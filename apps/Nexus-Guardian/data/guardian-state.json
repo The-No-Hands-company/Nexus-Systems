@@ -1,0 +1,74 @@
+{
+  "version": 1,
+  "counters": {
+    "decisionCounter": 4,
+    "auditCounter": 4
+  },
+  "decisions": [
+    {
+      "id": "dec-1777404751852-3",
+      "scope": "service",
+      "subjectId": "svc-e2e-allow",
+      "verdict": "approve",
+      "reason": "e2e-approve",
+      "issuedAt": "2026-04-28T19:32:31.852Z",
+      "issuedBy": "e2e-test"
+    },
+    {
+      "id": "dec-1777404751858-4",
+      "scope": "service",
+      "subjectId": "svc-e2e-deny",
+      "verdict": "deny",
+      "reason": "e2e-deny",
+      "issuedAt": "2026-04-28T19:32:31.858Z",
+      "issuedBy": "e2e-test"
+    }
+  ],
+  "auditLog": [
+    {
+      "eventId": "audit-1777404291398-1",
+      "decisionId": "dec-1777404291398-1",
+      "scope": "service",
+      "subjectId": "svc-e2e-allow",
+      "verdict": "approve",
+      "timestamp": "2026-04-28T19:24:51.398Z"
+    },
+    {
+      "eventId": "audit-1777404291405-2",
+      "decisionId": "dec-1777404291405-2",
+      "scope": "service",
+      "subjectId": "svc-e2e-deny",
+      "verdict": "deny",
+      "timestamp": "2026-04-28T19:24:51.405Z"
+    },
+    {
+      "eventId": "audit-1777404751852-3",
+      "decisionId": "dec-1777404751852-3",
+      "scope": "service",
+      "subjectId": "svc-e2e-allow",
+      "verdict": "approve",
+      "timestamp": "2026-04-28T19:32:31.852Z"
+    },
+    {
+      "eventId": "audit-1777404751858-4",
+      "decisionId": "dec-1777404751858-4",
+      "scope": "service",
+      "subjectId": "svc-e2e-deny",
+      "verdict": "deny",
+      "timestamp": "2026-04-28T19:32:31.858Z"
+    }
+  ],
+  "policy": {
+    "policyId": "default",
+    "description": "Default guardian policy — approve unless explicitly denied",
+    "version": 2,
+    "defaultVerdict": "approve",
+    "enabled": true,
+    "publicExposureDenyRules": [
+      "unsafe",
+      "blocked-service"
+    ],
+    "updatedAt": "2026-04-28T19:21:25.791Z"
+  },
+  "updatedAt": "2026-04-28T19:32:31.858Z"
+}

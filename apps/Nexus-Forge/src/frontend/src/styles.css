@@ -1,0 +1,212 @@
+:root {
+  --bg: #08111f;
+  --bg-soft: #101d30;
+  --surface: #13233b;
+  --surface-alt: #1a2f4f;
+  --text: #e7edf8;
+  --muted: #98a7c2;
+  --accent: #0f9d8a;
+  --accent-strong: #0ec5ad;
+  --border: #2c436a;
+  --shadow: 0 14px 34px rgba(0, 0, 0, 0.26);
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  color: var(--text);
+  font-family: "IBM Plex Sans", "Segoe UI", sans-serif;
+  background:
+    radial-gradient(circle at 10% 10%, rgba(18, 186, 160, 0.18), transparent 34%),
+    radial-gradient(circle at 80% 0%, rgba(38, 84, 145, 0.35), transparent 38%),
+    linear-gradient(145deg, #050b14 0%, #0d1a2d 58%, #111d33 100%);
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+a {
+  color: var(--accent-strong);
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+.app-shell {
+  min-height: 100vh;
+}
+
+.top-nav {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  padding: 18px 28px;
+  border-bottom: 1px solid var(--border);
+  backdrop-filter: blur(8px);
+  background: rgba(8, 17, 31, 0.68);
+  position: sticky;
+  top: 0;
+  z-index: 20;
+}
+
+.brand a {
+  color: var(--text);
+  font-weight: 700;
+  letter-spacing: 0.5px;
+}
+
+.nav-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  align-items: center;
+}
+
+.app-content {
+  width: min(1100px, calc(100% - 32px));
+  margin: 28px auto;
+  padding-bottom: 36px;
+}
+
+section {
+  background: linear-gradient(180deg, rgba(23, 40, 66, 0.9), rgba(17, 32, 54, 0.9));
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 22px;
+  box-shadow: var(--shadow);
+}
+
+h2 {
+  font-size: 1.6rem;
+  margin-bottom: 8px;
+}
+
+h3 {
+  margin-bottom: 8px;
+}
+
+p {
+  color: var(--muted);
+}
+
+.repo-grid {
+  margin-top: 14px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 14px;
+}
+
+.repo-card {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px;
+  background: linear-gradient(180deg, var(--surface), var(--surface-alt));
+}
+
+.repo-card h3,
+.repo-card h4 {
+  color: var(--text);
+  margin-bottom: 6px;
+}
+
+.repo-card p {
+  margin-bottom: 10px;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  background: rgba(14, 197, 173, 0.15);
+  border: 1px solid rgba(14, 197, 173, 0.35);
+  color: #9bf4e6;
+  padding: 4px 10px;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+form {
+  margin-top: 14px;
+  display: grid;
+  gap: 12px;
+}
+
+label {
+  display: grid;
+  gap: 6px;
+  color: var(--text);
+  font-weight: 600;
+}
+
+input,
+textarea,
+button {
+  font: inherit;
+}
+
+input,
+textarea {
+  background: rgba(8, 17, 31, 0.7);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px;
+}
+
+textarea {
+  min-height: 120px;
+  resize: vertical;
+}
+
+button {
+  width: fit-content;
+  background: var(--accent);
+  color: #01231e;
+  font-weight: 700;
+  border: 0;
+  border-radius: 8px;
+  padding: 10px 14px;
+  cursor: pointer;
+}
+
+button:hover {
+  background: var(--accent-strong);
+}
+
+.team-list,
+.activity-panel,
+.repo-meta {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+@media (max-width: 720px) {
+  .top-nav {
+    padding: 14px;
+  }
+
+  .app-content {
+    width: calc(100% - 20px);
+    margin: 16px auto;
+  }
+
+  section {
+    padding: 16px;
+  }
+}

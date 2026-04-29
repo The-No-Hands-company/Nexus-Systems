@@ -1,0 +1,3729 @@
+{
+  "generatedAt": 1776557719337,
+  "total": 342,
+  "byModule": {
+    "core": 69,
+    "workflows": 55,
+    "teams": 13,
+    "rbac": 10,
+    "skills": 36,
+    "safety": 58,
+    "platform": 41,
+    "mcp": 44,
+    "memory": 53,
+    "artifacts": 14,
+    "gsd": 16,
+    "tools": 18,
+    "gateway": 33,
+    "llm": 13,
+    "metrics": 28,
+    "marketplace": 13,
+    "plugins": 18,
+    "logger": 26,
+    "config": 2,
+    "hooks": 12,
+    "secrets": 11,
+    "adapters": 11,
+    "recipes": 13,
+    "workspace": 1,
+    "cloud": 10
+  },
+  "stubs": [
+    {
+      "id": "A-001",
+      "title": "Multi-agent role templates (researcher, coder, reviewer, planner).",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 29,
+      "modules": [
+        "core",
+        "workflows"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "A-002",
+      "title": "Agent personality packs with profile switching.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 30,
+      "modules": [
+        "core",
+        "workflows"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "A-003",
+      "title": "Dynamic agent spawning by task complexity.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 31,
+      "modules": [
+        "core",
+        "workflows"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "A-004",
+      "title": "Delegation graph with parent-child traceability.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 32,
+      "modules": [
+        "core",
+        "workflows"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "A-005",
+      "title": "Agent run modes: fast, balanced, deep.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 33,
+      "modules": [
+        "core",
+        "workflows"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "A-006",
+      "title": "Tool budget caps per agent run.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 34,
+      "modules": [
+        "core",
+        "workflows"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "A-007",
+      "title": "Token budget forecasting before execution.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 35,
+      "modules": [
+        "core",
+        "workflows"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "A-008",
+      "title": "Agent self-checkpointing for long tasks.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 36,
+      "modules": [
+        "core",
+        "workflows"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "A-009",
+      "title": "Recovery mode after tool/error loops.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 37,
+      "modules": [
+        "core",
+        "workflows"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "A-010",
+      "title": "Agent handoff protocol between specialist agents.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 38,
+      "modules": [
+        "core",
+        "workflows"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "A-011",
+      "title": "Long-horizon monitor agents (persistent loop).",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 39,
+      "modules": [
+        "core",
+        "workflows"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "A-012",
+      "title": "Recursive sub-planning for complex goals.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 40,
+      "modules": [
+        "core",
+        "workflows"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "A-013",
+      "title": "Pluggable reasoning styles (ReAct, plan-act, code-act).",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 41,
+      "modules": [
+        "core",
+        "workflows"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "A-014",
+      "title": "Agent capability declarations and negotiation.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 42,
+      "modules": [
+        "core",
+        "workflows"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "A-015",
+      "title": "Conflict resolution between concurrent agents.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 43,
+      "modules": [
+        "core",
+        "workflows"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "C-001",
+      "title": "Shared agent directories and team defaults.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 199,
+      "modules": [
+        "teams",
+        "rbac"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "C-002",
+      "title": "Team inbox with routing rules.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 200,
+      "modules": [
+        "teams",
+        "rbac"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "C-003",
+      "title": "Multi-user session collaboration.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 201,
+      "modules": [
+        "teams",
+        "rbac"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "C-004",
+      "title": "Role-based access control across actions.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 202,
+      "modules": [
+        "teams",
+        "rbac"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "C-005",
+      "title": "Approval workflows with assigned approvers.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 203,
+      "modules": [
+        "teams",
+        "rbac"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "C-006",
+      "title": "Shared memory namespaces by team.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 204,
+      "modules": [
+        "teams",
+        "rbac"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "C-007",
+      "title": "Team analytics dashboards.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 205,
+      "modules": [
+        "teams",
+        "rbac"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "C-008",
+      "title": "Agent ownership and on-call assignments.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 206,
+      "modules": [
+        "teams",
+        "rbac"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "C-009",
+      "title": "Conflict and lock management for edits.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 207,
+      "modules": [
+        "teams",
+        "rbac"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "C-010",
+      "title": "Commenting and review threads on tasks.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 208,
+      "modules": [
+        "teams",
+        "rbac"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "CCM-001",
+      "title": "Skill registry contracts with frontmatter-driven runtime requirements and install specs.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 530,
+      "modules": [
+        "skills",
+        "safety",
+        "platform"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "CCM-002",
+      "title": "Skill moderation snapshots, malware/suspicion gates, and role-based delete/restore lifecycle.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 531,
+      "modules": [
+        "skills",
+        "safety",
+        "platform"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "CCM-003",
+      "title": "Canonical slug ownership operations (rename/merge/redirect) and compatibility-safe install flows.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 532,
+      "modules": [
+        "skills",
+        "safety",
+        "platform"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "CCM-004",
+      "title": "Structured skill packaging metadata (`origin`, lockfiles, deterministic zip/build provenance).",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 533,
+      "modules": [
+        "skills",
+        "safety",
+        "platform"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "CCM-005",
+      "title": "Sandbox-first claw deployment with layered controls (network/filesystem/process/inference).",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 534,
+      "modules": [
+        "skills",
+        "safety",
+        "platform"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "CCM-006",
+      "title": "Inference indirection via controlled gateway route instead of direct model endpoint exposure.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 535,
+      "modules": [
+        "skills",
+        "safety",
+        "platform"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "CCM-007",
+      "title": "Policy tiering (restricted/balanced/open) with operator approval loops and hot-reloadable controls.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 536,
+      "modules": [
+        "skills",
+        "safety",
+        "platform"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "CCM-008",
+      "title": "Blueprint/image hardening patterns (digest pinning, stripped build tools, startup integrity checks).",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 537,
+      "modules": [
+        "skills",
+        "safety",
+        "platform"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "CCM-009",
+      "title": "Desktop claw UX pattern: dual-process host API proxy with WS/HTTP/IPC fallback and gateway supervision.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 538,
+      "modules": [
+        "skills",
+        "safety",
+        "platform"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "CCM-010",
+      "title": "Multi-agent account binding and channel routing models (`@agent` direct context switching).",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 539,
+      "modules": [
+        "skills",
+        "safety",
+        "platform"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "CCM-011",
+      "title": "Swarm CLI model: team spawn, task dependencies, inbox messaging, worktree isolation, lifecycle protocol.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 540,
+      "modules": [
+        "skills",
+        "safety",
+        "platform"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "CCM-012",
+      "title": "Worker persistence loops (idle/report/receive/replan) for long-running autonomous teams.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 541,
+      "modules": [
+        "skills",
+        "safety",
+        "platform"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "CCM-013",
+      "title": "Economic execution loop: task valuation, artifact submission, quality scoring, cost-aware survivability.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 542,
+      "modules": [
+        "skills",
+        "safety",
+        "platform"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "CCM-014",
+      "title": "Artifact-first submission/evaluation protocol with path validation and auto-wrap-up on iteration limits.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 543,
+      "modules": [
+        "skills",
+        "safety",
+        "platform"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "CCM-015",
+      "title": "Asynchronous RL loop for claw agents (conversation-derived reward, proxy training, continuous improvement).",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 544,
+      "modules": [
+        "skills",
+        "safety",
+        "platform"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "CCM-016",
+      "title": "Multi-mode RL methods (binary RL, OPD, hybrid) and environment-specific rails (terminal/GUI/SWE/tool-call).",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 545,
+      "modules": [
+        "skills",
+        "safety",
+        "platform"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "CCM-017",
+      "title": "Research pipeline orchestration as stage machine with gate checkpoints and optional human co-pilot.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 546,
+      "modules": [
+        "skills",
+        "safety",
+        "platform"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "CCM-018",
+      "title": "Agent/skill discovery contracts in claw CLIs with structured JSON output and source precedence.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 547,
+      "modules": [
+        "skills",
+        "safety",
+        "platform"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "CCM-019",
+      "title": "Plugin contract validation against unsupported manifest fields to prevent silent compatibility drift.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 548,
+      "modules": [
+        "skills",
+        "safety",
+        "platform"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "CCM-020",
+      "title": "Claw-native docs posture: operation guides, troubleshooting, policy docs, and explicit runbook commands.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 549,
+      "modules": [
+        "skills",
+        "safety",
+        "platform"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "CM-001",
+      "title": "Durable orchestration state and checkpointing.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 418,
+      "modules": [
+        "core",
+        "mcp",
+        "memory"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "CM-002",
+      "title": "Interrupt/resume with human approval and staged continuation.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 419,
+      "modules": [
+        "core",
+        "mcp",
+        "memory"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "CM-003",
+      "title": "Multi-agent handoff contracts and delegation semantics.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 420,
+      "modules": [
+        "core",
+        "mcp",
+        "memory"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "CM-004",
+      "title": "Planner ledger and iterative plan revision loops.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 421,
+      "modules": [
+        "core",
+        "mcp",
+        "memory"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "CM-005",
+      "title": "Tool loop governance (max iterations, force-final mode, retries).",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 422,
+      "modules": [
+        "core",
+        "mcp",
+        "memory"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "CM-006",
+      "title": "Structured output channels (text + typed/structured blocks).",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 423,
+      "modules": [
+        "core",
+        "mcp",
+        "memory"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "CM-007",
+      "title": "Roots-aware workspace boundary enforcement.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 424,
+      "modules": [
+        "core",
+        "mcp",
+        "memory"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "CM-008",
+      "title": "Transport abstraction (stdio + streamable HTTP + legacy SSE).",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 425,
+      "modules": [
+        "core",
+        "mcp",
+        "memory"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "CM-009",
+      "title": "Capability negotiation cache per session and server profile.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 426,
+      "modules": [
+        "core",
+        "mcp",
+        "memory"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "CM-010",
+      "title": "Task-augmented operations with progress/cancel semantics.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 427,
+      "modules": [
+        "core",
+        "mcp",
+        "memory"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "CM-011",
+      "title": "Elicitation and sampling bridges for client-assisted reasoning.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 428,
+      "modules": [
+        "core",
+        "mcp",
+        "memory"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "CM-012",
+      "title": "Resource subscription and list-changed synchronization.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 429,
+      "modules": [
+        "core",
+        "mcp",
+        "memory"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "CM-013",
+      "title": "Tool annotation-driven safety hints (read-only, destructive, idempotent).",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 430,
+      "modules": [
+        "core",
+        "mcp",
+        "memory"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "CM-014",
+      "title": "Browser automation split: accessibility snapshot vs vision coordinates.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 431,
+      "modules": [
+        "core",
+        "mcp",
+        "memory"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "CM-015",
+      "title": "Network/storage/browser-state control as first-class tools.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 432,
+      "modules": [
+        "core",
+        "mcp",
+        "memory"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "CM-016",
+      "title": "Repo map generation for large-codebase context compression.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 433,
+      "modules": [
+        "core",
+        "mcp",
+        "memory"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "CM-017",
+      "title": "Architect/editor split mode for reasoning vs edit execution.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 434,
+      "modules": [
+        "core",
+        "mcp",
+        "memory"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "CM-018",
+      "title": "Session replay and trace-based judge/evaluator loops.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 435,
+      "modules": [
+        "core",
+        "mcp",
+        "memory"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "CM-019",
+      "title": "Memory extraction, deduplication, decay, and profile summarization.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 436,
+      "modules": [
+        "core",
+        "mcp",
+        "memory"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "CM-020",
+      "title": "Graph memory relations (entity and relationship persistence).",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 437,
+      "modules": [
+        "core",
+        "mcp",
+        "memory"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "CM-021",
+      "title": "Scoped memory keys (user_id, agent_id, run_id).",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 438,
+      "modules": [
+        "core",
+        "mcp",
+        "memory"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "CM-022",
+      "title": "Policy packs and allowlist-driven extension governance.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 439,
+      "modules": [
+        "core",
+        "mcp",
+        "memory"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "CM-023",
+      "title": "Sandboxed app/UI extensions with CSP and permission metadata.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 440,
+      "modules": [
+        "core",
+        "mcp",
+        "memory"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "CM-024",
+      "title": "Unified telemetry for cost, latency, quality, and incidents.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 441,
+      "modules": [
+        "core",
+        "mcp",
+        "memory"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "D-001",
+      "title": "Artifact system with typed outputs.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 168,
+      "modules": [
+        "artifacts"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "D-002",
+      "title": "Versioned artifact lineage graph.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 169,
+      "modules": [
+        "artifacts"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "D-003",
+      "title": "Artifact diff and merge operations.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 170,
+      "modules": [
+        "artifacts"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "D-004",
+      "title": "Artifact export packs (pdf/docx/md/json).",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 171,
+      "modules": [
+        "artifacts"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "D-005",
+      "title": "Artifact quality evaluators by type.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 172,
+      "modules": [
+        "artifacts"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "D-006",
+      "title": "Citation engine for research outputs.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 173,
+      "modules": [
+        "artifacts"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "D-007",
+      "title": "Dataset manager for agent experiments.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 174,
+      "modules": [
+        "artifacts"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "D-008",
+      "title": "Prompt/result dataset labeling workflow.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 175,
+      "modules": [
+        "artifacts"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "D-009",
+      "title": "Reproducibility bundle per run.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 176,
+      "modules": [
+        "artifacts"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "D-010",
+      "title": "Artifact retention and archive policies.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 177,
+      "modules": [
+        "artifacts"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "DX2-001",
+      "title": "Add checkpoint backends in `src/core` with resumable run handles. [CM-001]",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 445,
+      "modules": [
+        "core"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "DX2-002",
+      "title": "Add workflow interrupts and resume tokens in `src/workflows`. [CM-002]",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 446,
+      "modules": [
+        "workflows"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "DX2-003",
+      "title": "Add explicit handoff schema in `src/core/types.ts`. [CM-003]",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 447,
+      "modules": [
+        "core"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "DX2-004",
+      "title": "Add planner-ledger artifact in `src/gsd` for plan revision traceability. [CM-004]",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 448,
+      "modules": [
+        "gsd"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "DX2-005",
+      "title": "Add tool-loop guardrail policy in `src/safety` and `src/tools`. [CM-005]",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 449,
+      "modules": [
+        "safety",
+        "tools"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "DX2-006",
+      "title": "Add structured content response contract in `src/artifacts`. [CM-006]",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 450,
+      "modules": [
+        "artifacts"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "DX2-007",
+      "title": "Add roots boundary adapter and sync hooks in `src/mcp`. [CM-007]",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 451,
+      "modules": [
+        "mcp"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "DX2-008",
+      "title": "Add transport manager abstraction in `src/gateway` and `src/mcp`. [CM-008]",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 452,
+      "modules": [
+        "gateway",
+        "mcp"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "DX2-009",
+      "title": "Add capability negotiation cache in `src/mcp` with TTL + invalidation. [CM-009]",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 453,
+      "modules": [
+        "mcp"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "DX2-010",
+      "title": "Add task progress/cancel model in `src/core` and `src/workflows`. [CM-010]",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 454,
+      "modules": [
+        "core",
+        "workflows"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "DX2-011",
+      "title": "Add elicitation/sampling bridge adapter in `src/llm` + `src/mcp`. [CM-011]",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 455,
+      "modules": [
+        "llm",
+        "mcp"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "DX2-012",
+      "title": "Add resource subscription manager in `src/mcp` + `src/memory`. [CM-012]",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 456,
+      "modules": [
+        "mcp",
+        "memory"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "DX2-013",
+      "title": "Add tool annotation safety mapper in `src/safety`. [CM-013]",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 457,
+      "modules": [
+        "safety"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "DX2-014",
+      "title": "Add dual-mode browser tools (snapshot + coordinate) in `src/tools/browser.ts`. [CM-014]",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 458,
+      "modules": [
+        "tools"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "DX2-015",
+      "title": "Add network/storage/browser-state operator tools in `src/tools`. [CM-015]",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 459,
+      "modules": [
+        "tools"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "DX2-016",
+      "title": "Add repo-map context compactor in `src/memory` + `src/core/agent.ts`. [CM-016]",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 460,
+      "modules": [
+        "memory",
+        "core"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "DX2-017",
+      "title": "Add architect/editor split execution mode in `src/core/orchestrator.ts`. [CM-017]",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 461,
+      "modules": [
+        "core"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "DX2-018",
+      "title": "Add run judge/eval loop with replay in `src/metrics` + `src/artifacts`. [CM-018]",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 462,
+      "modules": [
+        "metrics",
+        "artifacts"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "DX2-019",
+      "title": "Add memory dedup + contradiction pipeline in `src/memory`. [CM-019]",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 463,
+      "modules": [
+        "memory"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "DX2-020",
+      "title": "Add graph-memory adapter layer in `src/memory` (optional provider backends). [CM-020]",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 464,
+      "modules": [
+        "memory"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "DX2-021",
+      "title": "Add identity scoping contract in `src/core/types.ts`. [CM-021]",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 465,
+      "modules": [
+        "core"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "DX2-022",
+      "title": "Add extension allowlist and policy profiles in `src/marketplace` + `src/safety`. [CM-022]",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 466,
+      "modules": [
+        "marketplace",
+        "safety"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "DX2-023",
+      "title": "Add sandbox UI extension metadata model in `src/plugins`. [CM-023]",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 467,
+      "modules": [
+        "plugins"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "DX2-024",
+      "title": "Add telemetry schema unification in `src/logger` + `src/metrics`. [CM-024]",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 468,
+      "modules": [
+        "logger",
+        "metrics"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "DX3-001",
+      "title": "Add `clawdis`-style skill metadata schema support (requires/env/install/os/config) in `src/skills` + `src/plugins`. [CCM-001]",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 553,
+      "modules": [
+        "skills",
+        "plugins"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "DX3-002",
+      "title": "Add skill moderation state model (active/hidden/removed + evidence snapshot) in `src/safety` + `src/marketplace`. [CCM-002]",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 554,
+      "modules": [
+        "safety",
+        "marketplace"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "DX3-003",
+      "title": "Add canonical package identity operations (rename/merge/alias redirects) in `src/marketplace`. [CCM-003]",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 555,
+      "modules": [
+        "marketplace"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "DX3-004",
+      "title": "Add install provenance files and lock metadata for reproducible skill installs in `src/artifacts` + `src/config`. [CCM-004]",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 556,
+      "modules": [
+        "artifacts",
+        "config"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "DX3-005",
+      "title": "Add sandbox policy profile abstraction (network/filesystem/process/inference) in `src/safety` + `src/config`. [CCM-005]",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 557,
+      "modules": [
+        "safety",
+        "config"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "DX3-006",
+      "title": "Add routed-inference policy contract to block direct provider host leakage in `src/gateway` + `src/llm`. [CCM-006]",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 558,
+      "modules": [
+        "gateway",
+        "llm"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "DX3-007",
+      "title": "Add policy tiers and operator approval workflow in `src/safety` + `src/hooks`. [CCM-007]",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 559,
+      "modules": [
+        "safety",
+        "hooks"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "DX3-008",
+      "title": "Add hardened runtime validation hooks (image/source checksum + config integrity checks) in `src/core` + `src/secrets`. [CCM-008]",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 560,
+      "modules": [
+        "core",
+        "secrets"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "DX3-009",
+      "title": "Add host-proxy transport fallback strategy for desktop/embedded clients in `src/gateway` + `src/adapters`. [CCM-009]",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 561,
+      "modules": [
+        "gateway",
+        "adapters"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "DX3-010",
+      "title": "Add per-agent channel/account binding model in `src/teams` + `src/core/types.ts`. [CCM-010]",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 562,
+      "modules": [
+        "teams",
+        "core"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "DX3-011",
+      "title": "Add swarm orchestration primitives (team spawn, dependency tasks, inbox commands) in `src/teams` + `src/workflows`. [CCM-011]",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 563,
+      "modules": [
+        "teams",
+        "workflows"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "DX3-012",
+      "title": "Add worker lifecycle protocol states (active/idle/shutdown pending) in `src/core/orchestrator.ts` + `src/teams`. [CCM-012]",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 564,
+      "modules": [
+        "core",
+        "teams"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "DX3-013",
+      "title": "Add economic-mode optional module (task valuation, token spend, payout simulation) in `src/metrics` + `src/workflows`. [CCM-013]",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 565,
+      "modules": [
+        "metrics",
+        "workflows"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "DX3-014",
+      "title": "Add artifact submission contract with pre-submit validation and auto-wrap-up hooks in `src/artifacts` + `src/hooks`. [CCM-014]",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 566,
+      "modules": [
+        "artifacts",
+        "hooks"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "DX3-015",
+      "title": "Add online adaptation interface for reward-feedback loops in `src/llm` + `src/metrics` (feature-flagged). [CCM-015]",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 567,
+      "modules": [
+        "llm",
+        "metrics"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "DX3-016",
+      "title": "Add multi-mode training/eval adapter contracts (binary/opd/hybrid) in `src/recipes` + `src/platform`. [CCM-016]",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 568,
+      "modules": [
+        "recipes",
+        "platform"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "DX3-017",
+      "title": "Add stage-gate pipeline template support for long workflows in `src/workflows` + `src/recipes`. [CCM-017]",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 569,
+      "modules": [
+        "workflows",
+        "recipes"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "DX3-018",
+      "title": "Add structured discovery outputs for agents/skills/providers in `src/core` + `src/logger`. [CCM-018]",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 570,
+      "modules": [
+        "core",
+        "logger"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "DX3-019",
+      "title": "Add plugin manifest compatibility validator with explicit unsupported-field diagnostics in `src/plugins` + `src/safety`. [CCM-019]",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 571,
+      "modules": [
+        "plugins",
+        "safety"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "DX3-020",
+      "title": "Add operations runbook generator for common claw maintenance tasks in `src/recipes` + `src/workspace`. [CCM-020]",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 572,
+      "modules": [
+        "recipes",
+        "workspace"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "E-001",
+      "title": "Unified event bus for runtime telemetry.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 225,
+      "modules": [
+        "metrics",
+        "logger"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "E-002",
+      "title": "Structured logs with correlation IDs.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 226,
+      "modules": [
+        "metrics",
+        "logger"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "E-003",
+      "title": "Cost/latency/token dashboards.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 227,
+      "modules": [
+        "metrics",
+        "logger"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "E-004",
+      "title": "Tool success/failure heatmaps.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 228,
+      "modules": [
+        "metrics",
+        "logger"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "E-005",
+      "title": "Agent quality scoring over time.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 229,
+      "modules": [
+        "metrics",
+        "logger"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "E-006",
+      "title": "Benchmark suites by scenario.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 230,
+      "modules": [
+        "metrics",
+        "logger"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "E-007",
+      "title": "Regression detector for behavior drift.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 231,
+      "modules": [
+        "metrics",
+        "logger"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "E-008",
+      "title": "Golden task test bank.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 232,
+      "modules": [
+        "metrics",
+        "logger"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "E-009",
+      "title": "Replay runner for incident analysis.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 233,
+      "modules": [
+        "metrics",
+        "logger"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "E-010",
+      "title": "Alerting integrations (Slack, email, webhook).",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 234,
+      "modules": [
+        "metrics",
+        "logger"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "E-011",
+      "title": "Experiment tracking for routing/model policies.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 235,
+      "modules": [
+        "metrics",
+        "logger"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "E-012",
+      "title": "User feedback loop to ranking/reward signals.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 236,
+      "modules": [
+        "metrics",
+        "logger"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "F-001",
+      "title": "Knowledge graph reasoning assistants.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 292,
+      "modules": [
+        "core",
+        "memory"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "F-002",
+      "title": "Multi-modal memory (image/audio/video notes).",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 293,
+      "modules": [
+        "core",
+        "memory"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "F-003",
+      "title": "Synthetic data generation for skill training.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 294,
+      "modules": [
+        "core",
+        "memory"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "F-004",
+      "title": "Self-reflection loops with bounded autonomy.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 295,
+      "modules": [
+        "core",
+        "memory"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "F-005",
+      "title": "Program synthesis agents for tool composition.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 296,
+      "modules": [
+        "core",
+        "memory"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "F-006",
+      "title": "Causal memory extraction from long sessions.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 297,
+      "modules": [
+        "core",
+        "memory"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "F-007",
+      "title": "Continual learning from approved traces.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 298,
+      "modules": [
+        "core",
+        "memory"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "F-008",
+      "title": "Agent swarm strategies for large objectives.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 299,
+      "modules": [
+        "core",
+        "memory"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "F-009",
+      "title": "Long-context compression research tracks.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 300,
+      "modules": [
+        "core",
+        "memory"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "F-010",
+      "title": "Policy-learning for safer autonomy.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 301,
+      "modules": [
+        "core",
+        "memory"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "G-001",
+      "title": "Policy engine with layered rules (global/project/agent).",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 137,
+      "modules": [
+        "safety"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "G-002",
+      "title": "Fine-grained path, network, and command controls.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 138,
+      "modules": [
+        "safety"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "G-003",
+      "title": "Data exfiltration guards and redaction pipeline.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 139,
+      "modules": [
+        "safety"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "G-004",
+      "title": "Secret scanning before any outbound action.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 140,
+      "modules": [
+        "safety"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "G-005",
+      "title": "Human-in-the-loop policy exceptions.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 141,
+      "modules": [
+        "safety"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "G-006",
+      "title": "Rule simulation and policy dry-run reports.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 142,
+      "modules": [
+        "safety"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "G-007",
+      "title": "Safety incident timeline with full forensics.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 143,
+      "modules": [
+        "safety"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "G-008",
+      "title": "Auto-quarantine for risky plugins/tools.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 144,
+      "modules": [
+        "safety"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "G-009",
+      "title": "Organization policy templates (strict/balanced/dev).",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 145,
+      "modules": [
+        "safety"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "G-010",
+      "title": "Risk-aware model routing (safe model fallback).",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 146,
+      "modules": [
+        "safety"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "G-011",
+      "title": "Explain-why-blocked responses for usability.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 147,
+      "modules": [
+        "safety"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "G-012",
+      "title": "Compliance profiles (SOC2, ISO-like control mapping).",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 148,
+      "modules": [
+        "safety"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "G-013",
+      "title": "Legal/PII-aware memory retention rules.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 149,
+      "modules": [
+        "safety"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "G-014",
+      "title": "Signed audit records and tamper evidence.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 150,
+      "modules": [
+        "safety"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "G-015",
+      "title": "Break-glass mode with mandatory audit trail.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 151,
+      "modules": [
+        "safety"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "H-001",
+      "title": "Cloud registration and discovery v2.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 266,
+      "modules": [
+        "cloud"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "H-002",
+      "title": "Distributed worker pool orchestration.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 267,
+      "modules": [
+        "cloud"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "H-003",
+      "title": "Remote execution targets by capability.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 268,
+      "modules": [
+        "cloud"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "H-004",
+      "title": "Work stealing for queued tasks.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 269,
+      "modules": [
+        "cloud"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "H-005",
+      "title": "Regional failover strategy.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 270,
+      "modules": [
+        "cloud"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "H-006",
+      "title": "Resource-aware scheduling (CPU/RAM/GPU).",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 271,
+      "modules": [
+        "cloud"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "H-007",
+      "title": "Multi-tenant workspace isolation.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 272,
+      "modules": [
+        "cloud"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "H-008",
+      "title": "Burst scaling for heavy automation jobs.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 273,
+      "modules": [
+        "cloud"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "H-009",
+      "title": "Optional hosted control plane.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 274,
+      "modules": [
+        "cloud"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "H-010",
+      "title": "Hybrid local-first with cloud acceleration.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 275,
+      "modules": [
+        "cloud"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "K-001",
+      "title": "Marketplace search, ranking, and trust badges.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 279,
+      "modules": [
+        "marketplace"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "K-002",
+      "title": "Publisher verification workflow.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 280,
+      "modules": [
+        "marketplace"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "K-003",
+      "title": "Package quality scorecards.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 281,
+      "modules": [
+        "marketplace"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "K-004",
+      "title": "Dependency vulnerability badges.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 282,
+      "modules": [
+        "marketplace"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "K-005",
+      "title": "Usage analytics for creators.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 283,
+      "modules": [
+        "marketplace"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "K-006",
+      "title": "Revenue/share-ready metadata rails.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 284,
+      "modules": [
+        "marketplace"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "K-007",
+      "title": "Private/internal marketplace channels.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 285,
+      "modules": [
+        "marketplace"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "K-008",
+      "title": "Curated collections by domain.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 286,
+      "modules": [
+        "marketplace"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "K-009",
+      "title": "Auto-update policy controls.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 287,
+      "modules": [
+        "marketplace"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "K-010",
+      "title": "Install impact previews before enable.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 288,
+      "modules": [
+        "marketplace"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "M-001",
+      "title": "Memory policies by scope: user, project, org.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 65,
+      "modules": [
+        "memory"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "M-002",
+      "title": "Hybrid retrieval (keyword + vector + recency).",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 66,
+      "modules": [
+        "memory"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "M-003",
+      "title": "Memory confidence scoring and decay.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 67,
+      "modules": [
+        "memory"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "M-004",
+      "title": "Contradiction detection across memory entries.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 68,
+      "modules": [
+        "memory"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "M-005",
+      "title": "Memory provenance with source links.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 69,
+      "modules": [
+        "memory"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "M-006",
+      "title": "Semantic memory graph of entities and relations.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 70,
+      "modules": [
+        "memory"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "M-007",
+      "title": "Memory snapshots and rollback.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 71,
+      "modules": [
+        "memory"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "M-008",
+      "title": "Time-aware memory (valid from/to).",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 72,
+      "modules": [
+        "memory"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "M-009",
+      "title": "Decision log memory extraction.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 73,
+      "modules": [
+        "memory"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "M-010",
+      "title": "Learned preference profiling from sessions.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 74,
+      "modules": [
+        "memory"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "M-011",
+      "title": "Session summarization tiers (short, medium, deep).",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 75,
+      "modules": [
+        "memory"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "M-012",
+      "title": "Memory compaction with quality checks.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 76,
+      "modules": [
+        "memory"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "M-013",
+      "title": "Project memory packs export/import.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 77,
+      "modules": [
+        "memory"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "M-014",
+      "title": "Team-shared memory spaces with ACLs.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 78,
+      "modules": [
+        "memory"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "M-015",
+      "title": "Auto-memory hygiene and dedup jobs.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 79,
+      "modules": [
+        "memory"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "N-001",
+      "title": "Deterministic replay for critical workflows.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 318,
+      "modules": [
+        "core",
+        "platform"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "N-002",
+      "title": "Graceful degradation under provider outages.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 319,
+      "modules": [
+        "core",
+        "platform"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "N-003",
+      "title": "Large-workspace performance guarantees.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 320,
+      "modules": [
+        "core",
+        "platform"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "N-004",
+      "title": "Backpressure and queue resilience.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 321,
+      "modules": [
+        "core",
+        "platform"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "N-005",
+      "title": "Backward-compatible plugin APIs.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 322,
+      "modules": [
+        "core",
+        "platform"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "N-006",
+      "title": "Versioned contracts for all public surfaces.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 323,
+      "modules": [
+        "core",
+        "platform"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "N-007",
+      "title": "Data portability and migration tooling.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 324,
+      "modules": [
+        "core",
+        "platform"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "N-008",
+      "title": "Install footprint and startup-time budgets.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 325,
+      "modules": [
+        "core",
+        "platform"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "N-009",
+      "title": "Disaster recovery and backup strategy.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 326,
+      "modules": [
+        "core",
+        "platform"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "N-010",
+      "title": "End-to-end security posture reviews.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 327,
+      "modules": [
+        "core",
+        "platform"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "O-001",
+      "title": "Advanced scheduler (cron + event triggers).",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 212,
+      "modules": [
+        "workflows",
+        "hooks"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "O-002",
+      "title": "Trigger graph (webhook, file change, queue, timer).",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 213,
+      "modules": [
+        "workflows",
+        "hooks"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "O-003",
+      "title": "Nightly maintenance workflows.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 214,
+      "modules": [
+        "workflows",
+        "hooks"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "O-004",
+      "title": "Auto-healing jobs (restart/recover/retry).",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 215,
+      "modules": [
+        "workflows",
+        "hooks"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "O-005",
+      "title": "Background workers with queue priorities.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 216,
+      "modules": [
+        "workflows",
+        "hooks"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "O-006",
+      "title": "Workload throttling and quotas.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 217,
+      "modules": [
+        "workflows",
+        "hooks"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "O-007",
+      "title": "SLA-aware task orchestration.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 218,
+      "modules": [
+        "workflows",
+        "hooks"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "O-008",
+      "title": "Canary runs for automation recipes.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 219,
+      "modules": [
+        "workflows",
+        "hooks"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "O-009",
+      "title": "Batch execution windows with guardrails.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 220,
+      "modules": [
+        "workflows",
+        "hooks"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "O-010",
+      "title": "Multi-stage deployment workflows.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 221,
+      "modules": [
+        "workflows",
+        "hooks"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "P-001",
+      "title": "MCP client manager for stdio/http/sse.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 101,
+      "modules": [
+        "mcp",
+        "gateway"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "P-002",
+      "title": "MCP server capability cache and discovery.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 102,
+      "modules": [
+        "mcp",
+        "gateway"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "P-003",
+      "title": "MCP resource and prompt browsing UI.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 103,
+      "modules": [
+        "mcp",
+        "gateway"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "P-004",
+      "title": "MCP tool trust policy and signatures.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 104,
+      "modules": [
+        "mcp",
+        "gateway"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "P-005",
+      "title": "MCP auth profiles (apikey/oauth/token vault).",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 105,
+      "modules": [
+        "mcp",
+        "gateway"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "P-006",
+      "title": "MCP server performance telemetry.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 106,
+      "modules": [
+        "mcp",
+        "gateway"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "P-007",
+      "title": "MCP server marketplace connector.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 107,
+      "modules": [
+        "mcp",
+        "gateway"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "P-008",
+      "title": "Auto-install recipes for popular MCP servers.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 108,
+      "modules": [
+        "mcp",
+        "gateway"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "P-009",
+      "title": "MCP extension testing harness.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 109,
+      "modules": [
+        "mcp",
+        "gateway"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "P-010",
+      "title": "MCP sampling support for tool-side model calls.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 110,
+      "modules": [
+        "mcp",
+        "gateway"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "P-011",
+      "title": "Multi-tenant MCP server routing.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 111,
+      "modules": [
+        "mcp",
+        "gateway"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "P-012",
+      "title": "Remote extension hot-reload.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 112,
+      "modules": [
+        "mcp",
+        "gateway"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "P-013",
+      "title": "Extension bundles by domain (devops, research, finance).",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 113,
+      "modules": [
+        "mcp",
+        "gateway"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "P-014",
+      "title": "Integration policy packs (enterprise-safe defaults).",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 114,
+      "modules": [
+        "mcp",
+        "gateway"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "P-015",
+      "title": "Protocol bridges (MCP <-> internal adapters).",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 115,
+      "modules": [
+        "mcp",
+        "gateway"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "Q-001",
+      "title": "Secrets vault abstraction with pluggable backends.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 155,
+      "modules": [
+        "secrets",
+        "safety"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "Q-002",
+      "title": "Key rotation policies and reminders.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 156,
+      "modules": [
+        "secrets",
+        "safety"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "Q-003",
+      "title": "Runtime secret lease tokens.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 157,
+      "modules": [
+        "secrets",
+        "safety"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "Q-004",
+      "title": "Encrypted local memory and config snapshots.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 158,
+      "modules": [
+        "secrets",
+        "safety"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "Q-005",
+      "title": "Agent isolation with per-agent credentials.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 159,
+      "modules": [
+        "secrets",
+        "safety"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "Q-006",
+      "title": "Ephemeral credential brokers for tools.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 160,
+      "modules": [
+        "secrets",
+        "safety"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "Q-007",
+      "title": "Supply-chain scanner for plugins/extensions.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 161,
+      "modules": [
+        "secrets",
+        "safety"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "Q-008",
+      "title": "Binary/tool checksum verification.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 162,
+      "modules": [
+        "secrets",
+        "safety"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "Q-009",
+      "title": "Secure remote execution channels.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 163,
+      "modules": [
+        "secrets",
+        "safety"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "Q-010",
+      "title": "Zero-trust network policy for tool egress.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 164,
+      "modules": [
+        "secrets",
+        "safety"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "R-001",
+      "title": "Policy-driven model selection matrix.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 240,
+      "modules": [
+        "llm"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "R-002",
+      "title": "Dynamic fallback chains by domain.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 241,
+      "modules": [
+        "llm"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "R-003",
+      "title": "Cost caps with graceful degradation.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 242,
+      "modules": [
+        "llm"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "R-004",
+      "title": "Latency-aware routing during peak load.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 243,
+      "modules": [
+        "llm"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "R-005",
+      "title": "Local/cloud hybrid inference arbitration.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 244,
+      "modules": [
+        "llm"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "R-006",
+      "title": "Specialized model lanes (code, vision, research).",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 245,
+      "modules": [
+        "llm"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "R-007",
+      "title": "Prompt caching and response memoization.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 246,
+      "modules": [
+        "llm"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "R-008",
+      "title": "Prompt optimization and auto-tuning loops.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 247,
+      "modules": [
+        "llm"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "R-009",
+      "title": "Response validator model (judge layer).",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 248,
+      "modules": [
+        "llm"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "R-010",
+      "title": "Ensemble voting for critical outputs.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 249,
+      "modules": [
+        "llm"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "S-001",
+      "title": "Plugin lifecycle hooks (install, load, update, retire).",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 119,
+      "modules": [
+        "skills",
+        "plugins"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "S-002",
+      "title": "Plugin trust levels (core, verified, community, untrusted).",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 120,
+      "modules": [
+        "skills",
+        "plugins"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "S-003",
+      "title": "Plugin permission manifests with review workflow.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 121,
+      "modules": [
+        "skills",
+        "plugins"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "S-004",
+      "title": "Plugin dependency solver and conflict reports.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 122,
+      "modules": [
+        "skills",
+        "plugins"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "S-005",
+      "title": "Skill packs with semantic versioning.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 123,
+      "modules": [
+        "skills",
+        "plugins"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "S-006",
+      "title": "Skill benchmark harness (quality/cost/latency).",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 124,
+      "modules": [
+        "skills",
+        "plugins"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "S-007",
+      "title": "Skill A/B testing and rollout percentages.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 125,
+      "modules": [
+        "skills",
+        "plugins"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "S-008",
+      "title": "Skill marketplace sync and metadata cache.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 126,
+      "modules": [
+        "skills",
+        "plugins"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "S-009",
+      "title": "Private registry support for internal teams.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 127,
+      "modules": [
+        "skills",
+        "plugins"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "S-010",
+      "title": "Skill linting and validation CLI.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 128,
+      "modules": [
+        "skills",
+        "plugins"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "S-011",
+      "title": "Skill execution traces and explainability logs.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 129,
+      "modules": [
+        "skills",
+        "plugins"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "S-012",
+      "title": "Prompt asset management for skills.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 130,
+      "modules": [
+        "skills",
+        "plugins"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "S-013",
+      "title": "Auto-suggest skills by context.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 131,
+      "modules": [
+        "skills",
+        "plugins"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "S-014",
+      "title": "Skill deprecation and migration assistant.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 132,
+      "modules": [
+        "skills",
+        "plugins"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "S-015",
+      "title": "One-click import from curated ecosystems.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 133,
+      "modules": [
+        "skills",
+        "plugins"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "T-001",
+      "title": "Hierarchical task trees with dependencies.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 47,
+      "modules": [
+        "gsd",
+        "workflows"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "T-002",
+      "title": "Blocked-by and unblocks relationships.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 48,
+      "modules": [
+        "gsd",
+        "workflows"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "T-003",
+      "title": "Critical path estimation and scheduling.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 49,
+      "modules": [
+        "gsd",
+        "workflows"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "T-004",
+      "title": "Task retries with strategy mutation.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 50,
+      "modules": [
+        "gsd",
+        "workflows"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "T-005",
+      "title": "Human approval gates at milestone boundaries.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 51,
+      "modules": [
+        "gsd",
+        "workflows"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "T-006",
+      "title": "Cost estimate before execution.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 52,
+      "modules": [
+        "gsd",
+        "workflows"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "T-007",
+      "title": "Effort estimate and ETA scoring.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 53,
+      "modules": [
+        "gsd",
+        "workflows"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "T-008",
+      "title": "Deliverable contracts per task.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 54,
+      "modules": [
+        "gsd",
+        "workflows"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "T-009",
+      "title": "Auto-generated test plans per implementation task.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 55,
+      "modules": [
+        "gsd",
+        "workflows"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "T-010",
+      "title": "Auto-generated rollback plan per risky task.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 56,
+      "modules": [
+        "gsd",
+        "workflows"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "T-011",
+      "title": "Task quality score (completeness, correctness, safety).",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 57,
+      "modules": [
+        "gsd",
+        "workflows"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "T-012",
+      "title": "Batch task execution windows (night mode).",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 58,
+      "modules": [
+        "gsd",
+        "workflows"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "T-013",
+      "title": "Task labels/tags and saved filters.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 59,
+      "modules": [
+        "gsd",
+        "workflows"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "T-014",
+      "title": "Task templates and reusable playbooks.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 60,
+      "modules": [
+        "gsd",
+        "workflows"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "T-015",
+      "title": "Cross-project task federation.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 61,
+      "modules": [
+        "gsd",
+        "workflows"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "U-001",
+      "title": "Multi-pane operations cockpit (agents/tasks/memory/tools).",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 181,
+      "modules": [
+        "gateway"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "U-002",
+      "title": "Live execution timeline with event streaming.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 182,
+      "modules": [
+        "gateway"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "U-003",
+      "title": "Trace explorer with tool call drill-down.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 183,
+      "modules": [
+        "gateway"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "U-004",
+      "title": "Explainability panel (why this action happened).",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 184,
+      "modules": [
+        "gateway"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "U-005",
+      "title": "Workspace profiles (coding, research, ops, writing).",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 185,
+      "modules": [
+        "gateway"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "U-006",
+      "title": "One-command onboarding wizard.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 186,
+      "modules": [
+        "gateway"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "U-007",
+      "title": "Interactive slash command discovery.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 187,
+      "modules": [
+        "gateway"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "U-008",
+      "title": "Guided recovery flows on failure.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 188,
+      "modules": [
+        "gateway"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "U-009",
+      "title": "Accessible terminal UX modes.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 189,
+      "modules": [
+        "gateway"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "U-010",
+      "title": "Mobile-friendly dashboard views.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 190,
+      "modules": [
+        "gateway"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "U-011",
+      "title": "Agent launch wizard templates.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 191,
+      "modules": [
+        "gateway"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "U-012",
+      "title": "Power-user keyboard workflows.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 192,
+      "modules": [
+        "gateway"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "U-013",
+      "title": "Session replay and share links.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 193,
+      "modules": [
+        "gateway"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "U-014",
+      "title": "Multi-session compare mode.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 194,
+      "modules": [
+        "gateway"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "U-015",
+      "title": "Theme/plugin UI extension points.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 195,
+      "modules": [
+        "gateway"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "V-001",
+      "title": "Public SDK for programmatic orchestration.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 253,
+      "modules": [
+        "platform",
+        "adapters"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "V-002",
+      "title": "Typed client libraries (TS/Python first).",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 254,
+      "modules": [
+        "platform",
+        "adapters"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "V-003",
+      "title": "Local dev sandbox bootstrap command.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 255,
+      "modules": [
+        "platform",
+        "adapters"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "V-004",
+      "title": "Recipe/package scaffolding CLI.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 256,
+      "modules": [
+        "platform",
+        "adapters"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "V-005",
+      "title": "Integration test harness for plugins.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 257,
+      "modules": [
+        "platform",
+        "adapters"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "V-006",
+      "title": "Snapshot test utilities for prompts.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 258,
+      "modules": [
+        "platform",
+        "adapters"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "V-007",
+      "title": "Mock tool servers for CI.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 259,
+      "modules": [
+        "platform",
+        "adapters"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "V-008",
+      "title": "Code generation for plugin manifests.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 260,
+      "modules": [
+        "platform",
+        "adapters"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "V-009",
+      "title": "Lint rules for safe tool usage.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 261,
+      "modules": [
+        "platform",
+        "adapters"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "V-010",
+      "title": "API contract testing suite.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 262,
+      "modules": [
+        "platform",
+        "adapters"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "VG-001",
+      "title": "Every orchestration run is replayable from persisted state.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 494,
+      "modules": [
+        "metrics",
+        "logger"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "VG-002",
+      "title": "Every destructive tool call is policy-evaluated and auditable.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 495,
+      "modules": [
+        "metrics",
+        "logger"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "VG-003",
+      "title": "MCP capability negotiation and roots sync are deterministic under reconnect.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 496,
+      "modules": [
+        "metrics",
+        "logger"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "VG-004",
+      "title": "Memory write path enforces dedup/contradiction checks.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 497,
+      "modules": [
+        "metrics",
+        "logger"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "VG-005",
+      "title": "Browser tooling can run in both snapshot-first and coordinate-mode flows.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 498,
+      "modules": [
+        "metrics",
+        "logger"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "VG-006",
+      "title": "Metrics include latency, token/cost, safety events, and completion quality.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 499,
+      "modules": [
+        "metrics",
+        "logger"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "VG3-001",
+      "title": "Every installed skill has parseable metadata + provenance lock record.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 587,
+      "modules": [
+        "metrics",
+        "logger",
+        "safety"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "VG3-002",
+      "title": "Moderation/quarantine states are enforced on install/execute paths.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 588,
+      "modules": [
+        "metrics",
+        "logger",
+        "safety"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "VG3-003",
+      "title": "Inference calls respect routed gateway policy and reject direct-host bypass attempts.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 589,
+      "modules": [
+        "metrics",
+        "logger",
+        "safety"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "VG3-004",
+      "title": "Swarm worker lifecycle transitions are observable and replayable from logs.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 590,
+      "modules": [
+        "metrics",
+        "logger",
+        "safety"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "VG3-005",
+      "title": "Structured `agents/skills/providers` inventory output is machine-parseable and stable.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 591,
+      "modules": [
+        "metrics",
+        "logger",
+        "safety"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "VG3-006",
+      "title": "Plugin manifest compatibility failures return explicit actionable diagnostics.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 592,
+      "modules": [
+        "metrics",
+        "logger",
+        "safety"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "X-001",
+      "title": "Tool capability registry with rich metadata.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 83,
+      "modules": [
+        "tools"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "X-002",
+      "title": "Tool risk scoring and required confirmation level.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 84,
+      "modules": [
+        "tools"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "X-003",
+      "title": "Tool execution simulation mode.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 85,
+      "modules": [
+        "tools"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "X-004",
+      "title": "Tool timeouts, retries, and backoff policies.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 86,
+      "modules": [
+        "tools"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "X-005",
+      "title": "Structured tool output contracts.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 87,
+      "modules": [
+        "tools"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "X-006",
+      "title": "Tool health checks and uptime monitoring.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 88,
+      "modules": [
+        "tools"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "X-007",
+      "title": "Tool dependency graph and conflict detection.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 89,
+      "modules": [
+        "tools"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "X-008",
+      "title": "Tool sandbox profiles (read-only, isolated, elevated).",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 90,
+      "modules": [
+        "tools"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "X-009",
+      "title": "Tool macros and compound actions.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 91,
+      "modules": [
+        "tools"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "X-010",
+      "title": "Tool runbooks for common workflows.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 92,
+      "modules": [
+        "tools"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "X-011",
+      "title": "Native git intelligence toolset expansion.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 93,
+      "modules": [
+        "tools"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "X-012",
+      "title": "Native package manager toolset (npm/pip/cargo/etc).",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 94,
+      "modules": [
+        "tools"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "X-013",
+      "title": "Native deployment toolset (docker/k8s/terraform).",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 95,
+      "modules": [
+        "tools"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "X-014",
+      "title": "Browser automation suite with visual assertions.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 96,
+      "modules": [
+        "tools"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "X-015",
+      "title": "Data wrangling tools (csv/json/parquet/sql).",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 97,
+      "modules": [
+        "tools"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "Z-001",
+      "title": "Software engineering pack.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 305,
+      "modules": [
+        "recipes",
+        "workflows"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "Z-002",
+      "title": "Deep research and citation pack.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 306,
+      "modules": [
+        "recipes",
+        "workflows"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "Z-003",
+      "title": "Marketing/SEO operations pack.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 307,
+      "modules": [
+        "recipes",
+        "workflows"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "Z-004",
+      "title": "Customer support automation pack.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 308,
+      "modules": [
+        "recipes",
+        "workflows"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "Z-005",
+      "title": "Data analytics and BI pack.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 309,
+      "modules": [
+        "recipes",
+        "workflows"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "Z-006",
+      "title": "DevOps and SRE automation pack.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 310,
+      "modules": [
+        "recipes",
+        "workflows"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "Z-007",
+      "title": "Security operations pack.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 311,
+      "modules": [
+        "recipes",
+        "workflows"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "Z-008",
+      "title": "Content production pipeline pack.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 312,
+      "modules": [
+        "recipes",
+        "workflows"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "Z-009",
+      "title": "E-commerce operations pack.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 313,
+      "modules": [
+        "recipes",
+        "workflows"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "Z-010",
+      "title": "Enterprise governance pack.",
+      "sourceDoc": "NEXUSCLAW_MASSIVE_FEATURE_BACKLOG.md",
+      "sourceLine": 314,
+      "modules": [
+        "recipes",
+        "workflows"
+      ],
+      "status": "planned"
+    }
+  ]
+}

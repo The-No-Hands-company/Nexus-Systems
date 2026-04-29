@@ -1,0 +1,27 @@
+[submodule "apps/Nexus"]
+	path = apps/Nexus
+	url = git@github.com:The-No-Hands-company/Nexus.git
+[submodule "apps/Nexus-AI"]
+	path = apps/Nexus-AI
+	url = https://github.com/The-No-Hands-company/Nexus-AI
+[submodule "apps/Nexus-Cloud"]
+	path = apps/Nexus-Cloud
+	url = git@github.com:The-No-Hands-company/Nexus-Cloud.git
+[submodule "apps/Nexus-Computer"]
+	path = apps/Nexus-Computer
+	url = https://github.com/The-No-Hands-company/Nexus-Computer.git
+[submodule "apps/Nexus-Deploy"]
+	path = apps/Nexus-Deploy
+	url = git@github.com:The-No-Hands-company/Nexus-Deploy.git
+[submodule "apps/Nexus-Hosting"]
+	path = apps/Nexus-Hosting
+	url = git@github.com:The-No-Hands-company/Nexus-Hosting.git
+[submodule "apps/Nexus-Network"]
+	path = apps/Nexus-Network
+	url = git@github.com:The-No-Hands-company/Nexus-Network.git
+[submodule "apps/Nexus-Vault"]
+	path = apps/Nexus-Vault
+	url = git@github.com:The-No-Hands-company/Nexus-Vault.git
+[submodule "apps/Phantom"]
+	path = apps/Phantom
+	url = git@github.com:Zajfan/Phantom.git

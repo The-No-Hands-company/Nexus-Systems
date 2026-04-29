@@ -1,0 +1,27 @@
+version: '3.8'
+
+services:
+  forge:
+    build: .
+    ports:
+      - "8090:8090"
+      - "8091:8091"
+    volumes:
+      - forge-data:/data
+    environment:
+      FORGE_STORAGE_PATH: /data/forge-repos
+      FORGE_DB_PATH: /data/forge-meta.db
+      FORGE_PUBLIC_DOMAIN: localhost:8090
+      PORT: 8090
+      LOG_LEVEL: info
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8090/.well-known/nexus-cloud"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  forge-data:
+    driver: local

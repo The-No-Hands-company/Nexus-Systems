@@ -1,0 +1,7 @@
+{
+  "name": "greeting",
+  "version": "1.0.0",
+  "description": "Sample AnyClaw plugin — adds greeting and farewell tools",
+  "main": "index.js",
+  "provides": ["tools", "hooks"]
+}

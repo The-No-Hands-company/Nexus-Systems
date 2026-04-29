@@ -1,0 +1,44 @@
+{
+  "name": "anyclaw",
+  "version": "0.1.0",
+  "description": "The everything claw — comprehensive local-first AI agent framework combining the best of 40+ claw-like applications",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "anyclaw": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "start": "node dist/index.js",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.39.0",
+    "better-sqlite3": "^11.8.1",
+    "chalk": "^5.4.1",
+    "commander": "^13.1.0",
+    "dotenv": "^16.4.7",
+    "fastify": "^5.2.1",
+    "@fastify/websocket": "^11.0.2",
+    "js-yaml": "^4.1.0",
+    "nanoid": "^5.1.0",
+    "openai": "^4.85.0",
+    "ora": "^8.2.0",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/js-yaml": "^4.0.9",
+    "@types/node": "^22.13.0",
+    "tsup": "^8.4.0",
+    "typescript": "^5.7.3",
+    "vitest": "^3.0.5"
+  }
+}
