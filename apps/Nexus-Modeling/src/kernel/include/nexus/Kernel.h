@@ -14,4 +14,7 @@
 #include <nexus/render/Camera.h>
 #include <nexus/render/SceneGraph.h>
 #include <nexus/render/Renderer.h>
+#include <nexus/parametric/ConstraintGraph.h>
+#include <nexus/parametric/ParametricSolver.h>
+#include <nexus/parametric/ParametricSerialization.h>
 #include <nexus/neural/NeuralRenderer.h>

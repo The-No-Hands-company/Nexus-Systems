@@ -15,6 +15,9 @@ add_library(nexus_gfx_core STATIC
     src/render/Renderer.cpp
     src/render/RenderGraphValidator.cpp
     src/render/FrameCaptureExporter.cpp
+    src/parametric/ConstraintGraph.cpp
+    src/parametric/ParametricSolver.cpp
+    src/parametric/ParametricSerialization.cpp
 )
 
 target_include_directories(nexus_gfx_core

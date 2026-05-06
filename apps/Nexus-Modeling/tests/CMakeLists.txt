@@ -20,6 +20,7 @@ add_executable(nexus_kernel_tests
     kernel/test_GeometryKernel.cpp
     kernel/test_TopologyGolden.cpp
     kernel/test_RenderPipelineV1.cpp
+    kernel/test_ParametricFoundation.cpp
     kernel/test_NullDevice.cpp
     kernel/test_NullDeviceExtended.cpp
     kernel/test_Camera.cpp
