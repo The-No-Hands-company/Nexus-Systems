@@ -1,0 +1,20 @@
+# Test module import for compiler
+
+print text "=== Module Import Test ==="
+print text ""
+
+# Import the math_helper module
+import modules.math_helper
+
+# Call module functions
+set result1 to modules.math_helper.add with 10, 5
+set result2 to modules.math_helper.multiply with 10, 5
+
+print text "10 + 5 = "
+print text result1
+
+print text "10 * 5 = "
+print text result2
+
+print text ""
+print text "=== Test Complete ==="

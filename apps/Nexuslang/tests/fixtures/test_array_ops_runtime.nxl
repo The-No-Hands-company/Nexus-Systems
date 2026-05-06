@@ -1,0 +1,45 @@
+fn test_arrpush_runtime() {
+    // Test arrpush with runtime-sized array
+    let arr = alloc(3, i64);
+    arr[0] = 10;
+    arr[1] = 20;
+    arr[2] = 30;
+    
+    // Push should increase size from 3 to 4
+    arr = arrpush(arr, 40);
+    
+    // Access new element - should work
+    arr[3] = 40;
+    
+    // Out of bounds - should panic
+    print("Attempting out of bounds after push...");
+    arr[4] = 50;
+}
+
+fn test_arrpop_runtime() {
+    // Test arrpop with runtime-sized array
+    let arr = alloc(5, i64);
+    arr[0] = 1;
+    arr[1] = 2;
+    arr[2] = 3;
+    arr[3] = 4;
+    arr[4] = 5;
+    
+    // Pop should decrease size from 5 to 4
+    arr = arrpop(arr);
+    
+    // Access last valid element - should work
+    arr[3] = 99;
+    
+    // Out of bounds - should panic
+    print("Attempting out of bounds after pop...");
+    arr[4] = 100;
+}
+
+fn main() {
+    print("Testing arrpush with runtime bounds...");
+    test_arrpush_runtime();
+    
+    print("Testing arrpop with runtime bounds...");
+    test_arrpop_runtime();
+}

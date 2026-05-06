@@ -1,0 +1,14 @@
+set x to 10
+set y to 20
+set result to x plus y
+
+function calculate_factorial that takes n as Integer returns Integer
+    if n is less than or equal to 1
+        return 1
+    
+    set previous to calculate_factorial with n minus 1
+    return n times previous
+
+set fact to calculate_factorial with 5
+print text "Factorial of 5 is: "
+print number fact

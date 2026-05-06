@@ -1,0 +1,25 @@
+# Generic Functions Test
+# Demonstrates generic function with type parameters
+
+# Generic max function - works with any comparable type
+function max that takes a as T, b as T where T is Comparable returns T
+    if a is greater than b
+        return a
+    return b
+
+# Test with integers
+set x to 10
+set y to 20
+set result to max with x, y
+print text "Max of 10 and 20: "
+print text result
+
+# Generic swap function
+function swap that takes a as T, b as T returns T
+    return b
+
+set first to 100
+set second to 200
+set swapped to swap with first, second
+print text "Swapped value: "
+print text swapped

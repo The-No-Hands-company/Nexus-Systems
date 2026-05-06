@@ -1,0 +1,20 @@
+# Test Rc<T> creation syntax
+# This test validates that the parser correctly handles Rc value creation
+
+# Basic Rc creation with integer
+set x to Rc of Integer with 42
+print text "Created Rc<Integer> with value 42"
+
+# Rc creation with string
+set name to Rc of String with "Hello, World"
+print text "Created Rc<String>"
+
+# Weak pointer creation
+set weak_ref to Weak of Integer with 100
+print text "Created Weak<Integer>"
+
+# Arc (atomic reference counted) creation
+set arc_val to Arc of Float with 3.14
+print text "Created Arc<Float>"
+
+print text "All Rc creation tests passed"

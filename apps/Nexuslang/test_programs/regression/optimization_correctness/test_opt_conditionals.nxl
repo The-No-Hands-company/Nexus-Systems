@@ -1,0 +1,113 @@
+# Optimization Correctness Test: Conditional Optimizations
+# Tests that branch optimizations preserve logic
+
+# Simple if-else
+function test_simple_conditional with x as Integer returns Integer
+    if x is greater than 0
+        return 1
+    else
+        return -1
+    end
+end
+
+# Nested conditionals
+function test_nested_conditional with x as Integer returns Integer
+    if x is greater than 100
+        if x is greater than 200
+            return 3
+        else
+            return 2
+        end
+    else
+        if x is greater than 50
+            return 1
+        else
+            return 0
+        end
+    end
+end
+
+# Multiple conditions with logical operators
+function test_logical_operators with x as Integer, y as Integer returns Integer
+    if x is greater than 0 and y is greater than 0
+        return 1
+    end
+    if x is less than 0 or y is less than 0
+        return -1
+    end
+    return 0
+end
+
+# Equality checks
+function test_equality with x as Integer returns Integer
+    if x is equal to 42
+        return 1000
+    else if x is equal to 0
+        return 500
+    else
+        return 0
+    end
+end
+
+# Complex boolean expressions
+function test_complex_boolean with a as Integer, b as Integer, c as Integer returns Integer
+    if a is greater than b and b is greater than c
+        return 1
+    else if a is equal to b or b is equal to c
+        return 2
+    else
+        return 3
+    end
+end
+
+# Main test runner
+print text "Testing conditional optimization correctness..."
+print text ""
+
+set test1 to call test_simple_conditional with 10
+print text "Simple conditional (10): "
+print test1
+print text " (expected: 1)"
+
+set test2 to call test_simple_conditional with -5
+print text "Simple conditional (-5): "
+print test2
+print text " (expected: -1)"
+
+set test3 to call test_nested_conditional with 250
+print text "Nested conditional (250): "
+print test3
+print text " (expected: 3)"
+
+set test4 to call test_nested_conditional with 150
+print text "Nested conditional (150): "
+print test4
+print text " (expected: 2)"
+
+set test5 to call test_nested_conditional with 75
+print text "Nested conditional (75): "
+print test5
+print text " (expected: 1)"
+
+set test6 to call test_logical_operators with 5 and 10
+print text "Logical operators (5, 10): "
+print test6
+print text " (expected: 1)"
+
+set test7 to call test_logical_operators with -5 and 10
+print text "Logical operators (-5, 10): "
+print test7
+print text " (expected: -1)"
+
+set test8 to call test_equality with 42
+print text "Equality (42): "
+print test8
+print text " (expected: 1000)"
+
+set test9 to call test_complex_boolean with 10 and 5 and 3
+print text "Complex boolean (10, 5, 3): "
+print test9
+print text " (expected: 1)"
+
+print text ""
+print text "All conditional tests complete!"

@@ -1,0 +1,9 @@
+# Test Null Safety
+
+set name to "Alice"
+print text name
+
+set age to 25
+print text age
+
+print text "Null safety test complete"

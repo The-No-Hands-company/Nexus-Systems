@@ -1,0 +1,22 @@
+# Type Error Detection Examples
+# This demonstrates that type checking catches common errors
+
+print text "Testing type error detection with typed functions..."
+print text ""
+
+# Define a function with typed parameters
+function add_numbers with a as Integer, b as Integer returns Integer
+    return a plus b
+end
+
+# This should work
+set result1 to add_numbers(5, 10)
+print text "add_numbers(5, 10) ="
+print text result1
+print text ""
+
+# This should fail at type checking - passing string to integer parameter
+print text "Now testing type error (passing string to Integer param)..."
+set result2 to add_numbers("hello", 5)
+
+print text "This line should never execute"

@@ -1,0 +1,80 @@
+# Test Math Functions for NexusLang Compiler
+# Tests mathematical operations
+
+print text "=== NexusLang Math Functions Test ==="
+
+# Test 1: Basic arithmetic
+print text ""
+print text "Test 1: Basic Arithmetic"
+set a to 10
+set b to 3
+print text "a = 10, b = 3"
+
+set sum to a plus b
+print text "a + b ="
+print number sum
+
+set diff to a minus b
+print text "a - b ="
+print number diff
+
+set prod to a times b
+print text "a * b ="
+print number prod
+
+set quot to a divided by b
+print text "a / b ="
+print number quot
+
+# Test 2: Float operations
+print text ""
+print text "Test 2: Float Operations"
+set pi to 3.14159
+set radius to 5.0
+set area to pi times radius times radius
+print text "Circle area (pi * r * r) ="
+print number area
+
+# Test 3: Comparison operations
+print text ""
+print text "Test 3: Comparisons"
+set x to 10
+set y to 20
+
+if x is less than y
+    print text "10 < 20: TRUE"
+
+if y is greater than x
+    print text "20 > 10: TRUE"
+
+set z to 10
+if x is equal to z
+    print text "10 == 10: TRUE"
+
+# Test 4: Modulo
+print text ""
+print text "Test 4: Modulo"
+set dividend to 17
+set divisor to 5
+set remainder to dividend modulo divisor
+print text "17 mod 5 ="
+print number remainder
+
+# Test 5: Negative numbers
+print text ""
+print text "Test 5: Negative Numbers"
+set negative to 0 minus 42
+print text "0 - 42 ="
+print number negative
+
+# Test 6: Mixed int and float
+print text ""
+print text "Test 6: Mixed Types"
+set intval to 7
+set floatval to 2.5
+set result to intval times floatval
+print text "7 * 2.5 ="
+print number result
+
+print text ""
+print text "=== Math Tests Complete ==="

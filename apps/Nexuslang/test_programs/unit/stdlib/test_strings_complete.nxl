@@ -1,0 +1,27 @@
+# Test comprehensive string operations
+print text "=== F-String Interpolation ==="
+set name to "Alice"
+set age to 30
+set greeting to f"Hello, {name}! You are {age} years old."
+print text greeting
+
+print text ""
+print text "=== String Methods ==="
+set text to "  Hello, World!  "
+set upper to upper with text
+print text upper
+
+set trimmed to trim with text
+print text trimmed
+
+set has_hello to contains with text and "Hello"
+print text has_hello
+
+set words to split with "a,b,c" and ","
+print text words
+
+set joined to join with "," and words
+print text joined
+
+print text ""
+print text "=== All Tests Passed! ==="

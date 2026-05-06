@@ -1,0 +1,227 @@
+# NexusLang Atomic Operations Example
+# Demonstrates lock-free concurrent programming with atomic types
+
+print text "NLPL Atomic Operations and Memory Ordering"
+print text "=========================================="
+print text ""
+
+# Example 1: Atomic Integer Operations
+print text "Example 1: Atomic Integer"
+print text "-------------------------"
+
+set counter to create_atomic_integer with 0
+
+# Load the current value (atomic_load takes: atomic_var, memory_order)
+set value to atomic_load with counter and "seq_cst"
+print text "Initial value: "
+print text value
+print text ""
+
+# Store a new value (atomic_store takes: atomic_var, value, memory_order)
+atomic_store with counter and 42 and "seq_cst"
+set value to atomic_load with counter and "seq_cst"
+print text "After store(42): "
+print text value
+print text ""
+
+# Exchange (swap) operation (atomic_exchange takes: atomic_var, new_value, memory_order)
+set old_value to atomic_exchange with counter and 100 and "seq_cst"
+print text "Exchange old value: "
+print text old_value
+set new_value to atomic_load with counter and "seq_cst"
+print text "Exchange new value: "
+print text new_value
+print text ""
+
+# Increment and decrement (takes: atomic_var, memory_order)
+set incremented to atomic_increment with counter and "seq_cst"
+print text "After increment: "
+print text incremented
+
+set decremented to atomic_decrement with counter and "seq_cst"
+print text "After decrement: "
+print text decremented
+print text ""
+
+# Example 2: Fetch-and-Add (Useful for concurrent counters)
+print text "Example 2: Fetch-and-Add Operations"
+print text "------------------------------------"
+
+set counter to create_atomic_integer with 10
+
+set old_val to atomic_fetch_add with counter and 5 and "seq_cst"
+print text "Fetch-add(5) old value: "
+print text old_val
+
+set current_val to atomic_load with counter and "seq_cst"
+print text "Current value after fetch-add: "
+print text current_val
+print text ""
+
+set old_val to atomic_fetch_sub with counter and 3 and "seq_cst"
+print text "Fetch-sub(3) old value: "
+print text old_val
+
+set current_val to atomic_load with counter and "seq_cst"
+print text "Current value after fetch-sub: "
+print text current_val
+print text ""
+
+# Example 3: Compare-and-Swap (CAS) - Lock-Free Algorithms
+print text "Example 3: Compare-and-Swap (CAS)"
+print text "-----------------------------------"
+
+set counter to create_atomic_integer with 50
+
+# Try to update from 50 to 60 (should succeed)
+set result to atomic_compare_exchange with counter and 50 and 60 and "seq_cst"
+set success to result[0]
+set actual to result[1]
+
+print text "CAS(50 -> 60) success: "
+print text success
+print text "Actual value was: "
+print text actual
+print text ""
+
+# Try to update from 50 to 70 (should fail, value is now 60)
+set result to atomic_compare_exchange with counter and 50 and 70 and "seq_cst"
+set success to result[0]
+set actual to result[1]
+
+print text "CAS(50 -> 70) success: "
+print text success
+print text "Actual value was: "
+print text actual
+
+set current_val to atomic_load with counter and "seq_cst"
+print text "Final value: "
+print text current_val
+print text ""
+
+# Example 4: Atomic Boolean (Flags)
+print text "Example 4: Atomic Boolean"
+print text "-------------------------"
+
+set ready_flag to create_atomic_boolean with false
+
+set is_ready to atomic_load with ready_flag and "seq_cst"
+print text "Initial ready flag: "
+print text is_ready
+print text ""
+
+# Set the flag
+atomic_store with ready_flag and true and "seq_cst"
+set is_ready to atomic_load with ready_flag and "seq_cst"
+print text "After setting flag: "
+print text is_ready
+print text ""
+
+# Test-and-set pattern (exchange false with true)
+set was_ready to atomic_exchange with ready_flag and false and "seq_cst"
+print text "Was ready before exchange: "
+print text was_ready
+
+set is_ready to atomic_load with ready_flag and "seq_cst"
+print text "Ready after exchange: "
+print text is_ready
+print text ""
+
+# Example 5: Bitwise Atomic Operations
+print text "Example 5: Bitwise Atomic Operations"
+print text "-------------------------------------"
+
+set flags to create_atomic_integer with 0
+
+# Set bit 0 (OR with 1)
+set old_flags to atomic_fetch_or with flags and 1 and "seq_cst"
+print text "After setting bit 0, old flags: "
+print text old_flags
+
+set current_flags to atomic_load with flags and "seq_cst"
+print text "Current flags: "
+print text current_flags
+print text ""
+
+# Set bit 1 (OR with 2)
+set old_flags to atomic_fetch_or with flags and 2 and "seq_cst"
+print text "After setting bit 1, old flags: "
+print text old_flags
+
+set current_flags to atomic_load with flags and "seq_cst"
+print text "Current flags: "
+print text current_flags
+print text ""
+
+# Clear bit 0 (AND with ~1 = 0xFFFFFFFE)
+set old_flags to atomic_fetch_and with flags and 0xFFFFFFFE and "seq_cst"
+print text "After clearing bit 0, old flags: "
+print text old_flags
+
+set current_flags to atomic_load with flags and "seq_cst"
+print text "Current flags: "
+print text current_flags
+print text ""
+
+# Toggle bit 1 (XOR with 2)
+set old_flags to atomic_fetch_xor with flags and 2 and "seq_cst"
+print text "After toggling bit 1, old flags: "
+print text old_flags
+
+set current_flags to atomic_load with flags and "seq_cst"
+print text "Current flags: "
+print text current_flags
+print text ""
+
+# Example 6: Memory Ordering
+print text "Example 6: Memory Ordering"
+print text "--------------------------"
+
+print text "Memory ordering options:"
+print text "- relaxed: No synchronization, just atomicity"
+print text "- acquire: Acquire semantics (for loads)"
+print text "- release: Release semantics (for stores)"
+print text "- seq_cst: Sequential consistency (default, strongest)"
+print text ""
+
+set data to create_atomic_integer with 0
+
+# Relaxed load/store (fastest, no synchronization)
+atomic_store with data and 123 and "relaxed"
+set value to atomic_load with data and "relaxed"
+print text "Relaxed load result: "
+print text value
+print text ""
+
+# Acquire/release pattern (common for producer-consumer)
+atomic_store with data and 456 and "release"
+set value to atomic_load with data and "acquire"
+print text "Acquire/release result: "
+print text value
+print text ""
+
+# Sequential consistency (default, safest)
+atomic_store with data and 789 and "seq_cst"
+set value to atomic_load with data and "seq_cst"
+print text "Seq-cst result: "
+print text value
+print text ""
+
+# Example 7: Memory Fence
+print text "Example 7: Memory Fence"
+print text "-----------------------"
+
+print text "Memory fences ensure ordering of memory operations"
+print text "Inserting full memory barrier..."
+atomic_fence with "seq_cst"
+print text "Fence complete - all prior operations visible"
+print text ""
+
+print text "Atomic Operations Examples Complete"
+print text ""
+print text "KEY CONCEPTS:"
+print text "1. Atomics prevent data races in concurrent code"
+print text "2. CAS enables lock-free algorithms"
+print text "3. Memory ordering controls visibility between threads"
+print text "4. Relaxed ordering is fastest but requires careful use"
+print text "5. Sequential consistency is safest but may be slower"

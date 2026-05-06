@@ -1,0 +1,18 @@
+class Animal
+    property species as String
+    
+    method speak
+        print "Animal sound"
+        print species
+
+class Dog extends Animal
+    property breed as String
+    
+    method bark
+        print "Woof!"
+
+set dog to new Dog
+set dog.species to "Canine"
+set dog.breed to "Labrador"
+dog.speak()
+dog.bark()

@@ -1,0 +1,137 @@
+# Advanced Type System Tests
+# Tests nested generics, edge cases, and complex type interactions
+
+print text "=== Advanced Type System Tests ==="
+print text ""
+
+# TEST 1: Generic with Multiple Type Parameters
+print text "TEST 1: Multiple Type Parameters - Pair<K, V>"
+
+class Pair<K, V>
+    property key as K
+    property value as V
+end class
+
+# Create Pair<String, Integer>
+set pair to new Pair<String, Integer>
+set pair.key to "age"
+set pair.value to 25
+
+print text "Key:"
+print text pair.key
+print text "Value:"
+print number pair.value
+
+print text ""
+
+# TEST 2: Generic Function with Multiple Parameters
+print text "TEST 2: Generic Function - swap<T>"
+
+function swap<T> that takes a as T and b as T returns List
+    set result to [b, a]
+    return result
+end
+
+set int_swap to swap with 1 and 2
+print text "swap(1, 2):"
+print number int_swap[0]
+print number int_swap[1]
+
+set str_swap to swap with "hello" and "world"
+print text "swap(hello, world):"
+print text str_swap[0]
+print text str_swap[1]
+
+print text ""
+
+# TEST 3: Struct with Generic Container
+print text "TEST 3: Struct in Generic Container"
+
+struct Point3D
+    x as Integer
+    y as Integer
+    z as Integer
+end
+
+class Container<T>
+    property item as T
+end class
+
+# Create Container with Point3D
+set p to new Point3D
+set p.x to 10
+set p.y to 20
+set p.z to 30
+
+set point_container to new Container<Point3D>
+set point_container.item to p
+
+print text "Point3D in container:"
+print number point_container.item.x
+print number point_container.item.y
+print number point_container.item.z
+
+print text ""
+
+# TEST 4: Enum with Generic
+print text "TEST 4: Enum with Generic Container"
+
+enum Color
+    Red = 0
+    Green = 1
+    Blue = 2
+end
+
+class ColoredItem<T>
+    property item as T
+    property color as Integer
+end class
+
+set colored_box to new ColoredItem<String>
+set colored_box.item to "Gift"
+set colored_box.color to Color.Red
+
+print text "Colored item:"
+print text colored_box.item
+print text "Color (Red = 0):"
+print number colored_box.color
+
+print text ""
+
+# TEST 5: Nested Lists
+print text "TEST 5: Nested Data Structures"
+
+# Create a list of lists
+set matrix to [[1, 2, 3], [4, 5, 6], [7, 8, 9]]
+
+print text "Matrix[0][0]:"
+print number matrix[0][0]
+print text "Matrix[1][1]:"
+print number matrix[1][1]
+print text "Matrix[2][2]:"
+print number matrix[2][2]
+
+print text ""
+
+# TEST 6: Generic Triple
+print text "TEST 6: Triple Type Parameters"
+
+class Triple<A, B, C>
+    property first as A
+    property second as B
+    property third as C
+end class
+
+set triple to new Triple<Integer, String, Float>
+set triple.first to 1
+set triple.second to "two"
+set triple.third to 3.0
+
+print text "Triple values:"
+print number triple.first
+print text triple.second
+print number triple.third
+
+print text ""
+
+print text "=== All Advanced Tests Complete ==="

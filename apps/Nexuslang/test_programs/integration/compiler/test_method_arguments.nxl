@@ -1,0 +1,34 @@
+# Test: Method Call Arguments Passing
+# Bug: Method calls with arguments didn't pass the arguments to the method
+# Fix: Modified MemberAccess handler in _generate_expression to process arguments
+
+class Calculator
+    property value as Integer
+    
+    method add with n as Integer returns Integer
+        set value to value plus n
+        return value
+    
+    method multiply with n as Integer returns Integer
+        set value to value times n
+        return value
+
+set calc to new Calculator
+set calc.value to 10
+
+print text "Initial value:"
+print number calc.value
+
+set result1 to call calc.add with 5
+print text "After add(5):"
+print number result1
+
+set result2 to call calc.multiply with 3
+print text "After multiply(3):"
+print number result2
+
+print text "Final value:"
+print number calc.value
+
+# Expected output: 10, 15, 45, 45
+# Before fix: Arguments ignored, would show 10, 0, 0, 10

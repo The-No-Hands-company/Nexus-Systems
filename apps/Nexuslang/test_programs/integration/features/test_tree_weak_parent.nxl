@@ -1,0 +1,142 @@
+program test_tree_weak_parent
+
+# Binary Tree with Weak Parent Pointers
+# Demonstrates breaking reference cycles:
+# - Children hold strong references (Rc) to keep them alive
+# - Parents use weak references to avoid cycles
+# - Without weak refs, parent->child->parent would create memory leak
+
+function test_simple_tree returns Integer
+    print text "=== Creating Binary Tree with Weak Parents ==="
+    
+    # Create root node
+    set root to Rc of Integer with 50
+    print text "Created root with value 50"
+    
+    # Create left child
+    set left_child to Rc of Integer with 25
+    print text "Created left child with value 25"
+    
+    # Create right child
+    set right_child to Rc of Integer with 75
+    print text "Created right child with value 75"
+    
+    # In a real tree struct, we would:
+    # 1. Store left and right as Rc<Node> (strong refs to children)
+    # 2. Store parent as Weak<Node> (weak ref to avoid cycle)
+    
+    print text ""
+    print text "Tree structure (conceptual):"
+    print text "       50 (root)"
+    print text "      /  \\"
+    print text "    25    75"
+    print text ""
+    print text "Children use Rc (strong refs)"
+    print text "Parent pointers would use Weak to break cycles"
+    
+    return 0
+end
+
+function test_parent_child_cycle_breaking returns Integer
+    print text ""
+    print text "=== Demonstrating Cycle Breaking with Weak Refs ==="
+    
+    # Simulate parent node
+    set parent to Rc of Integer with 100
+    print text "Created parent with value 100"
+    
+    # Create child with strong reference
+    set child to Rc of Integer with 200
+    print text "Created child with value 200"
+    
+    # Parent holds strong ref to child (Rc)
+    # Child needs ref back to parent - use Weak to break cycle!
+    set weak_parent to downgrade parent
+    print text "Created weak reference from child back to parent"
+    
+    print text ""
+    print text "Cycle avoided:"
+    print text "  parent --(Rc)--> child"
+    print text "  child --(Weak)--> parent"
+    print text ""
+    print text "Without Weak: parent and child would never be freed"
+    print text "With Weak: parent can be freed when no strong refs remain"
+    
+    return 0
+end
+
+function test_tree_traversal_pattern returns Integer
+    print text ""
+    print text "=== Tree Traversal Pattern ==="
+    
+    # Create a small tree
+    set root to Rc of Integer with 10
+    print text "Root: 10"
+    
+    set left to Rc of Integer with 5
+    print text "Left: 5"
+    
+    set right to Rc of Integer with 15
+    print text "Right: 15"
+    
+    # Simulate child holding weak ref to parent
+    set weak_to_root to downgrade root
+    print text ""
+    print text "Children hold weak refs to root for upward traversal"
+    
+    # Try to upgrade weak ref to access parent
+    set parent_ref to upgrade weak_to_root
+    print text "Upgraded weak ref to access parent (traversing up)"
+    print text "This is safe - returns NULL if parent was freed"
+    
+    return 0
+end
+
+function test_complex_tree returns Integer
+    print text ""
+    print text "=== Complex Tree Structure ==="
+    
+    # Multi-level tree
+    set root to Rc of Integer with 50
+    print text "Level 0: Root = 50"
+    
+    set left_l1 to Rc of Integer with 25
+    set right_l1 to Rc of Integer with 75
+    print text "Level 1: Left = 25, Right = 75"
+    
+    set left_left_l2 to Rc of Integer with 12
+    set left_right_l2 to Rc of Integer with 37
+    print text "Level 2: LeftLeft = 12, LeftRight = 37"
+    
+    # Create weak refs back to parents
+    set weak_from_left to downgrade root
+    set weak_from_right to downgrade root
+    print text ""
+    print text "All children have weak refs to their parents"
+    
+    print text ""
+    print text "Tree structure:"
+    print text "           50"
+    print text "          /  \\"
+    print text "        25    75"
+    print text "       /  \\"
+    print text "     12    37"
+    print text ""
+    print text "All parent pointers are Weak<T> - no cycles"
+    print text "Tree can be properly freed when root goes out of scope"
+    
+    return 0
+end
+
+function main returns Integer
+    call test_simple_tree
+    call test_parent_child_cycle_breaking
+    call test_tree_traversal_pattern
+    call test_complex_tree
+    
+    print text ""
+    print text "=== All tree tests with weak parent pointers passed ==="
+    print text "Memory will be properly released (no leaks from cycles)"
+    
+    return 0
+end

@@ -1,0 +1,4 @@
+set ptr to call alloc with 100
+print text "Allocated"
+call dealloc with ptr
+print text "Deallocated"

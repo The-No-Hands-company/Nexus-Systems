@@ -1,0 +1,9 @@
+# Test for-each loops
+
+# Simple counting for loop
+print text "For loop 0 to 4:"
+for i from 0 to 4
+    print text i
+
+# For-each with range
+print text "Done with basic for"

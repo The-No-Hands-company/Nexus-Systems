@@ -1,0 +1,22 @@
+# Test enum definition
+
+enum Color
+    Red
+    Green
+    Blue
+end
+
+enum Status
+    Success = 0
+    Error = 1
+    Pending = 2
+end
+
+enum LogLevel
+    Debug = "DEBUG"
+    Info = "INFO"
+    Warning = "WARNING"
+    Error = "ERROR"
+end
+
+print text "Enums defined successfully"

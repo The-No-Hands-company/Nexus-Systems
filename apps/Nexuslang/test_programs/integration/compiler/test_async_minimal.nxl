@@ -1,0 +1,7 @@
+# Minimal async test - just return without await
+
+async function main returns Integer
+    print text "Async main starting"
+    print text "Async main returning 42"
+    return 42
+end

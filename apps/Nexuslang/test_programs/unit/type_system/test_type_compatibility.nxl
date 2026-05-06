@@ -1,0 +1,170 @@
+# Type Compatibility Test Program
+# Tests type compatibility checking, subtyping, and type conversions
+
+print text "=== Type Compatibility Tests ==="
+
+# Test 1: Basic type compatibility
+set x to 42
+set y to x  # Integer to Integer - compatible
+print text "Compatible: Integer to Integer"
+
+# Test 2: Numeric type widening (Integer to Float)
+set int_val to 10
+set float_val to 3.14
+set result to int_val plus float_val  # Should work: Integer + Float = Float
+print text "Compatible: Integer + Float = Float, result = " plus result as String
+
+# Test 3: String concatenation compatibility
+set name to "Alice"
+set age to 30
+set description to name plus " is " plus age as String plus " years old"
+print text "Compatible: String + (Integer as String) = " plus description
+
+# Test 4: List element type compatibility
+set int_list to [1, 2, 3]
+set mixed_nums to [1, 2.5, 3]  # Mixed Integer and Float - should unify to Float
+print text "Compatible: [Integer, Float] unifies to List<Float>"
+
+# Test 5: Function parameter compatibility
+function process with value as Float returns Float
+    return value times 2.0
+end
+
+set int_arg to 5
+set result1 to process(int_arg)  # Integer compatible with Float parameter
+set result2 to process(3.14)
+print text "Compatible: Integer argument for Float parameter"
+
+# Test 6: Return type compatibility
+function get_number with flag as Boolean returns Float
+    if flag
+        return 42        # Integer literal
+    else
+        return 3.14      # Float literal
+    end
+    # Both branches unify to Float
+end
+
+set num1 to get_number(true)
+set num2 to get_number(false)
+print text "Compatible: Integer and Float returns unify to Float"
+
+# Test 7: List assignment compatibility
+function get_integers returns List of Integer
+    return [1, 2, 3]
+end
+
+set numbers to get_integers()
+# Assigning to variable - List<Integer> is compatible with List<Integer>
+print text "Compatible: List<Integer> to List<Integer>"
+
+# Test 8: Dictionary key type compatibility
+set scores to {"Alice": 95, "Bob": 87}
+set alice_score to scores["Alice"]  # String key - compatible
+print text "Compatible: String key for Dictionary<String, Integer>"
+
+# Test 9: Union type compatibility
+function maybe_string with flag as Boolean returns String
+    if flag
+        return "yes"
+    else
+        return "no"
+    end
+end
+
+set answer to maybe_string(true)
+print text "Compatible: Both branches return String"
+
+# Test 10: Class inheritance compatibility
+class Animal
+    name as String
+    
+    method make_sound returns String
+        return "Some sound"
+    end
+end
+
+class Dog extends Animal
+    breed as String
+    
+    method make_sound returns String
+        return "Woof!"
+    end
+end
+
+function greet_animal with animal as Animal returns String
+    return "Hello, " plus animal.name plus "! " plus animal.make_sound()
+end
+
+set dog to Dog with name as "Buddy", breed as "Golden Retriever"
+set greeting to greet_animal(dog)  # Dog compatible with Animal (subtype)
+print text "Compatible: Dog (subtype) to Animal (supertype)"
+
+# Test 11: Null compatibility
+function find_user with id as Integer returns String
+    if id is greater than 0
+        return "User" plus id as String
+    else
+        # Would return null in some languages - testing compatibility
+        return ""
+    end
+end
+
+set user to find_user(1)
+print text "Compatible: String result (testing null compatibility)"
+
+# Test 12: Lambda parameter compatibility
+function apply_to_int with value as Integer, fn as Function returns Integer
+    return fn(value)
+end
+
+# Lambda with Integer parameter - compatible with Function type
+set doubled to apply_to_int(10, lambda x => x times 2)
+print text "Compatible: Lambda Integer->Integer for Function parameter"
+
+# Test 13: Collection element compatibility
+function sum_list with items as List of Integer returns Integer
+    set total to 0
+    for each item in items
+        set total to total plus item
+    end
+    return total
+end
+
+set numbers_list to [1, 2, 3, 4, 5]
+set sum_result to sum_list(numbers_list)
+print text "Compatible: List<Integer> elements for iteration"
+
+# Test 14: Method return type compatibility
+class Calculator
+    method add with a as Integer, b as Integer returns Integer
+        return a plus b
+    end
+    
+    method add_float with a as Float, b as Float returns Float
+        return a plus b
+    end
+end
+
+set calc to Calculator
+set int_sum to calc.add(5, 3)
+set float_sum to calc.add_float(5.5, 3.2)
+print text "Compatible: Method return types Integer and Float"
+
+# Test 15: Type narrowing compatibility
+function process_value with value as Float returns String
+    # Can compare Float with Integer literal - Integer widens to Float
+    if value is greater than 0
+        return "positive"
+    else if value is less than 0
+        return "negative"
+    else
+        return "zero"
+    end
+end
+
+set classification to process_value(42.0)
+print text "Compatible: Float compared with Integer (widening)"
+
+print text ""
+print text "All type compatibility tests completed!"

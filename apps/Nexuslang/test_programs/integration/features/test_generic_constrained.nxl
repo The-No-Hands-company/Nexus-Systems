@@ -1,0 +1,10 @@
+# Test generic class with type constraint
+
+define a class called NumberContainer with T as a type parameter that must be a number
+    properties:
+        value: T
+    methods:
+        define a method called add that takes a parameter other of type T and returns T
+            return self.value plus other
+
+print text "Generic class NumberContainer<T extends number> defined successfully!"

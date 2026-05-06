@@ -1,0 +1,122 @@
+
+import core.result
+import core.optional
+
+extern function malloc with size as Integer returns Pointer from library "c"
+extern function calloc with num as Integer, size as Integer returns Pointer from library "c"
+extern function c_free with ptr as Pointer returns Void from library "nxl_runtime"
+extern function strcmp with s1 as String, s2 as String returns Integer from library "c"
+extern function hash_string with s as String returns Integer from library "c"
+
+export Dictionary
+
+class Dictionary<K, V>
+    # keys is array of Strings. "Pointer to String" -> i8**
+    property keys as Pointer to String
+    property values as Pointer to V
+    property occupied as Pointer to Integer
+    property capacity as Integer
+    property count as Integer
+    
+    function put that takes key as String, value as V returns Void
+        if capacity == 0
+             resize(8)
+             
+        if count * 10 >= capacity * 7
+             resize(capacity * 2)
+             
+        # Linear probing
+        set idx to hash_string(key) % capacity
+        set start_idx to idx
+        
+        while 1 == 1
+            set flag to occupied[idx]
+            if flag == 0
+                set keys[idx] to key
+                set values[idx] to value
+                set occupied[idx] to 1
+                set count to count + 1
+                return Void
+                
+            set current_key to keys[idx]
+            if strcmp(current_key, key) == 0
+                set values[idx] to value
+                return Void
+                
+            set idx to (idx + 1) % capacity
+            if idx == start_idx
+                 # Should not happen
+                 return Void
+
+    function get that takes key as String returns Optional<V>
+        if capacity == 0
+             return Optional.None
+             
+        set idx to hash_string(key) % capacity
+        set start_idx to idx
+        
+        while 1 == 1
+             set flag to occupied[idx]
+             if flag == 0
+                  return Optional.None
+                  
+             set current_key to keys[idx]
+             if strcmp(current_key, key) == 0
+                  set val to values[idx]
+                  return Optional.Some with val
+                  
+             set idx to (idx + 1) % capacity
+             if idx == start_idx
+                  return Optional.None
+                  
+    function contains that takes key as String returns Integer
+        # Returns 1 if present, 0 if not (Boolean implementation pending)
+        if capacity == 0
+             return 0
+             
+        set idx to hash_string(key) % capacity
+        set start_idx to idx
+        
+        while 1 == 1
+             set flag to occupied[idx]
+             if flag == 0
+                  return 0
+                  
+             set current_key to keys[idx]
+             if strcmp(current_key, key) == 0
+                  return 1
+                  
+             set idx to (idx + 1) % capacity
+             if idx == start_idx
+                  return 0
+
+    function resize that takes new_cap as Integer returns Void
+        set old_keys to keys
+        set old_values to values
+        set old_occupied to occupied
+        set old_cap to capacity
+        
+        # Allocate new
+        set keys to calloc(new_cap, sizeof String)
+        set values to calloc(new_cap, sizeof V)
+        set occupied to calloc(new_cap, sizeof Integer)
+        set capacity to new_cap
+        set count to 0
+        
+        # Rehash old items
+        if old_cap > 0
+             set i to 0
+             while i < old_cap
+                 set flag to old_occupied[i]
+                 if flag == 1
+                      set k to old_keys[i]
+                      set v to old_values[i]
+                      put(k, v)
+                 set i to i + 1
+                 
+             c_free(old_keys)
+             c_free(old_values)
+             c_free(old_occupied)
+
+    function len returns Integer
+        return count

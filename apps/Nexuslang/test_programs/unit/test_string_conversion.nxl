@@ -1,0 +1,97 @@
+# Test String Conversion Functions
+# Verifies FFI string conversion functions work correctly
+
+print text "=== Testing NexusLang String Conversion Functions ==="
+print text ""
+
+# Test 1: to_c_string - Convert NexusLang string to C string (bytes)
+print text "Test 1: to_c_string()"
+set nxl_string to "Hello, World!"
+set c_string to to_c_string with nxl_string
+print text "NLPL string: "
+print text nxl_string
+print text "Converted to C string (bytes): "
+print text c_string
+
+# Test 2: from_c_string - Convert C string (bytes) back to NexusLang string
+print text ""
+print text "Test 2: from_c_string()"
+set c_bytes to to_c_string with "FFI Test"
+set back_to_nxl to from_c_string with c_bytes
+print text "Original: FFI Test"
+print text "Round-trip result: "
+print text back_to_nxl
+
+# Test 3: from_c_string with plain bytes
+print text ""
+print text "Test 3: from_c_string() with bytes"
+# Simulate C string bytes (without using to_c_string)
+set test_string to from_c_string with c_string
+print text "Decoded from C string: "
+print text test_string
+
+# Test 4: Empty string conversion
+print text ""
+print text "Test 4: Empty string conversion"
+set empty_nxl to ""
+set empty_c to to_c_string with empty_nxl
+set empty_back to from_c_string with empty_c
+print text "Empty string round-trip: '"
+print text empty_back
+print text "'"
+
+# Test 5: Special characters and unicode
+print text ""
+print text "Test 5: Special characters"
+set special to "Tab:\t Newline:\n Quote:\" Unicode:café"
+set special_c to to_c_string with special
+set special_back to from_c_string with special_c
+print text "Original with special chars: "
+print text special
+print text "After round-trip: "
+print text special_back
+
+# Test 6: Multiple conversions (stress test)
+print text ""
+print text "Test 6: Multiple conversions"
+set count to 0
+while count is less than 5
+    set converted to to_c_string with "Test iteration"
+    set recovered to from_c_string with converted
+    print text recovered
+    set count to count plus 1
+end
+
+# Test 7: Long string
+print text ""
+print text "Test 7: Long string conversion"
+set long_string to "The quick brown fox jumps over the lazy dog. "
+set long_string to long_string plus long_string  # Double it
+set long_string to long_string plus long_string  # Double again (180+ chars)
+set long_c to to_c_string with long_string
+set long_back to from_c_string with long_c
+print text "Long string length (original): "
+# For now just verify it doesn't crash
+print text "Long string converted successfully"
+
+# Test 8: Practical FFI use case simulation
+print text ""
+print text "Test 8: Practical FFI simulation"
+# Simulate preparing strings for C library calls
+set filename to "data.txt"
+set mode to "r"
+set c_filename to to_c_string with filename
+set c_mode to to_c_string with mode
+print text "Prepared C strings for file operations:"
+print text "Filename (C): "
+print text c_filename
+print text "Mode (C): "
+print text c_mode
+# Simulate getting results back from C
+set c_result to to_c_string with "File opened successfully"
+set nxl_result to from_c_string with c_result
+print text "Result from C: "
+print text nxl_result
+
+print text ""
+print text "=== All String Conversion Tests Passed ==="

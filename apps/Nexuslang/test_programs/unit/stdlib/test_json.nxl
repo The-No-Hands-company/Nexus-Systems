@@ -1,0 +1,56 @@
+# NexusLang JSON Module Test
+# Tests JSON parsing, stringifying, file I/O
+
+# Test 1: Parse JSON string
+print text "Test 1: Parse JSON"
+set json_string to "{\"name\":\"Alice\",\"age\":30,\"active\":true}"
+set data to call json_parse with json_string
+print text "Name:"
+print text data["name"]
+print text "Age:"
+print text data["age"]
+
+# Test 2: Stringify object
+print text "Test 2: Stringify"
+set obj to {"city": "New York", "population": 8000000}
+set json_str to call json_stringify with obj
+print text json_str
+
+# Test 3: Pretty stringify
+print text "Test 3: Pretty stringify"
+set pretty to call pretty_json with obj
+print text pretty
+
+# Test 4: Parse array
+print text "Test 4: Parse array"
+set array_json to "[1, 2, 3, 4, 5]"
+set numbers to call json_parse with array_json
+print text "First number:"
+print text numbers[0]
+print text "Last number:"
+print text numbers[4]
+
+# Test 5: Validation
+print text "Test 5: Validation"
+set valid_json to "{\"test\": true}"
+set invalid_json to "{test: true}"
+set is_valid to call is_valid_json with valid_json
+print text "Valid JSON check:"
+print text is_valid
+set is_invalid to call is_valid_json with invalid_json
+print text "Invalid JSON check:"
+print text is_invalid
+
+# Test 6: File operations
+print text "Test 6: File save/load"
+set test_data to {"message": "Hello JSON", "count": 42}
+call write_json_file with "/tmp/test_json.json", test_data, true
+print text "Saved to /tmp/test_json.json"
+
+set loaded_data to call parse_json_file with "/tmp/test_json.json"
+print text "Loaded message:"
+print text loaded_data["message"]
+print text "Loaded count:"
+print text loaded_data["count"]
+
+print text "All JSON tests completed!"

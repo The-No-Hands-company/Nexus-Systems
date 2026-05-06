@@ -1,0 +1,558 @@
+# Design Patterns in NexusLang
+
+# 1. Creational Patterns
+
+# Singleton Pattern
+class Logger
+    private static set instance to null
+    private set log_level to Integer
+    private set log_file to String
+    
+    private function initialize with log_level as Integer and log_file as String
+        set this.log_level to log_level
+        set this.log_file to log_file
+        print text "Logger initialized with level " plus convert log_level to string
+    
+    public static function get instance returns Logger
+        if Logger.instance is null
+            create Logger.instance as new Logger with 1 and "app.log"
+        return Logger.instance
+    
+    public function log with message as String and level as Integer
+        if level is greater than or equal to this.log_level
+            print text "LOG [" plus convert level to string plus "]: " plus message
+            # In a real implementation, would write to the log file
+
+# Factory Method Pattern
+interface Shape
+    function calculate area returns Float
+    function calculate perimeter returns Float
+
+class Rectangle that implements Shape
+    private set width to Float
+    private set height to Float
+    
+    public function initialize with width as Float and height as Float
+        set this.width to width
+        set this.height to height
+    
+    public function calculate area returns Float
+        return this.width times this.height
+    
+    public function calculate perimeter returns Float
+        return 2 times (this.width plus this.height)
+
+class Circle that implements Shape
+    private set radius to Float
+    
+    public function initialize with radius as Float
+        set this.radius to radius
+    
+    public function calculate area returns Float
+        return 3.14159 times this.radius times this.radius
+    
+    public function calculate perimeter returns Float
+        return 2 times 3.14159 times this.radius
+
+class ShapeFactory
+    public function create shape with shape_type as String and params as Dictionary returns Shape
+        if shape_type is equal to "rectangle"
+            return new Rectangle with params["width"] and params["height"]
+        else if shape_type is equal to "circle"
+            return new Circle with params["radius"]
+        else
+            raise new Error with "Unknown shape type: " plus shape_type
+
+# Builder Pattern
+class EmailBuilder
+    private set to_address to String
+    private set from_address to String
+    private set subject to String
+    private set body to String
+    private set attachments to List of String
+    
+    public function initialize
+        set this.to_address to ""
+        set this.from_address to ""
+        set this.subject to ""
+        set this.body to ""
+        create this.attachments as empty List of String
+    
+    public function to with address as String returns EmailBuilder
+        set this.to_address to address
+        return this
+    
+    public function from with address as String returns EmailBuilder
+        set this.from_address to address
+        return this
+    
+    public function with subject with subject as String returns EmailBuilder
+        set this.subject to subject
+        return this
+    
+    public function with body with body as String returns EmailBuilder
+        set this.body to body
+        return this
+    
+    public function with attachment with attachment as String returns EmailBuilder
+        append attachment to this.attachments
+        return this
+    
+    public function build returns Email
+        if this.to_address is equal to ""
+            raise new Error with "To address is required"
+        if this.from_address is equal to ""
+            raise new Error with "From address is required"
+        return new Email with this.to_address and this.from_address and this.subject and this.body and this.attachments
+
+class Email
+    private set to_address to String
+    private set from_address to String
+    private set subject to String
+    private set body to String
+    private set attachments to List of String
+    
+    public function initialize with to as String and from as String and subject as String and body as String and attachments as List of String
+        set this.to_address to to
+        set this.from_address to from
+        set this.subject to subject
+        set this.body to body
+        set this.attachments to attachments
+    
+    public function send
+        print text "Sending email from " plus this.from_address plus " to " plus this.to_address
+        print text "Subject: " plus this.subject
+        print text "Body: " plus this.body
+        if length of this.attachments is greater than 0
+            print text "Attachments: " plus convert this.attachments to string
+
+# 2. Structural Patterns
+
+# Adapter Pattern
+class LegacyRectangle
+    private set x1 to Integer
+    private set y1 to Integer
+    private set x2 to Integer
+    private set y2 to Integer
+    
+    public function initialize with x1 as Integer and y1 as Integer and x2 as Integer and y2 as Integer
+        set this.x1 to x1
+        set this.y1 to y1
+        set this.x2 to x2
+        set this.y2 to y2
+    
+    public function get x1 returns Integer
+        return this.x1
+    
+    public function get y1 returns Integer
+        return this.y1
+    
+    public function get x2 returns Integer
+        return this.x2
+    
+    public function get y2 returns Integer
+        return this.y2
+
+class RectangleAdapter that implements Shape
+    private set legacy_rectangle to LegacyRectangle
+    
+    public function initialize with legacy_rectangle as LegacyRectangle
+        set this.legacy_rectangle to legacy_rectangle
+    
+    public function calculate area returns Float
+        set width to get x2 from this.legacy_rectangle minus get x1 from this.legacy_rectangle
+        set height to get y2 from this.legacy_rectangle minus get y1 from this.legacy_rectangle
+        return convert width to Float times convert height to Float
+    
+    public function calculate perimeter returns Float
+        set width to get x2 from this.legacy_rectangle minus get x1 from this.legacy_rectangle
+        set height to get y2 from this.legacy_rectangle minus get y1 from this.legacy_rectangle
+        return 2 times convert (width plus height) to Float
+
+# Decorator Pattern
+interface Coffee
+    function get cost returns Float
+    function get description returns String
+
+class SimpleCoffee that implements Coffee
+    public function get cost returns Float
+        return 5.0
+    
+    public function get description returns String
+        return "Simple coffee"
+
+class CoffeeDecorator that implements Coffee
+    protected set wrapped_coffee to Coffee
+    
+    public function initialize with coffee as Coffee
+        set this.wrapped_coffee to coffee
+    
+    public function get cost returns Float
+        return get cost from this.wrapped_coffee
+    
+    public function get description returns String
+        return get description from this.wrapped_coffee
+
+class MilkDecorator that extends CoffeeDecorator
+    public function initialize with coffee as Coffee
+        call parent initialize with coffee
+    
+    public function get cost returns Float
+        return get cost from parent plus 1.0
+    
+    public function get description returns String
+        return get description from parent plus ", with milk"
+
+class SugarDecorator that extends CoffeeDecorator
+    public function initialize with coffee as Coffee
+        call parent initialize with coffee
+    
+    public function get cost returns Float
+        return get cost from parent plus 0.5
+    
+    public function get description returns String
+        return get description from parent plus ", with sugar"
+
+# Composite Pattern
+interface FileSystemComponent
+    function get name returns String
+    function get size returns Integer
+    function print
+
+class File that implements FileSystemComponent
+    private set name to String
+    private set size to Integer
+    
+    public function initialize with name as String and size as Integer
+        set this.name to name
+        set this.size to size
+    
+    public function get name returns String
+        return this.name
+    
+    public function get size returns Integer
+        return this.size
+    
+    public function print
+        print text this.name plus " (" plus convert this.size to string plus " bytes)"
+
+class Directory that implements FileSystemComponent
+    private set name to String
+    private set children to List of FileSystemComponent
+    
+    public function initialize with name as String
+        set this.name to name
+        create this.children as empty List of FileSystemComponent
+    
+    public function add with component as FileSystemComponent
+        append component to this.children
+    
+    public function get name returns String
+        return this.name
+    
+    public function get size returns Integer
+        set total_size to 0
+        for each child in this.children
+            set total_size to total_size plus get size from child
+        return total_size
+    
+    public function print
+        print text this.name plus " (dir)"
+        for each child in this.children
+            print text "  "
+            print from child
+
+# 3. Behavioral Patterns
+
+# Observer Pattern
+interface Observer
+    function update with subject as Subject and data as Any
+
+class Subject
+    private set observers to List of Observer
+    
+    public function initialize
+        create this.observers as empty List of Observer
+    
+    public function attach with observer as Observer
+        append observer to this.observers
+    
+    public function detach with observer as Observer
+        remove observer from this.observers
+    
+    public function notify with data as Any
+        for each observer in this.observers
+            update observer with this and data
+
+class WeatherStation that extends Subject
+    private set temperature to Float
+    
+    public function initialize
+        call parent initialize
+        set this.temperature to 0.0
+    
+    public function set temperature with temperature as Float
+        set this.temperature to temperature
+        notify this with this.temperature
+    
+    public function get temperature returns Float
+        return this.temperature
+
+class TemperatureDisplay that implements Observer
+    public function update with subject as Subject and data as Any
+        print text "Temperature Display: " plus convert data to string plus " degrees"
+
+class TemperatureLogger that implements Observer
+    public function update with subject as Subject and data as Any
+        print text "Temperature Logger: Logging temperature " plus convert data to string plus " degrees"
+
+# Strategy Pattern
+interface SortingStrategy
+    function sort with array as List returns List
+
+class BubbleSort that implements SortingStrategy
+    public function sort with array as List returns List
+        set length to length of array
+        set sorted_array to copy of array
+        
+        for i from 0 to length minus 1
+            for j from 0 to length minus i minus 2
+                if sorted_array[j] is greater than sorted_array[j plus 1]
+                    # Swap elements
+                    set temp to sorted_array[j]
+                    set sorted_array[j] to sorted_array[j plus 1]
+                    set sorted_array[j plus 1] to temp
+        
+        return sorted_array
+
+class QuickSort that implements SortingStrategy
+    public function sort with array as List returns List
+        print text "Using QuickSort strategy (simplified implementation)"
+        # Simplified implementation - in real code this would be a full quicksort
+        return sort array
+    
+class Sorter
+    private set strategy to SortingStrategy
+    
+    public function initialize with strategy as SortingStrategy
+        set this.strategy to strategy
+    
+    public function set strategy with strategy as SortingStrategy
+        set this.strategy to strategy
+    
+    public function sort with array as List returns List
+        return sort this.strategy with array
+
+# Command Pattern
+interface Command
+    function execute
+
+class Light
+    private set is_on to Boolean
+    private set name to String
+    
+    public function initialize with name as String
+        set this.is_on to false
+        set this.name to name
+    
+    public function turn on
+        set this.is_on to true
+        print text this.name plus " light turned on"
+    
+    public function turn off
+        set this.is_on to false
+        print text this.name plus " light turned off"
+    
+    public function is on returns Boolean
+        return this.is_on
+
+class LightOnCommand that implements Command
+    private set light to Light
+    
+    public function initialize with light as Light
+        set this.light to light
+    
+    public function execute
+        turn on this.light
+
+class LightOffCommand that implements Command
+    private set light to Light
+    
+    public function initialize with light as Light
+        set this.light to light
+    
+    public function execute
+        turn off this.light
+
+class RemoteControl
+    private set slots to Dictionary of Integer and Command
+    
+    public function initialize
+        create this.slots as empty Dictionary of Integer and Command
+    
+    public function set command with slot as Integer and command as Command
+        set this.slots[slot] to command
+    
+    public function press button with slot as Integer
+        if slot is in this.slots
+            execute this.slots[slot]
+        else
+            print text "No command assigned to slot " plus convert slot to string
+
+# Usage Examples
+
+# Singleton example
+function test singleton pattern
+    print text "Testing Singleton Pattern:"
+    set logger1 to get instance from Logger
+    set logger2 to get instance from Logger
+    
+    # Both logger1 and logger2 should reference the same instance
+    log logger1 with "This is a test message from logger1" and 1
+    log logger2 with "This is a test message from logger2" and 2
+    print text ""
+
+# Factory Method example
+function test factory method pattern
+    print text "Testing Factory Method Pattern:"
+    create factory as new ShapeFactory
+    
+    create rectangle as create shape from factory with "rectangle" and {"width": 5.0, "height": 3.0}
+    print text "Rectangle area: " plus convert calculate area from rectangle to string
+    print text "Rectangle perimeter: " plus convert calculate perimeter from rectangle to string
+    
+    create circle as create shape from factory with "circle" and {"radius": 2.5}
+    print text "Circle area: " plus convert calculate area from circle to string
+    print text "Circle perimeter: " plus convert calculate perimeter from circle to string
+    print text ""
+
+# Builder example
+function test builder pattern
+    print text "Testing Builder Pattern:"
+    set email to new EmailBuilder
+        .to with "recipient@example.com"
+        .from with "sender@example.com"
+        .with subject with "Meeting Tomorrow"
+        .with body with "Let's meet at 10 AM to discuss the project."
+        .with attachment with "agenda.pdf"
+        .build
+    
+    send email
+    print text ""
+
+# Adapter example
+function test adapter pattern
+    print text "Testing Adapter Pattern:"
+    create legacy_rectangle as new LegacyRectangle with 0 and 0 and 10 and 5
+    create rectangle_adapter as new RectangleAdapter with legacy_rectangle
+    
+    print text "Rectangle area: " plus convert calculate area from rectangle_adapter to string
+    print text "Rectangle perimeter: " plus convert calculate perimeter from rectangle_adapter to string
+    print text ""
+
+# Decorator example
+function test decorator pattern
+    print text "Testing Decorator Pattern:"
+    create coffee as new SimpleCoffee
+    print text "Simple coffee cost: " plus convert get cost from coffee to string
+    print text "Simple coffee description: " plus get description from coffee
+    
+    create coffee_with_milk as new MilkDecorator with coffee
+    print text "Coffee with milk cost: " plus convert get cost from coffee_with_milk to string
+    print text "Coffee with milk description: " plus get description from coffee_with_milk
+    
+    create coffee_with_milk_and_sugar as new SugarDecorator with coffee_with_milk
+    print text "Coffee with milk and sugar cost: " plus convert get cost from coffee_with_milk_and_sugar to string
+    print text "Coffee with milk and sugar description: " plus get description from coffee_with_milk_and_sugar
+    print text ""
+
+# Composite example
+function test composite pattern
+    print text "Testing Composite Pattern:"
+    create root as new Directory with "root"
+    
+    create bin as new Directory with "bin"
+    create home as new Directory with "home"
+    
+    create file1 as new File with "file1.txt" and 1000
+    create file2 as new File with "file2.txt" and 2000
+    create file3 as new File with "file3.txt" and 3000
+    
+    add file1 to bin
+    add file2 to bin
+    add file3 to home
+    add bin to root
+    add home to root
+    
+    print from root
+    print text "Total size: " plus convert get size from root to string plus " bytes"
+    print text ""
+
+# Observer example
+function test observer pattern
+    print text "Testing Observer Pattern:"
+    create weather_station as new WeatherStation
+    create display as new TemperatureDisplay
+    create logger as new TemperatureLogger
+    
+    attach display to weather_station
+    attach logger to weather_station
+    
+    set temperature of weather_station to 25.5
+    set temperature of weather_station to 26.8
+    
+    detach logger from weather_station
+    set temperature of weather_station to 27.3
+    print text ""
+
+# Strategy example
+function test strategy pattern
+    print text "Testing Strategy Pattern:"
+    create bubble_sorter as new Sorter with new BubbleSort
+    create quick_sorter as new Sorter with new QuickSort
+    
+    set numbers to [5, 3, 8, 1, 9, 2]
+    print text "Original array: " plus convert numbers to string
+    
+    set sorted_numbers to sort bubble_sorter with numbers
+    print text "Sorted with bubble sort: " plus convert sorted_numbers to string
+    
+    set strategy of bubble_sorter to new QuickSort
+    set sorted_numbers to sort bubble_sorter with numbers
+    print text "Sorted with quick sort: " plus convert sorted_numbers to string
+    print text ""
+
+# Command example
+function test command pattern
+    print text "Testing Command Pattern:"
+    create living_room_light as new Light with "Living Room"
+    create kitchen_light as new Light with "Kitchen"
+    
+    create living_room_light_on as new LightOnCommand with living_room_light
+    create living_room_light_off as new LightOffCommand with living_room_light
+    create kitchen_light_on as new LightOnCommand with kitchen_light
+    create kitchen_light_off as new LightOffCommand with kitchen_light
+    
+    create remote as new RemoteControl
+    set command of remote with 0 and living_room_light_on
+    set command of remote with 1 and living_room_light_off
+    set command of remote with 2 and kitchen_light_on
+    set command of remote with 3 and kitchen_light_off
+    
+    press button of remote with 0  # Turn on living room light
+    press button of remote with 2  # Turn on kitchen light
+    press button of remote with 1  # Turn off living room light
+    press button of remote with 3  # Turn off kitchen light
+    press button of remote with 4  # No command assigned
+    print text ""
+
+# Run all examples
+test singleton pattern
+test factory method pattern
+test builder pattern
+test adapter pattern
+test decorator pattern
+test composite pattern
+test observer pattern
+test strategy pattern
+test command pattern 

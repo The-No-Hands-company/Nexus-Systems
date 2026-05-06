@@ -1,0 +1,297 @@
+# Data Processor — NexusLang Showcase Project #2
+#
+# A CSV data analysis tool that loads employee records, computes
+# statistics, ranks departments, finds outliers, and produces a
+# formatted report — all in idiomatic NexusLang.
+#
+# Demonstrates: CSV parsing, dictionaries, lists, sorting, math
+# functions, string formatting, control flow, and functions.
+#
+# Usage (from repo root):
+#   python -m nexuslang.main showcase/data_processor/analyze.nlpl
+
+set data_file to "showcase/data_processor/sample_data.csv"
+set separator to "--------------------------------------------------------------------------------"
+set header_sep to "================================================================================"
+
+# ---------------------------------------------------------------------------
+# Helper functions
+# ---------------------------------------------------------------------------
+
+function bar_chart with value, maximum, width returns text
+    set filled to round((value divided by maximum) times width)
+    set bar to ""
+    set i to 0
+    repeat while i is less than filled
+        set bar to bar plus "#"
+        set i to i plus 1
+    end
+    repeat while i is less than width
+        set bar to bar plus "."
+        set i to i plus 1
+    end
+    return bar
+end
+
+function pad_right with text_value, target_width returns text
+    set result to to_string(text_value)
+    set current_len to length of result
+    repeat while current_len is less than target_width
+        set result to result plus " "
+        set current_len to current_len plus 1
+    end
+    return result
+end
+
+function pad_left with text_value, target_width returns text
+    set result to to_string(text_value)
+    set current_len to length of result
+    repeat while current_len is less than target_width
+        set result to " " plus result
+        set current_len to current_len plus 1
+    end
+    return result
+end
+
+function format_currency with amount returns text
+    set thousands to round(amount divided by 1000)
+    return "$" plus thousands plus "k"
+end
+
+function list_average with numbers returns number
+    set total to 0
+    for each num in numbers
+        set total to total plus num
+    end
+    return total divided by length of numbers
+end
+
+function list_max with numbers returns number
+    set best to numbers[0]
+    for each num in numbers
+        if num is greater than best
+            set best to num
+        end
+    end
+    return best
+end
+
+function list_min with numbers returns number
+    set worst to numbers[0]
+    for each num in numbers
+        if num is less than worst
+            set worst to num
+        end
+    end
+    return worst
+end
+
+function list_sum with numbers returns number
+    set total to 0
+    for each num in numbers
+        set total to total plus num
+    end
+    return total
+end
+
+# ---------------------------------------------------------------------------
+# Load and parse CSV
+# ---------------------------------------------------------------------------
+
+print text header_sep
+print text "  NexusLang Data Processor"
+print text "  Analyzing: " plus data_file
+print text header_sep
+print text ""
+
+set raw_lines to read_lines(data_file)
+set headers to split_string(raw_lines[0], ",")
+
+set employees to []
+set line_number to 0
+for each line in raw_lines
+    if line_number is greater than 0
+        set fields to split_string(line, ",")
+        if length of fields equals 5
+            set employee to {
+                "name":       trim_string(fields[0]),
+                "department": trim_string(fields[1]),
+                "salary":     to_number(trim_string(fields[2])),
+                "years":      to_number(trim_string(fields[3])),
+                "rating":     to_number(trim_string(fields[4]))
+            }
+            append employee to employees
+        end
+    end
+    set line_number to line_number plus 1
+end
+
+set total_employees to length of employees
+print text "  Loaded " plus total_employees plus " employee records"
+print text ""
+
+# ---------------------------------------------------------------------------
+# Overall statistics
+# ---------------------------------------------------------------------------
+
+set all_salaries to []
+set all_years to []
+set all_ratings to []
+
+for each emp in employees
+    append emp["salary"] to all_salaries
+    append emp["years"] to all_years
+    append emp["rating"] to all_ratings
+end
+
+set avg_salary to list_average(all_salaries)
+set max_salary to list_max(all_salaries)
+set min_salary to list_min(all_salaries)
+set avg_years to list_average(all_years)
+set avg_rating to list_average(all_ratings)
+set total_payroll to list_sum(all_salaries)
+
+print text separator
+print text "  OVERALL STATISTICS"
+print text separator
+print text ""
+print text "  Employees:       " plus total_employees
+print text "  Total payroll:   " plus format_currency(total_payroll)
+print text "  Avg salary:      " plus format_currency(avg_salary)
+print text "  Salary range:    " plus format_currency(min_salary) plus " — " plus format_currency(max_salary)
+print text "  Avg tenure:      " plus round(avg_years) plus " years"
+print text "  Avg rating:      " plus avg_rating
+print text ""
+
+# ---------------------------------------------------------------------------
+# Department breakdown
+# ---------------------------------------------------------------------------
+
+set dept_names to []
+set dept_salaries to {}
+set dept_counts to {}
+set dept_ratings to {}
+
+for each emp in employees
+    set dept to emp["department"]
+    if not (dept in dept_counts)
+        append dept to dept_names
+        set dept_counts[dept] to 0
+        set dept_salaries[dept] to 0
+        set dept_ratings[dept] to 0
+    end
+    set dept_counts[dept] to dept_counts[dept] plus 1
+    set dept_salaries[dept] to dept_salaries[dept] plus emp["salary"]
+    set dept_ratings[dept] to dept_ratings[dept] plus emp["rating"]
+end
+
+print text separator
+print text "  DEPARTMENT BREAKDOWN"
+print text separator
+print text ""
+print text "  Department          Headcount    Avg Salary   Avg Rating   Share"
+print text "  " plus separator
+
+for each dept in dept_names
+    set count to dept_counts[dept]
+    set avg_dept_salary to round(dept_salaries[dept] divided by count)
+    set avg_dept_rating to round(dept_ratings[dept] divided by count)
+    set share_pct to pct(count, total_employees)
+    set chart to bar_chart(count, total_employees, 20)
+
+    set col1 to pad_right(dept, 20)
+    set col2 to pad_left(count, 6)
+    set col3 to pad_left(format_currency(avg_dept_salary), 12)
+    set col4 to pad_left(avg_dept_rating, 12)
+    set col5 to pad_left(share_pct plus "%", 8)
+
+    print text "  " plus col1 plus col2 plus col3 plus col4 plus col5
+end
+
+print text ""
+
+# ---------------------------------------------------------------------------
+# Top performers (rating >= 4.5)
+# ---------------------------------------------------------------------------
+
+set top_performers to []
+for each emp in employees
+    if emp["rating"] is greater than or equal to 4.5
+        append emp to top_performers
+    end
+end
+
+print text separator
+print text "  TOP PERFORMERS (rating >= 4.5)"
+print text separator
+print text ""
+
+if length of top_performers is greater than 0
+    for each emp in top_performers
+        set name_col to pad_right(emp["name"], 20)
+        set dept_col to pad_right(emp["department"], 15)
+        set sal_col  to pad_left(format_currency(emp["salary"]), 8)
+        set rating   to emp["rating"]
+        print text "  " plus name_col plus dept_col plus sal_col plus "   ★ " plus rating
+    end
+else
+    print text "  No top performers found."
+end
+
+print text ""
+
+# ---------------------------------------------------------------------------
+# Salary distribution (histogram buckets)
+# ---------------------------------------------------------------------------
+
+set bucket_50_60 to 0
+set bucket_60_70 to 0
+set bucket_70_80 to 0
+set bucket_80_90 to 0
+set bucket_90_100 to 0
+set bucket_100_plus to 0
+
+for each emp in employees
+    set s to emp["salary"]
+    if s is less than 60000
+        set bucket_50_60 to bucket_50_60 plus 1
+    else if s is less than 70000
+        set bucket_60_70 to bucket_60_70 plus 1
+    else if s is less than 80000
+        set bucket_70_80 to bucket_70_80 plus 1
+    else if s is less than 90000
+        set bucket_80_90 to bucket_80_90 plus 1
+    else if s is less than 100000
+        set bucket_90_100 to bucket_90_100 plus 1
+    else
+        set bucket_100_plus to bucket_100_plus plus 1
+    end
+end
+
+print text separator
+print text "  SALARY DISTRIBUTION"
+print text separator
+print text ""
+
+set max_bucket to list_max([bucket_50_60, bucket_60_70, bucket_70_80, bucket_80_90, bucket_90_100, bucket_100_plus])
+
+set buckets to [
+    ["$50k-60k", bucket_50_60],
+    ["$60k-70k", bucket_60_70],
+    ["$70k-80k", bucket_70_80],
+    ["$80k-90k", bucket_80_90],
+    ["$90k-100k", bucket_90_100],
+    ["$100k+",   bucket_100_plus]
+]
+
+for each bucket in buckets
+    set label to pad_right(bucket[0], 12)
+    set count to bucket[1]
+    set chart to bar_chart(count, max_bucket, 24)
+    print text "  " plus label plus " [" plus chart plus "] " plus count
+end
+
+print text ""
+print text separator
+print text "  Analysis complete."
+print text separator

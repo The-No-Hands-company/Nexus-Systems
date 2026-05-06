@@ -1,0 +1,86 @@
+# Foreign Function Interface (FFI) - C Library Interoperability
+# This demonstrates calling C library functions from NexusLang
+
+print text "======================================"
+print text "FFI: C Library Interoperability Demo"
+print text "======================================"
+print text ""
+
+# Example 1: String Length Function (strlen)
+print text "Example 1: String Length (strlen)"
+print text "---------------------------------"
+
+# Declare the strlen function from libc
+# Syntax: extern function NAME with PARAMS returns TYPE from library "LIB"
+extern function strlen with str as Pointer returns Integer from library "c"
+
+# Call strlen with different strings
+set message to "Hello, World!"
+set length to call strlen with message
+
+print text "String: "
+print text message
+print text "Length: "
+print number length
+
+set empty to ""
+set empty_len to call strlen with empty
+print text "Empty string length: "
+print number empty_len
+
+print text ""
+
+# Example 2: String Comparison (strcmp)
+print text "Example 2: String Comparison (strcmp)"
+print text "-------------------------------------"
+
+# Declare strcmp - takes two string pointers, returns int
+extern function strcmp with s1 as Pointer, s2 as Pointer returns Integer from library "c"
+
+# Compare identical strings
+set str_a to "apple"
+set str_b to "apple"
+set result1 to call strcmp with str_a, str_b
+print text "strcmp('apple', 'apple') = "
+print number result1
+print text "(0 means equal)"
+
+# Compare different strings
+set str_c to "banana"
+set str_d to "cherry"
+set result2 to call strcmp with str_c, str_d
+print text "strcmp('banana', 'cherry') = "
+print number result2
+print text "(negative means first string comes before second)"
+
+print text ""
+
+# Example 3: Printf (declaration only - format args need special handling)
+print text "Example 3: Printf Declaration"
+print text "----------------------------"
+
+# Declare printf - we can bind it, though calling with format args
+# requires special variadic argument handling
+extern function printf with format as Pointer returns Integer from library "c"
+
+print text "printf function successfully bound to NLPL"
+print text "Note: Full format string support requires variadic args"
+
+print text ""
+
+# Summary
+print text "======================================"
+print text "FFI Demo Summary"
+print text "======================================"
+print text ""
+print text " Declared and called strlen"
+print text " Declared and called strcmp" 
+print text " Demonstrated C library binding"
+print text ""
+print text "FFI enables NexusLang to:"
+print text "- Call any C library function"
+print text "- Access system APIs"
+print text "- Integrate with existing C code"
+print text "- Achieve near-native performance"
+print text ""
+print text "======================================"

@@ -1,0 +1,39 @@
+# Pattern matching with guards test
+
+print text "=== Pattern Matching with Guards ==="
+
+# Test 1: Guard with comparison
+print text "Test 1: Guard with comparison"
+set n to 15
+match n with
+    case _ if n is greater than 10
+        print text "PASS: n > 10"
+    case _
+        print text "FAIL: Should have matched guard"
+end
+
+# Test 2: Guard with equality check  
+print text "Test 2: Guard with equality"
+set status to 200
+match status with
+    case _ if status is equal to 200
+        print text "PASS: HTTP OK"
+    case _ if status is equal to 404
+        print text "FAIL: Not Found"
+    case _
+        print text "FAIL: Unknown status"
+end
+
+# Test 3: Guard on specific value
+print text "Test 3: Guard on value"
+set val to 5
+match val with
+    case 5 if val is less than 3
+        print text "FAIL: 5 < 3 is false"
+    case 5 if val is greater than 3
+        print text "PASS: 5 > 3 is true"
+    case _
+        print text "FAIL: Should have matched case 5"
+end
+
+print text "=== Guard tests complete ==="

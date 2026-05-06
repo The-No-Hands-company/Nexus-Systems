@@ -1,0 +1,15 @@
+# Simple Rc<T> creation and cleanup test
+# Tests basic reference counting functionality
+
+function test_rc_basic returns Integer
+    # Create an Rc<Integer>
+    set x to Rc of Integer with 42
+    print text "Created Rc with value 42"
+    
+    # Return success
+    return 0
+end
+
+# Call the test function
+set result to call test_rc_basic
+print text "Test completed"

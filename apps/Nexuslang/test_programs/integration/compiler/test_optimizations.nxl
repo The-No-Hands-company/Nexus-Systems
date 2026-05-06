@@ -1,0 +1,106 @@
+# Test Program for Optimizer Verification
+# This program tests constant folding, dead code elimination, and function inlining
+
+# ----- Test 1: Constant Folding -----
+# These expressions should be evaluated at compile time
+function test_constant_folding returns Integer
+    # Simple arithmetic folding
+    set a to 2 plus 3
+    set b to 10 times 5
+    set c to 100 minus 25
+    set d to 50 divided by 2
+    
+    # Boolean constant folding
+    set bool1 to true and false
+    set bool2 to true or false
+    
+    set result to a plus b
+    set result to result plus c
+    set result to result plus d
+    return result
+end
+
+# ----- Test 2: Dead Code Elimination -----
+# This function is never called - should be removed by DCE
+function unused_helper returns Integer
+    print text "This should never execute"
+    return 999
+end
+
+# This function IS called - should NOT be removed
+function used_helper with x as Integer returns Integer
+    return x times 2
+end
+
+# ----- Test 3: Simple Functions for Inlining -----
+# Small function that should be inlined
+function add_one with n as Integer returns Integer
+    return n plus 1
+end
+
+# Another small function for inlining
+function double_value with n as Integer returns Integer
+    return n times 2
+end
+
+# Complex function that should NOT be inlined (too many statements)
+function complex_operation with a as Integer and b as Integer returns Integer
+    set result to 0
+    set i to 0
+    while i is less than a
+        set result to result plus b
+        set i to i plus 1
+    end
+    if result is greater than 100
+        set result to result minus 50
+    else
+        set result to result plus 10
+    end
+    return result
+end
+
+# ----- Test 4: Dead Variable Elimination -----
+function test_dead_variables returns Integer
+    set used_var to 42
+    set dead_var to 100
+    set another_dead to 200
+    
+    return used_var
+end
+
+# ----- Main Program -----
+function main returns Integer
+    # Test constant folding
+    print text "Testing constant folding:"
+    set fold_result to test_constant_folding
+    print text fold_result
+    
+    # Test that used_helper is kept
+    print text "Testing DCE keeps used functions:"
+    set helper_result to used_helper with 21
+    print text helper_result
+    
+    # Test function inlining (small functions should be inlined)
+    print text "Testing function inlining:"
+    set x to 5
+    set y to add_one with x
+    set z to double_value with y
+    print text z
+    
+    # Test dead variable handling
+    print text "Testing dead variable elimination:"
+    set dead_test to test_dead_variables
+    print text dead_test
+    
+    # Test complex function (should NOT be inlined)
+    print text "Testing complex function (not inlined):"
+    set complex_result to complex_operation with 5 and 10
+    print text complex_result
+    
+    # Compile-time constant expression
+    set constant_expr to 100
+    print text "Constant expression result:"
+    print text constant_expr
+    
+    return 0
+end

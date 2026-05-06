@@ -1,0 +1,6 @@
+# Test range-based for loop
+
+for i from 0 to 5
+    print text i
+
+print text "Loop done!"

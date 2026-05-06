@@ -1,0 +1,37 @@
+# Test Empty Classes - No Properties
+# Tests proper LLVM type generation for empty classes
+
+# Empty class - no properties
+class EmptyMarker
+    pass
+
+# Another empty class
+class EmptyContainer
+    pass
+
+# Class with field for comparison
+struct WithField
+    value as Integer
+end
+
+function main that takes nothing returns Integer
+    print text "=== Empty Class Tests ==="
+    
+    # Test sizeof on empty class
+    print text "Testing sizeof on empty class..."
+    set empty_size to sizeof EmptyMarker
+    print text "sizeof(EmptyMarker): "
+    print number empty_size
+    
+    # Compare with struct that has field
+    set with_field_size to sizeof WithField
+    print text "sizeof(WithField): "
+    print number with_field_size
+    
+    print text ""
+    print text "Expected: EmptyMarker should be 0 bytes (empty struct)"
+    print text "Expected: WithField should be 8 bytes (one i64)"
+    
+    print text ""
+    print text "=== Empty class test complete ==="
+    return 0

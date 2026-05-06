@@ -1,0 +1,17 @@
+# Test f-string end-to-end
+set name to "Alice"
+set age to 30
+set greeting to f"Hello, {name}! You are {age} years old."
+print text greeting
+
+# Test with expressions
+set x to 10
+set y to 20
+set result to f"The sum of {x} and {y} is {x + y}"
+print text result
+
+# Test multiple interpolations
+set a to 5
+set b to 3
+set math_result to f"{a} + {b} = {a + b}, {a} * {b} = {a * b}"
+print text math_result

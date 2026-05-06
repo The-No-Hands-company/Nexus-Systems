@@ -1,0 +1,50 @@
+# Advanced Rc<T> cloning test - multiple levels of sharing
+#
+# This test validates complex cloning scenarios:
+# - Multiple clones from the same source
+# - Cloning clones (transitive sharing)
+# - Proper cleanup order
+
+function test_multi_clone returns Integer
+  print text "=== Multi-level Rc Cloning ==="
+  
+  # Create original
+  set original to Rc of Integer with 999
+  print text "Created original Rc"
+  
+  # First level clones
+  set clone1 to original
+  set clone2 to original
+  print text "Created 2 clones from original (refcount = 3)"
+  
+  # Second level clone
+  set clone_of_clone to clone1
+  print text "Created clone of clone1 (refcount = 4)"
+  
+  print text "All 4 variables share the same value"
+  print text "Automatic cleanup will release all 4 references"
+  
+  return 0
+end
+
+function test_rc_sequential_sharing returns Integer
+  print text ""
+  print text "=== Rc Sequential Sharing ==="
+  
+  set x to Rc of Integer with 123
+  print text "Created Rc x"
+  
+  set y to x
+  print text "Cloned x to y (both share same Rc)"
+  
+  print text "Both x and y will be released at function end"
+  
+  return 0
+end
+
+# Run tests
+call test_multi_clone
+call test_rc_sequential_sharing
+
+print text ""
+print text "=== Advanced cloning tests passed ==="

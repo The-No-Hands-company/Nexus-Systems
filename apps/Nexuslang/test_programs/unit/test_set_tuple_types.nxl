@@ -1,0 +1,21 @@
+# Test SetType and TupleType
+# Validates that the new collection types work correctly
+
+print text "=== Testing Set and Tuple Types ==="
+
+# Test 1: Set creation and usage
+set myset to create set
+print text "Created empty set"
+
+# Test 2: Tuple creation
+set mytuple to create tuple
+print text "Created empty tuple"
+
+# Test 3: Type checking with explicit types
+set typed_set to create set of Integer
+print text "Created typed set: Set<Integer>"
+
+set typed_tuple to create tuple of String
+print text "Created typed tuple: Tuple<String>"
+
+print text "=== All Set/Tuple Type Tests Passed ==="

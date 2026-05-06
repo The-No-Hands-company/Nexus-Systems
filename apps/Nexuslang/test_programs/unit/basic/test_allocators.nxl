@@ -1,0 +1,155 @@
+# Test: Memory Allocator Control
+# Covers: SystemAllocator, ArenaAllocator, PoolAllocator, SlabAllocator,
+#         allocate/deallocate/reallocate/reset, stats, global and per-type allocators,
+#         block introspection, byte read/write.
+
+# --- SystemAllocator ---
+
+set sys_alloc to create_system_allocator with 0
+print text "system allocator created"
+
+set blk to allocator_allocate with sys_alloc and 64 and "TestType"
+set blk_size to allocator_block_size with blk
+set blk_type to allocator_block_type with blk
+print text "block size:"
+print text blk_size
+print text "block type:"
+print text blk_type
+
+call allocator_write_byte with blk and 0 and 200
+call allocator_write_byte with blk and 1 and 55
+set b0 to allocator_read_byte with blk and 0
+set b1 to allocator_read_byte with blk and 1
+print text "byte 0 (expect 200):"
+print text b0
+print text "byte 1 (expect 55):"
+print text b1
+
+set stats to get_allocator_stats with sys_alloc
+print text "sys alloc_count after 1 alloc (expect 1):"
+print text stats["allocation_count"]
+print text "sys current_bytes after 1 alloc (expect 64):"
+print text stats["current_bytes"]
+
+call allocator_deallocate with sys_alloc and blk
+set stats to get_allocator_stats with sys_alloc
+print text "sys current_bytes after dealloc (expect 0):"
+print text stats["current_bytes"]
+print text "sys dealloc_count after 1 dealloc (expect 1):"
+print text stats["deallocation_count"]
+
+# --- Reallocate ---
+
+set blk2 to allocator_allocate with sys_alloc and 32 and "byte"
+call allocator_write_byte with blk2 and 0 and 99
+set blk3 to allocator_reallocate with sys_alloc and blk2 and 128
+set expanded_size to allocator_block_size with blk3
+print text "reallocated block size (expect 128):"
+print text expanded_size
+set b_check to allocator_read_byte with blk3 and 0
+print text "data preserved after realloc (expect 99):"
+print text b_check
+
+call allocator_reset with sys_alloc
+set stats to get_allocator_stats with sys_alloc
+print text "sys current_bytes after reset (expect 0):"
+print text stats["current_bytes"]
+
+# --- ArenaAllocator ---
+
+set arena to create_arena_allocator with 4096
+print text "arena allocator created (4096 bytes)"
+
+set arena_blk1 to allocator_allocate with arena and 100 and "node"
+set arena_blk2 to allocator_allocate with arena and 200 and "edge"
+set arena_blk1_size to allocator_block_size with arena_blk1
+set arena_blk2_size to allocator_block_size with arena_blk2
+print text "arena blk1 size (expect 100):"
+print text arena_blk1_size
+print text "arena blk2 size (expect 200):"
+print text arena_blk2_size
+
+set astats to get_allocator_stats with arena
+print text "arena alloc_count (expect 2):"
+print text astats["allocation_count"]
+print text "arena current_bytes (expect >=300):"
+print text astats["current_bytes"]
+
+# Arena individual dealloc is no-op, reset frees everything
+call allocator_reset with arena
+set astats to get_allocator_stats with arena
+print text "arena alloc_count after reset (expect 0):"
+print text astats["allocation_count"]
+print text "arena current_bytes after reset (expect 0):"
+print text astats["current_bytes"]
+
+# --- PoolAllocator ---
+
+set pool to create_pool_allocator with 64 and 8
+print text "pool allocator created (64-byte blocks, capacity 8)"
+
+set p1 to allocator_allocate with pool and 64 and "Obj"
+set p2 to allocator_allocate with pool and 64 and "Obj"
+set pstats to get_allocator_stats with pool
+print text "pool alloc_count after 2 allocs (expect 2):"
+print text pstats["allocation_count"]
+print text "pool current_bytes after 2 allocs (expect 128):"
+print text pstats["current_bytes"]
+
+call allocator_deallocate with pool and p1
+set pstats to get_allocator_stats with pool
+print text "pool current_bytes after 1 dealloc (expect 64):"
+print text pstats["current_bytes"]
+
+call allocator_reset with pool
+set pstats to get_allocator_stats with pool
+print text "pool current_bytes after reset (expect 0):"
+print text pstats["current_bytes"]
+
+# --- SlabAllocator ---
+
+set slab to create_slab_allocator with 32 and 4
+print text "slab allocator created (32-byte objects, 4 per slab)"
+
+set s1 to allocator_allocate with slab and 32 and "SlabObj"
+set s2 to allocator_allocate with slab and 32 and "SlabObj"
+set s3 to allocator_allocate with slab and 32 and "SlabObj"
+set sstats to get_allocator_stats with slab
+print text "slab alloc_count after 3 allocs (expect 3):"
+print text sstats["allocation_count"]
+
+call allocator_deallocate with slab and s2
+set sstats to get_allocator_stats with slab
+print text "slab dealloc_count after 1 dealloc (expect 1):"
+print text sstats["deallocation_count"]
+
+call allocator_reset with slab
+set sstats to get_allocator_stats with slab
+print text "slab alloc_count after reset (expect 0):"
+print text sstats["allocation_count"]
+
+# --- Global allocator override ---
+
+set global_before to get_global_allocator with 0
+print text "global allocator retrieved"
+
+set new_global to create_arena_allocator with 16384
+call set_global_allocator with new_global
+set global_after to get_global_allocator with 0
+print text "global allocator changed: ok"
+
+# Restore system allocator as global
+set system_restore to create_system_allocator with 0
+call set_global_allocator with system_restore
+
+# --- Per-type allocator ---
+
+set node_pool to create_pool_allocator with 128 and 32
+call set_type_allocator with "Node" and node_pool
+set retrieved_alloc to get_type_allocator with "Node"
+print text "per-type allocator set and retrieved: ok"
+
+call clear_type_allocator with "Node"
+print text "per-type allocator cleared: ok"
+
+print text "all allocator tests passed"

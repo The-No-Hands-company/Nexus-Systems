@@ -1,0 +1,17 @@
+# Test for-each loop boundary detection
+
+print text "Before loop"
+
+set items to ["first", "second", "third"]
+for each item in items
+    print text item
+end
+
+print text "After loop"
+
+# Another loop
+for each number in [10, 20, 30]
+    print text number
+end
+
+print text "Done"

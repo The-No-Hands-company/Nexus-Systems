@@ -1,0 +1,14 @@
+# String operations module
+# This module provides basic string functions
+
+Define function get_length that takes text as String and returns Integer
+    # In a real implementation, this would call strlen
+    # For now, return a placeholder
+    Return 10.
+End function.
+
+Define function is_empty that takes text as String and returns Integer
+    # Return 1 if empty, 0 otherwise
+    # Placeholder implementation
+    Return 0.
+End function.

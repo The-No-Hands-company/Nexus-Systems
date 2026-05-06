@@ -1,0 +1,173 @@
+# NexusLang LLVM Compiler - Comprehensive Feature Test
+# Tests all currently working features
+
+print text "========================================="
+print text "NLPL Native Compiler Feature Showcase"
+print text "========================================="
+
+# === INTEGERS ===
+print text ""
+print text "=== 1. INTEGER ARITHMETIC ==="
+set a to 100
+set b to 25
+print text a
+print text b
+set sum to a plus b
+set diff to a minus b
+set prod to a times b
+set quot to a divided by b
+print text "Sum: "
+print text sum
+print text "Difference:"
+print text diff
+print text "Product:"
+print text prod
+print text "Quotient:"
+print text quot
+
+# === FLOATS ===
+print text ""
+print text "=== 2. FLOATING POINT ==="
+set pi to 3.14159
+set e to 2.71828
+print text pi
+print text e
+set float_sum to pi plus e
+set float_prod to pi times e
+print text "Float sum:"
+print text float_sum
+print text "Float product:"
+print text float_prod
+
+# === COMPARISONS ===
+print text ""
+print text "=== 3. COMPARISONS ==="
+set x to 50
+set y to 30
+set is_greater to x is greater than y
+set is_less to x is less than y
+set is_equal to x is equal to y
+print text "50 > 30:"
+print text is_greater
+print text "50 < 30:"
+print text is_less
+print text "50 == 30:"
+print text is_equal
+
+# === IF/ELSE ===
+print text ""
+print text "=== 4. CONDITIONALS ==="
+set age to 25
+if age is greater than or equal to 18
+    print text "Adult - can vote"
+else
+    print text "Minor - cannot vote"
+
+set score to 85
+if score is greater than or equal to 90
+    print text "Grade: A"
+else
+    if score is greater than or equal to 80
+        print text "Grade: B"
+    else
+        print text "Grade: C or below"
+
+# === WHILE LOOPS ===
+print text ""
+print text "=== 5. WHILE LOOPS ==="
+print text "Countdown from 5:"
+set countdown to 5
+while countdown is greater than 0
+    print text countdown
+    set countdown to countdown minus 1
+print text "Liftoff!"
+
+# === FUNCTIONS ===
+print text ""
+print text "=== 6. FUNCTIONS ==="
+
+function double that takes n as Integer returns Integer
+    set result to n times 2
+    return result
+
+function cube that takes n as Integer returns Integer
+    return n times n times n
+
+set num to 7
+set doubled to double with num
+set cubed to cube with num
+print text "Number:"
+print text num
+print text "Doubled:"
+print text doubled
+print text "Cubed:"
+print text cubed
+
+# Recursive function - factorial
+function factorial that takes n as Integer returns Integer
+    if n is less than or equal to 1
+        return 1
+    set n_minus_one to n minus 1
+    set recursive_result to factorial with n_minus_one
+    return n times recursive_result
+
+set fact5 to factorial with 5
+print text "5 factorial:"
+print text fact5
+
+# === STRINGS ===
+print text ""
+print text "=== 7. STRINGS ==="
+set message to "Native code generation works!"
+set language to "NexusLang"
+print text message
+print text language
+
+# === NESTED CONTROL FLOW ===
+print text ""
+print text "=== 8. NESTED STRUCTURES ==="
+set i to 1
+while i is less than or equal to 3
+    print text "Outer loop:"
+    print text i
+    
+    if i is equal to 2
+        print text "  Middle iteration"
+    
+    set i to i plus 1
+
+# === COMPLEX FUNCTION ===
+print text ""
+print text "=== 9. COMPLEX LOGIC ==="
+
+function is_even that takes n as Integer returns Integer
+    set remainder to n mod 2
+    if remainder is equal to 0
+        return 1
+    else
+        return 0
+
+function fibonacci that takes n as Integer returns Integer
+    if n is less than or equal to 1
+        return n
+    set n1 to n minus 1
+    set n2 to n minus 2
+    set fib1 to fibonacci with n1
+    set fib2 to fibonacci with n2
+    return fib1 plus fib2
+
+set num_to_check to 8
+set evenness to is_even with num_to_check
+print text "Is 8 even:"
+print text evenness
+
+set fib_10 to fibonacci with 10
+print text "Fibonacci(10):"
+print text fib_10
+
+# === FINAL ===
+print text ""
+print text "========================================="
+print text "All Features Working!"
+print text "NLPL Native Compilation: SUCCESS"
+print text "========================================="

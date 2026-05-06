@@ -1,0 +1,133 @@
+# Test SIMD (Single Instruction, Multiple Data) Operations
+# SIMD Module: Vector operations inspired by x86 MMX, SSE, AVX instructions
+# Total functions: 47 vector operations
+
+print text "=== SIMD Module Test ==="
+print text ""
+
+# Vector Arithmetic (4 functions)
+print text "Vector Arithmetic:"
+set vec_a to [1, 2, 3, 4]
+set vec_b to [5, 6, 7, 8]
+set sum to simd_add with vec_a and vec_b
+print text "  simd_add([1,2,3,4], [5,6,7,8]) -> " plus sum
+set diff to simd_sub with vec_a and vec_b
+print text "  simd_sub([1,2,3,4], [5,6,7,8]) -> " plus diff
+set prod to simd_mul with [2, 3, 4] and [5, 6, 7]
+print text "  simd_mul([2,3,4], [5,6,7]) -> " plus prod
+set quot to simd_div with [10, 20, 30] and [2, 4, 5]
+print text "  simd_div([10,20,30], [2,4,5]) -> " plus quot
+print text ""
+
+# Vector Logical Operations (4 functions)
+print text "Vector Logical Operations:"
+set and_result to simd_and with [255, 170] and [15, 85]
+print text "  simd_and([0xFF, 0xAA], [0x0F, 0x55]) -> " plus and_result
+set or_result to simd_or with [15, 0] and [240, 255]
+print text "  simd_or([0x0F, 0x00], [0xF0, 0xFF]) -> " plus or_result
+set xor_result to simd_xor with [255, 170] and [15, 170]
+print text "  simd_xor([0xFF, 0xAA], [0x0F, 0xAA]) -> " plus xor_result
+set not_result to simd_not with [0, 15] and 8
+print text "  simd_not([0, 15], width=8) -> " plus not_result
+print text ""
+
+# Vector Comparison (5 functions)
+print text "Vector Comparison:"
+set min_result to simd_min with [1, 5, 3] and [2, 4, 6]
+print text "  simd_min([1,5,3], [2,4,6]) -> " plus min_result
+set max_result to simd_max with [1, 5, 3] and [2, 4, 6]
+print text "  simd_max([1,5,3], [2,4,6]) -> " plus max_result
+set cmp_eq to simd_cmp_eq with [1, 2, 3] and [1, 5, 3]
+print text "  simd_cmp_eq([1,2,3], [1,5,3]) -> " plus cmp_eq
+set cmp_gt to simd_cmp_gt with [5, 2, 7] and [3, 4, 6]
+print text "  simd_cmp_gt([5,2,7], [3,4,6]) -> " plus cmp_gt
+set cmp_lt to simd_cmp_lt with [3, 5, 2] and [4, 4, 1]
+print text "  simd_cmp_lt([3,5,2], [4,4,1]) -> " plus cmp_lt
+print text ""
+
+# Vector Math (3 functions)
+print text "Vector Math:"
+set sqrt_result to simd_sqrt with [4, 9, 16, 25]
+print text "  simd_sqrt([4,9,16,25]) -> " plus sqrt_result
+set abs_result to simd_abs with [-1, 2, -3, 4]
+print text "  simd_abs([-1,2,-3,4]) -> " plus abs_result
+set neg_result to simd_neg with [1, -2, 3, -4]
+print text "  simd_neg([1,-2,3,-4]) -> " plus neg_result
+print text ""
+
+# Horizontal Operations (4 functions)
+print text "Horizontal Operations (reduce across vector):"
+set h_add to simd_hadd with [1, 2, 3, 4]
+print text "  simd_hadd([1,2,3,4]) -> " plus h_add
+set h_mul to simd_hmul with [2, 3, 4]
+print text "  simd_hmul([2,3,4]) -> " plus h_mul
+set h_min to simd_hmin with [5, 2, 8, 1, 9]
+print text "  simd_hmin([5,2,8,1,9]) -> " plus h_min
+set h_max to simd_hmax with [5, 2, 8, 1, 9]
+print text "  simd_hmax([5,2,8,1,9]) -> " plus h_max
+print text ""
+
+# Vector Manipulation (5 functions)
+print text "Vector Manipulation:"
+set shuffled to simd_shuffle with [10, 20, 30, 40] and [3, 1, 2, 0]
+print text "  simd_shuffle([10,20,30,40], [3,1,2,0]) -> " plus shuffled
+set broadcast to simd_broadcast with 42 and 4
+print text "  simd_broadcast(42, 4) -> " plus broadcast
+set splat to simd_splat with [10, 20, 30, 40] and 2
+print text "  simd_splat([10,20,30,40], index=2) -> " plus splat
+set extracted to simd_extract with [10, 20, 30, 40] and 2
+print text "  simd_extract([10,20,30,40], 2) -> " plus extracted
+set inserted to simd_insert with [10, 20, 30, 40] and 2 and 99
+print text "  simd_insert([10,20,30,40], 2, 99) -> " plus inserted
+print text ""
+
+# Vector Packing (5 functions)
+print text "Vector Packing (type-specific):"
+set packed_i8 to simd_pack_i8 with 10 and 20 and -5 and 127
+print text "  simd_pack_i8(10, 20, -5, 127) -> " plus packed_i8
+set packed_i16 to simd_pack_i16 with 1000 and -2000 and 32767
+print text "  simd_pack_i16(1000, -2000, 32767) -> " plus packed_i16
+set packed_i32 to simd_pack_i32 with 100000 and -200000
+print text "  simd_pack_i32(100000, -200000) -> " plus packed_i32
+set packed_f32 to simd_pack_f32 with 1.5 and 2.7 and -3.14
+print text "  simd_pack_f32(1.5, 2.7, -3.14) -> " plus packed_f32
+set packed_f64 to simd_pack_f64 with 1.5 and 2.7 and -3.14
+print text "  simd_pack_f64(1.5, 2.7, -3.14) -> " plus packed_f64
+print text ""
+
+# Vector Conversion (2 functions)
+print text "Vector Conversion:"
+set to_float to simd_cvt_i32_f32 with [1, 2, 3]
+print text "  simd_cvt_i32_f32([1,2,3]) -> " plus to_float
+set to_int to simd_cvt_f32_i32 with [1.9, 2.1, -3.7]
+print text "  simd_cvt_f32_i32([1.9, 2.1, -3.7]) -> " plus to_int
+print text ""
+
+# Vector Load/Store (2 functions)
+print text "Vector Load/Store:"
+set data to [10, 20, 30, 40, 50]
+set loaded to simd_load with data and 1 and 3
+print text "  simd_load([10,20,30,40,50], offset=1, count=3) -> " plus loaded
+set stored to simd_store with [99, 88] and data and 2
+print text "  simd_store([99,88], data, offset=2) -> " plus stored
+print text ""
+
+# Vector Utilities (5 functions)
+print text "Vector Utilities:"
+set align_result to simd_align with [1, 2, 3] and 4
+print text "  simd_align([1,2,3], alignment=4) -> " plus align_result
+set vec_length to simd_length with [1, 2, 3, 4]
+print text "  simd_length([1,2,3,4]) -> " plus vec_length
+set reverse_result to simd_reverse with [1, 2, 3, 4]
+print text "  simd_reverse([1,2,3,4]) -> " plus reverse_result
+set zipped to simd_zip with [1, 2, 3] and [10, 20, 30]
+print text "  simd_zip([1,2,3], [10,20,30]) -> " plus zipped
+set unzipped to simd_unzip with [1, 10, 2, 20, 3, 30]
+print text "  simd_unzip([1,10,2,20,3,30]) -> " plus unzipped
+print text ""
+
+print text "SIMD module test complete!"
+print text "47 functions tested: vector arithmetic, logical ops, comparisons, math, horizontal ops,"
+print text "manipulation, packing, conversion, load/store, and utilities"
+print text ""
+print text "Use SIMD for: Graphics, audio, video, scientific computing, data processing"

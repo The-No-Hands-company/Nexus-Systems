@@ -1,0 +1,110 @@
+# Optimization Correctness Test: Data Structure Optimizations
+# Tests that optimizations preserve list and dict semantics
+
+# List operations
+function test_list_operations returns Integer
+    set numbers to list 10, 20, 30, 40, 50
+    set sum to 0
+    
+    for each num in numbers
+        set sum to sum plus num
+    end
+    
+    return sum
+end
+
+# List building in loop
+function test_list_building returns Integer
+    set result to list
+    set i to 0
+    while i is less than 10
+        append i to result
+        set i to i plus 1
+    end
+    
+    set sum to 0
+    for each val in result
+        set sum to sum plus val
+    end
+    return sum
+end
+
+# Dictionary operations
+function test_dict_operations returns Integer
+    set scores to dictionary
+    set scores["alice"] to 95
+    set scores["bob"] to 87
+    set scores["charlie"] to 92
+    
+    set total to scores["alice"] plus scores["bob"] plus scores["charlie"]
+    return total
+end
+
+# Nested data structures
+function test_nested_structures returns Integer
+    set matrix to list
+    set i to 0
+    while i is less than 3
+        set row to list
+        set j to 0
+        while j is less than 3
+            append i times 3 plus j to row
+        set j to j plus 1
+        end
+        append row to matrix
+        set i to i plus 1
+    end
+    
+    set sum to 0
+    for each row in matrix
+        for each val in row
+            set sum to sum plus val
+        end
+    end
+    return sum
+end
+
+# List modification
+function test_list_modification returns Integer
+    set nums to list 1, 2, 3, 4, 5
+    set nums[0] to 10
+    set nums[4] to 50
+    
+    set sum to 0
+    for each n in nums
+        set sum to sum plus n
+    end
+    return sum
+end
+
+# Main test runner
+print text "Testing data structure optimization correctness..."
+print text ""
+
+set test1 to call test_list_operations
+print text "List operations: "
+print test1
+print text " (expected: 150)"
+
+set test2 to call test_list_building
+print text "List building: "
+print test2
+print text " (expected: 45)"
+
+set test3 to call test_dict_operations
+print text "Dict operations: "
+print test3
+print text " (expected: 274)"
+
+set test4 to call test_nested_structures
+print text "Nested structures: "
+print test4
+print text " (expected: 36)"
+
+set test5 to call test_list_modification
+print text "List modification: "
+print test5
+print text " (expected: 69)"
+
+print text ""
+print text "All data structure tests complete!"

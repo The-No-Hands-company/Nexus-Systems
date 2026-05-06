@@ -1,0 +1,57 @@
+# Collection Operations Test - map, filter, reduce
+
+print text "=== Collection Operations Test ==="
+
+# Define our collection operation functions
+
+function map_array that takes arr as List of Integer, func as Function returns List of Integer
+    set result to empty list
+    for each item in arr
+        set transformed to call func with item
+        append transformed to result
+    return result
+
+function filter_array that takes arr as List of Integer, predicate as Function returns List of Integer
+    set result to empty list
+    for each item in arr
+        set passes to call predicate with item
+        if passes
+            append item to result
+    return result
+
+function reduce_array that takes arr as List of Integer, func as Function, initial as Integer returns Integer
+    set acc to initial
+    for each item in arr
+        set acc to call func with acc, item
+    return acc
+
+# Test 1: Map - double each number
+print text "Test 1: Map (double)"
+set numbers to [1, 2, 3, 4, 5]
+set double to lambda with x as Integer returns Integer
+    return x times 2
+set doubled to call map_array with numbers, double
+
+print text "Doubled:"
+for each d in doubled
+    print d
+
+# Test 2: Filter - keep even numbers
+print text "Test 2: Filter (even)"
+set is_even to lambda with x as Integer returns Integer
+    return x modulo 2
+set evens to call filter_array with numbers, is_even
+
+print text "Evens:"
+for each e in evens
+    print e
+
+# Test 3: Reduce - sum all numbers
+print text "Test 3: Reduce (sum)"
+set add to lambda with a as Integer, b as Integer returns Integer
+    return a plus b
+set total to call reduce_array with numbers, add, 0
+print text "Sum of 1-5:"
+print total
+
+print text "=== Tests Complete ==="

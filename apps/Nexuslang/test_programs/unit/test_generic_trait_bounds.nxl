@@ -1,0 +1,59 @@
+# Test Generic Trait Bounds
+# Validates that trait bound constraints work correctly
+
+print text "=== Testing Generic Trait Bounds ==="
+
+# Test 1: Generic function with single trait bound
+# Comparable trait requires types that can be compared
+function max<T: Comparable> with a as T and b as T returns T
+    if a is greater than b
+        return a
+    else
+        return b
+    end
+end
+
+# Test with integers (implements Comparable)
+set int_result to call max with 10 and 20
+print text "Max of 10 and 20:"
+print number int_result
+
+# Test with floats (implements Comparable)
+set float_result to call max with 3.14 and 2.71
+print text "Max of 3.14 and 2.71:"
+print number float_result
+
+
+# Test 2: Generic function with multiple trait bounds
+# Requires type to implement both Comparable AND Printable
+function sort_and_print<T: Comparable + Printable> with items as List
+    # Sort and print items
+    print text "Sorting and printing items"
+    # For now, just print first item as demonstration
+    set first to items[0]
+    print text "First item:"
+    print number first
+end
+
+# Test with list of integers
+set numbers to create list
+call list_append with numbers and 5
+call list_append with numbers and 2
+call list_append with numbers and 8
+
+call sort_and_print with numbers
+
+
+# Test 3: Generic function without constraints (should accept any type)
+function identity<T> with value as T returns T
+    return value
+end
+
+set id_int to call identity with 42
+set id_str to call identity with "hello"
+
+print text "Identity function results:"
+print number id_int
+
+
+print text "=== All Generic Trait Bound Tests Passed ==="

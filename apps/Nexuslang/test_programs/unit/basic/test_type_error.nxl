@@ -1,0 +1,16 @@
+# Test Type Error Detection
+# This program contains intentional type errors that should be caught
+
+# Define a function that expects an integer
+function double with x as Integer returns Integer
+    return x times 2
+end
+
+# This should work fine
+set result1 to double(5)
+print text "double(5) ="
+print text result1
+
+# This should cause a type error (passing string to integer parameter)
+set result2 to double("hello")
+print text "This should not execute"

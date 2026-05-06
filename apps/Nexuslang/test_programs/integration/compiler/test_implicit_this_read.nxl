@@ -1,0 +1,21 @@
+# Test: Implicit this.property Read Access
+# Bug: Inside methods, property names didn't resolve to this.property
+# Fix: _generate_identifier checks if in method context and identifier is a property
+
+class Counter
+    property count as Integer
+    
+    method get_count returns Integer
+        # 'count' should implicitly mean 'this.count'
+        return count
+
+set c to new Counter
+set c.count to 42
+
+set value to call c.get_count
+
+print text "Count:"
+print number value
+
+# Expected output: 42
+# Before fix: Would return 0 or garbage (uninitialized local variable)

@@ -1,0 +1,203 @@
+# Web Programming in NexusLang
+
+# HTTP Server
+class HttpServer
+    private set host to String
+    private set port to Integer
+    private set routes to Dictionary of Function
+    private set middleware to List of Function
+    
+    public function initialize with host as String and port as Integer
+        set this.host to host
+        set this.port to port
+        create this.routes as empty Dictionary of Function
+        create this.middleware as empty List of Function
+    
+    public function use with middleware as Function
+        append middleware to this.middleware
+    
+    public function get with path as String and handler as Function
+        set this.routes["GET " plus path] to handler
+    
+    public function post with path as String and handler as Function
+        set this.routes["POST " plus path] to handler
+    
+    public function put with path as String and handler as Function
+        set this.routes["PUT " plus path] to handler
+    
+    public function delete with path as String and handler as Function
+        set this.routes["DELETE " plus path] to handler
+    
+    public function start
+        print text "Server starting on " plus this.host plus ":" plus convert this.port to string
+        start server on this.host and this.port with this.handle request
+
+# HTTP Request
+class HttpRequest
+    private set method to String
+    private set path to String
+    private set headers to Dictionary of String
+    private set body to Any
+    private set query to Dictionary of String
+    private set params to Dictionary of String
+    
+    public function initialize with method as String and path as String and headers as Dictionary of String and body as Any and query as Dictionary of String and params as Dictionary of String
+        set this.method to method
+        set this.path to path
+        set this.headers to headers
+        set this.body to body
+        set this.query to query
+        set this.params to params
+    
+    public function get method returns String
+        return this.method
+    
+    public function get path returns String
+        return this.path
+    
+    public function get headers returns Dictionary of String
+        return this.headers
+    
+    public function get body returns Any
+        return this.body
+    
+    public function get query returns Dictionary of String
+        return this.query
+    
+    public function get params returns Dictionary of String
+        return this.params
+
+# HTTP Response
+class HttpResponse
+    private set status_code to Integer
+    private set headers to Dictionary of String
+    private set body to Any
+    
+    public function initialize with status_code as Integer and headers as Dictionary of String and body as Any
+        set this.status_code to status_code
+        set this.headers to headers
+        set this.body to body
+    
+    public function set status code with code as Integer
+        set this.status_code to code
+    
+    public function set header with name as String and value as String
+        set this.headers[name] to value
+    
+    public function set body with body as Any
+        set this.body to body
+    
+    public function send json with data as Any
+        set this.headers["Content-Type"] to "application/json"
+        set this.body to convert data to json string
+    
+    public function send text with text as String
+        set this.headers["Content-Type"] to "text/plain"
+        set this.body to text
+    
+    public function send html with html as String
+        set this.headers["Content-Type"] to "text/html"
+        set this.body to html
+
+# Web Application
+class WebApplication
+    private set server as HttpServer
+    private set user_repository as UserRepository
+    
+    public function initialize with user_repository as UserRepository
+        create this.server as new HttpServer with "localhost" and 3000
+        set this.user_repository to user_repository
+        this.setup routes
+    
+    private function setup routes
+        # Middleware for logging
+        function log request with request as HttpRequest and next as Function returns HttpResponse
+            print text request.method plus " " plus request.path
+            set response to next with request
+            print text "Response status: " plus convert response.status_code to string
+            return response
+        
+        use log request in this.server
+        
+        # Routes
+        get "/users" with this.get users in this.server
+        get "/users/:id" with this.get user by id in this.server
+        post "/users" with this.create user in this.server
+        put "/users/:id" with this.update user in this.server
+        delete "/users/:id" with this.delete user in this.server
+    
+    private function get users with request as HttpRequest returns HttpResponse
+        set users to find all in this.user_repository
+        create response as new HttpResponse with 200 and {} and null
+        send json users in response
+        return response
+    
+    private function get user by id with request as HttpRequest returns HttpResponse
+        set id to convert request.params["id"] to integer
+        set user to find by id id in this.user_repository
+        if user is null
+            create response as new HttpResponse with 404 and {} and null
+            send json {"error": "User not found"} in response
+            return response
+        
+        create response as new HttpResponse with 200 and {} and null
+        send json user in response
+        return response
+    
+    private function create user with request as HttpRequest returns HttpResponse
+        set data to convert request.body from json string
+        create user as new User with data["name"] and data["email"]
+        set saved_user to create user in this.user_repository
+        create response as new HttpResponse with 201 and {} and null
+        send json saved_user in response
+        return response
+    
+    private function update user with request as HttpRequest returns HttpResponse
+        set id to convert request.params["id"] to integer
+        set user to find by id id in this.user_repository
+        if user is null
+            create response as new HttpResponse with 404 and {} and null
+            send json {"error": "User not found"} in response
+            return response
+        
+        set data to convert request.body from json string
+        set user.name to data["name"]
+        set user.email to data["email"]
+        set updated_user to update user in this.user_repository
+        create response as new HttpResponse with 200 and {} and null
+        send json updated_user in response
+        return response
+    
+    private function delete user with request as HttpRequest returns HttpResponse
+        set id to convert request.params["id"] to integer
+        delete id in this.user_repository
+        create response as new HttpResponse with 204 and {} and null
+        return response
+    
+    public function start
+        start this.server
+
+# Usage Examples
+# Create database connection and repository
+create connection as new DatabaseConnection with "localhost" and 5432 and "postgres" and "password" and "mydb"
+connect connection
+create user_repository as new UserRepository with connection
+
+# Create and start web application
+create app as new WebApplication with user_repository
+start app
+
+# Example HTTP requests:
+# GET /users
+# POST /users
+# {
+#     "name": "John Doe",
+#     "email": "john@example.com"
+# }
+# GET /users/1
+# PUT /users/1
+# {
+#     "name": "John Smith",
+#     "email": "john.smith@example.com"
+# }
+# DELETE /users/1 

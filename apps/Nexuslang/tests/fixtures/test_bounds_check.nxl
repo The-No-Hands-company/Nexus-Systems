@@ -1,0 +1,13 @@
+fn main() {
+    print("Testing array bounds check...");
+    let arr = [1, 2, 3];
+    
+    // valid access
+    arr[0] = 10;
+    
+    // Invalid access - should panic
+    print("Attempting out of bounds assignment...");
+    arr[3] = 4;
+    
+    print("Should not reach here!");
+}

@@ -1,0 +1,109 @@
+# Rotating Triangle Demo - First 3D Rendering
+# Modern OpenGL with shaders, VAO/VBO, camera system
+
+print text "=== NexusLang Triangle Demo ==="
+print text ""
+
+# Create window
+print text "Creating 800x600 window..."
+set window to create_window with 800 and 600 and "NLPL Triangle"
+
+# Define vertex shader (GLSL 3.30)
+set vertex_src to "#version 330 core
+layout (location = 0) in vec3 aPos;
+layout (location = 1) in vec3 aColor;
+
+out vec3 ourColor;
+
+uniform mat4 model;
+uniform mat4 view;
+uniform mat4 projection;
+
+void main()
+{
+    gl_Position = projection * view * model * vec4(aPos, 1.0);
+    ourColor = aColor;
+}"
+
+# Define fragment shader (GLSL 3.30)
+set fragment_src to "#version 330 core
+out vec4 FragColor;
+in vec3 ourColor;
+
+void main()
+{
+    FragColor = vec4(ourColor, 1.0);
+}"
+
+# Compile shaders
+print text "Compiling shaders..."
+set shader to create_shader with vertex_src and fragment_src
+
+# Create triangle vertices: x,y,z,r,g,b for each vertex
+print text "Creating triangle geometry..."
+set vertices to [0.0, 0.5, 0.0, 1.0, 0.0, 0.0, 0.5, -0.5, 0.0, 0.0, 1.0, 0.0, -0.5, -0.5, 0.0, 0.0, 0.0, 1.0]
+
+# Create VAO and VBO
+set vao to create_vertex_array()
+set vbo to create_vertex_buffer with vertices
+call vao_set_vertex_buffer with vao and vbo
+
+# Position attribute: location 0, 3 floats, stride 24, offset 0
+call vao_set_attribute with vao and 0 and 3 and 24 and 0
+
+# Color attribute: location 1, 3 floats, stride 24, offset 12
+call vao_set_attribute with vao and 1 and 3 and 24 and 12
+
+# Create orbital camera
+print text "Setting up camera..."
+set camera to create_orbital_camera with 0.0 and 0.0 and 0.0 and 3.0
+
+# Create projection matrix
+set proj_matrix to mat4_perspective with 0.785 and 1.333 and 0.1 and 100.0
+set proj_list to mat4_to_list with proj_matrix
+
+# Set background color
+call set_clear_color with 0.1 and 0.15 and 0.2 and 1.0
+
+# Main loop
+print text "Rendering... (close window to exit)"
+print text ""
+set angle to 0.0
+
+while not window_should_close with window
+    # Update rotation
+    set angle to angle plus 0.02
+    
+    # Rotate camera
+    call orbital_rotate with camera and 0.5 and 0.0
+    
+    # Get view matrix
+    set view_list to camera_get_view_matrix with camera
+    
+    # Create model matrix
+    set model to mat4_rotation_y with angle
+    set model_list to mat4_to_list with model
+    
+    # Clear screen
+    call begin_frame
+    
+    # Bind shader and set uniforms
+    call use_shader with shader
+    call set_uniform_mat4 with shader and "model" and model_list
+    call set_uniform_mat4 with shader and "view" and view_list
+    call set_uniform_mat4 with shader and "projection" and proj_list
+    
+    # Draw triangle
+    call vao_draw_arrays with vao and 4 and 0 and 3
+    
+    # Present frame
+    call end_frame with window
+end
+
+# Cleanup
+print text "Shutting down..."
+call delete_vertex_array with vao
+call delete_shader with shader
+call destroy_window with window
+
+print text "Complete!"

@@ -1,0 +1,56 @@
+# Test FFI callback with signal handlers
+# Demonstrates using NexusLang function as signal handler
+
+# Global counter for signal demonstrations
+set signal_count to 0
+
+# Signal handler function
+function handle_signal with signum as Int returns Void
+    print text "Signal "
+    print signum
+    print text " received!\n"
+    
+    set signal_count to signal_count plus 1
+    
+    if signal_count is greater than or equal to 3
+        print text "Exiting after 3 signals\n"
+        extern function exit from "c" with code as Int returns Void
+        call exit with 0
+    end
+end
+
+# Main program
+function main returns Int
+    print text "Setting up signal handler...\n"
+    
+    # Declare signal function
+    # void (*signal(int sig, void (*func)(int)))(int)
+    # Returns previous handler
+    extern function signal from "c" with sig as Int,
+                                        handler as Callback returns Pointer
+    
+    # SIGINT = 2 (Ctrl+C)
+    set sigint to 2
+    
+    # Install our handler
+    call signal with sigint, callback handle_signal
+    
+    print text "Signal handler installed for SIGINT (Ctrl+C)\n"
+    print text "Press Ctrl+C to test (3 times to exit)\n\n"
+    
+    # Busy wait loop
+    set counter to 0
+    while counter is less than 1000000
+        set counter to counter plus 1
+        
+        # Print progress occasionally
+        if counter modulo 100000 is 0
+            print text "Waiting... ("
+            print counter
+            print text ")\n"
+        end
+    end
+    
+    print text "Timeout - exiting\n"
+    return 0
+end

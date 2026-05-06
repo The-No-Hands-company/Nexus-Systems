@@ -1,0 +1,48 @@
+# Test pattern matching with Option and Result
+print text "=== Pattern Matching Tests ==="
+
+# Test Option matching
+set some_val to Some with 42
+
+match some_val
+    case Some with value
+        print text "Got Some:"
+        print text value
+    case None
+        print text "Got None"
+end
+
+set none_val to None
+
+match none_val
+    case Some with value
+        print text "Got Some:"
+        print text value
+    case None
+        print text "Got None - correct!"
+end
+
+# Test Result matching
+set ok_val to Ok with "success"
+
+match ok_val
+    case Ok with value
+        print text "Success:"
+        print text value
+    case Err with error
+        print text "Error:"
+        print text error
+end
+
+set err_val to Err with "failed"
+
+match err_val
+    case Ok with value
+        print text "Success:"
+        print text value
+    case Err with error
+        print text "Error occurred:"
+        print text error
+end
+
+print text "=== All Pattern Matching Tests Passed! ==="

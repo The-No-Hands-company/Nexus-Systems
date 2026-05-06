@@ -1,0 +1,34 @@
+# Test Sizeof Array Literals
+# Tests proper size calculation for array literals
+
+function main that takes nothing returns Integer
+    print text "=== Sizeof Array Literal Tests ==="
+    
+    # Test sizeof on array literals
+    print text ""
+    print text "Test 1: sizeof [1, 2, 3] (3 x i64 = 24 bytes)"
+    set size1 to sizeof [1, 2, 3]
+    print text "Result: "
+    print number size1
+    
+    print text ""
+    print text "Test 2: sizeof [1, 2, 3, 4, 5] (5 x i64 = 40 bytes)"
+    set size2 to sizeof [1, 2, 3, 4, 5]
+    print text "Result: "
+    print number size2
+    
+    print text ""
+    print text "Test 3: sizeof [] (empty array = 0 bytes)"
+    set size3 to sizeof []
+    print text "Result: "
+    print number size3
+    
+    print text ""
+    print text "Test 4: sizeof [10] (1 x i64 = 8 bytes)"
+    set size4 to sizeof [10]
+    print text "Result: "
+    print number size4
+    
+    print text ""
+    print text "=== All sizeof array literal tests complete ==="
+    return 0

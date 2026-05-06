@@ -1,0 +1,12 @@
+class Person
+    property name as String
+    property age as Integer
+    
+    method greet
+        print "Hello, my name is"
+        print name
+
+set person to new Person
+set person.name to "Alice"
+set person.age to 30
+person.greet

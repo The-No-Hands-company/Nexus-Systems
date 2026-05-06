@@ -1,0 +1,44 @@
+# Simple Collection Operations Test
+
+print text "=== Simple Collection Test ==="
+
+# Test 1: Create and access a list
+print text "Test 1: List creation"
+set numbers to [10, 20, 30, 40, 50]
+
+# Access by index
+print text "First element:"
+print numbers[0]
+
+print text "Third element:"
+print numbers[2]
+
+print text "Last element:"
+print numbers[4]
+
+# Test 2: Empty list
+print text "Test 2: Empty list"
+set empty to empty list
+# Can't print empty list directly, just verify it compiles
+
+# Test 3: Lambda that doubles a number
+print text "Test 3: Lambda test"
+set doubler to lambda with x as Integer returns Integer
+    return x times 2
+
+set result to call doubler with 5
+print text "Double of 5:"
+print result
+
+# Test 4: Manual map (without for each over array)
+print text "Test 4: Manual doubling"
+set d0 to call doubler with numbers[0]
+set d1 to call doubler with numbers[1]
+set d2 to call doubler with numbers[2]
+
+print text "Doubled values:"
+print d0
+print d1
+print d2
+
+print text "=== Tests Complete ==="

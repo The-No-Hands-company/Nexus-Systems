@@ -1,0 +1,19 @@
+# Simple test for keyword-only parameters
+print text "Testing keyword-only parameters..."
+
+function test_func with x as Integer, *, y as Integer, z as Integer
+    print text "x ="
+    print text x
+    print text "y ="
+    print text y
+    print text "z ="
+    print text z
+    return x plus y plus z
+end
+
+# Call with keyword-only params
+set result to test_func with 10, y: 20, z: 30
+print text "Result:"
+print text result
+
+print text "Test complete!"

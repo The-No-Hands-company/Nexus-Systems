@@ -1,0 +1,19 @@
+# Multi-module test - imports two modules
+
+Import math_ops
+Import helpers
+
+print text "=== Multi-Module Test ==="
+
+# Use math functions
+set a to 20
+set b to 10
+set result to math_ops.sum with a, b
+print text "20 + 10 = "
+print text result
+
+# Use helper functions
+set r1 to helpers.greet with "NexusLang"
+set r2 to helpers.say with "Module system working!"
+
+print text "=== Test Complete ==="

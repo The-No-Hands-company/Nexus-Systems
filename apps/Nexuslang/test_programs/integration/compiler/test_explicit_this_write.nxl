@@ -1,0 +1,25 @@
+# Test: Explicit this.property Write Access
+# Bug: Assigning to 'this.property' used alloca pointer instead of loading
+# Fix: _generate_member_assignment loads pointer from alloca before accessing
+
+class Box
+    property value as Integer
+    
+    method set_value with n as Integer returns Integer
+        # Explicit 'this.value' assignment should work correctly
+        set this.value to n
+        return this.value
+
+set b to new Box
+set b.value to 5
+
+set result to call b.set_value with 100
+
+print text "After set_value(100):"
+print number result
+
+print text "Direct access:"
+print number b.value
+
+# Expected output: 100, 100
+# Before fix: Would show garbage, original value unchanged

@@ -1,0 +1,56 @@
+# Complete Generics Test Suite
+# Tests all aspects of the generics system
+
+# Test 1: Simple generic function
+print text "=== Test 1: Simple Generic Function ==="
+
+function identity that takes val as T returns T
+    return val
+
+set x to identity with 42
+print text "Identity(42) = "
+print text x
+
+set y to identity with "Hello"
+print text "Identity('Hello') = "
+print text y
+
+# Test 2: Generic function with constraint
+print text "=== Test 2: Generic with Constraint ==="
+
+function max that takes first as T, second as T where T is Comparable returns T
+    if first is greater than second
+        return first
+    return second
+
+set max_int to max with 10, 20
+print text "Max(10, 20) = "
+print text max_int
+
+# Test 3: Multiple type parameters
+print text "=== Test 3: Multiple Type Parameters ==="
+
+function pair that takes first as A, second as B returns A where A is Any, B is Any
+    # In real implementation, this would return a Pair<A,B>
+    # For now, just return first
+    return first
+
+set result to pair with 100, "test"
+print text "Pair result = "
+print text result
+
+# Test 4: Generic function calling generic function
+print text "=== Test 4: Nested Generics ==="
+
+function swap that takes val1 as T, val2 as T returns T
+    return val2
+
+function process that takes x as T returns T where T is Any
+    set swapped to swap with x, x
+    return swapped
+
+set processed to process with 999
+print text "Processed = "
+print text processed
+
+print text "=== All Generic Tests Complete ==="

@@ -1,0 +1,4 @@
+# Test index assignment with list
+set numbers to [1, 2, 3]
+set numbers[0] to 100
+print text numbers[0]

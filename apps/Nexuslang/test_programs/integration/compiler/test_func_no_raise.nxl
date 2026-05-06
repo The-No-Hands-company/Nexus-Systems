@@ -1,0 +1,7 @@
+# Test - function without raise
+function printer returns Integer
+    print text "Hello"
+    return 0
+end
+
+print text "Done"

@@ -1,0 +1,4 @@
+# Even simpler test
+function main returns Integer
+    return 0
+end

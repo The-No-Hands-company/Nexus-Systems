@@ -1,0 +1,259 @@
+# Test Crypto Module - Comprehensive Test Suite
+
+function main
+    print text "=== NexusLang Crypto Module Test Suite ==="
+    print text ""
+    
+    # Test counters
+    set total_tests to 0
+    set passed_tests to 0
+    set failed_tests to 0
+    
+    # Test 1: Basic Hashing
+    print text "Test 1: Basic Hashing Functions"
+    set total_tests to total_tests plus 1
+    set test_data to "Hello, World!"
+    set md5_hash to hash_md5 with data: test_data
+    set sha256_hash to hash_sha256 with data: test_data
+    set sha512_hash to hash_sha512 with data: test_data
+    
+    if length of md5_hash is equal to 32
+        print text "  ✓ MD5 hash length correct (32 hex chars)"
+        set passed_tests to passed_tests plus 1
+    else
+        print text "  ✗ MD5 hash length incorrect"
+        set failed_tests to failed_tests plus 1
+    end
+    
+    # Test 2: HMAC
+    print text "Test 2: HMAC Functions"
+    set total_tests to total_tests plus 1
+    set key to "secret_key"
+    set hmac_hash to hmac_sha256 with data: test_data and key: key
+    
+    if length of hmac_hash is greater than 0
+        print text "  ✓ HMAC-SHA256 generated"
+        set passed_tests to passed_tests plus 1
+    else
+        print text "  ✗ HMAC-SHA256 failed"
+        set failed_tests to failed_tests plus 1
+    end
+    
+    # Test 3: Base64 Encoding/Decoding
+    print text "Test 3: Base64 Encoding/Decoding"
+    set total_tests to total_tests plus 1
+    set original to "Test message"
+    set encoded to base64_encode with data: original
+    set decoded to base64_decode with data: encoded
+    
+    if decoded is equal to original
+        print text "  ✓ Base64 encoding/decoding works"
+        set passed_tests to passed_tests plus 1
+    else
+        print text "  ✗ Base64 encoding/decoding failed"
+        set failed_tests to failed_tests plus 1
+    end
+    
+    # Test 4: Random Generation
+    print text "Test 4: Cryptographically Secure Random"
+    set total_tests to total_tests plus 1
+    set random_hex_1 to random_hex with n: 16
+    set random_hex_2 to random_hex with n: 16
+    set random_token_val to random_token with n: 32
+    
+    if random_hex_1 is not equal to random_hex_2
+        print text "  ✓ Random generation produces unique values"
+        set passed_tests to passed_tests plus 1
+    else
+        print text "  ✗ Random generation failed (duplicates)"
+        set failed_tests to failed_tests plus 1
+    end
+    
+    # Test 5: Password Hashing
+    print text "Test 5: Password Hashing and Verification"
+    set total_tests to total_tests plus 1
+    set password to "MySecurePassword123!"
+    set hash_info to hash_password with password: password
+    set is_valid to verify_password with password: password and hash_info: hash_info
+    set is_invalid to verify_password with password: "WrongPassword" and hash_info: hash_info
+    
+    if is_valid is equal to true and is_invalid is equal to false
+        print text "  ✓ Password hashing and verification works"
+        set passed_tests to passed_tests plus 1
+    else
+        print text "  ✗ Password verification failed"
+        set failed_tests to failed_tests plus 1
+    end
+    
+    # Test 6: AES Encryption/Decryption
+    print text "Test 6: AES-256-GCM Encryption/Decryption"
+    set total_tests to total_tests plus 1
+    set aes_key to aes_generate_key
+    set plaintext to "Sensitive data that needs encryption"
+    set encrypted to aes_encrypt with plaintext: plaintext and key: aes_key
+    set decrypted to aes_decrypt with encrypted_data: encrypted and key: aes_key
+    
+    if decrypted is equal to plaintext
+        print text "  ✓ AES encryption/decryption works"
+        set passed_tests to passed_tests plus 1
+    else
+        print text "  ✗ AES encryption/decryption failed"
+        set failed_tests to failed_tests plus 1
+    end
+    
+    # Test 7: ChaCha20 Encryption/Decryption
+    print text "Test 7: ChaCha20 Encryption/Decryption"
+    set total_tests to total_tests plus 1
+    set chacha_key to chacha20_generate_key
+    set plaintext2 to "Another sensitive message"
+    set encrypted2 to chacha20_encrypt with plaintext: plaintext2 and key: chacha_key
+    set decrypted2 to chacha20_decrypt with encrypted_data: encrypted2 and key: chacha_key
+    
+    if decrypted2 is equal to plaintext2
+        print text "  ✓ ChaCha20 encryption/decryption works"
+        set passed_tests to passed_tests plus 1
+    else
+        print text "  ✗ ChaCha20 encryption/decryption failed"
+        set failed_tests to failed_tests plus 1
+    end
+    
+    # Test 8: RSA Key Generation
+    print text "Test 8: RSA Key Pair Generation"
+    set total_tests to total_tests plus 1
+    set rsa_keys to rsa_generate_keypair with key_size: 2048
+    
+    # Check if keys were generated (they should be bytes objects)
+    if rsa_keys contains "private_key" and rsa_keys contains "public_key"
+        print text "  ✓ RSA key pair generated"
+        set passed_tests to passed_tests plus 1
+    else
+        print text "  ✗ RSA key generation failed"
+        set failed_tests to failed_tests plus 1
+    end
+    
+    # Test 9: RSA Encryption/Decryption
+    print text "Test 9: RSA Encryption/Decryption"
+    set total_tests to total_tests plus 1
+    set rsa_message to "Secret message"
+    set rsa_encrypted to rsa_encrypt with plaintext: rsa_message and public_key_pem: rsa_keys["public_key"]
+    set rsa_decrypted to rsa_decrypt with ciphertext: rsa_encrypted and private_key_pem: rsa_keys["private_key"]
+    
+    if rsa_decrypted is equal to rsa_message
+        print text "  ✓ RSA encryption/decryption works"
+        set passed_tests to passed_tests plus 1
+    else
+        print text "  ✗ RSA encryption/decryption failed"
+        set failed_tests to failed_tests plus 1
+    end
+    
+    # Test 10: RSA Digital Signatures
+    print text "Test 10: RSA Digital Signatures"
+    set total_tests to total_tests plus 1
+    set message_to_sign to "Important document"
+    set signature to rsa_sign with message: message_to_sign and private_key_pem: rsa_keys["private_key"]
+    set is_valid_sig to rsa_verify with message: message_to_sign and signature: signature and public_key_pem: rsa_keys["public_key"]
+    set is_invalid_sig to rsa_verify with message: "Tampered document" and signature: signature and public_key_pem: rsa_keys["public_key"]
+    
+    if is_valid_sig is equal to true and is_invalid_sig is equal to false
+        print text "  ✓ RSA signatures work correctly"
+        set passed_tests to passed_tests plus 1
+    else
+        print text "  ✗ RSA signature verification failed"
+        set failed_tests to failed_tests plus 1
+    end
+    
+    # Test 11: Ed25519 Key Generation
+    print text "Test 11: Ed25519 Key Pair Generation"
+    set total_tests to total_tests plus 1
+    set ed_keys to ed25519_generate_keypair
+    
+    if ed_keys contains "private_key" and ed_keys contains "public_key"
+        print text "  ✓ Ed25519 key pair generated"
+        set passed_tests to passed_tests plus 1
+    else
+        print text "  ✗ Ed25519 key generation failed"
+        set failed_tests to failed_tests plus 1
+    end
+    
+    # Test 12: Ed25519 Signatures
+    print text "Test 12: Ed25519 Digital Signatures"
+    set total_tests to total_tests plus 1
+    set ed_message to "Message to sign with Ed25519"
+    set ed_signature to ed25519_sign with message: ed_message and private_key_bytes: ed_keys["private_key"]
+    set ed_valid to ed25519_verify with message: ed_message and signature: ed_signature and public_key_bytes: ed_keys["public_key"]
+    set ed_invalid to ed25519_verify with message: "Tampered message" and signature: ed_signature and public_key_bytes: ed_keys["public_key"]
+    
+    if ed_valid is equal to true and ed_invalid is equal to false
+        print text "  ✓ Ed25519 signatures work correctly"
+        set passed_tests to passed_tests plus 1
+    else
+        print text "  ✗ Ed25519 signature verification failed"
+        set failed_tests to failed_tests plus 1
+    end
+    
+    # Test 13: PBKDF2 Key Derivation
+    print text "Test 13: PBKDF2 Key Derivation"
+    set total_tests to total_tests plus 1
+    set user_password to "UserPassword123"
+    set derived to pbkdf2_derive_key with password: user_password and iterations: 100000 and key_length: 32
+    
+    if derived contains "key" and derived contains "salt"
+        print text "  ✓ PBKDF2 key derivation works"
+        set passed_tests to passed_tests plus 1
+    else
+        print text "  ✗ PBKDF2 key derivation failed"
+        set failed_tests to failed_tests plus 1
+    end
+    
+    # Test 14: Argon2 Key Derivation
+    print text "Test 14: Argon2 Key Derivation"
+    set total_tests to total_tests plus 1
+    set argon_password to "AnotherPassword456"
+    set argon_derived to argon2_derive_key with password: argon_password and time_cost: 2 and memory_cost: 65536
+    
+    if argon_derived contains "key" and argon_derived contains "salt"
+        print text "  ✓ Argon2 key derivation works"
+        set passed_tests to passed_tests plus 1
+    else
+        print text "  ✗ Argon2 key derivation failed"
+        set failed_tests to failed_tests plus 1
+    end
+    
+    # Test 15: Encryption with Derived Key
+    print text "Test 15: AES Encryption with Derived Key"
+    set total_tests to total_tests plus 1
+    set master_password to "MasterPassword789"
+    set key_info to pbkdf2_derive_key with password: master_password
+    set sensitive_data to "Highly sensitive information"
+    set encrypted_data to aes_encrypt with plaintext: sensitive_data and key: key_info["key"]
+    set decrypted_data to aes_decrypt with encrypted_data: encrypted_data and key: key_info["key"]
+    
+    if decrypted_data is equal to sensitive_data
+        print text "  ✓ Password-derived encryption works"
+        set passed_tests to passed_tests plus 1
+    else
+        print text "  ✗ Password-derived encryption failed"
+        set failed_tests to failed_tests plus 1
+    end
+    
+    # Summary
+    print text ""
+    print text "=== Test Results ==="
+    print text "Total tests: " concat total_tests
+    print text "Passed: " concat passed_tests
+    print text "Failed: " concat failed_tests
+    
+    set pass_rate to passed_tests times 100 divided by total_tests
+    print text "Pass rate: " concat pass_rate concat "%"
+    
+    if failed_tests is equal to 0
+        print text ""
+        print text "✓ All tests passed! Crypto module is working correctly."
+    else
+        print text ""
+        print text "✗ Some tests failed. Please review the failures above."
+    end
+end
+
+# Run tests
+main

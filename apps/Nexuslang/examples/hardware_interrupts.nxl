@@ -1,0 +1,418 @@
+# NexusLang Hardware Module - Interrupt and Exception Handling Examples
+# Demonstrates interrupt handling, IDT management, and exception processing
+
+print text "=========================================="
+print text "Interrupt and Exception Handling Examples"
+print text "=========================================="
+print text ""
+
+# ============================================================================
+# Example 1: Initialize IDT and Set Up Basic Handlers
+# ============================================================================
+
+print text "Example 1: IDT Initialization"
+print text "------------------------------"
+
+try
+    # Initialize the Interrupt Descriptor Table
+    setup_idt
+    print text "IDT initialized successfully"
+    
+    # Get IDT information
+    set idt_base to get_idt_base
+    set idt_limit to get_idt_limit
+    
+    print text "IDT base address:"
+    print text idt_base
+    print text "IDT limit (size - 1):"
+    print text idt_limit
+    print text "IDT size in bytes:"
+    print text idt_limit plus 1
+    print text "Number of IDT entries: 256"
+    print text ""
+    
+catch error with message
+    print text "Error initializing IDT:"
+    print text message
+    print text "(This requires root/administrator privileges)"
+    print text ""
+end
+
+# ============================================================================
+# Example 2: Timer Interrupt Handler (IRQ 0, Vector 32)
+# ============================================================================
+
+print text "Example 2: Timer Interrupt Handler"
+print text "-----------------------------------"
+
+# Define a timer interrupt handler
+function timer_handler with frame as Dict
+    print text "TIMER INTERRUPT FIRED"
+    print text "Interrupt vector:"
+    print text frame["vector"]
+    
+    # Access saved CPU state
+    print text "Instruction pointer at interrupt:"
+    print text frame["rip"]
+    
+    print text "Stack pointer:"
+    print text frame["rsp"]
+    
+    print text "CPU flags (RFLAGS):"
+    print text frame["rflags"]
+    
+    # Check if interrupts were enabled before this interrupt
+    set if_bit to frame["rflags"] bitwise_and 512
+    if if_bit is not 0
+        print text "Interrupts were enabled before this interrupt"
+    else
+        print text "Interrupts were disabled before this interrupt"
+    end
+    
+    print text ""
+end
+
+try
+    # Register timer handler (vector 32)
+    register_interrupt_handler with vector: 32 and handler: timer_handler
+    print text "Timer interrupt handler registered (vector 32)"
+    print text ""
+    
+catch error with message
+    print text "Error registering timer handler:"
+    print text message
+    print text ""
+end
+
+# ============================================================================
+# Example 3: Keyboard Interrupt Handler (IRQ 1, Vector 33)
+# ============================================================================
+
+print text "Example 3: Keyboard Interrupt Handler"
+print text "--------------------------------------"
+
+# Define keyboard interrupt handler
+function keyboard_handler with frame as Dict
+    print text "KEYBOARD INTERRUPT"
+    print text "Key press detected at RIP:"
+    print text frame["rip"]
+    
+    # In a real OS, you would read the scan code from port 0x60
+    # read_port_byte with port: 96  (0x60 in decimal)
+    
+    print text "Handler processing complete"
+    print text ""
+end
+
+try
+    # Register keyboard handler (vector 33)
+    register_interrupt_handler with vector: 33 and handler: keyboard_handler
+    print text "Keyboard interrupt handler registered (vector 33)"
+    print text ""
+    
+catch error with message
+    print text "Error registering keyboard handler:"
+    print text message
+    print text ""
+end
+
+# ============================================================================
+# Example 4: Page Fault Exception Handler (Vector 14)
+# ============================================================================
+
+print text "Example 4: Page Fault Exception Handler"
+print text "----------------------------------------"
+
+# Define page fault handler
+function page_fault_handler with frame as Dict
+    print text "PAGE FAULT EXCEPTION"
+    print text "Vector: 14"
+    
+    # Page fault error code provides information about the fault
+    set error_code to frame["error_code"]
+    print text "Error code:"
+    print text error_code
+    
+    # Decode error code bits:
+    # Bit 0: P (Present) - 0 = not present, 1 = protection violation
+    # Bit 1: W/R (Write/Read) - 0 = read, 1 = write
+    # Bit 2: U/S (User/Supervisor) - 0 = supervisor, 1 = user
+    # Bit 3: RSV (Reserved) - 1 = reserved bit violation
+    # Bit 4: I/D (Instruction/Data) - 1 = instruction fetch
+    
+    set present_bit to error_code bitwise_and 1
+    set write_bit to error_code bitwise_and 2
+    set user_bit to error_code bitwise_and 4
+    
+    if present_bit is 0
+        print text "Fault type: Page not present"
+    else
+        print text "Fault type: Protection violation"
+    end
+    
+    if write_bit is not 0
+        print text "Access type: Write"
+    else
+        print text "Access type: Read"
+    end
+    
+    if user_bit is not 0
+        print text "Privilege level: User mode"
+    else
+        print text "Privilege level: Kernel mode"
+    end
+    
+    print text "Faulting instruction:"
+    print text frame["rip"]
+    
+    # On x86, CR2 contains the faulting address
+    # In a real implementation, would read CR2
+    print text "(Faulting address would be in CR2 register)"
+    print text ""
+end
+
+try
+    # Register page fault handler (vector 14)
+    register_interrupt_handler with vector: 14 and handler: page_fault_handler
+    print text "Page fault handler registered (vector 14)"
+    print text ""
+    
+catch error with message
+    print text "Error registering page fault handler:"
+    print text message
+    print text ""
+end
+
+# ============================================================================
+# Example 5: General Protection Fault Handler (Vector 13)
+# ============================================================================
+
+print text "Example 5: General Protection Fault Handler"
+print text "-------------------------------------------"
+
+function gp_fault_handler with frame as Dict
+    print text "GENERAL PROTECTION FAULT"
+    
+    set error_code to frame["error_code"]
+    print text "Error code:"
+    print text error_code
+    
+    # GP fault error code indicates the segment selector that caused the fault
+    # Bits 15-3: Segment selector index
+    # Bit 2: IDT/GDT/LDT indicator
+    # Bit 1: IDT indicator
+    # Bit 0: External event
+    
+    set external_bit to error_code bitwise_and 1
+    if external_bit is not 0
+        print text "Cause: External event"
+    else
+        print text "Cause: Internal error"
+    end
+    
+    print text "Faulting instruction:"
+    print text frame["rip"]
+    
+    print text "Register dump:"
+    print text "RAX:"
+    print text frame["rax"]
+    print text "RBX:"
+    print text frame["rbx"]
+    print text "RCX:"
+    print text frame["rcx"]
+    print text "RDX:"
+    print text frame["rdx"]
+    print text ""
+end
+
+try
+    # Register GP fault handler (vector 13)
+    register_interrupt_handler with vector: 13 and handler: gp_fault_handler
+    print text "General protection fault handler registered (vector 13)"
+    print text ""
+    
+catch error with message
+    print text "Error registering GP fault handler:"
+    print text message
+    print text ""
+end
+
+# ============================================================================
+# Example 6: Interrupt Enable/Disable (Critical Sections)
+# ============================================================================
+
+print text "Example 6: Critical Sections with CLI/STI"
+print text "-----------------------------------------"
+
+try
+    # Check initial state
+    set if_state to get_interrupt_flag
+    print text "Initial interrupt flag state:"
+    print text if_state
+    
+    # Disable interrupts for critical section
+    print text "Entering critical section (CLI)..."
+    disable_interrupts
+    
+    set if_disabled to get_interrupt_flag
+    print text "Interrupt flag after CLI:"
+    print text if_disabled
+    
+    # Critical section - no interrupts allowed here
+    print text "Executing critical hardware operations..."
+    print text "(Hardware operations would go here)"
+    
+    # Re-enable interrupts
+    print text "Exiting critical section (STI)..."
+    enable_interrupts
+    
+    set if_enabled to get_interrupt_flag
+    print text "Interrupt flag after STI:"
+    print text if_enabled
+    print text ""
+    
+catch error with message
+    print text "Error with interrupt control:"
+    print text message
+    print text ""
+end
+
+# ============================================================================
+# Example 7: List All Registered Handlers
+# ============================================================================
+
+print text "Example 7: List Registered Interrupt Handlers"
+print text "----------------------------------------------"
+
+try
+    set handlers to list_interrupt_handlers
+    
+    print text "Registered interrupt handlers:"
+    print text "Number of handlers:"
+    print text length of handlers
+    print text ""
+    
+    for each handler in handlers
+        print text "Vector:"
+        print text handler["vector"]
+        print text "Vector name:"
+        print text handler["vector_name"]
+        print text "---"
+    end
+    
+    print text ""
+    
+catch error with message
+    print text "Error listing handlers:"
+    print text message
+    print text ""
+end
+
+# ============================================================================
+# Example 8: IDT Entry Manipulation
+# ============================================================================
+
+print text "Example 8: IDT Entry Configuration"
+print text "-----------------------------------"
+
+try
+    # Get current timer IDT entry
+    set timer_entry to get_idt_entry with vector: 32
+    print text "Current timer IDT entry:"
+    print text "Offset (handler address):"
+    print text timer_entry["offset"]
+    print text "Segment selector:"
+    print text timer_entry["segment"]
+    print text "Gate type:"
+    print text timer_entry["gate_type"]
+    print text "DPL (privilege level):"
+    print text timer_entry["dpl"]
+    print text "Present:"
+    print text timer_entry["present"]
+    print text ""
+    
+    # Set a new IDT entry (demonstration)
+    print text "Setting new IDT entry for vector 50..."
+    set_idt_entry with vector: 50 and offset: 8192 and segment: 8 and gate_type: 142 and dpl: 0
+    
+    # Read it back
+    set custom_entry to get_idt_entry with vector: 50
+    print text "Custom entry offset:"
+    print text custom_entry["offset"]
+    print text "IDT entry configuration: SUCCESS"
+    print text ""
+    
+catch error with message
+    print text "Error configuring IDT entry:"
+    print text message
+    print text ""
+end
+
+# ============================================================================
+# Example 9: Unregister Handlers (Cleanup)
+# ============================================================================
+
+print text "Example 9: Cleanup - Unregister Handlers"
+print text "-----------------------------------------"
+
+try
+    # Unregister all our handlers
+    print text "Unregistering handlers..."
+    
+    unregister_interrupt_handler with vector: 32
+    print text "Timer handler unregistered"
+    
+    unregister_interrupt_handler with vector: 33
+    print text "Keyboard handler unregistered"
+    
+    unregister_interrupt_handler with vector: 14
+    print text "Page fault handler unregistered"
+    
+    unregister_interrupt_handler with vector: 13
+    print text "GP fault handler unregistered"
+    
+    # Verify cleanup
+    set remaining to list_interrupt_handlers
+    print text "Remaining registered handlers:"
+    print text length of remaining
+    
+    if length of remaining is 0
+        print text "All handlers cleaned up: SUCCESS"
+    end
+    
+    print text ""
+    
+catch error with message
+    print text "Error during cleanup:"
+    print text message
+    print text ""
+end
+
+# ============================================================================
+# Summary
+# ============================================================================
+
+print text "=========================================="
+print text "Summary"
+print text "=========================================="
+print text ""
+print text "Interrupt handling features demonstrated:"
+print text "1. IDT initialization and management"
+print text "2. Hardware interrupt handlers (timer, keyboard)"
+print text "3. Exception handlers (page fault, GP fault)"
+print text "4. Exception frame access and CPU state inspection"
+print text "5. Error code decoding"
+print text "6. Interrupt enable/disable (CLI/STI)"
+print text "7. Handler registration and listing"
+print text "8. IDT entry configuration"
+print text "9. Handler cleanup"
+print text ""
+print text "Note: Actual interrupt delivery requires:"
+print text "- Ring 0 (kernel mode) execution"
+print text "- Hardware or software interrupt trigger"
+print text "- Proper IDT configuration in CPU"
+print text ""
+print text "This example shows the NexusLang API for interrupt handling."
+print text "In a real OS, interrupts would fire automatically from hardware."
+print text ""
+print text "Examples complete"

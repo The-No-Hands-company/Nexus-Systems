@@ -1,0 +1,237 @@
+{
+  "name": "nlpl-language-support",
+  "displayName": "NLPL Language Support",
+  "description": "Language support for NexusLang (NexusLang) with LSP features",
+  "version": "0.1.0",
+  "publisher": "nlpl",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Zajfan/NLPL"
+  },
+  "engines": {
+    "vscode": "^1.75.0"
+  },
+  "categories": [
+    "Programming Languages",
+    "Linters",
+    "Formatters"
+  ],
+  "keywords": [
+    "nlpl",
+    "natural language",
+    "programming",
+    "lsp",
+    "language server"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "languages": [
+      {
+        "id": "nlpl",
+        "aliases": [
+          "NexusLang",
+          "nlpl"
+        ],
+        "extensions": [
+          ".nxl"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "nlpl",
+        "scopeName": "source.nxl",
+        "path": "./syntaxes/nlpl.tmLanguage.json"
+      }
+    ],
+    "configuration": {
+      "type": "object",
+      "title": "NexusLang",
+      "properties": {
+        "nexuslang.languageServer.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable NexusLang language server"
+        },
+        "nexuslang.languageServer.path": {
+          "type": "string",
+          "default": "",
+          "description": "Path to NexusLang language server executable. Leave empty to auto-detect from workspace."
+        },
+        "nexuslang.languageServer.pythonPath": {
+          "type": "string",
+          "default": "python3",
+          "description": "Path to Python interpreter for running LSP server"
+        },
+        "nexuslang.languageServer.arguments": {
+          "type": "array",
+          "default": [
+            "--stdio"
+          ],
+          "description": "Arguments to pass to the language server"
+        },
+        "nexuslang.languageServer.debug": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enable debug mode for language server"
+        },
+        "nexuslang.languageServer.logFile": {
+          "type": "string",
+          "default": "",
+          "description": "Path to log file for language server output"
+        },
+        "nexuslang.languageServer.linting.enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enable real-time analyzer-backed lint diagnostics in the language server"
+        },
+        "nexuslang.languageServer.linting.strict": {
+          "type": "boolean",
+          "default": false,
+          "description": "Use strict lint profile for editor-time diagnostics"
+        },
+        "nexuslang.languageServer.linting.errorsOnly": {
+          "type": "boolean",
+          "default": false,
+          "description": "Only surface lint diagnostics with error severity"
+        },
+        "nexuslang.trace.server": {
+          "type": "string",
+          "enum": [
+            "off",
+            "messages",
+            "verbose"
+          ],
+          "default": "off",
+          "description": "Traces the communication between VS Code and the language server"
+        },
+        "nexuslang.debugger.pythonPath": {
+          "type": "string",
+          "default": "python3",
+          "description": "Path to Python interpreter for running debug adapter"
+        },
+        "nexuslang.debugger.logFile": {
+          "type": "string",
+          "default": "/tmp/nlpl-dap.log",
+          "description": "Path to log file for debugger output"
+        }
+      }
+    },
+    "commands": [
+      {
+        "command": "nexuslang.explainErrorCode",
+        "title": "NLPL: Explain Error Code",
+        "category": "NexusLang"
+      }
+    ],
+    "breakpoints": [
+      {
+        "language": "nlpl"
+      }
+    ],
+    "debuggers": [
+      {
+        "type": "nlpl",
+        "label": "NLPL Debug",
+        "program": "./out/debugAdapter.js",
+        "runtime": "node",
+        "configurationAttributes": {
+          "launch": {
+            "required": [
+              "program"
+            ],
+            "properties": {
+              "program": {
+                "type": "string",
+                "description": "Absolute path to the NexusLang program to debug",
+                "default": "${file}"
+              },
+              "stopOnEntry": {
+                "type": "boolean",
+                "description": "Automatically stop after launch",
+                "default": false
+              },
+              "args": {
+                "type": "array",
+                "description": "Command line arguments passed to the program",
+                "default": []
+              },
+              "cwd": {
+                "type": "string",
+                "description": "Working directory for the program",
+                "default": "${workspaceFolder}"
+              },
+              "pythonPath": {
+                "type": "string",
+                "description": "Path to Python interpreter",
+                "default": "python3"
+              },
+              "debugServerPath": {
+                "type": "string",
+                "description": "Path to NexusLang debug adapter server",
+                "default": ""
+              }
+            }
+          },
+          "attach": {
+            "required": [
+              "program"
+            ],
+            "properties": {
+              "program": {
+                "type": "string",
+                "description": "Absolute path to the NexusLang program to attach to"
+              }
+            }
+          }
+        },
+        "initialConfigurations": [
+          {
+            "type": "nlpl",
+            "request": "launch",
+            "name": "Debug NexusLang Program",
+            "program": "${file}",
+            "stopOnEntry": false
+          }
+        ],
+        "configurationSnippets": [
+          {
+            "label": "NLPL: Launch",
+            "description": "A new configuration for debugging NexusLang programs",
+            "body": {
+              "type": "nlpl",
+              "request": "launch",
+              "name": "Debug NexusLang Program",
+              "program": "^\"\\${file}\"",
+              "stopOnEntry": false
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "pretest": "npm run compile",
+    "test": "node ./out/test/runTest.js",
+    "package": "vsce package",
+    "publish": "vsce publish"
+  },
+  "devDependencies": {
+    "@types/node": "^18.0.0",
+    "@types/vscode": "^1.75.0",
+    "@vscode/test-electron": "^2.3.0",
+    "typescript": "^5.0.0",
+    "vsce": "^2.15.0"
+  },
+  "dependencies": {
+    "vscode-languageclient": "^8.1.0"
+  }
+}

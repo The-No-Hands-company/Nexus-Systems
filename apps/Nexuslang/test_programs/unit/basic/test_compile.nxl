@@ -1,0 +1,5 @@
+# Test NexusLang compilation to native executable
+# This should compile to C, then to a binary that prints "Hello from NLPL!"
+
+set greeting to "Hello from NLPL!"
+print text greeting

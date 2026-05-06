@@ -1,0 +1,26 @@
+# Test variadic extern function - printf
+# Demonstrates variadic parameter support in FFI
+
+extern function printf with format as Pointer, ... returns Integer from library "c"
+
+# Call printf with different numbers of arguments
+set format1 to "Hello, World!\n"
+call printf with format1
+
+set format2 to "Number: %d\n"
+set value to 42
+call printf with format2, value
+
+set format3 to "Two numbers: %d and %d\n"
+set first to 10
+set second to 20
+call printf with format3, first, second
+
+set format4 to "String: %s, Number: %d, Float: %f\n"
+set text to "test"
+set num to 123
+set fval to 3.14
+call printf with format4, text, num, fval
+
+set done to "Variadic test complete!\n"
+call printf with done

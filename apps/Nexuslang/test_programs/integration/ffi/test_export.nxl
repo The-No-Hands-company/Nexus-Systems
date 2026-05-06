@@ -1,0 +1,11 @@
+
+export calc_add, calc_sub
+
+function calc_add that takes x as Integer, y as Integer returns Integer
+    return x + y
+
+function calc_sub that takes x as Integer, y as Integer returns Integer
+    return x - y
+
+function internal_helper that takes a as Integer returns Integer
+    return a * 2

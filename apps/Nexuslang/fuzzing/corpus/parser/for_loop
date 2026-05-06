@@ -1,0 +1,2 @@
+for each item in [1, 2, 3]
+  print text item

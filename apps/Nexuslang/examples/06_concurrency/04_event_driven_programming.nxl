@@ -1,0 +1,164 @@
+# Event-Driven Programming in NexusLang
+
+# Event System
+class Event
+    private set name to String
+    private set data to Dictionary of Any
+    
+    public function initialize with name as String and data as Dictionary of Any
+        set this.name to name
+        set this.data to data
+    
+    public function get name returns String
+        return this.name
+    
+    public function get data returns Dictionary of Any
+        return this.data
+
+class EventEmitter
+    private set listeners to Dictionary of List of Function
+    
+    public function initialize
+        create this.listeners as empty Dictionary of List of Function
+    
+    public function on with event_name as String and callback as Function
+        if event_name not in this.listeners
+            create this.listeners[event_name] as empty List of Function
+        append callback to this.listeners[event_name]
+    
+    public function off with event_name as String and callback as Function
+        if event_name in this.listeners
+            remove callback from this.listeners[event_name]
+    
+    public function emit with event as Event
+        if event.name in this.listeners
+            for each callback in this.listeners[event.name]
+                call callback with event
+
+# GUI Event Handling
+class Button
+    private set text to String
+    private set position to Dictionary of Integer
+    private set size to Dictionary of Integer
+    private set is_enabled to Boolean
+    private set event_emitter as new EventEmitter
+    
+    public function initialize with text as String and x as Integer and y as Integer and width as Integer and height as Integer
+        set this.text to text
+        create this.position as Dictionary of Integer
+        set this.position["x"] to x
+        set this.position["y"] to y
+        create this.size as Dictionary of Integer
+        set this.size["width"] to width
+        set this.size["height"] to height
+        set this.is_enabled to true
+    
+    public function on click with callback as Function
+        on "click" with callback in this.event_emitter
+    
+    public function handle click with x as Integer and y as Integer
+        if this.is enabled and this.contains point with x and y
+            create event as new Event with "click" and {"x": x, "y": y}
+            emit event through this.event_emitter
+    
+    private function contains point with x as Integer and y as Integer returns Boolean
+        return x is greater than or equal to this.position["x"] and
+               x is less than or equal to this.position["x"] plus this.size["width"] and
+               y is greater than or equal to this.position["y"] and
+               y is less than or equal to this.position["y"] plus this.size["height"]
+
+# Form Validation
+class Form
+    private set fields to Dictionary of String
+    private set validators to Dictionary of Function
+    private set event_emitter as new EventEmitter
+    
+    public function initialize
+        create this.fields as empty Dictionary of String
+        create this.validators as empty Dictionary of Function
+    
+    public function add field with name as String and value as String
+        set this.fields[name] to value
+    
+    public function set validator with name as String and validator as Function
+        set this.validators[name] to validator
+    
+    public function validate returns Boolean
+        set is_valid to true
+        for each field_name in this.fields
+            if field_name in this.validators
+                set validator to this.validators[field_name]
+                if not validator with this.fields[field_name]
+                    set is_valid to false
+                    create event as new Event with "validation_error" and {"field": field_name}
+                    emit event through this.event_emitter
+        
+        if is_valid
+            create event as new Event with "validation_success" and this.fields
+            emit event through this.event_emitter
+        
+        return is_valid
+
+# Timer Events
+class Timer
+    private set interval to Integer
+    private set is_running to Boolean
+    private set event_emitter as new EventEmitter
+    
+    public function initialize with interval as Integer
+        set this.interval to interval
+        set this.is_running to false
+    
+    public function start
+        set this.is_running to true
+        while this.is_running
+            create event as new Event with "tick" and {"timestamp": current time}
+            emit event through this.event_emitter
+            wait for this.interval seconds
+    
+    public function stop
+        set this.is_running to false
+
+# Usage Examples
+# Create and handle button events
+create button as new Button with "Click me!" and 100 and 100 and 200 and 50
+
+function handle button click with event as Event
+    print text "Button clicked at (" plus convert event.data["x"] to string plus ", " plus convert event.data["y"] to string plus ")"
+
+on click handle button click in button
+
+# Create and handle form validation
+create form as new Form
+
+function validate email with email as String returns Boolean
+    return email contains "@" and email contains "."
+
+add field "email" with "john@example.com" to form
+set validator "email" to validate email in form
+
+function handle validation error with event as Event
+    print text "Validation error in field: " plus event.data["field"]
+
+function handle validation success with event as Event
+    print text "Form is valid with data: " plus convert event.data to string
+
+on "validation_error" with handle validation error in form
+on "validation_success" with handle validation success in form
+
+validate form
+
+# Create and handle timer events
+create timer as new Timer with 1
+
+function handle tick with event as Event
+    print text "Timer tick at: " plus convert event.data["timestamp"] to string
+
+on "tick" with handle tick in timer
+
+start timer
+
+# Wait for some time to see timer events
+wait for 5 seconds
+
+stop timer 

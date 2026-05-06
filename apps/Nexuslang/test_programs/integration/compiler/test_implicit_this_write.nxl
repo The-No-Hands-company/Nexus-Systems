@@ -1,0 +1,31 @@
+# Test: Implicit this.property Write Access
+# Bug: Inside methods, property assignment created new local variable
+# Fix: _generate_variable_declaration checks if in method context and identifier is a property
+
+class Counter
+    property count as Integer
+    
+    method increment returns Integer
+        # 'set count to...' should modify this.count, not create local variable
+        set count to count plus 1
+        return count
+    
+    method get_count returns Integer
+        return count
+
+set c to new Counter
+set c.count to 10
+
+set result1 to call c.increment
+print text "After increment:"
+print number result1
+
+set result2 to call c.get_count
+print text "Get count:"
+print number result2
+
+print text "Direct access:"
+print number c.count
+
+# Expected output: 11, 11, 11
+# Before fix: Would show 11, 10, 10 (method modified local var, not property)

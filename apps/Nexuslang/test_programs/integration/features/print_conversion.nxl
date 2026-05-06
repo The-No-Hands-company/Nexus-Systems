@@ -1,0 +1,24 @@
+# Test Print Type Conversion
+
+print text 123
+print text 45.67
+print number "789"
+print number "12.34"
+print text true
+print text [1, 2, 3]
+
+# Mixed usage
+set x to 10
+print text "The value is " plus convert x to string
+print number convert x to float
+
+# Additional coverage for compiler verification
+set y to convert "10.0" to float
+print text "Result: " plus convert y to string
+
+set z to convert 123.45 to integer
+print text "Int: " plus convert z to string
+
+set w to convert "999" to integer
+print text "StrInt: " plus convert w to string
+

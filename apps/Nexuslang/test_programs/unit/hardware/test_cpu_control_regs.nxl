@@ -1,0 +1,184 @@
+# CPU Control Registers Test
+# Test: Control register access (CR0, CR2, CR3, CR4)
+# Expected: Error messages indicating compiled mode required
+# NOTE: These functions require compiled mode with inline assembly
+
+print text "Test: CPU Control Registers"
+print text "NOTE: CR access requires compiled mode"
+print text ""
+
+# Test 1: Read CR0
+print text "Test 1: Read CR0 (Protected Mode/Paging control)"
+function test_read_cr0
+    set cr0 to read_cr0
+    print text "CR0 value:"
+    print text cr0
+end
+
+try
+    test_read_cr0
+catch error
+    print text "Expected error: CR0 read requires compiled mode"
+    print text error
+end
+
+print text ""
+
+# Test 2: Read CR2
+print text "Test 2: Read CR2 (Page Fault Address)"
+function test_read_cr2
+    set cr2 to read_cr2
+    print text "CR2 (page fault address):"
+    print text cr2
+end
+
+try
+    test_read_cr2
+catch error
+    print text "Expected error: CR2 read requires compiled mode"
+    print text error
+end
+
+print text ""
+
+# Test 3: Read CR3
+print text "Test 3: Read CR3 (Page Directory Base)"
+function test_read_cr3
+    set cr3 to read_cr3
+    print text "CR3 (page directory base):"
+    print text cr3
+end
+
+try
+    test_read_cr3
+catch error
+    print text "Expected error: CR3 read requires compiled mode"
+    print text error
+end
+
+print text ""
+
+# Test 4: Read CR4
+print text "Test 4: Read CR4 (Architecture Extensions)"
+function test_read_cr4
+    set cr4 to read_cr4
+    print text "CR4 value:"
+    print text cr4
+end
+
+try
+    test_read_cr4
+catch error
+    print text "Expected error: CR4 read requires compiled mode"
+    print text error
+end
+
+print text ""
+
+# Test 5: Write CR0
+print text "Test 5: Write CR0"
+function test_write_cr0
+    # Try to enable paging (bit 31)
+    set new_cr0 to 2147483648
+    write_cr0 with value: new_cr0
+    print text "CR0 written"
+end
+
+try
+    test_write_cr0
+catch error
+    print text "Expected error: CR0 write requires compiled mode"
+    print text error
+end
+
+print text ""
+
+# Test 6: Write CR3
+print text "Test 6: Write CR3"
+function test_write_cr3
+    # Try to switch page directory
+    set new_pd to 4096  # Must be page-aligned
+    write_cr3 with value: new_pd
+    print text "CR3 written"
+end
+
+try
+    test_write_cr3
+catch error
+    print text "Expected error: CR3 write requires compiled mode"
+    print text error
+end
+
+print text ""
+
+# Test 7: Write CR3 with invalid alignment
+print text "Test 7: Write CR3 with misaligned address (should fail)"
+function test_write_cr3_misaligned
+    set bad_addr to 4097  # Not page-aligned
+    write_cr3 with value: bad_addr
+    print text "ERROR: Should not reach here"
+end
+
+try
+    test_write_cr3_misaligned
+catch error
+    print text "Expected error: Address not page-aligned"
+    print text error
+end
+
+print text ""
+
+# Test 8: Write CR4
+print text "Test 8: Write CR4"
+function test_write_cr4
+    # Try to enable PAE (bit 5)
+    set new_cr4 to 32
+    write_cr4 with value: new_cr4
+    print text "CR4 written"
+end
+
+try
+    test_write_cr4
+catch error
+    print text "Expected error: CR4 write requires compiled mode"
+    print text error
+end
+
+print text ""
+
+# Documentation of CR0 flags
+print text "CR0 Flags (for compiled mode reference):"
+print text "  Bit 0 (PE):  Protected Mode Enable"
+print text "  Bit 1 (MP):  Monitor Coprocessor"
+print text "  Bit 2 (EM):  Emulation"
+print text "  Bit 3 (TS):  Task Switched"
+print text "  Bit 16 (WP): Write Protect"
+print text "  Bit 29 (NW): Not Write-through"
+print text "  Bit 30 (CD): Cache Disable"
+print text "  Bit 31 (PG): Paging Enable"
+
+print text ""
+
+# Documentation of CR3
+print text "CR3 (Page Directory Base Register):"
+print text "  Contains physical address of page directory"
+print text "  Must be page-aligned (multiple of 4096)"
+print text "  Writing flushes TLB (Translation Lookaside Buffer)"
+
+print text ""
+
+# Documentation of CR4 flags
+print text "CR4 Flags (for compiled mode reference):"
+print text "  Bit 4 (PSE):       Page Size Extensions"
+print text "  Bit 5 (PAE):       Physical Address Extension"
+print text "  Bit 7 (PGE):       Page Global Enable"
+print text "  Bit 9 (OSFXSR):    OS FXSAVE/FXRSTOR support"
+print text "  Bit 10 (OSXMMEXCPT): OS SIMD exception support"
+print text "  Bit 13 (VMXE):     VMX Enable"
+print text "  Bit 18 (OSXSAVE):  XSAVE enabled by OS"
+print text "  Bit 20 (SMEP):     Supervisor Mode Execution Prevention"
+print text "  Bit 21 (SMAP):     Supervisor Mode Access Prevention"
+
+print text ""
+print text "Test complete"
+print text "Control register access will be available in compiled mode"

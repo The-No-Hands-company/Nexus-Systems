@@ -1,0 +1,43 @@
+# Test Lambda Closures - Environment Capture
+# Tests that lambdas can access outer scope variables
+
+function main that takes nothing returns Integer
+    print text "=== Lambda Closure Tests ==="
+    
+    # Test 1: Simple closure - capture outer variable
+    print text ""
+    print text "Test 1: Lambda capturing outer variable"
+    set outer_value to 10
+    set add_outer to lambda x: x plus outer_value
+    # Expected: call add_outer with 5 returns 15
+    
+    print text "Calling lambda(5) with outer_value=10"
+    print text "Expected: 15"
+    # Note: This will fail with current implementation
+    # set result1 to call add_outer with 5
+    # print text "Result: "
+    # print number result1
+    
+    # Test 2: Multiple captured variables
+    print text ""
+    print text "Test 2: Lambda capturing multiple variables"
+    set multiplier to 3
+    set offset to 7
+    set calc to lambda x: multiplied by multiplier plus offset
+    # Expected: calc(4) = 4 * 3 + 7 = 19
+    
+    print text "Calling lambda(4) with multiplier=3, offset=7"
+    print text "Expected: 19"
+    # set result2 to call calc with 4
+    # print number result2
+    
+    # Test 3: Nested function with closure
+    print text ""
+    print text "Test 3: Function returning closure"
+    print text "makeAdder(5) returns lambda that adds 5"
+    print text "Expected: adder(10) = 15"
+    
+    print text ""
+    print text "=== Lambda closure tests complete ==="
+    print text "Note: Tests commented out - closures not yet implemented"
+    return 0

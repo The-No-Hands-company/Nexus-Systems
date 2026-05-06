@@ -1,0 +1,129 @@
+
+extern function malloc with size as Integer returns Pointer from library "c"
+extern function calloc with num as Integer, size as Integer returns Pointer from library "c"
+extern function c_free with ptr as Pointer returns Void from library "nxl_runtime"
+extern function strlen with s as Pointer to Byte returns Integer from library "c"
+extern function strcpy with dest as Pointer to Byte, src as Pointer to Byte returns Pointer from library "c"
+extern function strcat with dest as Pointer to Byte, src as Pointer to Byte returns Pointer from library "c"
+extern function strcmp with s1 as Pointer to Byte, s2 as Pointer to Byte returns Integer from library "c"
+
+export Str
+
+class Str
+    property buffer as Pointer to Byte
+    property length as Integer
+    property capacity as Integer
+
+    # Create from literal string (i8*)
+    function new that takes s as String returns Void
+        # Calculate length
+        # Cast String to Pointer to Byte for FFI if needed, or rely on implicit compatibility
+        # In NexusLang currently String = i8* so passing it to Pointer to Byte arg might work or need cast
+        # For now, let's assume String and Pointer to Byte are compatible at call site or use raw Pointer
+        
+        set len to strlen(s)
+        set new_cap to len + 1
+        
+        set buffer to malloc(new_cap)
+        strcpy(buffer, s)
+        
+        set length to len
+        set capacity to new_cap
+
+    function len returns Integer
+        return length
+        
+    function c_str returns Pointer to Byte
+        return buffer
+        
+    function equals that takes other as Str returns Boolean
+        if length != other.length
+            return false
+            
+        if strcmp(buffer, other.buffer) == 0
+            return true
+        else
+            return false
+            
+    function concat that takes other as Str returns Str
+        set new_len to length + other.length
+        set new_cap to new_len + 1
+        
+        set new_buf to malloc(new_cap)
+        
+        # Copy first part
+        strcpy(new_buf, buffer)
+        # Concat second part
+        strcat(new_buf, other.buffer)
+        
+        set result to new Str
+        # Manually init result (since we have raw buffer)
+        # We need a way to set private/internal props or use a helper
+        # Current 'new' takes a String literal. 
+        # We can expose a 'from_ptr' static-like method or special constructor if we had overloads?
+        # For now, we'll manually set fields of the result object
+        # Note: In NexusLang 'new Str' creates object, but 'new' method is initializer.
+        # This is tricky without constructors that return Self.
+        # Wait, 'set result to new Str' creates empty object then calls .new() if args match? 
+        # Or just allocates?
+        # Current compiler: 'new Class' allocates. 'new Class()' calls initializer if matching?
+        # Actually standard practice here is to define methods on the instance.
+        
+        # Let's bypass the 'new' initializer and manual set
+        # But 'result' fields are properties. We can set them from here? 
+        # Yes, standard implementation allows field access.
+        
+        # However, we can't just access result.buffer if we don't own it? 
+        # NexusLang access rules are permissive for now.
+        
+        result.init_raw(new_buf, new_len, new_cap)
+        return result
+        
+    function init_raw that takes buf as Pointer to Byte, len as Integer, cap as Integer returns Void
+        set buffer to buf
+        set length to len
+        set capacity to cap
+
+    function substring that takes start as Integer, count as Integer returns Str
+        if start >= length
+            set empty to new Str
+            empty.new("")
+            return empty
+            
+        set new_cap to count + 1
+        set new_buf to malloc(new_cap)
+        
+        # Simple manual copy loop or use memcpy/strncpy?
+        # Let's use loop for safety if strncpy is annoying
+        set i to 0
+        set src_ptr to buffer
+        # Pointer arithmetic? src_ptr + start?
+        # NexusLang backend supports index access on pointers roughly? 
+        # buffer[index] works.
+        
+        while i < count
+            # buffer[start + i]
+            set idx to start + i
+            if idx >= length
+                 # break loop?
+                 # No 'break' yet? Parser supports BREAK? 
+                 # Let's assume yes or avoid overflow
+                 set new_buf[i] to 0 # null term
+                 # break
+                 # Hack: force i to count
+                 set i to count
+            else
+                 set val to buffer[idx]
+                 set new_buf[i] to val
+                 set i to i + 1
+                 
+        set new_buf[count] to 0 # Null terminate
+        
+        set res to new Str
+        res.init_raw(new_buf, i, new_cap) # i is actaul count copied
+        return res
+        
+    function destroy returns Void
+        if capacity > 0
+             c_free(buffer)
+             set capacity to 0

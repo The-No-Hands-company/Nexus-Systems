@@ -1,0 +1,34 @@
+# Test basic interrupt handler registration
+print text "Testing interrupt handler registration..."
+
+# Define a simple handler
+function test_handler with frame as Dict
+    print text "Handler called successfully"
+end
+
+try
+    # Register handler for keyboard interrupt (vector 33)
+    set result to register_interrupt_handler with vector: 33 and handler: test_handler
+    if result
+        print text "Handler registered: SUCCESS"
+    else
+        print text "Handler registration failed"
+    end
+    
+    # List registered handlers
+    set handlers to list_interrupt_handlers
+    print text "Registered handlers count:"
+    print text length of handlers
+    
+    # Unregister handler
+    set unregister_result to unregister_interrupt_handler with vector: 33
+    if unregister_result
+        print text "Handler unregistered: SUCCESS"
+    end
+    
+catch error with message
+    print text "Error (expected without root):"
+    print text message
+end
+
+print text "Test complete"

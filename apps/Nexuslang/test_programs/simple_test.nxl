@@ -1,0 +1,5 @@
+set x to 5
+set y to 10
+set sum to x plus y
+print text "Sum is: "
+print text sum

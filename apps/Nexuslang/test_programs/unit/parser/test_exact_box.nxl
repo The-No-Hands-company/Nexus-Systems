@@ -1,0 +1,40 @@
+# Exact copy of Box section from examples/18
+print text "=== Generic Types in NexusLang ==="
+print text ""
+
+print text "1. Generic Container Class"
+print text "--------------------------"
+
+class Box<T>
+    property value as T
+    property count as Integer
+    
+    method get_value returns T
+        return this.value
+    end method
+    
+    method set_value with v as T
+        set this.value to v
+    end method
+    
+    method increment
+        set this.count to this.count plus 1
+    end method
+end class
+
+# Create Box<Integer>
+set int_box to new Box<Integer>
+set int_box.value to 42
+set int_box.count to 1
+
+print text "Integer box value: "
+print text call int_box.get_value
+
+call int_box.set_value with 100
+print text "Updated value: "
+print text call int_box.get_value
+
+call int_box.increment
+print text "Count after increment: "
+print text int_box.count
+print text ""

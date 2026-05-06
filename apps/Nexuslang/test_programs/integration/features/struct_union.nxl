@@ -1,0 +1,64 @@
+# Test Struct and Union Features
+
+# 1. Struct Definition
+struct Point
+    x as Integer
+    y as Integer
+end
+
+struct Rectangle
+    top_left as Point
+    bottom_right as Point
+end
+
+# 2. Instantiation and Assignment
+print text "--- Struct Instantiation ---"
+set p1 to new Point
+set p1.x to 10
+set p1.y to 20
+
+print text "p1.x: " plus convert p1.x to string
+print text "p1.y: " plus convert p1.y to string
+
+# 3. Sizeof Operator
+print text "--- Sizeof ---"
+set size_int to sizeof Integer
+print text "Size of Integer: " plus convert size_int to string
+set size_point to sizeof Point
+print text "Size of Point: " plus convert size_point to string
+
+# 4. Nested Structs
+print text "--- Nested Structs ---"
+set rect to new Rectangle
+set rect.top_left to new Point
+set rect.top_left.x to 5
+set rect.top_left.y to 5
+
+print text "rect.top_left.x: " plus convert rect.top_left.x to string
+
+# 5. Union Definition (Shared Memory)
+union DataPacket
+    intValue as Integer
+    floatValue as Float
+    byteValue as Byte
+end
+
+print text "--- Union Shared Memory ---"
+set packet to new DataPacket
+set packet.intValue to 65
+
+print text "packet.intValue: " plus convert packet.intValue to string
+# Note: Interpreting raw bytes of int 65 as float or char might vary, 
+# but for verification we check if writing one field affects the memory of the union.
+# Let's write to byteValue and see if intValue changes (if we write 0)
+
+set packet.intValue to 0
+set packet.byteValue to 1
+print text "packet.intValue after setting byteValue=1: " plus convert packet.intValue to string
+
+# 6. Offsetof Operator
+print text "--- Offsetof ---"
+set offset_x to offsetof Point.x
+set offset_y to offsetof Point.y
+print text "Offset of Point.x: " plus convert offset_x to string
+print text "Offset of Point.y: " plus convert offset_y to string

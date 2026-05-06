@@ -1,0 +1,104 @@
+# Example demonstrating all standard library modules
+
+# Import modules
+Import math.
+Import string.
+Import io.
+Import system.
+Import collections.
+Import network.
+
+# Using math module
+Print("=== Math Module ===").
+Create radius as Float and set it to 5.0.
+Create area and set it to math.PI * math.power(radius, 2).
+Print("Circle area: " + area).
+Print("Square root of 16: " + math.square_root(16)).
+Print("Maximum of 3, 7, 2, 10, 5: " + math.maximum(3, 7, 2, 10, 5)).
+
+# Using string module
+Print("\n=== String Module ===").
+Create message as String and set it to "hello, world".
+Create upper_message and set it to string.uppercase(message).
+Create capitalized and set it to string.capitalize(message).
+Print("Original: " + message).
+Print("Uppercase: " + upper_message).
+Print("Capitalized: " + capitalized).
+Print("Contains 'world': " + string.contains(message, "world")).
+Create words and set it to string.split(message, " ").
+Create joined and set it to string.join(", ", words).
+Print("Split and joined: " + joined).
+
+# Using IO module
+Print("\n=== IO Module ===").
+Create filename and set it to "test_output.txt".
+Create content and set it to "This is a test file created by NexusLang.".
+io.write_file(filename, content).
+Print("File written: " + filename).
+Create read_content and set it to io.read_file(filename).
+Print("File content: " + read_content).
+Print("File exists: " + io.file_exists(filename)).
+io.delete_file(filename).
+Print("File deleted.").
+
+# Using system module
+Print("\n=== System Module ===").
+Print("OS Name: " + system.get_os_name()).
+Print("OS Version: " + system.get_os_version()).
+Print("Platform: " + system.get_platform()).
+Print("Python Version: " + system.get_python_version()).
+Print("Hostname: " + system.get_hostname()).
+Print("Current Time: " + system.get_current_time()).
+Print("Current Date: " + system.get_current_date()).
+Print("Process ID: " + system.get_process_id()).
+
+# Using collections module
+Print("\n=== Collections Module ===").
+Create my_list and set it to collections.list_create(1, 2, 3, 4, 5).
+Print("List: " + my_list).
+collections.list_append(my_list, 6).
+Print("After append: " + my_list).
+Print("List length: " + collections.list_length(my_list)).
+Print("List contains 3: " + collections.list_contains(my_list, 3)).
+
+Create my_dict and set it to collections.dict_create().
+collections.dict_set(my_dict, "name", "NexusLang").
+collections.dict_set(my_dict, "version", "1.0").
+Print("Dictionary: " + my_dict).
+Print("Dictionary keys: " + collections.dict_keys(my_dict)).
+Print("Dictionary values: " + collections.dict_values(my_dict)).
+
+Create my_set and set it to collections.set_create(1, 2, 3, 3, 4, 5).
+Print("Set: " + my_set).
+Print("Set length: " + collections.set_length(my_set)).
+Print("Set contains 3: " + collections.set_contains(my_set, 3)).
+
+# Using network module (Note: This will only work with internet connection)
+Print("\n=== Network Module ===").
+Print("URL parsing:").
+Create parsed_url and set it to network.url_parse("https://example.com/path?query=value").
+Print("Scheme: " + parsed_url["scheme"]).
+Print("Hostname: " + parsed_url["hostname"]).
+Print("Path: " + parsed_url["path"]).
+
+Create params and set it to collections.dict_create().
+collections.dict_set(params, "q", "NLPL language").
+collections.dict_set(params, "lang", "en").
+Create encoded and set it to network.url_encode(params).
+Print("URL encoded parameters: " + encoded).
+
+# Uncomment to make actual HTTP requests
+# Print("HTTP GET request:").
+# Create response and set it to network.http_get("https://httpbin.org/get").
+# Print("Status code: " + response["status_code"]).
+
+# JSON operations
+Print("\n=== JSON Operations ===").
+Create json_obj and set it to collections.dict_create().
+collections.dict_set(json_obj, "name", "NexusLang").
+collections.dict_set(json_obj, "features", collections.list_create("types", "modules", "stdlib")).
+Create json_str and set it to network.json_encode(json_obj).
+Print("JSON string: " + json_str).
+Create parsed_json and set it to network.json_decode(json_str).
+Print("Parsed JSON name: " + parsed_json["name"]).
+Print("Parsed JSON features: " + parsed_json["features"]). 

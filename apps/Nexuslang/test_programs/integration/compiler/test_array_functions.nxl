@@ -1,0 +1,62 @@
+# Test Array Features for NexusLang Compiler
+# Tests basic array operations and bounds checking
+
+print text "=== NexusLang Array Features Test ==="
+
+# Test 1: Static array creation and access
+print text ""
+print text "Test 1: Static Array Creation"
+set numbers to [10, 20, 30, 40, 50]
+print text "Array created: [10, 20, 30, 40, 50]"
+print text "First element (numbers[0]):"
+print number numbers[0]
+print text "Third element (numbers[2]):"
+print number numbers[2]
+print text "Last element (numbers[4]):"
+print number numbers[4]
+
+# Test 2: Float array
+print text ""
+print text "Test 2: Float Array"
+set decimals to [1.5, 2.7, 3.14, 4.0]
+print text "Float array: [1.5, 2.7, 3.14, 4.0]"
+print text "Pi approximation (decimals[2]):"
+print number decimals[2]
+
+# Test 3: String array
+print text ""
+print text "Test 3: String Array"
+set names to ["Alice", "Bob", "Charlie"]
+print text "Names: [Alice, Bob, Charlie]"
+print text "First name:"
+print text names[0]
+
+# Test 4: Boolean array
+print text ""
+print text "Test 4: Boolean Array"
+set flags to [true, false, true, false]
+print text "Flags array created: [true, false, true, false]"
+
+# Test 5: Nested array (2D)
+print text ""
+print text "Test 5: Nested 2D Array"
+set matrix to [[1, 2, 3], [4, 5, 6], [7, 8, 9]]
+print text "3x3 Matrix created"
+print text "Center element (matrix[1][1]):"
+print number matrix[1][1]
+print text "Corner element (matrix[2][2]):"
+print number matrix[2][2]
+
+# Test 6: Array modification
+print text ""
+print text "Test 6: Array Modification"
+set mutable to [100, 200, 300]
+print text "Original array: [100, 200, 300]"
+print text "Before modification, mutable[1]:"
+print number mutable[1]
+set mutable[1] to 999
+print text "After setting mutable[1] to 999:"
+print number mutable[1]
+
+print text ""
+print text "=== All Array Tests Complete ==="

@@ -1,0 +1,33 @@
+# Test complete async/await workflow
+# Tests: async function definition, await expression, scheduler
+
+print text "=== Complete Async/Await Test ==="
+
+# Simple async function
+async function get_value returns Integer
+    print text "get_value: starting"
+    set x to 100
+    print text "get_value: returning"
+    return x
+end
+
+# Another async function that awaits
+async function double_value returns Integer
+    print text "double_value: starting"
+    set val to await get_value
+    print text "double_value: got value, doubling"
+    set result to val times 2
+    print text "double_value: returning"
+    return result
+end
+
+# Async main for testing
+async function async_main returns Integer
+    print text "async_main: starting"
+    set final to await double_value
+    print text "async_main: completed"
+    return final
+end
+
+print text "All async functions defined"
+print text "Test PASSED"

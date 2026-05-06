@@ -1,0 +1,48 @@
+# Test program for debugging with breakpoints
+# Demonstrates step execution and variable inspection
+
+function calculate_sum with numbers as List returns Integer
+    print text "Starting sum calculation"
+    set total to 0
+    set count to 0
+    
+    for each num in numbers
+        set total to total plus num
+        set count to count plus 1
+        print text "Added " plus num plus ", total is now " plus total
+    end
+    
+    print text "Final total: " plus total
+    print text "Count: " plus count
+    return total
+end
+
+function calculate_average with numbers as List returns Float
+    print text "Calculating average"
+    set sum to calculate_sum with numbers
+    set length to 0
+    
+    for each num in numbers
+        set length to length plus 1
+    end
+    
+    set avg to sum divided by length
+    print text "Average: " plus avg
+    return avg
+end
+
+# Main execution
+print text "Number Statistics"
+print text "================="
+
+set data to [10, 20, 30, 40, 50]
+
+print text "Numbers: " plus data
+
+set sum to calculate_sum with data
+print text "Sum: " plus sum
+
+set average to calculate_average with data
+print text "Average: " plus average
+
+print text "Complete!"

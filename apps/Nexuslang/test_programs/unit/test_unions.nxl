@@ -1,0 +1,116 @@
+# Test Union Implementation
+# Verifies union types work with overlapping memory layout
+
+print text "=== Testing NexusLang Union Implementation ==="
+print text ""
+
+# Test 1: Basic union definition and instantiation
+print text "Test 1: Basic Union"
+union Value
+    int_val as Integer
+    float_val as Float
+end
+
+create v as new Value
+set v.int_val to 42
+print text "Set int_val to 42"
+print text "int_val = "
+print text v.int_val
+
+# Test 2: Overlapping memory (union property)
+print text ""
+print text "Test 2: Overlapping Memory"
+# When we set float_val, it should overwrite int_val (same memory)
+set v.float_val to 3.14
+print text "Set float_val to 3.14"
+print text "float_val = "
+print text v.float_val
+print text "int_val (now contains float bits) = "
+print text v.int_val  # Will show garbage because memory is reinterpreted
+
+# Test 3: Union size (size of largest member)
+print text ""
+print text "Test 3: Union Size"
+union Data
+    byte_val as Integer
+    long_val as Integer
+    double_val as Float
+end
+
+set data_size to sizeof Data
+print text "Union Data size (should be largest member): "
+print text data_size
+
+# Test 4: Multiple union instances
+print text ""
+print text "Test 4: Multiple Union Instances"
+create v1 as new Value
+create v2 as new Value
+set v1.int_val to 100
+set v2.int_val to 200
+print text "v1.int_val = "
+print text v1.int_val
+print text "v2.int_val = "
+print text v2.int_val
+
+# Test 5: Union with different sized fields
+print text ""
+print text "Test 5: Different Sized Fields"
+union Mixed
+    small as Integer
+    large as Integer
+end
+
+create m as new Mixed
+set m.small to 255
+print text "Small field set to 255: "
+print text m.small
+set m.large to 1000000
+print text "Large field set to 1000000: "
+print text m.large
+
+# Test 6: Type detection via union (use case)
+print text ""
+print text "Test 6: Type-Tagged Union Pattern"
+# Simulate a variant type with type tag
+union Variant
+    int_value as Integer
+    float_value as Float
+end
+
+create var as new Variant
+# In real code, you'd track the type separately
+set var.int_value to 12345
+print text "Variant storing integer: "
+print text var.int_value
+
+# Test 7: Union for memory efficiency
+print text ""
+print text "Test 7: Memory Efficiency"
+# Union uses only the size of largest member, not sum
+union Efficient
+    option_a as Integer
+    option_b as Integer
+    option_c as Integer
+end
+
+set efficient_size to sizeof Efficient
+print text "Union with 3 Integer fields, size = "
+print text efficient_size
+print text "(Should be size of 1 Integer, not 3)"
+
+# Test 8: Practical use - IP address union
+print text ""
+print text "Test 8: Practical Example - IP Address"
+union IPAddress
+    as_int as Integer
+    # In real code, you'd have byte access too
+end
+
+create ip as new IPAddress
+set ip.as_int to 16777343  # 127.0.0.127 as integer (127 + 127*256^3)
+print text "IP as integer: "
+print text ip.as_int
+
+print text ""
+print text "=== All Union Tests Passed ==="

@@ -1,0 +1,21 @@
+# Test Generic Types
+
+print text "--- List of Integer ---"
+# Syntax check only for now (runtime ignores types)
+set numbers to new List of Integer
+numbers.append(1)
+numbers.append(2)
+print text "List size: " plus convert len(numbers) to string
+
+print text "--- Dictionary of String, Integer ---"
+set scores to new Dictionary of String, Integer
+set scores["Alice"] to 100
+print text "Alice score: " plus convert scores["Alice"] to string
+
+print text "--- Map of String to Integer (New Syntax) ---"
+# This fails currently
+set capitals to new Map of String to Integer
+set capitals["France"] to "Paris"
+# Note: "Paris" is a string, even though we said Integer. 
+# Current runtime is untyped, but syntax should parse.
+print text "Capital of France: " plus capitals["France"]

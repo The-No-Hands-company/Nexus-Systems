@@ -1,0 +1,26 @@
+# Test Interface Definition and Implementation
+# Tests defining interfaces and implementing them in classes
+
+print text "=== Interface Test ==="
+
+# Define an interface
+define an interface called Drawable
+    it has a method called draw that returns void
+end interface
+
+# Class that implements Drawable  
+class Circle implements Drawable
+    set radius to 5.0
+    
+    method draw
+        print text "Drawing a circle"
+    end method
+end class
+
+# Create and use the class
+set c to new Circle
+
+# Call the interface method using dot notation
+c.draw()
+
+print text "=== Interface Test Complete ==="

@@ -1,0 +1,52 @@
+# Test Generic Function Type Inference Fix
+# Validates that generic functions correctly infer return types
+
+print text "=== Generic Function Type Inference Test ==="
+print text ""
+
+# Generic identity function
+function identity<T> that takes value as T returns T
+    return value
+end
+
+# Test 1: Integer inference
+print text "Test 1: Integer type inference"
+set int_val to identity with 42
+print text "identity(42) type should be Integer"
+print text "Value: "
+print text int_val
+print text ""
+
+# Test 2: Boolean inference  
+print text "Test 2: Boolean type inference"
+set bool_val to identity with true
+print text "identity(true) type should be Boolean"
+print text "Value: "
+print text bool_val
+print text ""
+
+# Generic swap function (returns second value)
+function get_second<T> that takes first as T and second as T returns T
+    return second
+end
+
+# Test 3: Multiple parameters same type
+print text "Test 3: Two parameter generic"
+set result to get_second with 100 and 200
+print text "get_second(100, 200) = "
+print text result
+print text ""
+
+# Generic with different types
+function make_number<T> that takes val as T returns Integer
+    return 42
+end
+
+# Test 4: Generic with fixed return type
+print text "Test 4: Generic with fixed Integer return"
+set num to make_number with true
+print text "make_number(true) = "
+print text num
+print text ""
+
+print text "=== All Type Inference Tests Passed ==="

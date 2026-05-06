@@ -1,0 +1,22 @@
+# Test multiple function parameters
+# Current syntax: function NAME that takes PARAM as TYPE returns TYPE
+
+# Try two parameters
+function add_two that takes a as Integer and b as Integer returns Integer
+    return a plus b
+
+# Try three parameters
+function add_three that takes a as Integer and b as Integer and c as Integer returns Integer
+    set sum1 to a plus b
+    set sum2 to sum1 plus c
+    return sum2
+
+# Test calls
+set x to 10
+set y to 20
+set result to add_two with x and y
+print text result
+
+set z to 30
+set result2 to add_three with x and y and z
+print text result2

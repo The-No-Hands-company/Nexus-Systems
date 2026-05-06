@@ -1,0 +1,23 @@
+# Test exception with function call
+
+function throw_error returns Void
+    print text "In throw_error function"
+    raise error with message "Error from function"
+    return
+end
+
+print text "Before try"
+
+try
+    print text "About to call throwing function"
+    call throw_error
+    print text "After call (unreachable)"
+catch e
+    print text "Caught: "
+    print text e
+end
+
+print text "After catch - program continues"
+end
+
+print text "After catch"

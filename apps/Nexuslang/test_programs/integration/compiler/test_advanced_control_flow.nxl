@@ -1,0 +1,93 @@
+# Advanced Control Flow - Full Feature Test
+# Tests: labeled loops, labeled break/continue, loop-else, fallthrough
+
+print text "=== Advanced Control Flow Complete Test ==="
+print text ""
+
+# Test 1: Labeled break - break out of outer loop
+print text "Test 1: Labeled break from nested loop"
+set outer_count to 0
+label outer: while outer_count is less than 3
+    set outer_count to outer_count plus 1
+    set inner_count to 0
+    while inner_count is less than 3
+        set inner_count to inner_count plus 1
+        if inner_count is equal to 2
+            print text "Breaking from outer loop"
+            break outer
+        print number inner_count
+    print text "Inner loop done"
+
+print text ""
+
+# Test 2: Labeled continue - continue specific loop
+print text "Test 2: Labeled continue in nested loop"
+set i to 0
+label outer_loop: while i is less than 3
+    set i to i plus 1
+    print text "Outer iteration"
+    set j to 0
+    while j is less than 3
+        set j to j plus 1
+        if j is equal to 2
+            print text "Continuing outer loop"
+            continue outer_loop
+        print number j
+    print text "Inner done (shouldn't see this)"
+
+print text ""
+
+# Test 3: Loop-else - executes if loop completes normally
+print text "Test 3: Loop with else (completes normally)"
+set count to 0
+while count is less than 3
+    print number count
+    set count to count plus 1
+else
+    print text "Loop completed normally"
+
+print text ""
+
+# Test 4: Loop-else with break - else doesn't execute
+print text "Test 4: Loop with else (breaks early)"
+set num to 0
+while num is less than 10
+    print number num
+    set num to num plus 1
+    if num is equal to 2
+        print text "Breaking early"
+        break
+else
+    print text "This should NOT print"
+
+print text ""
+
+# Test 5: Switch with fallthrough
+print text "Test 5: Switch statement with fallthrough"
+set value to 2
+switch value
+    case 1
+        print text "Case 1"
+        fallthrough
+    case 2
+        print text "Case 2"
+        fallthrough
+    case 3
+        print text "Case 3"
+    default
+        print text "Default case"
+
+print text ""
+
+# Test 6: For loop with label and else
+print text "Test 6: For loop with label and else"
+set numbers to [1, 2, 3, 4, 5]
+label my_loop: for each num in numbers
+    if num is equal to 10
+        break my_loop
+    print number num
+else
+    print text "For loop completed"
+
+print text ""
+print text "=== All Advanced Control Flow Tests Complete ==="

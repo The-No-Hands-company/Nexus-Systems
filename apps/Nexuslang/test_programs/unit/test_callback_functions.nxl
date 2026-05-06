@@ -1,0 +1,117 @@
+# Test Callback Functions / Function Pointers
+
+print text "=== Testing NexusLang Callback Functions ==="
+print text ""
+
+# Test 1: Function as a variable
+print text "Test 1: Store function in variable"
+
+function greet with name as String returns String
+    return "Hello, " plus name
+end
+
+set my_function to greet
+set result to my_function with "Alice"
+print text result
+print text ""
+
+# Test 2: Pass function as argument
+print text "Test 2: Pass function as callback"
+
+function apply_twice with func and value as Integer returns Integer
+    set temp to func with value
+    return func with temp
+end
+
+function double with n as Integer returns Integer
+    return n times 2
+end
+
+set result to apply_twice with double and 5
+print text "Apply double twice to 5:"
+print text result
+print text ""
+
+# Test 3: Array of functions
+print text "Test 3: Array of function pointers"
+
+function add_one with n as Integer returns Integer
+    return n plus 1
+end
+
+function multiply_by_ten with n as Integer returns Integer
+    return n times 10
+end
+
+set operations to [add_one, multiply_by_ten]
+
+set value to 5
+set func1 to operations[0]
+set value to func1 with value
+print text "After add_one: "
+print text value
+
+set func2 to operations[1]
+set value to func2 with value
+print text "After multiply_by_ten: "
+print text value
+print text ""
+
+# Test 4: Callback pattern (event handler simulation)
+print text "Test 4: Event handler pattern"
+
+function on_button_click with button_id as Integer
+    print text "Button clicked: "
+    print text button_id
+end
+
+function register_callback with handler and id as Integer
+    # Simulate event firing
+    handler with id
+end
+
+register_callback with on_button_click and 42
+print text ""
+
+# Test 5: Storing and using function references
+print text "Test 5: Multiple function references"
+
+function times_two with n as Integer returns Integer
+    return n times 2
+end
+
+function times_three with n as Integer returns Integer
+    return n times 3
+end
+
+set multiplier to times_three
+set result to multiplier with 7
+print text "3 * 7 = "
+print text result
+print text ""
+
+# Test 6: Map-like operation
+print text "Test 6: Map operation with callback"
+
+function map_list with func and list as List returns List
+    set result to []
+    for each item in list
+        set transformed to func with item
+        add transformed to result
+    end
+    return result
+end
+
+function square with n as Integer returns Integer
+    return n times n
+end
+
+set numbers to [1, 2, 3, 4, 5]
+set squared to map_list with square and numbers
+print text "Squared numbers: "
+for each num in squared
+    print text num
+end
+print text ""
+
+print text "=== All Callback Function Tests Passed ==="

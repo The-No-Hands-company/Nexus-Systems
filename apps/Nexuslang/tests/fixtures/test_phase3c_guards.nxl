@@ -1,0 +1,39 @@
+// Test Phase 3c: Control flow analysis (guard detection)
+fn test_guarded_access() {
+    print("Testing Phase 3c: Guarded Access");
+    
+    // Test 1: Simple guard with arrlen
+    let arr1 = [1, 2, 3, 4, 5];
+    let i = 2;
+    
+    if i < arrlen(arr1) {
+        arr1[i] = 100;  // Should eliminate check - guarded
+        print("Test 1 passed: Guarded access with arrlen");
+    }
+    
+    // Test 2: Guard with constant
+    let arr2 = alloc(10, i64);
+    let j = 5;
+    
+    if j < 10 {
+        arr2[j] = 42;  // Should eliminate check - guarded
+        print("Test 2 passed: Guarded access with constant");
+    }
+}
+
+fn test_unguarded_access() {
+    print("Testing unguarded access (should have checks)");
+    
+    let arr = [1, 2, 3];
+    let i = 2;
+    
+    // No guard - should keep bounds check
+    arr[i] = 99;
+    print("Unguarded access completed");
+}
+
+fn main() {
+    test_guarded_access();
+    test_unguarded_access();
+    print("All Phase 3c tests passed!");
+}

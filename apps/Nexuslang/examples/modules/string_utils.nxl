@@ -1,0 +1,23 @@
+# String utilities module
+
+Define function concat that takes a as String, b as String and returns String
+    Return a + b.
+End function.
+
+Define function repeat that takes text as String, count as Integer and returns String
+    Create result and set it to "".
+    Repeat count times
+        Set result to result + text.
+    End loop.
+    Return result.
+End function.
+
+Define function uppercase that takes text as String and returns String
+    # This is a placeholder - in a real implementation, we would call a built-in function
+    Return text.uppercase().
+End function.
+
+Define function lowercase that takes text as String and returns String
+    # This is a placeholder - in a real implementation, we would call a built-in function
+    Return text.lowercase().
+End function. 

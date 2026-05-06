@@ -1,0 +1,40 @@
+# FFI String Example - Call C string manipulation functions
+# Tests strlen, strcmp, strcpy, strcat from libc
+#
+# Compilation:
+#   python nlplc_llvm.py test_programs/ffi/test_ffi_string.nlpl -o ffi_string
+#
+# Expected Output:
+#   Length of 'Hello': 5
+#   strcmp result: 0 (equal)
+#   Concatenated: Hello World
+
+extern function strlen with str as Pointer returns Integer from library "c"
+extern function strcmp with s1 as Pointer, s2 as Pointer returns Integer from library "c"
+extern function strcpy with dest as Pointer, src as Pointer returns Pointer from library "c"
+extern function strcat with dest as Pointer, src as Pointer returns Pointer from library "c"
+extern function malloc with size as Integer returns Pointer from library "c"
+extern function printf with format as Pointer returns Integer from library "c"
+
+# Test strlen
+set greeting to "Hello"
+set str_len to call strlen with greeting
+set format to "Length of 'Hello': %d\n"
+call printf with format, str_len
+
+# Test strcmp
+set str1 to "Test"
+set str2 to "Test"
+set cmp_result to call strcmp with str1, str2
+set format2 to "strcmp result: %d (equal)\n"
+call printf with format2, cmp_result
+
+# Test strcpy and strcat
+set buffer_size to 50
+set buffer to call malloc with buffer_size
+set hello to "Hello"
+call strcpy with buffer, hello
+set world to " World"
+call strcat with buffer, world
+set format3 to "Concatenated: %s\n"
+call printf with format3, buffer

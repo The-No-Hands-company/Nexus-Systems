@@ -1,0 +1,42 @@
+{
+    "name": "NexusLang",
+    "selector": "source.nxl",
+    "variants": [
+        {
+            "name": "Run",
+            "shell_cmd": "python3 -m nexuslang.main \"$file\""
+        },
+        {
+            "name": "Build",
+            "shell_cmd": "nlpl build"
+        },
+        {
+            "name": "Build (Release)",
+            "shell_cmd": "nlpl build --release"
+        },
+        {
+            "name": "Test",
+            "shell_cmd": "nlpl test"
+        },
+        {
+            "name": "Test with Coverage",
+            "shell_cmd": "nlpl test --coverage"
+        },
+        {
+            "name": "Coverage",
+            "shell_cmd": "nlpl coverage \"$file\""
+        },
+        {
+            "name": "Profile",
+            "shell_cmd": "nlpl profile \"$file\""
+        },
+        {
+            "name": "Docs",
+            "shell_cmd": "nlpl doc"
+        }
+    ],
+    "shell_cmd": "python3 -m nexuslang.main \"$file\"",
+    "file_regex": "^(.+):([0-9]+):([0-9]+): error: (.*)$",
+    "working_dir": "$project_path",
+    "encoding": "utf-8"
+}

@@ -1,0 +1,23 @@
+
+import core.optional
+
+export args, env, exit
+
+# Note: Accessing argv/argc requires compiler support or global variable exposure.
+# For now, we stub `args` or bindings.
+
+extern function getenv with name as String returns String from library "c"
+extern function exit with code as Integer returns Void from library "c"
+
+function env that takes name as String returns Optional<String>
+    set val to getenv(name)
+    # Check null? 
+    # getenv returns NULL if not found.
+    # If `val` (String/i8*) is 0...
+    # We implicitly need a way to check if String is null.
+    # LLVM `icmp ne i8* %val, null`
+    # Let's assume `if val` check works on strings too (truthiness).
+    
+    if val
+         return Optional.Some with val
+    return Optional.None

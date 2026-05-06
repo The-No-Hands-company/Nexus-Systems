@@ -1,0 +1,8 @@
+# Test: greater than or equal to comparison
+set age to 25
+
+if age is greater than or equal to 18
+    print text "Adult"
+
+if age is less than or equal to 65
+    print text "Not senior"

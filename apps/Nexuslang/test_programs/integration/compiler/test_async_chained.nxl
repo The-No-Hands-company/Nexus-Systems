@@ -1,0 +1,29 @@
+# Test chained async/await: one async function awaiting another
+
+async function get_base returns Integer
+    print text "get_base: returning 10"
+    return 10
+end
+
+async function double_value returns Integer
+    print text "double_value: awaiting get_base"
+    set base to await get_base
+    print text "double_value: got base"
+    set result to base times 2
+    print text "double_value: returning result"
+    return result
+end
+
+async function main returns Integer
+    print text "main: starting"
+    set x to await double_value
+    print text "main: got double_value result"
+    
+    if x is equal to 20
+        print text "SUCCESS: x is 20"
+    else
+        print text "FAIL: x is not 20"
+    end
+    
+    return x
+end

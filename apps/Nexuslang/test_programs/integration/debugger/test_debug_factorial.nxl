@@ -1,0 +1,32 @@
+# Test program for debugger
+# Simple factorial calculator with multiple functions
+
+function factorial with n as Integer returns Integer
+    print text "Calculating factorial of " plus n
+    
+    if n is less than or equal to 1
+        return 1
+    end
+    
+    set result to n times factorial with n minus 1
+    return result
+end
+
+function main
+    print text "Factorial Calculator"
+    print text "===================="
+    
+    set numbers to [3, 5, 7]
+    
+    for each num in numbers
+        print text "Computing factorial(" plus num plus ")"
+        set result to factorial with num
+        print text "Result: " plus result
+        print text ""
+    end
+    
+    print text "Done!"
+end
+
+# Run main
+main

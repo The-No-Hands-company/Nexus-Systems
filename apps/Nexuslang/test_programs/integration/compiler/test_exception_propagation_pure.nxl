@@ -1,0 +1,65 @@
+# Test exception propagation (pure NexusLang - no extern dependencies)
+
+print text "=== Exception Propagation Test (Pure NLPL) ==="
+
+# Test 1: Simple propagation through nesting
+print text "Test 1: Propagation through nested try-catch"
+try
+    try
+        print text "  Inner: About to raise"
+        raise error with message "Inner exception"
+        print text "  ERROR: Should not reach"
+    catch inner_e
+        print text "  Inner caught: "
+        print text inner_e
+        print text "  Inner: Re-raising..."
+        raise error with message "Re-raised from inner"
+    end
+    print text "  ERROR: Should not reach after re-raise"
+catch outer_e
+    print text "  Outer caught: "
+    print text outer_e
+end
+print text "Test 1: PASSED"
+
+# Test 2: Triple nested with propagation
+print text ""
+print text "Test 2: Triple nested propagation"
+try
+    try
+        try
+            print text "  Level 3: Raising"
+            raise error with message "Level 3 error"
+        catch e3
+            print text "  Level 3 caught, re-raising as Level 2"
+            raise error with message "Level 2 error"
+        end
+    catch e2
+        print text "  Level 2 caught, re-raising as Level 1"
+        raise error with message "Level 1 error"
+    end
+catch e1
+    print text "  Level 1 caught: "
+    print text e1
+end
+print text "Test 2: PASSED"
+
+# Test 3: Selective catching
+print text ""
+print text "Test 3: Selective catching (inner doesn't catch, outer does)"
+try
+    try
+        print text "  Inner try - raising"
+        raise error with message "Should reach outer"
+    catch inner_e
+        # Catch and immediately re-raise
+        raise error with message inner_e
+    end
+catch outer_e
+    print text "  Outer caught: "
+    print text outer_e
+end
+print text "Test 3: PASSED"
+
+print text ""
+print text "=== All Pure NexusLang Propagation Tests Complete ==="

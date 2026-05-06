@@ -1,0 +1,706 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Nexus Engine - ARPG</title>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+          "Helvetica Neue", Arial, sans-serif;
+        background: #09090b;
+        color: #fff;
+      }
+
+      /* ── Canvas: fixed full-screen behind all UI ─────────── */
+      #gameCanvas {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        z-index: 0;
+      }
+
+      /* ── Root overlay: flex column, pointer-events blocked  ─ */
+      #editor-root {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        display: flex;
+        flex-direction: column;
+        pointer-events: none;
+        z-index: 10;
+      }
+
+      /* ════ TOOLBAR ═══════════════════════════════════════════ */
+      #editorToolbar {
+        height: 50px;
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        padding: 0 12px;
+        background: rgba(6, 6, 9, 0.94);
+        border-bottom: 1px solid rgba(0, 255, 140, 0.25);
+        pointer-events: auto;
+        flex-shrink: 0;
+        user-select: none;
+      }
+
+      .toolbar-btn {
+        border: 1px solid #1ad37a;
+        background: #0d2a1d;
+        color: #a5ffd2;
+        padding: 5px 11px;
+        border-radius: 6px;
+        font-size: 12px;
+        font-weight: 600;
+        cursor: pointer;
+        white-space: nowrap;
+      }
+
+      .toolbar-btn:hover { background: #13412d; }
+      .toolbar-btn.active {
+        background: #1a5e38;
+        border-color: #2dff96;
+        color: #ccffe5;
+      }
+
+      .toolbar-sep {
+        width: 1px;
+        height: 28px;
+        background: rgba(0, 255, 140, 0.2);
+        flex-shrink: 0;
+        margin: 0 2px;
+      }
+
+      .toolbar-spacer { flex: 1; }
+
+      .toolbar-stat {
+        font-size: 11px;
+        color: #52b87a;
+        font-family: "Courier New", monospace;
+        white-space: nowrap;
+      }
+
+      /* ════ MIDDLE ROW ════════════════════════════════════════ */
+      .editor-mid {
+        flex: 1;
+        display: flex;
+        min-height: 0;
+      }
+
+      .viewport-area {
+        flex: 1;
+        pointer-events: none;
+      }
+
+      /* ════ SIDE PANELS ═══════════════════════════════════════ */
+      .side-panel {
+        display: flex;
+        flex-direction: column;
+        background: rgba(6, 6, 9, 0.88);
+        pointer-events: auto;
+        flex-shrink: 0;
+        overflow: hidden;
+        user-select: none;
+      }
+
+      #hierarchyPanel {
+        width: 210px;
+        border-right: 1px solid rgba(33, 184, 255, 0.16);
+      }
+
+      #inspectorPanel {
+        width: 272px;
+        border-left: 1px solid rgba(33, 184, 255, 0.16);
+        overflow-y: auto;
+      }
+
+      .panel-title {
+        font-size: 10px;
+        font-weight: 700;
+        color: #77d7ff;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        padding: 6px 10px;
+        background: rgba(10, 10, 16, 0.65);
+        border-bottom: 1px solid rgba(33, 184, 255, 0.12);
+        flex-shrink: 0;
+      }
+
+      .panel-section {
+        border-top: 1px solid rgba(122, 122, 122, 0.18);
+        padding: 8px 10px;
+      }
+
+      .section-label {
+        font-size: 11px;
+        color: #d0d9de;
+        margin-bottom: 6px;
+      }
+
+      /* ── Hierarchy list ── */
+      .scene-object-list {
+        overflow-y: auto;
+        flex: 1;
+        padding: 4px 5px;
+        display: flex;
+        flex-direction: column;
+        gap: 3px;
+      }
+
+      .hierarchy-toolbar {
+        padding: 8px 8px 4px;
+        border-bottom: 1px solid rgba(33, 184, 255, 0.08);
+      }
+
+      .hierarchy-meta {
+        padding: 4px 10px 6px;
+        font-size: 10px;
+        color: #5a8898;
+        font-family: "Courier New", monospace;
+      }
+
+      .scene-object-btn {
+        border: 1px solid #1e3d4e;
+        background: #0a1720;
+        color: #9dd0e8;
+        padding: 5px 8px;
+        border-radius: 4px;
+        text-align: left;
+        cursor: pointer;
+        font-size: 11px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        width: 100%;
+      }
+
+      .scene-object-row {
+        display: grid;
+        grid-template-columns: 18px 1fr;
+        gap: 4px;
+        align-items: center;
+      }
+
+      .scene-tree-toggle {
+        width: 18px;
+        height: 18px;
+        border: 1px solid #1d3f52;
+        border-radius: 4px;
+        background: #0a1720;
+        color: #7cb7cf;
+        font-size: 10px;
+        cursor: pointer;
+        line-height: 1;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .scene-tree-toggle.is-empty {
+        visibility: hidden;
+      }
+
+      .scene-object-btn.drag-over {
+        border-color: #2dff96;
+        box-shadow: 0 0 0 1px rgba(45, 255, 150, 0.35) inset;
+      }
+
+      .scene-object-btn.selected {
+        border-color: #22c1ff;
+        background: #0e2f42;
+        color: #e4f6ff;
+      }
+
+      /* ── Transform grid ── */
+      .transform-grid {
+        display: grid;
+        grid-template-columns: 26px 1fr 1fr 1fr;
+        gap: 4px;
+        align-items: center;
+      }
+
+      .axis-label { font-size: 10px; color: #87d6ff; }
+
+      .transform-input {
+        width: 100%;
+        background: #0c171d;
+        color: #d6f2ff;
+        border: 1px solid #2a5668;
+        border-radius: 4px;
+        padding: 4px;
+        font-size: 11px;
+      }
+
+      .property-grid {
+        display: grid;
+        grid-template-columns: 78px 1fr;
+        gap: 6px;
+        align-items: center;
+      }
+
+      .property-label {
+        font-size: 10px;
+        color: #87d6ff;
+      }
+
+      .property-checkbox-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 11px;
+        color: #cce4f0;
+      }
+
+      .property-badge {
+        display: inline-flex;
+        align-items: center;
+        min-height: 24px;
+        padding: 0 8px;
+        border-radius: 999px;
+        border: 1px solid #24495a;
+        background: #0b1b24;
+        color: #8fcce2;
+        font-size: 10px;
+      }
+
+      /* ── Material editor ── */
+      .mat-row {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        margin-bottom: 5px;
+      }
+
+      .mat-label {
+        font-size: 10px;
+        color: #87d6ff;
+        width: 88px;
+        flex-shrink: 0;
+      }
+
+      .mat-color-input {
+        width: 34px;
+        height: 22px;
+        padding: 1px;
+        cursor: pointer;
+        background: #0c171d;
+        border: 1px solid #2a5668;
+        border-radius: 3px;
+      }
+
+      .mat-val {
+        font-size: 10px;
+        color: #d0d9de;
+        width: 28px;
+        text-align: right;
+        flex-shrink: 0;
+        font-family: monospace;
+      }
+
+      .mini-btn-row {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 6px;
+      }
+
+      /* ════ CONTENT BROWSER ═══════════════════════════════════ */
+      #contentBrowser {
+        height: 210px;
+        border-top: 1px solid rgba(33, 184, 255, 0.16);
+        display: flex;
+        flex-direction: column;
+        background: rgba(6, 6, 9, 0.92);
+        pointer-events: auto;
+        flex-shrink: 0;
+        user-select: none;
+      }
+
+      .cb-tab-bar {
+        height: 34px;
+        display: flex;
+        align-items: center;
+        gap: 0;
+        background: rgba(8, 8, 12, 0.92);
+        border-bottom: 1px solid rgba(33, 184, 255, 0.14);
+        padding: 0 8px;
+        flex-shrink: 0;
+      }
+
+      .cb-tab {
+        background: transparent;
+        border: none;
+        border-bottom: 2px solid transparent;
+        color: #5a8898;
+        padding: 0 12px;
+        height: 34px;
+        font-size: 11px;
+        font-weight: 600;
+        cursor: pointer;
+        white-space: nowrap;
+      }
+
+      .cb-tab:hover { color: #9fd4e8; }
+      .cb-tab.active { color: #22c1ff; border-bottom-color: #22c1ff; }
+
+      .cb-content {
+        flex: 1;
+        overflow-y: auto;
+        padding: 9px 12px;
+      }
+
+      .cb-panel { display: none; }
+      .cb-panel.active { display: block; }
+
+      /* ── Status bar ── */
+      .status-bar {
+        height: 22px;
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        padding: 0 12px;
+        background: rgba(8, 8, 12, 0.96);
+        border-top: 1px solid rgba(33, 184, 255, 0.1);
+        flex-shrink: 0;
+      }
+
+      .status-item {
+        font-size: 10px;
+        color: #3e6878;
+        font-family: "Courier New", monospace;
+        white-space: nowrap;
+      }
+
+      /* ── Add Object ── */
+      .add-object-grid {
+        display: grid;
+        grid-template-columns: repeat(6, 1fr);
+        gap: 6px;
+      }
+
+      .add-obj-btn {
+        border: 1px solid #1e4d5e;
+        background: #0b1e26;
+        color: #a0d4e8;
+        padding: 7px 4px;
+        border-radius: 5px;
+        font-size: 11px;
+        cursor: pointer;
+        text-align: center;
+      }
+
+      .add-obj-btn:hover {
+        background: #112f3c;
+        border-color: #21b8ff;
+      }
+
+      /* ── Prefab library ── */
+      .prefab-entry {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        background: #0d1e28;
+        border: 1px solid #1a4d62;
+        border-radius: 4px;
+        padding: 4px 7px;
+        margin-bottom: 4px;
+      }
+
+      .prefab-name {
+        flex: 1;
+        font-size: 11px;
+        color: #a0d4e8;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .prefab-btn {
+        border: 1px solid #1d5770;
+        background: #0c2230;
+        color: #8ed4f0;
+        padding: 3px 8px;
+        border-radius: 4px;
+        font-size: 10px;
+        cursor: pointer;
+      }
+
+      .prefab-btn:hover { background: #123548; }
+
+      /* ── Selection rect ── */
+      .selection-rect {
+        position: fixed;
+        display: none;
+        border: 1px solid rgba(34, 193, 255, 0.95);
+        background: rgba(34, 193, 255, 0.12);
+        box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.3) inset;
+        pointer-events: none;
+        z-index: 120;
+      }
+    </style>
+  </head>
+  <body>
+    <canvas id="gameCanvas"></canvas>
+
+    <div id="editor-root">
+      <!-- ── Toolbar ──────────────────────────────────────────── -->
+      <div id="editorToolbar">
+        <button class="toolbar-btn" id="enginePlay">&#9654; Play</button>
+        <button class="toolbar-btn" id="enginePause">&#9646;&#9646; Pause</button>
+        <button class="toolbar-btn" id="engineReset">&#8635; Reset</button>
+        <div class="toolbar-sep"></div>
+        <button class="toolbar-btn" id="duplicateSelection" title="Duplicate (Ctrl+D)">Duplicate</button>
+        <button class="toolbar-btn" id="deleteSelection" title="Delete (Delete)">Delete</button>
+        <div class="toolbar-sep"></div>
+        <button class="toolbar-btn active" id="gizmoTranslate" title="Move (W)">&#8679; Move</button>
+        <button class="toolbar-btn" id="gizmoRotate" title="Rotate (E)">&#8635; Rotate</button>
+        <button class="toolbar-btn" id="gizmoScale" title="Scale (R)">&#8615; Scale</button>
+        <div class="toolbar-spacer"></div>
+        <span id="fps" class="toolbar-stat">FPS: --</span>
+      </div>
+
+      <!-- ── Middle row: Hierarchy | Viewport | Inspector ─────── -->
+      <div class="editor-mid">
+
+        <!-- Left: Scene Hierarchy -->
+        <div class="side-panel" id="hierarchyPanel">
+          <div class="panel-title">Scene Hierarchy</div>
+          <div class="hierarchy-toolbar">
+            <input class="transform-input" id="hierarchySearch" type="text" placeholder="Search objects..." />
+          </div>
+          <div class="hierarchy-meta" id="hierarchyMeta">0 objects</div>
+          <div class="scene-object-list" id="sceneObjectList"></div>
+        </div>
+
+        <!-- Centre: Viewport (transparent — events pass to canvas) -->
+        <div class="viewport-area"></div>
+
+        <!-- Right: Inspector -->
+        <div class="side-panel" id="inspectorPanel">
+          <div class="panel-title">Inspector</div>
+          <div style="padding:7px 10px 0;">
+            <div class="section-label" id="selectedObject">Selected: none</div>
+          </div>
+
+          <div class="panel-section">
+            <div class="section-label">Object</div>
+            <div class="property-grid">
+              <div class="property-label">Name</div>
+              <input class="transform-input" id="objectNameInput" type="text" placeholder="Object name" />
+              <div class="property-label">Enabled</div>
+              <label class="property-checkbox-row">
+                <input id="objectEnabled" type="checkbox" />
+                <span>Participates in scene</span>
+              </label>
+              <div class="property-label">Visible</div>
+              <label class="property-checkbox-row">
+                <input id="objectVisible" type="checkbox" />
+                <span>Rendered in viewport</span>
+              </label>
+              <div class="property-label">Pickable</div>
+              <label class="property-checkbox-row">
+                <input id="objectPickable" type="checkbox" />
+                <span>Selectable by click</span>
+              </label>
+              <div class="property-label">Prefab</div>
+              <div class="property-badge" id="objectPrefabLabel">None</div>
+              <div class="property-label">Parent</div>
+              <select class="transform-input" id="objectParentSelect">
+                <option value="">No parent</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="panel-section">
+            <div class="section-label">Transform</div>
+            <div class="transform-grid">
+              <div class="axis-label">Pos</div>
+              <input class="transform-input" id="posX" type="number" step="0.1" />
+              <input class="transform-input" id="posY" type="number" step="0.1" />
+              <input class="transform-input" id="posZ" type="number" step="0.1" />
+              <div class="axis-label">Rot</div>
+              <input class="transform-input" id="rotX" type="number" step="0.05" />
+              <input class="transform-input" id="rotY" type="number" step="0.05" />
+              <input class="transform-input" id="rotZ" type="number" step="0.05" />
+              <div class="axis-label">Scl</div>
+              <input class="transform-input" id="sclX" type="number" step="0.05" />
+              <input class="transform-input" id="sclY" type="number" step="0.05" />
+              <input class="transform-input" id="sclZ" type="number" step="0.05" />
+            </div>
+          </div>
+
+          <div class="panel-section">
+            <div class="section-label">Material</div>
+            <div class="mat-row">
+              <span class="mat-label">Albedo</span>
+              <input id="matAlbedo" type="color" class="mat-color-input" value="#a5a5a5" />
+            </div>
+            <div class="mat-row">
+              <span class="mat-label">Emissive</span>
+              <input id="matEmissive" type="color" class="mat-color-input" value="#000000" />
+            </div>
+            <div id="matPbrSection" style="display:none;">
+              <div class="mat-row">
+                <span class="mat-label">Emis. Intensity</span>
+                <input id="matEmissiveInt" type="number" step="0.1" min="0" max="10"
+                  class="transform-input" style="width:56px;" value="1" />
+              </div>
+              <div class="mat-row">
+                <span class="mat-label">Roughness</span>
+                <input id="matRoughness" type="range" min="0" max="1" step="0.01"
+                  style="flex:1;" value="0.8" />
+                <span id="matRoughnessVal" class="mat-val">0.80</span>
+              </div>
+              <div class="mat-row">
+                <span class="mat-label">Metallic</span>
+                <input id="matMetallic" type="range" min="0" max="1" step="0.01"
+                  style="flex:1;" value="0" />
+                <span id="matMetallicVal" class="mat-val">0.00</span>
+              </div>
+            </div>
+            <div class="mini-btn-row" style="margin-top:6px;">
+              <button class="toolbar-btn" id="matUpgradePbr">Use PBR</button>
+              <button class="toolbar-btn" id="matNewMat">New Std. Mat</button>
+            </div>
+          </div>
+
+          <div class="panel-section">
+            <div class="section-label">Audio Mixer</div>
+            <div class="property-grid">
+              <div class="property-label">Music Mode</div>
+              <select class="transform-input" id="audioMusicMode">
+                <option value="auto">Auto</option>
+                <option value="menu">Menu</option>
+                <option value="ambient">Ambient</option>
+                <option value="cinematic">Cinematic</option>
+                <option value="combat">Combat</option>
+              </select>
+              <div class="property-label">Active Loop</div>
+              <div class="property-badge" id="audioActiveLoop">None</div>
+              <div class="property-label">Snapshot</div>
+              <div class="property-badge" id="audioSnapshotState">default</div>
+            </div>
+            <div class="mat-row" style="margin-top:8px;">
+              <span class="mat-label">Master</span>
+              <input id="audioBusMaster" type="range" min="0" max="1" step="0.01" style="flex:1;" value="1" />
+              <span id="audioBusMasterVal" class="mat-val">1.00</span>
+            </div>
+            <div class="mat-row">
+              <span class="mat-label">Music</span>
+              <input id="audioBusMusic" type="range" min="0" max="1" step="0.01" style="flex:1;" value="1" />
+              <span id="audioBusMusicVal" class="mat-val">1.00</span>
+            </div>
+            <div class="mat-row">
+              <span class="mat-label">SFX</span>
+              <input id="audioBusSfx" type="range" min="0" max="1" step="0.01" style="flex:1;" value="1" />
+              <span id="audioBusSfxVal" class="mat-val">1.00</span>
+            </div>
+            <div class="mat-row">
+              <span class="mat-label">UI</span>
+              <input id="audioBusUi" type="range" min="0" max="1" step="0.01" style="flex:1;" value="1" />
+              <span id="audioBusUiVal" class="mat-val">1.00</span>
+            </div>
+            <div class="mini-btn-row" style="margin-top:6px;">
+              <button class="toolbar-btn" id="audioDuckMusicBtn">Duck Music</button>
+              <button class="toolbar-btn" id="audioResetMixerBtn">Reset Mix</button>
+            </div>
+          </div>
+        </div>
+      </div><!-- .editor-mid -->
+
+      <!-- ── Bottom: Content Browser ──────────────────────────── -->
+      <div id="contentBrowser">
+        <div class="cb-tab-bar">
+          <button class="cb-tab active" data-tab="prefabs">Prefab Library</button>
+          <button class="cb-tab" data-tab="add-object">Add Object</button>
+          <button class="cb-tab" data-tab="import">Import</button>
+          <button class="cb-tab" data-tab="scene">Scene JSON</button>
+          <div class="toolbar-spacer"></div>
+          <span id="status" class="toolbar-stat" style="font-size:10px;margin-right:6px;">Status: Editor ready</span>
+        </div>
+
+        <div class="cb-content">
+          <!-- Prefabs -->
+          <div id="tab-prefabs" class="cb-panel active">
+            <div style="display:flex;gap:6px;margin-bottom:8px;align-items:center;">
+              <input class="transform-input" id="prefabNameInput" type="text"
+                placeholder="Prefab name…" style="flex:1;max-width:200px;" />
+              <button class="toolbar-btn" id="savePrefabBtn">Save</button>
+              <button class="toolbar-btn" id="exportPrefabBtn">Export JSON</button>
+              <button class="toolbar-btn" id="importPrefabBtn">Import JSON</button>
+              <input id="importPrefabInput" type="file" accept="application/json,.prefab.json" hidden />
+            </div>
+            <div id="prefabList"></div>
+          </div>
+
+          <!-- Add Object -->
+          <div id="tab-add-object" class="cb-panel">
+            <div class="mini-btn-row" style="max-width:260px;margin-bottom:8px;">
+              <button class="toolbar-btn" id="createEmptyNode">+ Empty</button>
+              <button class="toolbar-btn" id="createFolderNode">+ Folder</button>
+            </div>
+            <div class="add-object-grid">
+              <button class="add-obj-btn" data-type="box">Cube</button>
+              <button class="add-obj-btn" data-type="sphere">Sphere</button>
+              <button class="add-obj-btn" data-type="capsule">Capsule</button>
+              <button class="add-obj-btn" data-type="cylinder">Cylinder</button>
+              <button class="add-obj-btn" data-type="plane">Plane</button>
+              <button class="add-obj-btn" data-type="pointlight">&#9728; Light</button>
+            </div>
+          </div>
+
+          <!-- Import -->
+          <div id="tab-import" class="cb-panel">
+            <p style="font-size:11px;color:#5a8898;margin-bottom:10px;">
+              Drag a <strong style="color:#a0d4e8;">.glb</strong> or
+              <strong style="color:#a0d4e8;">.gltf</strong> file onto the viewport,
+              or use the button below.
+            </p>
+            <button class="toolbar-btn" id="importAssets">Import GLB / GLTF&hellip;</button>
+            <input id="importAssetsInput" type="file" accept=".glb,.gltf,.bin,image/*" multiple hidden />
+          </div>
+
+          <!-- Scene JSON -->
+          <div id="tab-scene" class="cb-panel">
+            <p style="font-size:11px;color:#5a8898;margin-bottom:10px;">
+              Save or restore the current scene layout as a JSON snapshot.
+            </p>
+            <div class="mini-btn-row" style="max-width:260px;">
+              <button class="toolbar-btn" id="engineSaveScene">&#8659; Save JSON</button>
+              <button class="toolbar-btn" id="engineLoadScene">&#8657; Load JSON</button>
+            </div>
+            <input id="engineLoadInput" type="file" accept="application/json" hidden />
+          </div>
+        </div><!-- .cb-content -->
+
+        <!-- Status bar -->
+        <div class="status-bar">
+          <span id="playtime" class="status-item">Playtime: 0s</span>
+          <span id="cameraMode" class="status-item">Camera: Third-person (7.0m)</span>
+          <span id="lockOn" class="status-item">Lock-on: none</span>
+          <span class="status-item" style="margin-left:auto;color:#2a4858;">
+            W/E/R gizmo &middot; F focus &middot; Ctrl+D dup &middot; Del delete &middot; Drag GLB to import
+          </span>
+        </div>
+      </div><!-- #contentBrowser -->
+    </div><!-- #editor-root -->
+
+    <div id="selectionRect" class="selection-rect"></div>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

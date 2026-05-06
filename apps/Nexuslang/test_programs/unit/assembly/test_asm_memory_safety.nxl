@@ -1,0 +1,79 @@
+# Week 8 Test: Memory Access Safety Validation
+#
+# Tests memory access validation warnings
+#
+# Expected: Warnings for unsafe memory patterns
+
+function test_null_pointer_check
+    print text "Test 1: Null pointer access detection"
+    
+    # Potential null pointer dereference
+    asm
+        code
+            "mov rax, [0]"
+        outputs "=a": result
+    end
+    set result to 0
+    print text "Null pointer test complete"
+end
+
+function test_unaligned_access
+    print text "Test 2: Unaligned memory access"
+    
+    # Unaligned access (offset +3 for dword)
+    set ptr to 1000
+    set result to 0
+    asm
+        code
+            "mov eax, [rbx+3]"
+        inputs "b": ptr
+        outputs "=a": result
+        clobbers "memory"
+    end
+    print text "Unaligned access test complete"
+end
+
+function test_aligned_access
+    print text "Test 3: Aligned memory access (no warnings)"
+    
+    # Properly aligned access
+    set ptr to 2000
+    set result to 0
+    asm
+        code
+            "mov rax, [rbx]"
+        inputs "b": ptr
+        outputs "=a": result
+        clobbers "memory"
+    end
+    print text "Aligned access test complete"
+end
+
+function test_array_access
+    print text "Test 4: Array access (bounds checking suggestion)"
+    
+    # Array access pattern
+    set arr_ptr to 3000
+    set result to 0
+    asm
+        code
+            "mov rax, [rax]"
+        inputs "a": arr_ptr
+        outputs "=a": result
+        clobbers "memory"
+    end
+    print text "Array access test complete"
+end
+
+# Main execution
+print text "=== Week 8: Memory Access Validation Test ==="
+print text ""
+call test_null_pointer_check
+print text ""
+call test_unaligned_access
+print text ""
+call test_aligned_access
+print text ""
+call test_array_access
+print text ""
+print text "=== All memory validation tests completed ==="

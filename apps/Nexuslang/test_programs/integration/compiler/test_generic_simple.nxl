@@ -1,0 +1,38 @@
+# Simpler Type System Test
+# Focus on what currently works
+
+print text "=== Simplified Type System Test ==="
+print text ""
+
+# TEST 1: Generic Functions (WORKING!)
+print text "TEST 1: Generic Functions"
+
+function identity<T> that takes value as T returns T
+    return value
+end
+
+set int_val to identity with 42
+set str_val to identity with "Hello"
+
+print text "identity(42):"
+print number int_val
+print text "identity(Hello):"
+print text str_val
+
+print text ""
+
+# TEST 2: Simple Generic Class
+print text "TEST 2: Generic Classes"
+
+class Container<T>
+    property value as T
+end class
+
+# Create instance (testing if this works)
+set my_container to new Container<Integer>
+
+print text "Created Container<Integer> instance"
+
+print text ""
+
+print text "=== Test Complete ==="

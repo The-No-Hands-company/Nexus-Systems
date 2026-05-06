@@ -1,0 +1,9 @@
+set greeting to "Hello"
+
+if greeting is equal to "Hello"
+    print text "Comparison works!"
+
+if "test" is equal to "test"
+    print text "Literal comparison works!"
+
+print text "String comparison tests done!"

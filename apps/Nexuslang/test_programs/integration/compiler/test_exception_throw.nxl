@@ -1,0 +1,41 @@
+# Exception throw/raise test for compiler
+
+print text "=== Exception Throw Test ==="
+print text ""
+
+# Test 1: Basic exception raise with string literal
+print text "Test 1: Raise with string literal"
+try
+    print text "About to raise an error"
+    raise error with message "Something went wrong!"
+    print text "This should not print"
+catch e
+    print text "Caught error: "
+    print text e
+end
+
+print text ""
+
+# Test 2: Raise with variable message
+print text "Test 2: Raise with variable message"
+set error_msg to "Invalid operation"
+try
+    raise error with message error_msg
+catch e
+    print text "Caught: "
+    print text e
+end
+
+print text ""
+
+# Test 3: Raise specific exception type
+print text "Test 3: Raise ValueError"
+try
+    raise ValueError with message "Value must be positive"
+catch e
+    print text "Caught ValueError: "
+    print text e
+end
+
+print text ""
+print text "=== Test Complete ==="

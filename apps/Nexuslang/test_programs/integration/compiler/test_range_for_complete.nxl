@@ -1,0 +1,26 @@
+# Comprehensive range-based for loop tests
+
+# Test 1: Simple range 0 to 5
+print text "Test 1: 0 to 5"
+for i from 0 to 5
+    print text i
+
+# Test 2: Non-zero start
+print text "Test 2: 5 to 10"
+for n from 5 to 10
+    print text n
+
+# Test 3: Using range in calculations
+print text "Test 3: Sum 1 to 5"
+set sum to 0
+for x from 1 to 6
+    set sum to sum plus x
+print text sum
+
+# Test 4: Nested loops
+print text "Test 4: Nested loops"
+for i from 0 to 3
+    for j from 0 to 2
+        print text i
+
+print text "All range loop tests complete!"

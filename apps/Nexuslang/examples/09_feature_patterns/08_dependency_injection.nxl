@@ -1,0 +1,264 @@
+# Dependency Injection and Inversion of Control in NexusLang
+
+# Service Container
+class ServiceContainer
+    private set services to Dictionary of Any
+    private set factories to Dictionary of Function
+    
+    public function initialize
+        create this.services as empty Dictionary of Any
+        create this.factories as empty Dictionary of Function
+    
+    public function register with name as String and instance as Any
+        set this.services[name] to instance
+    
+    public function register factory with name as String and factory as Function
+        set this.factories[name] to factory
+    
+    public function get with name as String returns Any
+        if name in this.services
+            return this.services[name]
+        
+        if name in this.factories
+            set instance to call this.factories[name]
+            set this.services[name] to instance
+            return instance
+        
+        raise new ServiceNotFoundError with "Service '" plus name plus "' not found"
+
+# Service Provider
+class ServiceProvider
+    private set container as ServiceContainer
+    
+    public function initialize with container as ServiceContainer
+        set this.container = container
+    
+    public function register services
+        # Register core services
+        register "config" with create config in this.container
+        register "logger" with create logger in this.container
+        register "database" with create database connection in this.container
+        
+        # Register repositories
+        register factory "user_repository" with create user repository in this.container
+        register factory "order_repository" with create order repository in this.container
+        
+        # Register services
+        register factory "auth_service" with create auth service in this.container
+        register factory "email_service" with create email service in this.container
+        register factory "payment_service" with create payment service in this.container
+
+# Service Interfaces
+interface IUserRepository
+    function find by id with id as Integer returns User
+    function find by email with email as String returns User
+    function create with user as User returns User
+    function update with user as User returns User
+    function delete with id as Integer
+
+interface IAuthService
+    function authenticate with email as String and password as String returns String
+    function validate token with token as String returns Boolean
+    function get current user returns User
+
+interface IEmailService
+    function send welcome email with user as User
+    function send password reset with user as User
+    function send order confirmation with order as Order
+
+interface IPaymentService
+    function process payment with amount as Float and card details as Dictionary of Any returns String
+    function refund payment with transaction_id as String returns Boolean
+    function get transaction status with transaction_id as String returns String
+
+# Service Implementations
+class UserRepository implements IUserRepository
+    private set connection as DatabaseConnection
+    
+    public function initialize with connection as DatabaseConnection
+        set this.connection = connection
+    
+    public function find by id with id as Integer returns User
+        set query to "SELECT * FROM users WHERE id = ?"
+        set result to execute query with [id] in this.connection
+        return this.map result to user
+    
+    public function find by email with email as String returns User
+        set query to "SELECT * FROM users WHERE email = ?"
+        set result to execute query with [email] in this.connection
+        return this.map result to user
+    
+    public function create with user as User returns User
+        set query to "INSERT INTO users (name, email, password_hash) VALUES (?, ?, ?)"
+        set result to execute query with [user.name, user.email, user.password_hash] in this.connection
+        set user.id to result.last_insert_id
+        return user
+    
+    public function update with user as User returns User
+        set query to "UPDATE users SET name = ?, email = ? WHERE id = ?"
+        execute query with [user.name, user.email, user.id] in this.connection
+        return user
+    
+    public function delete with id as Integer
+        set query to "DELETE FROM users WHERE id = ?"
+        execute query with [id] in this.connection
+    
+    private function map result to user returns User
+        if result.rows is empty
+            return null
+        
+        set row to result.rows[0]
+        create user as new User with row["name"] and row["email"]
+        set user.id to row["id"]
+        set user.password_hash to row["password_hash"]
+        return user
+
+class AuthService implements IAuthService
+    private set user_repository as IUserRepository
+    private set password_hasher as PasswordHasher
+    private set jwt as JWT
+    
+    public function initialize with user_repository as IUserRepository and password_hasher as PasswordHasher and jwt as JWT
+        set this.user_repository = user_repository
+        set this.password_hasher = password_hasher
+        set this.jwt = jwt
+    
+    public function authenticate with email as String and password as String returns String
+        set user to find by email email in this.user_repository
+        if user is null
+            raise new AuthenticationError with "Invalid credentials"
+        
+        if not verify password and user.password_hash in this.password_hasher
+            raise new AuthenticationError with "Invalid credentials"
+        
+        set payload to {
+            "user_id": user.id,
+            "email": user.email,
+            "exp": current time plus 3600
+        }
+        return encode payload in this.jwt
+    
+    public function validate token with token as String returns Boolean
+        try
+            set payload to decode token in this.jwt
+            return current time is less than payload["exp"]
+        catch error
+            return false
+    
+    public function get current user returns User
+        set token to get authorization token from request
+        if not validate token with token in this
+            raise new AuthenticationError with "Invalid token"
+        
+        set payload to decode token in this.jwt
+        return find by id payload["user_id"] in this.user_repository
+
+class EmailService implements IEmailService
+    private set smtp_client as SmtpClient
+    
+    public function initialize with smtp_client as SmtpClient
+        set this.smtp_client = smtp_client
+    
+    public function send welcome email with user as User
+        set subject to "Welcome to Our Platform!"
+        set body to "Hello " plus user.name plus ", welcome to our platform!"
+        send email with user.email and subject and body using this.smtp_client
+    
+    public function send password reset with user as User
+        set subject to "Password Reset Request"
+        set body to "Click here to reset your password"
+        send email with user.email and subject and body using this.smtp_client
+    
+    public function send order confirmation with order as Order
+        set subject to "Order Confirmation #" plus convert order.id to string
+        set body to "Thank you for your order!"
+        send email with order.user.email and subject and body using this.smtp_client
+
+class PaymentService implements IPaymentService
+    private set payment_gateway as PaymentGateway
+    
+    public function initialize with payment_gateway as PaymentGateway
+        set this.payment_gateway = payment_gateway
+    
+    public function process payment with amount as Float and card details as Dictionary of Any returns String
+        return process payment with amount and card details using this.payment_gateway
+    
+    public function refund payment with transaction_id as String returns Boolean
+        return refund transaction with transaction_id using this.payment_gateway
+    
+    public function get transaction status with transaction_id as String returns String
+        return get status of transaction with transaction_id using this.payment_gateway
+
+# Application
+class Application
+    private set container as ServiceContainer
+    private set user_controller as UserController
+    private set order_controller as OrderController
+    
+    public function initialize
+        create this.container as new ServiceContainer
+        create provider as new ServiceProvider with this.container
+        register services in provider
+        
+        create this.user_controller as new UserController with this.container
+        create this.order_controller as new OrderController with this.container
+    
+    public function start
+        create server as new HttpServer with "localhost" and 3000
+        setup routes with server
+        start server
+
+# Controllers
+class UserController
+    private set auth_service as IAuthService
+    private set email_service as IEmailService
+    
+    public function initialize with container as ServiceContainer
+        set this.auth_service = get "auth_service" from container
+        set this.email_service = get "email_service" from container
+    
+    public function register with request as HttpRequest returns HttpResponse
+        set data to convert request.body from json string
+        create user as new User with data["name"] and data["email"]
+        set user.password_hash to hash data["password"] in password_hasher
+        
+        try
+            set saved_user to create user in user_repository
+            send welcome email with saved_user in this.email_service
+            create response as new HttpResponse with 201 and {} and null
+            send json saved_user in response
+            return response
+        catch error
+            create response as new HttpResponse with 400 and {} and null
+            send json {"error": error.message} in response
+            return response
+
+class OrderController
+    private set payment_service as IPaymentService
+    private set email_service as IEmailService
+    
+    public function initialize with container as ServiceContainer
+        set this.payment_service = get "payment_service" from container
+        set this.email_service = get "email_service" from container
+    
+    public function create order with request as HttpRequest returns HttpResponse
+        set data to convert request.body from json string
+        create order as new Order with data["items"] and data["total"]
+        
+        try
+            set transaction_id to process payment with order.total and data["card_details"] in this.payment_service
+            set order.transaction_id to transaction_id
+            set saved_order to create order in order_repository
+            send order confirmation with saved_order in this.email_service
+            
+            create response as new HttpResponse with 201 and {} and null
+            send json saved_order in response
+            return response
+        catch error
+            create response as new HttpResponse with 400 and {} and null
+            send json {"error": error.message} in response
+            return response
+
+# Usage Example
+create app as new Application
+start app 

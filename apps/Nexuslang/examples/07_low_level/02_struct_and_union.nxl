@@ -1,0 +1,142 @@
+# NexusLang Struct and Union Examples
+# Demonstrates C-style data structures for low-level programming
+
+# Example 1: Basic struct definition
+struct Point
+    x as Integer
+    y as Integer
+end
+
+# Create and use struct
+set origin to new Point
+set origin.x to 0
+set origin.y to 0
+print text "Origin: ("
+print text origin.x
+print text ", "
+print text origin.y
+print text ")"
+
+# Example 2: Struct with constructor initialization  
+set point1 to new Point
+set point1.x to 10
+set point1.y to 20
+print text "Point1: ("
+print text point1.x
+print text ", "
+print text point1.y
+print text ")"
+
+# Example 3: Packed struct (no padding)
+packed struct IPv4Header
+    version as Integer with 4 bits
+    ihl as Integer with 4 bits  
+    tos as Integer with 8 bits
+    total_length as Integer with 16 bits
+    identification as Integer with 16 bits
+    flags as Integer with 3 bits
+    fragment_offset as Integer with 13 bits
+    ttl as Integer with 8 bits
+    protocol as Integer with 8 bits
+    checksum as Integer with 16 bits
+    source_ip as Integer with 32 bits
+    dest_ip as Integer with 32 bits
+end
+
+# Example 4: Aligned struct (for hardware)
+struct CacheLineData aligned to 64 bytes
+    value as Integer
+    timestamp as Integer
+    padding as Array of 48 bytes
+end
+
+print text "Cache line size: "
+print text sizeof CacheLineData
+print text " bytes"
+# Example 5: Union (overlapping memory)
+union Number
+    as_integer as Integer
+    as_float as Float
+    as_bytes as Array of 8 bytes
+end
+
+set num to new Number
+set num.as_integer to 42
+print text "As integer: "
+print text num.as_integer
+print text "As float (reinterpreted): "
+print text num.as_float
+
+# Example 6: Nested structs
+struct Rectangle
+    top_left as Point
+    bottom_right as Point
+end
+
+set rect to new Rectangle
+set rect.top_left.x to 0
+set rect.top_left.y to 0
+set rect.bottom_right.x to 100
+set rect.bottom_right.y to 50
+
+# Example 7: Struct with methods (hybrid OOP)
+struct Vector3D
+    x as Float
+    y as Float
+    z as Float
+    
+    method magnitude returns Float
+        set sum to (x times x) plus (y times y) plus (z times z)
+        return sqrt sum
+    end
+    
+    method normalize returns Vector3D
+        set mag to call magnitude
+        set result to new Vector3D
+        set result.x to x divided by mag
+        set result.y to y divided by mag
+        set result.z to z divided by mag
+        return result
+    end
+end
+
+# Example 8: offsetof operator (get field memory offset)
+print text "Offset of x in Point: "
+print text (offset of x in Point)
+print text "Offset of y in Point: "
+print text (offset of y in Point)
+
+# Example 9: sizeof with structs
+print text "Size of Point: "
+print text (sizeof Point)
+print text "Size of IPv4Header: "
+print text (sizeof IPv4Header)
+
+# Example 10: Pointer to struct
+set point_ptr to address of origin
+set value_x to (dereference point_ptr).x
+print text "X via pointer: "
+print text value_x
+
+# Example 11: Array of structs
+set points to new Array of 10 Point
+set points[0] to origin
+set points[1].x to 5
+set points[1].y to 10
+
+# Example 12: Struct for hardware register (embedded systems)
+packed struct USARTRegister aligned to 4 bytes
+    dr as Integer with 9 bits      # Data register
+    reserved1 as Integer with 7 bits
+    sr as Integer with 16 bits     # Status register
+    brr as Integer with 16 bits    # Baud rate register
+    cr1 as Integer with 16 bits    # Control register 1
+    cr2 as Integer with 16 bits    # Control register 2
+    cr3 as Integer with 16 bits    # Control register 3
+end
+
+# Map struct to hardware address (OS/driver development)
+set usart1 to (dereference (0x40011000 as Pointer to USARTRegister))
+set usart1.cr1 to 0x200C  # Enable USART, transmitter, receiver
+
+print text "Struct operations complete!"

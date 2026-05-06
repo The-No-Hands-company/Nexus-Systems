@@ -1,0 +1,6 @@
+function main
+    print text "Testing repeat 3 times"
+    repeat 3 times
+        print text "Hello"
+    end
+    print text "Done"

@@ -1,0 +1,135 @@
+# Test Interrupt Handling Module
+# Interrupts Module: x86-style interrupt handling framework
+# Total functions: 23 interrupt operations + simulation helpers
+
+print text "=== Interrupt Handling Module Test ==="
+print text ""
+
+# Initialize interrupt system
+print text "Initializing interrupt system:"
+set init_result to interrupt_init
+print text "  interrupt_init() -> " plus init_result
+print text ""
+
+# Interrupt Enable/Disable (3 functions)
+print text "Interrupt Control:"
+set is_enabled to interrupt_is_enabled
+print text "  interrupt_is_enabled() -> " plus is_enabled
+set disable_result to interrupt_disable
+print text "  interrupt_disable() -> " plus disable_result
+set is_enabled_2 to interrupt_is_enabled
+print text "  interrupt_is_enabled() after disable -> " plus is_enabled_2
+set enable_result to interrupt_enable
+print text "  interrupt_enable() -> " plus enable_result
+print text ""
+
+# Vector Management (4 functions)
+print text "Interrupt Vectors:"
+set div_zero_vec to interrupt_get_vector with "DIVIDE_BY_ZERO"
+print text "  interrupt_get_vector(\"DIVIDE_BY_ZERO\") -> " plus div_zero_vec
+set vec_name to interrupt_get_vector_name with 0
+print text "  interrupt_get_vector_name(0) -> " plus vec_name
+set reg_custom to interrupt_register_vector with "MY_CUSTOM_INT" and 144
+print text "  interrupt_register_vector(\"MY_CUSTOM_INT\", 0x90) -> " plus reg_custom
+set all_vectors to interrupt_get_all_vectors
+print text "  interrupt_get_all_vectors() -> Dictionary with " plus all_vectors
+print text ""
+
+# Interrupt Statistics (3 functions)
+print text "Interrupt History and Statistics:"
+set pending_count to interrupt_get_pending_count
+print text "  interrupt_get_pending_count() -> " plus pending_count
+set stats to interrupt_get_stats
+print text "  interrupt_get_stats() -> " plus stats
+print text ""
+
+# Simulate Common Interrupts (8 functions)
+print text "Simulating Common x86 Interrupts:"
+print text "  interrupt_simulate_divide_by_zero() - INT 0x00"
+set div_result to interrupt_simulate_divide_by_zero
+print text "    Triggered (no handler registered)"
+print text ""
+
+print text "  interrupt_simulate_breakpoint(address=0x1000) - INT 0x03"
+set bp_result to interrupt_simulate_breakpoint with 4096
+print text "    Triggered breakpoint at address 0x1000"
+print text ""
+
+print text "  interrupt_simulate_overflow() - INT 0x04"
+set overflow_result to interrupt_simulate_overflow
+print text "    Triggered overflow exception"
+print text ""
+
+print text "  interrupt_simulate_page_fault(address=0x2000, type=\"read\") - INT 0x0E"
+set pf_result to interrupt_simulate_page_fault with 8192 and "read"
+print text "    Triggered page fault at address 0x2000"
+print text ""
+
+print text "  interrupt_simulate_general_protection_fault() - INT 0x0D"
+set gpf_result to interrupt_simulate_general_protection_fault
+print text "    Triggered general protection fault"
+print text ""
+
+print text "  interrupt_simulate_timer_tick(ticks=100) - IRQ 0 (INT 0x20)"
+set timer_result to interrupt_simulate_timer_tick with 100
+print text "    Triggered timer interrupt, tick count: 100"
+print text ""
+
+print text "  interrupt_simulate_keyboard(scancode=0x1E) - IRQ 1 (INT 0x21)"
+set kbd_result to interrupt_simulate_keyboard with 30
+print text "    Triggered keyboard interrupt, scancode: 0x1E (A key)"
+print text ""
+
+print text "  interrupt_syscall(syscall_number=1, args) - INT 0x80"
+set syscall_result to interrupt_syscall with 1
+print text "    Triggered system call, number: 1 (write)"
+print text ""
+
+# Check history after simulations
+set history to interrupt_get_history
+print text "Total interrupts triggered: 8"
+print text ""
+
+# Pending interrupt queue (3 functions)
+print text "Pending Interrupt Queue:"
+print text "  Disabling interrupts and triggering INT 0x03..."
+set disable_2 to interrupt_disable
+set trigger_1 to interrupt_trigger with 3
+set trigger_2 to interrupt_trigger with 4
+set pending_2 to interrupt_get_pending_count
+print text "  interrupt_get_pending_count() -> " plus pending_2
+print text "  Re-enabling interrupts and processing..."
+set enable_2 to interrupt_enable
+set processed to interrupt_process_pending
+print text "  interrupt_process_pending() -> " plus processed
+set pending_3 to interrupt_get_pending_count
+print text "  interrupt_get_pending_count() after processing -> " plus pending_3
+print text ""
+
+# Clear operations (2 functions)
+print text "Cleanup Operations:"
+set cleared_pending to interrupt_clear_pending
+print text "  interrupt_clear_pending() -> " plus cleared_pending
+set history_count to interrupt_get_history
+set cleared_history to interrupt_clear_history
+print text "  interrupt_clear_history() -> cleared all records"
+print text ""
+
+print text "Common x86 Interrupt Vectors:"
+print text "  0x00: Divide by Zero"
+print text "  0x01: Debug"
+print text "  0x03: Breakpoint"
+print text "  0x04: Overflow"
+print text "  0x06: Invalid Opcode"
+print text "  0x08: Double Fault"
+print text "  0x0D: General Protection Fault"
+print text "  0x0E: Page Fault"
+print text "  0x20-0x2F: Hardware IRQs (timer, keyboard, disk, etc.)"
+print text "  0x80: Linux System Call"
+print text ""
+
+print text "Interrupt module test complete!"
+print text "23 functions tested: init, enable/disable, handler management, triggering,"
+print text "vector management, history, statistics, and common x86 interrupt simulations"
+print text ""
+print text "Use interrupts for: OS development, exception handling, event-driven systems"

@@ -1,0 +1,22 @@
+# Math utilities module
+
+Define function add that takes a as Integer, b as Integer and returns Integer
+    Return a + b.
+End function.
+
+Define function subtract that takes a as Integer, b as Integer and returns Integer
+    Return a - b.
+End function.
+
+Define function multiply that takes a as Integer, b as Integer and returns Integer
+    Return a * b.
+End function.
+
+Define function divide that takes a as Integer, b as Integer and returns Float
+    Return a / b.
+End function.
+
+Define private function helper that takes nothing
+    # This is a private function that cannot be imported
+    Print("Helper function called").
+End function. 

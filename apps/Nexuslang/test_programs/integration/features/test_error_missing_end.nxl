@@ -1,0 +1,7 @@
+# Intentional error - missing 'end'
+set x to 5
+if x is greater than 3
+    print text "x is big"
+# Missing 'end' here
+
+print text "Done"

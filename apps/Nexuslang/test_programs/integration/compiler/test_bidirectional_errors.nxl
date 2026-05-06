@@ -1,0 +1,75 @@
+# Test Bidirectional Type Inference - Error Detection
+# This test should catch type errors using bidirectional inference
+
+print text "=== Testing Type Error Detection with Bidirectional Inference ==="
+
+# TEST 1: Wrong argument type should be detected
+function expect_integer with x as Integer returns Integer
+    return x plus 10
+end
+
+# This should work
+set valid_call to call expect_integer with 42
+print text "Valid call: "
+print number valid_call
+
+# This should cause a type error (String passed to Integer parameter)
+# Uncomment to test error detection:
+# set invalid_call to call expect_integer with "hello"
+
+print text ""
+print text "=== TEST 1 Complete: Argument type validation ==="
+
+# TEST 2: Return type mismatch should be detected
+function must_return_string returns String
+    # This should cause error - returning Integer instead of String
+    # Uncomment to test:
+    # return 123
+    return "correct"
+end
+
+set result to call must_return_string
+print text "Result: "
+print text result
+
+print text ""
+print text "=== TEST 2 Complete: Return type validation ==="
+
+# TEST 3: Function result type mismatch
+function returns_integer returns Integer
+    return 42
+end
+
+function expects_string with s as String returns String
+    return "Got: " plus s
+end
+
+# This should cause error - passing Integer where String expected
+# Uncomment to test:
+# set bad_chain to call expects_string with call returns_integer
+
+print text ""
+print text "=== TEST 3 Complete: Chained call type validation ==="
+
+# TEST 4: Arithmetic type errors
+function do_math with a as Integer and b as Integer returns Integer
+    # This should work
+    set sum to a plus b
+    
+    # This should cause error - can't multiply Integer by String
+    # Uncomment to test:
+    # set bad_result to a times "five"
+    
+    return sum
+end
+
+set math_result to call do_math with 5 and 10
+print text "Math result: "
+print number math_result
+
+print text ""
+print text "=== TEST 4 Complete: Arithmetic type validation ==="
+
+print text ""
+print text "=== All Type Error Tests Complete ==="
+print text "Uncomment error cases to test detection"

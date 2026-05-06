@@ -1,0 +1,27 @@
+function calculate_hypotenuse that takes a and b returns Float
+    set a_squared to pow(a, 2)
+    set b_squared to pow(b, 2)
+    set sum to a_squared plus b_squared
+    return sqrt(sum)
+
+function calculate_circle_area that takes radius returns Float
+    set pi to 3.14159
+    set r_squared to pow(radius, 2)
+    return pi times r_squared
+
+set side_a to 3.0
+set side_b to 4.0
+set hypotenuse to calculate_hypotenuse with side_a, side_b
+
+print text "Hypotenuse:"
+print text hypotenuse
+
+set r to 5.0
+set area to calculate_circle_area with r
+print text "Circle area:"
+print text area
+
+set num to -42
+set absolute to abs(num)
+print text "Absolute value:"
+print text absolute

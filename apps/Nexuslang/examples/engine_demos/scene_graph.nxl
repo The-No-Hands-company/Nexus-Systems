@@ -1,0 +1,190 @@
+# Multi-Object Scene Graph Demo
+# Demonstrates parent-child hierarchies and transform inheritance
+
+print text "=== NexusLang Scene Graph Demo ==="
+print text "Multiple cubes with parent-child relationships"
+
+# Create window
+print text "Creating 800x600 window..."
+set window to create_window with 800 and 600 and "Scene Graph Demo"
+
+# Compile shaders
+print text "Compiling shaders..."
+set vertex_shader to "
+#version 330 core
+layout(location = 0) in vec3 position;
+layout(location = 1) in vec3 color;
+
+out vec3 Color;
+
+uniform mat4 model;
+uniform mat4 view;
+uniform mat4 projection;
+
+void main() {
+    gl_Position = projection * view * model * vec4(position, 1.0);
+    Color = color;
+}
+"
+
+set fragment_shader to "
+#version 330 core
+in vec3 Color;
+out vec4 FragColor;
+
+void main() {
+    FragColor = vec4(Color, 1.0);
+}
+"
+
+set shader to create_shader with vertex_shader and fragment_shader
+
+# Create cube geometry (8 vertices with RGB colors + 36 indices)
+print text "Creating cube geometry..."
+set vertices to [0.5, 0.5, 0.5, 1.0, 0.0, 0.0, -0.5, 0.5, 0.5, 0.0, 1.0, 0.0, -0.5, -0.5, 0.5, 0.0, 0.0, 1.0, 0.5, -0.5, 0.5, 1.0, 1.0, 0.0, 0.5, 0.5, -0.5, 1.0, 0.0, 1.0, -0.5, 0.5, -0.5, 0.0, 1.0, 1.0, -0.5, -0.5, -0.5, 0.5, 0.5, 0.5, 0.5, -0.5, -0.5, 1.0, 1.0, 1.0]
+
+set indices to [0, 1, 2, 2, 3, 0, 4, 5, 6, 6, 7, 4, 0, 4, 7, 7, 3, 0, 1, 5, 6, 6, 2, 1, 0, 1, 5, 5, 4, 0, 2, 3, 7, 7, 6, 2]
+
+set vao to create_vertex_array()
+set vbo to create_vertex_buffer with vertices
+set ebo to create_index_buffer with indices
+call vao_set_vertex_buffer with vao and vbo
+call vao_set_index_buffer with vao and ebo
+call vao_set_attribute with vao and 0 and 3 and 24 and 0
+call vao_set_attribute with vao and 1 and 3 and 24 and 12
+
+# Setup camera
+print text "Setting up camera..."
+set camera to create_orbital_camera with 0.0 and 0.0 and 0.0 and 8.0
+
+# Create projection matrix
+set fov to 0.785
+set aspect to 800.0 divided by 600.0
+set proj to mat4_perspective with fov and aspect and 0.1 and 100.0
+set proj_list to mat4_to_list with proj
+
+# Create scene graph hierarchy
+print text "Building scene graph..."
+
+# Root node (center pivot)
+set root_node to create_scene_node with "Root"
+call set_node_position with root_node and 0.0 and 0.0 and 0.0
+
+# Parent cube (orbits around origin)
+set parent_cube to create_scene_node with "ParentCube"
+call set_node_parent with parent_cube and root_node
+call set_node_position with parent_cube and 2.0 and 0.0 and 0.0
+call set_node_scale_uniform with parent_cube and 1.0
+call set_node_rendering with parent_cube and vao and 0 and 36 and -1 and shader
+
+# Child cube 1 (orbits parent, smaller)
+set child1 to create_scene_node with "Child1"
+call set_node_parent with child1 and parent_cube
+call set_node_position with child1 and 1.5 and 0.0 and 0.0
+call set_node_scale_uniform with child1 and 0.5
+call set_node_rendering with child1 and vao and 0 and 36 and -1 and shader
+
+# Child cube 2 (orbits parent, opposite side)
+set child2 to create_scene_node with "Child2"
+call set_node_parent with child2 and parent_cube
+call set_node_position with child2 and -1.5 and 0.0 and 0.0
+call set_node_scale_uniform with child2 and 0.5
+call set_node_rendering with child2 and vao and 0 and 36 and -1 and shader
+
+# Grandchild (orbits child1, tiny)
+set grandchild to create_scene_node with "Grandchild"
+call set_node_parent with grandchild and child1
+call set_node_position with grandchild and 0.8 and 0.0 and 0.0
+call set_node_scale_uniform with grandchild and 0.5
+call set_node_rendering with grandchild and vao and 0 and 36 and -1 and shader
+
+# Independent cube (no parent, stationary at origin)
+set independent to create_scene_node with "Independent"
+call set_node_position with independent and 0.0 and 0.0 and 0.0
+call set_node_scale_uniform with independent and 0.8
+call set_node_rendering with independent and vao and 0 and 36 and -1 and shader
+
+# Set clear color before main loop
+call set_clear_color with 0.1 and 0.1 and 0.15 and 1.0
+
+print text "Rendering..."
+print text "(Parent orbits center, children orbit parent, grandchild orbits child)"
+print text ""
+
+set angle to 0.0
+set frame_count to 0
+
+# Main loop
+while not window_should_close with window
+    set angle to angle plus 0.01
+    set frame_count to frame_count plus 1
+    
+    # Rotate root (parent cube orbits)
+    call set_node_rotation with root_node and 0.0 and angle and 0.0
+    
+    # Rotate parent cube itself
+    call set_node_rotation with parent_cube and angle times 2.0 and 0.0 and 0.0
+    
+    # Rotate children around parent
+    set child_angle to angle times 3.0
+    call set_node_rotation with child1 and 0.0 and child_angle and 0.0
+    call set_node_rotation with child2 and 0.0 and 0.0 minus child_angle and 0.0
+    
+    # Rotate grandchild
+    call set_node_rotation with grandchild and 0.0 and 0.0 and angle times 5.0
+    
+    # Rotate independent cube
+    call set_node_rotation with independent and angle and angle and 0.0
+    
+    # Update scene graph
+    call update_scene_graph
+    
+    # Update camera
+    call orbital_rotate with camera and 0.3 and 0.0
+    set view_list to camera_get_view_matrix with camera
+    
+    # Render
+    call begin_frame
+    call use_shader with shader
+    call set_uniform_mat4 with shader and "view" and view_list
+    call set_uniform_mat4 with shader and "projection" and proj_list
+    
+    # Draw all cubes with their world transforms
+    set parent_matrix to get_node_world_matrix with parent_cube
+    call set_uniform_mat4 with shader and "model" and parent_matrix
+    call vao_draw_elements with vao and GL_TRIANGLES() and 36
+    
+    set child1_matrix to get_node_world_matrix with child1
+    call set_uniform_mat4 with shader and "model" and child1_matrix
+    call vao_draw_elements with vao and GL_TRIANGLES() and 36
+    
+    set child2_matrix to get_node_world_matrix with child2
+    call set_uniform_mat4 with shader and "model" and child2_matrix
+    call vao_draw_elements with vao and GL_TRIANGLES() and 36
+    
+    set grandchild_matrix to get_node_world_matrix with grandchild
+    call set_uniform_mat4 with shader and "model" and grandchild_matrix
+    call vao_draw_elements with vao and GL_TRIANGLES() and 36
+    
+    set independent_matrix to get_node_world_matrix with independent
+    call set_uniform_mat4 with shader and "model" and independent_matrix
+    call vao_draw_elements with vao and GL_TRIANGLES() and 36
+    
+    call end_frame with window
+    
+    # Exit after 600 frames for testing (10 seconds at 60 FPS)
+    if frame_count is greater than or equal to 600
+        print text "Frame limit reached - exiting..."
+        break
+    end
+end
+
+print text ""
+print text "Cleaning up..."
+call delete_vertex_array with vao
+call delete_vertex_buffer with vbo
+call delete_index_buffer with ebo
+call delete_shader with shader
+call destroy_window with window
+
+print text "Demo complete!"

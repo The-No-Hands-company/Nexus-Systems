@@ -1,0 +1,15 @@
+# Test read-write with no-op (just return input)
+
+print text "No-op readwrite test:"
+set x to 42
+print text "Before: "
+print number x
+
+asm
+    code ""
+    outputs "+r": x
+end
+
+print text "After: "
+print number x
+print text "Expected: 42 (unchanged)"

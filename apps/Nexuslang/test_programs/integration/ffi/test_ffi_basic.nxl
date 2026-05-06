@@ -1,0 +1,16 @@
+# FFI Example - Call C printf function
+# This demonstrates NLPL's Foreign Function Interface
+#
+# Compilation:
+#   python nlplc_llvm.py test_programs/ffi/test_ffi_basic.nlpl -o ffi_demo
+#
+# Usage:
+#   ./ffi_demo
+#
+# Expected Output:
+#   Hello from NexusLang calling C printf!
+
+extern function printf with format as Pointer, ... returns Integer from library "c"
+
+set greeting to "Hello from NexusLang calling C printf!\n"
+call printf with greeting

@@ -1,0 +1,11 @@
+# Test float/double compilation
+
+set x to 3.14
+set y to 2.5
+
+set sum to x plus y
+set product to x times y
+
+print text "Float arithmetic:"
+print text sum
+print text product

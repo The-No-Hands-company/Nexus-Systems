@@ -1,0 +1,4 @@
+set numbers to [1, 2, 3, 4, 5]
+set first to numbers[0]
+set last to numbers[10]
+print text last

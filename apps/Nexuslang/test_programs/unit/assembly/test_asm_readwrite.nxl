@@ -1,0 +1,84 @@
+# Test: Inline Assembly Read-Write Constraints (+r)
+# Tests that read-write constraints properly load, modify, and store values
+
+print text "Testing inline assembly read-write constraints:"
+print text ""
+
+# Test 1: Simple increment with +r constraint
+print text "Test 1: Increment with +r constraint"
+set counter to 10
+print text "  Initial value: "
+print number counter
+asm
+    code
+        "add $0, 5"
+    outputs "+r": counter
+end
+print text "  After 'add $0, 5': "
+print number counter
+print text "  Expected: 15"
+print text ""
+
+# Test 2: Decrement with +r constraint
+print text "Test 2: Decrement with +r constraint"
+set value to 100
+print text "  Initial value: "
+print number value
+asm
+    code
+        "sub $0, 25"
+    outputs "+r": value
+end
+print text "  After 'sub $0, 25': "
+print number value
+print text "  Expected: 75"
+print text ""
+
+# Test 3: Multiplication with +r constraint
+print text "Test 3: Multiply with +r constraint"
+set num to 7
+print text "  Initial value: "
+print number num
+asm
+    code
+        "imul $0, $2"
+    outputs "+r": num
+    inputs "r": 6
+end
+print text "  After 'imul $0, 6': "
+print number num
+print text "  Expected: 42"
+print text ""
+
+# Test 4: Bit shift with +r constraint
+print text "Test 4: Bit shift with +r constraint"
+set bits to 2
+print text "  Initial value: "
+print number bits
+asm
+    code
+        "shl $0, 3"
+    outputs "+r": bits
+end
+print text "  After 'shl $0, 3' (multiply by 8): "
+print number bits
+print text "  Expected: 16"
+print text ""
+
+# Test 5: Negation with +r constraint
+print text "Test 5: Negation with +r constraint"
+set signed_val to 42
+print text "  Initial value: "
+print number signed_val
+asm
+    code
+        "neg $0"
+    outputs "+r": signed_val
+end
+print text "  After 'neg $0': "
+print number signed_val
+print text "  Expected: -42 (or large positive due to unsigned)"
+print text ""
+
+print text "All read-write constraint tests complete!"
+print text "Note: +r constraint loads initial value, modifies it, stores it back"

@@ -1,0 +1,119 @@
+# Inline Assembly Test: Clobber Lists
+# Tests clobber list functionality (registers, memory, condition codes)
+# Week 1-2: Testing clobber constraint generation
+
+print text "Inline Assembly Clobber Test"
+print text "============================="
+print text ""
+
+# Test 1: Register clobber (single register)
+print text "Test 1: Single register clobber (rax)"
+asm
+    code
+        "mov rax, 123"
+        "mov rbx, 456"
+    clobbers "rax"
+end
+print text "Register clobber test complete (rax modified)"
+print text ""
+
+# Test 2: Multiple register clobbers
+print text "Test 2: Multiple register clobbers (rax, rbx, rcx)"
+asm
+    code
+        "mov rax, 1"
+        "mov rbx, 2"
+        "mov rcx, 3"
+    clobbers "rax", "rbx", "rcx"
+end
+print text "Multiple register clobbers complete"
+print text ""
+
+# Test 3: Memory clobber
+print text "Test 3: Memory clobber"
+asm
+    code
+        "mov qword ptr [rsp-8], 999"
+    clobbers "memory"
+end
+print text "Memory clobber test complete (stack modified)"
+print text ""
+
+# Test 4: Condition code clobber (cc)
+print text "Test 4: Condition code clobber (cc)"
+asm
+    code
+        "cmp rax, rbx"
+        "test rcx, rcx"
+    clobbers "cc"
+end
+print text "Condition code clobber test complete (flags modified)"
+print text ""
+
+# Test 5: Combined clobbers (registers + memory)
+print text "Test 5: Combined clobbers (rax, rbx + memory)"
+asm
+    code
+        "mov rax, 777"
+        "mov qword ptr [rsp-16], rax"
+    clobbers "rax", "rbx", "memory"
+end
+print text "Combined clobber test complete"
+print text ""
+
+# Test 6: All clobber types (registers + memory + cc)
+print text "Test 6: All clobber types (rax, rdx, memory, cc)"
+asm
+    code
+        "mov rax, 888"
+        "mov rdx, 999"
+        "mov qword ptr [rsp-24], rax"
+        "cmp rax, rdx"
+    clobbers "rax", "rdx", "memory", "cc"
+end
+print text "All clobber types test complete"
+print text ""
+
+# Test 7: Clobbers with operands (input + clobbers)
+print text "Test 7: Clobbers with input operands"
+set x to 42
+asm
+    code
+        "mov rax, $0"
+        "mov rbx, 100"
+        "add rax, rbx"
+    inputs "r": x
+    clobbers "rax", "rbx"
+end
+print text "Operands + clobbers test complete"
+print text ""
+
+# Test 8: Clobbers with output operands
+print text "Test 8: Clobbers with output operands"
+set result to 0
+asm
+    code
+        "mov rcx, 200"
+        "mov $0, rcx"
+    outputs "=r": result
+    clobbers "rcx"
+end
+print text "Output + clobbers test complete"
+print text "Expected result: 200, Actual: "
+print number result
+print text ""
+
+print text "============================="
+print text "Clobber Test Summary:"
+print text "- Test 1: Single register clobber - DONE"
+print text "- Test 2: Multiple register clobbers - DONE"
+print text "- Test 3: Memory clobber - DONE"
+print text "- Test 4: Condition code clobber (cc) - DONE"
+print text "- Test 5: Combined clobbers - DONE"
+print text "- Test 6: All clobber types - DONE"
+print text "- Test 7: Clobbers + input operands - DONE"
+print text "- Test 8: Clobbers + output operands - DONE"
+print text ""
+print text "NOTE: In interpreter mode, all inline assembly is skipped."
+print text "      Compile with nlplc to verify clobber constraints in LLVM IR."
+print text "      Clobber syntax: clobbers reg1, reg2, memory, cc"

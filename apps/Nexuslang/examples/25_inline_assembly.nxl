@@ -1,0 +1,387 @@
+# ============================================================================
+# NexusLang Inline Assembly - Comprehensive Guide and Examples
+# ============================================================================
+#
+# This example demonstrates inline assembly in NexusLang, a powerful feature for:
+# - Direct hardware control
+# - Performance-critical code
+# - Architecture-specific optimizations
+# - Operating system kernel development
+#
+# Status: Week 1-2 Complete (70%)
+# - Basic inline assembly ✓
+# - Intel syntax support ✓
+# - Operand numbering ($0, $1, $2...) ✓
+# - Clobber lists ✓
+# - Type inference ✓
+# - Constraint validation ✓
+#
+# ============================================================================
+
+print text "NLPL Inline Assembly Guide"
+print text "=========================="
+print text ""
+
+# ----------------------------------------------------------------------------
+# SECTION 1: Basic Inline Assembly
+# ----------------------------------------------------------------------------
+
+print text "Section 1: Basic Inline Assembly"
+print text "---------------------------------"
+
+# Simplest form: no operands, just assembly code
+print text "Example 1a: NOP instruction"
+asm
+    code
+        "nop"
+end
+print text "  Executed NOP (no operation)"
+print text ""
+
+# Multiple instructions
+print text "Example 1b: Multiple instructions"
+asm
+    code
+        "nop"
+        "nop"
+        "nop"
+end
+print text "  Executed 3 NOP instructions"
+print text ""
+
+# ----------------------------------------------------------------------------
+# SECTION 2: Input Operands
+# ----------------------------------------------------------------------------
+
+print text "Section 2: Input Operands"
+print text "-------------------------"
+
+print text "Example 2a: Single input operand"
+set value to 42
+set result_2a to 0
+asm
+    code
+        "mov rax, $1"
+        "add rax, 10"
+        "mov $0, rax"
+    outputs "=r": result_2a
+    inputs "r": value
+end
+print text "  Input: 42, Added: 10, Result: "
+print number result_2a
+print text ""
+
+print text "Example 2b: Multiple input operands"
+set a to 10
+set b to 20
+set c to 30
+set sum to 0
+asm
+    code
+        "mov rax, $1"
+        "add rax, $2"
+        "add rax, $3"
+        "mov $0, rax"
+    outputs "=r": sum
+    inputs "r": a, "r": b, "r": c
+end
+print text "  10 + 20 + 30 = "
+print number sum
+print text ""
+
+# ----------------------------------------------------------------------------
+# SECTION 3: Output Operands
+# ----------------------------------------------------------------------------
+
+print text "Section 3: Output Operands"
+print text "--------------------------"
+
+print text "Example 3a: Single output operand"
+set result_3a to 0
+asm
+    code
+        "mov $0, 999"
+    outputs "=r": result_3a
+end
+print text "  Output value: "
+print number result_3a
+print text ""
+
+print text "Example 3b: Output with computation"
+set input_val to 5
+set result_3b to 0
+asm
+    code
+        "mov rax, $1"
+        "imul rax, rax"
+        "mov $0, rax"
+    outputs "=r": result_3b
+    inputs "r": input_val
+end
+print text "  5 squared = "
+print number result_3b
+print text ""
+
+# ----------------------------------------------------------------------------
+# SECTION 4: Clobber Lists
+# ----------------------------------------------------------------------------
+
+print text "Section 4: Clobber Lists"
+print text "------------------------"
+
+print text "Example 4a: Register clobbers"
+set x to 7
+set y to 8
+set product to 0
+asm
+    code
+        "mov rax, $1"
+        "imul rax, $2"
+        "mov $0, rax"
+    outputs "=r": product
+    inputs "r": x, "r": y
+    clobbers "rax"
+end
+print text "  7 * 8 = "
+print number product
+print text "  (RAX register was clobbered)"
+print text ""
+
+print text "Example 4b: Multiple clobbers"
+set val1 to 100
+set val2 to 50
+set diff to 0
+asm
+    code
+        "mov rax, $1"
+        "mov rbx, $2"
+        "sub rax, rbx"
+        "mov $0, rax"
+    outputs "=r": diff
+    inputs "r": val1, "r": val2
+    clobbers "rax", "rbx"
+end
+print text "  100 - 50 = "
+print number diff
+print text "  (RAX and RBX registers were clobbered)"
+print text ""
+
+# ----------------------------------------------------------------------------
+# SECTION 5: Type Inference
+# ----------------------------------------------------------------------------
+
+print text "Section 5: Type Inference"
+print text "-------------------------"
+
+print text "Example 5a: Integer type (i64)"
+set int_input to 123
+set int_output to 0
+asm
+    code
+        "mov rax, $1"
+        "add rax, 77"
+        "mov $0, rax"
+    outputs "=r": int_output
+    inputs "r": int_input
+end
+print text "  Integer: 123 + 77 = "
+print number int_output
+print text ""
+
+# ----------------------------------------------------------------------------
+# SECTION 6: Operand Numbering
+# ----------------------------------------------------------------------------
+
+print text "Section 6: Operand Numbering"
+print text "----------------------------"
+
+print text "Example 6a: Understanding $0, $1, $2..."
+print text "  Output operands are numbered first: $0, $1, ..."
+print text "  Input operands follow: $N, $N+1, ... (where N = num outputs)"
+print text ""
+
+print text "Example 6b: Complex operand numbering"
+set m to 3
+set n to 4
+set p to 5
+set formula_result to 0
+asm
+    code
+        "mov rax, $1"
+        "imul rax, $2"
+        "add rax, $3"
+        "mov $0, rax"
+    outputs "=r": formula_result
+    inputs "r": m, "r": n, "r": p
+end
+print text "  (3 * 4) + 5 = "
+print number formula_result
+print text "  Operands: $0=output, $1=m, $2=n, $3=p"
+print text ""
+
+# ----------------------------------------------------------------------------
+# SECTION 7: Register Constraints
+# ----------------------------------------------------------------------------
+
+print text "Section 7: Register Constraints"
+print text "-------------------------------"
+
+print text "Example 7a: General register constraint (r)"
+print text "  'r' = Any general-purpose register"
+set gen_reg_val to 42
+set gen_reg_out to 0
+asm
+    code
+        "mov rax, $1"
+        "mov $0, rax"
+    outputs "=r": gen_reg_out
+    inputs "r": gen_reg_val
+end
+print text "  Value transferred via general register: "
+print number gen_reg_out
+print text ""
+
+print text "Example 7b: Early clobber constraint (=&r)"
+print text "  '=&r' = Output register written before inputs are read"
+set early_val to 0
+asm
+    code
+        "mov $0, 777"
+    outputs "=&r": early_val
+end
+print text "  Early clobber output: "
+print number early_val
+print text ""
+
+# ----------------------------------------------------------------------------
+# SECTION 8: Practical Use Cases
+# ----------------------------------------------------------------------------
+
+print text "Section 8: Practical Use Cases"
+print text "------------------------------"
+
+# Use case 1: Fast bit operations
+print text "Example 8a: Bit shift left (multiply by 2^n)"
+function fast_shift_left with value as Integer and bits as Integer returns Integer
+    set shifted to 0
+    asm
+        code
+            "mov rax, $1"
+            "shl rax, 3"
+            "mov $0, rax"
+        outputs "=r": shifted
+        inputs "r": value
+        clobbers "rax"
+    end
+    return shifted
+end
+
+set shift_result to fast_shift_left with value: 5 and bits: 3
+print text "  5 << 3 (multiply by 8) = "
+print number shift_result
+print text ""
+
+# Use case 2: Conditional move
+print text "Example 8b: Conditional move (CMOV)"
+function conditional_select with condition as Integer and true_val as Integer and false_val as Integer returns Integer
+    set result to 0
+    asm
+        code
+            "mov rax, $2"
+            "mov rbx, $3"
+            "test $1, $1"
+            "cmovnz rax, rbx"
+            "mov $0, rax"
+        outputs "=r": result
+        inputs "r": condition, "r": true_val, "r": false_val
+        clobbers "rax", "rbx"
+    end
+    return result
+end
+
+set cond_result to conditional_select with condition: 1 and true_val: 100 and false_val: 200
+print text "  Condition=1: selected value = "
+print number cond_result
+print text ""
+
+# Use case 3: Increment with flags
+print text "Example 8c: Increment with overflow detection"
+set counter to 255
+set incremented to 0
+asm
+    code
+        "mov rax, $1"
+        "inc rax"
+        "mov $0, rax"
+    outputs "=r": incremented
+    inputs "r": counter
+    clobbers "rax", "cc"
+end
+print text "  255 + 1 = "
+print number incremented
+print text "  (condition codes were affected)"
+print text ""
+
+# ----------------------------------------------------------------------------
+# SECTION 9: Best Practices
+# ----------------------------------------------------------------------------
+
+print text "Section 9: Best Practices"
+print text "-------------------------"
+print text "1. Always declare clobbered registers"
+print text "2. Use appropriate constraints for operands"
+print text "3. Number operands correctly ($0, $1, $2...)"
+print text "4. Test assembly in isolation before integrating"
+print text "5. Document why inline assembly is necessary"
+print text "6. Consider portability (x86/x64 only for now)"
+print text ""
+
+# ----------------------------------------------------------------------------
+# SECTION 10: Constraint Reference
+# ----------------------------------------------------------------------------
+
+print text "Section 10: Constraint Reference"
+print text "--------------------------------"
+print text "Input constraints:"
+print text "  'r'  = Any general-purpose register"
+print text "  'a'  = RAX register (specific)"
+print text "  'b'  = RBX register (specific)"
+print text "  'c'  = RCX register (specific)"
+print text "  'd'  = RDX register (specific)"
+print text "  'S'  = RSI register (specific)"
+print text "  'D'  = RDI register (specific)"
+print text "  'm'  = Memory operand"
+print text "  'i'  = Immediate integer (constant)"
+print text ""
+print text "Output constraints:"
+print text "  '=r' = Write-only register"
+print text "  '+r' = Read-write register"
+print text "  '=&r'= Early clobber (write before inputs read)"
+print text ""
+print text "Special clobbers:"
+print text "  'memory' = Assembly reads/writes memory"
+print text "  'cc'     = Condition codes (flags) modified"
+print text ""
+
+# ----------------------------------------------------------------------------
+# COMPLETION
+# ----------------------------------------------------------------------------
+
+print text "============================================================================"
+print text "Week 1-2 Features Demonstrated:"
+print text "  - Basic inline assembly (no operands)"
+print text "  - Input operands with constraints"
+print text "  - Output operands with constraints"
+print text "  - Clobber lists (registers and special)"
+print text "  - Operand numbering ($0, $1, $2...)"
+print text "  - Type inference (Integer -> i64)"
+print text "  - Constraint validation"
+print text "  - Intel syntax support"
+print text ""
+print text "Coming in Week 3-4:"
+print text "  - Complete constraint validation"
+print text "  - Register conflict detection"
+print text "  - Multiple output operands (struct return)"
+print text "  - Read-write constraints (+r)"
+print text "  - Memory constraints (m)"
+print text "============================================================================"

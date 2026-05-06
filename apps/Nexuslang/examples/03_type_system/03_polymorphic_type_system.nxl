@@ -1,0 +1,193 @@
+# Advanced Type System in NexusLang
+
+# Type Inference
+# These variables don't need explicit type annotations - they're inferred
+set name to "John Doe"             # Inferred as String
+set age to 30                      # Inferred as Integer
+set height to 6.2                  # Inferred as Float
+set is_active to true              # Inferred as Boolean
+set grades to [90, 85, 92, 88]     # Inferred as List<Integer>
+set person to {                    # Inferred as Dictionary<String, Any>
+    "name": "John",
+    "age": 30,
+    "is_student": true
+}
+
+# Return type inference
+function calculate average with numbers as List of Integer
+    set sum to 0
+    for each number in numbers
+        set sum to sum plus number
+    return sum divided by length of numbers
+    # Return type inferred as Float
+
+function get greeting with name as String
+    return "Hello, " plus name plus "!"
+    # Return type inferred as String
+
+# Generic Types
+# A generic Stack class
+class Stack with generic parameters T
+    private set items to List of T
+    
+    public function initialize
+        create this.items as empty List of T
+    
+    public function push with item as T
+        append item to this.items
+    
+    public function pop returns T
+        if length of this.items is 0
+            raise new Error with "Stack is empty"
+        return remove last item from this.items
+    
+    public function peek returns T
+        if length of this.items is 0
+            raise new Error with "Stack is empty"
+        return this.items[length of this.items minus 1]
+    
+    public function is empty returns Boolean
+        return length of this.items is 0
+
+# A generic Pair class
+class Pair with generic parameters T, U
+    private set first to T
+    private set second to U
+    
+    public function initialize with first as T and second as U
+        set this.first to first
+        set this.second to second
+    
+    public function get first returns T
+        return this.first
+    
+    public function get second returns U
+        return this.second
+    
+    public function set first with value as T
+        set this.first to value
+    
+    public function set second with value as U
+        set this.second to value
+
+# User-Defined Types with Inheritance
+
+# Interface definition
+interface Printable
+    function to string returns String
+
+interface Comparable
+    function compare to with other as Any returns Integer
+
+# Base class
+class Person
+    private set name to String
+    private set age to Integer
+    
+    public function initialize with name as String and age as Integer
+        set this.name to name
+        set this.age to age
+    
+    public function get name returns String
+        return this.name
+    
+    public function get age returns Integer
+        return this.age
+    
+    public function set name with name as String
+        set this.name to name
+    
+    public function set age with age as Integer
+        set this.age to age
+
+# Derived class that inherits from Person and implements Printable and Comparable
+class Student that extends Person and implements Printable and Comparable
+    private set student_id to String
+    private set grades to List of Integer
+    
+    public function initialize with name as String and age as Integer and student_id as String
+        call parent initialize with name and age
+        set this.student_id to student_id
+        create this.grades as empty List of Integer
+    
+    public function get student_id returns String
+        return this.student_id
+    
+    public function add grade with grade as Integer
+        append grade to this.grades
+    
+    public function get average grade returns Float
+        return calculate average with this.grades
+    
+    # Implementation of Printable interface
+    public function to string returns String
+        return "Student: " plus this.name plus " (ID: " plus this.student_id plus ")"
+    
+    # Implementation of Comparable interface
+    public function compare to with other as Any returns Integer
+        if other is instance of Student
+            if this.age is less than other.age
+                return -1
+            else if this.age is greater than other.age
+                return 1
+            else
+                return 0
+        raise new Error with "Cannot compare Student with non-Student"
+
+# Generic class that extends another class
+class GraduateStudent with generic parameters T that extends Student
+    private set thesis_topic to T
+    
+    public function initialize with name as String and age as Integer and student_id as String and thesis_topic as T
+        call parent initialize with name and age and student_id
+        set this.thesis_topic to thesis_topic
+    
+    public function get thesis_topic returns T
+        return this.thesis_topic
+    
+    # Override method from parent class
+    public function to string returns String
+        return "Graduate Student: " plus this.name plus " (ID: " plus this.student_id plus ", Thesis: " plus convert this.thesis_topic to string plus ")"
+
+# Usage Examples
+# Creating instances of generic classes
+create int_stack as new Stack of Integer
+push 10 to int_stack
+push 20 to int_stack
+push 30 to int_stack
+print text "Popped: " plus convert pop from int_stack to string
+
+create string_stack as new Stack of String
+push "Hello" to string_stack
+push "World" to string_stack
+print text "Popped: " plus pop from string_stack
+
+create name_age_pair as new Pair of String and Integer with "John" and 30
+print text "Name: " plus get first from name_age_pair plus ", Age: " plus convert get second from name_age_pair to string
+
+# Creating instances with inheritance and interfaces
+create person as new Person with "Alice" and 35
+create student as new Student with "Bob" and 20 and "S12345"
+create grad_student as new GraduateStudent of String with "Charlie" and 25 and "G67890" and "Machine Learning"
+
+# Using interface methods
+print text to string from student
+print text to string from grad_student
+
+# Demonstrating polymorphism
+function print person details with person as Person
+    print text "Name: " plus get name from person
+    print text "Age: " plus convert get age from person to string
+    
+    # Check if person is a Student using type checking
+    if person is instance of Student
+        print text "Student ID: " plus get student_id from person
+        
+        # Check if person is a GraduateStudent using type checking
+        if person is instance of GraduateStudent
+            print text "Thesis Topic: " plus convert get thesis_topic from person to string
+
+# Call with different types to demonstrate polymorphism
+print person details with person
+print person details with student
+print person details with grad_student 

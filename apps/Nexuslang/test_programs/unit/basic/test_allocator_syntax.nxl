@@ -1,0 +1,92 @@
+# Test: Compiler-level allocator syntax
+# Covers: set x to [] as List of Type with allocator <name>
+#         set x to {} as Dictionary of K, V with allocator <name>
+#         AllocatorTrackedList / AllocatorTrackedDict mutation tracking
+#         get_allocator_stats reflects mutations (append, remove, clear)
+
+# --- List with arena allocator ---
+
+set arena to create_arena_allocator with 65536
+print text "arena created"
+
+set items to [] as List of Integer with allocator arena
+
+set stats to get_allocator_stats with arena
+print text "initial alloc_count after empty list (expect 0):"
+print text stats["allocation_count"]
+
+call list_append with items and 10
+call list_append with items and 20
+call list_append with items and 30
+
+set stats to get_allocator_stats with arena
+print text "alloc_count after 3 appends (expect 3):"
+print text stats["allocation_count"]
+
+print text "list length (expect 3):"
+print text length of items
+
+print text "item[0] (expect 10):"
+print text items[0]
+print text "item[2] (expect 30):"
+print text items[2]
+
+# --- Pre-populated list with arena ---
+
+set arena2 to create_arena_allocator with 65536
+set pre_items to [1, 2, 3, 4, 5] as List of Integer with allocator arena2
+
+set stats2 to get_allocator_stats with arena2
+print text "alloc_count for pre-populated list of 5 (expect 5):"
+print text stats2["allocation_count"]
+
+call list_append with pre_items and 6
+set stats2 to get_allocator_stats with arena2
+print text "alloc_count after one append (expect 6):"
+print text stats2["allocation_count"]
+
+# --- Dict with pool allocator ---
+
+set pool to create_pool_allocator with 16 and 64
+set mapping to {} as Dictionary of String, Integer with allocator pool
+
+set stats3 to get_allocator_stats with pool
+print text "pool alloc_count after empty dict (expect 0):"
+print text stats3["allocation_count"]
+
+set mapping["alpha"] to 1
+set mapping["beta"] to 2
+set mapping["gamma"] to 3
+
+set stats3 to get_allocator_stats with pool
+print text "pool alloc_count after 3 insertions (expect 3):"
+print text stats3["allocation_count"]
+
+print text "mapping[alpha] (expect 1):"
+print text mapping["alpha"]
+
+# --- System allocator with list ---
+
+set sys to create_system_allocator with 0
+set numbers to [] as List of Float with allocator sys
+
+call list_append with numbers and 3.14
+call list_append with numbers and 2.72
+
+set sys_stats to get_allocator_stats with sys
+print text "sys alloc_count after 2 float appends (expect 2):"
+print text sys_stats["allocation_count"]
+
+# --- Reset and verify tracking stops ---
+
+call allocator_reset with arena
+set stats_after_reset to get_allocator_stats with arena
+print text "arena alloc_count after reset (expect 0):"
+print text stats_after_reset["allocation_count"]
+
+# Items list still works (Python list in memory) even after arena reset
+call list_append with items and 99
+print text "list still usable after arena reset (expect 4 items):"
+print text length of items
+
+print text "all allocator syntax tests passed"

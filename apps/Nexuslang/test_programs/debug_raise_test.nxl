@@ -1,0 +1,13 @@
+function test_raise returns Integer
+  raise error with message "Test error"
+  return 0
+end
+
+print text "Starting"
+try
+  set result to test_raise
+  print text "Should not reach here"
+catch error with message
+  print text "Caught error: " plus message
+end
+print text "Done"

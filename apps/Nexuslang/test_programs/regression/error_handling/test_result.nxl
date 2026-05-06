@@ -1,0 +1,25 @@
+# Test Result<T, E> Type
+# Demonstrates error handling with Result
+
+# Function that can fail
+function parse_number that takes text as String returns Result of Integer or String
+    # Try to convert to integer
+    if text is equal to "123"
+        return Ok with 123
+    else if text is equal to "456"
+        return Ok with 456
+    else
+        return Error with "Invalid number format"
+
+# Test successful parsing
+set result1 to parse_number with "123"
+print text "Parsing '123':"
+# In real implementation, would use pattern matching here
+print text result1
+
+# Test failed parsing
+set result2 to parse_number with "abc"
+print text "Parsing 'abc':"
+print text result2
+
+print text "Result test complete"

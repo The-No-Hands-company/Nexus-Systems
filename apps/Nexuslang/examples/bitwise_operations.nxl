@@ -1,0 +1,483 @@
+# NexusLang Bitwise Operations - Comprehensive Guide
+# Demonstrates all bitwise operations with practical examples
+
+print text "========================================"
+print text "  NexusLang Bitwise Operations Guide"
+print text "========================================"
+print text ""
+
+# ========================================
+# Section 1: Introduction to Bitwise Operations
+# ========================================
+print text "SECTION 1: Introduction to Bitwise Operations"
+print text "----------------------------------------------"
+print text "Bitwise operations work directly on the binary representation"
+print text "of integers. They are fundamental for:"
+print text "  - Hardware control and device drivers"
+print text "  - Performance optimization (faster than arithmetic)"
+print text "  - Bit manipulation and flags"
+print text "  - Cryptography and hashing"
+print text "  - Graphics and image processing"
+print text "  - Network protocols and data compression"
+print text ""
+
+# ========================================
+# Section 2: Bitwise AND Operation
+# ========================================
+print text "SECTION 2: Bitwise AND Operation"
+print text "--------------------------------"
+print text "Syntax: x bitwise and y"
+print text "Symbols: & (alternative)"
+print text "Result: 1 only if both bits are 1"
+print text ""
+
+print text "Example: 12 AND 10"
+print text "  12 = 1100 (binary)"
+print text "  10 = 1010 (binary)"
+print text "  --------------"
+print text "       1000 = 8"
+set result to 12 bitwise and 10
+print text "Result: "
+print text result
+print text ""
+
+print text "Practical use: Check if bit is set"
+set flags to 13
+set bit2_mask to 4
+set is_bit2_set to flags bitwise and bit2_mask
+print text "Flags = 13 (binary: 1101)"
+print text "Is bit 2 set? "
+if is_bit2_set is not equal to 0
+    print text "YES (bit 2 = 1)"
+else
+    print text "NO (bit 2 = 0)"
+end
+print text ""
+
+# ========================================
+# Section 3: Bitwise OR Operation
+# ========================================
+print text "SECTION 3: Bitwise OR Operation"
+print text "-------------------------------"
+print text "Syntax: x bitwise or y"
+print text "Symbols: | (alternative)"
+print text "Result: 1 if either bit is 1"
+print text ""
+
+print text "Example: 12 OR 10"
+print text "  12 = 1100 (binary)"
+print text "  10 = 1010 (binary)"
+print text "  --------------"
+print text "       1110 = 14"
+set result to 12 bitwise or 10
+print text "Result: "
+print text result
+print text ""
+
+print text "Practical use: Set specific bits"
+set flags to 8
+print text "Starting flags: 8 (binary: 1000)"
+set flags to flags bitwise or 1
+print text "After setting bit 0: "
+print text flags
+print text " (binary: 1001)"
+set flags to flags bitwise or 4
+print text "After setting bit 2: "
+print text flags
+print text " (binary: 1101)"
+print text ""
+
+# ========================================
+# Section 4: Bitwise XOR Operation
+# ========================================
+print text "SECTION 4: Bitwise XOR (Exclusive OR)"
+print text "-------------------------------------"
+print text "Syntax: x bitwise xor y"
+print text "Symbols: ^ (alternative)"
+print text "Result: 1 if bits are different"
+print text ""
+
+print text "Example: 12 XOR 10"
+print text "  12 = 1100 (binary)"
+print text "  10 = 1010 (binary)"
+print text "  --------------"
+print text "       0110 = 6"
+set result to 12 bitwise xor 10
+print text "Result: "
+print text result
+print text ""
+
+print text "Practical use: Toggle bits"
+set flags to 5
+print text "Starting flags: 5 (binary: 0101)"
+set toggle_mask to 3
+set flags to flags bitwise xor toggle_mask
+print text "After XOR with 3: "
+print text flags
+print text " (binary: 0110)"
+set flags to flags bitwise xor toggle_mask
+print text "After XOR with 3 again: "
+print text flags
+print text " (back to 5 - XOR toggles!)"
+print text ""
+
+print text "Famous XOR trick: Swapping without temporary variable"
+set a to 25
+set b to 40
+print text "Before: a = "
+print text a
+print text ", b = "
+print text b
+set a to a bitwise xor b
+set b to a bitwise xor b
+set a to a bitwise xor b
+print text "After:  a = "
+print text a
+print text ", b = "
+print text b
+print text ""
+
+# ========================================
+# Section 5: Bitwise NOT Operation
+# ========================================
+print text "SECTION 5: Bitwise NOT (Complement)"
+print text "-----------------------------------"
+print text "Syntax: bitwise not x"
+print text "Symbols: ~ (alternative)"
+print text "Result: Inverts all bits"
+print text ""
+
+print text "Example: NOT 5"
+print text "  5 = 00000101 (binary)"
+print text "  NOT inverts all bits"
+print text "  Result (two's complement): -6"
+set result to bitwise not 5
+print text "Result: "
+print text result
+print text ""
+
+print text "Note: Python/NLPL use two's complement representation"
+print text "NOT x = -(x + 1)"
+print text ""
+
+print text "Practical use: Creating bit masks"
+set keep_bits to 15
+print text "Keep bottom 4 bits, clear the rest"
+print text "Mask = NOT 15 = "
+set mask to bitwise not keep_bits
+print text mask
+set value to 255
+set result to value bitwise and (bitwise not keep_bits)
+print text "255 AND (NOT 15) = "
+print text result
+print text ""
+
+# ========================================
+# Section 6: Left Shift Operation
+# ========================================
+print text "SECTION 6: Left Shift Operation"
+print text "--------------------------------"
+print text "Syntax: x shift left n"
+print text "Symbols: << (alternative)"
+print text "Effect: Multiplies by 2^n"
+print text ""
+
+print text "Example: 5 << 2"
+print text "  5 = 0101 (binary)"
+print text "  Shift left by 2 positions"
+print text "  Result: 10100 = 20"
+set result to 5 shift left 2
+print text "Result: "
+print text result
+print text "Verification: 5 * (2^2) = 5 * 4 = 20"
+print text ""
+
+print text "Practical use: Fast multiplication by powers of 2"
+set n to 7
+print text "Fast calculation of 7 * 8:"
+set result to n shift left 3
+print text "7 << 3 = "
+print text result
+print text ""
+
+print text "Building bit masks:"
+set bit_position to 5
+set mask to 1 shift left bit_position
+print text "Mask for bit 5: 1 << 5 = "
+print text mask
+print text " (binary: 100000)"
+print text ""
+
+# ========================================
+# Section 7: Right Shift Operation
+# ========================================
+print text "SECTION 7: Right Shift Operation"
+print text "---------------------------------"
+print text "Syntax: x shift right n"
+print text "Symbols: >> (alternative)"
+print text "Effect: Divides by 2^n (integer division)"
+print text ""
+
+print text "Example: 20 >> 2"
+print text "  20 = 10100 (binary)"
+print text "  Shift right by 2 positions"
+print text "  Result: 00101 = 5"
+set result to 20 shift right 2
+print text "Result: "
+print text result
+print text "Verification: 20 / (2^2) = 20 / 4 = 5"
+print text ""
+
+print text "Practical use: Fast division by powers of 2"
+set n to 100
+print text "Fast calculation of 100 / 4:"
+set result to n shift right 2
+print text "100 >> 2 = "
+print text result
+print text ""
+
+print text "Extracting high-order bits:"
+set value to 256
+set high_byte to value shift right 8
+print text "Extract byte 1 from 256: 256 >> 8 = "
+print text high_byte
+print text ""
+
+# ========================================
+# Section 8: Practical Applications
+# ========================================
+print text "SECTION 8: Practical Applications"
+print text "----------------------------------"
+print text ""
+
+# Application 1: Permission flags
+print text "Application 1: Permission Flags System"
+print text "---------------------------------------"
+set READ to 4
+set WRITE to 2
+set EXECUTE to 1
+
+set user_permissions to READ bitwise or WRITE
+print text "User has READ | WRITE permissions"
+print text "Permission value: "
+print text user_permissions
+print text ""
+
+print text "Check if user can read:"
+set can_read to user_permissions bitwise and READ
+if can_read is not equal to 0
+    print text "YES - User has READ permission"
+else
+    print text "NO - User lacks READ permission"
+end
+print text ""
+
+print text "Check if user can execute:"
+set can_execute to user_permissions bitwise and EXECUTE
+if can_execute is not equal to 0
+    print text "YES - User has EXECUTE permission"
+else
+    print text "NO - User lacks EXECUTE permission"
+end
+print text ""
+
+# Application 2: Color manipulation
+print text "Application 2: RGB Color Manipulation"
+print text "--------------------------------------"
+set red to 255
+set green to 128
+set blue to 64
+
+# Pack RGB into single 32-bit integer
+set color to red shift left 16
+set color to color bitwise or (green shift left 8)
+set color to color bitwise or blue
+
+print text "Packed RGB color: "
+print text color
+print text ""
+
+# Extract components back
+set extracted_red to (color shift right 16) bitwise and 255
+set extracted_green to (color shift right 8) bitwise and 255
+set extracted_blue to color bitwise and 255
+
+print text "Extracted Red: "
+print text extracted_red
+print text "Extracted Green: "
+print text extracted_green
+print text "Extracted Blue: "
+print text extracted_blue
+print text ""
+
+# Application 3: Power of 2 detection
+print text "Application 3: Power of 2 Detection"
+print text "------------------------------------"
+print text "Checking if numbers are powers of 2:"
+set test_numbers to create list with 1 and 2 and 3 and 4 and 7 and 8 and 16 and 31 and 32
+for each num in test_numbers
+    set check to num bitwise and (num minus 1)
+    print text "Is "
+    print text num
+    print text " a power of 2? "
+    if num is greater than 0
+        if check is equal to 0
+            print text "YES"
+        else
+            print text "NO"
+        end
+    else
+        print text "NO"
+    end
+end
+print text ""
+
+# Application 4: Even/Odd check
+print text "Application 4: Fast Even/Odd Check"
+print text "-----------------------------------"
+print text "Checking parity using AND with 1:"
+set numbers to create list with 10 and 15 and 22 and 37 and 100
+for each num in numbers
+    set parity to num bitwise and 1
+    print text "Number "
+    print text num
+    print text " is "
+    if parity is equal to 0
+        print text "EVEN"
+    else
+        print text "ODD"
+    end
+end
+print text ""
+
+# Application 5: Bit counting
+print text "Application 5: Counting Set Bits"
+print text "---------------------------------"
+set number to 42
+print text "Counting 1-bits in 42 (binary: 101010):"
+set count to 0
+set temp to number
+while temp is greater than 0
+    set bit to temp bitwise and 1
+    if bit is equal to 1
+        set count to count plus 1
+    end
+    set temp to temp shift right 1
+end
+print text "Number of 1-bits: "
+print text count
+print text " (Expected: 3)"
+print text ""
+
+# ========================================
+# Section 9: Performance Considerations
+# ========================================
+print text "SECTION 9: Performance Benefits"
+print text "--------------------------------"
+print text "Bitwise operations are typically faster than arithmetic:"
+print text ""
+print text "Fast Operations:"
+print text "  x << 1     instead of  x * 2"
+print text "  x >> 1     instead of  x / 2"
+print text "  x & 1      instead of  x % 2"
+print text "  x << 3     instead of  x * 8"
+print text ""
+print text "Use bitwise ops when:"
+print text "  - Working with hardware registers"
+print text "  - Implementing low-level protocols"
+print text "  - Optimizing hot code paths"
+print text "  - Manipulating individual bits"
+print text "  - Packing multiple values into one integer"
+print text ""
+
+# ========================================
+# Section 10: Common Patterns
+# ========================================
+print text "SECTION 10: Common Bitwise Patterns"
+print text "------------------------------------"
+print text ""
+
+print text "Pattern 1: Set bit n"
+print text "  value OR (1 << n)"
+set value to 0
+set n to 3
+set value to value bitwise or (1 shift left n)
+print text "Set bit 3: "
+print text value
+print text " (binary: 1000)"
+print text ""
+
+print text "Pattern 2: Clear bit n"
+print text "  value AND NOT (1 << n)"
+set value to 15
+set n to 2
+set mask to bitwise not (1 shift left n)
+set value to value bitwise and mask
+print text "Clear bit 2 from 15: "
+print text value
+print text " (binary: 1011)"
+print text ""
+
+print text "Pattern 3: Toggle bit n"
+print text "  value XOR (1 << n)"
+set value to 5
+set n to 1
+set value to value bitwise xor (1 shift left n)
+print text "Toggle bit 1 in 5: "
+print text value
+print text " (binary: 0111 = 7)"
+print text ""
+
+print text "Pattern 4: Check if bit n is set"
+print text "  (value AND (1 << n)) != 0"
+set value to 12
+set n to 2
+set check to value bitwise and (1 shift left n)
+print text "Is bit 2 set in 12? "
+if check is not equal to 0
+    print text "YES"
+else
+    print text "NO"
+end
+print text ""
+
+print text "Pattern 5: Isolate lowest set bit"
+print text "  value AND (-value)"
+set value to 12
+set neg_value to 0 minus value
+set lowest to value bitwise and neg_value
+print text "Lowest set bit in 12 (1100): "
+print text lowest
+print text " (binary: 0100 = 4)"
+print text ""
+
+# ========================================
+# Conclusion
+# ========================================
+print text "========================================"
+print text "  Summary"
+print text "========================================"
+print text ""
+print text "NLPL provides complete bitwise operations:"
+print text ""
+print text "  Operation        Natural Syntax          Symbol"
+print text "  --------------------------------------------"
+print text "  AND              x bitwise and y         x & y"
+print text "  OR               x bitwise or y          x | y"
+print text "  XOR              x bitwise xor y         x ^ y"
+print text "  NOT              bitwise not x           ~x"
+print text "  Left Shift       x shift left n         x << n"
+print text "  Right Shift      x shift right n        x >> n"
+print text ""
+print text "These operations are essential for:"
+print text "  - Low-level systems programming"
+print text "  - Hardware control and device drivers"
+print text "  - Performance-critical code"
+print text "  - Cryptography and security"
+print text "  - Graphics and multimedia"
+print text "  - Network protocol implementation"
+print text "  - Any application requiring bit manipulation"
+print text ""
+print text "========================================"
+print text "  End of Bitwise Operations Guide"
+print text "========================================"

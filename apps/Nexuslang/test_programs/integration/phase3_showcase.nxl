@@ -1,0 +1,107 @@
+# Phase 3 Feature Showcase - All Features Together!
+
+print text "=== NexusLang Phase 3 Feature Showcase ==="
+print text "Testing: Comprehensions + Decorators + Type Inference + Generics (infrastructure)"
+
+# Feature 1: List Comprehensions with Type Inference
+print text "\n=== Feature 1: List Comprehensions ==="
+set numbers to [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+set evens to [n for n in numbers if n is less than 6]
+set squares to [n times n for n in evens]
+print text "Filtered numbers: " plus convert length(evens) to string plus " items"
+print text "Squared: " plus convert length(squares) to string plus " items"
+
+# Feature 2: Dict Comprehensions with Type Inference
+print text "\n=== Feature 2: Dict Comprehensions ==="
+set names to ["alice", "bob", "charlie", "diana"]
+set name_lengths to {name: length(name) for name in names}
+print text "Name->Length mappings: " plus convert length(name_lengths) to string plus " entries"
+
+# Feature 3: Decorators (@memoize)
+print text "\n=== Feature 3: @memoize Decorator ==="
+@memoize
+function expensive_calculation with n as Integer returns Integer
+ print text " Computing for n=" plus convert n to string
+ set result to n times n times n
+ return result
+end
+
+set calc1 to expensive_calculation(5)
+set calc2 to expensive_calculation(5)
+print text "First call result: " plus convert calc1 to string
+print text "Second call (cached): " plus convert calc2 to string
+
+# Feature 4: Decorators (@trace)
+print text "\n=== Feature 4: @trace Decorator ==="
+@trace
+function combine with a as Integer, b as Integer returns Integer
+ return a times 10 plus b
+end
+
+set combined to combine(4, 2)
+print text "Combined result: " plus convert combined to string
+
+# Feature 5: Decorators (@timer)
+print text "\n=== Feature 5: @timer Decorator ==="
+@timer
+function process_list with items as List returns Integer
+ set total to 0
+ for each item in items
+ set total to total plus item
+ return total
+end
+
+set sum_result to process_list(numbers)
+print text "Sum of numbers: " plus convert sum_result to string
+
+# Feature 6: Multiple Decorators (Chaining)
+print text "\n=== Feature 6: Decorator Chaining ==="
+@timer
+@memoize
+function fibonacci with n as Integer returns Integer
+ if n is less than 2
+ return n
+ return fibonacci(n minus 1) plus fibonacci(n minus 2)
+end
+
+print text "Computing fibonacci(10) with @timer + @memoize:"
+set fib_result to fibonacci(10)
+print text "Fibonacci(10) = " plus convert fib_result to string
+
+# Feature 7: Comprehensions + Decorators Together
+print text "\n=== Feature 7: Combined Features ==="
+@memoize
+function square with x as Integer returns Integer
+ return x times x
+end
+
+set values to [1, 2, 3, 4, 5]
+set results to [square(n) for n in values]
+print text "Squared values: " plus convert length(results) to string plus " items"
+
+# Feature 8: Nested Comprehensions
+print text "\n=== Feature 8: Nested Comprehensions ==="
+set matrix_data to [1, 2, 3]
+set doubled_matrix to [x times 2 for x in matrix_data]
+set matrix_dict to {x: x times x for x in doubled_matrix}
+print text "Matrix transformations: " plus convert length(matrix_dict) to string plus " mappings"
+
+# Feature 9: Type Inference Demonstration
+print text "\n=== Feature 9: Type Inference ==="
+set inferred_int to 42
+set inferred_float to 3.14
+set inferred_string to "hello"
+set inferred_bool to inferred_int is greater than 10
+set inferred_list to [10, 20, 30]
+set inferred_dict to {"key": "value"}
+print text "Types automatically inferred for 6 variables!"
+
+# Summary
+print text "\n=== Phase 3 Features Successfully Demonstrated! ==="
+print text " List Comprehensions"
+print text " Dict Comprehensions"
+print text " Decorators (@memoize, @trace, @timer)"
+print text " Decorator Chaining"
+print text " Type Inference (runtime)"
+print text " Generic Infrastructure (ready)"
+print text "\n All Phase 3 Core Features Working! "

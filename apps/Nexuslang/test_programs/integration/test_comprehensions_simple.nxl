@@ -1,0 +1,53 @@
+# Test List Comprehensions - Simple Version
+
+print text "=== List Comprehension Tests ==="
+
+# Test 1: Basic list comprehension
+print text "\nTest 1: Basic comprehension [x * 2 for x in list]"
+set numbers to [1, 2, 3, 4, 5]
+set doubled to [x times 2 for x in numbers]
+print text "Doubled works: " plus convert length(doubled) to string plus " elements"
+
+# Test 2: Simple transformation
+print text "\nTest 2: Square each number [x * x for x in list]"
+set squared to [x times x for x in numbers]
+print text "Squared works: " plus convert length(squared) to string plus " elements"
+
+# Test 3: Add constant
+print text "\nTest 3: Add 10 to each [x + 10 for x in list]"
+set plus_ten to [x plus 10 for x in numbers]
+print text "Plus 10 works: " plus convert length(plus_ten) to string plus " elements"
+
+# Test 4: Simple condition - greater than
+print text "\nTest 4: Filter greater than 3 [x for x in list if x > 3]"
+set filtered to [x for x in numbers if x is greater than 3]
+print text "Filtered works: " plus convert length(filtered) to string plus " elements (expected 2)"
+
+# Test 5: Condition with transformation
+print text "\nTest 5: Double if > 2 [x * 2 for x in list if x > 2]"
+set doubled_filtered to [x times 2 for x in numbers if x is greater than 2]
+print text "Filtered+doubled: " plus convert length(doubled_filtered) to string plus " elements (expected 3)"
+
+# Test 6: Empty result
+print text "\nTest 6: Empty result [x for x in list if x > 100]"
+set empty_result to [x for x in numbers if x is greater than 100]
+print text "Empty list: " plus convert length(empty_result) to string plus " elements (expected 0)"
+
+# Test 7: All pass condition
+print text "\nTest 7: All pass [x for x in list if x < 100]"
+set all_pass to [x for x in numbers if x is less than 100]
+print text "All pass: " plus convert length(all_pass) to string plus " elements (expected 5)"
+
+# Test 8: Complex expression
+print text "\nTest 8: Complex expression [x * x + 1 for x in list]"
+set complex_expr to [x times x plus 1 for x in numbers]
+print text "Complex expr: " plus convert length(complex_expr) to string plus " elements"
+
+# Test 9: Check actual values
+print text "\nTest 9: Check actual values"
+set simple to [x times 2 for x in [1, 2, 3]]
+print text "First element (1*2): " plus convert simple[0] to string
+print text "Second element (2*2): " plus convert simple[1] to string
+print text "Third element (3*2): " plus convert simple[2] to string
+
+print text "\n=== All List Comprehension Tests Complete ==="

@@ -1,0 +1,23 @@
+# Sieve of Eratosthenes - finds all primes up to N
+# Tests: List operations, loop performance, conditional branching
+# Compatible with the NexusLang interpreter (uses simple list ops)
+
+set limit to 5000
+set sieve to create list of limit plus 1 items with value true
+set result_count to 0
+
+set i to 2
+while i is less than or equal to limit
+    if get item i from sieve is true
+        set j to i times i
+        while j is less than or equal to limit
+            set item j in sieve to false
+            set j to j plus i
+        end
+        set result_count to result_count plus 1
+    end
+    set i to i plus 1
+end
+
+print text "Primes up to 5000: "
+print text convert result_count to string

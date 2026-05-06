@@ -1,0 +1,34 @@
+# Test pattern matching with guard conditions
+# Guards allow conditional matching based on value properties
+
+function classify_number that takes n as Integer returns String
+    match n with
+        case x if x is less than 0
+            return "Negative"
+        case x if x is equal to 0
+            return "Zero"
+        case x if x is less than 10
+            return "Small positive"
+        case x if x is less than 100
+            return "Medium positive"
+        case _
+            return "Large positive"
+
+function main that takes nothing returns Integer
+    # Test various numbers
+    set result1 to call classify_number with -5
+    print text result1
+    
+    set result2 to call classify_number with 0
+    print text result2
+    
+    set result3 to call classify_number with 7
+    print text result3
+    
+    set result4 to call classify_number with 42
+    print text result4
+    
+    set result5 to call classify_number with 150
+    print text result5
+    
+    return 0

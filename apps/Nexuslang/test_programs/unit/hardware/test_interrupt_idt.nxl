@@ -1,0 +1,52 @@
+# Test IDT (Interrupt Descriptor Table) management
+print text "Testing IDT management..."
+
+try
+    # Initialize IDT
+    print text "Test 1: Initialize IDT"
+    set init_result to setup_idt
+    if init_result
+        print text "IDT initialized: SUCCESS"
+    end
+    
+    # Get IDT base and limit
+    print text "Test 2: Get IDT base and limit"
+    set idt_base to get_idt_base
+    set idt_limit to get_idt_limit
+    print text "IDT base address:"
+    print text idt_base
+    print text "IDT limit:"
+    print text idt_limit
+    print text "IDT size (bytes):"
+    print text idt_limit plus 1
+    
+    # Get a specific IDT entry (page fault - vector 14)
+    print text "Test 3: Get IDT entry for page fault (vector 14)"
+    set entry to get_idt_entry with vector: 14
+    print text "Entry offset:"
+    print text entry["offset"]
+    print text "Entry segment:"
+    print text entry["segment"]
+    print text "Entry present:"
+    print text entry["present"]
+    
+    # Set an IDT entry
+    print text "Test 4: Set IDT entry for timer (vector 32)"
+    set set_result to set_idt_entry with vector: 32 and offset: 4096 and segment: 8
+    if set_result
+        print text "IDT entry set: SUCCESS"
+    end
+    
+    # Read back the entry
+    set timer_entry to get_idt_entry with vector: 32
+    print text "Timer entry offset:"
+    print text timer_entry["offset"]
+    
+    print text "All IDT tests: SUCCESS"
+    
+catch error with message
+    print text "Error (expected without root):"
+    print text message
+end
+
+print text "Test complete"

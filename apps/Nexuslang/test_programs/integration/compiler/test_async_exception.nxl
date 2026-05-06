@@ -1,0 +1,34 @@
+# Test async functions with exception handling
+# Phase 5: Exception Integration
+
+print text "=== Async Exception Test ==="
+
+async function may_fail with should_fail as Integer returns Integer
+    if should_fail is equal to 1
+        raise Error "Async function failed!"
+    end
+    return 42
+end
+
+async function main returns Integer
+    print text "Test 1: Async without exception"
+    try
+        set result to await may_fail with 0
+        if result is equal to 42
+            print text "  PASS: Got result 42"
+        end
+    catch error
+        print text "  FAIL: Should not have caught exception"
+    end
+    
+    print text "Test 2: Async with exception"
+    try
+        set result2 to await may_fail with 1
+        print text "  FAIL: Should have raised exception"
+    catch error
+        print text "  PASS: Caught exception"
+    end
+    
+    print text "=== Async Exception Test Complete ==="
+    return 0
+end

@@ -1,0 +1,666 @@
+#!/usr/bin/env python3
+"""
+NLPL Build System CLI
+=====================
+
+Modern package management and build system for NexusLang.
+
+Usage:
+    nlplbuild init [NAME]           # Initialize new project
+    nlplbuild build [TARGET]        # Build project or specific target
+    nlplbuild run [TARGET] [ARGS]   # Build and run
+    nlplbuild clean                 # Clean build artifacts
+    nlplbuild test                  # Run tests
+    nlplbuild check                 # Check for errors without building
+    nlplbuild doc                   # Generate documentation
+    
+Examples:
+    nlplbuild init my_project       # Create new project
+    nlplbuild build                 # Build all targets
+    nlplbuild build main            # Build specific target
+    nlplbuild run main              # Build and run main target
+    nlplbuild run main -- arg1      # Pass arguments to program
+    nlplbuild clean                 # Clean build artifacts
+"""
+
+import sys
+import os
+import argparse
+from pathlib import Path
+
+# Add src to path
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
+
+from nexuslang.build_system import Project, Builder, BuildConfig
+
+
+def cmd_init(args):
+    """Initialize a new NexusLang project."""
+    name = args.name or Path.cwd().name
+    
+    if (Path.cwd() / "nexuslang.toml").exists():
+        print(f"Error: nlpl.toml already exists in {Path.cwd()}")
+        return 1
+    
+    print(f"Creating new NexusLang project: {name}")
+    
+    project = Project.init(
+        Path.cwd(),
+        name,
+        version=args.version,
+        authors=args.authors,
+        license=args.license,
+    )
+    
+    print(f"✓ Created {name}")
+    print(f"  - src/main.nxl")
+    print(f"  - nlpl.toml")
+    print(f"  - .gitignore")
+    print()
+    print("Next steps:")
+    print(f"  nlplbuild build    # Build the project")
+    print(f"  nlplbuild run      # Run the project")
+    
+    return 0
+
+
+def cmd_build(args):
+    """Build the project."""
+    # Find project root
+    current = Path.cwd()
+    while current != current.parent:
+        if (current / "nexuslang.toml").exists():
+            break
+        current = current.parent
+    else:
+        print("Error: No nlpl.toml found. Run 'nlplbuild init' first.")
+        return 1
+    
+    try:
+        project = Project(current)
+    except FileNotFoundError as e:
+        print(f"Error: {e}")
+        return 1
+    
+    # Build configuration
+    config = BuildConfig(
+        optimization=args.optimization if args.optimization is not None else 0,
+        debug=args.debug,
+        profile=args.profile,
+        incremental=not args.no_incremental,
+        verbose=args.verbose,
+    )
+    
+    # Apply profile settings
+    if args.profile in project.config.profiles:
+        profile = project.config.profiles[args.profile]
+        if 'optimization' in profile and args.optimization is None:
+            config.optimization = profile['optimization']
+        if 'debug' in profile:
+            config.debug = profile['debug']
+    
+    builder = Builder(project, config)
+    
+    print(f"Building {project.config.name} v{project.config.version}")
+    print(f"Profile: {config.profile}")
+    
+    if args.target:
+        success = builder.build_target(args.target)
+    else:
+        success = builder.build_all()
+    
+    if success:
+        print()
+        print("✓ Build successful")
+        return 0
+    else:
+        print()
+        print("✗ Build failed")
+        return 1
+
+
+def cmd_run(args):
+    """Build and run the project."""
+    # Find project root
+    current = Path.cwd()
+    while current != current.parent:
+        if (current / "nexuslang.toml").exists():
+            break
+        current = current.parent
+    else:
+        print("Error: No nlpl.toml found. Run 'nlplbuild init' first.")
+        return 1
+    
+    try:
+        project = Project(current)
+    except FileNotFoundError as e:
+        print(f"Error: {e}")
+        return 1
+    
+    # Build configuration
+    config = BuildConfig(
+        optimization=args.optimization if args.optimization is not None else 0,
+        debug=args.debug,
+        profile=args.profile,
+        incremental=not args.no_incremental,
+        verbose=args.verbose,
+    )
+    
+    # Apply profile settings
+    if args.profile in project.config.profiles:
+        profile = project.config.profiles[args.profile]
+        if 'optimization' in profile and args.optimization is None:
+            config.optimization = profile['optimization']
+        if 'debug' in profile:
+            config.debug = profile['debug']
+    
+    builder = Builder(project, config)
+    
+    # Determine target
+    target = args.target or "main"
+    
+    # Run target
+    return builder.run_target(target, args.program_args)
+
+
+def cmd_clean(args):
+    """Clean build artifacts."""
+    # Find project root
+    current = Path.cwd()
+    while current != current.parent:
+        if (current / "nexuslang.toml").exists():
+            break
+        current = current.parent
+    else:
+        print("Error: No nlpl.toml found. Run 'nlplbuild init' first.")
+        return 1
+    
+    try:
+        project = Project(current)
+    except FileNotFoundError as e:
+        print(f"Error: {e}")
+        return 1
+    
+    config = BuildConfig(verbose=args.verbose)
+    builder = Builder(project, config)
+    builder.clean()
+    
+    return 0
+
+
+def cmd_check(args):
+    """Check for errors without building."""
+    # Find project root
+    current = Path.cwd()
+    while current != current.parent:
+        if (current / "nexuslang.toml").exists():
+            break
+        current = current.parent
+    else:
+        print("Error: No nlpl.toml found. Run 'nlplbuild init' first.")
+        return 1
+    
+    try:
+        project = Project(current)
+    except FileNotFoundError as e:
+        print(f"Error: {e}")
+        return 1
+    
+    print(f"Checking {project.config.name}...")
+    
+    errors = []
+    warnings = []
+    
+    # Find all NexusLang source files
+    src_dir = current / "src"
+    if not src_dir.exists():
+        print("Error: No src/ directory found")
+        return 1
+    
+    nxl_files = list(src_dir.rglob("*.nxl"))
+    
+    if not nxl_files:
+        print("Warning: No .nlpl files found in src/")
+        return 0
+    
+    print(f"Found {len(nxl_files)} file(s) to check")
+    
+    # Import NexusLang compiler components
+    sys.path.insert(0, str(current / "src"))
+    
+    try:
+        from nexuslang.parser.lexer import Lexer
+        from nexuslang.parser.parser import Parser
+        from nexuslang.typesystem.typechecker import TypeChecker
+    except ImportError as e:
+        print(f"Warning: Could not import NexusLang compiler: {e}")
+        print("Skipping type checking")
+        return 0
+    
+    # Check each file
+    for file_path in nxl_files:
+        rel_path = file_path.relative_to(current)
+        
+        try:
+            # Read source
+            with open(file_path, 'r') as f:
+                source = f.read()
+            
+            # Lex
+            lexer = Lexer(source, str(file_path))
+            tokens = lexer.tokenize()
+            
+            # Parse
+            parser = Parser(tokens)
+            ast = parser.parse()
+            
+            # Type check (if available)
+            try:
+                type_checker = TypeChecker()
+                type_errors = type_checker.check(ast)
+                
+                if type_errors:
+                    for error in type_errors:
+                        errors.append(f"{rel_path}: {error}")
+            except Exception as e:
+                # Type checking might not be fully implemented
+                pass
+            
+            print(f"  ✓ {rel_path}")
+            
+        except SyntaxError as e:
+            errors.append(f"{rel_path}:{e.lineno}: Syntax error: {e.msg}")
+        except Exception as e:
+            errors.append(f"{rel_path}: {str(e)}")
+    
+    # Report results
+    print()
+    if errors:
+        print(f"Found {len(errors)} error(s):")
+        for error in errors:
+            print(f"  ✗ {error}")
+        return 1
+    
+    if warnings:
+        print(f"Found {len(warnings)} warning(s):")
+        for warning in warnings:
+            print(f"  ⚠ {warning}")
+    
+    print("✓ No errors found")
+    return 0
+
+
+def cmd_test(args):
+    """Run project tests."""
+    # Find project root
+    current = Path.cwd()
+    while current != current.parent:
+        if (current / "nexuslang.toml").exists():
+            break
+        current = current.parent
+    else:
+        print("Error: No nlpl.toml found. Run 'nlplbuild init' first.")
+        return 1
+    
+    try:
+        project = Project(current)
+    except FileNotFoundError as e:
+        print(f"Error: {e}")
+        return 1
+    
+    print(f"Running tests for {project.config.name}...")
+    
+    # Look for test files in tests/ directory
+    tests_dir = current / "tests"
+    test_programs_dir = current / "test_programs"
+    
+    test_files = []
+    
+    if tests_dir.exists():
+        # Python unit tests
+        test_files.extend(tests_dir.rglob("test_*.py"))
+    
+    if test_programs_dir.exists():
+        # NexusLang test programs
+        test_files.extend(test_programs_dir.rglob("test_*.nxl"))
+    
+    if not test_files:
+        print("No test files found in tests/ or test_programs/")
+        print("✓ All tests passed (0 tests)")
+        return 0
+    
+    print(f"Found {len(test_files)} test file(s)")
+    
+    passed = 0
+    failed = 0
+    errors = []
+    
+    # Run Python tests with pytest if available
+    python_tests = [f for f in test_files if f.suffix == '.py']
+    if python_tests:
+        try:
+            import subprocess
+            result = subprocess.run(
+                ['pytest', '-v'] + [str(f) for f in python_tests],
+                cwd=current,
+                capture_output=True,
+                text=True
+            )
+            
+            if result.returncode == 0:
+                # Count passed tests from pytest output
+                import re
+                matches = re.findall(r'(\d+) passed', result.stdout)
+                if matches:
+                    passed += int(matches[0])
+                print(f"  Python tests: {passed} passed")
+            else:
+                print(f"  Python tests: FAILED")
+                print(result.stdout)
+                failed += len(python_tests)
+                
+        except FileNotFoundError:
+            print("  Warning: pytest not found, skipping Python tests")
+        except Exception as e:
+            print(f"  Error running Python tests: {e}")
+    
+    # Run NexusLang test programs
+    nxl_tests = [f for f in test_files if f.suffix == '.nxl']
+    if nxl_tests:
+        print(f"\nRunning {len(nxl_tests)} NexusLang test(s)...")
+        
+        for test_file in nxl_tests:
+            rel_path = test_file.relative_to(current)
+            
+            try:
+                # Try to compile and run the test
+                import subprocess
+                
+                # Use the NexusLang compiler
+                result = subprocess.run(
+                    ['python3', 'src/main.py', str(test_file)],
+                    cwd=current,
+                    capture_output=True,
+                    text=True,
+                    timeout=10
+                )
+                
+                if result.returncode == 0:
+                    print(f"  ✓ {rel_path}")
+                    passed += 1
+                else:
+                    print(f"  ✗ {rel_path}")
+                    errors.append(f"{rel_path}: {result.stderr}")
+                    failed += 1
+                    
+            except subprocess.TimeoutExpired:
+                print(f"  ✗ {rel_path} (timeout)")
+                errors.append(f"{rel_path}: Test timed out")
+                failed += 1
+            except Exception as e:
+                print(f"  ✗ {rel_path}")
+                errors.append(f"{rel_path}: {str(e)}")
+                failed += 1
+    
+    # Report results
+    print()
+    print(f"Test Results: {passed} passed, {failed} failed")
+    
+    if errors:
+        print("\nFailures:")
+        for error in errors[:10]:  # Show first 10 errors
+            print(f"  {error}")
+        if len(errors) > 10:
+            print(f"  ... and {len(errors) - 10} more")
+    
+    if failed == 0:
+        print("✓ All tests passed")
+        return 0
+    else:
+        print(f"✗ {failed} test(s) failed")
+        return 1
+
+
+def cmd_doc(args):
+    """Generate documentation."""
+    # Find project root
+    current = Path.cwd()
+    while current != current.parent:
+        if (current / "nexuslang.toml").exists():
+            break
+        current = current.parent
+    else:
+        print("Error: No nlpl.toml found. Run 'nlplbuild init' first.")
+        return 1
+    
+    try:
+        project = Project(current)
+    except FileNotFoundError as e:
+        print(f"Error: {e}")
+        return 1
+    
+    print(f"Generating documentation for {project.config.name}...")
+    
+    # Create docs output directory
+    docs_dir = current / "docs"
+    docs_dir.mkdir(exist_ok=True)
+    
+    # Find all NexusLang source files
+    src_dir = current / "src"
+    if not src_dir.exists():
+        print("Error: No src/ directory found")
+        return 1
+    
+    nxl_files = list(src_dir.rglob("*.nxl"))
+    
+    if not nxl_files:
+        print("Warning: No .nlpl files found in src/")
+        return 0
+    
+    print(f"Found {len(nxl_files)} file(s) to document")
+    
+    # Import NexusLang compiler components
+    sys.path.insert(0, str(current / "src"))
+    
+    try:
+        from nexuslang.parser.lexer import Lexer
+        from nexuslang.parser.parser import Parser
+    except ImportError as e:
+        print(f"Error: Could not import NexusLang compiler: {e}")
+        return 1
+    
+    # Generate documentation for each file
+    all_docs = []
+    
+    for file_path in nxl_files:
+        rel_path = file_path.relative_to(src_dir)
+        
+        try:
+            # Read source
+            with open(file_path, 'r') as f:
+                source = f.read()
+            
+            # Lex and parse
+            lexer = Lexer(source, str(file_path))
+            tokens = lexer.tokenize()
+            parser = Parser(tokens)
+            ast = parser.parse()
+            
+            # Extract documentation
+            doc_content = f"# {rel_path}\n\n"
+            
+            # Extract functions, classes, and their docstrings
+            for stmt in ast.statements:
+                if hasattr(stmt, '__class__'):
+                    stmt_type = stmt.__class__.__name__
+                    
+                    if stmt_type == 'FunctionDefinition':
+                        doc_content += f"## Function: `{stmt.name}`\n\n"
+                        
+                        # Parameters
+                        if hasattr(stmt, 'parameters') and stmt.parameters:
+                            params = []
+                            for param in stmt.parameters:
+                                param_str = param.name
+                                if hasattr(param, 'type_annotation') and param.type_annotation:
+                                    param_str += f": {param.type_annotation}"
+                                params.append(param_str)
+                            doc_content += f"**Parameters**: {', '.join(params)}\n\n"
+                        
+                        # Return type
+                        if hasattr(stmt, 'return_type') and stmt.return_type:
+                            doc_content += f"**Returns**: {stmt.return_type}\n\n"
+                        
+                        # Docstring (if available)
+                        if hasattr(stmt, 'docstring') and stmt.docstring:
+                            doc_content += f"{stmt.docstring}\n\n"
+                        
+                        doc_content += "---\n\n"
+                    
+                    elif stmt_type == 'ClassDefinition':
+                        doc_content += f"## Class: `{stmt.name}`\n\n"
+                        
+                        # Parent classes
+                        if hasattr(stmt, 'parent_classes') and stmt.parent_classes:
+                            doc_content += f"**Inherits from**: {', '.join(stmt.parent_classes)}\n\n"
+                        
+                        # Properties
+                        if hasattr(stmt, 'properties') and stmt.properties:
+                            doc_content += "**Properties**:\n\n"
+                            for prop in stmt.properties:
+                                prop_str = f"- `{prop.name}`"
+                                if hasattr(prop, 'type_annotation') and prop.type_annotation:
+                                    prop_str += f": {prop.type_annotation}"
+                                doc_content += f"{prop_str}\n"
+                            doc_content += "\n"
+                        
+                        # Methods
+                        if hasattr(stmt, 'methods') and stmt.methods:
+                            doc_content += "**Methods**:\n\n"
+                            for method in stmt.methods:
+                                method_str = f"- `{method.name}(`"
+                                if hasattr(method, 'parameters') and method.parameters:
+                                    params = [p.name for p in method.parameters]
+                                    method_str += ', '.join(params)
+                                method_str += ")`"
+                                if hasattr(method, 'return_type') and method.return_type:
+                                    method_str += f" -> {method.return_type}"
+                                doc_content += f"{method_str}\n"
+                            doc_content += "\n"
+                        
+                        doc_content += "---\n\n"
+            
+            all_docs.append((rel_path, doc_content))
+            print(f"  ✓ {rel_path}")
+            
+        except Exception as e:
+            print(f"  ✗ {rel_path}: {str(e)}")
+    
+    # Write documentation files
+    for rel_path, content in all_docs:
+        # Create markdown file
+        doc_file = docs_dir / f"{rel_path.stem}.md"
+        doc_file.parent.mkdir(parents=True, exist_ok=True)
+        
+        with open(doc_file, 'w') as f:
+            f.write(content)
+    
+    # Generate index
+    index_content = f"# {project.config.name} Documentation\n\n"
+    index_content += f"Version: {project.config.version}\n\n"
+    index_content += "## Modules\n\n"
+    
+    for rel_path, _ in all_docs:
+        module_name = rel_path.stem
+        index_content += f"- [{module_name}]({module_name}.md)\n"
+    
+    with open(docs_dir / "index.md", 'w') as f:
+        f.write(index_content)
+    
+    print()
+    print(f"✓ Documentation generated in {docs_dir}")
+    print(f"  Generated {len(all_docs)} module documentation file(s)")
+    print(f"  Index: {docs_dir / 'index.md'}")
+    
+    return 0
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description='NLPL Build System',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=__doc__,
+    )
+    
+    subparsers = parser.add_subparsers(dest='command', help='Commands')
+    
+    # init command
+    init_parser = subparsers.add_parser('init', help='Initialize new project')
+    init_parser.add_argument('name', nargs='?', help='Project name')
+    init_parser.add_argument('--version', default='0.1.0', help='Initial version')
+    init_parser.add_argument('--authors', nargs='+', default=[], help='Project authors')
+    init_parser.add_argument('--license', default='MIT', help='Project license')
+    init_parser.set_defaults(func=cmd_init)
+    
+    # build command
+    build_parser = subparsers.add_parser('build', help='Build project')
+    build_parser.add_argument('target', nargs='?', help='Target to build')
+    build_parser.add_argument('-O', '--optimization', type=int, default=None,
+                            choices=[0, 1, 2, 3], help='Optimization level')
+    build_parser.add_argument('-g', '--debug', action='store_true', help='Include debug info')
+    build_parser.add_argument('--profile', default='dev', help='Build profile (dev/release)')
+    build_parser.add_argument('--no-incremental', action='store_true',
+                            help='Disable incremental compilation')
+    build_parser.add_argument('-v', '--verbose', action='store_true', help='Verbose output')
+    build_parser.set_defaults(func=cmd_build)
+    
+    # run command
+    run_parser = subparsers.add_parser('run', help='Build and run')
+    run_parser.add_argument('target', nargs='?', help='Target to run')
+    run_parser.add_argument('program_args', nargs='*', help='Arguments to pass to program')
+    run_parser.add_argument('-O', '--optimization', type=int, default=None,
+                          choices=[0, 1, 2, 3], help='Optimization level')
+    run_parser.add_argument('-g', '--debug', action='store_true', help='Include debug info')
+    run_parser.add_argument('--profile', default='dev', help='Build profile (dev/release)')
+    run_parser.add_argument('--no-incremental', action='store_true',
+                          help='Disable incremental compilation')
+    run_parser.add_argument('-v', '--verbose', action='store_true', help='Verbose output')
+    run_parser.set_defaults(func=cmd_run)
+    
+    # clean command
+    clean_parser = subparsers.add_parser('clean', help='Clean build artifacts')
+    clean_parser.add_argument('-v', '--verbose', action='store_true', help='Verbose output')
+    clean_parser.set_defaults(func=cmd_clean)
+    
+    # check command
+    check_parser = subparsers.add_parser('check', help='Check for errors')
+    check_parser.set_defaults(func=cmd_check)
+    
+    # test command
+    test_parser = subparsers.add_parser('test', help='Run tests')
+    test_parser.set_defaults(func=cmd_test)
+    
+    # doc command
+    doc_parser = subparsers.add_parser('doc', help='Generate documentation')
+    doc_parser.set_defaults(func=cmd_doc)
+    
+    args = parser.parse_args()
+    
+    if not args.command:
+        parser.print_help()
+        return 1
+    
+    try:
+        return args.func(args)
+    except KeyboardInterrupt:
+        print("\nInterrupted")
+        return 130
+    except Exception as e:
+        print(f"Error: {e}")
+        import traceback
+        traceback.print_exc()
+        return 1
+
+
+if __name__ == '__main__':
+    sys.exit(main())

@@ -1,0 +1,16 @@
+# NexusLang module A - defines greet function and User class
+# Used by LSP goto-definition tests
+
+function greet with name as String returns String
+    return "Hello, " plus name
+end
+
+class User
+    field name as String
+    field email as String
+
+    method constructor with name as String and email as String
+        set self.name to name
+        set self.email to email
+    end
+end

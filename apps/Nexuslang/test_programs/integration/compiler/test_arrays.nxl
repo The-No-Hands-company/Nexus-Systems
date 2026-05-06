@@ -1,0 +1,19 @@
+# Test arrays and array indexing
+
+# Array literal
+set numbers to [10, 20, 30, 40, 50]
+
+# Print array element
+print text numbers[0]
+print text numbers[2]
+
+# Modify array element
+set numbers[1] to 99
+
+# Print modified element
+print text numbers[1]
+
+# Array with different values
+set values to [5, 10, 15]
+print text values[0]
+print text values[2]

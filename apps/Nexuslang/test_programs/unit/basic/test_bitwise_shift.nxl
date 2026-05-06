@@ -1,0 +1,123 @@
+# Test: Bitwise Shift Operations
+# Tests left shift and right shift operations
+
+print text "=== Bitwise Shift Operations Test ==="
+print text ""
+
+# Test 1: Left shift
+print text "Test 1: Left Shift (Multiply by powers of 2)"
+set a to 1
+set result to a shift left 0
+print text "1 shift left 0 = "
+print text result
+print text "Expected: 1"
+
+set result to a shift left 1
+print text "1 shift left 1 = "
+print text result
+print text "Expected: 2"
+
+set result to a shift left 2
+print text "1 shift left 2 = "
+print text result
+print text "Expected: 4"
+
+set result to a shift left 3
+print text "1 shift left 3 = "
+print text result
+print text "Expected: 8"
+
+set result to a shift left 8
+print text "1 shift left 8 = "
+print text result
+print text "Expected: 256"
+print text ""
+
+# Test 2: Right shift
+print text "Test 2: Right Shift (Divide by powers of 2)"
+set a to 128
+set result to a shift right 0
+print text "128 shift right 0 = "
+print text result
+print text "Expected: 128"
+
+set result to a shift right 1
+print text "128 shift right 1 = "
+print text result
+print text "Expected: 64"
+
+set result to a shift right 2
+print text "128 shift right 2 = "
+print text result
+print text "Expected: 32"
+
+set result to a shift right 3
+print text "128 shift right 3 = "
+print text result
+print text "Expected: 16"
+
+set result to a shift right 7
+print text "128 shift right 7 = "
+print text result
+print text "Expected: 1"
+print text ""
+
+# Test 3: Shift with larger numbers
+print text "Test 3: Shifting larger numbers"
+set a to 42
+set result to a shift left 2
+print text "42 shift left 2 = "
+print text result
+print text "Expected: 168 (42 * 4)"
+
+set result to a shift right 1
+print text "42 shift right 1 = "
+print text result
+print text "Expected: 21 (42 / 2)"
+print text ""
+
+# Test 4: Shift edge cases
+print text "Test 4: Shift edge cases"
+set a to 0
+set result to a shift left 5
+print text "0 shift left 5 = "
+print text result
+print text "Expected: 0"
+
+set result to a shift right 5
+print text "0 shift right 5 = "
+print text result
+print text "Expected: 0"
+print text ""
+
+# Test 5: Combining shifts
+print text "Test 5: Combining shifts"
+set a to 16
+set result to a shift left 2
+set result to result shift right 1
+print text "(16 shift left 2) shift right 1 = "
+print text result
+print text "Expected: 32 (16 * 4 / 2)"
+print text ""
+
+# Test 6: Demonstrating bit patterns
+print text "Test 6: Bit pattern manipulation"
+set a to 5
+print text "Starting value: 5 (binary: 0101)"
+set result to a shift left 1
+print text "5 shift left 1 = "
+print text result
+print text "Expected: 10 (binary: 1010)"
+
+set result to result shift left 1
+print text "10 shift left 1 = "
+print text result
+print text "Expected: 20 (binary: 10100)"
+
+set result to result shift right 2
+print text "20 shift right 2 = "
+print text result
+print text "Expected: 5 (back to original)"
+print text ""
+
+print text "=== All Shift Operations Tests Complete ==="

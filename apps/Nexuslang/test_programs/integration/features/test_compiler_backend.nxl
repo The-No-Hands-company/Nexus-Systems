@@ -1,0 +1,28 @@
+# Test Compiler Backend - Simple Program to Compile to C
+
+# Simple hello world
+set message to "Hello from NexusLang Compiler!"
+print text message
+
+# Basic arithmetic
+set x to 10
+set y to 20
+set sum to x plus y
+
+print text "Sum: "
+print sum
+
+# Conditional
+if sum is greater than 25
+    print text "Sum is large!"
+else
+    print text "Sum is small"
+end
+
+# Loop
+set counter to 0
+while counter is less than 3
+    print text "Counter: "
+    print counter
+    set counter to counter plus 1
+end

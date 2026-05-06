@@ -1,0 +1,32 @@
+# Test Basic Generics: Box<T>
+
+# Define a generic class Box<T>
+class Box<T>
+    property value as T
+
+    method set_value with new_value as T
+        set this.value to new_value
+    end method
+
+    method get_value returns T
+        return this.value
+    end method
+end class
+
+# Instantiate Box<Integer>
+# Note: Parser supports "Box<Integer>", Interpreter needs to handle it.
+set int_box to new Box<Integer>
+int_box.set_value(42)
+
+set val to int_box.get_value()
+print text val
+
+# Instantiate Box<String>
+set str_box to new Box<String>
+str_box.set_value("Hello Generics")
+
+set str_val to str_box.get_value()
+print text str_val
+
+# Verify types (if we had reflection, we'd check T, but behavior proves it works)
+print text "Generics test complete"

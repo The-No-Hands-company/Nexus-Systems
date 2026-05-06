@@ -1,0 +1,112 @@
+# Inline Assembly Test: Input/Output Operands
+# Tests register operand numbering ($0, $1, $2, etc.)
+# Week 1-2: Testing operand passing through constraints
+
+print text "Inline Assembly Operand Test"
+print text "============================="
+print text ""
+
+# Test 1: Input operand - pass value to assembly
+print text "Test 1: Input operand (pass value to assembly)"
+set x to 42
+asm
+    code
+        "# Load input operand $0 into rax"
+        "mov rax, $0"
+    inputs "r": x
+end
+print text "Input operand test complete (value 42 passed to assembly)"
+print text ""
+
+# Test 2: Output operand - get value from assembly
+print text "Test 2: Output operand (get value from assembly)"
+set result to 0
+asm
+    code
+        "# Set output operand $0 to constant value"
+        "mov $0, 100"
+    outputs "=r": result
+end
+print text "Output operand test complete"
+print text "Expected result: 100"
+print text "Actual result: "
+print number result
+print text ""
+
+# Test 3: Input and output operands - increment value
+print text "Test 3: Mixed input/output (increment value)"
+set value to 50
+asm
+    code
+        "# Increment input $1 and store in output $0"
+        "mov rax, $1"
+        "add rax, 1"
+        "mov $0, rax"
+    outputs "=r": value
+    inputs "r": value
+end
+print text "Increment test complete"
+print text "Expected result: 51"
+print text "Actual result: "
+print number value
+print text ""
+
+# Test 4: Multiple input operands - addition
+print text "Test 4: Multiple inputs (addition)"
+set a to 10
+set b to 20
+set sum to 0
+asm
+    code
+        "# Add inputs $1 and $2, store in output $0"
+        "mov rax, $1"
+        "add rax, $2"
+        "mov $0, rax"
+    outputs "=r": sum
+    inputs "r": a, "r": b
+end
+print text "Addition test complete"
+print text "Expected sum: 30"
+print text "Actual sum: "
+print number sum
+print text ""
+
+# Test 5: Memory operand constraint (advanced)
+print text "Test 5: Memory operand constraint"
+set memory_value to 77
+asm
+    code
+        "# Load from memory operand $0"
+        "mov rax, $0"
+    inputs "m": memory_value
+end
+print text "Memory operand test complete (value 77 loaded from memory)"
+print text ""
+
+# Test 6: Immediate operand constraint
+# NOTE: 'i' constraint requires compile-time constants in LLVM
+# Variables cannot be used with 'i' constraint - use 'r' instead for variables
+print text "Test 6: Register operand with immediate value"
+set imm_value to 99
+asm
+    code
+        "# Use register operand $0 (not immediate - variables aren't constant)"
+        "mov rbx, $0"
+    inputs "r": imm_value
+end
+print text "Register operand test complete (value 99 in register)"
+print text ""
+
+print text "============================="
+print text "Operand Test Summary:"
+print text "- Test 1: Input operand (r constraint) - DONE"
+print text "- Test 2: Output operand (=r constraint) - DONE"
+print text "- Test 3: Mixed input/output - DONE"
+print text "- Test 4: Multiple inputs - DONE"
+print text "- Test 5: Memory operand (m constraint) - DONE"
+print text "- Test 6: Register operand (r constraint) - DONE"
+print text ""
+print text "NOTE: In interpreter mode, all inline assembly is skipped."
+print text "      Compile with 'nlplc' to generate actual inline assembly."
+print text "      Operand numbering: outputs first ($0...), then inputs ($N...)."
+print text "      'i' constraint requires compile-time constants, not variables."

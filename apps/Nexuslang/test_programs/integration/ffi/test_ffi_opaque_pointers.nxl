@@ -1,0 +1,44 @@
+# Test FFI Opaque Pointer Types
+# Demonstrates opaque pointer declarations and usage with C libraries
+
+# Test 1: FILE* from stdio.h (opaque pointer type)
+extern type FILE as opaque pointer
+
+extern function fopen with filename as String, mode as String returns FILE from library "c"
+extern function fclose with stream as FILE returns Integer from library "c"
+extern function fprintf with stream as FILE, format as String, ... returns Integer from library "c"
+extern function fgets with str as Pointer, n as Integer, stream as FILE returns Pointer from library "c"
+
+# Test 2: DIR* from dirent.h (directory stream)
+extern type DIR as opaque pointer
+extern type dirent as opaque struct
+
+extern function opendir with name as String returns DIR from library "c"
+extern function readdir with dirp as DIR returns Pointer from library "c"
+extern function closedir with dirp as DIR returns Integer from library "c"
+
+# Test 3: pthread_t from pthread.h (thread handle)
+extern type pthread_t as opaque pointer
+extern type pthread_attr_t as opaque pointer
+
+extern function pthread_create with thread as Pointer, attr as pthread_attr_t, start_routine as function with Pointer returns Pointer, arg as Pointer returns Integer from library "pthread"
+
+# Test 4: Generic opaque handle
+extern type Handle as opaque pointer
+
+extern function create_handle returns Handle from library "custom"
+extern function use_handle with h as Handle returns Integer from library "custom"
+extern function destroy_handle with h as Handle returns Void from library "custom"
+
+# Test 5: Opaque pointer aliasing
+extern type Context as opaque pointer
+extern type Connection as opaque pointer
+
+# Test usage - file operations
+set file to call fopen with "test.txt", "w"
+if file is not null
+    call fprintf with file, "Hello from NLPL!\n"
+    call fclose with file
+end
+
+print text "Opaque pointer tests complete"

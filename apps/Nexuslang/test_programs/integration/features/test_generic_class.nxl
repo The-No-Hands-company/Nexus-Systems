@@ -1,0 +1,13 @@
+# Test generic class definition
+
+define a class called Container with T as a type parameter
+    properties:
+        value: T
+    methods:
+        define a method called get that returns T
+            return self.value
+        
+        define a method called set that takes a parameter new_value of type T
+            set self.value to new_value
+
+print text "Generic class Container<T> defined successfully!"

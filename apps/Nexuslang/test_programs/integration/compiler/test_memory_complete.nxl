@@ -1,0 +1,44 @@
+# Memory Management with Pointer Dereference Test
+
+# Test 1: Allocate and write using dereference
+set data_ptr to call alloc with 16
+print text "Test 1: Allocated 16 bytes"
+
+# Write to dereferenced pointer
+set (value at data_ptr) to 42
+print text "Test 2: Wrote value 42 to pointer"
+
+# Read from dereferenced pointer
+set val to value at data_ptr
+if val is equal to 42
+    print text "Test 3 PASS: Read correct value from pointer"
+else
+    print text "Test 3 FAIL: Read incorrect value"
+    print number val
+end
+
+# Test pointer arithmetic and dereference
+set offset_ptr to data_ptr plus 8
+set (value at offset_ptr) to 100
+set val2 to value at offset_ptr
+
+if val2 is equal to 100
+    print text "Test 4 PASS: Pointer arithmetic and dereference work"
+else
+    print text "Test 4 FAIL: Pointer arithmetic failed"
+    print number val2
+end
+
+# Clean up
+call dealloc with data_ptr
+print text "Test 5 PASS: Deallocated memory"
+
+# Test reallocation
+set buffer to call alloc with 50
+print text "Test 6: Allocated 50 bytes"
+
+set buffer to call realloc with buffer and 100
+print text "Test 7: Reallocated to 100 bytes"
+
+call dealloc with buffer
+print text "Test 8: All memory management tests complete!"

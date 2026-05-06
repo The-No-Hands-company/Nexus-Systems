@@ -1,0 +1,44 @@
+# Test File I/O Standard Library Functions
+
+print text "=== File I/O Test ==="
+
+# Write to a file
+set success to write_file("/tmp/nxl_test.txt", "Hello from NLPL!")
+print text "Write file success"
+
+# Check if file exists
+if file_exists("/tmp/nxl_test.txt")
+    print text "File exists: YES"
+else
+    print text "File exists: NO"
+end
+
+# Read the file
+set content to read_file("/tmp/nxl_test.txt")
+print text "File content read"
+
+# Get file size  
+set size to file_size("/tmp/nxl_test.txt")
+print text "File size obtained"
+
+# Append to file
+set success2 to append_file("/tmp/nxl_test.txt", "\nAppended line")
+print text "Append file success"
+
+# Copy file
+set copy_success to copy_file("/tmp/nxl_test.txt", "/tmp/nxl_test_copy.txt")
+print text "Copy file success"
+
+# Check if copied file exists
+if file_exists("/tmp/nxl_test_copy.txt")
+    print text "Copied file exists: YES"
+else
+    print text "Copied file exists: NO"
+end
+
+# Delete both files
+set del1 to delete_file("/tmp/nxl_test.txt")
+set del2 to delete_file("/tmp/nxl_test_copy.txt")
+print text "Files deleted"
+
+print text "=== File I/O Test Complete ==="

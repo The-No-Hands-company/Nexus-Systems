@@ -1,0 +1,112 @@
+# Type Inference Test Program
+# Tests bidirectional type inference, lambda inference, and expression type inference
+
+print text "=== Type Inference Tests ==="
+
+# Test 1: Basic type inference from literals
+set x to 42
+set y to 3.14
+set name to "Alice"
+set is_active to true
+
+print text "Basic inference: x is Integer, y is Float, name is String, is_active is Boolean"
+
+# Test 2: List type inference
+set numbers to [1, 2, 3, 4, 5]
+set floats to [1.0, 2.5, 3.7]
+set strings to ["hello", "world"]
+
+print text "List inference: numbers is List<Integer>, floats is List<Float>, strings is List<String>"
+
+# Test 3: Dictionary type inference
+set scores to {"Alice": 95, "Bob": 87, "Charlie": 92}
+set prices to {"apple": 1.99, "banana": 0.99, "orange": 2.49}
+
+print text "Dictionary inference: scores is Dictionary<String, Integer>"
+
+# Test 4: Function return type inference
+function add with a as Integer, b as Integer returns Integer
+    return a plus b
+end
+
+function greet with name as String
+    # No explicit return type - should infer String
+    return "Hello, " plus name
+end
+
+set result to add(5, 3)
+set greeting to greet("World")
+
+print text "Function inference: add returns Integer, greet returns String"
+
+# Test 5: Lambda type inference from context
+function apply with value as Integer, fn as Function returns Integer
+    return fn(value)
+end
+
+# Lambda parameter type inferred from apply's signature
+set doubled to apply(10, lambda x => x times 2)
+print text "Lambda inference: x inferred as Integer from context"
+
+# Test 6: Bidirectional inference with expected types
+function process_list with items as List of Integer, fn as Function returns List of Integer
+    set result to empty List of Integer
+    for each item in items
+        set transformed to fn(item)
+        append transformed to result
+    end
+    return result
+end
+
+set processed to process_list([1, 2, 3], lambda x => x plus 1)
+print text "Bidirectional inference: lambda x => x plus 1 has type Integer -> Integer"
+
+# Test 7: Method chain type inference
+function get_user with id as Integer returns Dictionary
+    return {"id": id, "name": "User" plus id as String, "active": true}
+end
+
+set user to get_user(1)
+set user_name to user["name"]
+print text "Method chain: user['name'] inferred as String from Dictionary<String, Any>"
+
+# Test 8: Nested call type inference
+function square with x as Integer returns Integer
+    return x times x
+end
+
+function increment with x as Integer returns Integer
+    return x plus 1
+end
+
+set nested_result to square(increment(5))
+print text "Nested calls: square(increment(5)) = " plus nested_result as String
+
+# Test 9: Type inference with unions
+function maybe_number with flag as Boolean returns Integer
+    if flag
+        return 42
+    else
+        return 0
+    end
+end
+
+set maybe_val to maybe_number(true)
+print text "Union inference: maybe_number returns Integer (unified from branches)"
+
+# Test 10: Contextual inference for empty collections
+function fill_list with size as Integer returns List of Integer
+    set result to empty List of Integer  # Type inferred from return annotation
+    set i to 0
+    while i is less than size
+        append i to result
+        set i to i plus 1
+    end
+    return result
+end
+
+set filled to fill_list(5)
+print text "Contextual inference: empty list inferred as List<Integer> from return type"
+
+print text ""
+print text "All type inference tests completed!"

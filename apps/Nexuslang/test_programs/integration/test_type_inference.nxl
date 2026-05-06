@@ -1,0 +1,60 @@
+# Test Type Inference - Variables without type annotations
+
+print text "=== Type Inference Tests ==="
+
+# Test 1: Infer integer type
+print text "\nTest 1: Infer integer from literal"
+set x to 42
+set y to x plus 10
+print text "x + 10 = " plus convert y to string
+
+# Test 2: Infer float type
+print text "\nTest 2: Infer float from literal"
+set pi to 3.14159
+set radius to 5
+set area to pi times radius times radius
+print text "Area = " plus convert area to string
+
+# Test 3: Infer string type
+print text "\nTest 3: Infer string from literal"
+set name to "Alice"
+set greeting to "Hello, " plus name
+print text greeting
+
+# Test 4: Infer boolean type
+print text "\nTest 4: Infer boolean from comparison"
+set is_adult to 25 is greater than or equal to 18
+if is_adult
+    print text "Adult status: true"
+else
+    print text "Adult status: false"
+
+# Test 5: Infer list type
+print text "\nTest 5: Infer list type"
+set numbers to [1, 2, 3, 4, 5]
+set doubled to [x times 2 for x in numbers]
+print text "List length: " plus convert length(doubled) to string
+
+# Test 6: Infer dict type
+print text "\nTest 6: Infer dict type"
+set scores to {"alice": 95, "bob": 87, "charlie": 92}
+set alice_score to scores["alice"]
+print text "Alice's score: " plus convert alice_score to string
+
+# Test 7: Infer function return type
+print text "\nTest 7: Infer function return type"
+function add with a as Integer, b as Integer
+    return a plus b
+end
+
+set sum to add(10, 20)
+print text "Sum: " plus convert sum to string
+
+# Test 8: Infer from arithmetic
+print text "\nTest 8: Arithmetic type inference"
+set a to 10
+set b to 3
+set division_result to a divided by b
+print text "10 / 3 = " plus convert division_result to string
+
+print text "\n=== All Type Inference Tests Complete ==="

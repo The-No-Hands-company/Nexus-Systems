@@ -1,0 +1,12 @@
+set x to 42
+set message to "The answer is:"
+set pi to 3.14159
+set isTrue to true
+
+print x
+print message  
+print pi
+print isTrue
+
+set sum to x plus 8
+print sum

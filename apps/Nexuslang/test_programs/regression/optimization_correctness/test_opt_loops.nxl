@@ -1,0 +1,96 @@
+# Optimization Correctness Test: Loop Optimizations
+# Tests that loop transformations preserve semantics
+
+# Simple counting loop
+function test_simple_loop returns Integer
+    set sum to 0
+    set i to 0
+    while i is less than 100
+        set sum to sum plus i
+        set i to i plus 1
+    end
+    return sum
+end
+
+# Nested loops
+function test_nested_loops returns Integer
+    set total to 0
+    set i to 0
+    while i is less than 10
+        set j to 0
+        while j is less than 10
+            set total to total plus 1
+            set j to j plus 1
+        end
+        set i to i plus 1
+    end
+    return total
+end
+
+# Loop with early exit
+function test_loop_break returns Integer
+    set i to 0
+    while i is less than 1000
+        if i is equal to 50
+            return i
+        end
+        set i to i plus 1
+    end
+    return -1
+end
+
+# Loop with continue-like behavior
+function test_loop_skip returns Integer
+    set count to 0
+    set i to 0
+    while i is less than 100
+        set i to i plus 1
+        if i modulo 2 is equal to 0
+            set count to count plus 1
+        end
+    end
+    return count
+end
+
+# Loop with accumulator
+function test_accumulator returns Integer
+    set product to 1
+    set i to 1
+    while i is less than or equal to 10
+        set product to product times i
+        set i to i plus 1
+    end
+    return product
+end
+
+# Main test runner
+print text "Testing loop optimization correctness..."
+print text ""
+
+set test1 to call test_simple_loop
+print text "Simple loop: "
+print test1
+print text " (expected: 4950)"
+
+set test2 to call test_nested_loops
+print text "Nested loops: "
+print test2
+print text " (expected: 100)"
+
+set test3 to call test_loop_break
+print text "Loop break: "
+print test3
+print text " (expected: 50)"
+
+set test4 to call test_loop_skip
+print text "Loop skip: "
+print test4
+print text " (expected: 50)"
+
+set test5 to call test_accumulator
+print text "Accumulator: "
+print test5
+print text " (expected: 3628800)"
+
+print text ""
+print text "All loop tests complete!"

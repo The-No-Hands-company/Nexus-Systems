@@ -1,0 +1,18 @@
+class Box<T>
+    property value as T
+    
+    method get_value returns T
+        return this.value
+    end method
+    
+    method set_value with v as T
+        set this.value to v
+    end method
+end class
+
+set int_box to new Box<Integer>
+set int_box.value to 42
+print text call int_box.get_value
+
+call int_box.set_value with 100
+print text call int_box.get_value

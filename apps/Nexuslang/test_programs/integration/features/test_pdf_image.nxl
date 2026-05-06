@@ -1,0 +1,71 @@
+# Test PDF and Image Processing modules
+
+print text "=== Testing PDF and Image Utilities ==="
+
+# Test PDF utilities
+print text "1. PDF Utilities Module"
+print text "PDF creation functions available:"
+print text "  - pdf_create(filename, page_size)"
+print text "  - pdf_add_text(canvas_id, text, x, y, font_name, font_size)"
+print text "  - pdf_add_line(canvas_id, x1, y1, x2, y2, width, color)"
+print text "  - pdf_add_rectangle(canvas_id, x, y, width, height, fill, color)"
+print text "  - pdf_add_page(canvas_id)"
+print text "  - pdf_save(canvas_id)"
+
+print text "PDF reading functions available:"
+print text "  - pdf_open(filename)"
+print text "  - pdf_get_page_count(reader_id)"
+print text "  - pdf_extract_text(reader_id, page_number)"
+print text "  - pdf_get_metadata(reader_id)"
+print text "  - pdf_close(reader_id)"
+
+print text "PDF manipulation functions available:"
+print text "  - pdf_merge(output_filename, input_files)"
+print text "  - pdf_split_pages(input_filename, start_page, end_page, output_filename)"
+print text "  - pdf_rotate_page(input_filename, page_number, rotation, output_filename)"
+print text "  - pdf_encrypt(input_filename, output_filename, password)"
+
+# Test Image utilities
+print text ""
+print text "2. Image Processing Module"
+print text "Image loading functions available:"
+print text "  - img_load(filename)"
+print text "  - img_create(width, height, mode, color)"
+print text "  - img_save(image_id, filename, format, quality)"
+print text "  - img_close(image_id)"
+
+print text "Image information functions available:"
+print text "  - img_get_size(image_id)"
+print text "  - img_get_format(image_id)"
+print text "  - img_get_mode(image_id)"
+
+print text "Image transformation functions available:"
+print text "  - img_resize(image_id, width, height, resample)"
+print text "  - img_crop(image_id, left, top, right, bottom)"
+print text "  - img_rotate(image_id, angle, expand)"
+print text "  - img_flip_horizontal(image_id)"
+print text "  - img_flip_vertical(image_id)"
+print text "  - img_convert(image_id, mode)"
+
+print text "Image filter functions available:"
+print text "  - img_blur(image_id, radius)"
+print text "  - img_sharpen(image_id)"
+print text "  - img_edge_detect(image_id)"
+print text "  - img_brightness(image_id, factor)"
+print text "  - img_contrast(image_id, factor)"
+
+print text "Image drawing functions available:"
+print text "  - img_draw_text(image_id, text, x, y, color, size)"
+print text "  - img_draw_rectangle(image_id, x1, y1, x2, y2, outline, fill, width)"
+
+print text ""
+print text "=== Summary ==="
+print text "PDF Utilities: 14 functions (creation, reading, manipulation)"
+print text "Image Processing: 22 functions (loading, transforms, filters, drawing)"
+print text "Total new functions: 36"
+print text "Total stdlib modules: 27"
+print text "Total stdlib functions: 406+"
+print text ""
+print text "Note: PDF and image operations require optional dependencies:"
+print text "  - pip install reportlab PyPDF2 (for PDF)"
+print text "  - pip install Pillow (for images)"

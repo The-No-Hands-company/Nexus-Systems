@@ -1,0 +1,34 @@
+# Test Print Type Conversion
+
+# Test 1: Print integers directly
+set num to 42
+print text "Number: "
+print text num
+print text "\n"
+
+# Test 2: Print floats directly
+set pi to 3.14159
+print text "Pi: "
+print text pi
+print text "\n"
+
+# Test 3: Print booleans directly
+set flag to true
+print text "Flag: "
+print text flag
+print text "\n"
+
+# Test 4: Panic with number (tests conversion in panic)
+# Uncomment to test:
+# panic 404
+
+# Test 5: Raise with number (tests conversion in raise)
+try
+    raise error with message 500
+catch e
+    print text "Caught error with numeric message: "
+    print text e
+    print text "\n"
+end
+
+print text "Type conversion test complete!\n"

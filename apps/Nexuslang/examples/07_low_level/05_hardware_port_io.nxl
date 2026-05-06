@@ -1,0 +1,174 @@
+# NexusLang Hardware Access Example - Port I/O Operations
+# WARNING: Requires root/administrator privileges
+# Use with extreme caution on real hardware
+
+# This example demonstrates direct hardware I/O port access
+# Common ports:
+# - 0x60-0x64: Keyboard controller
+# - 0x3F8-0x3FF: COM1 serial port
+# - 0x378-0x37F: Parallel port (LPT1)
+
+print text "NLPL Hardware Access - Port I/O Operations"
+print text "==========================================="
+print text ""
+
+# Example 1: Read keyboard controller status
+print text "Example 1: Reading Keyboard Controller Status"
+print text "----------------------------------------------"
+try
+    # Port 0x64 is the keyboard controller status register
+    # Bit 0: Output buffer full (data available from keyboard)
+    # Bit 1: Input buffer full (command being processed)
+    set status to read_port_byte with port 0x64
+    
+    print text "Keyboard controller status: "
+    print text status
+    print text ""
+    
+    set bit_0 to status bitwise and 1
+    if bit_0 equals 1
+        print text "Output buffer is full (data available)"
+    end
+    
+    set bit_1 to status bitwise and 2
+    if bit_1 equals 2
+        print text "Input buffer is full (busy)"
+    end
+catch error with message msg
+    print text "Error reading keyboard controller: "
+    print text msg
+    print text "Note: This requires root/administrator privileges"
+end
+
+print text ""
+
+# Example 2: Serial port operations (COM1)
+print text "Example 2: Serial Port Access (COM1)"
+print text "-------------------------------------"
+try
+    # COM1 base address is 0x3F8
+    set com1_base to 0x3F8
+    
+    # Read Line Status Register (offset +5)
+    set lsr_port to com1_base plus 5
+    set line_status to read_port_byte with port lsr_port
+    
+    print text "COM1 Line Status Register: "
+    print text line_status
+    print text ""
+    
+    # Check if data is ready (bit 0 of LSR)
+    set bit_0 to line_status bitwise and 1
+    if bit_0 equals 1
+        print text "Data ready on COM1"
+        
+        # Read data from data register (offset +0)
+        set data to read_port_byte with port com1_base
+        print text "Received byte: "
+        print text data
+    else
+        print text "No data available on COM1"
+    end
+catch error with message msg
+    print text "Error accessing serial port: "
+    print text msg
+end
+
+print text ""
+
+# Example 3: Writing to parallel port
+print text "Example 3: Parallel Port Output (LPT1)"
+print text "--------------------------------------"
+try
+    # LPT1 base address is 0x378
+    set lpt1_base to 0x378
+    
+    # Write a byte pattern to data register
+    set pattern to 0xAA  # 10101010 binary pattern
+    
+    print text "Writing pattern to parallel port: "
+    print text pattern
+    
+    write_port_byte with port lpt1_base and value pattern
+    
+    print text "Pattern written successfully"
+    print text "Note: This will light up connected LEDs in alternating pattern"
+catch error with message msg
+    print text "Error writing to parallel port: "
+    print text msg
+end
+
+print text ""
+
+# Example 4: Word and dword operations
+print text "Example 4: Multi-byte Port Operations"
+print text "-------------------------------------"
+try
+    # Hypothetical 16-bit device at port 0x1000
+    set device_port to 0x1000
+    
+    # Write a 16-bit word
+    set word_value to 0x1234
+    write_port_word with port device_port and value word_value
+    print text "Written 16-bit word: "
+    print text word_value
+    
+    # Read back the word
+    set read_word to read_port_word with port device_port
+    print text "Read back 16-bit word: "
+    print text read_word
+    
+    # Write a 32-bit dword
+    set dword_value to 0x12345678
+    write_port_dword with port device_port and value dword_value
+    print text "Written 32-bit dword: "
+    print text dword_value
+    
+    # Read back the dword
+    set read_dword to read_port_dword with port device_port
+    print text "Read back 32-bit dword: "
+    print text read_dword
+catch error with message msg
+    print text "Error in multi-byte operations: "
+    print text msg
+end
+
+print text ""
+
+# Example 5: Safe port detection
+print text "Example 5: Safe Port Detection"
+print text "-------------------------------"
+
+function safe_probe_port with port as Integer returns Boolean
+    try
+        # Attempt to read from port
+        set value to read_port_byte with port port
+        return true
+    catch error with message msg
+        return false
+    end
+
+print text "Probing common hardware ports:"
+
+set common_ports to [0x60, 0x64, 0x3F8, 0x378]  # Keyboard data, status, COM1, LPT1
+
+for each port in common_ports
+    print text "Port 0x"
+    print text port
+    print text ": "
+    
+    if safe_probe_port with port port
+        print text "Accessible"
+    else
+        print text "Not accessible"
+    end
+
+print text ""
+print text "Hardware Access Examples Complete"
+print text ""
+print text "IMPORTANT SAFETY NOTES:"
+print text "1. These operations require root/administrator privileges"
+print text "2. Incorrect port access can crash the system or damage hardware"
+print text "3. Always verify port addresses in hardware documentation"
+print text "4. Test in a virtual machine before using on real hardware"
+print text "5. Some modern systems may not have legacy ports (COM, LPT)"

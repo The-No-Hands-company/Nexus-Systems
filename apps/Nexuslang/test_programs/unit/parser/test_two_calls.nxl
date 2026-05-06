@@ -1,0 +1,14 @@
+# Test with two method calls
+class Box<T>
+    property value as T
+    
+    method get_value returns T
+        return this.value
+    end method
+end class
+
+set int_box to new Box<Integer>
+set int_box.value to 42
+print text call int_box.get_value
+set int_box.value to 99
+print text call int_box.get_value

@@ -1,0 +1,36 @@
+# Comprehensive Rc<T> test
+# Tests creation, automatic cleanup, and memory management
+
+function test_multiple_rc returns Integer
+    # Test creating multiple Rc values
+    set a to Rc of Integer with 10
+    set b to Rc of Integer with 20
+    set c to Rc of Integer with 30
+    
+    print text "Created 3 Rc values"
+    print text "All will be automatically released on return"
+    
+    return 0
+end
+
+function test_arc returns Integer
+    # Test Arc (atomic reference counted)
+    set shared to Arc of Integer with 100
+    print text "Created Arc value (thread-safe)"
+    
+    return 0
+end
+
+# Run all tests
+print text "=== Rc<T> Comprehensive Test ==="
+print text ""
+
+print text "Test 1: Multiple Rc values"
+set r1 to call test_multiple_rc
+print text ""
+
+print text "Test 2: Arc (atomic) values"
+set r2 to call test_arc
+print text ""
+
+print text "=== All tests passed ==="

@@ -1,0 +1,28 @@
+# Test dictionary/map support
+
+print text "Testing dictionaries"
+
+# Test 1: Create a dictionary
+set person to {"name": "Alice", "age": 30, "city": "NYC"}
+print text "Created dictionary"
+
+# Test 2: Access dictionary values
+set name_value to person["name"]
+print text "Name:"
+print text name_value
+
+set age_value to person["age"]
+print text "Age:"
+print text age_value
+
+# Test 3: Create and use another dictionary
+set scores to {"math": 95, "english": 88, "science": 92}
+set math_score to scores["math"]
+print text "Math score:"
+print text math_score
+
+# Test 4: Empty dictionary
+set empty_dict to {}
+print text "Empty dictionary created"
+
+print text "All dictionary tests completed"

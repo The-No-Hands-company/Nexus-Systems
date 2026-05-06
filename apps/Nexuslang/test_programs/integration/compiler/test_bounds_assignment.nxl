@@ -1,0 +1,8 @@
+# Array Bounds - Assignment Out of Bounds Test  
+# This test should PANIC with "Array index out of bounds"
+
+# Test array bounds with assignment out of bounds (should panic)
+print text "Testing assignment out of bounds"
+set numbers to [10, 20, 30]
+set numbers[5] to 999
+print text "ERROR: Should have panicked!"

@@ -1,0 +1,96 @@
+# Test all operators in NexusLang
+
+# Power operator
+print text "Testing power operator:"
+set result to 2 to the power of 8
+print text result  # Expected: 256
+
+set result to 5 ** 3
+print text result  # Expected: 125
+
+# Floor division
+print text "Testing floor division:"
+set result to 17 divided by 5 using floor division
+print text result  # Expected: 3
+
+set result to 17 // 5
+print text result  # Expected: 3
+
+set result to negative 17 // 5
+print text result  # Expected: -4
+
+# Bitwise AND
+print text "Testing bitwise AND:"
+set result to 12 bitwise and 10
+print text result  # Expected: 8 (1100 & 1010 = 1000)
+
+set result to 12 & 10
+print text result  # Expected: 8
+
+# Bitwise OR
+print text "Testing bitwise OR:"
+set result to 12 bitwise or 10
+print text result  # Expected: 14 (1100 | 1010 = 1110)
+
+set result to 12 | 10
+print text result  # Expected: 14
+
+# Bitwise XOR
+print text "Testing bitwise XOR:"
+set result to 12 bitwise xor 10
+print text result  # Expected: 6 (1100 ^ 1010 = 0110)
+
+set result to 12 ^ 10
+print text result  # Expected: 6
+
+# Bitwise NOT
+print text "Testing bitwise NOT:"
+set result to bitwise not 5
+print text result  # Expected: -6 (~5 = -6 in two's complement)
+
+set result to ~5
+print text result  # Expected: -6
+
+# Left shift
+print text "Testing left shift:"
+set result to 4 shift left 2
+print text result  # Expected: 16 (0100 << 2 = 10000)
+
+set result to 4 << 2
+print text result  # Expected: 16
+
+# Right shift
+print text "Testing right shift:"
+set result to 16 shift right 2
+print text result  # Expected: 4 (10000 >> 2 = 0100)
+
+set result to 16 >> 2
+print text result  # Expected: 4
+
+# Membership operator (in)
+print text "Testing membership operator:"
+set numbers to create list of Integer
+add 1 to numbers
+add 2 to numbers
+add 3 to numbers
+add 4 to numbers
+add 5 to numbers
+set result to 3 in numbers
+print text result  # Expected: True
+
+set result to 10 in numbers
+print text result  # Expected: False
+
+# Combined operations
+print text "Testing combined operations:"
+set x to 10
+set y to 3
+set result to x to the power of 2 plus y to the power of 2
+print text result  # Expected: 109 (100 + 9)
+
+set bits to 15
+set mask to 7
+set result to bits bitwise and mask
+print text result  # Expected: 7 (1111 & 0111 = 0111)
+
+print text "All operator tests complete!"

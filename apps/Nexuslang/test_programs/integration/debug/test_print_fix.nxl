@@ -1,0 +1,31 @@
+set x to 42
+set y to 3.14
+set name to "NexusLang"
+
+print text "Testing print statements:"
+print number x
+print number y
+print text name
+
+function add_numbers that takes a as Integer and b as Integer returns Integer
+    set sum to a plus b
+    return sum
+
+set result to add_numbers with 10 and 20
+print text "Sum result:"
+print number result
+
+function calculate_factorial that takes n as Integer returns Integer
+    if n is less than or equal to 1
+        return 1
+    
+    set previous to calculate_factorial with n minus 1
+    return n times previous
+
+set fact to calculate_factorial with 5
+print text "Factorial of 5:"
+print number fact
+
+set fact2 to calculate_factorial with 7
+print text "Factorial of 7:"
+print number fact2

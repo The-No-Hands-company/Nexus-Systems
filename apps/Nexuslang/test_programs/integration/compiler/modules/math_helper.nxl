@@ -1,0 +1,7 @@
+# math_helper module - provides basic math operations
+
+function add that takes a as Integer, b as Integer returns Integer
+    return a plus b
+
+function multiply that takes a as Integer, b as Integer returns Integer
+    return a times b

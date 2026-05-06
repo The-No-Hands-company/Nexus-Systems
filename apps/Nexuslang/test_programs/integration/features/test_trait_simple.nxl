@@ -1,0 +1,7 @@
+# Test simple trait definition
+
+define a trait called Comparable
+    that requires a method called compare with other returning Integer
+end trait
+
+print text "Trait Comparable defined successfully!"

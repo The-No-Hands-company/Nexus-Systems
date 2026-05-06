@@ -1,0 +1,97 @@
+# Constants and Compact Code Demo
+# Demonstrates different ways to handle repetitive constant definitions
+
+print text "=== NexusLang Constants Demo ==="
+print text ""
+
+# ===== Approach 1: Traditional (verbose but clear) =====
+print text "Approach 1: Traditional individual constants"
+set FACE_TOP to 0
+set FACE_BOTTOM to 1
+set FACE_NORTH to 2
+set FACE_SOUTH to 3
+set FACE_EAST to 4
+set FACE_WEST to 5
+
+print text "Face constants defined"
+
+# ===== Approach 2: Dictionary/Map for related constants =====
+print text ""
+print text "Approach 2: Dictionary for grouped constants"
+
+# Create a dictionary for faces
+set faces to new Dictionary
+call faces.set with "TOP" and 0
+call faces.set with "BOTTOM" and 1
+call faces.set with "NORTH" and 2
+call faces.set with "SOUTH" and 3
+call faces.set with "EAST" and 4
+call faces.set with "WEST" and 5
+
+# Access like: call faces.get with "TOP"
+set top_face to faces.get with "TOP"
+print text "TOP face value:"
+print text top_face
+
+# ===== Approach 3: List for sequential constants =====
+print text ""
+print text "Approach 3: List for sequential values"
+
+set face_names to ["TOP", "BOTTOM", "NORTH", "SOUTH", "EAST", "WEST"]
+# Access by index: face_names[0] = "TOP" (value 0), face_names[1] = "BOTTOM" (value 1)
+
+print text "Face names list created"
+
+# ===== Approach 4: Struct-like with nested structure =====
+print text ""
+print text "Approach 4: Nested dictionaries for complex constants"
+
+set normals to new Dictionary
+
+# Top normal
+set normal_top to new Dictionary
+call normal_top.set with "x" and 0.0
+call normal_top.set with "y" and 1.0
+call normal_top.set with "z" and 0.0
+call normals.set with "TOP" and normal_top
+
+# Bottom normal
+set normal_bottom to new Dictionary
+call normal_bottom.set with "x" and 0.0
+call normal_bottom.set with "y" and -1.0
+call normal_bottom.set with "z" and 0.0
+call normals.set with "BOTTOM" and normal_bottom
+
+# North normal
+set normal_north to new Dictionary
+call normal_north.set with "x" and 0.0
+call normal_north.set with "y" and 0.0
+call normal_north.set with "z" and 1.0
+call normals.set with "NORTH" and normal_north
+
+# Access like:
+set top_normal to normals.get with "TOP"
+set top_normal_y to top_normal.get with "y"
+print text "TOP normal Y component:"
+print text top_normal_y
+
+# ===== Approach 5: List of lists for vector constants =====
+print text ""
+print text "Approach 5: List of lists for compact vectors"
+
+set normal_vectors to [[0.0, 1.0, 0.0], [0.0, -1.0, 0.0], [0.0, 0.0, 1.0], [0.0, 0.0, -1.0], [1.0, 0.0, 0.0], [-1.0, 0.0, 0.0]]
+
+# Access like: normal_vectors[0] = [0.0, 1.0, 0.0] (TOP)
+#             normal_vectors[0][1] = 1.0 (Y component)
+
+print text "Compact normal vectors defined"
+
+# ===== Demonstration =====
+print text ""
+print text "=== Comparison ==="
+print text "Traditional: 6 lines per constant group"
+print text "Dictionary: Compact, named access, easy iteration"
+print text "List: Most compact, good for sequential data"
+print text "Nested: Best for complex structured data"
+print text ""
+print text "Recommendation: Use dictionaries for named constants, lists for sequential data"

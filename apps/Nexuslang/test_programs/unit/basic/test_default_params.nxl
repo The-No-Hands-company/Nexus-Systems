@@ -1,0 +1,35 @@
+# Test default parameter values
+# Tests the "default to" syntax for function parameters
+
+function greet with name as String default to "World"
+    print text "Hello"
+    print text name
+end
+
+# Test 1: Use default value
+print text "Test 1: Using default parameter"
+greet with "Alice"  # Should print "Hello" and "Alice"
+
+# Test 2: Multiple defaults
+function make_person with name as String and age as Integer default to 0 and city as String default to "Unknown"
+    print text name
+    print text age
+    print text city
+end
+
+print text ""
+print text "Test 2: Multiple defaults"
+make_person with "Bob"  # Should use defaults for age and city
+make_person with "Charlie" and 30  # Should use default for city only  
+make_person with "Diana" and 25 and "NYC"  # All provided
+
+# Test 3: Named arguments with defaults
+function configure with host as String default to "localhost" and port as Integer default to 8080
+    print text host
+    print text port
+end
+
+print text ""
+print text "Test 3: Named + defaults"
+configure with host: "example.com"  # Should use default port
+configure with port: 3000  # Should use default host

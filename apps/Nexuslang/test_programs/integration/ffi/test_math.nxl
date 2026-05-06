@@ -1,0 +1,30 @@
+# Test FFI: Call C math library functions
+# Demonstrates using external math functions
+
+extern function sqrt with x as Double returns Double from library "m"
+extern function pow with base as Double with exponent as Double returns Double from library "m"
+extern function sin with x as Double returns Double from library "m"
+extern function printf with format as Pointer returns Integer from library "c"
+
+function main
+    # Test sqrt
+    set num to 16.0
+    set result to sqrt(num)
+    set format to "sqrt(16.0) = %f\n"
+    printf(format, result)
+    
+    # Test pow
+    set base to 2.0
+    set exp to 10.0
+    set power_result to pow(base, exp)
+    set format2 to "pow(2.0, 10.0) = %f\n"
+    printf(format2, power_result)
+    
+    # Test sin
+    set angle to 1.5708  # approximately pi/2
+    set sin_result to sin(angle)
+    set format3 to "sin(pi/2) = %f\n"
+    printf(format3, sin_result)
+    
+    return 0
+end

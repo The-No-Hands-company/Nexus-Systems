@@ -1,0 +1,32 @@
+# Test multiple await expressions in the same function
+
+async function get_a returns Integer
+    print text "get_a: returning 5"
+    return 5
+end
+
+async function get_b returns Integer
+    print text "get_b: returning 7"
+    return 7
+end
+
+async function main returns Integer
+    print text "main: starting"
+    
+    set a to await get_a
+    print text "main: got a"
+    
+    set b to await get_b
+    print text "main: got b"
+    
+    set sum to a plus b
+    print text "main: calculated sum"
+    
+    if sum is equal to 12
+        print text "SUCCESS: sum is 12"
+    else
+        print text "FAIL: sum is not 12"
+    end
+    
+    return sum
+end

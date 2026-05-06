@@ -1,0 +1,13 @@
+# NexusLang Control Flow - LLVM Backend Test
+# Tests if/while statements
+
+set counter to 0
+
+while counter is less than 5
+    print text counter
+    set counter to counter plus 1
+end
+
+if counter is equal to 5
+    print text "Loop completed!"
+end

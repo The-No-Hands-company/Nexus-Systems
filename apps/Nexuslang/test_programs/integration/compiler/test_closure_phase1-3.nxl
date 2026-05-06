@@ -1,0 +1,27 @@
+# Test Lambda Closures - Phase 1-3 Validation
+# Tests that closures properly analyze and capture variables
+
+function main that takes nothing returns Integer
+    print text "=== Lambda Closure Phase 1-3 Test ==="
+    
+    # Test 1: Simple closure - should analyze and capture outer_value
+    print text ""
+    print text "Test 1: Lambda capturing one variable"
+    set outer_value to 42
+    set my_lambda to lambda x: x plus outer_value
+    # Note: Cannot call yet - Phase 5 (call site updates) not complete
+    
+    print text "Lambda created (captures not callable yet)"
+    print text "Phase 1-3 implementation: Environment analysis, struct generation, parameter modification"
+    
+    print text ""
+    print text "Expected behavior when complete:"
+    print text "- Lambda analyzes body to find 'outer_value' reference"
+    print text "- Creates environment struct with i64 field"
+    print text "- Modifies lambda signature to accept env pointer"
+    print text "- Stores outer_value=42 into environment"
+    
+    print text ""
+    print text "=== Phase 1-3 Complete ==="
+    print text "Remaining: Phase 4b (closure struct), Phase 5 (call sites)"
+    return 0

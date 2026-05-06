@@ -1,0 +1,18 @@
+# Test file importing from module A
+# File: test_module_b.nlpl
+
+import test_module_a
+
+# Call function from imported module
+set message to greet with "World"
+print text message
+
+# Use class from imported module
+set user to new User
+set user.name to "Alice"
+set user.age to 30
+set description to user.describe
+print text description
+
+# Access global variable
+set global_counter to global_counter plus 1

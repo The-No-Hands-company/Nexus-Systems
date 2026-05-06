@@ -1,0 +1,74 @@
+# Constant Folding Optimization Test
+# Tests compiler's ability to evaluate constant expressions at compile time
+
+print text "=== Constant Folding Optimization Test ==="
+print text ""
+
+# Test 1: Arithmetic constant folding
+print text "Test 1: Arithmetic Operations"
+set result1 to 2 plus 3
+set result2 to 10 times 5
+set result3 to 100 divided by 4
+set result4 to 17 modulo 5
+print number result1
+print number result2
+print number result3
+print number result4
+print text ""
+
+# Test 2: Nested arithmetic
+print text "Test 2: Nested Arithmetic"
+set complex to 2 plus 3 times 4
+set parentheses to 2 times 3 plus 4 times 5
+print number complex
+print number parentheses
+print text ""
+
+# Test 3: Logical constant folding  
+print text "Test 3: Logical Operations"
+set is_true to 1
+set is_false to 0
+if is_true
+    print text "True branch"
+if is_false
+    print text "Should NOT print"
+print text ""
+
+# Test 4: Comparison constant folding
+print text "Test 4: Comparisons"
+if 5 is greater than 3
+    print text "5 > 3 is true"
+if 2 is less than 10
+    print text "2 < 10 is true"
+if 7 is equal to 7
+    print text "7 == 7 is true"
+print text ""
+
+# Test 5: Bitwise constant folding
+print text "Test 5: Bitwise Operations"
+set bitand to 5 bitwise and 3
+set bitor to 5 bitwise or 3
+set bitxor to 5 bitwise xor 3
+set shifted to 8 shift right 2
+print number bitand
+print number bitor
+print number bitxor
+print number shifted
+print text ""
+
+# Test 6: String concatenation
+print text "Test 6: String Operations"
+print text "Hello"
+print text "World"
+print text ""
+
+# Test 7: Complex expression
+print text "Test 7: Complex Expression"
+set value to 10
+set multiplier to 2
+set offset to 5
+set calculated to value times multiplier plus offset
+print number calculated
+print text ""
+
+print text "=== Constant Folding Tests Complete ==="

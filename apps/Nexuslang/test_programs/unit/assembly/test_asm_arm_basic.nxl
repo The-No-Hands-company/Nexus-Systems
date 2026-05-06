@@ -1,0 +1,162 @@
+# ARM/AArch64 Inline Assembly Tests - Basic Operations
+# These tests are ready for ARM hardware but cannot be executed on x86_64
+# 
+# Hardware Requirements:
+# - Raspberry Pi 3/4/5 (ARMv8 AArch64)
+# - Apple Silicon Mac (M1/M2/M3)
+# - ARM server (AWS Graviton, etc.)
+#
+# To test on ARM hardware:
+# 1. Compile: python dev_tools/nlplc test_asm_arm_basic.nlpl
+# 2. Run: ./test_asm_arm_basic
+# 3. Verify all tests pass with correct results
+
+function main returns Integer
+    print text "=== ARM/AArch64 Inline Assembly Tests ==="
+    print text ""
+    
+    # Test 1: Basic arithmetic (ADD)
+    print text "Test 1: Basic ADD operation"
+    set a to 10
+    set b to 20
+    set result to 0
+    
+    asm
+        code
+            "add x0, x1, x2"    # x0 = x1 + x2
+            "mov $0, x0"        # Store result
+        outputs "=r": result
+        inputs "r": a, "r": b
+        clobbers "x0"
+    end
+    
+    print text "Result: "
+    print number result
+    print text " (expected: 30)"
+    print text ""
+    
+    # Test 2: Subtraction (SUB)
+    print text "Test 2: Basic SUB operation"
+    set x to 50
+    set y to 15
+    set diff to 0
+    
+    asm
+        code
+            "sub x0, x1, x2"    # x0 = x1 - x2
+            "mov $0, x0"
+        outputs "=r": diff
+        inputs "r": x, "r": y
+        clobbers "x0"
+    end
+    
+    print text "Result: "
+    print number diff
+    print text " (expected: 35)"
+    print text ""
+    
+    # Test 3: Multiplication (MUL)
+    print text "Test 3: Basic MUL operation"
+    set m to 6
+    set n to 7
+    set product to 0
+    
+    asm
+        code
+            "mul x0, x1, x2"    # x0 = x1 * x2
+            "mov $0, x0"
+        outputs "=r": product
+        inputs "r": m, "r": n
+        clobbers "x0"
+    end
+    
+    print text "Result: "
+    print number product
+    print text " (expected: 42)"
+    print text ""
+    
+    # Test 4: Bitwise operations (AND, ORR, EOR)
+    print text "Test 4: Bitwise operations"
+    set val1 to 15   # 0b1111
+    set val2 to 10   # 0b1010
+    set and_result to 0
+    set or_result to 0
+    set xor_result to 0
+    
+    asm
+        code
+            "and x0, x1, x2"    # AND
+            "mov $0, x0"
+        outputs "=r": and_result
+        inputs "r": val1, "r": val2
+        clobbers "x0"
+    end
+    
+    asm
+        code
+            "orr x0, x1, x2"    # OR
+            "mov $0, x0"
+        outputs "=r": or_result
+        inputs "r": val1, "r": val2
+        clobbers "x0"
+    end
+    
+    asm
+        code
+            "eor x0, x1, x2"    # XOR
+            "mov $0, x0"
+        outputs "=r": xor_result
+        inputs "r": val1, "r": val2
+        clobbers "x0"
+    end
+    
+    print text "AND result: "
+    print number and_result
+    print text " (expected: 10)"
+    print text "OR result: "
+    print number or_result
+    print text " (expected: 15)"
+    print text "XOR result: "
+    print number xor_result
+    print text " (expected: 5)"
+    print text ""
+    
+    # Test 5: Shift operations (LSL, LSR, ASR)
+    print text "Test 5: Shift operations"
+    set shift_val to 8
+    set lsl_result to 0
+    set lsr_result to 0
+    
+    asm
+        code
+            "lsl x0, x1, 2"     # Logical shift left by 2
+            "mov $0, x0"
+        outputs "=r": lsl_result
+        inputs "r": shift_val
+        clobbers "x0"
+    end
+    
+    asm
+        code
+            "lsr x0, x1, 1"     # Logical shift right by 1
+            "mov $0, x0"
+        outputs "=r": lsr_result
+        inputs "r": shift_val
+        clobbers "x0"
+    end
+    
+    print text "LSL result: "
+    print number lsl_result
+    print text " (expected: 32)"
+    print text "LSR result: "
+    print number lsr_result
+    print text " (expected: 4)"
+    print text ""
+    
+    print text "=== All ARM basic tests completed ==="
+    print text "Note: Results may be incorrect on x86_64 (requires ARM hardware)"
+    
+    return 0
+end
+
+main()

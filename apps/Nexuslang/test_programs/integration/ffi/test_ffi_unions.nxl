@@ -1,0 +1,65 @@
+# Test FFI Union Marshalling
+# Demonstrates C union types and marshalling between NexusLang and C
+
+# Test 1: Basic union
+union Value
+    int_value as Integer
+    float_value as Float
+    char_value as Char
+end
+
+# Test 2: Tagged union (discriminated union)
+struct TaggedValue
+    tag as Integer
+    data as Value
+end
+
+# Test 3: Union with pointer
+union PointerOrInt
+    ptr as Pointer
+    int_val as Integer
+end
+
+# Test 4: Union with struct
+struct Point
+    x as Integer
+    y as Integer
+end
+
+union Shape
+    radius as Float  # Circle
+    point as Point   # Rectangle corner
+end
+
+# Test 5: C library union (sockaddr)
+union sockaddr_storage
+    sin_family as Integer
+    sin_port as Integer
+    sin_addr as Integer
+    padding as array of 128 of Char
+end
+
+# Test 6: Size compatibility test
+extern function test_union_size with u as Value returns Integer from library "custom"
+
+# Usage examples
+set val to new Value
+set val.int_value to 42
+print text "Union int value: "
+print value val.int_value
+
+set val.float_value to 3.14
+print text "Union float value: "
+print value val.float_value
+
+# Tagged union usage
+set tagged to new TaggedValue
+set tagged.tag to 1  # 1 = integer
+set tagged.data.int_value to 100
+
+if tagged.tag is equal to 1
+    print text "Tagged union contains integer: "
+    print value tagged.data.int_value
+end
+
+print text "Union marshalling tests complete"

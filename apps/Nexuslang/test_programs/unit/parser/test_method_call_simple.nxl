@@ -1,0 +1,12 @@
+# Simple test for parameterless method call parsing
+class Box
+    property value as Integer
+    
+    method get_value returns Integer
+        return this.value
+    end
+end
+
+set box to new Box
+set box.value to 42
+print text call box.get_value

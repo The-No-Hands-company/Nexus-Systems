@@ -1,0 +1,14 @@
+# Simple bounds check test
+
+set arr to [10, 20, 30]
+
+print text "Accessing arr[0]"
+print number arr[0]
+
+print text "Accessing arr[1]"
+print number arr[1]
+
+print text "Accessing arr[2]"
+print number arr[2]
+
+print text "Test passed!"

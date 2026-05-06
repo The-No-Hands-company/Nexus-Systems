@@ -1,0 +1,60 @@
+# Test Structs and Unions
+print text "=== Struct/Union Tests ==="
+
+struct Point
+    x as Integer
+    y as Integer
+end
+
+struct Rect
+    p1 as Point
+    p2 as Point
+end
+
+union MyData
+    i as Integer
+    f as Float
+end
+
+# Test Struct Creation and Access
+print text "--- Struct Test ---"
+set p to new Point
+set p.x to 10
+set p.y to 20
+
+print text "Point:"
+print text p.x
+print text p.y
+
+# Test Nested Structs
+# DO NOT RUN nested struct test yet if parser doesn't support nested field access fully
+# set r to new Rect
+# set r.p1 to p
+# print text "Rect.p1.x:"
+# print text r.p1.x
+
+# Test Union (Memory Sharing)
+print text "--- Union Test ---"
+set u to new MyData
+set u.i to 1065353216  # Binary representation of 1.0 float
+
+print text "Union as Integer:"
+print text u.i
+print text "Union as Float:"
+print text u.f  # Should be 1.0
+
+set u.f to 2.5
+print text "Union as Float (set):"
+print text u.f
+
+# Test Sizeof
+print text "--- Sizeof Test ---"
+set size_pt to sizeof Point
+print text "Sizeof Point (should be 16):"
+print text size_pt
+
+set size_u to sizeof MyData
+print text "Sizeof MyData (should be 8):"
+print text size_u
+
+print text "=== Tests Complete ==="

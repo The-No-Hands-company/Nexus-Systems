@@ -1,0 +1,40 @@
+# Test error propagation with ? operator
+print text "=== Error Propagation Tests ==="
+
+# Function that returns Result
+function divide with a as Integer and b as Integer returns Result
+    if b == 0
+        return Err with "Division by zero"
+    end
+    return Ok with (a / b)
+end
+
+# Function using ? operator
+function safe_divide with x as Integer and y as Integer returns Result
+    set result to divide with x and y?  # Propagates error
+    return Ok with result
+end
+
+# Test successful case
+set success to safe_divide with 10 and 2
+match success
+    case Ok with value
+        print text "Success:"
+        print text value
+    case Err with error
+        print text "Error:"
+        print text error
+end
+
+# Test error case
+set failure to safe_divide with 10 and 0
+match failure
+    case Ok with value
+        print text "Success:"
+        print text value
+    case Err with error
+        print text "Error (expected):"
+        print text error
+end
+
+print text "=== All Error Propagation Tests Passed! ==="

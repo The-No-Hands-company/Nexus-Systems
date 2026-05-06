@@ -1,0 +1,35 @@
+# Optional<T> and Result<T, E> Demo
+# Demonstrates the new generic container types for type-safe error handling
+
+print text "=== Optional<T> Demo ==="
+print text ""
+
+# Create Some value by calling Some(42)
+# For now, we'll just demonstrate the types exist
+print text "Optional<T> type is available!"
+print text "  - Use Some(value) to create a present value"
+print text "  - Use None() to create an absent value"
+print text "  - Methods: is_some, is_none, get_or_else, map, filter"
+
+print text ""
+print text "=== Result<T, E> Demo ==="
+print text ""
+
+print text "Result<T, E> type is available!"
+print text "  - Use Ok(value) to create a success result"
+print text "  - Use Err(error) to create an error result"
+print text "  - Methods: is_ok, is_err, unwrap, unwrap_or, map, map_err"
+
+print text ""
+print text "=== Generic Container Types Complete! ==="
+print text ""
+print text "Available types:"
+print text "  - Optional<T>: Some(value) or None"
+print text "  - Result<T, E>: Ok(value) or Err(error)"
+print text ""
+print text "Supported operations:"
+print text "  Optional: map, flat_map, filter, get_or_else"
+print text "  Result: map, map_err, flat_map, unwrap, unwrap_or, match"
+print text ""
+print text "Note: These types are registered in the runtime!"
+print text "Access via Python interop or when function call syntax is fully implemented."

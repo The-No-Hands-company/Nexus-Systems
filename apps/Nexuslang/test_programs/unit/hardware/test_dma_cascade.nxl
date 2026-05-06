@@ -1,0 +1,140 @@
+# DMA Cascade and Multi-Channel Test
+# Test: Multiple channel allocation and controller reset
+# Expected: Should manage multiple channels and reset correctly
+
+print text "Test: DMA multiple channels and reset"
+
+# Test 1: List channels (should be empty initially)
+print text "Test 1: Initial channel list"
+set channels to list_allocated_channels
+print text "Allocated channels (should be empty):"
+print text channels
+
+# Test 2: Allocate multiple channels
+print text "Test 2: Allocate multiple channels"
+set ch0 to allocate_dma_channel with channel: 0
+set ch1 to allocate_dma_channel with channel: 1
+set ch2 to allocate_dma_channel with channel: 2
+set ch3 to allocate_dma_channel with channel: 3
+
+if ch0 and ch1 and ch2 and ch3
+    print text "Channels 0-3 allocated successfully"
+end
+
+# List allocated channels
+set channels to list_allocated_channels
+print text "Allocated channels:"
+for each ch in channels
+    print text ch
+end
+
+# Test 3: Configure multiple channels
+print text "Test 3: Configure multiple channels"
+
+# Channel 0: Memory-to-memory
+configure_dma_transfer with channel: 0 and source: 4096 and destination: 8192 and count: 256 and mode: 1 and direction: 2
+
+# Channel 1: Device read
+configure_dma_transfer with channel: 1 and source: 0 and destination: 16384 and count: 512 and mode: 2 and direction: 1
+
+# Channel 2: Floppy disk
+configure_dma_transfer with channel: 2 and source: 0 and destination: 32768 and count: 1024 and mode: 1 and direction: 1
+
+# Channel 3: Sound card
+configure_dma_transfer with channel: 3 and source: 65536 and destination: 0 and count: 2048 and mode: 2 and direction: 2
+
+print text "All channels configured"
+
+# Test 4: Get status of all channels
+print text "Test 4: Channel status"
+for each ch in channels
+    set status to get_channel_status with channel: ch
+    print text "Channel:"
+    print text ch
+    print text "  Count:"
+    print text status["count"]
+    print text "  Mode:"
+    print text status["mode"]
+    print text "  Direction:"
+    print text status["direction"]
+end
+
+# Test 5: Start multiple transfers
+print text "Test 5: Start multiple transfers"
+start_dma_transfer with channel: 0
+start_dma_transfer with channel: 1
+start_dma_transfer with channel: 2
+start_dma_transfer with channel: 3
+
+print text "All transfers started"
+
+# Check active status
+for each ch in channels
+    set status to get_channel_status with channel: ch
+    print text "Channel active:"
+    print text ch
+    print text status["active"]
+end
+
+# Test 6: Test channel 4 (cascade) - should error
+print text "Test 6: Channel 4 cascade test"
+
+function test_channel_4
+    set ch4 to allocate_dma_channel with channel: 4
+    print text "ERROR: Should have thrown exception"
+end
+
+try
+    test_channel_4
+catch error
+    print text "Correctly prevented channel 4 allocation (cascade)"
+end
+
+# Test 7: Allocate channel 5 (16-bit controller)
+print text "Test 7: Allocate 16-bit channel"
+set ch5 to allocate_dma_channel with channel: 5
+if ch5
+    print text "Channel 5 (16-bit) allocated"
+end
+
+# Configure with larger count (16-bit can handle 128KB)
+configure_dma_transfer with channel: 5 and source: 0 and destination: 0 and count: 65536 and mode: 2 and direction: 2
+print text "Channel 5 configured with 64KB transfer"
+
+set status5 to get_channel_status with channel: 5
+print text "Channel 5 count:"
+print text status5["count"]
+
+release_dma_channel with channel: 5
+
+# Test 8: Reset controller
+print text "Test 8: Reset DMA controller"
+set reset to reset_dma_controller
+if reset
+    print text "DMA controller reset"
+end
+
+# Verify all channels released
+set channels_after to list_allocated_channels
+print text "Channels after reset (should be empty):"
+print text channels_after
+
+# Test 9: Re-allocate after reset
+print text "Test 9: Re-allocate after reset"
+set ch0_new to allocate_dma_channel with channel: 0
+if ch0_new
+    print text "Channel 0 successfully re-allocated after reset"
+end
+
+# Check status (should be clean)
+set status_new to get_channel_status with channel: 0
+print text "Clean channel status:"
+print text "  Allocated:"
+print text status_new["allocated"]
+print text "  Count (should be 0):"
+print text status_new["count"]
+
+# Clean up
+release_dma_channel with channel: 0
+
+print text "Test complete"

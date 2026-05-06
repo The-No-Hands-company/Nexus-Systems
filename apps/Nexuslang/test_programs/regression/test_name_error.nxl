@@ -1,0 +1,5 @@
+# Test enhanced error messages
+
+# 1. Test undefined variable with "did you mean" suggestions
+set counter to 10
+print text conter  # typo: should be 'counter'

@@ -1,0 +1,57 @@
+
+extern function c_sqrt with x as Float returns Float from library "m"
+extern function c_pow with base as Float, exp as Float returns Float from library "m"
+extern function c_ceil with x as Float returns Float from library "m"
+extern function c_floor with x as Float returns Float from library "m"
+extern function c_fabs with x as Float returns Float from library "m"
+extern function c_sin with x as Float returns Float from library "m"
+extern function c_cos with x as Float returns Float from library "m"
+extern function c_tan with x as Float returns Float from library "m"
+
+export Math
+
+class Math
+    # Static methods wrapper
+    # Since NexusLang doesn't have 'static' keywords yet in a way that allows calling Math.sqrt without instance easily?
+    # Wait, previous modules like 'File' had static-like methods or just functions in module?
+    # Actually core.io.File has 'new'.
+    # For Math, we probably just want module-level functions or a class that we never instantiate?
+    # The parser supports module.function calls.
+    # So if I define these as top-level functions in the module and export them, they are callable as core.math.sqrt(x).
+    # But the plan said "Class Math". 
+    # If I put them in a class, I need an instance or static method support.
+    # LLVM generator supports static methods if I don't use 'self'.
+    # But usually 'call Class.method()' expects dispatch.
+    
+    # Let's stick to module level functions for Math? It's more natural for "core.math.sqrt".
+    # But if I want "Math.sqrt", I can alias the module?
+    # The plan said "Class Math". Let's follow the plan but maybe make them effectively static by not using properties.
+    # Actually, let's look at `core.io`. It has `File` class.
+    # `core.result` has `Result` class.
+    # If I define class Math, I can call `Math.sqrt(...)` if I allow static calls.
+    # Currently parser supports `Identifier.Identifier(...)`.
+    # Let's define the methods in the class.
+
+    function sqrt that takes x as Float returns Float
+        return c_sqrt(x)
+
+    function pow that takes base as Float, exp as Float returns Float
+        return c_pow(base, exp)
+
+    function abs that takes x as Float returns Float
+        return c_fabs(x)
+
+    function ceil that takes x as Float returns Float
+        return c_ceil(x)
+
+    function floor that takes x as Float returns Float
+        return c_floor(x)
+        
+    function sin that takes x as Float returns Float
+        return c_sin(x)
+        
+    function cos that takes x as Float returns Float
+        return c_cos(x)
+        
+    function tan that takes x as Float returns Float
+        return c_tan(x)

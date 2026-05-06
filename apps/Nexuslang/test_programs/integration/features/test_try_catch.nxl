@@ -1,0 +1,20 @@
+# Test error handling
+
+print text "Test 1: Basic try/catch"
+try
+    print text "In try block"
+    set x to 5
+    print text x
+catch e
+    print text "No error caught"
+end
+
+print text "Test 2: Try/catch with error"
+try
+    print text "About to cause error"
+    set y to undefined_variable
+catch err
+    print text "Successfully caught error!"
+end
+
+print text "All tests completed"

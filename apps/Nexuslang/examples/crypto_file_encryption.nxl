@@ -1,0 +1,171 @@
+# File Encryption Tool - Password-Based Encryption Example
+# Demonstrates AES-256-GCM encryption with PBKDF2 key derivation
+
+function encrypt_file with input_file as String and output_file as String and password as String
+    print text "Encrypting file: " concat input_file
+    
+    # Read file contents
+    set file_content to read_file with path: input_file
+    
+    # Derive encryption key from password using PBKDF2
+    print text "Deriving encryption key from password..."
+    set key_info to pbkdf2_derive_key with password: password and iterations: 100000 and key_length: 32
+    
+    # Encrypt file content with AES-256-GCM
+    print text "Encrypting content..."
+    set encrypted to aes_encrypt with plaintext: file_content and key: key_info["key"]
+    
+    # Prepare encrypted package (salt + nonce + tag + ciphertext)
+    # In real implementation, we would serialize these properly
+    set package to create_dictionary
+    set package["salt"] to key_info["salt"]
+    set package["nonce"] to encrypted["nonce"]
+    set package["tag"] to encrypted["tag"]
+    set package["ciphertext"] to encrypted["ciphertext"]
+    set package["algorithm"] to "AES-256-GCM"
+    set package["kdf"] to "PBKDF2-SHA256"
+    set package["iterations"] to 100000
+    
+    # Write encrypted package to output file
+    # Note: In production, use proper binary serialization
+    write_file with path: output_file and content: serialize_to_json with data: package
+    
+    print text "✓ File encrypted successfully"
+    print text "Output: " concat output_file
+    print text "Algorithm: AES-256-GCM with PBKDF2-SHA256"
+end
+
+function decrypt_file with input_file as String and output_file as String and password as String
+    print text "Decrypting file: " concat input_file
+    
+    # Read encrypted package
+    set encrypted_content to read_file with path: input_file
+    set package to deserialize_from_json with json_string: encrypted_content
+    
+    # Verify algorithm
+    if package["algorithm"] is not equal to "AES-256-GCM"
+        print text "Error: Unsupported encryption algorithm"
+        return false
+    end
+    
+    # Derive decryption key using saved salt
+    print text "Deriving decryption key..."
+    set key_info to pbkdf2_derive_key with password: password and salt: package["salt"] and iterations: package["iterations"] and key_length: 32
+    
+    # Reconstruct encrypted data structure
+    set encrypted_data to create_dictionary
+    set encrypted_data["nonce"] to package["nonce"]
+    set encrypted_data["tag"] to package["tag"]
+    set encrypted_data["ciphertext"] to package["ciphertext"]
+    
+    # Decrypt content
+    print text "Decrypting content..."
+    set decrypted to aes_decrypt with encrypted_data: encrypted_data and key: key_info["key"]
+    
+    # Write decrypted content to output file
+    write_file with path: output_file and content: decrypted
+    
+    print text "✓ File decrypted successfully"
+    print text "Output: " concat output_file
+    return true
+end
+
+function demonstrate_crypto_features
+    print text "=== NexusLang Cryptography Module Demo ==="
+    print text ""
+    
+    # Demo 1: Hashing
+    print text "1. Hashing Functions"
+    print text "-------------------"
+    set data to "Hello, NLPL!"
+    set hash_sha256_val to hash_sha256 with data: data
+    set hash_blake2b_val to hash_blake2b with data: data
+    print text "Data: " concat data
+    print text "SHA-256: " concat hash_sha256_val
+    print text "BLAKE2b: " concat hash_blake2b_val
+    print text ""
+    
+    # Demo 2: Password Hashing
+    print text "2. Password Hashing"
+    print text "-------------------"
+    set password to "SecurePassword123!"
+    set hash_info to hash_password with password: password
+    print text "Password hashed with PBKDF2-SHA256"
+    print text "Iterations: 100,000"
+    print text "Verification: " concat verify_password with password: password and hash_info: hash_info
+    print text ""
+    
+    # Demo 3: Symmetric Encryption (AES)
+    print text "3. AES-256-GCM Encryption"
+    print text "-------------------------"
+    set secret_message to "This is a confidential message"
+    set aes_key to aes_generate_key
+    set encrypted to aes_encrypt with plaintext: secret_message and key: aes_key
+    set decrypted to aes_decrypt with encrypted_data: encrypted and key: aes_key
+    print text "Original: " concat secret_message
+    print text "Encrypted: [binary ciphertext]"
+    print text "Decrypted: " concat decrypted
+    print text "Match: " concat (decrypted is equal to secret_message)
+    print text ""
+    
+    # Demo 4: RSA Asymmetric Encryption
+    print text "4. RSA-2048 Encryption"
+    print text "----------------------"
+    set rsa_keys to rsa_generate_keypair with key_size: 2048
+    set rsa_message to "Asymmetric encryption test"
+    set rsa_encrypted to rsa_encrypt with plaintext: rsa_message and public_key_pem: rsa_keys["public_key"]
+    set rsa_decrypted to rsa_decrypt with ciphertext: rsa_encrypted and private_key_pem: rsa_keys["private_key"]
+    print text "RSA key pair generated (2048 bits)"
+    print text "Original: " concat rsa_message
+    print text "Decrypted: " concat rsa_decrypted
+    print text "Match: " concat (rsa_decrypted is equal to rsa_message)
+    print text ""
+    
+    # Demo 5: Digital Signatures
+    print text "5. Digital Signatures (Ed25519)"
+    print text "--------------------------------"
+    set ed_keys to ed25519_generate_keypair
+    set document to "Important legal document"
+    set signature to ed25519_sign with message: document and private_key_bytes: ed_keys["private_key"]
+    set is_valid to ed25519_verify with message: document and signature: signature and public_key_bytes: ed_keys["public_key"]
+    print text "Document: " concat document
+    print text "Signature: [64 bytes]"
+    print text "Verification: " concat is_valid
+    print text ""
+    
+    # Demo 6: Key Derivation
+    print text "6. Key Derivation Functions"
+    print text "---------------------------"
+    set master_password to "MasterPassword"
+    set pbkdf2_key to pbkdf2_derive_key with password: master_password and iterations: 100000
+    set argon2_key to argon2_derive_key with password: master_password and time_cost: 2 and memory_cost: 65536
+    print text "PBKDF2-SHA256 (100,000 iterations): [32-byte key derived]"
+    print text "Argon2 (time_cost=2, memory=64MB): [32-byte key derived]"
+    print text ""
+    
+    print text "=== Demo Complete ==="
+end
+
+function main
+    print text "NLPL Cryptography Module - File Encryption Example"
+    print text "==================================================="
+    print text ""
+    
+    # Run comprehensive demo
+    demonstrate_crypto_features
+    
+    # File encryption example (simulated)
+    print text ""
+    print text "File Encryption Example"
+    print text "========================"
+    print text ""
+    print text "Usage:"
+    print text "  encrypt_file with input_file: \"document.txt\" and output_file: \"document.enc\" and password: \"YourPassword\""
+    print text "  decrypt_file with input_file: \"document.enc\" and output_file: \"document_decrypted.txt\" and password: \"YourPassword\""
+    print text ""
+    print text "Note: This example demonstrates the crypto API."
+    print text "For actual file encryption, integrate with file I/O module."
+end
+
+# Run main
+main

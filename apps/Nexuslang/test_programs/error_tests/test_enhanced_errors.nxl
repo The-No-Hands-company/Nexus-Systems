@@ -1,0 +1,25 @@
+# Test file for enhanced error messages
+# This file contains intentional errors to test error reporting
+
+# Error 1: Undefined variable
+print text undefined_var
+
+# Error 2: Undefined function
+result to undeclared_function with 42
+
+# Error 3: Type mismatch
+set x to 5
+set y to "hello"
+set z to x plus y
+
+# Error 4: Missing end
+function test_function with param as Integer
+    print text param
+# Missing 'end' here
+
+# Error 5: Invalid syntax
+set invalid syntax here
+
+# Error 6: Division by zero
+set divisor to 0
+set result to 10 divided by divisor

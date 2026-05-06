@@ -1,0 +1,16 @@
+# Test edge cases for logical operators
+
+# Double NOT
+set x to 1
+if not not x
+  print text "Double NOT works!"
+
+# NOT with complex expression
+set a to 1
+set b to 0
+if not (a and b)
+  print text "NOT (a AND b) works!"
+
+# Mixed operators
+if (a or b) and not b
+  print text "Mixed AND/OR/NOT works!"

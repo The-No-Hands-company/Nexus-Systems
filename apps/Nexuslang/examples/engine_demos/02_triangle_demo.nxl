@@ -1,0 +1,135 @@
+# Triangle Demo - Modern OpenGL with Shaders
+# Demonstrates: Shaders, VAO/VBO, Matrix transformations, Rotation
+
+# Vertex shader - transforms vertices and passes color to fragment shader
+set vertex_shader to "
+#version 330 core
+layout (location = 0) in vec3 aPos;
+layout (location = 1) in vec3 aColor;
+
+out vec3 ourColor;
+
+uniform mat4 model;
+uniform mat4 view;
+uniform mat4 projection;
+
+void main()
+{
+    gl_Position = projection * view * model * vec4(aPos, 1.0);
+    ourColor = aColor;
+}
+"
+
+# Fragment shader - outputs interpolated color
+set fragment_shader to "
+#version 330 core
+out vec4 FragColor;
+in vec3 ourColor;
+
+void main()
+{
+    FragColor = vec4(ourColor, 1.0);
+}
+"
+
+# Create window
+print text "Creating window..."
+set window to create_window with 800 and 600 and "NLPL Triangle Demo"
+
+# Compile shaders
+print text "Compiling shaders..."
+set shader to create_shader with vertex_shader and fragment_shader
+
+# Triangle vertices: position (x,y,z) + color (r,g,b)
+set vertices to new List of Float
+# Vertex 0: Top (red)
+call vertices.add with 0.0
+call vertices.add with 0.5
+call vertices.add with 0.0
+call vertices.add with 1.0
+call vertices.add with 0.0
+call vertices.add with 0.0
+
+# Vertex 1: Bottom-right (green)
+call vertices.add with 0.5
+call vertices.add with -0.5
+call vertices.add with 0.0
+call vertices.add with 0.0
+call vertices.add with 1.0
+call vertices.add with 0.0
+
+# Vertex 2: Bottom-left (blue)
+call vertices.add with -0.5
+call vertices.add with -0.5
+call vertices.add with 0.0
+call vertices.add with 0.0
+call vertices.add with 0.0
+call vertices.add with 1.0
+
+# Create VAO and VBO
+print text "Creating vertex buffers..."
+set vao to create_vertex_array
+set vbo to create_vertex_buffer with vertices
+
+# Configure VAO
+call vao_set_vertex_buffer with vao and vbo
+
+# Position attribute (location = 0, size = 3, stride = 6*4 bytes, offset = 0)
+call vao_set_attribute with vao and 0 and 3 and 24 and 0
+
+# Color attribute (location = 1, size = 3, stride = 6*4 bytes, offset = 3*4 bytes)
+call vao_set_attribute with vao and 1 and 3 and 24 and 12
+
+# Setup view and projection matrices
+print text "Setting up camera..."
+
+# View matrix: camera at (0, 0, 3) looking at origin
+set eye to vec3 with 0.0 and 0.0 and 3.0
+set target to vec3 with 0.0 and 0.0 and 0.0
+set up to vec3 with 0.0 and 1.0 and 0.0
+set view_matrix to mat4_look_at with eye and target and up
+
+# Projection matrix: perspective with 45 degree FOV
+set projection_matrix to mat4_perspective with 45.0 and 1.333 and 0.1 and 100.0
+
+# Convert matrices to flat lists for uniform upload
+set view_list to call view_matrix.to_list
+set proj_list to call projection_matrix.to_list
+
+# Main render loop
+print text "Starting render loop..."
+set angle to 0.0
+set mode to GL_TRIANGLES
+
+while window_should_close with window is equal to false
+    # Update rotation
+    set angle to angle plus 0.02
+    
+    # Create model matrix (rotate around Y axis)
+    set model_matrix to mat4_rotation_y with angle
+    set model_list to call model_matrix.to_list
+    
+    # Clear screen
+    call set_clear_color with 0.1 and 0.1 and 0.15 and 1.0
+    call begin_frame
+    
+    # Use shader and set uniforms
+    call use_shader with shader
+    call set_uniform_mat4 with shader and "model" and model_list
+    call set_uniform_mat4 with shader and "view" and view_list
+    call set_uniform_mat4 with shader and "projection" and proj_list
+    
+    # Draw triangle
+    call vao_draw_arrays with vao and mode and 0 and 3
+    
+    # Swap buffers
+    call end_frame with window
+end
+
+# Cleanup
+print text "Cleaning up..."
+call delete_vertex_array with vao
+call delete_shader with shader
+call destroy_window with window
+
+print text "Demo complete"

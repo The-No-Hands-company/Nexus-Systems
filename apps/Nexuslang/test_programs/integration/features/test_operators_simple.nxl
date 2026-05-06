@@ -1,0 +1,33 @@
+# Simple operator tests
+
+# Power operator
+set result to 2 ** 8
+print text result
+
+# Floor division
+set result to 17 // 5
+print text result
+
+# Bitwise AND
+set result to 12 & 10
+print text result
+
+# Bitwise OR
+set result to 12 | 10
+print text result
+
+# Bitwise XOR
+set result to 12 ^ 10
+print text result
+
+# Bitwise NOT
+set result to ~5
+print text result
+
+# Left shift
+set result to 4 << 2
+print text result
+
+# Right shift
+set result to 16 >> 2
+print text result

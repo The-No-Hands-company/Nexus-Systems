@@ -1,0 +1,11 @@
+# Test output-only constraint
+
+print text "Test output-only:"
+set result to 0
+asm
+    code "mov $0, 100"
+    outputs "=r": result
+end
+print text "Result: "
+print number result
+print text "Expected: 100"

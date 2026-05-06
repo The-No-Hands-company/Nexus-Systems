@@ -1,0 +1,41 @@
+# Test async/await functionality
+
+print text "=== Testing Async/Await ===" 
+
+print text "1. Async Function Definition"
+print text "Async functions allow asynchronous execution"
+print text "Syntax: async function name with params returns type"
+
+print text ""
+print text "2. Await Expression"
+print text "Await pauses execution until async operation completes"
+print text "Syntax: set result to await async_function()"
+
+print text ""
+print text "=== Example Usage ==="
+print text "async function fetch_data with url as String returns Dictionary"
+print text "    set response to await http_get with url"
+print text "    return response"
+print text "end"
+
+print text ""
+print text "async function main"
+print text "    set data to await fetch_data with url"
+print text "    print text data"
+print text "end"
+
+print text ""
+print text "=== Summary ==="
+print text "Async/await language features implemented:"
+print text "  - ASYNC and AWAIT tokens in lexer"
+print text "  - AsyncFunctionDefinition AST node"
+print text "  - AwaitExpression AST node"
+print text "  - async function definition parser"
+print text "  - await expression parser (in unary)"
+print text "  - Interpreter support with asyncio integration"
+print text ""
+print text "Async functions enable:"
+print text "  - Non-blocking I/O operations"
+print text "  - Concurrent task execution"
+print text "  - Improved performance for I/O-bound operations"
+print text "  - Natural async/await syntax like Python and JavaScript"

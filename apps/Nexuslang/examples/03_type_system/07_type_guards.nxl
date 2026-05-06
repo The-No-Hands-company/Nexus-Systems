@@ -1,0 +1,69 @@
+# Type Guards and Runtime Type Checking
+# This example demonstrates checking types at runtime and handling different types
+
+# Function that handles multiple types
+function process_value with value
+    # Check if value is a number
+    if value is a number
+        print text "Processing number: "
+        print text value times 2
+        return value times 2
+    else if value is a string
+        print text "Processing string: "
+        print text value plus value
+        return value plus value
+    else if value is a list
+        print text "Processing list with length: "
+        print text length of value
+        return length of value
+    else
+        print text "Unknown type, cannot process"
+        return nothing
+    end
+end
+
+# Function with type validation
+function safe_divide with numerator and denominator
+    if denominator is equal to 0
+        print text "Error: Cannot divide by zero"
+        return nothing
+    end
+    
+    if numerator is a number and denominator is a number
+        return numerator divided by denominator
+    else
+        print text "Error: Both arguments must be numbers"
+        return nothing
+    end
+end
+
+# Usage examples
+print text "Testing type guards:"
+
+print text "Test 1: Number input"
+set result1 to process_value with 42
+# Should double the number
+
+print text "Test 2: String input"
+set result2 to process_value with "Hello"
+# Should concatenate the string
+
+print text "Test 3: List input"
+set my_list to create list
+set my_list to my_list with 1
+set my_list to my_list with 2
+set my_list to my_list with 3
+set result3 to process_value with my_list
+# Should return list length
+
+print text "Test 4: Safe division"
+set result4 to safe_divide with 10 and 2
+print text "10 / 2 = "
+print text result4
+
+print text "Test 5: Division by zero"
+set result5 to safe_divide with 10 and 0
+# Should handle error gracefully
+
+print text "Type guards enable robust runtime type checking!"
+print text "They make code safer by validating types before operations"

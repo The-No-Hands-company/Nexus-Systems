@@ -1,0 +1,63 @@
+# Generic Dictionary<K,V> Implementation
+# Standard library generic hash map
+
+class Dictionary of K, V
+    property keys as List of K
+    property values as List of V
+    property count as Integer
+    
+    function init
+        set keys to new List of K
+        set values to new List of V
+        set count to 0
+    
+    function set that takes key as K, value as V
+        # Find existing key
+        set i to 0
+        set found to 0
+        while i is less than count
+            if keys.get with i is equal to key
+                # Update existing
+                values.remove with i
+                values.add with value
+                set found to 1
+            set i to i plus 1
+        
+        # Add new key-value pair
+        if found is equal to 0
+            keys.add with key
+            values.add with value
+            set count to count plus 1
+    
+    function get that takes key as K returns V
+        set i to 0
+        while i is less than count
+            if keys.get with i is equal to key
+                return values.get with i
+            set i to i plus 1
+        return null
+    
+    function remove that takes key as K returns V
+        set i to 0
+        while i is less than count
+            if keys.get with i is equal to key
+                set value to values.get with i
+                keys.remove with i
+                values.remove with i
+                set count to count minus 1
+                return value
+            set i to i plus 1
+        return null
+    
+    function contains_key that takes key as K returns Integer
+        set i to 0
+        while i is less than count
+            if keys.get with i is equal to key
+                return 1
+            set i to i plus 1
+        return 0
+    
+    function clear
+        keys.clear
+        values.clear
+        set count to 0

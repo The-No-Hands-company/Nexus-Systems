@@ -1,0 +1,28 @@
+# Test trait definitions with required and provided methods
+
+# Define a trait with required methods only
+define a trait called Comparable
+    that requires a method called compare with other returning Integer
+end trait
+
+print text "Trait Comparable defined with required method: compare"
+
+# Define a trait with both required and provided methods
+define a trait called Printable
+    that requires a method called to_string returning String
+    and provides a method called display
+        print text "Displaying: " plus call to_string
+    end
+end trait
+
+print text "Trait Printable defined with required method: to_string and provided method: display"
+
+# Define a trait with multiple required methods
+define a trait called Serializable
+    that requires a method called serialize returning String
+    that requires a method called deserialize with data as String
+end trait
+
+print text "Trait Serializable defined with required methods: serialize, deserialize"
+
+print text "All trait definitions successful!"

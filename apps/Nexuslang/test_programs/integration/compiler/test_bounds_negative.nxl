@@ -1,0 +1,8 @@
+# Array Bounds - Negative Index Test
+# This test should PANIC with "Array index out of bounds"
+
+print text "Testing negative index (should panic)..."
+set numbers to [10, 20, 30]
+set neg_index to -1
+print number numbers[neg_index]
+print text "ERROR: Should have panicked!"

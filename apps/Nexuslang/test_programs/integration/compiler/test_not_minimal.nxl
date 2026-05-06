@@ -1,0 +1,4 @@
+# Minimal NOT test
+set c to 0
+if not c
+    print text "NOT works!"

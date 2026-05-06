@@ -1,0 +1,154 @@
+# Week 8 Test: Dangerous Instruction Detection
+# 
+# Tests the safety validation system's ability to detect and warn about:
+# - Privileged instructions (cli, sti, hlt, in, out)
+# - Control register access (mov cr0, mov dr0)
+# - Stack manipulation (push, pop, call, ret)
+# - Interrupt instructions (int, iret)
+#
+# Expected: Program compiles with warnings for each dangerous instruction
+
+function test_privileged_instructions
+    # Test 1: CLI instruction (disable interrupts)
+    asm
+        code
+            "cli"
+    end
+    print text "Test 1: CLI instruction executed"
+    
+    # Test 2: STI instruction (enable interrupts)
+    asm
+        code
+            "sti"
+    end
+    print text "Test 2: STI instruction executed"
+    
+    # Test 3: HLT instruction (halt processor)
+    asm
+        code
+            "hlt"
+    end
+    print text "Test 3: HLT instruction executed"
+end
+
+function test_io_instructions
+    # Test 4: IN instruction (read from I/O port)
+    set port_value to 0
+    asm
+        code
+            "in al, 0x60"
+        outputs "=a": port_value
+    end
+    print text "Test 4: IN instruction executed"
+    
+    # Test 5: OUT instruction (write to I/O port)
+    set data to 42
+    asm
+        code
+            "out 0x80, al"
+        inputs "a": data
+    end
+    print text "Test 5: OUT instruction executed"
+end
+
+function test_control_registers
+    # Test 6: MOV CR0 instruction (control register access)
+    set cr0_value to 0
+    asm
+        code
+            "mov rax, cr0"
+        outputs "=a": cr0_value
+    end
+    print text "Test 6: MOV CR0 instruction executed"
+end
+
+function test_stack_manipulation
+    # Test 7: PUSH instruction
+    set value to 100
+    asm
+        code
+            "push rax"
+        inputs "a": value
+    end
+    print text "Test 7: PUSH instruction executed"
+    
+    # Test 8: POP instruction
+    set result to 0
+    asm
+        code
+            "pop rax"
+        outputs "=a": result
+    end
+    print text "Test 8: POP instruction executed"
+    
+    # Test 9: CALL instruction
+    asm
+        code
+            "nop"
+            "call some_label"
+            "some_label: nop"
+    end
+    print text "Test 9: CALL instruction executed"
+end
+
+function test_interrupt_instructions
+    # Test 10: INT instruction (software interrupt)
+    asm
+        code
+            "int 0x80"
+    end
+    print text "Test 10: INT instruction executed"
+    
+    # Test 11: IRET instruction (return from interrupt)
+    asm
+        code
+            "iretq"
+    end
+    print text "Test 11: IRET instruction executed"
+end
+
+function test_system_instructions
+    # Test 12: RDMSR instruction (read model-specific register)
+    asm
+        code
+            "rdmsr"
+    end
+    print text "Test 12: RDMSR instruction executed"
+    
+    # Test 13: WRMSR instruction (write model-specific register)
+    asm
+        code
+            "wrmsr"
+    end
+    print text "Test 13: WRMSR instruction executed"
+end
+
+# Main execution
+print text "=== Week 8: Dangerous Instruction Detection Test ==="
+print text ""
+print text "Testing privileged instructions..."
+call test_privileged_instructions
+print text ""
+
+print text "Testing I/O instructions..."
+call test_io_instructions
+print text ""
+
+print text "Testing control register access..."
+call test_control_registers
+print text ""
+
+print text "Testing stack manipulation..."
+call test_stack_manipulation
+print text ""
+
+print text "Testing interrupt instructions..."
+call test_interrupt_instructions
+print text ""
+
+print text "Testing system instructions..."
+call test_system_instructions
+print text ""
+
+print text "=== All dangerous instruction tests completed ==="
+print text "Note: This program should compile with warnings for each dangerous instruction"

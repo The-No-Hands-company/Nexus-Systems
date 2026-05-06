@@ -1,0 +1,26 @@
+# Test logical operators: and, or, not
+
+# Test AND
+set a to 1
+set b to 1
+if a and b
+    print text "Both true"
+
+# Test OR
+set c to 0
+if a or c
+    print text "At least one true"
+
+# Test NOT
+if not c
+    print text "c is false"
+
+# Complex expression
+if a and (b or c)
+    print text "Complex: true"
+
+# Short-circuit test
+set x to 10
+set y to 20
+if x is greater than 5 and y is less than 30
+    print text "Both conditions met"

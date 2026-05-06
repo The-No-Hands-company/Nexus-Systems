@@ -1,0 +1,37 @@
+# Test program for nlpllint
+# This has intentional bugs to test the analyzer
+
+# Memory leak - allocate without free
+function test_memory_leak
+    set buffer to alloc with 1024
+    print text "Allocated buffer"
+    # Missing: call dealloc with buffer
+end
+
+# Use-after-free
+function test_use_after_free
+    set data to alloc with 100
+    call dealloc with data
+    set value to dereference data
+end
+
+# Double-free
+function test_double_free
+    set ptr to alloc with 50
+    call dealloc with ptr
+    call dealloc with ptr
+end
+
+# Resource leak - file not closed
+function test_file_leak
+    set file to open "data.txt"
+    set content to read_file with "data.txt"
+    print text content
+    # Missing: call close with file
+end
+
+# Call test functions
+call test_memory_leak
+call test_use_after_free
+call test_double_free
+call test_file_leak

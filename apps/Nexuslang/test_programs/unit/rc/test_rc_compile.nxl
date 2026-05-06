@@ -1,0 +1,22 @@
+# Basic Rc<T> compilation test
+# This program tests that Rc types are recognized and runtime functions are declared
+
+# Function with Rc parameter type
+function test_rc_parameter with x as Rc of Integer
+    print text "Function with Rc parameter compiled successfully"
+end
+
+# Function with Weak parameter type
+function test_weak_parameter with x as Weak of Integer
+    print text "Function with Weak parameter compiled successfully"  
+end
+
+# Function with Arc parameter type
+function test_arc_parameter with x as Arc of Integer
+    print text "Function with Arc parameter compiled successfully"
+end
+
+# Main function - just verify compilation
+function main
+    print text "SUCCESS: Rc types recognized and runtime functions declared"
+end

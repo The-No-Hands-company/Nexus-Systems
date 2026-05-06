@@ -1,0 +1,61 @@
+# Test exception frame access within interrupt handlers
+print text "Testing exception frame access..."
+
+# Define handler that inspects exception frame
+function frame_inspector_handler with frame as Dict
+    print text "Handler invoked - inspecting frame"
+    
+    print text "Vector number:"
+    print text frame["vector"]
+    
+    print text "Instruction pointer (RIP):"
+    print text frame["rip"]
+    
+    print text "Stack pointer (RSP):"
+    print text frame["rsp"]
+    
+    print text "CPU flags (RFLAGS):"
+    print text frame["rflags"]
+    
+    print text "Error code:"
+    print text frame["error_code"]
+    
+    print text "General purpose registers:"
+    print text "RAX:"
+    print text frame["rax"]
+    print text "RBX:"
+    print text frame["rbx"]
+    
+    print text "Frame inspection complete"
+end
+
+try
+    # Register handler for general protection fault (vector 13)
+    print text "Registering handler for vector 13 (GP fault)"
+    register_interrupt_handler with vector: 13 and handler: frame_inspector_handler
+    
+    # List handlers
+    set handlers to list_interrupt_handlers
+    print text "Registered handlers:"
+    for each handler in handlers
+        print text "Vector:"
+        print text handler["vector"]
+        print text "Vector name:"
+        print text handler["vector_name"]
+    end
+    
+    # Note: Actually triggering interrupts requires kernel mode
+    # This test verifies the registration and frame structure
+    
+    # Unregister
+    unregister_interrupt_handler with vector: 13
+    print text "Handler unregistered"
+    
+    print text "Exception frame test: SUCCESS"
+    
+catch error with message
+    print text "Error (expected without root):"
+    print text message
+end
+
+print text "Test complete"

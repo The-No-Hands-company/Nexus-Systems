@@ -1,0 +1,72 @@
+# NexusLang Variadic Parameters Example
+# Demonstrates *args style variable-length argument lists
+
+# Example 1: Simple variadic function
+function print_all with *messages as String
+    print text "Messages:"
+    for each msg in messages
+        print text msg
+    end
+end
+
+print text "=== Example 1: Simple Variadic ==="
+print_all with "Hello"
+print_all with "One" and "Two" and "Three" and "Four"
+
+# Example 2: Required + variadic parameters
+function greet_all with greeting as String and *names as String
+    for each name in names
+        print text greeting
+        print text name
+    end
+end
+
+print text ""
+print text "=== Example 2: Required + Variadic ==="
+greet_all with "Hello" and "Alice" and "Bob" and "Charlie"
+greet_all with "Hi"  # No variadic args - gets empty list
+
+# Example 3: Variadic with numeric operations
+function sum_all with *numbers as Integer
+    set total to 0
+    for each num in numbers
+        set total to total plus num
+    end
+    print text "Sum:"
+    print text total
+end
+
+print text ""
+print text "=== Example 3: Numeric Variadic ==="
+sum_all with 1 and 2 and 3 and 4 and 5
+sum_all with 10 and 20 and 30
+
+# Example 4: Combining features (required + default + variadic)
+function log_message with level as String and show_time as Boolean default to True and *messages as String
+    if show_time
+        print text "[TIMESTAMP]"
+    end
+    print text level
+    for each msg in messages
+        print text msg
+    end
+end
+
+print text ""
+print text "=== Example 4: All Features Combined ==="
+log_message with "ERROR" and True and "Connection" and "failed"
+log_message with "INFO" and False and "Server" and "started" and "on" and "port" and "8080"
+log_message with "WARNING" and "Low" and "memory"  # Uses default show_time=True
+
+# Example 5: Empty variadic parameters
+function maybe_print with prefix as String and *optional_messages as String
+    print text prefix
+    for each msg in optional_messages
+        print text msg
+    end
+end
+
+print text ""
+print text "=== Example 5: Empty Variadic ==="
+maybe_print with "Prefix only"
+maybe_print with "With messages" and "message1" and "message2"

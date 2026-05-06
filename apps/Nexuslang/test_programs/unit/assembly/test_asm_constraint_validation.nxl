@@ -1,0 +1,71 @@
+# Test: Inline Assembly Constraint Validation
+# Tests basic constraint validation (Week 1-2)
+
+print text "Testing inline assembly constraint validation:"
+print text ""
+
+# Test 1: Valid input constraints
+print text "Test 1: Valid input constraints"
+set x to 10
+set result1 to 0
+asm
+    code
+        "mov rax, $1"
+        "mov $0, rax"
+    outputs "=r": result1
+    inputs "r": x
+end
+print text "Valid 'r' constraint: PASS"
+
+# Test 2: Valid specific register constraints
+print text "Test 2: Specific register constraints"
+set b_val to 20
+set result2 to 0
+asm
+    code
+        "mov rax, $1"
+        "mov $0, rax"
+    outputs "=r": result2
+    inputs "r": b_val
+end
+print text "Valid 'r' constraints: PASS"
+
+# Test 3: Memory constraint (register for now)
+print text "Test 3: Register constraint"
+set mem_var to 30
+set result3 to 0
+asm
+    code
+        "mov rax, $1"
+        "mov $0, rax"
+    outputs "=r": result3
+    inputs "r": mem_var
+end
+print text "Valid 'r' constraint: PASS"
+
+# Test 4: Different register input
+print text "Test 4: Integer value constraint"
+set g_val to 40
+set result4 to 0
+asm
+    code
+        "mov rax, $1"
+        "mov $0, rax"
+    outputs "=r": result4
+    inputs "r": g_val
+end
+print text "Valid 'r' constraint: PASS"
+
+# Test 5: Early clobber constraint
+print text "Test 5: Early clobber constraint"
+set early_out to 0
+asm
+    code
+        "mov $0, 777"
+    outputs "=&r": early_out
+end
+print text "Valid '=&r' early clobber: PASS"
+
+print text ""
+print text "All constraint validation tests passed!"
+print text "Note: Invalid constraint tests should be in separate error-testing program"

@@ -1,0 +1,10 @@
+# LSP smoke test fixture
+# This file contains a deliberate syntax error so the LSP server
+# will produce at least one E001 diagnostic on didOpen.
+# Used exclusively by tests/test_lsp_smoke_diagnostics.py.
+
+set greeting to "hello"
+print text greeting
+
+# Deliberate syntax error: incomplete expression triggers E001
+set broken to

@@ -1,0 +1,40 @@
+# Simple Optimization Test
+# Tests constant folding, DCE, and inlining
+
+# Function that will be inlined
+function add_numbers with a as Integer and b as Integer returns Integer
+    return a plus b
+
+# Function with constant folding opportunities (takes dummy arg for now)
+function get_constant with dummy as Integer returns Integer
+    set x to 5 plus 10
+    set y to x times 2
+    return y
+
+# Unused function - should be removed by DCE
+function never_called with dummy as Integer returns Integer
+    return 42
+
+# Used function
+function compute with n as Integer returns Integer
+    set result to n times 2
+    return result
+
+# Main entry point
+function main returns Integer
+    print text "Optimization Test"
+    
+    set a to 10
+    set b to 20
+    
+    set sum to add_numbers with a and b
+    print text sum
+    
+    # Call get_constant with dummy argument
+    set constant to get_constant with 0
+    print text constant
+    
+    set computed to compute with 5
+    print text computed
+    
+    return 0

@@ -1,0 +1,95 @@
+# Lit Cube - Phong Lighting Demo
+# Demonstrates diffuse + specular + ambient lighting with normal vectors
+
+print text "=== NexusLang Lit Cube ==="
+print text "Creating window..."
+
+set window to create_window with 800 and 600 and "NLPL Lighting"
+
+# Vertex shader with normals
+set vs to "#version 330 core
+layout (location = 0) in vec3 aPos;
+layout (location = 1) in vec3 aNormal;
+out vec3 FragPos;
+out vec3 Normal;
+uniform mat4 model;
+uniform mat4 view;
+uniform mat4 projection;
+void main() {
+    FragPos = vec3(model * vec4(aPos, 1.0));
+    Normal = mat3(transpose(inverse(model))) * aNormal;
+    gl_Position = projection * view * vec4(FragPos, 1.0);
+}"
+
+# Phong fragment shader
+set fs to "#version 330 core
+out vec4 FragColor;
+in vec3 FragPos;
+in vec3 Normal;
+uniform vec3 lightPos;
+uniform vec3 viewPos;
+uniform vec3 lightColor;
+uniform vec3 objectColor;
+void main() {
+    float ambientStrength = 0.2;
+    vec3 ambient = ambientStrength * lightColor;
+    vec3 norm = normalize(Normal);
+    vec3 lightDir = normalize(lightPos - FragPos);
+    float diff = max(dot(norm, lightDir), 0.0);
+    vec3 diffuse = diff * lightColor;
+    float specularStrength = 0.5;
+    vec3 viewDir = normalize(viewPos - FragPos);
+    vec3 reflectDir = reflect(-lightDir, norm);
+    float spec = pow(max(dot(viewDir, reflectDir), 0.0), 32.0);
+    vec3 specular = specularStrength * spec * lightColor;
+    vec3 result = (ambient + diffuse + specular) * objectColor;
+    FragColor = vec4(result, 1.0);
+}"
+
+print text "Compiling shaders..."
+set shader to create_shader with vs and fs
+
+# Cube vertices with normals (position + normal for each vertex)
+set vertices to [-0.5, -0.5, -0.5, 0.0, 0.0, -1.0, 0.5, -0.5, -0.5, 0.0, 0.0, -1.0, 0.5, 0.5, -0.5, 0.0, 0.0, -1.0, 0.5, 0.5, -0.5, 0.0, 0.0, -1.0, -0.5, 0.5, -0.5, 0.0, 0.0, -1.0, -0.5, -0.5, -0.5, 0.0, 0.0, -1.0, -0.5, -0.5, 0.5, 0.0, 0.0, 1.0, 0.5, -0.5, 0.5, 0.0, 0.0, 1.0, 0.5, 0.5, 0.5, 0.0, 0.0, 1.0, 0.5, 0.5, 0.5, 0.0, 0.0, 1.0, -0.5, 0.5, 0.5, 0.0, 0.0, 1.0, -0.5, -0.5, 0.5, 0.0, 0.0, 1.0, -0.5, 0.5, 0.5, -1.0, 0.0, 0.0, -0.5, 0.5, -0.5, -1.0, 0.0, 0.0, -0.5, -0.5, -0.5, -1.0, 0.0, 0.0, -0.5, -0.5, -0.5, -1.0, 0.0, 0.0, -0.5, -0.5, 0.5, -1.0, 0.0, 0.0, -0.5, 0.5, 0.5, -1.0, 0.0, 0.0, 0.5, 0.5, 0.5, 1.0, 0.0, 0.0, 0.5, 0.5, -0.5, 1.0, 0.0, 0.0, 0.5, -0.5, -0.5, 1.0, 0.0, 0.0, 0.5, -0.5, -0.5, 1.0, 0.0, 0.0, 0.5, -0.5, 0.5, 1.0, 0.0, 0.0, 0.5, 0.5, 0.5, 1.0, 0.0, 0.0, -0.5, -0.5, -0.5, 0.0, -1.0, 0.0, 0.5, -0.5, -0.5, 0.0, -1.0, 0.0, 0.5, -0.5, 0.5, 0.0, -1.0, 0.0, 0.5, -0.5, 0.5, 0.0, -1.0, 0.0, -0.5, -0.5, 0.5, 0.0, -1.0, 0.0, -0.5, -0.5, -0.5, 0.0, -1.0, 0.0, -0.5, 0.5, -0.5, 0.0, 1.0, 0.0, 0.5, 0.5, -0.5, 0.0, 1.0, 0.0, 0.5, 0.5, 0.5, 0.0, 1.0, 0.0, 0.5, 0.5, 0.5, 0.0, 1.0, 0.0, -0.5, 0.5, 0.5, 0.0, 1.0, 0.0, -0.5, 0.5, -0.5, 0.0, 1.0, 0.0]
+
+print text "Creating lit cube..."
+set vao to create_vertex_array()
+set vbo to create_vertex_buffer with vertices
+call vao_set_vertex_buffer with vao and vbo
+call vao_set_attribute with vao and 0 and 3 and 24 and 0
+call vao_set_attribute with vao and 1 and 3 and 24 and 12
+
+# FPS camera
+set cam to create_fps_camera with 0.0 and 0.0 and 5.0
+set proj to mat4_perspective with 0.785 and 1.333 and 0.1 and 100.0
+set proj_list to mat4_to_list with proj
+
+call set_clear_color with 0.05 and 0.05 and 0.1 and 1.0
+
+print text "Rendering with lighting..."
+set angle to 0.0
+
+while not window_should_close with window
+    set angle to angle plus 0.02
+    set view_list to camera_get_view_matrix with cam
+    set model to mat4_rotation_y with angle
+    set model_list to mat4_to_list with model
+    
+    call begin_frame
+    call use_shader with shader
+    call set_uniform_mat4 with shader and "model" and model_list
+    call set_uniform_mat4 with shader and "view" and view_list
+    call set_uniform_mat4 with shader and "projection" and proj_list
+    call set_uniform_vec3 with shader and "lightPos" and 2.0 and 2.0 and 2.0
+    call set_uniform_vec3 with shader and "viewPos" and 0.0 and 0.0 and 5.0
+    call set_uniform_vec3 with shader and "lightColor" and 1.0 and 1.0 and 1.0
+    call set_uniform_vec3 with shader and "objectColor" and 1.0 and 0.5 and 0.3
+    
+    call vao_draw_arrays with vao and 4 and 0 and 36
+    call end_frame with window
+end
+
+call delete_vertex_array with vao
+call delete_shader with shader
+call destroy_window with window
+print text "Lighting demo complete!"

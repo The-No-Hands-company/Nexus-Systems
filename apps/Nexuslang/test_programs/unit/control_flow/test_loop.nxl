@@ -1,0 +1,5 @@
+define a trait called Printable
+    methods:
+        define a method called print
+
+allocate 100 bytes for buffer

@@ -1,0 +1,39 @@
+# NexusLang Debugger Test Program
+# Purpose: Test basic debugging features
+
+function calculate_factorial with n as Integer returns Integer
+    if n is less than or equal to 1
+        return 1
+    end
+    
+    set result to n times calculate_factorial with n: n minus 1
+    return result
+end
+
+function main returns Integer
+    print text "Factorial Calculator - Debug Test"
+    print text "==================================="
+    
+    set numbers to new List of Integer
+    call numbers.add with 3
+    call numbers.add with 5
+    call numbers.add with 7
+    
+    for each num in numbers
+        set factorial to calculate_factorial with n: num
+        print text "Factorial of " + string num + " = " + string factorial
+    end
+    
+    print text ""
+    print text "Testing breakpoint at line 28..."
+    set x to 42
+    set y to 100
+    set sum to x plus y
+    print text "Sum: " + string sum
+    
+    print text "Debug test complete!"
+    return 0
+end
+
+# Run main
+call main

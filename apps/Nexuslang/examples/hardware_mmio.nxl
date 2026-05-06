@@ -1,0 +1,199 @@
+# NexusLang Example: Memory-Mapped I/O (MMIO) Operations
+# Demonstrates low-level hardware access via memory mapping
+#
+# WARNING: Requires root/administrator privileges
+# Usage: sudo python -m nexuslang.main examples/hardware_mmio.nlpl
+
+print text "NLPL Memory-Mapped I/O Example"
+print text "================================"
+print text ""
+
+# Example 1: VGA Text Mode Buffer Access
+print text "Example 1: VGA Text Mode Buffer (0xB8000)"
+print text "------------------------------------------"
+print text "The VGA text buffer is located at physical address 0xB8000"
+print text "It contains 80x25 character cells, each with 2 bytes:"
+print text "  - Byte 0: ASCII character code"
+print text "  - Byte 1: Attribute (color/style)"
+print text ""
+
+set vga_phys_addr to 753664  # 0xB8000 in decimal
+set vga_size to 4000         # 80 columns * 25 rows * 2 bytes
+
+try
+    # Map VGA buffer with uncacheable hint (UC)
+    # UC is appropriate for device memory that has side effects
+    print text "Mapping VGA buffer..."
+    set vga_buffer to map_memory with physical_address: vga_phys_addr and size: vga_size and cache_hint: "UC"
+    print text "VGA buffer mapped at virtual address: "
+    print text vga_buffer
+    print text ""
+    
+    # Write "Hello NLPL!" to top-left corner of screen
+    print text "Writing 'Hello NLPL!' to screen..."
+    
+    # Character 'H' (72) with light gray on black (0x07)
+    write mmio byte with address: vga_buffer and value: 72 and offset: 0
+    write mmio byte with address: vga_buffer and value: 7 and offset: 1
+    
+    # Character 'e' (101)
+    write mmio byte with address: vga_buffer and value: 101 and offset: 2
+    write mmio byte with address: vga_buffer and value: 7 and offset: 3
+    
+    # Character 'l' (108)
+    write mmio byte with address: vga_buffer and value: 108 and offset: 4
+    write mmio byte with address: vga_buffer and value: 7 and offset: 5
+    
+    # Character 'l' (108)
+    write mmio byte with address: vga_buffer and value: 108 and offset: 6
+    write mmio byte with address: vga_buffer and value: 7 and offset: 7
+    
+    # Character 'o' (111)
+    write mmio byte with address: vga_buffer and value: 111 and offset: 8
+    write mmio byte with address: vga_buffer and value: 7 and offset: 9
+    
+    # Space (32)
+    write mmio byte with address: vga_buffer and value: 32 and offset: 10
+    write mmio byte with address: vga_buffer and value: 7 and offset: 11
+    
+    # Character 'N' (78) with bright green (0x0A)
+    write mmio byte with address: vga_buffer and value: 78 and offset: 12
+    write mmio byte with address: vga_buffer and value: 10 and offset: 13
+    
+    # Character 'L' (76)
+    write mmio byte with address: vga_buffer and value: 76 and offset: 14
+    write mmio byte with address: vga_buffer and value: 10 and offset: 15
+    
+    # Character 'P' (80)
+    write mmio byte with address: vga_buffer and value: 80 and offset: 16
+    write mmio byte with address: vga_buffer and value: 10 and offset: 17
+    
+    # Character 'L' (76)
+    write mmio byte with address: vga_buffer and value: 76 and offset: 18
+    write mmio byte with address: vga_buffer and value: 10 and offset: 19
+    
+    # Character '!' (33)
+    write mmio byte with address: vga_buffer and value: 33 and offset: 20
+    write mmio byte with address: vga_buffer and value: 10 and offset: 21
+    
+    print text "Text written to VGA buffer"
+    print text ""
+    
+    # Read back the first character
+    set char_code to read mmio byte with address: vga_buffer and offset: 0
+    set char_attr to read mmio byte with address: vga_buffer and offset: 1
+    print text "First character read back:"
+    print text "  Code: "
+    print text char_code
+    print text "  Attribute: "
+    print text char_attr
+    print text ""
+    
+    # Get mapping information
+    set info to get mapping info with address: vga_buffer
+    print text "Mapping info:"
+    print text "  Physical: 0x"
+    print text info["physical_address"]
+    print text "  Virtual: 0x"
+    print text info["virtual_address"]
+    print text "  Size: "
+    print text info["size"]
+    print text "  Cache: "
+    print text info["cache_hint"]
+    print text ""
+    
+    # Unmap when done
+    print text "Unmapping VGA buffer..."
+    unmap memory with address: vga_buffer
+    print text "VGA buffer unmapped successfully"
+    
+    # Clean up
+    unmap_memory with address: vga_buffer
+    print text ""
+    
+catch error with message
+    print text "Error occurred: "
+    print text message
+    print text ""
+    print text "Note: This example requires root/administrator privileges"
+    print text "  Linux: sudo python -m nexuslang.main examples/hardware_mmio.nxl"
+    print text "  Windows: Run as Administrator"
+    print text ""
+end
+
+# Example 2: Framebuffer with Write-Combining
+print text "Example 2: Framebuffer Mapping with Write-Combining"
+print text "----------------------------------------------------"
+print text "Modern framebuffers benefit from WC (write-combining) cache hint"
+print text "WC allows the CPU to buffer writes for better performance"
+print text ""
+
+set fb_phys_addr to 0xE0000000  # Typical framebuffer address
+set fb_size to 0x800000         # 8 MB framebuffer
+
+try
+    # Map framebuffer with write-combining hint (WC)
+    # WC allows buffered writes which improves performance for framebuffers
+    print text "Mapping framebuffer..."
+    set framebuffer to map_memory with physical_address: fb_phys_addr and size: fb_size and cache_hint: "WC"
+    print text "Framebuffer mapped at: "
+    print text framebuffer
+    
+    # Write pixel data (example: 32-bit RGBA)
+    print text "Writing pixel data..."
+    set pixel_color to 0xFF0000FF  # Red with full alpha
+    write mmio dword with address: framebuffer and value: pixel_color and offset: 0
+    
+    print text "Pixel written successfully"
+    print text ""
+    
+    # List all active mappings
+    print text "Active MMIO mappings:"
+    set mappings to list mappings
+    print text "Count: "
+    print text mappings.length
+    print text ""
+    
+    unmap memory with address: framebuffer
+    print text "Framebuffer unmapped"
+    print text ""
+    
+catch error with message
+    print text "Error (expected - framebuffer address may not exist): "
+    print text message
+    print text ""
+end
+
+# Example 3: Device Register Access
+print text "Example 3: Device Register Access Pattern"
+print text "------------------------------------------"
+print text "Typical pattern for accessing device registers via MMIO"
+print text ""
+
+function read_device_register with device_base, register_offset returns Integer
+    # Read a 32-bit device register
+    set value to read mmio dword with address: device_base and offset: register_offset
+    return value
+end
+
+function write_device_register with device_base, register_offset, value
+    # Write a 32-bit device register
+    write mmio dword with address: device_base and value: value and offset: register_offset
+end
+
+print text "Device register access functions defined"
+print text "  - read_device_register(base, offset) -> value"
+print text "  - write_device_register(base, offset, value)"
+print text ""
+
+print text "Example complete!"
+print text ""
+print text "Key NexusLang MMIO Functions:"
+print text "  - map_memory: Map physical memory to virtual address"
+print text "  - unmap_memory: Release mapped memory"
+print text "  - read mmio byte/word/dword/qword: Volatile reads"
+print text "  - write mmio byte/word/dword/qword: Volatile writes"
+print text "  - get mapping info: Get mapping details"
+print text "  - list mappings: List all active mappings"
+print text ""
+print text "Cache hints: UC (default), WC (framebuffers), WB, WT, WP"

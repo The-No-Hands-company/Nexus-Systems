@@ -1,0 +1,124 @@
+# Test: Inline Assembly Labels and Jumps
+# Tests that local labels and jump instructions work within inline assembly
+
+print text "Testing inline assembly labels and jumps:"
+print text ""
+
+# Test 1: Simple loop with label and jump
+print text "Test 1: Simple loop with label (count to 5)"
+set counter to 0
+set result to 0
+asm
+    code
+        "mov rcx, 0"
+        ".L_loop1:"
+        "inc rcx"
+        "cmp rcx, 5"
+        "jl .L_loop1"
+        "mov $0, rcx"
+    outputs "=r": result
+end
+print text "  Result: "
+print number result
+print text "  Expected: 5"
+print text ""
+
+# Test 2: Conditional branch with two labels
+print text "Test 2: Conditional branch (check if value > 10)"
+set check_val to 15
+set is_greater to 0
+asm
+    code
+        "mov rax, $1"
+        "cmp rax, 10"
+        "jg .L_greater"
+        "mov $0, 0"
+        "jmp .L_done"
+        ".L_greater:"
+        "mov $0, 1"
+        ".L_done:"
+    outputs "=r": is_greater
+    inputs "r": check_val
+end
+print text "  Is 15 > 10? "
+print number is_greater
+print text "  Expected: 1 (true)"
+print text ""
+
+# Test 3: Multiple labels with nested logic
+print text "Test 3: Multiple labels (categorize value 0-100)"
+set input_val to 42
+set category to 0
+asm
+    code
+        "mov rax, $1"
+        "cmp rax, 25"
+        "jl .L_low"
+        "cmp rax, 75"
+        "jl .L_medium"
+        "mov $0, 3"
+        "jmp .L_end"
+        ".L_low:"
+        "mov $0, 1"
+        "jmp .L_end"
+        ".L_medium:"
+        "mov $0, 2"
+        ".L_end:"
+    outputs "=r": category
+    inputs "r": input_val
+end
+print text "  Category for 42: "
+print number category
+print text "  Expected: 2 (medium: 25-74)"
+print text ""
+
+# Test 4: Loop with multiple conditions
+print text "Test 4: Sum of numbers 1-10"
+set sum to 0
+asm
+    code
+        "xor rax, rax"
+        "mov rcx, 1"
+        ".L_sum_loop:"
+        "add rax, rcx"
+        "inc rcx"
+        "cmp rcx, 11"
+        "jl .L_sum_loop"
+        "mov $0, rax"
+    outputs "=r": sum
+end
+print text "  Sum 1-10: "
+print number sum
+print text "  Expected: 55"
+print text ""
+
+# Test 5: Jump table simulation (find max of 3 numbers)
+print text "Test 5: Find maximum of three values"
+set a to 42
+set b to 17
+set c to 98
+set max_val to 0
+asm
+    code
+        "mov rax, $1"
+        "mov rbx, $2"
+        "mov rcx, $3"
+        "cmp rax, rbx"
+        "jge .L_check_a_c"
+        "mov rax, rbx"
+        ".L_check_a_c:"
+        "cmp rax, rcx"
+        "jge .L_max_found"
+        "mov rax, rcx"
+        ".L_max_found:"
+        "mov $0, rax"
+    outputs "=r": max_val
+    inputs "r": a, "r": b, "r": c
+end
+print text "  Max of (42, 17, 98): "
+print number max_val
+print text "  Expected: 98"
+print text ""
+
+print text "All label and jump tests complete!"
+print text "Note: Labels use .L_ prefix, jumps use je/jne/jg/jl/jmp/etc."

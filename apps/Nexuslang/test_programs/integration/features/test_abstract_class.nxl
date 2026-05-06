@@ -1,0 +1,11 @@
+# Test abstract class
+
+abstract class Shape
+    public abstract function calculate area returns Float
+    public abstract function calculate perimeter returns Float
+    
+    public function describe returns String
+        return "This is a shape"
+end
+
+print text "Abstract class defined successfully"

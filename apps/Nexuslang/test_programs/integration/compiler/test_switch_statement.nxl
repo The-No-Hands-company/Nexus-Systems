@@ -1,0 +1,96 @@
+# Switch Statement Test for NexusLang Compiler
+
+print text "=== Switch Statement Tests ==="
+
+# Test 1: Integer switch with multiple cases
+print text "Test 1: Integer switch"
+set day to 3
+switch day
+    case 1
+        print text "Monday"
+    case 2
+        print text "Tuesday"
+    case 3
+        print text "Wednesday"
+    case 4
+        print text "Thursday"
+    case 5
+        print text "Friday"
+    default
+        print text "Weekend"
+
+# Test 2: Switch with default only
+print text "Test 2: Unknown day"
+set unknown_day to 7
+switch unknown_day
+    case 1
+        print text "This won't print"
+    default
+        print text "Weekend or invalid"
+
+# Test 3: Switch with operations in cases
+print text "Test 3: Switch with computation"
+set operation to 1
+set result to 0
+switch operation
+    case 1
+        set result to 10 plus 5
+        print text "Addition result: "
+        print number result
+    case 2
+        set result to 10 minus 5
+        print text "Subtraction result: "
+        print number result
+    case 3
+        set result to 10 times 5
+        print text "Multiplication result: "
+        print number result
+    default
+        print text "Unknown operation"
+
+# Test 4: Nested switch
+print text "Test 4: Nested switch"
+set category to 1
+set subcategory to 2
+switch category
+    case 1
+        print text "Category 1"
+        switch subcategory
+            case 1
+                print text "  Subcategory 1-1"
+            case 2
+                print text "  Subcategory 1-2"
+            default
+                print text "  Unknown subcategory"
+    case 2
+        print text "Category 2"
+    default
+        print text "Unknown category"
+
+# Test 5: Switch with zero case
+print text "Test 5: Zero value"
+set value to 0
+switch value
+    case 0
+        print text "Zero detected"
+    case 1
+        print text "One"
+    default
+        print text "Other"
+
+# Test 6: Negative values
+print text "Test 6: Negative value switch"
+set temperature to -5
+switch temperature
+    case -10
+        print text "Very cold"
+    case -5
+        print text "Cold"
+    case 0
+        print text "Freezing"
+    case 5
+        print text "Cool"
+    default
+        print text "Other temperature"
+
+print text "=== All switch tests complete ==="

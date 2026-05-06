@@ -1,0 +1,126 @@
+# FFI Test: Basic Type Marshalling
+# Tests passing fundamental C types between NexusLang and C functions
+
+# Integer types
+extern function abs with value as Integer returns Integer from library "c"
+extern function labs with value as Integer returns Integer from library "c"
+
+# Floating-point types
+extern function fabs with value as Float returns Float from library "m"
+extern function sqrt with value as Float returns Float from library "m"
+extern function pow with base as Float, exponent as Float returns Float from library "m"
+
+# Boolean-like operations
+extern function isdigit with c as Integer returns Integer from library "c"
+extern function isalpha with c as Integer returns Integer from library "c"
+
+function test_integer_types
+    print text "Testing integer type marshalling..."
+    
+    # Test abs() with negative integer
+    set neg_val to -42
+    set result to abs(neg_val)
+    print text "abs(-42) = "
+    print number result
+    
+    if result is equal to 42
+        print text "  PASS: Integer marshalling works"
+    else
+        print text "  FAIL: Expected 42, got "
+        print number result
+    end
+    
+    # Test labs() with large negative
+    set large_neg to -1000000
+    set large_result to labs(large_neg)
+    print text "labs(-1000000) = "
+    print number large_result
+    
+    if large_result is equal to 1000000
+        print text "  PASS: Long integer marshalling works"
+    else
+        print text "  FAIL"
+    end
+end
+
+function test_float_types
+    print text "Testing floating-point type marshalling..."
+    
+    # Test fabs() with negative float
+    set neg_float to -3.14
+    set result to fabs(neg_float)
+    print text "fabs(-3.14) = "
+    print number result
+    
+    # Test sqrt()
+    set value to 16.0
+    set sqrt_result to sqrt(value)
+    print text "sqrt(16.0) = "
+    print number sqrt_result
+    
+    if sqrt_result is greater than 3.9 and sqrt_result is less than 4.1
+        print text "  PASS: Float marshalling works"
+    else
+        print text "  FAIL: Expected ~4.0"
+    end
+    
+    # Test pow()
+    set base to 2.0
+    set exp to 10.0
+    set pow_result to pow(base, exp)
+    print text "pow(2.0, 10.0) = "
+    print number pow_result
+    
+    if pow_result is greater than 1023.0 and pow_result is less than 1025.0
+        print text "  PASS: Multiple float parameters work"
+    else
+        print text "  FAIL: Expected 1024.0"
+    end
+end
+
+function test_char_types
+    print text "Testing character type marshalling..."
+    
+    # Test isdigit with ASCII '5' (53)
+    set digit_char to 53
+    set is_digit to isdigit(digit_char)
+    print text "isdigit('5') = "
+    print number is_digit
+    
+    if is_digit is not equal to 0
+        print text "  PASS: Character parameter works"
+    else
+        print text "  FAIL: Expected non-zero"
+    end
+    
+    # Test isalpha with ASCII 'A' (65)
+    set alpha_char to 65
+    set is_alpha to isalpha(alpha_char)
+    print text "isalpha('A') = "
+    print number is_alpha
+    
+    if is_alpha is not equal to 0
+        print text "  PASS: Character marshalling complete"
+    else
+        print text "  FAIL"
+    end
+end
+
+function main
+    print text "=== FFI Basic Type Marshalling Test ==="
+    print text ""
+    
+    call test_integer_types
+    print text ""
+    
+    call test_float_types
+    print text ""
+    
+    call test_char_types
+    print text ""
+    
+    print text "=== Test Complete ==="
+end
+
+# Run tests
+main()

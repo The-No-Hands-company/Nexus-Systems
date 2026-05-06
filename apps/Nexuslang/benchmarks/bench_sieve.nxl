@@ -1,0 +1,48 @@
+# Prime Sieve Benchmark - Eratosthenes Algorithm
+# Tests: Array operations, loops, integer arithmetic
+# Target: Memory-intensive algorithm with lots of writes
+
+function sieve_of_eratosthenes with limit as Integer returns Integer
+    # Create list of all numbers from 2 to limit
+    set primes to [true, true]  # 0 and 1 are not prime
+    
+    # Initialize: all numbers are potentially prime
+    set i to 2
+    while i is less than or equal to limit
+        append true to primes
+        set i to i plus 1
+    end
+    
+    # Sieve
+    set p to 2
+    while p times p is less than or equal to limit
+        if primes[p] equals true
+            # Mark multiples of p as not prime
+            set multiple to p times p
+            while multiple is less than or equal to limit
+                set primes[multiple] to false
+                set multiple to multiple plus p
+            end
+        end
+        set p to p plus 1
+    end
+    
+    # Count primes
+    set count to 0
+    set i to 2
+    while i is less than or equal to limit
+        if primes[i] equals true
+            set count to count plus 1
+        end
+        set i to i plus 1
+    end
+    
+    return count
+end
+
+# Run benchmark - find primes up to 1000
+set count to sieve_of_eratosthenes with 1000
+
+print text "Found "
+print text convert count to string
+print text " primes up to 1000"

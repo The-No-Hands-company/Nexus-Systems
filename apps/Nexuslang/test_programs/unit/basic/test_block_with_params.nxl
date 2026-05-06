@@ -1,0 +1,21 @@
+# Test block with parameters
+
+function each_item with list as List and block as Function
+    print text "Iterating over list..."
+    for each item in list
+        block(item)
+    end
+    print text "Done iterating!"
+end
+
+set numbers to [1, 2, 3, 4, 5]
+print text "Numbers created"
+
+each_item with numbers do item
+    print text "Processing item:"
+    print text item
+    print text "Doubled:"
+    print text item times 2
+end
+
+print text "Test complete!"

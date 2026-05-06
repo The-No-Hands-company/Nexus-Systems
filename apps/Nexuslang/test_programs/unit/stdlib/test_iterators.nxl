@@ -1,0 +1,34 @@
+# Test iterator protocol and ranges
+print text "=== Iterator Protocol Tests ==="
+
+# Define helper functions (since lambdas are not supported yet)
+# Define helper functions (since lambdas are not supported yet)
+function double that takes x as Integer returns Integer
+    return x * 2
+
+function is_even that takes x as Integer returns Boolean
+    return x % 2 == 0
+
+function add that takes acc as Integer, x as Integer returns Integer
+    return acc + x
+
+# Test range creation
+set range1 to create_range with 1 and 6 and false
+print text "Range 1..5 created"
+
+# Test map
+set numbers to [1, 2, 3, 4, 5]
+set doubled_iter to map with numbers and double
+set doubled to collect with doubled_iter
+print text doubled
+
+# Test filter
+set evens_iter to filter with numbers and is_even
+set evens to collect with evens_iter
+print text evens
+
+# Test reduce
+set sum to reduce with numbers and 0 and add
+print text sum
+
+print text "=== All Iterator Tests Passed! ==="

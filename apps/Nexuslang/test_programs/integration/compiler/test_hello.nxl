@@ -1,0 +1,4 @@
+# Simple hello world test
+
+print text "Hello, World!"
+print text "NLPL Compiler Test"

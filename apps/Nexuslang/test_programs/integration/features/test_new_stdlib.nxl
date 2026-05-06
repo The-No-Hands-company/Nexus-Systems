@@ -1,0 +1,65 @@
+# Test New Standard Library Features
+
+print text "=== Testing New Standard Library ==="
+
+# 1. File System Operations
+print text "\n1. File System"
+set test_file to "/tmp/nxl_test.txt"
+set success to write_file(test_file, "Hello from NLPL!")
+set content to read_file(test_file)
+print text "  - File written and read"
+print content
+
+set file_info to get_file_info(test_file)
+print text "  - File info retrieved"
+
+set home to get_home_dir()
+set cwd to get_cwd()
+print text "  - Paths working"
+
+# 2. JSON Operations
+print text "\n2. JSON Parsing"
+set obj to {"language": "NexusLang", "version": 1}
+set json_out to to_json(obj, true)
+print text "  - Object to JSON:"
+print json_out
+
+set parsed to parse_json(json_out)
+print text "  - JSON parsed back"
+
+# 3. Regular Expressions  
+print text "\n3. Regular Expressions"
+set has_match to regex_match("NLP.", "NLPL is awesome")
+print text "  - Pattern matching:"
+print has_match
+
+set matches to regex_find_all("[0-9]+", "There are 42 features and 100 tests")
+print text "  - Found numbers:"
+print matches
+
+set replaced to regex_replace("cat", "dog", "The cat sat on the mat")
+print text "  - Replacement:"
+print replaced
+
+# 4. DateTime Operations
+print text "\n4. Date & Time"
+set current to now()
+print text "  - Current time:"
+print current
+
+set ts to timestamp()
+print text "  - Unix timestamp:"
+print ts
+
+set iso_time to to_iso(current)
+print text "  - ISO format:"
+print iso_time
+
+# Clean up
+set deleted to delete_file(test_file)
+
+print text "\n=== New Stdlib Features Working! ==="
+print text "File System: 35+ functions"
+print text "JSON: 9 functions"
+print text "Regex: 13 functions"
+print text "DateTime: 30+ functions"

@@ -1,0 +1,137 @@
+# Test: Atomic types and memory ordering operations
+# Covers: AtomicInteger, AtomicBoolean, AtomicPointer,
+#         load/store/exchange/compare_exchange, fetch_add/sub/and/or/xor,
+#         increment/decrement, fence, all memory orders.
+
+# --- AtomicInteger: create and basic load/store ---
+
+set counter to create_atomic_integer with 0
+set initial to atomic_load with counter and "seq_cst"
+print text "initial:"
+print text initial
+
+call atomic_store with counter and 42 and "seq_cst"
+set loaded to atomic_load with counter and "acquire"
+print text "after store 42:"
+print text loaded
+
+# --- AtomicInteger: fetch_add / fetch_sub ---
+
+set before_add to atomic_fetch_add with counter and 8 and "seq_cst"
+print text "before fetch_add(8):"
+print text before_add
+
+set now to atomic_load with counter and "relaxed"
+print text "after fetch_add(8):"
+print text now
+
+set before_sub to atomic_fetch_sub with counter and 10 and "seq_cst"
+print text "before fetch_sub(10):"
+print text before_sub
+
+set now to atomic_load with counter and "relaxed"
+print text "after fetch_sub(10):"
+print text now
+
+# --- AtomicInteger: increment / decrement ---
+
+call atomic_increment with counter and "seq_cst"
+call atomic_increment with counter and "seq_cst"
+call atomic_decrement with counter and "seq_cst"
+set after_inc_dec to atomic_load with counter and "seq_cst"
+print text "after 2x increment, 1x decrement:"
+print text after_inc_dec
+
+# --- AtomicInteger: exchange ---
+
+set old to atomic_exchange with counter and 100 and "seq_cst"
+print text "exchanged old value:"
+print text old
+set current to atomic_load with counter and "seq_cst"
+print text "after exchange to 100:"
+print text current
+
+# --- AtomicInteger: compare_exchange success ---
+
+set cas_result to atomic_compare_exchange with counter and 100 and 200 and "seq_cst"
+set success to cas_result[0]
+print text "compare_exchange(100->200) succeeded:"
+print text success
+set current to atomic_load with counter and "seq_cst"
+print text "value after successful CAS:"
+print text current
+
+# --- AtomicInteger: compare_exchange failure ---
+
+set cas_fail to atomic_compare_exchange with counter and 999 and 1 and "seq_cst"
+set fail_flag to cas_fail[0]
+print text "compare_exchange(999->1) succeeded (expect false):"
+print text fail_flag
+
+# --- AtomicInteger: bitwise fetch operations ---
+
+call atomic_store with counter and 15 and "seq_cst"
+set before_and to atomic_fetch_and with counter and 6 and "seq_cst"
+print text "before fetch_and(6) [15 and 6]:"
+print text before_and
+set now to atomic_load with counter and "relaxed"
+print text "after fetch_and(6), expect 6:"
+print text now
+
+call atomic_store with counter and 5 and "seq_cst"
+set before_or to atomic_fetch_or with counter and 2 and "seq_cst"
+print text "before fetch_or(2) [5 or 2]:"
+print text before_or
+set now to atomic_load with counter and "relaxed"
+print text "after fetch_or(2), expect 7:"
+print text now
+
+call atomic_store with counter and 7 and "seq_cst"
+set before_xor to atomic_fetch_xor with counter and 3 and "seq_cst"
+print text "before fetch_xor(3) [7 xor 3]:"
+print text before_xor
+set now to atomic_load with counter and "relaxed"
+print text "after fetch_xor(3), expect 4:"
+print text now
+
+# --- AtomicBoolean ---
+
+set flag to create_atomic_boolean with false
+set b0 to atomic_load with flag and "seq_cst"
+print text "bool initial (false):"
+print text b0
+
+call atomic_store with flag and true and "seq_cst"
+set b1 to atomic_load with flag and "acquire"
+print text "bool after store true:"
+print text b1
+
+set bold to atomic_exchange with flag and false and "seq_cst"
+print text "bool exchange old:"
+print text bold
+set bnow to atomic_load with flag and "relaxed"
+print text "bool after exchange to false:"
+print text bnow
+
+# --- AtomicPointer ---
+
+set ap to create_atomic_pointer with 0
+set p0 to atomic_load with ap and "seq_cst"
+print text "pointer initial:"
+print text p0
+
+call atomic_store with ap and 12345 and "seq_cst"
+set p1 to atomic_load with ap and "acquire"
+print text "pointer after store 12345:"
+print text p1
+
+# --- Memory fence ---
+
+call atomic_fence with "seq_cst"
+call atomic_fence with "acquire"
+call atomic_fence with "release"
+call atomic_fence with "acq_rel"
+call atomic_fence with "relaxed"
+print text "fences: ok"
+
+print text "all atomic tests passed"

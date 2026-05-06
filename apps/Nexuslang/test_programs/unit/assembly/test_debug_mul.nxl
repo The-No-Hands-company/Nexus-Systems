@@ -1,0 +1,12 @@
+# Debug multiply test
+
+print text "Debug multiply with $2:"
+set num to 7
+asm
+    code "imul $0, $2"
+    outputs "+r": num
+    inputs "r": 6
+end
+print text "Result: "
+print number num
+print text "Should be 42"

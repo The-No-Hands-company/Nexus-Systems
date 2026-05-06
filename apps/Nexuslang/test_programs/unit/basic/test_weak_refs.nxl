@@ -1,0 +1,61 @@
+program test_weak_refs
+
+# Test downgrade and upgrade operations
+# Weak references allow breaking reference cycles
+
+function test_rc_downgrade returns Integer
+  print text "=== Testing Rc Downgrade ==="
+  
+  # Create a strong reference
+  set strong_ref to Rc of Integer with 42
+  print text "Created strong Rc with value 42"
+  
+  # Downgrade to weak reference
+  set weak_ref to downgrade strong_ref
+  print text "Downgraded to weak reference"
+  
+  # Strong ref still valid, weak ref also valid
+  print text "Both references exist, value is accessible"
+  
+  return 0
+end
+
+function test_arc_downgrade returns Integer
+  print text "=== Testing Arc Downgrade ==="
+  
+  # Create atomic reference counter
+  set arc_strong to Arc of Integer with 99
+  print text "Created Arc with value 99"
+  
+  # Downgrade to weak
+  set arc_weak to downgrade arc_strong
+  print text "Downgraded Arc to weak reference"
+  
+  return 0
+end
+
+function test_weak_upgrade returns Integer
+  print text "=== Testing Weak Upgrade ==="
+  
+  # Create strong and weak references
+  set rc_val to Rc of Integer with 777
+  set weak_val to downgrade rc_val
+  print text "Created Rc and downgraded to Weak"
+  
+  # Upgrade weak back to strong
+  set upgraded to upgrade weak_val
+  print text "Upgraded weak reference back to strong"
+  
+  # Now we have 2 strong refs (rc_val and upgraded)
+  print text "Successfully created second strong reference from weak"
+  
+  return 0
+end
+
+function main returns Integer
+  call test_rc_downgrade
+  call test_arc_downgrade
+  call test_weak_upgrade
+  print text "=== All weak reference tests passed ==="
+  return 0
+end

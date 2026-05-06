@@ -1,0 +1,20 @@
+# Test case conversion functions
+
+# Test toupper
+set lower_str to "hello world 123"
+set upper_result to toupper(lower_str)
+print text upper_result
+
+# Test tolower
+set upper_str to "HELLO WORLD 123"
+set lower_result to tolower(upper_str)
+print text lower_result
+
+# Test mixed case
+set mixed_str to "HeLLo WoRLd"
+set to_upper to toupper(mixed_str)
+set to_lower to tolower(mixed_str)
+print text to_upper
+print text to_lower
+
+print text "Case conversion tests done!"

@@ -1,0 +1,79 @@
+
+import core.result
+
+# C stdio bindings
+extern function fopen with filename as String, mode as String returns Pointer from library "c"
+extern function fclose with stream as Pointer returns Integer from library "c"
+extern function fputs with s as String, stream as Pointer returns Integer from library "c"
+extern function fseek with stream as Pointer, offset as Integer, whence as Integer returns Integer from library "c"
+extern function ftell with stream as Pointer returns Integer from library "c"
+extern function rewind with stream as Pointer returns Void from library "c"
+extern function fread with ptr as Pointer, size as Integer, nmemb as Integer, stream as Pointer returns Integer from library "c"
+
+# C stdlib bindings (for memory allocation)
+# Use calloc to allocate zero-initialized memory and treat as String
+extern function calloc with nmemb as Integer, size as Integer returns String from library "c"
+# extern function free with ptr as Pointer returns Void from library "c" # Not used yet but good to have
+extern function free with ptr as Pointer returns Void from library "c"
+
+export File
+
+class File
+    property handle as Pointer
+    property is_open as Boolean
+
+    # Constants
+    # SEEK_SET = 0, SEEK_END = 2
+    
+    static function open that takes path as String, mode as String returns Result<File, String>
+        set handle to fopen(path, mode)
+        
+        # Check if handle is non-null
+        if handle
+             set file to File.new
+             set file.handle to handle
+             set file.is_open to true
+             return Result.Ok with file
+        
+        return Result.Err with "Failed to open file"
+
+    function close returns Void
+        if is_open
+            fclose(handle)
+            set is_open to false
+
+    function write that takes content as String returns Result<Integer, String>
+        if not is_open
+             return Result.Err with "File is closed"
+        
+        set res to fputs(content, handle)
+        if res >= 0
+             return Result.Ok with res
+        return Result.Err with "Write error"
+        
+    function read_to_string returns Result<String, String>
+        if not is_open
+            return Result.Err with "File is closed"
+            
+        # Determine file size
+        fseek(handle, 0, 2) # SEEK_END
+        set size to ftell(handle)
+        rewind(handle)
+        
+        if size < 0
+             return Result.Err with "Failed to determine file size"
+             
+        # Allocate buffer (size + 1 for null terminator)
+        # Using calloc implicitly casts void* to String (i8*) via definition
+        set buffer to calloc(size + 1, 1)
+        
+        if not buffer
+             return Result.Err with "Memory allocation failed"
+             
+        # Read file
+        set read_count to fread(buffer, 1, size, handle)
+        
+        if read_count < 0
+             return Result.Err with "Read error"
+             
+        return Result.Ok with buffer

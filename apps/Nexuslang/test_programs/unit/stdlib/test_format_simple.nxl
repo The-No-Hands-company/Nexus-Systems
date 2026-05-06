@@ -1,0 +1,7 @@
+# Simple format test
+set pi to 3.14159
+print text pi
+
+# Try basic f-string first
+set basic to f"Pi is {pi}"
+print text basic

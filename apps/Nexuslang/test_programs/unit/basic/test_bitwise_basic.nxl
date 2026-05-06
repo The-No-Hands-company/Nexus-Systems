@@ -1,0 +1,84 @@
+# Test: Basic Bitwise Operations
+# Tests fundamental bitwise AND, OR, XOR operations
+
+print text "=== Basic Bitwise Operations Test ==="
+print text ""
+
+# Test 1: Bitwise AND
+print text "Test 1: Bitwise AND"
+set a to 12
+set b to 10
+set result to a bitwise and b
+print text "12 bitwise and 10 = "
+print text result
+print text "Expected: 8 (binary: 1100 AND 1010 = 1000)"
+print text ""
+
+# Test 2: Bitwise OR
+print text "Test 2: Bitwise OR"
+set a to 12
+set b to 10
+set result to a bitwise or b
+print text "12 bitwise or 10 = "
+print text result
+print text "Expected: 14 (binary: 1100 OR 1010 = 1110)"
+print text ""
+
+# Test 3: Bitwise XOR
+print text "Test 3: Bitwise XOR"
+set a to 12
+set b to 10
+set result to a bitwise xor b
+print text "12 bitwise xor 10 = "
+print text result
+print text "Expected: 6 (binary: 1100 XOR 1010 = 0110)"
+print text ""
+
+# Test 4: Bitwise operations with zero
+print text "Test 4: Operations with zero"
+set a to 5
+set result to a bitwise and 0
+print text "5 bitwise and 0 = "
+print text result
+print text "Expected: 0"
+
+set result to a bitwise or 0
+print text "5 bitwise or 0 = "
+print text result
+print text "Expected: 5"
+
+set result to a bitwise xor 0
+print text "5 bitwise xor 0 = "
+print text result
+print text "Expected: 5"
+print text ""
+
+# Test 5: Bitwise operations with all bits set
+print text "Test 5: Operations with 255 (all 8 bits set)"
+set a to 170
+set result to a bitwise and 255
+print text "170 bitwise and 255 = "
+print text result
+print text "Expected: 170"
+
+set result to a bitwise or 255
+print text "170 bitwise or 255 = "
+print text result
+print text "Expected: 255"
+print text ""
+
+# Test 6: Self operations
+print text "Test 6: Self operations"
+set a to 42
+set result to a bitwise and a
+print text "42 bitwise and 42 = "
+print text result
+print text "Expected: 42"
+
+set result to a bitwise xor a
+print text "42 bitwise xor 42 = "
+print text result
+print text "Expected: 0 (any number XOR itself is 0)"
+print text ""
+
+print text "=== All Basic Bitwise Tests Complete ==="

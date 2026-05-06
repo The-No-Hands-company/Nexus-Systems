@@ -1,0 +1,90 @@
+# Test Complete Struct Support
+
+print text "=== Testing NexusLang Struct Support ==="
+print text ""
+
+# Test 1: Basic Struct Definition and Instantiation
+print text "Test 1: Basic struct definition"
+
+struct Point
+    x as Integer
+    y as Integer
+end
+
+create point1 as new Point
+set point1.x to 10
+set point1.y to 20
+
+print text "Point coordinates:"
+print text point1.x
+print text point1.y
+print text ""
+
+# Test 2: Sizeof operator
+print text "Test 2: Sizeof operator"
+
+set point_size to sizeof Point
+print text "Size of Point struct:"
+print text point_size
+print text ""
+
+# Test 3: Nested structs
+print text "Test 3: Nested structs"
+
+struct Rectangle
+    top_left as Point
+    bottom_right as Point
+end
+
+create rect as new Rectangle
+create tl as new Point
+set tl.x to 0
+set tl.y to 0
+create br as new Point
+set br.x to 100
+set br.y to 50
+
+set rect.top_left to tl
+set rect.bottom_right to br
+
+print text "Rectangle top-left:"
+print text rect.top_left.x
+print text rect.top_left.y
+print text ""
+
+# Test 4: Different data types in struct
+print text "Test 4: Mixed data types"
+
+struct Player
+    name as String
+    score as Integer
+    health as Float
+    active as Boolean
+end
+
+create player as new Player
+set player.score to 1000
+set player.health to 95.5
+set player.active to true
+
+print text "Player stats:"
+print text player.score
+print text player.health
+print text player.active
+print text ""
+
+# Test 5: Packed struct (no padding)
+print text "Test 5: Packed struct"
+
+packed struct Flags
+    flag1 as Byte
+    flag2 as Byte
+    flag3 as Byte
+end
+
+set flags_size to sizeof Flags
+print text "Size of packed Flags struct:"
+print text flags_size
+print text ""
+
+print text "=== All Struct Tests Passed ==="

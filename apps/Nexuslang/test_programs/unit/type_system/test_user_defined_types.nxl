@@ -1,0 +1,175 @@
+# User-Defined Types Test Program
+# Tests class types, inheritance, property/method type checking
+
+print text "=== User-Defined Types Tests ==="
+
+# Test 1: Basic class with typed properties
+class Person
+    name as String
+    age as Integer
+    active as Boolean
+    
+    method get_info returns String
+        return this.name plus " (" plus this.age as String plus " years old)"
+    end
+    
+    method is_adult returns Boolean
+        return this.age is greater than or equal to 18
+    end
+end
+
+set person to Person with name as "Alice", age as 30, active as true
+set info to person.get_info()
+print text "Basic class: " plus info
+
+# Test 2: Class inheritance
+class Employee extends Person
+    employee_id as Integer
+    department as String
+    salary as Float
+    
+    method get_employee_info returns String
+        set base_info to this.get_info()
+        return base_info plus " - ID: " plus this.employee_id as String
+    end
+    
+    method give_raise with amount as Float
+        set this.salary to this.salary plus amount
+    end
+end
+
+set employee to Employee with name as "Bob", age as 28, active as true, employee_id as 1001, department as "Engineering", salary as 75000.0
+set emp_info to employee.get_employee_info()
+print text "Inheritance: " plus emp_info
+
+# Test 3: Property type checking
+set employee.salary to 80000.0  # Valid: Float assignment
+print text "Property type check: salary updated to 80000.0"
+
+# Test 4: Method return type checking
+set is_adult to person.is_adult()
+if is_adult
+    print text "Type check: is_adult() returns Boolean - Alice is an adult"
+else
+    print text "Type check: is_adult() returns Boolean - Alice is not an adult"
+end
+
+# Test 5: Method parameter type checking
+employee.give_raise(5000.0)  # Valid: Float argument
+print text "Method param check: give_raise(5000.0) accepted Float"
+
+# Test 6: Multiple inheritance (if supported)
+class Printable
+    method to_string returns String
+        return "Object"
+    end
+end
+
+class Manager extends Employee
+    team_size as Integer
+    
+    method get_full_info returns String
+        set emp_data to this.get_employee_info()
+        return emp_data plus " - Team: " plus this.team_size as String
+    end
+end
+
+set manager to Manager with name as "Charlie", age as 35, active as true, employee_id as 2001, department as "Management", salary as 95000.0, team_size as 10
+set mgr_info to manager.get_full_info()
+print text "Multiple levels: " plus mgr_info
+
+# Test 7: Property access type inference
+set manager_name to manager.name  # Should infer String
+set manager_age to manager.age    # Should infer Integer
+print text "Property inference: name is String, age is Integer"
+
+# Test 8: Polymorphism (if supported)
+function greet_person with p as Person returns String
+    return "Hello, " plus p.name
+end
+
+set greeting1 to greet_person(person)
+set greeting2 to greet_person(employee)
+set greeting3 to greet_person(manager)
+
+print text "Polymorphism: greet_person works with Person, Employee, Manager"
+
+# Test 9: Type compatibility checking
+function process_employee with e as Employee returns String
+    return e.get_employee_info()
+end
+
+# Should work with Employee and Manager (subtype)
+set processed to process_employee(manager)
+print text "Subtype compatibility: Manager can be used as Employee"
+
+# Test 10: Generic class (if supported)
+class Container
+    value as Integer
+    
+    method get_value returns Integer
+        return this.value
+    end
+    
+    method set_value with new_value as Integer
+        set this.value to new_value
+    end
+end
+
+set container to Container with value as 42
+set stored_value to container.get_value()
+print text "Generic class: Container stores value " plus stored_value as String
+
+container.set_value(100)
+set new_value to container.get_value()
+print text "Generic class: Container updated to " plus new_value as String
+
+# Test 11: Abstract class concepts (if supported)
+class Shape
+    method calculate_area returns Float
+        # Abstract method - would be overridden in subclasses
+        return 0.0
+    end
+end
+
+class Rectangle extends Shape
+    width as Float
+    height as Float
+    
+    method calculate_area returns Float
+        return this.width times this.height
+    end
+end
+
+set rect to Rectangle with width as 5.0, height as 3.0
+set area to rect.calculate_area()
+print text "Abstract class: Rectangle area = " plus area as String
+
+# Test 12: Interface-like behavior
+class Comparable
+    method compare_to with other as Comparable returns Integer
+        return 0  # Default: equal
+    end
+end
+
+class NumberValue extends Comparable
+    value as Integer
+    
+    method compare_to with other as NumberValue returns Integer
+        if this.value is greater than other.value
+            return 1
+        else if this.value is less than other.value
+            return -1
+        else
+            return 0
+        end
+    end
+end
+
+set num1 to NumberValue with value as 42
+set num2 to NumberValue with value as 17
+set comparison to num1.compare_to(num2)
+print text "Interface: compare_to(42, 17) = " plus comparison as String
+
+print text ""
+print text "All user-defined types tests completed!"

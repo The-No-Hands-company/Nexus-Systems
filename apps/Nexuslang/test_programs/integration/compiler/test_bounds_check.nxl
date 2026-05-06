@@ -1,0 +1,21 @@
+# Test Array Bounds Checking
+
+print text "=== Array Bounds Checking Test ==="
+
+# Create an array
+set numbers to [10, 20, 30, 40, 50]
+
+# Valid accesses
+print text "Valid accesses:"
+set first to numbers[0]
+print text "numbers[0] = accessed"
+
+set last to numbers[4]
+print text "numbers[4] = accessed"
+
+# This should trigger bounds check error (index out of range)
+print text "Attempting invalid access..."
+set invalid to numbers[10]
+print text "This should not print"
+
+print text "=== Test Complete ==="

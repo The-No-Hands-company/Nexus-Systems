@@ -1,0 +1,46 @@
+# Test Match Expression Support
+
+# Test 1: Match with function call result
+function get_value returns Integer
+    return 42
+
+match get_value() with
+    case 42
+        print text "Matched function call result!\n"
+    case _
+        print text "No match\n"
+end
+
+# Test 2: Match with arithmetic expression
+set a to 10
+set b to 20
+
+match a plus b with
+    case 30
+        print text "Matched arithmetic expression!\n"
+    case _
+        print text "No match\n"
+end
+
+# Test 3: Match with member access
+# (Would need object support, simplified for now)
+
+# Test 4: Match with literal
+match 100 with
+    case 100
+        print text "Matched literal!\n"
+    case _
+        print text "No match\n"
+end
+
+# Test 5: Match with comparison result (boolean)
+match a is less than b with
+    case true
+        print text "Matched boolean expression!\n"
+    case false
+        print text "False case\n"
+    case _
+        print text "No match\n"
+end
+
+print text "Match expression test complete!\n"

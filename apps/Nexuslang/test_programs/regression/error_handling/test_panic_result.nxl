@@ -1,0 +1,22 @@
+
+import core.result
+
+function main returns Integer
+    print "Testing Result..."
+    
+    # Test Ok
+    set res to Result.Ok with 42
+    if res.is_ok
+        print "Result is Ok:"
+        print res.unwrap()
+    
+    # Test Err
+    set err to Result.Err with "Failed"
+    if err.is_err
+        print "Result is Err"
+        # print err.unwrap_err()
+    
+    print "Testing Panic (Expect abort)..."
+    panic with "This is a test panic"
+    
+    return 0

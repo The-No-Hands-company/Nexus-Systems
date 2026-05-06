@@ -1,0 +1,11 @@
+set age to 18
+
+if age is greater than or equal to 21
+    print 21
+
+if age is greater than or equal to 18
+    print 18
+else
+    print 0
+
+print 99

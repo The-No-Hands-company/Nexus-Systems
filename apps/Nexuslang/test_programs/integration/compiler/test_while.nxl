@@ -1,0 +1,12 @@
+# Test while loop compilation
+
+set counter to 0
+
+print text "Counting to 5:"
+
+while counter is less than 5
+    print text counter
+    set counter to counter plus 1
+
+print text "Done counting"
+print text counter

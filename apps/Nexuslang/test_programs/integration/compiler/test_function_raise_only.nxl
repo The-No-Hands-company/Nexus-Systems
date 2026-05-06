@@ -1,0 +1,8 @@
+# Minimal test - just function with raise
+function thrower returns Void
+    print text "About to raise"
+    raise error with message "Error"
+    return
+end
+
+print text "Function defined"

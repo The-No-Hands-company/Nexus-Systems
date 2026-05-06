@@ -1,0 +1,32 @@
+# Test parsing of Rc<T> smart pointer types
+# This test verifies the parser can handle Rc syntax without runtime implementation
+
+# Test 1: Basic Rc type annotation
+function test_rc_annotation with x as Rc of Integer
+    print text "Function with Rc parameter parsed successfully"
+end
+
+# Test 2: Variable declaration with Rc type (will need runtime to execute)
+# set num to Rc of Integer with 42
+
+# Test 3: Nested Rc types
+function test_nested_rc with list as Rc of List of Integer
+    print text "Nested Rc type parsed successfully"
+end
+
+# Test 4: Weak reference type
+function test_weak with weak_ref as Weak of Integer
+    print text "Weak type parsed successfully"
+end
+
+# Test 5: Arc (atomic reference counted) type
+function test_arc with shared as Arc of Integer
+    print text "Arc type parsed successfully"
+end
+
+# Test 6: Complex nested structure
+function test_complex with data as Rc of Dictionary of String, List of Integer
+    print text "Complex Rc type parsed successfully"
+end
+
+print text "All Rc parsing tests passed"

@@ -1,0 +1,2 @@
+function add with a as Integer and b as Integer returns Integer
+  return a plus b

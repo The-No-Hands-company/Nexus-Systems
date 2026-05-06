@@ -1,0 +1,13 @@
+# Test while loops
+
+print text "Testing while loops"
+
+set counter to 0
+while counter is less than 5
+    print text counter
+    set counter to counter plus 1
+end
+
+print text "While loop completed"
+print text "Final counter value:"
+print text counter

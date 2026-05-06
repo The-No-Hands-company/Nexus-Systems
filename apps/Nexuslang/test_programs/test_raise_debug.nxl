@@ -1,0 +1,19 @@
+function test_raise returns Integer
+  print text "About to raise error"
+  raise error with message "Test error"
+  print text "After raise (should not print)"
+  return 0
+end
+
+print text "=== Testing Raise Statement ==="
+print text "Starting"
+
+try
+  print text "In try block, calling test_raise"
+  set result to test_raise
+  print text "Should not reach here"
+catch error with message
+  print text "Caught error: " plus message
+end
+
+print text "Done"

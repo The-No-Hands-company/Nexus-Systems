@@ -1,0 +1,4 @@
+set message to "Hello from NLPL!"
+set x to 10
+set y to 20
+set sum to x plus y

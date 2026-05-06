@@ -1,0 +1,28 @@
+# Test Generic Types (simplified - pointer-based)
+
+print text "=== Generic Types Test ==="
+
+# Define a generic container class that works with any pointer type
+class Box
+    set value to "default"
+    
+    method get returns String
+        return this.value
+    end method
+    
+    method set_value with item as String
+        set this.value to item
+    end method
+end class
+
+# Instantiate Box
+set box1 to new Box
+box1.set_value("Hello World")
+print text "Box value set"
+
+# Create another box
+set box2 to new Box
+box2.set_value("Another value")
+print text "Second box value set"
+
+print text "=== Generic Types Test Complete ==="

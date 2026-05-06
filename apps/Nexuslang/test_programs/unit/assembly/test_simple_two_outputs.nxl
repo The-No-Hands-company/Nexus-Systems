@@ -1,0 +1,16 @@
+# Simple two output test
+
+print text "Simple two output test:"
+set a to 0
+set b to 0
+asm
+    code
+        "mov $0, 42"
+        "mov $1, 99"
+    outputs "=r": a, "=r": b
+end
+print text "a = "
+print number a
+print text "b = "
+print number b
+print text "Expected: a=42, b=99"

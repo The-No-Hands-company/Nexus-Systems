@@ -1,0 +1,11 @@
+# Test Decorators - Simple
+
+print text "Testing @memoize decorator"
+
+@memoize
+function add_ten with x as Integer returns Integer
+    return x plus 10
+end
+
+set result to add_ten(5)
+print text "Result: " plus convert result to string

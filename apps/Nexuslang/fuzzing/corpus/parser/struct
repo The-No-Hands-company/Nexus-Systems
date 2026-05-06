@@ -1,0 +1,4 @@
+struct Point
+  x as Integer
+  y as Integer
+end

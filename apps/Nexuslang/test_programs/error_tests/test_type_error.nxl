@@ -1,0 +1,4 @@
+set name to "Alice"
+set age to 30
+set result to name plus age
+print text result

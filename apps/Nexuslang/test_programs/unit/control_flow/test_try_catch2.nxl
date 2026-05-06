@@ -1,0 +1,11 @@
+# Test what exception is raised
+
+try
+    set x to 10 divided by 0
+    print text "No error"
+catch error
+    print text "Caught error:"
+    print text error
+end
+
+print text "After try/catch"

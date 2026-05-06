@@ -1,0 +1,32 @@
+# Advanced Rc type parsing test
+# Tests complex nested scenarios
+
+# Test 1: Function returning Rc type
+function create_rc_number returns Rc of Integer
+    print text "Function returning Rc type parsed"
+    return 42
+end
+
+# Test 2: Multiple Rc parameters
+function combine_rcs with a as Rc of Integer, b as Rc of Integer returns Rc of Integer
+    print text "Multiple Rc parameters parsed"
+    return 0
+end
+
+# Test 3: Deeply nested Rc types
+function nested_structure returns Rc of List of Dictionary of String, Rc of Integer
+    print text "Deeply nested Rc types parsed"
+    return 0
+end
+
+# Test 4: Mix of regular and Rc types
+function mixed_params with regular as Integer, wrapped as Rc of String
+    print text "Mixed parameter types parsed"
+end
+
+# Test 5: Weak and Arc types
+function weak_and_arc with weak_ptr as Weak of Integer, shared as Arc of List of String
+    print text "Weak and Arc types parsed"
+end
+
+print text "All advanced Rc parsing tests passed"

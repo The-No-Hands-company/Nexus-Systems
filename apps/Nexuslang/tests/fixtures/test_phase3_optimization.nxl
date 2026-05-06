@@ -1,0 +1,29 @@
+// Test Phase 3: Compile-time bounds check elimination
+fn test_constant_indices() {
+    // Constant indices - should be optimized away
+    let arr = [10, 20, 30, 40, 50];
+    
+    arr[0] = 100;  // Safe - no check needed
+    arr[2] = 300;  // Safe - no check needed  
+    arr[4] = 500;  // Safe - no check needed
+    
+    print("Constant index accesses completed");
+}
+
+fn test_optimization_vs_runtime() {
+    // This should still have runtime checks (out of bounds)
+    let arr = [1, 2, 3];
+    
+    print("Attempting out of bounds with constant index...");
+    arr[5] = 99;  // Should panic - even with optimization
+}
+
+fn main() {
+    print("Testing Phase 3: Bounds Check Optimization");
+    
+    // Compile with --optimize-bounds-checks to see difference
+    test_constant_indices();
+    
+    print("Now testing that unsafe accesses still panic...");
+    test_optimization_vs_runtime();
+}

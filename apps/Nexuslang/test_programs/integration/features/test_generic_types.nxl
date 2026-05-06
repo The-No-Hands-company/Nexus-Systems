@@ -1,0 +1,45 @@
+# Test Generic Types - create list of Type, create dict of K to V
+
+print text "=== Generic Types Test ==="
+
+# Create empty list
+set numbers to create list of Integer
+print text "Empty list:"
+print numbers
+
+# Create list with initial values
+set names to create list of String with ["Alice", "Bob", "Charlie"]
+print text "List with initial values:"
+print names
+
+# Create empty dictionary
+set ages to create dict of String to Integer
+print text "Empty dictionary:"
+print ages
+
+# Add items using direct function call
+set result to list_append(numbers, 10)
+set result to list_append(numbers, 20)
+set result to list_append(numbers, 30)
+
+print text "Numbers after appending:"
+print numbers
+
+# Dictionary assignment
+set ages["Alice"] to 30
+set ages["Bob"] to 25
+
+print text "Ages dictionary:"
+print ages
+
+# Nested generics - list of lists
+set matrix to create list of List
+set row1 to [1, 2, 3]
+set row2 to [4, 5, 6]
+set result to list_append(matrix, row1)
+set result to list_append(matrix, row2)
+
+print text "Matrix (list of lists):"
+print matrix
+
+print text " Generic types working!"

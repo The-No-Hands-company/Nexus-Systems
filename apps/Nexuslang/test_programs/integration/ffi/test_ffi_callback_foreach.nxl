@@ -1,0 +1,60 @@
+# Test FFI callback with custom foreach implementation
+# Demonstrates passing NexusLang functions to C-style iteration functions
+
+# Action function to print an integer
+function print_element with element as Int returns Void
+    print text "Element: "
+    print element
+    print text "\n"
+end
+
+# Action function to double each element
+function double_element with ptr as Pointer returns Void
+    set value to dereference ptr as Int
+    set doubled to value times 2
+    store doubled at ptr
+end
+
+# C-style foreach function (implemented in NexusLang for demonstration)
+function array_foreach with array as Pointer,
+                           size as Int,
+                           action as Callback returns Void
+    set i to 0
+    while i is less than size
+        # Calculate element address
+        set element_ptr to array plus (i times sizeof Int)
+        
+        # Call the callback with element pointer
+        call action with element_ptr
+        
+        set i to i plus 1
+    end
+end
+
+# Main program
+function main returns Int
+    # Create array
+    set size to 5
+    set numbers to allocate size times sizeof Int
+    
+    # Initialize
+    set i to 0
+    while i is less than size
+        set ptr to numbers plus (i times sizeof Int)
+        set value to (i plus 1) times 10
+        store value at ptr
+        set i to i plus 1
+    end
+    
+    print text "Original array:\n"
+    call array_foreach with numbers, size, callback print_element
+    
+    print text "\nDoubling all elements...\n"
+    call array_foreach with numbers, size, callback double_element
+    
+    print text "\nModified array:\n"  
+    call array_foreach with numbers, size, callback print_element
+    
+    free numbers
+    return 0
+end

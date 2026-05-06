@@ -1,0 +1,77 @@
+# Test: keywords used as method names on dict objects
+# Covers: obj.has(), obj.set(), obj.get(), obj.keys(), obj.values(), obj.items(),
+#         obj.remove(), obj.update(), obj.clear(), obj.size(), obj.contains()
+
+set inventory to {}
+
+# obj.set(key, value) -- 'set' was a reserved keyword
+call inventory.set("sword", 10)
+call inventory.set("shield", 5)
+call inventory.set("arrow", 100)
+
+print text "after set:"
+print text inventory
+
+# obj.has(key) -- 'has' was a reserved keyword
+if inventory.has("sword")
+    print text "has sword: true"
+else
+    print text "has sword: false"
+
+if inventory.has("potion")
+    print text "has potion: true"
+else
+    print text "has potion: false"
+
+# obj.contains(key) -- alias for has
+if inventory.contains("shield")
+    print text "contains shield: true"
+
+# obj.get(key) -- already worked but verify
+set sword_count to inventory.get("sword")
+print text "sword count:"
+print text sword_count
+
+# obj.get(key, default) -- with default
+set missing to inventory.get("potion", 0)
+print text "potion with default:"
+print text missing
+
+# obj.keys()
+set k to inventory.keys()
+print text "keys:"
+print text k
+
+# obj.values()
+set v to inventory.values()
+print text "values:"
+print text v
+
+# obj.size()
+set sz to inventory.size()
+print text "size:"
+print text sz
+
+# obj.remove(key)
+call inventory.remove("arrow")
+if inventory.has("arrow")
+    print text "arrow still present"
+else
+    print text "arrow removed: ok"
+
+# obj.update(other)
+set extra to {}
+call extra.set("potion", 3)
+call inventory.update(extra)
+if inventory.has("potion")
+    print text "update merged potion: ok"
+
+# obj.clear()
+set temp to {}
+call temp.set("a", 1)
+call temp.clear()
+set temp_size to temp.size()
+print text "after clear size:"
+print text temp_size
+
+print text "all dict keyword method tests passed"

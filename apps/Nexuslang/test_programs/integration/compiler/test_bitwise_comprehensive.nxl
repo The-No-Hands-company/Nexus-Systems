@@ -1,0 +1,95 @@
+# Comprehensive Bitwise Operations Tests
+
+# Test 1: Basic AND operation
+print text "Test 1: Bitwise AND"
+set a to 5     # Binary: 0101
+set b to 3     # Binary: 0011
+set result to a bitwise and b  # Expected: 1 (0001)
+print text "5 AND 3 = "
+print number result
+print text ""
+
+# Test 2: Basic OR operation  
+print text "Test 2: Bitwise OR"
+set result to a bitwise or b  # Expected: 7 (0111)
+print text "5 OR 3 = "
+print number result
+print text ""
+
+# Test 3: Basic XOR operation
+print text "Test 3: Bitwise XOR"
+set result to a bitwise xor b  # Expected: 6 (0110)
+print text "5 XOR 3 = "
+print number result
+print text ""
+
+# Test 4: Bitwise NOT
+print text "Test 4: Bitwise NOT"
+set x to 5     # Binary: 0...0101
+set result to bitwise not x  # Expected: -6 (two's complement)
+print text "NOT 5 = "
+print number result
+print text ""
+
+# Test 5: Left shift
+print text "Test 5: Left Shift"
+set result to 5 shift left 2  # 5 << 2 = 20
+print text "5 << 2 = "
+print number result
+print text ""
+
+# Test 6: Right shift
+print text "Test 6: Right Shift"
+set result to 20 shift right 2  # 20 >> 2 = 5
+print text "20 >> 2 = "
+print number result
+print text ""
+
+# Test 7: Multiple operations
+print text "Test 7: Complex expression"
+set val1 to 12  # Binary: 1100
+set val2 to 10  # Binary: 1010
+set result to val1 bitwise and val2  # Expected: 8 (1000)
+print text "12 AND 10 = "
+print number result
+print text ""
+
+# Test 8: Shift with zero
+print text "Test 8: Shift by zero"
+set result to 42 shift left 0  # Should be 42
+print text "42 << 0 = "
+print number result
+print text ""
+
+# Test 9: AND with zero (masking)
+print text "Test 9: AND with zero"
+set result to 255 bitwise and 0  # Should be 0
+print text "255 AND 0 = "
+print number result
+print text ""
+
+# Test 10: OR with zero (identity)
+print text "Test 10: OR with zero"
+set result to 42 bitwise or 0  # Should be 42
+print text "42 OR 0 = "
+print number result
+print text ""
+
+# Test 11: XOR with self (always zero)
+print text "Test 11: XOR with self"
+set num to 123
+set result to num bitwise xor num  # Should be 0
+print text "123 XOR 123 = "
+print number result
+print text ""
+
+# Test 12: Combining shifts
+print text "Test 12: Left then right shift"
+set original to 16
+set shifted_left to original shift left 3  # 16 << 3 = 128
+set shifted_back to shifted_left shift right 3  # 128 >> 3 = 16
+print text "((16 << 3) >> 3) = "
+print number shifted_back
+print text ""
+
+print text "All bitwise operation tests completed!"

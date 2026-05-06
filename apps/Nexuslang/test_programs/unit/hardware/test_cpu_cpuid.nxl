@@ -1,0 +1,122 @@
+# CPU CPUID Instruction Test
+# Test: CPUID instruction for processor information
+# Expected: Should return CPU vendor and basic information
+
+print text "Test: CPUID instruction"
+
+# Test 1: Get CPU vendor
+print text "Test 1: CPU vendor ID"
+set vendor to get_cpu_vendor()
+print text "CPU Vendor:"
+print text vendor
+
+# Test 2: Execute CPUID leaf 0 (vendor + max leaf)
+print text "Test 2: CPUID leaf 0"
+set result0 to cpuid with leaf: 0
+print text "Maximum supported leaf:"
+print text result0["eax"]
+print text "Vendor ID (EBX):"
+print text result0["ebx"]
+print text "Vendor ID (EDX):"
+print text result0["edx"]
+print text "Vendor ID (ECX):"
+print text result0["ecx"]
+
+# Test 3: Execute CPUID leaf 1 (features)
+print text "Test 3: CPUID leaf 1 (features)"
+set result1 to cpuid with leaf: 1
+print text "Processor info (EAX):"
+print text result1["eax"]
+print text "Feature flags (EDX):"
+print text result1["edx"]
+print text "Feature flags (ECX):"
+print text result1["ecx"]
+
+# Test 4: Get all CPU features
+print text "Test 4: Get CPU features"
+set features to get_cpu_features()
+print text "FPU supported:"
+print text features["has_fpu"]
+print text "SSE supported:"
+print text features["has_sse"]
+print text "SSE2 supported:"
+print text features["has_sse2"]
+print text "SSE3 supported:"
+print text features["has_sse3"]
+print text "AVX supported:"
+print text features["has_avx"]
+print text "AES-NI supported:"
+print text features["has_aes"]
+
+# Test 5: Check specific features
+print text "Test 5: Check specific features"
+set has_sse2 to check_feature with feature_name: "sse2"
+if has_sse2 is equal to true
+    print text "SSE2: Supported"
+else
+    print text "SSE2: Not supported"
+end
+
+set has_avx to check_feature with feature_name: "avx"
+if has_avx is equal to true
+    print text "AVX: Supported"
+else
+    print text "AVX: Not supported"
+end
+
+set has_fma to check_feature with feature_name: "fma"
+if has_fma is equal to true
+    print text "FMA: Supported"
+else
+    print text "FMA: Not supported"
+end
+
+set has_aes to check_feature with feature_name: "aes"
+if has_aes is equal to true
+    print text "AES-NI: Supported"
+else
+    print text "AES-NI: Not supported"
+end
+
+# Test 6: Check various SIMD features
+print text "Test 6: SIMD feature summary"
+set features2 to get_cpu_features()
+print text "SIMD Extensions:"
+
+if features2["has_mmx"] is equal to true
+    print text "  MMX: YES"
+end
+
+if features2["has_sse"] is equal to true
+    print text "  SSE: YES"
+end
+
+if features2["has_sse2"] is equal to true
+    print text "  SSE2: YES"
+end
+
+if features2["has_sse3"] is equal to true
+    print text "  SSE3: YES"
+end
+
+if features2["has_ssse3"] is equal to true
+    print text "  SSSE3: YES"
+end
+
+if features2["has_sse4_1"] is equal to true
+    print text "  SSE4.1: YES"
+end
+
+if features2["has_sse4_2"] is equal to true
+    print text "  SSE4.2: YES"
+end
+
+if features2["has_avx"] is equal to true
+    print text "  AVX: YES"
+end
+
+if features2["has_avx2"] is equal to true
+    print text "  AVX2: YES"
+end
+
+print text "Test complete"

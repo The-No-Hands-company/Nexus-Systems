@@ -1,0 +1,27 @@
+# Test traits with class implementation
+
+# Define a trait with required methods
+define a trait called Comparable
+    that requires a method called compare with other returning Integer
+end trait
+
+print text "Defined Comparable trait"
+
+# Define a trait with provided methods
+define a trait called Printable
+    that requires a method called to_string returning String
+end trait
+
+print text "Defined Printable trait"
+
+# Define a trait that requires multiple methods
+define a trait called Serializable
+    that requires a method called serialize returning String
+    that requires a method called deserialize with data as String
+end trait
+
+print text "Defined Serializable trait"
+
+# Verify traits are stored
+print text "All traits defined successfully!"
+print text "Traits can now be used for type checking and class composition"

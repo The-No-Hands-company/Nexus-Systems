@@ -1,0 +1,59 @@
+# Best Practices Example: Clean Voxel Renderer
+# Demonstrates external shaders + compact constants
+
+print text "=== Voxel Renderer - Best Practices Demo ==="
+
+# ===== Constants: Compact List Approach =====
+
+# Face indices (0-5) - using list positions as constants
+set face_names to ["TOP", "BOTTOM", "NORTH", "SOUTH", "EAST", "WEST"]
+
+# Face normals - compact 2D list (6 faces × 3 components)
+set normals to [[0.0, 1.0, 0.0], [0.0, -1.0, 0.0], [0.0, 0.0, 1.0], [0.0, 0.0, -1.0], [1.0, 0.0, 0.0], [-1.0, 0.0, 0.0]]
+
+# Instead of 18 variables, we have 2 lines!
+print text "Initialized 6 face constants with normals (compact)"
+
+# ===== Load Shaders: External Files =====
+
+# Clean separation - no GLSL mixed into NexusLang code!
+print text "Loading shaders from external files..."
+# Note: Using skybox shaders as example (in production, you'd have voxel-specific shaders)
+set shader to load_shader_from_files with "shaders/skybox/skybox.vert" and "shaders/skybox/skybox.frag"
+print text "Shaders loaded successfully"
+
+# ===== Usage Example =====
+
+# Access face constants by index
+set TOP to 0
+set BOTTOM to 1
+set NORTH to 2
+
+# Get normal for top face
+set top_normal to normals[TOP]
+set nx to top_normal[0]
+set ny to top_normal[1]
+set nz to top_normal[2]
+
+print text ""
+print text "TOP face normal: ("
+print text nx
+print text ", "
+print text ny
+print text ", "
+print text nz
+print text ")"
+
+# ===== Demonstrate Benefits =====
+
+print text ""
+print text "=== Benefits Demonstrated ==="
+print text "1. Shaders in separate .glsl files (clean separation)"
+print text "2. Constants in compact lists (18 lines → 2 lines)"
+print text "3. Clear, maintainable code structure"
+print text "4. Easy to extend (add new faces/normals)"
+print text "5. Professional code organization"
+
+call delete_shader with shader
+print text ""
+print text "Demo complete!"

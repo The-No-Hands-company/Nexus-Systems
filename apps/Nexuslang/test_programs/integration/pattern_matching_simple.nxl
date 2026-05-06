@@ -1,0 +1,62 @@
+# Simple Pattern Matching Test
+
+print text "=== Pattern Matching Test ==="
+print text ""
+
+# Test 1: Literal matching
+print text "Test 1: Literal Match"
+set x to 42
+match x with
+    case 42
+        print text "Matched 42"
+    case _
+        print text "Failed"
+end
+print text ""
+
+# Test 2: Identifier binding
+print text "Test 2: Identifier Binding"
+set y to 100
+match y with
+    case n
+        print text "Bound to n:"
+        print text n
+end
+print text ""
+
+# Test 3: Wildcard
+print text "Test 3: Wildcard"
+set z to "anything"
+match z with
+    case "specific"
+        print text "Should not match"
+    case _
+        print text "Wildcard matched"
+end
+print text ""
+
+# Test 4: String matching
+print text "Test 4: String Match"
+set cmd to "start"
+match cmd with
+    case "start"
+        print text "Started"
+    case "stop"
+        print text "Stopped"
+    case _
+        print text "Unknown"
+end
+print text ""
+
+# Test 5: Boolean matching
+print text "Test 5: Boolean Match"
+set flag to true
+match flag with
+    case true
+        print text "True matched"
+    case false
+        print text "False matched"
+end
+print text ""
+
+print text "=== All Tests Complete ==="

@@ -1,0 +1,6 @@
+# Simple test for negative step
+print text "Counting down from 3 to 1"
+for i from 3 to 1 by -1
+    print text i
+end
+print text "Done"

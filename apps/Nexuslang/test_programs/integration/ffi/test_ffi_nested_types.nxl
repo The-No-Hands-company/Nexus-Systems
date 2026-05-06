@@ -1,0 +1,74 @@
+# Test FFI Complex Nested Types
+# Demonstrates nested struct, pointer-to-pointer, and complex type compositions
+
+# Test 1: Nested struct
+struct Address
+    street as String
+    city as String
+    zip_code as Integer
+end
+
+struct Person
+    name as String
+    age as Integer
+    address as Address
+end
+
+# Test 2: Pointer-to-pointer (char** for argv)
+extern function execve with path as String, argv as Pointer, envp as Pointer returns Integer from library "c"
+
+# Test 3: Array of pointers (char*[])
+extern function getenv with name as String returns String from library "c"
+
+# Test 4: Struct containing function pointers
+struct Operations
+    add_func as function with Integer, Integer returns Integer
+    sub_func as function with Integer, Integer returns Integer
+    mul_func as function with Integer, Integer returns Integer
+end
+
+# Test 5: Pointer to array
+extern type IntArray as Pointer
+
+# Test 6: Nested pointers (void**, void***)
+extern function malloc_2d with rows as Integer, cols as Integer returns Pointer from library "custom"
+
+# Test 7: Struct with array member
+struct Buffer
+    data as Pointer
+    size as Integer
+    capacity as Integer
+end
+
+# Test 8: Union with nested struct
+union Data
+    int_val as Integer
+    float_val as Float
+    nested_struct as Person
+end
+
+# Test 9: Bitfield struct (advanced)
+struct Flags
+    bit0 as Integer  # Bitfield: 1
+    bit1 as Integer  # Bitfield: 1
+    reserved as Integer  # Bitfield: 6
+end
+
+# Test 10: Recursive struct (linked list)
+struct Node
+    value as Integer
+    next as Pointer  # Node*
+end
+
+# Create nested instance
+set addr to new Address
+set addr.street to "123 Main St"
+set addr.city to "Springfield"
+set addr.zip_code to 12345
+
+set person to new Person
+set person.name to "John Doe"
+set person.age to 30
+set person.address to addr
+
+print text "Nested types tests complete"

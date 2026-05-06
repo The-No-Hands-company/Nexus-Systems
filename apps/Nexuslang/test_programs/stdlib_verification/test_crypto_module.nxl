@@ -1,0 +1,56 @@
+# Test Crypto Module Functionality
+# Verifies hashing (MD5, SHA256, SHA512, BLAKE2), HMAC, Base64
+
+function main
+    print text "Testing Crypto Module..."
+    
+    set test_string to "Hello, NLPL!"
+    
+    # Test 1: MD5 hash
+    set md5_hash to hash_md5 with test_string, "utf-8"
+    print text "MD5 hash:"
+    print text md5_hash
+    
+    # Test 2: SHA-1 hash
+    set sha1_hash to hash_sha1 with test_string, "utf-8"
+    print text "SHA-1 hash:"
+    print text sha1_hash
+    
+    # Test 3: SHA-256 hash
+    set sha256_hash to hash_sha256 with test_string, "utf-8"
+    print text "SHA-256 hash:"
+    print text sha256_hash
+    
+    # Test 4: SHA-512 hash
+    set sha512_hash to hash_sha512 with test_string, "utf-8"
+    print text "SHA-512 hash:"
+    print text sha512_hash
+    
+    # Test 5: BLAKE2b hash
+    set blake2b_hash to hash_blake2b with test_string, "utf-8"
+    print text "BLAKE2b hash:"
+    print text blake2b_hash
+    
+    # Test 6: HMAC-SHA256
+    set secret_key to "secret_key"
+    set hmac_result to hmac_sha256 with test_string, secret_key, "utf-8"
+    print text "HMAC-SHA256:"
+    print text hmac_result
+    
+    # Test 7: Base64 encoding
+    set encoded to base64_encode with test_string, "utf-8"
+    print text "Base64 encoded:"
+    print text encoded
+    
+    # Test 8: Base64 decoding
+    set decoded to base64_decode with encoded, "utf-8"
+    print text "Base64 decoded:"
+    print text decoded
+    
+    # Test 9: Secure random token
+    set token to secure_token with 16
+    print text "Secure random token (16 bytes):"
+    print text token
+    
+    print text "Crypto module verification COMPLETE"
+end

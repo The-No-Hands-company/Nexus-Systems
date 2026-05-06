@@ -1,0 +1,6 @@
+# Test index assignment with dictionary  
+set data to {}
+set data["name"] to "Alice"
+set data["age"] to 30
+print text data["name"]
+print text data["age"]

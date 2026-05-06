@@ -1,0 +1,13 @@
+# Simple list comprehension test
+
+async function main with nothing returns Integer
+    # Create a simple list comprehension
+    # [x * 2 for x in range(5)]
+    # For now, we'll use a hardcoded range since we don't have range() yet
+    
+    # Test will just compile to verify syntax works
+    set doubled to [x times 2 for x in numbers]
+    
+    print text "List comprehension compiled successfully!"
+    return 0
+end

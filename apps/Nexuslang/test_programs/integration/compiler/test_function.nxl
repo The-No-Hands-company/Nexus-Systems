@@ -1,0 +1,19 @@
+# Test function definition and calls
+
+function square that takes n as Integer returns Integer
+    set result to n times n
+    return result
+
+function greet that takes num as Integer returns Integer
+    print text "Number is:"
+    print text num
+    return num
+
+set x to 5
+set squared to square with x
+print text "5 squared ="
+print text squared
+
+set y to greet with 42
+print text "Returned:"
+print text y

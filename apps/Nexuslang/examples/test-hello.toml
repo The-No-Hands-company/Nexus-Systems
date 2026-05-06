@@ -1,0 +1,15 @@
+# Test NexusLang Project Manifest - Simple Hello World
+[package]
+name = "hello-build-test"
+version = "0.1.0"
+
+[[bin]]
+name = "hello"
+path = "build_test_hello.nxl"
+
+[profile.dev]
+opt-level = 0
+debug = true
+
+[profile.release]
+opt-level = 2

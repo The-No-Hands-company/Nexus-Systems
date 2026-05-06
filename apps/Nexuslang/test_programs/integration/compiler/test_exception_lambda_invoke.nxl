@@ -1,0 +1,18 @@
+# Test exception with function call through invoke
+
+function main returns Integer
+    # Define a function that throws
+    set thrower to lambda : raise error with message "Lambda error"
+    
+    print text "Before try"
+    
+    try
+        call thrower
+        print text "After call (unreachable)"
+    catch e
+        print text "Caught exception"
+    end
+    
+    print text "After catch - success!"
+    return 0
+end

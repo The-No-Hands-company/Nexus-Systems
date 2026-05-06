@@ -1,0 +1,14 @@
+# Test basic async/await syntax (Phase 1 infrastructure test)
+# This tests that coroutine infrastructure compiles correctly
+
+print text "=== Async/Await Infrastructure Test ==="
+
+# Simple synchronous program (no async yet, just infrastructure)
+set x to 10
+set y to 20
+set result to x plus y
+
+print text "Result: "
+print result
+
+print text "=== Infrastructure Test Complete ==="

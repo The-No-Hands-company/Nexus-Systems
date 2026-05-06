@@ -1,0 +1,30 @@
+# Array Bounds Checking Tests
+
+# Test 1: Valid array access within bounds
+set numbers to [10, 20, 30, 40, 50]
+
+# Test 2: Valid array assignment
+set arr to [100, 200, 300, 400, 500]
+set arr[0] to 100
+set arr[4] to 500
+print number arr[0]
+print number arr[4]
+print text "Test 2 passed!"
+print text ""
+
+# Test 3: Edge case - first index (should succeed)
+print text "Test 3: First index access"
+set values to [7, 8, 9]
+print number values[0]
+print text "Test 3 passed!"
+print text ""
+
+# Test 4: Edge case - last index (should succeed)
+print text "Test 4: Last index access"
+set data to [11, 22, 33, 44]
+print number data[3]
+print text "Test 4 passed!"
+print text ""
+
+print text "All valid bounds tests passed!"
+print text "Note: Out-of-bounds tests must be run separately (they will panic)"

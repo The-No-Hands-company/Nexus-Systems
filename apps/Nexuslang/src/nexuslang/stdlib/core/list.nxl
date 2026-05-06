@@ -1,0 +1,64 @@
+
+import core.result
+import core.optional
+
+# C stdlib bindings
+extern function malloc with size as Integer returns Pointer from library "c"
+extern function realloc with ptr as Pointer, size as Integer returns Pointer from library "c"
+extern function free with ptr as Pointer returns Void from library "c"
+
+export List
+
+class List<T>
+    # data is a pointer to the array of elements of type T
+    # using "Pointer to T" syntax which parser supports
+    property data as Pointer to T
+    property length as Integer
+    property capacity as Integer
+    
+    
+    function push that takes item as T returns Void
+        if length >= capacity
+             set new_cap to capacity * 2
+             if new_cap == 0
+                 set new_cap to 8
+                 
+             set item_size to sizeof T
+             set new_size to new_cap * item_size
+             
+             # Realloc (handles null data correctly)
+             set new_data to realloc(data, new_size)
+             
+             # Update data pointer
+             set data to new_data
+             set capacity to new_cap
+             
+        # Store item using index assignment
+        set data[length] to item
+        set length to length + 1
+        
+    function pop returns Optional<T>
+        if length == 0
+             return Optional.None
+             
+        set length to length - 1
+        set val to data[length]
+        return Optional.Some with val
+        
+    function get that takes index as Integer returns Result<T, String>
+        if index < 0 or index >= length
+             return Result.Err with "Index out of bounds"
+             
+        set val to data[index]
+        return Result.Ok with val
+        
+    function set that takes index as Integer, value as T returns Result<Void, String>
+        if index < 0 or index >= length
+             return Result.Err with "Index out of bounds"
+             
+        set data[index] to value
+        return Result.Ok with Void
+        
+    function len returns Integer
+        return length
+

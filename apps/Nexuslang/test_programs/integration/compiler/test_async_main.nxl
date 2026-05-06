@@ -1,0 +1,23 @@
+# Test async main function with scheduler
+# The async main should be run through the scheduler automatically
+
+# Simple async function
+async function compute_value returns Integer
+    set x to 10
+    set y to 20
+    return x plus y
+end
+
+# Async function that awaits
+async function get_doubled returns Integer
+    set val to await compute_value
+    return val times 2
+end
+
+# Async main - should be detected and run through scheduler
+async function main returns Integer
+    print text "Starting async main..."
+    set result to await get_doubled
+    print text "Got result from async chain"
+    return result
+end

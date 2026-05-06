@@ -1,0 +1,25 @@
+# Test bitwise operations
+
+# Test 1: Bitwise AND (5 & 3 = 1)
+set a to 5
+set b to 3
+set result to a bitwise and b
+print text result
+
+# Test 2: Bitwise OR (5 | 3 = 7)
+set result to a bitwise or b
+print text result
+
+# Test 3: Bitwise XOR (5 ^ 3 = 6)
+set result to a bitwise xor b
+print text result
+
+# Test 4: Left shift (5 << 2 = 20)
+set result to a shift left 2
+print text result
+
+# Test 5: Right shift (20 >> 2 = 5)
+set result to 20 shift right 2
+print text result
+
+print text "Bitwise tests complete!"

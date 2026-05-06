@@ -1,0 +1,90 @@
+# Test: Bitwise Operations with Symbol Syntax
+# Tests that both natural language and symbol syntax work
+
+print text "=== Bitwise Symbol Syntax Test ==="
+print text ""
+
+# Test 1: AND with & symbol
+print text "Test 1: AND with & symbol"
+set a to 12
+set b to 10
+set result to a bitwise and b
+print text "12 bitwise and 10 = "
+print text result
+print text "Expected: 8"
+print text ""
+
+# Test 2: OR with | symbol  
+print text "Test 2: OR with | symbol"
+set a to 12
+set b to 10
+set result to a bitwise or b
+print text "12 bitwise or 10 = "
+print text result
+print text "Expected: 14"
+print text ""
+
+# Test 3: XOR with ^ symbol
+print text "Test 3: XOR with ^ symbol"
+set a to 12
+set b to 10
+set result to a bitwise xor b
+print text "12 bitwise xor 10 = "
+print text result
+print text "Expected: 6"
+print text ""
+
+# Test 4: NOT with ~ symbol
+print text "Test 4: NOT with ~ symbol"
+set a to 5
+set result to bitwise not a
+print text "bitwise not 5 = "
+print text result
+print text "Expected: -6"
+print text ""
+
+# Test 5: Left shift with << symbol
+print text "Test 5: Left shift with << symbol"
+set a to 3
+set result to a shift left 2
+print text "3 shift left 2 = "
+print text result
+print text "Expected: 12"
+print text ""
+
+# Test 6: Right shift with >> symbol
+print text "Test 6: Right shift with >> symbol"
+set a to 12
+set result to a shift right 2
+print text "12 shift right 2 = "
+print text result
+print text "Expected: 3"
+print text ""
+
+# Test 7: Complex expression with mixed syntax
+print text "Test 7: Complex expressions"
+set a to 15
+set b to 7
+set c to 3
+
+# (15 AND 7) OR (3 << 1)
+set temp1 to a bitwise and b
+set temp2 to c shift left 1
+set result to temp1 bitwise or temp2
+print text "(15 AND 7) OR (3 << 1) = "
+print text result
+print text "Expected: 7 OR 6 = 7"
+print text ""
+
+# Test 8: Chained operations
+print text "Test 8: Chained operations"
+set value to 255
+set result to value shift right 2
+set result to result bitwise and 31
+set result to result shift left 1
+print text "((255 >> 2) AND 31) << 1 = "
+print text result
+print text "Expected: 62"
+print text ""
+
+print text "=== All Symbol Syntax Tests Complete ==="

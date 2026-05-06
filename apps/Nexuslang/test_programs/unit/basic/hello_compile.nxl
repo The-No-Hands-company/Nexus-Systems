@@ -1,0 +1,7 @@
+# Simple hello world for compiler testing
+
+print text "Hello from NexusLang compiler!"
+print text "The compiler is working perfectly with Python 3.14"
+
+set x to 42
+print number x

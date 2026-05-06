@@ -1,0 +1,99 @@
+# Test: Basic Memory-Mapped I/O Operations
+# Tests fundamental MMIO functionality: mapping, reading, writing, unmapping
+
+print text "Testing MMIO Basic Operations..."
+
+# Test 1: Map memory with default cache hint (uncacheable)
+print text "Test 1: Map VGA text buffer (0xB8000)"
+set vga_address to 753664  # 0xB8000
+set vga_size to 4000       # 80x25x2 bytes
+
+# Note: This will fail without root privileges
+# Expected: PrivilegeError if not root
+print text "Attempting to map memory (requires root)..."
+
+# Test will validate error handling
+set mapping_succeeded to false
+try
+    set vga_buffer to map_memory with physical_address: vga_address and size: vga_size
+    set mapping_succeeded to true
+    print text "Memory mapped successfully"
+    print text "Virtual address: "
+    print text vga_buffer
+    
+    # Test 2: Get mapping info
+    print text ""
+    print text "Test 2: Get mapping information"
+    set info to get mapping info with address: vga_buffer
+    print text "Physical address: "
+    print text info["physical_address"]
+    print text "Size: "
+    print text info["size"]
+    print text "Cache hint: "
+    print text info["cache_hint"]
+    
+    # Test 3: Read a byte from mapped memory
+    print text ""
+    print text "Test 3: Read byte from offset 0"
+    set byte_value to read mmio byte with address: vga_buffer and offset: 0
+    print text "Byte value: "
+    print text byte_value
+    
+    # Test 4: Write a byte to mapped memory
+    print text ""
+    print text "Test 4: Write byte (65 = 'A') to offset 0"
+    write mmio byte with address: vga_buffer and value: 65 and offset: 0
+    print text "Write successful"
+    
+    # Test 5: Read back the written byte
+    print text ""
+    print text "Test 5: Read back written byte"
+    set read_back to read mmio byte with address: vga_buffer and offset: 0
+    print text "Read back value: "
+    print text read_back
+    
+    if read_back is equal to 65
+        print text "Read/write verification: PASS"
+    else
+        print text "Read/write verification: FAIL"
+    end
+    
+    # Test 6: Read/write word (16-bit)
+    print text ""
+    print text "Test 6: Word (16-bit) operations"
+    write mmio word with address: vga_buffer and value: 0x4142 and offset: 2
+    set word_value to read mmio word with address: vga_buffer and offset: 2
+    print text "Word value: "
+    print text word_value
+    
+    # Test 7: Read/write dword (32-bit)
+    print text ""
+    print text "Test 7: Dword (32-bit) operations"
+    write mmio dword with address: vga_buffer and value: 0x41424344 and offset: 4
+    set dword_value to read mmio dword with address: vga_buffer and offset: 4
+    print text "Dword value: "
+    print text dword_value
+    
+    # Test 8: List all mappings
+    print text ""
+    print text "Test 8: List active mappings"
+    set mappings to list mappings
+    print text "Number of mappings: "
+    print text mappings.length
+    
+    # Test 9: Unmap memory
+    print text ""
+    print text "Test 9: Unmap memory"
+    unmap_memory with address: vga_buffer
+    print text "Memory unmapped successfully"
+    
+    print text ""
+    print text "All MMIO tests PASSED"
+    
+catch error with message
+    print text "Error occurred: "
+    print text message
+    print text ""
+    print text "Note: This test requires root privileges"
+    print text "  sudo python -m nexuslang.main test_programs/unit/hardware/test_mmio_basic.nxl"
+end

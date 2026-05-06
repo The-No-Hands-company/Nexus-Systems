@@ -1,0 +1,44 @@
+# Test collections
+print text "=== Collections Tests ==="
+
+# Vec tests
+print text "--- Vec<T> Tests ---"
+set vec to Vec
+call vec.push with 1
+call vec.push with 2
+call vec.push with 3
+
+print text "Vec length:"
+set len to vec.len
+print text len
+
+set last to vec.pop
+print text "Popped:"
+print text last
+
+# HashMap tests
+print text "--- HashMap<K,V> Tests ---"
+set map to HashMap
+call map.insert with "name" and "Alice"
+call map.insert with "age" and 30
+
+set name to map.get with "name"
+print text "Name:"
+print text name
+
+# Set tests
+print text "--- Set<T> Tests ---"
+set s to Set
+call s.add with 1
+call s.add with 2
+call s.add with 2  # Duplicate
+
+print text "Set length:"
+set slen to s.len
+print text slen
+
+print text "Contains 1:"
+set has1 to s.contains with 1
+print text has1
+
+print text "=== All Collections Tests Passed! ==="

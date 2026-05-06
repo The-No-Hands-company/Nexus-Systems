@@ -1,0 +1,60 @@
+# Test Inline Function Calls (without 'call' keyword)
+
+# Test 1: Basic inline function call
+function greet with name as String returns String
+    return "Hello, " plus name
+end
+
+set message to greet with "World"
+print text message
+
+# Test 2: Inline function call with multiple arguments
+function add with a as Integer and b as Integer returns Integer
+    return a plus b
+end
+
+set sum to add with 5 and 10
+print text "5 + 10 = "
+print text sum
+
+# Test 3: Chained inline function calls (step by step)
+function double with n as Integer returns Integer
+    return n times 2
+end
+
+function triple with n as Integer returns Integer
+    return n times 3
+end
+
+set doubled to double with 5
+set tripled to triple with 3
+set result to add with doubled and tripled
+print text "double(5) + triple(3) = "
+print text result
+
+# Test 4: Inline calls in expressions
+function multiply with x as Integer and y as Integer returns Integer
+    return x times y
+end
+
+set calculation to multiply with 3 and 4 plus multiply with 2 and 5
+print text "3*4 + 2*5 = "
+print text calculation
+
+# Test 5: Zero-argument function with parentheses
+function get_constant returns Integer
+    return 42
+end
+
+set value to get_constant()
+print text "Constant value: "
+print text value
+
+# Test 6: Stdlib functions without 'call'
+Import system.
+
+set platform to system.get_os_name()
+print text "Platform: " plus platform
+
+print text ""
+print text "=== All Inline Function Call Tests Passed ==="

@@ -1,0 +1,50 @@
+# Generic List<T> Implementation
+# Standard library generic list with type safety
+
+class List of T
+    property items as Array of T
+    property count as Integer
+    property capacity as Integer
+    
+    function init
+        set count to 0
+        set capacity to 10
+        # Allocate initial array
+    
+    function add that takes item as T
+        if count is equal to capacity
+            # Resize array
+            set capacity to capacity times 2
+        # Add item to array
+        set count to count plus 1
+    
+    function get that takes index as Integer returns T
+        if index is greater than or equal to count
+            # Return default/error
+            return null
+        # Return item at index
+        return items[index]
+    
+    function remove that takes index as Integer returns T
+        if index is greater than or equal to count
+            return null
+        set item to items[index]
+        # Shift elements
+        set count to count minus 1
+        return item
+    
+    function contains that takes item as T where T is Equatable returns Integer
+        set i to 0
+        while i is less than count
+            if items[i] is equal to item
+                return 1
+            set i to i plus 1
+        return 0
+    
+    function clear
+        set count to 0
+    
+    function is_empty returns Integer
+        if count is equal to 0
+            return 1
+        return 0

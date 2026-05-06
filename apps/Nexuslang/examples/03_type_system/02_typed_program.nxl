@@ -1,0 +1,25 @@
+# Example NexusLang program with type annotations
+
+# Variable declarations with type annotations
+Create number as Integer and set it to 42.
+Create pi as Float and set it to 3.14159.
+Create name as String and set it to "John Doe".
+Create is_active as Boolean and set it to true.
+
+# Function with type annotations
+Define a function called add that takes a as Integer, b as Integer and returns Integer
+    Return a + b.
+End function.
+
+Define a function called greet that takes person as String
+    Create greeting and set it to "Hello, " + person + "!".
+    Return greeting.
+End function.
+
+# Using the functions
+Create result as Integer and set it to add(5, 10).
+Create message and set it to greet(name).
+
+# Type error examples (these would be caught by the type checker)
+# Create wrong_type as Integer and set it to "This is not an integer".
+# Create result2 and set it to add("5", 10). 

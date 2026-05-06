@@ -1,0 +1,10 @@
+# NexusLang Arithmetic - LLVM Backend Test
+# Tests basic types, variables, and arithmetic
+
+set x to 10
+set y to 20
+set sum to x plus y
+set product to x times y
+
+print text sum
+print text product

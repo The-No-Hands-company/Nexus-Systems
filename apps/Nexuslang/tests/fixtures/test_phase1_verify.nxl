@@ -1,0 +1,19 @@
+// Simple test to verify Phase 1 runtime bounds checking
+fn main() {
+    print("Testing Phase 1: Runtime Size Tracking");
+    
+    // Test 1: Basic allocation and bounds
+    print("Test 1: Basic allocation");
+    let arr = alloc(5, i64);
+    arr[0] = 100;
+    arr[4] = 500;
+    print(" Valid accesses work");
+    
+    // Test 2: arrlen with runtime size
+    print("Test 2: arrlen");
+    let size = arrlen(arr);
+    print("Array size:");
+    print(size);  // Should print 5
+    
+    print("All Phase 1 tests passed!");
+}

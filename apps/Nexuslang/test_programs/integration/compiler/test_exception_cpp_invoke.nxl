@@ -1,0 +1,22 @@
+# Test exception handling with C++ function that throws
+# This validates the invoke/landingpad mechanism
+
+# Declare external C++ function that throws
+extern function cpp_throw_error with message as Pointer returns Void from library "exception_helper"
+
+print text "=== Exception Invoke Test ==="
+
+# Test 1: Try-catch with throwing function
+print text "Test 1: Try-catch with throwing C++ function"
+try
+    print text "  About to call cpp_throw_error..."
+    call cpp_throw_error with "Exception from C++"
+    print text "  ERROR: Should not reach here!"
+catch e
+    print text "  SUCCESS: Caught exception!"
+    print text "  Message: "
+    print text e
+end
+
+print text "Test 2: After catch - program continues"
+print text "=== All tests complete ==="

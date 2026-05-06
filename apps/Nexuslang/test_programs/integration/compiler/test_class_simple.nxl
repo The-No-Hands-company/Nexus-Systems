@@ -1,0 +1,34 @@
+# Simple class test for compiler
+
+class Point
+    property x as Integer
+    property y as Integer
+    
+    method distance_from_origin returns Integer
+        set x_squared to x times x
+        set y_squared to y times y
+        set sum to x_squared plus y_squared
+        return sum
+
+print text "=== Simple Class Test ==="
+print text ""
+
+print text "Creating Point(3, 4)..."
+set p to new Point
+set p.x to 3
+set p.y to 4
+
+print text "Coordinates:"
+print text "x = "
+print text p.x
+print text "y = "
+print text p.y
+
+print text ""
+print text "Calculating distance squared..."
+set dist to call p.distance_from_origin
+print text "Distance squared: "
+print text dist
+
+print text ""
+print text "=== Test Complete ==="

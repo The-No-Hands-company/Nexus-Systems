@@ -1,0 +1,30 @@
+# Comprehensive list comprehension test
+
+async function main with nothing returns Integer
+    # Create source data
+    set numbers to [1, 2, 3, 4, 5]
+    
+    # Test 1: Simple transformation
+    set doubled to [x times 2 for x in numbers]
+    print text "Test 1 - Doubled (should be 2,4,6,8,10):"
+    for each item in doubled
+        print text item
+    end
+    
+    # Test 2: With condition (filter positive)
+    set big_numbers to [x for x in numbers if x is greater than 2]
+    print text "Test 2 - Greater than 2 (should be 3,4,5):"
+    for each item in big_numbers
+        print text item
+    end
+    
+    # Test 3: Complex expression with condition
+    set squared_evens to [x times x for x in numbers if x modulo 2 is equal to 0]
+    print text "Test 3 - Squared evens (should be 4,16):"
+    for each item in squared_evens
+        print text item
+    end
+    
+    print text "All list comprehension tests complete!"
+    return 0
+end

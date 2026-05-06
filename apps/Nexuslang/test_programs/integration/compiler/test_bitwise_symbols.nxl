@@ -1,0 +1,32 @@
+# Test bitwise symbolic operators
+set a to 5
+set b to 3
+
+# Test 1: Symbolic AND &
+set result to a & b
+print text result
+
+# Test 2: Symbolic OR |
+set result to a | b
+print text result
+
+# Test 3: Symbolic XOR ^
+set result to a ^ b
+print text result
+
+# Test 4: Symbolic SHIFT << >>
+set left to a << 2
+set right to 20 >> 2
+print text left
+print text right
+
+# Test 5: Bitwise NOT ~
+# ~5 = -6 (in 2s complement)
+set not_val to ~a
+print text not_val
+
+# Test 6: Natural language NOT
+set not_val_nl to bitwise not a
+print text not_val_nl
+
+print text "Symbolic tests complete!"

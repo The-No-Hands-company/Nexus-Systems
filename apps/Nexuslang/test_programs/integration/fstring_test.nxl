@@ -1,0 +1,17 @@
+# Test F-String Compilation
+
+set name to "Alice"
+set age to 30
+set pi to 3.14159
+
+# Test basic string interpolation
+print text f"Hello, {name}!"
+
+# Test expression in f-string
+print text f"Name: {name}, Age: {age}"
+
+# Test arithmetic in f-string  
+print text f"5 + 3 = {5 plus 3}"
+
+# Test float in f-string
+print text f"Pi is approximately {pi}"

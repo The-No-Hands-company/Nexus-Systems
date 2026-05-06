@@ -1,0 +1,17 @@
+# Simple pointer operations test
+set x to 42
+print text "Value: "
+print text x
+
+set ptr to address of x
+print text "Pointer: "
+print text ptr
+
+set value to dereference ptr
+print text "Dereferenced: "
+print text value
+
+print text "Size of Integer: "
+print text (sizeof Integer)
+
+print text "Pointer operations work!"

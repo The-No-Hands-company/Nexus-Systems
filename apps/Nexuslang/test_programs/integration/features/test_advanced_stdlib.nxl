@@ -1,0 +1,164 @@
+# Test Advanced Standard Library Features
+# Signal handling, argument parsing, configuration
+
+print text "=== Testing Advanced Stdlib Features ==="
+print text ""
+
+# 1. Configuration Files
+print text "1. Configuration Management"
+
+# Create INI config
+set config to create_config("ini")
+print text "  - Created INI config"
+
+# Set values
+set_config_value(config, "host", "localhost", "database")
+set_config_value(config, "port", "5432", "database")
+set_config_value(config, "username", "admin", "database")
+
+set_config_value(config, "level", "INFO", "logging")
+set_config_value(config, "file", "/var/log/app.log", "logging")
+
+print text "  - Config values set"
+
+# Save config
+set config_file to "/tmp/nxl_test.ini"
+set saved to save_config_file(config, config_file)
+
+if saved
+    print text "  - Config saved: SUCCESS"
+else
+    print text "  - Config saved: FAILED"
+end
+
+# Load config back
+set new_config to create_config("ini")
+set loaded to load_config_file(new_config, config_file)
+
+if loaded
+    print text "  - Config loaded: SUCCESS"
+    
+    # Get values
+    set db_host to get_config_value(new_config, "host", "database", "default")
+    print text "  - Database host: "
+    print text db_host
+    
+    set log_level to get_config_value(new_config, "level", "logging", "DEBUG")
+    print text "  - Log level: "
+    print text log_level
+    
+    # Check key existence
+    set has_port to has_config_key(new_config, "port", "database")
+    if has_port
+        print text "  - Has port key: TRUE"
+    else
+        print text "  - Has port key: FALSE"
+    end
+    
+    # Get sections
+    set sections to get_config_sections(new_config)
+    print text "  - Config sections: "
+    set section_count to list_length(sections)
+    print text section_count
+else
+    print text "  - Config loaded: FAILED"
+end
+
+# JSON config
+set json_config to create_config("json")
+set_config_value(json_config, "name", "NLPL Test")
+set_config_value(json_config, "version", "1.0")
+set_config_value(json_config, "debug", "true")
+
+set json_file to "/tmp/nxl_test.json"
+set json_saved to save_config_file(json_config, json_file)
+
+if json_saved
+    print text "  - JSON config saved: SUCCESS"
+else
+    print text "  - JSON config saved: FAILED"
+end
+
+# Simple config (key=value)
+set simple_config to create_config("simple")
+set_config_value(simple_config, "api_key", "secret123")
+set_config_value(simple_config, "endpoint", "https://api.example.com")
+
+set simple_file to "/tmp/nxl_test.conf"
+set simple_saved to save_config_file(simple_config, simple_file)
+
+if simple_saved
+    print text "  - Simple config saved: SUCCESS"
+else
+    print text "  - Simple config saved: FAILED"
+end
+
+print text ""
+
+# 2. Argument Parsing
+print text "2. Command-Line Argument Parsing"
+
+# Create parser
+set parser to create_parser("NLPL Test Program", "nxl_test")
+print text "  - Parser created"
+
+# Add arguments
+set parser to add_argument(parser, "--verbose", "Enable verbose output", "str", "", false, "store_true")
+set parser to add_argument(parser, "--input", "Input file path", "str", "input.txt", false, "")
+set parser to add_argument(parser, "--count", "Number of iterations", "int", 10, false, "")
+set parser to add_argument(parser, "--output", "Output file path", "str", "output.txt", false, "")
+
+print text "  - Arguments added: verbose, input, count, output"
+
+# Parse with default values (no args provided)
+set args to parse_args(parser, [])
+print text "  - Arguments parsed"
+
+# Get values
+set input_file to get_arg_value(parser, "input")
+print text "  - Input file: "
+print text input_file
+
+set count_val to get_arg_value(parser, "count")
+print text "  - Count: "
+print text count_val
+
+set output_file to get_arg_value(parser, "output")
+print text "  - Output file: "
+print text output_file
+
+print text ""
+
+# 3. Signal Handling
+print text "3. Signal Handling"
+
+# Get signal constants
+set sigint_num to SIGINT()
+print text "  - SIGINT number: "
+print text sigint_num
+
+set sigterm_num to SIGTERM()
+print text "  - SIGTERM number: "
+print text sigterm_num
+
+# Get signal names
+set int_name to get_signal_name(sigint_num)
+print text "  - SIGINT name: "
+print text int_name
+
+set term_name to get_signal_name(sigterm_num)
+print text "  - SIGTERM name: "
+print text term_name
+
+print text "  - Signal functions available (handlers not tested)"
+
+print text ""
+
+print text "=== Advanced Features Complete! ==="
+print text ""
+print text "Summary:"
+print text "  Config: 9+ functions (INI, JSON, simple key=value formats)"
+print text "  ArgParse: 4+ functions (create parser, add args, parse, get values)"
+print text "  Signals: 7+ functions (handle signals, send, ignore, constants)"
+print text ""
+print text "Total new functions: 20+"

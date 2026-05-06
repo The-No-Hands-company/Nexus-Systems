@@ -1,0 +1,13 @@
+# Test basic array indexing
+set numbers to [1, 2, 3, 4, 5]
+set first to numbers[0]
+print first
+
+# Test nested indexing
+set matrix to [[1, 2], [3, 4]]
+set value to matrix[0][1]
+print value
+
+# Test with member access
+set obj to new Person
+set items to obj.data[0]

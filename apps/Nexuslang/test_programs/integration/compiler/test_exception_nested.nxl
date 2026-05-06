@@ -1,0 +1,44 @@
+# Test nested try-catch blocks
+
+print text "=== Nested Try-Catch Test ==="
+
+# Test 1: Nested try-catch, inner catches
+print text "Test 1: Inner catch handles"
+try
+    print text "  Outer try - entering"
+    try
+        print text "    Inner try - about to raise"
+        raise error with message "Inner error"
+        print text "    ERROR: Should not reach here"
+    catch inner_e
+        print text "    Inner catch: "
+        print text inner_e
+    end
+    print text "  Outer try - after inner catch"
+catch outer_e
+    print text "  ERROR: Outer catch should not run"
+    print text outer_e
+end
+print text "Test 1: Complete"
+
+# Test 2: Nested try-catch, inner doesn't catch, outer catches
+print text ""
+print text "Test 2: Outer catch handles (re-raise from inner)"
+try
+    print text "  Outer try - entering"
+    try
+        print text "    Inner try - about to raise"
+        raise ValueError with message "Propagated error"
+    catch inner_e
+        print text "    Inner catch - re-raising"
+        raise error with message inner_e
+    end
+    print text "  ERROR: Should not reach here"
+catch outer_e
+    print text "  Outer catch: "
+    print text outer_e
+end
+print text "Test 2: Complete"
+
+print text ""
+print text "=== All nested tests complete ==="

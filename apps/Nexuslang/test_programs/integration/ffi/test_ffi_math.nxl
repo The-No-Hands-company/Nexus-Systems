@@ -1,0 +1,34 @@
+# FFI Math Example - Call C math library functions
+# Tests calling external functions from libm
+#
+# Compilation:
+#   python nlplc_llvm.py test_programs/ffi/test_ffi_math.nlpl -o ffi_math
+#
+# Expected Output:
+#   sqrt(16.0) = 4.000000
+#   pow(2.0, 8.0) = 256.000000
+#   sin(3.14159/2) = 1.000000
+
+extern function sqrt with x as Float returns Float from library "m"
+extern function pow with x as Float, y as Float returns Float from library "m"
+extern function sin with x as Float returns Float from library "m"
+extern function printf with format as Pointer, ... returns Integer from library "c"
+
+# Test sqrt
+set value to 16.0
+set result to call sqrt with value
+set format to "sqrt(16.0) = %f\n"
+call printf with format, result
+
+# Test pow
+set base to 2.0
+set exponent to 8.0
+set power_result to call pow with base, exponent
+set format2 to "pow(2.0, 8.0) = %f\n"
+call printf with format2, power_result
+
+# Test sin (pi/2 should be ~1.0)
+set pi_half to 1.5708
+set sin_result to call sin with pi_half
+set format3 to "sin(pi/2) = %f\n"
+call printf with format3, sin_result

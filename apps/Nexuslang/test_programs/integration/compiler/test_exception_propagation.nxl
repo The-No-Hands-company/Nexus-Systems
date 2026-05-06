@@ -1,0 +1,38 @@
+# Test exception propagation through function calls
+
+extern function cpp_throw_error with message as Pointer returns Void from library "exception_helper"
+
+print text "=== Exception Propagation Test ==="
+
+# Test 1: Exception thrown from extern function, caught at top level
+print text "Test 1: Propagation from extern function"
+try
+    print text "  About to call throwing function"
+    call cpp_throw_error with "Error from deep call"
+    print text "  ERROR: Should not reach"
+catch e
+    print text "  Caught propagated exception: "
+    print text e
+end
+print text "Test 1: Complete"
+
+# Test 2: Multiple try-catch with extern calls
+print text ""
+print text "Test 2: Multiple catch levels"
+try
+    try
+        call cpp_throw_error with "Deep nested error"
+    catch inner_e
+        print text "  Inner caught: "
+        print text inner_e
+        # Re-raise with different message
+        raise error with message "Re-raised from inner"
+    end
+catch outer_e
+    print text "  Outer caught: "
+    print text outer_e
+end
+print text "Test 2: Complete"
+
+print text ""
+print text "=== All propagation tests complete ==="

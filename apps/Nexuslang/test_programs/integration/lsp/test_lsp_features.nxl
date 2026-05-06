@@ -1,0 +1,71 @@
+# Test NexusLang file for LSP testing
+# This file tests various LSP features:
+# - Go-to-definition
+# - Find references
+# - Hover documentation
+# - Auto-completion
+# - Symbol search
+
+import math
+from string import split, join
+
+# Variable definitions
+set counter to 0
+set message to "Hello, LSP!"
+set result as Float to 3.14
+
+# Function definition with parameters
+function calculate_average that takes numbers as List of Float returns Float
+    # Calculate the average of a list of numbers
+    if numbers is empty
+        return 0.0
+    
+    set total to 0.0
+    for each num in numbers
+        set total to total plus num
+    
+    set avg to total divided by length of numbers
+    return avg
+
+# Class definition
+class Person
+    property name as String
+    property age as Integer
+    
+    method greet that takes greeting as String returns String
+        # Create a personalized greeting
+        set full_greeting to greeting plus ", " plus name
+        return full_greeting
+    
+    method is_adult returns Boolean
+        return age is greater than or equal to 18
+
+# Function that calls other functions (for references test)
+function process_data that takes values as List of Float returns Float
+    set avg to calculate_average with values
+    
+    # Create a person
+    set person to new Person
+    set person.name to "Alice"
+    set person.age to 25
+    
+    # Call person methods
+    set greeting to call greet on person with "Welcome"
+    
+    return avg
+
+# Function that uses stdlib (for hover test)
+function analyze_text that takes text as String returns List of String
+    set parts to split with text, " "
+    return parts
+
+# Variable for testing find references
+set test_counter to 0
+set test_counter to test_counter plus 1
+set doubled to test_counter times 2
+
+# Test math functions
+set square_root to sqrt with 16
+set sine_value to sin with 0
+
+print text message

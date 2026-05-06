@@ -1,0 +1,5 @@
+# Test program with intentional errors to see enhanced error messages
+
+# Error 1: Typo in variable name (should suggest 'count')
+set count to 5
+print text conter

@@ -1,0 +1,117 @@
+# Example 33: Async/Await and Concurrent Programming
+# Demonstrates asynchronous programming with promises and async functions
+
+print text "=== Async/Await in NexusLang ==="
+print text ""
+
+# Basic async function
+async function fetch_data with url as String returns String
+  print text "Fetching data from " plus url plus "..."
+  
+  # Simulate async operation (in real implementation, this would await I/O)
+  set result to "Data from " plus url
+  
+  return result
+end
+
+# Async function with error handling
+async function fetch_with_retry with url as String, max_retries as Integer returns String
+  set attempts to 0
+  
+  while attempts is less than max_retries
+    try
+      set data to await fetch_data with url
+      return data
+    catch err
+      set attempts to attempts plus 1
+      set attempt_str to attempts to_string
+      print text "Attempt " plus attempt_str plus " failed"
+      
+      if attempts is equal to max_retries
+        raise error "Max retries reached"
+      end
+    end
+  end
+  
+  return ""
+end
+
+# Multiple concurrent async operations
+async function fetch_all with urls as List of String returns List of String
+  set results to []
+  
+  # In a full implementation, these would run concurrently
+  for each url in urls
+    set data to await fetch_data with url
+    call list_append with results, data
+  end
+  
+  return results
+end
+
+# Using async functions
+print text "1. Simple Async Call"
+print text "--------------------"
+set data to await fetch_data with "https://api.example.com/data"
+print text "Result: " plus data
+print text ""
+
+print text "2. Async with Retry Logic"
+print text "-------------------------"
+try
+  set reliable_data to await fetch_with_retry with "https://api.example.com/flaky", 3
+  print text "Successfully fetched: " plus reliable_data
+catch error
+  print text "Failed to fetch data: " plus error
+end
+print text ""
+
+print text "3. Concurrent Fetching"
+print text "---------------------"
+set urls to ["https://api.example.com/users", "https://api.example.com/posts", "https://api.example.com/comments"]
+set all_data to await fetch_all with urls
+
+set data_count to length of all_data
+set count_str to data_count to_string
+print text "Fetched " plus count_str plus " items:"
+for each item in all_data
+  print text "  - " plus item
+end
+print text ""
+
+# Async with callbacks (Promise-style)
+function process_async_result with handler as Function
+  print text "Processing async operation..."
+  
+  # Simulate async work
+  set result to "Processed data"
+  
+  # Call the callback
+  call handler with result
+end
+
+print text "4. Callback-based Async"
+print text "----------------------"
+function handle_result with data as String
+  print text "Callback received: " plus data
+end
+
+call process_async_result with handle_result
+print text ""
+
+# Async generators (future feature)
+print text "5. Async Patterns Summary"
+print text "-------------------------"
+print text "✓ Async functions with 'async function' keyword"
+print text "✓ Await expressions with 'await' keyword"
+print text "✓ Error handling in async context"
+print text "✓ Concurrent operations (await multiple)"
+print text "✓ Callback-based async (compatibility)"
+print text ""
+
+print text "=== Best Practices ==="
+print text "1. Use async/await for I/O-bound operations"
+print text "2. Handle errors with try/catch in async functions"
+print text "3. Avoid blocking operations in async code"
+print text "4. Use Promise.all equivalent for concurrent operations"
+print text "5. Clean up resources in finally blocks"

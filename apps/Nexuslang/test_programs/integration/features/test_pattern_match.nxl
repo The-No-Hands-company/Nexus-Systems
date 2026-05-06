@@ -1,0 +1,25 @@
+# Test pattern matching implementation
+# Pattern matching with literal values
+
+function test_number_match that takes num as Integer returns String
+    match num with
+        case 1
+            return "One"
+        case 2
+            return "Two"
+        case 3
+            return "Three"
+        case _
+            return "Other number"
+
+function main that takes nothing returns Integer
+    set result1 to call test_number_match with 1
+    print text result1
+    
+    set result2 to call test_number_match with 2
+    print text result2
+    
+    set result3 to call test_number_match with 5
+    print text result3
+    
+    return 0

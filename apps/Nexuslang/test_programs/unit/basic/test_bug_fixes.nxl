@@ -1,0 +1,67 @@
+# Bug fix verification tests
+# 1. newline emission stops cross-line token eating in member-name parser
+# 2. zero-arg function calls via () syntax
+# 3. zero-arg function calls via "func with" syntax (requires NEWLINE fix)
+
+# --- Helper ---
+function check with msg as String and condition as Boolean
+    if condition
+        print text msg concatenate ": ok"
+    else
+        print text msg concatenate ": FAIL"
+    end
+end
+
+# --- Bug 1: cross-line member-name eating ---
+# Before the fix, the multi-word member-name parser would eat tokens from the
+# next line if no NEWLINE was emitted.  After the fix, object.method on one
+# line must not consume the identifier that begins the next line.
+
+set nums to create list
+list_append with nums and 3
+list_append with nums and 1
+list_append with nums and 2
+
+set first to nums[0]
+set second to nums[1]
+
+# These two reads must stay independent (cross-line eating would corrupt second).
+check with msg: "first element correct" and condition: first is equal to 3
+check with msg: "second element independent" and condition: second is equal to 1
+
+# --- Bug 3: zero-arg function call via () syntax ---
+
+function greet_noarg
+    print text "zero-arg ok"
+end
+
+# Call with explicit parentheses - should execute the function body
+greet_noarg()
+
+function double_noarg returns Integer
+    return 21 plus 21
+end
+
+set result to double_noarg()
+check with msg: "zero-arg returns value" and condition: result is equal to 42
+
+# zero-arg call via 'with' keyword followed immediately by newline
+function ping
+    print text "ping called"
+end
+
+ping with
+
+check with msg: "ping with returned nothing harmful" and condition: true
+
+# --- Bug 1 advanced: distinct .length calls on adjacent lines ---
+set text1 to "hello"
+set text2 to "world!"
+
+set len1 to length with text1
+set len2 to length with text2
+
+check with msg: "len1 is 5" and condition: len1 is equal to 5
+check with msg: "len2 is 6" and condition: len2 is equal to 6
+
+print text "all bug fix tests passed"

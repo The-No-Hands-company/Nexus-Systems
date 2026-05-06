@@ -1,0 +1,5 @@
+# Test access modifiers in class
+class Test
+    private set x to Integer
+    public function foo with n as Integer returns Integer
+        return n

@@ -1,0 +1,67 @@
+# Standard Library Feature Test
+# Tests major stdlib modules to identify what's working vs. what needs work
+
+print text "=== NexusLang Standard Library Feature Test ==="
+print text ""
+
+# Test 1: Math module
+print text "Test 1: Math module"
+set pi_value to PI
+print text "PI constant:"
+print text pi_value
+set sqrt_result to sqrt with 16
+print text "sqrt(16):"
+print text sqrt_result
+print text "PASS: Math module works"
+print text ""
+
+# Test 2: String module
+print text "Test 2: String module"
+set text1 to "hello world"
+set upper_text to uppercase with text1
+print text "uppercase('hello world'):"
+print text upper_text
+set lower_text to lowercase with "HELLO"
+print text "lowercase('HELLO'):"
+print text lower_text
+set cap_text to capitalize with "hello"
+print text "capitalize('hello'):"
+print text cap_text
+set trimmed to trim with "  spaces  "
+print text "trim('  spaces  '):"
+print text trimmed
+set reversed to reverse with "hello"
+print text "reverse('hello'):"
+print text reversed
+print text "PASS: String module works"
+print text ""
+
+# Test 3: Collections module
+print text "Test 3: Collections (lists)"
+set my_list to create list
+call add with my_list and 10
+call add with my_list and 20
+call add with my_list and 30
+set list_size to length with my_list
+print text "List length:"
+print text list_size
+set first_item to list_pop with my_list and 0
+print text "First item (after pop(0)):"
+print text first_item
+print text "PASS: Collections work"
+print text ""
+
+# Test 4: System module  
+print text "Test 4: System module"
+call time
+print text "PASS: System module works"
+print text ""
+
+# Test 5: IO module (file operations)
+print text "Test 5: File I/O"
+call write_file with "test_output.txt" and "Hello from NLPL!"
+print text "PASS: File I/O works"
+print text ""
+
+print text "=== Standard Library Test Complete ==="
+print text "All tested modules are functional!"

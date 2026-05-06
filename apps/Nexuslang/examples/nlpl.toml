@@ -1,0 +1,75 @@
+# Example NexusLang Project Manifest
+# This demonstrates a complete nlpl.toml configuration
+
+[package]
+name = "data-processor"
+version = "0.1.0"
+authors = ["Developer <dev@example.com>"]
+license = "MIT"
+description = "A data processing application demonstrating NexusLang capabilities"
+repository = "https://github.com/user/data-processor"
+keywords = ["data", "processing", "analytics"]
+edition = "2026"
+build = "build.nxl"  # Custom build script
+
+# Runtime dependencies
+[dependencies]
+nlpl-math = "1.0"
+nlpl-csv = "2.0"
+nlpl-database = "1.5"
+
+# Development dependencies (testing, benchmarking)
+[dev-dependencies]
+nlpl-test = "1.0"
+nlpl-bench = "0.3"
+
+# Build script dependencies
+[build-dependencies]
+nlpl-build-tools = "0.2"
+
+# Binary targets
+[[bin]]
+name = "processor"
+path = "src/main.nxl"
+
+[[bin]]
+name = "analyzer"
+path = "src/bin/analyzer.nxl"
+required-features = ["data-analytics"]
+
+# Library target (if this package is also a library)
+[lib]
+name = "data_processor_lib"
+path = "src/lib.nxl"
+crate-type = ["lib"]
+
+# Build profiles
+[profile.dev]
+opt-level = 0
+debug = true
+incremental = true
+
+[profile.release]
+opt-level = 3
+lto = true
+strip = true
+panic = "abort"
+
+[profile.production]
+inherits = "release"
+codegen-units = 1  # Maximum optimization
+
+# Feature flags (domain-neutral capabilities)
+[features]
+default = ["text-processing"]
+text-processing = []  # Text/string manipulation features
+data-analytics = ["nlpl-math/statistics"]  # Statistical analysis capabilities
+storage-backend = ["dep:nlpl-database"]  # Persistent data storage
+concurrent-execution = []  # Multi-threading/parallel processing
+
+# Platform-specific dependencies
+[target.'cfg(unix)'.dependencies]
+nlpl-unix-utils = "0.1"
+
+[target.'cfg(windows)'.dependencies]
+nlpl-windows-api = "0.2"

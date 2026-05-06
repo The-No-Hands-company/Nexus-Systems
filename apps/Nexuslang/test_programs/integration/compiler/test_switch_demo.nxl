@@ -1,0 +1,83 @@
+# Switch Statement Demo - Simple Examples
+
+print text "=== NexusLang Switch Statement Demo ==="
+
+# Example 1: Simple day of week
+print text "\nExample 1: Day of Week"
+set day to 5
+print text "Day number: "
+print number day
+
+switch day
+    case 1
+        print text "Monday - Start of work week"
+    case 2
+        print text "Tuesday"
+    case 3
+        print text "Wednesday - Midweek"
+    case 4
+        print text "Thursday"
+    case 5
+        print text "Friday - Last work day!"
+    case 6
+        print text "Saturday - Weekend!"
+    case 7
+        print text "Sunday - Weekend!"
+    default
+        print text "Invalid day number"
+
+# Example 2: Calculator
+print text "\nExample 2: Simple Calculator"
+set operation to 3
+set num1 to 10
+set num2 to 5
+set result to 0
+
+print text "Operation code: "
+print number operation
+print text "Numbers: "
+print number num1
+print text " and "
+print number num2
+
+switch operation
+    case 1
+        set result to num1 plus num2
+        print text "Addition: "
+        print number result
+    case 2
+        set result to num1 minus num2
+        print text "Subtraction: "
+        print number result
+    case 3
+        set result to num1 times num2
+        print text "Multiplication: "
+        print number result
+    case 4
+        set result to num1 divided by num2
+        print text "Division: "
+        print number result
+    default
+        print text "Unknown operation"
+
+# Example 3: Grade conversion
+print text "\nExample 3: Grade Converter"
+set numeric_grade to 85
+
+switch numeric_grade
+    case 100
+        print text "Perfect score! A+"
+    case 90
+        print text "Excellent! A"
+    case 85
+        print text "Very Good! B+"
+    case 80
+        print text "Good! B"
+    case 75
+        print text "Satisfactory! C+"
+    case 70
+        print text "Pass! C"
+    default
+        print text "Score not in lookup table"
+
+print text "\n=== Demo complete ==="

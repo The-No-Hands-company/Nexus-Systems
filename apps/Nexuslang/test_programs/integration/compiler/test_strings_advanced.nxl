@@ -1,0 +1,20 @@
+# Test advanced string operations
+# Once implemented: concatenation, length, comparison
+
+# String concatenation
+set greeting to "Hello"
+set name to "World"
+print text greeting
+print text name
+
+# TODO: Test concatenation when implemented
+# set message to greeting concatenated with " " concatenated with name
+# print text message
+
+# TODO: Test length when implemented
+# set len to length of greeting
+# print text len
+
+# TODO: Test comparison when implemented
+# if greeting is equal to "Hello"
+#     print text "Match!"

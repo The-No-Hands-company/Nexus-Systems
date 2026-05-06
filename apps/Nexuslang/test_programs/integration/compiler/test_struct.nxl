@@ -1,0 +1,14 @@
+# Test struct definition and usage
+
+struct Point
+    x as Integer
+    y as Integer
+
+set p to new Point
+set p.x to 10
+set p.y to 20
+
+print text p.x
+print text p.y
+
+print text "Struct test done!"

@@ -1,0 +1,13 @@
+# Test calling a closure with parentheses
+
+function execute_block with block as Function
+    print text "About to call the block..."
+    block()
+    print text "Block finished!"
+end
+
+execute_block do
+    print text "Hello from inside the block!"
+end
+
+print text "Test complete!"

@@ -1,0 +1,53 @@
+# Test edge cases for logical operators
+
+# Double NOT
+set x to 1
+if not not x
+  print text "Double NOT works!"
+end
+
+# Triple NOT  
+if not not not x
+  print text "This should NOT print"
+else
+  print text "Triple NOT works!"
+end
+
+# NOT with AND
+set a to 1
+set b to 0
+if not a and b
+  print text "This should NOT print"
+else
+  print text "NOT with AND works!"
+end
+
+# NOT with OR
+if not a or b
+  print text "This should NOT print"
+else
+  print text "NOT a OR b works!"
+end
+
+# NOT of complex expression
+if not (a and b)
+  print text "NOT (a AND b) works!"
+end
+
+# Chained ANDs
+set c to 1
+if a and b and c
+  print text "This should NOT print"
+else
+  print text "Chained AND works!"
+end
+
+# Chained ORs
+if a or b or c
+  print text "Chained OR works!"
+end
+
+# Mixed AND/OR/NOT
+if (a or b) and not b
+  print text "Mixed AND/OR/NOT works!"
+end

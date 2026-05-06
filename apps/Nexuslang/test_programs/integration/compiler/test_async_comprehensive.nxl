@@ -1,0 +1,74 @@
+# Comprehensive async/await test
+# Tests: basic async, single await, chained await, multiple awaits, control flow in async
+
+print text "=== Comprehensive Async/Await Tests ==="
+
+# Test 1: Basic async function (no await)
+async function simple_async returns Integer
+    print text "simple_async: running"
+    return 100
+end
+
+# Test 2: Async with calculation
+async function compute returns Integer
+    set x to 10
+    set y to 5
+    set result to x times y
+    return result
+end
+
+# Test 3: Simple await chain  
+async function get_factor returns Integer
+    return 3
+end
+
+async function multiply_by_factor with value as Integer returns Integer
+    set factor to await get_factor
+    set result to value times factor
+    return result
+end
+
+# Test 4: Multiple sequential awaits
+async function add_values returns Integer
+    set a to await compute
+    set b to await get_factor
+    return a plus b
+end
+
+# Main async function that runs all tests
+async function main returns Integer
+    print text "Test 1: Basic async function"
+    set result1 to await simple_async
+    if result1 is equal to 100
+        print text "  PASS: simple_async returned 100"
+    else
+        print text "  FAIL: simple_async did not return 100"
+    end
+    
+    print text "Test 2: Async with calculation"
+    set result2 to await compute
+    if result2 is equal to 50
+        print text "  PASS: compute returned 50"
+    else
+        print text "  FAIL: compute did not return 50"
+    end
+    
+    print text "Test 3: Chained await"
+    set result3 to await multiply_by_factor with 7
+    if result3 is equal to 21
+        print text "  PASS: multiply_by_factor returned 21"
+    else
+        print text "  FAIL: multiply_by_factor did not return 21"
+    end
+    
+    print text "Test 4: Multiple awaits"
+    set result4 to await add_values
+    if result4 is equal to 53
+        print text "  PASS: add_values returned 53"
+    else
+        print text "  FAIL: add_values did not return 53"
+    end
+    
+    print text "=== All async tests complete ==="
+    return 0
+end

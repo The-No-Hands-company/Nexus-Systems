@@ -1,0 +1,16 @@
+# Test Type Checking Integration
+# This program tests that the type checking system is actually running
+
+# Simple variable declarations
+set x to 10
+set y to 3.14
+set name to "NexusLang"
+set flag to true
+
+# Print values
+print text "x ="
+print text x
+print text "name ="
+print text name
+
+print text "Type checking test completed!"

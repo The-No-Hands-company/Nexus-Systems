@@ -1,0 +1,179 @@
+# CPU Control Error Handling Test
+# Test: Error handling for CPU control operations
+# Expected: All errors caught correctly
+
+print text "Test: CPU Control Error Handling"
+
+# Test 1: Invalid CPUID leaf type
+print text "Test 1: Invalid CPUID leaf (non-integer)"
+function test_invalid_leaf_type
+    set result to cpuid with leaf: "invalid"
+    print text "ERROR: Should have thrown exception"
+end
+
+try
+    test_invalid_leaf_type
+catch error
+    print text "Caught expected error: Leaf must be integer"
+end
+
+# Test 2: Check feature with non-string
+print text "Test 2: Invalid feature name (non-string)"
+function test_invalid_feature_type
+    set has_feature to check_feature with feature_name: 123
+    print text "ERROR: Should have thrown exception"
+end
+
+try
+    test_invalid_feature_type
+catch error
+    print text "Caught expected error: Feature name must be string"
+end
+
+# Test 3: Unknown feature name
+print text "Test 3: Unknown feature name"
+set has_unknown to check_feature with feature_name: "unknown_feature_xyz"
+print text "Unknown feature result (should be false):"
+print text has_unknown
+
+# Test 4: MSR with invalid type
+print text "Test 4: MSR address must be integer"
+function test_invalid_msr_type
+    set value to read_msr with msr_address: "invalid"
+    print text "ERROR: Should have thrown exception"
+end
+
+try
+    test_invalid_msr_type
+catch error
+    print text "Caught expected error: MSR address must be integer"
+end
+
+# Test 5: Negative MSR address
+print text "Test 5: Negative MSR address"
+function test_negative_msr
+    set value to read_msr with msr_address: -100
+    print text "ERROR: Should have thrown exception"
+end
+
+try
+    test_negative_msr
+catch error
+    print text "Caught expected error: Invalid MSR address"
+end
+
+# Test 6: CR0 write with invalid type
+print text "Test 6: CR0 write with non-integer"
+function test_invalid_cr0_type
+    write_cr0 with value: "invalid"
+    print text "ERROR: Should have thrown exception"
+end
+
+try
+    test_invalid_cr0_type
+catch error
+    print text "Caught expected error: Value must be integer"
+end
+
+# Test 7: CR3 write with misaligned address
+print text "Test 7: CR3 write with misaligned address"
+function test_cr3_misaligned
+    write_cr3 with value: 4097  # Not page-aligned
+    print text "ERROR: Should have thrown exception"
+end
+
+try
+    test_cr3_misaligned
+catch error
+    print text "Caught expected error: Must be page-aligned"
+end
+
+# Test 8: CR3 write with invalid type
+print text "Test 8: CR3 write with non-integer"
+function test_invalid_cr3_type
+    write_cr3 with value: "invalid"
+    print text "ERROR: Should have thrown exception"
+end
+
+try
+    test_invalid_cr3_type
+catch error
+    print text "Caught expected error: Value must be integer"
+end
+
+# Test 9: CR4 write with invalid type
+print text "Test 9: CR4 write with non-integer"
+function test_invalid_cr4_type
+    write_cr4 with value: "invalid"
+    print text "ERROR: Should have thrown exception"
+end
+
+try
+    test_invalid_cr4_type
+catch error
+    print text "Caught expected error: Value must be integer"
+end
+
+# Test 10: MSR write with invalid address type
+print text "Test 10: MSR write with invalid address type"
+function test_invalid_msr_write_addr
+    write_msr with msr_address: "invalid" and value: 0
+    print text "ERROR: Should have thrown exception"
+end
+
+try
+    test_invalid_msr_write_addr
+catch error
+    print text "Caught expected error: Address must be integer"
+end
+
+# Test 11: MSR write with invalid value type
+print text "Test 11: MSR write with invalid value type"
+function test_invalid_msr_write_value
+    write_msr with msr_address: 0 and value: "invalid"
+    print text "ERROR: Should have thrown exception"
+end
+
+try
+    test_invalid_msr_write_value
+catch error
+    print text "Caught expected error: Value must be integer"
+end
+
+# Test 12: Valid CPUID operations
+print text "Test 12: Valid CPUID operations (should succeed)"
+set result0 to cpuid with leaf: 0
+print text "CPUID leaf 0 succeeded, max leaf:"
+print text result0["eax"]
+
+set result1 to cpuid with leaf: 1
+print text "CPUID leaf 1 succeeded"
+
+set result_with_subleaf to cpuid with leaf: 7 and subleaf: 0
+print text "CPUID with subleaf succeeded"
+
+# Test 13: Valid feature checks
+print text "Test 13: Valid feature checks"
+set has_sse2 to check_feature with feature_name: "sse2"
+print text "check_feature succeeded for sse2"
+
+set has_avx to check_feature with feature_name: "avx"
+print text "check_feature succeeded for avx"
+
+# Test 14: Get features (should always work)
+print text "Test 14: Get features (comprehensive)"
+set features to get_cpu_features()
+print text "get_cpu_features succeeded, feature count:"
+# Features dict will have many keys
+print text "Has SSE2:"
+print text features["has_sse2"]
+
+# Test 15: Get vendor (should always work)
+print text "Test 15: Get vendor"
+set vendor to get_cpu_vendor()
+print text "CPU vendor:"
+print text vendor
+
+print text ""
+print text "All error tests passed"
+print text "Test complete"

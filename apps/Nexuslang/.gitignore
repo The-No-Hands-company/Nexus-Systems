@@ -1,0 +1,188 @@
+# Python bytecode and caches
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.pyre/
+.tox/
+.nox/
+.hypothesis/
+
+# Packaging / build outputs
+dist/
+build/
+*.egg
+*.egg-info/
+pip-wheel-metadata/
+
+# Virtual environments
+venv/
+.venv/
+env/
+ENV/
+
+# Coverage artifacts
+.coverage
+.coverage.*
+coverage.json
+coverage.xml
+htmlcov/
+
+# Logs and temporary files
+*.log
+*.tmp
+*.temp
+*.bak
+*.backup
+*.orig
+*.rej
+
+# Environment / local config
+*.env
+*.env.*
+.envrc
+
+# Editors and IDEs
+.idea/
+.DS_Store
+*.swp
+*.swo
+*~
+.vscode/*
+!.vscode/settings.json
+.vscode/extensions.json
+.vscode/nlpl-language-config.json
+
+# Local AI / assistant tooling
+.emergent/
+.aider*
+.claude/
+.cursor/
+.windsurf/
+.continue/
+.github/copilot-instructions.md
+
+# Repository-local workspace clutter
+NLPL.code-workspace
+vscode-extension-backup-*.tar.gz
+
+# NexusLang build artifacts
+build/bin/*
+build/generated/*
+build/executables/*
+build/artifacts/*
+!build/bin/.gitkeep
+!build/generated/.gitkeep
+!build/executables/.gitkeep
+!build/artifacts/.gitkeep
+
+# Generated source files
+*.generated.c
+*.generated.cpp
+*.generated.js
+*.generated.wasm
+
+# Native / compiler artifacts
+*.o
+*.a
+*.so
+*.dylib
+*.dll
+*.bc
+*.ll
+*.exe
+*.out
+a.out
+
+# ANTLR artifacts
+*.tokens
+*.interp
+*Lexer.py
+*Parser.py
+*Listener.py
+*Visitor.py
+
+# Fuzzing runtime artifacts
+fuzzing/crashes/
+fuzzing/corpus_generated/
+crash-*
+slow-*
+timeout-*
+oom-*
+.atheris_report/
+
+# VS Code extension build artifacts
+vscode-extension/out/
+vscode-extension/node_modules/
+vscode-extension/*.vsix
+vscode-extension/.vscode/
+.vscode/extensions/
+.vscode/nlpl-extension/
+
+# Source package named 'build' (must be tracked; negates the build/ rule above)
+!src/nexuslang/build/
+!src/nexuslang/build/**
+
+# stdlib native build outputs
+src/nexuslang/stdlib_native/_cmake_build/
+src/nexuslang/stdlib_native/*.o
+src/nlpl/stdlib_native/_cmake_build/
+src/nlpl/stdlib_native/*.o
+src/nlpl/
+
+# Utility / local helper directories not part of the project
+utility/
+vscode-nlpl/
+
+# Root-level scratch and verification files that should live elsewhere
+/test_*.py
+/test_*.nlpl
+/benchmark_*.py
+/benchmark_*.nlpl
+/debug_*.py
+/debug_*.nlpl
+/verify_*.py
+/SESSION_SUMMARY_*.md
+/LLVM_COMPILATION_SESSION*.md
+
+# Root-level compiled executables and generated binaries
+/animation_*
+/clean_*
+/shadow_*
+/skybox*
+/texture_*
+/test_direct_*
+/test_else_*
+/test_func_*
+/test_list_*
+/test_repeat_*
+/test_async_*
+/test_await_*
+/test_bitwise*
+/test_bounds_*
+/test_class*
+/test_closure_*
+/test_collection_*
+/test_comprehension_*
+/test_constant_*
+/test_cpp_*
+/test_dead_*
+/test_empty_*
+/test_enum_*
+/test_exception*
+/test_explicit_*
+/test_file_*
+/test_alloc_*
+/test_array_*
+/nlpl-analyze
+/nlpl-format
+/nlplc
+/01_basic_concepts
+/02_object_oriented
+
+# Keep actual source, tests, docs, examples, and fixtures tracked
+!/tests/
+!/test_programs/

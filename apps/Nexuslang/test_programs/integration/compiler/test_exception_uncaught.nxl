@@ -1,0 +1,8 @@
+# Test uncaught exception behavior
+
+print text "=== Uncaught Exception Test ==="
+print text "About to raise without try-catch"
+
+raise error with message "This exception has no handler"
+
+print text "ERROR: Should never reach here"

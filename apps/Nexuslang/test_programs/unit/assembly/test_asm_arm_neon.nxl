@@ -1,0 +1,76 @@
+# ARM/AArch64 NEON SIMD Tests
+# Tests ARM NEON SIMD instructions for vector operations
+#
+# Hardware Requirements: ARM/AArch64 with NEON support
+# (All modern ARM Cortex-A processors, Apple Silicon, etc.)
+
+function main returns Integer
+    print text "=== ARM NEON SIMD Tests ==="
+    print text ""
+    
+    # Test 1: Vector addition (VADD - 4x 32-bit integers)
+    print text "Test 1: NEON vector addition (4x integers)"
+    set vec_result to 0
+    
+    # Note: This is a simplified test - real NEON needs proper vector setup
+    asm
+        code
+            "mov x0, 10"
+            "mov x1, 20"
+            "add x0, x0, x1"
+            "mov $0, x0"
+        outputs "=r": vec_result
+        clobbers "x0", "x1"
+    end
+    
+    print text "Result: "
+    print number vec_result
+    print text " (expected: 30 - simplified test)"
+    print text ""
+    
+    # Test 2: Vector multiply (VMUL)
+    print text "Test 2: NEON vector multiply"
+    set mul_result to 0
+    
+    asm
+        code
+            "mov x0, 5"
+            "mov x1, 6"
+            "mul x0, x0, x1"
+            "mov $0, x0"
+        outputs "=r": mul_result
+        clobbers "x0", "x1"
+    end
+    
+    print text "Result: "
+    print number mul_result
+    print text " (expected: 30 - simplified test)"
+    print text ""
+    
+    # Test 3: Vector load/store
+    print text "Test 3: NEON load/store operations"
+    set addr to 0x1000
+    set loaded_val to 0
+    
+    asm
+        code
+            "add x0, x1, 64"    # Simulate vector stride
+            "mov $0, x0"
+        outputs "=r": loaded_val
+        inputs "r": addr
+        clobbers "x0"
+    end
+    
+    print text "Address after stride: "
+    print number loaded_val
+    print text " (expected: 4160 = 0x1000 + 64)"
+    print text ""
+    
+    print text "=== ARM NEON tests completed ==="
+    print text "Note: Full NEON testing requires vector register support"
+    print text "      These are simplified placeholder tests"
+    
+    return 0
+end
+
+main()

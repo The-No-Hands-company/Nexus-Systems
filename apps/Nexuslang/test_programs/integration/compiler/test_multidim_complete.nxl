@@ -1,0 +1,47 @@
+# Comprehensive multi-dimensional array tests
+
+# Test 1: 2x3 matrix operations
+print text "Test 1: Matrix operations"
+set matrix to [[1, 2, 3], [4, 5, 6]]
+set sum to 0
+set row0_0 to matrix[0][0]
+set row0_1 to matrix[0][1]
+set row0_2 to matrix[0][2]
+set row1_0 to matrix[1][0]
+set row1_1 to matrix[1][1]
+set row1_2 to matrix[1][2]
+set sum to row0_0 plus row0_1 plus row0_2 plus row1_0 plus row1_1 plus row1_2
+print text sum  # Should be 21
+
+# Test 2: Access first row as sub-array
+print text "Test 2: Row extraction"
+set first_row to matrix[0]
+set val to first_row[1]
+print text val  # Should be 2
+
+# Test 3: 3x3 matrix with calculations
+print text "Test 3: 3x3 matrix diagonal sum"
+set grid to [[1, 2, 3], [4, 5, 6], [7, 8, 9]]
+set diag to grid[0][0] plus grid[1][1] plus grid[2][2]
+print text diag  # Should be 15 (1+5+9)
+
+# Test 4: Mixed values in rows
+print text "Test 4: Mixed row sizes"
+set mixed to [[10, 20], [30, 40, 50], [60]]
+set a to mixed[0][0]
+set b to mixed[1][1]
+set c to mixed[2][0]
+set total to a plus b plus c
+print text total  # Should be 110 (10+40+60)
+
+# Test 5: 3D cube access
+print text "Test 5: 3D cube"
+set cube to [[[1, 2], [3, 4]], [[5, 6], [7, 8]]]
+set corner1 to cube[0][0][0]  # 1
+set corner2 to cube[0][1][1]  # 4
+set corner3 to cube[1][0][0]  # 5
+set corner4 to cube[1][1][1]  # 8
+set cube_sum to corner1 plus corner2 plus corner3 plus corner4
+print text cube_sum  # Should be 18
+
+print text "All multi-dimensional array tests passed!"

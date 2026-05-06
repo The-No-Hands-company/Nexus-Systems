@@ -1,0 +1,201 @@
+# REST API Server - User Management
+# Demonstrates NexusLang for web backend development
+
+# User structure
+struct User
+    id as Integer
+    username as String
+    email as String
+    created_at as String
+    is_active as Boolean
+end
+
+# API Response structure
+struct ApiResponse
+    status as Integer
+    message as String
+    data as Any
+end
+
+# Global user database (in-memory)
+set users to empty list
+set next_id to 1
+
+# Create a new user (POST /users)
+function create_user with username as String, email as String returns ApiResponse
+    # Validate input
+    if username is empty
+        return create_error_response with status: 400, message: "Username is required"
+    end
+    
+    if email is empty
+        return create_error_response with status: 400, message: "Email is required"
+    end
+    
+    # Check if username already exists
+    for each user in users
+        if user.username equals username
+            return create_error_response with status: 409, message: "Username already exists"
+        end
+    end
+    
+    # Create new user
+    set new_user to new User
+    set new_user.id to next_id
+    set new_user.username to username
+    set new_user.email to email
+    set new_user.created_at to "2026-02-14T10:00:00Z"
+    set new_user.is_active to true
+    
+    add new_user to users
+    set next_id to next_id plus 1
+    
+    print text "Created user: " plus username
+    
+    return create_success_response with status: 201, message: "User created", data: new_user
+end
+
+# Get all users (GET /users)
+function get_all_users returns ApiResponse
+    return create_success_response with status: 200, message: "Success", data: users
+end
+
+# Get user by ID (GET /users/:id)
+function get_user_by_id with user_id as Integer returns ApiResponse
+    for each user in users
+        if user.id equals user_id
+            return create_success_response with status: 200, message: "Success", data: user
+        end
+    end
+    
+    return create_error_response with status: 404, message: "User not found"
+end
+
+# Update user (PUT /users/:id)
+function update_user with user_id as Integer, new_email as String returns ApiResponse
+    for each user in users
+        if user.id equals user_id
+            if new_email is not empty
+                set user.email to new_email
+            end
+            
+            print text "Updated user: " plus user.username
+            return create_success_response with status: 200, message: "User updated", data: user
+        end
+    end
+    
+    return create_error_response with status: 404, message: "User not found"
+end
+
+# Delete user (DELETE /users/:id)
+function delete_user with user_id as Integer returns ApiResponse
+    set index to 0
+    for each user in users
+        if user.id equals user_id
+            # Remove user from list
+            print text "Deleted user: " plus user.username
+            # (In production, would actually remove from list)
+            set user.is_active to false
+            return create_success_response with status: 200, message: "User deleted", data: none
+        end
+        set index to index plus 1
+    end
+    
+    return create_error_response with status: 404, message: "User not found"
+end
+
+# Search users by username (GET /users/search?q=...)
+function search_users with query as String returns ApiResponse
+    set results to empty list
+    
+    for each user in users
+        # Simple substring matching
+        if user.username contains query or user.email contains query
+            add user to results
+        end
+    end
+    
+    return create_success_response with status: 200, message: "Search complete", data: results
+end
+
+# Helper: Create success response
+function create_success_response with status as Integer, message as String, data as Any returns ApiResponse
+    set response to new ApiResponse
+    set response.status to status
+    set response.message to message
+    set response.data to data
+    return response
+end
+
+# Helper: Create error response
+function create_error_response with status as Integer, message as String returns ApiResponse
+    set response to new ApiResponse
+    set response.status to status
+    set response.message to message
+    set response.data to none
+    return response
+end
+
+# Helper: Print API response
+function print_response with response as ApiResponse
+    print text "Status: " plus string of response.status
+    print text "Message: " plus response.message
+    
+    if response.data is not none
+        print text "Data: [object]"
+    end
+    
+    print text ""
+end
+
+# Main program - API demonstration
+print text "REST API Server - User Management"
+print text "=================================="
+print text ""
+
+# POST /users
+print text "POST /users (Create alice)"
+set response to create_user with username: "alice", email: "alice@example.com"
+print_response with response
+
+print text "POST /users (Create bob)"
+set response to create_user with username: "bob", email: "bob@example.com"
+print_response with response
+
+print text "POST /users (Create charlie)"
+set response to create_user with username: "charlie", email: "charlie@example.com"
+print_response with response
+
+# GET /users
+print text "GET /users (List all)"
+set response to get_all_users
+print_response with response
+print text "Total users: " plus string of length of users
+print text ""
+
+# GET /users/2
+print text "GET /users/2 (Get bob)"
+set response to get_user_by_id with user_id: 2
+print_response with response
+
+# PUT /users/2
+print text "PUT /users/2 (Update bob's email)"
+set response to update_user with user_id: 2, new_email: "bob.new@example.com"
+print_response with response
+
+# Search users
+print text "GET /users/search?q=alice"
+set response to search_users with query: "alice"
+print_response with response
+
+# DELETE /users/1
+print text "DELETE /users/1 (Delete alice)"
+set response to delete_user with user_id: 1
+print_response with response
+
+# Try to get deleted user
+print text "GET /users/1 (Try to get deleted user)"
+set response to get_user_by_id with user_id: 1
+print_response with response
+
+print text "API Demo Complete!"

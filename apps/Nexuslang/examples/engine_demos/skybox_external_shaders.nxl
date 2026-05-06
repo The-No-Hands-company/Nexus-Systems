@@ -1,0 +1,66 @@
+# Skybox Demo - Clean Separation of Concerns
+# Demonstrates loading shaders from external .glsl files
+
+print text "=== NexusLang Skybox Demo (External Shaders) ==="
+print text "Loading shaders from separate .glsl files"
+
+# Create window
+set window to create_window with 800 and 600 and "Skybox - External Shaders"
+
+# ===== Load Shaders from Files =====
+print text "Loading skybox shaders from files..."
+set skybox_shader to load_shader_from_files with "shaders/skybox/skybox.vert" and "shaders/skybox/skybox.frag"
+print text "Shaders loaded successfully!"
+
+# ===== Load Skybox Cubemap =====
+print text "Loading skybox textures..."
+set skybox_faces to ["test_textures/skybox/right.png", "test_textures/skybox/left.png", "test_textures/skybox/top.png", "test_textures/skybox/bottom.png", "test_textures/skybox/front.png", "test_textures/skybox/back.png"]
+set skybox_cubemap to load_cubemap_from_files with skybox_faces
+
+# ===== Create Skybox Geometry =====
+set skybox_vao to create_skybox_geometry()
+
+# ===== Camera Setup =====
+set camera to create_orbital_camera with 0.0 and 0.0 and 0.0 and 5.0
+set fov to 0.785
+set aspect to 800.0 divided by 600.0
+set proj to mat4_perspective with fov and aspect and 0.1 and 100.0
+set proj_list to mat4_to_list with proj
+
+call set_clear_color with 0.0 and 0.0 and 0.0 and 1.0
+
+print text "Rendering..."
+print text ""
+
+set angle to 0.0
+set frame_count to 0
+
+while not window_should_close with window
+    set angle to angle plus 0.3
+    set frame_count to frame_count plus 1
+    
+    call orbital_rotate with camera and angle times 0.01 and 0.0
+    set view_list to camera_get_view_matrix with camera
+    
+    call begin_frame
+    
+    # Render skybox
+    call use_shader with skybox_shader
+    call set_uniform_mat4 with skybox_shader and "view" and view_list
+    call set_uniform_mat4 with skybox_shader and "projection" and proj_list
+    call set_uniform_int with skybox_shader and "skybox" and 0
+    call bind_cubemap with skybox_cubemap and 0
+    call vao_draw_arrays with skybox_vao and GL_TRIANGLES() and 0 and 36
+    
+    call end_frame with window
+    
+    if frame_count is greater than or equal to 300
+        print text "Demo complete!"
+        break
+    end
+end
+
+call delete_vertex_array with skybox_vao
+call delete_cubemap with skybox_cubemap
+call delete_shader with skybox_shader
+call destroy_window with window

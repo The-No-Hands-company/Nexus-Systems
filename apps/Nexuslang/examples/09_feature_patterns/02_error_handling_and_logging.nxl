@@ -1,0 +1,232 @@
+# Error Handling and Logging in NexusLang
+
+# Log Levels
+enum LogLevel
+    DEBUG
+    INFO
+    WARNING
+    ERROR
+    CRITICAL
+
+# Custom Exceptions
+class ValidationError extends Error
+    private set field to String
+    private set message to String
+    
+    public function initialize with field as String and message as String
+        call parent initialize with message
+        set this.field to field
+        set this.message to message
+    
+    public function get field returns String
+        return this.field
+
+class DatabaseError extends Error
+    private set query to String
+    private set error_code to Integer
+    
+    public function initialize with message as String and query as String and error_code as Integer
+        call parent initialize with message
+        set this.query to query
+        set this.error_code to error_code
+    
+    public function get query returns String
+        return this.query
+    
+    public function get error_code returns Integer
+        return this.error_code
+
+# Logger
+class Logger
+    private set level to LogLevel
+    private set handlers to List of Function
+    
+    public function initialize with level as LogLevel
+        set this.level to level
+        create this.handlers as empty List of Function
+    
+    public function add handler with handler as Function
+        append handler to this.handlers
+    
+    public function debug with message as String
+        if this.level is less than or equal to LogLevel.DEBUG
+            this.log with LogLevel.DEBUG and message
+    
+    public function info with message as String
+        if this.level is less than or equal to LogLevel.INFO
+            this.log with LogLevel.INFO and message
+    
+    public function warning with message as String
+        if this.level is less than or equal to LogLevel.WARNING
+            this.log with LogLevel.WARNING and message
+    
+    public function error with message as String
+        if this.level is less than or equal to LogLevel.ERROR
+            this.log with LogLevel.ERROR and message
+    
+    public function critical with message as String
+        if this.level is less than or equal to LogLevel.CRITICAL
+            this.log with LogLevel.CRITICAL and message
+    
+    private function log with level as LogLevel and message as String
+        set timestamp to current time
+        set log_entry to {
+            "timestamp": timestamp,
+            "level": level,
+            "message": message
+        }
+        
+        for each handler in this.handlers
+            call handler with log_entry
+
+# Log Handlers
+class ConsoleHandler
+    public function handle with entry as Dictionary of Any
+        set color to this.get color for level entry["level"]
+        print text color plus "[" plus convert entry["timestamp"] to string plus "] " plus entry["level"] plus ": " plus entry["message"] plus "\033[0m"
+    
+    private function get color for level with level as LogLevel returns String
+        switch level
+            case LogLevel.DEBUG
+                return "\033[37m"  # White
+            case LogLevel.INFO
+                return "\033[32m"  # Green
+            case LogLevel.WARNING
+                return "\033[33m"  # Yellow
+            case LogLevel.ERROR
+                return "\033[31m"  # Red
+            case LogLevel.CRITICAL
+                return "\033[35m"  # Magenta
+            default
+                return "\033[0m"   # Reset
+
+class FileHandler
+    private set file_path to String
+    
+    public function initialize with file_path as String
+        set this.file_path to file_path
+    
+    public function handle with entry as Dictionary of Any
+        set log_line to "[" plus convert entry["timestamp"] to string plus "] " plus entry["level"] plus ": " plus entry["message"]
+        append log_line to this.file_path
+
+# Error Handler
+class ErrorHandler
+    private set logger as Logger
+    
+    public function initialize with logger as Logger
+        set this.logger to logger
+    
+    public function handle error with error as Error
+        set error_message to error.message
+        if error is instance of ValidationError
+            set error_message to "Validation error in field '" plus error.field plus "': " plus error_message
+        else if error is instance of DatabaseError
+            set error_message to "Database error (code " plus convert error.error_code to string plus ") in query: " plus error.query plus ". " plus error_message
+        
+        error error_message in this.logger
+        
+        if error is instance of CriticalError
+            critical "Application cannot continue due to critical error" in this.logger
+            exit application with code 1
+
+# Usage Examples
+# Create logger with handlers
+create logger as new Logger with LogLevel.DEBUG
+create console_handler as new ConsoleHandler
+create file_handler as new FileHandler with "app.log"
+add handler console_handler.handle to logger
+add handler file_handler.handle to logger
+
+# Create error handler
+create error_handler as new ErrorHandler with logger
+
+# Example: Validation with error handling
+function validate user with user as User
+    if user.name is empty
+        raise new ValidationError with "name" and "Name cannot be empty"
+    
+    if not user.email contains "@"
+        raise new ValidationError with "email" and "Invalid email format"
+    
+    if user.age is less than 0
+        raise new ValidationError with "age" and "Age cannot be negative"
+
+# Example: Database operations with error handling
+function save user with user as User and connection as DatabaseConnection
+    try
+        set query to "INSERT INTO users (name, email, age) VALUES (?, ?, ?)"
+        execute query with [user.name, user.email, user.age] in connection
+        info "User saved successfully" in logger
+    catch error
+        if error is instance of DatabaseError
+            raise new DatabaseError with "Failed to save user" and query and error.error_code
+        else
+            raise error
+
+# Example: Application flow with error handling
+function process user registration with data as Dictionary of Any
+    try
+        # Log start of process
+        info "Starting user registration process" in logger
+        
+        # Validate input data
+        debug "Validating user data" in logger
+        validate user with data
+        
+        # Create user object
+        create user as new User with data["name"] and data["email"] and data["age"]
+        
+        # Save to database
+        debug "Saving user to database" in logger
+        save user with user and database_connection
+        
+        # Log success
+        info "User registration completed successfully" in logger
+        return user
+    catch error
+        # Log error and handle it
+        error_handler.handle error with error
+        return null
+
+# Example: Critical error handling
+function initialize application
+    try
+        # Load configuration
+        debug "Loading application configuration" in logger
+        load configuration
+        
+        # Initialize database connection
+        info "Initializing database connection" in logger
+        create connection as new DatabaseConnection with config["db_host"] and config["db_port"] and config["db_user"] and config["db_pass"] and config["db_name"]
+        connect connection
+        
+        # Start web server
+        info "Starting web server" in logger
+        create server as new HttpServer with config["host"] and config["port"]
+        start server
+    catch error
+        # Log critical error and exit
+        critical "Failed to initialize application: " plus error.message in logger
+        exit application with code 1
+
+# Example: Graceful shutdown
+function shutdown application
+    info "Shutting down application" in logger
+    try
+        # Close database connections
+        debug "Closing database connections" in logger
+        close all database connections
+        
+        # Stop web server
+        debug "Stopping web server" in logger
+        stop web server
+        
+        # Save application state
+        info "Saving application state" in logger
+        save application state
+        
+        info "Application shutdown completed successfully" in logger
+    catch error
+        error "Error during application shutdown: " plus error.message in logger
+        # Continue shutdown process even if there are errors 

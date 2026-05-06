@@ -1,0 +1,31 @@
+# Simple exception handling test for compiler
+
+print text "=== Exception Handling Test ==="
+print text ""
+
+# Test 1: Basic try-catch
+print text "Test 1: Basic try-catch"
+try
+    print text "In try block"
+    set x to 10
+    set y to 0
+    # This would cause division by zero in real code
+    print text "About to divide"
+catch
+    print text "Caught an error!"
+end
+    
+print text ""
+
+# Test 2: Try-catch with exception variable
+print text "Test 2: Try-catch with exception variable"
+try
+    print text "In try block 2"
+    set result to 100
+catch error
+    print text "Caught error: "
+    print text error
+end
+
+print text ""
+print text "=== Test Complete ==="

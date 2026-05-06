@@ -1,0 +1,39 @@
+
+# Optional<T> Type for Null Safety
+
+export class Optional<T>
+    property value as T
+    property has_value as Boolean
+    
+    # Constructors
+    static function Some that takes value as T returns Optional<T>
+        set opt to Optional.new
+        set opt.value to value
+        set opt.has_value to true
+        return opt
+        
+    static function None returns Optional<T>
+        set opt to Optional.new
+        set opt.has_value to false
+        return opt
+        
+    function is_some returns Boolean
+        return has_value
+        
+    function is_none returns Boolean
+        return not has_value
+        
+    function unwrap returns T
+        if not has_value
+            panic with "Called unwrap on a None value"
+        return value
+        
+    function unwrap_or that takes default as T returns T
+        if has_value
+            return value
+        return default
+        
+    function map<U> that takes f as Function<T, U> returns Optional<U>
+        if has_value
+            return Optional.Some with f(value)
+        return Optional.None

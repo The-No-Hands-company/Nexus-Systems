@@ -1,0 +1,279 @@
+name: NexusLang CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+  schedule:
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHONUNBUFFERED: "1"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+
+jobs:
+  lint:
+    name: Lint (markdown + workflow)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Markdownlint
+        run: |
+          npm install -g markdownlint-cli@0.39.0
+          markdownlint README.md docs/**/*.md
+
+      - name: Actionlint
+        uses: docker://ghcr.io/rhysd/actionlint:1.6.27
+        with:
+          args: "-color"
+
+  tests:
+    name: Tests (py${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11", "3.12", "3.13", "3.14-dev"]
+    continue-on-error: ${{ matrix.python-version == '3.14-dev' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest pytest-cov pytest-timeout pytest-rerunfailures
+
+      - name: Run tests with coverage
+        run: |
+          pytest tests/ -q --maxfail=1 --disable-warnings \
+            --cov=src/nlpl \
+            --cov-config=.coveragerc \
+            --cov-report=xml:coverage-${{ matrix.python-version }}.xml \
+            --cov-report=json:coverage-${{ matrix.python-version }}.json \
+            --cov-report=term-missing:skip-covered \
+            --cov-fail-under=80 \
+            --timeout=30 \
+            --junitxml=junit-${{ matrix.python-version }}.xml
+
+      - name: Check per-component coverage thresholds
+        run: |
+          python scripts/check_coverage_thresholds.py \
+            --json coverage-${{ matrix.python-version }}.json
+
+      - name: Upload to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          files: coverage-${{ matrix.python-version }}.xml
+          flags: python-${{ matrix.python-version }}
+          token: ${{ secrets.CODECOV_TOKEN }}
+          fail_ci_if_error: false
+          verbose: false
+
+      - name: Upload coverage artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-${{ matrix.python-version }}
+          path: |
+            coverage-${{ matrix.python-version }}.xml
+            coverage-${{ matrix.python-version }}.json
+          retention-days: 14
+
+      - name: Upload junit results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: junit-${{ matrix.python-version }}
+          path: junit-${{ matrix.python-version }}.xml
+          retention-days: 14
+
+  example-smoke:
+    name: Example smoke (py3.11)
+    needs: [tests, lint]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Install LLVM
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y llvm-14 clang-14
+          sudo ln -sf /usr/bin/llvm-config-14 /usr/bin/llvm-config
+
+      - name: Test working examples
+        run: |
+          # Test examples that should parse and compile successfully
+          python nlplc examples/01_basic_concepts.nlpl --emit-llvm -o /tmp/test1 || exit 1
+          python nlplc examples/02_object_oriented.nlpl --emit-llvm -o /tmp/test2 || exit 1
+          python nlplc examples/04_type_system_basics.nlpl --emit-llvm -o /tmp/test4 || exit 1
+          python nlplc examples/03_type_system/05_type_features_index.nlpl --emit-llvm -o /tmp/test8 || exit 1
+          python nlplc examples/11_traits.nlpl --emit-llvm -o /tmp/test11 || exit 1
+          python nlplc examples/12_type_aliases.nlpl --emit-llvm -o /tmp/test12 || exit 1
+          python nlplc examples/25_ffi_c_interop.nlpl --emit-llvm -o /tmp/test25a || exit 1
+          python nlplc examples/26_ffi_struct_marshalling.nlpl --emit-llvm -o /tmp/test26a || exit 1
+          python nlplc examples/26_repeat_while_loops.nlpl --emit-llvm -o /tmp/test26b || exit 1
+          python nlplc examples/32_feature_showcase.nlpl --emit-llvm -o /tmp/test32 || exit 1
+          echo "All working examples compiled successfully"
+
+  lsp-smoke:
+    name: LSP smoke (py3.11)
+    needs: [tests, lint]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run LSP smoke
+        run: |
+          python scripts/ci_lsp_smoke.py \
+            --sample examples/01_basic_concepts.nlpl \
+            --max-latency-ms 500 \
+            --output lsp-smoke.json
+
+      - name: Upload LSP smoke results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lsp-smoke
+          path: lsp-smoke.json
+          retention-days: 14
+
+  perf-smoke:
+    name: Perf smoke (py3.11)
+    needs: [tests, lint]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run perf smoke
+        run: |
+          python scripts/ci_perf_smoke.py \
+            --sample test_programs/unit/basic/test_hello.nlpl \
+            --sample test_programs/unit/basic/test_simple.nlpl \
+            --threshold-ms 1500 \
+            --output perf-smoke.json
+
+      - name: Upload perf smoke results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: perf-smoke
+          path: perf-smoke.json
+          retention-days: 14
+
+  macos-weekly:
+    name: MacOS weekly sanity
+    if: github.event_name == 'schedule'
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest pytest-cov pytest-timeout
+
+      - name: Smoke tests with coverage
+        run: |
+          pytest tests/ -q --maxfail=1 --disable-warnings --timeout=30 \
+            --cov=src/nlpl --cov-config=.coveragerc \
+            --cov-report=json:coverage-macos.json \
+            --cov-fail-under=80
+
+  coverage-gates:
+    name: Coverage gates (component thresholds)
+    needs: [tests]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Download coverage artifact (py3.11)
+        uses: actions/download-artifact@v4
+        with:
+          name: coverage-3.11
+          path: .
+
+      - name: Install pytest-cov
+        run: pip install pytest-cov
+
+      - name: Check per-component thresholds
+        run: |
+          python scripts/check_coverage_thresholds.py --json coverage-3.11.json
+
+      - name: Write step summary
+        if: always()
+        run: |
+          echo "## Coverage Report" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          python scripts/check_coverage_thresholds.py --json coverage-3.11.json \
+            --no-fail >> $GITHUB_STEP_SUMMARY || true

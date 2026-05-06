@@ -1,0 +1,41 @@
+# Test 1: Basic step by 2
+set sum to 0
+for i from 0 to 10 by 2
+    set sum to sum plus i
+end
+print number sum
+# Expected: 0+2+4+6+8+10 = 30
+
+# Test 2: Step by 3
+set result to 0
+for x from 1 to 10 by 3
+    set result to result plus x
+end
+print number result
+# Expected: 1+4+7+10 = 22
+
+# Test 3: Negative step (countdown)
+set countdown to 0
+for i from 10 to 0 by -2
+    set countdown to countdown plus i
+end
+print number countdown
+# Expected: 10+8+6+4+2+0 = 30
+
+# Test 4: Step of 1 (should work same as without step)
+set total to 0
+for i from 5 to 8 by 1
+    set total to total plus i
+end
+print number total
+# Expected: 5+6+7+8 = 26
+
+# Test 5: Large step
+set large to 0
+for i from 0 to 100 by 25
+    set large to large plus i
+end
+print number large
+# Expected: 0+25+50+75+100 = 250
+
+print text "For-loop step tests complete!"

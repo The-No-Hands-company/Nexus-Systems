@@ -1,0 +1,13 @@
+# Simplest possible test
+
+function test with block as Function
+    print text "Calling block..."
+    set result to block()
+    print text "Block returned:"
+    print text result
+end
+
+test do
+    print text "Inside block"
+    return 42
+end

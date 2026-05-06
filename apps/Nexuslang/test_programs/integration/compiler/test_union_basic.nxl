@@ -1,0 +1,21 @@
+# Simple union test for compiler
+
+print text "=== Union Type Test ==="
+print text ""
+
+# Test 1: Basic union definition
+union MyUnion
+    as_integer as Integer
+    as_float as Float
+end
+
+set val to new MyUnion
+set val.as_integer to 42
+
+print text "Test 1: Basic union"
+print text "Set as integer: 42"
+print text "Read as integer: "
+print text val.as_integer
+
+print text ""
+print text "=== Test Complete ==="

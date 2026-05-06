@@ -1,0 +1,215 @@
+# Example 34: Advanced Pattern Matching
+# Demonstrates all pattern matching features in NexusLang
+
+print text "=== Advanced Pattern Matching in NexusLang ==="
+print text ""
+
+# 1. Basic Value Matching
+print text "1. Basic Value Matching"
+print text "----------------------"
+
+function describe_number with n as Integer returns String
+  match n with
+    case 0 then return "zero"
+    case 1 then return "one"
+    case 2 then return "two"
+    case n then return "other number"
+  end
+end
+
+print text describe_number with 0
+print text describe_number with 1
+print text describe_number with 42
+print text ""
+
+# 2. Pattern Matching with Guards
+print text "2. Pattern Matching with Guards"
+print text "-------------------------------"
+
+function classify_number with n as Integer returns String
+  match n with
+    case 0 then return "zero"
+    case n if n is less than 0 then return "negative"
+    case n if n is less than 10 then return "small positive"
+    case n if n is less than 100 then return "medium positive"
+    case n then return "large positive"
+  end
+end
+
+print text "classify -5: " plus (classify_number with -5)
+print text "classify 3: " plus (classify_number with 3)
+print text "classify 50: " plus (classify_number with 50)
+print text "classify 200: " plus (classify_number with 200)
+print text ""
+
+# 3. String Pattern Matching
+print text "3. String Pattern Matching"
+print text "-------------------------"
+
+function process_command with cmd as String returns String
+  match cmd with
+    case "start" then return "Starting system..."
+    case "stop" then return "Stopping system..."
+    case "restart" then return "Restarting system..."
+    case "status" then return "System is running"
+    case cmd then return "Unknown command: " plus cmd
+  end
+end
+
+print text process_command with "start"
+print text process_command with "status"
+print text process_command with "unknown"
+print text ""
+
+# 4. Range-based Matching
+print text "4. Range-based Pattern Matching"
+print text "-------------------------------"
+
+function grade_score with score as Integer returns String
+  match score with
+    case s if s is greater than or equal to 90 then return "A"
+    case s if s is greater than or equal to 80 then return "B"
+    case s if s is greater than or equal to 70 then return "C"
+    case s if s is greater than or equal to 60 then return "D"
+    case s then return "F"
+  end
+end
+
+print text "Score 95: " plus (grade_score with 95)
+print text "Score 85: " plus (grade_score with 85)
+print text "Score 72: " plus (grade_score with 72)
+print text "Score 55: " plus (grade_score with 55)
+print text ""
+
+# 5. Complex Condition Guards
+print text "5. Complex Condition Guards"
+print text "---------------------------"
+
+function evaluate_applicant with age as Integer, experience as Integer returns String
+  match age with
+    case a if a is less than 18 then return "Too young"
+    case a if a is greater than 65 then return "Retired"
+    case a if experience is greater than or equal to 5 then return "Experienced candidate"
+    case a if experience is greater than or equal to 2 then return "Mid-level candidate"
+    case a then return "Entry-level candidate"
+  end
+end
+
+print text evaluate_applicant with 16, 0
+print text evaluate_applicant with 30, 7
+print text evaluate_applicant with 25, 3
+print text evaluate_applicant with 22, 0
+print text ""
+
+# 6. Boolean Pattern Matching
+print text "6. Boolean Pattern Matching"
+print text "---------------------------"
+
+function check_status with is_active as Boolean, is_verified as Boolean returns String
+  if is_active
+    if is_verified
+      return "Active and verified"
+    else
+      return "Active but not verified"
+    end
+  else
+    return "Inactive"
+  end
+end
+
+print text check_status with true, true
+print text check_status with true, false
+print text check_status with false, true
+print text ""
+
+# 7. Nested Pattern Matching
+print text "7. Nested Pattern Matching"
+print text "-------------------------"
+
+function process_request with request_type as String, status_code as Integer returns String
+  match request_type with
+    case "GET" then
+      match status_code with
+        case 200 then return "GET: Success"
+        case 404 then return "GET: Not Found"
+        case s then return "GET: Error"
+      end
+    case "POST" then
+      match status_code with
+        case 201 then return "POST: Created"
+        case 400 then return "POST: Bad Request"
+        case s then return "POST: Error"
+      end
+    case t then return "Unknown request type"
+  end
+end
+
+print text process_request with "GET", 200
+print text process_request with "POST", 201
+print text process_request with "GET", 404
+print text ""
+
+# 8. Pattern Matching for State Machines
+print text "8. State Machine with Pattern Matching"
+print text "-------------------------------------"
+
+function next_state with current as String, event as String returns String
+  match current with
+    case "idle" then
+      match event with
+        case "start" then return "running"
+        case e then return "idle"
+      end
+    case "running" then
+      match event with
+        case "pause" then return "paused"
+        case "stop" then return "stopped"
+        case e then return "running"
+      end
+    case "paused" then
+      match event with
+        case "resume" then return "running"
+        case "stop" then return "stopped"
+        case e then return "paused"
+      end
+    case "stopped" then return "stopped"
+    case s then return "unknown"
+  end
+end
+
+print text "idle + start: " plus (next_state with "idle", "start")
+print text "running + pause: " plus (next_state with "running", "pause")
+print text "paused + resume: " plus (next_state with "paused", "resume")
+print text "running + stop: " plus (next_state with "running", "stop")
+print text ""
+
+# 9. Pattern Matching with Multiple Conditions
+print text "9. Multiple Condition Guards"
+print text "----------------------------"
+
+function check_eligibility with age as Integer, income as Integer, credit_score as Integer returns String
+  match age with
+    case a if a is less than 18 then return "Too young"
+    case a if a is greater than 70 then return "Too old"
+    case a if income is less than 30000 then return "Income too low"
+    case a if credit_score is less than 600 then return "Credit score too low"
+    case a if income is greater than 100000 and credit_score is greater than 750 then return "Premium eligible"
+    case a if income is greater than 50000 and credit_score is greater than 700 then return "Standard eligible"
+    case a then return "Basic eligible"
+  end
+end
+
+print text check_eligibility with 25, 120000, 800
+print text check_eligibility with 25, 60000, 720
+print text check_eligibility with 25, 25000, 650
+print text check_eligibility with 15, 50000, 750
+print text ""
+
+print text "=== Pattern Matching Best Practices ==="
+print text "1. Order cases from most specific to most general"
+print text "2. Use guards for complex conditions"
+print text "3. Always provide a default case"
+print text "4. Keep pattern matching expressions readable"
+print text "5. Consider using helper functions for complex logic"
+print text "6. Use nested matching for multi-dimensional decisions"
+print text "7. Combine with enums for type-safe state machines"

@@ -1,0 +1,21 @@
+# Test Lambda Functions
+# Tests lambda expression creation using Python-style single-expression syntax
+
+function main returns Integer
+    # Create simple lambda expressions (Python-style: lambda params: expr)
+    set add to lambda x, y: x plus y
+    set multiply to lambda x, y: x times y
+    set square to lambda x: x times x
+    
+    # Call lambda functions using function call syntax
+    set result1 to add(5, 3)
+    print integer result1
+    
+    set result2 to multiply(4, 7)
+    print integer result2
+    
+    set result3 to square(6)
+    print integer result3
+    
+    return 0
+end

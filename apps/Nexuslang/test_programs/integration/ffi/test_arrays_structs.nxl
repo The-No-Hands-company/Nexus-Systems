@@ -1,0 +1,67 @@
+# FFI Array and Struct Tests
+# Tests array marshalling and struct passing to C functions
+
+print text "=== FFI Array and Struct Tests ==="
+print text ""
+
+# Test 1: Array access (through pointer)
+print text "Test 1: Array pointer access"
+extern function printf with format as Pointer, ... returns Integer from library "c"
+
+# Create a list (NLPL array)
+set numbers to create list
+append 10 to numbers
+append 20 to numbers
+append 30 to numbers
+
+# Access array elements
+call printf with "Array[0] = %d\n", numbers[0]
+call printf with "Array[1] = %d\n", numbers[1]
+call printf with "Array[2] = %d\n", numbers[2]
+print text ""
+
+# Test 2: Simple struct creation and field access
+print text "Test 2: Struct field access"
+
+struct Point
+    x as Integer
+    y as Integer
+end
+
+set p to new Point
+set p.x to 100
+set p.y to 200
+
+call printf with "Point: x=%d, y=%d\n", p.x, p.y
+print text ""
+
+# Test 3: Nested struct
+print text "Test 3: Nested struct access"
+
+struct Rectangle
+    top_left as Point
+    bottom_right as Point
+end
+
+set rect to new Rectangle
+set rect.top_left to new Point
+set rect.top_left.x to 10
+set rect.top_left.y to 20
+set rect.bottom_right to new Point
+set rect.bottom_right.x to 100
+set rect.bottom_right.y to 200
+
+call printf with "Rectangle: (%d,%d) to (%d,%d)\n", rect.top_left.x, rect.top_left.y, rect.bottom_right.x, rect.bottom_right.y
+print text ""
+
+# Test 4: Dictionary (hash map) access
+print text "Test 4: Dictionary type handling"
+
+set config to create dictionary
+set config["width"] to 800
+set config["height"] to 600
+
+call printf with "Config: width=%d, height=%d\n", config["width"], config["height"]
+print text ""
+
+print text "=== All Array and Struct Tests Passed ==="

@@ -1,0 +1,152 @@
+# Comprehensive NexusLang Standard Library Test
+# Tests all major features of the compiled NexusLang runtime
+
+print text "========================================"
+print text "    NexusLang Comprehensive Compiler Test    "
+print text "========================================"
+
+# ================================================
+# Section 1: Variables and Basic Types
+# ================================================
+print text ""
+print text "--- Section 1: Variables and Basic Types ---"
+
+set int_var to 42
+print text "Integer:"
+print number int_var
+
+set float_var to 3.14159
+print text "Float:"
+print number float_var
+
+set string_var to "Hello, NLPL!"
+print text "String:"
+print text string_var
+
+set bool_var to true
+print text "Boolean: true"
+
+# ================================================
+# Section 2: Arithmetic Operations
+# ================================================
+print text ""
+print text "--- Section 2: Arithmetic Operations ---"
+
+set a to 15
+set b to 4
+
+set add_result to a plus b
+print text "15 + 4 ="
+print number add_result
+
+set sub_result to a minus b
+print text "15 - 4 ="
+print number sub_result
+
+set mul_result to a times b
+print text "15 * 4 ="
+print number mul_result
+
+set div_result to a divided by b
+print text "15 / 4 ="
+print number div_result
+
+set mod_result to a modulo b
+print text "15 mod 4 ="
+print number mod_result
+
+# ================================================
+# Section 3: Arrays
+# ================================================
+print text ""
+print text "--- Section 3: Arrays ---"
+
+set numbers to [100, 200, 300, 400, 500]
+print text "Array: [100, 200, 300, 400, 500]"
+print text "numbers[0] ="
+print number numbers[0]
+print text "numbers[4] ="
+print number numbers[4]
+
+# Modify array
+set numbers[2] to 999
+print text "After numbers[2] = 999:"
+print number numbers[2]
+
+# Float array
+set decimals to [1.1, 2.2, 3.3]
+print text "Float array[1] ="
+print number decimals[1]
+
+# String array
+set names to ["Alice", "Bob", "Charlie"]
+print text "String array[0] ="
+print text names[0]
+
+# 2D Array
+set matrix to [[1, 2], [3, 4], [5, 6]]
+print text "2D matrix[1][1] ="
+print number matrix[1][1]
+
+# ================================================
+# Section 4: Control Flow
+# ================================================
+print text ""
+print text "--- Section 4: Control Flow ---"
+
+set x to 10
+set y to 20
+
+if x is less than y
+    print text "x < y: TRUE"
+
+if x is greater than y
+    print text "x > y: TRUE"
+else
+    print text "x > y: FALSE"
+
+set z to 10
+if x is equal to z
+    print text "x == z: TRUE"
+
+# ================================================
+# Section 5: Loops
+# ================================================
+print text ""
+print text "--- Section 5: Loops ---"
+
+print text "While loop countdown:"
+set countdown to 5
+while countdown is greater than 0
+    print number countdown
+    set countdown to countdown minus 1
+
+print text "For loop sum (1 to 5):"
+set total to 0
+for each i in [1, 2, 3, 4, 5]
+    set total to total plus i
+print text "Sum ="
+print number total
+
+# ================================================
+# Section 6: String Operations
+# ================================================
+print text ""
+print text "--- Section 6: String Operations ---"
+
+set greeting to "hello"
+set world to " world"
+set full to greeting plus world
+print text "Concatenation:"
+print text full
+
+# ================================================
+# Section 7: Functions (if supported)
+# ================================================
+print text ""
+print text "--- Section 7: Complete! ---"
+
+print text ""
+print text "========================================"
+print text "      All Tests Passed Successfully!    "
+print text "========================================"

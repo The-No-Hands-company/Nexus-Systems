@@ -1,0 +1,38 @@
+# Comprehensive struct test
+
+# Test 1: Simple struct with integers
+struct Point
+    x as Integer
+    y as Integer
+
+set p1 to new Point
+set p1.x to 10
+set p1.y to 20
+
+print text p1.x
+print text p1.y
+
+# Test 2: Struct with mixed types
+struct Person
+    age as Integer
+    height as Float
+
+set person to new Person
+set person.age to 25
+set person.height to 5.9
+
+print text person.age
+
+# Test 3: Multiple instances of same struct
+set p2 to new Point
+set p2.x to 100
+set p2.y to 200
+
+print text p2.x
+print text p2.y
+
+# Test 4: Using struct fields in expressions
+set sum to p1.x plus p1.y
+print text sum
+
+print text "All struct tests complete!"

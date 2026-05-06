@@ -1,0 +1,23 @@
+# NexusLang LSP Server Test Program
+# This program tests if the LSP server can detect errors
+
+# Test 1: Valid syntax
+set name to "Alice"
+set age to 25
+
+# Test 2: Unclosed string (should trigger error)
+# set message to "Hello
+
+# Test 3: Unused variable (should trigger warning)
+set unused_var to 42
+
+# Test 4: Function definition
+function greet that takes person_name as String returns String
+    return "Hello, " plus person_name
+
+# Test 5: Use the function
+set greeting to greet with name
+print text greeting
+
+# Test 6: Type error (if type checker is working)
+# set result to "string" plus 123

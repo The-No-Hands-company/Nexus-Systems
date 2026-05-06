@@ -1,0 +1,35 @@
+# Test: Generic Classes - Comprehensive
+# Tests multiple specializations and operations
+
+class Container<T>
+    property data as T
+    property count as Integer
+    
+    method get_data returns T
+        return this.data
+    end method
+end class
+
+function main
+    print text "=== Comprehensive Generic Classes Test ==="
+    
+    # Test with Integer
+    set int_container to new Container<Integer>
+    set int_container.data to 100
+    set int_container.count to 1
+    set result1 to call int_container.get_data
+    print text "Integer container:"
+    print number result1
+    print number int_container.count
+    
+    # Test with String
+    set str_container to new Container<String>
+    set str_container.data to "Generic Data"
+    set str_container.count to 2
+    set result2 to call str_container.get_data
+    print text "String container:"
+    print text result2
+    print number str_container.count
+    
+    print text "=== All Tests Passed ==="
+end

@@ -1,0 +1,19 @@
+# Test async/await with actual await expressions
+# Tests Phase 2 (async function) and Phase 3 (await expression)
+
+print text "=== Async/Await Complete Test ==="
+
+# Simple async function
+async function get_number returns Integer
+    return 42
+end
+
+# Async function that awaits another async function
+async function fetch_and_double returns Integer
+    set num to await get_number
+    set result to num times 2
+    return result
+end
+
+print text "Async functions defined"
+print text "Test PASSED"

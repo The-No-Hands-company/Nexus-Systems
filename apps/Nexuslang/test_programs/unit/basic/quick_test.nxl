@@ -1,0 +1,2 @@
+set greeting to "Hello, NLPL!"
+print text greeting

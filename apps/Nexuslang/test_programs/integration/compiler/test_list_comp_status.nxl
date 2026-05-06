@@ -1,0 +1,14 @@
+# Test list comprehension values directly
+
+async function main with nothing returns Integer
+    # Create a simple comprehension
+    set doubled to [x times 2 for x in numbers]
+    
+    # TODO: For-each doesn't work with comprehensions yet (needs size metadata)
+    # For now, we know it creates 10 elements (0..9 doubled = 0,2,4,6,8,10,12,14,16,18)
+    
+    print text "List comprehension compilation successful"
+    print text "Note: Iteration over comprehension results requires size metadata (not yet implemented)"
+    
+    return 0
+end

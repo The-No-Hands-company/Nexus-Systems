@@ -1,0 +1,20 @@
+# Simple f-string test
+
+async function main with nothing returns Integer
+    set name to "World"
+    set age to 25
+    
+    # Basic f-string interpolation
+    set greeting to f"Hello, {name}!"
+    print text greeting
+    
+    # Multiple variables
+    set info to f"Name: {name}, Age: {age}"
+    print text info
+    
+    # With expressions
+    set doubled to f"Double of {age} is {age times 2}"
+    print text doubled
+    
+    return 0
+end

@@ -1,0 +1,37 @@
+# NexusLang Type System Demonstration
+
+# Variable declarations with type annotations
+set count to 10
+set price to 19.99
+set name to "NexusLang"
+set is_enabled to true
+
+# Function with type annotations
+function calculate_total with quantity as Integer, unit_price as Float returns Float
+    return quantity times unit_price
+end
+
+function format_price with amount as Float returns String
+    return "$" plus convert amount to string
+end
+
+# Using the functions with correct types
+set total to calculate_total(count, price)
+set formatted_price to format_price(total)
+
+# Output the results
+print text "Order Summary:"
+print text "Product: " plus name
+print text "Quantity: " plus convert count to string
+print text "Unit Price: $" plus convert price to string
+print text "Total: " plus formatted_price
+
+# Uncomment these lines to see type errors:
+# Type error: assigning string to integer
+# set error1 as Integer to "This is not an integer"
+
+# Type error: passing string to a function expecting integer
+# set error2 to calculate_total("5", price)
+
+# Type error: incompatible binary operation
+# set error3 to count plus name

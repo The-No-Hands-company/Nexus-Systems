@@ -1,0 +1,63 @@
+# Test pattern matching with variant (enum) patterns
+# Variants represent tagged union types like Result<T, E> and Option<T>
+
+# Note: This requires Result/Option type system implementation
+# For now, we'll simulate with integer tags
+
+enum Result
+    Ok with value as Integer
+    Error with message as String
+end
+
+enum Option
+    Some with value as Integer
+    None
+end
+
+function handle_result that takes result as Result returns String
+    match result with
+        case Ok value
+            return "Success: " + value
+        case Error message
+            return "Error: " + message
+        case _
+            return "Unknown result"
+
+function handle_option that takes opt as Option returns String
+    match opt with
+        case Some value
+            return "Value: " + value
+        case None
+            return "No value"
+        case _
+            return "Unknown option"
+
+function divide that takes a as Integer and b as Integer returns Result
+    # Division with error handling
+    if b is equal to 0
+        return Error with "Division by zero"
+    else
+        set quotient to a divided by b
+        return Ok with quotient
+    end
+
+function main that takes nothing returns Integer
+    # Test Result patterns
+    set result1 to call divide with 10 and 2
+    set msg1 to call handle_result with result1
+    print text msg1
+    
+    set result2 to call divide with 10 and 0
+    set msg2 to call handle_result with result2
+    print text msg2
+    
+    # Test Option patterns
+    set some_value to Some with 42
+    set msg3 to call handle_option with some_value
+    print text msg3
+    
+    set no_value to None
+    set msg4 to call handle_option with no_value
+    print text msg4
+    
+    return 0

@@ -1,0 +1,40 @@
+# Test boolean operations and comparisons
+
+# Test 1: Boolean literals
+print text "Test 1: Boolean literals"
+set flag to true
+if flag
+    print text "Flag is true"
+
+set disabled to false
+if not disabled
+    print text "Not disabled"
+
+# Test 2: Comparison results stored in variables
+print text "Test 2: Comparison storage"
+set is_greater to 10 > 5
+if is_greater
+    print text "10 is greater than 5"
+
+set is_equal to 5 == 5
+if is_equal
+    print text "5 equals 5"
+
+# Test 3: Complex boolean expressions
+print text "Test 3: Complex expressions"
+set x to 10
+set y to 20
+set result to x > 5 and y < 30
+if result
+    print text "Both conditions true"
+
+# Test 4: Boolean arithmetic
+print text "Test 4: Boolean in expressions"
+set count to 0
+if true
+    set count to count plus 1
+if false
+    set count to count plus 1
+print text count  # Should be 1
+
+print text "Boolean tests complete!"

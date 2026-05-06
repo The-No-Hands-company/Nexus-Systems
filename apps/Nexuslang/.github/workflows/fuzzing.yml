@@ -1,0 +1,340 @@
+name: NexusLang Fuzzing
+
+# Runs on a schedule (weekly) and can be triggered manually.
+# Does NOT block normal CI — fuzzing crashes are tracked separately.
+
+on:
+  schedule:
+    # Every Sunday at 02:00 UTC
+    - cron: "0 2 * * 0"
+  workflow_dispatch:
+    inputs:
+      timeout_seconds:
+        description: "Wall-clock time limit per fuzz target (seconds)"
+        required: false
+        default: "120"
+
+concurrency:
+  group: fuzzing-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHONUNBUFFERED: "1"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  # Default fuzzing duration when not supplied via workflow_dispatch
+  FUZZ_TIMEOUT: ${{ github.event.inputs.timeout_seconds || '120' }}
+
+jobs:
+  # ------------------------------------------------------------------
+  # Sanity: run every harness in --sanity mode (no Atheris required).
+  # This verifies the harnesses themselves don't have Python bugs.
+  # Runs on every push/schedule.
+  # ------------------------------------------------------------------
+  sanity:
+    name: Harness sanity checks
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11", "3.12", "3.13"]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run fuzz_lexer --sanity
+        run: python fuzzing/fuzz_lexer.py --sanity
+
+      - name: Run fuzz_parser --sanity
+        run: python fuzzing/fuzz_parser.py --sanity
+
+      - name: Run fuzz_interpreter --sanity
+        run: python fuzzing/fuzz_interpreter.py --sanity
+
+      - name: Run fuzz_typechecker --sanity
+        run: python fuzzing/fuzz_typechecker.py --sanity
+
+      - name: Run fuzz_ffi_marshal --sanity
+        run: python fuzzing/fuzz_ffi_marshal.py --sanity
+
+  # ------------------------------------------------------------------
+  # Harness unit tests: pytest tests/fuzz/
+  # ------------------------------------------------------------------
+  harness-tests:
+    name: Harness unit tests (py3.11)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest pytest-timeout
+
+      - name: Run harness tests
+        run: |
+          pytest tests/fuzz/ -v --timeout=60 --tb=short
+
+  # ------------------------------------------------------------------
+  # Atheris fuzzing: time-boxed runs per harness.
+  # Only runs on schedule or workflow_dispatch (not on every push).
+  # ------------------------------------------------------------------
+  fuzz-lexer:
+    name: Fuzz lexer (${{ env.FUZZ_TIMEOUT }}s)
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies + Atheris
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install atheris || echo "Atheris install failed — using sanity mode"
+
+      - name: Run fuzzer (time-boxed)
+        run: |
+          if python -c "import atheris" 2>/dev/null; then
+            timeout ${{ env.FUZZ_TIMEOUT }}s \
+              python fuzzing/fuzz_lexer.py fuzzing/corpus/lexer/ \
+                -max_total_time=${{ env.FUZZ_TIMEOUT }} \
+                -artifact_prefix=fuzzing/crashes/lexer_ \
+              || true
+          else
+            python fuzzing/fuzz_lexer.py --sanity
+          fi
+
+      - name: Upload crashes
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuzz-lexer-crashes
+          path: fuzzing/crashes/lexer_*
+          if-no-files-found: ignore
+          retention-days: 30
+
+  fuzz-parser:
+    name: Fuzz parser (${{ env.FUZZ_TIMEOUT }}s)
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies + Atheris
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install atheris || true
+
+      - name: Run fuzzer (time-boxed)
+        run: |
+          if python -c "import atheris" 2>/dev/null; then
+            timeout ${{ env.FUZZ_TIMEOUT }}s \
+              python fuzzing/fuzz_parser.py fuzzing/corpus/parser/ \
+                -max_total_time=${{ env.FUZZ_TIMEOUT }} \
+                -artifact_prefix=fuzzing/crashes/parser_ \
+              || true
+          else
+            python fuzzing/fuzz_parser.py --sanity
+          fi
+
+      - name: Upload crashes
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuzz-parser-crashes
+          path: fuzzing/crashes/parser_*
+          if-no-files-found: ignore
+          retention-days: 30
+
+  fuzz-interpreter:
+    name: Fuzz interpreter (${{ env.FUZZ_TIMEOUT }}s)
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies + Atheris
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install atheris || true
+
+      - name: Run fuzzer (time-boxed)
+        run: |
+          if python -c "import atheris" 2>/dev/null; then
+            timeout ${{ env.FUZZ_TIMEOUT }}s \
+              python fuzzing/fuzz_interpreter.py fuzzing/corpus/interpreter/ \
+                -max_total_time=${{ env.FUZZ_TIMEOUT }} \
+                -artifact_prefix=fuzzing/crashes/interpreter_ \
+              || true
+          else
+            python fuzzing/fuzz_interpreter.py --sanity
+          fi
+
+      - name: Upload crashes
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuzz-interpreter-crashes
+          path: fuzzing/crashes/interpreter_*
+          if-no-files-found: ignore
+          retention-days: 30
+
+  fuzz-typechecker:
+    name: Fuzz typechecker (${{ env.FUZZ_TIMEOUT }}s)
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies + Atheris
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install atheris || true
+
+      - name: Run fuzzer (time-boxed)
+        run: |
+          if python -c "import atheris" 2>/dev/null; then
+            timeout ${{ env.FUZZ_TIMEOUT }}s \
+              python fuzzing/fuzz_typechecker.py fuzzing/corpus/typechecker/ \
+                -max_total_time=${{ env.FUZZ_TIMEOUT }} \
+                -artifact_prefix=fuzzing/crashes/typechecker_ \
+              || true
+          else
+            python fuzzing/fuzz_typechecker.py --sanity
+          fi
+
+      - name: Upload crashes
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuzz-typechecker-crashes
+          path: fuzzing/crashes/typechecker_*
+          if-no-files-found: ignore
+          retention-days: 30
+
+  fuzz-ffi:
+    name: Fuzz FFI marshal (${{ env.FUZZ_TIMEOUT }}s)
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies + Atheris
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install atheris || true
+
+      - name: Run fuzzer (time-boxed)
+        run: |
+          if python -c "import atheris" 2>/dev/null; then
+            timeout ${{ env.FUZZ_TIMEOUT }}s \
+              python fuzzing/fuzz_ffi_marshal.py fuzzing/corpus/ffi/ \
+                -max_total_time=${{ env.FUZZ_TIMEOUT }} \
+                -artifact_prefix=fuzzing/crashes/ffi_ \
+              || true
+          else
+            python fuzzing/fuzz_ffi_marshal.py --sanity
+          fi
+
+      - name: Upload crashes
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuzz-ffi-crashes
+          path: fuzzing/crashes/ffi_*
+          if-no-files-found: ignore
+          retention-days: 30
+
+  # ------------------------------------------------------------------
+  # Summary: collect all crash artifacts and write a report.
+  # ------------------------------------------------------------------
+  crash-summary:
+    name: Crash summary
+    needs: [fuzz-lexer, fuzz-parser, fuzz-interpreter, fuzz-typechecker, fuzz-ffi]
+    if: always() && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all crash artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: fuzz-*-crashes
+          path: crashes/
+          merge-multiple: true
+
+      - name: Report crashes
+        run: |
+          echo "## Fuzzing Run Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          TOTAL=$(find crashes/ -maxdepth 1 -type f 2>/dev/null | wc -l)
+          echo "Total crash files found: **${TOTAL}**" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          if [ "$TOTAL" -gt 0 ]; then
+            echo "### Crash files" >> $GITHUB_STEP_SUMMARY
+            find crashes/ -maxdepth 1 -type f | while read f; do
+              echo "- \`$(basename $f)\` ($(wc -c < $f) bytes)" >> $GITHUB_STEP_SUMMARY
+            done
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "Download the artifacts above to reproduce crashes locally:" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            echo "python fuzzing/fuzz_<target>.py <crash-file>" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+          else
+            echo "No crashes found in this run." >> $GITHUB_STEP_SUMMARY
+          fi

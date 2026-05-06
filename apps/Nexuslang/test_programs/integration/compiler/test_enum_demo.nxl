@@ -1,0 +1,78 @@
+# Enum Types Demo - Simple Examples
+
+print text "=== NexusLang Enum Types Demo ==="
+
+# Example 1: Days of the week
+print text "\nExample 1: Days of Week"
+enum DayOfWeek
+    Monday
+    Tuesday
+    Wednesday
+    Thursday
+    Friday
+    Saturday
+    Sunday
+
+set today to DayOfWeek.Wednesday
+print text "Today is day number: "
+print number today
+
+if today is less than 5
+    print text "It's a weekday"
+else
+    print text "It's the weekend!"
+
+# Example 2: Traffic light states
+print text "\nExample 2: Traffic Light"
+enum TrafficLight
+    Red = 0
+    Yellow = 1
+    Green = 2
+
+set light to TrafficLight.Green
+switch light
+    case 0
+        print text "STOP - Red light"
+    case 1
+        print text "CAUTION - Yellow light"
+    case 2
+        print text "GO - Green light"
+
+# Example 3: User roles with explicit values
+print text "\nExample 3: User Roles"
+enum UserRole
+    Guest = 0
+    User = 10
+    Moderator = 50
+    Admin = 100
+
+set role to UserRole.Moderator
+print text "User role level: "
+print number role
+
+if role is greater than 40
+    print text "User has moderation privileges"
+
+# Example 4: Game states
+print text "\nExample 4: Game States"
+enum GameState
+    MainMenu
+    Playing
+    Paused
+    GameOver
+
+set current_state to GameState.Playing
+print text "Current game state: "
+print number current_state
+
+switch current_state
+    case 0
+        print text "Showing main menu"
+    case 1
+        print text "Game is active"
+    case 2
+        print text "Game is paused"
+    case 3
+        print text "Game over"
+
+print text "\n=== Demo complete ===" 

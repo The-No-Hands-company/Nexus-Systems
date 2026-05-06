@@ -1,0 +1,116 @@
+# Comprehensive Inline Assembly Test
+# Platform: x86-64 with AT&T syntax
+# Tests various inline assembly features that actually compile and work
+
+print text "=== Comprehensive Inline Assembly Tests ==="
+print text ""
+
+# Test 1: Basic NOP (no-operation) - simplest valid assembly
+print text "Test 1: Basic NOP instructions"
+asm
+    code
+        "nop"
+        "nop"
+end
+print text "PASS: Test 1 - Basic inline assembly compiled"
+print text ""
+
+# Test 2: Assembly comment only (no actual operations)
+print text "Test 2: Assembly with comments"
+asm
+    code
+        "# This is an assembly comment"
+        "nop"
+end
+print text "PASS: Test 2 - Assembly comments work"
+print text ""
+
+# Test 3: Read-only input operand
+print text "Test 3: Assembly with input operand"
+set x to 42
+asm
+    code
+        "# Using input: %0"
+    inputs "r": x
+end
+print text "PASS: Test 3 - Input operand compiled"
+print text ""
+
+# Test 4: Multiple input operands
+print text "Test 4: Multiple input operands"
+set val1 to 10
+set val2 to 20
+asm
+    code
+        "# First: %0, Second: %1"
+    inputs "r": val1, "r": val2
+end
+print text "PASS: Test 4 - Multiple inputs compiled"
+print text ""
+
+# Test 5: Simple output operand (compiler handles register allocation)
+print text "Test 5: Output operand"
+asm
+    code
+        ""
+    outputs "=r": result
+end
+print text "PASS: Test 5 - Output operand syntax compiled"
+print text ""
+
+# Test 6: Input operand (compiler handles register allocation)
+print text "Test 6: Input constraint syntax"
+set n to 8
+asm
+    code
+        ""
+    inputs "r": n
+end
+print text "PASS: Test 6 - Input constraint syntax compiled"
+print text ""
+
+# Test 7: Clobber list (indicate side effects)
+print text "Test 7: Clobber list"
+asm
+    code
+        "nop"
+    clobbers "cc"
+end
+print text "PASS: Test 7 - Clobber list compiled"
+print text ""
+
+# Test 8: Memory constraint
+print text "Test 8: Memory constraint"
+set mem_val to 100
+asm
+    code
+        "# Memory operand"
+    inputs "m": mem_val
+end
+print text "PASS: Test 8 - Memory constraint compiled"
+print text ""
+
+# Test 9: Empty assembly block (minimal syntax)
+print text "Test 9: Minimal assembly block"
+asm
+    code
+        "nop"
+end
+print text "PASS: Test 9 - Minimal syntax compiled"
+print text ""
+
+# Test 10: Multiple instructions in one block
+print text "Test 10: Multiple instructions"
+asm
+    code
+        "nop"
+        "nop"
+        "nop"
+end
+print text "PASS: Test 10 - Multiple instructions compiled"
+print text ""
+
+print text ""
+print text "=== All 10 Inline Assembly Tests Passed! ==="
+print text "Successfully compiled with LLVM backend"
+print text "Note: Actual assembly execution is platform-specific"

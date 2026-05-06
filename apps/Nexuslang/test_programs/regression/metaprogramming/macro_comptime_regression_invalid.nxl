@@ -1,0 +1,8 @@
+# Macro/comptime regression fixture: intentional misuse for diagnostics
+macro KNOWN
+    print text "known"
+end
+
+comptime const LIMIT is 10
+set LIMIT to 11
+expand UNKNOWN_MACRO

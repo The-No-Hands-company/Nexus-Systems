@@ -1,0 +1,14 @@
+# Test arithmetic operations in LLVM backend
+
+set x to 10
+set y to 5
+
+set sum to x plus y
+set difference to x minus y
+set product to x times y
+set quotient to x divided by y
+
+print text sum
+print text difference
+print text product
+print text quotient

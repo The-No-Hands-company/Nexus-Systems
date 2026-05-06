@@ -1,0 +1,14 @@
+# Test simple trailing block parsing
+
+function execute_block with block as Function
+    print text "Executing block..."
+    print text "Block received!"
+    # TODO: Call the block once we figure out syntax
+end
+
+# Test 1: Simple block with no parameters
+execute_block do
+    print text "Hello from block!"
+end
+
+print text "Test 1 complete"

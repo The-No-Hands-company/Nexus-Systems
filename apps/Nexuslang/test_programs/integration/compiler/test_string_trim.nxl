@@ -1,0 +1,28 @@
+# Test trim function
+
+# Leading whitespace
+set leading to "   hello"
+set trimmed1 to trim(leading)
+print text trimmed1
+
+# Trailing whitespace  
+set trailing to "world   "
+set trimmed2 to trim(trailing)
+print text trimmed2
+
+# Both sides
+set both to "   hello world   "
+set trimmed3 to trim(both)
+print text trimmed3
+
+# No whitespace
+set no_space to "hello"
+set trimmed4 to trim(no_space)
+print text trimmed4
+
+# Only whitespace
+set only_space to "     "
+set trimmed5 to trim(only_space)
+print text trimmed5
+
+print text "Trim tests done!"

@@ -1,0 +1,14 @@
+# Test async/await coroutine generation
+# This tests that async functions compile to proper LLVM coroutines
+
+print text "=== Async/Await Coroutine Test ==="
+
+# Simple async function that returns immediately
+async function simple_async returns Integer
+    set value to 42
+    return value
+end
+
+# For now, just test that the infrastructure compiles
+print text "Async functions defined"
+print text "Test PASSED"

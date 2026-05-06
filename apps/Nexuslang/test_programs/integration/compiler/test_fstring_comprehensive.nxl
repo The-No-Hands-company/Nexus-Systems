@@ -1,0 +1,24 @@
+# Comprehensive f-string test with format specifiers
+
+async function main with nothing returns Integer
+    set pi to 3.14159265359
+    set count to 42
+    
+    # Test 1: Float precision
+    set formatted_pi to f"Pi is approximately {pi:.2f}"
+    print text formatted_pi
+    
+    # Test 2: Integer zero-padding
+    set padded to f"Count: {count:04d}"
+    print text padded
+    
+    # Test 3: Multiple variables with formatting
+    set mixed to f"Pi: {pi:.3f}, Count: {count}"
+    print text mixed
+    
+    # Test 4: Expressions in f-strings with formatting
+    set expr_test to f"Pi doubled: {pi times 2:.4f}"
+    print text expr_test
+    
+    return 0
+end

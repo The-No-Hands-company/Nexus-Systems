@@ -1,0 +1,41 @@
+# Test Exception Type Support
+
+# Test 1: Catch specific exception type
+try
+    # This would throw a ValueError
+    raise ValueError with message "Invalid value"
+catch e as ValueError
+    print text "Caught ValueError: "
+    print text e
+    print text "\n"
+end
+
+# Test 2: Catch different exception type
+try
+    # This would throw a RuntimeError
+    raise RuntimeError with message "Runtime problem"
+catch e as RuntimeError
+    print text "Caught RuntimeError: "
+    print text e
+    print text "\n"
+end
+
+# Test 3: Catch any exception (no type specified)
+try
+    raise error with message "Generic error"
+catch e
+    print text "Caught generic exception: "
+    print text e
+    print text "\n"
+end
+
+# Test 4: Multiple exception types
+try
+    raise TypeError with message "Type mismatch"
+catch e as TypeError
+    print text "Caught TypeError: "
+    print text e
+    print text "\n"
+end
+
+print text "Exception type support test complete!\n"

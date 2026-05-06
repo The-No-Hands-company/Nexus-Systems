@@ -1,0 +1,44 @@
+# Parse-only test for Rc types - verifies parser handles syntax correctly
+# Run with: python -m nexuslang.main test_programs/unit/rc/test_rc_parse_only.nlpl --no-type-check
+
+# All these should parse successfully (but won't execute until runtime is implemented)
+
+# Simple Rc types
+function test1 with x as Rc of Integer
+    print text "Basic Rc"
+end
+
+function test2 with x as Weak of String
+    print text "Basic Weak"
+end
+
+function test3 with x as Arc of Float
+    print text "Basic Arc"
+end
+
+# Nested Rc types
+function test4 with x as Rc of List of Integer
+    print text "Rc of List"
+end
+
+function test5 with x as Rc of Dictionary of String, Integer
+    print text "Rc of Dict"
+end
+
+# Complex nesting
+function test6 with x as Rc of List of Rc of Integer
+    print text "Rc of List of Rc"
+end
+
+# Return types
+function test7 returns Rc of Integer
+    print text "Returns Rc"
+    return 0
+end
+
+# Multiple parameters
+function test8 with a as Rc of Integer, b as Weak of Integer, c as Arc of Integer
+    print text "Mixed smart pointers"
+end
+
+print text "SUCCESS: All Rc type syntax parsed correctly"

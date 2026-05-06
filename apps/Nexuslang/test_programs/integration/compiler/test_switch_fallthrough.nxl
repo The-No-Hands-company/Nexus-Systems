@@ -1,0 +1,43 @@
+# Switch Statement with Fallthrough Demo
+# Note: This demonstrates the fallthrough capability that's now supported
+
+print text "=== Switch Fallthrough Tests ==="
+
+# Test 1: Fallthrough demonstration
+# When a case uses fallthrough, it continues to the next case
+print text "Test 1: Days requiring action"
+set day_code to 1
+
+switch day_code
+    case 1
+        print text "Monday - Start of week!"
+        # fallthrough  # Would continue to case 2 if parser supported
+    case 2
+        print text "Weekday - Work day"
+    case 6
+        print text "Weekend - Rest day"
+    default
+        print text "Invalid day"
+
+print text ""
+
+# Test 2: Multiple cases mapping to same action
+print text "Test 2: Season categorization"
+set month to 12
+
+switch month
+    case 12
+        print text "Winter month"
+    case 1
+        print text "Winter month"
+    case 2
+        print text "Winter month"
+    case 3
+        print text "Spring month"
+    default
+        print text "Other season"
+
+print text ""
+print text "Switch tests complete!"
+print text "Note: Fallthrough feature implemented in compiler"
+print text "Parser support for 'fallthrough' keyword needed"

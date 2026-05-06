@@ -1,0 +1,19 @@
+# Simple test to check if map_memory is registered
+print text "Checking MMIO function registration..."
+
+# Try to access map_memory function
+print text "Testing function availability:"
+
+# This should work without calling it
+print text "If you see this, basic parsing works"
+
+# Try calling with invalid args to see if function exists
+try
+    set test to map_memory with physical_address: 100 and size: 10
+    print text "Function exists and was called"
+catch error with message
+    print text "Function exists, error message:"
+    print text message
+end
+
+print text "Test complete"

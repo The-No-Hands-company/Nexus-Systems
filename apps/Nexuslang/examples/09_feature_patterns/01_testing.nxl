@@ -1,0 +1,183 @@
+# Testing in NexusLang
+
+# Test Framework
+class TestCase
+ private set name to String
+ private set tests to List of Function
+ 
+ public function initialize with name as String
+ set this.name to name
+ create this.tests as empty List of Function
+ 
+ public function test with name as String and test_function as Function
+ append {"name": name, "function": test_function} to this.tests
+ 
+ public function run
+ print text "Running tests for " plus this.name
+ set passed to 0
+ set failed to 0
+ 
+ for each test in this.tests
+ print text "Running test: " plus test["name"]
+ try
+ call test["function"]
+ print text " Test passed: " plus test["name"]
+ increment passed
+ catch error
+ print text " Test failed: " plus test["name"]
+ print text " Error: " plus error.message
+ increment failed
+ 
+ print text "Test Summary:"
+ print text " Passed: " plus convert passed to string
+ print text " Failed: " plus convert failed to string
+ return failed is 0
+
+# Assertions
+class Assert
+ public static function equal with actual as Any and expected as Any
+ if actual is not equal to expected
+ raise error "Assertion failed: expected " plus convert expected to string plus " but got " plus convert actual to string
+ 
+ public static function not equal with actual as Any and expected as Any
+ if actual is equal to expected
+ raise error "Assertion failed: values should not be equal but both are " plus convert actual to string
+ 
+ public static function true with value as Boolean
+ if not value
+ raise error "Assertion failed: expected true but got false"
+ 
+ public static function false with value as Boolean
+ if value
+ raise error "Assertion failed: expected false but got true"
+ 
+ public static function null with value as Any
+ if value is not null
+ raise error "Assertion failed: expected null but got " plus convert value to string
+ 
+ public static function not null with value as Any
+ if value is null
+ raise error "Assertion failed: expected non-null value but got null"
+ 
+ public static function throws with function as Function and expected_error as String
+ try
+ call function
+ raise error "Assertion failed: expected function to throw error containing '" plus expected_error plus "' but no error was thrown"
+ catch error
+ if not error.message contains expected_error
+ raise error "Assertion failed: expected error containing '" plus expected_error plus "' but got '" plus error.message plus "'"
+
+# Mock Objects
+class Mock
+ private set calls to List of Dictionary of Any
+ private set return_values to Dictionary of Any
+ 
+ public function initialize
+ create this.calls as empty List of Dictionary of Any
+ create this.return_values as empty Dictionary of Any
+ 
+ public function when with method as String and args as List of Any returns value as Any
+ set key to method plus "(" plus convert args to string plus ")"
+ set this.return_values[key] to value
+ 
+ public function called with method as String and args as List of Any
+ append {"method": method, "args": args} to this.calls
+ 
+ public function get calls returns List of Dictionary of Any
+ return this.calls
+ 
+ public function get call count with method as String returns Integer
+ set count to 0
+ for each call in this.calls
+ if call["method"] is equal to method
+ increment count
+ return count
+ 
+ public function verify with method as String and args as List of Any
+ set key to method plus "(" plus convert args to string plus ")"
+ if key not in this.return_values
+ raise error "No mock return value set for " plus key
+ return this.return_values[key]
+
+# Test Suites
+class TestSuite
+ private set test_cases to List of TestCase
+ 
+ public function initialize
+ create this.test_cases as empty List of TestCase
+ 
+ public function add test case with test_case as TestCase
+ append test_case to this.test_cases
+ 
+ public function run
+ print text "Running test suite"
+ set all_passed to true
+ 
+ for each test_case in this.test_cases
+ if not run test_case
+ set all_passed to false
+ 
+ if all_passed
+ print text "All tests passed!"
+ else
+ print text "Some tests failed."
+ 
+ return all_passed
+
+# Usage Examples
+# Test User class
+create user_tests as new TestCase with "User"
+
+test "User initialization" in user_tests
+ create user as new User with "John Doe" and "john@example.com"
+ assert equal user.name "John Doe"
+ assert equal user.email "john@example.com"
+ assert not null user.created_at
+
+test "User email validation" in user_tests
+ create user as new User with "John Doe" and "invalid-email"
+ assert throws function validate email with user.email "Invalid email format"
+
+# Test UserRepository class
+create repository_tests as new TestCase with "UserRepository"
+
+test "Create user" in repository_tests
+ create connection as new DatabaseConnection with "localhost" and 5432 and "postgres" and "password" and "testdb"
+ create repository as new UserRepository with connection
+ create user as new User with "John Doe" and "john@example.com"
+ set saved_user to create user in repository
+ assert not null saved_user.id
+ assert equal saved_user.name "John Doe"
+
+test "Find user by ID" in repository_tests
+ create connection as new DatabaseConnection with "localhost" and 5432 and "postgres" and "password" and "testdb"
+ create repository as new UserRepository with connection
+ set user to find by id 1 in repository
+ assert not null user
+ assert equal user.id 1
+
+# Test WebApplication class
+create web_tests as new TestCase with "WebApplication"
+
+test "Create user endpoint" in web_tests
+ create mock_repository as new Mock
+ create app as new WebApplication with mock_repository
+ create request as new HttpRequest with "POST" and "/users" and {} and {"name": "John Doe", "email": "john@example.com"} and {} and {}
+ set response to create user with request in app
+ assert equal response.status_code 201
+ assert equal mock_repository.get call count "create" 1
+
+test "Get user endpoint" in web_tests
+ create mock_repository as new Mock
+ create app as new WebApplication with mock_repository
+ create request as new HttpRequest with "GET" and "/users/1" and {} and null and {} and {"id": "1"}
+ set response to get user by id with request in app
+ assert equal response.status_code 200
+ assert equal mock_repository.get call count "find_by_id" 1
+
+# Run all tests
+create suite as new TestSuite
+add test case user_tests to suite
+add test case repository_tests to suite
+add test case web_tests to suite
+run suite 

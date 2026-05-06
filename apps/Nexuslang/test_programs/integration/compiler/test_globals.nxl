@@ -1,0 +1,32 @@
+# Test global variables
+# Global variables should be accessible across functions
+
+# Global counter
+set counter to 0
+
+# Global accumulator  
+set total to 0
+
+function increment that takes amount as Integer returns Integer
+    set counter to counter plus amount
+    return counter
+
+function add_to_total that takes value as Integer returns Integer
+    set total to total plus value
+    return total
+
+# Test 1: Use globals in functions
+print text "Test 1: Global counter"
+call increment with 1
+print text counter  # Should be 1
+call increment with 1
+print text counter  # Should be 2
+
+# Test 2: Global accumulator
+print text "Test 2: Global accumulator"
+call add_to_total with 10
+print text total  # Should be 10
+call add_to_total with 20
+print text total  # Should be 30
+
+print text "Global variable tests complete!"

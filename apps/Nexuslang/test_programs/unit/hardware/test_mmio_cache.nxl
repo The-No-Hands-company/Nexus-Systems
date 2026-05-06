@@ -1,0 +1,93 @@
+# Test: Memory-Mapped I/O Cache Control
+# Tests different cache hints (WB, WT, UC, WC, WP)
+
+print text "Testing MMIO Cache Control..."
+
+# Test mapping with different cache hints
+set test_address to 0xE0000000  # Typical framebuffer address
+set test_size to 4096
+
+print text "Test 1: Uncacheable (UC) - Default for device memory"
+try
+    set uc_buffer to map_memory with physical_address: test_address and size: test_size and cache_hint: "UC"
+    print text "UC mapping successful"
+    set info to get mapping info with address: uc_buffer
+    print text "Cache hint: "
+    print text info["cache_hint"]
+    unmap memory with address: uc_buffer
+catch error with message
+    print text "Error (may need root): "
+    print text message
+end
+
+print text ""
+print text "Test 2: Write-Combining (WC) - For framebuffers"
+try
+    set wc_buffer to map_memory with physical_address: test_address and size: test_size and cache_hint: "WC"
+    print text "WC mapping successful"
+    set info to get mapping info with address: wc_buffer
+    print text "Cache hint: "
+    print text info["cache_hint"]
+    unmap_memory with address: wc_buffer
+    print text "WC mapping cleaned up"
+    print text "Error (may need root): "
+    print text message
+end
+
+print text ""
+print text "Test 3: Write-Back (WB) - Normal cached memory"
+try
+    set wb_buffer to map_memory with physical_address: test_address and size: test_size and cache_hint: "WB"
+    print text "WB mapping successful"
+    set info to get mapping info with address: wb_buffer
+    print text "Cache hint: "
+    print text info["cache_hint"]
+    unmap_memory with address: wb_buffer
+    print text "WB mapping cleaned up"
+    print text "Error (may need root): "
+    print text message
+end
+
+print text ""
+print text "Test 4: Write-Through (WT) - Cached with immediate writeback"
+try
+    set wt_buffer to map_memory with physical_address: test_address and size: test_size and cache_hint: "WT"
+    print text "WT mapping successful"
+    set info to get mapping info with address: wt_buffer
+    print text "Cache hint: "
+    print text info["cache_hint"]
+    unmap_memory with address: wt_buffer
+    print text "WT mapping cleaned up"
+catch error with message
+    print text "Error (may need root): "
+    print text message
+end
+
+print text ""
+print text "Test 5: Write-Protected (WP) - Reads cached, writes uncached"
+try
+    set wp_buffer to map_memory with physical_address: test_address and size: test_size and cache_hint: "WP"
+    print text "WP mapping successful"
+    set info to get mapping info with address: wp_buffer
+    print text "Cache hint: "
+    print text info["cache_hint"]
+    unmap_memory with address: wp_buffer
+    print text "WP mapping cleaned up"
+catch error with message
+    print text "Error (may need root): "
+    print text message
+end
+
+print text ""
+print text "Test 6: Invalid cache hint - should raise error"
+try
+    set bad_buffer to map_memory with physical_address: test_address and size: test_size and cache_hint: "INVALID"
+    print text "ERROR: Should have raised MMIOError for invalid cache hint"
+catch error with message
+    print text "Correctly caught error"
+    print text "Error message: "
+    print text message
+end
+
+print text ""
+print text "Cache control tests complete"

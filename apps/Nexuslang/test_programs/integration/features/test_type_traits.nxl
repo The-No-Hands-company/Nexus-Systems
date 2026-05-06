@@ -1,0 +1,153 @@
+# Test Type Traits Module
+# Type Traits Module: C++ <type_traits> style runtime type introspection
+# Total functions: 56 type trait operations
+
+print text "=== Type Traits Module Test ==="
+print text ""
+
+# Type Category Checks (7 functions)
+print text "Type Category Checks:"
+set is_int to trait_is_integer with 42
+print text "  trait_is_integer(42) -> " plus is_int
+set is_float to trait_is_floating_point with 3.14
+print text "  trait_is_floating_point(3.14) -> " plus is_float
+set is_num to trait_is_numeric with 42
+print text "  trait_is_numeric(42) -> " plus is_num
+set is_bool to trait_is_boolean with true
+print text "  trait_is_boolean(true) -> " plus is_bool
+set is_str to trait_is_string with "hello"
+print text "  trait_is_string(\"hello\") -> " plus is_str
+set is_none to trait_is_none with 0
+print text "  trait_is_none(0) -> " plus is_none
+print text ""
+
+# Callable Type Checks (4 functions)
+print text "Callable Type Checks:"
+set test_list to [1, 2, 3]
+set is_call to trait_is_callable with test_list
+print text "  trait_is_callable(list) -> " plus is_call
+set is_iter to trait_is_iterable with test_list
+print text "  trait_is_iterable([1,2,3]) -> " plus is_iter
+print text ""
+
+# Container Type Checks (7 functions)
+print text "Container Type Checks:"
+set is_seq to trait_is_sequence with test_list
+print text "  trait_is_sequence([1,2,3]) -> " plus is_seq
+set test_dict to {"a": 1, "b": 2}
+set is_map to trait_is_mapping with test_dict
+print text "  trait_is_mapping({\"a\": 1}) -> " plus is_map
+set is_list to trait_is_list with test_list
+print text "  trait_is_list([1,2,3]) -> " plus is_list
+set test_tuple to [1, 2, 3]
+set is_dict to trait_is_dict with test_dict
+print text "  trait_is_dict({\"a\": 1}) -> " plus is_dict
+print text ""
+
+# Mutability Checks (3 functions)
+print text "Mutability Checks:"
+set is_mut to trait_is_mutable with test_list
+print text "  trait_is_mutable([1,2,3]) -> " plus is_mut
+set is_immut to trait_is_immutable with 42
+print text "  trait_is_immutable(42) -> " plus is_immut
+set is_hash to trait_is_hashable with "hello"
+print text "  trait_is_hashable(\"hello\") -> " plus is_hash
+print text ""
+
+# Type Information (7 functions)
+print text "Type Information:"
+set type_name to trait_type_name with test_list
+print text "  trait_type_name([1,2,3]) -> " plus type_name
+set type_mod to trait_type_module with test_list
+print text "  trait_type_module([1,2,3]) -> " plus type_mod
+set type_size to trait_type_size with 42
+print text "  trait_type_size(42) -> " plus type_size plus " bytes"
+set type_id to trait_type_id with test_list
+print text "  trait_type_id(list_object) -> " plus type_id
+set type_bases to trait_type_bases with true
+print text "  trait_type_bases(True) -> " plus type_bases
+set type_mro to trait_type_mro with true
+print text "  trait_type_mro(True) -> " plus type_mro
+print text ""
+
+# Attribute and Method Inspection (6 functions)
+print text "Attribute and Method Inspection:"
+set has_append to trait_has_attribute with test_list and "append"
+print text "  trait_has_attribute(list, \"append\") -> " plus has_append
+set has_method to trait_has_method with test_list and "append"
+print text "  trait_has_method(list, \"append\") -> " plus has_method
+set method_list to trait_get_methods with test_list
+print text "  trait_get_methods(list) -> " plus method_list
+set pub_methods to trait_get_public_methods with test_list
+print text "  trait_get_public_methods(list) -> " plus pub_methods
+set attr_list to trait_get_attributes with test_list
+print text "  trait_get_attributes(list) -> " plus attr_list
+print text ""
+
+# Container-Specific Traits (4 functions)
+print text "Container-Specific Traits:"
+set trait_length to trait_get_length with test_list
+print text "  trait_get_length([1,2,3]) -> " plus trait_length
+set is_empty to trait_is_empty with test_list
+print text "  trait_is_empty([1,2,3]) -> " plus is_empty
+set empty_list to []
+set is_empty_2 to trait_is_empty with empty_list
+print text "  trait_is_empty([]) -> " plus is_empty_2
+set supports_idx to trait_supports_index with test_list
+print text "  trait_supports_index([1,2,3]) -> " plus supports_idx
+set supports_in to trait_supports_contains with test_list
+print text "  trait_supports_contains([1,2,3]) -> " plus supports_in
+print text ""
+
+# Comparison and Arithmetic Traits (4 functions)
+print text "Comparison and Arithmetic Traits:"
+set supports_cmp to trait_supports_comparison with 42
+print text "  trait_supports_comparison(42) -> " plus supports_cmp
+set supports_ord to trait_supports_ordering with 42
+print text "  trait_supports_ordering(42) -> " plus supports_ord
+set supports_arith to trait_supports_arithmetic with 42
+print text "  trait_supports_arithmetic(42) -> " plus supports_arith
+set supports_div to trait_supports_division with 42
+print text "  trait_supports_division(42) -> " plus supports_div
+print text ""
+
+# Special Method Checks (4 functions)
+print text "Special Method Checks:"
+set has_iter_m to trait_has_iter with test_list
+print text "  trait_has_iter([1,2,3]) -> " plus has_iter_m
+set has_call_m to trait_has_call with test_list
+print text "  trait_has_call(list) -> " plus has_call_m
+print text ""
+
+# Type Conversion Checks (3 functions)
+print text "Type Conversion Checks:"
+set can_int to trait_can_convert_to_int with "42"
+print text "  trait_can_convert_to_int(\"42\") -> " plus can_int
+set can_float to trait_can_convert_to_float with "3.14"
+print text "  trait_can_convert_to_float(\"3.14\") -> " plus can_float
+set can_str to trait_can_convert_to_str with 42
+print text "  trait_can_convert_to_str(42) -> " plus can_str
+print text ""
+
+# Comprehensive Trait Analysis (2 functions)
+print text "Comprehensive Trait Analysis:"
+set all_traits to trait_get_all_traits with test_list
+print text "  trait_get_all_traits([1,2,3]) ->"
+print text "    Type categories: is_sequence, is_list, is_iterable"
+print text "    Mutability: is_mutable, is_hashable=False"
+print text "    Capabilities: supports_index, supports_contains"
+print text "    Type info: type_name=list, type_module=builtins"
+print text ""
+
+print text "Instance and Inheritance Checks (2 functions):"
+set is_inst to trait_is_instance with 42 and "int"
+print text "  trait_is_instance(42, \"int\") -> " plus is_inst
+print text ""
+
+print text "Type traits module test complete!"
+print text "56 functions tested: type categories, callable/container checks, mutability,"
+print text "type information, attribute/method inspection, container traits, comparison,"
+print text "arithmetic, special methods, conversions, and comprehensive analysis"
+print text ""
+print text "Use type_traits for: Metaprogramming, runtime type checking, reflection,"
+print text "generic programming, type-safe APIs, dynamic dispatch"

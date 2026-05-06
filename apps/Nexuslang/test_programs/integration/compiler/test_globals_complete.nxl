@@ -1,0 +1,47 @@
+# Comprehensive global variable tests
+
+# Test 1: Integer globals
+set global_int to 42
+print text "Test 1: Integer global"
+print text global_int
+
+# Test 2: Float globals
+set global_float to 3.14
+print text "Test 2: Float global"
+print text global_float
+
+# Test 3: Multiple operations on one global
+set count to 0
+set count to count plus 1
+set count to count plus 2
+set count to count plus 3
+print text "Test 3: Multiple ops (should be 6)"
+print text count
+
+# Test 4: Globals modified in nested scopes
+set outer to 100
+
+function modify_outer that takes delta as Integer returns Integer
+    set outer to outer plus delta
+    return outer
+
+call modify_outer with 23
+print text "Test 4: After function (should be 123)"
+print text outer
+
+# Test 5: Multiple globals interacting
+set a to 10
+set b to 20
+
+function swap_add that takes x as Integer returns Integer
+    set temp to a
+    set a to b
+    set b to temp
+    return a plus b
+
+call swap_add with 0
+print text "Test 5: After swap (a=20, b=10, sum=30)"
+print text a
+print text b
+
+print text "All global tests passed!"

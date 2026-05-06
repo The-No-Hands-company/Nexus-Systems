@@ -1,0 +1,10 @@
+# Quick test for zero-arg function syntax
+print text "Testing zero-arg function call"
+
+function get_value returns Integer
+    return 42
+end
+
+# Try different syntaxes
+set result to get_value
+print text result

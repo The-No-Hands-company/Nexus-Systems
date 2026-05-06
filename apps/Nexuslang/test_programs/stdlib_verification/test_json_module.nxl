@@ -1,0 +1,35 @@
+# Test JSON Module Functionality
+# Verifies parse_json, to_json, json_get, json_set
+
+function main
+    print text "Testing JSON Module..."
+    
+    # Test 1: Parse JSON string
+    set json_str to "{\"name\":\"Alice\",\"age\":30,\"active\":true}"
+    set data to parse_json with json_str
+    print text "Parsed JSON successfully"
+    
+    # Test 2: JSON to string
+    set obj to create_dict
+    dict_set with obj, "name", "Bob"
+    dict_set with obj, "age", 25
+    set json_output to to_json with obj, true
+    print text "Serialized to JSON:"
+    print text json_output
+    
+    # Test 3: json_get with dot notation
+    set name to json_get with data, "name", "Unknown"
+    print text "Name from JSON:"
+    print text name
+    
+    # Test 4: json_set with dot notation
+    set result to json_set with data, "age", 31
+    print text "Set age to 31"
+    
+    # Test 5: Pretty print
+    set pretty to pretty_json with data, 2
+    print text "Pretty printed:"
+    print text pretty
+    
+    print text "JSON module verification COMPLETE"
+end

@@ -1,0 +1,10 @@
+extern function add_numbers with a as Integer, b as Integer returns Integer from library "mylib"
+extern function print_message with msg as String returns Void from library "mylib"
+
+function main that takes nothing
+    print "NLPL: Calling C library..."
+    print_message("Hello from NLPL!")
+    
+    set result to add_numbers(10, 20)
+    print "NLPL: Result from C: " 
+    print result

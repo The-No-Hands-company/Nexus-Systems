@@ -1,0 +1,64 @@
+# FFI Struct Marshalling Test
+# Tests passing structs with external C functions
+#
+# Compilation:
+#   python nlplc_llvm.py test_programs/ffi/test_ffi_struct.nlpl -o test_ffi_struct
+#
+# Expected Output:
+#   Point: (10, 20)
+#   Sum: 30
+#   Distance: 20
+#   3D Point: (1.5, 2.5, 3.5)
+#   Struct marshalling test complete!
+
+# Define a simple Point struct
+struct Point
+    x as Integer
+    y as Integer
+end
+
+# Define a 3D Point struct
+struct Point3D
+    x as Float
+    y as Float
+    z as Float
+end
+
+# Declare external printf for output
+extern function printf with format as String returns Integer from library "c"
+
+# Create and test a Point struct
+set p to new Point
+set p.x to 10
+set p.y to 20
+
+call printf with "Point: (%lld, %lld)\n", p.x, p.y
+
+# Calculate simple operation
+set sum to p.x plus p.y
+call printf with "Sum: %lld\n", sum
+
+# Test multiple struct instances
+set p1 to new Point
+set p1.x to 0
+set p1.y to 0
+
+set p2 to new Point
+set p2.x to 10
+set p2.y to 10
+
+# Calculate Manhattan distance
+set dx to p2.x minus p1.x
+set dy to p2.y minus p1.y
+set dist to dx plus dy
+call printf with "Distance: %lld\n", dist
+
+# Test 3D point with floats
+set p3d to new Point3D
+set p3d.x to 1.5
+set p3d.y to 2.5
+set p3d.z to 3.5
+
+call printf with "3D Point: (%.1f, %.1f, %.1f)\n", p3d.x, p3d.y, p3d.z
+call printf with "Struct marshalling test complete!\n"
+

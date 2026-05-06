@@ -1,0 +1,340 @@
+# SQLite3 FFI Bindings Example
+# Demonstrates complete FFI usage with a real-world C library
+
+# SQLite3 opaque types (pointers to internal structures)
+# We don't need to know their internal structure
+# typedef struct sqlite3 sqlite3;
+# typedef struct sqlite3_stmt sqlite3_stmt;
+
+# SQLite3 result codes
+set constant SQLITE_OK to 0
+set constant SQLITE_ERROR to 1
+set constant SQLITE_BUSY to 5
+set constant SQLITE_NOMEM to 7
+set constant SQLITE_READONLY to 8
+set constant SQLITE_DONE to 101
+set constant SQLITE_ROW to 100
+
+# SQLite3 column types
+set constant SQLITE_INTEGER to 1
+set constant SQLITE_FLOAT to 2
+set constant SQLITE_TEXT to 3
+set constant SQLITE_BLOB to 4
+set constant SQLITE_NULL to 5
+
+# SQLite3 core functions
+extern function sqlite3_open with filename as String, ppDb as Pointer returns Integer from library "sqlite3"
+extern function sqlite3_close with db as Pointer returns Integer from library "sqlite3"
+extern function sqlite3_exec with db as Pointer, sql as String, callback as Pointer, arg as Pointer, errmsg as Pointer returns Integer from library "sqlite3"
+extern function sqlite3_errmsg with db as Pointer returns String from library "sqlite3"
+
+# Prepared statement functions
+extern function sqlite3_prepare_v2 with db as Pointer, sql as String, nByte as Integer, ppStmt as Pointer, pzTail as Pointer returns Integer from library "sqlite3"
+extern function sqlite3_step with stmt as Pointer returns Integer from library "sqlite3"
+extern function sqlite3_finalize with stmt as Pointer returns Integer from library "sqlite3"
+
+# Column access functions
+extern function sqlite3_column_count with stmt as Pointer returns Integer from library "sqlite3"
+extern function sqlite3_column_name with stmt as Pointer, col as Integer returns String from library "sqlite3"
+extern function sqlite3_column_type with stmt as Pointer, col as Integer returns Integer from library "sqlite3"
+extern function sqlite3_column_int with stmt as Pointer, col as Integer returns Integer from library "sqlite3"
+extern function sqlite3_column_double with stmt as Pointer, col as Integer returns Float from library "sqlite3"
+extern function sqlite3_column_text with stmt as Pointer, col as Integer returns String from library "sqlite3"
+
+# Bind functions (for parameterized queries)
+extern function sqlite3_bind_int with stmt as Pointer, index as Integer, value as Integer returns Integer from library "sqlite3"
+extern function sqlite3_bind_double with stmt as Pointer, index as Integer, value as Float returns Integer from library "sqlite3"
+extern function sqlite3_bind_text with stmt as Pointer, index as Integer, value as String, n as Integer, destructor as Pointer returns Integer from library "sqlite3"
+
+function check_result with result as Integer and db as Pointer
+    # Check if SQLite operation succeeded
+    if result is not equal to SQLITE_OK
+        set error_msg to sqlite3_errmsg(db)
+        print text "SQLite error: "
+        print text error_msg
+        return false
+    end
+    return true
+end
+
+function create_sample_database with filename as String
+    print text "Creating sample database: "
+    print text filename
+    
+    # Allocate space for database handle pointer
+    set db_ptr to allocate memory for Pointer
+    
+    # Open database
+    set result to sqlite3_open(filename, db_ptr)
+    
+    if result is not equal to SQLITE_OK
+        print text "Failed to open database"
+        return null
+    end
+    
+    # Dereference to get actual db handle
+    set db to dereference db_ptr
+    
+    # Create table
+    set create_sql to "CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY, name TEXT, age INTEGER, salary REAL);"
+    set null_ptr to 0
+    
+    set result to sqlite3_exec(db, create_sql, null_ptr, null_ptr, null_ptr)
+    
+    if check_result(result, db) is equal to false
+        call sqlite3_close with db
+        return null
+    end
+    
+    print text "Table created successfully"
+    return db
+end
+
+function insert_user with db as Pointer and name as String and age as Integer and salary as Float
+    print text "Inserting user: "
+    print text name
+    
+    # Prepare INSERT statement with placeholders
+    set insert_sql to "INSERT INTO users (name, age, salary) VALUES (?, ?, ?);"
+    set stmt_ptr to allocate memory for Pointer
+    set null_ptr to 0
+    
+    set result to sqlite3_prepare_v2(db, insert_sql, -1, stmt_ptr, null_ptr)
+    
+    if result is not equal to SQLITE_OK
+        print text "Failed to prepare statement"
+        return false
+    end
+    
+    set stmt to dereference stmt_ptr
+    
+    # Bind parameters (1-indexed in SQLite)
+    set SQLITE_TRANSIENT to -1
+    
+    call sqlite3_bind_text with stmt and 1 and name and -1 and null_ptr
+    call sqlite3_bind_int with stmt and 2 and age
+    call sqlite3_bind_double with stmt and 3 and salary
+    
+    # Execute
+    set result to sqlite3_step(stmt)
+    
+    if result is not equal to SQLITE_DONE
+        print text "Failed to insert row"
+        call sqlite3_finalize with stmt
+        return false
+    end
+    
+    # Clean up
+    call sqlite3_finalize with stmt
+    
+    print text "  User inserted successfully"
+    return true
+end
+
+function query_all_users with db as Pointer
+    print text "Querying all users..."
+    print text ""
+    
+    set query_sql to "SELECT id, name, age, salary FROM users;"
+    set stmt_ptr to allocate memory for Pointer
+    set null_ptr to 0
+    
+    set result to sqlite3_prepare_v2(db, query_sql, -1, stmt_ptr, null_ptr)
+    
+    if result is not equal to SQLITE_OK
+        print text "Failed to prepare query"
+        return
+    end
+    
+    set stmt to dereference stmt_ptr
+    
+    # Print header
+    print text "ID | Name | Age | Salary"
+    print text "---|------|-----|-------"
+    
+    # Fetch rows
+    set row_count to 0
+    
+    while true
+        set result to sqlite3_step(stmt)
+        
+        if result is equal to SQLITE_ROW
+            # Read columns
+            set id to sqlite3_column_int(stmt, 0)
+            set name to sqlite3_column_text(stmt, 1)
+            set age to sqlite3_column_int(stmt, 2)
+            set salary to sqlite3_column_double(stmt, 3)
+            
+            # Print row
+            print integer id
+            print text " | "
+            print text name
+            print text " | "
+            print integer age
+            print text " | "
+            print float salary
+            
+            set row_count to row_count plus 1
+        else if result is equal to SQLITE_DONE
+            break
+        else
+            print text "Error fetching row"
+            break
+        end
+    end
+    
+    print text ""
+    print text "Total rows: "
+    print integer row_count
+    
+    # Clean up
+    call sqlite3_finalize with stmt
+end
+
+function query_users_by_age with db as Pointer and min_age as Integer
+    print text "Querying users with age >= "
+    print integer min_age
+    print text ""
+    
+    set query_sql to "SELECT name, age FROM users WHERE age >= ? ORDER BY age;"
+    set stmt_ptr to allocate memory for Pointer
+    set null_ptr to 0
+    
+    set result to sqlite3_prepare_v2(db, query_sql, -1, stmt_ptr, null_ptr)
+    
+    if result is not equal to SQLITE_OK
+        print text "Failed to prepare query"
+        return
+    end
+    
+    set stmt to dereference stmt_ptr
+    
+    # Bind parameter
+    call sqlite3_bind_int with stmt and 1 and min_age
+    
+    # Fetch and print results
+    set count to 0
+    
+    while true
+        set result to sqlite3_step(stmt)
+        
+        if result is equal to SQLITE_ROW
+            set name to sqlite3_column_text(stmt, 0)
+            set age to sqlite3_column_int(stmt, 1)
+            
+            print text "  "
+            print text name
+            print text " (age "
+            print integer age
+            print text ")"
+            
+            set count to count plus 1
+        else if result is equal to SQLITE_DONE
+            break
+        else
+            print text "Error fetching row"
+            break
+        end
+    end
+    
+    print text "Found "
+    print integer count
+    print text " users"
+    
+    call sqlite3_finalize with stmt
+end
+
+function calculate_average_salary with db as Pointer
+    print text "Calculating average salary..."
+    
+    set query_sql to "SELECT AVG(salary) FROM users;"
+    set stmt_ptr to allocate memory for Pointer
+    set null_ptr to 0
+    
+    set result to sqlite3_prepare_v2(db, query_sql, -1, stmt_ptr, null_ptr)
+    
+    if result is not equal to SQLITE_OK
+        print text "Failed to prepare query"
+        return
+    end
+    
+    set stmt to dereference stmt_ptr
+    
+    set result to sqlite3_step(stmt)
+    
+    if result is equal to SQLITE_ROW
+        set avg_salary to sqlite3_column_double(stmt, 0)
+        print text "Average salary: $"
+        print float avg_salary
+    else
+        print text "No data available"
+    end
+    
+    call sqlite3_finalize with stmt
+end
+
+function main
+    print text "=== SQLite3 FFI Example ==="
+    print text ""
+    
+    set db_filename to "example.db"
+    
+    # Create and open database
+    set db to create_sample_database(db_filename)
+    
+    if db is null
+        print text "Failed to create database"
+        return
+    end
+    
+    print text ""
+    
+    # Insert sample data
+    call insert_user with db and "Alice Smith" and 30 and 75000.50
+    call insert_user with db and "Bob Johnson" and 25 and 55000.00
+    call insert_user with db and "Carol Williams" and 35 and 85000.75
+    call insert_user with db and "David Brown" and 28 and 62000.25
+    call insert_user with db and "Eve Davis" and 42 and 95000.00
+    
+    print text ""
+    
+    # Query all users
+    call query_all_users with db
+    
+    print text ""
+    
+    # Query users by age
+    call query_users_by_age with db and 30
+    
+    print text ""
+    
+    # Calculate average
+    call calculate_average_salary with db
+    
+    print text ""
+    
+    # Close database
+    set result to sqlite3_close(db)
+    
+    if result is equal to SQLITE_OK
+        print text "Database closed successfully"
+    else
+        print text "Warning: Error closing database"
+    end
+    
+    print text ""
+    print text "=== Example Complete ==="
+    print text ""
+    print text "This example demonstrates:"
+    print text "  - Opening/closing SQLite database"
+    print text "  - Creating tables with SQL"
+    print text "  - Prepared statements with parameters"
+    print text "  - Binding values (int, double, text)"
+    print text "  - Executing queries"
+    print text "  - Fetching and processing results"
+    print text "  - Error handling"
+    print text "  - Memory management with FFI"
+end
+
+# Run example
+call main

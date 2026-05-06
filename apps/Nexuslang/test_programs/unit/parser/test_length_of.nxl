@@ -1,0 +1,4 @@
+# Test "length of" syntax
+set name to "Hello"
+set name_length to length of name
+print text name_length

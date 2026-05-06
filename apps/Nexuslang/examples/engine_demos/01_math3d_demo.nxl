@@ -1,0 +1,141 @@
+# 3D Math Library Demo
+# Demonstrates Vector3, Matrix4, and Quaternion operations
+
+print text "=== NexusLang 3D Math Library Demo ==="
+print text ""
+
+# Test Vector3
+print text "Testing Vector3..."
+set v1 to Vector3 with 1.0 and 2.0 and 3.0
+set v2 to Vector3 with 4.0 and 5.0 and 6.0
+
+print text "v1 = "
+print number v1.x
+print text ", "
+print number v1.y
+print text ", "
+print number v1.z
+print text ""
+
+set v3 to vec3_add with v1 and v2
+print text "v1 + v2 = "
+print number v3.x
+print text ", "
+print number v3.y
+print text ", "
+print number v3.z
+print text ""
+
+set length to vec3_length with v1
+print text "Length of v1: "
+print number length
+print text ""
+
+set normalized to vec3_normalize with v1
+print text "Normalized v1: "
+print number normalized.x
+print text ", "
+print number normalized.y
+print text ", "
+print number normalized.z
+print text ""
+
+set dot_product to vec3_dot with v1 and v2
+print text "v1 dot v2: "
+print number dot_product
+print text ""
+
+set cross_product to vec3_cross with v1 and v2
+print text "v1 cross v2: "
+print number cross_product.x
+print text ", "
+print number cross_product.y
+print text ", "
+print number cross_product.z
+print text ""
+
+# Test common vectors
+print text ""
+print text "Common vector constants:"
+set up to vec3_up
+print text "Up: "
+print number up.x
+print text ", "
+print number up.y
+print text ", "
+print number up.z
+print text ""
+
+set forward to vec3_forward
+print text "Forward: "
+print number forward.x
+print text ", "
+print number forward.y
+print text ", "
+print number forward.z
+print text ""
+
+# Test Matrix4
+print text ""
+print text "Testing Matrix4..."
+
+set translation_mat to mat4_translation with 10.0 and 20.0 and 30.0
+print text "Created translation matrix"
+
+set scale_mat to mat4_scale with 2.0 and 2.0 and 2.0
+print text "Created scale matrix"
+
+set rotation_mat to mat4_rotation_y with 1.5708
+print text "Created rotation matrix (90 degrees around Y)"
+
+# Transform a point
+set point to Vector3 with 1.0 and 0.0 and 0.0
+set transformed to mat4_transform_point with rotation_mat and point
+print text "Rotated point (1, 0, 0): "
+print number transformed.x
+print text ", "
+print number transformed.y
+print text ", "
+print number transformed.z
+print text ""
+
+# Test Quaternion
+print text ""
+print text "Testing Quaternion..."
+
+set axis to vec3_up
+set angle to radians with 90.0
+set quat to quat_from_axis_angle with axis and angle
+print text "Created quaternion from axis-angle"
+
+set rotated_vec to quat_rotate_vector with quat and point
+print text "Rotated vector with quaternion: "
+print number rotated_vec.x
+print text ", "
+print number rotated_vec.y
+print text ", "
+print number rotated_vec.z
+print text ""
+
+# Test SLERP
+set quat1 to quat_identity
+set quat2 to quat_from_axis_angle with axis and angle
+set interpolated to quat_slerp with quat1 and quat2 and 0.5
+print text "SLERP between identity and 90deg rotation (t=0.5): interpolated"
+
+# Test utility functions
+print text ""
+print text "Utility functions:"
+set rad to radians with 180.0
+print text "180 degrees = "
+print number rad
+print text " radians"
+print text ""
+
+set deg to degrees with 3.14159
+print text "pi radians = "
+print number deg
+print text " degrees"
+print text ""
+
+print text "=== Demo Complete ==="

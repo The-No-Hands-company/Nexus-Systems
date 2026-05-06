@@ -1,0 +1,131 @@
+# Database Programming in NexusLang
+
+# Database Connection
+class DatabaseConnection
+    private set connection to Connection
+    private set is_connected to Boolean
+    
+    public function initialize with host as String and port as Integer and database as String and username as String and password as String
+        set this.is_connected to false
+        set connection_string to "postgresql://" plus username plus ":" plus password plus "@" plus host plus ":" plus convert port to string plus "/" plus database
+        create this.connection as new Connection with connection_string
+    
+    public function connect
+        if not this.is_connected
+            connect this.connection
+            set this.is_connected to true
+    
+    public function disconnect
+        if this.is_connected
+            disconnect this.connection
+            set this.is_connected to false
+    
+    public function execute query with query as String and parameters as List of Any returns List of Dictionary of Any
+        if not this.is_connected
+            raise error with message "Not connected to database"
+        
+        set result to execute query on this.connection with parameters
+        return result
+
+# Database Model
+class User
+    private set id to Integer
+    private set name to String
+    private set email to String
+    private set created_at to DateTime
+    
+    public function initialize with name as String and email as String
+        set this.name to name
+        set this.email to email
+        set this.created_at to current time
+    
+    public function save with connection as DatabaseConnection returns Boolean
+        set query to "INSERT INTO users (name, email, created_at) VALUES (?, ?, ?)"
+        set parameters to [this.name, this.email, this.created_at]
+        
+        try
+            execute query query with parameters parameters on connection
+            return true
+        catch error
+            return false
+    
+    public static function find by id with id as Integer and connection as DatabaseConnection returns User
+        set query to "SELECT * FROM users WHERE id = ?"
+        set result to execute query query with [id] on connection
+        
+        if result is empty
+            return null
+        
+        set row to result[0]
+        create user as new User with row["name"] and row["email"]
+        set user.id to row["id"]
+        set user.created_at to row["created_at"]
+        return user
+
+# Database Migration
+class DatabaseMigration
+    private set connection to DatabaseConnection
+    
+    public function initialize with connection as DatabaseConnection
+        set this.connection to connection
+    
+    public function create users table
+        set query to """
+            CREATE TABLE IF NOT EXISTS users (
+                id SERIAL PRIMARY KEY,
+                name VARCHAR(255) NOT NULL,
+                email VARCHAR(255) UNIQUE NOT NULL,
+                created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+        """
+        execute query query on this.connection
+    
+    public function create posts table
+        set query to """
+            CREATE TABLE IF NOT EXISTS posts (
+                id SERIAL PRIMARY KEY,
+                user_id INTEGER REFERENCES users(id),
+                title VARCHAR(255) NOT NULL,
+                content TEXT NOT NULL,
+                created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+        """
+        execute query query on this.connection
+
+# Example: Database Operations
+# Create database connection
+create db as new DatabaseConnection with "localhost" and 5432 and "mydb" and "user" and "password"
+
+# Connect to database
+connect db
+
+# Create tables
+create migration as new DatabaseMigration with db
+create users table in migration
+create posts table in migration
+
+# Create and save a user
+create user as new User with "John Doe" and "john@example.com"
+save user to db
+
+# Find user by ID
+set found_user to User.find by id with 1 and db
+
+# Execute a complex query
+set query to """
+    SELECT u.name, COUNT(p.id) as post_count
+    FROM users u
+    LEFT JOIN posts p ON u.id = p.user_id
+    GROUP BY u.id, u.name
+    HAVING COUNT(p.id) > 0
+    ORDER BY post_count DESC
+"""
+
+set results to execute query query on db
+
+# Print results
+for each row in results
+    print text "User: " plus row["name"] plus ", Posts: " plus convert row["post_count"] to string
+
+# Clean up
+disconnect db 

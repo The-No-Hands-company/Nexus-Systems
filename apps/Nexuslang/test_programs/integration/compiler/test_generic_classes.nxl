@@ -1,0 +1,37 @@
+# Test: Generic Classes
+# Tests if generic type parameters work for classes
+
+# Define a generic Box class that can hold any type
+class Box<T>
+    property value as T
+    
+    method set_value with v as T
+        set this.value to v
+    end method
+    
+    method get_value returns T
+        return this.value
+    end method
+end class
+
+function main
+    print text "=== Generic Classes Test ==="
+    
+    # Create Box<Integer>
+    set int_box to new Box<Integer>
+    call int_box.set_value with 42
+    
+    set int_result to call int_box.get_value
+    print text "Integer box value:"
+    print number int_result
+    
+    # Create Box<String>  
+    set string_box to new Box<String>
+    call string_box.set_value with "Hello"
+    
+    set string_result to call string_box.get_value
+    print text "String box value:"
+    print text string_result
+    
+    print text "=== Generic Classes Test Complete ==="
+end

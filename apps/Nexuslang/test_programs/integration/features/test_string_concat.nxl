@@ -1,0 +1,16 @@
+# Test string concatenation
+
+print text "Test 1: Simple string concatenation"
+set str1 to "Hello"
+set str2 to " World"
+set result to str1 plus str2
+print text result
+
+print text "Test 2: Multiple concatenations"
+set first to "NexusLang"
+set second to " is"
+set third to " awesome"
+set full to first plus second plus third
+print text full
+
+print text "All tests completed"

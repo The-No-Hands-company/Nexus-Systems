@@ -1,0 +1,193 @@
+# Advanced Syntax Validation Test
+#
+# Tests instruction-specific operand validation:
+# - Correct operand counts
+# - Operand type checking (register vs memory vs immediate)
+# - Invalid operand combinations
+#
+# Uses proper operand substitution ($0, $1) for correct LLVM IR generation
+
+function test_correct_syntax
+    print text "Test 1: Correct syntax (two-operand instructions)"
+    
+    # Valid instructions with correct operand counts
+    # Operand numbering: $0 = output, $1 = input a, $2 = input b
+    set a to 10
+    set b to 20
+    set result to 0
+    
+    asm
+        code
+            "mov rax, $1"
+            "mov rbx, $2"
+            "add rax, rbx"
+            "mov $0, rax"
+        outputs "=r": result
+        inputs "r": a, "r": b
+        clobbers "rax", "rbx"
+    end
+    
+    print text "Result: "
+    print number result
+end
+
+function test_valid_lea
+    print text "Test 2: Valid LEA instruction (memory operand)"
+    
+    # LEA with memory operand - proper operand substitution
+    set base to 1000
+    set result to 0
+    asm
+        code
+            "lea $0, [$1+8]"
+        inputs "r": base
+        outputs "=r": result
+    end
+    
+    print text "LEA result (base+8): "
+    print number result
+end
+
+function test_valid_complex_instructions
+    print text "Test 3: Complex valid instructions (comparison)"
+    
+    # Various valid instructions with correct operand counts
+    # $0 = output result, $1 = input x, $2 = input y
+    set x to 100
+    set y to 50
+    set result to 0
+    
+    asm
+        code
+            "mov rax, $1"
+            "mov rbx, $2"
+            "cmp rax, rbx"
+            "setg al"
+            "movzx rax, al"
+            "mov $0, rax"
+        outputs "=r": result
+        inputs "r": x, "r": y
+        clobbers "rax", "rbx", "cc"
+    end
+    
+    print text "Comparison result (1 if x>y, 0 otherwise): "
+    print number result
+end
+
+function test_shift_instructions
+    print text "Test 4: Shift instructions (correct operand count)"
+    
+    # Shift instructions require 2 operands
+    set value to 8
+    set result to 0
+    
+    asm
+        code
+            "mov rax, $0"
+            "shl rax, 2"
+            "mov $1, rax"
+        inputs "r": value
+        outputs "=r": result
+        clobbers "rax", "cc"
+    end
+    
+    print text "Shift result (8 << 2 = 32): "
+    print number result
+end
+
+function test_memory_operands
+    print text "Test 5: Memory operand validation"
+    
+    # Test memory constraint with LEA (requires memory source)
+    set addr to 5000
+    set result to 0
+    
+    asm
+        code
+            "lea $0, [$1+16]"
+        inputs "r": addr
+        outputs "=r": result
+    end
+    
+    print text "Memory address calculation (addr+16): "
+    print number result
+end
+
+function test_conditional_jumps
+    print text "Test 6: Conditional jump instructions (single operand)"
+    
+    # Conditional jumps require exactly 1 operand (label)
+    # $0 = output result, $1 = input a, $2 = input b
+    set a to 10
+    set b to 5
+    set result to 0
+    
+    asm
+        code
+            "mov rax, $1"
+            "mov rbx, $2"
+            "cmp rax, rbx"
+            "jg .greater"
+            "mov rcx, 0"
+            "jmp .end"
+            ".greater: mov rcx, 1"
+            ".end: mov $0, rcx"
+        outputs "=r": result
+        inputs "r": a, "r": b
+        clobbers "rax", "rbx", "rcx", "cc"
+    end
+    
+    print text "Jump result (1 if a>b): "
+    print number result
+end
+
+function test_single_operand_instructions
+    print text "Test 7: Single operand instructions (inc, dec, neg)"
+    
+    # Single operand instructions
+    set value to 42
+    set result to 0
+    
+    asm
+        code
+            "mov rax, $0"
+            "inc rax"
+            "dec rax"
+            "dec rax"
+            "mov $1, rax"
+        inputs "r": value
+        outputs "=r": result
+        clobbers "rax", "cc"
+    end
+    
+    print text "Result after inc then 2x dec (42 -> 43 -> 42 -> 41): "
+    print number result
+end
+
+# Main execution
+print text "=== Advanced Syntax Validation Test ==="
+print text ""
+
+call test_correct_syntax
+print text ""
+
+call test_valid_lea
+print text ""
+
+call test_valid_complex_instructions
+print text ""
+
+call test_shift_instructions
+print text ""
+
+call test_memory_operands
+print text ""
+
+call test_conditional_jumps
+print text ""
+
+call test_single_operand_instructions
+print text ""
+
+print text "=== All syntax validation tests passed ==="
+

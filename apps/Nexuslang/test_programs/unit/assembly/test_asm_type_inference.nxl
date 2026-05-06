@@ -1,0 +1,86 @@
+# Test: Inline Assembly Type Inference
+# Tests type inference for operands in inline assembly
+
+print text "Testing inline assembly type inference:"
+print text ""
+
+# Test 1: Integer type inference (default)
+print text "Test 1: Integer (i64) type inference"
+set int_val to 42
+set int_result to 0
+asm
+    code
+        "mov rax, $1"
+        "add rax, 100"
+        "mov $0, rax"
+    outputs "=r": int_result
+    inputs "r": int_val
+end
+print text "int_result ="
+print int_result
+print text ""
+
+# Test 2: Multiple operands with consistent types
+print text "Test 2: Multiple integer operands"
+set a to 10
+set b to 20
+set c to 30
+set sum to 0
+asm
+    code
+        "mov rax, $1"
+        "add rax, $2"
+        "add rax, $3"
+        "mov $0, rax"
+    outputs "=r": sum
+    inputs "r": a, "r": b, "r": c
+end
+print text "sum (10 + 20 + 30) ="
+print sum
+print text ""
+
+# Test 3: Register constraint (simplified memory test)
+print text "Test 3: Register constraint with integer value"
+set mem_val to 999
+set mem_result to 0
+asm
+    code
+        "mov rax, $1"
+        "mov $0, rax"
+    outputs "=r": mem_result
+    inputs "r": mem_val
+end
+print text "mem_result ="
+print mem_result
+print text ""
+
+# Test 4: Output variable type inference from constraint
+print text "Test 4: Output variable type from register constraint"
+set reg_out to 0
+asm
+    code
+        "mov $0, 777"
+    outputs "=r": reg_out
+end
+print text "reg_out ="
+print reg_out
+print text ""
+
+# Test 5: Complex operand numbering with type inference
+print text "Test 5: Complex operand numbering"
+set x to 5
+set y to 7
+set product to 0
+asm
+    code
+        "mov rax, $1"
+        "imul rax, $2"
+        "mov $0, rax"
+    outputs "=r": product
+    inputs "r": x, "r": y
+end
+print text "product (5 * 7) ="
+print product
+print text ""
+
+print text "Type inference tests complete"

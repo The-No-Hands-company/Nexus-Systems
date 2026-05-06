@@ -1,0 +1,8 @@
+# Math utilities module
+function add with x as Integer and y as Integer returns Integer
+    return x plus y
+end
+
+function multiply with x as Integer and y as Integer returns Integer
+    return x times y
+end

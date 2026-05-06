@@ -1,0 +1,32 @@
+"""
+Demo: Generic Types in NexusLang
+Shows how to use generic type annotations with functions and variables.
+"""
+
+# Function with generic List parameter - both syntaxes work!
+function sum_integers that takes numbers as List<Integer> returns Integer
+    set total to 0
+    set total to 42  # Placeholder since we don't have loops implemented yet
+    return total
+
+# Function with generic Dictionary parameter
+function lookup_score that takes scores as Dictionary<String, Float> returns Float
+    set default_score to 0.0
+    return default_score
+
+# Function with nested generics
+function process_matrix that takes matrix as List<List<Integer>> returns Integer
+    set result to 0
+    return result
+
+# Function with complex nested generics
+function group_data that takes data as Dictionary<String, List<Integer>> returns Boolean
+    return true
+
+# Natural language syntax also works:
+function old_style that takes items as List of String returns Boolean
+    return true
+
+print text "Generic types demo complete!"
+print text "Functions defined with generic type annotations"
+print text "Both syntaxes supported: List<T> and List of T"

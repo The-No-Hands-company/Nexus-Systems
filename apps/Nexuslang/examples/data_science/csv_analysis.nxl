@@ -1,0 +1,188 @@
+# CSV Data Analysis Tool
+# Demonstrates NexusLang for data processing and statistics
+
+# Define data record structure
+struct DataRecord
+    values as List of Float
+end
+
+# Load CSV data (simplified - assumes numeric data)
+function load_csv with filename as String returns List of List of Float
+    print text "Loading data from: " plus filename
+    
+    # Sample data (in real implementation, would read from file)
+    set data to empty list
+    
+    # Sample sales data: month, revenue, expenses, profit
+    add [1.0, 10000.0, 6000.0, 4000.0] to data
+    add [2.0, 12000.0, 6500.0, 5500.0] to data
+    add [3.0, 15000.0, 7000.0, 8000.0] to data
+    add [4.0, 13000.0, 6800.0, 6200.0] to data
+    add [5.0, 18000.0, 8000.0, 10000.0] to data
+    add [6.0, 20000.0, 8500.0, 11500.0] to data
+    
+    print text "Loaded " plus string of length of data plus " records"
+    return data
+end
+
+# Calculate mean of a column
+function calculate_mean with data as List of List of Float, column as Integer returns Float
+    set sum to 0.0
+    set count to 0
+    
+    for each row in data
+        set sum to sum plus row[column]
+        set count to count plus 1
+    end
+    
+    if count is greater than 0
+        return sum divided by count
+    end
+    
+    return 0.0
+end
+
+# Calculate standard deviation
+function calculate_std_dev with data as List of List of Float, column as Integer returns Float
+    set mean to calculate_mean with data, column
+    set sum_squared_diff to 0.0
+    set count to 0
+    
+    for each row in data
+        set diff to row[column] minus mean
+        set squared_diff to diff times diff
+        set sum_squared_diff to sum_squared_diff plus squared_diff
+        set count to count plus 1
+    end
+    
+    if count is greater than 0
+        set variance to sum_squared_diff divided by count
+        # Simplified square root (would use math library in production)
+        return variance
+    end
+    
+    return 0.0
+end
+
+# Find minimum value in column
+function find_min with data as List of List of Float, column as Integer returns Float
+    if data is empty
+        return 0.0
+    end
+    
+    set min_value to data[0][column]
+    
+    for each row in data
+        if row[column] is less than min_value
+            set min_value to row[column]
+        end
+    end
+    
+    return min_value
+end
+
+# Find maximum value in column
+function find_max with data as List of List of Float, column as Integer returns Float
+    if data is empty
+        return 0.0
+    end
+    
+    set max_value to data[0][column]
+    
+    for each row in data
+        if row[column] is greater than max_value
+            set max_value to row[column]
+        end
+    end
+    
+    return max_value
+end
+
+# Calculate growth rate
+function calculate_growth_rate with data as List of List of Float, column as Integer returns Float
+    if length of data is less than 2
+        return 0.0
+    end
+    
+    set first_value to data[0][column]
+    set last_value to data[length of data minus 1][column]
+    
+    if first_value is not equal to 0.0
+        set growth to (last_value minus first_value) divided by first_value
+        return growth times 100.0
+    end
+    
+    return 0.0
+end
+
+# Generate statistical summary
+function generate_summary with data as List of List of Float, column as Integer, column_name as String
+    print text "Statistics for: " plus column_name
+    print text "================================"
+    
+    set mean to calculate_mean with data, column
+    set min_val to find_min with data, column
+    set max_val to find_max with data, column
+    set growth to calculate_growth_rate with data, column
+    
+    print text "Mean: " plus string of mean
+    print text "Min: " plus string of min_val
+    print text "Max: " plus string of max_val
+    print text "Growth Rate: " plus string of growth plus "%"
+    print text ""
+end
+
+# Main program
+print text "CSV Data Analysis Tool"
+print text "======================"
+print text ""
+
+# Load data
+set sales_data to load_csv with filename: "sales_data.csv"
+
+print text ""
+
+# Analyze each column
+generate_summary with data: sales_data, column: 1, column_name: "Revenue"
+generate_summary with data: sales_data, column: 2, column_name: "Expenses"
+generate_summary with data: sales_data, column: 3, column_name: "Profit"
+
+# Calculate profit margin
+print text "Additional Metrics"
+print text "==================="
+
+set total_revenue to 0.0
+set total_profit to 0.0
+
+for each row in sales_data
+    set total_revenue to total_revenue plus row[1]
+    set total_profit to total_profit plus row[3]
+end
+
+set profit_margin to (total_profit divided by total_revenue) times 100.0
+print text "Average Profit Margin: " plus string of profit_margin plus "%"
+
+# Identify best and worst months
+set best_month to 0
+set best_profit to 0.0
+set worst_month to 0
+set worst_profit to 999999.0
+
+set month_num to 0
+for each row in sales_data
+    set month_num to month_num plus 1
+    set profit to row[3]
+    
+    if profit is greater than best_profit
+        set best_profit to profit
+        set best_month to month_num
+    end
+    
+    if profit is less than worst_profit
+        set worst_profit to profit
+        set worst_month to month_num
+    end
+end
+
+print text "Best Month: " plus string of best_month plus " (Profit: $" plus string of best_profit plus ")"
+print text "Worst Month: " plus string of worst_month plus " (Profit: $" plus string of worst_profit plus ")"

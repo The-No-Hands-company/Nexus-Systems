@@ -1,0 +1,27 @@
+# Test enum usage
+
+enum Color
+    Red
+    Green
+    Blue
+end
+
+enum Status
+    Success = 0
+    Error = 1
+    Pending = 2
+end
+
+print text "Red value:"
+print text Color.Red
+
+print text "Green value:"
+print text Color.Green
+
+print text "Status.Success:"
+print text Status.Success
+
+print text "Status.Error:"
+print text Status.Error
+
+print text "Enum values work!"

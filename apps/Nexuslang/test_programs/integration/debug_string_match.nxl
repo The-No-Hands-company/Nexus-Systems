@@ -1,0 +1,14 @@
+# Debug string matching test
+print text "Testing string pattern matching"
+set cmd to "start"
+print text "cmd value:"
+print text cmd
+
+match cmd with
+    case "start"
+        print text "Matched start"
+    case "stop"
+        print text "Matched stop"
+    case _
+        print text "Matched wildcard"
+end

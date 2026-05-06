@@ -1,0 +1,70 @@
+# Test 1: Square root
+set num to 16.0
+set result to call sqrt with num
+print number result
+# Expected: 4.0
+
+# Test 2: Power function
+set base to 2.0
+set exp to 8.0
+set power_result to call pow with base and exp
+print number power_result
+# Expected: 256.0
+
+# Test 3: Absolute value (positive)
+set pos to 42.0
+set abs_pos to call abs with pos
+print number abs_pos
+# Expected: 42.0
+
+# Test 4: Absolute value (negative)
+set neg to -17.0
+set abs_neg to call abs with neg
+print number abs_neg
+# Expected: 17.0
+
+# Test 5: Minimum of two numbers
+set a to 5.0
+set b to 12.0
+set minimum to call min with a and b
+print number minimum
+# Expected: 5.0
+
+# Test 6: Maximum of two numbers
+set x to 7.0
+set y to 3.0
+set maximum to call max with x and y
+print number maximum
+# Expected: 7.0
+
+# Test 7: Sine function (π/2 1.5708)
+set angle to 1.5708
+set sine to call sin with angle
+print number sine
+# Expected: ~1.0
+
+# Test 8: Cosine function (0 radians)
+set zero to 0.0
+set cosine to call cos with zero
+print number cosine
+# Expected: 1.0
+
+# Test 9: Tangent function (π/4 0.7854)
+set angle2 to 0.7854
+set tangent to call tan with angle2
+print number tangent
+# Expected: ~1.0
+
+# Test 10: Floor function
+set decimal to 7.8
+set floored to call floor with decimal
+print number floored
+# Expected: 7.0
+
+# Test 11: Ceiling function
+set decimal2 to 7.2
+set ceiled to call ceil with decimal2
+print number ceiled
+# Expected: 8.0
+
+print text "Math stdlib tests complete!"

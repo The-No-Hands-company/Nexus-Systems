@@ -1,0 +1,11 @@
+# Test string operations - simple version
+
+set greeting to "Hello"
+set name to "World"
+print text greeting
+print text name
+
+set message to greeting plus " " plus name
+print text message
+
+print text "Done!"

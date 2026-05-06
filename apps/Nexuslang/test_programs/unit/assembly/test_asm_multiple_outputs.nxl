@@ -1,0 +1,124 @@
+# Test: Inline Assembly Multiple Output Operands
+# Tests that multiple outputs are correctly returned using LLVM struct type
+
+print text "Testing inline assembly multiple output operands:"
+print text ""
+
+# Test 1: Two outputs - RDTSC-like (timestamp split into low/high)
+print text "Test 1: Two outputs (simulated RDTSC)"
+set tsc_low to 0
+set tsc_high to 0
+asm
+    code
+        "mov $0, 0x12345678"
+        "mov $1, 0xABCDEF00"
+    outputs "=r": tsc_low, "=r": tsc_high
+end
+print text "  TSC Low: "
+print number tsc_low
+print text "  TSC High: "
+print number tsc_high
+print text "  Expected: Low=305419896, High=2882400000"
+print text ""
+
+# Test 2: Three outputs - arithmetic operations
+print text "Test 2: Three outputs (sum, difference, product)"
+set sum to 0
+set diff to 0
+set prod to 0
+asm
+    code
+        "mov $0, 15"
+        "mov $1, 5"
+        "mov $2, 75"
+    outputs "=r": sum, "=r": diff, "=r": prod
+end
+print text "  Sum: "
+print number sum
+print text "  Difference: "
+print number diff
+print text "  Product: "
+print number prod
+print text "  Expected: Sum=15, Diff=5, Prod=75"
+print text ""
+
+# Test 3: Two outputs with computation
+print text "Test 3: Two outputs with computation (quotient and remainder)"
+set quotient to 0
+set remainder to 0
+asm
+    code
+        "mov rax, 100"
+        "mov rcx, 7"
+        "xor rdx, rdx"
+        "div rcx"
+        "mov rbx, rdx"
+        "mov $0, rax"
+        "mov $1, rbx"
+    outputs "=r": quotient, "=r": remainder
+end
+print text "  100 / 7 = "
+print number quotient
+print text "  100 mod 7 = "
+print number remainder
+print text "  Expected: Quotient=14, Remainder=2"
+print text ""
+
+# Test 4: Four outputs - bitwise operations
+print text "Test 4: Four outputs (bitwise AND, OR, XOR, NOT)"
+set bit_and to 0
+set bit_or to 0
+set bit_xor to 0
+set bit_not to 0
+asm
+    code
+        "mov rax, 0x0F"
+        "mov rbx, 0xF0"
+        "mov $0, rax"
+        "and $0, rbx"
+        "mov $1, rax"
+        "or $1, rbx"
+        "mov $2, rax"
+        "xor $2, rbx"
+        "mov $3, rax"
+        "not $3"
+    outputs "=r": bit_and, "=r": bit_or, "=r": bit_xor, "=r": bit_not
+end
+print text "  AND: "
+print number bit_and
+print text "  OR: "
+print number bit_or
+print text "  XOR: "
+print number bit_xor
+print text "  NOT: "
+print number bit_not
+print text "  Expected: AND=0, OR=255, XOR=255, NOT=-16"
+print text ""
+
+# Test 5: Two outputs with input
+print text "Test 5: Two outputs with one input (double and triple)"
+set input_val to 10
+set doubled to 0
+set tripled to 0
+asm
+    code
+        "mov rax, $2"
+        "mov $0, rax"
+        "shl $0, 1"
+        "mov rbx, rax"
+        "imul rbx, 3"
+        "mov $1, rbx"
+    outputs "=r": doubled, "=r": tripled
+    inputs "r": input_val
+end
+print text "  Input: "
+print number input_val
+print text "  Doubled: "
+print number doubled
+print text "  Tripled: "
+print number tripled
+print text "  Expected: Input=10, Doubled=20, Tripled=30"
+print text ""
+
+print text "All multiple output tests complete!"
+print text "Note: Multiple outputs use LLVM struct return type: {i64, i64, ...}"

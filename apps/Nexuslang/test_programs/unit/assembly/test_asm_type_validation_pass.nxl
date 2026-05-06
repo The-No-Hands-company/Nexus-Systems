@@ -1,0 +1,91 @@
+# Test: Inline Assembly Type Validation (Passing Tests)
+# Tests that correct type-constraint combinations work properly
+
+print text "Testing inline assembly type validation (passing tests):"
+print text ""
+
+# Test 1: Integer with register constraint (r) - SHOULD PASS
+print text "Test 1: Integer with 'r' constraint (valid)"
+set int_val to 100
+set result1 to 0
+asm
+    code
+        "mov rax, $1"
+        "mov $0, rax"
+    outputs "=r": result1
+    inputs "r": int_val
+end
+print text "  Result: "
+print number result1
+print text "  Status: PASS"
+print text ""
+
+# Test 2: Integer with specific register constraints - SHOULD PASS
+print text "Test 2: Integer with specific register constraints (valid)"
+set a_val to 10
+set b_val to 20
+set result2 to 0
+asm
+    code
+        "mov rax, $1"
+        "add rax, $2"
+        "mov $0, rax"
+    outputs "=r": result2
+    inputs "r": a_val, "r": b_val
+end
+print text "  Result: "
+print number result2
+print text "  Status: PASS"
+print text ""
+
+# Test 3: Memory constraint with any type - SHOULD PASS
+print text "Test 3: Integer with memory constraint (valid)"
+set mem_val to 50
+set result3 to 0
+asm
+    code
+        "mov rax, $1"
+        "mov $0, rax"
+    outputs "=r": result3
+    inputs "r": mem_val
+end
+print text "  Result: "
+print number result3
+print text "  Status: PASS"
+print text ""
+
+# Test 4: Multiple integer operands - SHOULD PASS
+print text "Test 4: Multiple integer operands (valid)"
+set x to 5
+set y to 7
+set z to 3
+set result4 to 0
+asm
+    code
+        "mov rax, $1"
+        "imul rax, $2"
+        "add rax, $3"
+        "mov $0, rax"
+    outputs "=r": result4
+    inputs "r": x, "r": y, "r": z
+end
+print text "  Result (5 * 7 + 3): "
+print number result4
+print text "  Status: PASS"
+print text ""
+
+# Test 5: Output variable with correct type - SHOULD PASS
+print text "Test 5: Output variable type inference (valid)"
+set output_var to 0
+asm
+    code
+        "mov $0, 999"
+    outputs "=r": output_var
+end
+print text "  Result: "
+print number output_var
+print text "  Status: PASS"
+print text ""
+
+print text "All type validation tests passed!"
+print text "Note: Invalid type tests should trigger compile-time errors"

@@ -1,0 +1,19 @@
+# Simple memory allocation test
+
+function main returns Integer
+    # Test 1: Basic allocation and deallocation
+    set ptr to call alloc with 100
+    print text "Allocated 100 bytes"
+    call dealloc with ptr
+    print text "Deallocated memory"
+    
+    # Test 2: Reallocation
+    set buffer to call alloc with 50
+    print text "Allocated 50 bytes"
+    set buffer to call realloc with buffer and 100
+    print text "Reallocated to 100 bytes"
+    call dealloc with buffer
+    
+    print text "Tests complete!"
+    return 0
+end

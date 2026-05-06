@@ -1,0 +1,46 @@
+
+# Result<T, E> Type for Error Handling
+
+export class Result<T, E>
+    property value as T
+    property error as E
+    property is_ok as Boolean
+    
+    # Constructors
+    static function Ok that takes value as T returns Result<T, E>
+        set res to Result.new
+        set res.value to value
+        set res.is_ok to true
+        return res
+        
+    static function Err that takes error as E returns Result<T, E>
+        set res to Result.new
+        set res.error to error
+        set res.is_ok to false
+        return res
+        
+    function is_ok returns Boolean
+        return is_ok
+        
+    function is_err returns Boolean
+        return not is_ok
+        
+    function unwrap returns T
+        if not is_ok
+            panic with "Called unwrap on an Err value"
+        return value
+        
+    function unwrap_err returns E
+        if is_ok
+            panic with "Called unwrap_err on an Ok value"
+        return error
+        
+    function unwrap_or that takes default as T returns T
+        if is_ok
+            return value
+        return default
+        
+    function map<U> that takes f as Function<T, U> returns Result<U, E>
+        if is_ok
+            return Result.Ok with f(value)
+        return Result.Err with error

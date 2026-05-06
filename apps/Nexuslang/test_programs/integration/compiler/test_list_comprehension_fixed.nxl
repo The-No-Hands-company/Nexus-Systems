@@ -1,0 +1,28 @@
+# Test list comprehensions with actual arrays
+# Currently fails because hardcoded to range(10)
+
+# Test 1: Simple comprehension over array
+set numbers to [1, 2, 3, 4, 5]
+set doubled to [x times 2 for x in numbers]
+
+print text "Original: [1, 2, 3, 4, 5]"
+print text "Doubled: "
+set i to 0
+while i is less than 5
+    print text doubled[i]
+    set i to i plus 1
+end
+
+# Test 2: Comprehension with condition
+set evens to [x for x in numbers if x modulo 2 is equal to 0]
+print text "Evens from [1,2,3,4,5]: should be [2, 4]"
+
+# Test 3: Different sized array
+set small to [10, 20]
+set incremented to [x plus 1 for x in small]
+print text "Small [10, 20] incremented: "
+set j to 0
+while j is less than 2
+    print text incremented[j]
+    set j to j plus 1
+end

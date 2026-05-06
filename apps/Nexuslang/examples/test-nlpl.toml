@@ -1,0 +1,29 @@
+# Test NexusLang Project Manifest
+# Simplified example for testing nxl_build.py
+
+[package]
+name = "test-project"
+version = "0.1.0"
+authors = ["Test Developer"]
+description = "Test project for build tool validation"
+
+# Binary using an existing example file
+[[bin]]
+name = "hello"
+path = "01_basics/01_basic_concepts.nxl"
+
+# Feature flags (domain-neutral)
+[features]
+default = ["core-features"]
+core-features = []
+extended-functionality = []
+performance-optimizations = []
+
+# Build profiles
+[profile.dev]
+opt-level = 0
+debug = true
+
+[profile.release]
+opt-level = 2
+debug = false

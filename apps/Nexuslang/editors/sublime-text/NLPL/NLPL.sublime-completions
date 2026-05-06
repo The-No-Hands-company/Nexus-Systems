@@ -1,0 +1,45 @@
+{
+    "scope": "source.nxl",
+    "completions": [
+        // Control flow
+        {"trigger": "function\tfunction definition",
+         "contents": "function ${1:name} with ${2:param} as ${3:Type} returns ${4:Type}\n\t${0}\nend\n"},
+        {"trigger": "class\tclass definition",
+         "contents": "class ${1:Name}\n\t${0}\nend\n"},
+        {"trigger": "struct\tstruct definition",
+         "contents": "struct ${1:Name}\n\t${2:field} as ${3:Type}\nend\n"},
+        {"trigger": "if\tif statement",
+         "contents": "if ${1:condition}\n\t${0}\nend\n"},
+        {"trigger": "ife\tif/else statement",
+         "contents": "if ${1:condition}\n\t${2:body}\nelse\n\t${0}\nend\n"},
+        {"trigger": "while\twhile loop",
+         "contents": "while ${1:condition}\n\t${0}\nend\n"},
+        {"trigger": "for\tfor each loop",
+         "contents": "for each ${1:item} in ${2:collection}\n\t${0}\nend\n"},
+        {"trigger": "match\tmatch statement",
+         "contents": "match ${1:value} with\n\tcase ${2:pattern}\n\t\t${0}\nend\n"},
+        {"trigger": "try\ttry/catch block",
+         "contents": "try\n\t${1:body}\ncatch ${2:error}\n\t${0}\nend\n"},
+        // Variables
+        {"trigger": "set\tset variable",
+         "contents": "set ${1:name} to ${0}"},
+        {"trigger": "import\timport module",
+         "contents": "import ${0:module_name}"},
+        // Types
+        "Integer", "Float", "String", "Boolean", "List", "Dict",
+        "Optional", "Result", "Void", "Any",
+        "Rc", "Arc", "Box", "Weak", "RefCell", "Mutex", "RwLock",
+        // Constants
+        "true", "false", "null", "none",
+        // Keywords
+        "function", "class", "struct", "union", "end",
+        "return", "break", "continue",
+        "if", "else", "otherwise", "while", "for", "each", "in",
+        "match", "with", "case", "default",
+        "import", "module", "from", "export",
+        "try", "catch", "raise", "finally",
+        "and", "or", "not",
+        "set", "to", "is", "as", "returns", "takes",
+        "async", "await", "parallel", "spawn"
+    ]
+}

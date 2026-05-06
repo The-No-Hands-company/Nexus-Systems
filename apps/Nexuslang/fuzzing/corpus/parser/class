@@ -1,0 +1,6 @@
+class Dog
+  properties
+    name as String
+    age as Integer
+  end
+end

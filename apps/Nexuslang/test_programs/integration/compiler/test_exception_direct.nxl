@@ -1,0 +1,6 @@
+# Test exception - inline throw (no function call)
+try
+    raise error with message "Direct raise"
+catch e
+    print text "Caught"
+end

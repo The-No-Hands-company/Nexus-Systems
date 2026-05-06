@@ -1,0 +1,248 @@
+# Cross-Platform Demo - Shows NexusLang works on Windows, Linux, and macOS
+# Tests platform detection, environment access, and cross-platform library loading
+
+use module system
+use module limits
+
+print text ""
+print text " NexusLang Cross-Platform Demonstration "
+print text " Proving NexusLang works on Windows, Linux, macOS, and BSD "
+print text ""
+print text ""
+
+# =============================================================================
+# Section 1: Platform Detection
+# =============================================================================
+print text "=== Platform Detection ==="
+print text ""
+
+set platform_name to call get_os_name
+set platform_info to call get_platform
+set os_version to call get_os_version
+set py_version to call get_python_version
+
+print text "Operating System: " plus platform_name
+print text "Platform Details: " plus platform_info
+print text "OS Version: " plus os_version
+print text "Python Version: " plus py_version
+
+print text ""
+print text " Platform detection successful!"
+print text ""
+
+# =============================================================================
+# Section 2: User Environment
+# =============================================================================
+print text "=== User Environment ==="
+print text ""
+
+set username to call get_username
+set hostname to call get_hostname
+
+print text "Username: " plus username
+print text "Hostname: " plus hostname
+
+# Cross-platform home directory detection
+set home_dir to call get_env with "HOME"
+if home_dir equals 0
+ # Windows fallback
+ set home_dir to call get_env with "USERPROFILE"
+end
+
+# Print home directory if found
+print text "Home Directory: " plus home_dir
+
+print text ""
+print text " Environment access successful!"
+print text ""
+
+# =============================================================================
+# Section 3: Platform-Dependent Constants
+# =============================================================================
+print text "=== Platform-Dependent Constants ==="
+print text ""
+
+set word_size to call get_word_size
+set endianness to call is_big_endian
+
+print text "Word Size: " plus word_size plus " bytes"
+
+if endianness
+ print text "Byte Order: Big Endian"
+else
+ print text "Byte Order: Little Endian"
+end
+
+# Determine architecture
+if word_size equals 8
+ print text "Architecture: 64-bit"
+end
+
+if word_size equals 4
+ print text "Architecture: 32-bit"
+end
+
+if word_size is greater than 8
+ print text "Architecture: Unknown (" plus word_size plus " bytes)"
+end
+
+if word_size is less than 4
+ print text "Architecture: Unknown (" plus word_size plus " bytes)"
+end
+
+print text ""
+print text " Platform constants retrieved successfully!"
+print text ""
+
+# =============================================================================
+# Section 4: Cross-Platform Library Detection
+# =============================================================================
+print text "=== Cross-Platform Library Support ==="
+print text ""
+
+# Determine expected library format for this platform
+if platform_name equals "Windows"
+ print text "Expected Library Format: .dll (Dynamic Link Library)"
+ print text "Standard C Library: msvcrt.dll"
+ print text "GUI Library: user32.dll, gdi32.dll"
+ print text "Example FFI Targets:"
+ print text " • Windows API (user32.dll, kernel32.dll)"
+ print text " • SDL2 (SDL2.dll)"
+ print text " • GTK3 (libgtk-3-0.dll)"
+else if platform_name equals "Linux"
+ print text "Expected Library Format: .so (Shared Object)"
+ print text "Standard C Library: libc.so.6"
+ print text "GUI Library: libgtk-3.so.0, libX11.so.6"
+ print text "Example FFI Targets:"
+ print text " • GTK3 (libgtk-3.so.0)"
+ print text " • X11 (libX11.so.6)"
+ print text " • SDL2 (libSDL2.so)"
+else if platform_name equals "Darwin"
+ print text "Expected Library Format: .dylib (Dynamic Library)"
+ print text "Standard C Library: libSystem.dylib"
+ print text "GUI Library: Cocoa frameworks"
+ print text "Example FFI Targets:"
+ print text " • Cocoa (libobjc.dylib)"
+ print text " • SDL2 (libSDL2.dylib)"
+ print text " • OpenGL (libGL.dylib)"
+else
+ print text "Platform: " plus platform_name
+ print text "Expected Library Format: .so (likely)"
+ print text "Standard C Library: libc.so or similar"
+end
+
+print text ""
+print text " Library format detection successful!"
+print text ""
+
+# =============================================================================
+# Section 5: Cross-Platform Path Handling
+# =============================================================================
+print text "=== Cross-Platform Path Handling ==="
+print text ""
+
+if platform_name equals "Windows"
+ print text "Path Separator: \\"
+ print text "Path Example: C:\\Users\\user\\Documents\\file.nxl"
+ print text "Drive Letters: Supported (C:, D:, etc.)"
+else
+ print text "Path Separator: /"
+ if platform_name equals "Darwin"
+ print text "Path Example: /Users/user/Documents/file.nxl"
+ else
+ print text "Path Example: /home/user/Documents/file.nxl"
+ end
+ print text "Drive Letters: Not used (Unix-style paths)"
+end
+
+print text ""
+print text " Path conventions identified!"
+print text ""
+
+# =============================================================================
+# Section 6: Platform Summary
+# =============================================================================
+print text ""
+print text " Platform Summary "
+print text ""
+print text ""
+
+if platform_name equals "Windows"
+ print text "You are running NexusLang on Microsoft Windows"
+ print text ""
+ print text "Cross-Platform Support:"
+ print text " Full interpreter support"
+ print text " FFI via .dll libraries"
+ print text " Windows API access (user32, kernel32, etc.)"
+ print text " Cross-platform libraries (SDL2, Qt, etc.)"
+ print text ""
+ print text "Recommendation:"
+ print text " Use SDL2 or Qt for truly cross-platform GUI development."
+ print text " Windows API code (MessageBox, etc.) won't run on Linux/Mac."
+else if platform_name equals "Linux"
+ print text "You are running NexusLang on Linux"
+ print text ""
+ print text "Cross-Platform Support:"
+ print text " Full interpreter support"
+ print text " FFI via .so libraries"
+ print text " GTK3 support (libgtk-3.so)"
+ print text " X11 support (libX11.so)"
+ print text " Cross-platform libraries (SDL2, Qt, etc.)"
+ print text ""
+ print text "Recommendation:"
+ print text " Use GTK3 for native Linux GUI or SDL2 for cross-platform."
+else if platform_name equals "Darwin"
+ print text "You are running NexusLang on macOS (Darwin)"
+ print text ""
+ print text "Cross-Platform Support:"
+ print text " Full interpreter support"
+ print text " FFI via .dylib libraries"
+ print text " Cocoa framework access (libobjc.dylib)"
+ print text " Cross-platform libraries (SDL2, Qt, etc.)"
+ print text ""
+ print text "Recommendation:"
+ print text " Use Cocoa for native macOS GUI or SDL2 for cross-platform."
+else
+ print text "You are running NexusLang on: " plus platform_name
+ print text ""
+ print text "Cross-Platform Support:"
+ print text " Interpreter should work (Python-based)"
+ print text " ? FFI support depends on platform"
+ print text " ? Library format may vary"
+ print text ""
+ print text "Note: This is an uncommon platform. Test thoroughly!"
+end
+
+print text ""
+print text ""
+print text " Cross-Platform Test Complete "
+print text " "
+print text " NexusLang is FULLY cross-platform! The interpreter runs on "
+print text " any system with Python 3.8+. Platform-specific features "
+print text " (like Windows MessageBox) require platform detection. "
+print text " "
+print text " Use platform detection and appropriate libraries for "
+print text " true cross-platform development. "
+print text ""
+print text ""
+
+# =============================================================================
+# Section 7: Next Steps
+# =============================================================================
+print text "=== Next Steps for Cross-Platform Development ==="
+print text ""
+print text "1. Use 'get_os_name' to detect platform before loading libraries"
+print text "2. Prefer cross-platform libraries (SDL2, GLFW, Qt) over platform-specific APIs"
+print text "3. Test your NexusLang programs on multiple platforms during development"
+print text "4. See docs/CROSS_PLATFORM_GUIDE.md for detailed patterns and examples"
+print text ""
+print text "Example: Loading platform-specific library"
+print text " if platform equals \"Windows\""
+print text " set lib to call load_library with \"user32.dll\""
+print text " else if platform equals \"Linux\""
+print text " set lib to call load_library with \"libgtk-3.so.0\""
+print text " else if platform equals \"Darwin\""
+print text " set lib to call load_library with \"libSystem.dylib\""
+print text " end"
+print text ""
+print text "Happy cross-platform coding with NLPL!"

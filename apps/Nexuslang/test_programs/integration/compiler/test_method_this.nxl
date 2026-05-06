@@ -1,0 +1,31 @@
+# Test implicit this.property in methods
+
+class Counter
+    property count as Integer
+    
+    method increment returns Integer
+        set count to count plus 1
+        return count
+    
+    method get_count returns Integer
+        return count
+
+set c to new Counter
+set c.count to 0
+
+print text "Initial count: 0"
+
+set result1 to call c.increment
+print text "After increment:"
+print number result1
+
+set result2 to call c.increment
+print text "After second increment:"
+print number result2
+
+set final to call c.get_count
+print text "Final count:"
+print number final
+
+print text "Direct access:"
+print number c.count

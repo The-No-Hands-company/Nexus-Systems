@@ -1,0 +1,6 @@
+# Test: create statement with member access
+class Test
+    set value to Integer
+    
+    function init
+        create this.value as 42

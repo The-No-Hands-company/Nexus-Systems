@@ -1,0 +1,84 @@
+# Test keyword-only parameters
+# Parameters after bare * must be passed by name
+
+print text "=== Testing Keyword-Only Parameters ==="
+
+# Test 1: Basic keyword-only parameters
+print text ""
+print text "Test 1: Basic keyword-only with defaults"
+function config with host as String, *, port as Integer default to 8080, timeout as Integer default to 30
+    print text "Host:"
+    print text host
+    print text "Port:"
+    print text port
+    print text "Timeout:"
+    print text timeout
+    return "configured"
+end
+
+# Valid: keyword-only params passed by name
+set result1 to config with "localhost", port: 9000, timeout: 60
+print text result1
+
+# Valid: using defaults for keyword-only params
+set result2 to config with "192.168.1.1"
+print text result2
+
+# Test 2: Mix positional, variadic, and keyword-only
+print text ""
+print text "Test 2: Positional + keyword-only"
+function process with name as String, age as Integer, *, city as String, country as String default to "USA"
+    print text "Name:"
+    print text name
+    print text "Age:"
+    print text age
+    print text "City:"
+    print text city
+    print text "Country:"
+    print text country
+    return "processed"
+end
+
+set result3 to process with "Alice" and 25, city: "New York", country: "USA"
+print text result3
+
+set result4 to process with "Bob" and 30, city: "London", country: "UK"
+print text result4
+
+# Test 3: Keyword-only without defaults (required)
+print text ""
+print text "Test 3: Required keyword-only parameters"
+function connect_api with url as String, *, api_key as String, secret as String
+    print text "Connecting to:"
+    print text url
+    print text "API Key:"
+    print text api_key
+    print text "Secret:"
+    print text secret
+    return "connected"
+end
+
+set result5 to connect_api with "https://api.example.com", api_key: "abc123", secret: "xyz789"
+print text result5
+
+# Test 4: All keyword-only (no positional)
+print text ""
+print text "Test 4: All parameters keyword-only"
+function settings with *, debug as Boolean default to false, verbose as Boolean default to false, level as Integer default to 1
+    print text "Debug:"
+    print text debug
+    print text "Verbose:"
+    print text verbose
+    print text "Level:"
+    print text level
+    return "configured"
+end
+
+set result6 to settings with debug: true, verbose: true, level: 3
+print text result6
+
+set result7 to settings with level: 2
+print text result7
+
+print text ""
+print text "=== All keyword-only parameter tests passed ==="

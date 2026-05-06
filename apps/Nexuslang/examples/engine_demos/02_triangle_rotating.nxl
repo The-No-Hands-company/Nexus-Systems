@@ -1,0 +1,147 @@
+# Triangle Demo - First Rendered 3D Object
+# Demonstrates: Modern OpenGL pipeline with shaders, VAO/VBO, camera, rotation
+
+print text "=== NexusLang Triangle Demo ==="
+print text "Press ESC to close window"
+print text ""
+
+# Create window
+print text "Creating window..."
+set window to create_window with 800 and 600 and "NLPL - Rotating Triangle"
+
+# Get shader source code from stdlib
+print text "Loading shaders..."
+set vertex_src to get_basic_color_vertex
+set fragment_src to get_basic_color_fragment
+
+# Compile shaders
+print text "Compiling shaders..."
+set shader to create_shader with vertex_src and fragment_src
+
+# Triangle vertices: position (x, y, z) + color (r, g, b)
+# Layout: [x, y, z, r, g, b] for each vertex
+print text "Creating triangle geometry..."
+set vertices to new List of Float
+
+# Vertex 0: Top center (red)
+call vertices.add with 0.0
+call vertices.add with 0.5
+call vertices.add with 0.0
+call vertices.add with 1.0
+call vertices.add with 0.0
+call vertices.add with 0.0
+
+# Vertex 1: Bottom right (green)
+call vertices.add with 0.5
+call vertices.add with -0.5
+call vertices.add with 0.0
+call vertices.add with 0.0
+call vertices.add with 1.0
+call vertices.add with 0.0
+
+# Vertex 2: Bottom left (blue)
+call vertices.add with -0.5
+call vertices.add with -0.5
+call vertices.add with 0.0
+call vertices.add with 0.0
+call vertices.add with 0.0
+call vertices.add with 1.0
+
+# Create VAO and VBO
+print text "Setting up vertex buffers..."
+set vao to create_vertex_array
+set vbo to create_vertex_buffer with vertices
+
+# Bind VBO to VAO
+call vao_set_vertex_buffer with vao and vbo
+
+# Configure vertex attributes
+# Position: location 0, 3 floats, stride 24 bytes (6 floats * 4), offset 0
+call vao_set_attribute with vao and 0 and 3 and 24 and 0
+
+# Color: location 1, 3 floats, stride 24 bytes, offset 12 bytes (3 floats * 4)
+call vao_set_attribute with vao and 1 and 3 and 24 and 12
+
+# Setup camera
+print text "Creating camera..."
+set camera to create_orbital_camera with 0.0 and 0.0 and 0.0 and 3.0
+
+# Get projection matrix
+print text "Setting up projection..."
+set fov to 45.0
+set aspect to 800.0 divided by 600.0
+set near to 0.1
+set far to 100.0
+set proj_matrix to mat4_perspective with fov and aspect and near and far
+
+# Convert projection to list for shader
+set proj_list to new List of Float
+set i to 0
+while i is less than 16
+    set value to call proj_matrix.get with i
+    call proj_list.add with value
+    set i to i plus 1
+end
+
+# Set clear color (dark blue)
+call set_clear_color with 0.1 and 0.15 and 0.2 and 1.0
+
+# Main render loop
+print text "Starting render loop..."
+print text ""
+set angle to 0.0
+set rotation_speed to 1.0
+
+while window_should_close with window equals false
+    # Update rotation angle
+    set angle to angle plus rotation_speed times 0.016
+    
+    # Rotate camera around triangle
+    call orbital_rotate with camera and rotation_speed and 0.0
+    
+    # Get view matrix from camera
+    set view_list to camera_get_view_matrix with camera
+    
+    # Create model matrix (identity - triangle at origin)
+    set model_matrix to mat4_identity
+    
+    # Rotate model around Y axis
+    set rot_matrix to mat4_rotation_y with angle
+    set model_matrix to mat4_multiply with model_matrix and rot_matrix
+    
+    # Convert model matrix to list
+    set model_list to new List of Float
+    set i to 0
+    while i is less than 16
+        set value to call model_matrix.get with i
+        call model_list.add with value
+        set i to i plus 1
+    end
+    
+    # Clear screen
+    call begin_frame
+    
+    # Use shader program
+    call use_shader with shader
+    
+    # Set uniforms
+    call set_uniform_mat4 with shader and "model" and model_list
+    call set_uniform_mat4 with shader and "view" and view_list
+    call set_uniform_mat4 with shader and "projection" and proj_list
+    
+    # Draw triangle
+    set gl_triangles to 4
+    call vao_draw_arrays with vao and gl_triangles and 0 and 3
+    
+    # Swap buffers and poll events
+    call end_frame with window
+end
+
+# Cleanup
+print text ""
+print text "Cleaning up..."
+call delete_vertex_array with vao
+call delete_shader with shader
+call destroy_window with window
+
+print text "Demo complete!"

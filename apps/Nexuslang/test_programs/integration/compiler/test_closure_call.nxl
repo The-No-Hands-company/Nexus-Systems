@@ -1,0 +1,32 @@
+# Test closure invocation - Phase 5 validation
+print text "=== Lambda Closure Call Test ==="
+print text ""
+
+# Test 1: Non-capturing lambda call
+print text "Test 1: Non-capturing lambda"
+set add to lambda x, y: x plus y
+set result to add with 3, 4
+print text "add(3, 4) = "
+print number result
+print text ""
+
+# Test 2: Capturing lambda call
+print text "Test 2: Capturing lambda"
+set outer_value to 10
+set add_outer to lambda x: x plus outer_value
+set result2 to add_outer with 5
+print text "add_outer(5) with outer=10: "
+print number result2
+print text ""
+
+# Test 3: Multiple captures
+print text "Test 3: Multiple captures"
+set a to 100
+set b to 20
+set combine to lambda x: x plus a plus b
+set result3 to combine with 3
+print text "combine(3) with a=100, b=20: "
+print number result3
+print text ""
+
+print text "=== All closure call tests complete ==="

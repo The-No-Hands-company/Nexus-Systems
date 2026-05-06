@@ -1,0 +1,14 @@
+# Test StringBuilder
+set builder to create_string_builder with 32
+print text "StringBuilder created"
+
+# This would require method call syntax which may not be implemented yet
+# For now, document the API
+
+print text "StringBuilder API:"
+print text "- append(text): Add text to builder"
+print text "- append_line(text): Add text + newline"
+print text "- to_string(): Get final string"
+print text "- clear(): Reset builder"
+print text "- length(): Get current length"
+print text "- is_empty(): Check if empty"

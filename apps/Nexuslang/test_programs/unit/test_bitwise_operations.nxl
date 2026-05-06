@@ -1,0 +1,91 @@
+# Test Bitwise Operations
+# Verifies all bitwise operators work correctly
+
+print text "=== Testing NexusLang Bitwise Operations ==="
+print text ""
+
+# Test 1: Bitwise AND
+print text "Test 1: Bitwise AND"
+set a to 12    # 0b1100
+set b to 10    # 0b1010
+set result to a bitwise and b  # Should be 8 (0b1000)
+print text "12 & 10 = "
+print text result
+
+# Test 2: Bitwise OR
+print text ""
+print text "Test 2: Bitwise OR"
+set c to 12    # 0b1100
+set d to 10    # 0b1010
+set result2 to c bitwise or d  # Should be 14 (0b1110)
+print text "12 | 10 = "
+print text result2
+
+# Test 3: Bitwise XOR
+print text ""
+print text "Test 3: Bitwise XOR"
+set e to 12    # 0b1100
+set f to 10    # 0b1010
+set result3 to e bitwise xor f  # Should be 6 (0b0110)
+print text "12 ^ 10 = "
+print text result3
+
+# Test 4: Left Shift
+print text ""
+print text "Test 4: Left Shift"
+set g to 5     # 0b0101
+set result4 to g shift left 2  # Should be 20 (0b10100)
+print text "5 << 2 = "
+print text result4
+
+# Test 5: Right Shift
+print text ""
+print text "Test 5: Right Shift"
+set h to 20    # 0b10100
+set result5 to h shift right 2  # Should be 5 (0b0101)
+print text "20 >> 2 = "
+print text result5
+
+# Test 6: Bitwise NOT
+print text ""
+print text "Test 6: Bitwise NOT"
+set i to 5     # 0b0101
+set result6 to bitwise not i  # Should be -6 (two's complement)
+print text "~5 = "
+print text result6
+
+# Test 7: Complex expression combining operations
+print text ""
+print text "Test 7: Complex Bitwise Expression"
+set flags to 15        # 0b1111
+set mask to 12         # 0b1100
+set cleared to flags bitwise and bitwise not mask  # Clear bits: 15 & ~12 = 3
+print text "flags & ~mask (15 & ~12) = "
+print text cleared
+
+# Test 8: Use in practical bit manipulation
+print text ""
+print text "Test 8: Practical Bit Manipulation"
+set permissions to 0
+set read_bit to 4      # 0b100
+set write_bit to 2     # 0b010
+set execute_bit to 1   # 0b001
+
+# Set read and write permissions
+set permissions to permissions bitwise or read_bit
+set permissions to permissions bitwise or write_bit
+print text "After setting read+write: "
+print text permissions  # Should be 6 (0b110)
+
+# Check if write permission is set
+set has_write to permissions bitwise and write_bit
+print text "Has write permission (should be 2): "
+print text has_write
+
+# Clear execute permission (not set, but demonstrates operation)
+set permissions to permissions bitwise and bitwise not execute_bit
+print text "After clearing execute (should still be 6): "
+print text permissions
+
+print text ""
+print text "=== All Bitwise Operation Tests Passed ==="

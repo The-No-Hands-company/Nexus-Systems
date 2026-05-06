@@ -1,0 +1,74 @@
+// NexusLang Standard Library Demo
+
+// Math operations
+Define function demonstrate_math() as
+    Print "Math Module Demo:".
+    Print "PI value:", PI.
+    Print "Square root of 16:", square_root(16).
+    Print "Power 2^3:", power(2, 3).
+    Print "Sine of 30 degrees:", sine(30 * PI / 180).
+    Print "Maximum of 5, 10, 3:", maximum(5, 10, 3).
+End function.
+
+// String operations
+Define function demonstrate_string() as
+    Print "String Module Demo:".
+    Set message to "Hello, NLPL!".
+    Print "Original:", message.
+    Print "Length:", length(message).
+    Print "Uppercase:", uppercase(message).
+    Print "Contains 'NexusLang':", contains(message, "NexusLang").
+    Print "Replace:", replace(message, "NexusLang", "World").
+End function.
+
+// Collections operations
+Define function demonstrate_collections() as
+    Print "Collections Module Demo:".
+    
+    // List operations
+    Set my_list to create_list(1, 2, 3, 4, 5).
+    Print "List:", my_list.
+    list_append(my_list, 6).
+    Print "After append:", my_list.
+    Print "List length:", list_length(my_list).
+    Print "Get item at index 2:", list_get(my_list, 2).
+    list_reverse(my_list).
+    Print "Reversed list:", my_list.
+    
+    // Dictionary operations
+    Set my_dict to create_dict().
+    dict_set(my_dict, "name", "NexusLang").
+    dict_set(my_dict, "version", "1.0").
+    dict_set(my_dict, "year", 2023).
+    Print "Dictionary:", my_dict.
+    Print "Keys:", dict_keys(my_dict).
+    Print "Has key 'version':", dict_has_key(my_dict, "version").
+End function.
+
+// System operations
+Define function demonstrate_system() as
+    Print "System Module Demo:".
+    Print "OS Name:", os_name().
+    Print "Python Version:", python_version().
+    Print "Current Time:", current_time().
+    Print "Current Date:", current_date().
+    Print "Timestamp:", timestamp().
+End function.
+
+// Main program
+Print "NLPL Standard Library Demo".
+Print "------------------------".
+
+demonstrate_math().
+Print.
+
+demonstrate_string().
+Print.
+
+demonstrate_collections().
+Print.
+
+demonstrate_system().
+Print.
+
+Print "Demo completed successfully!". 

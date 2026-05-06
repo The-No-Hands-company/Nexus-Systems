@@ -1,0 +1,12 @@
+# Test if port I/O functions work (they're in the same module)
+print text "Testing port I/O function availability..."
+
+try
+    set value to read_port_byte with port: 0x60
+    print text "Port I/O function works"
+catch error with message
+    print text "Port I/O error (expected without root):"
+    print text message
+end
+
+print text "Test complete"

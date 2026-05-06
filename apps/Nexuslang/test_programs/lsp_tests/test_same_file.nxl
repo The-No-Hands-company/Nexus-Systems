@@ -1,0 +1,6 @@
+function calculate_sum with a as Integer, b as Integer returns Integer
+    return a plus b
+end
+
+set result to calculate_sum with 5 and 10
+print text result

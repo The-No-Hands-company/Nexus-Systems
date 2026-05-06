@@ -1,0 +1,30 @@
+# Comprehensive string operations test
+
+# Test 1: String variables
+set first to "Hello"
+set second to "World"
+print text first
+print text second
+
+# Test 2: String concatenation
+set message to first plus " " plus second
+print text message
+
+# Test 3: Multiple concatenations
+set long_msg to "The " plus "quick " plus "brown" plus " fox"
+print text long_msg
+
+# Test 4: String comparison - equal
+if first is equal to "Hello"
+    print text "String comparison: PASS"
+
+# Test 5: String comparison - literals
+if "test" is equal to "test"
+    print text "Literal comparison: PASS"
+
+# Test 6: Concatenated comparison
+set expected to "Hello World"
+if message is equal to expected
+    print text "Concatenated comparison: PASS"
+
+print text "All string tests complete!"

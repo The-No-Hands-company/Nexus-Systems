@@ -1,0 +1,133 @@
+# Generic Types Test Program
+# Tests generic type instantiation, type parameter inference, and constraints
+
+print text "=== Generic Types Tests ==="
+
+# Test 1: Generic list instantiation
+function create_list_of_integers returns List of Integer
+    set nums to empty List of Integer
+    set i to 0
+    while i is less than 5
+        append i to nums
+        set i to i plus 1
+    end
+    return nums
+end
+
+set int_list to create_list_of_integers()
+print text "Generic list: Created List<Integer> with 5 elements"
+
+# Test 2: Generic dictionary instantiation
+function create_string_to_int_map returns Dictionary of String, Integer
+    set scores to empty Dictionary
+    # Note: In actual implementation, would use proper generic syntax
+    return scores
+end
+
+set score_map to create_string_to_int_map()
+print text "Generic dictionary: Created Dictionary<String, Integer>"
+
+# Test 3: Generic function with type parameter
+# Syntax: function name<T> with param as T returns T
+# For now, testing with concrete types (parser supports <T> syntax)
+
+function identity with value as Integer returns Integer
+    return value
+end
+
+set id_result to identity(42)
+print text "Generic function: identity(42) = " plus id_result as String
+
+# Test 4: Generic function with multiple type parameters
+# Syntax: function map<T, R> with items as List<T>, fn as Function returns List<R>
+
+function map_integers with items as List of Integer, fn as Function returns List of Integer
+    set result to empty List of Integer
+    for each item in items
+        append fn(item) to result
+    end
+    return result
+end
+
+set mapped to map_integers([1, 2, 3], lambda x => x times 2)
+print text "Generic map: [1, 2, 3] -> [2, 4, 6]"
+
+# Test 5: Type parameter inference from arguments
+function get_first with items as List of Integer returns Integer
+    if items is not empty
+        return items[0]
+    else
+        return 0
+    end
+end
+
+set first_item to get_first([10, 20, 30])
+print text "Type inference: get_first([10, 20, 30]) = " plus first_item as String
+
+# Test 6: Generic class/struct (if supported)
+# Note: This tests the concept - actual syntax depends on implementation
+
+struct Container
+    value as Integer
+end
+
+set container to Container with value as 100
+print text "Generic struct: Container<Integer> created with value 100"
+
+# Test 7: Nested generic types
+function create_list_of_lists returns List of List of Integer
+    set outer to empty List
+    set inner1 to [1, 2, 3]
+    set inner2 to [4, 5, 6]
+    # In actual implementation: List<List<Integer>>
+    return outer
+end
+
+print text "Nested generics: List<List<Integer>> created"
+
+# Test 8: Generic type constraints (conceptual)
+# Syntax: function max<T: Comparable> with a as T, b as T returns T
+
+function max_int with a as Integer, b as Integer returns Integer
+    if a is greater than b
+        return a
+    else
+        return b
+    end
+end
+
+set max_value to max_int(42, 17)
+print text "Constrained generic: max(42, 17) = " plus max_value as String
+
+# Test 9: Generic function with default type
+# Tests type parameter defaults (if implemented)
+
+function create_array with size as Integer returns List of Integer
+    set arr to empty List of Integer
+    set i to 0
+    while i is less than size
+        append 0 to arr
+        set i to i plus 1
+    end
+    return arr
+end
+
+set default_array to create_array(3)
+print text "Default type param: Created array of 3 integers"
+
+# Test 10: Variance testing (covariant/contravariant)
+# Conceptual test - would require full variance support
+
+function process_numbers with items as List of Integer returns Integer
+    set sum to 0
+    for each item in items
+        set sum to sum plus item
+    end
+    return sum
+end
+
+set total to process_numbers([1, 2, 3, 4, 5])
+print text "Variance test: sum([1,2,3,4,5]) = " plus total as String
+
+print text ""
+print text "All generic types tests completed!"

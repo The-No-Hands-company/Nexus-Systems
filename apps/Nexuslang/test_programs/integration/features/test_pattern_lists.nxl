@@ -1,0 +1,59 @@
+# Test pattern matching with list patterns
+# Lists support head/tail decomposition and rest patterns
+
+function describe_list that takes items as List of Integer returns String
+    match items with
+        case []
+            return "Empty list"
+        case [single]
+            return "Single element"
+        case [first, second]
+            return "Two elements"
+        case [first, second, third]
+            return "Three elements"
+        case [head, ...tail]
+            return "Multiple elements"
+        case _
+            return "Unknown"
+
+function sum_list that takes numbers as List of Integer returns Integer
+    match numbers with
+        case []
+            return 0
+        case [single]
+            return single
+        case [first, ...rest]
+            # Recursive sum: first + sum(rest)
+            set rest_sum to call sum_list with rest
+            return first plus rest_sum
+        case _
+            return 0
+
+function main that takes nothing returns Integer
+    # Test list pattern matching
+    set empty to create list
+    set desc1 to call describe_list with empty
+    print text desc1
+    
+    set single to create list with 42
+    set desc2 to call describe_list with single
+    print text desc2
+    
+    set two to create list with 1 and 2
+    set desc3 to call describe_list with two
+    print text desc3
+    
+    set three to create list with 1 and 2 and 3
+    set desc4 to call describe_list with three
+    print text desc4
+    
+    set many to create list with 1 and 2 and 3 and 4 and 5
+    set desc5 to call describe_list with many
+    print text desc5
+    
+    # Test recursive sum
+    set total to call sum_list with many
+    print text "Sum: "
+    print text total
+    
+    return 0

@@ -1,0 +1,45 @@
+# Test Regex Module Functionality
+# Verifies regex_match, regex_find, regex_find_all, regex_replace, regex_split
+
+function main
+    print text "Testing Regex Module..."
+    
+    # Test 1: regex_match
+    set text to "Hello World 123"
+    set pattern to "Hello.*123"
+    set matches to regex_match with pattern, text, 0
+    print text "Pattern matches:"
+    print matches
+    
+    # Test 2: regex_find (first match)
+    set number_pattern to "[0-9]+"
+    set first_number to regex_find with number_pattern, text, 0
+    print text "First number found:"
+    print text first_number
+    
+    # Test 3: regex_find_all
+    set all_text to "cat dog cat bird cat"
+    set cat_pattern to "cat"
+    set all_cats to regex_find_all with cat_pattern, all_text, 0
+    print text "All 'cat' matches:"
+    print all_cats
+    
+    # Test 4: regex_replace
+    set replaced to regex_replace with "cat", "dog", all_text, 0, 0
+    print text "After replacing cat with dog:"
+    print text replaced
+    
+    # Test 5: regex_split
+    set csv_text to "apple,banana,cherry"
+    set parts to regex_split with ",", csv_text, 0, 0
+    print text "Split by comma:"
+    print parts
+    
+    # Test 6: regex_escape (escape special chars)
+    set special to "test.string*with+special[chars]"
+    set escaped to regex_escape with special
+    print text "Escaped string:"
+    print text escaped
+    
+    print text "Regex module verification COMPLETE"
+end

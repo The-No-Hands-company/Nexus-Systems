@@ -1,0 +1,7 @@
+# Test variadic function syntax
+
+extern function printf with format as Pointer, ... returns Integer from library "c"
+
+function my_variadic that takes first as Integer, ... returns Integer
+    # Variadic function body
+    return first

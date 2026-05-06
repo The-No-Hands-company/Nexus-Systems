@@ -1,0 +1,305 @@
+# Reactive Programming Patterns in NexusLang
+
+# Observable Stream
+class Observable with generic parameters T
+    private set subscribers to List of Function
+    private set is_completed to Boolean
+    private set error to Error or null
+    
+    public function initialize
+        create this.subscribers as empty List of Function
+        set this.is_completed to false
+        set this.error to null
+    
+    public function subscribe with on_next as Function and on_error as Function and on_complete as Function returns Subscription
+        if this.is_completed
+            on_complete
+            return new Subscription with this and on_next
+        else if this.error is not null
+            on_error with this.error
+            return new Subscription with this and on_next
+        
+        append on_next to this.subscribers
+        return new Subscription with this and on_next
+    
+    public function next with value as T
+        if this.is_completed or this.error is not null
+            return
+        
+        for each subscriber in this.subscribers
+            subscriber with value
+    
+    public function error with error as Error
+        if this.is_completed or this.error is not null
+            return
+        
+        set this.error to error
+        for each subscriber in this.subscribers
+            subscriber with error
+    
+    public function complete
+        if this.is_completed or this.error is not null
+            return
+        
+        set this.is_completed to true
+        for each subscriber in this.subscribers
+            subscriber with null
+
+# Subscription
+class Subscription
+    private set observable to Observable
+    private set on_next as Function
+    
+    public function initialize with observable as Observable and on_next as Function
+        set this.observable to observable
+        set this.on_next to on_next
+    
+    public function unsubscribe
+        remove this.on_next from this.observable.subscribers
+
+# Subject (Hot Observable)
+class Subject with generic parameters T that extends Observable of T
+    public function initialize
+        call parent initialize
+    
+    public function next with value as T
+        call parent next with value
+    
+    public function error with error as Error
+        call parent error with error
+    
+    public function complete
+        call parent complete
+
+# Operators
+function map with observable as Observable and fn as Function returns Observable
+    create result as new Subject
+    
+    subscribe observable with
+        lambda with value as Any
+            next result with fn with value,
+        lambda with error as Error
+            error result with error,
+        lambda
+            complete result
+    
+    return result
+
+function filter with observable as Observable and predicate as Function returns Observable
+    create result as new Subject
+    
+    subscribe observable with
+        lambda with value as Any
+            if predicate with value
+                next result with value,
+        lambda with error as Error
+            error result with error,
+        lambda
+            complete result
+    
+    return result
+
+function merge with observables as List of Observable returns Observable
+    create result as new Subject
+    set completed_count to 0
+    
+    for each observable in observables
+        subscribe observable with
+            lambda with value as Any
+                next result with value,
+            lambda with error as Error
+                error result with error,
+            lambda
+                set completed_count to completed_count plus 1
+                if completed_count is equal to length of observables
+                    complete result
+    
+    return result
+
+function debounce with observable as Observable and delay as Integer returns Observable
+    create result as new Subject
+    set timer to null
+    
+    subscribe observable with
+        lambda with value as Any
+            if timer is not null
+                cancel timer
+            set timer to start new timer with delay milliseconds
+                next result with value,
+        lambda with error as Error
+            error result with error,
+        lambda
+            complete result
+    
+    return result
+
+# Example Usage
+
+# Example 1: Basic Observable
+function test basic observable
+    print text "Testing Basic Observable:"
+    create subject as new Subject of Integer
+    
+    subscribe subject with
+        lambda with value as Integer
+            print text "Received value: " plus convert value to string,
+        lambda with error as Error
+            print text "Error: " plus error.message,
+        lambda
+            print text "Completed"
+    
+    next subject with 1
+    next subject with 2
+    next subject with 3
+    complete subject
+    print text ""
+
+# Example 2: Operators
+function test operators
+    print text "Testing Operators:"
+    create numbers as new Subject of Integer
+    
+    # Create a pipeline: numbers -> filter even -> map square -> debounce 500ms
+    set pipeline to debounce with
+        map with
+            filter with numbers with lambda with x as Integer returns Boolean
+                return x % 2 is 0
+            with lambda with x as Integer returns Integer
+                return x times x
+        with 500
+    
+    subscribe pipeline with
+        lambda with value as Integer
+            print text "Pipeline result: " plus convert value to string,
+        lambda with error as Error
+            print text "Error: " plus error.message,
+        lambda
+            print text "Completed"
+    
+    # Emit values quickly
+    next numbers with 1
+    next numbers with 2
+    next numbers with 3
+    next numbers with 4
+    next numbers with 5
+    next numbers with 6
+    
+    # Wait for debounce
+    sleep for 600 milliseconds
+    
+    complete numbers
+    print text ""
+
+# Example 3: Merge Operator
+function test merge operator
+    print text "Testing Merge Operator:"
+    create stream1 as new Subject of Integer
+    create stream2 as new Subject of Integer
+    
+    set merged to merge with [stream1, stream2]
+    
+    subscribe merged with
+        lambda with value as Integer
+            print text "Merged value: " plus convert value to string,
+        lambda with error as Error
+            print text "Error: " plus error.message,
+        lambda
+            print text "Completed"
+    
+    next stream1 with 1
+    next stream2 with 2
+    next stream1 with 3
+    next stream2 with 4
+    complete stream1
+    complete stream2
+    print text ""
+
+# Example 4: Error Handling
+function test error handling
+    print text "Testing Error Handling:"
+    create stream as new Subject of Integer
+    
+    subscribe stream with
+        lambda with value as Integer
+            print text "Value: " plus convert value to string,
+        lambda with error as Error
+            print text "Error caught: " plus error.message,
+        lambda
+            print text "Completed"
+    
+    next stream with 1
+    error stream with new Error with "Something went wrong"
+    print text ""
+
+# Example 5: Subscription Management
+function test subscription management
+    print text "Testing Subscription Management:"
+    create stream as new Subject of Integer
+    
+    set subscription to subscribe stream with
+        lambda with value as Integer
+            print text "Value: " plus convert value to string,
+        lambda with error as Error
+            print text "Error: " plus error.message,
+        lambda
+            print text "Completed"
+    
+    next stream with 1
+    next stream with 2
+    
+    unsubscribe subscription
+    next stream with 3  # Should not be received
+    print text ""
+
+# Example 6: Complex Pipeline
+function test complex pipeline
+    print text "Testing Complex Pipeline:"
+    create input as new Subject of Integer
+    
+    # Create a complex pipeline:
+    # 1. Filter out negative numbers
+    # 2. Map to squares
+    # 3. Filter out numbers > 100
+    # 4. Debounce for 300ms
+    # 5. Map to strings
+    set pipeline to map with
+        debounce with
+            filter with
+                map with
+                    filter with input with lambda with x as Integer returns Boolean
+                        return x is greater than or equal to 0
+                    with lambda with x as Integer returns Integer
+                        return x times x
+                with lambda with x as Integer returns Boolean
+                    return x is less than or equal to 100
+            with 300
+        with lambda with x as Integer returns String
+            return "Result: " plus convert x to string
+    
+    subscribe pipeline with
+        lambda with value as String
+            print text value,
+        lambda with error as Error
+            print text "Error: " plus error.message,
+        lambda
+            print text "Completed"
+    
+    # Emit values
+    next input with -1  # Should be filtered out
+    next input with 5   # Should be squared to 25
+    next input with 15  # Should be squared to 225 (filtered out)
+    next input with 8   # Should be squared to 64
+    
+    # Wait for debounce
+    sleep for 400 milliseconds
+    
+    complete input
+    print text ""
+
+# Run all examples
+test basic observable
+test operators
+test merge operator
+test error handling
+test subscription management
+test complex pipeline 

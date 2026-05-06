@@ -1,0 +1,13 @@
+# Test with variable arg and block
+
+function test with data as List and block as Function
+    print text "data is:"
+    print text data
+    print text "Calling block..."
+    block()
+end
+
+set my_list to [1, 2, 3]
+test with my_list do
+    print text "Block called!"
+end

@@ -1,0 +1,112 @@
+# FFI Struct Marshalling Example
+# Demonstrates passing NexusLang structs to C functions and back
+
+print text "============================================="
+print text "FFI Struct Marshalling - Complete Example"
+print text "============================================="
+print text ""
+
+# Example 1: Define a Point struct
+print text "Example 1: Point Structure"
+print text "-------------------------"
+
+struct Point
+ x as Integer
+ y as Integer
+end
+
+set origin to new Point
+set origin.x to 0
+set origin.y to 0
+
+set corner to new Point
+set corner.x to 100
+set corner.y to 200
+
+print text "Created two Point structures:"
+print text " origin: ("
+print number origin.x
+print text ", "
+print number origin.y
+print text ")"
+print text " corner: ("
+print number corner.x
+print text ", "
+print number corner.y
+print text ")"
+
+set point_size to sizeof Point
+print text "Size of Point struct: "
+print number point_size
+print text " bytes"
+
+print text ""
+
+# Example 2: Complex struct with mixed types
+print text "Example 2: Mixed-Type Structure"
+print text "-------------------------------"
+
+struct Person
+ age as Integer
+ height as Float
+ is_active as Boolean
+end
+
+set person to new Person
+set person.age to 28
+set person.height to 5.9
+set person.is_active to true
+
+print text "Person structure:"
+print text " age: "
+print number person.age
+print text " height: "
+print number person.height
+print text " is_active: true"
+
+print text ""
+
+# Example 3: Packed struct (no padding)
+print text "Example 3: Packed Structure"
+print text "--------------------------"
+
+packed struct Header
+ version as Integer
+ flags as Integer
+ checksum as Integer
+end
+
+set header to new Header
+set header.version to 1
+set header.flags to 0
+set header.checksum to 12345
+
+set header_size to sizeof Header
+print text "Packed header size: "
+print number header_size
+print text " bytes (no padding)"
+
+print text ""
+
+# Summary
+print text "============================================="
+print text "FFI Struct Marshalling Summary"
+print text "============================================="
+print text ""
+print text "NLPL can now:"
+print text " Define C-compatible structs"
+print text " Pass structs to C functions"
+print text " Receive structs from C functions"
+print text " Handle nested structures"
+print text " Control memory layout (packed/aligned)"
+print text " Mix different field types"
+print text ""
+print text "This enables:"
+print text " • System API calls (stat, time, socket)"
+print text " • Graphics libraries (OpenGL, SDL)"
+print text " • Audio processing"
+print text " • Network protocols"
+print text " • File format parsing"
+print text " • Hardware interfacing"
+print text ""
+print text "============================================="

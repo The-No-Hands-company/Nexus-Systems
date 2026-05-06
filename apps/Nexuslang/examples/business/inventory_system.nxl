@@ -1,0 +1,153 @@
+# Inventory Management System
+# Demonstrates NexusLang for business applications
+
+# Define product structure
+struct Product
+    id as Integer
+    name as String
+    quantity as Integer
+    price as Float
+    category as String
+end
+
+# Global inventory
+set inventory to empty list
+
+# Add product to inventory
+function add_product with id as Integer, name as String, qty as Integer, price as Float, category as String
+    set product to new Product
+    set product.id to id
+    set product.name to name
+    set product.quantity to qty
+    set product.price to price
+    set product.category to category
+    
+    add product to inventory
+    print text "Added product: " plus name
+end
+
+# Find product by ID
+function find_product with product_id as Integer returns Product or None
+    for each item in inventory
+        if item.id equals product_id
+            return item
+        end
+    end
+    return none
+end
+
+# Update stock quantity
+function update_stock with product_id as Integer, quantity_change as Integer returns Boolean
+    set product to find_product with product_id
+    
+    if product is none
+        print text "Error: Product not found"
+        return false
+    end
+    
+    set new_quantity to product.quantity plus quantity_change
+    
+    if new_quantity is less than 0
+        print text "Error: Insufficient stock"
+        return false
+    end
+    
+    set product.quantity to new_quantity
+    print text "Updated stock for " plus product.name plus ": " plus string of new_quantity
+    return true
+end
+
+# Calculate total inventory value
+function calculate_total_value returns Float
+    set total to 0.0
+    
+    for each product in inventory
+        set item_value to product.price times product.quantity
+        set total to total plus item_value
+    end
+    
+    return total
+end
+
+# Generate low stock report
+function low_stock_report with threshold as Integer
+    print text "Low Stock Report (below " plus string of threshold plus " units):"
+    print text "================================================"
+    
+    set low_stock_count to 0
+    
+    for each product in inventory
+        if product.quantity is less than threshold
+            print text product.name plus ": " plus string of product.quantity plus " units"
+            set low_stock_count to low_stock_count plus 1
+        end
+    end
+    
+    if low_stock_count equals 0
+        print text "All products are adequately stocked"
+    else
+        print text "Total low stock items: " plus string of low_stock_count
+    end
+end
+
+# Generate category report
+function category_report
+    print text "Inventory by Category:"
+    print text "================================================"
+    
+    set categories to empty dict
+    
+    # Count items and value per category
+    for each product in inventory
+        set cat to product.category
+        
+        if cat not in categories
+            set categories[cat] to empty dict
+            set categories[cat]["count"] to 0
+            set categories[cat]["value"] to 0.0
+        end
+        
+        set categories[cat]["count"] to categories[cat]["count"] plus 1
+        set item_value to product.price times product.quantity
+        set categories[cat]["value"] to categories[cat]["value"] plus item_value
+    end
+    
+    # Print category summaries
+    for each category, data in categories
+        print text category plus ":"
+        print text "  Items: " plus string of data["count"]
+        print text "  Total value: $" plus string of data["value"]
+    end
+end
+
+# Main program
+print text "Inventory Management System"
+print text "=============================="
+
+# Add sample products
+add_product with id: 1, name: "Laptop", qty: 15, price: 999.99, category: "Electronics"
+add_product with id: 2, name: "Mouse", qty: 50, price: 25.50, category: "Electronics"
+add_product with id: 3, name: "Desk Chair", qty: 8, price: 199.99, category: "Furniture"
+add_product with id: 4, name: "Notebook", qty: 100, price: 3.99, category: "Stationery"
+add_product with id: 5, name: "Pen Set", qty: 5, price: 12.99, category: "Stationery"
+
+print text ""
+
+# Update stock
+update_stock with product_id: 2, quantity_change: -10
+update_stock with product_id: 3, quantity_change: 5
+
+print text ""
+
+# Calculate total value
+set total_value to calculate_total_value
+print text "Total inventory value: $" plus string of total_value
+
+print text ""
+
+# Generate reports
+low_stock_report with threshold: 10
+
+print text ""
+
+category_report

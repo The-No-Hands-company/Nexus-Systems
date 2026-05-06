@@ -1,0 +1,66 @@
+# Inline Assembly Test: Simple Operand Tests
+# Tests that should definitely work
+
+print text "Simple Operand Test"
+print text "==================="
+print text ""
+
+# Test 1: Single input operand
+print text "Test 1: Input operand"
+set x to 42
+asm
+    code
+        "mov rax, $0"
+    inputs "r": x
+end
+print text "Input test complete"
+print text ""
+
+# Test 2: Single output operand
+print text "Test 2: Output operand"
+set result to 0
+asm
+    code
+        "mov $0, 100"
+    outputs "=r": result
+end
+print text "Output test complete"
+print text "Expected: 100, Actual: "
+print number result
+print text ""
+
+# Test 3: Input and output
+print text "Test 3: Input + output (increment)"
+set value to 50
+asm
+    code
+        "mov rax, $1"
+        "add rax, 1"
+        "mov $0, rax"
+    outputs "=r": value
+    inputs "r": value
+end
+print text "Increment test complete"
+print text "Expected: 51, Actual: "
+print number value
+print text ""
+
+# Test 4: Two inputs, one output (addition)
+print text "Test 4: Two inputs + one output"
+set a to 10
+set b to 20
+set sum to 0
+asm
+    code
+        "mov rax, $1"
+        "add rax, $2"
+        "mov $0, rax"
+    outputs "=r": sum
+    inputs "r": a, "r": b
+end
+print text "Addition test complete"
+print text "Expected: 30, Actual: "
+print number sum
+print text ""
+
+print text "All simple tests complete!"

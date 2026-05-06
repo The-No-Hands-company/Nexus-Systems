@@ -1,0 +1,154 @@
+# Comprehensive Inline Assembly Test
+# Tests inline assembly code generation (compile-only feature)
+# Note: This demonstrates the syntax and compilation - actual assembly execution is platform-specific
+
+print text "=== Comprehensive Inline Assembly Tests ==="
+print text ""
+
+# Test 1: Basic no-op assembly (simplest case)
+print text "Test 1: Basic NOP instructions"
+asm
+    code
+        "nop"
+        "nop"
+end
+print text "PASS: Test 1 passed: Basic inline assembly"
+print text ""
+
+# Test 2: Assembly with single input (read-only)
+print text "Test 2: Assembly with input operand"
+set x to 42
+asm
+    code
+        "# Input value in register: %0"
+    inputs "r": x
+end
+print text "PASS: Test 2 passed: Assembly with input"
+print text ""
+
+# Test 3: Assembly with single output (write-only)
+print text "Test 3: Assembly with output operand"
+asm
+    code
+        "mov $$100, %0"
+    outputs "=r": result
+end
+print text "PASS: Test 3 passed: Assembly with output"
+print text ""
+
+# Test 4: Assembly with multiple inputs
+print text "Test 4: Assembly with multiple inputs"
+set val1 to 10
+set val2 to 20
+asm
+    code
+        "# First input: %0, Second input: %1"
+    inputs "r": val1, "r": val2
+end
+print text "PASS: Test 4 passed: Multiple input operands"
+print text ""
+
+# Test 5: Assembly with inputs and outputs (read-write)
+print text "Test 5: Assembly with inputs and outputs"
+set a to 15
+set b to 25
+asm
+    code
+        "mov %1, %0"
+        "add %2, %0"
+    outputs "=r": sum
+    inputs "r": a, "r": b
+end
+print text "PASS: Test 5 passed: Inputs and outputs combined"
+print text ""
+
+# Test 6: Assembly with clobbers (indicates modified registers)
+print text "Test 6: Assembly with clobber list"
+set n to 8
+asm
+    code
+        "shl $$1, %0"
+    outputs "=r": doubled
+    inputs "0": n
+    clobbers "cc"
+end
+print text "PASS: Test 6 passed: Assembly with clobbers"
+print text ""
+
+# Test 7: Memory constraint test
+print text "Test 7: Assembly with memory constraint"
+set mem_val to 123
+asm
+    code
+        "# Memory operand: %0"
+    inputs "m": mem_val
+end
+print text "PASS: Test 7 passed: Memory constraint"
+print text ""
+
+# Test 8: Immediate constraint test
+print text "Test 8: Assembly with immediate constraint"
+asm
+    code
+        "mov $$42, %0"
+    outputs "=r": imm_result
+end
+print text "PASS: Test 8 passed: Immediate value handling"
+print text ""
+
+# Test 9: Multiple output operands
+print text "Test 9: Assembly with multiple outputs"
+set dividend to 100
+set divisor to 7
+asm
+    code
+        "# Division operation"
+        "mov %2, %%rax"
+        "xor %%rdx, %%rdx"
+        "div %3"
+        "mov %%rax, %0"
+        "mov %%rdx, %1"
+    outputs "=r": quotient, "=r": remainder
+    inputs "r": dividend, "r": divisor
+    clobbers "rax", "rdx"
+end
+print text "PASS: Test 9 passed: Multiple outputs"
+print text ""
+
+# Test 10: Complex assembly with all features
+print text "Test 10: Complex assembly (all features)"
+set base to 5
+asm
+    code
+        "# Complex operation"
+        "mov %1, %0"
+        "imul $$3, %0"
+        "add $$10, %0"
+    outputs "=r": final_result
+    inputs "r": base
+    clobbers "cc"
+end
+print text "PASS: Test 10 passed: Complex assembly block"
+print text ""
+
+# Test 11: Empty clobber list (valid syntax)
+print text "Test 11: Assembly with empty optional sections"
+asm
+    code
+        "nop"
+end
+print text "PASS: Test 11 passed: Minimal assembly syntax"
+print text ""
+
+# Test 12: Assembly comment preservation
+print text "Test 12: Assembly with comments"
+asm
+    code
+        "# This is a comment in assembly"
+        "nop  # Inline comment"
+end
+print text "PASS: Test 12 passed: Assembly comments"
+print text ""
+
+print text "=== All 12 Inline Assembly Tests Passed! ==="
+print text "Note: This is a compile-time feature. Execution requires LLVM compiler."

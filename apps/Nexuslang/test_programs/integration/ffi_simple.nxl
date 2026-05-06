@@ -1,0 +1,8 @@
+# Simple FFI test
+extern function strlen with str as Pointer returns Integer from library "c"
+
+set msg to "Hello"
+print text "Testing strlen..."
+set len to call strlen with msg
+print text "Result:"
+print number len

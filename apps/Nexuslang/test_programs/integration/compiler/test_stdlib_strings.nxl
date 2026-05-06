@@ -1,0 +1,58 @@
+# Test Standard Library String Functions
+# Tests string manipulation operations in the compiler
+
+function main returns Integer
+    print text "=== String Functions Test ==="
+    
+    # Test 1: strlen
+    print text "Test 1: strlen"
+    set hello to "Hello, World!"
+    set len to strlen with hello
+    print len
+    # Expected: 13
+    
+    # Test 2: substr
+    print text "Test 2: substr"
+    set sub to substr with hello and 0 and 5
+    print text sub
+    # Expected: "Hello"
+    
+    # Test 3: charat
+    print text "Test 3: charat"
+    set char to charat with hello and 7
+    print text char
+    # Expected: "W"
+    
+    # Test 4: indexof
+    print text "Test 4: indexof"
+    set idx to indexof with hello and "World"
+    print idx
+    # Expected: 7
+    
+    # Test 5: replace
+    print text "Test 5: replace"
+    set replaced to replace with hello and "World" and "NexusLang"
+    print text replaced
+    # Expected: "Hello, NLPL!"
+    
+    # Test 6: trim
+    print text "Test 6: trim"
+    set spacy to "   trimmed   "
+    set trimmed to trim with spacy
+    print text trimmed
+    # Expected: "trimmed"
+    
+    # Test 7: toupper
+    print text "Test 7: toupper"
+    set upper to toupper with hello
+    print text upper
+    # Expected: "HELLO, WORLD!"
+    
+    # Test 8: tolower
+    print text "Test 8: tolower"
+    set lower to tolower with hello
+    print text lower
+    # Expected: "hello, world!"
+    
+    print text "=== String Tests Complete ==="
+    return 0

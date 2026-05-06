@@ -1,0 +1,9 @@
+# Test uncaught exception with function main wrapper
+
+function main returns Integer
+    print text "=== Uncaught Exception in main() Test ==="
+    print text "About to raise without try-catch"
+    raise error with message "Uncaught from main"
+    print text "ERROR: Should never reach"
+    return 0
+end

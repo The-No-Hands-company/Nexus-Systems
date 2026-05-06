@@ -1,0 +1,186 @@
+# DMA Error Handling Test
+# Test: Invalid parameters and error conditions
+# Expected: Should catch and report all errors gracefully
+
+print text "Test: DMA error handling"
+
+# Test 1: Invalid channel number (too high)
+print text "Test 1: Invalid channel (8)"
+function test_invalid_channel_high
+    set success to allocate_dma_channel with channel: 8
+    print text "ERROR: Should have thrown exception"
+end
+
+try
+    test_invalid_channel_high
+catch error
+    print text "Caught expected error: Invalid channel 8"
+end
+
+# Test 2: Invalid channel number (negative)
+print text "Test 2: Invalid channel (-1)"
+function test_invalid_channel_negative
+    set success to allocate_dma_channel with channel: -1
+    print text "ERROR: Should have thrown exception"
+end
+
+try
+    test_invalid_channel_negative
+catch error
+    print text "Caught expected error: Negative channel"
+end
+
+# Test 3: Allocate cascade channel (4)
+print text "Test 3: Allocate cascade channel 4"
+function test_cascade_channel
+    set success to allocate_dma_channel with channel: 4
+    print text "ERROR: Should have thrown exception"
+end
+
+try
+    test_cascade_channel
+catch error
+    print text "Caught expected error: Channel 4 is cascade"
+end
+
+# Test 4: Double allocation
+print text "Test 4: Double allocation"
+set success1 to allocate_dma_channel with channel: 1
+if success1
+    print text "First allocation successful"
+end
+
+set success2 to allocate_dma_channel with channel: 1
+if not success2
+    print text "Second allocation correctly failed"
+end
+
+release_dma_channel with channel: 1
+
+# Test 5: Release unallocated channel
+print text "Test 5: Release unallocated channel"
+set released to release_dma_channel with channel: 5
+if not released
+    print text "Release correctly failed for unallocated channel"
+end
+
+# Test 6: Configure without allocation
+print text "Test 6: Configure without allocation"
+function test_configure_unallocated
+    configure_dma_transfer with channel: 6 and source: 0 and destination: 0 and count: 100 and mode: 1 and direction: 2
+    print text "ERROR: Should have thrown exception"
+end
+
+try
+    test_configure_unallocated
+catch error
+    print text "Caught expected error: Channel not allocated"
+end
+
+# Test 7: Invalid transfer count (too large for 8-bit channel)
+print text "Test 7: Invalid count (too large)"
+set success to allocate_dma_channel with channel: 2
+
+function test_invalid_count
+    configure_dma_transfer with channel: 2 and source: 0 and destination: 0 and count: 100000 and mode: 1 and direction: 2
+    print text "ERROR: Should have thrown exception"
+end
+
+try
+    test_invalid_count
+catch error
+    print text "Caught expected error: Count too large"
+end
+
+release_dma_channel with channel: 2
+
+# Test 8: Invalid mode
+print text "Test 8: Invalid mode (4)"
+set success to allocate_dma_channel with channel: 3
+
+function test_invalid_mode
+    configure_dma_transfer with channel: 3 and source: 0 and destination: 0 and count: 100 and mode: 4 and direction: 2
+    print text "ERROR: Should have thrown exception"
+end
+
+try
+    test_invalid_mode
+catch error
+    print text "Caught expected error: Invalid mode"
+end
+
+release_dma_channel with channel: 3
+
+# Test 9: Invalid direction
+print text "Test 9: Invalid direction (3)"
+set success to allocate_dma_channel with channel: 1
+
+function test_invalid_direction
+    configure_dma_transfer with channel: 1 and source: 0 and destination: 0 and count: 100 and mode: 1 and direction: 3
+    print text "ERROR: Should have thrown exception"
+end
+
+try
+    test_invalid_direction
+catch error
+    print text "Caught expected error: Invalid direction"
+end
+
+release_dma_channel with channel: 1
+
+# Test 10: Start without configuration
+print text "Test 10: Start without configuration"
+set success to allocate_dma_channel with channel: 0
+
+function test_start_unconfigured
+    start_dma_transfer with channel: 0
+    print text "ERROR: Should have thrown exception"
+end
+
+try
+    test_start_unconfigured
+catch error
+    print text "Caught expected error: Not configured"
+end
+
+release_dma_channel with channel: 0
+
+# Test 11: Double start
+print text "Test 11: Double start"
+set success to allocate_dma_channel with channel: 1
+configure_dma_transfer with channel: 1 and source: 0 and destination: 0 and count: 100 and mode: 1 and direction: 2
+start_dma_transfer with channel: 1
+
+function test_double_start
+    start_dma_transfer with channel: 1
+    print text "ERROR: Should have thrown exception"
+end
+
+try
+    test_double_start
+catch error
+    print text "Caught expected error: Already active"
+end
+
+stop_dma_transfer with channel: 1
+release_dma_channel with channel: 1
+
+# Test 12: Unmask without configuration
+print text "Test 12: Unmask without configuration"
+set success to allocate_dma_channel with channel: 2
+
+function test_unmask_unconfigured
+    unmask_dma_channel with channel: 2
+    print text "ERROR: Should have thrown exception"
+end
+
+try
+    test_unmask_unconfigured
+catch error
+    print text "Caught expected error: Not configured"
+end
+
+release_dma_channel with channel: 2
+
+print text "All error tests passed"
+print text "Test complete"

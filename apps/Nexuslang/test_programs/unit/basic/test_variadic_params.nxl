@@ -1,0 +1,55 @@
+# Test variadic parameters (*args style)
+
+# Test 1: Simple variadic function
+function print_all with *messages as String
+    for each msg in messages
+        print text msg
+    end
+end
+
+print text "=== Test 1: Simple Variadic ==="
+print_all with "Hello"
+print_all with "One" and "Two" and "Three"
+
+# Test 2: Mix required and variadic
+function greet_all with greeting as String and *names as String
+    for each name in names
+        print text greeting
+        print text name
+    end
+end
+
+print text ""
+print text "=== Test 2: Required + Variadic ==="
+greet_all with "Hello" and "Alice" and "Bob"
+greet_all with "Hi"  # Should work with no variadic args
+
+# Test 3: Variadic with type constraints
+function sum_numbers with *numbers as Integer
+    set total to 0
+    for each num in numbers
+        set total to total plus num
+    end
+    print text total
+end
+
+print text ""
+print text "=== Test 3: Variadic Numbers ==="
+sum_numbers with 1 and 2 and 3
+sum_numbers with 10 and 20 and 30 and 40
+
+# Test 4: Named parameters before variadic
+function log_message with level as String and timestamp as Boolean default to True and *messages as String
+    if timestamp
+        print text "TIMESTAMP"
+    end
+    print text level
+    for each msg in messages
+        print text msg
+    end
+end
+
+print text ""
+print text "=== Test 4: Named + Default + Variadic ==="
+log_message with "ERROR" and True and "Failed" and "to" and "connect"
+log_message with "INFO" and "Server" and "started"

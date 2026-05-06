@@ -1,0 +1,21 @@
+# Test that await actually returns the correct value
+
+async function get_42 returns Integer
+    print text "get_42 called"
+    return 42
+end
+
+async function main returns Integer
+    print text "main: calling get_42"
+    set x to await get_42
+    print text "main: got result"
+    
+    # Check if x is 42
+    if x is equal to 42
+        print text "SUCCESS: x is 42"
+    else
+        print text "FAIL: x is not 42"
+    end
+    
+    return x
+end

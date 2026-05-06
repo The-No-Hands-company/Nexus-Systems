@@ -1,0 +1,9 @@
+# Test multiple methods with access modifiers
+class Test
+    private set x to Integer
+    
+    public function get x returns Integer
+        return this.x
+    
+    public function set x with newval as Integer
+        set this.x to newval

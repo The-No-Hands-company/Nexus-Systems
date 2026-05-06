@@ -1,0 +1,22 @@
+# Test multi-dimensional arrays (2D arrays)
+
+# Test 1: 2D array creation and access
+print text "Test 1: 2D array basics"
+set matrix to [[1, 2, 3], [4, 5, 6], [7, 8, 9]]
+set first_row to matrix[0]
+set center to matrix[1][1]
+print text center  # Should be 5
+
+# Test 2: Different sized rows
+print text "Test 2: Jagged array"
+set jagged to [[1, 2], [3, 4, 5], [6]]
+set item to jagged[1][2]
+print text item  # Should be 5
+
+# Test 3: 3D array
+print text "Test 3: 3D array"
+set cube to [[[1, 2], [3, 4]], [[5, 6], [7, 8]]]
+set deep_item to cube[1][0][1]
+print text deep_item  # Should be 6
+
+print text "Multi-dimensional array tests complete!"

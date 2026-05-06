@@ -1,0 +1,11 @@
+# Callback syntax test - demonstrates 'callback' keyword
+# This tests parsing and compilation of callback references
+
+extern function printf with format as Pointer returns Integer from library "c"
+
+set message to "Callback implementation test\n"
+call printf with message
+
+# Note: The 'callback' keyword is used to pass NexusLang functions to C functions
+# Example syntax: call qsort with array, size, sizeof Int, callback compare_func
+# This test verifies the keyword exists and is recognized by the parser

@@ -1,0 +1,36 @@
+# Test for loop with negative steps
+# Verifies runtime step direction handling
+
+print text "Test 1: Positive step (1 to 5, step +1)"
+for i from 1 to 5 by 1
+    print text i
+end
+
+print text "Test 2: Negative step (5 down to 1, step -1)"
+for i from 5 to 1 by -1
+    print text i
+end
+
+print text "Test 3: Positive step with larger increment (0 to 10, step +2)"
+for i from 0 to 10 by 2
+    print text i
+end
+
+print text "Test 4: Negative step with larger decrement (10 down to 0, step -2)"
+for i from 10 to 0 by -2
+    print text i
+end
+
+print text "Test 5: Runtime variable step (positive)"
+set positive_step to 3
+for i from 0 to 9 by positive_step
+    print text i
+end
+
+print text "Test 6: Runtime variable step (negative)"
+set negative_step to -3
+for i from 9 to 0 by negative_step
+    print text i
+end
+
+print text "All for loop tests passed!"

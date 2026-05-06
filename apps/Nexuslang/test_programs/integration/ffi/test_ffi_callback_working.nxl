@@ -1,0 +1,26 @@
+# Test FFI callbacks with a simple C function
+# Demonstrates passing NexusLang function as callback to C
+
+extern function printf with format as Pointer returns Integer from library "c"
+
+# Define a simple callback function that will be passed to C
+# In real use, this would be called by a C library function
+function my_callback that takes x as Integer returns Integer
+    set format to "Callback called with: %d\n"
+    call printf with format, x
+    set result to x times 2
+    return result
+
+set msg to "Testing callback functionality\n"
+call printf with msg
+
+# Directly call the callback to test it works
+set value to 42
+set result to my_callback with value
+
+set format to "Result: %d\n"
+call printf with format, result
+
+# Note: The 'callback' keyword would be used like:
+# call some_c_function with callback my_callback
+# where some_c_function expects a function pointer

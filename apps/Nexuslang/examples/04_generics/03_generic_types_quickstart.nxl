@@ -1,0 +1,88 @@
+# Generic Types in NexusLang - Quick Start Guide
+# Demonstrates core generic programming patterns
+
+print text "=== NexusLang Generic Types - Quick Start ==="
+print text ""
+
+# ============================================================================
+# 1. GENERIC FUNCTIONS
+# ============================================================================
+
+print text "1. Generic Functions"
+print text "--------------------"
+
+# Generic identity function
+function identity<T> that takes value as T returns T
+    return value
+end
+
+set num to identity with 42
+print text "identity(42) = "
+print text num
+
+set txt to identity with "hello"
+print text "identity(hello) = "
+print text txt
+print text ""
+
+# Generic function with two parameters
+function create_pair<T, U> that takes first as T and second as U returns List
+    set result to [first, second]
+    return result
+end
+
+set coord to create_pair with 100 and "meters"
+print text "Pair created: [100, meters]"
+print text ""
+
+# ============================================================================
+# 2. GENERIC CLASSES
+# ============================================================================
+
+print text "2. Generic Classes"
+print text "------------------"
+
+# Simple generic container
+class Container<T>
+    property value as T
+    
+    method get returns T
+        return this.value
+    end method
+    
+    method set with v as T
+        set this.value to v
+    end method
+end class
+
+# Create and use Container<Integer>
+set int_container to new Container<Integer>
+set int_container.value to 100
+print text "Container value: "
+print text call int_container.get
+print text ""
+
+# Generic class with multiple type parameters
+class KeyValue<K, V>
+    property key as K
+    property val as V
+end class
+
+set record to new KeyValue<String, Integer>
+set record.key to "age"
+set record.val to 25
+print text "KeyValue: age = 25"
+print text ""
+
+# ============================================================================
+# 3. BEST PRACTICES
+# ============================================================================
+
+print text "=== Best Practices ==="
+print text "1. Use <T> notation for type parameters"
+print text "2. Generic functions work with 'with' keyword"
+print text "3. Generic classes use 'as T' for properties"
+print text "4. Methods use 'with param as T' for parameters"
+print text "5. Instantiate with: new ClassName<Type>"
+print text ""
+print text "=== Generic Types Guide Complete ==="

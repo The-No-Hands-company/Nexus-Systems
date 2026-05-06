@@ -1,0 +1,6 @@
+# Test dictionary key not found with suggestions
+set data to {}
+set data["name"] to "Alice"
+set data["age"] to 30
+set data["city"] to "NYC"
+set value to data["nam"]  # typo: should be "name"

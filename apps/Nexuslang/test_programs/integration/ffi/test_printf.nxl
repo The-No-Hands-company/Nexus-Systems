@@ -1,0 +1,19 @@
+# Test FFI: Call C printf function
+# This demonstrates foreign function interface with C standard library
+
+# Declare external C function
+extern function printf with format as Pointer returns Integer from library "c"
+
+# Main function
+function main
+    # Call C printf
+    set format to "Hello from NexusLang using C printf!\n"
+    printf(format)
+    
+    # Call printf with formatting
+    set num to 42
+    set format2 to "The answer is: %d\n"
+    printf(format2, num)
+    
+    return 0
+end

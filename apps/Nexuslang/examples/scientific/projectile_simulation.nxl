@@ -1,0 +1,130 @@
+# Numerical Simulation - Projectile Motion
+# Demonstrates NexusLang for scientific computing
+
+# Constants
+set GRAVITY to 9.81
+set TIME_STEP to 0.1
+
+# Projectile state structure
+struct Projectile
+    x as Float          # horizontal position (meters)
+    y as Float          # vertical position (meters)
+    vx as Float         # horizontal velocity (m/s)
+    vy as Float         # vertical velocity (m/s)
+    time as Float       # elapsed time (seconds)
+end
+
+# Initialize projectile
+function create_projectile with initial_velocity as Float, angle_degrees as Float returns Projectile
+    # Convert angle to radians (simplified)
+    set angle_rad to angle_degrees times 0.0174533
+    
+    # Calculate initial velocity components
+    # Simplified trig (in production, would use math library)
+    set vx to initial_velocity times 0.866  # approximate cos for 60 degrees
+    set vy to initial_velocity times 0.5    # approximate sin for 60 degrees
+    
+    set projectile to new Projectile
+    set projectile.x to 0.0
+    set projectile.y to 0.0
+    set projectile.vx to vx
+    set projectile.vy to vy
+    set projectile.time to 0.0
+    
+    return projectile
+end
+
+# Update projectile physics
+function update_projectile with proj as Projectile, dt as Float
+    # Update velocity (gravity affects vertical component)
+    set proj.vy to proj.vy minus (GRAVITY times dt)
+    
+    # Update position
+    set proj.x to proj.x plus (proj.vx times dt)
+    set proj.y to proj.y plus (proj.vy times dt)
+    
+    # Update time
+    set proj.time to proj.time plus dt
+end
+
+# Simulate projectile motion
+function simulate_projectile with initial_velocity as Float, angle as Float
+    print text "Projectile Motion Simulation"
+    print text "============================"
+    print text "Initial velocity: " plus string of initial_velocity plus " m/s"
+    print text "Launch angle: " plus string of angle plus " degrees"
+    print text ""
+    
+    set proj to create_projectile with initial_velocity, angle
+    
+    print text "Time(s)  X(m)    Y(m)    Vx(m/s) Vy(m/s)"
+    print text "========================================="
+    
+    set max_height to 0.0
+    set max_distance to 0.0
+    
+    # Simulate until projectile hits ground
+    while proj.y is greater than or equal to 0.0
+        # Print current state every 0.5 seconds
+        set time_mod to proj.time times 10.0
+        set time_int to integer of time_mod
+        set remainder to time_int modulo 5
+        
+        if remainder equals 0
+            print text string of proj.time plus "    " plus string of proj.x plus "    " plus string of proj.y plus "    " plus string of proj.vx plus "    " plus string of proj.vy
+        end
+        
+        # Track maximum height and distance
+        if proj.y is greater than max_height
+            set max_height to proj.y
+        end
+        
+        if proj.x is greater than max_distance
+            set max_distance to proj.x
+        end
+        
+        # Update physics
+        update_projectile with proj, TIME_STEP
+    end
+    
+    print text ""
+    print text "Final Results:"
+    print text "=============="
+    print text "Maximum height: " plus string of max_height plus " meters"
+    print text "Total distance: " plus string of max_distance plus " meters"
+    print text "Flight time: " plus string of proj.time plus " seconds"
+end
+
+# Calculate required velocity for target distance
+function calculate_required_velocity with distance as Float, angle as Float returns Float
+    # Simplified calculation (would use proper physics formula in production)
+    # Range = (v^2 * sin(2*angle)) / g
+    # Solving for v: v = sqrt((Range * g) / sin(2*angle))
+    
+    # For 45 degree angle, sin(2*angle) = 1 (maximum range)
+    set velocity_squared to distance times GRAVITY
+    
+    # Simplified square root approximation
+    set velocity to distance divided by 10.0
+    
+    return velocity
+end
+
+# Main program
+print text "Scientific Computing Example: Projectile Motion"
+print text "==============================================="
+print text ""
+
+# Run simulation
+simulate_projectile with initial_velocity: 50.0, angle: 45.0
+
+print text ""
+print text "================================"
+print text ""
+
+# Calculate velocity for specific distance
+set target_distance to 200.0
+set required_v to calculate_required_velocity with distance: target_distance, angle: 45.0
+
+print text "To reach " plus string of target_distance plus " meters:"
+print text "Required initial velocity: approximately " plus string of required_v plus " m/s"

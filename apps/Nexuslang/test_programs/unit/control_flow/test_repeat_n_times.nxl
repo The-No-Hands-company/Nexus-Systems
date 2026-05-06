@@ -1,0 +1,65 @@
+function test_basic_repeat
+    print text "Test 1: Basic repeat"
+    repeat 5 times
+        print text "Iteration"
+    end
+    print text "Done"
+
+function test_variable_count
+    print text "Test 2: Variable count"
+    set n to 3
+    repeat n times
+        print text "Count iteration"
+    end
+
+function test_zero_count
+    print text "Test 3: Zero count"
+    repeat 0 times
+        print text "Should not print"
+    end
+    print text "Zero count handled"
+
+function test_with_break
+    print text "Test 4: Break in loop"
+    set counter to 0
+    repeat 10 times
+        set counter to counter plus 1
+        if counter is equal to 3
+            break
+        end
+        print text "Counter: "
+        print text counter
+    end
+    print text "Final counter: "
+    print text counter
+
+function test_with_continue
+    print text "Test 5: Continue in loop"
+    set i to 0
+    repeat 5 times
+        set i to i plus 1
+        if i is equal to 3
+            continue
+        end
+        print text "Value: "
+        print text i
+    end
+
+function test_nested_repeat
+    print text "Test 6: Nested repeat"
+    repeat 3 times
+        print text "Outer"
+        repeat 2 times
+            print text "  Inner"
+        end
+    end
+
+# Run all tests
+test_basic_repeat()
+test_variable_count()
+test_zero_count()
+test_with_break()
+test_with_continue()
+test_nested_repeat()
+
+print text "All tests complete"

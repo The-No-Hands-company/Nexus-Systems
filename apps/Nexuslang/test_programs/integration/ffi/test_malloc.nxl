@@ -1,0 +1,28 @@
+# Test FFI: Call C malloc/free for dynamic memory allocation
+# Demonstrates manual memory management via C functions
+
+extern function malloc with size as Integer returns Pointer from library "c"
+extern function free with ptr as Pointer from library "c"
+extern function printf with format as Pointer returns Integer from library "c"
+
+function main
+    # Allocate 100 bytes
+    set size to 100
+    set buffer to malloc(size)
+    
+    # Check if allocation succeeded
+    if buffer is not null
+        set msg to "Memory allocated successfully!\n"
+        printf(msg)
+        
+        # Free the memory
+        free(buffer)
+        set msg2 to "Memory freed.\n"
+        printf(msg2)
+    else
+        set msg to "Memory allocation failed!\n"
+        printf(msg)
+    end
+    
+    return 0
+end

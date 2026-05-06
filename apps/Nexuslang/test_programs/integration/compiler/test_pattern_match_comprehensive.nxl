@@ -1,0 +1,69 @@
+# Comprehensive pattern matching test
+
+print text "=== Pattern Matching Tests ==="
+
+# Test 1: Integer matching
+print text "Test 1: Integer matching"
+set x to 3
+match x with
+    case 1
+        print text "FAIL: Got 1"
+    case 2
+        print text "FAIL: Got 2"
+    case 3
+        print text "PASS: Got 3"
+    case _
+        print text "FAIL: Got default"
+end
+
+# Test 2: Wildcard/Default case
+print text "Test 2: Default case"
+set y to 999
+match y with
+    case 1
+        print text "FAIL: Got 1"
+    case 2
+        print text "FAIL: Got 2"
+    case _
+        print text "PASS: Default case works"
+end
+
+# Test 3: Multiple matches in sequence
+print text "Test 3: Multiple matches"
+set val to 0
+match val with
+    case 0
+        print text "PASS: Zero matched"
+    case _
+        print text "FAIL: Should have matched 0"
+end
+
+set val to 100
+match val with
+    case 100
+        print text "PASS: 100 matched"
+    case _
+        print text "FAIL: Should have matched 100"
+end
+
+# Test 4: Match with side effects
+print text "Test 4: Match with calculations"
+set result to 0
+set code to 2
+match code with
+    case 1
+        set result to 10
+    case 2
+        set result to 20
+    case 3
+        set result to 30
+    case _
+        set result to minus 1
+end
+
+if result is equal to 20
+    print text "PASS: Result is 20"
+else
+    print text "FAIL: Result should be 20"
+
+print text "=== All pattern matching tests complete ==="

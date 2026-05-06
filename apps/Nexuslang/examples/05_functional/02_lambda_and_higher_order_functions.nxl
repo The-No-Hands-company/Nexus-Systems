@@ -1,0 +1,179 @@
+# Lambda and Higher-Order Functions in NexusLang
+
+# Lambda Functions (Anonymous Functions)
+# Basic lambda function that adds two numbers
+set add to lambda with a as Integer and b as Integer returns Integer
+    return a plus b
+
+# Lambda function with no parameters
+set get_random_number to lambda returns Integer
+    return random number between 1 and 100
+
+# Lambda function that captures variables from outer scope
+set multiplier to 2
+set multiply_by to lambda with x as Integer returns Integer
+    return x times multiplier
+
+# Higher-Order Functions
+
+# Function that takes a function as an argument
+function apply with fn as Function and x as Integer returns Integer
+    return fn with x
+
+# Function that returns a function
+function create_multiplier with factor as Integer returns Function
+    return lambda with x as Integer returns Integer
+        return x times factor
+
+# Function that takes a function and applies it to each item in a list
+function map with fn as Function and items as List returns List
+    set result to empty List
+    for each item in items
+        append fn with item to result
+    return result
+
+# Function that takes a predicate function and filters a list
+function filter with predicate as Function and items as List returns List
+    set result to empty List
+    for each item in items
+        if predicate with item
+            append item to result
+    return result
+
+# Function that takes a function and accumulates a result
+function reduce with fn as Function and items as List and initial as Any returns Any
+    set result to initial
+    for each item in items
+        set result to fn with result and item
+    return result
+
+# Usage Examples
+
+# Using lambda functions directly
+print text "5 + 3 = " plus convert add with 5 and 3 to string
+print text "Random number: " plus convert get_random_number to string
+print text "6 × 2 = " plus convert multiply_by with 6 to string
+
+# Using higher-order function 'apply'
+print text "apply multiply_by to 4: " plus convert apply with multiply_by and 4 to string
+
+# Creating and using a function from a higher-order function
+set double to create_multiplier with 2
+set triple to create_multiplier with 3
+print text "double 10: " plus convert double with 10 to string
+print text "triple 10: " plus convert triple with 10 to string
+
+# Using map with a lambda function
+set numbers to [1, 2, 3, 4, 5]
+set squared_numbers to map with lambda with x as Integer returns Integer
+    return x times x
+and numbers
+
+print text "Original numbers: " plus convert numbers to string
+print text "Squared numbers: " plus convert squared_numbers to string
+
+# Using filter with a lambda function
+set even_numbers to filter with lambda with x as Integer returns Boolean
+    return x % 2 is 0
+and numbers
+
+print text "Even numbers: " plus convert even_numbers to string
+
+# Using reduce with a lambda function
+set sum to reduce with lambda with acc as Integer and x as Integer returns Integer
+    return acc plus x
+and numbers and 0
+
+print text "Sum of numbers: " plus convert sum to string
+
+# Combining higher-order functions
+set result to reduce with lambda with acc as Integer and x as Integer returns Integer
+    return acc plus x
+and map with lambda with x as Integer returns Integer
+    return x times x
+and filter with lambda with x as Integer returns Boolean
+    return x % 2 is not 0
+and numbers and 0
+
+print text "Sum of squares of odd numbers: " plus convert result to string
+
+# Advanced Examples
+
+# Composing functions
+function compose with f as Function and g as Function returns Function
+    return lambda with x as Any returns Any
+        return f with g with x
+
+set increment to lambda with x as Integer returns Integer
+    return x plus 1
+
+set square to lambda with x as Integer returns Integer
+    return x times x
+
+set increment_then_square to compose with square and increment
+print text "increment_then_square 5: " plus convert increment_then_square with 5 to string
+
+# Currying
+function curry_add returns Function
+    return lambda with a as Integer returns Function
+        return lambda with b as Integer returns Integer
+            return a plus b
+
+set add_five to curry_add with 5
+print text "add_five 10: " plus convert add_five with 10 to string
+
+# Memoization using closures
+function memoize with fn as Function returns Function
+    set cache to empty Dictionary
+    
+    return lambda with x as Any returns Any
+        if x is in cache
+            return cache[x]
+        else
+            set result to fn with x
+            set cache[x] to result
+            return result
+
+# Fibonacci with memoization
+set fibonacci to memoize with lambda with n as Integer returns Integer
+    if n is less than 2
+        return n
+    else
+        return fibonacci with n minus 1 plus fibonacci with n minus 2
+
+print text "Fibonacci 10: " plus convert fibonacci with 10 to string
+print text "Fibonacci 20: " plus convert fibonacci with 20 to string
+
+# Function that returns a function that operates on a data structure
+function create_finder with key as String returns Function
+    return lambda with obj as Dictionary returns Any
+        if key is in obj
+            return obj[key]
+        else
+            return null
+
+set find_name to create_finder with "name"
+set person1 to {"name": "Alice", "age": 30}
+set person2 to {"age": 25, "city": "New York"}
+
+print text "Person1 name: " plus convert find_name with person1 to string
+print text "Person2 name: " plus convert find_name with person2 to string
+
+# Partial application
+function partial with fn as Function and fixed_args as List returns Function
+    return lambda with rest_args as List returns Any
+        set all_args to copy of fixed_args
+        append all of rest_args to all_args
+        return fn with all_args
+
+set multiply to lambda with args as List returns Integer
+    set result to 1
+    for each arg in args
+        set result to result times arg
+    return result
+
+set double to partial with multiply and [2]
+set triple to partial with multiply and [3]
+
+print text "double 4: " plus convert double with [4] to string
+print text "triple 4: " plus convert triple with [4] to string 

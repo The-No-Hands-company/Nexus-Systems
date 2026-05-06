@@ -1,0 +1,228 @@
+# Week 8 Test: Memory Access Validation
+#
+# Tests the memory access validator's ability to detect:
+# - Potential null pointer dereferences
+# - Unaligned memory accesses
+# - Memory operations that need bounds checking
+#
+# Expected: Program compiles with warnings about memory safety
+
+function test_null_pointer_dereference
+    # Test 1: Potential null pointer dereference [0]
+    set result to 0
+    asm
+        code
+        "mov rax, [0]"
+    output result with constraint "=a"
+    end
+    print text "Test 1: Null pointer dereference warning expected"
+end
+
+function test_unaligned_access_word
+    # Test 2: Unaligned word access (offset +1)
+    set ptr to 1000
+    set result to 0
+    asm
+        code
+        "mov ax, [rax+1]"
+    input ptr with constraint "a"
+    output result with constraint "=a"
+    end
+    print text "Test 2: Unaligned word access (offset +1)"
+end
+
+function test_unaligned_access_dword
+    # Test 3: Unaligned dword access (offset +3)
+    set ptr to 2000
+    set result to 0
+    asm
+        code
+        "mov eax, [rbx+3]"
+    input ptr with constraint "b"
+    output result with constraint "=a"
+    end
+    print text "Test 3: Unaligned dword access (offset +3)"
+end
+
+function test_unaligned_access_qword
+    # Test 4: Unaligned qword access (offset +5)
+    set ptr to 3000
+    set result to 0
+    asm
+        code
+        "mov rax, [rcx+5]"
+    input ptr with constraint "c"
+    output result with constraint "=a"
+    end
+    print text "Test 4: Unaligned qword access (offset +5)"
+end
+
+function test_aligned_byte_access
+    # Test 5: Aligned byte access (no warning expected)
+    set ptr to 4000
+    set result to 0
+    asm
+        code
+        "mov al, [rax+1]"
+    input ptr with constraint "a"
+    output result with constraint "=a"
+    end
+    print text "Test 5: Aligned byte access (no warning)"
+end
+
+function test_array_bounds_checking
+    # Test 6: Array access without bounds checking
+    set arr_ptr to 5000
+    set index to 10
+    set result to 0
+    asm
+        code
+        "mov rax, [rax]"
+    input arr_ptr with constraint "a"
+    output result with constraint "=a"
+    end
+    print text "Test 6: Array access - bounds checking suggestion expected"
+end
+
+function test_pointer_arithmetic
+    # Test 7: Pointer arithmetic without validation
+    set base to 6000
+    set offset to 100
+    set result to 0
+    asm
+        code
+        "add rax, rbx"
+        "mov rcx, [rax]"
+    input base with constraint "a"
+    input offset with constraint "b"
+    output result with constraint "=c"
+    end
+    print text "Test 7: Pointer arithmetic with memory access"
+end
+
+function test_multiple_memory_accesses
+    # Test 8: Multiple memory operations
+    set src to 7000
+    set dst to 8000
+    set value to 42
+    asm
+        code
+        "mov rax, [rbx]"
+        "mov [rcx], rax"
+    input src with constraint "b"
+    input dst with constraint "c"
+    output value with constraint "=a"
+    end
+    print text "Test 8: Multiple memory accesses"
+end
+
+function test_memory_store_unaligned
+    # Test 9: Unaligned memory store
+    set ptr to 9000
+    set value to 123
+    asm
+        code
+        "mov [rax+7], rbx"
+    input ptr with constraint "a"
+    input value with constraint "b"
+    end
+    print text "Test 9: Unaligned memory store (offset +7)"
+end
+
+function test_null_pointer_store
+    # Test 10: Null pointer store attempt
+    set value to 999
+    asm
+        code
+        "mov [0], rax"
+    input value with constraint "a"
+    end
+    print text "Test 10: Null pointer store warning expected"
+end
+
+function test_aligned_memory_access
+    # Test 11: Properly aligned memory access (no warnings)
+    set ptr to 10000
+    set result to 0
+    asm
+        code
+        "mov rax, [rbx]"
+    input ptr with constraint "b"
+    output result with constraint "=a"
+    clobber "memory"
+    end
+    print text "Test 11: Aligned memory access with memory clobber"
+end
+
+function test_memory_barrier
+    # Test 12: Memory access with explicit barrier
+    set ptr1 to 11000
+    set ptr2 to 12000
+    set val to 0
+    asm
+        code
+        "mov rax, [rbx]"
+        "mfence"
+        "mov [rcx], rax"
+    input ptr1 with constraint "b"
+    input ptr2 with constraint "c"
+    output val with constraint "=a"
+    clobber "memory"
+    end
+    print text "Test 12: Memory access with barrier"
+end
+
+# Main execution
+print text "=== Week 8: Memory Access Validation Test ==="
+print text ""
+
+print text "Test 1: Null pointer dereference..."
+call test_null_pointer_dereference
+print text ""
+
+print text "Test 2: Unaligned word access..."
+call test_unaligned_access_word
+print text ""
+
+print text "Test 3: Unaligned dword access..."
+call test_unaligned_access_dword
+print text ""
+
+print text "Test 4: Unaligned qword access..."
+call test_unaligned_access_qword
+print text ""
+
+print text "Test 5: Aligned byte access..."
+call test_aligned_byte_access
+print text ""
+
+print text "Test 6: Array bounds checking..."
+call test_array_bounds_checking
+print text ""
+
+print text "Test 7: Pointer arithmetic..."
+call test_pointer_arithmetic
+print text ""
+
+print text "Test 8: Multiple memory accesses..."
+call test_multiple_memory_accesses
+print text ""
+
+print text "Test 9: Unaligned memory store..."
+call test_memory_store_unaligned
+print text ""
+
+print text "Test 10: Null pointer store..."
+call test_null_pointer_store
+print text ""
+
+print text "Test 11: Aligned memory access..."
+call test_aligned_memory_access
+print text ""
+
+print text "Test 12: Memory barrier..."
+call test_memory_barrier
+print text ""
+
+print text "=== All memory access validation tests completed ==="
+print text "Note: Should see warnings for unaligned accesses and null pointer operations"

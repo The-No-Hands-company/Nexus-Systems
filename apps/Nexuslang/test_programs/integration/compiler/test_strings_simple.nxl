@@ -1,0 +1,23 @@
+# Test string operations - compiler version
+
+# Test 1: Basic string variables
+set greeting to "Hello"
+set name to "World"
+print text greeting
+print text name
+
+# Test 2: String concatenation
+set message to greeting plus " " plus name
+print text message
+
+# Test 3: String comparison
+if greeting is equal to "Hello"
+    print text "String comparison works!"
+
+if "test" is equal to "test"
+    print text "Literal comparison works!"
+
+# Test 4: Multiple concatenations
+set sentence to "NLPL " plus "Compiler " plus "Rocks!"
+print text sentence
+print text "String tests complete!"

@@ -1,0 +1,61 @@
+# Test FFI with libc functions - Full Integration Test
+# Tests both declaration and actual function calls
+
+print text "======================================="
+print text "FFI Integration Test - libc Functions"
+print text "======================================="
+print text ""
+
+# Test 1: strlen function
+print text "Test 1: strlen function"
+print text "-----------------------"
+extern function strlen with str as Pointer returns Integer from library "c"
+
+set msg to "Hello, NLPL!"
+set length to call strlen with msg
+print text "String: Hello, NLPL!"
+print text "Length: "
+print number length
+
+print text ""
+
+# Test 2: strcmp function  
+print text "Test 2: strcmp function"
+print text "-----------------------"
+extern function strcmp with s1 as Pointer, s2 as Pointer returns Integer from library "c"
+
+set str1 to "test"
+set str2 to "test"
+set result to call strcmp with str1, str2
+print text "strcmp('test', 'test') = "
+print number result
+print text "(0 means strings are equal)"
+
+print text ""
+
+# Test 3: Multiple calls
+print text "Test 3: Multiple strlen calls"
+print text "-----------------------------"
+set empty to ""
+set short to "Hi"
+set long to "This is a longer string for testing"
+
+set len_empty to call strlen with empty
+set len_short to call strlen with short
+set len_long to call strlen with long
+
+print text "Empty string length: "
+print number len_empty
+print text "Short string length: "
+print number len_short
+print text "Long string length: "
+print number len_long
+
+print text ""
+print text "======================================="
+print text "All FFI tests passed!"
+print text "======================================="
+
+
+
+

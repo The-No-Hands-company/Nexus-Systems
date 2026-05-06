@@ -1,0 +1,42 @@
+# Test Bitwise Operations
+
+# Use variables to prevent constant folding (if any)
+set a to 5
+set b to 3
+set zero to 0
+set one to 1
+set two to 2
+set eight to 8
+
+print text "--- Bitwise AND ---"
+# 5 is 101, 3 is 011 -> 101 & 011 = 001 (1)
+print number a bitwise and b
+print number a & b
+
+print text "--- Bitwise OR ---"
+# 5 is 101, 3 is 011 -> 101 | 011 = 111 (7)
+print number a bitwise or b
+print number a | b
+
+print text "--- Bitwise XOR ---"
+# 5 is 101, 3 is 011 -> 101 ^ 011 = 110 (6)
+print number a bitwise xor b
+print number a ^ b
+
+print text "--- Bitwise NOT ---"
+# ~0 should be -1
+print number bitwise not zero
+print number ~zero
+
+print text "--- Bitwise Shift ---"
+# 1 << 2 = 100 (4)
+print number one shift left two
+print number one << two
+
+# 8 >> 2 = 10 (2)
+print number eight shift right two
+print number eight >> two
+
+print text "--- Complex Expression ---"
+# (1 << 2) | 1 = 4 | 1 = 5
+print number (one << two) | one

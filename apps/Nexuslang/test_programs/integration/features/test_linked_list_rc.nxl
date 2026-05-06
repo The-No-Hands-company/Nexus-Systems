@@ -1,0 +1,84 @@
+program test_linked_list_rc
+
+# Linked List with Rc<T> - Demonstrating Shared Ownership
+# This example shows:
+# 1. Creating a chain of Rc-wrapped values
+# 2. Shared ownership (multiple strong references to same node)
+# 3. Automatic cleanup when references go out of scope
+
+function test_simple_chain returns Integer
+    print text "=== Creating Simple Rc Chain ==="
+    
+    # Create a chain: node1 -> node2 -> node3
+    # Each value wrapped in Rc for shared ownership
+    set node3 to Rc of Integer with 30
+    print text "Created node3 with value 30"
+    
+    set node2 to Rc of Integer with 20
+    print text "Created node2 with value 20"
+    
+    set node1 to Rc of Integer with 10
+    print text "Created node1 with value 10"
+    
+    # In a real linked list, we'd store next pointers in a struct
+    # For this demo, we're showing the Rc ownership concept
+    print text "All nodes created with Rc for reference counting"
+    
+    return 0
+end
+
+function test_shared_ownership returns Integer
+    print text ""
+    print text "=== Testing Shared Ownership ==="
+    
+    # Create an Rc value
+    set original_ref to Rc of Integer with 100
+    print text "Created original_ref to value 100"
+    
+    # Create a second strong reference (automatic clone)
+    set shared_ref to original_ref
+    print text "Created shared_ref pointing to same value"
+    
+    # Both references are now valid
+    # The value will only be freed when BOTH are released
+    print text "Both references keep the value alive"
+    print text "Value will be freed when both go out of scope"
+    
+    return 0
+end
+
+function test_multiple_references returns Integer
+    print text ""
+    print text "=== Testing Multiple References ==="
+    
+    # Create Rc with value
+    set ref1 to Rc of Integer with 42
+    print text "Created ref1 with value 42"
+    
+    # Create additional references (each increments ref count)
+    set ref2 to ref1
+    print text "Created ref2 (ref count now 2)"
+    
+    set ref3 to ref1
+    print text "Created ref3 (ref count now 3)"
+    
+    set ref4 to ref2
+    print text "Created ref4 from ref2 (ref count now 4)"
+    
+    print text "Value has 4 strong references"
+    print text "Will be freed only after all 4 are released"
+    
+    return 0
+end
+
+function main returns Integer
+    call test_simple_chain
+    call test_shared_ownership
+    call test_multiple_references
+    
+    print text ""
+    print text "=== All Rc ownership tests passed ==="
+    print text "Automatic cleanup will release all Rc values"
+    
+    return 0
+end

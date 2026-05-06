@@ -1,0 +1,8 @@
+# Minimal lambda test
+
+async function main with nothing returns Integer
+    set add to lambda x, y: x plus y
+    set result to add(5, 3)
+    print text result
+    return 0
+end

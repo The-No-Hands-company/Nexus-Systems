@@ -1,0 +1,172 @@
+# Complete Type System Test
+# Tests: Generic types, type inference, structs, unions, enums
+
+print text "=== Type System Completion Test ==="
+print text ""
+
+# ============================================
+# TEST 1: Generic Function with Type Inference
+# ============================================
+print text "TEST 1: Generic Functions"
+
+function identity<T> that takes value as T returns T
+    return value
+end
+
+# Test with different types
+set int_result to identity with 42
+print text "identity(42) = "
+print number int_result
+
+set string_result to identity with "Hello"
+print text "identity(Hello) = "
+print text string_result
+
+print text ""
+
+# ============================================
+# TEST 2: Generic Class with Type Parameters
+# ============================================
+print text "TEST 2: Generic Classes"
+
+class Box<T>
+    property value as T
+    
+    method set_value with val as T
+        set this.value to val
+    end method
+    
+    method get_value returns T
+        return this.value
+    end method
+end class
+
+# Create Box<Integer>
+set int_box to new Box<Integer>
+call int_box.set_value with 100
+set box_value to call int_box.get_value
+print text "Box<Integer> value:"
+print number box_value
+
+# Create Box<String>
+set str_box to new Box<String>
+call str_box.set_value with "Boxed String"
+set box_str to call str_box.get_value
+print text "Box<String> value:"
+print text box_str
+
+print text ""
+
+# ============================================
+# TEST 3: Type Inference from Context
+# ============================================
+print text "TEST 3: Type Inference"
+
+# Infer type from literal
+set auto_int to 42
+set auto_float to 3.14
+set auto_string to "inferred"
+set auto_bool to true
+
+print text "Inferred types work correctly"
+
+# Infer from operations
+set sum_result to auto_int plus 10
+set concat_result to auto_string plus " type"
+
+print text "Operation type inference works"
+
+print text ""
+
+# ============================================
+# TEST 4: Struct Definition and Usage
+# ============================================
+print text "TEST 4: Struct Types"
+
+struct Point
+    x as Integer
+    y as Integer
+end
+
+# Create struct instance
+set p to new Point
+set p.x to 10
+set p.y to 20
+
+print text "Point struct:"
+print text "  x ="
+print number p.x
+print text "  y ="  
+print number p.y
+
+print text ""
+
+# ============================================
+# TEST 5: Union Definition and Usage
+# ============================================
+print text "TEST 5: Union Types"
+
+union Value
+    int_val as Integer
+    float_val as Float
+    string_val as String
+end
+
+# Create union instance
+set v to new Value
+set v.int_val to 42
+
+print text "Union Value with integer:"
+print number v.int_val
+
+print text ""
+
+# ============================================
+# TEST 6: Complex Generic Types
+# ============================================
+print text "TEST 6: Complex Generic Types"
+
+class Pair<T, U>
+    property first as T
+    property second as U
+    
+    method get_first returns T
+        return this.first
+    end method
+    
+    method get_second returns U
+        return this.second
+    end method
+end class
+
+# Create Pair<Integer, String>
+set pair to new Pair<Integer, String>
+set pair.first to 1
+set pair.second to "one"
+
+set first_val to call pair.get_first
+set second_val to call pair.get_second
+
+print text "Pair<Integer, String>:"
+print text "  first ="
+print number first_val
+print text "  second ="
+print text second_val
+
+print text ""
+
+# ============================================
+# TEST 7: Generic Functions with Constraints
+# ============================================
+print text "TEST 7: Generic Constraints (Planned)"
+
+# This will be supported when trait system is complete
+# function sum<T: Numeric> with a as T and b as T returns T
+#     return a plus b
+# end
+
+print text "Generic constraints - implementation pending"
+
+print text ""
+
+print text "=== All Type System Tests Complete ==="

@@ -1,0 +1,190 @@
+# Generic Types in NexusLang - Working Examples
+# Demonstrates real working generic patterns (compiler-tested)
+
+print text "=== Generic Types in NexusLang ==="
+print text ""
+
+# ============================================================================
+# 1. GENERIC CLASSES WITH PROPERTIES
+# ============================================================================
+
+print text "1. Generic Container Class"
+print text "--------------------------"
+
+class Box<T>
+    property value as T
+    property count as Integer
+    
+    method get_value returns T
+        return this.value
+    end method
+    
+    method set_value with v as T
+        set this.value to v
+    end method
+    
+    method increment
+        set this.count to this.count plus 1
+    end method
+end class
+
+# Create Box<Integer>
+set int_box to new Box<Integer>
+set int_box.value to 42
+set int_box.count to 1
+
+print text "Integer box value: "
+print text call int_box.get_value
+
+call int_box.set_value with 100
+print text "Updated value: "
+print text call int_box.get_value
+
+call int_box.increment
+print text "Count after increment: "
+print text int_box.count
+print text ""
+
+# ============================================================================
+# 2. GENERIC CLASSES WITH MULTIPLE TYPE PARAMETERS
+# ============================================================================
+
+print text "2. Generic Pair Class"
+print text "---------------------"
+
+class Pair<K, V>
+    property key as K
+    property val as V
+    
+    method get_key returns K
+        return this.key
+    end method
+    
+    method get_value returns V
+        return this.val
+    end method
+end class
+
+# Create Pair<Integer, Integer>
+set coord to new Pair<Integer, Integer>
+set coord.key to 100
+set coord.val to 200
+
+print text "Pair key: "
+print text call coord.get_key
+
+print text "Pair value: "
+print text call coord.get_value
+print text ""
+
+# ============================================================================
+# 3. GENERIC CLASSES WITH METHODS
+# ============================================================================
+
+print text "3. Generic Calculator Class"
+print text "---------------------------"
+
+class Calculator<T>
+    property accumulator as T
+    
+    method add with value as T returns T
+        set this.accumulator to this.accumulator plus value
+        return this.accumulator
+    end method
+    
+    method multiply with value as T returns T
+        set this.accumulator to this.accumulator times value
+        return this.accumulator
+    end method
+    
+    method reset with value as T
+        set this.accumulator to value
+    end method
+end class
+
+# Create Calculator<Integer>
+set calc to new Calculator<Integer>
+set calc.accumulator to 10
+
+set result1 to call calc.add with 5
+print text "10 + 5 = "
+print text result1
+
+set result2 to call calc.multiply with 2
+print text "15 * 2 = "
+print text result2
+
+call calc.reset with 0
+print text "After reset: "
+print text calc.accumulator
+print text ""
+
+# ============================================================================
+# 4. GENERIC OPTIONAL TYPE PATTERN
+# ============================================================================
+
+print text "4. Generic Optional Pattern"
+print text "---------------------------"
+
+class Optional<T>
+    property has_value as Boolean
+    property stored_value as T
+    
+    method set_some with val as T
+        set this.has_value to true
+        set this.stored_value to val
+    end method
+    
+    method set_none
+        set this.has_value to false
+    end method
+    
+    method is_some returns Boolean
+        return this.has_value
+    end method
+    
+    method unwrap returns T
+        return this.stored_value
+    end method
+    
+    method unwrap_or with default_val as T returns T
+        if this.has_value
+            return this.stored_value
+        end
+        return default_val
+    end method
+end class
+
+# Create Optional<Integer> with value
+set opt1 to new Optional<Integer>
+call opt1.set_some with 42
+
+if call opt1.is_some
+    set value1 to call opt1.unwrap
+    print text "Optional has value: "
+    print text value1
+end
+
+# Create Optional<Integer> without value
+set opt2 to new Optional<Integer>
+call opt2.set_none
+
+set value2 to call opt2.unwrap_or with 999
+print text "Optional is None, using default: "
+print text value2
+print text ""
+
+# ============================================================================
+# 5. BEST PRACTICES SUMMARY
+# ============================================================================
+
+print text "=== Generic Types Best Practices ==="
+print text "1. Use <T> syntax for type parameters"
+print text "2. Properties: 'property name as T'"
+print text "3. Methods: 'method name with param as T returns T'"
+print text "4. Instantiate: 'new ClassName<Type>'"
+print text "5. Multiple params: 'class Name<K, V>'"
+print text "6. Generic classes enable type-safe containers"
+print text "7. Optional<T> pattern for nullable handling"
+print text ""
+print text "=== All Examples Completed Successfully ==="

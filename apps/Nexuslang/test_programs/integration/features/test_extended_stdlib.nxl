@@ -1,0 +1,219 @@
+# Test Extended Standard Library Features
+# NO SIMPLIFICATIONS - Full featured test
+
+print text "=== Testing Extended Standard Library ==="
+print text ""
+
+# 1. HTTP Client (using free test API)
+print text "1. HTTP Client"
+set api_url to "https://httpbin.org/get"
+print text "  - Making GET request to httpbin.org..."
+
+set http_result to http_get(api_url)
+set check_ok to is_response_ok(http_result)
+
+if check_ok
+    print text "  - GET request successful"
+    set status to get_response_status(http_result)
+    print text "  - Status code: "
+    print text status
+    
+    set headers to get_response_headers(http_result)
+    print text "  - Response headers retrieved"
+    
+    set body to get_response_text(http_result)
+    print text "  - Response body length: "
+    set body_len to len(body)
+    print text body_len
+else
+    print text "  - Request failed (check network connection)"
+    set status to get_response_status(http_result)
+    print text "  - Status code: "
+    print text status
+end
+print text ""
+
+# 2. Cryptography & Hashing
+print text "2. Cryptography & Hashing"
+set message to "Hello NLPL"
+
+# MD5
+set md5_hash to hash_md5(message)
+print text "  - MD5: "
+print text md5_hash
+
+# SHA-256
+set sha256_hash to hash_sha256(message)
+print text "  - SHA256: "
+print text sha256_hash
+
+# SHA-512
+set sha512_hash to hash_sha512(message)
+print text "  - SHA512: "
+print text sha512_hash
+
+# BLAKE2b
+set blake2_hash to hash_blake2b(message)
+print text "  - BLAKE2b: "
+print text blake2_hash
+
+# Base64 encoding
+set encoded to base64_encode(message)
+print text "  - Base64 encoded: "
+print text encoded
+
+set decoded to base64_decode(encoded)
+print text "  - Base64 decoded: "
+print text decoded
+
+# HMAC
+set secret_key to "my_secret_key"
+set hmac_result to hmac_sha256(message, secret_key)
+print text "  - HMAC-SHA256: "
+print text hmac_result
+
+# Password hashing (PBKDF2)
+set password to "secret123"
+set hash_result to hash_password(password)
+print text "  - Password hashed with PBKDF2"
+
+set valid to verify_password(password, hash_result)
+if valid
+    print text "  - Password verification: SUCCESS"
+else
+    print text "  - Password verification: FAILED"
+end
+
+set wrong_password to "wrong123"
+set invalid to verify_password(wrong_password, hash_result)
+if invalid
+    print text "  - Wrong password rejected: FAILED"
+else
+    print text "  - Wrong password rejected: SUCCESS"
+end
+
+# Random tokens
+set token to random_token(16)
+print text "  - Random token (16 bytes): "
+print text token
+
+set hex_str to random_hex(8)
+print text "  - Random hex (8 bytes): "
+print text hex_str
+
+print text ""
+
+# 3. UUID Generation
+print text "3. UUID Generation"
+
+# UUID v4 (random)
+set uuid_v4 to uuid4()
+print text "  - UUID v4 (random): "
+print text uuid_v4
+
+# UUID v1 (time-based)
+set uuid_v1 to uuid1()
+print text "  - UUID v1 (time-based): "
+print text uuid_v1
+
+# Validation
+set uuid_valid to is_valid_uuid(uuid_v4)
+if uuid_valid
+    print text "  - UUID v4 validation: VALID"
+else
+    print text "  - UUID v4 validation: INVALID"
+end
+
+set invalid_uuid to "not-a-uuid"
+set uuid_invalid to is_valid_uuid(invalid_uuid)
+if uuid_invalid
+    print text "  - Invalid UUID check: FAILED"
+else
+    print text "  - Invalid UUID check: SUCCESS"
+end
+
+print text ""
+
+# 4. Random Number Generation
+print text "4. Random Utilities"
+
+# Random integer
+set rand_int to random_int(1, 100)
+print text "  - Random int (1-100): "
+print text rand_int
+
+# Random float
+set rand_float to random_float(0.0, 1.0)
+print text "  - Random float (0.0-1.0): "
+print text rand_float
+
+# Random boolean
+set rand_bool to random_bool(0.5)
+print text "  - Random boolean (50% true): "
+print text rand_bool
+
+# Random choice from list
+set items to [1, 2, 3, 4, 5]
+set chosen to random_choice(items)
+print text "  - Random choice from [1,2,3,4,5]: "
+print text chosen
+
+# Random sample (3 unique items)
+set sample to random_sample(items, 3)
+print text "  - Random sample (3 items): "
+set sample_str to to_string(sample)
+print text sample_str
+
+# Shuffle list
+set shuffled to shuffle_list(items)
+print text "  - Shuffled [1,2,3,4,5]: "
+set shuffled_str to to_string(shuffled)
+print text shuffled_str
+
+# Gaussian distribution
+set gauss to random_gauss(0.0, 1.0)
+print text "  - Random Gaussian (mu=0, sigma=1): "
+print text gauss
+
+print text ""
+
+# 5. URL utilities
+print text "5. URL Utilities"
+
+# URL encoding
+set params to {"name": "John Doe", "age": "30"}
+set encoded_params to url_encode(params)
+print text "  - URL encoded params: "
+print text encoded_params
+
+# URL parsing
+set test_url to "https://example.com:8080/path?query=value#fragment"
+set parsed to url_parse(test_url)
+print text "  - Parsed URL scheme: "
+set scheme to parsed["scheme"]
+print text scheme
+print text "  - Parsed URL hostname: "
+set hostname to parsed["hostname"]
+print text hostname
+print text "  - Parsed URL port: "
+set port to parsed["port"]
+print text port
+
+# URL joining
+set base_url to "https://example.com/api/"
+set url_path to "users/123"
+set joined to url_join(base_url, url_path)
+print text "  - Joined URL: "
+print text joined
+
+print text ""
+
+print text "=== Extended Stdlib Features Complete! ==="
+print text ""
+print text "Summary:"
+print text "  HTTP: 20+ functions (GET, POST, PUT, DELETE, url_parse, download_file)"
+print text "  Crypto: 25+ functions (MD5, SHA256, SHA512, BLAKE2, HMAC, Base64, PBKDF2)"
+print text "  UUID: 5+ functions (v1, v4, v3, v5, validation)"
+print text "  Random: 12+ functions (int, float, choice, sample, shuffle, gauss)"
+print text ""
+print text "Total new functions: 62+"

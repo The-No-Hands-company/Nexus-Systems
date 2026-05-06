@@ -1,0 +1,22 @@
+# Simple DMA test - Basic channel allocation and release
+# Expected: Should print success messages for allocation/release
+
+print text "Test: Basic DMA channel allocation"
+
+# Allocate channel 2 (floppy disk)
+set success to allocate_dma_channel with channel: 2
+if success
+    print text "Success: Channel 2 allocated"
+else
+    print text "Error: Channel 2 allocation failed"
+end
+
+# Release channel 2
+set released to release_dma_channel with channel: 2
+if released
+    print text "Success: Channel 2 released"
+else
+    print text "Error: Channel 2 release failed"
+end
+
+print text "Test complete"

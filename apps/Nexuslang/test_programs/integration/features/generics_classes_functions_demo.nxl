@@ -1,0 +1,34 @@
+# Generic Classes and Functions Demo
+# Demonstrates the newly implemented generic type parameter support
+
+# Generic function with single type parameter
+function identity<T> that takes value as T returns T
+    return value
+
+# Generic function with multiple type parameters
+function map<T, R> that takes items as List<T> and mapper as String returns List<R>
+    return items
+
+# Generic class with single type parameter
+class Container<T>
+    pass
+
+# Generic class with multiple type parameters
+class Pair<K, V>
+    pass
+
+# Generic class with inheritance
+class Node<T> extends BaseNode
+    pass
+
+# Nested generic types in function
+function process<T> that takes matrix as List<List<T>> returns T
+    return matrix
+
+print text "Generic classes and functions demo complete!"
+print text ""
+print text "Supported syntax:"
+print text "  - Generic functions: function name<T, R> that takes..."
+print text "  - Generic classes: class Name<T, K, V>"
+print text "  - With inheritance: class Node<T> extends BaseNode"
+print text "  - Nested generics: List<List<T>>, Dictionary<K, List<V>>"

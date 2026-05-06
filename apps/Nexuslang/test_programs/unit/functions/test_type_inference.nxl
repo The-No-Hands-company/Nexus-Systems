@@ -1,0 +1,19 @@
+function add that takes x and y returns Integer
+    set result to x plus y
+    return result
+
+function multiply that takes a and b returns Integer
+    return a times b
+
+function greet that takes name returns Nothing
+    print name
+
+set num1 to 10
+set num2 to 20
+set sum to add with num1, num2
+set product to multiply with 5, 6
+
+print sum
+print product
+
+greet with "Type inference test!"

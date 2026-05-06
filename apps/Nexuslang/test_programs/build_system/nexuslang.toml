@@ -1,0 +1,11 @@
+[package]
+name = "calculator"
+version = "0.1.0"
+
+[[bin]]
+name = "calculator"
+path = "calculator.nxl"
+
+[profile.dev]
+opt_level = 0
+debug = true

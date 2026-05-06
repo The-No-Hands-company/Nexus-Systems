@@ -1,0 +1,10 @@
+# Simple macro test
+print text "Testing simple macro"
+
+macro HELLO
+    print text "Hello!"
+end
+
+print text "Macro defined"
+expand HELLO
+print text "Done"

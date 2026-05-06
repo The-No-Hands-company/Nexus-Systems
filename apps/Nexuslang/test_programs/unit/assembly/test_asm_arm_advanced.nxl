@@ -1,0 +1,114 @@
+# ARM/AArch64 Advanced Features - Conditional Execution & Load/Store
+# Tests ARM-specific features not available on x86_64
+#
+# Hardware Requirements: ARM/AArch64 (Raspberry Pi, Apple Silicon, ARM server)
+
+function main returns Integer
+    print text "=== ARM/AArch64 Advanced Features Tests ==="
+    print text ""
+    
+    # Test 1: Conditional execution (CSEL - Conditional Select)
+    print text "Test 1: Conditional select (CSEL)"
+    set x to 10
+    set y to 20
+    set max_val to 0
+    
+    asm
+        code
+            "cmp x1, x2"        # Compare x and y
+            "csel x0, x1, x2, gt"  # x0 = (x1 > x2) ? x1 : x2
+            "mov $0, x0"
+        outputs "=r": max_val
+        inputs "r": x, "r": y
+        clobbers "x0"
+    end
+    
+    print text "Max value: "
+    print number max_val
+    print text " (expected: 20)"
+    print text ""
+    
+    # Test 2: Load/Store with offset
+    print text "Test 2: Load/Store with offset"
+    set base_addr to 1000
+    set offset_val to 0
+    
+    asm
+        code
+            "add x0, x1, 16"    # Calculate address (base + 16)
+            "mov $0, x0"
+        outputs "=r": offset_val
+        inputs "r": base_addr
+        clobbers "x0"
+    end
+    
+    print text "Address with offset: "
+    print number offset_val
+    print text " (expected: 1016)"
+    print text ""
+    
+    # Test 3: Multiple register operations (ADC - Add with Carry)
+    print text "Test 3: Add with carry (ADC)"
+    set val1 to 0xFFFFFFFFFFFFFFFF  # Max 64-bit value
+    set val2 to 1
+    set carry_result to 0
+    
+    asm
+        code
+            "adds x0, x1, x2"   # Add and set flags
+            "adc x3, xzr, xzr"  # Capture carry bit
+            "mov $0, x3"
+        outputs "=r": carry_result
+        inputs "r": val1, "r": val2
+        clobbers "x0", "x3"
+    end
+    
+    print text "Carry bit: "
+    print number carry_result
+    print text " (expected: 1)"
+    print text ""
+    
+    # Test 4: Bit field operations (UBFX - Unsigned Bit Field Extract)
+    print text "Test 4: Bit field extract (UBFX)"
+    set source to 0xFF00
+    set extracted to 0
+    
+    asm
+        code
+            "ubfx x0, x1, 8, 8"  # Extract bits 8-15
+            "mov $0, x0"
+        outputs "=r": extracted
+        inputs "r": source
+        clobbers "x0"
+    end
+    
+    print text "Extracted bits: "
+    print number extracted
+    print text " (expected: 255)"
+    print text ""
+    
+    # Test 5: Reverse bytes (REV)
+    print text "Test 5: Reverse bytes (REV)"
+    set original to 0x12345678
+    set reversed to 0
+    
+    asm
+        code
+            "rev w0, w1"        # Reverse bytes in 32-bit word
+            "mov $0, x0"
+        outputs "=r": reversed
+        inputs "r": original
+        clobbers "x0"
+    end
+    
+    print text "Reversed: "
+    print number reversed
+    print text " (expected: 2018915346 = 0x78563412)"
+    print text ""
+    
+    print text "=== All ARM advanced tests completed ==="
+    
+    return 0
+end
+
+main()

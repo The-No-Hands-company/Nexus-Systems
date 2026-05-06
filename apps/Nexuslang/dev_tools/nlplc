@@ -1,0 +1,215 @@
+#!/usr/bin/env python3
+"""
+NLPL Compiler - Compile NexusLang code to native executables.
+
+Usage:
+    nlplc <source.nlpl>              # Compile to executable
+    nlplc <source.nlpl> -o output    # Specify output name
+    nlplc <source.nlpl> --emit-llvm  # Generate LLVM IR only
+    nlplc <source.nlpl> --optimize   # Enable optimizations
+"""
+
+import sys
+import os
+import argparse
+import subprocess
+from pathlib import Path
+
+# Add src to path
+sys.path.insert(0, str(Path(__file__).parent / "src"))
+
+from nexuslang.parser.lexer import Lexer
+from nexuslang.parser.parser import Parser
+from nexuslang.compiler.backends.llvm_ir_generator import LLVMIRGenerator
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="NLPL Compiler - Compile NexusLang to native executables",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=__doc__
+    )
+    parser.add_argument("source", help="NLPL source file (.nxl)")
+    parser.add_argument("-o", "--output", help="Output file name (default: source name without extension)")
+    parser.add_argument("--emit-llvm", action="store_true", help="Generate LLVM IR (.ll) only")
+    parser.add_argument("--emit-bc", action="store_true", help="Generate LLVM bitcode (.bc)")
+    parser.add_argument("-O", "--optimize", type=int, choices=[0, 1, 2, 3], default=0,
+                        help="Optimization level (0-3, default: 0)")
+    parser.add_argument("--debug", action="store_true", help="Include debug information")
+    parser.add_argument("--verbose", "-v", action="store_true", help="Verbose output")
+    parser.add_argument("--no-link", action="store_true", help="Don't link, just compile to object file")
+    parser.add_argument("--run", action="store_true", help="Run the compiled executable immediately")
+    
+    args = parser.parse_args()
+    
+    # Check if source file exists
+    if not os.path.exists(args.source):
+        print(f"Error: Source file '{args.source}' not found", file=sys.stderr)
+        return 1
+    
+    # Determine output name
+    source_path = Path(args.source)
+    if args.output:
+        output_base = args.output
+    else:
+        output_base = source_path.stem
+    
+    if args.verbose:
+        print(f"Compiling {args.source}...")
+    
+    # Read source code
+    try:
+        with open(args.source, 'r') as f:
+            source_code = f.read()
+    except Exception as e:
+        print(f"Error reading source file: {e}", file=sys.stderr)
+        return 1
+    
+    # Parse source code
+    try:
+        lexer = Lexer(source_code)
+        tokens = lexer.scan_tokens()
+        parser_obj = Parser(tokens)
+        ast = parser_obj.parse()
+        
+        if args.verbose:
+            print(f"✓ Parsed successfully ({len(tokens)} tokens)")
+    except Exception as e:
+        print(f"Parse error: {e}", file=sys.stderr)
+        return 1
+    
+    # Generate LLVM IR
+    try:
+        generator = LLVMIRGenerator()
+        llvm_ir = generator.generate(ast)
+        
+        if args.verbose:
+            print(f"✓ Generated LLVM IR ({len(llvm_ir)} bytes)")
+    except Exception as e:
+        print(f"Code generation error: {e}", file=sys.stderr)
+        if args.verbose:
+            import traceback
+            traceback.print_exc()
+        return 1
+    
+    # Write LLVM IR to file
+    ll_file = f"{output_base}.ll"
+    try:
+        with open(ll_file, 'w') as f:
+            f.write(llvm_ir)
+        if args.verbose:
+            print(f"✓ Wrote LLVM IR to {ll_file}")
+    except Exception as e:
+        print(f"Error writing LLVM IR: {e}", file=sys.stderr)
+        return 1
+    
+    # If only emitting LLVM IR, stop here
+    if args.emit_llvm:
+        print(f"Generated LLVM IR: {ll_file}")
+        return 0
+    
+    # Compile LLVM IR to object file using llc or clang
+    obj_file = f"{output_base}.o"
+    
+    # Check if llc is available
+    llc_available = subprocess.run(["which", "llc"], capture_output=True).returncode == 0
+    clang_available = subprocess.run(["which", "clang"], capture_output=True).returncode == 0
+    
+    if not (llc_available or clang_available):
+        print("Error: Neither 'llc' nor 'clang' found. Please install LLVM tools.", file=sys.stderr)
+        print(f"LLVM IR saved to: {ll_file}")
+        return 1
+    
+    try:
+        if clang_available:
+            # Use clang to compile directly
+            compile_cmd = ["clang", ll_file, "-c", "-o", obj_file]
+            if args.optimize:
+                compile_cmd.append(f"-O{args.optimize}")
+            if args.debug:
+                compile_cmd.append("-g")
+            
+            if args.verbose:
+                print(f"Running: {' '.join(compile_cmd)}")
+            
+            result = subprocess.run(compile_cmd, capture_output=True, text=True)
+            if result.returncode != 0:
+                print(f"Compilation failed:\n{result.stderr}", file=sys.stderr)
+                return 1
+            
+            if args.verbose:
+                print(f"✓ Compiled to object file: {obj_file}")
+        else:
+            # Use llc
+            compile_cmd = ["llc", ll_file, "-o", obj_file, "-filetype=obj"]
+            if args.optimize:
+                compile_cmd.extend([f"-O{args.optimize}"])
+            
+            if args.verbose:
+                print(f"Running: {' '.join(compile_cmd)}")
+            
+            result = subprocess.run(compile_cmd, capture_output=True, text=True)
+            if result.returncode != 0:
+                print(f"Compilation failed:\n{result.stderr}", file=sys.stderr)
+                return 1
+            
+            if args.verbose:
+                print(f"✓ Compiled to object file: {obj_file}")
+    
+    except Exception as e:
+        print(f"Error during compilation: {e}", file=sys.stderr)
+        return 1
+    
+    # If bitcode requested
+    if args.emit_bc:
+        bc_file = f"{output_base}.bc"
+        bc_cmd = ["llvm-as", ll_file, "-o", bc_file]
+        result = subprocess.run(bc_cmd, capture_output=True, text=True)
+        if result.returncode == 0:
+            print(f"Generated bitcode: {bc_file}")
+        else:
+            print(f"Warning: Could not generate bitcode: {result.stderr}", file=sys.stderr)
+    
+    # Link to executable (unless --no-link)
+    if not args.no_link and clang_available:
+        exe_file = output_base
+        link_cmd = ["clang", obj_file, "-o", exe_file]
+        if args.debug:
+            link_cmd.append("-g")
+        
+        # Link with C standard library, math library, pthread, and C++ standard library (for exceptions)
+        link_cmd.extend(["-lm", "-lpthread", "-lstdc++"])
+        
+        if args.verbose:
+            print(f"Running: {' '.join(link_cmd)}")
+        
+        result = subprocess.run(link_cmd, capture_output=True, text=True)
+        if result.returncode != 0:
+            print(f"Linking failed:\n{result.stderr}", file=sys.stderr)
+            return 1
+        
+        if args.verbose:
+            print(f"✓ Linked executable: {exe_file}")
+        
+        # Make executable
+        os.chmod(exe_file, 0o755)
+        
+        print(f"✓ Successfully compiled: {exe_file}")
+        
+        # Run if requested
+        if args.run:
+            if args.verbose:
+                print(f"\n=== Running {exe_file} ===\n")
+            result = subprocess.run([f"./{exe_file}"])
+            return result.returncode
+    else:
+        if args.no_link:
+            print(f"Object file: {obj_file}")
+        else:
+            print(f"Object file: {obj_file} (clang not available for linking)")
+    
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

@@ -1,0 +1,125 @@
+# Optimization Correctness Test: Edge Cases
+# Tests boundary conditions and special values
+
+# Zero handling
+function test_zero_operations returns Integer
+    set a to 0
+    set b to 100
+    set c to a plus b
+    set d to b minus a
+    set e to a times b
+    
+    if e is equal to 0
+        return c plus d
+    end
+    return -1
+end
+
+# Boundary values
+function test_boundaries returns Integer
+    set max_val to 2147483647  # Near INT_MAX
+    set result to 0
+    
+    if max_val is greater than 0
+        set result to result plus 1
+    end
+    
+    set min_val to -2147483648  # Near INT_MIN
+    if min_val is less than 0
+        set result to result plus 1
+    end
+    
+    return result
+end
+
+# Division by one
+function test_identity_operations returns Integer
+    set x to 42
+    set y to x times 1
+    set z to y divided by 1
+    set w to z plus 0
+    set v to w minus 0
+    return v
+end
+
+# Boolean edge cases
+function test_boolean_edges with flag as Integer returns Integer
+    if flag is equal to 0
+        return 0
+    end
+    if flag is not equal to 0
+        return 1
+    end
+    return -1
+end
+
+# Empty operations
+function test_empty_collections returns Integer
+    set empty_list to list
+    set count to 0
+    
+    for each item in empty_list
+        set count to count plus 1
+    end
+    
+    return count
+end
+
+# Comparison chains
+function test_comparison_chains returns Integer
+    set a to 5
+    set b to 10
+    set c to 15
+    
+    set result to 0
+    if a is less than b and b is less than c
+        set result to result plus 1
+    end
+    if c is greater than b and b is greater than a
+        set result to result plus 1
+    end
+    
+    return result
+end
+
+# Main test runner
+print text "Testing edge case optimization correctness..."
+print text ""
+
+set test1 to call test_zero_operations
+print text "Zero operations: "
+print test1
+print text " (expected: 200)"
+
+set test2 to call test_boundaries
+print text "Boundaries: "
+print test2
+print text " (expected: 2)"
+
+set test3 to call test_identity_operations
+print text "Identity operations: "
+print test3
+print text " (expected: 42)"
+
+set test4a to call test_boolean_edges with 0
+print text "Boolean edges (0): "
+print test4a
+print text " (expected: 0)"
+
+set test4b to call test_boolean_edges with 1
+print text "Boolean edges (1): "
+print test4b
+print text " (expected: 1)"
+
+set test5 to call test_empty_collections
+print text "Empty collections: "
+print test5
+print text " (expected: 0)"
+
+set test6 to call test_comparison_chains
+print text "Comparison chains: "
+print test6
+print text " (expected: 2)"
+
+print text ""
+print text "All edge case tests complete!"

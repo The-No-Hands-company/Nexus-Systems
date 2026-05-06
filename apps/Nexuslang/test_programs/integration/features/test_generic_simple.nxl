@@ -1,0 +1,7 @@
+# Simplified test for generic class
+
+define a class called Box with T as a type parameter
+    properties:
+        item: T
+
+print text "Generic class Box<T> defined!"

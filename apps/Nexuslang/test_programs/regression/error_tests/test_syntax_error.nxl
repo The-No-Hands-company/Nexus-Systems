@@ -1,0 +1,4 @@
+# Test syntax error with enhanced context
+set x to 5
+set y to 10 +
+print text x

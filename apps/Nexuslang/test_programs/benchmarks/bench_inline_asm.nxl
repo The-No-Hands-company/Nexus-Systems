@@ -1,0 +1,240 @@
+# NexusLang Inline Assembly Performance Benchmarks
+# Tests compilation speed and overhead of various inline assembly patterns
+
+# Benchmark 1: Simple arithmetic (minimal overhead baseline)
+function bench_simple_arithmetic returns Integer
+    set result to 0
+    
+    asm
+        code
+            "mov rax, 10"
+            "add rax, 20"
+            "mov $0, rax"
+        outputs "=r": result
+        clobbers "rax"
+    end
+    
+    return result
+end
+
+# Benchmark 2: Multiple inline assembly blocks
+function bench_multiple_blocks returns Integer
+    set a to 0
+    set b to 0
+    set c to 0
+    
+    asm
+        code "mov $0, 10"
+        outputs "=r": a
+    end
+    
+    asm
+        code "mov $0, 20"
+        outputs "=r": b
+    end
+    
+    asm
+        code
+            "mov rax, $1"
+            "add rax, $2"
+            "mov $0, rax"
+        outputs "=r": c
+        inputs "r": a, "r": b
+        clobbers "rax"
+    end
+    
+    return c
+end
+
+# Benchmark 3: Complex instruction mix (all validation types)
+function bench_complex_instructions returns Integer
+    set x to 100
+    set y to 50
+    set result to 0
+    
+    asm
+        code
+            "mov rax, $1"
+            "mov rbx, $2"
+            "cmp rax, rbx"
+            "setg cl"
+            "movzx rax, cl"
+            "shl rax, 1"
+            "add rax, rbx"
+            "mov $0, rax"
+        outputs "=r": result
+        inputs "r": x, "r": y
+        clobbers "rax", "rbx", "rcx"
+    end
+    
+    return result
+end
+
+# Benchmark 4: Conditional jumps and labels
+function bench_conditional_jumps returns Integer
+    set a to 10
+    set b to 5
+    set result to 0
+    
+    asm
+        code
+            "mov rax, $1"
+            "mov rbx, $2"
+            "cmp rax, rbx"
+            "jg .greater"
+            "mov $0, 0"
+            "jmp .done"
+            ".greater:"
+            "mov $0, 1"
+            ".done:"
+        outputs "=r": result
+        inputs "r": a, "r": b
+        clobbers "rax", "rbx"
+    end
+    
+    return result
+end
+
+# Benchmark 5: Memory operations (LEA, addressing)
+function bench_memory_operations returns Integer
+    set base to 1000
+    set result to 0
+    
+    asm
+        code
+            "lea $0, [$1 + 8]"
+        outputs "=r": result
+        inputs "r": base
+    end
+    
+    return result
+end
+
+# Benchmark 6: SIMD operations (if supported)
+function bench_simd_operations returns Integer
+    set x to 42
+    set result to 0
+    
+    asm
+        code
+            "mov rax, $1"
+            "inc rax"
+            "dec rax"
+            "dec rax"
+            "mov $0, rax"
+        outputs "=r": result
+        inputs "r": x
+        clobbers "rax"
+    end
+    
+    return result
+end
+
+# Benchmark 7: Stress test - Many instructions
+function bench_many_instructions returns Integer
+    set input to 10
+    set result to 0
+    
+    asm
+        code
+            "mov rax, $1"
+            "add rax, 1"
+            "add rax, 2"
+            "add rax, 3"
+            "add rax, 4"
+            "add rax, 5"
+            "sub rax, 1"
+            "sub rax, 2"
+            "shl rax, 1"
+            "shr rax, 1"
+            "mov $0, rax"
+        outputs "=r": result
+        inputs "r": input
+        clobbers "rax"
+    end
+    
+    return result
+end
+
+# Benchmark 8: Stress test - Many blocks
+function bench_many_blocks returns Integer
+    set counter to 0
+    
+    asm code "mov $0, 1" outputs "=r": counter end
+    set counter to counter plus 1
+    
+    asm code "mov rax, $1" "add rax, 1" "mov $0, rax" outputs "=r": counter inputs "r": counter clobbers "rax" end
+    set counter to counter plus 1
+    
+    asm code "mov rax, $1" "add rax, 1" "mov $0, rax" outputs "=r": counter inputs "r": counter clobbers "rax" end
+    set counter to counter plus 1
+    
+    asm code "mov rax, $1" "add rax, 1" "mov $0, rax" outputs "=r": counter inputs "r": counter clobbers "rax" end
+    set counter to counter plus 1
+    
+    asm code "mov rax, $1" "add rax, 1" "mov $0, rax" outputs "=r": counter inputs "r": counter clobbers "rax" end
+    
+    return counter
+end
+
+# Main benchmark runner
+function main returns Integer
+    print text "=== NexusLang Inline Assembly Performance Benchmarks ==="
+    print text ""
+    
+    # Run each benchmark
+    print text "Benchmark 1: Simple arithmetic"
+    set result1 to bench_simple_arithmetic()
+    print text "Result: "
+    print number result1
+    print text ""
+    
+    print text "Benchmark 2: Multiple blocks"
+    set result2 to bench_multiple_blocks()
+    print text "Result: "
+    print number result2
+    print text ""
+    
+    print text "Benchmark 3: Complex instructions"
+    set result3 to bench_complex_instructions()
+    print text "Result: "
+    print number result3
+    print text ""
+    
+    print text "Benchmark 4: Conditional jumps"
+    set result4 to bench_conditional_jumps()
+    print text "Result: "
+    print number result4
+    print text ""
+    
+    print text "Benchmark 5: Memory operations"
+    set result5 to bench_memory_operations()
+    print text "Result: "
+    print number result5
+    print text ""
+    
+    print text "Benchmark 6: SIMD operations"
+    set result6 to bench_simd_operations()
+    print text "Result: "
+    print number result6
+    print text ""
+    
+    print text "Benchmark 7: Many instructions"
+    set result7 to bench_many_instructions()
+    print text "Result: "
+    print number result7
+    print text ""
+    
+    print text "Benchmark 8: Many blocks"
+    set result8 to bench_many_blocks()
+    print text "Result: "
+    print number result8
+    print text ""
+    
+    print text "=== All benchmarks completed ==="
+    
+    return 0
+end
+
+# Run benchmarks
+main()

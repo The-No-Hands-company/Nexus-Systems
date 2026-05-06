@@ -1,0 +1,31 @@
+# Comprehensive test for repeat while loop with break and continue
+
+print text "Test 1: Repeat while with break"
+set counter to 0
+repeat while counter is less than 100
+    print value counter
+    set counter to counter plus 1
+    if counter is equal to 5
+        break
+
+print text "Test 2: Repeat while with continue"
+set i to 0
+repeat while i is less than 10
+    set i to i plus 1
+    if i modulo 2 is equal to 0
+        continue
+    print text "Odd number:"
+    print value i
+
+print text "Test 3: Repeat while with complex expressions"
+set x to 1
+set y to 20
+repeat while x is less than y and x is less than 15
+    print text "x:"
+    print value x
+    print text "y:"
+    print value y
+    set x to x times 2
+    set y to y minus 3
+
+print text "All comprehensive repeat while tests passed!"

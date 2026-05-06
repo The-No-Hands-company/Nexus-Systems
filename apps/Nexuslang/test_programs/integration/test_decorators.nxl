@@ -1,0 +1,83 @@
+# Test Decorator Functionality
+
+print text "=== Decorator Tests ==="
+
+# Test 1: @memoize decorator
+print text "\nTest 1: @memoize decorator"
+@memoize
+function fibonacci with n as Integer returns Integer
+    print text "Computing fibonacci(" plus convert n to string plus ")"
+    if n is less than 2
+        return n
+    return fibonacci(n minus 1) plus fibonacci(n minus 2)
+end
+
+# Call multiple times - should only compute each value once
+set result1 to fibonacci(5)
+set result2 to fibonacci(5)
+print text "Fibonacci(5) = " plus convert result1 to string
+print text "Second call (should use cache)"
+print text "Fibonacci(5) = " plus convert result2 to string
+
+# Test 2: @trace decorator
+print text "\nTest 2: @trace decorator"
+@trace
+function double with x as Integer returns Integer
+    return x times 2
+end
+
+set doubled to double(21)
+print text "Result: " plus convert doubled to string
+
+# Test 3: @timer decorator
+print text "\nTest 3: @timer decorator"
+@timer
+function slow_operation with n as Integer returns Integer
+    set sum to 0
+    set i to 0
+    while i is less than n
+        set sum to sum plus i
+        set i to i plus 1
+    return sum
+end
+
+set sum_result to slow_operation(1000)
+print text "Sum: " plus convert sum_result to string
+
+# Test 4: @deprecated decorator (with message)
+print text "\nTest 4: @deprecated decorator"
+@deprecated with message "Use new_calculate instead"
+function old_calculate with x as Integer returns Integer
+    return x plus 10
+end
+
+set old_result to old_calculate(5)
+print text "Old calculate result: " plus convert old_result to string
+
+# Test 5: Multiple decorators (chaining)
+print text "\nTest 5: Multiple decorators"
+@timer
+@trace
+function complex_operation with x as Integer returns Integer
+    return x times x plus x
+end
+
+set complex_result to complex_operation(7)
+print text "Complex result: " plus convert complex_result to string
+
+# Test 6: Decorator on simple function
+print text "\nTest 6: Simple @memoize"
+@memoize
+function square with n as Integer returns Integer
+    print text "Computing square of " plus convert n to string
+    return n times n
+end
+
+set sq1 to square(4)
+set sq2 to square(4)
+set sq3 to square(5)
+print text "Square(4) = " plus convert sq1 to string
+print text "Square(4) again = " plus convert sq2 to string
+print text "Square(5) = " plus convert sq3 to string
+
+print text "\n=== All Decorator Tests Complete ==="

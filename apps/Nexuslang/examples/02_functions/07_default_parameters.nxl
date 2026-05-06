@@ -1,0 +1,50 @@
+# NexusLang Default Parameters Example
+# Demonstrates default parameter values in function definitions
+
+# Example 1: Simple default parameter
+function greet with name as String default to "World"
+    print text "Hello"
+    print text name
+
+print text "=== Example 1: Simple Default ===" 
+greet with  # Uses default "World"
+greet with "Alice"  # Overrides default
+
+# Example 2: Multiple defaults
+function create_config with host as String and port as Integer default to 8080 and ssl as Boolean default to False
+    print text "Server configuration:"
+    print text host
+    print text port
+    print text ssl
+
+print text ""
+print text "=== Example 2: Multiple Defaults ==="
+create_config with "localhost"  # Uses defaults for port and ssl
+create_config with "api.example.com" and 443 and True  # Overrides all defaults
+
+# Example 3: Named arguments with defaults
+function connect_to_server with host as String default to "localhost" and port as Integer default to 8080 and timeout as Integer default to 30
+    print text "Connecting to"
+    print text host
+    print text port
+    print text timeout
+
+print text ""
+print text "=== Example 3: Named + Defaults ==="
+connect_to_server with  # All defaults
+connect_to_server with host: "db.example.com"  # Override just host
+connect_to_server with port: 5432 and timeout: 60  # Uses default host
+connect_to_server with host: "cache.local" and timeout: 5  # Uses default port
+
+# Example 4: Required + optional parameters
+function save_file with filename as String and backup as Boolean default to True and compress as Boolean default to False
+    print text "Saving file:"
+    print text filename
+    print text backup
+    print text compress
+
+print text ""
+print text "=== Example 4: Required + Optional ==="
+save_file with "data.txt"  # filename required, rest default
+save_file with "archive.tar" and True and True  # All provided
+save_file with filename: "config.json" and compress: True  # Mixed named

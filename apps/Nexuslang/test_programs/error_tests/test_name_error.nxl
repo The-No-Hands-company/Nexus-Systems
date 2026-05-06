@@ -1,0 +1,8 @@
+set counter to 0
+set total to 100
+
+while countr is less than 10
+    set counter to counter plus 1
+end
+
+print text counter

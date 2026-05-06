@@ -1,0 +1,2 @@
+set d to {"key": "value"}
+print text d["key"]

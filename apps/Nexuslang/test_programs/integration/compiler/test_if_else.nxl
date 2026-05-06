@@ -1,0 +1,22 @@
+# Test if/else statement compilation
+
+set x to 10
+set y to 20
+
+if x is less than y
+    print text "x is smaller"
+
+if x is greater than y
+    print text "x is greater"
+else
+    print text "x is not greater"
+
+# Nested condition
+set max to 0
+if x is greater than y
+    set max to x
+else
+    set max to y
+
+print text "Max value:"
+print text max

@@ -1,0 +1,86 @@
+# Promise<T> Demo - Async Programming in NexusLang
+# Demonstrates Promise creation, chaining, and async operations
+
+print text "=== Promise<T> Demo ==="
+
+# Test 1: Basic Promise Creation with Promise.resolve()
+print text "\n1. Creating resolved promise:"
+set resolved_promise to call Promise.resolve with 42
+set value to call resolved_promise.get
+print text "Resolved value: " plus value
+
+# Test 2: Promise.reject() 
+print text "\n2. Creating rejected promise:"
+set rejected_promise to call Promise.reject with "Error occurred"
+# Note: Getting a rejected promise will raise an exception in real usage
+
+# Test 3: Promise Chaining with .then()
+print text "\n3. Promise chaining with .then():"
+set chained to call Promise.resolve with 10
+set doubled to call chained.then with lambda x: x * 2
+set result to call doubled.get
+print text "10 doubled = " plus result
+
+# Test 4: Promise.all() - Wait for all promises
+print text "\n4. Promise.all() - combining multiple promises:"
+set p1 to call Promise.resolve with 1
+set p2 to call Promise.resolve with 2
+set p3 to call Promise.resolve with 3
+set all_promise to call Promise.all with [p1, p2, p3]
+set all_results to call all_promise.get
+print text "All results: " plus all_results
+
+# Test 5: Promise.race() - First to complete wins
+print text "\n5. Promise.race() - first promise wins:"
+set fast to call Promise.resolve with "fast"
+set slow to call Promise.resolve with "slow"
+set race_promise to call Promise.race with [fast, slow]
+set winner to call race_promise.get
+print text "Winner: " plus winner
+
+# Test 6: async_task for running functions asynchronously
+print text "\n6. Running async task:"
+function compute_sum with a as Integer and b as Integer returns Integer
+    return a plus b
+
+set async_result to call async_task with compute_sum and [5, 10]
+set sum_value to call async_result.get
+print text "5 + 10 (async) = " plus sum_value
+
+# Test 7: Error Handling with .catch()
+print text "\n7. Error handling with .catch():"
+set error_promise to call Promise.reject with "Something failed"
+set recovered to call error_promise.catch with lambda err: "Recovered from: " plus err
+set recovered_value to call recovered.get
+print text recovered_value
+
+# Test 8: .finally() - Always runs
+print text "\n8. Using .finally() for cleanup:"
+function with_cleanup returns String
+    set p to call Promise.resolve with "data"
+    set with_final to call p.finally_ with lambda: print text "Cleanup executed"
+    return call with_final.get
+
+set final_result to call with_cleanup
+print text "Final result: " plus final_result
+
+# Test 9: Chaining transformations
+print text "\n9. Complex chaining:"
+set complex to call Promise.resolve with 5
+set step1 to call complex.then with lambda x: x * 2
+set step2 to call step1.then with lambda x: x + 3
+set step3 to call step2.then with lambda x: x * x
+set final to call step3.get
+print text "(5 * 2 + 3)^2 = " plus final
+
+print text "\n=== Promise Demo Complete ==="
+print text "\nAvailable Promise methods:"
+print text "- Promise.resolve(value) - Create fulfilled promise"
+print text "- Promise.reject(error) - Create rejected promise"
+print text "- Promise.all([promises]) - Wait for all"
+print text "- Promise.race([promises]) - First to complete"
+print text "- promise.then(fn) - Chain success handler"
+print text "- promise.catch(fn) - Handle errors"
+print text "- promise.finally_(fn) - Always execute cleanup"
+print text "- promise.get(timeout) - Block and wait for result"
+print text "- async_task(fn, args...) - Run function asynchronously"

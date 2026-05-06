@@ -1,0 +1,272 @@
+# Functional Programming Patterns in NexusLang
+
+# 1. Pure Functions and Immutability
+function calculate square with number as Integer returns Integer
+    return number times number
+
+function create user with name as String and age as Integer returns Dictionary
+    return {
+        "name": name,
+        "age": age,
+        "created_at": current timestamp
+    }
+
+# 2. Higher-Order Functions
+function map with fn as Function and items as List returns List
+    set result to empty List
+    for each item in items
+        append fn with item to result
+    return result
+
+function filter with predicate as Function and items as List returns List
+    set result to empty List
+    for each item in items
+        if predicate with item
+            append item to result
+    return result
+
+function reduce with fn as Function and items as List and initial as Any returns Any
+    set result to initial
+    for each item in items
+        set result to fn with result and item
+    return result
+
+# 3. Function Composition
+function compose with f as Function and g as Function returns Function
+    return lambda with x as Any returns Any
+        return f with g with x
+
+# 4. Currying
+function curry add returns Function
+    return lambda with a as Integer returns Function
+        return lambda with b as Integer returns Integer
+            return a plus b
+
+# 5. Memoization
+function memoize with fn as Function returns Function
+    set cache to empty Dictionary
+    
+    return lambda with x as Any returns Any
+        if x is in cache
+            return cache[x]
+        else
+            set result to fn with x
+            set cache[x] to result
+            return result
+
+# 6. Recursion
+function factorial with n as Integer returns Integer
+    if n is less than or equal to 1
+        return 1
+    else
+        return n times factorial with n minus 1
+
+function fibonacci with n as Integer returns Integer
+    if n is less than 2
+        return n
+    else
+        return fibonacci with n minus 1 plus fibonacci with n minus 2
+
+# 7. Immutable Data Structures
+class ImmutableList with generic parameters T
+    private set items to List of T
+    
+    public function initialize with items as List of T
+        set this.items to copy of items
+    
+    public function add with item as T returns ImmutableList of T
+        set new_items to copy of this.items
+        append item to new_items
+        return new ImmutableList with new_items
+    
+    public function remove with index as Integer returns ImmutableList of T
+        set new_items to copy of this.items
+        remove item at index from new_items
+        return new ImmutableList with new_items
+    
+    public function get item at index as Integer returns T
+        return this.items[index]
+    
+    public function get length returns Integer
+        return length of this.items
+
+# 8. Pattern Matching
+function match number with number as Integer returns String
+    if number is 0
+        return "zero"
+    else if number is 1
+        return "one"
+    else if number is 2
+        return "two"
+    else
+        return "many"
+
+# 9. Partial Application
+function partial with fn as Function and fixed_args as List returns Function
+    return lambda with rest_args as List returns Any
+        set all_args to copy of fixed_args
+        append all of rest_args to all_args
+        return fn with all_args
+
+# 10. Function Pipelines
+function pipe with functions as List of Function returns Function
+    return lambda with initial_value as Any returns Any
+        set result to initial_value
+        for each fn in functions
+            set result to fn with result
+        return result
+
+# Usage Examples
+
+# Example 1: Pure Functions and Immutability
+function test pure functions
+    print text "Testing Pure Functions:"
+    set number to 5
+    set squared to calculate square with number
+    print text "Square of " plus convert number to string plus " is " plus convert squared to string
+    
+    set user1 to create user with "Alice" and 30
+    set user2 to create user with "Bob" and 25
+    print text "User 1: " plus convert user1 to string
+    print text "User 2: " plus convert user2 to string
+    print text ""
+
+# Example 2: Higher-Order Functions
+function test higher order functions
+    print text "Testing Higher-Order Functions:"
+    set numbers to [1, 2, 3, 4, 5]
+    
+    # Map example
+    set doubled to map with lambda with x as Integer returns Integer
+        return x times 2
+    and numbers
+    print text "Doubled numbers: " plus convert doubled to string
+    
+    # Filter example
+    set even_numbers to filter with lambda with x as Integer returns Boolean
+        return x % 2 is 0
+    and numbers
+    print text "Even numbers: " plus convert even_numbers to string
+    
+    # Reduce example
+    set sum to reduce with lambda with acc as Integer and x as Integer returns Integer
+        return acc plus x
+    and numbers and 0
+    print text "Sum of numbers: " plus convert sum to string
+    print text ""
+
+# Example 3: Function Composition
+function test function composition
+    print text "Testing Function Composition:"
+    set increment to lambda with x as Integer returns Integer
+        return x plus 1
+    
+    set square to lambda with x as Integer returns Integer
+        return x times x
+    
+    set increment_then_square to compose with square and increment
+    set result to increment_then_square with 5
+    print text "Increment then square 5: " plus convert result to string
+    print text ""
+
+# Example 4: Currying
+function test currying
+    print text "Testing Currying:"
+    set add_five to curry add with 5
+    set result to add_five with 10
+    print text "5 + 10 = " plus convert result to string
+    print text ""
+
+# Example 5: Memoization
+function test memoization
+    print text "Testing Memoization:"
+    set memoized_fibonacci to memoize with lambda with n as Integer returns Integer
+        return fibonacci with n
+    
+    print text "Calculating Fibonacci(10) first time..."
+    set result1 to memoized_fibonacci with 10
+    print text "Calculating Fibonacci(10) second time (should be faster)..."
+    set result2 to memoized_fibonacci with 10
+    print text "Results: " plus convert result1 to string plus ", " plus convert result2 to string
+    print text ""
+
+# Example 6: Recursion
+function test recursion
+    print text "Testing Recursion:"
+    set n to 5
+    print text "Factorial of " plus convert n to string plus " is " plus convert factorial with n to string
+    print text "Fibonacci of " plus convert n to string plus " is " plus convert fibonacci with n to string
+    print text ""
+
+# Example 7: Immutable Data Structures
+function test immutable data structures
+    print text "Testing Immutable Data Structures:"
+    create list1 as new ImmutableList with [1, 2, 3]
+    create list2 as add 4 to list1
+    create list3 as remove 1 from list2
+    
+    print text "Original list: " plus convert list1 to string
+    print text "After adding 4: " plus convert list2 to string
+    print text "After removing index 1: " plus convert list3 to string
+    print text ""
+
+# Example 8: Pattern Matching
+function test pattern matching
+    print text "Testing Pattern Matching:"
+    print text "0 is " plus match number with 0
+    print text "1 is " plus match number with 1
+    print text "2 is " plus match number with 2
+    print text "3 is " plus match number with 3
+    print text ""
+
+# Example 9: Partial Application
+function test partial application
+    print text "Testing Partial Application:"
+    set multiply to lambda with args as List returns Integer
+        set result to 1
+        for each arg in args
+            set result to result times arg
+        return result
+    
+    set double to partial with multiply and [2]
+    set triple to partial with multiply and [3]
+    
+    print text "Double 4: " plus convert double with [4] to string
+    print text "Triple 4: " plus convert triple with [4] to string
+    print text ""
+
+# Example 10: Function Pipelines
+function test function pipelines
+    print text "Testing Function Pipelines:"
+    set numbers to [1, 2, 3, 4, 5]
+    
+    set pipeline to pipe with [
+        lambda with x as List returns List
+            return map with lambda with n as Integer returns Integer
+                return n times 2
+            and x,
+        lambda with x as List returns List
+            return filter with lambda with n as Integer returns Boolean
+                return n % 2 is 0
+            and x,
+        lambda with x as List returns Integer
+            return reduce with lambda with acc as Integer and n as Integer returns Integer
+                return acc plus n
+            and x and 0
+    ]
+    
+    set result to pipeline with numbers
+    print text "Pipeline result: " plus convert result to string
+    print text ""
+
+# Run all examples
+test pure functions
+test higher order functions
+test function composition
+test currying
+test memoization
+test recursion
+test immutable data structures
+test pattern matching
+test partial application
+test function pipelines 

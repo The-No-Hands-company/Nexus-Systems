@@ -1,0 +1,2 @@
+function greet with name as String
+  print text name

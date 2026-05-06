@@ -1,0 +1,9 @@
+# Simple test for debugger
+# Set breakpoint at line 5 with: python -m nexuslang.main test_simple.nlpl --debugger --break 5
+
+set x to 10
+set y to 20
+set sum to x plus y
+print text "Sum is: " plus sum
+set product to x times y
+print text "Product is: " plus product

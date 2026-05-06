@@ -1,0 +1,55 @@
+# Test: Basic Inline Assembly - NOP and Simple Instructions
+# Purpose: Validate basic inline assembly code generation
+# Expected: No errors, successful compilation (if compiled), interpreter warns
+
+# Test 1: Simple NOP instruction
+print text "Test 1: NOP instruction"
+asm
+    code
+        "nop"
+end
+print text "NOP executed"
+
+# Test 2: Multiple NOP instructions
+print text "Test 2: Multiple NOPs"
+asm
+    code
+        "nop"
+        "nop"
+        "nop"
+end
+print text "Multiple NOPs executed"
+
+# Test 3: MOV instruction with register (no inputs/outputs for now)
+print text "Test 3: MOV instruction"
+asm
+    code
+        "mov rax, 0"
+end
+print text "MOV executed"
+
+# Test 4: Simple arithmetic (no side effects visible in interpreter mode)
+print text "Test 4: ADD instruction"
+asm
+    code
+        "mov rax, 5"
+        "mov rbx, 3"
+        "add rax, rbx"
+end
+print text "ADD executed"
+
+# Test 5: Comments and documentation
+print text "Test 5: Documented assembly"
+asm
+    code
+        "# This is a comment in assembly"
+        "mov rcx, 0x1234"
+        "# Another comment"
+        "nop"
+end
+print text "Documented assembly executed"
+
+print text ""
+print text "Basic inline assembly test complete!"
+print text "Note: In interpreter mode, inline assembly is skipped with warnings."
+print text "Compile with 'nlplc' to generate actual inline assembly in LLVM IR."

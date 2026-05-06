@@ -1,0 +1,49 @@
+# Comprehensive else-if test
+print text "=== Test 1: Score 95 ==="
+set score to 95
+if score is greater than or equal to 90
+    print text "Grade: A"
+else if score is greater than or equal to 80
+    print text "Grade: B"
+else if score is greater than or equal to 70
+    print text "Grade: C"
+else
+    print text "Grade: F"
+end
+
+print text ""
+print text "=== Test 2: Score 75 ==="
+set score to 75
+if score is greater than or equal to 90
+    print text "Grade: A"
+else if score is greater than or equal to 80
+    print text "Grade: B"
+else if score is greater than or equal to 70
+    print text "Grade: C"
+else
+    print text "Grade: F"
+end
+
+print text ""
+print text "=== Test 3: Score 50 ==="
+set score to 50
+if score is greater than or equal to 90
+    print text "Grade: A"
+else if score is greater than or equal to 80
+    print text "Grade: B"
+else if score is greater than or equal to 70
+    print text "Grade: C"
+else
+    print text "Grade: F"
+end
+
+print text ""
+print text "=== Test 4: No else case ==="
+set value to 15
+if value is equal to 10
+    print text "Value is 10"
+else if value is equal to 20
+    print text "Value is 20"
+else if value is equal to 15
+    print text "Value is 15"
+end

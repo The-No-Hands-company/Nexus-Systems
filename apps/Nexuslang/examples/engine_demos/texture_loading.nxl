@@ -1,0 +1,137 @@
+# Texture Loading Demo - Load PNG/JPEG images
+# Demonstrates loading external image files as textures
+
+print text "=== NexusLang Texture Loading Demo ==="
+print text "Loading textures from image files..."
+
+# Create window
+set window to create_window with 800 and 600 and "Texture Loading Demo"
+
+# Compile shaders
+set vertex_shader to "
+#version 330 core
+layout(location = 0) in vec3 position;
+layout(location = 1) in vec2 texcoord;
+
+out vec2 TexCoord;
+
+uniform mat4 model;
+uniform mat4 view;
+uniform mat4 projection;
+
+void main() {
+    gl_Position = projection * view * model * vec4(position, 1.0);
+    TexCoord = texcoord;
+}
+"
+
+set fragment_shader to "
+#version 330 core
+in vec2 TexCoord;
+out vec4 FragColor;
+
+uniform sampler2D texture1;
+
+void main() {
+    FragColor = texture(texture1, TexCoord);
+}
+"
+
+print text "Compiling shaders..."
+set shader to create_shader with vertex_shader and fragment_shader
+
+# Create textured cube (36 vertices with position + texcoord)
+print text "Creating cube geometry..."
+set vertices to [0.5, 0.5, 0.5, 1.0, 1.0, -0.5, 0.5, 0.5, 0.0, 1.0, -0.5, -0.5, 0.5, 0.0, 0.0, -0.5, -0.5, 0.5, 0.0, 0.0, 0.5, -0.5, 0.5, 1.0, 0.0, 0.5, 0.5, 0.5, 1.0, 1.0, -0.5, 0.5, -0.5, 1.0, 1.0, 0.5, 0.5, -0.5, 0.0, 1.0, 0.5, -0.5, -0.5, 0.0, 0.0, 0.5, -0.5, -0.5, 0.0, 0.0, -0.5, -0.5, -0.5, 1.0, 0.0, -0.5, 0.5, -0.5, 1.0, 1.0, 0.5, 0.5, -0.5, 1.0, 1.0, 0.5, 0.5, 0.5, 0.0, 1.0, 0.5, -0.5, 0.5, 0.0, 0.0, 0.5, -0.5, 0.5, 0.0, 0.0, 0.5, -0.5, -0.5, 1.0, 0.0, 0.5, 0.5, -0.5, 1.0, 1.0, -0.5, 0.5, 0.5, 1.0, 1.0, -0.5, 0.5, -0.5, 0.0, 1.0, -0.5, -0.5, -0.5, 0.0, 0.0, -0.5, -0.5, -0.5, 0.0, 0.0, -0.5, -0.5, 0.5, 1.0, 0.0, -0.5, 0.5, 0.5, 1.0, 1.0, 0.5, 0.5, 0.5, 1.0, 1.0, 0.5, 0.5, -0.5, 0.0, 1.0, -0.5, 0.5, -0.5, 0.0, 0.0, -0.5, 0.5, -0.5, 0.0, 0.0, -0.5, 0.5, 0.5, 1.0, 0.0, 0.5, 0.5, 0.5, 1.0, 1.0, 0.5, -0.5, 0.5, 1.0, 1.0, 0.5, -0.5, -0.5, 0.0, 1.0, -0.5, -0.5, -0.5, 0.0, 0.0, -0.5, -0.5, -0.5, 0.0, 0.0, -0.5, -0.5, 0.5, 1.0, 0.0, 0.5, -0.5, 0.5, 1.0, 1.0]
+
+set vao to create_vertex_array()
+set vbo to create_vertex_buffer with vertices
+call vao_set_vertex_buffer with vao and vbo
+call vao_set_attribute with vao and 0 and 3 and 20 and 0
+call vao_set_attribute with vao and 1 and 2 and 20 and 12
+
+# Load textures from files
+print text "Loading texture: test_textures/test_pattern.png"
+set texture1 to load_texture_from_file with "test_textures/test_pattern.png"
+print text "Loading texture: test_textures/smiley.png"
+set texture2 to load_texture_from_file with "test_textures/smiley.png"
+
+print text "Textures loaded successfully!"
+
+# Setup camera
+print text "Setting up camera..."
+set camera to create_orbital_camera with 0.0 and 0.0 and 0.0 and 5.0
+
+# Create projection matrix
+set fov to 0.785
+set aspect to 800.0 divided by 600.0
+set proj to mat4_perspective with fov and aspect and 0.1 and 100.0
+set proj_list to mat4_to_list with proj
+
+# Set clear color
+call set_clear_color with 0.2 and 0.2 and 0.25 and 1.0
+
+print text "Rendering..."
+print text "(Two cubes with loaded textures)"
+print text ""
+
+set angle to 0.0
+set frame_count to 0
+
+# Main loop
+while not window_should_close with window
+    set angle to angle plus 0.01
+    set frame_count to frame_count plus 1
+    
+    # Update camera
+    call orbital_rotate with camera and 0.3 and 0.0
+    set view_list to camera_get_view_matrix with camera
+    
+    # Render
+    call begin_frame
+    call use_shader with shader
+    call set_uniform_mat4 with shader and "view" and view_list
+    call set_uniform_mat4 with shader and "projection" and proj_list
+    call set_uniform_int with shader and "texture1" and 0
+    
+    # Draw first cube (left) with test pattern texture
+    set model1 to mat4_identity()
+    set model1 to mat4_translate with model1 and -1.5 and 0.0 and 0.0
+    set rot to mat4_rotation_y with angle
+    set model1 to mat4_multiply with model1 and rot
+    set model1_list to mat4_to_list with model1
+    
+    call set_uniform_mat4 with shader and "model" and model1_list
+    call bind_texture with texture1 and 0
+    call vao_draw_arrays with vao and GL_TRIANGLES() and 0 and 36
+    
+    # Draw second cube (right) with smiley texture
+    set model2 to mat4_identity()
+    set model2 to mat4_translate with model2 and 1.5 and 0.0 and 0.0
+    set rot2 to mat4_rotation_y with 0.0 minus angle
+    set model2 to mat4_multiply with model2 and rot2
+    set model2_list to mat4_to_list with model2
+    
+    call set_uniform_mat4 with shader and "model" and model2_list
+    call bind_texture with texture2 and 0
+    call vao_draw_arrays with vao and GL_TRIANGLES() and 0 and 36
+    
+    call end_frame with window
+    
+    # Exit after 600 frames for testing (10 seconds at 60 FPS)
+    if frame_count is greater than or equal to 600
+        print text "Frame limit reached - exiting..."
+        break
+    end
+end
+
+print text ""
+print text "Cleaning up..."
+call delete_vertex_array with vao
+call delete_vertex_buffer with vbo
+call delete_texture with texture1
+call delete_texture with texture2
+call delete_shader with shader
+call destroy_window with window
+
+print text "Demo complete!"

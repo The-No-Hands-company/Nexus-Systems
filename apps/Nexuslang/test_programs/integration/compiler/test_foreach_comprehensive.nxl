@@ -1,0 +1,25 @@
+# Comprehensive for-each loop tests
+
+# Test 1: Simple iteration
+set numbers to [1, 2, 3, 4, 5]
+print text "Sum of numbers:"
+set sum to 0
+for each n in numbers
+  set sum to sum plus n
+
+print text sum
+
+# Test 2: Multiple for-each loops
+set values to [10, 20, 30]
+print text "Values:"
+for each v in values
+  print text v
+
+# Test 3: Nested arrays (each element)
+set data to [100, 200, 300]
+print text "Data doubled:"
+for each d in data
+  set doubled to d times 2
+  print text doubled
+
+print text "All tests passed!"

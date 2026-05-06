@@ -1,0 +1,66 @@
+# Test FFI Advanced Types - Comprehensive Test
+# Tests opaque pointers, function pointers, unions, and nested types
+
+# Test 1: Opaque pointer type (FILE*)
+extern type FILE as opaque pointer
+
+extern function fopen with filename as String, mode as String returns FILE from library "c"
+extern function fclose with stream as FILE returns Integer from library "c"
+extern function fprintf with stream as FILE, format as String, ... returns Integer from library "c"
+
+# Test 2: Function pointer type
+extern type CompareFunc as function with Integer, Integer returns Integer
+
+function compare_ascending with a as Integer, b as Integer returns Integer
+    if a is less than b
+        return -1
+    else if a is greater than b
+        return 1
+    else
+        return 0
+    end
+end
+
+# Test 3: Union type
+union Value
+    int_value as Integer
+    float_value as Float
+end
+
+# Test 4: Nested struct
+struct Point
+    x as Integer
+    y as Integer
+end
+
+struct Rectangle
+    top_left as Point
+    width as Integer
+    height as Integer
+end
+
+# Test Usage
+print text "FFI Advanced Types Test"
+
+# Test opaque pointer
+set file to call fopen with "test_output.txt", "w"
+if file is not null
+    call fprintf with file, "Hello from NexusLang FFI!\n"
+    call fclose with file
+    print text "File operations successful"
+end
+
+# Test union
+set val to new Value
+set val.int_value to 42
+print text "Union test complete"
+
+# Test nested struct
+set rect to new Rectangle
+set rect.top_left.x to 10
+set rect.top_left.y to 20
+set rect.width to 100
+set rect.height to 50
+print text "Nested struct test complete"
+
+print text "All advanced FFI type tests passed!"

@@ -1,0 +1,24 @@
+# Simplified Inline Assembly Test
+# Tests that inline assembly compiles without runtime testing
+
+print text "Testing inline assembly compilation..."
+
+# Test 1: Simple no-op assembly
+asm
+    code
+        "nop"
+end
+
+print text "Test 1: Basic inline assembly compiled successfully"
+
+# Test 2: Assembly with input (read-only)
+set x to 42
+asm
+    code
+        "# Using input: %0"
+    inputs "r": x
+end
+
+print text "Test 2: Assembly with input compiled successfully"
+
+print text "All inline assembly tests compiled!"

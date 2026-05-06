@@ -1,0 +1,58 @@
+# Test else-if chains
+
+# Test 1: Basic else-if chain
+print text "Test 1: Grade classification"
+set score to 85
+
+if score is greater than or equal to 90
+    print text "A"
+else if score is greater than or equal to 80
+    print text "B"
+else if score is greater than or equal to 70
+    print text "C"
+else if score is greater than or equal to 60
+    print text "D"
+else
+    print text "F"
+
+# Test 2: Multiple conditions with calculations
+print text "Test 2: Number classification"
+set num to 0
+
+if num is greater than 0
+    print text "Positive"
+else if num is less than 0
+    print text "Negative"
+else
+    print text "Zero"
+
+# Test 3: Nested else-if
+print text "Test 3: Range checking"
+set value to 50
+
+if value is less than 25
+    print text "Low"
+else if value is less than 75
+    if value is greater than or equal to 50
+        print text "Medium-High"
+    else
+        print text "Medium-Low"
+else
+    print text "High"
+
+# Test 4: Complex else-if chain
+print text "Test 4: Temperature classification"
+set temp to 72
+
+if temp is less than 32
+    print text "Freezing"
+else if temp is less than 50
+    print text "Cold"
+else if temp is less than 70
+    print text "Cool"
+else if temp is less than 85
+    print text "Warm"
+else
+    print text "Hot"
+
+print text "All else-if tests complete!"

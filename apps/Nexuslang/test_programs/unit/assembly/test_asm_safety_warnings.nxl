@@ -1,0 +1,77 @@
+# Week 8 Test: Dangerous Instruction Detection (Simplified)
+# 
+# Tests warnings for dangerous instructions that will compile
+# (avoiding privileged instructions that LLVM will reject)
+#
+# Expected: Program compiles with warnings
+
+function test_stack_operations
+    print text "Test 1: Stack manipulation warnings"
+    
+    # PUSH/POP pair (balanced)
+    set value to 42
+    set result to 0
+    asm
+        code
+            "push $0"
+            "pop $1"
+        inputs "r": value
+        outputs "=r": result
+        clobbers "memory"
+    end
+    print text "Stack operations complete, result: "
+    print number result
+end
+
+function test_arithmetic_with_implicit_registers
+    print text "Test 2: MUL implicit register usage (rdx:rax)"
+    
+    # MUL uses rdx:rax implicitly
+    set a to 5
+    set b to 10
+    set high to 0
+    set low to 0
+    asm
+        code
+            "mov rax, $0"
+            "mov rbx, $1"
+            "mul rbx"
+            "mov $2, rdx"
+            "mov $3, rax"
+        inputs "r": a, "r": b
+        outputs "=r": high, "=r": low
+        clobbers "rax", "rdx"
+    end
+    print text "MUL result (high): "
+    print number high
+    print text "MUL result (low): "
+    print number low
+end
+
+function test_memory_operations
+    print text "Test 3: Memory operations"
+    
+    # Simple memory operation
+    set value to 100
+    set result to 0
+    asm
+        code
+            "mov rax, $0"
+            "mov $1, rax"
+        inputs "r": value
+        outputs "=r": result
+    end
+    print text "Memory operation result: "
+    print number result
+end
+
+# Main execution
+print text "=== Week 8: Dangerous Instruction Warnings Test ==="
+print text ""
+call test_stack_operations
+print text ""
+call test_arithmetic_with_implicit_registers
+print text ""
+call test_memory_operations
+print text ""
+print text "=== Test completed - check warnings above ==="

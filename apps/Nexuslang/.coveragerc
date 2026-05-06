@@ -1,0 +1,39 @@
+[run]
+source = src/nlpl
+branch = true
+omit =
+    */tests/*
+    */__pycache__/*
+    src/nlpl/stdlib/platform_macos*
+    src/nlpl/stdlib/platform_windows*
+    src/nlpl/stdlib/platform_linux*
+
+[report]
+precision = 2
+skip_empty = true
+exclude_lines =
+    # Standard pragma
+    pragma: no cover
+    # Abstract placeholders
+    raise NotImplementedError
+    # Debug / repr
+    def __repr__
+    def __str__
+    # Module-level guards
+    if __name__ == .__main__.:
+    # Type stubs
+    \.\.\.
+    @abstractmethod
+    @abc.abstractmethod
+    # Unreachable
+    assert False
+
+[html]
+directory = htmlcov
+
+[xml]
+output = coverage.xml
+
+[json]
+output = coverage.json
+pretty_print = true

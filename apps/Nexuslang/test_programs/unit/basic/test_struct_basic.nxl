@@ -1,0 +1,40 @@
+program test_struct_basic
+
+# Test basic struct definition and usage
+
+struct Point
+    x as Integer
+    y as Integer
+end
+
+struct Person
+    name as String
+    age as Integer
+    height as Float
+end
+
+function test_struct_creation returns Integer
+    print text "=== Testing Struct Creation ==="
+    
+    # Allocate a Point struct
+    set my_point to allocate sizeof Point
+    
+    # Set field values
+    set x from my_point to 10
+    set y from my_point to 20
+    
+    print text "Point created: "
+    set px to get x from my_point
+    set py to get y from my_point
+    print px
+    print text ", "
+    print py
+    
+    return 0
+end
+
+function main returns Integer
+    call test_struct_creation
+    print text "=== Struct test complete ==="
+    return 0
+end

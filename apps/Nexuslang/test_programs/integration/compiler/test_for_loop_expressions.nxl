@@ -1,0 +1,24 @@
+# Test For Loop Arbitrary Expressions
+
+# Test 1: For loop with function call
+function get_numbers returns List of Integer
+    return [10, 20, 30, 40, 50]
+
+for each num in get_numbers()
+    print text "Number: "
+    print text num
+    print text "\n"
+end
+
+# Test 2: For loop with list expression
+for each val in [100, 200, 300]
+    print text "Value: "
+    print text val
+    print text "\n"
+end
+
+# Test 3: For loop with arithmetic on list
+set base to [1, 2, 3]
+# This would need list concatenation or similar, simplified for now
+
+print text "For loop arbitrary expressions test complete!\n"

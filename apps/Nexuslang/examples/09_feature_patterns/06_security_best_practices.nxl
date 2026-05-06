@@ -1,0 +1,284 @@
+# Secure File Operations Example
+# Demonstrates NexusLang security best practices
+
+print text "=== NexusLang Security Example: Safe File Operations ==="
+print text ""
+
+# This example shows how to safely handle file operations
+# Run with: nlpl --allow-read=./data --allow-write=./output security_example.nlpl
+
+# ==========================================
+# 1. Path Validation
+# ==========================================
+
+print text "1. Path Validation Example"
+print text "----------------------------"
+
+function validate_user_path with user_input returns String or Null
+    print text "Validating path:"
+    print value user_input
+    
+    # Check for path traversal attempts
+    if user_input contains "../"
+        print text "  ERROR: Path traversal detected (../)"
+        return null
+    
+    if user_input contains "..\\"
+        print text "  ERROR: Path traversal detected (..\\)"
+        return null
+    
+    # Check for absolute paths (security risk)
+    if user_input starts with "/"
+        print text "  ERROR: Absolute paths not allowed"
+        return null
+    
+    # Check for null bytes
+    # (In real implementation, would check for \x00)
+    
+    print text "  Path validation passed"
+    return user_input
+
+# Test with safe path
+set safe_path to validate_user_path with "data/file.txt"
+if safe_path is not null
+    print text "Safe path accepted:"
+    print value safe_path
+
+print text ""
+
+# Test with dangerous path
+set dangerous_path to validate_user_path with "../etc/passwd"
+if dangerous_path is null
+    print text "Dangerous path correctly rejected"
+
+print text ""
+
+# ==========================================
+# 2. Input Validation
+# ==========================================
+
+print text "2. Input Validation Example"
+print text "----------------------------"
+
+function validate_filename with filename returns Boolean
+    # Check length
+    set max_length to 255
+    if length of filename is greater than max_length
+        print text "  ERROR: Filename too long"
+        return false
+    
+    # Check for dangerous characters
+    set dangerous_chars to ["<", ">", "|", "&", ";", "$", "`"]
+    for each char in dangerous_chars
+        if filename contains char
+            print text "  ERROR: Filename contains dangerous character:"
+            print value char
+            return false
+    
+    # Ensure filename is not empty
+    if length of filename is equal to 0
+        print text "  ERROR: Filename cannot be empty"
+        return false
+    
+    print text "  Filename validation passed"
+    return true
+
+# Test valid filename
+set valid_name to validate_filename with "document.txt"
+print text "Valid filename:"
+print value valid_name
+
+print text ""
+
+# Test invalid filename
+set invalid_name to validate_filename with "file; rm -rf /"
+print text "Invalid filename caught"
+
+print text ""
+
+# ==========================================
+# 3. Safe Error Handling
+# ==========================================
+
+print text "3. Safe Error Handling Example"
+print text "-------------------------------"
+
+function safe_read_file with path returns String or Null
+    # Validate path first
+    set validated to validate_user_path with path
+    if validated is null
+        print text "  Path validation failed"
+        return null
+    
+    # Check filename
+    if not validate_filename with path
+        print text "  Filename validation failed"
+        return null
+    
+    # In real implementation:
+    # - Check if file exists
+    # - Check permissions
+    # - Check file size (prevent DoS)
+    # - Read file with error handling
+    
+    print text "  Would safely read file:"
+    print value path
+    return "file_content"
+
+# Try to read a file
+set content to safe_read_file with "data/example.txt"
+if content is not null
+    print text "File read successfully (simulated)"
+
+print text ""
+
+# Try to read dangerous path
+set bad_content to safe_read_file with "../../etc/passwd"
+if bad_content is null
+    print text "Dangerous file access prevented"
+
+print text ""
+
+# ==========================================
+# 4. Directory Whitelist
+# ==========================================
+
+print text "4. Directory Whitelist Example"
+print text "-------------------------------"
+
+# Define allowed directories
+set allowed_read_dirs to ["data", "documents"]
+set allowed_write_dirs to ["output", "temp"]
+
+function is_path_allowed with path and allowed_list returns Boolean
+    for each allowed_dir in allowed_list
+        if path starts with allowed_dir
+            return true
+    return false
+
+function safe_file_operation with path and operation returns Boolean
+    print text "Checking operation:"
+    print value operation
+    print text "On path:"
+    print value path
+    
+    # Validate path
+    set validated to validate_user_path with path
+    if validated is null
+        return false
+    
+    # Check against whitelist
+    if operation is equal to "read"
+        if is_path_allowed with path and allowed_read_dirs
+            print text "  Read operation allowed"
+            return true
+    
+    if operation is equal to "write"
+        if is_path_allowed with path and allowed_write_dirs
+            print text "  Write operation allowed"
+            return true
+    
+    print text "  Operation denied: path not in whitelist"
+    return false
+
+# Test allowed operations
+set read_ok to safe_file_operation with "data/file.txt" and "read"
+print text ""
+
+set write_ok to safe_file_operation with "output/result.txt" and "write"
+print text ""
+
+# Test denied operations
+set denied to safe_file_operation with "system/config.txt" and "read"
+print text ""
+
+# ==========================================
+# 5. Sanitizing User Input
+# ==========================================
+
+print text "5. Input Sanitization Example"
+print text "------------------------------"
+
+function sanitize_filename with raw_filename returns String
+    # Remove path separators
+    set sanitized to replace_all in raw_filename with "/" with "_"
+    set sanitized to replace_all in sanitized with "\\" with "_"
+    
+    # Remove other dangerous characters
+    set dangerous to ["<", ">", ":", "|", "?", "*", "&", ";", "$"]
+    for each char in dangerous
+        set sanitized to replace_all in sanitized with char with "_"
+    
+    # Remove leading dots (hidden files)
+    repeat while sanitized starts with "."
+        set sanitized to substring of sanitized from 1
+    
+    # Ensure not empty
+    if length of sanitized is equal to 0
+        set sanitized to "unnamed_file"
+    
+    return sanitized
+
+# Test sanitization
+set dangerous_filename to "../../../etc/passwd"
+set safe_filename to sanitize_filename with dangerous_filename
+print text "Original (dangerous):"
+print value dangerous_filename
+print text "Sanitized (safe):"
+print value safe_filename
+
+print text ""
+
+# ==========================================
+# 6. Rate Limiting (Basic)
+# ==========================================
+
+print text "6. Rate Limiting Example"
+print text "-------------------------"
+
+# Simple request counter
+set request_count to 0
+set max_requests to 5
+
+function check_rate_limit returns Boolean
+    set request_count to request_count plus 1
+    
+    if request_count is greater than max_requests
+        print text "  Rate limit exceeded!"
+        return false
+    
+    print text "  Request allowed ("
+    print value request_count
+    print text " / "
+    print value max_requests
+    print text ")"
+    return true
+
+# Simulate multiple requests
+set i to 0
+repeat while i is less than 8
+    set allowed to check_rate_limit
+    if not allowed
+        print text "  Request blocked"
+    set i to i plus 1
+
+print text ""
+
+# ==========================================
+# Summary
+# ==========================================
+
+print text "=== Security Best Practices Summary ==="
+print text ""
+print text "1. Always validate user input"
+print text "2. Use path whitelists for file operations"
+print text "3. Sanitize filenames and paths"
+print text "4. Handle errors securely (fail closed)"
+print text "5. Implement rate limiting"
+print text "6. Log security events"
+print text "7. Grant minimum necessary permissions"
+print text ""
+print text "Run this example with limited permissions:"
+print text "  nlpl --allow-read=./data --allow-write=./output security_example.nxl"
+print text ""
+print text "=== Example Complete ==="

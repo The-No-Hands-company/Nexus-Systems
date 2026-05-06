@@ -1,0 +1,27 @@
+// Test Phase 2: Function parameter size annotations
+fn fill_array(arr: i64[count], count: i64, value: i64) {
+    // arr has size annotation [count]
+    // Compiler should track bounds using count parameter
+    
+    let i = 0;
+    while i < count {
+        arr[i] = value;  // Should be bounds checked!
+        i = i + 1;
+    }
+    
+    // This should panic - out of bounds
+    print("Attempting out of bounds access in function...");
+    arr[count] = 999;
+}
+
+fn main() {
+    print("Testing Phase 2: Parameter Size Annotations");
+    
+    // Create array with runtime size
+    let data = alloc(10, i64);
+    
+    // Call function with size annotation
+    fill_array(data, 10, 42);
+    
+    print("Should not reach here!");
+}

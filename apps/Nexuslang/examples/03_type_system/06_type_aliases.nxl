@@ -1,0 +1,43 @@
+# Type Aliases
+# This example demonstrates type aliases for creating shorthand names for complex types
+
+# Basic type aliases for commonly used types
+# Note: Type alias syntax is being designed, these are example concepts
+
+# Alias for a dictionary with string keys and string values
+# define a type alias called StringMap for Dictionary<string, string>
+
+# Alias for a list of numbers
+# define a type alias called NumberList for List<number>
+
+# Alias for a list of custom objects
+# define a type alias called PointList for List<Point>
+
+# Alias for function types
+# define a type alias called Comparator for Function<T, T, Integer>
+
+# Alias for nested complex types
+# define a type alias called UserDatabase for Dictionary<string, Dictionary<string, string>>
+
+# Usage would look like:
+# set users as UserDatabase to empty dictionary
+# set names as StringMap to {"first": "John", "last": "Doe"}
+# set scores as NumberList to [95, 87, 92, 88, 100]
+
+print text "Type aliases provide readable names for complex type signatures"
+print text "They help make code more maintainable and self-documenting"
+print text "Especially useful for generic types with multiple type parameters"
+
+# Example with actual working code
+set my_dict to create dictionary
+set my_dict["name"] to "Alice"
+set my_dict["role"] to "Developer"
+print text "Created a string-to-string dictionary (StringMap concept)"
+
+set my_list to create list
+set my_list to my_list with 10
+set my_list to my_list with 20
+set my_list to my_list with 30
+print text "Created a list of numbers (NumberList concept)"
+
+print text "Type aliases will make these declarations cleaner and more expressive!"

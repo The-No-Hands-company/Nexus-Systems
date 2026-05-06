@@ -1,0 +1,193 @@
+# Example 35: Debugging and Error Handling
+# Demonstrates debugging techniques and comprehensive error handling
+
+print text "=== Debugging and Error Handling in NexusLang ==="
+print text ""
+
+# 1. Basic Try-Catch
+print text "1. Basic Error Handling"
+print text "----------------------"
+
+try
+  set result to 10 divided by 2
+  set result_str to result to_string
+  print text "10 / 2 = " plus result_str
+  
+  set bad_result to 10 divided by 0
+  print text "This won't print"
+catch error with message
+  print text "Error caught: " plus message
+end
+print text ""
+
+# 2. Multiple Try-Catch Blocks
+print text "2. Multiple Error Handlers"
+print text "-------------------------"
+
+try
+  print text "Attempting first division..."
+  set result to 10 divided by 0
+catch error with message
+  print text "First handler caught error"
+end
+
+try
+  print text "Attempting second division..."
+  set result to 5 divided by 0
+catch error with message
+  print text "Second handler caught error"
+end
+print text ""
+
+# 3. Debugging with Print Statements
+print text "3. Debug Tracing"
+print text "----------------"
+
+function debug_factorial with n as Integer returns Integer
+  set n_str to n to_string
+  print text "DEBUG: factorial called with n=" plus n_str
+  
+  if n is less than or equal to 1
+    print text "DEBUG: base case reached"
+    return 1
+  end
+  
+  set recursive_result to debug_factorial with (n minus 1)
+  set result to n times recursive_result
+  
+  set n_str2 to n to_string
+  set result_str to result to_string
+  print text "DEBUG: factorial(" plus n_str2 plus ") = " plus result_str
+  return result
+end
+
+set fact5 to debug_factorial with 5
+set fact5_str to fact5 to_string
+print text "Final result: 5! = " plus fact5_str
+print text ""
+
+# 4. Defensive Programming - Bounds Checking
+print text "4. Defensive Programming"
+print text "-----------------------"
+
+function safe_array_access with arr as List of Integer, index as Integer returns Integer
+  set length to length of arr
+  
+  if index is less than 0
+    print text "WARNING: Negative index, using 0"
+    set index to 0
+  end
+  
+  if index is greater than or equal to length
+    print text "WARNING: Index out of bounds, using last element"
+    set index to length minus 1
+  end
+  
+  return arr at index
+end
+
+set numbers to [10, 20, 30, 40, 50]
+set result2 to safe_array_access with numbers, 2
+set result2_str to result2 to_string
+print text "Safe access [2]: " plus result2_str
+
+set result_neg1 to safe_array_access with numbers, -1
+set result_neg1_str to result_neg1 to_string
+print text "Safe access [-1]: " plus result_neg1_str
+
+set result100 to safe_array_access with numbers, 100
+set result100_str to result100 to_string
+print text "Safe access [100]: " plus result100_str
+print text ""
+
+# 5. Input Validation
+print text "5. Input Validation"
+print text "------------------"
+
+function validate_age with age as Integer returns Boolean
+  set age_str to age to_string
+  
+  if age is less than 0
+    print text "Error: Age cannot be negative. Got: " plus age_str
+    return false
+  end
+  
+  if age is greater than 150
+    print text "Error: Age unrealistic. Got: " plus age_str
+    return false
+  end
+  
+  print text "Valid age: " plus age_str
+  return true
+end
+
+call validate_age with 25
+call validate_age with -5
+call validate_age with 200
+print text ""
+
+# 6. Logging Different Levels
+print text "6. Debug Logging Levels"
+print text "----------------------"
+
+function log_message with level as String, msg as String
+  print text "[" plus level plus "] " plus msg
+end
+
+call log_message with "DEBUG", "Entering function"
+call log_message with "INFO", "Processing started"
+call log_message with "WARNING", "Low memory detected"
+call log_message with "ERROR", "Operation failed"
+print text ""
+
+# 7. Error Recovery with Retry Logic
+print text "7. Error Recovery Pattern"
+print text "------------------------"
+
+function attempt_operation with attempt_num as Integer returns Boolean
+  set num_str to attempt_num to_string
+  print text "Attempt " plus num_str
+  
+  # Simulate operation that succeeds on attempt 3
+  if attempt_num is greater than or equal to 3
+    print text "Success on attempt " plus num_str
+    return true
+  end
+  
+  print text "Attempt " plus num_str plus " failed"
+  return false
+end
+
+set max_attempts to 4
+set current_attempt to 1
+set operation_succeeded to false
+
+while current_attempt is less than or equal to max_attempts
+  set result to attempt_operation with current_attempt
+  
+  if result
+    set operation_succeeded to true
+    set current_attempt to max_attempts
+  end
+  
+  set current_attempt to current_attempt plus 1
+end
+
+if operation_succeeded
+  print text "Operation eventually succeeded!"
+else
+  print text "All attempts exhausted"
+end
+print text ""
+
+print text "=== Debugging Best Practices ==="
+print text "1. Use descriptive error messages"
+print text "2. Include context in error messages (variable values, state)"
+print text "3. Log at different levels (DEBUG, INFO, WARNING, ERROR)"
+print text "4. Use try-catch blocks for expected errors"
+print text "5. Clean up resources in error handlers"
+print text "6. Test error handling paths"
+print text "7. Use defensive programming for public APIs"
+print text "8. Implement retry logic for transient failures"
+print text "9. Add debug print statements during development"
+print text "10. Remove or disable debug output in production"

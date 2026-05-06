@@ -1,0 +1,48 @@
+# Test exception filtering - catch specific, let others propagate
+
+print text "=== Exception Filtering Test ==="
+
+# Test 1: Catch ValueError, let other errors propagate
+print text "Test 1: Catch ValueError only"
+try
+    try
+        print text "  Inner: raising generic error"
+        raise error with message "Generic error - should propagate"
+    catch e
+        # Check if we can filter by message (simplified test)
+        print text "  Inner catch - got: "
+        print text e
+        # Re-throw to outer
+        raise error with message e
+    end
+catch outer_e
+    print text "  Outer catch: "
+    print text outer_e
+end
+print text "Test 1: Complete"
+
+# Test 2: Multiple nested with different exception types
+print text ""
+print text "Test 2: Deep nesting with re-raise"
+try
+    try
+        try
+            raise TypeError with message "Type mismatch"
+        catch e1
+            print text "  Level 3 caught: "
+            print text e1
+            raise ValueError with message "Converted to ValueError"
+        end
+    catch e2
+        print text "  Level 2 caught: "
+        print text e2
+        raise error with message "Final error"
+    end
+catch e3
+    print text "  Level 1 caught: "
+    print text e3
+end
+print text "Test 2: Complete"
+
+print text ""
+print text "=== All filtering tests complete ==="

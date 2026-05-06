@@ -1,0 +1,14 @@
+# Minimal exception test
+
+print text "Before try"
+
+try
+    print text "In try block"
+    raise error with message "Test error"
+    print text "After raise (unreachable)"
+catch e
+    print text "Caught exception: "
+    print text e
+end
+
+print text "After catch - program continues"

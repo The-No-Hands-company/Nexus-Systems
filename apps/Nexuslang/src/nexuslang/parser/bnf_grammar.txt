@@ -1,0 +1,78 @@
+/* 
+ * Formal BNF Grammar for Natural Language Programming Language (NLPL)
+ * This grammar defines the syntax of our English-like programming language
+ */
+
+/* Program Structure */
+<program> ::= <statement-list>
+<statement-list> ::= <statement> | <statement> <statement-list>
+<statement> ::= <variable-declaration> "." 
+              | <function-definition> 
+              | <class-definition> 
+              | <if-statement> 
+              | <while-loop> 
+              | <for-loop> 
+              | <memory-allocation> "." 
+              | <memory-deallocation> "." 
+              | <concurrent-execution> 
+              | <try-catch> 
+              | <expression-statement> "."
+
+/* Variable Declaration */
+<variable-declaration> ::= "Create" ["a" | "an"] <type> "called" <identifier> ["and" "set" "it" "to" <expression>]
+
+/* Function Definition */
+<function-definition> ::= "Define" ["a"] "function" "called" <identifier> "that" "takes" <parameter-list> "and" "returns" <type> "." <statement-list> "End"
+
+<parameter-list> ::= "nothing" | <parameter> | <parameter> ["and"] <parameter-list>
+<parameter> ::= <type> <identifier>
+
+/* Class Definition */
+<class-definition> ::= "Define" ["a"] "class" "called" <identifier> "." <class-body> "End"
+<class-body> ::= <property-declaration> | <method-definition> | <property-declaration> <class-body> | <method-definition> <class-body>
+<property-declaration> ::= "It" "has" ["a" | "an"] <type> "property" "called" <identifier> "."
+<method-definition> ::= "Define" ["a"] "method" "called" <identifier> "that" "takes" <parameter-list> "and" "returns" <type> "." <statement-list> "End"
+
+/* Control Flow */
+<if-statement> ::= "If" <expression> ["then"] <statement-list> [<else-clause>] "End"
+<else-clause> ::= "Otherwise" <statement-list>
+
+<while-loop> ::= "While" <expression> <statement-list> "End"
+<for-loop> ::= "Repeat" "for" "each" <identifier> "in" <expression> <statement-list> "End"
+
+/* Memory Management */
+<memory-allocation> ::= "Allocate" ["a"] "new" <type> "in" "memory" ["with" "value" <expression>] "and" "name" "it" <identifier>
+<memory-deallocation> ::= "Free" "the" "memory" "at" <identifier>
+
+/* Concurrency */
+<concurrent-execution> ::= "Run" "these" "tasks" "at" "the" "same" "time" [":" | "."] <statement-list> "End"
+
+/* Error Handling */
+<try-catch> ::= "Try" "to" <statement> "but" "if" "it" "fails" <statement-list> "End"
+
+/* Expressions */
+<expression-statement> ::= <expression>
+<expression> ::= <logical-expression>
+<logical-expression> ::= <comparison-expression> | <logical-expression> ("and" | "or") <comparison-expression>
+<comparison-expression> ::= <arithmetic-expression> | <comparison-expression> ("equals" | "not" "equals" | "is" "less" "than" | "is" "greater" "than" | "is" "less" "than" "or" "equal" "to" | "is" "greater" "than" "or" "equal" "to") <arithmetic-expression>
+<arithmetic-expression> ::= <term> | <arithmetic-expression> ("plus" | "minus") <term>
+<term> ::= <factor> | <term> ("times" | "divided" "by" | "modulo") <factor>
+<factor> ::= <literal> | <identifier> | <function-call> | "(" <expression> ")"
+
+/* Function Call */
+<function-call> ::= <identifier> "with" <argument-list>
+<argument-list> ::= <expression> | <expression> ["," | "and"] <argument-list>
+
+/* Basic Elements */
+<type> ::= "integer" | "float" | "string" | "boolean" | "list" | <identifier>
+<identifier> ::= <letter> {<letter> | <digit>}*
+<literal> ::= <number> | <string-literal> | <boolean-literal>
+<number> ::= <digit>+ ["." <digit>+]
+<string-literal> ::= "\"" {<character>}* "\""
+<boolean-literal> ::= "true" | "false"
+
+/* Lexical Elements */
+<letter> ::= "a" | "b" | ... | "z" | "A" | "B" | ... | "Z"
+<digit> ::= "0" | "1" | ... | "9"
+<character> ::= <letter> | <digit> | <special-character>
+<special-character> ::= " " | "!" | "#" | "$" | ... (* Any printable character except " *)

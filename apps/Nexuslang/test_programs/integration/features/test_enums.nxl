@@ -1,0 +1,103 @@
+# Test Enum Feature
+# Tests auto-numbered enums, explicit values, and enum member access
+
+print text "=== Testing Enum Feature ==="
+print text ""
+
+# Test 1: Auto-numbered enum
+print text "1. Auto-numbered Enum"
+
+enum Color
+    Red
+    Green
+    Blue
+end
+
+print text "  - Color enum defined"
+print text "  - Red value: "
+print text Color["Red"]
+print text "  - Green value: "
+print text Color["Green"]  
+print text "  - Blue value: "
+print text Color["Blue"]
+
+print text ""
+
+# Test 2: Explicit integer values
+print text "2. Explicit Integer Values"
+
+enum Status
+    Success = 0
+    Error = 1
+    Warning = 2
+    Pending = 10
+end
+
+print text "  - Status enum defined"
+print text "  - Success = "
+print text Status["Success"]
+print text "  - Error = "
+print text Status["Error"]
+print text "  - Warning = "
+print text Status["Warning"]
+print text "  - Pending = "
+print text Status["Pending"]
+
+print text ""
+
+# Test 3: String values
+print text "3. String Value Enum"
+
+enum LogLevel
+    Debug = "DEBUG"
+    Info = "INFO"
+    Warn = "WARN"
+    Error = "ERROR"
+end
+
+print text "  - LogLevel enum defined"
+print text "  - Debug = "
+print text LogLevel["Debug"]
+print text "  - Info = "
+print text LogLevel["Info"]
+print text "  - Error = "
+print text LogLevel["Error"]
+
+print text ""
+
+# Test 4: Mixed auto and explicit values
+print text "4. Mixed Auto and Explicit Values"
+
+enum Priority
+    Low
+    Medium = 5
+    High
+    Critical = 10
+end
+
+print text "  - Priority enum defined"
+print text "  - Low = "
+print text Priority["Low"]
+print text "  - Medium = "
+print text Priority["Medium"]
+print text "  - High = "
+print text Priority["High"]
+print text "  - Critical = "
+print text Priority["Critical"]
+
+print text ""
+
+# Test 5: Using enum values in conditionals
+print text "5. Using Enum in Conditionals"
+
+set current_status to Status["Success"]
+
+if current_status is equal to Status["Success"]
+    print text "  - Status check: SUCCESS"
+else
+    print text "  - Status check: FAILED"
+end
+
+print text ""
+
+print text "=== All Enum Tests Passed! ==="

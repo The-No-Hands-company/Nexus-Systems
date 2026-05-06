@@ -1,0 +1,18 @@
+# Simple math utilities module
+
+# Define some functions
+function add with x as Integer and y as Integer returns Integer
+    return x plus y
+end
+
+function multiply with x as Integer and y as Integer returns Integer
+    return x times y
+end
+
+function square with x as Integer returns Integer
+    return x times x
+end
+
+# Define some constants
+set PI to 3.14159
+set E to 2.71828

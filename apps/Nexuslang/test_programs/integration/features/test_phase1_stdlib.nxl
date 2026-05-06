@@ -1,0 +1,302 @@
+# Test Phase 1 Standard Library - Essential Missing Features
+# File I/O, JSON (enhanced), Regex, DateTime, SQLite
+
+print text "=== Testing Phase 1 Essential Stdlib ==="
+print text ""
+
+# =======================
+# 1. File I/O Operations
+# =======================
+print text "1. File I/O Operations"
+
+# Write file
+set content to "Hello from NLPL!"
+set written to write_file("/tmp/nxl_test.txt", content)
+if written
+    print text "  - File written: SUCCESS"
+else
+    print text "  - File written: FAILED"
+end
+
+# Read file
+set read_content to read_file("/tmp/nxl_test.txt")
+print text "  - File content read: "
+set content_len to len(read_content)
+print text content_len
+print text " bytes"
+
+# Check file exists
+set exists_result to file_exists("/tmp/nxl_test.txt")
+if exists_result
+    print text "  - File exists: TRUE"
+else
+    print text "  - File exists: FALSE"
+end
+
+# Get file size
+set fsize to file_size("/tmp/nxl_test.txt")
+print text "  - File size: "
+print text fsize
+print text " bytes"
+
+# Write lines
+set lines to ["First line", "Second line", "Third line"]
+set written_lines to write_lines("/tmp/nxl_lines.txt", lines)
+if written_lines
+    print text "  - Lines written: SUCCESS"
+end
+
+# Read lines
+set read_lines_result to read_lines("/tmp/nxl_lines.txt")
+set line_count to list_length(read_lines_result)
+print text "  - Lines read: "
+print text line_count
+
+# Copy file
+set copied to copy_file("/tmp/nxl_test.txt", "/tmp/nxl_copy.txt")
+if copied
+    print text "  - File copied: SUCCESS"
+end
+
+# Create directory
+set dir_created to create_directories("/tmp/nxl_test_dir/subdir")
+if dir_created
+    print text "  - Directory created: SUCCESS"
+end
+
+# List directory
+set dir_contents to list_directory("/tmp")
+set dir_item_count to list_length(dir_contents)
+print text "  - /tmp contains "
+print text dir_item_count
+print text " items"
+
+print text ""
+
+# =======================
+# 2. JSON Operations
+# =======================
+print text "2. JSON Operations"
+
+# Create JSON object
+set data_obj to {}
+dict_set(data_obj, "name", "NexusLang")
+dict_set(data_obj, "version", "1.0")
+dict_set(data_obj, "active", true)
+
+# Convert to JSON
+set json_str to to_json(data_obj)
+print text "  - JSON string: "
+print text json_str
+
+# Pretty JSON
+set pretty to pretty_json(data_obj)
+print text "  - Pretty JSON created: SUCCESS"
+
+# Parse JSON from file
+set parsed to read_json_file("/tmp/nxl_test_json.json")
+set lang_name to dict_get(parsed, "language")
+print text "  - Parsed language: "
+print text lang_name
+
+# JSON path operations
+set complex_obj to read_json_file("/tmp/nxl_user.json")
+set user_name to json_get(complex_obj, "user.name", "Unknown")
+print text "  - JSON path get: "
+print text user_name
+
+# Write JSON file
+set json_file_written to write_json_file("/tmp/nxl_data.json", data_obj)
+if json_file_written
+    print text "  - JSON file written: SUCCESS"
+end
+
+# Read JSON file
+set loaded_json to read_json_file("/tmp/nxl_data.json")
+set loaded_name to dict_get(loaded_json, "name")
+print text "  - JSON file read, name: "
+print text loaded_name
+
+print text ""
+
+# =======================
+# 3. Regular Expressions
+# =======================
+print text "3. Regular Expressions"
+
+# Search for pattern
+set text_with_num to "Order ID: 12345"
+set match_found to regex_find("\\d+", text_with_num)
+print text "  - Regex match found: "
+print text match_found
+
+# Find all
+set email_text to "Contact: alice@example.com or bob@test.org"
+set emails to regex_find_all("[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}", email_text)
+set email_count to list_length(emails)
+print text "  - Emails found: "
+print text email_count
+
+# Replace
+set replaced to regex_replace("\\d+", "XXX", "ID: 12345")
+print text "  - Regex replace: "
+print text replaced
+
+# Split by pattern
+set split_result to regex_split("\\s+", "Split   by    whitespace")
+set split_count to list_length(split_result)
+print text "  - Regex split parts: "
+print text split_count
+
+# Escape special chars
+set escaped to regex_escape("1.5 + 2.5 = ?")
+print text "  - Regex escaped: "
+print text escaped
+
+print text ""
+
+# =======================
+# 4. DateTime Operations
+# =======================
+print text "4. DateTime Operations"
+
+# Current time
+set current to now()
+print text "  - Current datetime: "
+print text current
+
+# Today's date
+set current_date to today()
+print text "  - Today's date: "
+print text current_date
+
+# Unix timestamp
+set ts to unix_timestamp()
+print text "  - Unix timestamp: "
+print text ts
+
+# Parse datetime
+set parsed_dt to parse_datetime("2025-01-15 14:30:00")
+print text "  - Parsed datetime: "
+print text parsed_dt
+
+# Format datetime
+set formatted to format_datetime(parsed_dt, "%B %d, %Y at %I:%M %p")
+print text "  - Formatted: "
+print text formatted
+
+# Add days
+set future to add_days(current_date, 7)
+print text "  - Date + 7 days: "
+print text future
+
+# Add hours
+set later to add_hours(current, 3)
+print text "  - Time + 3 hours: "
+print text later
+
+# Date components
+set dt_year to get_year(parsed_dt)
+print text "  - Year: "
+print text dt_year
+
+set dt_month to get_month(parsed_dt)
+print text "  - Month: "
+print text dt_month
+
+set dt_day to get_day(parsed_dt)
+print text "  - Day: "
+print text dt_day
+
+print text ""
+
+# =======================
+# 5. SQLite Database
+# =======================
+print text "5. SQLite Database"
+
+# Connect to in-memory database
+set db_conn to db_connect(":memory:")
+print text "  - Database connected: "
+print text db_conn
+
+# Create table
+set table_created to db_execute(db_conn, "CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT, age INTEGER)", [])
+if table_created
+    print text "  - Table created: SUCCESS"
+end
+
+# Insert data
+set insert1 to db_execute(db_conn, "INSERT INTO users (name, age) VALUES (?, ?)", ["Alice", 30])
+set insert2 to db_execute(db_conn, "INSERT INTO users (name, age) VALUES (?, ?)", ["Bob", 25])
+set insert3 to db_execute(db_conn, "INSERT INTO users (name, age) VALUES (?, ?)", ["Charlie", 35])
+
+if insert1
+    print text "  - Data inserted: SUCCESS"
+end
+
+# Query all rows
+set users to db_query(db_conn, "SELECT * FROM users ORDER BY age", [])
+set user_count to list_length(users)
+print text "  - Users queried: "
+print text user_count
+print text " rows"
+
+# Get first user
+set first_user to list_get(users, 0)
+set first_name to dict_get(first_user, "name")
+set first_age to dict_get(first_user, "age")
+print text "  - First user: "
+print text first_name
+print text " (age "
+print text first_age
+print text ")"
+
+# Query one row
+set bob to db_query_one(db_conn, "SELECT * FROM users WHERE name = ?", ["Bob"])
+set bob_age to dict_get(bob, "age")
+print text "  - Bob's age: "
+print text bob_age
+
+# Update
+set updated to db_execute(db_conn, "UPDATE users SET age = ? WHERE name = ?", [26, "Bob"])
+if updated
+    print text "  - Update: SUCCESS"
+end
+
+# Verify update
+set bob_updated to db_query_one(db_conn, "SELECT age FROM users WHERE name = ?", ["Bob"])
+set new_age to dict_get(bob_updated, "age")
+print text "  - Bob's new age: "
+print text new_age
+
+# Check table exists
+set table_exists_result to db_table_exists(db_conn, "users")
+if table_exists_result
+    print text "  - Table exists: TRUE"
+end
+
+# List tables
+set tables to db_list_tables(db_conn)
+set table_count to list_length(tables)
+print text "  - Tables in database: "
+print text table_count
+
+# Close connection
+set closed to db_close(db_conn)
+if closed
+    print text "  - Database closed: SUCCESS"
+end
+
+print text ""
+
+print text "=== Phase 1 Complete! ==="
+print text ""
+print text "Summary:"
+print text "  File I/O: 30+ functions (read, write, copy, move, dirs, temp files)"
+print text "  JSON: 8+ functions (parse, stringify, path ops, file ops)"
+print text "  Regex: 9+ functions (match, search, findall, replace, split, patterns)"
+print text "  DateTime: 30+ functions (now, parse, format, arithmetic, components)"
+print text "  SQLite: 14+ functions (connect, execute, query, transactions, utilities)"
+print text ""
+print text "Total new/enhanced: 90+ functions"

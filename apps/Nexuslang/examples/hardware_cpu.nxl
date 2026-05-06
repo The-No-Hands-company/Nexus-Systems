@@ -1,0 +1,425 @@
+# CPU Control Example Program
+# Demonstrates complete CPU control capabilities including:
+# - CPUID instruction usage
+# - Feature detection and analysis
+# - Control register operations (compiled mode)
+# - Model-Specific Register operations (compiled mode)
+# - Optimization decision making
+
+print text "CPU Control Example Program"
+print text "============================="
+
+# Example 1: CPU Vendor Detection
+print text ""
+print text "Example 1: CPU Vendor Detection"
+print text "--------------------------------"
+set vendor to get_cpu_vendor()
+print text "CPU Vendor:"
+print text vendor
+
+if vendor is equal to "GenuineIntel"
+    print text "Intel processor detected"
+else if vendor is equal to "AuthenticAMD"
+    print text "AMD processor detected"
+else
+    print text "Other processor vendor"
+end
+
+# Example 2: CPUID Instruction Usage
+print text ""
+print text "Example 2: CPUID Instruction Usage"
+print text "-----------------------------------"
+
+# Leaf 0: Get maximum supported CPUID leaf and vendor ID
+set result0 to cpuid with leaf: 0
+print text "CPUID Leaf 0 (Basic Info):"
+print text "Maximum supported leaf:"
+print text result0["eax"]
+
+print text "Vendor ID parts (EBX:EDX:ECX):"
+print text result0["ebx"]
+print text result0["edx"]
+print text result0["ecx"]
+
+# Leaf 1: Get processor info and feature flags
+set result1 to cpuid with leaf: 1
+print text ""
+print text "CPUID Leaf 1 (Processor Info and Features):"
+print text "EAX (Processor Signature):"
+print text result1["eax"]
+print text "EBX (Brand Index and Cache Info):"
+print text result1["ebx"]
+print text "ECX (Extended Features):"
+print text result1["ecx"]
+print text "EDX (Basic Features):"
+print text result1["edx"]
+
+# Leaf 7: Extended features (if supported)
+if result0["eax"] is greater than or equal to 7
+    set result7 to cpuid with leaf: 7 and subleaf: 0
+    print text ""
+    print text "CPUID Leaf 7 (Extended Features):"
+    print text "EBX (Extended Feature Flags):"
+    print text result7["ebx"]
+end
+
+# Example 3: Feature Detection and Analysis
+print text ""
+print text "Example 3: CPU Feature Detection"
+print text "---------------------------------"
+
+set features to get_cpu_features()
+print text "Retrieved comprehensive feature dict"
+
+# Check individual features
+print text ""
+print text "Basic Features:"
+print text "Has FPU (Floating-Point Unit):"
+print text features["has_fpu"]
+print text "Has TSC (Time Stamp Counter):"
+print text features["has_tsc"]
+print text "Has APIC (Advanced Programmable Interrupt Controller):"
+print text features["has_apic"]
+print text "Has MSR (Model-Specific Registers):"
+print text features["has_msr"]
+
+print text ""
+print text "SIMD Features:"
+print text "Has MMX:"
+print text features["has_mmx"]
+print text "Has SSE:"
+print text features["has_sse"]
+print text "Has SSE2:"
+print text features["has_sse2"]
+print text "Has SSE3:"
+print text features["has_sse3"]
+print text "Has SSSE3:"
+print text features["has_ssse3"]
+print text "Has SSE4.1:"
+print text features["has_sse4_1"]
+print text "Has SSE4.2:"
+print text features["has_sse4_2"]
+print text "Has AVX:"
+print text features["has_avx"]
+
+# Example 4: SIMD Capability Progression
+print text ""
+print text "Example 4: SIMD Capability Analysis"
+print text "------------------------------------"
+
+set simd_level to "None"
+if features["has_mmx"] is equal to true
+    set simd_level to "MMX"
+end
+if features["has_sse"] is equal to true
+    set simd_level to "SSE"
+end
+if features["has_sse2"] is equal to true
+    set simd_level to "SSE2"
+end
+if features["has_sse3"] is equal to true
+    set simd_level to "SSE3"
+end
+if features["has_ssse3"] is equal to true
+    set simd_level to "SSSE3"
+end
+if features["has_sse4_1"] is equal to true
+    set simd_level to "SSE4.1"
+end
+if features["has_sse4_2"] is equal to true
+    set simd_level to "SSE4.2"
+end
+if features["has_avx"] is equal to true
+    set simd_level to "AVX"
+end
+
+print text "Highest SIMD level:"
+print text simd_level
+
+# Example 5: Cryptography Features
+print text ""
+print text "Example 5: Cryptography Features"
+print text "---------------------------------"
+
+set has_aes to check_feature with feature_name: "aes"
+set has_pclmul to check_feature with feature_name: "pclmulqdq"
+set has_rdrand to check_feature with feature_name: "rdrand"
+
+print text "Has AES-NI (Hardware AES):"
+print text has_aes
+print text "Has PCLMULQDQ (Carry-less multiplication):"
+print text has_pclmul
+print text "Has RDRAND (Hardware RNG):"
+print text has_rdrand
+
+if has_aes is equal to true
+    print text "Hardware-accelerated AES available"
+end
+if has_pclmul is equal to true
+    print text "Fast polynomial multiplication available"
+end
+if has_rdrand is equal to true
+    print text "Hardware random number generation available"
+end
+
+# Example 6: Advanced Math Features
+print text ""
+print text "Example 6: Advanced Math Features"
+print text "----------------------------------"
+
+set has_fma to check_feature with feature_name: "fma"
+set has_f16c to check_feature with feature_name: "f16c"
+
+print text "Has FMA (Fused Multiply-Add):"
+print text has_fma
+print text "Has F16C (Half-precision float conversion):"
+print text has_f16c
+
+if has_fma is equal to true
+    print text "FMA improves floating-point computation accuracy"
+end
+if has_f16c is equal to true
+    print text "Half-precision float conversions accelerated"
+end
+
+# Example 7: System Features
+print text ""
+print text "Example 7: System Features"
+print text "--------------------------"
+
+set has_htt to check_feature with feature_name: "htt"
+set has_vmx to check_feature with feature_name: "vmx"
+
+print text "Has HTT (Hyper-Threading Technology):"
+print text has_htt
+print text "Has VMX (Virtual Machine Extensions):"
+print text has_vmx
+
+if has_htt is equal to true
+    print text "Processor supports hyper-threading"
+end
+if has_vmx is equal to true
+    print text "Hardware virtualization available"
+end
+
+# Example 8: Optimization Decision Making
+print text ""
+print text "Example 8: Optimization Recommendations"
+print text "----------------------------------------"
+
+print text "Based on detected features, recommended optimizations:"
+print text ""
+
+if features["has_avx"] is equal to true
+    print text "Vector Operations:"
+    print text "- Use 256-bit AVX instructions for SIMD operations"
+    print text "- Process 8 floats or 4 doubles simultaneously"
+    print text "- Ideal for matrix operations and signal processing"
+else if features["has_sse4_2"] is equal to true
+    print text "Vector Operations:"
+    print text "- Use 128-bit SSE 4.2 instructions"
+    print text "- Process 4 floats or 2 doubles simultaneously"
+    print text "- Good for general SIMD workloads"
+else if features["has_sse2"] is equal to true
+    print text "Vector Operations:"
+    print text "- Use 128-bit SSE2 instructions (baseline)"
+    print text "- Process 4 floats or 2 doubles simultaneously"
+else
+    print text "Vector Operations:"
+    print text "- No SIMD available, use scalar operations"
+end
+
+print text ""
+if has_aes is equal to true
+    print text "Cryptography:"
+    print text "- Use AES-NI instructions for AES encryption"
+    print text "- 3-5x faster than software AES implementation"
+end
+
+if has_rdrand is equal to true
+    print text "Random Number Generation:"
+    print text "- Use RDRAND for cryptographically secure RNG"
+    print text "- Hardware-based, eliminates timing attacks"
+end
+
+print text ""
+if has_fma is equal to true
+    print text "Floating-Point Math:"
+    print text "- Use FMA for multiply-add operations"
+    print text "- Reduced rounding error, better performance"
+end
+
+# Example 9: Control Register Operations (Compiled Mode)
+print text ""
+print text "Example 9: Control Register Operations"
+print text "---------------------------------------"
+print text "Note: Control register access requires compiled mode"
+print text ""
+
+print text "Control Registers (CR0, CR2, CR3, CR4):"
+print text ""
+print text "CR0 - System Control Register:"
+print text "  Flags: PE (Protected Mode), MP (Monitor Coprocessor),"
+print text "         EM (Emulation), TS (Task Switched), WP (Write Protect),"
+print text "         NW (Not Write-through), CD (Cache Disable), PG (Paging)"
+print text ""
+print text "CR2 - Page Fault Linear Address:"
+print text "  Contains the address that caused the last page fault"
+print text "  Read by page fault handler to determine faulting address"
+print text ""
+print text "CR3 - Page Directory Base Register (PDBR):"
+print text "  Bits 12-31: Physical base address of page directory"
+print text "  Must be page-aligned (multiple of 4096)"
+print text "  Updated on process context switches"
+print text "  Writing to CR3 flushes TLB entries"
+print text ""
+print text "CR4 - Architecture Extensions:"
+print text "  Flags: PSE (Page Size Extension), PAE (Physical Address Extension),"
+print text "         PGE (Page Global Enable), OSFXSR (OS FXSAVE/FXRSTOR),"
+print text "         VMXE (VMX Enable), SMEP (Supervisor Mode Exec Protection),"
+print text "         SMAP (Supervisor Mode Access Prevention)"
+print text ""
+
+print text "Example CR0 operations (compiled mode only):"
+print text "  set cr0_value to read_cr0"
+print text "  # Enable write protection"
+print text "  set cr0_value to cr0_value or 65536  # WP bit = 1 << 16"
+print text "  write_cr0 with value: cr0_value"
+print text ""
+
+print text "Example CR3 operations (compiled mode only):"
+print text "  set cr3_value to read_cr3"
+print text "  print text cr3_value  # Current page directory address"
+print text "  # Switch to new page directory"
+print text "  set new_pd_addr to 1048576  # Must be page-aligned"
+print text "  write_cr3 with value: new_pd_addr  # Also flushes TLB"
+print text ""
+
+print text "Example CR4 operations (compiled mode only):"
+print text "  set cr4_value to read_cr4"
+print text "  # Enable PAE (Physical Address Extension)"
+print text "  set cr4_value to cr4_value or 32  # PAE bit = 1 << 5"
+print text "  write_cr4 with value: cr4_value"
+
+# Example 10: Model-Specific Registers (Compiled Mode)
+print text ""
+print text "Example 10: Model-Specific Register Operations"
+print text "-----------------------------------------------"
+print text "Note: MSR access requires compiled mode"
+print text ""
+
+print text "Common MSRs and Their Usage:"
+print text ""
+
+print text "IA32_EFER (0xC0000080 = 3221225600):"
+print text "  Extended Feature Enable Register"
+print text "  Bits:"
+print text "    0 (SCE): SYSCALL/SYSRET enable"
+print text "    8 (LME): Long Mode Enable (activate 64-bit)"
+print text "   10 (LMA): Long Mode Active (read-only status)"
+print text "   11 (NXE): No-Execute Enable (DEP support)"
+print text ""
+print text "Example: Enable SYSCALL instruction:"
+print text "  set efer to read_msr with msr_address: 3221225600"
+print text "  set efer to efer or 1  # Set SCE bit"
+print text "  write_msr with msr_address: 3221225600 and value: efer"
+print text ""
+
+print text "IA32_APIC_BASE (0x1B = 27):"
+print text "  APIC Configuration"
+print text "  Bits:"
+print text "    8 (BSP): Bootstrap Processor flag"
+print text "   11 (EN): APIC Global Enable"
+print text "   12-35: APIC Base Physical Address"
+print text ""
+print text "Example: Read APIC base address:"
+print text "  set apic_base to read_msr with msr_address: 27"
+print text "  # Extract address (bits 12-35, shift right 12)"
+print text "  set apic_addr to apic_base / 4096"
+print text ""
+
+print text "IA32_TSC (0x10 = 16):"
+print text "  Time Stamp Counter (64-bit cycle counter)"
+print text "  Increments every CPU clock cycle"
+print text "  Used for high-precision timing"
+print text ""
+print text "Example: Measure execution time:"
+print text "  set start_tsc to read_msr with msr_address: 16"
+print text "  # ... code to measure ..."
+print text "  set end_tsc to read_msr with msr_address: 16"
+print text "  set cycles to end_tsc minus start_tsc"
+print text ""
+
+print text "IA32_FS_BASE (0xC0000100 = 3221225728):"
+print text "IA32_GS_BASE (0xC0000101 = 3221225729):"
+print text "  FS and GS segment base addresses"
+print text "  Used for thread-local storage (TLS)"
+print text "  FS commonly used for user-space TLS"
+print text "  GS used for per-CPU data in kernel"
+print text ""
+print text "Example: Set up thread-local storage:"
+print text "  set tls_addr to 4194304  # TLS region address"
+print text "  write_msr with msr_address: 3221225728 and value: tls_addr"
+print text ""
+
+print text "SYSCALL MSRs:"
+print text "  IA32_STAR (0xC0000081 = 3221225729):"
+print text "    CS/SS selectors for SYSCALL/SYSRET"
+print text "  IA32_LSTAR (0xC0000082 = 3221225730):"
+print text "    64-bit SYSCALL entry point"
+print text "  IA32_FMASK (0xC0000084 = 3221225732):"
+print text "    RFLAGS mask for SYSCALL"
+print text ""
+print text "Example: Configure system call handler:"
+print text "  set syscall_entry to 8388608  # Handler address"
+print text "  write_msr with msr_address: 3221225730 and value: syscall_entry"
+print text ""
+
+print text "SYSENTER MSRs:"
+print text "  IA32_SYSENTER_CS (0x174 = 372):"
+print text "    Code segment for SYSENTER"
+print text "  IA32_SYSENTER_ESP (0x175 = 373):"
+print text "    Stack pointer for SYSENTER"
+print text "  IA32_SYSENTER_EIP (0x176 = 374):"
+print text "    Entry point for SYSENTER"
+print text ""
+
+# Example 11: CPU Information Summary
+print text ""
+print text "Example 11: Complete CPU Information Summary"
+print text "---------------------------------------------"
+
+print text "CPU Summary:"
+print text "Vendor: " plus vendor
+
+print text ""
+print text "Capabilities:"
+print text "  Basic Math: FPU=" plus features["has_fpu"] plus ", FMA=" plus has_fma
+print text "  SIMD Level: " plus simd_level
+print text "  Crypto: AES=" plus has_aes plus ", RDRAND=" plus has_rdrand
+print text "  System: TSC=" plus features["has_tsc"] plus ", MSR=" plus features["has_msr"] plus ", APIC=" plus features["has_apic"]
+print text "  Virtualization: VMX=" plus has_vmx
+print text "  Threading: HTT=" plus has_htt
+
+print text ""
+print text "Recommended Usage:"
+if simd_level is not equal to "None"
+    print text "- Use " plus simd_level plus " for vector operations"
+end
+if has_aes is equal to true
+    print text "- Use AES-NI for encryption"
+end
+if has_fma is equal to true
+    print text "- Use FMA for math operations"
+end
+if has_rdrand is equal to true
+    print text "- Use RDRAND for secure random numbers"
+end
+
+print text ""
+print text "CPU Control example complete"
+print text ""
+print text "Note: This example demonstrates CPUID operations that work in"
+print text "interpreter mode. Control register (CR) and MSR operations require"
+print text "compiled mode with inline assembly support. See the documentation"
+print text "for complete implementation details when using compiled mode."

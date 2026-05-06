@@ -1,0 +1,101 @@
+# Optimization Correctness Test: Function Call Optimizations
+# Tests inlining and function call optimizations
+
+# Simple recursive function (factorial)
+function factorial with n as Integer returns Integer
+    if n is less than or equal to 1
+        return 1
+    end
+    set result to call factorial with n minus 1
+    return n times result
+end
+
+# Mutually recursive functions
+function is_even with n as Integer returns Integer
+    if n is equal to 0
+        return 1
+    end
+    return call is_odd with n minus 1
+end
+
+function is_odd with n as Integer returns Integer
+    if n is equal to 0
+        return 0
+    end
+    return call is_even with n minus 1
+end
+
+# Helper function that might be inlined
+function add_numbers with a as Integer, b as Integer returns Integer
+    return a plus b
+end
+
+# Function using helper multiple times
+function test_inlining returns Integer
+    set x to call add_numbers with 10 and 20
+    set y to call add_numbers with 5 and 15
+    set z to call add_numbers with x and y
+    return z
+end
+
+# Fibonacci (recursive version for testing)
+function fib with n as Integer returns Integer
+    if n is less than or equal to 1
+        return n
+    end
+    set a to call fib with n minus 1
+    set b to call fib with n minus 2
+    return a plus b
+end
+
+# Function with side effects (prints)
+function test_side_effects with x as Integer returns Integer
+    if x is greater than 10
+        print text "Large number"
+    end
+    return x times 2
+end
+
+# Main test runner
+print text "Testing function optimization correctness..."
+print text ""
+
+set test1 to call factorial with 5
+print text "Factorial(5): "
+print test1
+print text " (expected: 120)"
+
+set test2 to call factorial with 10
+print text "Factorial(10): "
+print test2
+print text " (expected: 3628800)"
+
+set test3 to call is_even with 10
+print text "Is_even(10): "
+print test3
+print text " (expected: 1)"
+
+set test4 to call is_odd with 10
+print text "Is_odd(10): "
+print test4
+print text " (expected: 0)"
+
+set test5 to call test_inlining
+print text "Inlining test: "
+print test5
+print text " (expected: 50)"
+
+set test6 to call fib with 10
+print text "Fibonacci(10): "
+print test6
+print text " (expected: 55)"
+
+print text ""
+print text "Side effects test:"
+set test7 to call test_side_effects with 15
+print text "Result: "
+print test7
+print text " (expected: 30)"
+
+print text ""
+print text "All function tests complete!"

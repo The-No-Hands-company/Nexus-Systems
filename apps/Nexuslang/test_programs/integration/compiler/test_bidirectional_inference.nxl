@@ -1,0 +1,129 @@
+# Test Bidirectional Type Inference
+# This test validates that type information flows in both directions:
+# 1. From function signatures to arguments (parameter type argument type)
+# 2. From return types to return expressions
+# 3. From function calls to nested calls
+
+print text "=== Test 1: Basic Function Parameter Inference ==="
+
+# Function with typed parameters - arguments should infer types from params
+function add_numbers with a as Integer and b as Integer returns Integer
+ return a plus b
+end
+
+# When calling with literals, type checker knows they should be Integers
+set result to call add_numbers with 10 and 20
+print text "add_numbers(10, 20) = "
+print number result
+
+function greet with name as String returns String
+ return "Hello, " plus name plus "!"
+end
+
+set greeting to call greet with "Alice"
+print text greeting
+
+print text ""
+print text "=== Test 2: Nested Function Call Inference ==="
+
+# When passing function results as arguments,
+# bidirectional inference validates types flow correctly
+function multiply with x as Integer and y as Integer returns Integer
+ return x times y
+end
+
+function square with n as Integer returns Integer
+ # The return type tells us this expression should be Integer
+ return call multiply with n and n
+end
+
+set squared to call square with 7
+print text "square(7) = "
+print number squared
+
+print text ""
+print text "=== Test 3: Function Return Type Context ==="
+
+# Function with explicit return type guides inference of return expression
+function get_message returns String
+ set prefix to "Message: "
+ set content to "Success"
+ # Type checker knows this should return String, validates the plus operation
+ return prefix plus content
+end
+
+set message to call get_message
+print text message
+
+function calculate_percentage with part as Integer and total as Integer returns Float
+ # Return type Float guides inference of this arithmetic expression
+ return convert part to float divided by convert total to float times 100.0
+end
+
+set percentage to call calculate_percentage with 75 and 100
+print text "Percentage: "
+print number percentage
+print text "%"
+
+print text ""
+print text "=== Test 4: Chained Function Calls ==="
+
+# Function that takes a function result as argument
+function format_number with value as Integer returns String
+ return "Value: " plus convert value to string
+end
+
+function process with data as Integer returns String
+ # multiply returns Integer, format_number expects Integer
+ # Bidirectional inference validates the chain
+ set result to call multiply with data and 2
+ return call format_number with result
+end
+
+set processed to call process with 21
+print text processed
+
+print text ""
+print text "=== Test 5: Type Propagation Through Operations ==="
+
+# Types propagate through arithmetic: Integer + Integer = Integer
+function add_three with a as Integer and b as Integer and c as Integer returns Integer
+ return a plus b plus c
+end
+
+set sum to call add_three with 10 and 20 and 30
+print text "10 + 20 + 30 = "
+print number sum
+
+# Float division returns Float
+function divide with a as Float and b as Float returns Float
+ return a divided by b
+end
+
+set quotient to call divide with 10.0 and 3.0
+print text "10.0 / 3.0 = "
+print number quotient
+
+print text ""
+print text "=== Test 6: Mixed Type Operations ==="
+
+# String concatenation with type conversion
+function describe_number with n as Integer returns String
+ return "The number is: " plus convert n to string
+end
+
+set description to call describe_number with 42
+print text description
+
+# Integer to Float conversion in context
+function calculate_average with a as Integer and b as Integer returns Float
+ set sum to a plus b
+ return convert sum to float divided by 2.0
+end
+
+set average to call calculate_average with 5 and 7
+print text "Average of 5 and 7: "
+print number average
+
+print text ""
+print text "=== All Bidirectional Inference Tests Complete ==="

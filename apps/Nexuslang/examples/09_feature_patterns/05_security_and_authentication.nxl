@@ -1,0 +1,287 @@
+# Security and Authentication in NexusLang
+
+# Password Hashing
+class PasswordHasher
+    private set salt_length to Integer
+    private set iterations to Integer
+    
+    public function initialize with salt_length as Integer and iterations as Integer
+        set this.salt_length to salt_length
+        set this.iterations to iterations
+    
+    public function hash with password as String returns String
+        set salt to generate random salt with this.salt_length
+        set hash to this.hash with password and salt
+        return salt plus ":" plus hash
+    
+    public function verify with password as String and hashed_password as String returns Boolean
+        set parts to split hashed_password by ":"
+        if length of parts is not 2
+            return false
+        
+        set salt to parts[0]
+        set hash to parts[1]
+        set computed_hash to this.hash with password and salt
+        return computed_hash is equal to hash
+    
+    private function hash with password as String and salt as String returns String
+        set combined to password plus salt
+        set hash to combined
+        
+        for i from 1 to this.iterations
+            set hash to compute sha256 with hash
+        
+        return hash
+    
+    private function generate random salt with length as Integer returns String
+        set characters to "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+        set salt to ""
+        
+        for i from 1 to length
+            set random_index to random number between 0 and length of characters minus 1
+            set salt to salt plus characters[random_index]
+        
+        return salt
+
+# JWT (JSON Web Token)
+class JWT
+    private set secret to String
+    private set algorithm to String
+    
+    public function initialize with secret as String and algorithm as String
+        set this.secret to secret
+        set this.algorithm to algorithm
+    
+    public function encode with payload as Dictionary of Any returns String
+        set header to {
+            "alg": this.algorithm,
+            "typ": "JWT"
+        }
+        
+        set encoded_header to encode base64 with convert header to json string
+        set encoded_payload to encode base64 with convert payload to json string
+        
+        set signature to this.sign with encoded_header plus "." plus encoded_payload
+        set encoded_signature to encode base64 with signature
+        
+        return encoded_header plus "." plus encoded_payload plus "." plus encoded_signature
+    
+    public function decode with token as String returns Dictionary of Any
+        set parts to split token by "."
+        if length of parts is not 3
+            raise new JWTError with "Invalid token format"
+        
+        set encoded_header to parts[0]
+        set encoded_payload to parts[1]
+        set encoded_signature to parts[2]
+        
+        set signature to this.sign with encoded_header plus "." plus encoded_payload
+        set computed_signature to encode base64 with signature
+        
+        if computed_signature is not equal to encoded_signature
+            raise new JWTError with "Invalid signature"
+        
+        set payload to convert decode base64 with encoded_payload from json string
+        return payload
+    
+    private function sign with data as String returns String
+        return compute hmac with data and this.secret and this.algorithm
+
+# Authentication Middleware
+class AuthMiddleware
+    private set jwt as JWT
+    private set user_repository as UserRepository
+    
+    public function initialize with jwt as JWT and user_repository as UserRepository
+        set this.jwt to jwt
+        set this.user_repository to user_repository
+    
+    public function authenticate with request as HttpRequest returns User
+        set auth_header to request.headers["Authorization"]
+        if auth_header is null or not auth_header starts with "Bearer "
+            raise new AuthenticationError with "Missing or invalid authorization header"
+        
+        set token to substring auth_header from 7
+        try
+            set payload to decode token in this.jwt
+            set user_id to payload["user_id"]
+            set user to find by id user_id in this.user_repository
+            if user is null
+                raise new AuthenticationError with "User not found"
+            return user
+        catch error
+            if error is instance of JWTError
+                raise new AuthenticationError with "Invalid token"
+            else
+                raise error
+
+# User Authentication
+class UserAuth
+    private set user_repository as UserRepository
+    private set password_hasher as PasswordHasher
+    private set jwt as JWT
+    
+    public function initialize with user_repository as UserRepository and password_hasher as PasswordHasher and jwt as JWT
+        set this.user_repository to user_repository
+        set this.password_hasher to password_hasher
+        set this.jwt to jwt
+    
+    public function register with name as String and email as String and password as String returns User
+        # Check if user already exists
+        if find by email email in this.user_repository is not null
+            raise new ValidationError with "email" and "Email already registered"
+        
+        # Hash password
+        set hashed_password to hash password in this.password_hasher
+        
+        # Create user
+        create user as new User with name and email
+        set user.password_hash to hashed_password
+        
+        # Save user
+        return create user in this.user_repository
+    
+    public function login with email as String and password as String returns String
+        # Find user
+        set user to find by email email in this.user_repository
+        if user is null
+            raise new AuthenticationError with "Invalid email or password"
+        
+        # Verify password
+        if not verify password and user.password_hash in this.password_hasher
+            raise new AuthenticationError with "Invalid email or password"
+        
+        # Generate token
+        set payload to {
+            "user_id": user.id,
+            "email": user.email,
+            "exp": current time plus 3600  # Token expires in 1 hour
+        }
+        return encode payload in this.jwt
+
+# Rate Limiting
+class RateLimiter
+    private set requests to Dictionary of List of Integer
+    private set max_requests to Integer
+    private set window_seconds to Integer
+    
+    public function initialize with max_requests as Integer and window_seconds as Integer
+        set this.max_requests to max_requests
+        set this.window_seconds to window_seconds
+        create this.requests as empty Dictionary of List of Integer
+    
+    public function check with ip as String returns Boolean
+        set now to current time
+        if ip not in this.requests
+            create this.requests[ip] as empty List of Integer
+        
+        # Remove old requests
+        set window_start to now minus this.window_seconds
+        set this.requests[ip] to filter this.requests[ip] where time is greater than window_start
+        
+        # Check if limit exceeded
+        if length of this.requests[ip] is greater than or equal to this.max_requests
+            return false
+        
+        # Add new request
+        append now to this.requests[ip]
+        return true
+
+# Security Headers
+class SecurityHeaders
+    public static function add security headers with response as HttpResponse
+        set headers to {
+            "X-Content-Type-Options": "nosniff",
+            "X-Frame-Options": "DENY",
+            "X-XSS-Protection": "1; mode=block",
+            "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
+            "Content-Security-Policy": "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline';"
+        }
+        
+        for each header in headers
+            set header header.key with header.value in response
+
+# Usage Examples
+# Initialize security components
+create password_hasher as new PasswordHasher with 16 and 10000
+create jwt as new JWT with "your-secret-key" and "HS256"
+create rate_limiter as new RateLimiter with 100 and 60  # 100 requests per minute
+create auth as new UserAuth with user_repository and password_hasher and jwt
+
+# Register new user
+try
+    set user to register with "John Doe" and "john@example.com" and "secure-password" in auth
+    print text "User registered successfully"
+catch error
+    if error is instance of ValidationError
+        print text "Registration failed: " plus error.message
+    else
+        print text "Unexpected error during registration"
+
+# Login user
+try
+    set token to login with "john@example.com" and "secure-password" in auth
+    print text "Login successful"
+catch error
+    if error is instance of AuthenticationError
+        print text "Login failed: " plus error.message
+    else
+        print text "Unexpected error during login"
+
+# Protected route with authentication and rate limiting
+function handle protected route with request as HttpRequest returns HttpResponse
+    # Check rate limit
+    set client_ip to request.headers["X-Forwarded-For"] or request.remote_address
+    if not check client_ip in rate_limiter
+        create response as new HttpResponse with 429 and {} and null
+        set response.headers["Retry-After"] to "60"
+        return response
+    
+    # Authenticate user
+    try
+        set user to authenticate request in auth_middleware
+    catch error
+        if error is instance of AuthenticationError
+            create response as new HttpResponse with 401 and {} and null
+            send json {"error": error.message} in response
+            return response
+        else
+            raise error
+    
+    # Process request
+    create response as new HttpResponse with 200 and {} and null
+    add security headers response
+    send json {"message": "Protected data for user " plus user.name} in response
+    return response
+
+# Example: Secure file upload
+function handle file upload with request as HttpRequest returns HttpResponse
+    # Validate file type
+    set content_type to request.headers["Content-Type"]
+    if not content_type starts with "multipart/form-data"
+        create response as new HttpResponse with 400 and {} and null
+        send json {"error": "Invalid content type"} in response
+        return response
+    
+    # Check file size
+    set max_size to 5 * 1024 * 1024  # 5MB
+    if request.content_length is greater than max_size
+        create response as new HttpResponse with 413 and {} and null
+        send json {"error": "File too large"} in response
+        return response
+    
+    # Generate secure filename
+    set original_filename to request.files[0].filename
+    set extension to get file extension with original_filename
+    set secure_filename to generate uuid plus extension
+    
+    # Save file securely
+    try
+        save file request.files[0] to "uploads/" plus secure_filename
+        create response as new HttpResponse with 200 and {} and null
+        send json {"filename": secure_filename} in response
+        return response
+    catch error
+        create response as new HttpResponse with 500 and {} and null
+        send json {"error": "Failed to save file"} in response
+        return response 

@@ -1,0 +1,16 @@
+# Simplest possible read-write constraint test
+
+print text "Simple read-write test"
+
+set x to 10
+print text "Before: "
+print number x
+
+asm
+    code "add $0, 5"
+    outputs "+r": x
+end
+
+print text "After: "
+print number x
+print text "Expected: 15"

@@ -1,0 +1,53 @@
+# Abstract Classes and Methods
+# This example demonstrates abstract classes that cannot be instantiated directly
+# and require subclasses to implement abstract methods
+
+# Define an abstract class
+abstract class Shape
+    properties:
+        area as Float
+    
+    # Abstract methods must be implemented by subclasses
+    public abstract function calculate_area returns Float
+    
+    public abstract function calculate_perimeter returns Float
+
+# Concrete implementation of Shape
+class Circle extends Shape
+    properties:
+        radius as Float
+    
+    public function calculate_area returns Float
+        return 3.14159 times self.radius times self.radius
+    
+    public function calculate_perimeter returns Float
+        return 2 times 3.14159 times self.radius
+
+# Another concrete implementation
+class Rectangle extends Shape
+    properties:
+        width as Float
+        height as Float
+    
+    public function calculate_area returns Float
+        return self.width times self.height
+    
+    public function calculate_perimeter returns Float
+        return 2 times (self.width plus self.height)
+
+# Usage examples
+print text "Creating circle with radius 5"
+set circle to Circle with radius 5.0
+print text "Circle area: "
+print text circle.calculate_area
+print text "Circle perimeter: "
+print text circle.calculate_perimeter
+
+print text "Creating rectangle 4x6"
+set rect to Rectangle with width 4.0 and height 6.0
+print text "Rectangle area: "
+print text rect.calculate_area
+print text "Rectangle perimeter: "
+print text rect.calculate_perimeter
+
+print text "Abstract classes ensure consistent interfaces across implementations!"

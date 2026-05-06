@@ -1,0 +1,24 @@
+# Main program demonstrating module imports
+
+# Basic import
+Import math_utils.
+
+# Selective import
+Import concat, repeat from string_utils.
+
+# Using the imported modules and functions
+Create result1 and set it to math_utils.add(5, 10).
+Create result2 and set it to math_utils.multiply(3, 4).
+
+# Using the selectively imported functions
+Create greeting and set it to concat("Hello, ", "World!").
+Create repeated and set it to repeat("*", 10).
+
+# Output the results
+Print("Result 1: " + result1).
+Print("Result 2: " + result2).
+Print("Greeting: " + greeting).
+Print("Repeated: " + repeated).
+
+# Try to access a private function (this would cause an error)
+# math_utils.helper(). 

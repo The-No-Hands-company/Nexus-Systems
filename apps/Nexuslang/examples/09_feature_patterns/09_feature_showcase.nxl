@@ -1,0 +1,69 @@
+# NexusLang Feature Showcase
+# Demonstrates: Arrays, For-Each Loops, Error Handling, and String Concatenation
+
+print text "=== NexusLang Feature Showcase ==="
+print text ""
+
+# 1. Array Indexing and List Literals
+print text "1. Array Indexing with Type Inference"
+set numbers to [10, 20, 30, 40, 50]
+set first to numbers[0]
+set last to numbers[4]
+print text "First number:"
+print text first
+print text "Last number:"
+print text last
+print text ""
+
+# 2. For-Each Loops
+print text "2. For-Each Loop"
+set fruits to ["apple", "banana", "cherry"]
+print text "Fruits in basket:"
+for each fruit in fruits
+    set message to "- " plus fruit
+    print text message
+end
+print text ""
+
+# 3. String Concatenation
+print text "3. String Concatenation"
+set greeting to "Hello"
+set name to "NexusLang"
+set exclamation to "!"
+set full_message to greeting plus " " plus name plus exclamation
+print text full_message
+print text ""
+
+# 4. Error Handling (conventional syntax)
+print text "4. Error Handling with Try-Catch"
+try
+    print text "Attempting operation..."
+    set result to 100
+    print text "Operation succeeded!"
+catch error
+    print text "Caught error:"
+    print text error
+end
+print text ""
+
+# 5. Combined Example: Process array with error handling
+print text "5. Combined Example"
+set scores to [85, 92, 78, 95, 88]
+set total to 0
+set count to 0
+
+try
+    print text "Processing scores..."
+    for each score in scores
+        set total to total plus score
+        set count to count plus 1
+    end
+    print text "All scores processed successfully!"
+catch processing_error
+    print text "Error during processing"
+end
+
+print text "Total scores:"
+print text total
+print text ""
+print text "=== Showcase Complete ==="

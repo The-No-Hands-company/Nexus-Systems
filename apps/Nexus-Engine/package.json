@@ -1,0 +1,42 @@
+{
+  "name": "nexus-engine",
+  "version": "0.1.0",
+  "description": "Unified 2D + 3D game engine for Nexus ecosystem",
+  "type": "module",
+  "main": "dist/main.js",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "test": "vitest",
+    "lint": "eslint src --ext .ts",
+    "type-check": "tsc --noEmit"
+  },
+  "keywords": [
+    "game-engine",
+    "3d",
+    "2d",
+    "browser",
+    "babylon.js",
+    "arpg",
+    "nexus"
+  ],
+  "author": "The-No-Hands Company",
+  "license": "MIT",
+  "dependencies": {
+    "@babylonjs/core": "^6.40.0",
+    "@babylonjs/inspector": "^6.40.0",
+    "@babylonjs/loaders": "^6.40.0",
+    "@babylonjs/materials": "^6.40.0",
+    "cannon-es": "^0.20.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@typescript-eslint/eslint-plugin": "^7.0.0",
+    "@typescript-eslint/parser": "^7.0.0",
+    "eslint": "^8.0.0",
+    "typescript": "^5.4.0",
+    "vite": "^5.1.0",
+    "vitest": "^1.0.0"
+  }
+}

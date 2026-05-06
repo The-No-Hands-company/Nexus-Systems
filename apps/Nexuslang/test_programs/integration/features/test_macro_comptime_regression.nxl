@@ -1,0 +1,13 @@
+# Macro/comptime regression fixture for integration features
+macro SCALE_BY with value, factor
+    set scaled to value times factor
+    print text scaled
+end
+
+comptime const BASE is 7
+comptime assert BASE is greater than 0 message "BASE must stay positive"
+
+function main returns Integer
+    expand SCALE_BY with value BASE, factor 3
+    return 0
+end

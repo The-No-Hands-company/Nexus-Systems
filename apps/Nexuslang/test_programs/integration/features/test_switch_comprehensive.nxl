@@ -1,0 +1,54 @@
+# Comprehensive switch statement tests
+
+print text "Test 1: Integer matching"
+set num to 2
+switch num
+    case 1
+        print text "One"
+    case 2
+        print text "Two"
+    case 3
+        print text "Three"
+
+print text "Test 2: Default case"
+set num to 99
+switch num
+    case 1
+        print text "One"
+    case 2
+        print text "Two"
+    default
+        print text "Not one or two"
+
+print text "Test 3: String matching"
+set status to "active"
+switch status
+    case "active"
+        print text "System is running"
+    case "paused"
+        print text "System is paused"
+    case "stopped"
+        print text "System is stopped"
+    default
+        print text "Unknown status"
+
+print text "Test 4: Expression in switch"
+set x to 5
+set y to 10
+switch x plus y
+    case 10
+        print text "Sum is 10"
+    case 15
+        print text "Sum is 15"
+    case 20
+        print text "Sum is 20"
+
+print text "Test 5: No matching case, no default"
+set value to 42
+switch value
+    case 1
+        print text "One"
+    case 2
+        print text "Two"
+
+print text "All switch tests passed!"

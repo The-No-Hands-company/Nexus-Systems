@@ -1,0 +1,54 @@
+# Test program to demonstrate all nlpllint checkers
+
+# Style S001: Function name should use snake_case
+function CalculateSum with a as Integer, b as Integer returns Integer
+    return a plus b
+end
+
+# Style S002: Class should use PascalCase
+class my_class
+    property value as Integer
+end
+
+# Style S004: Variable name too short
+set x to 42
+
+# Style S005: Line length (this line will be way too long to fit within the 100 character limit that we have set for our code style guidelines in the NexusLang language)
+
+# Style S006: Missing documentation
+function helper
+    return 1
+end
+
+# Dead Code D001: Unreachable after return
+function early_return
+    return 1
+    set x to 2  # This will never execute
+end
+
+# Dead Code D005: Redundant condition
+if true
+    print text "Always true"
+end
+
+if value equals value
+    print text "Redundant comparison"
+end
+
+# Memory M007: Memory leak
+function leak_memory
+    set ptr to allocate with 100
+    # Missing dealloc - memory leak!
+end
+
+# Resource R005: Resource leak
+function leak_file
+    set f to open file "test.txt"
+    # Missing close - resource leak!
+end
+
+# Null Safety N003: Use before initialization
+function use_uninitialized
+    set result as Integer
+    return result  # Used before initialized
+end

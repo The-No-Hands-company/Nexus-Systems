@@ -1,0 +1,50 @@
+# Example NexusLang Project Manifest
+# This demonstrates a complete nexuslang.toml configuration
+
+[package]
+name = "data-processor"
+version = "0.1.0"
+authors = ["Developer <dev@example.com>"]
+license = "MIT"
+description = "A data processing application demonstrating NexusLang capabilities"
+repository = "https://github.com/user/data-processor"
+keywords = ["data", "processing", "analytics"]
+edition = "2026"
+build = "build.nxl"  # Custom build script
+
+# Runtime dependencies
+[dependencies]
+nexuslang-math = "1.0"
+nexuslang-csv = "2.0"
+nexuslang-database = "1.5"
+
+# Development dependencies (testing, benchmarking)
+[dev-dependencies]
+nexuslang-test = "1.0"
+nexuslang-bench = "0.3"
+
+# Build script dependencies
+[build-dependencies]
+nexuslang-build-tools = "0.2"
+
+# Binary targets
+[[bin]]
+name = "processor"
+path = "src/main.nxl"
+
+[[bin]]
+name = "analyzer"
+path = "src/bin/analyzer.nxl"
+required-features = ["data-analytics"]
+
+# Library target (if this package is also a library)
+[lib]
+name = "data_processor_lib"
+path = "src/lib.nxl"
+crate-type = ["lib"]
+
+# Build profiles
+[profile.dev]
+opt-level = 0
+debug = true
+incremental = true

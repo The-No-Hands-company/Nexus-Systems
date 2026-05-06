@@ -1,0 +1,30 @@
+# Test Class Inheritance
+# Tests single inheritance with extends keyword
+
+print text "=== Class Inheritance Test ==="
+
+# Base class
+class Animal
+    property name as String
+    property age as Integer
+
+# Derived class extends Animal
+class Dog extends Animal
+    property breed as String
+
+# Test instantiation - Dog should have Animal's properties too
+set dog to new Dog
+set dog.name to "Buddy"
+set dog.age to 3
+set dog.breed to "Golden Retriever"
+
+print text "Dog name: "
+print text dog.name
+
+print text "Dog age: "
+print dog.age
+
+print text "Dog breed: "
+print text dog.breed
+
+print text "=== Test Complete ==="

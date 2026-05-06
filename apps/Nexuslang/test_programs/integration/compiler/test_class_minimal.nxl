@@ -1,0 +1,22 @@
+# Very simple class test - no visibility modifiers
+
+class Point
+    property x as Integer
+    property y as Integer
+
+print text "=== Minimal Class Test ==="
+print text ""
+
+print text "Creating Point instance..."
+set p to new Point
+set p.x to 10
+set p.y to 20
+
+print text "Point created successfully!"
+print text "x = "
+print text p.x
+print text "y = "
+print text p.y
+
+print text ""
+print text "=== Test Complete ==="

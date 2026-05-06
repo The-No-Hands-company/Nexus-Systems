@@ -1,0 +1,8 @@
+
+import core.result
+
+function main that takes nothing
+    let res = Result.Ok(42)
+    match res
+        case Result.Ok(val) => print("Success: " + val)
+        case Result.Err(msg) => print("Error: " + msg)

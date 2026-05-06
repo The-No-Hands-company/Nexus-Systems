@@ -1,0 +1,30 @@
+# Comprehensive lambda function test
+
+async function main with nothing returns Integer
+    # Test 1: Simple binary operation lambda
+    set add to lambda x, y: x plus y
+    set result1 to add(10, 5)
+    print text result1
+    
+    # Test 2: Unary operation lambda
+    set double to lambda n: n times 2
+    set result2 to double(7)
+    print text result2
+    
+    # Test 3: Comparison lambda
+    set is_positive to lambda num: num is greater than 0
+    set result3 to is_positive(42)
+    print text result3
+    
+    # Test 4: Nested lambda calls
+    set multiply to lambda a, b: a times b
+    set result4 to multiply(add(3, 4), double(2))
+    print text result4
+    
+    # Test 5: Lambda with subtraction
+    set subtract to lambda x, y: x minus y
+    set result5 to subtract(100, 25)
+    print text result5
+    
+    return 0
+end

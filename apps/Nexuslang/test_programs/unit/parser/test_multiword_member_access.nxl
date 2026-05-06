@@ -1,0 +1,13 @@
+# Test: multi-word method names in member access
+class Test
+    set value to Integer
+    
+    function get value returns Integer
+        return this.value
+    
+    function set value with x as Integer
+        set this.value to x
+
+set obj to new Test
+call obj.get value
+call obj.set value with 10

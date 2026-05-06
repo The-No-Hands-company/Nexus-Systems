@@ -1,0 +1,9 @@
+# Test if regular expressions work
+function test that takes nothing returns Integer
+    return 42
+end
+
+function main that takes nothing returns Integer
+    set x to test()
+    return x
+end

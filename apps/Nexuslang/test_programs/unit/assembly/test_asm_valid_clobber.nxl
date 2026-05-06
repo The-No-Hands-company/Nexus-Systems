@@ -1,0 +1,16 @@
+# Test: Valid x86_64 Register Clobbers
+# Purpose: Validate that valid x86_64 registers are accepted
+# This test should compile successfully
+
+print text "Testing valid x86_64 register clobbers..."
+
+set result to 100
+asm
+    code "mov $0, 100"
+    outputs "=r": result
+    clobbers "rax", "rbx", "cc"
+end
+
+print text "Result: "
+print number result
+print text "Valid clobbers accepted successfully"

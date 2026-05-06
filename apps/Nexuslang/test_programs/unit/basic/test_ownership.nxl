@@ -1,0 +1,150 @@
+# NexusLang Ownership and Borrow Checker Tests
+# Tests: move semantics, immutable borrows, mutable borrows, drop borrow
+
+function check with name as String and condition as Boolean
+    if condition
+        print text name concatenate ": ok"
+    else
+        print text name concatenate ": FAIL"
+    end
+end
+
+# --- Section 1: Move semantics ---
+
+set original to 100
+set moved_val to move original
+
+# moved_val should have the original value
+check with name: "move transfers value" and condition: moved_val is equal to 100
+
+# accessing original should now be a moved-value error
+set move_error_caught to false
+try
+    set dummy to original
+catch err
+    set move_error_caught to true
+end
+check with name: "accessing moved var raises error" and condition: move_error_caught is equal to true
+
+# Moving a string
+set greeting to "hello"
+set greeting2 to move greeting
+check with name: "move works with strings" and condition: greeting2 is equal to "hello"
+
+# Move into a function: the function receives the value
+function consume_number with n as Integer returns Integer
+    return n plus 1
+end
+
+set base to 42
+set result to consume_number with n: move base
+check with name: "move into function call" and condition: result is equal to 43
+
+# --- Section 2: Immutable borrows ---
+
+set counter to 10
+
+# Single immutable borrow
+set b1 to borrow counter
+check with name: "immutable borrow returns value" and condition: b1 is equal to 10
+
+# Multiple simultaneous immutable borrows allowed
+set b2 to borrow counter
+check with name: "second immutable borrow returns value" and condition: b2 is equal to 10
+
+# Writing to a borrowed variable should fail
+set write_blocked to false
+try
+    set counter to 99
+catch err
+    set write_blocked to true
+end
+check with name: "write blocked while immutably borrowed" and condition: write_blocked is equal to true
+
+# Drop first borrow
+drop borrow counter
+
+# Still one borrow left — write still blocked
+set write_still_blocked to false
+try
+    set counter to 99
+catch err
+    set write_still_blocked to true
+end
+check with name: "write still blocked after one drop (two borrows)" and condition: write_still_blocked is equal to true
+
+# Drop second borrow — now writable
+drop borrow counter
+set counter to 99
+check with name: "write allowed after all borrows dropped" and condition: counter is equal to 99
+
+# --- Section 3: Mutable borrows ---
+
+set data to 55
+
+set mb to borrow mutable data
+check with name: "mutable borrow returns value" and condition: mb is equal to 55
+
+# Additional mutable borrow should fail
+set double_mut_blocked to false
+try
+    set mb2 to borrow mutable data
+catch err
+    set double_mut_blocked to true
+end
+check with name: "second mutable borrow blocked" and condition: double_mut_blocked is equal to true
+
+# Immutable borrow while mutably borrowed should fail
+set imm_blocked to false
+try
+    set b3 to borrow data
+catch err
+    set imm_blocked to true
+end
+check with name: "immutable borrow blocked while mutably borrowed" and condition: imm_blocked is equal to true
+
+# Write directly blocked while mutably borrowed
+set mut_write_blocked to false
+try
+    set data to 99
+catch err
+    set mut_write_blocked to true
+end
+check with name: "write blocked while mutably borrowed" and condition: mut_write_blocked is equal to true
+
+# Drop the mutable borrow
+drop borrow mutable data
+set data to 77
+check with name: "write allowed after mutable borrow dropped" and condition: data is equal to 77
+
+# --- Section 4: Move cannot happen when borrowed ---
+
+set asset to 200
+set ba to borrow asset
+
+set move_of_borrowed_blocked to false
+try
+    set stolen to move asset
+catch err
+    set move_of_borrowed_blocked to true
+end
+check with name: "move blocked while borrowed" and condition: move_of_borrowed_blocked is equal to true
+
+drop borrow asset
+
+# After dropping borrow, move is allowed
+set asset_moved to move asset
+check with name: "move allowed after borrow released" and condition: asset_moved is equal to 200
+
+# --- Section 5: Drop borrow error on non-borrowed var ---
+
+set x to 7
+set drop_err to false
+try
+    drop borrow x
+catch err
+    set drop_err to true
+end
+check with name: "drop borrow with no borrow raises error" and condition: drop_err is equal to true
+
+print text "all ownership tests passed"

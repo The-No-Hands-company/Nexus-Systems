@@ -1,0 +1,9 @@
+# Optimization Test Program
+
+# Test 1: Constant folding
+set a to 10 plus 20
+set b to 5 times 6
+
+print text "Results:"
+print text a
+print text b

@@ -1,0 +1,57 @@
+# NexusLang Pointer Operations Example
+# Demonstrates low-level memory manipulation capabilities
+
+# Example 1: Basic pointer operations
+set x to 42
+set ptr to address of x
+print text "Value of x: "
+print text x
+print text "Address of x (as pointer): "
+print text ptr
+print text "Dereferenced value: "
+print text (dereference ptr)
+
+# Example 2: Pointer arithmetic (for arrays)
+set numbers to [10, 20, 30, 40, 50]
+set array_ptr to address of numbers[0]
+print text "First element via pointer: "
+print text (value at array_ptr)
+
+# Example 3: Sizeof operator for memory management
+print text "Size of Integer: "
+print text (sizeof Integer)
+print text "Size of Float: "
+print text (sizeof Float)
+print text "Size of array: "
+print text (sizeof numbers)
+
+# Example 4: Manual memory allocation with pointers
+allocate buffer of size 1024 bytes
+set buffer_ptr to address of buffer
+# Write to memory
+set (value at buffer_ptr) to 255
+free buffer
+
+# Example 5: Pointer to pointer (for advanced data structures)
+set value to 100
+set ptr1 to address of value
+set ptr2 to address of ptr1  # Pointer to pointer
+print text "Double dereferenced value: "
+print text (value at (value at ptr2))
+
+# Example 6: Function pointers (for callbacks, virtual tables)
+function add with a as Integer and b as Integer returns Integer
+    return a plus b
+
+set func_ptr to address of add
+# Call via function pointer
+set result to call (value at func_ptr) with 5 and 3
+print text "Result from function pointer: "
+print text result
+
+# Example 7: Type-specific pointer declarations
+set int_ptr to 0 as Pointer to Integer
+set float_ptr to 0 as Pointer to Float
+set custom_ptr to 0 as Pointer to MyCustomClass
+
+print text "Pointer operations demonstration complete!"

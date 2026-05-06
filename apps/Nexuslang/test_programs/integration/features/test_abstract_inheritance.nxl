@@ -1,0 +1,18 @@
+# Test abstract class with concrete subclass
+
+abstract class Animal
+    public abstract function make sound returns String
+    
+    public function describe returns String
+        return "I am an animal and I say: " plus this.make sound
+end
+
+class Dog extends Animal
+    public function make sound returns String
+        return "Woof!"
+end
+
+set dog to new Dog
+print text dog.describe
+
+print text "Abstract class and inheritance working!"

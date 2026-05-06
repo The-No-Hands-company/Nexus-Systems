@@ -1,0 +1,269 @@
+# FFI Test: Memory Ownership ,Management
+# Tests proper memory allocation, deallocation, ,ownership tracking
+
+# Memory allocation functions
+extern function malloc with size as Integer returns Pointer from library "c"
+extern function calloc with num as Integer ,size as Integer returns Pointer from library "c"
+extern function realloc with ptr as Pointer ,size as Integer returns Pointer from library "c"
+extern function free with ptr as Pointer from library "c"
+
+# Memory manipulation
+extern function memset with ptr as Pointer ,value as Integer ,size as Integer returns Pointer from library "c"
+extern function memcpy with dest as Pointer ,src as Pointer ,size as Integer returns Pointer from library "c"
+
+function test_basic_allocation
+    print text "Testing basic malloc/free..."
+    
+    # Allocate 100 bytes
+    set size to 100
+    set ptr to malloc(size)
+    
+    print text "Allocated "
+    print number size
+    print text " bytes at address: "
+    print pointer ptr
+    
+    if ptr is not null
+        print text "  PASS: malloc succeeded"
+        
+        # Free the memory
+        call free with ptr
+        print text "  PASS: Memory freed"
+    else
+        print text "  FAIL: malloc returned NULL"
+    end
+end
+
+function test_calloc
+    print text "Testing calloc (zero-initialized allocation)..."
+    
+    # Allocate 10 integers (each 8 bytes) = 80 bytes
+    set count to 10
+    set size to 8
+    set ptr to calloc(count, size)
+    
+    print text "Allocated "
+    print number count
+    print text " items of "
+    print number size
+    print text " bytes each"
+    
+    if ptr is not null
+        print text "  PASS: calloc succeeded"
+        call free with ptr
+    else
+        print text "  FAIL: calloc returned NULL"
+    end
+end
+
+function test_realloc
+    print text "Testing realloc (resize allocation)..."
+    
+    # Initial allocation
+    set initial_size to 50
+    set ptr to malloc(initial_size)
+    
+    if ptr is not null
+        print text "Initial allocation: "
+        print number initial_size
+        print text " bytes"
+        
+        # Grow the allocation
+        set new_size to 200
+        set new_ptr to realloc(ptr, new_size)
+        
+        if new_ptr is not null
+            print text "Resized to: "
+            print number new_size
+            print text " bytes"
+            print text "  PASS: realloc succeeded"
+            call free with new_ptr
+        else
+            print text "  FAIL: realloc returned NULL"
+            call free with ptr
+        end
+    else
+        print text "  FAIL: Initial malloc failed"
+    end
+end
+
+function test_memset
+    print text "Testing memset (fill memory)..."
+    
+    set size to 100
+    set ptr to malloc(size)
+    
+    if ptr is not null
+        # Fill with value 42
+        set fill_value to 42
+        call memset with ptr ,fill_value ,size
+        
+        print text "Filled "
+        print number size
+        print text " bytes with value "
+        print number fill_value
+        print text "  PASS: memset completed"
+        
+        call free with ptr
+    else
+        print text "  FAIL: malloc failed"
+    end
+end
+
+function test_memcpy
+    print text "Testing memcpy (copy memory)..."
+    
+    set size to 50
+    set src_ptr to malloc(size)
+    set dest_ptr to malloc(size)
+    
+    if src_ptr is not null ,dest_ptr is not null
+        # Initialize source memory
+        call memset with src_ptr ,77 ,size
+        
+        # Copy to destination
+        call memcpy with dest_ptr ,src_ptr ,size
+        
+        print text "Copied "
+        print number size
+        print text " bytes from source to destination"
+        print text "  PASS: memcpy completed"
+        
+        call free with src_ptr
+        call free with dest_ptr
+    else
+        print text "  FAIL: malloc failed"
+        if src_ptr is not null
+            call free with src_ptr
+        end
+        if dest_ptr is not null
+            call free with dest_ptr
+        end
+    end
+end
+
+function test_null_pointer
+    print text "Testing NULL pointer handling..."
+    
+    # Allocate 0 bytes (implementation-defined behavior)
+    set zero_ptr to malloc(0)
+    
+    if zero_ptr is null
+        print text "malloc(0) returned NULL (valid behavior)"
+        print text "  PASS: NULL handling works"
+    else
+        print text "malloc(0) returned non-NULL"
+        print text "  Note: Implementation-defined behavior"
+        call free with zero_ptr
+    end
+end
+
+function test_multiple_allocations
+    print text "Testing multiple concurrent allocations..."
+    
+    set ptr1 to malloc(100)
+    set ptr2 to malloc(200)
+    set ptr3 to malloc(300)
+    
+    set success_count to 0
+    
+    if ptr1 is not null
+        set success_count to success_count plus 1
+    end
+    
+    if ptr2 is not null
+        set success_count to success_count plus 1
+    end
+    
+    if ptr3 is not null
+        set success_count to success_count plus 1
+    end
+    
+    print text "Successfully allocated "
+    print number success_count
+    print text " out of 3 blocks"
+    
+    if success_count is equal to 3
+        print text "  PASS: Multiple allocations work"
+    else
+        print text "  PARTIAL: Some allocations failed"
+    end
+    
+    # Free all successful allocations
+    if ptr1 is not null
+        call free with ptr1
+    end
+    if ptr2 is not null
+        call free with ptr2
+    end
+    if ptr3 is not null
+        call free with ptr3
+    end
+end
+
+function test_large_allocation
+    print text "Testing large allocation..."
+    
+    # Try to allocate 10 MB
+    set large_size to 10485760  # 10 * 1024 * 1024
+    set large_ptr to malloc(large_size)
+    
+    if large_ptr is not null
+        print text "Successfully allocated "
+        print number large_size
+        print text " bytes (10 MB)"
+        print text "  PASS: Large allocations work"
+        call free with large_ptr
+    else
+        print text "  Note: 10 MB allocation failed (may be memory constrained)"
+        print text "  This is acceptable behavior"
+    end
+end
+
+function main
+    print text "=== FFI Memory Ownership ,Management Test ==="
+    print text ""
+    print text "IMPORTANT: This test demonstrates manual memory management."
+    print text "In production code:"
+    print text "  1. Always free() allocated memory"
+    print text "  2. Don't use pointers after free()"
+    print text "  3. Check for NULL after allocation"
+    print text "  4. Use RAII patterns when possible"
+    print text ""
+    
+    test_basic_allocation
+    print text ""
+    
+    test_calloc
+    print text ""
+    
+    test_realloc
+    print text ""
+    
+    test_memset
+    print text ""
+    
+    test_memcpy
+    print text ""
+    
+    test_null_pointer
+    print text ""
+    
+    test_multiple_allocations
+    print text ""
+    
+    test_large_allocation
+    print text ""
+    
+    print text "=== Test Complete ==="
+    print text ""
+    print text "Memory management best practices:"
+    print text "  - Match every malloc/calloc with free"
+    print text "  - Use smart pointers when available"
+    print text "  - Check return values for NULL"
+    print text "  - Be careful with realloc (may move data)"
+    print text "  - Never access freed memory"
+end
+
+# Run tests
+call main

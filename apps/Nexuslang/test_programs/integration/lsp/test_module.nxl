@@ -1,0 +1,22 @@
+# Module for import testing
+# This module is imported by test_lsp_features.nlpl to test:
+# - Cross-file go-to-definition
+# - Import resolution
+# - Module symbol search
+
+# Exported function
+function helper_function that takes value as Integer returns Integer
+    return value times 2
+
+# Exported class
+class DataProcessor
+    property data as List of Float
+    
+    method process returns Float
+        set sum to 0.0
+        for each item in data
+            set sum to sum plus item
+        return sum
+
+# Module-level variable
+set module_constant to 42

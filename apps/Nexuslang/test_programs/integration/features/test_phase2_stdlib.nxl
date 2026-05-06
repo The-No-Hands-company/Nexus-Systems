@@ -1,0 +1,199 @@
+# Test Phase 2 Standard Library - Advanced Features
+# XML parsing, Email/SMTP, Templates
+
+print text "=== Testing Phase 2 Advanced Stdlib ==="
+print text ""
+
+# =======================
+# 1. XML Operations
+# =======================
+print text "1. XML Operations"
+
+# Create XML element
+set root to create_xml_element("library", "", {})
+print text "  - Root element created"
+
+# Add children
+set book1 to create_xml_element("book", "", {})
+xml_set_attr(book1, "id", "1")
+xml_set_attr(book1, "category", "fiction")
+
+set title1 to create_xml_element("title", "The Great Gatsby", {})
+xml_add_child(book1, title1)
+
+set author1 to create_xml_element("author", "F. Scott Fitzgerald", {})
+xml_add_child(book1, author1)
+
+xml_add_child(root, book1)
+
+print text "  - Book element added with title and author"
+
+# Add second book
+set book2 to create_xml_element("book", "", {})
+xml_set_attr(book2, "id", "2")
+xml_set_attr(book2, "category", "science")
+
+set title2 to create_xml_element("title", "A Brief History of Time", {})
+xml_add_child(book2, title2)
+
+set author2 to create_xml_element("author", "Stephen Hawking", {})
+xml_add_child(book2, author2)
+
+xml_add_child(root, book2)
+
+print text "  - Second book added"
+
+# Convert to string
+set xml_string to to_xml_string(root)
+print text "  - XML string created: "
+set xml_len to len(xml_string)
+print text xml_len
+print text " characters"
+
+# Write to file
+set xml_written to write_xml_file("/tmp/nxl_library.xml", root, true)
+if xml_written
+    print text "  - XML file written: SUCCESS"
+end
+
+# Read from file
+set loaded_root to parse_xml_file("/tmp/nxl_library.xml")
+set root_tag to xml_get_tag(loaded_root)
+print text "  - XML file loaded, root tag: "
+print text root_tag
+
+# Find elements
+set books to xml_findall(loaded_root, "book")
+set book_count to list_length(books)
+print text "  - Books found: "
+print text book_count
+
+# Get first book details
+set first_book to list_get(books, 0)
+set book_id to xml_get_attr(first_book, "id", "")
+print text "  - First book ID: "
+print text book_id
+
+# Find title
+set title_elem to xml_find(first_book, "title")
+set title_text to xml_get_text(title_elem)
+print text "  - First book title: "
+print text title_text
+
+print text ""
+
+# =======================
+# 2. Template Rendering
+# =======================
+print text "2. Template Rendering"
+
+# Simple template
+set tmpl to "Hello, ${name}! You have ${count} messages."
+set vars to {}
+dict_set(vars, "name", "Alice")
+dict_set(vars, "count", 5)
+
+set rendered to template_render(tmpl, vars)
+print text "  - Template rendered: "
+print text rendered
+
+# Safe substitute (missing variable)
+set tmpl2 to "User: ${username}, Status: ${status}"
+set vars2 to {}
+dict_set(vars2, "username", "bob123")
+
+set safe_result to template_safe_substitute(tmpl2, vars2)
+print text "  - Safe substitute: "
+print text safe_result
+
+# Template replace
+set tmpl3 to "The quick ANIMAL jumps over the lazy DOG"
+set replacements to {}
+dict_set(replacements, "ANIMAL", "fox")
+dict_set(replacements, "DOG", "dog")
+
+set replaced to template_replace(tmpl3, replacements)
+print text "  - Template replace: "
+print text replaced
+
+# Template loop
+set item_tmpl to "- ${name}: ${value}"
+set items to []
+set item1 to {}
+dict_set(item1, "name", "Apple")
+dict_set(item1, "value", 100)
+list_append(items, item1)
+
+set item2 to {}
+dict_set(item2, "name", "Banana")
+dict_set(item2, "value", 50)
+list_append(items, item2)
+
+set item3 to {}
+dict_set(item3, "name", "Orange")
+dict_set(item3, "value", 75)
+list_append(items, item3)
+
+set loop_result to template_loop(item_tmpl, items, "\n")
+print text "  - Template loop result:"
+print text loop_result
+
+# Write template to file
+set template_content to "Welcome, ${user}!\nYour account: ${account}\nBalance: ${balance}"
+set template_written to write_file("/tmp/nxl_template.txt", template_content)
+if template_written
+    print text "  - Template file written: SUCCESS"
+end
+
+# Load and render template file
+set tmpl_vars to {}
+dict_set(tmpl_vars, "user", "John Doe")
+dict_set(tmpl_vars, "account", "ACC123")
+dict_set(tmpl_vars, "balance", "1000")
+
+set file_rendered to render_template_file("/tmp/nxl_template.txt", tmpl_vars)
+print text "  - Template from file:"
+print text file_rendered
+
+print text ""
+
+# =======================
+# 3. Email Message Creation
+# =======================
+print text "3. Email Message Creation"
+
+# Create email message
+set msg to create_email("sender@example.com", "Test Email from NLPL")
+print text "  - Email created"
+
+# Add recipients
+set recipient_added to email_add_recipient(msg, "recipient@example.com")
+if recipient_added
+    print text "  - Recipient added: SUCCESS"
+end
+
+set cc_added to email_add_cc(msg, "cc@example.com")
+if cc_added
+    print text "  - CC added: SUCCESS"
+end
+
+# Set body
+set body to "This is a test email sent from NexusLang."
+set body_set to email_set_body(msg, body, false)
+if body_set
+    print text "  - Email body set: SUCCESS"
+end
+
+print text "  - Email composition complete"
+print text "  - Note: SMTP sending skipped (requires server credentials)"
+
+print text ""
+
+print text "=== Phase 2 Complete! ==="
+print text ""
+print text "Summary:"
+print text "  XML: 20+ functions (parse, create, find, navigate, attributes)"
+print text "  Templates: 8+ functions (render, substitute, loop, file ops)"
+print text "  Email: 12+ functions (SMTP, compose, attachments, send)"
+print text ""
+print text "Total new functions: 40+"

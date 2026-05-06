@@ -1,0 +1,6 @@
+# Minimal for-each loop test case
+set fruits to ["apple", "banana", "orange"]
+
+for each fruit in fruits
+    print text fruit
+end

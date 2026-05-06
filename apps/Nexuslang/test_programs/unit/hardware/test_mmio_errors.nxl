@@ -1,0 +1,67 @@
+# Test: MMIO Error Handling and Edge Cases
+# Tests error conditions and boundary cases
+
+print text "Testing MMIO Error Handling..."
+
+# Test 1: Invalid physical address (negative)
+print text "Test 1: Invalid physical address (negative)"
+try
+    set bad_map to map_memory with physical_address: -1000 and size: 4096
+    print text "ERROR: Should have raised error"
+catch error with message
+    print text "PASS: Correctly caught negative address"
+    print text "Error: "
+    print text message
+end
+
+# Test 2: Invalid size (zero)
+print text ""
+print text "Test 2: Invalid size (zero)"
+try
+    set bad_map to map_memory with physical_address: 0xB8000 and size: 0
+    print text "ERROR: Should have raised error"
+catch error with message
+    print text "PASS: Correctly caught zero size"
+    print text "Error: "
+    print text message
+end
+
+# Test 3: Invalid size (negative)
+print text ""
+print text "Test 3: Invalid size (negative)"
+try
+    set bad_map to map_memory with physical_address: 0xB8000 and size: -100
+    print text "ERROR: Should have raised error"
+catch error with message
+    print text "PASS: Correctly caught negative size"
+    print text "Error: "
+    print text message
+end
+
+# Test 4: Read/write to unmapped address
+print text ""
+print text "Test 4: Access to unmapped address"
+set fake_address to 0xDEADBEEF
+try
+    set value to read mmio byte with address: fake_address and offset: 0
+    print text "ERROR: Should have raised error"
+catch error with message
+    print text "PASS: Correctly caught unmapped address read"
+    print text "Error: "
+    print text message
+end
+
+try
+    write mmio byte with address: fake_address and value: 42 and offset: 0
+    print text "ERROR: Should have raised error"
+catch error with message
+    print text "PASS: Correctly caught unmapped address write"
+    print text "Error: "
+    print text message
+end
+
+print text ""
+print text "Error handling tests complete (basic tests passed)"
+print text ""
+print text "Note: Full tests require root privileges"
+print text "  sudo python -m nexuslang.main test_programs/unit/hardware/test_mmio_errors.nxl"

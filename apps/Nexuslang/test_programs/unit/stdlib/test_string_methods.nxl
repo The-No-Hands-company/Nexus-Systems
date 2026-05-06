@@ -1,0 +1,41 @@
+# Test comprehensive string methods
+set text to "  Hello, World!  "
+
+# Transformation
+set upper to string_to_upper with text
+print text upper
+
+set lower to string_to_lower with text
+print text lower
+
+set trimmed to string_trim with text
+print text trimmed
+
+# Searching
+set has_hello to string_contains with text and "Hello"
+print text has_hello
+
+set starts to string_starts_with with text and "  Hello"
+print text starts
+
+set ends to string_ends_with with text and "!  "
+print text ends
+
+# Splitting
+set words to string_split with "a,b,c" and ","
+print text words
+
+# Joining
+set joined to string_join with "," and words
+print text joined
+
+# Inspection
+set len to string_length with text
+print text len
+
+set empty to string_is_empty with ""
+print text empty
+
+# Replace
+set replaced to string_replace_all with "hello hello" and "hello" and "hi"
+print text replaced

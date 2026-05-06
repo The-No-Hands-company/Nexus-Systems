@@ -1,0 +1,12 @@
+# Macro/comptime regression fixture: valid behavior
+macro SCALE_AND_PRINT with value, factor
+    set scaled to value times factor
+    print text scaled
+end
+
+comptime const BASE is 5
+comptime assert BASE is greater than 0 message "BASE must stay positive"
+
+expand SCALE_AND_PRINT with value BASE, factor 3
+set computed to BASE plus 7
+print text computed

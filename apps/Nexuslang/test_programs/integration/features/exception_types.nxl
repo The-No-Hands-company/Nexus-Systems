@@ -1,0 +1,130 @@
+# NexusLang Exception Type Support Test
+# ===================================
+# Demonstrates typed exception handling with specific exception types
+
+print text "=== NexusLang Exception Type Support Tests ==="
+print text ""
+
+# Test 1: Generic exception handling (catch all)
+print text "Test 1: Generic Exception Handling"
+try
+    set result to 10 divided by 0
+catch error
+    print text "Caught generic error"
+end
+print text ""
+
+# Test 2: Specific exception type - ValueError
+print text "Test 2: ValueError Handling"
+try
+    raise ValueError with message "Invalid value provided"
+catch e as ValueError
+    print text "Caught ValueError: " plus e
+end
+print text ""
+
+# Test 3: Specific exception type - RuntimeError
+print text "Test 3: RuntimeError Handling"
+try
+    raise RuntimeError with message "Runtime error occurred"
+catch err as RuntimeError
+    print text "Caught RuntimeError: " plus err
+end
+print text ""
+
+# Test 4: Specific exception type - TypeError
+print text "Test 4: TypeError Handling"
+try
+    raise TypeError with message "Type mismatch error"
+catch type_err as TypeError
+    print text "Caught TypeError: " plus type_err
+end
+print text ""
+
+# Test 5: Specific exception type - IndexError
+print text "Test 5: IndexError Handling"
+try
+    set numbers to [1, 2, 3]
+    set value to numbers[10]  # Out of bounds
+catch idx_err as IndexError
+    print text "Caught IndexError: " plus idx_err
+end
+print text ""
+
+# Test 6: Multiple exception types (nested try-catch)
+print text "Test 6: Multiple Exception Types"
+try
+    try
+        raise ValueError with message "Inner ValueError"
+    catch e as ValueError
+        print text "Caught inner ValueError: " plus e
+        raise RuntimeError with message "Re-throwing as RuntimeError"
+    end
+catch outer_err as RuntimeError
+    print text "Caught outer RuntimeError: " plus outer_err
+end
+print text ""
+
+# Test 7: Exception type mismatch (should not catch)
+print text "Test 7: Exception Type Mismatch"
+try
+    try
+        raise ValueError with message "This is a ValueError"
+    catch e as TypeError  # Wrong type - should not catch
+        print text "This should not print"
+    end
+catch fallback as ValueError
+    print text "Caught by fallback handler: " plus fallback
+end
+print text ""
+
+# Test 8: Function with typed exception
+print text "Test 8: Function with Typed Exception"
+function divide with a as Integer and b as Integer returns Integer
+    if b is equal to 0
+        raise ValueError with message "Division by zero"
+    end
+    return a divided by b
+end
+
+try
+    set result to divide with 10 and 0
+catch div_err as ValueError
+    print text "Caught ValueError in function: " plus div_err
+end
+print text ""
+
+# Test 9: Class method with typed exception
+print text "Test 9: Class Method with Typed Exception"
+class Calculator
+    function safe_divide with a as Integer and b as Integer returns Integer
+        if b is equal to 0
+            raise ValueError with message "Cannot divide by zero"
+        end
+        return a divided by b
+    end
+end
+
+set calc to new Calculator
+try
+    set result to calc.safe_divide(100, 0)
+catch calc_err as ValueError
+    print text "Caught ValueError from class method: " plus calc_err
+end
+print text ""
+
+# Test 10: Re-raising exceptions
+print text "Test 10: Re-raising Exceptions"
+try
+    try
+        raise RuntimeError with message "Original error"
+    catch e as RuntimeError
+        print text "Caught and re-raising: " plus e
+        raise error  # Re-raise current exception
+    end
+catch final_err as RuntimeError
+    print text "Caught re-raised exception: " plus final_err
+end
+print text ""
+
+print text "=== All Exception Type Tests Completed ==="

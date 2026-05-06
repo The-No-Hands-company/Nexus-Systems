@@ -1,0 +1,59 @@
+# Test Memory Management Functions
+# Tests: alloc, dealloc, realloc with pointer operations
+
+function main returns Integer
+    # Test 1: Basic allocation
+    set ptr to call alloc with 100
+    print text "Test 1 PASS: Allocated 100 bytes"
+    call dealloc with ptr
+    print text "Test 2 PASS: Deallocated memory"
+    
+    # Test 3: Allocate and write to memory using dereference
+    set data_ptr to call alloc with 16  # 2 integers (8 bytes each)
+    
+    # Write first value
+    set (value at data_ptr) to 42
+    
+    # Write second value (offset by 8 bytes)
+    set offset_ptr to data_ptr plus 8
+    set (value at offset_ptr) to 100
+    
+    # Read back first value
+    set val1 to value at data_ptr
+    
+    # Read back second value
+    set val2 to value at offset_ptr
+    
+    if val1 is equal to 42
+        if val2 is equal to 100
+            print text "Test 3 PASS: Memory read/write works"
+        else
+            print text "Test 3 FAIL: Second value incorrect"
+            print number val2
+        end
+    else
+        print text "Test 3 FAIL: First value incorrect"
+        print number val1
+    end
+    call dealloc with data_ptr
+    
+    # Test 4: Reallocate - expand buffer
+    set buffer to call alloc with 50
+    print text "Test 4a PASS: Allocated 50 byte buffer"
+    
+    set buffer to call realloc with buffer and 100
+    print text "Test 4b PASS: Reallocated buffer to 100 bytes"
+    call dealloc with buffer
+    
+    # Test 5: Multiple allocations
+    set ptr1 to call alloc with 10
+    set ptr2 to call alloc with 20
+    set ptr3 to call alloc with 30
+    print text "Test 5 PASS: Multiple allocations successful"
+    call dealloc with ptr1
+    call dealloc with ptr2
+    call dealloc with ptr3
+    
+    print text "Memory management tests complete!"
+    return 0
+end

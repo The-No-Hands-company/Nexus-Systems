@@ -1,0 +1,24 @@
+# Test FFI Opaque Pointers - Simple Test
+# Demonstrates opaque pointer types with C library functions
+
+# Declare opaque type for FILE*
+extern type FILE as opaque pointer
+
+# Declare fopen/fclose/fprintf
+extern function fopen with filename as String, mode as String returns FILE from library "c"
+extern function fclose with stream as FILE returns Integer from library "c"  
+extern function fprintf with stream as FILE, format as String, ... returns Integer from library "c"
+
+print text "Testing FFI Opaque Pointers..."
+
+# Open a file
+set output_file to call fopen with "test_opaque.txt", "w"
+
+# Write to file
+call fprintf with output_file, "Hello from NexusLang FFI!\n"
+call fprintf with output_file, "Opaque pointer test successful!\n"
+
+# Close file
+call fclose with output_file
+
+print text "Opaque pointer test complete!"

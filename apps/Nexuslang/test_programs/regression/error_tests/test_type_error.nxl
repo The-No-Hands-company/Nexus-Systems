@@ -1,0 +1,6 @@
+# Test type error with enhanced context
+function add_numbers with a as Integer and b as Integer returns Integer
+    return a plus b
+
+set result to add_numbers with "hello" and 5
+print text result

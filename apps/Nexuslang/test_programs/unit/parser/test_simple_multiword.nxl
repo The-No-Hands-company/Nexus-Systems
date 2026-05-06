@@ -1,0 +1,13 @@
+# Simplest possible test of multi-word member access
+
+class Point
+    set x to Integer
+    
+    function get x returns Integer
+        return this.x
+end
+
+set p to new Point
+set p.x to 5
+set result to p.get x
+print text result

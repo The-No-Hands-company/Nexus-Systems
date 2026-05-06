@@ -1,0 +1,93 @@
+# Test: NexusLang Macro System
+# Tests macro definitions, expansions, and parameter substitution
+
+print text "=== Test 1: Simple Macro Without Parameters ==="
+macro HELLO
+    print text "Hello from macro!"
+end
+expand HELLO
+print text ""
+
+print text "=== Test 2: Macro With Single Parameter ==="
+macro GREET with person
+    print text "Hello, "
+    print text person
+    print text "!"
+end
+expand GREET with person "Alice"
+expand GREET with person "Bob"
+print text ""
+
+print text "=== Test 3: Macro With Multiple Parameters ==="
+macro CALCULATE with x, y, operation
+    print text x
+    print text " "
+    print text operation
+    print text " "
+    print text y
+    print text " = "
+    if operation is equal to "plus"
+        print text x plus y
+    else if operation is equal to "times"
+        print text x times y
+    end
+end
+expand CALCULATE with x 5, y 3, operation "plus"
+expand CALCULATE with x 7, y 4, operation "times"
+print text ""
+
+print text "=== Test 4: Macro With Variable Substitution ==="
+set counter to 10
+set name to "Counter"
+macro LOG_VARIABLE with varname, value
+    print text varname
+    print text " = "
+    print text value
+end
+expand LOG_VARIABLE with varname name, value counter
+print text ""
+
+print text "=== Test 5: Macro for Repetitive Code ==="
+macro PRINT_SEPARATOR with char, count
+    set i to 0
+    while i is less than count
+        print text char
+        set i to i plus 1
+    end
+    print text ""
+end
+expand PRINT_SEPARATOR with char "=", count 20
+expand PRINT_SEPARATOR with char "-", count 15
+print text ""
+
+print text "=== Test 6: Macro With Conditional Logic ==="
+macro CHECK_RANGE with value, min, max
+    if value is less than min
+        print text value
+        print text " is below range ["
+        print text min
+        print text ", "
+        print text max
+        print text "]"
+    else if value is greater than max
+        print text value
+        print text " is above range ["
+        print text min
+        print text ", "
+        print text max
+        print text "]"
+    else
+        print text value
+        print text " is within range ["
+        print text min
+        print text ", "
+        print text max
+        print text "]"
+    end
+end
+expand CHECK_RANGE with value 5, min 1, max 10
+expand CHECK_RANGE with value 15, min 1, max 10
+expand CHECK_RANGE with value 0, min 1, max 10
+print text ""
+
+print text "=== All Macro Tests Complete ==="

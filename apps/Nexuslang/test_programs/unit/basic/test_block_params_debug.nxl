@@ -1,0 +1,26 @@
+# Simple test for block parameters
+print text "Testing block parameters..."
+
+function test_params with block
+    print text "Calling block with 10 and 20..."
+    set result to block(10, 20)
+    print text "Result:"
+    print text result
+    return result
+end
+
+print text "Creating block with parameters x and y"
+set result to test_params do x and y
+    print text "Inside block"
+    print text "x is:"
+    print text x
+    print text "y is:"
+    print text y
+    set sum to x plus y
+    print text "Sum is:"
+    print text sum
+    return sum
+end
+
+print text "Final result:"
+print text result

@@ -1,0 +1,11 @@
+# NexusLang module B - imports from module A
+# Used by LSP goto-definition tests
+
+import greet from "test_module_a"
+import User from "test_module_a"
+
+set message to greet with name: "World"
+
+# Create a user instance
+
+set user to new User with name: "Alice" and email: "alice@example.com"

@@ -1,0 +1,22 @@
+# Test format specifiers in f-strings
+print text "=== Format Specifiers Test ==="
+
+# Float formatting
+set pi to 3.14159
+set formatted_pi to f"{pi:.2f}"
+print text formatted_pi
+
+# Integer zero-padding
+set num to 42
+set padded to f"{num:05d}"
+print text padded
+
+# Alignment
+set name to "Alice"
+set right_aligned to f"{name:>10}"
+print text right_aligned
+
+set centered to f"{name:^10}"
+print text centered
+
+print text "=== All Format Tests Passed! ==="

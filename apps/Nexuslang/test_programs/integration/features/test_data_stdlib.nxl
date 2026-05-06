@@ -1,0 +1,158 @@
+# Test Data & Utilities Standard Library
+# Logging, CSV, and Path utilities
+
+print text "=== Testing Data & Utilities Stdlib ==="
+print text ""
+
+# 1. Logging
+print text "1. Logging System"
+
+# Basic logging
+log_debug("This is a debug message")
+log_info("This is an info message")
+log_warning("This is a warning message")
+log_error("This is an error message")
+
+print text "  - Log messages written to console"
+
+# Change log level (suppress debug)
+set_log_level("INFO")
+print text "  - Log level set to INFO"
+
+log_debug("This debug won't show")
+log_info("This info will show")
+
+# Add file logging
+set log_file to "/tmp/nxl_test.log"
+set file_added to add_file_handler(log_file, "DEBUG")
+
+if file_added
+    print text "  - File handler added: SUCCESS"
+    log_info("This goes to both console and file")
+else
+    print text "  - File handler added: FAILED"
+end
+
+# Custom format
+set_log_format("%(levelname)s: %(message)s")
+log_warning("Custom format applied")
+
+print text ""
+
+# 2. CSV Operations  
+print text "2. CSV Data Processing"
+
+# Read pre-created CSV file
+set csv_file to "/tmp/nxl_test_data.csv"
+set csv_read_data to csv_read(csv_file, true, ",")
+print text "  - CSV file read"
+print text "  - Rows count: "
+set row_count to list_length(csv_read_data)
+print text row_count
+
+if row_count
+    print text "  - First row name: "
+    set first_row to csv_read_data[0]
+    set first_name to first_row["name"]
+    print text first_name
+    
+    print text "  - Second row city: "
+    set second_row to csv_read_data[1]
+    set second_city to second_row["city"]
+    print text second_city
+else
+    print text "  - No data read (file may not exist)"
+end
+
+# CSV rows (no header)
+set csv_rows to csv_read_rows(csv_file, ",")
+print text "  - CSV rows total: "
+set total_rows to list_length(csv_rows)
+print text total_rows
+
+print text ""
+
+# 3. Path Utilities
+print text "3. Path Manipulation"
+
+# Path joining
+set joined_path to path_join("/home", "user", "documents", "file.txt")
+print text "  - Joined path: "
+print text joined_path
+
+# Path splitting
+set test_path to "/home/user/documents/report.pdf"
+set path_parts to path_split(test_path)
+print text "  - Directory: "
+set dir_part to path_parts["directory"]
+print text dir_part
+print text "  - Filename: "
+set file_part to path_parts["filename"]
+print text file_part
+print text "  - Stem: "
+set stem_part to path_parts["stem"]
+print text stem_part
+print text "  - Extension: "
+set ext_part to path_parts["extension"]
+print text ext_part
+
+# Path operations
+set abs_path to path_absolute(".")
+print text "  - Absolute path of '.': "
+print text abs_path
+
+set parent_path to path_parent(test_path)
+print text "  - Parent of test path: "
+print text parent_path
+
+# Path stem and suffix
+set stem to path_stem(test_path)
+print text "  - File stem: "
+print text stem
+
+set suffix to path_suffix(test_path)
+print text "  - File suffix: "
+print text suffix
+
+# Change extension
+set new_path to path_with_suffix(test_path, ".docx")
+print text "  - Path with new suffix: "
+print text new_path
+
+# Path checks
+set is_abs to path_is_absolute(test_path)
+if is_abs
+    print text "  - Is absolute path: TRUE"
+else
+    print text "  - Is absolute path: FALSE"
+end
+
+# Glob patterns
+set tmp_files to path_glob("/tmp", "nxl_test*")
+print text "  - Files matching 'nxl_test*': "
+set file_count to list_length(tmp_files)
+print text file_count
+
+# Expand user
+set home_path to path_expanduser("~/documents")
+print text "  - Expanded path: "
+print text home_path
+
+# Path match
+set matches_pdf to path_match(test_path, "*.pdf")
+if matches_pdf
+    print text "  - Path matches '*.pdf': TRUE"
+else
+    print text "  - Path matches '*.pdf': FALSE"
+end
+
+print text ""
+
+print text "=== Data & Utilities Features Complete! ==="
+print text ""
+print text "Summary:"
+print text "  Logging: 10+ functions (debug, info, warning, error, file handlers)"
+print text "  CSV: 8+ functions (read, write, parse, TSV support)"
+print text "  Path: 22+ functions (join, split, glob, normalize, checks)"
+print text ""
+print text "Total new functions: 40+"

@@ -1,0 +1,77 @@
+# DMA Transfer Control Test
+# Test: Start, stop, mask, unmask operations
+# Expected: Should control DMA transfers successfully
+
+print text "Test: DMA transfer control"
+
+# Allocate and configure channel 3
+set success to allocate_dma_channel with channel: 3
+if success
+    print text "Channel 3 allocated"
+end
+
+# Configure transfer (memory-to-memory simulation)
+# Source: 0x20000, Dest: 0x30000, Count: 512 bytes, Mode: BLOCK, Direction: READ
+set configured to configure_dma_transfer with channel: 3 and source: 131072 and destination: 196608 and count: 512 and mode: 2 and direction: 2
+
+if configured
+    print text "Transfer configured (512 bytes, BLOCK mode)"
+end
+
+# Start transfer
+set started to start_dma_transfer with channel: 3
+if started
+    print text "Transfer started"
+end
+
+# Check if active
+set status to get_channel_status with channel: 3
+print text "Transfer active:"
+print text status["active"]
+
+# Get transfer count
+set remaining to get_transfer_count with channel: 3
+print text "Bytes remaining:"
+print text remaining
+
+# Mask channel (pause transfer)
+set masked to mask_dma_channel with channel: 3
+if masked
+    print text "Channel masked (paused)"
+end
+
+# Check status after masking
+set status2 to get_channel_status with channel: 3
+print text "Active after mask:"
+print text status2["active"]
+
+# Unmask channel (resume transfer)
+set unmasked to unmask_dma_channel with channel: 3
+if unmasked
+    print text "Channel unmasked (resumed)"
+end
+
+# Check if complete
+set complete to is_transfer_complete with channel: 3
+print text "Transfer complete:"
+print text complete
+
+# Stop transfer
+set stopped to stop_dma_transfer with channel: 3
+if stopped
+    print text "Transfer stopped"
+end
+
+# Get detailed status
+set final_status to get_dma_status with channel: 3
+print text "Final status:"
+print text "  Channel:"
+print text final_status["channel"]
+print text "  Allocated:"
+print text final_status["allocated"]
+print text "  Active:"
+print text final_status["active"]
+
+# Clean up
+release_dma_channel with channel: 3
+print text "Test complete"

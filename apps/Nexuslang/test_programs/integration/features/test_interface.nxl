@@ -1,0 +1,8 @@
+# Test interface definition
+
+interface Drawable
+    function draw returns None
+    function get color returns String
+end
+
+print text "Interface defined successfully"

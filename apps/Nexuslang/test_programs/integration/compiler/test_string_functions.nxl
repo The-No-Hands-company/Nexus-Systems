@@ -1,0 +1,46 @@
+# Test String Functions for NexusLang Compiler
+# Tests string manipulation operations
+
+print text "=== NexusLang String Functions Test ==="
+
+# Test 1: String length
+print text ""
+print text "Test 1: String Length"
+set greeting to "Hello, World!"
+print text "String: Hello, World!"
+print text "Expected length: 13"
+
+# Test 2: Uppercase
+print text ""
+print text "Test 2: Uppercase"
+set original to "hello nlpl"
+print text "Original: hello nlpl"
+print text "Expected uppercase: HELLO NLPL"
+
+# Test 3: Lowercase
+print text ""
+print text "Test 3: Lowercase"
+set mixed to "HELLO NLPL"
+print text "Original: HELLO NLPL"
+print text "Expected lowercase: hello nlpl"
+
+# Test 4: String concatenation (using plus operator)
+print text ""
+print text "Test 4: String Concatenation"
+set first to "Hello"
+set second to " World"
+set combined to first plus second
+print text "Result:"
+print text combined
+
+# Test 5: Multiple string types
+print text ""
+print text "Test 5: String Array"
+set names to ["Alice", "Bob", "Charlie", "Diana"]
+print text "First name:"
+print text names[0]
+print text "Last name:"
+print text names[3]
+
+print text ""
+print text "=== String Tests Complete ==="

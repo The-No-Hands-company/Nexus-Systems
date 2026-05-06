@@ -1,0 +1,127 @@
+# Unified Syntax Example
+# This example demonstrates the proposed unified syntax combining NexusLang and Eng++ features
+
+# Class definition with properties and methods
+Define a class called BankAccount.
+    # Properties with articles
+    It has a string property called owner.
+    It has a float property called balance.
+    It has an integer property called account_number.
+    
+    # Constructor method
+    Define a method called initialize that takes string owner_name and integer acct_num and returns nothing.
+        Set owner to owner_name.
+        Set balance to 0.0.
+        Set account_number to acct_num.
+        Print "Created account for " + owner + " with account number " + account_number + ".".
+    End method.
+    
+    # Deposit method
+    Define a method called deposit that takes float amount and returns float.
+        If amount is less than or equal to 0, then
+            Print "Error: Deposit amount must be positive.".
+            Return balance.
+        End if.
+        
+        Set balance to balance plus amount.
+        Print "Deposited " + amount + ". New balance: " + balance + ".".
+        Return balance.
+    End method.
+    
+    # Withdraw method with error handling
+    Define a method called withdraw that takes float amount and returns float.
+        Try to
+            If amount is less than or equal to 0, then
+                Print "Error: Withdrawal amount must be positive.".
+                Return balance.
+            End if.
+            
+            If amount is greater than balance, then
+                Print "Error: Insufficient funds.".
+                Return balance.
+            End if.
+            
+            Set balance to balance minus amount.
+            Print "Withdrew " + amount + ". New balance: " + balance + ".".
+            Return balance.
+        But if it fails,
+            Print "An error occurred during withdrawal.".
+            Return balance.
+        End try.
+    End method.
+    
+    # Transfer method
+    Define a method called transfer that takes float amount and BankAccount recipient and returns boolean.
+        If amount is less than or equal to 0, then
+            Print "Error: Transfer amount must be positive.".
+            Return false.
+        End if.
+        
+        If amount is greater than balance, then
+            Print "Error: Insufficient funds for transfer.".
+            Return false.
+        End if.
+        
+        Set balance to balance minus amount.
+        Call recipient.deposit with amount.
+        Print "Transferred " + amount + " to account " + recipient.account_number + ".".
+        Return true.
+    End method.
+End class.
+
+# Main program
+# Create accounts
+Create a BankAccount called account1.
+Call account1.initialize with "John Doe", 12345.
+
+Create a BankAccount called account2.
+Call account2.initialize with "Jane Smith", 67890.
+
+# Perform transactions
+Call account1.deposit with 1000.0.
+Call account1.withdraw with 250.0.
+Call account1.transfer with 300.0, account2.
+
+# Demonstrate loops
+Create an integer called counter and set it to 1.
+
+# While loop with comma and explicit end
+While counter is less than 5,
+    Print "Counter: " + counter.
+    Set counter to counter plus 1.
+End while.
+
+# Create a list of transactions
+Create a list called transactions.
+Add 100 to transactions.
+Add 200 to transactions.
+Add 50 to transactions.
+Add 75 to transactions.
+
+# For-each loop with comma and explicit end
+Print "Processing transactions:".
+Repeat for each amount in transactions,
+    Call account2.deposit with amount.
+End loop.
+
+# Repeat N times loop (from Eng++)
+Print "Generating monthly reports:".
+Repeat 3 times,
+    Print "Generated report for month " + counter + ".".
+    Set counter to counter plus 1.
+End loop.
+
+# Demonstrate concurrency (from NLPL)
+Print "Processing accounts concurrently:".
+Run these tasks at the same time:
+    Call account1.deposit with 500.
+    Call account2.withdraw with 100.
+    Print "Updating account records...".
+End concurrent.
+
+# Memory management example
+Allocate a new float in memory with value 1000.0 and name it savings_ptr.
+Print "Allocated memory with value: " + savings_ptr.
+Free the memory at savings_ptr.
+
+Print "Program completed successfully." 

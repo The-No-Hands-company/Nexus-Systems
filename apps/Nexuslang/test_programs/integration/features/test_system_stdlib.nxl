@@ -1,0 +1,180 @@
+# Test System Standard Library Features
+# Compression, Environment, and Subprocess modules
+
+print text "=== Testing System Standard Library ==="
+print text ""
+
+# 1. Compression
+print text "1. Compression & Archiving"
+
+# GZIP compression
+set original_text to "Hello NLPL! This is a test of compression features."
+set compressed to gzip_compress(original_text)
+print text "  - GZIP compressed: "
+set comp_len to len(to_string(compressed))
+print text comp_len
+print text " bytes"
+
+set decompressed to gzip_decompress(compressed)
+print text "  - GZIP decompressed: "
+print text decompressed
+
+# ZLIB compression
+set zlib_compressed to zlib_compress(original_text, 9)
+print text "  - ZLIB compressed (level 9)"
+
+set zlib_decompressed to zlib_decompress(zlib_compressed)
+print text "  - ZLIB decompressed: "
+print text zlib_decompressed
+
+# BZ2 compression
+set bz2_compressed to bz2_compress(original_text)
+print text "  - BZ2 compressed"
+
+set bz2_decompressed to bz2_decompress(bz2_compressed)
+print text "  - BZ2 decompressed: "
+print text bz2_decompressed
+
+# File compression test
+set test_file to "/tmp/nxl_compress_test.txt"
+set file_created to write_file(test_file, "Test data for compression")
+
+if file_created
+    set compressed_file to gzip_compress_file(test_file)
+    print text "  - File compressed to: "
+    print text compressed_file
+    
+    set file_exists_result to file_exists(compressed_file)
+    if file_exists_result
+        print text "  - Compressed file exists: SUCCESS"
+    else
+        print text "  - Compressed file exists: FAILED"
+    end
+else
+    print text "  - File creation failed"
+end
+
+print text ""
+
+# 2. Environment Variables
+print text "2. Environment Variables"
+
+# Set and get environment variable
+set test_var_name to "NLPL_TEST_VAR"
+set test_var_value to "Hello from NLPL"
+set_env(test_var_name, test_var_value)
+print text "  - Environment variable set"
+
+set retrieved to get_env(test_var_name)
+print text "  - Retrieved value: "
+print text retrieved
+
+# Check existence
+set var_exists to has_env(test_var_name)
+if var_exists
+    print text "  - Variable exists: SUCCESS"
+else
+    print text "  - Variable exists: FAILED"
+end
+
+# Get with default
+set missing to get_env("NLPL_MISSING_VAR", "default_value")
+print text "  - Get missing var with default: "
+print text missing
+
+# System info
+set platform_name to get_platform()
+print text "  - Platform: "
+print text platform_name
+
+set username to get_user()
+print text "  - User: "
+print text username
+
+set hostname to get_hostname()
+print text "  - Hostname: "
+print text hostname
+
+set cpu_count to get_cpu_count()
+print text "  - CPU count: "
+print text cpu_count
+
+set path_sep to get_path_separator()
+print text "  - Path separator: "
+print text path_sep
+
+# Clean up
+set removed to unset_env(test_var_name)
+if removed
+    print text "  - Environment variable removed: SUCCESS"
+else
+    print text "  - Environment variable removed: FAILED"
+end
+
+print text ""
+
+# 3. Subprocess Execution
+print text "3. Subprocess Execution"
+
+# Run simple command
+set echo_result to run_command("echo Hello from subprocess")
+set stdout to get_result_stdout(echo_result)
+print text "  - Echo output: "
+print text stdout
+
+set is_success to is_result_success(echo_result)
+if is_success
+    print text "  - Command success: TRUE"
+else
+    print text "  - Command success: FALSE"
+end
+
+# Get command output directly
+set date_output to get_output("date")
+print text "  - Date output: "
+print text date_output
+
+# Check command status
+set status_code to get_status("echo test")
+print text "  - Echo status code: "
+print text status_code
+
+# Check if command succeeds
+set cmd_ok to check_command("true")
+if cmd_ok
+    print text "  - Command check (true): SUCCESS"
+else
+    print text "  - Command check (true): FAILED"
+end
+
+# Which command
+set ls_path to which("ls")
+print text "  - Path to 'ls': "
+print text ls_path
+
+# Split and join commands
+set cmd_string to "echo 'hello world' test"
+set cmd_parts to split_command(cmd_string)
+print text "  - Command split into parts"
+
+set cmd_joined to join_command(cmd_parts)
+print text "  - Command rejoined: "
+print text cmd_joined
+
+# Run command list (safer)
+set args to ["echo", "Safe execution"]
+set safe_result to run_command_list(args)
+set safe_output to get_result_stdout(safe_result)
+print text "  - Safe command output: "
+print text safe_output
+
+print text ""
+
+print text "=== System Stdlib Features Complete! ==="
+print text ""
+print text "Summary:"
+print text "  Compression: 22+ functions (gzip, zlib, bz2, zip, tar)"
+print text "  Environment: 14+ functions (get/set env, platform info, argv)"
+print text "  Subprocess: 12+ functions (run commands, capture output, check status)"
+print text ""
+print text "Total new functions: 48+"

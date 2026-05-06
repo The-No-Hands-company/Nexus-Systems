@@ -1,0 +1,41 @@
+# Test Multi-Level Inheritance
+# Tests inheritance chain: Animal -> Mammal -> Dog
+
+print text "=== Multi-Level Inheritance Test ==="
+
+# Base class - Level 1
+class Animal
+    property name as String
+    property age as Integer
+
+# Middle class - Level 2
+class Mammal extends Animal
+    property warm_blooded as Integer
+
+# Derived class - Level 3
+class Dog extends Mammal
+    property breed as String
+
+# Create Dog instance
+set buddy to new Dog
+
+# Set properties at each level
+set buddy.name to "Buddy"
+set buddy.age to 5
+set buddy.warm_blooded to 1
+set buddy.breed to "Golden Retriever"
+
+# Print all properties
+print text "Name: "
+print text buddy.name
+
+print text "Age: "
+print buddy.age
+
+print text "Warm Blooded: "
+print buddy.warm_blooded
+
+print text "Breed: "
+print text buddy.breed
+
+print text "=== Multi-Level Test Complete ==="

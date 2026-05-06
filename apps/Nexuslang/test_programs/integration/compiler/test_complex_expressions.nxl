@@ -1,0 +1,79 @@
+# Complex Expression Type Inference Tests
+# Tests for index expressions with proper type propagation
+
+print text "=== Test 1: Simple Index Access - Inferred Type ==="
+# Test basic list indexing without explicit type annotation
+
+set nums to create list
+call list_append with nums and 10
+call list_append with nums and 20
+call list_append with nums and 30
+
+# Access element - should infer Integer type from list contents
+set first_num to nums[0]
+print text "First element:"
+print text first_num
+
+
+print text "=== Test 2: Nested Index Access - Inferred Types ==="
+# Test nested indexing with inference
+
+set inner1 to create list
+call list_append with inner1 and 1
+call list_append with inner1 and 2
+call list_append with inner1 and 3
+
+set inner2 to create list
+call list_append with inner2 and 4
+call list_append with inner2 and 5
+call list_append with inner2 and 6
+
+set matrix to create list
+call list_append with matrix and inner1
+call list_append with matrix and inner2
+
+# Nested access - should infer Integer type
+set value to matrix[1][2]
+print text "Matrix [1][2]:"
+print text value  # Should be 6
+
+
+print text "=== Test 3: Type Propagation Through Functions ==="
+# Test type inference with function returns
+
+function double with x as Integer returns Integer
+    return x times 2
+end
+
+function get_value returns Integer
+    return 42
+end
+
+# Function return type should propagate
+set result1 to call double with 5
+print text "Double of 5:"
+print text result1
+
+set result2 to call get_value
+print text "Get value:"
+print text result2
+
+
+print text "=== Test 4: Index Assignment with Type Checking ==="
+# Test that index assignment maintains types
+
+set values to create list
+call list_append with values and 1
+call list_append with values and 2
+call list_append with values and 3
+
+set values[1] to 100
+print text "After assignment, values[1]:"
+print text values[1]
+
+
+print text "=== All Complex Expression Tests Complete ==="
+
+
+
+

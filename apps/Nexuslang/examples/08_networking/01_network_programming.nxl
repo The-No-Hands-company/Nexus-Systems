@@ -1,0 +1,130 @@
+# Network Programming in NexusLang
+
+# HTTP Client
+class HttpClient
+    private set base_url to String
+    private set headers to Dictionary of String
+    
+    public function initialize with base_url as String
+        set this.base_url to base_url
+        create this.headers as empty Dictionary of String
+    
+    public function set header with name as String and value as String
+        set this.headers[name] to value
+    
+    public function get with path as String returns Dictionary of Any
+        set url to this.base_url plus path
+        set response to send http request "GET" to url with headers this.headers
+        return parse json response.body
+    
+    public function post with path as String and data as Dictionary of Any returns Dictionary of Any
+        set url to this.base_url plus path
+        set json_data to convert data to json string
+        set response to send http request "POST" to url with headers this.headers and body json_data
+        return parse json response.body
+
+# WebSocket Client
+class WebSocketClient
+    private set url to String
+    private set socket to WebSocket
+    private set is_connected to Boolean
+    
+    public function initialize with url as String
+        set this.url to url
+        set this.is_connected to false
+    
+    public function connect
+        create this.socket as new WebSocket with this.url
+        connect this.socket
+        set this.is_connected to true
+    
+    public function disconnect
+        if this.is_connected
+            disconnect this.socket
+            set this.is_connected to false
+    
+    public function send message with message as String
+        if not this.is_connected
+            raise error with message "Not connected to WebSocket server"
+        send message through this.socket
+    
+    public function on message with callback as Function
+        set this.socket.on message to callback
+
+# TCP Server
+class TcpServer
+    private set port to Integer
+    private set server to TcpListener
+    private set is_running to Boolean
+    
+    public function initialize with port as Integer
+        set this.port to port
+        set this.is_running to false
+    
+    public function start
+        create this.server as new TcpListener with this.port
+        start listening on this.server
+        set this.is_running to true
+        
+        while this.is_running
+            set client to accept connection from this.server
+            create thread as new Thread with function handle client with client
+            start thread
+    
+    public function stop
+        set this.is_running to false
+        stop listening on this.server
+
+function handle client with client as TcpClient
+    try
+        while true
+            set data to receive data from client
+            if data is empty
+                break
+            
+            set response to process request with data
+            send response to client
+    finally
+        close client
+
+# Example: REST API Client
+create api as new HttpClient with "https://api.example.com"
+
+# Set authentication header
+set header "Authorization" to "Bearer token123" in api
+
+# GET request
+set response to get "/users" from api
+print text "Users: " plus convert response to string
+
+# POST request
+create user_data as Dictionary of String
+set user_data["name"] to "John Doe"
+set user_data["email"] to "john@example.com"
+
+set response to post "/users" with user_data to api
+print text "Created user: " plus convert response to string
+
+# Example: WebSocket Chat Client
+create chat as new WebSocketClient with "ws://chat.example.com"
+
+function handle chat message with message as String
+    print text "Received: " plus message
+
+connect chat
+on message handle chat message in chat
+
+send message "Hello, everyone!" through chat
+
+# Example: TCP Echo Server
+create server as new TcpServer with 8080
+
+function process request with data as String returns String
+    return "Echo: " plus data
+
+start server
+
+# Wait for some time to handle connections
+wait for 60 seconds
+
+stop server 

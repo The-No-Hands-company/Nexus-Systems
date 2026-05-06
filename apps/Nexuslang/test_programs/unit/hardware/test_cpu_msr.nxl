@@ -1,0 +1,240 @@
+# CPU Model-Specific Registers (MSR) Test
+# Test: MSR read/write operations
+# Expected: Error messages indicating compiled mode required
+# NOTE: MSR access requires compiled mode with inline assembly
+
+print text "Test: Model-Specific Registers (MSRs)"
+print text "NOTE: MSR access requires compiled mode"
+print text ""
+
+# Test 1: Read IA32_EFER (Extended Feature Enable Register)
+print text "Test 1: Read IA32_EFER"
+function test_read_efer
+    set efer_addr to 3221225600  # 0xC0000080
+    set efer to read_msr with msr_address: efer_addr
+    print text "EFER value:"
+    print text efer
+end
+
+try
+    test_read_efer
+catch error
+    print text "Expected error: MSR read requires compiled mode"
+    print text error
+end
+
+print text ""
+
+# Test 2: Read IA32_APIC_BASE
+print text "Test 2: Read IA32_APIC_BASE"
+function test_read_apic_base
+    set apic_addr to 27  # 0x1B
+    set apic_base to read_msr with msr_address: apic_addr
+    print text "APIC BASE:"
+    print text apic_base
+end
+
+try
+    test_read_apic_base
+catch error
+    print text "Expected error: MSR read requires compiled mode"
+    print text error
+end
+
+print text ""
+
+# Test 3: Read IA32_TSC (Time Stamp Counter)
+print text "Test 3: Read IA32_TSC"
+function test_read_tsc
+    set tsc_addr to 16  # 0x10
+    set tsc to read_msr with msr_address: tsc_addr
+    print text "TSC value:"
+    print text tsc
+end
+
+try
+    test_read_tsc
+catch error
+    print text "Expected error: MSR read requires compiled mode"
+    print text error
+end
+
+print text ""
+
+# Test 4: Read IA32_FS_BASE
+print text "Test 4: Read IA32_FS_BASE"
+function test_read_fs_base
+    set fs_base_addr to 3221225728  # 0xC0000100
+    set fs_base to read_msr with msr_address: fs_base_addr
+    print text "FS BASE:"
+    print text fs_base
+end
+
+try
+    test_read_fs_base
+catch error
+    print text "Expected error: MSR read requires compiled mode"
+    print text error
+end
+
+print text ""
+
+# Test 5: Read IA32_GS_BASE
+print text "Test 5: Read IA32_GS_BASE"
+function test_read_gs_base
+    set gs_base_addr to 3221225729  # 0xC0000101
+    set gs_base to read_msr with msr_address: gs_base_addr
+    print text "GS BASE:"
+    print text gs_base
+end
+
+try
+    test_read_gs_base
+catch error
+    print text "Expected error: MSR read requires compiled mode"
+    print text error
+end
+
+print text ""
+
+# Test 6: Write IA32_EFER
+print text "Test 6: Write IA32_EFER"
+function test_write_efer
+    set efer_addr to 3221225600  # 0xC0000080
+    set new_efer to 1  # Enable SYSCALL/SYSRET (SCE bit)
+    write_msr with msr_address: efer_addr and value: new_efer
+    print text "EFER written"
+end
+
+try
+    test_write_efer
+catch error
+    print text "Expected error: MSR write requires compiled mode"
+    print text error
+end
+
+print text ""
+
+# Test 7: Write IA32_FS_BASE
+print text "Test 7: Write IA32_FS_BASE"
+function test_write_fs_base
+    set fs_base_addr to 3221225728  # 0xC0000100
+    set new_fs_base to 65536  # New FS segment base
+    write_msr with msr_address: fs_base_addr and value: new_fs_base
+    print text "FS BASE written"
+end
+
+try
+    test_write_fs_base
+catch error
+    print text "Expected error: MSR write requires compiled mode"
+    print text error
+end
+
+print text ""
+
+# Test 8: Check MSR support
+print text "Test 8: Check MSR support"
+set efer_supported to check_msr_support with msr_address: 3221225600
+print text "IA32_EFER supported:"
+print text efer_supported
+
+set fake_msr to check_msr_support with msr_address: 99999999
+print text "Fake MSR supported:"
+print text fake_msr
+
+print text ""
+
+# Test 9: Invalid MSR address (negative)
+print text "Test 9: Invalid MSR address"
+function test_invalid_msr
+    set bad_addr to -1
+    set value to read_msr with msr_address: bad_addr
+    print text "ERROR: Should not reach here"
+end
+
+try
+    test_invalid_msr
+catch error
+    print text "Expected error: Invalid MSR address"
+    print text error
+end
+
+print text ""
+
+# Documentation of common MSRs
+print text "Common MSR Addresses (for compiled mode reference):"
+print text ""
+
+print text "IA32_EFER (0xC0000080 = 3221225600):"
+print text "  Extended Feature Enable Register"
+print text "  Bit 0 (SCE):  SYSCALL/SYSRET Enable"
+print text "  Bit 8 (LME):  Long Mode Enable"
+print text "  Bit 10 (LMA): Long Mode Active"
+print text "  Bit 11 (NXE): No-Execute Enable"
+
+print text ""
+
+print text "IA32_APIC_BASE (0x1B = 27):"
+print text "  APIC Base Address Register"
+print text "  Bits 12-35: APIC base physical address"
+print text "  Bit 8: BSP flag"
+print text "  Bit 11: APIC global enable"
+
+print text ""
+
+print text "IA32_TSC (0x10 = 16):"
+print text "  Time Stamp Counter"
+print text "  64-bit cycle counter"
+print text "  Increments with each CPU cycle"
+
+print text ""
+
+print text "IA32_FS_BASE (0xC0000100 = 3221225728):"
+print text "  FS segment base address"
+print text "  Used for thread-local storage"
+
+print text ""
+
+print text "IA32_GS_BASE (0xC0000101 = 3221225729):"
+print text "  GS segment base address"
+print text "  Kernel uses for per-CPU data"
+
+print text ""
+
+print text "IA32_KERNEL_GS_BASE (0xC0000102 = 3221225730):"
+print text "  Kernel GS base (swapped on SWAPGS)"
+
+print text ""
+
+print text "IA32_STAR (0xC0000081 = 3221225601):"
+print text "  SYSCALL target address (32-bit mode)"
+
+print text ""
+
+print text "IA32_LSTAR (0xC0000082 = 3221225602):"
+print text "  SYSCALL target address (64-bit mode)"
+
+print text ""
+
+print text "IA32_FMASK (0xC0000084 = 3221225604):"
+print text "  SYSCALL flag mask"
+
+print text ""
+
+print text "IA32_SYSENTER_CS (0x174 = 372):"
+print text "  SYSENTER code segment"
+
+print text ""
+
+print text "IA32_SYSENTER_ESP (0x175 = 373):"
+print text "  SYSENTER stack pointer"
+
+print text ""
+
+print text "IA32_SYSENTER_EIP (0x176 = 374):"
+print text "  SYSENTER instruction pointer"
+
+print text ""
+print text "Test complete"
+print text "MSR access will be available in compiled mode"

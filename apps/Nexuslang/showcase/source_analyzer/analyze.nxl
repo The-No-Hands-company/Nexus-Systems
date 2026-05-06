@@ -1,0 +1,507 @@
+# Source Code Analyzer -- NexusLang Showcase Project
+#
+# A practical CLI tool that scans a directory of source files and produces
+# a detailed report: language breakdown, line counts, comment density,
+# blank line ratio, largest files, and a visual summary.
+#
+# Demonstrates: file I/O, string processing, control flow, collections,
+# functions, formatted output, error handling, and real-world utility.
+#
+# Usage:
+#   nlpl showcase/source_analyzer/analyze.nlpl
+#   (analyzes the NexusLang src/ directory by default)
+
+# ---------------------------------------------------------------------------
+# Configuration
+# ---------------------------------------------------------------------------
+
+set target_directory to "src/nlpl/parser"
+set separator to "--------------------------------------------------------------------------------"
+set header_sep to "================================================================================"
+
+# ---------------------------------------------------------------------------
+# Language extension map
+# ---------------------------------------------------------------------------
+
+set lang_extensions to {
+    ".py": "Python",
+    ".nxl": "NexusLang",
+    ".js": "JavaScript",
+    ".ts": "TypeScript",
+    ".rs": "Rust",
+    ".c": "C",
+    ".h": "C Header",
+    ".cpp": "C++",
+    ".hpp": "C++ Header",
+    ".java": "Java",
+    ".go": "Go",
+    ".rb": "Ruby",
+    ".sh": "Shell",
+    ".md": "Markdown",
+    ".toml": "TOML",
+    ".json": "JSON",
+    ".yaml": "YAML",
+    ".yml": "YAML",
+    ".xml": "XML",
+    ".html": "HTML",
+    ".css": "CSS",
+    ".sql": "SQL",
+    ".txt": "Text"
+}
+
+# Comment prefix map (single-line comments by language)
+set comment_prefixes to {
+    "Python": "#",
+    "NexusLang": "#",
+    "JavaScript": "//",
+    "TypeScript": "//",
+    "Rust": "//",
+    "C": "//",
+    "C Header": "//",
+    "C++": "//",
+    "C++ Header": "//",
+    "Java": "//",
+    "Go": "//",
+    "Ruby": "#",
+    "Shell": "#",
+    "TOML": "#",
+    "YAML": "#",
+    "SQL": "--"
+}
+
+# ---------------------------------------------------------------------------
+# Utility functions
+# ---------------------------------------------------------------------------
+
+function make_bar with filled as Integer and total as Integer and width as Integer returns String
+    # Build a visual bar like [#########...........] 45%
+    if total is equal to 0
+        set pct to 0
+    else
+        set pct to filled times 100 integer divided by total
+    end
+    set bar_filled to pct times width integer divided by 100
+    set bar_empty to width minus bar_filled
+
+    set bar_str to "[" plus repeat("#", bar_filled) plus repeat(".", bar_empty) plus "] " plus convert pct to string plus "%"
+    return bar_str
+end
+
+function pad_right with text as String and width as Integer returns String
+    set needed to width minus length(text)
+    if needed is less than or equal to 0
+        return text
+    end
+    return text plus repeat(" ", needed)
+end
+
+function pad_left with text as String and width as Integer returns String
+    set needed to width minus length(text)
+    if needed is less than or equal to 0
+        return text
+    end
+    return repeat(" ", needed) plus text
+end
+
+function format_bytes with num_bytes as Integer returns String
+    if num_bytes is greater than or equal to 1048576
+        set mb to num_bytes times 10 integer divided by 1048576
+        set whole to mb integer divided by 10
+        set frac to mb modulo 10
+        return convert whole to string plus "." plus convert frac to string plus " MB"
+    end
+    if num_bytes is greater than or equal to 1024
+        set kb to num_bytes times 10 integer divided by 1024
+        set whole to kb integer divided by 10
+        set frac to kb modulo 10
+        return convert whole to string plus "." plus convert frac to string plus " KB"
+    end
+    return convert num_bytes to string plus " B"
+end
+
+function get_language with filepath as String returns String
+    set ext to get_extension(filepath)
+    try
+        return lang_extensions[ext]
+    catch err with message
+        return "Other"
+    end
+end
+
+function is_comment_line with line as String and lang as String returns Integer
+    set trimmed to strip(line)
+    if length(trimmed) is equal to 0
+        return 0
+    end
+    try
+        set prefix to comment_prefixes[lang]
+        set prefix_len to length(prefix)
+        if length(trimmed) is greater than or equal to prefix_len
+            set line_start to substring(trimmed, 0, prefix_len)
+            if line_start is equal to prefix
+                return 1
+            end
+        end
+        return 0
+    catch err with message
+        return 0
+    end
+end
+
+# ---------------------------------------------------------------------------
+# Core analysis function
+# ---------------------------------------------------------------------------
+
+function analyze_file with filepath as String returns String
+    # Returns a pipe-delimited result string:
+    # "language|total_lines|code_lines|comment_lines|blank_lines|file_size"
+    # Using a string because NexusLang dicts from functions are simpler this way
+
+    set lang to get_language(filepath)
+
+    try
+        set content to read_file(filepath)
+    catch err with message
+        return "Error|0|0|0|0|0"
+    end
+
+    set fsize to convert get_file_size(filepath) to integer
+    set lines to split_lines(content)
+    set total_lines to length(lines)
+    set code_lines to 0
+    set comment_lines to 0
+    set blank_lines to 0
+
+    for each line in lines
+        set trimmed to strip(line)
+        if length(trimmed) is equal to 0
+            set blank_lines to blank_lines plus 1
+        else
+            set is_comment to is_comment_line(line, lang)
+            if is_comment is equal to 1
+                set comment_lines to comment_lines plus 1
+            else
+                set code_lines to code_lines plus 1
+            end
+        end
+    end
+
+    set result to lang plus "|"
+    set result to result plus convert total_lines to string plus "|"
+    set result to result plus convert code_lines to string plus "|"
+    set result to result plus convert comment_lines to string plus "|"
+    set result to result plus convert blank_lines to string plus "|"
+    set result to result plus convert fsize to string
+    return result
+end
+
+# ---------------------------------------------------------------------------
+# Main analysis
+# ---------------------------------------------------------------------------
+
+print text ""
+print text header_sep
+print text "  NexusLang Source Code Analyzer"
+print text "  Scanning: " plus target_directory
+print text header_sep
+print text ""
+
+# Collect all files via walk_directory
+set entries to walk_directory(target_directory)
+set all_files to []
+
+for each entry in entries
+    set dir_path to entry["path"]
+    # Skip __pycache__ directories
+    set skip_dir to 0
+    if contains(dir_path, "__pycache__")
+        set skip_dir to 1
+    end
+
+    if skip_dir is equal to 0
+        set dir_files to entry["files"]
+        for each fname in dir_files
+            # Skip binary/compiled files
+            set fext to get_extension(fname)
+            set skip_file to 0
+            if fext is equal to ".pyc"
+                set skip_file to 1
+            end
+            if fext is equal to ".pyo"
+                set skip_file to 1
+            end
+            if fext is equal to ".so"
+                set skip_file to 1
+            end
+            if skip_file is equal to 0
+                set full_path to join_path(dir_path, fname)
+                append full_path to all_files
+            end
+        end
+    end
+end
+
+print text "  Found " plus convert length(all_files) to string plus " files. Analyzing..."
+print text ""
+
+# Accumulators
+set lang_total_lines to {}
+set lang_code_lines to {}
+set lang_comment_lines to {}
+set lang_blank_lines to {}
+set lang_file_count to {}
+set lang_total_bytes to {}
+
+set grand_total_lines to 0
+set grand_code_lines to 0
+set grand_comment_lines to 0
+set grand_blank_lines to 0
+set grand_total_bytes to 0
+set grand_file_count to 0
+set analyzed_count to 0
+set error_count to 0
+
+# Track largest files: store as list of "size|path" strings
+set largest_files to []
+
+for each filepath in all_files
+    set result to analyze_file(filepath)
+    set parts to str_split(result, "|")
+
+    set lang to parts[0]
+
+    if lang is equal to "Error"
+        set error_count to error_count plus 1
+    else
+        set total to parts[1]
+        set code to parts[2]
+        set comments to parts[3]
+        set blanks to parts[4]
+        set fsize to parts[5]
+
+        # Convert strings to numbers
+        set total_num to convert total to integer
+        set code_num to convert code to integer
+        set comment_num to convert comments to integer
+        set blank_num to convert blanks to integer
+        set size_num to convert fsize to integer
+
+        # Update grand totals
+        set grand_total_lines to grand_total_lines plus total_num
+        set grand_code_lines to grand_code_lines plus code_num
+        set grand_comment_lines to grand_comment_lines plus comment_num
+        set grand_blank_lines to grand_blank_lines plus blank_num
+        set grand_total_bytes to grand_total_bytes plus size_num
+        set grand_file_count to grand_file_count plus 1
+        set analyzed_count to analyzed_count plus 1
+
+        # Update per-language counters
+        set lang_total_lines[lang] to dict_get(lang_total_lines, lang, 0) plus total_num
+        set lang_code_lines[lang] to dict_get(lang_code_lines, lang, 0) plus code_num
+        set lang_comment_lines[lang] to dict_get(lang_comment_lines, lang, 0) plus comment_num
+        set lang_blank_lines[lang] to dict_get(lang_blank_lines, lang, 0) plus blank_num
+        set lang_file_count[lang] to dict_get(lang_file_count, lang, 0) plus 1
+        set lang_total_bytes[lang] to dict_get(lang_total_bytes, lang, 0) plus size_num
+
+        # Track for largest files list
+        set file_entry to convert size_num to string plus "|" plus filepath
+        append file_entry to largest_files
+    end
+end
+
+# ---------------------------------------------------------------------------
+# Report: Summary
+# ---------------------------------------------------------------------------
+
+print text separator
+print text "  SUMMARY"
+print text separator
+print text ""
+print text "  Directory:     " plus target_directory
+print text "  Files found:   " plus convert length(all_files) to string
+print text "  Files analyzed:" plus " " plus convert analyzed_count to string
+if error_count is greater than 0
+    print text "  Errors:        " plus convert error_count to string
+end
+print text "  Total size:    " plus format_bytes(grand_total_bytes)
+print text ""
+print text "  Total lines:   " plus convert grand_total_lines to string
+print text "  Code lines:    " plus convert grand_code_lines to string
+print text "  Comment lines: " plus convert grand_comment_lines to string
+print text "  Blank lines:   " plus convert grand_blank_lines to string
+print text ""
+
+# Comment density
+if grand_total_lines is greater than 0
+    print text "  Code:     " plus make_bar(grand_code_lines, grand_total_lines, 30)
+    print text "  Comments: " plus make_bar(grand_comment_lines, grand_total_lines, 30)
+    print text "  Blank:    " plus make_bar(grand_blank_lines, grand_total_lines, 30)
+end
+
+# ---------------------------------------------------------------------------
+# Report: Language Breakdown
+# ---------------------------------------------------------------------------
+
+print text ""
+print text separator
+print text "  LANGUAGE BREAKDOWN"
+print text separator
+print text ""
+
+# Header row
+set row to "  "
+set row to row plus pad_right("Language", 16)
+set row to row plus pad_left("Files", 8)
+set row to row plus pad_left("Lines", 10)
+set row to row plus pad_left("Code", 10)
+set row to row plus pad_left("Comments", 10)
+set row to row plus pad_left("Blank", 8)
+set row to row plus pad_left("Size", 12)
+print text row
+print text "  " plus separator
+
+# Get list of languages that were found
+set found_languages to []
+set found_languages to keys(lang_file_count)
+
+for each lang in found_languages
+    set fc to lang_file_count[lang]
+    set tl to lang_total_lines[lang]
+    set cl to lang_code_lines[lang]
+    set cml to lang_comment_lines[lang]
+    set bl to lang_blank_lines[lang]
+    set tb to lang_total_bytes[lang]
+
+    set row to "  "
+    set row to row plus pad_right(lang, 16)
+    set row to row plus pad_left(convert fc to string, 8)
+    set row to row plus pad_left(convert tl to string, 10)
+    set row to row plus pad_left(convert cl to string, 10)
+    set row to row plus pad_left(convert cml to string, 10)
+    set row to row plus pad_left(convert bl to string, 8)
+    set row to row plus pad_left(format_bytes(tb), 12)
+    print text row
+end
+
+# Totals row
+print text "  " plus separator
+set row to "  "
+set row to row plus pad_right("TOTAL", 16)
+set row to row plus pad_left(convert grand_file_count to string, 8)
+set row to row plus pad_left(convert grand_total_lines to string, 10)
+set row to row plus pad_left(convert grand_code_lines to string, 10)
+set row to row plus pad_left(convert grand_comment_lines to string, 10)
+set row to row plus pad_left(convert grand_blank_lines to string, 8)
+set row to row plus pad_left(format_bytes(grand_total_bytes), 12)
+print text row
+
+# ---------------------------------------------------------------------------
+# Report: Language Distribution (visual)
+# ---------------------------------------------------------------------------
+
+print text ""
+print text separator
+print text "  LANGUAGE DISTRIBUTION"
+print text separator
+print text ""
+
+for each lang in found_languages
+    set tl to lang_total_lines[lang]
+    set bar to make_bar(tl, grand_total_lines, 25)
+    set label to pad_right(lang, 16)
+    set count_str to pad_left(convert tl to string, 8)
+    print text "  " plus label plus count_str plus " lines " plus bar
+end
+
+# ---------------------------------------------------------------------------
+# Report: Largest Files (top 10)
+# ---------------------------------------------------------------------------
+
+print text ""
+print text separator
+print text "  LARGEST FILES (by size)"
+print text separator
+print text ""
+
+# Simple selection sort to find top 10 (sort largest_files descending by size)
+# largest_files entries are "size|path" strings
+set num_to_show to 10
+if length(largest_files) is less than num_to_show
+    set num_to_show to length(largest_files)
+end
+
+set shown to 0
+set used_indices to []
+
+while shown is less than num_to_show
+    set best_size to 0 minus 1
+    set best_idx to 0 minus 1
+
+    set idx to 0
+    while idx is less than length(largest_files)
+        # Check if this index was already used
+        set already_used to 0
+        for each ui in used_indices
+            if ui is equal to idx
+                set already_used to 1
+            end
+        end
+
+        if already_used is equal to 0
+            set entry to largest_files[idx]
+            set entry_parts to str_split(entry, "|")
+            set entry_size to convert entry_parts[0] to integer
+            if entry_size is greater than best_size
+                set best_size to entry_size
+                set best_idx to idx
+            end
+        end
+
+        set idx to idx plus 1
+    end
+
+    if best_idx is greater than or equal to 0
+        append best_idx to used_indices
+        set entry to largest_files[best_idx]
+        set entry_parts to str_split(entry, "|")
+        set entry_size to convert entry_parts[0] to integer
+        set entry_path to entry_parts[1]
+
+        set rank to shown plus 1
+        set rank_str to pad_left(convert rank to string, 4)
+        set size_str to pad_left(format_bytes(entry_size), 10)
+        print text rank_str plus ". " plus size_str plus "  " plus entry_path
+    end
+
+    set shown to shown plus 1
+end
+
+# ---------------------------------------------------------------------------
+# Report: Comment Density by Language
+# ---------------------------------------------------------------------------
+
+print text ""
+print text separator
+print text "  COMMENT DENSITY BY LANGUAGE"
+print text separator
+print text ""
+
+for each lang in found_languages
+    set tl to lang_total_lines[lang]
+    set cml to lang_comment_lines[lang]
+    if tl is greater than 0
+        set label to pad_right(lang, 16)
+        set bar to make_bar(cml, tl, 20)
+        print text "  " plus label plus bar
+    end
+end
+
+# ---------------------------------------------------------------------------
+# Footer
+# ---------------------------------------------------------------------------
+
+print text ""
+print text header_sep
+print text "  Analysis complete.  " plus convert analyzed_count to string plus " files processed."
+print text header_sep
+print text ""

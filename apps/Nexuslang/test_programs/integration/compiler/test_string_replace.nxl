@@ -1,0 +1,18 @@
+# Test replace function specifically
+
+# Simple replacement
+set str1 to "Hello World"
+set result1 to replace(str1, "World", "NexusLang")
+print text result1
+
+# Multiple replacements
+set str2 to "foo foo foo"
+set result2 to replace(str2, "foo", "bar")
+print text result2
+
+# No match
+set str3 to "Hello World"
+set result3 to replace(str3, "xyz", "abc")
+print text result3
+
+print text "Replace tests done!"

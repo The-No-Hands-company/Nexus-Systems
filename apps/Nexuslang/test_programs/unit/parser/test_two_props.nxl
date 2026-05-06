@@ -1,0 +1,14 @@
+# Test with two properties
+class Box<T>
+    property value as T
+    property count as Integer
+    
+    method get_value returns T
+        return this.value
+    end method
+end class
+
+set int_box to new Box<Integer>
+set int_box.value to 42
+set int_box.count to 1
+print text call int_box.get_value

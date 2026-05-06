@@ -1,0 +1,9 @@
+set x to 5
+
+if x is greater than 3
+    print x
+
+set counter to 0
+while counter is less than 3
+    print counter
+    set counter to counter plus 1

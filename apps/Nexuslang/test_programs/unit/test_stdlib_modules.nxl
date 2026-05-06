@@ -1,0 +1,120 @@
+# Test Standard Library - datetime, json, regex, crypto
+# Verifies P1 stdlib modules are working correctly
+
+print text "=== Testing NexusLang Standard Library Modules ==="
+print text ""
+
+# Test 1: JSON module  
+print text "Test 1: JSON Parsing and Serialization"
+set json_str to "{\"name\":\"Alice\",\"age\":30,\"active\":true}"
+set parsed to parse_json with json_str
+print text "Parsed JSON: "
+print text parsed
+
+set data to parsed
+set json_out to to_json with data and false
+print text "Serialized back: "
+print text json_out
+
+set pretty_json to to_json with data and true
+print text "Pretty JSON: "
+print text pretty_json
+
+# Test 2: Regex module
+print text ""
+print text "Test 2: Regular Expressions"
+set pattern to "[0-9]+"
+set text_input to "There are 42 apples and 13 oranges"
+set matches to regex_find_all with pattern and text_input and 0
+print text "Numbers found: "
+print text matches
+
+set email_pattern to "[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}"
+set email_text to "Contact: user@example.com or admin@test.org"
+set emails to regex_find_all with email_pattern and email_text and 0
+print text "Emails found: "
+print text emails
+
+set replaced to regex_replace with "[0-9]+" and "XX" and text_input and 0 and 0
+print text "Numbers replaced: "
+print text replaced
+
+# Test 3: Crypto module
+print text ""
+print text "Test 3: Cryptography and Hashing"
+set message to "Hello, NLPL!"
+
+set md5_hash to hash_md5 with message and "utf-8"
+print text "MD5: "
+print text md5_hash
+
+set sha256_hash to hash_sha256 with message and "utf-8"
+print text "SHA-256: "
+print text sha256_hash
+
+set sha512_hash to hash_sha512 with message and "utf-8"
+print text "SHA-512: "
+print text sha512_hash
+
+# Test 4: Base64 encoding
+print text ""
+print text "Test 4: Base64 Encoding"
+set plain_text to "NLPL is awesome"
+set encoded to base64_encode with plain_text and "utf-8"
+print text "Base64 encoded: "
+print text encoded
+
+set decoded to base64_decode with encoded and "utf-8"
+print text "Base64 decoded: "
+print text decoded
+
+# Test 5: HMAC
+print text ""
+print text "Test 5: HMAC (Message Authentication)"
+set secret to "my_secret_key"
+set data_msg to "important message"
+set hmac_result to hmac_sha256 with data_msg and secret and "utf-8"
+print text "HMAC-SHA256: "
+print text hmac_result
+
+# Test 6: Random crypto tokens
+print text ""
+print text "Test 6: Cryptographically Secure Random"
+set random_token_hex to random_hex with 16
+print text "Random hex (16 bytes): "
+print text random_token_hex
+
+set url_token to random_token with 32
+print text "URL-safe token: "
+print text url_token
+
+# Test 7: Regex validation patterns
+print text ""
+print text "Test 7: Regex Pattern Validation"
+set valid_email to regex_match with "^[a-z]+@[a-z]+\\.[a-z]+$" and "test@example.com" and 0
+print text "Email valid: "
+print text valid_email
+
+set invalid_email to regex_match with "^[a-z]+@[a-z]+\\.[a-z]+$" and "invalid.email" and 0
+print text "Invalid email (should be false): "
+print text invalid_email
+
+# Test 8: Hash comparison (timing-safe)
+print text ""
+print text "Test 8: Timing-Safe Hash Comparison"
+set password_text to "password123"
+set hash1 to hash_sha256 with password_text and "utf-8"
+set hash2 to hash_sha256 with password_text and "utf-8"
+set different_password to "differentpass"
+set hash3 to hash_sha256 with different_password and "utf-8"
+
+set same to compare_digest with hash1 and hash2
+print text "Same hashes match: "
+print text same
+
+set different to compare_digest with hash1 and hash3
+print text "Different hashes match (should be false): "
+print text different
+
+print text ""
+print text "=== All Standard Library Module Tests Passed ==="

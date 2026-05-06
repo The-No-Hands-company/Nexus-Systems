@@ -1,0 +1,390 @@
+# Native Threading API Example
+# Demonstrates multi-threaded programming with NLPL's native threading support
+
+print text "=== Native Threading API Examples ==="
+print text ""
+
+# Example 1: Basic Thread Creation and Joining
+print text "Example 1: Basic Thread Creation"
+print text "Creating a worker thread..."
+
+function worker with thread_id as Integer
+    print text "Worker thread started (ID: "
+    print text thread_id
+    print text ")"
+    
+    # Simulate some work
+    set counter to 0
+    while counter is less than 5
+        print text "  Worker iteration: "
+        print text counter
+        sleep_thread with 0.1
+        set counter to counter plus 1
+    end
+    
+    print text "Worker thread completed"
+    return thread_id times 100
+
+# Create and start thread
+set thread_handle to create_thread with worker and 1
+
+# Get thread information
+set tid to get_thread_id with thread_handle
+print text "Thread ID: "
+print text tid
+
+# Check if thread is alive
+set is_alive to thread_is_alive with thread_handle
+print text "Thread is alive: "
+print text is_alive
+
+# Wait for thread to complete
+print text "Waiting for thread to complete..."
+set result to join_thread with thread_handle
+print text "Thread returned: "
+print text result
+print text ""
+
+
+# Example 2: Multiple Concurrent Threads
+print text "Example 2: Multiple Concurrent Threads"
+
+function countdown with start_value as Integer
+    set current_thread_id to get_current_thread_id()
+    print text "Thread "
+    print text current_thread_id
+    print text " counting from "
+    print text start_value
+    
+    set count to start_value
+    while count is greater than 0
+        print text "  Thread "
+        print text current_thread_id
+        print text ": "
+        print text count
+        sleep_thread with 0.15
+        set count to count minus 1
+    end
+    
+    print text "Thread "
+    print text current_thread_id
+    print text " finished!"
+
+# Create multiple threads
+set threads to []
+set i to 0
+while i is less than 3
+    set thread to create_thread with countdown and (5 minus i)
+    set threads to append with threads and thread
+    set i to i plus 1
+end
+
+# Wait for all threads to complete
+print text "Waiting for all threads..."
+for each thread in threads
+    join_thread with thread
+end
+print text "All threads completed"
+print text ""
+
+
+# Example 3: Thread-Local Storage (TLS)
+print text "Example 3: Thread-Local Storage"
+
+function tls_worker with worker_id as Integer
+    # Each thread has its own copy of thread-local variables
+    thread_local_set with "worker_id" and worker_id
+    thread_local_set with "counter" and 0
+    
+    # Simulate work with thread-local data
+    set iterations to 3
+    set i to 0
+    while i is less than iterations
+        set current_id to thread_local_get with "worker_id" and 0
+        set counter to thread_local_get with "counter" and 0
+        
+        print text "Worker "
+        print text current_id
+        print text " iteration "
+        print text counter
+        
+        thread_local_set with "counter" and (counter plus 1)
+        sleep_thread with 0.1
+        set i to i plus 1
+    end
+    
+    set final_counter to thread_local_get with "counter" and 0
+    print text "Worker "
+    print text worker_id
+    print text " final counter: "
+    print text final_counter
+
+# Create threads with TLS
+set tls_threads to []
+set j to 0
+while j is less than 3
+    set thread to create_thread with tls_worker and j
+    set tls_threads to append with tls_threads and thread
+    set j to j plus 1
+end
+
+# Wait for TLS threads
+for each thread in tls_threads
+    join_thread with thread
+end
+print text ""
+
+
+# Example 4: Getting System Information
+print text "Example 4: System Thread Information"
+
+set num_cpus to get_cpu_count()
+print text "Number of CPU cores: "
+print text num_cpus
+
+set main_thread_id to get_current_thread_id()
+print text "Main thread ID: "
+print text main_thread_id
+
+set main_thread_name to get_current_thread_name()
+print text "Main thread name: "
+print text main_thread_name
+print text ""
+
+
+# Example 5: Thread Naming
+print text "Example 5: Named Threads"
+
+function named_worker
+    set my_name to get_current_thread_name()
+    set my_id to get_current_thread_id()
+    
+    print text "Hello from "
+    print text my_name
+    print text " (ID: "
+    print text my_id
+    print text ")"
+    
+    sleep_thread with 0.2
+
+# Create named threads
+set named_thread1 to create_thread with named_worker
+set_thread_name with named_thread1 and "DataProcessor"
+
+set named_thread2 to create_thread with named_worker
+set_thread_name with named_thread2 and "NetworkHandler"
+
+set named_thread3 to create_thread with named_worker
+set_thread_name with named_thread3 and "EventListener"
+
+# Join named threads
+join_thread with named_thread1
+join_thread with named_thread2
+join_thread with named_thread3
+print text ""
+
+
+# Example 6: Producer-Consumer Pattern
+print text "Example 6: Producer-Consumer Pattern"
+
+# Shared queue (simplified - in production use proper synchronization)
+set shared_queue to []
+set queue_max_size to 5
+set production_complete to create_atomic_boolean with False
+
+function producer with items_to_produce as Integer
+    set produced to 0
+    while produced is less than items_to_produce
+        # Wait if queue is full (busy wait - not ideal, just for demo)
+        set queue_size to length of shared_queue
+        while queue_size is greater than or equal to queue_max_size
+            yield_thread()
+            set queue_size to length of shared_queue
+        end
+        
+        # Produce item
+        set item to produced plus 1
+        set shared_queue to append with shared_queue and item
+        print text "Produced item: "
+        print text item
+        
+        set produced to produced plus 1
+        sleep_thread with 0.1
+    end
+    
+    # Signal production complete
+    atomic_store with production_complete and True and "release"
+    print text "Producer finished"
+
+function consumer with consumer_id as Integer
+    set consumed to 0
+    set running to True
+    
+    while running
+        set queue_size to length of shared_queue
+        
+        # Check if there are items to consume
+        if queue_size is greater than 0
+            # Consume item (remove from beginning)
+            set item to get shared_queue at 0
+            # Remove first element (simplified)
+            set new_queue to []
+            set idx to 1
+            while idx is less than queue_size
+                set elem to get shared_queue at idx
+                set new_queue to append with new_queue and elem
+                set idx to idx plus 1
+            end
+            set shared_queue to new_queue
+            
+            print text "Consumer "
+            print text consumer_id
+            print text " consumed: "
+            print text item
+            
+            set consumed to consumed plus 1
+            sleep_thread with 0.15
+        else
+            # Check if production is complete
+            set is_complete to atomic_load with production_complete and "acquire"
+            if is_complete
+                set running to False
+            else
+                yield_thread()
+            end
+        end
+    end
+    
+    print text "Consumer "
+    print text consumer_id
+    print text " finished (consumed "
+    print text consumed
+    print text " items)"
+
+# Start producer and consumers
+set items_to_produce to 10
+set producer_thread to create_thread with producer and items_to_produce
+
+set consumer_threads to []
+set c to 0
+while c is less than 2
+    set consumer_thread to create_thread with consumer and (c plus 1)
+    set consumer_threads to append with consumer_threads and consumer_thread
+    set c to c plus 1
+end
+
+# Wait for producer
+join_thread with producer_thread
+
+# Wait for consumers
+for each consumer_thread in consumer_threads
+    join_thread with consumer_thread
+end
+print text "Producer-Consumer pattern completed"
+print text ""
+
+
+# Example 7: Thread Pool Pattern
+print text "Example 7: Thread Pool Pattern"
+
+function task_worker with task_id as Integer
+    set thread_id to get_current_thread_id()
+    print text "Task "
+    print text task_id
+    print text " executing on thread "
+    print text thread_id
+    
+    # Simulate work
+    sleep_thread with 0.2
+    
+    print text "Task "
+    print text task_id
+    print text " completed"
+    
+    return task_id times 10
+
+# Create thread pool (fixed number of worker threads)
+set num_workers to get_cpu_count()
+if num_workers is greater than 4
+    set num_workers to 4
+end
+
+print text "Creating thread pool with "
+print text num_workers
+print text " workers"
+
+# Create tasks
+set num_tasks to 8
+set task_threads to []
+set task_counter to 0
+
+while task_counter is less than num_tasks
+    set task_thread to create_thread with task_worker and (task_counter plus 1)
+    set task_threads to append with task_threads and task_thread
+    set task_counter to task_counter plus 1
+    
+    # Limit concurrent threads to pool size
+    if task_counter modulo num_workers is equal to 0
+        # Wait for batch to complete before starting next batch
+        set batch_start to task_counter minus num_workers
+        set batch_idx to batch_start
+        while batch_idx is less than task_counter
+            set thread_to_join to get task_threads at batch_idx
+            join_thread with thread_to_join
+            set batch_idx to batch_idx plus 1
+        end
+    end
+end
+
+# Wait for remaining threads
+for each remaining_thread in task_threads
+    set is_alive to thread_is_alive with remaining_thread
+    if is_alive
+        join_thread with remaining_thread
+    end
+end
+
+print text "Thread pool completed all tasks"
+print text ""
+
+
+# Example 8: Thread Yield and Sleep
+print text "Example 8: Thread Yield and Sleep"
+
+function yielding_worker with worker_num as Integer
+    set iterations to 3
+    set i to 0
+    while i is less than iterations
+        print text "Worker "
+        print text worker_num
+        print text " working..."
+        
+        # Yield to let other threads run
+        yield_thread()
+        
+        set i to i plus 1
+    end
+    
+    print text "Worker "
+    print text worker_num
+    print text " sleeping..."
+    sleep_thread with 0.3
+    print text "Worker "
+    print text worker_num
+    print text " woke up"
+
+set yield_threads to []
+set y to 0
+while y is less than 2
+    set yield_thread to create_thread with yielding_worker and (y plus 1)
+    set yield_threads to append with yield_threads and yield_thread
+    set y to y plus 1
+end
+
+for each yield_thread in yield_threads
+    join_thread with yield_thread
+end
+print text ""
+
+
+print text "=== All Threading Examples Completed ==="

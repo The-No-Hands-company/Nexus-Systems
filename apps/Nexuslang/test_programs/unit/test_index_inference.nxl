@@ -1,0 +1,65 @@
+# Test Index Expression Type Inference
+# Validates that type inference works for indexing operations
+
+print text "=== Testing Index Expression Type Inference ==="
+
+# Test 1: Simple list indexing
+function test_list_index returns Integer
+    set mylist to create list
+    call list_append with mylist and 10
+    call list_append with mylist and 20
+    call list_append with mylist and 30
+    
+    # Index expression should infer Integer type from List<Integer>
+    set value to mylist[1]
+    return value
+end
+
+set result1 to call test_list_index
+print text "List index result:"
+print number result1
+
+
+# Test 2: Dictionary indexing
+function test_dict_index returns Integer
+    set mydict to create dictionary
+    call dict_set with mydict and "key1" and 100
+    call dict_set with mydict and "key2" and 200
+    
+    # Index expression should infer Integer type from Dictionary<String, Integer>
+    set value to mydict["key1"]
+    return value
+end
+
+set result2 to call test_dict_index
+print text "Dict index result:"
+print number result2
+
+
+# Test 3: Nested indexing
+function test_nested_index returns Integer
+    set list1 to create list
+    call list_append with list1 and 1
+    call list_append with list1 and 2
+    call list_append with list1 and 3
+    
+    set list2 to create list
+    call list_append with list2 and 4
+    call list_append with list2 and 5
+    call list_append with list2 and 6
+    
+    set matrix to create list
+    call list_append with matrix and list1
+    call list_append with matrix and list2
+    
+    # Nested index: matrix[1][2] should infer Integer
+    set value to matrix[1][2]
+    return value
+end
+
+set result3 to call test_nested_index
+print text "Nested index result:"
+print number result3
+
+
+print text "=== All Index Inference Tests Passed ==="

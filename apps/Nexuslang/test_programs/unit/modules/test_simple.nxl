@@ -1,0 +1,7 @@
+# Simple test - no modules
+set x to 10
+set y to 5
+set sum to x plus y
+
+print text "Sum: "
+print text sum

@@ -1,0 +1,40 @@
+# Pattern Matching with Guards Test
+
+print text "=== Pattern Matching Test ==="
+
+set x to 1
+
+print text "Testing x = 1:"
+match x with
+    case 1 when x > 0
+        print text "one (positive)"
+    case 1
+        print text "one (any)"
+    case 2
+        print text "two"
+    case _
+        print text "other"
+
+set x to -1
+
+print text "Testing x = -1:"
+match x with
+    case 1 when x > 0
+        print text "one (positive)"
+    case -1
+        print text "negative one"
+    case _
+        print text "other"
+
+set x to 5
+
+print text "Testing x = 5:"
+match x with
+    case 1
+        print text "one"
+    case 2
+        print text "two"
+    case _
+        print text "other"
+
+print text "=== Tests Complete ==="

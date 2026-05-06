@@ -1,0 +1,14 @@
+# Test else-if chains
+set score to 85
+
+if score is greater than or equal to 90
+    print text "Grade: A"
+else if score is greater than or equal to 80
+    print text "Grade: B"
+else if score is greater than or equal to 70
+    print text "Grade: C"
+else if score is greater than or equal to 60
+    print text "Grade: D"
+else
+    print text "Grade: F"
+end

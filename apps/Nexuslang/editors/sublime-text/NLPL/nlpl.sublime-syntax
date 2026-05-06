@@ -1,0 +1,195 @@
+%YAML 1.2
+---
+# NexusLang Syntax Definition for Sublime Text
+# =========================================
+#
+# Installation:
+#   1. Open the Packages directory: Preferences > Browse Packages...
+#   2. Create a folder: NexusLang/
+#   3. Copy nlpl.sublime-syntax and nlpl.sublime-settings into NexusLang/
+#   4. Restart Sublime Text
+#
+# Or install via Package Control after submitting to the wbond.net repository.
+
+name: NexusLang
+file_extensions:
+  - nlpl
+scope: source.nlpl
+version: 2
+
+variables:
+  identifier: '[a-zA-Z_][a-zA-Z0-9_]*'
+  number_int: '\b(?:0x[0-9A-Fa-f]+|0b[01]+|0o[0-7]+|[0-9]+)\b'
+  number_float: '\b[0-9]+\.[0-9]+\b'
+
+contexts:
+  main:
+    - include: doc-comment
+    - include: comment
+    - include: string-double
+    - include: string-single
+    - include: string-triple
+    - include: keywords
+    - include: natural-keywords
+    - include: types
+    - include: constants
+    - include: numbers
+    - include: function-call
+    - include: function-definition
+    - include: class-definition
+    - include: operators
+    - include: punctuation
+
+  # ---------------------------------------------------------------------------
+  # Comments
+  # ---------------------------------------------------------------------------
+  doc-comment:
+    - match: '##.*$'
+      scope: comment.line.documentation.nlpl
+
+  comment:
+    - match: '#(?!#).*$'
+      scope: comment.line.number-sign.nlpl
+
+  # ---------------------------------------------------------------------------
+  # Strings
+  # ---------------------------------------------------------------------------
+  string-triple:
+    - match: '"""'
+      scope: punctuation.definition.string.begin.nlpl
+      push:
+        - meta_scope: string.quoted.triple.nlpl
+        - match: '"""'
+          scope: punctuation.definition.string.end.nlpl
+          pop: true
+        - include: string-interpolation
+
+  string-double:
+    - match: '"'
+      scope: punctuation.definition.string.begin.nlpl
+      push:
+        - meta_scope: string.quoted.double.nlpl
+        - match: '"'
+          scope: punctuation.definition.string.end.nlpl
+          pop: true
+        - match: '\\.'
+          scope: constant.character.escape.nlpl
+        - include: string-interpolation
+
+  string-single:
+    - match: "'"
+      scope: punctuation.definition.string.begin.nlpl
+      push:
+        - meta_scope: string.quoted.single.nlpl
+        - match: "'"
+          scope: punctuation.definition.string.end.nlpl
+          pop: true
+        - match: '\\.'
+          scope: constant.character.escape.nlpl
+
+  string-interpolation:
+    - match: '\$\{'
+      scope: punctuation.section.interpolation.begin.nlpl
+      push:
+        - meta_scope: meta.interpolation.nlpl
+        - match: '\}'
+          scope: punctuation.section.interpolation.end.nlpl
+          pop: true
+        - include: main
+
+  # ---------------------------------------------------------------------------
+  # Keywords
+  # ---------------------------------------------------------------------------
+  keywords:
+    - match: '\b(function|class|struct|union|end)\b'
+      scope: keyword.declaration.nlpl
+
+    - match: '\b(if|else|otherwise|while|for|each|in|do|match|case|default|when)\b'
+      scope: keyword.control.nlpl
+
+    - match: '\b(return|break|continue|yield)\b'
+      scope: keyword.control.flow.nlpl
+
+    - match: '\b(import|module|from|export)\b'
+      scope: keyword.control.import.nlpl
+
+    - match: '\b(try|catch|raise|throw|finally)\b'
+      scope: keyword.control.exception.nlpl
+
+    - match: '\b(new|delete|free|allocate|address|dereference|sizeof)\b'
+      scope: keyword.operator.memory.nlpl
+
+    - match: '\b(and|or|not)\b'
+      scope: keyword.operator.logical.nlpl
+
+    - match: '\b(parallel|async|await|spawn|join)\b'
+      scope: keyword.other.async.nlpl
+
+  natural-keywords:
+    - match: '\b(set|to|is|are|has|have|let|as|returns|that|takes|of|called)\b'
+      scope: keyword.other.natural.nlpl
+
+    - match: '\b(greater|less|than|equal|plus|minus|times|divided|by)\b'
+      scope: keyword.operator.natural.nlpl
+
+    - match: '\b(target|borrow|move|drop|lifetime|with)\b'
+      scope: keyword.other.qualifier.nlpl
+
+  # ---------------------------------------------------------------------------
+  # Types
+  # ---------------------------------------------------------------------------
+  types:
+    - match: '\b(Integer|Float|String|Boolean|List|Dict|Void|Optional|Result|Ok|Err|Null|Any|Rc|Arc|Box|Weak|RefCell|Mutex|RwLock)\b'
+      scope: storage.type.builtin.nlpl
+    - match: '\b[A-Z][a-zA-Z0-9_]*\b'
+      scope: storage.type.user.nlpl
+
+  # ---------------------------------------------------------------------------
+  # Constants
+  # ---------------------------------------------------------------------------
+  constants:
+    - match: '\b(true|false|null|none|some)\b'
+      scope: constant.language.nlpl
+
+  # ---------------------------------------------------------------------------
+  # Numbers
+  # ---------------------------------------------------------------------------
+  numbers:
+    - match: '{{number_float}}'
+      scope: constant.numeric.float.nlpl
+    - match: '{{number_int}}'
+      scope: constant.numeric.integer.nlpl
+
+  # ---------------------------------------------------------------------------
+  # Function and class declarations
+  # ---------------------------------------------------------------------------
+  function-definition:
+    - match: '\b(function)\s+({{identifier}})'
+      captures:
+        1: keyword.declaration.function.nlpl
+        2: entity.name.function.nlpl
+
+  class-definition:
+    - match: '\b(class|struct|union)\s+({{identifier}})'
+      captures:
+        1: keyword.declaration.class.nlpl
+        2: entity.name.class.nlpl
+
+  function-call:
+    - match: '({{identifier}})\s+with\b'
+      captures:
+        1: variable.function.nlpl
+
+  # ---------------------------------------------------------------------------
+  # Operators and punctuation
+  # ---------------------------------------------------------------------------
+  operators:
+    - match: '[+\-*/<>=!&|^~%]+'
+      scope: keyword.operator.nlpl
+
+    - match: '\.\.'
+      scope: keyword.operator.range.nlpl
+
+  punctuation:
+    - match: '[{}()\[\],;.]'
+      scope: punctuation.separator.nlpl

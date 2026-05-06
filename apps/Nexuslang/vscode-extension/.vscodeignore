@@ -1,0 +1,10 @@
+.vscode/**
+.vscode-test/**
+src/**
+.gitignore
+tsconfig.json
+*.vsix
+*.map
+# Exclude most node_modules but keep required dependencies
+node_modules/**
+!node_modules/vscode-languageclient/**

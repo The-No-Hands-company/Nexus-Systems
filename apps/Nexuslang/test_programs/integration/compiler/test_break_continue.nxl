@@ -1,0 +1,32 @@
+# Test break and continue statements
+
+# Test 1: Break out of loop early
+set numbers to [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+print text "Numbers until 5:"
+for each n in numbers
+  if n is equal to 6
+    break
+  end
+  print text n
+
+# Test 2: Continue to skip values
+set values to [1, 2, 3, 4, 5]
+print text "Odd numbers only:"
+for each v in values
+  set remainder to v minus 2 times v divided by 2
+  if remainder is equal to 0
+    continue
+  end
+  print text v
+
+# Test 3: While loop with break
+set counter to 0
+print text "While with break at 3:"
+while counter is less than 10
+  print text counter
+  set counter to counter plus 1
+  if counter is equal to 3
+    break
+  end
+
+print text "All break/continue tests done!"

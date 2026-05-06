@@ -1,0 +1,7 @@
+function test returns Integer
+    set x to 5
+    return x
+end
+
+set result to call test
+print number result

@@ -1,0 +1,29 @@
+# Matrix Multiplication Benchmark (Simplified)
+# Tests: Nested loops, arithmetic, array access patterns
+# Target: CPU-bound numerical computation
+
+function matrix_sum with size as Integer returns Integer
+    # Create a simple matrix as flattened array
+    # Compute sum of all elements after operations
+    set sum to 0
+    
+    set i to 0
+    while i is less than size
+        set j to 0
+        while j is less than size
+            # Simulate matrix operations
+            set value to i times size plus j
+            set sum to sum plus value
+            set j to j plus 1
+        end
+        set i to i plus 1
+    end
+    
+    return sum
+end
+
+# Run benchmark - 200x200 matrix
+set result to matrix_sum with 200
+
+print text "Matrix sum (200x200): "
+print text convert result to string

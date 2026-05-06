@@ -1,0 +1,60 @@
+# Test: Type Inference
+# Tests if the compiler can infer types from expressions
+
+print text "=== Type Inference Test ==="
+
+# Test 1: Infer from literal
+set x to 42
+# x should be inferred as Integer
+
+# Test 2: Infer from arithmetic
+set y to 10 plus 20
+# y should be inferred as Integer
+
+# Test 3: Infer from string literal
+set name to "Alice"
+# name should be inferred as String
+
+# Test 4: Infer from list
+set numbers to [1, 2, 3, 4, 5]
+# numbers should be inferred as List of Integer
+
+# Test 5: Infer from function call
+function get_value returns Integer
+    return 100
+
+set result to call get_value
+# result should be inferred as Integer
+
+# Test 6: Infer from method call
+class Box
+    property value as Integer
+    
+    method get_value returns Integer
+        return value
+
+set b to new Box
+set b.value to 50
+set box_value to call b.get_value
+# box_value should be inferred as Integer
+
+# Print all values to verify
+print text "x (should be 42):"
+print number x
+
+print text "y (should be 30):"
+print number y
+
+print text "name (should be Alice):"
+print text name
+
+print text "numbers[0] (should be 1):"
+print number numbers[0]
+
+print text "result (should be 100):"
+print number result
+
+print text "box_value (should be 50):"
+print number box_value
+
+print text "=== Type Inference Test Complete ==="

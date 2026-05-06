@@ -1,0 +1,59 @@
+# Comprehensive Function Pointer Tests
+
+# Test 1: Basic function pointer - Get address
+print text "Test 1: Basic function pointer address"
+
+function add_numbers that takes a as Integer and b as Integer returns Integer
+    return a plus b
+
+set func_ptr to address of add_numbers
+print text "Function pointer obtained"
+print text ""
+
+# Test 2: Get addresses of multiple functions
+print text "Test 2: Multiple function pointers"
+
+function multiply_numbers that takes x as Integer and y as Integer returns Integer
+    return x times y
+
+function subtract_numbers that takes a as Integer and b as Integer returns Integer
+    return a minus b
+
+set add_ptr to address of add_numbers
+set mult_ptr to address of multiply_numbers
+set sub_ptr to address of subtract_numbers
+
+print text "Multiple function pointers obtained"
+print text ""
+
+# Test 3: Function pointer with single parameter
+print text "Test 3: Single parameter function"
+
+function square_number that takes n as Integer returns Integer
+    return n times n
+
+set square_ptr to address of square_number
+print text "Single parameter function pointer obtained"
+print text ""
+
+# Test 4: Function pointer with no parameters
+print text "Test 4: No parameter function"
+
+function get_constant returns Integer
+    return 42
+
+set const_ptr to address of get_constant
+print text "No parameter function pointer obtained"
+print text ""
+
+# Test 5: Store function pointer and reassign
+print text "Test 5: Function pointer reassignment"
+
+set operation_ptr to address of add_numbers
+print text "Initial pointer set to add_numbers"
+
+set operation_ptr to address of multiply_numbers
+print text "Pointer reassigned to multiply_numbers"
+print text ""
+
+print text "All function pointer address tests completed!"

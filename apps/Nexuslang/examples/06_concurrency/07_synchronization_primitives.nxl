@@ -1,0 +1,492 @@
+# Synchronization Primitives Example
+# Demonstrates mutexes, condition variables, semaphores, barriers, and more
+
+print text "=== Synchronization Primitives Examples ==="
+print text ""
+
+# Example 1: Mutex - Protecting Shared Counter
+print text "Example 1: Mutex - Thread-Safe Counter"
+
+set shared_counter to 0
+set counter_mutex to create_mutex()
+
+function increment_counter with iterations as Integer
+    set i to 0
+    while i is less than iterations
+        # Critical section - lock mutex
+        lock_mutex with counter_mutex
+        
+        # Access shared variable
+        set temp to shared_counter
+        sleep_thread with 0.001  # Simulate work
+        set shared_counter to temp plus 1
+        
+        # Release mutex
+        unlock_mutex with counter_mutex
+        
+        set i to i plus 1
+    end
+    
+    set tid to get_current_thread_id()
+    print text "Thread "
+    print text tid
+    print text " completed increments"
+
+# Start threads
+set num_threads to 3
+set iterations_per_thread to 10
+set threads to []
+
+set t to 0
+while t is less than num_threads
+    set thread to create_thread with increment_counter and iterations_per_thread
+    set threads to append with threads and thread
+    set t to t plus 1
+end
+
+# Wait for all threads
+for each thread in threads
+    join_thread with thread
+end
+
+set expected to num_threads times iterations_per_thread
+print text "Final counter value: "
+print text shared_counter
+print text " (expected: "
+print text expected
+print text ")"
+print text ""
+
+
+# Example 2: Condition Variable - Producer-Consumer
+print text "Example 2: Condition Variable - Producer-Consumer"
+
+set shared_buffer to []
+set buffer_mutex to create_mutex()
+set buffer_not_empty to create_condition_variable with buffer_mutex
+set max_buffer_size to 5
+set items_to_produce to 8
+set production_done to False
+
+function cv_producer with num_items as Integer
+    set produced to 0
+    while produced is less than num_items
+        lock_mutex with buffer_mutex
+        
+        # Wait if buffer is full
+        set buffer_size to length of shared_buffer
+        while buffer_size is greater than or equal to max_buffer_size
+            unlock_mutex with buffer_mutex
+            sleep_thread with 0.05
+            lock_mutex with buffer_mutex
+            set buffer_size to length of shared_buffer
+        end
+        
+        # Produce item
+        set item to produced plus 1
+        set shared_buffer to append with shared_buffer and item
+        print text "Produced: "
+        print text item
+        
+        # Signal consumers
+        notify_one with buffer_not_empty
+        
+        unlock_mutex with buffer_mutex
+        
+        set produced to produced plus 1
+        sleep_thread with 0.1
+    end
+    
+    lock_mutex with buffer_mutex
+    set production_done to True
+    notify_all with buffer_not_empty
+    unlock_mutex with buffer_mutex
+    
+    print text "Producer finished"
+
+function cv_consumer with consumer_id as Integer
+    set consumed_count to 0
+    set running to True
+    
+    while running
+        lock_mutex with buffer_mutex
+        
+        # Wait while buffer is empty and production not done
+        set buffer_size to length of shared_buffer
+        while buffer_size is equal to 0
+            if production_done
+                set running to False
+                unlock_mutex with buffer_mutex
+                break
+            end
+            
+            wait_on_condition with buffer_not_empty
+            set buffer_size to length of shared_buffer
+        end
+        
+        if running is False
+            break
+        end
+        
+        # Consume item
+        if buffer_size is greater than 0
+            set item to get shared_buffer at 0
+            
+            # Remove first element
+            set new_buffer to []
+            set idx to 1
+            while idx is less than buffer_size
+                set elem to get shared_buffer at idx
+                set new_buffer to append with new_buffer and elem
+                set idx to idx plus 1
+            end
+            set shared_buffer to new_buffer
+            
+            print text "Consumer "
+            print text consumer_id
+            print text " consumed: "
+            print text item
+            
+            set consumed_count to consumed_count plus 1
+        end
+        
+        unlock_mutex with buffer_mutex
+        
+        sleep_thread with 0.15
+    end
+    
+    print text "Consumer "
+    print text consumer_id
+    print text " finished (consumed "
+    print text consumed_count
+    print text " items)"
+
+# Reset for this example
+set shared_buffer to []
+set production_done to False
+
+# Start producer and consumers
+set producer_thread to create_thread with cv_producer and items_to_produce
+
+set consumer_threads to []
+set c to 0
+while c is less than 2
+    set consumer_thread to create_thread with cv_consumer and (c plus 1)
+    set consumer_threads to append with consumer_threads and consumer_thread
+    set c to c plus 1
+end
+
+# Wait for completion
+join_thread with producer_thread
+for each consumer_thread in consumer_threads
+    join_thread with consumer_thread
+end
+print text ""
+
+
+# Example 3: Semaphore - Limited Resource Access
+print text "Example 3: Semaphore - Connection Pool"
+
+set max_connections to 2
+set connection_pool to create_semaphore with max_connections
+
+function use_connection with client_id as Integer
+    print text "Client "
+    print text client_id
+    print text " waiting for connection..."
+    
+    # Acquire connection from pool
+    wait_semaphore with connection_pool
+    
+    print text "Client "
+    print text client_id
+    print text " got connection, working..."
+    
+    # Simulate work
+    sleep_thread with 0.3
+    
+    print text "Client "
+    print text client_id
+    print text " releasing connection"
+    
+    # Release connection back to pool
+    post_semaphore with connection_pool
+
+# Start clients
+set num_clients to 5
+set client_threads to []
+set cl to 0
+while cl is less than num_clients
+    set client_thread to create_thread with use_connection and (cl plus 1)
+    set client_threads to append with client_threads and client_thread
+    set cl to cl plus 1
+end
+
+# Wait for all clients
+for each client_thread in client_threads
+    join_thread with client_thread
+end
+print text "All clients completed"
+print text ""
+
+
+# Example 4: Barrier - Synchronization Point
+print text "Example 4: Barrier - Phase Synchronization"
+
+set num_workers to 3
+set sync_barrier to create_barrier with num_workers
+
+function phased_worker with worker_id as Integer
+    # Phase 1
+    print text "Worker "
+    print text worker_id
+    print text " executing phase 1"
+    sleep_thread with 0.1
+    
+    print text "Worker "
+    print text worker_id
+    print text " waiting at barrier..."
+    set barrier_index to wait_barrier with sync_barrier
+    
+    # Phase 2 (all threads synchronized here)
+    print text "Worker "
+    print text worker_id
+    print text " executing phase 2"
+    sleep_thread with 0.1
+    
+    print text "Worker "
+    print text worker_id
+    print text " completed"
+
+# Start workers
+set worker_threads to []
+set w to 0
+while w is less than num_workers
+    set worker_thread to create_thread with phased_worker and (w plus 1)
+    set worker_threads to append with worker_threads and worker_thread
+    set w to w plus 1
+end
+
+# Wait for workers
+for each worker_thread in worker_threads
+    join_thread with worker_thread
+end
+print text "All workers synchronized and completed"
+print text ""
+
+
+# Example 5: Read-Write Lock - Multiple Readers
+print text "Example 5: Read-Write Lock - Shared Data"
+
+set shared_data to 100
+set data_rwlock to create_rwlock()
+set read_count to create_atomic_integer with 0
+set write_count to create_atomic_integer with 0
+
+function reader_thread with reader_id as Integer
+    set reads to 0
+    while reads is less than 3
+        # Acquire read lock (multiple readers allowed)
+        read_lock with data_rwlock
+        
+        # Read shared data
+        set value to shared_data
+        print text "Reader "
+        print text reader_id
+        print text " read value: "
+        print text value
+        
+        atomic_increment with read_count and "seq_cst"
+        
+        # Release read lock
+        read_unlock with data_rwlock
+        
+        sleep_thread with 0.1
+        set reads to reads plus 1
+    end
+
+function writer_thread with writer_id as Integer
+    set writes to 0
+    while writes is less than 2
+        # Acquire write lock (exclusive access)
+        write_lock with data_rwlock
+        
+        # Modify shared data
+        set old_value to shared_data
+        set shared_data to shared_data plus 10
+        print text "Writer "
+        print text writer_id
+        print text " updated: "
+        print text old_value
+        print text " -> "
+        print text shared_data
+        
+        atomic_increment with write_count and "seq_cst"
+        
+        # Release write lock
+        write_unlock with data_rwlock
+        
+        sleep_thread with 0.2
+        set writes to writes plus 1
+    end
+
+# Start readers and writers
+set rw_threads to []
+
+# Start 3 readers
+set r to 0
+while r is less than 3
+    set reader to create_thread with reader_thread and (r plus 1)
+    set rw_threads to append with rw_threads and reader
+    set r to r plus 1
+end
+
+# Start 1 writer
+set writer to create_thread with writer_thread and 1
+set rw_threads to append with rw_threads and writer
+
+# Wait for all
+for each rw_thread in rw_threads
+    join_thread with rw_thread
+end
+
+set total_reads to atomic_load with read_count and "seq_cst"
+set total_writes to atomic_load with write_count and "seq_cst"
+print text "Total reads: "
+print text total_reads
+print text ", Total writes: "
+print text total_writes
+print text ""
+
+
+# Example 6: Reentrant Lock - Recursive Locking
+print text "Example 6: Reentrant Lock - Recursive Function"
+
+set reentrant_lock to create_reentrant_lock()
+
+function recursive_function with depth as Integer
+    lock_reentrant with reentrant_lock
+    
+    print text "Locked at depth: "
+    print text depth
+    
+    if depth is greater than 0
+        # Recursive call - reentrant lock allows this
+        recursive_function with (depth minus 1)
+    end
+    
+    print text "Unlocking from depth: "
+    print text depth
+    
+    unlock_reentrant with reentrant_lock
+
+set reentrant_thread to create_thread with recursive_function and 3
+join_thread with reentrant_thread
+print text ""
+
+
+# Example 7: Once - One-Time Initialization
+print text "Example 7: Once - One-Time Initialization"
+
+set init_once to create_once()
+set init_counter to create_atomic_integer with 0
+
+function initialize_resource
+    atomic_increment with init_counter and "seq_cst"
+    print text "Resource initialized (this should print once)"
+    sleep_thread with 0.1
+
+function worker_with_init with worker_id as Integer
+    print text "Worker "
+    print text worker_id
+    print text " calling initialization..."
+    
+    # This will only execute once across all threads
+    call_once with init_once and initialize_resource
+    
+    print text "Worker "
+    print text worker_id
+    print text " continuing with work"
+
+# Start multiple threads
+set init_threads to []
+set i to 0
+while i is less than 5
+    set init_thread to create_thread with worker_with_init and (i plus 1)
+    set init_threads to append with init_threads and init_thread
+    set i to i plus 1
+end
+
+# Wait for all
+for each init_thread in init_threads
+    join_thread with init_thread
+end
+
+set init_calls to atomic_load with init_counter and "seq_cst"
+print text "Initialize function called "
+print text init_calls
+print text " time(s)"
+print text ""
+
+
+# Example 8: Try-Lock - Non-Blocking Lock Attempt
+print text "Example 8: Try-Lock - Non-Blocking Mutex"
+
+set trylock_mutex to create_mutex()
+set successful_locks to create_atomic_integer with 0
+set failed_locks to create_atomic_integer with 0
+
+function trylock_worker with worker_id as Integer
+    set attempts to 0
+    while attempts is less than 5
+        set acquired to try_lock_mutex with trylock_mutex
+        
+        if acquired
+            # Got the lock
+            print text "Worker "
+            print text worker_id
+            print text " acquired lock"
+            
+            atomic_increment with successful_locks and "seq_cst"
+            
+            sleep_thread with 0.1
+            
+            unlock_mutex with trylock_mutex
+        else
+            # Couldn't get lock, do something else
+            print text "Worker "
+            print text worker_id
+            print text " failed to acquire lock, doing other work"
+            
+            atomic_increment with failed_locks and "seq_cst"
+            
+            sleep_thread with 0.05
+        end
+        
+        set attempts to attempts plus 1
+    end
+
+# Start workers
+set trylock_threads to []
+set tl to 0
+while tl is less than 3
+    set trylock_thread to create_thread with trylock_worker and (tl plus 1)
+    set trylock_threads to append with trylock_threads and trylock_thread
+    set tl to tl plus 1
+end
+
+# Wait for all
+for each trylock_thread in trylock_threads
+    join_thread with trylock_thread
+end
+
+set success_count to atomic_load with successful_locks and "seq_cst"
+set fail_count to atomic_load with failed_locks and "seq_cst"
+print text "Successful locks: "
+print text success_count
+print text ", Failed attempts: "
+print text fail_count
+print text ""
+
+
+print text "=== All Synchronization Examples Completed ==="

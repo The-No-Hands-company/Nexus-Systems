@@ -1,0 +1,28 @@
+# NexusLang Native Code via LLVM Backend
+# Comprehensive test of compiler features
+
+print text "=== NexusLang LLVM Compiler Test ==="
+
+# Integer arithmetic
+set a to 100
+set b to 7
+set sum to a plus b
+set diff to a minus b
+set prod to a times b
+set quot to a divided by b
+
+print text "Arithmetic:"
+print text sum
+print text diff 
+print text prod
+print text quot
+
+# Boolean comparisons
+set x to 50
+set y to 30
+set is_greater to x is greater than y # Returns 1 (true)
+
+print text "Comparison (50 > 30):"
+print text is_greater
+
+print text "=== NexusLang Native Compilation Success ===</"

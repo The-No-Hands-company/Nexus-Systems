@@ -1,0 +1,11 @@
+# Test for-each loops with arrays
+
+# Simple for-each over array
+set numbers to [10, 20, 30, 40, 50]
+
+print text "For-each over numbers:"
+for each num in numbers
+  print text num
+  
+# Note: Currently limited - will iterate up to 100 elements
+# Use break to stop early if needed

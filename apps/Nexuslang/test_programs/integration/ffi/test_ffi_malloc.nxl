@@ -1,0 +1,21 @@
+# FFI Memory Allocation Example
+# Tests malloc and pointer manipulation
+#
+# Compilation:
+#   python nlplc_llvm.py test_programs/ffi/test_ffi_malloc.nlpl -o ffi_malloc
+#
+# Expected Output:
+#   Allocated 100 bytes at: 0x...
+#   Memory operations complete
+
+extern function malloc with size as Integer returns Pointer from library "c"
+extern function printf with format as Pointer returns Integer from library "c"
+
+# Allocate memory
+set bytes to 100
+set ptr to call malloc with bytes
+set format to "Allocated 100 bytes at: %p\n"
+call printf with format, ptr
+
+set msg to "Memory operations complete\n"
+call printf with msg

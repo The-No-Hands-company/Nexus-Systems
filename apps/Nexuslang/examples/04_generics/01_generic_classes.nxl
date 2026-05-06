@@ -1,0 +1,36 @@
+# Generic Classes with Type Parameters
+# This example demonstrates generic classes with type parameters and bounded type constraints
+
+# Basic generic class
+define a class called Container with T as a type parameter
+    properties:
+        value: T
+    methods:
+        define a method called get that returns T
+            return self.value
+        
+        define a method called set that takes a parameter new_value of type T
+            set self.value to new_value
+
+# Generic class with type constraint
+define a class called NumberContainer with T as a type parameter that must be a number
+    properties:
+        value: T
+    methods:
+        define a method called add that takes a parameter other of type T and returns T
+            return self.value plus other
+        
+        define a method called multiply that takes a parameter other of type T and returns T
+            return self.value times other
+
+# Usage examples
+print text "Creating NumberContainer with value 42"
+set number_container to NumberContainer with value 42
+
+print text "Adding 8 to container: "
+print text number_container.add with 8
+
+print text "Multiplying container by 2: "
+print text number_container.multiply with 2
+
+print text "Generic classes allow type-safe containers for any type!"

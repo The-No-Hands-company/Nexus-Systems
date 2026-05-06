@@ -1,0 +1,14 @@
+# Test pattern matching in the compiler
+
+set x to 5
+
+match x with
+    case 1
+        print text "One"
+    case 5
+        print text "Five"
+    case _
+        print text "Other"
+end
+
+print text "Pattern matching test complete"

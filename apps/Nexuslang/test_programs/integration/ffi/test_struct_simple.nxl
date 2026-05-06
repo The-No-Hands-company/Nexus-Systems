@@ -1,0 +1,13 @@
+# Simple struct test
+struct Point
+    x as Integer
+    y as Integer
+end
+
+extern function printf with format as String returns Integer from library "c"
+
+set p to new Point
+set p.x to 42
+set p.y to 99
+
+call printf with "x=%lld y=%lld\n", p.x, p.y

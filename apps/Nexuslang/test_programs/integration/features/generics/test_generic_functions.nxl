@@ -1,0 +1,29 @@
+# Test Generic Functions - Simple Version
+
+# Generic identity function (single line)
+function identity<T> that takes value as T returns T
+    return value
+
+# Generic max function (single line)  
+function max<T> that takes a as T, b as T returns T
+    return a
+
+# Test identity with explicit type argument using "call ... with" syntax
+set int_val to call identity<Integer> with 42
+print text "Identity Integer: "
+print text int_val
+print text "\n"
+
+# Test identity with String
+set str_val to call identity<String> with "Hello"
+print text "Identity String: "
+print text str_val
+print text "\n"
+
+# Test max with Integer (two arguments)
+set max_int to call max<Integer> with 10, 20
+print text "Max Integer: "
+print text max_int
+print text "\n"
+
+print text "Generic functions test complete!\n"

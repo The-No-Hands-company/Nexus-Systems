@@ -1,0 +1,282 @@
+# Comprehensive Guide to Generic Types in NexusLang
+# Real-world patterns and best practices for type-safe generic programming
+
+print text "=== NexusLang Generic Types - Comprehensive Guide ==="
+print text ""
+
+# ============================================================================
+# 1. GENERIC FUNCTIONS - Basic Usage
+# ============================================================================
+
+print text "1. Generic Functions"
+print text "--------------------"
+
+# Generic identity function - returns same value with type safety
+function identity<T> that takes value as T returns T
+    return value
+end
+
+set int_result to identity with 42
+print text "Identity(42): "
+print text int_result
+
+set str_result to identity with "Hello NLPL"
+print text "Identity(Hello NLPL): "
+print text str_result
+print text ""
+
+# Generic swap - returns second value
+function get_second<T> that takes first as T and second as T returns T
+    return second
+end
+
+set swapped to get_second with 100 and 200
+print text "get_second(100, 200): "
+print text swapped
+print text ""
+
+# ============================================================================
+# 2. GENERIC FUNCTIONS - List Operations
+# ============================================================================
+
+print text "2. Generic List Operations"
+print text "--------------------------"
+
+# Get first element from list
+function get_first<T> that takes items as List returns T
+    set result to get items[0]
+    return result
+end
+
+set int_list to [10, 20, 30, 40]
+set first_int to get_first with int_list
+print text "First element of [10,20,30,40]: "
+print text first_int
+
+set str_list to ["alpha", "beta", "gamma"]
+set first_str to get_first with str_list
+print text "First element of [alpha,beta,gamma]: "
+print text first_str
+print text ""
+
+# Count elements in generic list
+function count_elements<T> that takes items as List returns Integer
+    return length of items
+end
+
+set int_count to count_elements with int_list
+print text "Count of integers: "
+print text int_count
+
+set str_count to count_elements with str_list
+print text "Count of strings: "
+print text str_count
+print text ""
+
+# ============================================================================
+# 3. GENERIC CLASSES - Container Pattern
+# ============================================================================
+
+print text "3. Generic Class - Container"
+print text "----------------------------"
+
+class Box<T>
+    property stored_value as T
+    property description as String
+    
+    method get_value returns T
+        return this.stored_value
+    end method
+    
+    method set_value with new_val as T
+        set this.stored_value to new_val
+    end method
+    
+    method get_description returns String
+        return this.description
+    end method
+end class
+
+# Create Box<Integer>
+set int_box to new Box<Integer>
+set int_box.stored_value to 42
+set int_box.description to "Answer Box"
+
+print text "Box description: "
+print text call int_box.get_description
+
+print text "Box value: "
+print text call int_box.get_value
+
+# Update value
+call int_box.set_value with 100
+print text "Updated value: "
+print text call int_box.get_value
+print text ""
+
+# ============================================================================
+# 4. GENERIC CLASSES - Numeric Operations
+# ============================================================================
+
+print text "4. Generic Class - Numeric Container"
+print text "------------------------------------"
+
+class Calculator<T>
+    property accumulator as T
+    
+    method add with value as T returns T
+        set this.accumulator to this.accumulator plus value
+        return this.accumulator
+    end method
+    
+    method multiply with value as T returns T
+        set this.accumulator to this.accumulator times value
+        return this.accumulator
+    end method
+    
+    method get_result returns T
+        return this.accumulator
+    end method
+end class
+
+# Use Calculator with integers
+set int_calc to new Calculator<Integer>
+set int_calc.accumulator to 10
+set step1 to call int_calc.add with 5
+print text "10 + 5 = "
+print text step1
+
+set step2 to call int_calc.multiply with 2
+print text "15 * 2 = "
+print text step2
+print text ""
+
+# ============================================================================
+# 5. PRACTICAL EXAMPLE - Generic Pair Type
+# ============================================================================
+
+print text "5. Practical Pattern - Pair Type"
+print text "--------------------------------"
+
+class Pair<T, U>
+    property first as T
+    property second as U
+    
+    method get_first returns T
+        return this.first
+    end method
+    
+    method get_second returns U
+        return this.second
+    end method
+    
+    method swap returns Pair<U, T>
+        set swapped to new Pair<U, T>
+        set swapped.first to this.second
+        set swapped.second to this.first
+        return swapped
+    end method
+end class
+
+# Create Pair<Integer, String>
+set coord_pair to new Pair<Integer, String>
+set coord_pair.first to 100
+set coord_pair.second to "meters"
+
+print text "Coordinate pair first: "
+print text call coord_pair.get_first
+
+print text "Coordinate pair second: "
+print text call coord_pair.get_second
+print text ""
+
+# Create Pair<String, Boolean>
+set flag_pair to new Pair<String, Boolean>
+set flag_pair.first to "enabled"
+set flag_pair.second to true
+
+print text "Flag pair first: "
+print text call flag_pair.get_first
+
+print text "Flag pair second: "
+print text call flag_pair.get_second
+print text ""
+
+# ============================================================================
+# 6. GENERIC CLASSES - Optional Type Pattern
+# ============================================================================
+
+print text "6. Practical Pattern - Optional Type"
+print text "------------------------------------"
+
+class Optional<T>
+    property has_value as Boolean
+    property stored_value as T
+    
+    method set_some with val as T
+        set this.has_value to true
+        set this.stored_value to val
+    end method
+    
+    method set_none
+        set this.has_value to false
+    end method
+    
+    method is_some returns Boolean
+        return this.has_value
+    end method
+    
+    method unwrap returns T
+        if this.has_value
+            return this.stored_value
+        end
+        print text "Error: Attempted to unwrap None value"
+        return this.stored_value
+    end method
+    
+    method unwrap_or with default_val as T returns T
+        if this.has_value
+            return this.stored_value
+        end
+        return default_val
+    end method
+end class
+
+# Create Optional<Integer> with Some value
+set some_int to new Optional<Integer>
+call some_int.set_some with 42
+
+if call some_int.is_some
+    set unwrapped to call some_int.unwrap
+    print text "Optional has value: "
+    print text unwrapped
+end
+
+# Create Optional<Integer> with None
+set none_int to new Optional<Integer>
+call none_int.set_none
+
+set default_value to call none_int.unwrap_or with 0
+print text "Optional is None, using default: "
+print text default_value
+print text ""
+
+# ============================================================================
+# 7. BEST PRACTICES SUMMARY
+# ============================================================================
+
+print text "=== Best Practices for Generic Types ==="
+print text ""
+print text "1. Use generics for type-safe, reusable functions"
+print text "2. Generic classes enable flexible container types"
+print text "3. Type parameters (T, U, etc.) make code adaptable"
+print text "4. Optional<T> pattern for handling nullable values"
+print text "5. Pair<T,U> pattern for heterogeneous data"
+print text "6. Generic functions work with any type"
+print text "7. Methods can return generic types for chaining"
+print text "8. Use 'with' for method parameters, 'returns' for return type"
+print text ""
+
+print text "=== Generic Types Guide Complete ==="
+print text "All 7 sections demonstrated successfully!"
+

@@ -1,0 +1,136 @@
+# Comprehensive test of trailing block syntax
+# Tests all features: blocks as callbacks, parameters, closures, scope capture
+
+print text "=== Trailing Block Syntax Tests ==="
+
+# Test 1: Simple block with no parameters
+print text ""
+print text "Test 1: Simple block"
+function execute_simple with block
+    print text "Calling the block..."
+    set result to block()
+    return result
+end
+
+set result1 to execute_simple do
+    print text "Inside simple block"
+    return "Block 1 complete"
+end
+print text result1
+
+# Test 2: Block with parameters
+print text ""
+print text "Test 2: Block with parameters"
+function execute_with_params with block
+    print text "Calling block with values..."
+    set r1 to block(10, 20)
+    set r2 to block(5, 15)
+    return "Both calls complete"
+end
+
+set result2 to execute_with_params do x and y
+    print text "x ="
+    print text x
+    print text "y ="
+    print text y
+    print text "sum ="
+    print text x plus y
+    return x plus y
+end
+print text result2
+
+# Test 3: Scope capture - block can access variables from outer scope
+print text ""
+print text "Test 3: Scope capture"
+set multiplier to 3
+
+function apply_to_list with list and block
+    print text "Applying block to each element..."
+    for each item in list
+        set result to block(item)
+        print text result
+    end
+    return "List processed"
+end
+
+set numbers to [1, 2, 3, 4, 5]
+set result3 to apply_to_list with numbers do value
+    # Block captures 'multiplier' from outer scope
+    return value times multiplier
+end
+print text result3
+
+# Test 4: Multiple trailing blocks (storing and calling later)
+print text ""
+print text "Test 4: Storing and reusing blocks"
+function make_transformer with operation
+    # Return the operation block so it can be reused
+    return operation
+end
+
+set double to make_transformer do x
+    return x times 2
+end
+
+set triple to make_transformer do x
+    return x times 3
+end
+
+print text "Using double:"
+print text double(5)
+print text double(10)
+
+print text "Using triple:"
+print text triple(5)
+print text triple(10)
+
+# Test 5: Blocks with function arguments AND trailing block
+print text ""
+print text "Test 5: Mixed arguments and block"
+function process_data with data and message and processor
+    print text message
+    for each item in data
+        set result to processor(item)
+        print text result
+    end
+    return "Processing complete"
+end
+
+set items to [1, 2, 3]
+
+# Create a processor block
+set squarer to make_transformer do value
+    return value times value
+end
+
+set result5 to process_data with items and "Processing list..." and squarer
+print text result5
+
+# Test 6: Nested blocks
+print text ""
+print text "Test 6: Nested blocks"
+function outer with block1
+    print text "In outer function"
+    set result to block1()
+    return result
+end
+
+set result6 to outer do
+    print text "In outer block"
+    
+    function inner with block2
+        print text "In inner function"
+        return block2()
+    end
+    
+    set inner_result to inner do
+        print text "In inner block"
+        return "Nested complete"
+    end
+    
+    return inner_result
+end
+print text result6
+
+print text ""
+print text "=== All tests passed! ==="

@@ -1,0 +1,34 @@
+# Test Rest Parameter Lists
+
+# Test 1: Basic list destructuring with rest
+set numbers to [1, 2, 3, 4, 5]
+
+# Pattern match with rest binding
+match numbers
+    case [first, second, ...rest]
+        print text "First: "
+        print text first
+        print text "\n"
+        print text "Second: "
+        print text second
+        print text "\n"
+        print text "Rest list created successfully\n"
+    case _
+        print text "No match\n"
+end
+
+# Test 2: Empty rest
+set short_list to [10, 20]
+
+match short_list
+    case [a, b, ...rest]
+        print text "Short list - First: "
+        print text a
+        print text ", Second: "
+        print text b
+        print text "\n"
+    case _
+        print text "No match\n"
+end
+
+print text "Rest parameter test complete!\n"

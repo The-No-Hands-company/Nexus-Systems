@@ -1,0 +1,24 @@
+# Trait Definitions and Usage
+# This example demonstrates traits (similar to interfaces with default implementations)
+# that can be mixed into classes to provide reusable behavior
+
+# Define a trait with required methods
+define a trait called Comparable
+    that requires a method called compare_to with other returning Integer
+
+# Define a trait with required method
+define a trait called Cloneable
+    that requires a method called clone returning Self
+
+# Define a trait with multiple required methods
+define a trait called Serializable
+    that requires a method called serialize returning String
+    that requires a method called deserialize with data as String
+
+# Classes can implement traits to ensure they provide required functionality
+print text "Trait Comparable defined - requires compare_to method"
+print text "Trait Cloneable defined - requires clone method"
+print text "Trait Serializable defined - requires serialize and deserialize methods"
+
+print text "Traits provide a way to define reusable behavior contracts!"
+print text "Classes implementing traits must provide all required methods"

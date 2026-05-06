@@ -1,0 +1,90 @@
+# Comprehensive demonstration of repeat while loops
+# This example shows various use cases of the natural language while loop
+
+print text "=== NexusLang Repeat While Loop Demonstration ==="
+print text ""
+
+# Example 1: Simple countdown
+print text "Example 1: Simple countdown from 5"
+set countdown to 5
+repeat while countdown is greater than 0
+    print value countdown
+    set countdown to countdown minus 1
+print text "Liftoff!"
+print text ""
+
+# Example 2: Accumulator pattern
+print text "Example 2: Sum of numbers 1 to 10"
+set sum to 0
+set number to 1
+repeat while number is less than or equal to 10
+    set sum to sum plus number
+    set number to number plus 1
+print text "Sum is:"
+print value sum
+print text ""
+
+# Example 3: Loop with early exit (break)
+print text "Example 3: Find first multiple of 7 greater than 50"
+set candidate to 50
+repeat while candidate is less than 100
+    set candidate to candidate plus 1
+    if candidate modulo 7 is equal to 0
+        print text "Found:"
+        print value candidate
+        break
+print text ""
+
+# Example 4: Loop with skip (continue)
+print text "Example 4: Print only numbers divisible by 3 from 1 to 15"
+set num to 0
+repeat while num is less than 15
+    set num to num plus 1
+    if num modulo 3 is not equal to 0
+        continue
+    print value num
+print text ""
+
+# Example 5: Nested repeat while loops (multiplication table)
+print text "Example 5: 3x3 multiplication table"
+set row to 1
+repeat while row is less than or equal to 3
+    set col to 1
+    repeat while col is less than or equal to 3
+        set product to row times col
+        print text "Row"
+        print value row
+        print text "x Col"
+        print value col
+        print text "="
+        print value product
+        set col to col plus 1
+    set row to row plus 1
+print text ""
+
+# Example 6: Complex condition with multiple variables
+print text "Example 6: Fibonacci sequence (while terms less than 100)"
+set a to 0
+set b to 1
+repeat while b is less than 100
+    print value b
+    set temp to a plus b
+    set a to b
+    set b to temp
+print text ""
+
+# Example 7: User-controlled loop (simulated with condition)
+print text "Example 7: Process items until threshold"
+set items_processed to 0
+set threshold to 5
+set running to 1
+repeat while running is equal to 1
+    set items_processed to items_processed plus 1
+    print text "Processed item"
+    print value items_processed
+    if items_processed is greater than or equal to threshold
+        set running to 0
+print text "Threshold reached!"
+print text ""
+
+print text "=== All examples completed successfully! ==="

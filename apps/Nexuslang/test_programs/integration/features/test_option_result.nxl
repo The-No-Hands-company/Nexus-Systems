@@ -1,0 +1,38 @@
+# Test Option and Result types
+print text "=== Option Type Tests ==="
+
+# Create Some value
+set some_val to Some with 42
+print text some_val
+
+# Create None value
+set none_val to None
+print text none_val
+
+# Test unwrap_or
+set val1 to some_val.unwrap_or with 0
+print text val1
+
+set val2 to none_val.unwrap_or with 0
+print text val2
+
+print text ""
+print text "=== Result Type Tests ==="
+
+# Create Ok value
+set ok_val to Ok with "success"
+print text ok_val
+
+# Create Err value
+set err_val to Err with "error message"
+print text err_val
+
+# Test unwrap_or
+set result1 to ok_val.unwrap_or with "default"
+print text result1
+
+set result2 to err_val.unwrap_or with "default"
+print text result2
+
+print text ""
+print text "=== All Tests Passed! ==="

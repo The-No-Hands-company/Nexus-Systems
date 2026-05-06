@@ -1,0 +1,28 @@
+print text "Test 1: Simple raise"
+try
+  print text "Before raise"
+  raise error with message "Direct error"
+  print text "After raise (should not print)"
+catch error with message
+  print text "Caught: " plus message
+end
+
+print text ""
+print text "Test 2: Raise in function"
+
+function test_func returns String
+  print text "Inside function"
+  raise error with message "Function error"
+  return "should not return"
+end
+
+try
+  print text "Calling function"
+  call test_func
+  print text "After function call (should not print)"
+catch error with message
+  print text "Caught from function: " plus message
+end
+
+print text ""
+print text "All tests done"

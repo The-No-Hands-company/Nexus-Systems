@@ -1,0 +1,53 @@
+# Example demonstrating the modular standard library
+
+# Import modules
+Import math.
+Import string.
+Import io.
+
+# Using math module
+Create radius as Float and set it to 5.0.
+Create area and set it to math.PI * math.power(radius, 2).
+Print("Circle area: " + area).
+
+# Using string module
+Create message as String and set it to "hello, world".
+Create upper_message and set it to string.uppercase(message).
+Create capitalized and set it to string.capitalize(message).
+Print("Original: " + message).
+Print("Uppercase: " + upper_message).
+Print("Capitalized: " + capitalized).
+
+# Using string manipulation
+Create words and set it to string.split(message, " ").
+Create joined and set it to string.join(", ", words).
+Print("Split and joined: " + joined).
+
+# Using IO module
+Create filename and set it to "test_output.txt".
+Create content and set it to "This is a test file created by NexusLang.".
+
+# Write to file
+io.write_file(filename, content).
+Print("File written: " + filename).
+
+# Read from file
+Create read_content and set it to io.read_file(filename).
+Print("File content: " + read_content).
+
+# Check if file exists
+Create exists and set it to io.file_exists(filename).
+Print("File exists: " + exists).
+
+# Delete the file
+io.delete_file(filename).
+Print("File deleted.").
+
+# Using math functions
+Create numbers and set it to [3, 7, 2, 10, 5].
+Create max_value and set it to math.maximum(3, 7, 2, 10, 5).
+Create min_value and set it to math.minimum(3, 7, 2, 10, 5).
+Create avg_value and set it to math.average(3, 7, 2, 10, 5).
+Print("Maximum: " + max_value).
+Print("Minimum: " + min_value).
+Print("Average: " + avg_value). 

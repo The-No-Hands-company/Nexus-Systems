@@ -1,0 +1,49 @@
+# Test DateTime Module Functionality
+# Verifies now, today, timestamp, date arithmetic, formatting
+
+function main
+    print text "Testing DateTime Module..."
+    
+    # Test 1: Get current time
+    set current_time to now
+    print text "Current datetime:"
+    print current_time
+    
+    # Test 2: Get current date
+    set current_date to today
+    print text "Current date:"
+    print current_date
+    
+    # Test 3: Get UTC time
+    set utc_time to utc_now
+    print text "Current UTC time:"
+    print utc_time
+    
+    # Test 4: Get Unix timestamp
+    set ts to timestamp
+    print text "Current timestamp (float):"
+    print ts
+    
+    # Test 5: Get Unix timestamp as integer
+    set ts_int to unix_timestamp
+    print text "Current timestamp (int):"
+    print ts_int
+    
+    # Test 6: Get millisecond timestamp
+    set ts_ms to timestamp_ms
+    print text "Current timestamp (ms):"
+    print ts_ms
+    
+    # Test 7: Format datetime
+    set formatted to format_datetime with current_time, "%Y-%m-%d %H:%M:%S"
+    print text "Formatted datetime:"
+    print text formatted
+    
+    # Test 8: Parse datetime from string
+    set date_string to "2024-01-15 10:30:00"
+    set parsed to parse_datetime with date_string, "%Y-%m-%d %H:%M:%S"
+    print text "Parsed datetime:"
+    print parsed
+    
+    print text "DateTime module verification COMPLETE"
+end

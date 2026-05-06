@@ -1,0 +1,65 @@
+"""
+Advanced Type System Features - Index
+
+This file serves as an index to the advanced type system features.
+Each feature has been separated into its own dedicated example file for clarity:
+
+23_generic_classes.nlpl
+    - Generic classes with type parameters
+    - Bounded type parameters (T must be a number)
+    - Type-safe containers
+
+24_abstract_classes.nlpl
+    - Abstract class definitions
+    - Abstract methods that must be implemented
+    - Concrete implementations of abstract classes
+
+25_traits.nlpl
+    - Trait definitions with required methods
+    - Reusable behavior contracts
+    - Multiple trait implementation
+
+26_type_aliases.nlpl
+    - Type aliases for complex types
+    - Shorthand names for generic types
+    - Improved code readability
+
+27_higher_order_functions.nlpl
+    - Functions that take functions as parameters
+    - Functions that return functions (closures)
+    - Function composition
+    - Currying
+
+28_type_guards.nlpl
+    - Runtime type checking
+    - Type-based conditional logic
+    - Safe type conversions
+
+29_variance.nlpl
+    - Covariance in producer types
+    - Contravariance in consumer types
+    - Invariance in bidirectional types
+
+Each example file is self-contained and demonstrates the feature with:
+- Clear comments explaining the concept
+- Working code examples
+- Usage demonstrations
+- Best practices
+
+See individual files for detailed implementations!
+"""
+
+print text "Advanced Type System Features"
+print text "=============================="
+print text ""
+print text "All advanced features have been organized into separate example files."
+print text "Check examples 23-29 for detailed demonstrations of each feature."
+print text ""
+print text "23. Generic Classes with Type Parameters"
+print text "24. Abstract Classes and Methods"
+print text "25. Traits and Mixins"
+print text "26. Type Aliases"
+print text "27. Higher-Order Functions"
+print text "28. Type Guards"
+print text "29. Variance in Generic Types"
+ 

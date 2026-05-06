@@ -1,0 +1,15 @@
+# Test: Invalid Register Clobber (Should FAIL)
+# Purpose: Validate that invalid registers for the current architecture are rejected
+# This test should produce a compiler error
+
+print text "Testing invalid register clobber..."
+
+set result to 100
+asm
+    code "mov $0, 100"
+    outputs "=r": result
+    clobbers "invalid_reg_name"
+end
+
+print text "Result: "
+print number result

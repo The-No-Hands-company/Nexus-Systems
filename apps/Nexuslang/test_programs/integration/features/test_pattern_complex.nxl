@@ -1,0 +1,80 @@
+# Test complex nested pattern matching
+# Combines multiple pattern types for comprehensive testing
+
+enum Shape
+    Circle with radius as Float
+    Rectangle with width as Float and height as Float
+    Triangle with base as Float and height as Float
+end
+
+function calculate_area that takes shape as Shape returns Float
+    match shape with
+        case Circle radius
+            # Area = π * r²
+            set pi to 3.14159
+            return pi multiplied by radius multiplied by radius
+        case Rectangle width height
+            return width multiplied by height
+        case Triangle base height
+            set half to 0.5
+            return half multiplied by base multiplied by height
+        case _
+            return 0.0
+
+function describe_shape that takes shape as Shape returns String
+    match shape with
+        case Circle radius if radius is less than 1.0
+            return "Small circle"
+        case Circle radius if radius is greater than or equal to 1.0 and radius is less than 5.0
+            return "Medium circle"
+        case Circle radius if radius is greater than or equal to 5.0
+            return "Large circle"
+        case Rectangle width height if width is equal to height
+            return "Square"
+        case Rectangle width height if width is greater than height
+            return "Wide rectangle"
+        case Rectangle width height
+            return "Tall rectangle"
+        case Triangle base height if base is equal to height
+            return "Isosceles triangle"
+        case Triangle base height
+            return "General triangle"
+        case _
+            return "Unknown shape"
+
+function main that takes nothing returns Integer
+    # Create test shapes
+    set small_circle to Circle with 0.5
+    set medium_circle to Circle with 3.0
+    set large_circle to Circle with 10.0
+    
+    set square to Rectangle with 5.0 and 5.0
+    set wide_rect to Rectangle with 10.0 and 5.0
+    set tall_rect to Rectangle with 5.0 and 10.0
+    
+    set iso_triangle to Triangle with 4.0 and 4.0
+    set gen_triangle to Triangle with 5.0 and 3.0
+    
+    # Test area calculation
+    set area1 to call calculate_area with medium_circle
+    print text "Circle area: "
+    print text area1
+    
+    set area2 to call calculate_area with square
+    print text "Square area: "
+    print text area2
+    
+    # Test descriptions
+    set desc1 to call describe_shape with small_circle
+    print text desc1
+    
+    set desc2 to call describe_shape with square
+    print text desc2
+    
+    set desc3 to call describe_shape with wide_rect
+    print text desc3
+    
+    set desc4 to call describe_shape with iso_triangle
+    print text desc4
+    
+    return 0

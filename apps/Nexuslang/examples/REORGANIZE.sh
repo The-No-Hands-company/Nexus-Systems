@@ -1,0 +1,70 @@
+#!/bin/bash
+# Script to reorganize examples into topic-based folders
+
+# 01_basics
+mv 01_basic_concepts.nlpl 01_basics/01_basic_concepts.nlpl
+mv 03_unified_syntax.nlpl 01_basics/02_unified_syntax.nlpl
+mv 26_repeat_while_loops.nlpl 01_basics/03_loops.nlpl
+
+# 02_oop
+mv 02_object_oriented.nlpl 02_oop/01_object_oriented.nlpl
+mv 10_abstract_classes.nlpl 02_oop/02_abstract_classes.nlpl
+mv 11_traits.nlpl 02_oop/03_traits.nlpl
+mv 15_design_patterns.nlpl 02_oop/04_design_patterns.nlpl
+
+# 03_type_system
+mv 04_type_system_basics.nlpl 03_type_system/01_type_system_basics.nlpl
+mv 05_typed_program.nlpl 03_type_system/02_typed_program.nlpl
+mv 06_advanced_type_system.nlpl 03_type_system/03_polymorphic_type_system.nlpl
+mv 07_type_system_features.nlpl 03_type_system/04_type_system_features.nlpl
+mv 08_advanced_type_features_index.nlpl 03_type_system/05_type_features_index.nlpl
+mv 12_type_aliases.nlpl 03_type_system/06_type_aliases.nlpl
+mv 13_type_guards.nlpl 03_type_system/07_type_guards.nlpl
+mv 14_variance.nlpl 03_type_system/08_variance.nlpl
+
+# 04_generics
+mv 09_generic_classes.nlpl 04_generics/01_generic_classes.nlpl
+mv 16_generic_types_comprehensive.nlpl 04_generics/02_generic_types_comprehensive.nlpl
+mv 17_generic_types_quickstart.nlpl 04_generics/03_generic_types_quickstart.nlpl
+mv 18_generic_classes_working.nlpl 04_generics/04_generic_classes_working.nlpl
+mv 19_generic_function_type_inference.nlpl 04_generics/05_generic_function_type_inference.nlpl
+
+# 05_functional
+mv 16_functional_programming.nlpl 05_functional/01_functional_programming.nlpl
+mv 17_lambda_and_higher_order_functions.nlpl 05_functional/02_lambda_and_higher_order_functions.nlpl
+mv 18_functional_programming_patterns.nlpl 05_functional/03_functional_programming_patterns.nlpl
+
+# 06_concurrency
+mv 33_async_await.nlpl 06_concurrency/01_async_await.nlpl
+mv 19_concurrent_programming.nlpl 06_concurrency/02_concurrent_programming.nlpl
+mv 20_reactive_programming.nlpl 06_concurrency/03_reactive_programming.nlpl
+mv 21_event_driven_programming.nlpl 06_concurrency/04_event_driven_programming.nlpl
+
+# 07_low_level
+mv 22_pointer_operations.nlpl 07_low_level/01_pointer_operations.nlpl
+mv 23_struct_and_union.nlpl 07_low_level/02_struct_and_union.nlpl
+mv 25_ffi_c_interop.nlpl 07_low_level/03_ffi_c_interop.nlpl
+mv 26_ffi_struct_marshalling.nlpl 07_low_level/04_ffi_struct_marshalling.nlpl
+
+# 08_networking
+mv 24_network_programming.nlpl 08_networking/01_network_programming.nlpl
+mv 25_web_programming.nlpl 08_networking/02_web_programming.nlpl
+mv 26_database_programming.nlpl 08_networking/03_database_programming.nlpl
+
+# 09_feature_patterns
+mv 27_testing.nlpl 09_feature_patterns/01_testing.nlpl
+mv 28_error_handling_and_logging.nlpl 09_feature_patterns/02_error_handling_and_logging.nlpl
+mv 35_debugging_error_handling.nlpl 09_feature_patterns/03_debugging_error_handling.nlpl
+mv 34_advanced_pattern_matching.nlpl 09_feature_patterns/04_pattern_matching.nlpl
+mv 29_security_and_authentication.nlpl 09_feature_patterns/05_security_and_authentication.nlpl
+mv 27_security_best_practices.nlpl 09_feature_patterns/06_security_best_practices.nlpl
+mv 30_performance_optimization.nlpl 09_feature_patterns/07_performance_optimization.nlpl
+mv 31_dependency_injection.nlpl 09_feature_patterns/08_dependency_injection.nlpl
+mv 32_feature_showcase.nlpl 09_feature_patterns/09_feature_showcase.nlpl
+
+# 10_stdlib
+mv stdlib_demo.nlpl 10_stdlib/01_stdlib_demo.nlpl
+mv stdlib_modules.nlpl 10_stdlib/02_stdlib_modules.nlpl
+mv stdlib_complete.nlpl 10_stdlib/03_stdlib_complete.nlpl
+
+echo "Reorganization complete!"

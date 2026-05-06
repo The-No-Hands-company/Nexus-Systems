@@ -1,0 +1,80 @@
+# Performance Benchmark Suite for NexusLang
+# Tests various aspects of interpreter and compiler performance
+
+print text "=== NexusLang Performance Benchmark Suite ==="
+print text ""
+
+# Benchmark 1: Loop performance
+print text "Benchmark 1: Loop Performance"
+set start_time to time
+set i to 0
+while i is less than 10000
+    set i to i plus 1
+end
+set end_time to time
+print text "10,000 iterations completed"
+print text ""
+
+# Benchmark 2: Function call overhead
+print text "Benchmark 2: Function Call Overhead"
+function test_function with x as Integer returns Integer
+    return x plus 1
+end
+
+set j to 0
+while j is less than 5000
+    set result to call test_function with j
+    set j to j plus 1
+end
+print text "5,000 function calls completed"
+print text ""
+
+# Benchmark 3: String operations
+print text "Benchmark 3: String Operations"
+set text to "hello world"
+set k to 0
+while k is less than 1000
+    set upper to uppercase with text
+    set lower to lowercase with upper
+    set k to k plus 1
+end
+print text "1,000 string operations completed"
+print text ""
+
+# Benchmark 4: List operations
+print text "Benchmark 4: List Operations"
+set my_list to create list
+set m to 0
+while m is less than 1000
+    call add with my_list and m
+    set m to m plus 1
+end
+set list_len to length with my_list
+print text "Created list with 1,000 elements"
+print text ""
+
+# Benchmark 5: Arithmetic operations
+print text "Benchmark 5: Arithmetic Operations"
+set sum to 0
+set n to 0
+while n is less than 10000
+    set sum to sum plus n
+    set product to n times 2
+    set division to n divided by 2
+    set n to n plus 1
+end
+print text "10,000 arithmetic operations completed"
+print text ""
+
+# Benchmark 6: Dictionary operations
+print text "Benchmark 6: Dictionary Operations"
+set my_dict to create dict
+set p to 0
+while p is less than 500
+    call dict_set with my_dict and p and p times 2
+    set p to p plus 1
+end
+print text "Created dict with 500 entries"
+print text ""
+
+print text "=== Benchmark Suite Complete ==="

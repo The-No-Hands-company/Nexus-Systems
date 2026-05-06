@@ -1,0 +1,165 @@
+# Pattern Matching Test Suite for NexusLang
+
+print text "=== NexusLang Pattern Matching Tests ==="
+print text ""
+
+# Test 1: Literal Pattern Matching
+print text "Test 1: Literal Pattern Matching"
+set status to "active"
+match status with
+ case "active"
+ print text " Literal match: active"
+ case "inactive"
+ print text " Should not match"
+ case _
+ print text " Should not reach wildcard"
+end
+print text ""
+
+# Test 2: Identifier Binding
+print text "Test 2: Identifier Binding"
+set number to 42
+match number with
+ case value
+ print text " Identifier binding: captured value"
+ print text value
+end
+print text ""
+
+# Test 3: Wildcard Pattern
+print text "Test 3: Wildcard Pattern"
+set unknown to "anything"
+match unknown with
+ case "specific"
+ print text " Should not match"
+ case _
+ print text " Wildcard matched"
+end
+print text ""
+
+# Test 4: Multiple Patterns with First Match Wins
+print text "Test 4: Multiple Patterns - First Match"
+set grade to 85
+match grade with
+ case 100
+ print text " Perfect"
+ case 85
+ print text " Good - first match wins"
+ case 85
+ print text " Should not reach second 85"
+ case _
+ print text " Should not reach wildcard"
+end
+print text ""
+
+# Test 5: Return Value from Match
+print text "Test 5: Match Expression Return Value"
+function describe_number with n as Integer returns String
+ match n with
+ case 0
+ return "zero"
+ case 1
+ return "one"
+ case 2
+ return "two"
+ case _
+ return "many"
+ end
+end
+
+set desc to call describe_number with 0
+print text "describe_number(0):"
+print text desc
+
+set desc to call describe_number with 2
+print text "describe_number(2):"
+print text desc
+
+set desc to call describe_number with 99
+print text "describe_number(99):"
+print text desc
+print text ""
+
+# Test 6: Nested Match Expressions
+print text "Test 6: Nested Match"
+set outer to 1
+set inner to 2
+
+match outer with
+ case 1
+ match inner with
+ case 2
+ print text " Nested match: outer=1, inner=2"
+ case _
+ print text " Inner wildcard"
+ end
+ case _
+ print text " Outer wildcard"
+end
+print text ""
+
+# Test 7: String Pattern Matching
+print text "Test 7: String Patterns"
+set command to "start"
+match command with
+ case "start"
+ print text " Starting..."
+ case "stop"
+ print text " Stopping..."
+ case "restart"
+ print text " Restarting..."
+ case _
+ print text " Unknown command"
+end
+print text ""
+
+# Test 8: Boolean Pattern Matching
+print text "Test 8: Boolean Patterns"
+set is_enabled to true
+match is_enabled with
+ case true
+ print text " Feature is enabled"
+ case false
+ print text " Feature is disabled"
+end
+print text ""
+
+# Test 9: Pattern Matching with Computation
+print text "Test 9: Match with Expression"
+function factorial with n as Integer returns Integer
+ match n with
+ case 0
+ return 1
+ case 1
+ return 1
+ case value
+ set n_minus_1 to value minus 1
+ set fact_n_minus_1 to call factorial with n_minus_1
+ return value times fact_n_minus_1
+ end
+end
+
+set fact5 to call factorial with 5
+print text "factorial(5):"
+print text fact5
+print text ""
+
+# Test 10: Pattern Match with Side Effects
+print text "Test 10: Match with Side Effects"
+set counter to 0
+set test_value to "increment"
+match test_value with
+ case "increment"
+ set counter to counter plus 1
+ print text " Counter incremented"
+ case "decrement"
+ set counter to counter minus 1
+ print text " Counter decremented"
+ case _
+ print text " Counter unchanged"
+end
+print text "Counter value:"
+print text counter
+print text ""
+
+print text "=== All Pattern Matching Tests Complete ==="

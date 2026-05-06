@@ -1,0 +1,68 @@
+# Test error handling for interrupt operations
+print text "Testing interrupt error handling..."
+
+print text "Test 1: Invalid vector number (negative)"
+try
+    # Define a dummy function for testing
+    function dummy_handler with frame as Dict
+        print text "dummy"
+    end
+    
+    register_interrupt_handler with vector: -1 and handler: dummy_handler
+    print text "ERROR: Should have failed"
+catch error with message
+    print text "Correctly rejected invalid vector: SUCCESS"
+    print text message
+end
+
+print text "Test 2: Invalid vector number (too large)"
+try
+    register_interrupt_handler with vector: 256 and handler: dummy_handler
+    print text "ERROR: Should have failed"
+catch error with message
+    print text "Correctly rejected invalid vector: SUCCESS"
+    print text message
+end
+
+print text "Test 3: Non-callable handler"
+try
+    register_interrupt_handler with vector: 50 and handler: 12345
+    print text "ERROR: Should have failed"
+catch error with message
+    print text "Correctly rejected non-callable: SUCCESS"
+    print text message
+end
+
+print text "Test 4: Invalid DPL for set_idt_entry"
+try
+    set_idt_entry with vector: 32 and offset: 4096 and segment: 8 and dpl: 5
+    print text "ERROR: Should have failed"
+catch error with message
+    print text "Correctly rejected invalid DPL: SUCCESS"
+    print text message
+end
+
+print text "Test 5: Get entry for invalid vector"
+try
+    set entry to get_idt_entry with vector: 300
+    print text "ERROR: Should have failed"
+catch error with message
+    print text "Correctly rejected invalid vector: SUCCESS"
+    print text message
+end
+
+print text "Test 6: Unregister non-existent handler"
+try
+    set result to unregister_interrupt_handler with vector: 200
+    if not result
+        print text "Correctly returned false for non-existent: SUCCESS"
+    else
+        print text "ERROR: Should have returned false"
+    end
+catch error with message
+    print text "Error:"
+    print text message
+end
+
+print text "All error handling tests: SUCCESS"
+print text "Test complete"

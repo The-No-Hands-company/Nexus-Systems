@@ -1,0 +1,21 @@
+# Test with multiple methods
+class Box<T>
+    property value as T
+    property count as Integer
+    
+    method get_value returns T
+        return this.value
+    end method
+    
+    method set_value with v as T
+        set this.value to v
+    end method
+    
+    method increment
+        set this.count to this.count plus 1
+    end method
+end class
+
+set int_box to new Box<Integer>
+set int_box.value to 42
+print text call int_box.get_value

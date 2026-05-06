@@ -1,0 +1,37 @@
+# Test Dictionary Comprehensions
+
+print text "=== Dictionary Comprehension Tests ==="
+
+# Test 1: Basic dict comprehension {x: x*x for x in list}
+print text "\nTest 1: Number to square {x: x*x for x in list}"
+set numbers to [1, 2, 3, 4, 5]
+set squares to {x: x times x for x in numbers}
+print text "Dict created: " plus convert length(squares) to string plus " entries"
+print text "Square of 3: " plus convert squares[3] to string
+
+# Test 2: String keys {s: length for s in list}
+print text "\nTest 2: String to length {s: len(s) for s in list}"
+set names to ["alice", "bob", "charlie"]
+set lengths to {name: length(name) for name in names}
+print text "Dict created: " plus convert length(lengths) to string plus " entries"
+print text "Length of 'bob': " plus convert lengths["bob"] to string
+
+# Test 3: With condition {x: x*2 for x in list if x > 2}
+print text "\nTest 3: Filtered {x: x*2 for x in list if x > 2}"
+set filtered_dict to {x: x times 2 for x in numbers if x is greater than 2}
+print text "Dict created: " plus convert length(filtered_dict) to string plus " entries (expected 3)"
+print text "Value for 4: " plus convert filtered_dict[4] to string
+
+# Test 4: Empty dict with impossible condition
+print text "\nTest 4: Empty dict {x: x for x in list if x > 100}"
+set empty_dict to {x: x for x in numbers if x is greater than 100}
+print text "Empty dict: " plus convert length(empty_dict) to string plus " entries (expected 0)"
+
+# Test 5: Transform both key and value {x+1: x*x for x in list}
+print text "\nTest 5: Transform both {x+1: x*x for x in list}"
+set transformed to {x plus 1: x times x for x in [1, 2, 3]}
+print text "Dict created: " plus convert length(transformed) to string plus " entries"
+print text "Value for key 2 (1+1): " plus convert transformed[2] to string
+print text "Value for key 4 (3+1): " plus convert transformed[4] to string
+
+print text "\n=== All Dictionary Comprehension Tests Complete ==="

@@ -1,0 +1,13 @@
+# Simple async test with one await
+
+async function get_value returns Integer
+    print text "get_value called"
+    return 99
+end
+
+async function main returns Integer
+    print text "main: before await"
+    set x to await get_value
+    print text "main: after await"
+    return x
+end

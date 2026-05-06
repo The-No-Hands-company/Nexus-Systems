@@ -1,0 +1,191 @@
+# Week 8 Test: Register Usage Analysis
+#
+# Tests the register usage analyzer's ability to detect:
+# - Registers used but not declared in clobber list
+# - Missing clobber declarations
+# - Implicit register usage (mul/div using rdx:rax)
+#
+# Expected: Program compiles with suggestions for missing clobbers
+
+function test_missing_clobber_simple
+    # Test 1: Modify rax without declaring it as clobbered
+    set result to 0
+    asm
+        code
+        "mov rax, 42"
+    output result with constraint "=r"
+    # Missing clobber: "rax"
+    end
+    print text "Test 1: Result (missing rax clobber): "
+    print text result
+end
+
+function test_missing_clobber_multiple
+    # Test 2: Modify multiple registers without declaring all clobbers
+    set a to 0
+    set b to 0
+    asm
+        code
+        "mov rax, 10"
+        "mov rbx, 20"
+        "mov rcx, 30"
+        "add rax, rbx"
+        "add rax, rcx"
+    output a with constraint "=r"
+    clobber "rax"
+    # Missing clobbers: "rbx", "rcx"
+    end
+    print text "Test 2: Result (missing rbx, rcx clobbers): "
+    print text a
+end
+
+function test_correct_clobber_declaration
+    # Test 3: Properly declare all clobbered registers (no warnings expected)
+    set result to 0
+    asm
+        code
+        "mov rax, 100"
+        "mov rbx, 200"
+        "add rax, rbx"
+    output result with constraint "=r"
+    clobber "rax"
+    clobber "rbx"
+    end
+    print text "Test 3: Result (all clobbers declared): "
+    print text result
+end
+
+function test_implicit_register_usage
+    # Test 4: MUL instruction implicitly uses rdx:rax
+    set a to 5
+    set result to 0
+    asm
+        code
+        "mul rax"
+    input a with constraint "a"
+    output result with constraint "=d"
+    clobber "rax"
+    # Missing clobber: "rdx" (implicitly used by mul)
+    end
+    print text "Test 4: Result (mul implicit rdx usage): "
+    print text result
+end
+
+function test_div_implicit_usage
+    # Test 5: DIV instruction implicitly uses rdx:rax
+    set dividend to 100
+    set divisor to 10
+    set quotient to 0
+    set remainder to 0
+    asm
+        code
+        "xor rdx, rdx"
+        "div rbx"
+    input dividend with constraint "a"
+    input divisor with constraint "b"
+    output quotient with constraint "=a"
+    output remainder with constraint "=d"
+    clobber "rax"
+    # Missing clobber: "rdx" (implicitly used by div)
+    end
+    print text "Test 5: Quotient (div implicit usage): "
+    print text quotient
+    print text "Remainder: "
+    print text remainder
+end
+
+function test_complex_register_usage
+    # Test 6: Complex assembly with multiple register modifications
+    set x to 10
+    set y to 20
+    set z to 30
+    set result to 0
+    asm
+        code
+        "mov rax, $0"
+        "mov rbx, $1"
+        "mov rcx, $2"
+        "add rax, rbx"
+        "add rax, rcx"
+        "mov $3, rax"
+    input x with constraint "r"
+    input y with constraint "r"
+    input z with constraint "r"
+    output result with constraint "=r"
+    # Missing clobbers: "rax", "rbx", "rcx"
+    end
+    print text "Test 6: Result (complex usage): "
+    print text result
+end
+
+function test_simd_register_usage
+    # Test 7: SSE/AVX register usage without clobbers
+    set a to 0
+    asm
+        code
+        "movq xmm0, rax"
+        "movq xmm1, rbx"
+        "paddq xmm0, xmm1"
+        "movq rax, xmm0"
+    output a with constraint "=a"
+    # Missing clobbers: "xmm0", "xmm1", "rax"
+    end
+    print text "Test 7: Result (SIMD register usage): "
+    print text a
+end
+
+function test_conditional_code_clobber
+    # Test 8: Arithmetic that modifies condition codes
+    set a to 10
+    set b to 20
+    set result to 0
+    asm
+        code
+        "add rax, rbx"
+    input a with constraint "a"
+    input b with constraint "b"
+    output result with constraint "=a"
+    clobber "rax"
+    # Missing clobber: "cc" (condition codes modified by add)
+    end
+    print text "Test 8: Result (missing cc clobber): "
+    print text result
+end
+
+# Main execution
+print text "=== Week 8: Register Usage Analysis Test ==="
+print text ""
+print text "Test 1: Simple missing clobber..."
+call test_missing_clobber_simple
+print text ""
+
+print text "Test 2: Multiple missing clobbers..."
+call test_missing_clobber_multiple
+print text ""
+
+print text "Test 3: Correct clobber declaration (no warnings)..."
+call test_correct_clobber_declaration
+print text ""
+
+print text "Test 4: Implicit register usage (mul)..."
+call test_implicit_register_usage
+print text ""
+
+print text "Test 5: Implicit register usage (div)..."
+call test_div_implicit_usage
+print text ""
+
+print text "Test 6: Complex register usage..."
+call test_complex_register_usage
+print text ""
+
+print text "Test 7: SIMD register usage..."
+call test_simd_register_usage
+print text ""
+
+print text "Test 8: Condition code clobber..."
+call test_conditional_code_clobber
+print text ""
+
+print text "=== All register usage analysis tests completed ==="
+print text "Note: Should see suggestions for missing clobbers in most tests"

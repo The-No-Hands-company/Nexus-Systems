@@ -1,0 +1,102 @@
+# Rotating Cube - 3D Depth Testing Demo
+# Demonstrates indexed rendering with EBO, depth testing, and proper 3D transforms
+
+print text "=== NexusLang Rotating Cube ==="
+print text "Creating window..."
+
+set window to create_window with 800 and 600 and "NLPL Cube"
+
+# Vertex shader
+set vs to "#version 330 core
+layout (location = 0) in vec3 aPos;
+layout (location = 1) in vec3 aColor;
+out vec3 ourColor;
+uniform mat4 model;
+uniform mat4 view;
+uniform mat4 projection;
+void main() {
+    gl_Position = projection * view * model * vec4(aPos, 1.0);
+    ourColor = aColor;
+}"
+
+# Fragment shader
+set fs to "#version 330 core
+out vec4 FragColor;
+in vec3 ourColor;
+void main() {
+    FragColor = vec4(ourColor, 1.0);
+}"
+
+print text "Compiling shaders..."
+set shader to create_shader with vs and fs
+
+# Cube vertices: 8 corners with RGB colors
+set vertices to [-0.5, -0.5, 0.5, 1.0, 0.0, 0.0, 0.5, -0.5, 0.5, 0.0, 1.0, 0.0, 0.5, 0.5, 0.5, 0.0, 0.0, 1.0, -0.5, 0.5, 0.5, 1.0, 1.0, 0.0, -0.5, -0.5, -0.5, 1.0, 0.0, 1.0, 0.5, -0.5, -0.5, 0.0, 1.0, 1.0, 0.5, 0.5, -0.5, 1.0, 1.0, 1.0, -0.5, 0.5, -0.5, 0.5, 0.5, 0.5]
+
+# Indices for 6 faces (2 triangles each)
+set indices to [0, 1, 2, 2, 3, 0, 1, 5, 6, 6, 2, 1, 5, 4, 7, 7, 6, 5, 4, 0, 3, 3, 7, 4, 3, 2, 6, 6, 7, 3, 4, 5, 1, 1, 0, 4]
+
+print text "Creating cube geometry..."
+
+# Setup VAO with VBO and EBO
+set vao to create_vertex_array()
+set vbo to create_vertex_buffer with vertices
+set ebo to create_index_buffer with indices
+
+call vao_set_vertex_buffer with vao and vbo
+call vao_set_index_buffer with vao and ebo
+
+# Position attribute
+call vao_set_attribute with vao and 0 and 3 and 24 and 0
+# Color attribute
+call vao_set_attribute with vao and 1 and 3 and 24 and 12
+
+# Create FPS camera at (0, 0, 5)
+print text "Setting up camera..."
+set cam to create_fps_camera with 0.0 and 0.0 and 5.0
+
+# Projection matrix
+set proj to mat4_perspective with 0.785 and 1.333 and 0.1 and 100.0
+set proj_list to mat4_to_list with proj
+
+# Background color
+call set_clear_color with 0.1 and 0.1 and 0.15 and 1.0
+
+print text "Rendering cube..."
+set angle_x to 0.0
+set angle_y to 0.0
+
+# Main loop
+while not window_should_close with window
+    # Update rotation angles
+    set angle_x to angle_x plus 0.01
+    set angle_y to angle_y plus 0.015
+    
+    # Get view matrix from camera
+    set view_list to camera_get_view_matrix with cam
+    
+    # Create model matrix with rotation
+    set rot_x to mat4_rotation_x with angle_x
+    set rot_y to mat4_rotation_y with angle_y
+    set model to mat4_multiply with rot_x and rot_y
+    set model_list to mat4_to_list with model
+    
+    # Clear and render
+    call begin_frame
+    call use_shader with shader
+    call set_uniform_mat4 with shader and "model" and model_list
+    call set_uniform_mat4 with shader and "view" and view_list
+    call set_uniform_mat4 with shader and "projection" and proj_list
+    
+    # Draw cube using indexed rendering
+    call vao_draw_elements with vao and 4 and 36
+    
+    call end_frame with window
+end
+
+# Cleanup
+call delete_vertex_array with vao
+call delete_shader with shader
+call destroy_window with window
+
+print text "Cube demo complete!"

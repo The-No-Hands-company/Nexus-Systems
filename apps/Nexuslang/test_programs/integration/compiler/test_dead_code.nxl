@@ -1,0 +1,47 @@
+# Dead Code Elimination Test
+# Tests removal of unreachable code
+
+print text "=== Dead Code Elimination Test ==="
+print text ""
+
+# Test 1: Simple return
+function test_simple returns Integer
+    return 42
+    set x to 100  # Dead code
+    print text "Never runs"  # Dead code
+
+print text "Test 1: Code after return"
+set result1 to call test_simple
+print text "Result:"
+print integer result1  # Should print 42
+
+# Test 2: Constant true condition
+print text ""
+print text "Test 2: Constant true condition"
+if true
+    print text "This always runs"
+
+# Test 3: Constant false condition  
+print text ""
+print text "Test 3: Constant false condition"
+if false
+    print text "Dead code here"
+    set y to 999
+print text "After false block"
+
+# Test 4: Code after break in loop
+print text ""
+print text "Test 4: Code after break"
+set sum to 0
+set i to 0
+while i is less than 5
+    set sum to sum plus i
+    set i to i plus 1
+    if i is equal to 3
+        break
+        set sum to 999  # Dead code - after break
+print text "Sum:"
+print integer sum  # Should print 0+1+2 = 3
+
+print text ""
+print text "=== Tests Complete ==="

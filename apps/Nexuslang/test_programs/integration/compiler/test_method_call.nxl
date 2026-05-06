@@ -1,0 +1,18 @@
+# Test basic method calls (no async)
+
+# Define a simple class with a method
+class Counter
+    set count to 0
+    
+    method increment
+        print text "Incrementing"
+    end method
+end class
+
+# Main program
+print text "=== Method Call Test ==="
+
+set c to new Counter
+c.increment()
+
+print text "=== Test Complete ==="

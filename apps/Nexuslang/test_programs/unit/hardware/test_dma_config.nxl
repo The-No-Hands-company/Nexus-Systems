@@ -1,0 +1,73 @@
+# DMA Configuration Test
+# Test: Transfer configuration and parameter setting
+# Expected: Should configure DMA transfer with all parameters
+
+print text "Test: DMA transfer configuration"
+
+# Allocate channel 2
+set success to allocate_dma_channel with channel: 2
+if success
+    print text "Channel 2 allocated"
+end
+
+# Configure complete transfer
+# Source: 0x10000 (64KB), Destination: device, Count: 1024 bytes
+# Mode: SINGLE (1), Direction: READ (2)
+set configured to configure_dma_transfer with channel: 2 and source: 65536 and destination: 0 and count: 1024 and mode: 1 and direction: 2
+
+if configured
+    print text "Transfer configured successfully"
+end
+
+# Get channel status
+set status to get_channel_status with channel: 2
+
+print text "Channel status:"
+print text "  Allocated:"
+print text status["allocated"]
+print text "  Source address:"
+print text status["source_address"]
+print text "  Count:"
+print text status["count"]
+print text "  Mode:"
+print text status["mode"]
+print text "  Direction:"
+print text status["direction"]
+
+# Test individual setters
+set addr_set to set_dma_address with channel: 2 and address: 131072
+if addr_set
+    print text "Address updated to 131072"
+end
+
+set count_set to set_dma_count with channel: 2 and count: 2048
+if count_set
+    print text "Count updated to 2048"
+end
+
+# DEMAND mode (0), WRITE direction (1)
+set mode_set to set_dma_mode with channel: 2 and mode: 0 and direction: 1
+if mode_set
+    print text "Mode updated to DEMAND/WRITE"
+end
+
+# Get updated status
+set new_status to get_channel_status with channel: 2
+print text "Updated count:"
+print text new_status["count"]
+
+# Get DMA registers
+set regs to get_dma_registers with channel: 2
+print text "DMA Registers:"
+print text "  Address:"
+print text regs["address"]
+print text "  Count:"
+print text regs["count"]
+print text "  Page:"
+print text regs["page"]
+print text "  Mode:"
+print text regs["mode"]
+
+# Clean up
+release_dma_channel with channel: 2
+print text "Test complete"

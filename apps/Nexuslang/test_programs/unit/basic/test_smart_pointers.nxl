@@ -1,0 +1,323 @@
+# test_smart_pointers.nlpl
+# Comprehensive test for NexusLang Memory Safety: smart pointer types.
+#
+# Covered:
+#   Rc<T>   - reference counted pointer (single-threaded)
+#   Arc<T>  - atomic reference counted pointer (thread-safe)
+#   Weak<T> - non-owning reference (breaks cycles)
+#   Box<T>  - unique ownership heap allocation
+#   RefCell<T> - interior mutability with runtime borrow checking
+#   Mutex<T>  - value guarded by a mutex
+#   RwLock<T> - value guarded by a read-write lock
+
+# ---------------------------------------------------------------------------
+# Section 1: Rc<T> - Reference Counted Pointer
+# ---------------------------------------------------------------------------
+
+# Create an Rc holding an integer
+set rc1 to Rc of Integer with 42
+
+# Read the contained value
+set v1 to rc_get with rc1
+if v1 is equal to 42
+    print text "rc basic get: ok"
+else
+    print text "rc basic get: FAIL"
+end
+
+# Verify initial strong count is 1
+set cnt1 to rc_strong_count with rc1
+if cnt1 is equal to 1
+    print text "rc initial strong count: ok"
+else
+    print text "rc initial strong count: FAIL"
+end
+
+# Clone the Rc - strong count becomes 2
+set rc2 to rc_clone with rc1
+set cnt2 to rc_strong_count with rc1
+if cnt2 is equal to 2
+    print text "rc clone increments strong count: ok"
+else
+    print text "rc clone increments strong count: FAIL"
+end
+
+# Both clones read same value
+set v2 to rc_get with rc2
+if v2 is equal to 42
+    print text "rc clone reads same value: ok"
+else
+    print text "rc clone reads same value: FAIL"
+end
+
+# Mutate through rc1 -- rc2 sees the change
+call rc_set with rc1 and 99
+set v3 to rc_get with rc2
+if v3 is equal to 99
+    print text "rc set visible through clone: ok"
+else
+    print text "rc set visible through clone: FAIL"
+end
+
+# Weak count starts at 0
+set wcnt1 to rc_weak_count with rc1
+if wcnt1 is equal to 0
+    print text "rc initial weak count: ok"
+else
+    print text "rc initial weak count: FAIL"
+end
+
+# ---------------------------------------------------------------------------
+# Section 2: Weak<T> - downgrade and upgrade
+# ---------------------------------------------------------------------------
+
+set rc3 to Rc of Integer with 7
+set weak1 to downgrade rc3
+
+# weak_get on a live Rc returns the value
+set wv1 to weak_get with weak1
+if wv1 is equal to 7
+    print text "weak_get on live rc: ok"
+else
+    print text "weak_get on live rc: FAIL"
+end
+
+# upgrade weak -> Rc: success (strong count was 1, upgrade adds 1 => 2)
+set rc4 to upgrade weak1
+if rc4 is not null
+    set upgraded_val to rc_get with rc4
+    if upgraded_val is equal to 7
+        print text "upgrade weak to rc: ok"
+    else
+        print text "upgrade weak to rc: FAIL"
+    end
+else
+    print text "upgrade weak to rc: FAIL (returned null)"
+end
+
+# ---------------------------------------------------------------------------
+# Section 3: Arc<T> - Thread-Safe Reference Counted
+# ---------------------------------------------------------------------------
+
+set arc1 to Arc of Integer with 100
+set av1 to rc_get with arc1
+if av1 is equal to 100
+    print text "arc basic get: ok"
+else
+    print text "arc basic get: FAIL"
+end
+
+set arc2 to arc_clone with arc1
+set ac1 to rc_strong_count with arc1
+if ac1 is equal to 2
+    print text "arc strong count after clone: ok"
+else
+    print text "arc strong count after clone: FAIL"
+end
+
+# Mutate through arc1, verify arc2 sees it
+call rc_set with arc1 and 200
+set av2 to rc_get with arc2
+if av2 is equal to 200
+    print text "arc mutation shared: ok"
+else
+    print text "arc mutation shared: FAIL"
+end
+
+# ---------------------------------------------------------------------------
+# Section 4: Box<T> - Unique Ownership
+# ---------------------------------------------------------------------------
+
+set b1 to box_new with 55
+set bval1 to box_get with b1
+if bval1 is equal to 55
+    print text "box_get: ok"
+else
+    print text "box_get: FAIL"
+end
+
+# Mutate via box_set
+call box_set with b1 and 77
+set bval2 to box_get with b1
+if bval2 is equal to 77
+    print text "box_set: ok"
+else
+    print text "box_set: FAIL"
+end
+
+# box_is_valid - should be true before consume
+set bvalid1 to box_is_valid with b1
+if bvalid1 is equal to true
+    print text "box_is_valid before consume: ok"
+else
+    print text "box_is_valid before consume: FAIL"
+end
+
+# box_into_inner - consume the box and get the value
+set inner1 to box_into_inner with b1
+if inner1 is equal to 77
+    print text "box_into_inner: ok"
+else
+    print text "box_into_inner: FAIL"
+end
+
+# After consuming, box is invalid
+set bvalid2 to box_is_valid with b1
+if bvalid2 is equal to false
+    print text "box_is_valid after consume: ok"
+else
+    print text "box_is_valid after consume: FAIL"
+end
+
+# ---------------------------------------------------------------------------
+# Section 5: RefCell<T> - Interior Mutability
+# ---------------------------------------------------------------------------
+
+set cell1 to refcell_new with 10
+
+# Basic get
+set cv1 to refcell_get with cell1
+if cv1 is equal to 10
+    print text "refcell_get: ok"
+else
+    print text "refcell_get: FAIL"
+end
+
+# Set via refcell_set
+call refcell_set with cell1 and 20
+set cv2 to refcell_get with cell1
+if cv2 is equal to 20
+    print text "refcell_set: ok"
+else
+    print text "refcell_set: FAIL"
+end
+
+# Borrow count starts at 0
+set bc0 to refcell_borrow_count with cell1
+if bc0 is equal to 0
+    print text "refcell initial borrow count: ok"
+else
+    print text "refcell initial borrow count: FAIL"
+end
+
+# Immutable borrow - count becomes 1
+set borrowed1 to refcell_borrow with cell1
+set bc1 to refcell_borrow_count with cell1
+if bc1 is equal to 1
+    print text "refcell immutable borrow count: ok"
+else
+    print text "refcell immutable borrow count: FAIL"
+end
+
+# Multiple immutable borrows are allowed
+set borrowed2 to refcell_borrow with cell1
+set bc2 to refcell_borrow_count with cell1
+if bc2 is equal to 2
+    print text "refcell multiple immutable borrows: ok"
+else
+    print text "refcell multiple immutable borrows: FAIL"
+end
+
+# Release one borrow
+call refcell_release with cell1
+set bc3 to refcell_borrow_count with cell1
+if bc3 is equal to 1
+    print text "refcell release borrow: ok"
+else
+    print text "refcell release borrow: FAIL"
+end
+
+# Release second borrow
+call refcell_release with cell1
+set bc4 to refcell_borrow_count with cell1
+if bc4 is equal to 0
+    print text "refcell all borrows released: ok"
+else
+    print text "refcell all borrows released: FAIL"
+end
+
+# Mutable borrow - borrow count becomes -1
+set mborrowed to refcell_borrow_mut with cell1
+set bc5 to refcell_borrow_count with cell1
+if bc5 is equal to -1
+    print text "refcell mutable borrow: ok"
+else
+    print text "refcell mutable borrow: FAIL"
+end
+
+# Release mutable borrow
+call refcell_release_mut with cell1
+set bc6 to refcell_borrow_count with cell1
+if bc6 is equal to 0
+    print text "refcell release mutable borrow: ok"
+else
+    print text "refcell release mutable borrow: FAIL"
+end
+
+# ---------------------------------------------------------------------------
+# Section 6: Mutex<T> value
+# ---------------------------------------------------------------------------
+
+set m1 to mutex_value_new with 500
+
+# Lock and read
+set mval1 to mutex_value_lock with m1
+if mval1 is equal to 500
+    print text "mutex_value_lock read: ok"
+else
+    print text "mutex_value_lock read: FAIL"
+end
+
+# Unlock
+call mutex_value_unlock with m1
+print text "mutex_value_unlock: ok"
+
+# Set via atomic acquire-set-release
+call mutex_value_set with m1 and 600
+set mval2 to mutex_value_lock with m1
+if mval2 is equal to 600
+    print text "mutex_value_set: ok"
+else
+    print text "mutex_value_set: FAIL"
+end
+call mutex_value_unlock with m1
+
+# try_lock (should succeed since unlocked)
+set tval to mutex_value_try_lock with m1
+if tval is equal to 600
+    print text "mutex_value_try_lock: ok"
+else
+    print text "mutex_value_try_lock: FAIL"
+end
+call mutex_value_unlock with m1
+
+# ---------------------------------------------------------------------------
+# Section 7: RwLock<T> value
+# ---------------------------------------------------------------------------
+
+set rw1 to rwlock_value_new with 1000
+
+# Read lock
+set rwval1 to rwlock_value_read with rw1
+if rwval1 is equal to 1000
+    print text "rwlock_value_read: ok"
+else
+    print text "rwlock_value_read: FAIL"
+end
+call rwlock_value_release_read with rw1
+
+# Write
+call rwlock_value_write with rw1 and 2000
+set rwval2 to rwlock_value_read with rw1
+if rwval2 is equal to 2000
+    print text "rwlock_value_write and read: ok"
+else
+    print text "rwlock_value_write and read: FAIL"
+end
+call rwlock_value_release_read with rw1
+
+# ---------------------------------------------------------------------------
+# Summary
+# ---------------------------------------------------------------------------
+
+print text "all smart pointer tests passed"

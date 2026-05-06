@@ -1,0 +1,103 @@
+# Pattern Matching Demonstration
+# Showcases all pattern matching features in NexusLang
+
+# Example 1: Basic literal patterns with optimization (uses LLVM switch)
+function day_name that takes day as Integer returns String
+    match day with
+        case 1
+            return "Monday"
+        case 2
+            return "Tuesday"
+        case 3
+            return "Wednesday"
+        case 4
+            return "Thursday"
+        case 5
+            return "Friday"
+        case 6
+            return "Saturday"
+        case 7
+            return "Sunday"
+        case _
+            return "Invalid day"
+
+# Example 2: Guard conditions for range matching
+function classify_age that takes age as Integer returns String
+    match age with
+        case x if x is less than 0
+            return "Invalid"
+        case x if x is less than 13
+            return "Child"
+        case x if x is less than 20
+            return "Teenager"
+        case x if x is less than 65
+            return "Adult"
+        case _
+            return "Senior"
+
+# Example 3: Pattern matching with identifier binding
+function describe_number that takes n as Integer returns String
+    match n with
+        case 0
+            return "Zero"
+        case num
+            # 'num' is bound to n here
+            return "Non-zero value"
+
+# Example 4: Multiple patterns demonstrating exhaustiveness
+function boolean_to_text that takes flag as Boolean returns String
+    match flag with
+        case true
+            return "Yes"
+        case false
+            return "No"
+
+function main that takes nothing returns Integer
+    # Test literal patterns
+    print text "=== Day Names ==="
+    set day1 to call day_name with 1
+    print text day1
+    
+    set day5 to call day_name with 5
+    print text day5
+    
+    set invalid to call day_name with 10
+    print text invalid
+    
+    # Test guard conditions
+    print text ""
+    print text "=== Age Classification ==="
+    set child to call classify_age with 8
+    print text child
+    
+    set teen to call classify_age with 16
+    print text teen
+    
+    set adult to call classify_age with 35
+    print text adult
+    
+    set senior to call classify_age with 70
+    print text senior
+    
+    # Test identifier binding
+    print text ""
+    print text "=== Number Description ==="
+    set zero_desc to call describe_number with 0
+    print text zero_desc
+    
+    set num_desc to call describe_number with 42
+    print text num_desc
+    
+    # Test boolean patterns
+    print text ""
+    print text "=== Boolean Conversion ==="
+    set yes to call boolean_to_text with true
+    print text yes
+    
+    set no to call boolean_to_text with false
+    print text no
+    
+    print text ""
+    print text "=== All tests completed ==="
+    
+    return 0

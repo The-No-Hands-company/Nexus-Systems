@@ -1,0 +1,3 @@
+# Test index out of bounds error
+set numbers to [1, 2, 3]
+set item to numbers[10]  # index out of bounds

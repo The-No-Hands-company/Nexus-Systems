@@ -1,0 +1,177 @@
+# Concurrent Programming in NexusLang
+
+# Thread Class
+class WorkerThread
+    private set name to String
+    private set is_running to Boolean
+    private set task to Function
+    
+    public function initialize with name as String and task as Function
+        set this.name to name
+        set this.is_running to false
+        set this.task to task
+    
+    public function start
+        set this.is_running to true
+        create thread as new Thread with this.task
+        start thread
+    
+    public function stop
+        set this.is_running to false
+    
+    public function is running returns Boolean
+        return this.is_running
+
+# Thread Pool
+class ThreadPool
+    private set workers to List of WorkerThread
+    private set max_workers to Integer
+    private set task_queue to Queue of Function
+    
+    public function initialize with max_workers as Integer
+        set this.max_workers to max_workers
+        create this.workers as empty List of WorkerThread
+        create this.task_queue as empty Queue of Function
+    
+    public function submit task with task as Function
+        append task to this.task_queue
+        this.process queue
+    
+    private function process queue
+        while not this.task_queue is empty and length of this.workers is less than this.max_workers
+            set task to remove from this.task_queue
+            create worker as new WorkerThread with "Worker-" plus convert length of this.workers to string and task
+            append worker to this.workers
+            start worker
+    
+    public function shutdown
+        for each worker in this.workers
+            stop worker
+        clear this.workers
+        clear this.task_queue
+
+# Mutex for Thread Synchronization
+class Mutex
+    private set is_locked to Boolean
+    
+    public function initialize
+        set this.is_locked to false
+    
+    public function lock
+        while this.is_locked
+            wait for 0.1 seconds
+        set this.is_locked to true
+    
+    public function unlock
+        set this.is_locked to false
+
+# Example: Bank Account with Thread Safety
+class ThreadSafeBankAccount
+    private set balance to Float
+    private set mutex as new Mutex
+    
+    public function initialize with initial_balance as Float
+        set this.balance to initial_balance
+    
+    public function deposit with amount as Float
+        lock this.mutex
+        try
+            set this.balance to this.balance plus amount
+        finally
+            unlock this.mutex
+    
+    public function withdraw with amount as Float returns Boolean
+        lock this.mutex
+        try
+            if amount is greater than this.balance
+                return false
+            set this.balance to this.balance minus amount
+            return true
+        finally
+            unlock this.mutex
+    
+    public function get balance returns Float
+        lock this.mutex
+        try
+            return this.balance
+        finally
+            unlock this.mutex
+
+# Example: Producer-Consumer Pattern
+class ProducerConsumer
+    private set buffer to List of Integer
+    private set max_size to Integer
+    private set mutex as new Mutex
+    private set not_full as new Condition
+    private set not_empty as new Condition
+    
+    public function initialize with max_size as Integer
+        set this.max_size to max_size
+        create this.buffer as empty List of Integer
+    
+    public function produce with item as Integer
+        lock this.mutex
+        try
+            while length of this.buffer is equal to this.max_size
+                wait on this.not_full
+            append item to this.buffer
+            signal this.not_empty
+        finally
+            unlock this.mutex
+    
+    public function consume returns Integer
+        lock this.mutex
+        try
+            while this.buffer is empty
+                wait on this.not_empty
+            set item to remove first from this.buffer
+            signal this.not_full
+            return item
+        finally
+            unlock this.mutex
+
+# Usage Examples
+# Create a thread pool
+create pool as new ThreadPool with 4
+
+# Create a thread-safe bank account
+create account as new ThreadSafeBankAccount with 1000.0
+
+# Create multiple threads to perform concurrent operations
+function deposit task
+    for each i in range from 1 to 10
+        deposit 100.0 to account
+        wait for 0.1 seconds
+
+function withdraw task
+    for each i in range from 1 to 10
+        withdraw 50.0 from account
+        wait for 0.1 seconds
+
+# Submit tasks to thread pool
+submit task deposit task to pool
+submit task withdraw task to pool
+
+# Create a producer-consumer example
+create pc as new ProducerConsumer with 5
+
+function producer task
+    for each i in range from 1 to 10
+        produce i to pc
+        wait for 0.1 seconds
+
+function consumer task
+    for each i in range from 1 to 10
+        set item to consume from pc
+        print text "Consumed: " plus convert item to string
+        wait for 0.1 seconds
+
+# Submit producer and consumer tasks
+submit task producer task to pool
+submit task consumer task to pool
+
+# Wait for all tasks to complete
+wait for 2 seconds
+
+# Shutdown the thread pool
+shutdown pool 

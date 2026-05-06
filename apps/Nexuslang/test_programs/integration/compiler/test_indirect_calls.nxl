@@ -1,0 +1,84 @@
+# Comprehensive Indirect Function Call Tests
+
+# Test 1: Basic indirect call through function pointer
+print text "Test 1: Basic indirect call"
+
+function add_numbers that takes a as Integer and b as Integer returns Integer
+    return a plus b
+
+set func_ptr to address of add_numbers
+set result to call (value at func_ptr) with 5 and 3
+print text "5 + 3 = "
+print number result
+print text ""
+
+# Test 2: Indirect call with multiplication
+print text "Test 2: Multiplication through pointer"
+
+function multiply_numbers that takes x as Integer and y as Integer returns Integer
+    return x times y
+
+set mult_ptr to address of multiply_numbers
+set product to call (value at mult_ptr) with 7 and 6
+print text "7 * 6 = "
+print number product
+print text ""
+
+# Test 3: Indirect call with single parameter
+print text "Test 3: Single parameter indirect call"
+
+function square_number that takes n as Integer returns Integer
+    return n times n
+
+set square_ptr to address of square_number
+set squared to call (value at square_ptr) with 9
+print text "9^2 = "
+print number squared
+print text ""
+
+# Test 4: Indirect call with no parameters
+print text "Test 4: No parameter indirect call"
+
+function get_constant returns Integer
+    return 42
+
+set const_ptr to address of get_constant
+set value to call (value at const_ptr)
+print text "Constant: "
+print number value
+print text ""
+
+# Test 5: Multiple indirect calls with different pointers
+print text "Test 5: Multiple different calls"
+
+function subtract_numbers that takes a as Integer and b as Integer returns Integer
+    return a minus b
+
+set add_ptr to address of add_numbers
+set sub_ptr to address of subtract_numbers
+
+set sum to call (value at add_ptr) with 20 and 5
+set diff to call (value at sub_ptr) with 20 and 5
+
+print text "20 + 5 = "
+print number sum
+print text "20 - 5 = "
+print number diff
+print text ""
+
+# Test 6: Reassignment and reuse
+print text "Test 6: Pointer reassignment"
+
+set operation_ptr to address of add_numbers
+set result1 to call (value at operation_ptr) with 10 and 3
+
+set operation_ptr to address of multiply_numbers
+set result2 to call (value at operation_ptr) with 10 and 3
+
+print text "Add: 10 + 3 = "
+print number result1
+print text "Multiply: 10 * 3 = "
+print number result2
+print text ""
+
+print text "All indirect function call tests completed!"

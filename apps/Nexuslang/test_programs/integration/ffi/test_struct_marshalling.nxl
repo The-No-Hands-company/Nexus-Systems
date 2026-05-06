@@ -1,0 +1,198 @@
+# Test FFI Struct Marshalling
+# Demonstrates passing structs to C functions
+
+# Define a Point struct compatible with C
+struct Point
+    x as Integer
+    y as Integer
+end
+
+# Define a Rectangle struct with nested Point
+struct Rectangle
+    top_left as Point
+    bottom_right as Point
+end
+
+# Define a Color struct (RGB)
+struct Color
+    r as Int8
+    g as Int8
+    b as Int8
+end
+
+# Declare external C function that takes a struct by value
+extern function calculate_distance with p1 as Point and p2 as Point returns Float from library "m"
+
+# Declare external C function that takes struct by reference
+extern function normalize_point with p as Point* returns Void from library "c"
+
+# Declare external function that returns a struct
+extern function create_point with x as Integer and y as Integer returns Point from library "c"
+
+# Test basic struct passing
+function test_struct_by_value
+    set point1 to new Point
+    set point1.x to 10
+    set point1.y to 20
+    
+    set point2 to new Point
+    set point2.x to 30
+    set point2.y to 40
+    
+    # Pass structs to C function
+    set distance to call calculate_distance with point1 and point2
+    print text "Distance: "
+    print number distance
+    print newline
+end
+
+# Test struct by reference
+function test_struct_by_reference
+    set point to new Point
+    set point.x to 100
+    set point.y to 200
+    
+    print text "Before normalization: ("
+    print number point.x
+    print text ", "
+    print number point.y
+    print text ")"
+    print newline
+    
+    # Pass struct pointer to C function
+    call normalize_point with address of point
+    
+    print text "After normalization: ("
+    print number point.x
+    print text ", "
+    print number point.y
+    print text ")"
+    print newline
+end
+
+# Test nested structs
+function test_nested_structs
+    set rect to new Rectangle
+    
+    # Initialize nested points
+    set rect.top_left to new Point
+    set rect.top_left.x to 0
+    set rect.top_left.y to 0
+    
+    set rect.bottom_right to new Point
+    set rect.bottom_right.x to 100
+    set rect.bottom_right.y to 50
+    
+    # Calculate area using width and height
+    set width to rect.bottom_right.x minus rect.top_left.x
+    set height to rect.bottom_right.y minus rect.top_left.y
+    set area to width times height
+    
+    print text "Rectangle area: "
+    print number area
+    print newline
+end
+
+# Test struct return values
+function test_struct_return
+    # Call C function that returns a struct
+    set point to call create_point with 42 and 84
+    
+    print text "Created point: ("
+    print number point.x
+    print text ", "
+    print number point.y
+    print text ")"
+    print newline
+end
+
+# Test struct arrays passed to C
+function test_struct_array
+    # Create array of points
+    set points to allocate 3 times sizeof Point
+    
+    # Initialize points
+    set index to 0
+    while index is less than 3
+        set offset to index times sizeof Point
+        set ptr to points plus offset
+        set point to dereference ptr as Point
+        set point.x to index times 10
+        set point.y to index times 20
+        set index to index plus 1
+    end
+    
+    # Process array (would pass to C function)
+    set index to 0
+    while index is less than 3
+        set offset to index times sizeof Point
+        set ptr to points plus offset
+        set point to dereference ptr as Point
+        
+        print text "Point["
+        print number index
+        print text "]: ("
+        print number point.x
+        print text ", "
+        print number point.y
+        print text ")"
+        print newline
+        
+        set index to index plus 1
+    end
+    
+    # Free memory
+    free points
+end
+
+# Test small struct optimization (fits in registers)
+function test_small_struct
+    set color to new Color
+    set color.r to 255
+    set color.g to 128
+    set color.b to 64
+    
+    print text "Color: RGB("
+    print number color.r
+    print text ", "
+    print number color.g
+    print text ", "
+    print number color.b
+    print text ")"
+    print newline
+end
+
+# Main function
+function main
+    print text "=== FFI Struct Marshalling Tests ==="
+    print newline
+    
+    print text "Test 1: Struct by value"
+    print newline
+    call test_struct_by_value
+    
+    print text "Test 2: Struct by reference"
+    print newline
+    call test_struct_by_reference
+    
+    print text "Test 3: Nested structs"
+    print newline
+    call test_nested_structs
+    
+    print text "Test 4: Struct return value"
+    print newline
+    call test_struct_return
+    
+    print text "Test 5: Struct array"
+    print newline
+    call test_struct_array
+    
+    print text "Test 6: Small struct"
+    print newline
+    call test_small_struct
+    
+    print text "=== All tests complete ==="
+    print newline
+end
+
+call main

@@ -1,0 +1,11 @@
+# Test multi-word member access in convert expressions
+
+class Calculator
+    function calculate average returns Float
+        return 85.5
+end
+
+set calc to new Calculator
+set avg to calc.calculate average
+print text "Average: "
+print text avg

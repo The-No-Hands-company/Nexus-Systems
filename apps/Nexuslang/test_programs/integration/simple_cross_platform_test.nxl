@@ -1,0 +1,31 @@
+# Simple Cross-Platform Test for NexusLang
+# Demonstrates platform detection and cross-platform capabilities
+
+Import system.
+Import limits.
+
+print text "=== NexusLang Cross-Platform Test ==="
+print text ""
+
+# Platform Information
+print text "Platform: " plus call get_os_name
+print text "Full Platform Info: " plus call get_platform
+print text "OS Version: " plus call get_os_version
+print text "Python Version: " plus call get_python_version
+print text ""
+
+# User Information
+print text "Username: " plus call get_username
+print text "Hostname: " plus call get_hostname
+print text ""
+
+# Platform Constants
+print text "Word Size: " plus call get_word_size plus " bytes"
+print text ""
+
+# Confirm Cross-Platform
+print text " NexusLang is FULLY cross-platform!"
+print text " The interpreter runs on Windows, Linux, macOS, and BSD"
+print text " FFI supports .dll (Windows), .so (Linux/BSD), and .dylib (macOS)"
+print text ""
+print text "See docs/CROSS_PLATFORM_GUIDE.md for detailed examples."

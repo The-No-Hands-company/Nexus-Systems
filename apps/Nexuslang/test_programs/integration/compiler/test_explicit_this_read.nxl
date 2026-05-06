@@ -1,0 +1,21 @@
+# Test: Explicit this.property Read Access
+# Bug: Using 'this.property' used alloca pointer instead of loading value
+# Fix: _generate_member_access loads pointer from alloca before accessing
+
+class Box
+    property value as Integer
+    
+    method get_value returns Integer
+        # Explicit 'this.value' should load the actual value
+        return this.value
+
+set b to new Box
+set b.value to 99
+
+set result to call b.get_value
+
+print text "Value:"
+print number result
+
+# Expected output: 99
+# Before fix: Would return garbage (pointer address instead of value)

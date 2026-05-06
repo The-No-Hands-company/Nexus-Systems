@@ -1,0 +1,115 @@
+"""
+This example demonstrates the advanced type system features in NexusLang.
+"""
+
+# 1. Generic Types
+define a class called Container with T as a type parameter
+    properties:
+        value: T
+    methods:
+        define a method called get_value that returns T
+            return self.value
+        
+        define a method called set_value that takes a parameter value of type T
+            self.value = value
+
+# 2. Type Inference
+define a function called process_numbers that takes a list of numbers
+    let result = 0
+    for each number in numbers
+        result = result + number
+    return result
+
+# 3. Union Types
+define a function called process_value that takes a value that can be either a string or a number
+    if value is a string
+        return "String: " + value
+    else
+        return "Number: " + str(value)
+
+# 4. Generic Functions
+define a function called map that takes a function and a list
+    let result = []
+    for each item in list
+        let mapped = function(item)
+        add mapped to result
+    return result
+
+# 5. Type Constraints
+define a class called NumericContainer with T as a type parameter that must be either integer or float
+    properties:
+        value: T
+    methods:
+        define a method called add that takes a parameter other of type T and returns T
+            return self.value + other
+
+# 6. Interface Implementation
+define an interface called Printable
+    methods:
+        define a method called to_string that returns a string
+
+define a class called Person that implements Printable
+    properties:
+        name: string
+        age: integer
+    methods:
+        define a method called to_string that returns a string
+            return "Person(name=" + self.name + ", age=" + str(self.age) + ")"
+
+# 7. Function Type Compatibility
+define a function called apply_operation that takes a function and two numbers
+    return function(number1, number2)
+
+# 8. Type Inference with Generics
+define a function called create_container that takes a value
+    return Container(value)
+
+# 9. Complex Type Inference
+define a function called process_data that takes a list of values
+    let result = []
+    for each value in values
+        if value is a string
+            add "String: " + value to result
+        else if value is a number
+            add "Number: " + str(value) to result
+        else
+            add "Unknown: " + str(value) to result
+    return result
+
+# 10. Type Safety Examples
+define a function called safe_divide that takes two numbers and returns either a number or null
+    if second_number is 0
+        return null
+    return first_number / second_number
+
+# Usage Examples
+let numbers = [1, 2, 3, 4, 5]
+let sum = process_numbers(numbers)
+print(sum)  # Should print 15
+
+let container = create_container("Hello")
+print(container.get_value())  # Should print "Hello"
+
+let person = Person("John", 30)
+print(person.to_string())  # Should print "Person(name=John, age=30)"
+
+let result = safe_divide(10, 2)
+if result is not null
+    print(result)  # Should print 5
+else
+    print("Division by zero")
+
+let mapped = map(lambda x: x * 2, numbers)
+print(mapped)  # Should print [2, 4, 6, 8, 10]
+
+let numeric_container = NumericContainer(42)
+let sum = numeric_container.add(8)
+print(sum)  # Should print 50
+
+let operation = lambda x, y: x + y
+let result = apply_operation(operation, 5, 3)
+print(result)  # Should print 8
+
+let data = ["Hello", 42, 3.14, "World"]
+let processed = process_data(data)
+print(processed)  # Should print ["String: Hello", "Number: 42", "Number: 3.14", "String: World"] 

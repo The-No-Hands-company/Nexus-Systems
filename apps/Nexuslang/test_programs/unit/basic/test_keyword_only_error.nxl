@@ -1,0 +1,11 @@
+# Test that keyword-only parameters reject positional arguments
+print text "Testing keyword-only parameter enforcement..."
+
+function test_kw_only with x as Integer, *, y as Integer, z as Integer
+    return x plus y plus z
+end
+
+# This should fail - trying to pass y positionally
+print text "Attempting to pass keyword-only param positionally (should fail)..."
+set result to test_kw_only with 10 and 20 and 30
+print text result

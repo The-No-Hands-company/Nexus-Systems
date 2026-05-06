@@ -1,0 +1,115 @@
+# Enum Types Test for NexusLang Compiler
+
+print text "=== Enum Types Tests ==="
+
+# Test 1: Basic auto-numbered enum
+print text "\nTest 1: Basic Colors enum"
+enum Color
+    Red
+    Green
+    Blue
+    Yellow
+
+set my_color to Color.Red
+print text "My color (should be 0): "
+print number my_color
+
+set another_color to Color.Blue
+print text "Blue color (should be 2): "
+print number another_color
+
+# Test 2: Enum with explicit values
+print text "\nTest 2: HTTP Status Codes"
+enum HttpStatus
+    OK = 200
+    NotFound = 404
+    ServerError = 500
+
+set status to HttpStatus.NotFound
+print text "Status code (should be 404): "
+print number status
+
+# Test 3: Using enum in switch statement
+print text "\nTest 3: Enum in switch"
+set traffic_light to Color.Yellow
+switch traffic_light
+    case 0
+        print text "Red - Stop"
+    case 1
+        print text "Green - Go"
+    case 2
+        print text "Blue - Not a traffic light color"
+    case 3
+        print text "Yellow - Caution"
+    default
+        print text "Unknown color"
+
+# Test 4: Enum comparisons
+print text "\nTest 4: Enum comparisons"
+if my_color is equal to Color.Red
+    print text "Color is Red"
+else
+    print text "Color is not Red"
+
+if status is equal to 404
+    print text "Status is 404 Not Found"
+
+# Test 5: Multiple enums
+print text "\nTest 5: Multiple enums"
+enum Direction
+    North
+    South
+    East
+    West
+
+enum Priority
+    Low = 1
+    Medium = 2
+    High = 3
+    Critical = 4
+
+set heading to Direction.North
+set task_priority to Priority.High
+
+print text "Heading (should be 0): "
+print number heading
+print text "Priority (should be 3): "
+print number task_priority
+
+# Test 6: Log levels (like in examples)
+print text "\nTest 6: Log Levels"
+enum LogLevel
+    DEBUG
+    INFO
+    WARNING
+    ERROR
+    CRITICAL
+
+set current_level to LogLevel.WARNING
+switch current_level
+    case 0
+        print text "Debug level"
+    case 1
+        print text "Info level"
+    case 2
+        print text "Warning level"
+    case 3
+        print text "Error level"
+    case 4
+        print text "Critical level"
+    default
+        print text "Unknown level"
+
+# Test 7: Enum with gaps in values
+print text "\nTest 7: Enum with gaps"
+enum ErrorCode
+    Success = 0
+    Warning = 100
+    Error = 200
+    Critical = 300
+
+set error to ErrorCode.Error
+print text "Error code (should be 200): "
+print number error
+
+print text "\n=== All enum tests complete ==="

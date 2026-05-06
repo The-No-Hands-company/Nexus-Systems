@@ -1,0 +1,29 @@
+# Test exhaustiveness and unreachable case detection
+# This program has intentional issues for testing analysis
+
+function test_unreachable that takes n as Integer returns String
+    match n with
+        case 1
+            return "One"
+        case 2
+            return "Two"
+        case _
+            return "Other"
+        case 3
+            return "Three"
+
+function test_non_exhaustive that takes n as Integer returns String
+    match n with
+        case 1
+            return "One"
+        case 2
+            return "Two"
+
+function main that takes nothing returns Integer
+    set result1 to call test_unreachable with 1
+    print text result1
+    
+    set result2 to call test_non_exhaustive with 3
+    print text result2
+    
+    return 0

@@ -1,0 +1,37 @@
+# Test FFI callbacks with qsort from C standard library
+# This demonstrates passing an NexusLang function as a callback to C's qsort()
+
+extern function printf with format as Pointer returns Integer from library "c"
+extern function qsort with base as Pointer, nmemb as Integer, size as Integer, compar as Pointer returns Integer from library "c"
+extern function malloc with size as Integer returns Pointer from library "c"
+extern function free with ptr as Pointer returns Integer from library "c"
+
+# Comparison function for qsort - compares two integers
+# This function will be called by C's qsort implementation
+function compare_ints that takes a as Pointer, b as Pointer returns Integer
+    # For now, just return a fixed comparison since we can't dereference easily
+    # In a full implementation, we'd cast and dereference the pointers
+    # This tests that the callback mechanism works
+    return 0
+
+# Test qsort with callback
+set array_size to 5
+set element_size to 4  # sizeof integer (approximate)
+
+# Allocate array
+set total_bytes to array_size times element_size
+set data_ptr to call malloc with total_bytes
+
+# Initialize array with values (simplified - would need proper pointer arithmetic)
+set msg to "Testing qsort with NexusLang callback\n"
+call printf with msg
+
+# Call qsort with our callback function
+# The 'callback' keyword tells the compiler to pass function pointer
+call qsort with data_ptr, array_size, element_size, callback compare_ints
+
+set msg2 to "Qsort completed successfully\n"
+call printf with msg2
+
+set msg3 to "Test complete\n"
+call printf with msg3

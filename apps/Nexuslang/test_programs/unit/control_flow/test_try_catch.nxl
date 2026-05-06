@@ -1,0 +1,9 @@
+# Test try/catch with message
+
+try
+    set x to 10 divided by 0
+catch error with message
+    print text "Caught error"
+    print text message
+
+print text "After try/catch"

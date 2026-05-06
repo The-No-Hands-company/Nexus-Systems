@@ -1,0 +1,54 @@
+# FFI Type Conversion Tests
+# Tests various type conversions between NexusLang and C
+
+print text "=== FFI Type Conversion Tests ==="
+print text ""
+
+# Test 1: Basic integer types
+print text "Test 1: Integer type conversions"
+extern function abs with n as Integer returns Integer from library "c"
+
+set negative to -42
+set result to call abs with negative
+print text "abs(-42) ="
+print text result
+print text ""
+
+# Test 2: Float/double types
+print text "Test 2: Float type conversions"
+extern function fabs with x as Float returns Float from library "m"
+
+set neg_float to -3.14
+set result_float to call fabs with neg_float
+print text "fabs(-3.14) ="
+print text result_float
+print text ""
+
+# Test 3: String to char pointer
+print text "Test 3: String to char* conversions"
+extern function strlen with str as Pointer returns Integer from library "c"
+
+set test_string to "Hello, World!"
+set length to call strlen with test_string
+print text "strlen('Hello, World!') ="
+print text length
+print text ""
+
+# Test 4: Boolean type
+print text "Test 4: Boolean type conversions"
+set bool_true to true
+set bool_false to false
+print text "Boolean true converts to:"
+print text bool_true
+print text "Boolean false converts to:"
+print text bool_false
+print text ""
+
+# Test 5: Multiple parameter types
+print text "Test 5: Mixed parameter types"
+extern function printf with format as Pointer, ... returns Integer from library "c"
+
+call printf with "Integer: %d, Float: %.2f, String: %s\n", 42, 3.14, "test"
+print text ""
+
+print text "=== All FFI Type Conversion Tests Passed ==="

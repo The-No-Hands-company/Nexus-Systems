@@ -1,0 +1,10 @@
+set x to 10
+set y to 20
+
+function add_numbers that takes a as Integer and b as Integer returns Integer
+    set sum to a plus b
+    return sum
+
+set result to add_numbers with 15 and 25
+print text "Result: "
+print number result

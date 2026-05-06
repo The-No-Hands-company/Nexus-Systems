@@ -1,0 +1,57 @@
+# Test List Comprehensions
+
+print text "=== List Comprehension Tests ==="
+
+# Test 1: Basic list comprehension
+print text "\nTest 1: Basic comprehension [x * 2 for x in list]"
+set numbers to [1, 2, 3, 4, 5]
+set doubled to [x times 2 for x in numbers]
+print text "Original: "
+print value numbers
+print text "Doubled: "
+print value doubled
+
+# Test 2: Comprehension with condition
+print text "\nTest 2: Comprehension with filter [x for x in list if x > 3]"
+set filtered to [x for x in numbers if x is greater than 3]
+print text "Numbers > 3: "
+print value filtered
+
+# Test 3: Complex expression
+print text "\nTest 3: Complex expression [x * x + 1 for x in list]"
+set squared_plus_one to [x times x plus 1 for x in numbers]
+print text "x² + 1: "
+print value squared_plus_one
+
+# Test 4: Comprehension with condition and transformation
+print text "\nTest 4: Transform and filter [x * 2 for x in list if x % 2 == 0]"
+set even_doubled to [x times 2 for x in numbers if x modulo 2 is equal to 0]
+print text "Even numbers doubled: "
+print value even_doubled
+
+# Test 5: String comprehension
+print text "\nTest 5: String list"
+set names to ["alice", "bob", "charlie"]
+print text "Names: "
+print value names
+
+# Test 6: Range-like comprehension
+print text "\nTest 6: Range-like comprehension"
+set range_list to [0, 1, 2, 3, 4]
+set incremented to [x plus 1 for x in range_list]
+print text "Range incremented: "
+print value incremented
+
+# Test 7: Empty list comprehension
+print text "\nTest 7: Empty result [x for x in list if false]"
+set empty_result to [x for x in numbers if 1 is equal to 0]
+print text "Empty list: "
+print value empty_result
+
+# Test 8: Single element
+print text "\nTest 8: Single element match"
+set single to [x for x in numbers if x is equal to 3]
+print text "Single element (3): "
+print value single
+
+print text "\n=== All List Comprehension Tests Complete ==="

@@ -1,0 +1,11 @@
+# Minimal NOT test
+set c to 0
+
+# This should print
+if c is equal to 0
+    print text "c equals 0"
+
+# This should also print (using NOT)
+# TODO: Fix NOT operator
+# if not c
+#     print text "not c works"

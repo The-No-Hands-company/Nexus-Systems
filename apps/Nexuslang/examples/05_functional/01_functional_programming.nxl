@@ -1,0 +1,146 @@
+# Functional Programming in NexusLang
+
+# Pure Functions
+function calculate square with number as Float returns Float
+    return number times number
+
+function calculate factorial with number as Integer returns Integer
+    if number is less than or equal to 1
+        return 1
+    return number times calculate factorial with number minus 1
+
+# Higher-Order Functions
+function map with numbers as List of Integer and transform as Function returns List of Integer
+    create result as empty List of Integer
+    for each number in numbers
+        append transform with number to result
+    return result
+
+function filter with numbers as List of Integer and predicate as Function returns List of Integer
+    create result as empty List of Integer
+    for each number in numbers
+        if predicate with number
+            append number to result
+    return result
+
+function reduce with numbers as List of Integer and reducer as Function and initial as Integer returns Integer
+    set result to initial
+    for each number in numbers
+        set result to reducer with result and number
+    return result
+
+# Lambda Functions
+set square as function with x as Float returns Float
+    return x times x
+
+set is even as function with x as Integer returns Boolean
+    return x divided by 2 has no remainder
+
+set add as function with a as Integer and b as Integer returns Integer
+    return a plus b
+
+# Immutable Data Structures
+class ImmutableList
+    private set items to List of Any
+    
+    public function initialize with items as List of Any
+        create this.items as copy of items
+    
+    public function add with item as Any returns ImmutableList
+        create new_items as copy of this.items
+        append item to new_items
+        return new ImmutableList with new_items
+    
+    public function remove with index as Integer returns ImmutableList
+        create new_items as copy of this.items
+        remove item at index from new_items
+        return new ImmutableList with new_items
+    
+    public function get with index as Integer returns Any
+        return this.items[index]
+
+# Pattern Matching
+function match number with number as Integer returns String
+    switch number
+        case 0
+            return "Zero"
+        case 1
+            return "One"
+        case 2
+            return "Two"
+        default
+            return "Many"
+
+# Recursive Data Structures
+class BinaryTree
+    private set value to Any
+    private set left to BinaryTree
+    private set right to BinaryTree
+    
+    public function initialize with value as Any
+        set this.value to value
+        set this.left to null
+        set this.right to null
+    
+    public function insert with value as Any
+        if value is less than this.value
+            if this.left is null
+                set this.left to new BinaryTree with value
+            else
+                insert value into this.left
+        else
+            if this.right is null
+                set this.right to new BinaryTree with value
+            else
+                insert value into this.right
+    
+    public function traverse with visitor as Function
+        if this.left is not null
+            traverse this.left with visitor
+        call visitor with this.value
+        if this.right is not null
+            traverse this.right with visitor
+
+# Usage Examples
+# Test pure functions
+set number to 5.0
+set squared to calculate square with number
+print text "Square of " plus convert number to string plus " is " plus convert squared to string
+
+set factorial_result to calculate factorial with 5
+print text "Factorial of 5 is " plus convert factorial_result to string
+
+# Test higher-order functions
+set numbers to [1, 2, 3, 4, 5]
+set squares to map numbers with square
+print text "Squares: " plus convert squares to string
+
+set even_numbers to filter numbers with is even
+print text "Even numbers: " plus convert even_numbers to string
+
+set sum to reduce numbers with add and 0
+print text "Sum: " plus convert sum to string
+
+# Test immutable list
+create list as new ImmutableList with [1, 2, 3]
+create new_list as list.add with 4
+print text "Original list: " plus convert list to string
+print text "New list: " plus convert new_list to string
+
+# Test pattern matching
+print text match number with 0
+print text match number with 1
+print text match number with 5
+
+# Test binary tree
+create tree as new BinaryTree with 5
+insert 3 into tree
+insert 7 into tree
+insert 1 into tree
+insert 9 into tree
+
+function print value with value as Any
+    print text convert value to string
+
+print text "Tree traversal:"
+traverse tree with print value 

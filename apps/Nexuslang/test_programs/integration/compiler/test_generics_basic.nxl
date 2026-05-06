@@ -1,0 +1,17 @@
+# Basic generic function test for compiler
+
+print text "=== Generic Functions Test ==="
+print text ""
+
+# Test 1: Generic function with single type parameter
+# Compiler should monomorphize this based on actual usage
+function identity<T> that takes value as T returns T
+    return value
+
+# Test 2: Call with Integer - compiler should generate identity_Integer specialization
+set result_int to identity with 42
+print text "identity(42) = "
+print number result_int
+
+print text ""
+print text "=== Test Complete ==="

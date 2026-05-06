@@ -1,0 +1,16 @@
+# Math operations module
+# This module provides basic math functions
+
+function sum that takes x as Integer, y as Integer returns Integer
+    return x plus y
+
+function diff that takes x as Integer, y as Integer returns Integer
+    return x minus y
+
+function product that takes x as Integer, y as Integer returns Integer
+    return x times y
+
+function quotient that takes x as Integer, y as Integer returns Integer
+    if y is equal to 0
+        return 0
+    return x divided by y

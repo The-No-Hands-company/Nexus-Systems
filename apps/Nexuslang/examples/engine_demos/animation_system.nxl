@@ -1,0 +1,228 @@
+# Animation System Demo
+# Demonstrates keyframe animation with multiple tracks, interpolation methods, and easing functions
+
+print text "=== NexusLang Animation System Demo ==="
+print text "Demonstrating keyframe animation with interpolation and easing"
+print text ""
+
+# Create window
+set window to create_window with 1280 and 720 and "NLPL Animation Demo"
+
+# Vertex shader with model/view/projection matrices
+set vertex_shader to "
+#version 330 core
+layout (location = 0) in vec3 aPos;
+layout (location = 1) in vec3 aNormal;
+
+uniform mat4 model;
+uniform mat4 view;
+uniform mat4 projection;
+
+out vec3 FragPos;
+out vec3 Normal;
+
+void main() {
+    FragPos = vec3(model * vec4(aPos, 1.0));
+    Normal = mat3(transpose(inverse(model))) * aNormal;
+    gl_Position = projection * view * vec4(FragPos, 1.0);
+}
+"
+
+# Fragment shader with simple lighting
+set fragment_shader to "
+#version 330 core
+in vec3 FragPos;
+in vec3 Normal;
+
+uniform vec3 objectColor;
+uniform vec3 lightPos;
+uniform vec3 viewPos;
+
+out vec4 FragColor;
+
+void main() {
+    // Ambient
+    float ambientStrength = 0.3;
+    vec3 ambient = ambientStrength * vec3(1.0);
+    
+    // Diffuse
+    vec3 norm = normalize(Normal);
+    vec3 lightDir = normalize(lightPos - FragPos);
+    float diff = max(dot(norm, lightDir), 0.0);
+    vec3 diffuse = diff * vec3(1.0);
+    
+    // Specular
+    float specularStrength = 0.5;
+    vec3 viewDir = normalize(viewPos - FragPos);
+    vec3 reflectDir = reflect(-lightDir, norm);
+    float spec = pow(max(dot(viewDir, reflectDir), 0.0), 32.0);
+    vec3 specular = specularStrength * spec * vec3(1.0);
+    
+    vec3 result = (ambient + diffuse + specular) * objectColor;
+    FragColor = vec4(result, 1.0);
+}
+"
+
+set shader to create_shader with vertex_shader and fragment_shader
+
+# Create cube geometry (simplified - 8 vertices with positions and normals)
+set vertices to [-0.5, -0.5, -0.5,  0.0,  0.0, -1.0, 0.5, -0.5, -0.5,  0.0,  0.0, -1.0, 0.5,  0.5, -0.5,  0.0,  0.0, -1.0, -0.5,  0.5, -0.5,  0.0,  0.0, -1.0, -0.5, -0.5,  0.5,  0.0,  0.0,  1.0, 0.5, -0.5,  0.5,  0.0,  0.0,  1.0, 0.5,  0.5,  0.5,  0.0,  0.0,  1.0, -0.5,  0.5,  0.5,  0.0,  0.0,  1.0]
+
+set indices to [0, 1, 2, 2, 3, 0, 4, 5, 6, 6, 7, 4, 0, 1, 5, 5, 4, 0, 2, 3, 7, 7, 6, 2, 0, 3, 7, 7, 4, 0, 1, 2, 6, 6, 5, 1]
+
+
+set vbo to create_vertex_buffer with vertices
+set ebo to create_index_buffer with indices
+set vao to create_vertex_array
+
+call vao_set_vertex_buffer with vao and vbo
+call vao_set_index_buffer with vao and ebo
+call vao_set_attribute with vao and 0 and 3 and 6 and 0
+call vao_set_attribute with vao and 1 and 3 and 6 and 3
+
+print text "Created cube geometry"
+
+# ===== Animation Track 1: Linear Position Animation =====
+print text "Creating linear position animation track..."
+set track_position to create_animation_track
+
+# Keyframes: time, [x, y, z]
+call add_keyframe with track_position and 0.0 and [-3.0, 0.0, 0.0]
+call add_keyframe with track_position and 2.0 and [-3.0, 2.0, 0.0]
+call add_keyframe with track_position and 4.0 and [-3.0, 0.0, 0.0]
+call add_keyframe with track_position and 6.0 and [-3.0, -2.0, 0.0]
+call add_keyframe with track_position and 8.0 and [-3.0, 0.0, 0.0]
+
+call animation_play with track_position and true
+
+# ===== Animation Track 2: Smooth Position with Easing =====
+print text "Creating smooth position animation with easing..."
+set track_position_smooth to create_animation_track
+
+call add_keyframe with track_position_smooth and 0.0 and [0.0, 0.0, 0.0]
+call add_keyframe with track_position_smooth and 3.0 and [0.0, 2.0, 0.0]
+call add_keyframe with track_position_smooth and 6.0 and [0.0, -2.0, 0.0]
+call add_keyframe with track_position_smooth and 9.0 and [0.0, 0.0, 0.0]
+
+call animation_play with track_position_smooth and true
+
+# ===== Animation Track 3: Circular Motion =====
+print text "Creating circular motion animation..."
+set track_circle to create_animation_track
+
+# Circular path using 8 keyframes
+call add_keyframe with track_circle and 0.0 and [3.0, 1.5, 0.0]
+call add_keyframe with track_circle and 1.0 and [4.06, 1.06, 0.0]
+call add_keyframe with track_circle and 2.0 and [4.5, 0.0, 0.0]
+call add_keyframe with track_circle and 3.0 and [4.06, -1.06, 0.0]
+call add_keyframe with track_circle and 4.0 and [3.0, -1.5, 0.0]
+call add_keyframe with track_circle and 5.0 and [1.94, -1.06, 0.0]
+call add_keyframe with track_circle and 6.0 and [1.5, 0.0, 0.0]
+call add_keyframe with track_circle and 7.0 and [1.94, 1.06, 0.0]
+call add_keyframe with track_circle and 8.0 and [3.0, 1.5, 0.0]
+
+call animation_play with track_circle and true
+
+print text "Animation tracks created and playing"
+print text ""
+
+# Camera setup
+set camera_pos to [0.0, 0.0, 12.0]
+set camera_front to [0.0, 0.0, -1.0]
+set camera_up to [0.0, 1.0, 0.0]
+
+# Light position
+set light_pos to [5.0, 5.0, 5.0]
+
+# Time tracking
+set total_time to 0.0
+set frame_count to 0
+
+print text "Starting animation loop (press ESC to exit)..."
+print text ""
+
+# Main loop
+while window_should_close with window is equal to false
+    # Update timing
+    set delta_time to 0.016
+    set total_time to total_time plus delta_time
+    set frame_count to frame_count plus 1
+    
+    # Print status every 60 frames (approximately 1 second)
+    if frame_count is equal to 60
+        print text "Animation running... Time: "
+        print text total_time
+        print text "s"
+        set frame_count to 0
+    end
+    
+    # Update animations
+    set pos1 to animation_update with track_position and delta_time
+    set pos2 to animation_update with track_position_smooth and delta_time
+    set pos3 to animation_update with track_circle and delta_time
+    
+    # Clear screen
+    call set_clear_color with 0.1 and 0.1 and 0.15 and 1.0
+    call begin_frame with window
+    
+    # Use shader
+    call use_shader with shader
+    
+    # Set view matrix (look at origin from camera position)
+    set view to create_view_matrix with camera_pos and [0.0, 0.0, 0.0] and camera_up
+    call set_uniform_mat4 with shader and "view" and view
+    
+    # Set projection matrix (perspective)
+    set projection to create_perspective_matrix with 45.0 and 1.777778 and 0.1 and 100.0
+    call set_uniform_mat4 with shader and "projection" and projection
+    
+    # Set light and view position
+    call set_uniform_vec3 with shader and "lightPos" and light_pos[0] and light_pos[1] and light_pos[2]
+    call set_uniform_vec3 with shader and "viewPos" and camera_pos[0] and camera_pos[1] and camera_pos[2]
+    
+    # ===== Draw Cube 1: Linear Animation (Red) =====
+    set model1 to create_translation_matrix with pos1[0] and pos1[1] and pos1[2]
+    call set_uniform_mat4 with shader and "model" and model1
+    call set_uniform_vec3 with shader and "objectColor" and 1.0 and 0.2 and 0.2
+    call vao_draw_elements with vao and 36
+    
+    # ===== Draw Cube 2: Smooth Animation (Green) =====
+    set model2 to create_translation_matrix with pos2[0] and pos2[1] and pos2[2]
+    call set_uniform_mat4 with shader and "model" and model2
+    call set_uniform_vec3 with shader and "objectColor" and 0.2 and 1.0 and 0.2
+    call vao_draw_elements with vao and 36
+    
+    # ===== Draw Cube 3: Circular Motion (Blue) =====
+    set model3 to create_translation_matrix with pos3[0] and pos3[1] and pos3[2]
+    call set_uniform_mat4 with shader and "model" and model3
+    call set_uniform_vec3 with shader and "objectColor" and 0.2 and 0.2 and 1.0
+    call vao_draw_elements with vao and 36
+    
+    # End frame
+    call end_frame with window
+    
+    # Check for ESC key
+    set esc_key to KEY_ESCAPE
+    if is_key_pressed with window and esc_key
+        break
+    end
+end
+
+print text ""
+print text "Animation demo complete!"
+print text "Demonstrated:"
+print text "- Linear keyframe interpolation (red cube)"
+print text "- Smooth interpolation (green cube)"
+print text "- Circular motion path (blue cube)"
+print text "- Looping animations"
+print text "- Real-time animation updates"
+
+# Cleanup
+call delete_animation_track with track_position
+call delete_animation_track with track_position_smooth
+call delete_animation_track with track_circle
+call delete_vertex_array with vao
+call delete_vertex_buffer with vbo
+call delete_index_buffer with ebo
+call delete_shader with shader
+call destroy_window with window

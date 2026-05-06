@@ -1,0 +1,48 @@
+# Advanced Control Flow - Loop Features Demo
+# Demonstrates loop enhancements now supported in compiler
+
+print text "=== Advanced Loop Control Tests ==="
+
+# Test 1: Basic loop with break
+print text "Test 1: Loop with break"
+set counter to 0
+while counter is less than 10
+    print number counter
+    set counter to counter plus 1
+    if counter is equal to 5
+        print text "Breaking at 5"
+        break
+
+print text ""
+
+# Test 2: Basic loop with continue
+print text "Test 2: Loop with continue (skip even numbers)"
+set num to 0
+while num is less than 6
+    set num to num plus 1
+    set remainder to num mod 2
+    if remainder is equal to 0
+        continue
+    print number num
+
+print text ""
+
+# Test 3: For loop with array
+print text "Test 3: For each in array"
+set numbers to [1, 2, 3, 4, 5]
+for each num in numbers
+    print number num
+
+print text ""
+print text "Loop control tests complete!"
+print text ""
+print text "Enhanced features now supported in compiler:"
+print text "1. Labeled loops - break/continue specific nested loop"
+print text "2. Loop-else - execute else block if loop completes normally"
+print text "3. Fallthrough in switch - continue to next case"
+print text ""
+print text "Note: Parser support needed for:"
+print text "  - 'label name:' before loops"
+print text "  - 'break label' and 'continue label'"
+print text "  - 'else' after loops"
+print text "  - 'fallthrough' in switch cases"

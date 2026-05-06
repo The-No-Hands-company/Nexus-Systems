@@ -1,0 +1,219 @@
+# FFI Test: Struct Marshalling
+# Tests passing structs by value and by pointer to C functions
+
+# Define a point struct matching C struct layout
+struct Point
+    x as Integer
+    y as Integer
+end
+
+# Define a rectangle struct with nested struct
+struct Rectangle
+    top_left as Pointer   # Point*
+    width as Integer
+    height as Integer
+end
+
+# Time struct matching C's struct tm (simplified)
+struct TimeInfo
+    seconds as Integer    # tm_sec
+    minutes as Integer    # tm_min
+    hours as Integer      # tm_hour
+    day as Integer        # tm_mday
+    month as Integer      # tm_mon
+    year as Integer       # tm_year
+end
+
+# C time functions
+extern function time with timer as Pointer returns Integer from library "c"
+extern function localtime with timer as Pointer returns Pointer from library "c"
+
+# Custom test functions (would need to be compiled separately)
+# extern function distance with p1 as Pointer and p2 as Pointer returns Float from library "test"
+# extern function area with rect as Pointer returns Integer from library "test"
+
+function test_struct_creation
+    print text "Testing struct creation..."
+    
+    # Create a Point struct
+    set p to create Point with x: 10 and y: 20
+    
+    print text "Point created: ("
+    print number p.x
+    print text ", "
+    print number p.y
+    print text ")"
+    
+    if p.x is equal to 10 and p.y is equal to 20
+        print text "  PASS: Struct fields accessible"
+    else
+        print text "  FAIL: Struct field values incorrect"
+    end
+end
+
+function test_struct_pointer
+    print text "Testing struct pointers..."
+    
+    # Create struct and get pointer
+    set p to create Point with x: 5 and y: 15
+    set ptr to address of p
+    
+    print text "Point address: "
+    print pointer ptr
+    print text "  PASS: Can get struct address"
+end
+
+function test_struct_modification
+    print text "Testing struct field modification..."
+    
+    set p to create Point with x: 1 and y: 2
+    
+    # Modify fields
+    set p.x to 100
+    set p.y to 200
+    
+    print text "Modified point: ("
+    print number p.x
+    print text ", "
+    print number p.y
+    print text ")"
+    
+    if p.x is equal to 100 and p.y is equal to 200
+        print text "  PASS: Struct fields modifiable"
+    else
+        print text "  FAIL"
+    end
+end
+
+function test_nested_structs
+    print text "Testing nested structs..."
+    
+    # Create point
+    set pt to create Point with x: 0 and y: 0
+    set pt_ptr to address of pt
+    
+    # Create rectangle with pointer to point
+    set rect to create Rectangle with top_left: pt_ptr and width: 100 and height: 50
+    
+    print text "Rectangle created"
+    print text "  Width: "
+    print number rect.width
+    print text "  Height: "
+    print number rect.height
+    
+    if rect.width is equal to 100 and rect.height is equal to 50
+        print text "  PASS: Nested struct pointers work"
+    else
+        print text "  FAIL"
+    end
+end
+
+function test_c_struct_interop
+    print text "Testing C struct interop with time functions..."
+    
+    # Get current time
+    set null_ptr to 0
+    set current_time to time(null_ptr)
+    
+    print text "Current Unix timestamp: "
+    print number current_time
+    
+    if current_time is greater than 0
+        print text "  PASS: Can receive integers from C functions"
+    else
+        print text "  FAIL: time() returned invalid value"
+    end
+    
+    # Note: localtime() returns a pointer to struct tm
+    # Full struct unmarshalling would require more complex handling
+    print text "  Note: Full struct tm marshalling requires advanced FFI"
+end
+
+function test_struct_array
+    print text "Testing array of structs..."
+    
+    # Create multiple points
+    set p1 to create Point with x: 1 and y: 1
+    set p2 to create Point with x: 2 and y: 4
+    set p3 to create Point with x: 3 and y: 9
+    
+    print text "Points created:"
+    print text "  P1: ("
+    print number p1.x
+    print text ", "
+    print number p1.y
+    print text ")"
+    print text "  P2: ("
+    print number p2.x
+    print text ", "
+    print number p2.y
+    print text ")"
+    print text "  P3: ("
+    print number p3.x
+    print text ", "
+    print number p3.y
+    print text ")"
+    
+    print text "  PASS: Multiple struct instances work"
+end
+
+function test_struct_size
+    print text "Testing sizeof with structs..."
+    
+    set point_size to sizeof Point
+    print text "sizeof(Point) = "
+    print number point_size
+    
+    # Point has 2 Integers (each likely 8 bytes on 64-bit) = 16 bytes
+    if point_size is greater than 0
+        print text "  PASS: sizeof works with structs"
+    else
+        print text "  FAIL: sizeof returned 0"
+    end
+    
+    set rect_size to sizeof Rectangle
+    print text "sizeof(Rectangle) = "
+    print number rect_size
+    
+    # Rectangle has 1 Pointer + 2 Integers
+    if rect_size is greater than point_size
+        print text "  PASS: Rectangle larger than Point as expected"
+    else
+        print text "  Note: Struct sizes may vary by platform"
+    end
+end
+
+function main
+    print text "=== FFI Struct Marshalling Test ==="
+    print text ""
+    
+    test_struct_creation
+    print text ""
+    
+    test_struct_pointer
+    print text ""
+    
+    test_struct_modification
+    print text ""
+    
+    test_nested_structs
+    print text ""
+    
+    test_c_struct_interop
+    print text ""
+    
+    test_struct_array
+    print text ""
+    
+    test_struct_size
+    print text ""
+    
+    print text "=== Test Complete ==="
+    print text ""
+    print text "Note: Full struct-by-value passing to C requires"
+    print text "matching ABI and calling conventions. This test"
+    print text "demonstrates NLPL's struct capabilities."
+end
+
+# Run tests
+call main

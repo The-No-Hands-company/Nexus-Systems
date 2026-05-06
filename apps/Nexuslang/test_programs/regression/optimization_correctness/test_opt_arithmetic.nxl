@@ -1,0 +1,83 @@
+# Optimization Correctness Test: Arithmetic Operations
+# Tests that O0, O1, O2, O3, Os all produce identical results for arithmetic
+
+# Test integer arithmetic with potential overflow
+function test_arithmetic returns Integer
+    set a to 1000000
+    set b to 2000000
+    set c to a plus b
+    set d to c minus a
+    set e to d times 2
+    set f to e divided by 4
+    return f
+end
+
+# Test negative numbers
+function test_negatives returns Integer
+    set x to -100
+    set y to 50
+    set z to x plus y
+    return z
+end
+
+# Test modulo operations
+function test_modulo returns Integer
+    set result to 0
+    set i to 0
+    while i is less than 100
+        if i modulo 3 is equal to 0
+            set result to result plus i
+        end
+        set i to i plus 1
+    end
+    return result
+end
+
+# Test mixed operations with precedence
+function test_precedence returns Integer
+    set a to 10
+    set b to 5
+    set c to 2
+    set result to a plus b times c  # Should be 10 + (5 * 2) = 20
+    return result
+end
+
+# Test division edge cases
+function test_division returns Integer
+    set a to 100
+    set b to 3
+    set result to a divided by b  # Integer division: 33
+    return result
+end
+
+# Main test runner
+print text "Testing arithmetic optimization correctness..."
+print text ""
+
+set test1 to call test_arithmetic
+print text "Arithmetic test: "
+print test1
+print text " (expected: 1000000)"
+
+set test2 to call test_negatives
+print text "Negatives test: "
+print test2
+print text " (expected: -50)"
+
+set test3 to call test_modulo
+print text "Modulo test: "
+print test3
+print text " (expected: 1683)"
+
+set test4 to call test_precedence
+print text "Precedence test: "
+print test4
+print text " (expected: 20)"
+
+set test5 to call test_division
+print text "Division test: "
+print test5
+print text " (expected: 33)"
+
+print text ""
+print text "All arithmetic tests complete!"

@@ -1,0 +1,82 @@
+# Test caching module
+
+print text "Testing NexusLang Caching Module"
+print text "==========================="
+print text ""
+
+# Basic cache operations
+print text "Basic Cache Operations:"
+print text "- cache_set: Store value with optional TTL (seconds)"
+print text "- cache_get: Retrieve value (returns default if not found)"
+print text "- cache_has: Check if key exists and not expired"
+print text "- cache_delete: Remove key from cache"
+print text "- cache_clear: Remove all cache entries"
+print text ""
+
+# Cache info
+print text "Cache Information:"
+print text "- cache_size: Get current number of entries"
+print text "- cache_get_keys: List all cache keys"
+print text "- cache_get_all: Get all entries as dictionary"
+print text ""
+
+# Configuration
+print text "Cache Configuration:"
+print text "- cache_set_max_size: Set maximum cache entries (default: 1000)"
+print text "- LRU eviction: Automatically removes oldest when full"
+print text ""
+
+# Statistics
+print text "Cache Statistics:"
+print text "- cache_get_stats: Returns hits, misses, evictions, size, hit_rate"
+print text "- cache_reset_stats: Reset statistics counters"
+print text ""
+
+# Advanced operations
+print text "Advanced Operations:"
+print text "- cache_get_or_set: Get from cache or compute and store"
+print text "- cache_cleanup_expired: Remove all expired entries"
+print text ""
+
+# Memoization
+print text "Memoization Support:"
+print text "- create_memoized_function: Create cache for function results"
+print text "- memoize_get: Get cached function result"
+print text "- memoize_set: Cache function result"
+print text "- memoize_clear: Clear function's cache"
+print text ""
+
+print text "Example Usage:"
+print text "-------------"
+print text "# Basic caching"
+print text "cache_set with \"user_123\" and user_data and 300 # 5 min TTL"
+print text "set user to cache_get with \"user_123\""
+print text ""
+print text "# Cache statistics"
+print text "set stats to cache_get_stats()"
+print text "print text \"Hit rate: \" plus stats[\"hit_rate\"] plus \"%\""
+print text ""
+print text "# Get or compute"
+print text "set data to cache_get_or_set with key and compute_fn and 600"
+print text ""
+print text "# Memoization"
+print text "create_memoized_function with fibonacci and 128"
+print text "set cached to memoize_get with fibonacci and args"
+print text "memoize_set with fibonacci and args and result"
+print text ""
+
+print text "Summary:"
+print text "--------"
+print text " 17 caching functions"
+print text " TTL (time-to-live) support"
+print text " LRU (least recently used) eviction"
+print text " Cache statistics tracking"
+print text " Memoization support"
+print text " Automatic cleanup of expired entries"
+print text ""
+print text "Features:"
+print text "- In-memory caching with OrderedDict"
+print text "- Configurable max size (default: 1000)"
+print text "- Per-key TTL support"
+print text "- Hit/miss/eviction tracking"
+print text "- Function result memoization"

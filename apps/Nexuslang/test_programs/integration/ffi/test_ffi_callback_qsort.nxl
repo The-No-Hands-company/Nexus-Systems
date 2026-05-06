@@ -1,0 +1,75 @@
+# Test FFI callback with qsort
+# Demonstrates using NexusLang function as callback to C qsort()
+
+# Comparison function for qsort - compares two integers
+function compare_ints that takes a as Pointer, b as Pointer returns Int
+    # Dereference the void* pointers to get integer values
+    set val_a to dereference a as Int
+    set val_b to dereference b as Int
+    
+    if val_a is less than val_b
+        return -1
+    else if val_a is greater than val_b
+        return 1
+    else
+        return 0
+end
+
+# Main program
+function main returns Int
+    # Create an array of integers
+    set size to 5
+    set numbers to allocate size times sizeof Int
+    
+    # Initialize with unsorted values
+    set index to address of numbers[0]
+    store 42 at index
+    set index to address of numbers[1]
+    store 17 at index
+    set index to address of numbers[2]
+    store 99 at index
+    set index to address of numbers[3]
+    store 8 at index
+    set index to address of numbers[4]
+    store 55 at index
+    
+    # Print unsorted array
+    print text "Unsorted: "
+    set i to 0
+    while i is less than size
+        set index to address of numbers[i]
+        set value to dereference index as Int
+        print value
+        print text " "
+        set i to i plus 1
+    end
+    print text "\n"
+    
+    # Declare and call qsort
+    # void qsort(void *base, size_t nitems, size_t size, 
+    #            int (*compar)(const void *, const void*))
+    extern function qsort from "c" with base as Pointer, 
+                                        nitems as Int64,
+                                        size as Int64,
+                                        compar as Callback returns Void
+    
+    # Sort using NexusLang callback
+    call qsort with numbers, size, sizeof Int, callback compare_ints
+    
+    # Print sorted array
+    print text "Sorted: "
+    set i to 0
+    while i is less than size
+        set index to address of numbers[i]
+        set value to dereference index as Int
+        print value
+        print text " "
+        set i to i plus 1
+    end
+    print text "\n"
+    
+    # Cleanup
+    free numbers
+    
+    return 0
+end

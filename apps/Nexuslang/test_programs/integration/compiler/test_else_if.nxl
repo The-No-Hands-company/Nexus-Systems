@@ -1,0 +1,40 @@
+# Test else-if chains
+
+# Test 1: Simple else-if
+print text "Test 1: Grade classification"
+set score to 85
+
+if score >= 90
+    print text "A"
+else if score >= 80
+    print text "B"
+else if score >= 70
+    print text "C"
+else
+    print text "F"
+
+# Test 2: Multiple conditions
+print text "Test 2: Number classification"
+set num to 0
+
+if num > 0
+    print text "Positive"
+else if num < 0
+    print text "Negative"
+else
+    print text "Zero"
+
+# Test 3: Nested else-if
+print text "Test 3: Age categories"
+set age to 25
+
+if age < 13
+    print text "Child"
+else if age < 20
+    print text "Teenager"
+else if age < 65
+    print text "Adult"
+else
+    print text "Senior"
+
+print text "Else-if tests complete!"

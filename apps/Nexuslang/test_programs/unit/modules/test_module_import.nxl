@@ -1,0 +1,25 @@
+# Test program for module imports
+# Demonstrates importing and using modules
+
+Import math_ops
+
+# Test basic module function calls
+set x to 10
+set y to 5
+
+set result1 to math_ops.sum with x, y
+set result2 to math_ops.diff with x, y
+set result3 to math_ops.product with x, y
+set result4 to math_ops.quotient with x, y
+
+print text "Addition: "
+print text result1
+
+print text "Subtraction: "
+print text result2
+
+print text "Multiplication: "
+print text result3
+
+print text "Division: "
+print text result4

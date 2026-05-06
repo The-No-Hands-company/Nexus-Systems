@@ -1,0 +1,25 @@
+# Minimal nested struct test to debug the issue
+
+struct Point
+    x as Integer
+    y as Integer
+
+struct Rectangle
+    top_left as Point
+    bottom_right as Point
+
+print text "Testing nested struct assignment..."
+
+set rect to new Rectangle
+print text "Created rectangle"
+
+set rect.top_left to new Point
+print text "Assigned top_left Point"
+
+set rect.top_left.x to 10
+print text "Set top_left.x = 10"
+
+print text "Reading back top_left.x:"
+print number rect.top_left.x
+
+print text "Expected: 10"

@@ -1,0 +1,46 @@
+# Comprehensive String Operations Test
+
+# Test 1: toupper - convert to uppercase
+print text "Test 1: toupper"
+set original to "hello world"
+set upper to toupper(original)
+print text upper
+print text ""
+
+# Test 2: tolower - convert to lowercase
+print text "Test 2: tolower"
+set mixed to "HeLLo WoRLd"
+set lower to tolower(mixed)
+print text lower
+print text ""
+
+# Test 3: replace - find and replace
+print text "Test 3: replace"
+set sentence to "The quick brown fox"
+set replaced to replace(sentence, "fox", "dog")
+print text replaced
+print text ""
+
+# Test 4: replace multiple occurrences
+print text "Test 4: replace multiple"
+set repeated_text to "foo bar foo baz foo"
+set all_replaced to replace(repeated_text, "foo", "qux")
+print text all_replaced
+print text ""
+
+# Test 5: trim - remove whitespace
+print text "Test 5: trim"
+set padded to "   hello world   "
+set trimmed to trim(padded)
+print text trimmed
+print text ""
+
+# Test 6: Chain operations
+print text "Test 6: chain operations"
+set chain_input to "  HELLO world  "
+set chain1 to trim(chain_input)
+set chain2 to tolower(chain1)
+print text chain2
+print text ""
+
+print text "All string operations tests complete!"

@@ -1,0 +1,8 @@
+{
+  "nexuslang.languageServer.enabled": true,
+  "nexuslang.languageServer.path": "${workspaceFolder}/src/nxl_lsp.py",
+  "nexuslang.trace.server": "verbose",
+  "files.associations": {
+    "*.nxl": "nlpl"
+  }
+}

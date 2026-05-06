@@ -1,0 +1,76 @@
+# Basic Programming Concepts in NexusLang
+# This example demonstrates basic programming concepts such as variables, data types, functions, control flow, loops, error handling, and file operations in NexusLang.
+
+# Function Definition (must be defined before use)
+function calculate_average with numbers as List of Float returns Float
+    if length(numbers) equals 0
+        return 0.0
+    
+    set total to 0.0
+    for each number in numbers
+        set total to total plus number
+    
+    return total divided by length(numbers)
+    
+end
+
+# Variables and Types
+set name to "John Doe"
+set age to 25
+set height to 1.75
+set is_student to true
+set grades to [85.5, 92.0, 88.5]
+
+# Basic Arithmetic
+set sum to 10 plus 5
+set difference to 20 minus 8
+set product to 4 times 6
+set quotient to 15 divided by 3
+
+# String Operations
+set greeting to "Hello, " plus name
+set upper_name to convert name to uppercase
+set lower_name to convert name to lowercase
+set name_length to length(name)
+
+# List Operations
+set first_grade to grades[0]
+set last_grade to grades[length(grades) minus 1]
+append 95.0 to grades
+set average to calculate_average with grades
+
+# Conditional Statements
+if age is greater than or equal to 18
+    print text "You are an adult"
+else if age is greater than or equal to 13
+    print text "You are a teenager"
+else
+    print text "You are a child"
+
+# Loops
+# For loop
+for each grade in grades
+    print text "Grade: " plus convert grade to string
+
+# While loop
+set counter to 0
+while counter is less than 5
+    print text "Counter: " plus convert counter to string
+    set counter to counter plus 1
+
+# Error Handling
+try
+    set result to 10 divided by 0
+catch error with message
+    print text "Error: " plus message
+
+# File Operations
+if file_exists("data.txt")
+    set content to read_file("data.txt")
+    print text "File content: " plus content
+else
+    set success to write_file("data.txt", "Hello, World!")
+    print text "File created successfully"
+
+function bad 
+

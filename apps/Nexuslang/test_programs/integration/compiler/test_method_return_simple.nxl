@@ -1,0 +1,15 @@
+# Simple method return type test
+
+class Dog
+    property name as String
+    
+    method bark returns String
+        return "Woof!"
+
+set buddy to new Dog
+set buddy.name to "Buddy"
+
+set sound to call buddy.bark
+
+print text "Dog says:"
+print text sound

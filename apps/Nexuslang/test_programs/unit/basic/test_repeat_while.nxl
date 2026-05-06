@@ -1,0 +1,36 @@
+# Test repeat while loop (natural language while loop)
+
+print text "Test 1: Basic repeat while loop"
+set counter to 0
+repeat while counter is less than 5
+    print text "Counter:"
+    print value counter
+    set counter to counter plus 1
+
+print text "Test 2: Repeat while with condition using variables"
+set x to 10
+repeat while x is greater than 0
+    print value x
+    set x to x minus 2
+
+print text "Test 3: Repeat while with complex condition"
+set a to 1
+set b to 10
+repeat while a is less than b
+    print text "a is less than b"
+    set a to a plus 2
+    set b to b minus 1
+
+print text "Test 4: Nested repeat while loops"
+set i to 0
+repeat while i is less than 3
+    print text "Outer loop:"
+    print value i
+    set j to 0
+    repeat while j is less than 2
+        print text "  Inner loop:"
+        print value j
+        set j to j plus 1
+    set i to i plus 1
+
+print text "All repeat while tests passed!"

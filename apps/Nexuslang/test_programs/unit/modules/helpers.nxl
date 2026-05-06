@@ -1,0 +1,12 @@
+# String helper module
+
+function greet that takes name as String returns Integer
+    print text "Hello, "
+    print text name
+    print text "!"
+    return 0
+
+function say that takes msg as String returns Integer
+    print text "Message: "
+    print text msg
+    return 1

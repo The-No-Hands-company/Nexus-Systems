@@ -1,0 +1,24 @@
+# Simple test of all features
+
+print text "=== Testing New Features ==="
+
+# Test 1: Array indexing
+set numbers to [10, 20, 30]
+set first_num to numbers[0]
+print text "Array indexing: First element is"
+print text first_num
+
+# Test 2: String concatenation
+set hello to "Hello"
+set world to " World"
+set message to hello plus world
+print text "String concat:"
+print text message
+
+# Test 3: For-each loop
+print text "For-each loop:"
+for each num in [1, 2, 3]
+    print text num
+end
+
+print text "=== All Tests Complete ==="

@@ -1,0 +1,49 @@
+# Generic Optional<T> (Maybe Monad)
+# For handling nullable values safely
+
+class Optional of T
+    property has_value as Integer
+    property value as T
+    
+    function init_with that takes val as T
+        set has_value to 1
+        set value to val
+    
+    function init_empty
+        set has_value to 0
+    
+    function is_present returns Integer
+        return has_value
+    
+    function is_empty returns Integer
+        if has_value is equal to 0
+            return 1
+        return 0
+    
+    function get returns T
+        if has_value is equal to 0
+            # Error: trying to get value from empty Optional
+            return null
+        return value
+    
+    function get_or_default that takes default_value as T returns T
+        if has_value is equal to 1
+            return value
+        return default_value
+    
+    function map that takes mapper as Function returns Optional of R where R is Any
+        if has_value is equal to 0
+            return new Optional of R
+        set mapped to mapper with value
+        return Optional.of with mapped
+
+# Convenience constructors
+function Optional.of that takes val as T returns Optional of T where T is Any
+    set opt to new Optional of T
+    opt.init_with with val
+    return opt
+
+function Optional.empty returns Optional of T where T is Any
+    set opt to new Optional of T
+    opt.init_empty
+    return opt

@@ -1,0 +1,32 @@
+# Test: Generic Classes - Simple Version
+# Direct property access instead of method calls
+
+class Box<T>
+    property value as T
+    
+    method get_value returns T
+        return this.value
+    end method
+end class
+
+function main
+    print text "=== Generic Classes Simple Test ==="
+    
+    # Create Box<Integer> and set value directly
+    set int_box to new Box<Integer>
+    set int_box.value to 42
+    
+    set int_result to call int_box.get_value
+    print text "Integer box value:"
+    print number int_result
+    
+    # Create Box<String> and set value directly
+    set string_box to new Box<String>
+    set string_box.value to "Hello Generics!"
+    
+    set string_result to call string_box.get_value
+    print text "String box value:"
+    print text string_result
+    
+    print text "=== Test Complete ==="
+end

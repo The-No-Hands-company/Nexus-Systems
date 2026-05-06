@@ -1,0 +1,48 @@
+# Test pattern matching with tuple patterns
+# Tuples allow matching structured data with multiple components
+
+function classify_point that takes x as Integer and y as Integer returns String
+    # Match tuple patterns for coordinate classification
+    match (x, y) with
+        case (0, 0)
+            return "Origin"
+        case (x, 0) if x is greater than 0
+            return "Positive X-axis"
+        case (x, 0) if x is less than 0
+            return "Negative X-axis"
+        case (0, y) if y is greater than 0
+            return "Positive Y-axis"
+        case (0, y) if y is less than 0
+            return "Negative Y-axis"
+        case (x, y) if x is greater than 0 and y is greater than 0
+            return "Quadrant I"
+        case (x, y) if x is less than 0 and y is greater than 0
+            return "Quadrant II"
+        case (x, y) if x is less than 0 and y is less than 0
+            return "Quadrant III"
+        case (x, y) if x is greater than 0 and y is less than 0
+            return "Quadrant IV"
+        case _
+            return "Unknown"
+
+function main that takes nothing returns Integer
+    # Test various points
+    set result1 to call classify_point with 0 and 0
+    print text result1
+    
+    set result2 to call classify_point with 5 and 0
+    print text result2
+    
+    set result3 to call classify_point with 0 and 3
+    print text result3
+    
+    set result4 to call classify_point with 4 and 3
+    print text result4
+    
+    set result5 to call classify_point with -2 and 5
+    print text result5
+    
+    set result6 to call classify_point with -3 and -4
+    print text result6
+    
+    return 0

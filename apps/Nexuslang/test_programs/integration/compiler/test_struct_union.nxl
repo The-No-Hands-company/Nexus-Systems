@@ -1,0 +1,40 @@
+# Struct and Union Test
+
+print text "=== Struct and Union Test ==="
+print text ""
+
+# TEST 1: Struct Definition and Usage
+print text "TEST 1: Struct Types"
+
+struct Point
+    x as Integer
+    y as Integer
+end
+
+set p to new Point
+set p.x to 10
+set p.y to 20
+
+print text "Point struct created"
+print text "x ="
+print number p.x
+print text "y ="
+print number p.y
+
+print text ""
+
+# TEST 2: Union Definition
+print text "TEST 2: Union Types"
+
+union Number
+    int_val as Integer
+    float_val as Float
+end
+
+set num to new Number
+set num.int_val to 42
+
+print text "Union created with int_val = 42"
+
+print text ""
+print text "=== Test Complete ==="

@@ -1,0 +1,39 @@
+# NexusLang Memory Management Demo
+# Demonstrates alloc, dealloc, realloc, and pointer operations
+
+print text "=== NexusLang Memory Management Demo ==="
+
+# Allocate memory for 5 integers (8 bytes each = 40 bytes)
+set data_ptr to alloc with 40
+print text "Allocated 40 bytes"
+
+# Write values using pointer dereference
+set (value at data_ptr) to 100
+print text "Stored 100 at data_ptr"
+
+# Read it back
+set first_value to value at data_ptr
+print text "Read value: "
+print number first_value
+
+# Pointer arithmetic to access second element (8 bytes later)
+set second_ptr to data_ptr plus 8
+set (value at second_ptr) to 200
+print text "Stored 200 at offset 8"
+
+set second_value to value at second_ptr
+print text "Read value at offset 8: "
+print number second_value
+
+# Reallocate to bigger size (80 bytes for 10 integers)
+set data_ptr to realloc with data_ptr and 80
+print text "Reallocated to 80 bytes"
+
+# Verify first value still there
+set check_value to value at data_ptr
+print text "First value still: "
+print number check_value
+
+# Clean up - dealloc returns void, call as statement
+call dealloc with data_ptr
+print text "Memory freed successfully"

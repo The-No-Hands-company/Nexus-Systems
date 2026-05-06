@@ -1,0 +1,238 @@
+# CPU Feature Detection Test  
+# Test: Comprehensive feature detection
+# Expected: Should detect all CPU capabilities
+
+print text "Test: CPU Feature Detection"
+
+# Test 1: Get comprehensive feature dict
+print text "Test 1: Get all features"
+set all_features to get_cpu_features()
+print text "Total features detected:"
+print text "Basic flags (EDX):"
+print text all_features["basic"]
+print text "Extended flags (ECX):"
+print text all_features["extended"]
+
+# Test 2: Floating point and math
+print text "Test 2: Math features"
+set has_fpu to check_feature with feature_name: "fpu"
+print text "FPU (Floating Point Unit):"
+print text has_fpu
+
+set has_fma to check_feature with feature_name: "fma"
+print text "FMA (Fused Multiply-Add):"
+print text has_fma
+
+set has_f16c to check_feature with feature_name: "f16c"
+print text "F16C (Half-precision float):"
+print text has_f16c
+
+# Test 3: SIMD instruction sets
+print text "Test 3: SIMD instruction sets"
+
+# MMX
+set has_mmx to check_feature with feature_name: "mmx"
+if has_mmx is equal to true
+    print text "MMX: Available"
+else
+    print text "MMX: Not available"
+end
+
+# SSE family
+set has_sse to check_feature with feature_name: "sse"
+if has_sse is equal to true
+    print text "SSE: Available"
+else
+    print text "SSE: Not available"
+end
+
+set has_sse2 to check_feature with feature_name: "sse2"
+if has_sse2
+    print text "SSE2: Available"
+else
+    print text "SSE2: Not available"
+end
+
+set has_sse3 to check_feature with feature_name: "sse3"
+if has_sse3
+    print text "SSE3: Available"
+else
+    print text "SSE3: Not available"
+end
+
+set has_ssse3 to check_feature with feature_name: "ssse3"
+if has_ssse3
+    print text "SSSE3: Available"
+else
+    print text "SSSE3: Not available"
+end
+
+set has_sse4_1 to check_feature with feature_name: "sse4_1"
+if has_sse4_1
+    print text "SSE4.1: Available"
+else
+    print text "SSE4.1: Not available"
+end
+
+set has_sse4_2 to check_feature with feature_name: "sse4_2"
+if has_sse4_2
+    print text "SSE4.2: Available"
+else
+    print text "SSE4.2: Not available"
+end
+
+# AVX family
+set has_avx to check_feature with feature_name: "avx"
+if has_avx is equal to true
+    print text "AVX: Available"
+else
+    print text "AVX: Not available"
+end
+
+set has_avx2 to check_feature with feature_name: "avx2"
+if has_avx2
+    print text "AVX2: Available"
+else
+    print text "AVX2: Not available"
+end
+
+set has_avx512f to check_feature with feature_name: "avx512f"
+if has_avx512f
+    print text "AVX-512 Foundation: Available"
+else
+    print text "AVX-512: Not available"
+end
+
+# Test 4: Cryptography features
+print text "Test 4: Cryptography features"
+
+set has_aes to check_feature with feature_name: "aes"
+if has_aes is equal to true
+    print text "AES-NI: Supported"
+else
+    print text "AES-NI: Not supported"
+end
+
+set has_pclmulqdq to check_feature with feature_name: "pclmulqdq"
+if has_pclmulqdq is equal to true
+    print text "PCLMULQDQ: Supported"
+else
+    print text "PCLMULQDQ: Not supported"
+end
+
+set has_rdrand to check_feature with feature_name: "rdrand"
+if has_rdrand is equal to true
+    print text "RDRAND: Supported"
+else
+    print text "RDRAND: Not supported"
+end
+
+# Test 5: System features
+print text "Test 5: System features"
+
+set has_tsc to check_feature with feature_name: "tsc"
+print text "TSC (Time Stamp Counter):"
+print text has_tsc
+
+set has_msr to check_feature with feature_name: "msr"
+print text "MSR (Model-Specific Registers):"
+print text has_msr
+
+set has_apic to check_feature with feature_name: "apic"
+print text "APIC (Advanced PIC):"
+print text has_apic
+
+set has_htt to check_feature with feature_name: "htt"
+print text "HTT (Hyper-Threading):"
+print text has_htt
+
+set has_vmx to check_feature with feature_name: "vmx"
+print text "VMX (Virtualization):"
+print text has_vmx
+
+# Test 6: Instruction features
+print text "Test 6: Instruction features"
+
+set has_cmov to check_feature with feature_name: "cmov"
+print text "CMOV (Conditional Move):"
+print text has_cmov
+
+set has_popcnt to check_feature with feature_name: "popcnt"
+print text "POPCNT (Population Count):"
+print text has_popcnt
+
+set has_movbe to check_feature with feature_name: "movbe"
+print text "MOVBE (Move Big-Endian):"
+print text has_movbe
+
+set has_cmpxchg16b to check_feature with feature_name: "cmpxchg16b"
+print text "CMPXCHG16B:"
+print text has_cmpxchg16b
+
+# Test 7: State management
+print text "Test 7: State management features"
+
+set has_fxsr to check_feature with feature_name: "fxsr"
+print text "FXSR (FXSAVE/FXRSTOR):"
+print text has_fxsr
+
+set has_xsave to check_feature with feature_name: "xsave"
+print text "XSAVE:"
+print text has_xsave
+
+set has_osxsave to check_feature with feature_name: "osxsave"
+print text "OSXSAVE (OS enabled XSAVE):"
+print text has_osxsave
+
+# Test 8: Bit manipulation
+print text "Test 8: Bit manipulation"
+
+set has_bmi1 to check_feature with feature_name: "bmi1"
+print text "BMI1 (Bit Manipulation Instruction Set 1):"
+print text has_bmi1
+
+set has_bmi2 to check_feature with feature_name: "bmi2"
+print text "BMI2 (Bit Manipulation Instruction Set 2):"
+print text has_bmi2
+
+# Test 9: Power management
+print text "Test 9: Power/monitoring features"
+
+set has_monitor to check_feature with feature_name: "monitor"
+print text "MONITOR/MWAIT:"
+print text has_monitor
+
+# Test 10: Feature summary for optimization decisions
+print text "Test 10: Optimization recommendations"
+
+set features_final to get_cpu_features()
+
+# Vector optimization recommendation
+print text "Vector optimization:"
+if features_final["has_avx2"]
+    print text "  Use AVX2 (256-bit SIMD)"
+else
+    if features_final["has_avx"]
+        print text "  Use AVX (256-bit SIMD)"
+    else
+        if features_final["has_sse4_2"]
+            print text "  Use SSE4.2 (128-bit SIMD)"
+        else
+            if features_final["has_sse2"]
+                print text "  Use SSE2 (128-bit SIMD)"
+            else
+                print text "  Use scalar operations"
+            end
+        end
+    end
+end
+
+# Crypto recommendation
+print text "Crypto acceleration:"
+if features_final["has_aes"]
+    print text "  Use AES-NI instructions"
+else
+    print text "  Use software AES"
+end
+
+print text "Test complete"

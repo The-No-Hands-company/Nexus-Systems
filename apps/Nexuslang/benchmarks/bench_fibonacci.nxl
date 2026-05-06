@@ -1,0 +1,28 @@
+# Fibonacci Benchmark - Iterative Implementation
+# Tests: Loop performance, integer arithmetic
+# Target: Compare loop optimization across levels
+
+function fibonacci with n as Integer returns Integer
+    if n is less than or equal to 1
+        return n
+    end
+    
+    set a to 0
+    set b to 1
+    set i to 2
+    
+    while i is less than or equal to n
+        set temp to a plus b
+        set a to b
+        set b to temp
+        set i to i plus 1
+    end
+    
+    return b
+end
+
+# Run benchmark - compute fibonacci(1000) iteratively
+set result to fibonacci with 1000
+
+print text "Fibonacci(1000) = "
+print text convert result to string

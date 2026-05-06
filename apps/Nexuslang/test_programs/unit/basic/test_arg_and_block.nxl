@@ -1,0 +1,12 @@
+# Simple test with arg and block
+
+function test with x as Integer and block as Function
+    print text "x is:"
+    print text x
+    print text "Calling block..."
+    block()
+end
+
+test with 42 do
+    print text "Block called!"
+end

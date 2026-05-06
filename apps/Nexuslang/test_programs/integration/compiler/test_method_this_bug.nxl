@@ -1,0 +1,30 @@
+# Minimal test for method property access bug
+
+class Counter
+    property count as Integer
+    
+    method increment returns Integer
+        set this.count to this.count plus 1
+        return this.count
+    
+    method get returns Integer
+        return this.count
+
+print text "Creating Counter..."
+set c to new Counter
+set c.count to 0
+print text "Initial count:"
+print number c.count
+
+print text "Calling increment..."
+set result to call c.increment
+print text "Increment returned:"
+print number result
+
+print text "Calling get..."
+set value to call c.get
+print text "Get returned:"
+print number value
+
+print text "Direct access to count:"
+print number c.count

@@ -1,0 +1,60 @@
+# Test interrupt enable/disable control
+print text "Testing interrupt control (CLI/STI)..."
+
+try
+    # Check initial interrupt flag state
+    print text "Test 1: Check initial interrupt flag"
+    set if_state to get_interrupt_flag
+    print text "Initial interrupt flag:"
+    print text if_state
+    
+    # Disable interrupts (CLI)
+    print text "Test 2: Disable interrupts (CLI)"
+    set disable_result to disable_interrupts
+    if disable_result
+        print text "Interrupts disabled: SUCCESS"
+    end
+    
+    # Check flag state
+    set if_disabled to get_interrupt_flag
+    print text "Interrupt flag after disable:"
+    print text if_disabled
+    if not if_disabled
+        print text "Flag correctly cleared: SUCCESS"
+    end
+    
+    # Enable interrupts (STI)
+    print text "Test 3: Enable interrupts (STI)"
+    set enable_result to enable_interrupts
+    if enable_result
+        print text "Interrupts enabled: SUCCESS"
+    end
+    
+    # Check flag state
+    set if_enabled to get_interrupt_flag
+    print text "Interrupt flag after enable:"
+    print text if_enabled
+    if if_enabled
+        print text "Flag correctly set: SUCCESS"
+    end
+    
+    # Test set_interrupt_flag function
+    print text "Test 4: Set interrupt flag directly"
+    set_interrupt_flag with enabled: false
+    set if_after_set to get_interrupt_flag
+    print text "Flag after set(false):"
+    print text if_after_set
+    
+    set_interrupt_flag with enabled: true
+    set if_after_set2 to get_interrupt_flag
+    print text "Flag after set(true):"
+    print text if_after_set2
+    
+    print text "All interrupt control tests: SUCCESS"
+    
+catch error with message
+    print text "Error (expected without root):"
+    print text message
+end
+
+print text "Test complete"

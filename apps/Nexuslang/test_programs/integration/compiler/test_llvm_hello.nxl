@@ -1,0 +1,4 @@
+# NexusLang Hello World - LLVM Backend Test
+# This will compile to native code via LLVM IR
+
+print text "Hello from LLVM!"

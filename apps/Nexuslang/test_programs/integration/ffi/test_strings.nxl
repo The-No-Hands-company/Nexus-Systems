@@ -1,0 +1,28 @@
+# Test FFI: Call C string functions
+# Demonstrates string manipulation via C standard library
+
+extern function strlen with str as Pointer returns Integer from library "c"
+extern function strcmp with str1 as Pointer with str2 as Pointer returns Integer from library "c"
+extern function printf with format as Pointer returns Integer from library "c"
+
+function main
+    # Test strlen
+    set text to "Hello, World!"
+    set len to strlen(text)
+    set format to "Length of '%s' is: %d\n"
+    printf(format, text, len)
+    
+    # Test strcmp
+    set str1 to "apple"
+    set str2 to "apple"
+    set str3 to "banana"
+    
+    set cmp1 to strcmp(str1, str2)
+    set cmp2 to strcmp(str1, str3)
+    
+    set format2 to "strcmp('%s', '%s') = %d\n"
+    printf(format2, str1, str2, cmp1)
+    printf(format2, str1, str3, cmp2)
+    
+    return 0
+end

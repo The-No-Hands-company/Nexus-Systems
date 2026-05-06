@@ -1,0 +1,82 @@
+# Textured Cube - Texture Mapping Demo
+# Demonstrates UV coordinates and texture sampling
+
+print text "=== NexusLang Textured Cube ==="
+print text "Creating window..."
+
+set window to create_window with 800 and 600 and "NLPL Textures"
+
+# Vertex shader with UV coordinates
+set vs to "#version 330 core
+layout (location = 0) in vec3 aPos;
+layout (location = 1) in vec2 aTexCoord;
+out vec2 TexCoord;
+uniform mat4 model;
+uniform mat4 view;
+uniform mat4 projection;
+void main() {
+    gl_Position = projection * view * model * vec4(aPos, 1.0);
+    TexCoord = aTexCoord;
+}"
+
+# Fragment shader with texture sampling
+set fs to "#version 330 core
+out vec4 FragColor;
+in vec2 TexCoord;
+uniform sampler2D texture1;
+void main() {
+    FragColor = texture(texture1, TexCoord);
+}"
+
+print text "Compiling shaders..."
+set shader to create_shader with vs and fs
+
+# Cube vertices with UV coordinates (position + texcoord)
+set vertices to [-0.5, -0.5, -0.5, 0.0, 0.0, 0.5, -0.5, -0.5, 1.0, 0.0, 0.5, 0.5, -0.5, 1.0, 1.0, 0.5, 0.5, -0.5, 1.0, 1.0, -0.5, 0.5, -0.5, 0.0, 1.0, -0.5, -0.5, -0.5, 0.0, 0.0, -0.5, -0.5, 0.5, 0.0, 0.0, 0.5, -0.5, 0.5, 1.0, 0.0, 0.5, 0.5, 0.5, 1.0, 1.0, 0.5, 0.5, 0.5, 1.0, 1.0, -0.5, 0.5, 0.5, 0.0, 1.0, -0.5, -0.5, 0.5, 0.0, 0.0, -0.5, 0.5, 0.5, 1.0, 0.0, -0.5, 0.5, -0.5, 1.0, 1.0, -0.5, -0.5, -0.5, 0.0, 1.0, -0.5, -0.5, -0.5, 0.0, 1.0, -0.5, -0.5, 0.5, 0.0, 0.0, -0.5, 0.5, 0.5, 1.0, 0.0, 0.5, 0.5, 0.5, 1.0, 0.0, 0.5, 0.5, -0.5, 1.0, 1.0, 0.5, -0.5, -0.5, 0.0, 1.0, 0.5, -0.5, -0.5, 0.0, 1.0, 0.5, -0.5, 0.5, 0.0, 0.0, 0.5, 0.5, 0.5, 1.0, 0.0, -0.5, -0.5, -0.5, 0.0, 1.0, 0.5, -0.5, -0.5, 1.0, 1.0, 0.5, -0.5, 0.5, 1.0, 0.0, 0.5, -0.5, 0.5, 1.0, 0.0, -0.5, -0.5, 0.5, 0.0, 0.0, -0.5, -0.5, -0.5, 0.0, 1.0, -0.5, 0.5, -0.5, 0.0, 1.0, 0.5, 0.5, -0.5, 1.0, 1.0, 0.5, 0.5, 0.5, 1.0, 0.0, 0.5, 0.5, 0.5, 1.0, 0.0, -0.5, 0.5, 0.5, 0.0, 0.0, -0.5, 0.5, -0.5, 0.0, 1.0]
+
+print text "Creating textured cube..."
+set vao to create_vertex_array()
+set vbo to create_vertex_buffer with vertices
+call vao_set_vertex_buffer with vao and vbo
+call vao_set_attribute with vao and 0 and 3 and 20 and 0
+call vao_set_attribute with vao and 1 and 2 and 20 and 12
+
+# Create checkerboard texture
+print text "Creating checkerboard texture..."
+set texture to create_checkerboard_texture with 256 and 256 and 32
+
+# Camera and projection
+set cam to create_fps_camera with 0.0 and 0.0 and 5.0
+set proj to mat4_perspective with 0.785 and 1.333 and 0.1 and 100.0
+set proj_list to mat4_to_list with proj
+
+call set_clear_color with 0.2 and 0.3 and 0.3 and 1.0
+
+print text "Rendering textured cube..."
+set angle to 0.0
+
+while not window_should_close with window
+    set angle to angle plus 0.015
+    set view_list to camera_get_view_matrix with cam
+    set rot_x to mat4_rotation_x with angle
+    set rot_y to mat4_rotation_y with angle times 0.7
+    set model to mat4_multiply with rot_x and rot_y
+    set model_list to mat4_to_list with model
+    
+    call begin_frame
+    call bind_texture with texture and 0
+    call use_shader with shader
+    call set_uniform_mat4 with shader and "model" and model_list
+    call set_uniform_mat4 with shader and "view" and view_list
+    call set_uniform_mat4 with shader and "projection" and proj_list
+    call set_uniform_int with shader and "texture1" and 0
+    
+    call vao_draw_arrays with vao and 4 and 0 and 36
+    call end_frame with window
+end
+
+call delete_texture with texture
+call delete_vertex_array with vao
+call delete_shader with shader
+call destroy_window with window
+print text "Texture demo complete!"

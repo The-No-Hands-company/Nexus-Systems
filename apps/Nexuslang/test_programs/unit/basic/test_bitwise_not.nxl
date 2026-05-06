@@ -1,0 +1,75 @@
+# Test: Bitwise NOT Operation
+# Tests bitwise NOT (complement) operation
+
+print text "=== Bitwise NOT Operation Test ==="
+print text ""
+
+# Test 1: Bitwise NOT basics
+print text "Test 1: Bitwise NOT basics"
+print text "Note: Python uses two's complement representation"
+print text "NOT inverts all bits, so NOT 0 = -1, NOT 5 = -6, etc."
+print text ""
+
+set a to 0
+set result to bitwise not a
+print text "bitwise not 0 = "
+print text result
+print text "Expected: -1 (all bits flipped)"
+print text ""
+
+set a to 5
+set result to bitwise not a
+print text "bitwise not 5 = "
+print text result
+print text "Expected: -6"
+print text ""
+
+set a to 10
+set result to bitwise not a
+print text "bitwise not 10 = "
+print text result
+print text "Expected: -11"
+print text ""
+
+# Test 2: Double negation
+print text "Test 2: Double negation"
+set a to 42
+set result to bitwise not a
+set result to bitwise not result
+print text "bitwise not (bitwise not 42) = "
+print text result
+print text "Expected: 42 (double negation returns original)"
+print text ""
+
+# Test 3: NOT with masks
+print text "Test 3: Using NOT for bit masking"
+set mask to 255
+set result to bitwise not mask
+print text "bitwise not 255 = "
+print text result
+print text "Expected: -256"
+print text ""
+
+# Test 4: NOT in expressions
+print text "Test 4: NOT in complex expressions"
+set a to 5
+set b to 3
+set result to a bitwise and (bitwise not b)
+print text "5 bitwise and (bitwise not 3) = "
+print text result
+print text "Expected: 4"
+print text ""
+
+# Test 5: Pattern verification
+print text "Test 5: Common NOT patterns"
+set values to create list with 1 and 2 and 4 and 8 and 16
+for each val in values
+    set negated to bitwise not val
+    print text "bitwise not "
+    print text val
+    print text " = "
+    print text negated
+end
+print text ""
+
+print text "=== All Bitwise NOT Tests Complete ==="

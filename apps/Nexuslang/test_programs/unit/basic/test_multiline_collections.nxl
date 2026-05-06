@@ -1,0 +1,63 @@
+# Test multi-line arrays and dictionaries with blank lines
+
+# Test 1: Multi-line array with blank lines
+set my_array to [
+    1,
+    2,
+
+    3,
+    4
+]
+
+print text "Array with blank lines:"
+print text my_array
+
+# Test 2: Multi-line array with trailing comma
+set arr2 to [
+    10,
+    20,
+    30,
+]
+
+print text "Array with trailing comma:"
+print text arr2
+
+# Test 3: Multi-line dictionary with blank lines
+set my_dict to {
+    "name": "Alice",
+    "age": 30,
+
+    "city": "New York",
+    "active": true
+}
+
+print text "Dictionary with blank lines:"
+print text my_dict
+
+# Test 4: Multi-line dictionary with trailing comma
+set dict2 to {
+    "x": 1,
+    "y": 2,
+    "z": 3,
+}
+
+print text "Dictionary with trailing comma:"
+print text dict2
+
+# Test 5: Nested structures with blank lines
+set nested to [
+    {
+        "id": 1,
+        "name": "First"
+    },
+
+    {
+        "id": 2,
+        "name": "Second"
+    }
+]
+
+print text "Nested structures:"
+print text nested
+
+print text "All tests passed!"

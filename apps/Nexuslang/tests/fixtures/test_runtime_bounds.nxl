@@ -1,0 +1,20 @@
+fn test_runtime_bounds() {
+    // Test 1: Dynamic allocation with runtime bounds checking
+    // alloc(count, type) allocates 'count' elements and tracks size
+    let arr = alloc(10, i64);  // Allocate 10 i64 elements with runtime size tracking
+    
+    // Valid accesses
+    arr[0] = 1;
+    arr[5] = 42;
+    arr[9] = 100;
+    
+    // Invalid access - should panic with bounds error
+    print("Attempting out of bounds access...");
+    arr[10] = 99;  // Index 10 is out of bounds for size 10
+    
+    print("Should not reach here!");
+}
+
+fn main() {
+    test_runtime_bounds();
+}

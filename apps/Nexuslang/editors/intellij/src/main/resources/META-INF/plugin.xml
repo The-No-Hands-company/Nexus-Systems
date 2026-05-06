@@ -1,0 +1,55 @@
+<idea-plugin>
+    <id>com.nlpl.intellij</id>
+    <name>NLPL Language Support</name>
+    <vendor email="dev@nlpl.org" url="https://github.com/The-No-hands-Company/NLPL">
+        The No-Hands Company
+    </vendor>
+    <description><![CDATA[
+        <p>Native support for the <b>NLPL (NexusLang)</b> in IntelliJ-based IDEs.</p>
+        <p>NLPL is a general-purpose programming language designed to read like natural English prose
+        while providing full low-level control.</p>
+
+        <h3>Features</h3>
+        <ul>
+            <li>Syntax highlighting for <code>.nlpl</code> files</li>
+            <li>LSP integration: code completion, go-to-definition, find references</li>
+            <li>Hover documentation via NexusLang language server</li>
+            <li>Inline diagnostics (errors and warnings)</li>
+            <li>Signature help for function calls</li>
+            <li>File type recognition with custom icon</li>
+            <li>Support for IntelliJ IDEA, PyCharm, CLion, WebStorm, and Rider</li>
+        </ul>
+
+        <h3>Requirements</h3>
+        <p>NLPL must be installed: <code>pip install nlpl</code> or from source.</p>
+        <p>The LSP server starts automatically when you open a <code>.nlpl</code> file.</p>
+    ]]></description>
+
+    <depends>com.intellij.modules.platform</depends>
+    <depends>com.intellij.platform.lsp</depends>
+
+    <extensions defaultExtensionNs="com.intellij">
+
+        <!-- File type -->
+        <fileType
+            name="NLPL File"
+            implementationClass="com.nlpl.intellij.NlplFileType"
+            fieldName="INSTANCE"
+            language="NexusLang"
+            extensions="nlpl" />
+
+        <!-- Syntax highlighting -->
+        <lang.syntaxHighlighterFactory
+            language="NexusLang"
+            implementationClass="com.nlpl.intellij.NlplSyntaxHighlighterFactory" />
+
+        <!-- LSP server activation -->
+        <platform.lsp.serverSupportProvider
+            implementation="com.nlpl.intellij.NlplLspServerSupportProvider" />
+
+        <!-- Color settings page for customizing NexusLang colors -->
+        <colorSettingsPage
+            implementation="com.nlpl.intellij.NlplColorSettingsPage" />
+
+    </extensions>
+</idea-plugin>

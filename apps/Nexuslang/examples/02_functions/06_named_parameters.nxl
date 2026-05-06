@@ -1,0 +1,57 @@
+# Named Parameters in NexusLang
+# Demonstrates the use of named/keyword parameters for improved code clarity
+
+# Example 1: Basic Named Parameters
+print text "=== Example 1: Basic Named Parameters ==="
+
+function greet with name as String and greeting as String
+    print text greeting
+    print text name
+
+greet with name: "Alice" and greeting: "Hello"
+print text ""
+
+# Example 2: Many Parameters
+print text "=== Example 2: Many Parameters ==="
+
+function create_user with username as String and email as String and age as Integer and city as String
+    print text "User:"
+    print text username
+    print text email
+    print text age
+    print text city
+
+create_user with username: "john" and email: "john@example.com" and age: 25 and city: "NYC"
+print text ""
+
+# Example 3: Reordering
+print text "=== Example 3: Reordering ==="
+
+function config with host as String and port as Integer and ssl as Boolean
+    print text host
+    print text port
+    print text ssl
+
+config with ssl: True and port: 443 and host: "api.example.com"
+print text ""
+
+# Example 4: Mixed positional and named
+print text "=== Example 4: Mixed ==="
+
+function add_three with x as Integer and y as Integer and z as Integer returns Integer
+    return x plus y plus z
+
+set result to add_three with 10 and 20 and z: 30
+print text result
+print text ""
+
+# Example 5: Rectangle area
+print text "=== Example 5: Rectangle ==="
+
+function area with width as Integer and height as Integer returns Integer
+    return width times height
+
+set a1 to area with width: 5 and height: 10
+set a2 to area with height: 10 and width: 5
+print text a1
+print text a2

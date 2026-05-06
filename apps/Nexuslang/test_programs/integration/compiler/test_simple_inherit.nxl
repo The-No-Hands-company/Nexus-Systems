@@ -1,0 +1,33 @@
+# Simple inheritance test 
+# This test verifies that Dog class gets Animal's properties
+
+print text "=== Simple Inheritance Test ==="
+
+class Animal
+    property name as String
+    property age as Integer
+
+class Dog extends Animal
+    property breed as String
+
+# Create a Dog instance
+set dog to new Dog
+
+# Set inherited properties  
+set dog.name to "Buddy"
+set dog.age to 5
+
+# Set own property
+set dog.breed to "Labrador"
+
+# Print all properties
+print text "Name: "
+print text dog.name
+
+print text "Age: "
+print dog.age
+
+print text "Breed: "
+print text dog.breed
+
+print text "=== Done ==="

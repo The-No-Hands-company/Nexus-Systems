@@ -1,0 +1,51 @@
+# Variance in Generic Types
+# This example demonstrates covariance and contravariance in generic type parameters
+
+# Producer (covariant) - only produces values of type T
+define a class called Producer with T as a type parameter
+    properties:
+        items: List
+    methods:
+        define a method called produce that returns T
+            if self.items is not empty
+                return self.items[0]
+            else
+                return nothing
+
+# Consumer (contravariant) - only consumes values of type T  
+define a class called Consumer with T as a type parameter
+    properties:
+        collected: List
+    methods:
+        define a method called consume that takes a parameter value of type T
+            set self.collected to self.collected with value
+
+# Invariant example - both produces and consumes
+define a class called Container with T as a type parameter
+    properties:
+        value: T
+    methods:
+        define a method called get that returns T
+            return self.value
+        
+        define a method called set that takes a parameter new_value of type T
+            set self.value to new_value
+
+print text "Variance demonstrates how generic types relate to their type parameters:"
+print text ""
+print text "Covariance (Producer<T>):"
+print text "  - Only produces/returns values of type T"
+print text "  - Safe to treat Producer<Derived> as Producer<Base>"
+print text "  - Example: A producer of Dogs can be treated as producer of Animals"
+print text ""
+print text "Contravariance (Consumer<T>):"
+print text "  - Only consumes/accepts values of type T"
+print text "  - Safe to treat Consumer<Base> as Consumer<Derived>"
+print text "  - Example: A consumer of Animals can consume Dogs"
+print text ""
+print text "Invariance (Container<T>):"
+print text "  - Both produces and consumes values of type T"
+print text "  - Cannot substitute - must match exactly"
+print text "  - Example: Container<Dog> is neither Container<Animal> nor vice versa"
+print text ""
+print text "Variance ensures type safety in generic hierarchies!"

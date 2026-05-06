@@ -1,0 +1,10 @@
+# Test: this.method_name with multi-word names
+class Test
+    set value to Integer
+    
+    function get value returns Integer
+        return this.value
+    
+    function test method
+        set x to this.get value
+        print text x

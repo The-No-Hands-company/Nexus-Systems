@@ -1,0 +1,40 @@
+# Test Memory Management Functions
+# Tests alloc, dealloc, realloc
+
+function main returns Integer
+    print text "=== Memory Management Test ==="
+    
+    # Test 1: alloc - allocate memory for 5 integers
+    print text "Test 1: alloc(5, Integer)"
+    set buffer to alloc with 5 and Integer
+    # buffer is now a pointer to 5 i64 values
+    
+    # Test 2: Write to allocated memory
+    print text "Test 2: Write to buffer[0]"
+    set buffer[0] to 42
+    set value to buffer[0]
+    print value
+    # Expected: 42
+    
+    # Test 3: Write more values
+    print text "Test 3: Multiple writes"
+    set buffer[1] to 100
+    set buffer[2] to 200
+    set v1 to buffer[1]
+    set v2 to buffer[2]
+    print v1
+    print v2
+    # Expected: 100, 200
+    
+    # Test 4: realloc - expand buffer to 10 elements
+    print text "Test 4: realloc"
+    set bigger to realloc with buffer and 80
+    # 80 bytes = 10 * 8 bytes per i64
+    
+    # Test 5: dealloc - free memory
+    print text "Test 5: dealloc"
+    dealloc with bigger
+    print text "Memory freed"
+    
+    print text "=== Memory Tests Complete ==="
+    return 0

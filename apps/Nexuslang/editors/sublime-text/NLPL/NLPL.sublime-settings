@@ -1,0 +1,7 @@
+{
+    "tab_size": 4,
+    "translate_tabs_to_spaces": true,
+    "auto_match_enabled": true,
+    "word_wrap": false,
+    "rulers": [100]
+}

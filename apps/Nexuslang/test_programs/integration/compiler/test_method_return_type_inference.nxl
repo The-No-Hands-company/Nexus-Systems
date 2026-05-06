@@ -1,0 +1,21 @@
+# Test: Method Return Type Inference
+# Bug: Variables assigned from method calls defaulted to Integer type
+# Fix: Type inference now checks method return types in class metadata
+
+class Animal
+    property species as String
+    
+    method get_species returns String
+        return species
+
+set dog to new Animal
+set dog.species to "Canine"
+
+# This should infer 'result' as String, not Integer
+set result to call dog.get_species
+
+print text "Species:"
+print text result
+
+# Expected output: "Canine"
+# Before fix: Would fail type checking or print garbage

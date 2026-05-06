@@ -1,0 +1,53 @@
+# Test Rc<T> automatic retain on assignment (cloning)
+#
+# This test validates that when you assign an Rc variable to another variable,
+# the reference count is automatically incremented, allowing safe sharing.
+
+function test_rc_cloning returns Integer
+  print text "=== Rc<T> Cloning Test ==="
+  
+  # Create an Rc with initial value
+  set x to Rc of Integer with 42
+  print text "Created Rc x with value 42"
+  
+  # Clone to another variable - should automatically call rc_retain
+  set y to x
+  print text "Cloned x to y (automatic retain)"
+  
+  # Both variables now point to the same data with refcount = 2
+  print text "Both x and y share the same Rc value"
+  
+  # When function returns, both will be released (refcount 2 -> 1 -> 0)
+  print text "Function returning - automatic cleanup of both"
+  
+  return 0
+end
+
+function test_arc_cloning returns Integer
+  print text ""
+  print text "=== Arc<T> Cloning Test (thread-safe) ==="
+  
+  # Create an Arc (atomic reference count)
+  set a to Arc of Integer with 100
+  print text "Created Arc a with value 100"
+  
+  # Clone - should call arc_retain
+  set b to a
+  print text "Cloned a to b (automatic atomic retain)"
+  
+  # Clone again
+  set c to b
+  print text "Cloned b to c (refcount now 3)"
+  
+  print text "All three variables (a, b, c) share the same Arc value"
+  print text "Function returning - automatic cleanup of all three"
+  
+  return 0
+end
+
+# Run tests
+call test_rc_cloning
+call test_arc_cloning
+
+print text ""
+print text "=== All cloning tests passed ==="

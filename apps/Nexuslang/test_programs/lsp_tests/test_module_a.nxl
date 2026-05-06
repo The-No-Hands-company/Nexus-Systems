@@ -1,0 +1,18 @@
+# Test module for LSP go-to-definition testing
+# File: test_module_a.nlpl
+
+function greet with name as String returns String
+    return "Hello, " plus name
+end
+
+# Class definition
+class User
+    property name as String
+    property age as Integer
+    
+    method describe returns String
+        return name plus " is " plus age plus " years old"
+    end
+end
+
+set global_counter to 0

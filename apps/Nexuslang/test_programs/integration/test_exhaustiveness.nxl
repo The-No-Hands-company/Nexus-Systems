@@ -1,0 +1,16 @@
+# Test non-exhaustive pattern matching error
+
+print text "Testing exhaustiveness checking"
+
+set test_value to 999
+
+match test_value with
+    case 1
+        print text "One"
+    case 2
+        print text "Two"
+    case 3
+        print text "Three"
+end
+
+print text "This should not print"

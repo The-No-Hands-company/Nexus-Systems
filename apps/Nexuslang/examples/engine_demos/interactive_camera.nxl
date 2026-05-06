@@ -1,0 +1,187 @@
+# Interactive Camera Demo - WASD + Mouse Control
+# Demonstrates keyboard and mouse input with FPS camera
+
+print text "=== NexusLang Interactive Camera Demo ==="
+print text "Controls: WASD = Move, Q/E = Up/Down, Mouse = Look, ESC = Exit"
+
+# Create window
+print text "Creating 800x600 window..."
+set window to create_window with 800 and 600 and "Interactive Camera"
+
+# Compile shaders
+print text "Compiling shaders..."
+set vertex_shader to "
+#version 330 core
+layout(location = 0) in vec3 position;
+layout(location = 1) in vec2 texcoord;
+
+out vec2 TexCoord;
+
+uniform mat4 model;
+uniform mat4 view;
+uniform mat4 projection;
+
+void main() {
+    gl_Position = projection * view * model * vec4(position, 1.0);
+    TexCoord = texcoord;
+}
+"
+
+set fragment_shader to "
+#version 330 core
+in vec2 TexCoord;
+out vec4 FragColor;
+
+uniform sampler2D texture1;
+
+void main() {
+    FragColor = texture(texture1, TexCoord);
+}
+"
+
+set shader to create_shader with vertex_shader and fragment_shader
+
+# Create textured cube (36 vertices with position + texcoord)
+print text "Creating cube geometry..."
+set vertices to [0.5, 0.5, 0.5, 1.0, 1.0, -0.5, 0.5, 0.5, 0.0, 1.0, -0.5, -0.5, 0.5, 0.0, 0.0, -0.5, -0.5, 0.5, 0.0, 0.0, 0.5, -0.5, 0.5, 1.0, 0.0, 0.5, 0.5, 0.5, 1.0, 1.0, -0.5, 0.5, -0.5, 1.0, 1.0, 0.5, 0.5, -0.5, 0.0, 1.0, 0.5, -0.5, -0.5, 0.0, 0.0, 0.5, -0.5, -0.5, 0.0, 0.0, -0.5, -0.5, -0.5, 1.0, 0.0, -0.5, 0.5, -0.5, 1.0, 1.0, 0.5, 0.5, -0.5, 1.0, 1.0, 0.5, 0.5, 0.5, 0.0, 1.0, 0.5, -0.5, 0.5, 0.0, 0.0, 0.5, -0.5, 0.5, 0.0, 0.0, 0.5, -0.5, -0.5, 1.0, 0.0, 0.5, 0.5, -0.5, 1.0, 1.0, -0.5, 0.5, 0.5, 1.0, 1.0, -0.5, 0.5, -0.5, 0.0, 1.0, -0.5, -0.5, -0.5, 0.0, 0.0, -0.5, -0.5, -0.5, 0.0, 0.0, -0.5, -0.5, 0.5, 1.0, 0.0, -0.5, 0.5, 0.5, 1.0, 1.0, 0.5, 0.5, 0.5, 1.0, 1.0, 0.5, 0.5, -0.5, 0.0, 1.0, -0.5, 0.5, -0.5, 0.0, 0.0, -0.5, 0.5, -0.5, 0.0, 0.0, -0.5, 0.5, 0.5, 1.0, 0.0, 0.5, 0.5, 0.5, 1.0, 1.0, 0.5, -0.5, 0.5, 1.0, 1.0, 0.5, -0.5, -0.5, 0.0, 1.0, -0.5, -0.5, -0.5, 0.0, 0.0, -0.5, -0.5, -0.5, 0.0, 0.0, -0.5, -0.5, 0.5, 1.0, 0.0, 0.5, -0.5, 0.5, 1.0, 1.0]
+
+set vao to create_vertex_array()
+set vbo to create_vertex_buffer with vertices
+call vao_set_vertex_buffer with vao and vbo
+call vao_set_attribute with vao and 0 and 3 and 20 and 0
+call vao_set_attribute with vao and 1 and 2 and 20 and 12
+
+# Create checkerboard texture
+print text "Creating texture..."
+set texture to create_checkerboard_texture with 256 and 256 and 32
+
+# Setup camera
+print text "Setting up camera..."
+set camera to create_fps_camera with 0.0 and 0.0 and 5.0
+
+# Create projection matrix
+set fov to 1.047
+set aspect to 800.0 divided by 600.0
+set proj to mat4_perspective with fov and aspect and 0.1 and 100.0
+set proj_list to mat4_to_list with proj
+
+# Camera movement settings
+set move_speed to 5.0
+set mouse_sensitivity to 0.1
+
+# Get input key constants
+set key_w to KEY_W()
+set key_a to KEY_A()
+set key_s to KEY_S()
+set key_d to KEY_D()
+set key_q to KEY_Q()
+set key_e to KEY_E()
+set key_escape to KEY_ESCAPE()
+set cursor_disabled to CURSOR_DISABLED()
+
+# Hide and lock cursor for FPS control
+call set_cursor_mode with window and cursor_disabled
+
+# Set clear color before main loop
+call set_clear_color with 0.1 and 0.1 and 0.15 and 1.0
+
+# Time tracking for delta time
+set last_time to 0.0
+set frame_count to 0
+
+print text "Starting render loop (use ESC to exit)..."
+print text ""
+
+while not window_should_close with window
+    # Calculate delta time
+    set current_time to frame_count times 0.016
+    set delta_time to current_time minus last_time
+    set last_time to current_time
+    set frame_count to frame_count plus 1
+    
+    # Handle input
+    
+    # Keyboard movement (WASD + QE)
+    set w_held to is_key_held with window and key_w
+    if w_held
+        call fps_move_forward with camera and move_speed times delta_time
+    end
+    
+    set s_held to is_key_held with window and key_s
+    if s_held
+        call fps_move_backward with camera and move_speed times delta_time
+    end
+    
+    set d_held to is_key_held with window and key_d
+    if d_held
+        call fps_move_right with camera and move_speed times delta_time
+    end
+    
+    set a_held to is_key_held with window and key_a
+    if a_held
+        call fps_move_left with camera and move_speed times delta_time
+    end
+    
+    set e_held to is_key_held with window and key_e
+    if e_held
+        call fps_move_up with camera and move_speed times delta_time
+    end
+    
+    set q_held to is_key_held with window and key_q
+    if q_held
+        call fps_move_down with camera and move_speed times delta_time
+    end
+    
+    # Check for ESC key to exit
+    set esc_pressed to is_key_pressed with window and key_escape
+    if esc_pressed
+        print text "Escape pressed - exiting..."
+        break
+    end
+    
+    # Mouse look
+    set delta_x to get_mouse_delta_x with window
+    set delta_y to get_mouse_delta_y with window
+    
+    set yaw_change to delta_x times mouse_sensitivity
+    set pitch_change to delta_y times mouse_sensitivity
+    call fps_rotate with camera and yaw_change and pitch_change
+    
+    # Get view matrix
+    set view_list to camera_get_view_matrix with camera
+    
+    # Create model matrix (stationary cube)
+    set model to mat4_identity()
+    set model_list to mat4_to_list with model
+    
+    # Render
+    call begin_frame
+    
+    call use_shader with shader
+    call set_uniform_mat4 with shader and "model" and model_list
+    call set_uniform_mat4 with shader and "view" and view_list
+    call set_uniform_mat4 with shader and "projection" and proj_list
+    call set_uniform_int with shader and "texture1" and 0
+    
+    call bind_texture with texture and 0
+    call vao_draw_arrays with vao and GL_TRIANGLES() and 0 and 36
+    
+    call end_frame with window
+    call update_input with window
+    
+    # Exit after 600 frames for testing (10 seconds at 60 FPS)
+    if frame_count is greater than or equal to 600
+        print text "Frame limit reached - exiting..."
+        break
+    end
+end
+
+print text ""
+print text "Cleaning up..."
+call delete_vertex_array with vao
+call delete_vertex_buffer with vbo
+call delete_texture with texture
+call delete_shader with shader
+call destroy_window with window
+
+print text "Demo complete!"

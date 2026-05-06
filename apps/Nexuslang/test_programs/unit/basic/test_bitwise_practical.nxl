@@ -1,0 +1,188 @@
+# Test: Bitwise Operations - Practical Applications
+# Real-world use cases for bitwise operations
+
+print text "=== Practical Bitwise Operations Test ==="
+print text ""
+
+# Test 1: Checking if a number is even or odd
+print text "Test 1: Even/Odd Check (using AND with 1)"
+set numbers to create list with 4 and 7 and 12 and 15 and 20
+for each num in numbers
+    set check to num bitwise and 1
+    print text "Number "
+    print text num
+    if check is equal to 0
+        print text " is EVEN"
+    else
+        print text " is ODD"
+    end
+end
+print text ""
+
+# Test 2: Multiplying/dividing by powers of 2
+print text "Test 2: Fast multiplication/division by powers of 2"
+set n to 10
+set doubled to n shift left 1
+print text "10 * 2 = "
+print text doubled
+print text " (using shift left 1)"
+
+set quadrupled to n shift left 2
+print text "10 * 4 = "
+print text quadrupled
+print text " (using shift left 2)"
+
+set halved to n shift right 1
+print text "10 / 2 = "
+print text halved
+print text " (using shift right 1)"
+print text ""
+
+# Test 3: Checking if specific bit is set
+print text "Test 3: Checking if specific bit is set"
+set flags to 13
+print text "Flags value: 13 (binary: 1101)"
+
+set bit0 to flags bitwise and 1
+set bit1 to flags bitwise and 2
+set bit2 to flags bitwise and 4
+set bit3 to flags bitwise and 8
+
+print text "Bit 0: "
+if bit0 is not equal to 0
+    print text "SET"
+else
+    print text "NOT SET"
+end
+
+print text "Bit 1: "
+if bit1 is not equal to 0
+    print text "NOT SET"
+else
+    print text "SET (actually bit 1 is NOT set in 13)"
+end
+
+print text "Bit 2: "
+if bit2 is not equal to 0
+    print text "SET"
+else
+    print text "NOT SET"
+end
+
+print text "Bit 3: "
+if bit3 is not equal to 0
+    print text "SET"
+else
+    print text "NOT SET"
+end
+print text ""
+
+# Test 4: Setting specific bits
+print text "Test 4: Setting specific bits"
+set value to 0
+print text "Starting value: 0"
+
+set value to value bitwise or 1
+print text "After setting bit 0: "
+print text value
+
+set value to value bitwise or 4
+print text "After setting bit 2: "
+print text value
+
+set value to value bitwise or 8
+print text "After setting bit 3: "
+print text value
+print text "Final value: 13 (binary: 1101)"
+print text ""
+
+# Test 5: Clearing specific bits
+print text "Test 5: Clearing specific bits"
+set value to 15
+print text "Starting value: 15 (binary: 1111)"
+
+set mask to bitwise not 2
+set value to value bitwise and mask
+print text "After clearing bit 1: "
+print text value
+print text "Expected: 13"
+print text ""
+
+# Test 6: Toggling bits with XOR
+print text "Test 6: Toggling bits with XOR"
+set value to 5
+print text "Starting value: 5 (binary: 0101)"
+
+set value to value bitwise xor 3
+print text "After XOR with 3: "
+print text value
+print text "Expected: 6 (binary: 0110)"
+
+set value to value bitwise xor 3
+print text "After XOR with 3 again: "
+print text value
+print text "Expected: 5 (back to original - XOR toggles)"
+print text ""
+
+# Test 7: Swapping values using XOR
+print text "Test 7: Swapping two values without temporary variable"
+set a to 25
+set b to 40
+print text "Before swap: a = "
+print text a
+print text ", b = "
+print text b
+
+set a to a bitwise xor b
+set b to a bitwise xor b
+set a to a bitwise xor b
+
+print text "After XOR swap: a = "
+print text a
+print text ", b = "
+print text b
+print text ""
+
+# Test 8: Power of 2 check
+print text "Test 8: Checking if number is power of 2"
+set numbers to create list with 1 and 2 and 4 and 7 and 8 and 15 and 16
+for each num in numbers
+    set check to num bitwise and (num minus 1)
+    print text "Is "
+    print text num
+    print text " a power of 2? "
+    if num is greater than 0
+        if check is equal to 0
+            print text "YES"
+        else
+            print text "NO"
+        end
+    else
+        print text "NO (must be positive)"
+    end
+end
+print text ""
+
+# Test 9: Extracting byte from integer
+print text "Test 9: Extracting bytes from 32-bit integer"
+set value to 305419896
+print text "Value: 305419896 (hex: 0x12345678)"
+
+set byte0 to value bitwise and 255
+print text "Byte 0: "
+print text byte0
+
+set byte1 to (value shift right 8) bitwise and 255
+print text "Byte 1: "
+print text byte1
+
+set byte2 to (value shift right 16) bitwise and 255
+print text "Byte 2: "
+print text byte2
+
+set byte3 to (value shift right 24) bitwise and 255
+print text "Byte 3: "
+print text byte3
+print text ""
+
+print text "=== All Practical Bitwise Tests Complete ==="

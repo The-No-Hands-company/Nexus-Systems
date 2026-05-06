@@ -1,0 +1,15 @@
+# Test calling a block with no parameters
+
+function call_block with block as Function
+    print text "About to call block..."
+    # The block is now a Python callable, so we call it directly
+    set my_block to block
+    # Call it as a function
+    my_block  # This should invoke the callable
+end
+
+call_block do
+    print text "Hello from inside the block!"
+end
+
+print text "Done!"
