@@ -2,6 +2,7 @@
 
 #include <gtest/gtest.h>
 
+#include <cmath>
 #include <cstring>
 
 using namespace nexus::geometry;
@@ -200,6 +201,83 @@ TEST(GeometryKernel, UploadContractPacksTangentChannelAtExpectedOffset)
     EXPECT_FLOAT_EQ(tangentX, mesh.attributes().tangents()[0].x);
     EXPECT_FLOAT_EQ(tangentW, 1.f);
     EXPECT_EQ(layout.bindings[0].strideBytes, 48u);
+}
+
+TEST(GeometryKernel, ReconstructBitangentUsesHandednessSign)
+{
+    const nexus::render::Vec3 normal{0.f, 1.f, 0.f};
+    const Vec4 tangentPositive{1.f, 0.f, 0.f, 1.f};
+    const Vec4 tangentNegative{1.f, 0.f, 0.f, -1.f};
+
+    const nexus::render::Vec3 bitangentPositive =
+        MeshUploadContract::reconstructBitangent(normal, tangentPositive);
+    const nexus::render::Vec3 bitangentNegative =
+        MeshUploadContract::reconstructBitangent(normal, tangentNegative);
+
+    EXPECT_NEAR(bitangentPositive.x, 0.f, 1e-6f);
+    EXPECT_NEAR(bitangentPositive.y, 0.f, 1e-6f);
+    EXPECT_NEAR(bitangentPositive.z, -1.f, 1e-6f);
+
+    EXPECT_NEAR(bitangentNegative.x, 0.f, 1e-6f);
+    EXPECT_NEAR(bitangentNegative.y, 0.f, 1e-6f);
+    EXPECT_NEAR(bitangentNegative.z, 1.f, 1e-6f);
+}
+
+TEST(GeometryKernel, PackedTangentSpaceParityWithMirroredUVs)
+{
+    Mesh mesh;
+    mesh.attributes().setPositions({
+        {0.f, 0.f, 0.f},
+        {1.f, 0.f, 0.f},
+        {0.f, 0.f, 1.f},
+    });
+    mesh.attributes().setUVs({
+        {0.f, 0.f},
+        {1.f, 0.f},
+        {0.f, -1.f},
+    });
+    mesh.topology().addFace(Face{{0u, 1u, 2u}});
+
+    ASSERT_TRUE(mesh.computeVertexNormals());
+    ASSERT_TRUE(mesh.computeVertexTangents());
+
+    const auto indices = MeshUploadContract::buildTriangulatedIndexBuffer(mesh);
+    const auto sections = MeshUploadContract::makeSingleSection(indices, 0u);
+    const MeshUploadView view = MeshUploadContract::buildView(mesh, indices, sections);
+    const PackedVertexLayout layout = MeshUploadContract::buildPackedVertexLayout(view);
+    const std::vector<uint8_t> packed = MeshUploadContract::packInterleavedVertexBuffer(view, layout);
+
+    ASSERT_EQ(layout.attributes.size(), 4u);
+    ASSERT_EQ(packed.size(), static_cast<size_t>(3u * layout.bindings[0].strideBytes));
+
+    float nx = 0.f;
+    float ny = 0.f;
+    float nz = 0.f;
+    float tx = 0.f;
+    float ty = 0.f;
+    float tz = 0.f;
+    float tw = 0.f;
+    std::memcpy(&nx, packed.data() + layout.attributes[1].offsetBytes + 0u * sizeof(float), sizeof(float));
+    std::memcpy(&ny, packed.data() + layout.attributes[1].offsetBytes + 1u * sizeof(float), sizeof(float));
+    std::memcpy(&nz, packed.data() + layout.attributes[1].offsetBytes + 2u * sizeof(float), sizeof(float));
+    std::memcpy(&tx, packed.data() + layout.attributes[2].offsetBytes + 0u * sizeof(float), sizeof(float));
+    std::memcpy(&ty, packed.data() + layout.attributes[2].offsetBytes + 1u * sizeof(float), sizeof(float));
+    std::memcpy(&tz, packed.data() + layout.attributes[2].offsetBytes + 2u * sizeof(float), sizeof(float));
+    std::memcpy(&tw, packed.data() + layout.attributes[2].offsetBytes + 3u * sizeof(float), sizeof(float));
+
+    EXPECT_FLOAT_EQ(tw, -1.f);
+
+    const nexus::render::Vec3 normal{nx, ny, nz};
+    const Vec4 tangent{tx, ty, tz, tw};
+    const nexus::render::Vec3 bitangent = MeshUploadContract::reconstructBitangent(normal, tangent);
+
+    EXPECT_NEAR(bitangent.x, 0.f, 1e-5f);
+    EXPECT_NEAR(bitangent.y, 0.f, 1e-5f);
+    EXPECT_LT(bitangent.z, 0.f);
+    EXPECT_NEAR(std::abs(bitangent.z), 1.f, 1e-5f);
+
+    const float bitangentLen = std::sqrt(bitangent.x * bitangent.x + bitangent.y * bitangent.y + bitangent.z * bitangent.z);
+    EXPECT_NEAR(bitangentLen, 1.f, 1e-5f);
 }
 
 TEST(GeometryKernel, UploadContractValidationRejectsTangentWithoutNormals)

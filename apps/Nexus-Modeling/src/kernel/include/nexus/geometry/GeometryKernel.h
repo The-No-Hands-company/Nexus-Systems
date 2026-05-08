@@ -102,43 +102,47 @@ struct GeometryDrawPacket {
 class MeshUploadContract {
 public:
     // Converts polygon faces to a flat triangle index stream suitable for GPU upload.
-    static std::vector<uint32_t> buildTriangulatedIndexBuffer(const Mesh& mesh);
+    [[nodiscard]] static std::vector<uint32_t> buildTriangulatedIndexBuffer(const Mesh& mesh);
 
     // Convenience section list that maps the full index range to one material slot.
-    static std::vector<MeshSection> makeSingleSection(
+    [[nodiscard]] static std::vector<MeshSection> makeSingleSection(
         std::span<const uint32_t> indices,
         nexus::render::MaterialID material);
 
     // Creates an immutable upload view over mesh attributes + supplied index/section ranges.
-    static MeshUploadView buildView(const Mesh& mesh,
-                                    std::span<const uint32_t> indices,
-                                    std::span<const MeshSection> sections);
+    [[nodiscard]] static MeshUploadView buildView(const Mesh& mesh,
+                                                  std::span<const uint32_t> indices,
+                                                  std::span<const MeshSection> sections);
 
     // Validates stream counts/strides and section index ranges.
-    static UploadValidationReport validateView(const MeshUploadView& view);
+    [[nodiscard]] static UploadValidationReport validateView(const MeshUploadView& view);
 
     // Builds a deterministic packed layout descriptor for backend vertex-input wiring.
     // Semantics are ordered canonically: Position, Normal, UV0, JointIndex4, JointWeight4.
-    static PackedVertexLayout buildPackedVertexLayout(const MeshUploadView& view);
+    [[nodiscard]] static PackedVertexLayout buildPackedVertexLayout(const MeshUploadView& view);
 
     // Packs all active streams into one tightly interleaved vertex buffer matching layout.
     // Returns empty if layout/view are incompatible.
-    static std::vector<uint8_t> packInterleavedVertexBuffer(const MeshUploadView& view,
-                                                            const PackedVertexLayout& layout);
+    [[nodiscard]] static std::vector<uint8_t> packInterleavedVertexBuffer(const MeshUploadView& view,
+                                                                           const PackedVertexLayout& layout);
+
+    // Reconstructs a unit-length bitangent from normal + tangent.xyz plus handedness in tangent.w.
+    [[nodiscard]] static nexus::render::Vec3 reconstructBitangent(const nexus::render::Vec3& normal,
+                                                                   const Vec4& tangent) noexcept;
 };
 
 class GeometryRenderBridge {
 public:
     // Creates GPU buffers from upload view + packed layout and populates MeshRef/indexCount.
     // sections are preserved as material slot ranges for render submission.
-    static UploadToDeviceReport uploadToDevice(nexus::gfx::IDevice& device,
+    [[nodiscard]] static UploadToDeviceReport uploadToDevice(nexus::gfx::IDevice& device,
                                                const MeshUploadView& view,
                                                const PackedVertexLayout& layout,
                                                std::span<const MeshSection> sections,
                                                const GeometryUploadOptions& options,
                                                UploadedGeometryMesh& out);
 
-    static UploadToDeviceReport uploadToDevice(nexus::gfx::IDevice& device,
+    [[nodiscard]] static UploadToDeviceReport uploadToDevice(nexus::gfx::IDevice& device,
                                                const MeshUploadView& view,
                                                const PackedVertexLayout& layout,
                                                std::span<const MeshSection> sections,
@@ -151,10 +155,10 @@ public:
     static void destroyUploadedMesh(nexus::gfx::IDevice& device, UploadedGeometryMesh& mesh) noexcept;
 
     // Builds one draw packet per material section; if no sections exist, creates one full-range packet.
-    static std::vector<GeometryDrawPacket> buildDrawPackets(const UploadedGeometryMesh& mesh);
+    [[nodiscard]] static std::vector<GeometryDrawPacket> buildDrawPackets(const UploadedGeometryMesh& mesh);
 
     // Converts geometry draw packets into SceneGraph node section payload format.
-    static std::vector<nexus::render::MeshSectionDrawPacket>
+    [[nodiscard]] static std::vector<nexus::render::MeshSectionDrawPacket>
     toSceneSectionDrawPackets(std::span<const GeometryDrawPacket> packets);
 
     // One-call upload-to-scene handoff: assigns MeshRef and converted section packets.
@@ -185,15 +189,15 @@ struct SkinningValidationReport {
 class SkinningBridge {
 public:
     // Builds name-based remap from mesh joint list to skeleton joint indices.
-    static SkinningValidationReport buildJointRemap(std::span<const std::string> meshJointNames,
-                                                    const nexus::animation::Skeleton& skeleton);
+    [[nodiscard]] static SkinningValidationReport buildJointRemap(std::span<const std::string> meshJointNames,
+                                                                   const nexus::animation::Skeleton& skeleton);
 
     // Remaps mesh per-vertex joint indices from mesh-joint space into skeleton-joint space.
     // Returns false if remap fails or mesh contains invalid joint references.
-    static bool remapMeshSkinningToSkeleton(Mesh& mesh,
-                                            std::span<const std::string> meshJointNames,
-                                            const nexus::animation::Skeleton& skeleton,
-                                            SkinningValidationReport& outReport);
+    [[nodiscard]] static bool remapMeshSkinningToSkeleton(Mesh& mesh,
+                                                          std::span<const std::string> meshJointNames,
+                                                          const nexus::animation::Skeleton& skeleton,
+                                                          SkinningValidationReport& outReport);
 };
 
 enum class GeometryCommandType : uint8_t {
@@ -222,7 +226,7 @@ class GeometryCommandSurface {
 public:
     // Small command-facing operation surface intended for future scripting bindings.
     // Month 2 starts with transform and weld because both are deterministic mesh ops.
-    static GeometryCommandReport execute(Mesh& mesh, const GeometryCommandDesc& command);
+    [[nodiscard]] static GeometryCommandReport execute(Mesh& mesh, const GeometryCommandDesc& command);
 };
 
 struct Edge {
@@ -260,18 +264,18 @@ class TopologyUtilities {
 public:
     // Validates basic topology constraints and manifold-adjacent edge usage.
     // Boundary edges (single-face usage) are allowed and reported as metadata.
-    static TopologyValidationReport validateTopology(const MeshTopology& topology,
-                                                     size_t vertexCount);
+    [[nodiscard]] static TopologyValidationReport validateTopology(const MeshTopology& topology,
+                                                                   size_t vertexCount);
 
     // Returns unique undirected edges sorted by (v0, v1), where v0 < v1.
-    static std::vector<Edge> extractEdgeList(const MeshTopology& topology);
+    [[nodiscard]] static std::vector<Edge> extractEdgeList(const MeshTopology& topology);
 
     // Extracts boundary loops/chains from edges that are referenced by exactly one face.
     // Closed loops are returned with first vertex repeated at the end.
-    static std::vector<std::vector<uint32_t>> extractBoundaryLoops(const MeshTopology& topology);
+    [[nodiscard]] static std::vector<std::vector<uint32_t>> extractBoundaryLoops(const MeshTopology& topology);
 
     // Face-level connected components using shared-undirected-edge adjacency.
-    static std::vector<std::vector<uint32_t>> connectedFaceComponents(const MeshTopology& topology);
+    [[nodiscard]] static std::vector<std::vector<uint32_t>> connectedFaceComponents(const MeshTopology& topology);
 };
 
 } // namespace nexus::geometry

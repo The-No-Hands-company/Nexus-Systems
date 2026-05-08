@@ -44,6 +44,11 @@ float vec3Dot(const nexus::render::Vec3& a, const nexus::render::Vec3& b) noexce
     return a.x * b.x + a.y * b.y + a.z * b.z;
 }
 
+float vec3Length(const nexus::render::Vec3& v) noexcept
+{
+    return std::sqrt(vec3Dot(v, v));
+}
+
 float vec3DistanceSq(const nexus::render::Vec3& a, const nexus::render::Vec3& b) noexcept
 {
     const nexus::render::Vec3 delta = vec3Sub(a, b);
@@ -53,6 +58,26 @@ float vec3DistanceSq(const nexus::render::Vec3& a, const nexus::render::Vec3& b)
 nexus::render::Vec3 vec3Scale(const nexus::render::Vec3& v, float s) noexcept
 {
     return {v.x * s, v.y * s, v.z * s};
+}
+
+float clamp01Signed(float x) noexcept
+{
+    if (x < -1.f) return -1.f;
+    if (x > 1.f) return 1.f;
+    return x;
+}
+
+float cornerAngle(const nexus::render::Vec3& edgeA,
+                  const nexus::render::Vec3& edgeB) noexcept
+{
+    const float lenA = vec3Length(edgeA);
+    const float lenB = vec3Length(edgeB);
+    if (lenA < 1e-12f || lenB < 1e-12f) {
+        return 0.f;
+    }
+
+    const float c = clamp01Signed(vec3Dot(edgeA, edgeB) / (lenA * lenB));
+    return std::acos(c);
 }
 
 nexus::render::Vec3 vec3Orthonormalize(const nexus::render::Vec3& tangent,
@@ -739,7 +764,8 @@ bool Mesh::computeVertexTangents()
     const auto& uvs = m_attributes.uvs();
     const size_t numVerts = positions.size();
 
-    std::vector<nexus::render::Vec3> accumulated(numVerts, {0.f, 0.f, 0.f});
+    std::vector<nexus::render::Vec3> accumulatedTangents(numVerts, {0.f, 0.f, 0.f});
+    std::vector<nexus::render::Vec3> accumulatedBitangents(numVerts, {0.f, 0.f, 0.f});
     bool accumulatedAny = false;
 
     for (size_t fi = 0; fi < m_topology.faceCount(); ++fi) {
@@ -771,16 +797,39 @@ bool Mesh::computeVertexTangents()
                 continue;
             }
 
+            const nexus::render::Vec3 faceCross = vec3Cross(edge1, edge2);
+            const float areaWeight = 0.5f * vec3Length(faceCross);
+            if (areaWeight < 1e-12f) {
+                continue;
+            }
+
+            const float angle0 = cornerAngle(vec3Sub(p1, p0), vec3Sub(p2, p0));
+            const float angle1 = cornerAngle(vec3Sub(p2, p1), vec3Sub(p0, p1));
+            const float angle2 = cornerAngle(vec3Sub(p0, p2), vec3Sub(p1, p2));
+
             const float invDet = 1.f / det;
             const nexus::render::Vec3 tangent = {
                 invDet * (dv2 * edge1.x - dv1 * edge2.x),
                 invDet * (dv2 * edge1.y - dv1 * edge2.y),
                 invDet * (dv2 * edge1.z - dv1 * edge2.z),
             };
+            const nexus::render::Vec3 bitangent = {
+                invDet * (-du2 * edge1.x + du1 * edge2.x),
+                invDet * (-du2 * edge1.y + du1 * edge2.y),
+                invDet * (-du2 * edge1.z + du1 * edge2.z),
+            };
 
-            accumulated[i0] = vec3Add(accumulated[i0], tangent);
-            accumulated[i1] = vec3Add(accumulated[i1], tangent);
-            accumulated[i2] = vec3Add(accumulated[i2], tangent);
+            const float weight0 = areaWeight * angle0;
+            const float weight1 = areaWeight * angle1;
+            const float weight2 = areaWeight * angle2;
+
+            accumulatedTangents[i0] = vec3Add(accumulatedTangents[i0], vec3Scale(tangent, weight0));
+            accumulatedTangents[i1] = vec3Add(accumulatedTangents[i1], vec3Scale(tangent, weight1));
+            accumulatedTangents[i2] = vec3Add(accumulatedTangents[i2], vec3Scale(tangent, weight2));
+
+            accumulatedBitangents[i0] = vec3Add(accumulatedBitangents[i0], vec3Scale(bitangent, weight0));
+            accumulatedBitangents[i1] = vec3Add(accumulatedBitangents[i1], vec3Scale(bitangent, weight1));
+            accumulatedBitangents[i2] = vec3Add(accumulatedBitangents[i2], vec3Scale(bitangent, weight2));
             accumulatedAny = true;
         }
     }
@@ -791,8 +840,11 @@ bool Mesh::computeVertexTangents()
 
     std::vector<Vec4> tangents(numVerts);
     for (size_t i = 0; i < numVerts; ++i) {
-        const nexus::render::Vec3 ortho = vec3Orthonormalize(accumulated[i], normals[i]);
-        tangents[i] = {ortho.x, ortho.y, ortho.z, 1.f};
+        const nexus::render::Vec3 ortho = vec3Orthonormalize(accumulatedTangents[i], normals[i]);
+        const nexus::render::Vec3 referenceBitangent = accumulatedBitangents[i];
+        const nexus::render::Vec3 derivedBitangent = vec3Cross(normals[i], ortho);
+        const float handedness = vec3Dot(derivedBitangent, referenceBitangent) < 0.f ? -1.f : 1.f;
+        tangents[i] = {ortho.x, ortho.y, ortho.z, handedness};
     }
 
     m_attributes.setTangents(std::move(tangents));

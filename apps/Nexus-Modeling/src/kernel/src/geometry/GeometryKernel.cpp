@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <cstring>
 #include <map>
 #include <queue>
@@ -440,6 +441,30 @@ std::vector<uint8_t> MeshUploadContract::packInterleavedVertexBuffer(
     }
 
     return packed;
+}
+
+nexus::render::Vec3 MeshUploadContract::reconstructBitangent(const nexus::render::Vec3& normal,
+                                                             const Vec4& tangent) noexcept
+{
+    const nexus::render::Vec3 t = {tangent.x, tangent.y, tangent.z};
+    const nexus::render::Vec3 bitangent = {
+        normal.y * t.z - normal.z * t.y,
+        normal.z * t.x - normal.x * t.z,
+        normal.x * t.y - normal.y * t.x,
+    };
+
+    const float lenSq = bitangent.x * bitangent.x + bitangent.y * bitangent.y + bitangent.z * bitangent.z;
+    if (lenSq < 1e-12f) {
+        return {0.f, 0.f, 0.f};
+    }
+
+    const float invLen = 1.f / std::sqrt(lenSq);
+    const float sign = tangent.w < 0.f ? -1.f : 1.f;
+    return {
+        bitangent.x * invLen * sign,
+        bitangent.y * invLen * sign,
+        bitangent.z * invLen * sign,
+    };
 }
 
 UploadToDeviceReport GeometryRenderBridge::uploadToDevice(nexus::gfx::IDevice& device,
