@@ -122,6 +122,14 @@ void TransformTrack::setKeyframes(std::vector<TransformKeyframe> keys)
     m_keys = std::move(keys);
 }
 
+const TransformKeyframe* TransformTrack::keyframe(size_t index) const noexcept
+{
+    if (index >= m_keys.size()) {
+        return nullptr;
+    }
+    return &m_keys[index];
+}
+
 Transform TransformTrack::sample(float timeSec) const noexcept
 {
     if (m_keys.empty()) return Transform::identity();
@@ -161,6 +169,16 @@ int32_t Skeleton::parentIndex(size_t i) const noexcept
 const std::string& Skeleton::boneName(size_t i) const
 {
     return m_bones.at(i).name;
+}
+
+int32_t Skeleton::findBoneIndexByName(const std::string& name) const noexcept
+{
+    for (size_t i = 0; i < m_bones.size(); ++i) {
+        if (m_bones[i].name == name) {
+            return static_cast<int32_t>(i);
+        }
+    }
+    return kInvalidBone;
 }
 
 const Transform& Skeleton::bindLocal(size_t i) const
@@ -239,6 +257,14 @@ void AnimationClip::clearBoneTrack(size_t boneIndex)
 bool AnimationClip::hasBoneTrack(size_t boneIndex) const noexcept
 {
     return boneIndex < m_tracks.size() && m_tracks[boneIndex].has_value();
+}
+
+const TransformTrack* AnimationClip::boneTrack(size_t boneIndex) const noexcept
+{
+    if (!hasBoneTrack(boneIndex)) {
+        return nullptr;
+    }
+    return &m_tracks[boneIndex].value();
 }
 
 size_t AnimationClip::trackCount() const noexcept

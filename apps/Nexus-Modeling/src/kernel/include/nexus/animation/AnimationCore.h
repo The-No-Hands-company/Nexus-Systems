@@ -26,7 +26,7 @@ struct Transform {
     nexus::render::Vec4 rotation{0.f, 0.f, 0.f, 1.f};
     nexus::render::Vec3 scale{1.f, 1.f, 1.f};
 
-    static Transform identity() noexcept { return {}; }
+    [[nodiscard]] static Transform identity() noexcept { return {}; }
     bool operator==(const Transform&) const = default;
 };
 
@@ -39,6 +39,9 @@ class TransformTrack {
 public:
     void setKeyframes(std::vector<TransformKeyframe> keys);
     [[nodiscard]] bool empty() const noexcept { return m_keys.empty(); }
+    [[nodiscard]] size_t keyframeCount() const noexcept { return m_keys.size(); }
+    [[nodiscard]] const TransformKeyframe* keyframe(size_t index) const noexcept;
+    [[nodiscard]] const std::vector<TransformKeyframe>& keyframes() const noexcept { return m_keys; }
     [[nodiscard]] Transform sample(float timeSec) const noexcept;
 
 private:
@@ -59,6 +62,7 @@ public:
     [[nodiscard]] size_t  boneCount() const noexcept { return m_bones.size(); }
     [[nodiscard]] int32_t parentIndex(size_t i) const noexcept;
     [[nodiscard]] const std::string& boneName(size_t i) const;
+    [[nodiscard]] int32_t findBoneIndexByName(const std::string& name) const noexcept;
     [[nodiscard]] const Transform& bindLocal(size_t i) const;
 
 private:
@@ -105,6 +109,8 @@ public:
     void setBoneTrack(size_t boneIndex, TransformTrack track);
     void clearBoneTrack(size_t boneIndex);
     [[nodiscard]] bool hasBoneTrack(size_t boneIndex) const noexcept;
+    [[nodiscard]] const TransformTrack* boneTrack(size_t boneIndex) const noexcept;
+    [[nodiscard]] size_t trackSlotCount() const noexcept { return m_tracks.size(); }
     [[nodiscard]] size_t trackCount() const noexcept;
 
     // Samples all bone channels into outPose; missing channels fallback to bind-local transforms.
@@ -171,9 +177,9 @@ public:
 
     // Requests cross-fade to a new clip using a deterministic fade window.
     // Returns false when request is rejected by interruption policy.
-    bool requestTransition(const AnimationClip& clip,
-                           float fadeWindowSec,
-                           const BoneWeightMask& mask = {});
+    [[nodiscard]] bool requestTransition(const AnimationClip& clip,
+                                         float fadeWindowSec,
+                                         const BoneWeightMask& mask = {});
 
     // Advances local clip clocks and transition clock; deterministic for fixed dt streams.
     void tick(float deltaSec) noexcept;
@@ -192,10 +198,10 @@ public:
     void sampleToPose(const Skeleton& skeleton, Pose& outPose) const;
 
     // Samples and applies output pose into scene graph using existing binding bridge.
-    bool applyToSceneGraph(const Skeleton& skeleton,
-                           const AnimationSceneBinding& binding,
-                           nexus::render::SceneGraph& scene,
-                           Pose& outPose) const;
+    [[nodiscard]] bool applyToSceneGraph(const Skeleton& skeleton,
+                                         const AnimationSceneBinding& binding,
+                                         nexus::render::SceneGraph& scene,
+                                         Pose& outPose) const;
 
 private:
     const AnimationClip* m_currentClip = nullptr;
@@ -236,25 +242,25 @@ class AnimationEvaluator {
 public:
     // Samples a clip and applies local transforms to bound scene nodes in deterministic bone order.
     // Returns false if any mapped scene node is missing.
-    static bool applyClipToSceneGraph(const AnimationClip& clip,
-                                      float timeSec,
-                                      const Skeleton& skeleton,
-                                      const AnimationSceneBinding& binding,
-                                      nexus::render::SceneGraph& scene,
-                                      Pose& outPose);
+    [[nodiscard]] static bool applyClipToSceneGraph(const AnimationClip& clip,
+                                                     float timeSec,
+                                                     const Skeleton& skeleton,
+                                                     const AnimationSceneBinding& binding,
+                                                     nexus::render::SceneGraph& scene,
+                                                     Pose& outPose);
 
     // Blends two clips and applies local transforms to bound scene nodes in deterministic bone order.
     // Returns false if any mapped scene node is missing.
-    static bool applyBlendToSceneGraph(const AnimationClip& clipA,
-                                       const AnimationClip& clipB,
-                                       float timeA,
-                                       float timeB,
-                                       float blendWeight,
-                                       const BoneWeightMask& mask,
-                                       const Skeleton& skeleton,
-                                       const AnimationSceneBinding& binding,
-                                       nexus::render::SceneGraph& scene,
-                                       Pose& outPose);
+    [[nodiscard]] static bool applyBlendToSceneGraph(const AnimationClip& clipA,
+                                                      const AnimationClip& clipB,
+                                                      float timeA,
+                                                      float timeB,
+                                                      float blendWeight,
+                                                      const BoneWeightMask& mask,
+                                                      const Skeleton& skeleton,
+                                                      const AnimationSceneBinding& binding,
+                                                      nexus::render::SceneGraph& scene,
+                                                      Pose& outPose);
 };
 
 enum class JointMatrixPackingSchema : uint8_t {
@@ -273,12 +279,12 @@ class SkinningContract {
 public:
     // Computes skinning matrices as modelMatrix * inverseBind for each joint.
     // Missing inverseBind entries default to identity.
-    static std::vector<nexus::render::Mat4> computeJointMatrices(
+    [[nodiscard]] static std::vector<nexus::render::Mat4> computeJointMatrices(
         const Pose& pose,
         const std::vector<nexus::render::Mat4>& inverseBindMatrices);
 
     // Packs joint matrices into a deterministic linear float layout for future GPU upload wiring.
-    static PackedJointMatrices packJointMatrices(
+    [[nodiscard]] static PackedJointMatrices packJointMatrices(
         const std::vector<nexus::render::Mat4>& jointMatrices,
         JointMatrixPackingSchema schema);
 };

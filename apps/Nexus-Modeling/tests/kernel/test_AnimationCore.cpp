@@ -42,6 +42,33 @@ TEST(AnimationCore, TransformTrackInterpolatesTranslation)
     EXPECT_NEAR(t.translation.z, 0.f, 1e-5f);
 }
 
+TEST(AnimationCore, TransformTrackExposesExactKeyframes)
+{
+    TransformTrack track;
+
+    TransformKeyframe k0{};
+    k0.timeSec = 0.1f;
+    k0.value.translation = {1.f, 2.f, 3.f};
+
+    TransformKeyframe k1{};
+    k1.timeSec = 0.9f;
+    k1.value.translation = {4.f, 5.f, 6.f};
+
+    track.setKeyframes({k1, k0});
+
+    ASSERT_EQ(track.keyframeCount(), 2u);
+    const TransformKeyframe* first = track.keyframe(0);
+    const TransformKeyframe* second = track.keyframe(1);
+    ASSERT_NE(first, nullptr);
+    ASSERT_NE(second, nullptr);
+
+    EXPECT_FLOAT_EQ(first->timeSec, 0.1f);
+    EXPECT_FLOAT_EQ(first->value.translation.x, 1.f);
+    EXPECT_FLOAT_EQ(second->timeSec, 0.9f);
+    EXPECT_FLOAT_EQ(second->value.translation.z, 6.f);
+    EXPECT_EQ(track.keyframe(2), nullptr);
+}
+
 TEST(AnimationCore, SkeletonRejectsInvalidParentIndex)
 {
     Skeleton skel;
@@ -57,6 +84,24 @@ TEST(AnimationCore, SkeletonRejectsInvalidParentIndex)
     const int32_t invalidIdx = skel.addBone(invalid);
     EXPECT_EQ(invalidIdx, Skeleton::kInvalidBone);
     EXPECT_EQ(skel.boneCount(), 1u);
+}
+
+TEST(AnimationCore, SkeletonFindBoneIndexByName)
+{
+    Skeleton skel;
+    BoneDesc root{};
+    root.name = "root";
+    root.parentIndex = -1;
+    ASSERT_EQ(skel.addBone(root), 0);
+
+    BoneDesc child{};
+    child.name = "child";
+    child.parentIndex = 0;
+    ASSERT_EQ(skel.addBone(child), 1);
+
+    EXPECT_EQ(skel.findBoneIndexByName("root"), 0);
+    EXPECT_EQ(skel.findBoneIndexByName("child"), 1);
+    EXPECT_EQ(skel.findBoneIndexByName("missing"), Skeleton::kInvalidBone);
 }
 
 TEST(AnimationCore, PoseComputesParentChildModelMatrices)
@@ -654,7 +699,7 @@ Skeleton makeSingleBoneSkeleton()
     Skeleton skel;
     BoneDesc root{};
     root.name = "root";
-    skel.addBone(root);
+    [[maybe_unused]] const int32_t rootIndex = skel.addBone(root);
     return skel;
 }
 
