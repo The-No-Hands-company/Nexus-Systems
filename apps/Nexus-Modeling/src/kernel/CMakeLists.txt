@@ -33,6 +33,8 @@ add_library(nexus_gfx_core STATIC
     src/parametric/ParametricSamples.cpp
     src/eval/EvalGraph.cpp
     src/sim/SimulationCore.cpp
+    src/gfx/GaussianSplatting.cpp
+    src/render/TemporalAccumulation.cpp
 )
 
 target_include_directories(nexus_gfx_core
