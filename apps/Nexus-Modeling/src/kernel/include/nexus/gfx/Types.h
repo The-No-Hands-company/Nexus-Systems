@@ -199,6 +199,7 @@ struct DeviceCapabilities {
     bool meshShaders          = false;
     bool rayTracingPipeline   = false;
     bool rayQuery             = false;  // inline ray queries in any stage
+    bool timelineSemaphores   = false;
     bool variableRateShading  = false;
     bool conservativeRaster   = false;
     bool tiledResources       = false;  // sparse binding / reserved resources

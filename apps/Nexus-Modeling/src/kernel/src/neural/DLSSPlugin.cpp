@@ -92,18 +92,26 @@ void DLSSPlugin::initNGX(VkInstance instance, VkPhysicalDevice physDev, VkDevice
     m_ngxAvailable = (result == 1 /*NVSDK_NGX_Result_Success*/);
 }
 
-void DLSSPlugin::upscale(nexus::gfx::CmdBufHandle /*cmd*/, const UpscalerInput& /*input*/, UpscalerOutput& /*output*/)
+void DLSSPlugin::upscale(nexus::gfx::CmdBufHandle /*cmd*/, const UpscalerInput& input, UpscalerOutput& output)
 {
-    if (!m_ngxAvailable || !m_pfn.EvaluateFeature) return;
-    // TODO: NVSDK_NGX_VULKAN_EvaluateFeature with NVSDK_NGX_Feature_SuperSamplingDLAA
-    //       Feed renderSize, displaySize, jitter, motionVectors, depth, color, output.
+    if (!m_ngxAvailable || !m_pfn.EvaluateFeature) {
+        output.color = input.color;
+        return;
+    }
+
+    // Until full NGX parameter wiring is integrated, keep behavior deterministic.
+    output.color = input.color;
 }
 
-void DLSSPlugin::denoise(nexus::gfx::CmdBufHandle /*cmd*/, const DenoiserInput& /*input*/, DenoiserOutput& /*output*/)
+void DLSSPlugin::denoise(nexus::gfx::CmdBufHandle /*cmd*/, const DenoiserInput& input, DenoiserOutput& output)
 {
-    // DLSS4 Ray Reconstruction denoiser uses the same NGX evaluate path
-    // TODO: NVSDK_NGX_VULKAN_EvaluateFeature with NVSDK_NGX_Feature_RayReconstruction
-    if (!m_ngxAvailable) return;
+    if (!m_ngxAvailable) {
+        output.color = input.color;
+        return;
+    }
+
+    // Until full NGX parameter wiring is integrated, keep behavior deterministic.
+    output.color = input.color;
 }
 
 } // namespace nexus::neural

@@ -6,16 +6,29 @@
 #include "../../src/kernel/src/backend/vulkan/VulkanDevice.h"
 #include "../../src/kernel/src/backend/vulkan/VulkanSwapchain.h"
 #include "../../src/kernel/src/backend/vulkan/VulkanFrameScheduler.h"
+#include "../../src/kernel/src/backend/vulkan/VulkanQueue.h"
+#include <nexus/neural/NeuralRenderer.h>
 
 #include <gtest/gtest.h>
 
 #include <array>
+#include <cstdlib>
 #include <vector>
 
 using namespace nexus::gfx;
 using namespace nexus::render;
 
 namespace {
+
+std::unique_ptr<RenderContext> createMinimalVulkanContext()
+{
+    RenderContextDesc desc{};
+    desc.preferredBackend = Backend::Vulkan;
+    desc.validation = ValidationLevel::Off;
+    desc.enableMeshShaders = false;
+    desc.enableRayTracing = false;
+    return RenderContext::create(desc);
+}
 
 PipelineHandle createVulkanDepthOnlyShadowPipeline(IDevice& dev,
                                                    ShaderHandle& outVertexShader,
@@ -133,14 +146,15 @@ void destroyVulkanTriangleBuffers(IDevice& dev, const VulkanTriangleBuffers& buf
 
 TEST(VulkanRegression, CreateComputePipelineFromInlineGlsl)
 {
-    std::unique_ptr<IDevice> dev;
+    std::unique_ptr<RenderContext> ctx;
     try {
-        dev = createDevice(Backend::Vulkan);
+        ctx = createMinimalVulkanContext();
     } catch (const std::exception& e) {
         GTEST_SKIP() << "Vulkan backend unavailable on this machine: " << e.what();
     }
 
-    ASSERT_NE(dev, nullptr);
+    ASSERT_NE(ctx, nullptr);
+    IDevice* dev = &ctx->device();
 
     constexpr std::string_view kComp = R"GLSL(
 #version 460
@@ -169,13 +183,14 @@ void main() {}
 
 TEST(VulkanRegression, SamplerAndQueryPoolLifecycle)
 {
-    std::unique_ptr<IDevice> dev;
+    std::unique_ptr<RenderContext> ctx;
     try {
-        dev = createDevice(Backend::Vulkan);
+        ctx = createMinimalVulkanContext();
     } catch (const std::exception& e) {
         GTEST_SKIP() << "Vulkan backend unavailable on this machine: " << e.what();
     }
-    ASSERT_NE(dev, nullptr);
+    ASSERT_NE(ctx, nullptr);
+    IDevice* dev = &ctx->device();
 
     SamplerDesc s{};
     s.anisotropyEnable = true;
@@ -194,13 +209,17 @@ TEST(VulkanRegression, SamplerAndQueryPoolLifecycle)
 
 TEST(VulkanRegression, TimelineSemaphoreSignalWaitAndQuery)
 {
-    std::unique_ptr<IDevice> dev;
+    std::unique_ptr<RenderContext> ctx;
     try {
-        dev = createDevice(Backend::Vulkan);
+        ctx = createMinimalVulkanContext();
     } catch (const std::exception& e) {
         GTEST_SKIP() << "Vulkan backend unavailable on this machine: " << e.what();
     }
-    ASSERT_NE(dev, nullptr);
+    ASSERT_NE(ctx, nullptr);
+    IDevice* dev = &ctx->device();
+    if (!dev->caps().timelineSemaphores) {
+        GTEST_SKIP() << "Timeline semaphores not supported on this Vulkan device";
+    }
 
     SemaphoreHandle timeline = dev->createTimelineSemaphore(2);
     ASSERT_TRUE(timeline.valid());
@@ -221,13 +240,17 @@ TEST(VulkanRegression, TimelineSemaphoreSignalWaitAndQuery)
 
 TEST(VulkanRegression, TimelineSubmitChainsWaitAndSignalValues)
 {
-    std::unique_ptr<IDevice> dev;
+    std::unique_ptr<RenderContext> ctx;
     try {
-        dev = createDevice(Backend::Vulkan);
+        ctx = createMinimalVulkanContext();
     } catch (const std::exception& e) {
         GTEST_SKIP() << "Vulkan backend unavailable on this machine: " << e.what();
     }
-    ASSERT_NE(dev, nullptr);
+    ASSERT_NE(ctx, nullptr);
+    IDevice* dev = &ctx->device();
+    if (!dev->caps().timelineSemaphores) {
+        GTEST_SKIP() << "Timeline semaphores not supported on this Vulkan device";
+    }
 
     SemaphoreHandle producer = dev->createTimelineSemaphore(0);
     SemaphoreHandle consumer = dev->createTimelineSemaphore(0);
@@ -259,15 +282,41 @@ TEST(VulkanRegression, TimelineSubmitChainsWaitAndSignalValues)
     dev->destroySemaphore(producer);
 }
 
+TEST(VulkanRegression, QueueOwnershipTransferHelperResolvesFamilies)
+{
+    using namespace nexus::gfx::vkqueue;
+
+    const QueueFamilyTransferInfo sameFamily = resolveQueueFamilyTransfer(3u, 3u);
+    EXPECT_FALSE(sameFamily.requiresOwnershipTransfer);
+    EXPECT_EQ(sameFamily.srcQueueFamilyIndex, VK_QUEUE_FAMILY_IGNORED);
+    EXPECT_EQ(sameFamily.dstQueueFamilyIndex, VK_QUEUE_FAMILY_IGNORED);
+
+    const QueueFamilyTransferInfo distinctFamilies = resolveQueueFamilyTransfer(1u, 4u);
+    EXPECT_TRUE(distinctFamilies.requiresOwnershipTransfer);
+    EXPECT_EQ(distinctFamilies.srcQueueFamilyIndex, 1u);
+    EXPECT_EQ(distinctFamilies.dstQueueFamilyIndex, 4u);
+
+    VkImageMemoryBarrier2 imageBarrier{VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2};
+    applyQueueFamilyTransfer(imageBarrier, distinctFamilies);
+    EXPECT_EQ(imageBarrier.srcQueueFamilyIndex, 1u);
+    EXPECT_EQ(imageBarrier.dstQueueFamilyIndex, 4u);
+
+    VkBufferMemoryBarrier2 bufferBarrier{VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2};
+    applyQueueFamilyTransfer(bufferBarrier, distinctFamilies);
+    EXPECT_EQ(bufferBarrier.srcQueueFamilyIndex, 1u);
+    EXPECT_EQ(bufferBarrier.dstQueueFamilyIndex, 4u);
+}
+
 TEST(VulkanRegression, UploadTextureStagingPathNoCrash)
 {
-    std::unique_ptr<IDevice> dev;
+    std::unique_ptr<RenderContext> ctx;
     try {
-        dev = createDevice(Backend::Vulkan);
+        ctx = createMinimalVulkanContext();
     } catch (const std::exception& e) {
         GTEST_SKIP() << "Vulkan backend unavailable on this machine: " << e.what();
     }
-    ASSERT_NE(dev, nullptr);
+    ASSERT_NE(ctx, nullptr);
+    IDevice* dev = &ctx->device();
 
     TextureDesc td{};
     td.extent = {4, 4, 1};
@@ -383,7 +432,7 @@ TEST(VulkanRegression, TimestampQueryPathThroughFrameScheduler)
     auto* vkSc  = dynamic_cast<VulkanSwapchain*>(sc.get());
     if (!vkDev || !vkSc) GTEST_SKIP() << "Not running on Vulkan concrete backend";
 
-    VulkanFrameScheduler scheduler(*vkDev, *vkSc, 2);
+    VulkanFrameScheduler scheduler(*vkDev, *vkSc, 1);
 
     QueryPoolDesc q{};
     q.count = 2;
@@ -407,13 +456,14 @@ TEST(VulkanRegression, TimestampQueryPathThroughFrameScheduler)
 
 TEST(VulkanRegression, BufferLifecycleForCompositeMaterialTable)
 {
-    std::unique_ptr<IDevice> dev;
+    std::unique_ptr<RenderContext> ctx;
     try {
-        dev = createDevice(Backend::Vulkan);
+        ctx = createMinimalVulkanContext();
     } catch (const std::exception& e) {
         GTEST_SKIP() << "Vulkan backend unavailable on this machine: " << e.what();
     }
-    ASSERT_NE(dev, nullptr);
+    ASSERT_NE(ctx, nullptr);
+    IDevice* dev = &ctx->device();
 
     BufferDesc materialTableDesc{};
     materialTableDesc.sizeBytes = 1024;
@@ -431,13 +481,14 @@ TEST(VulkanRegression, BufferLifecycleForCompositeMaterialTable)
 
 TEST(VulkanRegression, ShadowMapDepthTextureLifecycle)
 {
-    std::unique_ptr<IDevice> dev;
+    std::unique_ptr<RenderContext> ctx;
     try {
-        dev = createDevice(Backend::Vulkan);
+        ctx = createMinimalVulkanContext();
     } catch (const std::exception& e) {
         GTEST_SKIP() << "Vulkan backend unavailable on this machine: " << e.what();
     }
-    ASSERT_NE(dev, nullptr);
+    ASSERT_NE(ctx, nullptr);
+    IDevice* dev = &ctx->device();
 
     TextureDesc shadowDepth{};
     shadowDepth.extent = {1024, 1024, 1};
@@ -455,13 +506,14 @@ TEST(VulkanRegression, ShadowMapDepthTextureLifecycle)
 
 TEST(VulkanRegression, ShadowLightingContractBufferUploadLifecycle)
 {
-    std::unique_ptr<IDevice> dev;
+    std::unique_ptr<RenderContext> ctx;
     try {
-        dev = createDevice(Backend::Vulkan);
+        ctx = createMinimalVulkanContext();
     } catch (const std::exception& e) {
         GTEST_SKIP() << "Vulkan backend unavailable on this machine: " << e.what();
     }
-    ASSERT_NE(dev, nullptr);
+    ASSERT_NE(ctx, nullptr);
+    IDevice* dev = &ctx->device();
 
     BufferDesc bd{};
     bd.sizeBytes = sizeof(ShadowLightingContract);
@@ -519,7 +571,7 @@ TEST(VulkanRegression, ShadowPassBindingDescBuildsCascadeAtlasPassDescriptors)
         GTEST_SKIP() << "Unable to create Vulkan shadow pipeline in this environment";
     }
 
-    VulkanFrameScheduler scheduler(*vkDev, *vkSc, 2);
+    VulkanFrameScheduler scheduler(*vkDev, *vkSc, 1);
     Renderer renderer(*ctx, *sc);
     renderer.setFrameScheduler(&scheduler);
     renderer.setShadowPipeline(shadowPipeline);
@@ -551,6 +603,7 @@ TEST(VulkanRegression, ShadowPassBindingDescBuildsCascadeAtlasPassDescriptors)
     renderer.beginFrame();
     renderer.render(cam, scene);
     renderer.endFrame();
+    vkDev->waitIdle();
 
     const ShadowPassBindingDesc shadowDesc = renderer.buildShadowPassBindingDesc();
     EXPECT_TRUE(shadowDesc.hasAtlasTarget());
@@ -572,6 +625,18 @@ TEST(VulkanRegression, ShadowPassBindingDescBuildsCascadeAtlasPassDescriptors)
     EXPECT_EQ(shadowDesc.cascadePasses[1].atlasRect.offset.y, 0);
     EXPECT_EQ(shadowDesc.cascadePasses[2].atlasRect.offset.x, 0);
     EXPECT_EQ(shadowDesc.cascadePasses[2].atlasRect.offset.y, 360);
+
+    for (uint32_t cascadeIndex = 0; cascadeIndex < shadowDesc.cascadeCount; ++cascadeIndex) {
+        const Rect2D rect = shadowDesc.cascadePasses[cascadeIndex].atlasRect;
+        EXPECT_GT(rect.extent.width, 0u);
+        EXPECT_GT(rect.extent.height, 0u);
+        EXPECT_GE(rect.offset.x, 0);
+        EXPECT_GE(rect.offset.y, 0);
+        EXPECT_LE(static_cast<uint32_t>(rect.offset.x) + rect.extent.width,
+                  shadowDesc.atlasExtent.width);
+        EXPECT_LE(static_cast<uint32_t>(rect.offset.y) + rect.extent.height,
+                  shadowDesc.atlasExtent.height);
+    }
 
     vkDev->waitIdle();
     destroyVulkanTriangleBuffers(*vkDev, triangleBuffers);
@@ -615,7 +680,7 @@ TEST(VulkanRegression, ShadowPassBindingDescClearsAndRebuildsAcrossResize)
         GTEST_SKIP() << "Unable to create Vulkan shadow pipeline in this environment";
     }
 
-    VulkanFrameScheduler scheduler(*vkDev, *vkSc, 2);
+    VulkanFrameScheduler scheduler(*vkDev, *vkSc, 1);
     Renderer renderer(*ctx, *sc);
     renderer.setFrameScheduler(&scheduler);
     renderer.setShadowPipeline(shadowPipeline);
@@ -646,6 +711,7 @@ TEST(VulkanRegression, ShadowPassBindingDescClearsAndRebuildsAcrossResize)
     renderer.beginFrame();
     renderer.render(cam, scene);
     renderer.endFrame();
+    vkDev->waitIdle();
 
     const ShadowPassBindingDesc beforeResize = renderer.buildShadowPassBindingDesc();
     EXPECT_TRUE(beforeResize.readyForLightingSampling());
@@ -664,6 +730,7 @@ TEST(VulkanRegression, ShadowPassBindingDescClearsAndRebuildsAcrossResize)
     renderer.beginFrame();
     renderer.render(cam, scene);
     renderer.endFrame();
+    vkDev->waitIdle();
 
     const ShadowPassBindingDesc afterResizeRender = renderer.buildShadowPassBindingDesc();
     EXPECT_TRUE(afterResizeRender.readyForLightingSampling());
@@ -947,6 +1014,71 @@ void main() { outColor = vec4(1.0, 0.5, 0.0, 1.0); }
     dev->destroyShader(mesh);
 }
 
+TEST(VulkanRegression, MeshShaderPipelineReturnsInvalidWhenRuntimeMeshShadersDisabled)
+{
+    std::unique_ptr<RenderContext> ctx;
+    try {
+        RenderContextDesc desc{};
+        desc.preferredBackend = Backend::Vulkan;
+        desc.validation = ValidationLevel::Off;
+        desc.enableMeshShaders = false;
+        desc.enableRayTracing = false;
+        ctx = RenderContext::create(desc);
+    } catch (const std::exception& e) {
+        GTEST_SKIP() << "Vulkan backend unavailable on this machine: " << e.what();
+    }
+    ASSERT_NE(ctx, nullptr);
+
+    IDevice* dev = &ctx->device();
+    EXPECT_FALSE(dev->caps().meshShaders);
+
+    constexpr std::string_view kMesh = R"GLSL(
+#version 460
+#extension GL_EXT_mesh_shader : require
+layout(local_size_x = 1) in;
+layout(triangles, max_vertices = 3, max_primitives = 1) out;
+void main() {
+  SetMeshOutputsEXT(3, 1);
+  gl_MeshVerticesEXT[0].gl_Position = vec4(-1.0, -1.0, 0.0, 1.0);
+  gl_MeshVerticesEXT[1].gl_Position = vec4( 3.0, -1.0, 0.0, 1.0);
+  gl_MeshVerticesEXT[2].gl_Position = vec4(-1.0,  3.0, 0.0, 1.0);
+  gl_PrimitiveTriangleIndicesEXT[0] = uvec3(0, 1, 2);
+}
+)GLSL";
+
+    constexpr std::string_view kFrag = R"GLSL(
+#version 460
+layout(location=0) out vec4 outColor;
+void main() { outColor = vec4(1.0, 1.0, 1.0, 1.0); }
+)GLSL";
+
+    ShaderDesc meshDesc{};
+    meshDesc.stage = ShaderStage::Mesh;
+    meshDesc.glslSource = kMesh;
+    meshDesc.debugName = "test.mesh.disabled.mesh";
+    ShaderHandle mesh = dev->createShader(meshDesc);
+
+    ShaderDesc fragDesc{};
+    fragDesc.stage = ShaderStage::Fragment;
+    fragDesc.glslSource = kFrag;
+    fragDesc.debugName = "test.mesh.disabled.frag";
+    ShaderHandle frag = dev->createShader(fragDesc);
+    ASSERT_TRUE(frag.valid());
+
+    MeshShaderPipelineDesc mp{};
+    mp.meshShader = mesh;
+    mp.fragmentShader = frag;
+    mp.depthTest = true;
+    mp.depthWrite = true;
+    mp.debugName = "test.mesh.disabled.pipeline";
+
+    PipelineHandle pipe = dev->createMeshShaderPipeline(mp);
+    EXPECT_FALSE(pipe.valid());
+
+    if (mesh.valid()) dev->destroyShader(mesh);
+    dev->destroyShader(frag);
+}
+
 TEST(VulkanRegression, CreateRayTracingPipelineFromInlineGlsl)
 {
     std::unique_ptr<IDevice> dev;
@@ -1028,13 +1160,14 @@ void main() { payload = vec3(1.0, 1.0, 1.0); }
 
 TEST(VulkanRegression, DescriptorSetAllocateUpdateFreeLifecycle)
 {
-    std::unique_ptr<IDevice> dev;
+    std::unique_ptr<RenderContext> ctx;
     try {
-        dev = createDevice(Backend::Vulkan);
+        ctx = createMinimalVulkanContext();
     } catch (const std::exception& e) {
         GTEST_SKIP() << "Vulkan backend unavailable on this machine: " << e.what();
     }
-    ASSERT_NE(dev, nullptr);
+    ASSERT_NE(ctx, nullptr);
+    IDevice* dev = &ctx->device();
 
     // Allocate a uniform buffer for binding
     BufferDesc bd{};
@@ -1070,13 +1203,14 @@ TEST(VulkanRegression, DescriptorSetAllocateUpdateFreeLifecycle)
 
 TEST(VulkanRegression, DescriptorSetAllocateSamplerBinding)
 {
-    std::unique_ptr<IDevice> dev;
+    std::unique_ptr<RenderContext> ctx;
     try {
-        dev = createDevice(Backend::Vulkan);
+        ctx = createMinimalVulkanContext();
     } catch (const std::exception& e) {
         GTEST_SKIP() << "Vulkan backend unavailable on this machine: " << e.what();
     }
-    ASSERT_NE(dev, nullptr);
+    ASSERT_NE(ctx, nullptr);
+    IDevice* dev = &ctx->device();
 
     // Create a sampler to bind
     SamplerDesc sd{};
@@ -1114,5 +1248,40 @@ TEST(VulkanRegression, DescriptorSetAllocateSamplerBinding)
 
     dev->destroyTexture(tex);
     dev->destroySampler(sampler);
+}
+
+TEST(VulkanRegression, NeuralRendererFactoryReturnsDeterministicFallbackOnVulkanRuntime)
+{
+    std::unique_ptr<RenderContext> ctx;
+    try {
+        ctx = createMinimalVulkanContext();
+    } catch (const std::exception& e) {
+        GTEST_SKIP() << "Vulkan backend unavailable on this machine: " << e.what();
+    }
+    ASSERT_NE(ctx, nullptr);
+
+    IDevice* dev = &ctx->device();
+    ASSERT_NE(dev, nullptr);
+
+    std::unique_ptr<nexus::neural::INeuralRenderer> neural =
+        nexus::neural::createNeuralRenderer(*dev, true, true, true);
+    ASSERT_NE(neural, nullptr);
+
+    EXPECT_EQ(neural->activeDenoiser(), nexus::neural::DenoiserBackend::None);
+    EXPECT_EQ(neural->activeUpscaler(), nexus::neural::UpscalerBackend::Bilinear);
+
+    nexus::neural::DenoiserInput dIn{};
+    dIn.color = TextureHandle{9};
+    nexus::neural::DenoiserOutput dOut{};
+    neural->denoise({}, dIn, dOut);
+    EXPECT_EQ(dOut.color.id, dIn.color.id);
+
+    nexus::neural::UpscalerInput uIn{};
+    uIn.color = TextureHandle{13};
+    uIn.renderResolution = {640, 360};
+    uIn.outputResolution = {1280, 720};
+    nexus::neural::UpscalerOutput uOut{};
+    neural->upscale({}, uIn, uOut);
+    EXPECT_EQ(uOut.color.id, uIn.color.id);
 }
 

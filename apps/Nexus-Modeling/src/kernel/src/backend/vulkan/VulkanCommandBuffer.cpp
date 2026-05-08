@@ -53,7 +53,15 @@ void VulkanCommandBuffer::beginRenderPass(
     colorAttachments.reserve(colorTargets.size());
 
     for (size_t i = 0; i < colorTargets.size(); ++i) {
-        const auto& tex = m_pool->textures[colorTargets[i].id];
+        const auto h = colorTargets[i];
+        if (!h.valid() || h.id >= m_pool->textures.size()) {
+            continue;
+        }
+
+        const auto& tex = m_pool->textures[h.id];
+        if (tex.image == VK_NULL_HANDLE || tex.defaultView == VK_NULL_HANDLE) {
+            continue;
+        }
 
         // Transition to color attachment optimal
         transitionImage(tex.image, VK_IMAGE_ASPECT_COLOR_BIT,
@@ -76,7 +84,11 @@ void VulkanCommandBuffer::beginRenderPass(
     }
 
     VkRenderingAttachmentInfo depthAtt{VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO};
-    bool hasDepth = depthTarget.valid() && depthTarget.id < m_pool->textures.size();
+    bool hasDepth = false;
+    if (depthTarget.valid() && depthTarget.id < m_pool->textures.size()) {
+        const auto& dtex = m_pool->textures[depthTarget.id];
+        hasDepth = dtex.image != VK_NULL_HANDLE && dtex.defaultView != VK_NULL_HANDLE;
+    }
     if (hasDepth) {
         const auto& dtex = m_pool->textures[depthTarget.id];
         transitionImage(dtex.image, VK_IMAGE_ASPECT_DEPTH_BIT,
@@ -105,7 +117,7 @@ void VulkanCommandBuffer::beginRenderPass(
     ri.renderArea.extent    = { renderArea.extent.width, renderArea.extent.height };
     ri.layerCount           = 1;
     ri.colorAttachmentCount = static_cast<uint32_t>(colorAttachments.size());
-    ri.pColorAttachments    = colorAttachments.data();
+    ri.pColorAttachments    = colorAttachments.empty() ? nullptr : colorAttachments.data();
     if (hasDepth) ri.pDepthAttachment = &depthAtt;
 
     if (m_pfnBeginRendering)

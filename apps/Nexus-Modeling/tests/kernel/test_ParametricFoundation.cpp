@@ -1,4 +1,5 @@
 #include <nexus/parametric/ConstraintGraph.h>
+#include <nexus/parametric/ParametricSamples.h>
 #include <nexus/parametric/ParametricSerialization.h>
 #include <nexus/parametric/ParametricSolver.h>
 
@@ -125,4 +126,99 @@ TEST(ParametricFoundation, DeserializeRejectsInvalidHeader)
 
     EXPECT_FALSE(report.valid);
     ASSERT_FALSE(report.errors.empty());
+}
+
+TEST(ParametricFoundation, CoincidentConstraintForcesPointMatch)
+{
+    ConstraintGraph graph;
+
+    const ParametricEntityId a = graph.addPoint({2.0, -1.0, 4.0});
+    const ParametricEntityId b = graph.addPoint({10.0, 5.0, -9.0});
+    ASSERT_NE(graph.addCoincidentConstraint(a, b), kInvalidConstraintId);
+
+    const ParametricSolverReport report = ParametricSolver::solve(graph);
+    EXPECT_TRUE(report.converged);
+    ASSERT_TRUE(report.errors.empty());
+
+    const ParametricPoint3* pa = graph.point(a);
+    const ParametricPoint3* pb = graph.point(b);
+    ASSERT_NE(pa, nullptr);
+    ASSERT_NE(pb, nullptr);
+
+    EXPECT_NEAR(pa->x, pb->x, 1e-12);
+    EXPECT_NEAR(pa->y, pb->y, 1e-12);
+    EXPECT_NEAR(pa->z, pb->z, 1e-12);
+}
+
+TEST(ParametricFoundation, AxisAlignedDistanceConstrainsSelectedAxisAndCollapsesOthers)
+{
+    ConstraintGraph graph;
+
+    const ParametricEntityId a = graph.addPoint({1.0, 2.0, 3.0});
+    const ParametricEntityId b = graph.addPoint({4.0, 5.0, 6.0});
+    ASSERT_NE(graph.addAxisAlignedDistanceConstraint(a, b, Axis::Y, 7.5), kInvalidConstraintId);
+
+    const ParametricSolverReport report = ParametricSolver::solve(graph);
+    EXPECT_TRUE(report.converged);
+    ASSERT_TRUE(report.errors.empty());
+
+    const ParametricPoint3* pa = graph.point(a);
+    const ParametricPoint3* pb = graph.point(b);
+    ASSERT_NE(pa, nullptr);
+    ASSERT_NE(pb, nullptr);
+
+    EXPECT_NEAR(pb->x, pa->x, 1e-12);
+    EXPECT_NEAR(pb->z, pa->z, 1e-12);
+    EXPECT_NEAR(pb->y - pa->y, 7.5, 1e-12);
+}
+
+TEST(ParametricFoundation, SerializationRoundTripIncludesNewConstraintTypes)
+{
+    ConstraintGraph graph;
+    const ParametricEntityId a = graph.addPoint({0.0, 0.0, 0.0});
+    const ParametricEntityId b = graph.addPoint({1.0, 2.0, 3.0});
+    const ParametricEntityId c = graph.addPoint({2.0, 4.0, 6.0});
+
+    ASSERT_NE(graph.addCoincidentConstraint(a, b), kInvalidConstraintId);
+    ASSERT_NE(graph.addAxisAlignedDistanceConstraint(b, c, Axis::X, 5.0), kInvalidConstraintId);
+
+    const std::string serialized = ParametricGraphSerializer::serialize(graph);
+
+    ConstraintGraph restored;
+    const ParametricSerializationReport report =
+        ParametricGraphSerializer::deserialize(serialized, restored);
+    EXPECT_TRUE(report.valid);
+    ASSERT_TRUE(report.errors.empty());
+
+    EXPECT_EQ(restored.coincidentConstraintCount(), 1u);
+    EXPECT_EQ(restored.axisAlignedDistanceConstraintCount(), 1u);
+}
+
+TEST(ParametricFoundation, SketchSampleGeneratorBuildsAndSolvesRectangleLikeModel)
+{
+    SketchSampleModel sample = ParametricSampleGenerator::makeSketchRectangle(8.0, 3.0);
+
+    ASSERT_NE(sample.origin, kInvalidEntityId);
+    ASSERT_NE(sample.xHandle, kInvalidEntityId);
+    ASSERT_NE(sample.yHandle, kInvalidEntityId);
+    ASSERT_NE(sample.corner, kInvalidEntityId);
+
+    const ParametricSolverReport report = ParametricSampleGenerator::solveSketchRectangle(sample);
+    EXPECT_TRUE(report.errors.empty());
+    EXPECT_TRUE(report.converged);
+
+    const ParametricPoint3* origin = sample.graph.point(sample.origin);
+    const ParametricPoint3* xHandle = sample.graph.point(sample.xHandle);
+    const ParametricPoint3* yHandle = sample.graph.point(sample.yHandle);
+    const ParametricPoint3* corner = sample.graph.point(sample.corner);
+    ASSERT_NE(origin, nullptr);
+    ASSERT_NE(xHandle, nullptr);
+    ASSERT_NE(yHandle, nullptr);
+    ASSERT_NE(corner, nullptr);
+
+    EXPECT_NEAR(xHandle->x - origin->x, 8.0, 1e-12);
+    EXPECT_NEAR(yHandle->y - origin->y, 3.0, 1e-12);
+    EXPECT_NEAR(corner->x, xHandle->x, 1e-12);
+    EXPECT_NEAR(corner->y, yHandle->y, 1e-12);
+    EXPECT_NEAR(corner->z, origin->z, 1e-12);
 }

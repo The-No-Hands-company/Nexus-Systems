@@ -8,7 +8,7 @@ Nexus Modeling is the geometry and rendering application in Nexus Systems, targe
 - Vulkan and Null backends are available.
 - Frame scheduler, GPU resources, shader compilation, scene graph, and camera systems are implemented.
 - Renderer has active GBuffer and composite pass scaffolding with real command recording and draw submission hooks.
-- Test suite currently includes 272 discovered tests (headless-friendly), with expected Vulkan skip behavior in environments without full runtime pipeline support.
+- Test suite currently includes 281 discovered tests (headless-friendly), with expected Vulkan skip behavior in environments without full runtime pipeline support.
 
 ## Repository layout
 

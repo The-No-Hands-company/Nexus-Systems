@@ -17,10 +17,10 @@ struct ParametricSerializationReport {
 
 class ParametricGraphSerializer {
 public:
-    static std::string serialize(const ConstraintGraph& graph);
+    [[nodiscard]] static std::string serialize(const ConstraintGraph& graph);
 
-    static ParametricSerializationReport deserialize(const std::string& data,
-                                                     ConstraintGraph& outGraph);
+    [[nodiscard]] static ParametricSerializationReport deserialize(const std::string& data,
+                                                                   ConstraintGraph& outGraph);
 };
 
 } // namespace nexus::parametric

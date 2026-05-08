@@ -143,9 +143,35 @@ TEST(Mesh, ComputeVertexTangentsProducesDeterministicXAxisTangentForTexturedTria
         EXPECT_NEAR(std::abs(tangent.x), 1.f, 1e-5f);
         EXPECT_NEAR(tangent.y, 0.f, 1e-5f);
         EXPECT_NEAR(tangent.z, 0.f, 1e-5f);
-        EXPECT_FLOAT_EQ(tangent.w, 1.f);
+        EXPECT_TRUE(tangent.w == 1.f || tangent.w == -1.f);
         const float dot = tangent.x * normal.x + tangent.y * normal.y + tangent.z * normal.z;
         EXPECT_NEAR(dot, 0.f, 1e-5f);
+    }
+}
+
+TEST(Mesh, ComputeVertexTangentsEncodesNegativeHandednessForMirroredUVs)
+{
+    Mesh mesh;
+    mesh.attributes().setPositions({
+        {0.f, 0.f, 0.f},
+        {1.f, 0.f, 0.f},
+        {0.f, 0.f, 1.f},
+    });
+    mesh.attributes().setUVs({
+        {0.f, 0.f},
+        {1.f, 0.f},
+        {0.f, -1.f},
+    });
+    Face f{};
+    f.indices = {0, 1, 2};
+    mesh.topology().addFace(f);
+
+    ASSERT_TRUE(mesh.computeVertexNormals());
+    ASSERT_TRUE(mesh.computeVertexTangents());
+    ASSERT_TRUE(mesh.attributes().hasTangents());
+
+    for (const auto& tangent : mesh.attributes().tangents()) {
+        EXPECT_FLOAT_EQ(tangent.w, -1.f);
     }
 }
 

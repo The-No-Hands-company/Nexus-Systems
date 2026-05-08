@@ -29,6 +29,22 @@ bool ConstraintGraph::removeEntity(ParametricEntityId id) noexcept
                        }),
         m_distanceConstraints.end());
 
+    m_coincidentConstraints.erase(
+        std::remove_if(m_coincidentConstraints.begin(),
+                       m_coincidentConstraints.end(),
+                       [id](const CoincidentConstraint& c) {
+                           return c.entityA == id || c.entityB == id;
+                       }),
+        m_coincidentConstraints.end());
+
+    m_axisAlignedDistanceConstraints.erase(
+        std::remove_if(m_axisAlignedDistanceConstraints.begin(),
+                       m_axisAlignedDistanceConstraints.end(),
+                       [id](const AxisAlignedDistanceConstraint& c) {
+                           return c.entityA == id || c.entityB == id;
+                       }),
+        m_axisAlignedDistanceConstraints.end());
+
     return true;
 }
 
@@ -71,20 +87,63 @@ ParametricConstraintId ConstraintGraph::addDistanceConstraint(ParametricEntityId
     return id;
 }
 
+ParametricConstraintId ConstraintGraph::addCoincidentConstraint(ParametricEntityId entityA,
+                                                                ParametricEntityId entityB) noexcept
+{
+    if (entityA == entityB || entityA == kInvalidEntityId || entityB == kInvalidEntityId ||
+        !hasEntity(entityA) || !hasEntity(entityB)) {
+        return kInvalidConstraintId;
+    }
+
+    const ParametricConstraintId id = m_nextConstraintId++;
+    m_coincidentConstraints.push_back(CoincidentConstraint{id, entityA, entityB});
+    return id;
+}
+
+ParametricConstraintId ConstraintGraph::addAxisAlignedDistanceConstraint(ParametricEntityId entityA,
+                                                                         ParametricEntityId entityB,
+                                                                         Axis axis,
+                                                                         double targetDistance) noexcept
+{
+    if (entityA == entityB || entityA == kInvalidEntityId || entityB == kInvalidEntityId ||
+        !hasEntity(entityA) || !hasEntity(entityB)) {
+        return kInvalidConstraintId;
+    }
+
+    const ParametricConstraintId id = m_nextConstraintId++;
+    m_axisAlignedDistanceConstraints.push_back(
+        AxisAlignedDistanceConstraint{id, entityA, entityB, axis, targetDistance});
+    return id;
+}
+
 bool ConstraintGraph::removeConstraint(ParametricConstraintId id) noexcept
 {
     const auto it = findConstraint(id);
-    if (it == m_distanceConstraints.end()) {
-        return false;
+    if (it != m_distanceConstraints.end()) {
+        m_distanceConstraints.erase(it);
+        return true;
     }
 
-    m_distanceConstraints.erase(it);
-    return true;
+    const auto coincidentIt = findCoincidentConstraint(id);
+    if (coincidentIt != m_coincidentConstraints.end()) {
+        m_coincidentConstraints.erase(coincidentIt);
+        return true;
+    }
+
+    const auto axisIt = findAxisAlignedDistanceConstraint(id);
+    if (axisIt != m_axisAlignedDistanceConstraints.end()) {
+        m_axisAlignedDistanceConstraints.erase(axisIt);
+        return true;
+    }
+
+    return false;
 }
 
 bool ConstraintGraph::hasConstraint(ParametricConstraintId id) const noexcept
 {
-    return findConstraint(id) != m_distanceConstraints.end();
+    return findConstraint(id) != m_distanceConstraints.end() ||
+           findCoincidentConstraint(id) != m_coincidentConstraints.end() ||
+           findAxisAlignedDistanceConstraint(id) != m_axisAlignedDistanceConstraints.end();
 }
 
 std::vector<ParametricEntity>::iterator ConstraintGraph::findEntity(ParametricEntityId id) noexcept
@@ -113,6 +172,34 @@ std::vector<DistanceConstraint>::const_iterator ConstraintGraph::findConstraint(
     return std::find_if(m_distanceConstraints.begin(),
                         m_distanceConstraints.end(),
                         [id](const DistanceConstraint& c) { return c.id == id; });
+}
+
+std::vector<CoincidentConstraint>::iterator ConstraintGraph::findCoincidentConstraint(ParametricConstraintId id) noexcept
+{
+    return std::find_if(m_coincidentConstraints.begin(),
+                        m_coincidentConstraints.end(),
+                        [id](const CoincidentConstraint& c) { return c.id == id; });
+}
+
+std::vector<CoincidentConstraint>::const_iterator ConstraintGraph::findCoincidentConstraint(ParametricConstraintId id) const noexcept
+{
+    return std::find_if(m_coincidentConstraints.begin(),
+                        m_coincidentConstraints.end(),
+                        [id](const CoincidentConstraint& c) { return c.id == id; });
+}
+
+std::vector<AxisAlignedDistanceConstraint>::iterator ConstraintGraph::findAxisAlignedDistanceConstraint(ParametricConstraintId id) noexcept
+{
+    return std::find_if(m_axisAlignedDistanceConstraints.begin(),
+                        m_axisAlignedDistanceConstraints.end(),
+                        [id](const AxisAlignedDistanceConstraint& c) { return c.id == id; });
+}
+
+std::vector<AxisAlignedDistanceConstraint>::const_iterator ConstraintGraph::findAxisAlignedDistanceConstraint(ParametricConstraintId id) const noexcept
+{
+    return std::find_if(m_axisAlignedDistanceConstraints.begin(),
+                        m_axisAlignedDistanceConstraints.end(),
+                        [id](const AxisAlignedDistanceConstraint& c) { return c.id == id; });
 }
 
 } // namespace nexus::parametric

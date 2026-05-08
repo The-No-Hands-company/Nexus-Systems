@@ -1,6 +1,6 @@
 # Kernel Baseline Report
 
-Status date: 2026-05-06
+Status date: 2026-05-07
 
 This document records the initial Month 1 baseline state for Nexus Modeling.
 
@@ -13,8 +13,8 @@ This document records the initial Month 1 baseline state for Nexus Modeling.
 
 1. Full local test gate passes:
    - ctest --test-dir build --output-on-failure
-2. Current discovered tests: 272
-3. Current result on recorded baseline run: 272 passed, 0 failed
+2. Current discovered tests: 290
+3. Current result on recorded baseline run: 290 passed, 0 failed
 
 ## Vulkan Skip Baseline
 
@@ -25,6 +25,12 @@ This baseline is acceptable for Month 1 so long as:
 
 1. Skip behavior remains intentional and documented.
 2. Null backend remains deterministic and fully runnable in CI.
+
+HD-VK-TEST-001 skip delta (2026-05-07):
+
+1. Prior VulkanRegression skips in this environment: 12.
+2. Current VulkanRegression skips in this environment: 5.
+3. Net delta: -7 skips (three avoidable lifecycle tests, two descriptor-set lifecycle tests, and two shadow-atlas regressions converted to runnable).
 
 ## Perf Smoke Baseline
 

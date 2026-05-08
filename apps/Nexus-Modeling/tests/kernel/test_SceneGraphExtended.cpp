@@ -285,3 +285,42 @@ TEST(SceneGraphExtended, ClearAndDestroyTLASWithoutLiveTLASStillClearsNodes)
     EXPECT_EQ(sg.root().children().size(), 0u);
     EXPECT_EQ(dev.destroyAccelStructCalls, 0u);
 }
+
+TEST(SceneGraphExtended, CollectVisibleUsesScaleAwareRadius)
+{
+    SceneGraph sg;
+    auto* n = sg.createNode("scaled");
+    ASSERT_NE(n, nullptr);
+    n->mesh.vertexBuffer.id = 1;
+    n->localTransform().translation = {-2.0f, 0.0f, 0.0f};
+    n->localTransform().scale = {3.0f, 3.0f, 3.0f};
+
+    Frustum f{};
+    // Plane x >= 0 (inside toward +X); with radius=3 and center x=-2, node intersects.
+    f.planes[0] = {1.0f, 0.0f, 0.0f, 0.0f};
+
+    std::vector<Node*> out;
+    sg.collectVisible(f, out);
+
+    ASSERT_EQ(out.size(), 1u);
+    EXPECT_EQ(out[0], n);
+}
+
+TEST(SceneGraphExtended, CollectVisibleHandlesMirroredScaleConservatively)
+{
+    SceneGraph sg;
+    auto* n = sg.createNode("mirrored");
+    ASSERT_NE(n, nullptr);
+    n->mesh.vertexBuffer.id = 2;
+    n->localTransform().translation = {-2.0f, 0.0f, 0.0f};
+    n->localTransform().scale = {-3.0f, 2.0f, 1.0f};
+
+    Frustum f{};
+    f.planes[0] = {1.0f, 0.0f, 0.0f, 0.0f};
+
+    std::vector<Node*> out;
+    sg.collectVisible(f, out);
+
+    ASSERT_EQ(out.size(), 1u);
+    EXPECT_EQ(out[0], n);
+}

@@ -8,8 +8,20 @@ add_library(nexus_gfx_core STATIC
     src/gfx/Device.cpp
     src/memory/GPUAllocator.cpp
     src/animation/AnimationCore.cpp
+    src/animation/AnimationSerialization.cpp
+    src/animation/SkeletonRetargeter.cpp
     src/geometry/Mesh.cpp
     src/geometry/GeometryKernel.cpp
+    src/geometry/BooleanOperation.cpp
+    src/geometry/BevelChamfer.cpp
+    src/geometry/RemeshOperation.cpp
+    src/geometry/MeshDiagnosticOverlay.cpp
+    src/geometry/MeshIO.cpp
+    src/geometry/ExtrudeOperation.cpp
+    src/geometry/InsetFacesOperation.cpp
+    src/asset/SceneAsset.cpp
+    src/asset/SceneAssetImporter.cpp
+    src/asset/AssetDependencyGraph.cpp
     src/render/Camera.cpp
     src/render/SceneGraph.cpp
     src/render/Renderer.cpp
@@ -18,6 +30,9 @@ add_library(nexus_gfx_core STATIC
     src/parametric/ConstraintGraph.cpp
     src/parametric/ParametricSolver.cpp
     src/parametric/ParametricSerialization.cpp
+    src/parametric/ParametricSamples.cpp
+    src/eval/EvalGraph.cpp
+    src/sim/SimulationCore.cpp
 )
 
 target_include_directories(nexus_gfx_core

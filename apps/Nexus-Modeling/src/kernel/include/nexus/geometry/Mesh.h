@@ -154,7 +154,7 @@ public:
     // Triangulate all faces in-place. Quads are split into two triangles,
     // n-gons are fan-triangulated (vertex 0 as pivot).
     // Returns the number of faces after triangulation.
-    size_t triangulate();
+    [[nodiscard]] size_t triangulate();
 
 private:
     std::vector<Face> m_faces;
@@ -178,40 +178,40 @@ public:
     // Computes per-vertex normals by averaging the face normals of incident faces.
     // Requires positions to be set. Overwrites any existing normals.
     // Returns false if positions are not set or topology indices are out of bounds.
-    bool computeVertexNormals();
+    [[nodiscard]] bool computeVertexNormals();
 
     // Computes per-vertex tangents from positions, normals, and UVs.
     // Requires positions, normals, and UVs to be present and topology indices to be valid.
-    // Tangent handedness is currently emitted as a placeholder value of +1.
-    bool computeVertexTangents();
+    // Tangent handedness in w is derived from the accumulated bitangent direction.
+    [[nodiscard]] bool computeVertexTangents();
 
     // Applies a topology-preserving transform to positions and directional channels.
     // Positions are transformed with w=1, normals/tangents with w=0 and renormalized.
     // Stable element IDs are preserved because topology does not change.
-    bool applyTransform(const nexus::render::Mat4& transform) noexcept;
+    [[nodiscard]] bool applyTransform(const nexus::render::Mat4& transform) noexcept;
 
     // Appends another mesh into this mesh and remaps appended indices by the current
     // vertex count. This is the first explicit merge path for Month 2 and requires
     // matching optional attribute-channel presence across both meshes.
     // Existing stable element IDs are preserved; appended elements receive fresh IDs.
-    bool appendMesh(const Mesh& other) noexcept;
+    [[nodiscard]] bool appendMesh(const Mesh& other) noexcept;
 
     // Extracts a deterministic submesh from a contiguous face range.
     // Used as the first split primitive for Month 2: selected faces are copied into out,
     // vertex buffers are compacted, and face indices are remapped to the compacted range.
     // When stable element IDs are present, retained vertex/face/edge IDs are preserved.
-    bool extractFaceRange(size_t firstFace, size_t faceCount, Mesh& out) const noexcept;
+    [[nodiscard]] bool extractFaceRange(size_t firstFace, size_t faceCount, Mesh& out) const noexcept;
 
     // Destructive split variant for Month 2 composition. Selected faces are extracted into out,
     // while this mesh keeps only the remaining faces with compacted vertex streams and remapped
     // indices. Rejects whole-mesh extraction so both results remain valid meshes.
-    bool splitFaceRange(size_t firstFace, size_t faceCount, Mesh& out) noexcept;
+    [[nodiscard]] bool splitFaceRange(size_t firstFace, size_t faceCount, Mesh& out) noexcept;
 
     // Welds duplicate vertices whose positions and optional attribute channels match
     // within the provided epsilon. The operation is constrained to preserve face arity;
     // if any weld would collapse a face or merge distinct attribute seams, it fails.
     // When stable element IDs are present, retained vertex/face IDs are preserved.
-    bool weldCoincidentVertices(float epsilon = 1e-5f) noexcept;
+    [[nodiscard]] bool weldCoincidentVertices(float epsilon = 1e-5f) noexcept;
 
     // Rebuilds deterministic stable element IDs for the current mesh shape.
     // IDs are stable for unchanged topology and attribute-only edits such as transforms.

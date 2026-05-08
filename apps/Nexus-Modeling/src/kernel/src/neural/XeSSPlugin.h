@@ -15,7 +15,7 @@ public:
 
     [[nodiscard]] bool available() const noexcept { return m_available; }
     [[nodiscard]] DenoiserBackend activeDenoiser() const noexcept override { return DenoiserBackend::None; }
-    [[nodiscard]] UpscalerBackend activeUpscaler() const noexcept override { return m_available ? UpscalerBackend::XeSS : UpscalerBackend::None; }
+    [[nodiscard]] UpscalerBackend activeUpscaler() const noexcept override { return UpscalerBackend::None; }
 
     void denoise(nexus::gfx::CmdBufHandle cmd, const DenoiserInput& in, DenoiserOutput& out) override;
     void upscale(nexus::gfx::CmdBufHandle cmd, const UpscalerInput& in, UpscalerOutput& out) override;

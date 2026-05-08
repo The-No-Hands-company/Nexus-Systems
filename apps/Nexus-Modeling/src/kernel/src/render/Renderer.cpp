@@ -742,19 +742,22 @@ void Renderer::render(const Camera& camera, SceneGraph& scene)
         m_impl->velocityLayout = nexus::gfx::TextureLayout::ShaderRead;
         m_impl->depthLayout    = nexus::gfx::TextureLayout::DepthRead;
 
-        // Lighting/composite pass target: swapchain color image.
-        cmd.textureBarrier({
-            fc.colorTarget,
-            m_impl->swapchainLayout,
-            nexus::gfx::TextureLayout::ColorAttachment
-        });
-        m_impl->swapchainLayout = nexus::gfx::TextureLayout::ColorAttachment;
+        const bool hasCompositeColorTarget = fc.colorTarget.valid();
+        if (hasCompositeColorTarget) {
+            // Lighting/composite pass target: swapchain color image.
+            cmd.textureBarrier({
+                fc.colorTarget,
+                m_impl->swapchainLayout,
+                nexus::gfx::TextureLayout::ColorAttachment
+            });
+            m_impl->swapchainLayout = nexus::gfx::TextureLayout::ColorAttachment;
 
-        std::array<nexus::gfx::ClearValue, 1> finalClears{};
-        finalClears[0].color = {0.05f, 0.05f, 0.08f, 1.f};
-        cmd.beginRenderPass({}, {&fc.colorTarget, 1}, {}, finalClears,
-                            {{0,0}, fc.extent});
-        if (m_impl->lightingCompositePipeline.valid()) {
+            std::array<nexus::gfx::ClearValue, 1> finalClears{};
+            finalClears[0].color = {0.05f, 0.05f, 0.08f, 1.f};
+            cmd.beginRenderPass({}, {&fc.colorTarget, 1}, {}, finalClears,
+                                {{0,0}, fc.extent});
+        }
+        if (m_impl->lightingCompositePipeline.valid() && hasCompositeColorTarget) {
             cmd.bindPipeline(m_impl->lightingCompositePipeline);
 
             // Bind composite inputs through the descriptor set contract.
@@ -812,14 +815,16 @@ void Renderer::render(const Camera& camera, SceneGraph& scene)
             cmd.draw(3, 1, 0, 0);
             ++m_stats.drawCalls;
         }
-        cmd.endRenderPass();
+        if (hasCompositeColorTarget) {
+            cmd.endRenderPass();
 
-        cmd.textureBarrier({
-            fc.colorTarget,
-            nexus::gfx::TextureLayout::ColorAttachment,
-            nexus::gfx::TextureLayout::Present
-        });
-        m_impl->swapchainLayout = nexus::gfx::TextureLayout::Present;
+            cmd.textureBarrier({
+                fc.colorTarget,
+                nexus::gfx::TextureLayout::ColorAttachment,
+                nexus::gfx::TextureLayout::Present
+            });
+            m_impl->swapchainLayout = nexus::gfx::TextureLayout::Present;
+        }
 
         // ── Render graph validation (optional, diagnostic) ────────────────
         if (m_impl->renderGraphValidationEnabled) {

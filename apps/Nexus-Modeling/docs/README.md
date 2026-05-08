@@ -18,6 +18,9 @@
 | [perf-benchmark-matrix.md](perf-benchmark-matrix.md) | Reproducible perf smoke matrix and harness contract |
 | [memory-lifetime-report.md](memory-lifetime-report.md) | Explicit lifecycle and memory reporting artifact definition |
 | [month-2-geometry-checklist.md](month-2-geometry-checklist.md) | Concrete implementation checklist for Month 2 Deterministic Mesh Foundation v0 |
+| [month-3-render-checklist.md](month-3-render-checklist.md) | Concrete implementation checklist for Month 3 Render Pipeline v1 |
+| [month-4-parametric-checklist.md](month-4-parametric-checklist.md) | Concrete implementation checklist for Month 4 Parametric Foundation |
+| [hardening-debt-ledger.md](hardening-debt-ledger.md) | Explicit Month 1-3 hardening debt items with measurable closure criteria |
 | [PRD.md](PRD.md) | Product goals, user targets, and high-level functional requirements |
 | [SDD.md](SDD.md) | Technical architecture, implementation constraints, and validation gates |
 | [FRD.md](FRD.md) | Granular behavioral requirements and acceptance criteria |
@@ -64,7 +67,7 @@ Roadmap detail for this direction lives in [vision-and-roadmap.md](vision-and-ro
 | Memory | VMA 3.1 | Industry standard for Vulkan memory management |
 | Shaders | GLSL → SPIR-V via glslang | Runtime compile or pre-compiled, same pipeline |
 | Build | CMake 3.28+ | Standard, composable, FetchContent for dependencies |
-| Tests | GoogleTest | 272 unit/integration tests, CI-safe headless paths |
+| Tests | GoogleTest | 281 unit/integration tests, CI-safe headless paths |
 | Neural plugins | DLSS4 / XeSS / OIDN | Runtime `dlopen`/`LoadLibrary` — zero hard dependency |
 
 ---

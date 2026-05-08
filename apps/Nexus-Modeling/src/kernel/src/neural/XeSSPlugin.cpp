@@ -68,13 +68,15 @@ void XeSSPlugin::initXeSS(VkDevice device, VkPhysicalDevice physDev)
     m_available = (result == 0 /*XESS_RESULT_SUCCESS*/);
 }
 
-void XeSSPlugin::upscale(nexus::gfx::CmdBufHandle /*cmd*/, const UpscalerInput& input, UpscalerOutput& /*output*/)
+void XeSSPlugin::upscale(nexus::gfx::CmdBufHandle /*cmd*/, const UpscalerInput& input, UpscalerOutput& output)
 {
-    if (!m_available || !m_pfn.VKExecute || !m_xessCtx) return;
-    // TODO: build xess_vk_execute_params_t from input (color, depth, motionVectors,
-    //       jitter, reset, inputWidth, inputHeight, outputWidth, outputHeight)
-    //       then call: xessVKExecute(m_xessCtx, cmdBuffer, &params)
-    (void)input;
+    if (!m_available || !m_pfn.VKExecute || !m_xessCtx) {
+        output.color = input.color;
+        return;
+    }
+
+    // Until full XeSS execute parameter wiring is integrated, keep behavior deterministic.
+    output.color = input.color;
 }
 
 void XeSSPlugin::denoise(nexus::gfx::CmdBufHandle /*cmd*/, const DenoiserInput& /*input*/, DenoiserOutput& /*output*/)

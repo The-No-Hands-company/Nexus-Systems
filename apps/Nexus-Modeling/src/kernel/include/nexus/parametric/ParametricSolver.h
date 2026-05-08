@@ -25,8 +25,8 @@ struct ParametricSolverReport {
 
 class ParametricSolver {
 public:
-    static ParametricSolverReport solve(ConstraintGraph& graph,
-                                        const ParametricSolverConfig& config = {}) noexcept;
+    [[nodiscard]] static ParametricSolverReport solve(ConstraintGraph& graph,
+                                                        const ParametricSolverConfig& config = {}) noexcept;
 };
 
 } // namespace nexus::parametric

@@ -130,6 +130,8 @@ private:
     DeviceCapabilities m_caps;
     HardwareTier       m_tier       = HardwareTier::Low;
     std::string        m_deviceName;
+    bool               m_meshShadersRequested = false;
+    bool               m_rayTracingRequested  = false;
 
     // Handle pool tables (slot-map pattern — no heap per handle)
     struct Impl;

@@ -158,7 +158,8 @@ bool compileGlslToSpirv(
 	shader.setSourceEntryPoint(entry.c_str());
 
 	std::string name(debugName.empty() ? "shader" : std::string(debugName));
-	shader.setPreamble(("#line 1 \"" + name + "\"\n").c_str());
+	constexpr const char* preamble = "#line 1\n";
+	shader.setPreamble(preamble);
 
 	shader.setEnvInput(glslang::EShSourceGlsl, lang, glslang::EShClientVulkan, 460);
 	shader.setEnvClient(glslang::EShClientVulkan, glslang::EShTargetVulkan_1_3);

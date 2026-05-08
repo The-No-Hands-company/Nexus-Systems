@@ -22,6 +22,11 @@ public:
                     VkDevice device,
                     VulkanResourcePool* pool,
                     VkQueue sparseQueue);
+    VulkanAllocator(VmaAllocator existingVma,
+                    VkPhysicalDevice physDev,
+                    VkDevice device,
+                    VulkanResourcePool* pool,
+                    VkQueue sparseQueue) noexcept;
     ~VulkanAllocator() override;
 
     void* alloc  (const AllocationInfo& info) override;
@@ -47,6 +52,7 @@ private:
     void submitSparseImageBind(VkImage image, const VkSparseImageMemoryBind& bind) const;
 
     VmaAllocator m_vma = nullptr;
+    bool m_ownsVma = true;
     VkPhysicalDevice m_physDevice = VK_NULL_HANDLE;
     VkDevice         m_device     = VK_NULL_HANDLE;
     VulkanResourcePool* m_pool    = nullptr;

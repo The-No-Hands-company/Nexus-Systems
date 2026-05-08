@@ -29,11 +29,12 @@ namespace nexus::gfx {
 
 VulkanSwapchain::VulkanSwapchain(VkInstance instance, VkPhysicalDevice physDev,
                                  VkDevice device, const SwapchainDesc& desc,
-                                 uint32_t graphicsFamily)
+                                                                 VkQueue presentQueue, uint32_t presentFamily)
     : m_instance(instance), m_physDev(physDev), m_device(device),
-      m_extent(desc.extent), m_hdr(desc.hdrEnabled)
+            m_presentQueue(presentQueue), m_presentFamily(presentFamily),
+            m_extent(desc.extent), m_hdr(desc.hdrEnabled)
 {
-    create(desc, graphicsFamily);
+        create(desc, presentFamily);
 }
 
 VulkanSwapchain::~VulkanSwapchain()
@@ -158,7 +159,7 @@ static VkPresentModeKHR choosePresentMode(VkPhysicalDevice pd, VkSurfaceKHR surf
 }
 
 // ── Create ────────────────────────────────────────────────────────────────────
-void VulkanSwapchain::create(const SwapchainDesc& desc, uint32_t graphicsFamily)
+void VulkanSwapchain::create(const SwapchainDesc& desc, uint32_t presentFamily)
 {
     // 1. Surface
     if (desc.nativeWindowHandle) {
@@ -174,7 +175,7 @@ void VulkanSwapchain::create(const SwapchainDesc& desc, uint32_t graphicsFamily)
 
     // Validate presentation support
     VkBool32 presentSupport = VK_FALSE;
-    vkGetPhysicalDeviceSurfaceSupportKHR(m_physDev, graphicsFamily, m_surface, &presentSupport);
+    vkGetPhysicalDeviceSurfaceSupportKHR(m_physDev, presentFamily, m_surface, &presentSupport);
     if (!presentSupport)
         throw std::runtime_error("Selected queue family does not support presentation");
 
@@ -318,8 +319,9 @@ PresentResult VulkanSwapchain::present(uint32_t imageIndex, SemaphoreHandle wait
     pi.pSwapchains    = &m_swapchain;
     pi.pImageIndices  = &imageIndex;
 
-    // Present queue — stored externally; we need it from VulkanDevice.
-    // For now use a cached queue obtained at construction. TODO: inject queue.
+    if (m_presentQueue == VK_NULL_HANDLE)
+        return PresentResult::OutOfDate;
+
     VkResult res = vkQueuePresentKHR(m_presentQueue, &pi);
 
     if (res == VK_ERROR_OUT_OF_DATE_KHR) return PresentResult::OutOfDate;
@@ -336,14 +338,7 @@ void VulkanSwapchain::resize(Extent2D newExtent)
     desc.imageCount  = static_cast<uint32_t>(m_images.size());
     desc.hdrEnabled  = m_hdr;
     destroy();
-    create(desc, m_graphicsFamily);
-}
-
-// ── Queue injection (called by VulkanDevice after construction) ───────────────
-void VulkanSwapchain::setPresentQueue(VkQueue queue, uint32_t family)
-{
-    m_presentQueue   = queue;
-    m_graphicsFamily = family;
+    create(desc, m_presentFamily);
 }
 
 VkFormat VulkanSwapchain::vkColorFormat() const noexcept

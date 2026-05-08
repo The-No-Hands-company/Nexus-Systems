@@ -34,7 +34,9 @@ OIDNDenoiser::~OIDNDenoiser()
 }
 
 DenoiserBackend OIDNDenoiser::activeDenoiser() const noexcept {
-    return m_device ? DenoiserBackend::OIDN_CPU : DenoiserBackend::None;
+    // Current OIDN integration does not yet execute a full GPU-texture readback
+    // and writeback path, so it is not exposed as an executable denoiser backend.
+    return DenoiserBackend::None;
 }
 
 void OIDNDenoiser::denoise(nexus::gfx::CmdBufHandle /*cmd*/, const DenoiserInput& input, DenoiserOutput& /*output*/)
@@ -44,12 +46,8 @@ void OIDNDenoiser::denoise(nexus::gfx::CmdBufHandle /*cmd*/, const DenoiserInput
     auto dev    = static_cast<OIDNDevice>(m_device);
     auto filter = static_cast<OIDNFilter>(m_filter);
 
-    // NOTE: For GPU-side denoising, color/albedo/normal TextureHandles
-    //       need to be read back to CPU buffers first, or use the OIDN CUDA/HIP path.
-    // For now: only proceeds when CPU-readable pointers are attached.
-    // NOTE: OIDN operates on CPU-visible float3 buffers.
-    // TextureHandles are GPU-resident; a readback pass is needed for CPU denoising.
-    // This path is a placeholder — full integration requires a readback blit.
+    // Runtime-safe behavior until readback/writeback integration is implemented:
+    // retain a deterministic no-op denoise path.
     (void)input; (void)dev; (void)filter;
 #else
     (void)input;

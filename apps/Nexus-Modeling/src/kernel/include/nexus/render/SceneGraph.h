@@ -59,13 +59,13 @@ public:
 
     // ── Hierarchy ──────────────────────────────────────────────────────────
     void            addChild   (std::unique_ptr<Node> child);
-    Node*           parent     () noexcept       { return m_parent; }
-    const Node*     parent     () const noexcept { return m_parent; }
-    std::vector<std::unique_ptr<Node>>& children() noexcept { return m_children; }
+        [[nodiscard]] Node*           parent     () noexcept       { return m_parent; }
+        [[nodiscard]] const Node*     parent     () const noexcept { return m_parent; }
+        [[nodiscard]] std::vector<std::unique_ptr<Node>>& children() noexcept { return m_children; }
 
     // ── Transform ──────────────────────────────────────────────────────────
-    Transform&       localTransform()       noexcept { return m_local; }
-    const Transform& localTransform() const noexcept { return m_local; }
+        [[nodiscard]] Transform&       localTransform()       noexcept { return m_local; }
+        [[nodiscard]] const Transform& localTransform() const noexcept { return m_local; }
     [[nodiscard]] Mat4 worldMatrix()  const noexcept;
 
     // ── Renderable payload ─────────────────────────────────────────────────
@@ -101,9 +101,9 @@ public:
     ~SceneGraph();
 
     // ── Node management ────────────────────────────────────────────────────
-    Node* createNode(std::string name, Node* parent = nullptr);
-    Node* findNode  (Node::NodeID id)  const noexcept;
-    Node* findNode  (std::string_view name) const noexcept;
+    [[nodiscard]] Node* createNode(std::string name, Node* parent = nullptr);
+    [[nodiscard]] Node* findNode  (Node::NodeID id)  const noexcept;
+    [[nodiscard]] Node* findNode  (std::string_view name) const noexcept;
     void  removeNode(Node::NodeID id);
     void  clear();
     void  clearAndDestroyTLAS(nexus::gfx::IDevice& device);

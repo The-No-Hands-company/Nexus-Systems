@@ -15,8 +15,8 @@ public:
     ~DLSSPlugin() override;
 
     [[nodiscard]] bool available() const noexcept { return m_ngxAvailable; }
-    [[nodiscard]] DenoiserBackend activeDenoiser() const noexcept override { return m_ngxAvailable ? DenoiserBackend::DLSS4 : DenoiserBackend::None; }
-    [[nodiscard]] UpscalerBackend activeUpscaler() const noexcept override { return m_ngxAvailable ? UpscalerBackend::DLSS4 : UpscalerBackend::None; }
+    [[nodiscard]] DenoiserBackend activeDenoiser() const noexcept override { return DenoiserBackend::None; }
+    [[nodiscard]] UpscalerBackend activeUpscaler() const noexcept override { return UpscalerBackend::None; }
 
     void denoise(nexus::gfx::CmdBufHandle cmd, const DenoiserInput& in, DenoiserOutput& out) override;
     void upscale(nexus::gfx::CmdBufHandle cmd, const UpscalerInput& in, UpscalerOutput& out) override;

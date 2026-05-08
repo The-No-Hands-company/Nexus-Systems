@@ -9,7 +9,7 @@ class VulkanSwapchain final : public ISwapchain {
 public:
     VulkanSwapchain(VkInstance instance, VkPhysicalDevice physDev,
                     VkDevice device, const SwapchainDesc& desc,
-                    uint32_t graphicsFamily);
+                    VkQueue presentQueue, uint32_t presentFamily);
     ~VulkanSwapchain() override;
 
     [[nodiscard]] AcquiredFrame acquire()         override;
@@ -20,9 +20,6 @@ public:
     [[nodiscard]] Format    colorFormat() const noexcept override { return m_format; }
     [[nodiscard]] uint32_t  imageCount()  const noexcept override { return static_cast<uint32_t>(m_images.size()); }
     [[nodiscard]] bool      isHdrActive() const noexcept override { return m_hdr; }
-
-    // Inject the present queue after construction (called by VulkanDevice)
-    void setPresentQueue(VkQueue queue, uint32_t family);
 
     // Raw image/view access (used by VulkanFrameScheduler to register images in the pool)
     [[nodiscard]] VkImage     image    (uint32_t i) const noexcept { return i < m_images.size()     ? m_images[i]     : VK_NULL_HANDLE; }
@@ -38,7 +35,7 @@ public:
     }
 
 private:
-    void create(const SwapchainDesc& desc, uint32_t graphicsFamily);
+    void create(const SwapchainDesc& desc, uint32_t presentFamily);
     void destroy();
 
     VkInstance       m_instance   = VK_NULL_HANDLE;
@@ -47,7 +44,7 @@ private:
     VkSurfaceKHR     m_surface    = VK_NULL_HANDLE;
     VkSwapchainKHR   m_swapchain  = VK_NULL_HANDLE;
     VkQueue          m_presentQueue   = VK_NULL_HANDLE;
-    uint32_t         m_graphicsFamily = 0;
+    uint32_t         m_presentFamily  = 0;
 
     std::vector<VkImage>     m_images;
     std::vector<VkImageView> m_imageViews;

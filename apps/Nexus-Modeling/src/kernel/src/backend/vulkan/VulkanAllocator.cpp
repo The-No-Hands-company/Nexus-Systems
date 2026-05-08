@@ -60,7 +60,8 @@ VulkanAllocator::VulkanAllocator(VkInstance instance,
                                  VkDevice device,
                                  VulkanResourcePool* pool,
                                  VkQueue sparseQueue)
-    : m_physDevice(physDev),
+    : m_ownsVma(true),
+      m_physDevice(physDev),
       m_device(device),
       m_pool(pool),
       m_sparseQueue(sparseQueue)
@@ -84,6 +85,19 @@ VulkanAllocator::VulkanAllocator(VkInstance instance,
         throw std::runtime_error("vmaCreateAllocator failed: " + std::to_string(res));
 }
 
+VulkanAllocator::VulkanAllocator(VmaAllocator existingVma,
+                                 VkPhysicalDevice physDev,
+                                 VkDevice device,
+                                 VulkanResourcePool* pool,
+                                 VkQueue sparseQueue) noexcept
+    : m_vma(existingVma),
+      m_ownsVma(false),
+      m_physDevice(physDev),
+      m_device(device),
+      m_pool(pool),
+      m_sparseQueue(sparseQueue)
+{}
+
 VulkanAllocator::~VulkanAllocator()
 {
     if (m_device != VK_NULL_HANDLE && m_sparseQueue != VK_NULL_HANDLE && m_pool != nullptr) {
@@ -103,7 +117,10 @@ VulkanAllocator::~VulkanAllocator()
         }
     }
     m_tileBindings.clear();
-    if (m_vma) { vmaDestroyAllocator(m_vma); m_vma = nullptr; }
+    if (m_ownsVma && m_vma) {
+        vmaDestroyAllocator(m_vma);
+    }
+    m_vma = nullptr;
 }
 
 uint64_t VulkanAllocator::makeTileKey(TextureHandle tex, uint32_t tileX, uint32_t tileY, uint32_t mipLevel) const noexcept

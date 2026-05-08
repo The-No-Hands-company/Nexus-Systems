@@ -15,11 +15,11 @@ namespace nexus::render {
 struct Vec3 {
     float x = 0.f, y = 0.f, z = 0.f;
 
-    Vec3 operator+(const Vec3& o) const noexcept { return {x+o.x, y+o.y, z+o.z}; }
-    Vec3 operator-(const Vec3& o) const noexcept { return {x-o.x, y-o.y, z-o.z}; }
-    Vec3 operator*(float s)        const noexcept { return {x*s,   y*s,   z*s};   }
-    Vec3 operator/(float s)        const noexcept { float inv=1.f/s; return *this*inv; }
-    Vec3 operator-()               const noexcept { return {-x, -y, -z}; }
+    [[nodiscard]] Vec3 operator+(const Vec3& o) const noexcept { return {x+o.x, y+o.y, z+o.z}; }
+    [[nodiscard]] Vec3 operator-(const Vec3& o) const noexcept { return {x-o.x, y-o.y, z-o.z}; }
+    [[nodiscard]] Vec3 operator*(float s)        const noexcept { return {x*s,   y*s,   z*s};   }
+    [[nodiscard]] Vec3 operator/(float s)        const noexcept { float inv=1.f/s; return *this*inv; }
+    [[nodiscard]] Vec3 operator-()               const noexcept { return {-x, -y, -z}; }
     Vec3& operator+=(const Vec3& o) noexcept { x+=o.x; y+=o.y; z+=o.z; return *this; }
     Vec3& operator-=(const Vec3& o) noexcept { x-=o.x; y-=o.y; z-=o.z; return *this; }
     Vec3& operator*=(float s)       noexcept { x*=s; y*=s; z*=s; return *this; }
@@ -41,9 +41,9 @@ inline Vec3 operator*(float s, const Vec3& v) noexcept { return v * s; }
 struct Vec4 {
     float x = 0.f, y = 0.f, z = 0.f, w = 1.f;
 
-    Vec4 operator+(const Vec4& o) const noexcept { return {x+o.x, y+o.y, z+o.z, w+o.w}; }
-    Vec4 operator-(const Vec4& o) const noexcept { return {x-o.x, y-o.y, z-o.z, w-o.w}; }
-    Vec4 operator*(float s)        const noexcept { return {x*s, y*s, z*s, w*s}; }
+    [[nodiscard]] Vec4 operator+(const Vec4& o) const noexcept { return {x+o.x, y+o.y, z+o.z, w+o.w}; }
+    [[nodiscard]] Vec4 operator-(const Vec4& o) const noexcept { return {x-o.x, y-o.y, z-o.z, w-o.w}; }
+    [[nodiscard]] Vec4 operator*(float s)        const noexcept { return {x*s, y*s, z*s, w*s}; }
     [[nodiscard]] float dot(const Vec4& o) const noexcept { return x*o.x+y*o.y+z*o.z+w*o.w; }
     [[nodiscard]] Vec3  xyz() const noexcept { return {x, y, z}; }
     bool operator==(const Vec4&) const = default;
@@ -53,13 +53,13 @@ struct Vec4 {
 struct Mat4 {
     float m[4][4] = {};
 
-    static Mat4 identity() noexcept {
+    [[nodiscard]] static Mat4 identity() noexcept {
         Mat4 r{};
         r.m[0][0] = r.m[1][1] = r.m[2][2] = r.m[3][3] = 1.f;
         return r;
     }
 
-    Mat4 operator*(const Mat4& o) const noexcept {
+    [[nodiscard]] Mat4 operator*(const Mat4& o) const noexcept {
         Mat4 r{};
         for (int i = 0; i < 4; ++i)
             for (int j = 0; j < 4; ++j)

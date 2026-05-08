@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-//  SceneGraph implementation stub
+//  SceneGraph implementation
 // ─────────────────────────────────────────────────────────────────────────────
 #include <nexus/render/SceneGraph.h>
 #include <nexus/geometry/GeometryKernel.h>
@@ -7,6 +7,28 @@
 #include <cmath>
 
 namespace nexus::render {
+
+namespace {
+
+[[nodiscard]] float axisScaleLength(const Mat4& world, int column) noexcept
+{
+    const float x = world.m[0][column];
+    const float y = world.m[1][column];
+    const float z = world.m[2][column];
+    return std::sqrt(x * x + y * y + z * z);
+}
+
+[[nodiscard]] float conservativeWorldRadius(const Mat4& world) noexcept
+{
+    // Unit-sphere mesh assumption scaled by the largest transformed basis axis.
+    // This remains conservative for non-uniform and mirrored transforms.
+    const float sx = axisScaleLength(world, 0);
+    const float sy = axisScaleLength(world, 1);
+    const float sz = axisScaleLength(world, 2);
+    return std::max({sx, sy, sz, 1e-6f});
+}
+
+} // namespace
 
 // ── Transform ────────────────────────────────────────────────────────────────
 Mat4 Transform::toMatrix() const noexcept
@@ -179,15 +201,14 @@ void SceneGraph::traverseImpl(Node& node, const Mat4& parentWorld, const Visitor
 void SceneGraph::collectVisible(const Frustum& frustum, std::vector<Node*>& output) const
 {
     // Sphere-frustum test (fast conservative cull).
-    // Uses the world matrix to derive a bounding sphere center.
+    // Uses the world matrix to derive center and conservative radius.
     traverse([&](Node& node, const Mat4& world) {
         if (!node.visible) return;
         if (!node.mesh.vertexBuffer.valid()) return;  // non-renderable node
 
-        // Center of bounding sphere approximation from world translation
+        // Center of bounding sphere approximation from world translation.
         float cx = world.m[0][3], cy = world.m[1][3], cz = world.m[2][3];
-        // Conservative radius: take max scale component × 1 (unit mesh assumed)
-        float radius = 1.f;
+        const float radius = conservativeWorldRadius(world);
 
         bool inside = true;
         for (const auto& plane : frustum.planes) {

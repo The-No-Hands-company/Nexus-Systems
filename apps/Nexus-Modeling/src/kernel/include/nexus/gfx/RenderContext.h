@@ -146,7 +146,7 @@ class RenderContext {
 public:
     ~RenderContext();
 
-    static std::unique_ptr<RenderContext> create(const RenderContextDesc& desc);
+    [[nodiscard]] static std::unique_ptr<RenderContext> create(const RenderContextDesc& desc);
 
     // ── Access ────────────────────────────────────────────────────────────
     [[nodiscard]] IDevice&        device()    noexcept;

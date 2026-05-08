@@ -16,7 +16,18 @@ add_executable(nexus_kernel_tests
     kernel/test_Types.cpp
     kernel/test_TypesExtended.cpp
     kernel/test_AnimationCore.cpp
+    kernel/test_AnimationSerialization.cpp
     kernel/test_Mesh.cpp
+        kernel/test_BooleanOperation.cpp
+    kernel/test_BevelChamfer.cpp
+    kernel/test_RemeshOperation.cpp
+    kernel/test_MeshDiagnosticOverlay.cpp
+    kernel/test_MeshIO.cpp
+    kernel/test_ExtrudeOperation.cpp
+    kernel/test_InsetFacesOperation.cpp
+    kernel/test_SceneAsset.cpp
+    kernel/test_SceneAssetImporter.cpp
+    kernel/test_AssetDependencyGraph.cpp
     kernel/test_GeometryKernel.cpp
     kernel/test_TopologyGolden.cpp
     kernel/test_RenderPipelineV1.cpp
@@ -31,6 +42,9 @@ add_executable(nexus_kernel_tests
     kernel/test_RenderContextExtended.cpp
     kernel/test_Renderer.cpp
     kernel/test_RendererBehavior.cpp
+    kernel/test_NeuralRenderer.cpp
+    kernel/test_EvalGraph.cpp
+    kernel/test_SimulationCore.cpp
 )
 
 add_executable(nexus_kernel_perf_smoke
@@ -47,12 +61,16 @@ if(NEXUS_BACKEND_VULKAN)
 endif()
 
 target_link_libraries(nexus_kernel_tests
-    PRIVATE nexus_gfx_core nexus_backend_null GTest::gtest_main
+    PRIVATE nexus_gfx_core nexus_backend_null nexus_neural GTest::gtest_main
     $<$<BOOL:${NEXUS_BACKEND_VULKAN}>:nexus_backend_vulkan>
 )
 
 target_compile_features(nexus_kernel_tests PRIVATE cxx_std_23)
 target_compile_features(nexus_kernel_perf_smoke PRIVATE cxx_std_23)
+
+target_compile_definitions(nexus_kernel_tests PRIVATE
+    NEXUS_TESTS_ROOT="${CMAKE_CURRENT_SOURCE_DIR}"
+)
 
 target_link_libraries(nexus_kernel_perf_smoke
     PRIVATE nexus_gfx_core nexus_backend_null
