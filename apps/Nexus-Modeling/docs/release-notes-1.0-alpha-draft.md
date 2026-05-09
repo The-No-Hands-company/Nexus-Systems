@@ -84,4 +84,5 @@ No intentional breaking public API removals in this alpha window.
 1. Ensure working tree is clean except intentionally excluded local workspace files.
 2. Run tools/release_gate_alpha.sh and archive generated signoff artifact.
 3. Review docs/month-12-alpha-compatibility-report.md for latest baseline metrics.
-4. Create annotated tag v1.0.0-alpha referencing this release note draft.
+4. Create annotated tag only through helper:
+   - ./tools/create_alpha_tag.sh --report build/release_signoff_1.0-alpha.txt --tag v1.0.0-alpha

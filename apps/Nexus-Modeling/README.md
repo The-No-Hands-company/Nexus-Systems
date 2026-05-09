@@ -37,6 +37,8 @@ From repository root:
 	- ctest --test-dir build --output-on-failure
 4. Alpha release gate and signoff report:
 	- ./tools/release_gate_alpha.sh
+5. Alpha tag helper (requires overall_signoff=PASS report):
+	- ./tools/create_alpha_tag.sh --report build/release_signoff_1.0-alpha.txt --tag v1.0.0-alpha
 
 ## Design goals
 
