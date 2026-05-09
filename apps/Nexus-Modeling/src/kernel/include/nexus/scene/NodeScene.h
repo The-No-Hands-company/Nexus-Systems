@@ -102,6 +102,16 @@ public:
     /// Read-only access to the asset slot. Returns nullptr for unknown ids.
     [[nodiscard]] const NodePayload* asset(SceneNodeId id) const noexcept;
 
+    /// Set reconstruction quality metrics on a node's output slot.
+    /// Returns false for unknown ids.
+    [[nodiscard]] bool setReconstructionDiagnostic(
+        SceneNodeId id,
+        NodePayload::ReconstructionDiagnostic diagnostic);
+
+    /// Read-only access to reconstruction quality metrics.
+    /// Returns nullptr when id is unknown or payload type is not ReconstructionDiagnostic.
+    [[nodiscard]] const NodePayload::ReconstructionDiagnostic* reconstructionDiagnostic(SceneNodeId id) const noexcept;
+
     // ── Cache invalidation ──────────────────────────────────────────────────
 
     void markDirty(SceneNodeId id);

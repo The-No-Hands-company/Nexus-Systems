@@ -162,6 +162,30 @@ TEST(NodeScene, AssetPersistedAfterRemoveAndReaddWithSameName) {
     EXPECT_EQ(a->type(), NodePayloadType::None);
 }
 
+TEST(NodeScene, SetReconstructionDiagnosticUnknownNodeReturnsFalse) {
+    NodeScene s;
+    EXPECT_FALSE(
+        s.setReconstructionDiagnostic(999u, NodePayload::ReconstructionDiagnostic{0.125f, 0.875f}));
+    EXPECT_EQ(s.reconstructionDiagnostic(999u), nullptr);
+}
+
+TEST(NodeScene, ReconstructionDiagnosticRoundTripViaConvenienceApi) {
+    NodeScene s;
+    SceneNodeId id = s.addNode("recon", NodeKind::Reconstruction);
+
+    const NodePayload::ReconstructionDiagnostic diag{0.125f, 0.875f};
+    ASSERT_TRUE(s.setReconstructionDiagnostic(id, diag));
+
+    const NodePayload::ReconstructionDiagnostic* got = s.reconstructionDiagnostic(id);
+    ASSERT_NE(got, nullptr);
+    EXPECT_FLOAT_EQ(got->residual, 0.125f);
+    EXPECT_FLOAT_EQ(got->confidence, 0.875f);
+
+    const NodePayload* raw = s.asset(id);
+    ASSERT_NE(raw, nullptr);
+    EXPECT_EQ(raw->type(), NodePayloadType::ReconstructionDiagnostic);
+}
+
 // ── Evaluation via internal EvalGraph ────────────────────────────────────────
 
 TEST(NodeScene, EvaluateEmptySceneSucceeds) {

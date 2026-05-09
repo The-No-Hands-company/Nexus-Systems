@@ -98,6 +98,22 @@ const NodePayload* NodeScene::asset(SceneNodeId id) const noexcept {
     return m_graph.nodeOutputPayload(id);
 }
 
+bool NodeScene::setReconstructionDiagnostic(
+    SceneNodeId id,
+    NodePayload::ReconstructionDiagnostic diagnostic) {
+    NodePayload payload;
+    payload.value = diagnostic;
+    return m_graph.setNodeOutputPayload(id, std::move(payload));
+}
+
+const NodePayload::ReconstructionDiagnostic* NodeScene::reconstructionDiagnostic(SceneNodeId id) const noexcept {
+    const NodePayload* payload = m_graph.nodeOutputPayload(id);
+    if (!payload) {
+        return nullptr;
+    }
+    return payload->reconstructionDiagnostic();
+}
+
 // ── Cache invalidation ────────────────────────────────────────────────────────
 
 void NodeScene::markDirty(SceneNodeId id) {
