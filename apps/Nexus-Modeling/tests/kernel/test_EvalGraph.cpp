@@ -604,3 +604,65 @@ TEST(EvalGraph, ClearAndRemoveNodeClearPayloadSlots) {
     g.clear();
     EXPECT_EQ(g.nodeOutputPayload(b), nullptr);
 }
+
+TEST(EvalGraph, MultiInputPayloadOrderingStableAcrossEdgeInsertionOrder) {
+    auto evaluateInputOrder = [](bool reverseEdgeInsertOrder) {
+        EvalGraph g;
+        NodeId a = g.addNode(NodeKind::Constant, "a");
+        NodeId b = g.addNode(NodeKind::Constant, "b");
+        NodeId m = g.addNode(NodeKind::Merge, "m");
+
+        if (reverseEdgeInsertOrder) {
+            EXPECT_TRUE(g.connect(b, m));
+            EXPECT_TRUE(g.connect(a, m));
+        } else {
+            EXPECT_TRUE(g.connect(a, m));
+            EXPECT_TRUE(g.connect(b, m));
+        }
+
+        NodePayload pa;
+        pa.value = 1.0f;
+        NodePayload pb;
+        pb.value = 2.0f;
+        EXPECT_TRUE(g.setNodeOutputPayload(a, pa));
+        EXPECT_TRUE(g.setNodeOutputPayload(b, pb));
+
+        std::vector<NodeId> observedInputNodes;
+        std::vector<float> observedInputValues;
+        g.setComputeCallback([&](NodeComputeContext& context) -> bool {
+            if (context.id != m) {
+                return true;
+            }
+
+            observedInputNodes.clear();
+            observedInputValues.clear();
+            for (const NodeInputPayload& entry : context.inputPayloads) {
+                if (entry.payload == nullptr) return false;
+                const float* v = entry.payload->scalarF32();
+                if (v == nullptr) return false;
+                observedInputNodes.push_back(entry.inputNode);
+                observedInputValues.push_back(*v);
+            }
+
+            if (context.outputPayload == nullptr) return false;
+            context.outputPayload->value = 3.0f;
+            return true;
+        });
+
+        const EvalReport r = g.evaluate();
+        EXPECT_TRUE(r.ok);
+        return std::make_pair(observedInputNodes, observedInputValues);
+    };
+
+    const auto forward = evaluateInputOrder(false);
+    const auto reverse = evaluateInputOrder(true);
+
+    ASSERT_EQ(forward.first.size(), 2u);
+    ASSERT_EQ(reverse.first.size(), 2u);
+    EXPECT_EQ(forward.first, reverse.first);
+    EXPECT_EQ(forward.second, reverse.second);
+
+    EXPECT_LT(forward.first[0], forward.first[1]);
+    EXPECT_FLOAT_EQ(forward.second[0], 1.0f);
+    EXPECT_FLOAT_EQ(forward.second[1], 2.0f);
+}
