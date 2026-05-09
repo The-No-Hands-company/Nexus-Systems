@@ -35,6 +35,7 @@ add_library(nexus_gfx_core STATIC
     src/sim/SimulationCore.cpp
     src/gfx/GaussianSplatting.cpp
     src/render/TemporalAccumulation.cpp
+    src/automation/AutomationScript.cpp
 )
 
 target_include_directories(nexus_gfx_core

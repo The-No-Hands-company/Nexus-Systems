@@ -46,6 +46,7 @@ add_executable(nexus_kernel_tests
     kernel/test_EvalGraph.cpp
     kernel/test_SimulationCore.cpp
     kernel/test_GaussianSplatting.cpp
+    kernel/test_AutomationScript.cpp
 )
 
 add_executable(nexus_kernel_perf_smoke
