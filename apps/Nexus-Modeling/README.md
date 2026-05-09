@@ -35,6 +35,8 @@ From repository root:
 	- cmake --build build -j$(nproc)
 3. Test:
 	- ctest --test-dir build --output-on-failure
+4. Alpha release gate and signoff report:
+	- ./tools/release_gate_alpha.sh
 
 ## Design goals
 

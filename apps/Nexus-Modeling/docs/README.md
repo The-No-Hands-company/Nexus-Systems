@@ -21,7 +21,9 @@
 | [month-3-render-checklist.md](month-3-render-checklist.md) | Concrete implementation checklist for Month 3 Render Pipeline v1 |
 | [month-4-parametric-checklist.md](month-4-parametric-checklist.md) | Concrete implementation checklist for Month 4 Parametric Foundation |
 | [api-freeze-alpha.md](api-freeze-alpha.md) | Month 12 API freeze audit process, manifest policy, and drift controls |
+| [api-contract-alpha-summary.md](api-contract-alpha-summary.md) | Alpha public API contract inventory with manifest-backed domain ownership mapping |
 | [month-12-alpha-compatibility-report.md](month-12-alpha-compatibility-report.md) | Month 12 alpha hardening report: API audit, determinism/perf, compatibility status |
+| [release-notes-1.0-alpha-draft.md](release-notes-1.0-alpha-draft.md) | Tag-ready draft release notes for kernel 1.0-alpha baseline |
 | [hardening-debt-ledger.md](hardening-debt-ledger.md) | Explicit Month 1-3 hardening debt items with measurable closure criteria |
 | [PRD.md](PRD.md) | Product goals, user targets, and high-level functional requirements |
 | [SDD.md](SDD.md) | Technical architecture, implementation constraints, and validation gates |
