@@ -297,28 +297,40 @@ ReconstructionAssessmentStats NodeScene::reconstructionAssessmentStats(
     return stats;
 }
 
+ReconstructionAssessmentStatsSnapshot NodeScene::reconstructionAssessmentStatsSnapshot() const {
+    return reconstructionAssessmentStatsSnapshot(m_reconstructionThresholds);
+}
+
+ReconstructionAssessmentStatsSnapshot NodeScene::reconstructionAssessmentStatsSnapshot(
+    const ReconstructionQualityThresholds& thresholds) const {
+    ReconstructionAssessmentStatsSnapshot snapshot;
+    snapshot.stats = reconstructionAssessmentStats(thresholds);
+    snapshot.passRate = snapshot.stats.total == 0u
+        ? 0.0f
+        : static_cast<float>(snapshot.stats.pass) / static_cast<float>(snapshot.stats.total);
+    snapshot.thresholds = thresholds;
+    return snapshot;
+}
+
 std::string NodeScene::reconstructionAssessmentStatsSummary() const {
     return reconstructionAssessmentStatsSummary(m_reconstructionThresholds);
 }
 
 std::string NodeScene::reconstructionAssessmentStatsSummary(
     const ReconstructionQualityThresholds& thresholds) const {
-    const ReconstructionAssessmentStats stats = reconstructionAssessmentStats(thresholds);
-    const float passRate = stats.total == 0u
-        ? 0.0f
-        : static_cast<float>(stats.pass) / static_cast<float>(stats.total);
+    const ReconstructionAssessmentStatsSnapshot summary = reconstructionAssessmentStatsSnapshot(thresholds);
 
     std::ostringstream oss;
     oss.imbue(std::locale::classic());
     oss << std::fixed << std::setprecision(3);
     oss << "reconstruction_stats"
-        << " total=" << stats.total
-        << " pass=" << stats.pass
-        << " fail=" << stats.fail
-        << " unavailable=" << stats.unavailable
-        << " pass_rate=" << passRate
-        << " residual_threshold=" << thresholds.maxResidual
-        << " confidence_threshold=" << thresholds.minConfidence;
+        << " total=" << summary.stats.total
+        << " pass=" << summary.stats.pass
+        << " fail=" << summary.stats.fail
+        << " unavailable=" << summary.stats.unavailable
+        << " pass_rate=" << summary.passRate
+        << " residual_threshold=" << summary.thresholds.maxResidual
+        << " confidence_threshold=" << summary.thresholds.minConfidence;
     return oss.str();
 }
 

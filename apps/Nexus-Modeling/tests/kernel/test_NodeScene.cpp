@@ -668,6 +668,57 @@ TEST(NodeScene, ReconstructionAssessmentStatsIsDeterministicAcrossRepeatedCalls)
     EXPECT_EQ(a.unavailable, b.unavailable);
 }
 
+TEST(NodeScene, ReconstructionAssessmentStatsSnapshotEmptySceneUsesDefaults) {
+    NodeScene s;
+
+    const ReconstructionAssessmentStatsSnapshot snapshot = s.reconstructionAssessmentStatsSnapshot();
+    EXPECT_EQ(snapshot.stats.total, 0u);
+    EXPECT_EQ(snapshot.stats.pass, 0u);
+    EXPECT_EQ(snapshot.stats.fail, 0u);
+    EXPECT_EQ(snapshot.stats.unavailable, 0u);
+    EXPECT_FLOAT_EQ(snapshot.passRate, 0.0f);
+    EXPECT_FLOAT_EQ(snapshot.thresholds.maxResidual, 0.200f);
+    EXPECT_FLOAT_EQ(snapshot.thresholds.minConfidence, 0.800f);
+}
+
+TEST(NodeScene, ReconstructionAssessmentStatsSnapshotIncludesCountersRateAndThresholds) {
+    NodeScene s;
+    SceneNodeId passNode = s.addNode("passNode", NodeKind::Reconstruction);
+    SceneNodeId failNode = s.addNode("failNode", NodeKind::Reconstruction);
+    (void)s.addNode("missingNode", NodeKind::Reconstruction);
+    ASSERT_TRUE(s.setReconstructionDiagnostic(passNode, NodePayload::ReconstructionDiagnostic{0.125f, 0.875f}));
+    ASSERT_TRUE(s.setReconstructionDiagnostic(failNode, NodePayload::ReconstructionDiagnostic{0.350f, 0.650f}));
+
+    const ReconstructionQualityThresholds t{.maxResidual = 0.300f, .minConfidence = 0.700f};
+    const ReconstructionAssessmentStatsSnapshot snapshot = s.reconstructionAssessmentStatsSnapshot(t);
+
+    EXPECT_EQ(snapshot.stats.total, 3u);
+    EXPECT_EQ(snapshot.stats.pass, 1u);
+    EXPECT_EQ(snapshot.stats.fail, 1u);
+    EXPECT_EQ(snapshot.stats.unavailable, 1u);
+    EXPECT_FLOAT_EQ(snapshot.passRate, 1.0f / 3.0f);
+    EXPECT_FLOAT_EQ(snapshot.thresholds.maxResidual, 0.300f);
+    EXPECT_FLOAT_EQ(snapshot.thresholds.minConfidence, 0.700f);
+}
+
+TEST(NodeScene, ReconstructionAssessmentStatsSnapshotIsDeterministicAcrossRepeatedCalls) {
+    NodeScene s;
+    SceneNodeId passNode = s.addNode("passNode", NodeKind::Reconstruction);
+    ASSERT_TRUE(s.setReconstructionDiagnostic(passNode, NodePayload::ReconstructionDiagnostic{0.125f, 0.875f}));
+
+    const ReconstructionQualityThresholds t{.maxResidual = 0.300f, .minConfidence = 0.700f};
+    const ReconstructionAssessmentStatsSnapshot a = s.reconstructionAssessmentStatsSnapshot(t);
+    const ReconstructionAssessmentStatsSnapshot b = s.reconstructionAssessmentStatsSnapshot(t);
+
+    EXPECT_EQ(a.stats.total, b.stats.total);
+    EXPECT_EQ(a.stats.pass, b.stats.pass);
+    EXPECT_EQ(a.stats.fail, b.stats.fail);
+    EXPECT_EQ(a.stats.unavailable, b.stats.unavailable);
+    EXPECT_FLOAT_EQ(a.passRate, b.passRate);
+    EXPECT_FLOAT_EQ(a.thresholds.maxResidual, b.thresholds.maxResidual);
+    EXPECT_FLOAT_EQ(a.thresholds.minConfidence, b.thresholds.minConfidence);
+}
+
 TEST(NodeScene, ReconstructionAssessmentStatsSummaryEmptySceneUsesDeterministicFormat) {
     NodeScene s;
     const std::string summary = s.reconstructionAssessmentStatsSummary();

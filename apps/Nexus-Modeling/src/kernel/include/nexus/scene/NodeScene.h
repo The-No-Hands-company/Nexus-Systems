@@ -51,6 +51,14 @@ struct ReconstructionAssessmentStats {
     std::size_t unavailable = 0;
 };
 
+/// Typed aggregate reconstruction stats-summary snapshot for parse-free
+/// UI/export consumers.
+struct ReconstructionAssessmentStatsSnapshot {
+    ReconstructionAssessmentStats stats{};
+    float passRate = 0.0f;
+    ReconstructionQualityThresholds thresholds{};
+};
+
 /// Procedural evaluation scene built on top of EvalGraph.
 ///
 /// NodeScene maps human-readable string names to EvalGraph node IDs,
@@ -229,6 +237,14 @@ public:
 
     /// Threshold-configurable variant of reconstructionAssessmentStats().
     [[nodiscard]] ReconstructionAssessmentStats reconstructionAssessmentStats(
+        const ReconstructionQualityThresholds& thresholds) const;
+
+    /// Typed aggregate stats-summary snapshot that includes counters, pass
+    /// rate, and thresholds.
+    [[nodiscard]] ReconstructionAssessmentStatsSnapshot reconstructionAssessmentStatsSnapshot() const;
+
+    /// Threshold-configurable variant of reconstructionAssessmentStatsSnapshot().
+    [[nodiscard]] ReconstructionAssessmentStatsSnapshot reconstructionAssessmentStatsSnapshot(
         const ReconstructionQualityThresholds& thresholds) const;
 
     /// Deterministic preformatted aggregate stats summary line.
