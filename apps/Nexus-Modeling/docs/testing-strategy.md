@@ -12,7 +12,7 @@ This document defines how Nexus Modeling validates kernel quality as the codebas
 ## Current baseline
 
 - Framework: GoogleTest
-- Discovered tests: 281
+- Discovered tests: 534 (529 pass, 5 expected Vulkan capability skips)
 - Scope currently covered:
   - Type system and flag semantics
    - Geometry mesh and upload contracts

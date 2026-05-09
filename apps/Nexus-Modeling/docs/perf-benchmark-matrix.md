@@ -12,6 +12,7 @@ so contributors can detect obvious regressions while the kernel is still forming
 The baseline harness is:
 
 1. CTest target: `KernelPerfSmoke.Null`
+2. CTest target: `KernelPerfSmoke.Determinism`
 2. Executable: `nexus_kernel_perf_smoke`
 3. Current scenario: `single_triangle_direct_path`
 
@@ -28,6 +29,7 @@ From repository root:
 | Backend | Scenario | Frames | Source of truth | Status |
 |---|---|---:|---|---|
 | Null | single_triangle_direct_path | 120 | `build/kernel_perf_smoke.txt` | Automated |
+| Null | single_triangle_direct_path (determinism) | 64 x 3 runs | `nexus_kernel_perf_smoke --determinism-runs 3` | Automated |
 | Vulkan | single_triangle_direct_path | 120 | Manual capture on GPU-capable runner | Pending environment |
 
 ## Initial Recorded Baseline
@@ -46,11 +48,17 @@ Observed output:
 6. `median_ms=0.000073`
 7. `final_frame_draw_calls=0`
 
+Determinism gate output (2026-05-09):
+
+1. `determinism_runs=3`
+2. `determinism_consistent=true`
+
 ## Interpretation Rules
 
 1. Treat this as a trend baseline, not a shipping performance guarantee.
 2. Compare same backend, same frame count, same scenario.
-3. Record notable regressions in PR notes when smoke timing changes materially.
+3. Determinism gate must keep `determinism_consistent=true`.
+4. Record notable regressions in PR notes when smoke timing changes materially.
 
 ## Month 1 Acceptance Link
 

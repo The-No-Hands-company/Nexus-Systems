@@ -47,6 +47,7 @@ add_executable(nexus_kernel_tests
     kernel/test_SimulationCore.cpp
     kernel/test_GaussianSplatting.cpp
     kernel/test_AutomationScript.cpp
+    kernel/test_ApiFreezeAudit.cpp
 )
 
 add_executable(nexus_kernel_perf_smoke
@@ -81,3 +82,4 @@ target_link_libraries(nexus_kernel_perf_smoke
 
 gtest_discover_tests(nexus_kernel_tests)
 add_test(NAME KernelPerfSmoke.Null COMMAND nexus_kernel_perf_smoke --frames 120)
+add_test(NAME KernelPerfSmoke.Determinism COMMAND nexus_kernel_perf_smoke --frames 64 --determinism-runs 3)
