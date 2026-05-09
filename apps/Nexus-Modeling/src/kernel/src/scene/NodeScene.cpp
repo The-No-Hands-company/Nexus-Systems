@@ -151,29 +151,31 @@ std::string NodeScene::reconstructionQualitySummary(
     SceneNodeId id,
     float maxResidual,
     float minConfidence) const {
-    const ReconstructionQualityState state = reconstructionQualityState(id, maxResidual, minConfidence);
-    if (state == ReconstructionQualityState::UnavailableUnknownNode) {
+    const ReconstructionAssessmentSnapshot snapshot = reconstructionAssessment(
+        id,
+        ReconstructionQualityThresholds{.maxResidual = maxResidual, .minConfidence = minConfidence});
+    if (snapshot.state == ReconstructionQualityState::UnavailableUnknownNode) {
         return "reconstruction_status=unavailable node=" + std::to_string(id) + " reason=unknown_node";
     }
-    if (state == ReconstructionQualityState::UnavailableMissingDiagnostic) {
+    if (snapshot.state == ReconstructionQualityState::UnavailableMissingDiagnostic) {
         return "reconstruction_status=unavailable node=" + std::to_string(id) + " reason=missing_diagnostic";
     }
 
-    const NodePayload::ReconstructionDiagnostic* d = reconstructionDiagnostic(id);
-    if (!d) {
+    if (!snapshot.metrics) {
         return "reconstruction_status=unavailable node=" + std::to_string(id) + " reason=missing_diagnostic";
     }
 
+    const NodePayload::ReconstructionDiagnostic& d = *snapshot.metrics;
     std::ostringstream oss;
     oss.imbue(std::locale::classic());
     oss << std::fixed << std::setprecision(3);
     oss << "reconstruction_status="
-        << (state == ReconstructionQualityState::Pass ? "pass" : "fail")
+        << (snapshot.state == ReconstructionQualityState::Pass ? "pass" : "fail")
         << " node=" << id
-        << " residual=" << d->residual
-        << " confidence=" << d->confidence
-        << " residual_threshold=" << maxResidual
-        << " confidence_threshold=" << minConfidence;
+        << " residual=" << d.residual
+        << " confidence=" << d.confidence
+        << " residual_threshold=" << snapshot.thresholds.maxResidual
+        << " confidence_threshold=" << snapshot.thresholds.minConfidence;
     return oss.str();
 }
 
@@ -181,6 +183,22 @@ std::string NodeScene::reconstructionQualitySummary(
     SceneNodeId id,
     const ReconstructionQualityThresholds& thresholds) const {
     return reconstructionQualitySummary(id, thresholds.maxResidual, thresholds.minConfidence);
+}
+
+ReconstructionAssessmentSnapshot NodeScene::reconstructionAssessment(SceneNodeId id) const noexcept {
+    return reconstructionAssessment(id, m_reconstructionThresholds);
+}
+
+ReconstructionAssessmentSnapshot NodeScene::reconstructionAssessment(
+    SceneNodeId id,
+    const ReconstructionQualityThresholds& thresholds) const noexcept {
+    ReconstructionAssessmentSnapshot snapshot;
+    snapshot.thresholds = thresholds;
+    snapshot.state = reconstructionQualityState(id, thresholds);
+    if (const NodePayload::ReconstructionDiagnostic* d = reconstructionDiagnostic(id)) {
+        snapshot.metrics = *d;
+    }
+    return snapshot;
 }
 
 ReconstructionQualityState NodeScene::reconstructionQualityState(SceneNodeId id) const noexcept {

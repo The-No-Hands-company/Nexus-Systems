@@ -398,6 +398,76 @@ TEST(NodeScene, ReconstructionQualityThresholdExplicitOverridesIgnoreSceneDefaul
         ReconstructionQualityThresholds{.maxResidual = 0.300f, .minConfidence = 0.700f}));
 }
 
+TEST(NodeScene, ReconstructionAssessmentSnapshotDefaultUnknownNodeParity) {
+    NodeScene s;
+    const ReconstructionAssessmentSnapshot snapshot = s.reconstructionAssessment(999u);
+
+    EXPECT_EQ(snapshot.state, s.reconstructionQualityState(999u));
+    EXPECT_FALSE(snapshot.metrics.has_value());
+    EXPECT_FLOAT_EQ(snapshot.thresholds.maxResidual, s.reconstructionQualityThresholds().maxResidual);
+    EXPECT_FLOAT_EQ(snapshot.thresholds.minConfidence, s.reconstructionQualityThresholds().minConfidence);
+}
+
+TEST(NodeScene, ReconstructionAssessmentSnapshotMissingDiagnosticParity) {
+    NodeScene s;
+    SceneNodeId n = s.addNode("plain", NodeKind::Geometry);
+
+    const ReconstructionAssessmentSnapshot snapshot = s.reconstructionAssessment(n);
+    EXPECT_EQ(snapshot.state, ReconstructionQualityState::UnavailableMissingDiagnostic);
+    EXPECT_EQ(snapshot.state, s.reconstructionQualityState(n));
+    EXPECT_FALSE(snapshot.metrics.has_value());
+}
+
+TEST(NodeScene, ReconstructionAssessmentSnapshotContainsMetricsAndThresholdParity) {
+    NodeScene s;
+    SceneNodeId n = s.addNode("recon", NodeKind::Reconstruction);
+    ASSERT_TRUE(s.setReconstructionDiagnostic(n, NodePayload::ReconstructionDiagnostic{0.250f, 0.750f}));
+
+    const ReconstructionQualityThresholds t{.maxResidual = 0.300f, .minConfidence = 0.700f};
+    const ReconstructionAssessmentSnapshot snapshot = s.reconstructionAssessment(n, t);
+
+    ASSERT_TRUE(snapshot.metrics.has_value());
+    EXPECT_FLOAT_EQ(snapshot.metrics->residual, 0.250f);
+    EXPECT_FLOAT_EQ(snapshot.metrics->confidence, 0.750f);
+    EXPECT_EQ(snapshot.state, s.reconstructionQualityState(n, t));
+    EXPECT_FLOAT_EQ(snapshot.thresholds.maxResidual, t.maxResidual);
+    EXPECT_FLOAT_EQ(snapshot.thresholds.minConfidence, t.minConfidence);
+}
+
+TEST(NodeScene, ReconstructionAssessmentSnapshotIsDeterministicAcrossRepeatedCalls) {
+    NodeScene s;
+    SceneNodeId n = s.addNode("recon", NodeKind::Reconstruction);
+    ASSERT_TRUE(s.setReconstructionDiagnostic(n, NodePayload::ReconstructionDiagnostic{0.250f, 0.750f}));
+
+    const ReconstructionQualityThresholds t{.maxResidual = 0.240f, .minConfidence = 0.760f};
+    const ReconstructionAssessmentSnapshot a = s.reconstructionAssessment(n, t);
+    const ReconstructionAssessmentSnapshot b = s.reconstructionAssessment(n, t);
+
+    EXPECT_EQ(a.state, b.state);
+    EXPECT_EQ(a.metrics.has_value(), b.metrics.has_value());
+    ASSERT_TRUE(a.metrics.has_value());
+    ASSERT_TRUE(b.metrics.has_value());
+    EXPECT_FLOAT_EQ(a.metrics->residual, b.metrics->residual);
+    EXPECT_FLOAT_EQ(a.metrics->confidence, b.metrics->confidence);
+    EXPECT_FLOAT_EQ(a.thresholds.maxResidual, b.thresholds.maxResidual);
+    EXPECT_FLOAT_EQ(a.thresholds.minConfidence, b.thresholds.minConfidence);
+}
+
+TEST(NodeScene, ReconstructionAssessmentSnapshotSummaryParityForCustomThresholds) {
+    NodeScene s;
+    SceneNodeId n = s.addNode("recon", NodeKind::Reconstruction);
+    ASSERT_TRUE(s.setReconstructionDiagnostic(n, NodePayload::ReconstructionDiagnostic{0.250f, 0.750f}));
+
+    const ReconstructionQualityThresholds t{.maxResidual = 0.240f, .minConfidence = 0.760f};
+    const ReconstructionAssessmentSnapshot snapshot = s.reconstructionAssessment(n, t);
+    ASSERT_TRUE(snapshot.metrics.has_value());
+    const std::string expected =
+        "reconstruction_status=fail node=" + std::to_string(n)
+            + " residual=0.250 confidence=0.750 residual_threshold=0.240 confidence_threshold=0.760";
+    EXPECT_EQ(s.reconstructionQualitySummary(n, t), expected);
+    EXPECT_EQ(snapshot.state, ReconstructionQualityState::Fail);
+}
+
 // ── Evaluation via internal EvalGraph ────────────────────────────────────────
 
 TEST(NodeScene, EvaluateEmptySceneSucceeds) {

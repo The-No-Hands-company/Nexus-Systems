@@ -2,6 +2,7 @@
 
 #include <nexus/eval/EvalGraph.h>
 
+#include <optional>
 #include <string>
 #include <string_view>
 #include <unordered_map>
@@ -26,6 +27,13 @@ enum class ReconstructionQualityState : uint8_t {
 struct ReconstructionQualityThresholds {
     float maxResidual = kReconstructionResidualThresholdAlpha;
     float minConfidence = kReconstructionConfidenceThresholdAlpha;
+};
+
+/// Typed reconstruction assessment snapshot for UI/export pipelines.
+struct ReconstructionAssessmentSnapshot {
+    ReconstructionQualityState state = ReconstructionQualityState::UnavailableUnknownNode;
+    ReconstructionQualityThresholds thresholds{};
+    std::optional<NodePayload::ReconstructionDiagnostic> metrics;
 };
 
 /// Procedural evaluation scene built on top of EvalGraph.
@@ -176,6 +184,14 @@ public:
     [[nodiscard]] std::string reconstructionQualitySummary(
         SceneNodeId id,
         const ReconstructionQualityThresholds& thresholds) const;
+
+    /// Typed reconstruction assessment snapshot using current scene defaults.
+    [[nodiscard]] ReconstructionAssessmentSnapshot reconstructionAssessment(SceneNodeId id) const noexcept;
+
+    /// Threshold-configurable typed reconstruction assessment snapshot.
+    [[nodiscard]] ReconstructionAssessmentSnapshot reconstructionAssessment(
+        SceneNodeId id,
+        const ReconstructionQualityThresholds& thresholds) const noexcept;
 
     /// Typed quality-state variant of reconstructionQualitySummary() that avoids
     /// string parsing in callers.
