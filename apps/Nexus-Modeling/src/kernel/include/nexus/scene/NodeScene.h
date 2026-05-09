@@ -22,6 +22,12 @@ enum class ReconstructionQualityState : uint8_t {
     Fail,
 };
 
+/// Typed threshold bundle for reconstruction quality checks and summaries.
+struct ReconstructionQualityThresholds {
+    float maxResidual = kReconstructionResidualThresholdAlpha;
+    float minConfidence = kReconstructionConfidenceThresholdAlpha;
+};
+
 /// Procedural evaluation scene built on top of EvalGraph.
 ///
 /// NodeScene maps human-readable string names to EvalGraph node IDs,
@@ -132,6 +138,12 @@ public:
         float maxResidual,
         float minConfidence) const noexcept;
 
+    /// Threshold-bundle variant of reconstructionPassesAlpha().
+    /// Returns false when id is unknown or the payload is not a diagnostic.
+    [[nodiscard]] bool reconstructionPassesAlpha(
+        SceneNodeId id,
+        const ReconstructionQualityThresholds& thresholds) const noexcept;
+
     /// Deterministic status summary string for UI/export pipelines.
     ///
     /// Formats:
@@ -154,6 +166,11 @@ public:
         float maxResidual,
         float minConfidence) const;
 
+    /// Threshold-bundle variant of reconstructionQualitySummary().
+    [[nodiscard]] std::string reconstructionQualitySummary(
+        SceneNodeId id,
+        const ReconstructionQualityThresholds& thresholds) const;
+
     /// Typed quality-state variant of reconstructionQualitySummary() that avoids
     /// string parsing in callers.
     [[nodiscard]] ReconstructionQualityState reconstructionQualityState(SceneNodeId id) const noexcept;
@@ -163,6 +180,11 @@ public:
         SceneNodeId id,
         float maxResidual,
         float minConfidence) const noexcept;
+
+    /// Threshold-bundle variant of reconstructionQualityState().
+    [[nodiscard]] ReconstructionQualityState reconstructionQualityState(
+        SceneNodeId id,
+        const ReconstructionQualityThresholds& thresholds) const noexcept;
 
     // ── Cache invalidation ──────────────────────────────────────────────────
 

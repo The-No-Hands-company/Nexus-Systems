@@ -317,6 +317,49 @@ TEST(NodeScene, ReconstructionQualityStateUsesCustomThresholds) {
         ReconstructionQualityState::Fail);
 }
 
+TEST(NodeScene, ReconstructionQualityThresholdBundleDefaultParityAcrossApis) {
+    NodeScene s;
+    SceneNodeId n = s.addNode("recon", NodeKind::Reconstruction);
+    ASSERT_TRUE(s.setReconstructionDiagnostic(n, NodePayload::ReconstructionDiagnostic{0.125f, 0.875f}));
+
+    const ReconstructionQualityThresholds t{};
+    EXPECT_EQ(s.reconstructionPassesAlpha(n, t), s.reconstructionPassesAlpha(n));
+    EXPECT_EQ(s.reconstructionQualityState(n, t), s.reconstructionQualityState(n));
+    EXPECT_EQ(s.reconstructionQualitySummary(n, t), s.reconstructionQualitySummary(n));
+}
+
+TEST(NodeScene, ReconstructionQualityThresholdBundleCustomParityWithScalarOverloads) {
+    NodeScene s;
+    SceneNodeId n = s.addNode("recon", NodeKind::Reconstruction);
+    ASSERT_TRUE(s.setReconstructionDiagnostic(n, NodePayload::ReconstructionDiagnostic{0.250f, 0.750f}));
+
+    const ReconstructionQualityThresholds t{.maxResidual = 0.300f, .minConfidence = 0.700f};
+    EXPECT_EQ(
+        s.reconstructionPassesAlpha(n, t),
+        s.reconstructionPassesAlpha(n, t.maxResidual, t.minConfidence));
+    EXPECT_EQ(
+        s.reconstructionQualityState(n, t),
+        s.reconstructionQualityState(n, t.maxResidual, t.minConfidence));
+    EXPECT_EQ(
+        s.reconstructionQualitySummary(n, t),
+        s.reconstructionQualitySummary(n, t.maxResidual, t.minConfidence));
+}
+
+TEST(NodeScene, ReconstructionQualityThresholdBundleSummaryIsDeterministicAcrossCalls) {
+    NodeScene s;
+    SceneNodeId n = s.addNode("recon", NodeKind::Reconstruction);
+    ASSERT_TRUE(s.setReconstructionDiagnostic(n, NodePayload::ReconstructionDiagnostic{0.250f, 0.750f}));
+
+    const ReconstructionQualityThresholds t{.maxResidual = 0.240f, .minConfidence = 0.760f};
+    const std::string first = s.reconstructionQualitySummary(n, t);
+    const std::string second = s.reconstructionQualitySummary(n, t);
+    EXPECT_EQ(first, second);
+    EXPECT_EQ(
+        first,
+        "reconstruction_status=fail node=" + std::to_string(n)
+            + " residual=0.250 confidence=0.750 residual_threshold=0.240 confidence_threshold=0.760");
+}
+
 // ── Evaluation via internal EvalGraph ────────────────────────────────────────
 
 TEST(NodeScene, EvaluateEmptySceneSucceeds) {

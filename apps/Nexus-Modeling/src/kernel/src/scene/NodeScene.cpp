@@ -132,6 +132,12 @@ bool NodeScene::reconstructionPassesAlpha(
     return d ? d->passesAlpha(maxResidual, minConfidence) : false;
 }
 
+bool NodeScene::reconstructionPassesAlpha(
+    SceneNodeId id,
+    const ReconstructionQualityThresholds& thresholds) const noexcept {
+    return reconstructionPassesAlpha(id, thresholds.maxResidual, thresholds.minConfidence);
+}
+
 std::string NodeScene::reconstructionQualitySummary(SceneNodeId id) const {
     return reconstructionQualitySummary(
         id,
@@ -169,6 +175,12 @@ std::string NodeScene::reconstructionQualitySummary(
     return oss.str();
 }
 
+std::string NodeScene::reconstructionQualitySummary(
+    SceneNodeId id,
+    const ReconstructionQualityThresholds& thresholds) const {
+    return reconstructionQualitySummary(id, thresholds.maxResidual, thresholds.minConfidence);
+}
+
 ReconstructionQualityState NodeScene::reconstructionQualityState(SceneNodeId id) const noexcept {
     return reconstructionQualityState(
         id,
@@ -190,6 +202,12 @@ ReconstructionQualityState NodeScene::reconstructionQualityState(
     return d->passesAlpha(maxResidual, minConfidence)
         ? ReconstructionQualityState::Pass
         : ReconstructionQualityState::Fail;
+}
+
+ReconstructionQualityState NodeScene::reconstructionQualityState(
+    SceneNodeId id,
+    const ReconstructionQualityThresholds& thresholds) const noexcept {
+    return reconstructionQualityState(id, thresholds.maxResidual, thresholds.minConfidence);
 }
 
 // ── Cache invalidation ────────────────────────────────────────────────────────
