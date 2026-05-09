@@ -1,0 +1,15 @@
+# Macro/comptime hygiene regression fixture for integration features
+macro SCALE_AND_PRINT with value, factor
+    set local_temp to value times factor
+    print text local_temp
+end
+
+comptime const BASE is 4
+comptime assert BASE is greater than 0 message "BASE must stay positive"
+
+function main returns Integer
+    set local_temp to 99
+    expand SCALE_AND_PRINT with value BASE, factor 5
+    print text local_temp
+    return 0
+end

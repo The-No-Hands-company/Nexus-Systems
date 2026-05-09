@@ -24,8 +24,7 @@ html {
 body {
   color: var(--text);
   font-family: "IBM Plex Sans", "Segoe UI", sans-serif;
-  background:
-    radial-gradient(circle at 10% 10%, rgba(18, 186, 160, 0.18), transparent 34%),
+  background: radial-gradient(circle at 10% 10%, rgba(18, 186, 160, 0.18), transparent 34%),
     radial-gradient(circle at 80% 0%, rgba(38, 84, 145, 0.35), transparent 38%),
     linear-gradient(145deg, #050b14 0%, #0d1a2d 58%, #111d33 100%);
   min-height: 100vh;

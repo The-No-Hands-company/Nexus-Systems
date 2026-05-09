@@ -15,28 +15,36 @@ from ..typesystem.types import (
 class TypeVariable:
     """Represents a generic type parameter (e.g., T, K, V)."""
     
-    def __init__(self, name: str, constraints: Optional[List[Type]] = None):
+    def __init__(self, name: str, constraints: Optional[List[Type]] = None) -> None:
+        if not isinstance(name, str) or not name.strip():
+            raise TypeError("Type variable name must be a non-empty string")
+        if constraints is not None and not isinstance(constraints, list):
+            raise TypeError("Type variable constraints must be a list when provided")
         self.name = name
         self.constraints = constraints or []
     
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"TypeVariable({self.name})"
     
-    def __eq__(self, other):
+    def __eq__(self, other: object) -> bool:
         return isinstance(other, TypeVariable) and self.name == other.name
     
-    def __hash__(self):
+    def __hash__(self) -> int:
         return hash(self.name)
 
 
 class TypeSubstitution:
     """Manages type variable substitutions during inference."""
     
-    def __init__(self):
+    def __init__(self) -> None:
         self.substitutions: Dict[str, Type] = {}
     
     def bind(self, type_var: str, concrete_type: Type) -> bool:
         """Bind a type variable to a concrete type."""
+        if not isinstance(type_var, str) or not type_var.strip():
+            raise TypeError("type_var must be a non-empty string")
+        if concrete_type is None or not hasattr(concrete_type, "is_compatible_with"):
+            raise TypeError("concrete_type must be a valid NexusLang type")
         if type_var in self.substitutions:
             # Check if binding is consistent
             existing = self.substitutions[type_var]
@@ -47,10 +55,14 @@ class TypeSubstitution:
     
     def get(self, type_var: str) -> Optional[Type]:
         """Get the substitution for a type variable."""
+        if not isinstance(type_var, str) or not type_var.strip():
+            raise TypeError("type_var must be a non-empty string")
         return self.substitutions.get(type_var)
     
     def apply(self, type_annotation: str) -> str:
         """Apply substitutions to a type annotation string."""
+        if not isinstance(type_annotation, str) or not type_annotation.strip():
+            raise TypeError("type_annotation must be a non-empty string")
         result = type_annotation
         for var_name, concrete_type in self.substitutions.items():
             # Get the type name for substitution
@@ -58,14 +70,14 @@ class TypeSubstitution:
             result = result.replace(var_name, type_name)
         return result
     
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"TypeSubstitution({self.substitutions})"
 
 
 class GenericTypeInference:
     """Infers generic type arguments from usage context."""
     
-    def __init__(self):
+    def __init__(self) -> None:
         self.substitution = TypeSubstitution()
     
     def infer_from_arguments(
@@ -85,6 +97,10 @@ class GenericTypeInference:
         Returns:
             Dictionary mapping type parameter names to inferred types
         """
+        if len(parameter_types) != len(argument_types):
+            raise ValueError(
+                "parameter_types and argument_types must have the same length"
+            )
         self.substitution = TypeSubstitution()
         
         # Match each parameter with its argument
@@ -154,8 +170,14 @@ class GenericTypeInference:
         try:
             param_type_obj = get_type_by_name(param_type_str)
             return arg_type.is_compatible_with(param_type_obj)
-        except:
-            return True  # Allow if we can't parse the type
+        except (NameError, KeyError, ValueError) as e:
+            # Type lookup failed; err on side of caution (type mismatch)
+            import logging
+            logging.warning(
+                f"Type inference: Cannot resolve parameter type '{param_type_str}': {e}. "
+                f"Assuming type mismatch for safety."
+            )
+            return False  # Conservative: incompatible rather than silent True
     
     def _split_type_args(self, args_str: str) -> List[str]:
         """Split type arguments by comma, respecting nesting."""
@@ -218,7 +240,13 @@ class GenericTypeInference:
         # Try to parse as regular type
         try:
             return get_type_by_name(return_type)
-        except:
+        except (NameError, KeyError, ValueError) as e:
+            # Type lookup failed; log and return ANY_TYPE as last resort
+            import logging
+            logging.warning(
+                f"Type substitution: Cannot resolve return type '{return_type}': {e}. "
+                f"Using ANY_TYPE; type safety may be compromised."
+            )
             return ANY_TYPE
 
 

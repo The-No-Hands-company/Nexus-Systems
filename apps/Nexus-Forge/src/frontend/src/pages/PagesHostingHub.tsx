@@ -19,7 +19,9 @@ export default function PagesHostingHub() {
   return (
     <section>
       <h2>Pages Hosting Hub</h2>
-      <p>Static hosting parity for project and org pages with custom domains and deployment history.</p>
+      <p>
+        Static hosting parity for project and org pages with custom domains and deployment history.
+      </p>
       <div className="repo-grid">
         <article className="repo-card">
           <h3>Source</h3>

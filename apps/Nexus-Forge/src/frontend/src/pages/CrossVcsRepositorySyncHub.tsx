@@ -1,7 +1,10 @@
 import { useEffect, useState } from "react";
 
 export default function CrossVcsRepositorySyncHub() {
-  const [health, setHealth] = useState<{ backends: number; synced: boolean }>({ backends: 0, synced: false });
+  const [health, setHealth] = useState<{ backends: number; synced: boolean }>({
+    backends: 0,
+    synced: false,
+  });
 
   useEffect(() => {
     async function load() {
@@ -31,7 +34,9 @@ export default function CrossVcsRepositorySyncHub() {
         </article>
         <article className="repo-card">
           <h3>Health</h3>
-          <p>Backends: {health.backends}, Synced: {health.synced ? "Yes" : "No"}</p>
+          <p>
+            Backends: {health.backends}, Synced: {health.synced ? "Yes" : "No"}
+          </p>
         </article>
       </div>
     </section>

@@ -24,7 +24,9 @@ export default function SustainabilityCommandCenterHub() {
       <div className="repo-grid">
         <article className="repo-card">
           <h3>Dimensions</h3>
-          <p>{dimensions.length > 0 ? dimensions.join(", ") : "No sustainability dimensions loaded"}</p>
+          <p>
+            {dimensions.length > 0 ? dimensions.join(", ") : "No sustainability dimensions loaded"}
+          </p>
         </article>
         <article className="repo-card">
           <h3>Initiatives</h3>

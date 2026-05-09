@@ -96,7 +96,7 @@ class SecurityChecker(BaseChecker):
         elif node_type == "PrintStatement":
             self._check_print_statement(node)
 
-        for child in self._iter_children(node):
+        for child in self.iter_child_nodes(node):
             self._walk(child, parent=node, depth=depth + 1)
 
     # ------------------------------------------------------------------
@@ -299,22 +299,7 @@ class SecurityChecker(BaseChecker):
             return False
         if type(node).__name__ in ("Name", "Identifier", "VariableRef", "NameExpression"):
             return True
-        for child in self._iter_children(node):
+        for child in self.iter_child_nodes(node):
             if self._contains_var_ref(child):
                 return True
         return False
-
-    # ------------------------------------------------------------------
-    # Iteration helpers
-    # ------------------------------------------------------------------
-
-    def _iter_children(self, node: Any):
-        if not hasattr(node, "__dict__"):
-            return
-        for k, v in vars(node).items():
-            if k.startswith("_"):
-                continue
-            if isinstance(v, list):
-                yield from [i for i in v if i is not None and hasattr(i, "__dict__")]
-            elif hasattr(v, "__dict__"):
-                yield v

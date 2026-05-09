@@ -1,4 +1,4 @@
-import { describe, it, expect } from "bun:test";
+import { describe, expect, it } from "bun:test";
 import { VCSFactory } from "../src/backend/vcs/vcs-interface";
 
 describe("VCS Backend", () => {

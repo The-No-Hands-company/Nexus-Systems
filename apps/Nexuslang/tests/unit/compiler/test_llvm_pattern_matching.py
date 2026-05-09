@@ -82,7 +82,56 @@ end
         llvm_ir = LLVMIRGenerator().generate(ast)
 
         assert '@NLPL_Optional_has_value' in llvm_ir
-        assert '@NLPL_Optional_get_value' in llvm_ir
+        assert '@NLPL_Optional_get_value_ptr' in llvm_ir
+
+    def test_option_pointer_pattern_uses_runtime_helpers(self):
+        """Pointer-backed Option patterns should use runtime helper calls."""
+        generator = LLVMIRGenerator()
+        pattern = OptionPattern("Some", "payload")
+
+        cond_reg = generator._generate_option_pattern_match(pattern, "%opt", "i8*", "  ")
+        generator._generate_option_pattern_binding(pattern, "%opt", "i8*", "  ")
+
+        ir = "\n".join(generator.ir_lines)
+        assert cond_reg.startswith("%")
+        assert "call i1 @NLPL_Optional_has_value(i8* %opt)" in ir
+        assert "call i32 @NLPL_Optional_get_value_kind(i8* %opt)" in ir
+        assert "call i64 @NLPL_Optional_get_value_i64(i8* %opt)" in ir
+        assert "call double @NLPL_Optional_get_value_f64(i8* %opt)" in ir
+        assert "call i8* @NLPL_Optional_get_value_ptr(i8* %opt)" in ir
+
+    def test_option_typed_integer_binding_uses_fast_path(self):
+        """Typed Some payload bindings should use direct i64 extractor path."""
+        generator = LLVMIRGenerator()
+        pattern = OptionPattern("Some", "payload", binding_type_annotation="Integer")
+
+        generator._generate_option_pattern_binding(pattern, "%opt", "i8*", "  ")
+        ir = "\n".join(generator.ir_lines)
+
+        assert "call i64 @NLPL_Optional_get_value_i64(i8* %opt)" in ir
+        assert "call i32 @NLPL_Optional_get_value_kind(i8* %opt)" not in ir
+        assert generator.local_vars["payload"][0] == "i64"
+
+    def test_option_pattern_parses_binding_type_annotation(self):
+        """Parser should preserve optional payload binding type metadata."""
+        code = """function main returns Integer
+    set opt to 0
+    match opt with
+        case Some with payload as Integer
+            return 1
+        case None
+            return 0
+end
+"""
+
+        lexer = Lexer(code)
+        tokens = lexer.scan_tokens()
+        parser = Parser(tokens)
+        ast = parser.parse()
+
+        match_stmt = _find_first_match(ast)
+        assert isinstance(match_stmt.cases[0].pattern, OptionPattern)
+        assert match_stmt.cases[0].pattern.binding_type_annotation == "Integer"
 
 
 class TestResultPatternMatching:
@@ -140,8 +189,92 @@ end
         llvm_ir = LLVMIRGenerator().generate(ast)
 
         assert '@NLPL_Result_is_ok' in llvm_ir
-        assert '@NLPL_Result_get_error' in llvm_ir
-        assert '@NLPL_Result_get_value' in llvm_ir
+        assert '@NLPL_Result_get_error_ptr' in llvm_ir
+        assert '@NLPL_Result_get_value_ptr' in llvm_ir
+
+    def test_result_pointer_err_pattern_uses_runtime_helpers(self):
+        """Pointer-backed Result Err patterns should use runtime matcher and error extractor."""
+        generator = LLVMIRGenerator()
+        pattern = ResultPattern("Err", "message")
+
+        cond_reg = generator._generate_result_pattern_match(pattern, "%res", "i8*", "  ")
+        generator._generate_result_pattern_binding(pattern, "%res", "i8*", "  ")
+
+        ir = "\n".join(generator.ir_lines)
+        assert cond_reg.startswith("%")
+        assert "call i1 @NLPL_Result_is_ok(i8* %res)" in ir
+        assert "call i32 @NLPL_Result_get_error_kind(i8* %res)" in ir
+        assert "call i64 @NLPL_Result_get_error_i64(i8* %res)" in ir
+        assert "call double @NLPL_Result_get_error_f64(i8* %res)" in ir
+        assert "call i8* @NLPL_Result_get_error_ptr(i8* %res)" in ir
+
+    def test_result_pointer_ok_pattern_uses_runtime_value_helper(self):
+        """Pointer-backed Result Ok bindings should use runtime value extractor."""
+        generator = LLVMIRGenerator()
+        pattern = ResultPattern("Ok", "value")
+
+        generator._generate_result_pattern_binding(pattern, "%res", "i8*", "  ")
+        ir = "\n".join(generator.ir_lines)
+
+        assert "call i32 @NLPL_Result_get_value_kind(i8* %res)" in ir
+        assert "call i64 @NLPL_Result_get_value_i64(i8* %res)" in ir
+        assert "call double @NLPL_Result_get_value_f64(i8* %res)" in ir
+        assert "call i8* @NLPL_Result_get_value_ptr(i8* %res)" in ir
+
+    def test_result_typed_float_err_binding_uses_fast_path(self):
+        """Typed Err payload bindings should use direct f64 extractor path."""
+        generator = LLVMIRGenerator()
+        pattern = ResultPattern("Err", "error_payload", binding_type_annotation="Float")
+
+        generator._generate_result_pattern_binding(pattern, "%res", "i8*", "  ")
+        ir = "\n".join(generator.ir_lines)
+
+        assert "call double @NLPL_Result_get_error_f64(i8* %res)" in ir
+        assert "call i32 @NLPL_Result_get_error_kind(i8* %res)" not in ir
+        assert generator.local_vars["error_payload"][0] == "double"
+
+    def test_result_pattern_parses_binding_type_annotation(self):
+        """Parser should preserve optional Result binding type metadata."""
+        code = """function main returns Integer
+    set res to 0
+    match res with
+        case Ok with value as Float
+            return 1
+        case Err with error
+            return 0
+end
+"""
+
+        lexer = Lexer(code)
+        tokens = lexer.scan_tokens()
+        parser = Parser(tokens)
+        ast = parser.parse()
+
+        match_stmt = _find_first_match(ast)
+        assert isinstance(match_stmt.cases[0].pattern, ResultPattern)
+        assert match_stmt.cases[0].pattern.binding_type_annotation == "Float"
+
+    def test_option_scalar_some_pattern_binding_fails_fast(self):
+        """Scalar Option Some binding should fail fast without heuristic coercion."""
+        generator = LLVMIRGenerator()
+        pattern = OptionPattern("Some", "payload")
+
+        with pytest.raises(
+            RuntimeError,
+            match="OptionPattern binding requires runtime-backed pointer representation",
+        ):
+            generator._generate_option_pattern_binding(pattern, "%opt", "i64", "  ")
+
+    def test_result_scalar_err_pattern_binding_fails_fast(self):
+        """Scalar Result Err binding should fail fast without heuristic coercion."""
+        generator = LLVMIRGenerator()
+        pattern = ResultPattern("Err", "error_payload")
+
+        with pytest.raises(
+            RuntimeError,
+            match="ResultPattern binding requires runtime-backed pointer representation",
+        ):
+            generator._generate_result_pattern_binding(pattern, "%res", "i64", "  ")
 
 
 class TestTuplePatternMatching:

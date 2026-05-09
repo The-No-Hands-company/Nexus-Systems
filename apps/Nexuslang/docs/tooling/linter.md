@@ -417,7 +417,7 @@ See `test_programs/static_analysis/test_bugs.nlpl` for example buggy code.
 
 - [ ] Fix minor bugs (line number comparisons)
 - [ ] Implement type safety checker (full)
-- [ ] Implement dead code checker (full)
+- [x] Implement dead code checker core coverage (unreachable code + unused symbol diagnostics)
 - [ ] Implement style checker (full)
 - [ ] Add auto-fix capability
 - [x] Add configuration file support (JSON/TOML + schema validation)

@@ -868,6 +868,31 @@ class TestBuildSystemRunLTOIfEnabled:
         assert skip is None
         assert errs == []
 
+    def test_lto_enabled_accepts_hyphenated_llvm_alias(self, tmp_path):
+        out_dir = tmp_path / "build"
+        out_dir.mkdir()
+        (out_dir / "main.ll").write_text("; fake bitcode\n")
+
+        bs = _make_build_system(tmp_path, target="llvm-ir", lto=True)
+        prof = ProfileConfig(name="release", optimization=3, lto=True)
+
+        final_out = out_dir / "pkg"
+        from nexuslang.build.lto import LTOResult
+        with patch("nexuslang.tooling.builder.LTOLinker") as MockLinker:
+            instance = MockLinker.return_value
+            instance.link_with_lto.return_value = LTOResult(
+                success=True, output_file=final_out
+            )
+            ran, out, skip, errs, warns = bs._run_lto_if_enabled(
+                prof, str(out_dir), "pkg"
+            )
+
+        assert ran is True
+        assert out == final_out
+        assert skip is None
+        assert errs == []
+        assert warns == []
+
     def test_lto_uses_thin_for_opt_lt_3(self, tmp_path):
         out_dir = tmp_path / "build"
         out_dir.mkdir()
@@ -1004,7 +1029,7 @@ class TestBuildResultLTOIntegration:
         bs = BuildSystem(cfg)
 
         # Mock _compile_one to succeed without actually writing .ll files
-        def fake_compile(source_path, out_dir, prof, features, check_only, opt_bounds):
+        def fake_compile(source_path, out_dir, prof, features, check_only, opt_bounds, sanitize=None):
             return source_path, True, []
 
         with patch.object(bs, "_compile_one", side_effect=fake_compile):
@@ -1018,3 +1043,51 @@ class TestBuildResultLTOIntegration:
         assert result.lto_output is None
         assert result.lto_skipped_reason is not None
         assert "no .ll" in result.lto_skipped_reason
+
+
+class TestBuildSystemTargetNormalization:
+    def test_compile_one_normalizes_cpp_alias_before_compiler_dispatch(self, tmp_path):
+        src_dir = tmp_path / "src"
+        src_dir.mkdir(parents=True, exist_ok=True)
+        source = src_dir / "main.nxl"
+        source.write_text('print text "hello"\n')
+
+        bs = _make_build_system(tmp_path, target="c++", lto=False)
+        prof = ProfileConfig(name="dev", optimization=0, lto=False)
+        compiler = MagicMock()
+        compiler.compile.return_value = (True, set())
+
+        with patch.object(bs, "_configure_compiler", return_value=compiler):
+            _, ok, errors = bs._compile_one(
+                str(source),
+                str(tmp_path / "build"),
+                prof,
+                [],
+                False,
+                False,
+            )
+
+        assert ok is True
+        assert errors == []
+        assert compiler.compile.call_args[0][1] == "cpp"
+
+    def test_maybe_link_uses_cpp_toolchain_for_cpp_alias(self, tmp_path):
+        out_dir = tmp_path / "build"
+        out_dir.mkdir(parents=True, exist_ok=True)
+        (out_dir / "main.cpp").write_text("int main() { return 0; }\n")
+
+        bs = _make_build_system(tmp_path, target="c++", lto=False)
+        errors = []
+
+        def fake_which(name):
+            if name == "g++":
+                return "/usr/bin/g++"
+            return None
+
+        fake_completed = MagicMock(returncode=0, stderr="")
+        with patch("nexuslang.tooling.builder.shutil.which", side_effect=fake_which):
+            with patch("subprocess.run", return_value=fake_completed) as mock_run:
+                bs._maybe_link(str(out_dir), errors)
+
+        assert errors == []
+        assert mock_run.call_args[0][0][0] == "/usr/bin/g++"

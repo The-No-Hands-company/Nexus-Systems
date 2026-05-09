@@ -24,7 +24,9 @@ export default function LegislativeChangeRadarHub() {
       <div className="repo-grid">
         <article className="repo-card">
           <h3>Categories</h3>
-          <p>{categories.length > 0 ? categories.join(", ") : "No legislative categories loaded"}</p>
+          <p>
+            {categories.length > 0 ? categories.join(", ") : "No legislative categories loaded"}
+          </p>
         </article>
         <article className="repo-card">
           <h3>Jurisdictions</h3>

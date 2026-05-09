@@ -1,4 +1,4 @@
-export function registerFederationRoutes(app: any) {
+export function registerFederationRoutes(app: ForgeRouteApp) {
   app.get("/.well-known/nexus-cloud", () => ({
     service: "nexus-forge",
     version: "0.1.0",
@@ -16,7 +16,7 @@ export function registerFederationRoutes(app: any) {
     };
   });
 
-  app.post("/api/cloud/register", async ({ body }: any) => {
+  app.post("/api/cloud/register", async ({ body }) => {
     const payload = body as { publicKey?: string; domain?: string; port?: number };
     return {
       ok: true,
@@ -25,7 +25,7 @@ export function registerFederationRoutes(app: any) {
     };
   });
 
-  app.get("/api/cloud/client", async ({ query }: any) => {
+  app.get("/api/cloud/client", async ({ query }) => {
     return {
       endpoint: "http://localhost:8090",
       requestedRepo: query.repo || null,

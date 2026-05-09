@@ -1,4 +1,4 @@
-export function registerMonetizationRoutes(app: any) {
+export function registerMonetizationRoutes(app: ForgeRouteApp) {
   app.get("/api/billing/plans", async () => ({
     plans: [
       { id: "free", name: "Free", seats: 5 },
@@ -13,7 +13,7 @@ export function registerMonetizationRoutes(app: any) {
     note: "Subscription lifecycle is stubbed.",
   }));
 
-  app.post("/api/billing/subscriptions", async ({ body }: any) => ({
+  app.post("/api/billing/subscriptions", async ({ body }) => ({
     ok: true,
     subscription: {
       id: "sub-stub",
@@ -22,7 +22,10 @@ export function registerMonetizationRoutes(app: any) {
     },
   }));
 
-  app.get("/api/billing/invoices", async () => ({ invoices: [], note: "Invoice ledger is stubbed." }));
+  app.get("/api/billing/invoices", async () => ({
+    invoices: [],
+    note: "Invoice ledger is stubbed.",
+  }));
   app.get("/api/billing/usage", async () => ({ usage: [], note: "Usage metering is stubbed." }));
   app.get("/api/billing/quotas", async () => ({ quotas: [], note: "Quota policies are stubbed." }));
 }

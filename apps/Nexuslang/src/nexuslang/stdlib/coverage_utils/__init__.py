@@ -74,22 +74,83 @@ class _SessionData:
             }
         return self.files[filepath]
 
-    def _should_track(self, filepath: str) -> bool:
+    @staticmethod
+    def _matches_path_pattern(filepath: str, pattern: str) -> bool:
+        """Match a traced filepath against a user include/exclude pattern.
+
+        Supports both glob-style matching and exact-path matching that is robust
+        to symlink/realpath differences.
+        """
+        fp_norm = os.path.normpath(filepath)
+        pat_norm = os.path.normpath(pattern)
+
+        # Standard glob matching on normalized forms.
+        if fnmatch.fnmatch(fp_norm, pat_norm):
+            return True
+
+        # Try glob matching against the resolved path of the traced file.
+        fp_real = os.path.realpath(fp_norm)
+        if fnmatch.fnmatch(fp_real, pat_norm):
+            return True
+
+        # If this is an exact path (no glob chars), compare normalized and
+        # resolved forms directly.
+        if not any(ch in pat_norm for ch in "*?["):
+            pat_real = os.path.realpath(pat_norm)
+            if fp_norm == pat_norm or fp_real == pat_norm:
+                return True
+            if fp_norm == pat_real or fp_real == pat_real:
+                return True
+
+            # Some environments execute the same file tree through alternate
+            # root prefixes (e.g. mirrored workspaces). Treat exact-path
+            # patterns as equivalent when they share a sufficiently specific
+            # trailing component sequence.
+            fp_parts = [part for part in fp_norm.split(os.sep) if part]
+            pat_parts = [part for part in pat_norm.split(os.sep) if part]
+            max_suffix = min(len(fp_parts), len(pat_parts))
+            for n in range(max_suffix, 2, -1):
+                if fp_parts[-n:] == pat_parts[-n:]:
+                    return True
+
+            # Fall back to inode/device identity when both files exist.
+            try:
+                if os.path.exists(fp_norm) and os.path.exists(pat_norm):
+                    if os.path.samefile(fp_norm, pat_norm):
+                        return True
+            except OSError:
+                pass
+
+        return False
+
+    def _canonical_track_path(self, filepath: str) -> str | None:
         if not filepath or filepath == "<string>" or filepath.startswith("<"):
-            return False
+            return None
         # normalise
         fp = os.path.normpath(filepath)
         if self.include_patterns:
-            if not any(fnmatch.fnmatch(fp, p) for p in self.include_patterns):
-                return False
+            matched_pattern = None
+            for pattern in self.include_patterns:
+                if self._matches_path_pattern(fp, pattern):
+                    matched_pattern = os.path.normpath(pattern)
+                    break
+            if matched_pattern is None:
+                return None
+            # Keep exact include paths deterministic as session keys even when
+            # execution happens through an alternate mirrored workspace root.
+            if not any(ch in matched_pattern for ch in "*?["):
+                fp = matched_pattern
         if self.exclude_patterns:
-            if any(fnmatch.fnmatch(fp, p) for p in self.exclude_patterns):
-                return False
-        return True
+            if any(self._matches_path_pattern(fp, p) for p in self.exclude_patterns):
+                return None
+        return fp
+
+    def _should_track(self, filepath: str) -> bool:
+        return self._canonical_track_path(filepath) is not None
 
     def _tracer(self, frame, event, arg):
-        filepath = frame.f_code.co_filename
-        if not self._should_track(filepath):
+        filepath = self._canonical_track_path(frame.f_code.co_filename)
+        if filepath is None:
             return self._tracer  # still need to return self to keep tracing
 
         lineno = frame.f_lineno

@@ -1,7 +1,10 @@
 import { useEffect, useState } from "react";
 
 export default function PerformanceTestingLabHub() {
-  const [regressions, setRegressions] = useState<{ regressions: number; baseline: string }>({ regressions: 0, baseline: "" });
+  const [regressions, setRegressions] = useState<{ regressions: number; baseline: string }>({
+    regressions: 0,
+    baseline: "",
+  });
 
   useEffect(() => {
     async function load() {
@@ -31,7 +34,9 @@ export default function PerformanceTestingLabHub() {
         </article>
         <article className="repo-card">
           <h3>Analysis</h3>
-          <p>Baseline: {regressions.baseline}, Regressions: {regressions.regressions}</p>
+          <p>
+            Baseline: {regressions.baseline}, Regressions: {regressions.regressions}
+          </p>
         </article>
       </div>
     </section>

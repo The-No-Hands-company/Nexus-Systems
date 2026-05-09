@@ -1,0 +1,209 @@
+# Desktop Calculator - GUI Showcase
+#
+# Demonstrates the NexusLang GUI stdlib by building a fully interactive
+# four-function desktop calculator.  No external libraries are required:
+# the window, buttons, and event loop all use the built-in gui module.
+#
+# Run with:
+#   python src/main.py examples/26_calculator_gui.nxl
+#
+# Architecture
+# ------------
+# - Buttons are created with widget_button; each click fires a button_click
+#   event into the window event queue.
+# - window_update drives the Tk event loop one frame at a time so the
+#   interpreter stays in control of the event processing.
+# - event_poll drains the event queue after each frame update.
+# - Calculator state (accumulator, pending operator, fresh flag) is stored
+#   in plain variables updated on each relevant event.
+
+# ---------------------------------------------------------------------------
+# Layout constants
+# ---------------------------------------------------------------------------
+
+set WIN_W to 280
+set WIN_H to 380
+set BTN_W to 60
+set BTN_H to 50
+set BTN_PAD to 5
+set BTN_LEFT to 10
+set BTN_TOP to 90
+set DISP_H to 70
+
+# ---------------------------------------------------------------------------
+# Calculator state
+# ---------------------------------------------------------------------------
+
+set accumulator to 0.0
+set pending_op to ""
+set display_text to "0"
+set fresh_entry to true
+
+# ---------------------------------------------------------------------------
+# Create the window and display entry
+# ---------------------------------------------------------------------------
+
+set win to window_create with "Calculator" and WIN_W and WIN_H
+window_set_background with win and "#2b2b2b"
+window_set_resizable with win and false and false
+
+set display to widget_entry with win and 10 and 10 and 260 and "0" and "Arial" and 28
+
+# ---------------------------------------------------------------------------
+# Helper: update the display widget text
+# ---------------------------------------------------------------------------
+
+function refresh_display
+    widget_set_text with display and display_text
+end
+
+# ---------------------------------------------------------------------------
+# Button layout: rows x columns
+#   Row 0:  C    +/-   %    /
+#   Row 1:  7     8    9    *
+#   Row 2:  4     5    6    -
+#   Row 3:  1     2    3    +
+#   Row 4:  0          .    =
+# ---------------------------------------------------------------------------
+
+set button_labels to ["C", "+/-", "%", "/", "7", "8", "9", "*", "4", "5", "6", "-", "1", "2", "3", "+", "0", ".", "="]
+
+set col to 0
+set row to 0
+set btn_index to 0
+
+for each label in button_labels
+    set bx to BTN_LEFT plus col times (BTN_W plus BTN_PAD)
+    set by to BTN_TOP plus row times (BTN_H plus BTN_PAD)
+
+    # Wide zero button spans two columns
+    if label is equal to "0"
+        set bw to BTN_W times 2 plus BTN_PAD
+    else
+        set bw to BTN_W
+    end
+
+    # Color scheme
+    if label is equal to "C" or label is equal to "+/-" or label is equal to "%"
+        set fg to "#000000"
+        set bg to "#a5a5a5"
+    else if label is equal to "/" or label is equal to "*" or label is equal to "-" or label is equal to "+" or label is equal to "="
+        set fg to "#ffffff"
+        set bg to "#f5a623"
+    else
+        set fg to "#ffffff"
+        set bg to "#333333"
+    end
+
+    widget_button with win and label and bx and by and bw and BTN_H and fg and bg and "Arial" and 18 and label
+
+    # Advance grid position (0 spans double)
+    if label is equal to "0"
+        set col to col plus 2
+    else
+        set col to col plus 1
+    end
+    if col is greater than or equal to 4
+        set col to 0
+        set row to row plus 1
+    end
+    set btn_index to btn_index plus 1
+end
+
+# ---------------------------------------------------------------------------
+# Show window and enter the event loop
+# ---------------------------------------------------------------------------
+
+window_show with win
+
+set running to true
+
+while running
+    window_update with win
+
+    set events to event_poll with win
+
+    for each evt in events
+        set evt_type to evt["type"]
+
+        if evt_type is equal to "button_click"
+            set label to evt["text"]
+
+            if label is equal to "C"
+                set accumulator to 0.0
+                set pending_op to ""
+                set display_text to "0"
+                set fresh_entry to true
+                refresh_display
+
+            else if label is equal to "+/-"
+                if display_text is not equal to "0"
+                    set current_val to to_float with display_text
+                    set display_text to to_string with current_val times -1.0
+                    refresh_display
+                end
+
+            else if label is equal to "%"
+                set current_val to to_float with display_text
+                set display_text to to_string with current_val divided by 100.0
+                refresh_display
+
+            else if label is equal to "=" or label is equal to "+" or label is equal to "-" or label is equal to "*" or label is equal to "/"
+                set right_val to to_float with display_text
+
+                if pending_op is equal to "+"
+                    set accumulator to accumulator plus right_val
+                else if pending_op is equal to "-"
+                    set accumulator to accumulator minus right_val
+                else if pending_op is equal to "*"
+                    set accumulator to accumulator times right_val
+                else if pending_op is equal to "/"
+                    if right_val is equal to 0.0
+                        set display_text to "Error"
+                        set accumulator to 0.0
+                        set pending_op to ""
+                        set fresh_entry to true
+                        refresh_display
+                    else
+                        set accumulator to accumulator divided by right_val
+                    end
+                else
+                    set accumulator to right_val
+                end
+
+                if label is equal to "="
+                    set display_text to to_string with accumulator
+                    set pending_op to ""
+                    set fresh_entry to true
+                else
+                    set display_text to to_string with accumulator
+                    set pending_op to label
+                    set fresh_entry to true
+                end
+                refresh_display
+
+            else
+                # Digit or decimal point
+                if fresh_entry
+                    if label is equal to "."
+                        set display_text to "0."
+                    else
+                        set display_text to label
+                    end
+                    set fresh_entry to false
+                else
+                    if label is equal to "."
+                        if str_contains with display_text and "."
+                            # Ignore second decimal point
+                        else
+                            set display_text to display_text plus label
+                        end
+                    else
+                        set display_text to display_text plus label
+                    end
+                end
+                refresh_display
+            end
+        end
+    end
+end

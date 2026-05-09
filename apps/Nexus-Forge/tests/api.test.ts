@@ -1,6 +1,6 @@
-import { describe, it, expect } from "bun:test";
-import { VCSFactory } from "../src/backend/vcs/vcs-interface";
+import { describe, expect, it } from "bun:test";
 import { registerFederationRoutes } from "../src/backend/api/federation";
+import { VCSFactory } from "../src/backend/vcs/vcs-interface";
 
 describe("API Integration", () => {
   it("should provide VCS backends for each supported type", () => {
@@ -11,7 +11,7 @@ describe("API Integration", () => {
   });
 
   it("should register federation routes without throwing", () => {
-    const mockApp = { get: () => mockApp, post: () => mockApp } as any;
+    const mockApp = { get: () => mockApp, post: () => mockApp } as unknown as ForgeRouteApp;
     expect(() => registerFederationRoutes(mockApp)).not.toThrow();
   });
 });

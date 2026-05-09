@@ -39,8 +39,20 @@ from ..parser.ast import (
     VariableDeclaration, ImportStatement, ASTNode, MethodDefinition,
     SwitchStatement, WhileLoop, ForLoop
 )
+from ..errors import NxlError
 
 logger = logging.getLogger('nexuslang-lsp.workspace-index')
+
+
+_RECOVERABLE_LSP_EXCEPTIONS = (
+    NxlError,
+    RuntimeError,
+    ValueError,
+    TypeError,
+    AttributeError,
+    OSError,
+    UnicodeError,
+)
 
 
 @dataclass
@@ -149,7 +161,7 @@ class WorkspaceIndex:
                 if progress_callback:
                     progress_callback(idx, total_files, file_path)
                     
-            except Exception as e:
+            except _RECOVERABLE_LSP_EXCEPTIONS as e:
                 logger.error(f"Failed to index {file_path}: {e}")
                 # Continue with other files even if one fails
         
@@ -219,7 +231,7 @@ class WorkspaceIndex:
             logger.debug(f"Indexed {len(symbols)} symbols from {file_uri}")
             return symbols
             
-        except Exception as e:
+        except _RECOVERABLE_LSP_EXCEPTIONS as e:
             logger.error(f"Failed to index {file_uri}: {e}", exc_info=True)
             return []
     

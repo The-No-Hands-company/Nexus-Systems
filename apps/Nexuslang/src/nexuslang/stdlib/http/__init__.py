@@ -480,21 +480,9 @@ class HTTPServerApp:
         # Parse cookies
         cookie_header = headers.get('Cookie', '')
         cookies = self.parse_cookies(cookie_header)
-        
-        # Find matching route
-        route_match = self.find_route(method, path_only)
-        
-        if route_match is None:
-            # 404 Not Found
-            if 404 in self.error_handlers:
-                return self.error_handlers[404](Request(method, path_only, headers, body, 
-                                                       query_params, {}, cookies))
-            return Response(f"404 Not Found: {path_only}", status=404)
-        
-        route, path_params = route_match
-        
-        # Create request object
-        request = Request(method, path_only, headers, body, query_params, path_params, cookies)
+
+        # Create request object before routing so middleware can inspect/short-circuit
+        request = Request(method, path_only, headers, body, query_params, {}, cookies)
         
         # Get or create session
         session_id = cookies.get('session_id')
@@ -508,13 +496,39 @@ class HTTPServerApp:
             session = self.session_manager.get_session(session_id)
         
         request.session = session
+
+        def _apply_middleware_response_headers(response: Response) -> Response:
+            extra_headers = getattr(request, '_response_headers', None)
+            if isinstance(extra_headers, dict):
+                for name, value in extra_headers.items():
+                    response.set_header(name, value)
+            return response
         
         try:
             # Apply middlewares (before)
             for middleware in self.middlewares:
                 result = middleware(request)
                 if isinstance(result, Response):
-                    return result  # Middleware can short-circuit
+                    if 'session_id' not in cookies or cookies['session_id'] != session_id:
+                        result.set_cookie('session_id', session_id, max_age=3600)
+                    return _apply_middleware_response_headers(result)  # Middleware can short-circuit
+
+            # Find matching route
+            route_match = self.find_route(method, path_only)
+
+            if route_match is None:
+                # 404 Not Found
+                if 404 in self.error_handlers:
+                    response = self.error_handlers[404](request)
+                else:
+                    response = Response(f"404 Not Found: {path_only}", status=404)
+
+                if 'session_id' not in cookies or cookies['session_id'] != session_id:
+                    response.set_cookie('session_id', session_id, max_age=3600)
+                return _apply_middleware_response_headers(response)
+
+            route, path_params = route_match
+            request.path_params = path_params
             
             # Call route handler
             response = route.handler(request)
@@ -532,13 +546,18 @@ class HTTPServerApp:
             if 'session_id' not in cookies or cookies['session_id'] != session_id:
                 response.set_cookie('session_id', session_id, max_age=3600)
             
-            return response
+            return _apply_middleware_response_headers(response)
             
         except Exception as e:
             # 500 Internal Server Error
             if 500 in self.error_handlers:
-                return self.error_handlers[500](request, e)
-            return Response(f"500 Internal Server Error: {str(e)}", status=500)
+                response = self.error_handlers[500](request, e)
+            else:
+                response = Response(f"500 Internal Server Error: {str(e)}", status=500)
+
+            if 'session_id' not in cookies or cookies['session_id'] != session_id:
+                response.set_cookie('session_id', session_id, max_age=3600)
+            return _apply_middleware_response_headers(response)
     
     def start(self, blocking: bool = True):
         """Start HTTP server."""
@@ -559,6 +578,9 @@ class HTTPServerApp:
             
             def do_PATCH(self):
                 self.handle_request('PATCH')
+
+            def do_OPTIONS(self):
+                self.handle_request('OPTIONS')
             
             def handle_request(self, method: str):
                 # Read request body
@@ -611,9 +633,42 @@ class HTTPServerApp:
 def cors_middleware(allowed_origins: str = '*', allowed_methods: str = 'GET, POST, PUT, DELETE, PATCH',
                    allowed_headers: str = 'Content-Type, Authorization'):
     """Create CORS middleware."""
+    normalized_methods = ', '.join(
+        method.strip().upper() for method in allowed_methods.split(',') if method.strip()
+    )
+    normalized_headers = ', '.join(
+        header.strip() for header in allowed_headers.split(',') if header.strip()
+    )
+
+    allowed_origin_values = [value.strip() for value in allowed_origins.split(',') if value.strip()]
+
+    def resolve_origin(request: Request) -> Optional[str]:
+        origin = request.get_header('Origin', '')
+        if not origin:
+            return '*' if allowed_origins == '*' else None
+        if allowed_origins == '*':
+            return '*'
+        return origin if origin in allowed_origin_values else None
+
     def middleware(request: Request) -> Optional[Response]:
-        # CORS is typically handled in response headers, not request
-        # This is a placeholder - actual CORS would modify response
+        allow_origin = resolve_origin(request)
+        if allow_origin is None:
+            return None
+
+        response_headers = {
+            'Access-Control-Allow-Origin': allow_origin,
+            'Access-Control-Allow-Methods': normalized_methods,
+            'Access-Control-Allow-Headers': normalized_headers,
+        }
+        if allow_origin != '*':
+            response_headers['Vary'] = 'Origin'
+
+        # Expose headers for the eventual response generated by route handlers.
+        request._response_headers = response_headers
+
+        if request.method.upper() == 'OPTIONS':
+            return Response('', status=204, headers=response_headers)
+
         return None
     return middleware
 
@@ -641,15 +696,19 @@ def basic_auth_decode(auth_header: str) -> Optional[Tuple[str, str]]:
     """Decode HTTP Basic Auth header."""
     if not auth_header or not auth_header.startswith('Basic '):
         return None
+    if len(auth_header) <= 6:
+        return None
+
     try:
         import base64
+        import binascii
         encoded = auth_header[6:]  # Remove 'Basic '
-        decoded = base64.b64decode(encoded).decode('utf-8')
+        decoded = base64.b64decode(encoded, validate=True).decode('utf-8')
         if ':' in decoded:
             username, password = decoded.split(':', 1)
             return username, password
-    except Exception:
-        pass
+    except (binascii.Error, UnicodeDecodeError, ValueError):
+        return None
     return None
 
 

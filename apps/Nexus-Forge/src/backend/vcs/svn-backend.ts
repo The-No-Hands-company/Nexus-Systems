@@ -1,7 +1,7 @@
-import { VCSBackend, VCSCommit, VCSDiff } from "./vcs-types";
+import type { VCSBackend, VCSCommit, VCSDiff } from "./vcs-types";
 
 export class SVNBackend implements VCSBackend {
-  name: "svn" = "svn";
+  name = "svn" as const;
   version = "1.0.0-stub";
 
   async init(_path: string, _bare = true): Promise<void> {

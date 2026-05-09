@@ -1,7 +1,10 @@
 import { useEffect, useState } from "react";
 
 export default function FeatureGatingOrchestratorHub() {
-  const [health, setHealth] = useState<{ status: string; activeFlags: number }>({ status: "", activeFlags: 0 });
+  const [health, setHealth] = useState<{ status: string; activeFlags: number }>({
+    status: "",
+    activeFlags: 0,
+  });
 
   useEffect(() => {
     async function load() {
@@ -31,7 +34,9 @@ export default function FeatureGatingOrchestratorHub() {
         </article>
         <article className="repo-card">
           <h3>Health</h3>
-          <p>Status: {health.status}, Active: {health.activeFlags}</p>
+          <p>
+            Status: {health.status}, Active: {health.activeFlags}
+          </p>
         </article>
       </div>
     </section>

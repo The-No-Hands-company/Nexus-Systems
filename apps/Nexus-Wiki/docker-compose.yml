@@ -1,0 +1,42 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: nexus-wiki-postgres
+    profiles: ["persistent"]
+    environment:
+      POSTGRES_DB: nexus_wiki
+      POSTGRES_USER: nexus_wiki
+      POSTGRES_PASSWORD: nexus_wiki
+    ports:
+      - "5432:5432"
+    volumes:
+      - nexus_wiki_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U nexus_wiki -d nexus_wiki"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  api:
+    image: python:3.14-slim
+    container_name: nexus-wiki-api
+    profiles: ["persistent"]
+    working_dir: /app
+    environment:
+      NEXUS_WIKI_STORE_BACKEND: postgres
+      DATABASE_URL: postgresql+psycopg://nexus_wiki:nexus_wiki@postgres:5432/nexus_wiki
+      NEXUS_CLOUD_SYSTEMS_API_URL: http://localhost:8080/api/v1/systems/register
+    volumes:
+      - ./:/app
+    command: >
+      sh -c "pip install -e .[dev] && uvicorn nexus_wiki.main:app --host 0.0.0.0 --port 9000 --app-dir src"
+    ports:
+      - "9000:9000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  nexus_wiki_pgdata:

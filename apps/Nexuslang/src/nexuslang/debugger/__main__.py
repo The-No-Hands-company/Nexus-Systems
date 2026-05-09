@@ -1,5 +1,4 @@
-"""
-"""NexusLang Debug Adapter Protocol Server Entry Point
+"""NexusLang Debug Adapter Protocol Server Entry Point.
 
 Run as: python3 -m nexuslang.debugger
 """

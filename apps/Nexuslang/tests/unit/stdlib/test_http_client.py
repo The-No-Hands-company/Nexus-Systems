@@ -14,6 +14,7 @@ To enable network tests:
 import os
 import sys
 import json
+import base64
 import pytest
 
 _PROJECT_ROOT = os.path.abspath(
@@ -24,6 +25,10 @@ if _PROJECT_ROOT not in sys.path:
 
 from nexuslang.stdlib.http import (
     HTTPResponse,
+    HTTPServerApp,
+    Response,
+    basic_auth_decode,
+    cors_middleware,
     url_encode,
     url_decode,
     url_parse,
@@ -229,6 +234,56 @@ class TestURLEncodeDecodeInterop:
         assert isinstance(decoded, dict)
         assert decoded["name"] == "Alice Smith"
         assert decoded["age"] == "30"
+
+
+class TestCORSMiddleware:
+    def test_preflight_request_returns_no_content_with_cors_headers(self):
+        app = HTTPServerApp()
+        app.use(cors_middleware())
+
+        response = app.handle_request(
+            "OPTIONS",
+            "/api/items",
+            {
+                "Origin": "https://client.example",
+                "Access-Control-Request-Method": "POST",
+            },
+            b"",
+        )
+
+        assert response.status == 204
+        assert response.headers.get("Access-Control-Allow-Origin") == "*"
+        assert "POST" in response.headers.get("Access-Control-Allow-Methods", "")
+        assert "Content-Type" in response.headers.get("Access-Control-Allow-Headers", "")
+
+    def test_cors_headers_attached_to_normal_route_response(self):
+        app = HTTPServerApp()
+        app.use(cors_middleware("https://client.example"))
+
+        @app.get("/api/ping")
+        def ping(_request):
+            return Response({"ok": True}, status=200)
+
+        response = app.handle_request(
+            "GET",
+            "/api/ping",
+            {"Origin": "https://client.example"},
+            b"",
+        )
+
+        assert response.status == 200
+        assert response.headers.get("Access-Control-Allow-Origin") == "https://client.example"
+        assert response.headers.get("Vary") == "Origin"
+
+
+class TestBasicAuthDecode:
+    def test_valid_basic_auth_header_decodes_credentials(self):
+        encoded = base64.b64encode(b"alice:secret").decode("ascii")
+        decoded = basic_auth_decode(f"Basic {encoded}")
+        assert decoded == ("alice", "secret")
+
+    def test_malformed_basic_auth_header_returns_none(self):
+        assert basic_auth_decode("Basic !!!") is None
 
 
 # ===========================================================================

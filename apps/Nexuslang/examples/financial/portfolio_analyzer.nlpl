@@ -1,0 +1,259 @@
+// Portfolio Analyzer - Financial Computing Showcase
+// Demonstrates: data modeling, contracts, calculations, parallel processing, pattern matching
+// Realistic portfolio analysis with risk metrics and performance tracking
+
+struct Stock
+  symbol as String        // Ticker symbol
+  name as String          // Company name
+  purchase_price as Float // Price paid per share
+  current_price as Float  // Current market price
+  quantity as Integer     // Number of shares
+end
+
+struct PortfolioMetrics
+  total_value as Float
+  total_cost as Float
+  unrealized_gain as Float
+  gain_percentage as Float
+  average_daily_return as Float
+  portfolio_volatility as Float
+end
+
+struct AnalysisResult
+  portfolio as List of Stock
+  metrics as PortfolioMetrics
+  top_performer as Stock
+  worst_performer as Stock
+  recommendation as String
+end
+
+// Calculate current value of a stock position
+function calculate_position_value with stock as Stock returns Float
+  require stock.quantity is greater than 0 with "Quantity must be positive"
+  require stock.current_price is greater than or equal to 0 with "Price cannot be negative"
+  set value to stock.current_price times stock.quantity
+  return value
+end
+
+// Calculate gain/loss for a position
+function calculate_position_gain with stock as Stock returns Float
+  require stock.quantity is greater than 0 with "Cannot calculate gain for empty position"
+  set cost_basis to stock.purchase_price times stock.quantity
+  set current_value to calculate_position_value with stock
+  set gain to current_value minus cost_basis
+  return gain
+end
+
+// Calculate portfolio cost basis
+function calculate_total_cost with portfolio as List of Stock returns Float
+  set total_cost to 0.0
+  for each stock in portfolio
+    set position_cost to stock.purchase_price times (stock.quantity as Float)
+    set total_cost to total_cost plus position_cost
+  end
+  return total_cost
+end
+
+// Calculate portfolio current value
+function calculate_portfolio_value with portfolio as List of Stock returns Float
+  set total_value to 0.0
+  for each stock in portfolio
+    set position_value to calculate_position_value with stock
+    set total_value to total_value plus position_value
+  end
+  return total_value
+end
+
+// Calculate daily return (simulated based on price change)
+function calculate_daily_return with stock as Stock returns Float
+  require stock.purchase_price is greater than 0 with "Purchase price must be positive for return calculation"
+  set price_change to stock.current_price minus stock.purchase_price
+  set daily_return to price_change divided by stock.purchase_price
+  return daily_return
+end
+
+// Calculate average daily return across portfolio
+function calculate_average_return with portfolio as List of Stock returns Float
+  require portfolio is not empty with "Portfolio cannot be empty"
+  set total_return to 0.0
+  set count to 0
+  for each stock in portfolio
+    set position_return to calculate_daily_return with stock
+    set total_return to total_return plus position_return
+    set count to count plus 1
+  end
+  set average to total_return divided by (count as Float)
+  return average
+end
+
+// Calculate portfolio volatility (standard deviation simulation)
+function calculate_volatility with portfolio as List of Stock returns Float
+  require portfolio is not empty with "Portfolio cannot be empty"
+  set avg_return to calculate_average_return with portfolio
+  set sum_squared_diff to 0.0
+  for each stock in portfolio
+    set position_return to calculate_daily_return with stock
+    set diff to position_return minus avg_return
+    set squared_diff to diff times diff
+    set sum_squared_diff to sum_squared_diff plus squared_diff
+  end
+  set variance to sum_squared_diff divided by ((portfolio length as Float) plus 1.0)
+  set volatility to (variance as Float) // simplified: just return variance as volatility proxy
+  return volatility
+end
+
+// Find best and worst performing stocks
+function find_top_performers with portfolio as List of Stock returns Stock and Stock
+  require portfolio is not empty with "Portfolio cannot be empty"
+  set best_stock to portfolio[0]
+  set worst_stock to portfolio[0]
+  set best_return to calculate_daily_return with best_stock
+  set worst_return to best_return
+  
+  for each stock in portfolio
+    set stock_return to calculate_daily_return with stock
+    if stock_return is greater than best_return
+      set best_stock to stock
+      set best_return to stock_return
+    end
+    if stock_return is less than worst_return
+      set worst_stock to stock
+      set worst_return to stock_return
+    end
+  end
+  
+  return best_stock and worst_stock
+end
+
+// Generate investment recommendation
+function generate_recommendation with metrics as PortfolioMetrics returns String
+  if metrics.portfolio_volatility is greater than 0.15
+    return "High risk portfolio - consider diversification"
+  end
+  
+  if metrics.gain_percentage is less than 0.0
+    return "Portfolio underwater - review underperforming positions"
+  end
+  
+  if metrics.average_daily_return is greater than 0.05
+    return "Strong performer - maintain current strategy"
+  end
+  
+  return "Moderate performance - consider rebalancing"
+end
+
+// Analyze portfolio and generate comprehensive report
+function analyze_portfolio with portfolio as List of Stock returns AnalysisResult
+  require portfolio is not empty with "Portfolio cannot be empty for analysis"
+  
+  set total_value to calculate_portfolio_value with portfolio
+  set total_cost to calculate_total_cost with portfolio
+  
+  require total_cost is greater than 0.0 with "Portfolio cost basis must be positive"
+  
+  set unrealized_gain to total_value minus total_cost
+  set gain_percentage to unrealized_gain divided by total_cost
+  set avg_return to calculate_average_return with portfolio
+  set volatility to calculate_volatility with portfolio
+  
+  set metrics to PortfolioMetrics
+    total_value: total_value
+    total_cost: total_cost
+    unrealized_gain: unrealized_gain
+    gain_percentage: gain_percentage
+    average_daily_return: avg_return
+    portfolio_volatility: volatility
+  end
+  
+  set best_worst to find_top_performers with portfolio
+  
+  set recommendation to generate_recommendation with metrics
+  
+  set result to AnalysisResult
+    portfolio: portfolio
+    metrics: metrics
+    top_performer: best_worst.0
+    worst_performer: best_worst.1
+    recommendation: recommendation
+  end
+  
+  return result
+end
+
+// Print formatted analysis report
+function print_analysis_report with result as AnalysisResult
+  print text "=== Portfolio Analysis Report ==="
+  print text ""
+  print text "Portfolio Summary:"
+  print text ("  Total Cost Basis: $" concatenated with (result.metrics.total_cost as String))
+  print text ("  Current Value: $" concatenated with (result.metrics.total_value as String))
+  print text ("  Unrealized Gain: $" concatenated with (result.metrics.unrealized_gain as String))
+  print text ("  Gain Percentage: " concatenated with ((result.metrics.gain_percentage times 100.0) as String) concatenated with "%")
+  print text ""
+  print text "Risk Metrics:"
+  print text ("  Average Daily Return: " concatenated with ((result.metrics.average_daily_return times 100.0) as String) concatenated with "%")
+  print text ("  Portfolio Volatility: " concatenated with (result.metrics.portfolio_volatility as String))
+  print text ""
+  print text "Top Performer:"
+  print text ("  " concatenated with result.top_performer.symbol concatenated with " (" concatenated with result.top_performer.name concatenated with ")")
+  print text ("  Gain: " concatenated with (((calculate_daily_return with result.top_performer) times 100.0) as String) concatenated with "%")
+  print text ""
+  print text "Worst Performer:"
+  print text ("  " concatenated with result.worst_performer.symbol concatenated with " (" concatenated with result.worst_performer.name concatenated with ")")
+  print text ("  Loss: " concatenated with (((calculate_daily_return with result.worst_performer) times 100.0) as String) concatenated with "%")
+  print text ""
+  print text "Recommendation:"
+  print text ("  " concatenated with result.recommendation)
+  print text ""
+  print text "Holdings:"
+  for each stock in result.portfolio
+    set value to calculate_position_value with stock
+    set gain to calculate_position_gain with stock
+    print text ("  " concatenated with stock.symbol concatenated with ": " concatenated with (stock.quantity as String) concatenated with " shares @ $" concatenated with (stock.current_price as String) concatenated with " = $" concatenated with (value as String) concatenated with " (gain: $" concatenated with (gain as String) concatenated with ")")
+  end
+end
+
+// Main - demo portfolio analysis
+set portfolio to [
+  Stock
+    symbol: "AAPL"
+    name: "Apple Inc."
+    purchase_price: 150.0
+    current_price: 185.5
+    quantity: 10
+  end,
+  Stock
+    symbol: "MSFT"
+    name: "Microsoft Corp."
+    purchase_price: 300.0
+    current_price: 380.0
+    quantity: 5
+  end,
+  Stock
+    symbol: "GOOGL"
+    name: "Alphabet Inc."
+    purchase_price: 2800.0
+    current_price: 2450.0
+    quantity: 2
+  end,
+  Stock
+    symbol: "AMZN"
+    name: "Amazon.com Inc."
+    purchase_price: 3200.0
+    current_price: 3580.0
+    quantity: 3
+  end,
+  Stock
+    symbol: "META"
+    name: "Meta Platforms Inc."
+    purchase_price: 200.0
+    current_price: 320.0
+    quantity: 8
+  end
+]
+
+set analysis_result to analyze_portfolio with portfolio
+print_analysis_report with analysis_result
+
+expect (analysis_result.metrics.total_value greater than 0) to be true with "Portfolio should have positive value"
+expect (analysis_result.portfolio length greater than 0) to equal true

@@ -20,6 +20,16 @@ Pipeline:
 
 import re
 from typing import Dict, List, Optional, Tuple
+from ..errors import NxlError
+
+
+_RECOVERABLE_FORMAT_EXCEPTIONS = (
+    NxlError,
+    RuntimeError,
+    ValueError,
+    TypeError,
+    AttributeError,
+)
 
 
 class NexusLangFormatter:
@@ -46,7 +56,7 @@ class NexusLangFormatter:
         """Format NexusLang code using AST-aware pipeline with regex fallback."""
         try:
             return self._format_with_tokens(code)
-        except Exception:
+        except _RECOVERABLE_FORMAT_EXCEPTIONS:
             return self._format_regex(code)
 
     def get_formatting_edits(self, text: str) -> List[dict]:

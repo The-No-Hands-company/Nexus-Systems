@@ -23,9 +23,27 @@ interface FeaturePayload {
 
 const fallbackData: FeaturePayload = {
   features: [
-    { id: "repo.create", name: "Repository Creation", category: "Core Repository", state: "stubbed", description: "Create repositories with VCS selection." },
-    { id: "pr.review", name: "Review Workflows", category: "Code Review", state: "stubbed", description: "Approve/request changes workflows." },
-    { id: "actions.pipelines", name: "CI Pipelines", category: "CI/CD", state: "stubbed", description: "Configure jobs on push and pull requests." },
+    {
+      id: "repo.create",
+      name: "Repository Creation",
+      category: "Core Repository",
+      state: "stubbed",
+      description: "Create repositories with VCS selection.",
+    },
+    {
+      id: "pr.review",
+      name: "Review Workflows",
+      category: "Code Review",
+      state: "stubbed",
+      description: "Approve/request changes workflows.",
+    },
+    {
+      id: "actions.pipelines",
+      name: "CI Pipelines",
+      category: "CI/CD",
+      state: "stubbed",
+      description: "Configure jobs on push and pull requests.",
+    },
   ],
   summary: {
     total: 3,

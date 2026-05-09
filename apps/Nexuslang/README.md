@@ -1,244 +1,196 @@
-# NexusLang — NexusLang
+# NexusLang
 
-> A general-purpose programming language that reads like English
+> A general-purpose programming language with English-like syntax and native backend support.
 
-[![CI](https://github.com/Zajfan/NexusLang/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/Zajfan/NexusLang/actions/workflows/ci.yml)
+[![CI](https://github.com/The-No-Hands-company/Nexuslang/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/The-No-Hands-company/Nexuslang/actions/workflows/ci.yml)
 [![Python](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-4288%20passing-brightgreen)](tests/)
 
----
+NexusLang (NLPL syntax) is designed to keep code readable while supporting low-level control, native compilation paths, and production tooling.
 
-## What is NLPL?
-
-NLPL is a programming language designed to read like English prose while compiling to native code via LLVM. It is currently under active development — the interpreter is mature, the LLVM compiler backend is functional, and the tooling ecosystem (LSP, debugger, build system) is comprehensive.
-
-```nlpl
-# Hello World
-print text "Hello, world!"
-
-# Functions read like English
-function greet with name as String returns String
-    if name is not empty
-        return "Hello, " plus name plus "!"
-    else
-        return "Hello, stranger!"
-    end
-end
-
-print text greet("Alice")
-
-# Natural control flow
-set scores to [95, 87, 73, 91, 88]
-set total to 0
-for each score in scores
-    set total to total plus score
-end
-print text "Average: " plus (total divided by length of scores)
-```
-
----
-
-## Current State
-
-NLPL is pre-v1.0 and under active development. This is an honest assessment of where things stand.
-
-### What works reliably
-
-| Component | Status | Notes |
-|-----------|--------|-------|
-| Lexer | ✅ Mature | Full Unicode, all token types |
-| Parser | ✅ Mature | Handles the full syntax surface |
-| Interpreter | ✅ Working | Executes all language constructs |
-| Type system | ✅ Working | Inference, generics, HKT, borrow checker |
-| Standard library | ✅ 85 modules | 2,219 registered functions |
-| LSP server | ✅ Working | 25 features: hover, completions, diagnostics, go-to-definition, rename, and more |
-| Debugger | ✅ Working | DAP-compliant, full breakpoint/step/variable inspection |
-| Build system | ✅ Working | Incremental builds, dependency tracking, caching |
-| LLVM backend | ✅ Functional | Compiles core language constructs to native binaries |
-| Test suite | ✅ 4,288 passing | 0 failures, 145 test files |
-
-### Known limitations
-
-- **Performance:** The interpreter is significantly slower than C for computation-heavy code. The LLVM compiled path produces fast native code, and compiler coverage has improved, but not every language construct is fully covered with production-grade semantics yet.
-- **Concurrency:** The async runtime exists and is tested, but has not been validated under heavy real-world workloads.
-- **FFI safety:** The FFI layer allows raw pointer operations; safety is the caller's responsibility inside `unsafe` blocks — there is no automatic checking.
-- **Self-hosting:** NexusLang is not self-hosted. The entire toolchain is written in Python.
-- **Parser size:** The recursive descent parser is approximately 9,900 lines (~9,913 currently). This works but is a maintenance concern as the language evolves.
-
----
-
-## Quick Start
+## 60-Second Start
 
 ```bash
-git clone https://github.com/Zajfan/NLPL
-cd NexusLang
+git clone https://github.com/The-No-Hands-company/Nexuslang
+cd Nexuslang
 pip install -r requirements.txt
 
 # Run a program
 PYTHONPATH=src python -m nexuslang.main examples/01_basics/01_basic_concepts.nlpl
 
-# Start the LSP server (stdio mode for editor integration)
-PYTHONPATH=src python -m nexuslang.lsp --stdio
-
-# Interactive REPL
-PYTHONPATH=src python -m nexuslang.repl
-
-# Run the full test suite
+# Run tests
 PYTHONPATH=src python -m pytest tests/
 ```
 
-See [QUICKSTART.md](QUICKSTART.md) for full setup instructions.
+For full setup and workflow details, see [QUICKSTART.md](QUICKSTART.md).
 
----
+## Showcase
 
-## Language Overview
+### Desktop Calculator (GUI)
 
-### Variables
+This calculator demo is implemented in NexusLang and executed through the current interpreter/runtime GUI layer.
+
+![NexusLang Calculator Demo](showcase/calculator/calculator_gui_demo.png)
+
+Run it locally:
+
+```bash
+PYTHONPATH=src python -m nexuslang.main examples/26_calculator_gui.nxl
+```
+
+### Delivery Command Center (GUI)
+
+Business-oriented KPI dashboard built with the NexusLang GUI runtime.
+
+![NexusLang Delivery Command Center](showcase/delivery/delivery_command_center_gui.png)
+
+Run it locally:
+
+```bash
+PYTHONPATH=src python -m nexuslang.main examples/27_delivery_dashboard_gui.nxl
+```
+
+### Service Desk Operations (Interactive TUI)
+
+Interactive terminal application with stateful updates and action-driven workflow.
+
+![NexusLang Service Desk TUI](showcase/delivery/service_desk_tui_console.png)
+
+Run it locally:
+
+```bash
+PYTHONPATH=src python -m nexuslang.main examples/business/service_desk_tui.nxl
+```
+
+## Language At A Glance
 
 ```nlpl
+# Variables
 set name to "Alice"
-set age as Integer to 30
 set score as Float to 98.6
-set active as Boolean to true
-```
 
-### Control flow
-
-```nlpl
-if age is greater than 18
-    print text "Adult"
-else if age is greater than 12
-    print text "Teen"
-else
-    print text "Child"
-end
-
-for each item in my_list
-    print text item
-end
-
-repeat while score is greater than 0
-    set score to score minus 1
-end
-```
-
-### Functions
-
-```nlpl
+# Functions
 function add with a as Integer, b as Integer returns Integer
     return a plus b
 end
-```
 
-### Classes
-
-```nlpl
-class Animal
-    set name as String to ""
-
-    function speak
-        print text name plus " speaks"
-    end
+# Control flow
+if score is greater than 90
+    print text "Excellent"
+else
+    print text "Keep going"
 end
 
-class Dog extends Animal
-    function speak
-        print text name plus " says woof"
-    end
-end
-```
-
-### Pattern matching
-
-```nlpl
-match value
-    case Integer
-        print text "number: " plus value
-    case String if length of value is greater than 10
-        print text "long string"
+# Pattern matching
+match score
+    case _ if score is greater than or equal to 90
+        print text "A"
     case _
-        print text "other"
+        print text "Non-A"
 end
 ```
 
-### Error handling
+## Capability Summary
 
-```nlpl
-try
-    set result to risky_operation()
-catch error as e
-    print text "Error: " plus e
-end
-```
+NexusLang is intended for broad, general-purpose development across domains.
 
-### Generics
+- Business and enterprise applications
+- Data processing and analytics pipelines
+- Scientific and numerical workloads
+- Web and network services
+- Systems and low-level utilities
+- Embedded-style and resource-constrained targets (ongoing)
+- Desktop tooling and developer automation
 
-```nlpl
-class Stack with T :: *
-    set items as List[T] to []
+Current implementation includes:
 
-    function push with item as T
-        append item to items
-    end
-end
-```
-
----
-
-## Standard Library
-
-85 modules covering: algorithms, async I/O, audio, build tools, cache, collections, compression, crypto, CSV, databases, datetime, environment, FFI, file I/O, filesystem, graphics, HTTP, image processing, JSON, linear algebra, logging, math, math3d, networking, numerical integration, option/result types, parallel computing, PDF, platform-specific (Linux/macOS/Windows), plotting, property testing, random, reflection, regex, scientific computing, serialization, SIMD, smart pointers, SQLite, statistics, strings, subprocess, sync primitives, system, testing, threading, type traits, UUID, validation, WebSocket, XML.
-
----
+- Lexer, parser, AST, interpreter pipeline
+- Optional type checking and type inference
+- LLVM IR backend and native toolchain integration
+- C backend
+- Module system and FFI support
+- Standard library modules across core domains
+- LSP server and debugger support
 
 ## Tooling
 
+### Command-line workflow
+
+```bash
+# Run a source file
+PYTHONPATH=src python -m nexuslang.main path/to/program.nlpl
+
+# Build / run project workflows
+PYTHONPATH=src python -m nexuslang.cli build
+PYTHONPATH=src python -m nexuslang.cli run
+
+# Start language server (stdio)
+PYTHONPATH=src python -m nexuslang.lsp --stdio
+```
+
 ### Editor support
 
-- **VS Code** — Extension in `vscode-extension/` (syntax highlighting, LSP)
-- **Neovim** — Config in `editors/neovim/`
-- **Emacs** — Mode in `editors/emacs/`
-- **Sublime Text** — Syntax in `editors/sublime-text/`
-
-### LSP (Language Server Protocol)
-
-25 features implemented: hover, completions, go-to-definition, find references, rename, signature help, code actions, semantic tokens, inlay hints, code lens, document symbols, workspace symbols, diagnostics, formatting, dead code detection, call hierarchy.
-
----
+- VS Code extension: [vscode-extension](vscode-extension)
+- Neovim config: [editors/neovim](editors/neovim)
+- Emacs mode: [editors/emacs](editors/emacs)
+- Sublime syntax: [editors/sublime-text](editors/sublime-text)
 
 ## Architecture
 
-```
-Source → Lexer → Parser → AST → Optimizer → Interpreter
-                                           → LLVM IR Generator → llc/clang → native binary
+```text
+Source -> Lexer -> Parser -> AST -> Optimizer -> Interpreter
+                                          -> LLVM IR Generator -> llc/clang -> Native Binary
 ```
 
-| Path | Description |
-|------|-------------|
-| `src/nlpl/parser/lexer.py` | Tokenizer |
-| `src/nlpl/parser/parser.py` | Recursive descent parser |
-| `src/nlpl/parser/ast.py` | 139 AST node types |
-| `src/nlpl/interpreter/interpreter.py` | Tree-walking interpreter |
-| `src/nlpl/typesystem/` | Type checker, inference engine, generics, HKT |
-| `src/nlpl/compiler/backends/llvm_ir_generator.py` | LLVM IR code generation |
-| `src/nlpl/lsp/server.py` | LSP server |
-| `src/nlpl/stdlib/` | 85 standard library modules |
-| `tests/` | 145 test files, 4,288 passing tests |
+Core paths:
 
----
+- [src/nexuslang/parser/lexer.py](src/nexuslang/parser/lexer.py)
+- [src/nexuslang/parser/parser.py](src/nexuslang/parser/parser.py)
+- [src/nexuslang/parser/ast.py](src/nexuslang/parser/ast.py)
+- [src/nexuslang/interpreter/interpreter.py](src/nexuslang/interpreter/interpreter.py)
+- [src/nexuslang/typesystem](src/nexuslang/typesystem)
+- [src/nexuslang/compiler/backends/llvm_ir_generator.py](src/nexuslang/compiler/backends/llvm_ir_generator.py)
+- [src/nexuslang/compiler/backends/c_generator.py](src/nexuslang/compiler/backends/c_generator.py)
+- [src/nexuslang/lsp](src/nexuslang/lsp)
+- [src/nexuslang/stdlib](src/nexuslang/stdlib)
+- [tests](tests)
+
+## Project Status
+
+NexusLang is pre-v1.0 and under active development.
+
+Strong areas today:
+
+- Core language pipeline and interpreter
+- Broad standard library surface
+- Compiler backend progress (C and LLVM paths)
+- Tooling stack (LSP, debugger, build workflows)
+- Extensive automated test coverage
+
+Active focus areas:
+
+- Closing remaining backend edge-case gaps
+- Continued semantic hardening and performance work
+- Expanded showcase applications demonstrating end-to-end build and runtime capabilities
+
+## Documentation Map
+
+- Getting started: [docs/getting-started](docs/getting-started)
+- Programming guide: [docs/guide](docs/guide)
+- Language and stdlib reference: [docs/reference](docs/reference)
+- Tooling docs: [docs/tooling](docs/tooling)
+- Internal planning and status: [docs/_internal](docs/_internal)
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md). The test suite requires `pytest` and `pytest-timeout`:
+See [CONTRIBUTING.md](CONTRIBUTING.md).
+
+Common validation command:
 
 ```bash
-pip install pytest pytest-timeout
 PYTHONPATH=src python -m pytest tests/
 ```
 
----
-
 ## License
 
-MIT — see [LICENSE](LICENSE).
+MIT. See [LICENSE](LICENSE).

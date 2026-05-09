@@ -693,7 +693,8 @@ class CallbackManager:
                 # If by pointer, dereference; if by value, use directly
                 if isinstance(arg.type, ir.PointerType):
                     # Load the struct from pointer
-                    struct_value = wrapper_builder.load(arg, name=f\"struct_{i}_value\")\n                    converted_args.append(struct_value)
+                    struct_value = wrapper_builder.load(arg, name=f"struct_{i}_value")
+                    converted_args.append(struct_value)
                 else:
                     # Already by value
                     converted_args.append(arg)

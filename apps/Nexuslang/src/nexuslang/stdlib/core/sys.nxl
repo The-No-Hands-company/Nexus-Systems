@@ -3,11 +3,18 @@ import core.optional
 
 export args, env, exit
 
-# Note: Accessing argv/argc requires compiler support or global variable exposure.
-# For now, we stub `args` or bindings.
+# Process arguments are exposed through NEXUSLANG_ARGS when runtime argv
+# binding is unavailable. The value is returned as a raw string payload so
+# user code can parse it according to application conventions.
 
 extern function getenv with name as String returns String from library "c"
 extern function exit with code as Integer returns Void from library "c"
+
+function args returns Optional<String>
+     set val to getenv("NEXUSLANG_ARGS")
+     if val
+           return Optional.Some with val
+     return Optional.None
 
 function env that takes name as String returns Optional<String>
     set val to getenv(name)

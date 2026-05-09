@@ -1,0 +1,10 @@
+{
+  "benchmark_name": "showcase_workflow_main",
+  "command": "PYTHONPATH=src python -m nexuslang.main examples/showcase_workflow/src/main.nxl",
+  "iterations": 15,
+  "unit": "ms",
+  "median_ms": 2.0,
+  "p95_ms": 2.8,
+  "record_count": 5,
+  "snapshot_version": "1"
+}

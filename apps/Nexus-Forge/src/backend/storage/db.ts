@@ -37,7 +37,9 @@ export class ForgeDB {
       this.initTables();
     } catch (error) {
       this.db = null;
-      console.warn("[ForgeDB] SQLite native bindings unavailable, using in-memory storage fallback.");
+      console.warn(
+        "[ForgeDB] SQLite native bindings unavailable, using in-memory storage fallback.",
+      );
       console.warn(error);
     }
   }
@@ -112,7 +114,7 @@ export class ForgeDB {
       this.inMemoryRepositories.push({
         id: this.nextRepoId++,
         name,
-        description,
+        ...(description !== undefined ? { description } : {}),
         vcs: vcs as RepositoryRecord["vcs"],
         owner_id: ownerId || null,
         created_at: now,
@@ -122,7 +124,7 @@ export class ForgeDB {
     }
 
     const stmt = this.db.prepare(
-      "INSERT INTO repositories (name, vcs, description, owner_id) VALUES (?, ?, ?, ?)"
+      "INSERT INTO repositories (name, vcs, description, owner_id) VALUES (?, ?, ?, ?)",
     );
     stmt.run(name, vcs, description || null, ownerId || null);
   }
@@ -141,7 +143,9 @@ export class ForgeDB {
       return this.inMemoryRepositories.slice(skip, skip + limit);
     }
 
-    const stmt = this.db.prepare("SELECT * FROM repositories ORDER BY created_at DESC LIMIT ? OFFSET ?");
+    const stmt = this.db.prepare(
+      "SELECT * FROM repositories ORDER BY created_at DESC LIMIT ? OFFSET ?",
+    );
     return stmt.all(limit, skip) as RepositoryRecord[];
   }
 
@@ -160,7 +164,7 @@ export class ForgeDB {
     }
 
     const stmt = this.db.prepare(
-      "INSERT INTO activity (repo_id, action, actor_id, details) VALUES (?, ?, ?, ?)"
+      "INSERT INTO activity (repo_id, action, actor_id, details) VALUES (?, ?, ?, ?)",
     );
     stmt.run(repoId, action, actorId || null, details || null);
   }
@@ -171,7 +175,7 @@ export class ForgeDB {
     }
 
     const stmt = this.db.prepare(
-      "SELECT * FROM activity WHERE repo_id = ? ORDER BY created_at DESC LIMIT ?"
+      "SELECT * FROM activity WHERE repo_id = ? ORDER BY created_at DESC LIMIT ?",
     );
     return stmt.all(repoId, limit);
   }

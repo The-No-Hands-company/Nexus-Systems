@@ -24,7 +24,9 @@ export default function DisasterRecoveryHub() {
       <div className="repo-grid">
         <article className="repo-card">
           <h3>Posture</h3>
-          <p>RTO {posture.rtoMinutes ?? "-"}m / RPO {posture.rpoMinutes ?? "-"}m</p>
+          <p>
+            RTO {posture.rtoMinutes ?? "-"}m / RPO {posture.rpoMinutes ?? "-"}m
+          </p>
         </article>
         <article className="repo-card">
           <h3>Plans</h3>

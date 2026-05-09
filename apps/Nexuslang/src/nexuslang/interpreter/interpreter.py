@@ -112,7 +112,10 @@ class _Channel:
         # Snapshot mutable payloads to model transfer semantics in interpreter mode.
         try:
             transferred = copy.deepcopy(value)
-        except Exception:
+        except TypeError as e:
+            # Type not deepcopyable (e.g., lambdas, C objects); transfer original
+            import logging
+            logging.debug(f"Cannot deep-copy channel value of type {type(value).__name__}: {e}")
             transferred = value
         self._queue.put(transferred)
 
@@ -235,6 +238,12 @@ class Interpreter:
         # Built lazily on first call to execute() so that subclasses that override
         # execute_* methods are also picked up correctly.
         self._dispatch_cache: Dict[str, Any] = {}
+
+        # Built-in call metadata cache.
+        # Key: Python callable object registered in runtime.functions
+        # Value: whether first parameter is named 'runtime'.
+        # This avoids repeated inspect.signature(...) in hot loops.
+        self._builtin_runtime_param_cache: Dict[Any, bool] = {}
 
         # Accumulated test results from all describe / test / it blocks run
         # during this interpreter session.  Each entry is a dict produced by
@@ -743,8 +752,13 @@ class Interpreter:
                     # 2. Smart-pointer RAII drop
                     if _sp_types and isinstance(val, _sp_types):
                         val.drop()
-                except Exception:
-                    pass  # Never let RAII / drop errors abort cleanup
+                except Exception as e:
+                    # Log RAII/drop errors but never let them abort cleanup (invariant)
+                    import logging
+                    logging.warning(
+                        f"Exception during scope cleanup (RAII/drop of {type(val).__name__}): {e}. "
+                        f"Cleanup will continue; resource may leak."
+                    )
 
             self.current_scope.pop()
             if len(self._type_annotations) > 1:
@@ -1025,7 +1039,13 @@ class Interpreter:
             if nxl_func is None:
                 try:
                     nxl_func = self.get_variable(decorator_node.name)
-                except Exception:
+                except NameError:
+                    # Decorator variable not found; skip this decorator
+                    nxl_func = None
+                except Exception as e:
+                    # Unexpected error in decorator lookup; log and skip
+                    import logging
+                    logging.warning(f"Error retrieving decorator '{decorator_node.name}': {e}")
                     nxl_func = None
             if nxl_func is not None and hasattr(nxl_func, 'body'):
                 self.enter_scope()
@@ -1741,8 +1761,13 @@ class Interpreter:
                     val = self.execute(arg_expr)
                     if isinstance(val, str):
                         traits.append(val)
-                except Exception:
-                    pass
+                except Exception as e:
+                    # Error evaluating decorator argument; log and skip this trait
+                    import logging
+                    logging.warning(
+                        f"Error evaluating decorator argument at line {getattr(arg_expr, 'line', '?')}: {e}. "
+                        f"Trait will be skipped."
+                    )
 
         for trait in traits:
             if trait == "DebugPrint":
@@ -1896,8 +1921,11 @@ class Interpreter:
             from ..runtime.structures import StructureInstance
             if isinstance(val, StructureInstance):
                 return val.definition.size
-        except:
-            pass
+        except (AttributeError, TypeError) as e:
+            # Size cannot be determined for non-structure types;
+            # fall through to default pointer size
+            import logging
+            logging.debug(f"Cannot determine sizeof for {target}: {e}")
             
         return 8  # Default pointer size.
     
@@ -2140,8 +2168,8 @@ class Interpreter:
                 try:
                     error_val = self.get_variable("error")
                     raise NLPLUserException("Error", str(error_val), getattr(node, 'line', None))
-                except:
-                    # No exception to re-raise
+                except NameError:
+                    # "error" variable not found in scope - no exception to re-raise
                     raise NxlRuntimeError(
                         message="Nothing to re-raise",
                         line=getattr(node, 'line', None),
@@ -3717,10 +3745,19 @@ class Interpreter:
         """Call a function registered in the runtime's built-in function table."""
         import inspect
         func = self.runtime.functions[function_name]
-        sig = inspect.signature(func)
-        params = list(sig.parameters.keys())
-        
-        if params and params[0] == 'runtime':
+
+        needs_runtime = self._builtin_runtime_param_cache.get(func)
+        if needs_runtime is None:
+            try:
+                sig = inspect.signature(func)
+                params = list(sig.parameters.keys())
+                needs_runtime = bool(params and params[0] == 'runtime')
+            except (TypeError, ValueError):
+                # Some callables may not expose a Python signature.
+                needs_runtime = False
+            self._builtin_runtime_param_cache[func] = needs_runtime
+
+        if needs_runtime:
             positional_args = [self.runtime] + list(positional_args)
         
         if named_args:
@@ -4148,7 +4185,11 @@ class Interpreter:
         type_args_map = self._build_generic_type_args_map(class_def, node, class_name)
         
         if isinstance(class_def, (RuntimeStructDefinition, RuntimeUnionDefinition)):
-            return self._instantiate_struct_or_union(class_def)
+            instance = self._instantiate_struct_or_union(class_def)
+            named_fields = getattr(node, 'named_fields', None) or {}
+            for field_name, value_expr in named_fields.items():
+                instance.set_field(field_name, self.execute(value_expr))
+            return instance
         
         return self._instantiate_regular_class(class_name, class_def, type_args_map)
 
@@ -4364,8 +4405,15 @@ class Interpreter:
                     for key in obj.properties.keys():
                         try:
                             obj.set_property(key, self.get_variable(key))
-                        except:
+                        except NameError:
+                            # Property variable not found in scope; keep original value
                             pass
+                        except (AttributeError, TypeError) as e:
+                            # Property assignment failed; log and continue
+                            import logging
+                            logging.warning(
+                                f"Failed to update property {key} on {type(obj).__name__}: {e}"
+                            )
                         
                     return result
                 finally:
@@ -4524,8 +4572,15 @@ class Interpreter:
                         if not key.startswith("__"):
                             try:
                                 obj[key] = self.get_variable(key)
-                            except:
-                                pass  # Field not modified
+                            except NameError:
+                                # Field variable not found in scope; keep original value
+                                pass
+                            except (AttributeError, KeyError, TypeError) as e:
+                                # Field assignment failed; log and continue
+                                import logging
+                                logging.warning(
+                                    f"Failed to update field {key} on object: {e}"
+                                )
                         
                     return result
                 finally:

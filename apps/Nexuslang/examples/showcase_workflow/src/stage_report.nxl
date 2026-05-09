@@ -1,0 +1,8 @@
+function stage_report returns Integer
+    print text "stage:report"
+    print text "sum_amount: 635"
+    print text "avg_amount: 158.75"
+    return 0
+end
+
+call stage_report

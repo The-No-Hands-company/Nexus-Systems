@@ -1,7 +1,10 @@
 import { useEffect, useState } from "react";
 
 export default function CrossCloudOrchestrationHub() {
-  const [health, setHealth] = useState<{ regions: number; status: string }>({ regions: 0, status: "" });
+  const [health, setHealth] = useState<{ regions: number; status: string }>({
+    regions: 0,
+    status: "",
+  });
 
   useEffect(() => {
     async function load() {
@@ -31,7 +34,9 @@ export default function CrossCloudOrchestrationHub() {
         </article>
         <article className="repo-card">
           <h3>Health</h3>
-          <p>Regions: {health.regions}, Status: {health.status}</p>
+          <p>
+            Regions: {health.regions}, Status: {health.status}
+          </p>
         </article>
       </div>
     </section>

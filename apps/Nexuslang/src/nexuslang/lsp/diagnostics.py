@@ -11,9 +11,23 @@ import logging
 
 from nexuslang.error_codes import get_error_info, get_error_code_for_type
 from nexuslang.lsp.telemetry import DiagnosticTelemetry
+from nexuslang.errors import NxlError
+from nexuslang.typesystem.typechecker import TypeCheckError
 
 
 logger = logging.getLogger(__name__)
+
+
+_RECOVERABLE_LSP_EXCEPTIONS = (
+    NxlError,
+    TypeCheckError,
+    RuntimeError,
+    ValueError,
+    TypeError,
+    AttributeError,
+    OSError,
+    UnicodeError,
+)
 
 
 class DiagnosticsProvider:
@@ -48,6 +62,7 @@ class DiagnosticsProvider:
         category: Optional[str] = None,
         fixes: Optional[List[str]] = None,
         doc_link: Optional[str] = None,
+        related_information: Optional[List[Dict]] = None,
     ) -> Dict:
         """Build normalized LSP diagnostic payload with NexusLang error metadata."""
         resolved_code = error_code or (get_error_code_for_type(error_type_key) if error_type_key else None)
@@ -90,7 +105,87 @@ class DiagnosticsProvider:
         if payload_data:
             diagnostic["data"] = payload_data
 
+        if related_information:
+            diagnostic["relatedInformation"] = related_information
+
         return diagnostic
+
+    def _extract_ownership_var_name(self, error: str) -> Optional[str]:
+        """Extract the primary variable name from ownership diagnostics."""
+        quoted = re.findall(r"'([^']+)'", error or "")
+        if quoted:
+            return quoted[0]
+        return None
+
+    def _extract_ownership_line(self, error: str) -> Optional[int]:
+        """Extract 0-based line index from BorrowError/LifetimeError messages."""
+        match = re.search(r'line\s+(\d+)', error or '', re.IGNORECASE)
+        if not match:
+            return None
+        return max(0, int(match.group(1)) - 1)
+
+    def _shape_ownership_message(self, error: str) -> str:
+        """Convert internal ownership pass error into user-facing diagnostic text."""
+        msg = (error or "").strip()
+        msg = re.sub(r'^\[(ownership\.(borrow|lifetime)(\.warning)?)\]\s*', '', msg, flags=re.IGNORECASE)
+        msg = re.sub(r'^(BorrowError|LifetimeError|LifetimeWarning)\s*(\(line\s+\d+\))?:\s*', '', msg, flags=re.IGNORECASE)
+        if not msg:
+            msg = "Ownership/lifetime rule violation"
+        return f"Ownership error: {msg}"
+
+    def _build_borrow_related_information(self, uri: str, text: str, var_name: Optional[str], primary_line: Optional[int]) -> List[Dict]:
+        """Collect related ranges for ownership diagnostics around a variable.
+
+        Related ranges prioritize borrow/move/drop lines, then declaration writes.
+        """
+        if not var_name:
+            return []
+
+        lines = text.split('\n')
+        escaped = re.escape(var_name)
+        borrow_re = re.compile(rf'\bborrow\s+(?:mutable\s+)?{escaped}\b', re.IGNORECASE)
+        drop_re = re.compile(rf'\bdrop\s+borrow\s+(?:mutable\s+)?{escaped}\b', re.IGNORECASE)
+        move_re = re.compile(rf'\bmove\s+{escaped}\b', re.IGNORECASE)
+        set_re = re.compile(rf'\bset\s+{escaped}\s+to\b', re.IGNORECASE)
+
+        candidates: List[tuple] = []
+        for idx, raw in enumerate(lines):
+            if primary_line is not None and idx == primary_line:
+                continue
+
+            match = borrow_re.search(raw)
+            if match:
+                candidates.append((0, idx, match.start(), match.end(), "Active borrow starts here"))
+                continue
+
+            match = drop_re.search(raw)
+            if match:
+                candidates.append((1, idx, match.start(), match.end(), "Borrow is released here"))
+                continue
+
+            match = move_re.search(raw)
+            if match:
+                candidates.append((2, idx, match.start(), match.end(), "Move operation occurs here"))
+                continue
+
+            match = set_re.search(raw)
+            if match:
+                candidates.append((3, idx, match.start(0), match.end(0), "Variable assignment site"))
+
+        related: List[Dict] = []
+        for _, idx, start, end, message in sorted(candidates, key=lambda item: (item[0], item[1]))[:3]:
+            related.append({
+                "location": {
+                    "uri": uri,
+                    "range": {
+                        "start": {"line": idx, "character": start},
+                        "end": {"line": idx, "character": max(start + 1, end)},
+                    },
+                },
+                "message": message,
+            })
+
+        return related
 
     def _is_valid_error_code(self, code: Optional[str]) -> bool:
         """Return True when code follows NexusLang EXXX format."""
@@ -304,7 +399,7 @@ class DiagnosticsProvider:
             # If we got here without exception, no syntax errors
             return []
             
-        except Exception as e:
+        except _RECOVERABLE_LSP_EXCEPTIONS as e:
             # Parse error - extract detailed position info
             error_msg = str(e)
             
@@ -385,7 +480,7 @@ class DiagnosticsProvider:
             # If we got here without exception, no syntax errors
             return []
             
-        except Exception as e:
+        except _RECOVERABLE_LSP_EXCEPTIONS as e:
             # Parse error - try to extract line/column info
             error_msg = str(e)
             
@@ -451,6 +546,8 @@ class DiagnosticsProvider:
                 # Try to find the AST node related to this error
                 line, col, end_col = self._find_error_position(text, error, ast)
 
+                is_ownership_error = "[ownership.borrow]" in (error or "") or "[ownership.lifetime]" in (error or "")
+
                 contract_fixes = self._suggest_contract_fixes(error)
                 asm_fixes = self._suggest_inline_asm_fixes(error)
                 ffi_fixes = self._suggest_unsafe_ffi_fixes(error)
@@ -459,14 +556,39 @@ class DiagnosticsProvider:
                 is_ffi_error = bool(ffi_fixes)
                 selected_fixes = contract_fixes or asm_fixes or ffi_fixes
 
-                if is_contract_error or is_asm_error or is_ffi_error:
+                related_information = None
+                diagnostic_message = f"Type error: {error}"
+
+                if is_ownership_error:
+                    ownership_line = self._extract_ownership_line(error)
+                    if ownership_line is not None:
+                        line = ownership_line
+                        line_text = text.split('\n')[line] if line < len(text.split('\n')) else ""
+                        var_name = self._extract_ownership_var_name(error)
+                        if var_name and var_name in line_text:
+                            col = line_text.find(var_name)
+                            end_col = col + len(var_name)
+
+                    var_name = self._extract_ownership_var_name(error)
+                    related_information = self._build_borrow_related_information(uri, text, var_name, line)
+                    diagnostic_message = self._shape_ownership_message(error)
+
+                if is_ownership_error or is_contract_error or is_asm_error or is_ffi_error:
                     error_code = "E201"
                     error_type = "invalid_operation"
                 else:
                     error_code = None
                     error_type = "type_mismatch"
 
-                if is_contract_error:
+                if is_ownership_error:
+                    category = "memory"
+                    if not selected_fixes:
+                        selected_fixes = [
+                            "Drop active borrows before move or assignment",
+                            "Avoid mutable borrow while immutable borrows are active",
+                            "Ensure moved values are not used again",
+                        ]
+                elif is_contract_error:
                     category = "contract"
                 elif is_asm_error:
                     category = "systems"
@@ -481,16 +603,17 @@ class DiagnosticsProvider:
                         start_char=col,
                         end_char=end_col,
                         severity=1,
-                        message=f"Type error: {error}",
+                        message=diagnostic_message,
                         source="nexuslang",
                         error_code=error_code,
                         error_type_key=error_type,
                         category=category,
                         fixes=selected_fixes,
+                        related_information=related_information,
                     )
                 )
         
-        except Exception:
+        except _RECOVERABLE_LSP_EXCEPTIONS:
             # If parsing fails, syntax errors are handled by parser diagnostics fallback.
             logger.debug("Enhanced type diagnostics failed", exc_info=True)
         
@@ -707,7 +830,7 @@ class DiagnosticsProvider:
                     )
                 )
         
-        except Exception:
+        except _RECOVERABLE_LSP_EXCEPTIONS:
             # If parsing fails, syntax errors are handled by parser diagnostics fallback.
             logger.debug("Type checker diagnostics failed", exc_info=True)
         
@@ -896,16 +1019,24 @@ class DiagnosticsProvider:
         return diagnostics
 
     def _check_channel_operations(self, text: str) -> List[Dict]:
-        """Check channel send/receive operations for obvious non-channel misuse."""
+        """Check channel send/receive/close operations for obvious non-channel misuse."""
         diagnostics = []
         lines = text.split('\n')
 
         variable_types = self._infer_variable_types(lines)
+        closed_channels: Dict[str, int] = {}
 
         send_pattern = re.compile(r'\bsend\s+.+\s+to\s+(\w+)\b', re.IGNORECASE)
         receive_pattern = re.compile(r'\breceive\s+from\s+(\w+)\b', re.IGNORECASE)
+        close_pattern = re.compile(r'^\s*close\s+(\w+)\b', re.IGNORECASE)
+        reassign_pattern = re.compile(r'^\s*set\s+(\w+)\s+(?:as\s+[^\s]+\s+)?to\b', re.IGNORECASE)
 
         for i, line in enumerate(lines):
+            reassign_match = reassign_pattern.match(line)
+            if reassign_match:
+                reassigned = reassign_match.group(1)
+                closed_channels.pop(reassigned, None)
+
             send_match = send_pattern.search(line)
             if send_match:
                 target = send_match.group(1)
@@ -922,6 +1053,24 @@ class DiagnosticsProvider:
                             source="nexuslang",
                             error_code="E201",
                             error_type_key="type_mismatch",
+                        )
+                    )
+                elif target in closed_channels:
+                    start = send_match.start(1)
+                    diagnostics.append(
+                        self._build_diagnostic(
+                            line=i,
+                            start_char=start,
+                            end_char=start + len(target),
+                            severity=2,
+                            message=f"Potential send to closed channel '{target}'",
+                            source="nexuslang",
+                            error_code="E201",
+                            error_type_key="invalid_operation",
+                            fixes=[
+                                f"Recreate channel before send: set {target} to create channel",
+                                f"Move this send before close {target}",
+                            ],
                         )
                     )
 
@@ -943,6 +1092,45 @@ class DiagnosticsProvider:
                             error_type_key="type_mismatch",
                         )
                     )
+                elif source_name in closed_channels:
+                    start = receive_match.start(1)
+                    diagnostics.append(
+                        self._build_diagnostic(
+                            line=i,
+                            start_char=start,
+                            end_char=start + len(source_name),
+                            severity=2,
+                            message=f"Potential receive from closed channel '{source_name}'",
+                            source="nexuslang",
+                            error_code="E201",
+                            error_type_key="invalid_operation",
+                            fixes=[
+                                f"Recreate channel before receive: set {source_name} to create channel",
+                                f"Move close {source_name} after this receive",
+                            ],
+                        )
+                    )
+
+            close_match = close_pattern.search(line)
+            if close_match:
+                target = close_match.group(1)
+                target_type = variable_types.get(target)
+                if target_type and target_type != "Channel":
+                    start = close_match.start(1)
+                    diagnostics.append(
+                        self._build_diagnostic(
+                            line=i,
+                            start_char=start,
+                            end_char=start + len(target),
+                            severity=1,
+                            message=f"Cannot close non-channel variable '{target}' of type {target_type}",
+                            source="nexuslang",
+                            error_code="E201",
+                            error_type_key="type_mismatch",
+                        )
+                    )
+                else:
+                    closed_channels[target] = i
 
         return diagnostics
 

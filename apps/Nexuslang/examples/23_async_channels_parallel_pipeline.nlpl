@@ -1,0 +1,177 @@
+#!/usr/bin/env nexuslang
+* Async Channels Parallel Pipeline Showcase
+* Demonstrates NexusLang's async functions, channel communication, and parallel processing
+* working together in a realistic concurrent data pipeline.
+*
+* Scenario: Process sensor readings in parallel, aggregate results via a channel,
+* and report statistics asynchronously.
+
+* Global configuration
+set SENSOR_COUNT to 10
+set READINGS_PER_SENSOR to 100
+set REPORT_INTERVAL to 50
+
+* Sensor reading structure
+struct SensorReading
+  sensor_id as Integer
+  value as Integer
+  timestamp as Integer
+end
+
+* Report aggregation structure
+struct AggregateReport
+  reading_count as Integer
+  sum_value as Integer
+  min_value as Integer
+  max_value as Integer
+  avg_value as Float
+end
+
+* Initialize sensor data: generate synthetic readings for each sensor
+function create_sensor_readings returns List of Integer
+  set all_readings to []
+  for each sensor_id in (0, SENSOR_COUNT)
+    for each reading_idx in (0, READINGS_PER_SENSOR)
+      set synthetic_value to 50 plus sensor_id times 10 plus reading_idx times 2
+      append synthetic_value to all_readings
+  return all_readings
+end
+
+* Process a chunk of sensor readings in parallel
+function process_sensor_chunk with readings as List of Integer and chunk_id as Integer returns AggregateReport
+  set chunk_sum to 0
+  set chunk_min to 2147483647
+  set chunk_max to -2147483648
+  
+  parallel for each reading in readings
+    if reading is less than chunk_min
+      set chunk_min to reading
+    end
+    if reading is greater than chunk_max
+      set chunk_max to reading
+    end
+    set chunk_sum to chunk_sum plus reading
+  end
+  
+  set count to length of readings
+  set avg_value to 0.0
+  if count is greater than 0
+    set avg_value to cast reading to Float divided by cast count to Float
+  end
+  
+  set result to SensorReading
+  set result.reading_count to count
+  set result.sum_value to chunk_sum
+  set result.min_value to chunk_min
+  set result.max_value to chunk_max
+  set result.avg_value to avg_value
+  
+  print text "Processed chunk " plus cast chunk_id to String plus " with " plus cast count to String plus " readings"
+  
+  return result
+end
+
+* Async aggregator: consumes readings from channel, updates global statistics
+async function aggregate_from_channel with reading_chan as Channel and total_expected as Integer
+  set total_received to 0
+  set global_sum to 0
+  set global_min to 2147483647
+  set global_max to -2147483648
+  set reports_received to []
+  
+  while total_received is less than total_expected
+    set result to receive from reading_chan
+    if result is not null
+      set total_received to total_received plus result.reading_count
+      set global_sum to global_sum plus result.sum_value
+      if result.min_value is less than global_min
+        set global_min to result.min_value
+      end
+      if result.max_value is greater than global_max
+        set global_max to result.max_value
+      end
+      append result to reports_received
+      
+      if remainder of total_received by REPORT_INTERVAL is equal to 0
+        print text "Intermediate: Processed " plus cast total_received to String plus " readings so far"
+      end
+    end
+  end
+  
+  set final_avg to 0.0
+  if total_received is greater than 0
+    set final_avg to cast global_sum to Float divided by cast total_received to Float
+  end
+  
+  print text ""
+  print text "Final Pipeline Statistics:"
+  print text "  Total readings processed: " plus cast total_received to String
+  print text "  Sum: " plus cast global_sum to String
+  print text "  Min: " plus cast global_min to String
+  print text "  Max: " plus cast global_max to String
+  print text "  Average: " plus cast final_avg to String
+  print text "  Reports aggregated: " plus cast length of reports_received to String
+end
+
+* Main orchestration
+function main
+  print text "NexusLang Async/Channels/Parallel Showcase"
+  print text "==========================================="
+  print text ""
+  
+  set all_readings to create_sensor_readings
+  set total_readings to length of all_readings
+  print text "Created " plus cast total_readings to String plus " synthetic sensor readings"
+  print text ""
+  
+  * Create channel for inter-task communication
+  set result_chan to create channel
+  
+  * Launch async aggregator task
+  set aggregator_task to spawn aggregate_from_channel with result_chan and total_readings
+  
+  * Partition readings into 4 chunks for parallel processing
+  set chunk_size to 0
+  if total_readings is greater than 0
+    set chunk_size to total_readings divided by 4
+    if remainder of total_readings by 4 is not equal to 0
+      set chunk_size to chunk_size plus 1
+    end
+  end
+  
+  set chunk_id to 0
+  set idx to 0
+  
+  print text "Launching parallel processing chunks..."
+  print text ""
+  
+  * Process each chunk in parallel, send results to channel
+  while idx is less than total_readings
+    set chunk_end to idx plus chunk_size
+    if chunk_end is greater than total_readings
+      set chunk_end to total_readings
+    end
+    
+    set chunk to slice all_readings from idx to chunk_end
+    
+    * Process chunk in parallel and send result to channel
+    set chunk_report to process_sensor_chunk with chunk and chunk_id
+    send chunk_report to result_chan
+    
+    set chunk_id to chunk_id plus 1
+    set idx to chunk_end
+  end
+  
+  print text ""
+  print text "Waiting for async aggregator to complete..."
+  print text ""
+  
+  * Wait for async aggregator to finish
+  await aggregator_task
+  
+  print text ""
+  print text "Pipeline complete!"
+end
+
+* Entry point
+main

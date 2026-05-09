@@ -1,0 +1,129 @@
+# Embedded Sensor Driver Showcase
+# Demonstrates NexusLang for embedded-style programming patterns:
+# - register-level read/write abstraction
+# - sensor initialization and calibration
+# - periodic sampling loop
+# - threshold-based alerting
+
+struct SensorRegisters
+    control as Integer
+    status as Integer
+    raw_value as Integer
+    calibration_offset as Integer
+    calibration_scale as Integer
+end
+
+struct SensorReading
+    sequence as Integer
+    raw as Integer
+    calibrated as Float
+    alarm as Boolean
+end
+
+function create_registers returns SensorRegisters
+    set regs to new SensorRegisters
+    set regs.control to 0
+    set regs.status to 0
+    set regs.raw_value to 0
+    set regs.calibration_offset to 0
+    set regs.calibration_scale to 100
+    return regs
+end
+
+function write_register with regs as SensorRegisters, register_name as String, value as Integer returns SensorRegisters
+    if register_name equals "control"
+        set regs.control to value
+    else if register_name equals "status"
+        set regs.status to value
+    else if register_name equals "raw_value"
+        set regs.raw_value to value
+    else if register_name equals "calibration_offset"
+        set regs.calibration_offset to value
+    else if register_name equals "calibration_scale"
+        set regs.calibration_scale to value
+    end
+    return regs
+end
+
+function read_register with regs as SensorRegisters, register_name as String returns Integer
+    if register_name equals "control"
+        return regs.control
+    else if register_name equals "status"
+        return regs.status
+    else if register_name equals "raw_value"
+        return regs.raw_value
+    else if register_name equals "calibration_offset"
+        return regs.calibration_offset
+    else if register_name equals "calibration_scale"
+        return regs.calibration_scale
+    end
+    return 0
+end
+
+function init_sensor with regs as SensorRegisters returns SensorRegisters
+    set regs to write_register with regs, "control", 1
+    set regs to write_register with regs, "status", 1
+    return regs
+end
+
+function calibrate_sensor with regs as SensorRegisters, offset as Integer, scale as Integer returns SensorRegisters
+    require scale is greater than 0 message "Calibration scale must be positive"
+
+    set regs to write_register with regs, "calibration_offset", offset
+    set regs to write_register with regs, "calibration_scale", scale
+    return regs
+end
+
+function acquire_sample with regs as SensorRegisters, seq as Integer returns SensorReading
+    # Simulate hardware conversion result changing over time.
+    set simulated_raw to 420 plus seq times 7
+    set regs to write_register with regs, "raw_value", simulated_raw
+
+    set raw to read_register with regs, "raw_value"
+    set offset to read_register with regs, "calibration_offset"
+    set scale to read_register with regs, "calibration_scale"
+
+    set calibrated to (raw plus offset) times scale divided by 100
+    set alarm to false
+    if calibrated is greater than 500
+        set alarm to true
+    end
+
+    set reading to new SensorReading
+    set reading.sequence to seq
+    set reading.raw to raw
+    set reading.calibrated to calibrated
+    set reading.alarm to alarm
+    return reading
+end
+
+function print_reading with reading as SensorReading
+    print text "Sample:"
+    print text reading.sequence
+    print text "Raw:"
+    print text reading.raw
+    print text "Calibrated:"
+    print text reading.calibrated
+    print text "Alarm:"
+    print text reading.alarm
+end
+
+function run_sensor_driver_demo
+    set regs to call create_registers
+    set regs to init_sensor with regs
+    set regs to calibrate_sensor with regs, -12, 105
+
+    print text "Sensor Driver Demo"
+    print text "=================="
+
+    set i to 0
+    while i is less than 6
+        set reading to acquire_sample with regs, i
+        print_reading with reading
+        set i to i plus 1
+    end
+
+    print text "Driver demo complete"
+end
+
+call run_sensor_driver_demo

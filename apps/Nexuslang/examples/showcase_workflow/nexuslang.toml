@@ -1,0 +1,19 @@
+[package]
+name = "showcase-workflow"
+version = "0.1.0"
+authors = []
+description = "End-to-end NexusLang capability demo project"
+
+[build]
+source_dir = "src"
+output_dir = "build"
+target = "c"
+optimization = 0
+headers = false
+
+[dependencies]
+
+[dev-dependencies]
+
+[features]
+default = []

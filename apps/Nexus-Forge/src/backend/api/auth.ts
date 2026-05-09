@@ -1,6 +1,5 @@
 import { env } from "bun";
 import jwt from "jsonwebtoken";
-import type { Elysia } from "elysia";
 
 const JWT_SECRET = env.JWT_SECRET || "nexus-forge-secret";
 
@@ -29,7 +28,7 @@ export function verifyToken(token: string): ForgeUser | null {
   }
 }
 
-export function authRoutes(app: Elysia) {
+export function authRoutes(app: ForgeRouteApp) {
   app.post("/api/auth/login", async ({ body }) => {
     const payload = body as { username?: string; password?: string };
     // TODO: Replace with real user store / password validation.

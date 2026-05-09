@@ -46,21 +46,24 @@ set second to numbers[1]
     ]
     
     print("\nVerification:")
-    all_passed = True
+    missing_patterns = []
     for name, pattern in checks:
         if pattern in c_code:
             print(f"   {name}: Found '{pattern}'")
         else:
             print(f"   {name}: Missing '{pattern}'")
-            all_passed = False
+            missing_patterns.append((name, pattern))
     
-    if all_passed:
+    if not missing_patterns:
         print("\n All checks passed!")
     else:
         print("\n Some checks failed")
-    
-    return all_passed
+
+    assert not missing_patterns, f"Missing generated C patterns: {missing_patterns}"
 
 if __name__ == "__main__":
-    success = test_array_indexing_c_gen()
-    sys.exit(0 if success else 1)
+    try:
+        test_array_indexing_c_gen()
+    except AssertionError:
+        sys.exit(1)
+    sys.exit(0)

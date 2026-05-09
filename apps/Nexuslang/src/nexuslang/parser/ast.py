@@ -355,13 +355,20 @@ class OptionPattern(Pattern):
         case None             # Matches None
     """
     
-    def __init__(self, variant: str, binding: str = None, line_number: int = None):
+    def __init__(
+        self,
+        variant: str,
+        binding: str = None,
+        line_number: int = None,
+        binding_type_annotation: str = None,
+    ):
         """Initialize Option pattern.
         
         Args:
             variant: "Some" or "None"
             binding: Variable name to bind the value (for Some)
             line_number: Source line number
+            binding_type_annotation: Optional declared type for bound payload
         """
         super().__init__("option", line_number)
         if variant not in ("Some", "None"):
@@ -369,6 +376,8 @@ class OptionPattern(Pattern):
         
         self.variant = variant
         self.binding = binding
+        self.binding_type_annotation = binding_type_annotation
+        self.binding_inferred_type = None
     
     def __repr__(self):
         if self.binding:
@@ -387,13 +396,20 @@ class ResultPattern(Pattern):
         case Err with error   # Matches Err and binds error
     """
     
-    def __init__(self, variant: str, binding: str = None, line_number: int = None):
+    def __init__(
+        self,
+        variant: str,
+        binding: str = None,
+        line_number: int = None,
+        binding_type_annotation: str = None,
+    ):
         """Initialize Result pattern.
         
         Args:
             variant: "Ok" or "Err"
             binding: Variable name to bind the value/error
             line_number: Source line number
+            binding_type_annotation: Optional declared type for bound payload/error
         """
         super().__init__("result", line_number)
         if variant not in ("Ok", "Err"):
@@ -401,6 +417,8 @@ class ResultPattern(Pattern):
         
         self.variant = variant
         self.binding = binding
+        self.binding_type_annotation = binding_type_annotation
+        self.binding_inferred_type = None
     
     def __repr__(self):
         if self.binding:
@@ -563,11 +581,12 @@ class MethodDefinition(ASTNode):
 
 class ObjectInstantiation(ASTNode):
     """Represents object creation with 'new ClassName' or 'new ClassName<T>'."""
-    def __init__(self, class_name, arguments=None, type_arguments=None, line_number=None):
+    def __init__(self, class_name, arguments=None, type_arguments=None, named_fields=None, line_number=None):
         super().__init__("object_instantiation", line_number)
         self.class_name = class_name
         self.arguments = arguments or []  # Constructor arguments
         self.type_arguments = type_arguments or []  # Generic type arguments like <Integer, String>
+        self.named_fields = named_fields or {}  # Named field initialization: {field_name: expr}
 
 class MemberAccess(ASTNode):
     """Represents member access: object.property or object.method()."""

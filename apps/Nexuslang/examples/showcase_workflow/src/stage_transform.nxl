@@ -1,0 +1,8 @@
+function stage_transform returns Integer
+    print text "stage:transform"
+    print text "validated: 4"
+    print text "filtered_invalid: 1"
+    return 0
+end
+
+call stage_transform

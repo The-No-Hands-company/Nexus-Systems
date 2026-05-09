@@ -16,6 +16,7 @@ from nexuslang.build.manifest import (
     Manifest, load_manifest, Dependency, BuildProfile, 
     PanicStrategy, CrateType, PackageMetadata
 )
+import nexuslang.build.manifest as manifest_module
 
 
 @pytest.fixture
@@ -339,6 +340,45 @@ class TestProfiles:
         assert test_profile.debug == True  # Inherited from dev
         assert test_profile.incremental == True  # Inherited from dev
 
+    @pytest.mark.parametrize(
+        "snippet,error_pattern",
+        [
+            ("opt-level = \"3\"", "opt-level"),
+            ("debug = 1", "debug"),
+            ("debug-assertions = \"true\"", "debug-assertions"),
+            ("incremental = \"false\"", "incremental"),
+            ("lto = \"always\"", "lto"),
+            ("strip = \"everything\"", "strip"),
+            ("panic = \"ignore\"", "panic"),
+            ("codegen-units = 0", "codegen-units"),
+        ],
+    )
+    def test_profile_field_validation_rejects_malformed_values(self, temp_project, snippet, error_pattern):
+        manifest_path = write_manifest(temp_project, f"""
+            [package]
+            name = "test"
+            version = "0.1.0"
+
+            [profile.release]
+            {snippet}
+        """)
+
+        with pytest.raises(ValueError, match=error_pattern):
+            Manifest(manifest_path)
+
+    def test_profile_inherits_unknown_profile_rejected(self, temp_project):
+        manifest_path = write_manifest(temp_project, """
+            [package]
+            name = "test"
+            version = "0.1.0"
+
+            [profile.custom]
+            inherits = "nonexistent"
+        """)
+
+        with pytest.raises(ValueError, match="unknown profile"):
+            Manifest(manifest_path)
+
 
 class TestFeatures:
     """Test feature parsing."""
@@ -360,6 +400,19 @@ class TestFeatures:
         assert len(manifest.features) == 3
         assert manifest.has_feature("simd")
         assert manifest.get_feature_dependencies("default") == ["std"]
+
+    def test_feature_definition_must_be_string_list(self, temp_project):
+        manifest_path = write_manifest(temp_project, """
+            [package]
+            name = "test"
+            version = "0.1.0"
+
+            [features]
+            bad = [1, 2]
+        """)
+
+        with pytest.raises(ValueError, match="Invalid feature 'bad'"):
+            Manifest(manifest_path)
 
 
 class TestWorkspace:
@@ -441,6 +494,41 @@ class TestManifestUtilities:
         manifest = Manifest(manifest_path)
         resolved = manifest.resolve_path("src/main.nxl")
         assert resolved == temp_project / "src" / "main.nxl"
+
+    def test_manifest_loads_manifest_data_once(self, monkeypatch, temp_project):
+        manifest_path = write_manifest(temp_project, """
+            [package]
+            name = "test"
+            version = "0.1.0"
+        """)
+        calls = []
+        original_loader = manifest_module.load_manifest_data
+
+        def traced_loader(path):
+            calls.append(path)
+            return original_loader(path)
+
+        monkeypatch.setattr(manifest_module, "load_manifest_data", traced_loader)
+
+        manifest = Manifest(manifest_path)
+        assert manifest.package.name == "test"
+        assert len(calls) == 1
+
+    def test_manifest_from_data_does_not_reload_from_disk(self, monkeypatch, temp_project):
+        manifest_path = write_manifest(temp_project, """
+            [package]
+            name = "test"
+            version = "0.1.0"
+        """)
+        data = manifest_module.load_manifest_data(manifest_path)
+
+        def fail_loader(_path):
+            raise AssertionError("load_manifest_data should not be called by Manifest.from_data")
+
+        monkeypatch.setattr(manifest_module, "load_manifest_data", fail_loader)
+
+        manifest = Manifest.from_data(data, path=manifest_path)
+        assert manifest.package.name == "test"
 
 
 class TestLoadManifest:

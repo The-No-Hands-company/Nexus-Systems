@@ -87,7 +87,7 @@ class PerformanceChecker(BaseChecker):
             return  # _check_function_def recurses
 
         # Generic recurse
-        for child in self._iter_children(node):
+        for child in self.iter_child_nodes(node):
             self._walk(child, in_loop, depth + 1)
 
     # ------------------------------------------------------------------
@@ -146,7 +146,7 @@ class PerformanceChecker(BaseChecker):
                     suggestion="Replace `sort()[0]` with `min()` and `sort()[-1]` with `max()`.",
                 ))
 
-        for child in self._iter_children(call):
+        for child in self.iter_child_nodes(call):
             self._walk(child, in_loop, depth + 1)
 
     # ------------------------------------------------------------------
@@ -175,7 +175,7 @@ class PerformanceChecker(BaseChecker):
                     suggestion="Use `append` to a list, then `join` after the loop.",
                 ))
 
-        for child in self._iter_children(node):
+        for child in self.iter_child_nodes(node):
             self._walk(child, in_loop, depth + 1)
 
     # ------------------------------------------------------------------
@@ -258,18 +258,3 @@ class PerformanceChecker(BaseChecker):
             pairs = getattr(node, "pairs", None) or getattr(node, "items", None) or []
             return len(pairs) >= 10
         return False
-
-    # ------------------------------------------------------------------
-    # Iteration helpers
-    # ------------------------------------------------------------------
-
-    def _iter_children(self, node: Any):
-        if not hasattr(node, "__dict__"):
-            return
-        for k, v in vars(node).items():
-            if k.startswith("_"):
-                continue
-            if isinstance(v, list):
-                yield from [i for i in v if i is not None and hasattr(i, "__dict__")]
-            elif hasattr(v, "__dict__"):
-                yield v

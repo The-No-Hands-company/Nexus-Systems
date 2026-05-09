@@ -8,6 +8,67 @@ import ctypes.util
 from typing import Dict, List, Any, Optional, Callable
 from ...runtime.runtime import Runtime
 
+
+SUPPORTED_CALLING_CONVENTIONS = {
+    "cdecl",
+    "stdcall",
+    "fastcall",
+    "thiscall",
+    "vectorcall",
+    "sysv",
+    "win64",
+}
+
+
+def is_calling_convention_supported(convention: str, platform: Optional[str] = None) -> bool:
+    """Return True when a calling convention is recognized for the current target platform."""
+    conv = (convention or "").strip().lower()
+    if conv not in SUPPORTED_CALLING_CONVENTIONS:
+        return False
+
+    platform_name = (platform or "").lower()
+    if not platform_name:
+        return True
+
+    if platform_name == "win32":
+        return conv in {"cdecl", "stdcall", "fastcall", "thiscall", "vectorcall", "win64"}
+    return conv in {"cdecl", "sysv", "fastcall", "thiscall", "vectorcall", "win64", "stdcall"}
+
+
+def get_ffi_type_size_hint(type_name: str, pointer_size: int = 8) -> Optional[int]:
+    """Return coarse ABI size hint in bytes for primitive/pointer FFI types."""
+    normalized = (type_name or "").strip().lower()
+    size_map = {
+        "int8": 1,
+        "uint8": 1,
+        "char": 1,
+        "int16": 2,
+        "uint16": 2,
+        "int32": 4,
+        "uint32": 4,
+        "int": 4,
+        "integer": 8,
+        "int64": 8,
+        "uint64": 8,
+        "long": 8,
+        "float": 4,
+        "double": 8,
+        "bool": 1,
+        "boolean": 1,
+        "size_t": pointer_size,
+        "pointer": pointer_size,
+        "void*": pointer_size,
+        "char*": pointer_size,
+        "string": pointer_size,
+        "str": pointer_size,
+    }
+
+    if normalized in size_map:
+        return size_map[normalized]
+    if "pointer" in normalized or "*" in normalized:
+        return pointer_size
+    return None
+
 class FFILibrary:
     """Wrapper for a loaded C library."""
     

@@ -106,7 +106,7 @@ function toInt(value: unknown, fallback: number): number {
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
-export function registerInventoryStubEngineRoutes(app: any) {
+export function registerInventoryStubEngineRoutes(app: ForgeRouteApp) {
   app.get("/api/inventory-stub-engine/summary", async () => {
     const features = await loadInventoryFeatures();
     const implemented = features.filter((f) => f.status === "✅").length;
@@ -125,10 +125,12 @@ export function registerInventoryStubEngineRoutes(app: any) {
     );
   });
 
-  app.get("/api/inventory-stub-engine/features", async ({ query }: any) => {
+  app.get("/api/inventory-stub-engine/features", async ({ query }) => {
     const features = await loadInventoryFeatures();
     const statusFilter = (query?.status as FeatureStatus | undefined) || undefined;
-    const sectionFilter = String(query?.section || "").trim().toLowerCase();
+    const sectionFilter = String(query?.section || "")
+      .trim()
+      .toLowerCase();
     const limit = Math.max(1, Math.min(500, toInt(query?.limit, 100)));
     const offset = Math.max(0, toInt(query?.offset, 0));
 
@@ -141,10 +143,13 @@ export function registerInventoryStubEngineRoutes(app: any) {
     }
 
     const items = filtered.slice(offset, offset + limit);
-    return listResponse(items, `Autonomous stub catalog slice (${offset}-${offset + items.length})`);
+    return listResponse(
+      items,
+      `Autonomous stub catalog slice (${offset}-${offset + items.length})`,
+    );
   });
 
-  app.get("/api/inventory-stub-engine/features/:slug", async ({ params }: any) => {
+  app.get("/api/inventory-stub-engine/features/:slug", async ({ params }) => {
     const features = await loadInventoryFeatures();
     const slug = String(params.slug || "").trim();
     const feature = features.find((f) => f.slug === slug);
@@ -155,7 +160,7 @@ export function registerInventoryStubEngineRoutes(app: any) {
     return entityResponse(feature, "Feature stub record");
   });
 
-  app.post("/api/inventory-stub-engine/features/:slug/stub", async ({ params, body }: any) => {
+  app.post("/api/inventory-stub-engine/features/:slug/stub", async ({ params, body }) => {
     const features = await loadInventoryFeatures();
     const slug = String(params.slug || "").trim();
     const feature = features.find((f) => f.slug === slug);
@@ -163,12 +168,15 @@ export function registerInventoryStubEngineRoutes(app: any) {
       return { ok: false, error: "Feature not found", status: 404 };
     }
 
+    const payload =
+      typeof body === "object" && body !== null ? (body as Record<string, unknown>) : {};
+
     return entityResponse(
       {
         ...feature,
         action: "stub-queued",
         previousStatus: feature.status,
-        requestedBy: body?.requestedBy || "autonomous-engine",
+        requestedBy: String(payload.requestedBy || "autonomous-engine"),
         requestedAt: new Date().toISOString(),
       },
       "Autonomous stubbing intent recorded",

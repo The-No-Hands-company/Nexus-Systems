@@ -36,6 +36,7 @@ def _run_cli_build(monkeypatch, argv, captured):
     class FakeBuildSystem:
         def __init__(self, config):
             self.config = config
+            captured["config"] = config
 
         def build(self, **kwargs):
             captured.update(kwargs)
@@ -70,3 +71,18 @@ def test_cli_no_lint_flag_overrides_manifest_default_true(monkeypatch, tmp_path)
     _run_cli_build(monkeypatch, ["nexuslang", "build", "--no-lint"], captured)
 
     assert captured.get("lint") is False
+
+
+def test_cli_build_target_triple_override_is_applied_to_config(monkeypatch, tmp_path):
+    _write_manifest(tmp_path / "nexuslang.toml", lint_on_build=False)
+    _write_source(tmp_path)
+    monkeypatch.chdir(tmp_path)
+
+    captured = {}
+    _run_cli_build(
+        monkeypatch,
+        ["nexuslang", "build", "--target", "aarch64-unknown-linux-gnu"],
+        captured,
+    )
+
+    assert captured["config"].build.target_triple == "aarch64-unknown-linux-gnu"

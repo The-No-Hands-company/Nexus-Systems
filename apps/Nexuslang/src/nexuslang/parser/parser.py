@@ -309,6 +309,8 @@ class Parser:
             return self._handle_when_statement()
         elif token.type == TokenType.REPEAT:
             return self.for_loop()
+        elif token.type == TokenType.RUN:
+            return self.concurrent_execution()
         elif token.type in (TokenType.ADD, TokenType.APPEND):
             return self.add_statement()
         elif token.type == TokenType.SEND:
@@ -1293,7 +1295,15 @@ class Parser:
         return parameters, variadic
 
     def _parse_where_clause(self, type_parameters, type_constraints, line_number):
-        """Parse 'where T is Comparable' constraints, mutating type_parameters and type_constraints in place."""
+        """Parse where constraints and merge them into the current generic constraints.
+
+        Supported forms:
+            where T is Comparable
+            where T is Comparable + Printable, R is Equatable
+
+        The parser accepts either mapping-style constraints (dict[str, list[str]])
+        or legacy list-style constraints (list[TypeConstraint]).
+        """
         self.advance()  # Eat 'where'
 
         # Parse constraint: T is Comparable, R is Equatable
@@ -1310,20 +1320,37 @@ class Parser:
             else:
                 break
 
-            # Parse constraint type (Comparable, Equatable, or a type name)
+            # Parse one or more constraint traits: Comparable + Printable
+            constraint_types = []
             if self.current_token.type == TokenType.IDENTIFIER:
-                constraint_type = self.current_token.lexeme
+                constraint_types.append(self.current_token.lexeme)
                 self.advance()
 
-                # Create TypeConstraint AST node
-                from ..parser.ast import TypeConstraint
-                type_constraints.append(
-                    TypeConstraint(param_name, constraint_type, line_number)
-                )
+                while self.current_token and self.current_token.type == TokenType.PLUS:
+                    self.advance()  # Eat '+'
+                    if self.current_token and self.current_token.type == TokenType.IDENTIFIER:
+                        constraint_types.append(self.current_token.lexeme)
+                        self.advance()
+                    else:
+                        self.error("Expected trait name after '+' in where clause")
+            else:
+                break
 
-                # Auto-add type parameter if not explicitly declared
-                if param_name not in type_parameters:
-                    type_parameters.append(param_name)
+            # Merge parsed constraints into supported container shapes.
+            if isinstance(type_constraints, dict):
+                existing = type_constraints.get(param_name, [])
+                type_constraints[param_name] = existing + constraint_types
+            else:
+                # Create TypeConstraint AST nodes for legacy list-based callers.
+                from ..parser.ast import TypeConstraint
+                for constraint_type in constraint_types:
+                    type_constraints.append(
+                        TypeConstraint(param_name, constraint_type, line_number)
+                    )
+
+            # Auto-add type parameter if not explicitly declared
+            if param_name not in type_parameters:
+                type_parameters.append(param_name)
 
             # Check for comma (more constraints)
             if self.current_token and self.current_token.type == TokenType.COMMA:
@@ -2190,11 +2217,14 @@ class Parser:
             if self.current_token and self.current_token.type == TokenType.DEDENT:
                 self.advance()  # consume DEDENT
 
-            # Consume END_CLASS if present
-            if self.current_token and self.current_token.type == TokenType.END_CLASS:
-                self.advance()  # consume combined 'end class' token
+            # Consume class end aliases if present
+            if self.current_token and self.current_token.type in (TokenType.END_CLASS, TokenType.END_THE_CLASS):
+                self.advance()  # consume combined 'end class' or 'end the class' token
             elif self.current_token and self.current_token.type == TokenType.END:
                 self.advance()  # consume 'end'
+                # consume optional 'the class' suffix if present
+                if self.current_token and self.current_token.type == TokenType.THE:
+                    self.advance()
                 # consume 'class' if present
                 if self.current_token and self.current_token.type == TokenType.CLASS:
                     self.advance()
@@ -2666,7 +2696,7 @@ class Parser:
             # Parse method body
             body = []
             while self.current_token and self.current_token.type != TokenType.DEDENT:
-                if self.current_token.type in (TokenType.END, TokenType.END_METHOD):
+                if self.current_token.type in (TokenType.END, TokenType.END_METHOD, TokenType.END_THE_METHOD):
                     break
                 stmt = self.statement()
                 if stmt:
@@ -2675,12 +2705,17 @@ class Parser:
             if self.current_token and self.current_token.type == TokenType.DEDENT:
                 self.advance()  # consume DEDENT
             
-            # Optional explicit 'end' for method - could be END token or END_METHOD combined token
-            if self.current_token and self.current_token.type == TokenType.END_METHOD:
-                self.advance()  # consume combined 'end method' token
+            # Optional explicit 'end' for method - could be END_* combined alias tokens
+            if self.current_token and self.current_token.type in (TokenType.END_METHOD, TokenType.END_THE_METHOD):
+                self.advance()  # consume combined 'end method' or 'end the method' token
             elif self.current_token and self.current_token.type == TokenType.END:
                 end_line = self.current_token.line
                 self.advance()  # consume 'end'
+                # Consume optional 'the' in "end the method" if same line.
+                if (self.current_token and
+                    self.current_token.type == TokenType.THE and
+                    self.current_token.line == end_line):
+                    self.advance()
                 # Only consume 'method' if it's on the same line (for "end method" syntax)
                 # Don't consume if separated by newline/indent (next method definition)
                 if (self.current_token and 
@@ -3152,6 +3187,7 @@ class Parser:
             while (self.current_token and self.current_token.type != TokenType.EOF and
                    self.current_token.type != TokenType.END and
                    self.current_token.type != TokenType.END_WHILE and
+                   self.current_token.type != TokenType.END_LOOP and
                    not (self.current_token.type == TokenType.IDENTIFIER and 
                         self.current_token.lexeme.lower() == 'end')):
                 statement = self.statement()
@@ -3161,6 +3197,9 @@ class Parser:
         # Eat 'end while' (single token) or 'end' + 'while' (two tokens)
         if self.current_token and self.current_token.type == TokenType.END_WHILE:
             # Single END_WHILE token
+            self.advance()
+        elif self.current_token and self.current_token.type == TokenType.END_LOOP:
+            # Single END_LOOP token alias
             self.advance()
         elif self.current_token and (self.current_token.type == TokenType.END or
                                      (self.current_token.type == TokenType.IDENTIFIER and 
@@ -3733,6 +3772,18 @@ class Parser:
                 case = self._parse_match_case()
                 if case:
                     cases.append(case)
+            elif self.current_token.type == TokenType.DEFAULT:
+                # Support compact syntax: default as <expression>
+                self.advance()  # consume 'default'
+                if self.current_token and self.current_token.type == TokenType.AS:
+                    self.advance()  # consume 'as'
+                    default_result = self.expression()
+                    self.match(TokenType.NEWLINE)
+                    from .ast import WildcardPattern, MatchCase
+                    wildcard = WildcardPattern(line_number)
+                    cases.append(MatchCase(wildcard, [ReturnStatement(default_result, line_number)], None, line_number))
+                else:
+                    self.error("Expected 'as' after 'default' in match expression")
             elif self.current_token.type == TokenType.DEDENT:
                 break
             elif self.current_token.type == TokenType.END:
@@ -3870,33 +3921,115 @@ class Parser:
         
         # Check for Option patterns (Some/None)
         if self.check(TokenType.IDENTIFIER):
-            variant_name = self.peek().lexeme
+            variant_name = self.current_token.lexeme
             
             if variant_name in ("Some", "None"):
                 self.advance()  # consume variant
                 binding = None
+                binding_type_annotation = None
                 
                 # Check for binding: "Some with value"
-                if self.match(TokenType.WITH):
-                    if not self.check(TokenType.IDENTIFIER):
+                has_with = self.match(TokenType.WITH)
+                if (not has_with and self.check(TokenType.IDENTIFIER) and
+                        self.peek().lexeme.lower() == 'with'):
+                    self.advance()
+                    has_with = True
+
+                if has_with:
+                    if not (self.check(TokenType.IDENTIFIER) or self._can_be_identifier(self.current_token)):
                         self.error("Expected variable name after 'with'")
-                    binding = self.advance().lexeme
+                    binding = self.current_token.lexeme
+                    self.advance()
+
+                # Shorthand binding form: "Some payload"
+                if (
+                    not has_with and binding is None and
+                    (self.check(TokenType.IDENTIFIER) or self._can_be_identifier(self.current_token))
+                ):
+                    binding = self.current_token.lexeme
+                    self.advance()
+
+                # Optional typed payload binding: "Some with value as Integer"
+                if binding is not None and self.check(TokenType.AS):
+                    next_tok = self._peek_next()
+                    if next_tok and (
+                        next_tok.type in (
+                            TokenType.IDENTIFIER,
+                            TokenType.INTEGER,
+                            TokenType.FLOAT,
+                            TokenType.BOOLEAN,
+                            TokenType.STRING,
+                            TokenType.LIST,
+                            TokenType.ARRAY,
+                            TokenType.DICTIONARY,
+                            TokenType.POINTER,
+                            TokenType.REFERENCE,
+                        ) or self._can_be_identifier(next_tok)
+                    ):
+                        self.advance()  # consume 'as'
+                        binding_type_annotation = self.parse_type()
                 
                 from .ast import OptionPattern
-                pattern = OptionPattern(variant_name, binding, line_number)
+                pattern = OptionPattern(
+                    variant_name,
+                    binding,
+                    line_number,
+                    binding_type_annotation=binding_type_annotation,
+                )
             
             elif variant_name in ("Ok", "Err"):
                 self.advance()  # consume variant
                 binding = None
+                binding_type_annotation = None
                 
                 # Check for binding: "Ok with value"
-                if self.match(TokenType.WITH):
-                    if not self.check(TokenType.IDENTIFIER):
+                has_with = self.match(TokenType.WITH)
+                if (not has_with and self.check(TokenType.IDENTIFIER) and
+                        self.peek().lexeme.lower() == 'with'):
+                    self.advance()
+                    has_with = True
+
+                if has_with:
+                    if not (self.check(TokenType.IDENTIFIER) or self._can_be_identifier(self.current_token)):
                         self.error("Expected variable name after 'with'")
-                    binding = self.advance().lexeme
+                    binding = self.current_token.lexeme
+                    self.advance()
+
+                # Shorthand binding form: "Ok value" / "Err error"
+                if (
+                    not has_with and binding is None and
+                    (self.check(TokenType.IDENTIFIER) or self._can_be_identifier(self.current_token))
+                ):
+                    binding = self.current_token.lexeme
+                    self.advance()
+
+                # Optional typed payload binding: "Ok with value as Integer"
+                if binding is not None and self.check(TokenType.AS):
+                    next_tok = self._peek_next()
+                    if next_tok and (
+                        next_tok.type in (
+                            TokenType.IDENTIFIER,
+                            TokenType.INTEGER,
+                            TokenType.FLOAT,
+                            TokenType.BOOLEAN,
+                            TokenType.STRING,
+                            TokenType.LIST,
+                            TokenType.ARRAY,
+                            TokenType.DICTIONARY,
+                            TokenType.POINTER,
+                            TokenType.REFERENCE,
+                        ) or self._can_be_identifier(next_tok)
+                    ):
+                        self.advance()  # consume 'as'
+                        binding_type_annotation = self.parse_type()
                 
                 from .ast import ResultPattern
-                pattern = ResultPattern(variant_name, binding, line_number)
+                pattern = ResultPattern(
+                    variant_name,
+                    binding,
+                    line_number,
+                    binding_type_annotation=binding_type_annotation,
+                )
             
             else:
                 # Regular variant or identifier pattern
@@ -3910,6 +4043,16 @@ class Parser:
         if self.match(TokenType.IF) or self.match(TokenType.WHEN):
             guard = self.expression()
         
+        # Compact inline case: case pattern as value
+        # e.g. case 0 as "groceries"  - the 'as value' is the result expression
+        if self.current_token and self.current_token.type == TokenType.AS:
+            self.advance()  # consume 'as'
+            result_expr = self.expression()
+            # Skip optional newline
+            self.match(TokenType.NEWLINE)
+            from .ast import MatchCase
+            return MatchCase(pattern, [ReturnStatement(result_expr, line_number)], guard, line_number)
+
         # Parse body - consume optional newline (lexer may skip it before INDENT)
         self.match(TokenType.NEWLINE)  # Optional
         
@@ -4381,28 +4524,32 @@ class Parser:
         """Parse a concurrent execution."""
         # Syntax: Run these tasks at the same time: <task_list>
         line_number = self.current_token.line
+
+        def _consume_identifier_word(word: str) -> bool:
+            if (self.current_token and
+                    self.current_token.type == TokenType.IDENTIFIER and
+                    self.current_token.lexeme.lower() == word):
+                self.advance()
+                return True
+            return False
         
         # Eat 'run'
         self.eat(TokenType.RUN)
-        
-        # Eat 'these'
-        self.eat(TokenType.THESE)
-        
-        # Eat 'tasks'
-        self.eat(TokenType.TASKS)
-        
-        # Eat 'at'
-        self.eat(TokenType.AT)
-        
-        # Eat 'the'
-        if self.current_token.type == TokenType.IDENTIFIER and self.current_token.lexeme.lower() == 'the':
+
+        # Optional natural-language lead-in words.
+        _consume_identifier_word('these')
+        _consume_identifier_word('tasks')
+
+        if self.current_token and self.current_token.type == TokenType.AT:
             self.advance()
-            
-        # Eat 'same'
-        self.eat(TokenType.SAME)
-        
-        # Eat 'time'
-        self.eat(TokenType.TIME)
+
+        if self.current_token and self.current_token.type == TokenType.THE:
+            self.advance()
+        else:
+            _consume_identifier_word('the')
+
+        _consume_identifier_word('same')
+        _consume_identifier_word('time')
         
         # Eat optional colon
         if self.current_token.type == TokenType.COLON:
@@ -4411,14 +4558,22 @@ class Parser:
         # Parse task list
         tasks = []
         while (self.current_token and self.current_token.type != TokenType.EOF and
+               self.current_token.type != TokenType.END_CONCURRENT and
+               self.current_token.type != TokenType.END and
                not (self.current_token.type == TokenType.IDENTIFIER and 
                     self.current_token.lexeme.lower() == 'end')):
             statement = self.statement()
             if statement:
                 tasks.append(statement)
                 
-        # Eat 'end'
-        if self.current_token and self.current_token.type == TokenType.IDENTIFIER and self.current_token.lexeme.lower() == 'end':
+        # Eat explicit end forms
+        if self.current_token and self.current_token.type == TokenType.END_CONCURRENT:
+            self.advance()
+        elif self.current_token and self.current_token.type == TokenType.END:
+            self.advance()
+            if self.current_token and self.current_token.type == TokenType.CONCURRENT:
+                self.advance()
+        elif self.current_token and self.current_token.type == TokenType.IDENTIFIER and self.current_token.lexeme.lower() == 'end':
             self.advance()
             
             # Support for explicit "End concurrent" syntax
@@ -4548,7 +4703,8 @@ class Parser:
             while (self.current_token and 
                    self.current_token.type != TokenType.EOF and
                    self.current_token.type != TokenType.DEDENT and
-                   self.current_token.type != TokenType.END):
+                     self.current_token.type != TokenType.END and
+                     self.current_token.type != TokenType.END_TRY):
                 statement = self.statement()
                 if statement:
                     catch_block.append(statement)
@@ -4560,8 +4716,12 @@ class Parser:
                 dedent_seen = True
                 
         # Eat 'end' token if present (optional if dedent was seen)
-        if self.current_token and self.current_token.type == TokenType.END:
+        if self.current_token and self.current_token.type == TokenType.END_TRY:
             self.advance()
+        elif self.current_token and self.current_token.type == TokenType.END:
+            self.advance()
+            if self.current_token and self.current_token.type == TokenType.TRY:
+                self.advance()
         elif not dedent_seen:
             # If no dedent and no end, that's an error
             self.eat(TokenType.END)
@@ -5111,6 +5271,12 @@ class Parser:
         if token.type == TokenType.CONVERT:
             return self.convert_expression()
         
+        # Handle nothing / null keyword as a literal
+        if token.type == TokenType.NOTHING:
+            line_num = token.line if hasattr(token, 'line') else 0
+            self.advance()
+            return Literal(None, line_num)
+        
         # Handle literals
         if token.type in (TokenType.INTEGER_LITERAL, TokenType.FLOAT_LITERAL, 
                          TokenType.STRING_LITERAL, TokenType.TRUE, TokenType.FALSE, TokenType.NULL):
@@ -5234,6 +5400,15 @@ class Parser:
             type_cast = TypeCastExpression(expr, target_type, line_num)
             return self._parse_member_access(type_cast)
         
+        # Handle (start, stop) or (start, stop, step) range tuple syntax
+        if self.current_token and self.current_token.type == TokenType.COMMA:
+            range_args = [expr]
+            while self.current_token and self.current_token.type == TokenType.COMMA:
+                self.advance()  # consume ','
+                range_args.append(self.expression())
+            self.eat(TokenType.RIGHT_PAREN)
+            return FunctionCall("range", range_args, line_number=line_num)
+
         self.eat(TokenType.RIGHT_PAREN)
         return self._parse_member_access(expr)
 
@@ -5334,6 +5509,52 @@ class Parser:
     
 
 
+    def _parse_struct_named_init(self, class_name, line_num):
+        """Parse named-field struct initialization: ClassName called with field: val ... end"""
+        self.advance()  # consume 'called'
+        self.advance()  # consume 'with'
+
+        named_fields = {}
+        # Parse zero or more field: value pairs until we hit 'end' or EOF
+        while (self.current_token and
+               self.current_token.type != TokenType.END and
+               self.current_token.type != TokenType.EOF and
+               self.current_token.type != TokenType.DEDENT):
+            # Skip INDENT tokens
+            if self.current_token.type == TokenType.INDENT:
+                self.advance()
+                continue
+            # Skip NEWLINE tokens
+            if self.current_token.type == TokenType.NEWLINE:
+                self.advance()
+                continue
+            # Expect field name (identifier or contextual keyword)
+            if self.current_token.type == TokenType.IDENTIFIER or self._can_be_identifier(self.current_token):
+                field_name = self.current_token.lexeme
+                self.advance()
+                # Expect colon
+                if self.current_token and self.current_token.type == TokenType.COLON:
+                    self.advance()  # consume ':'
+                    value_expr = self.expression()
+                    named_fields[field_name] = value_expr
+                    # Optional comma separator
+                    if self.current_token and self.current_token.type == TokenType.COMMA:
+                        self.advance()
+                else:
+                    self.error(f"Expected ':' after field name '{field_name}' in struct initialization")
+            else:
+                break
+
+        # Consume DEDENT if present
+        if self.current_token and self.current_token.type == TokenType.DEDENT:
+            self.advance()
+        # Consume 'end'
+        if self.current_token and self.current_token.type == TokenType.END:
+            self.advance()
+
+        expr = ObjectInstantiation(class_name, [], [], named_fields, line_num)
+        return self._parse_member_access(expr)
+
     def _primary_fstring(self, token):
         """Parse an f-string literal expression."""
         parts_data = token.literal  # List of ('literal', str, None) or ('expr', str, format_spec)
@@ -5401,6 +5622,12 @@ class Parser:
             func_call = self.function_call(name, line_num)
             return self._parse_member_access(func_call)
         
+        # Named-field struct initialization: StructName called with field: val ... end
+        if self.current_token and self.current_token.type == TokenType.CALLED:
+            peek = self.peek()
+            if peek and peek.type == TokenType.WITH:
+                return self._parse_struct_named_init(name, line_num)
+
         # Parse as identifier with potential member access
         expr = Identifier(name)
         expr = self._parse_member_access(expr)
@@ -6809,11 +7036,13 @@ class Parser:
             return
         if self.current_token.type == TokenType.DEDENT:
             self.advance()
-        if self.current_token and self.current_token.type == TokenType.END_INTERFACE:
+        if self.current_token and self.current_token.type in (TokenType.END_INTERFACE, TokenType.END_THE_INTERFACE):
             self.advance()
         elif self.current_token and self.current_token.type == TokenType.END:
             self.advance()
             # Optionally consume "interface" after "end"
+            if self.current_token and self.current_token.type == TokenType.THE:
+                self.advance()
             if self.current_token and self.current_token.type == TokenType.INTERFACE:
                 self.advance()
         elif self.current_token and self.current_token.type == TokenType.IDENTIFIER and self.current_token.lexeme.lower() == 'end':
@@ -6855,6 +7084,7 @@ class Parser:
 
         while (self.current_token and self.current_token.type != TokenType.EOF and
                self.current_token.type != TokenType.END_INTERFACE and
+             self.current_token.type != TokenType.END_THE_INTERFACE and
                self.current_token.type != TokenType.DEDENT and
                not (self.current_token.type == TokenType.IDENTIFIER and 
                     self.current_token.lexeme.lower() == 'end')):
@@ -7555,7 +7785,7 @@ class Parser:
         
         while self.current_token and self.current_token.type != TokenType.EOF:
             # Check for END_TRAIT token first
-            if self.current_token.type == TokenType.END_TRAIT:
+            if self.current_token.type in (TokenType.END_TRAIT, TokenType.END_THE_TRAIT):
                 self.advance()  # Consume 'end trait'
                 break
             
@@ -8077,7 +8307,15 @@ class Parser:
         
         # Parse the return value expression
         value = self.expression()
-            
+        # Handle optional postfix type annotation: return expr as TypeName [optional]
+        # This is a type hint, not a runtime cast - we discard the type annotation
+        if self.current_token and self.current_token.type == TokenType.AS:
+            self.advance()  # consume 'as'
+            # consume the type name(s) and optional keyword
+            while self.current_token and self.current_token.type not in (
+                TokenType.NEWLINE, TokenType.EOF, TokenType.DEDENT, TokenType.END):
+                self.advance()
+
         return ReturnStatement(value, token.line)
     
     def break_statement(self):
@@ -9731,18 +9969,28 @@ class Parser:
     # ------------------------------------------------------------------
 
     def _parse_contract_body(self, keyword: str):
-        """Parse condition and optional 'message <expr>' for contract stmts."""
+        """Parse condition and optional message payload for contract statements.
+
+        Accepted payload introducers:
+            - message <expr>
+            - with <expr>   (parser compatibility alias)
+        """
         condition = self.expression()
         message_expr = None
         # 'message' may be tokenized as TokenType.MESSAGE or as an IDENTIFIER
-        # depending on lexer version; handle both.
+        # depending on lexer version; 'with' is also accepted as a compatibility alias.
         tok = self.current_token
+        tok_text = ""
+        if tok is not None:
+            tok_text = (getattr(tok, "value", None) or getattr(tok, "lexeme", "") or "").lower()
         is_message_token = tok is not None and (
             tok.type == TokenType.MESSAGE
-            or (tok.type == TokenType.IDENTIFIER and tok.value == "message")
+            or (tok.type == TokenType.IDENTIFIER and tok_text == "message")
+            or tok.type == TokenType.WITH
+            or (tok.type == TokenType.IDENTIFIER and tok_text == "with")
         )
         if is_message_token:
-            self.advance()  # consume "message"
+            self.advance()  # consume message introducer
             message_expr = self.expression()
         return condition, message_expr
 

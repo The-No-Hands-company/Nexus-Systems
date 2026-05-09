@@ -1,7 +1,10 @@
 import { useEffect, useState } from "react";
 
 export default function CodeOwnershipTrackerHub() {
-  const [coverage, setCoverage] = useState<{ coverage: number; orphaned: number }>({ coverage: 0, orphaned: 0 });
+  const [coverage, setCoverage] = useState<{ coverage: number; orphaned: number }>({
+    coverage: 0,
+    orphaned: 0,
+  });
 
   useEffect(() => {
     async function load() {
@@ -31,7 +34,9 @@ export default function CodeOwnershipTrackerHub() {
         </article>
         <article className="repo-card">
           <h3>Coverage</h3>
-          <p>Coverage: {coverage.coverage}%, Orphaned: {coverage.orphaned}</p>
+          <p>
+            Coverage: {coverage.coverage}%, Orphaned: {coverage.orphaned}
+          </p>
         </article>
       </div>
     </section>

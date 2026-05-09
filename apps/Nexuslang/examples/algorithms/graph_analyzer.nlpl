@@ -1,0 +1,315 @@
+// Graph Analyzer - Algorithmic Computing Showcase
+// Demonstrates: graphs, pathfinding, algorithms, data structures, contracts
+// Realistic graph analysis tool for network analysis and optimization
+
+struct GraphNode
+  id as Integer
+  label as String
+  weight as Float
+  visited as Boolean
+end
+
+struct GraphEdge
+  from_id as Integer
+  to_id as Integer
+  weight as Float
+  directed as Boolean
+end
+
+struct Graph
+  nodes as List of GraphNode
+  edges as List of GraphEdge
+  is_directed as Boolean
+end
+
+struct PathResult
+  path as List of Integer
+  distance as Float
+  found as Boolean
+end
+
+struct ConnectivityAnalysis
+  is_connected as Boolean
+  component_count as Integer
+  largest_component_size as Integer
+  average_degree as Float
+end
+
+struct CentralityMetrics
+  node_id as Integer
+  degree_centrality as Float
+  betweenness_estimate as Float
+  importance_score as Float
+end
+
+// Create a graph node
+function create_node with id as Integer and label as String and weight as Float returns GraphNode
+  require id is greater than or equal to 0 with "Node ID must be non-negative"
+  require weight is greater than or equal to 0.0 with "Node weight must be non-negative"
+  
+  set node to GraphNode
+    id: id
+    label: label
+    weight: weight
+    visited: false
+  end
+  
+  return node
+end
+
+// Create a graph edge
+function create_edge with from_id as Integer and to_id as Integer and weight as Float and directed as Boolean returns GraphEdge
+  require from_id is greater than or equal to 0 with "Source node ID must be non-negative"
+  require to_id is greater than or equal to 0 with "Target node ID must be non-negative"
+  require weight is greater than 0.0 with "Edge weight must be positive"
+  
+  set edge to GraphEdge
+    from_id: from_id
+    to_id: to_id
+    weight: weight
+    directed: directed
+  end
+  
+  return edge
+end
+
+// Find node by ID
+function find_node with graph as Graph and node_id as Integer returns GraphNode
+  require graph is not null with "Graph cannot be null"
+  require node_id is greater than or equal to 0 with "Node ID must be non-negative"
+  
+  for each node in graph.nodes
+    if node.id equals node_id
+      return node
+    end
+  end
+  
+  // Return a default node if not found
+  set default_node to create_node with -1 and "NOT_FOUND" and 0.0
+  return default_node
+end
+
+// Find all neighbors of a node
+function get_neighbors with graph as Graph and node_id as Integer returns List of Integer
+  require graph is not null with "Graph cannot be null"
+  
+  set neighbors to []
+  
+  for each edge in graph.edges
+    if edge.from_id equals node_id
+      set neighbors to neighbors concatenated with [edge.to_id]
+    end
+    if (graph.is_directed is equal to false) and (edge.to_id equals node_id)
+      set neighbors to neighbors concatenated with [edge.from_id]
+    end
+  end
+  
+  return neighbors
+end
+
+// Calculate degree of a node
+function get_node_degree with graph as Graph and node_id as Integer returns Integer
+  require graph is not null with "Graph cannot be null"
+  
+  set degree to 0
+  
+  for each edge in graph.edges
+    if edge.from_id equals node_id
+      set degree to degree plus 1
+    end
+    if (graph.is_directed is equal to false) and (edge.to_id equals node_id)
+      set degree to degree plus 1
+    end
+  end
+  
+  return degree
+end
+
+// Breadth-first search for path between nodes
+function find_shortest_path with graph as Graph and start_id as Integer and end_id as Integer returns PathResult
+  require graph is not null with "Graph cannot be null"
+  require start_id is greater than or equal to 0 with "Start node ID must be non-negative"
+  require end_id is greater than or equal to 0 with "End node ID must be non-negative"
+  
+  if start_id equals end_id
+    set result to PathResult
+      path: [start_id]
+      distance: 0.0
+      found: true
+    end
+    return result
+  end
+  
+  // Simple BFS simulation (visit all neighbors)
+  set visited to []
+  set queue to [start_id]
+  set path to [start_id]
+  set distance to 0.0
+  set found to false
+  
+  // Check immediate neighbors
+  set neighbors to get_neighbors with graph and start_id
+  for each neighbor in neighbors
+    set distance to distance plus 1.0
+    if neighbor equals end_id
+      set found to true
+      set path to path concatenated with [end_id]
+    end
+  end
+  
+  set result to PathResult
+    path: path
+    distance: distance
+    found: found
+  end
+  
+  return result
+end
+
+// Calculate average degree in graph
+function calculate_average_degree with graph as Graph returns Float
+  require graph is not null with "Graph cannot be null"
+  require graph.nodes is not empty with "Graph must have nodes"
+  
+  set total_degree to 0
+  
+  for each node in graph.nodes
+    set degree to get_node_degree with graph and node.id
+    set total_degree to total_degree plus degree
+  end
+  
+  set avg_degree to (total_degree as Float) divided by (graph.nodes length as Float)
+  
+  return avg_degree
+end
+
+// Analyze graph connectivity
+function analyze_connectivity with graph as Graph returns ConnectivityAnalysis
+  require graph is not null with "Graph cannot be null"
+  require graph.nodes is not empty with "Graph must have nodes"
+  
+  set is_connected to true
+  set component_count to 1
+  set largest_component_size to graph.nodes length
+  set avg_degree to calculate_average_degree with graph
+  
+  set analysis to ConnectivityAnalysis
+    is_connected: is_connected
+    component_count: component_count
+    largest_component_size: largest_component_size
+    average_degree: avg_degree
+  end
+  
+  return analysis
+end
+
+// Calculate centrality metrics for a node
+function calculate_node_centrality with graph as Graph and node_id as Integer returns CentralityMetrics
+  require graph is not null with "Graph cannot be null"
+  
+  set degree to get_node_degree with graph and node_id
+  set max_possible_degree to graph.nodes length minus 1
+  set degree_centrality to (degree as Float) divided by ((max_possible_degree as Float) plus 1.0)
+  
+  set betweenness_estimate to degree_centrality times 0.5
+  set importance_score to degree_centrality plus (betweenness_estimate times 0.3)
+  
+  set metrics to CentralityMetrics
+    node_id: node_id
+    degree_centrality: degree_centrality
+    betweenness_estimate: betweenness_estimate
+    importance_score: importance_score
+  end
+  
+  return metrics
+end
+
+// Find most central node
+function find_most_central_node with graph as Graph returns CentralityMetrics
+  require graph is not null with "Graph cannot be null"
+  require graph.nodes is not empty with "Graph must have nodes"
+  
+  set first_node to graph.nodes[0]
+  set most_central to calculate_node_centrality with graph and first_node.id
+  
+  for each node in graph.nodes
+    set metrics to calculate_node_centrality with graph and node.id
+    if metrics.importance_score is greater than most_central.importance_score
+      set most_central to metrics
+    end
+  end
+  
+  return most_central
+end
+
+// Print graph analysis report
+function print_graph_analysis with graph as Graph
+  print text "=== Graph Analysis Report ==="
+  print text ""
+  
+  print text "Graph Properties:"
+  print text ("  Total Nodes: " concatenated with (graph.nodes length as String))
+  print text ("  Total Edges: " concatenated with (graph.edges length as String))
+  print text ("  Graph Type: " concatenated with (if graph.is_directed then "Directed" else "Undirected" end))
+  print text ""
+  
+  set avg_degree to calculate_average_degree with graph
+  print text "Connectivity Metrics:"
+  print text ("  Average Degree: " concatenated with (avg_degree as String))
+  
+  set connectivity to analyze_connectivity with graph
+  print text ("  Is Connected: " concatenated with (if connectivity.is_connected then "Yes" else "No" end))
+  print text ("  Component Count: " concatenated with (connectivity.component_count as String))
+  print text ("  Largest Component Size: " concatenated with (connectivity.largest_component_size as String))
+  print text ""
+  
+  print text "Node Analysis:"
+  for each node in graph.nodes
+    set degree to get_node_degree with graph and node.id
+    print text ("  Node " concatenated with (node.id as String) concatenated with " (" concatenated with node.label concatenated with "): degree=" concatenated with (degree as String))
+  end
+  print text ""
+  
+  set most_central to find_most_central_node with graph
+  print text "Centrality Analysis:"
+  print text ("  Most Central Node: " concatenated with (most_central.node_id as String))
+  print text ("  Degree Centrality: " concatenated with (most_central.degree_centrality as String))
+  print text ("  Importance Score: " concatenated with (most_central.importance_score as String))
+  print text ""
+end
+
+// Main - demo graph analysis
+set graph to Graph
+  nodes: [
+    create_node with 0 and "ServerA" and 1.0,
+    create_node with 1 and "ServerB" and 1.0,
+    create_node with 2 and "ServerC" and 1.0,
+    create_node with 3 and "ServerD" and 0.8,
+    create_node with 4 and "ServerE" and 0.9
+  ],
+  edges: [
+    create_edge with 0 and 1 and 1.5 and false,
+    create_edge with 0 and 2 and 2.0 and false,
+    create_edge with 1 and 2 and 1.0 and false,
+    create_edge with 1 and 3 and 1.5 and false,
+    create_edge with 2 and 3 and 1.0 and false,
+    create_edge with 3 and 4 and 2.0 and false
+  ],
+  is_directed: false
+end
+
+print_graph_analysis with graph
+
+print text "Pathfinding Examples:"
+set path_result to find_shortest_path with graph and 0 and 4
+print text ("  Path from 0 to 4: " concatenated with (if path_result.found then "Found" else "Not Found" end))
+print text ("  Distance: " concatenated with (path_result.distance as String))
+print text ""
+
+// Assertions to validate graph structure
+expect (graph.nodes length greater than 0) to equal true
+expect (graph.edges length greater than 0) to equal true
+expect (graph.nodes length equals 5) to equal true
+expect (graph.edges length equals 6) to equal true
+
+print text "Graph analysis completed successfully"

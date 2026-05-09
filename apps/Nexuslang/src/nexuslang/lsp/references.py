@@ -12,9 +12,21 @@ from ..parser.lexer import Lexer
 from ..parser.parser import Parser
 from ..analysis import ASTSymbolExtractor, SymbolTable
 from ..parser.ast import ClassDefinition
+from ..errors import NxlError
 
 
 logger = logging.getLogger(__name__)
+
+
+_RECOVERABLE_LSP_EXCEPTIONS = (
+    NxlError,
+    RuntimeError,
+    ValueError,
+    TypeError,
+    AttributeError,
+    OSError,
+    UnicodeError,
+)
 
 
 class ReferencesProvider:
@@ -47,7 +59,7 @@ class ReferencesProvider:
             
             self.symbol_tables[uri] = symbol_table
             return symbol_table
-        except Exception:
+        except _RECOVERABLE_LSP_EXCEPTIONS:
             logger.debug("Falling back to cached symbol table for %s", uri, exc_info=True)
             return self.symbol_tables.get(uri, None)
     
@@ -130,7 +142,7 @@ class ReferencesProvider:
                     file_text = fh.read()
                 doc_refs = self._find_in_document(file_text, symbol, symbol_type, file_uri)
                 references.extend(doc_refs)
-            except Exception:
+            except _RECOVERABLE_LSP_EXCEPTIONS:
                 logger.warning("Skipping references scan for %s", file_uri, exc_info=True)
     
     def _fallback_find_references(
@@ -531,7 +543,7 @@ class ReferencesProvider:
                 tokens = lexer.tokenize()
                 parser = Parser(tokens)
                 ast = parser.parse()
-            except Exception:
+            except _RECOVERABLE_LSP_EXCEPTIONS:
                 logger.debug("Skipping class hierarchy parse for %s", file_uri, exc_info=True)
                 continue
 

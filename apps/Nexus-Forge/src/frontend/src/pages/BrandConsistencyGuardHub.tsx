@@ -1,7 +1,10 @@
 import { useEffect, useState } from "react";
 
 export default function BrandConsistencyGuardHub() {
-  const [deviations, setDeviations] = useState<{ violations: number; compliant: boolean }>({ violations: 0, compliant: false });
+  const [deviations, setDeviations] = useState<{ violations: number; compliant: boolean }>({
+    violations: 0,
+    compliant: false,
+  });
 
   useEffect(() => {
     async function load() {
@@ -31,7 +34,9 @@ export default function BrandConsistencyGuardHub() {
         </article>
         <article className="repo-card">
           <h3>Status</h3>
-          <p>Compliant: {deviations.compliant ? "Yes" : "No"}, Violations: {deviations.violations}</p>
+          <p>
+            Compliant: {deviations.compliant ? "Yes" : "No"}, Violations: {deviations.violations}
+          </p>
         </article>
       </div>
     </section>

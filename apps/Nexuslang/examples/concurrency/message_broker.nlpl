@@ -1,0 +1,256 @@
+// Message Broker - Concurrency Showcase
+// Demonstrates: channels, async/await, task spawning, concurrent message routing
+// Realistic pub/sub message broker for distributed system communication
+
+struct Message
+  id as Integer
+  topic as String
+  payload as String
+  sender_id as Integer
+  timestamp as String
+end
+
+struct MessageBroker
+  input_channel as Channel
+  output_channels as List of Channel
+  message_queue as List of Message
+  total_messages_processed as Integer
+  active_subscribers as Integer
+end
+
+struct SubscriberResult
+  subscriber_id as Integer
+  messages_received as Integer
+  processing_time_ms as Integer
+end
+
+struct BrokerStats
+  total_messages as Integer
+  messages_by_topic as List of String  // Topic names
+  subscriber_results as List of SubscriberResult
+  total_processing_time_ms as Integer
+end
+
+// Create a message with given parameters
+function create_message with msg_id as Integer and topic as String and payload as String and sender_id as Integer and timestamp as String returns Message
+  require msg_id is greater than or equal to 0 with "Message ID must be non-negative"
+  require topic is not empty with "Topic cannot be empty"
+  require sender_id is greater than or equal to 0 with "Sender ID must be non-negative"
+  
+  set message to Message
+    id: msg_id
+    topic: topic
+    payload: payload
+    sender_id: sender_id
+    timestamp: timestamp
+  end
+  
+  return message
+end
+
+// Process message and route to subscribers
+async function message_router with input_ch as Channel and output_channels as List of Channel
+  require input_ch is not null with "Input channel cannot be null"
+  require output_channels is not empty with "Must have at least one output channel"
+  
+  set message_count to 0
+  
+  // Process incoming messages
+  while true
+    set received_msg to receive from input_ch
+    if received_msg is not null
+      set message_count to message_count plus 1
+      
+      // Route message to all subscribers
+      for each output_ch in output_channels
+        send received_msg to output_ch
+      end
+      
+      print text ("Router: Forwarded message " concatenated with (message_count as String) concatenated with " on topic '" concatenated with received_msg.topic concatenated with "'")
+    end
+  end
+end
+
+// Subscriber task that receives and processes messages
+async function subscriber with subscriber_id as Integer and input_ch as Channel returns SubscriberResult
+  require subscriber_id is greater than or equal to 0 with "Subscriber ID must be non-negative"
+  require input_ch is not null with "Input channel cannot be null"
+  
+  set messages_received to 0
+  set processing_time to 0
+  
+  print text ("Subscriber " concatenated with (subscriber_id as String) concatenated with " started")
+  
+  // Receive and process messages
+  while messages_received is less than 10  // Process up to 10 messages
+    set msg to receive from input_ch
+    if msg is not null
+      set messages_received to messages_received plus 1
+      set processing_time to processing_time plus 1
+      
+      print text ("  Sub-" concatenated with (subscriber_id as String) concatenated with " received: [" concatenated with msg.topic concatenated with "] " concatenated with msg.payload)
+    end
+  end
+  
+  print text ("Subscriber " concatenated with (subscriber_id as String) concatenated with " completed")
+  
+  set result to SubscriberResult
+    subscriber_id: subscriber_id
+    messages_received: messages_received
+    processing_time_ms: processing_time
+  end
+  
+  return result
+end
+
+// Topic-specific subscriber (filters by topic)
+async function topic_subscriber with subscriber_id as Integer and topic_filter as String and input_ch as Channel returns SubscriberResult
+  require subscriber_id is greater than or equal to 0 with "Subscriber ID must be non-negative"
+  require topic_filter is not empty with "Topic filter cannot be empty"
+  require input_ch is not null with "Input channel cannot be null"
+  
+  set messages_received to 0
+  set matching_messages to 0
+  set processing_time to 0
+  
+  print text ("Topic Subscriber " concatenated with (subscriber_id as String) concatenated with " started (filter: " concatenated with topic_filter concatenated with ")")
+  
+  // Process messages and filter by topic
+  while messages_received is less than 10
+    set msg to receive from input_ch
+    if msg is not null
+      set messages_received to messages_received plus 1
+      
+      if msg.topic equals topic_filter
+        set matching_messages to matching_messages plus 1
+        print text ("  TopicSub-" concatenated with (subscriber_id as String) concatenated with " received matching: [" concatenated with msg.topic concatenated with "] " concatenated with msg.payload)
+      end
+      
+      set processing_time to processing_time plus 1
+    end
+  end
+  
+  print text ("Topic Subscriber " concatenated with (subscriber_id as String) concatenated with " completed (received " concatenated with (matching_messages as String) concatenated with " matching messages)")
+  
+  set result to SubscriberResult
+    subscriber_id: subscriber_id
+    messages_received: matching_messages
+    processing_time_ms: processing_time
+  end
+  
+  return result
+end
+
+// Publisher task that sends messages
+async function publisher with publisher_id as Integer and output_ch as Channel and topic as String and message_count as Integer
+  require publisher_id is greater than or equal to 0 with "Publisher ID must be non-negative"
+  require output_ch is not null with "Output channel cannot be null"
+  require topic is not empty with "Topic cannot be empty"
+  require message_count is greater than 0 with "Message count must be positive"
+  
+  print text ("Publisher " concatenated with (publisher_id as String) concatenated with " started (topic: " concatenated with topic concatenated with ")")
+  
+  set sent_count to 0
+  while sent_count is less than message_count
+    set sent_count to sent_count plus 1
+    
+    set msg to create_message with sent_count and topic and ("Message " concatenated with (sent_count as String) concatenated with " from publisher " concatenated with (publisher_id as String)) and publisher_id and "2026-05-04T15:00:00Z"
+    
+    send msg to output_ch
+    print text ("Pub-" concatenated with (publisher_id as String) concatenated with " sent: [" concatenated with topic concatenated with "] message " concatenated with (sent_count as String))
+  end
+  
+  print text ("Publisher " concatenated with (publisher_id as String) concatenated with " completed")
+end
+
+// Main broker orchestration
+function run_broker_demo
+  print text "=== Message Broker Demo ==="
+  print text ""
+  print text "Creating channels..."
+  
+  // Create broker channels
+  set input_channel to create channel
+  set output_channel_1 to create channel
+  set output_channel_2 to create channel
+  set output_channel_3 to create channel
+  
+  set output_channels to [output_channel_1, output_channel_2, output_channel_3]
+  
+  print text "Spawning message router..."
+  spawn message_router with input_channel and output_channels
+  
+  print text "Spawning publishers..."
+  spawn publisher with 1 and input_channel and "orders" and 3
+  spawn publisher with 2 and input_channel and "notifications" and 2
+  
+  print text "Spawning generic subscribers..."
+  spawn subscriber with 1 and output_channel_1
+  spawn subscriber with 2 and output_channel_2
+  
+  print text "Spawning topic-filtered subscribers..."
+  spawn topic_subscriber with 100 and "orders" and output_channel_3
+  
+  print text ""
+  print text "Message broker simulation running..."
+  print text "(Note: This is a simulated broker demo)"
+  print text ""
+  
+  print text "=== Broker Configuration ==="
+  print text ("Active Input Channel: " concatenated with (input_channel as String))
+  print text ("Output Channels: 3")
+  print text ("Publishers: 2")
+  print text ("Subscribers: 3")
+  print text ""
+  
+  print text "=== Demo Complete ==="
+end
+
+// Simulated stats reporting
+function print_broker_stats with total_messages as Integer and subscriber_count as Integer
+  print text "=== Broker Statistics ==="
+  print text ("Total Messages Processed: " concatenated with (total_messages as String))
+  print text ("Active Subscribers: " concatenated with (subscriber_count as String))
+  print text ("Average Messages per Subscriber: " concatenated with (((total_messages divided by subscriber_count) as String)))
+  print text ""
+  print text "Topics:"
+  print text "  - orders: High priority business messages"
+  print text "  - notifications: System alerts and events"
+  print text "  - user_actions: User activity tracking"
+  print text ""
+  print text "Performance:"
+  print text "  - Message Throughput: ~1000 msgs/sec (simulated)"
+  print text "  - Latency: <5ms (simulated)"
+  print text "  - Memory Usage: Minimal (channels are efficient)"
+  print text ""
+end
+
+// Main execution
+run_broker_demo
+
+print text ""
+print_broker_stats with 5 and 3
+
+print text "Key Features Demonstrated:"
+print text "1. Channel creation and message passing"
+print text "2. Async function definitions for concurrent tasks"
+print text "3. Task spawning with spawn keyword"
+print text "4. Message routing and distribution"
+print text "5. Topic-based filtering"
+print text "6. Concurrent publisher/subscriber pattern"
+print text ""
+
+print text "Advanced Possibilities:"
+print text "- Fan-out routing: One publisher, many subscribers"
+print text "- Topic hierarchies: orders/created, orders/shipped"
+print text "- Message transformation: Middleware processing"
+print text "- Load balancing: Distribution across subscribers"
+print text "- Persistence: Durable message queues"
+print text "- Clustering: Multi-node brokers"
+print text ""
+
+// Assertions to validate broker structure
+expect (output_channels length equals 3) to equal true
+expect (output_channels length is greater than 0) to equal true
+
+print text "Message broker demo completed successfully"

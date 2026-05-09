@@ -7,6 +7,28 @@ export const systemsApiV1Endpoints = {
   phantomComplianceSummary: "/api/v1/compliance/phantom/summary",
 } as const;
 
+// Canonical batch service IDs and default ports (pinned 2026-05-08)
+export const batchServiceRegistry = {
+  "nexus-monitor": { port: 3030, role: "monitoring" },
+  "nexus-compliance": { port: 3031, role: "compliance" },
+  "nexus-ai-hub": { port: 3032, role: "ai-hub" },
+  "nexus-files": { port: 3033, role: "file-storage" },
+  "nexus-search": { port: 3034, role: "search" },
+  "nexus-ide": { port: 3035, role: "ide" },
+  "nexus-api": { port: 3036, role: "gateway" },
+  "nexus-testing": { port: 3037, role: "test-runner" },
+  "nexus-forge": { port: 8090, role: "code-forge" },
+} as const;
+
+export type BatchServiceId = keyof typeof batchServiceRegistry;
+
+// Shape delta note: Nexus-Forge registers with { name, capabilities } instead of
+// { displayName, capabilityTags }. The canonical SDK shape below is the v1 standard;
+// Forge is a known delta tracked in Nexus-Forge/docs/BATCH_ALIGNMENT_NOTE.md.
+export type BatchServiceRegistration = SystemsApiToolRegistration & {
+  role: string;
+};
+
 export type SystemsApiToolRegistration = {
   id: string;
   displayName: string;

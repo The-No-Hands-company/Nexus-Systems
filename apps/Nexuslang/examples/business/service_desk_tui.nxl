@@ -1,0 +1,135 @@
+# Service Desk Operations Console - Interactive TUI
+#
+# Stateful terminal UI with clear/redraw cycle and action menu.
+
+set day to 1
+set open_count to 7
+set active_count to 4
+set blocked_count to 2
+set resolved_count to 11
+set sla_risk to 3
+set running to true
+
+function draw_header
+    print text "============================================================================="
+    print text "  NEXUSLANG SERVICE DESK OPERATIONS CONSOLE"
+    print text "  Interactive TUI demo for repository screenshots"
+    print text "============================================================================="
+end
+
+function draw_kpis
+    print text ""
+    print text "Day: " plus to_string with day
+    print text ""
+    print text "KPI BOARD"
+    print text "---------"
+    print text "Open.............: " plus to_string with open_count
+    print text "Active...........: " plus to_string with active_count
+    print text "Blocked..........: " plus to_string with blocked_count
+    print text "Resolved.........: " plus to_string with resolved_count
+    print text "SLA Risk.........: " plus to_string with sla_risk
+end
+
+function draw_workload
+    print text ""
+    print text "WORKLOAD LANES"
+    print text "--------------"
+    print text "Intake Queue    [" plus to_string with open_count plus "]"
+    print text "Active Handling [" plus to_string with active_count plus "]"
+    print text "Blocked Queue   [" plus to_string with blocked_count plus "]"
+    print text "Completed       [" plus to_string with resolved_count plus "]"
+end
+
+function draw_status
+    print text ""
+    if blocked_count is greater than 3
+        print text "Status: critical - blocker pressure is high"
+    else if sla_risk is greater than 4
+        print text "Status: warning - SLA exposure growing"
+    else
+        print text "Status: stable - operations under control"
+    end
+end
+
+function draw_actions
+    print text ""
+    print text "ACTIONS"
+    print text "-------"
+    print text "1) Advance Tick"
+    print text "2) Inject Incident"
+    print text "3) Recover Blocker"
+    print text "4) Resolve Active Ticket"
+    print text "5) Reset Scenario"
+    print text "6) Exit"
+end
+
+function redraw
+    execute_command with "clear"
+    draw_header with
+    draw_kpis with
+    draw_workload with
+    draw_status with
+    draw_actions with
+    print text ""
+end
+
+while running
+    redraw with
+    set choice_raw to input with "Choose action [1-6]: "
+    set choice to trim with choice_raw
+
+    if choice is equal to "1"
+        set day to day plus 1
+
+        if open_count is greater than 0
+            set open_count to open_count minus 1
+            set active_count to active_count plus 1
+        end
+
+        if active_count is greater than 0
+            set active_count to active_count minus 1
+            set resolved_count to resolved_count plus 1
+        end
+
+        if sla_risk is greater than 0
+            set sla_risk to sla_risk minus 1
+        end
+    else if choice is equal to "2"
+        set open_count to open_count plus 2
+        set blocked_count to blocked_count plus 1
+        set sla_risk to sla_risk plus 1
+    else if choice is equal to "3"
+        if blocked_count is greater than 0
+            set blocked_count to blocked_count minus 1
+            set active_count to active_count plus 1
+        end
+
+        if sla_risk is greater than 0
+            set sla_risk to sla_risk minus 1
+        end
+    else if choice is equal to "4"
+        if active_count is greater than 0
+            set active_count to active_count minus 1
+            set resolved_count to resolved_count plus 1
+        end
+
+        if sla_risk is greater than 0
+            set sla_risk to sla_risk minus 1
+        end
+    else if choice is equal to "5"
+        set day to 1
+        set open_count to 7
+        set active_count to 4
+        set blocked_count to 2
+        set resolved_count to 11
+        set sla_risk to 3
+    else if choice is equal to "6"
+        set running to false
+    else
+        print text "Unknown action."
+        sleep with 1
+    end
+end
+
+execute_command with "clear"
+print text "Service Desk Operations Console closed."

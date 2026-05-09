@@ -1,11 +1,18 @@
 # Nexus AI Hub
 
-Status: Scaffold created
+Status: MVP shell implemented
 Blueprint source: Nexus Systems Ecosystem Blueprint v1.2
 
 ## Purpose
 
-TODO: Define product scope and MVP for Nexus AI Hub.
+Nexus AI Hub provides the first AI orchestration and provider routing surface for ecosystem services.
+
+This MVP gate focuses on:
+
+- a minimal AI-Hub service contract (route + provider status)
+- a health/readiness surface for orchestration
+- a contract-first shell compatible with Nexus-Cloud registration
+- one smoke or contract test target
 
 ## Dual Mode Target
 
@@ -18,8 +25,19 @@ TODO: Define product scope and MVP for Nexus AI Hub.
 - docs/: design and architecture notes
 - tests/: automated tests
 
+## Runtime Shell (Implemented)
+
+- `GET /health`
+- `GET /api/v1/hub/providers/status`
+- `POST /api/v1/hub/route`
+
+## Local Commands
+
+- `npm run dev`
+- `npm test`
+
 ## Next Steps
 
-1. Define architecture and service boundaries.
-2. Add initial runtime entrypoint and health endpoint.
-3. Register with Nexus-Cloud Systems API contract.
+1. Add invalid payload smoke coverage for route endpoint.
+2. Add cloud heartbeat registration integration hook.
+3. Extend providers status endpoint with provider health metadata.

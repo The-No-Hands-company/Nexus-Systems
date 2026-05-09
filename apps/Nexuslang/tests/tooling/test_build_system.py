@@ -17,12 +17,14 @@ import time
 from pathlib import Path
 
 import pytest
+import nexuslang.tooling.config as tooling_config_module
 
 # Make sure the src tree is importable regardless of whether pytest is run from
 # the project root or from within src/.
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from nexuslang.tooling.builder import _BuildCache, BuildResult, BuildSystem
+from nexuslang.build.manifest import Manifest
 from nexuslang.tooling.build_script import (
     BuildScriptCache,
     BuildScriptDirectives,
@@ -269,6 +271,176 @@ class TestConfigLoader:
         assert "libmath" in config.dependencies
         assert "testlib" in config.dev_dependencies
         assert "codegen" in config.build_dependencies
+
+    def test_shared_sections_match_canonical_manifest(self, tmp_path):
+        _write_toml(tmp_path, FULL_TOML)
+        manifest_path = tmp_path / "nexuslang.toml"
+        orig = Path.cwd()
+        os.chdir(tmp_path)
+        try:
+            config = ConfigLoader.load("nexuslang.toml")
+            manifest = Manifest(manifest_path)
+        finally:
+            os.chdir(orig)
+
+        assert config.package.name == manifest.package.name
+        assert config.package.version == manifest.package.version
+        assert config.package.authors == manifest.package.authors
+        assert set(config.dependencies) == set(manifest.dependencies)
+        assert set(config.dev_dependencies) == set(manifest.dev_dependencies)
+        assert set(config.build_dependencies) == set(manifest.build_dependencies)
+
+    def test_config_loader_uses_manifest_package_validation(self, tmp_path):
+        _write_toml(tmp_path, """\
+[package]
+name = "InvalidName"
+version = "1.0.0"
+""")
+        orig = Path.cwd()
+        os.chdir(tmp_path)
+        try:
+            with pytest.raises(ValueError, match="Invalid package name"):
+                ConfigLoader.load("nexuslang.toml")
+        finally:
+            os.chdir(orig)
+
+    def test_tooling_specific_build_fields_still_loaded(self, tmp_path):
+        _write_toml(tmp_path, """\
+[package]
+name = "tooling"
+version = "1.0.0"
+
+[build]
+source_dir = "app"
+output_dir = "out"
+target = "llvm_ir"
+optimization = 2
+debug_info = false
+headers = true
+features = ["feature_a"]
+profile = "release"
+target_triple = "aarch64-unknown-linux-gnu"
+jobs = 8
+warnings_as_errors = true
+build_script = "scripts/build.nxl"
+lint_on_build = true
+lint_strict = true
+lint_errors_only = true
+lint_fail_on_warnings = true
+""")
+        orig = Path.cwd()
+        os.chdir(tmp_path)
+        try:
+            config = ConfigLoader.load("nexuslang.toml")
+        finally:
+            os.chdir(orig)
+
+        assert config.build.source_dir == "app"
+        assert config.build.output_dir == "out"
+        assert config.build.target == "llvm_ir"
+        assert config.build.optimization == 2
+        assert config.build.debug_info is False
+        assert config.build.headers is True
+        assert config.build.features == ["feature_a"]
+        assert config.build.profile == "release"
+        assert config.build.target_triple == "aarch64-unknown-linux-gnu"
+        assert config.build.jobs == 8
+        assert config.build.warnings_as_errors is True
+        assert config.build.build_script == "scripts/build.nxl"
+        assert config.build.lint_on_build is True
+        assert config.build.lint_strict is True
+        assert config.build.lint_errors_only is True
+        assert config.build.lint_fail_on_warnings is True
+
+    def test_config_loader_uses_single_manifest_data_load(self, monkeypatch, tmp_path):
+        _write_toml(tmp_path, MINIMAL_TOML)
+        calls = []
+        original_loader = tooling_config_module.load_manifest_data
+
+        def traced_loader(path):
+            calls.append(path)
+            return original_loader(path)
+
+        monkeypatch.setattr(tooling_config_module, "load_manifest_data", traced_loader)
+
+        orig = Path.cwd()
+        os.chdir(tmp_path)
+        try:
+            config = ConfigLoader.load("nexuslang.toml")
+        finally:
+            os.chdir(orig)
+
+        assert config.package.name == "myproject"
+        assert len(calls) == 1
+
+    @pytest.mark.parametrize(
+        "build_snippet,error_pattern",
+        [
+            ("optimization = \"2\"", "build.optimization"),
+            ("optimization = 9", "build.optimization"),
+            ("debug_info = \"true\"", "build.debug_info"),
+            ("headers = 1", "build.headers"),
+            ("features = [1, 2]", "build.features"),
+            ("profile = 123", "build.profile"),
+            ("jobs = 0", "build.jobs"),
+            ("warnings_as_errors = \"yes\"", "build.warnings_as_errors"),
+            ("build_script = 1", "build.build_script"),
+            ("parallel_jobs = -1", "build.parallel_jobs"),
+            ("lto = \"aggressive\"", "build.lto"),
+            ("sysroot = 42", "build.sysroot"),
+        ],
+    )
+    def test_malformed_build_fields_fail_contract_validation(self, tmp_path, build_snippet, error_pattern):
+        _write_toml(tmp_path, f"""\
+[package]
+name = "strict-build"
+version = "1.0.0"
+
+[build]
+source_dir = "src"
+output_dir = "build"
+target = "c"
+{build_snippet}
+""")
+        orig = Path.cwd()
+        os.chdir(tmp_path)
+        try:
+            with pytest.raises(ValueError, match=error_pattern):
+                ConfigLoader.load("nexuslang.toml")
+        finally:
+            os.chdir(orig)
+
+    def test_profile_section_shape_propagates_from_canonical_manifest(self, tmp_path):
+        _write_toml(tmp_path, """\
+profile = ["invalid"]
+
+[package]
+name = "strict-profile"
+version = "1.0.0"
+""")
+        orig = Path.cwd()
+        os.chdir(tmp_path)
+        try:
+            with pytest.raises(ValueError, match="Section 'profile' must be a table"):
+                ConfigLoader.load("nexuslang.toml")
+        finally:
+            os.chdir(orig)
+
+    def test_features_section_shape_propagates_from_canonical_manifest(self, tmp_path):
+        _write_toml(tmp_path, """\
+features = ["invalid"]
+
+[package]
+name = "strict-features"
+version = "1.0.0"
+""")
+        orig = Path.cwd()
+        os.chdir(tmp_path)
+        try:
+            with pytest.raises(ValueError, match="Section 'features' must be a table"):
+                ConfigLoader.load("nexuslang.toml")
+        finally:
+            os.chdir(orig)
 
     def test_builtin_dev_profile(self, tmp_path):
         _write_toml(tmp_path, MINIMAL_TOML)

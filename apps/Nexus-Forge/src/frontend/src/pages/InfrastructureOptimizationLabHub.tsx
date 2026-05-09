@@ -1,7 +1,10 @@
 import { useEffect, useState } from "react";
 
 export default function InfrastructureOptimizationLabHub() {
-  const [recommendations, setRecommendations] = useState<{ focus: string[]; savings: string }>({ focus: [], savings: "" });
+  const [recommendations, setRecommendations] = useState<{ focus: string[]; savings: string }>({
+    focus: [],
+    savings: "",
+  });
 
   useEffect(() => {
     async function load() {
@@ -19,7 +22,10 @@ export default function InfrastructureOptimizationLabHub() {
   return (
     <section>
       <h2>Infrastructure Optimization Lab Hub</h2>
-      <p>Infrastructure baseline analysis, optimization experiments, and cost-performance recommendations.</p>
+      <p>
+        Infrastructure baseline analysis, optimization experiments, and cost-performance
+        recommendations.
+      </p>
       <div className="repo-grid">
         <article className="repo-card">
           <h3>Baseline Metrics</h3>

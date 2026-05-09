@@ -1,0 +1,12 @@
+# Macro/comptime invalid regression fixture for integration features
+macro REQUIRE_POSITIVE with value
+    require value is greater than 0 message "value must be positive"
+end
+
+comptime const THRESHOLD is "oops"
+comptime assert THRESHOLD message "threshold must be boolean"
+
+function main returns Integer
+    expand REQUIRE_POSITIVE with value THRESHOLD
+    return 0
+end

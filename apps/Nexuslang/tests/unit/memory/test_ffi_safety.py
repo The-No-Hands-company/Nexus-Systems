@@ -20,6 +20,7 @@ from nexuslang.parser.ast import (
 from nexuslang.parser.parser import Parser
 from nexuslang.interpreter.interpreter import Interpreter
 from nexuslang.runtime.runtime import Runtime
+from nexuslang.typesystem.typechecker import TypeChecker
 from nexuslang.compiler import CompilerOptions
 from nexuslang.compiler.backends.c_generator import CCodeGenerator
 
@@ -46,6 +47,14 @@ def _run(source: str):
     interp = Interpreter(runtime)
     interp.interpret(ast)
     return interp
+
+
+def _typecheck(source: str):
+    """Parse and type-check a NexusLang program; return checker instance."""
+    ast = _parse(source)
+    checker = TypeChecker(enable_ownership_passes=False)
+    checker.check_program(ast)
+    return checker
 
 
 # ===========================================================================
@@ -467,3 +476,53 @@ class TestUnsafeBlockEndToEnd:
         )
         interp = _run(src)
         assert interp._in_unsafe_context == 0
+
+
+# ===========================================================================
+# 11. TYPECHECKER: FFI ABI checks
+# ===========================================================================
+
+class TestTypeCheckerFFIABIChecks:
+    def test_invalid_calling_convention_reports_error(self):
+        src = (
+            "extern function printf with fmt as String returns Integer "
+            "from library \"c\" calling convention weirdcc\n"
+        )
+        checker = _typecheck(src)
+        assert any("Unsupported FFI calling convention" in e for e in checker.errors)
+
+    def test_variadic_requires_cdecl_or_sysv(self):
+        src = (
+            "extern function printf with fmt as String, ... returns Integer "
+            "from library \"c\" calling convention stdcall\n"
+        )
+        checker = _typecheck(src)
+        assert any("Variadic extern function 'printf' requires 'cdecl' or 'sysv'" in e for e in checker.errors)
+
+    def test_opaque_struct_by_value_reports_layout_error(self):
+        src = (
+            "extern type FILE as opaque pointer\n"
+            "extern function consume with file as FILE returns Integer from library \"c\"\n"
+        )
+        checker = _typecheck(src)
+        assert any("Opaque extern type 'FILE' has unknown layout" in e for e in checker.errors)
+
+    def test_managed_container_extern_param_reports_abi_instability(self):
+        src = (
+            "extern function consume with items as List of Integer returns Integer from library \"c\"\n"
+        )
+        checker = _typecheck(src)
+        assert any("Unsized/managed type 'List of Integer'" in e for e in checker.errors)
+
+    def test_valid_cdecl_extern_signature_has_no_abi_errors(self):
+        src = (
+            "extern type FILE as opaque pointer\n"
+            "extern function fclose with f as Pointer returns Integer "
+            "from library \"c\" calling convention cdecl\n"
+        )
+        checker = _typecheck(src)
+        abi_errors = [
+            e for e in checker.errors
+            if "FFI" in e or "ABI" in e or "extern function" in e or "Opaque extern type" in e
+        ]
+        assert abi_errors == []

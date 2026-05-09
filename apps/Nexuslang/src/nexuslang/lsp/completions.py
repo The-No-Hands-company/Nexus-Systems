@@ -283,6 +283,17 @@ class CompletionProvider:
                     "documentation": "Channel"
                 })
 
+        # After "close" - suggest channel variables
+        elif re.search(r'\bclose\s*$', prefix, re.IGNORECASE):
+            for channel_name in self._extract_channel_variables(text):
+                completions.append({
+                    "label": channel_name,
+                    "kind": 6,
+                    "detail": "Channel variable",
+                    "insertText": channel_name,
+                    "documentation": "Close channel"
+                })
+
         # After "spawn" - suggest function names to spawn
         elif re.search(r'\bspawn\s*$', prefix, re.IGNORECASE):
             for func_name in self._extract_functions(text):

@@ -1,7 +1,10 @@
 import { useEffect, useState } from "react";
 
 export default function CrossTeamDependencyGraphHub() {
-  const [health, setHealth] = useState<{ status: string; criticalDeps: number }>({ status: "", criticalDeps: 0 });
+  const [health, setHealth] = useState<{ status: string; criticalDeps: number }>({
+    status: "",
+    criticalDeps: 0,
+  });
 
   useEffect(() => {
     async function load() {
@@ -31,7 +34,9 @@ export default function CrossTeamDependencyGraphHub() {
         </article>
         <article className="repo-card">
           <h3>Health</h3>
-          <p>Status: {health.status}, Critical: {health.criticalDeps}</p>
+          <p>
+            Status: {health.status}, Critical: {health.criticalDeps}
+          </p>
         </article>
       </div>
     </section>

@@ -1,0 +1,6 @@
+id,customer,amount,status
+1,acme,120,ok
+2,borealis,240,ok
+3,caelum,95,ok
+4,delta,180,invalid
+5,elysium,180,ok

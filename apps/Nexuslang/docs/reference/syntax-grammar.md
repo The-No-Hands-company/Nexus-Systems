@@ -228,13 +228,22 @@ End class.
 Canonical forms:
 
 ```ebnf
-classDef            ::= "class" IDENTIFIER [genericParams] ["extends" typeList] ["implements" typeList] classBody "end"
+classDef            ::= "class" IDENTIFIER [genericParams] [("extends" | "inherits") typeList] ["implements" typeList] classBody "end"
 classBody           ::= classMember*
 classMember         ::= classMemberModifier* (propertyDecl | methodDef | operatorMethodDef | constructorDef)
-classMemberModifier ::= "public" | "private" | "protected" | "static" | "abstract"
+classMemberModifier ::= "public" | "private" | "protected"
 propertyDecl        ::= ["property"] IDENTIFIER "as" typeAnnotation ["default" "to" expression]
-methodDef           ::= functionDef | "abstract" "function" IDENTIFIER [genericParams] ["with" parameterList] ["returns" typeAnnotation]
+                     | "set" IDENTIFIER "to" expression
+methodDef           ::= functionDef
+                     | "static" functionDef
+                     | "abstract" "function" IDENTIFIER [genericParams] ["with" parameterList] ["returns" typeAnnotation]
 ```
+
+Notes:
+
+- Current parser accepts both `extends` and `inherits` for class inheritance clauses.
+- `static` and `abstract` are parsed as contextual class-member forms (for methods), not general-purpose class-member modifiers.
+- Access modifiers (`public`, `private`, `protected`) can prefix `set` property forms and method declarations in class bodies.
 
 #### Object Creation and Usage
 
@@ -332,8 +341,15 @@ Canonical forms:
 
 ```ebnf
 functionDef          ::= ["async"] "function" IDENTIFIER [genericParams]
-                         ["with" parameterList] ["returns" typeAnnotation]
-                         contractClauses? statement* "end"
+                         ["with" parameterList] [whereClause] ["returns" typeAnnotation]
+                         statement* "end"
+
+genericParams        ::= "<" genericParam ("," genericParam)* ">"
+genericParam         ::= IDENTIFIER [":" typeConstraintList]
+                       | IDENTIFIER "::" kindAnnotation
+whereClause          ::= "where" whereConstraint ("," whereConstraint)*
+whereConstraint      ::= IDENTIFIER "is" typeConstraintList
+typeConstraintList   ::= IDENTIFIER (("+" | "and") IDENTIFIER)*
 
 yieldExpression      ::= "yield" [expression]
 generatorExpression  ::= "(" expression "for" expression "in" expression ["if" expression] ")"
@@ -342,8 +358,48 @@ generatorExpression  ::= "(" expression "for" expression "in" expression ["if" e
 Notes:
 
 1. Generator declaration is semantic (body contains `yield`), not a separate keyword form.
+
+### 9.2 Macros and Comptime (Parser-Aligned)
+
+NexusLang supports parser-level metaprogramming statements for macro definition/expansion and compile-time evaluation.
+
+```nexuslang
+macro SCALE_BY with value, factor
+    set scaled to value times factor
+    print text scaled
+end
+
+comptime const BASE is 7
+comptime assert BASE is greater than 0 message "BASE must stay positive"
+
+function main returns Integer
+    expand SCALE_BY with value BASE, factor 3
+    return 0
+end
+```
+
+Canonical forms:
+
+```ebnf
+macroDefinition  ::= "macro" IDENTIFIER ["with" IDENTIFIER ("," IDENTIFIER)*] statement* "end"
+macroExpansion   ::= "expand" IDENTIFIER ["with" IDENTIFIER expression ("," IDENTIFIER expression)*]
+
+comptimeStmt     ::= "comptime" "eval" expression
+                   | "comptime" "const" IDENTIFIER ("is" | "to") expression
+                   | "comptime" "assert" expression ["message" expression]
+                   | "comptime" expression
+```
+
+Notes:
+
+1. Macro parameters are plain identifiers in parser syntax (`with p1, p2, ...`); type annotations are not part of the current parser form.
+2. Macro expansion arguments use named-value pairs (`with name expr`) and comma separators.
+3. Hygiene behavior is currently enforced in compiler expansion logic via scoped renaming of macro-local declarations, rather than through additional grammar markers.
+4. `comptime` supports both explicit forms (`eval`, `const`, `assert`) and a bare expression fallback (`comptime EXPR`).
 2. Parser-level generator expression uses `for ... in ...` inside parentheses.
 3. `yield` can be bare (`yield`) or carry a value (`yield expr`).
+4. Generic bounds in angle-bracket params use `:` and support trait composition with `+`.
+5. `where` constraints support one or more entries, separated by commas.
 
 ### 10. Comments and Documentation
 
@@ -389,6 +445,165 @@ Execute assembly {
 }.
 ```
 
+Parser-aligned canonical forms:
+
+```ebnf
+inlineAssembly  ::= "asm" ["for" "arch" STRING] asmSection* ["end"]
+asmSection      ::= "code" STRING+
+                  | "inputs" asmOperandList
+                  | "outputs" asmOperandList
+                  | "clobbers" asmClobberList
+asmOperandList  ::= asmOperand ("," asmOperand)*
+asmOperand      ::= STRING ":" expression
+asmClobberList  ::= STRING ("," STRING)*
+```
+
+```nexuslang
+asm for arch "x86_64"
+    code "mov rax, 1" "ret"
+    inputs "r": value
+    outputs "=r": out_reg
+    clobbers "rax", "rcx"
+end
+```
+
+Notes:
+
+1. The parser accepts an indented `code` section containing one or more string literals.
+2. Operand sections preserve source order and allow repeated constraints.
+3. `end` is accepted but not required by the reference grammar for inline assembly blocks.
+
+### Channels (Parser-Aligned)
+
+```ebnf
+sendStatement   ::= "send" expression "to" expression
+closeStatement  ::= "close" ["with"] expression
+receiveExpr     ::= "receive" ["from"] expression
+```
+
+```nexuslang
+send payload to jobs
+set next to receive from jobs
+set fallback to receive jobs
+close with jobs
+close jobs
+```
+
+Notes:
+
+1. `receive` supports both `receive from ch` and `receive ch`.
+2. `close` supports both `close with ch` and `close ch`.
+3. Channel pipeline operator forms are not part of the current parser-aligned reference grammar.
+
+### Async and Await (Parser-Aligned)
+
+```ebnf
+asyncFunctionDef  ::= "async" "function" IDENTIFIER [genericParams]
+                      ["with" parameterList] ["returns" typeAnnotation]
+                      statement* "end"
+
+awaitExpression   ::= "await" expression
+```
+
+```nexuslang
+async function fetch_data with endpoint as String returns String
+    return "ok"
+end
+
+set result to await fetch_data with "/status"
+```
+
+Notes:
+
+1. `async` is parser-level syntax only for function declarations (`async function ...`).
+2. `await` is parsed as an expression and can be nested inside larger expressions.
+3. `spawn` is currently tooling/runtime-facing and not a parser-level keyword form in the reference grammar.
+
+### Contracts and Assertions (Parser-Aligned)
+
+```ebnf
+contractStatement ::= requireStatement
+                    | ensureStatement
+                    | guaranteeStatement
+                    | invariantStatement
+
+requireStatement   ::= "require" expression [("message" | "with") expression]
+ensureStatement    ::= "ensure" expression [("message" | "with") expression]
+guaranteeStatement ::= "guarantee" expression [("message" | "with") expression]
+invariantStatement ::= "invariant" expression [("message" | "with") expression]
+```
+
+```nexuslang
+require amount is greater than 0 message "amount must be positive"
+ensure result is greater than or equal to 0
+guarantee cache_ready message "cache must be initialized"
+invariant size is greater than or equal to 0
+
+function divide with a as Integer and b as Integer returns Integer
+    require b is not equal to 0 message "division by zero"
+    if a is greater than 0
+        invariant b is not equal to 0
+    end
+    return a divided by b
+end
+```
+
+Notes:
+
+1. Contract statements are regular statements in the parser and can appear at top-level or inside nested blocks.
+2. Nested forms are valid in function bodies and control-flow blocks (`if`, `while`, `for`, `try`, etc.).
+3. `message` payload is optional and accepts any expression (tooling/typechecker may apply stricter semantic checks).
+4. Parser compatibility also accepts `with <expr>` as a message introducer in contract statements.
+
+### FFI and Unsafe (Parser-Aligned)
+
+```ebnf
+externFunction  ::= "extern" "function" IDENTIFIER
+                    ["with" externParameterList]
+                    ["returns" typeAnnotation]
+                    ["from" "library" STRING]
+                    ["calling" "convention" ("cdecl"|"stdcall"|IDENTIFIER)]
+
+externVariable  ::= "extern" "variable" IDENTIFIER "as" typeAnnotation
+                    ["from" "library" STRING]
+
+externType      ::= "extern" "type" IDENTIFIER "as" ["opaque"] typeAnnotation
+                  | "extern" "type" IDENTIFIER "as" "function"
+                    ["with" typeAnnotation ("," typeAnnotation)*]
+                    ["returns" typeAnnotation]
+
+foreignFunction ::= "foreign" "function" IDENTIFIER
+                    ["with" externParameterList]
+                    ["returns" typeAnnotation]
+                    ["from" "library" STRING]
+                    ["calling" "convention" ("cdecl"|"stdcall"|IDENTIFIER)]
+
+unsafeBlock     ::= "unsafe" ["do"] statement* "end"
+```
+
+```nexuslang
+extern function puts with s as String returns Integer from library "libc" calling convention cdecl
+foreign function puts with s as String returns Integer from library "libc"
+extern variable errno as Integer from library "libc"
+extern type FILE as opaque pointer
+extern type Callback as function with Integer, Integer returns Integer
+
+unsafe do
+    set ptr to address of buffer
+    # raw pointer operations
+end
+
+unsafe
+    set ptr to address of buffer
+end
+```
+
+Notes:
+
+1. `foreign` is parser-level syntax only for function declarations.
+2. `unsafe` accepts both `unsafe do ... end` and `unsafe ... end`.
+3. Extern function parameters are comma-separated in the reference grammar.
+
 ## Compiler Directives
 
 ```
@@ -396,6 +611,112 @@ Tell the compiler to optimize for speed.
 Tell the compiler to include the file "helpers.h".
 Tell the compiler to use the C calling convention for this function.
 ```
+
+## Type System
+## Ownership / Borrow / Lifetime
+
+NexusLang implements a borrow-checker-enforced ownership model that prevents
+data races and use-after-free errors at compile time.
+
+### Move semantics
+
+Transfer ownership of a variable to a new binding.
+After a move the source name is invalid.
+
+```nexuslang
+set y to move x          # x is now invalid; y owns the value
+```
+
+Grammar:
+```
+moveExpression : MOVE IDENTIFIER ;
+```
+
+### Borrow semantics
+
+Create a temporary shared (immutable) or exclusive (mutable) reference.
+Multiple immutable borrows are allowed simultaneously.
+At most one mutable borrow may be active at a time.
+
+```nexuslang
+set r  to borrow x               # immutable borrow
+set rw to borrow mutable x       # mutable borrow
+```
+
+Grammar:
+```
+borrowExpression : BORROW MUTABLE? IDENTIFIER lifetimeAnnotation? ;
+```
+
+### Lifetime annotations
+
+Bind a borrow to an explicit lifetime label so the compiler can verify
+that the reference does not outlive its source.
+
+```nexuslang
+set r to borrow x with lifetime a
+```
+
+Grammar:
+```
+lifetimeAnnotation : WITH LIFETIME IDENTIFIER ;
+```
+
+### Explicit borrow release
+
+Borrows are normally released when they fall out of scope.
+`drop borrow` releases a borrow early, allowing subsequent mutations.
+
+```nexuslang
+drop borrow x
+drop borrow mutable x
+```
+
+Grammar:
+```
+dropBorrowStatement : DROP BORROW MUTABLE? IDENTIFIER ;
+```
+
+### Reference-counted smart pointers
+
+`rc` creates a single-threaded reference-counted pointer (`Rc<T>`).
+`arc` creates an atomically reference-counted pointer for concurrent use (`Arc<T>`).
+
+```nexuslang
+set p  to rc Integer : 42        # Rc<Integer>
+set ap to arc String : "hello"   # Arc<String>
+```
+
+Grammar:
+```
+rcCreation  : RC  typeAnnotation ':' expression | RC  expression ;
+arcCreation : ARC typeAnnotation ':' expression | ARC expression ;
+```
+
+### Weak references (cycle breaking)
+
+`downgrade` converts an `Rc`/`Arc` to a non-owning `Weak` reference.
+`upgrade` converts a `Weak` back to an `Rc`/`Arc`, returning `None` if the
+original has already been dropped.
+
+```nexuslang
+set w to downgrade p
+set q to upgrade w       # q is None if p was dropped
+```
+
+Grammar:
+```
+downgradeExpression : DOWNGRADE expression ;
+upgradeExpression   : UPGRADE   expression ;
+```
+
+Notes:
+
+1. The typechecker enforces borrow rules via `BorrowChecker` + `LifetimeChecker` passes.
+2. Ownership diagnostics are surfaced in LSP as `Ownership error: ...` with
+    `relatedInformation` ranges pointing at conflicting borrow, move, or drop sites.
+3. `drop borrow` is a statement; all other ownership forms are expressions usable
+    inside variable declarations and function arguments.
 
 ## Type System
 

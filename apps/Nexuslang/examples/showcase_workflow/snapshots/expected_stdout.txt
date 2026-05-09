@@ -1,0 +1,9 @@
+NexusLang Capability Demo
+fixture: fixtures/input_records.csv
+records: 5
+valid: 4
+invalid: 1
+sum_amount: 635
+avg_amount: 158.75
+status: ok
+Program result: 0

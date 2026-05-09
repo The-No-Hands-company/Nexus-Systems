@@ -129,6 +129,9 @@ def cmd_build(args):
     """Compile the project."""
     config = _load_project()
 
+    if getattr(args, 'target', None):
+        config.build.target_triple = args.target
+
     # --opt-level / -O overrides profile
     if hasattr(args, 'opt_level') and args.opt_level is not None:
         try:
@@ -146,6 +149,12 @@ def cmd_build(args):
 
     builder = BuildSystem(config)
     features = args.features or []
+    sanitize = args.sanitize or []
+    
+    # Handle 'all' sanitizer option
+    if sanitize and 'all' in sanitize:
+        sanitize = ['address', 'thread', 'memory', 'undefined']
+    
     ok = builder.build(
         release=args.release,
         profile=args.profile,
@@ -157,6 +166,7 @@ def cmd_build(args):
         lint_strict=args.lint_strict,
         lint_errors_only=args.lint_errors_only,
         lint_fail_on_warnings=args.lint_fail_on_warnings,
+        sanitize=sanitize,
     )
     sys.exit(0 if ok else 1)
 
@@ -176,10 +186,17 @@ def cmd_run(args):
     builder = BuildSystem(config)
     features = args.features or []
     run_args = args.run_args or []
+    sanitize = args.sanitize or []
+    if sanitize and 'all' in sanitize:
+        sanitize = ['address', 'thread', 'memory', 'undefined']
     code = builder.run(
         release=args.release,
         features=features,
         run_args=run_args,
+        sanitize=sanitize,
+        analyze_runtime=getattr(args, 'analyze_runtime', False),
+        analysis_output=getattr(args, 'analysis_output', None),
+        profile_source=getattr(args, 'profile_source', None),
     )
     sys.exit(code)
 
@@ -329,14 +346,42 @@ def cmd_coverage(args):
 def cmd_profile(args):
     """Run a NexusLang file with CPU and memory profiling."""
     from ..tooling.profiler import run_with_profiling
+    from ..tooling.sanitizer_runtime import (
+        format_sanitizer_report,
+        parse_sanitizer_output,
+        write_combined_runtime_analysis,
+        write_sanitizer_report,
+    )
     source = args.source
     output_dir = args.output or "profile"
-    run_with_profiling(
+    profiler = run_with_profiling(
         source_path=source,
         output_dir=output_dir,
         cpu=not args.no_cpu,
         memory=not args.no_memory,
     )
+
+    sanitizer_log = getattr(args, 'sanitizer_log', None)
+    if sanitizer_log:
+        try:
+            with open(sanitizer_log, 'r', encoding='utf-8') as f:
+                sanitizer_text = f.read()
+            report = parse_sanitizer_output(sanitizer_text)
+            if report.has_findings:
+                print("\n" + format_sanitizer_report(report))
+            write_sanitizer_report(report, os.path.join(output_dir, "sanitizer-report.json"))
+            write_combined_runtime_analysis(
+                output_dir=output_dir,
+                sanitizer_report=report,
+                profiler_summary={
+                    "cpu_functions": len(profiler.cpu._profiles) if profiler.cpu else 0,
+                    "memory_peak_bytes": profiler.memory.peak_bytes if profiler.memory else 0,
+                    "source": source,
+                },
+            )
+        except OSError as exc:
+            print(f"error: failed to read sanitizer log '{sanitizer_log}': {exc}")
+            sys.exit(1)
 
 
 def cmd_add(args):
@@ -638,6 +683,9 @@ def _add_build_subcommand(sub: argparse._SubParsersAction) -> None:
                    help="Only report lint errors (suppress lint warnings)")
     p.add_argument("--lint-fail-on-warnings", action="store_true",
                    help="Treat lint warnings as build-breaking")
+    p.add_argument("--sanitize", metavar="SANITIZER", nargs="+",
+                   choices=["address", "thread", "memory", "undefined", "all"],
+                   help="Enable runtime sanitizers (address, thread, memory, undefined, or all)")
 
 
 def _add_run_subcommand(sub: argparse._SubParsersAction) -> None:
@@ -650,6 +698,15 @@ def _add_run_subcommand(sub: argparse._SubParsersAction) -> None:
                    help="Arguments to pass to the compiled program (after --)")
     p.add_argument("--opt-level", "-O", metavar="LEVEL",
                    help="Optimisation level: 0, 1, 2, 3, or s (size).")
+    p.add_argument("--sanitize", metavar="SANITIZER", nargs="+",
+                   choices=["address", "thread", "memory", "undefined", "all"],
+                   help="Enable runtime sanitizers for build+run")
+    p.add_argument("--analyze-runtime", action="store_true",
+                   help="Generate combined runtime analysis (sanitizer + profiling)")
+    p.add_argument("--analysis-output", metavar="DIR",
+                   help="Output directory for runtime analysis (default: build/runtime-analysis)")
+    p.add_argument("--profile-source", metavar="FILE",
+                   help="Source file to profile when --analyze-runtime is enabled")
 
 
 def _add_lint_subcommand(sub: argparse._SubParsersAction) -> None:
@@ -731,6 +788,8 @@ def _add_profile_subcommand(sub: argparse._SubParsersAction) -> None:
                    help="Disable CPU profiling")
     p.add_argument("--no-memory", action="store_true",
                    help="Disable memory profiling")
+    p.add_argument("--sanitizer-log", metavar="FILE",
+                   help="Optional sanitizer stderr log to parse and merge into profile output")
 
 
 def _add_add_subcommand(sub: argparse._SubParsersAction) -> None:

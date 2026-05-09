@@ -1,0 +1,400 @@
+// Spam Classifier - Machine Learning Showcase
+// Demonstrates: classification, training, feature extraction, metrics, contracts
+// Realistic ML pipeline for text classification and prediction
+
+struct Email
+  id as Integer
+  subject as String
+  body as String
+  word_count as Integer
+  is_spam as Boolean
+end
+
+struct FeatureVector
+  email_id as Integer
+  suspicious_word_count as Integer
+  capitalization_ratio as Float
+  special_char_count as Integer
+  urgency_score as Float
+  predicted_spam as Boolean
+end
+
+struct ClassificationMetrics
+  total_samples as Integer
+  true_positives as Integer
+  false_positives as Integer
+  false_negatives as Integer
+  true_negatives as Integer
+  accuracy as Float
+  precision as Float
+  recall as Float
+  f1_score as Float
+end
+
+struct SpamClassifier
+  trained as Boolean
+  threshold as Float
+  total_trained as Integer
+  spam_word_list as List of String
+end
+
+// Create an email record
+function create_email with id as Integer and subject as String and body as String and word_count as Integer and is_spam as Boolean returns Email
+  require id is greater than or equal to 0 with "Email ID must be non-negative"
+  require subject is not empty with "Subject cannot be empty"
+  require word_count is greater than 0 with "Word count must be positive"
+  
+  set email to Email
+    id: id
+    subject: subject
+    body: body
+    word_count: word_count
+    is_spam: is_spam
+  end
+  
+  return email
+end
+
+// Initialize classifier
+function create_classifier returns SpamClassifier
+  set spam_words to [
+    "viagra",
+    "click here",
+    "urgent",
+    "limited time",
+    "congratulations",
+    "winner",
+    "claim",
+    "free",
+    "act now",
+    "verify account"
+  ]
+  
+  set classifier to SpamClassifier
+    trained: false
+    threshold: 0.5
+    total_trained: 0
+    spam_word_list: spam_words
+  end
+  
+  return classifier
+end
+
+// Count suspicious words in text
+function count_suspicious_words with text as String and spam_words as List of String returns Integer
+  require text is not empty with "Text cannot be empty"
+  require spam_words is not empty with "Spam word list cannot be empty"
+  
+  set count to 0
+  
+  for each word in spam_words
+    if text contains word
+      set count to count plus 1
+    end
+  end
+  
+  return count
+end
+
+// Calculate capitalization ratio (indicator of shouting/urgency)
+function calculate_capitalization_ratio with text as String returns Float
+  require text is not empty with "Text cannot be empty"
+  
+  set text_length to text length
+  require text_length is greater than 0 with "Text length must be positive"
+  
+  // Simplified: count uppercase letters (1 for each cap, 0 for lowercase)
+  set capital_count to 0
+  
+  // Estimate based on text content (simplified for demo)
+  if text contains "!!!"
+    set capital_count to capital_count plus 3
+  end
+  
+  if text contains "???"
+    set capital_count to capital_count plus 2
+  end
+  
+  set ratio to (capital_count as Float) divided by ((text_length as Float) divided by 10.0)
+  
+  return ratio
+end
+
+// Count special characters
+function count_special_chars with text as String returns Integer
+  require text is not empty with "Text cannot be empty"
+  
+  set count to 0
+  
+  if text contains "!"
+    set count to count plus 1
+  end
+  
+  if text contains "$"
+    set count to count plus 1
+  end
+  
+  if text contains "*"
+    set count to count plus 1
+  end
+  
+  if text contains "#"
+    set count to count plus 1
+  end
+  
+  if text contains "@"
+    set count to count plus 1
+  end
+  
+  return count
+end
+
+// Calculate urgency score
+function calculate_urgency_score with subject as String and body as String returns Float
+  require subject is not empty with "Subject cannot be empty"
+  
+  set urgency to 0.0
+  
+  if subject contains "urgent"
+    set urgency to urgency plus 0.3
+  end
+  
+  if subject contains "limited time"
+    set urgency to urgency plus 0.3
+  end
+  
+  if subject contains "act now"
+    set urgency to urgency plus 0.2
+  end
+  
+  if body contains "NOW" or body contains "ASAP"
+    set urgency to urgency plus 0.2
+  end
+  
+  return urgency
+end
+
+// Extract features from email
+function extract_features with email as Email and classifier as SpamClassifier returns FeatureVector
+  require email is not null with "Email cannot be null"
+  require classifier is not null with "Classifier cannot be null"
+  
+  set combined_text to email.subject concatenated with " " concatenated with email.body
+  
+  set suspicious_words to count_suspicious_words with combined_text and classifier.spam_word_list
+  set cap_ratio to calculate_capitalization_ratio with combined_text
+  set special_chars to count_special_chars with combined_text
+  set urgency to calculate_urgency_score with email.subject and email.body
+  
+  set features to FeatureVector
+    email_id: email.id
+    suspicious_word_count: suspicious_words
+    capitalization_ratio: cap_ratio
+    special_char_count: special_chars
+    urgency_score: urgency
+    predicted_spam: false
+  end
+  
+  return features
+end
+
+// Predict spam probability (simple linear combination)
+function predict_spam_score with features as FeatureVector returns Float
+  require features is not null with "Features cannot be null"
+  
+  // Simple scoring: weighted combination of spam indicators
+  set score to 0.0
+  
+  // Suspicious words contribute 0.3 per word (capped)
+  set word_contribution to ((features.suspicious_word_count as Float) times 0.3)
+  if word_contribution is greater than 1.0
+    set word_contribution to 1.0
+  end
+  set score to score plus word_contribution
+  
+  // Capitalization contributes up to 0.2
+  set cap_contribution to features.capitalization_ratio times 0.1
+  if cap_contribution is greater than 0.2
+    set cap_contribution to 0.2
+  end
+  set score to score plus cap_contribution
+  
+  // Special characters contribute 0.2 per char (capped)
+  set special_contribution to ((features.special_char_count as Float) times 0.1)
+  if special_contribution is greater than 0.2
+    set special_contribution to 0.2
+  end
+  set score to score plus special_contribution
+  
+  // Urgency contributes directly
+  set score to score plus features.urgency_score
+  
+  // Cap at 1.0
+  if score is greater than 1.0
+    set score to 1.0
+  end
+  
+  return score
+end
+
+// Classify email
+function classify_email with email as Email and classifier as SpamClassifier returns FeatureVector
+  require email is not null with "Email cannot be null"
+  require classifier is not null with "Classifier cannot be null"
+  
+  set features to extract_features with email and classifier
+  set spam_score to predict_spam_score with features
+  
+  if spam_score is greater than or equal to classifier.threshold
+    set features.predicted_spam to true
+  end
+  
+  return features
+end
+
+// Train classifier on labeled examples (update spam word list, threshold)
+function train_classifier with emails as List of Email and classifier as SpamClassifier returns SpamClassifier
+  require emails is not empty with "Training data cannot be empty"
+  require classifier is not null with "Classifier cannot be null"
+  
+  set classifier.trained to true
+  set classifier.total_trained to emails length
+  
+  // Simple training: adjust threshold based on class distribution
+  set spam_count to 0
+  for each email in emails
+    if email.is_spam equals true
+      set spam_count to spam_count plus 1
+    end
+  end
+  
+  set spam_ratio to (spam_count as Float) divided by (emails length as Float)
+  
+  // Adjust threshold (lower threshold if spam is common)
+  if spam_ratio is greater than 0.5
+    set classifier.threshold to 0.4
+  else
+    set classifier.threshold to 0.6
+  end
+  
+  return classifier
+end
+
+// Calculate classification metrics
+function calculate_metrics with predictions as List of FeatureVector and actuals as List of Email returns ClassificationMetrics
+  require predictions is not empty with "Predictions cannot be empty"
+  require actuals is not empty with "Actuals cannot be empty"
+  require (predictions length equals actuals length) with "Prediction and actual counts must match"
+  
+  set tp to 0  // true positives
+  set fp to 0  // false positives
+  set fn to 0  // false negatives
+  set tn to 0  // true negatives
+  
+  set i to 0
+  while i is less than predictions length
+    set pred to predictions[i]
+    set actual to actuals[i]
+    
+    if pred.predicted_spam equals true and actual.is_spam equals true
+      set tp to tp plus 1
+    else if pred.predicted_spam equals true and actual.is_spam equals false
+      set fp to fp plus 1
+    else if pred.predicted_spam equals false and actual.is_spam equals true
+      set fn to fn plus 1
+    else if pred.predicted_spam equals false and actual.is_spam equals false
+      set tn to tn plus 1
+    end
+    
+    set i to i plus 1
+  end
+  
+  set total to tp plus fp plus fn plus tn
+  set accuracy to ((tp plus tn) as Float) divided by (total as Float)
+  
+  set precision_denom to (tp plus fp)
+  set precision to if precision_denom is greater than 0 then ((tp as Float) divided by (precision_denom as Float)) else 0.0 end
+  
+  set recall_denom to (tp plus fn)
+  set recall to if recall_denom is greater than 0 then ((tp as Float) divided by (recall_denom as Float)) else 0.0 end
+  
+  set f1_denom to (precision plus recall)
+  set f1_score to if f1_denom is greater than 0 then (2.0 times (precision times recall) divided by f1_denom) else 0.0 end
+  
+  set metrics to ClassificationMetrics
+    total_samples: total
+    true_positives: tp
+    false_positives: fp
+    false_negatives: fn
+    true_negatives: tn
+    accuracy: accuracy
+    precision: precision
+    recall: recall
+    f1_score: f1_score
+  end
+  
+  return metrics
+end
+
+// Print classification report
+function print_classification_report with metrics as ClassificationMetrics
+  print text "=== Classification Report ==="
+  print text ""
+  print text "Confusion Matrix:"
+  print text ("  True Positives: " concatenated with (metrics.true_positives as String))
+  print text ("  False Positives: " concatenated with (metrics.false_positives as String))
+  print text ("  True Negatives: " concatenated with (metrics.true_negatives as String))
+  print text ("  False Negatives: " concatenated with (metrics.false_negatives as String))
+  print text ""
+  print text "Performance Metrics:"
+  print text ("  Accuracy: " concatenated with ((metrics.accuracy times 100.0) as String) concatenated with "%")
+  print text ("  Precision: " concatenated with ((metrics.precision times 100.0) as String) concatenated with "%")
+  print text ("  Recall: " concatenated with ((metrics.recall times 100.0) as String) concatenated with "%")
+  print text ("  F1-Score: " concatenated with (metrics.f1_score as String))
+  print text ""
+end
+
+// Main - demo spam classifier
+set training_data to [
+  create_email with 1 and "Congratulations!" and "You have won! Click here to claim prize!" and 10 and true,
+  create_email with 2 and "Limited time offer" and "Act now!!!  Free money here!!!" and 8 and true,
+  create_email with 3 and "Verify your account" and "Urgent: click link now  $$$" and 7 and true,
+  create_email with 4 and "Team meeting at 3pm" and "Let's discuss the project status" and 9 and false,
+  create_email with 5 and "Project update" and "The new features are ready for testing" and 10 and false,
+  create_email with 6 and "Weekly report" and "Here are the latest metrics and updates" and 12 and false,
+  create_email with 7 and "Special offer" and "URGENT!!! Free viagra now!!!" and 7 and true,
+  create_email with 8 and "Code review" and "Please review my pull request" and 8 and false
+]
+
+set classifier to create_classifier
+set trained_classifier to train_classifier with training_data and classifier
+
+print text "=== Spam Classifier Demo ==="
+print text ""
+print text ("Trained on " concatenated with (training_data length as String) concatenated with " emails")
+print text ("Threshold: " concatenated with (trained_classifier.threshold as String))
+print text ""
+
+set predictions to []
+for each email in training_data
+  set prediction to classify_email with email and trained_classifier
+  set predictions to predictions concatenated with [prediction]
+end
+
+set metrics to calculate_metrics with predictions and training_data
+print_classification_report with metrics
+
+print text "Sample Predictions:"
+for each prediction in predictions
+  set actual_label to if training_data[prediction.email_id].is_spam then "SPAM" else "HAM" end
+  set predicted_label to if prediction.predicted_spam then "SPAM" else "HAM" end
+  print text ("  Email " concatenated with (prediction.email_id as String) concatenated with ": Predicted=" concatenated with predicted_label concatenated with ", Actual=" concatenated with actual_label)
+end
+
+// Assertions to validate classifier
+expect (trained_classifier.trained equals true) to equal true
+expect (predictions length equals training_data length) to equal true
+expect (metrics.accuracy is greater than 0.0) to equal true
+
+print text ""
+print text "Classification completed successfully"

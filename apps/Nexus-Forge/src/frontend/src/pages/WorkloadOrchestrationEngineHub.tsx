@@ -1,7 +1,10 @@
 import { useEffect, useState } from "react";
 
 export default function WorkloadOrchestrationEngineHub() {
-  const [efficiency, setEfficiency] = useState<{ utilization: number; efficiency: string }>({ utilization: 0, efficiency: "" });
+  const [efficiency, setEfficiency] = useState<{ utilization: number; efficiency: string }>({
+    utilization: 0,
+    efficiency: "",
+  });
 
   useEffect(() => {
     async function load() {
@@ -31,7 +34,9 @@ export default function WorkloadOrchestrationEngineHub() {
         </article>
         <article className="repo-card">
           <h3>Efficiency</h3>
-          <p>Utilization: {efficiency.utilization}%, Status: {efficiency.efficiency}</p>
+          <p>
+            Utilization: {efficiency.utilization}%, Status: {efficiency.efficiency}
+          </p>
         </article>
       </div>
     </section>

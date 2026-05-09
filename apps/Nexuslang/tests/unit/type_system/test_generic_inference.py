@@ -4,7 +4,7 @@ Tests for generic type parameter inference.
 
 import pytest
 from nexuslang.typesystem.generic_inference import (
-    GenericTypeInference, TypeSubstitution, infer_generic_types
+    GenericTypeInference, TypeSubstitution, TypeVariable, infer_generic_types
 )
 from nexuslang.typesystem.types import (
     ListType, DictionaryType, INTEGER_TYPE, STRING_TYPE, FLOAT_TYPE, BOOLEAN_TYPE
@@ -34,6 +34,32 @@ class TestTypeSubstitution:
         
         result = subst.apply('List<T>')
         assert 'integer' in result.lower()
+
+    def test_bind_requires_non_empty_type_var(self):
+        """Binding should fail fast on invalid type variable names."""
+        subst = TypeSubstitution()
+
+        with pytest.raises(TypeError, match="type_var must be a non-empty string"):
+            subst.bind('', INTEGER_TYPE)
+
+    def test_apply_requires_non_empty_annotation(self):
+        """Applying substitutions should reject empty annotations."""
+        subst = TypeSubstitution()
+
+        with pytest.raises(TypeError, match="type_annotation must be a non-empty string"):
+            subst.apply('')
+
+
+class TestTypeVariableContracts:
+    """Test strict TypeVariable construction contracts."""
+
+    def test_type_variable_rejects_empty_name(self):
+        with pytest.raises(TypeError, match="Type variable name must be a non-empty string"):
+            TypeVariable('')
+
+    def test_type_variable_rejects_non_list_constraints(self):
+        with pytest.raises(TypeError, match="Type variable constraints must be a list when provided"):
+            TypeVariable('T', constraints='not-a-list')
 
 
 class TestGenericTypeInference:
@@ -107,6 +133,16 @@ class TestGenericTypeInference:
         assert 'R' in result
         assert result['T'] is INTEGER_TYPE
         assert result['R'] is STRING_TYPE
+
+    def test_infer_from_arguments_rejects_mismatched_arity(self):
+        """Inference should fail fast when parameter and argument arity diverge."""
+        inferrer = GenericTypeInference()
+
+        with pytest.raises(
+            ValueError,
+            match="parameter_types and argument_types must have the same length",
+        ):
+            inferrer.infer_from_arguments(['T'], ['T'], [INTEGER_TYPE, STRING_TYPE])
     
     def test_substitute_return_type_simple(self):
         """Test substituting a simple type variable in return type."""

@@ -1,7 +1,10 @@
 import { useEffect, useState } from "react";
 
 export default function BranchProtectionPoliciesHub() {
-  const [status, setStatus] = useState<{ violations: number; enforced: boolean }>({ violations: 0, enforced: false });
+  const [status, setStatus] = useState<{ violations: number; enforced: boolean }>({
+    violations: 0,
+    enforced: false,
+  });
 
   useEffect(() => {
     async function load() {
@@ -31,7 +34,9 @@ export default function BranchProtectionPoliciesHub() {
         </article>
         <article className="repo-card">
           <h3>Status</h3>
-          <p>Enforced: {status.enforced ? "Yes" : "No"}, Violations: {status.violations}</p>
+          <p>
+            Enforced: {status.enforced ? "Yes" : "No"}, Violations: {status.violations}
+          </p>
         </article>
       </div>
     </section>

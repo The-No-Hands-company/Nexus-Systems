@@ -1,6 +1,6 @@
 # NexusLang Feature Completeness Audit
 
-Updated: 2026-05-02
+Updated: 2026-05-07
 
 ## Purpose
 
@@ -73,157 +73,34 @@ What still remains high-value after revalidation:
 
 ## Confirmed High-Priority Gaps
 
-### P0: Cross-toolchain inconsistencies that block “feature complete” status
+### May 2026 correction of stale P0 claims
 
-#### 1. Channels are runtime-capable but not toolchain-complete
+The original P0 section below this heading was written before multiple feature-closure batches landed.
+Those claims are now stale and should not be used as current status for channels, generators,
+parallel-for, contracts, or macro/comptime support.
 
-Status:
+Closed since the original audit:
 
-- lexer: yes
-- parser: yes
-- AST: yes
-- interpreter: yes
-- tests: yes
-- typechecker: no direct handling found
-- LLVM backend: no direct handling found
-- C backend: no direct handling found
-- LSP feature-specific support: no direct handling found
+- Channels: parser + interpreter + typechecker + LLVM/C backends + LSP diagnostics/completions now contain explicit channel handling.
+- Parallel-for: parser/interpreter/compiler/typechecker/LSP support paths now exist.
+- Contracts/assertions: interpreter + typechecker + LLVM/C backend paths now include dedicated handling.
+- Macro/comptime: parser/interpreter/typechecker/compiler/LSP paths now include dedicated handling.
+- Pattern matching on C backend: statement-level guarded/bound lowering now exists for major pattern families.
 
-Evidence:
+Current P0-level focus areas after revalidation:
 
-- parser/interpreter support exists in:
-  - `src/nexuslang/parser/lexer.py`
-  - `src/nexuslang/parser/parser.py`
-  - `src/nexuslang/parser/ast.py`
-  - `src/nexuslang/interpreter/interpreter.py`
-  - `tests/unit/language/test_channels.py`
-- no `SendStatement`, `ReceiveExpression`, or `ChannelCreation` references were found in:
-  - `src/nexuslang/typesystem/typechecker.py`
-  - `src/nexuslang/compiler/backends/llvm_ir_generator.py`
-  - `src/nexuslang/lsp/*.py`
-
-Why it matters:
-
-NLPL now has working channels, but they are still effectively interpreter-only. A language is not feature complete when new core concurrency primitives do not propagate into typechecking, compilation, and tooling.
-
-#### 2. Yield and generator support are not complete across the stack
-
-Status:
-
-- lexer: yes
-- parser: yes
-- AST: yes
-- interpreter: yes
-- compiler: partial / placeholder implementation
-- typechecker: no direct handling found
-- grammar: now documented, but implementation parity is still uneven
-
-Evidence:
-
-- parser support:
-  - `src/nexuslang/parser/parser.py` contains `parse_yield_expression`
-- interpreter support:
-  - `src/nexuslang/interpreter/interpreter.py` contains runtime yield handling
-- LLVM backend:
-  - `src/nexuslang/compiler/backends/llvm_ir_generator.py` contains `_generate_generator_expression`
-  - the implementation explicitly states generators are still an MVP approximation and uses placeholder behavior such as a hard-coded size placeholder
-- no direct `YieldExpression` or `GeneratorExpression` references were found in:
-  - `src/nexuslang/typesystem/typechecker.py`
-  - `src/nexuslang/compiler/backends/c_generator.py`
-
-Why it matters:
-
-This is not just a documentation gap. The compiled path for generators is not at the same semantic maturity as the interpreter path.
-
-#### 3. Parallel-for is interpreter-only
-
-Status:
-
-- parser: yes
-- AST: yes
-- interpreter: yes
-- compiler: no direct support found
-
-Evidence:
-
-- parser has `parse_parallel_for`
-- interpreter has `execute_parallel_for_loop`
-- no `ParallelForLoop` or `parallel_for_loop` references were found in `src/nexuslang/compiler/backends/llvm_ir_generator.py`
-
-Why it matters:
-
-Parallel iteration is a major feature family. If it cannot compile, NexusLang still has a major gap between its execution modes.
-
-#### 4. Contract/assertion features are interpreter-only
-
-Status:
-
-- parser and runtime support exist
-- typechecker: no direct handling found
-- compiler: no direct handling found
-
-Evidence:
-
-- interpreter contains:
-  - `execute_expect_statement`
-  - `execute_require_statement`
-  - `execute_ensure_statement`
-  - `execute_guarantee_statement`
-  - `execute_invariant_statement`
-- no direct references for `ExpectStatement`, `RequireStatement`, `EnsureStatement`, `GuaranteeStatement`, or `InvariantStatement` were found in:
-  - `src/nexuslang/typesystem/typechecker.py`
-  - `src/nexuslang/compiler/backends/llvm_ir_generator.py`
-
-Why it matters:
-
-Contract programming is part of the language surface, but today it is not enforced consistently outside the interpreter.
-
-#### 5. Macros and comptime features do not propagate across the toolchain
-
-Status:
-
-- lexer: yes
-- parser: yes
-- AST: yes
-- interpreter: yes
-- typechecker: no direct handling found
-- compiler backend: no direct handling found
-- grammar parity still incomplete overall
-
-Evidence:
-
-- parser dispatch includes:
-  - `TokenType.MACRO`
-  - `TokenType.EXPAND`
-  - `TokenType.COMPTIME`
-- interpreter contains:
-  - `execute_macro_definition`
-  - `execute_macro_expansion`
-  - `execute_comptime_expression`
-  - `execute_comptime_const`
-  - `execute_comptime_assert`
-- no direct `MacroDefinition`, `MacroExpansion`, `ComptimeExpression`, `ComptimeConst`, or `ComptimeAssert` references were found in:
-  - `src/nexuslang/typesystem/typechecker.py`
-  - `src/nexuslang/compiler/backends/llvm_ir_generator.py`
-
-Why it matters:
-
-These are foundational meta-language features. Without cross-toolchain support they remain interpreter-centric rather than language-complete.
+- Semantic parity depth (not surface presence): advanced behavior equivalence across interpreter vs LLVM/C for generators/patterns/contracts.
+- Shared-analysis consistency: unify checker traversal and diagnostics semantics to reduce parser-shape drift between tools.
+- Grammar/reference parity: align formal grammar and status docs with the implemented parser/language surface.
 
 ## Confirmed Core Language Surface Gaps
 
 ### 1. The lexer defines more language than the parser actually parses
 
-A repository-wide scan found 27 token names defined in `TokenType` but not referenced in `src/nexuslang/parser/parser.py`.
+A current repository scan found 22 token names defined in `TokenType` but not referenced in `src/nexuslang/parser/parser.py`.
 
 Confirmed examples:
 
-- end-form aliases:
-  - `END_THE_TRAIT`
-  - `END_THE_INTERFACE`
-  - `END_LOOP`
-  - `END_CONCURRENT`
-  - `END_TRY`
 - range/reference-like surface:
   - `RANGE`
   - `RANGE_INCLUSIVE`
@@ -250,6 +127,8 @@ Confirmed examples:
   - `INLINE`
   - `ASSEMBLY`
 
+Note: prior audit examples listing end-form aliases (`END_LOOP`, `END_CONCURRENT`, `END_TRY`, `END_THE_INTERFACE`, `END_THE_TRAIT`) are stale and have been removed; those aliases are now consumed by parser termination paths.
+
 Why it matters:
 
 The token inventory currently advertises a wider language surface than the parser implements. That makes the lexer a poor proxy for actual feature support and increases maintenance cost.
@@ -273,21 +152,19 @@ This creates a false sense of language breadth. These terms are currently closer
 
 ## Typechecker and Static Analysis Gaps
 
-### 1. The main typechecker is narrower than the interpreter
+### 1. Surface coverage is broader; semantic depth is the remaining issue
 
-`src/nexuslang/typesystem/typechecker.py` uses a limited explicit dispatch in `check_statement` plus several grouped helper buckets.
+As of May 2026 revalidation, the main typechecker and related static passes do include handling for
+channels, parallel-for, contracts/assertions, macro/comptime, and ownership-related constructs.
 
-Confirmed absent direct handling for these newer or advanced features:
+Remaining gap:
 
-- channels (`SendStatement`, `ReceiveExpression`, `ChannelCreation`)
-- unsafe blocks (`UnsafeBlock`)
-- yield/generator support (`YieldExpression`, `GeneratorExpression`)
-- macro/comptime nodes
-- contract/assertion nodes
+- deeper path- and flow-sensitive semantics for advanced constructs (especially when features combine),
+  not first-pass node visibility.
 
 Why it matters:
 
-The typechecker cannot be described as feature-complete if major language constructs are invisible to it.
+The key risk is now precision/consistency across complex programs rather than outright feature absence.
 
 ### 2. Static analysis is split across multiple passes and not obviously unified
 
@@ -312,49 +189,38 @@ Why it matters:
 
 This is workable, but it is not yet a single coherent language-analysis pipeline. The static semantics need a documented ownership model and integration plan.
 
-### 3. LSP diagnostics depend on incomplete lower layers
+### 3. LSP diagnostics depend on lower-layer semantic precision
 
 `src/nexuslang/lsp/diagnostics.py` uses:
 
 - parser-based syntax checks
 - typechecker-based diagnostics
-- regex-style additional checks such as unused variables
+- supplemental static checks for advanced feature families
 
 Why it matters:
 
-Diagnostics can only be as complete as the parser/typechecker coverage beneath them. For advanced features, the LSP currently inherits those gaps.
+LSP fidelity still depends on parser/typechecker precision. For advanced feature combinations, diagnostics can lag runtime semantics even when feature hooks exist.
 
 ## Compiler Backend Gaps
 
-### 1. LLVM backend is substantially behind the interpreter on advanced features
+### 1. LLVM backend has broad feature hooks; parity depth remains
 
-Confirmed examples:
+The LLVM backend now includes dedicated handling across many previously missing families (channels,
+parallel-for, contracts/assertions, macro/comptime).
 
-- no direct channel node handling found
-- no direct parallel-for handling found
-- no direct contract node handling found
-- no direct macro/comptime node handling found
-- generator support exists, but is explicitly approximate rather than complete
+Remaining gap:
 
-Key file:
+- behavior-level parity and optimization maturity for advanced constructs (for example, complex generator
+  behavior and edge-case lowering fidelity), not baseline node support.
 
-- `src/nexuslang/compiler/backends/llvm_ir_generator.py`
+### 2. C backend coverage improved; clarify support envelope by feature depth
 
-Why it matters:
-
-The LLVM path is functional for core constructs, but it is not yet feature-complete relative to the interpreter.
-
-### 2. C backend appears significantly narrower than the language surface
-
-A broad AST-to-backend scan showed the C generator covers a much smaller subset of node types than the interpreter.
-
-Key file:
-
-- `src/nexuslang/compiler/backends/c_generator.py`
+Recent work closed major statement-level gaps (including richer pattern/match lowering), but C backend
+maturity is still uneven across advanced combinations.
 
 Why it matters:
 
-If the C backend remains intentionally limited, that scope should be documented explicitly. If not, it needs a dedicated expansion plan.
+The key documentation need is a support matrix that distinguishes "supported syntax" from "fully parity-tested semantics".
 
 ## Grammar Parity Gaps
 
@@ -455,7 +321,7 @@ Why it matters:
 
 A regex formatter will inevitably lag the language as new constructs are added. NexusLang needs an AST-aware formatter if it wants formatting to be trustworthy across the whole language.
 
-### 2. LSP feature breadth is ahead of feature-specific semantic depth
+### 2. LSP feature breadth is ahead of full semantic depth
 
 `README.md` claims 25 LSP features and describes the tooling ecosystem as comprehensive.
 
@@ -463,18 +329,12 @@ Confirmed current reality:
 
 - a real LSP exists in `src/nexuslang/lsp/`
 - diagnostics, formatter, hover, rename, references, symbols, and other modules exist
-- no direct feature-specific references were found in `src/nexuslang/lsp/*.py` for advanced nodes such as:
-  - `SendStatement`
-  - `ReceiveExpression`
-  - `ChannelCreation`
-  - `MacroExpansion`
-  - `ComptimeExpression`
-  - `YieldExpression`
-  - `UnsafeBlock`
+- advanced feature coverage exists across hover/completions/diagnostics for channels,
+  macro/comptime, unsafe/FFI, generators/yield, and parallel capture checks
 
 Why it matters:
 
-The LSP is real and valuable, but “comprehensive” should be interpreted cautiously until feature-matrix parity is established for newer and more advanced constructs.
+The LSP is substantial, but feature-matrix parity and flow-sensitive diagnostics depth still need tightening.
 
 ### 3. Diagnostics and formatting are only partly semantic
 
@@ -489,7 +349,7 @@ As the language surface expands, these tools need to migrate from heuristic supp
 
 ## Documentation and Positioning Gaps
 
-### 1. README claims are stronger than the current cross-toolchain evidence
+### 1. README claims still need stronger support-matrix framing
 
 `README.md` currently states or strongly implies:
 
@@ -502,8 +362,8 @@ As the language surface expands, these tools need to migrate from heuristic supp
 The core issue is not that these statements are entirely false. The issue is that they flatten the difference between:
 
 - core constructs
-- interpreter-only constructs
-- partially compiled constructs
+- syntax coverage vs deep semantic parity
+- interpreter semantics vs compiled semantics
 - feature-specific tooling coverage
 
 Why it matters:

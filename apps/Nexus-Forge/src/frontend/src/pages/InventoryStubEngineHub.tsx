@@ -18,7 +18,13 @@ interface FeatureItem {
 }
 
 export default function InventoryStubEngineHub() {
-  const [summary, setSummary] = useState<Summary>({ total: 0, implemented: 0, stubbed: 0, notYet: 0, sections: 0 });
+  const [summary, setSummary] = useState<Summary>({
+    total: 0,
+    implemented: 0,
+    stubbed: 0,
+    notYet: 0,
+    sections: 0,
+  });
   const [features, setFeatures] = useState<FeatureItem[]>([]);
   const [statusFilter, setStatusFilter] = useState<"all" | "✅" | "🟡" | "❌">("❌");
   const [loading, setLoading] = useState(false);

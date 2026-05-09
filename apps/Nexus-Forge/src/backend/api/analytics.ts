@@ -1,4 +1,4 @@
-export function registerAnalyticsRoutes(app: any) {
+export function registerAnalyticsRoutes(app: ForgeRouteApp) {
   app.get("/api/analytics/usage", async () => ({
     dailyActiveUsers: 0,
     activeRepositories: 0,
@@ -18,7 +18,7 @@ export function registerAnalyticsRoutes(app: any) {
     note: "Reliability analytics is stubbed.",
   }));
 
-  app.post("/api/analytics/reports", async ({ body }: any) => ({
+  app.post("/api/analytics/reports", async ({ body }) => ({
     ok: true,
     reportId: "report-stub",
     options: body || {},

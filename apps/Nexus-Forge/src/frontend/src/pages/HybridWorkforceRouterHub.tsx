@@ -19,7 +19,9 @@ export default function HybridWorkforceRouterHub() {
   return (
     <section>
       <h2>Hybrid Workforce Router Hub</h2>
-      <p>Workforce assignment, scheduling, and optimization across on-site, remote, and hybrid modes.</p>
+      <p>
+        Workforce assignment, scheduling, and optimization across on-site, remote, and hybrid modes.
+      </p>
       <div className="repo-grid">
         <article className="repo-card">
           <h3>Assignments</h3>

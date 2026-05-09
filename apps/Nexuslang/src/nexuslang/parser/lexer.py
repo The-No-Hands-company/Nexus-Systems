@@ -442,9 +442,12 @@ class Lexer:
             "divided by": TokenType.DIVIDED_BY,
             "integer divided by": TokenType.FLOOR_DIVIDE,
             "modulo": TokenType.MODULO,
+                        "mod": TokenType.MODULO,
             "to the power of": TokenType.POWER,
             "power": TokenType.POWER,
             "concatenate": TokenType.CONCATENATE,
+            "concatenated": TokenType.CONCATENATE,
+            "concatenated with": TokenType.CONCATENATE,
             "add": TokenType.ADD,
             "is": TokenType.IS,
             "equals": TokenType.EQUAL_TO,  # Single-word comparison

@@ -19,7 +19,9 @@ export default function CustomerLifetimeVaultHub() {
   return (
     <section>
       <h2>Customer Lifetime Vault Hub</h2>
-      <p>Lifecycle value profiles, segmentation, and predictive analytics for customer relationships.</p>
+      <p>
+        Lifecycle value profiles, segmentation, and predictive analytics for customer relationships.
+      </p>
       <div className="repo-grid">
         <article className="repo-card">
           <h3>Profiles</h3>

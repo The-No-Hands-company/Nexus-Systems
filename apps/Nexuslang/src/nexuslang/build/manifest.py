@@ -9,11 +9,15 @@ configuration.
 from __future__ import annotations
 
 import re
-import tomllib
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
+
+try:
+    import tomllib
+except ImportError:
+    import tomli as tomllib
 
 
 # ---------------------------------------------------------------------------
@@ -94,6 +98,7 @@ class BuildProfile:
     name: str
     opt_level: Union[int, str] = 0
     debug: bool = False
+    debug_assertions: bool = False
     incremental: bool = False
     lto: Union[bool, str] = False
     strip: Union[bool, str] = False
@@ -121,6 +126,7 @@ _DEFAULT_PROFILES: Dict[str, Dict[str, Any]] = {
     "dev": {
         "opt_level": 0,
         "debug": True,
+        "debug_assertions": True,
         "incremental": True,
         "lto": False,
         "strip": False,
@@ -129,6 +135,7 @@ _DEFAULT_PROFILES: Dict[str, Dict[str, Any]] = {
     "release": {
         "opt_level": 3,
         "debug": False,
+        "debug_assertions": False,
         "incremental": False,
         "lto": True,
         "strip": True,
@@ -137,6 +144,7 @@ _DEFAULT_PROFILES: Dict[str, Dict[str, Any]] = {
     "test": {
         "opt_level": 0,
         "debug": True,
+        "debug_assertions": True,
         "incremental": True,
         "lto": False,
         "strip": False,
@@ -145,6 +153,7 @@ _DEFAULT_PROFILES: Dict[str, Dict[str, Any]] = {
     "bench": {
         "opt_level": 3,
         "debug": False,
+        "debug_assertions": False,
         "incremental": False,
         "lto": True,
         "strip": False,
@@ -154,6 +163,16 @@ _DEFAULT_PROFILES: Dict[str, Dict[str, Any]] = {
 
 _PACKAGE_NAME_RE = re.compile(r'^[a-z0-9][a-z0-9_-]*$')
 _VERSION_RE = re.compile(r'^\d+\.\d+(\.\d+)?([.-][a-zA-Z0-9.+]+)?$')
+_OPT_LEVEL_STRINGS = {"s", "z"}
+_LTO_STRINGS = {"off", "thin", "fat"}
+_STRIP_STRINGS = {"none", "debuginfo", "symbols"}
+
+
+def load_manifest_data(path: Union[str, Path]) -> Dict[str, Any]:
+    """Load and parse manifest TOML from *path*."""
+    manifest_path = Path(path)
+    with open(manifest_path, "rb") as f:
+        return tomllib.load(f)
 
 
 # ---------------------------------------------------------------------------
@@ -163,7 +182,11 @@ _VERSION_RE = re.compile(r'^\d+\.\d+(\.\d+)?([.-][a-zA-Z0-9.+]+)?$')
 class Manifest:
     """Parsed representation of a nexuslang.toml manifest file."""
 
-    def __init__(self, path: Optional[Union[str, Path]] = None):
+    def __init__(
+        self,
+        path: Optional[Union[str, Path]] = None,
+        data: Optional[Dict[str, Any]] = None,
+    ):
         self._path: Optional[Path] = Path(path) if path is not None else None
         self.package: Optional[PackageMetadata] = None
         self.dependencies: Dict[str, Dependency] = {}
@@ -176,8 +199,19 @@ class Manifest:
         self.workspace: Optional[WorkspaceConfig] = None
         self.target_specific_deps: Dict[str, Dict[str, Dependency]] = {}
 
-        if self._path is not None:
+        if data is not None:
+            self._parse(data)
+        elif self._path is not None:
             self._load(self._path)
+
+    @classmethod
+    def from_data(
+        cls,
+        data: Dict[str, Any],
+        path: Optional[Union[str, Path]] = None,
+    ) -> "Manifest":
+        """Construct a manifest from already-loaded TOML data."""
+        return cls(path=path, data=data)
 
     # ------------------------------------------------------------------
     # Loading
@@ -187,12 +221,13 @@ class Manifest:
         if not path.exists():
             raise FileNotFoundError(f"Could not find nlpl.toml at {path}")
 
-        with open(path, "rb") as f:
-            data = tomllib.load(f)
+        data = load_manifest_data(path)
 
         self._parse(data)
 
     def _parse(self, data: Dict[str, Any]) -> None:
+        data = self._ensure_dict(data, "root")
+
         if "package" in data:
             self.package = self._parse_package(data["package"])
 
@@ -206,9 +241,26 @@ class Manifest:
         if "lib" in data:
             self.library_target = self._parse_library(data["lib"])
 
-        self._parse_profiles(data.get("profile", {}))
+        profile_data = data.get("profile", {})
+        if profile_data is not None and not isinstance(profile_data, dict):
+            raise ValueError("Section 'profile' must be a table")
+        self._parse_profiles(profile_data or {})
 
-        self.features = {k: v for k, v in data.get("features", {}).items()}
+        features_data = data.get("features", {})
+        if features_data is not None and not isinstance(features_data, dict):
+            raise ValueError("Section 'features' must be a table")
+
+        self.features = {}
+        for feature_name, deps in (features_data or {}).items():
+            if not isinstance(feature_name, str):
+                raise ValueError("Feature names must be strings")
+            if not isinstance(deps, list) or not all(
+                isinstance(dep, str) for dep in deps
+            ):
+                raise ValueError(
+                    f"Invalid feature '{feature_name}': expected a list of string entries"
+                )
+            self.features[feature_name] = list(deps)
 
         if "workspace" in data:
             self.workspace = self._parse_workspace(data["workspace"])
@@ -218,7 +270,8 @@ class Manifest:
             for target_spec, target_cfg in target_section.items():
                 if isinstance(target_cfg, dict):
                     deps = target_cfg.get("dependencies", {})
-                    self.target_specific_deps[target_spec] = self._parse_deps(deps)
+                    if isinstance(deps, dict):
+                        self.target_specific_deps[target_spec] = self._parse_deps(deps)
 
         if self.package is None and self.workspace is None:
             raise ValueError("Manifest must contain either [package] or [workspace]")
@@ -227,7 +280,65 @@ class Manifest:
     # Section parsers
     # ------------------------------------------------------------------
 
+    def _ensure_dict(self, value: Any, section: str) -> Dict[str, Any]:
+        if not isinstance(value, dict):
+            raise ValueError(f"Section '{section}' must be a table")
+        return value
+
+    def _validate_opt_level(self, value: Any, profile_name: str) -> Union[int, str]:
+        if isinstance(value, bool):
+            raise ValueError(
+                f"Invalid profile '{profile_name}' field 'opt-level': expected integer in range 0..3 or one of {sorted(_OPT_LEVEL_STRINGS)}"
+            )
+        if isinstance(value, int):
+            if 0 <= value <= 3:
+                return value
+            raise ValueError(
+                f"Invalid profile '{profile_name}' field 'opt-level': expected integer in range 0..3 or one of {sorted(_OPT_LEVEL_STRINGS)}"
+            )
+        if isinstance(value, str) and value in _OPT_LEVEL_STRINGS:
+            return value
+        raise ValueError(
+            f"Invalid profile '{profile_name}' field 'opt-level': expected integer in range 0..3 or one of {sorted(_OPT_LEVEL_STRINGS)}"
+        )
+
+    def _validate_bool_field(self, field_name: str, value: Any, profile_name: str) -> bool:
+        if isinstance(value, bool):
+            return value
+        raise ValueError(
+            f"Invalid profile '{profile_name}' field '{field_name}': expected boolean"
+        )
+
+    def _validate_lto(self, value: Any, profile_name: str) -> Union[bool, str]:
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, str) and value in _LTO_STRINGS:
+            return value
+        raise ValueError(
+            f"Invalid profile '{profile_name}' field 'lto': expected boolean or one of {sorted(_LTO_STRINGS)}"
+        )
+
+    def _validate_strip(self, value: Any, profile_name: str) -> Union[bool, str]:
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, str) and value in _STRIP_STRINGS:
+            return value
+        raise ValueError(
+            f"Invalid profile '{profile_name}' field 'strip': expected boolean or one of {sorted(_STRIP_STRINGS)}"
+        )
+
+    def _validate_codegen_units(self, value: Any, profile_name: str) -> Optional[int]:
+        if value is None:
+            return None
+        if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+            raise ValueError(
+                f"Invalid profile '{profile_name}' field 'codegen-units': expected a positive integer"
+            )
+        return value
+
     def _parse_package(self, pkg: Dict[str, Any]) -> PackageMetadata:
+        pkg = self._ensure_dict(pkg, "package")
+
         name = pkg.get("name")
         if name is None:
             raise ValueError("Missing required field 'name' in [package]")
@@ -261,6 +372,8 @@ class Manifest:
         )
 
     def _parse_deps(self, deps: Dict[str, Any]) -> Dict[str, Dependency]:
+        deps = self._ensure_dict(deps, "dependency")
+
         result: Dict[str, Dependency] = {}
         for name, spec in deps.items():
             if isinstance(spec, str):
@@ -283,6 +396,9 @@ class Manifest:
         return result
 
     def _parse_binary(self, data: Dict[str, Any]) -> BinaryTarget:
+        data = self._ensure_dict(data, "bin")
+        if "name" not in data or not isinstance(data["name"], str):
+            raise ValueError("Each [[bin]] entry must include string field 'name'")
         return BinaryTarget(
             name=data["name"],
             path=data.get("path", f"src/bin/{data['name']}.nxl"),
@@ -290,7 +406,12 @@ class Manifest:
         )
 
     def _parse_library(self, data: Dict[str, Any]) -> LibraryTarget:
+        data = self._ensure_dict(data, "lib")
         raw_crate_types = data.get("crate-type", ["lib"])
+        if not isinstance(raw_crate_types, list) or not all(
+            isinstance(ct, str) for ct in raw_crate_types
+        ):
+            raise ValueError("Field 'lib.crate-type' must be a list of strings")
         crate_types = [CrateType(ct) for ct in raw_crate_types]
         return LibraryTarget(
             name=data.get("name", ""),
@@ -306,7 +427,15 @@ class Manifest:
 
         # Apply user-defined profiles (may override or add new ones)
         for name, raw in profiles_data.items():
+            if not isinstance(raw, dict):
+                raise ValueError(f"Profile 'profile.{name}' must be a table")
+
             inherits = raw.get("inherits")
+            if inherits is not None and not isinstance(inherits, str):
+                raise ValueError(
+                    f"Invalid profile '{name}' field 'inherits': expected string"
+                )
+
             base: Dict[str, Any] = {}
 
             if inherits and inherits in self.profiles:
@@ -315,34 +444,68 @@ class Manifest:
                 base = {
                     "opt_level": parent.opt_level,
                     "debug": parent.debug,
+                    "debug_assertions": parent.debug_assertions,
                     "incremental": parent.incremental,
                     "lto": parent.lto,
                     "strip": parent.strip,
                     "panic": parent.panic,
                     "codegen_units": parent.codegen_units,
                 }
+            elif inherits:
+                raise ValueError(
+                    f"Invalid profile '{name}' field 'inherits': unknown profile '{inherits}'"
+                )
             elif name in _DEFAULT_PROFILES:
                 base = dict(_DEFAULT_PROFILES[name])
 
             # Map TOML keys to dataclass field names
-            opt_level = raw.get("opt-level", base.get("opt_level", 0))
-            debug = raw.get("debug", base.get("debug", False))
-            incremental = raw.get("incremental", base.get("incremental", False))
-            lto = raw.get("lto", base.get("lto", False))
-            strip = raw.get("strip", base.get("strip", False))
+            opt_level = self._validate_opt_level(
+                raw.get("opt-level", base.get("opt_level", 0)),
+                name,
+            )
+            debug = self._validate_bool_field(
+                "debug",
+                raw.get("debug", base.get("debug", False)),
+                name,
+            )
+            debug_assertions = self._validate_bool_field(
+                "debug-assertions",
+                raw.get(
+                "debug-assertions",
+                base.get("debug_assertions", debug),
+                ),
+                name,
+            )
+            incremental = self._validate_bool_field(
+                "incremental",
+                raw.get("incremental", base.get("incremental", False)),
+                name,
+            )
+            lto = self._validate_lto(raw.get("lto", base.get("lto", False)), name)
+            strip = self._validate_strip(raw.get("strip", base.get("strip", False)), name)
             panic_raw = raw.get("panic", base.get("panic", PanicStrategy.UNWIND))
-            if isinstance(panic_raw, str) and panic_raw not in (p.value for p in PanicStrategy):
-                panic_val = PanicStrategy.UNWIND
-            elif isinstance(panic_raw, str):
+            if isinstance(panic_raw, str):
+                if panic_raw not in (p.value for p in PanicStrategy):
+                    raise ValueError(
+                        f"Invalid profile '{name}' field 'panic': expected one of {[p.value for p in PanicStrategy]}"
+                    )
                 panic_val = PanicStrategy(panic_raw)
-            else:
+            elif isinstance(panic_raw, PanicStrategy):
                 panic_val = panic_raw
-            codegen_units = raw.get("codegen-units", base.get("codegen_units"))
+            else:
+                raise ValueError(
+                    f"Invalid profile '{name}' field 'panic': expected string"
+                )
+            codegen_units = self._validate_codegen_units(
+                raw.get("codegen-units", base.get("codegen_units")),
+                name,
+            )
 
             self.profiles[name] = BuildProfile(
                 name=name,
                 opt_level=opt_level,
                 debug=debug,
+                debug_assertions=debug_assertions,
                 incremental=incremental,
                 lto=lto,
                 strip=strip,
@@ -352,10 +515,26 @@ class Manifest:
             )
 
     def _parse_workspace(self, data: Dict[str, Any]) -> WorkspaceConfig:
+        data = self._ensure_dict(data, "workspace")
+        members = data.get("members", [])
+        exclude = data.get("exclude", [])
+        resolver = data.get("resolver")
+
+        if not isinstance(members, list) or not all(
+            isinstance(member, str) for member in members
+        ):
+            raise ValueError("Field 'workspace.members' must be a list of strings")
+        if not isinstance(exclude, list) or not all(
+            isinstance(item, str) for item in exclude
+        ):
+            raise ValueError("Field 'workspace.exclude' must be a list of strings")
+        if resolver is not None and not isinstance(resolver, str):
+            raise ValueError("Field 'workspace.resolver' must be a string")
+
         return WorkspaceConfig(
-            members=list(data.get("members", [])),
-            exclude=list(data.get("exclude", [])),
-            resolver=data.get("resolver"),
+            members=list(members),
+            exclude=list(exclude),
+            resolver=resolver,
         )
 
     # ------------------------------------------------------------------
@@ -410,6 +589,7 @@ def load_manifest(path: Optional[Union[str, Path]] = None) -> Manifest:
 __all__ = [
     "Manifest",
     "load_manifest",
+    "load_manifest_data",
     "Dependency",
     "BuildProfile",
     "PanicStrategy",

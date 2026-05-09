@@ -1,8 +1,8 @@
-import { Elysia } from "elysia";
 import { cors } from "@elysiajs/cors";
 import { env } from "bun";
-import { registerRoutes } from "./api/routes";
+import { Elysia } from "elysia";
 import { registerFederationRoutes } from "./api/federation";
+import { registerRoutes } from "./api/routes";
 import { ForgeDB } from "./storage/db";
 import { RepositoryManager } from "./storage/repository";
 
@@ -11,14 +11,16 @@ const storagePath = env.FORGE_STORAGE_PATH || "./data/repos";
 const db = new ForgeDB(dbPath);
 const repoManager = new RepositoryManager(storagePath, db);
 
-const app = new Elysia()
-  .use(cors())
-  .get("/health", () => ({ status: "ok", timestamp: new Date().toISOString() }));
+const app = new Elysia().use(cors()).get("/health", () => ({
+  service: "nexus-forge",
+  status: "ok",
+  timestamp: new Date().toISOString(),
+}));
 
 registerRoutes(app, repoManager);
 registerFederationRoutes(app);
 
-const port = parseInt(env.PORT || "8090", 10);
+const port = Number.parseInt(env.PORT || "8090", 10);
 const host = env.HOST || "0.0.0.0";
 const cloudUrl = (env.NEXUS_CLOUD_URL || "").trim();
 const cloudApiKey = (env.NEXUS_CLOUD_API_KEY || "").trim();

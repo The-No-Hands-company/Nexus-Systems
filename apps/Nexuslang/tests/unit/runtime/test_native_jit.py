@@ -14,6 +14,7 @@ those tools are absent.
 
 from __future__ import annotations
 
+import ctypes
 import io
 import sys
 import threading
@@ -324,18 +325,77 @@ class TestNativeFunctionJITCompilation:
         assert elapsed_ms < 5.0, f"Cache hit took {elapsed_ms:.2f}ms (expected < 5ms)"
 
     @skip_no_llvm
-    def test_unsupported_type_returns_none(self):
-        """Functions with Float parameters return None (not yet supported in ctypes wrapper)."""
+    def test_float_wrapper_supports_scalar_signatures(self):
+        """Float parameters and returns should map to ctypes double."""
         from nexuslang.parser.ast import FunctionDefinition, Parameter, ReturnStatement, Identifier
-        # Hand-build a func def with Float typing to test unsupported-type path
+
+        class _NativeFn:
+            def __call__(self, value):
+                return value
+
         param = Parameter("x")
         param.type_annotation = "Float"
         fd = FunctionDefinition("float_fn", [param], [ReturnStatement(Identifier("x"))])
         fd.return_type = "Float"
+        native = _NativeFn()
         jit = NativeFunctionJIT(_FakeInterpreter(), opt_level=3)
-        # _make_wrapper should return None for Float params
-        result = jit._make_wrapper(fd, object())
-        assert result is None
+        wrapper = jit._make_wrapper(fd, native)
+        assert wrapper is not None
+        assert native.argtypes == [ctypes.c_double]
+        assert native.restype is ctypes.c_double
+        assert wrapper(3.25) == pytest.approx(3.25)
+
+    @skip_no_llvm
+    def test_compile_float_identity_function(self):
+        """A simple Float -> Float function should compile to a native callable."""
+        fd = _parse_function("""
+            function float_identity with x as Float returns Float
+                return x
+            end
+        """)
+        jit = NativeFunctionJIT(_FakeInterpreter(fd), opt_level=3)
+        fn = _silent(jit.compile, "float_identity", fd)
+        assert fn is not None
+        assert fn(7.5) == pytest.approx(7.5)
+
+    @skip_no_llvm
+    def test_boolean_wrapper_supports_scalar_signatures(self):
+        """Boolean parameters and returns should map to ctypes c_bool, not c_int64."""
+        from nexuslang.parser.ast import FunctionDefinition, Parameter, ReturnStatement, Identifier
+
+        class _NativeFn:
+            def __call__(self, value):
+                return value
+
+        param = Parameter("flag")
+        param.type_annotation = "Boolean"
+        fd = FunctionDefinition("bool_fn", [param], [ReturnStatement(Identifier("flag"))])
+        fd.return_type = "Boolean"
+        native = _NativeFn()
+        jit = NativeFunctionJIT(_FakeInterpreter(), opt_level=3)
+        wrapper = jit._make_wrapper(fd, native)
+        assert wrapper is not None
+        assert native.argtypes == [ctypes.c_bool]
+        assert native.restype is ctypes.c_bool
+        assert wrapper(True) is True
+        assert wrapper(False) is False
+
+    @skip_no_llvm
+    def test_compile_boolean_not_function(self):
+        """A Boolean -> Boolean function that negates its input should compile natively."""
+        fd = _parse_function("""
+            function bool_not with flag as Boolean returns Boolean
+                if flag
+                    return false
+                end
+                return true
+            end
+        """)
+        jit = NativeFunctionJIT(_FakeInterpreter(fd), opt_level=3)
+        fn = _silent(jit.compile, "bool_not", fd)
+        assert fn is not None
+        assert fn(False) is True
+        assert fn(True) is False
 
     @skip_no_llvm
     def test_concurrent_compilation_returns_correct_results(self):

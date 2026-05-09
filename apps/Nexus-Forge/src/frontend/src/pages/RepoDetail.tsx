@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useParams, Link } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 
 interface RepoDetailData {
   name?: string;
@@ -8,11 +8,16 @@ interface RepoDetailData {
   cloneUrl?: string;
 }
 
+interface ActivityItem {
+  id?: string;
+  action?: string;
+  created_at?: string;
+}
+
 export default function RepoDetail() {
   const params = useParams();
   const [repo, setRepo] = useState<RepoDetailData | null>(null);
-  const [activity, setActivity] = useState<any[]>([]);
-
+  const [activity, setActivity] = useState<ActivityItem[]>([]);
 
   useEffect(() => {
     async function load() {
@@ -47,8 +52,12 @@ export default function RepoDetail() {
           <p>No activity yet.</p>
         ) : (
           <ul>
-            {activity.map((item, index) => (
-              <li key={index}>{item.action || "activity event"}</li>
+            {activity.map((item) => (
+              <li
+                key={`${item.id ?? item.action ?? "activity-event"}-${item.created_at ?? "unknown"}`}
+              >
+                {item.action || "activity event"}
+              </li>
             ))}
           </ul>
         )}

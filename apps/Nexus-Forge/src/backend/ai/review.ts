@@ -8,7 +8,11 @@ export interface ReviewResult {
   suggestions: string[];
 }
 
-export async function reviewPullRequest(repo: string, prId: string, _diff: string): Promise<ReviewResult> {
+export async function reviewPullRequest(
+  repo: string,
+  prId: string,
+  _diff: string,
+): Promise<ReviewResult> {
   // TODO: Integrate with Nexus AI service.
   return {
     ok: true,

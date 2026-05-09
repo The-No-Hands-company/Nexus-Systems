@@ -1,0 +1,288 @@
+#!/usr/bin/env nexuslang
+
+# Low-Level Systems Programming Showcase
+# Demonstrates NexusLang's systems programming capabilities:
+# - Direct memory operations and pointers
+# - Bitwise operations for flags and packed data
+# - Low-level collections with custom memory layout
+# - Performance-sensitive iteration patterns
+# - Buffer management and safety contracts
+#
+# Scenario: Implement a simple memory allocator with free list tracking,
+# bit-flag status tracking, and performance reporting.
+
+# Bitwise flag definitions
+set FLAG_ALLOCATED to 1
+set FLAG_PROTECTED to 2
+set FLAG_PINNED to 4
+set FLAG_DIRTY to 8
+
+# Memory block descriptor structure
+struct MemoryBlock
+  address as Integer
+  size as Integer
+  flags as Integer
+  next_block_address as Integer
+end
+
+# Statistics tracking
+struct AllocationStats
+  total_allocated as Integer
+  total_freed as Integer
+  block_count as Integer
+  protected_count as Integer
+end
+
+# Initialize a memory block with specific flags
+function init_memory_block with addr as Integer and size as Integer and initial_flags as Integer returns MemoryBlock
+  require addr is greater than or equal to 0 with "Invalid address"
+  require size is greater than 0 with "Size must be positive"
+  
+  set block to MemoryBlock called with
+    address: addr
+    size: size
+    flags: initial_flags
+    next_block_address: 0
+  end
+  
+  return block
+end
+
+# Check if a flag is set using bitwise AND
+function has_flag with flags as Integer and flag_mask as Integer returns Boolean
+  return (flags bitwise_and flag_mask) equals flag_mask
+end
+
+# Set a flag using bitwise OR
+function set_flag with flags as Integer and flag_mask as Integer returns Integer
+  return flags bitwise_or flag_mask
+end
+
+# Clear a flag using bitwise AND with complement
+function clear_flag with flags as Integer and flag_mask as Integer returns Integer
+  return flags bitwise_and (bitwise_not flag_mask)
+end
+
+# Toggle a flag using bitwise XOR
+function toggle_flag with flags as Integer and flag_mask as Integer returns Integer
+  return flags bitwise_xor flag_mask
+end
+
+# Simulate allocation from a free list
+function allocate_block with available_blocks as List of MemoryBlock and requested_size as Integer returns MemoryBlock optional
+  for each block in available_blocks
+    if (has_flag with block.flags and FLAG_ALLOCATED) is false
+      if block.size is greater than or equal to requested_size
+        # Mark as allocated and dirty
+        set new_flags to set_flag with block.flags and FLAG_ALLOCATED
+        set new_flags to set_flag with new_flags and FLAG_DIRTY
+        
+        set new_block to MemoryBlock called with
+          address: block.address
+          size: requested_size
+          flags: new_flags
+          next_block_address: block.next_block_address
+        end
+        
+        return new_block as MemoryBlock optional
+      end
+    end
+  end
+  
+  return nothing
+end
+
+# Simulate deallocation
+function free_block with block as MemoryBlock returns MemoryBlock
+  ensure (has_flag with block.flags and FLAG_PROTECTED) is false with "Cannot free protected memory"
+  
+  # Clear allocated and dirty flags
+  set new_flags to clear_flag with block.flags and FLAG_ALLOCATED
+  set new_flags to clear_flag with new_flags and FLAG_DIRTY
+  
+  set freed_block to MemoryBlock called with
+    address: block.address
+    size: block.size
+    flags: new_flags
+    next_block_address: block.next_block_address
+  end
+  
+  return freed_block
+end
+
+# Protect a block from deallocation
+function protect_block with block as MemoryBlock returns MemoryBlock
+  set new_flags to set_flag with block.flags and FLAG_PROTECTED
+  
+  set protected_block to MemoryBlock called with
+    address: block.address
+    size: block.size
+    flags: new_flags
+    next_block_address: block.next_block_address
+  end
+  
+  return protected_block
+end
+
+# Generate statistics from block list
+function compute_stats with blocks as List of MemoryBlock returns AllocationStats
+  set allocated_total to 0
+  set freed_total to 0
+  set protected_total to 0
+  
+  for each block in blocks
+    if has_flag with block.flags and FLAG_ALLOCATED
+      set allocated_total to allocated_total plus block.size
+    else
+      set freed_total to freed_total plus block.size
+    end
+    
+    if has_flag with block.flags and FLAG_PROTECTED
+      set protected_total to protected_total plus 1
+    end
+  end
+  
+  set stats to AllocationStats called with
+    total_allocated: allocated_total
+    total_freed: freed_total
+    block_count: blocks.length
+    protected_count: protected_total
+  end
+  
+  return stats
+end
+
+# Simulate bit-packing of memory metadata
+function pack_metadata with block_idx as Integer and size_code as Integer and flags as Integer returns Integer
+  # Pack: bits 0-7=flags, bits 8-15=size_code, bits 16-23=block_idx
+  set result to flags bitwise_or (size_code times 256)
+  set result to result bitwise_or (block_idx times 65536)
+  return result
+end
+
+# Extract flags from packed metadata
+function extract_flags_from_metadata with metadata as Integer returns Integer
+  return metadata bitwise_and 255
+end
+
+# Extract size code from packed metadata
+function extract_size_from_metadata with metadata as Integer returns Integer
+  set temp to metadata bitwise_and 65280
+  return temp divided by 256
+end
+
+# Extract block index from packed metadata
+function extract_block_idx_from_metadata with metadata as Integer returns Integer
+  set temp to metadata bitwise_and 16711680
+  return temp divided by 65536
+end
+
+# Format and print detailed report
+function print_detailed_report with blocks as List of MemoryBlock and stats as AllocationStats
+  print text "=== Memory Management Report ==="
+  print text ""
+  
+  print text "Aggregate Statistics:"
+  print text ("  Total Allocated: " concatenated with (stats.total_allocated as String) concatenated with " bytes")
+  print text ("  Total Free: " concatenated with (stats.total_freed as String) concatenated with " bytes")
+  print text ("  Block Count: " concatenated with (stats.block_count as String))
+  print text ("  Protected Blocks: " concatenated with (stats.protected_count as String))
+  print text ""
+  
+  # Categorize blocks by status
+  set allocated_blocks to (b for each b in blocks where (has_flag with b.flags and FLAG_ALLOCATED)) as List of MemoryBlock
+  
+  set free_blocks to (b for each b in blocks where (has_flag with b.flags and FLAG_ALLOCATED) is false) as List of MemoryBlock
+  
+  set protected_blocks to (b for each b in blocks where (has_flag with b.flags and FLAG_PROTECTED)) as List of MemoryBlock
+  
+  print text "Block Breakdown:"
+  print text ("  Allocated: " concatenated with (allocated_blocks.length as String))
+  print text ("  Free: " concatenated with (free_blocks.length as String))
+  print text ("  Protected: " concatenated with (protected_blocks.length as String))
+  print text ""
+  
+  print text "Memory Layout (first 10 blocks):"
+  set display_count to 0
+  for each block in blocks
+    if display_count is less than 10
+      set alloc_status to match (has_flag with block.flags and FLAG_ALLOCATED) with
+        case true as "ALLOC"
+        case false as "FREE"
+      end
+      
+      set prot_status to match (has_flag with block.flags and FLAG_PROTECTED) with
+        case true as "[PROTECTED]"
+        case false as ""
+      end
+      
+      print text ("  Block[" concatenated with (block.address as String) concatenated with "]: " concatenated with (block.size as String) concatenated with " bytes, " concatenated with alloc_status concatenated with " " concatenated with prot_status)
+      
+      set display_count to display_count plus 1
+    end
+  end
+end
+
+# Main function: orchestrate memory management scenario
+function main returns Integer
+  print text "Starting Systems Programming Showcase (Memory Management)"
+  print text ""
+  
+  # Create initial free list of memory blocks
+  set blocks to []
+  
+  append (init_memory_block with 1000 and 256 and 0) to blocks
+  append (init_memory_block with 1256 and 512 and 0) to blocks
+  append (init_memory_block with 1768 and 128 and 0) to blocks
+  append (init_memory_block with 1896 and 1024 and 0) to blocks
+  
+  print text "Created free list with 4 blocks"
+  print text ""
+  
+  # Allocate some blocks
+  set block1 to allocate_block with blocks and 256
+  print text ("Allocated 256 bytes: " concatenated with (
+    match block1 with
+      case nothing as "FAILED"
+      case b as ("SUCCESS at " concatenated with (b.address as String))
+    end
+  ))
+  
+  set block2 to allocate_block with blocks and 512
+  print text ("Allocated 512 bytes: " concatenated with (
+    match block2 with
+      case nothing as "FAILED"
+      case b as ("SUCCESS at " concatenated with (b.address as String))
+    end
+  ))
+  
+  # Test bitwise operations on flags
+  set test_flags to 0
+  set test_flags to set_flag with test_flags and FLAG_ALLOCATED
+  set test_flags to set_flag with test_flags and FLAG_DIRTY
+  
+  print text ""
+  print text "Bitwise Flag Tests:"
+  print text ("  Allocated flag set: " concatenated with ((has_flag with test_flags and FLAG_ALLOCATED) as String))
+  print text ("  Protected flag set: " concatenated with ((has_flag with test_flags and FLAG_PROTECTED) as String))
+  print text ("  Dirty flag set: " concatenated with ((has_flag with test_flags and FLAG_DIRTY) as String))
+  print text ""
+  
+  # Test metadata packing
+  set packed to pack_metadata with 5 and 3 and 12
+  print text "Metadata Packing Test:"
+  print text ("  Packed value: " concatenated with (packed as String))
+  print text ("  Extracted flags: " concatenated with ((extract_flags_from_metadata with packed) as String))
+  print text ("  Extracted size code: " concatenated with ((extract_size_from_metadata with packed) as String))
+  print text ("  Extracted block index: " concatenated with ((extract_block_idx_from_metadata with packed) as String))
+  print text ""
+  
+  # Compute and display statistics
+  set stats to compute_stats with blocks
+  print_detailed_report with blocks and stats
+  
+  print text ""
+  print text "Systems Programming Showcase Complete"
+  
+  return 0
+end

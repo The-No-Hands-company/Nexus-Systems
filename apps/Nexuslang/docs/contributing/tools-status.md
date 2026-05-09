@@ -1,6 +1,6 @@
 # NexusLang Development Tools Implementation Status
 
-**Date:** May 2, 2026
+**Date:** May 7, 2026
 **Goal:** Transform NexusLang from "90% debugging" to "90% development"
 
 ---
@@ -65,7 +65,7 @@ Remaining high-value work is now less about "feature missing" and more about dee
 
 ---
 
-### 2. Static Analyzer Infrastructure (In Progress)
+### 2. Static Analyzer Infrastructure (Current State)
 **Location:** `src/nexuslang/tooling/analyzer/`
 
 **Completed:**
@@ -86,11 +86,22 @@ Remaining high-value work is now less about "feature missing" and more about dee
  - Abstract `BaseChecker` interface
  - AST walking utilities
  - Source line retrieval
+ - Context-aware shared traversal now supports both `ASTNode` subclasses and legacy parser nodes that expose children via `__dict__`
 
-**In Progress:**
-- Individual checkers (memory, null, resources, init, types, dead_code, style)
+**Completed checkers:**
+- memory safety
+- null safety
+- resource leak
+- initialization
+- type safety
+- dead code
+- data-flow
+- control-flow
+- security
+- performance
+- style
 
-**Next:** Implement checkers + CLI tool
+**Current focus:** semantic depth and diagnostics parity across analyzer/LSP/compiler paths
 
 ---
 
@@ -112,7 +123,7 @@ Remaining high-value work is now less about "feature missing" and more about dee
 
 ### Tools Being Built (Priority Order)
 
-#### Priority 1: nlpllint (Static Analyzer) IN PROGRESS
+#### Priority 1: nxllint (Static Analyzer) IN PROGRESS
 **Goal:** Catch 80% of bugs before runtime
 
 **Status:**
@@ -124,7 +135,7 @@ Remaining high-value work is now less about "feature missing" and more about dee
  - [ ] Null safety (integrate existing checker)
  - [ ] Resource leaks (files, memory, locks)
  - [ ] Initialization (uninitialized variables)
- - [ ] Type safety (type mismatches)
+ - [x] Type safety (type mismatches) - Completed 2026-05-05: re-enabled concrete TypeSafetyChecker diagnostics (T001/T002/T007) and added checker/CLI regression tests.
  - [ ] Dead code (unreachable statements)
  - [ ] Style (code conventions)
 - [ ] CLI tool (`src/nexuslang/cli/nlpllint.py`)
@@ -178,13 +189,18 @@ Formatted output with suggestions
 **Goal:** Industry-standard bug detection
 
 **Components:**
-- [ ] LLVM sanitizer flags in build system
-- [ ] AddressSanitizer (memory errors)
-- [ ] ThreadSanitizer (race conditions)
-- [ ] MemorySanitizer (uninitialized reads)
-- [ ] UndefinedBehaviorSanitizer (UB detection)
-- [ ] Runtime wrapper for readable output
-- [ ] `nexuslang build --sanitize=address` interface
+- [x] LLVM sanitizer flags in build system
+- [x] AddressSanitizer (memory errors)
+- [x] ThreadSanitizer (race conditions)
+- [x] MemorySanitizer (uninitialized reads)
+- [x] UndefinedBehaviorSanitizer (UB detection)
+- [x] Runtime wrapper for readable output
+- [x] `nexuslang build --sanitize=address` interface
+
+**Completed:** 2026-05-05
+- Added sanitizer CLI wiring for build/run (`--sanitize address|thread|memory|undefined|all`)
+- Added runtime sanitizer parsing and structured reporting (`sanitizer-report.json`)
+- Added combined runtime analysis artifact integrating profiling + sanitizer findings
 
 **Estimated effort:** 1 week
 
@@ -226,7 +242,10 @@ Formatted output with suggestions
 
 ## Immediate Roadmap (Next 2 Weeks)
 
-### Week 1 (Jan 2-9, 2026)
+Note: The week-by-week plan below is a historical Jan 2026 implementation log.
+Current priorities should be taken from this May 2026 status header and active tracker docs.
+
+### Historical: Week 1 (Jan 2-9, 2026)
 **Focus:** Complete nlpllint foundation
 
 **Tasks:**
@@ -242,7 +261,7 @@ Formatted output with suggestions
 
 ---
 
-### Week 2 (Jan 10-16, 2026)
+### Historical: Week 2 (Jan 10-16, 2026)
 **Focus:** Complete nlpllint + debug mode
 
 **Tasks:**
@@ -391,11 +410,11 @@ analyzer = StaticAnalyzer(
 ## Success Criteria
 
 ### nlpllint v1.0
-- [ ] Detects 10+ types of memory bugs
+- [x] Detects 10+ types of memory bugs
 - [ ] Detects null pointer dereferences
-- [ ] Detects resource leaks
+- [x] Detects resource leaks
 - [ ] Detects uninitialized variables
-- [ ] Detects type mismatches
+- [x] Detects type mismatches
 - [ ] Runs in <100ms per file
 - [ ] Provides auto-fixes for common issues
 - [ ] Has <5% false positives
@@ -413,13 +432,13 @@ analyzer = StaticAnalyzer(
 - [ ] <10% runtime overhead
 
 ### Sanitizer Integration
-- [ ] AddressSanitizer works
-- [ ] ThreadSanitizer works
-- [ ] MemorySanitizer works
-- [ ] UBSanitizer works
-- [ ] Readable output formatting
-- [ ] Integration with build system
-- [ ] Documentation
+- [x] AddressSanitizer works
+- [x] ThreadSanitizer works
+- [x] MemorySanitizer works
+- [x] UBSanitizer works
+- [x] Readable output formatting
+- [x] Integration with build system
+- [x] Documentation
 
 ---
 

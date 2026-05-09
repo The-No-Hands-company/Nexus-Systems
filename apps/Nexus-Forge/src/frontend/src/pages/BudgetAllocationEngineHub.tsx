@@ -1,7 +1,10 @@
 import { useEffect, useState } from "react";
 
 export default function BudgetAllocationEngineHub() {
-  const [health, setHealth] = useState<{ utilization: number; trend: string }>({ utilization: 0, trend: "" });
+  const [health, setHealth] = useState<{ utilization: number; trend: string }>({
+    utilization: 0,
+    trend: "",
+  });
 
   useEffect(() => {
     async function load() {
@@ -31,7 +34,9 @@ export default function BudgetAllocationEngineHub() {
         </article>
         <article className="repo-card">
           <h3>Health</h3>
-          <p>Utilization: {health.utilization}%, Trend: {health.trend}</p>
+          <p>
+            Utilization: {health.utilization}%, Trend: {health.trend}
+          </p>
         </article>
       </div>
     </section>

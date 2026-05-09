@@ -233,6 +233,9 @@ class TestWindowFunctionsUnavailable(unittest.TestCase):
     def test_window_hide_false(self):
         self.assertFalse(_gui_mod.window_hide(1))
 
+    def test_window_focus_false(self):
+        self.assertFalse(_gui_mod.window_focus(1))
+
     def test_window_destroy_false(self):
         self.assertFalse(_gui_mod.window_destroy(1))
 
@@ -265,6 +268,9 @@ class TestWindowFunctionsUnavailable(unittest.TestCase):
 
     def test_window_maximize_false(self):
         self.assertFalse(_gui_mod.window_maximize(1))
+
+    def test_window_set_topmost_false(self):
+        self.assertFalse(_gui_mod.window_set_topmost(1, True))
 
     def test_window_update_false(self):
         self.assertFalse(_gui_mod.window_update(1))
@@ -338,6 +344,19 @@ class TestWindowFunctionsAvailable(unittest.TestCase):
         win_id = _gui_mod.window_create("T", 100, 100)
         _gui_mod.window_set_title(win_id, "New Title")
         _gui_mod._windows[win_id].title.assert_called_with("New Title")
+
+    def test_window_focus_calls_lift_and_focus(self):
+        win_id = _gui_mod.window_create("T", 100, 100)
+        result = _gui_mod.window_focus(win_id)
+        self.assertTrue(result)
+        _gui_mod._windows[win_id].lift.assert_called_once()
+        _gui_mod._windows[win_id].focus_force.assert_called_once()
+
+    def test_window_set_topmost_calls_attributes(self):
+        win_id = _gui_mod.window_create("T", 100, 100)
+        result = _gui_mod.window_set_topmost(win_id, True)
+        self.assertTrue(result)
+        _gui_mod._windows[win_id].attributes.assert_called_with("-topmost", True)
 
     def test_window_set_size_calls_geometry(self):
         win_id = _gui_mod.window_create("T", 100, 100)
@@ -1066,11 +1085,13 @@ class TestRegistration(unittest.TestCase):
 
         required = {
             "window_create", "window_show", "window_hide", "window_destroy",
+            "window_focus",
             "window_is_open", "window_set_title", "window_set_size",
             "window_get_size", "window_set_position", "window_get_position",
             "window_set_background", "window_fullscreen", "window_minimize",
             "window_maximize", "window_update", "window_mainloop",
             "window_screenshot", "window_set_resizable", "window_set_alpha",
+            "window_set_topmost",
             "window_get_screen_size", "gui_quit",
             "canvas_create", "canvas_clear", "canvas_update",
             "canvas_draw_line", "canvas_draw_rect", "canvas_draw_oval",

@@ -126,8 +126,8 @@ end
         or "((intptr_t)(opt)) != 0" in c_code
     )
     assert (
-        "NLPL_Optional_get_value" in c_code
-        or "= (intptr_t)(opt);" in c_code
+        "NLPL_Optional_get_value_ptr" in c_code
+        or "= (void*)(opt);" in c_code
     )
     assert "__match_bind_payload_" in c_code
 
@@ -159,12 +159,12 @@ end
         or "((intptr_t)(res)) >= 0" in c_code
     )
     assert (
-        "NLPL_Result_get_value" in c_code
-        or "= (intptr_t)(res);" in c_code
+        "NLPL_Result_get_value_ptr" in c_code
+        or "= (void*)(res);" in c_code
     )
     assert (
-        "NLPL_Result_get_error" in c_code
-        or '"error"' in c_code
+        "NLPL_Result_get_error_ptr" in c_code
+        or "= (void*)(res);" in c_code
     )
     assert "__match_bind_value_" in c_code
     assert "__match_bind_message_" in c_code
@@ -194,9 +194,9 @@ end
 
     assert "((intptr_t)(opt)) != 0" in c_code
     assert "NLPL_Optional_has_value" not in c_code
-    assert "NLPL_Optional_get_value" not in c_code
+    assert "NLPL_Optional_get_value_ptr" not in c_code
     assert "__match_bind_payload_" in c_code
-    assert "= (intptr_t)(opt);" in c_code
+    assert "= (void*)(opt);" in c_code
 
 
 def test_c_match_expression_uses_scalar_result_fallback_without_runtime_helpers():
@@ -223,11 +223,104 @@ end
 
     assert "((intptr_t)(res)) >= 0" in c_code
     assert "NLPL_Result_is_ok" not in c_code
-    assert "NLPL_Result_get_value" not in c_code
-    assert "NLPL_Result_get_error" not in c_code
+    assert "NLPL_Result_get_value_ptr" not in c_code
+    assert "NLPL_Result_get_error_ptr" not in c_code
     assert '__match_bind_message_' in c_code
-    assert '"error"' in c_code
+    assert "= (void*)(res);" in c_code
     assert "__match_bind_value_" in c_code
+
+
+def test_c_option_typed_integer_binding_uses_fast_path():
+    generator = CCodeGenerator(target="c")
+    pattern = OptionPattern("Some", "payload", binding_type_annotation="Integer")
+
+    generator._generate_pattern_bindings(pattern, "opt", "void*", None)
+
+    c_code = "\n".join(generator.output_buffer)
+    assert "NLPL_Optional_get_value_i64((void*)(opt))" in c_code
+    assert "NLPL_Optional_get_value_kind((void*)(opt))" not in c_code
+    assert generator.symbol_table["payload"] == "int"
+
+
+def test_c_result_typed_float_err_binding_uses_fast_path():
+    generator = CCodeGenerator(target="c")
+    pattern = ResultPattern("Err", "error_payload", binding_type_annotation="Float")
+
+    generator._generate_pattern_bindings(pattern, "res", "void*", None)
+
+    c_code = "\n".join(generator.output_buffer)
+    assert "NLPL_Result_get_error_f64((void*)(res))" in c_code
+    assert "NLPL_Result_get_error_kind((void*)(res))" not in c_code
+    assert generator.symbol_table["error_payload"] == "double"
+
+
+def test_c_option_untyped_pointer_binding_uses_kind_dispatch_fallback():
+    generator = CCodeGenerator(target="c")
+    pattern = OptionPattern("Some", "payload")
+
+    generator._generate_pattern_bindings(pattern, "opt", "void*", None)
+
+    c_code = "\n".join(generator.output_buffer)
+    assert "NLPL_Optional_get_value_kind((void*)(opt))" in c_code
+    assert "NLPL_Optional_get_value_i64((void*)(opt))" in c_code
+    assert "NLPL_Optional_get_value_f64((void*)(opt))" in c_code
+    assert "NLPL_Optional_get_value_ptr((void*)(opt))" in c_code
+    # Declarations must be zero-initialized (lifetime-safe hoisting) and must appear
+    # in the output; they must NOT be inlined with a function call on the same line.
+    lines = c_code.split("\n")
+    i64_decl_lines = [l for l in lines if "int64_t __nxl_opt_i64_" in l]
+    f64_decl_lines = [l for l in lines if "double __nxl_opt_f64_" in l]
+    assert i64_decl_lines, "int64_t spill variable must be declared"
+    assert f64_decl_lines, "double spill variable must be declared"
+    for decl in i64_decl_lines:
+        assert "NLPL_Optional_get_value_i64" not in decl, (
+            f"int64_t declaration must be zero-init, not inlined with a call: {decl!r}"
+        )
+    for decl in f64_decl_lines:
+        assert "NLPL_Optional_get_value_f64" not in decl, (
+            f"double declaration must be zero-init, not inlined with a call: {decl!r}"
+        )
+    # The actual runtime calls must appear as bare assignments inside the if branches.
+    assert any("= NLPL_Optional_get_value_i64" in l for l in lines), (
+        "Assignment to i64 spill inside if-branch must be present"
+    )
+    assert any("= NLPL_Optional_get_value_f64" in l for l in lines), (
+        "Assignment to f64 spill inside if-branch must be present"
+    )
+    assert generator.symbol_table["payload"] == "void*"
+
+
+def test_c_result_untyped_pointer_err_binding_uses_kind_dispatch_fallback():
+    generator = CCodeGenerator(target="c")
+    pattern = ResultPattern("Err", "error_payload")
+
+    generator._generate_pattern_bindings(pattern, "res", "void*", None)
+
+    c_code = "\n".join(generator.output_buffer)
+    assert "NLPL_Result_get_error_kind((void*)(res))" in c_code
+    assert "NLPL_Result_get_error_i64((void*)(res))" in c_code
+    assert "NLPL_Result_get_error_f64((void*)(res))" in c_code
+    assert "NLPL_Result_get_error_ptr((void*)(res))" in c_code
+    lines = c_code.split("\n")
+    i64_decl_lines = [l for l in lines if "int64_t __nxl_res_err_i64_" in l]
+    f64_decl_lines = [l for l in lines if "double __nxl_res_err_f64_" in l]
+    assert i64_decl_lines, "int64_t err spill variable must be declared"
+    assert f64_decl_lines, "double err spill variable must be declared"
+    for decl in i64_decl_lines:
+        assert "NLPL_Result_get_error_i64" not in decl, (
+            f"int64_t declaration must be zero-init, not inlined with a call: {decl!r}"
+        )
+    for decl in f64_decl_lines:
+        assert "NLPL_Result_get_error_f64" not in decl, (
+            f"double declaration must be zero-init, not inlined with a call: {decl!r}"
+        )
+    assert any("= NLPL_Result_get_error_i64" in l for l in lines), (
+        "Assignment to i64 err spill inside if-branch must be present"
+    )
+    assert any("= NLPL_Result_get_error_f64" in l for l in lines), (
+        "Assignment to f64 err spill inside if-branch must be present"
+    )
+    assert generator.symbol_table["error_payload"] == "void*"
 
 
 def test_c_match_expression_lowers_variant_patterns_and_binding():
@@ -302,3 +395,27 @@ end
     assert "nums[0]" in c_code
     assert "__match_bind_head_" in c_code
     assert "__match_bind_tail_" in c_code
+
+
+def test_c_match_expression_lowers_non_identifier_list_expression():
+    ast = _parse(
+        """
+function main returns Integer
+    match [2, 3] with
+        case (x, y)
+            print text x
+            print text y
+        case _
+            print text 0
+    end
+    return 0
+end
+"""
+    )
+
+    c_code = CCodeGenerator(target="c").generate(ast)
+
+    assert "__nxl_match_value_" in c_code
+    assert "[] = {2, 3}" in c_code
+    assert "[0]" in c_code
+    assert "[1]" in c_code

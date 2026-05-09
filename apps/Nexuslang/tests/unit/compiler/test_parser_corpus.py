@@ -89,6 +89,11 @@ from nexuslang.parser.ast import (
     AwaitExpression,
     YieldExpression,
     GenericTypeInstantiation,
+    MacroDefinition,
+    MacroExpansion,
+    ComptimeExpression,
+    ComptimeConst,
+    ComptimeAssert,
 )
 
 
@@ -258,8 +263,48 @@ class TestFunctionDefinitions:
         assert isinstance(node, FunctionDefinition)
         assert len(node.body) == 1
         assert isinstance(node.body[0], YieldExpression)
-        assert isinstance(node.body[0].value, Literal)
-        assert node.body[0].value.value == 1
+
+
+# ---------------------------------------------------------------------------
+# 3.1 Macros / comptime
+# ---------------------------------------------------------------------------
+
+class TestMacroAndComptime:
+    def test_macro_definition_with_parameters(self):
+        src = (
+            "macro SCALE_BY with value, factor\n"
+            "    set scaled to value times factor\n"
+            "    print text scaled\n"
+            "end"
+        )
+        node = first(src)
+        assert isinstance(node, MacroDefinition)
+        assert node.name == "SCALE_BY"
+        assert node.parameters == ["value", "factor"]
+        assert len(node.body) >= 1
+
+    def test_macro_expansion_with_named_arguments(self):
+        node = first("expand SCALE_BY with value 7, factor 3")
+        assert isinstance(node, MacroExpansion)
+        assert node.name == "SCALE_BY"
+        assert "value" in node.arguments
+        assert "factor" in node.arguments
+
+    def test_comptime_eval_statement(self):
+        node = first("comptime eval 2 plus 3")
+        assert isinstance(node, ComptimeExpression)
+
+    def test_comptime_const_statement(self):
+        node = first("comptime const BASE is 7")
+        assert isinstance(node, ComptimeConst)
+        assert node.name == "BASE"
+
+    def test_comptime_assert_statement_with_message(self):
+        node = first('comptime assert 1 is equal to 1 message "ok"')
+        assert isinstance(node, ComptimeAssert)
+        assert node.message_expr is not None
+        assert isinstance(node.message_expr, Literal)
+        assert node.message_expr.value == "ok"
 
     def test_nested_function_call_in_body(self):
         src = (

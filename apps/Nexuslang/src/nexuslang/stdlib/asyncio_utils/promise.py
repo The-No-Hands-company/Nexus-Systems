@@ -72,15 +72,23 @@ class Promise:
                     for catch_cb in self._catch_callbacks:
                         try:
                             catch_cb(e)
-                        except:
-                            pass
+                        except Exception as catch_err:
+                            # Catch callback itself failed; log but don't crash
+                            import logging
+                            logging.exception(
+                                f"Promise catch callback raised exception: {catch_err}"
+                            )
             
             # Execute finally callbacks
             for callback in self._finally_callbacks:
                 try:
                     callback()
-                except:
-                    pass
+                except Exception as finally_err:
+                    # Finally callback failed; log but continue cleanup
+                    import logging
+                    logging.exception(
+                        f"Promise finally callback raised exception: {finally_err}"
+                    )
     
     def _reject(self, error: Any):
         """Mark promise as rejected with an error."""
@@ -96,15 +104,23 @@ class Promise:
                 for callback in self._catch_callbacks:
                     try:
                         callback(error)
-                    except:
-                        pass
+                    except Exception as catch_err:
+                        # Catch callback itself failed; log but don't crash rejection
+                        import logging
+                        logging.exception(
+                            f"Promise catch callback raised exception while handling {type(error).__name__}: {catch_err}"
+                        )
             
             # Execute finally callbacks
             for callback in self._finally_callbacks:
                 try:
                     callback()
-                except:
-                    pass
+                except Exception as finally_err:
+                    # Finally callback failed; log but continue cleanup
+                    import logging
+                    logging.exception(
+                        f"Promise finally callback raised exception: {finally_err}"
+                    )
     
     def then(self, on_fulfilled: Callable, on_rejected: Callable = None) -> 'Promise':
         """

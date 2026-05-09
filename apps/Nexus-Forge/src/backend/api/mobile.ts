@@ -1,4 +1,4 @@
-export function registerMobileRoutes(app: any) {
+export function registerMobileRoutes(app: ForgeRouteApp) {
   app.get("/api/mobile/sessions", async () => ({
     sessions: [],
     note: "Mobile device session tracking is stubbed.",
@@ -9,7 +9,7 @@ export function registerMobileRoutes(app: any) {
     note: "Push token registry is stubbed.",
   }));
 
-  app.post("/api/mobile/push/send", async ({ body }: any) => ({
+  app.post("/api/mobile/push/send", async ({ body }) => ({
     ok: true,
     notificationId: "push-stub",
     payload: body || {},

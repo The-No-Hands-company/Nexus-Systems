@@ -12,7 +12,7 @@ Strategy:
 - Standard library → Link against NexusLang C runtime library
 """
 
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional, Set, Tuple
 from copy import deepcopy
 from nexuslang.compiler import CodeGenerator
 from nexuslang.parser.ast import *
@@ -53,10 +53,41 @@ class CCodeGenerator(CodeGenerator):
         self.loop_label_counter = 0
         self.loop_control_stack: List[tuple] = []  # (continue_label, break_label, loop_name)
         self.labeled_loop_controls: Dict[str, tuple] = {}  # label -> (continue_label, break_label)
+        # Generic specialization state
+        self.generic_function_templates: Dict[str, FunctionDefinition] = {}
+        self.generic_specialization_requests: Dict[str, Set[Tuple[str, ...]]] = {}
+        self.generic_specialization_names: Dict[Tuple[str, Tuple[str, ...]], str] = {}
+        self.generated_specialized_functions: Set[str] = set()
+        self.borrow_tracker: Dict[str, Dict[str, Any]] = {}
+        self.moved_variables: Set[str] = set()
+        self.async_function_return_types: Dict[str, str] = {}
+        self.async_task_payload_types: Dict[str, str] = {}
+        self.in_async_function = False
+        self.current_async_payload_type: Optional[str] = None
+        self.current_async_frame_var: Optional[str] = None
+        self.extern_functions: Dict[str, Dict[str, Any]] = {}
+        self.extern_types: Dict[str, Dict[str, Any]] = {}
+        self.parallel_body_counter = 0
+        self.parallel_body_definitions: List[str] = []
         
     def generate(self, ast: Program) -> str:
         """Generate complete C program from AST."""
         self.reset()
+        self.generic_function_templates = {}
+        self.generic_specialization_requests = {}
+        self.generic_specialization_names = {}
+        self.generated_specialized_functions = set()
+        self.borrow_tracker = {}
+        self.moved_variables = set()
+        self.async_function_return_types = {}
+        self.async_task_payload_types = {}
+        self.in_async_function = False
+        self.current_async_payload_type = None
+        self.current_async_frame_var = None
+        self.extern_functions = {}
+        self.extern_types = {}
+        self.parallel_body_counter = 0
+        self.parallel_body_definitions = []
         
         # Add default required includes
         self.includes.add("<stdio.h>")
@@ -67,10 +98,15 @@ class CCodeGenerator(CodeGenerator):
         
         self.top_level_statements = [
             stmt for stmt in ast.statements
-            if not isinstance(stmt, (FunctionDefinition, ClassDefinition, ExternFunctionDeclaration, ExternVariableDeclaration, MacroDefinition))
+            if not isinstance(stmt, (FunctionDefinition, AsyncFunctionDefinition, ClassDefinition, ExternFunctionDeclaration, ExternVariableDeclaration, MacroDefinition))
         ]
 
         has_user_main = any(isinstance(stmt, FunctionDefinition) and stmt.name == "main" for stmt in ast.statements)
+
+        # Collect generic function templates and discover required specializations
+        # before emitting declarations, so call sites can resolve to stable names.
+        self._collect_generic_function_templates(ast)
+        self._collect_generic_specialization_requests(ast)
 
         # Pre-collect compile-time metadata used while emitting function bodies.
         for stmt in ast.statements:
@@ -91,7 +127,13 @@ class CCodeGenerator(CodeGenerator):
             if isinstance(stmt, ClassDefinition):
                 self._generate_class_definition(stmt)
             elif isinstance(stmt, FunctionDefinition):
+                if hasattr(stmt, 'type_parameters') and stmt.type_parameters:
+                    # Generic templates are emitted as concrete specializations only.
+                    self._generate_generic_function_specializations(stmt)
+                    continue
                 self._generate_function_declaration(stmt)
+            elif isinstance(stmt, AsyncFunctionDefinition):
+                self._generate_async_function_declaration(stmt)
             elif isinstance(stmt, ExternFunctionDeclaration):
                 self._generate_extern_function(stmt)
             elif isinstance(stmt, ExternVariableDeclaration):
@@ -100,6 +142,8 @@ class CCodeGenerator(CodeGenerator):
                 self.forward_declarations.append(f"extern {var_type} {stmt.name};")
                 # Track in symbol table for type inference
                 self.symbol_table[stmt.name] = var_type
+            elif isinstance(stmt, ExternTypeDeclaration):
+                self._generate_extern_type(stmt)
             elif isinstance(stmt, MacroDefinition):
                 self._collect_macro_definition(stmt)
             elif has_user_main and isinstance(stmt, VariableDeclaration):
@@ -108,6 +152,10 @@ class CCodeGenerator(CodeGenerator):
             elif has_user_main and isinstance(stmt, ComptimeConst):
                 const_type = self._infer_type(stmt.expr)
                 self.global_variables[stmt.name] = const_type
+
+        # If specialization requests were discovered while lowering bodies,
+        # emit any newly-requested concrete variants now.
+        self._emit_pending_generic_specializations()
         
         if has_user_main and self.top_level_statements:
             self.forward_declarations.append(f"static void {self.top_level_init_name}(void);")
@@ -131,6 +179,9 @@ class CCodeGenerator(CodeGenerator):
             # In a real compiler, we might put these in an _init function called by start
             if self.top_level_statements:
                 self._generate_top_level_init_function()
+
+        # Top-level init lowering can discover additional generic calls.
+        self._emit_pending_generic_specializations()
         
         # Now prepend header and includes to the generated code
         header_lines = [
@@ -149,6 +200,10 @@ class CCodeGenerator(CodeGenerator):
         # Add forward declarations if any
         if self.forward_declarations:
             header_lines.extend(self.forward_declarations)
+            header_lines.append("")
+
+        if self.parallel_body_definitions:
+            header_lines.extend(self.parallel_body_definitions)
             header_lines.append("")
 
         if self.global_variables:
@@ -176,6 +231,198 @@ class CCodeGenerator(CodeGenerator):
         self.output_buffer = header_lines + self.output_buffer
         
         return self.get_output()
+
+    def _collect_generic_function_templates(self, ast: Program) -> None:
+        """Record generic function templates declared in the program."""
+        for stmt in getattr(ast, 'statements', []):
+            if isinstance(stmt, FunctionDefinition) and getattr(stmt, 'type_parameters', None):
+                self.generic_function_templates[stmt.name] = stmt
+
+    def _collect_generic_specialization_requests(self, ast: Program) -> None:
+        """Walk the AST and pre-register concrete generic specializations used by calls."""
+        seen: Set[int] = set()
+
+        def _is_ast_like(value: Any) -> bool:
+            if isinstance(value, ASTNode):
+                return True
+            module_name = getattr(value.__class__, '__module__', '')
+            return module_name.endswith('parser.ast')
+
+        def _walk(node: Any) -> None:
+            if node is None:
+                return
+
+            node_id = id(node)
+            if node_id in seen:
+                return
+            seen.add(node_id)
+
+            if isinstance(node, list):
+                for item in node:
+                    _walk(item)
+                return
+
+            if isinstance(node, dict):
+                for value in node.values():
+                    _walk(value)
+                return
+
+            if isinstance(node, FunctionCall):
+                self._resolve_generic_call_name(node)
+
+            if hasattr(node, '__dict__'):
+                for value in node.__dict__.values():
+                    if isinstance(value, (list, dict)):
+                        _walk(value)
+                    elif _is_ast_like(value):
+                        _walk(value)
+
+        _walk(ast)
+
+    def _specialized_function_name(self, base_name: str, type_args: List[str]) -> str:
+        """Return mangled specialization name aligned with LLVM backend naming."""
+        normalized = [self._normalize_type_arg_name(arg) for arg in type_args]
+        return f"{base_name}_{'_'.join(normalized)}"
+
+    def _normalize_type_arg_name(self, type_name: str) -> str:
+        """Normalize type argument names for mangled symbol generation."""
+        if not type_name:
+            return "Any"
+        cleaned = str(type_name).strip()
+        if not cleaned:
+            return "Any"
+        # Keep backend parity with LLVM's Capitalized suffix style.
+        return cleaned.capitalize()
+
+    def _c_type_to_nxl_type(self, c_type: str) -> str:
+        """Map inferred C types back to canonical NexusLang type names."""
+        reverse = {
+            'int': 'Integer',
+            'double': 'Float',
+            'const char*': 'String',
+            'bool': 'Boolean',
+            'void': 'Void',
+            'intptr_t': 'Integer',
+        }
+        return reverse.get(c_type, 'Any')
+
+    def _resolve_type_arguments_for_call(
+        self,
+        node: FunctionCall,
+        template: FunctionDefinition,
+    ) -> Optional[List[str]]:
+        """Resolve concrete type arguments for a call to a generic template."""
+        # Explicit type arguments take precedence.
+        if hasattr(node, 'type_arguments') and node.type_arguments:
+            explicit: List[str] = []
+            for arg in node.type_arguments:
+                if isinstance(arg, str):
+                    explicit.append(arg)
+                elif hasattr(arg, 'name'):
+                    explicit.append(arg.name)
+                else:
+                    explicit.append(str(arg))
+            return explicit
+
+        # Infer from positional arguments based on generic-typed parameters.
+        type_params = list(getattr(template, 'type_parameters', []) or [])
+        if not type_params:
+            return None
+        bindings: Dict[str, str] = {}
+        args = list(getattr(node, 'arguments', []) or [])
+        params = list(getattr(template, 'parameters', []) or [])
+
+        for idx, param in enumerate(params):
+            if idx >= len(args):
+                break
+            ann = getattr(param, 'type_annotation', None)
+            if ann not in type_params:
+                continue
+            inferred_c = self._infer_type(args[idx])
+            inferred_nxl = self._c_type_to_nxl_type(inferred_c)
+            if ann in bindings and bindings[ann] != inferred_nxl:
+                # Conflicting local inference: keep first stable binding.
+                continue
+            bindings[ann] = inferred_nxl
+
+        if not bindings:
+            return None
+        return [bindings.get(tp, 'Any') for tp in type_params]
+
+    def _resolve_generic_call_name(self, node: FunctionCall) -> str:
+        """Resolve a function call target, specializing generic templates when needed."""
+        func_name = node.name
+        if not isinstance(func_name, str):
+            return func_name
+        if func_name not in self.generic_function_templates:
+            return func_name
+
+        template = self.generic_function_templates[func_name]
+        type_args = self._resolve_type_arguments_for_call(node, template)
+        if not type_args:
+            return func_name
+
+        key = (func_name, tuple(type_args))
+        if key not in self.generic_specialization_names:
+            specialized_name = self._specialized_function_name(func_name, type_args)
+            self.generic_specialization_names[key] = specialized_name
+            self.generic_specialization_requests.setdefault(func_name, set()).add(tuple(type_args))
+        return self.generic_specialization_names[key]
+
+    def _substitute_generic_function_template(
+        self,
+        template: FunctionDefinition,
+        specialized_name: str,
+        substitutions: Dict[str, str],
+    ) -> FunctionDefinition:
+        """Clone and materialize a generic function template with concrete types."""
+        node = deepcopy(template)
+        node.name = specialized_name
+        node.type_parameters = []
+        node.type_constraints = {}
+
+        if getattr(node, 'return_type', None) in substitutions:
+            node.return_type = substitutions[node.return_type]
+
+        for param in getattr(node, 'parameters', []) or []:
+            ann = getattr(param, 'type_annotation', None)
+            if ann in substitutions:
+                param.type_annotation = substitutions[ann]
+
+        return node
+
+    def _generate_generic_function_specializations(self, template: FunctionDefinition) -> None:
+        """Emit all currently requested specializations for a generic function template."""
+        func_name = template.name
+        requests = sorted(self.generic_specialization_requests.get(func_name, set()))
+        if not requests:
+            return
+
+        for type_args_tuple in requests:
+            type_args = list(type_args_tuple)
+            specialized_name = self._specialized_function_name(func_name, type_args)
+            if specialized_name in self.generated_specialized_functions:
+                continue
+
+            substitutions = dict(zip(template.type_parameters, type_args))
+            specialized_node = self._substitute_generic_function_template(
+                template,
+                specialized_name,
+                substitutions,
+            )
+            self.generated_specialized_functions.add(specialized_name)
+            self._generate_function_declaration(specialized_node)
+
+    def _emit_pending_generic_specializations(self) -> None:
+        """Emit requested generic specializations until the request set stabilizes."""
+        changed = True
+        while changed:
+            changed = False
+            for func_name, template in list(self.generic_function_templates.items()):
+                before = len(self.generated_specialized_functions)
+                self._generate_generic_function_specializations(template)
+                if len(self.generated_specialized_functions) > before:
+                    changed = True
     
     def _generate_function_declaration(self, node: FunctionDefinition) -> None:
         """Generate function declaration."""
@@ -228,6 +475,68 @@ class CCodeGenerator(CodeGenerator):
         
         # Clear function-local variables from symbol table
         # (Keep only global scope variables)
+        if node.parameters:
+            for param in node.parameters:
+                if param.name in self.symbol_table:
+                    del self.symbol_table[param.name]
+
+    def _generate_async_function_declaration(self, node: AsyncFunctionDefinition) -> None:
+        """Generate async function as a coroutine-frame producing C function."""
+        payload_type = self._map_type(node.return_type) if node.return_type else "int"
+        self.async_function_return_types[node.name] = payload_type
+        self.function_types[node.name] = "NXLAsyncFrame*"
+
+        self.needed_runtime_functions.add("nxl_async_frame_create")
+        self.needed_runtime_functions.add("nxl_async_resume")
+        self.needed_runtime_functions.add("nxl_async_destroy")
+
+        if node.parameters:
+            params = []
+            for param in node.parameters:
+                if hasattr(param, 'type_annotation') and param.type_annotation:
+                    param_type = self._map_type(param.type_annotation)
+                else:
+                    param_type = self._infer_parameter_type(param.name, node.body, node.return_type)
+
+                params.append(f"{param_type} {param.name}")
+                self.symbol_table[param.name] = param_type
+            param_str = ", ".join(params)
+        else:
+            param_str = "void"
+
+        self.emit_raw(f"NXLAsyncFrame* {node.name}({param_str}) {{")
+        self.indent()
+        self.emit("NXLAsyncFrame* __nxl_async_frame = nxl_async_frame_create();")
+        self.emit("if (!__nxl_async_frame) {")
+        self.indent()
+        self.emit("return NULL;")
+        self.dedent()
+        self.emit("}")
+
+        saved_in_async = self.in_async_function
+        saved_payload = self.current_async_payload_type
+        saved_frame = self.current_async_frame_var
+
+        self.in_async_function = True
+        self.current_async_payload_type = payload_type
+        self.current_async_frame_var = "__nxl_async_frame"
+
+        if node.body:
+            for stmt in node.body:
+                self._generate_statement(stmt)
+
+        self.emit("__nxl_async_frame->state = -1;")
+        self.emit("__nxl_async_frame->done = 1;")
+        self.emit("return __nxl_async_frame;")
+
+        self.in_async_function = saved_in_async
+        self.current_async_payload_type = saved_payload
+        self.current_async_frame_var = saved_frame
+
+        self.dedent()
+        self.emit_raw("}")
+        self.emit_raw("")
+
         if node.parameters:
             for param in node.parameters:
                 if param.name in self.symbol_table:
@@ -579,6 +888,9 @@ class CCodeGenerator(CodeGenerator):
             # Functions are generated separately, not inline
             # They should be handled at the top level
             pass
+        elif isinstance(node, AsyncFunctionDefinition):
+            # Async functions are generated separately at top level.
+            pass
         elif isinstance(node, PrintStatement):
             expr = self._generate_expression(node)
             self.emit(f"{expr};")
@@ -589,7 +901,16 @@ class CCodeGenerator(CodeGenerator):
         elif isinstance(node, ExternFunctionDeclaration):
             self._generate_extern_function(node)
         elif isinstance(node, ReturnStatement):
-            if node.value:
+            if self.in_async_function and self.current_async_frame_var:
+                frame_var = self.current_async_frame_var
+                payload_type = self.current_async_payload_type or "int"
+                if node.value is not None:
+                    expr = self._generate_expression(node.value)
+                    self._emit_async_result_store(frame_var, payload_type, expr)
+                self.emit(f"{frame_var}->state = -1;")
+                self.emit(f"{frame_var}->done = 1;")
+                self.emit(f"return {frame_var};")
+            elif node.value:
                 expr = self._generate_expression(node.value)
                 self.emit(f"return {expr};")
             else:
@@ -614,6 +935,8 @@ class CCodeGenerator(CodeGenerator):
             self._generate_continue_statement(node)
         elif isinstance(node, FallthroughStatement):
             self.emit("/* fallthrough */")
+        elif isinstance(node, DropBorrowStatement):
+            self._generate_drop_borrow_statement(node)
         elif isinstance(node, SendStatement):
             channel_expr = self._generate_expression(node.channel)
             value_expr = self._generate_expression(node.value)
@@ -681,8 +1004,14 @@ class CCodeGenerator(CodeGenerator):
             try:
                 expr = self._generate_expression(node)
                 self.emit(f"{expr};")
-            except:
-                self.emit(f"/* Unhandled statement: {type(node).__name__} */")
+            except (AttributeError, TypeError, ValueError, NotImplementedError) as e:
+                # Expression generation failed; emit comment and log error
+                import logging
+                logging.error(
+                    f"C code generation failed for statement {type(node).__name__} at line {getattr(node, 'line', '?')}: {e}. "
+                    f"Generated code will contain placeholder comment."
+                )
+                self.emit(f"/* Unhandled statement: {type(node).__name__} (error: {e.__class__.__name__}) */")
     
     def _generate_variable_declaration(self, node: VariableDeclaration) -> None:
         """Generate variable declaration or assignment."""
@@ -695,6 +1024,9 @@ class CCodeGenerator(CodeGenerator):
             return
         
         emitted_name = self._resolve_symbol_name(node.name)
+        async_payload_type = self._infer_async_payload_type_from_expression(node.value)
+        if isinstance(node.name, str):
+            self.moved_variables.discard(node.name)
 
         # Spilled yielded-function locals already have storage; emit assignment only.
         if isinstance(node.name, str) and node.name in self.symbol_aliases:
@@ -702,6 +1034,11 @@ class CCodeGenerator(CodeGenerator):
             if node.name not in self.symbol_table:
                 self.symbol_table[node.name] = self._infer_type(node.value)
             self.emit(f"{emitted_name} = {value_expr};")
+            if isinstance(node.name, str):
+                if async_payload_type is not None:
+                    self.async_task_payload_types[node.name] = async_payload_type
+                else:
+                    self.async_task_payload_types.pop(node.name, None)
             return
 
         if self.inside_top_level_init and isinstance(node.name, str) and node.name in self.global_variables:
@@ -714,6 +1051,11 @@ class CCodeGenerator(CodeGenerator):
             # Variable exists - generate assignment only
             value_expr = self._generate_expression(node.value)
             self.emit(f"{emitted_name} = {value_expr};")
+            if isinstance(node.name, str):
+                if async_payload_type is not None:
+                    self.async_task_payload_types[node.name] = async_payload_type
+                else:
+                    self.async_task_payload_types.pop(node.name, None)
         else:
             # New variable - generate declaration with type
             value_expr = self._generate_expression(node.value)
@@ -743,15 +1085,23 @@ class CCodeGenerator(CodeGenerator):
                         # 2D array - determine inner dimension size
                         inner_size = len(node.value.elements[0].elements)
                         outer_size = len(node.value.elements)
+                        self.array_sizes[node.name] = outer_size
                         self.emit(f"{base_type} {emitted_name}[{outer_size}][{inner_size}] = {value_expr};")
                     else:
                         # 1D array
+                        self.array_sizes[node.name] = len(node.value.elements)
                         self.emit(f"{base_type} {emitted_name}{dims} = {value_expr};")
                 else:
                     self.emit(f"{base_type} {emitted_name}{dims} = {value_expr};")
             else:
                 # Regular type
                 self.emit(f"{var_type} {emitted_name} = {value_expr};")
+
+            if isinstance(node.name, str):
+                if async_payload_type is not None:
+                    self.async_task_payload_types[node.name] = async_payload_type
+                else:
+                    self.async_task_payload_types.pop(node.name, None)
     
     def _infer_parameter_type(self, param_name: str, body: List[Any], return_type: Any = None) -> str:
         """
@@ -1001,14 +1351,19 @@ class CCodeGenerator(CodeGenerator):
 
     def _infer_function_call_type(self, expr: Any) -> str:
         """Infer C type for a FunctionCall expression."""
-        if expr.name in self.function_types:
-            return self.function_types[expr.name]
+        resolved_name = self._resolve_generic_call_name(expr) if isinstance(expr, FunctionCall) else expr.name
+        if resolved_name in self.async_function_return_types or expr.name in self.async_function_return_types:
+            return "NXLAsyncFrame*"
+        if resolved_name in self.function_types:
+            return self.function_types[resolved_name]
         if expr.name in self._STDLIB_RETURN_TYPES:
             return self._STDLIB_RETURN_TYPES[expr.name]
         return "int"
 
     def _infer_identifier_type(self, expr: Identifier) -> str:
         """Infer C type for an identifier expression."""
+        if expr.name in self.async_function_return_types:
+            return "NXLAsyncFrame*"
         # Check if it's a property in the current class
         if self.current_class and (self.current_class, expr.name) in self.property_types:
             return self.property_types[(self.current_class, expr.name)]
@@ -1092,6 +1447,17 @@ class CCodeGenerator(CodeGenerator):
         if isinstance(expr, ReceiveExpression):
             return "intptr_t"
 
+        if isinstance(expr, AwaitExpression):
+            payload_type = self._infer_async_payload_type_from_expression(
+                getattr(expr, 'expression', None) or getattr(expr, 'expr', None)
+            )
+            if payload_type is not None:
+                return payload_type
+            return "int"
+
+        if isinstance(expr, (MoveExpression, BorrowExpression, BorrowExpressionWithLifetime)):
+            return self.symbol_table.get(getattr(expr, 'var_name', ''), "void*")
+
         if isinstance(expr, YieldExpression):
             return self._infer_type(expr.value) if getattr(expr, "value", None) is not None else "intptr_t"
 
@@ -1120,10 +1486,57 @@ class CCodeGenerator(CodeGenerator):
         
         if extern_decl not in self.forward_declarations:
             self.forward_declarations.append(extern_decl)
+
+        self.extern_functions[node.name] = {
+            "return_type": return_type,
+            "parameters": [
+                {
+                    "name": getattr(param, "name", f"arg_{idx}"),
+                    "type": self._map_type(getattr(param, "type_annotation", "Pointer") or "Pointer"),
+                }
+                for idx, param in enumerate(node.parameters or [])
+            ],
+            "variadic": bool(getattr(node, "variadic", False)),
+        }
             
         # Add library to required libraries for linking
         if hasattr(node, 'library') and node.library:
             self.required_libraries.add(node.library)
+
+    def _generate_extern_type(self, node: ExternTypeDeclaration) -> None:
+        """Generate C extern type aliases used by FFI declarations."""
+        type_name = getattr(node, "name", None)
+        if not type_name:
+            return
+
+        if getattr(node, "is_function_pointer", False):
+            signature = getattr(node, "function_signature", None) or ([], "Void")
+            param_types, return_type = signature
+            c_return = self._map_type(return_type)
+            c_params = [self._map_type(p) for p in (param_types or [])]
+            params_str = ", ".join(c_params) if c_params else "void"
+            typedef = f"typedef {c_return} (*{type_name})({params_str});"
+            self.extern_types[type_name] = {"kind": "function_pointer", "typedef": typedef}
+            if typedef not in self.forward_declarations:
+                self.forward_declarations.append(typedef)
+            return
+
+        if bool(getattr(node, "is_opaque", False)):
+            base_type = str(getattr(node, "base_type", "pointer") or "pointer").lower()
+            if base_type == "struct":
+                typedef = f"typedef struct {type_name} {type_name};"
+            else:
+                typedef = f"typedef void* {type_name};"
+            self.extern_types[type_name] = {"kind": "opaque", "typedef": typedef}
+            if typedef not in self.forward_declarations:
+                self.forward_declarations.append(typedef)
+            return
+
+        aliased_type = self._map_type(getattr(node, "base_type", "Pointer") or "Pointer")
+        typedef = f"typedef {aliased_type} {type_name};"
+        self.extern_types[type_name] = {"kind": "alias", "typedef": typedef}
+        if typedef not in self.forward_declarations:
+            self.forward_declarations.append(typedef)
     
     def _generate_if_statement(self, node: IfStatement) -> None:
         """Generate if statement."""
@@ -1178,6 +1591,8 @@ class CCodeGenerator(CodeGenerator):
         """Generate for loop."""
         # For NLPL's "for each x in collection" style loops
         # Generate as C for loop with index
+        if node.iterable is None:
+            raise RuntimeError("C backend for loops require an iterable expression")
         
         iterator = node.iterator
         loop_id = self.loop_label_counter
@@ -1186,8 +1601,16 @@ class CCodeGenerator(CodeGenerator):
         break_label = f"__nxl_loop_break_{loop_id}"
         self._push_loop_control_context(getattr(node, 'label', None), continue_label, break_label)
         
+        # Generator-expression iterable: materialize then iterate.
+        if type(node.iterable).__name__ == 'GeneratorExpression':
+            self._generate_for_loop_over_generator_expression(node, iterator, continue_label)
+            self._pop_loop_control_context()
+            self.emit(f"{break_label}: ;")
+            return
+
         # Determine the collection type and how to get its length
         collection_type = self._infer_type(node.iterable)
+        collection_expr = self._generate_expression(node.iterable)
         
         # Check if we can determine the array size
         if isinstance(node.iterable, ListExpression):
@@ -1221,29 +1644,31 @@ class CCodeGenerator(CodeGenerator):
                     element_type = var_type[:-2]
                     
                     # For arrays, we need sizeof to get length
-                    # Note: This only works for stack-allocated arrays, not pointers
                     self.emit(f"/* For each loop over array */")
-                    self.emit(f"for (int _i = 0; _i < sizeof({collection_expr})/sizeof({element_type}); _i++) {{")
+                    self.emit(f"for (int _i = 0; _i < (int)(sizeof({collection_expr}) / sizeof({collection_expr}[0])); _i++) {{")
                     self.indent()
                     self.emit(f"{element_type} {iterator} = {collection_expr}[_i];")
                 else:
-                    # Unknown collection type - use placeholder
-                    self.emit(f"/* For each loop - collection type unknown */")
-                    self.emit(f"for (int _i = 0; _i < /* length */; _i++) {{")
-                    self.indent()
-                    self.emit(f"/* Unknown type */ {iterator} = {collection_expr}[_i];")
+                    raise RuntimeError(
+                        f"C backend cannot lower for-each over '{var_name}' of type '{var_type}'. "
+                        "Only fixed-size array variables are currently supported."
+                    )
             else:
-                # Variable not in symbol table
-                self.emit(f"/* For each loop - variable not found */")
-                self.emit(f"for (int _i = 0; _i < /* length */; _i++) {{")
-                self.indent()
-                self.emit(f"int {iterator} = {collection_expr}[_i];")
+                raise RuntimeError(
+                    f"C backend cannot lower for-each over unknown variable '{var_name}'"
+                )
         else:
-            # Some other expression
-            self.emit(f"/* For each loop - generic */")
-            self.emit(f"for (int _i = 0; _i < /* length */; _i++) {{")
-            self.indent()
-            self.emit(f"int {iterator} = {collection_expr}[_i];")
+            if collection_type.endswith("[]"):
+                element_type = collection_type[:-2]
+                self.emit("/* For each loop over array expression */")
+                self.emit(f"for (int _i = 0; _i < (int)(sizeof({collection_expr}) / sizeof({collection_expr}[0])); _i++) {{")
+                self.indent()
+                self.emit(f"{element_type} {iterator} = {collection_expr}[_i];")
+            else:
+                raise RuntimeError(
+                    "C backend cannot lower for-each over non-array expressions; "
+                    "use an array variable or list literal."
+                )
         
         # Generate loop body
         if node.body:
@@ -1257,6 +1682,187 @@ class CCodeGenerator(CodeGenerator):
         self.emit("}")
         self._pop_loop_control_context()
         self.emit(f"{break_label}: ;")
+
+    def _resolve_identifier_sequence_bound(self, source_name: str) -> Optional[str]:
+        """Resolve a bounded iteration length expression for identifier sources.
+
+        Priority order:
+        1. Compile-time known fixed-size arrays tracked in ``self.array_sizes``.
+        2. Explicit sibling metadata variables (aliases: _length, _len, _size, _count) typed as integer.
+        3. Fallback to standalone length/len/size/count variables in scope.
+        """
+        if source_name in self.array_sizes:
+            return str(self.array_sizes[source_name])
+
+        # Try common metadata aliases in order of preference
+        aliases = [
+            f"{source_name}_length",
+            f"{source_name}_len",
+            f"{source_name}_size",
+            f"{source_name}_count",
+        ]
+
+        for alias in aliases:
+            alias_type = self.symbol_table.get(alias, self.global_variables.get(alias, ""))
+            if isinstance(alias_type, str) and alias_type in {"int", "long", "size_t"}:
+                return alias
+
+        # Fallback to standalone length/len/size/count if in scope
+        for fallback in ["length", "len", "size", "count"]:
+            fallback_type = self.symbol_table.get(fallback, self.global_variables.get(fallback, ""))
+            if isinstance(fallback_type, str) and fallback_type in {"int", "long", "size_t"}:
+                return fallback
+
+        return None
+
+    def _check_metadata_variable_type(self, var_name: str) -> bool:
+        """Validate that a metadata variable has a valid integer type.
+
+        Returns True if valid (int, long, size_t), False otherwise.
+        """
+        var_type = self.symbol_table.get(var_name, self.global_variables.get(var_name, ""))
+        if not isinstance(var_type, str):
+            return False
+        return var_type in {"int", "long", "size_t", "uint32_t", "uint64_t", "int32_t", "int64_t"}
+
+    def _get_metadata_variable_names(self, source_name: str) -> list:
+        """Get list of candidate metadata variable names for a source identifier.
+
+        Used for diagnostics and documentation.
+        """
+        return [
+            f"{source_name}_length",
+            f"{source_name}_len",
+            f"{source_name}_size",
+            f"{source_name}_count",
+        ]
+
+    def _generate_for_loop_over_generator_expression(self, node: ForLoop, iterator: str, continue_label: str) -> None:
+        """Lower `for each` over generator expressions via eager materialization.
+
+        Current C backend strategy mirrors interpreter semantics for generator
+        expressions: evaluate source iterable, apply optional filter, apply mapped
+        expression, store into a temporary array, then iterate the materialized
+        values.
+        """
+        gen = node.iterable
+        target_node = getattr(gen, 'target', None)
+        if not isinstance(target_node, Identifier):
+            raise RuntimeError("C backend generator lowering requires identifier target")
+
+        target_name = target_node.name
+        source = getattr(gen, 'iterable', None)
+
+        # Resolve source iterable as a concrete array + bounded upper length.
+        source_index_expr = None
+        src_bound_expr = None
+        src_bound_var = None
+        dynamic_bound = False
+
+        if isinstance(source, ListExpression):
+            src_size = len(source.elements)
+            src_elem_type = self._infer_type(source.elements[0]) if source.elements else "int"
+            src_arr = f"__nxl_gen_src_{id(node)}"
+            element_exprs = [self._generate_expression(elem) for elem in source.elements]
+            self.emit(f"{src_elem_type} {src_arr}[] = {{{', '.join(element_exprs)}}};")
+            source_index_expr = f"{src_arr}[__nxl_gi]"
+            src_bound_expr = str(src_size)
+        elif isinstance(source, Identifier):
+            src_arr = self._generate_expression(source)
+            src_var_type = self.symbol_table.get(source.name, self.global_variables.get(source.name, ""))
+
+            src_elem_type = "int"
+            if isinstance(src_var_type, str):
+                if src_var_type.endswith("[]"):
+                    src_elem_type = src_var_type[:-2]
+                elif src_var_type.endswith("*") and src_var_type != "void*":
+                    src_elem_type = src_var_type[:-1]
+
+            src_bound_expr = self._resolve_identifier_sequence_bound(source.name)
+            if src_bound_expr is None:
+                candidates = self._get_metadata_variable_names(source.name)
+                raise RuntimeError(
+                    f"C backend cannot lower generator source '{source.name}' without known array size. "
+                    f"Provide one of: {', '.join(candidates)} (as int/long/size_t)"
+                )
+
+            if source.name not in self.array_sizes:
+                # Metadata-sized sources are potentially non-local pointers; cast to
+                # inferred element pointer type before indexed reads.
+                source_index_expr = f"(({src_elem_type}*){src_arr})[__nxl_gi]"
+                dynamic_bound = True
+            else:
+                source_index_expr = f"{src_arr}[__nxl_gi]"
+                dynamic_bound = not src_bound_expr.isdigit()
+        else:
+            raise RuntimeError(
+                "C backend cannot lower generator expression over non-array/list sources"
+            )
+
+        out_elem_type = self._infer_type(getattr(gen, 'expr', None))
+        if out_elem_type.endswith("[]"):
+            out_elem_type = out_elem_type[:-2]
+        if out_elem_type == "void*":
+            out_elem_type = "int"
+
+        out_arr = f"__nxl_gen_values_{id(node)}"
+        out_count = f"__nxl_gen_count_{id(node)}"
+
+        self.emit(f"/* For each loop over generator expression (materialized) */")
+        if dynamic_bound:
+            src_bound_var = f"__nxl_gen_src_bound_{id(node)}"
+            self.emit(f"int {src_bound_var} = ({src_bound_expr});")
+            self.emit(f"if ({src_bound_var} < 0) {src_bound_var} = 0;")
+            self.emit(f"{out_elem_type}* {out_arr} = NULL;")
+            self.emit(f"if ({src_bound_var} > 0) {{")
+            self.indent()
+            self.emit(f"{out_arr} = ({out_elem_type}*)malloc(sizeof({out_elem_type}) * (size_t){src_bound_var});")
+            self.emit(f"if (!{out_arr}) {{")
+            self.indent()
+            self.emit('fprintf(stderr, "Generator materialization allocation failed\\n");')
+            self.emit("exit(1);")
+            self.dedent()
+            self.emit("}")
+            self.dedent()
+            self.emit("}")
+        else:
+            self.emit(f"{out_elem_type} {out_arr}[{src_bound_expr}];")
+
+        self.emit(f"int {out_count} = 0;")
+        loop_bound = src_bound_var if src_bound_var else src_bound_expr
+        self.emit(f"for (int __nxl_gi = 0; __nxl_gi < {loop_bound}; __nxl_gi++) {{")
+        self.indent()
+        self.emit(f"{src_elem_type} {target_name} = {source_index_expr};")
+
+        cond = getattr(gen, 'condition', None)
+        value_expr = self._generate_expression(getattr(gen, 'expr'))
+        if cond is not None:
+            cond_expr = self._generate_expression(cond)
+            self.emit(f"if ({cond_expr}) {{")
+            self.indent()
+            self.emit(f"{out_arr}[{out_count}++] = {value_expr};")
+            self.dedent()
+            self.emit("}")
+        else:
+            self.emit(f"{out_arr}[{out_count}++] = {value_expr};")
+
+        self.dedent()
+        self.emit("}")
+
+        self.emit(f"for (int _i = 0; _i < {out_count}; _i++) {{")
+        self.indent()
+        self.emit(f"{out_elem_type} {iterator} = {out_arr}[_i];")
+
+        if node.body:
+            for stmt in node.body:
+                self._generate_statement(stmt)
+
+        self.emit(f"{continue_label}: ;")
+        self.dedent()
+        self.emit("}")
+
+        if dynamic_bound:
+            self.emit(f"if ({out_arr} != NULL) free({out_arr});")
 
     def _push_loop_control_context(self, loop_name: str, continue_label: str, break_label: str) -> None:
         """Track loop control labels for labeled break/continue lowering."""
@@ -1299,7 +1905,81 @@ class CCodeGenerator(CodeGenerator):
         self.emit("continue;")
 
     def _generate_parallel_for_loop(self, node: ParallelForLoop) -> None:
-        """Generate parallel-for loop (sequential fallback in C backend)."""
+        """Generate parallel-for loop using runtime-backed execution when safe.
+
+        Execution strategy (in priority order):
+        1. Direct path   – no outer-local captures; use nxl_parallel_for_i64.
+        2. Capture path  – read-only outer-local captures transported via a per-call
+                           context struct; use nxl_parallel_for_ctx_i64.
+        3. Sequential fallback – iterable shape unknown at compile time.
+        """
+        iterator = node.var_name
+
+        runtime_array_name = None
+        runtime_count_expr = None
+        iterable = node.iterable
+
+        # Resolve iterable array and count first; fall back early if unsupported.
+        if isinstance(iterable, ListExpression):
+            element_exprs = [f"(int64_t)({self._generate_expression(elem)})" for elem in iterable.elements]
+            runtime_array_name = f"__nxl_parallel_data_{self.parallel_body_counter}"
+            self.emit(f"int64_t {runtime_array_name}[] = {{{', '.join(element_exprs)}}};")
+            runtime_count_expr = str(len(iterable.elements))
+        elif isinstance(iterable, Identifier):
+            collection_name = iterable.name
+            size = self.array_sizes.get(collection_name)
+            if size is None:
+                self._emit_parallel_for_sequential_fallback(node)
+                return
+
+            runtime_array_name = f"__nxl_parallel_data_{self.parallel_body_counter}"
+            self.emit(f"int64_t {runtime_array_name}[{size}];")
+            self.emit(f"for (int __nxl_pi = 0; __nxl_pi < {size}; __nxl_pi++) {{")
+            self.indent()
+            self.emit(f"{runtime_array_name}[__nxl_pi] = (int64_t)({collection_name}[__nxl_pi]);")
+            self.dedent()
+            self.emit("}")
+            runtime_count_expr = str(size)
+        else:
+            self._emit_parallel_for_sequential_fallback(node)
+            return
+
+        # Collect outer-local captures required by the body.
+        captures = self._collect_parallel_for_captures(node, iterator)
+
+        if captures:
+            # Capture-transport path: build a context struct, pass it to the callback.
+            body_index_preview = self.parallel_body_counter
+            body_fn_name = self._generate_parallel_for_body_function(
+                node, iterator, captures=captures
+            )
+            ctx_typedef = f"__nxl_ctx_t_{body_index_preview}"
+            ctx_inst = f"__nxl_ctx_{body_index_preview}"
+            fields_init = ", ".join(name for name in captures)
+            self.emit(f"{ctx_typedef} {ctx_inst} = {{ {fields_init} }};")
+            self._ensure_forward_declaration(
+                "extern void nxl_parallel_for_ctx_i64("
+                "int64_t* data, int64_t count, "
+                "void (*body)(int64_t, void*), void* ctx, int64_t workers);"
+            )
+            self.emit(
+                f"nxl_parallel_for_ctx_i64({runtime_array_name}, "
+                f"(int64_t){runtime_count_expr}, {body_fn_name}, &{ctx_inst}, 0);"
+            )
+        else:
+            # Direct path: no captures; simpler callback signature.
+            body_fn_name = self._generate_parallel_for_body_function(node, iterator)
+            self._ensure_forward_declaration(
+                "extern void nxl_parallel_for_i64("
+                "int64_t* data, int64_t count, void (*body)(int64_t), int64_t workers);"
+            )
+            self.emit(
+                f"nxl_parallel_for_i64({runtime_array_name}, "
+                f"(int64_t){runtime_count_expr}, {body_fn_name}, 0);"
+            )
+
+    def _emit_parallel_for_sequential_fallback(self, node: ParallelForLoop) -> None:
+        """Lower parallel-for as sequential foreach when outlining is not safe."""
         self.emit("/* parallel-for lowered to sequential loop */")
 
         iterator = node.var_name
@@ -1335,6 +2015,160 @@ class CCodeGenerator(CodeGenerator):
 
         self.dedent()
         self.emit("}")
+
+    def _collect_parallel_for_captures(self, node: ParallelForLoop, iterator_name: str) -> List[str]:
+        """Return an ordered list of outer-local variable names captured by the body.
+
+        Variables are considered captured when they are referenced by an Identifier
+        inside the body but are not:
+        - the loop iterator
+        - locally declared within the body
+        - a global variable
+        - a function or extern symbol
+
+        The returned list preserves first-encountered order so generated struct fields
+        and initialisers remain stable across repeated code generation runs.
+        """
+        import enum as _enum
+
+        # Sentinel: reject recursion into enum values and non-AST leaf objects.
+        def _is_ast_node(v: Any) -> bool:
+            return (
+                hasattr(v, '__dict__')
+                and not isinstance(v, (_enum.Enum, type))
+                and type(v).__module__ not in ('builtins',)
+            )
+
+        declared_in_body: Set[str] = set()
+
+        def gather_declared(stmt: Any) -> None:
+            if isinstance(stmt, VariableDeclaration):
+                declared_in_body.add(stmt.name)
+            elif isinstance(stmt, (ForLoop, ParallelForLoop)):
+                declared_in_body.add(stmt.var_name)
+            for value in vars(stmt).values():
+                if isinstance(value, list):
+                    for item in value:
+                        if _is_ast_node(item):
+                            gather_declared(item)
+                elif _is_ast_node(value):
+                    gather_declared(value)
+
+        for stmt in getattr(node, 'body', []) or []:
+            gather_declared(stmt)
+
+        seen: Set[str] = set()
+        ordered: List[str] = []
+
+        def visit(value: Any) -> None:
+            if isinstance(value, Identifier):
+                name = value.name
+                if name == iterator_name or name in declared_in_body:
+                    return
+                if name in self.global_variables:
+                    return
+                if name in self.functions or name in self.extern_functions:
+                    return
+                if name in self.symbol_table and name not in seen:
+                    seen.add(name)
+                    ordered.append(name)
+                return
+            if isinstance(value, list):
+                for item in value:
+                    visit(item)
+                return
+            if _is_ast_node(value):
+                for child in vars(value).values():
+                    visit(child)
+
+        for stmt in getattr(node, 'body', []) or []:
+            visit(stmt)
+
+        return ordered
+
+    def _parallel_body_references_outer_locals(self, node: ParallelForLoop, iterator_name: str) -> bool:
+        """Return True when any outer local is captured by the parallel body.
+
+        Retained for backward compatibility; prefer _collect_parallel_for_captures
+        when the captured names are also needed.
+        """
+        return bool(self._collect_parallel_for_captures(node, iterator_name))
+
+    def _generate_parallel_for_body_function(
+        self,
+        node: ParallelForLoop,
+        iterator_name: str,
+        captures: Optional[List[str]] = None,
+    ) -> str:
+        """Outline a parallel-for body into a static callback function.
+
+        When *captures* is non-empty the callback receives an additional
+        ``void* __nxl_ctx_raw`` argument.  A typed context struct typedef
+        named ``__nxl_ctx_t_<index>`` is emitted into the parallel body
+        definitions block, and each captured variable is unpacked into a local
+        at the start of the callback so the rest of the body code can reference
+        them by their original names.
+        """
+        body_index = self.parallel_body_counter
+        self.parallel_body_counter += 1
+        body_name = f"__nxl_parallel_body_{body_index}"
+        ctx_typedef = f"__nxl_ctx_t_{body_index}"
+
+        has_ctx = bool(captures)
+
+        if has_ctx:
+            self._ensure_forward_declaration(
+                f"static void {body_name}(int64_t __nxl_iter_value, void* __nxl_ctx_raw);"
+            )
+        else:
+            self._ensure_forward_declaration(
+                f"static void {body_name}(int64_t __nxl_iter_value);"
+            )
+
+        saved_output = self.output_buffer
+        saved_indent = self.indent_level
+        saved_symbols = self.symbol_table.copy()
+
+        callback_lines: List[str] = []
+        try:
+            self.output_buffer = callback_lines
+            self.indent_level = 0
+
+            if has_ctx:
+                # Emit capture struct typedef before the function definition.
+                self.emit_raw(f"typedef struct {{")
+                for cap_name in captures:  # type: ignore[union-attr]
+                    cap_type = self.symbol_table.get(cap_name, "intptr_t")
+                    self.emit_raw(f"    {cap_type} {cap_name};")
+                self.emit_raw(f"}} {ctx_typedef};")
+                self.emit_raw("")
+
+                self.emit_raw(
+                    f"static void {body_name}(int64_t __nxl_iter_value, void* __nxl_ctx_raw) {{"
+                )
+                self.indent()
+                self.emit(f"{ctx_typedef}* __nxl_ctx = ({ctx_typedef}*)__nxl_ctx_raw;")
+                for cap_name in captures:  # type: ignore[union-attr]
+                    cap_type = self.symbol_table.get(cap_name, "intptr_t")
+                    self.emit(f"{cap_type} {cap_name} = __nxl_ctx->{cap_name};")
+                    self.symbol_table[cap_name] = cap_type
+            else:
+                self.emit_raw(f"static void {body_name}(int64_t __nxl_iter_value) {{")
+                self.indent()
+
+            self.symbol_table[iterator_name] = "int64_t"
+            self.emit(f"int64_t {iterator_name} = __nxl_iter_value;")
+            for stmt in getattr(node, 'body', []) or []:
+                self._generate_statement(stmt)
+            self.dedent()
+            self.emit_raw("}")
+        finally:
+            self.output_buffer = saved_output
+            self.indent_level = saved_indent
+            self.symbol_table = saved_symbols
+
+        self.parallel_body_definitions.append("\n".join(callback_lines))
+        return body_name
 
     def _generate_contract_statement(self, node: Any) -> None:
         """Generate runtime checks for contract statements."""
@@ -1392,33 +2226,54 @@ class CCodeGenerator(CodeGenerator):
     def _generate_match_expression(self, node: MatchExpression) -> None:
         """Generate statement-level pattern matching as a guarded case chain."""
         match_value_type = self._infer_type(node.expression)
-        unique_suffix = f"{len(self.symbol_aliases)}_{len(self.output_buffer)}"
+        self.temp_counter += 1
+        unique_suffix = f"{self.temp_counter}"
         done_var = f"__nxl_match_done_{unique_suffix}"
         source_name = node.expression.name if isinstance(node.expression, Identifier) else None
+        temporary_source_name = None
 
         if isinstance(node.expression, Identifier):
             match_var = self._resolve_symbol_name(node.expression.name)
             emit_match_decl = False
         else:
             match_var = f"__nxl_match_value_{unique_suffix}"
-            emit_match_decl = "[]" not in match_value_type
+            temporary_source_name = match_var
+            emit_match_decl = True
 
         self.emit("{")
         self.indent()
         if emit_match_decl:
             match_value_expr = self._generate_expression(node.expression)
-            self.emit(f"{match_value_type} {match_var} = {match_value_expr};")
-        elif not isinstance(node.expression, Identifier):
-            raise RuntimeError("C backend cannot match directly on non-identifier array/list expressions")
+            if "[]" in match_value_type:
+                elem_type = self._list_element_type(match_value_type)
+                if isinstance(match_value_expr, str) and match_value_expr.strip().startswith("{"):
+                    # List literal -> materialize a local C array so index-based patterns
+                    # can bind against stable storage.
+                    self.emit(f"{elem_type} {match_var}[] = {match_value_expr};")
+                    if isinstance(node.expression, ListExpression):
+                        # Preserve tuple/list pattern length checks for temporary
+                        # list literals used directly in match expressions.
+                        self.array_sizes[match_var] = len(node.expression.elements)
+                else:
+                    # Expression yielding an array-like value -> treat as pointer-like.
+                    self.emit(f"{elem_type}* {match_var} = {match_value_expr};")
+            else:
+                self.emit(f"{match_value_type} {match_var} = {match_value_expr};")
 
         self.emit(f"bool {done_var} = false;")
 
         for case_index, case in enumerate(node.cases):
-            condition_expr = self._generate_match_condition(case.pattern, match_var, match_value_type, source_name)
+            pattern_source_name = source_name or temporary_source_name
+            condition_expr = self._generate_match_condition(case.pattern, match_var, match_value_type, pattern_source_name)
             if condition_expr is None:
-                raise RuntimeError(
-                    f"C backend does not yet support pattern type '{type(case.pattern).__name__}'"
+                # Pattern type not yet fully supported in C backend — emit a no-match
+                # condition so the remaining cases still compile correctly.
+                pattern_type_name = type(case.pattern).__name__
+                self.emit(
+                    f"/* C backend: pattern type '{pattern_type_name}' not fully supported; "
+                    "case skipped */"
                 )
+                condition_expr = "false"
 
             self.emit(f"if (!{done_var}) {{")
             self.indent()
@@ -1429,7 +2284,7 @@ class CCodeGenerator(CodeGenerator):
             try:
                 self.emit(f"if (__nxl_case_match_{case_index}) {{")
                 self.indent()
-                self._generate_pattern_bindings(case.pattern, match_var, match_value_type, source_name)
+                self._generate_pattern_bindings(case.pattern, match_var, match_value_type, pattern_source_name)
                 if getattr(case, 'guard', None) is not None:
                     guard_expr = self._generate_expression(case.guard)
                     self.emit(f"__nxl_case_match_{case_index} = ({guard_expr});")
@@ -1496,6 +2351,162 @@ class CCodeGenerator(CodeGenerator):
         }
         return normalized in integer_like
 
+    def _map_pattern_inferred_type_to_c(self, inferred_type: Any) -> str | None:
+        """Map inferred type-system objects attached to patterns to C types."""
+        if inferred_type is None:
+            return None
+
+        type_name = type(inferred_type).__name__
+        if type_name == "PrimitiveType":
+            primitive_name = getattr(inferred_type, "name", "").lower()
+            if primitive_name == "integer":
+                return "int"
+            if primitive_name == "float":
+                return "double"
+            if primitive_name == "boolean":
+                return "bool"
+            if primitive_name == "string":
+                return "const char*"
+            return None
+
+        if type_name in ("ListType", "DictionaryType", "AnyType", "UnionType"):
+            return None
+
+        if type_name in ("ClassType", "GenericType"):
+            return self._map_type(getattr(inferred_type, "name", "Any"))
+
+        return None
+
+    def _resolve_pattern_binding_c_type(self, pattern: Any) -> str | None:
+        """Resolve concrete C type for Option/Result binding from metadata."""
+        annotation = getattr(pattern, "binding_type_annotation", None)
+        if isinstance(annotation, str) and annotation.strip():
+            return self._map_type(annotation)
+
+        inferred_type = getattr(pattern, "binding_inferred_type", None)
+        if inferred_type is not None:
+            return self._map_pattern_inferred_type_to_c(inferred_type)
+
+        return None
+
+    def _emit_optional_payload_for_type(self, opt_expr: str, target_type: str) -> str | None:
+        """Return direct Option payload extraction expression for a known C target type."""
+        if target_type == "int":
+            self._ensure_forward_declaration("extern int64_t NLPL_Optional_get_value_i64(void* opt);")
+            return f"(int)NLPL_Optional_get_value_i64((void*)({opt_expr}))"
+        if target_type == "double":
+            self._ensure_forward_declaration("extern double NLPL_Optional_get_value_f64(void* opt);")
+            return f"NLPL_Optional_get_value_f64((void*)({opt_expr}))"
+        if self._is_pointer_like_c_type(target_type):
+            self._ensure_forward_declaration("extern void* NLPL_Optional_get_value_ptr(void* opt);")
+            if target_type == "void*":
+                return f"NLPL_Optional_get_value_ptr((void*)({opt_expr}))"
+            return f"({target_type})NLPL_Optional_get_value_ptr((void*)({opt_expr}))"
+        return None
+
+    def _emit_result_payload_for_type(self, res_expr: str, is_ok_variant: bool, target_type: str) -> str | None:
+        """Return direct Result payload extraction expression for a known C target type."""
+        if is_ok_variant:
+            i64_helper = "NLPL_Result_get_value_i64"
+            f64_helper = "NLPL_Result_get_value_f64"
+            ptr_helper = "NLPL_Result_get_value_ptr"
+        else:
+            i64_helper = "NLPL_Result_get_error_i64"
+            f64_helper = "NLPL_Result_get_error_f64"
+            ptr_helper = "NLPL_Result_get_error_ptr"
+
+        if target_type == "int":
+            self._ensure_forward_declaration(f"extern int64_t {i64_helper}(void* res);")
+            return f"(int){i64_helper}((void*)({res_expr}))"
+        if target_type == "double":
+            self._ensure_forward_declaration(f"extern double {f64_helper}(void* res);")
+            return f"{f64_helper}((void*)({res_expr}))"
+        if self._is_pointer_like_c_type(target_type):
+            self._ensure_forward_declaration(f"extern void* {ptr_helper}(void* res);")
+            if target_type == "void*":
+                return f"{ptr_helper}((void*)({res_expr}))"
+            return f"({target_type}){ptr_helper}((void*)({res_expr}))"
+        return None
+
+    def _emit_dynamic_optional_payload_ref_binding(self, opt_expr: str, emitted_name: str) -> None:
+        """Emit runtime kind-dispatched Option extraction into a void* binding."""
+        self._ensure_forward_declaration("extern int32_t NLPL_Optional_get_value_kind(void* opt);")
+        self._ensure_forward_declaration("extern int64_t NLPL_Optional_get_value_i64(void* opt);")
+        self._ensure_forward_declaration("extern double NLPL_Optional_get_value_f64(void* opt);")
+        self._ensure_forward_declaration("extern void* NLPL_Optional_get_value_ptr(void* opt);")
+
+        self.temp_counter += 1
+        unique_suffix = f"{self.temp_counter}"
+        kind_name = f"__nxl_opt_kind_{unique_suffix}"
+        i64_name = f"__nxl_opt_i64_{unique_suffix}"
+        f64_name = f"__nxl_opt_f64_{unique_suffix}"
+
+        self.emit(f"int32_t {kind_name} = NLPL_Optional_get_value_kind((void*)({opt_expr}));")
+        self.emit(f"int64_t {i64_name} = 0;")
+        self.emit(f"double {f64_name} = 0.0;")
+        self.emit(f"void* {emitted_name} = NULL;")
+        self.emit(f"if ({kind_name} == 3) {{")
+        self.indent()
+        self.emit(f"{emitted_name} = NLPL_Optional_get_value_ptr((void*)({opt_expr}));")
+        self.dedent()
+        self.emit(f"}} else if ({kind_name} == 1) {{")
+        self.indent()
+        self.emit(f"{i64_name} = NLPL_Optional_get_value_i64((void*)({opt_expr}));")
+        self.emit(f"{emitted_name} = (void*)(&{i64_name});")
+        self.dedent()
+        self.emit(f"}} else if ({kind_name} == 2) {{")
+        self.indent()
+        self.emit(f"{f64_name} = NLPL_Optional_get_value_f64((void*)({opt_expr}));")
+        self.emit(f"{emitted_name} = (void*)(&{f64_name});")
+        self.dedent()
+        self.emit("}")
+
+    def _emit_dynamic_result_payload_ref_binding(self, res_expr: str, is_ok_variant: bool, emitted_name: str) -> None:
+        """Emit runtime kind-dispatched Result extraction into a void* binding."""
+        if is_ok_variant:
+            kind_helper = "NLPL_Result_get_value_kind"
+            i64_helper = "NLPL_Result_get_value_i64"
+            f64_helper = "NLPL_Result_get_value_f64"
+            ptr_helper = "NLPL_Result_get_value_ptr"
+            prefix = "ok"
+        else:
+            kind_helper = "NLPL_Result_get_error_kind"
+            i64_helper = "NLPL_Result_get_error_i64"
+            f64_helper = "NLPL_Result_get_error_f64"
+            ptr_helper = "NLPL_Result_get_error_ptr"
+            prefix = "err"
+
+        self._ensure_forward_declaration(f"extern int32_t {kind_helper}(void* res);")
+        self._ensure_forward_declaration(f"extern int64_t {i64_helper}(void* res);")
+        self._ensure_forward_declaration(f"extern double {f64_helper}(void* res);")
+        self._ensure_forward_declaration(f"extern void* {ptr_helper}(void* res);")
+
+        self.temp_counter += 1
+        unique_suffix = f"{self.temp_counter}"
+        kind_name = f"__nxl_res_{prefix}_kind_{unique_suffix}"
+        i64_name = f"__nxl_res_{prefix}_i64_{unique_suffix}"
+        f64_name = f"__nxl_res_{prefix}_f64_{unique_suffix}"
+
+        self.emit(f"int32_t {kind_name} = {kind_helper}((void*)({res_expr}));")
+        self.emit(f"int64_t {i64_name} = 0;")
+        self.emit(f"double {f64_name} = 0.0;")
+        self.emit(f"void* {emitted_name} = NULL;")
+        self.emit(f"if ({kind_name} == 3) {{")
+        self.indent()
+        self.emit(f"{emitted_name} = {ptr_helper}((void*)({res_expr}));")
+        self.dedent()
+        self.emit(f"}} else if ({kind_name} == 1) {{")
+        self.indent()
+        self.emit(f"{i64_name} = {i64_helper}((void*)({res_expr}));")
+        self.emit(f"{emitted_name} = (void*)(&{i64_name});")
+        self.dedent()
+        self.emit(f"}} else if ({kind_name} == 2) {{")
+        self.indent()
+        self.emit(f"{f64_name} = {f64_helper}((void*)({res_expr}));")
+        self.emit(f"{emitted_name} = (void*)(&{f64_name});")
+        self.dedent()
+        self.emit("}")
+
     def _generate_match_condition(self, pattern: Any, match_var: str, match_type: str, source_name: str | None) -> str | None:
         """Return a C condition expression for supported pattern kinds."""
         if isinstance(pattern, WildcardPattern):
@@ -1541,7 +2552,15 @@ class CCodeGenerator(CodeGenerator):
                     self._ensure_forward_declaration("extern bool NLPL_Result_is_ok(void* res);")
                     is_ok = f"NLPL_Result_is_ok((void*)({match_var}))"
                 return is_ok if variant == "Ok" else f"(!{is_ok})"
-            return None
+            # Custom user-defined enum variant: emit a comparison against the
+            # C constant using the NXL_<EnumType>_<Variant> naming convention.
+            # The C type of the match variable is used as the enum type prefix.
+            c_type = match_type.rstrip("*").strip()
+            if c_type:
+                constant = f"NXL_{c_type}_{variant}"
+            else:
+                constant = f"NXL_{variant}"
+            return f"({match_var} == {constant})"
 
         if isinstance(pattern, TuplePattern):
             if source_name is None or source_name not in self.array_sizes:
@@ -1584,7 +2603,8 @@ class CCodeGenerator(CodeGenerator):
         """Emit local bindings for supported pattern variables."""
         if isinstance(pattern, IdentifierPattern):
             bound_name = pattern.name
-            emitted_name = f"__match_bind_{bound_name}_{len(self.symbol_aliases)}_{len(self.output_buffer)}"
+            self.temp_counter += 1
+            emitted_name = f"__match_bind_{bound_name}_{self.temp_counter}"
             self.symbol_table[bound_name] = match_type
             self.symbol_aliases[bound_name] = emitted_name
             self.emit(f"{match_type} {emitted_name} = {match_var};")
@@ -1592,66 +2612,93 @@ class CCodeGenerator(CodeGenerator):
 
         if isinstance(pattern, OptionPattern) and pattern.binding:
             bound_name = pattern.binding
-            emitted_name = f"__match_bind_{bound_name}_{len(self.symbol_aliases)}_{len(self.output_buffer)}"
-            self.symbol_table[bound_name] = "intptr_t"
+            self.temp_counter += 1
+            emitted_name = f"__match_bind_{bound_name}_{self.temp_counter}"
             self.symbol_aliases[bound_name] = emitted_name
+
+            binding_type = self._resolve_pattern_binding_c_type(pattern)
             if self._supports_scalar_variant_match(match_type):
-                self.emit(f"intptr_t {emitted_name} = (intptr_t)({match_var});")
+                self.symbol_table[bound_name] = "void*"
+                self.emit(f"void* {emitted_name} = (void*)({match_var});")
             else:
-                self._ensure_forward_declaration("extern intptr_t NLPL_Optional_get_value(void* opt);")
-                self.emit(f"intptr_t {emitted_name} = NLPL_Optional_get_value((void*)({match_var}));")
+                if binding_type is not None:
+                    value_expr = self._emit_optional_payload_for_type(match_var, binding_type)
+                    if value_expr is not None:
+                        self.symbol_table[bound_name] = binding_type
+                        self.emit(f"{binding_type} {emitted_name} = {value_expr};")
+                        return
+
+                self.symbol_table[bound_name] = "void*"
+                self._emit_dynamic_optional_payload_ref_binding(match_var, emitted_name)
             return
 
         if isinstance(pattern, ResultPattern) and pattern.binding:
             variant = pattern.variant
             bound_name = pattern.binding
-            emitted_name = f"__match_bind_{bound_name}_{len(self.symbol_aliases)}_{len(self.output_buffer)}"
+            self.temp_counter += 1
+            emitted_name = f"__match_bind_{bound_name}_{self.temp_counter}"
+            binding_type = self._resolve_pattern_binding_c_type(pattern)
             if variant == "Ok":
-                self.symbol_table[bound_name] = "intptr_t"
                 self.symbol_aliases[bound_name] = emitted_name
                 if self._supports_scalar_variant_match(match_type):
-                    self.emit(f"intptr_t {emitted_name} = (intptr_t)({match_var});")
+                    self.symbol_table[bound_name] = "void*"
+                    self.emit(f"void* {emitted_name} = (void*)({match_var});")
                 else:
-                    self._ensure_forward_declaration("extern intptr_t NLPL_Result_get_value(void* res);")
-                    self.emit(f"intptr_t {emitted_name} = NLPL_Result_get_value((void*)({match_var}));")
+                    if binding_type is not None:
+                        value_expr = self._emit_result_payload_for_type(match_var, True, binding_type)
+                        if value_expr is not None:
+                            self.symbol_table[bound_name] = binding_type
+                            self.emit(f"{binding_type} {emitted_name} = {value_expr};")
+                            return
+
+                    self.symbol_table[bound_name] = "void*"
+                    self._emit_dynamic_result_payload_ref_binding(match_var, True, emitted_name)
             else:
-                self.symbol_table[bound_name] = "const char*"
                 self.symbol_aliases[bound_name] = emitted_name
                 if self._supports_scalar_variant_match(match_type):
-                    self.emit(f"const char* {emitted_name} = \"error\";")
+                    self.symbol_table[bound_name] = "void*"
+                    self.emit(f"void* {emitted_name} = (void*)({match_var});")
                 else:
-                    self._ensure_forward_declaration("extern const char* NLPL_Result_get_error(void* res);")
-                    self.emit(f"const char* {emitted_name} = NLPL_Result_get_error((void*)({match_var}));")
+                    if binding_type is not None:
+                        value_expr = self._emit_result_payload_for_type(match_var, False, binding_type)
+                        if value_expr is not None:
+                            self.symbol_table[bound_name] = binding_type
+                            self.emit(f"{binding_type} {emitted_name} = {value_expr};")
+                            return
+
+                    self.symbol_table[bound_name] = "void*"
+                    self._emit_dynamic_result_payload_ref_binding(match_var, False, emitted_name)
             return
 
         if isinstance(pattern, VariantPattern) and pattern.bindings:
             variant = self._variant_suffix(pattern.variant_name)
             bound_name = pattern.bindings[0]
-            emitted_name = f"__match_bind_{bound_name}_{len(self.symbol_aliases)}_{len(self.output_buffer)}"
+            self.temp_counter += 1
+            emitted_name = f"__match_bind_{bound_name}_{self.temp_counter}"
             if variant == "Some":
-                self.symbol_table[bound_name] = "intptr_t"
+                self.symbol_table[bound_name] = "void*"
                 self.symbol_aliases[bound_name] = emitted_name
                 if self._supports_scalar_variant_match(match_type):
-                    self.emit(f"intptr_t {emitted_name} = (intptr_t)({match_var});")
+                    self.emit(f"void* {emitted_name} = (void*)({match_var});")
                 else:
-                    self._ensure_forward_declaration("extern intptr_t NLPL_Optional_get_value(void* opt);")
-                    self.emit(f"intptr_t {emitted_name} = NLPL_Optional_get_value((void*)({match_var}));")
+                    self._ensure_forward_declaration("extern void* NLPL_Optional_get_value_ptr(void* opt);")
+                    self.emit(f"void* {emitted_name} = NLPL_Optional_get_value_ptr((void*)({match_var}));")
             elif variant == "Ok":
-                self.symbol_table[bound_name] = "intptr_t"
+                self.symbol_table[bound_name] = "void*"
                 self.symbol_aliases[bound_name] = emitted_name
                 if self._supports_scalar_variant_match(match_type):
-                    self.emit(f"intptr_t {emitted_name} = (intptr_t)({match_var});")
+                    self.emit(f"void* {emitted_name} = (void*)({match_var});")
                 else:
-                    self._ensure_forward_declaration("extern intptr_t NLPL_Result_get_value(void* res);")
-                    self.emit(f"intptr_t {emitted_name} = NLPL_Result_get_value((void*)({match_var}));")
+                    self._ensure_forward_declaration("extern void* NLPL_Result_get_value_ptr(void* res);")
+                    self.emit(f"void* {emitted_name} = NLPL_Result_get_value_ptr((void*)({match_var}));")
             elif variant == "Err":
-                self.symbol_table[bound_name] = "const char*"
+                self.symbol_table[bound_name] = "void*"
                 self.symbol_aliases[bound_name] = emitted_name
                 if self._supports_scalar_variant_match(match_type):
-                    self.emit(f"const char* {emitted_name} = \"error\";")
+                    self.emit(f"void* {emitted_name} = (void*)({match_var});")
                 else:
-                    self._ensure_forward_declaration("extern const char* NLPL_Result_get_error(void* res);")
-                    self.emit(f"const char* {emitted_name} = NLPL_Result_get_error((void*)({match_var}));")
+                    self._ensure_forward_declaration("extern void* NLPL_Result_get_error_ptr(void* res);")
+                    self.emit(f"void* {emitted_name} = NLPL_Result_get_error_ptr((void*)({match_var}));")
             return
 
         if isinstance(pattern, TuplePattern):
@@ -1666,7 +2713,8 @@ class CCodeGenerator(CodeGenerator):
                 self._generate_pattern_bindings(elem_pattern, f"{match_var}[{index}]", elem_type, None)
             if pattern.rest_binding and source_name in self.array_sizes:
                 bound_name = pattern.rest_binding
-                emitted_name = f"__match_bind_{bound_name}_{len(self.symbol_aliases)}_{len(self.output_buffer)}"
+                self.temp_counter += 1
+                emitted_name = f"__match_bind_{bound_name}_{self.temp_counter}"
                 offset = len(pattern.patterns)
                 self.symbol_table[bound_name] = f"{elem_type}*"
                 self.symbol_aliases[bound_name] = emitted_name
@@ -1962,6 +3010,9 @@ class CCodeGenerator(CodeGenerator):
         elif isinstance(node, FunctionCall):
             return self._generate_function_call(node)
 
+        elif isinstance(node, CallbackReference):
+            return node.function_name
+
         elif isinstance(node, PrintStatement):
             expr_node = node.expression
             if isinstance(expr_node, list):
@@ -2002,6 +3053,15 @@ class CCodeGenerator(CodeGenerator):
             channel_expr = self._generate_expression(node.channel)
             return f"nxl_channel_receive({channel_expr})"
 
+        elif isinstance(node, AwaitExpression):
+            return self._generate_await_expression(node)
+
+        elif isinstance(node, MoveExpression):
+            return self._generate_move_expression(node)
+
+        elif isinstance(node, (BorrowExpression, BorrowExpressionWithLifetime)):
+            return self._generate_borrow_expression(node)
+
         elif isinstance(node, YieldExpression):
             if node.value is None:
                 return "0"
@@ -2028,6 +3088,137 @@ class CCodeGenerator(CodeGenerator):
             return "true" if node.value else "false"
         else:
             return f"{node.value}"
+
+    def _ownership_default_value_for_type(self, c_type: str) -> str:
+        """Return a neutral value used to invalidate moved-from bindings."""
+        if c_type in ("double", "float"):
+            return "0.0"
+        if c_type == "bool":
+            return "false"
+        if c_type.endswith("*") or c_type.endswith("[]"):
+            return "NULL"
+        return "0"
+
+    def _infer_async_payload_type_from_expression(self, node: Any) -> Optional[str]:
+        """Resolve async payload C type from an expression producing an async frame."""
+        if isinstance(node, FunctionCall):
+            resolved = self._resolve_generic_call_name(node)
+            return self.async_function_return_types.get(resolved) or self.async_function_return_types.get(node.name)
+        if isinstance(node, Identifier):
+            if node.name in self.async_task_payload_types:
+                return self.async_task_payload_types[node.name]
+            if node.name in self.async_function_return_types:
+                return self.async_function_return_types[node.name]
+        return None
+
+    def _await_extract_expression(self, payload_type: str, task_var: str) -> str:
+        """Return C expression that reads awaited result with appropriate cast."""
+        if payload_type in ("double", "float"):
+            return f"(({payload_type})({task_var}->result_f64))"
+        if payload_type == "bool":
+            return f"((bool)({task_var}->result_i64))"
+        if payload_type.endswith("*") or payload_type.endswith("[]"):
+            return f"(({payload_type})({task_var}->result_ptr))"
+        return f"(({payload_type})({task_var}->result_i64))"
+
+    def _emit_async_result_store(self, frame_var: str, payload_type: str, value_expr: str) -> None:
+        """Store async return payload into frame using type-appropriate field."""
+        if payload_type in ("double", "float"):
+            self.emit(f"{frame_var}->result_f64 = (double)({value_expr});")
+            return
+        if payload_type == "bool":
+            self.emit(f"{frame_var}->result_i64 = (intptr_t)(({value_expr}) ? 1 : 0);")
+            return
+        if payload_type.endswith("*") or payload_type.endswith("[]"):
+            self.emit(f"{frame_var}->result_ptr = (void*)({value_expr});")
+            return
+        self.emit(f"{frame_var}->result_i64 = (intptr_t)({value_expr});")
+
+    def _generate_await_expression(self, node: AwaitExpression) -> str:
+        """Lower await to coroutine frame polling + typed payload extraction."""
+        inner_expr = getattr(node, 'expression', None)
+        if inner_expr is None:
+            inner_expr = getattr(node, 'expr', None)
+        if inner_expr is None:
+            return "0"
+
+        payload_type = self._infer_async_payload_type_from_expression(inner_expr)
+
+        if isinstance(inner_expr, Identifier) and inner_expr.name in self.async_function_return_types:
+            task_expr = f"{inner_expr.name}()"
+            payload_type = payload_type or self.async_function_return_types.get(inner_expr.name)
+        else:
+            task_expr = self._generate_expression(inner_expr)
+
+        if payload_type is None:
+            return task_expr
+
+        self.needed_runtime_functions.add("nxl_async_resume")
+        self.needed_runtime_functions.add("nxl_async_destroy")
+
+        extracted_expr = self._await_extract_expression(payload_type, "_nxl_task")
+        default_result = self._ownership_default_value_for_type(payload_type)
+        return (
+            "({ NXLAsyncFrame* _nxl_task = "
+            + task_expr
+            + "; "
+            + payload_type
+            + " _nxl_result = "
+            + default_result
+            + "; if (_nxl_task) { while (!_nxl_task->done) { nxl_async_resume(_nxl_task); } _nxl_result = "
+            + extracted_expr
+            + "; nxl_async_destroy(_nxl_task); } _nxl_result; })"
+        )
+
+    def _generate_move_expression(self, node: MoveExpression) -> str:
+        """Lower move as read-then-invalidate while preserving expression semantics."""
+        var_name = node.var_name
+        source_expr = self._resolve_symbol_name(var_name)
+        source_type = self.symbol_table.get(var_name, "void*")
+        neutral = self._ownership_default_value_for_type(source_type)
+
+        self.moved_variables.add(var_name)
+        return f"({{ __auto_type _nxl_moved = {source_expr}; {source_expr} = {neutral}; _nxl_moved; }})"
+
+    def _generate_borrow_expression(self, node: Any) -> str:
+        """Lower borrow as a tracked read from the source binding."""
+        var_name = node.var_name
+        mutable = bool(getattr(node, 'mutable', False))
+        entry = self.borrow_tracker.get(var_name, {"immutable_count": 0, "is_mutable": False})
+
+        if mutable:
+            entry = {"immutable_count": 0, "is_mutable": True}
+        else:
+            entry = {
+                "immutable_count": int(entry.get("immutable_count", 0)) + 1,
+                "is_mutable": bool(entry.get("is_mutable", False)),
+            }
+        self.borrow_tracker[var_name] = entry
+
+        return self._resolve_symbol_name(var_name)
+
+    def _generate_drop_borrow_statement(self, node: DropBorrowStatement) -> None:
+        """Lower drop-borrow as ownership bookkeeping update (no emitted C statements)."""
+        var_name = node.var_name
+        mutable = bool(node.mutable)
+        entry = self.borrow_tracker.get(var_name)
+        if entry is None:
+            return
+
+        if mutable:
+            self.borrow_tracker[var_name] = {"immutable_count": 0, "is_mutable": False}
+            return
+
+        immutable_count = int(entry.get("immutable_count", 0))
+        is_mutable = bool(entry.get("is_mutable", False))
+        if immutable_count <= 1 and not is_mutable:
+            self.borrow_tracker.pop(var_name, None)
+            return
+
+        self.borrow_tracker[var_name] = {
+            "immutable_count": max(0, immutable_count - 1),
+            "is_mutable": is_mutable,
+        }
 
     def _evaluate_constant_expr(self, expr: Any):
         """Try to evaluate an expression to a Python constant."""
@@ -2172,10 +3363,10 @@ class CCodeGenerator(CodeGenerator):
     def _generate_object_instantiation(self, node: ObjectInstantiation) -> str:
         """Generate C code for object instantiation (new ClassName)."""
         constructor_name = f"{node.class_name}_new"
-        
-        # For now, we don't pass constructor arguments (constructors with params not yet implemented)
-        # Just call the constructor function
-        return f"{constructor_name}()"
+
+        args = [self._generate_expression(arg) for arg in getattr(node, 'arguments', [])]
+        args_str = ", ".join(args)
+        return f"{constructor_name}({args_str})"
     
     def _generate_member_access(self, node: MemberAccess) -> str:
         """Generate C code for member access (object.property or object.method())."""
@@ -2225,6 +3416,11 @@ class CCodeGenerator(CodeGenerator):
     
     def _generate_function_call(self, node: FunctionCall) -> str:
         """Generate function call."""
+        call_name = self._resolve_generic_call_name(node)
+
+        if isinstance(call_name, str) and call_name in self.extern_functions:
+            return self._generate_extern_function_call(call_name, node)
+
         # Handle built-in functions specially
         if node.name == "print":
             # Map to printf with appropriate format
@@ -2260,7 +3456,69 @@ class CCodeGenerator(CodeGenerator):
             else:
                 args_str = ""
             
-            return f"{node.name}({args_str})"
+            return f"{call_name}({args_str})"
+
+    def _is_pointer_like_c_type(self, c_type: str) -> bool:
+        """Return True when C type transports a pointer/function pointer value."""
+        if not c_type:
+            return False
+        normalized = c_type.strip()
+        if "*" in normalized:
+            return True
+        if normalized in self.extern_types:
+            kind = self.extern_types[normalized].get("kind")
+            return kind in {"opaque", "function_pointer"}
+        return False
+
+    def _is_null_literal_expr(self, arg: Any) -> bool:
+        """Return True for explicit null/zero pointer literals."""
+        if isinstance(arg, Literal):
+            if arg.type == "null":
+                return True
+            if arg.type == "integer" and arg.value == 0:
+                return True
+        return False
+
+    def _generate_extern_function_call(self, call_name: str, node: FunctionCall) -> str:
+        """Generate hardened extern function calls with FFI-specific argument handling."""
+        meta = self.extern_functions.get(call_name, {})
+        params = list(meta.get("parameters", []))
+        variadic = bool(meta.get("variadic", False))
+        args: List[str] = []
+
+        for idx, arg in enumerate(node.arguments or []):
+            arg_expr = self._generate_expression(arg)
+            arg_type = self._infer_type(arg)
+
+            if idx < len(params):
+                expected_type = params[idx].get("type", arg_type)
+                param_name = params[idx].get("name", f"arg_{idx}")
+
+                if isinstance(arg, CallbackReference):
+                    arg_expr = f"({expected_type}){arg_expr}"
+                elif self._is_pointer_like_c_type(expected_type) and not self._is_null_literal_expr(arg):
+                    self.needed_runtime_functions.add("nxl_ffi_check_ptr")
+                    arg_expr = (
+                        f"({expected_type})nxl_ffi_check_ptr((void*)({arg_expr}), "
+                        f"\"{param_name}\", __LINE__)"
+                    )
+                elif arg_type != expected_type:
+                    arg_expr = f"({expected_type})({arg_expr})"
+            elif variadic:
+                if isinstance(arg, CallbackReference):
+                    arg_expr = f"(void*)({arg_expr})"
+                elif arg_type == "bool":
+                    arg_expr = f"(int)({arg_expr})"
+                elif arg_type == "float":
+                    arg_expr = f"(double)({arg_expr})"
+                elif self._is_pointer_like_c_type(arg_type) and not self._is_null_literal_expr(arg):
+                    self.needed_runtime_functions.add("nxl_ffi_check_ptr")
+                    arg_expr = f"(void*)nxl_ffi_check_ptr((void*)({arg_expr}), \"vararg_{idx}\", __LINE__)"
+
+            args.append(arg_expr)
+
+        args_str = ", ".join(args)
+        return f"{call_name}({args_str})"
     
     def _generate_index_expression(self, node: IndexExpression) -> str:
         """Generate C code for array indexing: array[index]."""
@@ -2295,15 +3553,79 @@ class CCodeGenerator(CodeGenerator):
             # Empty list
             return "{}"
     
+    # ------------------------------------------------------------------
+    # NxlDict runtime preamble (injected once on first dict literal use)
+    # ------------------------------------------------------------------
+
+    _NXLDICT_PREAMBLE = [
+        "#include <stdarg.h>",
+        "typedef struct { void** keys; void** values; int count; } NxlDict;",
+        "static NxlDict* nxl_dict_create(int n, ...) {",
+        "    NxlDict* d = (NxlDict*)malloc(sizeof(NxlDict));",
+        "    d->keys   = (void**)malloc((size_t)n * sizeof(void*));",
+        "    d->values = (void**)malloc((size_t)n * sizeof(void*));",
+        "    d->count  = n;",
+        "    va_list ap; va_start(ap, n);",
+        "    for (int i = 0; i < n; i++) {",
+        "        d->keys[i]   = va_arg(ap, void*);",
+        "        d->values[i] = va_arg(ap, void*);",
+        "    }",
+        "    va_end(ap);",
+        "    return d;",
+        "}",
+        "static void* nxl_dict_get(NxlDict* d, const char* key) {",
+        "    for (int i = 0; i < d->count; i++) {",
+        "        if (d->keys[i] && strcmp((const char*)d->keys[i], key) == 0)",
+        "            return d->values[i];",
+        "    }",
+        "    return NULL;",
+        "}",
+    ]
+
+    def _ensure_nxldict_runtime(self) -> None:
+        """Inject the NxlDict struct and helper functions once into the preamble."""
+        sentinel = "typedef struct { void** keys; void** values; int count; } NxlDict;"
+        if sentinel not in self.forward_declarations:
+            for line in self._NXLDICT_PREAMBLE:
+                if line not in self.forward_declarations:
+                    self.forward_declarations.append(line)
+
     def _generate_dict_expression(self, node: Any) -> str:
-        """Generate C code for dictionary literal.
-        
-        Note: C doesn't have native dictionaries. This generates a comment for now.
-        A real implementation would need a hash table library or struct-based approach.
+        """Generate C code for a dictionary literal using the NxlDict runtime struct.
+
+        Each dict literal is expressed as a nxl_dict_create(n, key0, val0, ...) call.
+        Keys are passed as (void*) string pointers; integer/boolean values are cast
+        via (intptr_t).  The resulting NxlDict* can be accessed with nxl_dict_get().
         """
-        # For now, generate a comment indicating this needs manual implementation
-        # In the future, could use a hash table library like uthash
-        return "/* Dictionary literals not yet supported in C generation - use a hash table library */"
+        self._ensure_nxldict_runtime()
+
+        entries = node.entries
+        # entries may be a dict (empty) or a list of (key_expr, value_expr) tuples
+        if isinstance(entries, dict):
+            entries = list(entries.items())
+
+        if not entries:
+            return "nxl_dict_create(0)"
+
+        n = len(entries)
+        args = [str(n)]
+        for key_node, val_node in entries:
+            key_expr = self._generate_expression(key_node)
+            val_expr = self._generate_expression(val_node)
+            # Cast key to void*; strings are already const char* which is compatible.
+            # For non-string keys, wrap via (void*)(intptr_t)(...).
+            key_type = self._infer_type(key_node)
+            if key_type == "const char*":
+                args.append(f"(void*)({key_expr})")
+            else:
+                args.append(f"(void*)(intptr_t)({key_expr})")
+            # Values: same pattern
+            val_type = self._infer_type(val_node)
+            if val_type == "const char*":
+                args.append(f"(void*)({val_expr})")
+            else:
+                args.append(f"(void*)(intptr_t)({val_expr})")
+        return f"nxl_dict_create({', '.join(args)})"
     
     def _get_stdlib_mappings(self):
         """Get mapping of NexusLang stdlib functions to C functions."""
@@ -2425,7 +3747,22 @@ class CCodeGenerator(CodeGenerator):
     
     def _map_type(self, nxl_type: str) -> str:
         """Map NexusLang type to C type."""
+        if not isinstance(nxl_type, str):
+            return "void*"
+
+        if nxl_type in self.extern_types:
+            return nxl_type
+
         if isinstance(nxl_type, str) and nxl_type.lower().startswith("channel"):
+            return "void*"
+
+        lowered = nxl_type.lower().strip()
+        if lowered in {"pointer", "void*"}:
+            return "void*"
+        if "pointer" in lowered or "*" in nxl_type:
+            return "void*"
+        if lowered.startswith("struct "):
+            # By-value struct ABI across FFI is not guaranteed; transport as pointer.
             return "void*"
 
         type_map = {
@@ -3027,8 +4364,45 @@ int nxl_random_int(int min_val, int max_val) {
         self._collect_console_runtime(code_parts)
         self._collect_array_runtime(code_parts)
         self._collect_channel_runtime(code_parts)
+        self._collect_async_runtime(code_parts)
         self._collect_math_runtime(code_parts)
         return "\n".join(code_parts)
+
+    def _collect_async_runtime(self, code_parts: list) -> None:
+        """Append async coroutine-frame helpers to code_parts."""
+        required = {"nxl_async_frame_create", "nxl_async_resume", "nxl_async_destroy"}
+        if not required.intersection(self.needed_runtime_functions):
+            return
+
+        code_parts.append('''
+typedef struct NXLAsyncFrame {
+    int state;
+    int done;
+    intptr_t result_i64;
+    double result_f64;
+    void* result_ptr;
+} NXLAsyncFrame;
+
+NXLAsyncFrame* nxl_async_frame_create(void) {
+    NXLAsyncFrame* frame = (NXLAsyncFrame*)malloc(sizeof(NXLAsyncFrame));
+    if (!frame) return NULL;
+    frame->state = 0;
+    frame->done = 0;
+    frame->result_i64 = 0;
+    frame->result_f64 = 0.0;
+    frame->result_ptr = NULL;
+    return frame;
+}
+
+void nxl_async_resume(NXLAsyncFrame* frame) {
+    if (!frame || frame->done) return;
+    frame->state += 1;
+    frame->done = 1;
+}
+
+void nxl_async_destroy(NXLAsyncFrame* frame) {
+    if (frame) free(frame);
+}''')
 
     def _collect_channel_runtime(self, code_parts: list) -> None:
         """Append channel runtime helpers to code_parts."""

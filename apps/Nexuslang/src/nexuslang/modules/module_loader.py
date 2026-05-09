@@ -11,6 +11,19 @@ from typing import Dict, List, Optional, Set, Any, Tuple
 from nexuslang.parser.lexer import Lexer
 from nexuslang.parser.parser import Parser
 from nexuslang.runtime.runtime import Runtime
+from nexuslang.errors import NxlError
+
+
+_RECOVERABLE_MODULE_LOAD_EXCEPTIONS = (
+    NxlError,
+    RuntimeError,
+    ValueError,
+    TypeError,
+    AttributeError,
+    OSError,
+    UnicodeError,
+    NameError,
+)
 
 class CircularImportError(ImportError):
     """Error raised when a circular import is detected."""
@@ -338,7 +351,7 @@ class ModuleLoader:
             
             # Return the module object
             return module
-        except Exception as e:
+        except _RECOVERABLE_MODULE_LOAD_EXCEPTIONS as e:
             raise ImportError(f"Error loading module '{file_path}': {str(e)}") from e
     
     def get_module_path(self, module_name: str) -> Optional[str]:

@@ -1,6 +1,6 @@
 # NexusLang Feature Support Matrix
 
-Updated: 2026-04-30
+Updated: 2026-05-07
 
 Legend:
 
@@ -55,6 +55,13 @@ Scope columns:
 - For each row marked ❌ or ⚠️, create/track concrete implementation tasks with file-level targets.
 
 ### Recent Gap Fill Progress
+
+- 2026-05-07: C backend generator-expression `for each` lowering now also supports identifier sources backed by local list-initialized arrays (known bounds propagated via local `array_sizes`), with unit and native C roundtrip regressions.
+- 2026-05-07: C backend generator-expression `for each` now supports non-sized/non-local identifier sources when explicit `<source>_length` metadata is in scope; lowering uses bounded materialization with runtime-safe allocation checks and native roundtrip coverage.
+- 2026-05-07: C backend metadata alias resolution for generator sources now accepts `_length`, `_len`, `_size`, `_count` suffixes (or standalone `length`/`len`/`size`/`count` fallbacks); strict type diagnostics ensure metadata variables are integer-typed (int/long/size_t) with actionable error messages listing valid aliases.
+- 2026-05-07: Parser now consumes lexer-defined end-form aliases for block termination (`end loop`, `end try`, `end concurrent`, `end the interface`, `end the trait`) with dedicated parser regression tests.
+- 2026-05-07: Parser class/method termination parity completed for lexer aliases `end the class` and `end the method` in class/method parse paths, with dedicated parser regressions.
+- 2026-05-07: C backend now lowers `for each` over generator expressions via explicit materialization (mapped/filtered forms over list/array sources), with native C roundtrip execution coverage.
 
 - 2026-04-30: Channels tooling moved from ❌ to ⚠️ after adding baseline LSP completions, hover docs, and diagnostics with dedicated tooling tests.
 - 2026-04-30: Channels compiler semantics hardened in C/LLVM backend integration: thread-safe blocking receive with condition-variable wakeup, close-aware receive path, and emitted close runtime declaration. Compiler remains ⚠️ until payload ownership and full close operation surface are complete.

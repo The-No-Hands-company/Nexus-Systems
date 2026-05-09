@@ -1,11 +1,18 @@
 import { entityResponse, listResponse } from "./contracts";
 
-export function registerCustomerValueObservatoryRoutes(app: any) {
-  app.get("/api/customer-value/accounts", async () => listResponse([], "Customer value account registry is stubbed."));
-  app.get("/api/customer-value/outcomes", async () => listResponse([], "Customer outcome tracking is stubbed."));
+export function registerCustomerValueObservatoryRoutes(app: ForgeRouteApp) {
+  app.get("/api/customer-value/accounts", async () =>
+    listResponse([], "Customer value account registry is stubbed."),
+  );
+  app.get("/api/customer-value/outcomes", async () =>
+    listResponse([], "Customer outcome tracking is stubbed."),
+  );
 
-  app.post("/api/customer-value/hypotheses", async ({ body }: any) =>
-    entityResponse({ id: "customer-value-hypothesis-stub", ...(body || {}) }, "Value hypothesis workflow is stubbed.")
+  app.post("/api/customer-value/hypotheses", async ({ body }) =>
+    entityResponse(
+      { id: "customer-value-hypothesis-stub", ...(body || {}) },
+      "Value hypothesis workflow is stubbed.",
+    ),
   );
 
   app.get("/api/customer-value/dimensions", async () =>
@@ -13,7 +20,7 @@ export function registerCustomerValueObservatoryRoutes(app: any) {
       {
         dimensions: ["adoption", "time-to-value", "retention", "expansion"],
       },
-      "Customer value dimensions are stubbed."
-    )
+      "Customer value dimensions are stubbed.",
+    ),
   );
 }

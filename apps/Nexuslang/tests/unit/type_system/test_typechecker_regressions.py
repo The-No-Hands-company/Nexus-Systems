@@ -97,3 +97,49 @@ def test_generator_function_reports_incompatible_yield_types():
         "end\n"
     )
     assert any("incompatible yield types" in e.lower() for e in errors)
+
+
+def test_statement_contains_yield_handles_token_enum_cycles_without_recursion():
+    """Yield scan should not recurse infinitely through Token/Enum metadata internals."""
+    source = (
+        "set tasks to []\n"
+        "function mark_done with task_id as Integer\n"
+        "    for each task in tasks\n"
+        "        if task[\"id\"] is equal to task_id\n"
+        "            set task[\"status\"] to \"done\"\n"
+        "        end\n"
+        "    end\n"
+        "end\n"
+    )
+
+    tokens = Lexer(source).tokenize()
+    program = Parser(tokens, source).parse()
+    checker = TypeChecker()
+
+    function_def = next(stmt for stmt in program.statements if type(stmt).__name__ == "FunctionDefinition")
+
+    # This call previously raised RecursionError due to metadata cycles.
+    assert checker._statement_contains_yield(function_def.body[0]) is False
+
+
+def test_typechecker_accepts_function_heavy_business_flow_without_recursion_crash():
+    """Function-heavy business logic should typecheck without recursion-depth failures."""
+    source = (
+        "set tasks to []\n"
+        "function add_task with title as String and owner as String\n"
+        "    set task to {\"id\": 1, \"title\": title, \"owner\": owner, \"status\": \"todo\"}\n"
+        "    append task to tasks\n"
+        "end\n"
+        "function mark_done with task_id as Integer\n"
+        "    for each task in tasks\n"
+        "        if task[\"id\"] is equal to task_id\n"
+        "            set task[\"status\"] to \"done\"\n"
+        "        end\n"
+        "    end\n"
+        "end\n"
+        "add_task with \"A\" and \"Ana\"\n"
+        "mark_done with 1\n"
+    )
+
+    errors = _typecheck(source)
+    assert isinstance(errors, list)

@@ -1,0 +1,117 @@
+# Task Tracker Dashboard
+# Demonstrates a reusable business application workflow in NexusLang:
+# - Task intake and ownership
+# - Status transitions (todo, in_progress, blocked, done)
+# - KPI and dashboard reporting
+
+set tasks to []
+
+function add_task with title as String and owner as String and priority as String and estimate_hours as Integer
+    set task_id to length of tasks plus 1
+    set task to {
+        "id": task_id,
+        "title": title,
+        "owner": owner,
+        "priority": priority,
+        "estimate_hours": estimate_hours,
+        "spent_hours": 0,
+        "status": "todo"
+    }
+
+    append task to tasks
+    print text "Task created: " plus title
+end
+
+function update_status with task_id as Integer and new_status as String returns Boolean
+    for each task in tasks
+        if task["id"] is equal to task_id
+            set task["status"] to new_status
+            return true
+        end
+    end
+    return false
+end
+
+function log_time with task_id as Integer and hours as Integer returns Boolean
+    for each task in tasks
+        if task["id"] is equal to task_id
+            set task["spent_hours"] to task["spent_hours"] plus hours
+            return true
+        end
+    end
+    return false
+end
+
+function print_board
+    print text ""
+    print text "=== Delivery Board ==="
+
+    for each task in tasks
+        print text "#" plus to_string with task["id"] plus " | " plus task["title"]
+        print text "  Owner: " plus task["owner"] plus " | Priority: " plus task["priority"]
+        print text "  Status: " plus task["status"]
+        print text "  Effort: " plus to_string with task["spent_hours"] plus "h / " plus to_string with task["estimate_hours"] plus "h"
+    end
+end
+
+function print_kpis
+    set todo_count to 0
+    set in_progress_count to 0
+    set blocked_count to 0
+    set done_count to 0
+    set total_estimate to 0
+    set total_spent to 0
+    set at_risk_count to 0
+
+    for each task in tasks
+        set total_estimate to total_estimate plus task["estimate_hours"]
+        set total_spent to total_spent plus task["spent_hours"]
+
+        if task["status"] is equal to "todo"
+            set todo_count to todo_count plus 1
+        else if task["status"] is equal to "in_progress"
+            set in_progress_count to in_progress_count plus 1
+        else if task["status"] is equal to "blocked"
+            set blocked_count to blocked_count plus 1
+        else if task["status"] is equal to "done"
+            set done_count to done_count plus 1
+        end
+
+        if task["spent_hours"] is greater than task["estimate_hours"] and task["status"] is not equal to "done"
+            set at_risk_count to at_risk_count plus 1
+        end
+    end
+
+    print text ""
+    print text "=== KPI Summary ==="
+    print text "Total tasks: " plus to_string with length of tasks
+    print text "Todo: " plus to_string with todo_count
+    print text "In progress: " plus to_string with in_progress_count
+    print text "Blocked: " plus to_string with blocked_count
+    print text "Done: " plus to_string with done_count
+    print text "Estimated effort: " plus to_string with total_estimate plus "h"
+    print text "Spent effort: " plus to_string with total_spent plus "h"
+    print text "Open at-risk tasks: " plus to_string with at_risk_count
+end
+
+# Simulated sprint workflow
+print text "Task Tracker Dashboard Showcase"
+print text "================================"
+
+add_task with "Build onboarding API" and "Ana" and "high" and 8
+add_task with "Import ERP invoices" and "Marek" and "high" and 13
+add_task with "Customer CSV mapping" and "Lina" and "medium" and 5
+add_task with "Release smoke tests" and "Ivo" and "medium" and 6
+
+update_status with 1 and "in_progress"
+update_status with 2 and "blocked"
+update_status with 3 and "in_progress"
+update_status with 4 and "done"
+
+log_time with 1 and 9
+log_time with 2 and 4
+log_time with 3 and 3
+log_time with 4 and 6
+
+print_board with
+print_kpis with

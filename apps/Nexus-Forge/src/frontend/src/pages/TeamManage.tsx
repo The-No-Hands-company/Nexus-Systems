@@ -7,7 +7,12 @@ export default function TeamManage() {
     <section>
       <h2>Team Management</h2>
       <p>Team and permission management is a stubbed experience in this prototype.</p>
-      <form onSubmit={(event) => { event.preventDefault(); setTeamName(""); }}>
+      <form
+        onSubmit={(event) => {
+          event.preventDefault();
+          setTeamName("");
+        }}
+      >
         <label>
           Team name
           <input value={teamName} onChange={(event) => setTeamName(event.target.value)} />

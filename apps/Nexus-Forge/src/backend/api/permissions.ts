@@ -1,6 +1,4 @@
-import type { Elysia } from "elysia";
-
-export function permissionRoutes(app: Elysia) {
+export function permissionRoutes(app: ForgeRouteApp) {
   app.get("/api/permissions/check", async ({ query }) => {
     const repo = query.repo || "unknown";
     return {

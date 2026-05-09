@@ -1,7 +1,7 @@
 import { featureCatalog, getFeatureSummary } from "../features/catalog";
 
-export function registerPlatformRoutes(app: any) {
-  app.get("/api/features", async ({ query }: any) => {
+export function registerPlatformRoutes(app: ForgeRouteApp) {
+  app.get("/api/features", async ({ query }) => {
     const category = query?.category as string | undefined;
     const state = query?.state as string | undefined;
 
@@ -18,7 +18,7 @@ export function registerPlatformRoutes(app: any) {
     };
   });
 
-  app.get("/api/features/:id", async ({ params }: any) => {
+  app.get("/api/features/:id", async ({ params }) => {
     const found = featureCatalog.find((item) => item.id === params.id);
     if (!found) return { error: "Feature not found", status: 404 };
     return { feature: found };
@@ -31,16 +31,8 @@ export function registerPlatformRoutes(app: any) {
         "Federation contract endpoints",
         "AI integration contract",
       ],
-      next: [
-        "Issue and project workflows",
-        "CI/CD pipelines",
-        "Security scans",
-      ],
-      later: [
-        "Federated replication",
-        "Observability and policy-as-code",
-        "Enterprise governance",
-      ],
+      next: ["Issue and project workflows", "CI/CD pipelines", "Security scans"],
+      later: ["Federated replication", "Observability and policy-as-code", "Enterprise governance"],
     };
   });
 

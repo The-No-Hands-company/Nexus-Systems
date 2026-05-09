@@ -1,5 +1,5 @@
-import simpleGit, { SimpleGit, SimpleGitOptions } from "simple-git";
-import { VCSCommit, VCSDiff, VCSBackend } from "./vcs-types";
+import simpleGit, { type SimpleGit, type SimpleGitOptions } from "simple-git";
+import type { VCSBackend, VCSCommit, VCSDiff } from "./vcs-types";
 
 const gitOptions: Partial<SimpleGitOptions> = {
   binary: "git",
@@ -7,7 +7,7 @@ const gitOptions: Partial<SimpleGitOptions> = {
 };
 
 export class GitBackend implements VCSBackend {
-  name: "git" = "git";
+  name = "git" as const;
   version = "2.40+";
 
   private git(repoPath: string): SimpleGit {
@@ -49,12 +49,16 @@ export class GitBackend implements VCSBackend {
     const git = this.git(repoPath);
     const result = await git.show(["--quiet", "--format=%H%n%an%n%s%n%ai", hash]);
     if (!result) return null;
-    const [commitHash, author, message, timestamp] = result.trim().split("\n");
+    const [commitHashRaw, authorRaw, messageRaw, timestampRaw] = result.trim().split("\n");
+    const commitHash = commitHashRaw ?? hash;
+    const author = authorRaw ?? "unknown";
+    const message = messageRaw ?? "";
+    const timestamp = timestampRaw ?? new Date().toISOString();
     return {
       hash: commitHash,
-      author: author || "unknown",
-      message: message || "",
-      timestamp: timestamp || new Date().toISOString(),
+      author,
+      message,
+      timestamp,
       files: [],
     };
   }

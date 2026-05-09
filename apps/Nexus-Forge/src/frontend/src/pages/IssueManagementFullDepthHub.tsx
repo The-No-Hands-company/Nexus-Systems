@@ -11,7 +11,11 @@ export default function IssueManagementFullDepthHub() {
           fetch("/api/issue-management-full-depth/hierarchy"),
           fetch("/api/issue-management-full-depth/iterations"),
         ]);
-        const [meta, hier, iter] = await Promise.all([metaRes.json(), hierRes.json(), iterRes.json()]);
+        const [meta, hier, iter] = await Promise.all([
+          metaRes.json(),
+          hierRes.json(),
+          iterRes.json(),
+        ]);
         setCounts({
           metadata: Array.isArray(meta.items) ? meta.items.length : 0,
           hierarchy: Array.isArray(hier.items) ? hier.items.length : 0,
@@ -29,9 +33,18 @@ export default function IssueManagementFullDepthHub() {
       <h2>Issue Management Full Depth Hub</h2>
       <p>Deep issue parity covering metadata, hierarchy, and iteration controls.</p>
       <div className="repo-grid">
-        <article className="repo-card"><h3>Metadata</h3><p>{counts.metadata}</p></article>
-        <article className="repo-card"><h3>Hierarchy</h3><p>{counts.hierarchy}</p></article>
-        <article className="repo-card"><h3>Iterations</h3><p>{counts.iterations}</p></article>
+        <article className="repo-card">
+          <h3>Metadata</h3>
+          <p>{counts.metadata}</p>
+        </article>
+        <article className="repo-card">
+          <h3>Hierarchy</h3>
+          <p>{counts.hierarchy}</p>
+        </article>
+        <article className="repo-card">
+          <h3>Iterations</h3>
+          <p>{counts.iterations}</p>
+        </article>
       </div>
     </section>
   );

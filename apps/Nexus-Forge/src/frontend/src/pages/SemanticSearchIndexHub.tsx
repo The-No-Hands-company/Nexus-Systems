@@ -1,7 +1,10 @@
 import { useEffect, useState } from "react";
 
 export default function SemanticSearchIndexHub() {
-  const [stats, setStats] = useState<{ indexed: number; ready: boolean }>({ indexed: 0, ready: false });
+  const [stats, setStats] = useState<{ indexed: number; ready: boolean }>({
+    indexed: 0,
+    ready: false,
+  });
 
   useEffect(() => {
     async function load() {
@@ -31,7 +34,9 @@ export default function SemanticSearchIndexHub() {
         </article>
         <article className="repo-card">
           <h3>Stats</h3>
-          <p>Indexed: {stats.indexed}, Ready: {stats.ready ? "Yes" : "No"}</p>
+          <p>
+            Indexed: {stats.indexed}, Ready: {stats.ready ? "Yes" : "No"}
+          </p>
         </article>
       </div>
     </section>

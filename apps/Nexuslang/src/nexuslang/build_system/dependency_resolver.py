@@ -2,15 +2,23 @@
 Dependency Resolution
 =====================
 
-Handles dependency resolution and version management.
+Legacy dependency-resolution compatibility surface.
+
+Maintains the older graph-shaped API while delegating actual resolution to the
+maintained lockfile and registry tooling where possible.
 """
 
 from dataclasses import dataclass, field
-from typing import Dict, List, Set, Optional, Tuple
+from typing import Dict, List, Set, Optional, Tuple, Any
 from pathlib import Path
-import re
 
 from .project import Dependency
+from nexuslang.tooling.lockfile import (
+    LockedPackage,
+    resolve_git_dependency as maintained_resolve_git_dependency,
+    resolve_path_dependency as maintained_resolve_path_dependency,
+    resolve_registry_dependency as maintained_resolve_registry_dependency,
+)
 
 
 class VersionConstraint:
@@ -165,7 +173,7 @@ class DependencyGraph:
 class DependencyResolver:
     """Resolves project dependencies."""
     
-    def __init__(self, package_registry: Optional[Dict[str, Dict[str, Any]]] = None):
+    def __init__(self, package_registry: Optional[Dict[str, Dict[str, Any]]] = None, project_root: Optional[Path] = None):
         """
         Initialize dependency resolver.
         
@@ -173,7 +181,35 @@ class DependencyResolver:
             package_registry: Mock registry for testing (name -> versions -> metadata)
         """
         self.package_registry = package_registry or {}
+        self.project_root = Path(project_root) if project_root is not None else Path.cwd()
         self.resolved: Dict[str, ResolvedDependency] = {}
+
+    def _dependency_to_spec(self, dep: Dependency) -> Dict[str, Any]:
+        spec: Dict[str, Any] = {}
+        if dep.version:
+            spec["version"] = dep.version
+        if dep.path:
+            spec["path"] = dep.path
+        if dep.git_url:
+            spec["git"] = dep.git_url
+        if getattr(dep, "git_rev", None):
+            spec["rev"] = dep.git_rev
+        elif getattr(dep, "git_tag", None):
+            spec["tag"] = dep.git_tag
+        elif dep.git_branch:
+            spec["branch"] = dep.git_branch
+        return spec
+
+    @staticmethod
+    def _resolved_dependency_from_locked(pkg: LockedPackage) -> ResolvedDependency:
+        return ResolvedDependency(
+            name=pkg.name,
+            version=pkg.version,
+            source=pkg.source,
+            path=Path(pkg.resolved_path) if pkg.resolved_path else None,
+            git_url=pkg.git_url,
+            git_commit=pkg.git_commit,
+        )
     
     def resolve(self, dependencies: Dict[str, Dependency]) -> DependencyGraph:
         """
@@ -211,130 +247,54 @@ class DependencyResolver:
             return self._resolve_registry_dependency(dep)
     
     def _resolve_path_dependency(self, dep: Dependency) -> Optional[ResolvedDependency]:
-        """Resolve a local path dependency."""
-        if not dep.path:
-            print(f"Error: Path dependency '{dep.name}' missing path")
+        """Resolve a local path dependency via the maintained lockfile layer."""
+        try:
+            locked = maintained_resolve_path_dependency(
+                dep.name,
+                self._dependency_to_spec(dep),
+                self.project_root,
+            )
+        except Exception as exc:
+            print(f"Error: {exc}")
             return None
-        
-        path = Path(dep.path)
-        if not path.exists():
-            print(f"Error: Path not found: {path}")
-            return None
-        
-        resolved = ResolvedDependency(
-            name=dep.name,
-            version=dep.version,
-            source="path",
-            path=path,
-        )
-        
+
+        resolved = self._resolved_dependency_from_locked(locked)
         self.resolved[dep.name] = resolved
         return resolved
     
     def _resolve_git_dependency(self, dep: Dependency) -> Optional[ResolvedDependency]:
-        """Resolve a git dependency by cloning from Git repository.
-        
-        Implements full Git dependency resolution:
-        - Clones repository to local cache
-        - Checks out specified branch/tag/commit
-        - Handles version constraints
-        - Provides local path for dependency usage
-        """
-        import subprocess
-        import os
-        import hashlib
-        from pathlib import Path
-        
-        if not dep.git_url:
-            print(f"Error: Git dependency '{dep.name}' missing URL")
-            return None
-        
-        # Create cache directory for git dependencies
-        cache_dir = Path.home() / ".nxl" / "git_cache"
-        cache_dir.mkdir(parents=True, exist_ok=True)
-        
-        # Generate unique directory name based on URL and branch
-        branch = dep.git_branch or "main"
-        url_hash = hashlib.sha256(f"{dep.git_url}#{branch}".encode()).hexdigest()[:12]
-        repo_dir = cache_dir / f"{dep.name}_{url_hash}"
-        
+        """Resolve a git dependency via the maintained lockfile layer."""
         try:
-            # Check if already cloned
-            if repo_dir.exists():
-                print(f"Using cached Git repository: {dep.name} from {dep.git_url}")
-                # Update existing repository
-                subprocess.run(
-                    ["git", "fetch", "--all"],
-                    cwd=repo_dir,
-                    check=True,
-                    capture_output=True,
-                    timeout=30
-                )
-                subprocess.run(
-                    ["git", "checkout", branch],
-                    cwd=repo_dir,
-                    check=True,
-                    capture_output=True,
-                    timeout=10
-                )
-                subprocess.run(
-                    ["git", "pull"],
-                    cwd=repo_dir,
-                    check=True,
-                    capture_output=True,
-                    timeout=30
-                )
-            else:
-                # Clone new repository
-                print(f"Cloning Git dependency: {dep.name} from {dep.git_url}")
-                subprocess.run(
-                    ["git", "clone", "--branch", branch, "--depth", "1", dep.git_url, str(repo_dir)],
-                    check=True,
-                    capture_output=True,
-                    timeout=60
-                )
-            
-            # Get actual commit hash for version tracking
-            result = subprocess.run(
-                ["git", "rev-parse", "HEAD"],
-                cwd=repo_dir,
-                check=True,
-                capture_output=True,
-                text=True,
-                timeout=5
+            locked = maintained_resolve_git_dependency(
+                dep.name,
+                self._dependency_to_spec(dep),
+                self.project_root,
             )
-            commit_hash = result.stdout.strip()
-            
-            # Create resolved dependency with local path
-            resolved = ResolvedDependency(
-                name=dep.name,
-                version=f"git+{commit_hash[:8]}",
-                source="git",
-                path=str(repo_dir),
-                git_url=dep.git_url,
-                git_commit=commit_hash
-            )
-            
-            self.resolved[dep.name] = resolved
-            print(f"Successfully resolved Git dependency: {dep.name} ({commit_hash[:8]})")
-            return resolved
-            
-        except subprocess.TimeoutExpired:
-            print(f"Error: Git operation timed out for '{dep.name}'")
-            print(f"  Repository may be too large or network is slow")
+        except Exception as exc:
+            print(f"Error: {exc}")
             return None
-        except subprocess.CalledProcessError as e:
-            print(f"Error: Failed to clone Git dependency '{dep.name}'")
-            print(f"  URL: {dep.git_url}")
-            print(f"  Branch: {branch}")
-            print(f"  Git error: {e.stderr.decode() if e.stderr else 'Unknown error'}")
-            return None
-        except Exception as e:
-            print(f"Error: Unexpected error resolving Git dependency '{dep.name}': {e}")
-            return None
+
+        resolved = self._resolved_dependency_from_locked(locked)
+        self.resolved[dep.name] = resolved
+        return resolved
     
     def _resolve_registry_dependency(self, dep: Dependency) -> Optional[ResolvedDependency]:
         """Resolve a registry dependency."""
+        if not self.package_registry:
+            try:
+                locked = maintained_resolve_registry_dependency(
+                    dep.name,
+                    dep.version,
+                    self.project_root,
+                )
+            except Exception as exc:
+                print(f"Error: {exc}")
+                return None
+
+            resolved = self._resolved_dependency_from_locked(locked)
+            self.resolved[dep.name] = resolved
+            return resolved
+
         # Check if package exists in registry
         if dep.name not in self.package_registry:
             print(f"Error: Package '{dep.name}' not found in registry")
@@ -366,18 +326,16 @@ class DependencyResolver:
         return resolved
     
     def download_dependencies(self, graph: DependencyGraph, install_dir: Path):
-        """Download all dependencies to install directory."""
+        """Fail fast for deprecated dependency installation behavior."""
         install_dir.mkdir(parents=True, exist_ok=True)
         
         for dep_name in graph.get_build_order():
             dep = graph.nodes[dep_name]
             
             if dep.source == "path":
-                # Local dependency, no download needed
                 continue
-            elif dep.source == "git":
-                # Would clone git repo
-                print(f"Would download {dep.name} from git")
-            else:
-                # Would download from registry
-                print(f"Would download {dep.name} v{dep.version} from registry")
+            raise NotImplementedError(
+                "Legacy build_system.DependencyResolver.download_dependencies is no "
+                "longer maintained. Use the maintained tooling registry and lockfile "
+                "workflow for git/registry dependencies."
+            )

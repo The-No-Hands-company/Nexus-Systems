@@ -31,8 +31,22 @@ import re
 import logging
 from typing import Dict, List, Optional
 
+from ..errors import NxlError
+
 
 logger = logging.getLogger(__name__)
+
+
+_RECOVERABLE_LSP_EXCEPTIONS = (
+    NxlError,
+    RuntimeError,
+    ValueError,
+    TypeError,
+    AttributeError,
+    OSError,
+    UnicodeError,
+    re.error,
+)
 
 
 # LSP InlayHintKind constants
@@ -312,7 +326,7 @@ class InlayHintsProvider:
                             params.append(pm.group(1))
                     if params:
                         cache[key] = params
-            except Exception:
+            except _RECOVERABLE_LSP_EXCEPTIONS:
                 logger.debug("Skipping workspace-index parameter cache enrichment", exc_info=True)
 
         return cache
@@ -369,5 +383,5 @@ def _find_arg_col(
         while pos < len(line) and line[pos] == " ":
             pos += 1
         return pos
-    except Exception:
+    except _RECOVERABLE_LSP_EXCEPTIONS:
         return None

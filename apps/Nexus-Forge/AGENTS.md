@@ -2,6 +2,12 @@
 
 This document describes how **Nexus AI** and agent-based automation integrate with Nexus Forge.
 
+## Engineering Standards
+
+- Follow ../docs/ENGINEERING_STANDARDS.md as the baseline for TypeScript, testing, API behavior, and security posture.
+- Required validation before handoff: bun run check && bun test.
+- Keep Forge on strict TypeScript and prefer Bun-native tooling for local development.
+
 ## Integration Points
 
 ### 1. Code Review on PR Creation

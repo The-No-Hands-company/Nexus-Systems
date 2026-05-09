@@ -996,6 +996,7 @@ def register_collections_functions(runtime):
     runtime.register_function("MaxHeap", MaxHeap)
     runtime.register_function("list_append", list_append)
     runtime.register_function("append", list_append)  # Alias
+    runtime.register_function("range", lambda *args: list(range(*[int(a) for a in args])))
     runtime.register_function("dict_set", dict_set)
     runtime.register_function("dict_get", dict_get)
     runtime.register_function("keys", keys)

@@ -13,6 +13,19 @@ Usage:
 import sys
 import argparse
 import logging
+
+from ..errors import NxlError
+
+
+_RECOVERABLE_LSP_EXCEPTIONS = (
+    NxlError,
+    RuntimeError,
+    ValueError,
+    TypeError,
+    AttributeError,
+    OSError,
+    UnicodeError,
+)
 from .server import NexusLangLanguageServer
 
 
@@ -98,7 +111,7 @@ Examples:
                 logger = logging.getLogger('nexuslang-lsp')
                 logger.info("Server interrupted by user")
             sys.exit(0)
-        except Exception as e:
+        except _RECOVERABLE_LSP_EXCEPTIONS as e:
             if args.debug:
                 logger = logging.getLogger('nexuslang-lsp')
                 logger.error(f"Server error: {e}", exc_info=True)

@@ -60,6 +60,7 @@ class LLVMIRGenerator(CodeGenerator):
         self.struct_types: Dict[str, List[Tuple[str, str]]] = {}  # struct_name -> [(field_name, field_type), ...]
         self.union_types: Dict[str, List[Tuple[str, str]]] = {}  # union_name -> [(field_name, field_type), ...]
         self.class_types: Dict[str, Dict] = {}  # class_name -> {properties: [...], methods: [...], parent: str}
+        self.class_metadata: Dict[str, Dict[str, Any]] = {}  # class_name -> metadata used by variant/property helpers
         self.interface_types: Dict[str, Dict] = {}  # interface_name -> {methods: [...], generic_parameters: [...]}
         self.enum_types: Dict[str, Dict[str, int]] = {}  # enum_name -> {member_name: value}
         
@@ -117,6 +118,9 @@ class LLVMIRGenerator(CodeGenerator):
         # Track which variables contain closures (for call site detection)
         # Maps variable name -> (return_type, param_types, has_environment)
         self.closure_variables: Dict[str, Tuple[str, List[str], bool]] = {}
+        # Function pointer signatures keyed by scope and variable name.
+        # Key format: (scope_name, var_name), where scope_name is function name or "__global__".
+        self.function_pointer_signatures: Dict[Tuple[str, str], Tuple[str, List[str]]] = {}
         # Track lambda captures: lambda_name -> has_captures
         self.lambda_captures: Dict[str, bool] = {}
         # Track last lambda generated (for variable declaration tracking)
@@ -153,12 +157,15 @@ class LLVMIRGenerator(CodeGenerator):
         self.current_coro_handle: Optional[str] = None
         # Track async functions defined: name -> (ret_type, param_types)
         self.async_functions: Dict[str, Tuple[str, List[str]]] = {}
+        # Track coroutine payload types for task variables by (scope, var_name).
+        self.async_task_payload_types: Dict[Tuple[str, str], str] = {}
         # Suspend point counter for unique labels
         self.suspend_counter = 0
         # Track variables that need to survive suspension (for frame spilling)
         self.coro_spilled_vars: Dict[str, Tuple[str, str]] = {}  # var_name -> (llvm_type, frame_slot)
         # Promise struct types generated: type_name -> struct_definition
         self.promise_types: Dict[str, str] = {}
+        self.coroutine_infrastructure_emitted = False
         
         # Reference counting infrastructure (Rc<T>, Weak<T>, Arc<T>)
         # Track if ANY Rc types are used in the program
@@ -178,6 +185,7 @@ class LLVMIRGenerator(CodeGenerator):
         self.has_parallel_for_ops = False
         self.parallel_body_counter = 0
         self.parallel_body_definitions: List[str] = []
+        self.parallel_capture_globals: Set[str] = set()
 
         # Generator runtime support (pull-style frame/next semantics)
         self.has_generator_ops = False
@@ -205,8 +213,11 @@ class LLVMIRGenerator(CodeGenerator):
         
         # FFI system
         self.extern_functions: Dict[str, Tuple[str, List[str], str]] = {}  # name -> (ret_type, param_types, library)
+        self.extern_types: Dict[str, Dict[str, Any]] = {}
         self.required_libraries: Set[str] = set()  # Libraries to link against
         self.exported_functions: List[str] = []  # List of function names to export to C header
+        self._cached_tools: Optional[Tuple[Optional[str], Optional[str], Optional[str]]] = None
+        self._cached_native_runtime_lib: Optional[str] = None
     
     def _detect_architecture(self) -> str:
         """
@@ -797,6 +808,7 @@ class LLVMIRGenerator(CodeGenerator):
     def generate(self, ast, source_file: str = None, debug_info: bool = False) -> str:
         """Generate complete LLVM IR module from AST."""
         self.ir_lines = []
+        self.coroutine_infrastructure_emitted = False
         self.debug_enabled = debug_info
         
         if self.enable_dead_code_elimination:
@@ -813,6 +825,10 @@ class LLVMIRGenerator(CodeGenerator):
         
         source_dir = os.path.dirname(source_file) if source_file else "."
         self._process_imports(ast, source_dir)
+        self.has_async_functions = any(
+            type(stmt).__name__ == 'AsyncFunctionDefinition'
+            for stmt in ast.statements
+        )
         self.top_level_statements = [
             stmt for stmt in ast.statements
             if type(stmt).__name__ not in {
@@ -828,6 +844,9 @@ class LLVMIRGenerator(CodeGenerator):
         self._emit_exception_infrastructure()
         self._generate_module_declarations()
         self._collect_first_pass(ast)
+        # Async detection happens during first pass; emit coroutine types after
+        # that pass so %Promise is fully defined before async function lowering.
+        self._emit_coroutine_infrastructure()
         self._detect_rc_usage(ast)
         self._detect_channel_usage(ast)
         self._detect_parallel_for_usage(ast)
@@ -857,6 +876,7 @@ class LLVMIRGenerator(CodeGenerator):
                 self._generate_pending_specializations()
         
         self._insert_late_type_declarations()
+        self._emit_parallel_capture_global_declarations()
         self._emit_parallel_body_definitions()
         self._emit_lambda_definitions()
         self._emit_string_constants()
@@ -954,7 +974,12 @@ class LLVMIRGenerator(CodeGenerator):
                 field_types = []
                 all_properties = self._get_all_class_properties(class_name)
                 for prop in all_properties:
-                    prop_type = self._map_nxl_type_to_llvm(prop.get('type', 'Integer'))
+                    prop_type = prop.get('type')
+                    if not prop_type:
+                        raise RuntimeError(
+                            f"Unable to emit class layout for '{class_name}' because property '{prop.get('name', '<unknown>')}' has no type metadata"
+                        )
+                    prop_type = self._map_nxl_type_to_llvm(prop_type)
                     field_types.append(prop_type)
                 if field_types:
                     fields_str = ', '.join(field_types)
@@ -1307,10 +1332,19 @@ class LLVMIRGenerator(CodeGenerator):
 
         # Legacy pattern-matching runtime helper symbols kept for compatibility.
         self.emit('declare i1 @NLPL_Optional_has_value(i8*) #4')
-        self.emit('declare i64 @NLPL_Optional_get_value(i8*) #4')
+        self.emit('declare i32 @NLPL_Optional_get_value_kind(i8*) #4')
+        self.emit('declare i64 @NLPL_Optional_get_value_i64(i8*) #4')
+        self.emit('declare double @NLPL_Optional_get_value_f64(i8*) #8')
+        self.emit('declare i8* @NLPL_Optional_get_value_ptr(i8*) #4')
         self.emit('declare i1 @NLPL_Result_is_ok(i8*) #4')
-        self.emit('declare i64 @NLPL_Result_get_value(i8*) #4')
-        self.emit('declare i8* @NLPL_Result_get_error(i8*) #4')
+        self.emit('declare i32 @NLPL_Result_get_value_kind(i8*) #4')
+        self.emit('declare i64 @NLPL_Result_get_value_i64(i8*) #4')
+        self.emit('declare double @NLPL_Result_get_value_f64(i8*) #8')
+        self.emit('declare i32 @NLPL_Result_get_error_kind(i8*) #4')
+        self.emit('declare i64 @NLPL_Result_get_error_i64(i8*) #4')
+        self.emit('declare double @NLPL_Result_get_error_f64(i8*) #8')
+        self.emit('declare i8* @NLPL_Result_get_value_ptr(i8*) #4')
+        self.emit('declare i8* @NLPL_Result_get_error_ptr(i8*) #4')
 
         if 'memcpy' not in self.extern_functions:
             self.emit('declare void @llvm.memcpy.p0i8.p0i8.i64(i8* noalias nocapture writeonly, i8* noalias nocapture readonly, i64, i1 immarg) #10')
@@ -1476,38 +1510,211 @@ class LLVMIRGenerator(CodeGenerator):
         """Define generator frame helpers for pull-style resume semantics."""
         self.emit('; Generator runtime helper functions')
 
+        # predicate_match(value, kind, arg) -> i1
+        # kind: 0=none, 1=truthy, 2=>, 3=>=, 4=<, 5=<=, 6===, 7=!=
+        self.emit('define i1 @nxl_generator_predicate_match(i64 %value, i64 %kind, i64 %arg) {')
+        self.emit('entry:')
+        self.emit('  switch i64 %kind, label %pred_default [')
+        self.emit('    i64 1, label %pred_truthy')
+        self.emit('    i64 2, label %pred_gt')
+        self.emit('    i64 3, label %pred_ge')
+        self.emit('    i64 4, label %pred_lt')
+        self.emit('    i64 5, label %pred_le')
+        self.emit('    i64 6, label %pred_eq')
+        self.emit('    i64 7, label %pred_ne')
+        self.emit('  ]')
+        self.emit('')
+        self.emit('pred_truthy:')
+        self.emit('  %truthy = icmp ne i64 %value, 0')
+        self.emit('  ret i1 %truthy')
+        self.emit('')
+        self.emit('pred_gt:')
+        self.emit('  %gt = icmp sgt i64 %value, %arg')
+        self.emit('  ret i1 %gt')
+        self.emit('')
+        self.emit('pred_ge:')
+        self.emit('  %ge = icmp sge i64 %value, %arg')
+        self.emit('  ret i1 %ge')
+        self.emit('')
+        self.emit('pred_lt:')
+        self.emit('  %lt = icmp slt i64 %value, %arg')
+        self.emit('  ret i1 %lt')
+        self.emit('')
+        self.emit('pred_le:')
+        self.emit('  %le = icmp sle i64 %value, %arg')
+        self.emit('  ret i1 %le')
+        self.emit('')
+        self.emit('pred_eq:')
+        self.emit('  %eq = icmp eq i64 %value, %arg')
+        self.emit('  ret i1 %eq')
+        self.emit('')
+        self.emit('pred_ne:')
+        self.emit('  %ne = icmp ne i64 %value, %arg')
+        self.emit('  ret i1 %ne')
+        self.emit('')
+        self.emit('pred_default:')
+        self.emit('  ret i1 true')
+        self.emit('}')
+        self.emit('')
+
+        # apply_transform(value, op, arg) -> i64
+        # op: 0=identity, 1=add (x+C), 2=sub (x-C), 3=mul (x*C)
+        self.emit('define i64 @nxl_generator_apply_transform(i64 %value, i64 %op, i64 %arg) {')
+        self.emit('entry:')
+        self.emit('  switch i64 %op, label %transform_identity [')
+        self.emit('    i64 1, label %transform_add')
+        self.emit('    i64 2, label %transform_sub')
+        self.emit('    i64 3, label %transform_mul')
+        self.emit('  ]')
+        self.emit('')
+        self.emit('transform_add:')
+        self.emit('  %add_result = add i64 %value, %arg')
+        self.emit('  ret i64 %add_result')
+        self.emit('')
+        self.emit('transform_sub:')
+        self.emit('  %sub_result = sub i64 %value, %arg')
+        self.emit('  ret i64 %sub_result')
+        self.emit('')
+        self.emit('transform_mul:')
+        self.emit('  %mul_result = mul i64 %value, %arg')
+        self.emit('  ret i64 %mul_result')
+        self.emit('')
+        self.emit('transform_identity:')
+        self.emit('  ret i64 %value')
+        self.emit('}')
+        self.emit('')
+
         # has_next(gen_frame) -> i1
         self.emit('define i1 @nxl_generator_has_next(i8* %gen) {')
         self.emit('entry:')
-        self.emit('  %frame = bitcast i8* %gen to { i64*, i64, i64 }*')
-        self.emit('  %size_ptr = getelementptr inbounds { i64*, i64, i64 }, { i64*, i64, i64 }* %frame, i32 0, i32 1')
+        self.emit('  %frame = bitcast i8* %gen to { i64*, i64, i64, i64, i64, i64, i64 }*')
+        self.emit('  %size_ptr = getelementptr inbounds { i64*, i64, i64, i64, i64, i64, i64 }, { i64*, i64, i64, i64, i64, i64, i64 }* %frame, i32 0, i32 1')
         self.emit('  %size = load i64, i64* %size_ptr, align 8')
-        self.emit('  %index_ptr = getelementptr inbounds { i64*, i64, i64 }, { i64*, i64, i64 }* %frame, i32 0, i32 2')
+        self.emit('  %index_ptr = getelementptr inbounds { i64*, i64, i64, i64, i64, i64, i64 }, { i64*, i64, i64, i64, i64, i64, i64 }* %frame, i32 0, i32 2')
         self.emit('  %index = load i64, i64* %index_ptr, align 8')
-        self.emit('  %has_next = icmp slt i64 %index, %size')
+        self.emit('  %pred_kind_ptr = getelementptr inbounds { i64*, i64, i64, i64, i64, i64, i64 }, { i64*, i64, i64, i64, i64, i64, i64 }* %frame, i32 0, i32 3')
+        self.emit('  %pred_kind = load i64, i64* %pred_kind_ptr, align 8')
+        self.emit('  %pred_arg_ptr = getelementptr inbounds { i64*, i64, i64, i64, i64, i64, i64 }, { i64*, i64, i64, i64, i64, i64, i64 }* %frame, i32 0, i32 4')
+        self.emit('  %pred_arg = load i64, i64* %pred_arg_ptr, align 8')
+        self.emit('  %is_borrowed = icmp slt i64 %size, 0')
+        self.emit('  br i1 %is_borrowed, label %borrowed_size, label %owned_size')
+        self.emit('')
+        self.emit('owned_size:')
+        self.emit('  br label %has_next_scan_init')
+        self.emit('')
+        self.emit('borrowed_size:')
+        self.emit('  %neg_size = sub i64 0, %size')
+        self.emit('  %logical_size.borrowed = sub i64 %neg_size, 1')
+        self.emit('  br label %has_next_scan_init')
+        self.emit('')
+        self.emit('has_next_scan_init:')
+        self.emit('  %logical_size = phi i64 [ %size, %owned_size ], [ %logical_size.borrowed, %borrowed_size ]')
+        self.emit('  %pred_enabled = icmp ne i64 %pred_kind, 0')
+        self.emit('  br i1 %pred_enabled, label %has_next_scan_loop, label %has_next_unfiltered')
+        self.emit('')
+        self.emit('has_next_unfiltered:')
+        self.emit('  %has_next = icmp slt i64 %index, %logical_size')
         self.emit('  ret i1 %has_next')
+        self.emit('')
+        self.emit('has_next_scan_loop:')
+        self.emit('  %scan_index = phi i64 [ %index, %has_next_scan_init ], [ %scan_next, %has_next_scan_advance ]')
+        self.emit('  %scan_in_range = icmp slt i64 %scan_index, %logical_size')
+        self.emit('  br i1 %scan_in_range, label %has_next_scan_check, label %has_next_scan_exhausted')
+        self.emit('')
+        self.emit('has_next_scan_check:')
+        self.emit('  %data_ptr_ptr = getelementptr inbounds { i64*, i64, i64, i64, i64, i64, i64 }, { i64*, i64, i64, i64, i64, i64, i64 }* %frame, i32 0, i32 0')
+        self.emit('  %data_ptr = load i64*, i64** %data_ptr_ptr, align 8')
+        self.emit('  %value_ptr = getelementptr inbounds i64, i64* %data_ptr, i64 %scan_index')
+        self.emit('  %value = load i64, i64* %value_ptr, align 8')
+        self.emit('  %match = call i1 @nxl_generator_predicate_match(i64 %value, i64 %pred_kind, i64 %pred_arg)')
+        self.emit('  br i1 %match, label %has_next_scan_found, label %has_next_scan_advance')
+        self.emit('')
+        self.emit('has_next_scan_advance:')
+        self.emit('  %scan_next = add i64 %scan_index, 1')
+        self.emit('  br label %has_next_scan_loop')
+        self.emit('')
+        self.emit('has_next_scan_found:')
+        self.emit('  store i64 %scan_index, i64* %index_ptr, align 8')
+        self.emit('  ret i1 true')
+        self.emit('')
+        self.emit('has_next_scan_exhausted:')
+        self.emit('  store i64 %logical_size, i64* %index_ptr, align 8')
+        self.emit('  ret i1 false')
         self.emit('}')
         self.emit('')
 
         # next(gen_frame) -> i64 (returns 0 when exhausted)
         self.emit('define i64 @nxl_generator_next(i8* %gen) {')
         self.emit('entry:')
-        self.emit('  %frame = bitcast i8* %gen to { i64*, i64, i64 }*')
-        self.emit('  %size_ptr = getelementptr inbounds { i64*, i64, i64 }, { i64*, i64, i64 }* %frame, i32 0, i32 1')
+        self.emit('  %frame = bitcast i8* %gen to { i64*, i64, i64, i64, i64, i64, i64 }*')
+        self.emit('  %size_ptr = getelementptr inbounds { i64*, i64, i64, i64, i64, i64, i64 }, { i64*, i64, i64, i64, i64, i64, i64 }* %frame, i32 0, i32 1')
         self.emit('  %size = load i64, i64* %size_ptr, align 8')
-        self.emit('  %index_ptr = getelementptr inbounds { i64*, i64, i64 }, { i64*, i64, i64 }* %frame, i32 0, i32 2')
+        self.emit('  %index_ptr = getelementptr inbounds { i64*, i64, i64, i64, i64, i64, i64 }, { i64*, i64, i64, i64, i64, i64, i64 }* %frame, i32 0, i32 2')
         self.emit('  %index = load i64, i64* %index_ptr, align 8')
-        self.emit('  %in_range = icmp slt i64 %index, %size')
-        self.emit('  br i1 %in_range, label %load_value, label %exhausted')
+        self.emit('  %pred_kind_ptr = getelementptr inbounds { i64*, i64, i64, i64, i64, i64, i64 }, { i64*, i64, i64, i64, i64, i64, i64 }* %frame, i32 0, i32 3')
+        self.emit('  %pred_kind = load i64, i64* %pred_kind_ptr, align 8')
+        self.emit('  %pred_arg_ptr = getelementptr inbounds { i64*, i64, i64, i64, i64, i64, i64 }, { i64*, i64, i64, i64, i64, i64, i64 }* %frame, i32 0, i32 4')
+        self.emit('  %pred_arg = load i64, i64* %pred_arg_ptr, align 8')
+        self.emit('  %transform_op_ptr = getelementptr inbounds { i64*, i64, i64, i64, i64, i64, i64 }, { i64*, i64, i64, i64, i64, i64, i64 }* %frame, i32 0, i32 5')
+        self.emit('  %transform_op = load i64, i64* %transform_op_ptr, align 8')
+        self.emit('  %transform_arg_ptr = getelementptr inbounds { i64*, i64, i64, i64, i64, i64, i64 }, { i64*, i64, i64, i64, i64, i64, i64 }* %frame, i32 0, i32 6')
+        self.emit('  %transform_arg = load i64, i64* %transform_arg_ptr, align 8')
+        self.emit('  %is_borrowed = icmp slt i64 %size, 0')
+        self.emit('  br i1 %is_borrowed, label %next_borrowed_size, label %next_owned_size')
         self.emit('')
-        self.emit('load_value:')
-        self.emit('  %data_ptr_ptr = getelementptr inbounds { i64*, i64, i64 }, { i64*, i64, i64 }* %frame, i32 0, i32 0')
+        self.emit('next_owned_size:')
+        self.emit('  br label %next_scan_init')
+        self.emit('')
+        self.emit('next_borrowed_size:')
+        self.emit('  %neg_size = sub i64 0, %size')
+        self.emit('  %logical_size.borrowed = sub i64 %neg_size, 1')
+        self.emit('  br label %next_scan_init')
+        self.emit('')
+        self.emit('next_scan_init:')
+        self.emit('  %logical_size = phi i64 [ %size, %next_owned_size ], [ %logical_size.borrowed, %next_borrowed_size ]')
+        self.emit('  %pred_enabled = icmp ne i64 %pred_kind, 0')
+        self.emit('  br i1 %pred_enabled, label %next_scan_loop, label %next_unfiltered')
+        self.emit('')
+        self.emit('next_unfiltered:')
+        self.emit('  %in_range = icmp slt i64 %index, %logical_size')
+        self.emit('  br i1 %in_range, label %next_load_unfiltered, label %exhausted')
+        self.emit('')
+        self.emit('next_load_unfiltered:')
+        self.emit('  %data_ptr_ptr = getelementptr inbounds { i64*, i64, i64, i64, i64, i64, i64 }, { i64*, i64, i64, i64, i64, i64, i64 }* %frame, i32 0, i32 0')
         self.emit('  %data_ptr = load i64*, i64** %data_ptr_ptr, align 8')
         self.emit('  %value_ptr = getelementptr inbounds i64, i64* %data_ptr, i64 %index')
         self.emit('  %value = load i64, i64* %value_ptr, align 8')
         self.emit('  %next_index = add i64 %index, 1')
         self.emit('  store i64 %next_index, i64* %index_ptr, align 8')
-        self.emit('  ret i64 %value')
+        self.emit('  %xval = call i64 @nxl_generator_apply_transform(i64 %value, i64 %transform_op, i64 %transform_arg)')
+        self.emit('  ret i64 %xval')
+        self.emit('')
+        self.emit('next_scan_loop:')
+        self.emit('  %scan_index = phi i64 [ %index, %next_scan_init ], [ %scan_next, %next_scan_advance ]')
+        self.emit('  %scan_in_range = icmp slt i64 %scan_index, %logical_size')
+        self.emit('  br i1 %scan_in_range, label %next_scan_check, label %next_scan_exhausted')
+        self.emit('')
+        self.emit('next_scan_check:')
+        self.emit('  %data_ptr_ptr.scan = getelementptr inbounds { i64*, i64, i64, i64, i64, i64, i64 }, { i64*, i64, i64, i64, i64, i64, i64 }* %frame, i32 0, i32 0')
+        self.emit('  %data_ptr.scan = load i64*, i64** %data_ptr_ptr.scan, align 8')
+        self.emit('  %value_ptr.scan = getelementptr inbounds i64, i64* %data_ptr.scan, i64 %scan_index')
+        self.emit('  %value.scan = load i64, i64* %value_ptr.scan, align 8')
+        self.emit('  %match.scan = call i1 @nxl_generator_predicate_match(i64 %value.scan, i64 %pred_kind, i64 %pred_arg)')
+        self.emit('  br i1 %match.scan, label %next_scan_found, label %next_scan_advance')
+        self.emit('')
+        self.emit('next_scan_advance:')
+        self.emit('  %scan_next = add i64 %scan_index, 1')
+        self.emit('  br label %next_scan_loop')
+        self.emit('')
+        self.emit('next_scan_found:')
+        self.emit('  %scan_next_idx = add i64 %scan_index, 1')
+        self.emit('  store i64 %scan_next_idx, i64* %index_ptr, align 8')
+        self.emit('  %xval.scan = call i64 @nxl_generator_apply_transform(i64 %value.scan, i64 %transform_op, i64 %transform_arg)')
+        self.emit('  ret i64 %xval.scan')
+        self.emit('')
+        self.emit('next_scan_exhausted:')
+        self.emit('  store i64 %logical_size, i64* %index_ptr, align 8')
+        self.emit('  ret i64 0')
         self.emit('')
         self.emit('exhausted:')
         self.emit('  ret i64 0')
@@ -2465,6 +2672,8 @@ class LLVMIRGenerator(CodeGenerator):
         
         global_name = f'@{var_name}'
         self.global_vars[var_name] = (llvm_type, global_name)
+        if hasattr(node, 'value') and node.value:
+            self._update_function_pointer_signature(var_name, node.value, is_global=True)
 
         ownership = self._get_channel_payload_ownership(getattr(node, 'value', None))
         if ownership is not None:
@@ -2565,14 +2774,22 @@ class LLVMIRGenerator(CodeGenerator):
             # Will be handled when FFI code generation is integrated
             # For now, just track it
             self.type_cache[node.name] = "i8*"  # Opaque pointer
+            self.extern_types[node.name] = {"kind": "opaque", "llvm_type": "i8*"}
         elif node.is_function_pointer:
             # Register function pointer type
             param_types, return_type = node.function_signature
-            # Will be handled by FFI codegen
-            self.type_cache[node.name] = f"function_ptr"
+            # Transport function pointers as opaque pointers at FFI boundary.
+            self.type_cache[node.name] = "i8*"
+            self.extern_types[node.name] = {
+                "kind": "function_pointer",
+                "llvm_type": "i8*",
+                "signature": (param_types or [], return_type),
+            }
         else:
             # Regular type alias
-            self.type_cache[node.name] = self._map_nxl_type_to_llvm(node.base_type)
+            mapped = self._map_nxl_type_to_llvm(node.base_type)
+            self.type_cache[node.name] = mapped
+            self.extern_types[node.name] = {"kind": "alias", "llvm_type": mapped}
     
     
     def _collect_function_signature(self, node):
@@ -2606,7 +2823,9 @@ class LLVMIRGenerator(CodeGenerator):
                 elif hasattr(param, 'param_type') and param.param_type:
                     param_type = self._map_nxl_type_to_llvm(param.param_type)
                 else:
-                    param_type = 'i64'  # Default to i64
+                    # Parameter has no type annotation - fail-fast for unannotated parameters
+                    param_index = i + 1
+                    raise RuntimeError(f"Function '{func_name}' parameter {param_index} has no type annotation - cannot infer parameter type (defaulting to i64 is not allowed)")
                 
                 if hasattr(param, 'name'):
                     param_name = param.name
@@ -2647,6 +2866,8 @@ class LLVMIRGenerator(CodeGenerator):
         self.current_function_name = func_name
         self.current_return_type = ret_type
         self.local_vars = {}
+        self._clear_local_function_pointer_signatures()
+        self._clear_local_async_task_payload_types()
         self.temp_counter = 0
         self.label_counter = 0
         
@@ -2663,6 +2884,16 @@ class LLVMIRGenerator(CodeGenerator):
             self.emit(f'  {alloca_name} = alloca {ptype}, align 8')
             self.emit(f'  store {ptype} %{pname}, {ptype}* {alloca_name}, align 8')
             self.local_vars[pname] = (ptype, alloca_name)
+
+        # Register function pointer signatures for typed parameters declared as extern function pointer aliases.
+        if hasattr(node, 'parameters'):
+            for param in node.parameters:
+                param_name = getattr(param, 'name', None)
+                if not isinstance(param_name, str):
+                    continue
+                sig = self._signature_from_type_annotation_value(getattr(param, 'type_annotation', None))
+                if sig is not None:
+                    self._set_function_pointer_signature(param_name, sig, is_global=False)
         
         # Populate runtime_array_sizes for parameters with size annotations
         if hasattr(node, 'parameters'):
@@ -3563,6 +3794,10 @@ class LLVMIRGenerator(CodeGenerator):
             self._generate_comptime_const(stmt, indent)
         elif stmt_type == 'ComptimeAssert':
             self._generate_comptime_assert(stmt, indent)
+        elif stmt_type == 'DropBorrowStatement':
+            # Borrow lifetime bookkeeping is enforced by analysis passes.
+            # Runtime lowering is intentionally a no-op in compiled backends.
+            pass
         # Add more statement types as needed
 
     def _coerce_to_i1(self, value_reg: str, value_type: str, indent='') -> str:
@@ -3695,6 +3930,94 @@ class LLVMIRGenerator(CodeGenerator):
                         expected_reg = self._convert_type(expected_reg, expected_type, 'i64', indent)
                     cond_reg = self._new_temp()
                     self.emit(f'{indent}{cond_reg} = icmp {ipred} i64 {actual_reg}, {expected_reg}')
+            elif matcher == 'contain':
+                if actual_type != 'i8*':
+                    if actual_type in ('i64', 'i32', 'i16', 'i8', 'i1', 'double', 'float'):
+                        actual_reg = self._convert_number_to_string(actual_reg, actual_type, indent)
+                        actual_type = 'i8*'
+                    else:
+                        actual_reg = self._convert_type(actual_reg, actual_type, 'i8*', indent)
+                        actual_type = 'i8*'
+                if expected_type != 'i8*':
+                    if expected_type in ('i64', 'i32', 'i16', 'i8', 'i1', 'double', 'float'):
+                        expected_reg = self._convert_number_to_string(expected_reg, expected_type, indent)
+                    else:
+                        expected_reg = self._convert_type(expected_reg, expected_type, 'i8*', indent)
+
+                strstr_reg = self._new_temp()
+                self.emit(f'{indent}{strstr_reg} = call i8* @strstr(i8* {actual_reg}, i8* {expected_reg})')
+                cond_reg = self._new_temp()
+                self.emit(f'{indent}{cond_reg} = icmp ne i8* {strstr_reg}, null')
+            elif matcher == 'start_with':
+                if actual_type != 'i8*':
+                    if actual_type in ('i64', 'i32', 'i16', 'i8', 'i1', 'double', 'float'):
+                        actual_reg = self._convert_number_to_string(actual_reg, actual_type, indent)
+                        actual_type = 'i8*'
+                    else:
+                        actual_reg = self._convert_type(actual_reg, actual_type, 'i8*', indent)
+                        actual_type = 'i8*'
+                if expected_type != 'i8*':
+                    if expected_type in ('i64', 'i32', 'i16', 'i8', 'i1', 'double', 'float'):
+                        expected_reg = self._convert_number_to_string(expected_reg, expected_type, indent)
+                    else:
+                        expected_reg = self._convert_type(expected_reg, expected_type, 'i8*', indent)
+
+                strstr_reg = self._new_temp()
+                self.emit(f'{indent}{strstr_reg} = call i8* @strstr(i8* {actual_reg}, i8* {expected_reg})')
+                cond_reg = self._new_temp()
+                self.emit(f'{indent}{cond_reg} = icmp eq i8* {strstr_reg}, {actual_reg}')
+            elif matcher == 'end_with':
+                if actual_type != 'i8*':
+                    if actual_type in ('i64', 'i32', 'i16', 'i8', 'i1', 'double', 'float'):
+                        actual_reg = self._convert_number_to_string(actual_reg, actual_type, indent)
+                        actual_type = 'i8*'
+                    else:
+                        actual_reg = self._convert_type(actual_reg, actual_type, 'i8*', indent)
+                        actual_type = 'i8*'
+                if expected_type != 'i8*':
+                    if expected_type in ('i64', 'i32', 'i16', 'i8', 'i1', 'double', 'float'):
+                        expected_reg = self._convert_number_to_string(expected_reg, expected_type, indent)
+                    else:
+                        expected_reg = self._convert_type(expected_reg, expected_type, 'i8*', indent)
+
+                actual_len = self._new_temp()
+                expected_len = self._new_temp()
+                has_room = self._new_temp()
+                offset = self._new_temp()
+                tail_ptr = self._new_temp()
+                cmp_reg = self._new_temp()
+                eq_reg = self._new_temp()
+                fallback_false = self._new_temp()
+                self.emit(f'{indent}{actual_len} = call i64 @strlen(i8* {actual_reg})')
+                self.emit(f'{indent}{expected_len} = call i64 @strlen(i8* {expected_reg})')
+                self.emit(f'{indent}{has_room} = icmp uge i64 {actual_len}, {expected_len}')
+                self.emit(f'{indent}{offset} = sub i64 {actual_len}, {expected_len}')
+                self.emit(f'{indent}{tail_ptr} = getelementptr i8, i8* {actual_reg}, i64 {offset}')
+                self.emit(f'{indent}{cmp_reg} = call i32 @strcmp(i8* {tail_ptr}, i8* {expected_reg})')
+                self.emit(f'{indent}{eq_reg} = icmp eq i32 {cmp_reg}, 0')
+                self.emit(f'{indent}{fallback_false} = and i1 {eq_reg}, {has_room}')
+                cond_reg = fallback_false
+            elif matcher == 'approximately_equal':
+                if actual_type != 'double':
+                    actual_reg = self._convert_type(actual_reg, actual_type, 'double', indent)
+                if expected_type != 'double':
+                    expected_reg = self._convert_type(expected_reg, expected_type, 'double', indent)
+
+                tolerance_expr = getattr(stmt, 'tolerance_expr', None)
+                if tolerance_expr is not None:
+                    tolerance_reg = self._generate_expression(tolerance_expr, indent)
+                    tolerance_type = self._infer_expression_type(tolerance_expr)
+                    if tolerance_type != 'double':
+                        tolerance_reg = self._convert_type(tolerance_reg, tolerance_type, 'double', indent)
+                else:
+                    tolerance_reg = '1.000000e-06'
+
+                diff = self._new_temp()
+                abs_diff = self._new_temp()
+                cond_reg = self._new_temp()
+                self.emit(f'{indent}{diff} = fsub double {actual_reg}, {expected_reg}')
+                self.emit(f'{indent}{abs_diff} = call double @fabs(double {diff})')
+                self.emit(f'{indent}{cond_reg} = fcmp ole double {abs_diff}, {tolerance_reg}')
             else:
                 msg_reg = self._contract_message_ptr(
                     getattr(stmt, 'message_expr', None),
@@ -3859,7 +4182,8 @@ class LLVMIRGenerator(CodeGenerator):
             self._emit_parallel_for_fallback(node, indent)
             return
 
-        if self._parallel_body_references_outer_locals(node):
+        parallel_capture_bindings = self._prepare_parallel_capture_bindings(node)
+        if parallel_capture_bindings is None:
             self._emit_parallel_for_fallback(node, indent)
             return
 
@@ -3873,10 +4197,48 @@ class LLVMIRGenerator(CodeGenerator):
         shim.label = None
         shim.else_body = None
 
-        array_ptr, array_type, array_size, length_reg = self._resolve_iterable(shim, indent)
-        if array_ptr is None or array_type == 'generator.frame':
+        array_ptr, array_type, array_size, length_reg, _owns_generator_frame = self._resolve_iterable(shim, indent)
+        if array_ptr is None:
             self._emit_parallel_for_fallback(node, indent)
             return
+
+        if array_type == 'generator.frame':
+            # Allow true parallel lowering for inline generator expressions.
+            if type(node.iterable).__name__ != 'GeneratorExpression':
+                self._emit_parallel_for_fallback(node, indent)
+                return
+
+            fast_path_spec = self._classify_generator_fast_path(node.iterable)
+            if not fast_path_spec:
+                self._emit_parallel_for_fallback(node, indent)
+                return
+
+            gen_ptr, gen_count = self._resolve_generator_identity_source(node.iterable, indent)
+            if gen_ptr is None or gen_count is None:
+                self._emit_parallel_for_fallback(node, indent)
+                return
+
+            pred_kind_val = fast_path_spec.get('pred_kind', 0)
+            prefilter_buf = None
+            if pred_kind_val == 0:
+                # Identity or arithmetic: parallel directly on source elements.
+                array_ptr = gen_ptr
+                array_type = 'i64*'
+                array_size = None
+                length_reg = gen_count
+            else:
+                # Filtered: emit a compiled prefilter pass that collects matching
+                # elements into a compact heap array, then dispatch parallel on it.
+                pred_arg_val = fast_path_spec.get('pred_arg', 0)
+                filt_arr, filt_count, prefilter_buf = self._emit_parallel_prefilter(
+                    gen_ptr, gen_count, pred_kind_val, pred_arg_val, indent
+                )
+                array_ptr = filt_arr
+                array_type = 'i64*'
+                array_size = None
+                length_reg = filt_count
+        else:
+            prefilter_buf = None
 
         ptr_type_for_runtime = array_type
         if array_type and array_type.startswith('{'):
@@ -3907,8 +4269,82 @@ class LLVMIRGenerator(CodeGenerator):
             self.emit(f'{indent}{cast_ptr} = bitcast {ptr_type_for_runtime} {array_ptr} to i64*')
             array_ptr = cast_ptr
 
-        body_fn_name = self._generate_parallel_for_body_function(node)
+        for _capture_name, capture_type, capture_source_ptr, capture_global in parallel_capture_bindings:
+            capture_value = self._new_temp()
+            self.emit(f'{indent}{capture_value} = load {capture_type}, {capture_type}* {capture_source_ptr}, align 8')
+            self.emit(f'{indent}store {capture_type} {capture_value}, {capture_type}* {capture_global}, align 8')
+
+        body_fn_name = self._generate_parallel_for_body_function(node, parallel_capture_bindings)
         self.emit(f'{indent}call void @nxl_parallel_for_i64(i64* {array_ptr}, i64 {count_reg}, void (i64)* @{body_fn_name}, i64 0)')
+        if prefilter_buf is not None:
+            self.emit(f'{indent}call void @free(i8* {prefilter_buf})')
+
+    def _emit_parallel_prefilter(self, src_ptr, src_count, pred_kind_val, pred_arg_val, indent=''):
+        """Emit an inline prefilter loop that partitions source elements by predicate.
+
+        Allocates a worst-case heap buffer, scans each source element, and stores
+        matching elements compactly.  Returns (filtered_arr_ptr, count_reg, buf_i8_ptr):
+        - filtered_arr_ptr: i64* pointing at the compact filtered array
+        - count_reg: register holding the final filtered element count
+        - buf_i8_ptr: i8* to pass to @free after the parallel call
+        """
+        bytes_reg = self._new_temp()
+        self.emit(f'{indent}{bytes_reg} = mul i64 {src_count}, 8')
+        buf_i8 = self._new_temp()
+        self.emit(f'{indent}{buf_i8} = call i8* @malloc(i64 {bytes_reg})')
+        filt_arr = self._new_temp()
+        self.emit(f'{indent}{filt_arr} = bitcast i8* {buf_i8} to i64*')
+        cnt_alloca = self._new_temp()
+        self.emit(f'{indent}{cnt_alloca} = alloca i64, align 8')
+        self.emit(f'{indent}store i64 0, i64* {cnt_alloca}, align 8')
+        idx_alloca = self._new_temp()
+        self.emit(f'{indent}{idx_alloca} = alloca i64, align 8')
+        self.emit(f'{indent}store i64 0, i64* {idx_alloca}, align 8')
+
+        cond_lbl = self._new_label('pfilt.cond')
+        body_lbl = self._new_label('pfilt.body')
+        store_lbl = self._new_label('pfilt.store')
+        inc_lbl = self._new_label('pfilt.inc')
+        end_lbl = self._new_label('pfilt.end')
+
+        self.emit(f'{indent}br label %{cond_lbl}')
+        self.emit(f'{cond_lbl}:')
+        scan_i = self._new_temp()
+        self.emit(f'{indent}{scan_i} = load i64, i64* {idx_alloca}, align 8')
+        scan_done = self._new_temp()
+        self.emit(f'{indent}{scan_done} = icmp sge i64 {scan_i}, {src_count}')
+        self.emit(f'{indent}br i1 {scan_done}, label %{end_lbl}, label %{body_lbl}')
+
+        self.emit(f'{body_lbl}:')
+        elem_ptr = self._new_temp()
+        self.emit(f'{indent}{elem_ptr} = getelementptr inbounds i64, i64* {src_ptr}, i64 {scan_i}')
+        elem_val = self._new_temp()
+        self.emit(f'{indent}{elem_val} = load i64, i64* {elem_ptr}, align 8')
+        match_reg = self._new_temp()
+        self.emit(f'{indent}{match_reg} = call i1 @nxl_generator_predicate_match(i64 {elem_val}, i64 {pred_kind_val}, i64 {pred_arg_val})')
+        self.emit(f'{indent}br i1 {match_reg}, label %{store_lbl}, label %{inc_lbl}')
+
+        self.emit(f'{store_lbl}:')
+        filt_cnt = self._new_temp()
+        self.emit(f'{indent}{filt_cnt} = load i64, i64* {cnt_alloca}, align 8')
+        dst_ptr = self._new_temp()
+        self.emit(f'{indent}{dst_ptr} = getelementptr inbounds i64, i64* {filt_arr}, i64 {filt_cnt}')
+        self.emit(f'{indent}store i64 {elem_val}, i64* {dst_ptr}, align 8')
+        filt_cnt_next = self._new_temp()
+        self.emit(f'{indent}{filt_cnt_next} = add i64 {filt_cnt}, 1')
+        self.emit(f'{indent}store i64 {filt_cnt_next}, i64* {cnt_alloca}, align 8')
+        self.emit(f'{indent}br label %{inc_lbl}')
+
+        self.emit(f'{inc_lbl}:')
+        idx_inc = self._new_temp()
+        self.emit(f'{indent}{idx_inc} = add i64 {scan_i}, 1')
+        self.emit(f'{indent}store i64 {idx_inc}, i64* {idx_alloca}, align 8')
+        self.emit(f'{indent}br label %{cond_lbl}')
+
+        self.emit(f'{end_lbl}:')
+        final_cnt = self._new_temp()
+        self.emit(f'{indent}{final_cnt} = load i64, i64* {cnt_alloca}, align 8')
+        return filt_arr, final_cnt, buf_i8
 
     def _emit_parallel_for_fallback(self, node, indent=''):
         """Fallback: lower to foreach loop when parallel outlining is not safe."""
@@ -3969,8 +4405,86 @@ class LLVMIRGenerator(CodeGenerator):
 
         return walk(getattr(node, 'body', []))
 
-    def _generate_parallel_for_body_function(self, node) -> str:
+    def _prepare_parallel_capture_bindings(self, node):
+        """Collect and allocate safe capture storage for outlined parallel loop bodies.
+
+        Returns a list of tuples:
+            (capture_name, capture_type, source_ptr, global_name)
+
+        Returns None when the loop body captures unsupported local types.
+        """
+        iterator_name = node.var_name
+        outer_locals = {
+            name: binding
+            for name, binding in self.local_vars.items()
+            if name != iterator_name
+        }
+        if not outer_locals:
+            return []
+
+        used_identifiers = set()
+        declared_identifiers = set()
+
+        def walk(current):
+            if current is None:
+                return
+            if isinstance(current, list):
+                for item in current:
+                    walk(item)
+                return
+            if not hasattr(current, '__dict__'):
+                return
+
+            node_name = type(current).__name__
+            if node_name == 'Identifier':
+                identifier_name = getattr(current, 'name', None)
+                if isinstance(identifier_name, str):
+                    used_identifiers.add(identifier_name)
+                return
+
+            if node_name == 'VariableDeclaration':
+                declared_name = getattr(current, 'name', None)
+                if isinstance(declared_name, str):
+                    declared_identifiers.add(declared_name)
+
+            if node_name == 'ForLoop':
+                declared_name = getattr(current, 'iterator', None)
+                if isinstance(declared_name, str):
+                    declared_identifiers.add(declared_name)
+
+            if node_name == 'ParallelForLoop':
+                declared_name = getattr(current, 'var_name', None)
+                if isinstance(declared_name, str):
+                    declared_identifiers.add(declared_name)
+
+            for value in vars(current).values():
+                walk(value)
+
+        walk(getattr(node, 'body', []))
+
+        capture_names = sorted((used_identifiers - declared_identifiers) & set(outer_locals.keys()))
+        if not capture_names:
+            return []
+
+        capture_index = self.parallel_body_counter
+        bindings = []
+        for capture_name in capture_names:
+            capture_type, source_ptr = outer_locals[capture_name]
+            if not isinstance(capture_type, str) or not capture_type:
+                return None
+            if capture_type.startswith('{'):
+                return None
+            global_name = f'@.parallel_capture.{capture_index}.{capture_name}'
+            self.parallel_capture_globals.add(f'{global_name} = internal global {capture_type} zeroinitializer, align 8')
+            bindings.append((capture_name, capture_type, source_ptr, global_name))
+
+        return bindings
+
+    def _generate_parallel_for_body_function(self, node, capture_bindings=None) -> str:
         """Outline parallel-for body into a standalone callback function."""
+        if capture_bindings is None:
+            capture_bindings = []
+
         body_name = f'__nxl_parallel_body_{self.parallel_body_counter}'
         self.parallel_body_counter += 1
 
@@ -3995,6 +4509,14 @@ class LLVMIRGenerator(CodeGenerator):
         self.emit(f'  {iter_alloca} = alloca i64, align 8')
         self.emit(f'  store i64 %iter_value, i64* {iter_alloca}, align 8')
         self.local_vars[node.var_name] = ('i64', iter_alloca)
+
+        for capture_name, capture_type, _source_ptr, capture_global in capture_bindings:
+            capture_alloca = self._new_temp()
+            self.emit(f'  {capture_alloca} = alloca {capture_type}, align 8')
+            capture_value = self._new_temp()
+            self.emit(f'  {capture_value} = load {capture_type}, {capture_type}* {capture_global}, align 8')
+            self.emit(f'  store {capture_type} {capture_value}, {capture_type}* {capture_alloca}, align 8')
+            self.local_vars[capture_name] = (capture_type, capture_alloca)
 
         if hasattr(node, 'body') and node.body:
             for stmt in node.body:
@@ -4023,6 +4545,15 @@ class LLVMIRGenerator(CodeGenerator):
         self.emit('; Parallel-for callback definitions')
         for body_ir in self.parallel_body_definitions:
             self.emit(body_ir)
+
+    def _emit_parallel_capture_global_declarations(self) -> None:
+        """Emit module-level globals used for parallel callback captures."""
+        if not self.parallel_capture_globals:
+            return
+        self.emit('')
+        self.emit('; Parallel-for capture globals')
+        for declaration in sorted(self.parallel_capture_globals):
+            self.emit(declaration)
 
     def _generate_send_statement(self, stmt, indent='') -> None:
         """Generate channel send statement via runtime call."""
@@ -4204,6 +4735,10 @@ class LLVMIRGenerator(CodeGenerator):
         if self._is_global_variable_context(node):
             return ""
 
+        async_payload_type = None
+        if hasattr(node, 'value') and node.value:
+            async_payload_type = self._infer_async_payload_type_from_expression(node.value)
+
         # Check if variable already exists (reassignment)
         if var_name in self.local_vars:
             # This is a reassignment - generate store only
@@ -4211,11 +4746,17 @@ class LLVMIRGenerator(CodeGenerator):
                 llvm_type, alloca_name = self.local_vars[var_name]
                 value_reg = self._generate_expression(node.value, indent)
                 value_type = self._infer_expression_type(node.value)
+                self._update_function_pointer_signature(var_name, node.value, is_global=False)
                 
                 # Type conversion if needed
                 if value_type != llvm_type:
                     value_reg = self._convert_type(value_reg, value_type, llvm_type, indent)
-                
+
+                if async_payload_type is not None:
+                    self._set_async_task_payload_type(var_name, async_payload_type, is_global=False)
+                else:
+                    self._clear_async_task_payload_type(var_name, is_global=False)
+
                 self.emit(f'{indent}store {llvm_type} {value_reg}, {llvm_type}* {alloca_name}, align 8')
             return
         elif self.current_class_context and var_name not in self.global_vars:
@@ -4236,7 +4777,7 @@ class LLVMIRGenerator(CodeGenerator):
                             self.emit(f'{indent}{this_ptr} = load {this_type}, {this_type}* {this_alloca}, align 8')
                             
                             # Get property pointer
-                            prop_type = self._map_nxl_type_to_llvm(prop.get('type', 'Integer'))
+                            _prop_index, _prop_type_name, prop_type = self._resolve_class_property_info(class_name, var_name)
                             prop_ptr = self._new_temp()
                             self.emit(f'{indent}{prop_ptr} = getelementptr inbounds %{class_name}, %{class_name}* {this_ptr}, i32 0, i32 {i}')
                             
@@ -4257,23 +4798,26 @@ class LLVMIRGenerator(CodeGenerator):
                 value_reg = self._generate_expression(node.value, indent)
                 value_type = self._infer_expression_type(node.value)
                 value_reg = self._track_rc_variable_assignment(node, var_name, value_reg, indent)
+                self._update_function_pointer_signature(var_name, node.value, is_global=True)
 
                 if type(node.value).__name__ == 'GeneratorExpression':
                     self.generator_vars.add(var_name)
                 
-                # Track if this is a closure assignment (lambda expression) for GLOBALS
+                # Track closure assignments with exact lambda signature metadata.
                 if type(node.value).__name__ == 'LambdaExpression':
-                    ret_type = 'i64'  # Default return type
-                    param_types = []
-                    if hasattr(node.value, 'parameters'):
-                        param_types = ['i64'] * len(node.value.parameters)
+                    ret_type, param_types = self._infer_lambda_signature(node.value)
                     has_env = self.last_lambda_has_captures
                     self.closure_variables[var_name] = (ret_type, param_types, has_env)
                 
                 # Type conversion if needed
                 if value_type != llvm_type:
                     value_reg = self._convert_type(value_reg, value_type, llvm_type, indent)
-                
+
+                if async_payload_type is not None:
+                    self._set_async_task_payload_type(var_name, async_payload_type, is_global=True)
+                else:
+                    self._clear_async_task_payload_type(var_name, is_global=True)
+
                 self.emit(f'{indent}store {llvm_type} {value_reg}, {llvm_type}* {global_name}, align 8')
             return
         
@@ -4292,6 +4836,7 @@ class LLVMIRGenerator(CodeGenerator):
             # Global scope - already collected, just initialize if needed
             if hasattr(node, 'value') and node.value and var_name in self.global_vars:
                 llvm_type, global_name = self.global_vars[var_name]
+                self._update_function_pointer_signature(var_name, node.value, is_global=True)
                 
                 # Special handling for list expressions and comprehensions - both return pointers
                 if type(node.value).__name__ in ('ListExpression', 'ListComprehension'):
@@ -4302,18 +4847,21 @@ class LLVMIRGenerator(CodeGenerator):
                     value_reg = self._generate_expression(node.value, indent)
                     value_type = self._infer_expression_type(node.value)
                     
-                    # Track if this is a closure assignment (lambda expression) for GLOBALS
+                    # Track closure assignments with exact lambda signature metadata.
                     if type(node.value).__name__ == 'LambdaExpression':
-                        ret_type = 'i64'  # Default return type
-                        param_types = []
-                        if hasattr(node.value, 'parameters'):
-                            param_types = ['i64'] * len(node.value.parameters)
+                        ret_type, param_types = self._infer_lambda_signature(node.value)
                         has_env = self.last_lambda_has_captures
                         self.closure_variables[var_name] = (ret_type, param_types, has_env)
                     
                     if value_type != llvm_type:
                         value_reg = self._convert_type(value_reg, value_type, llvm_type, indent)
-                    
+
+                    async_payload_type = self._infer_async_payload_type_from_expression(node.value)
+                    if async_payload_type is not None:
+                        self._set_async_task_payload_type(var_name, async_payload_type, is_global=True)
+                    else:
+                        self._clear_async_task_payload_type(var_name, is_global=True)
+
                     self.emit(f'{indent}store {llvm_type} {value_reg}, {llvm_type}* {global_name}, align 8')
             return
         
@@ -4456,6 +5004,10 @@ class LLVMIRGenerator(CodeGenerator):
                 llvm_type = self._infer_expression_type(node.value)
             else:
                 llvm_type = 'i64'  # Default
+
+        annotation_signature = self._signature_from_type_annotation(node)
+        if annotation_signature is not None:
+            self._set_function_pointer_signature(var_name, annotation_signature, is_global=False)
         
         # Special handling for struct instantiation - reuse the allocated struct
         if hasattr(node, 'value') and node.value and type(node.value).__name__ == 'ObjectInstantiation':
@@ -4474,6 +5026,7 @@ class LLVMIRGenerator(CodeGenerator):
         if hasattr(node, 'value') and node.value:
             value_reg = self._generate_expression(node.value, indent)
             value_type = self._infer_expression_type(node.value)
+            self._update_function_pointer_signature(var_name, node.value, is_global=False)
 
             if type(node.value).__name__ == 'GeneratorExpression':
                 self.generator_vars.add(var_name)
@@ -4482,16 +5035,11 @@ class LLVMIRGenerator(CodeGenerator):
             
             # Track if this is a closure assignment (lambda expression)
             if type(node.value).__name__ == 'LambdaExpression':
-                # Mark this variable as containing a closure for call site handling
-                ret_type = 'i64'  # Default return type
-                param_types = []
-                
-                if hasattr(node.value, 'parameters'):
-                    param_types = ['i64'] * len(node.value.parameters)  # Simplified
-                
+                ret_type, param_types = self._infer_lambda_signature(node.value)
+
                 # Use the tracked has_captures from lambda generation
                 has_env = self.last_lambda_has_captures
-                
+
                 self.closure_variables[var_name] = (ret_type, param_types, has_env)
             
             # If value is an array (ListExpression), track its size
@@ -4519,7 +5067,13 @@ class LLVMIRGenerator(CodeGenerator):
             # Type conversion if needed
             if value_type != llvm_type:
                 value_reg = self._convert_type(value_reg, value_type, llvm_type, indent)
-            
+
+            async_payload_type = self._infer_async_payload_type_from_expression(node.value)
+            if async_payload_type is not None:
+                self._set_async_task_payload_type(var_name, async_payload_type, is_global=False)
+            else:
+                self._clear_async_task_payload_type(var_name, is_global=False)
+
             self.emit(f'{indent}store {llvm_type} {value_reg}, {llvm_type}* {alloca_name}, align 8')
         else:
             # Zero-initialize
@@ -5410,13 +5964,13 @@ class LLVMIRGenerator(CodeGenerator):
         Stores value at computed array address.
         """
         if not hasattr(node, 'target') or not hasattr(node, 'value'):
-            return
+            raise RuntimeError("IndexAssignment missing target or value")
         
         # Target is an IndexExpression - extract array and index from it
         if not hasattr(node.target, 'array_expr') or not hasattr(node.target, 'index_expr'):
-            return
+            raise RuntimeError("IndexAssignment target is not an IndexExpression")
         
-        base_type = "i64*" # Default fallback
+        base_type = None
         
         # Generate base array reference
         if hasattr(node.target.array_expr, 'name'):
@@ -5433,7 +5987,7 @@ class LLVMIRGenerator(CodeGenerator):
                 self.emit(f'{indent}{base_reg} = load {var_type}, {var_type}* {global_name}, align 8')
                 base_type = var_type
             else:
-                 return # Variable not found
+                raise RuntimeError(f"Unknown array variable '{var_name}' in index assignment")
         else:
             # Complex expression as base
             base_reg = self._generate_expression(node.target.array_expr, indent)
@@ -5463,7 +6017,7 @@ class LLVMIRGenerator(CodeGenerator):
         if base_type and base_type.endswith('*'):
             elem_type = base_type[:-1]
         else:
-            elem_type = 'i64' # Fallback
+            raise RuntimeError(f"IndexAssignment requires pointer-like base type, got '{base_type}'")
             
         # Generate value to store
         value_reg = self._generate_expression(node.value, indent)
@@ -6139,15 +6693,18 @@ class LLVMIRGenerator(CodeGenerator):
         """
         Resolve the iterable expression of a for-each loop.
 
-        Returns (array_ptr, array_type, array_size, length_reg) where
+        Returns (array_ptr, array_type, array_size, length_reg, owns_generator_frame) where
         length_reg is a register holding the dynamic length (or None if the
         length is either statically known via array_size or not yet determined).
-        Returns (None, None, None, None) if the iterable cannot be resolved.
+        owns_generator_frame is True when the iterable expression produced a
+        temporary generator frame that should be cleaned up after the loop.
+        Returns (None, None, None, None, False) if the iterable cannot be resolved.
         """
         array_size = None
         array_ptr = None
         array_type = None
         length_reg = None
+        owns_generator_frame = False
 
         if hasattr(node.iterable, 'name'):
             # Simple variable reference
@@ -6159,7 +6716,7 @@ class LLVMIRGenerator(CodeGenerator):
                 self.emit(f'{indent}{array_ptr} = load {array_type}, {array_type}* {array_alloca}, align 8')
 
                 if array_var_name in self.generator_vars:
-                    return array_ptr, 'generator.frame', None, None
+                    return array_ptr, 'generator.frame', None, None, False
 
                 # Get array size from tracking
                 if array_var_name in self.array_sizes:
@@ -6171,7 +6728,7 @@ class LLVMIRGenerator(CodeGenerator):
                 self.emit(f'{indent}{array_ptr} = load {array_type}, {array_type}* {global_name}, align 8')
 
                 if array_var_name in self.generator_vars:
-                    return array_ptr, 'generator.frame', None, None
+                    return array_ptr, 'generator.frame', None, None, False
 
                 # Try to get size from tracking
                 if array_var_name in self.array_sizes:
@@ -6182,7 +6739,7 @@ class LLVMIRGenerator(CodeGenerator):
             iterable_type = self._infer_expression_type(node.iterable)
 
             if type(node.iterable).__name__ == 'GeneratorExpression':
-                return iterable_reg, 'generator.frame', None, None
+                return iterable_reg, 'generator.frame', None, None, True
 
             # For list types, extract length and data pointer
             if iterable_type.startswith('{'):
@@ -6201,7 +6758,7 @@ class LLVMIRGenerator(CodeGenerator):
                 array_type = iterable_type
                 array_size = None  # Unknown size
 
-        return array_ptr, array_type, array_size, length_reg
+        return array_ptr, array_type, array_size, length_reg, owns_generator_frame
 
     def _emit_foreach_loop_body_element(self, body_label, index_alloca, iter_alloca, elem_type, array_type, array_ptr, inc_label, node, indent):
         """Emit the foreach loop body block: load current element and execute loop body statements."""
@@ -6259,7 +6816,7 @@ class LLVMIRGenerator(CodeGenerator):
         iterator_name = node.iterator
         
         # Evaluate the iterable expression
-        array_ptr, array_type, array_size, length_reg = self._resolve_iterable(node, indent)
+        array_ptr, array_type, array_size, length_reg, owns_generator_frame = self._resolve_iterable(node, indent)
         
         # If we couldn't determine the array pointer, skip
         if array_ptr is None:
@@ -6310,6 +6867,30 @@ class LLVMIRGenerator(CodeGenerator):
                 self.emit(f'{indent}br label %{end_label}')
 
             self.emit(f'{end_label}:')
+
+            if owns_generator_frame:
+                frame_ptr = self._new_temp()
+                self.emit(f'{indent}{frame_ptr} = bitcast i8* {array_ptr} to {{ i64*, i64, i64, i64, i64, i64, i64 }}*')
+                size_field_ptr = self._new_temp()
+                self.emit(f'{indent}{size_field_ptr} = getelementptr inbounds {{ i64*, i64, i64, i64, i64, i64, i64 }}, {{ i64*, i64, i64, i64, i64, i64, i64 }}* {frame_ptr}, i32 0, i32 1')
+                size_val = self._new_temp()
+                self.emit(f'{indent}{size_val} = load i64, i64* {size_field_ptr}, align 8')
+                owns_data = self._new_temp()
+                self.emit(f'{indent}{owns_data} = icmp sge i64 {size_val}, 0')
+                free_data_label = self._new_label('gen.free_data')
+                skip_data_label = self._new_label('gen.skip_data')
+                self.emit(f'{indent}br i1 {owns_data}, label %{free_data_label}, label %{skip_data_label}')
+                self.emit(f'{free_data_label}:')
+                data_field_ptr = self._new_temp()
+                self.emit(f'{indent}{data_field_ptr} = getelementptr inbounds {{ i64*, i64, i64, i64, i64, i64, i64 }}, {{ i64*, i64, i64, i64, i64, i64, i64 }}* {frame_ptr}, i32 0, i32 0')
+                data_ptr = self._new_temp()
+                self.emit(f'{indent}{data_ptr} = load i64*, i64** {data_field_ptr}, align 8')
+                data_i8 = self._new_temp()
+                self.emit(f'{indent}{data_i8} = bitcast i64* {data_ptr} to i8*')
+                self.emit(f'{indent}call void @free(i8* {data_i8})')
+                self.emit(f'{indent}br label %{skip_data_label}')
+                self.emit(f'{skip_data_label}:')
+                self.emit(f'{indent}call void @free(i8* {array_ptr})')
 
             self.loop_stack.pop()
             if hasattr(node, 'label') and node.label and node.label in self.labeled_loops:
@@ -6879,6 +7460,10 @@ class LLVMIRGenerator(CodeGenerator):
         for i, case in enumerate(node.cases):
             case_label = f"match.case.{match_id}.{i}"
             next_case_label = f"match.case.{match_id}.{i+1}"
+            has_guard = case.guard is not None
+            case_scope_locals = dict(self.local_vars)
+            case_scope_array_sizes = dict(self.array_sizes)
+            case_scope_runtime_array_sizes = dict(self.runtime_array_sizes)
             
             # Emit case label
             self.emit(f'\n{case_label}:')
@@ -6890,15 +7475,22 @@ class LLVMIRGenerator(CodeGenerator):
             )
             
             # If guard condition exists, check it
-            if case.guard:
-                guard_reg = self._generate_expression(case.guard, indent + '  ')
-                
+            if has_guard:
                 # Combine pattern match with guard
                 guard_label = f"match.guard.{match_id}.{i}"
-                guard_failed_label = f"match.guard.failed.{match_id}.{i}"
                 
                 self.emit(f'{indent}  br i1 {pattern_matches}, label %{guard_label}, label %{next_case_label}')
                 self.emit(f'\n{guard_label}:')
+
+                # Guard expressions can reference pattern-bound identifiers.
+                self._generate_pattern_bindings(
+                    case.pattern,
+                    match_value_reg,
+                    match_value_type,
+                    indent + '  ',
+                    case_label=case_label,
+                )
+                guard_reg = self._generate_expression(case.guard, indent + '  ')
                 self.emit(f'{indent}  br i1 {guard_reg}, label %{case_label}.body, label %{next_case_label}')
                 
                 # Emit case body label (only once - guard path jumps here)
@@ -6909,14 +7501,21 @@ class LLVMIRGenerator(CodeGenerator):
                     # Not last case - branch to next case if pattern doesn't match
                     self.emit(f'{indent}  br i1 {pattern_matches}, label %{case_label}.body, label %{next_case_label}')
                 else:
-                    # Last case - always execute if we reach here
-                    self.emit(f'{indent}  br label %{case_label}.body')
+                    # Last case - execute only if pattern matches, otherwise end.
+                    self.emit(f'{indent}  br i1 {pattern_matches}, label %{case_label}.body, label %{end_label}')
                 
                 # Emit case body label (only for non-guard cases)
                 self.emit(f'\n{case_label}.body:')
             
-            # Generate variable bindings for pattern
-            self._generate_pattern_bindings(case.pattern, match_value_reg, match_value_type, indent + '  ', case_label=case_label)
+            # Generate pattern bindings for non-guard cases.
+            if not has_guard:
+                self._generate_pattern_bindings(
+                    case.pattern,
+                    match_value_reg,
+                    match_value_type,
+                    indent + '  ',
+                    case_label=case_label,
+                )
             
             for stmt in case.body:
                 self._generate_statement(stmt, indent + '  ')
@@ -6925,6 +7524,11 @@ class LLVMIRGenerator(CodeGenerator):
             # Check if last statement was a return
             if not case.body or type(case.body[-1]).__name__ != 'ReturnStatement':
                 self.emit(f'{indent}  br label %{end_label}')
+
+            # Pattern bindings are scoped to this case body.
+            self.local_vars = case_scope_locals
+            self.array_sizes = case_scope_array_sizes
+            self.runtime_array_sizes = case_scope_runtime_array_sizes
         
         # Emit end label
         self.emit(f'\n{end_label}:')
@@ -7038,28 +7642,22 @@ class LLVMIRGenerator(CodeGenerator):
         is_some = (variant == 'Some') or bool(getattr(pattern, 'is_some', False))
 
         if value_type.endswith('*'):
-            has_value = self._new_temp()
-            self.emit(f'{indent}{has_value} = ptrtoint {value_type} {value_reg} to i64')
+            opt_ptr = value_reg
+            if value_type != 'i8*':
+                opt_ptr = self._new_temp()
+                self.emit(f'{indent}{opt_ptr} = bitcast {value_type} {value_reg} to i8*')
+
             has_value_i1 = self._new_temp()
-            self.emit(f'{indent}{has_value_i1} = icmp ne i64 {has_value}, 0')
+            self.emit(f'{indent}{has_value_i1} = call i1 @NLPL_Optional_has_value(i8* {opt_ptr})')
             if is_some:
                 return has_value_i1
             is_none = self._new_temp()
             self.emit(f'{indent}{is_none} = xor i1 {has_value_i1}, true')
             return is_none
 
-        if is_some:
-            # Match Some(inner)
-            has_value = self._new_temp()
-            self.emit(f'{indent}{has_value} = icmp ne {value_type} {value_reg}, 0')
-            return has_value
-        else:
-            # Match None
-            has_value = self._new_temp()
-            self.emit(f'{indent}{has_value} = icmp ne {value_type} {value_reg}, 0')
-            is_none = self._new_temp()
-            self.emit(f'{indent}{is_none} = xor i1 {has_value}, true')
-            return is_none
+        raise RuntimeError(
+            f"OptionPattern requires runtime-backed pointer representation; got scalar type '{value_type}'"
+        )
 
     def _generate_result_pattern_match(self, pattern, value_reg, value_type, indent):
         """Generate match code for ResultPattern (Ok/Err specific)."""
@@ -7069,28 +7667,22 @@ class LLVMIRGenerator(CodeGenerator):
         is_ok_variant = (variant == 'Ok') or bool(getattr(pattern, 'is_ok', False))
 
         if value_type.endswith('*'):
-            value_i64 = self._new_temp()
-            self.emit(f'{indent}{value_i64} = ptrtoint {value_type} {value_reg} to i64')
+            res_ptr = value_reg
+            if value_type != 'i8*':
+                res_ptr = self._new_temp()
+                self.emit(f'{indent}{res_ptr} = bitcast {value_type} {value_reg} to i8*')
+
             is_ok = self._new_temp()
-            self.emit(f'{indent}{is_ok} = icmp sge i64 {value_i64}, 0')
+            self.emit(f'{indent}{is_ok} = call i1 @NLPL_Result_is_ok(i8* {res_ptr})')
             if is_ok_variant:
                 return is_ok
             is_err = self._new_temp()
             self.emit(f'{indent}{is_err} = xor i1 {is_ok}, true')
             return is_err
 
-        if is_ok_variant:
-            # Match Ok(value)
-            is_ok = self._new_temp()
-            self.emit(f'{indent}{is_ok} = icmp sge {value_type} {value_reg}, 0')
-            return is_ok
-        else:
-            # Match Err(error)
-            is_ok = self._new_temp()
-            self.emit(f'{indent}{is_ok} = icmp sge {value_type} {value_reg}, 0')
-            is_err = self._new_temp()
-            self.emit(f'{indent}{is_err} = xor i1 {is_ok}, true')
-            return is_err
+        raise RuntimeError(
+            f"ResultPattern requires runtime-backed pointer representation; got scalar type '{value_type}'"
+        )
 
     def _generate_tuple_pattern_match(self, pattern, value_reg, value_type, case_label, indent):
         """Generate match code for TuplePattern."""
@@ -7278,46 +7870,11 @@ class LLVMIRGenerator(CodeGenerator):
         class_name = value_type
         method_name = f"NLPL_{class_name}_{prop_name}"
 
-        # Resolve return type from generic type substitutions
-        # Check if we have type substitutions active (from specialized generic class)
-        if self.current_type_substitutions:
-            # Look up the property type in class metadata
-            if class_name in self.class_metadata:
-                class_meta = self.class_metadata[class_name]
-                if 'properties' in class_meta:
-                    for prop in class_meta['properties']:
-                        if prop['name'] == prop_name:
-                            prop_type = prop['type']
-                            # Apply type substitutions
-                            if prop_type in self.current_type_substitutions:
-                                return_type_ir = self._map_nxl_type_to_llvm(
-                                    self.current_type_substitutions[prop_type]
-                                )
-                            else:
-                                return_type_ir = self._map_nxl_type_to_llvm(prop_type)
-                            break
-                    else:
-                        # Property not found in metadata, default to i64
-                        return_type_ir = 'i64'
-                else:
-                    return_type_ir = 'i64'
-            else:
-                return_type_ir = 'i64'
-        else:
-            # No type substitutions, try to infer from class metadata
-            if class_name in self.class_metadata:
-                class_meta = self.class_metadata[class_name]
-                if 'properties' in class_meta:
-                    for prop in class_meta['properties']:
-                        if prop['name'] == prop_name:
-                            return_type_ir = self._map_nxl_type_to_llvm(prop['type'])
-                            break
-                    else:
-                        return_type_ir = 'i64'
-                else:
-                    return_type_ir = 'i64'
-            else:
-                return_type_ir = 'i64'
+        _prop_index, _prop_type, return_type_ir = self._resolve_class_property_info(
+            class_name,
+            prop_name,
+            type_substitutions=self.current_type_substitutions,
+        )
 
         # Call getter with resolved return type
         inner_val = self._new_temp()
@@ -7579,19 +8136,243 @@ class LLVMIRGenerator(CodeGenerator):
             # Unknown pattern type
             return 'false'
     
+    def _emit_typed_optional_payload_ref(self, opt_ptr, indent):
+        """Materialize Option payload as i8* reference across ptr/i64/f64 kinds."""
+        kind_reg = self._new_temp()
+        self.emit(f'{indent}{kind_reg} = call i32 @NLPL_Optional_get_value_kind(i8* {opt_ptr})')
+
+        ptr_label = self._new_label('opt.payload.ptr')
+        i64_label = self._new_label('opt.payload.i64')
+        f64_label = self._new_label('opt.payload.f64')
+        none_label = self._new_label('opt.payload.none')
+        done_label = self._new_label('opt.payload.done')
+
+        self.emit(f'{indent}switch i32 {kind_reg}, label %{none_label} [')
+        self.emit(f'{indent}  i32 3, label %{ptr_label}')
+        self.emit(f'{indent}  i32 1, label %{i64_label}')
+        self.emit(f'{indent}  i32 2, label %{f64_label}')
+        self.emit(f'{indent}]')
+
+        self.emit(f'\n{ptr_label}:')
+        ptr_payload = self._new_temp()
+        self.emit(f'{indent}{ptr_payload} = call i8* @NLPL_Optional_get_value_ptr(i8* {opt_ptr})')
+        self.emit(f'{indent}br label %{done_label}')
+
+        self.emit(f'\n{i64_label}:')
+        i64_payload = self._new_temp()
+        self.emit(f'{indent}{i64_payload} = call i64 @NLPL_Optional_get_value_i64(i8* {opt_ptr})')
+        i64_slot = self._new_temp()
+        self.emit(f'{indent}{i64_slot} = alloca i64')
+        self.emit(f'{indent}store i64 {i64_payload}, i64* {i64_slot}')
+        i64_ref = self._new_temp()
+        self.emit(f'{indent}{i64_ref} = bitcast i64* {i64_slot} to i8*')
+        self.emit(f'{indent}br label %{done_label}')
+
+        self.emit(f'\n{f64_label}:')
+        f64_payload = self._new_temp()
+        self.emit(f'{indent}{f64_payload} = call double @NLPL_Optional_get_value_f64(i8* {opt_ptr})')
+        f64_slot = self._new_temp()
+        self.emit(f'{indent}{f64_slot} = alloca double')
+        self.emit(f'{indent}store double {f64_payload}, double* {f64_slot}')
+        f64_ref = self._new_temp()
+        self.emit(f'{indent}{f64_ref} = bitcast double* {f64_slot} to i8*')
+        self.emit(f'{indent}br label %{done_label}')
+
+        self.emit(f'\n{none_label}:')
+        self.emit(f'{indent}br label %{done_label}')
+
+        self.emit(f'\n{done_label}:')
+        payload_ref = self._new_temp()
+        self.emit(
+            f'{indent}{payload_ref} = phi i8* '
+            f'[{ptr_payload}, %{ptr_label}], '
+            f'[{i64_ref}, %{i64_label}], '
+            f'[{f64_ref}, %{f64_label}], '
+            f'[null, %{none_label}]'
+        )
+        return payload_ref
+
+    def _emit_typed_result_payload_ref(self, res_ptr, is_ok_variant, indent):
+        """Materialize Result payload/error as i8* reference across ptr/i64/f64 kinds."""
+        if is_ok_variant:
+            kind_helper = 'NLPL_Result_get_value_kind'
+            ptr_helper = 'NLPL_Result_get_value_ptr'
+            i64_helper = 'NLPL_Result_get_value_i64'
+            f64_helper = 'NLPL_Result_get_value_f64'
+            label_prefix = 'result.ok.payload'
+        else:
+            kind_helper = 'NLPL_Result_get_error_kind'
+            ptr_helper = 'NLPL_Result_get_error_ptr'
+            i64_helper = 'NLPL_Result_get_error_i64'
+            f64_helper = 'NLPL_Result_get_error_f64'
+            label_prefix = 'result.err.payload'
+
+        kind_reg = self._new_temp()
+        self.emit(f'{indent}{kind_reg} = call i32 @{kind_helper}(i8* {res_ptr})')
+
+        ptr_label = self._new_label(f'{label_prefix}.ptr')
+        i64_label = self._new_label(f'{label_prefix}.i64')
+        f64_label = self._new_label(f'{label_prefix}.f64')
+        none_label = self._new_label(f'{label_prefix}.none')
+        done_label = self._new_label(f'{label_prefix}.done')
+
+        self.emit(f'{indent}switch i32 {kind_reg}, label %{none_label} [')
+        self.emit(f'{indent}  i32 3, label %{ptr_label}')
+        self.emit(f'{indent}  i32 1, label %{i64_label}')
+        self.emit(f'{indent}  i32 2, label %{f64_label}')
+        self.emit(f'{indent}]')
+
+        self.emit(f'\n{ptr_label}:')
+        ptr_payload = self._new_temp()
+        self.emit(f'{indent}{ptr_payload} = call i8* @{ptr_helper}(i8* {res_ptr})')
+        self.emit(f'{indent}br label %{done_label}')
+
+        self.emit(f'\n{i64_label}:')
+        i64_payload = self._new_temp()
+        self.emit(f'{indent}{i64_payload} = call i64 @{i64_helper}(i8* {res_ptr})')
+        i64_slot = self._new_temp()
+        self.emit(f'{indent}{i64_slot} = alloca i64')
+        self.emit(f'{indent}store i64 {i64_payload}, i64* {i64_slot}')
+        i64_ref = self._new_temp()
+        self.emit(f'{indent}{i64_ref} = bitcast i64* {i64_slot} to i8*')
+        self.emit(f'{indent}br label %{done_label}')
+
+        self.emit(f'\n{f64_label}:')
+        f64_payload = self._new_temp()
+        self.emit(f'{indent}{f64_payload} = call double @{f64_helper}(i8* {res_ptr})')
+        f64_slot = self._new_temp()
+        self.emit(f'{indent}{f64_slot} = alloca double')
+        self.emit(f'{indent}store double {f64_payload}, double* {f64_slot}')
+        f64_ref = self._new_temp()
+        self.emit(f'{indent}{f64_ref} = bitcast double* {f64_slot} to i8*')
+        self.emit(f'{indent}br label %{done_label}')
+
+        self.emit(f'\n{none_label}:')
+        self.emit(f'{indent}br label %{done_label}')
+
+        self.emit(f'\n{done_label}:')
+        payload_ref = self._new_temp()
+        self.emit(
+            f'{indent}{payload_ref} = phi i8* '
+            f'[{ptr_payload}, %{ptr_label}], '
+            f'[{i64_ref}, %{i64_label}], '
+            f'[{f64_ref}, %{f64_label}], '
+            f'[null, %{none_label}]'
+        )
+        return payload_ref
+
+    def _map_pattern_inferred_type_to_llvm(self, inferred_type):
+        """Map inferred type-system objects attached to patterns to LLVM types."""
+        if inferred_type is None:
+            return None
+        type_name = type(inferred_type).__name__
+        if type_name == 'PrimitiveType':
+            primitive_name = getattr(inferred_type, 'name', '').lower()
+            if primitive_name == 'integer':
+                return 'i64'
+            if primitive_name == 'float':
+                return 'double'
+            if primitive_name == 'boolean':
+                return 'i1'
+            if primitive_name == 'string':
+                return 'i8*'
+            return None
+        if type_name in ('ListType', 'DictionaryType', 'AnyType', 'UnionType'):
+            return None
+        if type_name in ('ClassType', 'GenericType'):
+            mapped = self._map_nxl_type_to_llvm(getattr(inferred_type, 'name', 'Any'))
+            return mapped
+        return None
+
+    def _resolve_pattern_binding_llvm_type(self, pattern):
+        """Resolve concrete LLVM type for Option/Result binding from metadata."""
+        annotation = getattr(pattern, 'binding_type_annotation', None)
+        if isinstance(annotation, str) and annotation.strip():
+            try:
+                return self._map_nxl_type_to_llvm(annotation)
+            except RuntimeError:
+                return None
+
+        inferred_type = getattr(pattern, 'binding_inferred_type', None)
+        if inferred_type is not None:
+            return self._map_pattern_inferred_type_to_llvm(inferred_type)
+
+        return None
+
+    def _emit_optional_payload_for_type(self, opt_ptr, target_type, indent):
+        """Extract Option payload directly as target_type when type metadata is available."""
+        if target_type == 'i64':
+            payload_reg = self._new_temp()
+            self.emit(f'{indent}{payload_reg} = call i64 @NLPL_Optional_get_value_i64(i8* {opt_ptr})')
+            return payload_reg
+        if target_type == 'double':
+            payload_reg = self._new_temp()
+            self.emit(f'{indent}{payload_reg} = call double @NLPL_Optional_get_value_f64(i8* {opt_ptr})')
+            return payload_reg
+        if target_type.endswith('*'):
+            payload_ptr = self._new_temp()
+            self.emit(f'{indent}{payload_ptr} = call i8* @NLPL_Optional_get_value_ptr(i8* {opt_ptr})')
+            if target_type == 'i8*':
+                return payload_ptr
+            cast_reg = self._new_temp()
+            self.emit(f'{indent}{cast_reg} = bitcast i8* {payload_ptr} to {target_type}')
+            return cast_reg
+        return None
+
+    def _emit_result_payload_for_type(self, res_ptr, is_ok_variant, target_type, indent):
+        """Extract Result payload/error directly as target_type when type metadata is available."""
+        if is_ok_variant:
+            i64_helper = 'NLPL_Result_get_value_i64'
+            f64_helper = 'NLPL_Result_get_value_f64'
+            ptr_helper = 'NLPL_Result_get_value_ptr'
+        else:
+            i64_helper = 'NLPL_Result_get_error_i64'
+            f64_helper = 'NLPL_Result_get_error_f64'
+            ptr_helper = 'NLPL_Result_get_error_ptr'
+
+        if target_type == 'i64':
+            payload_reg = self._new_temp()
+            self.emit(f'{indent}{payload_reg} = call i64 @{i64_helper}(i8* {res_ptr})')
+            return payload_reg
+        if target_type == 'double':
+            payload_reg = self._new_temp()
+            self.emit(f'{indent}{payload_reg} = call double @{f64_helper}(i8* {res_ptr})')
+            return payload_reg
+        if target_type.endswith('*'):
+            payload_ptr = self._new_temp()
+            self.emit(f'{indent}{payload_ptr} = call i8* @{ptr_helper}(i8* {res_ptr})')
+            if target_type == 'i8*':
+                return payload_ptr
+            cast_reg = self._new_temp()
+            self.emit(f'{indent}{cast_reg} = bitcast i8* {payload_ptr} to {target_type}')
+            return cast_reg
+        return None
+
     def _generate_option_pattern_binding(self, pattern, value_reg, value_type, indent):
         """Generate bindings for OptionPattern (Some(value) extraction)."""
         bind_name = getattr(pattern, 'binding', None)
         inner_pattern = getattr(pattern, 'inner_pattern', None)
         if bind_name is None and not inner_pattern:
             return
-        
-        inner_type = 'i64'
+
+        inner_type = self._resolve_pattern_binding_llvm_type(pattern)
         if value_type.endswith('*'):
-            inner_val = self._new_temp()
-            self.emit(f'{indent}{inner_val} = ptrtoint {value_type} {value_reg} to i64')
+            opt_ptr = value_reg
+            if value_type != 'i8*':
+                opt_ptr = self._new_temp()
+                self.emit(f'{indent}{opt_ptr} = bitcast {value_type} {value_reg} to i8*')
+            if inner_type is None:
+                inner_type = 'i8*'
+                inner_val = self._emit_typed_optional_payload_ref(opt_ptr, indent)
+            else:
+                inner_val = self._emit_optional_payload_for_type(opt_ptr, inner_type, indent)
+                if inner_val is None:
+                    inner_type = 'i8*'
+                    inner_val = self._emit_typed_optional_payload_ref(opt_ptr, indent)
         else:
-            inner_val = value_reg
+            raise RuntimeError(
+                f"OptionPattern binding requires runtime-backed pointer representation; got scalar type '{value_type}'"
+            )
         
         # Direct binding form: OptionPattern("Some", "value")
         if bind_name:
@@ -7622,20 +8403,45 @@ class LLVMIRGenerator(CodeGenerator):
         # Determine which field to extract based on Ok vs Err
         variant = getattr(pattern, 'variant', None)
         is_ok_variant = (variant == 'Ok') or bool(getattr(pattern, 'is_ok', False))
+        inner_type = self._resolve_pattern_binding_llvm_type(pattern)
         if is_ok_variant:
             # Extract value from Result.Ok
-            inner_type = 'i64'  # Can be enhanced with type inference
             if value_type.endswith('*'):
-                inner_val = self._new_temp()
-                self.emit(f'{indent}{inner_val} = ptrtoint {value_type} {value_reg} to i64')
+                res_ptr = value_reg
+                if value_type != 'i8*':
+                    res_ptr = self._new_temp()
+                    self.emit(f'{indent}{res_ptr} = bitcast {value_type} {value_reg} to i8*')
+                if inner_type is None:
+                    inner_type = 'i8*'
+                    inner_val = self._emit_typed_result_payload_ref(res_ptr, True, indent)
+                else:
+                    inner_val = self._emit_result_payload_for_type(res_ptr, True, inner_type, indent)
+                    if inner_val is None:
+                        inner_type = 'i8*'
+                        inner_val = self._emit_typed_result_payload_ref(res_ptr, True, indent)
             else:
-                inner_val = value_reg
+                raise RuntimeError(
+                    f"ResultPattern binding requires runtime-backed pointer representation; got scalar type '{value_type}'"
+                )
         else:
             # Extract error from Result.Err
-            inner_type = 'i8*'  # Error is typically a string
-            str_name, str_len = self._get_or_create_string_constant('error')
-            inner_val = self._new_temp()
-            self.emit(f'{indent}{inner_val} = getelementptr inbounds [{str_len} x i8], [{str_len} x i8]* {str_name}, i64 0, i64 0')
+            if value_type.endswith('*'):
+                res_ptr = value_reg
+                if value_type != 'i8*':
+                    res_ptr = self._new_temp()
+                    self.emit(f'{indent}{res_ptr} = bitcast {value_type} {value_reg} to i8*')
+                if inner_type is None:
+                    inner_type = 'i8*'
+                    inner_val = self._emit_typed_result_payload_ref(res_ptr, False, indent)
+                else:
+                    inner_val = self._emit_result_payload_for_type(res_ptr, False, inner_type, indent)
+                    if inner_val is None:
+                        inner_type = 'i8*'
+                        inner_val = self._emit_typed_result_payload_ref(res_ptr, False, indent)
+            else:
+                raise RuntimeError(
+                    f"ResultPattern binding requires runtime-backed pointer representation; got scalar type '{value_type}'"
+                )
         
         # Direct binding form: ResultPattern("Ok"|"Err", "name")
         if bind_name:
@@ -7643,6 +8449,7 @@ class LLVMIRGenerator(CodeGenerator):
             self.emit(f'{indent}{var_addr} = alloca {inner_type}')
             self.emit(f'{indent}store {inner_type} {inner_val}, {inner_type}* {var_addr}')
             self.local_vars[bind_name] = (inner_type, var_addr)
+
             return
 
         # Legacy nested pattern form (inner_pattern)
@@ -7945,6 +8752,34 @@ class LLVMIRGenerator(CodeGenerator):
         all_properties.extend(class_info['properties'])
         
         return all_properties
+
+    def _resolve_class_property_info(self, class_name: str, member_name: str, type_substitutions=None) -> tuple:
+        """Resolve class property index and LLVM type without inventing fallback metadata."""
+        substitutions = type_substitutions or self.current_type_substitutions or {}
+
+        if class_name in self.class_types:
+            properties = self._get_all_class_properties(class_name)
+        elif class_name in self.class_metadata:
+            properties = self.class_metadata[class_name].get('properties') or []
+        else:
+            raise RuntimeError(f"Unable to resolve property '{member_name}' for unknown class '{class_name}'")
+
+        for index, prop in enumerate(properties):
+            if prop.get('name') != member_name:
+                continue
+
+            prop_type = prop.get('type')
+            if not prop_type:
+                raise RuntimeError(
+                    f"Unable to resolve type metadata for property '{member_name}' on class '{class_name}'"
+                )
+
+            if prop_type in substitutions:
+                prop_type = substitutions[prop_type]
+
+            return index, prop_type, self._map_nxl_type_to_llvm(prop_type)
+
+        raise RuntimeError(f"Unable to resolve property '{member_name}' metadata for class '{class_name}'")
     
     def _get_all_class_methods(self, class_name: str) -> list:
         """
@@ -8290,18 +9125,15 @@ class LLVMIRGenerator(CodeGenerator):
                         return
 
             elif type_name in self.class_types:
-                properties = self._get_all_class_properties(type_name)
-                for i, prop in enumerate(properties):
-                    if prop['name'] == member_name:
-                        prop_type = self._map_nxl_type_to_llvm(prop.get('type', 'Integer'))
-                        value_reg = self._generate_expression(node.value, indent)
-                        value_type = self._infer_expression_type(node.value)
-                        if value_type != prop_type:
-                            value_reg = self._convert_type(value_reg, value_type, prop_type, indent)
-                        prop_ptr = self._new_temp()
-                        self.emit(f'{indent}{prop_ptr} = getelementptr inbounds %{type_name}, %{type_name}* {parent_ptr}, i32 0, i32 {i}')
-                        self.emit(f'{indent}store {prop_type} {value_reg}, {prop_type}* {prop_ptr}, align 8')
-                        return
+                prop_index, _prop_type_name, prop_type = self._resolve_class_property_info(type_name, member_name)
+                value_reg = self._generate_expression(node.value, indent)
+                value_type = self._infer_expression_type(node.value)
+                if value_type != prop_type:
+                    value_reg = self._convert_type(value_reg, value_type, prop_type, indent)
+                prop_ptr = self._new_temp()
+                self.emit(f'{indent}{prop_ptr} = getelementptr inbounds %{type_name}, %{type_name}* {parent_ptr}, i32 0, i32 {prop_index}')
+                self.emit(f'{indent}store {prop_type} {value_reg}, {prop_type}* {prop_ptr}, align 8')
+                return
 
     def _store_struct_field(self, struct_name, member_name, node, obj_ptr, indent):
         """Store a value into a named field of a struct."""
@@ -8347,35 +9179,26 @@ class LLVMIRGenerator(CodeGenerator):
 
     def _store_class_property(self, struct_name, member_name, node, obj_ptr, indent):
         """Store a value into a class property (with inheritance support)."""
-        # Handle class property assignment (with inheritance support)
-        properties = self._get_all_class_properties(struct_name)
-        prop_index = -1
-        prop_type = None
-        for i, prop in enumerate(properties):
-            if prop['name'] == member_name:
-                prop_index = i
-                prop_type = self._map_nxl_type_to_llvm(prop.get('type', 'Integer'))
-                break
-        if prop_index >= 0 and prop_type:
-            value_reg = self._generate_expression(node.value, indent)
-            value_type = self._infer_expression_type(node.value)
-            if value_type != prop_type:
-                value_reg = self._convert_type(value_reg, value_type, prop_type, indent)
-            prop_ptr = self._new_temp()
-            self.emit(f'{indent}{prop_ptr} = getelementptr inbounds %{struct_name}, %{struct_name}* {obj_ptr}, i32 0, i32 {prop_index}')
-            self.emit(f'{indent}store {prop_type} {value_reg}, {prop_type}* {prop_ptr}, align 8')
+        prop_index, _prop_type_name, prop_type = self._resolve_class_property_info(struct_name, member_name)
+        value_reg = self._generate_expression(node.value, indent)
+        value_type = self._infer_expression_type(node.value)
+        if value_type != prop_type:
+            value_reg = self._convert_type(value_reg, value_type, prop_type, indent)
+        prop_ptr = self._new_temp()
+        self.emit(f'{indent}{prop_ptr} = getelementptr inbounds %{struct_name}, %{struct_name}* {obj_ptr}, i32 0, i32 {prop_index}')
+        self.emit(f'{indent}store {prop_type} {value_reg}, {prop_type}* {prop_ptr}, align 8')
 
     def _generate_member_assignment(self, node, indent=''):
         """Generate member assignment with support for nested access: object.field = value or rect.top_left.x = value."""
         # Get target which is a MemberAccess node
         if not hasattr(node, 'target'):
-            return
+            raise RuntimeError("MemberAssignment missing target")
         
         target = node.target
         
         # Extract object and member from MemberAccess
         if not hasattr(target, 'object_expr') or not hasattr(target, 'member_name'):
-            return
+            raise RuntimeError("MemberAssignment target is not a MemberAccess")
         
         obj_expr_type = type(target.object_expr).__name__
         member_name = target.member_name
@@ -8405,7 +9228,7 @@ class LLVMIRGenerator(CodeGenerator):
                 obj_ptr = self._new_temp()
                 self.emit(f'{indent}{obj_ptr} = load {llvm_type}, {llvm_type}* {global_name}, align 8')
             else:
-                return  # Variable not found
+                raise RuntimeError(f"Unknown object variable '{var_name}' in member assignment")
             
             # Extract struct name from type like "%Point*"
             if llvm_type.startswith('%') and llvm_type.endswith('*'):
@@ -8419,6 +9242,12 @@ class LLVMIRGenerator(CodeGenerator):
                 
                 elif struct_name in self.class_types:
                     self._store_class_property(struct_name, member_name, node, obj_ptr, indent)
+                else:
+                    raise RuntimeError(f"Unsupported aggregate type '{struct_name}' in member assignment")
+            else:
+                raise RuntimeError(f"Member assignment target '{var_name}' has non-aggregate LLVM type '{llvm_type}'")
+        else:
+            raise RuntimeError(f"Unsupported member assignment object expression type '{obj_expr_type}'")
 
     def _generate_type_cast_expression(self, node, indent=''):
         """Generate IR for type casting."""
@@ -8606,6 +9435,10 @@ class LLVMIRGenerator(CodeGenerator):
             return self._generate_dereference_expression(expr, indent)
         elif expr_type == 'AddressOfExpression':
             return self._generate_address_of_expression(expr, indent)
+        elif expr_type == 'MoveExpression':
+            return self._generate_move_expression(expr, indent)
+        elif expr_type in ('BorrowExpression', 'BorrowExpressionWithLifetime'):
+            return self._generate_borrow_expression(expr, indent)
         elif expr_type == 'DowngradeExpression':
             return self._generate_downgrade_expression(expr, indent)
         elif expr_type == 'UpgradeExpression':
@@ -8629,14 +9462,80 @@ class LLVMIRGenerator(CodeGenerator):
         elif expr_type == 'ReceiveExpression':
             return self._generate_receive_expression(expr, indent)
         else:
-            # Unknown expression - return zero
-            return '0'
+            raise RuntimeError(f"Unsupported expression type during LLVM generation: {expr_type}")
 
     def _generate_channel_creation_expression(self, indent='') -> str:
         """Generate create channel expression via runtime call."""
         result_reg = self._new_temp()
         self.emit(f'{indent}{result_reg} = call i8* @nxl_channel_create()')
         return result_reg
+
+    def _load_named_variable(self, var_name: str, indent='') -> str:
+        """Load a variable by name from local/global storage."""
+        if var_name in self.local_vars:
+            var_type, alloca_ptr = self.local_vars[var_name]
+            result_reg = self._new_temp()
+            self.emit(f'{indent}{result_reg} = load {var_type}, {var_type}* {alloca_ptr}, align 8')
+            return result_reg
+
+        if var_name in self.global_vars:
+            var_type, global_ptr = self.global_vars[var_name]
+            result_reg = self._new_temp()
+            self.emit(f'{indent}{result_reg} = load {var_type}, {var_type}* {global_ptr}, align 8')
+            return result_reg
+
+        raise RuntimeError(f"Unknown variable '{var_name}' in value load")
+
+    def _emit_owned_variable_invalidation(self, var_name: str, indent='') -> None:
+        """Invalidate a moved-from variable by writing a neutral value."""
+        target = None
+
+        if var_name in self.local_vars:
+            target = self.local_vars[var_name]
+        elif var_name in self.global_vars:
+            target = self.global_vars[var_name]
+
+        if target is None:
+            return
+
+        var_type, ptr_name = target
+        if var_type in ('double', 'float'):
+            neutral = '0.0'
+        elif var_type == 'i1':
+            neutral = 'false'
+        elif var_type.endswith('*'):
+            neutral = 'null'
+        else:
+            neutral = '0'
+
+        align = '8'
+        if var_type == 'i1':
+            align = '1'
+        elif var_type in ('i8',):
+            align = '1'
+        elif var_type in ('i16',):
+            align = '2'
+        elif var_type in ('i32', 'float'):
+            align = '4'
+
+        self.emit(f'{indent}store {var_type} {neutral}, {var_type}* {ptr_name}, align {align}')
+
+    def _generate_move_expression(self, expr, indent='') -> str:
+        """Lower move semantics by returning current value and invalidating source."""
+        var_name = getattr(expr, 'var_name', None)
+        if not var_name:
+            raise RuntimeError("MoveExpression missing source variable name")
+
+        moved_reg = self._load_named_variable(var_name, indent)
+        self._emit_owned_variable_invalidation(var_name, indent)
+        return moved_reg
+
+    def _generate_borrow_expression(self, expr, indent='') -> str:
+        """Lower borrow semantics as a value read in compiled backends."""
+        var_name = getattr(expr, 'var_name', None)
+        if not var_name:
+            raise RuntimeError("BorrowExpression missing source variable name")
+        return self._load_named_variable(var_name, indent)
 
     def _generate_yield_expression(self, expr, indent='') -> str:
         """Generate baseline yield expression value for compiled backends."""
@@ -8944,6 +9843,45 @@ class LLVMIRGenerator(CodeGenerator):
         
         return result_reg
     
+    def _async_task_scope_key(self, is_global: bool = False) -> str:
+        return '__global__' if is_global else (self.current_function_name or '__global__')
+
+    def _set_async_task_payload_type(self, var_name: str, payload_type: str, is_global: bool = False) -> None:
+        self.async_task_payload_types[(self._async_task_scope_key(is_global), var_name)] = payload_type
+
+    def _clear_async_task_payload_type(self, var_name: str, is_global: bool = False) -> None:
+        self.async_task_payload_types.pop((self._async_task_scope_key(is_global), var_name), None)
+
+    def _clear_local_async_task_payload_types(self) -> None:
+        scope = self._async_task_scope_key(is_global=False)
+        for key in [key for key in self.async_task_payload_types if key[0] == scope]:
+            del self.async_task_payload_types[key]
+
+    def _resolve_async_task_payload_type(self, var_name: str) -> Optional[str]:
+        local_key = (self._async_task_scope_key(is_global=False), var_name)
+        if local_key in self.async_task_payload_types:
+            return self.async_task_payload_types[local_key]
+        global_key = ('__global__', var_name)
+        if global_key in self.async_task_payload_types:
+            return self.async_task_payload_types[global_key]
+        return None
+
+    def _infer_async_payload_type_from_expression(self, expr) -> Optional[str]:
+        expr_type = type(expr).__name__
+        if expr_type == 'FunctionCall':
+            func_name = getattr(expr, 'name', None)
+            if type(func_name).__name__ == 'Identifier':
+                func_name = func_name.name
+            if isinstance(func_name, str) and func_name in self.async_functions:
+                return self.async_functions[func_name][0]
+        if expr_type == 'Identifier' and hasattr(expr, 'name'):
+            payload_type = self._resolve_async_task_payload_type(expr.name)
+            if payload_type is not None:
+                return payload_type
+            if expr.name in self.async_functions:
+                return self.async_functions[expr.name][0]
+        return None
+
     def _generate_await_expression(self, expr, indent='') -> str:
         """
         Generate await expression with proper coroutine suspend point.
@@ -8971,6 +9909,40 @@ class LLVMIRGenerator(CodeGenerator):
         if not self.in_async_function:
             result_reg = self._generate_expression(inner_expr, indent)
             return result_reg
+
+        inner_type = type(inner_expr).__name__
+
+        # Hardening: only run coroutine polling path when awaited target is
+        # known to produce a coroutine handle. Otherwise evaluate directly.
+        known_async_target = False
+        if inner_type == 'Identifier':
+            func_name = inner_expr.name
+            if func_name in self.async_functions:
+                known_async_target = True
+            elif func_name in self.local_vars:
+                known_async_target = self.local_vars[func_name][0] == 'i8*'
+            elif func_name in self.global_vars:
+                known_async_target = self.global_vars[func_name][0] == 'i8*'
+        elif inner_type == 'FunctionCall':
+            call_name = getattr(inner_expr, 'name', None)
+            if isinstance(call_name, str) and call_name in self.async_functions:
+                known_async_target = True
+
+        if not known_async_target:
+            # Await on a plain function identifier should call synchronously.
+            if inner_type == 'Identifier':
+                sync_name = inner_expr.name
+                if sync_name in self.functions:
+                    ret_type, _, _ = self.functions[sync_name]
+                    call_reg = self._new_temp()
+                    self.emit(f'{indent}{call_reg} = call {ret_type} @{sync_name}()')
+                    return call_reg
+                if sync_name in self.extern_functions:
+                    ret_type, _, _, _ = self.extern_functions[sync_name]
+                    call_reg = self._new_temp()
+                    self.emit(f'{indent}{call_reg} = call {ret_type} @{sync_name}()')
+                    return call_reg
+            return self._generate_expression(inner_expr, indent)
         
         # Get unique suspend point ID
         suspend_id = self.suspend_counter
@@ -8979,8 +9951,6 @@ class LLVMIRGenerator(CodeGenerator):
         # Call the async function to get coroutine handle
         # If inner_expr is an Identifier (just function name), we need to call it
         # If inner_expr is a FunctionCall, generate the call normally
-        inner_type = type(inner_expr).__name__
-        
         if inner_type == 'Identifier':
             # It's just a function name - need to generate a call to it
             func_name = inner_expr.name
@@ -9053,11 +10023,11 @@ class LLVMIRGenerator(CodeGenerator):
         elif inner_type == 'FunctionCall' and hasattr(inner_expr, 'name'):
             func_name = inner_expr.name
         
-        if func_name and func_name in self.async_functions:
+        inner_ret_type = self._infer_async_payload_type_from_expression(inner_expr)
+        if inner_ret_type is None and func_name and func_name in self.async_functions:
             inner_ret_type, _ = self.async_functions[func_name]
-        else:
-            # Default to i64 if we can't determine the type
-            inner_ret_type = 'i64'
+        if inner_ret_type is None:
+            inner_ret_type = self._infer_expression_type(expr) or 'i64'
         
         # Cast result pointer to the correct type and load the value
         if inner_ret_type == 'i8*':
@@ -9212,6 +10182,20 @@ class LLVMIRGenerator(CodeGenerator):
             if body_type:
                 return body_type
         return 'i64'
+
+    def _infer_lambda_signature(self, expr) -> Tuple[str, List[str]]:
+        """Infer exact LLVM return and parameter types for a lambda expression."""
+        ret_type = self._infer_lambda_return_type(expr)
+        param_types: List[str] = []
+
+        if hasattr(expr, 'parameters') and expr.parameters:
+            for param in expr.parameters:
+                if hasattr(param, 'type_annotation') and param.type_annotation:
+                    param_types.append(self._map_nxl_type_to_llvm(param.type_annotation))
+                else:
+                    param_types.append('i64')
+
+        return ret_type, param_types
 
     def _generate_lambda_body_ir(
         self, lambda_name: str, ret_type: str, param_types, param_names,
@@ -9760,37 +10744,310 @@ class LLVMIRGenerator(CodeGenerator):
         
         A proper implementation would use LLVM coroutines or a manual state machine.
         """
-        # For now, generate as list comprehension and wrap in generator struct
-        # A generator struct could be: {i64* data, i64 size, i64 current_index}
-        
-        # Use list comprehension implementation and preserve the actual produced count
-        list_ptr, list_count = self._generate_list_comprehension_expression_with_count(expr, indent)
+        list_ptr = None
+        list_count = None
+        frame_size_encoded = None
+        initial_index = '0'
+        pred_kind = '0'
+        pred_arg = '0'
+        transform_op = '0'
+        transform_arg = '0'
+
+        # Fast resumable path: identity generator over a list-like iterable can
+        # pull directly from source storage without eager materialization.
+        fast_path_spec = self._classify_generator_fast_path(expr)
+        if fast_path_spec is not None:
+            list_ptr, list_count = self._resolve_generator_identity_source(expr, indent)
+            if list_ptr is not None and list_count is not None:
+                list_count_plus_one = self._new_temp()
+                self.emit(f'{indent}{list_count_plus_one} = add i64 {list_count}, 1')
+                encoded_borrowed_size = self._new_temp()
+                self.emit(f'{indent}{encoded_borrowed_size} = sub i64 0, {list_count_plus_one}')
+                frame_size_encoded = encoded_borrowed_size
+                pred_kind = str(fast_path_spec.get('pred_kind', 0))
+                pred_arg = str(fast_path_spec.get('pred_arg', 0))
+                transform_op = str(fast_path_spec.get('transform_op', 0))
+                transform_arg = str(fast_path_spec.get('transform_arg', 0))
+
+        # Fallback path: materialize via list comprehension when source cannot
+        # be resumed directly.
+        if list_ptr is None or list_count is None:
+            list_ptr, list_count = self._generate_list_comprehension_expression_with_count(expr, indent)
+            frame_size_encoded = list_count
+            pred_kind = '0'
+            pred_arg = '0'
         
         # Create a heap-backed generator frame for pull/resume semantics.
         gen_alloc = self._new_temp()
-        self.emit(f'{indent}{gen_alloc} = call i8* @malloc(i64 24)')
+        self.emit(f'{indent}{gen_alloc} = call i8* @malloc(i64 56)')
         gen_struct = self._new_temp()
-        self.emit(f'{indent}{gen_struct} = bitcast i8* {gen_alloc} to {{ i64*, i64, i64 }}*')
+        self.emit(f'{indent}{gen_struct} = bitcast i8* {gen_alloc} to {{ i64*, i64, i64, i64, i64, i64, i64 }}*')
         
         # Store data pointer
         data_field_ptr = self._new_temp()
-        self.emit(f'{indent}{data_field_ptr} = getelementptr inbounds {{ i64*, i64, i64 }}, {{ i64*, i64, i64 }}* {gen_struct}, i32 0, i32 0')
+        self.emit(f'{indent}{data_field_ptr} = getelementptr inbounds {{ i64*, i64, i64, i64, i64, i64, i64 }}, {{ i64*, i64, i64, i64, i64, i64, i64 }}* {gen_struct}, i32 0, i32 0')
         self.emit(f'{indent}store i64* {list_ptr}, i64** {data_field_ptr}, align 8')
         
         size_field_ptr = self._new_temp()
-        self.emit(f'{indent}{size_field_ptr} = getelementptr inbounds {{ i64*, i64, i64 }}, {{ i64*, i64, i64 }}* {gen_struct}, i32 0, i32 1')
-        self.emit(f'{indent}store i64 {list_count}, i64* {size_field_ptr}, align 8')
+        self.emit(f'{indent}{size_field_ptr} = getelementptr inbounds {{ i64*, i64, i64, i64, i64, i64, i64 }}, {{ i64*, i64, i64, i64, i64, i64, i64 }}* {gen_struct}, i32 0, i32 1')
+        self.emit(f'{indent}store i64 {frame_size_encoded}, i64* {size_field_ptr}, align 8')
         
         # Initialize current_index to 0
         index_field_ptr = self._new_temp()
-        self.emit(f'{indent}{index_field_ptr} = getelementptr inbounds {{ i64*, i64, i64 }}, {{ i64*, i64, i64 }}* {gen_struct}, i32 0, i32 2')
-        self.emit(f'{indent}store i64 0, i64* {index_field_ptr}, align 8')
-        
+        self.emit(f'{indent}{index_field_ptr} = getelementptr inbounds {{ i64*, i64, i64, i64, i64, i64, i64 }}, {{ i64*, i64, i64, i64, i64, i64, i64 }}* {gen_struct}, i32 0, i32 2')
+        self.emit(f'{indent}store i64 {initial_index}, i64* {index_field_ptr}, align 8')
+
+        pred_kind_ptr = self._new_temp()
+        self.emit(f'{indent}{pred_kind_ptr} = getelementptr inbounds {{ i64*, i64, i64, i64, i64, i64, i64 }}, {{ i64*, i64, i64, i64, i64, i64, i64 }}* {gen_struct}, i32 0, i32 3')
+        self.emit(f'{indent}store i64 {pred_kind}, i64* {pred_kind_ptr}, align 8')
+
+        pred_arg_ptr = self._new_temp()
+        self.emit(f'{indent}{pred_arg_ptr} = getelementptr inbounds {{ i64*, i64, i64, i64, i64, i64, i64 }}, {{ i64*, i64, i64, i64, i64, i64, i64 }}* {gen_struct}, i32 0, i32 4')
+        self.emit(f'{indent}store i64 {pred_arg}, i64* {pred_arg_ptr}, align 8')
+
+        transform_op_ptr = self._new_temp()
+        self.emit(f'{indent}{transform_op_ptr} = getelementptr inbounds {{ i64*, i64, i64, i64, i64, i64, i64 }}, {{ i64*, i64, i64, i64, i64, i64, i64 }}* {gen_struct}, i32 0, i32 5')
+        self.emit(f'{indent}store i64 {transform_op}, i64* {transform_op_ptr}, align 8')
+
+        transform_arg_ptr = self._new_temp()
+        self.emit(f'{indent}{transform_arg_ptr} = getelementptr inbounds {{ i64*, i64, i64, i64, i64, i64, i64 }}, {{ i64*, i64, i64, i64, i64, i64, i64 }}* {gen_struct}, i32 0, i32 6')
+        self.emit(f'{indent}store i64 {transform_arg}, i64* {transform_arg_ptr}, align 8')
+
         # Return generator struct pointer (cast to i8* for generic pointer)
         result_ptr = self._new_temp()
-        self.emit(f'{indent}{result_ptr} = bitcast {{ i64*, i64, i64 }}* {gen_struct} to i8*')
+        self.emit(f'{indent}{result_ptr} = bitcast {{ i64*, i64, i64, i64, i64, i64, i64 }}* {gen_struct} to i8*')
         
         return result_ptr
+
+    def _is_identity_generator_expression(self, expr) -> bool:
+        """Return True for identity generators: (x for x in iterable ...)."""
+        expr_node = getattr(expr, 'expr', None)
+        target_node = getattr(expr, 'target', None)
+        if type(expr_node).__name__ != 'Identifier' or type(target_node).__name__ != 'Identifier':
+            return False
+        if getattr(expr_node, 'name', None) != getattr(target_node, 'name', None):
+            return False
+        return True
+
+    def _classify_generator_fast_path(self, expr):
+        """Classify eligible non-materializing generator fast paths.
+
+        Returns:
+            - {'pred_kind': 0, 'pred_arg': 0} for (x for x in iterable)
+            - {'pred_kind': 1, 'pred_arg': 0} for (x for x in iterable if x)
+            - {'pred_kind': K, 'pred_arg': C} for single comparison filters
+            - {'pred_kind': 0, 'pred_arg': 0, 'transform_op': T, 'transform_arg': C}
+              for single-step arithmetic: (x op C for x in iterable)
+            - None when materialization is required
+        """
+        if not self._is_identity_generator_expression(expr):
+            # Arithmetic transform path: (x op C for x in iterable) without filter.
+            if getattr(expr, 'condition', None) is None:
+                transform = self._extract_generator_arithmetic_transform(expr)
+                if transform is not None:
+                    return {'pred_kind': 0, 'pred_arg': 0, 'transform_op': transform[0], 'transform_arg': transform[1]}
+            return None
+
+        condition = getattr(expr, 'condition', None)
+        if condition is None:
+            return {'pred_kind': 0, 'pred_arg': 0}
+
+        target_name = getattr(getattr(expr, 'target', None), 'name', None)
+        if type(condition).__name__ == 'Identifier' and getattr(condition, 'name', None) == target_name:
+            return {'pred_kind': 1, 'pred_arg': 0}
+
+        comparison = self._extract_generator_comparison_filter(condition, target_name)
+        if comparison is not None:
+            return comparison
+
+        return None
+
+    def _extract_generator_comparison_filter(self, condition, target_name):
+        """Extract a simple comparison predicate against the generator target.
+
+        Supported forms:
+            x <op> <integer literal>
+            <integer literal> <op> x
+        """
+        if type(condition).__name__ != 'BinaryOperation':
+            return None
+
+        left = getattr(condition, 'left', None)
+        right = getattr(condition, 'right', None)
+        op = getattr(condition, 'operator', None)
+        if hasattr(op, 'lexeme'):
+            op = op.lexeme
+        elif hasattr(op, 'name'):
+            op = op.name.lower()
+        op = str(op).lower()
+
+        def _int_literal(node):
+            if type(node).__name__ != 'Literal':
+                return None
+            value = getattr(node, 'value', None)
+            return value if isinstance(value, int) else None
+
+        left_is_target = type(left).__name__ == 'Identifier' and getattr(left, 'name', None) == target_name
+        right_is_target = type(right).__name__ == 'Identifier' and getattr(right, 'name', None) == target_name
+
+        compare_value = None
+        normalized_op = None
+
+        if left_is_target:
+            compare_value = _int_literal(right)
+            normalized_op = op
+        elif right_is_target:
+            compare_value = _int_literal(left)
+            invert = {
+                '>': '<',
+                '>=': '<=',
+                '<': '>',
+                '<=': '>=',
+                'greater than': '<',
+                'greater than or equal to': '<=',
+                'less than': '>',
+                'less than or equal to': '>=',
+                'is greater than': '<',
+                'is greater than or equal to': '<=',
+                'is less than': '>',
+                'is less than or equal to': '>=',
+            }
+            normalized_op = invert.get(op, op)
+
+        if compare_value is None:
+            return None
+
+        op_to_kind = {
+            '>': 2,
+            '>=': 3,
+            '<': 4,
+            '<=': 5,
+            '==': 6,
+            '!=': 7,
+            'equal to': 6,
+            'not equal to': 7,
+            'equals': 6,
+            'is': 6,
+            'is equal to': 6,
+            'is not': 7,
+            'is not equal to': 7,
+            'greater than': 2,
+            'greater than or equal to': 3,
+            'less than': 4,
+            'less than or equal to': 5,
+            'is greater than': 2,
+            'is greater than or equal to': 3,
+            'is less than': 4,
+            'is less than or equal to': 5,
+            'equal_to': 6,
+            'not_equal_to': 7,
+            'less_than': 4,
+            'greater_than': 2,
+            'less_than_or_equal_to': 5,
+            'greater_than_or_equal_to': 3,
+        }
+
+        if normalized_op not in op_to_kind:
+            return None
+
+        return {'pred_kind': op_to_kind[normalized_op], 'pred_arg': compare_value}
+
+    def _extract_generator_arithmetic_transform(self, expr):
+        """Extract single-step arithmetic transform from a mapped generator expression.
+
+        Supported forms (no conditional filter):
+            x + C, C + x  -> transform_op=1 (add)
+            x - C         -> transform_op=2 (sub)  (C - x is not supported)
+            x * C, C * x  -> transform_op=3 (mul)
+
+        Returns (transform_op, transform_arg) or None if not recognized.
+        """
+        target_name = getattr(getattr(expr, 'target', None), 'name', None)
+        expr_node = getattr(expr, 'expr', None)
+        if target_name is None or type(expr_node).__name__ != 'BinaryOperation':
+            return None
+
+        left = getattr(expr_node, 'left', None)
+        right = getattr(expr_node, 'right', None)
+        op = getattr(expr_node, 'operator', None)
+        if hasattr(op, 'lexeme'):
+            op = op.lexeme
+        elif hasattr(op, 'name'):
+            op = op.name.lower()
+        op = str(op).lower().strip()
+
+        def _int_literal(node):
+            if type(node).__name__ != 'Literal':
+                return None
+            v = getattr(node, 'value', None)
+            return v if isinstance(v, int) else None
+
+        left_is_target = type(left).__name__ == 'Identifier' and getattr(left, 'name', None) == target_name
+        right_is_target = type(right).__name__ == 'Identifier' and getattr(right, 'name', None) == target_name
+
+        add_ops = {'+', 'add', 'plus'}
+        sub_ops = {'-', 'sub', 'minus'}
+        mul_ops = {'*', 'mul', 'times', 'multiplied by', 'multiply'}
+
+        if op in add_ops:
+            if left_is_target:
+                c = _int_literal(right)
+                if c is not None:
+                    return (1, c)
+            if right_is_target:
+                c = _int_literal(left)
+                if c is not None:
+                    return (1, c)
+        elif op in sub_ops:
+            if left_is_target:
+                c = _int_literal(right)
+                if c is not None:
+                    return (2, c)
+        elif op in mul_ops:
+            if left_is_target:
+                c = _int_literal(right)
+                if c is not None:
+                    return (3, c)
+            if right_is_target:
+                c = _int_literal(left)
+                if c is not None:
+                    return (3, c)
+
+        return None
+
+    def _resolve_generator_identity_source(self, expr, indent=''):
+        """Resolve source pointer/count for identity generator without materialization."""
+        class _GeneratorSourceShim:
+            pass
+
+        shim = _GeneratorSourceShim()
+        shim.iterator = getattr(getattr(expr, 'target', None), 'name', '__gen_item')
+        shim.iterable = getattr(expr, 'iterable', None)
+        shim.body = []
+        shim.label = None
+        shim.else_body = None
+
+        array_ptr, array_type, array_size, length_reg, _owns_generator_frame = self._resolve_iterable(shim, indent)
+        if array_ptr is None or array_type == 'generator.frame':
+            return None, None
+
+        ptr_type_for_frame = array_type
+        if array_type and array_type.startswith('{'):
+            ptr_type_for_frame = 'i64*'
+
+        if ptr_type_for_frame != 'i64*':
+            return None, None
+
+        if array_size is not None:
+            count_reg = str(array_size)
+        elif length_reg is not None:
+            count_reg = length_reg
+        elif type(getattr(expr, 'iterable', None)).__name__ == 'ListExpression':
+            count_reg = str(len(getattr(expr.iterable, 'elements', [])))
+        else:
+            return None, None
+
+        return array_ptr, count_reg
 
     def _generate_fstring_expression(self, expr, indent='') -> str:
         """
@@ -9936,7 +11193,26 @@ class LLVMIRGenerator(CodeGenerator):
             target = expr.target
             # Check if target is Identifier (Type Name)
             if type(target).__name__ == 'Identifier':
-                type_name = target.name
+                ident_name = target.name
+
+                # Prefer variable resolution when identifier is already in scope.
+                # This handles sizeof variable-expression targets correctly.
+                if ident_name in self.local_vars or ident_name in self.global_vars:
+                    if ident_name in self.local_vars:
+                        inferred_type = self.local_vars[ident_name][0]
+                    else:
+                        inferred_type = self.global_vars[ident_name][0]
+                    inferred_type = inferred_type or self._infer_expression_type(target) or "i8"
+                    size_bits = self._get_type_size_bits(inferred_type)
+                    size_bytes = (size_bits + 7) // 8
+                    size_reg = f"%sizeof_res_{self.temp_counter}"
+                    self.temp_counter += 1
+                    self.ir_lines.append(
+                        f"{indent}{size_reg} = add i64 {size_bytes}, 0  ; sizeof expression target ({inferred_type})"
+                    )
+                    return size_reg
+
+                type_name = ident_name
                 
                 # Check generics first (critical for List<T>)
                 if type_name in self.type_cache:
@@ -9952,8 +11228,13 @@ class LLVMIRGenerator(CodeGenerator):
                          # Primitive or unknown type
                          try:
                              target_llvm_type = self._get_llvm_type(type_name)
-                         except:
-                             # Default fallback
+                         except (KeyError, AttributeError, ValueError) as e:
+                             # Type lookup failed; log and fallback to i8 (may cause type safety issues)
+                             import logging
+                             logging.warning(
+                                 f"LLVM type resolution failed for '{type_name}' in sizeof: {e}. "
+                                 f"Defaulting to i8; generated code may have incorrect size."
+                             )
                              target_llvm_type = "i8"
             elif type(target).__name__ == 'ListExpression':
                 # Array literal: sizeof [1, 2, 3]
@@ -9964,9 +11245,9 @@ class LLVMIRGenerator(CodeGenerator):
                     # Infer element type from first element
                     first_elem_type = self._infer_expression_type(target.elements[0])
                     
-                    # Get size of element type
+                    # Get size of element type (round up bits -> bytes)
                     elem_size_bits = self._get_type_size_bits(first_elem_type)
-                    elem_size_bytes = elem_size_bits // 8
+                    elem_size_bytes = (elem_size_bits + 7) // 8
                     
                     # Calculate total size
                     total_size = element_count * elem_size_bytes
@@ -9983,8 +11264,16 @@ class LLVMIRGenerator(CodeGenerator):
                     self.ir_lines.append(f"{indent}{size_reg} = add i64 0, 0  ; sizeof empty array literal")
                     return size_reg
             else:
-                # Expression target - unsupported for now
-                pass
+                # Expression target: infer expression LLVM type and compute its size.
+                inferred_type = self._infer_expression_type(target) or "i8"
+                size_bits = self._get_type_size_bits(inferred_type)
+                size_bytes = (size_bits + 7) // 8
+                size_reg = f"%sizeof_res_{self.temp_counter}"
+                self.temp_counter += 1
+                self.ir_lines.append(
+                    f"{indent}{size_reg} = add i64 {size_bytes}, 0  ; sizeof expression target ({inferred_type})"
+                )
+                return size_reg
         
         # Check if this is an empty type (class/struct with no fields)
         is_empty_type = False
@@ -10143,7 +11432,7 @@ class LLVMIRGenerator(CodeGenerator):
                                 self.emit(f'{indent}{this_ptr} = load {this_type}, {this_type}* {this_alloca}, align 8')
                                 
                                 # Get property pointer
-                                prop_type = self._map_nxl_type_to_llvm(prop.get('type', 'Integer'))
+                                _prop_index, _prop_type_name, prop_type = self._resolve_class_property_info(class_name, var_name)
                                 prop_ptr = self._new_temp()
                                 self.emit(f'{indent}{prop_ptr} = getelementptr inbounds %{class_name}, %{class_name}* {this_ptr}, i32 0, i32 {i}')
                                 
@@ -10152,10 +11441,9 @@ class LLVMIRGenerator(CodeGenerator):
                                 self.emit(f'{indent}{result_reg} = load {prop_type}, {prop_type}* {prop_ptr}, align 8')
                                 
                                 return result_reg
-                # Not a property, fall through to return 0
-            # Unknown variable - return zero
-            return '0'
-        return '0'
+                # Not a property, fall through to fail-fast unknown identifier handling.
+            raise RuntimeError(f"Unknown identifier '{var_name}' during LLVM generation")
+        raise RuntimeError("Identifier expression missing 'name' attribute")
     
     def _emit_integer_binary_op(self, result_reg: str, result_type: str, left_reg: str, right_reg: str, op: str, indent: str) -> bool:
         """Emit integer binary operation instruction. Returns False if op is unknown."""
@@ -10322,16 +11610,12 @@ class LLVMIRGenerator(CodeGenerator):
         # Integer operations (includes i1 booleans)
         if result_type in ('i64', 'i32', 'i16', 'i8', 'i1'):
             if not self._emit_integer_binary_op(result_reg, result_type, left_reg, right_reg, op, indent):
-                # Unknown operator - log warning and return zero
-                print(f"Warning: Unknown integer operator '{op}' in binary operation")
-                return '0'
+                raise RuntimeError(f"Unsupported integer binary operator '{op}'")
         
         # Float operations
         elif result_type in ('double', 'float'):
             if not self._emit_float_binary_op(result_reg, result_type, left_reg, right_reg, op, indent):
-                # Unknown operator - log warning and return zero
-                print(f"Warning: Unknown float operator '{op}' in binary operation")
-                return '0'
+                raise RuntimeError(f"Unsupported float binary operator '{op}'")
         
         return result_reg
     
@@ -10626,46 +11910,218 @@ class LLVMIRGenerator(CodeGenerator):
         self.emit(f'{indent}{result_reg} = call {ret_type} {func_ptr_typed}({args_str})')
         
         return result_reg
+
+    def _llvm_type_is_known(self, type_name: Any) -> bool:
+        if not isinstance(type_name, str):
+            return False
+        if type_name in ('void', 'float', 'double', 'half'):
+            return True
+        if type_name.endswith('*'):
+            return True
+        if type_name.startswith('i') and type_name[1:].isdigit():
+            return True
+        if type_name.startswith('%'):
+            return True
+        return False
+
+    def _coerce_type_to_llvm(self, type_name: Any) -> str:
+        if isinstance(type_name, str) and self._llvm_type_is_known(type_name):
+            return type_name
+        if type_name is None:
+            return 'i64'
+        return self._map_nxl_type_to_llvm(str(type_name))
+
+    def _normalize_function_pointer_signature(self, ret_type: Any, param_types: List[Any]) -> Tuple[str, List[str]]:
+        llvm_ret = self._coerce_type_to_llvm(ret_type)
+        llvm_params = [self._coerce_type_to_llvm(param) for param in (param_types or [])]
+        return llvm_ret, llvm_params
+
+    def _signature_from_type_annotation_value(self, annotation: Any) -> Optional[Tuple[str, List[str]]]:
+        if not isinstance(annotation, str):
+            return None
+        extern_info = self.extern_types.get(annotation)
+        if not isinstance(extern_info, dict):
+            return None
+        if extern_info.get('kind') != 'function_pointer':
+            return None
+        signature = extern_info.get('signature')
+        if not isinstance(signature, tuple) or len(signature) != 2:
+            return None
+        param_types, return_type = signature
+        return self._normalize_function_pointer_signature(return_type, list(param_types or []))
+
+    def _signature_from_type_annotation(self, node: Any) -> Optional[Tuple[str, List[str]]]:
+        for attr_name in ('var_type', 'type_annotation'):
+            sig = self._signature_from_type_annotation_value(getattr(node, attr_name, None))
+            if sig is not None:
+                return sig
+        return None
+
+    def _scope_key(self, is_global: bool = False) -> str:
+        return '__global__' if is_global else (self.current_function_name or '__global__')
+
+    def _set_function_pointer_signature(self, var_name: str, signature: Tuple[str, List[str]], is_global: bool = False) -> None:
+        key = (self._scope_key(is_global), var_name)
+        self.function_pointer_signatures[key] = signature
+
+    def _clear_function_pointer_signature(self, var_name: str, is_global: bool = False) -> None:
+        key = (self._scope_key(is_global), var_name)
+        self.function_pointer_signatures.pop(key, None)
+
+    def _clear_local_function_pointer_signatures(self) -> None:
+        scope = self._scope_key(is_global=False)
+        keys = [key for key in self.function_pointer_signatures if key[0] == scope]
+        for key in keys:
+            del self.function_pointer_signatures[key]
+
+    def _signature_from_callable_name(self, callable_name: str) -> Optional[Tuple[str, List[str]]]:
+        if callable_name in self.functions:
+            ret_type, param_types, _ = self.functions[callable_name]
+            return self._normalize_function_pointer_signature(ret_type, list(param_types or []))
+        if callable_name in self.extern_functions:
+            ret_type, param_types, _, _ = self.extern_functions[callable_name]
+            return self._normalize_function_pointer_signature(ret_type, list(param_types or []))
+        return None
+
+    def _resolve_function_pointer_signature(self, var_name: str) -> Optional[Tuple[str, List[str]]]:
+        local_key = (self._scope_key(is_global=False), var_name)
+        if local_key in self.function_pointer_signatures:
+            return self.function_pointer_signatures[local_key]
+
+        global_key = ('__global__', var_name)
+        if global_key in self.function_pointer_signatures:
+            return self.function_pointer_signatures[global_key]
+
+        if var_name in self.local_vars:
+            sig = self._signature_from_type_annotation_value(self.local_vars[var_name][0])
+            if sig is not None:
+                return sig
+        if var_name in self.global_vars:
+            sig = self._signature_from_type_annotation_value(self.global_vars[var_name][0])
+            if sig is not None:
+                return sig
+
+        return self._signature_from_callable_name(var_name)
+
+    def _resolve_function_pointer_signature_from_expression(self, pointer_expr: Any) -> Optional[Tuple[str, List[str]]]:
+        expr_type = type(pointer_expr).__name__
+
+        if expr_type == 'Identifier' and hasattr(pointer_expr, 'name'):
+            return self._resolve_function_pointer_signature(pointer_expr.name)
+
+        if expr_type == 'AddressOfExpression' and hasattr(pointer_expr, 'target'):
+            target = pointer_expr.target
+            if type(target).__name__ == 'Identifier' and hasattr(target, 'name'):
+                return self._signature_from_callable_name(target.name)
+
+        return None
+
+    def _update_function_pointer_signature(self, var_name: str, value_expr: Any, is_global: bool = False) -> None:
+        expr_type = type(value_expr).__name__
+        signature: Optional[Tuple[str, List[str]]] = None
+
+        if expr_type == 'AddressOfExpression' and hasattr(value_expr, 'target'):
+            target = value_expr.target
+            if type(target).__name__ == 'Identifier' and hasattr(target, 'name'):
+                signature = self._signature_from_callable_name(target.name)
+        elif expr_type == 'LambdaExpression':
+            lambda_ret_type, lambda_param_types = self._infer_lambda_signature(value_expr)
+            signature = self._normalize_function_pointer_signature(lambda_ret_type, list(lambda_param_types))
+        elif expr_type == 'Identifier' and hasattr(value_expr, 'name'):
+            signature = self._resolve_function_pointer_signature(value_expr.name)
+
+        if signature is None:
+            self._clear_function_pointer_signature(var_name, is_global=is_global)
+        else:
+            self._set_function_pointer_signature(var_name, signature, is_global=is_global)
+
+    def _coerce_function_pointer_to_i8(self, pointer_reg: str, pointer_type: str, indent='') -> str:
+        if pointer_type == 'i8*':
+            return pointer_reg
+
+        if pointer_type.endswith('*'):
+            cast_reg = self._new_temp()
+            self.emit(f'{indent}{cast_reg} = bitcast {pointer_type} {pointer_reg} to i8*')
+            return cast_reg
+
+        int_reg = pointer_reg
+        int_type = pointer_type
+        if pointer_type != 'i64':
+            int_reg = self._convert_type(pointer_reg, pointer_type, 'i64', indent)
+            int_type = 'i64'
+
+        cast_reg = self._new_temp()
+        self.emit(f'{indent}{cast_reg} = inttoptr {int_type} {int_reg} to i8*')
+        return cast_reg
+
+    def _prepare_function_pointer_call_arguments(
+        self,
+        call_expr: Any,
+        expected_param_types: Optional[List[str]],
+        indent=''
+    ) -> Tuple[List[str], List[str], str]:
+        arg_regs: List[str] = []
+        arg_types: List[str] = []
+
+        for arg_expr in getattr(call_expr, 'arguments', []) or []:
+            arg_reg = self._generate_expression(arg_expr, indent)
+            arg_type = self._infer_expression_type(arg_expr)
+            arg_regs.append(arg_reg)
+            arg_types.append(arg_type)
+
+        if expected_param_types is None:
+            call_param_types = list(arg_types)
+        else:
+            if len(expected_param_types) != len(arg_regs):
+                raise RuntimeError(
+                    f"Function pointer call argument count mismatch: expected {len(expected_param_types)}, got {len(arg_regs)}"
+                )
+            call_param_types = list(expected_param_types)
+            for idx, expected_type in enumerate(call_param_types):
+                if arg_types[idx] != expected_type:
+                    arg_regs[idx] = self._convert_type(arg_regs[idx], arg_types[idx], expected_type, indent)
+                    arg_types[idx] = expected_type
+
+        args_str = ', '.join(f'{ptype} {preg}' for ptype, preg in zip(call_param_types, arg_regs))
+        return call_param_types, arg_regs, args_str
     
     def _generate_function_pointer_call(self, func_name, expr, indent='') -> str:
         """Generate a call through a plain function pointer variable (not a closure)."""
-        # Old behavior: plain function pointer (not a closure)
-        # Load the function pointer from the variable
+        signature = self._resolve_function_pointer_signature(func_name)
+        if signature is None:
+            raise RuntimeError(
+                f"Unable to resolve function pointer signature for '{func_name}'"
+            )
+        ret_type, expected_param_types = signature
+
+        # Load function pointer value from variable storage.
         if func_name in self.local_vars:
             var_type, var_ptr = self.local_vars[func_name]
-            # Load the i64 value (which is ptrtoint of function pointer)
-            ptr_as_int = self._new_temp()
-            self.emit(f'{indent}{ptr_as_int} = load i64, i64* {var_ptr}, align 8')
+            ptr_value = self._new_temp()
+            self.emit(f'{indent}{ptr_value} = load {var_type}, {var_type}* {var_ptr}, align 8')
         else:
             var_type, global_name = self.global_vars[func_name]
-            ptr_as_int = self._new_temp()
-            self.emit(f'{indent}{ptr_as_int} = load i64, i64* {global_name}, align 8')
-        
-        # Convert back from i64 to function pointer
-        # We need to infer the function signature from arguments
-        # For now, assume it takes i64 args and returns i64
-        arg_types = []
-        arg_regs = []
-        if hasattr(expr, 'arguments'):
-            for arg_expr in expr.arguments:
-                arg_reg = self._generate_expression(arg_expr, indent)
-                arg_type = self._infer_expression_type(arg_expr)
-                arg_types.append(arg_type)
-                arg_regs.append(arg_reg)
-        
-        # Construct function pointer type: i64 (i64, i64, ...)*
-        ret_type = 'i64'  # Assume i64 return for now
-        func_ptr_type = f'{ret_type} ({", ".join(arg_types)})*'
-        
-        # Convert i64 to function pointer
+            ptr_value = self._new_temp()
+            self.emit(f'{indent}{ptr_value} = load {var_type}, {var_type}* {global_name}, align 8')
+
+        ptr_i8 = self._coerce_function_pointer_to_i8(ptr_value, var_type, indent)
+
+        call_param_types, _, args_str = self._prepare_function_pointer_call_arguments(
+            expr,
+            expected_param_types,
+            indent,
+        )
+
+        func_ptr_type = f'{ret_type} ({", ".join(call_param_types)})*'
         func_ptr = self._new_temp()
-        self.emit(f'{indent}{func_ptr} = inttoptr i64 {ptr_as_int} to {func_ptr_type}')
-        
-        # Call through function pointer
-        args_str = ', '.join(f'{t} {r}' for t, r in zip(arg_types, arg_regs))
+        self.emit(f'{indent}{func_ptr} = bitcast i8* {ptr_i8} to {func_ptr_type}')
+
+        if ret_type == 'void':
+            self.emit(f'{indent}call void {func_ptr}({args_str})')
+            return '0'
+
         result_reg = self._new_temp()
         self.emit(f'{indent}{result_reg} = call {ret_type} {func_ptr}({args_str})')
-        
         return result_reg
     
     def _generate_extern_call(self, func_name, expr, indent='') -> str:
@@ -10688,6 +12144,23 @@ class LLVMIRGenerator(CodeGenerator):
                         arg_type = expected_type
                 # For variadic args beyond declared params, keep original type
                 # This is crucial for printf with mixed int/float arguments
+                elif variadic:
+                    # C variadic promotions + pointer normalization.
+                    if arg_type in ('i1', 'i8', 'i16'):
+                        promoted = self._new_temp()
+                        self.emit(f'{indent}{promoted} = sext {arg_type} {arg_reg} to i32')
+                        arg_reg = promoted
+                        arg_type = 'i32'
+                    elif arg_type == 'float':
+                        promoted = self._new_temp()
+                        self.emit(f'{indent}{promoted} = fpext float {arg_reg} to double')
+                        arg_reg = promoted
+                        arg_type = 'double'
+                    elif arg_type.endswith('*') and arg_type != 'i8*':
+                        promoted = self._new_temp()
+                        self.emit(f'{indent}{promoted} = bitcast {arg_type} {arg_reg} to i8*')
+                        arg_reg = promoted
+                        arg_type = 'i8*'
                 
                 args.append(f'{arg_type} {arg_reg}')
         
@@ -10753,8 +12226,15 @@ class LLVMIRGenerator(CodeGenerator):
                 # Check if this is a tracked closure variable
                 if func_name in self.closure_variables:
                     return self._generate_closure_call(func_name, expr, indent)
-                else:
+                elif self._resolve_function_pointer_signature(func_name) is not None:
                     return self._generate_function_pointer_call(func_name, expr, indent)
+                # Some parser paths represent variable references as zero-argument calls.
+                # If the variable is not callable, treat this as a regular identifier load.
+                if not getattr(expr, 'arguments', []):
+                    pseudo_identifier = type('PseudoIdentifier', (), {})()
+                    pseudo_identifier.name = func_name
+                    return self._generate_identifier(pseudo_identifier, indent)
+                raise RuntimeError(f"Unable to resolve function pointer signature for '{func_name}'")
         
         # Delegate to builtin handler
         _builtin_result = self._generate_builtin_call(func_name, expr, indent)
@@ -10782,6 +12262,11 @@ class LLVMIRGenerator(CodeGenerator):
                         # Map LLVM type back to NexusLang type name for specialization
                         nxl_type = self._llvm_type_to_nxl(arg_type_llvm)
                         type_args.append(nxl_type)
+
+                if not type_args:
+                    raise RuntimeError(
+                        f"Generic function '{func_name}' called without sufficient type information to infer type arguments"
+                    )
                 
                 # Create specialized name
                 type_names_capitalized = [t.capitalize() for t in type_args]
@@ -10797,8 +12282,7 @@ class LLVMIRGenerator(CodeGenerator):
                 # Update func_name to call the specialized version
                 func_name = specialized_name
             else:
-                # Unknown function - return zero
-                return '0'
+                raise RuntimeError(f"Unknown function '{func_name}' during LLVM generation")
         
         ret_type, param_types, param_names = self.functions[func_name]
         
@@ -10882,45 +12366,34 @@ class LLVMIRGenerator(CodeGenerator):
         deref_expr is the DereferenceExpression containing the function pointer
         call_expr is the FunctionCall node containing arguments
         """
-        # Get the function pointer (the dereference target)
-        # The deref_expr.pointer should point to a variable holding a function pointer
         func_ptr_expr = deref_expr.pointer
-        
-        # Generate arguments first to infer parameter types
-        args = []
-        param_types = []
-        if hasattr(call_expr, 'arguments'):
-            for arg_expr in call_expr.arguments:
-                arg_reg = self._generate_expression(arg_expr, indent)
-                arg_type = self._infer_expression_type(arg_expr)
-                args.append(f'{arg_type} {arg_reg}')
-                param_types.append(arg_type)
-        
-        # For now, assume all indirect calls return i64
-        # In a full implementation, we'd track function pointer types
-        ret_type = 'i64'
-        
-        # Get the function pointer value (this will be an i8* from address-of)
-        func_ptr_i8 = self._generate_expression(func_ptr_expr, indent)
-        
-        # Create the function pointer type
-        param_types_str = ', '.join(param_types)
-        func_type = f'{ret_type} ({param_types_str})*'
-        
-        # Bitcast i8* back to the function pointer type
+
+        signature = self._resolve_function_pointer_signature_from_expression(func_ptr_expr)
+        if signature is None:
+            raise RuntimeError("Unable to resolve indirect function pointer signature")
+        ret_type, expected_param_types = signature
+
+        call_param_types, _, args_str = self._prepare_function_pointer_call_arguments(
+            call_expr,
+            expected_param_types,
+            indent,
+        )
+
+        raw_ptr_reg = self._generate_expression(func_ptr_expr, indent)
+        raw_ptr_type = self._infer_expression_type(func_ptr_expr)
+        func_ptr_i8 = self._coerce_function_pointer_to_i8(raw_ptr_reg, raw_ptr_type, indent)
+
+        func_type = f'{ret_type} ({", ".join(call_param_types)})*'
         func_ptr = self._new_temp()
         self.emit(f'{indent}{func_ptr} = bitcast i8* {func_ptr_i8} to {func_type}')
-        
-        # Generate indirect call
-        args_str = ', '.join(args)
-        
+
         if ret_type == 'void':
             self.emit(f'{indent}call void {func_ptr}({args_str})')
             return '0'
-        else:
-            result_reg = self._new_temp()
-            self.emit(f'{indent}{result_reg} = call {ret_type} {func_ptr}({args_str})')
-            return result_reg
+
+        result_reg = self._new_temp()
+        self.emit(f'{indent}{result_reg} = call {ret_type} {func_ptr}({args_str})')
+        return result_reg
     
     def _generate_string_function_call(self, func_name: str, expr, indent='') -> str:
         """Generate built-in string function calls."""
@@ -11920,30 +13393,17 @@ class LLVMIRGenerator(CodeGenerator):
     
     def _generate_class_property_access(self, type_name, member_name, obj_ptr, indent='') -> str:
         """Generate a GEP+load to read a class property (not a method call)."""
-        # Property access (not a method call)
-        properties = self._get_all_class_properties(type_name)
-        
-        # Find property index
-        prop_index = -1
-        prop_type = None
-        for i, prop in enumerate(properties):
-            if prop['name'] == member_name:
-                prop_index = i
-                prop_type = self._map_nxl_type_to_llvm(prop.get('type', 'Integer'))
-                break
-        
-        if prop_index >= 0 and prop_type:
-            # Get property pointer
-            prop_ptr = self._new_temp()
-            self.emit(f'{indent}{prop_ptr} = getelementptr inbounds %{type_name}, %{type_name}* {obj_ptr}, i32 0, i32 {prop_index}')
-            
-            # Load property value
-            result_reg = self._new_temp()
-            self.emit(f'{indent}{result_reg} = load {prop_type}, {prop_type}* {prop_ptr}, align 8')
-            
-            return result_reg
-        
-        return '0'
+        prop_index, _prop_type_name, prop_type = self._resolve_class_property_info(type_name, member_name)
+
+        # Get property pointer
+        prop_ptr = self._new_temp()
+        self.emit(f'{indent}{prop_ptr} = getelementptr inbounds %{type_name}, %{type_name}* {obj_ptr}, i32 0, i32 {prop_index}')
+
+        # Load property value
+        result_reg = self._new_temp()
+        self.emit(f'{indent}{result_reg} = load {prop_type}, {prop_type}* {prop_ptr}, align 8')
+
+        return result_reg
     
     def _generate_identifier_member_access(self, expr, var_name, indent='') -> str:
         """Generate member access where the object is a simple identifier variable."""
@@ -12147,21 +13607,17 @@ class LLVMIRGenerator(CodeGenerator):
                             
                             return result_reg
                 elif type_name in self.class_types:
-                    properties = self._get_all_class_properties(type_name)
-                    
-                    for i, prop in enumerate(properties):
-                        if prop['name'] == member_name:
-                            prop_type = self._map_nxl_type_to_llvm(prop.get('type', 'Integer'))
-                            
-                            # Get pointer to the property
-                            prop_ptr = self._new_temp()
-                            self.emit(f'{indent}{prop_ptr} = getelementptr inbounds %{type_name}, %{type_name}* {nested_ptr}, i32 0, i32 {i}')
-                            
-                            # Load property value
-                            result_reg = self._new_temp()
-                            self.emit(f'{indent}{result_reg} = load {prop_type}, {prop_type}* {prop_ptr}, align 8')
-                            
-                            return result_reg
+                    prop_index, _prop_type_name, prop_type = self._resolve_class_property_info(type_name, member_name)
+
+                    # Get pointer to the property
+                    prop_ptr = self._new_temp()
+                    self.emit(f'{indent}{prop_ptr} = getelementptr inbounds %{type_name}, %{type_name}* {nested_ptr}, i32 0, i32 {prop_index}')
+
+                    # Load property value
+                    result_reg = self._new_temp()
+                    self.emit(f'{indent}{result_reg} = load {prop_type}, {prop_type}* {prop_ptr}, align 8')
+
+                    return result_reg
             
             return '0'
         
@@ -12195,12 +13651,10 @@ class LLVMIRGenerator(CodeGenerator):
                             self.emit(f'{indent}{field_ptr} = getelementptr inbounds %{type_name}, %{type_name}* {nested_ptr}, i32 0, i32 {i}')
                             return field_ptr
                 elif type_name in self.class_types:
-                    properties = self._get_all_class_properties(type_name)
-                    for i, prop in enumerate(properties):
-                        if prop['name'] == member_name:
-                            prop_ptr = self._new_temp()
-                            self.emit(f'{indent}{prop_ptr} = getelementptr inbounds %{type_name}, %{type_name}* {nested_ptr}, i32 0, i32 {i}')
-                            return prop_ptr
+                    prop_index, _prop_type_name, _prop_type = self._resolve_class_property_info(type_name, member_name)
+                    prop_ptr = self._new_temp()
+                    self.emit(f'{indent}{prop_ptr} = getelementptr inbounds %{type_name}, %{type_name}* {nested_ptr}, i32 0, i32 {prop_index}')
+                    return prop_ptr
             return 'null'
         
         # Simple identifier case
@@ -12227,12 +13681,10 @@ class LLVMIRGenerator(CodeGenerator):
                             self.emit(f'{indent}{field_ptr} = getelementptr inbounds %{type_name}, %{type_name}* {obj_ptr}, i32 0, i32 {i}')
                             return field_ptr
                 elif type_name in self.class_types:
-                    properties = self._get_all_class_properties(type_name)
-                    for i, prop in enumerate(properties):
-                        if prop['name'] == member_name:
-                            prop_ptr = self._new_temp()
-                            self.emit(f'{indent}{prop_ptr} = getelementptr inbounds %{type_name}, %{type_name}* {obj_ptr}, i32 0, i32 {i}')
-                            return prop_ptr
+                    prop_index, _prop_type_name, _prop_type = self._resolve_class_property_info(type_name, member_name)
+                    prop_ptr = self._new_temp()
+                    self.emit(f'{indent}{prop_ptr} = getelementptr inbounds %{type_name}, %{type_name}* {obj_ptr}, i32 0, i32 {prop_index}')
+                    return prop_ptr
         
         return 'null'
     
@@ -12257,10 +13709,7 @@ class LLVMIRGenerator(CodeGenerator):
                         if fname == member_name:
                             return ftype
                 elif type_name in self.class_types:
-                    properties = self._get_all_class_properties(type_name)
-                    for prop in properties:
-                        if prop['name'] == member_name:
-                            return self._map_nxl_type_to_llvm(prop.get('type', 'Integer'))
+                    return self._resolve_class_property_info(type_name, member_name)[2]
             return 'i64'
         
         # Simple identifier case
@@ -12282,10 +13731,7 @@ class LLVMIRGenerator(CodeGenerator):
                         if fname == member_name:
                             return ftype
                 elif type_name in self.class_types:
-                    properties = self._get_all_class_properties(type_name)
-                    for prop in properties:
-                        if prop['name'] == member_name:
-                            return self._map_nxl_type_to_llvm(prop.get('type', 'Integer'))
+                    return self._resolve_class_property_info(type_name, member_name)[2]
         
         return 'i64'
     
@@ -12328,12 +13774,19 @@ class LLVMIRGenerator(CodeGenerator):
         
         # Check if function exists
         if func_name in self.functions:
-            # Return function pointer directly
-            # For LLVM IR, function names are used as-is when passed as pointers
-            return f'@{func_name}'
+            ret_type, param_types, _ = self.functions[func_name]
+            params_str = ', '.join(param_types) if param_types else 'void'
+            return f'bitcast ({ret_type} ({params_str})* @{func_name} to i8*)'
+        elif func_name in self.extern_functions:
+            ret_type, param_types, _library, variadic = self.extern_functions[func_name]
+            if variadic:
+                params_str = ', '.join(param_types) + ', ...' if param_types else '...'
+            else:
+                params_str = ', '.join(param_types) if param_types else 'void'
+            return f'bitcast ({ret_type} ({params_str})* @{func_name} to i8*)'
         else:
             print(f" Warning: Callback function '{func_name}' not found")
-            return '0'
+            return 'null'
     
     def _generate_object_instantiation(self, expr, indent='') -> str:
         """Generate class/struct/union instantiation: new ClassName or new StructName or new UnionName."""
@@ -12395,7 +13848,7 @@ class LLVMIRGenerator(CodeGenerator):
         if is_class:
             properties = self._get_all_class_properties(type_name)
             for i, prop in enumerate(properties):
-                prop_type = self._map_nxl_type_to_llvm(prop.get('type', 'Integer'))
+                prop_type = self._resolve_class_property_info(type_name, prop['name'])[2]
                 field_ptr = self._new_temp()
                 self.emit(f'{indent}{field_ptr} = getelementptr inbounds %{type_name}, %{type_name}* {obj_ptr}, i32 0, i32 {i}')
                 
@@ -12471,7 +13924,13 @@ class LLVMIRGenerator(CodeGenerator):
                 elem_type = parts[1]
                 elem_size = self._get_type_size_bits(elem_type)
                 return count * elem_size
-            except:
+            except (IndexError, ValueError, TypeError) as e:
+                # Array size calculation failed; log and fallback (may cause memory safety issues)
+                import logging
+                logging.warning(
+                    f"LLVM array size calculation failed for '{llvm_type}': {e}. "
+                    f"Defaulting to 64 bits; generated code may have incorrect array size."
+                )
                 return 64  # Fallback
         
         # Struct types: check struct_types registry
@@ -12497,7 +13956,7 @@ class LLVMIRGenerator(CodeGenerator):
             elif struct_name in self.class_types:
                 total_bits = 0
                 for prop in self._get_all_class_properties(struct_name):
-                    prop_type = self._map_nxl_type_to_llvm(prop.get('type', 'Integer'))
+                    prop_type = self._resolve_class_property_info(struct_name, prop['name'])[2]
                     total_bits += self._get_type_size_bits(prop_type)
                 return total_bits
             
@@ -12539,6 +13998,9 @@ class LLVMIRGenerator(CodeGenerator):
         
         if nxl_type in self.type_cache:
             return self.type_cache[nxl_type]
+
+        if nxl_type in self.extern_types:
+            return self.extern_types[nxl_type].get('llvm_type', 'i8*')
         
         # substitute generic types if context is active
         if nxl_type in self.current_type_substitutions:
@@ -12587,6 +14049,8 @@ class LLVMIRGenerator(CodeGenerator):
             llvm_type = 'i8*'
         elif nxl_lower in ('pointer', 'any'):
             llvm_type = 'i8*'  # Any type uses void pointer
+        elif '*' in nxl_type or 'pointer to' in nxl_lower:
+            llvm_type = 'i8*'
         elif nxl_lower == 'void':
             llvm_type = 'void'
         elif nxl_lower == 'byte':
@@ -12595,15 +14059,34 @@ class LLVMIRGenerator(CodeGenerator):
             llvm_type = 'i16'
         elif nxl_lower == 'long':
             llvm_type = 'i64'
-        elif nxl_lower.startswith('list of ') or nxl_lower.startswith('array of '):
+        elif (
+            nxl_lower in ('list', 'array', 'vector')
+            or nxl_lower.startswith('list of ')
+            or nxl_lower.startswith('array of ')
+        ):
             # List/array - for now use i8* (opaque pointer)
             llvm_type = 'i8*'
-        elif nxl_lower.startswith('dict of ') or nxl_lower.startswith('map of '):
+        elif (
+            nxl_lower in ('dict', 'map', 'dictionary', 'set')
+            or nxl_lower.startswith('dict of ')
+            or nxl_lower.startswith('map of ')
+        ):
             # Dictionary - use i8* (opaque pointer)
             llvm_type = 'i8*'
+        elif (
+            nxl_lower == 'option'
+            or nxl_lower.startswith('option of ')
+            or nxl_lower == 'result'
+            or nxl_lower.startswith('result of ')
+            or nxl_lower == 'tuple'
+            or nxl_lower.startswith('tuple of ')
+            or nxl_lower == 'variant'
+            or nxl_lower.startswith('variant of ')
+            or nxl_lower == 'enum'
+        ):
+            llvm_type = 'i8*'
         else:
-            # Unknown type - default to i64
-            llvm_type = 'i64'
+            raise RuntimeError(f"Unable to map NexusLang type '{nxl_type}' to LLVM type")
         
         self.type_cache[nxl_type] = llvm_type
         return llvm_type
@@ -12631,9 +14114,10 @@ class LLVMIRGenerator(CodeGenerator):
             # Extract type name from %TypeName*
             type_name = llvm_type[1:-1]  # Remove % and *
             return type_name
+        elif llvm_type.endswith('*'):
+            return 'Pointer'
         
-        # Default to Integer for unknown types
-        return 'Integer'
+        raise RuntimeError(f"Unable to map LLVM type '{llvm_type}' to NexusLang type")
     
     def _infer_member_access_type_expr(self, expr) -> str:
         """Infer LLVM type for a MemberAccess expression."""
@@ -12679,9 +14163,7 @@ class LLVMIRGenerator(CodeGenerator):
                                 return self._map_nxl_type_to_llvm(return_type_nxl)
                         
                         # Not a method, check if it's a property
-                        for prop in self._get_all_class_properties(class_name):
-                            if prop['name'] == member_name:
-                                return self._map_nxl_type_to_llvm(prop.get('type', 'Integer'))
+                        return self._resolve_class_property_info(class_name, member_name)[2]
                     
                     # Look up in struct_types
                     elif class_name in self.struct_types:
@@ -12691,16 +14173,43 @@ class LLVMIRGenerator(CodeGenerator):
                             if field_name == member_name:
                                 return field_type  # Already in LLVM type format
         
-        # Fallback
+        # Handle simple enum member access (EnumName.MemberName) as integer constants.
+        if hasattr(expr, 'object_expr') and type(expr.object_expr).__name__ == 'Identifier':
+            enum_name = expr.object_expr.name
+            if enum_name in self.enum_types:
+                if expr.member_name in self.enum_types[enum_name]:
+                    return 'i64'
+                raise RuntimeError(f"Enum '{enum_name}' has no member '{expr.member_name}'")
+
+        # Member type not found - fail-fast rather than silently defaulting to i64
+        if hasattr(expr, 'object_expr') and hasattr(expr, 'member_name'):
+            raise RuntimeError(f"Cannot infer type for member access '{expr.member_name}' on {getattr(expr.object_expr, 'name', 'unknown')} - member type metadata not available")
+        
+        # Final fallback (should rarely reach here with proper type annotations)
         return 'i64'
     
     def _infer_function_call_type(self, expr) -> str:
         """Infer LLVM return type for a FunctionCall expression."""
         if hasattr(expr, 'name'):
             func_name = expr.name
+            if type(func_name).__name__ == 'DereferenceExpression':
+                signature = self._resolve_function_pointer_signature_from_expression(getattr(func_name, 'pointer', None))
+                if signature is not None:
+                    return signature[0]
+                # Function pointer signature unknown - fail-fast rather than assume i64
+                raise RuntimeError("Unable to resolve indirect function pointer signature")
             # Handle Identifier wrapped names
             if type(func_name).__name__ == 'Identifier':
                 func_name = func_name.name
+
+            if isinstance(func_name, str):
+                if func_name in self.closure_variables:
+                    closure_ret_type, _closure_param_types, _closure_has_env = self.closure_variables[func_name]
+                    return closure_ret_type
+
+                signature = self._resolve_function_pointer_signature(func_name)
+                if signature is not None and func_name not in self.functions and func_name not in self.extern_functions:
+                    return signature[0]
                 
             # Check built-in string functions
             if func_name == 'strlen':
@@ -12759,13 +14268,20 @@ class LLVMIRGenerator(CodeGenerator):
                             self.pending_specializations.append((func_name, type_args, specialized_name))
                         return self.functions[specialized_name][0]
                 else:
-                    # Can't infer type args - default to i64
-                    return 'i64'
+                    # Can't infer type args from generic function - fail-fast rather than assume i64
+                    raise RuntimeError(f"Generic function '{func_name}' called without sufficient type information to infer type arguments")
             # Check extern functions (FFI)
             elif func_name in self.extern_functions:
                 ret_type, _, _, _ = self.extern_functions[func_name]
                 return ret_type
-        return 'i64'
+            elif isinstance(func_name, str) and (func_name in self.local_vars or func_name in self.global_vars):
+                if not getattr(expr, 'arguments', []):
+                    if func_name in self.local_vars:
+                        return self.local_vars[func_name][0]
+                    return self.global_vars[func_name][0]
+                raise RuntimeError(f"Unable to resolve function pointer signature for '{func_name}'")
+        # Unknown function - fail-fast rather than assume i64
+        raise RuntimeError(f"Function '{func_name if isinstance(func_name, str) else 'unknown'}' not found in type registry - cannot infer return type")
     
     def _infer_binary_op_type(self, expr) -> str:
         """Infer the LLVM type of a BinaryOperation expression."""
@@ -12894,11 +14410,13 @@ class LLVMIRGenerator(CodeGenerator):
             if hasattr(expr, 'elements') and expr.elements:
                 elem_type = self._infer_expression_type(expr.elements[0])
                 return f'{elem_type}*'  # Pointer to element type
-            return 'i64*'  # Default to i64 pointer
+            raise RuntimeError("Unable to infer list element type from empty list literal")
         elif expr_type == 'ListComprehension':
-            # List comprehension - returns pointer to array, same as ListExpression
-            # [expr for var in iterable] -> i64*
-            return 'i64*'
+            # List comprehension type is derived from comprehension element expression.
+            if hasattr(expr, 'expr') and expr.expr is not None:
+                elem_type = self._infer_expression_type(expr.expr)
+                return f'{elem_type}*'
+            raise RuntimeError("Unable to infer list comprehension element type")
         elif expr_type == 'IndexExpression':
             # Array indexing - return element type
             # If array is T*, indexing returns T
@@ -12907,8 +14425,8 @@ class LLVMIRGenerator(CodeGenerator):
                 # Remove one level of pointer indirection
                 if array_type.endswith('*'):
                     return array_type[:-1]  # i64* -> i64, i64** -> i64*
-            # Fallback
-            return 'i64'
+                raise RuntimeError(f"IndexExpression requires pointer-like array type, got '{array_type}'")
+            raise RuntimeError("IndexExpression missing array expression for type inference")
         elif expr_type == 'ObjectInstantiation':
             return self._infer_object_instantiation_type(expr)
         elif expr_type == 'MemberAccess':
@@ -12917,6 +14435,14 @@ class LLVMIRGenerator(CodeGenerator):
             return self._infer_function_call_type(expr)
         elif expr_type == 'AddressOfExpression':
             return self._infer_address_of_type(expr)
+        elif expr_type in ('MoveExpression', 'BorrowExpression', 'BorrowExpressionWithLifetime'):
+            if hasattr(expr, 'var_name'):
+                var_name = expr.var_name
+                if var_name in self.local_vars:
+                    return self.local_vars[var_name][0]
+                if var_name in self.global_vars:
+                    return self.global_vars[var_name][0]
+            return 'i64'
         elif expr_type == 'DereferenceExpression':
             # value at ptr - returns the pointed-to type
             if hasattr(expr, 'pointer'):
@@ -12956,12 +14482,21 @@ class LLVMIRGenerator(CodeGenerator):
             if hasattr(expr, 'channel'):
                 return self._infer_channel_payload_type(expr.channel)
             return 'i64'
+        elif expr_type == 'AwaitExpression':
+            inner_expr = getattr(expr, 'expr', getattr(expr, 'expression', None))
+            if inner_expr is not None:
+                payload_type = self._infer_async_payload_type_from_expression(inner_expr)
+                if payload_type is not None:
+                    return payload_type
+            return 'i64'
         elif expr_type == 'YieldExpression':
             if hasattr(expr, 'value') and expr.value is not None:
                 return self._infer_expression_type(expr.value)
             return 'i64'
         elif expr_type == 'GeneratorExpression':
             # Generator expressions lower to opaque generator frame pointers.
+            return 'i8*'
+        elif expr_type == 'CallbackReference':
             return 'i8*'
         
         return 'i64'  # Default
@@ -13244,8 +14779,9 @@ class LLVMIRGenerator(CodeGenerator):
         - Task queue structures for scheduler
         - Coroutine state enum
         """
-        if not self.has_async_functions:
+        if self.coroutine_infrastructure_emitted or not self.has_async_functions:
             return  # Skip coroutine types if no async functions
+        self.coroutine_infrastructure_emitted = True
             
         self.emit('; Coroutine infrastructure for async/await')
         
@@ -13761,12 +15297,8 @@ class LLVMIRGenerator(CodeGenerator):
             output_file: Path to output executable
             opt_level: LLVM optimization level (0-3)
         """
-        import shutil
-        
-        # Check for required tools
-        opt_tool = shutil.which('opt')
-        llc = shutil.which('llc')
-        clang = shutil.which('clang')
+        # Check for required tools (cached per generator instance).
+        opt_tool, llc, clang = self._get_cached_llvm_tools()
         
         if not opt_tool:
             print(" opt not found. Please install LLVM: sudo apt install llvm")
@@ -13841,17 +15373,10 @@ class LLVMIRGenerator(CodeGenerator):
             link_objs = [obj_file]
 
             # Attempt to build/locate the NexusLang native runtime library (libNLPL.a).
-            # The library provides nxl_* runtime functions and supplements the
-            # inline IR helper definitions.  If cmake / cc are missing we fall
-            # back gracefully -- the inline IR definitions remain sufficient.
-            try:
-                from nexuslang.stdlib_native import build_if_needed, get_library_path
-                build_if_needed(verbose=False)
-                stdlib_native_lib = get_library_path()
-                if stdlib_native_lib and os.path.isfile(stdlib_native_lib):
-                    link_objs.append(stdlib_native_lib)
-            except Exception:
-                pass  # Non-fatal: inline IR helpers cover all needed symbols
+            # Cache result so repeated calls avoid redundant probing/build checks.
+            stdlib_native_lib = self._get_cached_native_runtime_lib()
+            if stdlib_native_lib and os.path.isfile(stdlib_native_lib):
+                link_objs.append(stdlib_native_lib)
 
             # Build clang command with optimization and FFI library flags
             # Use clang++ to link C++ runtime for exception handling
@@ -13885,8 +15410,47 @@ class LLVMIRGenerator(CodeGenerator):
                 if f and os.path.exists(f):
                     try:
                         os.remove(f)
-                    except:
-                        pass
+                    except (OSError, FileNotFoundError, PermissionError) as e:
+                        # File cleanup failed; log but don't block compilation completion
+                        import logging
+                        logging.warning(
+                            f"Failed to clean up temporary file '{f}' after compilation: {e}. "
+                            f"Manual cleanup may be required."
+                        )
+
+    def _get_cached_llvm_tools(self) -> Tuple[Optional[str], Optional[str], Optional[str]]:
+        """Resolve and cache LLVM tool paths used by compile_to_executable."""
+        if self._cached_tools is not None:
+            return self._cached_tools
+
+        import shutil
+
+        self._cached_tools = (
+            shutil.which('opt'),
+            shutil.which('llc'),
+            shutil.which('clang'),
+        )
+        return self._cached_tools
+
+    def _get_cached_native_runtime_lib(self) -> Optional[str]:
+        """Resolve and cache native runtime static library path (best-effort)."""
+        if self._cached_native_runtime_lib is not None:
+            return self._cached_native_runtime_lib or None
+
+        try:
+            from nexuslang.stdlib_native import build_if_needed, get_library_path
+
+            build_if_needed(verbose=False)
+            candidate = get_library_path()
+            if candidate and os.path.isfile(candidate):
+                self._cached_native_runtime_lib = candidate
+            else:
+                self._cached_native_runtime_lib = ""
+        except Exception:
+            # Non-fatal: inline IR helpers cover all needed symbols.
+            self._cached_native_runtime_lib = ""
+
+        return self._cached_native_runtime_lib or None
     
     def get_library_link_flags(self) -> List[str]:
         """Generate linker flags for required FFI libraries.

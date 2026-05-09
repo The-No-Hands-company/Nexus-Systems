@@ -1,0 +1,8 @@
+function stage_prepare returns Integer
+    print text "stage:prepare"
+    print text "fixture: fixtures/input_records.csv"
+    print text "loaded: 5"
+    return 0
+end
+
+call stage_prepare

@@ -1,0 +1,232 @@
+#!/usr/bin/env nexuslang
+
+# Comprehensive Data Processing Showcase
+# Demonstrates NexusLang's multi-feature integration:
+# - Struct types and compound data
+# - Generators and comprehensions
+# - Pattern matching with guards and bindings
+# - Error handling with Result types
+# - Collections and iteration
+# - Mathematical operations
+# - Contract-driven validation
+# - Multiple return values
+# - String processing and formatting
+# - Parallel processing
+#
+# Scenario: Analyze a dataset of transactions, compute statistics,
+# detect anomalies, generate reports with contracts for validation.
+
+# Data structures
+struct Transaction
+  id as Integer
+  amount as Float
+  category as String
+  timestamp as Integer
+  is_verified as Boolean
+end
+
+struct TransactionStats
+  total_amount as Float
+  transaction_count as Integer
+  average_amount as Float
+  min_amount as Float
+  max_amount as Float
+  verified_count as Integer
+end
+
+struct AnomalyReport
+  anomaly_id as Integer
+  transaction_id as Integer
+  severity as String
+  reason as String
+  suggested_action as String
+end
+
+# Generate synthetic transaction dataset
+function generate_transactions with count as Integer returns List of Transaction
+  set transactions to []
+  
+  for each i in (0, count)
+    set tx_id to i
+    set amount_base to 100.0 plus (i mod 50) times 10.0
+    set category_idx to i mod 4
+    set category to match category_idx with
+      case 0 as "groceries"
+      case 1 as "gas"
+      case 2 as "entertainment"
+      case 3 as "utilities"
+      default as "other"
+    end
+    
+    set is_verified to (i mod 3) not equal to 0
+    
+    set tx to Transaction called with
+      id: tx_id
+      amount: amount_base
+      category: category
+      timestamp: i times 3600
+      is_verified: is_verified
+    end
+    
+    append tx to transactions
+  
+  return transactions
+end
+
+# Compute statistics using generators and pattern matching
+function compute_statistics with transactions as List of Transaction returns TransactionStats
+  require transactions is not empty with "Transaction list cannot be empty"
+  
+  set verified_txs to (
+    tx for each tx in transactions where tx.is_verified
+  ) as List of Transaction
+  
+  set amounts to (tx.amount for each tx in transactions) as List of Float
+  set verified_amounts to (tx.amount for each tx in verified_txs) as List of Float
+  
+  # Calculate aggregate values
+  set total_amount to 0.0
+  set min_amount to 999999.0
+  set max_amount to 0.0
+  
+  for each amount in amounts
+    set total_amount to total_amount plus amount
+    
+    if amount is less than min_amount
+      set min_amount to amount
+    end
+    
+    if amount is greater than max_amount
+      set max_amount to amount
+    end
+  end
+  
+  set avg_amount to total_amount divided by (amounts.length as Float)
+  
+  set stats to TransactionStats called with
+    total_amount: total_amount
+    transaction_count: amounts.length
+    average_amount: avg_amount
+    min_amount: min_amount
+    max_amount: max_amount
+    verified_count: verified_txs.length
+  end
+  
+  return stats
+end
+
+# Detect anomalies with pattern matching and guards
+function detect_anomalies with transactions as List of Transaction and stats as TransactionStats returns List of AnomalyReport
+  set anomalies to []
+  set threshold_high to stats.average_amount times 1.5
+  set threshold_low to stats.average_amount times 0.5
+  
+  for each tx in transactions
+    set severity to match tx.amount with
+      case amt where amt is greater than threshold_high as "high"
+      case amt where amt is less than threshold_low as "low"
+      default as "normal"
+    end
+    
+    if severity is not equal to "normal"
+      set report to AnomalyReport called with
+        anomaly_id: anomalies.length
+        transaction_id: tx.id
+        severity: severity
+        reason: "Amount deviation from average"
+        suggested_action: "Review transaction"
+      end
+      append report to anomalies
+    end
+    
+    if tx.is_verified is false
+      set unverified_report to AnomalyReport called with
+        anomaly_id: anomalies.length
+        transaction_id: tx.id
+        severity: "medium"
+        reason: "Transaction not verified"
+        suggested_action: "Request verification"
+      end
+      append unverified_report to anomalies
+    end
+  end
+  
+  return anomalies
+end
+
+# Format and print detailed report
+function print_report with stats as TransactionStats and anomalies as List of AnomalyReport
+  print text "=== Transaction Analysis Report ==="
+  print text ""
+  
+  print text "Statistics:"
+  print text ("  Total Transactions: " concatenated with (stats.transaction_count as String))
+  print text ("  Total Amount: " concatenated with (stats.total_amount as String))
+  print text ("  Average Amount: " concatenated with (stats.average_amount as String))
+  print text ("  Min Amount: " concatenated with (stats.min_amount as String))
+  print text ("  Max Amount: " concatenated with (stats.max_amount as String))
+  print text ("  Verified Count: " concatenated with (stats.verified_count as String))
+  print text ""
+  
+  print text "Anomalies Detected:"
+  print text ("  Total: " concatenated with (anomalies.length as String))
+  
+  # Group anomalies by severity
+  set high_severity to (
+    a for each a in anomalies where a.severity equals "high"
+  ) as List of AnomalyReport
+  
+  set medium_severity to (
+    a for each a in anomalies where a.severity equals "medium"
+  ) as List of AnomalyReport
+  
+  set low_severity to (
+    a for each a in anomalies where a.severity equals "low"
+  ) as List of AnomalyReport
+  
+  print text ("  High Severity: " concatenated with (high_severity.length as String))
+  print text ("  Medium Severity: " concatenated with (medium_severity.length as String))
+  print text ("  Low Severity: " concatenated with (low_severity.length as String))
+  print text ""
+  
+  print text "Sample Anomalies (first 5):"
+  set display_count to 0
+  for each anomaly in anomalies
+    if display_count is less than 5
+      print text ("  ID " concatenated with (anomaly.transaction_id as String) concatenated with ": " concatenated with anomaly.severity concatenated with " - " concatenated with anomaly.reason)
+      set display_count to display_count plus 1
+    end
+  end
+end
+
+# Main function: orchestrate analysis pipeline
+function main returns Integer
+  print text "Starting Comprehensive Data Processing Showcase"
+  print text ""
+  
+  # Generate dataset
+  set transaction_count to 20
+  set transactions to generate_transactions with transaction_count
+  
+  require transactions.length equals transaction_count with "Failed to generate transactions"
+  
+  # Compute statistics
+  set stats to compute_statistics with transactions
+  
+  ensure stats.transaction_count equals transaction_count with "Transaction count mismatch"
+  ensure stats.total_amount is greater than 0.0 with "Total amount must be positive"
+  ensure stats.average_amount is greater than 0.0 with "Average amount must be positive"
+  
+  # Detect anomalies
+  set anomalies to detect_anomalies with transactions and stats
+  
+  ensure anomalies.length is greater than or equal to 0 with "Anomaly list is invalid"
+  
+  # Print results
+  print_report with stats and anomalies
+  
+  print text ""
+  print text "Analysis Complete"
+  
+  return 0
+end

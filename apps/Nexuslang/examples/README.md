@@ -103,6 +103,52 @@ python -m nexuslang.main examples/01_basic_concepts.nlpl --debug
 python -m nexuslang.main examples/01_basic_concepts.nlpl --no-type-check
 ```
 
+## Domain-Specific Showcase Applications
+
+Complete, production-quality applications demonstrating NexusLang across different domains:
+
+### Financial Computing
+**[Portfolio Analyzer](./financial/portfolio_analyzer.nlpl)** - Comprehensive investment portfolio analysis tool
+- **Demonstrates**: Data modeling (structs), mathematical computations, contracts, type-safe calculations
+- **Domain**: Financial services, investment analysis
+- **Key Features**: P&L calculations, risk metrics (volatility), portfolio optimization
+- **Documentation**: [README_PORTFOLIO.md](./financial/README_PORTFOLIO.md)
+- **Use Cases**: Portfolio rebalancing, risk assessment, performance reporting
+- **Execution**: `python src/main.py examples/financial/portfolio_analyzer.nlpl`
+
+### Systems Administration
+**[Log Analyzer](./systems/log_analyzer.nlpl)** - Powerful log processing and monitoring tool
+- **Demonstrates**: String parsing, pattern matching, data aggregation, file I/O patterns
+- **Domain**: DevOps, system administration, monitoring
+- **Key Features**: Log parsing, error detection, statistics aggregation, health assessment
+- **Documentation**: [README_LOG_ANALYZER.md](./systems/README_LOG_ANALYZER.md)
+- **Use Cases**: Daily log review, incident investigation, compliance reporting
+- **Execution**: `python src/main.py examples/systems/log_analyzer.nlpl`
+
+### Distributed Systems & Concurrency
+**[Message Broker](./concurrency/message_broker.nlpl)** - Event-driven pub/sub messaging system
+- **Demonstrates**: Channels, async/await, task spawning, concurrent orchestration
+- **Domain**: Microservices, event streaming, distributed systems
+- **Key Features**: Fan-out message routing, topic-based filtering, concurrent task coordination
+- **Documentation**: [README_MESSAGE_BROKER.md](./concurrency/README_MESSAGE_BROKER.md)
+- **Use Cases**: Microservice communication, real-time event processing, IoT data distribution
+- **Execution**: `python src/main.py examples/concurrency/message_broker.nlpl`
+
+### Integrated Multi-Feature Demo
+**[Async Channels Parallel Pipeline](./23_async_channels_parallel_pipeline.nlpl)** - Sensor data processing with concurrent workers
+- **Demonstrates**: Async functions, channels, parallel-for loops, task coordination
+- **Combines**: All three concurrency models (channels, async, parallel)
+- **Documentation**: [README_SHOWCASE.md](./README_SHOWCASE.md)
+
+## Showcase Application Quick Comparison
+
+| Showcase | Domain | Key Features | Demonstrates | Lines | Status |
+|----------|--------|--------------|--------------|-------|--------|
+| Portfolio Analyzer | Finance | P&L, volatility, recommendations | Structs, math, contracts | ~280 | Production ✓ |
+| Log Analyzer | Systems | Parsing, filtering, stats | String ops, aggregation, filtering | ~290 | Production ✓ |
+| Message Broker | Concurrency | Routing, topics, async tasks | Channels, async, spawn | ~320 | Production ✓ |
+| Sensor Pipeline | Multi-domain | Parallel processing, async, channels | All three concurrency models | ~160 | Production ✓ |
+
 ## Contributing Examples
 
 When adding new examples:
@@ -111,3 +157,4 @@ When adding new examples:
 3. Include comments explaining concepts
 4. Provide usage examples
 5. Update this README
+6. For production showcases, include comprehensive README_*.md documentation

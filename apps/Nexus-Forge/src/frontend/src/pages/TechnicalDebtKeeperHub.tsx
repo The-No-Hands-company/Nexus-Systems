@@ -1,7 +1,10 @@
 import { useEffect, useState } from "react";
 
 export default function TechnicalDebtKeeperHub() {
-  const [trends, setTrends] = useState<{ trends: string[]; focus: string }>({ trends: [], focus: "" });
+  const [trends, setTrends] = useState<{ trends: string[]; focus: string }>({
+    trends: [],
+    focus: "",
+  });
 
   useEffect(() => {
     async function load() {
@@ -31,7 +34,9 @@ export default function TechnicalDebtKeeperHub() {
         </article>
         <article className="repo-card">
           <h3>Trends</h3>
-          <p>Status: {trends.focus}, Trend: {trends.trends.join(" → ") || "No data"}</p>
+          <p>
+            Status: {trends.focus}, Trend: {trends.trends.join(" → ") || "No data"}
+          </p>
         </article>
       </div>
     </section>

@@ -1,7 +1,10 @@
 import { useEffect, useState } from "react";
 
 export default function CommitSigningVaultHub() {
-  const [policy, setPolicy] = useState<{ required: boolean; algorithms: string[] }>({ required: false, algorithms: [] });
+  const [policy, setPolicy] = useState<{ required: boolean; algorithms: string[] }>({
+    required: false,
+    algorithms: [],
+  });
 
   useEffect(() => {
     async function load() {
@@ -31,7 +34,10 @@ export default function CommitSigningVaultHub() {
         </article>
         <article className="repo-card">
           <h3>Policy</h3>
-          <p>Required: {policy.required ? "Yes" : "No"}, Algorithms: {policy.algorithms.join(", ") || "None"}</p>
+          <p>
+            Required: {policy.required ? "Yes" : "No"}, Algorithms:{" "}
+            {policy.algorithms.join(", ") || "None"}
+          </p>
         </article>
       </div>
     </section>

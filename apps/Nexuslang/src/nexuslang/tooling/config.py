@@ -1,36 +1,10 @@
 
 import os
-import sys
 from dataclasses import dataclass, field
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Union
 
-# Try to import tomllib (Python 3.11+) or tomli
-try:
-    import tomllib
-except ImportError:
-    try:
-        import tomli as tomllib
-    except ImportError:
-        # Fallback for older python without tomli installed
-        # This is a very basic parser for bootstrapping
-        class SimpleToml:
-            def load(self, f):
-                data = {}
-                current_section = data
-                for line in f:
-                    line = line.strip()
-                    if not line or line.startswith('#'): continue
-                    if line.startswith('[') and line.endswith(']'):
-                        section = line[1:-1]
-                        current_section = {}
-                        data[section] = current_section
-                    elif '=' in line:
-                        key, value = line.split('=', 1)
-                        key = key.strip()
-                        value = value.strip().strip('"').strip("'")
-                        current_section[key] = value
-                return data
-        tomllib = SimpleToml()
+from nexuslang.build.manifest import Dependency as ManifestDependency
+from nexuslang.build.manifest import Manifest, load_manifest_data
 
 @dataclass
 class PackageConfig:
@@ -43,12 +17,12 @@ class PackageConfig:
 class ProfileConfig:
     """Build profile (dev, release, or custom)."""
     name: str
-    optimization: int = 0       # 0-3
+    optimization: Union[int, str] = 0       # 0-3 or size-focused symbolic levels
     debug_info: bool = True
     debug_assertions: bool = True
-    lto: bool = False            # Link-time optimisation
+    lto: Union[bool, str] = False            # Link-time optimisation
     incremental: bool = True
-    strip: bool = False          # Strip symbols on release
+    strip: Union[bool, str] = False          # Strip symbols on release
 
 
 # Built-in profiles
@@ -159,78 +133,239 @@ class ProjectConfig:
         return sorted(active)
 
 
+def _dependency_to_spec(dep: ManifestDependency) -> Any:
+    """Convert canonical manifest dependency model to tooling config shape."""
+    is_plain_version = (
+        dep.version_req is not None
+        and dep.path is None
+        and dep.git is None
+        and dep.branch is None
+        and dep.tag is None
+        and dep.rev is None
+        and not dep.features
+        and dep.default_features
+        and not dep.optional
+    )
+    if is_plain_version:
+        return dep.version_req
+
+    spec: Dict[str, Any] = {}
+    if dep.version_req is not None:
+        spec["version"] = dep.version_req
+    if dep.path is not None:
+        spec["path"] = dep.path
+    if dep.git is not None:
+        spec["git"] = dep.git
+    if dep.branch is not None:
+        spec["branch"] = dep.branch
+    if dep.tag is not None:
+        spec["tag"] = dep.tag
+    if dep.rev is not None:
+        spec["rev"] = dep.rev
+    if dep.features:
+        spec["features"] = list(dep.features)
+    if not dep.default_features:
+        spec["default-features"] = False
+    if dep.optional:
+        spec["optional"] = True
+
+    return spec
+
+
 class ConfigLoader:
     """Loads and validates nlpl.toml configuration."""
+
+    @staticmethod
+    def _expect_table(value: Any, section: str) -> Dict[str, Any]:
+        if not isinstance(value, dict):
+            raise ValueError(f"Section '{section}' must be a table")
+        return value
+
+    @staticmethod
+    def _expect_string(value: Any, field: str) -> str:
+        if not isinstance(value, str):
+            raise ValueError(f"Invalid field '{field}': expected string")
+        return value
+
+    @staticmethod
+    def _expect_optional_string(value: Any, field: str) -> Optional[str]:
+        if value is None:
+            return None
+        if not isinstance(value, str):
+            raise ValueError(f"Invalid field '{field}': expected string or null")
+        return value
+
+    @staticmethod
+    def _expect_bool(value: Any, field: str) -> bool:
+        if not isinstance(value, bool):
+            raise ValueError(f"Invalid field '{field}': expected boolean")
+        return value
+
+    @staticmethod
+    def _expect_int(value: Any, field: str, *, min_value: Optional[int] = None, max_value: Optional[int] = None) -> int:
+        if isinstance(value, bool) or not isinstance(value, int):
+            raise ValueError(f"Invalid field '{field}': expected integer")
+        if min_value is not None and value < min_value:
+            raise ValueError(f"Invalid field '{field}': expected integer >= {min_value}")
+        if max_value is not None and value > max_value:
+            raise ValueError(f"Invalid field '{field}': expected integer <= {max_value}")
+        return value
+
+    @staticmethod
+    def _expect_string_list(value: Any, field: str) -> List[str]:
+        if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
+            raise ValueError(f"Invalid field '{field}': expected list of strings")
+        return list(value)
 
     @staticmethod
     def load(path: str = "nexuslang.toml") -> ProjectConfig:
         if not os.path.exists(path):
             raise FileNotFoundError(f"Configuration file not found: {path}")
 
-        with open(path, "rb") as f:
-            data = tomllib.load(f)
+        data = load_manifest_data(path)
+        manifest = Manifest.from_data(data, path=path)
 
-        # Parse [package]
-        pkg_data = data.get("package", {})
-        package = PackageConfig(
-            name=pkg_data.get("name", "untitled"),
-            version=pkg_data.get("version", "0.1.0"),
-            authors=pkg_data.get("authors", []),
-            description=pkg_data.get("description", "")
-        )
+        # Parse canonical manifest sections via nexuslang.build.manifest.
+        if manifest.package is not None:
+            package = PackageConfig(
+                name=manifest.package.name,
+                version=manifest.package.version,
+                authors=list(manifest.package.authors),
+                description=manifest.package.description or "",
+            )
+        else:
+            # Workspace-only manifests can omit [package].
+            pkg_data = data.get("package", {})
+            package = PackageConfig(
+                name=pkg_data.get("name", "untitled"),
+                version=pkg_data.get("version", "0.1.0"),
+                authors=list(pkg_data.get("authors", [])),
+                description=pkg_data.get("description", ""),
+            )
 
         # Parse [build]
-        build_data = data.get("build", {})
-        build = BuildConfig(
-            source_dir=build_data.get("source_dir", "src"),
-            output_dir=build_data.get("output_dir", "build"),
-            target=build_data.get("target", "c"),
-            optimization=int(build_data.get("optimization", 0)),
-            debug_info=bool(build_data.get("debug_info", True)),
-            headers=bool(build_data.get("headers", False)),
-            features=list(build_data.get("features", [])),
-            profile=build_data.get("profile", "dev"),
-            target_triple=build_data.get("target_triple"),
-            jobs=build_data.get("jobs"),
-            warnings_as_errors=bool(build_data.get("warnings_as_errors", False)),
-            # None preserves auto-detect; absent key → None.  Empty string → disabled.
-            build_script=build_data.get("build_script", None),
-            lint_on_build=bool(build_data.get("lint_on_build", False)),
-            lint_strict=bool(build_data.get("lint_strict", False)),
-            lint_errors_only=bool(build_data.get("lint_errors_only", False)),
-            lint_fail_on_warnings=bool(build_data.get("lint_fail_on_warnings", False)),
+        build_data = ConfigLoader._expect_table(data.get("build", {}), "build")
+
+        source_dir = ConfigLoader._expect_string(build_data.get("source_dir", "src"), "build.source_dir")
+        output_dir = ConfigLoader._expect_string(build_data.get("output_dir", "build"), "build.output_dir")
+        target = ConfigLoader._expect_string(build_data.get("target", "c"), "build.target")
+        optimization = ConfigLoader._expect_int(
+            build_data.get("optimization", 0),
+            "build.optimization",
+            min_value=0,
+            max_value=3,
+        )
+        debug_info = ConfigLoader._expect_bool(build_data.get("debug_info", True), "build.debug_info")
+        headers = ConfigLoader._expect_bool(build_data.get("headers", False), "build.headers")
+        features = ConfigLoader._expect_string_list(build_data.get("features", []), "build.features")
+        profile = ConfigLoader._expect_string(build_data.get("profile", "dev"), "build.profile")
+        target_triple = ConfigLoader._expect_optional_string(
+            build_data.get("target_triple"),
+            "build.target_triple",
         )
 
-        # Parse [features]
-        features_raw = data.get("features", {})
-        default_features = features_raw.pop("default", []) if isinstance(features_raw, dict) else []
+        jobs_raw = build_data.get("jobs")
+        if jobs_raw is None:
+            jobs = None
+        else:
+            jobs = ConfigLoader._expect_int(jobs_raw, "build.jobs", min_value=1)
+
+        warnings_as_errors = ConfigLoader._expect_bool(
+            build_data.get("warnings_as_errors", False),
+            "build.warnings_as_errors",
+        )
+        build_script = ConfigLoader._expect_optional_string(
+            build_data.get("build_script", None),
+            "build.build_script",
+        )
+        lint_on_build = ConfigLoader._expect_bool(
+            build_data.get("lint_on_build", False),
+            "build.lint_on_build",
+        )
+        lint_strict = ConfigLoader._expect_bool(
+            build_data.get("lint_strict", False),
+            "build.lint_strict",
+        )
+        lint_errors_only = ConfigLoader._expect_bool(
+            build_data.get("lint_errors_only", False),
+            "build.lint_errors_only",
+        )
+        lint_fail_on_warnings = ConfigLoader._expect_bool(
+            build_data.get("lint_fail_on_warnings", False),
+            "build.lint_fail_on_warnings",
+        )
+
+        parallel_jobs = ConfigLoader._expect_int(
+            build_data.get("parallel_jobs", 0),
+            "build.parallel_jobs",
+            min_value=0,
+        )
+        lto = ConfigLoader._expect_string(build_data.get("lto", "disabled"), "build.lto")
+        if lto not in {"disabled", "thin", "full"}:
+            raise ValueError("Invalid field 'build.lto': expected one of ['disabled', 'full', 'thin']")
+        sysroot = ConfigLoader._expect_optional_string(
+            build_data.get("sysroot"),
+            "build.sysroot",
+        )
+
+        build = BuildConfig(
+            source_dir=source_dir,
+            output_dir=output_dir,
+            target=target,
+            optimization=optimization,
+            debug_info=debug_info,
+            headers=headers,
+            features=features,
+            profile=profile,
+            target_triple=target_triple,
+            jobs=jobs,
+            parallel_jobs=parallel_jobs,
+            lto=lto,
+            sysroot=sysroot,
+            warnings_as_errors=warnings_as_errors,
+            # None preserves auto-detect; absent key → None.  Empty string → disabled.
+            build_script=build_script,
+            lint_on_build=lint_on_build,
+            lint_strict=lint_strict,
+            lint_errors_only=lint_errors_only,
+            lint_fail_on_warnings=lint_fail_on_warnings,
+        )
+
+        features_raw = dict(manifest.features)
+        default_features = features_raw.pop("default", [])
         features_config = FeaturesConfig(
-            definitions=dict(features_raw) if isinstance(features_raw, dict) else {},
+            definitions=features_raw,
             default=list(default_features),
         )
 
-        # Parse [profile.NAME] sections
+        # Keep only user-defined profiles in config.profiles.
         profiles: Dict[str, ProfileConfig] = {}
-        for profile_name, profile_data in data.get("profile", {}).items():
-            inherits = profile_data.get("inherits", profile_name)
-            if inherits == "release":
-                base = _PROFILE_RELEASE
-            else:
-                base = _PROFILE_DEV
+        for profile_name in data.get("profile", {}):
+            parsed = manifest.profiles.get(profile_name)
+            if parsed is None:
+                continue
             profiles[profile_name] = ProfileConfig(
                 name=profile_name,
-                optimization=profile_data.get("opt-level", base.optimization),
-                debug_info=profile_data.get("debug", base.debug_info),
-                debug_assertions=profile_data.get("debug-assertions", base.debug_assertions),
-                lto=profile_data.get("lto", base.lto),
-                incremental=profile_data.get("incremental", base.incremental),
-                strip=profile_data.get("strip", base.strip),
+                optimization=parsed.opt_level,
+                debug_info=parsed.debug,
+                debug_assertions=parsed.debug_assertions,
+                lto=parsed.lto,
+                incremental=parsed.incremental,
+                strip=parsed.strip,
             )
 
-        # Parse dependency sections
-        dependencies = data.get("dependencies", {})
-        dev_dependencies = data.get("dev-dependencies", {})
-        build_dependencies = data.get("build-dependencies", {})
+        dependencies = {
+            name: _dependency_to_spec(dep)
+            for name, dep in manifest.dependencies.items()
+        }
+        dev_dependencies = {
+            name: _dependency_to_spec(dep)
+            for name, dep in manifest.dev_dependencies.items()
+        }
+        build_dependencies = {
+            name: _dependency_to_spec(dep)
+            for name, dep in manifest.build_dependencies.items()
+        }
 
         return ProjectConfig(
             package=package,

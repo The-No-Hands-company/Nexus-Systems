@@ -162,6 +162,38 @@ class ChannelType(Type):
     def __hash__(self) -> int:
         return hash(("Channel", self.payload_type))
 
+    def __repr__(self) -> str:
+        return f"Channel<{self.payload_type}>"
+
+
+class AwaitableType(Type):
+    """Represents an awaitable task/promise type with a result payload type."""
+
+    def __init__(self, payload_type: Type):
+        self.payload_type = payload_type
+        self.name = "Awaitable"
+
+    def is_compatible_with(self, other: Type) -> bool:
+        if isinstance(other, AwaitableType):
+            return self.payload_type.is_compatible_with(other.payload_type)
+        return isinstance(other, AnyType)
+
+    def get_common_supertype(self, other: Type) -> Optional[Type]:
+        if isinstance(other, AwaitableType):
+            common_payload = self.payload_type.get_common_supertype(other.payload_type)
+            if common_payload:
+                return AwaitableType(common_payload)
+        return ANY_TYPE
+
+    def _equals(self, other: Type) -> bool:
+        return self.payload_type == other.payload_type
+
+    def __hash__(self) -> int:
+        return hash(("Awaitable", self.payload_type))
+
+    def __repr__(self) -> str:
+        return f"Awaitable<{self.payload_type}>"
+
 class SetType(Type):
     """Represents a set type with an element type."""
     
@@ -1037,6 +1069,10 @@ def get_type_by_name(name: str) -> 'Type':
         return NULL_TYPE
     elif name_lower == 'any':
         return ANY_TYPE
+    elif name_lower == 'channel':
+        return ChannelType(ANY_TYPE)
+    elif name_lower in ('awaitable', 'task', 'promise'):
+        return AwaitableType(ANY_TYPE)
     # Trait types
     elif name == "Comparable":
         return COMPARABLE_TRAIT
@@ -1086,6 +1122,13 @@ def get_type_by_name(name: str) -> 'Type':
             payload_type = get_type_by_name(type_args[0])
             return ChannelType(payload_type)
 
+        # Handle Awaitable<T>
+        elif base_type_name.lower() in ('awaitable', 'task', 'promise'):
+            if len(type_args) != 1:
+                return AwaitableType(ANY_TYPE)
+            payload_type = get_type_by_name(type_args[0])
+            return AwaitableType(payload_type)
+
         # For other generic types, return as ANY for now
         # (can be extended to handle custom generic classes)
         return ANY_TYPE
@@ -1118,6 +1161,18 @@ def get_type_by_name(name: str) -> 'Type':
         payload_type_name = name_lower.split('channel of')[-1].strip()
         payload_type = get_type_by_name(payload_type_name)
         return ChannelType(payload_type)
+    elif 'awaitable of' in name_lower:
+        payload_type_name = name_lower.split('awaitable of')[-1].strip()
+        payload_type = get_type_by_name(payload_type_name)
+        return AwaitableType(payload_type)
+    elif 'task of' in name_lower:
+        payload_type_name = name_lower.split('task of')[-1].strip()
+        payload_type = get_type_by_name(payload_type_name)
+        return AwaitableType(payload_type)
+    elif 'promise of' in name_lower:
+        payload_type_name = name_lower.split('promise of')[-1].strip()
+        payload_type = get_type_by_name(payload_type_name)
+        return AwaitableType(payload_type)
     
     # Default: return ANY_TYPE for unknown types
     return ANY_TYPE

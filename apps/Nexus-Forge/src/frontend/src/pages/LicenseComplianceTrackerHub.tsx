@@ -19,7 +19,9 @@ export default function LicenseComplianceTrackerHub() {
   return (
     <section>
       <h2>License Compliance Tracker Hub</h2>
-      <p>Software license inventory, compliance violation detection, and remediation recommendations.</p>
+      <p>
+        Software license inventory, compliance violation detection, and remediation recommendations.
+      </p>
       <div className="repo-grid">
         <article className="repo-card">
           <h3>License Inventory</h3>

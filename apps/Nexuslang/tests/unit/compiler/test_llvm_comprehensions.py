@@ -13,7 +13,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../../../src'))
 
 from nexuslang.parser.lexer import Lexer
 from nexuslang.parser.parser import Parser
-from nexuslang.parser.ast import GeneratorExpression, Identifier, ListExpression, Literal, Program, VariableDeclaration, ForLoop, PrintStatement
+from nexuslang.parser.ast import GeneratorExpression, Identifier, ListExpression, Literal, Program, VariableDeclaration, ForLoop, PrintStatement, BinaryOperation
 from nexuslang.compiler.backends.llvm_ir_generator import LLVMIRGenerator
 
 
@@ -126,7 +126,130 @@ class TestGeneratorExpressions:
 
         assert "define i1 @nxl_generator_has_next(i8* %gen)" in llvm_ir
         assert "define i64 @nxl_generator_next(i8* %gen)" in llvm_ir
-        assert "call i8* @malloc(i64 24)" in llvm_ir
+        assert "define i1 @nxl_generator_predicate_match(i64 %value, i64 %kind, i64 %arg)" in llvm_ir
+        assert "define i64 @nxl_generator_apply_transform(i64 %value, i64 %op, i64 %arg)" in llvm_ir
+        assert "call i8* @malloc(i64 56)" in llvm_ir
+
+    def test_identity_generator_over_named_list_reuses_source_storage(self):
+        """Identity generators over list variables should avoid eager list materialization."""
+        ast = Program([
+            VariableDeclaration(
+                "numbers",
+                ListExpression([
+                    Literal("integer", 1),
+                    Literal("integer", 2),
+                    Literal("integer", 3),
+                ]),
+            ),
+            VariableDeclaration(
+                "gen",
+                GeneratorExpression(
+                    Identifier("x"),
+                    Identifier("x"),
+                    Identifier("numbers"),
+                    None,
+                ),
+            ),
+        ])
+
+        generator = LLVMIRGenerator()
+        llvm_ir = generator.generate(ast)
+
+        assert "call i8* @malloc(i64 56)" in llvm_ir
+        assert "call i8* @malloc(i64 800)" not in llvm_ir
+
+    def test_truthy_filtered_generator_over_named_list_reuses_source_storage(self):
+        """Truthy filtered identity generators should stay resumable without eager list materialization."""
+        ast = Program([
+            VariableDeclaration(
+                "numbers",
+                ListExpression([
+                    Literal("integer", 0),
+                    Literal("integer", 5),
+                    Literal("integer", 0),
+                    Literal("integer", 9),
+                ]),
+            ),
+            VariableDeclaration(
+                "gen",
+                GeneratorExpression(
+                    Identifier("x"),
+                    Identifier("x"),
+                    Identifier("numbers"),
+                    Identifier("x"),
+                ),
+            ),
+        ])
+
+        generator = LLVMIRGenerator()
+        llvm_ir = generator.generate(ast)
+
+        assert "call i8* @malloc(i64 56)" in llvm_ir
+        assert "call i8* @malloc(i64 800)" not in llvm_ir
+        assert "store i64 1, i64*" in llvm_ir
+        assert "nxl_generator_predicate_match" in llvm_ir
+
+    def test_single_comparison_filtered_generator_over_named_list_reuses_source_storage(self):
+        """Single-comparison filtered identity generators should remain resumable and non-materialized."""
+        ast = Program([
+            VariableDeclaration(
+                "numbers",
+                ListExpression([
+                    Literal("integer", -1),
+                    Literal("integer", 0),
+                    Literal("integer", 2),
+                    Literal("integer", 5),
+                ]),
+            ),
+            VariableDeclaration(
+                "gen",
+                GeneratorExpression(
+                    Identifier("x"),
+                    Identifier("x"),
+                    Identifier("numbers"),
+                    BinaryOperation(Identifier("x"), ">", Literal("integer", 0)),
+                ),
+            ),
+        ])
+
+        generator = LLVMIRGenerator()
+        llvm_ir = generator.generate(ast)
+
+        assert "call i8* @malloc(i64 56)" in llvm_ir
+        assert "call i8* @malloc(i64 800)" not in llvm_ir
+        assert "store i64 2, i64*" in llvm_ir
+        assert "store i64 0, i64*" in llvm_ir
+
+    def test_arithmetic_transform_generator_avoids_materialization(self):
+        """Arithmetic mapped generators (x+C for x in items) should skip eager list construction."""
+        ast = Program([
+            VariableDeclaration(
+                "numbers",
+                ListExpression([
+                    Literal("integer", 1),
+                    Literal("integer", 2),
+                    Literal("integer", 3),
+                ]),
+            ),
+            VariableDeclaration(
+                "gen",
+                GeneratorExpression(
+                    BinaryOperation(Identifier("x"), "+", Literal("integer", 10)),
+                    Identifier("x"),
+                    Identifier("numbers"),
+                    None,
+                ),
+            ),
+        ])
+
+        generator = LLVMIRGenerator()
+        llvm_ir = generator.generate(ast)
+
+        assert "call i8* @malloc(i64 56)" in llvm_ir
+        assert "call i8* @malloc(i64 800)" not in llvm_ir
+        assert "store i64 1, i64*" in llvm_ir
+        assert "store i64 10, i64*" in llvm_ir
+        assert "nxl_generator_apply_transform" in llvm_ir
 
     def test_foreach_over_generator_uses_pull_runtime_helpers(self):
         """Foreach over generator variable should consume frame via has_next/next calls."""
@@ -161,6 +284,37 @@ class TestGeneratorExpressions:
         assert "call i1 @nxl_generator_has_next(i8*" in llvm_ir
         assert "call i64 @nxl_generator_next(i8*" in llvm_ir
         assert "gen.cond" in llvm_ir
+
+    def test_foreach_over_inline_generator_expression_cleans_up_frame(self):
+        """Inline generator-expression foreach should free temporary frame storage after use."""
+        ast = Program([
+            VariableDeclaration(
+                "numbers",
+                ListExpression([
+                    Literal("integer", 1),
+                    Literal("integer", 2),
+                    Literal("integer", 3),
+                ]),
+            ),
+            ForLoop(
+                iterator="item",
+                iterable=GeneratorExpression(
+                    Identifier("x"),
+                    Identifier("x"),
+                    Identifier("numbers"),
+                    None,
+                ),
+                body=[PrintStatement(Identifier("item"))],
+            ),
+        ])
+
+        generator = LLVMIRGenerator()
+        llvm_ir = generator.generate(ast)
+
+        assert "call i1 @nxl_generator_has_next(i8*" in llvm_ir
+        assert "call i64 @nxl_generator_next(i8*" in llvm_ir
+        assert llvm_ir.count("call void @free(i8*") >= 1
+        assert "icmp sge i64" in llvm_ir
 
 
 class TestComprehensionHelpers:

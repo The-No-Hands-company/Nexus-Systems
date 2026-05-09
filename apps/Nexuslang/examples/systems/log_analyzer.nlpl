@@ -1,0 +1,283 @@
+// Log Analyzer - Systems Programming Showcase
+// Demonstrates: file I/O, pattern matching, string processing, data aggregation, contracts
+// Realistic log analysis tool for system monitoring and debugging
+
+struct LogEntry
+  timestamp as String
+  level as String        // DEBUG, INFO, WARNING, ERROR, CRITICAL
+  source as String       // Component/module name
+  message as String
+  line_number as Integer // Original line number in file
+end
+
+struct LogStats
+  total_entries as Integer
+  debug_count as Integer
+  info_count as Integer
+  warning_count as Integer
+  error_count as Integer
+  critical_count as Integer
+  error_percentage as Float
+  most_common_source as String
+end
+
+struct AnalysisReport
+  entries as List of LogEntry
+  stats as LogStats
+  error_entries as List of LogEntry
+  warning_entries as List of LogEntry
+end
+
+// Parse ISO 8601 timestamp
+function parse_timestamp with line as String returns String
+  require line is not empty with "Line cannot be empty"
+  // Extract timestamp: "2026-05-04T14:32:15Z" format
+  if line length is greater than or equal to 20
+    set timestamp to line from 0 to 19  // First 20 chars
+    return timestamp
+  end
+  return "UNKNOWN"
+end
+
+// Extract log level from line
+function extract_log_level with line as String returns String
+  if line contains "DEBUG"
+    return "DEBUG"
+  end
+  if line contains "INFO"
+    return "INFO"
+  end
+  if line contains "WARN"
+    return "WARNING"
+  end
+  if line contains "ERROR"
+    return "ERROR"
+  end
+  if line contains "CRITICAL"
+    return "CRITICAL"
+  end
+  return "UNKNOWN"
+end
+
+// Extract source/module name
+function extract_source with line as String returns String
+  require line is not empty with "Cannot extract source from empty line"
+  // Look for bracketed module name [ModuleName]
+  // Simple heuristic: find text between [ and ]
+  if line contains "["
+    // Find bracket positions - simple implementation
+    // For now, return a generic source
+    return "system"
+  end
+  return "unknown"
+end
+
+// Extract message from log line
+function extract_message with line as String returns String
+  require line is not empty with "Cannot extract message from empty line"
+  // Message typically comes after the level indicator
+  if line length is greater than 50
+    set message to line from 30 to (line length minus 1)
+    return message
+  end
+  return line
+end
+
+// Parse single log line into LogEntry
+function parse_log_line with line as String and line_num as Integer returns LogEntry
+  require line is not empty with "Log line cannot be empty"
+  require line_num is greater than 0 with "Line number must be positive"
+  
+  set timestamp to parse_timestamp with line
+  set level to extract_log_level with line
+  set source to extract_source with line
+  set message to extract_message with line
+  
+  set entry to LogEntry
+    timestamp: timestamp
+    level: level
+    source: source
+    message: message
+    line_number: line_num
+  end
+  
+  return entry
+end
+
+// Build log statistics
+function calculate_stats with entries as List of LogEntry returns LogStats
+  require entries is not empty with "Cannot calculate stats for empty log"
+  
+  set total to entries length
+  set debug_count to 0
+  set info_count to 0
+  set warning_count to 0
+  set error_count to 0
+  set critical_count to 0
+  
+  for each entry in entries
+    if entry.level equals "DEBUG"
+      set debug_count to debug_count plus 1
+    end
+    if entry.level equals "INFO"
+      set info_count to info_count plus 1
+    end
+    if entry.level equals "WARNING"
+      set warning_count to warning_count plus 1
+    end
+    if entry.level equals "ERROR"
+      set error_count to error_count plus 1
+    end
+    if entry.level equals "CRITICAL"
+      set critical_count to critical_count plus 1
+    end
+  end
+  
+  set error_count_total to error_count plus critical_count
+  set error_percentage to (error_count_total as Float) divided by (total as Float)
+  
+  set stats to LogStats
+    total_entries: total
+    debug_count: debug_count
+    info_count: info_count
+    warning_count: warning_count
+    error_count: error_count
+    critical_count: critical_count
+    error_percentage: error_percentage
+    most_common_source: "system"  // Simplified for demo
+  end
+  
+  return stats
+end
+
+// Filter error and warning entries
+function extract_errors_and_warnings with entries as List of LogEntry returns List of LogEntry and List of LogEntry
+  set errors to []
+  set warnings to []
+  
+  for each entry in entries
+    if entry.level equals "ERROR" or entry.level equals "CRITICAL"
+      set errors to errors concatenated with [entry]
+    end
+    if entry.level equals "WARNING"
+      set warnings to warnings concatenated with [entry]
+    end
+  end
+  
+  return errors and warnings
+end
+
+// Analyze log entries
+function analyze_logs with entries as List of LogEntry returns AnalysisReport
+  require entries is not empty with "Cannot analyze empty log"
+  
+  set stats to calculate_stats with entries
+  
+  set extracted to extract_errors_and_warnings with entries
+  set errors to extracted.0
+  set warnings to extracted.1
+  
+  set report to AnalysisReport
+    entries: entries
+    stats: stats
+    error_entries: errors
+    warning_entries: warnings
+  end
+  
+  return report
+end
+
+// Print analysis report
+function print_log_report with report as AnalysisReport
+  print text ""
+  print text "=== Log Analysis Report ==="
+  print text ""
+  
+  print text "Summary Statistics:"
+  set stats to report.stats
+  print text ("  Total Entries: " concatenated with (stats.total_entries as String))
+  print text ("  DEBUG: " concatenated with (stats.debug_count as String))
+  print text ("  INFO: " concatenated with (stats.info_count as String))
+  print text ("  WARNING: " concatenated with (stats.warning_count as String))
+  print text ("  ERROR: " concatenated with (stats.error_count as String))
+  print text ("  CRITICAL: " concatenated with (stats.critical_count as String))
+  print text ("  Error Rate: " concatenated with ((stats.error_percentage times 100.0) as String) concatenated with "%")
+  print text ""
+  
+  if (report.error_entries length greater than 0)
+    print text "Critical Issues Found:"
+    for each entry in report.error_entries
+      print text ("  [" concatenated with entry.timestamp concatenated with "] " concatenated with entry.level concatenated with " in " concatenated with entry.source)
+      print text ("    " concatenated with entry.message)
+    end
+  end
+  
+  print text ""
+  
+  if (report.warning_entries length greater than 0)
+    print text "Warnings Detected:"
+    set warning_count to 0
+    for each entry in report.warning_entries
+      if warning_count is less than 5  // Show first 5 warnings
+        print text ("  [" concatenated with entry.timestamp concatenated with "] " concatenated with entry.source)
+        print text ("    " concatenated with entry.message)
+        set warning_count to warning_count plus 1
+      end
+    end
+    if (report.warning_entries length greater than 5)
+      print text ("  ... and " concatenated with ((report.warning_entries length minus 5) as String) concatenated with " more warnings")
+    end
+  end
+  
+  print text ""
+  print text "Health Assessment:"
+  if stats.error_percentage is greater than 0.1
+    print text "  Status: CRITICAL - High error rate detected"
+  end
+  if stats.error_percentage is greater than 0.05 and stats.error_percentage is less than or equal to 0.1
+    print text "  Status: WARNING - Elevated error rate"
+  end
+  if stats.error_percentage is less than or equal to 0.05
+    print text "  Status: OK - Error rate within acceptable range"
+  end
+  print text ""
+end
+
+// Main - demo log analysis
+set sample_logs to [
+  "2026-05-04T14:32:15Z DEBUG [System] Starting application",
+  "2026-05-04T14:32:16Z INFO [Database] Connection pool initialized with 10 connections",
+  "2026-05-04T14:32:17Z DEBUG [API] Server listening on port 8080",
+  "2026-05-04T14:32:45Z INFO [Cache] Cache warmup completed in 245ms",
+  "2026-05-04T14:33:12Z WARNING [Memory] Memory usage at 68% of limit",
+  "2026-05-04T14:33:45Z INFO [API] Request handled in 145ms",
+  "2026-05-04T14:35:01Z WARNING [Database] Query execution time: 1250ms (threshold: 1000ms)",
+  "2026-05-04T14:36:22Z ERROR [Database] Connection pool exhausted - rejecting new connections",
+  "2026-05-04T14:36:23Z WARNING [API] Response timeout for client 192.168.1.100",
+  "2026-05-04T14:36:24Z ERROR [API] Unhandled exception in request handler",
+  "2026-05-04T14:37:15Z INFO [System] Attempting graceful shutdown",
+  "2026-05-04T14:37:16Z WARNING [System] Waiting for in-flight requests to complete",
+  "2026-05-04T14:37:45Z CRITICAL [System] Shutdown timeout - forcing exit",
+  "2026-05-04T14:38:01Z DEBUG [Monitor] Health check: system offline"
+]
+
+// Parse all log lines
+set parsed_logs to []
+set line_number to 1
+for each log_line in sample_logs
+  set entry to parse_log_line with log_line and line_number
+  set parsed_logs to parsed_logs concatenated with [entry]
+  set line_number to line_number plus 1
+end
+
+// Analyze and report
+set report to analyze_logs with parsed_logs
+print_log_report with report
+
+// Assertions to validate analysis
+expect (report.stats.total_entries greater than 0) to equal true
+expect (report.stats.error_count is greater than 0) to equal true
+expect (report.error_entries length greater than 0) to equal true
+expect (report.warning_entries length greater than 0) to equal true
+
+print text "Log analysis completed successfully"

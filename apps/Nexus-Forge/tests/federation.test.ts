@@ -1,4 +1,4 @@
-import { describe, it, expect } from "bun:test";
+import { describe, expect, it } from "bun:test";
 import { federationEndpoints } from "../src/backend/api/federation";
 
 describe("Federation Contract", () => {

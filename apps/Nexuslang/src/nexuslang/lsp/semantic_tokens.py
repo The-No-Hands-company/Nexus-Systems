@@ -10,6 +10,18 @@ import re
 from ..parser.lexer import Lexer
 from ..parser.parser import Parser
 from ..analysis import ASTSymbolExtractor, SymbolTable, SymbolKind
+from ..errors import NxlError
+
+
+_RECOVERABLE_LSP_EXCEPTIONS = (
+    NxlError,
+    RuntimeError,
+    ValueError,
+    TypeError,
+    AttributeError,
+    OSError,
+    UnicodeError,
+)
 
 
 class SemanticTokensProvider:
@@ -78,7 +90,7 @@ class SemanticTokensProvider:
             
             self.symbol_tables[uri] = symbol_table
             return symbol_table
-        except Exception:
+        except _RECOVERABLE_LSP_EXCEPTIONS:
             return self.symbol_tables.get(uri, None)
     
     def _symbol_kind_to_token_type(self, kind: SymbolKind) -> int:

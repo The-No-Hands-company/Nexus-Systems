@@ -60,8 +60,10 @@ class DiagnosticTelemetry:
             return
         try:
             _persist_counts(Counter(codes))
-        except Exception:
-            pass  # Never let telemetry errors propagate to the caller
+        except (IOError, OSError, json.JSONDecodeError) as e:
+            # Telemetry persistence failed; log but don't propagate (don't block caller)
+            import logging
+            logging.warning(f"Failed to persist telemetry counts: {e}")
 
 
 # ---------------------------------------------------------------------------
@@ -74,7 +76,13 @@ def _load_data() -> dict:
         return {"counts": {}, "sessions": 0, "first_seen": str(date.today()), "last_updated": ""}
     try:
         return json.loads(_COUNTS_FILE.read_text(encoding="utf-8"))
-    except Exception:
+    except (json.JSONDecodeError, FileNotFoundError, IOError) as e:
+        # Telemetry file corrupted or inaccessible; log and return empty skeleton
+        import logging
+        logging.warning(
+            f"Failed to load telemetry data from {_COUNTS_FILE}: {e}. "
+            f"Using empty telemetry skeleton; previous data may be lost."
+        )
         return {"counts": {}, "sessions": 0, "first_seen": str(date.today()), "last_updated": ""}
 
 

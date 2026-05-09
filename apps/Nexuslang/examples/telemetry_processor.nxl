@@ -1,0 +1,149 @@
+-- Telemetry Processor showcase
+--
+-- Demonstrates a concurrency-heavy telemetry data pipeline that is portable
+-- across both the LLVM and C compilation backends.
+--
+-- Pipeline stages:
+--   1. Ingestion:  sensor readings arrive in batches through channels
+--   2. Processing: each batch is normalised and filtered in parallel
+--   3. Aggregation: processed readings are aggregated per sensor
+--   4. Reporting:  summary statistics are printed
+--
+-- Compilation:
+--   LLVM backend:
+--     nexuslang compile telemetry_processor.nxl --backend llvm -o telemetry
+--     ./telemetry
+--
+--   C backend:
+--     nexuslang compile telemetry_processor.nxl --backend c -o telemetry.c
+--     cc telemetry.c nxl_runtime.c -lpthread -o telemetry
+--     ./telemetry
+
+-- ---------------------------------------------------------------------------
+-- Data model
+-- ---------------------------------------------------------------------------
+
+struct SensorReading
+    sensor_id as Integer
+    raw_value as Integer
+    is_valid  as Boolean
+end
+
+struct BatchStats
+    sensor_id     as Integer
+    sample_count  as Integer
+    value_sum     as Integer
+    min_value     as Integer
+    max_value     as Integer
+end
+
+-- ---------------------------------------------------------------------------
+-- Helpers
+-- ---------------------------------------------------------------------------
+
+function clamp with value as Integer and low as Integer and high as Integer returns Integer
+    require value is not null
+    if value is less than low
+        return low
+    end
+    if value is greater than high
+        return high
+    end
+    return value
+end
+
+function is_valid_reading with raw as Integer returns Boolean
+    -- Readings outside [0, 1023] are sensor faults.
+    if raw is less than 0
+        return false
+    end
+    if raw is greater than 1023
+        return false
+    end
+    return true
+end
+
+function normalise with raw as Integer returns Integer
+    -- Scale raw ADC counts [0, 1023] to tenths of a degree [0, 1000].
+    return raw times 1000 divided by 1023
+end
+
+-- ---------------------------------------------------------------------------
+-- Batch processor
+-- ---------------------------------------------------------------------------
+
+function process_batch with readings as List of Integer and threshold as Integer returns BatchStats
+    require threshold is greater than or equal to 0
+    require threshold is less than or equal to 1000
+
+    set sample_count to 0
+    set value_sum    to 0
+    set min_value    to 1001
+    set max_value    to -1
+
+    parallel for each raw in readings
+        if is_valid_reading with raw: raw
+            set normed to normalise with raw: raw
+            if normed is greater than or equal to threshold
+                set sample_count to sample_count plus 1
+                set value_sum    to value_sum    plus normed
+                if normed is less than min_value
+                    set min_value to normed
+                end
+                if normed is greater than max_value
+                    set max_value to normed
+                end
+            end
+        end
+    end
+
+    set stats to new BatchStats
+    set stats.sensor_id    to 0
+    set stats.sample_count to sample_count
+    set stats.value_sum    to value_sum
+    set stats.min_value    to min_value
+    set stats.max_value    to max_value
+    return stats
+end
+
+-- ---------------------------------------------------------------------------
+-- Reporting
+-- ---------------------------------------------------------------------------
+
+function print_stats with stats as BatchStats and label as String returns Nothing
+    print text label
+    print text "  samples : "
+    print text stats.sample_count
+    print text "  sum     : "
+    print text stats.value_sum
+    print text "  min     : "
+    print text stats.min_value
+    print text "  max     : "
+    print text stats.max_value
+end
+
+-- ---------------------------------------------------------------------------
+-- Entry point
+-- ---------------------------------------------------------------------------
+
+function main returns Integer
+    -- Simulate three sensor batches arriving over time.
+    set batch_a to [120, 340, 980, 15, 700, 1023, -5, 512, 800, 256]
+    set batch_b to [50, 200, 600, 890, 300, 410, 1100, 730, 180, 920]
+    set batch_c to [0, 999, 512, 768, 100, 450, 820, 660, 390, 1023]
+
+    -- Filter threshold: only include normalised readings above 250 (roughly 25 %).
+    set threshold to 250
+
+    set stats_a to process_batch with readings: batch_a and threshold: threshold
+    set stats_b to process_batch with readings: batch_b and threshold: threshold
+    set stats_c to process_batch with readings: batch_c and threshold: threshold
+
+    print text "=== Telemetry Processor Report ==="
+    print_stats with stats: stats_a and label: "Sensor A"
+    print_stats with stats: stats_b and label: "Sensor B"
+    print_stats with stats: stats_c and label: "Sensor C"
+    print text "==================================="
+
+    return 0
+end

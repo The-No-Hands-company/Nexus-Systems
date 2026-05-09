@@ -21,9 +21,18 @@ export default function RequirementsManagementHub() {
       <h2>Requirements Management Hub</h2>
       <p>Requirements lifecycle and compliance traceability parity.</p>
       <div className="repo-grid">
-        <article className="repo-card"><h3>Compliance Matrix</h3><p>{report.complianceMatrix || "stubbed"}</p></article>
-        <article className="repo-card"><h3>CSV Import</h3><p>{report.csvImport || "stubbed"}</p></article>
-        <article className="repo-card"><h3>Status</h3><p>Requirements API stubs active</p></article>
+        <article className="repo-card">
+          <h3>Compliance Matrix</h3>
+          <p>{report.complianceMatrix || "stubbed"}</p>
+        </article>
+        <article className="repo-card">
+          <h3>CSV Import</h3>
+          <p>{report.csvImport || "stubbed"}</p>
+        </article>
+        <article className="repo-card">
+          <h3>Status</h3>
+          <p>Requirements API stubs active</p>
+        </article>
       </div>
     </section>
   );

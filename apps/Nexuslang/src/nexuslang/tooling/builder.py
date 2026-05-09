@@ -1,5 +1,6 @@
 
 import os
+import sys
 import shutil
 import glob
 import time
@@ -156,6 +157,17 @@ class BuildSystem:
     def __init__(self, config: ProjectConfig) -> None:
         self.config = config
 
+    @staticmethod
+    def _normalize_build_target(target: str) -> str:
+        """Canonicalize user-facing build target spellings for tooling paths."""
+        normalized = target.strip().lower().replace("-", "_")
+        aliases = {
+            "c++": CompilationTarget.CPP,
+            "cxx": CompilationTarget.CPP,
+            "llvm": CompilationTarget.LLVM_IR,
+        }
+        return aliases.get(normalized, normalized)
+
     # ------------------------------------------------------------------
     # Public commands
     # ------------------------------------------------------------------
@@ -174,6 +186,7 @@ class BuildSystem:
         lint_strict: bool = False,
         lint_errors_only: bool = False,
         lint_fail_on_warnings: bool = False,
+        sanitize: Optional[List[str]] = None,
     ) -> bool:
         """Build the project.
 
@@ -185,6 +198,7 @@ class BuildSystem:
             clean:                  Discard cache and rebuild everything.
             check_only:             Parse and type-check without emitting output.
             optimize_bounds_checks: Enable compile-time bounds check elimination.
+            sanitize:               List of sanitizers to enable (address, thread, memory, undefined).
 
         Returns:
             True if all files compiled successfully.
@@ -201,6 +215,7 @@ class BuildSystem:
             lint_strict=lint_strict,
             lint_errors_only=lint_errors_only,
             lint_fail_on_warnings=lint_fail_on_warnings,
+            sanitize=sanitize,
         )
         result.print_summary(
             self.config.package.name,
@@ -214,13 +229,17 @@ class BuildSystem:
         release: bool = False,
         features: Optional[List[str]] = None,
         run_args: Optional[List[str]] = None,
+        sanitize: Optional[List[str]] = None,
+        analyze_runtime: bool = False,
+        analysis_output: Optional[str] = None,
+        profile_source: Optional[str] = None,
     ) -> int:
         """Build then run the project executable.
 
         Returns:
             Exit code of the executed program (1 if build failed).
         """
-        if not self.build(release=release, features=features):
+        if not self.build(release=release, features=features, sanitize=sanitize):
             return 1
 
         executable = self._find_executable(self.config.build.output_dir)
@@ -233,7 +252,62 @@ class BuildSystem:
         print(f"\nRunning `{' '.join(cmd)}`")
         print("-" * 40)
         try:
-            return subprocess.run(cmd).returncode
+            proc = subprocess.run(cmd, capture_output=True, text=True)
+
+            if proc.stdout:
+                print(proc.stdout, end="")
+            if proc.stderr:
+                print(proc.stderr, end="", file=sys.stderr)
+
+            report = None
+            if sanitize:
+                from .sanitizer_runtime import (
+                    format_sanitizer_report,
+                    parse_sanitizer_output,
+                    write_combined_runtime_analysis,
+                    write_sanitizer_report,
+                )
+
+                report = parse_sanitizer_output(proc.stderr or "")
+                if report.has_findings:
+                    print("\n" + format_sanitizer_report(report))
+
+                    runtime_out_dir = analysis_output or os.path.join(self.config.build.output_dir, "runtime-analysis")
+                    write_sanitizer_report(
+                        report,
+                        os.path.join(runtime_out_dir, "sanitizer-report.json"),
+                    )
+
+            if analyze_runtime:
+                from .sanitizer_runtime import write_combined_runtime_analysis
+
+                runtime_out_dir = analysis_output or os.path.join(self.config.build.output_dir, "runtime-analysis")
+                profiling_summary: Dict[str, object] = {}
+
+                # Optionally pair sanitizer findings with interpreter-side CPU/memory profiling.
+                source_candidate = profile_source or os.path.join(self.config.build.source_dir, "main.nxl")
+                if os.path.exists(source_candidate):
+                    from .profiler import run_with_profiling
+
+                    profiler = run_with_profiling(
+                        source_path=source_candidate,
+                        output_dir=os.path.join(runtime_out_dir, "profile"),
+                        cpu=True,
+                        memory=True,
+                    )
+                    profiling_summary = {
+                        "cpu_functions": len(profiler.cpu._profiles) if profiler.cpu else 0,
+                        "memory_peak_bytes": profiler.memory.peak_bytes if profiler.memory else 0,
+                        "source": source_candidate,
+                    }
+
+                write_combined_runtime_analysis(
+                    output_dir=runtime_out_dir,
+                    sanitizer_report=report,
+                    profiler_summary=profiling_summary,
+                )
+
+            return proc.returncode
         except Exception as exc:
             print(f"  error running executable: {exc}")
             return 1
@@ -410,6 +484,7 @@ class BuildSystem:
         prof: ProfileConfig,
         active_features: List[str],
         optimize_bounds_checks: bool = False,
+        sanitize: Optional[List[str]] = None,
     ) -> Compiler:
         """Create and configure a fresh Compiler instance."""
         from ..compiler import create_compiler
@@ -423,6 +498,18 @@ class BuildSystem:
             # Signal to backends that bounds-check elimination is requested
             compiler.options.optimization_level = max(compiler.options.optimization_level, 1)
 
+        # Apply sanitizers
+        if sanitize:
+            for san in sanitize:
+                if san == 'address':
+                    compiler.options.sanitize_address = True
+                elif san == 'thread':
+                    compiler.options.sanitize_thread = True
+                elif san == 'memory':
+                    compiler.options.sanitize_memory = True
+                elif san == 'undefined':
+                    compiler.options.sanitize_undefined = True
+
         # Add dependency library search paths
         all_deps = {**self.config.dependencies, **self.config.build_dependencies}
         for dep_name, dep_spec in all_deps.items():
@@ -435,7 +522,8 @@ class BuildSystem:
 
     def _compile_one(
         self, source_path: str, out_dir: str, prof: ProfileConfig,
-        active_features: List[str], check_only: bool, optimize_bounds_checks: bool
+        active_features: List[str], check_only: bool, optimize_bounds_checks: bool,
+        sanitize: Optional[List[str]] = None,
     ) -> Tuple[str, bool, List[str]]:
         """Compile a single source file.  Designed to run in a thread.
 
@@ -457,13 +545,14 @@ class BuildSystem:
                 return source_path, True, []
 
             compiler = self._configure_compiler(
-                prof, active_features, optimize_bounds_checks
+                prof, active_features, optimize_bounds_checks, sanitize
             )
             rel = os.path.relpath(source_path, self.config.build.source_dir)
             base = os.path.splitext(rel)[0]
             output_file = os.path.join(out_dir, base)
+            target = self._normalize_build_target(self.config.build.target)
 
-            ok, _ = compiler.compile(ast, self.config.build.target, output_file)
+            ok, _ = compiler.compile(ast, target, output_file)
             if not ok:
                 errors.append(f"Compiler reported failure for {source_path}")
             return source_path, ok, errors
@@ -475,12 +564,13 @@ class BuildSystem:
         self,
         to_compile: List[str],
         out_dir: str,
-        prof,
+        prof: ProfileConfig,
         active_features: List[str],
         check_only: bool,
         optimize_bounds_checks: bool,
         max_workers: int,
         cache,
+        sanitize: Optional[List[str]] = None,
     ):
         """Compile *to_compile* files serially or in parallel.
 
@@ -496,7 +586,8 @@ class BuildSystem:
         if max_workers == 1:
             for src in to_compile:
                 _, ok, errs = self._compile_one(
-                    src, out_dir, prof, active_features, check_only, optimize_bounds_checks
+                    src, out_dir, prof, active_features, check_only, optimize_bounds_checks,
+                    sanitize
                 )
                 if ok:
                     compiled_ok += 1
@@ -509,6 +600,7 @@ class BuildSystem:
                     executor.submit(
                         self._compile_one,
                         src, out_dir, prof, active_features, check_only, optimize_bounds_checks,
+                        sanitize,
                     ): src
                     for src in to_compile
                 }
@@ -535,6 +627,7 @@ class BuildSystem:
         lint_strict: bool = False,
         lint_errors_only: bool = False,
         lint_fail_on_warnings: bool = False,
+        sanitize: Optional[List[str]] = None,
     ) -> BuildResult:
         t0 = time.monotonic()
 
@@ -655,7 +748,7 @@ class BuildSystem:
 
         compiled_ok, compile_errors, _compile_warnings = self._compile_files(
             to_compile, out_dir, prof, active_features, check_only, optimize_bounds_checks,
-            max_workers, cache,
+            max_workers, cache, sanitize
         )
         all_errors.extend(compile_errors)
 
@@ -675,10 +768,11 @@ class BuildSystem:
                     lto_output = None
 
         # Link multi-file C/C++ projects when more than one file compiled
+        target = self._normalize_build_target(self.config.build.target)
         if (
             not check_only
             and not all_errors
-            and self.config.build.target in ("c", "cpp", CompilationTarget.C, CompilationTarget.CPP)
+            and target in (CompilationTarget.C, CompilationTarget.CPP)
             and len(sources) > 1
         ):
             self._maybe_link(out_dir, all_errors)
@@ -813,7 +907,8 @@ class BuildSystem:
         if not prof.lto:
             return False, None, None, [], []
 
-        if self.config.build.target not in ("llvm_ir", CompilationTarget.LLVM_IR):
+        target = self._normalize_build_target(self.config.build.target)
+        if target != CompilationTarget.LLVM_IR:
             reason = (
                 f"LTO requested but target is '{self.config.build.target}'; "
                 "LTO requires target='llvm_ir'"
@@ -854,9 +949,9 @@ class BuildSystem:
         """Attempt to link compiled C/C++ objects into a single executable."""
         import subprocess
 
-        target = self.config.build.target
+        target = self._normalize_build_target(self.config.build.target)
         compilers = (
-            ["g++", "clang++"] if target in ("cpp", CompilationTarget.CPP)
+            ["g++", "clang++"] if target == CompilationTarget.CPP
             else ["gcc", "clang"]
         )
         cc = next((shutil.which(c) for c in compilers if shutil.which(c)), None)
@@ -892,7 +987,7 @@ class BuildSystem:
 
         _, ok, _ = self._compile_one(
             str(test_file), str(out_dir), prof, active_features,
-            check_only=False, optimize_bounds_checks=False
+            check_only=False, optimize_bounds_checks=False, sanitize=None
         )
         if not ok:
             return False

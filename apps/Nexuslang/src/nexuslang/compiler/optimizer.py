@@ -7,30 +7,44 @@ Includes:
 - Dead Code Eliminator: Removes unreachable code
 """
 
-from typing import Any, Optional
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 class BoundsCheckOptimizer:
     """Analyzes array accesses to determine if bounds checks can be eliminated."""
     
-    def __init__(self):
-        self.safe_accesses = set()  # (array_name, index_identifier)
-        self.loop_bounds = {}       # loop_var -> (start, end)
-        self.array_sizes = {}       # array_name -> size (compile-time known)
+    def __init__(self) -> None:
+        self.safe_accesses: Set[Tuple[str, Any]] = set()  # (array_name, index_identifier)
+        self.loop_bounds: Dict[str, Tuple[int, int]] = {}  # loop_var -> (start, end)
+        self.array_sizes: Dict[str, int] = {}  # array_name -> size (compile-time known)
     
-    def set_array_size(self, array_name, size):
+    def set_array_size(self, array_name: str, size: int) -> None:
         """Register an array's compile-time known size."""
+        if not isinstance(array_name, str) or not array_name:
+            raise TypeError("array_name must be a non-empty string")
+        if not isinstance(size, int):
+            raise TypeError("size must be an integer")
+        if size < 0:
+            raise ValueError("size must be non-negative")
         self.array_sizes[array_name] = size
     
-    def set_loop_bounds(self, loop_var, start, end):
+    def set_loop_bounds(self, loop_var: str, start: int, end: int) -> None:
         """Register loop induction variable bounds."""
+        if not isinstance(loop_var, str) or not loop_var:
+            raise TypeError("loop_var must be a non-empty string")
+        if not isinstance(start, int) or not isinstance(end, int):
+            raise TypeError("start and end must be integers")
+        if end < start:
+            raise ValueError("end must be greater than or equal to start")
         self.loop_bounds[loop_var] = (start, end)
     
-    def clear_loop_bounds(self, loop_var):
+    def clear_loop_bounds(self, loop_var: str) -> None:
         """Clear loop bounds when exiting loop scope."""
+        if not isinstance(loop_var, str) or not loop_var:
+            raise TypeError("loop_var must be a non-empty string")
         if loop_var in self.loop_bounds:
             del self.loop_bounds[loop_var]
     
-    def analyze_constant_index(self, array_name, index_value):
+    def analyze_constant_index(self, array_name: str, index_value: Any) -> bool:
         """
         Check if constant index access is provably safe.
         
@@ -52,7 +66,7 @@ class BoundsCheckOptimizer:
         
         return False
     
-    def analyze_loop_variable(self, array_name, loop_var):
+    def analyze_loop_variable(self, array_name: str, loop_var: str) -> bool:
         """
         Check if loop induction variable access is provably safe.
         
@@ -78,7 +92,7 @@ class BoundsCheckOptimizer:
         
         return False
     
-    def is_safe_access(self, array_name, index_info):
+    def is_safe_access(self, array_name: str, index_info: Any) -> bool:
         """
         Determine if an array access is provably safe.
         
@@ -103,11 +117,13 @@ class BoundsCheckOptimizer:
         
         return False
     
-    def mark_safe_access(self, array_name, index_info):
+    def mark_safe_access(self, array_name: str, index_info: Any) -> None:
         """Mark an access as safe (e.g., after explicit bounds check in user code)."""
+        if not isinstance(array_name, str) or not array_name:
+            raise TypeError("array_name must be a non-empty string")
         self.safe_accesses.add((array_name, index_info))
     
-    def reset(self):
+    def reset(self) -> None:
         """Reset optimizer state (e.g., between functions)."""
         self.safe_accesses.clear()
         self.loop_bounds.clear()
@@ -125,7 +141,7 @@ class ConstantFolder:
     - Bitwise: 5 & 3 → 1, 8 >> 2 → 2
     """
     
-    def fold_expression(self, node):
+    def fold_expression(self, node: Any) -> Any:
         """Recursively fold constants in an expression tree."""
         from ..parser.ast import BinaryOperation, UnaryOperation, Literal
         
@@ -141,7 +157,7 @@ class ConstantFolder:
         # Not a foldable expression
         return node
     
-    def _fold_binary_op(self, node):
+    def _fold_binary_op(self, node: Any) -> Any:
         """Fold binary operations with constant operands."""
         from ..parser.ast import BinaryOperation, Literal
         
@@ -238,12 +254,17 @@ class ConstantFolder:
                 return int(left) << int(right)
             elif op in ('right shift', 'right_shift', '>>'):
                 return int(left) >> int(right)
-        except:
-            return None  # Evaluation failed
+        except (TypeError, ValueError, OverflowError, ZeroDivisionError) as e:
+            # Constant folding failed for numeric operation
+            import logging
+            logging.debug(
+                f"Constant folding failed for '{op}' on {type(left).__name__} and {type(right).__name__}: {e}"
+            )
+            return None
         
         return None  # Unknown operator
     
-    def _fold_unary_op(self, node):
+    def _fold_unary_op(self, node: Any) -> Any:
         """Fold unary operations with constant operands."""
         from ..parser.ast import UnaryOperation, Literal
         
@@ -285,7 +306,12 @@ class ConstantFolder:
                 return -value
             elif op in ('bitwise not', 'bitwise_not', '~'):
                 return ~int(value)
-        except:
+        except (TypeError, ValueError, OverflowError) as e:
+            # Constant folding failed for unary operation
+            import logging
+            logging.debug(
+                f"Constant folding failed for unary '{op}' on {type(value).__name__}: {e}"
+            )
             return None
         
         return None
@@ -301,7 +327,7 @@ class DeadCodeEliminator:
     - Unreachable code after unconditional jumps
     """
     
-    def eliminate_dead_code(self, statements):
+    def eliminate_dead_code(self, statements: List[Any]) -> List[Any]:
         """
         Remove unreachable statements from a list.
         
@@ -379,7 +405,7 @@ class DeadCodeEliminator:
         
         return result
     
-    def optimize_function(self, func_def):
+    def optimize_function(self, func_def: Any) -> Any:
         """Optimize a function definition by removing dead code."""
         if func_def.body:
             func_def.body = self.eliminate_dead_code(func_def.body)

@@ -1,7 +1,10 @@
 import { useEffect, useState } from "react";
 
 export default function MachineTranslationPlatformHub() {
-  const [quality, setQuality] = useState<{ score: number; languages: number }>({ score: 0, languages: 0 });
+  const [quality, setQuality] = useState<{ score: number; languages: number }>({
+    score: 0,
+    languages: 0,
+  });
 
   useEffect(() => {
     async function load() {
@@ -31,7 +34,9 @@ export default function MachineTranslationPlatformHub() {
         </article>
         <article className="repo-card">
           <h3>Quality</h3>
-          <p>Score: {quality.score}, Languages: {quality.languages}</p>
+          <p>
+            Score: {quality.score}, Languages: {quality.languages}
+          </p>
         </article>
       </div>
     </section>

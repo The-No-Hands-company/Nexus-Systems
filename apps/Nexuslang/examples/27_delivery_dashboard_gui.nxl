@@ -1,0 +1,157 @@
+# Delivery Command Center - Desktop GUI
+#
+# Screenshot-ready desktop dashboard with reliable calculator-style event loop.
+
+set win to window_create with "NexusLang Delivery Command Center" and 860 and 540
+window_set_background with win and "#e9eef5"
+window_set_resizable with win and false and false
+
+set day to 1
+set committed_scope to 42
+set completed to 18
+set active to 9
+set blocked to 3
+set backlog to 12
+
+set title to widget_label with win and "Delivery Command Center" and 24 and 16 and "#0f172a" and "#e9eef5" and "Arial" and 28
+set subtitle to widget_label with win and "Cross-domain delivery status and execution health" and 24 and 52 and "#475569" and "#e9eef5" and "Arial" and 12
+
+set lbl_day to widget_label with win and "Sprint Day: 1" and 24 and 94 and "#0f172a" and "#e9eef5" and "Arial" and 12
+set lbl_scope to widget_label with win and "Committed Scope: 42" and 200 and 94 and "#0f172a" and "#e9eef5" and "Arial" and 12
+
+set card_completed_label to widget_label with win and "Completed" and 28 and 142 and "#0a7f3f" and "#e9eef5" and "Arial" and 12
+set card_completed_value to widget_label with win and "18" and 28 and 168 and "#0a7f3f" and "#e9eef5" and "Arial" and 30
+
+set card_active_label to widget_label with win and "Active" and 248 and 142 and "#205493" and "#e9eef5" and "Arial" and 12
+set card_active_value to widget_label with win and "9" and 248 and 168 and "#205493" and "#e9eef5" and "Arial" and 30
+
+set card_blocked_label to widget_label with win and "Blocked" and 468 and 142 and "#8a2c0d" and "#e9eef5" and "Arial" and 12
+set card_blocked_value to widget_label with win and "3" and 468 and 168 and "#8a2c0d" and "#e9eef5" and "Arial" and 30
+
+set card_backlog_label to widget_label with win and "Backlog" and 688 and 142 and "#5b5f97" and "#e9eef5" and "Arial" and 12
+set card_backlog_value to widget_label with win and "12" and 688 and 168 and "#5b5f97" and "#e9eef5" and "Arial" and 30
+
+set summary_title to widget_label with win and "Operational Summary" and 24 and 242 and "#0f172a" and "#e9eef5" and "Arial" and 14
+set summary_body to widget_text_area with win and 24 and 270 and 812 and 170 and "" and "Courier" and 12 and "word"
+
+widget_button with win and "Advance Day" and 24 and 460 and 170 and 46 and "#ffffff" and "#1f6feb" and "Arial" and 12 and "advance"
+widget_button with win and "Inject Risk" and 208 and 460 and 170 and 46 and "#ffffff" and "#a84a0b" and "Arial" and 12 and "risk"
+widget_button with win and "Recover" and 392 and 460 and 170 and 46 and "#ffffff" and "#0a7f3f" and "Arial" and 12 and "recover"
+widget_button with win and "Reset" and 576 and 460 and 120 and 46 and "#ffffff" and "#475569" and "Arial" and 12 and "reset"
+widget_button with win and "Close" and 716 and 460 and 120 and 46 and "#ffffff" and "#111827" and "Arial" and 12 and "close"
+
+function set_summary
+    set text to "Throughput Snapshot\n"
+    set text to text plus "------------------\n"
+    set text to text plus "Completed: " plus to_string with completed plus "\n"
+    set text to text plus "Active: " plus to_string with active plus "\n"
+    set text to text plus "Blocked: " plus to_string with blocked plus "\n"
+    set text to text plus "Backlog: " plus to_string with backlog plus "\n"
+
+    if blocked is greater than 3
+        set text to text plus "\nStatus: Elevated delivery risk due to blockers."
+    else if completed is greater than or equal to 28
+        set text to text plus "\nStatus: Throughput above plan."
+    else
+        set text to text plus "\nStatus: Stable progression with manageable risk."
+    end
+
+    widget_set_text with summary_body and text
+end
+
+function refresh
+    widget_set_text with lbl_day and "Sprint Day: " plus to_string with day
+    widget_set_text with lbl_scope and "Committed Scope: " plus to_string with committed_scope
+
+    widget_set_text with card_completed_value and to_string with completed
+    widget_set_text with card_active_value and to_string with active
+    widget_set_text with card_blocked_value and to_string with blocked
+    widget_set_text with card_backlog_value and to_string with backlog
+
+    set_summary with
+end
+
+function do_advance
+    set day to day plus 1
+
+    if backlog is greater than 0
+        set backlog to backlog minus 1
+        set active to active plus 1
+    end
+
+    if active is greater than 0
+        set active to active minus 1
+        set completed to completed plus 1
+    end
+
+    refresh with
+end
+
+function do_risk
+    if active is greater than 0
+        set active to active minus 1
+        set blocked to blocked plus 1
+    else if backlog is greater than 0
+        set backlog to backlog minus 1
+        set blocked to blocked plus 1
+    end
+
+    refresh with
+end
+
+function do_recover
+    if blocked is greater than 0
+        set blocked to blocked minus 1
+        set active to active plus 1
+    end
+
+    refresh with
+end
+
+function do_reset
+    set day to 1
+    set committed_scope to 42
+    set completed to 18
+    set active to 9
+    set blocked to 3
+    set backlog to 12
+    refresh with
+end
+
+refresh with
+window_show with win
+window_set_topmost with win and true
+window_focus with win
+window_set_topmost with win and false
+
+print text "Delivery Command Center GUI started."
+print text "A desktop window should now be visible."
+print text "Close the window or press the Close button to exit."
+
+set running to true
+while running
+    window_update with win
+
+    set events to event_poll with win
+    for each evt in events
+        if evt["type"] is equal to "button_click"
+            set action to evt["command_name"]
+
+            if action is equal to "advance"
+                do_advance with
+            else if action is equal to "risk"
+                do_risk with
+            else if action is equal to "recover"
+                do_recover with
+            else if action is equal to "reset"
+                do_reset with
+            else if action is equal to "close"
+                set running to false
+            end
+        end
+    end
+
+    if window_is_open with win is equal to false
+        set running to false
+    end
+end

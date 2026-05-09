@@ -2,28 +2,27 @@
 Build System Core
 ==================
 
-Handles compilation, incremental builds, and caching.
+Legacy build-system compatibility surface.
+
+The public datatypes in this module remain available for older callers, but
+compilation is routed through the maintained compiler façade rather than a
+duplicate LLVM-only pipeline.
 """
 
 import os
-import sys
 import hashlib
-import json
 import pickle
 import subprocess
 from pathlib import Path
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Set, Any
+from typing import Dict, List, Optional, Set
 from datetime import datetime
 
-# Add src to path for imports
-sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
-
+from nexuslang.compiler import CompilationTarget, Compiler, CompilerOptions
 from nexuslang.parser.lexer import Lexer
 from nexuslang.parser.parser import Parser
-from nexuslang.compiler.backends.llvm_ir_generator import LLVMIRGenerator, LLVM_AVAILABLE
-from nexuslang.optimizer import OptimizationLevel, create_optimization_pipeline
-from .project import Project, Target
+from nexuslang.parser.ast import Program
+from .project import Project
 
 
 @dataclass
@@ -143,7 +142,7 @@ class BuildCache:
 
 
 class Builder:
-    """Builds NexusLang projects."""
+    """Compatibility builder delegating execution to maintained compiler paths."""
     
     def __init__(self, project: Project, config: BuildConfig):
         self.project = project
@@ -222,83 +221,68 @@ class Builder:
         debug: bool = False,
         target_type: str = "executable",
     ) -> bool:
-        """Compile a single NexusLang file."""
+        """Compile a single NexusLang file via the maintained compiler façade."""
         try:
-            # Read source
-            with open(source_path, 'r') as f:
-                source_code = f.read()
-            
-            if self.config.verbose:
-                print(f"  Lexing {source_path.name}...")
-            
-            # Lex
-            lexer = Lexer(source_code)
-            lexer.filename = str(source_path)
-            tokens = lexer.tokenize()
-            
-            if self.config.verbose:
-                print(f"  Parsing {source_path.name}...")
-            
-            # Parse
-            parser = Parser(tokens)
-            parser.filename = str(source_path)
-            ast = parser.parse()
-            
-            if self.config.verbose:
-                print(f"  Generating LLVM IR...")
-            
-            # Generate LLVM IR
-            generator = LLVMIRGenerator()
-            llvm_ir = generator.generate(ast, source_file=str(source_path), debug_info=debug)
-            
-            # Apply optimizations
-            if optimization > 0:
-                if self.config.verbose:
-                    print(f"  Optimizing (O{optimization})...")
-                # Optimizations are applied at compile time via opt_level parameter
-            
-            # Add debug info if requested
-            # Debug info is generated in generate() call above
-            
-            # Ensure output directory exists
+            ast = self._parse_source(source_path)
+            compiler = self._create_compiler(optimization=optimization, debug=debug)
+
             output_path.parent.mkdir(parents=True, exist_ok=True)
-            
+
             if target_type == "module":
-                # Just save LLVM IR
                 ir_path = output_path.with_suffix('.ll')
                 if self.config.verbose:
                     print(f"  Writing IR to {ir_path}...")
-                with open(ir_path, 'w') as f:
-                    f.write(llvm_ir)
-                return True
-            
-            # Compile to executable/library
-            if self.config.verbose:
-                print(f"  Compiling to {target_type}...")
-            
-            # Save IR to temporary file
-            import tempfile
-            with tempfile.NamedTemporaryFile(mode='w', suffix='.ll', delete=False) as f:
-                temp_ll = f.name
-                f.write(llvm_ir)
-            
-            try:
-                # Compile to executable
-                success = generator.compile_to_executable(str(output_path), opt_level=optimization)
+                success, _ = compiler.compile(ast, CompilationTarget.LLVM_IR, str(ir_path))
                 return success
-            finally:
-                # Clean up temporary file
-                if os.path.exists(temp_ll):
-                    os.remove(temp_ll)
-            
-            return True
-            
+
+            if target_type == "executable":
+                if self.config.verbose:
+                    print(f"  Compiling to {target_type}...")
+                return compiler.compile_and_link(ast, CompilationTarget.C, str(output_path))
+
+            if target_type == "library":
+                raise NotImplementedError(
+                    "Legacy build_system.Builder library builds are no longer backed by "
+                    "the removed standalone LLVM pipeline. Use the maintained tooling "
+                    "build path when centralized archive support is implemented."
+                )
+
+            raise ValueError(f"Unsupported legacy build target type: {target_type}")
+
+        except NotImplementedError:
+            raise
         except Exception as e:
             print(f"Error compiling {source_path}: {e}")
             if self.config.verbose:
                 import traceback
                 traceback.print_exc()
             return False
+
+    def _parse_source(self, source_path: Path) -> Program:
+        """Parse a source file into an AST using the maintained frontend."""
+        with open(source_path, 'r') as f:
+            source_code = f.read()
+
+        if self.config.verbose:
+            print(f"  Lexing {source_path.name}...")
+
+        lexer = Lexer(source_code)
+        lexer.filename = str(source_path)
+        tokens = lexer.tokenize()
+
+        if self.config.verbose:
+            print(f"  Parsing {source_path.name}...")
+
+        parser = Parser(tokens)
+        parser.filename = str(source_path)
+        return parser.parse()
+
+    def _create_compiler(self, *, optimization: int, debug: bool) -> Compiler:
+        """Create compiler configured for the legacy builder compatibility flow."""
+        options = CompilerOptions()
+        options.optimization_level = optimization
+        options.debug_info = debug
+        return Compiler(options)
     
     def build_all(self) -> bool:
         """Build all targets in the project."""

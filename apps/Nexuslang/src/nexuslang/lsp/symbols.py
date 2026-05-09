@@ -50,7 +50,12 @@ class SymbolProvider:
             
             self.symbol_tables[uri] = symbol_table
             return symbol_table
-        except Exception:
+        except (AttributeError, TypeError, ValueError, KeyError) as e:
+            # Symbol extraction failed; log and return stale cache
+            import logging
+            logging.warning(
+                f"Symbol extraction failed for {uri}: {e}. Returning stale symbol table from cache."
+            )
             return self.symbol_tables.get(uri, None)
     
     def _symbol_kind_to_lsp(self, kind: SymbolKind) -> int:

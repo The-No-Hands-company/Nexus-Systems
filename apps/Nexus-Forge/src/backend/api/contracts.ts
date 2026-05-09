@@ -22,7 +22,7 @@ export function listResponse<T>(items: T[], note?: string): ApiListResponse<T> {
   return {
     items,
     nextCursor: null,
-    note,
+    ...(note !== undefined ? { note } : {}),
   };
 }
 
@@ -30,6 +30,6 @@ export function entityResponse<T>(entity: T, note?: string): ApiEntityResponse<T
   return {
     ok: true,
     entity,
-    note,
+    ...(note !== undefined ? { note } : {}),
   };
 }

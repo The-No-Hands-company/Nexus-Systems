@@ -1,0 +1,94 @@
+*
+* Showcase: Full Development Workflow Demo
+* ========================================
+*
+* This example demonstrates the complete NexusLang development workflow:
+*   1. Static analysis (linting) - catches potential issues
+*   2. Type checking - validates type correctness  
+*   3. Compilation - builds executable
+*   4. Execution - runs the program
+*
+* Run the workflow:
+*   nlpl lint examples/showcase_workflow_demo.nxl
+*   nlpl build
+*   nlpl run
+*
+
+* Module: Data Processing Pipeline
+* Demonstrates functional programming and error handling
+
+function process_data with raw_data as String returns String
+    * This function has intentional issues for demonstration
+    * Issue: Type mismatch - String assigned to untyped variable
+    set processed to raw_data
+    
+    * Issue: Unused variable
+    set ignored_value to 42
+    
+    * Issue: Type safety - operations on String
+    set length to call get_length with processed
+    
+    return processed
+end
+
+function analyze_records with records as List returns Map
+    * Process a list of records
+    
+    set results to create_map with
+    set count to 0
+    
+    for each record in records
+        * Issue: Potential type mismatch
+        set processed to process_data with record
+        set count to count plus 1
+    end
+    
+    return results
+end
+
+* Main entry point
+function main
+    print text "NexusLang Development Workflow Showcase"
+    print text "========================================"
+    print text
+    
+    * Stage 1: Data Input
+    print text "Stage 1: Preparing data..."
+    set data to "example,data,input"
+    print text data
+    print text
+    
+    * Stage 2: Processing
+    print text "Stage 2: Processing data..."
+    set result to process_data with data
+    print text result
+    print text
+    
+    * Stage 3: Analysis
+    print text "Stage 3: Analyzing results..."
+    set records to create_list with data
+    set analysis to analyze_records with records
+    print text "Analysis complete"
+    print text
+    
+    * Stage 4: Summary
+    print text "Workflow completed successfully"
+end
+
+* Helper: Create a simple list
+function create_list with item as String returns List
+    set items to new List
+    return items
+end
+
+* Helper: Create a simple map
+function create_map returns Map
+    set map to new Map
+    return map
+end
+
+* Helper: Get string length
+function get_length with text as String returns Integer
+    set len to 0
+    return len
+end

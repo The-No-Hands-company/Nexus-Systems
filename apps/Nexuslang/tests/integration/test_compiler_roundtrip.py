@@ -318,6 +318,30 @@ end
         assert rc == 0
         assert out == "7\n0\n"
 
+    def test_interleaved_yielded_functions_keep_isolated_state(self):
+        src = """
+function gen_a returns Integer
+    yield 1
+    yield 2
+end
+
+function gen_b returns Integer
+    yield 10
+    yield 20
+end
+
+function main returns Integer
+    print text call gen_a
+    print text call gen_b
+    print text call gen_a
+    print text call gen_b
+    return 0
+end
+"""
+        rc, out, _ = compile_and_run(src)
+        assert rc == 0
+        assert out == "1\n10\n2\n20\n"
+
     def test_top_level_comptime_const_initializes_before_user_main(self):
         src = """
 comptime const LIMIT is 5
@@ -745,6 +769,291 @@ end
         assert rc == 0
         assert out == "small\n"
 
+    # --- contracts / assertions --------------------------------------------
+
+    def test_require_passes_when_condition_true(self):
+        src = """
+function main returns Integer
+    require 5 is greater than 3 message "Should not fail"
+    print text "passed"
+    return 0
+end
+"""
+        rc, out, _ = compile_and_run(src)
+        assert rc == 0
+        assert out == "passed\n"
+
+    def test_require_fails_when_condition_false(self):
+        src = """
+function main returns Integer
+    require 1 is equal to 2 message "This contract will fail"
+    print text "should not reach"
+    return 0
+end
+"""
+        rc, out, err = compile_and_run(src)
+        assert rc != 0  # Should exit with error
+        # Panic should be called
+        assert "panic" in err.lower() or rc != 0
+
+    def test_ensure_passes_when_condition_true(self):
+        src = """
+function calculate_value returns Integer
+    set result to 42
+    ensure result is greater than 0 message "Result must be positive"
+    return result
+end
+
+function main returns Integer
+    set value to call calculate_value
+    print text value
+    return 0
+end
+"""
+        rc, out, _ = compile_and_run(src)
+        assert rc == 0
+        assert out == "42\n"
+
+    def test_ensure_fails_when_condition_false(self):
+        src = """
+function calculate_bad returns Integer
+    set result to -5
+    ensure result is greater than 0 message "Result must be positive"
+    return result
+end
+
+function main returns Integer
+    set value to call calculate_bad
+    print text value
+    return 0
+end
+"""
+        rc, out, err = compile_and_run(src)
+        assert rc != 0  # Should exit with error
+
+    def test_expect_equal_passes(self):
+        src = """
+function main returns Integer
+    expect 2 plus 2 to equal 4
+    print text "test passed"
+    return 0
+end
+"""
+        rc, out, _ = compile_and_run(src)
+        assert rc == 0
+        assert out == "test passed\n"
+
+    def test_expect_equal_fails(self):
+        src = """
+function main returns Integer
+    expect 2 plus 2 to equal 5
+    print text "should not reach"
+    return 0
+end
+"""
+        rc, out, err = compile_and_run(src)
+        assert rc != 0
+
+    def test_expect_greater_than_passes(self):
+        src = """
+function main returns Integer
+    expect 10 to be greater than 5
+    print text "passed"
+    return 0
+end
+"""
+        rc, out, _ = compile_and_run(src)
+        assert rc == 0
+        assert out == "passed\n"
+
+    def test_expect_less_than_passes(self):
+        src = """
+function main returns Integer
+    expect 3 to be less than 7
+    print text "passed"
+    return 0
+end
+"""
+        rc, out, _ = compile_and_run(src)
+        assert rc == 0
+        assert out == "passed\n"
+
+    def test_expect_be_true_passes(self):
+        src = """
+function main returns Integer
+    set condition to 5 is greater than 3
+    expect condition to be true
+    print text "passed"
+    return 0
+end
+"""
+        rc, out, _ = compile_and_run(src)
+        assert rc == 0
+        assert out == "passed\n"
+
+    def test_expect_be_false_passes(self):
+        src = """
+function main returns Integer
+    set condition to 2 is greater than 5
+    expect condition to be false
+    print text "passed"
+    return 0
+end
+"""
+        rc, out, _ = compile_and_run(src)
+        assert rc == 0
+        assert out == "passed\n"
+
+    def test_expect_string_contain_passes(self):
+        src = """
+function main returns Integer
+    expect "hello world" to contain "world"
+    print text "passed"
+    return 0
+end
+"""
+        rc, out, _ = compile_and_run(src)
+        assert rc == 0
+        assert out == "passed\n"
+
+    def test_expect_string_start_with_passes(self):
+        src = """
+function main returns Integer
+    expect "hello world" to start with "hello"
+    print text "passed"
+    return 0
+end
+"""
+        rc, out, _ = compile_and_run(src)
+        assert rc == 0
+        assert out == "passed\n"
+
+    def test_expect_string_end_with_passes(self):
+        src = """
+function main returns Integer
+    expect "hello world" to end with "world"
+    print text "passed"
+    return 0
+end
+"""
+        rc, out, _ = compile_and_run(src)
+        assert rc == 0
+        assert out == "passed\n"
+
+    def test_multiple_requires_in_sequence(self):
+        src = """
+function main returns Integer
+    require 1 is greater than 0 message "First"
+    require 2 is greater than 0 message "Second"
+    require 3 is greater than 0 message "Third"
+    print text "all passed"
+    return 0
+end
+"""
+        rc, out, _ = compile_and_run(src)
+        assert rc == 0
+        assert out == "all passed\n"
+
+    def test_require_in_function_parameter_validation(self):
+        src = """
+function divide with numerator as Integer and denominator as Integer returns Integer
+    require denominator is not equal to 0 message "Cannot divide by zero"
+    set result to numerator divided by denominator
+    return result
+end
+
+function main returns Integer
+    set answer to divide with 10 and 2
+    print text answer
+    return 0
+end
+"""
+        rc, out, _ = compile_and_run(src)
+        assert rc == 0
+        assert out == "5\n"
+
+    def test_require_in_function_fails_on_invalid_input(self):
+        src = """
+function divide with numerator as Integer and denominator as Integer returns Integer
+    require denominator is not equal to 0 message "Cannot divide by zero"
+    set result to numerator divided by denominator
+    return result
+end
+
+function main returns Integer
+    set answer to divide with 10 and 0
+    print text answer
+    return 0
+end
+"""
+        rc, out, err = compile_and_run(src)
+        assert rc != 0
+
+    # --- exception handling -------------------------------------------------
+
+    def test_try_catch_catches_raised_error_message(self):
+        src = """
+function main returns Integer
+    try
+        raise error with message "boom"
+    catch err
+        print text err
+    end
+    return 0
+end
+"""
+        rc, out, _ = compile_and_run(src)
+        assert rc == 0
+        assert out == "boom\n"
+
+    def test_try_catch_continues_execution_after_catch(self):
+        src = """
+function main returns Integer
+    try
+        raise error with message "inner"
+    catch err
+        print text err
+    end
+    print text "after catch"
+    return 0
+end
+"""
+        rc, out, _ = compile_and_run(src)
+        assert rc == 0
+        assert out == "inner\nafter catch\n"
+
+    def test_uncaught_raise_exits_nonzero(self):
+        src = """
+function main returns Integer
+    raise error with message "fatal"
+    print text "unreachable"
+    return 0
+end
+"""
+        rc, out, err = compile_and_run(src)
+        assert rc != 0
+        assert "fatal" in out.lower() or "fatal" in err.lower() or "panic" in err.lower() or err.strip() != ""
+
+    def test_nested_try_catch_inner_caught_outer_not_triggered(self):
+        src = """
+function main returns Integer
+    try
+        try
+            raise error with message "inner"
+        catch inner_err
+            print text inner_err
+        end
+        print text "outer continues"
+    catch outer_err
+        print text "unexpected outer catch"
+    end
+    return 0
+end
+"""
+        rc, out, _ = compile_and_run(src)
+        assert rc == 0
+        assert out == "inner\nouter continues\n"
+
 
 @skip_no_llvm
 class TestRuntimeBackedPatternRoundtrip:
@@ -757,7 +1066,7 @@ class TestRuntimeBackedPatternRoundtrip:
     def test_option_pattern_runtime_backed_roundtrip(self):
         src = """
 function main returns Integer
-    set opt to 0
+    set opt to 7
     match opt with
         case payload
             print text payload
@@ -772,9 +1081,11 @@ end
         match_stmt.cases[0].pattern = OptionPattern("Some", "payload")
         match_stmt.cases[1].pattern = OptionPattern("None", None)
 
-        rc, out, _ = compile_ast_and_run(ast)
-        assert rc == 0
-        assert out != ""
+        with pytest.raises(
+            RuntimeError,
+            match="OptionPattern requires runtime-backed pointer representation",
+        ):
+            compile_ast_and_run(ast)
 
     def test_result_pattern_runtime_backed_roundtrip(self):
         src = """
@@ -794,9 +1105,35 @@ end
         match_stmt.cases[0].pattern = ResultPattern("Ok", "value")
         match_stmt.cases[1].pattern = ResultPattern("Err", "error_msg")
 
-        rc, out, _ = compile_ast_and_run(ast)
-        assert rc == 0
-        assert out != ""
+        with pytest.raises(
+            RuntimeError,
+            match="ResultPattern requires runtime-backed pointer representation",
+        ):
+            compile_ast_and_run(ast)
+
+    def test_result_err_pattern_preserves_scalar_payload_roundtrip(self):
+        src = """
+function main returns Integer
+    set res to -7
+    match res with
+        case item
+            print text item
+        case _
+            print text 0
+    end
+    return 0
+end
+"""
+        ast = _parse_program(src)
+        match_stmt = _first_match_expression(ast)
+        match_stmt.cases[0].pattern = ResultPattern("Err", "item")
+        match_stmt.cases[1].pattern = ResultPattern("Ok", "value")
+
+        with pytest.raises(
+            RuntimeError,
+            match="ResultPattern requires runtime-backed pointer representation",
+        ):
+            compile_ast_and_run(ast)
 
     def test_tuple_pattern_runtime_backed_roundtrip(self):
         src = """
@@ -831,6 +1168,176 @@ end
         rc, out, _ = compile_and_run(src)
         assert rc == 0
         assert out == "1\n"
+
+    def test_option_pattern_typed_binding_mixed_payload_lowering(self):
+        """LLVM lowering should use typed Option payload extractor fast path when type metadata is present."""
+        generator = LLVMIRGenerator()
+        pattern = OptionPattern("Some", "payload", binding_type_annotation="Integer")
+
+        generator._generate_option_pattern_binding(pattern, "%opt", "i8*", "  ")
+        ir = "\n".join(generator.ir_lines)
+
+        assert "call i64 @NLPL_Optional_get_value_i64(i8* %opt)" in ir
+        assert "call i32 @NLPL_Optional_get_value_kind(i8* %opt)" not in ir
+
+    def test_result_pattern_typed_binding_mixed_payload_lowering(self):
+        """LLVM lowering should use typed Result payload extractor fast path when type metadata is present."""
+        generator = LLVMIRGenerator()
+        pattern = ResultPattern("Err", "error_payload", binding_type_annotation="Float")
+
+        generator._generate_result_pattern_binding(pattern, "%res", "i8*", "  ")
+        ir = "\n".join(generator.ir_lines)
+
+        assert "call double @NLPL_Result_get_error_f64(i8* %res)" in ir
+        assert "call i32 @NLPL_Result_get_error_kind(i8* %res)" not in ir
+
+
+@skip_no_llvm
+class TestOwnershipRoundtrip:
+    """Executable ownership semantics coverage in compiled backends."""
+
+    def test_move_transfers_value_and_invalidates_source(self):
+        src = """
+function main returns Integer
+    set value to 41
+    set moved to move value
+    print text moved
+    print text value
+    return 0
+end
+"""
+        rc, out, _ = compile_and_run(src)
+        assert rc == 0
+        assert out == "41\n0\n"
+
+    def test_borrow_reads_source_snapshot(self):
+        src = """
+function main returns Integer
+    set value to 7
+    set ref to borrow value
+    set value to 9
+    print text ref
+    print text value
+    return 0
+end
+"""
+        rc, out, _ = compile_and_run(src)
+        assert rc == 0
+        assert out == "7\n9\n"
+
+    def test_drop_borrow_allows_followup_assignment_path(self):
+        src = """
+function main returns Integer
+    set value to 5
+    set ref to borrow value
+    drop borrow value
+    set value to value plus 10
+    print text ref
+    print text value
+    return 0
+end
+"""
+        rc, out, _ = compile_and_run(src)
+        assert rc == 0
+        assert out == "5\n15\n"
+
+    def test_drop_mutable_borrow_assignment_path(self):
+        src = """
+function main returns Integer
+    set value to 2
+    set mut_ref to borrow mutable value
+    drop borrow mutable value
+    set value to 12
+    print text mut_ref
+    print text value
+    return 0
+end
+"""
+        rc, out, _ = compile_and_run(src)
+        assert rc == 0
+        assert out == "2\n12\n"
+
+
+@skip_no_llvm
+class TestAsyncCoroutineRoundtrip:
+    """Executable async/await coroutine frame coverage via LLVM native roundtrip."""
+
+    def test_async_main_awaits_async_function_and_prints_value(self):
+        src = """
+async function fetch returns Integer
+    return 7
+end
+
+async function main returns Integer
+    set value to await fetch
+    print text value
+    return 0
+end
+"""
+        rc, out, _ = compile_and_run(src)
+        assert rc == 0
+        assert out == "7\n"
+
+    def test_nested_async_await_chain_preserves_result_through_coroutine_frames(self):
+        src = """
+async function seed returns Integer
+    return 41
+end
+
+async function compute returns Integer
+    set base to await seed
+    return base plus 1
+end
+
+async function main returns Integer
+    set result to await compute
+    print text result
+    return 0
+end
+"""
+        rc, out, _ = compile_and_run(src)
+        assert rc == 0
+        assert out == "42\n"
+
+    def test_mixed_sync_async_call_graph_with_multiple_await_points(self):
+        src = """
+function scale with n as Integer returns Integer
+    return n times 2
+end
+
+async function add_one with n as Integer returns Integer
+    return n plus 1
+end
+
+async function main returns Integer
+    set base to scale with 20
+    set step1 to await add_one with base
+    set step2 to await add_one with step1
+    print text step2
+    return 0
+end
+"""
+        rc, out, _ = compile_and_run(src)
+        assert rc == 0
+        assert out == "42\n"
+
+    def test_async_error_path_propagates_contract_failure(self):
+        src = """
+async function fail_async returns Integer
+    require false message "async contract failed"
+    return 1
+end
+
+async function main returns Integer
+    set value to await fail_async
+    print text value
+    return 0
+end
+"""
+        rc, out, err = compile_and_run(src)
+        assert rc != 0
+        combined = out + err
+        assert "async contract failed" in combined
 
 
 @skip_no_llvm

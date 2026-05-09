@@ -383,7 +383,11 @@ class TestFFICallTracer:
             return a // b
 
         wrapped = self.tracer.wrap_ctypes_function("divide", divide)
-        wrapped(0, 10)
+        with pytest.warns(
+            UserWarning,
+            match=r"FFI assertion 'no_zero' \(post\) failed on 'divide': result is zero",
+        ):
+            wrapped(0, 10)
         rec = self.tracer.records[0]
         assert not rec.post_assertions_passed
 
@@ -397,7 +401,11 @@ class TestFFICallTracer:
             return x
 
         wrapped = self.tracer.wrap_ctypes_function("sqrt", sqrt_dummy)
-        wrapped(-1)
+        with pytest.warns(
+            UserWarning,
+            match=r"FFI assertion 'no_negative' \(pre\) failed on 'sqrt': negative input",
+        ):
+            wrapped(-1)
         rec = self.tracer.records[0]
         assert not rec.pre_assertions_passed
 

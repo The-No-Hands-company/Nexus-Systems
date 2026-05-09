@@ -192,6 +192,8 @@ class TestRunner:
         Suppress per-test output (only totals).
     """
 
+    __test__ = False
+
     def __init__(
         self,
         workers: int = 1,

@@ -185,3 +185,48 @@ def test_nlpllint_rejects_invalid_analyzer_value_type(tmp_path, monkeypatch, cap
 
     err = capsys.readouterr().err
     assert "Analyzer config key 'security' must be a boolean" in err
+
+
+def test_nlpllint_reports_type_mismatch_when_types_checker_enabled(tmp_path, monkeypatch, capsys):
+    source_file = tmp_path / "types.nxl"
+    source_file.write_text(
+        'set count to "forty-two" as Integer\n',
+        encoding="utf-8",
+    )
+
+    config_file = tmp_path / "nlpllint.json"
+    config_file.write_text(
+        json.dumps(
+            {
+                "json": True,
+                "analyzer": {
+                    "memory": False,
+                    "null": False,
+                    "resources": False,
+                    "init": False,
+                    "types": True,
+                    "dead_code": False,
+                    "style": False,
+                    "performance": False,
+                    "security": False,
+                    "data_flow": False,
+                    "control_flow": False,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["nlpllint", str(source_file), "--config", str(config_file)],
+    )
+
+    exit_code = nlpllint.main()
+    assert exit_code is None
+
+    out = capsys.readouterr().out
+    payload = json.loads(out)
+    issues = payload["files"][0]["issues"]
+    assert any(issue["code"] == "T001" for issue in issues)

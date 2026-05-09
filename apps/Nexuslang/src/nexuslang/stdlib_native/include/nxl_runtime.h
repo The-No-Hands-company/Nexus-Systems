@@ -32,6 +32,57 @@ void    nxl_assert(int condition, const char *msg);
 /* Execute body(data[i]) in parallel over i in [0, count), then join workers. */
 void    nxl_parallel_for_i64(int64_t *data, int64_t count, void (*body)(int64_t), int64_t workers);
 
+/* Same as nxl_parallel_for_i64 but body receives a caller-supplied context pointer.
+ * ctx is passed unmodified to every invocation; body(data[i], ctx). */
+void    nxl_parallel_for_ctx_i64(int64_t *data, int64_t count, void (*body)(int64_t, void *), void *ctx, int64_t workers);
+
+/* ===========================================================================
+ * Option/Result runtime helper ABI (typed payload extraction)
+ * =========================================================================*/
+
+typedef enum NLPLValueKind {
+	NLPL_VALUE_KIND_NONE = 0,
+	NLPL_VALUE_KIND_I64 = 1,
+	NLPL_VALUE_KIND_F64 = 2,
+	NLPL_VALUE_KIND_PTR = 3
+} NLPLValueKind;
+
+typedef union NLPLValuePayload {
+	int64_t i64;
+	double f64;
+	void *ptr;
+} NLPLValuePayload;
+
+typedef struct NLPLOptionalValue {
+	int has_value;
+	NLPLValueKind value_kind;
+	NLPLValuePayload value;
+} NLPLOptionalValue;
+
+typedef struct NLPLResultValue {
+	int is_ok;
+	NLPLValueKind value_kind;
+	NLPLValuePayload value;
+	NLPLValueKind error_kind;
+	NLPLValuePayload error;
+} NLPLResultValue;
+
+int     NLPL_Optional_has_value(void *opt);
+int32_t NLPL_Optional_get_value_kind(void *opt);
+int64_t NLPL_Optional_get_value_i64(void *opt);
+double  NLPL_Optional_get_value_f64(void *opt);
+void   *NLPL_Optional_get_value_ptr(void *opt);
+
+int     NLPL_Result_is_ok(void *res);
+int32_t NLPL_Result_get_value_kind(void *res);
+int64_t NLPL_Result_get_value_i64(void *res);
+double  NLPL_Result_get_value_f64(void *res);
+int32_t NLPL_Result_get_error_kind(void *res);
+int64_t NLPL_Result_get_error_i64(void *res);
+double  NLPL_Result_get_error_f64(void *res);
+void   *NLPL_Result_get_value_ptr(void *res);
+void   *NLPL_Result_get_error_ptr(void *res);
+
 /* ===========================================================================
  * Print helpers
  * =========================================================================*/

@@ -473,8 +473,8 @@ class NativeFunctionJIT:
         Build a Python callable that bridges Python values to/from the
         native function's C ABI.
 
-        Only integer-parameter, integer-returning functions are currently
-        supported.  Returns None if the function uses unsupported types.
+        Integer, Float, and Boolean scalars are supported.  Returns None
+        if the function uses unsupported types.
         """
         # Inspect parameter types
         params = getattr(func_def, "parameters", []) or []
@@ -495,19 +495,20 @@ class NativeFunctionJIT:
             if p_type_name in ("Integer", "int", ""):
                 ctypes_argtypes.append(ctypes.c_int64)
             elif p_type_name in ("Float", "float"):
-                # Float support: not yet implemented in IR generator
-                return None
+                ctypes_argtypes.append(ctypes.c_double)
             elif p_type_name in ("Boolean", "bool"):
-                ctypes_argtypes.append(ctypes.c_int64)
+                ctypes_argtypes.append(ctypes.c_bool)
             else:
                 # Unsupported type (String, List, etc.) — cannot inline
                 return None
 
         # Determine return type
-        if return_type_name in ("Integer", "int", "", "Boolean", "bool"):
+        if return_type_name in ("Integer", "int", ""):
             ctypes_restype = ctypes.c_int64
+        elif return_type_name in ("Boolean", "bool"):
+            ctypes_restype = ctypes.c_bool
         elif return_type_name in ("Float", "float"):
-            return None  # Float return not yet implemented
+            ctypes_restype = ctypes.c_double
         else:
             return None
 
@@ -519,11 +520,19 @@ class NativeFunctionJIT:
             for arg, ctype in zip(args, ctypes_argtypes):
                 if ctype is ctypes.c_int64:
                     c_args.append(int(arg))
+                elif ctype is ctypes.c_double:
+                    c_args.append(float(arg))
+                elif ctype is ctypes.c_bool:
+                    c_args.append(bool(arg))
                 else:
                     c_args.append(arg)
             result = native_fn(*c_args)
             if ctypes_restype is ctypes.c_int64:
                 return int(result)
+            if ctypes_restype is ctypes.c_double:
+                return float(result)
+            if ctypes_restype is ctypes.c_bool:
+                return bool(result)
             return result
 
         return _wrapper

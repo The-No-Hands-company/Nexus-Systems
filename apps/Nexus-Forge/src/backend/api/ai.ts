@@ -1,9 +1,8 @@
-import type { Elysia } from "elysia";
-import { reviewPullRequest } from "../ai/review";
-import { generateIssuePR } from "../ai/issue";
 import { createDeployPayload } from "../ai/deploy";
+import { generateIssuePR } from "../ai/issue";
+import { reviewPullRequest } from "../ai/review";
 
-export function registerAIRoutes(app: Elysia) {
+export function registerAIRoutes(app: ForgeRouteApp) {
   app.post("/api/ai/review", async ({ body }) => {
     const payload = body as { repo: string; prId: string; diff: string };
     return reviewPullRequest(payload.repo, payload.prId, payload.diff || "");

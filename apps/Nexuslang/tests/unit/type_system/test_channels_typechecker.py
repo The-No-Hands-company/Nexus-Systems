@@ -8,7 +8,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..', 'sr
 from nexuslang.parser.lexer import Lexer
 from nexuslang.parser.parser import Parser
 from nexuslang.typesystem.typechecker import TypeChecker
-from nexuslang.typesystem.types import ChannelType, INTEGER_TYPE
+from nexuslang.typesystem.types import ANY_TYPE, ChannelType, INTEGER_TYPE, get_type_by_name
 
 
 def _parse(code: str):
@@ -119,3 +119,10 @@ def test_typechecker_rejects_close_on_non_channel():
     errors = checker.check_program(ast)
 
     assert any("Close target must be a channel" in err for err in errors)
+
+
+def test_get_type_by_name_exact_channel_alias_returns_channel_type():
+    channel_type = get_type_by_name("Channel")
+
+    assert isinstance(channel_type, ChannelType)
+    assert channel_type.payload_type == ANY_TYPE

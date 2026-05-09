@@ -1,4 +1,4 @@
-export function registerComplianceRoutes(app: any) {
+export function registerComplianceRoutes(app: ForgeRouteApp) {
   app.get("/api/compliance/frameworks", async () => ({
     frameworks: ["SOC2", "ISO27001", "GDPR", "HIPAA"],
     note: "Compliance frameworks are stubbed.",
@@ -14,7 +14,7 @@ export function registerComplianceRoutes(app: any) {
     note: "Evidence collection is stubbed.",
   }));
 
-  app.post("/api/compliance/audits", async ({ body }: any) => ({
+  app.post("/api/compliance/audits", async ({ body }) => ({
     ok: true,
     auditId: "audit-stub",
     scope: body || {},

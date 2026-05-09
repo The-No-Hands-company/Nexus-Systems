@@ -289,7 +289,7 @@ class DataFlowChecker(BaseChecker):
             self._walk(getattr(node, "operand", None), scope, depth + 1)
 
         else:
-            for child in self._iter_children(node):
+            for child in self.iter_child_nodes(node):
                 self._walk(child, scope, depth + 1)
 
     def _walk_block(self, stmts: List[Any], scope: _Scope, depth: int) -> None:
@@ -359,14 +359,3 @@ class DataFlowChecker(BaseChecker):
         if nt in ("Name", "Identifier", "VariableRef", "NameExpression"):
             return getattr(node, "name", None) or getattr(node, "value", None)
         return None
-
-    def _iter_children(self, node: Any):
-        if not hasattr(node, "__dict__"):
-            return
-        for k, v in vars(node).items():
-            if k.startswith("_"):
-                continue
-            if isinstance(v, list):
-                yield from [i for i in v if i is not None and hasattr(i, "__dict__")]
-            elif hasattr(v, "__dict__"):
-                yield v

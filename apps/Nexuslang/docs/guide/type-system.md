@@ -123,3 +123,38 @@ Explicit type conversion functions:
 3. Implement a type checker that validates type compatibility
 4. Add type inference capabilities
 5. Integrate type checking into the interpreter
+
+## Ownership and Borrow Semantics
+
+NexusLang tracks variable ownership to eliminate data races and dangling
+references without a garbage collector.
+
+### Core Rules
+
+- Every value has exactly one owner at a time.
+- Ownership is transferred (moved) on assignment unless a borrow is used.
+- There can be any number of simultaneous immutable borrows, **or** exactly
+    one mutable borrow, but not both at the same time.
+- Borrows must not outlive the owner.
+
+### Syntax Summary
+
+| Operation | Syntax |
+|---|---|
+| Move ownership | `set y to move x` |
+| Immutable borrow | `set r to borrow x` |
+| Mutable borrow | `set rw to borrow mutable x` |
+| Borrow with lifetime | `set r to borrow x with lifetime a` |
+| Release borrow early | `drop borrow x` / `drop borrow mutable x` |
+| Reference count (single-threaded) | `set p to rc Integer : 42` |
+| Reference count (concurrent) | `set ap to arc String : "hello"` |
+| Downgrade to weak | `set w to downgrade p` |
+| Upgrade from weak | `set q to upgrade w` |
+
+### Compiler Enforcement
+
+The `BorrowChecker` and `LifetimeChecker` passes run inside the `TypeChecker`
+pipeline (in that order) and emit structured `Ownership error: ...` diagnostics
+with `relatedInformation` ranges pointing at conflicting sites.
+Errors halt further ownership passes when `stop_on_ownership_errors` is set,
+and warnings are collected in a separate channel so they never suppress type errors.

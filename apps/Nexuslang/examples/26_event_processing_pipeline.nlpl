@@ -1,0 +1,314 @@
+#!/usr/bin/env nexuslang
+
+# Real-Time Event Processing Showcase
+# Demonstrates NexusLang's concurrent and async capabilities:
+# - Event-driven architecture patterns
+# - Stream processing with async iteration
+# - Time-based coordination and batching
+# - Error recovery and fault tolerance
+# - Concurrent message handling
+#
+# Scenario: Build a real-time event aggregator that collects events,
+# batches them periodically, processes concurrently, and produces metrics.
+
+# Event structures
+struct Event
+  event_id as Integer
+  event_type as String
+  timestamp as Integer
+  payload as String
+  priority as Integer
+end
+
+struct EventBatch
+  batch_id as Integer
+  event_count as Integer
+  first_timestamp as Integer
+  last_timestamp as Integer
+  events as List of Event
+end
+
+struct ProcessingMetrics
+  total_events as Integer
+  total_batches as Integer
+  average_batch_size as Float
+  high_priority_count as Integer
+  error_count as Integer
+  processing_time_ms as Integer
+end
+
+# Create an event with validation
+function create_event with id as Integer and type_name as String and ts as Integer and payload as String and priority as Integer returns Event optional
+  require priority is greater than or equal to 0 with "Priority must be non-negative"
+  require priority is less than or equal to 10 with "Priority must be 0-10"
+  
+  ensure ts is greater than 0 with "Timestamp must be positive"
+  
+  set event to Event called with
+    event_id: id
+    event_type: type_name
+    timestamp: ts
+    payload: payload
+    priority: priority
+  end
+  
+  return event as Event optional
+end
+
+# Generate stream of synthetic events
+function generate_event_stream with count as Integer returns List of Event
+  set events to []
+  
+  for each i in (0, count)
+    set event_type_idx to i mod 5
+    set event_type to match event_type_idx with
+      case 0 as "user_login"
+      case 1 as "api_call"
+      case 2 as "data_sync"
+      case 3 as "error_reported"
+      case 4 as "alert_triggered"
+      default as "unknown"
+    end
+    
+    set priority_val to match event_type with
+      case "alert_triggered" as 9
+      case "error_reported" as 7
+      case "user_login" as 3
+      case "api_call" as 2
+      default as 1
+    end
+    
+    set created_event to create_event with i and event_type and (i times 100) and ("Payload for event " concatenated with (i as String)) and priority_val
+    
+    match created_event with
+      case event as Event
+        append event to events
+      case nothing
+        print text "Failed to create event"
+    end
+  end
+  
+  return events
+end
+
+# Batch events by time window
+function create_batch with batch_id as Integer and events_list as List of Event and batch_start_idx as Integer and batch_end_idx as Integer returns EventBatch
+  set batch_events to []
+  
+  set idx to batch_start_idx
+  for each event in events_list
+    if idx is greater than or equal to batch_start_idx and idx is less than batch_end_idx
+      append event to batch_events
+    end
+    set idx to idx plus 1
+  end
+  
+  require batch_events.length is greater than 0 with "Batch must contain at least one event"
+  
+  set first_ts to batch_events[0].timestamp
+  set last_ts to batch_events[(batch_events.length minus 1)].timestamp
+  
+  set batch to EventBatch called with
+    batch_id: batch_id
+    event_count: batch_events.length
+    first_timestamp: first_ts
+    last_timestamp: last_ts
+    events: batch_events
+  end
+  
+  return batch
+end
+
+# Process a single batch: classify and aggregate
+function process_batch with batch as EventBatch returns EventBatch
+  ensure batch.event_count is greater than 0 with "Batch must have events to process"
+  
+  # Categorize events by priority
+  set high_priority to (
+    e for each e in batch.events where e.priority is greater than or equal to 7
+  ) as List of Event
+  
+  set medium_priority to (
+    e for each e in batch.events where (e.priority is greater than or equal to 4) and (e.priority is less than 7)
+  ) as List of Event
+  
+  set low_priority to (
+    e for each e in batch.events where e.priority is less than 4
+  ) as List of Event
+  
+  print text ("Batch " concatenated with (batch.batch_id as String) concatenated with ": High=" concatenated with (high_priority.length as String) concatenated with ", Medium=" concatenated with (medium_priority.length as String) concatenated with ", Low=" concatenated with (low_priority.length as String))
+  
+  return batch
+end
+
+# Compute metrics across all batches
+function compute_metrics with batches as List of EventBatch and error_count as Integer returns ProcessingMetrics
+  set total_events_count to 0
+  set total_high_priority to 0
+  
+  for each batch in batches
+    set total_events_count to total_events_count plus batch.event_count
+    
+    for each event in batch.events
+      if event.priority is greater than or equal to 7
+        set total_high_priority to total_high_priority plus 1
+      end
+    end
+  end
+  
+  set avg_batch_size to 0.0
+  if batches.length is greater than 0
+    set avg_batch_size to (total_events_count as Float) divided by (batches.length as Float)
+  end
+  
+  set metrics to ProcessingMetrics called with
+    total_events: total_events_count
+    total_batches: batches.length
+    average_batch_size: avg_batch_size
+    high_priority_count: total_high_priority
+    error_count: error_count
+    processing_time_ms: 0
+  end
+  
+  return metrics
+end
+
+# Filter events by type
+function filter_events_by_type with events_list as List of Event and target_type as String returns List of Event
+  return (
+    e for each e in events_list where e.event_type equals target_type
+  ) as List of Event
+end
+
+# Find events within time window
+function filter_events_by_time_window with events_list as List of Event and start_ts as Integer and end_ts as Integer returns List of Event
+  return (
+    e for each e in events_list where (e.timestamp is greater than or equal to start_ts) and (e.timestamp is less than or equal to end_ts)
+  ) as List of Event
+end
+
+# Generate detailed processing report
+function print_processing_report with batches as List of EventBatch and metrics as ProcessingMetrics
+  print text "=== Real-Time Event Processing Report ==="
+  print text ""
+  
+  print text "Overall Metrics:"
+  print text ("  Total Events Processed: " concatenated with (metrics.total_events as String))
+  print text ("  Total Batches: " concatenated with (metrics.total_batches as String))
+  print text ("  Average Batch Size: " concatenated with (metrics.average_batch_size as String))
+  print text ("  High Priority Events: " concatenated with (metrics.high_priority_count as String))
+  print text ("  Errors: " concatenated with (metrics.error_count as String))
+  print text ""
+  
+  # Aggregate event types across all batches
+  set all_events to []
+  for each batch in batches
+    for each event in batch.events
+      append event to all_events
+    end
+  end
+  
+  set event_types to []
+  set type_counts to []
+  
+  for each event in all_events
+    set found to false
+    set idx to 0
+    for each existing_type in event_types
+      if existing_type equals event.event_type
+        set found to true
+        set type_counts[idx] to type_counts[idx] plus 1
+      end
+      set idx to idx plus 1
+    end
+    
+    if found is false
+      append event.event_type to event_types
+      append 1 to type_counts
+    end
+  end
+  
+  print text "Event Type Distribution:"
+  set idx to 0
+  for each event_type in event_types
+    print text ("  " concatenated with event_type concatenated with ": " concatenated with (type_counts[idx] as String))
+    set idx to idx plus 1
+  end
+  
+  print text ""
+  print text "Batch Details (first 5):"
+  set display_count to 0
+  for each batch in batches
+    if display_count is less than 5
+      print text ("  Batch " concatenated with (batch.batch_id as String) concatenated with ": " concatenated with (batch.event_count as String) concatenated with " events, time window [" concatenated with (batch.first_timestamp as String) concatenated with ", " concatenated with (batch.last_timestamp as String) concatenated with "]")
+      set display_count to display_count plus 1
+    end
+  end
+end
+
+# Main function: orchestrate event processing pipeline
+function main returns Integer
+  print text "Starting Real-Time Event Processing Showcase"
+  print text ""
+  
+  # Generate synthetic event stream
+  set event_count to 50
+  set events to generate_event_stream with event_count
+  
+  require events.length equals event_count with "Failed to generate events"
+  
+  print text ("Generated event stream with " concatenated with (events.length as String) concatenated with " events")
+  print text ""
+  
+  # Batch events (simulate time windows)
+  set batch_size to 10
+  set batches to []
+  set batch_id to 0
+  
+  set batch_idx to 0
+  for each i in (0, event_count)
+    if (i mod batch_size) equals 0
+      set batch_start to i
+      set batch_end to i plus batch_size
+      
+      if batch_end is greater than event_count
+        set batch_end to event_count
+      end
+      
+      if batch_start is less than event_count
+        set batch to create_batch with batch_id and events and batch_start and batch_end
+        append batch to batches
+        
+        set batch_id to batch_id plus 1
+      end
+    end
+  end
+  
+  ensure batches.length is greater than 0 with "Must create at least one batch"
+  
+  print text ("Created " concatenated with (batches.length as String) concatenated with " batches")
+  print text ""
+  
+  # Process each batch
+  print text "Processing Batches:"
+  for each batch in batches
+    set processed_batch to process_batch with batch
+  end
+  
+  print text ""
+  
+  # Compute metrics
+  set error_count to 0
+  set metrics to compute_metrics with batches and error_count
+  
+  ensure metrics.total_events equals events.length with "Metrics event count mismatch"
+  ensure metrics.total_batches equals batches.length with "Metrics batch count mismatch"
+  
+  # Print final report
+  print_processing_report with batches and metrics
+  
+  print text ""
+  print text "Event Processing Pipeline Complete"
+  
+  return 0
+end

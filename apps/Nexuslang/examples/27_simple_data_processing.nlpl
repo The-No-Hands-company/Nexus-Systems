@@ -1,0 +1,109 @@
+# Simpler Data Processing Showcase
+# Demonstrates supported NexusLang syntax:
+# - Struct types
+# - Function definitions
+# - Pattern matching
+# - String operations
+# - Mathematical operations
+# - Contract assertions
+# - List operations
+
+struct Person
+  name as String
+  age as Integer
+  salary as Float
+end
+
+struct Team
+  members as List of Person
+  total_salary as Float
+  member_count as Integer
+end
+
+function create_person with name as String and age as Integer and salary as Float returns Person
+  require age is greater than or equal to 0 with "Age must be non-negative"
+  ensure salary is greater than or equal to 0.0 with "Salary must be non-negative"
+  
+  set p to new Person
+  set p.name to name
+  set p.age to age
+  set p.salary to salary
+  
+  return p
+end
+
+function calculate_team_salary with team as Team returns Float
+  require team.member_count is greater than 0 with "Team must have members"
+  
+  set total to 0.0
+  for each member in team.members
+    set total to total plus member.salary
+  end
+  
+  return total
+end
+
+function get_highest_paid with team as Team returns Person
+  if team.member_count equals 0
+    return team.members[0]
+  end
+  
+  set highest to team.members[0]
+  for each member in team.members
+    if member.salary is greater than highest.salary
+      set highest to member
+    end
+  end
+  
+  return highest
+end
+
+function format_person_info with person as Person returns String
+  set age_str to person.age as String
+  set salary_str to person.salary as String
+  return (person.name concatenated with " (age: " concatenated with age_str concatenated with ", salary: " concatenated with salary_str concatenated with ")")
+end
+
+function main returns Integer
+  print text "=== Data Processing Showcase ==="
+  print text ""
+  
+  # Create team members
+  set alice to create_person with "Alice" and 35 and 75000.0
+  set bob to create_person with "Bob" and 28 and 65000.0
+  set carol to create_person with "Carol" and 42 and 85000.0
+  
+  # Build team
+  set members to []
+  append alice to members
+  append bob to members
+  append carol to members
+  
+  set team to new Team
+  set team.members to members
+  set team.member_count to 3
+  set team.total_salary to 0.0
+  
+  # Calculate salary
+  set total_salary to calculate_team_salary with team
+  set team.total_salary to total_salary
+  
+  print text ("Team has " concatenated with (team.member_count as String) concatenated with " members")
+  print text ("Total salary: " concatenated with (team.total_salary as String))
+  print text ""
+  
+  # Find highest paid
+  set highest to get_highest_paid with team
+  print text ("Highest paid: " concatenated with (format_person_info with highest))
+  
+  print text ""
+  print text "All team members:"
+  for each member in team.members
+    print text ("  - " concatenated with (format_person_info with member))
+  end
+  
+  print text ""
+  print text "Showcase Complete"
+  
+  return 0
+end

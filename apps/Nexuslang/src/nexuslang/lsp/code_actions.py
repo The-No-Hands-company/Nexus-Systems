@@ -10,7 +10,19 @@ from typing import List, Dict, Optional
 from ..parser.lexer import Lexer
 from ..parser.parser import Parser
 from ..analysis import ASTSymbolExtractor, SymbolTable, SymbolKind
+from ..errors import NxlError
 from .formatter import NexusLangFormatter
+
+
+_RECOVERABLE_LSP_EXCEPTIONS = (
+    NxlError,
+    RuntimeError,
+    ValueError,
+    TypeError,
+    AttributeError,
+    OSError,
+    UnicodeError,
+)
 
 
 class CodeActionsProvider:
@@ -52,7 +64,7 @@ class CodeActionsProvider:
             
             self.symbol_tables[uri] = symbol_table
             return symbol_table
-        except Exception:
+        except _RECOVERABLE_LSP_EXCEPTIONS:
             return self.symbol_tables.get(uri, None)
     
     def get_code_actions(self, uri: str, text: str, range_params: Dict, diagnostics: List[Dict]) -> List[Dict]:
@@ -140,6 +152,7 @@ class CodeActionsProvider:
         # Actions for specific diagnostics
         for diagnostic in diagnostics:
             message = diagnostic.get('message', '')
+            message_lower = message.lower()
             diag_range = diagnostic.get('range', {})
 
             # Prefer structured fixes from diagnostic payload
@@ -156,15 +169,125 @@ class CodeActionsProvider:
                     actions.append(fix)
             
             # Fix undefined variable
-            if 'undefined' in message.lower():
+            if 'undefined' in message_lower:
                 match = re.search(r"'(\w+)'", message)
                 if match:
                     var_name = match.group(1)
                     declare_action = self._declare_variable_action(uri, diag_range, var_name, diagnostic)
                     if declare_action:
                         actions.append(declare_action)
+
+            # Parser quick fixes for common syntax diagnostics.
+            if ('syntax error' in message_lower or 'expected' in message_lower):
+                missing_end = self._add_missing_end_action(uri, text, diag_range, diagnostic)
+                if missing_end:
+                    actions.append(missing_end)
+
+                missing_paren = self._add_missing_closing_paren_action(uri, text, diag_range, diagnostic)
+                if missing_paren:
+                    actions.append(missing_paren)
+
+            # Generic typing quick fix from message alone (without structured fixes).
+            if 'type error' in message_lower and "expected '" in message_lower:
+                type_fix = self._add_type_annotation(uri, text, diag_range, message)
+                if type_fix:
+                    type_fix["diagnostics"] = [diagnostic]
+                    actions.append(type_fix)
+
+            # Boolean condition quick fix for control flow checks.
+            if 'must be a boolean' in message_lower:
+                bool_fix = self._convert_condition_to_boolean_check(uri, text, diag_range, diagnostic)
+                if bool_fix:
+                    actions.append(bool_fix)
         
         return actions
+
+    def _add_missing_end_action(self, uri: str, text: str, diag_range: Dict, diagnostic: Dict) -> Optional[Dict]:
+        """Offer a quick fix to add a missing 'end' when parser diagnostics suggest it."""
+        message = diagnostic.get('message', '').lower()
+        if 'end' not in message:
+            return None
+
+        insert_line = max(0, diag_range.get('end', {}).get('line', 0))
+        return {
+            "title": "Add missing end",
+            "kind": self.KIND_QUICKFIX,
+            "diagnostics": [diagnostic],
+            "edit": {
+                "changes": {
+                    uri: [{
+                        "range": {
+                            "start": {"line": insert_line, "character": 0},
+                            "end": {"line": insert_line, "character": 0},
+                        },
+                        "newText": "end\n",
+                    }]
+                }
+            },
+        }
+
+    def _add_missing_closing_paren_action(self, uri: str, text: str, diag_range: Dict, diagnostic: Dict) -> Optional[Dict]:
+        """Offer a quick fix to insert a missing closing ')' for parser diagnostics."""
+        message = diagnostic.get('message', '').lower()
+        if "')'" not in message and 'parenthesis' not in message and 'paren' not in message:
+            return None
+
+        line_num = max(0, diag_range.get('start', {}).get('line', 0))
+        lines = text.split('\n')
+        if line_num >= len(lines):
+            return None
+
+        insert_char = len(lines[line_num])
+        return {
+            "title": "Add closing )",
+            "kind": self.KIND_QUICKFIX,
+            "diagnostics": [diagnostic],
+            "edit": {
+                "changes": {
+                    uri: [{
+                        "range": {
+                            "start": {"line": line_num, "character": insert_char},
+                            "end": {"line": line_num, "character": insert_char},
+                        },
+                        "newText": ")",
+                    }]
+                }
+            },
+        }
+
+    def _convert_condition_to_boolean_check(self, uri: str, text: str, diag_range: Dict, diagnostic: Dict) -> Optional[Dict]:
+        """Convert control-flow condition to explicit boolean check by appending 'is true'."""
+        line_num = max(0, diag_range.get('start', {}).get('line', 0))
+        lines = text.split('\n')
+        if line_num >= len(lines):
+            return None
+
+        line = lines[line_num]
+        match = re.match(r'^(\s*)(if|while)\s+(.+?)\s*$', line, re.IGNORECASE)
+        if not match:
+            return None
+
+        indent, keyword, condition = match.groups()
+        if re.search(r'\bis\s+(true|false)\b', condition, re.IGNORECASE):
+            return None
+
+        new_line = f"{indent}{keyword} {condition} is true"
+        return {
+            "title": "Convert condition to explicit boolean check",
+            "kind": self.KIND_QUICKFIX,
+            "diagnostics": [diagnostic],
+            "edit": {
+                "changes": {
+                    uri: [{
+                        "range": {
+                            "start": {"line": line_num, "character": 0},
+                            "end": {"line": line_num, "character": len(line)},
+                        },
+                        "newText": new_line,
+                    }]
+                }
+            },
+        }
     
     def _has_selection(self, range_params: Dict) -> bool:
         """Check if range represents a non-empty selection."""
@@ -280,6 +403,33 @@ class CodeActionsProvider:
                     actions.append(action)
                 continue
 
+            if "closed channel" in message_lower and "recreate channel" in fix_lower:
+                match = re.search(r"'([^']+)'", message)
+                if match:
+                    action = self._recreate_channel_before_operation_action(
+                        uri,
+                        diag_range,
+                        match.group(1),
+                        diagnostic,
+                    )
+                    if action:
+                        actions.append(action)
+                continue
+
+            if "closed channel" in message_lower and "move" in fix_lower and "close" in fix_lower:
+                match = re.search(r"'([^']+)'", message)
+                if match:
+                    action = self._move_close_after_operation_action(
+                        uri,
+                        text,
+                        diag_range,
+                        match.group(1),
+                        diagnostic,
+                    )
+                    if action:
+                        actions.append(action)
+                continue
+
             is_contract_context = any(k in message_lower for k in ("require", "ensure", "guarantee", "invariant", "contract"))
 
             if is_contract_context and ("add contract failure message" in fix_lower or "contract failure message" in fix_lower):
@@ -332,6 +482,152 @@ class CodeActionsProvider:
                 }
             },
         }
+
+    def _recreate_channel_before_operation_action(
+        self,
+        uri: str,
+        diag_range: Dict,
+        channel_name: str,
+        diagnostic: Dict,
+    ) -> Optional[Dict]:
+        """Insert channel recreation before a send/receive on a closed channel."""
+        line_num = diag_range.get("start", {}).get("line")
+        if line_num is None:
+            return None
+
+        return {
+            "title": f"Recreate channel '{channel_name}' before operation",
+            "kind": self.KIND_QUICKFIX,
+            "diagnostics": [diagnostic],
+            "edit": {
+                "changes": {
+                    uri: [{
+                        "range": {
+                            "start": {"line": line_num, "character": 0},
+                            "end": {"line": line_num, "character": 0},
+                        },
+                        "newText": f"set {channel_name} to create channel\n",
+                    }]
+                }
+            },
+        }
+
+    def _move_close_after_operation_action(
+        self,
+        uri: str,
+        text: str,
+        diag_range: Dict,
+        channel_name: str,
+        diagnostic: Dict,
+    ) -> Optional[Dict]:
+        """Move a channel close directly after the flagged operation when proven safe.
+
+        Safety policy (conservative):
+        - Operation must have an immediately preceding non-empty line in the same indentation block.
+        - That line must be exactly `close <channel_name>`.
+        - No block-boundary crossing is allowed by construction (single adjacent statement swap).
+        """
+        op_line_num = diag_range.get("start", {}).get("line")
+        if op_line_num is None:
+            return None
+
+        lines = text.split("\n")
+        if op_line_num < 0 or op_line_num >= len(lines):
+            return None
+
+        op_line = lines[op_line_num]
+        op_indent = len(op_line) - len(op_line.lstrip())
+
+        prev_non_empty = op_line_num - 1
+        while prev_non_empty >= 0 and not lines[prev_non_empty].strip():
+            prev_non_empty -= 1
+        if prev_non_empty < 0:
+            return None
+
+        close_line = lines[prev_non_empty]
+        close_indent = len(close_line) - len(close_line.lstrip())
+        close_pattern = rf'^\s*close\s+{re.escape(channel_name)}\b\s*$'
+        if not re.match(close_pattern, close_line, re.IGNORECASE):
+            return None
+        if close_indent != op_indent:
+            return None
+        if self._has_attached_close_metadata(lines, prev_non_empty, channel_name):
+            return None
+
+        # Rewrite only the local contiguous segment to keep edit deterministic.
+        segment_lines = lines[prev_non_empty:op_line_num + 1]
+        reordered = segment_lines[1:] + [segment_lines[0]]
+
+        if op_line_num + 1 < len(lines):
+            replace_end = {"line": op_line_num + 1, "character": 0}
+            replacement = "\n".join(reordered) + "\n"
+        else:
+            replace_end = {"line": op_line_num, "character": len(lines[op_line_num])}
+            replacement = "\n".join(reordered)
+
+        return {
+            "title": f"Move close '{channel_name}' after this operation (safe reorder)",
+            "kind": self.KIND_QUICKFIX,
+            "diagnostics": [diagnostic],
+            "edit": {
+                "changes": {
+                    uri: [{
+                        "range": {
+                            "start": {"line": prev_non_empty, "character": 0},
+                            "end": replace_end,
+                        },
+                        "newText": replacement,
+                    }]
+                }
+            },
+        }
+
+    def _has_attached_close_metadata(self, lines: List[str], close_line_num: int, channel_name: str) -> bool:
+        """Return True if comments/directives are attached to the close statement.
+
+        Attached metadata includes:
+        - Inline trailing comments on the close line.
+        - Immediately preceding comment/directive lines (same indentation block).
+        """
+        if close_line_num < 0 or close_line_num >= len(lines):
+            return False
+
+        close_line = lines[close_line_num]
+        close_indent = len(close_line) - len(close_line.lstrip())
+
+        # Inline comment on close line.
+        inline = re.match(
+            rf'^\s*close\s+{re.escape(channel_name)}\b\s*#.+$',
+            close_line,
+            re.IGNORECASE,
+        )
+        if inline:
+            return True
+
+        comment_line_re = re.compile(r'^\s*#')
+        directive_line_re = re.compile(r'^\s*(?:@\w+|pragma\b|directive\b)', re.IGNORECASE)
+        directive_comment_re = re.compile(r'^\s*#\s*(?:noqa\b|nolint\b|lint:|pragma\b|directive\b|nlpl:|nexuslang:)', re.IGNORECASE)
+
+        idx = close_line_num - 1
+        while idx >= 0:
+            raw = lines[idx]
+            if not raw.strip():
+                break
+
+            indent = len(raw) - len(raw.lstrip())
+            stripped = raw.lstrip()
+            is_comment = bool(comment_line_re.match(raw))
+            is_directive = bool(directive_line_re.match(raw) or directive_comment_re.match(raw))
+
+            if indent != close_indent:
+                break
+            if not (is_comment or is_directive):
+                break
+
+            # Any contiguous metadata line immediately above close blocks reordering.
+            return True
+
+        return False
 
     def _convert_contract_condition_to_boolean(self, uri: str, text: str, diag_range: Dict, diagnostic: Dict) -> Optional[Dict]:
         """Convert contract condition to explicit boolean check by appending 'is true'."""

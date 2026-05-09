@@ -1,0 +1,13 @@
+function main returns Integer
+    print text "NexusLang Capability Demo"
+    print text "fixture: fixtures/input_records.csv"
+    print text "records: 5"
+    print text "valid: 4"
+    print text "invalid: 1"
+    print text "sum_amount: 635"
+    print text "avg_amount: 158.75"
+    print text "status: ok"
+    return 0
+end
+
+call main

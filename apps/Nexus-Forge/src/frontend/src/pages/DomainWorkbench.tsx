@@ -1,5 +1,5 @@
-import { Link, useParams } from "react-router-dom";
 import { useEffect, useState } from "react";
+import { Link, useParams } from "react-router-dom";
 
 interface DomainResponse {
   domain?: {

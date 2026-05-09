@@ -64,6 +64,7 @@ statement
     | panicStatement
     | fallthroughStatement
     | sendStatement
+    | closeStatement
     | tryCatch
     | raiseStatement
     | assertStatement
@@ -82,9 +83,9 @@ statement
     | importStatement
     | exportStatement
     | testBlock
-    | asyncStatement
-    | awaitStatement
-    | spawnStatement
+    | macroDefinition
+    | macroExpansion
+    | comptimeStatement
     | expressionStatement
     ;
 
@@ -169,8 +170,8 @@ memberAssignment
 functionDefinition
     : ASYNC? FUNCTION IDENTIFIER genericTypeParams?
         (WITH parameterList)?
+        whereClause?
         (RETURNS typeAnnotation)?
-        contractClauses?
         functionBody
         END
     ;
@@ -191,8 +192,16 @@ genericTypeParams
     ;
 
 genericParam
-    : IDENTIFIER (WHERE IDENTIFIER IS typeConstraintList)?
+    : IDENTIFIER (':' typeConstraintList)?
     | IDENTIFIER '::' kindAnnotation
+    ;
+
+whereClause
+    : WHERE whereConstraint (',' whereConstraint)*
+    ;
+
+whereConstraint
+    : IDENTIFIER IS typeConstraintList
     ;
 
 kindAnnotation
@@ -204,7 +213,7 @@ kindAnnotation
 ARROW : '->' ;
 
 typeConstraintList
-    : IDENTIFIER (AND IDENTIFIER)*
+    : IDENTIFIER (('+' | AND) IDENTIFIER)*
     ;
 
 functionBody
@@ -216,10 +225,10 @@ contractClauses
     ;
 
 contractClause
-    : REQUIRE expression
-    | ENSURE expression
-    | GUARANTEE expression
-    | INVARIANT expression
+    : REQUIRE expression (MESSAGE expression)?
+    | ENSURE expression (MESSAGE expression)?
+    | GUARANTEE expression (MESSAGE expression)?
+    | INVARIANT expression (MESSAGE expression)?
     ;
 
 // --------------------------------------------------------------------------
@@ -241,7 +250,7 @@ contractClause
 
 classDefinition
     : CLASS IDENTIFIER genericTypeParams?
-        (EXTENDS typeList)?
+        ((EXTENDS | INHERITS) typeList)?
         (IMPLEMENTS typeList)?
         classBody
         END
@@ -262,8 +271,6 @@ classMemberModifier
     : PUBLIC
     | PRIVATE
     | PROTECTED
-    | STATIC
-    | ABSTRACT
     ;
 
 propertyDeclaration
@@ -273,6 +280,7 @@ propertyDeclaration
 
 methodDefinition
     : functionDefinition
+    | 'static' functionDefinition
     | ABSTRACT FUNCTION IDENTIFIER genericTypeParams?
         (WITH parameterList)?
         (RETURNS typeAnnotation)?
@@ -561,7 +569,13 @@ printStatement
     ;
 
 sendStatement
+    // Parser-aligned: send <value> to <channel>
     : SEND expression TO expression
+    ;
+
+closeStatement
+    // Parser-aligned variants: close <channel> | close with <channel>
+    : CLOSE WITH? expression
     ;
 
 appendStatement
@@ -599,10 +613,10 @@ assertStatement
     | ASSERT expression COMMA expression
     ;
 
-requireStatement  : REQUIRE expression ;
-ensureStatement   : ENSURE expression ;
-guaranteeStatement: GUARANTEE expression ;
-invariantStatement: INVARIANT expression ;
+requireStatement  : REQUIRE expression (MESSAGE expression)? ;
+ensureStatement   : ENSURE expression (MESSAGE expression)? ;
+guaranteeStatement: GUARANTEE expression (MESSAGE expression)? ;
+invariantStatement: INVARIANT expression (MESSAGE expression)? ;
 
 // --------------------------------------------------------------------------
 // Memory management (low-level)
@@ -637,11 +651,26 @@ freeStatement
 // --------------------------------------------------------------------------
 
 inlineAssembly
-    : ASM asmBody END
+    : ASM (FOR ARCH STRING_LITERAL)? asmSection* END?
     ;
 
-asmBody
-    : ( ~END_KW )*     // raw token sequence until 'end' keyword
+asmSection
+    : CODE STRING_LITERAL+
+    | INPUTS asmOperandList
+    | OUTPUTS asmOperandList
+    | CLOBBERS asmClobberList
+    ;
+
+asmOperandList
+    : asmOperand (COMMA asmOperand)*
+    ;
+
+asmOperand
+    : STRING_LITERAL ':' expression
+    ;
+
+asmClobberList
+    : STRING_LITERAL (COMMA STRING_LITERAL)*
     ;
 
 // --------------------------------------------------------------------------
@@ -651,21 +680,40 @@ asmBody
 // --------------------------------------------------------------------------
 
 foreignFunction
+    // Parser-aligned: foreign only applies to function declarations.
     : FOREIGN FUNCTION IDENTIFIER
-        (FROM STRING_LITERAL)?
-        (WITH parameterList)?
+        (WITH externParameterList)?
         (RETURNS typeAnnotation)?
-        END?
+        (FROM LIBRARY STRING_LITERAL)?
+        (CALLING CONVENTION (CDECL | STDCALL | IDENTIFIER))?
     ;
 
 externDeclaration
+    // Parser-aligned extern variants: function, variable, and type declarations.
     : EXTERN FUNCTION IDENTIFIER
-        (WITH parameterList)?
+        (WITH externParameterList)?
         (RETURNS typeAnnotation)?
         (FROM LIBRARY STRING_LITERAL)?
-    | EXTERN IDENTIFIER IDENTIFIER AS typeAnnotation
+        (CALLING CONVENTION (CDECL | STDCALL | IDENTIFIER))?
+    | EXTERN VARIABLE IDENTIFIER AS typeAnnotation
         (FROM LIBRARY STRING_LITERAL)?
-    | EXTERN TYPE IDENTIFIER AS typeAnnotation
+    | EXTERN TYPE IDENTIFIER AS OPAQUE? typeAnnotation
+    | EXTERN TYPE IDENTIFIER AS FUNCTION
+        (WITH externTypeList)?
+        (RETURNS typeAnnotation)?
+    ;
+
+externParameterList
+    : externParameter (COMMA externParameter)* (COMMA ELLIPSIS)?
+    | ELLIPSIS
+    ;
+
+externParameter
+    : IDENTIFIER AS typeAnnotation
+    ;
+
+externTypeList
+    : typeAnnotation (COMMA typeAnnotation)*
     ;
 
 // --------------------------------------------------------------------------
@@ -715,15 +763,36 @@ testBlock
       END
     ;
 
-// --------------------------------------------------------------------------
-// Async / concurrency
-// --------------------------------------------------------------------------
+macroDefinition
+    : MACRO IDENTIFIER (WITH macroParameterList)? statement* END
+    ;
 
-asyncStatement : ASYNC statement ;
-awaitStatement : AWAIT expression ;
-spawnStatement : SPAWN expression ;
+macroParameterList
+    : IDENTIFIER (COMMA IDENTIFIER)*
+    ;
+
+macroExpansion
+    : EXPAND IDENTIFIER (WITH macroArgumentList)?
+    ;
+
+macroArgumentList
+    : macroArgument (COMMA macroArgument)*
+    ;
+
+macroArgument
+    : IDENTIFIER expression
+    ;
+
+comptimeStatement
+    : COMPTIME EVAL expression
+    | COMPTIME CONST IDENTIFIER (IS | TO) expression
+    | COMPTIME ASSERT expression
+    | COMPTIME ASSERT expression MESSAGE expression
+    | COMPTIME expression
+    ;
 
 unsafeBlock
+    // Parser-aligned unsafe variants: unsafe do ... end | unsafe ... end
     : UNSAFE DO? statement* END
     ;
 
@@ -845,6 +914,10 @@ atom
     | addressOfExpression
     | dereferenceExpression
     | lengthExpression
+        | moveExpression
+        | borrowExpression
+        | rcCreation
+        | arcCreation
     | genericTypeInstantiation
     | receiveExpression
     | yieldExpression
@@ -853,6 +926,7 @@ atom
     ;
 
 receiveExpression
+    // Parser-aligned variants: receive <channel> | receive from <channel>
     : RECEIVE FROM? expression
     ;
 
@@ -933,6 +1007,53 @@ lengthExpression
     ;
 
 genericTypeInstantiation
+    // ==========================================================================
+    // Ownership / Borrow / Lifetime expressions
+    // ==========================================================================
+
+    // Transfer ownership of a variable to a new binding; the source is invalidated.
+    moveExpression
+        : MOVE IDENTIFIER
+        ;
+
+    // Create an immutable or mutable borrow; optional lifetime annotation.
+    borrowExpression
+        : BORROW MUTABLE? IDENTIFIER lifetimeAnnotation?
+        ;
+
+    // Explicit lifetime annotation on a borrow or parameter.
+    lifetimeAnnotation
+        : WITH LIFETIME IDENTIFIER
+        ;
+
+    // Release an active borrow before the end of the enclosing scope.
+    dropBorrowStatement
+        : DROP BORROW MUTABLE? IDENTIFIER
+        ;
+
+    // Reference-counted heap allocation: creates an Rc<T> (single-threaded)
+    // or Arc<T> (thread-safe) smart pointer.
+    rcCreation
+        : RC typeAnnotation ':' expression
+        | RC expression
+        ;
+
+    arcCreation
+        : ARC typeAnnotation ':' expression
+        | ARC expression
+        ;
+
+    // Downgrade an Rc/Arc to a Weak reference to break reference cycles.
+    downgradeExpression
+        : DOWNGRADE expression
+        ;
+
+    // Upgrade a Weak reference back to an Rc/Arc (returns None if already dropped).
+    upgradeExpression
+        : UPGRADE expression
+        ;
+
+    genericTypeInstantiation
     : CREATE IDENTIFIER OF typeAnnotation
     | CREATE IDENTIFIER WITH LENGTH expression
     | CREATE ARRAY OF typeAnnotation WITH LENGTH expression
@@ -1001,14 +1122,22 @@ BITWISE_XOR: 'bitwise' WS 'xor' ;
 BYTES      : 'bytes' ;
 BY         : 'by' ;
 BREAK      : 'break' ;
+CALLING    : 'calling' ;
 CASE       : 'case' ;
 CATCH      : 'catch' ;
+CDECL      : 'cdecl' ;
 CLASS      : 'class' ;
 CHANNEL    : 'channel' ;
+CLOBBERS   : 'clobbers' ;
+CLOSE      : 'close' ;
+COMPTIME   : 'comptime' ;
 COMMA      : ',' ;
+CONVENTION : 'convention' ;
 CONSTRUCTOR: 'constructor' ;
 CONTINUE   : 'continue' ;
+CONST      : 'const' ;
 CONVERT    : 'convert' ;
+CODE       : 'code' ;
 CREATE     : 'create' ;
 DEALLOCATE : 'deallocate' ;
 DEFAULT    : 'default' ;
@@ -1019,12 +1148,14 @@ EACH       : 'each' ;
 ELSE       : 'else' ;
 EMPTY      : 'empty' ;
 END        : 'end' ;
-END_KW     : 'end' ;     // alias used in asmBody rule
+END_KW     : 'end' ;     // alias kept for compatibility with older tooling
 ENSURE     : 'ensure' ;
 ENUM       : 'enum' ;
 EQUALS     : 'equals' ;
+EVAL       : 'eval' ;
 EXTERN     : 'extern' ;
 EXPORT     : 'export' ;
+EXPAND     : 'expand' ;
 EXTENDS    : 'extends' ;
 FALLTHROUGH: 'fallthrough' ;
 FINALLY    : 'finally' ;
@@ -1039,6 +1170,7 @@ IMPLEMENTS : 'implements' ;
 IMPORT     : 'import' ;
 IN         : 'in' ;
 INDEX      : 'index' ;
+INPUTS     : 'inputs' ;
 INTERFACE  : 'interface' ;
 INVARIANT  : 'invariant' ;
 IS         : 'is' ;
@@ -1048,7 +1180,9 @@ LENGTH     : 'length' ;
 LESS       : 'less' ;
 LIBRARY    : 'library' ;
 GREATER    : 'greater' ;
+MACRO      : 'macro' ;
 MATCH      : 'match' ;
+MESSAGE    : 'message' ;
 MINUS      : 'minus' ;
 MODULO     : 'modulo' ;
 NEW        : 'new' ;
@@ -1060,6 +1194,8 @@ ONLY       : 'only' ;
 OPERATOR   : 'operator' ;
 OR         : 'or' ;
 OTHERWISE  : 'otherwise' ;
+OPAQUE     : 'opaque' ;
+OUTPUTS    : 'outputs' ;
 PANIC      : 'panic' ;
 PLUS       : 'plus' ;
 POWER      : 'power' ;
@@ -1083,6 +1219,7 @@ SIZEOF     : 'sizeof' ;
 SPAWN      : 'spawn' ;
 STATIC     : 'static' ;
 STRUCT     : 'struct' ;
+STDCALL    : 'stdcall' ;
 SWITCH     : 'switch' ;
 TEST       : 'test' ;
 TEXT       : 'text' ;
@@ -1096,11 +1233,24 @@ TRY        : 'try' ;
 TYPE       : 'type' ;
 UNION      : 'union' ;
 UNSAFE     : 'unsafe' ;
+VARIABLE   : 'variable' ;
 WHEN       : 'when' ;
 WHERE      : 'where' ;
 WHILE      : 'while' ;
 WITH       : 'with' ;
 YIELD      : 'yield' ;
+ELLIPSIS   : '...' ;
+
+// Ownership / borrow / lifetime keywords
+ARC        : 'arc' ;
+BORROW     : 'borrow' ;
+DOWNGRADE  : 'downgrade' ;
+DROP       : 'drop' ;
+LIFETIME   : 'lifetime' ;
+MOVE       : 'move' ;
+MUTABLE    : 'mutable' ;
+RC         : 'rc' ;
+UPGRADE    : 'upgrade' ;
 
 
 // ==========================================================================

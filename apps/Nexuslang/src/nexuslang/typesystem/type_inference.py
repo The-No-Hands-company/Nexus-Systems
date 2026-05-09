@@ -21,7 +21,7 @@ from ..typesystem.types import (
 class TypeInferenceEngine:
     """Engine for inferring types in NexusLang programs."""
     
-    def __init__(self):
+    def __init__(self) -> None:
         self.type_constraints: Dict[str, Type] = {}
         self.type_variables: Dict[str, Type] = {}
         self.next_type_var = 0
@@ -34,7 +34,7 @@ class TypeInferenceEngine:
         self.next_type_var += 1
         return var_name
     
-    def reset(self):
+    def reset(self) -> None:
         """Reset the inference engine state."""
         self.type_constraints.clear()
         self.type_variables.clear()
@@ -773,18 +773,80 @@ class TypeInferenceEngine:
             context.add_type_parameter(param_name, constraints if constraints else None)
         
         return context
+
+    def _type_to_binding_annotation(self, t: "Type") -> Optional[str]:
+        """Convert inferred type objects to canonical binding annotation strings."""
+        if t is None or t == ANY_TYPE:
+            return None
+        if isinstance(t, PrimitiveType):
+            name = t.name.lower()
+            if name == 'integer':
+                return 'Integer'
+            if name == 'float':
+                return 'Float'
+            if name == 'boolean':
+                return 'Boolean'
+            if name == 'string':
+                return 'String'
+            return t.name
+        if isinstance(t, ListType):
+            inner = self._type_to_binding_annotation(t.element_type) or 'Any'
+            return f'List of {inner}'
+        if isinstance(t, DictionaryType):
+            key_ann = self._type_to_binding_annotation(t.key_type) or 'Any'
+            val_ann = self._type_to_binding_annotation(t.value_type) or 'Any'
+            return f'Dict of {key_ann} to {val_ann}'
+        if isinstance(t, ClassType):
+            return t.name
+        if isinstance(t, GenericType):
+            return t.name
+        return None
+
+    def _binding_annotation_to_type(self, annotation: Any) -> Optional["Type"]:
+        """Resolve explicit pattern binding annotation to a type object."""
+        if annotation is None:
+            return None
+        if isinstance(annotation, Type):
+            return annotation
+        if isinstance(annotation, str):
+            try:
+                return get_type_by_name(annotation)
+            except Exception:
+                return None
+        return None
+
+    def _set_pattern_binding_type(self, pattern, inferred_type: "Type") -> "Type":
+        """Persist the resolved binding type and backfill a canonical annotation when possible."""
+        pattern.binding_inferred_type = inferred_type
+        if getattr(pattern, 'binding_type_annotation', None) is None:
+            inferred_ann = self._type_to_binding_annotation(inferred_type)
+            if inferred_ann is not None:
+                pattern.binding_type_annotation = inferred_ann
+        return inferred_type
+
     def _infer_option_pattern_bindings(self, pattern, match_value_type: "Type") -> dict:
         """Return bindings for an OptionPattern (Some/None)."""
         bindings = {}
         if pattern.variant == "Some" and pattern.binding:
+            declared_type = self._binding_annotation_to_type(
+                getattr(pattern, 'binding_type_annotation', None)
+            )
+            if declared_type is not None:
+                self._set_pattern_binding_type(pattern, declared_type)
+                bindings[pattern.binding] = declared_type
+                return bindings
+
             is_option = (
                 (hasattr(match_value_type, 'name') and match_value_type.name == 'Option')
                 or (isinstance(match_value_type, GenericType) and match_value_type.name == 'Option')
             )
             if is_option and hasattr(match_value_type, 'type_parameters') and match_value_type.type_parameters:
-                bindings[pattern.binding] = match_value_type.type_parameters[0]
+                inferred = match_value_type.type_parameters[0]
             else:
-                bindings[pattern.binding] = ANY_TYPE
+                inferred = ANY_TYPE
+
+            self._set_pattern_binding_type(pattern, inferred)
+            bindings[pattern.binding] = inferred
         # None variant has no bindings
         return bindings
 
@@ -798,15 +860,35 @@ class TypeInferenceEngine:
         has_params = is_result and hasattr(match_value_type, 'type_parameters') and match_value_type.type_parameters
 
         if pattern.variant == "Ok" and pattern.binding:
+            declared_type = self._binding_annotation_to_type(
+                getattr(pattern, 'binding_type_annotation', None)
+            )
+            if declared_type is not None:
+                self._set_pattern_binding_type(pattern, declared_type)
+                bindings[pattern.binding] = declared_type
+                return bindings
+
             if has_params and len(match_value_type.type_parameters) >= 1:
-                bindings[pattern.binding] = match_value_type.type_parameters[0]
+                inferred = match_value_type.type_parameters[0]
             else:
-                bindings[pattern.binding] = ANY_TYPE
+                inferred = ANY_TYPE
+            self._set_pattern_binding_type(pattern, inferred)
+            bindings[pattern.binding] = inferred
         elif pattern.variant == "Err" and pattern.binding:
+            declared_type = self._binding_annotation_to_type(
+                getattr(pattern, 'binding_type_annotation', None)
+            )
+            if declared_type is not None:
+                self._set_pattern_binding_type(pattern, declared_type)
+                bindings[pattern.binding] = declared_type
+                return bindings
+
             if has_params and len(match_value_type.type_parameters) >= 2:
-                bindings[pattern.binding] = match_value_type.type_parameters[1]
+                inferred = match_value_type.type_parameters[1]
             else:
-                bindings[pattern.binding] = ANY_TYPE
+                inferred = ANY_TYPE
+            self._set_pattern_binding_type(pattern, inferred)
+            bindings[pattern.binding] = inferred
         return bindings
 
     def _infer_list_pattern_bindings(self, pattern, match_value_type: "Type") -> dict:

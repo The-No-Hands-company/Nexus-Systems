@@ -10,6 +10,7 @@ import sys
 from typing import Dict, List, Optional, Any
 from dataclasses import dataclass
 import logging
+from ..errors import NxlError
 
 from ..tooling.analyzer.analyzer import create_default_analyzer, create_strict_analyzer
 
@@ -20,6 +21,17 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger('nexuslang-lsp')
+
+
+_RECOVERABLE_LSP_EXCEPTIONS = (
+    NxlError,
+    RuntimeError,
+    ValueError,
+    TypeError,
+    AttributeError,
+    OSError,
+    UnicodeError,
+)
 
 
 @dataclass
@@ -132,7 +144,7 @@ class NexusLangLanguageServer:
                 if response:
                     self._write_message(response)
                     
-            except Exception as e:
+            except _RECOVERABLE_LSP_EXCEPTIONS as e:
                 logger.error(f"Error handling message: {e}", exc_info=True)
     
     def _read_message(self) -> Optional[Dict]:
@@ -160,7 +172,7 @@ class NexusLangLanguageServer:
             content = sys.stdin.buffer.read(content_length).decode('utf-8')
             return json.loads(content)
             
-        except Exception as e:
+        except _RECOVERABLE_LSP_EXCEPTIONS as e:
             logger.error(f"Error reading message: {e}")
             return None
     
@@ -179,7 +191,7 @@ class NexusLangLanguageServer:
             sys.stdout.buffer.write(response.encode('utf-8'))
             sys.stdout.buffer.flush()
             
-        except Exception as e:
+        except _RECOVERABLE_LSP_EXCEPTIONS as e:
             logger.error(f"Error writing message: {e}")
     
     def _handle_message(self, message: Dict) -> Optional[Dict]:
@@ -297,7 +309,7 @@ class NexusLangLanguageServer:
                     self.workspace_index.scan_workspace()
                     stats = self.workspace_index.get_statistics()
                     logger.info(f"Workspace indexed: {stats['files_indexed']} files, {stats['total_symbols']} symbols")
-                except Exception as e:
+                except _RECOVERABLE_LSP_EXCEPTIONS as e:
                     logger.error(f"Error indexing workspace: {e}", exc_info=True)
             
             threading.Thread(target=index_workspace, daemon=True).start()
@@ -316,7 +328,7 @@ class NexusLangLanguageServer:
                         self.workspace_index.scan_workspace()
                         stats = self.workspace_index.get_statistics()
                         logger.info(f"Workspace indexed: {stats['files_indexed']} files, {stats['total_symbols']} symbols")
-                    except Exception as e:
+                    except _RECOVERABLE_LSP_EXCEPTIONS as e:
                         logger.error(f"Error indexing workspace: {e}", exc_info=True)
                 
                 threading.Thread(target=index_workspace, daemon=True).start()
@@ -393,7 +405,7 @@ class NexusLangLanguageServer:
                 self.dead_code_provider.get_diagnostics(uri, text),
                 lint_diagnostics,
             )
-        except Exception as e:
+        except _RECOVERABLE_LSP_EXCEPTIONS as e:
             logger.error(f"Dead code analysis error for {uri}: {e}", exc_info=True)
         self._publish_diagnostics(uri, diagnostics)
     
@@ -412,7 +424,7 @@ class NexusLangLanguageServer:
                 try:
                     self.workspace_index.index_file(uri)
                     logger.debug(f"Re-indexed file: {uri}")
-                except Exception as e:
+                except _RECOVERABLE_LSP_EXCEPTIONS as e:
                     logger.error(f"Error re-indexing file {uri}: {e}")
             
             # Send diagnostics (syntax + dead-code warnings)
@@ -424,7 +436,7 @@ class NexusLangLanguageServer:
                     self.dead_code_provider.get_diagnostics(uri, changes[0]['text']),
                     lint_diagnostics,
                 )
-            except Exception as e:
+            except _RECOVERABLE_LSP_EXCEPTIONS as e:
                 logger.error(f"Dead code analysis error for {uri}: {e}", exc_info=True)
             self._publish_diagnostics(uri, diagnostics)
 
@@ -456,7 +468,7 @@ class NexusLangLanguageServer:
         for checker in analyzer.checkers:
             try:
                 issues = checker.check(ast, text, lines)
-            except Exception as exc:
+            except _RECOVERABLE_LSP_EXCEPTIONS as exc:
                 logger.error(
                     "Realtime lint checker '%s' failed for %s: %s",
                     checker.__class__.__name__,
@@ -696,7 +708,7 @@ class NexusLangLanguageServer:
         text = self.documents.get(uri, '')
         try:
             lenses = self.code_lens_provider.get_code_lenses(uri, text)
-        except Exception as e:
+        except _RECOVERABLE_LSP_EXCEPTIONS as e:
             logger.error(f"Error getting code lenses for {uri}: {e}", exc_info=True)
             lenses = []
         return {"jsonrpc": "2.0", "id": msg_id, "result": lenses}
@@ -705,7 +717,7 @@ class NexusLangLanguageServer:
         """Handle codeLens/resolve request."""
         try:
             lens = self.code_lens_provider.resolve_code_lens(params)
-        except Exception as e:
+        except _RECOVERABLE_LSP_EXCEPTIONS as e:
             logger.error(f"Error resolving code lens: {e}", exc_info=True)
             lens = params
         return {"jsonrpc": "2.0", "id": msg_id, "result": lens}
@@ -721,7 +733,7 @@ class NexusLangLanguageServer:
         range_ = params.get('range')
         try:
             hints = self.inlay_hints_provider.get_inlay_hints(uri, text, range_)
-        except Exception as e:
+        except _RECOVERABLE_LSP_EXCEPTIONS as e:
             logger.error(f"Error getting inlay hints for {uri}: {e}", exc_info=True)
             hints = []
         return {"jsonrpc": "2.0", "id": msg_id, "result": hints}
@@ -1003,7 +1015,7 @@ class NexusLangLanguageServer:
                                     'end': {'line': line_num, 'character': line.find(target_name) + len(target_name)}
                                 }]
                             })
-            except Exception as e:
+            except _RECOVERABLE_LSP_EXCEPTIONS as e:
                 logger.error(f"Error analyzing calls in {file_uri}: {e}")
                 continue
         
@@ -1026,7 +1038,7 @@ class NexusLangLanguageServer:
         try:
             with open(file_path, 'r') as f:
                 content = f.read()
-        except Exception:
+        except _RECOVERABLE_LSP_EXCEPTIONS:
             return {"jsonrpc": "2.0", "id": msg_id, "result": []}
         
         outgoing = []
@@ -1119,7 +1131,7 @@ class NexusLangLanguageServer:
             ast = parser.parse()
             self._parse_cache[uri] = (text_hash, ast)
             return ast
-        except Exception:
+        except _RECOVERABLE_LSP_EXCEPTIONS:
             return None
 
     def invalidate_parse_cache(self, uri: str) -> None:

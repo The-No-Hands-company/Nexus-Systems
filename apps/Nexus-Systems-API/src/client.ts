@@ -27,7 +27,10 @@ export class NexusSystemsApiClient {
     });
   }
 
-  async heartbeat(toolId: string, payload: Omit<SystemsApiToolHeartbeat, "toolId">): Promise<Response> {
+  async heartbeat(
+    toolId: string,
+    payload: Omit<SystemsApiToolHeartbeat, "toolId">,
+  ): Promise<Response> {
     const path = systemsApiV1Endpoints.heartbeat.replace(":toolId", encodeURIComponent(toolId));
     return this.request(path, {
       method: "POST",
@@ -41,7 +44,9 @@ export class NexusSystemsApiClient {
   }
 
   async getComplianceSummary(): Promise<PhantomComplianceSummary> {
-    const response = await this.request(systemsApiV1Endpoints.phantomComplianceSummary, { method: "GET" });
+    const response = await this.request(systemsApiV1Endpoints.phantomComplianceSummary, {
+      method: "GET",
+    });
     return (await response.json()) as PhantomComplianceSummary;
   }
 

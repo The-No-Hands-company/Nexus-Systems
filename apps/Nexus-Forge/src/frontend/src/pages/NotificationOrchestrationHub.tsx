@@ -1,7 +1,10 @@
 import { useEffect, useState } from "react";
 
 export default function NotificationOrchestrationHub() {
-  const [delivery, setDelivery] = useState<{ delivered: number; failed: number }>({ delivered: 0, failed: 0 });
+  const [delivery, setDelivery] = useState<{ delivered: number; failed: number }>({
+    delivered: 0,
+    failed: 0,
+  });
 
   useEffect(() => {
     async function load() {
@@ -31,7 +34,9 @@ export default function NotificationOrchestrationHub() {
         </article>
         <article className="repo-card">
           <h3>Delivery</h3>
-          <p>Delivered: {delivery.delivered}, Failed: {delivery.failed}</p>
+          <p>
+            Delivered: {delivery.delivered}, Failed: {delivery.failed}
+          </p>
         </article>
       </div>
     </section>

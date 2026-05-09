@@ -20,11 +20,11 @@ from ..typesystem.types import (
 class SimpleTypeInference:
     """Simple type inference engine for NexusLang."""
     
-    def __init__(self):
+    def __init__(self) -> None:
         self.variable_types: Dict[str, Type] = {}
         self.function_return_types: Dict[str, Type] = {}
     
-    def reset(self):
+    def reset(self) -> None:
         """Reset the inference engine state."""
         self.variable_types.clear()
         self.function_return_types.clear()

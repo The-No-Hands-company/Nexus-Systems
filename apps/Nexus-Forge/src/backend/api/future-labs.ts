@@ -1,4 +1,4 @@
-export function registerFutureLabsRoutes(app: any) {
+export function registerFutureLabsRoutes(app: ForgeRouteApp) {
   app.get("/api/labs/experiments", async () => ({
     experiments: [
       { id: "exp-semantic-merge", status: "stubbed", title: "Semantic Merge Assistant" },
@@ -7,7 +7,7 @@ export function registerFutureLabsRoutes(app: any) {
     ],
   }));
 
-  app.post("/api/labs/experiments", async ({ body }: any) => ({
+  app.post("/api/labs/experiments", async ({ body }) => ({
     ok: true,
     experiment: {
       id: "exp-created-stub",
@@ -25,11 +25,16 @@ export function registerFutureLabsRoutes(app: any) {
     note: "Feature flag control plane is stubbed.",
   }));
 
-  app.post("/api/labs/flags/toggle", async ({ body }: any) => ({
-    ok: true,
-    toggled: body?.key || null,
-    enabled: !!body?.enabled,
-  }));
+  app.post("/api/labs/flags/toggle", async ({ body }) => {
+    const payload =
+      typeof body === "object" && body !== null ? (body as Record<string, unknown>) : {};
+
+    return {
+      ok: true,
+      toggled: typeof payload.key === "string" ? payload.key : null,
+      enabled: !!payload.enabled,
+    };
+  });
 
   app.get("/api/labs/sandboxes", async () => ({
     sandboxes: [],

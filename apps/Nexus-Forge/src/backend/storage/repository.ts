@@ -1,7 +1,7 @@
-import fs from "fs/promises";
-import path from "path";
+import fs from "node:fs/promises";
+import path from "node:path";
 import { VCSFactory } from "../vcs/vcs-interface";
-import { ForgeDB, RepositoryRecord } from "./db";
+import type { ForgeDB, RepositoryRecord } from "./db";
 
 export interface RepositorySetup {
   name: string;
@@ -10,7 +10,10 @@ export interface RepositorySetup {
 }
 
 export class RepositoryManager {
-  constructor(private storagePath: string, private db: ForgeDB) {}
+  constructor(
+    private storagePath: string,
+    private db: ForgeDB,
+  ) {}
 
   async createRepository(setup: RepositorySetup, ownerId?: number): Promise<void> {
     const repoPath = path.join(this.storagePath, `${setup.name}.${this.getExtension(setup.vcs)}`);
@@ -22,7 +25,12 @@ export class RepositoryManager {
     this.db.addRepository(setup.name, setup.vcs, setup.description, ownerId);
     const record = this.db.getRepository(setup.name);
     if (record) {
-      this.db.logActivity(record.id, "repository.created", ownerId, `Created repository ${setup.name}`);
+      this.db.logActivity(
+        record.id,
+        "repository.created",
+        ownerId,
+        `Created repository ${setup.name}`,
+      );
     }
   }
 
@@ -59,7 +67,7 @@ export class RepositoryManager {
   }
 
   private getExtension(vcs: "git" | "svn" | "hg" | "pijul"): string {
-    const ext: Record<string, string> = {
+    const ext: Record<RepositorySetup["vcs"], string> = {
       git: "git",
       svn: "svn",
       hg: "hg",
