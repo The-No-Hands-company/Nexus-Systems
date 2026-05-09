@@ -95,6 +95,7 @@ struct NodeComputeContext {
     std::vector<NodeId> outputNodes;  ///< Downstream dependents consuming this node.
     std::vector<NodeInputPayload> inputPayloads; ///< Payloads for inputNodes in deterministic order.
     NodePayload* outputPayload = nullptr; ///< Mutable payload slot for this node's output.
+    std::vector<std::string>* diagnostics = nullptr; ///< Optional sink for deterministic per-node diagnostics.
     std::size_t evaluationIndex = 0;  ///< Index within EvalReport::evaluationOrder.
 };
 

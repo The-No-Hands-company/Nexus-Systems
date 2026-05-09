@@ -545,6 +545,54 @@ TEST(EvalGraph, ComputeFailureMessageUsesReconstructionKindName) {
     EXPECT_NE(r.messages[0].find("kind=Reconstruction"), std::string::npos);
 }
 
+TEST(EvalGraph, CallbackCanEmitDeterministicDiagnosticsMessages) {
+    EvalGraph g;
+    NodeId src = g.addNode(NodeKind::Constant, "src");
+    NodeId recon = g.addNode(NodeKind::Reconstruction, "fit");
+    g.connect(src, recon);
+
+    g.setComputeCallback([&](NodeComputeContext& context) -> bool {
+        if (context.id == recon) {
+            if (context.diagnostics == nullptr) {
+                return false;
+            }
+            context.diagnostics->push_back(
+                "reconstruction residual=0.125 confidence=0.875 node=" + std::to_string(context.id));
+        }
+        return true;
+    });
+
+    const auto r = g.evaluate();
+    EXPECT_TRUE(r.ok);
+    ASSERT_EQ(r.messages.size(), 1u);
+    EXPECT_EQ(r.messages[0], "reconstruction residual=0.125 confidence=0.875 node=" + std::to_string(recon));
+}
+
+TEST(EvalGraph, CallbackDiagnosticsOrderMatchesEvaluationOrder) {
+    EvalGraph g;
+    NodeId a = g.addNode(NodeKind::Constant, "a");
+    NodeId b = g.addNode(NodeKind::Reconstruction, "b");
+    NodeId c = g.addNode(NodeKind::ProxyGeometry, "c");
+    g.connect(a, b);
+    g.connect(b, c);
+
+    g.setComputeCallback([&](NodeComputeContext& context) -> bool {
+        if (context.diagnostics == nullptr) {
+            return false;
+        }
+        context.diagnostics->push_back("diag node=" + std::to_string(context.id));
+        return true;
+    });
+
+    const auto r = g.evaluate();
+    EXPECT_TRUE(r.ok);
+    ASSERT_EQ(r.evaluationOrder.size(), 3u);
+    ASSERT_EQ(r.messages.size(), 3u);
+    EXPECT_EQ(r.messages[0], "diag node=" + std::to_string(r.evaluationOrder[0]));
+    EXPECT_EQ(r.messages[1], "diag node=" + std::to_string(r.evaluationOrder[1]));
+    EXPECT_EQ(r.messages[2], "diag node=" + std::to_string(r.evaluationOrder[2]));
+}
+
 TEST(EvalGraph, LegacyCallbackRegistrationRemainsSupported) {
     EvalGraph g;
     NodeId a = g.addNode(NodeKind::Constant, "a");

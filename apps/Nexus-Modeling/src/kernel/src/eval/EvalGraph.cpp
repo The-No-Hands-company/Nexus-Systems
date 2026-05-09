@@ -198,6 +198,7 @@ EvalReport EvalGraph::evaluate() {
                 outputNodesFor(n.id),
                 inputPayloads,
                 outPayload,
+                &report.messages,
                 evalIndex
             };
 
