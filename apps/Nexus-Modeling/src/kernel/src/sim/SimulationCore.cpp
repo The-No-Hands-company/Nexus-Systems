@@ -407,6 +407,10 @@ SimState RigidBodySolver::captureState() const {
 }
 
 bool RigidBodySolver::restoreState(const SimState& state) {
+    if (!isPositiveFinite(state.simulationTime) && state.simulationTime != 0.0) {
+        return false;
+    }
+
     if (state.bodies.empty() && !m_bodies.empty()) {
         // Structurally invalid restore: snapshot has no bodies but solver does.
         return false;
@@ -422,6 +426,12 @@ bool RigidBodySolver::restoreState(const SimState& state) {
                                return a.id == b.id;
                            }) != orderedBodies.end()) {
         return false;
+    }
+
+    for (const SimBodySnapshot& snap : state.bodies) {
+        if (!isFiniteVec3(snap.position) || !isFiniteVec3(snap.velocity)) {
+            return false;
+        }
     }
 
     m_time = state.simulationTime;

@@ -575,6 +575,24 @@ TEST(SimulationCore, RestoreStateRejectsDuplicateBodyIds) {
     EXPECT_FALSE(s.restoreState(invalid));
 }
 
+TEST(SimulationCore, RestoreStateRejectsNonFiniteSnapshotData) {
+    RigidBodySolver s;
+    const BodyId id = s.addBody({1.0f, {1.0f, 2.0f, 3.0f}, {0.5f, 0.25f, -0.75f}});
+    ASSERT_NE(id, kInvalidBodyId);
+
+    const SimState baseline = s.captureState();
+
+    SimState bad = baseline;
+    bad.simulationTime = std::numeric_limits<double>::quiet_NaN();
+    bad.bodies[0].position.x = std::numeric_limits<float>::infinity();
+    bad.bodies[0].velocity.y = std::numeric_limits<float>::quiet_NaN();
+
+    EXPECT_FALSE(s.restoreState(bad));
+
+    const SimState after = s.captureState();
+    EXPECT_EQ(after, baseline);
+}
+
 TEST(SimulationCore, SimStateSerializationOrdersExtremeBodyIdsDeterministically) {
     SimState state;
     state.simulationTime = 12.5;
