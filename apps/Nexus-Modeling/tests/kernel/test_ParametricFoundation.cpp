@@ -5,7 +5,9 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <cmath>
+#include <limits>
 #include <string>
 
 using namespace nexus::parametric;
@@ -128,6 +130,45 @@ TEST(ParametricFoundation, DeserializeRejectsInvalidHeader)
     ASSERT_FALSE(report.errors.empty());
 }
 
+TEST(ParametricFoundation, SolverErrorsAreDeterministicAndSorted)
+{
+    ConstraintGraph graph;
+    ParametricSolverConfig config{};
+    config.maxIterations = 0;
+
+    const ParametricSolverReport reportA = ParametricSolver::solve(graph, config);
+    const ParametricSolverReport reportB = ParametricSolver::solve(graph, config);
+
+    EXPECT_FALSE(reportA.converged);
+    EXPECT_FALSE(reportB.converged);
+    EXPECT_EQ(reportA.errors, reportB.errors);
+    EXPECT_TRUE(std::is_sorted(reportA.errors.begin(), reportA.errors.end()));
+    EXPECT_TRUE(std::is_sorted(reportB.errors.begin(), reportB.errors.end()));
+}
+
+TEST(ParametricFoundation, SerializationErrorsAreDeterministicAndSorted)
+{
+    ConstraintGraph graphA;
+    ConstraintGraph graphB;
+
+    const std::string badData =
+        "NEXUS_PARAM_GRAPH_V1\n"
+        "C BADKIND 0 0 1 2\n"
+        "Q invalid_payload\n"
+        "E broken_entity\n";
+
+    const ParametricSerializationReport reportA =
+        ParametricGraphSerializer::deserialize(badData, graphA);
+    const ParametricSerializationReport reportB =
+        ParametricGraphSerializer::deserialize(badData, graphB);
+
+    EXPECT_FALSE(reportA.valid);
+    EXPECT_FALSE(reportB.valid);
+    EXPECT_EQ(reportA.errors, reportB.errors);
+    EXPECT_TRUE(std::is_sorted(reportA.errors.begin(), reportA.errors.end()));
+    EXPECT_TRUE(std::is_sorted(reportB.errors.begin(), reportB.errors.end()));
+}
+
 TEST(ParametricFoundation, CoincidentConstraintForcesPointMatch)
 {
     ConstraintGraph graph;
@@ -221,4 +262,72 @@ TEST(ParametricFoundation, SketchSampleGeneratorBuildsAndSolvesRectangleLikeMode
     EXPECT_NEAR(corner->x, xHandle->x, 1e-12);
     EXPECT_NEAR(corner->y, yHandle->y, 1e-12);
     EXPECT_NEAR(corner->z, origin->z, 1e-12);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Non-finite distance input hardening
+// ─────────────────────────────────────────────────────────────────────────────
+
+TEST(ParametricFoundation, AddDistanceConstraintRejectsNaNDistance)
+{
+    ConstraintGraph graph;
+    const ParametricEntityId a = graph.addPoint({0.0, 0.0, 0.0});
+    const ParametricEntityId b = graph.addPoint({1.0, 0.0, 0.0});
+
+    const double nan = std::numeric_limits<double>::quiet_NaN();
+    EXPECT_EQ(graph.addDistanceConstraint(a, b, nan), kInvalidConstraintId);
+    EXPECT_EQ(graph.distanceConstraintCount(), 0u);
+}
+
+TEST(ParametricFoundation, AddDistanceConstraintRejectsPositiveInfDistance)
+{
+    ConstraintGraph graph;
+    const ParametricEntityId a = graph.addPoint({0.0, 0.0, 0.0});
+    const ParametricEntityId b = graph.addPoint({1.0, 0.0, 0.0});
+
+    const double inf = std::numeric_limits<double>::infinity();
+    EXPECT_EQ(graph.addDistanceConstraint(a, b, inf), kInvalidConstraintId);
+    EXPECT_EQ(graph.distanceConstraintCount(), 0u);
+}
+
+TEST(ParametricFoundation, AddDistanceConstraintRejectsNegativeDistance)
+{
+    ConstraintGraph graph;
+    const ParametricEntityId a = graph.addPoint({0.0, 0.0, 0.0});
+    const ParametricEntityId b = graph.addPoint({1.0, 0.0, 0.0});
+
+    EXPECT_EQ(graph.addDistanceConstraint(a, b, -1.0), kInvalidConstraintId);
+    EXPECT_EQ(graph.distanceConstraintCount(), 0u);
+}
+
+TEST(ParametricFoundation, AddAxisAlignedDistanceConstraintRejectsNaNDistance)
+{
+    ConstraintGraph graph;
+    const ParametricEntityId a = graph.addPoint({0.0, 0.0, 0.0});
+    const ParametricEntityId b = graph.addPoint({1.0, 0.0, 0.0});
+
+    const double nan = std::numeric_limits<double>::quiet_NaN();
+    EXPECT_EQ(graph.addAxisAlignedDistanceConstraint(a, b, Axis::X, nan), kInvalidConstraintId);
+    EXPECT_EQ(graph.axisAlignedDistanceConstraintCount(), 0u);
+}
+
+TEST(ParametricFoundation, AddAxisAlignedDistanceConstraintRejectsPositiveInfDistance)
+{
+    ConstraintGraph graph;
+    const ParametricEntityId a = graph.addPoint({0.0, 0.0, 0.0});
+    const ParametricEntityId b = graph.addPoint({1.0, 0.0, 0.0});
+
+    const double inf = std::numeric_limits<double>::infinity();
+    EXPECT_EQ(graph.addAxisAlignedDistanceConstraint(a, b, Axis::Y, inf), kInvalidConstraintId);
+    EXPECT_EQ(graph.axisAlignedDistanceConstraintCount(), 0u);
+}
+
+TEST(ParametricFoundation, AddAxisAlignedDistanceConstraintRejectsNegativeDistance)
+{
+    ConstraintGraph graph;
+    const ParametricEntityId a = graph.addPoint({0.0, 0.0, 0.0});
+    const ParametricEntityId b = graph.addPoint({1.0, 0.0, 0.0});
+
+    EXPECT_EQ(graph.addAxisAlignedDistanceConstraint(a, b, Axis::Z, -5.0), kInvalidConstraintId);
+    EXPECT_EQ(graph.axisAlignedDistanceConstraintCount(), 0u);
 }

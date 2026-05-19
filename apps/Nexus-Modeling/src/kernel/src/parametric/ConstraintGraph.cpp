@@ -1,8 +1,19 @@
 #include <nexus/parametric/ConstraintGraph.h>
 
 #include <algorithm>
+#include <bit>
+#include <cstdint>
 
 namespace nexus::parametric {
+
+namespace {
+
+bool isFiniteDouble(double v) noexcept
+{
+    return (std::bit_cast<uint64_t>(v) & 0x7FF0000000000000ULL) != 0x7FF0000000000000ULL;
+}
+
+} // namespace
 
 ParametricEntityId ConstraintGraph::addPoint(const ParametricPoint3& point) noexcept
 {
@@ -78,7 +89,8 @@ ParametricConstraintId ConstraintGraph::addDistanceConstraint(ParametricEntityId
                                                               double targetDistance) noexcept
 {
     if (entityA == entityB || entityA == kInvalidEntityId || entityB == kInvalidEntityId ||
-        targetDistance < 0.0 || !hasEntity(entityA) || !hasEntity(entityB)) {
+        !isFiniteDouble(targetDistance) || targetDistance < 0.0 ||
+        !hasEntity(entityA) || !hasEntity(entityB)) {
         return kInvalidConstraintId;
     }
 
@@ -106,6 +118,7 @@ ParametricConstraintId ConstraintGraph::addAxisAlignedDistanceConstraint(Paramet
                                                                          double targetDistance) noexcept
 {
     if (entityA == entityB || entityA == kInvalidEntityId || entityB == kInvalidEntityId ||
+        !isFiniteDouble(targetDistance) || targetDistance < 0.0 ||
         !hasEntity(entityA) || !hasEntity(entityB)) {
         return kInvalidConstraintId;
     }
