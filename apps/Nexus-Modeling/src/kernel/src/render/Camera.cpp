@@ -4,13 +4,29 @@
 #include <nexus/render/Camera.h>
 #include <cmath>
 #include <cstring>
+#include <bit>
+#include <cstdint>
 
 namespace nexus::render {
 
 static constexpr float kPI = 3.14159265358979323846f;
 
+// Bit-pattern finiteness check: determines if a float is finite (not NaN or Inf).
+// Uses IEEE-754 bit layout to detect exponent field == all-1s (special values).
+static bool isFiniteFloat(float v) noexcept {
+    constexpr uint32_t kExpMask = 0x7F800000u;  // 8 exponent bits (bits 30-23)
+    const uint32_t bits = std::bit_cast<uint32_t>(v);
+    return (bits & kExpMask) != kExpMask;  // finite if exponent is not all-1s
+}
+
 void Camera::setPerspective(float fovYDeg, float aspect, float nearZ, float farZ) noexcept
 {
+    // Reject non-finite camera parameters to prevent NaN/Inf corruption of matrices
+    if (!isFiniteFloat(fovYDeg) || !isFiniteFloat(aspect) || 
+        !isFiniteFloat(nearZ) || !isFiniteFloat(farZ)) {
+        return;
+    }
+
     m_mode   = CameraMode::Perspective;
     m_fovY   = fovYDeg;
     m_aspect = aspect;
@@ -25,6 +41,12 @@ void Camera::setPerspective(float fovYDeg, float aspect, float nearZ, float farZ
 
 void Camera::setOrthographic(float width, float height, float nearZ, float farZ) noexcept
 {
+    // Reject non-finite camera parameters to prevent NaN/Inf corruption of matrices
+    if (!isFiniteFloat(width) || !isFiniteFloat(height) || 
+        !isFiniteFloat(nearZ) || !isFiniteFloat(farZ)) {
+        return;
+    }
+
     m_mode   = CameraMode::Orthographic;
     m_orthoW = width;
     m_orthoH = height;
@@ -65,6 +87,11 @@ void Camera::lookAt(Vec3 eye, Vec3 target, Vec3 up) noexcept
 }
 
 void Camera::setJitter(float jx, float jy) noexcept {
+    // Reject non-finite jitter values to prevent temporal reprojection artifacts
+    if (!isFiniteFloat(jx) || !isFiniteFloat(jy)) {
+        return;
+    }
+
     m_ubo.jitter.z = m_ubo.jitter.x;
     m_ubo.jitter.w = m_ubo.jitter.y;
     m_ubo.jitter.x = jx;
