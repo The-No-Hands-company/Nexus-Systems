@@ -2910,6 +2910,24 @@ void ScriptBatchHarness::registerBuiltinCommands()
             return true;
         });
 
+    m_registry.registerCommand("parametric.has_entity",
+        [](ScriptContext& context, const ScriptCommand& command, std::vector<std::string>& messages) {
+            if (!context.hasParametricGraph) {
+                messages.push_back("parametric.has_entity requires parametric.new first");
+                return false;
+            }
+            const auto idArg = parseIntArg(command, "id");
+            if (!idArg || *idArg <= 0) {
+                messages.push_back("parametric.has_entity requires valid id=");
+                return false;
+            }
+            const auto entityId = static_cast<nexus::parametric::ParametricEntityId>(*idArg);
+            const bool exists = context.parametricGraph.hasEntity(entityId);
+            messages.push_back("parametric entity id=" + std::to_string(entityId)
+                + " exists=" + std::string(exists ? "1" : "0"));
+            return exists;
+        });
+
     m_registry.registerCommand("parametric.set_point",
         [](ScriptContext& context, const ScriptCommand& command, std::vector<std::string>& messages) {
             if (!context.hasParametricGraph) {
