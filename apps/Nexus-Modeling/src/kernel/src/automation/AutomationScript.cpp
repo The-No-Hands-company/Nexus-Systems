@@ -678,6 +678,13 @@ namespace {
     return bytes;
 }
 
+[[nodiscard]] std::vector<uint8_t> serializeParametricState(
+    const nexus::parametric::ConstraintGraph& graph)
+{
+    const std::string text = nexus::parametric::ParametricGraphSerializer::serialize(graph);
+    return std::vector<uint8_t>(text.begin(), text.end());
+}
+
 [[nodiscard]] std::vector<uint8_t> serializeAnimationState(
     const nexus::animation::Skeleton& skeleton,
     const nexus::animation::Pose& pose)
@@ -2664,6 +2671,48 @@ void ScriptBatchHarness::registerBuiltinCommands()
             return true;
         });
 
+    m_registry.registerCommand("parametric.add_axis_aligned_distance_constraint",
+        [](ScriptContext& context, const ScriptCommand& command, std::vector<std::string>& messages) {
+            if (!context.hasParametricGraph) {
+                messages.push_back("parametric.add_axis_aligned_distance_constraint requires parametric.new first");
+                return false;
+            }
+            const auto aArg = parseIntArg(command, "a");
+            const auto bArg = parseIntArg(command, "b");
+            const auto distArg = parseDoubleArg(command, "dist");
+            const auto axisArg = getArg(command, "axis");
+            if (!aArg || !bArg || !distArg || !axisArg || axisArg->empty()) {
+                messages.push_back("parametric.add_axis_aligned_distance_constraint requires a= b= axis= dist=");
+                return false;
+            }
+
+            nexus::parametric::Axis axis = nexus::parametric::Axis::X;
+            if (*axisArg == "x" || *axisArg == "X") {
+                axis = nexus::parametric::Axis::X;
+            } else if (*axisArg == "y" || *axisArg == "Y") {
+                axis = nexus::parametric::Axis::Y;
+            } else if (*axisArg == "z" || *axisArg == "Z") {
+                axis = nexus::parametric::Axis::Z;
+            } else {
+                messages.push_back("parametric.add_axis_aligned_distance_constraint invalid axis (use x|y|z)");
+                return false;
+            }
+
+            const auto idA = static_cast<nexus::parametric::ParametricEntityId>(*aArg);
+            const auto idB = static_cast<nexus::parametric::ParametricEntityId>(*bArg);
+            const auto cid = context.parametricGraph.addAxisAlignedDistanceConstraint(idA, idB, axis, *distArg);
+            if (cid == nexus::parametric::kInvalidConstraintId) {
+                messages.push_back("parametric.add_axis_aligned_distance_constraint failed: invalid entity ids");
+                return false;
+            }
+            messages.push_back("parametric axis constraint id=" + std::to_string(cid)
+                + " a=" + std::to_string(idA)
+                + " b=" + std::to_string(idB)
+                + " axis=" + *axisArg
+                + " dist=" + std::to_string(*distArg));
+            return true;
+        });
+
     m_registry.registerCommand("parametric.solve",
         [](ScriptContext& context, const ScriptCommand& command, std::vector<std::string>& messages) {
             if (!context.hasParametricGraph) {
@@ -2718,6 +2767,76 @@ void ScriptBatchHarness::registerBuiltinCommands()
                 + " distance_constraints=" + std::to_string(context.parametricGraph.distanceConstraintCount())
                 + " coincident_constraints=" + std::to_string(context.parametricGraph.coincidentConstraintCount())
                 + " axis_constraints=" + std::to_string(context.parametricGraph.axisAlignedDistanceConstraintCount()));
+            return true;
+        });
+
+    m_registry.registerCommand("parametric.hash",
+        [](ScriptContext& context, const ScriptCommand&, std::vector<std::string>& messages) {
+            if (!context.hasParametricGraph) {
+                messages.push_back("parametric.hash requires parametric.new first");
+                return false;
+            }
+            const auto bytes = serializeParametricState(context.parametricGraph);
+            messages.push_back("parametric hash=" + hashHex(hashBytesFnv1a64(bytes))
+                + " entities=" + std::to_string(context.parametricGraph.entityCount())
+                + " bytes=" + std::to_string(bytes.size()));
+            return true;
+        });
+
+    m_registry.registerCommand("parametric.set_baseline",
+        [](ScriptContext& context, const ScriptCommand&, std::vector<std::string>& messages) {
+            if (!context.hasParametricGraph) {
+                messages.push_back("parametric.set_baseline requires parametric.new first");
+                return false;
+            }
+            context.parametricBaselineBytes = serializeParametricState(context.parametricGraph);
+            context.hasParametricBaseline = true;
+            messages.push_back("parametric baseline set entities="
+                + std::to_string(context.parametricGraph.entityCount()));
+            return true;
+        });
+
+    m_registry.registerCommand("parametric.diff",
+        [](ScriptContext& context, const ScriptCommand&, std::vector<std::string>& messages) {
+            if (!context.hasParametricGraph) {
+                messages.push_back("parametric.diff requires parametric.new first");
+                return false;
+            }
+            if (!context.hasParametricBaseline) {
+                messages.push_back("parametric.diff requires parametric.set_baseline first");
+                return false;
+            }
+            const auto currBytes = serializeParametricState(context.parametricGraph);
+            const auto& baseBytes = context.parametricBaselineBytes;
+            const size_t changed = byteDiffCount(baseBytes, currBytes);
+            const size_t firstDiff = firstByteDiff(baseBytes, currBytes);
+            messages.push_back("parametric diff equal=" + std::string(changed == 0 ? "1" : "0")
+                + " changed=" + std::to_string(changed)
+                + " first_diff=" + std::string(firstDiff == static_cast<size_t>(-1) ? "-1" : std::to_string(firstDiff))
+                + " base_hash=" + hashHex(hashBytesFnv1a64(baseBytes))
+                + " curr_hash=" + hashHex(hashBytesFnv1a64(currBytes)));
+            return true;
+        });
+
+    m_registry.registerCommand("parametric.expect_hash",
+        [](ScriptContext& context, const ScriptCommand& command, std::vector<std::string>& messages) {
+            if (!context.hasParametricGraph) {
+                messages.push_back("parametric.expect_hash requires parametric.new first");
+                return false;
+            }
+            const auto expected = parseExpectedHashArg(command);
+            if (!expected) {
+                messages.push_back("parametric.expect_hash requires hash=<uint64|0xHEX>");
+                return false;
+            }
+            const auto bytes = serializeParametricState(context.parametricGraph);
+            const uint64_t actual = hashBytesFnv1a64(bytes);
+            if (actual != *expected) {
+                messages.push_back("parametric.expect_hash mismatch expected="
+                    + hashHex(*expected) + " actual=" + hashHex(actual));
+                return false;
+            }
+            messages.push_back("parametric.expect_hash match " + hashHex(actual));
             return true;
         });
 

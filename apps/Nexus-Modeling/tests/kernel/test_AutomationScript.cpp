@@ -44,6 +44,7 @@ TEST(AutomationScript, DefaultRegistryExposesBuiltins)
     EXPECT_TRUE(harness.registry().hasCommand("animation.add_bone"));
     EXPECT_TRUE(harness.registry().hasCommand("animation.state_hash"));
     EXPECT_TRUE(harness.registry().hasCommand("sim.cross_solver_hash"));
+    EXPECT_TRUE(harness.registry().hasCommand("parametric.hash"));
 }
 
 TEST(AutomationScript, ScriptListCommandsContainsKnownEntries)
@@ -1680,8 +1681,10 @@ TEST(AutomationScript, ParametricCommandsAreRegistered)
     const std::vector<std::string> required = {
         "parametric.new", "parametric.add_point", "parametric.remove_entity",
         "parametric.add_distance_constraint", "parametric.add_coincident_constraint",
+        "parametric.add_axis_aligned_distance_constraint",
         "parametric.solve", "parametric.get_point", "parametric.describe",
-        "parametric.serialize", "parametric.load"
+        "parametric.hash", "parametric.set_baseline", "parametric.diff",
+        "parametric.expect_hash", "parametric.serialize", "parametric.load"
     };
     for (const auto& n : required) {
         EXPECT_TRUE(harness.registry().hasCommand(n)) << "missing: " << n;
@@ -1834,6 +1837,131 @@ TEST(AutomationScript, ParametricCoincidentConstraintIsTracked)
     EXPECT_NE(report.steps[3].messages.front().find("parametric coincident constraint id="), std::string::npos);
     ASSERT_FALSE(report.steps[4].messages.empty());
     EXPECT_NE(report.steps[4].messages.front().find("coincident_constraints=1"), std::string::npos);
+}
+
+TEST(AutomationScript, ParametricAxisAlignedConstraintIsTracked)
+{
+    ScriptBatchHarness harness;
+    ScriptContext context;
+    const ScriptRunReport report = harness.runScript(
+        "parametric.new\n"
+        "parametric.add_point x=0 y=0 z=0\n"
+        "parametric.add_point x=1 y=2 z=3\n"
+        "parametric.add_axis_aligned_distance_constraint a=1 b=2 axis=x dist=2\n"
+        "parametric.describe\n",
+        context);
+
+    EXPECT_TRUE(report.valid);
+    ASSERT_EQ(report.steps.size(), 5u);
+    ASSERT_FALSE(report.steps[3].messages.empty());
+    EXPECT_NE(report.steps[3].messages.front().find("parametric axis constraint id="), std::string::npos);
+    ASSERT_FALSE(report.steps[4].messages.empty());
+    EXPECT_NE(report.steps[4].messages.front().find("axis_constraints=1"), std::string::npos);
+}
+
+TEST(AutomationScript, ParametricAxisAlignedConstraintRejectsInvalidAxis)
+{
+    ScriptBatchHarness harness;
+    ScriptContext context;
+    const ScriptRunReport report = harness.runScript(
+        "parametric.new\n"
+        "parametric.add_point x=0 y=0 z=0\n"
+        "parametric.add_point x=1 y=2 z=3\n"
+        "parametric.add_axis_aligned_distance_constraint a=1 b=2 axis=q dist=2\n",
+        context);
+
+    EXPECT_FALSE(report.valid);
+    ASSERT_EQ(report.steps.size(), 4u);
+    EXPECT_FALSE(report.steps[3].success);
+    ASSERT_FALSE(report.steps[3].messages.empty());
+    EXPECT_NE(report.steps[3].messages.front().find("invalid axis"), std::string::npos);
+}
+
+TEST(AutomationScript, ParametricHashIsDeterministicAndDiffDetectsChange)
+{
+    ScriptBatchHarness harness;
+    ScriptContext hashContext;
+    const ScriptRunReport hashReport = harness.runScript(
+        "parametric.new\n"
+        "parametric.add_point x=0 y=0 z=0\n"
+        "parametric.hash\n"
+        "parametric.hash\n",
+        hashContext);
+
+    EXPECT_TRUE(hashReport.valid);
+    ASSERT_EQ(hashReport.steps.size(), 4u);
+    ASSERT_FALSE(hashReport.steps[2].messages.empty());
+    ASSERT_FALSE(hashReport.steps[3].messages.empty());
+    EXPECT_EQ(hashReport.steps[2].messages.front(), hashReport.steps[3].messages.front());
+
+    ScriptContext diffContext;
+    const ScriptRunReport diffReport = harness.runScript(
+        "parametric.new\n"
+        "parametric.add_point x=0 y=0 z=0\n"
+        "parametric.set_baseline\n"
+        "parametric.add_point x=1 y=0 z=0\n"
+        "parametric.diff\n",
+        diffContext);
+
+    EXPECT_TRUE(diffReport.valid);
+    ASSERT_EQ(diffReport.steps.size(), 5u);
+    ASSERT_FALSE(diffReport.steps[4].messages.empty());
+    EXPECT_NE(diffReport.steps[4].messages.front().find("equal=0"), std::string::npos);
+}
+
+TEST(AutomationScript, ParametricExpectHashDetectsMismatch)
+{
+    ScriptBatchHarness harness;
+    ScriptContext context;
+    const ScriptRunReport report = harness.runScript(
+        "parametric.new\n"
+        "parametric.add_point x=0 y=0 z=0\n"
+        "parametric.expect_hash hash=0x1\n",
+        context);
+
+    EXPECT_FALSE(report.valid);
+    ASSERT_EQ(report.steps.size(), 3u);
+    EXPECT_FALSE(report.steps.back().success);
+    ASSERT_FALSE(report.steps.back().messages.empty());
+    EXPECT_NE(report.steps.back().messages.front().find("mismatch"), std::string::npos);
+}
+
+TEST(AutomationScript, CrossDomainParametricOutputDrivesMeshGenerationPipeline)
+{
+    ScriptBatchHarness harness;
+
+    ScriptContext parametricContext;
+    const ScriptRunReport parametricReport = harness.runScript(
+        "parametric.new\n"
+        "parametric.add_point x=0 y=0 z=0\n"
+        "parametric.add_point x=2 y=0 z=0\n"
+        "parametric.add_distance_constraint a=1 b=2 dist=3\n"
+        "parametric.solve\n"
+        "parametric.get_point id=2\n",
+        parametricContext);
+
+    EXPECT_TRUE(parametricReport.valid);
+    ASSERT_EQ(parametricReport.steps.size(), 6u);
+    ASSERT_FALSE(parametricReport.steps[5].messages.empty());
+
+    const std::string pointMessage = parametricReport.steps[5].messages.front();
+    const size_t xPos = pointMessage.find("x=");
+    ASSERT_NE(xPos, std::string::npos);
+    const size_t yPos = pointMessage.find(" y=", xPos);
+    ASSERT_NE(yPos, std::string::npos);
+    const std::string xText = pointMessage.substr(xPos + 2, yPos - (xPos + 2));
+    const double drivenHeight = std::max(0.5, std::abs(std::stod(xText)));
+
+    ScriptContext meshContext;
+    const ScriptRunReport meshReport = harness.runScript(
+        "mesh.make_cylinder radius=1 height=" + std::to_string(drivenHeight) + " segs=8\n"
+        "mesh.hash\n",
+        meshContext);
+
+    EXPECT_TRUE(meshReport.valid);
+    ASSERT_EQ(meshReport.steps.size(), 2u);
+    ASSERT_FALSE(meshReport.steps[1].messages.empty());
+    EXPECT_NE(meshReport.steps[1].messages.front().find("mesh hash=0x"), std::string::npos);
 }
 
 } // namespace nexus::automation::testing

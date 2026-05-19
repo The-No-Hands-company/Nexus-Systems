@@ -98,6 +98,10 @@ struct ScriptContext {
     std::vector<uint8_t>                       sceneBaselineBytes;
     bool                                       hasSceneBaseline = false;
 
+    // ── Parametric baseline ───────────────────────────────────────────────────
+    std::vector<uint8_t>                       parametricBaselineBytes;
+    bool                                       hasParametricBaseline = false;
+
     // ── Animation baseline ────────────────────────────────────────────────────
     nexus::animation::Skeleton                 skeletonBaseline;
     nexus::animation::Pose                     poseBaseline;
