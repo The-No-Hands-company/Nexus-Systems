@@ -499,6 +499,36 @@ TEST(SimulationCore, RestoreStateReturnsFalseWhenSnapshotIsEmptyButSolverHasBodi
     EXPECT_FALSE(s.restoreState(empty));
 }
 
+TEST(SimulationCore, RestoreStateRejectsDuplicateBodyIds) {
+    RigidBodySolver s;
+    (void)s.addBody({1.0f});
+
+    SimState invalid;
+    invalid.bodies.push_back({1u, {0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 0.0f}});
+    invalid.bodies.push_back({1u, {1.0f, 2.0f, 3.0f}, {4.0f, 5.0f, 6.0f}});
+
+    EXPECT_FALSE(s.restoreState(invalid));
+}
+
+TEST(SimulationCore, SimStateSerializationOrdersExtremeBodyIdsDeterministically) {
+    SimState state;
+    state.simulationTime = 12.5;
+    state.bodies.push_back({std::numeric_limits<BodyId>::max(), {1.0f, 2.0f, 3.0f}, {4.0f, 5.0f, 6.0f}});
+    state.bodies.push_back({1u, {7.0f, 8.0f, 9.0f}, {0.5f, 0.25f, 0.125f}});
+    state.bodies.push_back({std::numeric_limits<BodyId>::max() - 1u, {10.0f, 11.0f, 12.0f}, {13.0f, 14.0f, 15.0f}});
+
+    const std::vector<std::uint8_t> bytesA = serializeSimState(state);
+    const std::vector<std::uint8_t> bytesB = serializeSimState(state);
+    EXPECT_EQ(bytesA, bytesB);
+
+    SimState restored;
+    ASSERT_TRUE(deserializeSimState(bytesA, restored));
+    ASSERT_EQ(restored.bodies.size(), 3u);
+    EXPECT_EQ(restored.bodies[0].id, 1u);
+    EXPECT_EQ(restored.bodies[1].id, std::numeric_limits<BodyId>::max() - 1u);
+    EXPECT_EQ(restored.bodies[2].id, std::numeric_limits<BodyId>::max());
+}
+
 TEST(SimulationCore, EmptySolverRestoresFromEmptyStateSuccessfully) {
     RigidBodySolver s;
     SimState empty;

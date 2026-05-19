@@ -39,6 +39,23 @@ inline uint64_t toBitsD(double d) { return std::bit_cast<uint64_t>(d); }
 inline float    fromBitsF(uint32_t u) { return std::bit_cast<float>(u); }
 inline double   fromBitsD(uint64_t u) { return std::bit_cast<double>(u); }
 
+inline bool isFiniteFloat(float value) noexcept {
+    const std::uint32_t bits = std::bit_cast<std::uint32_t>(value);
+    return (bits & 0x7F800000u) != 0x7F800000u;
+}
+
+inline bool isPositiveFiniteDouble(double value) noexcept {
+    const std::uint64_t bits = std::bit_cast<std::uint64_t>(value);
+    constexpr std::uint64_t kSignMask = 0x8000000000000000ULL;
+    constexpr std::uint64_t kExpMask = 0x7FF0000000000000ULL;
+    constexpr std::uint64_t kMagnitudeMask = 0x7FFFFFFFFFFFFFFFULL;
+    return (bits & kSignMask) == 0ULL && (bits & kExpMask) != kExpMask && (bits & kMagnitudeMask) != 0ULL;
+}
+
+inline bool isFiniteVec3(const ClothVec3& value) noexcept {
+    return isFiniteFloat(value.x) && isFiniteFloat(value.y) && isFiniteFloat(value.z);
+}
+
 // ── Internal solver data ──────────────────────────────────────────────────────
 
 struct ClothNode {
@@ -205,7 +222,25 @@ void ClothSolver::setGravity(ClothVec3 gravity) noexcept { m_impl->grav = gravit
 ClothVec3 ClothSolver::gravity() const noexcept { return m_impl->grav; }
 
 ClothStepReport ClothSolver::step(double dt) {
-    if (dt <= 0.0) return ClothStepReport{false, m_impl->time, 0};
+    if (!isPositiveFiniteDouble(dt) || !isFiniteVec3(m_impl->grav)) {
+        return ClothStepReport{false, m_impl->time, 0};
+    }
+
+    for (const auto& [id, node] : m_impl->nodes) {
+        (void)id;
+        if (!isFiniteFloat(node.mass) || node.mass < 0.0f || !isFiniteVec3(node.position) || !isFiniteVec3(node.velocity)) {
+            return ClothStepReport{false, m_impl->time, 0};
+        }
+    }
+
+    for (const auto& edge : m_impl->edges) {
+        if (!isFiniteFloat(edge.restLength) || edge.restLength < 0.0f) {
+            return ClothStepReport{false, m_impl->time, 0};
+        }
+        if (!isFiniteFloat(edge.stiffness) || edge.stiffness <= 0.0f) {
+            return ClothStepReport{false, m_impl->time, 0};
+        }
+    }
 
     const float fdt = static_cast<float>(dt);
     auto& nodes = m_impl->nodes;

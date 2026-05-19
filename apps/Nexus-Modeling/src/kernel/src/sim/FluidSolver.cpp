@@ -39,6 +39,23 @@ inline uint64_t toBitsFD(double d) { return std::bit_cast<uint64_t>(d); }
 inline float    fromBitsFF(uint32_t u) { return std::bit_cast<float>(u); }
 inline double   fromBitsFD(uint64_t u) { return std::bit_cast<double>(u); }
 
+inline bool isFiniteFloat(float value) noexcept {
+    const std::uint32_t bits = std::bit_cast<std::uint32_t>(value);
+    return (bits & 0x7F800000u) != 0x7F800000u;
+}
+
+inline bool isPositiveFiniteDouble(double value) noexcept {
+    const std::uint64_t bits = std::bit_cast<std::uint64_t>(value);
+    constexpr std::uint64_t kSignMask = 0x8000000000000000ULL;
+    constexpr std::uint64_t kExpMask = 0x7FF0000000000000ULL;
+    constexpr std::uint64_t kMagnitudeMask = 0x7FFFFFFFFFFFFFFFULL;
+    return (bits & kSignMask) == 0ULL && (bits & kExpMask) != kExpMask && (bits & kMagnitudeMask) != 0ULL;
+}
+
+inline bool isFiniteVec3(const FluidVec3& value) noexcept {
+    return isFiniteFloat(value.x) && isFiniteFloat(value.y) && isFiniteFloat(value.z);
+}
+
 // ── Internal particle data ────────────────────────────────────────────────────
 
 struct FluidParticle {
@@ -199,7 +216,16 @@ void  FluidSolver::setPressureStiffness(float k) noexcept  { m_impl->kStiff = k;
 float FluidSolver::pressureStiffness()  const noexcept     { return m_impl->kStiff; }
 
 FluidStepReport FluidSolver::step(double dt) {
-    if (dt <= 0.0) return FluidStepReport{false, m_impl->time, 0};
+    if (!isPositiveFiniteDouble(dt) || !isFiniteVec3(m_impl->grav) || !isFiniteFloat(m_impl->h) || m_impl->h <= 0.0f || !isFiniteFloat(m_impl->kStiff)) {
+        return FluidStepReport{false, m_impl->time, 0};
+    }
+
+    for (const auto& [id, particle] : m_impl->particles) {
+        (void)id;
+        if (!isFiniteFloat(particle.mass) || particle.mass < 0.0f || !isFiniteVec3(particle.position) || !isFiniteVec3(particle.velocity) || !isFiniteFloat(particle.restDensity) || !isFiniteFloat(particle.density)) {
+            return FluidStepReport{false, m_impl->time, 0};
+        }
+    }
 
     const float fdt = static_cast<float>(dt);
     auto& parts = m_impl->particles;

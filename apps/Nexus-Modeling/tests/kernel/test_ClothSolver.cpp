@@ -1,6 +1,8 @@
 #include <gtest/gtest.h>
 #include "nexus/sim/ClothSolver.h"
 
+#include <limits>
+
 using namespace nexus;
 
 // ── ClothSolver node management ───────────────────────────────────────────────
@@ -53,6 +55,18 @@ TEST(ClothSolver, StepWithNegativeDtFails) {
     const auto id = solver.addNode({1.0f, {}, {}});
     EXPECT_NE(id, kInvalidClothNodeId);
     const auto r = solver.step(-0.016);
+    EXPECT_FALSE(r.ok);
+    EXPECT_EQ(r.nodesIntegrated, 0u);
+}
+
+TEST(ClothSolver, StepRejectsNonFiniteRuntimeState) {
+    ClothSolver solver;
+    const auto id = solver.addNode({1.0f, {}, {}});
+    ASSERT_NE(id, kInvalidClothNodeId);
+
+    solver.setGravity({std::numeric_limits<float>::quiet_NaN(), 0.0f, 0.0f});
+
+    const auto r = solver.step(0.016);
     EXPECT_FALSE(r.ok);
     EXPECT_EQ(r.nodesIntegrated, 0u);
 }

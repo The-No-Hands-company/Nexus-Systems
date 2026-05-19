@@ -1,5 +1,6 @@
 #include "nexus/sim/SimulationCore.h"
 
+#include <cassert>
 #include <bit>
 #include <algorithm>
 #include <cstdint>
@@ -346,12 +347,28 @@ SimState RigidBodySolver::captureState() const {
                                                             const SimBodySnapshot& b) {
         return a.id < b.id;
     });
+    assert(std::adjacent_find(state.bodies.begin(), state.bodies.end(),
+                              [](const SimBodySnapshot& a, const SimBodySnapshot& b) {
+                                  return a.id == b.id;
+                              }) == state.bodies.end());
     return state;
 }
 
 bool RigidBodySolver::restoreState(const SimState& state) {
     if (state.bodies.empty() && !m_bodies.empty()) {
         // Structurally invalid restore: snapshot has no bodies but solver does.
+        return false;
+    }
+
+    std::vector<SimBodySnapshot> orderedBodies = state.bodies;
+    std::sort(orderedBodies.begin(), orderedBodies.end(), [](const SimBodySnapshot& a,
+                                                             const SimBodySnapshot& b) {
+        return a.id < b.id;
+    });
+    if (std::adjacent_find(orderedBodies.begin(), orderedBodies.end(),
+                           [](const SimBodySnapshot& a, const SimBodySnapshot& b) {
+                               return a.id == b.id;
+                           }) != orderedBodies.end()) {
         return false;
     }
 

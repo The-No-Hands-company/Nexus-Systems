@@ -1,6 +1,8 @@
 #include <gtest/gtest.h>
 #include "nexus/sim/FluidSolver.h"
 
+#include <limits>
+
 using namespace nexus;
 
 // ── FluidSolver particle management ──────────────────────────────────────────
@@ -79,6 +81,18 @@ TEST(FluidSolver, StepWithNegativeDtFails) {
     const auto id = solver.addParticle({1.0f, {0,0,0}, {0,0,0}, 1000.0f});
     EXPECT_NE(id, kInvalidFluidParticleId);
     const auto r = solver.step(-0.016);
+    EXPECT_FALSE(r.ok);
+    EXPECT_EQ(r.particlesAdvanced, 0u);
+}
+
+TEST(FluidSolver, StepRejectsNonFiniteRuntimeState) {
+    FluidSolver solver;
+    const auto id = solver.addParticle({1.0f, {0,0,0}, {0,0,0}, 1000.0f});
+    ASSERT_NE(id, kInvalidFluidParticleId);
+
+    solver.setGravity({0.0f, std::numeric_limits<float>::infinity(), 0.0f});
+
+    const auto r = solver.step(0.016);
     EXPECT_FALSE(r.ok);
     EXPECT_EQ(r.particlesAdvanced, 0u);
 }
