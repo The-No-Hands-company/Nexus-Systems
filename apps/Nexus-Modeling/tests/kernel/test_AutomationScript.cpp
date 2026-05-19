@@ -2109,6 +2109,41 @@ TEST(AutomationScript, ParametricSolvePipelineRunsDeterministically)
     EXPECT_NE(report.steps[5].messages.front().find("distance_constraints=1"), std::string::npos);
 }
 
+TEST(AutomationScript, ParametricSolveAcceptsConvergenceEpsilon)
+{
+    ScriptBatchHarness harness;
+    ScriptContext context;
+    const ScriptRunReport report = harness.runScript(
+        "parametric.new\n"
+        "parametric.add_point x=0 y=0 z=0\n"
+        "parametric.add_point x=3 y=4 z=0\n"
+        "parametric.add_distance_constraint a=1 b=2 dist=5\n"
+        "parametric.solve convergence_epsilon=1e-10 max_iterations=32\n",
+        context);
+
+    EXPECT_TRUE(report.valid);
+    ASSERT_EQ(report.steps.size(), 5u);
+    EXPECT_TRUE(report.steps.back().success);
+    ASSERT_FALSE(report.steps.back().messages.empty());
+    EXPECT_NE(report.steps.back().messages.front().find("converged=1"), std::string::npos);
+}
+
+TEST(AutomationScript, ParametricSolveRejectsInvalidConvergenceEpsilon)
+{
+    ScriptBatchHarness harness;
+    ScriptContext context;
+    const ScriptRunReport report = harness.runScript(
+        "parametric.new\n"
+        "parametric.solve convergence_epsilon=-1\n",
+        context);
+
+    EXPECT_FALSE(report.valid);
+    ASSERT_EQ(report.steps.size(), 2u);
+    EXPECT_FALSE(report.steps.back().success);
+    ASSERT_FALSE(report.steps.back().messages.empty());
+    EXPECT_NE(report.steps.back().messages.front().find("requires valid convergence_epsilon="), std::string::npos);
+}
+
 TEST(AutomationScript, ParametricGetPointReturnsCoordinates)
 {
     ScriptBatchHarness harness;

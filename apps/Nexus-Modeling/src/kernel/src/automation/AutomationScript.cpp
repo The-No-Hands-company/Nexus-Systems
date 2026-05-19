@@ -3093,6 +3093,14 @@ void ScriptBatchHarness::registerBuiltinCommands()
             nexus::parametric::ParametricSolverConfig cfg;
             if (const auto maxIter = parseIntArg(command, "max_iterations"))
                 cfg.maxIterations = static_cast<uint32_t>(std::max(1, *maxIter));
+            if (const auto epsilonText = getArg(command, "convergence_epsilon")) {
+                const auto epsilon = parseDoubleArg(command, "convergence_epsilon");
+                if (!epsilon || *epsilon <= 0.0) {
+                    messages.push_back("parametric.solve requires valid convergence_epsilon=");
+                    return false;
+                }
+                cfg.convergenceEpsilon = *epsilon;
+            }
             const auto report = nexus::parametric::ParametricSolver::solve(context.parametricGraph, cfg);
             messages.push_back("parametric solved converged=" + std::string(report.converged ? "1" : "0")
                 + " iterations=" + std::to_string(report.iterationsRan)
