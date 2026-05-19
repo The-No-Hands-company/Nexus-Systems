@@ -240,6 +240,27 @@ TEST(AnimationCore, ClipSampleRateQuantizesSampleTime)
     EXPECT_NEAR(pose.localTransform(0).translation.x, 5.f, 1e-5f);
 }
 
+TEST(AnimationCore, ClipSettersRejectNegativeAndNonFiniteValues)
+{
+    AnimationClip clip;
+    clip.setDurationSec(1.5f);
+    clip.setSampleRateHz(24.f);
+
+    const float nan = std::numeric_limits<float>::quiet_NaN();
+    const float inf = std::numeric_limits<float>::infinity();
+
+    clip.setDurationSec(-1.f);
+    clip.setDurationSec(nan);
+    clip.setDurationSec(inf);
+
+    clip.setSampleRateHz(-60.f);
+    clip.setSampleRateHz(nan);
+    clip.setSampleRateHz(-inf);
+
+    EXPECT_FLOAT_EQ(clip.durationSec(), 1.5f);
+    EXPECT_FLOAT_EQ(clip.sampleRateHz(), 24.f);
+}
+
 TEST(AnimationCore, ClipBlenderSupportsPerBoneWeightMask)
 {
     Skeleton skel;

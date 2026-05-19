@@ -238,14 +238,14 @@ AnimationClip::AnimationClip(float durationSec, float sampleRateHz)
 
 void AnimationClip::setDurationSec(float durationSec) noexcept
 {
-    if (!isFiniteFloat(durationSec)) return;
-    m_durationSec = std::max(0.f, durationSec);
+    if (!isFiniteFloat(durationSec) || durationSec < 0.f) return;
+    m_durationSec = durationSec;
 }
 
 void AnimationClip::setSampleRateHz(float sampleRateHz) noexcept
 {
-    if (!isFiniteFloat(sampleRateHz)) return;
-    m_sampleRateHz = std::max(0.f, sampleRateHz);
+    if (!isFiniteFloat(sampleRateHz) || sampleRateHz < 0.f) return;
+    m_sampleRateHz = sampleRateHz;
 }
 
 void AnimationClip::setBoneTrack(size_t boneIndex, TransformTrack track)
