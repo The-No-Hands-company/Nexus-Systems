@@ -956,6 +956,8 @@ TEST(AutomationScript, MeshHashCommandsAreRegistered)
     EXPECT_TRUE(harness.registry().hasCommand("mesh.set_baseline"));
     EXPECT_TRUE(harness.registry().hasCommand("mesh.diff"));
     EXPECT_TRUE(harness.registry().hasCommand("mesh.expect_hash"));
+    EXPECT_TRUE(harness.registry().hasCommand("mesh.export_bundle"));
+    EXPECT_TRUE(harness.registry().hasCommand("mesh.verify_bundle"));
 }
 
 TEST(AutomationScript, MeshHashIsDeterministicAndDiffDetectsChange)
@@ -997,6 +999,104 @@ TEST(AutomationScript, MeshExpectHashDetectsMismatch)
     EXPECT_FALSE(report.steps[1].success);
     ASSERT_FALSE(report.steps[1].messages.empty());
     EXPECT_NE(report.steps[1].messages.front().find("mismatch"), std::string::npos);
+}
+
+TEST(AutomationScript, MeshExportAndVerifyBundleRoundTrip)
+{
+    const fs::path outDir = tempPath("mesh_bundle_verify");
+    const fs::path bundlePath = outDir / "mesh_bundle.json";
+    fs::create_directories(outDir);
+
+    ScriptBatchHarness harness;
+    ScriptContext context;
+    const ScriptRunReport report = harness.runScript(
+        "mesh.make_triangle size=1\n"
+        "mesh.export_bundle path=" + bundlePath.string() + "\n"
+        "mesh.verify_bundle path=" + bundlePath.string() + "\n",
+        context);
+
+    EXPECT_TRUE(report.valid);
+    ASSERT_EQ(report.steps.size(), 3u);
+    EXPECT_TRUE(report.steps.back().success);
+    ASSERT_FALSE(report.steps.back().messages.empty());
+    EXPECT_NE(report.steps.back().messages.front().find("match:"), std::string::npos);
+
+    fs::remove(bundlePath);
+    fs::remove_all(outDir);
+}
+
+TEST(AutomationScript, MeshVerifyBundleRejectsMissingOrInvalidHash)
+{
+    const fs::path outDir = tempPath("mesh_bundle_verify_malformed");
+    const fs::path bundlePath = outDir / "mesh_bundle.json";
+    fs::create_directories(outDir);
+
+    {
+        std::ofstream out(bundlePath, std::ios::trunc);
+        ASSERT_TRUE(out.good());
+        out << "{\"vertex_count\":3,\"face_count\":1}";
+        ASSERT_TRUE(out.good());
+    }
+
+    ScriptBatchHarness harness;
+    ScriptContext context;
+    const ScriptRunReport missingHashReport = harness.runScript(
+        "mesh.make_triangle size=1\n"
+        "mesh.verify_bundle path=" + bundlePath.string() + "\n",
+        context);
+
+    EXPECT_FALSE(missingHashReport.valid);
+    ASSERT_EQ(missingHashReport.steps.size(), 2u);
+    EXPECT_FALSE(missingHashReport.steps.back().success);
+    ASSERT_FALSE(missingHashReport.steps.back().messages.empty());
+    EXPECT_NE(missingHashReport.steps.back().messages.front().find("missing mesh_hash"), std::string::npos);
+
+    {
+        std::ofstream out(bundlePath, std::ios::trunc);
+        ASSERT_TRUE(out.good());
+        out << "{\"mesh_hash\":123,\"vertex_count\":3,\"face_count\":1}";
+        ASSERT_TRUE(out.good());
+    }
+
+    ScriptContext invalidContext;
+    const ScriptRunReport invalidHashReport = harness.runScript(
+        "mesh.make_triangle size=1\n"
+        "mesh.verify_bundle path=" + bundlePath.string() + "\n",
+        invalidContext);
+
+    EXPECT_FALSE(invalidHashReport.valid);
+    ASSERT_EQ(invalidHashReport.steps.size(), 2u);
+    EXPECT_FALSE(invalidHashReport.steps.back().success);
+    ASSERT_FALSE(invalidHashReport.steps.back().messages.empty());
+    EXPECT_NE(invalidHashReport.steps.back().messages.front().find("missing mesh_hash"), std::string::npos);
+
+    fs::remove(bundlePath);
+    fs::remove_all(outDir);
+}
+
+TEST(AutomationScript, MeshVerifyBundleFailsAfterMutation)
+{
+    const fs::path outDir = tempPath("mesh_bundle_verify_fail");
+    const fs::path bundlePath = outDir / "mesh_bundle.json";
+    fs::create_directories(outDir);
+
+    ScriptBatchHarness harness;
+    ScriptContext context;
+    const ScriptRunReport report = harness.runScript(
+        "mesh.make_triangle size=1\n"
+        "mesh.export_bundle path=" + bundlePath.string() + "\n"
+        "mesh.transform tx=1\n"
+        "mesh.verify_bundle path=" + bundlePath.string() + "\n",
+        context);
+
+    EXPECT_FALSE(report.valid);
+    ASSERT_EQ(report.steps.size(), 4u);
+    EXPECT_FALSE(report.steps.back().success);
+    ASSERT_FALSE(report.steps.back().messages.empty());
+    EXPECT_NE(report.steps.back().messages.front().find("mismatch"), std::string::npos);
+
+    fs::remove(bundlePath);
+    fs::remove_all(outDir);
 }
 
 // ── scene.hash / scene.set_baseline / scene.diff / scene.export_bundle / scene.verify_bundle ─

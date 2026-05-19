@@ -2330,6 +2330,68 @@ void ScriptBatchHarness::registerBuiltinCommands()
             return true;
         });
 
+    m_registry.registerCommand("mesh.export_bundle",
+        [](ScriptContext& context, const ScriptCommand& command, std::vector<std::string>& messages) {
+            if (!context.hasMesh) {
+                messages.push_back("mesh.export_bundle requires a mesh");
+                return false;
+            }
+            const auto pathArg = getArg(command, "path");
+            if (!pathArg) {
+                messages.push_back("mesh.export_bundle requires path=");
+                return false;
+            }
+            const std::filesystem::path target = normalizePath(context.workingDirectory, *pathArg);
+            const auto bytes = serializeMeshState(context.mesh);
+            const std::string meshHash = hashHex(hashBytesFnv1a64(bytes));
+            std::ostringstream oss;
+            oss << "{\"mesh_hash\":\"" << meshHash << "\""
+                << ",\"vertex_count\":" << context.mesh.attributes().vertexCount()
+                << ",\"face_count\":" << context.mesh.topology().faceCount()
+                << "}";
+            const std::string json = oss.str();
+            std::vector<uint8_t> outBytes(json.begin(), json.end());
+            if (!writeBytesToFile(target, outBytes, messages)) {
+                return false;
+            }
+            messages.push_back("mesh bundle exported hash=" + meshHash
+                + " bytes=" + std::to_string(outBytes.size()));
+            return true;
+        });
+
+    m_registry.registerCommand("mesh.verify_bundle",
+        [](ScriptContext& context, const ScriptCommand& command, std::vector<std::string>& messages) {
+            if (!context.hasMesh) {
+                messages.push_back("mesh.verify_bundle requires a mesh");
+                return false;
+            }
+            const auto pathArg = getArg(command, "path");
+            if (!pathArg) {
+                messages.push_back("mesh.verify_bundle requires path=");
+                return false;
+            }
+            const std::filesystem::path source = normalizePath(context.workingDirectory, *pathArg);
+            std::vector<uint8_t> input;
+            if (!readBytesFromFile(source, input, messages)) {
+                return false;
+            }
+            const std::string text(input.begin(), input.end());
+            const auto expectedHash = extractJsonStringField(text, "mesh_hash");
+            if (!expectedHash) {
+                messages.push_back("mesh.verify_bundle missing mesh_hash in: " + makePathString(source));
+                return false;
+            }
+            const auto currBytes = serializeMeshState(context.mesh);
+            const std::string actualHash = hashHex(hashBytesFnv1a64(currBytes));
+            if (*expectedHash != actualHash) {
+                messages.push_back("mesh.verify_bundle mismatch expected=" + *expectedHash
+                    + " actual=" + actualHash);
+                return false;
+            }
+            messages.push_back("mesh.verify_bundle match: " + actualHash);
+            return true;
+        });
+
     // ── Scene hashing and baseline commands ──────────────────────────────────
 
     m_registry.registerCommand("scene.hash",
