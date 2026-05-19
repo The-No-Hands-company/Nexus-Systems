@@ -479,9 +479,118 @@ TEST(AutomationScript, RigidSimCommandsAreRegistered)
     EXPECT_TRUE(harness.registry().hasCommand("sim.rigid.import_state"));
     EXPECT_TRUE(harness.registry().hasCommand("sim.rigid.state_hash"));
     EXPECT_TRUE(harness.registry().hasCommand("sim.rigid.state_summary"));
+    EXPECT_TRUE(harness.registry().hasCommand("sim.rigid.describe"));
+    EXPECT_TRUE(harness.registry().hasCommand("sim.rigid.list_bodies"));
+    EXPECT_TRUE(harness.registry().hasCommand("sim.rigid.has_body"));
+    EXPECT_TRUE(harness.registry().hasCommand("sim.rigid.get_body"));
     EXPECT_TRUE(harness.registry().hasCommand("sim.rigid.diff_state"));
     EXPECT_TRUE(harness.registry().hasCommand("sim.rigid.set_baseline"));
     EXPECT_TRUE(harness.registry().hasCommand("sim.rigid.expect_hash"));
+}
+
+TEST(AutomationScript, RigidDescribeEmitsBodyCount)
+{
+    ScriptBatchHarness harness;
+    ScriptContext context;
+    const ScriptRunReport report = harness.runScript(
+        "sim.rigid.create gy=0\n"
+        "sim.rigid.add_body mass=1\n"
+        "sim.rigid.add_body mass=0\n"
+        "sim.rigid.describe\n",
+        context);
+
+    EXPECT_TRUE(report.valid);
+    ASSERT_EQ(report.steps.size(), 4u);
+    ASSERT_FALSE(report.steps.back().messages.empty());
+    EXPECT_NE(report.steps.back().messages.front().find("bodies=2"), std::string::npos);
+}
+
+TEST(AutomationScript, RigidListBodiesEmitsOneMessagePerBody)
+{
+    ScriptBatchHarness harness;
+    ScriptContext context;
+    const ScriptRunReport report = harness.runScript(
+        "sim.rigid.create gy=0\n"
+        "sim.rigid.add_body mass=1 tx=0 ty=1 tz=2 vx=3 vy=4 vz=5\n"
+        "sim.rigid.add_body mass=0 tx=6 ty=7 tz=8\n"
+        "sim.rigid.list_bodies\n",
+        context);
+
+    EXPECT_TRUE(report.valid);
+    ASSERT_EQ(report.steps.size(), 4u);
+    ASSERT_EQ(report.steps.back().messages.size(), 2u);
+    EXPECT_NE(report.steps.back().messages[0].find("id=1"), std::string::npos);
+    EXPECT_NE(report.steps.back().messages[0].find("px=0."), std::string::npos);
+    EXPECT_NE(report.steps.back().messages[0].find("vy=4."), std::string::npos);
+    EXPECT_NE(report.steps.back().messages[1].find("id=2"), std::string::npos);
+    EXPECT_NE(report.steps.back().messages[1].find("px=6."), std::string::npos);
+}
+
+TEST(AutomationScript, RigidHasBodyFindsExistingBody)
+{
+    ScriptBatchHarness harness;
+    ScriptContext context;
+    const ScriptRunReport report = harness.runScript(
+        "sim.rigid.create\n"
+        "sim.rigid.add_body mass=1\n"
+        "sim.rigid.has_body id=1\n",
+        context);
+
+    EXPECT_TRUE(report.valid);
+    ASSERT_EQ(report.steps.size(), 3u);
+    EXPECT_TRUE(report.steps.back().success);
+    ASSERT_FALSE(report.steps.back().messages.empty());
+    EXPECT_NE(report.steps.back().messages.front().find("exists"), std::string::npos);
+}
+
+TEST(AutomationScript, RigidHasBodyFailsForMissingBody)
+{
+    ScriptBatchHarness harness;
+    ScriptContext context;
+    const ScriptRunReport report = harness.runScript(
+        "sim.rigid.create\n"
+        "sim.rigid.has_body id=99\n",
+        context);
+
+    EXPECT_FALSE(report.valid);
+    ASSERT_EQ(report.steps.size(), 2u);
+    EXPECT_FALSE(report.steps.back().success);
+    ASSERT_FALSE(report.steps.back().messages.empty());
+    EXPECT_NE(report.steps.back().messages.front().find("not found"), std::string::npos);
+}
+
+TEST(AutomationScript, RigidGetBodyReturnsMetadata)
+{
+    ScriptBatchHarness harness;
+    ScriptContext context;
+    const ScriptRunReport report = harness.runScript(
+        "sim.rigid.create\n"
+        "sim.rigid.add_body mass=1 tx=1 ty=2 tz=3 vx=4 vy=5 vz=6\n"
+        "sim.rigid.get_body id=1\n",
+        context);
+
+    EXPECT_TRUE(report.valid);
+    ASSERT_EQ(report.steps.size(), 3u);
+    ASSERT_FALSE(report.steps.back().messages.empty());
+    EXPECT_NE(report.steps.back().messages.front().find("id=1"), std::string::npos);
+    EXPECT_NE(report.steps.back().messages.front().find("px=1."), std::string::npos);
+    EXPECT_NE(report.steps.back().messages.front().find("vz=6."), std::string::npos);
+}
+
+TEST(AutomationScript, RigidGetBodyFailsForMissingBody)
+{
+    ScriptBatchHarness harness;
+    ScriptContext context;
+    const ScriptRunReport report = harness.runScript(
+        "sim.rigid.create\n"
+        "sim.rigid.get_body id=99\n",
+        context);
+
+    EXPECT_FALSE(report.valid);
+    ASSERT_EQ(report.steps.size(), 2u);
+    EXPECT_FALSE(report.steps.back().success);
+    ASSERT_FALSE(report.steps.back().messages.empty());
+    EXPECT_NE(report.steps.back().messages.front().find("not found"), std::string::npos);
 }
 
 TEST(AutomationScript, RigidSimPipelineRunsDeterministically)
