@@ -1,8 +1,146 @@
 #include "nexus/sim/SimulationCore.h"
 
+#include <bit>
 #include <algorithm>
+#include <cstdint>
+#include <cstring>
+#include <limits>
+#include <type_traits>
 
 namespace nexus {
+
+namespace {
+
+constexpr std::uint32_t kSimStateMagic = 0x314d5353u; // 'SSM1' little-endian marker
+constexpr std::uint32_t kSimStateVersion = 1u;
+
+template <typename T>
+void appendBytes(std::vector<std::uint8_t>& out, T value)
+{
+    static_assert(std::is_trivially_copyable_v<T>);
+    const std::uint8_t* begin = reinterpret_cast<const std::uint8_t*>(&value);
+    out.insert(out.end(), begin, begin + sizeof(T));
+}
+
+template <typename T>
+bool readBytes(const std::vector<std::uint8_t>& bytes, std::size_t& offset, T& out)
+{
+    static_assert(std::is_trivially_copyable_v<T>);
+    if (offset + sizeof(T) > bytes.size()) {
+        return false;
+    }
+    std::memcpy(&out, bytes.data() + offset, sizeof(T));
+    offset += sizeof(T);
+    return true;
+}
+
+std::uint32_t toBits(float value)
+{
+    return std::bit_cast<std::uint32_t>(value);
+}
+
+std::uint64_t toBits(double value)
+{
+    return std::bit_cast<std::uint64_t>(value);
+}
+
+float fromBitsFloat(std::uint32_t bits)
+{
+    return std::bit_cast<float>(bits);
+}
+
+double fromBitsDouble(std::uint64_t bits)
+{
+    return std::bit_cast<double>(bits);
+}
+
+} // namespace
+
+bool operator==(const SimBodySnapshot& a, const SimBodySnapshot& b) noexcept
+{
+    return a.id == b.id && a.position == b.position && a.velocity == b.velocity;
+}
+
+bool operator==(const SimState& a, const SimState& b) noexcept
+{
+    return a.simulationTime == b.simulationTime && a.bodies == b.bodies;
+}
+
+std::vector<std::uint8_t> serializeSimState(const SimState& state)
+{
+    SimState sorted = state;
+    std::sort(sorted.bodies.begin(), sorted.bodies.end(), [](const SimBodySnapshot& lhs,
+                                                             const SimBodySnapshot& rhs) {
+        return lhs.id < rhs.id;
+    });
+
+    std::vector<std::uint8_t> bytes;
+    bytes.reserve(16u + sorted.bodies.size() * 32u);
+
+    appendBytes(bytes, kSimStateMagic);
+    appendBytes(bytes, kSimStateVersion);
+    appendBytes(bytes, toBits(sorted.simulationTime));
+
+    const std::uint32_t bodyCount = static_cast<std::uint32_t>(sorted.bodies.size());
+    appendBytes(bytes, bodyCount);
+
+    for (const SimBodySnapshot& body : sorted.bodies) {
+        appendBytes(bytes, static_cast<std::uint32_t>(body.id));
+        appendBytes(bytes, toBits(body.position.x));
+        appendBytes(bytes, toBits(body.position.y));
+        appendBytes(bytes, toBits(body.position.z));
+        appendBytes(bytes, toBits(body.velocity.x));
+        appendBytes(bytes, toBits(body.velocity.y));
+        appendBytes(bytes, toBits(body.velocity.z));
+    }
+
+    return bytes;
+}
+
+bool deserializeSimState(const std::vector<std::uint8_t>& bytes, SimState& outState)
+{
+    std::size_t offset = 0u;
+    std::uint32_t magic = 0u;
+    std::uint32_t version = 0u;
+    std::uint64_t timeBits = 0u;
+    std::uint32_t bodyCount = 0u;
+
+    if (!readBytes(bytes, offset, magic) || magic != kSimStateMagic) return false;
+    if (!readBytes(bytes, offset, version) || version != kSimStateVersion) return false;
+    if (!readBytes(bytes, offset, timeBits)) return false;
+    if (!readBytes(bytes, offset, bodyCount)) return false;
+
+    SimState state;
+    state.simulationTime = fromBitsDouble(timeBits);
+    state.bodies.reserve(bodyCount);
+
+    for (std::uint32_t i = 0; i < bodyCount; ++i) {
+        std::uint32_t id = 0u;
+        std::uint32_t px = 0u, py = 0u, pz = 0u;
+        std::uint32_t vx = 0u, vy = 0u, vz = 0u;
+
+        if (!readBytes(bytes, offset, id)) return false;
+        if (!readBytes(bytes, offset, px)) return false;
+        if (!readBytes(bytes, offset, py)) return false;
+        if (!readBytes(bytes, offset, pz)) return false;
+        if (!readBytes(bytes, offset, vx)) return false;
+        if (!readBytes(bytes, offset, vy)) return false;
+        if (!readBytes(bytes, offset, vz)) return false;
+
+        state.bodies.push_back(SimBodySnapshot{
+            static_cast<BodyId>(id),
+            {fromBitsFloat(px), fromBitsFloat(py), fromBitsFloat(pz)},
+            {fromBitsFloat(vx), fromBitsFloat(vy), fromBitsFloat(vz)}
+        });
+    }
+
+    if (offset != bytes.size()) {
+        return false;
+    }
+
+    outState = std::move(state);
+    return true;
+}
 
 RigidBodySolver::RigidBodySolver()  = default;
 RigidBodySolver::~RigidBodySolver() = default;
@@ -62,13 +200,44 @@ SimVec3 RigidBodySolver::gravity() const noexcept {
 
 // ── Simulation step ───────────────────────────────────────────────────────────
 
+namespace {
+
+inline bool isPositiveFinite(double v) noexcept
+{
+    const std::uint64_t bits = std::bit_cast<std::uint64_t>(v);
+    constexpr std::uint64_t kSignMask = 0x8000000000000000ULL;
+    constexpr std::uint64_t kExpMask = 0x7FF0000000000000ULL;
+    constexpr std::uint64_t kMagnitudeMask = 0x7FFFFFFFFFFFFFFFULL;
+
+    const bool finite = (bits & kExpMask) != kExpMask;
+    const bool positive = (bits & kSignMask) == 0ULL;
+    const bool nonZero = (bits & kMagnitudeMask) != 0ULL;
+    return finite && positive && nonZero;
+}
+
+} // namespace
+
 StepReport RigidBodySolver::step(double dt) {
     StepReport report;
     report.simulationTime   = m_time;
     report.bodiesIntegrated = 0;
 
-    if (dt <= 0.0) {
+    if (!isPositiveFinite(dt)) {
         report.ok = false;
+        return report;
+    }
+
+    size_t dynamicBodies = 0u;
+    for (const auto& [id, b] : m_bodies) {
+        (void)id;
+        if (b.mass != 0.0f) {
+            ++dynamicBodies;
+        }
+    }
+
+    if (dynamicBodies == 0u) {
+        m_time += dt;
+        report.simulationTime = m_time;
         return report;
     }
 
@@ -92,12 +261,75 @@ StepReport RigidBodySolver::step(double dt) {
 
         // Clear per-step accumulated force.
         b.force = {0.0f, 0.0f, 0.0f};
-
-        ++report.bodiesIntegrated;
     }
 
     m_time += dt;
     report.simulationTime = m_time;
+    report.bodiesIntegrated = dynamicBodies;
+    return report;
+}
+
+StepReport RigidBodySolver::stepFixed(double dt, double fixedSubstep)
+{
+    StepReport report;
+    report.simulationTime = m_time;
+    report.bodiesIntegrated = 0;
+
+    if (!isPositiveFinite(dt) || !isPositiveFinite(fixedSubstep)) {
+        report.ok = false;
+        return report;
+    }
+
+    size_t dynamicBodies = 0u;
+    for (const auto& [id, b] : m_bodies) {
+        (void)id;
+        if (b.mass != 0.0f) {
+            ++dynamicBodies;
+        }
+    }
+
+    if (dynamicBodies == 0u) {
+        m_time += dt;
+        report.simulationTime = m_time;
+        return report;
+    }
+
+    auto integrateSubstep = [this](double substepDt) {
+        const float fdt = static_cast<float>(substepDt);
+        for (auto& [id, b] : m_bodies) {
+            (void)id;
+            if (b.mass == 0.0f) {
+                continue;
+            }
+
+            const SimVec3 gravityForce = m_gravity * b.mass;
+            const SimVec3 totalForce = gravityForce + b.force;
+            const SimVec3 acceleration = totalForce * (1.0f / b.mass);
+            b.velocity = b.velocity + acceleration * fdt;
+            b.position = b.position + b.velocity * fdt;
+        }
+        m_time += substepDt;
+    };
+
+    double remaining = dt;
+    while (remaining > fixedSubstep) {
+        integrateSubstep(fixedSubstep);
+        remaining -= fixedSubstep;
+    }
+    if (remaining > 0.0) {
+        integrateSubstep(remaining);
+    }
+
+    for (auto& [id, b] : m_bodies) {
+        (void)id;
+        if (b.mass == 0.0f) {
+            continue;
+        }
+        b.force = {0.0f, 0.0f, 0.0f};
+    }
+
+    report.simulationTime = m_time;
+    report.bodiesIntegrated = dynamicBodies;
     return report;
 }
 
@@ -110,6 +342,10 @@ SimState RigidBodySolver::captureState() const {
     for (const auto& [id, b] : m_bodies) {
         state.bodies.push_back(SimBodySnapshot{b.id, b.position, b.velocity});
     }
+    std::sort(state.bodies.begin(), state.bodies.end(), [](const SimBodySnapshot& a,
+                                                            const SimBodySnapshot& b) {
+        return a.id < b.id;
+    });
     return state;
 }
 

@@ -43,6 +43,16 @@ struct SimState {
     double simulationTime = 0.0;
 };
 
+[[nodiscard]] bool operator==(const SimBodySnapshot& a, const SimBodySnapshot& b) noexcept;
+[[nodiscard]] bool operator==(const SimState& a, const SimState& b) noexcept;
+
+/// Deterministic cacheable byte format for replay and rollback snapshots.
+/// Format: magic + version + simulation time + ordered body records.
+[[nodiscard]] std::vector<std::uint8_t> serializeSimState(const SimState& state);
+
+/// Restores a SimState from serializeSimState(). Returns false on malformed input.
+[[nodiscard]] bool deserializeSimState(const std::vector<std::uint8_t>& bytes, SimState& outState);
+
 /// Report returned by RigidBodySolver::step().
 struct StepReport {
     bool        ok               = true;
@@ -92,15 +102,27 @@ public:
 
     // ── Simulation step ──────────────────────────────────────────────────────
 
-    /// Advance the simulation by dt seconds (must be > 0).
-    /// Returns a report with ok == false and bodiesIntegrated == 0 if dt <= 0.
+    /// Advance the simulation by dt seconds (must be finite and > 0).
+    /// Returns a report with ok == false and bodiesIntegrated == 0 if dt is
+    /// non-finite or <= 0.
     /// dt is double to prevent float-precision leakage into time accumulation;
     /// positions and velocities are still integrated at float precision.
     [[nodiscard]] StepReport step(double dt);
 
+    /// Advance the simulation by splitting dt into fixed-size substeps.
+    /// Both dt and fixedSubstep must be finite and > 0. Any remainder smaller
+    /// than fixedSubstep is integrated as a final shorter step.
+    ///
+    /// Force accumulation is consumed once across the full call (after all
+    /// substeps), so an applied force affects every internal substep and then
+    /// is cleared.
+    [[nodiscard]] StepReport stepFixed(double dt, double fixedSubstep);
+
     // ── Replay and rollback ──────────────────────────────────────────────────
 
     /// Capture all body states and the current simulation time.
+    /// Snapshot bodies are ordered by ascending BodyId for deterministic replay
+    /// serialization and stable comparisons.
     [[nodiscard]] SimState captureState() const;
 
     /// Restore all body states from a snapshot.
