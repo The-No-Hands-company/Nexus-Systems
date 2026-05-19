@@ -3270,6 +3270,52 @@ void ScriptBatchHarness::registerBuiltinCommands()
             return true;
         });
 
+    m_registry.registerCommand("sim.cross_solver.set_baseline",
+        [](ScriptContext& context, const ScriptCommand&, std::vector<std::string>& messages) {
+            context.crossSolverBaselineBytes = serializeCrossSolverState(context);
+            context.hasCrossSolverBaseline = true;
+            messages.push_back("cross_solver baseline set hash="
+                + hashHex(hashBytesFnv1a64(context.crossSolverBaselineBytes)));
+            return true;
+        });
+
+    m_registry.registerCommand("sim.cross_solver.diff_state",
+        [](ScriptContext& context, const ScriptCommand&, std::vector<std::string>& messages) {
+            if (!context.hasCrossSolverBaseline) {
+                messages.push_back("sim.cross_solver.diff_state requires sim.cross_solver.set_baseline first");
+                return false;
+            }
+            const std::vector<uint8_t> currBytes = serializeCrossSolverState(context);
+            const auto& baseBytes = context.crossSolverBaselineBytes;
+            const size_t changed = byteDiffCount(baseBytes, currBytes);
+            const size_t firstDiff = firstByteDiff(baseBytes, currBytes);
+            messages.push_back("cross_solver diff equal=" + std::string(changed == 0 ? "1" : "0")
+                + " changed=" + std::to_string(changed)
+                + " first_diff="
+                + std::string(firstDiff == static_cast<size_t>(-1) ? "-1" : std::to_string(firstDiff))
+                + " base_hash=" + hashHex(hashBytesFnv1a64(baseBytes))
+                + " curr_hash=" + hashHex(hashBytesFnv1a64(currBytes)));
+            return true;
+        });
+
+    m_registry.registerCommand("sim.cross_solver.expect_hash",
+        [](ScriptContext& context, const ScriptCommand& command, std::vector<std::string>& messages) {
+            const auto expected = parseExpectedHashArg(command);
+            if (!expected) {
+                messages.push_back("sim.cross_solver.expect_hash requires hash=<uint64|0xHEX>");
+                return false;
+            }
+            const std::vector<uint8_t> currBytes = serializeCrossSolverState(context);
+            const uint64_t actual = hashBytesFnv1a64(currBytes);
+            if (actual != *expected) {
+                messages.push_back("sim.cross_solver.expect_hash mismatch expected="
+                    + hashHex(*expected) + " actual=" + hashHex(actual));
+                return false;
+            }
+            messages.push_back("sim.cross_solver.expect_hash match " + hashHex(actual));
+            return true;
+        });
+
     m_registry.registerCommand("sim.export_cross_solver_bundle",
         [](ScriptContext& context, const ScriptCommand& command, std::vector<std::string>& messages) {
             const auto pathArg = getArg(command, "path");

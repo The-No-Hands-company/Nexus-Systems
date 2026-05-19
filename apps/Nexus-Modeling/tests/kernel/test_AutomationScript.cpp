@@ -2513,8 +2513,62 @@ TEST(AutomationScript, CrossSolverHashCommandsAreRegistered)
 {
     ScriptBatchHarness harness;
     EXPECT_TRUE(harness.registry().hasCommand("sim.cross_solver_hash"));
+    EXPECT_TRUE(harness.registry().hasCommand("sim.cross_solver.set_baseline"));
+    EXPECT_TRUE(harness.registry().hasCommand("sim.cross_solver.diff_state"));
+    EXPECT_TRUE(harness.registry().hasCommand("sim.cross_solver.expect_hash"));
     EXPECT_TRUE(harness.registry().hasCommand("sim.export_cross_solver_bundle"));
     EXPECT_TRUE(harness.registry().hasCommand("sim.verify_cross_solver_bundle"));
+}
+
+TEST(AutomationScript, CrossSolverSetBaselineAndDiffDetectsChanges)
+{
+    ScriptBatchHarness harness;
+    ScriptContext context;
+    const ScriptRunReport report = harness.runScript(
+        "sim.rigid.create gy=0\n"
+        "sim.rigid.add_body mass=1\n"
+        "sim.cross_solver.set_baseline\n"
+        "sim.cross_solver.diff_state\n"
+        "sim.rigid.step dt=0.1\n"
+        "sim.cross_solver.diff_state\n",
+        context);
+
+    EXPECT_TRUE(report.valid);
+    ASSERT_EQ(report.steps.size(), 6u);
+    ASSERT_FALSE(report.steps[3].messages.empty());
+    EXPECT_NE(report.steps[3].messages.front().find("equal=1"), std::string::npos);
+    ASSERT_FALSE(report.steps[5].messages.empty());
+    EXPECT_NE(report.steps[5].messages.front().find("equal=0"), std::string::npos);
+}
+
+TEST(AutomationScript, CrossSolverDiffRequiresBaseline)
+{
+    ScriptBatchHarness harness;
+    ScriptContext context;
+    const ScriptRunReport report = harness.runScript("sim.cross_solver.diff_state\n", context);
+
+    EXPECT_FALSE(report.valid);
+    ASSERT_EQ(report.steps.size(), 1u);
+    EXPECT_FALSE(report.steps.back().success);
+    ASSERT_FALSE(report.steps.back().messages.empty());
+    EXPECT_NE(report.steps.back().messages.front().find("set_baseline first"), std::string::npos);
+}
+
+TEST(AutomationScript, CrossSolverExpectHashDetectsMismatch)
+{
+    ScriptBatchHarness harness;
+    ScriptContext context;
+    const ScriptRunReport report = harness.runScript(
+        "sim.rigid.create gy=0\n"
+        "sim.rigid.add_body mass=1\n"
+        "sim.cross_solver.expect_hash hash=0x0000000000000001\n",
+        context);
+
+    EXPECT_FALSE(report.valid);
+    ASSERT_EQ(report.steps.size(), 3u);
+    EXPECT_FALSE(report.steps.back().success);
+    ASSERT_FALSE(report.steps.back().messages.empty());
+    EXPECT_NE(report.steps.back().messages.front().find("mismatch"), std::string::npos);
 }
 
 TEST(AutomationScript, CrossSolverExportAndVerifyRoundTrip)

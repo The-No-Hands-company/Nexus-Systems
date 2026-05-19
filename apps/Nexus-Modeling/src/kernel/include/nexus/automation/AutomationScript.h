@@ -81,6 +81,8 @@ struct ScriptContext {
     nexus::FluidState                          fluidLastState;
     bool                                       hasFluidSolver  = false;
     bool                                       hasFluidLastState = false;
+    std::vector<uint8_t>                       crossSolverBaselineBytes;
+    bool                                       hasCrossSolverBaseline = false;
 
     // ── Gaussian Splatting ────────────────────────────────────────────────────
     nexus::gfx::GaussianSplatCloud             gaussianCloud;
