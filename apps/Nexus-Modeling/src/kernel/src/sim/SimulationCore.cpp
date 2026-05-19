@@ -216,6 +216,18 @@ inline bool isPositiveFinite(double v) noexcept
     return finite && positive && nonZero;
 }
 
+inline bool isFiniteFloat(float v) noexcept
+{
+    const std::uint32_t bits = std::bit_cast<std::uint32_t>(v);
+    constexpr std::uint32_t kExpMask = 0x7F800000u;
+    return (bits & kExpMask) != kExpMask;
+}
+
+inline bool isFiniteVec3(const SimVec3& v) noexcept
+{
+    return isFiniteFloat(v.x) && isFiniteFloat(v.y) && isFiniteFloat(v.z);
+}
+
 } // namespace
 
 StepReport RigidBodySolver::step(double dt) {
@@ -226,6 +238,22 @@ StepReport RigidBodySolver::step(double dt) {
     if (!isPositiveFinite(dt)) {
         report.ok = false;
         return report;
+    }
+
+    if (!isFiniteVec3(m_gravity)) {
+        report.ok = false;
+        return report;
+    }
+
+    for (const auto& [id, b] : m_bodies) {
+        (void)id;
+        if (!isFiniteFloat(b.mass) || b.mass < 0.0f ||
+            !isFiniteVec3(b.position) ||
+            !isFiniteVec3(b.velocity) ||
+            !isFiniteVec3(b.force)) {
+            report.ok = false;
+            return report;
+        }
     }
 
     size_t dynamicBodies = 0u;
@@ -279,6 +307,22 @@ StepReport RigidBodySolver::stepFixed(double dt, double fixedSubstep)
     if (!isPositiveFinite(dt) || !isPositiveFinite(fixedSubstep)) {
         report.ok = false;
         return report;
+    }
+
+    if (!isFiniteVec3(m_gravity)) {
+        report.ok = false;
+        return report;
+    }
+
+    for (const auto& [id, b] : m_bodies) {
+        (void)id;
+        if (!isFiniteFloat(b.mass) || b.mass < 0.0f ||
+            !isFiniteVec3(b.position) ||
+            !isFiniteVec3(b.velocity) ||
+            !isFiniteVec3(b.force)) {
+            report.ok = false;
+            return report;
+        }
     }
 
     size_t dynamicBodies = 0u;

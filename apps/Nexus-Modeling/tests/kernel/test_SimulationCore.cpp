@@ -187,6 +187,34 @@ TEST(SimulationCore, StepRejectsNonFiniteDt) {
     EXPECT_FALSE(s.step(-inf).ok);
 }
 
+TEST(SimulationCore, StepRejectsNonFiniteRuntimeState) {
+    const double nan = std::numeric_limits<double>::quiet_NaN();
+
+    {
+        RigidBodySolver s;
+        (void)s.addBody({1.0f});
+        s.setGravity({static_cast<float>(nan), 0.0f, 0.0f});
+        EXPECT_FALSE(s.step(0.016).ok);
+    }
+
+    {
+        RigidBodySolver s;
+        SimBodyDesc desc;
+        desc.mass = 1.0f;
+        desc.position = {static_cast<float>(nan), 0.0f, 0.0f};
+        (void)s.addBody(desc);
+        EXPECT_FALSE(s.step(0.016).ok);
+    }
+
+    {
+        RigidBodySolver s;
+        const BodyId id = s.addBody({1.0f});
+        ASSERT_NE(id, kInvalidBodyId);
+        ASSERT_TRUE(s.applyForce(id, {static_cast<float>(nan), 0.0f, 0.0f}));
+        EXPECT_FALSE(s.step(0.016).ok);
+    }
+}
+
 TEST(SimulationCore, StepAdvancesSimulationTime) {
     RigidBodySolver s;
     (void)s.step(0.016);
@@ -223,6 +251,15 @@ TEST(SimulationCore, StepFixedRejectsNonFiniteArguments) {
     EXPECT_FALSE(s.stepFixed(0.1, nan).ok);
     EXPECT_FALSE(s.stepFixed(inf, 0.01).ok);
     EXPECT_FALSE(s.stepFixed(0.1, inf).ok);
+}
+
+TEST(SimulationCore, StepFixedRejectsNonFiniteRuntimeState) {
+    RigidBodySolver s;
+    (void)s.addBody({1.0f});
+
+    const float inf = std::numeric_limits<float>::infinity();
+    s.setGravity({0.0f, -9.81f, inf});
+    EXPECT_FALSE(s.stepFixed(0.1, 0.01).ok);
 }
 
 TEST(SimulationCore, StepFixedMatchesSingleStepWhenNoForcesAndNoGravity) {
