@@ -366,7 +366,7 @@ void ClipStateMachine::play(const AnimationClip& clip,
                             const BoneWeightMask& mask)
 {
     m_currentClip = &clip;
-    m_currentTimeSec = std::max(0.f, startTimeSec);
+    m_currentTimeSec = isFiniteFloat(startTimeSec) ? std::max(0.f, startTimeSec) : 0.f;
 
     m_nextClip = nullptr;
     m_nextTimeSec = 0.f;

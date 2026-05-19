@@ -1277,3 +1277,53 @@ TEST(AnimationCore, RequestTransitionWithNaNFadeTreatedAsImmediateSwap)
     EXPECT_TRUE(result);
     EXPECT_FALSE(machine.isTransitioning());  // immediate swap, no cross-fade in flight
 }
+
+TEST(AnimationCore, ClipStateMachinePlayRejectsNaNStartTime)
+{
+    AnimationClip clip(4.f, 0.f);
+
+    TransformTrack track;
+    TransformKeyframe k0{};
+    k0.timeSec = 0.f;
+    k0.value.translation = {0.f, 0.f, 0.f};
+    TransformKeyframe k1{};
+    k1.timeSec = 4.f;
+    k1.value.translation = {20.f, 0.f, 0.f};
+    track.setKeyframes({k0, k1});
+    clip.setBoneTrack(0, track);
+
+    Skeleton skel;
+    (void)skel.addBone(BoneDesc{"root", -1, {}});
+
+    ClipStateMachine machine;
+    machine.play(clip, std::numeric_limits<float>::quiet_NaN(), {});
+
+    Pose out;
+    machine.sampleToPose(skel, out);
+    EXPECT_NEAR(out.localTransform(0).translation.x, 0.f, 1e-5f);
+}
+
+TEST(AnimationCore, ClipStateMachinePlayRejectsInfStartTime)
+{
+    AnimationClip clip(4.f, 0.f);
+
+    TransformTrack track;
+    TransformKeyframe k0{};
+    k0.timeSec = 0.f;
+    k0.value.translation = {0.f, 0.f, 0.f};
+    TransformKeyframe k1{};
+    k1.timeSec = 4.f;
+    k1.value.translation = {20.f, 0.f, 0.f};
+    track.setKeyframes({k0, k1});
+    clip.setBoneTrack(0, track);
+
+    Skeleton skel;
+    (void)skel.addBone(BoneDesc{"root", -1, {}});
+
+    ClipStateMachine machine;
+    machine.play(clip, std::numeric_limits<float>::infinity(), {});
+
+    Pose out;
+    machine.sampleToPose(skel, out);
+    EXPECT_NEAR(out.localTransform(0).translation.x, 0.f, 1e-5f);
+}
