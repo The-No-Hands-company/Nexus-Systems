@@ -55,6 +55,9 @@ double fromBitsDouble(std::uint64_t bits)
     return std::bit_cast<double>(bits);
 }
 
+bool isFiniteFloat(float v) noexcept;
+bool isFiniteVec3(const SimVec3& v) noexcept;
+
 } // namespace
 
 bool operator==(const SimBodySnapshot& a, const SimBodySnapshot& b) noexcept
@@ -149,6 +152,11 @@ RigidBodySolver::~RigidBodySolver() = default;
 // ── Body management ───────────────────────────────────────────────────────────
 
 BodyId RigidBodySolver::addBody(const SimBodyDesc& desc) {
+    if (!isFiniteFloat(desc.mass) || desc.mass < 0.0f ||
+        !isFiniteVec3(desc.position) || !isFiniteVec3(desc.velocity)) {
+        return kInvalidBodyId;
+    }
+
     BodyId id = m_nextId++;
     m_bodies.emplace(id, Body{
         id,
@@ -186,7 +194,7 @@ bool RigidBodySolver::getBodyState(BodyId id,
 
 bool RigidBodySolver::applyForce(BodyId id, SimVec3 force) noexcept {
     Body* b = findBody(id);
-    if (!b || b->mass == 0.0f) return false;
+    if (!b || b->mass == 0.0f || !isFiniteVec3(force)) return false;
     b->force += force;
     return true;
 }

@@ -83,6 +83,34 @@ TEST(SimulationCore, GetBodyStateReturnsFalseForUnknownId) {
     EXPECT_FALSE(s.getBodyState(99u, p, v));
 }
 
+TEST(SimulationCore, AddBodyRejectsNegativeMass) {
+    RigidBodySolver s;
+    EXPECT_EQ(s.addBody({-1.0f}), kInvalidBodyId);
+    EXPECT_EQ(s.bodyCount(), 0u);
+}
+
+TEST(SimulationCore, AddBodyRejectsNonFiniteState) {
+    RigidBodySolver s;
+    const float nan = std::numeric_limits<float>::quiet_NaN();
+    const float inf = std::numeric_limits<float>::infinity();
+
+    SimBodyDesc badMass;
+    badMass.mass = nan;
+    EXPECT_EQ(s.addBody(badMass), kInvalidBodyId);
+
+    SimBodyDesc badPosition;
+    badPosition.mass = 1.0f;
+    badPosition.position = {inf, 0.0f, 0.0f};
+    EXPECT_EQ(s.addBody(badPosition), kInvalidBodyId);
+
+    SimBodyDesc badVelocity;
+    badVelocity.mass = 1.0f;
+    badVelocity.velocity = {0.0f, nan, 0.0f};
+    EXPECT_EQ(s.addBody(badVelocity), kInvalidBodyId);
+
+    EXPECT_EQ(s.bodyCount(), 0u);
+}
+
 TEST(SimulationCore, ClearRemovesAllBodies) {
     RigidBodySolver s;
     (void)s.addBody({1.0f});
@@ -202,16 +230,16 @@ TEST(SimulationCore, StepRejectsNonFiniteRuntimeState) {
         SimBodyDesc desc;
         desc.mass = 1.0f;
         desc.position = {static_cast<float>(nan), 0.0f, 0.0f};
-        (void)s.addBody(desc);
-        EXPECT_FALSE(s.step(0.016).ok);
+        EXPECT_EQ(s.addBody(desc), kInvalidBodyId);
+        EXPECT_EQ(s.bodyCount(), 0u);
     }
 
     {
         RigidBodySolver s;
         const BodyId id = s.addBody({1.0f});
         ASSERT_NE(id, kInvalidBodyId);
-        ASSERT_TRUE(s.applyForce(id, {static_cast<float>(nan), 0.0f, 0.0f}));
-        EXPECT_FALSE(s.step(0.016).ok);
+        EXPECT_FALSE(s.applyForce(id, {static_cast<float>(nan), 0.0f, 0.0f}));
+        EXPECT_TRUE(s.step(0.016).ok);
     }
 }
 
