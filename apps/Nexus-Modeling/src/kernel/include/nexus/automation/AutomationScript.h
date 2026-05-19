@@ -10,8 +10,15 @@
 #include <nexus/animation/AnimationCore.h>
 #include <nexus/geometry/GeometryKernel.h>
 #include <nexus/geometry/MeshIO.h>
+#include <nexus/gfx/GaussianSplatting.h>
 #include <nexus/gfx/RenderContext.h>
+#include <nexus/parametric/ConstraintGraph.h>
+#include <nexus/parametric/ParametricSerialization.h>
+#include <nexus/parametric/ParametricSolver.h>
 #include <nexus/render/SceneGraph.h>
+#include <nexus/sim/ClothSolver.h>
+#include <nexus/sim/FluidSolver.h>
+#include <nexus/sim/SimulationCore.h>
 
 #include <filesystem>
 #include <functional>
@@ -33,12 +40,14 @@ struct ScriptStepReport {
     size_t lineNumber = 0;
     std::string command;
     bool success = false;
+    // messages is sorted lexicographically on every return path; callers may rely on this.
     std::vector<std::string> messages;
 };
 
 struct ScriptRunReport {
     bool valid = true;
     std::vector<ScriptStepReport> steps;
+    // messages is sorted lexicographically on every return path; callers may rely on this.
     std::vector<std::string> messages;
 };
 
@@ -57,6 +66,43 @@ struct ScriptContext {
 
     std::unique_ptr<nexus::gfx::RenderContext> renderContext;
 
+    // ── Simulation ────────────────────────────────────────────────────────────
+    std::unique_ptr<nexus::RigidBodySolver>    rigidSolver;
+    nexus::SimState                            rigidLastState;
+    bool                                       hasRigidSolver  = false;
+    bool                                       hasRigidLastState = false;
+
+    std::unique_ptr<nexus::ClothSolver>        clothSolver;
+    nexus::ClothState                          clothLastState;
+    bool                                       hasClothSolver  = false;
+    bool                                       hasClothLastState = false;
+
+    std::unique_ptr<nexus::FluidSolver>        fluidSolver;
+    nexus::FluidState                          fluidLastState;
+    bool                                       hasFluidSolver  = false;
+    bool                                       hasFluidLastState = false;
+
+    // ── Gaussian Splatting ────────────────────────────────────────────────────
+    nexus::gfx::GaussianSplatCloud             gaussianCloud;
+    bool                                       hasGaussianCloud = false;
+
+    // ── Parametric ────────────────────────────────────────────────────────────
+    nexus::parametric::ConstraintGraph         parametricGraph;
+    bool                                       hasParametricGraph = false;
+
+    // ── Mesh baseline ─────────────────────────────────────────────────────────
+    nexus::geometry::Mesh                      meshBaseline;
+    bool                                       hasMeshBaseline = false;
+
+    // ── Scene baseline ────────────────────────────────────────────────────────
+    std::vector<uint8_t>                       sceneBaselineBytes;
+    bool                                       hasSceneBaseline = false;
+
+    // ── Animation baseline ────────────────────────────────────────────────────
+    nexus::animation::Skeleton                 skeletonBaseline;
+    nexus::animation::Pose                     poseBaseline;
+    bool                                       hasAnimBaseline = false;
+
     std::string sceneName;
     std::string meshName;
 };
@@ -67,6 +113,7 @@ public:
 
     bool registerCommand(std::string name, CommandHandler handler);
     [[nodiscard]] bool hasCommand(std::string_view name) const;
+    [[nodiscard]] std::vector<std::string> listCommands() const;
     [[nodiscard]] bool execute(ScriptContext& context,
                                const ScriptCommand& command,
                                std::vector<std::string>& messages) const;
