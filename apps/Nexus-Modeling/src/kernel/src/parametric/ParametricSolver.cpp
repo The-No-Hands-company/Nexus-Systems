@@ -1,10 +1,23 @@
 #include <nexus/parametric/ParametricSolver.h>
 
 #include <algorithm>
+#include <bit>
 #include <cmath>
+#include <cstdint>
 #include <limits>
 
 namespace nexus::parametric {
+
+namespace {
+
+bool isFiniteDouble(double value) noexcept
+{
+    const std::uint64_t bits = std::bit_cast<std::uint64_t>(value);
+    constexpr std::uint64_t kExpMask = 0x7FF0000000000000ULL;
+    return (bits & kExpMask) != kExpMask;
+}
+
+} // namespace
 
 ParametricSolverReport ParametricSolver::solve(ConstraintGraph& graph,
                                                const ParametricSolverConfig& config) noexcept
@@ -20,6 +33,13 @@ ParametricSolverReport ParametricSolver::solve(ConstraintGraph& graph,
     if (config.convergenceEpsilon < 0.0) {
         report.converged = false;
         report.errors.push_back("convergenceEpsilon must be non-negative");
+        return report;
+    }
+
+    if (!isFiniteDouble(config.convergenceEpsilon)) {
+        report.converged = false;
+        report.errors.push_back("convergenceEpsilon must be finite");
+        std::sort(report.errors.begin(), report.errors.end());
         return report;
     }
 

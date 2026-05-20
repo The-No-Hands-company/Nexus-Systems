@@ -146,6 +146,30 @@ TEST(ParametricFoundation, SolverErrorsAreDeterministicAndSorted)
     EXPECT_TRUE(std::is_sorted(reportB.errors.begin(), reportB.errors.end()));
 }
 
+TEST(ParametricFoundation, SolverRejectsNonFiniteConvergenceEpsilon)
+{
+    ConstraintGraph graph;
+    const ParametricEntityId a = graph.addPoint({0.0, 0.0, 0.0});
+    const ParametricEntityId b = graph.addPoint({1.0, 0.0, 0.0});
+    ASSERT_NE(graph.addDistanceConstraint(a, b, 2.0), kInvalidConstraintId);
+
+    ParametricSolverConfig nanConfig{};
+    nanConfig.convergenceEpsilon = std::numeric_limits<double>::quiet_NaN();
+    const ParametricSolverReport nanReport = ParametricSolver::solve(graph, nanConfig);
+    EXPECT_FALSE(nanReport.converged);
+    EXPECT_NE(std::find(nanReport.errors.begin(), nanReport.errors.end(),
+                        "convergenceEpsilon must be finite"),
+              nanReport.errors.end());
+
+    ParametricSolverConfig infConfig{};
+    infConfig.convergenceEpsilon = std::numeric_limits<double>::infinity();
+    const ParametricSolverReport infReport = ParametricSolver::solve(graph, infConfig);
+    EXPECT_FALSE(infReport.converged);
+    EXPECT_NE(std::find(infReport.errors.begin(), infReport.errors.end(),
+                        "convergenceEpsilon must be finite"),
+              infReport.errors.end());
+}
+
 TEST(ParametricFoundation, SerializationErrorsAreDeterministicAndSorted)
 {
     ConstraintGraph graphA;
