@@ -2,6 +2,7 @@
 #include "nexus/eval/EvalGraph.h"
 
 #include <algorithm>
+#include <limits>
 
 using namespace nexus;
 
@@ -14,7 +15,7 @@ TEST(EvalGraph, EmptyGraphHasZeroNodes) {
 
 TEST(EvalGraph, AddNodeIncreasesCount) {
     EvalGraph g;
-    g.addNode(NodeKind::Geometry, "geo");
+    (void)g.addNode(NodeKind::Geometry, "geo");
     EXPECT_EQ(g.nodeCount(), 1u);
 }
 
@@ -65,8 +66,8 @@ TEST(EvalGraph, NodeIdsAreStableAndUnique) {
 
 TEST(EvalGraph, ClearRemovesAllNodes) {
     EvalGraph g;
-    g.addNode(NodeKind::Merge, "m1");
-    g.addNode(NodeKind::Merge, "m2");
+    (void)g.addNode(NodeKind::Merge, "m1");
+    (void)g.addNode(NodeKind::Merge, "m2");
     g.clear();
     EXPECT_EQ(g.nodeCount(), 0u);
 }
@@ -98,7 +99,7 @@ TEST(EvalGraph, ConnectDuplicateEdgeReturnsFalse) {
     EvalGraph g;
     NodeId a = g.addNode(NodeKind::Constant, "c");
     NodeId b = g.addNode(NodeKind::Geometry, "g");
-    g.connect(a, b);
+    ASSERT_TRUE(g.connect(a, b));
     EXPECT_FALSE(g.connect(a, b));
 }
 
@@ -106,7 +107,7 @@ TEST(EvalGraph, DisconnectRemovesEdge) {
     EvalGraph g;
     NodeId a = g.addNode(NodeKind::Constant, "c");
     NodeId b = g.addNode(NodeKind::Geometry, "g");
-    g.connect(a, b);
+    ASSERT_TRUE(g.connect(a, b));
     EXPECT_TRUE(g.disconnect(a, b));
     EXPECT_FALSE(g.isConnected(a, b));
 }
@@ -123,9 +124,9 @@ TEST(EvalGraph, RemoveNodeAlsoRemovesItsEdges) {
     NodeId a = g.addNode(NodeKind::Constant, "c");
     NodeId b = g.addNode(NodeKind::Geometry, "g");
     NodeId c = g.addNode(NodeKind::Transform, "t");
-    g.connect(a, b);
-    g.connect(b, c);
-    g.removeNode(b);
+    ASSERT_TRUE(g.connect(a, b));
+    ASSERT_TRUE(g.connect(b, c));
+    (void)g.removeNode(b);
     EXPECT_FALSE(g.isConnected(a, b));
     EXPECT_FALSE(g.isConnected(b, c));
 }
@@ -134,7 +135,7 @@ TEST(EvalGraph, EdgeDirectionIsNotSymmetric) {
     EvalGraph g;
     NodeId a = g.addNode(NodeKind::Constant, "c");
     NodeId b = g.addNode(NodeKind::Geometry, "g");
-    g.connect(a, b);
+    ASSERT_TRUE(g.connect(a, b));
     EXPECT_TRUE(g.isConnected(a, b));
     EXPECT_FALSE(g.isConnected(b, a));
 }
@@ -161,8 +162,8 @@ TEST(EvalGraph, MarkDirtyDirtiesNodeAndTransitiveDownstream) {
     NodeId a = g.addNode(NodeKind::Constant, "c");
     NodeId b = g.addNode(NodeKind::Geometry, "g");
     NodeId c = g.addNode(NodeKind::Transform, "t");
-    g.connect(a, b);
-    g.connect(b, c);
+    ASSERT_TRUE(g.connect(a, b));
+    ASSERT_TRUE(g.connect(b, c));
     g.clearDirtyAll();
 
     g.markDirty(a);
@@ -176,8 +177,8 @@ TEST(EvalGraph, MarkDirtyMidChainDoesNotDirtyUpstream) {
     NodeId a = g.addNode(NodeKind::Constant, "c");
     NodeId b = g.addNode(NodeKind::Geometry, "g");
     NodeId c = g.addNode(NodeKind::Transform, "t");
-    g.connect(a, b);
-    g.connect(b, c);
+    ASSERT_TRUE(g.connect(a, b));
+    ASSERT_TRUE(g.connect(b, c));
     g.clearDirtyAll();
 
     g.markDirty(b);
@@ -202,7 +203,7 @@ TEST(EvalGraph, AcyclicGraphHasNoCycle) {
     EvalGraph g;
     NodeId a = g.addNode(NodeKind::Constant, "c");
     NodeId b = g.addNode(NodeKind::Geometry, "g");
-    g.connect(a, b);
+    ASSERT_TRUE(g.connect(a, b));
     EXPECT_FALSE(g.hasCycle());
 }
 
@@ -210,8 +211,8 @@ TEST(EvalGraph, DirectCycleIsDetected) {
     EvalGraph g;
     NodeId a = g.addNode(NodeKind::Geometry, "a");
     NodeId b = g.addNode(NodeKind::Geometry, "b");
-    g.connect(a, b);
-    g.connect(b, a);
+    ASSERT_TRUE(g.connect(a, b));
+    ASSERT_TRUE(g.connect(b, a));
     EXPECT_TRUE(g.hasCycle());
 }
 
@@ -220,9 +221,9 @@ TEST(EvalGraph, LongerCycleIsDetected) {
     NodeId a = g.addNode(NodeKind::Geometry, "a");
     NodeId b = g.addNode(NodeKind::Transform, "b");
     NodeId c = g.addNode(NodeKind::Merge, "c");
-    g.connect(a, b);
-    g.connect(b, c);
-    g.connect(c, a);
+    ASSERT_TRUE(g.connect(a, b));
+    ASSERT_TRUE(g.connect(b, c));
+    ASSERT_TRUE(g.connect(c, a));
     EXPECT_TRUE(g.hasCycle());
 }
 
@@ -230,10 +231,10 @@ TEST(EvalGraph, DisconnectBreaksCycleAndHasCycleReturnsFalse) {
     EvalGraph g;
     NodeId a = g.addNode(NodeKind::Geometry, "a");
     NodeId b = g.addNode(NodeKind::Geometry, "b");
-    g.connect(a, b);
-    g.connect(b, a);
+    ASSERT_TRUE(g.connect(a, b));
+    ASSERT_TRUE(g.connect(b, a));
     ASSERT_TRUE(g.hasCycle());
-    g.disconnect(b, a);
+    (void)g.disconnect(b, a);
     EXPECT_FALSE(g.hasCycle());
 }
 
@@ -253,8 +254,8 @@ TEST(EvalGraph, EvaluateProducesDependencyFirstOrder) {
     NodeId a = g.addNode(NodeKind::Constant, "c");
     NodeId b = g.addNode(NodeKind::Geometry, "g");
     NodeId c = g.addNode(NodeKind::Transform, "t");
-    g.connect(a, b);
-    g.connect(b, c);
+    ASSERT_TRUE(g.connect(a, b));
+    ASSERT_TRUE(g.connect(b, c));
 
     auto r = g.evaluate();
     EXPECT_TRUE(r.ok);
@@ -271,7 +272,7 @@ TEST(EvalGraph, EvaluateMarksAllNewNodesDirtyOnFirstPass) {
     EvalGraph g;
     NodeId a = g.addNode(NodeKind::Constant, "c");
     NodeId b = g.addNode(NodeKind::Geometry, "g");
-    g.connect(a, b);
+    ASSERT_TRUE(g.connect(a, b));
 
     auto r = g.evaluate();
     EXPECT_EQ(r.dirtyNodes.size(), 2u);
@@ -281,9 +282,9 @@ TEST(EvalGraph, EvaluateSecondPassHasNoDirtyNodes) {
     EvalGraph g;
     NodeId a = g.addNode(NodeKind::Constant, "c");
     NodeId b = g.addNode(NodeKind::Geometry, "g");
-    g.connect(a, b);
+    ASSERT_TRUE(g.connect(a, b));
 
-    g.evaluate(); // first pass clears dirty
+    (void)g.evaluate(); // first pass clears dirty
     auto r2 = g.evaluate();
     EXPECT_TRUE(r2.ok);
     EXPECT_TRUE(r2.dirtyNodes.empty());
@@ -294,9 +295,9 @@ TEST(EvalGraph, EvaluateAfterMarkDirtyReEvaluatesDownstream) {
     NodeId a = g.addNode(NodeKind::Constant, "c");
     NodeId b = g.addNode(NodeKind::Geometry, "g");
     NodeId c = g.addNode(NodeKind::Transform, "t");
-    g.connect(a, b);
-    g.connect(b, c);
-    g.evaluate();   // first pass — clears all dirty
+    ASSERT_TRUE(g.connect(a, b));
+    ASSERT_TRUE(g.connect(b, c));
+    (void)g.evaluate();   // first pass — clears all dirty
 
     g.markDirty(a); // cascades to b and c
     auto r = g.evaluate();
@@ -308,9 +309,9 @@ TEST(EvalGraph, EvaluatePartialDirtyOnlyReEvaluatesDirtyBranch) {
     NodeId a    = g.addNode(NodeKind::Constant, "c");
     NodeId bClean = g.addNode(NodeKind::Geometry, "clean");
     NodeId cDirty = g.addNode(NodeKind::Animation, "dirty");
-    g.connect(a, bClean);
-    g.connect(a, cDirty);
-    g.evaluate(); // clears all
+    ASSERT_TRUE(g.connect(a, bClean));
+    ASSERT_TRUE(g.connect(a, cDirty));
+    (void)g.evaluate(); // clears all
 
     g.markDirty(cDirty); // only cDirty and its downstream (none) are dirty
     auto r = g.evaluate();
@@ -322,8 +323,8 @@ TEST(EvalGraph, EvaluateWithCycleFailsAndReportsHasCycle) {
     EvalGraph g;
     NodeId a = g.addNode(NodeKind::Geometry, "a");
     NodeId b = g.addNode(NodeKind::Geometry, "b");
-    g.connect(a, b);
-    g.connect(b, a);
+    ASSERT_TRUE(g.connect(a, b));
+    ASSERT_TRUE(g.connect(b, a));
 
     auto r = g.evaluate();
     EXPECT_FALSE(r.ok);
@@ -338,10 +339,10 @@ TEST(EvalGraph, EvaluationOrderIsDeterministicAcrossRepeatedRuns) {
         NodeId b = g.addNode(NodeKind::Geometry, "g1");
         NodeId c = g.addNode(NodeKind::Geometry, "g2");
         NodeId d = g.addNode(NodeKind::Merge, "m");
-        g.connect(a, b);
-        g.connect(a, c);
-        g.connect(b, d);
-        g.connect(c, d);
+        (void)g.connect(a, b);
+        (void)g.connect(a, c);
+        (void)g.connect(b, d);
+        (void)g.connect(c, d);
         return g.evaluate().evaluationOrder;
     };
     EXPECT_EQ(build(), build());
@@ -353,10 +354,10 @@ TEST(EvalGraph, DiamondDependencyEvaluatesRootBeforeLeaf) {
     NodeId left  = g.addNode(NodeKind::Geometry, "left");
     NodeId right = g.addNode(NodeKind::Geometry, "right");
     NodeId merge = g.addNode(NodeKind::Merge, "merge");
-    g.connect(root, left);
-    g.connect(root, right);
-    g.connect(left, merge);
-    g.connect(right, merge);
+    ASSERT_TRUE(g.connect(root, left));
+    ASSERT_TRUE(g.connect(root, right));
+    ASSERT_TRUE(g.connect(left, merge));
+    ASSERT_TRUE(g.connect(right, merge));
 
     auto r = g.evaluate();
     EXPECT_TRUE(r.ok);
@@ -370,8 +371,8 @@ TEST(EvalGraph, ComputeCallbackInvokedInEvaluationOrderForDirtyNodes) {
     NodeId a = g.addNode(NodeKind::Constant, "a");
     NodeId b = g.addNode(NodeKind::Geometry, "b");
     NodeId c = g.addNode(NodeKind::Transform, "c");
-    g.connect(a, b);
-    g.connect(b, c);
+    ASSERT_TRUE(g.connect(a, b));
+    ASSERT_TRUE(g.connect(b, c));
 
     std::vector<NodeId> invoked;
     g.setComputeCallback([&](NodeId id, NodeKind, const std::string&) {
@@ -390,10 +391,10 @@ TEST(EvalGraph, ComputeCallbackRunsOnlyForDirtyNodes) {
     NodeId a = g.addNode(NodeKind::Constant, "a");
     NodeId b = g.addNode(NodeKind::Geometry, "b");
     NodeId c = g.addNode(NodeKind::Transform, "c");
-    g.connect(a, b);
-    g.connect(b, c);
+    ASSERT_TRUE(g.connect(a, b));
+    ASSERT_TRUE(g.connect(b, c));
 
-    g.evaluate(); // clear initial dirty state
+    (void)g.evaluate(); // clear initial dirty state
     g.markDirty(b);
 
     std::vector<NodeId> invoked;
@@ -415,8 +416,8 @@ TEST(EvalGraph, ComputeCallbackFailureAbortsEvaluationAndReportsNode) {
     NodeId a = g.addNode(NodeKind::Constant, "a");
     NodeId b = g.addNode(NodeKind::Geometry, "b");
     NodeId c = g.addNode(NodeKind::Transform, "c");
-    g.connect(a, b);
-    g.connect(b, c);
+    ASSERT_TRUE(g.connect(a, b));
+    ASSERT_TRUE(g.connect(b, c));
 
     std::vector<NodeId> invoked;
     g.setComputeCallback([&](NodeId id, NodeKind, const std::string&) {
@@ -445,10 +446,10 @@ TEST(EvalGraph, ComputeCallbackReceivesDeterministicDependencyContext) {
     NodeId b = g.addNode(NodeKind::Geometry, "b");
     NodeId c = g.addNode(NodeKind::Geometry, "c");
     NodeId d = g.addNode(NodeKind::Merge, "d");
-    g.connect(a, b);
-    g.connect(a, c);
-    g.connect(b, d);
-    g.connect(c, d);
+    ASSERT_TRUE(g.connect(a, b));
+    ASSERT_TRUE(g.connect(a, c));
+    ASSERT_TRUE(g.connect(b, d));
+    ASSERT_TRUE(g.connect(c, d));
 
     std::vector<NodeComputeContext> contexts;
     g.setComputeCallback([&](const NodeComputeContext& context) {
@@ -479,8 +480,8 @@ TEST(EvalGraph, CycleFailureHasDeterministicMessage) {
     EvalGraph g;
     NodeId a = g.addNode(NodeKind::Geometry, "a");
     NodeId b = g.addNode(NodeKind::Geometry, "b");
-    g.connect(a, b);
-    g.connect(b, a);
+    ASSERT_TRUE(g.connect(a, b));
+    ASSERT_TRUE(g.connect(b, a));
 
     const auto r = g.evaluate();
     EXPECT_FALSE(r.ok);
@@ -494,8 +495,8 @@ TEST(EvalGraph, ComputeFailureMessageContainsDeterministicContext) {
     NodeId a = g.addNode(NodeKind::Constant, "root");
     NodeId b = g.addNode(NodeKind::Geometry, "mid");
     NodeId c = g.addNode(NodeKind::Transform, "leaf");
-    g.connect(a, b);
-    g.connect(b, c);
+    ASSERT_TRUE(g.connect(a, b));
+    ASSERT_TRUE(g.connect(b, c));
 
     g.setComputeCallback([&](const NodeComputeContext& context) {
         return context.id != b;
@@ -549,7 +550,7 @@ TEST(EvalGraph, CallbackCanEmitDeterministicDiagnosticsMessages) {
     EvalGraph g;
     NodeId src = g.addNode(NodeKind::Constant, "src");
     NodeId recon = g.addNode(NodeKind::Reconstruction, "fit");
-    g.connect(src, recon);
+    ASSERT_TRUE(g.connect(src, recon));
 
     g.setComputeCallback([&](NodeComputeContext& context) -> bool {
         if (context.id == recon) {
@@ -573,8 +574,8 @@ TEST(EvalGraph, CallbackDiagnosticsOrderMatchesEvaluationOrder) {
     NodeId a = g.addNode(NodeKind::Constant, "a");
     NodeId b = g.addNode(NodeKind::Reconstruction, "b");
     NodeId c = g.addNode(NodeKind::ProxyGeometry, "c");
-    g.connect(a, b);
-    g.connect(b, c);
+    ASSERT_TRUE(g.connect(a, b));
+    ASSERT_TRUE(g.connect(b, c));
 
     g.setComputeCallback([&](NodeComputeContext& context) -> bool {
         if (context.diagnostics == nullptr) {
@@ -597,7 +598,7 @@ TEST(EvalGraph, LegacyCallbackRegistrationRemainsSupported) {
     EvalGraph g;
     NodeId a = g.addNode(NodeKind::Constant, "a");
     NodeId b = g.addNode(NodeKind::Geometry, "b");
-    g.connect(a, b);
+    ASSERT_TRUE(g.connect(a, b));
 
     std::vector<NodeId> invoked;
     g.setComputeCallback([&](NodeId id, NodeKind, const std::string&) {
@@ -639,7 +640,7 @@ TEST(EvalGraph, CallbackReadsUpstreamPayloadAndWritesOutputPayload) {
     EvalGraph g;
     NodeId src = g.addNode(NodeKind::Constant, "src");
     NodeId dst = g.addNode(NodeKind::Transform, "dst");
-    g.connect(src, dst);
+    ASSERT_TRUE(g.connect(src, dst));
 
     NodePayload seed;
     seed.value = 10.0f;
@@ -939,7 +940,7 @@ TEST(EvalGraph, PayloadPersistsAcrossCleanPassAndUpdatesOnReDirty) {
     EvalGraph g;
     NodeId src = g.addNode(NodeKind::Constant, "src");
     NodeId dst = g.addNode(NodeKind::Transform, "dst");
-    g.connect(src, dst);
+    ASSERT_TRUE(g.connect(src, dst));
 
     // Seed src with a known value before first evaluate.
     NodePayload seed;
@@ -963,7 +964,6 @@ TEST(EvalGraph, PayloadPersistsAcrossCleanPassAndUpdatesOnReDirty) {
     EXPECT_TRUE(r1.ok);
     EXPECT_EQ(r1.dirtyNodes.size(), 2u);
     EXPECT_EQ(callCount, 2);
-
     {
         const NodePayload* out = g.nodeOutputPayload(dst);
         ASSERT_NE(out, nullptr);
@@ -977,7 +977,6 @@ TEST(EvalGraph, PayloadPersistsAcrossCleanPassAndUpdatesOnReDirty) {
     EXPECT_TRUE(r2.ok);
     EXPECT_TRUE(r2.dirtyNodes.empty());
     EXPECT_EQ(callCount, 0);
-
     // Payload must be unchanged after the clean pass.
     {
         const NodePayload* out = g.nodeOutputPayload(dst);
@@ -1005,4 +1004,121 @@ TEST(EvalGraph, PayloadPersistsAcrossCleanPassAndUpdatesOnReDirty) {
         ASSERT_EQ(out->type(), NodePayloadType::ScalarF32);
         EXPECT_FLOAT_EQ(*out->scalarF32(), 14.0f);
     }
+}
+
+TEST(EvalGraph, SetNodeOutputPayloadMarksDownstreamDirty)
+{
+    EvalGraph g;
+    NodeId src = g.addNode(NodeKind::Constant, "src");
+    NodeId mid = g.addNode(NodeKind::Geometry, "mid");
+    NodeId leaf = g.addNode(NodeKind::Transform, "leaf");
+    ASSERT_TRUE(g.connect(src, mid));
+    ASSERT_TRUE(g.connect(mid, leaf));
+
+    g.clearDirtyAll();
+
+    NodePayload payload;
+    payload.value = 1.0f;
+    ASSERT_TRUE(g.setNodeOutputPayload(src, payload));
+
+    EXPECT_TRUE(g.isDirty(src));
+    EXPECT_TRUE(g.isDirty(mid));
+    EXPECT_TRUE(g.isDirty(leaf));
+}
+
+TEST(EvalGraph, SetNodeOutputPayloadRejectsNonFiniteScalarF32)
+{
+    EvalGraph g;
+    NodeId n = g.addNode(NodeKind::Constant, "c");
+
+    // Set a valid float first.
+    NodePayload valid;
+    valid.value = 2.5f;
+    ASSERT_TRUE(g.setNodeOutputPayload(n, valid));
+    EXPECT_FLOAT_EQ(*g.nodeOutputPayload(n)->scalarF32(), 2.5f);
+
+    const float nan = std::numeric_limits<float>::quiet_NaN();
+    const float inf = std::numeric_limits<float>::infinity();
+    const float ninf = -std::numeric_limits<float>::infinity();
+
+    NodePayload bad;
+    bad.value = nan;
+    EXPECT_FALSE(g.setNodeOutputPayload(n, bad));
+    EXPECT_FLOAT_EQ(*g.nodeOutputPayload(n)->scalarF32(), 2.5f);
+
+    bad.value = inf;
+    EXPECT_FALSE(g.setNodeOutputPayload(n, bad));
+    EXPECT_FLOAT_EQ(*g.nodeOutputPayload(n)->scalarF32(), 2.5f);
+
+    bad.value = ninf;
+    EXPECT_FALSE(g.setNodeOutputPayload(n, bad));
+    EXPECT_FLOAT_EQ(*g.nodeOutputPayload(n)->scalarF32(), 2.5f);
+}
+
+TEST(EvalGraph, ClearNodeOutputPayloadMarksDownstreamDirty)
+{
+    EvalGraph g;
+    NodeId src = g.addNode(NodeKind::Constant, "src");
+    NodeId mid = g.addNode(NodeKind::Geometry, "mid");
+    NodeId leaf = g.addNode(NodeKind::Transform, "leaf");
+    ASSERT_TRUE(g.connect(src, mid));
+    ASSERT_TRUE(g.connect(mid, leaf));
+
+    NodePayload payload;
+    payload.value = 1.0f;
+    ASSERT_TRUE(g.setNodeOutputPayload(src, payload));
+    (void)g.evaluate();
+
+    ASSERT_TRUE(g.clearNodeOutputPayload(src));
+
+    EXPECT_TRUE(g.isDirty(src));
+    EXPECT_TRUE(g.isDirty(mid));
+    EXPECT_TRUE(g.isDirty(leaf));
+}
+
+TEST(EvalGraph, MessagesAreDeterministicAndSorted)
+{
+    // Two identical graphs must produce identical (deterministic) message vectors.
+    auto makeGraph = []() {
+        EvalGraph g;
+        // Create a cycle: a -> b -> a
+        const NodeId a = g.addNode(NodeKind::Transform, "a");
+        const NodeId b = g.addNode(NodeKind::Transform, "b");
+        (void)g.connect(a, b);
+        (void)g.connect(b, a);
+        return g.evaluate();
+    };
+
+    const EvalReport r1 = makeGraph();
+    const EvalReport r2 = makeGraph();
+
+    EXPECT_FALSE(r1.ok);
+    EXPECT_TRUE(r1.hasCycle);
+    EXPECT_EQ(r1.messages, r2.messages);
+
+    // Contract: messages must be lexicographically sorted.
+    auto sorted = r1.messages;
+    std::sort(sorted.begin(), sorted.end());
+    EXPECT_EQ(r1.messages, sorted);
+}
+
+TEST(EvalGraph, MultipleWarningMessagesAreLexicographicallySorted)
+{
+    // A graph with a failing compute callback accumulates messages; they must be sorted.
+    EvalGraph g;
+    const NodeId n1 = g.addNode(NodeKind::Transform, "alpha");
+    const NodeId n2 = g.addNode(NodeKind::Transform, "beta");
+    ASSERT_TRUE(g.connect(n1, n2));
+
+    // Callback always fails, causing a diagnostic message to be appended.
+    g.setComputeCallback([](NodeComputeContext&) -> bool { return false; });
+
+    const EvalReport r = g.evaluate();
+    EXPECT_FALSE(r.ok);
+    EXPECT_TRUE(r.executionFailed);
+    EXPECT_FALSE(r.messages.empty());
+
+    auto sorted = r.messages;
+    std::sort(sorted.begin(), sorted.end());
+    EXPECT_EQ(r.messages, sorted);
 }

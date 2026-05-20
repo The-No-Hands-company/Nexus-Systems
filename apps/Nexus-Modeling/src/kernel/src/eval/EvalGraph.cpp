@@ -1,6 +1,8 @@
 #include "nexus/eval/EvalGraph.h"
 
 #include <algorithm>
+#include <bit>
+#include <cstdint>
 #include <deque>
 #include <sstream>
 #include <unordered_map>
@@ -9,6 +11,13 @@
 namespace nexus {
 
 namespace {
+
+bool isFiniteFloat(float v) noexcept
+{
+    constexpr std::uint32_t kExpMask = 0x7F800000u;
+    const std::uint32_t bits = std::bit_cast<std::uint32_t>(v);
+    return (bits & kExpMask) != kExpMask;
+}
 
 const char* nodeKindName(NodeKind kind) {
     switch (kind) {
@@ -171,6 +180,7 @@ EvalReport EvalGraph::evaluate() {
         report.ok       = false;
         report.hasCycle = true;
         report.messages.push_back("cycle detected: evaluation aborted before compute dispatch");
+        std::sort(report.messages.begin(), report.messages.end());
         return report;
     }
 
@@ -218,12 +228,14 @@ EvalReport EvalGraph::evaluate() {
                     + " inputs=" + joinNodeIds(context.inputNodes)
                     + " outputs=" + joinNodeIds(context.outputNodes)
                     + " eval_index=" + std::to_string(context.evaluationIndex));
+                std::sort(report.messages.begin(), report.messages.end());
                 return report;
             }
             report.dirtyNodes.push_back(id);
             n.dirty = false;
         }
     }
+    std::sort(report.messages.begin(), report.messages.end());
     return report;
 }
 
@@ -246,7 +258,11 @@ bool EvalGraph::setNodeOutputPayload(NodeId id, NodePayload payload) {
     if (it == m_outputPayloads.end()) {
         return false;
     }
+    if (const float* f = std::get_if<float>(&payload.value)) {
+        if (!isFiniteFloat(*f)) return false;
+    }
     it->second = std::move(payload);
+    markDirty(id);
     return true;
 }
 
@@ -256,6 +272,7 @@ bool EvalGraph::clearNodeOutputPayload(NodeId id) noexcept {
         return false;
     }
     it->second = NodePayload{};
+    markDirty(id);
     return true;
 }
 
