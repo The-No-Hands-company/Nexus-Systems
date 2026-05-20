@@ -1,5 +1,7 @@
 #include <nexus/asset/SceneAssetImporter.h>
 
+#include <set>
+
 namespace nexus::asset {
 
 SceneAssetIOReport SceneAssetImporter::importScene(const std::string& path,
@@ -19,10 +21,16 @@ SceneAssetPackageReport SceneAssetImporter::importScenes(
 
     SceneAssetPackageReport report{};
     outScenes.clear();
+    std::set<std::string> seenPaths;
 
     for (const SceneAssetPackageEntry& entry : packageEntries) {
         if (entry.path.empty()) {
             report.messages.push_back("Package entry has empty path");
+            report.failedPaths.push_back(entry.path);
+            continue;
+        }
+        if (!seenPaths.insert(entry.path).second) {
+            report.messages.push_back("Duplicate package entry path: " + entry.path);
             report.failedPaths.push_back(entry.path);
             continue;
         }
@@ -61,6 +69,29 @@ SceneAssetPackageReport SceneAssetImporter::importScenes(
     }
 
     return importScenes(packageEntries, outScenes, options);
+}
+
+SceneAssetPackageReport SceneAssetImporter::importPackageManifest(
+    const std::string& manifestPath,
+    std::map<std::string, SceneAsset>& outScenes,
+    const SceneAssetImportOptions& options) noexcept
+{
+    SceneAssetPackageReport report{};
+    outScenes.clear();
+
+    SceneAssetPackageDescriptor descriptor;
+    const SceneAssetPackageIOReport ioRep = SceneAsset::loadPackageManifest(
+        manifestPath,
+        descriptor,
+        options.packageMigrationPolicy);
+    if (!ioRep.valid) {
+        report.valid = false;
+        report.messages = ioRep.messages;
+        report.failedPaths.push_back(manifestPath);
+        return report;
+    }
+
+    return importScenes(descriptor.entries, outScenes, options);
 }
 
 } // namespace nexus::asset
