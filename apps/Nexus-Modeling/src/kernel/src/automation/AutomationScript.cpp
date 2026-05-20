@@ -12,6 +12,7 @@
 #include <nexus/sim/SimulationCore.h>
 
 #include <algorithm>
+#include <bit>
 #include <charconv>
 #include <cctype>
 #include <cmath>
@@ -22,6 +23,18 @@
 
 namespace nexus::automation {
 namespace {
+
+[[nodiscard]] bool isFiniteFloat(float value) noexcept
+{
+    const std::uint32_t bits = std::bit_cast<std::uint32_t>(value);
+    return (bits & 0x7F800000u) != 0x7F800000u;
+}
+
+[[nodiscard]] bool isFiniteDouble(double value) noexcept
+{
+    const std::uint64_t bits = std::bit_cast<std::uint64_t>(value);
+    return (bits & 0x7FF0000000000000ull) != 0x7FF0000000000000ull;
+}
 
 [[nodiscard]] nexus::render::Mat4 makeTranslationMatrix(float x, float y, float z) noexcept
 {
@@ -140,6 +153,9 @@ namespace {
     if (end == text->c_str() || *end != '\0') {
         return std::nullopt;
     }
+    if (!isFiniteFloat(value)) {
+        return std::nullopt;
+    }
     return value;
 }
 
@@ -168,6 +184,9 @@ namespace {
     char* end = nullptr;
     const double value = std::strtod(text->c_str(), &end);
     if (end == text->c_str() || *end != '\0') {
+        return std::nullopt;
+    }
+    if (!isFiniteDouble(value)) {
         return std::nullopt;
     }
     return value;

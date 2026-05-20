@@ -3548,4 +3548,76 @@ TEST(AutomationScript, CrossDomainParametricOutputDrivesMeshGenerationPipeline)
     EXPECT_NE(meshReport.steps[1].messages.front().find("mesh hash=0x"), std::string::npos);
 }
 
+TEST(AutomationScript, ParseFloatArgRejectsNonFiniteValuesAndUsesSafeDefaults)
+{
+    // Feeding "nan" or "inf" as a float arg must NOT corrupt mesh positions.
+    // The parser should treat non-finite parsed results as missing (nullopt),
+    // causing the command to fall back to its safe default value.
+    const fs::path outObj = tempPath("parse_nonfinite.obj");
+
+    ScriptBatchHarness harness;
+    ScriptContext context;
+    const ScriptRunReport report = harness.runScript(
+        "mesh.make_triangle size=1\n"
+        "mesh.transform tx=nan\n"
+        "mesh.transform sx=inf\n"
+        "mesh.export path=" + outObj.string() + "\n",
+        context);
+
+    // All four steps must succeed:
+    // - triangle creation
+    // - tx=nan  → treated as tx=0.0 (default), positions unchanged
+    // - sx=inf  → treated as sx=1.0 (default), positions unchanged
+    // - export  → succeeds because positions are still finite
+    EXPECT_TRUE(report.valid);
+    ASSERT_EQ(report.steps.size(), 4u);
+    EXPECT_TRUE(report.steps[1].success);
+    EXPECT_TRUE(report.steps[2].success);
+    EXPECT_TRUE(report.steps[3].success);
+
+    fs::remove(outObj);
+}
+
+TEST(AutomationScript, ParseFloatArgRejectsNonFiniteValuesForSimDt)
+{
+    // dt=nan must not reach the rigid solver — parseFloatArg should treat
+    // it as missing, falling back to the default dt of 0.016.
+    ScriptBatchHarness harness;
+    ScriptContext context;
+    const ScriptRunReport report = harness.runScript(
+        "sim.rigid.create gy=-9.81\n"
+        "sim.rigid.add_body mass=1 tx=0 ty=10 tz=0\n"
+        "sim.rigid.add_body mass=0 tx=0 ty=0 tz=0\n"
+        "sim.rigid.step dt=nan\n"
+        "sim.rigid.step dt=inf\n",
+        context);
+
+    // Both steps should succeed using the safe default dt (0.016), not fail
+    // with "invalid dt" from the solver's own guard.
+    EXPECT_TRUE(report.valid);
+    ASSERT_EQ(report.steps.size(), 5u);
+    EXPECT_TRUE(report.steps[3].success);
+    EXPECT_TRUE(report.steps[4].success);
+}
+
+TEST(AutomationScript, ParseDoubleArgRejectsNonFinitePointValuesAndUsesDefaults)
+{
+    ScriptBatchHarness harness;
+    ScriptContext context;
+    const ScriptRunReport report = harness.runScript(
+        "parametric.new\n"
+        "parametric.add_point x=nan y=inf z=-inf\n"
+        "parametric.get_point id=1\n",
+        context);
+
+    EXPECT_TRUE(report.valid);
+    ASSERT_EQ(report.steps.size(), 3u);
+    EXPECT_TRUE(report.steps[1].success);
+    EXPECT_TRUE(report.steps[2].success);
+    ASSERT_FALSE(report.steps[2].messages.empty());
+    EXPECT_NE(report.steps[2].messages.front().find("x=0."), std::string::npos);
+    EXPECT_NE(report.steps[2].messages.front().find("y=0."), std::string::npos);
+    EXPECT_NE(report.steps[2].messages.front().find("z=0."), std::string::npos);
+}
+
 } // namespace nexus::automation::testing
