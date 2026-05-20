@@ -60,6 +60,13 @@ SketchSampleModel ParametricSampleGenerator::makeSketchRectangle(double width, d
 ParametricSolverReport ParametricSampleGenerator::solveSketchRectangle(SketchSampleModel& model,
                                                                        const ParametricSolverConfig& config) noexcept
 {
+    if (config.maxIterations == 0u) {
+        ParametricSolverReport report{};
+        report.converged = false;
+        report.errors.push_back("maxIterations must be greater than zero");
+        return report;
+    }
+
     return ParametricSolver::solve(model.graph, config);
 }
 

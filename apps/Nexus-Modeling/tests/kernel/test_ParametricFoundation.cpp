@@ -330,6 +330,22 @@ TEST(ParametricFoundation, SketchSampleGeneratorRejectsNonFiniteRectangleDimensi
     EXPECT_EQ(infHeight.graph.entityCount(), 0u);
 }
 
+TEST(ParametricFoundation, SketchSampleSolverRejectsZeroIterationConfigAtEntry)
+{
+    SketchSampleModel sample = ParametricSampleGenerator::makeSketchRectangle(8.0, 3.0);
+    ASSERT_NE(sample.origin, kInvalidEntityId);
+
+    ParametricSolverConfig config{};
+    config.maxIterations = 0u;
+
+    const ParametricSolverReport report =
+        ParametricSampleGenerator::solveSketchRectangle(sample, config);
+
+    EXPECT_FALSE(report.converged);
+    EXPECT_EQ(report.errors,
+              std::vector<std::string>{"maxIterations must be greater than zero"});
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 //  Non-finite distance input hardening
 // ─────────────────────────────────────────────────────────────────────────────
