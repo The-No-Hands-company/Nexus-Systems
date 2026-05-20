@@ -1,5 +1,8 @@
 #include <nexus/parametric/ParametricSerialization.h>
 
+#include <algorithm>
+#include <bit>
+#include <cstdint>
 #include <iomanip>
 #include <sstream>
 #include <string>
@@ -10,13 +13,23 @@ namespace {
 
 constexpr const char* kMagic = "NEXUS_PARAM_GRAPH_V1";
 
+bool isFiniteDouble(double value) noexcept
+{
+    const std::uint64_t bits = std::bit_cast<std::uint64_t>(value);
+    constexpr std::uint64_t kExpMask = 0x7FF0000000000000ULL;
+    return (bits & kExpMask) != kExpMask;
+}
+
 bool parseEntityLine(std::istringstream& line,
                      ParametricEntityId& id,
                      ParametricPoint3& point)
 {
     char tag = '\0';
     line >> tag >> id >> point.x >> point.y >> point.z;
-    return !line.fail() && tag == 'E';
+    return !line.fail() && tag == 'E' &&
+           isFiniteDouble(point.x) &&
+           isFiniteDouble(point.y) &&
+           isFiniteDouble(point.z);
 }
 
 bool parseDistanceConstraintLine(std::istringstream& line,
@@ -28,7 +41,7 @@ bool parseDistanceConstraintLine(std::istringstream& line,
     char tag = '\0';
     std::string kind;
     line >> tag >> kind >> id >> a >> b >> distance;
-    return !line.fail() && tag == 'C' && kind == "DIST";
+    return !line.fail() && tag == 'C' && kind == "DIST" && isFiniteDouble(distance);
 }
 
 bool parseCoincidentConstraintLine(std::istringstream& line,
@@ -67,7 +80,7 @@ bool parseAxisConstraintLine(std::istringstream& line,
         return false;
     }
 
-    return true;
+    return isFiniteDouble(distance);
 }
 
 char axisToChar(Axis axis)
@@ -126,6 +139,7 @@ ParametricSerializationReport ParametricGraphSerializer::deserialize(const std::
     if (!std::getline(input, line) || line != kMagic) {
         report.valid = false;
         report.errors.push_back("missing or invalid serialization header");
+        std::sort(report.errors.begin(), report.errors.end());
         return report;
     }
 
@@ -209,6 +223,7 @@ ParametricSerializationReport ParametricGraphSerializer::deserialize(const std::
         }
     }
 
+    std::sort(report.errors.begin(), report.errors.end());
     return report;
 }
 

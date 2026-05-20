@@ -130,6 +130,29 @@ TEST(ParametricFoundation, DeserializeRejectsInvalidHeader)
     ASSERT_FALSE(report.errors.empty());
 }
 
+TEST(ParametricFoundation, DeserializeRejectsNonFiniteNumericPayloads)
+{
+    ConstraintGraph graph;
+    const std::string badData =
+        "NEXUS_PARAM_GRAPH_V1\n"
+        "E 1 0 0 0\n"
+        "E 2 nan 0 0\n"
+        "C DIST 1 1 2 inf\n";
+
+    const ParametricSerializationReport report =
+        ParametricGraphSerializer::deserialize(badData, graph);
+
+    EXPECT_FALSE(report.valid);
+    EXPECT_NE(std::find(report.errors.begin(), report.errors.end(),
+                        "failed to parse entity line: E 2 nan 0 0"),
+              report.errors.end());
+    EXPECT_NE(std::find(report.errors.begin(), report.errors.end(),
+                        "failed to parse constraint line: C DIST 1 1 2 inf"),
+              report.errors.end());
+    EXPECT_EQ(graph.entityCount(), 1u);
+    EXPECT_EQ(graph.distanceConstraintCount(), 0u);
+}
+
 TEST(ParametricFoundation, SolverErrorsAreDeterministicAndSorted)
 {
     ConstraintGraph graph;
