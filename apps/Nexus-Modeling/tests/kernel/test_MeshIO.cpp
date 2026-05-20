@@ -382,4 +382,51 @@ TEST(MeshIO, ImportOBJRejectsNonFiniteNumericScalars)
     }
 }
 
+TEST(MeshIO, ExportRejectsNonFiniteAttributeData)
+{
+    {
+        const std::string path = tmpPath("export_nan_position.obj");
+        std::remove(path.c_str());
+
+        Mesh mesh = makeTriangle(1.f);
+        auto positions = mesh.attributes().positions();
+        positions[0].x = std::numeric_limits<float>::quiet_NaN();
+        mesh.attributes().setPositions(std::move(positions));
+
+        MeshExportOptions opts{};
+        opts.format = MeshExportFormat::OBJ;
+
+        const MeshExportReport rep = MeshIO::exportMesh(mesh, path, opts);
+        EXPECT_FALSE(rep.valid);
+        EXPECT_TRUE(hasDiagnostic(rep.diagnostic, MeshExportDiagnostic::InvalidMesh));
+        EXPECT_EQ(rep.messages,
+                  std::vector<std::string>{"Cannot export: mesh positions contain non-finite values"});
+        EXPECT_TRUE(readFile(path).empty());
+        std::remove(path.c_str());
+    }
+
+    {
+        const std::string path = tmpPath("export_inf_uv.ply");
+        std::remove(path.c_str());
+
+        Mesh mesh = makePlane(1.f, 1.f, 1u, 1u);
+        auto uvs = mesh.attributes().uvs();
+        ASSERT_FALSE(uvs.empty());
+        uvs[0].u = std::numeric_limits<float>::infinity();
+        mesh.attributes().setUVs(std::move(uvs));
+
+        MeshExportOptions opts{};
+        opts.format = MeshExportFormat::PLY;
+        opts.includeUVs = true;
+
+        const MeshExportReport rep = MeshIO::exportMesh(mesh, path, opts);
+        EXPECT_FALSE(rep.valid);
+        EXPECT_TRUE(hasDiagnostic(rep.diagnostic, MeshExportDiagnostic::InvalidMesh));
+        EXPECT_EQ(rep.messages,
+                  std::vector<std::string>{"Cannot export: mesh UVs contain non-finite values"});
+        EXPECT_TRUE(readFile(path).empty());
+        std::remove(path.c_str());
+    }
+}
+
 } // namespace nexus::geometry::testing

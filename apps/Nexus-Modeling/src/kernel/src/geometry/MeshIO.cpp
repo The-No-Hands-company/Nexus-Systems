@@ -16,6 +16,51 @@ namespace nexus::geometry {
 
 namespace {
 
+bool isFiniteFloat(float value) noexcept
+{
+    constexpr std::uint32_t kExpMask = 0x7F800000u;
+    const std::uint32_t bits = std::bit_cast<std::uint32_t>(value);
+    return (bits & kExpMask) != kExpMask;
+}
+
+bool meshAttributesAreFinite(const Mesh& mesh,
+                             const MeshExportOptions& options,
+                             MeshExportReport& report)
+{
+    for (const auto& position : mesh.attributes().positions()) {
+        if (!isFiniteFloat(position.x) || !isFiniteFloat(position.y) || !isFiniteFloat(position.z)) {
+            report.diagnostic = MeshExportDiagnostic::InvalidMesh;
+            report.messages.push_back("Cannot export: mesh positions contain non-finite values");
+            std::sort(report.messages.begin(), report.messages.end());
+            return false;
+        }
+    }
+
+    if (options.includeNormals && mesh.attributes().hasNormals()) {
+        for (const auto& normal : mesh.attributes().normals()) {
+            if (!isFiniteFloat(normal.x) || !isFiniteFloat(normal.y) || !isFiniteFloat(normal.z)) {
+                report.diagnostic = MeshExportDiagnostic::InvalidMesh;
+                report.messages.push_back("Cannot export: mesh normals contain non-finite values");
+                std::sort(report.messages.begin(), report.messages.end());
+                return false;
+            }
+        }
+    }
+
+    if (options.includeUVs && mesh.attributes().hasUVs()) {
+        for (const auto& uv : mesh.attributes().uvs()) {
+            if (!isFiniteFloat(uv.u) || !isFiniteFloat(uv.v)) {
+                report.diagnostic = MeshExportDiagnostic::InvalidMesh;
+                report.messages.push_back("Cannot export: mesh UVs contain non-finite values");
+                std::sort(report.messages.begin(), report.messages.end());
+                return false;
+            }
+        }
+    }
+
+    return true;
+}
+
 void sortMessages(MeshImportReport& report)
 {
     std::sort(report.messages.begin(), report.messages.end());
@@ -455,6 +500,10 @@ MeshExportReport MeshIO::exportMesh(const Mesh&              mesh,
         report.diagnostic = MeshExportDiagnostic::FileOpenFailed;
         report.messages.push_back("Cannot export: path is empty");
         std::sort(report.messages.begin(), report.messages.end());
+        return report;
+    }
+
+    if (!meshAttributesAreFinite(mesh, options, report)) {
         return report;
     }
 
