@@ -4,7 +4,9 @@
 #include <nexus/geometry/BooleanOperation.h>
 #include <nexus/render/Camera.h>
 #include <algorithm>
+#include <bit>
 #include <cmath>
+#include <cstdint>
 #include <limits>
 #include <map>
 #include <numeric>
@@ -85,6 +87,12 @@ inline float vec3Length(const Vec3& v)
     return std::sqrt(vec3Dot(v, v));
 }
 
+inline bool isFiniteFloat(float value) noexcept
+{
+    const std::uint32_t bits = std::bit_cast<std::uint32_t>(value);
+    return (bits & 0x7F800000u) != 0x7F800000u;
+}
+
 inline Vec3 vec3Normalize(const Vec3& v)
 {
     float len = vec3Length(v);
@@ -96,7 +104,7 @@ inline Vec3 vec3Normalize(const Vec3& v)
 
 inline bool isFiniteVec3(const Vec3& v)
 {
-    return std::isfinite(v.x) && std::isfinite(v.y) && std::isfinite(v.z);
+    return isFiniteFloat(v.x) && isFiniteFloat(v.y) && isFiniteFloat(v.z);
 }
 
 inline bool isDegenerateTriangle(const Vec3& p0, const Vec3& p1, const Vec3& p2, float eps)
@@ -431,6 +439,7 @@ BooleanOperationReport BooleanOperation::validateMesh(const Mesh& mesh) noexcept
     if (!topo.hasValidIndices(attrs.vertexCount())) {
         report.addMessage("Face indices exceed vertex count");
         report.code = BooleanOperationDiagnostic::InputAInvalid;
+        std::sort(report.messages.begin(), report.messages.end());
         return report;
     }
 
@@ -439,6 +448,7 @@ BooleanOperationReport BooleanOperation::validateMesh(const Mesh& mesh) noexcept
         if (uses > 2u) {
             report.addMessage("Mesh contains non-manifold edges");
             report.code = BooleanOperationDiagnostic::InputANotManifold;
+            std::sort(report.messages.begin(), report.messages.end());
             return report;
         }
     }
@@ -446,6 +456,7 @@ BooleanOperationReport BooleanOperation::validateMesh(const Mesh& mesh) noexcept
     if (hasDegenerate) {
         report.addMessage("Mesh contains degenerate triangles/edges");
         report.code = BooleanOperationDiagnostic::GeometricDegeneracy;
+        std::sort(report.messages.begin(), report.messages.end());
         return report;
     }
 
@@ -454,6 +465,7 @@ BooleanOperationReport BooleanOperation::validateMesh(const Mesh& mesh) noexcept
         ? (BooleanOperationDiagnostic::SuccessWithWarnings | BooleanOperationDiagnostic::InputAHasNonTriangles)
         : BooleanOperationDiagnostic::Success;
 
+    std::sort(report.messages.begin(), report.messages.end());
     return report;
 }
 
@@ -463,10 +475,11 @@ BooleanOperationReport BooleanOperation::compute(
 {
     BooleanOperationReport report;
 
-    if (!(std::isfinite(options.geometricTolerance)) || options.geometricTolerance <= 0.f) {
+    if (!isFiniteFloat(options.geometricTolerance) || options.geometricTolerance <= 0.f) {
         report.code = BooleanOperationDiagnostic::NumericalInstability;
         report.addMessage("geometricTolerance must be finite and > 0");
         report.valid = false;
+        std::sort(report.messages.begin(), report.messages.end());
         return report;
     }
 
@@ -480,6 +493,7 @@ BooleanOperationReport BooleanOperation::compute(
             } else {
                 report.addMessage("Input A validation failed");
             }
+            std::sort(report.messages.begin(), report.messages.end());
             return report;
         }
         if (reportA.hasWarning(BooleanOperationDiagnostic::InputAHasNonTriangles)) {
@@ -494,6 +508,7 @@ BooleanOperationReport BooleanOperation::compute(
             } else {
                 report.addMessage("Input B validation failed");
             }
+            std::sort(report.messages.begin(), report.messages.end());
             return report;
         }
         if (reportB.hasWarning(BooleanOperationDiagnostic::InputAHasNonTriangles)) {
@@ -517,12 +532,14 @@ BooleanOperationReport BooleanOperation::compute(
     if (posA.empty() || trisA.empty()) {
         report.code = BooleanOperationDiagnostic::InputAEmpty;
         report.addMessage("Input A has no triangles after triangulation");
+        std::sort(report.messages.begin(), report.messages.end());
         return report;
     }
 
     if (posB.empty() || trisB.empty()) {
         report.code = BooleanOperationDiagnostic::InputBEmpty;
         report.addMessage("Input B has no triangles after triangulation");
+        std::sort(report.messages.begin(), report.messages.end());
         return report;
     }
 
@@ -540,11 +557,13 @@ BooleanOperationReport BooleanOperation::compute(
             report.code = BooleanOperationDiagnostic::Success;
             report.addMessage("Meshes do not intersect; returning input A for difference");
             report.valid = true;
+            std::sort(report.messages.begin(), report.messages.end());
             return report;
         } else {
             report.code = BooleanOperationDiagnostic::NoIntersection;
             report.addMessage("Meshes do not intersect for this operation");
             report.valid = true;  // Empty result is valid
+            std::sort(report.messages.begin(), report.messages.end());
             return report;
         }
     }
@@ -560,6 +579,7 @@ BooleanOperationReport BooleanOperation::compute(
         report.code = BooleanOperationDiagnostic::OutputEmpty;
         report.addMessage("Boolean operation resulted in empty mesh");
         report.valid = true;  // Empty result can be valid (e.g., no intersection)
+        std::sort(report.messages.begin(), report.messages.end());
         return report;
     }
 
@@ -602,6 +622,7 @@ BooleanOperationReport BooleanOperation::compute(
         ? (BooleanOperationDiagnostic::SuccessWithWarnings | BooleanOperationDiagnostic::GeometricDegeneracy)
         : BooleanOperationDiagnostic::Success;
     report.valid = true;
+    std::sort(report.messages.begin(), report.messages.end());
     return report;
 }
 

@@ -2,7 +2,9 @@
 
 #include <algorithm>
 #include <array>
+#include <bit>
 #include <cmath>
+#include <cstdint>
 #include <limits>
 #include <map>
 #include <span>
@@ -119,6 +121,12 @@ float degreesToRadians(float deg) noexcept
     return deg * 0.01745329251994329576923690768489f;
 }
 
+bool isFiniteFloat(float value) noexcept
+{
+    const std::uint32_t bits = std::bit_cast<std::uint32_t>(value);
+    return (bits & 0x7F800000u) != 0x7F800000u;
+}
+
 bool isFaceIndexReferenced(uint32_t faceIndex,
                            const std::vector<uint32_t>& refs) noexcept
 {
@@ -183,19 +191,22 @@ BevelChamferReport BevelChamferOperation::apply(const Mesh& input,
     if (!input.isValid()) {
         report.diagnostic = BevelChamferDiagnostic::InvalidInputMesh;
         report.messages.push_back("Input mesh is invalid");
+        std::sort(report.messages.begin(), report.messages.end());
         return report;
     }
 
-    if (desc.distance <= 0.f || !std::isfinite(desc.distance)) {
+    if (desc.distance <= 0.f || !isFiniteFloat(desc.distance)) {
         report.diagnostic = BevelChamferDiagnostic::InvalidDistance;
         report.messages.push_back("distance must be finite and > 0");
+        std::sort(report.messages.begin(), report.messages.end());
         return report;
     }
 
     if (desc.sharpAngleDegrees <= 0.f || desc.sharpAngleDegrees >= 180.f
-        || !std::isfinite(desc.sharpAngleDegrees)) {
+        || !isFiniteFloat(desc.sharpAngleDegrees)) {
         report.diagnostic = BevelChamferDiagnostic::InvalidSharpAngle;
         report.messages.push_back("sharpAngleDegrees must be finite and in (0, 180)");
+        std::sort(report.messages.begin(), report.messages.end());
         return report;
     }
 
@@ -267,6 +278,7 @@ BevelChamferReport BevelChamferOperation::apply(const Mesh& input,
         output = input;
         report.diagnostic = report.diagnostic | BevelChamferDiagnostic::NoSharpEdgesDetected;
         report.messages.push_back("No sharp edges matched the threshold; output equals input");
+        std::sort(report.messages.begin(), report.messages.end());
         report.valid = true;
         return report;
     }
@@ -452,6 +464,7 @@ BevelChamferReport BevelChamferOperation::apply(const Mesh& input,
         report.diagnostic = report.diagnostic | BevelChamferDiagnostic::SuccessWithWarnings;
     }
 
+    std::sort(report.messages.begin(), report.messages.end());
     report.valid = true;
     return report;
 }

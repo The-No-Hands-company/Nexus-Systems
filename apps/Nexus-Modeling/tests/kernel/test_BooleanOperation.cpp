@@ -7,6 +7,8 @@
 #include <nexus/geometry/Mesh.h>
 #include <gtest/gtest.h>
 
+#include <limits>
+
 namespace nexus::geometry::testing {
 
 using namespace nexus::geometry::primitives;
@@ -88,6 +90,21 @@ TEST(BooleanOperation, ValidateMeshRejectsDegenerateTriangle)
     auto report = BooleanOperation::validateMesh(mesh);
     EXPECT_FALSE(report.valid);
     EXPECT_TRUE(report.hasWarning(BooleanOperationDiagnostic::GeometricDegeneracy));
+}
+
+TEST(BooleanOperation, ValidateMeshRejectsNonFinitePosition)
+{
+    Mesh mesh;
+    mesh.attributes().setPositions({
+        {0.f, 0.f, 0.f},
+        {1.f, std::numeric_limits<float>::quiet_NaN(), 0.f},
+        {0.f, 1.f, 0.f},
+    });
+    mesh.topology().addFace(Face{{0u, 1u, 2u}});
+
+    const auto report = BooleanOperation::validateMesh(mesh);
+    EXPECT_FALSE(report.valid);
+    EXPECT_TRUE(report.hasWarning(BooleanOperationDiagnostic::InputAInvalid));
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -328,6 +345,21 @@ TEST(BooleanOperation, ComputeRejectsNonPositiveTolerance)
     EXPECT_TRUE(report.hasWarning(BooleanOperationDiagnostic::NumericalInstability));
 }
 
+TEST(BooleanOperation, ComputeRejectsNonFiniteTolerance)
+{
+    Mesh boxA = makeBox(2.0f, 2.0f, 2.0f);
+    Mesh boxB = makeBox(1.0f, 1.0f, 1.0f);
+
+    BooleanOperationOptions opts;
+    opts.geometricTolerance = std::numeric_limits<float>::infinity();
+
+    Mesh result;
+    const auto report = BooleanOperation::compute(boxA, boxB, BooleanOperationType::Union, opts, result);
+
+    EXPECT_FALSE(report.valid);
+    EXPECT_TRUE(report.hasWarning(BooleanOperationDiagnostic::NumericalInstability));
+}
+
 TEST(BooleanOperation, ComputeMapsInputBNonManifoldDiagnostic)
 {
     Mesh meshA = makeBox(2.0f, 2.0f, 2.0f);
@@ -350,6 +382,84 @@ TEST(BooleanOperation, ComputeMapsInputBNonManifoldDiagnostic)
 
     EXPECT_FALSE(report.valid);
     EXPECT_TRUE(report.hasWarning(BooleanOperationDiagnostic::InputBNotManifold));
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Diagnostic ordering contract tests (slice 9)
+// ─────────────────────────────────────────────────────────────────────────────
+
+// validateMesh can accumulate two messages when a mesh has non-triangle faces
+// AND a subsequent structural error (e.g. out-of-bounds indices).  The non-
+// triangle message starts with 'M' while the index-bounds message starts with
+// 'F', so without a sort the insertion order is wrong.
+TEST(BooleanOperation, ValidateMeshMultipleMessagesAreLexicographicallySorted)
+{
+    // Quad face {0,1,2,3} with only 3 vertices — hasNonTriangles=true AND
+    // hasValidIndices(3) fails (index 3 >= vertexCount 3).
+    Mesh mesh;
+    mesh.attributes().setPositions({
+        {0.f, 0.f, 0.f},
+        {1.f, 0.f, 0.f},
+        {0.f, 1.f, 0.f},
+    });
+    mesh.topology().addFace(Face{{0u, 1u, 2u, 3u}});  // quad, index 3 out of bounds
+
+    auto report = BooleanOperation::validateMesh(mesh);
+
+    EXPECT_FALSE(report.valid);
+    ASSERT_EQ(report.messages.size(), 2u);
+    EXPECT_TRUE(std::is_sorted(report.messages.begin(), report.messages.end()))
+        << "validateMesh messages are not lexicographically sorted";
+    // 'F' < 'M': "Face indices..." must come before "Mesh contains non-triangle..."
+    EXPECT_LT(report.messages[0], report.messages[1]);
+    EXPECT_NE(report.messages[0].find("Face indices"), std::string::npos);
+    EXPECT_NE(report.messages[1].find("non-triangle"), std::string::npos);
+}
+
+// compute accumulates up to three messages when both inputs have non-triangle
+// faces and a degenerate triangle is skipped during fan-triangulation.
+// Insertion order: [Input A warning, Input B warning, Degenerate warning].
+// Sorted order: [Degenerate..., Input A..., Input B...] ('D' < 'I').
+TEST(BooleanOperation, ComputeMultipleWarningMessagesAreLexicographicallySorted)
+{
+    // meshA: standard box — quad faces → Input A non-triangle warning.
+    Mesh meshA = makeBox(2.0f, 2.0f, 2.0f);
+
+    // meshB: one quad face whose first fan-triangle is degenerate (colinear
+    // vertices) and whose second fan-triangle is valid and overlaps meshA.
+    // Positions: v0=(0,0,0), v1=(1,0,0), v2=(2,0,0), v3=(0,1,0)
+    // Fan of quad {0,1,2,3}:
+    //   tri0 = {0,1,2} → (0,0,0),(1,0,0),(2,0,0) — colinear → DEGENERATE
+    //   tri1 = {0,2,3} → (0,0,0),(2,0,0),(0,1,0) — valid
+    Mesh meshB;
+    meshB.attributes().setPositions({
+        {0.f, 0.f, 0.f},
+        {1.f, 0.f, 0.f},
+        {2.f, 0.f, 0.f},
+        {0.f, 1.f, 0.f},
+    });
+    meshB.topology().addFace(Face{{0u, 1u, 2u, 3u}});
+
+    Mesh result;
+    auto report =
+        BooleanOperation::compute(meshA, meshB, BooleanOperationType::Union, {}, result);
+
+    // Three warnings must be present and lexicographically sorted.
+    ASSERT_GE(report.messages.size(), 3u);
+    EXPECT_TRUE(std::is_sorted(report.messages.begin(), report.messages.end()))
+        << "compute messages are not lexicographically sorted";
+    // "Degenerate..." ('D') must sort before "Input..." ('I').
+    bool foundDegenerate = false;
+    bool foundInputA     = false;
+    bool foundInputB     = false;
+    for (const auto& msg : report.messages) {
+        if (msg.find("Degenerate") != std::string::npos)    foundDegenerate = true;
+        if (msg.find("Input A") != std::string::npos)       foundInputA     = true;
+        if (msg.find("Input B") != std::string::npos)       foundInputB     = true;
+    }
+    EXPECT_TRUE(foundDegenerate) << "Expected degenerate-skip message";
+    EXPECT_TRUE(foundInputA)     << "Expected Input A non-triangle warning";
+    EXPECT_TRUE(foundInputB)     << "Expected Input B non-triangle warning";
 }
 
 }  // namespace nexus::geometry::testing

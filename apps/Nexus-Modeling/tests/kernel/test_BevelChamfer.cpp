@@ -5,6 +5,7 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <limits>
 
 namespace nexus::geometry::testing {
 
@@ -43,6 +44,34 @@ TEST(BevelChamfer, RejectsInvalidSharpAngle)
 
     BevelChamferDesc desc{};
     desc.sharpAngleDegrees = 180.0f;
+
+    Mesh out;
+    const BevelChamferReport report = BevelChamferOperation::apply(box, desc, out);
+
+    EXPECT_FALSE(report.valid);
+    EXPECT_TRUE(hasDiagnostic(report.diagnostic, BevelChamferDiagnostic::InvalidSharpAngle));
+}
+
+TEST(BevelChamfer, RejectsNonFiniteDistance)
+{
+    Mesh box = makeBox(1.0f, 1.0f, 1.0f);
+
+    BevelChamferDesc desc{};
+    desc.distance = std::numeric_limits<float>::quiet_NaN();
+
+    Mesh out;
+    const BevelChamferReport report = BevelChamferOperation::apply(box, desc, out);
+
+    EXPECT_FALSE(report.valid);
+    EXPECT_TRUE(hasDiagnostic(report.diagnostic, BevelChamferDiagnostic::InvalidDistance));
+}
+
+TEST(BevelChamfer, RejectsNonFiniteSharpAngle)
+{
+    Mesh box = makeBox(1.0f, 1.0f, 1.0f);
+
+    BevelChamferDesc desc{};
+    desc.sharpAngleDegrees = std::numeric_limits<float>::infinity();
 
     Mesh out;
     const BevelChamferReport report = BevelChamferOperation::apply(box, desc, out);
@@ -237,6 +266,52 @@ TEST(BevelChamfer, DegeneracyRegressionWithTinyDistanceProducesValidTopology)
     const TopologyValidationReport topoReport =
         TopologyUtilities::validateTopology(out.topology(), out.attributes().vertexCount());
     EXPECT_TRUE(topoReport.valid);
+}
+
+TEST(BevelChamfer, MessagesSortedWhenMultipleErrorsOccur)
+{
+    // Create a mesh with geometry that will trigger non-manifold detection
+    // plus missing sharp edges - this generates 2 messages that should be sorted.
+    Mesh box = makeBox(0.1f, 0.1f, 0.1f);
+    
+    BevelChamferDesc desc{};
+    desc.mode = BevelChamferMode::Bevel;
+    desc.distance = 0.01f;
+    desc.sharpAngleDegrees = 179.0f;  // Very high threshold = no sharp edges
+    desc.includeBoundaryEdges = false;
+    
+    Mesh out;
+    const BevelChamferReport report = BevelChamferOperation::apply(box, desc, out);
+    
+    // Verify messages are sorted if multiple exist
+    if (report.messages.size() > 1u) {
+        std::vector<std::string> sorted = report.messages;
+        std::sort(sorted.begin(), sorted.end());
+        EXPECT_EQ(report.messages, sorted) << "Messages not in lexicographic order";
+    }
+}
+
+TEST(BevelChamfer, SuccessMessagesAreOrdered)
+{
+    Mesh box1 = makeBox(1.0f, 1.0f, 1.0f);
+    Mesh box2 = makeBox(1.0f, 1.0f, 1.0f);
+    
+    BevelChamferDesc desc{};
+    desc.mode = BevelChamferMode::Bevel;
+    desc.distance = 0.05f;
+    desc.sharpAngleDegrees = 45.0f;
+    
+    Mesh out1, out2;
+    const BevelChamferReport rep1 = BevelChamferOperation::apply(box1, desc, out1);
+    const BevelChamferReport rep2 = BevelChamferOperation::apply(box2, desc, out2);
+    
+    // Both should have same messages in same order (deterministic)
+    EXPECT_EQ(rep1.messages, rep2.messages);
+    
+    // Verify messages are sorted
+    std::vector<std::string> sorted = rep1.messages;
+    std::sort(sorted.begin(), sorted.end());
+    EXPECT_EQ(rep1.messages, sorted);
 }
 
 } // namespace nexus::geometry::testing

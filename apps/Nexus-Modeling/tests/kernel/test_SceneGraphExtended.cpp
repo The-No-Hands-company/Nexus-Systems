@@ -2,6 +2,9 @@
 #include <nexus/gfx/Device.h>
 #include <gtest/gtest.h>
 
+#include <cmath>
+#include <limits>
+
 using namespace nexus::render;
 using namespace nexus::gfx;
 
@@ -317,6 +320,57 @@ TEST(SceneGraphExtended, CollectVisibleHandlesMirroredScaleConservatively)
 
     Frustum f{};
     f.planes[0] = {1.0f, 0.0f, 0.0f, 0.0f};
+
+    std::vector<Node*> out;
+    sg.collectVisible(f, out);
+
+    ASSERT_EQ(out.size(), 1u);
+    EXPECT_EQ(out[0], n);
+}
+
+TEST(SceneGraphExtended, WorldMatrixSanitizesNonFiniteLocalTransform)
+{
+    SceneGraph sg;
+    auto* n = sg.createNode("sanitized");
+    ASSERT_NE(n, nullptr);
+
+    n->localTransform().translation = {
+        std::numeric_limits<float>::quiet_NaN(),
+        std::numeric_limits<float>::infinity(),
+        -std::numeric_limits<float>::infinity()};
+    n->localTransform().rotation = {
+        std::numeric_limits<float>::quiet_NaN(),
+        0.f,
+        0.f,
+        std::numeric_limits<float>::infinity()};
+    n->localTransform().scale = {
+        std::numeric_limits<float>::quiet_NaN(),
+        std::numeric_limits<float>::infinity(),
+        -std::numeric_limits<float>::infinity()};
+
+    const Mat4 world = n->worldMatrix();
+    EXPECT_TRUE(std::isfinite(world.m[0][3]));
+    EXPECT_TRUE(std::isfinite(world.m[1][3]));
+    EXPECT_TRUE(std::isfinite(world.m[2][3]));
+    EXPECT_FLOAT_EQ(world.m[0][3], 0.f);
+    EXPECT_FLOAT_EQ(world.m[1][3], 0.f);
+    EXPECT_FLOAT_EQ(world.m[2][3], 0.f);
+}
+
+TEST(SceneGraphExtended, CollectVisibleUsesSanitizedCenterForNonFiniteTranslation)
+{
+    SceneGraph sg;
+    auto* n = sg.createNode("nan_center");
+    ASSERT_NE(n, nullptr);
+    n->mesh.vertexBuffer.id = 7;
+    n->localTransform().translation = {
+        std::numeric_limits<float>::quiet_NaN(),
+        0.f,
+        0.f};
+
+    Frustum f{};
+    // Plane x >= -0.5 ; sanitized center at x=0 remains visible.
+    f.planes[0] = {1.0f, 0.0f, 0.0f, 0.5f};
 
     std::vector<Node*> out;
     sg.collectVisible(f, out);

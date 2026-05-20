@@ -4,11 +4,47 @@
 #include <nexus/render/SceneGraph.h>
 #include <nexus/geometry/GeometryKernel.h>
 #include <algorithm>
+#include <bit>
 #include <cmath>
+#include <cstdint>
 
 namespace nexus::render {
 
 namespace {
+
+[[nodiscard]] bool isFiniteFloat(float value) noexcept
+{
+    const std::uint32_t bits = std::bit_cast<std::uint32_t>(value);
+    return (bits & 0x7F800000u) != 0x7F800000u;
+}
+
+[[nodiscard]] float finiteOr(float value, float fallback) noexcept
+{
+    return isFiniteFloat(value) ? value : fallback;
+}
+
+[[nodiscard]] Transform sanitizeTransform(const Transform& in) noexcept
+{
+    Transform out{};
+    out.translation.x = finiteOr(in.translation.x, 0.f);
+    out.translation.y = finiteOr(in.translation.y, 0.f);
+    out.translation.z = finiteOr(in.translation.z, 0.f);
+
+    const bool rotationFinite = isFiniteFloat(in.rotation.x)
+        && isFiniteFloat(in.rotation.y)
+        && isFiniteFloat(in.rotation.z)
+        && isFiniteFloat(in.rotation.w);
+    if (rotationFinite) {
+        out.rotation = in.rotation;
+    } else {
+        out.rotation = {0.f, 0.f, 0.f, 1.f};
+    }
+
+    out.scale.x = finiteOr(in.scale.x, 1.f);
+    out.scale.y = finiteOr(in.scale.y, 1.f);
+    out.scale.z = finiteOr(in.scale.z, 1.f);
+    return out;
+}
 
 [[nodiscard]] float axisScaleLength(const Mat4& world, int column) noexcept
 {
@@ -33,9 +69,16 @@ namespace {
 // ── Transform ────────────────────────────────────────────────────────────────
 Mat4 Transform::toMatrix() const noexcept
 {
+    const Transform sanitized = sanitizeTransform(*this);
+
     // Quaternion to rotation matrix, then apply scale and translation.
-    const float& qx = rotation.x, &qy = rotation.y, &qz = rotation.z, &qw = rotation.w;
-    const float& sx = scale.x,    &sy = scale.y,     &sz = scale.z;
+    const float& qx = sanitized.rotation.x;
+    const float& qy = sanitized.rotation.y;
+    const float& qz = sanitized.rotation.z;
+    const float& qw = sanitized.rotation.w;
+    const float& sx = sanitized.scale.x;
+    const float& sy = sanitized.scale.y;
+    const float& sz = sanitized.scale.z;
 
     float xx = qx*qx, yy = qy*qy, zz = qz*qz;
     float xy = qx*qy, xz = qx*qz, yz = qy*qz;
@@ -51,9 +94,9 @@ Mat4 Transform::toMatrix() const noexcept
     m.m[2][0] = sz * 2*(xz - wy);
     m.m[2][1] = sz * 2*(yz + wx);
     m.m[2][2] = sz * (1 - 2*(xx+yy));
-    m.m[0][3] = translation.x;
-    m.m[1][3] = translation.y;
-    m.m[2][3] = translation.z;
+    m.m[0][3] = sanitized.translation.x;
+    m.m[1][3] = sanitized.translation.y;
+    m.m[2][3] = sanitized.translation.z;
     m.m[3][3] = 1.f;
     return m;
 }

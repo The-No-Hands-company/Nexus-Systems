@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 
 namespace nexus::geometry::testing {
 
@@ -45,6 +46,35 @@ TEST(RemeshOperation, RejectsInvalidTargetEdgeLength)
 
     RemeshDesc desc{};
     desc.targetEdgeLength = 0.f;
+
+    Mesh out;
+    const RemeshReport report = RemeshOperation::apply(box, desc, out);
+
+    EXPECT_FALSE(report.valid);
+    EXPECT_TRUE(hasDiagnostic(report.diagnostic, RemeshDiagnostic::InvalidTargetEdgeLength));
+}
+
+TEST(RemeshOperation, RejectsNonFiniteTargetEdgeLength)
+{
+    Mesh box = makeBox(1.f, 1.f, 1.f);
+
+    RemeshDesc desc{};
+    desc.targetEdgeLength = std::numeric_limits<float>::quiet_NaN();
+
+    Mesh out;
+    const RemeshReport report = RemeshOperation::apply(box, desc, out);
+
+    EXPECT_FALSE(report.valid);
+    EXPECT_TRUE(hasDiagnostic(report.diagnostic, RemeshDiagnostic::InvalidTargetEdgeLength));
+}
+
+TEST(RemeshOperation, RejectsNonFiniteSplitThresholdMultiplier)
+{
+    Mesh box = makeBox(1.f, 1.f, 1.f);
+
+    RemeshDesc desc{};
+    desc.targetEdgeLength = 1.f;
+    desc.splitThresholdMultiplier = std::numeric_limits<float>::infinity();
 
     Mesh out;
     const RemeshReport report = RemeshOperation::apply(box, desc, out);
@@ -242,6 +272,64 @@ TEST(RemeshOperation, CollapseDeterministicAcrossRuns)
     ASSERT_TRUE(reportB.valid);
     EXPECT_EQ(reportA.collapseCount, reportB.collapseCount);
     EXPECT_EQ(outA.topology().faceCount(), outB.topology().faceCount());
+}
+
+TEST(RemeshOperation, UploadContractMultipleWarningsAreLexicographicallySorted)
+{
+    // Non-triangulated input plane will trigger InputTriangulated.
+    // Large target edge length will trigger NoChangesApplied (no edges subdivided).
+    // The messages vector must be lexicographically sorted.
+    Mesh plane = makePlane(1.f, 1.f, 2, 2);
+
+    RemeshDesc desc{};
+    desc.targetEdgeLength = 100.f;  // Large target — no changes applied
+    desc.maxIterations = 2;
+    desc.recomputeNormals = false;
+
+    Mesh out;
+    const RemeshReport report = RemeshOperation::apply(plane, desc, out);
+
+    ASSERT_TRUE(report.valid);
+    EXPECT_TRUE(hasDiagnostic(report.diagnostic, RemeshDiagnostic::InputTriangulated));
+    EXPECT_TRUE(hasDiagnostic(report.diagnostic, RemeshDiagnostic::NoChangesApplied));
+    EXPECT_EQ(report.messages.size(), 2);
+
+    // Expected messages in sorted order:
+    std::vector<std::string> expected = {
+        "Input contained non-triangle faces and was triangulated before remeshing",
+        "No edges exceeded remesh threshold; output remains unchanged"
+    };
+    EXPECT_EQ(report.messages, expected);
+}
+
+TEST(RemeshOperation, UploadContractWarningOrderIsIndependentOfConfigVariation)
+{
+    // Apply remesh with two slightly different descriptors that don't affect warnings.
+    // Both should produce InputTriangulated + NoChangesApplied in identical order.
+    Mesh a = makePlane(1.f, 1.f, 2, 2);
+    Mesh b = makePlane(1.f, 1.f, 2, 2);
+
+    RemeshDesc descA{};
+    descA.targetEdgeLength = 100.f;
+    descA.maxIterations = 2;
+    descA.recomputeNormals = false;
+    descA.collapseEdgesBelow = 0.f;
+
+    RemeshDesc descB{};
+    descB.targetEdgeLength = 100.f;
+    descB.maxIterations = 2;
+    descB.recomputeNormals = false;
+    descB.collapseEdgesBelow = 0.f;
+    descB.maxCollapseIterations = 5;  // Different collapse setting, but no collapse since collapseEdgesBelow=0
+
+    Mesh outA, outB;
+    const RemeshReport reportA = RemeshOperation::apply(a, descA, outA);
+    const RemeshReport reportB = RemeshOperation::apply(b, descB, outB);
+
+    ASSERT_TRUE(reportA.valid);
+    ASSERT_TRUE(reportB.valid);
+    EXPECT_EQ(reportA.messages.size(), reportB.messages.size());
+    EXPECT_EQ(reportA.messages, reportB.messages);
 }
 
 } // namespace nexus::geometry::testing

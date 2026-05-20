@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <array>
+#include <bit>
 #include <cmath>
 #include <cstdint>
 #include <limits>
@@ -83,6 +84,12 @@ Vec4 lerpVec4(const Vec4& a, const Vec4& b) noexcept
     };
 }
 
+bool isFiniteFloat(float value) noexcept
+{
+    const std::uint32_t bits = std::bit_cast<std::uint32_t>(value);
+    return (bits & 0x7F800000u) != 0x7F800000u;
+}
+
 JointWeight4 averageWeights(const JointWeight4& a, const JointWeight4& b) noexcept
 {
     JointWeight4 out{};
@@ -107,8 +114,8 @@ RemeshReport RemeshOperation::apply(const Mesh& input,
         return report;
     }
 
-    if (desc.targetEdgeLength <= 0.f || !std::isfinite(desc.targetEdgeLength)
-        || desc.splitThresholdMultiplier < 1.0f || !std::isfinite(desc.splitThresholdMultiplier)) {
+    if (desc.targetEdgeLength <= 0.f || !isFiniteFloat(desc.targetEdgeLength)
+        || desc.splitThresholdMultiplier < 1.0f || !isFiniteFloat(desc.splitThresholdMultiplier)) {
         report.diagnostic = RemeshDiagnostic::InvalidTargetEdgeLength;
         report.messages.push_back("targetEdgeLength must be finite and > 0, splitThresholdMultiplier must be >= 1");
         return report;
@@ -390,6 +397,7 @@ RemeshReport RemeshOperation::apply(const Mesh& input,
         report.diagnostic = report.diagnostic | RemeshDiagnostic::OutputTopologyInvalid;
         report.messages.push_back("Remesh produced an invalid output mesh");
         report.valid = false;
+        std::sort(report.messages.begin(), report.messages.end());
         return report;
     }
 
@@ -400,6 +408,7 @@ RemeshReport RemeshOperation::apply(const Mesh& input,
 
     report.diagnostic = report.diagnostic | RemeshDiagnostic::SuccessWithWarnings;
     report.valid = true;
+    std::sort(report.messages.begin(), report.messages.end());
     return report;
 }
 
