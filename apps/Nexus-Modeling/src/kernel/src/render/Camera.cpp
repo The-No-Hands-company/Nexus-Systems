@@ -68,6 +68,12 @@ void Camera::setOrthographic(float width, float height, float nearZ, float farZ)
 
 void Camera::lookAt(Vec3 eye, Vec3 target, Vec3 up) noexcept
 {
+    if (!isFiniteFloat(eye.x) || !isFiniteFloat(eye.y) || !isFiniteFloat(eye.z) ||
+        !isFiniteFloat(target.x) || !isFiniteFloat(target.y) || !isFiniteFloat(target.z) ||
+        !isFiniteFloat(up.x) || !isFiniteFloat(up.y) || !isFiniteFloat(up.z)) {
+        return;
+    }
+
     m_ubo.position = {eye.x, eye.y, eye.z, m_near};
 
     // Forward (right-handed, Z points into the scene = negative Z)

@@ -2,6 +2,7 @@
 #include <gtest/gtest.h>
 
 #include <cmath>
+#include <limits>
 
 using namespace nexus::render;
 
@@ -91,6 +92,29 @@ TEST(CameraExtended, OrthographicRejectsDegenerateFiniteParameters)
     cam.setOrthographic(10.f, 8.f, 5.f, 5.f);
     EXPECT_TRUE(nearlyEqual(cam.ubo().projection.m[2][2], before.m[2][2]));
     EXPECT_TRUE(nearlyEqual(cam.ubo().projection.m[3][3], before.m[3][3]));
+}
+
+TEST(CameraExtended, LookAtRejectsNonFiniteVectors)
+{
+    Camera cam;
+    cam.setPerspective(70.f, 16.f / 9.f, 0.1f, 5000.f);
+    cam.lookAt({4.f, 3.f, 10.f}, {0.f, 0.f, 0.f});
+
+    const auto before = cam.ubo();
+    const float nan = std::numeric_limits<float>::quiet_NaN();
+    const float inf = std::numeric_limits<float>::infinity();
+
+    cam.lookAt({nan, 3.f, 10.f}, {0.f, 0.f, 0.f});
+    EXPECT_TRUE(nearlyEqual(cam.ubo().position.x, before.position.x));
+    EXPECT_TRUE(nearlyEqual(cam.ubo().view.m[0][3], before.view.m[0][3]));
+
+    cam.lookAt({4.f, 3.f, 10.f}, {0.f, inf, 0.f});
+    EXPECT_TRUE(nearlyEqual(cam.ubo().direction.y, before.direction.y));
+    EXPECT_TRUE(nearlyEqual(cam.ubo().view.m[1][3], before.view.m[1][3]));
+
+    cam.lookAt({4.f, 3.f, 10.f}, {0.f, 0.f, 0.f}, {0.f, nan, 0.f});
+    EXPECT_TRUE(nearlyEqual(cam.ubo().viewProj.m[0][0], before.viewProj.m[0][0]));
+    EXPECT_TRUE(nearlyEqual(cam.ubo().invViewProj.m[2][3], before.invViewProj.m[2][3]));
 }
 
 TEST(CameraExtended, Vec3DotCrossNormalizeBehave)
