@@ -3,6 +3,7 @@
 #include <gtest/gtest.h>
 
 #include <cmath>
+#include <limits>
 
 using namespace nexus::geometry;
 using namespace nexus::geometry::primitives;
@@ -533,6 +534,20 @@ TEST(Mesh, PrimitivePlaneSegmentsCorrectly)
     EXPECT_EQ(plane.topology().faceCount(), 6u);       // 2*3
     EXPECT_TRUE(plane.attributes().hasUVs());
     EXPECT_EQ(plane.attributes().uvs().size(), 12u);
+}
+
+TEST(Mesh, PrimitiveConstructorsRejectNonFiniteDimensions)
+{
+    const float nan = std::numeric_limits<float>::quiet_NaN();
+    const float inf = std::numeric_limits<float>::infinity();
+
+    EXPECT_FALSE(makeTriangle(nan).isValid());
+    EXPECT_FALSE(makeBox(1.f, inf, 1.f).isValid());
+    EXPECT_FALSE(makePlane(1.f, nan, 2u, 3u).isValid());
+    EXPECT_FALSE(makeSphere(inf, 8u, 12u).isValid());
+    EXPECT_FALSE(makeCylinder(1.f, nan, 12u).isValid());
+    EXPECT_FALSE(makeCone(nan, 2.f, 12u).isValid());
+    EXPECT_FALSE(makeCapsule(1.f, inf, 12u, 6u).isValid());
 }
 
 TEST(Mesh, SkinningStreamsMustMatchVertexCount)

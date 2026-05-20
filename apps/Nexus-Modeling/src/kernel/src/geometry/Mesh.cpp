@@ -1,7 +1,9 @@
 #include <nexus/geometry/Mesh.h>
 
 #include <algorithm>
+#include <bit>
 #include <cmath>
+#include <cstdint>
 #include <map>
 
 #include <limits>
@@ -9,6 +11,13 @@
 namespace nexus::geometry {
 
 namespace {
+
+bool isFiniteFloat(float value) noexcept
+{
+    constexpr std::uint32_t kExpMask = 0x7F800000u;
+    const std::uint32_t bits = std::bit_cast<std::uint32_t>(value);
+    return (bits & kExpMask) != kExpMask;
+}
 
 nexus::render::Vec3 vec3Sub(const nexus::render::Vec3& a, const nexus::render::Vec3& b) noexcept
 {
@@ -1212,6 +1221,10 @@ namespace primitives {
 
 Mesh makeTriangle(float size)
 {
+    if (!isFiniteFloat(size)) {
+        return {};
+    }
+
     const float h = size * 0.5f;
     std::vector<nexus::render::Vec3> positions = {
         {  0.f,  0.f,  h },   // front apex
@@ -1230,6 +1243,10 @@ Mesh makeTriangle(float size)
 
 Mesh makeBox(float widthX, float heightY, float depthZ)
 {
+    if (!isFiniteFloat(widthX) || !isFiniteFloat(heightY) || !isFiniteFloat(depthZ)) {
+        return {};
+    }
+
     const float hx = widthX * 0.5f;
     const float hy = heightY * 0.5f;
     const float hz = depthZ * 0.5f;
@@ -1268,6 +1285,10 @@ Mesh makeBox(float widthX, float heightY, float depthZ)
 
 Mesh makePlane(float width, float depth, uint32_t widthSegs, uint32_t depthSegs)
 {
+    if (!isFiniteFloat(width) || !isFiniteFloat(depth)) {
+        return {};
+    }
+
     widthSegs = std::max(1u, widthSegs);
     depthSegs = std::max(1u, depthSegs);
 
@@ -1316,4 +1337,406 @@ Mesh makePlane(float width, float depth, uint32_t widthSegs, uint32_t depthSegs)
 
 } // namespace primitives
 
+// ─────────────────────────────────────────────────────────────────────────────
+//  Additional primitive constructors — Month 5
+// ─────────────────────────────────────────────────────────────────────────────
+
+namespace primitives {
+
+namespace {
+
+static constexpr float kPi = 3.14159265358979323846f;
+
+} // anonymous namespace
+
+Mesh makeSphere(float radius, uint32_t latSegs, uint32_t lonSegs)
+{
+    if (!isFiniteFloat(radius)) {
+        return {};
+    }
+
+    latSegs = std::max(2u, latSegs);
+    lonSegs = std::max(3u, lonSegs);
+
+    std::vector<nexus::render::Vec3> positions;
+    std::vector<Vec2> uvs;
+
+    // Layout: top pole (1 vertex), then (latSegs-1) interior rings × lonSegs each,
+    // then bottom pole (1 vertex).  No seam duplication — UV continuity is
+    // approximate, which is acceptable for a default primitive.
+    const uint32_t topPole = 0u;
+    positions.push_back({0.f, radius, 0.f});
+    uvs.push_back({0.5f, 0.f});
+
+    for (uint32_t ring = 1; ring < latSegs; ++ring) {
+        const float phi    = static_cast<float>(ring) / static_cast<float>(latSegs) * kPi;
+        const float sinPhi = std::sin(phi);
+        const float cosPhi = std::cos(phi);
+        const float vCoord = static_cast<float>(ring) / static_cast<float>(latSegs);
+        for (uint32_t seg = 0; seg < lonSegs; ++seg) {
+            const float theta = static_cast<float>(seg) / static_cast<float>(lonSegs) * 2.f * kPi;
+            const float uCoord = static_cast<float>(seg) / static_cast<float>(lonSegs);
+            positions.push_back({
+                radius * sinPhi * std::cos(theta),
+                radius * cosPhi,
+                radius * sinPhi * std::sin(theta)
+            });
+            uvs.push_back({uCoord, vCoord});
+        }
+    }
+
+    const uint32_t botPole = static_cast<uint32_t>(positions.size());
+    positions.push_back({0.f, -radius, 0.f});
+    uvs.push_back({0.5f, 1.f});
+
+    Mesh mesh;
+    mesh.attributes().setPositions(std::move(positions));
+    mesh.attributes().setUVs(std::move(uvs));
+
+    // Helper: ring vertex index  (ring 1..latSegs-1, seg 0..lonSegs-1)
+    auto ringVert = [&](uint32_t ring, uint32_t seg) -> uint32_t {
+        return 1u + (ring - 1u) * lonSegs + (seg % lonSegs);
+    };
+
+    // Top cap triangles: {topPole, ring1[next], ring1[seg]}  (CCW outward)
+    for (uint32_t seg = 0; seg < lonSegs; ++seg) {
+        Face f{};
+        f.indices = { topPole,
+                      ringVert(1, (seg + 1) % lonSegs),
+                      ringVert(1, seg) };
+        mesh.topology().addFace(std::move(f));
+    }
+
+    // Interior quads: {tl, tr, br, bl}  (CCW outward) for rings 1..latSegs-2
+    for (uint32_t ring = 1; ring < latSegs - 1u; ++ring) {
+        for (uint32_t seg = 0; seg < lonSegs; ++seg) {
+            const uint32_t tl = ringVert(ring,     seg);
+            const uint32_t tr = ringVert(ring,     (seg + 1) % lonSegs);
+            const uint32_t br = ringVert(ring + 1, (seg + 1) % lonSegs);
+            const uint32_t bl = ringVert(ring + 1, seg);
+            Face f{};
+            f.indices = {tl, tr, br, bl};
+            mesh.topology().addFace(std::move(f));
+        }
+    }
+
+    // Bottom cap triangles: {lastRing[seg], lastRing[next], botPole}  (CCW outward)
+    const uint32_t lastRing = latSegs - 1u;
+    for (uint32_t seg = 0; seg < lonSegs; ++seg) {
+        Face f{};
+        f.indices = { ringVert(lastRing, seg),
+                      ringVert(lastRing, (seg + 1) % lonSegs),
+                      botPole };
+        mesh.topology().addFace(std::move(f));
+    }
+
+    return mesh;
+}
+
+Mesh makeCylinder(float radius, float height, uint32_t radialSegs)
+{
+    if (!isFiniteFloat(radius) || !isFiniteFloat(height)) {
+        return {};
+    }
+
+    radialSegs = std::max(3u, radialSegs);
+
+    std::vector<nexus::render::Vec3> positions;
+    std::vector<Vec2> uvs;
+
+    const float hy = height * 0.5f;
+
+    // Bottom ring (indices 0..radialSegs-1), Top ring (indices radialSegs..2*radialSegs-1)
+    for (uint32_t seg = 0; seg < radialSegs; ++seg) {
+        const float theta = static_cast<float>(seg) / static_cast<float>(radialSegs) * 2.f * kPi;
+        const float x     = radius * std::cos(theta);
+        const float z     = radius * std::sin(theta);
+        const float u     = static_cast<float>(seg) / static_cast<float>(radialSegs);
+        positions.push_back({x, -hy, z});  uvs.push_back({u, 1.f});
+        positions.push_back({x,  hy, z});  uvs.push_back({u, 0.f});
+    }
+
+    // Bottom center and top center
+    const uint32_t botCenter = static_cast<uint32_t>(positions.size());
+    positions.push_back({0.f, -hy, 0.f});  uvs.push_back({0.5f, 0.5f});
+    const uint32_t topCenter = botCenter + 1u;
+    positions.push_back({0.f,  hy, 0.f});  uvs.push_back({0.5f, 0.5f});
+
+    Mesh mesh;
+    mesh.attributes().setPositions(std::move(positions));
+    mesh.attributes().setUVs(std::move(uvs));
+
+    // Vertex helpers: each segment contributes 2 vertices (bottom=even, top=odd)
+    auto botRing = [&](uint32_t seg) { return (seg % radialSegs) * 2u; };
+    auto topRing = [&](uint32_t seg) { return (seg % radialSegs) * 2u + 1u; };
+
+    // Barrel: {topCur, topNext, botNext, botCur}  (CCW outward)
+    for (uint32_t seg = 0; seg < radialSegs; ++seg) {
+        const uint32_t tl = topRing(seg);
+        const uint32_t tr = topRing(seg + 1);
+        const uint32_t br = botRing(seg + 1);
+        const uint32_t bl = botRing(seg);
+        Face f{};
+        f.indices = {tl, tr, br, bl};
+        mesh.topology().addFace(std::move(f));
+    }
+
+    // Top cap: {topCenter, topRing[seg], topRing[next]}  (CCW outward, +Y normal)
+    for (uint32_t seg = 0; seg < radialSegs; ++seg) {
+        Face f{};
+        f.indices = { topCenter,
+                      topRing(seg + 1),
+                      topRing(seg) };
+        mesh.topology().addFace(std::move(f));
+    }
+
+    // Bottom cap: {botCenter, botRing[seg], botRing[next]}  (CCW outward, -Y normal)
+    for (uint32_t seg = 0; seg < radialSegs; ++seg) {
+        Face f{};
+        f.indices = { botCenter,
+                      botRing(seg),
+                      botRing(seg + 1) };
+        mesh.topology().addFace(std::move(f));
+    }
+
+    return mesh;
+}
+
+Mesh makeCone(float radius, float height, uint32_t radialSegs)
+{
+    if (!isFiniteFloat(radius) || !isFiniteFloat(height)) {
+        return {};
+    }
+
+    radialSegs = std::max(3u, radialSegs);
+
+    std::vector<nexus::render::Vec3> positions;
+    std::vector<Vec2> uvs;
+
+    // Base ring (y = 0)
+    for (uint32_t seg = 0; seg < radialSegs; ++seg) {
+        const float theta = static_cast<float>(seg) / static_cast<float>(radialSegs) * 2.f * kPi;
+        const float u     = static_cast<float>(seg) / static_cast<float>(radialSegs);
+        positions.push_back({ radius * std::cos(theta), 0.f, radius * std::sin(theta) });
+        uvs.push_back({u, 1.f});
+    }
+
+    // Apex and base center
+    const uint32_t apexIdx       = static_cast<uint32_t>(positions.size());
+    positions.push_back({0.f, height, 0.f});  uvs.push_back({0.5f, 0.f});
+    const uint32_t baseCenterIdx = apexIdx + 1u;
+    positions.push_back({0.f, 0.f,   0.f});   uvs.push_back({0.5f, 0.5f});
+
+    Mesh mesh;
+    mesh.attributes().setPositions(std::move(positions));
+    mesh.attributes().setUVs(std::move(uvs));
+
+    auto baseRing = [&](uint32_t seg) { return seg % radialSegs; };
+
+    // Lateral triangles: {apex, ring[next], ring[seg]}  (CCW outward)
+    for (uint32_t seg = 0; seg < radialSegs; ++seg) {
+        Face f{};
+        f.indices = { apexIdx,
+                      baseRing(seg + 1),
+                      baseRing(seg) };
+        mesh.topology().addFace(std::move(f));
+    }
+
+    // Base cap: {baseCenter, ring[seg], ring[next]}  (CCW outward, -Y normal)
+    for (uint32_t seg = 0; seg < radialSegs; ++seg) {
+        Face f{};
+        f.indices = { baseCenterIdx,
+                      baseRing(seg),
+                      baseRing(seg + 1) };
+        mesh.topology().addFace(std::move(f));
+    }
+
+    return mesh;
+}
+
+Mesh makeCapsule(float radius, float cylinderHeight,
+                 uint32_t radialSegs, uint32_t ringSegs)
+{
+    if (!isFiniteFloat(radius) || !isFiniteFloat(cylinderHeight)) {
+        return {};
+    }
+
+    radialSegs = std::max(3u, radialSegs);
+    ringSegs   = std::max(2u, ringSegs);
+    if (cylinderHeight < 0.f) cylinderHeight = 0.f;
+
+    std::vector<nexus::render::Vec3> positions;
+    std::vector<Vec2> uvs;
+
+    const float hcy = cylinderHeight * 0.5f;
+    const float totalHeight = cylinderHeight + 2.f * radius;
+
+    // -------------------------------------------------------------------
+    // Vertex layout:
+    //   [0]                   : top pole   (0, hcy+radius, 0)
+    //   [1 .. ringSegs*lon]   : top hemisphere rings (ring 1..ringSegs)
+    //   [ringSegs*lon+1 .. (ringSegs+1)*lon] : cylinder bottom equator ring
+    //   [(ringSegs+1)*lon+1 .. (2*ringSegs)*lon] : bottom hemisphere rings
+    //   [last]                : bottom pole (0, -(hcy+radius), 0)
+    // -------------------------------------------------------------------
+
+    // UV v-coordinate: map full capsule height to [0,1]
+    auto vCoordForY = [&](float y) {
+        return (totalHeight * 0.5f - y) / totalHeight;
+    };
+
+    // Top pole
+    const uint32_t topPole = 0u;
+    positions.push_back({0.f, hcy + radius, 0.f});
+    uvs.push_back({0.5f, vCoordForY(hcy + radius)});
+
+    // Top hemisphere rings (phi: pi/(2*ringSegs) .. pi/2)
+    for (uint32_t ring = 1; ring <= ringSegs; ++ring) {
+        const float phi    = static_cast<float>(ring) / static_cast<float>(ringSegs) * (kPi * 0.5f);
+        const float sinPhi = std::sin(phi);
+        const float cosPhi = std::cos(phi);
+        const float y      = hcy + radius * cosPhi;
+        const float r      = radius * sinPhi;
+        const float vc     = vCoordForY(y);
+        for (uint32_t seg = 0; seg < radialSegs; ++seg) {
+            const float theta = static_cast<float>(seg) / static_cast<float>(radialSegs) * 2.f * kPi;
+            const float uc    = static_cast<float>(seg) / static_cast<float>(radialSegs);
+            positions.push_back({r * std::cos(theta), y, r * std::sin(theta)});
+            uvs.push_back({uc, vc});
+        }
+    }
+
+    // Cylinder bottom equator ring (y = -hcy, same radius as sphere equator)
+    const uint32_t cylBotRingBase = static_cast<uint32_t>(positions.size());
+    {
+        const float vc = vCoordForY(-hcy);
+        for (uint32_t seg = 0; seg < radialSegs; ++seg) {
+            const float theta = static_cast<float>(seg) / static_cast<float>(radialSegs) * 2.f * kPi;
+            const float uc    = static_cast<float>(seg) / static_cast<float>(radialSegs);
+            positions.push_back({radius * std::cos(theta), -hcy, radius * std::sin(theta)});
+            uvs.push_back({uc, vc});
+        }
+    }
+
+    // Bottom hemisphere rings (phi: pi/2 + pi/(2*ringSegs) .. pi - pi/(2*ringSegs))
+    for (uint32_t ring = 1; ring < ringSegs; ++ring) {
+        const float phi    = kPi * 0.5f + static_cast<float>(ring) / static_cast<float>(ringSegs) * (kPi * 0.5f);
+        const float sinPhi = std::sin(phi);
+        const float cosPhi = std::cos(phi);
+        const float y      = -hcy + radius * cosPhi;
+        const float r      = radius * sinPhi;
+        const float vc     = vCoordForY(y);
+        for (uint32_t seg = 0; seg < radialSegs; ++seg) {
+            const float theta = static_cast<float>(seg) / static_cast<float>(radialSegs) * 2.f * kPi;
+            const float uc    = static_cast<float>(seg) / static_cast<float>(radialSegs);
+            positions.push_back({r * std::cos(theta), y, r * std::sin(theta)});
+            uvs.push_back({uc, vc});
+        }
+    }
+
+    // Bottom pole
+    const uint32_t botPole = static_cast<uint32_t>(positions.size());
+    positions.push_back({0.f, -(hcy + radius), 0.f});
+    uvs.push_back({0.5f, vCoordForY(-(hcy + radius))});
+
+    Mesh mesh;
+    mesh.attributes().setPositions(std::move(positions));
+    mesh.attributes().setUVs(std::move(uvs));
+
+    // Ring accessor helpers
+    // Top hemisphere ring r (1..ringSegs) starts at: 1 + (r-1)*radialSegs
+    auto topHemiRing = [&](uint32_t r, uint32_t seg) -> uint32_t {
+        return 1u + (r - 1u) * radialSegs + (seg % radialSegs);
+    };
+    // Cylinder bottom equator ring: cylBotRingBase + seg
+    auto cylBotRing = [&](uint32_t seg) -> uint32_t {
+        return cylBotRingBase + (seg % radialSegs);
+    };
+    // Bottom hemisphere ring r (1..ringSegs-1):
+    // starts at cylBotRingBase + radialSegs + (r-1)*radialSegs
+    auto botHemiRing = [&](uint32_t r, uint32_t seg) -> uint32_t {
+        return cylBotRingBase + radialSegs + (r - 1u) * radialSegs + (seg % radialSegs);
+    };
+
+    // Top cap
+    for (uint32_t seg = 0; seg < radialSegs; ++seg) {
+        Face f{};
+        f.indices = { topPole,
+                      topHemiRing(1, (seg + 1) % radialSegs),
+                      topHemiRing(1, seg) };
+        mesh.topology().addFace(std::move(f));
+    }
+
+    // Top hemisphere interior quads (rings 1..ringSegs-1)
+    for (uint32_t ring = 1; ring < ringSegs; ++ring) {
+        for (uint32_t seg = 0; seg < radialSegs; ++seg) {
+            const uint32_t tl = topHemiRing(ring,     seg);
+            const uint32_t tr = topHemiRing(ring,     (seg + 1) % radialSegs);
+            const uint32_t br = topHemiRing(ring + 1, (seg + 1) % radialSegs);
+            const uint32_t bl = topHemiRing(ring + 1, seg);
+            Face f{};
+            f.indices = {tl, tr, br, bl};
+            mesh.topology().addFace(std::move(f));
+        }
+    }
+
+    // Cylinder barrel: top hemi equator (ringSegs) → cylinder bottom equator
+    for (uint32_t seg = 0; seg < radialSegs; ++seg) {
+        const uint32_t tl = topHemiRing(ringSegs,  seg);
+        const uint32_t tr = topHemiRing(ringSegs,  (seg + 1) % radialSegs);
+        const uint32_t br = cylBotRing((seg + 1) % radialSegs);
+        const uint32_t bl = cylBotRing(seg);
+        Face f{};
+        f.indices = {tl, tr, br, bl};
+        mesh.topology().addFace(std::move(f));
+    }
+
+    if (ringSegs > 1u) {
+        // Bottom hemisphere: cylinder equator → first bottom hemi ring
+        for (uint32_t seg = 0; seg < radialSegs; ++seg) {
+            const uint32_t tl = cylBotRing(seg);
+            const uint32_t tr = cylBotRing((seg + 1) % radialSegs);
+            const uint32_t br = botHemiRing(1, (seg + 1) % radialSegs);
+            const uint32_t bl = botHemiRing(1, seg);
+            Face f{};
+            f.indices = {tl, tr, br, bl};
+            mesh.topology().addFace(std::move(f));
+        }
+
+        // Bottom hemisphere interior quads (rings 1..ringSegs-2)
+        for (uint32_t ring = 1; ring < ringSegs - 1u; ++ring) {
+            for (uint32_t seg = 0; seg < radialSegs; ++seg) {
+                const uint32_t tl = botHemiRing(ring,     seg);
+                const uint32_t tr = botHemiRing(ring,     (seg + 1) % radialSegs);
+                const uint32_t br = botHemiRing(ring + 1, (seg + 1) % radialSegs);
+                const uint32_t bl = botHemiRing(ring + 1, seg);
+                Face f{};
+                f.indices = {tl, tr, br, bl};
+                mesh.topology().addFace(std::move(f));
+            }
+        }
+
+        // Bottom cap: last bottom hemi ring → bottom pole
+        for (uint32_t seg = 0; seg < radialSegs; ++seg) {
+            Face f{};
+            f.indices = { botHemiRing(ringSegs - 1u, seg),
+                          botHemiRing(ringSegs - 1u, (seg + 1) % radialSegs),
+                          botPole };
+            mesh.topology().addFace(std::move(f));
+        }
+    } else {
+        // ringSegs == 2: no interior bottom hemi rings — cylinder equator directly to pole
+        for (uint32_t seg = 0; seg < radialSegs; ++seg) {
+            Face f{};
+            f.indices = { cylBotRing(seg),
+                          cylBotRing((seg + 1) % radialSegs),
+                          botPole };
+            mesh.topology().addFace(std::move(f));
+        }
+    }
+
+    return mesh;
+}
+
+} // namespace primitives (second block)
 } // namespace nexus::geometry
