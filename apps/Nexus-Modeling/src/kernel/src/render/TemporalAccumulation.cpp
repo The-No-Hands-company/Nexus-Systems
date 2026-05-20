@@ -2,7 +2,9 @@
 //  Nexus Render — Temporal Accumulation implementation
 // ─────────────────────────────────────────────────────────────────────────────
 #include <nexus/render/TemporalAccumulation.h>
+#include <bit>
 #include <cmath>
+#include <cstdint>
 
 namespace nexus::render {
 
@@ -10,6 +12,26 @@ namespace nexus::render {
 //  Halton low-discrepancy sequence helpers
 // ─────────────────────────────────────────────────────────────────────────────
 namespace {
+
+bool isFiniteFloat(float v) noexcept
+{
+    constexpr std::uint32_t kExpMask = 0x7F800000u;
+    const std::uint32_t bits = std::bit_cast<std::uint32_t>(v);
+    return (bits & kExpMask) != kExpMask;
+}
+
+bool isValidConfig(const TemporalAccumulationConfig& cfg) noexcept
+{
+    if (!isFiniteFloat(cfg.blendFactor) || cfg.blendFactor < 0.f || cfg.blendFactor > 1.f)
+        return false;
+    if (!isFiniteFloat(cfg.velocityRejectionThreshold))
+        return false;
+    if (!isFiniteFloat(cfg.varianceClipGamma))
+        return false;
+    if (cfg.jitter.sampleCount == 0u)
+        return false;
+    return true;
+}
 
 [[nodiscard]] float halton(uint32_t index, uint32_t base) noexcept
 {
@@ -30,8 +52,14 @@ namespace {
 //  TemporalAccumulator
 // ─────────────────────────────────────────────────────────────────────────────
 TemporalAccumulator::TemporalAccumulator(TemporalAccumulationConfig cfg) noexcept
-    : m_cfg(std::move(cfg))
+    : m_cfg(isValidConfig(cfg) ? std::move(cfg) : TemporalAccumulationConfig{})
 {}
+
+void TemporalAccumulator::setConfig(TemporalAccumulationConfig cfg) noexcept
+{
+    if (!isValidConfig(cfg)) return;
+    m_cfg = std::move(cfg);
+}
 
 void TemporalAccumulator::advanceFrame() noexcept
 {

@@ -18,6 +18,7 @@
 #include <cmath>
 #include <cstring>
 #include <filesystem>
+#include <limits>
 #include <sstream>
 #include <vector>
 
@@ -358,4 +359,90 @@ TEST(TemporalAccumulation, StateFrameIndexIsWritable)
     nexus::render::TemporalAccumulator acc;
     acc.state().frameIndex = 42u;
     EXPECT_EQ(acc.state().frameIndex, 42u);
+}
+
+TEST(TemporalAccumulation, SetConfigRejectsNonFiniteBlendFactor)
+{
+    nexus::render::TemporalAccumulationConfig cfg;
+    cfg.blendFactor = 0.2f;
+    nexus::render::TemporalAccumulator acc(cfg);
+
+    const float nan = std::numeric_limits<float>::quiet_NaN();
+    const float inf = std::numeric_limits<float>::infinity();
+
+    nexus::render::TemporalAccumulationConfig bad = cfg;
+    bad.blendFactor = nan;
+    acc.setConfig(bad);
+    EXPECT_FLOAT_EQ(acc.config().blendFactor, 0.2f);
+
+    bad.blendFactor = inf;
+    acc.setConfig(bad);
+    EXPECT_FLOAT_EQ(acc.config().blendFactor, 0.2f);
+}
+
+TEST(TemporalAccumulation, SetConfigRejectsBlendFactorOutOfRange)
+{
+    nexus::render::TemporalAccumulationConfig cfg;
+    cfg.blendFactor = 0.3f;
+    nexus::render::TemporalAccumulator acc(cfg);
+
+    nexus::render::TemporalAccumulationConfig bad = cfg;
+    bad.blendFactor = -0.1f;
+    acc.setConfig(bad);
+    EXPECT_FLOAT_EQ(acc.config().blendFactor, 0.3f);
+
+    bad.blendFactor = 1.5f;
+    acc.setConfig(bad);
+    EXPECT_FLOAT_EQ(acc.config().blendFactor, 0.3f);
+}
+
+TEST(TemporalAccumulation, SetConfigRejectsNonFiniteRejectionThreshold)
+{
+    nexus::render::TemporalAccumulationConfig cfg;
+    cfg.blendFactor                    = 0.1f;
+    cfg.velocityRejectionThreshold     = 0.05f;
+    nexus::render::TemporalAccumulator acc(cfg);
+
+    nexus::render::TemporalAccumulationConfig bad = cfg;
+    bad.velocityRejectionThreshold = std::numeric_limits<float>::quiet_NaN();
+    acc.setConfig(bad);
+    EXPECT_FLOAT_EQ(acc.config().velocityRejectionThreshold, 0.05f);
+}
+
+TEST(TemporalAccumulation, SetConfigRejectsNonFiniteVarianceClipGamma)
+{
+    nexus::render::TemporalAccumulationConfig cfg;
+    cfg.blendFactor      = 0.1f;
+    cfg.varianceClipGamma = 1.0f;
+    nexus::render::TemporalAccumulator acc(cfg);
+
+    nexus::render::TemporalAccumulationConfig bad = cfg;
+    bad.varianceClipGamma = std::numeric_limits<float>::infinity();
+    acc.setConfig(bad);
+    EXPECT_FLOAT_EQ(acc.config().varianceClipGamma, 1.0f);
+}
+
+TEST(TemporalAccumulation, SetConfigRejectsZeroSampleCount)
+{
+    nexus::render::TemporalAccumulationConfig cfg;
+    cfg.blendFactor          = 0.1f;
+    cfg.jitter.sampleCount   = 8u;
+    nexus::render::TemporalAccumulator acc(cfg);
+
+    nexus::render::TemporalAccumulationConfig bad = cfg;
+    bad.jitter.sampleCount = 0u;
+    acc.setConfig(bad);
+    EXPECT_EQ(acc.config().jitter.sampleCount, 8u);
+}
+
+TEST(TemporalAccumulation, ConstructorFallsBackToDefaultForInvalidConfig)
+{
+    nexus::render::TemporalAccumulationConfig bad;
+    bad.blendFactor = std::numeric_limits<float>::quiet_NaN();
+
+    nexus::render::TemporalAccumulator acc(bad);
+
+    // Should have fallen back to default config.
+    const nexus::render::TemporalAccumulationConfig def{};
+    EXPECT_FLOAT_EQ(acc.config().blendFactor, def.blendFactor);
 }

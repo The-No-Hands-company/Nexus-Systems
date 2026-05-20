@@ -67,7 +67,7 @@ public:
     [[nodiscard]] const TemporalAccumulationState&  state()  const noexcept { return m_state; }
           TemporalAccumulationState&                state()        noexcept { return m_state; }
 
-    void setConfig(TemporalAccumulationConfig cfg) noexcept { m_cfg = std::move(cfg); }
+    void setConfig(TemporalAccumulationConfig cfg) noexcept;
 
 private:
     TemporalAccumulationConfig m_cfg;
