@@ -138,29 +138,6 @@ std::map<uint32_t, SceneAsset::MigrationFn>& migrationRegistry() noexcept
     return registry;
 }
 
-std::map<uint32_t, SceneAsset::PackageMigrationFn>& packageMigrationRegistry() noexcept
-{
-    static std::map<uint32_t, SceneAsset::PackageMigrationFn> registry;
-    return registry;
-}
-
-SceneAssetPackageMigrationModeFlags normalizedModeFlags(
-    SceneAssetPackageMigrationModeFlags flags) noexcept
-{
-    const bool strict = hasMigrationModeFlag(flags, SceneAssetPackageMigrationModeFlags::Strict);
-    const bool lenient = hasMigrationModeFlag(flags, SceneAssetPackageMigrationModeFlags::Lenient);
-    if ((strict && lenient) || (!strict && !lenient)) {
-        return SceneAssetPackageMigrationModeFlags::Strict;
-    }
-    return flags;
-}
-
-bool isLenientMode(SceneAssetPackageMigrationModeFlags flags) noexcept
-{
-    return hasMigrationModeFlag(normalizedModeFlags(flags),
-                                SceneAssetPackageMigrationModeFlags::Lenient);
-}
-
 bool migrateSceneAssetV0ToV1(uint32_t fromVersion, std::vector<uint8_t>& rawBytes)
 {
     if (fromVersion != 0u) {
@@ -213,116 +190,8 @@ bool migrateSceneAssetV0ToV1(uint32_t fromVersion, std::vector<uint8_t>& rawByte
     return true;
 }
 
-bool migrateScenePackageV0ToV1(uint32_t fromVersion, std::vector<uint8_t>& rawBytes)
-{
-    if (fromVersion != 0u) {
-        return false;
-    }
-
-    size_t offset = 0u;
-    uint32_t magic = 0u;
-    uint32_t version = 0u;
-    uint32_t entryCount = 0u;
-
-    if (!readU32At(rawBytes, offset, magic) || magic != kSceneAssetPackageMagic) {
-        return false;
-    }
-    if (!readU32At(rawBytes, offset, version) || version != 0u) {
-        return false;
-    }
-    if (!readU32At(rawBytes, offset, entryCount)) {
-        return false;
-    }
-
-    // v0 entry layout:
-    // [path][dependsCount][dependsOn...]
-    // v1 entry layout:
-    // [path][name][dependsCount][dependsOn...]
-    std::vector<uint8_t> migrated;
-    migrated.reserve(rawBytes.size() + static_cast<size_t>(entryCount) * 8u);
-    appendU32(migrated, magic);
-    appendU32(migrated, version);
-    appendU32(migrated, entryCount);
-
-    for (uint32_t i = 0; i < entryCount; ++i) {
-        std::string path;
-        if (!readStringAt(rawBytes, offset, path)) {
-            return false;
-        }
-
-        uint32_t dependsCount = 0u;
-        if (!readU32At(rawBytes, offset, dependsCount)) {
-            return false;
-        }
-
-        appendString(migrated, path);
-        appendString(migrated, path); // v1 default label = path for migrated assets
-        appendU32(migrated, dependsCount);
-
-        for (uint32_t di = 0; di < dependsCount; ++di) {
-            std::string dep;
-            if (!readStringAt(rawBytes, offset, dep)) {
-                return false;
-            }
-            appendString(migrated, dep);
-        }
-    }
-
-    if (offset != rawBytes.size()) {
-        return false;
-    }
-
-    rawBytes = std::move(migrated);
-    return true;
-}
-
-bool migrateScenePackageV1ToV2(uint32_t fromVersion, std::vector<uint8_t>& rawBytes)
-{
-    if (fromVersion != 1u) {
-        return false;
-    }
-
-    size_t offset = 0u;
-    uint32_t magic = 0u;
-    uint32_t version = 0u;
-    uint32_t entryCount = 0u;
-
-    if (!readU32At(rawBytes, offset, magic) || magic != kSceneAssetPackageMagic) {
-        return false;
-    }
-    if (!readU32At(rawBytes, offset, version) || version != 1u) {
-        return false;
-    }
-    if (!readU32At(rawBytes, offset, entryCount)) {
-        return false;
-    }
-
-    std::vector<uint8_t> migrated;
-    migrated.reserve(rawBytes.size() + sizeof(uint32_t) * 2u);
-    appendU32(migrated, magic);
-    appendU32(migrated, version);
-    appendU32(migrated, kSceneAssetPackageVersionCurrent);
-    appendU32(migrated, static_cast<uint32_t>(SceneAssetPackageMigrationModeFlags::Strict));
-    appendU32(migrated, entryCount);
-
-    if (offset <= rawBytes.size()) {
-        migrated.insert(migrated.end(),
-                        rawBytes.begin() + static_cast<std::vector<uint8_t>::difference_type>(offset),
-                        rawBytes.end());
-    }
-
-    rawBytes = std::move(migrated);
-    return true;
-}
-
 [[maybe_unused]] const bool kRegisteredSceneAssetV0Migration =
     SceneAsset::registerMigration(0u, migrateSceneAssetV0ToV1);
-
-[[maybe_unused]] const bool kRegisteredScenePackageV0Migration =
-    SceneAsset::registerPackageMigration(0u, migrateScenePackageV0ToV1);
-
-[[maybe_unused]] const bool kRegisteredScenePackageV1Migration =
-    SceneAsset::registerPackageMigration(1u, migrateScenePackageV1ToV2);
 
 } // namespace
 
@@ -381,18 +250,13 @@ void SceneAsset::resetBuiltinMigrations() noexcept
 bool SceneAsset::registerPackageMigration(uint32_t fromVersion,
                                           PackageMigrationFn fn) noexcept
 {
-    if (!fn) {
-        return false;
-    }
-    packageMigrationRegistry()[fromVersion] = std::move(fn);
-    return true;
+    (void)fromVersion;
+    (void)fn;
+    return false;
 }
 
 void SceneAsset::resetBuiltinPackageMigrations() noexcept
 {
-    packageMigrationRegistry().clear();
-    packageMigrationRegistry()[0u] = migrateScenePackageV0ToV1;
-    packageMigrationRegistry()[1u] = migrateScenePackageV1ToV2;
 }
 
 SceneAssetPackageIOReport SceneAsset::savePackageManifest(
@@ -425,7 +289,10 @@ SceneAssetPackageIOReport SceneAsset::savePackageManifest(
     };
 
     const SceneAssetPackageMigrationModeFlags modeFlags =
-        normalizedModeFlags(package.migrationPolicy.modeFlags);
+        hasMigrationModeFlag(package.migrationPolicy.modeFlags,
+                             SceneAssetPackageMigrationModeFlags::Lenient)
+            ? SceneAssetPackageMigrationModeFlags::Lenient
+            : SceneAssetPackageMigrationModeFlags::Strict;
 
     uint32_t targetVersion = package.migrationPolicy.targetVersion;
     if (targetVersion == 0u || targetVersion > kSceneAssetPackageVersionCurrent) {
@@ -503,6 +370,7 @@ SceneAssetPackageIOReport SceneAsset::loadPackageManifest(
     const SceneAssetPackageMigrationPolicy& policy) noexcept
 {
     SceneAssetPackageIOReport report{};
+    (void)policy;
     outPackage.entries.clear();
     outPackage.version = 0u;
     outPackage.migrationPolicy = {};
@@ -556,119 +424,25 @@ SceneAssetPackageIOReport SceneAsset::loadPackageManifest(
         return fail(SceneAssetPackageDiagnostic::ReadError, "Read error: package version");
     }
     report.sourceVersion = version;
-    report.modeFlags = normalizedModeFlags(policy.modeFlags);
 
-    uint32_t effectiveTargetVersion = policy.targetVersion;
-    if (effectiveTargetVersion == 0u) {
-        effectiveTargetVersion = kSceneAssetPackageVersionCurrent;
+    if (version != kSceneAssetPackageVersionCurrent) {
+        return fail(SceneAssetPackageDiagnostic::UnsupportedVersion,
+                    "Unsupported scene package version: " + std::to_string(version));
     }
 
-    if (effectiveTargetVersion > kSceneAssetPackageVersionCurrent) {
-        if (isLenientMode(report.modeFlags)) {
-            report.messages.push_back("Requested target version exceeds current package version; clamped to current");
-            effectiveTargetVersion = kSceneAssetPackageVersionCurrent;
-        } else {
-            return fail(SceneAssetPackageDiagnostic::UnsupportedVersion,
-                        "Requested target version exceeds current package version: "
-                        + std::to_string(effectiveTargetVersion));
-        }
+    if (!readU32At(bytes, offset, targetVersionMeta)) {
+        return fail(SceneAssetPackageDiagnostic::ReadError,
+                    "Read error: package target version");
     }
-
-    if (effectiveTargetVersion < 1u) {
-        if (isLenientMode(report.modeFlags)) {
-            report.messages.push_back("Requested target version is below minimum; clamped to 1");
-            effectiveTargetVersion = 1u;
-        } else {
-            return fail(SceneAssetPackageDiagnostic::InvalidData,
-                        "Requested target version is below minimum supported version");
-        }
+    uint32_t rawModeFlags = 0u;
+    if (!readU32At(bytes, offset, rawModeFlags)) {
+        return fail(SceneAssetPackageDiagnostic::ReadError,
+                    "Read error: package mode flags");
     }
-
-    report.targetVersion = effectiveTargetVersion;
-
-    if (version > kSceneAssetPackageVersionCurrent) {
-        if (isLenientMode(report.modeFlags) && version <= effectiveTargetVersion) {
-            report.messages.push_back("Package version exceeds runtime current version; attempting best-effort parse");
-        } else {
-            return fail(SceneAssetPackageDiagnostic::UnsupportedVersion,
-                        "Unsupported scene package version: " + std::to_string(version));
-        }
-    }
-
-    if (version > effectiveTargetVersion) {
-        if (isLenientMode(report.modeFlags)) {
-            report.messages.push_back("Source package version is newer than requested target; using source version as effective target");
-            effectiveTargetVersion = version;
-            report.targetVersion = effectiveTargetVersion;
-        } else {
-            return fail(SceneAssetPackageDiagnostic::UnsupportedVersion,
-                        "Source package version exceeds requested target version");
-        }
-    }
-
-    while (version < effectiveTargetVersion) {
-        SceneAssetPackageMigrationAuditEntry audit{};
-        audit.fromVersion = version;
-        audit.toVersion = version + 1u;
-
-        auto it = packageMigrationRegistry().find(version);
-        if (it == packageMigrationRegistry().end()) {
-            audit.success = false;
-            audit.message = "Missing migration function";
-            report.migrationAuditTrail.push_back(std::move(audit));
-            if (isLenientMode(report.modeFlags)) {
-                report.messages.push_back("Missing migration for scene package version: "
-                                          + std::to_string(version));
-                break;
-            }
-            return fail(SceneAssetPackageDiagnostic::UnsupportedVersion,
-                        "Missing migration for scene package version: " + std::to_string(version));
-        }
-        if (!it->second(version, bytes)) {
-            audit.success = false;
-            audit.message = "Migration function returned failure";
-            report.migrationAuditTrail.push_back(std::move(audit));
-            if (isLenientMode(report.modeFlags)) {
-                report.messages.push_back("Scene package migration failed from version: "
-                                          + std::to_string(version));
-                break;
-            }
-            return fail(SceneAssetPackageDiagnostic::MigrationFailed,
-                        "Scene package migration failed from version: "
-                        + std::to_string(version));
-        }
-
-        audit.success = true;
-        audit.message = "Migration applied";
-        report.migrationAuditTrail.push_back(std::move(audit));
-        ++version;
-        writeU32At(bytes, sizeof(uint32_t), version);
-    }
-
-    offset = 0u;
-    if (!readU32At(bytes, offset, magic)) {
-        return fail(SceneAssetPackageDiagnostic::ReadError, "Read error: package magic");
-    }
-    if (!readU32At(bytes, offset, version)) {
-        return fail(SceneAssetPackageDiagnostic::ReadError, "Read error: package version");
-    }
-
-    if (version >= 2u) {
-        if (!readU32At(bytes, offset, targetVersionMeta)) {
-            return fail(SceneAssetPackageDiagnostic::ReadError,
-                        "Read error: package target version");
-        }
-        uint32_t rawModeFlags = 0u;
-        if (!readU32At(bytes, offset, rawModeFlags)) {
-            return fail(SceneAssetPackageDiagnostic::ReadError,
-                        "Read error: package mode flags");
-        }
-        modeFlagsMeta = normalizedModeFlags(
-            static_cast<SceneAssetPackageMigrationModeFlags>(rawModeFlags));
-    } else {
-        targetVersionMeta = version;
-        modeFlagsMeta = SceneAssetPackageMigrationModeFlags::Strict;
-    }
+    modeFlagsMeta = hasMigrationModeFlag(static_cast<SceneAssetPackageMigrationModeFlags>(rawModeFlags),
+                                         SceneAssetPackageMigrationModeFlags::Lenient)
+        ? SceneAssetPackageMigrationModeFlags::Lenient
+        : SceneAssetPackageMigrationModeFlags::Strict;
 
     if (!readU32At(bytes, offset, entryCount)) {
         return fail(SceneAssetPackageDiagnostic::ReadError,
@@ -743,7 +517,8 @@ SceneAssetPackageIOReport SceneAsset::loadPackageManifest(
 
     report.valid = true;
     report.version = version;
-    report.targetVersion = effectiveTargetVersion;
+    report.targetVersion = targetVersionMeta;
+    report.modeFlags = modeFlagsMeta;
     report.entryCount = static_cast<uint32_t>(outPackage.entries.size());
     std::sort(report.messages.begin(), report.messages.end());
     return report;
