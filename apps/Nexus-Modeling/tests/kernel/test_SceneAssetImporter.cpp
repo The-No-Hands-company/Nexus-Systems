@@ -197,55 +197,6 @@ TEST(SceneAssetImporter, ImportScenesPathListDependencyModeIsDeterministic)
     std::remove(pathC.c_str());
 }
 
-TEST(SceneAssetImporter, ImportPackageManifestLoadsScenesInDependencyOrder)
-{
-    const std::string pathA = tmpPath("manifest_a.nxas");
-    const std::string pathB = tmpPath("manifest_b.nxas");
-    const std::string pathC = tmpPath("manifest_c.nxas");
-    const std::string manifestPath = tmpPath("manifest_pkg.nxpk");
-
-    saveSceneFile(pathA, "A");
-    saveSceneFile(pathB, "B");
-    saveSceneFile(pathC, "C");
-
-    SceneAssetPackageDescriptor pkg;
-    pkg.entries = {
-        SceneAssetPackageEntry{pathC, "C", {pathA, pathB}},
-        SceneAssetPackageEntry{pathB, "B", {pathA}},
-        SceneAssetPackageEntry{pathA, "A", {}},
-    };
-    ASSERT_TRUE(SceneAsset::savePackageManifest(pkg, manifestPath).valid);
-
-    std::map<std::string, SceneAsset> loaded;
-    SceneAssetImportOptions options{};
-    options.dependencyDrivenMultiScene = true;
-    const SceneAssetPackageReport rep =
-        SceneAssetImporter::importPackageManifest(manifestPath, loaded, options);
-
-    ASSERT_TRUE(rep.valid);
-    ASSERT_EQ(rep.loadOrder.size(), 3u);
-    EXPECT_EQ(rep.loadOrder[0], pathA);
-    EXPECT_EQ(rep.loadOrder[1], pathB);
-    EXPECT_EQ(rep.loadOrder[2], pathC);
-    ASSERT_EQ(loaded.size(), 3u);
-
-    std::remove(pathA.c_str());
-    std::remove(pathB.c_str());
-    std::remove(pathC.c_str());
-    std::remove(manifestPath.c_str());
-}
-
-TEST(SceneAssetImporter, ImportPackageManifestReturnsFailureForMissingFile)
-{
-    std::map<std::string, SceneAsset> loaded;
-    const SceneAssetPackageReport rep =
-        SceneAssetImporter::importPackageManifest("/tmp/nexus_missing_package_manifest.nxpk", loaded);
-
-    EXPECT_FALSE(rep.valid);
-    EXPECT_TRUE(loaded.empty());
-    EXPECT_FALSE(rep.messages.empty());
-}
-
 TEST(SceneAssetImporter, ImportScenesSequentialModeRejectsDuplicatePaths)
 {
     const std::string pathA = tmpPath("dup_a.nxas");

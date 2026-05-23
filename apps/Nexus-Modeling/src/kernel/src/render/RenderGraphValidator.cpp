@@ -83,6 +83,14 @@ RenderGraphValidationReport RenderGraphValidator::validate(
                     "shadow atlas must be in DepthRead layout at composite pass");
             }
             break;
+
+        case RenderPassType::RayTracing:
+            // ── RT pass state ────────────────────────────────────────────
+            // Ray tracing is optional and runs after composite in the deferred
+            // rendering flow. No strict ordering constraints beyond that.
+            // GBuffer and shadow atlas should be in readable state.
+            // (Validation is currently permissive for stub implementations.)
+            break;
         }
 
         (void)seenComposite; // unused after the loop; silence potential warning

@@ -83,7 +83,9 @@ public:
     void dispatch(uint32_t, uint32_t, uint32_t) override {}
     void dispatchIndirect(BufferHandle, uint64_t) override {}
 
-    void traceRays(uint32_t, uint32_t, uint32_t) override {}
+    void traceRays(uint32_t width, uint32_t height, uint32_t depth) override {
+        events.push_back({"traceRays", width, height});
+    }
 
     void copyBuffer(BufferHandle, BufferHandle, uint64_t, uint64_t, uint64_t) override {}
     void copyTexture(TextureHandle, TextureHandle) override {}
@@ -345,6 +347,56 @@ TEST(RendererBehavior, SchedulerPathRecordsPassSequenceAndTransitions)
 
     dev.destroyBuffer(materialTable);
     dev.destroySampler(sampler);
+}
+
+TEST(RendererBehavior, RayTracingStubModeTriggersTraceRaysOnNullBackend)
+{
+    RenderContextDesc desc{};
+    desc.preferredBackend = Backend::Null;
+    desc.validation = ValidationLevel::Off;
+
+    auto ctx = RenderContext::create(desc);
+    ASSERT_NE(ctx, nullptr);
+
+    SwapchainDesc sd{};
+    sd.extent = {1280, 720};
+    auto sc = ctx->createSwapchain(sd);
+    ASSERT_NE(sc, nullptr);
+
+    Renderer renderer(*ctx, *sc);
+
+    PipelineHandle rtPipe{};
+    rtPipe.id = 999;
+    renderer.setRayTracingPipeline(rtPipe);
+
+    RendererSettings settings{};
+    settings.mode = RenderMode::PathTrace;
+    settings.enableRayTracingStub = true;
+    renderer.applySettings(settings);
+
+    RecordingCommandBuffer cmd;
+    RecordingScheduler scheduler(cmd);
+    renderer.setFrameScheduler(&scheduler);
+
+    SceneGraph scene;
+    Node* n = scene.createNode("raytracer");
+    ASSERT_NE(n, nullptr);
+    n->mesh.vertexBuffer.id = 11;
+    n->mesh.indexBuffer.id = 12;
+    n->mesh.indexCount = 3;
+
+    Camera cam;
+
+    renderer.beginFrame();
+    renderer.render(cam, scene);
+    renderer.endFrame();
+
+    const int traceIndex = indexOfKind(cmd.events, "traceRays");
+    EXPECT_GE(traceIndex, 0);
+    EXPECT_EQ(cmd.events[traceIndex].a, 1280u);
+    EXPECT_EQ(cmd.events[traceIndex].b, 720u);
+    EXPECT_EQ(renderer.lastFrameStats().rayTracingDrawCalls, 1u);
+    EXPECT_EQ(renderer.lastFrameStats().rayPayloads, renderer.lastFrameStats().visibleNodes);
 }
 
 TEST(RendererBehavior, ShadowPassRunsBeforeGeometryAndTransitionsForSampling)

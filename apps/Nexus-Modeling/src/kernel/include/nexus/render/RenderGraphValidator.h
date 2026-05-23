@@ -35,6 +35,7 @@ enum class RenderPassType : uint8_t {
     Shadow,     // depth-only shadow atlas rendering
     Geometry,   // GBuffer deferred geometry pass
     Composite,  // lighting/composite pass reading GBuffer + shadow
+    RayTracing, // optional ray tracing pass reading GBuffer / shadow inputs
 };
 
 // ── State snapshot for a single pass ─────────────────────────────────────────

@@ -71,27 +71,4 @@ SceneAssetPackageReport SceneAssetImporter::importScenes(
     return importScenes(packageEntries, outScenes, options);
 }
 
-SceneAssetPackageReport SceneAssetImporter::importPackageManifest(
-    const std::string& manifestPath,
-    std::map<std::string, SceneAsset>& outScenes,
-    const SceneAssetImportOptions& options) noexcept
-{
-    SceneAssetPackageReport report{};
-    outScenes.clear();
-
-    SceneAssetPackageDescriptor descriptor;
-    const SceneAssetPackageIOReport ioRep = SceneAsset::loadPackageManifest(
-        manifestPath,
-        descriptor,
-        options.packageMigrationPolicy);
-    if (!ioRep.valid) {
-        report.valid = false;
-        report.messages = ioRep.messages;
-        report.failedPaths.push_back(manifestPath);
-        return report;
-    }
-
-    return importScenes(descriptor.entries, outScenes, options);
-}
-
 } // namespace nexus::asset

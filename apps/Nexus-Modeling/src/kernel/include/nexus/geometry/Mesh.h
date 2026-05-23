@@ -246,6 +246,23 @@ namespace primitives {
 [[nodiscard]] Mesh makePlane(float width, float depth,
                              uint32_t widthSegs = 1, uint32_t depthSegs = 1);
 
+[[nodiscard]] Mesh makeSphere(float radius,
+                              uint32_t latSegs = 16,
+                              uint32_t lonSegs = 16);
+
+[[nodiscard]] Mesh makeCylinder(float radius,
+                                float height,
+                                uint32_t radialSegs = 16);
+
+[[nodiscard]] Mesh makeCone(float radius,
+                            float height,
+                            uint32_t radialSegs = 16);
+
+[[nodiscard]] Mesh makeCapsule(float radius,
+                              float cylinderHeight,
+                              uint32_t radialSegs = 16,
+                              uint32_t ringSegs = 8);
+
 } // namespace primitives
 
 } // namespace nexus::geometry

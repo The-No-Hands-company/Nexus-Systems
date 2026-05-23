@@ -57,6 +57,7 @@ struct RendererSettings {
     bool        enableBloom     = true;
     bool        enableSSR       = false; // screen-space reflections
     bool        enableRTReflect = false; // RT reflections (High+ tier)
+    bool        enableRayTracingStub = false; // allow deterministic stub RT on non-RT backends
 };
 
 // ── Per-frame stats ───────────────────────────────────────────────────────────
@@ -65,6 +66,9 @@ struct FrameStats {
     uint32_t visibleNodes     = 0;
     uint32_t drawCalls        = 0;
     uint32_t triangles        = 0;
+    uint32_t rayTracingDrawCalls = 0;
+    uint32_t rayPayloads      = 0;
+    uint32_t rayHits          = 0;
     uint32_t meshlets         = 0;
     double   gpuTimeMs        = 0.0;
     double   cpuCullTimeMs    = 0.0;
@@ -311,6 +315,7 @@ public:
     void setFallbackGeometryPipeline(nexus::gfx::PipelineHandle pipeline) noexcept;
     void setShadowPipeline(nexus::gfx::PipelineHandle pipeline) noexcept;
     void setLightingCompositePipeline(nexus::gfx::PipelineHandle pipeline) noexcept;
+    void setRayTracingPipeline(nexus::gfx::PipelineHandle pipeline) noexcept;
     void setMaterialPipeline(MaterialID material, nexus::gfx::PipelineHandle pipeline) noexcept;
     void clearMaterialPipelines() noexcept;
     void setCompositeMaterialBindings(const CompositeMaterialBindings& bindings) noexcept;

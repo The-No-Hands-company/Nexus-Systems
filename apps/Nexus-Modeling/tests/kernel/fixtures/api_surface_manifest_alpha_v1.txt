@@ -37,4 +37,7 @@ src/kernel/include/nexus/render/Renderer.h
 src/kernel/include/nexus/render/SceneGraph.h
 src/kernel/include/nexus/render/TemporalAccumulation.h
 src/kernel/include/nexus/scene/NodeScene.h
+src/kernel/include/nexus/sim/ClothSolver.h
+src/kernel/include/nexus/sim/FluidSolver.h
 src/kernel/include/nexus/sim/SimulationCore.h
+src/kernel/include/nexus/sim/SimulationCoupling.h

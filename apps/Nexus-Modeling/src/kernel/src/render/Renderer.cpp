@@ -48,6 +48,7 @@ struct Renderer::Impl {
     nexus::gfx::PipelineHandle               fallbackGeometryPipeline;
     nexus::gfx::PipelineHandle               shadowPipeline;
     nexus::gfx::PipelineHandle               lightingCompositePipeline;
+    nexus::gfx::PipelineHandle               rayTracingPipeline;
     std::unordered_map<MaterialID, nexus::gfx::PipelineHandle> materialPipelines;
     std::vector<std::vector<nexus::gfx::DescriptorSetHandle>> deferredDescriptorSetsByFrame;
     CompositeMaterialBindings                compositeBindings;
@@ -626,6 +627,11 @@ void Renderer::render(const Camera& camera, SceneGraph& scene)
         const bool runShadowPass = m_settings.enableShadows
             && m_impl->shadowPipeline.valid()
             && shadowCascadeCount > 0;
+        const bool runRayTracingPass = (m_settings.mode == RenderMode::PathTrace
+                                   || m_settings.mode == RenderMode::HybridRT)
+            && m_impl->rayTracingPipeline.valid()
+            && (m_settings.enableRayTracingStub || m_ctx.caps().rayTracingTier >= 2);
+
         if (m_settings.enableShadows) {
             uploadShadowLightingContract();
         }
@@ -817,7 +823,18 @@ void Renderer::render(const Camera& camera, SceneGraph& scene)
         }
         if (hasCompositeColorTarget) {
             cmd.endRenderPass();
+        }
 
+        if (runRayTracingPass) {
+            cmd.bindPipeline(m_impl->rayTracingPipeline);
+            cmd.traceRays(fc.extent.width, fc.extent.height, 1);
+
+            m_stats.rayTracingDrawCalls = 1;
+            m_stats.rayPayloads = m_stats.visibleNodes;
+            m_stats.rayHits = scene.tlas().valid() ? 1u : 0u;
+        }
+
+        if (hasCompositeColorTarget) {
             cmd.textureBarrier({
                 fc.colorTarget,
                 nexus::gfx::TextureLayout::ColorAttachment,
@@ -843,6 +860,12 @@ void Renderer::render(const Camera& camera, SceneGraph& scene)
                           nexus::gfx::TextureLayout::ShaderRead,
                           ranShadow ? nexus::gfx::TextureLayout::DepthRead
                                     : nexus::gfx::TextureLayout::DepthRead);
+            if (runRayTracingPass) {
+                rgDesc.record(RenderPassType::RayTracing,
+                              nexus::gfx::TextureLayout::ShaderRead,
+                              ranShadow ? nexus::gfx::TextureLayout::DepthRead
+                                        : nexus::gfx::TextureLayout::Undefined);
+            }
             m_impl->lastRenderGraphReport = RenderGraphValidator::validate(rgDesc);
         }
 
@@ -877,6 +900,17 @@ void Renderer::render(const Camera& camera, SceneGraph& scene)
             compEntry.shadowAtlasLayout  = runShadowPass ? nexus::gfx::TextureLayout::DepthRead
                                                          : nexus::gfx::TextureLayout::Undefined;
             m_impl->captureExporter->recordPass(compEntry);
+
+            if (runRayTracingPass) {
+                FramePassEntry rtEntry{};
+                rtEntry.passType          = RenderPassType::RayTracing;
+                rtEntry.drawCalls         = 1;
+                rtEntry.triangles         = 0;
+                rtEntry.gbufferColorLayout = nexus::gfx::TextureLayout::ShaderRead;
+                rtEntry.shadowAtlasLayout  = runShadowPass ? nexus::gfx::TextureLayout::DepthRead
+                                                           : nexus::gfx::TextureLayout::Undefined;
+                m_impl->captureExporter->recordPass(rtEntry);
+            }
         }
     } else {
         // ── Direct swapchain path (non-production compatibility fallback) ─────────
@@ -934,6 +968,11 @@ void Renderer::setShadowPipeline(nexus::gfx::PipelineHandle pipeline) noexcept
 void Renderer::setLightingCompositePipeline(nexus::gfx::PipelineHandle pipeline) noexcept
 {
     m_impl->lightingCompositePipeline = pipeline;
+}
+
+void Renderer::setRayTracingPipeline(nexus::gfx::PipelineHandle pipeline) noexcept
+{
+    m_impl->rayTracingPipeline = pipeline;
 }
 
 void Renderer::setMaterialPipeline(MaterialID material, nexus::gfx::PipelineHandle pipeline) noexcept
@@ -1096,10 +1135,10 @@ void Renderer::selectRenderPath()
     const auto  tier = m_ctx.hardwareTier();
 
     // Downgrade render mode if hardware doesn't support it
-    if (m_settings.mode == RenderMode::PathTrace && caps.rayTracingTier < 2)
+    if (m_settings.mode == RenderMode::PathTrace && caps.rayTracingTier < 2 && !m_settings.enableRayTracingStub)
         m_settings.mode = (caps.rayTracingTier == 1) ? RenderMode::HybridRT : RenderMode::Rasterize;
 
-    if (m_settings.mode == RenderMode::HybridRT && caps.rayTracingTier < 1)
+    if (m_settings.mode == RenderMode::HybridRT && caps.rayTracingTier < 1 && !m_settings.enableRayTracingStub)
         m_settings.mode = RenderMode::Rasterize;
 
     // Upscaler degradation on low-end

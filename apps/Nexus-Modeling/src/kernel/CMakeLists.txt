@@ -34,6 +34,9 @@ add_library(nexus_gfx_core STATIC
     src/eval/EvalGraph.cpp
     src/scene/NodeScene.cpp
     src/sim/SimulationCore.cpp
+    src/sim/FluidSolver.cpp
+    src/sim/ClothSolver.cpp
+    src/sim/SimulationCoupling.cpp
     src/gfx/GaussianSplatting.cpp
     src/render/TemporalAccumulation.cpp
     src/automation/AutomationScript.cpp
