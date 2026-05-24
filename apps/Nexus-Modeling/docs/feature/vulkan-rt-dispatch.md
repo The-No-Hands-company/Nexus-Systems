@@ -38,6 +38,28 @@ it automatically, closing roadmap month-13 #1.
   `traceRays` is null-guarded — so non-RT paths are unaffected. Needs validation on
   RT hardware (RenderDoc/Nsight capture + a known-good raygen/miss/hit shader set).
 
+## Bring-up shaders & hardware-gated test
+
+- **Shaders** ([shaders/rt/raytrace.{rgen,rmiss,rchit}](../../shaders/rt/)): a minimal
+  raygen (one primary ray/pixel → output image), miss (background color), and
+  closest-hit (barycentric debug color) set — the canonical assets for RT bring-up.
+- **Test** ([tests/kernel/test_VulkanRayTracingDispatch.cpp](../../tests/kernel/test_VulkanRayTracingDispatch.cpp)):
+  - `ShadersCompileToModules` — runs wherever a Vulkan device exists (GLSL→SPIR-V +
+    module creation need no GPU RT support). **Verifies the bring-up shaders compile.**
+  - `RayTracingPipelineBuildsOnHardware` — gated on `caps().rayTracingTier >= 2`;
+    creates the RT pipeline (exercising the SBT build) on real RT hardware, skips
+    otherwise.
+
+### Software-rasterizer gate (lavapipe/llvmpipe)
+
+CPU software rasterizers **advertise** `VK_KHR_ray_tracing_pipeline` but their
+implementations are incomplete and **crash during RT pipeline creation** (observed:
+SIGSEGV in `lvp_CreateRayTracingPipelinesKHR`). `VulkanDevice::queryCapabilities` now
+detects `VK_PHYSICAL_DEVICE_TYPE_CPU` (`DeviceCapabilities::softwareDevice`) and refuses
+to report RT capability on such devices (`rayTracingPipeline`/`rayQuery` forced false,
+tier 0). This keeps both the renderer and the bring-up test off the broken path — the
+test skips cleanly instead of crashing.
+
 ## Follow-ups
 
 - Stage the SBT to device-local memory (currently host-visible; fine for correctness,

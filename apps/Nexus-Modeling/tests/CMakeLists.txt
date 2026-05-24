@@ -66,6 +66,7 @@ if(NEXUS_BACKEND_VULKAN)
         kernel/test_VulkanSwapchainFallback.cpp
         kernel/test_VulkanRegression.cpp
         kernel/test_VulkanShaderBindingTable.cpp
+        kernel/test_VulkanRayTracingDispatch.cpp
     )
     # SBT layout math lives in the backend's internal headers; expose them to the
     # test target so the pure (GPU-free) arithmetic can be unit-tested directly.

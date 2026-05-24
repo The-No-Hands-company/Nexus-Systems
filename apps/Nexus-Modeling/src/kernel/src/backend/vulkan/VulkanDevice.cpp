@@ -394,9 +394,18 @@ void VulkanDevice::queryCapabilities()
     f2.pNext       = &rqFeat;
     vkGetPhysicalDeviceFeatures2(m_physDevice, &f2);
 
+    // CPU/software rasterizers (lavapipe, llvmpipe) advertise ray-tracing support
+    // but their implementations are incomplete and crash on RT pipeline creation.
+    // Treat them as non-RT so neither the renderer nor tests attempt RT on them.
+    VkPhysicalDeviceProperties devProps{};
+    vkGetPhysicalDeviceProperties(m_physDevice, &devProps);
+    m_caps.softwareDevice = (devProps.deviceType == VK_PHYSICAL_DEVICE_TYPE_CPU);
+
     m_caps.meshShaders        = m_meshShadersRequested && (meshFeat.meshShader == VK_TRUE);
-    m_caps.rayTracingPipeline = m_rayTracingRequested && (rtFeat.rayTracingPipeline == VK_TRUE);
-    m_caps.rayQuery           = m_rayTracingRequested && (rqFeat.rayQuery == VK_TRUE);
+    m_caps.rayTracingPipeline = m_rayTracingRequested && (rtFeat.rayTracingPipeline == VK_TRUE)
+                             && !m_caps.softwareDevice;
+    m_caps.rayQuery           = m_rayTracingRequested && (rqFeat.rayQuery == VK_TRUE)
+                             && !m_caps.softwareDevice;
     m_caps.timelineSemaphores = vksync::supportsTimelineSemaphores(m_physDevice);
     m_caps.maxMeshletVerts    = meshProps.maxMeshOutputVertices;
     m_caps.maxMeshletPrims    = meshProps.maxMeshOutputPrimitives;

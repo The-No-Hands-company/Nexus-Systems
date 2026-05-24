@@ -207,6 +207,7 @@ struct DeviceCapabilities {
     bool unifiedMemory        = false;  // device-local + host-visible on same heap
     bool directStorage        = false;  // platform DirectStorage or equivalent
     bool aftermath            = false;  // NVIDIA Aftermath present
+    bool softwareDevice       = false;  // CPU/software rasterizer (e.g. lavapipe/llvmpipe)
     uint32_t maxMeshletVerts  = 0;
     uint32_t maxMeshletPrims  = 0;
     uint32_t minSubgroupSize  = 0;
