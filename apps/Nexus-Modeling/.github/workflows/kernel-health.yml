@@ -82,6 +82,10 @@ jobs:
           echo 'Running fallback regression with NEXUS_FORCE_SWAPCHAIN_NO_STORAGE=1'
           NEXUS_FORCE_SWAPCHAIN_NO_STORAGE=1 ./build/tests/nexus_kernel_tests --gtest_filter='VulkanSwapchainFallback.*'
 
-      - name: Skip Vulkan test execution
+      - name: Skip Vulkan test execution — run fallback with Null backend
         if: env.SKIP_VULKAN_TESTS == '1'
-        run: echo 'Skipping Vulkan test execution because no Vulkan ICD is available.'
+        run: |
+          echo 'No Vulkan ICD detected — building tests with Null backend and running fallback regression.'
+          cmake -S . -B build-null -DNEXUS_BACKEND_VULKAN=OFF
+          cmake --build build-null --target nexus_kernel_tests -j$(nproc)
+          NEXUS_FORCE_SWAPCHAIN_NO_STORAGE=1 ./build-null/tests/nexus_kernel_tests --gtest_filter='VulkanSwapchainFallback.*'
