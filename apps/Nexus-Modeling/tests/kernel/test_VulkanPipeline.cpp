@@ -3,10 +3,12 @@
 // ─────────────────────────────────────────────────────────────────────────────
 #include <nexus/gfx/Device.h>
 #include <nexus/gfx/RenderContext.h>
+#include <nexus/render/Renderer.h>
 
 #include <gtest/gtest.h>
 
 #include <array>
+#include <span>
 #include <string_view>
 
 using namespace nexus::gfx;
@@ -344,6 +346,68 @@ void main() { outColor = vec4(1.0); }
     DescriptorSetDesc dsd{};
     dsd.bindings = binds;
     dsd.debugName = "test.graphics.descriptorset";
+    const DescriptorSetHandle set = dev->allocateDescriptorSet(dsd);
+    EXPECT_TRUE(set.valid());
+
+    if (set.valid())  dev->freeDescriptorSet(set);
+    if (pipe.valid()) dev->destroyPipeline(pipe);
+    dev->destroyShader(vs);
+    dev->destroyShader(fs);
+}
+
+TEST(VulkanPipeline, CompositeCoreSetLayoutCreatesValidPipeline)
+{
+    // The renderer's published composite core (set 0) layout must produce a valid
+    // pipeline layout on a real device, and a descriptor set from the same layout
+    // must be layout-compatible. Verifies the deferred path's descriptor contract
+    // against an actual Vulkan device (runs on the software rasterizer too).
+    std::unique_ptr<RenderContext> ctx;
+    try {
+        ctx = createMinimalVulkanContext();
+    } catch (const std::exception& e) {
+        GTEST_SKIP() << "Vulkan backend unavailable on this machine: " << e.what();
+    }
+    ASSERT_NE(ctx, nullptr);
+    IDevice* dev = &ctx->device();
+
+    constexpr std::string_view kVert = R"GLSL(
+#version 460
+void main() {
+    const vec2 p[3] = vec2[3](vec2(-1.0,-1.0), vec2(3.0,-1.0), vec2(-1.0,3.0));
+    gl_Position = vec4(p[gl_VertexIndex], 0.0, 1.0);
+}
+)GLSL";
+    constexpr std::string_view kFrag = R"GLSL(
+#version 460
+layout(location = 0) out vec4 outColor;
+void main() { outColor = vec4(0.0); }
+)GLSL";
+
+    ShaderDesc vsDesc{}; vsDesc.stage = ShaderStage::Vertex;   vsDesc.glslSource = kVert;
+    ShaderDesc fsDesc{}; fsDesc.stage = ShaderStage::Fragment; fsDesc.glslSource = kFrag;
+    const ShaderHandle vs = dev->createShader(vsDesc);
+    const ShaderHandle fs = dev->createShader(fsDesc);
+    ASSERT_TRUE(vs.valid());
+    ASSERT_TRUE(fs.valid());
+
+    const std::span<const DescriptorBindingDesc> coreLayout =
+        nexus::render::Renderer::compositeCoreSetLayout();
+
+    GraphicsPipelineDesc gp{};
+    gp.vertexShader       = vs;
+    gp.fragmentShader     = fs;
+    gp.topology           = Topology::TriangleList;
+    gp.depthTest          = false;
+    gp.depthWrite         = false;
+    gp.descriptorBindings = coreLayout;   // build the pipeline layout from the contract
+    gp.debugName          = "test.composite.coreset.pipeline";
+
+    const PipelineHandle pipe = dev->createGraphicsPipeline(gp);
+    EXPECT_TRUE(pipe.valid());
+
+    DescriptorSetDesc dsd{};
+    dsd.bindings = coreLayout;
+    dsd.debugName = "test.composite.coreset";
     const DescriptorSetHandle set = dev->allocateDescriptorSet(dsd);
     EXPECT_TRUE(set.valid());
 

@@ -20,9 +20,11 @@
 #include <nexus/render/SceneGraph.h>
 #include <nexus/render/RenderGraphValidator.h>
 #include <nexus/render/FrameCaptureExporter.h>
+#include <nexus/gfx/Device.h>
 #include <array>
 #include <cstdint>
 #include <memory>
+#include <span>
 
 namespace nexus::render {
 
@@ -329,6 +331,15 @@ public:
     [[nodiscard]] ShadowPassBindingDesc     buildShadowPassBindingDesc()      const noexcept;
     [[nodiscard]] CompositePassBindingDesc   buildCompositePassBindingDesc()   const noexcept;
     [[nodiscard]] ShadowLightingBindingDesc  buildShadowLightingBindingDesc()  const noexcept;
+
+    // Authoritative descriptor set layouts for the lighting/composite pass. The
+    // composite pipeline's layout MUST be built from these (set 0 = core GBuffer
+    // inputs, set 1 = shadow) for the renderer's descriptor binding to be valid on
+    // hardware. Only binding/type are meaningful (handles are left empty). The
+    // renderer binds its descriptor sets from these same definitions, so the
+    // pipeline layout and the runtime bindings cannot drift.
+    [[nodiscard]] static std::span<const nexus::gfx::DescriptorBindingDesc> compositeCoreSetLayout()   noexcept;
+    [[nodiscard]] static std::span<const nexus::gfx::DescriptorBindingDesc> compositeShadowSetLayout() noexcept;
     void resetScene(SceneGraph& scene);
     void resetSceneAndDestroyTLAS(SceneGraph& scene);
     [[nodiscard]] const RendererSettings& settings() const noexcept { return m_settings; }

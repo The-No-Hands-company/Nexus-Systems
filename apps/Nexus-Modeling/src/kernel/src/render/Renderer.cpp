@@ -68,6 +68,27 @@ struct Renderer::Impl {
 
 namespace {
 
+// Authoritative descriptor layouts for the lighting/composite pass. Both the
+// composite pipeline's layout (built by the pipeline creator) and the renderer's
+// runtime descriptor bindings derive from these, so they cannot drift. Only
+// binding + type are meaningful here.
+constexpr nexus::gfx::DescriptorBindingDesc kCompositeCoreLayout[] = {
+    {0, nexus::gfx::DescriptorType::SampledTexture, {}, {}, {}, {}}, // albedo
+    {1, nexus::gfx::DescriptorType::SampledTexture, {}, {}, {}, {}}, // normal
+    {2, nexus::gfx::DescriptorType::SampledTexture, {}, {}, {}, {}}, // velocity
+    {3, nexus::gfx::DescriptorType::SampledTexture, {}, {}, {}, {}}, // depth
+    {4, nexus::gfx::DescriptorType::Sampler,        {}, {}, {}, {}}, // albedo sampler
+    {5, nexus::gfx::DescriptorType::Sampler,        {}, {}, {}, {}}, // normal sampler
+    {6, nexus::gfx::DescriptorType::Sampler,        {}, {}, {}, {}}, // velocity sampler
+    {7, nexus::gfx::DescriptorType::Sampler,        {}, {}, {}, {}}, // depth sampler
+    {8, nexus::gfx::DescriptorType::StorageBuffer,  {}, {}, {}, {}}, // material table (optional)
+};
+constexpr nexus::gfx::DescriptorBindingDesc kCompositeShadowLayout[] = {
+    {0, nexus::gfx::DescriptorType::SampledTexture, {}, {}, {}, {}}, // shadow depth
+    {1, nexus::gfx::DescriptorType::Sampler,        {}, {}, {}, {}}, // shadow sampler
+    {2, nexus::gfx::DescriptorType::StorageBuffer,  {}, {}, {}, {}}, // shadow lighting
+};
+
 struct SceneDrawPacket {
     nexus::gfx::BufferHandle vertexBuffer;
     nexus::gfx::BufferHandle indexBuffer;
@@ -779,19 +800,29 @@ void Renderer::render(const Camera& camera, SceneGraph& scene)
             if (compositeDesc.readyForComposite()) {
                 auto& dev = m_ctx.device();
 
-                // Core GBuffer + sampler + material table bindings (set 0).
+                // Core GBuffer + sampler + material table bindings (set 0), sourced
+                // from the published composite layout so the pipeline layout and these
+                // runtime bindings cannot drift. Handles are filled per binding index.
                 std::array<nexus::gfx::DescriptorBindingDesc, 9> coreBindings{};
                 uint32_t nb = 0;
-                coreBindings[nb++] = { 0, nexus::gfx::DescriptorType::SampledTexture, {}, compositeDesc.albedoTexture,   {} };
-                coreBindings[nb++] = { 1, nexus::gfx::DescriptorType::SampledTexture, {}, compositeDesc.normalTexture,   {} };
-                coreBindings[nb++] = { 2, nexus::gfx::DescriptorType::SampledTexture, {}, compositeDesc.velocityTexture, {} };
-                coreBindings[nb++] = { 3, nexus::gfx::DescriptorType::SampledTexture, {}, compositeDesc.depthTexture,    {} };
-                coreBindings[nb++] = { 4, nexus::gfx::DescriptorType::Sampler, {}, {}, compositeDesc.albedoSampler   };
-                coreBindings[nb++] = { 5, nexus::gfx::DescriptorType::Sampler, {}, {}, compositeDesc.normalSampler   };
-                coreBindings[nb++] = { 6, nexus::gfx::DescriptorType::Sampler, {}, {}, compositeDesc.velocitySampler };
-                coreBindings[nb++] = { 7, nexus::gfx::DescriptorType::Sampler, {}, {}, compositeDesc.depthSampler    };
-                if (compositeDesc.materialTable.valid()) {
-                    coreBindings[nb++] = { 8, nexus::gfx::DescriptorType::StorageBuffer, compositeDesc.materialTable, {}, {} };
+                for (const auto& slot : compositeCoreSetLayout()) {
+                    nexus::gfx::DescriptorBindingDesc b = slot; // binding + type from contract
+                    switch (slot.binding) {
+                        case 0: b.texture = compositeDesc.albedoTexture;   break;
+                        case 1: b.texture = compositeDesc.normalTexture;   break;
+                        case 2: b.texture = compositeDesc.velocityTexture; break;
+                        case 3: b.texture = compositeDesc.depthTexture;    break;
+                        case 4: b.sampler = compositeDesc.albedoSampler;   break;
+                        case 5: b.sampler = compositeDesc.normalSampler;   break;
+                        case 6: b.sampler = compositeDesc.velocitySampler; break;
+                        case 7: b.sampler = compositeDesc.depthSampler;    break;
+                        case 8:
+                            if (!compositeDesc.materialTable.valid()) continue; // optional
+                            b.buffer = compositeDesc.materialTable;
+                            break;
+                        default: continue;
+                    }
+                    coreBindings[nb++] = b;
                 }
 
                 nexus::gfx::DescriptorSetDesc coreSetDesc{};
@@ -804,15 +835,24 @@ void Renderer::render(const Camera& camera, SceneGraph& scene)
                     deferDescriptorSetFree(*m_impl, fc.frameSlot, coreSet);
                 }
 
-                // Shadow lighting bindings (set 1) — only when fully populated.
+                // Shadow lighting bindings (set 1) — only when fully populated. Sourced
+                // from the published shadow set layout (single source of truth).
                 if (compositeDesc.hasShadowInputs()) {
                     std::array<nexus::gfx::DescriptorBindingDesc, 3> shadowBindings{};
-                    shadowBindings[0] = { 0, nexus::gfx::DescriptorType::SampledTexture, {}, compositeDesc.shadowDepthTexture, {} };
-                    shadowBindings[1] = { 1, nexus::gfx::DescriptorType::Sampler,        {}, {}, compositeDesc.shadowDepthSampler };
-                    shadowBindings[2] = { 2, nexus::gfx::DescriptorType::StorageBuffer,  compositeDesc.shadowLightingBuffer, {}, {} };
+                    uint32_t sb = 0;
+                    for (const auto& slot : compositeShadowSetLayout()) {
+                        nexus::gfx::DescriptorBindingDesc b = slot;
+                        switch (slot.binding) {
+                            case 0: b.texture = compositeDesc.shadowDepthTexture;   break;
+                            case 1: b.sampler = compositeDesc.shadowDepthSampler;   break;
+                            case 2: b.buffer  = compositeDesc.shadowLightingBuffer; break;
+                            default: continue;
+                        }
+                        shadowBindings[sb++] = b;
+                    }
 
                     nexus::gfx::DescriptorSetDesc shadowSetDesc{};
-                    shadowSetDesc.bindings  = shadowBindings;
+                    shadowSetDesc.bindings  = std::span{ shadowBindings.data(), sb };
                     shadowSetDesc.debugName = "Composite.ShadowSet";
 
                     nexus::gfx::DescriptorSetHandle shadowSet = dev.allocateDescriptorSet(shadowSetDesc);
@@ -1082,6 +1122,16 @@ ShadowPassBindingDesc Renderer::buildShadowPassBindingDesc() const noexcept
         desc.cascadePasses[i].triangles = m_impl->shadow.cascadeTriangles[i];
     }
     return desc;
+}
+
+std::span<const nexus::gfx::DescriptorBindingDesc> Renderer::compositeCoreSetLayout() noexcept
+{
+    return kCompositeCoreLayout;
+}
+
+std::span<const nexus::gfx::DescriptorBindingDesc> Renderer::compositeShadowSetLayout() noexcept
+{
+    return kCompositeShadowLayout;
 }
 
 CompositePassBindingDesc Renderer::buildCompositePassBindingDesc() const noexcept

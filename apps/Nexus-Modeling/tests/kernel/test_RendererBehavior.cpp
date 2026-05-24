@@ -3602,3 +3602,31 @@ TEST(RendererBehavior, ShadowLightingBindingDescIsIncompleteWhenContractNotSet)
     EXPECT_EQ(shadowDesc.shadowCascadeCount, 0u);
 }
 
+
+TEST(RendererBehavior, CompositeDescriptorSetLayoutContractIsStable)
+{
+    // The renderer publishes the composite pass descriptor layouts as the single
+    // source of truth; render() binds from these and pipeline creators must build
+    // the composite pipeline's set layouts from them. Guard the contract so an
+    // accidental edit that would desync pipeline layout vs runtime bindings fails here.
+    const std::span<const DescriptorBindingDesc> core   = Renderer::compositeCoreSetLayout();
+    const std::span<const DescriptorBindingDesc> shadow = Renderer::compositeShadowSetLayout();
+
+    ASSERT_EQ(core.size(), 9u);
+    ASSERT_EQ(shadow.size(), 3u);
+
+    for (uint32_t i = 0; i < core.size(); ++i)   EXPECT_EQ(core[i].binding, i);
+    for (uint32_t i = 0; i < shadow.size(); ++i) EXPECT_EQ(shadow[i].binding, i);
+
+    // Set 0: albedo/normal/velocity/depth textures, their samplers, material table.
+    EXPECT_EQ(core[0].type, DescriptorType::SampledTexture);
+    EXPECT_EQ(core[3].type, DescriptorType::SampledTexture);
+    EXPECT_EQ(core[4].type, DescriptorType::Sampler);
+    EXPECT_EQ(core[7].type, DescriptorType::Sampler);
+    EXPECT_EQ(core[8].type, DescriptorType::StorageBuffer);
+
+    // Set 1: shadow depth texture + sampler + lighting buffer.
+    EXPECT_EQ(shadow[0].type, DescriptorType::SampledTexture);
+    EXPECT_EQ(shadow[1].type, DescriptorType::Sampler);
+    EXPECT_EQ(shadow[2].type, DescriptorType::StorageBuffer);
+}
