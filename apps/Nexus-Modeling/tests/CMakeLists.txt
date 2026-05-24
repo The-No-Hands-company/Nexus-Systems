@@ -65,6 +65,12 @@ if(NEXUS_BACKEND_VULKAN)
         kernel/test_VulkanSwapchainStorageUsage.cpp
         kernel/test_VulkanSwapchainFallback.cpp
         kernel/test_VulkanRegression.cpp
+        kernel/test_VulkanShaderBindingTable.cpp
+    )
+    # SBT layout math lives in the backend's internal headers; expose them to the
+    # test target so the pure (GPU-free) arithmetic can be unit-tested directly.
+    target_include_directories(nexus_kernel_tests PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/../src/kernel/src/backend/vulkan
     )
 endif()
 

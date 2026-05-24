@@ -143,6 +143,7 @@ struct VulkanResourcePool {
         VkPipeline         pipeline  = VK_NULL_HANDLE;
         VkPipelineLayout   layout    = VK_NULL_HANDLE;
         VkPipelineBindPoint bindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+        VulkanShaderBindingTableGpu sbt{}; // valid only for ray-tracing pipelines
     };
     std::vector<PipelineEntry>   pipelines;
     std::vector<VkCommandBuffer> cmdBufs;

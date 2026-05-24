@@ -407,11 +407,22 @@ void VulkanDevice::queryCapabilities()
     else if (m_caps.rayQuery)      m_caps.rayTracingTier = 1;
 
     VkPhysicalDeviceSubgroupProperties sg{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SUBGROUP_PROPERTIES};
+    VkPhysicalDeviceRayTracingPipelinePropertiesKHR rtProps{
+        VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_PROPERTIES_KHR};
     VkPhysicalDeviceProperties2 p2{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2};
     p2.pNext = &sg;
+    if (m_caps.rayTracingPipeline) {
+        sg.pNext = &rtProps; // chain RT pipeline properties when supported
+    }
     vkGetPhysicalDeviceProperties2(m_physDevice, &p2);
     m_caps.minSubgroupSize = sg.subgroupSize;
     m_caps.maxSubgroupSize = sg.subgroupSize;
+
+    if (m_caps.rayTracingPipeline) {
+        m_rtPipelineProps.shaderGroupHandleSize      = rtProps.shaderGroupHandleSize;
+        m_rtPipelineProps.shaderGroupBaseAlignment   = rtProps.shaderGroupBaseAlignment;
+        m_rtPipelineProps.shaderGroupHandleAlignment = rtProps.shaderGroupHandleAlignment;
+    }
 }
 
 // ── Tier classification ───────────────────────────────────────────────────────
@@ -469,6 +480,8 @@ void VulkanDevice::waitIdle() {
 VkQueue  VulkanDevice::queue(QueueType t)       const noexcept { return m_queues[static_cast<size_t>(t)].handle; }
 uint32_t VulkanDevice::queueFamily(QueueType t) const noexcept { return m_queues[static_cast<size_t>(t)].family; }
 VulkanResourcePool* VulkanDevice::resourcePool() noexcept { return m_pool.get(); }
+
+VmaAllocator VulkanDevice::vma() const noexcept { return m_pool ? m_pool->vma : nullptr; }
 
 // ── Buffer ────────────────────────────────────────────────────────────────────
 BufferHandle VulkanDevice::createBuffer(const BufferDesc& desc)

@@ -6,7 +6,9 @@
 #include "VulkanCommandBuffer.h"
 #include "VulkanDevice.h"
 #include "VulkanMeshShader.h"
+#include "VulkanRayTracing.h"
 #include "VulkanUtils.h"
+#include <vk_mem_alloc.h>
 
 #include <algorithm>
 #include <array>
@@ -635,6 +637,18 @@ PipelineHandle vkCreateRayTracingPipeline(VulkanDevice& dev, const RayTracingPip
 	e.layout = layout;
 	e.bindPoint = VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR;
 
+	// Build the shader binding table so traceRays() can dispatch this pipeline.
+	const auto& rtp = dev.rtPipelineProps();
+	e.sbt = buildShaderBindingTable(dev.vma(), device, pipeline,
+									rtp.shaderGroupHandleSize,
+									rtp.shaderGroupHandleAlignment,
+									rtp.shaderGroupBaseAlignment,
+									static_cast<uint32_t>(desc.missShaders.size()),
+									static_cast<uint32_t>(desc.closestHitShaders.size()));
+	if (!e.sbt.valid()) {
+		std::fprintf(stderr, "createRayTracingPipeline: shader binding table build failed\n");
+	}
+
 	PipelineHandle h{};
 	h.id = pool->nextPipeId;
 	if (pool->nextPipeId >= pool->pipelines.size())
@@ -652,6 +666,8 @@ void vkDestroyPipeline(VulkanDevice& dev, PipelineHandle h)
 	if (!h.valid() || h.id >= pool->pipelines.size()) return;
 
 	auto& entry = pool->pipelines[h.id];
+	if (entry.sbt.buffer != VK_NULL_HANDLE && dev.vma())
+		vmaDestroyBuffer(dev.vma(), entry.sbt.buffer, entry.sbt.allocation);
 	if (entry.pipeline)
 		vkDestroyPipeline(device, entry.pipeline, nullptr);
 	if (entry.layout)

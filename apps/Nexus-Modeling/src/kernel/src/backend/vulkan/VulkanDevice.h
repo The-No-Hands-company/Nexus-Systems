@@ -14,6 +14,9 @@
 #include <vector>
 #include <string>
 
+struct VmaAllocator_T;
+using VmaAllocator = VmaAllocator_T*;
+
 namespace nexus::gfx {
 
 struct VulkanResourcePool;  // defined in VulkanCommandBuffer.h
@@ -100,11 +103,21 @@ public:
     [[nodiscard]] VkInstance       instance()       const noexcept { return m_instance; }
     [[nodiscard]] VkDevice         logical()        const noexcept { return m_device; }
     [[nodiscard]] VkPhysicalDevice physical()       const noexcept { return m_physDevice; }
+    [[nodiscard]] VmaAllocator     vma()            const noexcept; // VMA allocator (defined in .cpp where Impl is complete)
     [[nodiscard]] VkQueue          queue(QueueType) const noexcept;
 
     // Resource pool access (for VulkanFrameScheduler and other internal Vulkan subsystems)
     [[nodiscard]] VulkanResourcePool* resourcePool() noexcept;
     [[nodiscard]] uint32_t         queueFamily(QueueType) const noexcept;
+
+    // Ray-tracing pipeline shader-group sizing for SBT construction.
+    // All fields are zero when the device does not support RT pipelines.
+    struct RtPipelineProps {
+        uint32_t shaderGroupHandleSize      = 0;
+        uint32_t shaderGroupBaseAlignment   = 0;
+        uint32_t shaderGroupHandleAlignment = 0;
+    };
+    [[nodiscard]] const RtPipelineProps& rtPipelineProps() const noexcept { return m_rtPipelineProps; }
 
 private:
     void createInstance(const RenderContextDesc& desc);
@@ -118,6 +131,8 @@ private:
     static VkCommandBuffer beginSingleUse(VkDevice device, VkCommandPool pool);
     static void endAndSubmitSingleUse(VkDevice device, VkCommandPool pool,
                                        VkQueue queue, VkCommandBuffer cmd);
+
+    RtPipelineProps      m_rtPipelineProps{};
 
     VkInstance           m_instance   = VK_NULL_HANDLE;
     VkDebugUtilsMessengerEXT m_debugMessenger = VK_NULL_HANDLE;

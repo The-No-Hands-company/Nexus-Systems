@@ -173,8 +173,11 @@ stub test now also asserts no merge when no merge pipeline is bound.
 
 ## Next Steps (Post-Alpha)
 
-1. **RT Vulkan Integration:** Implement actual ray tracing dispatch and shader binding.
-   (Requires RT-capable hardware to verify; the CPU-side stub/merge plumbing is in place.)
+1. **RT Vulkan Integration:** shader binding table construction + dispatch wiring
+   **landed** (pipeline → SBT → bind → `vkCmdTraceRaysKHR`); SBT alignment math is
+   unit-tested and the wiring is compile-verified. **Runtime verification still pending
+   on RT-capable hardware** (tier 2). See
+   [docs/feature/vulkan-rt-dispatch.md](feature/vulkan-rt-dispatch.md).
 2. ~~**Solver Output Streaming:** Pipeline solver snapshot updates through coupling per-frame.~~
    **Delivered** (§4): `SimulationDriver` — fixed-timestep accumulator with render interpolation.
 3. ~~**Rotation/Scale Coupling:** Extend to full transform state if simulation provides orientation.~~

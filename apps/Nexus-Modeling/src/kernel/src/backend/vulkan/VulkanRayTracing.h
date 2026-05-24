@@ -74,4 +74,31 @@ void destroyAccelStruct(VmaAllocator vma, VkDevice device,
                          const RTPfnTable& pfn,
                          VulkanAccelStruct& as);
 
+// ── Shader binding table ──────────────────────────────────────────────────────
+// GPU-resident SBT built from a ray-tracing pipeline's shader group handles.
+struct VulkanShaderBindingTableGpu {
+    VkBuffer      buffer     = VK_NULL_HANDLE;
+    VmaAllocation allocation = nullptr;
+    VkStridedDeviceAddressRegionKHR raygen   {};
+    VkStridedDeviceAddressRegionKHR miss     {};
+    VkStridedDeviceAddressRegionKHR hit      {};
+    VkStridedDeviceAddressRegionKHR callable {};
+
+    [[nodiscard]] bool valid() const noexcept { return buffer != VK_NULL_HANDLE; }
+};
+
+// Builds an SBT for `rtPipeline` (1 raygen + `missCount` miss + `hitCount` hit
+// groups). Returns an invalid table on failure (handle query unavailable, alloc
+// failure, or zero handle size). The buffer is host-visible and device-address
+// capable; free with vmaDestroyBuffer.
+VulkanShaderBindingTableGpu buildShaderBindingTable(
+    VmaAllocator vma,
+    VkDevice     device,
+    VkPipeline   rtPipeline,
+    uint32_t     handleSize,
+    uint32_t     handleAlignment,
+    uint32_t     baseAlignment,
+    uint32_t     missCount,
+    uint32_t     hitCount);
+
 } // namespace nexus::gfx

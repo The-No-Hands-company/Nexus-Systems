@@ -142,6 +142,15 @@ void VulkanCommandBuffer::bindPipeline(PipelineHandle pipeline)
     m_currentPipelineLayout = entry.layout;
     m_currentBindPoint      = entry.bindPoint;
     vkCmdBindPipeline(m_cmd, entry.bindPoint, entry.pipeline);
+
+    // Binding a ray-tracing pipeline activates its shader binding table so the
+    // next traceRays() dispatch resolves raygen/miss/hit records.
+    if (entry.bindPoint == VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR && entry.sbt.valid()) {
+        m_sbtRayGen   = entry.sbt.raygen;
+        m_sbtMiss     = entry.sbt.miss;
+        m_sbtHitGroup = entry.sbt.hit;
+        m_sbtCallable = entry.sbt.callable;
+    }
 }
 
 // ── Viewport / scissor ────────────────────────────────────────────────────────

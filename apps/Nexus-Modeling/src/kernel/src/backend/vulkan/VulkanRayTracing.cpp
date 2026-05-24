@@ -2,6 +2,7 @@
 //  VulkanRayTracing — BLAS / TLAS build implementation
 // ─────────────────────────────────────────────────────────────────────────────
 #include "VulkanRayTracing.h"
+#include "VulkanShaderBindingTable.h"
 #include "VulkanUtils.h"
 #include <vk_mem_alloc.h>
 #include <stdexcept>
@@ -335,6 +336,87 @@ void destroyAccelStruct(VmaAllocator vma, VkDevice device,
     if (as.buffer.handle != VK_NULL_HANDLE && vma)
         vmaDestroyBuffer(vma, as.buffer.handle, as.buffer.allocation);
     as = {};
+}
+
+// ── Shader binding table ──────────────────────────────────────────────────────
+VulkanShaderBindingTableGpu buildShaderBindingTable(
+    VmaAllocator vma, VkDevice device, VkPipeline rtPipeline,
+    uint32_t handleSize, uint32_t handleAlignment, uint32_t baseAlignment,
+    uint32_t missCount, uint32_t hitCount)
+{
+    VulkanShaderBindingTableGpu sbt{};
+    if (handleSize == 0 || rtPipeline == VK_NULL_HANDLE || vma == nullptr) {
+        return sbt;
+    }
+
+    auto pfnGetHandles = reinterpret_cast<PFN_vkGetRayTracingShaderGroupHandlesKHR>(
+        vkGetDeviceProcAddr(device, "vkGetRayTracingShaderGroupHandlesKHR"));
+    if (!pfnGetHandles) {
+        return sbt;
+    }
+
+    const uint32_t groupCount = 1u + missCount + hitCount;
+    const SbtLayout layout = computeShaderBindingTableLayout(
+        handleSize, handleAlignment, baseAlignment, missCount, hitCount);
+
+    // Fetch all group handles, tightly packed at `handleSize` each.
+    std::vector<uint8_t> handles(static_cast<size_t>(groupCount) * handleSize);
+    if (pfnGetHandles(device, rtPipeline, 0, groupCount,
+                      handles.size(), handles.data()) != VK_SUCCESS) {
+        return sbt;
+    }
+
+    // Host-visible, device-address SBT buffer (small; persistently mapped).
+    VkBufferCreateInfo bci{VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};
+    bci.size        = layout.totalSize;
+    bci.usage       = VK_BUFFER_USAGE_SHADER_BINDING_TABLE_BIT_KHR
+                    | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
+    bci.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+
+    VmaAllocationCreateInfo aci{};
+    aci.usage = VMA_MEMORY_USAGE_AUTO;
+    aci.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT
+              | VMA_ALLOCATION_CREATE_MAPPED_BIT;
+
+    VmaAllocationInfo allocInfo{};
+    if (vmaCreateBuffer(vma, &bci, &aci, &sbt.buffer, &sbt.allocation, &allocInfo) != VK_SUCCESS) {
+        return VulkanShaderBindingTableGpu{};
+    }
+
+    // Copy each group's handle into its region slot.
+    auto* dst = static_cast<uint8_t*>(allocInfo.pMappedData);
+    auto handleAt = [&](uint32_t group) {
+        return handles.data() + static_cast<size_t>(group) * handleSize;
+    };
+    std::memcpy(dst + layout.raygen.offset, handleAt(0), handleSize);
+    for (uint32_t i = 0; i < missCount; ++i) {
+        std::memcpy(dst + layout.miss.offset + i * layout.miss.stride, handleAt(1 + i), handleSize);
+    }
+    for (uint32_t i = 0; i < hitCount; ++i) {
+        std::memcpy(dst + layout.hit.offset + i * layout.hit.stride,
+                    handleAt(1 + missCount + i), handleSize);
+    }
+
+    // Resolve device-address regions for vkCmdTraceRaysKHR.
+    VkBufferDeviceAddressInfo bdai{VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO};
+    bdai.buffer = sbt.buffer;
+    const VkDeviceAddress base = vkGetBufferDeviceAddress(device, &bdai);
+
+    sbt.raygen.deviceAddress = base + layout.raygen.offset;
+    sbt.raygen.stride        = layout.raygen.stride;
+    sbt.raygen.size          = layout.raygen.size;
+    if (missCount > 0) {
+        sbt.miss.deviceAddress = base + layout.miss.offset;
+        sbt.miss.stride        = layout.miss.stride;
+        sbt.miss.size          = layout.miss.size;
+    }
+    if (hitCount > 0) {
+        sbt.hit.deviceAddress = base + layout.hit.offset;
+        sbt.hit.stride        = layout.hit.stride;
+        sbt.hit.size          = layout.hit.size;
+    }
+    // Callable region left zeroed (unused).
+    return sbt;
 }
 
 } // namespace nexus::gfx
