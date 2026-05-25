@@ -132,6 +132,10 @@ uint64_t hashGraphicsPipelineDesc(const GraphicsPipelineDesc& desc)
 		hash ^= fnv1a_hash(&desc.colorAttachmentFormat, sizeof(desc.colorAttachmentFormat));
 	}
 	hash ^= fnv1a_hash(&desc.depthAttachmentFormat, sizeof(desc.depthAttachmentFormat));
+	if (!desc.vertexBindings.empty())
+		hash ^= fnv1a_hash(desc.vertexBindings.data(), desc.vertexBindings.size_bytes());
+	if (!desc.vertexAttributes.empty())
+		hash ^= fnv1a_hash(desc.vertexAttributes.data(), desc.vertexAttributes.size_bytes());
 	return hash;
 }
 
@@ -241,7 +245,30 @@ PipelineHandle vkCreateGraphicsPipeline(VulkanDevice& dev, const GraphicsPipelin
 	stages[1].module = fs;
 	stages[1].pName = "main";
 
+	// Vertex input layout: when bindings/attributes are supplied (e.g. derived from
+	// a mesh via MeshUploadContract), wire them into the pipeline so vertex buffers
+	// are fetched. Empty → no attributes (gl_VertexIndex-only shaders).
+	std::vector<VkVertexInputBindingDescription> viBindings;
+	viBindings.reserve(desc.vertexBindings.size());
+	for (const VertexBinding& b : desc.vertexBindings) {
+		viBindings.push_back({
+			b.binding,
+			b.stride,
+			b.inputRate == VertexInputRate::Instance ? VK_VERTEX_INPUT_RATE_INSTANCE
+													 : VK_VERTEX_INPUT_RATE_VERTEX,
+		});
+	}
+	std::vector<VkVertexInputAttributeDescription> viAttrs;
+	viAttrs.reserve(desc.vertexAttributes.size());
+	for (const VertexAttribute& a : desc.vertexAttributes) {
+		viAttrs.push_back({ a.location, a.binding, vkutil::toVkFormat(a.format), a.offset });
+	}
+
 	VkPipelineVertexInputStateCreateInfo vi{VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO};
+	vi.vertexBindingDescriptionCount   = static_cast<uint32_t>(viBindings.size());
+	vi.pVertexBindingDescriptions      = viBindings.empty() ? nullptr : viBindings.data();
+	vi.vertexAttributeDescriptionCount = static_cast<uint32_t>(viAttrs.size());
+	vi.pVertexAttributeDescriptions    = viAttrs.empty() ? nullptr : viAttrs.data();
 
 	VkPipelineInputAssemblyStateCreateInfo ia{VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO};
 	ia.topology = toVkTopology(desc.topology);

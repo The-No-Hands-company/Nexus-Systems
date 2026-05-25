@@ -75,6 +75,14 @@ struct PackedVertexLayout {
     std::vector<PackedVertexAttribute> attributes;
 };
 
+// Owning translation of a PackedVertexLayout into the gfx pipeline vertex-input
+// arrays. Keep it alive while building the graphics pipeline and pass spans over
+// its members into GraphicsPipelineDesc::vertexBindings / vertexAttributes.
+struct GpuVertexInputLayout {
+    std::vector<nexus::gfx::VertexBinding>   bindings;
+    std::vector<nexus::gfx::VertexAttribute> attributes;
+};
+
 struct UploadedGeometryMesh {
     nexus::render::MeshRef meshRef{};
     std::vector<MeshSection> sections;
@@ -120,6 +128,11 @@ public:
     // Builds a deterministic packed layout descriptor for backend vertex-input wiring.
     // Semantics are ordered canonically: Position, Normal, UV0, JointIndex4, JointWeight4.
     [[nodiscard]] static PackedVertexLayout buildPackedVertexLayout(const MeshUploadView& view);
+
+    // Translates a packed layout into gfx pipeline vertex-input arrays (one
+    // VertexBinding per binding, one VertexAttribute per attribute) so a graphics
+    // pipeline can consume the interleaved vertex buffer this layout describes.
+    [[nodiscard]] static GpuVertexInputLayout toGpuVertexInputLayout(const PackedVertexLayout& layout);
 
     // Packs all active streams into one tightly interleaved vertex buffer matching layout.
     // Returns empty if layout/view are incompatible.

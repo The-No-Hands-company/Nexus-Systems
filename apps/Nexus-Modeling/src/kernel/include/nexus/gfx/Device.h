@@ -120,6 +120,24 @@ struct DescriptorSetLayoutDesc {
     std::span<const DescriptorBindingDesc> bindings;
 };
 
+// One vertex buffer binding point: its byte stride and fetch rate. The array index
+// in GraphicsPipelineDesc::vertexBindings is not the binding number — `binding` is.
+struct VertexBinding {
+    uint32_t        binding   = 0;
+    uint32_t        stride    = 0;
+    VertexInputRate inputRate = VertexInputRate::Vertex;
+};
+
+// One vertex attribute: its shader `location`, the source `binding`, its `format`
+// (reusing the texture Format enum, as Vulkan does), and byte `offset` within the
+// vertex. Derived from a mesh's PackedVertexLayout via MeshUploadContract.
+struct VertexAttribute {
+    uint32_t location = 0;
+    uint32_t binding  = 0;
+    Format   format   = Format::R32G32B32_Float;
+    uint32_t offset   = 0;
+};
+
 struct GraphicsPipelineDesc {
     ShaderHandle  vertexShader;
     ShaderHandle  fragmentShader;
@@ -153,6 +171,11 @@ struct GraphicsPipelineDesc {
     // Required to build the deferred GBuffer geometry pipeline (albedo/normal/velocity).
     std::span<const Format> colorAttachmentFormats;
     Format        depthAttachmentFormat = Format::Undefined;
+    // Vertex input layout. Both empty → no vertex attributes (the vertex shader
+    // sources geometry from gl_VertexIndex). When set, attributes are fetched from
+    // bound vertex buffers; derived from a mesh via MeshUploadContract.
+    std::span<const VertexBinding>   vertexBindings;
+    std::span<const VertexAttribute> vertexAttributes;
     // Descriptor set layouts. `descriptorBindings` is a convenience for a single
     // set 0; `descriptorSetLayouts` (array index = set number) takes precedence and
     // supports multiple sets. Both empty → push-constant-only pipeline layout.

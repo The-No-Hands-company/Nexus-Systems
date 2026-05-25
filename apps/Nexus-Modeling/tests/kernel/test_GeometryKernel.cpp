@@ -139,6 +139,48 @@ TEST(GeometryKernel, UploadContractPackedLayoutIsDeterministic)
     EXPECT_EQ(layout.attributes[4].offsetBytes, 40u);
 }
 
+TEST(GeometryKernel, ToGpuVertexInputLayoutMapsAllSemanticFormats)
+{
+    // Mesh-derived vertex-input wiring: a packed layout translates to gfx pipeline
+    // vertex bindings/attributes a graphics pipeline can consume.
+    Mesh mesh = primitives::makeTriangle(1.f);
+    ASSERT_TRUE(mesh.computeVertexNormals());
+    mesh.attributes().setUVs({ {0.f, 0.f}, {1.f, 0.f}, {0.f, 1.f} });
+    mesh.attributes().setSkinning(
+        { JointIndex4{1, 2, 3, 4}, JointIndex4{1, 2, 3, 4}, JointIndex4{1, 2, 3, 4} },
+        { JointWeight4{0.4f, 0.3f, 0.2f, 0.1f},
+          JointWeight4{0.4f, 0.3f, 0.2f, 0.1f},
+          JointWeight4{0.4f, 0.3f, 0.2f, 0.1f} });
+
+    const auto indices = MeshUploadContract::buildTriangulatedIndexBuffer(mesh);
+    const auto sections = MeshUploadContract::makeSingleSection(indices, 0u);
+    const MeshUploadView view = MeshUploadContract::buildView(mesh, indices, sections);
+    const PackedVertexLayout packed = MeshUploadContract::buildPackedVertexLayout(view);
+
+    const GpuVertexInputLayout gpu = MeshUploadContract::toGpuVertexInputLayout(packed);
+
+    using nexus::gfx::Format;
+    using nexus::gfx::VertexInputRate;
+
+    ASSERT_EQ(gpu.bindings.size(), 1u);
+    EXPECT_EQ(gpu.bindings[0].binding, 0u);
+    EXPECT_EQ(gpu.bindings[0].stride, 56u);  // mirrors the packed layout stride
+    EXPECT_EQ(gpu.bindings[0].inputRate, VertexInputRate::Vertex);
+
+    ASSERT_EQ(gpu.attributes.size(), 5u);
+    // Position Float3 @0, Normal Float3 @12, UV0 Float2 @24, JointIndex4 Uint16x4 @32,
+    // JointWeight4 Float4 @40 — exercising every VertexElementFormat mapping.
+    EXPECT_EQ(gpu.attributes[0].format, Format::R32G32B32_Float);    EXPECT_EQ(gpu.attributes[0].offset, 0u);
+    EXPECT_EQ(gpu.attributes[1].format, Format::R32G32B32_Float);    EXPECT_EQ(gpu.attributes[1].offset, 12u);
+    EXPECT_EQ(gpu.attributes[2].format, Format::R32G32_Float);       EXPECT_EQ(gpu.attributes[2].offset, 24u);
+    EXPECT_EQ(gpu.attributes[3].format, Format::R16G16B16A16_Uint);  EXPECT_EQ(gpu.attributes[3].offset, 32u);
+    EXPECT_EQ(gpu.attributes[4].format, Format::R32G32B32A32_Float); EXPECT_EQ(gpu.attributes[4].offset, 40u);
+    for (uint32_t i = 0; i < 5u; ++i) {
+        EXPECT_EQ(gpu.attributes[i].location, i);
+        EXPECT_EQ(gpu.attributes[i].binding, 0u);
+    }
+}
+
 TEST(GeometryKernel, UploadContractIncludesTangentChannelWhenPresent)
 {
     Mesh mesh = primitives::makeTriangle(1.f);

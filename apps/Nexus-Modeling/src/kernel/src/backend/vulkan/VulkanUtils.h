@@ -38,6 +38,7 @@ inline VkFormat toVkFormat(Format f) noexcept
     case Format::BC7_Unorm:             return VK_FORMAT_BC7_UNORM_BLOCK;
     case Format::A2R10G10B10_Unorm_Pack32:  return VK_FORMAT_A2R10G10B10_UNORM_PACK32;
     case Format::R16G16B16A16_Sfloat:       return VK_FORMAT_R16G16B16A16_SFLOAT;
+    case Format::R16G16B16A16_Uint:         return VK_FORMAT_R16G16B16A16_UINT;
     default:                            return VK_FORMAT_UNDEFINED;
     }
 }

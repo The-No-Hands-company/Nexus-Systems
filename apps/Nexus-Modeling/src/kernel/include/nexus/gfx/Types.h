@@ -82,6 +82,14 @@ enum class Format : uint32_t {
     // HDR presentation
     A2R10G10B10_Unorm_Pack32,
     R16G16B16A16_Sfloat,
+    // Integer vertex formats (e.g. skinning joint indices)
+    R16G16B16A16_Uint,
+};
+
+// ── Vertex input rate (per-vertex vs per-instance attribute fetch) ───────────
+enum class VertexInputRate : uint8_t {
+    Vertex   = 0,
+    Instance = 1,
 };
 
 // ── Sample count ─────────────────────────────────────────────────────────────

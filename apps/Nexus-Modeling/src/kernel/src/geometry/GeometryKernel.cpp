@@ -405,6 +405,30 @@ PackedVertexLayout MeshUploadContract::buildPackedVertexLayout(const MeshUploadV
     return layout;
 }
 
+GpuVertexInputLayout MeshUploadContract::toGpuVertexInputLayout(const PackedVertexLayout& layout)
+{
+    auto toGfxFormat = [](VertexElementFormat f) -> nexus::gfx::Format {
+        switch (f) {
+        case VertexElementFormat::Float2:   return nexus::gfx::Format::R32G32_Float;
+        case VertexElementFormat::Float3:   return nexus::gfx::Format::R32G32B32_Float;
+        case VertexElementFormat::Float4:   return nexus::gfx::Format::R32G32B32A32_Float;
+        case VertexElementFormat::Uint16x4: return nexus::gfx::Format::R16G16B16A16_Uint;
+        }
+        return nexus::gfx::Format::R32G32B32_Float;
+    };
+
+    GpuVertexInputLayout out;
+    out.bindings.reserve(layout.bindings.size());
+    for (const auto& b : layout.bindings) {
+        out.bindings.push_back({ b.binding, b.strideBytes, nexus::gfx::VertexInputRate::Vertex });
+    }
+    out.attributes.reserve(layout.attributes.size());
+    for (const auto& a : layout.attributes) {
+        out.attributes.push_back({ a.location, a.binding, toGfxFormat(a.format), a.offsetBytes });
+    }
+    return out;
+}
+
 std::vector<uint8_t> MeshUploadContract::packInterleavedVertexBuffer(
     const MeshUploadView& view,
     const PackedVertexLayout& layout)

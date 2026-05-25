@@ -487,3 +487,121 @@ void main() {
     dev.destroyTexture(color0);
     dev.destroyTexture(color1);
 }
+
+TEST(VulkanDeferredDraw, VertexInputLayoutFeedsAttributesFromBuffer)
+{
+    // A pipeline built with a vertex-input layout (one binding, one Float3 position
+    // attribute) fetches positions from a bound vertex buffer. The triangle covers
+    // the screen only if the attribute is read; if the vertex fetch were not wired
+    // the positions would be zero (degenerate) and the center would stay clear.
+    std::unique_ptr<RenderContext> ctx;
+    try {
+        ctx = makeContext();
+    } catch (const std::exception& e) {
+        GTEST_SKIP() << "Vulkan backend unavailable: " << e.what();
+    }
+    ASSERT_NE(ctx, nullptr);
+    IDevice& dev = ctx->device();
+
+    constexpr uint32_t W = 8, H = 8;
+
+    TextureDesc td{};
+    td.extent = {W, H, 1};
+    td.format = Format::R8G8B8A8_Unorm;
+    td.usage  = TextureUsage::ColorAttachment | TextureUsage::TransferSrc;
+    const TextureHandle color = dev.createTexture(td);
+    ASSERT_TRUE(color.valid());
+
+    BufferDesc rbd{};
+    rbd.sizeBytes = uint64_t(W) * H * 4u;
+    rbd.usage     = BufferUsage::TransferDst;
+    rbd.memory    = MemoryHint::GpuToCpu;
+    const BufferHandle readback = dev.createBuffer(rbd);
+    ASSERT_TRUE(readback.valid());
+
+    // Fullscreen triangle as interleaved Float3 positions (stride 12).
+    const float verts[9] = {
+        -1.f, -1.f, 0.f,
+         3.f, -1.f, 0.f,
+        -1.f,  3.f, 0.f,
+    };
+    BufferDesc vbd{};
+    vbd.sizeBytes = sizeof(verts);
+    vbd.usage     = BufferUsage::VertexBuffer | BufferUsage::TransferDst;
+    vbd.memory    = MemoryHint::GpuOnly;
+    const BufferHandle vbuf = dev.createBuffer(vbd);
+    ASSERT_TRUE(vbuf.valid());
+    dev.uploadBuffer(vbuf, verts, sizeof(verts));
+
+    constexpr std::string_view kVert = R"GLSL(
+#version 460
+layout(location = 0) in vec3 inPos;
+void main() { gl_Position = vec4(inPos, 1.0); }
+)GLSL";
+    constexpr std::string_view kFrag = R"GLSL(
+#version 460
+layout(location = 0) out vec4 outColor;
+void main() { outColor = vec4(1.0, 1.0, 0.0, 1.0); }
+)GLSL";
+
+    ShaderDesc vsDesc{}; vsDesc.stage = ShaderStage::Vertex;   vsDesc.glslSource = kVert;
+    ShaderDesc fsDesc{}; fsDesc.stage = ShaderStage::Fragment; fsDesc.glslSource = kFrag;
+    const ShaderHandle vs = dev.createShader(vsDesc);
+    const ShaderHandle fs = dev.createShader(fsDesc);
+    ASSERT_TRUE(vs.valid() && fs.valid());
+
+    const std::array<VertexBinding, 1>   bindings{{ {0, 12, VertexInputRate::Vertex} }};
+    const std::array<VertexAttribute, 1> attrs{{ {0, 0, Format::R32G32B32_Float, 0} }};
+
+    GraphicsPipelineDesc gp{};
+    gp.vertexShader          = vs;
+    gp.fragmentShader        = fs;
+    gp.topology              = Topology::TriangleList;
+    gp.cullMode              = CullMode::None;
+    gp.depthTest             = false;
+    gp.depthWrite            = false;
+    gp.colorAttachmentFormat = Format::R8G8B8A8_Unorm;
+    gp.vertexBindings        = bindings;
+    gp.vertexAttributes      = attrs;
+    gp.debugName             = "vertexinput.pipeline";
+    const PipelineHandle pso = dev.createGraphicsPipeline(gp);
+    ASSERT_TRUE(pso.valid());
+
+    const CmdBufHandle cbh = dev.allocateCommandBuffer(QueueType::Graphics);
+    ICommandBuffer* cmd = dev.getCommandBuffer(cbh);
+    ASSERT_NE(cmd, nullptr);
+
+    cmd->begin();
+    ClearValue clear{};
+    clear.color = {0.0f, 0.0f, 0.0f, 1.0f};
+    cmd->beginRenderPass({}, {&color, 1}, {}, {&clear, 1}, {{0, 0}, {W, H}});
+    cmd->bindPipeline(pso);
+    cmd->setViewport({ .x = 0.f, .y = 0.f, .width = float(W), .height = float(H), .minDepth = 0.f, .maxDepth = 1.f });
+    cmd->setScissor({ .offset = {0, 0}, .extent = {W, H} });
+    cmd->bindVertexBuffer(vbuf, 0, 0);
+    cmd->draw(3, 1, 0, 0);
+    cmd->endRenderPass();
+    cmd->textureBarrier({color, TextureLayout::ColorAttachment, TextureLayout::TransferSrc});
+    cmd->copyTextureToBuffer(color, readback);
+    cmd->end();
+
+    submitAndWait(dev, cbh);
+
+    std::array<uint8_t, W * H * 4> pixels{};
+    dev.readbackBuffer(readback, pixels.data(), pixels.size());
+
+    // Center pixel is covered by the buffer-fed triangle -> yellow.
+    const uint8_t* c = &pixels[((H / 2) * W + (W / 2)) * 4];
+    EXPECT_NEAR(c[0], 255, 4);
+    EXPECT_NEAR(c[1], 255, 4);
+    EXPECT_NEAR(c[2], 0,   4);
+    EXPECT_EQ(c[3], 255);
+
+    dev.freeCommandBuffer(cbh);
+    dev.destroyPipeline(pso);
+    dev.destroyShader(vs);
+    dev.destroyShader(fs);
+    dev.destroyBuffer(vbuf);
+    dev.destroyBuffer(readback);
+    dev.destroyTexture(color);
+}
