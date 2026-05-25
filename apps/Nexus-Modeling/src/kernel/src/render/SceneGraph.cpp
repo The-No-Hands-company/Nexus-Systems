@@ -250,15 +250,10 @@ void SceneGraph::collectVisible(const Frustum& frustum, std::vector<Node*>& outp
         if (!node.mesh.vertexBuffer.valid()) return;  // non-renderable node
 
         // Center of bounding sphere approximation from world translation.
-        float cx = world.m[0][3], cy = world.m[1][3], cz = world.m[2][3];
+        const Vec3 center{ world.m[0][3], world.m[1][3], world.m[2][3] };
         const float radius = conservativeWorldRadius(world);
 
-        bool inside = true;
-        for (const auto& plane : frustum.planes) {
-            float dist = plane.x*cx + plane.y*cy + plane.z*cz + plane.w;
-            if (dist < -radius) { inside = false; break; }
-        }
-        if (inside) output.push_back(&node);
+        if (frustum.intersectsSphere(center, radius)) output.push_back(&node);
     });
 }
 

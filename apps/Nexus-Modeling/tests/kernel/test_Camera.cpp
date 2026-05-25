@@ -109,3 +109,110 @@ TEST(Camera, SetJitterRejectsInfY)
     cam.setJitter(0.25f, std::numeric_limits<float>::infinity());
     EXPECT_FLOAT_EQ(cam.ubo().jitter.y, prevY);
 }
+
+// ── Frustum intersection queries ──────────────────────────────────────────────
+//
+// Hand-built frustum bounding the box x∈[-1,1], y∈[-1,1], z∈[0,10] with
+// inward, unit-length normals (matching Camera::extractFrustum's convention).
+namespace {
+Frustum makeBoxFrustum()
+{
+    Frustum f{};
+    f.planes[0] = { 1.f,  0.f,  0.f,  1.f}; // x >= -1
+    f.planes[1] = {-1.f,  0.f,  0.f,  1.f}; // x <=  1
+    f.planes[2] = { 0.f,  1.f,  0.f,  1.f}; // y >= -1
+    f.planes[3] = { 0.f, -1.f,  0.f,  1.f}; // y <=  1
+    f.planes[4] = { 0.f,  0.f,  1.f,  0.f}; // z >=  0
+    f.planes[5] = { 0.f,  0.f, -1.f, 10.f}; // z <= 10
+    return f;
+}
+} // namespace
+
+TEST(Camera, FrustumContainsPoint)
+{
+    const Frustum f = makeBoxFrustum();
+    EXPECT_TRUE(f.containsPoint({0.f, 0.f, 5.f}));   // center
+    EXPECT_TRUE(f.containsPoint({1.f, 1.f, 10.f}));  // far corner (boundary is inside)
+    EXPECT_FALSE(f.containsPoint({0.f, 0.f, -1.f})); // behind near plane
+    EXPECT_FALSE(f.containsPoint({2.f, 0.f, 5.f}));  // right of right plane
+    EXPECT_FALSE(f.containsPoint({0.f, 0.f, 11.f})); // beyond far plane
+}
+
+TEST(Camera, FrustumIntersectsSphere)
+{
+    const Frustum f = makeBoxFrustum();
+    EXPECT_TRUE(f.intersectsSphere({0.f, 0.f, 5.f}, 0.5f));  // fully inside
+    EXPECT_FALSE(f.intersectsSphere({2.f, 0.f, 5.f}, 0.5f)); // sits 1.0 right of x=1, radius too small
+    EXPECT_TRUE(f.intersectsSphere({2.f, 0.f, 5.f}, 1.5f));  // radius reaches back across x=1
+    EXPECT_FALSE(f.intersectsSphere({0.f, 0.f, -2.f}, 1.f)); // entirely behind near plane
+    EXPECT_TRUE(f.intersectsSphere({0.f, 0.f, -0.5f}, 1.f)); // straddles near plane
+}
+
+TEST(Camera, FrustumIntersectsAabb)
+{
+    const Frustum f = makeBoxFrustum();
+    EXPECT_TRUE(f.intersectsAabb({{-0.5f, -0.5f, 4.f}, {0.5f, 0.5f, 6.f}})); // inside
+    EXPECT_FALSE(f.intersectsAabb({{2.f, 2.f, 11.f}, {3.f, 3.f, 12.f}}));    // fully outside
+    EXPECT_TRUE(f.intersectsAabb({{0.5f, -0.5f, 4.f}, {3.f, 0.5f, 6.f}}));   // straddles right plane
+    EXPECT_TRUE(f.intersectsAabb({{-5.f, -5.f, -5.f}, {5.f, 5.f, 15.f}}));   // encloses the frustum
+}
+
+TEST(Camera, FrustumDegeneratePlaneIsConservative)
+{
+    // An all-zero frustum (every plane degenerate) must never cull: dot+d == 0
+    // satisfies the >= 0 inside test, so everything is reported visible.
+    Frustum f{};
+    EXPECT_TRUE(f.containsPoint({1000.f, -1000.f, 1000.f}));
+    EXPECT_TRUE(f.intersectsSphere({0.f, 0.f, 0.f}, 0.f));
+    EXPECT_TRUE(f.intersectsAabb({{-1.f, -1.f, -1.f}, {1.f, 1.f, 1.f}}));
+}
+
+TEST(Camera, FrustumFromRealCameraCullsBehindAndSides)
+{
+    Camera cam;
+    cam.setPerspective(60.f, 1.f, 0.1f, 100.f);
+    cam.lookAt({0.f, 0.f, 5.f}, {0.f, 0.f, 0.f}); // looking down -Z at the origin
+    const Frustum& f = cam.frustum();
+
+    EXPECT_TRUE(f.containsPoint({0.f, 0.f, 0.f}));      // target, in front
+    EXPECT_FALSE(f.containsPoint({0.f, 0.f, 10.f}));    // behind the camera
+    EXPECT_FALSE(f.containsPoint({1000.f, 0.f, 0.f}));  // far off to the side
+    EXPECT_TRUE(f.intersectsSphere({0.f, 0.f, 0.f}, 1.f));
+    EXPECT_TRUE(f.intersectsAabb({{-0.5f, -0.5f, -0.5f}, {0.5f, 0.5f, 0.5f}}));
+}
+
+TEST(Camera, AabbCenterAndExtents)
+{
+    const Aabb box{{-2.f, 0.f, 1.f}, {4.f, 6.f, 5.f}};
+    const Vec3 c = box.center();
+    const Vec3 e = box.extents();
+    EXPECT_FLOAT_EQ(c.x, 1.f);  EXPECT_FLOAT_EQ(c.y, 3.f);  EXPECT_FLOAT_EQ(c.z, 3.f);
+    EXPECT_FLOAT_EQ(e.x, 3.f);  EXPECT_FLOAT_EQ(e.y, 3.f);  EXPECT_FLOAT_EQ(e.z, 2.f);
+}
+
+// Pins the matrix convention: column-vector (clip = viewProj * world) with
+// reversed-Z Vulkan NDC. This is the ground truth the frustum extraction relies
+// on; if the projection layout or P*V order regresses, this fails first.
+TEST(Camera, PerspectiveProjectsToReversedZNdc)
+{
+    Camera cam;
+    cam.setPerspective(60.f, 1.f, 0.1f, 100.f);
+    cam.lookAt({0.f, 0.f, 5.f}, {0.f, 0.f, 0.f}); // look down -Z
+    const Mat4& vp = cam.ubo().viewProj;
+
+    auto ndc = [&](Vec3 world) {
+        const Vec4 clip = vp * Vec4{world.x, world.y, world.z, 1.f};
+        return Vec3{clip.x / clip.w, clip.y / clip.w, clip.z / clip.w};
+    };
+
+    // Near plane (world z = 5 - 0.1 = 4.9) -> NDC z = 1; far plane (z = -95) -> 0.
+    EXPECT_NEAR(ndc({0.f, 0.f, 4.9f}).z, 1.f, 1e-3f);
+    EXPECT_NEAR(ndc({0.f, 0.f, -95.f}).z, 0.f, 1e-3f);
+
+    // The look-at target projects to screen center, within the depth range.
+    const Vec3 c = ndc({0.f, 0.f, 0.f});
+    EXPECT_NEAR(c.x, 0.f, 1e-4f);
+    EXPECT_NEAR(c.y, 0.f, 1e-4f);
+    EXPECT_GT(c.z, 0.f);
+    EXPECT_LT(c.z, 1.f);
+}

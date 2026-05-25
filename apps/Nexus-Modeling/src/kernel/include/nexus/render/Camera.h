@@ -122,9 +122,58 @@ struct Mat4 {
     }
 };
 
+// ── Axis-aligned bounding box (world space) ──────────────────────────────────
+struct Aabb {
+    Vec3 min = {0.f, 0.f, 0.f};
+    Vec3 max = {0.f, 0.f, 0.f};
+
+    [[nodiscard]] Vec3 center()  const noexcept { return (min + max) * 0.5f; }
+    [[nodiscard]] Vec3 extents() const noexcept { return (max - min) * 0.5f; } // half-size
+    bool operator==(const Aabb&) const = default;
+};
+
 // ── Frustum planes (6 planes for culling) ────────────────────────────────────
+//
+// Planes are stored with inward-pointing, unit-length normals (see
+// Camera::extractFrustum, Gribb-Hartmann). A point p is inside a plane when
+// dot(n, p) + d >= 0; inside the frustum when that holds for all six. The
+// intersection queries below are conservative: they never reject a volume that
+// is actually visible (an AABB test may keep a few false positives near the
+// edges, which is the standard space/accuracy trade for broad-phase culling).
 struct Frustum {
     Vec4 planes[6]; // each plane: {nx, ny, nz, d} (normal + distance)
+
+    [[nodiscard]] bool containsPoint(const Vec3& p) const noexcept {
+        for (const auto& pl : planes) {
+            if (pl.x * p.x + pl.y * p.y + pl.z * p.z + pl.w < 0.f) return false;
+        }
+        return true;
+    }
+
+    // True unless the sphere lies entirely outside one plane.
+    [[nodiscard]] bool intersectsSphere(const Vec3& center, float radius) const noexcept {
+        for (const auto& pl : planes) {
+            const float dist = pl.x * center.x + pl.y * center.y + pl.z * center.z + pl.w;
+            if (dist < -radius) return false;
+        }
+        return true;
+    }
+
+    // Positive-vertex (p-vertex) test: for each plane pick the box corner
+    // furthest along the plane normal; if even that corner is outside, the whole
+    // box is outside that plane and therefore the frustum.
+    [[nodiscard]] bool intersectsAabb(const Vec3& min, const Vec3& max) const noexcept {
+        for (const auto& pl : planes) {
+            const float px = (pl.x >= 0.f) ? max.x : min.x;
+            const float py = (pl.y >= 0.f) ? max.y : min.y;
+            const float pz = (pl.z >= 0.f) ? max.z : min.z;
+            if (pl.x * px + pl.y * py + pl.z * pz + pl.w < 0.f) return false;
+        }
+        return true;
+    }
+    [[nodiscard]] bool intersectsAabb(const Aabb& box) const noexcept {
+        return intersectsAabb(box.min, box.max);
+    }
 };
 
 // ── Camera uniform data (uploaded directly to GPU) ────────────────────────────

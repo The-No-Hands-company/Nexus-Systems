@@ -127,13 +127,16 @@ void Camera::rebuildMatrices() noexcept
 
     if (m_mode == CameraMode::Perspective) {
         float tanHalf = std::tan((m_fovY * kPI / 180.f) * 0.5f);
-        // Reversed-Z perspective (better depth precision): maps far -> 0, near -> 1
-        // Right-handed, Vulkan NDC (Y flipped)
+        // Reversed-Z perspective (better depth precision): maps near -> 1, far -> 0.
+        // Right-handed (view -Z is forward), Vulkan clip (depth [0,1], Y flipped).
+        // Column-vector convention: clip = P * view (P * V), so the perspective
+        // divide row lives in row 3 (clip.w = -view.z) — matching the column-vector
+        // view matrix built in lookAt(), which puts translation in the last column.
         P.m[0][0] =  1.f / (m_aspect * tanHalf);
-        P.m[1][1] = -1.f / tanHalf;    // Vulkan Y flip
-        P.m[2][2] =  m_near / (m_near - m_far);   // reversed-Z
-        P.m[2][3] = -1.f;
-        P.m[3][2] =  (m_near * m_far) / (m_near - m_far);
+        P.m[1][1] = -1.f / tanHalf;                      // Vulkan Y flip
+        P.m[2][2] =  m_near / (m_far - m_near);          // reversed-Z: near->1, far->0
+        P.m[2][3] =  (m_near * m_far) / (m_far - m_near);
+        P.m[3][2] = -1.f;                                // clip.w = -view.z
     } else {
         P.m[0][0] =  2.f / m_orthoW;
         P.m[1][1] = -2.f / m_orthoH;  // Vulkan Y flip
@@ -146,7 +149,9 @@ void Camera::rebuildMatrices() noexcept
     P.m[0][3] += m_ubo.jitter.x;
     P.m[1][3] += m_ubo.jitter.y;
 
-    m_ubo.viewProj    = m_ubo.view * P;
+    // Column-vector convention (clip = M * v, as Mat4::operator*(Vec4) implements):
+    // the combined transform is P * V so that clip = P * (V * world).
+    m_ubo.viewProj    = P * m_ubo.view;
     m_ubo.invViewProj = m_ubo.viewProj.inverse();
 
     extractFrustum();
@@ -154,32 +159,38 @@ void Camera::rebuildMatrices() noexcept
 
 void Camera::extractFrustum() noexcept
 {
-    // Extract 6 frustum planes from the combined VP matrix (Gribb-Hartmann method)
+    // Gribb-Hartmann plane extraction for the column-vector combined matrix
+    // M = P * V (clip = M * world, row k of M giving clip component k). A world
+    // point is inside the clip volume when, for Vulkan NDC:
+    //     -w <= x <= w,  -w <= y <= w,  0 <= z <= w.
+    // Each inequality yields an inward plane built from a row combination of M.
+    // Note the NEAR plane is z >= 0 -> row2 alone (Vulkan [0,1] depth), NOT
+    // row3 + row2 (that is the OpenGL [-1,1] form). With reversed-Z the row2/
+    // row3-row2 pair maps to far/near geometrically, which is fine for culling.
     const auto& m = m_ubo.viewProj.m;
 
-    auto extractPlane = [&](int a, int b, float sign, Vec4& plane) {
-        plane.x = m[3][0] + sign * m[a][0];
-        plane.y = m[3][1] + sign * m[a][1];
-        plane.z = m[3][2] + sign * m[a][2];
-        plane.w = m[3][3] + sign * m[a][3];
-        float l = std::sqrt(plane.x*plane.x + plane.y*plane.y + plane.z*plane.z);
+    auto setPlane = [](Vec4& plane, float x, float y, float z, float w) noexcept {
+        const float l = std::sqrt(x*x + y*y + z*z);
         if (!isFiniteFloat(l) || l <= 1e-8f) {
             plane = {0.f, 0.f, 0.f, 0.f};
         } else {
-            plane.x /= l;
-            plane.y /= l;
-            plane.z /= l;
-            plane.w /= l;
+            const float inv = 1.f / l;
+            plane = {x*inv, y*inv, z*inv, w*inv};
         }
-        (void)b;
     };
 
-    extractPlane(0,  0,  1.f, m_frustum.planes[0]); // left
-    extractPlane(0,  0, -1.f, m_frustum.planes[1]); // right
-    extractPlane(1,  1,  1.f, m_frustum.planes[2]); // bottom
-    extractPlane(1,  1, -1.f, m_frustum.planes[3]); // top
-    extractPlane(2,  2,  1.f, m_frustum.planes[4]); // near
-    extractPlane(2,  2, -1.f, m_frustum.planes[5]); // far
+    // left:   x + w >= 0  -> row0 + row3
+    setPlane(m_frustum.planes[0], m[0][0]+m[3][0], m[0][1]+m[3][1], m[0][2]+m[3][2], m[0][3]+m[3][3]);
+    // right:  w - x >= 0  -> row3 - row0
+    setPlane(m_frustum.planes[1], m[3][0]-m[0][0], m[3][1]-m[0][1], m[3][2]-m[0][2], m[3][3]-m[0][3]);
+    // bottom: y + w >= 0  -> row1 + row3
+    setPlane(m_frustum.planes[2], m[1][0]+m[3][0], m[1][1]+m[3][1], m[1][2]+m[3][2], m[1][3]+m[3][3]);
+    // top:    w - y >= 0  -> row3 - row1
+    setPlane(m_frustum.planes[3], m[3][0]-m[1][0], m[3][1]-m[1][1], m[3][2]-m[1][2], m[3][3]-m[1][3]);
+    // near:   z >= 0      -> row2          (Vulkan clip)
+    setPlane(m_frustum.planes[4], m[2][0], m[2][1], m[2][2], m[2][3]);
+    // far:    w - z >= 0  -> row3 - row2
+    setPlane(m_frustum.planes[5], m[3][0]-m[2][0], m[3][1]-m[2][1], m[3][2]-m[2][2], m[3][3]-m[2][3]);
 }
 
 } // namespace nexus::render
