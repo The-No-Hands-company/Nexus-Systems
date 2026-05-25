@@ -263,6 +263,13 @@ namespace primitives {
                               uint32_t radialSegs = 16,
                               uint32_t ringSegs = 8);
 
+// Torus in the XZ plane (Y up). majorRadius is the distance from the center to the
+// tube center; minorRadius is the tube radius. Closed in both directions (no caps).
+[[nodiscard]] Mesh makeTorus(float majorRadius,
+                             float minorRadius,
+                             uint32_t majorSegs = 24,
+                             uint32_t minorSegs = 12);
+
 } // namespace primitives
 
 } // namespace nexus::geometry

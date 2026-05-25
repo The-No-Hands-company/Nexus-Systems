@@ -1738,5 +1738,56 @@ Mesh makeCapsule(float radius, float cylinderHeight,
     return mesh;
 }
 
+Mesh makeTorus(float majorRadius, float minorRadius, uint32_t majorSegs, uint32_t minorSegs)
+{
+    if (!isFiniteFloat(majorRadius) || !isFiniteFloat(minorRadius)) {
+        return {};
+    }
+
+    majorSegs = std::max(3u, majorSegs);
+    minorSegs = std::max(3u, minorSegs);
+
+    std::vector<nexus::render::Vec3> positions;
+    std::vector<Vec2> uvs;
+    positions.reserve(static_cast<size_t>(majorSegs) * minorSegs);
+    uvs.reserve(static_cast<size_t>(majorSegs) * minorSegs);
+
+    // u sweeps the major circle (XZ plane); v sweeps the tube cross-section.
+    for (uint32_t i = 0; i < majorSegs; ++i) {
+        const float u    = static_cast<float>(i) / static_cast<float>(majorSegs) * 2.f * kPi;
+        const float cosU = std::cos(u);
+        const float sinU = std::sin(u);
+        for (uint32_t j = 0; j < minorSegs; ++j) {
+            const float v     = static_cast<float>(j) / static_cast<float>(minorSegs) * 2.f * kPi;
+            const float ringR = majorRadius + minorRadius * std::cos(v);
+            positions.push_back({ ringR * cosU, minorRadius * std::sin(v), ringR * sinU });
+            uvs.push_back({ static_cast<float>(i) / static_cast<float>(majorSegs),
+                            static_cast<float>(j) / static_cast<float>(minorSegs) });
+        }
+    }
+
+    Mesh mesh;
+    mesh.attributes().setPositions(std::move(positions));
+    mesh.attributes().setUVs(std::move(uvs));
+
+    auto vert = [&](uint32_t i, uint32_t j) -> uint32_t {
+        return (i % majorSegs) * minorSegs + (j % minorSegs);
+    };
+
+    // Closed in both directions: majorSegs × minorSegs quads (no caps).
+    for (uint32_t i = 0; i < majorSegs; ++i) {
+        for (uint32_t j = 0; j < minorSegs; ++j) {
+            Face f{};
+            f.indices = { vert(i,     j),
+                          vert(i + 1, j),
+                          vert(i + 1, j + 1),
+                          vert(i,     j + 1) };
+            mesh.topology().addFace(std::move(f));
+        }
+    }
+
+    return mesh;
+}
+
 } // namespace primitives (second block)
 } // namespace nexus::geometry

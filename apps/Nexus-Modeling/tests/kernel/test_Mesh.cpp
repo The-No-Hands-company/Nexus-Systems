@@ -548,6 +548,36 @@ TEST(Mesh, PrimitiveConstructorsRejectNonFiniteDimensions)
     EXPECT_FALSE(makeCylinder(1.f, nan, 12u).isValid());
     EXPECT_FALSE(makeCone(nan, 2.f, 12u).isValid());
     EXPECT_FALSE(makeCapsule(1.f, inf, 12u, 6u).isValid());
+    EXPECT_FALSE(makeTorus(inf, 0.5f, 24u, 12u).isValid());
+    EXPECT_FALSE(makeTorus(2.f, nan, 24u, 12u).isValid());
+}
+
+TEST(Mesh, PrimitiveTorusHasExpectedTopologyAndBounds)
+{
+    const float R = 2.f, r = 0.5f;
+    const uint32_t majorSegs = 24u, minorSegs = 12u;
+    const Mesh torus = makeTorus(R, r, majorSegs, minorSegs);
+    EXPECT_TRUE(torus.isValid());
+    EXPECT_EQ(torus.attributes().vertexCount(), majorSegs * minorSegs); // 288
+    EXPECT_EQ(torus.topology().faceCount(), majorSegs * minorSegs);     // 288 quads
+    EXPECT_TRUE(torus.attributes().hasUVs());
+
+    // Every vertex lies on the torus surface: |y| <= r, and the XZ distance from the
+    // axis is within [R - r, R + r].
+    for (const auto& p : torus.attributes().positions()) {
+        EXPECT_LE(std::fabs(p.y), r + 1e-4f);
+        const float xz = std::sqrt(p.x * p.x + p.z * p.z);
+        EXPECT_GE(xz, R - r - 1e-4f);
+        EXPECT_LE(xz, R + r + 1e-4f);
+    }
+}
+
+TEST(Mesh, PrimitiveTorusClampsLowSegmentCounts)
+{
+    const Mesh torus = makeTorus(1.f, 0.25f, 1u, 1u); // clamped to 3x3
+    EXPECT_TRUE(torus.isValid());
+    EXPECT_EQ(torus.attributes().vertexCount(), 9u);
+    EXPECT_EQ(torus.topology().faceCount(), 9u);
 }
 
 TEST(Mesh, SkinningStreamsMustMatchVertexCount)
