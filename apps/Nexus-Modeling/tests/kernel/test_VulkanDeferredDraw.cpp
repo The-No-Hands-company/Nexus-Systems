@@ -359,3 +359,131 @@ void main() { outColor = ca + cb; }
     dev.destroyBuffer(readback);
     dev.destroyTexture(color);
 }
+
+TEST(VulkanDeferredDraw, MultiRenderTargetPipelineWritesAllAttachments)
+{
+    // MRT: a pipeline built with colorAttachmentFormats (>1) and a fragment shader
+    // writing distinct colors to two outputs renders into two attachments in one
+    // pass; both read back independently. This is the capability the deferred
+    // GBuffer geometry pipeline (albedo/normal/velocity) needs.
+    std::unique_ptr<RenderContext> ctx;
+    try {
+        ctx = makeContext();
+    } catch (const std::exception& e) {
+        GTEST_SKIP() << "Vulkan backend unavailable: " << e.what();
+    }
+    ASSERT_NE(ctx, nullptr);
+    IDevice& dev = ctx->device();
+
+    constexpr uint32_t W = 4, H = 4;
+
+    auto makeColorTarget = [&](const char* name) {
+        TextureDesc td{};
+        td.extent = {W, H, 1};
+        td.format = Format::R8G8B8A8_Unorm;
+        td.usage  = TextureUsage::ColorAttachment | TextureUsage::TransferSrc;
+        td.debugName = name;
+        return dev.createTexture(td);
+    };
+    const TextureHandle color0 = makeColorTarget("mrt.color0");
+    const TextureHandle color1 = makeColorTarget("mrt.color1");
+    ASSERT_TRUE(color0.valid() && color1.valid());
+
+    auto makeReadback = [&]() {
+        BufferDesc bd{};
+        bd.sizeBytes = uint64_t(W) * H * 4u;
+        bd.usage     = BufferUsage::TransferDst;
+        bd.memory    = MemoryHint::GpuToCpu;
+        return dev.createBuffer(bd);
+    };
+    const BufferHandle rb0 = makeReadback();
+    const BufferHandle rb1 = makeReadback();
+    ASSERT_TRUE(rb0.valid() && rb1.valid());
+
+    constexpr std::string_view kVert = R"GLSL(
+#version 460
+void main() {
+    const vec2 p[3] = vec2[3](vec2(-1.0,-1.0), vec2(3.0,-1.0), vec2(-1.0,3.0));
+    gl_Position = vec4(p[gl_VertexIndex], 0.0, 1.0);
+}
+)GLSL";
+    constexpr std::string_view kFrag = R"GLSL(
+#version 460
+layout(location = 0) out vec4 c0;
+layout(location = 1) out vec4 c1;
+void main() {
+    c0 = vec4(0.25, 0.0, 0.0, 1.0);
+    c1 = vec4(0.0, 0.5, 0.75, 1.0);
+}
+)GLSL";
+
+    ShaderDesc vsDesc{}; vsDesc.stage = ShaderStage::Vertex;   vsDesc.glslSource = kVert;
+    ShaderDesc fsDesc{}; fsDesc.stage = ShaderStage::Fragment; fsDesc.glslSource = kFrag;
+    const ShaderHandle vs = dev.createShader(vsDesc);
+    const ShaderHandle fs = dev.createShader(fsDesc);
+    ASSERT_TRUE(vs.valid() && fs.valid());
+
+    const std::array<Format, 2> colorFormats{ Format::R8G8B8A8_Unorm, Format::R8G8B8A8_Unorm };
+
+    GraphicsPipelineDesc gp{};
+    gp.vertexShader           = vs;
+    gp.fragmentShader         = fs;
+    gp.topology               = Topology::TriangleList;
+    gp.cullMode               = CullMode::None;
+    gp.depthTest              = false;
+    gp.depthWrite             = false;
+    gp.colorAttachmentFormats = colorFormats;  // MRT: two color attachments
+    gp.debugName              = "mrt.pipeline";
+    const PipelineHandle pso = dev.createGraphicsPipeline(gp);
+    ASSERT_TRUE(pso.valid());
+
+    const CmdBufHandle cbh = dev.allocateCommandBuffer(QueueType::Graphics);
+    ICommandBuffer* cmd = dev.getCommandBuffer(cbh);
+    ASSERT_NE(cmd, nullptr);
+
+    const std::array<TextureHandle, 2> targets{ color0, color1 };
+    std::array<ClearValue, 2> clears{};
+    clears[0].color = {0.0f, 0.0f, 0.0f, 1.0f};
+    clears[1].color = {0.0f, 0.0f, 0.0f, 1.0f};
+
+    cmd->begin();
+    cmd->beginRenderPass({}, targets, {}, clears, {{0, 0}, {W, H}});
+    cmd->bindPipeline(pso);
+    cmd->setViewport({ .x = 0.f, .y = 0.f, .width = float(W), .height = float(H), .minDepth = 0.f, .maxDepth = 1.f });
+    cmd->setScissor({ .offset = {0, 0}, .extent = {W, H} });
+    cmd->draw(3, 1, 0, 0);
+    cmd->endRenderPass();
+    cmd->textureBarrier({color0, TextureLayout::ColorAttachment, TextureLayout::TransferSrc});
+    cmd->textureBarrier({color1, TextureLayout::ColorAttachment, TextureLayout::TransferSrc});
+    cmd->copyTextureToBuffer(color0, rb0);
+    cmd->copyTextureToBuffer(color1, rb1);
+    cmd->end();
+
+    submitAndWait(dev, cbh);
+
+    std::array<uint8_t, W * H * 4> px0{};
+    std::array<uint8_t, W * H * 4> px1{};
+    dev.readbackBuffer(rb0, px0.data(), px0.size());
+    dev.readbackBuffer(rb1, px1.data(), px1.size());
+
+    // Attachment 0 = (0.25, 0, 0, 1) -> (64, 0, 0, 255).
+    EXPECT_NEAR(px0[0], 64, 4);
+    EXPECT_NEAR(px0[1], 0,  4);
+    EXPECT_NEAR(px0[2], 0,  4);
+    EXPECT_EQ(px0[3], 255);
+    // Attachment 1 = (0, 0.5, 0.75, 1) -> (0, 128, 191, 255). Proves the second
+    // attachment received its own distinct output, not a copy of the first.
+    EXPECT_NEAR(px1[0], 0,   4);
+    EXPECT_NEAR(px1[1], 128, 4);
+    EXPECT_NEAR(px1[2], 191, 4);
+    EXPECT_EQ(px1[3], 255);
+
+    dev.freeCommandBuffer(cbh);
+    dev.destroyPipeline(pso);
+    dev.destroyShader(vs);
+    dev.destroyShader(fs);
+    dev.destroyBuffer(rb0);
+    dev.destroyBuffer(rb1);
+    dev.destroyTexture(color0);
+    dev.destroyTexture(color1);
+}

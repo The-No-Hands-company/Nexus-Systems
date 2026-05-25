@@ -147,6 +147,11 @@ struct GraphicsPipelineDesc {
     uint8_t       colorWriteMask        = 0xF;    // RGBA
     // Attachment formats (Undefined → use swapchain defaults B8G8R8A8_SRGB / D32_Float)
     Format        colorAttachmentFormat = Format::Undefined;
+    // Multiple render targets (MRT): when non-empty, this takes precedence over the
+    // single colorAttachmentFormat and defines one color attachment per element, in
+    // order. The blend/write state above is applied uniformly to every attachment.
+    // Required to build the deferred GBuffer geometry pipeline (albedo/normal/velocity).
+    std::span<const Format> colorAttachmentFormats;
     Format        depthAttachmentFormat = Format::Undefined;
     // Descriptor set layouts. `descriptorBindings` is a convenience for a single
     // set 0; `descriptorSetLayouts` (array index = set number) takes precedence and

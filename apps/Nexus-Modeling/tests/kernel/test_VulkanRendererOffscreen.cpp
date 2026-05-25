@@ -325,3 +325,156 @@ void main() { outColor = vec4(1.0, 1.0, 0.0, 1.0); }
     dev.destroyBuffer(readback);
     dev.destroyTexture(color);
 }
+
+// End-to-end: a 3-MRT GBuffer geometry pipeline (albedo/normal/velocity formats),
+// built with the camera set-0 layout, runs through the real Renderer::render()
+// deferred geometry pass with the per-frame camera UBO bound. Previously
+// impossible — the pipeline API capped color attachments at one. The GBuffer
+// targets aren't host-readable (Sampled, not TransferSrc), so this verifies the
+// geometry draw executed without a validation error via frame stats.
+TEST(VulkanRendererOffscreen, GBufferMrtGeometryPipelineRunsThroughRenderer)
+{
+    std::unique_ptr<RenderContext> ctx;
+    try {
+        ctx = makeContext();
+    } catch (const std::exception& e) {
+        GTEST_SKIP() << "Vulkan backend unavailable: " << e.what();
+    }
+    ASSERT_NE(ctx, nullptr);
+    IDevice& dev = ctx->device();
+
+    // The lavapipe software rasterizer's shader JIT crashes executing this float16
+    // 3-MRT + depth GBuffer config through the deferred path (the standalone RGBA8
+    // MRT path in VulkanDeferredDraw.MultiRenderTargetPipelineWritesAllAttachments
+    // proves the pipeline capability itself). Run only on real hardware.
+    if (dev.caps().softwareDevice) {
+        GTEST_SKIP() << "GBuffer float16 MRT through the deferred path needs real hardware "
+                        "(software rasterizer shader JIT crashes).";
+    }
+
+    constexpr uint32_t W = 32, H = 32;
+
+    SwapchainDesc sd{};
+    sd.extent = {W, H};
+    auto sc = ctx->createSwapchain(sd);
+    ASSERT_NE(sc, nullptr);
+
+    TextureDesc td{};
+    td.extent = {W, H, 1};
+    td.format = Format::R8G8B8A8_Unorm;
+    td.usage  = TextureUsage::ColorAttachment | TextureUsage::TransferSrc;
+    const TextureHandle color = dev.createTexture(td);
+    ASSERT_TRUE(color.valid());
+
+    // Vertex shader transforms a triangle by the camera UBO (set 0); fragment writes
+    // the three GBuffer channels. Matches the GBuffer attachment formats:
+    // albedo/normal = R16G16B16A16_Float, velocity = R16G16_Float, depth = D32_Float.
+    constexpr std::string_view kVert = R"GLSL(
+#version 460
+layout(set = 0, binding = 0, std140) uniform Camera {
+    mat4 view;
+    mat4 projection;
+    mat4 viewProj;
+} cam;
+void main() {
+    const vec3 p[3] = vec3[3](vec3(-1.0,-1.0,0.0), vec3(1.0,-1.0,0.0), vec3(0.0,1.0,0.0));
+    gl_Position = vec4(p[gl_VertexIndex], 1.0) * cam.viewProj;
+}
+)GLSL";
+    constexpr std::string_view kFrag = R"GLSL(
+#version 460
+layout(location = 0) out vec4 albedo;
+layout(location = 1) out vec4 normal;
+layout(location = 2) out vec4 velocity;
+void main() {
+    albedo   = vec4(1.0, 0.5, 0.25, 1.0);
+    normal   = vec4(0.0, 0.0, 1.0, 0.0);
+    velocity = vec4(0.0, 0.0, 0.0, 0.0);
+}
+)GLSL";
+
+    ShaderDesc vsDesc{}; vsDesc.stage = ShaderStage::Vertex;   vsDesc.glslSource = kVert;
+    ShaderDesc fsDesc{}; fsDesc.stage = ShaderStage::Fragment; fsDesc.glslSource = kFrag;
+    const ShaderHandle vs = dev.createShader(vsDesc);
+    const ShaderHandle fs = dev.createShader(fsDesc);
+    ASSERT_TRUE(vs.valid() && fs.valid());
+
+    const std::array<Format, 3> gbufferFormats{
+        Format::R16G16B16A16_Float, // albedo/material
+        Format::R16G16B16A16_Float, // normal
+        Format::R16G16_Float        // velocity
+    };
+    const std::array<DescriptorSetLayoutDesc, 1> sets{{ { Renderer::geometryCameraSetLayout() } }};
+
+    GraphicsPipelineDesc gp{};
+    gp.vertexShader           = vs;
+    gp.fragmentShader         = fs;
+    gp.topology               = Topology::TriangleList;
+    gp.cullMode               = CullMode::None;
+    gp.depthTest              = true;
+    gp.depthWrite             = true;  // reversed-Z GreaterOrEqual default
+    gp.colorAttachmentFormats = gbufferFormats;       // MRT — the new capability
+    gp.depthAttachmentFormat  = Format::D32_Float;
+    gp.descriptorSetLayouts   = sets;
+    gp.debugName              = "gbuffer.geometry.mrt";
+    const PipelineHandle geomPipe = dev.createGraphicsPipeline(gp);
+    ASSERT_TRUE(geomPipe.valid());
+
+    // A renderable node: indices {0,1,2}. The vertex shader uses gl_VertexIndex, so
+    // the vertex buffer content is unused, but a valid handle is required.
+    BufferDesc vbd{};
+    vbd.sizeBytes = 3 * sizeof(float) * 3;
+    vbd.usage     = BufferUsage::VertexBuffer | BufferUsage::TransferDst;
+    vbd.memory    = MemoryHint::GpuOnly;
+    const BufferHandle vbuf = dev.createBuffer(vbd);
+    ASSERT_TRUE(vbuf.valid());
+
+    const uint32_t indices[3] = {0u, 1u, 2u};
+    BufferDesc ibd{};
+    ibd.sizeBytes = sizeof(indices);
+    ibd.usage     = BufferUsage::IndexBuffer | BufferUsage::TransferDst;
+    ibd.memory    = MemoryHint::GpuOnly;
+    const BufferHandle ibuf = dev.createBuffer(ibd);
+    ASSERT_TRUE(ibuf.valid());
+    dev.uploadBuffer(ibuf, indices, sizeof(indices));
+
+    Renderer renderer(*ctx, *sc);
+    OffscreenScheduler sched(dev, color, {W, H});
+    renderer.setFrameScheduler(&sched);
+    renderer.setFallbackGeometryPipeline(geomPipe);
+
+    RendererSettings settings{};
+    settings.enableShadows = false; // no shadow pipeline bound; keep to the geometry pass
+    renderer.applySettings(settings);
+
+    SceneGraph scene;
+    nexus::render::Node* node = scene.createNode("mrt-geo");
+    ASSERT_NE(node, nullptr);
+    node->mesh.vertexBuffer = vbuf;
+    node->mesh.indexBuffer  = ibuf;
+    node->mesh.indexCount   = 3;
+
+    Camera cam;
+    cam.setPerspective(60.f, 1.f, 0.1f, 1000.f);
+    cam.lookAt({0.f, 0.f, 5.f}, {0.f, 0.f, 0.f});
+
+    renderer.beginFrame();
+    renderer.render(cam, scene);
+    renderer.endFrame();
+
+    // The node is in the frustum and the MRT geometry pipeline drew it through the
+    // real deferred geometry pass with the camera UBO bound at set 0.
+    const auto& stats = renderer.lastFrameStats();
+    EXPECT_EQ(stats.visibleNodes, 1u);
+    EXPECT_GE(stats.drawCalls, 1u);
+    EXPECT_GE(stats.triangles, 1u);
+
+    renderer.setFrameScheduler(nullptr);
+    dev.freeCommandBuffer(sched.commandBuffer());
+    dev.destroyBuffer(vbuf);
+    dev.destroyBuffer(ibuf);
+    dev.destroyPipeline(geomPipe);
+    dev.destroyShader(vs);
+    dev.destroyShader(fs);
+    dev.destroyTexture(color);
+}

@@ -126,7 +126,11 @@ uint64_t hashGraphicsPipelineDesc(const GraphicsPipelineDesc& desc)
 	hash ^= fnv1a_hash(&desc.dstAlphaBlend, sizeof(desc.dstAlphaBlend));
 	hash ^= fnv1a_hash(&desc.alphaBlendOp, sizeof(desc.alphaBlendOp));
 	hash ^= fnv1a_hash(&desc.lineWidth, sizeof(desc.lineWidth));
-	hash ^= fnv1a_hash(&desc.colorAttachmentFormat, sizeof(desc.colorAttachmentFormat));
+	if (!desc.colorAttachmentFormats.empty()) {
+		hash ^= fnv1a_hash(desc.colorAttachmentFormats.data(), desc.colorAttachmentFormats.size_bytes());
+	} else {
+		hash ^= fnv1a_hash(&desc.colorAttachmentFormat, sizeof(desc.colorAttachmentFormat));
+	}
 	hash ^= fnv1a_hash(&desc.depthAttachmentFormat, sizeof(desc.depthAttachmentFormat));
 	return hash;
 }
@@ -278,20 +282,35 @@ PipelineHandle vkCreateGraphicsPipeline(VulkanDevice& dev, const GraphicsPipelin
 		cbAttach.alphaBlendOp = vkutil::toVkBlendOp(desc.alphaBlendOp);
 	}
 
+	// Resolve color attachment formats: the MRT span (colorAttachmentFormats) takes
+	// precedence over the single colorAttachmentFormat. The blend state above is
+	// replicated to every attachment.
+	std::vector<VkFormat> colorFormats;
+	if (!desc.colorAttachmentFormats.empty()) {
+		colorFormats.reserve(desc.colorAttachmentFormats.size());
+		for (const Format f : desc.colorAttachmentFormats) {
+			colorFormats.push_back(vkutil::toVkFormat(f));
+		}
+	} else if (desc.colorAttachmentFormat != Format::Undefined) {
+		colorFormats.push_back(vkutil::toVkFormat(desc.colorAttachmentFormat));
+	}
+	const uint32_t colorCount = static_cast<uint32_t>(colorFormats.size());
+
+	// One blend attachment per color target; for depth-only pipelines keep a single
+	// (unused) blend attachment, matching prior behavior.
+	const uint32_t blendCount = colorCount > 0 ? colorCount : 1u;
+	std::vector<VkPipelineColorBlendAttachmentState> blendAttachments(blendCount, cbAttach);
+
 	VkPipelineColorBlendStateCreateInfo cb{VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO};
 	cb.logicOpEnable = VK_FALSE;
-	cb.attachmentCount = 1;
-	cb.pAttachments = &cbAttach;
+	cb.attachmentCount = blendCount;
+	cb.pAttachments = blendAttachments.data();
 
 	const VkDynamicState dynStates[] = {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR};
 	VkPipelineDynamicStateCreateInfo dyn{VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO};
 	dyn.dynamicStateCount = static_cast<uint32_t>(std::size(dynStates));
 	dyn.pDynamicStates = dynStates;
 
-	const bool hasColorAttachment = desc.colorAttachmentFormat != Format::Undefined;
-	VkFormat colorFormat = hasColorAttachment
-						   ? vkutil::toVkFormat(desc.colorAttachmentFormat)
-						   : VK_FORMAT_UNDEFINED;
 	VkFormat depthFormat = VK_FORMAT_UNDEFINED;
 	if (desc.depthTest || desc.depthWrite) {
 		depthFormat = desc.depthAttachmentFormat != Format::Undefined
@@ -300,8 +319,8 @@ PipelineHandle vkCreateGraphicsPipeline(VulkanDevice& dev, const GraphicsPipelin
 	}
 
 	VkPipelineRenderingCreateInfo rendering{VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO};
-	rendering.colorAttachmentCount = hasColorAttachment ? 1u : 0u;
-	rendering.pColorAttachmentFormats = hasColorAttachment ? &colorFormat : nullptr;
+	rendering.colorAttachmentCount = colorCount;
+	rendering.pColorAttachmentFormats = colorCount > 0 ? colorFormats.data() : nullptr;
 	rendering.depthAttachmentFormat = depthFormat;
 	rendering.stencilAttachmentFormat = VK_FORMAT_UNDEFINED;
 
