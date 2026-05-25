@@ -67,6 +67,7 @@ public:
 
     // ── Ray tracing ───────────────────────────────────────────────────────────
     void traceRays(uint32_t width, uint32_t height, uint32_t depth) override;
+    void copyTextureToBuffer(TextureHandle src, BufferHandle dst) override;
 
     // ── Copies ────────────────────────────────────────────────────────────────
     void copyBuffer (BufferHandle src, BufferHandle  dst, uint64_t size, uint64_t srcOff, uint64_t dstOff) override;

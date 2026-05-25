@@ -86,6 +86,23 @@ The same descriptor-set-layout wiring now covers all pipeline types, not just RT
   valid + both descriptor sets layout-compatible). The renderer binds from the same tables,
   so layout and runtime bindings cannot drift.
 
+## Deferred-draw integration harness
+
+`tests/kernel/test_VulkanDeferredDraw.cpp` exercises the deferred path end-to-end on a
+real Vulkan device (passes on the software rasterizer, so it runs in CI):
+- `OffscreenClearAndReadback` — render to an offscreen color target, copy it to a buffer
+  via the new `ICommandBuffer::copyTextureToBuffer`, read back, and verify the cleared
+  pixels. Establishes the render-target + readback verification mechanism.
+- `DescriptorBoundDrawReadsUniformBuffer` — a fullscreen draw whose fragment shader reads a
+  UBO bound through a descriptor set; readback confirms the bound value reached the shader.
+- `DescriptorBoundDrawReadsTwoSets` — the full composite shape: a fragment shader reads a
+  UBO from set 0 and a UBO from set 1 and writes their sum; readback confirms multi-set
+  descriptor binding is valid AT DRAW TIME.
+
+Note: fullscreen-triangle passes set `cullMode = CullMode::None` — the standard
+fullscreen triangle is back-facing under Vulkan's Y-down clip space and would otherwise be
+culled by the default back-face culling.
+
 ### Software-rasterizer gate (lavapipe/llvmpipe)
 
 CPU software rasterizers **advertise** `VK_KHR_ray_tracing_pipeline` but their

@@ -302,6 +302,22 @@ void VulkanCommandBuffer::copyTexture(TextureHandle src, TextureHandle dst)
                    1, &region);
 }
 
+void VulkanCommandBuffer::copyTextureToBuffer(TextureHandle src, BufferHandle dst)
+{
+    if (!src.valid() || !dst.valid()) return;
+    const auto& s = m_pool->textures[src.id];
+
+    VkBufferImageCopy region{};
+    region.bufferOffset      = 0;
+    region.bufferRowLength   = 0;   // tightly packed
+    region.bufferImageHeight = 0;
+    region.imageSubresource  = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1 };
+    region.imageOffset       = { 0, 0, 0 };
+    region.imageExtent       = s.extent;
+    vkCmdCopyImageToBuffer(m_cmd, s.image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                           m_pool->buffers[dst.id].handle, 1, &region);
+}
+
 void VulkanCommandBuffer::blitTexture(TextureHandle src, TextureHandle dst,
                                        const Rect2D& sr, const Rect2D& dr)
 {

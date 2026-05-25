@@ -130,6 +130,10 @@ public:
     // ── Copies ────────────────────────────────────────────────────────────
     virtual void copyBuffer (BufferHandle  src, BufferHandle  dst, uint64_t sizeBytes, uint64_t srcOffset = 0, uint64_t dstOffset = 0) = 0;
     virtual void copyTexture(TextureHandle src, TextureHandle dst) = 0;
+    // Copy a full color texture into a buffer for readback. The image must be in
+    // TransferSrc layout and the buffer must have TransferDst usage. Tightly packed.
+    // Default no-op for backends that don't support readback copies.
+    virtual void copyTextureToBuffer(TextureHandle src, BufferHandle dst) { (void)src; (void)dst; }
     virtual void blitTexture(TextureHandle src, TextureHandle dst, const Rect2D& srcRect, const Rect2D& dstRect) = 0;
 
     // ── Barriers ──────────────────────────────────────────────────────────
