@@ -191,7 +191,8 @@ BodyId RigidBodySolver::addBody(const SimBodyDesc& desc) {
         !isFiniteInertia(desc.inertia) ||
         !isFiniteQuat(desc.orientation) || !isFiniteVec3(desc.angularVelocity) ||
         !isFiniteFloat(desc.linearDamping)  || desc.linearDamping  < 0.0f ||
-        !isFiniteFloat(desc.angularDamping) || desc.angularDamping < 0.0f) {
+        !isFiniteFloat(desc.angularDamping) || desc.angularDamping < 0.0f ||
+        !isFiniteFloat(desc.collisionRadius) || desc.collisionRadius < 0.0f) {
         return kInvalidBodyId;
     }
 
@@ -207,7 +208,8 @@ BodyId RigidBodySolver::addBody(const SimBodyDesc& desc) {
         desc.angularVelocity,
         /*torque=*/{0.0f, 0.0f, 0.0f},
         desc.linearDamping,
-        desc.angularDamping
+        desc.angularDamping,
+        desc.collisionRadius
     });
     return id;
 }
@@ -266,6 +268,53 @@ void RigidBodySolver::setGravity(SimVec3 gravity) noexcept {
 
 SimVec3 RigidBodySolver::gravity() const noexcept {
     return m_gravity;
+}
+
+// ── Ground-plane collision ──────────────────────────────────────────────────────
+
+void RigidBodySolver::setGroundPlane(SimVec3 normal, float offset, float restitution) noexcept {
+    if (!isFiniteVec3(normal) || !isFiniteFloat(offset) || !isFiniteFloat(restitution)) {
+        return; // reject non-finite; leave any previous plane unchanged
+    }
+    const float lenSq = normal.x*normal.x + normal.y*normal.y + normal.z*normal.z;
+    if (!isFiniteFloat(lenSq) || lenSq <= 0.0f) {
+        return; // degenerate (zero-length) normal
+    }
+    const float invLen = 1.0f / std::sqrt(lenSq);
+    m_groundNormal = { normal.x * invLen, normal.y * invLen, normal.z * invLen };
+    m_groundOffset = offset;
+    m_groundRestitution = restitution < 0.0f ? 0.0f : (restitution > 1.0f ? 1.0f : restitution);
+    m_groundEnabled = true;
+}
+
+void RigidBodySolver::clearGroundPlane() noexcept {
+    m_groundEnabled = false;
+}
+
+bool RigidBodySolver::hasGroundPlane() const noexcept {
+    return m_groundEnabled;
+}
+
+void RigidBodySolver::resolveGroundContact(Body& b) const noexcept {
+    if (!m_groundEnabled || b.collisionRadius <= 0.0f) {
+        return;
+    }
+    const SimVec3& n = m_groundNormal;
+    // Signed distance of the sphere center from the plane (positive on the allowed side).
+    const float dist = (n.x*b.position.x + n.y*b.position.y + n.z*b.position.z) - m_groundOffset;
+    const float penetration = b.collisionRadius - dist;
+    if (penetration <= 0.0f) {
+        return; // sphere clear of the plane
+    }
+    // Positional correction: lift the center along the normal until the sphere is
+    // tangent to the plane.
+    b.position += n * penetration;
+    // Reflect only the inbound normal velocity component with restitution; never add
+    // energy when the body is already separating (vn >= 0).
+    const float vn = n.x*b.velocity.x + n.y*b.velocity.y + n.z*b.velocity.z;
+    if (vn < 0.0f) {
+        b.velocity += n * (-(1.0f + m_groundRestitution) * vn);
+    }
 }
 
 // ── Simulation step ───────────────────────────────────────────────────────────
@@ -480,6 +529,10 @@ StepReport RigidBodySolver::step(double dt) {
         b.orientation = integrateOrientation(b.orientation, b.angularVelocity, fdt);
         b.angularVelocity = angularVelocityFromMomentum(b.orientation, worldMomentum, b.inertia);
         b.angularVelocity = b.angularVelocity * dampingFactor(b.angularDamping, fdt);
+
+        // Resolve collision against the optional static ground plane (no-op when
+        // disabled or the body has no collider).
+        resolveGroundContact(b);
 
         // Clear per-step accumulated force and torque.
         b.force  = {0.0f, 0.0f, 0.0f};

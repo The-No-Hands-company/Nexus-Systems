@@ -46,6 +46,7 @@ struct SimBodyDesc {
     SimVec3 angularVelocity = {0.0f, 0.0f, 0.0f}; ///< rad/s about each axis.
     float   linearDamping  = 0.0f;        ///< per-second linear velocity decay (>= 0, finite). 0 = none.
     float   angularDamping = 0.0f;        ///< per-second angular velocity decay (>= 0, finite). 0 = none.
+    float   collisionRadius = 0.0f;       ///< sphere collider radius (>= 0, finite). 0 = no collision.
 };
 
 /// Cacheable per-body state for snapshot/restore.
@@ -135,6 +136,23 @@ public:
     void setGravity(SimVec3 gravity) noexcept;
     [[nodiscard]] SimVec3 gravity() const noexcept;
 
+    // ── Ground-plane collision ─────────────────────────────────────────────────
+
+    /// Enable a static collision half-space. After each step, dynamic bodies with
+    /// collisionRadius > 0 whose sphere penetrates the plane are pushed out along
+    /// the normal and bounce: the inbound normal velocity is reflected scaled by
+    /// `restitution` (0 = inelastic, 1 = perfectly elastic). The plane is
+    /// { p : dot(normal, p) = offset }, with `normal` pointing toward the allowed
+    /// (open) side; it is normalized internally. Rejects non-finite inputs or a
+    /// degenerate (zero-length) normal, leaving any previous plane unchanged.
+    /// Disabled by default — with no plane set, trajectories are unchanged.
+    void setGroundPlane(SimVec3 normal, float offset, float restitution) noexcept;
+
+    /// Disable ground-plane collision.
+    void clearGroundPlane() noexcept;
+
+    [[nodiscard]] bool hasGroundPlane() const noexcept;
+
     // ── Simulation step ──────────────────────────────────────────────────────
 
     /// Advance the simulation by dt seconds (must be finite and > 0).
@@ -188,6 +206,7 @@ private:
         SimVec3 torque;       ///< accumulated, cleared after each step
         float   linearDamping;  ///< per-second linear velocity decay (>= 0)
         float   angularDamping; ///< per-second angular velocity decay (>= 0)
+        float   collisionRadius; ///< sphere collider radius (>= 0); 0 = no collision
     };
 
     std::unordered_map<BodyId, Body> m_bodies;
@@ -195,8 +214,17 @@ private:
     double            m_time    = 0.0;
     SimVec3           m_gravity = {0.0f, -9.81f, 0.0f};
 
+    bool    m_groundEnabled     = false;
+    SimVec3 m_groundNormal      = {0.0f, 1.0f, 0.0f};
+    float   m_groundOffset      = 0.0f;
+    float   m_groundRestitution = 0.0f;
+
     Body*       findBody(BodyId id)       noexcept;
     const Body* findBody(BodyId id) const noexcept;
+
+    /// Sphere-vs-plane positional correction + restitution. No-op when the ground
+    /// is disabled, the body has no collider, or the sphere is clear of the plane.
+    void resolveGroundContact(Body& b) const noexcept;
 };
 
 } // namespace nexus

@@ -1062,3 +1062,103 @@ TEST(SimulationCore, AngularMomentumMagnitudeConservedUnderZeroTorque) {
     const float l1 = momentumMag();
     EXPECT_NEAR(l1, l0, l0 * 0.02f); // |L| conserved (world rotation preserves its norm)
 }
+
+// ── Ground-plane collision ──────────────────────────────────────────────────────
+
+TEST(SimulationCore, GroundPlaneDisabledByDefault) {
+    RigidBodySolver s;
+    EXPECT_FALSE(s.hasGroundPlane());
+}
+
+TEST(SimulationCore, SetAndClearGroundPlaneToggleState) {
+    RigidBodySolver s;
+    s.setGroundPlane({0.0f, 1.0f, 0.0f}, 0.0f, 0.5f);
+    EXPECT_TRUE(s.hasGroundPlane());
+    s.clearGroundPlane();
+    EXPECT_FALSE(s.hasGroundPlane());
+}
+
+TEST(SimulationCore, SetGroundPlaneRejectsNonFiniteAndDegenerateNormal) {
+    const float nan = std::numeric_limits<float>::quiet_NaN();
+    const float inf = std::numeric_limits<float>::infinity();
+    RigidBodySolver s;
+    s.setGroundPlane({nan, 1.0f, 0.0f}, 0.0f, 0.5f);   // non-finite normal
+    EXPECT_FALSE(s.hasGroundPlane());
+    s.setGroundPlane({0.0f, 1.0f, 0.0f}, inf, 0.5f);   // non-finite offset
+    EXPECT_FALSE(s.hasGroundPlane());
+    s.setGroundPlane({0.0f, 0.0f, 0.0f}, 0.0f, 0.5f);  // degenerate (zero) normal
+    EXPECT_FALSE(s.hasGroundPlane());
+}
+
+TEST(SimulationCore, WithoutGroundPlaneBodyFallsThrough) {
+    RigidBodySolver s;
+    const BodyId id = s.addBody({.mass = 1.0f, .position = {0.0f, 1.0f, 0.0f}, .collisionRadius = 0.5f});
+    for (int i = 0; i < 100; ++i) (void)s.step(0.01);
+    SimVec3 pos, vel;
+    ASSERT_TRUE(s.getBodyState(id, pos, vel));
+    EXPECT_LT(pos.y, 0.0f);   // no collision opted in -> passes through y=0
+}
+
+TEST(SimulationCore, BodyRestsOnGroundInelastic) {
+    RigidBodySolver s;
+    // Non-unit normal exercises internal normalization; plane y = 0.
+    s.setGroundPlane({0.0f, 5.0f, 0.0f}, 0.0f, 0.0f);
+    const BodyId id = s.addBody({.mass = 1.0f, .position = {0.0f, 3.0f, 0.0f}, .collisionRadius = 0.5f});
+    for (int i = 0; i < 400; ++i) (void)s.step(0.01);
+    SimVec3 pos, vel;
+    ASSERT_TRUE(s.getBodyState(id, pos, vel));
+    EXPECT_NEAR(pos.y, 0.5f, 1e-3f);   // rests tangent to the plane, never penetrates
+    EXPECT_NEAR(vel.y, 0.0f, 1e-3f);   // inelastic -> normal velocity removed
+}
+
+TEST(SimulationCore, ElasticBounceReversesNormalVelocity) {
+    RigidBodySolver s;
+    s.setGravity({0.0f, 0.0f, 0.0f});                  // isolate the bounce
+    s.setGroundPlane({0.0f, 1.0f, 0.0f}, 0.0f, 1.0f);  // perfectly elastic
+    const BodyId id = s.addBody({.mass = 1.0f,
+                                 .position = {0.0f, 0.5f, 0.0f},   // resting on the surface
+                                 .velocity = {0.0f, -2.0f, 0.0f},  // moving into the plane
+                                 .collisionRadius = 0.5f});
+    (void)s.step(0.01);
+    SimVec3 pos, vel;
+    ASSERT_TRUE(s.getBodyState(id, pos, vel));
+    EXPECT_NEAR(vel.y, 2.0f, 1e-4f);   // inbound normal velocity reflected
+    EXPECT_NEAR(pos.y, 0.5f, 1e-4f);   // pushed back tangent to the plane
+}
+
+TEST(SimulationCore, PenetratingBodyIsPushedOut) {
+    RigidBodySolver s;
+    s.setGravity({0.0f, 0.0f, 0.0f});
+    s.setGroundPlane({0.0f, 1.0f, 0.0f}, 0.0f, 0.0f);
+    // Center exactly on the plane -> fully penetrating by the radius.
+    const BodyId id = s.addBody({.mass = 1.0f, .position = {0.0f, 0.0f, 0.0f}, .collisionRadius = 0.5f});
+    (void)s.step(0.01);
+    SimVec3 pos, vel;
+    ASSERT_TRUE(s.getBodyState(id, pos, vel));
+    EXPECT_NEAR(pos.y, 0.5f, 1e-4f);
+}
+
+TEST(SimulationCore, RadiusZeroBodyIgnoresGround) {
+    RigidBodySolver s;
+    s.setGroundPlane({0.0f, 1.0f, 0.0f}, 0.0f, 0.5f);
+    const BodyId id = s.addBody({.mass = 1.0f, .position = {0.0f, 1.0f, 0.0f}}); // no collider
+    for (int i = 0; i < 100; ++i) (void)s.step(0.01);
+    SimVec3 pos, vel;
+    ASSERT_TRUE(s.getBodyState(id, pos, vel));
+    EXPECT_LT(pos.y, 0.0f);   // radius 0 -> no collision
+}
+
+TEST(SimulationCore, NonAxisAlignedPlaneBounces) {
+    RigidBodySolver s;
+    s.setGravity({0.0f, 0.0f, 0.0f});
+    s.setGroundPlane({1.0f, 0.0f, 0.0f}, 0.0f, 1.0f);  // plane x = 0
+    const BodyId id = s.addBody({.mass = 1.0f,
+                                 .position = {0.5f, 0.0f, 0.0f},   // resting on the surface
+                                 .velocity = {-3.0f, 0.0f, 0.0f},  // moving into the plane
+                                 .collisionRadius = 0.5f});
+    (void)s.step(0.01);
+    SimVec3 pos, vel;
+    ASSERT_TRUE(s.getBodyState(id, pos, vel));
+    EXPECT_NEAR(vel.x, 3.0f, 1e-4f);   // reflected along the plane normal
+    EXPECT_NEAR(pos.x, 0.5f, 1e-4f);
+}
