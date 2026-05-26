@@ -1353,24 +1353,44 @@ TEST(SimulationCore, SetFrictionRejectsNonFiniteAndClampsNegative) {
     EXPECT_FLOAT_EQ(s.friction(), 0.0f);
 }
 
-TEST(SimulationCore, GroundFrictionDeceleratesSlidingBody) {
-    // A sphere sliding along the floor under gravity loses tangential speed with
-    // friction enabled, but keeps sliding when frictionless.
-    auto finalVx = [](float friction) {
-        RigidBodySolver s;
-        s.setGravity({0.0f, -9.81f, 0.0f});
-        s.setGroundPlane({0.0f, 1.0f, 0.0f}, 0.0f, 0.0f);
-        s.setFriction(friction);
-        const BodyId id = s.addBody({.mass = 1.0f, .position = {0.0f, 0.5f, 0.0f},
-                                     .velocity = {2.0f, 0.0f, 0.0f}, .collisionRadius = 0.5f});
-        for (int i = 0; i < 120; ++i) (void)s.step(0.01);
-        SimVec3 p, v;
-        s.getBodyState(id, p, v);
-        return v.x;
-    };
-    EXPECT_NEAR(finalVx(0.0f), 2.0f, 1e-3f);  // frictionless: keeps sliding
-    EXPECT_LT(finalVx(0.5f), 0.2f);           // friction: decelerated to ~rest
-    EXPECT_GE(finalVx(0.5f), -0.05f);         // doesn't reverse past zero
+TEST(SimulationCore, FrictionlessSlidingBodyKeepsGlidingWithoutSpin) {
+    // Frictionless: a sliding sphere keeps its tangential speed and never spins.
+    RigidBodySolver s;
+    s.setGravity({0.0f, -9.81f, 0.0f});
+    s.setGroundPlane({0.0f, 1.0f, 0.0f}, 0.0f, 0.0f);
+    s.setFriction(0.0f);
+    const BodyId id = s.addBody({.mass = 1.0f, .position = {0.0f, 0.5f, 0.0f},
+                                 .velocity = {2.0f, 0.0f, 0.0f}, .collisionRadius = 0.5f});
+    for (int i = 0; i < 120; ++i) (void)s.step(0.01);
+    SimVec3 p, v, w; SimQuat q;
+    ASSERT_TRUE(s.getBodyState(id, p, v));
+    ASSERT_TRUE(s.getBodyAngularState(id, q, w));
+    EXPECT_NEAR(v.x, 2.0f, 1e-3f);   // tangential speed preserved
+    EXPECT_NEAR(w.z, 0.0f, 1e-4f);   // no spin without friction
+}
+
+TEST(SimulationCore, GroundFrictionSpinsSlidingBodyUpToRolling) {
+    // With friction the tangential impulse both slows the slide and spins the body
+    // up until it rolls without slipping. For inertia {1,1,1}, m=1, r=0.5 the
+    // rolling speed is v0 * m r^2 / (I + m r^2) = 2 * 0.25 / 1.25 = 0.4, and the
+    // rolling condition is wz = -vx / r.
+    RigidBodySolver s;
+    s.setGravity({0.0f, -9.81f, 0.0f});
+    s.setGroundPlane({0.0f, 1.0f, 0.0f}, 0.0f, 0.0f);
+    s.setFriction(0.5f);
+    const float r = 0.5f;
+    const BodyId id = s.addBody({.mass = 1.0f, .position = {0.0f, 0.5f, 0.0f},
+                                 .velocity = {2.0f, 0.0f, 0.0f},
+                                 .inertia = {1.0f, 1.0f, 1.0f},
+                                 .collisionRadius = r});
+    for (int i = 0; i < 600; ++i) (void)s.step(0.01);
+    SimVec3 p, v, w; SimQuat q;
+    ASSERT_TRUE(s.getBodyState(id, p, v));
+    ASSERT_TRUE(s.getBodyAngularState(id, q, w));
+    EXPECT_NEAR(v.x, 0.4f, 0.05f);          // decelerated from 2, but rolling — not stopped
+    EXPECT_GT(v.x, 0.0f);
+    EXPECT_NEAR(w.z, -v.x / r, 0.05f);      // rolling without slipping (contact velocity ~ 0)
+    EXPECT_LT(w.z, -0.1f);                  // genuinely spun up
 }
 
 TEST(SimulationCore, BodyBodyFrictionOpposesTangentialSlide) {
@@ -1393,4 +1413,24 @@ TEST(SimulationCore, BodyBodyFrictionOpposesTangentialSlide) {
     EXPECT_NEAR(tangentialVy(0.0f), 3.0f, 0.05f);   // frictionless: tangential speed preserved
     EXPECT_LT(tangentialVy(0.5f), 2.7f);            // friction removes tangential speed
     EXPECT_LT(tangentialVy(0.5f), tangentialVy(0.0f));
+}
+
+TEST(SimulationCore, BodyBodyFrictionImpartsSpin) {
+    // B presses into a static A along X while sliding along +Y. The tangential
+    // friction impulse acts at B's contact point, so it must also spin B (angular
+    // coupling), not just slow its slide.
+    RigidBodySolver s;
+    s.setGravity({0.0f, 0.0f, 0.0f});
+    s.setBodyCollision(0.0f);
+    s.setFriction(0.5f);
+    (void)s.addBody({.mass = 0.0f, .position = {0.0f, 0.0f, 0.0f}, .collisionRadius = 0.5f}); // static
+    const BodyId b = s.addBody({.mass = 1.0f, .position = {0.8f, 0.0f, 0.0f},
+                                .velocity = {-1.0f, 3.0f, 0.0f},
+                                .inertia = {1.0f, 1.0f, 1.0f}, .collisionRadius = 0.5f});
+    SimVec3 p, v, w; SimQuat q;
+    ASSERT_TRUE(s.getBodyAngularState(b, q, w));
+    EXPECT_NEAR(w.z, 0.0f, 1e-6f);          // starts unspun
+    (void)s.step(0.001);
+    ASSERT_TRUE(s.getBodyAngularState(b, q, w));
+    EXPECT_GT(w.z, 0.0f);                    // friction at the contact spun it up about +Z
 }

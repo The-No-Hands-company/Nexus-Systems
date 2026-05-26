@@ -62,6 +62,12 @@ bool isFiniteVec3(const SimVec3& v) noexcept;
 bool isFiniteQuat(const SimQuat& q) noexcept;
 bool isFiniteInertia(const SimVec3& i) noexcept;
 
+// Used by the contact-resolution member functions below (defined further down).
+SimVec3 cross(const SimVec3& a, const SimVec3& b) noexcept;
+SimVec3 angularVelocityFromMomentum(const SimQuat& orientation,
+                                    const SimVec3& momentum,
+                                    const SimVec3& inertia) noexcept;
+
 } // namespace
 
 bool operator==(const SimBodySnapshot& a, const SimBodySnapshot& b) noexcept
@@ -316,14 +322,32 @@ void RigidBodySolver::resolveGroundContact(Body& b) const noexcept {
         const float jn = -(1.0f + m_groundRestitution) * vn; // normal speed gained (>0)
         b.velocity += n * jn;
 
-        // Coulomb sliding friction: oppose tangential motion, capped at friction*jn.
+        // Coulomb friction at the contact point with angular coupling: the impulse
+        // both slows the slide and spins the body, so a sliding sphere rolls up to
+        // rolling-without-slipping (where the contact-point velocity vanishes).
         if (m_friction > 0.0f) {
-            const float vnNow = n.x*b.velocity.x + n.y*b.velocity.y + n.z*b.velocity.z;
-            const SimVec3 vt  = b.velocity - n * vnNow; // tangential component
+            const float invMass = 1.0f / b.mass;
+            const SimVec3 r = n * (-b.collisionRadius); // center -> contact point (sphere bottom)
+            // Contact-point velocity includes the spin term omega x r.
+            const SimVec3 vContact = b.velocity + cross(b.angularVelocity, r);
+            const float vCn = n.x*vContact.x + n.y*vContact.y + n.z*vContact.z;
+            const SimVec3 vt = vContact - n * vCn; // tangential contact velocity
             const float vtLen = std::sqrt(vt.x*vt.x + vt.y*vt.y + vt.z*vt.z);
             if (vtLen > 1e-6f) {
-                const float drop = std::min(vtLen, m_friction * jn);
-                b.velocity += vt * (-(drop / vtLen));
+                const SimVec3 tdir = vt * (1.0f / vtLen);
+                // Effective inverse mass along the tangent (linear + angular).
+                const SimVec3 iitRt   = angularVelocityFromMomentum(b.orientation, cross(r, tdir), b.inertia);
+                const SimVec3 angTerm = cross(iitRt, r);
+                const float effInvMass = invMass + (tdir.x*angTerm.x + tdir.y*angTerm.y + tdir.z*angTerm.z);
+                if (effInvMass > 1e-12f) {
+                    const float normalImpulse = jn / invMass; // jn is a velocity delta; impulse = jn*mass
+                    float jt = vtLen / effInvMass;             // would cancel the slip
+                    const float maxJt = m_friction * normalImpulse;
+                    if (jt > maxJt) jt = maxJt;                // Coulomb cone (kinetic friction)
+                    const SimVec3 frictionImpulse = tdir * (-jt);
+                    b.velocity += frictionImpulse * invMass;
+                    b.angularVelocity += iitRt * (-jt);        // I^-1 (r x J), J = -jt*tdir
+                }
             }
         }
     }
@@ -420,20 +444,40 @@ void RigidBodySolver::resolveBodyPair(Body& a, Body& b) const noexcept {
         a.velocity += impulse * (-invMassA);
         b.velocity += impulse * invMassB;
 
-        // Coulomb sliding friction along the contact tangent, capped at friction*jn.
+        // Coulomb friction with angular coupling at the contact point: the
+        // tangential impulse torques both bodies (spinning them) as well as slowing
+        // the slide, capped by the Coulomb cone (mu * normal impulse).
         if (m_friction > 0.0f) {
-            const SimVec3 relV = b.velocity - a.velocity; // after the normal impulse
-            const float rvn = relV.x*normal.x + relV.y*normal.y + relV.z*normal.z;
-            const SimVec3 vt = relV - normal * rvn;       // tangential relative velocity
+            const SimVec3 rA = normal * a.collisionRadius;    // a center -> contact
+            const SimVec3 rB = normal * (-b.collisionRadius); // b center -> contact
+            // Relative velocity at the contact point (includes each body's spin).
+            const SimVec3 vCA = a.velocity + cross(a.angularVelocity, rA);
+            const SimVec3 vCB = b.velocity + cross(b.angularVelocity, rB);
+            const SimVec3 relC = vCB - vCA;
+            const float rcn = relC.x*normal.x + relC.y*normal.y + relC.z*normal.z;
+            const SimVec3 vt = relC - normal * rcn; // tangential contact velocity
             const float vtLen = std::sqrt(vt.x*vt.x + vt.y*vt.y + vt.z*vt.z);
             if (vtLen > 1e-6f) {
-                const SimVec3 t = vt * (1.0f / vtLen);
-                float jt = vtLen / invSum;                // magnitude opposing the slide
-                const float maxFric = m_friction * jn;
-                if (jt > maxFric) jt = maxFric;           // Coulomb cone
-                const SimVec3 frictionImpulse = t * (-jt);
-                a.velocity += frictionImpulse * (-invMassA);
-                b.velocity += frictionImpulse * invMassB;
+                const SimVec3 tdir = vt * (1.0f / vtLen);
+                const SimVec3 iitA = (invMassA > 0.0f)
+                    ? angularVelocityFromMomentum(a.orientation, cross(rA, tdir), a.inertia) : SimVec3{};
+                const SimVec3 iitB = (invMassB > 0.0f)
+                    ? angularVelocityFromMomentum(b.orientation, cross(rB, tdir), b.inertia) : SimVec3{};
+                const SimVec3 angA = cross(iitA, rA);
+                const SimVec3 angB = cross(iitB, rB);
+                const float effInvMass = invSum
+                    + (tdir.x*angA.x + tdir.y*angA.y + tdir.z*angA.z)
+                    + (tdir.x*angB.x + tdir.y*angB.y + tdir.z*angB.z);
+                if (effInvMass > 1e-12f) {
+                    float jt = vtLen / effInvMass;
+                    const float maxJt = m_friction * jn;
+                    if (jt > maxJt) jt = maxJt; // Coulomb cone (kinetic friction)
+                    const SimVec3 J = tdir * (-jt); // friction impulse on b; -J on a
+                    a.velocity += J * (-invMassA);
+                    b.velocity += J * invMassB;
+                    a.angularVelocity += iitA * jt;    // I_A^-1 (rA x -J) = +jt * iitA
+                    b.angularVelocity += iitB * (-jt); // I_B^-1 (rB x  J) = -jt * iitB
+                }
             }
         }
     }
