@@ -48,6 +48,8 @@ struct SimBodyDesc {
     float   angularDamping = 0.0f;        ///< per-second angular velocity decay (>= 0, finite). 0 = none.
     float   collisionRadius = 0.0f;       ///< collider radius (>= 0, finite). 0 = no collision.
     float   collisionHalfHeight = 0.0f;   ///< capsule half-length along body-local +Y (>= 0, finite). 0 = sphere.
+    SimVec3 collisionHalfExtents = {0.0f, 0.0f, 0.0f}; ///< box half-extents (each >= 0, finite). Any > 0 makes the
+                                          ///< collider an oriented box (radius/halfHeight ignored).
 };
 
 /// Cacheable per-body state for snapshot/restore.
@@ -242,7 +244,12 @@ private:
         float   angularDamping; ///< per-second angular velocity decay (>= 0)
         float   collisionRadius; ///< collider radius (>= 0); 0 = no collision
         float   collisionHalfHeight; ///< capsule half-length along body-local +Y; 0 = sphere
+        SimVec3 collisionHalfExtents; ///< box half-extents; any component > 0 = oriented box
     };
+
+    [[nodiscard]] static bool  isBoxCollider(const Body& b) noexcept;
+    [[nodiscard]] static bool  hasCollider(const Body& b)   noexcept;
+    [[nodiscard]] static float boundingRadius(const Body& b) noexcept;
 
     std::unordered_map<BodyId, Body> m_bodies;
     BodyId            m_nextId  = 1u;

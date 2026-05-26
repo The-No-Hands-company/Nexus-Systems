@@ -73,6 +73,10 @@ float   dotv(const SimVec3& a, const SimVec3& b) noexcept;
 void closestPtSegmentSegment(const SimVec3& p1, const SimVec3& q1,
                              const SimVec3& p2, const SimVec3& q2,
                              SimVec3& c1, SimVec3& c2) noexcept;
+SimVec3 closestPtPointSegment(const SimVec3& p, const SimVec3& a, const SimVec3& b) noexcept;
+// Closest point on an oriented box (center/orientation/half-extents) to point p.
+SimVec3 closestPtPointObb(const SimVec3& center, const SimQuat& orientation,
+                          const SimVec3& halfExtents, const SimVec3& p) noexcept;
 
 } // namespace
 
@@ -205,7 +209,10 @@ BodyId RigidBodySolver::addBody(const SimBodyDesc& desc) {
         !isFiniteFloat(desc.linearDamping)  || desc.linearDamping  < 0.0f ||
         !isFiniteFloat(desc.angularDamping) || desc.angularDamping < 0.0f ||
         !isFiniteFloat(desc.collisionRadius) || desc.collisionRadius < 0.0f ||
-        !isFiniteFloat(desc.collisionHalfHeight) || desc.collisionHalfHeight < 0.0f) {
+        !isFiniteFloat(desc.collisionHalfHeight) || desc.collisionHalfHeight < 0.0f ||
+        !isFiniteVec3(desc.collisionHalfExtents) ||
+        desc.collisionHalfExtents.x < 0.0f || desc.collisionHalfExtents.y < 0.0f ||
+        desc.collisionHalfExtents.z < 0.0f) {
         return kInvalidBodyId;
     }
 
@@ -223,7 +230,8 @@ BodyId RigidBodySolver::addBody(const SimBodyDesc& desc) {
         desc.linearDamping,
         desc.angularDamping,
         desc.collisionRadius,
-        desc.collisionHalfHeight
+        desc.collisionHalfHeight,
+        desc.collisionHalfExtents
     });
     return id;
 }
@@ -309,6 +317,24 @@ bool RigidBodySolver::hasGroundPlane() const noexcept {
     return m_groundEnabled;
 }
 
+bool RigidBodySolver::isBoxCollider(const Body& b) noexcept {
+    return b.collisionHalfExtents.x > 0.0f
+        || b.collisionHalfExtents.y > 0.0f
+        || b.collisionHalfExtents.z > 0.0f;
+}
+
+bool RigidBodySolver::hasCollider(const Body& b) noexcept {
+    return b.collisionRadius > 0.0f || isBoxCollider(b);
+}
+
+float RigidBodySolver::boundingRadius(const Body& b) noexcept {
+    if (isBoxCollider(b)) {
+        const SimVec3& e = b.collisionHalfExtents;
+        return std::sqrt(e.x*e.x + e.y*e.y + e.z*e.z); // circumscribed sphere
+    }
+    return b.collisionRadius + b.collisionHalfHeight; // capsule reach (sphere when h=0)
+}
+
 void RigidBodySolver::resolveContact(Body& a, Body* b, const SimVec3& contactPoint,
                                      const SimVec3& normal, float penetration,
                                      float restitution) const noexcept
@@ -389,13 +415,36 @@ void RigidBodySolver::resolveContact(Body& a, Body* b, const SimVec3& contactPoi
 }
 
 void RigidBodySolver::resolveGroundContact(Body& b) const noexcept {
-    if (!m_groundEnabled || b.collisionRadius <= 0.0f) {
+    if (!m_groundEnabled || !hasCollider(b)) {
         return;
     }
     const SimVec3& pn = m_groundNormal;          // plane normal (toward the allowed side)
     const SimVec3 toObstacle = pn * (-1.0f);     // contact normal: body -> plane
-    // Sample the collider: a sphere is one point; a capsule contacts at each of its
-    // two endpoints, which keeps a capsule lying flat on the floor stable.
+
+    if (isBoxCollider(b)) {
+        // Box vs plane: each of the 8 corners is a potential contact. Resting on a
+        // face gives 4 contacts, which keeps the box stable. Iterate a fixed corner
+        // order for determinism; correction from earlier corners shifts the body.
+        const SimVec3& e = b.collisionHalfExtents;
+        for (int s = 0; s < 8; ++s) {
+            const SimVec3 ax = rotateByQuat(b.orientation, {1.0f, 0.0f, 0.0f});
+            const SimVec3 ay = rotateByQuat(b.orientation, {0.0f, 1.0f, 0.0f});
+            const SimVec3 az = rotateByQuat(b.orientation, {0.0f, 0.0f, 1.0f});
+            const float sx = (s & 1) ? 1.0f : -1.0f;
+            const float sy = (s & 2) ? 1.0f : -1.0f;
+            const float sz = (s & 4) ? 1.0f : -1.0f;
+            const SimVec3 corner = b.position + ax * (sx*e.x) + ay * (sy*e.y) + az * (sz*e.z);
+            const float signedDist = dotv(pn, corner) - m_groundOffset;
+            if (signedDist >= 0.0f) {
+                continue; // corner above the plane
+            }
+            resolveContact(b, nullptr, corner, toObstacle, -signedDist, m_groundRestitution);
+        }
+        return;
+    }
+
+    // Round collider — a sphere is one point; a capsule contacts at each of its two
+    // endpoints, which keeps a capsule lying flat on the floor stable.
     const int count = (b.collisionHalfHeight > 0.0f) ? 2 : 1;
     for (int i = 0; i < count; ++i) {
         // Recompute per endpoint: the previous endpoint's correction moves the body.
@@ -468,13 +517,48 @@ void RigidBodySolver::resolveContacts() noexcept {
 }
 
 void RigidBodySolver::resolveBodyPair(Body& a, Body& b) const noexcept {
+    const bool aBox = isBoxCollider(a);
+    const bool bBox = isBoxCollider(b);
+
+    if (aBox && bBox) {
+        return; // box-box (SAT narrow-phase) is a separate pass — not yet implemented
+    }
+
+    if (aBox || bBox) {
+        // Box vs round (sphere/capsule): reduce the round shape to a sphere at the
+        // point on its segment closest to the box centre, then test that sphere
+        // against the closest point on the box surface.
+        Body& box   = aBox ? a : b;
+        Body& round = aBox ? b : a;
+        if (round.collisionRadius <= 0.0f) {
+            return;
+        }
+        const SimVec3 axis = rotateByQuat(round.orientation, {0.0f, 1.0f, 0.0f}) * round.collisionHalfHeight;
+        const SimVec3 sphereCenter = closestPtPointSegment(box.position,
+                                                           round.position - axis,
+                                                           round.position + axis);
+        const SimVec3 onBox = closestPtPointObb(box.position, box.orientation,
+                                                box.collisionHalfExtents, sphereCenter);
+        const SimVec3 delta = sphereCenter - onBox; // box surface -> round centre
+        const float distSq = dotv(delta, delta);
+        if (distSq >= round.collisionRadius * round.collisionRadius) {
+            return; // no overlap
+        }
+        const float dist = std::sqrt(distSq);
+        const SimVec3 nBoxToRound = (dist > 1e-6f) ? delta * (1.0f / dist) : SimVec3{0.0f, 1.0f, 0.0f};
+        const float penetration = round.collisionRadius - dist;
+        // resolveContact separates its first body along -normal; pass (box, round)
+        // with the box->round normal so the round is pushed out of the box.
+        resolveContact(box, &round, onBox, nBoxToRound, penetration, m_bodyRestitution);
+        return;
+    }
+
+    // Round vs round. Each collider is a round segment (capsule); a sphere is the
+    // zero-length case. The closest points between the segments give the contact.
     const float rSum = a.collisionRadius + b.collisionRadius;
     if (rSum <= 0.0f) {
         return;
     }
-
-    // Each collider is a round segment (capsule); a sphere is the zero-length case.
-    // The closest points between the two segments give the sphere-sphere contact.
     const SimVec3 axisA = rotateByQuat(a.orientation, {0.0f, 1.0f, 0.0f}) * a.collisionHalfHeight;
     const SimVec3 axisB = rotateByQuat(b.orientation, {0.0f, 1.0f, 0.0f}) * b.collisionHalfHeight;
     SimVec3 cA, cB;
@@ -501,7 +585,7 @@ void RigidBodySolver::resolveBodyCollisions() noexcept {
     colliders.reserve(m_bodies.size());
     for (auto& [id, b] : m_bodies) {
         (void)id;
-        if (b.collisionRadius > 0.0f) {
+        if (hasCollider(b)) {
             colliders.push_back(&b);
         }
     }
@@ -512,10 +596,12 @@ void RigidBodySolver::resolveBodyCollisions() noexcept {
     // skipped without an exact test. Spheres that overlap in 3D always overlap in
     // their x-projection, so no real contact is ever pruned; this only drops the
     // pairs the O(n^2) loop would have rejected anyway.
+    // AABB x-extent uses a conservative bounding radius per collider (sphere/capsule
+    // reach, or a box's circumscribed sphere) so no overlapping pair is pruned.
     std::sort(colliders.begin(), colliders.end(),
               [](const Body* a, const Body* c) noexcept {
-                  const float amin = a->position.x - a->collisionRadius;
-                  const float cmin = c->position.x - c->collisionRadius;
+                  const float amin = a->position.x - boundingRadius(*a);
+                  const float cmin = c->position.x - boundingRadius(*c);
                   if (amin != cmin) return amin < cmin;
                   return a->id < c->id;
               });
@@ -525,9 +611,9 @@ void RigidBodySolver::resolveBodyCollisions() noexcept {
     // that resolution makes.
     std::vector<std::pair<Body*, Body*>> candidates;
     for (std::size_t i = 0; i < colliders.size(); ++i) {
-        const float iMaxX = colliders[i]->position.x + colliders[i]->collisionRadius;
+        const float iMaxX = colliders[i]->position.x + boundingRadius(*colliders[i]);
         for (std::size_t k = i + 1; k < colliders.size(); ++k) {
-            const float kMinX = colliders[k]->position.x - colliders[k]->collisionRadius;
+            const float kMinX = colliders[k]->position.x - boundingRadius(*colliders[k]);
             if (kMinX > iMaxX) {
                 break; // sorted by min.x: no later body can overlap i on x
             }
@@ -683,6 +769,40 @@ void closestPtSegmentSegment(const SimVec3& p1, const SimVec3& q1,
     }
     c1 = p1 + d1 * s;
     c2 = p2 + d2 * t;
+}
+
+/// Closest point on segment [a,b] to point p.
+SimVec3 closestPtPointSegment(const SimVec3& p, const SimVec3& a, const SimVec3& b) noexcept
+{
+    const SimVec3 ab = b - a;
+    const float denom = dotv(ab, ab);
+    if (denom <= 1e-12f) {
+        return a; // degenerate segment
+    }
+    const float t = clampUnit(dotv(p - a, ab) / denom);
+    return a + ab * t;
+}
+
+/// Closest point on an oriented box to point p: project (p - center) onto each box
+/// axis, clamp to the half-extent, and rebuild in world space.
+SimVec3 closestPtPointObb(const SimVec3& center, const SimQuat& orientation,
+                          const SimVec3& halfExtents, const SimVec3& p) noexcept
+{
+    const SimVec3 d = p - center;
+    const SimVec3 axes[3] = {
+        rotateByQuat(orientation, {1.0f, 0.0f, 0.0f}),
+        rotateByQuat(orientation, {0.0f, 1.0f, 0.0f}),
+        rotateByQuat(orientation, {0.0f, 0.0f, 1.0f}),
+    };
+    const float ext[3] = { halfExtents.x, halfExtents.y, halfExtents.z };
+    SimVec3 result = center;
+    for (int i = 0; i < 3; ++i) {
+        float dist = dotv(d, axes[i]);
+        if (dist >  ext[i]) dist =  ext[i];
+        if (dist < -ext[i]) dist = -ext[i];
+        result += axes[i] * dist;
+    }
+    return result;
 }
 
 /// Hamilton product a * b.

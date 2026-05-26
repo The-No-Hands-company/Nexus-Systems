@@ -1522,3 +1522,65 @@ TEST(SimulationCore, SphereHitsCapsuleSide) {
     EXPECT_GT(v.y, 0.0f);             // bounced upward off the capsule side
     EXPECT_GE(p.y, 0.9f - 1e-2f);     // pushed back out of penetration
 }
+
+// ── Box (OBB) colliders ─────────────────────────────────────────────────────────
+
+TEST(SimulationCore, AddBodyRejectsNonFiniteOrNegativeHalfExtents) {
+    RigidBodySolver s;
+    EXPECT_EQ(s.addBody({.mass = 1.0f,
+                         .collisionHalfExtents = {std::numeric_limits<float>::infinity(), 1.0f, 1.0f}}),
+              kInvalidBodyId);
+    EXPECT_EQ(s.addBody({.mass = 1.0f, .collisionHalfExtents = {1.0f, -1.0f, 1.0f}}),
+              kInvalidBodyId);
+    EXPECT_NE(s.addBody({.mass = 1.0f, .collisionHalfExtents = {0.5f, 0.5f, 0.5f}}),
+              kInvalidBodyId);
+}
+
+TEST(SimulationCore, BoxRestsFlatOnGround) {
+    // A unit cube dropped on the floor rests on its 4 bottom corners with the center
+    // at the half-extent height, and stays flat (symmetric contacts -> no tipping).
+    RigidBodySolver s;
+    s.setGravity({0.0f, -9.81f, 0.0f});
+    s.setGroundPlane({0.0f, 1.0f, 0.0f}, 0.0f, 0.0f);
+    const BodyId id = s.addBody({.mass = 1.0f, .position = {0.0f, 5.0f, 0.0f},
+                                 .collisionHalfExtents = {0.5f, 0.5f, 0.5f}});
+    for (int i = 0; i < 600; ++i) (void)s.step(0.01);
+    SimVec3 p, v, w; SimQuat q;
+    ASSERT_TRUE(s.getBodyState(id, p, v));
+    ASSERT_TRUE(s.getBodyAngularState(id, q, w));
+    EXPECT_NEAR(p.y, 0.5f, 2e-2f);   // bottom face rests on the plane
+    EXPECT_LT(std::fabs(w.x) + std::fabs(w.y) + std::fabs(w.z), 0.1f); // no tumbling
+}
+
+TEST(SimulationCore, SphereBouncesOffBoxFace) {
+    // A sphere penetrating a static box's top face is pushed out and bounces.
+    RigidBodySolver s;
+    s.setGravity({0.0f, 0.0f, 0.0f});
+    s.setBodyCollision(1.0f); // elastic
+    (void)s.addBody({.mass = 0.0f, .position = {0.0f, 0.0f, 0.0f},
+                     .collisionHalfExtents = {1.0f, 1.0f, 1.0f}}); // static box
+    const BodyId ball = s.addBody({.mass = 1.0f, .position = {0.0f, 1.4f, 0.0f},
+                                   .velocity = {0.0f, -2.0f, 0.0f}, .collisionRadius = 0.5f});
+    (void)s.step(0.01);
+    SimVec3 p, v;
+    ASSERT_TRUE(s.getBodyState(ball, p, v));
+    EXPECT_GT(v.y, 0.0f);            // bounced up off the top face
+    EXPECT_GE(p.y, 1.5f - 2e-2f);    // pushed out to rest tangent to the face
+}
+
+TEST(SimulationCore, BoxBlocksSlidingSphereFromSide) {
+    // A sphere moving toward a static box's side is stopped/pushed back along the
+    // box face normal (closest point on a side face, not a corner).
+    RigidBodySolver s;
+    s.setGravity({0.0f, 0.0f, 0.0f});
+    s.setBodyCollision(1.0f);
+    (void)s.addBody({.mass = 0.0f, .position = {0.0f, 0.0f, 0.0f},
+                     .collisionHalfExtents = {1.0f, 1.0f, 1.0f}}); // static box, +X face at x=1
+    const BodyId ball = s.addBody({.mass = 1.0f, .position = {1.4f, 0.0f, 0.0f},
+                                   .velocity = {-2.0f, 0.0f, 0.0f}, .collisionRadius = 0.5f});
+    (void)s.step(0.01);
+    SimVec3 p, v;
+    ASSERT_TRUE(s.getBodyState(ball, p, v));
+    EXPECT_GT(v.x, 0.0f);            // reflected off the +X face
+    EXPECT_GE(p.x, 1.5f - 2e-2f);
+}
