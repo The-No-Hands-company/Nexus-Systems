@@ -15,6 +15,8 @@
 #include <nexus/render/Renderer.h>
 #include <nexus/render/Camera.h>
 #include <nexus/render/SceneGraph.h>
+#include <nexus/geometry/Mesh.h>
+#include <nexus/geometry/GeometryKernel.h>
 
 #include <gtest/gtest.h>
 
@@ -28,6 +30,8 @@ using nexus::render::Renderer;
 using nexus::render::RendererSettings;
 using nexus::render::SceneGraph;
 using nexus::render::Camera;
+using nexus::render::GBufferGeometryPipelineDesc;
+namespace geom = nexus::geometry;
 
 namespace {
 
@@ -326,12 +330,72 @@ void main() { outColor = vec4(1.0, 1.0, 0.0, 1.0); }
     dev.destroyTexture(color);
 }
 
-// End-to-end: a 3-MRT GBuffer geometry pipeline (albedo/normal/velocity formats),
-// built with the camera set-0 layout, runs through the real Renderer::render()
-// deferred geometry pass with the per-frame camera UBO bound. Previously
-// impossible — the pipeline API capped color attachments at one. The GBuffer
-// targets aren't host-readable (Sampled, not TransferSrc), so this verifies the
-// geometry draw executed without a validation error via frame stats.
+// The convenience helper assembles a creatable GBuffer geometry pipeline from a
+// mesh-derived vertex layout plus the published contracts (camera set 0, GBuffer
+// formats, reversed-Z). Pipeline CREATION (no draw) runs on any Vulkan device, so
+// this exercises the helper end-to-end on the software rasterizer.
+TEST(VulkanRendererOffscreen, CreateGBufferGeometryPipelineFromMeshIsValid)
+{
+    std::unique_ptr<RenderContext> ctx;
+    try {
+        ctx = makeContext();
+    } catch (const std::exception& e) {
+        GTEST_SKIP() << "Vulkan backend unavailable: " << e.what();
+    }
+    ASSERT_NE(ctx, nullptr);
+    IDevice& dev = ctx->device();
+
+    // Build a mesh and derive its GPU vertex-input layout from the upload contract.
+    geom::Mesh mesh = geom::primitives::makeTriangle(1.f);
+    ASSERT_TRUE(mesh.computeVertexNormals());
+    mesh.attributes().setUVs({ {0.f, 0.f}, {1.f, 0.f}, {0.f, 1.f} });
+    const auto indices  = geom::MeshUploadContract::buildTriangulatedIndexBuffer(mesh);
+    const auto sections = geom::MeshUploadContract::makeSingleSection(indices, nexus::render::kInvalidMaterial);
+    const geom::MeshUploadView    view   = geom::MeshUploadContract::buildView(mesh, indices, sections);
+    const geom::PackedVertexLayout packed = geom::MeshUploadContract::buildPackedVertexLayout(view);
+    const geom::GpuVertexInputLayout vtx  = geom::MeshUploadContract::toGpuVertexInputLayout(packed);
+
+    constexpr std::string_view kVert = R"GLSL(
+#version 460
+layout(set = 0, binding = 0, std140) uniform Camera { mat4 view; mat4 projection; mat4 viewProj; } cam;
+layout(location = 0) in vec3 inPos;
+void main() { gl_Position = vec4(inPos, 1.0) * cam.viewProj; }
+)GLSL";
+    constexpr std::string_view kFrag = R"GLSL(
+#version 460
+layout(location = 0) out vec4 albedo;
+layout(location = 1) out vec4 normal;
+layout(location = 2) out vec4 velocity;
+void main() { albedo = vec4(1.0); normal = vec4(0.0, 0.0, 1.0, 0.0); velocity = vec4(0.0); }
+)GLSL";
+    ShaderDesc vsDesc{}; vsDesc.stage = ShaderStage::Vertex;   vsDesc.glslSource = kVert;
+    ShaderDesc fsDesc{}; fsDesc.stage = ShaderStage::Fragment; fsDesc.glslSource = kFrag;
+    const ShaderHandle vs = dev.createShader(vsDesc);
+    const ShaderHandle fs = dev.createShader(fsDesc);
+    ASSERT_TRUE(vs.valid() && fs.valid());
+
+    GBufferGeometryPipelineDesc desc{};
+    desc.vertexShader     = vs;
+    desc.fragmentShader   = fs;
+    desc.vertexBindings   = vtx.bindings;
+    desc.vertexAttributes = vtx.attributes;
+    desc.cullMode         = CullMode::None;
+    desc.debugName        = "gbuffer.geometry.from-mesh";
+    const PipelineHandle pso = Renderer::createGBufferGeometryPipeline(dev, desc);
+    EXPECT_TRUE(pso.valid());
+
+    if (pso.valid()) dev.destroyPipeline(pso);
+    dev.destroyShader(vs);
+    dev.destroyShader(fs);
+}
+
+// End-to-end: a real mesh, uploaded via the geometry bridge, drawn through the
+// convenience-built GBuffer geometry pipeline (camera UBO + GBuffer MRT formats +
+// mesh-derived vertex input) by the real Renderer::render() deferred pass. The
+// GBuffer targets aren't host-readable (Sampled, not TransferSrc), so the draw is
+// verified via frame stats. Hardware-gated: the software-rasterizer shader JIT
+// crashes on this float16 3-MRT + depth config (creation is covered by the test
+// above; standalone RGBA8 MRT by VulkanDeferredDraw).
 TEST(VulkanRendererOffscreen, GBufferMrtGeometryPipelineRunsThroughRenderer)
 {
     std::unique_ptr<RenderContext> ctx;
@@ -366,20 +430,13 @@ TEST(VulkanRendererOffscreen, GBufferMrtGeometryPipelineRunsThroughRenderer)
     const TextureHandle color = dev.createTexture(td);
     ASSERT_TRUE(color.valid());
 
-    // Vertex shader transforms a triangle by the camera UBO (set 0); fragment writes
-    // the three GBuffer channels. Matches the GBuffer attachment formats:
-    // albedo/normal = R16G16B16A16_Float, velocity = R16G16_Float, depth = D32_Float.
+    // Vertex shader consumes the mesh position (location 0) transformed by the
+    // camera UBO; fragment writes the three GBuffer channels.
     constexpr std::string_view kVert = R"GLSL(
 #version 460
-layout(set = 0, binding = 0, std140) uniform Camera {
-    mat4 view;
-    mat4 projection;
-    mat4 viewProj;
-} cam;
-void main() {
-    const vec3 p[3] = vec3[3](vec3(-1.0,-1.0,0.0), vec3(1.0,-1.0,0.0), vec3(0.0,1.0,0.0));
-    gl_Position = vec4(p[gl_VertexIndex], 1.0) * cam.viewProj;
-}
+layout(set = 0, binding = 0, std140) uniform Camera { mat4 view; mat4 projection; mat4 viewProj; } cam;
+layout(location = 0) in vec3 inPos;
+void main() { gl_Position = vec4(inPos, 1.0) * cam.viewProj; }
 )GLSL";
     constexpr std::string_view kFrag = R"GLSL(
 #version 460
@@ -399,41 +456,30 @@ void main() {
     const ShaderHandle fs = dev.createShader(fsDesc);
     ASSERT_TRUE(vs.valid() && fs.valid());
 
-    // Build the pipeline's render-target formats from the published GBuffer
-    // contract so they cannot drift from the renderer's actual GBuffer.
-    const std::array<DescriptorSetLayoutDesc, 1> sets{{ { Renderer::geometryCameraSetLayout() } }};
+    // Upload a real mesh and derive its GPU vertex-input layout from the contract.
+    geom::Mesh mesh = geom::primitives::makeTriangle(1.f);
+    ASSERT_TRUE(mesh.computeVertexNormals());
+    mesh.attributes().setUVs({ {0.f, 0.f}, {1.f, 0.f}, {0.f, 1.f} });
+    const auto indices  = geom::MeshUploadContract::buildTriangulatedIndexBuffer(mesh);
+    const auto sections = geom::MeshUploadContract::makeSingleSection(indices, nexus::render::kInvalidMaterial);
+    const geom::MeshUploadView     view   = geom::MeshUploadContract::buildView(mesh, indices, sections);
+    const geom::PackedVertexLayout packed = geom::MeshUploadContract::buildPackedVertexLayout(view);
+    const geom::GpuVertexInputLayout vtx  = geom::MeshUploadContract::toGpuVertexInputLayout(packed);
 
-    GraphicsPipelineDesc gp{};
-    gp.vertexShader           = vs;
-    gp.fragmentShader         = fs;
-    gp.topology               = Topology::TriangleList;
-    gp.cullMode               = CullMode::None;
-    gp.depthTest              = true;
-    gp.depthWrite             = true;  // reversed-Z GreaterOrEqual default
-    gp.colorAttachmentFormats = Renderer::gbufferColorFormats();  // MRT — the new capability
-    gp.depthAttachmentFormat  = Renderer::gbufferDepthFormat();
-    gp.descriptorSetLayouts   = sets;
-    gp.debugName              = "gbuffer.geometry.mrt";
-    const PipelineHandle geomPipe = dev.createGraphicsPipeline(gp);
+    geom::UploadedGeometryMesh uploaded{};
+    ASSERT_TRUE(geom::GeometryRenderBridge::uploadToDevice(dev, view, packed, sections, uploaded).valid);
+
+    // Assemble the GBuffer geometry pipeline from the convenience helper: camera
+    // set 0 + GBuffer formats from the contracts, mesh-derived vertex input.
+    GBufferGeometryPipelineDesc pdesc{};
+    pdesc.vertexShader     = vs;
+    pdesc.fragmentShader   = fs;
+    pdesc.vertexBindings   = vtx.bindings;
+    pdesc.vertexAttributes = vtx.attributes;
+    pdesc.cullMode         = CullMode::None;
+    pdesc.debugName        = "gbuffer.geometry.from-mesh";
+    const PipelineHandle geomPipe = Renderer::createGBufferGeometryPipeline(dev, pdesc);
     ASSERT_TRUE(geomPipe.valid());
-
-    // A renderable node: indices {0,1,2}. The vertex shader uses gl_VertexIndex, so
-    // the vertex buffer content is unused, but a valid handle is required.
-    BufferDesc vbd{};
-    vbd.sizeBytes = 3 * sizeof(float) * 3;
-    vbd.usage     = BufferUsage::VertexBuffer | BufferUsage::TransferDst;
-    vbd.memory    = MemoryHint::GpuOnly;
-    const BufferHandle vbuf = dev.createBuffer(vbd);
-    ASSERT_TRUE(vbuf.valid());
-
-    const uint32_t indices[3] = {0u, 1u, 2u};
-    BufferDesc ibd{};
-    ibd.sizeBytes = sizeof(indices);
-    ibd.usage     = BufferUsage::IndexBuffer | BufferUsage::TransferDst;
-    ibd.memory    = MemoryHint::GpuOnly;
-    const BufferHandle ibuf = dev.createBuffer(ibd);
-    ASSERT_TRUE(ibuf.valid());
-    dev.uploadBuffer(ibuf, indices, sizeof(indices));
 
     Renderer renderer(*ctx, *sc);
     OffscreenScheduler sched(dev, color, {W, H});
@@ -447,9 +493,7 @@ void main() {
     SceneGraph scene;
     nexus::render::Node* node = scene.createNode("mrt-geo");
     ASSERT_NE(node, nullptr);
-    node->mesh.vertexBuffer = vbuf;
-    node->mesh.indexBuffer  = ibuf;
-    node->mesh.indexCount   = 3;
+    geom::GeometryRenderBridge::assignUploadedMeshToNode(uploaded, *node);
 
     Camera cam;
     cam.setPerspective(60.f, 1.f, 0.1f, 1000.f);
@@ -468,8 +512,7 @@ void main() {
 
     renderer.setFrameScheduler(nullptr);
     dev.freeCommandBuffer(sched.commandBuffer());
-    dev.destroyBuffer(vbuf);
-    dev.destroyBuffer(ibuf);
+    geom::GeometryRenderBridge::destroyNodeMeshPayload(dev, *node);
     dev.destroyPipeline(geomPipe);
     dev.destroyShader(vs);
     dev.destroyShader(fs);

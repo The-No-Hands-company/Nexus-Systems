@@ -299,6 +299,20 @@ struct ShadowLightingBindingDesc {
     }
 };
 
+// ── Deferred GBuffer geometry pipeline assembly ───────────────────────────────
+// Inputs for Renderer::createGBufferGeometryPipeline. The caller supplies the
+// shaders and a mesh-derived vertex-input layout (from
+// MeshUploadContract::toGpuVertexInputLayout); the renderer fills in the camera
+// set-0 layout and the GBuffer color/depth formats from its published contracts.
+struct GBufferGeometryPipelineDesc {
+    nexus::gfx::ShaderHandle vertexShader;
+    nexus::gfx::ShaderHandle fragmentShader;
+    std::span<const nexus::gfx::VertexBinding>   vertexBindings;
+    std::span<const nexus::gfx::VertexAttribute> vertexAttributes;
+    nexus::gfx::CullMode cullMode  = nexus::gfx::CullMode::Back;
+    const char*          debugName = nullptr;
+};
+
 // ── Renderer ──────────────────────────────────────────────────────────────────
 class Renderer {
 public:
@@ -355,6 +369,14 @@ public:
     // pipeline's render-target formats cannot drift from the actual GBuffer.
     [[nodiscard]] static std::span<const nexus::gfx::Format> gbufferColorFormats() noexcept;
     [[nodiscard]] static nexus::gfx::Format                  gbufferDepthFormat()  noexcept;
+
+    // Assembles a deferred GBuffer geometry pipeline from the published contracts
+    // (geometryCameraSetLayout at set 0, gbufferColorFormats/gbufferDepthFormat as
+    // render targets, reversed-Z depth) plus the caller's shaders and mesh-derived
+    // vertex-input layout — so apps don't hand-wire those four pieces. Returns an
+    // invalid handle if the device cannot create the pipeline.
+    [[nodiscard]] static nexus::gfx::PipelineHandle createGBufferGeometryPipeline(
+        nexus::gfx::IDevice& device, const GBufferGeometryPipelineDesc& desc);
     void resetScene(SceneGraph& scene);
     void resetSceneAndDestroyTLAS(SceneGraph& scene);
     [[nodiscard]] const RendererSettings& settings() const noexcept { return m_settings; }

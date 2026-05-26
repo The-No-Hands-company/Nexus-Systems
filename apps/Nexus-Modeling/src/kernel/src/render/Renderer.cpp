@@ -1200,6 +1200,27 @@ nexus::gfx::Format Renderer::gbufferDepthFormat() noexcept
     return kGBufferDepthFormat;
 }
 
+nexus::gfx::PipelineHandle Renderer::createGBufferGeometryPipeline(
+    nexus::gfx::IDevice& device, const GBufferGeometryPipelineDesc& desc)
+{
+    const std::array<nexus::gfx::DescriptorSetLayoutDesc, 1> sets{{ { geometryCameraSetLayout() } }};
+
+    nexus::gfx::GraphicsPipelineDesc gp{};
+    gp.vertexShader           = desc.vertexShader;
+    gp.fragmentShader         = desc.fragmentShader;
+    gp.topology               = nexus::gfx::Topology::TriangleList;
+    gp.cullMode               = desc.cullMode;
+    gp.depthTest              = true;
+    gp.depthWrite             = true;  // reversed-Z, GreaterOrEqual (matches the GBuffer pass)
+    gp.colorAttachmentFormats = gbufferColorFormats();
+    gp.depthAttachmentFormat  = gbufferDepthFormat();
+    gp.vertexBindings         = desc.vertexBindings;
+    gp.vertexAttributes       = desc.vertexAttributes;
+    gp.descriptorSetLayouts   = sets;
+    gp.debugName              = desc.debugName;
+    return device.createGraphicsPipeline(gp);
+}
+
 void Renderer::uploadCameraUniform(const Camera& camera)
 {
     auto& dev = m_ctx.device();
