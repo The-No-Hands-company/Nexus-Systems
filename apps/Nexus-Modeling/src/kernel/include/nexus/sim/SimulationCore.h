@@ -178,6 +178,14 @@ public:
     void setSolverIterations(uint32_t iterations) noexcept;
     [[nodiscard]] uint32_t solverIterations() const noexcept;
 
+    /// Coulomb friction coefficient applied at ground and body-body contacts
+    /// (>= 0; 0 = frictionless, the default). After the normal impulse a tangential
+    /// impulse opposes sliding, capped at friction * normal impulse. This is linear
+    /// (no angular coupling yet) — it models sliding friction, not rolling. Rejects
+    /// non-finite input; negative values are clamped to 0.
+    void setFriction(float coefficient) noexcept;
+    [[nodiscard]] float friction() const noexcept;
+
     // ── Simulation step ──────────────────────────────────────────────────────
 
     /// Advance the simulation by dt seconds (must be finite and > 0).
@@ -247,6 +255,7 @@ private:
     bool     m_bodyCollisionEnabled = false;
     float    m_bodyRestitution      = 0.0f;
     uint32_t m_solverIterations     = 1u;
+    float    m_friction             = 0.0f;
 
     Body*       findBody(BodyId id)       noexcept;
     const Body* findBody(BodyId id) const noexcept;

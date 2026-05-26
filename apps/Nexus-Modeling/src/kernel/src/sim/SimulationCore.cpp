@@ -313,7 +313,19 @@ void RigidBodySolver::resolveGroundContact(Body& b) const noexcept {
     // energy when the body is already separating (vn >= 0).
     const float vn = n.x*b.velocity.x + n.y*b.velocity.y + n.z*b.velocity.z;
     if (vn < 0.0f) {
-        b.velocity += n * (-(1.0f + m_groundRestitution) * vn);
+        const float jn = -(1.0f + m_groundRestitution) * vn; // normal speed gained (>0)
+        b.velocity += n * jn;
+
+        // Coulomb sliding friction: oppose tangential motion, capped at friction*jn.
+        if (m_friction > 0.0f) {
+            const float vnNow = n.x*b.velocity.x + n.y*b.velocity.y + n.z*b.velocity.z;
+            const SimVec3 vt  = b.velocity - n * vnNow; // tangential component
+            const float vtLen = std::sqrt(vt.x*vt.x + vt.y*vt.y + vt.z*vt.z);
+            if (vtLen > 1e-6f) {
+                const float drop = std::min(vtLen, m_friction * jn);
+                b.velocity += vt * (-(drop / vtLen));
+            }
+        }
     }
 }
 
@@ -341,6 +353,17 @@ void RigidBodySolver::setSolverIterations(uint32_t iterations) noexcept {
 
 uint32_t RigidBodySolver::solverIterations() const noexcept {
     return m_solverIterations;
+}
+
+void RigidBodySolver::setFriction(float coefficient) noexcept {
+    if (!isFiniteFloat(coefficient)) {
+        return; // reject non-finite; leave prior value unchanged
+    }
+    m_friction = coefficient < 0.0f ? 0.0f : coefficient;
+}
+
+float RigidBodySolver::friction() const noexcept {
+    return m_friction;
 }
 
 void RigidBodySolver::resolveContacts() noexcept {
@@ -392,10 +415,27 @@ void RigidBodySolver::resolveBodyPair(Body& a, Body& b) const noexcept {
     const SimVec3 relVel = b.velocity - a.velocity;
     const float vn = relVel.x*normal.x + relVel.y*normal.y + relVel.z*normal.z;
     if (vn < 0.0f) {
-        const float j = -(1.0f + m_bodyRestitution) * vn / invSum;
-        const SimVec3 impulse = normal * j;
+        const float jn = -(1.0f + m_bodyRestitution) * vn / invSum; // normal impulse (>0)
+        const SimVec3 impulse = normal * jn;
         a.velocity += impulse * (-invMassA);
         b.velocity += impulse * invMassB;
+
+        // Coulomb sliding friction along the contact tangent, capped at friction*jn.
+        if (m_friction > 0.0f) {
+            const SimVec3 relV = b.velocity - a.velocity; // after the normal impulse
+            const float rvn = relV.x*normal.x + relV.y*normal.y + relV.z*normal.z;
+            const SimVec3 vt = relV - normal * rvn;       // tangential relative velocity
+            const float vtLen = std::sqrt(vt.x*vt.x + vt.y*vt.y + vt.z*vt.z);
+            if (vtLen > 1e-6f) {
+                const SimVec3 t = vt * (1.0f / vtLen);
+                float jt = vtLen / invSum;                // magnitude opposing the slide
+                const float maxFric = m_friction * jn;
+                if (jt > maxFric) jt = maxFric;           // Coulomb cone
+                const SimVec3 frictionImpulse = t * (-jt);
+                a.velocity += frictionImpulse * (-invMassA);
+                b.velocity += frictionImpulse * invMassB;
+            }
+        }
     }
 }
 

@@ -1335,3 +1335,62 @@ TEST(SimulationCore, StackSettlesWithoutInterpenetration) {
     EXPECT_GE(p2.y - p1.y, 2.0f * r - tol);    // gap b1->b2 ~ diameter
     EXPECT_LT(p0.y, 1.0f);                     // didn't launch upward
 }
+
+// ── Coulomb friction (tangential impulse) ───────────────────────────────────────
+
+TEST(SimulationCore, FrictionDefaultsToZero) {
+    RigidBodySolver s;
+    EXPECT_FLOAT_EQ(s.friction(), 0.0f);
+}
+
+TEST(SimulationCore, SetFrictionRejectsNonFiniteAndClampsNegative) {
+    RigidBodySolver s;
+    s.setFriction(0.4f);
+    EXPECT_FLOAT_EQ(s.friction(), 0.4f);
+    s.setFriction(std::numeric_limits<float>::infinity()); // rejected, unchanged
+    EXPECT_FLOAT_EQ(s.friction(), 0.4f);
+    s.setFriction(-1.0f);                                  // clamped to 0
+    EXPECT_FLOAT_EQ(s.friction(), 0.0f);
+}
+
+TEST(SimulationCore, GroundFrictionDeceleratesSlidingBody) {
+    // A sphere sliding along the floor under gravity loses tangential speed with
+    // friction enabled, but keeps sliding when frictionless.
+    auto finalVx = [](float friction) {
+        RigidBodySolver s;
+        s.setGravity({0.0f, -9.81f, 0.0f});
+        s.setGroundPlane({0.0f, 1.0f, 0.0f}, 0.0f, 0.0f);
+        s.setFriction(friction);
+        const BodyId id = s.addBody({.mass = 1.0f, .position = {0.0f, 0.5f, 0.0f},
+                                     .velocity = {2.0f, 0.0f, 0.0f}, .collisionRadius = 0.5f});
+        for (int i = 0; i < 120; ++i) (void)s.step(0.01);
+        SimVec3 p, v;
+        s.getBodyState(id, p, v);
+        return v.x;
+    };
+    EXPECT_NEAR(finalVx(0.0f), 2.0f, 1e-3f);  // frictionless: keeps sliding
+    EXPECT_LT(finalVx(0.5f), 0.2f);           // friction: decelerated to ~rest
+    EXPECT_GE(finalVx(0.5f), -0.05f);         // doesn't reverse past zero
+}
+
+TEST(SimulationCore, BodyBodyFrictionOpposesTangentialSlide) {
+    // B presses into a static A along X (contact normal ~ +X) while sliding along Y.
+    // The normal impulse leaves the tangential (Y) velocity alone; friction bleeds
+    // it off. One small step keeps the contact normal axis-aligned for a clean read.
+    auto tangentialVy = [](float friction) {
+        RigidBodySolver s;
+        s.setGravity({0.0f, 0.0f, 0.0f});
+        s.setBodyCollision(0.0f);
+        s.setFriction(friction);
+        (void)s.addBody({.mass = 0.0f, .position = {0.0f, 0.0f, 0.0f}, .collisionRadius = 0.5f}); // static
+        const BodyId b = s.addBody({.mass = 1.0f, .position = {0.8f, 0.0f, 0.0f},
+                                    .velocity = {-1.0f, 3.0f, 0.0f}, .collisionRadius = 0.5f});
+        (void)s.step(0.001);
+        SimVec3 p, v;
+        s.getBodyState(b, p, v);
+        return v.y;
+    };
+    EXPECT_NEAR(tangentialVy(0.0f), 3.0f, 0.05f);   // frictionless: tangential speed preserved
+    EXPECT_LT(tangentialVy(0.5f), 2.7f);            // friction removes tangential speed
+    EXPECT_LT(tangentialVy(0.5f), tangentialVy(0.0f));
+}
