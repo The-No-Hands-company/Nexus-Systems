@@ -153,6 +153,22 @@ public:
 
     [[nodiscard]] bool hasGroundPlane() const noexcept;
 
+    // ── Body-body collision ────────────────────────────────────────────────────
+
+    /// Enable sphere-vs-sphere collision among bodies with collisionRadius > 0.
+    /// After integration, overlapping pairs are separated by a mass-weighted
+    /// positional correction and bounce: the approaching relative normal velocity
+    /// is reflected scaled by the shared `restitution` [0,1]. Static bodies
+    /// (mass == 0) act as immovable. Pairs are resolved once per step in
+    /// ascending-BodyId order so the result is deterministic. Disabled by default;
+    /// rejects a non-finite restitution (leaving the prior setting unchanged).
+    void setBodyCollision(float restitution) noexcept;
+
+    /// Disable body-body collision.
+    void clearBodyCollision() noexcept;
+
+    [[nodiscard]] bool hasBodyCollision() const noexcept;
+
     // ── Simulation step ──────────────────────────────────────────────────────
 
     /// Advance the simulation by dt seconds (must be finite and > 0).
@@ -219,12 +235,22 @@ private:
     float   m_groundOffset      = 0.0f;
     float   m_groundRestitution = 0.0f;
 
+    bool    m_bodyCollisionEnabled = false;
+    float   m_bodyRestitution      = 0.0f;
+
     Body*       findBody(BodyId id)       noexcept;
     const Body* findBody(BodyId id) const noexcept;
 
     /// Sphere-vs-plane positional correction + restitution. No-op when the ground
     /// is disabled, the body has no collider, or the sphere is clear of the plane.
     void resolveGroundContact(Body& b) const noexcept;
+
+    /// Single deterministic pass of sphere-vs-sphere resolution over all collider
+    /// bodies (ascending-BodyId pair order). No-op when body collision is disabled.
+    void resolveBodyCollisions() noexcept;
+
+    /// Mass-weighted positional + impulse resolution for one overlapping pair.
+    void resolveBodyPair(Body& a, Body& b) const noexcept;
 };
 
 } // namespace nexus

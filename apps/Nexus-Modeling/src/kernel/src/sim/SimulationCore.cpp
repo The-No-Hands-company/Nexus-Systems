@@ -317,6 +317,82 @@ void RigidBodySolver::resolveGroundContact(Body& b) const noexcept {
     }
 }
 
+// ── Body-body collision ─────────────────────────────────────────────────────────
+
+void RigidBodySolver::setBodyCollision(float restitution) noexcept {
+    if (!isFiniteFloat(restitution)) {
+        return; // reject non-finite; leave prior setting unchanged
+    }
+    m_bodyRestitution = restitution < 0.0f ? 0.0f : (restitution > 1.0f ? 1.0f : restitution);
+    m_bodyCollisionEnabled = true;
+}
+
+void RigidBodySolver::clearBodyCollision() noexcept {
+    m_bodyCollisionEnabled = false;
+}
+
+bool RigidBodySolver::hasBodyCollision() const noexcept {
+    return m_bodyCollisionEnabled;
+}
+
+void RigidBodySolver::resolveBodyPair(Body& a, Body& b) const noexcept {
+    const SimVec3 delta = b.position - a.position; // contact normal points a -> b
+    const float distSq  = delta.x*delta.x + delta.y*delta.y + delta.z*delta.z;
+    const float rSum    = a.collisionRadius + b.collisionRadius;
+    if (distSq >= rSum * rSum) {
+        return; // not overlapping
+    }
+
+    const float invMassA = (a.mass > 0.0f) ? (1.0f / a.mass) : 0.0f;
+    const float invMassB = (b.mass > 0.0f) ? (1.0f / b.mass) : 0.0f;
+    const float invSum   = invMassA + invMassB;
+    if (invSum <= 0.0f) {
+        return; // both static — nothing to move
+    }
+
+    // Contact normal + penetration depth. Coincident centers fall back to an
+    // arbitrary axis so the response stays finite.
+    float dist = std::sqrt(distSq);
+    SimVec3 normal = (dist > 1e-6f) ? delta * (1.0f / dist) : SimVec3{1.0f, 0.0f, 0.0f};
+    const float penetration = rSum - dist;
+
+    // Positional correction split by inverse mass (heavier body moves less).
+    const SimVec3 correction = normal * (penetration / invSum);
+    a.position += correction * (-invMassA);
+    b.position += correction * invMassB;
+
+    // Impulse along the normal, only when the bodies are approaching.
+    const SimVec3 relVel = b.velocity - a.velocity;
+    const float vn = relVel.x*normal.x + relVel.y*normal.y + relVel.z*normal.z;
+    if (vn < 0.0f) {
+        const float j = -(1.0f + m_bodyRestitution) * vn / invSum;
+        const SimVec3 impulse = normal * j;
+        a.velocity += impulse * (-invMassA);
+        b.velocity += impulse * invMassB;
+    }
+}
+
+void RigidBodySolver::resolveBodyCollisions() noexcept {
+    // Deterministic pair order: gather collider bodies sorted by ascending id so
+    // the sequential resolution is reproducible regardless of map iteration order.
+    std::vector<Body*> colliders;
+    colliders.reserve(m_bodies.size());
+    for (auto& [id, b] : m_bodies) {
+        (void)id;
+        if (b.collisionRadius > 0.0f) {
+            colliders.push_back(&b);
+        }
+    }
+    std::sort(colliders.begin(), colliders.end(),
+              [](const Body* a, const Body* c) noexcept { return a->id < c->id; });
+
+    for (std::size_t i = 0; i < colliders.size(); ++i) {
+        for (std::size_t k = i + 1; k < colliders.size(); ++k) {
+            resolveBodyPair(*colliders[i], *colliders[k]);
+        }
+    }
+}
+
 // ── Simulation step ───────────────────────────────────────────────────────────
 
 namespace {
@@ -537,6 +613,12 @@ StepReport RigidBodySolver::step(double dt) {
         // Clear per-step accumulated force and torque.
         b.force  = {0.0f, 0.0f, 0.0f};
         b.torque = {0.0f, 0.0f, 0.0f};
+    }
+
+    // Body-body collision pass (after integration + ground contact). Single
+    // deterministic pass; no-op when disabled.
+    if (m_bodyCollisionEnabled) {
+        resolveBodyCollisions();
     }
 
     m_time += dt;

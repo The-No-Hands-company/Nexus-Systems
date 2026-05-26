@@ -1162,3 +1162,106 @@ TEST(SimulationCore, NonAxisAlignedPlaneBounces) {
     EXPECT_NEAR(vel.x, 3.0f, 1e-4f);   // reflected along the plane normal
     EXPECT_NEAR(pos.x, 0.5f, 1e-4f);
 }
+
+// ── Body-body (sphere-sphere) collision ─────────────────────────────────────────
+
+TEST(SimulationCore, BodyCollisionDisabledByDefault) {
+    RigidBodySolver s;
+    EXPECT_FALSE(s.hasBodyCollision());
+}
+
+TEST(SimulationCore, SetAndClearBodyCollisionToggleState) {
+    RigidBodySolver s;
+    s.setBodyCollision(0.5f);
+    EXPECT_TRUE(s.hasBodyCollision());
+    s.clearBodyCollision();
+    EXPECT_FALSE(s.hasBodyCollision());
+}
+
+TEST(SimulationCore, SetBodyCollisionRejectsNonFinite) {
+    RigidBodySolver s;
+    s.setBodyCollision(std::numeric_limits<float>::quiet_NaN());
+    EXPECT_FALSE(s.hasBodyCollision());
+}
+
+TEST(SimulationCore, EqualMassHeadOnElasticSwapsVelocities) {
+    RigidBodySolver s;
+    s.setGravity({0.0f, 0.0f, 0.0f});
+    s.setBodyCollision(1.0f); // perfectly elastic
+    const BodyId a = s.addBody({.mass = 1.0f, .position = {-0.4f, 0.0f, 0.0f},
+                                .velocity = {2.0f, 0.0f, 0.0f}, .collisionRadius = 0.5f});
+    const BodyId b = s.addBody({.mass = 1.0f, .position = {0.4f, 0.0f, 0.0f},
+                                .velocity = {-2.0f, 0.0f, 0.0f}, .collisionRadius = 0.5f});
+    (void)s.step(0.01);
+
+    SimVec3 pa, va, pb, vb;
+    ASSERT_TRUE(s.getBodyState(a, pa, va));
+    ASSERT_TRUE(s.getBodyState(b, pb, vb));
+    // Equal-mass perfectly-elastic head-on collision swaps the velocities.
+    EXPECT_NEAR(va.x, -2.0f, 1e-4f);
+    EXPECT_NEAR(vb.x,  2.0f, 1e-4f);
+    EXPECT_LT(pa.x, pb.x); // separated, A still left of B
+}
+
+TEST(SimulationCore, StaticBodyActsImmovable) {
+    RigidBodySolver s;
+    s.setGravity({0.0f, 0.0f, 0.0f});
+    s.setBodyCollision(1.0f);
+    // A is static (mass 0); B approaches it from +x moving -x.
+    (void)s.addBody({.mass = 0.0f, .position = {0.0f, 0.0f, 0.0f}, .collisionRadius = 0.5f});
+    const BodyId b = s.addBody({.mass = 1.0f, .position = {0.8f, 0.0f, 0.0f},
+                                .velocity = {-2.0f, 0.0f, 0.0f}, .collisionRadius = 0.5f});
+    (void)s.step(0.01);
+
+    SimVec3 pb, vb;
+    ASSERT_TRUE(s.getBodyState(b, pb, vb));
+    EXPECT_NEAR(vb.x, 2.0f, 1e-4f);   // bounces off the immovable body
+    EXPECT_GE(pb.x, 0.5f);            // pushed clear (centers >= rSum apart)
+}
+
+TEST(SimulationCore, HeavierBodyMovesLessOnSeparation) {
+    RigidBodySolver s;
+    s.setGravity({0.0f, 0.0f, 0.0f});
+    s.setBodyCollision(0.0f);
+    const BodyId heavy = s.addBody({.mass = 10.0f, .position = {-0.4f, 0.0f, 0.0f}, .collisionRadius = 0.5f});
+    const BodyId light = s.addBody({.mass = 1.0f,  .position = {0.4f, 0.0f, 0.0f},  .collisionRadius = 0.5f});
+    (void)s.step(0.01);
+
+    SimVec3 ph, vh, pl, vl;
+    ASSERT_TRUE(s.getBodyState(heavy, ph, vh));
+    ASSERT_TRUE(s.getBodyState(light, pl, vl));
+    const float movedHeavy = std::fabs(ph.x - (-0.4f));
+    const float movedLight = std::fabs(pl.x - (0.4f));
+    EXPECT_GT(movedLight, movedHeavy);          // lighter body absorbs most of the push-out
+    EXPECT_NEAR(movedLight, movedHeavy * 10.0f, movedHeavy * 0.5f); // ~inverse-mass ratio
+}
+
+TEST(SimulationCore, SeparatedBodiesDoNotInteract) {
+    RigidBodySolver s;
+    s.setGravity({0.0f, 0.0f, 0.0f});
+    s.setBodyCollision(1.0f);
+    const BodyId a = s.addBody({.mass = 1.0f, .position = {-5.0f, 0.0f, 0.0f}, .collisionRadius = 0.5f});
+    const BodyId b = s.addBody({.mass = 1.0f, .position = {5.0f, 0.0f, 0.0f},  .collisionRadius = 0.5f});
+    (void)s.step(0.01);
+
+    SimVec3 pa, va, pb, vb;
+    ASSERT_TRUE(s.getBodyState(a, pa, va));
+    ASSERT_TRUE(s.getBodyState(b, pb, vb));
+    EXPECT_NEAR(pa.x, -5.0f, 1e-5f);
+    EXPECT_NEAR(pb.x,  5.0f, 1e-5f);
+}
+
+TEST(SimulationCore, BodyCollisionIsDeterministic) {
+    auto run = [] {
+        RigidBodySolver s;
+        s.setGravity({0.0f, -9.81f, 0.0f});
+        s.setBodyCollision(0.5f);
+        (void)s.addBody({.mass = 1.0f, .position = {-0.3f, 1.0f, 0.0f},
+                         .velocity = {1.0f, 0.0f, 0.0f}, .collisionRadius = 0.5f});
+        (void)s.addBody({.mass = 2.0f, .position = {0.3f, 1.0f, 0.0f},
+                         .velocity = {-1.0f, 0.0f, 0.0f}, .collisionRadius = 0.5f});
+        for (int i = 0; i < 50; ++i) (void)s.step(0.01);
+        return serializeSimState(s.captureState());
+    };
+    EXPECT_EQ(run(), run()); // identical inputs -> identical trajectory
+}
