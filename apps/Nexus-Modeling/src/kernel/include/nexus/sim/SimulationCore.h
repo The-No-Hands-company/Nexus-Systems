@@ -10,6 +10,9 @@ namespace nexus {
 using BodyId = uint32_t;
 inline constexpr BodyId kInvalidBodyId = 0u;
 
+using ConstraintId = uint32_t;
+inline constexpr ConstraintId kInvalidConstraintId = 0u;
+
 /// Minimal 3-component vector used by the simulation subsystem.
 /// Kept independent so the sim layer has no dependency on render math types.
 struct SimVec3 {
@@ -51,6 +54,15 @@ struct SimBodyDesc {
     float   collisionHalfHeight = 0.0f;   ///< capsule half-length along body-local +Y (>= 0, finite). 0 = sphere.
     SimVec3 collisionHalfExtents = {0.0f, 0.0f, 0.0f}; ///< box half-extents (each >= 0, finite). Any > 0 makes the
                                           ///< collider an oriented box (radius/halfHeight ignored).
+};
+
+/// Distance (rod/rope) constraint between two body centres, or between one body
+/// and a fixed world point. Holds their separation at `distance`.
+struct DistanceConstraintDesc {
+    BodyId  bodyA = kInvalidBodyId;            ///< must be a valid body
+    BodyId  bodyB = kInvalidBodyId;            ///< second body, or kInvalidBodyId to pin to `worldAnchor`
+    SimVec3 worldAnchor = {0.0f, 0.0f, 0.0f};  ///< the fixed point when bodyB is invalid
+    float   distance = 0.0f;                   ///< target separation (>= 0, finite)
 };
 
 /// Cacheable per-body state for snapshot/restore.
@@ -190,6 +202,19 @@ public:
     void setFriction(float coefficient) noexcept;
     [[nodiscard]] float friction() const noexcept;
 
+    // ── Constraints (joints) ───────────────────────────────────────────────────
+
+    /// Add a distance constraint. Returns kInvalidConstraintId if bodyA is unknown,
+    /// bodyB is set but unknown, or distance is non-finite/negative. Solved each
+    /// step (Baumgarte-stabilised) after integration and contacts.
+    [[nodiscard]] ConstraintId addDistanceConstraint(const DistanceConstraintDesc& desc);
+
+    /// Remove a constraint. Returns false if the id is unknown.
+    [[nodiscard]] bool removeConstraint(ConstraintId id) noexcept;
+
+    [[nodiscard]] bool        hasConstraint(ConstraintId id) const noexcept;
+    [[nodiscard]] std::size_t constraintCount() const noexcept;
+
     // ── Simulation step ──────────────────────────────────────────────────────
 
     /// Advance the simulation by dt seconds (must be finite and > 0).
@@ -270,6 +295,19 @@ private:
     // Warm-start cache: accumulated (normal, tangent) impulse per box-box contact
     // feature, carried to the next frame so persistent stacks start near solution.
     std::unordered_map<std::uint64_t, std::pair<float, float>> m_boxWarmStart;
+
+    struct DistanceConstraint {
+        ConstraintId id;
+        BodyId  bodyA;
+        BodyId  bodyB;        // kInvalidBodyId => pinned to worldAnchor
+        SimVec3 worldAnchor;
+        float   distance;
+    };
+    std::vector<DistanceConstraint> m_constraints;
+    ConstraintId                    m_nextConstraintId = 1u;
+
+    /// Baumgarte-stabilised iterated solve of all distance constraints (dt seconds).
+    void solveConstraints(float dt) noexcept;
 
     Body*       findBody(BodyId id)       noexcept;
     const Body* findBody(BodyId id) const noexcept;

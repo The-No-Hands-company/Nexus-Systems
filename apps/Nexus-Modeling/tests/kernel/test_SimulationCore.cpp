@@ -1678,3 +1678,77 @@ TEST(SimulationCore, BoxBoxCollisionIsDeterministic) {
     };
     EXPECT_EQ(run(), run());
 }
+
+// ── Distance constraints (joints) ───────────────────────────────────────────────
+
+TEST(SimulationCore, AddDistanceConstraintValidatesInputs) {
+    RigidBodySolver s;
+    const BodyId a = s.addBody({.mass = 1.0f});
+    const BodyId b = s.addBody({.mass = 1.0f});
+
+    EXPECT_EQ(s.addDistanceConstraint({.bodyA = 999u, .bodyB = b, .distance = 1.f}), kInvalidConstraintId);
+    EXPECT_EQ(s.addDistanceConstraint({.bodyA = a, .bodyB = 999u, .distance = 1.f}), kInvalidConstraintId);
+    EXPECT_EQ(s.addDistanceConstraint({.bodyA = a, .bodyB = b, .distance = -1.f}), kInvalidConstraintId);
+    EXPECT_EQ(s.addDistanceConstraint({.bodyA = a, .bodyB = b,
+                                       .distance = std::numeric_limits<float>::quiet_NaN()}), kInvalidConstraintId);
+
+    const ConstraintId c = s.addDistanceConstraint({.bodyA = a, .bodyB = b, .distance = 1.f});
+    EXPECT_NE(c, kInvalidConstraintId);
+    EXPECT_TRUE(s.hasConstraint(c));
+    EXPECT_EQ(s.constraintCount(), 1u);
+    EXPECT_TRUE(s.removeConstraint(c));
+    EXPECT_FALSE(s.hasConstraint(c));
+    EXPECT_EQ(s.constraintCount(), 0u);
+    EXPECT_FALSE(s.removeConstraint(c));
+}
+
+TEST(SimulationCore, PendulumMaintainsDistanceToWorldAnchor) {
+    RigidBodySolver s;
+    s.setGravity({0.0f, -9.81f, 0.0f});
+    s.setSolverIterations(16u);
+    const SimVec3 anchor{0.0f, 5.0f, 0.0f};
+    const float L = 3.0f;
+    const BodyId bob = s.addBody({.mass = 1.0f, .position = {3.0f, 5.0f, 0.0f}}); // start horizontal
+    ASSERT_NE(s.addDistanceConstraint({.bodyA = bob, .bodyB = kInvalidBodyId,
+                                       .worldAnchor = anchor, .distance = L}), kInvalidConstraintId);
+
+    auto distToAnchor = [&] {
+        SimVec3 p, v; s.getBodyState(bob, p, v);
+        const SimVec3 d = {p.x - anchor.x, p.y - anchor.y, p.z - anchor.z};
+        return std::sqrt(d.x*d.x + d.y*d.y + d.z*d.z);
+    };
+    for (int i = 0; i < 100; ++i) {
+        (void)s.step(0.01);
+        EXPECT_NEAR(distToAnchor(), L, 0.1f); // length held throughout the swing
+    }
+    SimVec3 p, v; s.getBodyState(bob, p, v);
+    EXPECT_LT(p.y, 4.8f); // swung down under gravity
+}
+
+TEST(SimulationCore, DistanceConstraintPullsTwoBodiesTogether) {
+    RigidBodySolver s;
+    s.setGravity({0.0f, 0.0f, 0.0f});
+    s.setSolverIterations(16u);
+    const BodyId a = s.addBody({.mass = 1.0f, .position = {0.0f, 0.0f, 0.0f}});
+    const BodyId b = s.addBody({.mass = 1.0f, .position = {2.0f, 0.0f, 0.0f}}); // start at distance 2
+    ASSERT_NE(s.addDistanceConstraint({.bodyA = a, .bodyB = b, .distance = 1.0f}), kInvalidConstraintId);
+
+    for (int i = 0; i < 200; ++i) (void)s.step(0.01);
+    SimVec3 pa, pb, v;
+    ASSERT_TRUE(s.getBodyState(a, pa, v));
+    ASSERT_TRUE(s.getBodyState(b, pb, v));
+    const SimVec3 d = {pb.x - pa.x, pb.y - pa.y, pb.z - pa.z};
+    EXPECT_NEAR(std::sqrt(d.x*d.x + d.y*d.y + d.z*d.z), 1.0f, 1e-2f); // pulled to the rest length
+    EXPECT_NEAR((pa.x + pb.x) * 0.5f, 1.0f, 1e-2f);                   // equal mass -> midpoint preserved
+}
+
+TEST(SimulationCore, ConstraintReferencingRemovedBodyIsSkipped) {
+    RigidBodySolver s;
+    const BodyId a = s.addBody({.mass = 1.0f});
+    const BodyId b = s.addBody({.mass = 1.0f, .position = {2.0f, 0.0f, 0.0f}});
+    (void)s.addDistanceConstraint({.bodyA = a, .bodyB = b, .distance = 1.0f});
+    EXPECT_TRUE(s.removeBody(b));
+    (void)s.step(0.01); // must not crash with a dangling constraint
+    SimVec3 p, v;
+    EXPECT_TRUE(s.getBodyState(a, p, v));
+}

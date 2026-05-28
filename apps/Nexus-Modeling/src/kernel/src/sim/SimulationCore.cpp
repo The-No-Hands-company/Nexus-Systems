@@ -498,6 +498,84 @@ float RigidBodySolver::friction() const noexcept {
     return m_friction;
 }
 
+// ── Constraints (joints) ────────────────────────────────────────────────────────
+
+ConstraintId RigidBodySolver::addDistanceConstraint(const DistanceConstraintDesc& desc)
+{
+    if (!findBody(desc.bodyA)) return kInvalidConstraintId;
+    if (desc.bodyB != kInvalidBodyId && !findBody(desc.bodyB)) return kInvalidConstraintId;
+    if (!isFiniteFloat(desc.distance) || desc.distance < 0.0f) return kInvalidConstraintId;
+    if (!isFiniteVec3(desc.worldAnchor)) return kInvalidConstraintId;
+
+    const ConstraintId id = m_nextConstraintId++;
+    m_constraints.push_back({ id, desc.bodyA, desc.bodyB, desc.worldAnchor, desc.distance });
+    return id;
+}
+
+bool RigidBodySolver::removeConstraint(ConstraintId id) noexcept
+{
+    for (auto it = m_constraints.begin(); it != m_constraints.end(); ++it) {
+        if (it->id == id) { m_constraints.erase(it); return true; }
+    }
+    return false;
+}
+
+bool RigidBodySolver::hasConstraint(ConstraintId id) const noexcept
+{
+    for (const auto& c : m_constraints) {
+        if (c.id == id) return true;
+    }
+    return false;
+}
+
+std::size_t RigidBodySolver::constraintCount() const noexcept
+{
+    return m_constraints.size();
+}
+
+void RigidBodySolver::solveConstraints(float dt) noexcept
+{
+    if (m_constraints.empty()) return;
+    const float invDt = (dt > 1e-8f) ? (1.0f / dt) : 0.0f;
+    constexpr float kBaumgarte = 0.2f; // fraction of the position error fed back per step
+
+    for (uint32_t iter = 0; iter < m_solverIterations; ++iter) {
+        for (const auto& c : m_constraints) {
+            Body* A = findBody(c.bodyA);
+            if (!A) continue; // body removed since the constraint was added
+            const float imA = (A->mass > 0.0f) ? (1.0f / A->mass) : 0.0f;
+
+            Body*   B = nullptr;
+            SimVec3 posB = c.worldAnchor;
+            SimVec3 velB{0.0f, 0.0f, 0.0f};
+            float   imB = 0.0f;
+            if (c.bodyB != kInvalidBodyId) {
+                B = findBody(c.bodyB);
+                if (!B) continue;
+                posB = B->position;
+                velB = B->velocity;
+                imB  = (B->mass > 0.0f) ? (1.0f / B->mass) : 0.0f;
+            }
+
+            const float invSum = imA + imB;
+            if (invSum <= 0.0f) continue; // both immovable
+
+            SimVec3 d = posB - A->position;        // axis A -> B
+            const float dist = std::sqrt(dotv(d, d));
+            const SimVec3 n = (dist > 1e-6f) ? d * (1.0f / dist) : SimVec3{1.0f, 0.0f, 0.0f};
+            const float cError = dist - c.distance; // > 0 stretched, < 0 compressed
+
+            const SimVec3 relV = velB - A->velocity;
+            const float vn = dotv(relV, n);
+            // Drive the distance rate to cancel the error (Baumgarte) and relative speed.
+            const float jn = -(vn + kBaumgarte * invDt * cError) / invSum;
+            const SimVec3 J = n * jn; // impulse on B; -J on A
+            A->velocity += J * (-imA);
+            if (B) B->velocity += J * imB;
+        }
+    }
+}
+
 void RigidBodySolver::resolveContacts() noexcept {
     if (!m_groundEnabled && !m_bodyCollisionEnabled) {
         return;
@@ -1104,6 +1182,7 @@ StepReport RigidBodySolver::step(double dt) {
     // Contact resolution (body-body + ground), iterated for stable stacks. No-op
     // when no collision feature is enabled.
     resolveContacts();
+    solveConstraints(fdt);
 
     m_time += dt;
     report.simulationTime = m_time;
@@ -1204,6 +1283,7 @@ StepReport RigidBodySolver::stepFixed(double dt, double fixedSubstep)
     // absent from the fixed-step path). No-op when no collision feature is enabled,
     // so existing fixed-step trajectories are unchanged.
     resolveContacts();
+    solveConstraints(static_cast<float>(dt));
 
     report.simulationTime = m_time;
     report.bodiesIntegrated = dynamicBodies;
@@ -1284,8 +1364,10 @@ double RigidBodySolver::simulationTime() const noexcept {
 
 void RigidBodySolver::clear() noexcept {
     m_bodies.clear();
+    m_constraints.clear();
+    m_boxWarmStart.clear();
     m_time = 0.0;
-    // m_nextId not reset; m_gravity preserved.
+    // m_nextId / m_nextConstraintId not reset; m_gravity preserved.
 }
 
 // ── Private helpers ───────────────────────────────────────────────────────────
