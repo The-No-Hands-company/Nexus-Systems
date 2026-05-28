@@ -1434,3 +1434,44 @@ TEST(AnimationCore, CubicInterpolationPassesThroughKeysAndSmooths)
     EXPECT_NEAR(mid, 1.875f, 1e-3f);
     EXPECT_GT(std::fabs(mid - 2.0f), 0.05f);
 }
+
+TEST(AnimationCore, CubicRotationUsesSquadSpline)
+{
+    constexpr float kPi = 3.14159265358979f;
+    // Z-axis rotations at 0, 30, 90, 180 degrees (accelerating) at t = 0,1,2,3.
+    auto zKey = [&](float deg, float t) {
+        const float h = deg * kPi / 180.f * 0.5f;
+        TransformKeyframe k{};
+        k.timeSec = t;
+        k.value.rotation = {0.f, 0.f, std::sin(h), std::cos(h)};
+        k.interpolation = KeyInterpolation::Cubic;
+        return k;
+    };
+    TransformTrack track;
+    track.setKeyframes({zKey(0.f, 0.f), zKey(30.f, 1.f), zKey(90.f, 2.f), zKey(180.f, 3.f)});
+
+    auto angleDeg = [&](const AnimTransform& t) {
+        float w = std::fabs(t.rotation.w);
+        if (w > 1.f) w = 1.f;
+        const float a = 2.f * std::acos(w) * 180.f / kPi;
+        return t.rotation.z >= 0.f ? a : -a;
+    };
+    auto unitLen = [](const AnimTransform& t) {
+        const auto& r = t.rotation;
+        return std::sqrt(r.x*r.x + r.y*r.y + r.z*r.z + r.w*r.w);
+    };
+
+    // Passes exactly through the keyframe rotations.
+    EXPECT_NEAR(angleDeg(track.sample(1.0f)), 30.f, 0.5f);
+    EXPECT_NEAR(angleDeg(track.sample(2.0f)), 90.f, 0.5f);
+
+    // Always a unit quaternion mid-segment.
+    EXPECT_NEAR(unitLen(track.sample(1.25f)), 1.0f, 1e-3f);
+    EXPECT_NEAR(unitLen(track.sample(1.75f)), 1.0f, 1e-3f);
+
+    // squad bends the arc off the plain-slerp midpoint (60 deg), staying in range.
+    const float mid = angleDeg(track.sample(1.5f));
+    EXPECT_GT(mid, 30.f);
+    EXPECT_LT(mid, 90.f);
+    EXPECT_GT(std::fabs(mid - 60.f), 1.0f);
+}

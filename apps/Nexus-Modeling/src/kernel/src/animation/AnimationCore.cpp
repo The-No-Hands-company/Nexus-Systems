@@ -48,6 +48,74 @@ nexus::render::Vec4 nlerp(const nexus::render::Vec4& a,
     return r;
 }
 
+// ── Quaternion helpers for spherical cubic (squad) rotation ──────────────────
+using Quat = nexus::render::Vec4; // xyzw
+
+float qdot(const Quat& a, const Quat& b) noexcept { return a.x*b.x + a.y*b.y + a.z*b.z + a.w*b.w; }
+Quat  qneg(const Quat& q) noexcept { return {-q.x, -q.y, -q.z, -q.w}; }
+Quat  qconj(const Quat& q) noexcept { return {-q.x, -q.y, -q.z, q.w}; } // inverse for a unit quat
+
+Quat qmul(const Quat& a, const Quat& b) noexcept
+{
+    return {
+        a.w*b.x + a.x*b.w + a.y*b.z - a.z*b.y,
+        a.w*b.y - a.x*b.z + a.y*b.w + a.z*b.x,
+        a.w*b.z + a.x*b.y - a.y*b.x + a.z*b.w,
+        a.w*b.w - a.x*b.x - a.y*b.y - a.z*b.z,
+    };
+}
+
+// Spherical linear interpolation along the shortest arc; falls back to nlerp when
+// the quaternions are nearly parallel (sin θ → 0).
+Quat slerp(const Quat& a, Quat b, float t) noexcept
+{
+    float d = qdot(a, b);
+    if (d < 0.f) { b = qneg(b); d = -d; } // shortest path
+    if (d > 0.9995f) {
+        return nlerp(a, b, t);
+    }
+    const float theta0 = std::acos(d);
+    const float sin0   = std::sin(theta0);
+    const float s0 = std::sin((1.f - t) * theta0) / sin0;
+    const float s1 = std::sin(t * theta0) / sin0;
+    return { s0*a.x + s1*b.x, s0*a.y + s1*b.y, s0*a.z + s1*b.z, s0*a.w + s1*b.w };
+}
+
+// Log of a unit quaternion -> pure quaternion (vector part, w = 0).
+Quat qlog(const Quat& q) noexcept
+{
+    const float vlen = std::sqrt(q.x*q.x + q.y*q.y + q.z*q.z);
+    if (vlen < 1e-8f) return {0.f, 0.f, 0.f, 0.f};
+    const float a = std::atan2(vlen, q.w) / vlen;
+    return {q.x*a, q.y*a, q.z*a, 0.f};
+}
+
+// Exp of a pure quaternion -> unit quaternion.
+Quat qexp(const Quat& v) noexcept
+{
+    const float vlen = std::sqrt(v.x*v.x + v.y*v.y + v.z*v.z);
+    if (vlen < 1e-8f) return {0.f, 0.f, 0.f, 1.f};
+    const float s = std::sin(vlen) / vlen;
+    return {v.x*s, v.y*s, v.z*s, std::cos(vlen)};
+}
+
+// Shoemake squad control quaternion for the centre key q1 given neighbours q0, q2
+// (already hemisphere-aligned to q1): s1 = q1 * exp(-(log(q1^-1 q2) + log(q1^-1 q0))/4).
+Quat squadControl(const Quat& q0, const Quat& q1, const Quat& q2) noexcept
+{
+    const Quat inv = qconj(q1);
+    const Quat l1 = qlog(qmul(inv, q2));
+    const Quat l0 = qlog(qmul(inv, q0));
+    const Quat e{ -(l0.x + l1.x) * 0.25f, -(l0.y + l1.y) * 0.25f, -(l0.z + l1.z) * 0.25f, 0.f };
+    return qmul(q1, qexp(e));
+}
+
+// squad(q1,q2,s1,s2,t) = slerp(slerp(q1,q2,t), slerp(s1,s2,t), 2t(1-t)).
+Quat squad(const Quat& q1, const Quat& q2, const Quat& s1, const Quat& s2, float t) noexcept
+{
+    return slerp(slerp(q1, q2, t), slerp(s1, s2, t), 2.f * t * (1.f - t));
+}
+
 Transform lerpTransform(const Transform& a, const Transform& b, float t) noexcept
 {
     Transform out{};
@@ -179,9 +247,9 @@ Transform TransformTrack::sample(float timeSec) const noexcept
                     return prev.value; // hold until the next keyframe
 
                 case KeyInterpolation::Cubic: {
-                    // Auto-tangent Catmull-Rom over translation/scale using the
-                    // surrounding keys; rotation follows the same smooth timing via
-                    // a smoothstep-eased nlerp (full quaternion splines are squad).
+                    // Auto-tangent Catmull-Rom over translation/scale, and a proper
+                    // spherical cubic (squad) over rotation using the surrounding keys
+                    // as the spline control points.
                     const Transform& p0 = (i >= 2) ? m_keys[i - 2].value : prev.value;
                     const Transform& p3 = (i + 1 < m_keys.size()) ? m_keys[i + 1].value : next.value;
                     Transform out{};
@@ -189,8 +257,17 @@ Transform TransformTrack::sample(float timeSec) const noexcept
                                                  next.value.translation, p3.translation, t);
                     out.scale       = catmullRom(p0.scale, prev.value.scale,
                                                  next.value.scale, p3.scale, t);
-                    const float te = t * t * (3.f - 2.f * t); // smoothstep easing
-                    out.rotation = nlerp(prev.value.rotation, next.value.rotation, te);
+
+                    // Hemisphere-align the four control quaternions into one chain so
+                    // the spline (and its log/exp tangents) take the shortest path.
+                    const Quat q1 = prev.value.rotation;
+                    Quat q0 = p0.rotation, q2 = next.value.rotation, q3 = p3.rotation;
+                    if (qdot(q1, q0) < 0.f) q0 = qneg(q0);
+                    if (qdot(q1, q2) < 0.f) q2 = qneg(q2);
+                    if (qdot(q2, q3) < 0.f) q3 = qneg(q3);
+                    const Quat s1 = squadControl(q0, q1, q2);
+                    const Quat s2 = squadControl(q1, q2, q3);
+                    out.rotation = squad(q1, q2, s1, s2, t);
                     return out;
                 }
 
