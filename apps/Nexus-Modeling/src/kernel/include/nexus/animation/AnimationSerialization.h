@@ -40,9 +40,10 @@ namespace nexus::animation {
 //  Version constants
 // ─────────────────────────────────────────────────────────────────────────────
 inline constexpr uint32_t kAnimClipMagic          = 0x4E584143u;  // "NXAC"
-// v2 adds a per-keyframe interpolation mode after the scale fields. v1 blobs are
-// still read (their keyframes default to Linear).
-inline constexpr uint32_t kAnimClipVersionCurrent  = 2u;
+// v2 adds a per-keyframe interpolation mode after the scale fields. v3 appends a
+// notify-event track after the bone tracks. Older blobs still read (their keyframes
+// default to Linear, and v<3 clips simply have no events).
+inline constexpr uint32_t kAnimClipVersionCurrent  = 3u;
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  I/O report

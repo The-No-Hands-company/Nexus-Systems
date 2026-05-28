@@ -101,6 +101,31 @@ enum class ClipWrapMode : uint8_t {
     Loop,
 };
 
+// A discrete event fired at a point in a clip's timeline (footstep, VFX, gameplay
+// hook). `id` is a caller-defined identifier, e.g. a hashed notify name.
+struct AnimationEvent {
+    float    timeSec = 0.f;
+    uint32_t id      = 0u;
+    bool operator==(const AnimationEvent&) const = default;
+};
+
+// An ordered set of timeline events. collectEvents returns those crossed as the
+// playhead advances, so each fires exactly once per pass.
+class NotifyTrack {
+public:
+    void setEvents(std::vector<AnimationEvent> events); // stored sorted by time
+    [[nodiscard]] bool   empty() const noexcept { return m_events.empty(); }
+    [[nodiscard]] size_t eventCount() const noexcept { return m_events.size(); }
+    [[nodiscard]] const std::vector<AnimationEvent>& events() const noexcept { return m_events; }
+
+    // Append every event in the half-open interval (fromTime, toTime] to `out`.
+    // Half-open so advancing across a boundary fires the event once, not twice.
+    void collectEvents(float fromTime, float toTime, std::vector<AnimationEvent>& out) const;
+
+private:
+    std::vector<AnimationEvent> m_events;
+};
+
 class AnimationClip {
 public:
     AnimationClip(float durationSec = 0.f, float sampleRateHz = 0.f);
@@ -121,8 +146,14 @@ public:
     [[nodiscard]] size_t trackSlotCount() const noexcept { return m_tracks.size(); }
     [[nodiscard]] size_t trackCount() const noexcept;
 
+    void setNotifyTrack(NotifyTrack track);
+    [[nodiscard]] const NotifyTrack& notifyTrack() const noexcept { return m_notifies; }
+
     // Samples all bone channels into outPose; missing channels fallback to bind-local transforms.
     void sampleToPose(float timeSec, const Skeleton& skeleton, Pose& outPose) const;
+
+    // Events fired as playback advances over (fromTime, toTime]. Appends to `out`.
+    void collectEvents(float fromTime, float toTime, std::vector<AnimationEvent>& out) const;
 
 private:
     [[nodiscard]] float normalizeAndQuantizeTime(float timeSec) const noexcept;
@@ -131,6 +162,7 @@ private:
     float m_sampleRateHz = 0.f;
     ClipWrapMode m_wrapMode = ClipWrapMode::Clamp;
     std::vector<std::optional<TransformTrack>> m_tracks;
+    NotifyTrack m_notifies;
 };
 
 struct BoneWeightMask {

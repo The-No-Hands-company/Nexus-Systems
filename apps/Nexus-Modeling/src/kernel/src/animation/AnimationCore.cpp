@@ -356,10 +356,39 @@ void Pose::computeModelMatrices(const Skeleton& skeleton)
     }
 }
 
+void NotifyTrack::setEvents(std::vector<AnimationEvent> events)
+{
+    std::sort(events.begin(), events.end(),
+              [](const AnimationEvent& a, const AnimationEvent& b) {
+                  if (a.timeSec != b.timeSec) return a.timeSec < b.timeSec;
+                  return a.id < b.id; // stable, deterministic order for equal times
+              });
+    m_events = std::move(events);
+}
+
+void NotifyTrack::collectEvents(float fromTime, float toTime, std::vector<AnimationEvent>& out) const
+{
+    for (const AnimationEvent& e : m_events) {
+        if (e.timeSec > fromTime && e.timeSec <= toTime) {
+            out.push_back(e);
+        }
+    }
+}
+
 AnimationClip::AnimationClip(float durationSec, float sampleRateHz)
     : m_durationSec(isFiniteFloat(durationSec) ? std::max(0.f, durationSec) : 0.f),
       m_sampleRateHz(isFiniteFloat(sampleRateHz) ? std::max(0.f, sampleRateHz) : 0.f)
 {}
+
+void AnimationClip::setNotifyTrack(NotifyTrack track)
+{
+    m_notifies = std::move(track);
+}
+
+void AnimationClip::collectEvents(float fromTime, float toTime, std::vector<AnimationEvent>& out) const
+{
+    m_notifies.collectEvents(fromTime, toTime, out);
+}
 
 void AnimationClip::setDurationSec(float durationSec) noexcept
 {

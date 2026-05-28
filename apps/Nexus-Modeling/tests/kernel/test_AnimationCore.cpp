@@ -1475,3 +1475,52 @@ TEST(AnimationCore, CubicRotationUsesSquadSpline)
     EXPECT_LT(mid, 90.f);
     EXPECT_GT(std::fabs(mid - 60.f), 1.0f);
 }
+
+// ── Notify / event tracks ───────────────────────────────────────────────────────
+
+TEST(AnimationCore, NotifyTrackSortsEventsByTime)
+{
+    NotifyTrack track;
+    track.setEvents({ {1.5f, 30u}, {0.5f, 10u}, {1.0f, 20u} });
+    ASSERT_EQ(track.eventCount(), 3u);
+    EXPECT_FLOAT_EQ(track.events()[0].timeSec, 0.5f);
+    EXPECT_FLOAT_EQ(track.events()[1].timeSec, 1.0f);
+    EXPECT_FLOAT_EQ(track.events()[2].timeSec, 1.5f);
+    EXPECT_EQ(track.events()[0].id, 10u);
+}
+
+TEST(AnimationCore, NotifyTrackCollectsEventsInHalfOpenInterval)
+{
+    NotifyTrack track;
+    track.setEvents({ {0.5f, 10u}, {1.0f, 20u}, {1.5f, 30u} });
+
+    std::vector<AnimationEvent> out;
+    track.collectEvents(0.4f, 1.1f, out);          // (0.4, 1.1]
+    ASSERT_EQ(out.size(), 2u);
+    EXPECT_EQ(out[0].id, 10u);
+    EXPECT_EQ(out[1].id, 20u);
+
+    // Advancing from exactly an event time excludes it (already fired); the next does.
+    out.clear();
+    track.collectEvents(1.0f, 1.5f, out);          // (1.0, 1.5]
+    ASSERT_EQ(out.size(), 1u);
+    EXPECT_EQ(out[0].id, 30u);
+
+    // Empty window fires nothing.
+    out.clear();
+    track.collectEvents(1.5f, 1.5f, out);
+    EXPECT_TRUE(out.empty());
+}
+
+TEST(AnimationCore, AnimationClipForwardsNotifyEvents)
+{
+    AnimationClip clip(2.f, 30.f);
+    NotifyTrack track;
+    track.setEvents({ {0.25f, 7u}, {1.75f, 9u} });
+    clip.setNotifyTrack(std::move(track));
+
+    std::vector<AnimationEvent> out;
+    clip.collectEvents(0.0f, 1.0f, out);
+    ASSERT_EQ(out.size(), 1u);
+    EXPECT_EQ(out[0].id, 7u);
+}

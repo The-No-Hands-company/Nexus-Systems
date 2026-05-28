@@ -127,6 +127,16 @@ AnimClipIOReport AnimationClipSerializer::save(const AnimationClip& clip,
         }
     }
 
+    // v3: notify-event track (count + each event's time and id).
+    {
+        const auto& events = clip.notifyTrack().events();
+        if (!writeU32(fp, static_cast<uint32_t>(events.size()))) { return fail("Write error: notifyCount"); }
+        for (const AnimationEvent& e : events) {
+            if (!writeF32(fp, e.timeSec)) { return fail("Write error: notify timeSec"); }
+            if (!writeU32(fp, e.id))      { return fail("Write error: notify id"); }
+        }
+    }
+
     std::fclose(fp);
 
     report.valid      = true;
@@ -226,6 +236,23 @@ AnimClipIOReport AnimationClipSerializer::load(const std::string& path,
         TransformTrack track;
         track.setKeyframes(std::move(keys));
         loaded.setBoneTrack(static_cast<size_t>(boneIndex), std::move(track));
+    }
+
+    // v3+: notify-event track. Older blobs simply have none.
+    if (version >= 3u) {
+        uint32_t notifyCount = 0u;
+        if (!readU32(fp, notifyCount)) { return fail(AnimClipDiagnostic::ReadError, "Read error: notifyCount"); }
+        std::vector<AnimationEvent> events;
+        events.reserve(notifyCount);
+        for (uint32_t e = 0u; e < notifyCount; ++e) {
+            AnimationEvent ev{};
+            if (!readF32(fp, ev.timeSec)) { return fail(AnimClipDiagnostic::ReadError, "Read error: notify timeSec"); }
+            if (!readU32(fp, ev.id))      { return fail(AnimClipDiagnostic::ReadError, "Read error: notify id"); }
+            events.push_back(ev);
+        }
+        NotifyTrack notifies;
+        notifies.setEvents(std::move(events));
+        loaded.setNotifyTrack(std::move(notifies));
     }
 
     std::fclose(fp);

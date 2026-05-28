@@ -511,4 +511,31 @@ TEST(AnimationSerialization, RoundTripPreservesKeyframeInterpolation)
     EXPECT_EQ(t->keyframe(2u)->interpolation, KeyInterpolation::Linear);
 }
 
+TEST(AnimationSerialization, RoundTripPreservesNotifyEvents)
+{
+    const std::string path = tmpPath("clip_notifies.nxac");
+
+    AnimationClip saved(2.f, 30.f);
+    // A bone track so the file has tracks too, exercising the notify section after them.
+    TransformTrack track;
+    TransformKeyframe k0; k0.timeSec = 0.f;
+    track.setKeyframes({k0});
+    saved.setBoneTrack(0u, std::move(track));
+
+    NotifyTrack notifies;
+    notifies.setEvents({ {1.5f, 99u}, {0.5f, 11u} }); // unsorted on input
+    saved.setNotifyTrack(std::move(notifies));
+
+    ASSERT_TRUE(AnimationClipSerializer::save(saved, path).valid);
+
+    AnimationClip loaded;
+    ASSERT_TRUE(AnimationClipSerializer::load(path, loaded).valid);
+    const auto& evs = loaded.notifyTrack().events();
+    ASSERT_EQ(evs.size(), 2u);
+    EXPECT_FLOAT_EQ(evs[0].timeSec, 0.5f); // stored sorted by time
+    EXPECT_EQ(evs[0].id, 11u);
+    EXPECT_FLOAT_EQ(evs[1].timeSec, 1.5f);
+    EXPECT_EQ(evs[1].id, 99u);
+}
+
 } // namespace nexus::animation::testing
