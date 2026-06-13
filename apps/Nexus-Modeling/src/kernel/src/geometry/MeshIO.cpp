@@ -2,14 +2,9 @@
 
 #include <algorithm>
 #include <bit>
-#include <cctype>
 #include <cstdint>
-#include <cstdlib>
 #include <fstream>
-#include <cstdio>
-#include <cstring>
 #include <limits>
-#include <sstream>
 #include <string>
 
 namespace nexus::geometry {
@@ -69,13 +64,14 @@ MeshExportReport exportOBJ(const Mesh&              mesh,
 {
     MeshExportReport report{};
 
-    std::FILE* fp = std::fopen(path.c_str(), "w");
-    if (!fp) {
+    std::ofstream out(path);
+    if (!out.is_open()) {
         report.diagnostic = MeshExportDiagnostic::FileOpenFailed;
         report.messages.push_back("Failed to open file for writing: " + path);
         std::sort(report.messages.begin(), report.messages.end());
         return report;
     }
+    out.precision(9);
 
     const auto& positions = mesh.attributes().positions();
     const bool  hasNormals = opts.includeNormals && mesh.attributes().hasNormals();
@@ -83,73 +79,58 @@ MeshExportReport exportOBJ(const Mesh&              mesh,
     const auto& normals    = hasNormals ? mesh.attributes().normals()  : decltype(mesh.attributes().normals()){};
     const auto& uvs        = hasUVs     ? mesh.attributes().uvs()      : decltype(mesh.attributes().uvs()){};
 
-    auto writeError = [&]() -> MeshExportReport {
-        std::fclose(fp);
+    auto check = [&]() -> bool {
+        if (out.good()) return true;
         report.diagnostic = MeshExportDiagnostic::WriteError;
         report.messages.push_back("Write error while exporting OBJ: " + path);
         std::sort(report.messages.begin(), report.messages.end());
-        return report;
+        return false;
     };
 
-    // Header comment
-    if (std::fprintf(fp, "# Nexus OBJ export\n") < 0) { return writeError(); }
+    out << "# Nexus OBJ export\n";
+    if (!check()) return report;
 
-    // Vertex positions
     for (const auto& p : positions) {
-        if (std::fprintf(fp, "v %.9g %.9g %.9g\n", p.x, p.y, p.z) < 0) {
-            return writeError();
-        }
+        out << "v " << p.x << ' ' << p.y << ' ' << p.z << '\n';
+        if (!check()) return report;
     }
 
-    // Vertex normals
     if (hasNormals) {
         for (const auto& n : normals) {
-            if (std::fprintf(fp, "vn %.9g %.9g %.9g\n", n.x, n.y, n.z) < 0) {
-                return writeError();
-            }
+            out << "vn " << n.x << ' ' << n.y << ' ' << n.z << '\n';
+            if (!check()) return report;
         }
     }
 
-    // Texture coords
     if (hasUVs) {
         for (const auto& uv : uvs) {
-            if (std::fprintf(fp, "vt %.9g %.9g\n", uv.u, uv.v) < 0) {
-                return writeError();
-            }
+            out << "vt " << uv.u << ' ' << uv.v << '\n';
+            if (!check()) return report;
         }
     }
 
-    // Faces (OBJ is 1-indexed)
     const size_t faceCount = mesh.topology().faceCount();
     for (size_t fi = 0; fi < faceCount; ++fi) {
         const Face& f = mesh.topology().face(fi);
-        if (f.indices.empty()) {
-            continue;
-        }
+        if (f.indices.empty()) continue;
 
-        if (std::fprintf(fp, "f") < 0) { return writeError(); }
-
+        out << 'f';
         for (const uint32_t idx : f.indices) {
-            const uint32_t vi = idx + 1u;  // 1-based
-
-            int written = 0;
+            const uint32_t vi = idx + 1u;
             if (hasNormals && hasUVs) {
-                written = std::fprintf(fp, " %u/%u/%u", vi, vi, vi);
+                out << ' ' << vi << '/' << vi << '/' << vi;
             } else if (hasNormals) {
-                written = std::fprintf(fp, " %u//%u", vi, vi);
+                out << ' ' << vi << "//" << vi;
             } else if (hasUVs) {
-                written = std::fprintf(fp, " %u/%u", vi, vi);
+                out << ' ' << vi << '/' << vi;
             } else {
-                written = std::fprintf(fp, " %u", vi);
+                out << ' ' << vi;
             }
-            if (written < 0) { return writeError(); }
         }
-
-        if (std::fprintf(fp, "\n") < 0) { return writeError(); }
+        out << '\n';
+        if (!check()) return report;
         ++report.facesWritten;
     }
-
-    std::fclose(fp);
 
     report.verticesWritten = static_cast<uint32_t>(positions.size());
     report.valid           = true;
@@ -164,13 +145,14 @@ MeshExportReport exportPLY(const Mesh&              mesh,
 {
     MeshExportReport report{};
 
-    std::FILE* fp = std::fopen(path.c_str(), "w");
-    if (!fp) {
+    std::ofstream out(path);
+    if (!out.is_open()) {
         report.diagnostic = MeshExportDiagnostic::FileOpenFailed;
         report.messages.push_back("Failed to open file for writing: " + path);
         std::sort(report.messages.begin(), report.messages.end());
         return report;
     }
+    out.precision(9);
 
     const auto& positions  = mesh.attributes().positions();
     const bool  hasNormals = opts.includeNormals && mesh.attributes().hasNormals();
@@ -181,78 +163,64 @@ MeshExportReport exportPLY(const Mesh&              mesh,
     const uint32_t vertexCount = static_cast<uint32_t>(positions.size());
     const uint32_t faceCount   = static_cast<uint32_t>(mesh.topology().faceCount());
 
-    auto writeError = [&]() -> MeshExportReport {
-        std::fclose(fp);
+    auto check = [&]() -> bool {
+        if (out.good()) return true;
         report.diagnostic = MeshExportDiagnostic::WriteError;
         report.messages.push_back("Write error while exporting PLY: " + path);
         std::sort(report.messages.begin(), report.messages.end());
-        return report;
+        return false;
     };
 
-    // PLY header
-    if (std::fprintf(fp,
-            "ply\n"
-            "format ascii 1.0\n"
-            "comment Nexus PLY export\n"
-            "element vertex %u\n"
-            "property float x\n"
-            "property float y\n"
-            "property float z\n",
-            vertexCount) < 0) { return writeError(); }
+    out << "ply\n"
+           "format ascii 1.0\n"
+           "comment Nexus PLY export\n"
+           "element vertex " << vertexCount << "\n"
+           "property float x\n"
+           "property float y\n"
+           "property float z\n";
+    if (!check()) return report;
 
     if (hasNormals) {
-        if (std::fprintf(fp,
-                "property float nx\n"
-                "property float ny\n"
-                "property float nz\n") < 0) { return writeError(); }
+        out << "property float nx\n"
+               "property float ny\n"
+               "property float nz\n";
+        if (!check()) return report;
     }
     if (hasUVs) {
-        if (std::fprintf(fp,
-                "property float s\n"
-                "property float t\n") < 0) { return writeError(); }
+        out << "property float s\n"
+               "property float t\n";
+        if (!check()) return report;
     }
 
-    if (std::fprintf(fp,
-            "element face %u\n"
-            "property list uchar int vertex_indices\n"
-            "end_header\n",
-            faceCount) < 0) { return writeError(); }
+    out << "element face " << faceCount << "\n"
+           "property list uchar int vertex_indices\n"
+           "end_header\n";
+    if (!check()) return report;
 
-    // Vertex data
     for (uint32_t vi = 0; vi < vertexCount; ++vi) {
-        int w = std::fprintf(fp, "%.9g %.9g %.9g",
-                             positions[vi].x, positions[vi].y, positions[vi].z);
-        if (w < 0) { return writeError(); }
-
+        out << positions[vi].x << ' ' << positions[vi].y << ' ' << positions[vi].z;
         if (hasNormals) {
-            w = std::fprintf(fp, " %.9g %.9g %.9g",
-                             normals[vi].x, normals[vi].y, normals[vi].z);
-            if (w < 0) { return writeError(); }
+            out << ' ' << normals[vi].x << ' ' << normals[vi].y << ' ' << normals[vi].z;
         }
         if (hasUVs) {
-            w = std::fprintf(fp, " %.9g %.9g", uvs[vi].u, uvs[vi].v);
-            if (w < 0) { return writeError(); }
+            out << ' ' << uvs[vi].u << ' ' << uvs[vi].v;
         }
-
-        if (std::fprintf(fp, "\n") < 0) { return writeError(); }
+        out << '\n';
+        if (!check()) return report;
     }
 
-    // Face data
     for (size_t fi = 0; fi < faceCount; ++fi) {
         const Face& f = mesh.topology().face(fi);
-        if (f.indices.empty()) {
-            continue;
-        }
+        if (f.indices.empty()) continue;
 
-        if (std::fprintf(fp, "%zu", f.indices.size()) < 0) { return writeError(); }
+        out << f.indices.size();
         for (const uint32_t idx : f.indices) {
-            if (std::fprintf(fp, " %u", idx) < 0) { return writeError(); }
+            out << ' ' << idx;
         }
-        if (std::fprintf(fp, "\n") < 0) { return writeError(); }
+        out << '\n';
+        if (!check()) return report;
         ++report.facesWritten;
     }
-
-    std::fclose(fp);
 
     report.verticesWritten = vertexCount;
     report.valid           = true;
