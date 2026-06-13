@@ -176,8 +176,8 @@ TEST(SweepLoft, DeterministicOutput) {
     Mesh mesh1, mesh2;
     NurbsSurface out1, out2;
 
-    SweepLoftOperation::sweep(profile, path, desc, out1, &mesh1);
-    SweepLoftOperation::sweep(profile, path, desc, out2, &mesh2);
+    (void)SweepLoftOperation::sweep(profile, path, desc, out1, &mesh1);
+    (void)SweepLoftOperation::sweep(profile, path, desc, out2, &mesh2);
 
     EXPECT_EQ(mesh1.attributes().vertexCount(), mesh2.attributes().vertexCount());
     EXPECT_EQ(mesh1.topology().faceCount(), mesh2.topology().faceCount());

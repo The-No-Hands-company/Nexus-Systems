@@ -1407,7 +1407,7 @@ TEST(SimulationCore, BodyBodyFrictionOpposesTangentialSlide) {
                                     .velocity = {-1.0f, 3.0f, 0.0f}, .collisionRadius = 0.5f});
         (void)s.step(0.001);
         SimVec3 p, v;
-        s.getBodyState(b, p, v);
+        (void)s.getBodyState(b, p, v);
         return v.y;
     };
     EXPECT_NEAR(tangentialVy(0.0f), 3.0f, 0.05f);   // frictionless: tangential speed preserved
@@ -1713,7 +1713,7 @@ TEST(SimulationCore, PendulumMaintainsDistanceToWorldAnchor) {
                                        .worldAnchor = anchor, .distance = L}), kInvalidConstraintId);
 
     auto distToAnchor = [&] {
-        SimVec3 p, v; s.getBodyState(bob, p, v);
+        SimVec3 p, v; (void)s.getBodyState(bob, p, v);
         const SimVec3 d = {p.x - anchor.x, p.y - anchor.y, p.z - anchor.z};
         return std::sqrt(d.x*d.x + d.y*d.y + d.z*d.z);
     };
@@ -1721,7 +1721,7 @@ TEST(SimulationCore, PendulumMaintainsDistanceToWorldAnchor) {
         (void)s.step(0.01);
         EXPECT_NEAR(distToAnchor(), L, 0.1f); // length held throughout the swing
     }
-    SimVec3 p, v; s.getBodyState(bob, p, v);
+    SimVec3 p, v; (void)s.getBodyState(bob, p, v);
     EXPECT_LT(p.y, 4.8f); // swung down under gravity
 }
 

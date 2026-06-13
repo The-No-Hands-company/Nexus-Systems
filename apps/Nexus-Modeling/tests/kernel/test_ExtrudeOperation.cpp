@@ -73,8 +73,8 @@ TEST(ExtrudeOperation, KeepOriginalFacesAddsExtraFaces)
     descDrop.keepOriginalFaces = false;
 
     Mesh outKeep, outDrop;
-    ExtrudeOperation::applyToAllFaces(box, descKeep, outKeep);
-    ExtrudeOperation::applyToAllFaces(box, descDrop, outDrop);
+    (void)ExtrudeOperation::applyToAllFaces(box, descKeep, outKeep);
+    (void)ExtrudeOperation::applyToAllFaces(box, descDrop, outDrop);
 
     // keepOriginalFaces adds origFaces more faces than the open variant
     EXPECT_EQ(outKeep.topology().faceCount(),

@@ -166,7 +166,7 @@ TEST(BooleanOperation, UnionWithNonIntersectingBoxes)
     Mesh boxB = makeBox(1.0f, 1.0f, 1.0f);
     nexus::render::Mat4 translate = nexus::render::Mat4::identity();
     translate.m[0][3] = 5.0f;
-    boxB.applyTransform(translate);
+    (void)boxB.applyTransform(translate);
 
     Mesh result;
     auto report = BooleanOperation::compute(boxA, boxB, BooleanOperationType::Union, result);
@@ -184,7 +184,7 @@ TEST(BooleanOperation, DifferenceWithNonIntersectingMeshesReturnsInputA)
     Mesh boxB = makeBox(1.0f, 1.0f, 1.0f);
     nexus::render::Mat4 translate = nexus::render::Mat4::identity();
     translate.m[0][3] = 5.0f;
-    boxB.applyTransform(translate);
+    (void)boxB.applyTransform(translate);
 
     Mesh result;
     auto report = BooleanOperation::compute(boxA, boxB, BooleanOperationType::Difference, result);
@@ -203,7 +203,7 @@ TEST(BooleanOperation, IntersectionWithNonIntersectingMeshesReturnsEmpty)
     Mesh boxB = makeBox(1.0f, 1.0f, 1.0f);
     nexus::render::Mat4 translate = nexus::render::Mat4::identity();
     translate.m[0][3] = 5.0f;
-    boxB.applyTransform(translate);
+    (void)boxB.applyTransform(translate);
 
     Mesh result;
     auto report =
@@ -222,10 +222,10 @@ TEST(BooleanOperation, IntersectionWithNonIntersectingMeshesReturnsEmpty)
 TEST(BooleanOperation, PreservesNormalsWhenOptionEnabled)
 {
     Mesh boxA = makeBox(2.0f, 2.0f, 2.0f);
-    boxA.computeVertexNormals();
+    (void)boxA.computeVertexNormals();
 
     Mesh boxB = makeBox(1.0f, 1.0f, 1.0f);
-    boxB.computeVertexNormals();
+    (void)boxB.computeVertexNormals();
 
     BooleanOperationOptions opts;
     opts.preserveNormals = true;
