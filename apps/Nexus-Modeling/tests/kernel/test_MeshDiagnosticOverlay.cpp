@@ -88,7 +88,7 @@ TEST(MeshDiagnosticOverlay, ModeFlagFiltersOutput)
     opts.modes = MeshOverlayMode::DegenerateFaces;
 
     MeshDiagnosticOverlayData data;
-    MeshDiagnosticExporter::extract(plane, opts, data);
+    (void)MeshDiagnosticExporter::extract(plane, opts, data);
     EXPECT_EQ(data.boundaryEdgeCount,   0u);
     EXPECT_EQ(data.nonManifoldEdgeCount, 0u);
     EXPECT_EQ(data.degenerateFaceCount,  0u);
@@ -114,7 +114,7 @@ TEST(MeshDiagnosticOverlay, DetectsNonManifoldEdge)
     mesh.topology().addFace(Face{{0u, 2u, 4u}});  // third face on edge 0-2
 
     MeshDiagnosticOverlayData data;
-    MeshDiagnosticExporter::extract(mesh, {}, data);
+    (void)MeshDiagnosticExporter::extract(mesh, {}, data);
     EXPECT_GE(data.nonManifoldEdgeCount, 1u);
 }
 
@@ -124,8 +124,8 @@ TEST(MeshDiagnosticOverlay, DeterministicAcrossRepeatedExtract)
 
     MeshDiagnosticOverlayData data1;
     MeshDiagnosticOverlayData data2;
-    MeshDiagnosticExporter::extract(box, {}, data1);
-    MeshDiagnosticExporter::extract(box, {}, data2);
+    (void)MeshDiagnosticExporter::extract(box, {}, data1);
+    (void)MeshDiagnosticExporter::extract(box, {}, data2);
 
     EXPECT_EQ(data1.nonManifoldEdgeCount, data2.nonManifoldEdgeCount);
     EXPECT_EQ(data1.boundaryEdgeCount,    data2.boundaryEdgeCount);

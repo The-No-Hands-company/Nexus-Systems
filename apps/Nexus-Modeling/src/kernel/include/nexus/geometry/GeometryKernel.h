@@ -34,9 +34,9 @@ enum class VertexElementFormat : uint8_t {
 
 struct VertexStreamView {
     VertexSemantic semantic = VertexSemantic::Position;
-    const void* data = nullptr;
-    uint32_t elementCount = 0;
-    uint32_t strideBytes = 0;
+    const void* data = nullptr;    // Points into the source Mesh attributes —
+    uint32_t elementCount = 0;     // valid only while the source Mesh is alive
+    uint32_t strideBytes = 0;      // and unmodified. Consume immediately.
 };
 
 struct MeshSection {

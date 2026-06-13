@@ -277,7 +277,7 @@ void computeBooleanResult(const std::vector<Vec3>& posA, const std::vector<Trian
             // Simple pointer comparison for determinism
             uint32_t oldIdx = 0;
             float minDist = std::numeric_limits<float>::max();
-            for (uint32_t i = 0; i < posA.size(); ++i) {
+            for (size_t i = 0; i < posA.size(); ++i) {
                 float d = vec3Length(vec3Sub(posA[i], p));
                 if (d < minDist) {
                     minDist = d;
