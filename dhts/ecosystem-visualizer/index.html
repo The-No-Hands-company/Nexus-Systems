@@ -1,0 +1,3606 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>Nexus Systems — Ecosystem Visualizer v3</title>
+  <style>
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    html,body{height:100%}
+    html{-webkit-text-size-adjust:100%}
+    body{
+      -webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;
+      font-family:"IBM Plex Sans","Segoe UI",system-ui,sans-serif;
+      background:#060a0e;color:#dce8e4;
+      display:grid;grid-template-rows:auto auto auto auto 1fr;overflow:hidden;
+    }
+    /* Scrollbar — dark, visible */
+    ::-webkit-scrollbar{width:6px;height:6px}
+    ::-webkit-scrollbar-track{background:rgba(255,255,255,0.02)}
+    ::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.08);border-radius:3px}
+    ::-webkit-scrollbar-thumb:hover{background:rgba(255,255,255,0.14)}
+    ::-webkit-scrollbar-corner{background:transparent}
+    :root{color-scheme:dark}
+    button,a,[role="button"],[tabindex],.chip,input,select,textarea{
+      touch-action:manipulation;-webkit-tap-highlight-color:transparent;
+    }
+
+    /* ── Header ── */
+    header{
+      padding:10px 18px;border-bottom:1px solid rgba(255,255,255,0.05);
+      background:rgba(6,10,14,0.94);backdrop-filter:blur(16px);
+      display:flex;gap:14px;align-items:center;justify-content:space-between;
+      flex-wrap:wrap;z-index:20;
+    }
+    .header-left{display:flex;align-items:center;gap:10px}
+    .logo{
+      width:32px;height:32px;border-radius:8px;
+      background:linear-gradient(135deg,#6366f1 0%,#14b8a6 100%);
+      display:flex;align-items:center;justify-content:center;
+      font-weight:900;font-size:15px;color:#fff;flex-shrink:0;
+    }
+    .title-group{display:flex;flex-direction:column;min-width:0}
+    .title{
+      font-size:15px;font-weight:700;
+      background:linear-gradient(135deg,#a5b4fc 0%,#5eead4 100%);
+      -webkit-background-clip:text;-webkit-text-fill-color:transparent;
+      background-clip:text;
+    }
+    .subtitle{font-size:9px;color:#475569;text-transform:uppercase;letter-spacing:1.2px}
+    .header-right{display:flex;gap:16px;align-items:center;flex-wrap:wrap}
+    .header-stats{display:flex;gap:14px;font-size:11px;color:#64748b;flex-wrap:wrap}
+    .stat{display:flex;align-items:center;gap:5px;cursor:pointer;transition:opacity 150ms}
+    .stat:hover{opacity:0.8}
+    .stat-dot{width:7px;height:7px;border-radius:999px;flex-shrink:0}
+    .stat-mini{font-size:10px;cursor:pointer;transition:opacity 120ms}
+    .stat-mini:hover{opacity:0.7}
+    .org-badge{
+      font-size:9px;padding:3px 8px;border-radius:999px;
+      border:1px solid rgba(255,255,255,0.08);color:#64748b;
+      white-space:nowrap;
+    }
+    .graph-sync{font-size:10px;color:#64748b;display:flex;align-items:center;gap:4px;white-space:nowrap}
+
+    /* ── Insights bar ── */
+    .insights-bar{
+      padding:6px 18px;border-bottom:1px solid rgba(255,255,255,0.03);
+      background:rgba(8,12,16,0.7);font-size:10px;color:#475569;
+      display:flex;gap:24px;align-items:center;flex-wrap:wrap;overflow:hidden;
+    }
+    .insight-row{display:flex;align-items:center;gap:6px;white-space:nowrap}
+    .insight-label{color:#334155;text-transform:uppercase;letter-spacing:0.5px;font-size:9px}
+
+    /* ── Focus Banner ── */
+    .focus-banner{
+      display:none;align-items:center;gap:10px;
+      padding:8px 18px;background:rgba(99,102,241,0.12);
+      border-bottom:1px solid rgba(99,102,241,0.2);
+      font-size:12px;color:#a5b4fc;
+    }
+    .focus-banner.visible{display:flex}
+    .focus-banner .focus-pill{
+      background:rgba(99,102,241,0.2);padding:3px 10px;border-radius:999px;
+      font-weight:700;color:#c7d2fe;
+    }
+    .focus-banner button{
+      margin-left:auto;padding:4px 10px;border-radius:6px;
+      border:1px solid rgba(99,102,241,0.3);background:rgba(99,102,241,0.1);
+      color:#a5b4fc;cursor:pointer;font-size:11px;transition:all 150ms;
+    }
+    .focus-banner button:hover{background:rgba(99,102,241,0.2)}
+
+    /* ── Toolbar ── */
+    .toolbar{
+      padding:8px 18px;border-bottom:1px solid rgba(255,255,255,0.04);
+      background:rgba(8,12,16,0.85);display:flex;gap:10px;align-items:center;
+    }
+    .view-toggle{display:flex;border-radius:8px;overflow:hidden;border:1px solid rgba(255,255,255,0.08)}
+    .view-btn{
+      padding:5px 12px;font-size:11px;cursor:pointer;
+      background:rgba(255,255,255,0.02);color:#64748b;
+      border:none;border-right:1px solid rgba(255,255,255,0.06);
+      transition:all 150ms;white-space:nowrap;
+    }
+    .view-btn:last-child{border-right:none}
+    .view-btn.active{background:rgba(99,102,241,0.15);color:#a5b4fc}
+    .view-btn:hover:not(.active){background:rgba(255,255,255,0.04)}
+
+    /* ── Main ── */
+    main{
+      display:grid;grid-template-columns:1fr 380px;min-height:0;overflow:hidden;
+    }
+    .view-panel{position:relative;width:100%;height:100%}
+    .view-panel.hidden{display:none}
+
+    /* ── Graph ── */
+    .graph-wrap{
+      background:radial-gradient(ellipse at 40% 30%,#0f172a 0%,#060a0e 65%);
+      overflow:hidden;
+    }
+    #graph{width:100%;height:100%}
+    .state-overlay{
+      position:absolute;inset:0;display:none;
+      align-items:center;justify-content:center;padding:24px;
+      background:rgba(6,10,14,0.75);text-align:center;
+      color:#475569;font-size:14px;z-index:10;
+    }
+    .state-overlay.visible{display:flex}
+
+    /* ── List View ── */
+    .list-wrap{overflow-y:auto;padding:8px;height:100%}
+    .list-header{
+      font-size:11px;color:#475569;padding:8px 12px;
+      text-transform:uppercase;letter-spacing:0.8px;
+      border-bottom:1px solid rgba(255,255,255,0.04);margin-bottom:4px;
+    }
+    .list-row{
+      display:flex;align-items:center;gap:10px;padding:8px 12px;
+      border-radius:6px;cursor:pointer;transition:background 120ms;font-size:12px;
+    }
+    .list-row:hover{background:rgba(255,255,255,0.03)}
+    .list-dot{width:8px;height:8px;border-radius:999px;flex-shrink:0}
+    .list-name{color:#e2e8f0;font-weight:600;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .list-tech{color:#475569;font-size:11px;white-space:nowrap}
+    .list-status{font-size:9px;font-weight:700;text-transform:uppercase;white-space:nowrap}
+
+    /* ── Roadmap View ── */
+    .roadmap-wrap{overflow-y:auto;padding:12px 18px;height:100%}
+    /* Tree view */
+    .tree-wrap{overflow:auto;padding:0;height:100%;background:var(--bg)}
+    .tree-root{margin:0;padding:0}
+    .tree-node{margin:0;border-left:2px solid transparent;user-select:none}
+    .tree-node-header{display:flex;align-items:center;gap:6px;padding:6px 12px;cursor:pointer;border-radius:4px;margin:1px 0;transition:background .12s}
+    .tree-node-header:hover{background:var(--bg2)}
+    .tree-node-header.selected{background:var(--accent-bg);outline:1px solid var(--accent)}
+    .tree-toggle{width:18px;height:18px;display:flex;align-items:center;justify-content:center;font-size:10px;color:var(--fg2);flex-shrink:0;transition:transform .15s}
+    .tree-toggle.expanded{transform:rotate(90deg)}
+    .tree-toggle.empty{visibility:hidden}
+    .tree-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+    .tree-label{font-size:13px;font-weight:500;color:var(--fg);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .tree-tech{font-size:11px;color:var(--fg2);flex-shrink:0}
+    .tree-status{font-size:11px;font-weight:600;flex-shrink:0}
+    .tree-count{font-size:10px;color:var(--fg2);background:var(--bg2);padding:1px 6px;border-radius:10px;flex-shrink:0}
+    .tree-children{padding-left:22px;overflow:hidden;transition:max-height .2s ease}
+    .tree-children.collapsed{max-height:0!important}
+    .tree-category-label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;padding:8px 12px 4px;color:var(--fg2);display:flex;align-items:center;gap:6px}
+    .tree-category-label .cat-swatch{width:8px;height:8px;border-radius:2px;flex-shrink:0}
+    .roadmap-header{padding:12px 0 16px;border-bottom:1px solid rgba(255,255,255,0.04);margin-bottom:12px}
+    .roadmap-title{font-size:16px;font-weight:700;color:#e2e8f0}
+    .roadmap-sub{display:block;font-size:10px;color:#475569;margin-top:4px}
+    .roadmap-category{margin-bottom:16px;padding:12px;border-radius:10px;background:rgba(255,255,255,0.015);border:1px solid rgba(255,255,255,0.04)}
+    .roadmap-cat-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+    .roadmap-cat-name{font-size:13px;font-weight:700;color:#cbd5e1;display:flex;align-items:center;gap:8px}
+    .roadmap-cat-pct{font-size:11px;color:#64748b}
+    .progress-bar{height:4px;border-radius:2px;background:rgba(255,255,255,0.04);margin-bottom:10px;overflow:hidden}
+    .progress-fill{height:100%;border-radius:2px;transition:width 400ms ease}
+    .roadmap-systems{display:flex;flex-wrap:wrap;gap:4px}
+    .roadmap-sys{
+      display:inline-flex;align-items:center;gap:5px;padding:4px 10px;
+      border-radius:999px;background:rgba(255,255,255,0.02);
+      border:1px solid rgba(255,255,255,0.05);cursor:pointer;
+      font-size:10px;transition:all 120ms;
+    }
+    .roadmap-sys:hover{background:rgba(255,255,255,0.05);border-color:rgba(255,255,255,0.12)}
+    .roadmap-sys-dot{width:6px;height:6px;border-radius:999px;flex-shrink:0}
+    .roadmap-sys-name{color:#e2e8f0;font-weight:600}
+    .roadmap-sys-tech{color:#475569;font-size:9px}
+    .roadmap-sys-status{font-size:8px;font-weight:700;text-transform:uppercase}
+
+    /* ── Matrix View ── */
+    .matrix-wrap{display:flex;flex-direction:column;overflow:hidden;height:100%;padding:8px 12px}
+    .matrix-scroll{overflow:auto;flex:1;position:relative}
+    .matrix-legend{display:flex;align-items:center;gap:16px;padding:8px 0;border-top:1px solid rgba(255,255,255,0.04);font-size:9px;color:#475569;flex-shrink:0}
+    .matrix-legend span{display:flex;align-items:center;gap:4px}
+    .matrix-legend .dot{width:8px;height:8px;border-radius:2px;flex-shrink:0}
+    .matrix-table{border-collapse:collapse;font-size:9px}
+    .matrix-table th,.matrix-table td{padding:0;text-align:center;position:relative}
+    .matrix-table th{padding:2px 4px;position:sticky;top:0;z-index:2;background:var(--bg)}
+    .matrix-table th:first-child{position:sticky;left:0;z-index:3}
+    .matrix-table .row-label,.matrix-table .col-label{
+      writing-mode:horizontal-tb;font-size:9px;white-space:nowrap;max-width:100px;
+      overflow:hidden;text-overflow:ellipsis;cursor:pointer;color:#94a3b8;padding:2px 6px;
+    }
+    .matrix-table .row-label:hover,.matrix-table .col-label:hover{color:#e2e8f0}
+    .matrix-table .col-label{writing-mode:vertical-rl;text-orientation:mixed;max-height:80px;min-width:20px;padding:4px 2px}
+    .matrix-cell{width:14px;height:14px;border-radius:2px;cursor:pointer;transition:all 100ms}
+    .matrix-cell:hover{transform:scale(1.5);z-index:1;box-shadow:0 0 6px rgba(255,255,255,0.15)}
+    .matrix-cell.empty{background:rgba(255,255,255,0.015)}
+    .matrix-cell.integrates{background:rgba(99,102,241,0.5)}
+    .matrix-cell.depends{background:rgba(245,158,11,0.5)}
+    .matrix-cell.connects{background:rgba(34,197,94,0.5)}
+    .matrix-cell.both{background:rgba(236,72,153,0.5)}
+    .matrix-cell.self{background:rgba(255,255,255,0.04)}
+
+    /* ── Sidebar ── */
+    aside{
+      border-left:1px solid rgba(255,255,255,0.05);
+      background:rgba(8,12,16,0.96);display:flex;flex-direction:column;overflow:hidden;
+    }
+    .sidebar-top{
+      padding:12px;display:grid;gap:8px;
+      border-bottom:1px solid rgba(255,255,255,0.05);
+      overflow-y:auto;flex-shrink:0;max-height:50%;
+    }
+    .sidebar-bottom{flex:1;overflow-y:auto;padding:12px}
+
+    .text-input{
+      width:100%;border:1px solid rgba(255,255,255,0.08);
+      border-radius:8px;background:rgba(255,255,255,0.02);
+      color:#e2e8f0;padding:7px 10px;font-size:12px;
+      outline:none;transition:border-color 200ms;
+    }
+    .text-input:focus{border-color:rgba(99,102,241,0.5)}
+    .text-input::placeholder{color:#334155}
+
+    .section-label{
+      font-size:9px;color:#334155;text-transform:uppercase;
+      letter-spacing:1px;font-weight:700;
+    }
+    .chip-grid{display:flex;flex-wrap:wrap;gap:5px}
+    .chip{
+      display:inline-flex;align-items:center;gap:5px;
+      border:1px solid rgba(255,255,255,0.06);border-radius:999px;
+      padding:3px 8px;background:rgba(255,255,255,0.015);
+      font-size:10px;color:#94a3b8;cursor:pointer;
+      transition:all 150ms;user-select:none;
+    }
+    .chip:hover{background:rgba(255,255,255,0.04)}
+    .chip input{accent-color:#6366f1;width:12px;height:12px}
+    .chip-dot{width:7px;height:7px;border-radius:999px;flex-shrink:0}
+
+    .ghost-btn{
+      border:1px solid rgba(255,255,255,0.08);
+      background:rgba(255,255,255,0.02);color:#94a3b8;
+      border-radius:8px;padding:5px 10px;cursor:pointer;
+      font-size:10px;width:fit-content;transition:all 150ms;
+    }
+    .ghost-btn:hover{background:rgba(255,255,255,0.06);color:#cbd5e1}
+
+    /* ── Detail Card ── */
+    .empty-detail{text-align:center;padding:28px 12px;color:#334155}
+    .empty-detail-icon{font-size:32px;margin-bottom:8px}
+    .empty-detail-text{font-size:13px;color:#475569}
+    .empty-detail-sub{font-size:11px;margin-top:4px;color:#334155}
+
+    .detail-header{margin-bottom:10px}
+    .detail-name{
+      font-size:17px;font-weight:700;color:#f1f5f9;
+      display:flex;align-items:center;gap:8px;margin-bottom:6px;
+    }
+    .status-dot-big{width:10px;height:10px;border-radius:999px;flex-shrink:0}
+    .detail-badges{display:flex;gap:6px;flex-wrap:wrap}
+    .status-badge{font-size:9px;padding:2px 7px;border-radius:999px;font-weight:700;text-transform:uppercase}
+    .deploy-badge{
+      font-size:9px;padding:2px 7px;border-radius:999px;
+      background:rgba(255,255,255,0.04);color:#64748b;
+      border:1px solid rgba(255,255,255,0.06);
+    }
+    .detail-desc{font-size:12px;color:#94a3b8;line-height:1.6;margin-bottom:12px}
+
+    .detail-actions{display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap}
+    .action-btn{
+      font-size:10px;padding:5px 10px;border-radius:6px;cursor:pointer;
+      border:1px solid rgba(255,255,255,0.08);background:rgba(255,255,255,0.02);
+      color:#94a3b8;transition:all 150ms;white-space:nowrap;
+    }
+    .action-btn:hover{background:rgba(99,102,241,0.1);border-color:rgba(99,102,241,0.3);color:#a5b4fc}
+
+    .detail-grid{
+      display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;
+      padding:10px;border-radius:8px;background:rgba(255,255,255,0.015);
+      border:1px solid rgba(255,255,255,0.04);
+    }
+    .detail-item{}
+    .detail-label{font-size:9px;color:#334155;text-transform:uppercase;letter-spacing:0.6px;margin-bottom:2px}
+    .detail-value{font-size:12px;color:#cbd5e1;word-break:break-word}
+
+    .detail-section{margin-bottom:10px}
+    .detail-section-title{
+      font-size:9px;color:#475569;text-transform:uppercase;
+      letter-spacing:0.6px;margin-bottom:5px;font-weight:700;
+    }
+    .chip-wrap{display:flex;flex-wrap:wrap;gap:4px}
+    .link-chip{
+      font-size:10px;padding:2px 7px;border-radius:999px;
+      cursor:pointer;transition:all 120ms;border:1px solid transparent;
+    }
+    .link-chip:hover{opacity:0.85}
+    .dep-chip{background:rgba(239,68,68,0.1);color:#f87171;border-color:rgba(239,68,68,0.2)}
+    .int-chip{background:rgba(99,102,241,0.1);color:#a5b4fc;border-color:rgba(99,102,241,0.2)}
+    .used-chip{background:rgba(16,185,129,0.1);color:#34d399;border-color:rgba(16,185,129,0.2)}
+    .link-chip.unresolved{opacity:0.5}
+    .link-chip.meta{background:rgba(245,158,11,0.1);color:#fbbf24;border-color:rgba(245,158,11,0.2);cursor:default}
+    .muted{color:#334155;font-size:10px}
+
+    /* ── Dependency Tree ── */
+    .dep-tree{padding-left:8px;font-size:11px}
+    .dep-tree.collapsed{max-height:0;overflow:hidden}
+    .dep-tree:not(.collapsed){max-height:600px;overflow-y:auto}
+    .tree-item{padding:3px 0;padding-left:12px;border-left:1px solid rgba(255,255,255,0.06)}
+    .tree-item.unresolved{color:#475569;font-style:italic}
+    .tree-dot{display:inline-block;width:6px;height:6px;border-radius:999px;margin-right:5px;vertical-align:middle}
+    .tree-link{color:#94a3b8;cursor:pointer;transition:color 120ms}
+    .tree-link:hover{color:#e2e8f0}
+    .tree-status{font-size:8px;font-weight:700;text-transform:uppercase;margin-left:5px}
+    .tree-children{margin-top:2px}
+    .tree-item.muted{color:#334155}
+
+    /* ── Legend ── */
+    .legend-section{
+      margin-top:auto;padding:12px;
+      border-top:1px solid rgba(255,255,255,0.05);
+    }
+
+    /* ── Mobile Bottom Sheet ── */
+    @media(max-width:980px){
+      body{grid-template-rows:auto auto auto auto 1fr}
+      main{
+        grid-template-columns:1fr;grid-template-rows:1fr;
+        position:relative;
+      }
+      aside{
+        position:fixed;bottom:0;left:0;right:0;z-index:30;
+        max-height:55vh;border-left:none;border-top:2px solid rgba(255,255,255,0.08);
+        border-radius:16px 16px 0 0;box-shadow:0 -4px 24px rgba(0,0,0,0.4);
+        transform:translateY(0);transition:transform 250ms ease;
+      }
+      aside.collapsed{transform:translateY(calc(100% - 44px))}
+      .mobile-handle{
+        display:flex;justify-content:center;padding:8px 0 4px;cursor:pointer;
+      }
+      .mobile-handle-bar{width:32px;height:3px;border-radius:2px;background:rgba(255,255,255,0.15)}
+      .header-stats{font-size:10px;gap:8px}
+      .insights-bar{gap:12px}
+      .toolbar{gap:6px}
+      .view-btn{font-size:10px;padding:5px 8px}
+    }
+    @media(min-width:981px){
+      .mobile-handle{display:none}
+    }
+
+    /* ── Help Overlay ── */
+    .help-overlay{
+      position:fixed;inset:0;z-index:100;display:none;
+      align-items:center;justify-content:center;
+      background:rgba(6,10,14,0.88);backdrop-filter:blur(6px);
+    }
+    .help-overlay.visible{display:flex}
+    .help-card{
+      background:rgba(15,23,42,0.98);border:1px solid rgba(255,255,255,0.08);
+      border-radius:16px;padding:28px 32px;max-width:520px;width:90vw;
+      box-shadow:0 16px 48px rgba(0,0,0,0.5);max-height:85vh;overflow-y:auto;
+    }
+    .help-card h2{
+      font-size:18px;color:#e2e8f0;margin-bottom:4px;
+      display:flex;align-items:center;gap:8px;
+    }
+    .help-card .help-sub{font-size:10px;color:#475569;margin-bottom:18px;text-transform:uppercase;letter-spacing:1px}
+    .help-section{margin-bottom:14px}
+    .help-section h3{font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:0.6px;margin-bottom:6px}
+    .help-row{
+      display:flex;align-items:center;gap:10px;padding:5px 0;
+      font-size:12px;color:#94a3b8;border-bottom:1px solid rgba(255,255,255,0.02);
+    }
+    .help-row kbd{
+      display:inline-block;min-width:28px;text-align:center;
+      background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);
+      border-radius:5px;padding:2px 7px;font-size:11px;font-family:inherit;
+      color:#cbd5e1;white-space:nowrap;
+    }
+    .help-row .help-desc{flex:1;min-width:0}
+    .help-close{
+      position:absolute;top:8px;right:12px;
+      background:none;border:none;color:#475569;cursor:pointer;
+      font-size:18px;padding:4px 8px;border-radius:6px;transition:all 150ms;
+    }
+    .help-close:hover{color:#e2e8f0;background:rgba(255,255,255,0.04)}
+    .help-btn{
+      margin-left:auto;padding:3px 9px;border-radius:6px;
+      border:1px solid rgba(255,255,255,0.08);background:rgba(255,255,255,0.02);
+      color:#64748b;cursor:pointer;font-size:12px;font-weight:700;
+      transition:all 150ms;white-space:nowrap;
+    }
+    .help-btn:hover{background:rgba(99,102,241,0.12);border-color:rgba(99,102,241,0.3);color:#a5b4fc}
+  </style>
+  <script src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+</head>
+<body>
+  <header>
+    <div class="header-left">
+      <div class="logo">N</div>
+      <div class="title-group">
+        <div class="title">Nexus Systems Ecosystem</div>
+        <div class="subtitle">The No Hands Company</div>
+      </div>
+    </div>
+    <div class="header-right">
+      <div class="header-stats">
+        <span class="stat" title="Native (Rust/C++)"><span class="stat-dot" style="background:#8b5cf6"></span> <span id="nativeCount">0</span></span>
+        <span class="stat" title="Built & tested"><span class="stat-dot" style="background:#10b981"></span> <span id="builtCount">0</span></span>
+        <span class="stat" title="Scaffolded / WIP"><span class="stat-dot" style="background:#f59e0b"></span> <span id="scaffoldedCount">0</span></span>
+        <span class="stat" title="Planned"><span class="stat-dot" style="background:#475569"></span> <span id="shellCount">0</span></span>
+        <span class="stat" style="font-weight:700;color:#94a3b8">· <span id="totalCount">0</span></span>
+      </div>
+      <span class="graph-sync" id="graphStatus">📄 …</span>
+      <span class="org-badge">🖐️ The No Hands Company</span>
+    </div>
+  </header>
+
+  <div class="insights-bar" id="insightsData">
+    <span style="color:#334155">Loading insights…</span>
+  </div>
+
+  <div class="focus-banner" id="focusBanner">
+    🔍 Focus: <span class="focus-pill" id="focusLabel"></span>
+    <span style="font-size:10px;color:#64748b">— showing only direct connections. Double-click a node to focus, Esc to exit.</span>
+    <button id="exitFocus">✕ Exit Focus</button>
+  </div>
+
+  <div class="toolbar">
+    <div class="view-toggle">
+      <button class="view-btn active" id="btnGraphView">🔗 Graph</button>
+      <button class="view-btn" id="btnListView">📋 List</button>
+      <button class="view-btn" id="btnRoadmapView">📅 Roadmap</button>
+      <button class="view-btn" id="btnTreeView">🌳 Tree</button>
+      <button class="view-btn" id="btnMatrixView">🔲 Matrix</button>
+    </div>
+    <span style="font-size:10px;color:#334155">
+      <span id="visibleNodes">0</span> nodes · <span id="visibleEdges">0</span> edges
+    </span>
+    <span style="font-size:9px;color:#334155;margin-left:auto">
+      <kbd style="background:rgba(255,255,255,0.04);padding:1px 5px;border-radius:4px">Ctrl+K</kbd> search
+      <kbd style="background:rgba(255,255,255,0.04);padding:1px 5px;border-radius:4px">←→</kbd> nav
+      <kbd style="background:rgba(255,255,255,0.04);padding:1px 5px;border-radius:4px">Enter</kbd> focus
+      <kbd style="background:rgba(255,255,255,0.04);padding:1px 5px;border-radius:4px">Esc</kbd> clear
+      <button class="help-btn" id="btnHelp" title="Keyboard shortcuts & navigation">?</button>
+    </span>
+  </div>
+
+  <!-- Help Overlay -->
+  <div class="help-overlay" id="helpOverlay">
+    <div class="help-card" onclick="event.stopPropagation()">
+      <h2>⌨️ How to Use the Visualizer</h2>
+      <div class="help-sub">Keyboard shortcuts & navigation guide</div>
+      <div class="help-section">
+        <h3>🔍 Search & Select</h3>
+        <div class="help-row"><kbd>Ctrl+K</kbd><span class="help-desc">Focus the search bar</span></div>
+        <div class="help-row"><kbd>Click</kbd><span class="help-desc">Select a system node to see details</span></div>
+        <div class="help-row"><kbd>Tab</kbd><span class="help-desc">Cycle forward through visible systems</span></div>
+      </div>
+      <div class="help-section">
+        <h3>🔗 Navigation</h3>
+        <div class="help-row"><kbd>DblClick</kbd><span class="help-desc">Focus mode — show only a system & its connections</span></div>
+        <div class="help-row"><kbd>← ↑ → ↓</kbd><span class="help-desc">Jump between connected nodes (when a system is selected)</span></div>
+        <div class="help-row"><kbd>Enter</kbd><span class="help-desc">Enter Focus mode for the selected system</span></div>
+        <div class="help-row"><kbd>Esc</kbd><span class="help-desc">Exit Focus mode / clear selection / close this help</span></div>
+      </div>
+      <div class="help-section">
+        <h3>📋 Views</h3>
+        <div class="help-row"><kbd>🔗</kbd><span class="help-desc"><b>Graph</b> — interactive network of all systems. Drag, zoom, click.</span></div>
+        <div class="help-row"><kbd>📋</kbd><span class="help-desc"><b>List</b> — searchable, sortable table. Scroll to see all systems.</span></div>
+        <div class="help-row"><kbd>📅</kbd><span class="help-desc"><b>Roadmap</b> — systems grouped by category with progress bars. Scroll per category.</span></div>
+        <div class="help-row"><kbd>🌳</kbd><span class="help-desc"><b>Tree</b> — hierarchy view with Nexus-Cloud as root. Collapse/expand categories.</span></div>
+        <div class="help-row"><kbd>🔲</kbd><span class="help-desc"><b>Matrix</b> — dependency adjacency matrix. See every connection at a glance.</span></div>
+      </div>
+      <div class="help-section">
+        <h3>🖱️ Mouse</h3>
+        <div class="help-row"><kbd>Scroll</kbd><span class="help-desc">Zoom in/out of the graph. In List/Roadmap: scroll the page.</span></div>
+        <div class="help-row"><kbd>Drag</kbd><span class="help-desc">Pan the graph. Drag background to move around.</span></div>
+        <div class="help-row"><kbd>RClick</kbd><span class="help-desc">Right-click a node in the graph for more options</span></div>
+      </div>
+    </div>
+  </div>
+
+  <main>
+    <!-- Graph View -->
+    <div class="view-panel graph-wrap" id="graphWrap">
+      <div id="graph"></div>
+      <div id="emptyState" class="state-overlay">No systems match the current filters.</div>
+    </div>
+
+    <!-- List View -->
+    <div class="view-panel list-wrap hidden" id="listWrap">
+      <div class="list-header" id="listCount">—</div>
+      <div id="listView"></div>
+    </div>
+
+    <!-- Roadmap View -->
+    <div class="view-panel roadmap-wrap hidden" id="roadmapWrap"></div>
+
+    <!-- Tree (Hierarchy) View -->
+    <div class="view-panel tree-wrap hidden" id="treeWrap"></div>
+
+    <!-- Matrix (Dependency) View -->
+    <div class="view-panel matrix-wrap hidden" id="matrixWrap">
+      <div class="matrix-scroll" id="matrixScroll"></div>
+      <div class="matrix-legend" id="matrixLegend"></div>
+    </div>
+
+    <!-- Sidebar -->
+    <aside id="sidebar">
+      <div class="mobile-handle" id="mobileHandle" title="Tap to expand/collapse">
+        <div class="mobile-handle-bar"></div>
+      </div>
+      <div class="sidebar-top" id="sidebarTop">
+        <div class="section-label">🔍 Search</div>
+        <input id="searchInput" class="text-input" type="search" placeholder="Search 88+ systems…" autocomplete="off" />
+
+        <div class="section-label">Status</div>
+        <div class="chip-grid" id="statusFilters"></div>
+
+        <div class="section-label">Categories</div>
+        <div class="chip-grid" id="categoryFilters"></div>
+
+        <button id="resetFilters" class="ghost-btn" type="button">↺ Reset All</button>
+      </div>
+
+      <div class="sidebar-bottom">
+        <div class="section-label" style="margin-bottom:6px">📋 System Details</div>
+        <div id="detailCard">
+          <div class="empty-detail">
+            <div class="empty-detail-icon">👆</div>
+            <div class="empty-detail-text">Click a node to see details</div>
+            <div class="empty-detail-sub">Double-click to focus · Arrow keys to navigate</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="legend-section">
+        <div class="section-label" style="margin-bottom:6px">Legend</div>
+        <div style="display:grid;gap:4px;font-size:10px;color:#475569">
+          <div style="display:flex;align-items:center;gap:6px"><span style="width:8px;height:8px;border-radius:999px;background:#8b5cf6"></span> Native (Rust/C++)</div>
+          <div style="display:flex;align-items:center;gap:6px"><span style="width:8px;height:8px;border-radius:999px;background:#10b981"></span> Built (working)</div>
+          <div style="display:flex;align-items:center;gap:6px"><span style="width:8px;height:8px;border-radius:999px;background:#f59e0b"></span> Scaffolded (WIP)</div>
+          <div style="display:flex;align-items:center;gap:6px"><span style="width:8px;height:8px;border-radius:999px;background:#475569"></span> Shell (planned)</div>
+          <div style="display:flex;align-items:center;gap:6px;margin-top:4px"><span style="width:8px;height:2px;background:#ef4444"></span> Depends on</div>
+          <div style="display:flex;align-items:center;gap:6px"><span style="width:8px;height:2px;background:#6366f1;border-top:1px dashed #6366f1"></span> Integrates with</div>
+        </div>
+      </div>
+    </aside>
+  </main>
+
+  <script>
+    // ═══════════════════════════════════════════
+    // Embedded Data (baked at build time)
+    // ═══════════════════════════════════════════
+    const EMBEDDED_DATA = {
+  "schemaVersion": "1.0.0",
+  "generatedAt": "2026-06-14T16:03:46.375306+00:00",
+  "organization": {
+    "name": "The No Hands Company",
+    "tagline": "Free. Open Source. Forever.",
+    "description": "A solo-dev GitHub organization built on three principles: (1) Open Source everything, (2) Free forever — no paywalls, no subscriptions, no enterprise-tier upsells, (3) The only accepted payment is voluntary donations via PayPal. Every tool offers dual-mode deployment: standalone via docker compose up, or fully managed inside Nexus-Cloud.",
+    "principles": [
+      "Open Source — every line of code is public",
+      "Free Forever — no paywalls, no subscriptions, no enterprise tiers",
+      "Donations Only — the only accepted payment is voluntary PayPal donations",
+      "Self-Hosted First — every tool runs standalone via docker compose up",
+      "Federated — tools communicate across instances, no central authority",
+      "AI-Native — every tool has AI deeply integrated, not bolted on",
+      "Privacy-First — no surveillance, no telemetry, no data mining",
+      "Sovereign — users own their data, their infrastructure, their destiny"
+    ],
+    "donations": {
+      "paypal": "paypal.me/TheNoHandsCompany",
+      "note": "Voluntary only. No features are gated behind donations."
+    },
+    "nexusCloudUrl": "https://nexus.cloud",
+    "githubOrg": "https://github.com/The-No-Hands-Company"
+  },
+  "ecosystems": [
+    {
+      "id": "nexus-systems",
+      "name": "Nexus Systems",
+      "description": "A complete alternative to Big Tech — 80+ integrated tools covering communication, productivity, creativity, business, AI, gaming, health, and more. Everything is free, open-source, self-hosted, and federated. For non-technical users, everything runs managed on Nexus Cloud at nexus.cloud.",
+      "categories": [
+        {
+          "id": "core-platform",
+          "name": "Core Platform",
+          "color": "#6366f1",
+          "systems": [
+            {
+              "id": "nexus",
+              "name": "Nexus",
+              "status": "native",
+              "tech": "Rust",
+              "port": null,
+              "description": "Communication platform — chat, voice, video, E2EE, Matrix-compatible federation. The beating heart.",
+              "dependencies": [],
+              "integrates": [
+                "Nexus-Auth",
+                "Nexus-Cloud",
+                "Nexus-Guardian"
+              ],
+              "deployment": "both"
+            },
+            {
+              "id": "nexus-cloud",
+              "name": "Nexus-Cloud",
+              "status": "built",
+              "tech": "TypeScript",
+              "port": null,
+              "description": "Orchestrator / sovereign cloud platform — control plane, scheduling, federation. Hosts the Nexus Systems API.",
+              "dependencies": [
+                "Nexus",
+                "Nexus-Auth",
+                "Nexus-Tunnel"
+              ],
+              "integrates": [
+                "Nexus-Systems-API"
+              ],
+              "deployment": "cloud"
+            },
+            {
+              "id": "nexus-hosting",
+              "name": "Nexus-Hosting",
+              "status": "built",
+              "tech": "TypeScript",
+              "port": null,
+              "description": "Ecosystem execution surface for hosted workloads and sites. pnpm monorepo + Rust crates. Fully developed.",
+              "dependencies": [
+                "Nexus-Tunnel"
+              ],
+              "integrates": [
+                "Nexus-Deploy"
+              ],
+              "deployment": "both"
+            },
+            {
+              "id": "nexus-deploy",
+              "name": "Nexus-Deploy",
+              "status": "built",
+              "tech": "TypeScript",
+              "port": null,
+              "description": "Self-hosted federated deployment / CI-CD pipeline.",
+              "dependencies": [
+                "Nexus-Hosting"
+              ],
+              "integrates": [
+                "Nexus-Forge"
+              ],
+              "deployment": "both"
+            },
+            {
+              "id": "nexus-vault",
+              "name": "Nexus-Vault",
+              "status": "built",
+              "tech": "TypeScript",
+              "port": 3054,
+              "description": "Secrets / password management — end-to-end encrypted vault, expandable to full Bitwarden-style.",
+              "dependencies": [
+                "nexus-core",
+                "Nexus-Auth"
+              ],
+              "integrates": [
+                "Nexus-API"
+              ],
+              "deployment": "both"
+            },
+            {
+              "id": "nexus-network",
+              "name": "Nexus-Network",
+              "status": "built",
+              "tech": "TypeScript",
+              "port": null,
+              "description": "Network / federation dashboard and monitoring — visualize your federated topology.",
+              "dependencies": [
+                "Nexus"
+              ],
+              "integrates": [
+                "Nexus-Monitor",
+                "Nexus-Edge"
+              ],
+              "deployment": "both"
+            },
+            {
+              "id": "nexuslang",
+              "name": "Nexuslang",
+              "status": "native",
+              "tech": "Python/C++",
+              "port": null,
+              "description": "Natural-language programming language — write code in plain English. Compiler + runtime.",
+              "dependencies": [],
+              "integrates": [
+                "Nexus-AI",
+                "Nexus-IDE"
+              ],
+              "deployment": "both"
+            }
+          ]
+        },
+        {
+          "id": "platform-integration",
+          "name": "Platform & Integration",
+          "color": "#14b8a6",
+          "systems": [
+            {
+              "id": "nexus-systems-api",
+              "name": "Nexus-Systems-API",
+              "status": "built",
+              "tech": "TypeScript",
+              "port": null,
+              "description": "Unified platform API layer (REST + WebSocket) hosted by Nexus-Cloud. Service discovery, public URL provisioning, cross-tool communication, centralized auth, monitoring hooks, developer SDK.",
+              "dependencies": [
+                "Nexus-Cloud",
+                "Nexus-Auth"
+              ],
+              "integrates": [
+                "ALL_SYSTEMS"
+              ],
+              "deployment": "cloud"
+            },
+            {
+              "id": "nexus-tunnel",
+              "name": "Nexus-Tunnel",
+              "status": "built",
+              "tech": "TypeScript",
+              "port": null,
+              "description": "Native sovereign tunneling system (WebSocket-based, with WebTransport/QUIC fallback). Automatic public HTTPS URLs without third-party dependencies. Used as sidecar by other tools.",
+              "dependencies": [],
+              "integrates": [
+                "Nexus-Cloud",
+                "Nexus-Edge",
+                "Nexus-Guardian"
+              ],
+              "deployment": "both"
+            },
+            {
+              "id": "nexus-api",
+              "name": "Nexus-API",
+              "status": "built",
+              "tech": "TypeScript",
+              "port": null,
+              "description": "API builder, testing, and documentation tool — design, test, and document APIs.",
+              "dependencies": [
+                "nexus-core"
+              ],
+              "integrates": [
+                "Nexus-Systems-API"
+              ],
+              "deployment": "both"
+            },
+            {
+              "id": "nexus-core",
+              "name": "nexus-core",
+              "status": "built",
+              "tech": "TypeScript",
+              "port": null,
+              "description": "Core shared library/package — the foundation every Nexus TypeScript app builds on.",
+              "dependencies": [],
+              "integrates": [
+                "ALL_TS_SYSTEMS"
+              ],
+              "deployment": "package"
+            }
+          ]
+        },
+        {
+          "id": "security",
+          "name": "Security, Access & Management",
+          "color": "#ef4444",
+          "systems": [
+            {
+              "id": "nexus-guardian",
+              "name": "Nexus-Guardian",
+              "status": "built",
+              "tech": "TypeScript",
+              "port": null,
+              "description": "Central safety, security, and system health command center. Real-time threat detection, AI behavior guardrails, founder alerts, proactive ecosystem defense.",
+              "dependencies": [
+                "nexus-core",
+                "Nexus-Monitor"
+              ],
+              "integrates": [
+                "Nexus-Tunnel"
+              ],
+              "deployment": "both"
+            },
+            {
+              "id": "nexus-auth",
+              "name": "Nexus-Auth",
+              "status": "built",
+              "tech": "TypeScript",
+              "port": null,
+              "description": "Centralized SSO / authentication server — OAuth2, OIDC, WebAuthn, passkeys.",
+              "dependencies": [
+                "nexus-core"
+              ],
+              "integrates": [
+                "ALL_SYSTEMS"
+              ],
+              "deployment": "both"
+            },
+            {
+              "id": "nexus-terminal",
+              "name": "Nexus-Terminal",
+              "status": "shell",
+              "tech": "TypeScript",
+              "port": null,
+              "description": "Secure web-based terminal / SSH gateway with AI assistance.",
+              "dependencies": [
+                "nexus-core",
+                "Nexus-Auth"
+              ],
+              "integrates": [
+                "Nexus-AI"
+              ],
+              "deployment": "both"
+            },
+            {
+              "id": "nexus-monitor",
+              "name": "Nexus-Monitor",
+              "status": "built",
+              "tech": "TypeScript",
+              "port": null,
+              "description": "Uptime, system, and observability dashboard — metrics, alerts, health checks.",
+              "dependencies": [
+                "nexus-core"
+              ],
+              "integrates": [
+                "Nexus-Network",
+                "Nexus-Guardian"
+              ],
+              "deployment": "both"
+            },
+            {
+              "id": "nexus-security",
+              "name": "Nexus-Security",
+              "status": "shell",
+              "tech": "TypeScript",
+              "port": null,
+              "description": "Comprehensive security suite — threat detection, confidential computing, digital provenance.",
+              "dependencies": [
+                "Nexus-Guardian"
+              ],
+              "integrates": [
+                "Nexus-Compliance"
+              ],
+              "deployment": "both"
+            },
+            {
+              "id": "nexus-compliance",
+              "name": "Nexus-Compliance",
+              "status": "built",
+              "tech": "TypeScript",
+              "port": null,
+              "description": "Tools for data sovereignty, regulatory compliance, and audit trails.",
+              "dependencies": [
+                "nexus-core"
+              ],
+              "integrates": [
+                "Nexus-Security"
+              ],
+              "deployment": "both"
+            }
+          ]
+        },
+        {
+          "id": "files-data",
+          "name": "Files, Photos & Data",
+          "color": "#f59e0b",
+          "systems": [
+            {
+              "id": "nexus-files",
+              "name": "Nexus-Files",
+              "status": "built",
+              "tech": "TypeScript",
+              "port": null,
+              "description": "Secure file sync, sharing with links, versioning, full-text search.",
+              "dependencies": [
+                "nexus-core",
+                "Nexus-Vault"
+              ],
+              "integrates": [
+                "Nexus-Photos"
+              ],
+              "deployment": "both"
+            },
+            {
+              "id": "nexus-photos",
+              "name": "Nexus-Photos",
+              "status": "shell",
+              "tech": "TypeScript",
+              "port": null,
+              "description": "Photo/video backup, AI tagging/faces/albums, sharing.",
+              "dependencies": [
+                "Nexus-Files",
+                "Nexus-AI"
+              ],
+              "integrates": [
+                "Nexus-Media",
+                "Nexus Discovery"
+              ],
+              "deployment": "both",
+              "phantom": true
+            },
+            {
+              "id": "nexus-book",
+              "name": "Nexus-Book",
+              "status": "shell",
+              "tech": "TypeScript",
+              "port": null,
+              "description": "Personal library / ebook manager with AI summaries and tagging.",
+              "dependencies": [
+                "Nexus-Files",
+                "Nexus-AI"
+              ],
+              "integrates": [],
+              "deployment": "both"
+            }
+          ]
+        },
+        {
+          "id": "media-entertainment",
+          "name": "Media & Entertainment",
+          "color": "#ec4899",
+          "systems": [
+            {
+              "id": "nexus-media",
+              "name": "Nexus-Media",
+              "status": "shell",
+              "tech": "TypeScript",
+              "port": null,
+              "description": "Media streaming server for movies, TV, music libraries (Jellyfin-style).",
+              "dependencies": [
+                "Nexus-Files"
+              ],
+              "integrates": [
+                "Nexus-Radio-Live"
+              ],
+              "deployment": "self-hosted"
+            },
+            {
+              "id": "nexus-music",
+              "name": "Nexus-Music",
+              "status": "shell",
+              "tech": "TypeScript",
+              "port": null,
+              "description": "Browser-based DAW with recording, mixing, collaboration, and AI features.",
+              "dependencies": [
+                "Nexus-AI"
+              ],
+              "integrates": [],
+              "deployment": "both"
+            },
+            {
+              "id": "nexus-radio-live",
+              "name": "Nexus-Radio-Live",
+              "status": "shell",
+              "tech": "TypeScript",
+              "port": null,
+              "description": "Self-hosted internet radio or live streaming server.",
+              "dependencies": [
+                "Nexus-Media"
+              ],
+              "integrates": [],
+              "deployment": "self-hosted"
+            }
+          ]
+        },
+        {
+          "id": "creativity-design",
+          "name": "Creativity & Design",
+          "color": "#8b5cf6",
+          "systems": [
+            {
+              "id": "nexus-modeling",
+              "name": "Nexus-Modeling",
+              "status": "native",
+              "tech": "C++",
+              "port": null,
+              "description": "Browser-based 3D / CAD parametric modeling — Vulkan, geometry kernel, AI-assisted. DO NOT TOUCH.",
+              "dependencies": [],
+              "integrates": [
+                "Nexus-Engine"
+              ],
+              "deployment": "both"
+            },
+            {
+              "id": "nexus-draw",
+              "name": "Nexus-Draw",
+              "status": "shell",
+              "tech": "TypeScript",
+              "port": null,
+              "description": "Real-time whiteboard and diagramming tool (Excalidraw-style).",
+              "dependencies": [],
+              "integrates": [
+                "Nexus-Design"
+              ],
+              "deployment": "both"
+            },
+            {
+              "id": "nexus-video",
+              "name": "Nexus-Video",
+              "status": "shell",
+              "tech": "TypeScript",
+              "port": null,
+              "description": "Browser-based video editor — cuts, effects, subtitles, transcoding.",
+              "dependencies": [
+                "Nexus-Media",
+                "Nexus-AI"
+              ],
+              "integrates": [],
+              "deployment": "both"
+            },
+            {
+              "id": "nexus-graphic",
+              "name": "Nexus-Graphic",
+              "status": "shell",
+              "tech": "TypeScript",
+              "port": null,
+              "description": "Full graphic design suite — vectors, photo editing, templates, AI generation.",
+              "dependencies": [
+                "Nexus-AI"
+              ],
+              "integrates": [
+                "Nexus-Draw",
+                "Nexus-Design",
+                "Phantom SDK"
+              ],
+              "deployment": "both",
+              "phantom": true
+            },
+            {
+              "id": "nexus-design",
+              "name": "Nexus-Design",
+              "status": "shell",
+              "tech": "TypeScript",
+              "port": null,
+              "description": "UI/UX / web design tool — Figma-style real-time collaboration, prototyping, handoff.",
+              "dependencies": [],
+              "integrates": [
+                "Nexus-Draw",
+                "Nexus-Graphic",
+                "Nexus Discovery"
+              ],
+              "deployment": "both",
+              "phantom": true
+            },
+            {
+              "id": "nexus-content",
+              "name": "Nexus-Content",
+              "status": "shell",
+              "tech": "TypeScript",
+              "port": null,
+              "description": "AI-powered content creation studio — text, images, video generation and editing.",
+              "dependencies": [
+                "Nexus-AI"
+              ],
+              "integrates": [
+                "Nexus-Graphic",
+                "Nexus-Video"
+              ],
+              "deployment": "both"
+            }
+          ]
+        },
+        {
+          "id": "productivity",
+          "name": "Productivity & Knowledge",
+          "color": "#22c55e",
+          "systems": [
+            {
+              "id": "nexus-notes",
+              "name": "Nexus-Notes",
+              "status": "shell",
+              "tech": "TypeScript",
+              "port": null,
+              "description": "Collaborative note-taking and knowledge base (Notion/Obsidian-style).",
+              "dependencies": [
+                "nexus-core",
+                "Nexus-AI"
+              ],
+              "integrates": [
+                "Nexus-Wiki",
+                "Nexus-Planner"
+              ],
+              "deployment": "both"
+            },
+            {
+              "id": "nexus-tasks",
+              "name": "Nexus-Tasks",
+              "status": "shell",
+              "tech": "TypeScript",
+              "port": null,
+              "description": "Kanban / project management with AI prioritization.",
+              "dependencies": [
+                "nexus-core"
+              ],
+              "integrates": [
+                "Nexus-Calendar",
+                "Nexus-Planner"
+              ],
+              "deployment": "both"
+            },
+            {
+              "id": "nexus-calendar",
+              "name": "Nexus-Calendar",
+              "status": "shell",
+              "tech": "TypeScript",
+              "port": null,
+              "description": "Shared calendars and contacts with reminders and federation.",
+              "dependencies": [
+                "nexus-core"
+              ],
+              "integrates": [
+                "Nexus-Tasks",
+                "Nexus-Meet",
+                "Nexus-Email"
+              ],
+              "deployment": "both"
+            },
+            {
+              "id": "nexus-office",
+              "name": "Nexus-Office",
+              "status": "shell",
+              "tech": "TypeScript",
+              "port": null,
+              "description": "Lightweight collaborative documents and spreadsheets (Google Docs alternative).",
+              "dependencies": [
+                "nexus-core"
+              ],
+              "integrates": [
+                "Nexus-PDF"
+              ],
+              "deployment": "both"
+            },
+            {
+              "id": "nexus-automate",
+              "name": "Nexus-Automate",
+              "status": "shell",
+              "tech": "TypeScript",
+              "port": null,
+              "description": "Workflow automation — Zapier/n8n-style visual automation builder.",
+              "dependencies": [
+                "Nexus-AI"
+              ],
+              "integrates": [
+                "ALL_SYSTEMS"
+              ],
+              "deployment": "both"
+            },
+            {
+              "id": "nexus-forms",
+              "name": "Nexus-Forms",
+              "status": "shell",
+              "tech": "TypeScript",
+              "port": null,
+              "description": "Advanced form builder and data collection with AI analysis.",
+              "dependencies": [
+                "nexus-core"
+              ],
+              "integrates": [
+                "Nexus-Survey",
+                "Nexus-Analytics"
+              ],
+              "deployment": "both"
+            },
+            {
+              "id": "nexus-wiki",
+              "name": "Nexus-Wiki",
+              "status": "built",
+              "tech": "Python",
+              "port": null,
+              "description": "Full-featured internal wiki / knowledge base with versioning and search. Nexus-owned Wikipedia alternative.",
+              "dependencies": [],
+              "integrates": [
+                "Nexus-Notes",
+                "Nexus-Search"
+              ],
+              "deployment": "both"
+            },
+            {
+              "id": "nexus-planner",
+              "name": "Nexus-Planner",
+              "status": "shell",
+              "tech": "TypeScript",
+              "port": null,
+              "description": "Personal + team planner — Notion-style all-in-one workspace with databases, AI assistance.",
+              "dependencies": [
+                "Nexus-AI",
+                "Nexus-Notes",
+                "Nexus-Tasks",
+                "Nexus-Calendar"
+              ],
+              "integrates": [
+                "Nexus-Office"
+              ],
+              "deployment": "both"
+            },
+            {
+              "id": "nexus-search",
+              "name": "Nexus-Search",
+              "status": "built",
+              "tech": "TypeScript",
+              "port": null,
+              "description": "Unified intelligent search across all Nexus data and tools with AI summarization.",
+              "dependencies": [
+                "Nexus-AI"
+              ],
+              "integrates": [
+                "ALL_SYSTEMS"
+              ],
+              "deployment": "both"
+            }
+          ]
+        },
+        {
+          "id": "ai",
+          "name": "AI & Intelligence",
+          "color": "#06b6d4",
+          "systems": [
+            {
+              "id": "nexus-ai",
+              "name": "Nexus-AI",
+              "status": "scaffolded",
+              "tech": "TypeScript",
+              "port": 3098,
+              "description": "Central AI service — model routing, provider integration, AI orchestration. Mature Python/FastAPI backend exists externally; monorepo version is TS integration shim.",
+              "dependencies": [
+                "nexus-core"
+              ],
+              "integrates": [
+                "ALL_AI_CONSUMERS"
+              ],
+              "deployment": "both"
+            },
+            {
+              "id": "nexus-ai-hub",
+              "name": "Nexus-AI-Hub",
+              "status": "built",
+              "tech": "TypeScript",
+              "port": null,
+              "description": "Dedicated interface for managing local AI models, agents, and RAG pipelines.",
+              "dependencies": [
+                "Nexus-AI"
+              ],
+              "integrates": [
+                "Nexus-Inference",
+                "Nexus-Agents"
+              ],
+              "deployment": "both"
+            },
+            {
+              "id": "nexus-computer",
+              "name": "Nexus-Computer",
+              "status": "scaffolded",
+              "tech": "TypeScript",
+              "port": 3045,
+              "description": "Personal AI cloud computer — your own AI-powered virtual machine. Full OS-like experience.",
+              "dependencies": [
+                "Nexus-AI",
+                "nexus-core"
+              ],
+              "integrates": [
+                "Nexus-IDE"
+              ],
+              "deployment": "both"
+            },
+            {
+              "id": "nexus-mind",
+              "name": "Nexus-Mind",
+              "status": "shell",
+              "tech": "TypeScript",
+              "port": null,
+              "description": "Mental wellness journal, mood tracking, and meditation tools with AI guidance.",
+              "dependencies": [
+                "Nexus-AI"
+              ],
+              "integrates": [
+                "Nexus-Health"
+              ],
+              "deployment": "both"
+            },
+            {
+              "id": "nexus-inference",
+              "name": "Nexus-Inference",
+              "status": "shell",
+              "tech": "TypeScript",
+              "port": null,
+              "description": "Optimized AI inference and supercomputing platform layer.",
+              "dependencies": [
+                "Nexus-AI"
+              ],
+              "integrates": [
+                "Nexus-AI-Hub"
+              ],
+              "deployment": "both"
+            },
+            {
+              "id": "nexus-insights",
+              "name": "Nexus-Insights",
+              "status": "shell",
+              "tech": "TypeScript",
+              "port": null,
+              "description": "AI-powered data analysis and reporting across all Nexus data.",
+              "dependencies": [
+                "Nexus-AI",
+                "Nexus-Analytics"
+              ],
+              "integrates": [
+                "ALL_SYSTEMS"
+              ],
+              "deployment": "both"
+            },
+            {
+              "id": "nexus-agents",
+              "name": "Nexus-Agents",
+              "status": "shell",
+              "tech": "TypeScript",
+              "port": null,
+              "description": "Multi-agent system builder and orchestrator — agentic AI workflows.",
+              "dependencies": [
+                "Nexus-AI",
+                "Nexusclaw"
+              ],
+              "integrates": [
+                "Nexus-AI-Hub"
+              ],
+              "deployment": "both"
+            },
+            {
+              "id": "nexus-engine",
+              "name": "Nexus-Engine",
+              "status": "built",
+              "tech": "TypeScript",
+              "port": null,
+              "description": "Unified 2D + 3D game engine — Babylon.js based, visual scripting, physics, multiplayer via federation, deep AI integration.",
+              "dependencies": [],
+              "integrates": [
+                "Nexus-Game",
+                "Nexus-Modeling"
+              ],
+              "deployment": "both"
+            }
+          ]
+        },
+        {
+          "id": "communication",
+          "name": "Communication & Collaboration",
+          "color": "#3b82f6",
+          "systems": [
+            {
+              "id": "nexus-meet",
+              "name": "Nexus-Meet",
+              "status": "shell",
+              "tech": "TypeScript",
+              "port": null,
+              "description": "Full video conferencing and webinars — recording, breakout rooms, AI transcription.",
+              "dependencies": [
+                "Nexus",
+                "Nexus-AI"
+              ],
+              "integrates": [
+                "Nexus-Calendar"
+              ],
+              "deployment": "both"
+            },
+            {
+              "id": "nexus-email",
+              "name": "Nexus-Email",
+              "status": "shell",
+              "tech": "TypeScript",
+              "port": null,
+              "description": "Private email server with calendar integration and AI filtering.",
+              "dependencies": [
+                "nexus-core",
+                "Nexus-AI"
+              ],
+              "integrates": [
+                "Nexus-Calendar"
+              ],
+              "deployment": "both"
+            },
+            {
+              "id": "nexus-team-chat",
+              "name": "Nexus-Team-Chat",
+              "status": "shell",
+              "tech": "TypeScript",
+              "port": null,
+              "description": "Advanced team channels, threads, and integrations (Slack/Discord alternative).",
+              "dependencies": [
+                "Nexus"
+              ],
+              "integrates": [
+                "Nexus-Meet"
+              ],
+              "deployment": "both"
+            },
+            {
+              "id": "nexus-presence",
+              "name": "Nexus-Presence",
+              "status": "shell",
+              "tech": "TypeScript",
+              "port": null,
+              "description": "Real-time presence, availability, and status sharing across all tools.",
+              "dependencies": [
+                "Nexus"
+              ],
+              "integrates": [
+                "ALL_SYSTEMS"
+              ],
+              "deployment": "both"
+            }
+          ]
+        },
+        {
+          "id": "business",
+          "name": "Business & Professional",
+          "color": "#f97316",
+          "systems": [
+            {
+              "id": "nexus-crm",
+              "name": "Nexus-CRM",
+              "status": "shell",
+              "tech": "TypeScript",
+              "port": null,
+              "description": "Customer relationship management — contacts, deals, pipelines, AI insights.",
+              "dependencies": [
+                "nexus-core",
+                "Nexus-AI"
+              ],
+              "integrates": [
+                "Nexus-Sales",
+                "Nexus-Email"
+              ],
+              "deployment": "both"
+            },
+            {
+              "id": "nexus-sales",
+              "name": "Nexus-Sales",
+              "status": "shell",
+              "tech": "TypeScript",
+              "port": null,
+              "description": "Sales automation and pipeline tools — outbound, quoting, contract management.",
+              "dependencies": [
+                "Nexus-CRM"
+              ],
+              "integrates": [
+                "Nexus-Contracts",
+                "Nexus-Billing"
+              ],
+              "deployment": "both"
+            },
+            {
+              "id": "nexus-hr",
+              "name": "Nexus-HR",
+              "status": "shell",
+              "tech": "TypeScript",
+              "port": null,
+              "description": "Human resources management — onboarding, payroll tracking, employee records, performance.",
+              "dependencies": [
+                "nexus-core"
+              ],
+              "integrates": [
+                "Nexus-Accounting"
+              ],
+              "deployment": "both"
+            },
+            {
+              "id": "nexus-accounting",
+              "name": "Nexus-Accounting",
+              "status": "shell",
+              "tech": "TypeScript",
+              "port": null,
+              "description": "Bookkeeping and invoicing with AI reconciliation.",
+              "dependencies": [
+                "nexus-core",
+                "Nexus-AI"
+              ],
+              "integrates": [
+                "Nexus-Billing",
+                "Nexus-Finance"
+              ],
+              "deployment": "both"
+            },
+            {
+              "id": "nexus-contracts",
+              "name": "Nexus-Contracts",
+              "status": "shell",
+              "tech": "TypeScript",
+              "port": null,
+              "description": "Contract creation, signing, and lifecycle management with AI review.",
+              "dependencies": [
+                "Nexus-AI"
+              ],
+              "integrates": [
+                "Nexus-Sales",
+                "Nexus-Compliance"
+              ],
+              "deployment": "both"
+            },
+            {
+              "id": "nexus-billing",
+              "name": "Nexus-Billing",
+              "status": "shell",
+              "tech": "TypeScript",
+              "port": null,
+              "description": "Invoicing, subscriptions, and payment handling — but everything stays free.",
+              "dependencies": [
+                "nexus-core"
+              ],
+              "integrates": [
+                "Nexus-Accounting",
+                "Nexus-Spend"
+              ],
+              "deployment": "both"
+            },
+            {
+              "id": "nexus-finance",
+              "name": "Nexus-Finance",
+              "status": "shell",
+              "tech": "TypeScript",
+              "port": null,
+              "description": "Simple personal budgeting and expense tracking with AI categorization.",
+              "dependencies": [
+                "nexus-core",
+                "Nexus-AI"
+              ],
+              "integrates": [
+                "Nexus-Accounting"
+              ],
+              "deployment": "both"
+            },
+            {
+              "id": "nexus-spend",
+              "name": "Nexus-Spend",
+              "status": "shell",
+              "tech": "TypeScript",
+              "port": null,
+              "description": "SaaS management and spend optimization — track what you're paying for.",
+              "dependencies": [
+                "nexus-core"
+              ],
+              "integrates": [
+                "Nexus-Billing"
+              ],
+              "deployment": "both"
+            }
+          ]
+        },
+        {
+          "id": "analytics",
+          "name": "Analytics, Intelligence & Data",
+          "color": "#84cc16",
+          "systems": [
+            {
+              "id": "nexus-analytics",
+              "name": "Nexus-Analytics",
+              "status": "shell",
+              "tech": "TypeScript",
+              "port": null,
+              "description": "Business intelligence and dashboards with AI queries.",
+              "dependencies": [
+                "nexus-core",
+                "Nexus-AI"
+              ],
+              "integrates": [
+                "Nexus-Insights",
+                "Nexus-Warehouse"
+              ],
+              "deployment": "both"
+            },
+            {
+              "id": "nexus-survey",
+              "name": "Nexus-Survey",
+              "status": "shell",
+              "tech": "TypeScript",
+              "port": null,
+              "description": "Advanced survey and feedback collection with analytics.",
+              "dependencies": [
+                "nexus-core"
+              ],
+              "integrates": [
+                "Nexus-Forms",
+                "Nexus-Analytics"
+              ],
+              "deployment": "both"
+            },
+            {
+              "id": "nexus-seo",
+              "name": "Nexus-SEO",
+              "status": "shell",
+              "tech": "TypeScript",
+              "port": null,
+              "description": "Built-in SEO monitoring and optimization tools for hosted sites.",
+              "dependencies": [
+                "Nexus-Hosting"
+              ],
+              "integrates": [
+                "Nexus-Analytics"
+              ],
+              "deployment": "both"
+            },
+            {
+              "id": "nexus-database",
+              "name": "Nexus-Database",
+              "status": "shell",
+              "tech": "TypeScript",
+              "port": null,
+              "description": "Visual database designer and GUI — manage your databases visually.",
+              "dependencies": [],
+              "integrates": [
+                "Nexus-Warehouse"
+              ],
+              "deployment": "both"
+            },
+            {
+              "id": "nexus-warehouse",
+              "name": "Nexus-Warehouse",
+              "status": "scaffolded",
+              "tech": "TypeScript",
+              "port": null,
+              "description": "Data warehouse and ETL pipeline — central data storage and transformation.",
+              "dependencies": [
+                "nexus-core"
+              ],
+              "integrates": [
+                "Nexus-Analytics",
+                "Nexus-Database"
+              ],
+              "deployment": "both"
+            }
+          ]
+        },
+        {
+          "id": "education",
+          "name": "Learning & Education",
+          "color": "#a855f7",
+          "systems": [
+            {
+              "id": "nexus-learn",
+              "name": "Nexus-Learn",
+              "status": "shell",
+              "tech": "TypeScript",
+              "port": null,
+              "description": "Learning management system (LMS) — courses, quizzes, certifications with AI tutoring.",
+              "dependencies": [
+                "Nexus-AI"
+              ],
+              "integrates": [
+                "Nexus-Academy",
+                "Nexus-Tutor"
+              ],
+              "deployment": "both"
+            },
+            {
+              "id": "nexus-tutor",
+              "name": "Nexus-Tutor",
+              "status": "shell",
+              "tech": "TypeScript",
+              "port": null,
+              "description": "Personal AI tutor and knowledge trainer — learn anything with AI guidance.",
+              "dependencies": [
+                "Nexus-AI"
+              ],
+              "integrates": [
+                "Nexus-Learn"
+              ],
+              "deployment": "both"
+            },
+            {
+              "id": "nexus-academy",
+              "name": "Nexus-Academy",
+              "status": "shell",
+              "tech": "TypeScript",
+              "port": null,
+              "description": "Community / team training platform with progress tracking.",
+              "dependencies": [
+                "Nexus-Learn"
+              ],
+              "integrates": [],
+              "deployment": "both"
+            }
+          ]
+        },
+        {
+          "id": "health",
+          "name": "Health, Fitness & Wellness",
+          "color": "#ec4899",
+          "systems": [
+            {
+              "id": "nexus-health",
+              "name": "Nexus-Health",
+              "status": "shell",
+              "tech": "TypeScript",
+              "port": null,
+              "description": "Personal health and medical records tracker — privacy-first, AI insights.",
+              "dependencies": [
+                "nexus-core",
+                "Nexus-Vault"
+              ],
+              "integrates": [
+                "Nexus-Fitness",
+                "Nexus-Nutrition",
+                "Nexus-Mind"
+              ],
+              "deployment": "self-hosted"
+            },
+            {
+              "id": "nexus-fitness",
+              "name": "Nexus-Fitness",
+              "status": "shell",
+              "tech": "TypeScript",
+              "port": null,
+              "description": "Fitness tracking, workouts, and progress logging.",
+              "dependencies": [
+                "nexus-core"
+              ],
+              "integrates": [
+                "Nexus-Health"
+              ],
+              "deployment": "self-hosted"
+            },
+            {
+              "id": "nexus-nutrition",
+              "name": "Nexus-Nutrition",
+              "status": "shell",
+              "tech": "TypeScript",
+              "port": null,
+              "description": "Meal planning, recipe management, and nutrition tracking with AI suggestions.",
+              "dependencies": [
+                "Nexus-AI"
+              ],
+              "integrates": [
+                "Nexus-Health"
+              ],
+              "deployment": "self-hosted"
+            }
+          ]
+        },
+        {
+          "id": "ecommerce",
+          "name": "E-Commerce & Marketplace",
+          "color": "#eab308",
+          "systems": [
+            {
+              "id": "nexus-store",
+              "name": "Nexus-Store",
+              "status": "shell",
+              "tech": "TypeScript",
+              "port": null,
+              "description": "Private e-commerce / digital product store.",
+              "dependencies": [
+                "nexus-core"
+              ],
+              "integrates": [
+                "Nexus-Billing",
+                "Nexus-Market"
+              ],
+              "deployment": "both"
+            },
+            {
+              "id": "nexus-market",
+              "name": "Nexus-Market",
+              "status": "shell",
+              "tech": "TypeScript",
+              "port": null,
+              "description": "Internal community marketplace for trading/sharing within federated nodes.",
+              "dependencies": [
+                "Nexus-Store"
+              ],
+              "integrates": [],
+              "deployment": "both"
+            }
+          ]
+        },
+        {
+          "id": "development",
+          "name": "Development & Coding",
+          "color": "#0891b2",
+          "systems": [
+            {
+              "id": "nexus-ide",
+              "name": "Nexus-IDE",
+              "status": "built",
+              "tech": "TypeScript",
+              "port": null,
+              "description": "Cloud-based code editor / IDE with AI assistance and collaboration (VS Code alternative).",
+              "dependencies": [
+                "Nexus-AI",
+                "Nexus-Computer"
+              ],
+              "integrates": [
+                "Nexus-Forge",
+                "Nexus-Code-Review"
+              ],
+              "deployment": "both"
+            },
+            {
+              "id": "nexus-code-review",
+              "name": "Nexus-Code-Review",
+              "status": "shell",
+              "tech": "TypeScript",
+              "port": null,
+              "description": "AI-powered code review and quality tools.",
+              "dependencies": [
+                "Nexus-AI"
+              ],
+              "integrates": [
+                "Nexus-IDE",
+                "Nexus-Forge"
+              ],
+              "deployment": "both"
+            },
+            {
+              "id": "nexus-testing",
+              "name": "Nexus-Testing",
+              "status": "built",
+              "tech": "TypeScript",
+              "port": null,
+              "description": "Comprehensive testing suite — unit, integration, end-to-end, performance.",
+              "dependencies": [
+                "nexus-core"
+              ],
+              "integrates": [
+                "ALL_SYSTEMS"
+              ],
+              "deployment": "both"
+            },
+            {
+              "id": "nexus-forge",
+              "name": "Nexus-Forge",
+              "status": "built",
+              "tech": "TypeScript",
+              "port": null,
+              "description": "Self-hosted code forge — free GitHub/GitLab alternative with federation and AI integration.",
+              "dependencies": [
+                "Nexus-Deploy"
+              ],
+              "integrates": [
+                "Nexus-IDE",
+                "Nexus-Code-Review",
+                "Nexus-AI"
+              ],
+              "deployment": "both"
+            }
+          ]
+        },
+        {
+          "id": "gaming",
+          "name": "Entertainment & Gaming",
+          "color": "#dc2626",
+          "systems": [
+            {
+              "id": "nexus-game",
+              "name": "Nexus-Game",
+              "status": "shell",
+              "tech": "TypeScript",
+              "port": null,
+              "description": "Game server hosting and management with federation.",
+              "dependencies": [
+                "Nexus-Hosting",
+                "Nexus-Engine"
+              ],
+              "integrates": [],
+              "deployment": "both"
+            },
+            {
+              "id": "nexus-play",
+              "name": "Nexus-Play",
+              "status": "shell",
+              "tech": "TypeScript",
+              "port": null,
+              "description": "Browser-based game library and streaming for personal collections.",
+              "dependencies": [
+                "Nexus-Engine"
+              ],
+              "integrates": [
+                "Nexus-Game"
+              ],
+              "deployment": "self-hosted"
+            },
+            {
+              "id": "nexus-arcade",
+              "name": "Nexus-Arcade",
+              "status": "shell",
+              "tech": "TypeScript",
+              "port": null,
+              "description": "Lightweight retro/emulator gaming platform.",
+              "dependencies": [
+                "Nexus-Engine"
+              ],
+              "integrates": [
+                "Nexus-Play"
+              ],
+              "deployment": "self-hosted"
+            }
+          ]
+        },
+        {
+          "id": "vertical",
+          "name": "Vertical & Niche",
+          "color": "#6b7280",
+          "systems": [
+            {
+              "id": "nexus-vertical",
+              "name": "Nexus-Vertical",
+              "status": "shell",
+              "tech": "TypeScript",
+              "port": null,
+              "description": "Framework for industry-specific modules — construction, healthcare, legal, real estate, etc.",
+              "dependencies": [
+                "nexus-core"
+              ],
+              "integrates": [
+                "ALL_SYSTEMS"
+              ],
+              "deployment": "both"
+            },
+            {
+              "id": "nexus-edge",
+              "name": "Nexus-Edge",
+              "status": "built",
+              "tech": "TypeScript",
+              "port": null,
+              "description": "Edge computing and IoT orchestration layer — device management, local breakout, low-latency routing.",
+              "dependencies": [
+                "Nexus-Tunnel"
+              ],
+              "integrates": [
+                "Nexus-Network"
+              ],
+              "deployment": "both"
+            },
+            {
+              "id": "nexus-provenance",
+              "name": "Nexus-Provenance",
+              "status": "shell",
+              "tech": "TypeScript",
+              "port": null,
+              "description": "Digital provenance and content authenticity tracking.",
+              "dependencies": [],
+              "integrates": [
+                "Nexus-Content",
+                "Nexus-Security"
+              ],
+              "deployment": "both"
+            },
+            {
+              "id": "nexus-confidential",
+              "name": "Nexus-Confidential",
+              "status": "shell",
+              "tech": "TypeScript",
+              "port": null,
+              "description": "Confidential computing and privacy-enhancing tech tools.",
+              "dependencies": [
+                "Phantom"
+              ],
+              "integrates": [
+                "Nexus-Security",
+                "Nexus-Vault"
+              ],
+              "deployment": "both"
+            },
+            {
+              "id": "nexus-home",
+              "name": "Nexus-Home",
+              "status": "shell",
+              "tech": "TypeScript",
+              "port": null,
+              "description": "Smart home integration layer — Home Assistant-style but Nexus-native.",
+              "dependencies": [
+                "Nexus-Edge"
+              ],
+              "integrates": [],
+              "deployment": "self-hosted"
+            },
+            {
+              "id": "nexus-pdf",
+              "name": "Nexus-PDF",
+              "status": "shell",
+              "tech": "TypeScript",
+              "port": null,
+              "description": "Browser-based PDF toolkit — merge, sign, OCR, AI summarization.",
+              "dependencies": [
+                "Nexus-AI"
+              ],
+              "integrates": [
+                "Nexus-Office"
+              ],
+              "deployment": "both"
+            },
+            {
+              "id": "nexus-social",
+              "name": "Nexus-Social",
+              "status": "shell",
+              "tech": "TypeScript",
+              "port": null,
+              "description": "Lightweight fediverse / private community posting client.",
+              "dependencies": [
+                "Nexus"
+              ],
+              "integrates": [
+                "Nexus-Content"
+              ],
+              "deployment": "both"
+            }
+          ]
+        },
+        {
+          "id": "internal-infra",
+          "name": "Internal Infrastructure",
+          "color": "#475569",
+          "systems": [
+            {
+              "id": "phantom",
+              "name": "Phantom",
+              "status": "native",
+              "tech": "Rust",
+              "port": null,
+              "description": "Anonymous networking layer — circuit routing, crypto, discovery, zero-knowledge VM. 8 crates. DO NOT TOUCH.",
+              "dependencies": [],
+              "integrates": [
+                "Nexus-Confidential",
+                "Nexus-Tunnel"
+              ],
+              "deployment": "infra"
+            },
+            {
+              "id": "nexusclaw",
+              "name": "Nexusclaw",
+              "status": "native",
+              "tech": "TypeScript/C++",
+              "port": null,
+              "description": "Agent framework with native code — hybrid TS/C++ for performance-critical agent operations.",
+              "dependencies": [],
+              "integrates": [
+                "Nexus-Agents",
+                "Nexus-AI"
+              ],
+              "deployment": "infra"
+            },
+            {
+              "id": "nexus-factory",
+              "name": "nexus-factory",
+              "status": "built",
+              "tech": "TypeScript",
+              "port": null,
+              "description": "Internal tooling/factory for scaffolding new Nexus apps.",
+              "dependencies": [
+                "nexus-core"
+              ],
+              "integrates": [],
+              "deployment": "infra"
+            }
+          ]
+        },
+        {
+          "id": "packages",
+          "name": "Packages & SDKs",
+          "color": "#06b6d4",
+          "systems": [
+            {
+              "id": "phantom-sdk",
+              "name": "Phantom SDK",
+              "status": "built",
+              "tech": "Rust + TypeScript",
+              "port": null,
+              "description": "Post-quantum identity layer — PQ keys, signing, KEM. 10 tests. Bound: Graphic, Photos, Design.",
+              "dependencies": [
+                "Phantom"
+              ],
+              "integrates": [
+                "nexus-graphic",
+                "nexus-photos",
+                "nexus-design"
+              ]
+            },
+            {
+              "id": "nexus-discovery",
+              "name": "Nexus Discovery",
+              "status": "built",
+              "tech": "TypeScript",
+              "port": null,
+              "description": "Service mesh via Cloud topology — resolve(), list(), call(). 6 tests. Bound: Photos, Design, GPU-Test.",
+              "dependencies": [
+                "nexus-cloud"
+              ],
+              "integrates": [
+                "nexus-photos",
+                "nexus-design",
+                "nexus-gpu-test"
+              ]
+            },
+            {
+              "id": "ghost-framework",
+              "name": "Ghost Framework",
+              "status": "built",
+              "tech": "TypeScript",
+              "port": null,
+              "description": "CLI code generator for scaffolding new Nexus apps.",
+              "dependencies": [],
+              "integrates": []
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "relationships": [
+    {
+      "source": "nexus-tunnel",
+      "target": "nexus-cloud",
+      "relation": "integrates_with"
+    },
+    {
+      "source": "nexus-tunnel",
+      "target": "nexus-edge",
+      "relation": "integrates_with"
+    },
+    {
+      "source": "nexus-tunnel",
+      "target": "nexus-guardian",
+      "relation": "integrates_with"
+    },
+    {
+      "source": "nexus-ai",
+      "target": "nexus-ai-hub",
+      "relation": "owns"
+    },
+    {
+      "source": "nexus-ai",
+      "target": "nexus-agents",
+      "relation": "owns"
+    },
+    {
+      "source": "nexus-ai",
+      "target": "nexus-inference",
+      "relation": "owns"
+    },
+    {
+      "source": "nexus-ai",
+      "target": "nexus-insights",
+      "relation": "owns"
+    },
+    {
+      "source": "nexus-guardian",
+      "target": "nexus-monitor",
+      "relation": "depends_on"
+    },
+    {
+      "source": "nexus-guardian",
+      "target": "nexus-security",
+      "relation": "owns"
+    },
+    {
+      "source": "nexus-guardian",
+      "target": "nexus-compliance",
+      "relation": "owns"
+    },
+    {
+      "source": "nexus-vault",
+      "target": "nexus-files",
+      "relation": "integrates_with"
+    },
+    {
+      "source": "nexus-forge",
+      "target": "nexus-deploy",
+      "relation": "depends_on"
+    },
+    {
+      "source": "nexus-forge",
+      "target": "nexus-ide",
+      "relation": "integrates_with"
+    },
+    {
+      "source": "nexus-engine",
+      "target": "nexus-game",
+      "relation": "owns"
+    },
+    {
+      "source": "nexus-engine",
+      "target": "nexus-play",
+      "relation": "owns"
+    },
+    {
+      "source": "nexus-engine",
+      "target": "nexus-arcade",
+      "relation": "owns"
+    },
+    {
+      "source": "nexus-engine",
+      "target": "nexus-modeling",
+      "relation": "integrates_with"
+    },
+    {
+      "source": "nexus-search",
+      "target": "nexus-ai",
+      "relation": "depends_on"
+    },
+    {
+      "source": "nexus-cloud",
+      "target": "nexus-systems-api",
+      "relation": "owns"
+    },
+    {
+      "source": "nexus-cloud",
+      "target": "nexus-tunnel",
+      "relation": "depends_on"
+    },
+    {
+      "source": "nexus-hosting",
+      "target": "nexus-deploy",
+      "relation": "integrates_with"
+    },
+    {
+      "source": "nexus-hosting",
+      "target": "nexus-tunnel",
+      "relation": "depends_on"
+    },
+    {
+      "source": "phantom",
+      "target": "nexus-confidential",
+      "relation": "integrates_with"
+    },
+    {
+      "source": "phantom",
+      "target": "nexus-tunnel",
+      "relation": "integrates_with"
+    },
+    {
+      "source": "nexusclaw",
+      "target": "nexus-agents",
+      "relation": "integrates_with"
+    },
+    {
+      "source": "nexusclaw",
+      "target": "nexus-ai",
+      "relation": "integrates_with"
+    },
+    {
+      "source": "nexus",
+      "target": "nexus-meet",
+      "relation": "owns"
+    },
+    {
+      "source": "nexus",
+      "target": "nexus-team-chat",
+      "relation": "owns"
+    },
+    {
+      "source": "nexus",
+      "target": "nexus-presence",
+      "relation": "owns"
+    },
+    {
+      "source": "nexus",
+      "target": "nexus-social",
+      "relation": "owns"
+    },
+    {
+      "source": "nexus-systems-api",
+      "target": "nexus-api",
+      "relation": "integrates_with"
+    },
+    {
+      "source": "nexus-wiki",
+      "target": "nexus-notes",
+      "relation": "integrates_with"
+    },
+    {
+      "source": "nexus-wiki",
+      "target": "nexus-search",
+      "relation": "integrates_with"
+    },
+    {
+      "source": "nexus-crm",
+      "target": "nexus-sales",
+      "relation": "owns"
+    },
+    {
+      "source": "nexus-accounting",
+      "target": "nexus-billing",
+      "relation": "owns"
+    },
+    {
+      "source": "nexus-accounting",
+      "target": "nexus-finance",
+      "relation": "owns"
+    },
+    {
+      "source": "nexus-analytics",
+      "target": "nexus-warehouse",
+      "relation": "depends_on"
+    },
+    {
+      "source": "nexus-analytics",
+      "target": "nexus-insights",
+      "relation": "integrates_with"
+    },
+    {
+      "source": "nexus-ide",
+      "target": "nexus-computer",
+      "relation": "depends_on"
+    },
+    {
+      "source": "nexus-ide",
+      "target": "nexus-code-review",
+      "relation": "owns"
+    },
+    {
+      "source": "nexus-ide",
+      "target": "nexus-forge",
+      "relation": "integrates_with"
+    },
+    {
+      "source": "nexus-learn",
+      "target": "nexus-tutor",
+      "relation": "owns"
+    },
+    {
+      "source": "nexus-learn",
+      "target": "nexus-academy",
+      "relation": "owns"
+    },
+    {
+      "source": "nexus-health",
+      "target": "nexus-fitness",
+      "relation": "owns"
+    },
+    {
+      "source": "nexus-health",
+      "target": "nexus-nutrition",
+      "relation": "owns"
+    },
+    {
+      "source": "nexus-health",
+      "target": "nexus-mind",
+      "relation": "owns"
+    },
+    {
+      "source": "nexus-office",
+      "target": "nexus-pdf",
+      "relation": "integrates_with"
+    },
+    {
+      "source": "nexus-planner",
+      "target": "nexus-notes",
+      "relation": "depends_on"
+    },
+    {
+      "source": "nexus-planner",
+      "target": "nexus-tasks",
+      "relation": "depends_on"
+    },
+    {
+      "source": "nexus-planner",
+      "target": "nexus-calendar",
+      "relation": "depends_on"
+    },
+    {
+      "source": "nexus-store",
+      "target": "nexus-market",
+      "relation": "owns"
+    }
+  ]
+};
+
+    // ═══════════════════════════════════════════
+    // Application (baked at build time)
+    // ═══════════════════════════════════════════
+    // ═══════════════════════════════════════════════════════════════
+// Nexus Systems Ecosystem Visualizer v3
+// The No Hands Company — Free. Open Source. Forever.
+// ═══════════════════════════════════════════════════════════════
+
+// ── Constants ──
+const STATUS_COLORS = {
+  native:     { bg: '#8b5cf6', border: '#a78bfa', text: '#ede9fe', label: 'NATIVE' },
+  built:      { bg: '#10b981', border: '#34d399', text: '#ecfdf5', label: 'BUILT' },
+  scaffolded: { bg: '#f59e0b', border: '#fbbf24', text: '#fefce8', label: 'WIP' },
+  shell:      { bg: '#475569', border: '#64748b', text: '#f1f5f9', label: 'PLANNED' }
+};
+
+const DEPLOYMENT_LABELS = {
+  'both':        '⚡ Self + Cloud',
+  'self-hosted': '🏠 Self-Hosted',
+  'cloud':       '☁️ Cloud Only',
+  'infra':       '🔧 Infrastructure',
+  'package':     '📦 Package'
+};
+
+// ── State ──
+const state = {
+  data: null,
+  systemIndex: new Map(),       // id → system (deduplicated)
+  reverseDeps: new Map(),       // id → [{id, name, status}]
+  categoryList: [],
+  visibleStatuses: new Set(Object.keys(STATUS_COLORS)),
+  visibleCategories: new Set(),
+  search: '',
+  selectedSystemId: null,
+  viewMode: 'graph',            // 'graph' | 'list' | 'roadmap' | 'tree'
+  savedGraphOptions: null,       // saved physics/layout for graph→tree→graph restore
+  focusMode: false,
+  focusRootId: null,
+  graphData: null,              // ecosystem-graph cross-reference
+};
+
+let nodesDataSet, edgesDataSet, network;
+
+// ═══════════════════════════════════════════════════════
+//  Data Indexing
+// ═══════════════════════════════════════════════════════
+
+function buildSystemIndex(data) {
+  const index = new Map();
+  for (const eco of data.ecosystems) {
+    for (const cat of eco.categories) {
+      for (const sys of cat.systems) {
+        const existing = index.get(sys.id);
+        if (!existing) {
+          index.set(sys.id, {
+            ...sys,
+            categories: [cat.id],
+            categoryNames: [cat.name],
+            categoryColors: [cat.color]
+          });
+        } else {
+          if (!existing.categories.includes(cat.id)) {
+            existing.categories.push(cat.id);
+            existing.categoryNames.push(cat.name);
+            existing.categoryColors.push(cat.color);
+          }
+        }
+      }
+    }
+  }
+  return index;
+}
+
+function buildReverseDeps(systemIndex) {
+  const rev = new Map();
+  for (const [id, sys] of systemIndex) {
+    for (const dep of sys.dependencies) {
+      const target = findSystemByNameOrId(dep, systemIndex);
+      const targetId = target ? target.id : dep.toLowerCase().replace(/\s+/g, '-');
+      if (!rev.has(targetId)) rev.set(targetId, []);
+      if (!rev.get(targetId).some(r => r.id === id)) {
+        rev.get(targetId).push({ id, name: sys.name, status: sys.status });
+      }
+    }
+  }
+  return rev;
+}
+
+function findSystemByNameOrId(nameOrId, systemIndex) {
+  if (!nameOrId || nameOrId === 'ALL_SYSTEMS' || nameOrId === 'ALL_TS_SYSTEMS' || nameOrId === 'ALL_AI_CONSUMERS') return null;
+  const slug = nameOrId.toLowerCase().replace(/\s+/g, '-');
+  if (systemIndex.has(slug)) return systemIndex.get(slug);
+  return [...systemIndex.values()].find(s =>
+    s.name.toLowerCase() === nameOrId.toLowerCase() || s.id === slug
+  );
+}
+
+// ═══════════════════════════════════════════════════════
+//  Focus Mode
+// ═══════════════════════════════════════════════════════
+
+function enterFocusMode(sysId) {
+  const sys = state.systemIndex.get(sysId);
+  if (!sys) return;
+
+  state.focusMode = true;
+  state.focusRootId = sysId;
+  document.getElementById('focusBanner').classList.add('visible');
+  document.getElementById('focusLabel').textContent = sys.name;
+  updateHash();
+
+  _renderFocusGraph(sysId);
+}
+
+function exitFocusMode() {
+  state.focusMode = false;
+  state.focusRootId = null;
+  document.getElementById('focusBanner').classList.remove('visible');
+  updateHash();
+  applyFilters();
+}
+
+function _renderFocusGraph(sysId) {
+  const sys = state.systemIndex.get(sysId);
+  if (!sys) return;
+
+  const neighborIds = new Set([sysId]);
+
+  // Dependencies (sys depends on these)
+  for (const depName of sys.dependencies || []) {
+    const t = findSystemByNameOrId(depName, state.systemIndex);
+    if (t) neighborIds.add(t.id);
+  }
+
+  // Integrations
+  for (const intName of sys.integrates || []) {
+    const t = findSystemByNameOrId(intName, state.systemIndex);
+    if (t) neighborIds.add(t.id);
+  }
+
+  // Reverse deps (systems that depend on this)
+  for (const rev of state.reverseDeps.get(sysId) || []) {
+    neighborIds.add(rev.id);
+  }
+
+  // Also: systems that integrate with this (search all systems' integrates lists)
+  for (const [, other] of state.systemIndex) {
+    if (neighborIds.has(other.id)) continue;
+    for (const intName of other.integrates || []) {
+      const t = findSystemByNameOrId(intName, state.systemIndex);
+      if (t && t.id === sysId) {
+        neighborIds.add(other.id);
+        break;
+      }
+    }
+  }
+
+  nodesDataSet.clear();
+  edgesDataSet.clear();
+
+  const nodes = [];
+  for (const nid of neighborIds) {
+    const s = state.systemIndex.get(nid);
+    if (s) nodes.push(mkNode(s, s.categories?.[0]));
+  }
+  nodesDataSet.add(nodes);
+
+  // Build edges only between visible nodes
+  const edges = [];
+  const addedPairs = new Set();
+  for (const nid of neighborIds) {
+    const s = state.systemIndex.get(nid);
+    if (!s) continue;
+    for (const depName of s.dependencies || []) {
+      const t = findSystemByNameOrId(depName, state.systemIndex);
+      if (t && neighborIds.has(t.id)) {
+        const key = `${nid}->${t.id}`;
+        if (!addedPairs.has(key)) {
+          addedPairs.add(key);
+          edges.push(mkEdge(nid, t.id, 'dependency', '#ef4444'));
+        }
+      }
+    }
+    for (const intName of s.integrates || []) {
+      const t = findSystemByNameOrId(intName, state.systemIndex);
+      if (t && neighborIds.has(t.id)) {
+        const key = `${nid}--${t.id}`;
+        if (!addedPairs.has(key)) {
+          addedPairs.add(key);
+          edges.push(mkEdge(nid, t.id, 'integration', '#6366f1'));
+        }
+      }
+    }
+  }
+  edgesDataSet.add(edges);
+
+  document.getElementById('visibleNodes').textContent = nodes.length;
+  document.getElementById('visibleEdges').textContent = edges.length;
+  document.getElementById('emptyState').classList.remove('visible');
+
+  if (network) {
+    network.selectNodes([sysId]);
+    setTimeout(() => network.fit({ animation: { duration: 400, easingFunction: 'easeInOutQuad' } }), 50);
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+//  Graph Construction
+// ═══════════════════════════════════════════════════════
+
+function mkNode(sys, primaryCategory) {
+  const colors = STATUS_COLORS[sys.status] || STATUS_COLORS.shell;
+  const depCount = sys.dependencies?.length || 0;
+  const intCount = sys.integrates?.length || 0;
+  const revCount = (state.reverseDeps.get(sys.id) || []).length;
+  const totalEdges = depCount + intCount + revCount;
+  const size = Math.min(10 + totalEdges * 2, 34);
+
+  const label = sys.name.replace('Nexus-', '');
+
+  return {
+    id: sys.id,
+    label: label,
+    group: primaryCategory || sys.categories?.[0] || 'other',
+    color: {
+      background: colors.bg,
+      border: colors.border,
+      highlight: { background: colors.border, border: '#fff' },
+      hover: { background: colors.border, border: '#fff' }
+    },
+    font: {
+      color: '#e2e8f0',
+      size: Math.max(10, Math.min(label.length > 10 ? 9 : 11, 14)),
+      face: 'system-ui, sans-serif',
+      strokeWidth: 2,
+      strokeColor: '#080c0f'
+    },
+    shape: sys.status === 'native' ? 'diamond' : 'dot',
+    size: size,
+    borderWidth: sys.status === 'native' ? 3 : sys.status === 'built' ? 2 : 1,
+    data: sys
+  };
+}
+
+function mkEdge(sourceId, targetId, relation, color) {
+  return {
+    from: sourceId,
+    to: targetId,
+    color: { color: color, opacity: 0.5, highlight: color },
+    arrows: { to: { enabled: true, scaleFactor: 0.5 } },
+    width: 0.8,
+    smooth: { type: 'continuous', roundness: 0.3 },
+    dashes: relation === 'integration',
+    title: relation === 'dependency' ? 'depends on' : 'integrates with'
+  };
+}
+
+function buildEdges(systemIndex, visibleIds) {
+  const edges = [];
+  const addedPairs = new Set();
+
+  for (const sysId of visibleIds) {
+    const sys = systemIndex.get(sysId);
+    if (!sys) continue;
+
+    for (const depName of sys.dependencies || []) {
+      const target = findSystemByNameOrId(depName, systemIndex);
+      if (target && visibleIds.has(target.id)) {
+        const key = `${sysId}->${target.id}`;
+        if (!addedPairs.has(key)) {
+          addedPairs.add(key);
+          edges.push(mkEdge(sysId, target.id, 'dependency', '#ef4444'));
+        }
+      }
+    }
+
+    for (const intName of sys.integrates || []) {
+      const target = findSystemByNameOrId(intName, systemIndex);
+      if (target && visibleIds.has(target.id)) {
+        const key = `${sysId}--${target.id}`;
+        if (!addedPairs.has(key)) {
+          addedPairs.add(key);
+          edges.push(mkEdge(sysId, target.id, 'integration', '#6366f1'));
+        }
+      }
+    }
+  }
+
+  return edges;
+}
+
+// ═══════════════════════════════════════════════════════
+//  Filtering
+// ═══════════════════════════════════════════════════════
+
+function getVisibleSystems() {
+  const results = [];
+  for (const [id, sys] of state.systemIndex) {
+    if (!state.visibleStatuses.has(sys.status)) continue;
+
+    const hasVisibleCategory = sys.categories.some(c => state.visibleCategories.has(c));
+    if (state.visibleCategories.size > 0 && !hasVisibleCategory) continue;
+
+    if (state.search) {
+      const q = state.search.toLowerCase();
+      const matches =
+        sys.name.toLowerCase().includes(q) ||
+        sys.id.toLowerCase().includes(q) ||
+        (sys.description || '').toLowerCase().includes(q) ||
+        (sys.tech || '').toLowerCase().includes(q);
+      if (!matches) continue;
+    }
+
+    results.push(sys);
+  }
+  return results;
+}
+
+function applyFilters() {
+  if (!state.systemIndex.size) return;
+
+  // If in focus mode, use focus rendering instead
+  if (state.focusMode && state.focusRootId) {
+    _renderFocusGraph(state.focusRootId);
+    return;
+  }
+
+  const visible = getVisibleSystems();
+  const visibleIds = new Set(visible.map(s => s.id));
+
+  nodesDataSet.clear();
+  edgesDataSet.clear();
+
+  const nodes = visible.map(s => mkNode(s, s.categories?.[0]));
+  nodesDataSet.add(nodes);
+
+  const edges = buildEdges(state.systemIndex, visibleIds);
+  edgesDataSet.add(edges);
+
+  document.getElementById('visibleNodes').textContent = visible.length;
+  document.getElementById('visibleEdges').textContent = edges.length;
+
+  if (state.viewMode === 'list') renderListView(visible);
+  if (state.viewMode === 'roadmap') renderRoadmapView();
+  if (state.viewMode === 'tree') renderTreeView();
+  if (state.viewMode === 'matrix') renderMatrixView();
+
+  if (visible.length === 0) {
+    document.getElementById('emptyState').classList.add('visible');
+  } else {
+    document.getElementById('emptyState').classList.remove('visible');
+    if (network && state.viewMode === 'graph') {
+      setTimeout(() => network.fit({ animation: { duration: 300, easingFunction: 'easeInOutQuad' } }), 50);
+    }
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+//  URL Hash Routing
+// ═══════════════════════════════════════════════════════
+
+function updateHash() {
+  if (state.focusMode && state.focusRootId) {
+    window.location.hash = 'focus=' + state.focusRootId;
+  } else if (state.selectedSystemId) {
+    window.location.hash = state.selectedSystemId;
+  } else {
+    // Don't clear hash if we're just rendering — only clear on explicit deselect
+  }
+}
+
+function applyHash() {
+  const hash = window.location.hash.replace('#', '');
+  if (!hash) return;
+
+  if (hash.startsWith('focus=')) {
+    const sysId = hash.replace('focus=', '');
+    if (state.systemIndex.has(sysId)) {
+      enterFocusMode(sysId);
+    }
+  } else if (state.systemIndex.has(hash)) {
+    selectSystem(hash);
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+//  Sidebar Detail
+// ═══════════════════════════════════════════════════════
+
+function selectSystem(sysId) {
+  state.selectedSystemId = sysId;
+  renderDetail(sysId);
+  updateHash();
+  if (network && sysId) {
+    network.selectNodes([sysId]);
+    network.focus(sysId, { scale: 1.5, animation: { duration: 400, easingFunction: 'easeInOutQuad' } });
+  }
+}
+
+function renderDetail(sysId) {
+  const card = document.getElementById('detailCard');
+
+  if (!sysId) {
+    card.innerHTML = `
+      <div class="empty-detail">
+        <div class="empty-detail-icon">👆</div>
+        <div class="empty-detail-text">Click a node to see details</div>
+        <div class="empty-detail-sub">Double-click to focus · Arrow keys to navigate</div>
+      </div>`;
+    return;
+  }
+
+  const sys = state.systemIndex.get(sysId);
+  if (!sys) return;
+
+  state.selectedSystemId = sysId;
+  const colors = STATUS_COLORS[sys.status] || STATUS_COLORS.shell;
+  const deployLabel = DEPLOYMENT_LABELS[sys.deployment] || sys.deployment || '—';
+
+  // Dependencies
+  const depLinks = (sys.dependencies || []).map(d => {
+    const target = findSystemByNameOrId(d, state.systemIndex);
+    return target
+      ? `<span class="link-chip dep-chip" data-id="${target.id}" onclick="event.stopPropagation(); selectSystem('${target.id}')">⬇ ${target.name}</span>`
+      : `<span class="link-chip dep-chip unresolved">⬇ ${d}</span>`;
+  }).join('') || '<span class="muted">none</span>';
+
+  // Integrations
+  const intLinks = (sys.integrates || []).map(i => {
+    const target = findSystemByNameOrId(i, state.systemIndex);
+    if (target) {
+      return `<span class="link-chip int-chip" data-id="${target.id}" onclick="event.stopPropagation(); selectSystem('${target.id}')">↔ ${target.name}</span>`;
+    }
+    if (i === 'ALL_SYSTEMS' || i === 'ALL_TS_SYSTEMS' || i === 'ALL_AI_CONSUMERS') {
+      return `<span class="link-chip int-chip meta">${i}</span>`;
+    }
+    return `<span class="link-chip int-chip unresolved">↔ ${i}</span>`;
+  }).join('') || '<span class="muted">none</span>';
+
+  // Used by
+  const usedBy = (state.reverseDeps.get(sysId) || []);
+  const usedByLinks = usedBy.length > 0
+    ? usedBy.map(u => `<span class="link-chip used-chip" data-id="${u.id}" onclick="event.stopPropagation(); selectSystem('${u.id}')">⬆ ${u.name}</span>`).join('')
+    : '<span class="muted">none</span>';
+
+  // Docs coverage from ecosystem-graph
+  let docCoverage = '—';
+  if (state.graphData) {
+    const docNode = state.graphData.nodes.find(n =>
+      n.type === 'system' && n.label.toLowerCase() === sys.name.toLowerCase()
+    );
+    docCoverage = docNode
+      ? `✅ Documented (${(docNode.sources || []).length} files)`
+      : '⚠️ Not documented';
+  }
+
+  // Dependency tree (recursive)
+  const depTree = _buildDepTree(sysId, new Set(), 0);
+
+  card.innerHTML = `
+    <div class="detail-header">
+      <div class="detail-name">
+        <span class="status-dot-big" style="background:${colors.bg};box-shadow:0 0 8px ${colors.bg}"></span>
+        ${sys.name}
+      </div>
+      <div class="detail-badges">
+        <span class="status-badge" style="background:${colors.bg};color:${colors.text}">${colors.label}</span>
+        <span class="deploy-badge">${deployLabel}</span>
+      </div>
+    </div>
+
+    <div class="detail-desc">${sys.description || 'No description yet.'}</div>
+
+    <div class="detail-actions">
+      <button class="action-btn" onclick="enterFocusMode('${sysId}')" title="Show only this system and its direct connections">🔍 Focus</button>
+      <button class="action-btn" onclick="copySystemMarkdown('${sysId}')" title="Copy system details as Markdown">📋 Copy MD</button>
+      <button class="action-btn" onclick="window.open('https://github.com/The-No-Hands-Company/${sys.name}', '_blank')" title="Open GitHub repo">🐙 GitHub</button>
+    </div>
+
+    <div class="detail-grid">
+      <div class="detail-item">
+        <div class="detail-label">Tech Stack</div>
+        <div class="detail-value">${sys.tech || '—'}</div>
+      </div>
+      <div class="detail-item">
+        <div class="detail-label">Port</div>
+        <div class="detail-value">${sys.port || '—'}</div>
+      </div>
+      <div class="detail-item">
+        <div class="detail-label">Categories</div>
+        <div class="detail-value">${(sys.categoryNames || []).join(', ') || '—'}</div>
+      </div>
+      <div class="detail-item">
+        <div class="detail-label">Docs</div>
+        <div class="detail-value">${docCoverage}</div>
+      </div>
+    </div>
+
+    <div class="detail-section">
+      <div class="detail-section-title">⬇ Dependencies (${(sys.dependencies || []).length})</div>
+      <div class="chip-wrap">${depLinks}</div>
+    </div>
+
+    <div class="detail-section">
+      <div class="detail-section-title">↔ Integrates With (${(sys.integrates || []).length})</div>
+      <div class="chip-wrap">${intLinks}</div>
+    </div>
+
+    <div class="detail-section">
+      <div class="detail-section-title">⬆ Used By (${usedBy.length})</div>
+      <div class="chip-wrap">${usedByLinks}</div>
+    </div>
+
+    <div class="detail-section">
+      <div class="detail-section-title" style="cursor:pointer" onclick="document.getElementById('depTree').classList.toggle('collapsed')">
+        🌳 Dependency Tree
+        <span style="font-size:9px;color:#475569;margin-left:4px">(click to expand)</span>
+      </div>
+      <div id="depTree" class="dep-tree collapsed">${depTree}</div>
+    </div>
+  `;
+}
+
+function _buildDepTree(sysId, visited, depth) {
+  if (visited.has(sysId) || depth > 3) return '';
+  visited.add(sysId);
+
+  const sys = state.systemIndex.get(sysId);
+  const deps = sys?.dependencies || [];
+  const children = deps.map(d => {
+    const target = findSystemByNameOrId(d, state.systemIndex);
+    if (!target) return `<div class="tree-item unresolved">${d}</div>`;
+    const colors = STATUS_COLORS[target.status] || STATUS_COLORS.shell;
+    const subTree = _buildDepTree(target.id, new Set(visited), depth + 1);
+    return `
+      <div class="tree-item">
+        <span class="tree-dot" style="background:${colors.bg}"></span>
+        <span class="tree-link" onclick="event.stopPropagation(); selectSystem('${target.id}')">${target.name}</span>
+        <span class="tree-status" style="color:${colors.border}">${colors.label}</span>
+        ${subTree ? `<div class="tree-children">${subTree}</div>` : ''}
+      </div>`;
+  }).join('');
+
+  if (!children && depth === 0) return '<div class="tree-item muted">No dependencies</div>';
+  return children;
+}
+
+function copySystemMarkdown(sysId) {
+  const sys = state.systemIndex.get(sysId);
+  if (!sys) return;
+  const colors = STATUS_COLORS[sys.status] || STATUS_COLORS.shell;
+  const md = [
+    `# ${sys.name}`,
+    `- **Status**: ${colors.label}`,
+    `- **Tech**: ${sys.tech || '—'}`,
+    `- **Port**: ${sys.port || '—'}`,
+    `- **Deployment**: ${DEPLOYMENT_LABELS[sys.deployment] || sys.deployment}`,
+    `- **Description**: ${sys.description || '—'}`,
+    `- **Dependencies**: ${(sys.dependencies || []).join(', ') || 'none'}`,
+    `- **Integrates with**: ${(sys.integrates || []).join(', ') || 'none'}`,
+    `- **GitHub**: https://github.com/The-No-Hands-Company/${sys.name}`,
+  ].join('\n');
+
+  navigator.clipboard.writeText(md).then(() => {
+    const btn = document.querySelector('.action-btn');
+    if (btn) { const orig = btn.textContent; btn.textContent = '✅ Copied!'; setTimeout(() => btn.textContent = orig, 1500); }
+  }).catch(() => alert('Copy failed — here is the markdown:\n\n' + md));
+}
+
+// ═══════════════════════════════════════════════════════
+//  List View
+// ═══════════════════════════════════════════════════════
+
+function renderListView(systems) {
+  const container = document.getElementById('listView');
+  if (!container) return;
+
+  container.innerHTML = systems.map(s => {
+    const colors = STATUS_COLORS[s.status] || STATUS_COLORS.shell;
+    return `
+      <div class="list-row" data-id="${s.id}" onclick="selectSystem('${s.id}'); switchView('graph')">
+        <span class="list-dot" style="background:${colors.bg}"></span>
+        <span class="list-name">${s.name}</span>
+        <span class="list-tech">${s.tech || ''}</span>
+        <span class="list-status" style="color:${colors.border}">${colors.label}</span>
+      </div>`;
+  }).join('');
+
+  document.getElementById('listCount').textContent = `${systems.length} systems`;
+}
+
+// ═══════════════════════════════════════════════════════
+//  Roadmap View
+// ═══════════════════════════════════════════════════════
+
+function renderRoadmapView() {
+  const container = document.getElementById('roadmapWrap');
+  if (!container) return;
+
+  // Group systems by category, respecting current filters
+  const visible = getVisibleSystems();
+  const byCategory = new Map();
+
+  for (const sys of visible) {
+    const catId = sys.categories?.[0] || 'other';
+    const catName = sys.categoryNames?.[0] || 'Other';
+    if (!byCategory.has(catId)) {
+      byCategory.set(catId, { id: catId, name: catName, color: sys.categoryColors?.[0] || '#475569', systems: [] });
+    }
+    byCategory.get(catId).systems.push(sys);
+  }
+
+  // Sort categories: least complete first (more shells = higher priority)
+  const sorted = [...byCategory.values()].sort((a, b) => {
+    const aPct = a.systems.filter(s => s.status === 'built' || s.status === 'native').length / a.systems.length;
+    const bPct = b.systems.filter(s => s.status === 'built' || s.status === 'native').length / b.systems.length;
+    return aPct - bPct;
+  });
+
+  container.innerHTML = `
+    <div class="roadmap-header">
+      <span class="roadmap-title">📅 Development Roadmap</span>
+      <span class="roadmap-sub">${visible.length} systems · categories sorted by completion (least → most)</span>
+    </div>
+    ${sorted.map(cat => {
+      const built = cat.systems.filter(s => s.status === 'built' || s.status === 'native').length;
+      const pct = Math.round((built / cat.systems.length) * 100);
+      const statusOrder = { shell: 0, scaffolded: 1, built: 2, native: 3 };
+      const sortedSystems = [...cat.systems].sort((a, b) => statusOrder[a.status] - statusOrder[b.status]);
+
+      return `
+        <div class="roadmap-category">
+          <div class="roadmap-cat-header">
+            <span class="roadmap-cat-name">
+              <span class="chip-dot" style="background:${cat.color}"></span> ${cat.name}
+            </span>
+            <span class="roadmap-cat-pct">${built}/${cat.systems.length} · ${pct}%</span>
+          </div>
+          <div class="progress-bar">
+            <div class="progress-fill" style="width:${pct}%;background:${cat.color}"></div>
+          </div>
+          <div class="roadmap-systems">
+            ${sortedSystems.map(s => {
+              const c = STATUS_COLORS[s.status] || STATUS_COLORS.shell;
+              return `
+                <div class="roadmap-sys" data-id="${s.id}" onclick="selectSystem('${s.id}'); switchView('graph')">
+                  <span class="roadmap-sys-dot" style="background:${c.bg}"></span>
+                  <span class="roadmap-sys-name">${s.name}</span>
+                  <span class="roadmap-sys-tech">${s.tech || ''}</span>
+                  <span class="roadmap-sys-status" style="color:${c.border}">${c.label}</span>
+                </div>`;
+            }).join('')}
+          </div>
+        </div>`;
+    }).join('')}
+  `;
+}
+
+// ═══════════════════════════════════════════════════════
+//  Dependency Matrix View — adjacency matrix of all visible systems
+// ═══════════════════════════════════════════════════════
+
+function renderMatrixView() {
+  const scroll = document.getElementById('matrixScroll');
+  const legend = document.getElementById('matrixLegend');
+  if (!scroll || !legend) return;
+
+  const visible = getVisibleSystems();
+  if (visible.length === 0) { scroll.innerHTML = '<div class="roadmap-header"><span class="roadmap-sub">No systems match filters.</span></div>'; legend.innerHTML = ''; return; }
+
+  // Build relationship lookup from system dependencies/integrates
+  const visibleIds = new Set(visible.map(s => s.id));
+  const relMap = {};
+  for (const sys of visible) {
+    relMap[sys.id] = { integrates: new Set(), depends: new Set(), connects: new Set() };
+  }
+  for (const sys of visible) {
+    // Dependencies (sys depends on these)
+    for (const depName of sys.dependencies || []) {
+      const target = findSystemByNameOrId(depName, state.systemIndex);
+      if (target && visibleIds.has(target.id)) {
+        relMap[sys.id].depends.add(target.id);
+      }
+    }
+    // Integrations (sys integrates with these)
+    for (const intName of sys.integrates || []) {
+      const target = findSystemByNameOrId(intName, state.systemIndex);
+      if (target && visibleIds.has(target.id)) {
+        relMap[sys.id].integrates.add(target.id);
+      }
+    }
+  }
+
+  // Sort by category then name
+  const byCat = {};
+  for (const sys of visible) {
+    const cat = sys.categories?.[0] || 'other';
+    if (!byCat[cat]) byCat[cat] = [];
+    byCat[cat].push(sys);
+  }
+  const sorted = [];
+  for (const [catId, systems] of Object.entries(byCat)) {
+    systems.sort((a, b) => a.name.localeCompare(b.name));
+    sorted.push(...systems);
+  }
+
+  const COLORS = {
+    built: '#22c55e', native: '#3b82f6', scaffolded: '#f59e0b',
+    shell: '#ef4444', planned: '#6b7280', unknown: '#475569'
+  };
+
+  function esc(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+
+  // Build table
+  let html = '<div class="roadmap-header"><span class="roadmap-title">🔲 Dependency Matrix</span>';
+  html += `<span class="roadmap-sub">${sorted.length} systems — hover cells to highlight · click to select</span></div>`;
+  html += '<table class="matrix-table"><thead><tr><th></th>';
+
+  // Column headers
+  for (const sys of sorted) {
+    const c = COLORS[sys.status] || COLORS.unknown;
+    html += `<th><div class="col-label" title="${esc(sys.name)}" style="color:${c}" onclick="selectSystem('${esc(sys.id)}'); switchView('graph')">${esc(sys.name)}</div></th>`;
+  }
+  html += '</tr></thead><tbody>';
+
+  // Rows
+  for (let ri = 0; ri < sorted.length; ri++) {
+    const rowSys = sorted[ri];
+    const c = COLORS[rowSys.status] || COLORS.unknown;
+    html += '<tr>';
+    html += `<td><div class="row-label" title="${esc(rowSys.name)}" style="color:${c}" onclick="selectSystem('${esc(rowSys.id)}'); switchView('graph')">${esc(rowSys.name)}</div></td>`;
+
+    for (let ci = 0; ci < sorted.length; ci++) {
+      const colSys = sorted[ci];
+      if (ri === ci) {
+        html += `<td><div class="matrix-cell self" title="${esc(rowSys.name)}"></div></td>`;
+      } else {
+        const r = relMap[rowSys.id];
+        const hasIntegrates = r.integrates.has(colSys.id);
+        const hasDepends = r.depends.has(colSys.id);
+        const hasConnects = r.connects.has(colSys.id);
+        let cls = 'empty', title = 'No connection';
+        if (hasIntegrates && hasDepends) { cls = 'both'; title = `${rowSys.name} ↔ ${colSys.name} (integrates + depends)`; }
+        else if (hasIntegrates) { cls = 'integrates'; title = `${rowSys.name} integrates ${colSys.name}`; }
+        else if (hasDepends) { cls = 'depends'; title = `${rowSys.name} depends on ${colSys.name}`; }
+        else if (hasConnects) { cls = 'connects'; title = `${rowSys.name} ↔ ${colSys.name}`; }
+        html += `<td><div class="matrix-cell ${cls}" title="${esc(title)}" onclick="selectSystem('${esc(colSys.id)}'); switchView('graph')"></div></td>`;
+      }
+    }
+    html += '</tr>';
+  }
+
+  html += '</tbody></table>';
+  scroll.innerHTML = html;
+
+  legend.innerHTML = `
+    <span><span class="dot" style="background:rgba(99,102,241,0.5)"></span> Integrates</span>
+    <span><span class="dot" style="background:rgba(245,158,11,0.5)"></span> Depends on</span>
+    <span><span class="dot" style="background:rgba(34,197,94,0.5)"></span> Connected</span>
+    <span><span class="dot" style="background:rgba(236,72,153,0.5)"></span> Both</span>
+    <span><span class="dot" style="background:rgba(255,255,255,0.04)"></span> Self</span>
+    <span style="margin-left:auto">${sorted.length}×${sorted.length} matrix</span>`;
+}
+
+// ═══════════════════════════════════════════════════════
+//  Hierarchy Tree View — Nexus-Cloud root → categories → systems
+// ═══════════════════════════════════════════════════════
+
+function renderTreeView() {
+  const container = document.getElementById('treeWrap');
+  if (!container) return;
+
+  const visible = getVisibleSystems();
+  const COLORS = {
+    built: '#22c55e', native: '#3b82f6', scaffolded: '#f59e0b',
+    shell: '#ef4444', planned: '#6b7280', unknown: '#475569'
+  };
+  const statusOrder = { native: 0, built: 1, scaffolded: 2, shell: 3, planned: 4, unknown: 5 };
+
+  // Group by category
+  const byCategory = new Map();
+  for (const sys of visible) {
+    const catId = sys.categories?.[0] || 'other';
+    const catName = sys.categoryNames?.[0] || 'Other';
+    const catColor = sys.categoryColors?.[0] || '#475569';
+    if (!byCategory.has(catId)) {
+      byCategory.set(catId, { id: catId, name: catName, color: catColor, systems: [] });
+    }
+    byCategory.get(catId).systems.push(sys);
+  }
+
+  const sortedCats = [...byCategory.values()].sort((a, b) => a.name.localeCompare(b.name));
+  const totalSystems = visible.length;
+  const builtCount = visible.filter(s => s.status === 'built' || s.status === 'native').length;
+
+  function esc(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+
+  let html = '';
+  html += `<div class="roadmap-header">
+    <span class="roadmap-title">🌳 Hierarchy Tree</span>
+    <span class="roadmap-sub">Nexus-Cloud → ${sortedCats.length} categories → ${totalSystems} systems · ${builtCount} built/native</span>
+  </div>`;
+
+  // Root node
+  html += `<div class="tree-root">`;
+  html += `<div class="tree-node" style="border-left:2px solid #6366f1;padding:0">
+    <div class="tree-node-header" style="padding:10px 16px;background:rgba(99,102,241,0.08);border-radius:8px;margin:4px 0">
+      <span class="tree-toggle expanded" onclick="toggleTreeNode(event, this)">▶</span>
+      <span class="tree-dot" style="background:linear-gradient(135deg,#6366f1,#14b8a6)"></span>
+      <span class="tree-label" style="font-weight:700;font-size:15px;color:#a5b4fc">Nexus-Cloud</span>
+      <span class="tree-tech" style="color:#6366f1">☁️ Platform Hub</span>
+      <span class="tree-count">${totalSystems} apps</span>
+    </div>
+    <div class="tree-children" style="max-height:99999px">`;
+
+  // Categories
+  for (const cat of sortedCats) {
+    const sysList = [...cat.systems].sort((a, b) => statusOrder[a.status] - statusOrder[b.status]);
+    const catBuilt = sysList.filter(s => s.status === 'built' || s.status === 'native').length;
+
+    html += `<div class="tree-category-label">
+      <span class="cat-swatch" style="background:${cat.color}"></span>${esc(cat.name)}
+      <span style="font-weight:400;font-size:9px;color:#475569">${catBuilt}/${sysList.length}</span>
+    </div>`;
+
+    html += `<div class="tree-node" style="border-left:2px solid ${cat.color}22">
+      <div class="tree-node-header" onclick="toggleTreeNode(event, this)">
+        <span class="tree-toggle expanded">▶</span>
+        <span class="tree-dot" style="background:${cat.color}"></span>
+        <span class="tree-label" style="font-weight:600">${esc(cat.name)}</span>
+        <span class="tree-count">${sysList.length}</span>
+      </div>
+      <div class="tree-children" style="max-height:99999px">`;
+
+    for (const sys of sysList) {
+      const c = COLORS[sys.status] || COLORS.unknown;
+      html += `<div class="tree-node">
+        <div class="tree-node-header" data-id="${esc(sys.id)}" onclick="event.stopPropagation(); selectSystem('${esc(sys.id)}'); switchView('graph')">
+          <span class="tree-toggle empty">▶</span>
+          <span class="tree-dot" style="background:${c}"></span>
+          <span class="tree-label">${esc(sys.name)}</span>
+          <span class="tree-tech">${esc(sys.tech || '')}</span>
+          <span class="tree-status" style="color:${c}">●</span>
+        </div>
+      </div>`;
+    }
+
+    html += `</div></div>`; // close category children + node
+  }
+
+  html += `</div></div></div>`; // close root children + root node + tree-root
+  container.innerHTML = html;
+}
+
+function toggleTreeNode(event, header) {
+  const toggle = header.querySelector('.tree-toggle');
+  const children = header.parentElement.querySelector('.tree-children');
+  if (children) {
+    toggle.classList.toggle('expanded');
+    children.classList.toggle('collapsed');
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+//  View Switching
+// ═══════════════════════════════════════════════════════
+
+function switchView(mode) {
+  state.viewMode = mode;
+  document.getElementById('graphWrap').classList.toggle('hidden', mode !== 'graph');
+  document.getElementById('listWrap').classList.toggle('hidden', mode !== 'list');
+  document.getElementById('roadmapWrap').classList.toggle('hidden', mode !== 'roadmap');
+  document.getElementById('treeWrap').classList.toggle('hidden', mode !== 'tree');
+  document.getElementById('matrixWrap').classList.toggle('hidden', mode !== 'matrix');
+  document.getElementById('btnGraphView').classList.toggle('active', mode === 'graph');
+  document.getElementById('btnListView').classList.toggle('active', mode === 'list');
+  document.getElementById('btnRoadmapView').classList.toggle('active', mode === 'roadmap');
+  document.getElementById('btnTreeView').classList.toggle('active', mode === 'tree');
+  document.getElementById('btnMatrixView').classList.toggle('active', mode === 'matrix');
+
+  if (mode === 'list') renderListView(getVisibleSystems());
+  if (mode === 'roadmap') renderRoadmapView();
+  if (mode === 'tree') renderTreeView();
+  if (mode === 'matrix') renderMatrixView();
+  if (mode === 'graph' && network) {
+    setTimeout(() => network.fit({ animation: { duration: 300 } }), 50);
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+//  Controls
+// ═══════════════════════════════════════════════════════
+
+function buildControls() {
+  // Status toggles
+  const statusContainer = document.getElementById('statusFilters');
+  for (const [status, colors] of Object.entries(STATUS_COLORS)) {
+    const chip = document.createElement('label');
+    chip.className = 'chip';
+    chip.style.borderColor = colors.border;
+    chip.innerHTML = `
+      <span class="chip-dot" style="background:${colors.bg}"></span>
+      <input type="checkbox" checked data-kind="status" data-value="${status}">
+      <span>${colors.label}</span>`;
+    chip.querySelector('input').addEventListener('change', (e) => {
+      if (e.target.checked) state.visibleStatuses.add(status);
+      else state.visibleStatuses.delete(status);
+      applyFilters();
+    });
+    statusContainer.appendChild(chip);
+  }
+
+  // Category toggles
+  const catContainer = document.getElementById('categoryFilters');
+  for (const cat of state.categoryList) {
+    const chip = document.createElement('label');
+    chip.className = 'chip';
+    chip.style.borderColor = cat.color + '66';
+    chip.innerHTML = `
+      <span class="chip-dot" style="background:${cat.color}"></span>
+      <input type="checkbox" data-kind="category" data-value="${cat.id}">
+      <span>${cat.name}</span>`;
+    chip.querySelector('input').addEventListener('change', (e) => {
+      if (e.target.checked) state.visibleCategories.add(cat.id);
+      else state.visibleCategories.delete(cat.id);
+      applyFilters();
+    });
+    catContainer.appendChild(chip);
+  }
+
+  // Search
+  document.getElementById('searchInput').addEventListener('input', (e) => {
+    state.search = e.target.value.trim();
+    applyFilters();
+  });
+
+  // Reset
+  document.getElementById('resetFilters').addEventListener('click', () => {
+    state.visibleStatuses = new Set(Object.keys(STATUS_COLORS));
+    state.visibleCategories = new Set();
+    state.search = '';
+    state.focusMode = false;
+    state.focusRootId = null;
+    document.getElementById('focusBanner').classList.remove('visible');
+    document.getElementById('searchInput').value = '';
+    document.querySelectorAll('#statusFilters input, #categoryFilters input').forEach(i => i.checked = true);
+    window.location.hash = '';
+    applyFilters();
+    renderDetail(null);
+  });
+
+  // View toggles
+  document.getElementById('btnGraphView').addEventListener('click', () => switchView('graph'));
+  document.getElementById('btnListView').addEventListener('click', () => switchView('list'));
+  document.getElementById('btnRoadmapView').addEventListener('click', () => switchView('roadmap'));
+  document.getElementById('btnTreeView').addEventListener('click', () => switchView('tree'));
+  document.getElementById('btnMatrixView').addEventListener('click', () => switchView('matrix'));
+
+  // Focus banner
+  document.getElementById('exitFocus').addEventListener('click', exitFocusMode);
+
+  // Help overlay
+  document.getElementById('btnHelp').addEventListener('click', toggleHelp);
+  document.getElementById('helpOverlay').addEventListener('click', (e) => {
+    if (e.target === document.getElementById('helpOverlay')) toggleHelp();
+  });
+
+  // Keyboard shortcuts
+  document.addEventListener('keydown', (e) => {
+    // Don't capture when typing in input
+    if (e.target.tagName === 'INPUT') return;
+
+    // ? toggles help
+    if (e.key === '?') {
+      e.preventDefault();
+      toggleHelp();
+      return;
+    }
+
+    if (e.key === 'Escape') {
+      // Close help first if open
+      if (document.getElementById('helpOverlay').classList.contains('visible')) {
+        toggleHelp();
+        return;
+      }
+      if (state.focusMode) { exitFocusMode(); return; }
+      renderDetail(null);
+      state.selectedSystemId = null;
+      window.location.hash = '';
+      if (network) network.unselectAll();
+    }
+
+    if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+      e.preventDefault();
+      document.getElementById('searchInput').focus();
+    }
+
+    // Arrow key navigation between connected nodes
+    if (state.selectedSystemId && network && ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
+      e.preventDefault();
+      const neighbors = _getConnectedNodes(state.selectedSystemId);
+      if (neighbors.length > 0) {
+        const idx = (e.key === 'ArrowRight' || e.key === 'ArrowDown') ? 0 : neighbors.length - 1;
+        selectSystem(neighbors[idx]);
+      }
+    }
+
+    // Enter to focus on selected
+    if (e.key === 'Enter' && state.selectedSystemId && !state.focusMode) {
+      e.preventDefault();
+      enterFocusMode(state.selectedSystemId);
+    }
+
+    // Tab to cycle through visible nodes
+    if (e.key === 'Tab' && !e.shiftKey) {
+      e.preventDefault();
+      const visible = getVisibleSystems();
+      if (visible.length === 0) return;
+      const currentIdx = visible.findIndex(s => s.id === state.selectedSystemId);
+      const nextIdx = (currentIdx + 1) % visible.length;
+      selectSystem(visible[nextIdx].id);
+    }
+  });
+}
+
+function _getConnectedNodes(sysId) {
+  const sys = state.systemIndex.get(sysId);
+  if (!sys) return [];
+
+  const ids = new Set();
+
+  for (const dep of sys.dependencies || []) {
+    const t = findSystemByNameOrId(dep, state.systemIndex);
+    if (t) ids.add(t.id);
+  }
+  for (const int of sys.integrates || []) {
+    const t = findSystemByNameOrId(int, state.systemIndex);
+    if (t) ids.add(t.id);
+  }
+  for (const rev of state.reverseDeps.get(sysId) || []) {
+    ids.add(rev.id);
+  }
+
+  return [...ids];
+}
+
+// ═══════════════════════════════════════════════════════
+//  Help Overlay
+// ═══════════════════════════════════════════════════════
+
+function toggleHelp() {
+  const overlay = document.getElementById('helpOverlay');
+  overlay.classList.toggle('visible');
+}
+
+// ═══════════════════════════════════════════════════════
+//  Ecosystem-Graph Integration
+// ═══════════════════════════════════════════════════════
+
+async function loadEcosystemGraph() {
+  try {
+    const resp = await fetch('../ecosystem-graph/graph.json');
+    if (resp.ok) {
+      state.graphData = await resp.json();
+      const docSystems = state.graphData.nodes.filter(n => n.type === 'system');
+      document.getElementById('graphStatus').textContent =
+        docSystems.length > 0
+          ? `📄 ${docSystems.length} documented`
+          : '📄 0 documented';
+      document.getElementById('graphStatus').style.color =
+        docSystems.length > 0 ? '#34d399' : '#f59e0b';
+    } else {
+      document.getElementById('graphStatus').textContent = '📄 no graph.json';
+    }
+  } catch {
+    document.getElementById('graphStatus').textContent = '📄 unavailable';
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+//  Init
+// ═══════════════════════════════════════════════════════
+
+function initStats() {
+  let native = 0, built = 0, scaffolded = 0, shell = 0;
+  const orphans = []; // systems with no dependencies and nothing depends on them
+  const hubs = [];    // systems with most total connections
+
+  for (const [id, sys] of state.systemIndex) {
+    switch (sys.status) { case 'native': native++; break; case 'built': built++; break; case 'scaffolded': scaffolded++; break; case 'shell': shell++; break; }
+
+    const depCount = sys.dependencies?.length || 0;
+    const intCount = sys.integrates?.length || 0;
+    const revCount = (state.reverseDeps.get(id) || []).length;
+    const total = depCount + intCount + revCount;
+
+    if (total === 0) orphans.push(sys.name);
+    hubs.push({ name: sys.name, id, total, status: sys.status });
+  }
+
+  document.getElementById('nativeCount').textContent = native;
+  document.getElementById('builtCount').textContent = built;
+  document.getElementById('scaffoldedCount').textContent = scaffolded;
+  document.getElementById('shellCount').textContent = shell;
+  document.getElementById('totalCount').textContent = state.systemIndex.size;
+
+  // Top hubs
+  hubs.sort((a, b) => b.total - a.total);
+  const topHubs = hubs.slice(0, 5).map(h => {
+    const c = STATUS_COLORS[h.status] || STATUS_COLORS.shell;
+    return `<span class="stat-mini" style="color:${c.border};cursor:pointer" onclick="selectSystem('${h.id}')" title="${h.total} connections">${h.name}</span>`;
+  }).join(' · ');
+
+  document.getElementById('insightsData').innerHTML = `
+    <div class="insight-row"><span class="insight-label">🔗 Top Hub</span> <span>${topHubs || '—'}</span></div>
+    <div class="insight-row"><span class="insight-label">🕳️ Orphans</span> <span>${orphans.length} systems</span></div>
+    <div class="insight-row"><span class="insight-label">📊 Completion</span> <span>${Math.round(((native + built) / state.systemIndex.size) * 100)}% built</span></div>
+  `;
+}
+
+function initNetwork() {
+  const container = document.getElementById('graph');
+  nodesDataSet = new vis.DataSet([]);
+  edgesDataSet = new vis.DataSet([]);
+
+  network = new vis.Network(
+    container,
+    { nodes: nodesDataSet, edges: edgesDataSet },
+    {
+      autoResize: true,
+      interaction: {
+        hover: true,
+        tooltipDelay: 200,
+        navigationButtons: true,
+        keyboard: { enabled: true, bindToWindow: false },
+        zoomView: true,
+        dragView: true
+      },
+      physics: {
+        enabled: true,
+        solver: 'forceAtlas2Based',
+        forceAtlas2Based: {
+          gravitationalConstant: -50,
+          centralGravity: 0.01,
+          springLength: 180,
+          springConstant: 0.08,
+          damping: 0.4,
+          avoidOverlap: 0.5
+        },
+        stabilization: { iterations: 200, fit: true }
+      },
+      layout: { improvedLayout: true },
+      edges: {
+        smooth: { type: 'continuous' },
+        width: 0.8,
+        selectionWidth: 2
+      },
+      groups: {}
+    }
+  );
+
+  network.on('click', (params) => {
+    if (params.nodes.length > 0) {
+      selectSystem(params.nodes[0]);
+    }
+  });
+
+  network.on('doubleClick', (params) => {
+    if (params.nodes.length > 0) {
+      enterFocusMode(params.nodes[0]);
+    }
+  });
+
+  network.on('stabilizationIterationsDone', () => {
+    network.fit({ animation: { duration: 400, easingFunction: 'easeInOutQuad' } });
+  });
+
+  // Handle window resize
+  window.addEventListener('resize', () => {
+    if (network) network.redraw();
+  });
+}
+
+function boot() {
+  if (typeof EMBEDDED_DATA === 'undefined') {
+    console.error('EMBEDDED_DATA not found — data not baked into HTML?');
+    return;
+  }
+
+  state.data = EMBEDDED_DATA;
+
+  // Build index
+  state.systemIndex = buildSystemIndex(state.data);
+  state.reverseDeps = buildReverseDeps(state.systemIndex);
+
+  // Collect categories
+  const catMap = new Map();
+  for (const eco of state.data.ecosystems) {
+    for (const cat of eco.categories) {
+      catMap.set(cat.id, { id: cat.id, name: cat.name, color: cat.color });
+    }
+  }
+  state.categoryList = [...catMap.values()];
+
+  // Init
+  initStats();
+  initNetwork();
+  buildControls();
+  applyFilters();
+  loadEcosystemGraph();
+
+  // Apply URL hash after everything is ready
+  setTimeout(applyHash, 600);
+
+  // Listen for hash changes
+  window.addEventListener('hashchange', applyHash);
+}
+
+// Start when DOM is ready
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', boot);
+} else {
+  boot();
+}
+
+  </script>
+</body>
+</html>

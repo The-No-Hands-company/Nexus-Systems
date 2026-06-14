@@ -1,0 +1,1812 @@
+{
+  "schemaVersion": "1.0.0",
+  "generatedAt": "2026-06-12T12:30:00+02:00",
+  "organization": {
+    "name": "The No Hands Company",
+    "tagline": "Free. Open Source. Forever.",
+    "description": "A solo-dev GitHub organization built on three principles: (1) Open Source everything, (2) Free forever — no paywalls, no subscriptions, no enterprise-tier upsells, (3) The only accepted payment is voluntary donations via PayPal. Every tool offers dual-mode deployment: standalone via docker compose up, or fully managed inside Nexus-Cloud.",
+    "principles": [
+      "Open Source — every line of code is public",
+      "Free Forever — no paywalls, no subscriptions, no enterprise tiers",
+      "Donations Only — the only accepted payment is voluntary PayPal donations",
+      "Self-Hosted First — every tool runs standalone via docker compose up",
+      "Federated — tools communicate across instances, no central authority",
+      "AI-Native — every tool has AI deeply integrated, not bolted on",
+      "Privacy-First — no surveillance, no telemetry, no data mining",
+      "Sovereign — users own their data, their infrastructure, their destiny"
+    ],
+    "donations": {
+      "paypal": "paypal.me/TheNoHandsCompany",
+      "note": "Voluntary only. No features are gated behind donations."
+    },
+    "nexusCloudUrl": "https://nexus.cloud",
+    "githubOrg": "https://github.com/The-No-Hands-Company"
+  },
+  "ecosystems": [
+    {
+      "id": "nexus-systems",
+      "name": "Nexus Systems",
+      "description": "A complete alternative to Big Tech — 80+ integrated tools covering communication, productivity, creativity, business, AI, gaming, health, and more. Everything is free, open-source, self-hosted, and federated. For non-technical users, everything runs managed on Nexus Cloud at nexus.cloud.",
+      "categories": [
+        {
+          "id": "core-platform",
+          "name": "Core Platform",
+          "color": "#6366f1",
+          "systems": [
+            {
+              "id": "nexus",
+              "name": "Nexus",
+              "status": "native",
+              "tech": "Rust",
+              "port": null,
+              "description": "Communication platform — chat, voice, video, E2EE, Matrix-compatible federation. The beating heart.",
+              "dependencies": [],
+              "integrates": [
+                "Nexus-Auth",
+                "Nexus-Cloud",
+                "Nexus-Guardian"
+              ],
+              "deployment": "both"
+            },
+            {
+              "id": "nexus-cloud",
+              "name": "Nexus-Cloud",
+              "status": "built",
+              "tech": "TypeScript",
+              "port": null,
+              "description": "Orchestrator / sovereign cloud platform — control plane, scheduling, federation. Hosts the Nexus Systems API.",
+              "dependencies": [
+                "Nexus",
+                "Nexus-Auth",
+                "Nexus-Tunnel"
+              ],
+              "integrates": [
+                "Nexus-Systems-API"
+              ],
+              "deployment": "cloud"
+            },
+            {
+              "id": "nexus-hosting",
+              "name": "Nexus-Hosting",
+              "status": "built",
+              "tech": "TypeScript",
+              "port": null,
+              "description": "Ecosystem execution surface for hosted workloads and sites. pnpm monorepo + Rust crates. Fully developed.",
+              "dependencies": [
+                "Nexus-Tunnel"
+              ],
+              "integrates": [
+                "Nexus-Deploy"
+              ],
+              "deployment": "both"
+            },
+            {
+              "id": "nexus-deploy",
+              "name": "Nexus-Deploy",
+              "status": "built",
+              "tech": "TypeScript",
+              "port": null,
+              "description": "Self-hosted federated deployment / CI-CD pipeline.",
+              "dependencies": [
+                "Nexus-Hosting"
+              ],
+              "integrates": [
+                "Nexus-Forge"
+              ],
+              "deployment": "both"
+            },
+            {
+              "id": "nexus-vault",
+              "name": "Nexus-Vault",
+              "status": "built",
+              "tech": "TypeScript",
+              "port": 3054,
+              "description": "Secrets / password management — end-to-end encrypted vault, expandable to full Bitwarden-style.",
+              "dependencies": [
+                "nexus-core",
+                "Nexus-Auth"
+              ],
+              "integrates": [
+                "Nexus-API"
+              ],
+              "deployment": "both"
+            },
+            {
+              "id": "nexus-network",
+              "name": "Nexus-Network",
+              "status": "built",
+              "tech": "TypeScript",
+              "port": null,
+              "description": "Network / federation dashboard and monitoring — visualize your federated topology.",
+              "dependencies": [
+                "Nexus"
+              ],
+              "integrates": [
+                "Nexus-Monitor",
+                "Nexus-Edge"
+              ],
+              "deployment": "both"
+            },
+            {
+              "id": "nexuslang",
+              "name": "Nexuslang",
+              "status": "native",
+              "tech": "Python/C++",
+              "port": null,
+              "description": "Natural-language programming language — write code in plain English. Compiler + runtime.",
+              "dependencies": [],
+              "integrates": [
+                "Nexus-AI",
+                "Nexus-IDE"
+              ],
+              "deployment": "both"
+            }
+          ]
+        },
+        {
+          "id": "platform-integration",
+          "name": "Platform & Integration",
+          "color": "#14b8a6",
+          "systems": [
+            {
+              "id": "nexus-systems-api",
+              "name": "Nexus-Systems-API",
+              "status": "built",
+              "tech": "TypeScript",
+              "port": null,
+              "description": "Unified platform API layer (REST + WebSocket) hosted by Nexus-Cloud. Service discovery, public URL provisioning, cross-tool communication, centralized auth, monitoring hooks, developer SDK.",
+              "dependencies": [
+                "Nexus-Cloud",
+                "Nexus-Auth"
+              ],
+              "integrates": [
+                "ALL_SYSTEMS"
+              ],
+              "deployment": "cloud"
+            },
+            {
+              "id": "nexus-tunnel",
+              "name": "Nexus-Tunnel",
+              "status": "built",
+              "tech": "TypeScript",
+              "port": null,
+              "description": "Native sovereign tunneling system (WebSocket-based, with WebTransport/QUIC fallback). Automatic public HTTPS URLs without third-party dependencies. Used as sidecar by other tools.",
+              "dependencies": [],
+              "integrates": [
+                "Nexus-Cloud",
+                "Nexus-Edge",
+                "Nexus-Guardian"
+              ],
+              "deployment": "both"
+            },
+            {
+              "id": "nexus-api",
+              "name": "Nexus-API",
+              "status": "built",
+              "tech": "TypeScript",
+              "port": null,
+              "description": "API builder, testing, and documentation tool — design, test, and document APIs.",
+              "dependencies": [
+                "nexus-core"
+              ],
+              "integrates": [
+                "Nexus-Systems-API"
+              ],
+              "deployment": "both"
+            },
+            {
+              "id": "nexus-core",
+              "name": "nexus-core",
+              "status": "built",
+              "tech": "TypeScript",
+              "port": null,
+              "description": "Core shared library/package — the foundation every Nexus TypeScript app builds on.",
+              "dependencies": [],
+              "integrates": [
+                "ALL_TS_SYSTEMS"
+              ],
+              "deployment": "package"
+            }
+          ]
+        },
+        {
+          "id": "security",
+          "name": "Security, Access & Management",
+          "color": "#ef4444",
+          "systems": [
+            {
+              "id": "nexus-guardian",
+              "name": "Nexus-Guardian",
+              "status": "built",
+              "tech": "TypeScript",
+              "port": null,
+              "description": "Central safety, security, and system health command center. Real-time threat detection, AI behavior guardrails, founder alerts, proactive ecosystem defense.",
+              "dependencies": [
+                "nexus-core",
+                "Nexus-Monitor"
+              ],
+              "integrates": [
+                "Nexus-Tunnel"
+              ],
+              "deployment": "both"
+            },
+            {
+              "id": "nexus-auth",
+              "name": "Nexus-Auth",
+              "status": "built",
+              "tech": "TypeScript",
+              "port": null,
+              "description": "Centralized SSO / authentication server — OAuth2, OIDC, WebAuthn, passkeys.",
+              "dependencies": [
+                "nexus-core"
+              ],
+              "integrates": [
+                "ALL_SYSTEMS"
+              ],
+              "deployment": "both"
+            },
+            {
+              "id": "nexus-terminal",
+              "name": "Nexus-Terminal",
+              "status": "shell",
+              "tech": "TypeScript",
+              "port": null,
+              "description": "Secure web-based terminal / SSH gateway with AI assistance.",
+              "dependencies": [
+                "nexus-core",
+                "Nexus-Auth"
+              ],
+              "integrates": [
+                "Nexus-AI"
+              ],
+              "deployment": "both"
+            },
+            {
+              "id": "nexus-monitor",
+              "name": "Nexus-Monitor",
+              "status": "built",
+              "tech": "TypeScript",
+              "port": null,
+              "description": "Uptime, system, and observability dashboard — metrics, alerts, health checks.",
+              "dependencies": [
+                "nexus-core"
+              ],
+              "integrates": [
+                "Nexus-Network",
+                "Nexus-Guardian"
+              ],
+              "deployment": "both"
+            },
+            {
+              "id": "nexus-security",
+              "name": "Nexus-Security",
+              "status": "shell",
+              "tech": "TypeScript",
+              "port": null,
+              "description": "Comprehensive security suite — threat detection, confidential computing, digital provenance.",
+              "dependencies": [
+                "Nexus-Guardian"
+              ],
+              "integrates": [
+                "Nexus-Compliance"
+              ],
+              "deployment": "both"
+            },
+            {
+              "id": "nexus-compliance",
+              "name": "Nexus-Compliance",
+              "status": "built",
+              "tech": "TypeScript",
+              "port": null,
+              "description": "Tools for data sovereignty, regulatory compliance, and audit trails.",
+              "dependencies": [
+                "nexus-core"
+              ],
+              "integrates": [
+                "Nexus-Security"
+              ],
+              "deployment": "both"
+            }
+          ]
+        },
+        {
+          "id": "files-data",
+          "name": "Files, Photos & Data",
+          "color": "#f59e0b",
+          "systems": [
+            {
+              "id": "nexus-files",
+              "name": "Nexus-Files",
+              "status": "built",
+              "tech": "TypeScript",
+              "port": null,
+              "description": "Secure file sync, sharing with links, versioning, full-text search.",
+              "dependencies": [
+                "nexus-core",
+                "Nexus-Vault"
+              ],
+              "integrates": [
+                "Nexus-Photos"
+              ],
+              "deployment": "both"
+            },
+            {
+              "id": "nexus-photos",
+              "name": "Nexus-Photos",
+              "status": "shell",
+              "tech": "TypeScript",
+              "port": null,
+              "description": "Photo/video backup, AI tagging/faces/albums, sharing.",
+              "dependencies": [
+                "Nexus-Files",
+                "Nexus-AI"
+              ],
+              "integrates": [
+                "Nexus-Media",
+                "Nexus Discovery"
+              ],
+              "deployment": "both",
+              "phantom": true
+            },
+            {
+              "id": "nexus-book",
+              "name": "Nexus-Book",
+              "status": "shell",
+              "tech": "TypeScript",
+              "port": null,
+              "description": "Personal library / ebook manager with AI summaries and tagging.",
+              "dependencies": [
+                "Nexus-Files",
+                "Nexus-AI"
+              ],
+              "integrates": [],
+              "deployment": "both"
+            }
+          ]
+        },
+        {
+          "id": "media-entertainment",
+          "name": "Media & Entertainment",
+          "color": "#ec4899",
+          "systems": [
+            {
+              "id": "nexus-media",
+              "name": "Nexus-Media",
+              "status": "shell",
+              "tech": "TypeScript",
+              "port": null,
+              "description": "Media streaming server for movies, TV, music libraries (Jellyfin-style).",
+              "dependencies": [
+                "Nexus-Files"
+              ],
+              "integrates": [
+                "Nexus-Radio-Live"
+              ],
+              "deployment": "self-hosted"
+            },
+            {
+              "id": "nexus-music",
+              "name": "Nexus-Music",
+              "status": "shell",
+              "tech": "TypeScript",
+              "port": null,
+              "description": "Browser-based DAW with recording, mixing, collaboration, and AI features.",
+              "dependencies": [
+                "Nexus-AI"
+              ],
+              "integrates": [],
+              "deployment": "both"
+            },
+            {
+              "id": "nexus-radio-live",
+              "name": "Nexus-Radio-Live",
+              "status": "shell",
+              "tech": "TypeScript",
+              "port": null,
+              "description": "Self-hosted internet radio or live streaming server.",
+              "dependencies": [
+                "Nexus-Media"
+              ],
+              "integrates": [],
+              "deployment": "self-hosted"
+            }
+          ]
+        },
+        {
+          "id": "creativity-design",
+          "name": "Creativity & Design",
+          "color": "#8b5cf6",
+          "systems": [
+            {
+              "id": "nexus-modeling",
+              "name": "Nexus-Modeling",
+              "status": "native",
+              "tech": "C++",
+              "port": null,
+              "description": "Browser-based 3D / CAD parametric modeling — Vulkan, geometry kernel, AI-assisted. DO NOT TOUCH.",
+              "dependencies": [],
+              "integrates": [
+                "Nexus-Engine"
+              ],
+              "deployment": "both"
+            },
+            {
+              "id": "nexus-draw",
+              "name": "Nexus-Draw",
+              "status": "shell",
+              "tech": "TypeScript",
+              "port": null,
+              "description": "Real-time whiteboard and diagramming tool (Excalidraw-style).",
+              "dependencies": [],
+              "integrates": [
+                "Nexus-Design"
+              ],
+              "deployment": "both"
+            },
+            {
+              "id": "nexus-video",
+              "name": "Nexus-Video",
+              "status": "shell",
+              "tech": "TypeScript",
+              "port": null,
+              "description": "Browser-based video editor — cuts, effects, subtitles, transcoding.",
+              "dependencies": [
+                "Nexus-Media",
+                "Nexus-AI"
+              ],
+              "integrates": [],
+              "deployment": "both"
+            },
+            {
+              "id": "nexus-graphic",
+              "name": "Nexus-Graphic",
+              "status": "shell",
+              "tech": "TypeScript",
+              "port": null,
+              "description": "Full graphic design suite — vectors, photo editing, templates, AI generation.",
+              "dependencies": [
+                "Nexus-AI"
+              ],
+              "integrates": [
+                "Nexus-Draw",
+                "Nexus-Design",
+                "Phantom SDK"
+              ],
+              "deployment": "both",
+              "phantom": true
+            },
+            {
+              "id": "nexus-design",
+              "name": "Nexus-Design",
+              "status": "shell",
+              "tech": "TypeScript",
+              "port": null,
+              "description": "UI/UX / web design tool — Figma-style real-time collaboration, prototyping, handoff.",
+              "dependencies": [],
+              "integrates": [
+                "Nexus-Draw",
+                "Nexus-Graphic",
+                "Nexus Discovery"
+              ],
+              "deployment": "both",
+              "phantom": true
+            },
+            {
+              "id": "nexus-content",
+              "name": "Nexus-Content",
+              "status": "shell",
+              "tech": "TypeScript",
+              "port": null,
+              "description": "AI-powered content creation studio — text, images, video generation and editing.",
+              "dependencies": [
+                "Nexus-AI"
+              ],
+              "integrates": [
+                "Nexus-Graphic",
+                "Nexus-Video"
+              ],
+              "deployment": "both"
+            }
+          ]
+        },
+        {
+          "id": "productivity",
+          "name": "Productivity & Knowledge",
+          "color": "#22c55e",
+          "systems": [
+            {
+              "id": "nexus-notes",
+              "name": "Nexus-Notes",
+              "status": "shell",
+              "tech": "TypeScript",
+              "port": null,
+              "description": "Collaborative note-taking and knowledge base (Notion/Obsidian-style).",
+              "dependencies": [
+                "nexus-core",
+                "Nexus-AI"
+              ],
+              "integrates": [
+                "Nexus-Wiki",
+                "Nexus-Planner"
+              ],
+              "deployment": "both"
+            },
+            {
+              "id": "nexus-tasks",
+              "name": "Nexus-Tasks",
+              "status": "shell",
+              "tech": "TypeScript",
+              "port": null,
+              "description": "Kanban / project management with AI prioritization.",
+              "dependencies": [
+                "nexus-core"
+              ],
+              "integrates": [
+                "Nexus-Calendar",
+                "Nexus-Planner"
+              ],
+              "deployment": "both"
+            },
+            {
+              "id": "nexus-calendar",
+              "name": "Nexus-Calendar",
+              "status": "shell",
+              "tech": "TypeScript",
+              "port": null,
+              "description": "Shared calendars and contacts with reminders and federation.",
+              "dependencies": [
+                "nexus-core"
+              ],
+              "integrates": [
+                "Nexus-Tasks",
+                "Nexus-Meet",
+                "Nexus-Email"
+              ],
+              "deployment": "both"
+            },
+            {
+              "id": "nexus-office",
+              "name": "Nexus-Office",
+              "status": "shell",
+              "tech": "TypeScript",
+              "port": null,
+              "description": "Lightweight collaborative documents and spreadsheets (Google Docs alternative).",
+              "dependencies": [
+                "nexus-core"
+              ],
+              "integrates": [
+                "Nexus-PDF"
+              ],
+              "deployment": "both"
+            },
+            {
+              "id": "nexus-automate",
+              "name": "Nexus-Automate",
+              "status": "shell",
+              "tech": "TypeScript",
+              "port": null,
+              "description": "Workflow automation — Zapier/n8n-style visual automation builder.",
+              "dependencies": [
+                "Nexus-AI"
+              ],
+              "integrates": [
+                "ALL_SYSTEMS"
+              ],
+              "deployment": "both"
+            },
+            {
+              "id": "nexus-forms",
+              "name": "Nexus-Forms",
+              "status": "shell",
+              "tech": "TypeScript",
+              "port": null,
+              "description": "Advanced form builder and data collection with AI analysis.",
+              "dependencies": [
+                "nexus-core"
+              ],
+              "integrates": [
+                "Nexus-Survey",
+                "Nexus-Analytics"
+              ],
+              "deployment": "both"
+            },
+            {
+              "id": "nexus-wiki",
+              "name": "Nexus-Wiki",
+              "status": "built",
+              "tech": "Python",
+              "port": null,
+              "description": "Full-featured internal wiki / knowledge base with versioning and search. Nexus-owned Wikipedia alternative.",
+              "dependencies": [],
+              "integrates": [
+                "Nexus-Notes",
+                "Nexus-Search"
+              ],
+              "deployment": "both"
+            },
+            {
+              "id": "nexus-planner",
+              "name": "Nexus-Planner",
+              "status": "shell",
+              "tech": "TypeScript",
+              "port": null,
+              "description": "Personal + team planner — Notion-style all-in-one workspace with databases, AI assistance.",
+              "dependencies": [
+                "Nexus-AI",
+                "Nexus-Notes",
+                "Nexus-Tasks",
+                "Nexus-Calendar"
+              ],
+              "integrates": [
+                "Nexus-Office"
+              ],
+              "deployment": "both"
+            },
+            {
+              "id": "nexus-search",
+              "name": "Nexus-Search",
+              "status": "built",
+              "tech": "TypeScript",
+              "port": null,
+              "description": "Unified intelligent search across all Nexus data and tools with AI summarization.",
+              "dependencies": [
+                "Nexus-AI"
+              ],
+              "integrates": [
+                "ALL_SYSTEMS"
+              ],
+              "deployment": "both"
+            }
+          ]
+        },
+        {
+          "id": "ai",
+          "name": "AI & Intelligence",
+          "color": "#06b6d4",
+          "systems": [
+            {
+              "id": "nexus-ai",
+              "name": "Nexus-AI",
+              "status": "scaffolded",
+              "tech": "TypeScript",
+              "port": 3098,
+              "description": "Central AI service — model routing, provider integration, AI orchestration. Mature Python/FastAPI backend exists externally; monorepo version is TS integration shim.",
+              "dependencies": [
+                "nexus-core"
+              ],
+              "integrates": [
+                "ALL_AI_CONSUMERS"
+              ],
+              "deployment": "both"
+            },
+            {
+              "id": "nexus-ai-hub",
+              "name": "Nexus-AI-Hub",
+              "status": "built",
+              "tech": "TypeScript",
+              "port": null,
+              "description": "Dedicated interface for managing local AI models, agents, and RAG pipelines.",
+              "dependencies": [
+                "Nexus-AI"
+              ],
+              "integrates": [
+                "Nexus-Inference",
+                "Nexus-Agents"
+              ],
+              "deployment": "both"
+            },
+            {
+              "id": "nexus-computer",
+              "name": "Nexus-Computer",
+              "status": "scaffolded",
+              "tech": "TypeScript",
+              "port": 3045,
+              "description": "Personal AI cloud computer — your own AI-powered virtual machine. Full OS-like experience.",
+              "dependencies": [
+                "Nexus-AI",
+                "nexus-core"
+              ],
+              "integrates": [
+                "Nexus-IDE"
+              ],
+              "deployment": "both"
+            },
+            {
+              "id": "nexus-mind",
+              "name": "Nexus-Mind",
+              "status": "shell",
+              "tech": "TypeScript",
+              "port": null,
+              "description": "Mental wellness journal, mood tracking, and meditation tools with AI guidance.",
+              "dependencies": [
+                "Nexus-AI"
+              ],
+              "integrates": [
+                "Nexus-Health"
+              ],
+              "deployment": "both"
+            },
+            {
+              "id": "nexus-inference",
+              "name": "Nexus-Inference",
+              "status": "shell",
+              "tech": "TypeScript",
+              "port": null,
+              "description": "Optimized AI inference and supercomputing platform layer.",
+              "dependencies": [
+                "Nexus-AI"
+              ],
+              "integrates": [
+                "Nexus-AI-Hub"
+              ],
+              "deployment": "both"
+            },
+            {
+              "id": "nexus-insights",
+              "name": "Nexus-Insights",
+              "status": "shell",
+              "tech": "TypeScript",
+              "port": null,
+              "description": "AI-powered data analysis and reporting across all Nexus data.",
+              "dependencies": [
+                "Nexus-AI",
+                "Nexus-Analytics"
+              ],
+              "integrates": [
+                "ALL_SYSTEMS"
+              ],
+              "deployment": "both"
+            },
+            {
+              "id": "nexus-agents",
+              "name": "Nexus-Agents",
+              "status": "shell",
+              "tech": "TypeScript",
+              "port": null,
+              "description": "Multi-agent system builder and orchestrator — agentic AI workflows.",
+              "dependencies": [
+                "Nexus-AI",
+                "Nexusclaw"
+              ],
+              "integrates": [
+                "Nexus-AI-Hub"
+              ],
+              "deployment": "both"
+            },
+            {
+              "id": "nexus-engine",
+              "name": "Nexus-Engine",
+              "status": "built",
+              "tech": "TypeScript",
+              "port": null,
+              "description": "Unified 2D + 3D game engine — Babylon.js based, visual scripting, physics, multiplayer via federation, deep AI integration.",
+              "dependencies": [],
+              "integrates": [
+                "Nexus-Game",
+                "Nexus-Modeling"
+              ],
+              "deployment": "both"
+            }
+          ]
+        },
+        {
+          "id": "communication",
+          "name": "Communication & Collaboration",
+          "color": "#3b82f6",
+          "systems": [
+            {
+              "id": "nexus-meet",
+              "name": "Nexus-Meet",
+              "status": "shell",
+              "tech": "TypeScript",
+              "port": null,
+              "description": "Full video conferencing and webinars — recording, breakout rooms, AI transcription.",
+              "dependencies": [
+                "Nexus",
+                "Nexus-AI"
+              ],
+              "integrates": [
+                "Nexus-Calendar"
+              ],
+              "deployment": "both"
+            },
+            {
+              "id": "nexus-email",
+              "name": "Nexus-Email",
+              "status": "shell",
+              "tech": "TypeScript",
+              "port": null,
+              "description": "Private email server with calendar integration and AI filtering.",
+              "dependencies": [
+                "nexus-core",
+                "Nexus-AI"
+              ],
+              "integrates": [
+                "Nexus-Calendar"
+              ],
+              "deployment": "both"
+            },
+            {
+              "id": "nexus-team-chat",
+              "name": "Nexus-Team-Chat",
+              "status": "shell",
+              "tech": "TypeScript",
+              "port": null,
+              "description": "Advanced team channels, threads, and integrations (Slack/Discord alternative).",
+              "dependencies": [
+                "Nexus"
+              ],
+              "integrates": [
+                "Nexus-Meet"
+              ],
+              "deployment": "both"
+            },
+            {
+              "id": "nexus-presence",
+              "name": "Nexus-Presence",
+              "status": "shell",
+              "tech": "TypeScript",
+              "port": null,
+              "description": "Real-time presence, availability, and status sharing across all tools.",
+              "dependencies": [
+                "Nexus"
+              ],
+              "integrates": [
+                "ALL_SYSTEMS"
+              ],
+              "deployment": "both"
+            }
+          ]
+        },
+        {
+          "id": "business",
+          "name": "Business & Professional",
+          "color": "#f97316",
+          "systems": [
+            {
+              "id": "nexus-crm",
+              "name": "Nexus-CRM",
+              "status": "shell",
+              "tech": "TypeScript",
+              "port": null,
+              "description": "Customer relationship management — contacts, deals, pipelines, AI insights.",
+              "dependencies": [
+                "nexus-core",
+                "Nexus-AI"
+              ],
+              "integrates": [
+                "Nexus-Sales",
+                "Nexus-Email"
+              ],
+              "deployment": "both"
+            },
+            {
+              "id": "nexus-sales",
+              "name": "Nexus-Sales",
+              "status": "shell",
+              "tech": "TypeScript",
+              "port": null,
+              "description": "Sales automation and pipeline tools — outbound, quoting, contract management.",
+              "dependencies": [
+                "Nexus-CRM"
+              ],
+              "integrates": [
+                "Nexus-Contracts",
+                "Nexus-Billing"
+              ],
+              "deployment": "both"
+            },
+            {
+              "id": "nexus-hr",
+              "name": "Nexus-HR",
+              "status": "shell",
+              "tech": "TypeScript",
+              "port": null,
+              "description": "Human resources management — onboarding, payroll tracking, employee records, performance.",
+              "dependencies": [
+                "nexus-core"
+              ],
+              "integrates": [
+                "Nexus-Accounting"
+              ],
+              "deployment": "both"
+            },
+            {
+              "id": "nexus-accounting",
+              "name": "Nexus-Accounting",
+              "status": "shell",
+              "tech": "TypeScript",
+              "port": null,
+              "description": "Bookkeeping and invoicing with AI reconciliation.",
+              "dependencies": [
+                "nexus-core",
+                "Nexus-AI"
+              ],
+              "integrates": [
+                "Nexus-Billing",
+                "Nexus-Finance"
+              ],
+              "deployment": "both"
+            },
+            {
+              "id": "nexus-contracts",
+              "name": "Nexus-Contracts",
+              "status": "shell",
+              "tech": "TypeScript",
+              "port": null,
+              "description": "Contract creation, signing, and lifecycle management with AI review.",
+              "dependencies": [
+                "Nexus-AI"
+              ],
+              "integrates": [
+                "Nexus-Sales",
+                "Nexus-Compliance"
+              ],
+              "deployment": "both"
+            },
+            {
+              "id": "nexus-billing",
+              "name": "Nexus-Billing",
+              "status": "shell",
+              "tech": "TypeScript",
+              "port": null,
+              "description": "Invoicing, subscriptions, and payment handling — but everything stays free.",
+              "dependencies": [
+                "nexus-core"
+              ],
+              "integrates": [
+                "Nexus-Accounting",
+                "Nexus-Spend"
+              ],
+              "deployment": "both"
+            },
+            {
+              "id": "nexus-finance",
+              "name": "Nexus-Finance",
+              "status": "shell",
+              "tech": "TypeScript",
+              "port": null,
+              "description": "Simple personal budgeting and expense tracking with AI categorization.",
+              "dependencies": [
+                "nexus-core",
+                "Nexus-AI"
+              ],
+              "integrates": [
+                "Nexus-Accounting"
+              ],
+              "deployment": "both"
+            },
+            {
+              "id": "nexus-spend",
+              "name": "Nexus-Spend",
+              "status": "shell",
+              "tech": "TypeScript",
+              "port": null,
+              "description": "SaaS management and spend optimization — track what you're paying for.",
+              "dependencies": [
+                "nexus-core"
+              ],
+              "integrates": [
+                "Nexus-Billing"
+              ],
+              "deployment": "both"
+            }
+          ]
+        },
+        {
+          "id": "analytics",
+          "name": "Analytics, Intelligence & Data",
+          "color": "#84cc16",
+          "systems": [
+            {
+              "id": "nexus-analytics",
+              "name": "Nexus-Analytics",
+              "status": "shell",
+              "tech": "TypeScript",
+              "port": null,
+              "description": "Business intelligence and dashboards with AI queries.",
+              "dependencies": [
+                "nexus-core",
+                "Nexus-AI"
+              ],
+              "integrates": [
+                "Nexus-Insights",
+                "Nexus-Warehouse"
+              ],
+              "deployment": "both"
+            },
+            {
+              "id": "nexus-survey",
+              "name": "Nexus-Survey",
+              "status": "shell",
+              "tech": "TypeScript",
+              "port": null,
+              "description": "Advanced survey and feedback collection with analytics.",
+              "dependencies": [
+                "nexus-core"
+              ],
+              "integrates": [
+                "Nexus-Forms",
+                "Nexus-Analytics"
+              ],
+              "deployment": "both"
+            },
+            {
+              "id": "nexus-seo",
+              "name": "Nexus-SEO",
+              "status": "shell",
+              "tech": "TypeScript",
+              "port": null,
+              "description": "Built-in SEO monitoring and optimization tools for hosted sites.",
+              "dependencies": [
+                "Nexus-Hosting"
+              ],
+              "integrates": [
+                "Nexus-Analytics"
+              ],
+              "deployment": "both"
+            },
+            {
+              "id": "nexus-database",
+              "name": "Nexus-Database",
+              "status": "shell",
+              "tech": "TypeScript",
+              "port": null,
+              "description": "Visual database designer and GUI — manage your databases visually.",
+              "dependencies": [],
+              "integrates": [
+                "Nexus-Warehouse"
+              ],
+              "deployment": "both"
+            },
+            {
+              "id": "nexus-warehouse",
+              "name": "Nexus-Warehouse",
+              "status": "scaffolded",
+              "tech": "TypeScript",
+              "port": null,
+              "description": "Data warehouse and ETL pipeline — central data storage and transformation.",
+              "dependencies": [
+                "nexus-core"
+              ],
+              "integrates": [
+                "Nexus-Analytics",
+                "Nexus-Database"
+              ],
+              "deployment": "both"
+            }
+          ]
+        },
+        {
+          "id": "education",
+          "name": "Learning & Education",
+          "color": "#a855f7",
+          "systems": [
+            {
+              "id": "nexus-learn",
+              "name": "Nexus-Learn",
+              "status": "shell",
+              "tech": "TypeScript",
+              "port": null,
+              "description": "Learning management system (LMS) — courses, quizzes, certifications with AI tutoring.",
+              "dependencies": [
+                "Nexus-AI"
+              ],
+              "integrates": [
+                "Nexus-Academy",
+                "Nexus-Tutor"
+              ],
+              "deployment": "both"
+            },
+            {
+              "id": "nexus-tutor",
+              "name": "Nexus-Tutor",
+              "status": "shell",
+              "tech": "TypeScript",
+              "port": null,
+              "description": "Personal AI tutor and knowledge trainer — learn anything with AI guidance.",
+              "dependencies": [
+                "Nexus-AI"
+              ],
+              "integrates": [
+                "Nexus-Learn"
+              ],
+              "deployment": "both"
+            },
+            {
+              "id": "nexus-academy",
+              "name": "Nexus-Academy",
+              "status": "shell",
+              "tech": "TypeScript",
+              "port": null,
+              "description": "Community / team training platform with progress tracking.",
+              "dependencies": [
+                "Nexus-Learn"
+              ],
+              "integrates": [],
+              "deployment": "both"
+            }
+          ]
+        },
+        {
+          "id": "health",
+          "name": "Health, Fitness & Wellness",
+          "color": "#ec4899",
+          "systems": [
+            {
+              "id": "nexus-health",
+              "name": "Nexus-Health",
+              "status": "shell",
+              "tech": "TypeScript",
+              "port": null,
+              "description": "Personal health and medical records tracker — privacy-first, AI insights.",
+              "dependencies": [
+                "nexus-core",
+                "Nexus-Vault"
+              ],
+              "integrates": [
+                "Nexus-Fitness",
+                "Nexus-Nutrition",
+                "Nexus-Mind"
+              ],
+              "deployment": "self-hosted"
+            },
+            {
+              "id": "nexus-fitness",
+              "name": "Nexus-Fitness",
+              "status": "shell",
+              "tech": "TypeScript",
+              "port": null,
+              "description": "Fitness tracking, workouts, and progress logging.",
+              "dependencies": [
+                "nexus-core"
+              ],
+              "integrates": [
+                "Nexus-Health"
+              ],
+              "deployment": "self-hosted"
+            },
+            {
+              "id": "nexus-nutrition",
+              "name": "Nexus-Nutrition",
+              "status": "shell",
+              "tech": "TypeScript",
+              "port": null,
+              "description": "Meal planning, recipe management, and nutrition tracking with AI suggestions.",
+              "dependencies": [
+                "Nexus-AI"
+              ],
+              "integrates": [
+                "Nexus-Health"
+              ],
+              "deployment": "self-hosted"
+            }
+          ]
+        },
+        {
+          "id": "ecommerce",
+          "name": "E-Commerce & Marketplace",
+          "color": "#eab308",
+          "systems": [
+            {
+              "id": "nexus-store",
+              "name": "Nexus-Store",
+              "status": "shell",
+              "tech": "TypeScript",
+              "port": null,
+              "description": "Private e-commerce / digital product store.",
+              "dependencies": [
+                "nexus-core"
+              ],
+              "integrates": [
+                "Nexus-Billing",
+                "Nexus-Market"
+              ],
+              "deployment": "both"
+            },
+            {
+              "id": "nexus-market",
+              "name": "Nexus-Market",
+              "status": "shell",
+              "tech": "TypeScript",
+              "port": null,
+              "description": "Internal community marketplace for trading/sharing within federated nodes.",
+              "dependencies": [
+                "Nexus-Store"
+              ],
+              "integrates": [],
+              "deployment": "both"
+            }
+          ]
+        },
+        {
+          "id": "development",
+          "name": "Development & Coding",
+          "color": "#0891b2",
+          "systems": [
+            {
+              "id": "nexus-ide",
+              "name": "Nexus-IDE",
+              "status": "built",
+              "tech": "TypeScript",
+              "port": null,
+              "description": "Cloud-based code editor / IDE with AI assistance and collaboration (VS Code alternative).",
+              "dependencies": [
+                "Nexus-AI",
+                "Nexus-Computer"
+              ],
+              "integrates": [
+                "Nexus-Forge",
+                "Nexus-Code-Review"
+              ],
+              "deployment": "both"
+            },
+            {
+              "id": "nexus-code-review",
+              "name": "Nexus-Code-Review",
+              "status": "shell",
+              "tech": "TypeScript",
+              "port": null,
+              "description": "AI-powered code review and quality tools.",
+              "dependencies": [
+                "Nexus-AI"
+              ],
+              "integrates": [
+                "Nexus-IDE",
+                "Nexus-Forge"
+              ],
+              "deployment": "both"
+            },
+            {
+              "id": "nexus-testing",
+              "name": "Nexus-Testing",
+              "status": "built",
+              "tech": "TypeScript",
+              "port": null,
+              "description": "Comprehensive testing suite — unit, integration, end-to-end, performance.",
+              "dependencies": [
+                "nexus-core"
+              ],
+              "integrates": [
+                "ALL_SYSTEMS"
+              ],
+              "deployment": "both"
+            },
+            {
+              "id": "nexus-forge",
+              "name": "Nexus-Forge",
+              "status": "built",
+              "tech": "TypeScript",
+              "port": null,
+              "description": "Self-hosted code forge — free GitHub/GitLab alternative with federation and AI integration.",
+              "dependencies": [
+                "Nexus-Deploy"
+              ],
+              "integrates": [
+                "Nexus-IDE",
+                "Nexus-Code-Review",
+                "Nexus-AI"
+              ],
+              "deployment": "both"
+            }
+          ]
+        },
+        {
+          "id": "gaming",
+          "name": "Entertainment & Gaming",
+          "color": "#dc2626",
+          "systems": [
+            {
+              "id": "nexus-game",
+              "name": "Nexus-Game",
+              "status": "shell",
+              "tech": "TypeScript",
+              "port": null,
+              "description": "Game server hosting and management with federation.",
+              "dependencies": [
+                "Nexus-Hosting",
+                "Nexus-Engine"
+              ],
+              "integrates": [],
+              "deployment": "both"
+            },
+            {
+              "id": "nexus-play",
+              "name": "Nexus-Play",
+              "status": "shell",
+              "tech": "TypeScript",
+              "port": null,
+              "description": "Browser-based game library and streaming for personal collections.",
+              "dependencies": [
+                "Nexus-Engine"
+              ],
+              "integrates": [
+                "Nexus-Game"
+              ],
+              "deployment": "self-hosted"
+            },
+            {
+              "id": "nexus-arcade",
+              "name": "Nexus-Arcade",
+              "status": "shell",
+              "tech": "TypeScript",
+              "port": null,
+              "description": "Lightweight retro/emulator gaming platform.",
+              "dependencies": [
+                "Nexus-Engine"
+              ],
+              "integrates": [
+                "Nexus-Play"
+              ],
+              "deployment": "self-hosted"
+            }
+          ]
+        },
+        {
+          "id": "vertical",
+          "name": "Vertical & Niche",
+          "color": "#6b7280",
+          "systems": [
+            {
+              "id": "nexus-vertical",
+              "name": "Nexus-Vertical",
+              "status": "shell",
+              "tech": "TypeScript",
+              "port": null,
+              "description": "Framework for industry-specific modules — construction, healthcare, legal, real estate, etc.",
+              "dependencies": [
+                "nexus-core"
+              ],
+              "integrates": [
+                "ALL_SYSTEMS"
+              ],
+              "deployment": "both"
+            },
+            {
+              "id": "nexus-edge",
+              "name": "Nexus-Edge",
+              "status": "built",
+              "tech": "TypeScript",
+              "port": null,
+              "description": "Edge computing and IoT orchestration layer — device management, local breakout, low-latency routing.",
+              "dependencies": [
+                "Nexus-Tunnel"
+              ],
+              "integrates": [
+                "Nexus-Network"
+              ],
+              "deployment": "both"
+            },
+            {
+              "id": "nexus-provenance",
+              "name": "Nexus-Provenance",
+              "status": "shell",
+              "tech": "TypeScript",
+              "port": null,
+              "description": "Digital provenance and content authenticity tracking.",
+              "dependencies": [],
+              "integrates": [
+                "Nexus-Content",
+                "Nexus-Security"
+              ],
+              "deployment": "both"
+            },
+            {
+              "id": "nexus-confidential",
+              "name": "Nexus-Confidential",
+              "status": "shell",
+              "tech": "TypeScript",
+              "port": null,
+              "description": "Confidential computing and privacy-enhancing tech tools.",
+              "dependencies": [
+                "Phantom"
+              ],
+              "integrates": [
+                "Nexus-Security",
+                "Nexus-Vault"
+              ],
+              "deployment": "both"
+            },
+            {
+              "id": "nexus-home",
+              "name": "Nexus-Home",
+              "status": "shell",
+              "tech": "TypeScript",
+              "port": null,
+              "description": "Smart home integration layer — Home Assistant-style but Nexus-native.",
+              "dependencies": [
+                "Nexus-Edge"
+              ],
+              "integrates": [],
+              "deployment": "self-hosted"
+            },
+            {
+              "id": "nexus-pdf",
+              "name": "Nexus-PDF",
+              "status": "shell",
+              "tech": "TypeScript",
+              "port": null,
+              "description": "Browser-based PDF toolkit — merge, sign, OCR, AI summarization.",
+              "dependencies": [
+                "Nexus-AI"
+              ],
+              "integrates": [
+                "Nexus-Office"
+              ],
+              "deployment": "both"
+            },
+            {
+              "id": "nexus-social",
+              "name": "Nexus-Social",
+              "status": "shell",
+              "tech": "TypeScript",
+              "port": null,
+              "description": "Lightweight fediverse / private community posting client.",
+              "dependencies": [
+                "Nexus"
+              ],
+              "integrates": [
+                "Nexus-Content"
+              ],
+              "deployment": "both"
+            }
+          ]
+        },
+        {
+          "id": "internal-infra",
+          "name": "Internal Infrastructure",
+          "color": "#475569",
+          "systems": [
+            {
+              "id": "phantom",
+              "name": "Phantom",
+              "status": "native",
+              "tech": "Rust",
+              "port": null,
+              "description": "Anonymous networking layer — circuit routing, crypto, discovery, zero-knowledge VM. 8 crates. DO NOT TOUCH.",
+              "dependencies": [],
+              "integrates": [
+                "Nexus-Confidential",
+                "Nexus-Tunnel"
+              ],
+              "deployment": "infra"
+            },
+            {
+              "id": "nexusclaw",
+              "name": "Nexusclaw",
+              "status": "native",
+              "tech": "TypeScript/C++",
+              "port": null,
+              "description": "Agent framework with native code — hybrid TS/C++ for performance-critical agent operations.",
+              "dependencies": [],
+              "integrates": [
+                "Nexus-Agents",
+                "Nexus-AI"
+              ],
+              "deployment": "infra"
+            },
+            {
+              "id": "nexus-factory",
+              "name": "nexus-factory",
+              "status": "built",
+              "tech": "TypeScript",
+              "port": null,
+              "description": "Internal tooling/factory for scaffolding new Nexus apps.",
+              "dependencies": [
+                "nexus-core"
+              ],
+              "integrates": [],
+              "deployment": "infra"
+            }
+          ]
+        },
+        {
+          "id": "packages",
+          "name": "Packages & SDKs",
+          "color": "#06b6d4",
+          "systems": [
+            {
+              "id": "phantom-sdk",
+              "name": "Phantom SDK",
+              "status": "built",
+              "tech": "Rust + TypeScript",
+              "port": null,
+              "description": "Post-quantum identity layer — PQ keys, signing, KEM. 10 tests. Bound: Graphic, Photos, Design.",
+              "dependencies": [
+                "Phantom"
+              ],
+              "integrates": [
+                "nexus-graphic",
+                "nexus-photos",
+                "nexus-design"
+              ]
+            },
+            {
+              "id": "nexus-discovery",
+              "name": "Nexus Discovery",
+              "status": "built",
+              "tech": "TypeScript",
+              "port": null,
+              "description": "Service mesh via Cloud topology — resolve(), list(), call(). 6 tests. Bound: Photos, Design, GPU-Test.",
+              "dependencies": [
+                "nexus-cloud"
+              ],
+              "integrates": [
+                "nexus-photos",
+                "nexus-design",
+                "nexus-gpu-test"
+              ]
+            },
+            {
+              "id": "ghost-framework",
+              "name": "Ghost Framework",
+              "status": "built",
+              "tech": "TypeScript",
+              "port": null,
+              "description": "CLI code generator for scaffolding new Nexus apps.",
+              "dependencies": [],
+              "integrates": []
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "relationships": [
+    {
+      "source": "nexus-tunnel",
+      "target": "nexus-cloud",
+      "relation": "integrates_with"
+    },
+    {
+      "source": "nexus-tunnel",
+      "target": "nexus-edge",
+      "relation": "integrates_with"
+    },
+    {
+      "source": "nexus-tunnel",
+      "target": "nexus-guardian",
+      "relation": "integrates_with"
+    },
+    {
+      "source": "nexus-ai",
+      "target": "nexus-ai-hub",
+      "relation": "owns"
+    },
+    {
+      "source": "nexus-ai",
+      "target": "nexus-agents",
+      "relation": "owns"
+    },
+    {
+      "source": "nexus-ai",
+      "target": "nexus-inference",
+      "relation": "owns"
+    },
+    {
+      "source": "nexus-ai",
+      "target": "nexus-insights",
+      "relation": "owns"
+    },
+    {
+      "source": "nexus-guardian",
+      "target": "nexus-monitor",
+      "relation": "depends_on"
+    },
+    {
+      "source": "nexus-guardian",
+      "target": "nexus-security",
+      "relation": "owns"
+    },
+    {
+      "source": "nexus-guardian",
+      "target": "nexus-compliance",
+      "relation": "owns"
+    },
+    {
+      "source": "nexus-vault",
+      "target": "nexus-files",
+      "relation": "integrates_with"
+    },
+    {
+      "source": "nexus-forge",
+      "target": "nexus-deploy",
+      "relation": "depends_on"
+    },
+    {
+      "source": "nexus-forge",
+      "target": "nexus-ide",
+      "relation": "integrates_with"
+    },
+    {
+      "source": "nexus-engine",
+      "target": "nexus-game",
+      "relation": "owns"
+    },
+    {
+      "source": "nexus-engine",
+      "target": "nexus-play",
+      "relation": "owns"
+    },
+    {
+      "source": "nexus-engine",
+      "target": "nexus-arcade",
+      "relation": "owns"
+    },
+    {
+      "source": "nexus-engine",
+      "target": "nexus-modeling",
+      "relation": "integrates_with"
+    },
+    {
+      "source": "nexus-search",
+      "target": "nexus-ai",
+      "relation": "depends_on"
+    },
+    {
+      "source": "nexus-cloud",
+      "target": "nexus-systems-api",
+      "relation": "owns"
+    },
+    {
+      "source": "nexus-cloud",
+      "target": "nexus-tunnel",
+      "relation": "depends_on"
+    },
+    {
+      "source": "nexus-hosting",
+      "target": "nexus-deploy",
+      "relation": "integrates_with"
+    },
+    {
+      "source": "nexus-hosting",
+      "target": "nexus-tunnel",
+      "relation": "depends_on"
+    },
+    {
+      "source": "phantom",
+      "target": "nexus-confidential",
+      "relation": "integrates_with"
+    },
+    {
+      "source": "phantom",
+      "target": "nexus-tunnel",
+      "relation": "integrates_with"
+    },
+    {
+      "source": "nexusclaw",
+      "target": "nexus-agents",
+      "relation": "integrates_with"
+    },
+    {
+      "source": "nexusclaw",
+      "target": "nexus-ai",
+      "relation": "integrates_with"
+    },
+    {
+      "source": "nexus",
+      "target": "nexus-meet",
+      "relation": "owns"
+    },
+    {
+      "source": "nexus",
+      "target": "nexus-team-chat",
+      "relation": "owns"
+    },
+    {
+      "source": "nexus",
+      "target": "nexus-presence",
+      "relation": "owns"
+    },
+    {
+      "source": "nexus",
+      "target": "nexus-social",
+      "relation": "owns"
+    },
+    {
+      "source": "nexus-systems-api",
+      "target": "nexus-api",
+      "relation": "integrates_with"
+    },
+    {
+      "source": "nexus-wiki",
+      "target": "nexus-notes",
+      "relation": "integrates_with"
+    },
+    {
+      "source": "nexus-wiki",
+      "target": "nexus-search",
+      "relation": "integrates_with"
+    },
+    {
+      "source": "nexus-crm",
+      "target": "nexus-sales",
+      "relation": "owns"
+    },
+    {
+      "source": "nexus-accounting",
+      "target": "nexus-billing",
+      "relation": "owns"
+    },
+    {
+      "source": "nexus-accounting",
+      "target": "nexus-finance",
+      "relation": "owns"
+    },
+    {
+      "source": "nexus-analytics",
+      "target": "nexus-warehouse",
+      "relation": "depends_on"
+    },
+    {
+      "source": "nexus-analytics",
+      "target": "nexus-insights",
+      "relation": "integrates_with"
+    },
+    {
+      "source": "nexus-ide",
+      "target": "nexus-computer",
+      "relation": "depends_on"
+    },
+    {
+      "source": "nexus-ide",
+      "target": "nexus-code-review",
+      "relation": "owns"
+    },
+    {
+      "source": "nexus-ide",
+      "target": "nexus-forge",
+      "relation": "integrates_with"
+    },
+    {
+      "source": "nexus-learn",
+      "target": "nexus-tutor",
+      "relation": "owns"
+    },
+    {
+      "source": "nexus-learn",
+      "target": "nexus-academy",
+      "relation": "owns"
+    },
+    {
+      "source": "nexus-health",
+      "target": "nexus-fitness",
+      "relation": "owns"
+    },
+    {
+      "source": "nexus-health",
+      "target": "nexus-nutrition",
+      "relation": "owns"
+    },
+    {
+      "source": "nexus-health",
+      "target": "nexus-mind",
+      "relation": "owns"
+    },
+    {
+      "source": "nexus-office",
+      "target": "nexus-pdf",
+      "relation": "integrates_with"
+    },
+    {
+      "source": "nexus-planner",
+      "target": "nexus-notes",
+      "relation": "depends_on"
+    },
+    {
+      "source": "nexus-planner",
+      "target": "nexus-tasks",
+      "relation": "depends_on"
+    },
+    {
+      "source": "nexus-planner",
+      "target": "nexus-calendar",
+      "relation": "depends_on"
+    },
+    {
+      "source": "nexus-store",
+      "target": "nexus-market",
+      "relation": "owns"
+    }
+  ]
+}
