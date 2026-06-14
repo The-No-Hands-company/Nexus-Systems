@@ -1,0 +1,15 @@
+{
+  "name": "@nexus/discovery",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "./src/index.ts",
+  "description": "Nexus Systems service discovery — resolves service names to URLs via Nexus-Cloud topology",
+  "scripts": {
+    "check": "bunx tsc --noEmit",
+    "test": "bun test"
+  },
+  "devDependencies": {
+    "bun-types": "^1.3.11",
+    "typescript": "^5.8"
+  }
+}
