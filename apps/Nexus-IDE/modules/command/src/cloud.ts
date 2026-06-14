@@ -13,11 +13,11 @@ function cloudHeaders(): Record<string, string> {
 }
 
 function hbMs(): number {
-  return Math.max(5000, Number(process.env["NEXUS_ANALYTICS_CLOUD_HEARTBEAT_INTERVAL_MS"] || "30000"));
+  return Math.max(5000, Number(process.env["NEXUS_COMMAND_CLOUD_HEARTBEAT_INTERVAL_MS"] || "30000"));
 }
 
 function enabled(): boolean {
-  return (process.env["NEXUS_ANALYTICS_ENABLE_CLOUD_INTEGRATION"] || "true").trim().toLowerCase() !== "false";
+  return (process.env["NEXUS_COMMAND_ENABLE_CLOUD_INTEGRATION"] || "true").trim().toLowerCase() !== "false";
 }
 
 export async function registerWithCloud(baseUrl: string): Promise<void> {
@@ -26,28 +26,28 @@ export async function registerWithCloud(baseUrl: string): Promise<void> {
     headers: cloudHeaders(),
     body: JSON.stringify(buildSystemsApiRegistrationPayload(baseUrl)),
   });
-  if (!r.ok) throw new Error(`Nexus-Analytics registration failed: ${r.status}`);
+  if (!r.ok) throw new Error(`Nexus-Command registration failed: ${r.status}`);
 }
 
 export async function heartbeatWithCloud(baseUrl: string): Promise<void> {
-  const r = await fetch(`${cloudBaseUrl()}/api/v1/tools/${encodeURIComponent("nexus-analytics")}/heartbeat`, {
+  const r = await fetch(`${cloudBaseUrl()}/api/v1/tools/${encodeURIComponent("nexus-command")}/heartbeat`, {
     method: "POST",
     headers: cloudHeaders(),
     body: JSON.stringify({ health: "healthy", upstreamUrl: baseUrl }),
   });
-  if (!r.ok) throw new Error(`Nexus-Analytics heartbeat failed: ${r.status}`);
+  if (!r.ok) throw new Error(`Nexus-Command heartbeat failed: ${r.status}`);
 }
 
 export function startHeartbeat(baseUrl: string): () => void {
   if (!enabled()) return () => {};
 
   registerWithCloud(baseUrl).catch((e) => {
-    console.warn(`[nexus-analytics] Cloud registration failed: ${(e as Error).message}`);
+    console.warn(`[nexus-command] Cloud registration failed: ${(e as Error).message}`);
   });
 
   const timer = setInterval(() => {
     heartbeatWithCloud(baseUrl).catch((e) => {
-      console.warn(`[nexus-analytics] Cloud heartbeat failed: ${(e as Error).message}`);
+      console.warn(`[nexus-command] Cloud heartbeat failed: ${(e as Error).message}`);
     });
   }, hbMs());
 

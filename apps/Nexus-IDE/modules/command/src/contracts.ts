@@ -12,17 +12,17 @@ export type SystemsApiRegistrationPayload = {
 
 export function buildSystemsApiRegistrationPayload(baseUrl: string): SystemsApiRegistrationPayload {
   return {
-    id: "nexus-analytics",
-    name: "Nexus-Analytics",
-    description: "Data analytics and reporting",
+    id: "nexus-command",
+    name: "Nexus-Command",
+    description: "Command palette and shortcuts",
     mode: "orchestrated",
     exposed: false,
     health: "healthy",
     upstreamUrl: baseUrl,
-    capabilities: ["data-analytics", "reporting", "insights"],
+    capabilities: ["command-palette", "shortcuts", "automation"],
     metadata: {
       version: "v1",
-      defaultPort: 3118,
+      defaultPort: 3127,
     },
   };
 }

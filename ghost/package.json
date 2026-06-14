@@ -1,0 +1,14 @@
+{
+  "name": "ghost",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Ghost Framework — CLI code generator for Nexus Systems apps",
+  "scripts": {
+    "scaffold": "bun run src/index.ts scaffold"
+  },
+  "devDependencies": {
+    "bun-types": "^1.3.11",
+    "typescript": "^5.8.3"
+  }
+}

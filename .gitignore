@@ -17,6 +17,11 @@
 !/test-apps.sh
 !/deploy/
 !/deploy/**
+!/ghost/
+!/ghost/**
+!/packages/
+!/packages/**
+!/demo-flow.sh
 
 # Local-only paths explicitly excluded from public repo
 Nexus-Systems.code-workspace

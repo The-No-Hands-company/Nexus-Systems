@@ -12,17 +12,17 @@ export type SystemsApiRegistrationPayload = {
 
 export function buildSystemsApiRegistrationPayload(baseUrl: string): SystemsApiRegistrationPayload {
   return {
-    id: "nexus-analytics",
-    name: "Nexus-Analytics",
-    description: "Data analytics and reporting",
+    id: "nexus-cache",
+    name: "Nexus-Cache",
+    description: "Caching and CDN",
     mode: "orchestrated",
     exposed: false,
     health: "healthy",
     upstreamUrl: baseUrl,
-    capabilities: ["data-analytics", "reporting", "insights"],
+    capabilities: ["caching", "cdn", "performance"],
     metadata: {
       version: "v1",
-      defaultPort: 3118,
+      defaultPort: 3122,
     },
   };
 }

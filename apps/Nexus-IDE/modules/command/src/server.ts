@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { startHeartbeat } from "./cloud";
-import { AnalyticsEngine } from "./analytics-engine";
+import { CommandEngine } from "./command-engine";
 
 function json(p: unknown, s = 200): Response {
   return new Response(JSON.stringify(p), {
@@ -10,10 +10,10 @@ function json(p: unknown, s = 200): Response {
 }
 
 export function createServer() {
-  const port = Number(process.env.PORT || "3118");
-  const baseUrl = process.env.NEXUS_NEXUS_ANALYTICS_BASE_URL || `http://localhost:${port}`;
+  const port = Number(process.env.PORT || "3127");
+  const baseUrl = process.env.NEXUS_NEXUS_COMMAND_BASE_URL || `http://localhost:${port}`;
   const startedAt = Date.now();
-  const engine = new AnalyticsEngine("data/nexus-analytics.sqlite");
+  const engine = new CommandEngine("data/nexus-command.sqlite");
 
   const server = Bun.serve({
     port,
@@ -23,7 +23,7 @@ export function createServer() {
 
       if (req.method === "GET" && p === "/health")
         return json({
-          service: "nexus-analytics",
+          service: "nexus-command",
           status: "ok",
           version: "v1",
           uptimeSeconds: Math.floor((Date.now() - startedAt) / 1000),
@@ -32,11 +32,11 @@ export function createServer() {
       if (req.method === "GET" && p === "/api/v1/status")
         return json(
           {
-            service: "nexus-analytics",
+            service: "nexus-command",
             status: "ready",
-            capabilities: ["data-analytics", "reporting", "insights"],
+            capabilities: ["command-palette", "shortcuts", "automation"],
             cloudIntegration: {
-              enabled: (process.env["NEXUS_ANALYTICS_ENABLE_CLOUD_INTEGRATION"] || "true") !== "false",
+              enabled: (process.env["NEXUS_COMMAND_ENABLE_CLOUD_INTEGRATION"] || "true") !== "false",
               cloudUrl: process.env.NEXUS_CLOUD_URL || "http://localhost:8787",
             },
           },
@@ -49,7 +49,7 @@ export function createServer() {
       if (req.method === "POST" && p === "/api/v1/items") {
         const b = await req.json().catch(() => ({})) as any;
         if (!b.name) return json({ error: "name required" }, 400);
-        return json(engine.create(b.name, b.reports, b.dashboards, b.metrics), 201);
+        return json(engine.create(b.name, b.commands, b.palettes, b.bindings), 201);
       }
 
       const im = p.match(/^\/api\/v1\/items\/([^/]+)$/);
@@ -62,7 +62,7 @@ export function createServer() {
     },
   });
 
-  console.log(`[nexus-analytics] Listening on port ${server.port}`);
+  console.log(`[nexus-command] Listening on port ${server.port}`);
   const stopHeartbeat = startHeartbeat(baseUrl);
   return { server, close: () => { stopHeartbeat(); server.stop(); } };
 }

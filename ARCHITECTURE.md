@@ -350,3 +350,165 @@ S3_ACCESS_KEY=minioadmin
 S3_SECRET_KEY=minioadmin
 S3_BUCKET=nexus
 ```
+
+---
+
+## 9. Federation
+
+Nexus Systems is designed for sovereign, multi-node operation. Two or more Nexus-Cloud instances can federate to share tools, topology, and discovery across independent clusters — each with its own identity, domain, and trust policy.
+
+### 9.1 Identity Model
+
+Every Nexus-Cloud node derives a permanent, self-sovereign identity at startup:
+
+| Component | Format | Example | Source |
+|---|---|---|---|
+| **DID** | `did:nexus:<32-char-hex>` | `did:nexus:a1b2c3d4...` | Derived from `NEXUS_CLOUD_DOMAIN` + `HOSTNAME` + `PORT` via SHA-256, or explicit via `NEXUS_CLOUD_NODE_DID` |
+| **Short ID** | 8-char hex | `a1b2c3d4` | First 8 chars of SHA-256(DID) |
+| **Address** | `@user:shortId` | `@alice:a1b2c3d4` | Scoped to node — holder of the node's private key controls the namespace |
+
+The DID is permanent for a given node. Short IDs are used for human-readable addressing. No registrar, no cost, no squatting is possible — addresses are cryptographic identities.
+
+### 9.2 Gossip Discovery Protocol
+
+Nodes discover each other through an HTTP gossip protocol (no DHT, no NAT traversal, zero runtime dependencies):
+
+```
+                     POST /v1/federation/peers/announce
+  Cloud-A ──────────────────────────────────────────────────▶ Cloud-B
+           { did, shortId, upstreamUrl }                      
+                                                               
+           ◀──────────────────────────────────────────────────  
+           { peers: [{ did, shortId, upstreamUrl }, ...] }     
+```
+
+**Announcement flow:**
+
+1. Cloud-A reads `BOOTSTRAP_PEERS` env var (comma-separated URLs of known peers)
+2. Cloud-A POSTs its `selfAnnouncement` to each bootstrap peer at `POST /v1/federation/peers/announce`
+3. Cloud-B receives the announcement, registers Cloud-A as a peer, and returns its own known peer list
+4. Cloud-A adds any newly discovered peers from Cloud-B's response
+5. Both nodes persist their peer lists to `data/platform-state.json`
+
+**Key endpoints:**
+
+| Endpoint | Method | Purpose |
+|---|---|---|
+| `/v1/federation/peers/announce` | POST | Exchange peer lists (gossip) |
+| `/v1/federation/identity` | GET | Return this node's DID + shortId + public key |
+| `/v1/federation/peers` | GET | List all known federation peers |
+| `/.well-known/nexus-cloud` | GET | Discovery document for external tooling |
+
+### 9.3 Bootstrap Process
+
+The `BOOTSTRAP_PEERS` environment variable seeds the initial peer set:
+
+```bash
+BOOTSTRAP_PEERS=http://cloud-b.nexus.local:8788,http://cloud-c.nexus.local:8789
+```
+
+On startup, `bootstrapPeers()` (called after the HTTP server is ready) contacts each peer and exchanges announcements. Bootstrap peers are auto-trusted — they bypass the normal trust check because the operator explicitly listed them. Newly discovered peers (via the returned peer list) are registered as `pending` and require explicit trust promotion.
+
+**Persistent state:** Peers are saved to `data/platform-state.json`. On restart, previously discovered peers are loaded first, then bootstrap peers are re-contacted to freshen the list.
+
+### 9.4 Tool Federation
+
+When a Nexus-Cloud node receives a tool registration from a federated peer, it propagates the tool to its own local registry:
+
+```
+  App → Cloud-A: POST /api/v1/tools  (register tool)
+       Cloud-A: stores tool locally
+       Cloud-A → Cloud-B: forwards tool registration to trusted peers
+       Cloud-B: stores federated tool in local registry
+```
+
+Tools registered from a federated peer carry the peer's origin metadata (`federatedBy`, `originPeer`). They appear in `GET /api/v1/tools` listings alongside locally registered tools. Heartbeats from the origin app flow through the proxy cloud to the origin.
+
+**Tool resolution:**
+
+```
+  Client → Cloud-B: GET /api/v1/tools
+       Cloud-B: returns local tools + federated tools from trusted peers
+       
+  Client → Cloud-B: GET /api/v1/tools/:toolId
+       Cloud-B: checks local registry → if federated, proxies to origin peer
+```
+
+### 9.5 `.well-known/nexus-cloud` Discovery Document
+
+Every Nexus-Cloud instance serves a discovery document at `GET /.well-known/nexus-cloud`:
+
+```json
+{
+  "version": "v1",
+  "nodeId": "did:nexus:a1b2c3d4...",
+  "shortId": "a1b2c3d4",
+  "namingScheme": "@user:shortId",
+  "domain": "cloud-a.nexus.local",
+  "apiBase": "http://cloud-a.nexus.local:8787",
+  "capabilities": [
+    "address-issuance",
+    "domain-binding",
+    "exposure-registry",
+    "routing-manifest",
+    "tool-registry",
+    "node-identity"
+  ],
+  "endpoints": {
+    "register": "/api/v1/tools",
+    "heartbeat": "/api/v1/tools/:toolId/heartbeat",
+    "addresses": "/api/v1/addresses",
+    "exposures": "/api/v1/exposures",
+    "domains": "/api/v1/domains",
+    "routes": "/api/v1/routes",
+    "status": "/api/v1/status",
+    "topology": "/api/v1/topology",
+    "identity": "/v1/federation/identity"
+  }
+}
+```
+
+External tooling discovers Nexus-Cloud instances by fetching this document. It provides the API base URL, node identity, and a capability map so consumers know what this node supports.
+
+### 9.6 Security Model
+
+Federation security is layered:
+
+| Layer | Mechanism | Description |
+|---|---|---|
+| **Transport** | TLS (production) | All gossip traffic encrypted in transit |
+| **Peer identity** | DID + URL | Peers are identified by their self-sovereign DID and reachable URL |
+| **Trust states** | `pending` → `verified` → `trusted` → `quarantined` → `revoked` → `expired` | Lifetime-managed trust that decays and requires renewal |
+| **Bootstrap trust** | Operator-configured | Peers listed in `BOOTSTRAP_PEERS` are auto-trusted as `verified` |
+| **Signed requests** | Ed25519 + HTTP Signature | Inter-node requests carry cryptographic signatures tied to the node's keypair |
+| **Trust expiry** | Configurable TTL (default 168h) | Peer trust expires after `NEXUS_CLOUD_PEER_TRUST_TTL_HOURS` unless renewed |
+| **Minimum trust** | Configurable | `NEXUS_CLOUD_FEDERATION_MIN_TRUST` sets the bar: `verified` (permissive) or `trusted` (strict) |
+| **Authorization** | `authorizeFederatedPeerAction()` | Every federated action checks the requesting peer's trust state before proceeding |
+
+**Trust lifecycle:**
+
+```
+  [BOOTSTRAP] ──▶ verified ──▶ trusted
+                     │              │
+                     ▼              ▼
+                 expired        expired
+                     │              │
+                 quarantined ──▶ revoked
+```
+
+Trust can be promoted, quarantined, or revoked via the API:
+```bash
+POST /v1/federation/peers/cloud-b.nexus.local/trust
+```
+
+### 9.7 Deployment Example: Dual-Cloud Federation
+
+A ready-to-run dual-cloud federation setup is available at `deploy/dual-cloud/`:
+
+```bash
+cd deploy/dual-cloud
+docker compose -f dual-cloud-compose.yml up -d
+bash federation-test.sh
+```
+
+This starts two Nexus-Cloud instances (cloud-A:8787, cloud-B:8788) configured with mutual `BOOTSTRAP_PEERS`, demonstrating peer discovery, gossip, and cross-cloud tool registration.

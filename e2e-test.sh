@@ -66,5 +66,40 @@ for t in sorted(tools,key=lambda x:x['id']):
     print(f'  {t[\"id\"]:25s} {t[\"health\"]:10s} {t.get(\"upstreamUrl\",\"-\"):40s}')
 " 2>/dev/null || true
 
+# ── Cross-app flow (simplified) ─────────────────────────────────────
+
+echo ""
+echo "━━━ Cross-App Communication Flow ━━━"
+
+# Step 1: Upload a photo to Nexus-Photos
+echo "1) POST /api/v1/photos → Photos:3096"
+PHOTO_JSON=$(curl -s -X POST http://localhost:3096/api/v1/photos \
+  -H 'content-type: application/json' \
+  -d '{"title":"E2E Test Photo","url":"s3://nexus-photos/test.jpg","width":1920,"height":1080}')
+PHOTO_ID=$(echo "$PHOTO_JSON" | python3 -c "import json,sys; print(json.load(sys.stdin).get('id',''))" 2>/dev/null || echo "")
+[ -n "$PHOTO_ID" ] && echo "  ✓ Photo created: $PHOTO_ID" || echo "  ✗ Photo upload failed"
+
+# Step 3: Submit photo for GPU validation
+echo "3) POST /api/v1/photos/validate → Photos:3096 (→ GPU-Test)"
+VALIDATE_JSON=$(curl -s -X POST http://localhost:3096/api/v1/photos/validate \
+  -H 'content-type: application/json' \
+  -d "{\"photoId\":\"$PHOTO_ID\"}")
+VALIDATE_OK=$(echo "$VALIDATE_JSON" | python3 -c "import json,sys; d=json.load(sys.stdin); print('ok' if d.get('jobId') else 'fail')" 2>/dev/null || echo "fail")
+[ "$VALIDATE_OK" = "ok" ] && echo "  ✓ Validation submitted" || echo "  ✗ Validation submission failed: $(echo $VALIDATE_JSON | head -c 80)"
+
+# Step 5: Create a design project
+echo "5) POST /api/v1/design/projects → Design:3074"
+PROJECT_JSON=$(curl -s -X POST http://localhost:3074/api/v1/design/projects \
+  -H 'content-type: application/json' \
+  -d '{"name":"E2E Test Project","type":"web"}')
+PROJECT_ID=$(echo "$PROJECT_JSON" | python3 -c "import json,sys; print(json.load(sys.stdin).get('id',''))" 2>/dev/null || echo "")
+[ -n "$PROJECT_ID" ] && echo "  ✓ Project created: $PROJECT_ID" || echo "  ✗ Project creation failed"
+
+# Step 7: Check topology
+echo "7) GET /api/v1/topology → Cloud:8787"
+TOPO_JSON=$(curl -s http://localhost:8787/api/v1/topology)
+TOPO_APPS=$(echo "$TOPO_JSON" | python3 -c "import json,sys; print(len(json.load(sys.stdin).get('topology',{}).get('apps',[])))" 2>/dev/null || echo "0")
+echo "  ✓ Topology: $TOPO_APPS apps in ecosystem"
+
 echo ""
 echo "✓ Ecosystem running ($COUNT apps + cloud)"

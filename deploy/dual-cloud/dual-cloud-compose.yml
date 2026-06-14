@@ -1,0 +1,83 @@
+version: "3.9"
+
+services:
+  cloud-a:
+    build:
+      context: ../../apps/Nexus-Cloud
+      dockerfile_inline: |
+        FROM oven/bun:1
+        WORKDIR /app
+        COPY package.json ./
+        RUN bun install --production --frozen-lockfile 2>/dev/null || bun install --production
+        COPY . .
+        EXPOSE 8787
+        CMD ["bun", "run", "src/index.ts"]
+    restart: unless-stopped
+    ports:
+      - "8787:8787"
+    environment:
+      PORT: "8787"
+      NEXUS_CLOUD_API_KEY: federation-dev-key
+      NEXUS_CLOUD_URL: http://cloud-a:8787
+      NEXUS_CLOUD_DOMAIN: cloud-a.nexus.local
+      NEXUS_CLOUD_NODE_DID: did:nexus:cloud-a-001
+      BOOTSTRAP_PEERS: http://cloud-b:8788
+      NEXUS_CLOUD_FEDERATION_MIN_TRUST: verified
+      CORS_ORIGIN: "*"
+      NODE_ENV: development
+    volumes:
+      - cloud_a_data:/app/data
+    networks:
+      - dual-cloud-net
+    healthcheck:
+      test: ["CMD", "bun", "-e", "fetch('http://localhost:8787/health').then(r=>{if(!r.ok)process.exit(1)})"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+
+  cloud-b:
+    build:
+      context: ../../apps/Nexus-Cloud
+      dockerfile_inline: |
+        FROM oven/bun:1
+        WORKDIR /app
+        COPY package.json ./
+        RUN bun install --production --frozen-lockfile 2>/dev/null || bun install --production
+        COPY . .
+        EXPOSE 8788
+        CMD ["bun", "run", "src/index.ts"]
+    restart: unless-stopped
+    ports:
+      - "8788:8788"
+    environment:
+      PORT: "8788"
+      NEXUS_CLOUD_API_KEY: federation-dev-key
+      NEXUS_CLOUD_URL: http://cloud-b:8788
+      NEXUS_CLOUD_DOMAIN: cloud-b.nexus.local
+      NEXUS_CLOUD_NODE_DID: did:nexus:cloud-b-002
+      BOOTSTRAP_PEERS: http://cloud-a:8787
+      NEXUS_CLOUD_FEDERATION_MIN_TRUST: verified
+      CORS_ORIGIN: "*"
+      NODE_ENV: development
+    volumes:
+      - cloud_b_data:/app/data
+    networks:
+      - dual-cloud-net
+    healthcheck:
+      test: ["CMD", "bun", "-e", "fetch('http://localhost:8788/health').then(r=>{if(!r.ok)process.exit(1)})"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+
+volumes:
+  cloud_a_data:
+    driver: local
+  cloud_b_data:
+    driver: local
+
+networks:
+  dual-cloud-net:
+    driver: bridge
+    name: dual-cloud-net
