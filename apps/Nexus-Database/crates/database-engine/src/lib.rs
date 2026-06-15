@@ -12,11 +12,11 @@
 
 pub mod buffer;
 pub mod btree;
-//pub mod lsm;
+pub mod lsm;
 pub mod page;
-//pub mod row;
-//pub mod storage;
 pub mod pgwire;
+pub mod row;
+pub mod storage;
 pub mod wal;
 
 use std::sync::Arc;
