@@ -5,13 +5,14 @@ edition = "2021"
 description = "Nexus Database Engine — pluggable storage engine with B-Tree + LSM-Tree"
 
 [dependencies]
-serde = { version = "1", features = ["derive"] }
 bincode = "1"
 thiserror = "2"
 parking_lot = "0.12"
 log = "0.4"
 tokio = { version = "1", features = ["full"] }
 uuid = { version = "1", features = ["v4"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
 
 [dev-dependencies]
 tempfile = "3"

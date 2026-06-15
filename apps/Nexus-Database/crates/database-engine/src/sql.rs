@@ -103,6 +103,7 @@ impl Literal {
             }
             ColumnType::Boolean => Self::Boolean(!bytes.is_empty() && bytes[0] != b'0'),
             ColumnType::Blob => Self::Text(format!("<blob:{}>", bytes.len())),
+            ColumnType::Jsonb => Self::Text(String::from_utf8_lossy(bytes).to_string()),
         }
     }
 

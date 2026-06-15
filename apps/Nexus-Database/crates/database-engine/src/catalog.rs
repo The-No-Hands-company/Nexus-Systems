@@ -62,6 +62,7 @@ pub enum ColumnType {
     Float,
     Boolean,
     Blob,
+    Jsonb,
 }
 
 impl ColumnType {
@@ -72,6 +73,7 @@ impl ColumnType {
             "FLOAT" | "REAL" | "DOUBLE" => Some(Self::Float),
             "BOOLEAN" | "BOOL" => Some(Self::Boolean),
             "BLOB" | "BYTEA" => Some(Self::Blob),
+            "JSONB" | "JSON" => Some(Self::Jsonb),
             _ => None,
         }
     }

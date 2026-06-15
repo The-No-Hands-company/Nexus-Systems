@@ -16,6 +16,7 @@ pub mod catalog;
 pub mod columnar;
 pub mod fts;
 pub mod index;
+pub mod json;
 pub mod lsm;
 pub mod page;
 pub mod persistent;
