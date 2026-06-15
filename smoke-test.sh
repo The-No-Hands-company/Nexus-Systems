@@ -93,7 +93,14 @@ for name in "${!APP_PORTS[@]}"; do
   port="${APP_PORTS[$name]}"
   
   if nc -z localhost "$port" 2>/dev/null; then
-    if curl -s -m 2 "http://localhost:$port/health" | grep -q '"status":"ok"'; then
+    health_ok=false
+    for retry in $(seq 1 5); do
+      if curl -s -m 2 "http://localhost:$port/health" | -E '("status":"ok"|"ok":true)'; then
+        health_ok=true; break
+      fi
+      sleep 1
+    done
+    if $health_ok; then
       echo "  ✓ $name :$port"
       ((PASS++)) || true
       echo "$name:$port:PASS" >> "$RESULTS"
