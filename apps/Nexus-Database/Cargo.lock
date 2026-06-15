@@ -514,6 +514,7 @@ name = "database-engine"
 version = "0.1.0"
 dependencies = [
  "bincode",
+ "fastrand",
  "log",
  "parking_lot",
  "serde",

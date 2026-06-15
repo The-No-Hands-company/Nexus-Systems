@@ -15,6 +15,7 @@ pub mod btree;
 pub mod catalog;
 pub mod columnar;
 pub mod fts;
+pub mod hnsw;
 pub mod index;
 pub mod json;
 pub mod lsm;
