@@ -20,6 +20,7 @@ pub mod pgwire;
 pub mod row;
 pub mod sql;
 pub mod storage;
+pub mod transaction;
 pub mod wal;
 
 use std::sync::Arc;
