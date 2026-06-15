@@ -13,6 +13,7 @@
 pub mod buffer;
 pub mod btree;
 pub mod catalog;
+pub mod columnar;
 pub mod index;
 pub mod lsm;
 pub mod page;
