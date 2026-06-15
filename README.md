@@ -132,3 +132,5 @@ See `.github/workflows/ci.yml`
 ## License
 
 AGPL-3.0 — Free. Open source. Forever.
+
+.test
