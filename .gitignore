@@ -2,35 +2,31 @@
 *
 !/.gitignore
 !/.gitmodules
+!/README.md
+!/docker-compose.yml
 !/apps/
 !/apps/**
 !/docs/
 !/docs/**
 !/.github/
 !/.github/**
-!/ARCHITECTURE.md
-!/VERSION_MATRIX.md
-!/docker-compose.yml
-!/run-all.sh
-!/e2e-test.sh
-!/test-integration.sh
-!/test-apps.sh
 !/deploy/
 !/deploy/**
 !/ghost/
 !/ghost/**
 !/packages/
 !/packages/**
-!/demo-flow.sh
+!/tools/
+!/tools/**
+!/scripts/
+!/scripts/**
+!/dhts/
+!/dhts/**
 
 # Local-only paths explicitly excluded from public repo
 Nexus-Systems.code-workspace
 Nexus_Systems_Ecosystem_Blueprint.md
-autopilot.py
 VersaAI-LegecyOnly/
-scripts/
-packages/
-dhts/
 Backups/
 
 # Secret and local artifact safety (inside allowed folders too)

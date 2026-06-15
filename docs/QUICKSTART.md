@@ -1,5 +1,3 @@
-[![CI](https://github.com/The-No-Hands-company/Nexus-Systems/actions/workflows/ci.yml/badge.svg)](https://github.com/The-No-Hands-company/Nexus-Systems/actions)
-
 # Nexus Systems — Quick Start
 
 Sovereign, self-hosted ecosystem of 80+ apps. Free. Open source. Privacy-first.
@@ -18,10 +16,10 @@ cd Nexus-Systems
 docker compose up -d
 
 # 4. Verify it works
-./scripts/demo/capstone.sh
+./capstone.sh
 
 # 5. See what's running
-./scripts/run-all.sh --status
+./run-all.sh --status
 ```
 
 ## What You Get
@@ -49,16 +47,16 @@ docker compose up -d
 
 ```bash
 # Contract validation — 71/71 apps pass
-./scripts/test/contract-test.sh
+./contract-test.sh
 
 # One-command ecosystem proof
-./scripts/demo/demo.sh
+./demo.sh
 
 # Full capstone: Cloud + Phantom + Discovery + Pipeline
-./scripts/demo/capstone.sh
+./capstone.sh
 
 # Smoke test — health checks on all 72 apps
-./scripts/test/smoke-test.sh
+./smoke-test.sh
 ```
 
 ## Architecture

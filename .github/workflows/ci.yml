@@ -99,7 +99,7 @@ jobs:
             [ ! -e "$app/data" ] && ln -sfn ../../data "$app/data" 2>/dev/null
           done
       - name: Run contract validation
-        run: chmod +x contract-test.sh && ./contract-test.sh
+        run: chmod +x scripts/test/contract-test.sh && ./scripts/test/contract-test.sh
 
   # ── Integration Smoke Test ───────────────────────────────────────
   smoke:
@@ -120,4 +120,4 @@ jobs:
             [ ! -e "apps/$app/data" ] && ln -sfn ../../data "apps/$app/data" 2>/dev/null
           done
       - name: Run smoke test
-        run: chmod +x smoke-test.sh && ./smoke-test.sh
+        run: chmod +x scripts/test/smoke-test.sh && ./scripts/test/smoke-test.sh
