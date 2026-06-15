@@ -1,5 +1,5 @@
 [package]
-name = "nexus-nexus-video-engine"
+name = "nexus-nexus-gpu-test-engine"
 version = "0.1.0"
 edition = "2021"
 
