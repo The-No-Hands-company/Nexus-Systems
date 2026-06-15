@@ -458,3 +458,64 @@ class WikiStore:
 
     def reset_for_tests(self) -> None:
         self._adapter.reset_for_tests()
+
+# ── Backlink tracking ──────────────────────────────────────────
+
+class BacklinkStore:
+    """Tracks [[page links]] between wiki articles for What Links Here."""
+    def __init__(self):
+        self._links: dict[str, set[str]] = {}
+
+    def index_links(self, slug: str, content: str):
+        import re
+        linked = set(re.findall(r'\[\[([^\]|]+)(?:\|[^\]]+)?\]\]', content))
+        self._links[slug] = {s.strip().lower().replace(" ", "-") for s in linked}
+
+    def get_backlinks(self, slug: str) -> list[tuple[str, str]]:
+        results = []
+        for source, targets in self._links.items():
+            if slug in targets:
+                title = source.replace("-", " ").title()
+                results.append((source, title))
+        return results
+
+    def rebuild(self, store: "WikiStoreAdapter"):
+        self._links.clear()
+        for page in store.list_pages():
+            full = store.get_page(page.slug)
+            if full:
+                self.index_links(page.slug, full.content)
+
+
+# ── User store (in-memory) ─────────────────────────────────────
+
+class InMemoryUserStore:
+    def __init__(self):
+        self._users: dict[str, dict] = {}
+
+    def create(self, uid: str, username: str, pw_hash: str):
+        self._users[uid] = {"user_id": uid, "username": username, "password_hash": pw_hash}
+
+    def get(self, uid: str) -> dict | None:
+        return self._users.get(uid)
+
+
+# ── Extended WikiStore ─────────────────────────────────────────
+
+_backlinks = BacklinkStore()
+_users = InMemoryUserStore()
+
+# Monkey-patch new methods onto the WikiStore instance
+def _add_methods(store_instance):
+    def get_backlinks(slug):
+        return _backlinks.get_backlinks(slug)
+    def create_user(uid, username, pw_hash):
+        _users.create(uid, username, pw_hash)
+    def get_user(uid):
+        return _users.get(uid)
+    store_instance.get_backlinks = get_backlinks
+    store_instance.create_user = create_user
+    store_instance.get_user = get_user
+    return store_instance
+
+_add_methods(store)

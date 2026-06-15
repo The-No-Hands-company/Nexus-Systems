@@ -111,6 +111,86 @@ def list_categories() -> dict:
     return {"categories": [{"name": k, "count": v} for k, v in sorted(cats.items())]}
 
 
+@app.get("/api/v1/pages/{slug}/links", response_model=dict)
+def what_links_here(slug: str) -> dict:
+    """Find all pages that link to this article."""
+    links = store.get_backlinks(slug)
+    return {"slug": slug, "backlinks": [{"slug": s, "title": t} for s, t in links]}
+
+
+@app.get("/api/v1/diff/{slug}", response_model=dict)
+def diff_versions(slug: str, v1: int = Query(None), v2: int = Query(None)) -> dict:
+    """Compare two versions of an article. Returns unified diff."""
+    revisions = store.list_revisions(slug)
+    if not revisions:
+        raise HTTPException(status_code=404, detail="No revisions found")
+    va = v1 or max(r.version for r in revisions)
+    vb = v2 or va - 1
+    r1 = next((r for r in revisions if r.version == va), None)
+    r2 = next((r for r in revisions if r.version == vb), None)
+    if not r1 or not r2:
+        raise HTTPException(status_code=404, detail="Version not found")
+    import difflib
+    diff = list(difflib.unified_diff(
+        r2.content.splitlines(), r1.content.splitlines(),
+        fromfile=f"v{r2.version}", tofile=f"v{r1.version}", lineterm=""
+    ))
+    return {"slug": slug, "v1": va, "v2": vb, "diff": diff}
+
+
+@app.post("/api/v1/pages/{slug}/talk", response_model=WikiPage)
+def create_talk_page(slug: str, payload: WikiPageCreate) -> WikiPage:
+    talk_slug = f"{slug}/talk"
+    payload.title = f"Talk: {payload.title}"
+    try:
+        return store.create_page(payload, slug_override=talk_slug)
+    except KeyError:
+        page = store.get_page(talk_slug)
+        return store.update_page(talk_slug, WikiPageUpdate(
+            content=payload.content, editor_id=payload.editor_id or "anonymous",
+            change_summary="Talk page updated"
+        ))
+
+
+@app.get("/api/v1/pages/{slug}/talk", response_model=WikiPage)
+def get_talk_page(slug: str) -> WikiPage:
+    talk_slug = f"{slug}/talk"
+    page = store.get_page(talk_slug)
+    if not page:
+        # Return empty talk page placeholder
+        return WikiPage(
+            slug=talk_slug, title=f"Talk: {slug}", content="*No discussions yet. Start a new topic.*",
+            category=None, tags=[], version=0, created_at=now_utc(), updated_at=now_utc()
+        )
+    return page
+
+
+# ── User/auth (basic) ──────────────────────────────────────────
+from pydantic import BaseModel as PydanticBase
+
+class UserCreate(PydanticBase):
+    username: str = Field(min_length=2, max_length=50)
+    password: str = Field(min_length=4)
+
+@app.post("/api/v1/auth/register")
+def register_user(payload: UserCreate) -> dict:
+    import hashlib
+    uid = hashlib.sha256(payload.username.encode()).hexdigest()[:12]
+    pw_hash = hashlib.sha256(payload.password.encode()).hexdigest()
+    store.create_user(uid, payload.username, pw_hash)
+    return {"user_id": uid, "username": payload.username}
+
+@app.post("/api/v1/auth/login")
+def login_user(payload: UserCreate) -> dict:
+    import hashlib
+    uid = hashlib.sha256(payload.username.encode()).hexdigest()[:12]
+    pw_hash = hashlib.sha256(payload.password.encode()).hexdigest()
+    user = store.get_user(uid)
+    if not user or user.get("password_hash") != pw_hash:
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+    return {"user_id": uid, "username": payload.username}
+
+
 @app.post(
     "/api/v1/integrations/nexus-cloud/register",
     response_model=NexusCloudRegisterResponse,
