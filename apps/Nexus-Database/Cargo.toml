@@ -2,6 +2,7 @@
 members = [
     "crates/database-core",
     "crates/database-server",
+    "crates/database-engine",
 ]
 resolver = "2"
 
