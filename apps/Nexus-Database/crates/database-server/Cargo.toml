@@ -32,6 +32,7 @@ chrono = { workspace = true }
 sha2 = { workspace = true }
 subtle = { workspace = true }
 reqwest = { workspace = true }
+database-engine = { path = "../database-engine" }
 
 [dev-dependencies]
 tokio-test = { workspace = true }

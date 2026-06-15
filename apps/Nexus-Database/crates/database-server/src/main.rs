@@ -1,4 +1,5 @@
 use axum::{routing::{delete, get, post}, Extension, Router, middleware};
+use database_core::ServerConfig;
 use tracing::info;
 
 mod auth;
@@ -77,6 +78,14 @@ async fn main() -> anyhow::Result<()> {
 
     let addr = config.listen_addr();
     info!("Nexus Database starting on http://{addr}");
+
+    // ── PostgreSQL wire protocol listener (port 5432) ──────────
+    tokio::spawn(async {
+        info!("PG wire protocol starting on 0.0.0.0:5432");
+        if let Err(e) = database_engine::pgwire::listen("0.0.0.0:5432").await {
+            tracing::error!("PG wire protocol error: {}", e);
+        }
+    });
 
     let listener = tokio::net::TcpListener::bind(&addr).await?;
 
