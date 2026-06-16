@@ -240,6 +240,17 @@ impl TableCatalog {
         Ok(())
     }
 
+    /// Change a column's data type.
+    pub fn alter_column_type(&self, table: &str, col_name: &str, new_type: ColumnType) -> Result<()> {
+        let mut tables = self.tables.write();
+        let meta = tables.get_mut(table)
+            .ok_or_else(|| EngineError::KeyNotFound(format!("Table {} not found", table)))?;
+        if let Some(pos) = meta.column_names.iter().position(|c| c == col_name) {
+            meta.column_types[pos] = new_type;
+        }
+        Ok(())
+    }
+
     /// Record a read operation on a table.
     pub fn record_read(&self, table: &str) {
         if let Some(pattern) = self.patterns.read().get(table) {

@@ -26,6 +26,7 @@ pub enum Statement {
         columns: Option<Vec<String>>,
         values: Vec<Vec<Literal>>,
         returning: Option<Vec<SelectColumn>>,
+        on_conflict: Option<OnConflict>,
     },
     Select {
         columns: Vec<SelectColumn>,
@@ -83,11 +84,18 @@ pub enum Statement {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub struct OnConflict {
+    pub column: String,
+    pub updates: Vec<(String, Literal)>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub enum AlterAction {
     AddColumn { name: String, col_type: ColumnType, column_def: String },
     DropColumn { name: String },
     RenameTable { new_name: String },
     RenameColumn { old_name: String, new_name: String },
+    AlterColumnType { name: String, new_type: ColumnType },
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -508,6 +516,20 @@ fn parse_insert(input: &str) -> std::result::Result<Statement, String> {
         values.push(literals);
     }
 
+    // Parse ON CONFLICT clause
+    let on_conflict = if let Some(pos) = input.to_uppercase().find("ON CONFLICT") {
+        let rest = input[pos + 11..].trim();
+        if let Some(paren_open) = rest.find('(') {
+            let col = rest[paren_open + 1..].split(')').next().unwrap_or("").trim().to_string();
+            let after_paren = &rest[paren_open + col.len() + 2..].trim();
+            let updates = if let Some(do_pos) = after_paren.to_uppercase().find("DO UPDATE SET") {
+                let set_part = &after_paren[do_pos + 13..].trim();
+                parse_set_pairs(set_part)
+            } else { Vec::new() };
+            Some(OnConflict { column: col, updates })
+        } else { None }
+    } else { None };
+
     // Parse RETURNING clause
     let returning = if let Some(pos) = input.to_uppercase().find("RETURNING") {
         let ret = input[pos + 9..].trim().trim_end_matches(';');
@@ -518,7 +540,17 @@ fn parse_insert(input: &str) -> std::result::Result<Statement, String> {
         }
     } else { None };
 
-    Ok(Statement::Insert { table: name, columns, values, returning })
+    Ok(Statement::Insert { table: name, columns, values, returning, on_conflict })
+}
+
+fn parse_set_pairs(s: &str) -> Vec<(String, Literal)> {
+    let s = s.trim().trim_end_matches(';');
+    s.split(',').filter_map(|pair| {
+        let parts: Vec<_> = pair.trim().splitn(2, '=').collect();
+        if parts.len() == 2 {
+            Some((parts[0].trim().to_string(), parse_literal(parts[1].trim())))
+        } else { None }
+    }).collect()
 }
 
 fn parse_select(input: &str) -> std::result::Result<Statement, String> {
@@ -808,7 +840,7 @@ pub fn execute(router: &DeltaMainRouter, stmt: &Statement) -> Result<ExecuteResu
             }
             Ok(ExecuteResult::CreateTable(name.clone()))
         }
-        Statement::Insert { table, ref columns, values, returning } => {
+        Statement::Insert { table, ref columns, values, returning, on_conflict } => {
             let meta = router.catalog().get_table(table)
                 .ok_or_else(|| crate::EngineError::KeyNotFound(format!("Table {} not found", table)))?;
 
@@ -828,6 +860,31 @@ pub fn execute(router: &DeltaMainRouter, stmt: &Statement) -> Result<ExecuteResu
                         col_data[target] = Some(val.to_bytes());
                     }
                 }
+
+                // Check ON CONFLICT — find existing row with matching unique value
+                if let Some(ref oc) = on_conflict {
+                    if let Some(conflict_idx) = meta.column_names.iter().position(|n| n == &oc.column) {
+                        let conflict_val = col_data.get(conflict_idx).and_then(|v| v.as_ref());
+                        if let Some(ref cv) = conflict_val {
+                            let colar = router.columnar.read();
+                            if let Ok(col_data_all) = colar.get_column(table, &oc.column) {
+                                if let Some(existing_idx) = col_data_all.iter().position(|v| v.as_deref() == Some(cv.as_slice())) {
+                                    drop(colar);
+                                    // UPDATE existing row
+                                    for (upd_col, upd_val) in &oc.updates {
+                                        let bytes = upd_val.to_bytes();
+                                        let _ = router.columnar.write().update_row(table, upd_col, existing_idx, Some(bytes.clone()));
+                                    }
+                                    last_row = Some(col_data); // approximate
+                                    count += 1;
+                                    continue;
+                                }
+                            }
+                            drop(colar);
+                        }
+                    }
+                }
+
                 last_row = Some(col_data.clone());
                 let row = Row::new(col_data.clone());
                 let row_idx = router.columnar.read().row_count(table);
@@ -1228,6 +1285,10 @@ pub fn execute(router: &DeltaMainRouter, stmt: &Statement) -> Result<ExecuteResu
                 AlterAction::RenameColumn { old_name, new_name } => {
                     router.catalog().rename_column(table, old_name, new_name)?;
                     router.columnar.write().rename_column(table, old_name, new_name);
+                    Ok(ExecuteResult::AlterTable(table.clone()))
+                }
+                AlterAction::AlterColumnType { name, new_type } => {
+                    router.catalog().alter_column_type(table, name, new_type.clone())?;
                     Ok(ExecuteResult::AlterTable(table.clone()))
                 }
             }
@@ -1878,6 +1939,17 @@ fn parse_alter_table(input: &str) -> std::result::Result<Statement, String> {
                     old_name: parts[0].trim_matches('"').to_string(),
                     new_name: parts[2].trim_matches('"').trim_end_matches(';').to_string(),
                 },
+            });
+        }
+    } else if upper.starts_with("ALTER COLUMN") {
+        let rest = upper.strip_prefix("ALTER COLUMN").unwrap_or("").trim();
+        let parts: Vec<_> = rest.split_whitespace().collect();
+        if parts.len() >= 3 && parts[1].to_uppercase() == "TYPE" {
+            let col_name = parts[0].trim_matches('"').to_string();
+            let new_type = ColumnType::from_str(parts[2]).unwrap_or(ColumnType::Text);
+            return Ok(Statement::AlterTable {
+                table,
+                action: AlterAction::AlterColumnType { name: col_name, new_type },
             });
         }
     }
