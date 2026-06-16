@@ -81,6 +81,10 @@ pub enum Statement {
     DropView {
         name: String,
     },
+    CreateTableAs {
+        name: String,
+        query: Box<Statement>,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -411,6 +415,13 @@ pub fn parse_sql(input: &str) -> std::result::Result<Statement, String> {
     let upper = trimmed.to_uppercase();
 
     if upper.starts_with("CREATE TABLE") {
+        // Check for CREATE TABLE ... AS SELECT
+        if let Some(as_pos) = upper.find(" AS SELECT") {
+            let table_name = trimmed[12..as_pos].trim().trim_matches('"').to_string();
+            let select_sql = &trimmed[as_pos + 4..].trim();
+            let query = Box::new(parse_select(select_sql)?);
+            return Ok(Statement::CreateTableAs { name: table_name, query });
+        }
         parse_create_table(trimmed)
     } else if upper.starts_with("INSERT INTO") {
         parse_insert(trimmed)
@@ -1521,6 +1532,24 @@ pub fn execute(router: &DeltaMainRouter, stmt: &Statement) -> Result<ExecuteResu
         Statement::DropView { name } => {
             router.views.write().remove(name);
             Ok(ExecuteResult::DropTable(name.clone()))
+        }
+        Statement::CreateTableAs { name, query } => {
+            let result = execute(router, query)?;
+            let (cols, rows) = result.to_pgwire_response();
+            let columns: Vec<(String, ColumnType)> = cols.iter().map(|c| (c.clone(), ColumnType::Text)).collect();
+            router.catalog().create_table(name, StorageEngine::Auto, columns.clone())?;
+            router.columnar.write().create_table(name, &columns);
+            // Insert each row
+            let meta = router.catalog().get_table(name).unwrap();
+            for row_vals in &rows {
+                let col_data: Vec<Option<Vec<u8>>> = row_vals.iter().map(|s| {
+                    if s == "NULL" { None } else { Some(s.clone().into_bytes()) }
+                }).collect();
+                let row = Row::new(col_data.clone());
+                router.insert(name, &row)?;
+                router.columnar.write().append_row(name, &col_data, &meta.column_types)?;
+            }
+            Ok(ExecuteResult::CreateTable(name.clone()))
         }
     }
 }

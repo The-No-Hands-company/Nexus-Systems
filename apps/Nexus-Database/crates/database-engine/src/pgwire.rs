@@ -855,7 +855,13 @@ async fn handle_catalog_query(stream: &mut TcpStream, query: &str, router: &Delt
         let mut rows: Vec<Vec<String>> = Vec::new();
         for (i, t) in tables.iter().enumerate() {
             let oid = (i + 1000).to_string();
-            rows.push(vec![oid, t.name.clone(), "2200".into(), "r".into(), "0".into(), "0".into()]);
+            let row_count = router.columnar.read().row_count(&t.name);
+            rows.push(vec![oid, t.name.clone(), "2200".into(), "r".into(), row_count.to_string(), "0".into()]);
+        }
+        // Include views
+        for (i, name) in router.views.read().keys().enumerate() {
+            let oid = (tables.len() + i + 1000).to_string();
+            rows.push(vec![oid, name.clone(), "2200".into(), "v".into(), "0".into(), "0".into()]);
         }
         send_query_result(stream, &cols, &rows).await?;
         stream.write_all(&build_cmd_complete("SELECT 1")).await?;
@@ -875,6 +881,7 @@ async fn handle_catalog_query(stream: &mut TcpStream, query: &str, router: &Delt
                     Some(crate::catalog::ColumnType::Float) => "701",
                     Some(crate::catalog::ColumnType::Boolean) => "16",
                     Some(crate::catalog::ColumnType::Jsonb) => "3802",
+                    Some(crate::catalog::ColumnType::Timestamp) => "1114",
                     _ => "25", // TEXT
                 };
                 rows.push(vec![oid.clone(), col.clone(), type_oid.into(), (j+1).to_string(), "f".into(), "-1".into()]);
@@ -908,6 +915,7 @@ async fn handle_catalog_query(stream: &mut TcpStream, query: &str, router: &Delt
             vec!["16".into(), "bool".into(), "1".into(), "0".into()],
             vec!["701".into(), "float8".into(), "8".into(), "0".into()],
             vec!["3802".into(), "jsonb".into(), "-1".into(), "0".into()],
+            vec!["1114".into(), "timestamp".into(), "8".into(), "0".into()],
         ];
         send_query_result(stream, &cols, &rows).await?;
         stream.write_all(&build_cmd_complete("SELECT 1")).await?;
