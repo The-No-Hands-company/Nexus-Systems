@@ -784,7 +784,7 @@ fn parse_aggregate(s: &str) -> Option<AggregateExpr> {
     };
 
     match func.as_str() {
-        "COUNT" | "SUM" | "AVG" | "MIN" | "MAX" => Some(AggregateExpr { func, column, alias }),
+        "COUNT" | "SUM" | "AVG" | "MIN" | "MAX" | "COUNT_DISTINCT" | "STRING_AGG" => Some(AggregateExpr { func, column, alias }),
         _ => None,
     }
 }
@@ -1071,6 +1071,38 @@ pub fn execute(router: &DeltaMainRouter, stmt: &Statement) -> Result<ExecuteResu
 
             // If aggregates or GROUP BY, use columnar aggregation engine
             if !aggregates.is_empty() || group_by.is_some() {
+                // Handle STRING_AGG specially (not in columnar engine)
+                let has_string_agg = aggregates.iter().any(|a| a.func == "STRING_AGG");
+                if has_string_agg && group_by.is_some() {
+                    let gb_col = group_by.as_ref().unwrap();
+                    let colar = router.columnar.read();
+                    let gb_data = colar.get_column(table, gb_col).unwrap_or_default();
+                    let mut groups: Vec<(String, Vec<Option<Vec<u8>>>)> = Vec::new();
+                    for (ri, gv) in gb_data.iter().enumerate() {
+                        let key = gv.as_ref().map(|b| String::from_utf8_lossy(b).to_string()).unwrap_or("NULL".into());
+                        if let Some(idx) = groups.iter().position(|(k, _)| k == &key) {
+                            if let Some(agg) = aggregates.first() {
+                                if let Ok(col_data) = colar.get_column(table, &agg.column) {
+                                    groups[idx].1.push(col_data.get(ri).cloned().flatten());
+                                }
+                            }
+                        } else {
+                            groups.push((key.clone(), Vec::new()));
+                            if let Some(agg) = aggregates.first() {
+                                if let Ok(col_data) = colar.get_column(table, &agg.column) {
+                                    groups.last_mut().unwrap().1.push(col_data.get(ri).cloned().flatten());
+                                }
+                            }
+                        }
+                    }
+                    let cols: Vec<String> = vec![gb_col.clone(), aggregates.first().map(|a| a.alias.clone().unwrap_or_else(|| "string_agg".into())).unwrap_or("string_agg".into())];
+                    let rows: Vec<Vec<String>> = groups.iter().map(|(key, vals)| {
+                        let joined = vals.iter().filter_map(|v| v.as_ref().map(|b| String::from_utf8_lossy(b).to_string())).collect::<Vec<_>>().join(", ");
+                        vec![key.clone(), joined]
+                    }).collect();
+                    return Ok(ExecuteResult::Select { columns: cols, rows });
+                }
+
                 let colar = router.columnar.read();
                 let mut states: Vec<_> = aggregates.iter().map(|a| {
                     let func = match a.func.as_str() {

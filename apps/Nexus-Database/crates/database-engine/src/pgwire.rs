@@ -995,6 +995,37 @@ async fn handle_catalog_query(stream: &mut TcpStream, query: &str, router: &Delt
     let upper = query.trim().to_uppercase();
     let tables = router.catalog().list_tables();
 
+    // information_schema.tables
+    if upper.contains("INFORMATION_SCHEMA.TABLES") || upper.contains("INFORMATION_SCHEMA.COLUMNS") {
+        if upper.contains("INFORMATION_SCHEMA.TABLES") {
+            let cols = vec!["table_catalog".into(), "table_schema".into(), "table_name".into(), "table_type".into()];
+            let mut rows = Vec::new();
+            for t in &tables {
+                rows.push(vec!["nexus".into(), "public".into(), t.name.clone(), "BASE TABLE".into()]);
+            }
+            send_query_result(stream, &cols, &rows).await?;
+        } else if upper.contains("INFORMATION_SCHEMA.COLUMNS") {
+            let cols = vec!["table_catalog".into(), "table_schema".into(), "table_name".into(), "column_name".into(), "data_type".into(), "is_nullable".into()];
+            let mut rows = Vec::new();
+            for t in &tables {
+                for (j, cn) in t.column_names.iter().enumerate() {
+                    let dt = match t.column_types.get(j) {
+                        Some(crate::catalog::ColumnType::Integer) => "integer",
+                        Some(crate::catalog::ColumnType::Float) => "double precision",
+                        Some(crate::catalog::ColumnType::Boolean) => "boolean",
+                        Some(crate::catalog::ColumnType::Timestamp) => "timestamp without time zone",
+                        _ => "text",
+                    };
+                    rows.push(vec!["nexus".into(), "public".into(), t.name.clone(), cn.clone(), dt.into(), "YES".into()]);
+                }
+            }
+            send_query_result(stream, &cols, &rows).await?;
+        }
+        stream.write_all(&build_cmd_complete("SELECT 1")).await?;
+        stream.write_all(&build_ready_for_query()).await?;
+        return Ok(());
+    }
+
     // pg_class — all relations (tables, indexes)
     if upper.contains("PG_CLASS") && !upper.contains("PG_NAMESPACE") && !upper.contains("PG_ATTRIBUTE") {
         let cols = vec!["oid".into(), "relname".into(), "relnamespace".into(), "relkind".into(), "reltuples".into(), "relpages".into()];
