@@ -867,8 +867,15 @@ fn parse_coalesce(s: &str) -> Option<(Vec<String>, Option<String>)> {
 }
 
 fn parse_fn_call(s: &str) -> Option<(String, String, Option<String>)> {
-    // UPPER(col), LOWER(col), LENGTH(col) [AS alias]
     let upper = s.to_uppercase().trim().to_string();
+    // Zero-arg functions: NOW(), CURRENT_TIMESTAMP
+    if upper.starts_with("NOW()") || upper.starts_with("CURRENT_TIMESTAMP") {
+        let func = if upper.starts_with("NOW") { "NOW" } else { "CURRENT_TIMESTAMP" };
+        let alias = if let Some(as_pos) = upper.find(" AS ") {
+            Some(s[as_pos + 4..].trim().to_string())
+        } else { None };
+        return Some((func.to_string(), "*".to_string(), alias));
+    }
     if let Some(paren_pos) = upper.find('(') {
         let func = upper[..paren_pos].trim().to_string();
         let inside = &s[paren_pos + 1..].trim();
@@ -880,7 +887,7 @@ fn parse_fn_call(s: &str) -> Option<(String, String, Option<String>)> {
         } else { None };
 
         match func.as_str() {
-            "UPPER" | "LOWER" | "LENGTH" | "SUBSTRING" => Some((func, col, alias)),
+            "UPPER" | "LOWER" | "LENGTH" | "SUBSTRING" | "TRIM" | "CONCAT" => Some((func, col, alias)),
             _ => None,
         }
     } else { None }
@@ -2033,6 +2040,38 @@ fn evaluate_select_column(sc: &SelectColumn, row: &Row, meta: &crate::catalog::T
             "NULL".into()
         }
         SelectColumn::FnCall { func, column, .. } => {
+            // Zero-arg functions
+            match func.as_str() {
+                "NOW" | "CURRENT_TIMESTAMP" => {
+                    let now = std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .unwrap_or_default()
+                        .as_secs() as i64;
+                    return format_value(&now.to_string().as_bytes(), &crate::catalog::ColumnType::Timestamp);
+                }
+                _ => {}
+            }
+            if column == "*" {
+                return match func.as_str() {
+                    "NOW" | "CURRENT_TIMESTAMP" => "0".into(),
+                    _ => "NULL".into(),
+                };
+            }
+            // Multi-arg functions handled by treating column as comma-separated args
+            if func == "CONCAT" {
+                let args: Vec<&str> = column.split(',').map(|s| s.trim().trim_matches('\'')).collect();
+                let mut result = String::new();
+                for arg in &args {
+                    if let Some(idx) = meta.column_names.iter().position(|n| n == arg) {
+                        if let Some(Some(val)) = row.columns.get(idx) {
+                            result.push_str(&String::from_utf8_lossy(val));
+                        }
+                    } else {
+                        result.push_str(arg);
+                    }
+                }
+                return result;
+            }
             if let Some(idx) = meta.column_names.iter().position(|n| n == column) {
                 if let Some(Some(val)) = row.columns.get(idx) {
                     let s = String::from_utf8_lossy(val).to_string();
@@ -2040,7 +2079,8 @@ fn evaluate_select_column(sc: &SelectColumn, row: &Row, meta: &crate::catalog::T
                         "UPPER" => s.to_uppercase(),
                         "LOWER" => s.to_lowercase(),
                         "LENGTH" => s.len().to_string(),
-                        "SUBSTRING" => s.chars().take(10).collect(), // simplified
+                        "SUBSTRING" => s.chars().take(10).collect(),
+                        "TRIM" => s.trim().to_string(),
                         _ => s,
                     };
                 }
