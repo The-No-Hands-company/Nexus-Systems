@@ -127,7 +127,7 @@ pub enum SelectColumn {
     CaseExpr { cases: Vec<CaseWhen>, else_result: Option<String>, alias: Option<String> },
     Coalesce { columns: Vec<String>, alias: Option<String> },
     FnCall { func: String, column: String, alias: Option<String> },
-    WindowFn { func: String, over_order: Vec<(String, OrderDir)>, over_partition: Option<String>, alias: Option<String> },
+    WindowFn { func: String, over_order: Vec<(String, OrderDir)>, over_partition: Option<String>, alias: Option<String>, lag_col: Option<String>, lag_offset: usize, lag_default: Option<String> },
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -621,7 +621,7 @@ fn parse_select(input: &str) -> std::result::Result<Statement, String> {
         } else if let Some(fncall) = parse_fn_call(col_part) {
             columns.push(SelectColumn::FnCall { func: fncall.0, column: fncall.1, alias: fncall.2 });
         } else if let Some(winfn) = parse_window_fn(col_part) {
-            columns.push(SelectColumn::WindowFn { func: winfn.0, over_order: winfn.1, over_partition: winfn.2, alias: winfn.3 });
+            columns.push(SelectColumn::WindowFn { func: winfn.0, over_order: winfn.1, over_partition: winfn.2, alias: winfn.3, lag_col: winfn.4, lag_offset: winfn.5, lag_default: winfn.6 });
         } else {
             columns.push(SelectColumn::Named(col_part.trim_matches('"').to_string()));
         }
@@ -886,15 +886,34 @@ fn parse_fn_call(s: &str) -> Option<(String, String, Option<String>)> {
     } else { None }
 }
 
-fn parse_window_fn(s: &str) -> Option<(String, Vec<(String, OrderDir)>, Option<String>, Option<String>)> {
-    // ROW_NUMBER() OVER (ORDER BY col), RANK() OVER (...)
+fn parse_window_fn(s: &str) -> Option<(String, Vec<(String, OrderDir)>, Option<String>, Option<String>, Option<String>, usize, Option<String>)> {
     let upper = s.to_uppercase().trim().to_string();
     let over_pos = upper.find("OVER")?;
     let func_part = &s[..over_pos].trim();
-    let (func, _) = func_part.split_once('(')?;
-    let func = func.trim();
-    if !matches!(func.to_uppercase().as_str(), "ROW_NUMBER" | "RANK" | "DENSE_RANK") {
+    let (func_with_args, _) = func_part.split_once(')')?;
+    let (func_name, args_str) = func_with_args.split_once('(')?;
+    let func_name = func_name.trim().to_uppercase();
+
+    if !matches!(func_name.as_str(), "ROW_NUMBER" | "RANK" | "DENSE_RANK" | "LAG" | "LEAD") {
         return None;
+    }
+
+    // Parse LAG/LEAD arguments: LAG(col, offset, default)
+    let mut lag_col: Option<String> = None;
+    let mut lag_offset: usize = 1;
+    let mut lag_default: Option<String> = None;
+    if func_name == "LAG" || func_name == "LEAD" {
+        let args_trimmed = args_str.trim();
+        let arg_parts: Vec<&str> = args_trimmed.split(',').map(|a| a.trim()).collect();
+        if !arg_parts.is_empty() {
+            lag_col = Some(arg_parts[0].trim_matches('\'').trim_matches('"').to_string());
+        }
+        if arg_parts.len() >= 2 {
+            lag_offset = arg_parts[1].parse().unwrap_or(1);
+        }
+        if arg_parts.len() >= 3 {
+            lag_default = Some(arg_parts[2].trim_matches('\'').trim_matches('"').to_string());
+        }
     }
 
     let over_rest = &s[over_pos + 4..].trim();
@@ -902,7 +921,6 @@ fn parse_window_fn(s: &str) -> Option<(String, Vec<(String, OrderDir)>, Option<S
     let paren_close = over_rest[paren_open..].find(')')?;
     let over_body = &over_rest[paren_open + 1..paren_open + paren_close].trim();
 
-    // Parse PARTITION BY and ORDER BY inside OVER
     let mut over_order: Vec<(String, OrderDir)> = Vec::new();
     let mut over_partition: Option<String> = None;
 
@@ -931,7 +949,7 @@ fn parse_window_fn(s: &str) -> Option<(String, Vec<(String, OrderDir)>, Option<S
         Some(after_over[as_pos + 4..].trim().to_string())
     } else { None };
 
-    Some((func.to_string(), over_order, over_partition, alias))
+    Some((func_name, over_order, over_partition, alias, lag_col, lag_offset, lag_default))
 }
 
 // ── Executor ─────────────────────────────────────────────────────
@@ -1379,7 +1397,7 @@ pub fn execute(router: &DeltaMainRouter, stmt: &Statement) -> Result<ExecuteResu
             // Compute window function values for each row (post-sort)
             let mut window_values: Vec<Vec<String>> = Vec::new();
             for wf_col in select_cols.iter() {
-                if let SelectColumn::WindowFn { func, over_order, over_partition, .. } = wf_col {
+                if let SelectColumn::WindowFn { func, over_order, over_partition, lag_col, lag_offset, lag_default, .. } = wf_col {
                     if !over_order.is_empty() || over_partition.is_some() {
                         // Sort a copy for window ordering (if different from main ORDER BY)
                         let mut sorted_rows: Vec<&Row> = sorted.iter().collect();
@@ -1410,33 +1428,89 @@ pub fn execute(router: &DeltaMainRouter, stmt: &Statement) -> Result<ExecuteResu
 
             // Compute window functions
             for (wi, wf_col) in select_cols.iter().enumerate() {
-                if let SelectColumn::WindowFn { func, over_order, .. } = wf_col {
+                if let SelectColumn::WindowFn { func, over_order, over_partition, lag_col, lag_offset, lag_default, .. } = wf_col {
                     let order_by_cols: Vec<(String, OrderDir)> = if !over_order.is_empty() { over_order.clone() } else { order_by.clone() };
                     let col_indices: Vec<usize> = order_by_cols.iter().filter_map(|(c, _)| meta.column_names.iter().position(|n| n == c)).collect();
+                    let part_idx: Option<usize> = over_partition.as_ref().and_then(|p| meta.column_names.iter().position(|n| n == p));
 
                     let mut vals: Vec<String> = Vec::new();
                     let mut rank = 0u64;
                     let mut dense_rank = 0u64;
+                    let mut row_num = 0u64;
                     let mut prev_key: Option<Vec<Option<&[u8]>>> = None;
+                    let mut prev_part: Option<&[u8]> = None;
 
-                    for (ri, row) in sorted.iter().enumerate() {
+                    // Collect row references with partition-aware sorting
+                    let mut wind_rows: Vec<(Option<Vec<u8>>, &Row)> = sorted.iter().map(|r| {
+                        let pk = part_idx.and_then(|pi| r.columns.get(pi).and_then(|c| c.clone()));
+                        (pk, r)
+                    }).collect();
+
+                    if let Some(ref _pi) = over_partition {
+                        wind_rows.sort_by(|(pa, ra), (pb, rb)| {
+                            let pk_cmp = pa.cmp(pb);
+                            if pk_cmp != std::cmp::Ordering::Equal { return pk_cmp; }
+                            for (col, dir) in &order_by_cols {
+                                if let Some(idx) = meta.column_names.iter().position(|c| c == col) {
+                                    let va = ra.columns.get(idx).and_then(|c| c.as_ref());
+                                    let vb = rb.columns.get(idx).and_then(|c| c.as_ref());
+                                    let cmp = match (va, vb) {
+                                        (None, None) => std::cmp::Ordering::Equal,
+                                        (None, Some(_)) => match dir { OrderDir::Asc => std::cmp::Ordering::Greater, OrderDir::Desc => std::cmp::Ordering::Less },
+                                        (Some(_), None) => match dir { OrderDir::Asc => std::cmp::Ordering::Less, OrderDir::Desc => std::cmp::Ordering::Greater },
+                                        (Some(a), Some(b)) => a.cmp(b),
+                                    };
+                                    if cmp != std::cmp::Ordering::Equal {
+                                        return match dir { OrderDir::Desc => cmp.reverse(), OrderDir::Asc => cmp };
+                                    }
+                                }
+                            }
+                            std::cmp::Ordering::Equal
+                        });
+                    }
+
+                    for (_pk, row) in &wind_rows {
+                        // Reset on partition boundary
+                        if let Some(ref pi) = over_partition {
+                            let current_part = part_idx.and_then(|idx| row.columns.get(idx)).and_then(|c| c.as_deref());
+                            if prev_part.is_some() && prev_part != current_part {
+                                rank = 0; dense_rank = 0; row_num = 0;
+                                prev_key = None;
+                            }
+                            prev_part = current_part;
+                        }
+
                         let current_key: Vec<Option<&[u8]>> = col_indices.iter().map(|&i| {
                             row.columns.get(i).and_then(|c: &Option<Vec<u8>>| c.as_deref())
                         }).collect();
 
+                        row_num += 1;
                         match func.as_str() {
-                            "ROW_NUMBER" => vals.push((ri + 1).to_string()),
+                            "ROW_NUMBER" => vals.push(row_num.to_string()),
                             "RANK" => {
-                                if prev_key.as_ref() != Some(&current_key) {
-                                    rank = ri as u64 + 1;
-                                }
+                                if prev_key.as_ref() != Some(&current_key) { rank = row_num; }
                                 vals.push(rank.to_string());
                             }
                             "DENSE_RANK" => {
-                                if prev_key.as_ref() != Some(&current_key) {
-                                    dense_rank += 1;
-                                }
+                                if prev_key.as_ref() != Some(&current_key) { dense_rank += 1; }
                                 vals.push(dense_rank.to_string());
+                            }
+                            "LAG" | "LEAD" => {
+                                let col_idx = lag_col.as_ref().or_else(|| over_partition.as_ref())
+                                    .and_then(|c| meta.column_names.iter().position(|n| n == c));
+                                let is_lead = func.as_str() == "LEAD";
+                                let offset = if is_lead { *lag_offset as isize } else { -(*lag_offset as isize) };
+                                let target_idx = vals.len() as isize + offset;
+                                let val = if target_idx >= 0 && target_idx < wind_rows.len() as isize {
+                                    let target_row = wind_rows[target_idx as usize].1;
+                                    col_idx.and_then(|ci| target_row.columns.get(ci))
+                                        .and_then(|c| c.as_ref())
+                                        .map(|b| String::from_utf8_lossy(b).to_string())
+                                        .unwrap_or_else(|| "NULL".into())
+                                } else {
+                                    lag_default.clone().unwrap_or_else(|| "NULL".into())
+                                };
+                                vals.push(val);
                             }
                             _ => vals.push("0".into()),
                         }
