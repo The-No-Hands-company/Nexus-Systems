@@ -276,10 +276,33 @@ async fn handle_query_with_router(stream: &mut TcpStream, query: &str, router: &
         router.undo_stack.write().clear();
     }
 
-    // Handle EXPLAIN — show query plan without executing
+    // Handle EXPLAIN [ANALYZE] — show query plan, optionally with execution
     if upper.starts_with("EXPLAIN") {
         let inner = query.trim().strip_prefix("EXPLAIN").unwrap_or(query).trim();
+        let analyze = inner.to_uppercase().starts_with("ANALYZE");
+        let inner = if analyze { inner.strip_prefix("ANALYZE").unwrap_or(inner).trim() } else { inner };
+
+        let start = std::time::Instant::now();
         let plan = generate_explain_plan(inner, router);
+
+        if analyze {
+            // Execute the query and capture timing
+            if let Ok(stmt) = crate::sql::parse_sql(inner) {
+                if let Ok(result) = crate::sql::execute(router, &stmt) {
+                    let elapsed = start.elapsed();
+                    let (_, rows) = result.to_pgwire_response();
+                    plan.iter().for_each(|p| {});
+                    let mut full_plan = plan.clone();
+                    full_plan.push(vec![format!("Actual Rows: {}", rows.len())]);
+                    full_plan.push(vec![format!("Execution Time: {:.3} ms", elapsed.as_secs_f64() * 1000.0)]);
+                    send_query_result(stream, &vec!["QUERY PLAN".into()], &full_plan).await?;
+                    stream.write_all(&build_cmd_complete("EXPLAIN")).await?;
+                    stream.write_all(&build_ready_for_query()).await?;
+                    return Ok(());
+                }
+            }
+        }
+
         send_query_result(stream, &vec!["QUERY PLAN".into()], &plan).await?;
         stream.write_all(&build_cmd_complete("EXPLAIN")).await?;
         stream.write_all(&build_ready_for_query()).await?;
@@ -351,7 +374,11 @@ async fn handle_query_with_router(stream: &mut TcpStream, query: &str, router: &
                 return Ok(());
             }
             Err(e) => {
-                stream.write_all(&build_error("42P01", &format!("Error: {}", e))).await?;
+                let code = if e.to_string().contains("not found") || e.to_string().contains("KeyNotFound") { "42P01" }
+                else if e.to_string().contains("Unsupported") { "0A000" }
+                else if e.to_string().contains("violat") || e.to_string().contains("constraint") { "23514" }
+                else { "42601" };
+                stream.write_all(&build_error(code, &e.to_string())).await?;
                 stream.write_all(&build_ready_for_query()).await?;
                 return Ok(());
             }
@@ -828,6 +855,9 @@ fn generate_explain_plan(query: &str, router: &DeltaMainRouter) -> Vec<Vec<Strin
             crate::sql::Statement::DropView { name } => {
                 plan.push(vec![format!("Drop View {}", name)]);
             }
+            crate::sql::Statement::CreateTableAs { name, .. } => {
+                plan.push(vec![format!("Create Table As {}", name)]);
+            }
             _ => {
                 plan.push(vec![format!("Query: {}", &query[..query.len().min(60)])]);
             }
@@ -942,6 +972,30 @@ async fn handle_catalog_query(stream: &mut TcpStream, query: &str, router: &Delt
         send_query_result(stream, &cols, &rows).await?;
         stream.write_all(&build_cmd_complete("SELECT 1")).await?;
         stream.write_all(&build_ready_for_query()).await?;
+    }
+
+    // \d tablename — describe specific table
+    if upper.starts_with("\\D ") && !upper.starts_with("\\DT") {
+        let table_name = upper[3..].trim().trim_matches('"').to_string();
+        if let Some(meta) = router.catalog().get_table(&table_name) {
+            let cols = vec!["Column".into(), "Type".into(), "Nullable".into(), "Default".into()];
+            let mut rows = Vec::new();
+            for (i, cn) in meta.column_names.iter().enumerate() {
+                let col_type = format!("{:?}", meta.column_types.get(i).unwrap_or(&crate::catalog::ColumnType::Text));
+                let nullable = "YES".to_string();
+                let default = "".to_string();
+                rows.push(vec![cn.clone(), col_type, nullable, default]);
+            }
+            // Show indexes
+            let idx_list = router.indexes.list_indexes(&table_name);
+            for idx in &idx_list {
+                rows.push(vec![format!("[idx:{}]", idx.name), idx.columns.join(","), "".into(), "".into()]);
+            }
+            send_query_result(stream, &cols, &rows).await?;
+            stream.write_all(&build_cmd_complete("SELECT 1")).await?;
+            stream.write_all(&build_ready_for_query()).await?;
+            return Ok(());
+        }
     }
 
     Ok(())
