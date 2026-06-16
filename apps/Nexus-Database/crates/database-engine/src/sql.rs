@@ -887,7 +887,7 @@ fn parse_fn_call(s: &str) -> Option<(String, String, Option<String>)> {
         } else { None };
 
         match func.as_str() {
-            "UPPER" | "LOWER" | "LENGTH" | "SUBSTRING" | "TRIM" | "CONCAT" => Some((func, col, alias)),
+            "UPPER" | "LOWER" | "LENGTH" | "SUBSTRING" | "TRIM" | "CONCAT" | "ABS" | "ROUND" | "CEIL" | "FLOOR" | "POWER" | "EXTRACT" => Some((func, col, alias)),
             _ => None,
         }
     } else { None }
@@ -2081,6 +2081,43 @@ fn evaluate_select_column(sc: &SelectColumn, row: &Row, meta: &crate::catalog::T
                         "LENGTH" => s.len().to_string(),
                         "SUBSTRING" => s.chars().take(10).collect(),
                         "TRIM" => s.trim().to_string(),
+                        "ABS" => s.parse::<f64>().map(|n| n.abs().to_string()).unwrap_or(s),
+                        "ROUND" => s.parse::<f64>().map(|n| n.round().to_string()).unwrap_or(s),
+                        "CEIL" => s.parse::<f64>().map(|n| n.ceil().to_string()).unwrap_or(s),
+                        "FLOOR" => s.parse::<f64>().map(|n| n.floor().to_string()).unwrap_or(s),
+                        "POWER" => {
+                            if let Some((base, exp)) = s.split_once(',') {
+                                let b = base.trim().parse::<f64>().unwrap_or(0.0);
+                                let e = exp.trim().parse::<f64>().unwrap_or(0.0);
+                                b.powf(e).to_string()
+                            } else { s }
+                        }
+                        "EXTRACT" => {
+                            // column contains "YEAR FROM col_name"
+                            if let Some((part, from_col)) = s.to_uppercase().split_once("FROM") {
+                                let col_name = from_col.trim().trim_matches('\'').trim_matches('"');
+                                if let Some(ci) = meta.column_names.iter().position(|n| n == col_name) {
+                                    if let Some(Some(cv)) = row.columns.get(ci) {
+                                        let ts_str = format_value(cv, &crate::catalog::ColumnType::Timestamp);
+                                        // Parse ISO timestamp: YYYY-MM-DD HH:MM:SS
+                                        if ts_str.len() >= 10 {
+                                            let y: i64 = ts_str[0..4].parse().unwrap_or(0);
+                                            let m: i64 = ts_str[5..7].parse().unwrap_or(0);
+                                            let d: i64 = ts_str[8..10].parse().unwrap_or(0);
+                                            let h: i64 = if ts_str.len() >= 13 { ts_str[11..13].parse().unwrap_or(0) } else { 0 };
+                                            return match part.trim() {
+                                                "YEAR" => y.to_string(),
+                                                "MONTH" => m.to_string(),
+                                                "DAY" => d.to_string(),
+                                                "HOUR" => h.to_string(),
+                                                _ => "0".to_string(),
+                                            };
+                                        }
+                                    }
+                                }
+                            }
+                            "0".to_string()
+                        }
                         _ => s,
                     };
                 }

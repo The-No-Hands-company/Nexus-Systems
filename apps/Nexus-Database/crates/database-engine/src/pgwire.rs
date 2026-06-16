@@ -334,6 +334,13 @@ async fn handle_query_with_router(stream: &mut TcpStream, query: &str, router: &
         return Ok(());
     }
 
+    // CREATE SCHEMA / DROP SCHEMA — acknowledged
+    if upper.starts_with("CREATE SCHEMA") || upper.starts_with("DROP SCHEMA") {
+        stream.write_all(&build_cmd_complete("CREATE SCHEMA")).await?;
+        stream.write_all(&build_ready_for_query()).await?;
+        return Ok(());
+    }
+
     // Handle SET/SHOW configuration
     if upper.starts_with("SET ") {
         let rest = upper.strip_prefix("SET ").unwrap_or("").trim();
