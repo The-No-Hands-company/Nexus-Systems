@@ -95,6 +95,12 @@ impl ColumnStore {
         }
     }
 
+    /// Drop an entire table from the columnar store.
+    pub fn drop_table(&self, table: &str) {
+        self.tables.write().remove(table);
+        self.row_counts.write().remove(table);
+    }
+
     /// Append a row to the columnar store.
     pub fn append_row(&self, table: &str, values: &[Option<Vec<u8>>], column_types: &[ColumnType]) -> Result<()> {
         let mut tables = self.tables.write();

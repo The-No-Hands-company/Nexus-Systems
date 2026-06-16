@@ -34,6 +34,7 @@ pub enum Statement {
         group_by: Option<String>,
         aggregates: Vec<AggregateExpr>,
         join: Option<JoinClause>,
+        distinct: bool,
     },
     Update {
         table: String,
@@ -50,6 +51,14 @@ pub enum Statement {
     AlterTable {
         table: String,
         action: AlterAction,
+    },
+    DropTable {
+        table: String,
+        if_exists: bool,
+    },
+    DropIndex {
+        name: String,
+        if_exists: bool,
     },
 }
 
@@ -192,6 +201,10 @@ pub fn parse_sql(input: &str) -> std::result::Result<Statement, String> {
         parse_truncate(trimmed)
     } else if upper.starts_with("ALTER TABLE") {
         parse_alter_table(trimmed)
+    } else if upper.starts_with("DROP TABLE") {
+        parse_drop_table(trimmed)
+    } else if upper.starts_with("DROP INDEX") {
+        parse_drop_index(trimmed)
     } else {
         Err(format!("Unsupported SQL: {}", &trimmed[..trimmed.len().min(50)]))
     }
@@ -270,6 +283,13 @@ fn parse_insert(input: &str) -> std::result::Result<Statement, String> {
 
 fn parse_select(input: &str) -> std::result::Result<Statement, String> {
     let rest = input.strip_prefix("SELECT").unwrap_or(input).trim();
+
+    // Check for DISTINCT
+    let (distinct, rest) = if rest.to_uppercase().starts_with("DISTINCT ") {
+        (true, rest.strip_prefix("DISTINCT").unwrap_or(rest).trim())
+    } else {
+        (false, rest)
+    };
 
     // Parse columns — may include aggregates like COUNT(col), SUM(col)
     let (columns_str, rest) = rest.split_once("FROM").ok_or("Expected FROM")?;
@@ -406,7 +426,7 @@ fn parse_select(input: &str) -> std::result::Result<Statement, String> {
         }
     }
 
-    Ok(Statement::Select { columns, table, where_clause, order_by, limit, group_by, aggregates, join })
+    Ok(Statement::Select { columns, table, where_clause, order_by, limit, group_by, aggregates, join, distinct })
 }
 
 /// Parse aggregate expression like COUNT(*), SUM(price), AVG(amount)
@@ -469,7 +489,7 @@ pub fn execute(router: &DeltaMainRouter, stmt: &Statement) -> Result<ExecuteResu
             }
             Ok(ExecuteResult::Insert(count))
         }
-        Statement::Select { columns, table, where_clause, order_by, limit, group_by, aggregates, join } => {
+        Statement::Select { columns, table, where_clause, order_by, limit, group_by, aggregates, join, distinct } => {
             let meta = router.catalog().get_table(table)
                 .ok_or_else(|| crate::EngineError::KeyNotFound(format!("Table {} not found", table)))?;
 
@@ -630,6 +650,10 @@ pub fn execute(router: &DeltaMainRouter, stmt: &Statement) -> Result<ExecuteResu
                     result_rows.truncate(*n);
                 }
 
+                if *distinct {
+                    dedup_rows(&mut result_rows);
+                }
+
                 return Ok(ExecuteResult::Select { columns: result_cols, rows: result_rows });
             }
 
@@ -705,7 +729,7 @@ pub fn execute(router: &DeltaMainRouter, stmt: &Statement) -> Result<ExecuteResu
                 .map(|&i| meta.column_names[i].clone())
                 .collect();
 
-            let result_rows: Vec<Vec<String>> = sorted.iter().map(|row| {
+            let mut result_rows: Vec<Vec<String>> = sorted.iter().map(|row| {
                 col_indices.iter().map(|&i| {
                     row.columns.get(i)
                         .and_then(|c| c.as_ref())
@@ -713,6 +737,10 @@ pub fn execute(router: &DeltaMainRouter, stmt: &Statement) -> Result<ExecuteResu
                         .unwrap_or_else(|| "NULL".to_string())
                 }).collect()
             }).collect();
+
+            if *distinct {
+                dedup_rows(&mut result_rows);
+            }
 
             Ok(ExecuteResult::Select { columns: result_cols, rows: result_rows })
         }
@@ -835,6 +863,24 @@ pub fn execute(router: &DeltaMainRouter, stmt: &Statement) -> Result<ExecuteResu
             router.columnar.write().truncate_table(table);
             Ok(ExecuteResult::Truncate(table.clone()))
         }
+        Statement::DropTable { table, if_exists } => {
+            if router.catalog().get_table(table).is_none() && *if_exists {
+                return Ok(ExecuteResult::DropTable(table.clone()));
+            }
+            router.catalog().drop_table(table)?;
+            router.columnar.write().drop_table(table);
+            // Remove views referencing this table
+            router.views.write().retain(|_, sql| !sql.to_uppercase().contains(&format!("FROM {}", table.to_uppercase())));
+            Ok(ExecuteResult::DropTable(table.clone()))
+        }
+        Statement::DropIndex { name, if_exists } => {
+            let all_indexes = router.indexes.list_all();
+            if !all_indexes.iter().any(|m| m.name == *name) && *if_exists {
+                return Ok(ExecuteResult::DropIndex(name.clone()));
+            }
+            router.indexes.drop_index(name)?;
+            Ok(ExecuteResult::DropIndex(name.clone()))
+        }
     }
 }
 
@@ -847,6 +893,8 @@ pub enum ExecuteResult {
     Delete(usize),
     Truncate(String),
     AlterTable(String),
+    DropTable(String),
+    DropIndex(String),
 }
 
 impl ExecuteResult {
@@ -859,6 +907,8 @@ impl ExecuteResult {
             Self::Delete(count) => (vec!["rows".into()], vec![vec![format!("DELETE {}", count)]]),
             Self::Truncate(table) => (vec!["result".into()], vec![vec![format!("TRUNCATE TABLE {}", table)]]),
             Self::AlterTable(table) => (vec!["result".into()], vec![vec![format!("ALTER TABLE {}", table)]]),
+            Self::DropTable(table) => (vec!["result".into()], vec![vec![format!("DROP TABLE {}", table)]]),
+            Self::DropIndex(name) => (vec!["result".into()], vec![vec![format!("DROP INDEX {}", name)]]),
         }
     }
 }
@@ -878,6 +928,12 @@ fn find_matching_paren(s: &str) -> std::result::Result<usize, String> {
         }
     }
     Err("Unmatched parenthesis".into())
+}
+
+/// Remove duplicate rows (keeps first occurrence).
+fn dedup_rows(rows: &mut Vec<Vec<String>>) {
+    let mut seen = std::collections::HashSet::new();
+    rows.retain(|row| seen.insert(row.clone()));
 }
 
 fn split_by_comma(s: &str) -> Vec<String> {
@@ -1056,6 +1112,28 @@ fn parse_alter_table(input: &str) -> std::result::Result<Statement, String> {
         });
     }
     Err(format!("Unsupported ALTER TABLE: {}", &upper[..upper.len().min(40)]))
+}
+
+fn parse_drop_table(input: &str) -> std::result::Result<Statement, String> {
+    let rest = input.strip_prefix("DROP TABLE").unwrap_or(input).trim();
+    let (rest, if_exists) = if rest.to_uppercase().starts_with("IF EXISTS") {
+        (rest.strip_prefix("IF EXISTS").unwrap_or(rest).trim(), true)
+    } else {
+        (rest, false)
+    };
+    let table = rest.trim_matches('"').trim_end_matches(';').to_string();
+    Ok(Statement::DropTable { table, if_exists })
+}
+
+fn parse_drop_index(input: &str) -> std::result::Result<Statement, String> {
+    let rest = input.strip_prefix("DROP INDEX").unwrap_or(input).trim();
+    let (rest, if_exists) = if rest.to_uppercase().starts_with("IF EXISTS") {
+        (rest.strip_prefix("IF EXISTS").unwrap_or(rest).trim(), true)
+    } else {
+        (rest, false)
+    };
+    let name = rest.trim_matches('"').trim_end_matches(';').to_string();
+    Ok(Statement::DropIndex { name, if_exists })
 }
 
 fn parse_where(input: &str) -> Option<WhereClause> {

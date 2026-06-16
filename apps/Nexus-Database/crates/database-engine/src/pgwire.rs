@@ -239,6 +239,8 @@ async fn handle_query_with_router(stream: &mut TcpStream, query: &str, router: &
                     crate::sql::ExecuteResult::Delete(n) => &format!("DELETE {}", n),
                     crate::sql::ExecuteResult::Truncate(_) => "TRUNCATE TABLE",
                     crate::sql::ExecuteResult::AlterTable(_) => "ALTER TABLE",
+                    crate::sql::ExecuteResult::DropTable(_) => "DROP TABLE",
+                    crate::sql::ExecuteResult::DropIndex(_) => "DROP INDEX",
                 };
                 stream.write_all(&build_cmd_complete(tag)).await?;
                 stream.write_all(&build_ready_for_query()).await?;
@@ -635,6 +637,12 @@ fn generate_explain_plan(query: &str, router: &DeltaMainRouter) -> Vec<Vec<Strin
             crate::sql::Statement::AlterTable { table, action } => {
                 plan.push(vec![format!("Alter Table {}", table)]);
                 plan.push(vec![format!("  Action: {:?}", action)]);
+            }
+            crate::sql::Statement::DropTable { table, .. } => {
+                plan.push(vec![format!("Drop Table {}", table)]);
+            }
+            crate::sql::Statement::DropIndex { name, .. } => {
+                plan.push(vec![format!("Drop Index {}", name)]);
             }
             crate::sql::Statement::CreateTable { name, columns, engine, .. } => {
                 plan.push(vec![format!("Create Table {}", name)]);

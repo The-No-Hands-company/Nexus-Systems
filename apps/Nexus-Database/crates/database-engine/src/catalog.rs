@@ -208,6 +208,15 @@ impl TableCatalog {
         Ok(())
     }
 
+    /// Drop a table entirely.
+    pub fn drop_table(&self, name: &str) -> Result<()> {
+        let mut tables = self.tables.write();
+        tables.remove(name)
+            .ok_or_else(|| EngineError::KeyNotFound(format!("Table {} not found", name)))?;
+        self.patterns.write().remove(name);
+        Ok(())
+    }
+
     /// Record a read operation on a table.
     pub fn record_read(&self, table: &str) {
         if let Some(pattern) = self.patterns.read().get(table) {
