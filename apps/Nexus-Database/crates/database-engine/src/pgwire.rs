@@ -306,6 +306,13 @@ async fn handle_query_with_router(stream: &mut TcpStream, query: &str, router: &
         return Ok(());
     }
 
+    // VACUUM / ANALYZE — no-op for ORM compatibility
+    if upper.starts_with("VACUUM") || upper.starts_with("ANALYZE") {
+        stream.write_all(&build_cmd_complete("VACUUM")).await?;
+        stream.write_all(&build_ready_for_query()).await?;
+        return Ok(());
+    }
+
     // Handle SET/SHOW configuration
     if upper.starts_with("SET ") {
         let rest = upper.strip_prefix("SET ").unwrap_or("").trim();

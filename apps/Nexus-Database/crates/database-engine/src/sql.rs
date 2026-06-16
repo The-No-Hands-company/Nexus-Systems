@@ -92,6 +92,10 @@ pub enum Statement {
         name: String,
         query: Box<Statement>,
     },
+    Values {
+        rows: Vec<Vec<Literal>>,
+        columns: Vec<String>,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -468,6 +472,8 @@ pub fn parse_sql(input: &str) -> std::result::Result<Statement, String> {
             return Ok(Statement::Except { left, right });
         }
         parse_select(trimmed)
+    } else if upper.starts_with("VALUES") {
+        parse_values_sql(trimmed)
     } else if upper.starts_with("TRUNCATE") {
         parse_truncate(trimmed)
     } else if upper.starts_with("ALTER TABLE") {
@@ -1751,6 +1757,20 @@ pub fn execute(router: &DeltaMainRouter, stmt: &Statement) -> Result<ExecuteResu
             }
             Ok(ExecuteResult::CreateTable(name.clone()))
         }
+        Statement::Values { rows, columns } => {
+            let cols: Vec<String> = columns.clone();
+            let string_rows: Vec<Vec<String>> = rows.iter().map(|r| {
+                r.iter().map(|v| match v {
+                    Literal::Null => "NULL".into(),
+                    Literal::Text(s) => s.clone(),
+                    Literal::Integer(i) => i.to_string(),
+                    Literal::Float(f) => f.to_string(),
+                    Literal::Boolean(b) => b.to_string(),
+                    Literal::Timestamp(ts) => ts.to_string(),
+                }).collect()
+            }).collect();
+            Ok(ExecuteResult::Select { columns: cols, rows: string_rows })
+        }
     }
 }
 
@@ -2131,6 +2151,20 @@ fn parse_set_op(input: &str, pos: usize, keyword: &str) -> std::result::Result<(
     let left = Box::new(parse_select(left_sql)?);
     let right = Box::new(parse_select(right_sql)?);
     Ok((left, right, all))
+}
+
+fn parse_values_sql(input: &str) -> std::result::Result<Statement, String> {
+    // VALUES (v1, v2), (v3, v4), ...
+    let rest = input.strip_prefix("VALUES").unwrap_or(input).trim();
+    let mut rows = Vec::new();
+    let mut col_count = 0;
+    for group in split_paren_groups(rest) {
+        let literals: Vec<Literal> = group.split(',').map(|v| parse_literal(v.trim())).collect();
+        if col_count == 0 { col_count = literals.len(); }
+        rows.push(literals);
+    }
+    let columns: Vec<String> = (1..=col_count).map(|i| format!("column{}", i)).collect();
+    Ok(Statement::Values { rows, columns })
 }
 
 fn parse_truncate(input: &str) -> std::result::Result<Statement, String> {
