@@ -217,6 +217,27 @@ impl TableCatalog {
         Ok(())
     }
 
+    /// Rename a table.
+    pub fn rename_table(&self, old_name: &str, new_name: &str) -> Result<()> {
+        let mut tables = self.tables.write();
+        let mut meta = tables.remove(old_name)
+            .ok_or_else(|| EngineError::KeyNotFound(format!("Table {} not found", old_name)))?;
+        meta.name = new_name.to_string();
+        tables.insert(new_name.to_string(), meta);
+        Ok(())
+    }
+
+    /// Rename a column.
+    pub fn rename_column(&self, table: &str, old_name: &str, new_name: &str) -> Result<()> {
+        let mut tables = self.tables.write();
+        let meta = tables.get_mut(table)
+            .ok_or_else(|| EngineError::KeyNotFound(format!("Table {} not found", table)))?;
+        if let Some(pos) = meta.column_names.iter().position(|c| c == old_name) {
+            meta.column_names[pos] = new_name.to_string();
+        }
+        Ok(())
+    }
+
     /// Record a read operation on a table.
     pub fn record_read(&self, table: &str) {
         if let Some(pattern) = self.patterns.read().get(table) {

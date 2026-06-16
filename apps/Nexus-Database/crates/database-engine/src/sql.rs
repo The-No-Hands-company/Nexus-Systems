@@ -35,6 +35,7 @@ pub enum Statement {
         aggregates: Vec<AggregateExpr>,
         join: Option<JoinClause>,
         distinct: bool,
+        having: Option<WhereClause>,
     },
     Update {
         table: String,
@@ -66,6 +67,8 @@ pub enum Statement {
 pub enum AlterAction {
     AddColumn { name: String, col_type: ColumnType, column_def: String },
     DropColumn { name: String },
+    RenameTable { new_name: String },
+    RenameColumn { old_name: String, new_name: String },
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -312,6 +315,7 @@ fn parse_select(input: &str) -> std::result::Result<Statement, String> {
     let mut order_by = None;
     let mut limit: Option<usize> = None;
     let mut group_by: Option<String> = None;
+    let mut having: Option<WhereClause> = None;
     let mut join: Option<JoinClause> = None;
 
     // Check for JOIN clause
@@ -401,6 +405,19 @@ fn parse_select(input: &str) -> std::result::Result<Statement, String> {
         group_by = Some(gb_col);
     }
 
+    // Parse HAVING
+    if rest.to_uppercase().contains("HAVING") {
+        let having_pos = rest.to_uppercase().find("HAVING").unwrap();
+        let having_rest = rest[having_pos + 6..].trim();
+        let parts: Vec<_> = having_rest.split_whitespace().collect();
+        if parts.len() >= 3 {
+            let col = parts[0].to_string();
+            let op = match parts[1] { "=" => CompareOp::Eq, "!=" | "<>" => CompareOp::Neq, ">" => CompareOp::Gt, "<" => CompareOp::Lt, _ => CompareOp::Eq };
+            let val = parse_literal(parts[2].trim_matches('\'').trim_matches('"'));
+            having = Some(WhereClause { column: col, op, value: val });
+        }
+    }
+
     // Parse ORDER BY
     if rest.to_uppercase().contains("ORDER BY") {
         let ob_pos = rest.to_uppercase().find("ORDER BY").unwrap();
@@ -426,7 +443,7 @@ fn parse_select(input: &str) -> std::result::Result<Statement, String> {
         }
     }
 
-    Ok(Statement::Select { columns, table, where_clause, order_by, limit, group_by, aggregates, join, distinct })
+    Ok(Statement::Select { columns, table, where_clause, order_by, limit, group_by, aggregates, join, distinct, having })
 }
 
 /// Parse aggregate expression like COUNT(*), SUM(price), AVG(amount)
@@ -489,7 +506,7 @@ pub fn execute(router: &DeltaMainRouter, stmt: &Statement) -> Result<ExecuteResu
             }
             Ok(ExecuteResult::Insert(count))
         }
-        Statement::Select { columns, table, where_clause, order_by, limit, group_by, aggregates, join, distinct } => {
+        Statement::Select { columns, table, where_clause, order_by, limit, group_by, aggregates, join, distinct, having } => {
             let meta = router.catalog().get_table(table)
                 .ok_or_else(|| crate::EngineError::KeyNotFound(format!("Table {} not found", table)))?;
 
@@ -509,15 +526,21 @@ pub fn execute(router: &DeltaMainRouter, stmt: &Statement) -> Result<ExecuteResu
                 }).collect();
 
                 if let Some(gb_col) = group_by {
-                    let rows = crate::columnar::execute_group_by(&colar, table, gb_col, &mut states)?;
+                    let mut rows = crate::columnar::execute_group_by(&colar, table, gb_col, &mut states)?;
                     let cols: Vec<String> = std::iter::once(gb_col.clone())
                         .chain(aggregates.iter().map(|a| a.alias.clone().unwrap_or_else(|| format!("{}({})", a.func, a.column))))
                         .collect();
+                    if let Some(having_clause) = having {
+                        apply_having(&cols, &mut rows, having_clause);
+                    }
                     return Ok(ExecuteResult::Select { columns: cols, rows });
                 } else {
-                    let row = crate::columnar::execute_aggregate(&colar, table, &mut states)?;
+                    let mut rows = vec![crate::columnar::execute_aggregate(&colar, table, &mut states)?];
                     let cols: Vec<String> = aggregates.iter().map(|a| a.alias.clone().unwrap_or_else(|| format!("{}({})", a.func, a.column))).collect();
-                    return Ok(ExecuteResult::Select { columns: cols, rows: vec![row] });
+                    if let Some(having_clause) = having {
+                        apply_having(&cols, &mut rows, having_clause);
+                    }
+                    return Ok(ExecuteResult::Select { columns: cols, rows });
                 }
             }
 
@@ -762,6 +785,16 @@ pub fn execute(router: &DeltaMainRouter, stmt: &Statement) -> Result<ExecuteResu
                     router.columnar.write().drop_column(table, name);
                     Ok(ExecuteResult::AlterTable(table.clone()))
                 }
+                AlterAction::RenameTable { new_name } => {
+                    router.catalog().rename_table(table, new_name)?;
+                    router.columnar.write().rename_table(table, new_name);
+                    Ok(ExecuteResult::AlterTable(new_name.clone()))
+                }
+                AlterAction::RenameColumn { old_name, new_name } => {
+                    router.catalog().rename_column(table, old_name, new_name)?;
+                    router.columnar.write().rename_column(table, old_name, new_name);
+                    Ok(ExecuteResult::AlterTable(table.clone()))
+                }
             }
         }
         Statement::Update { table, sets, where_clause } => {
@@ -928,6 +961,29 @@ fn find_matching_paren(s: &str) -> std::result::Result<usize, String> {
         }
     }
     Err("Unmatched parenthesis".into())
+}
+
+/// Apply HAVING filter to aggregated rows.
+fn apply_having(cols: &[String], rows: &mut Vec<Vec<String>>, having_clause: &WhereClause) {
+    let col_idx = cols.iter().position(|c| c == &having_clause.column);
+    rows.retain(|row| {
+        if let Some(idx) = col_idx {
+            if idx < row.len() {
+                let val = &row[idx];
+                if let Ok(i) = val.parse::<i64>() {
+                    let lit_val = Literal::Integer(i);
+                    return lit_val.compare(&having_clause.value, &having_clause.op);
+                }
+                if let Ok(f) = val.parse::<f64>() {
+                    let lit_val = Literal::Float(f);
+                    return lit_val.compare(&having_clause.value, &having_clause.op);
+                }
+                let lit_val = Literal::Text(val.clone());
+                return lit_val.compare(&having_clause.value, &having_clause.op);
+            }
+        }
+        true
+    });
 }
 
 /// Remove duplicate rows (keeps first occurrence).
@@ -1110,6 +1166,24 @@ fn parse_alter_table(input: &str) -> std::result::Result<Statement, String> {
             table,
             action: AlterAction::DropColumn { name },
         });
+    } else if upper.starts_with("RENAME TO") {
+        let new_name = upper.strip_prefix("RENAME TO").unwrap_or("").trim().trim_matches('"').trim_end_matches(';').to_string();
+        return Ok(Statement::AlterTable {
+            table,
+            action: AlterAction::RenameTable { new_name },
+        });
+    } else if upper.starts_with("RENAME COLUMN") {
+        let rest = upper.strip_prefix("RENAME COLUMN").unwrap_or("").trim();
+        let parts: Vec<_> = rest.split_whitespace().collect();
+        if parts.len() >= 3 && parts[1].to_uppercase() == "TO" {
+            return Ok(Statement::AlterTable {
+                table,
+                action: AlterAction::RenameColumn {
+                    old_name: parts[0].trim_matches('"').to_string(),
+                    new_name: parts[2].trim_matches('"').trim_end_matches(';').to_string(),
+                },
+            });
+        }
     }
     Err(format!("Unsupported ALTER TABLE: {}", &upper[..upper.len().min(40)]))
 }

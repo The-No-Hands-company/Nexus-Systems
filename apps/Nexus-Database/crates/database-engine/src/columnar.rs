@@ -101,6 +101,28 @@ impl ColumnStore {
         self.row_counts.write().remove(table);
     }
 
+    /// Rename a table in the columnar store.
+    pub fn rename_table(&self, old_name: &str, new_name: &str) {
+        if let Some(chunks) = self.tables.write().remove(old_name) {
+            self.tables.write().insert(new_name.to_string(), chunks);
+        }
+        if let Some(count) = self.row_counts.write().remove(old_name) {
+            self.row_counts.write().insert(new_name.to_string(), count);
+        }
+    }
+
+    /// Rename a column in the columnar store.
+    pub fn rename_column(&self, table: &str, old_name: &str, new_name: &str) {
+        let mut tables = self.tables.write();
+        if let Some(chunks) = tables.get_mut(table) {
+            for chunk in chunks.iter_mut() {
+                if chunk.column_name == old_name {
+                    chunk.column_name = new_name.to_string();
+                }
+            }
+        }
+    }
+
     /// Append a row to the columnar store.
     pub fn append_row(&self, table: &str, values: &[Option<Vec<u8>>], column_types: &[ColumnType]) -> Result<()> {
         let mut tables = self.tables.write();
