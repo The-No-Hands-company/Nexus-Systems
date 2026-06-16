@@ -5,7 +5,7 @@
 
 use std::collections::BTreeMap;
 
-use crate::catalog::{ColumnType, DeltaMainRouter, StorageEngine};
+use crate::catalog::{ColumnType, DeltaMainRouter, StorageEngine, UndoAction};
 use crate::columnar::{AggregateFunc as ColAggFunc, AggregateState};
 use crate::row::Row;
 use crate::Result;
@@ -643,8 +643,10 @@ pub fn execute(router: &DeltaMainRouter, stmt: &Statement) -> Result<ExecuteResu
                     }
                 }
                 let row = Row::new(col_data.clone());
+                let row_idx = router.columnar.read().row_count(table);
                 router.insert(table, &row)?;
                 router.columnar.write().append_row(table, &col_data, &meta.column_types)?;
+                router.undo_stack.write().push(UndoAction::Insert { table: table.clone(), row_idx });
                 count += 1;
             }
             Ok(ExecuteResult::Insert(count))
@@ -1005,6 +1007,11 @@ pub fn execute(router: &DeltaMainRouter, stmt: &Statement) -> Result<ExecuteResu
             // Update matching rows
             for &row_idx in &match_indices {
                 for (col, val) in sets {
+                    let old_val = router.columnar.read().get_column(table, col)
+                        .ok().and_then(|c| c.get(row_idx).cloned()).flatten();
+                    router.undo_stack.write().push(UndoAction::Update {
+                        table: table.clone(), row_idx, column: col.clone(), old_value: old_val,
+                    });
                     let bytes = val.to_bytes();
                     let _ = router.columnar.write().update_row(table, col, row_idx, Some(bytes));
                 }
@@ -1052,12 +1059,35 @@ pub fn execute(router: &DeltaMainRouter, stmt: &Statement) -> Result<ExecuteResu
             let deleted = match_indices.len();
             // Delete matching rows (reverse order to keep indices valid)
             for &row_idx in match_indices.iter().rev() {
+                // Snapshot row data for undo
+                let row_data: Vec<Option<Vec<u8>>> = meta.column_names.iter().map(|cn| {
+                    router.columnar.read().get_column(table, cn)
+                        .ok().and_then(|c| c.get(row_idx).cloned()).flatten()
+                }).collect();
+                router.undo_stack.write().push(UndoAction::Delete {
+                    table: table.clone(), row_idx, data: row_data,
+                });
                 let _ = router.columnar.write().delete_row(table, row_idx);
             }
 
             Ok(ExecuteResult::Delete(deleted))
         }
         Statement::Truncate { table } => {
+            // Snapshot all data for undo
+            let colar = router.columnar.read();
+            let row_count = colar.row_count(table);
+            let meta = router.catalog().get_table(table);
+            let mut all_data: Vec<Vec<Option<Vec<u8>>>> = Vec::new();
+            if let Some(ref meta) = meta {
+                for ri in 0..row_count {
+                    let row: Vec<_> = meta.column_names.iter().map(|cn| {
+                        colar.get_column(table, cn).ok().and_then(|c| c.get(ri).cloned()).flatten()
+                    }).collect();
+                    all_data.push(row);
+                }
+            }
+            drop(colar);
+            router.undo_stack.write().push(UndoAction::Truncate { table: table.clone(), data: all_data });
             router.columnar.write().truncate_table(table);
             Ok(ExecuteResult::Truncate(table.clone()))
         }

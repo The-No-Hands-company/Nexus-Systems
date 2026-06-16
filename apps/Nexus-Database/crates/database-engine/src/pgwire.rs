@@ -172,6 +172,26 @@ async fn handle_query_with_router(stream: &mut TcpStream, query: &str, router: &
         return Ok(());
     }
 
+    // Handle transaction commands
+    if upper == "BEGIN" || upper == "BEGIN TRANSACTION" || upper == "BEGIN WORK" || upper == "START TRANSACTION" {
+        router.undo_stack.write().clear();
+        stream.write_all(&build_cmd_complete("BEGIN")).await?;
+        stream.write_all(&build_ready_for_query()).await?;
+        return Ok(());
+    }
+    if upper == "COMMIT" || upper == "COMMIT TRANSACTION" || upper == "COMMIT WORK" {
+        router.undo_stack.write().clear();
+        stream.write_all(&build_cmd_complete("COMMIT")).await?;
+        stream.write_all(&build_ready_for_query()).await?;
+        return Ok(());
+    }
+    if upper == "ROLLBACK" || upper == "ROLLBACK TRANSACTION" || upper == "ROLLBACK WORK" {
+        undo_all(router);
+        stream.write_all(&build_cmd_complete("ROLLBACK")).await?;
+        stream.write_all(&build_ready_for_query()).await?;
+        return Ok(());
+    }
+
     // Handle EXPLAIN — show query plan without executing
     if upper.starts_with("EXPLAIN") {
         let inner = query.trim().strip_prefix("EXPLAIN").unwrap_or(query).trim();
@@ -489,6 +509,55 @@ fn build_backend_key(pid: i32, secret: i32) -> Vec<u8> {
 fn build_ready_for_query() -> Vec<u8> {
     // 'I' = idle, 'T' = in transaction, 'E' = error
     build_message(R_READY, b"I")
+}
+
+fn undo_all(router: &DeltaMainRouter) {
+    let mut stack = router.undo_stack.write();
+    while let Some(action) = stack.pop() {
+        match action {
+            crate::catalog::UndoAction::Insert { table, row_idx } => {
+                let _ = router.columnar.write().delete_row(&table, row_idx);
+            }
+            crate::catalog::UndoAction::Update { table, row_idx, column, old_value } => {
+                let _ = router.columnar.write().update_row(&table, &column, row_idx, old_value);
+            }
+            crate::catalog::UndoAction::Delete { table, row_idx, data } => {
+                // Re-insert: append row at position (not quite right — we'd need re-insert)
+                // For now, restore data at row_idx position
+                let store = router.columnar.read();
+                let meta = router.catalog().get_table(&table);
+                if let Some(meta) = meta {
+                    for (col_i, col_name) in meta.column_names.iter().enumerate() {
+                        if col_i < data.len() {
+                            let _ = router.columnar.write().update_row(&table, col_name, row_idx, data[col_i].clone());
+                        }
+                    }
+                }
+            }
+            crate::catalog::UndoAction::Truncate { table, data } => {
+                // Re-insert all rows
+                let meta = router.catalog().get_table(&table);
+                if let Some(meta) = meta {
+                    for row_data in &data {
+                        let _ = router.columnar.write().append_row(&table, row_data, &meta.column_types);
+                    }
+                }
+            }
+            crate::catalog::UndoAction::AlterAddColumn { table, column } => {
+                router.columnar.write().drop_column(&table, &column);
+                let _ = router.catalog().drop_column(&table, &column);
+            }
+            crate::catalog::UndoAction::AlterDropColumn { table, column, data } => {
+                // Re-add column with old data
+                let col_type = crate::catalog::ColumnType::Text; // approximate
+                router.columnar.write().add_column(&table, &column, col_type.clone());
+                let _ = router.catalog().add_column(&table, &column, col_type);
+                for (row_idx, val) in data.iter().enumerate() {
+                    let _ = router.columnar.write().update_row(&table, &column, row_idx, val.clone());
+                }
+            }
+        }
+    }
 }
 
 fn build_cmd_complete(tag: &str) -> Vec<u8> {

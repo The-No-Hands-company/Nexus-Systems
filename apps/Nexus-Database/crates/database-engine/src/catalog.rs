@@ -322,6 +322,17 @@ pub struct DeltaMainRouter {
     pub columnar: RwLock<ColumnStore>,
     pub views: RwLock<HashMap<String, String>>,
     pub indexes: Arc<crate::index::IndexManager>,
+    pub undo_stack: RwLock<Vec<UndoAction>>,
+}
+
+#[derive(Debug, Clone)]
+pub enum UndoAction {
+    Insert { table: String, row_idx: usize },
+    Update { table: String, row_idx: usize, column: String, old_value: Option<Vec<u8>> },
+    Delete { table: String, row_idx: usize, data: Vec<Option<Vec<u8>>> },
+    Truncate { table: String, data: Vec<Vec<Option<Vec<u8>>>> },
+    AlterAddColumn { table: String, column: String },
+    AlterDropColumn { table: String, column: String, data: Vec<Option<Vec<u8>>> },
 }
 
 impl DeltaMainRouter {
@@ -337,6 +348,7 @@ impl DeltaMainRouter {
             columnar: RwLock::new(columnar),
             views: RwLock::new(HashMap::new()),
             indexes: Arc::new(crate::index::IndexManager::new(pool.clone())),
+            undo_stack: RwLock::new(Vec::new()),
         })
     }
 
