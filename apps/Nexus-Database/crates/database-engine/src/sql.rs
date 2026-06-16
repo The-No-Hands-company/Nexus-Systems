@@ -123,6 +123,7 @@ pub enum SelectColumn {
     CaseExpr { cases: Vec<CaseWhen>, else_result: Option<String>, alias: Option<String> },
     Coalesce { columns: Vec<String>, alias: Option<String> },
     FnCall { func: String, column: String, alias: Option<String> },
+    WindowFn { func: String, over_order: Vec<(String, OrderDir)>, over_partition: Option<String>, alias: Option<String> },
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -613,6 +614,8 @@ fn parse_select(input: &str) -> std::result::Result<Statement, String> {
             columns.push(SelectColumn::Coalesce { columns: coalesce.0, alias: coalesce.1 });
         } else if let Some(fncall) = parse_fn_call(col_part) {
             columns.push(SelectColumn::FnCall { func: fncall.0, column: fncall.1, alias: fncall.2 });
+        } else if let Some(winfn) = parse_window_fn(col_part) {
+            columns.push(SelectColumn::WindowFn { func: winfn.0, over_order: winfn.1, over_partition: winfn.2, alias: winfn.3 });
         } else {
             columns.push(SelectColumn::Named(col_part.trim_matches('"').to_string()));
         }
@@ -875,6 +878,54 @@ fn parse_fn_call(s: &str) -> Option<(String, String, Option<String>)> {
             _ => None,
         }
     } else { None }
+}
+
+fn parse_window_fn(s: &str) -> Option<(String, Vec<(String, OrderDir)>, Option<String>, Option<String>)> {
+    // ROW_NUMBER() OVER (ORDER BY col), RANK() OVER (...)
+    let upper = s.to_uppercase().trim().to_string();
+    let over_pos = upper.find("OVER")?;
+    let func_part = &s[..over_pos].trim();
+    let (func, _) = func_part.split_once('(')?;
+    let func = func.trim();
+    if !matches!(func.to_uppercase().as_str(), "ROW_NUMBER" | "RANK" | "DENSE_RANK") {
+        return None;
+    }
+
+    let over_rest = &s[over_pos + 4..].trim();
+    let paren_open = over_rest.find('(')?;
+    let paren_close = over_rest[paren_open..].find(')')?;
+    let over_body = &over_rest[paren_open + 1..paren_open + paren_close].trim();
+
+    // Parse PARTITION BY and ORDER BY inside OVER
+    let mut over_order: Vec<(String, OrderDir)> = Vec::new();
+    let mut over_partition: Option<String> = None;
+
+    let upper_over = over_body.to_uppercase();
+    if let Some(pb_pos) = upper_over.find("PARTITION BY") {
+        let pb_rest = &over_body[pb_pos + 12..].trim();
+        let part_col = pb_rest.split_whitespace().next().unwrap_or("").trim_matches('"').to_string();
+        over_partition = Some(part_col);
+    }
+
+    if let Some(ob_pos) = upper_over.find("ORDER BY") {
+        let ob_rest = &over_body[ob_pos + 8..].trim();
+        for pair in ob_rest.split(',') {
+            let parts: Vec<_> = pair.trim().split_whitespace().collect();
+            if !parts.is_empty() {
+                let col = parts[0].trim_matches('"').to_string();
+                let dir = if parts.len() > 1 && parts[1].to_uppercase() == "DESC" { OrderDir::Desc } else { OrderDir::Asc };
+                over_order.push((col, dir));
+            }
+        }
+    }
+
+    // Parse alias after OVER (...)
+    let after_over = over_rest[paren_open + paren_close + 1..].trim();
+    let alias = if let Some(as_pos) = after_over.to_uppercase().find(" AS ") {
+        Some(after_over[as_pos + 4..].trim().to_string())
+    } else { None };
+
+    Some((func.to_string(), over_order, over_partition, alias))
 }
 
 // ── Executor ─────────────────────────────────────────────────────
@@ -1315,12 +1366,86 @@ pub fn execute(router: &DeltaMainRouter, stmt: &Statement) -> Result<ExecuteResu
                 SelectColumn::CaseExpr { alias, .. } => alias.clone().unwrap_or_else(|| "case".into()),
                 SelectColumn::Coalesce { alias, columns: cols } => alias.clone().unwrap_or_else(|| cols.first().cloned().unwrap_or_else(|| "coalesce".into())),
                 SelectColumn::FnCall { func, column, alias } => alias.clone().unwrap_or_else(|| format!("{}({})", func, column)),
+                SelectColumn::WindowFn { func, over_partition, alias, .. } => alias.clone().unwrap_or_else(|| format!("{}()", func)),
                 SelectColumn::All => "?".into(),
             }).collect();
 
-            let mut result_rows: Vec<Vec<String>> = sorted.iter().map(|row| {
-                select_cols.iter().map(|sc| {
-                    evaluate_select_column(sc, row, &meta)
+            // Compute window function values for each row (post-sort)
+            let mut window_values: Vec<Vec<String>> = Vec::new();
+            for wf_col in select_cols.iter() {
+                if let SelectColumn::WindowFn { func, over_order, over_partition, .. } = wf_col {
+                    if !over_order.is_empty() || over_partition.is_some() {
+                        // Sort a copy for window ordering (if different from main ORDER BY)
+                        let mut sorted_rows: Vec<&Row> = sorted.iter().collect();
+                        sorted_rows.sort_by(|a, b| {
+                            for (col, dir) in over_order {
+                                if let Some(idx) = meta.column_names.iter().position(|c| c == col) {
+                                    let va = a.columns.get(idx).and_then(|c| c.as_ref());
+                                    let vb = b.columns.get(idx).and_then(|c| c.as_ref());
+                                    let cmp = match (va, vb) {
+                                        (None, None) => std::cmp::Ordering::Equal,
+                                        (None, Some(_)) => match dir { OrderDir::Asc => std::cmp::Ordering::Greater, OrderDir::Desc => std::cmp::Ordering::Less },
+                                        (Some(_), None) => match dir { OrderDir::Asc => std::cmp::Ordering::Less, OrderDir::Desc => std::cmp::Ordering::Greater },
+                                        (Some(a), Some(b)) => a.cmp(b),
+                                    };
+                                    if cmp != std::cmp::Ordering::Equal {
+                                        return match dir { OrderDir::Desc => cmp.reverse(), OrderDir::Asc => cmp };
+                                    }
+                                }
+                            }
+                            std::cmp::Ordering::Equal
+                        });
+                    } else {
+                        // No explicit OVER ORDER BY → use built-in ORDER BY
+                    }
+                }
+                window_values.push(Vec::new());
+            }
+
+            // Compute window functions
+            for (wi, wf_col) in select_cols.iter().enumerate() {
+                if let SelectColumn::WindowFn { func, over_order, .. } = wf_col {
+                    let order_by_cols: Vec<(String, OrderDir)> = if !over_order.is_empty() { over_order.clone() } else { order_by.clone() };
+                    let col_indices: Vec<usize> = order_by_cols.iter().filter_map(|(c, _)| meta.column_names.iter().position(|n| n == c)).collect();
+
+                    let mut vals: Vec<String> = Vec::new();
+                    let mut rank = 0u64;
+                    let mut dense_rank = 0u64;
+                    let mut prev_key: Option<Vec<Option<&[u8]>>> = None;
+
+                    for (ri, row) in sorted.iter().enumerate() {
+                        let current_key: Vec<Option<&[u8]>> = col_indices.iter().map(|&i| {
+                            row.columns.get(i).and_then(|c: &Option<Vec<u8>>| c.as_deref())
+                        }).collect();
+
+                        match func.as_str() {
+                            "ROW_NUMBER" => vals.push((ri + 1).to_string()),
+                            "RANK" => {
+                                if prev_key.as_ref() != Some(&current_key) {
+                                    rank = ri as u64 + 1;
+                                }
+                                vals.push(rank.to_string());
+                            }
+                            "DENSE_RANK" => {
+                                if prev_key.as_ref() != Some(&current_key) {
+                                    dense_rank += 1;
+                                }
+                                vals.push(dense_rank.to_string());
+                            }
+                            _ => vals.push("0".into()),
+                        }
+                        prev_key = Some(current_key);
+                    }
+                    if wi < window_values.len() { window_values[wi] = vals; }
+                }
+            }
+
+            let mut result_rows: Vec<Vec<String>> = sorted.iter().enumerate().map(|(ri, row)| {
+                select_cols.iter().enumerate().map(|(si, sc)| {
+                    match sc {
+                        SelectColumn::WindowFn { .. } => window_values.get(si).and_then(|wv| wv.get(ri)).cloned().unwrap_or_else(|| "0".into()),
+                        _ => evaluate_select_column(sc, row, &meta),
+                    }
                 }).collect()
             }).collect();
 
@@ -1775,6 +1900,7 @@ fn format_value(bytes: &[u8], col_type: &ColumnType) -> String {
 fn evaluate_select_column(sc: &SelectColumn, row: &Row, meta: &crate::catalog::TableMeta) -> String {
     match sc {
         SelectColumn::All => "?".into(),
+        SelectColumn::WindowFn { .. } => "0".into(),
         SelectColumn::Named(name) => {
             if let Some(idx) = meta.column_names.iter().position(|n| n == name) {
                 row.columns.get(idx)
