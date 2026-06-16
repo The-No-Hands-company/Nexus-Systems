@@ -816,6 +816,12 @@ fn generate_explain_plan(query: &str, router: &DeltaMainRouter) -> Vec<Vec<Strin
                 plan.push(vec![format!("  Columns: {}", columns.iter().map(|(c, t)| format!("{} {:?}", c, t)).collect::<Vec<_>>().join(", "))]);
                 plan.push(vec![format!("  Engine: {:?}", engine)]);
             }
+            crate::sql::Statement::Union { ref all, .. } => {
+                plan.push(vec![format!("Union{}", if *all { " All" } else { "" })]);
+            }
+            crate::sql::Statement::DropView { name } => {
+                plan.push(vec![format!("Drop View {}", name)]);
+            }
             _ => {
                 plan.push(vec![format!("Query: {}", &query[..query.len().min(60)])]);
             }

@@ -64,6 +64,14 @@ pub enum Statement {
         name: String,
         if_exists: bool,
     },
+    Union {
+        left: Box<Statement>,
+        right: Box<Statement>,
+        all: bool,
+    },
+    DropView {
+        name: String,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -106,7 +114,7 @@ pub struct WhereClause {
 pub enum WherePredicate {
     Compare { column: String, op: CompareOp, value: Literal },
     IsNull { column: String, not: bool },
-    Like { column: String, pattern: String, not: bool },
+    Like { column: String, pattern: String, not: bool, case_insensitive: bool },
     InList { column: String, values: Vec<Literal>, not: bool },
     Between { column: String, low: Literal, high: Literal, not: bool },
     Subquery { column: String, op: CompareOp, subquery: Box<Statement> },
@@ -133,8 +141,12 @@ impl WhereClause {
                 let is_null = row_val == "NULL" || row_val.is_empty();
                 if *not { !is_null } else { is_null }
             }
-            WherePredicate::Like { pattern, not, .. } => {
-                let matched = like_match(row_val, pattern);
+            WherePredicate::Like { pattern, not, case_insensitive, .. } => {
+                let matched = if *case_insensitive {
+                    like_match(&row_val.to_lowercase(), &pattern.to_lowercase())
+                } else {
+                    like_match(row_val, pattern)
+                };
                 if *not { !matched } else { matched }
             }
             WherePredicate::InList { values, not, .. } => {
@@ -373,6 +385,17 @@ pub fn parse_sql(input: &str) -> std::result::Result<Statement, String> {
     } else if upper.starts_with("DELETE") {
         parse_delete(trimmed)
     } else if upper.starts_with("SELECT") {
+        // Check for UNION/INTERSECT/EXCEPT
+        let union_pos = upper.find(" UNION ");
+        if let Some(pos) = union_pos {
+            let left_sql = &trimmed[..pos].trim();
+            let right_sql = &trimmed[pos + 7..].trim();
+            let all = right_sql.to_uppercase().starts_with("ALL ");
+            let right_sql = if all { &right_sql[4..] } else { right_sql };
+            let left = Box::new(parse_select(left_sql)?);
+            let right = Box::new(parse_select(right_sql)?);
+            return Ok(Statement::Union { left, right, all });
+        }
         parse_select(trimmed)
     } else if upper.starts_with("TRUNCATE") {
         parse_truncate(trimmed)
@@ -380,6 +403,8 @@ pub fn parse_sql(input: &str) -> std::result::Result<Statement, String> {
         parse_alter_table(trimmed)
     } else if upper.starts_with("DROP TABLE") {
         parse_drop_table(trimmed)
+    } else if upper.starts_with("DROP VIEW") {
+        parse_drop_view(trimmed)
     } else if upper.starts_with("DROP INDEX") {
         parse_drop_index(trimmed)
     } else {
@@ -1363,6 +1388,22 @@ pub fn execute(router: &DeltaMainRouter, stmt: &Statement) -> Result<ExecuteResu
             router.indexes.drop_index(name)?;
             Ok(ExecuteResult::DropIndex(name.clone()))
         }
+        Statement::Union { left, right, all } => {
+            let l_result = execute(router, left)?;
+            let r_result = execute(router, right)?;
+            let (l_cols, l_rows) = l_result.to_pgwire_response();
+            let (_r_cols, r_rows) = r_result.to_pgwire_response();
+            let mut result_rows = l_rows;
+            result_rows.extend(r_rows);
+            if !*all {
+                dedup_rows(&mut result_rows);
+            }
+            Ok(ExecuteResult::Select { columns: l_cols, rows: result_rows })
+        }
+        Statement::DropView { name } => {
+            router.views.write().remove(name);
+            Ok(ExecuteResult::DropTable(name.clone()))
+        }
     }
 }
 
@@ -1787,6 +1828,13 @@ fn parse_drop_table(input: &str) -> std::result::Result<Statement, String> {
     Ok(Statement::DropTable { table, if_exists })
 }
 
+fn parse_drop_view(input: &str) -> std::result::Result<Statement, String> {
+    let rest = input.strip_prefix("DROP VIEW").unwrap_or(input).trim();
+    let rest = rest.strip_prefix("IF EXISTS").unwrap_or(rest).trim();
+    let name = rest.trim_matches('"').trim_end_matches(';').to_string();
+    Ok(Statement::DropView { name })
+}
+
 fn parse_drop_index(input: &str) -> std::result::Result<Statement, String> {
     let rest = input.strip_prefix("DROP INDEX").unwrap_or(input).trim();
     let (rest, if_exists) = if rest.to_uppercase().starts_with("IF EXISTS") {
@@ -1823,16 +1871,26 @@ fn parse_where_clause(input: &str) -> Option<WhereClause> {
         return Some(WhereClause { predicate: WherePredicate::IsNull { column: col, not: true } });
     }
 
-    // LIKE / NOT LIKE
+    // LIKE / ILIKE / NOT LIKE / NOT ILIKE
+    if let Some(pos) = upper.find("NOT ILIKE") {
+        let col = trimmed[..pos].trim().trim_matches('"').to_string();
+        let pattern = trimmed[pos + 9..].trim().trim_matches('\'').trim_matches('"').to_string();
+        return Some(WhereClause { predicate: WherePredicate::Like { column: col, pattern, not: true, case_insensitive: true } });
+    }
     if let Some(pos) = upper.find("NOT LIKE") {
         let col = trimmed[..pos].trim().trim_matches('"').to_string();
         let pattern = trimmed[pos + 8..].trim().trim_matches('\'').trim_matches('"').to_string();
-        return Some(WhereClause { predicate: WherePredicate::Like { column: col, pattern, not: true } });
+        return Some(WhereClause { predicate: WherePredicate::Like { column: col, pattern, not: true, case_insensitive: false } });
+    }
+    if let Some(pos) = upper.find("ILIKE") {
+        let col = trimmed[..pos].trim().trim_matches('"').to_string();
+        let pattern = trimmed[pos + 5..].trim().trim_matches('\'').trim_matches('"').to_string();
+        return Some(WhereClause { predicate: WherePredicate::Like { column: col, pattern, not: false, case_insensitive: true } });
     }
     if let Some(pos) = upper.find("LIKE") {
         let col = trimmed[..pos].trim().trim_matches('"').to_string();
         let pattern = trimmed[pos + 4..].trim().trim_matches('\'').trim_matches('"').to_string();
-        return Some(WhereClause { predicate: WherePredicate::Like { column: col, pattern, not: false } });
+        return Some(WhereClause { predicate: WherePredicate::Like { column: col, pattern, not: false, case_insensitive: false } });
     }
 
     // IN (...) / NOT IN (...)
