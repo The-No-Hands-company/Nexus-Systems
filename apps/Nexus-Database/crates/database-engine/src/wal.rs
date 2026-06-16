@@ -17,7 +17,7 @@ use std::fs::{File, OpenOptions};
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::Path;
 
-const ENTRY_HEADER_SIZE: usize = 18;
+const ENTRY_HEADER_SIZE: usize = 22; // lsn:8 + type:2 + page_id:8 + data_len:4
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u16)]
@@ -119,8 +119,8 @@ impl WriteAheadLog {
             let lsn = u64::from_le_bytes(header[0..8].try_into().unwrap());
             let entry_type = WalEntryType::from_u16(u16::from_le_bytes(header[8..10].try_into().unwrap()))
                 .ok_or(EngineError::WalCorrupted(format!("Unknown entry type at LSN {}", lsn)))?;
-            let page_id = u64::from_le_bytes(header[10..14].try_into().unwrap());
-            let data_len = u32::from_le_bytes(header[14..18].try_into().unwrap()) as usize;
+            let page_id = u64::from_le_bytes(header[10..18].try_into().unwrap());
+            let data_len = u32::from_le_bytes(header[18..22].try_into().unwrap()) as usize;
             let mut data = vec![0u8; data_len];
             file.read_exact(&mut data)?;
 

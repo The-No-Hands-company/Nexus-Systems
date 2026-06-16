@@ -46,16 +46,19 @@ impl SequenceStore {
             seq.fetch_add(1, Ordering::SeqCst)
         } else {
             drop(seqs);
-            // Auto-create
+            // fetch_add returns old value: store 2 so first call returns 1, second returns 2, etc.
             self.sequences.write().insert(name.to_string(), AtomicU64::new(2));
             1
         }
     }
 
-    /// Get the current value without incrementing.
+    /// Get the current value (stored value minus 1 = last returned value).
     pub fn currval(&self, name: &str) -> Option<u64> {
         self.sequences.read().get(name)
-            .map(|s| s.load(Ordering::SeqCst))
+            .map(|s| {
+                let v = s.load(Ordering::SeqCst);
+                if v > 0 { v.saturating_sub(1) } else { 0 }
+            })
     }
 
     /// Set a sequence to a specific value.

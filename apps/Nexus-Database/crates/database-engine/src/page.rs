@@ -100,12 +100,17 @@ impl Page {
     }
 
     pub fn set_checksum(&mut self) {
-        let chk = self.data[..15].iter().fold(0u8, |a, b| a ^ b);
+        let mut parts: Vec<u8> = self.data.to_vec();
+        parts[15] = 0;
+        let chk = parts.iter().fold(0u8, |a, b| a ^ b);
         self.data[15] = chk;
     }
 
     pub fn verify_checksum(&self) -> bool {
-        self.checksum() == self.data[..15].iter().fold(0u8, |a, b| a ^ b)
+        let mut copy = self.data.clone();
+        let stored = copy[15];
+        copy[15] = 0;
+        copy.iter().fold(0u8, |a, b| a ^ b) == stored
     }
 
     /// Available space in the data region.
