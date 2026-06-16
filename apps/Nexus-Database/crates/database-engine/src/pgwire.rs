@@ -662,7 +662,12 @@ fn generate_explain_plan(query: &str, router: &DeltaMainRouter) -> Vec<Vec<Strin
                     plan.push(vec![format!("  ->  Seq Scan on {}", jc.right_table)]);
                     plan.push(vec![format!("        Rows: ~{}", router.columnar.read().row_count(&jc.right_table))]);
                 } else {
-                    plan.push(vec![format!("Seq Scan on {}", table)]);
+                    let scan_type = if let Some(wc) = where_clause {
+                        if wc.is_compare() && router.indexes.find_best_index(&table, wc.column()).is_some() {
+                            "Index Scan"
+                        } else { "Seq Scan" }
+                    } else { "Seq Scan" };
+                    plan.push(vec![format!("{} on {}", scan_type, table)]);
                     plan.push(vec![format!("  Rows: ~{}", row_count)]);
                 }
 

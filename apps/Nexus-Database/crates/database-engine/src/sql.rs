@@ -149,6 +149,20 @@ impl WhereClause {
         let s = val.as_ref().map(|b| String::from_utf8_lossy(b).to_string()).unwrap_or("NULL".into());
         self.matches(&s)
     }
+
+    /// Get the lookup key bytes for index searches (for Compare Eq only).
+    pub fn lookup_value_bytes(&self) -> Vec<u8> {
+        if let WherePredicate::Compare { value, .. } = &self.predicate {
+            value.to_bytes()
+        } else {
+            vec![]
+        }
+    }
+
+    /// Check if this is a comparison predicate.
+    pub fn is_compare(&self) -> bool {
+        matches!(&self.predicate, WherePredicate::Compare { .. })
+    }
 }
 
 /// Simple SQL LIKE pattern matching.
@@ -646,6 +660,9 @@ pub fn execute(router: &DeltaMainRouter, stmt: &Statement) -> Result<ExecuteResu
                 let row_idx = router.columnar.read().row_count(table);
                 router.insert(table, &row)?;
                 router.columnar.write().append_row(table, &col_data, &meta.column_types)?;
+                // Index the new row
+                let pk = row_idx.to_le_bytes().to_vec();
+                let _ = router.indexes.index_row(table, &pk, &row, &meta);
                 router.undo_stack.write().push(UndoAction::Insert { table: table.clone(), row_idx });
                 count += 1;
             }
@@ -838,23 +855,58 @@ pub fn execute(router: &DeltaMainRouter, stmt: &Statement) -> Result<ExecuteResu
             }
 
             // Standard SELECT (no aggregates)
-            // Read from columnar store
             let col_store = router.columnar.read();
             let row_count = col_store.row_count(table);
 
-            // Build rows from columnar data
-            let mut all_rows: Vec<Row> = Vec::new();
-            for row_idx in 0..row_count {
-                let mut col_values: Vec<Option<Vec<u8>>> = Vec::new();
-                for col_name in &meta.column_names {
-                    let val = col_store.get_column(table, col_name)
-                        .ok()
-                        .and_then(|col| col.get(row_idx).cloned())
-                        .flatten();
-                    col_values.push(val);
+            // Check for index scan optimization
+            let mut index_used = false;
+            let all_rows: Vec<Row> = if let Some(wc) = where_clause {
+                if wc.is_compare() && matches!(&wc.predicate, WherePredicate::Compare { op: CompareOp::Eq, .. }) {
+                    if let Some(idx_meta) = router.indexes.find_best_index(table, wc.column()) {
+                        if let Ok(pks) = router.indexes.lookup(&idx_meta.name, &wc.lookup_value_bytes()) {
+                            index_used = !pks.is_empty();
+                            let mut rows = Vec::new();
+                            for pk_bytes in &pks {
+                                if pk_bytes.len() == 8 {
+                                    if let Ok(row_idx) = usize::try_from(u64::from_le_bytes(pk_bytes[..8].try_into().unwrap_or([0; 8]))) {
+                                        if row_idx < row_count as usize {
+                                            let mut col_values: Vec<Option<Vec<u8>>> = Vec::new();
+                                            for col_name in &meta.column_names {
+                                                let val = col_store.get_column(table, col_name)
+                                                    .ok().and_then(|col| col.get(row_idx).cloned()).flatten();
+                                                col_values.push(val);
+                                            }
+                                            rows.push(Row::new(col_values));
+                                        }
+                                    }
+                                }
+                            }
+                            rows
+                        } else {
+                            Vec::new()
+                        }
+                    } else { Vec::new() }
+                } else { Vec::new() }
+            } else { Vec::new() };
+
+            // Fallback: full scan if not using index
+            let mut all_rows = if !all_rows.is_empty() {
+                all_rows
+            } else {
+                let mut rows: Vec<Row> = Vec::new();
+                for row_idx in 0..row_count {
+                    let mut col_values: Vec<Option<Vec<u8>>> = Vec::new();
+                    for col_name in &meta.column_names {
+                        let val = col_store.get_column(table, col_name)
+                            .ok()
+                            .and_then(|col| col.get(row_idx).cloned())
+                            .flatten();
+                        col_values.push(val);
+                    }
+                    rows.push(Row::new(col_values));
                 }
-                all_rows.push(Row::new(col_values));
-            }
+                rows
+            };
             drop(col_store);
 
             // Filter with WHERE
@@ -1064,6 +1116,8 @@ pub fn execute(router: &DeltaMainRouter, stmt: &Statement) -> Result<ExecuteResu
                     router.columnar.read().get_column(table, cn)
                         .ok().and_then(|c| c.get(row_idx).cloned()).flatten()
                 }).collect();
+                let del_row = Row::new(row_data.clone());
+                let _ = router.indexes.deindex_row(table, &del_row, &meta);
                 router.undo_stack.write().push(UndoAction::Delete {
                     table: table.clone(), row_idx, data: row_data,
                 });
