@@ -140,6 +140,7 @@ async fn handle_connection_with_router(mut stream: TcpStream, router: &DeltaMain
 
     // Prepared statement cache
     let mut prepared: HashMap<String, String> = HashMap::new();
+    let mut bound_params: HashMap<String, Vec<Option<String>>> = HashMap::new();
     let mut session_seqs: HashMap<String, u64> = HashMap::new();
 
     // Query loop with router
@@ -163,14 +164,52 @@ async fn handle_connection_with_router(mut stream: TcpStream, router: &DeltaMain
                         prepared.insert(name, sql);
                         stream.write_all(b"1\0\0\0\x04").await?;
                     }
-                    M_BIND => { stream.write_all(b"2\0\0\0\x04").await?; }
+                    M_BIND => {
+                        // Parse Bind message: [portal\0][statement\0][format_codes...][params...][result_formats...]
+                        let body = &buf[5..n];
+                        let portal_end = body.iter().position(|&b| b == 0).unwrap_or(0);
+                        let stmt_start = portal_end + 1;
+                        let stmt_end = body[stmt_start..].iter().position(|&b| b == 0).unwrap_or(0);
+                        let stmt_name = String::from_utf8_lossy(&body[stmt_start..stmt_start + stmt_end]).to_string();
+
+                        let mut pos = stmt_start + stmt_end + 1;
+                        // Skip format codes for parameters
+                        if pos + 2 <= body.len() {
+                            let num_formats = u16::from_be_bytes([body[pos], body[pos+1]]);
+                            pos += 2 + num_formats as usize * 2;
+                        }
+                        // Read parameter values
+                        let mut params: Vec<Option<String>> = Vec::new();
+                        if pos + 2 <= body.len() {
+                            let num_params = u16::from_be_bytes([body[pos], body[pos+1]]);
+                            pos += 2;
+                            for _ in 0..num_params {
+                                if pos + 4 <= body.len() {
+                                    let plen = i32::from_be_bytes([body[pos], body[pos+1], body[pos+2], body[pos+3]]);
+                                    pos += 4;
+                                    if plen == -1 {
+                                        params.push(None); // NULL
+                                    } else {
+                                        let pval = String::from_utf8_lossy(&body[pos..pos + plen as usize]).to_string();
+                                        params.push(Some(pval));
+                                        pos += plen as usize;
+                                    }
+                                }
+                            }
+                        }
+                        bound_params.insert(stmt_name.clone(), params);
+                        stream.write_all(b"2\0\0\0\x04").await?;
+                    }
                     M_DESCRIBE => {
                         let body = &buf[5..n];
                         stream.write_all(b"n\0\0\0\x04").await?;
                     }
                     M_EXECUTE => {
-                        if let Some(sql) = prepared.get("") {
-                            handle_query_with_router(&mut stream, sql, router, &mut session_seqs).await?;
+                        // Execute protal → substitute bound params into SQL
+                        if let Some(sql) = prepared.get("").cloned() {
+                            let params = bound_params.get("").cloned().unwrap_or_default();
+                            let substituted = substitute_params(&sql, &params);
+                            handle_query_with_router(&mut stream, &substituted, router, &mut session_seqs).await?;
                         } else {
                             stream.write_all(&build_cmd_complete("EXECUTE 0")).await?;
                         }
@@ -648,6 +687,23 @@ fn build_backend_key(pid: i32, secret: i32) -> Vec<u8> {
 fn build_ready_for_query() -> Vec<u8> {
     // 'I' = idle, 'T' = in transaction, 'E' = error
     build_message(R_READY, b"I")
+}
+
+/// Substitute $1, $2 placeholders with bound parameter values.
+fn substitute_params(sql: &str, params: &[Option<String>]) -> String {
+    let mut result = sql.to_string();
+    for (i, param) in params.iter().enumerate() {
+        let placeholder = format!("${}", i + 1);
+        let val = match param {
+            Some(v) => {
+                if v.parse::<i64>().is_ok() || v.parse::<f64>().is_ok() { v.clone() }
+                else { format!("'{}'", v.replace('\'', "''")) }
+            }
+            None => "NULL".to_string(),
+        };
+        result = result.replace(&placeholder, &val);
+    }
+    result
 }
 
 fn store_setting(session: &mut HashMap<String, u64>, setting: &str) {

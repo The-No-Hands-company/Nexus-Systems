@@ -122,6 +122,7 @@ pub enum SelectColumn {
     Named(String),
     CaseExpr { cases: Vec<CaseWhen>, else_result: Option<String>, alias: Option<String> },
     Coalesce { columns: Vec<String>, alias: Option<String> },
+    FnCall { func: String, column: String, alias: Option<String> },
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -597,6 +598,8 @@ fn parse_select(input: &str) -> std::result::Result<Statement, String> {
             columns.push(SelectColumn::CaseExpr { cases: case.0, else_result: case.1, alias: case.2 });
         } else if let Some(coalesce) = parse_coalesce(col_part) {
             columns.push(SelectColumn::Coalesce { columns: coalesce.0, alias: coalesce.1 });
+        } else if let Some(fncall) = parse_fn_call(col_part) {
+            columns.push(SelectColumn::FnCall { func: fncall.0, column: fncall.1, alias: fncall.2 });
         } else {
             columns.push(SelectColumn::Named(col_part.trim_matches('"').to_string()));
         }
@@ -839,6 +842,26 @@ fn parse_coalesce(s: &str) -> Option<(Vec<String>, Option<String>)> {
 
     let columns: Vec<String> = args.split(',').map(|c| c.trim().trim_matches('\'').trim_matches('"').to_string()).collect();
     Some((columns, alias))
+}
+
+fn parse_fn_call(s: &str) -> Option<(String, String, Option<String>)> {
+    // UPPER(col), LOWER(col), LENGTH(col) [AS alias]
+    let upper = s.to_uppercase().trim().to_string();
+    if let Some(paren_pos) = upper.find('(') {
+        let func = upper[..paren_pos].trim().to_string();
+        let inside = &s[paren_pos + 1..].trim();
+        let end = inside.find(')')?;
+        let col = inside[..end].trim().trim_matches('\'').trim_matches('"').to_string();
+
+        let alias = if let Some(as_pos) = inside[end + 1..].to_uppercase().find(" AS ") {
+            Some(inside[end + 1 + as_pos + 4..].trim().to_string())
+        } else { None };
+
+        match func.as_str() {
+            "UPPER" | "LOWER" | "LENGTH" | "SUBSTRING" => Some((func, col, alias)),
+            _ => None,
+        }
+    } else { None }
 }
 
 // ── Executor ─────────────────────────────────────────────────────
@@ -1264,6 +1287,7 @@ pub fn execute(router: &DeltaMainRouter, stmt: &Statement) -> Result<ExecuteResu
                 SelectColumn::Named(n) => n.clone(),
                 SelectColumn::CaseExpr { alias, .. } => alias.clone().unwrap_or_else(|| "case".into()),
                 SelectColumn::Coalesce { alias, columns: cols } => alias.clone().unwrap_or_else(|| cols.first().cloned().unwrap_or_else(|| "coalesce".into())),
+                SelectColumn::FnCall { func, column, alias } => alias.clone().unwrap_or_else(|| format!("{}({})", func, column)),
                 SelectColumn::All => "?".into(),
             }).collect();
 
@@ -1757,6 +1781,21 @@ fn evaluate_select_column(sc: &SelectColumn, row: &Row, meta: &crate::catalog::T
                             return format_value(val, &meta.column_types[idx]);
                         }
                     }
+                }
+            }
+            "NULL".into()
+        }
+        SelectColumn::FnCall { func, column, .. } => {
+            if let Some(idx) = meta.column_names.iter().position(|n| n == column) {
+                if let Some(Some(val)) = row.columns.get(idx) {
+                    let s = String::from_utf8_lossy(val).to_string();
+                    return match func.as_str() {
+                        "UPPER" => s.to_uppercase(),
+                        "LOWER" => s.to_lowercase(),
+                        "LENGTH" => s.len().to_string(),
+                        "SUBSTRING" => s.chars().take(10).collect(), // simplified
+                        _ => s,
+                    };
                 }
             }
             "NULL".into()
