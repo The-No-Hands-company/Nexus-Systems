@@ -63,6 +63,10 @@ struct FeatureNode {
     PrimType primType = PrimType::None;
     float primParams[4] = {}; // dimensions: w/h/d, radius, etc.
 
+    // Display mode (Solid, Wireframe, BoundingBox).
+    enum class DisplayMode : uint8_t { Solid, Wireframe, BoundingBox };
+    DisplayMode displayMode = DisplayMode::Solid;
+
     bool dirty = true;
     bool deleted = false;
     bool hidden = false;

@@ -421,6 +421,20 @@ void keyCallback(GLFWwindow* w, int key, int scancode, int action, int mods) {
     if(key == GLFW_KEY_F12) { s.showPanels=!s.showPanels; printf("Panels: %s\n",s.showPanels?"ON":"OFF"); return; }
     if(key == GLFW_KEY_F5) { s.showPerf=!s.showPerf; printf("Perf overlay: %s\n",s.showPerf?"ON":"OFF"); return; }
     if(key == GLFW_KEY_U) { printf("Gizmo: world orientation\n"); return; }
+    // Physics gravity toggle.
+    if(key == GLFW_KEY_T && !ctrl) {
+        printf("Physics: gravity applied to all meshes\n");
+        auto& hist = s.app->document().history();
+        for(FeatureId i=1; i<=static_cast<FeatureId>(hist.featureCount()); ++i) {
+            auto* n = hist.node(i);
+            if(n && n->mesh && !n->deleted && !n->hidden) {
+                auto pos = n->mesh->attributes().positions();
+                for(auto& v : pos) v.y -= 1.f;
+                n->mesh->attributes().setPositions(std::move(pos));
+            }
+        }
+        return;
+    }
     // Camera presets: Ctrl+Shift+1-9 save, Ctrl+1-9 restore.
     if(ctrl && (key >= GLFW_KEY_1 && key <= GLFW_KEY_9)) {
         int slot = key - GLFW_KEY_1;
@@ -837,6 +851,7 @@ int main() {
     if(!glfwInit()) { fprintf(stderr, "GLFW init failed\n"); return 1; }
     glfwWindowHint(GLFW_CLIENT_API, GLFW_OPENGL_API); // simple OpenGL for now
     glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
+    glfwWindowHint(GLFW_SAMPLES, 4); // 4x MSAA
 
     GLFWwindow* window = glfwCreateWindow(1280, 720, "Nexus Modeling", nullptr, nullptr);
     if(!window) { glfwTerminate(); return 1; }
@@ -893,6 +908,7 @@ int main() {
         glClearColor(0.15f, 0.15f, 0.18f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
         glEnable(GL_DEPTH_TEST);
+        glEnable(GL_MULTISAMPLE); // 4x MSAA
 
         // Lighting setup.
         if(state.lighting) {
@@ -1005,7 +1021,7 @@ int main() {
                 color.z = node->material.albedo[2];
             }
 
-            // Shaded fill with color.
+            // Shaded fill with vertex arrays.
             glColor3f(color.x, color.y, color.z);
             if(state.lighting) {
                 GLfloat matAmb[] = {color.x*0.4f, color.y*0.4f, color.z*0.4f, 1.f};
@@ -1016,7 +1032,8 @@ int main() {
                 glMaterialfv(GL_FRONT_AND_BACK, GL_SPECULAR, matSpec);
                 glMaterialf(GL_FRONT_AND_BACK, GL_SHININESS, (1.f - node->material.roughness) * 128.f);
             }
-            glBegin(GL_TRIANGLES);
+            // Build vertex arrays (cached per frame).
+            std::vector<float> varray, narray;
             size_t psz = pos.size();
             for(uint32_t fi=0; fi<topo.faceCount(); ++fi) {
                 const auto& face = topo.face(fi);
@@ -1025,37 +1042,35 @@ int main() {
                     uint32_t i0=face.indices[0], i1=face.indices[j+1], i2=face.indices[j+2];
                     if(i0>=psz||i1>=psz||i2>=psz) continue;
                     auto& v0=pos[i0], &v1=pos[i1], &v2=pos[i2];
+                    varray.insert(varray.end(),{v0.x,v0.y,v0.z,v1.x,v1.y,v1.z,v2.x,v2.y,v2.z});
                     if(state.lighting) {
                         Vec3 fn = (v1-v0).cross(v2-v0).normalize();
-                        glNormal3f(fn.x, fn.y, fn.z);
+                        narray.insert(narray.end(),{fn.x,fn.y,fn.z,fn.x,fn.y,fn.z,fn.x,fn.y,fn.z});
                     }
-                    glVertex3f(v0.x, v0.y, v0.z);
-                    glVertex3f(v1.x, v1.y, v1.z);
-                    glVertex3f(v2.x, v2.y, v2.z);
                 }
             }
-            glEnd();
+            if(!varray.empty()) {
+                glEnableClientState(GL_VERTEX_ARRAY);
+                glVertexPointer(3, GL_FLOAT, 0, varray.data());
+                if(state.lighting && !narray.empty()) {
+                    glEnableClientState(GL_NORMAL_ARRAY);
+                    glNormalPointer(GL_FLOAT, 0, narray.data());
+                }
+                glDrawArrays(GL_TRIANGLES, 0, (GLsizei)varray.size()/3);
+                glDisableClientState(GL_VERTEX_ARRAY);
+                if(state.lighting) glDisableClientState(GL_NORMAL_ARRAY);
+            }
 
-            // Wireframe overlay.
-            glColor3f(0.1f, 0.1f, 0.15f);
-            glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
-            glBegin(GL_TRIANGLES);
-            for(uint32_t fi=0; fi<topo.faceCount(); ++fi) {
-                const auto& face = topo.face(fi);
-                if(face.vertexCount()<3) continue;
-                for(size_t j=0; j+2<face.vertexCount(); ++j) {
-                    uint32_t i0=face.indices[0], i1=face.indices[j+1], i2=face.indices[j+2];
-                    if(i0>=psz||i1>=psz||i2>=psz) continue;
-                    auto& v0 = pos[face.indices[0]];
-                    auto& v1 = pos[face.indices[j+1]];
-                    auto& v2 = pos[face.indices[j+2]];
-                    glVertex3f(v0.x, v0.y, v0.z);
-                    glVertex3f(v1.x, v1.y, v1.z);
-                    glVertex3f(v2.x, v2.y, v2.z);
-                }
+            // Wireframe overlay (reuse vertex arrays).
+            if(!varray.empty()) {
+                glColor3f(0.1f, 0.1f, 0.15f);
+                glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+                glEnableClientState(GL_VERTEX_ARRAY);
+                glVertexPointer(3, GL_FLOAT, 0, varray.data());
+                glDrawArrays(GL_TRIANGLES, 0, (GLsizei)varray.size()/3);
+                glDisableClientState(GL_VERTEX_ARRAY);
+                glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
             }
-            glEnd();
-            glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
 
             // Selection highlight with gizmo handle.
             if(isSelected) {
@@ -1072,15 +1087,20 @@ int main() {
             glColor4f(0.8f, 0.6f, 0.2f, 0.35f);
             const auto& pp = preview->attributes().positions();
             const auto& pt = preview->topology();
-            glBegin(GL_TRIANGLES);
+            std::vector<float> gv;
             for(uint32_t fi=0; fi<pt.faceCount(); ++fi) {
                 const auto& face = pt.face(fi);
                 for(size_t j=0; j+2<face.vertexCount(); ++j) {
                     auto& v0=pp[face.indices[0]], &v1=pp[face.indices[j+1]], &v2=pp[face.indices[j+2]];
-                    glVertex3f(v0.x,v0.y,v0.z); glVertex3f(v1.x,v1.y,v1.z); glVertex3f(v2.x,v2.y,v2.z);
+                    gv.insert(gv.end(),{v0.x,v0.y,v0.z,v1.x,v1.y,v1.z,v2.x,v2.y,v2.z});
                 }
             }
-            glEnd();
+            if(!gv.empty()) {
+                glEnableClientState(GL_VERTEX_ARRAY);
+                glVertexPointer(3,GL_FLOAT,0,gv.data());
+                glDrawArrays(GL_TRIANGLES,0,(GLsizei)gv.size()/3);
+                glDisableClientState(GL_VERTEX_ARRAY);
+            }
             glDisable(GL_BLEND);
         }
 

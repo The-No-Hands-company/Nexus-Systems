@@ -646,6 +646,16 @@ void EditorUI::renderOutliner(AppContext& ctx, FeatureId& selectedId) {
                 if(ctx.document) ctx.document->deleteFeature(i);
                 if(selectedId == i) selectedId = nexus::parametric::kInvalidFeatureId;
             }
+            if(ImGui::BeginMenu("Display")) {
+                using DM = nexus::parametric::FeatureNode::DisplayMode;
+                auto* mutableNode = ctx.document ? ctx.document->history().node(i) : nullptr;
+                if(mutableNode) {
+                    if(ImGui::MenuItem("Solid", nullptr, mutableNode->displayMode==DM::Solid)) mutableNode->displayMode=DM::Solid;
+                    if(ImGui::MenuItem("Wireframe", nullptr, mutableNode->displayMode==DM::Wireframe)) mutableNode->displayMode=DM::Wireframe;
+                    if(ImGui::MenuItem("BoundingBox", nullptr, mutableNode->displayMode==DM::BoundingBox)) mutableNode->displayMode=DM::BoundingBox;
+                }
+                ImGui::EndMenu();
+            }
             ImGui::EndPopup();
         }
     }
