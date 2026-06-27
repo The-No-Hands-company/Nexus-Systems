@@ -18,6 +18,8 @@ struct SurfaceIntegrationOptions {
 struct SurfaceIntegrationResult {
     float area         = 0.f;
     float signedVolume = 0.f;
+    nexus::render::Vec3 centroid{};
+    float momentInertia[6] = {};
 };
 
 class SurfaceIntegration {
