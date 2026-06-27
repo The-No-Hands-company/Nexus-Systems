@@ -103,12 +103,22 @@ HealReport healTopology(Mesh& mesh, const HealOptions& opts) noexcept
         for(uint32_t fi=0;fi<result.topology().faceCount();++fi){
             const auto& f=result.topology().face(fi);
             if(f.vertexCount()<3){keep[fi]=false;report.facesRemoved++;continue;}
-            // Compute area.
             const auto& pos=result.attributes().positions();
             if(!f.indicesInBounds(pos.size())){keep[fi]=false;report.facesRemoved++;continue;}
             Vec3 a=pos[f.indices[0]], b=pos[f.indices[1]], c=pos[f.indices[2]];
             float area=(b-a).cross(c-a).length()*0.5f;
             if(area<opts.minFaceArea){keep[fi]=false;report.facesRemoved++;}
+        }
+        // Apply the keep filter to actually remove degenerate faces.
+        if (report.facesRemoved > 0) {
+            Mesh filtered;
+            auto& fa = filtered.attributes();
+            fa.setPositions(result.attributes().positions());
+            auto& ft = filtered.topology();
+            for (uint32_t fi = 0; fi < result.topology().faceCount(); ++fi) {
+                if (keep[fi]) ft.addFace(result.topology().face(fi));
+            }
+            result = std::move(filtered);
         }
     }
 
