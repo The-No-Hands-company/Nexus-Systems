@@ -23,7 +23,7 @@ geometry::Mesh CadPart::combinedMesh() const noexcept
     for (size_t i = 1; i <= m_document.history().featureCount(); ++i) {
         auto* node = m_document.history().node(static_cast<parametric::FeatureId>(i));
         if (node && node->mesh) {
-            (void)combined.appendMesh(*node->mesh);
+            if (!combined.appendMesh(*node->mesh)) { combined = *node->mesh; }
         }
     }
     return combined;

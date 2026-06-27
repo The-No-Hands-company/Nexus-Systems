@@ -236,7 +236,7 @@ Mesh createRectangularArray(const Mesh& instance, uint32_t countX, uint32_t coun
             mat.m[0][3] = static_cast<float>(x) * spacingX;
             mat.m[1][3] = static_cast<float>(y) * spacingY;
             Mesh transformed = MeshTransform::apply(instance, mat);
-            (void)result.appendMesh(transformed);
+            if (!result.appendMesh(transformed)) continue;
         }
     }
     return result;
