@@ -217,8 +217,10 @@ Mesh createHole(const Mesh& solid, const Vec3& position, const Vec3& direction,
     BooleanOperationOptions opts;
     opts.attemptRepair = true;
     Mesh output;
-    (void)BooleanOperation::compute(solid, cylinder, BooleanOperationType::Difference,
-                               opts, output);
+    if (!BooleanOperation::compute(solid, cylinder, BooleanOperationType::Difference,
+                                opts, output).valid) {
+        output = solid;
+    }
     return output;
 }
 
@@ -262,7 +264,7 @@ Mesh createCircularArray(const Mesh& instance, const Vec3& center,
         mat.m[1][3] = offset.y;
         mat.m[2][3] = offset.z;
         Mesh transformed = MeshTransform::apply(instance, mat);
-        (void)result.appendMesh(transformed);
+        if (!result.appendMesh(transformed)) continue;
     }
     return result;
 }
