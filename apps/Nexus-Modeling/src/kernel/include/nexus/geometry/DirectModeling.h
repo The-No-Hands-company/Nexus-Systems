@@ -22,7 +22,17 @@ public:
         const std::vector<uint32_t>& faceIndices,
         float distance) noexcept;
 
-    // Pull selected faces inward (negative distance push).
+    [[nodiscard]] static DirectModelingReport pushFacesPerFace(
+        HalfEdgeMesh& mesh,
+        const std::vector<uint32_t>& faceIndices,
+        float distance) noexcept;
+
+    [[nodiscard]] static DirectModelingReport pushFacesWithDraft(
+        HalfEdgeMesh& mesh,
+        const std::vector<uint32_t>& faceIndices,
+        float distance,
+        float draftAngleDeg) noexcept;
+
     [[nodiscard]] static DirectModelingReport pullFaces(
         HalfEdgeMesh& mesh,
         const std::vector<uint32_t>& faceIndices,

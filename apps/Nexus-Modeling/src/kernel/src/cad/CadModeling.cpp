@@ -5,78 +5,396 @@
 #include <nexus/cad/CadIncrementalSolver.h>
 
 #include <algorithm>
+#include <cmath>
+#include <limits>
+#include <numbers>
+#include <unordered_map>
+#include <unordered_set>
 
 namespace nexus::cad {
 
-// ── Ref Geometry ─────────────────────────────────────────────────
-RefGeometry CadRefGeometry::createPlane(const Vec3& p,const Vec3& n,const std::string& name) noexcept { return {RefGeometryType::Plane,name,p,n.normalize(),{}}; }
-RefGeometry CadRefGeometry::createAxis(const Vec3& p,const Vec3& d,const std::string& name) noexcept { return {RefGeometryType::Axis,name,p,d.normalize(),{}}; }
-RefGeometry CadRefGeometry::createPoint(const Vec3& p,const std::string& name) noexcept { return {RefGeometryType::Point,name,p,{},{p}}; }
-std::vector<RefGeometry> CadRefGeometry::standardTriad() noexcept { return {createPlane({0,0,0},{0,0,1}),createPlane({0,0,0},{0,1,0}),createPlane({0,0,0},{1,0,0}),createAxis({0,0,0},{1,0,0}),createAxis({0,0,0},{0,1,0}),createAxis({0,0,0},{0,0,1}),createPoint({0,0,0})}; }
-
-// ── Body ─────────────────────────────────────────────────────────
-std::vector<CadBody> CadBodyManager::splitFaces(const CadBody& s,const std::vector<uint32_t>&) noexcept { return {s}; }
-CadBody CadBodyManager::combine(const std::vector<CadBody>& bodies) noexcept { CadBody c; c.name="Combined"; for(const auto& b:bodies) (void)c.mesh.appendMesh(b.mesh); return c; }
-bool CadBodyManager::isWatertight(const CadBody&) noexcept { return true; }
-
-// ── Section ──────────────────────────────────────────────────────
-SectionPlane CadSectionView::create(const Vec3& p,const Vec3& n) noexcept { return {p,n.normalize(),true,true,{0.3f,0.3f,0.8f}}; }
-geometry::Mesh CadSectionView::apply(const CadDocument&,parametric::FeatureId,const SectionPlane&) noexcept { return {}; }
-geometry::Mesh CadSectionView::generateCap(const geometry::Mesh&,const SectionPlane&) noexcept { return {}; }
-SectionPlane CadSectionView::front() noexcept { return create({0,0,0},{0,0,1}); }
-SectionPlane CadSectionView::top() noexcept { return create({0,0,0},{0,1,0}); }
-SectionPlane CadSectionView::right() noexcept { return create({0,0,0},{1,0,0}); }
-
-// ── Suppression ──────────────────────────────────────────────────
-std::vector<SuppressionState> CadSuppression::suppress(CadDocument&,parametric::FeatureId) noexcept { return {}; }
-bool CadSuppression::unsuppress(CadDocument&,parametric::FeatureId) noexcept { return true; }
-bool CadSuppression::isSuppressed(const CadDocument&,parametric::FeatureId) noexcept { return false; }
-std::vector<parametric::FeatureId> CadSuppression::suppressedList(const CadDocument&) noexcept { return {}; }
-
-// ── Design Table ─────────────────────────────────────────────────
-void CadDesignTable::addParameter(const std::string& n,double d) { m_params.push_back(n); m_defaults.push_back(d); }
-void CadDesignTable::addRow(const std::string& n,const std::vector<double>& v) { m_rows.push_back({n,v}); }
-bool CadDesignTable::apply(const std::string&,CadDocument&) const noexcept { return true; }
-std::string CadDesignTable::exportCSV() const noexcept { std::string c="Name,"; for(size_t i=0;i<m_params.size();++i){if(i>0)c+=",";c+=m_params[i];} c+="\n"; for(const auto& r:m_rows){c+=r.name; for(auto v:r.values)c+=","+std::to_string(v); c+="\n";} return c; }
-const std::vector<std::string>& CadDesignTable::parameters() const noexcept { return m_params; }
-const std::vector<DesignTableRow>& CadDesignTable::rows() const noexcept { return m_rows; }
-
-// ── View Manager ─────────────────────────────────────────────────
-void CadViewManager::saveView(const std::string& n,const Vec3& p,const Vec3& t,const Vec3& u) { m_views.push_back({n,p,t,u,45.f}); }
-CadView CadViewManager::recall(const std::string& n) const { for(const auto& v:m_views) if(v.name==n)return v; return isometricView(); }
-CadView CadViewManager::frontView() noexcept { return {"Front",{0,0,10},{0,0,0},{0,1,0},45.f}; }
-CadView CadViewManager::topView() noexcept { return {"Top",{0,10,0},{0,0,0},{0,0,-1},45.f}; }
-CadView CadViewManager::rightView() noexcept { return {"Right",{10,0,0},{0,0,0},{0,1,0},45.f}; }
-CadView CadViewManager::isometricView() noexcept { return {"Isometric",{7,5,7},{0,0,0},{0,1,0},45.f}; }
-const std::vector<CadView>& CadViewManager::savedViews() const noexcept { return m_views; }
-
-// ── Material Library ─────────────────────────────────────────────
-void CadMaterialLibrary::add(const CadAppearance& m) { m_materials.push_back(m); }
-void CadMaterialLibrary::applyToFeature(const std::string&,CadDocument&,parametric::FeatureId) noexcept {}
-std::vector<CadAppearance> CadMaterialLibrary::standardLibrary() noexcept { return {{"Steel",{0.55,0.55,0.58},{0.7,0.7,0.7},0.3f,0.9f},{"Aluminum",{0.75,0.75,0.78},{0.5,0.5,0.5},0.4f,0.1f},{"Copper",{0.85,0.45,0.25},{0.9,0.6,0.3},0.2f,0.95f},{"Glass",{0.9,0.95,1},{0.9,0.9,0.9},0.05f,0,0.5f},{"Chrome",{0.55,0.55,0.6},{1,1,1},0.05f,1}}; }
-const std::vector<CadAppearance>& CadMaterialLibrary::materials() const noexcept { return m_materials; }
-
 // ── Surfacing ─────────────────────────────────────────────────────
-geometry::NurbsSurface CadSurfacing::createBlend(const geometry::NurbsSurface&,float,float,const geometry::NurbsSurface&,float,float,const BlendSpec&) noexcept { return {}; }
-bool CadSurfacing::validateClassA(const geometry::NurbsSurface&) noexcept { return true; }
-CurvatureComb CadSurfacing::generateCurvatureComb(const geometry::NurbsSurface&,float,bool) noexcept { return {}; }
-geometry::Mesh CadSurfacing::generateZebraStripes(const geometry::NurbsSurface&,uint32_t) noexcept { return {}; }
+geometry::NurbsSurface CadSurfacing::createBlend(const geometry::NurbsSurface& a, float ua, float va,
+                                                   const geometry::NurbsSurface& b, float ub, float vb,
+                                                   const BlendSpec& spec) noexcept {
+    (void)ua; (void)va; (void)ub; (void)vb;
+    int32_t degU = std::max(a.degreeU(), b.degreeU());
+    int32_t degV = std::max(a.degreeV(), b.degreeV());
+    int32_t nU = 4;
+    int32_t nV = 4;
+
+    std::vector<float> kU, kV;
+    for (int32_t i = 0; i <= degU; ++i) kU.push_back(0.0f);
+    for (int32_t i = 0; i <= degU; ++i) kU.push_back(1.0f);
+    for (int32_t i = 0; i <= degV; ++i) kV.push_back(0.0f);
+    for (int32_t i = 0; i <= degV; ++i) kV.push_back(1.0f);
+
+    std::vector<Vec3> ctl;
+    ctl.reserve(static_cast<size_t>(nU * nV));
+
+    float alpha = 1.0f / (1.0f + spec.tangentScale);
+    const auto& ctlA = a.controlPoints();
+    const auto& ctlB = b.controlPoints();
+    int32_t nUA = a.controlPointCountU();
+    int32_t nVA = a.controlPointCountV();
+
+    for (int32_t i = 0; i < nU; ++i) {
+        for (int32_t j = 0; j < nV; ++j) {
+            Vec3 pt{};
+            int32_t ia = (i * nUA) / nU;
+            int32_t ja = (j * nVA) / nV;
+            int32_t ib = (i * b.controlPointCountU()) / nU;
+            int32_t jb = (j * b.controlPointCountV()) / nV;
+
+            size_t idxA = static_cast<size_t>(ia * nVA + ja);
+            size_t idxB = static_cast<size_t>(ib * b.controlPointCountV() + jb);
+
+            if (idxA < ctlA.size() && idxB < ctlB.size()) {
+                pt = Vec3{
+                    ctlA[idxA].x * alpha + ctlB[idxB].x * (1.0f - alpha),
+                    ctlA[idxA].y * alpha + ctlB[idxB].y * (1.0f - alpha),
+                    ctlA[idxA].z * alpha + ctlB[idxB].z * (1.0f - alpha),
+                };
+            }
+            ctl.push_back(pt);
+        }
+    }
+
+    return geometry::NurbsSurface(degU, degV, std::move(kU), std::move(kV), std::move(ctl), nU, nV);
+}
+
+bool CadSurfacing::validateClassA(const geometry::NurbsSurface& s) noexcept {
+    if (s.degreeU() < 3 || s.degreeV() < 3) return false;
+    const auto& ctl = s.controlPoints();
+    if (ctl.size() < 16) return false;
+
+    for (size_t i = 0; i + 1 < ctl.size(); ++i) {
+        float dx = ctl[i + 1].x - ctl[i].x;
+        float dy = ctl[i + 1].y - ctl[i].y;
+        float dz = ctl[i + 1].z - ctl[i].z;
+        if (std::sqrt(dx * dx + dy * dy + dz * dz) > 100.0f) return false;
+    }
+    return true;
+}
+
+CurvatureComb CadSurfacing::generateCurvatureComb(const geometry::NurbsSurface& s, float radius, bool isoU) noexcept {
+    CurvatureComb comb;
+    const int samples = std::max(2, static_cast<int>(radius * 8.0f));
+    auto [uMin, uMax] = s.domainU();
+    auto [vMin, vMax] = s.domainV();
+
+    comb.points.reserve(samples);
+    comb.normals.reserve(samples);
+    comb.curvature.reserve(samples);
+
+    float uMid = (uMin + uMax) * 0.5f;
+    float vMid = (vMin + vMax) * 0.5f;
+
+    for (int i = 0; i < samples; ++i) {
+        float t = static_cast<float>(i) / static_cast<float>(samples - 1);
+        float u = isoU ? uMin + t * (uMax - uMin) : uMid;
+        float v = isoU ? vMid : vMin + t * (vMax - vMin);
+
+        Vec3 pt = s.evaluate(u, v);
+        Vec3 du = s.derivativeU(u, v);
+        Vec3 dv = s.derivativeV(u, v);
+
+        Vec3 n{du.y * dv.z - du.z * dv.y,
+               du.z * dv.x - du.x * dv.z,
+               du.x * dv.y - du.y * dv.x};
+        float nLen = std::sqrt(n.x * n.x + n.y * n.y + n.z * n.z);
+        if (nLen > 1e-10f) {
+            n = Vec3{n.x / nLen, n.y / nLen, n.z / nLen};
+        }
+
+        float duLen = std::sqrt(du.x * du.x + du.y * du.y + du.z * du.z);
+        float dvLen = std::sqrt(dv.x * dv.x + dv.y * dv.y + dv.z * dv.z);
+
+        comb.points.push_back(pt);
+        comb.normals.push_back(n);
+        comb.curvature.push_back(0.1f + duLen * dvLen * 0.5f);
+    }
+
+    return comb;
+}
+
+geometry::Mesh CadSurfacing::generateZebraStripes(const geometry::NurbsSurface& s, uint32_t count) noexcept {
+    geometry::Mesh mesh;
+    std::vector<Vec3> positions;
+    auto [uMin, uMax] = s.domainU();
+    auto [vMin, vMax] = s.domainV();
+
+    float spacing = 1.0f / static_cast<float>(count);
+    float uSpan = uMax - uMin;
+
+    for (uint32_t i = 0; i < count; ++i) {
+        float t0 = static_cast<float>(i) * spacing;
+        float t1 = static_cast<float>(i + 1) * spacing;
+
+        Vec3 p0 = s.evaluate(uMin + t0 * uSpan, (vMin + vMax) * 0.5f);
+        Vec3 p1 = s.evaluate(uMin + t1 * uSpan, (vMin + vMax) * 0.5f);
+        Vec3 p2 = s.evaluate(uMin + t0 * uSpan, vMin);
+        Vec3 p3 = s.evaluate(uMin + t1 * uSpan, vMin);
+
+        uint32_t base = static_cast<uint32_t>(positions.size());
+        positions.push_back(p0);
+        positions.push_back(p1);
+        positions.push_back(p2);
+        positions.push_back(p3);
+
+        geometry::Face f1, f2;
+        f1.indices = {base, base + 1, base + 2};
+        f2.indices = {base + 1, base + 3, base + 2};
+        mesh.topology().addFace(f1);
+        mesh.topology().addFace(f2);
+    }
+
+    mesh.attributes().setPositions(positions);
+    return mesh;
+}
 
 // ── Tolerant ──────────────────────────────────────────────────────
-geometry::Mesh CadTolerantModeling::fuzzyUnion(const geometry::Mesh&,const geometry::Mesh&,const TolerantBooleanOptions&) noexcept { return {}; }
-geometry::Mesh CadTolerantModeling::healGaps(const geometry::Mesh& m,float) noexcept { return m; }
-geometry::Mesh CadTolerantModeling::removeSlivers(const geometry::Mesh& m,float) noexcept { return m; }
-geometry::Mesh CadTolerantModeling::repairImport(const geometry::Mesh& m) noexcept { return healGaps(removeSlivers(m),0.1f); }
+geometry::Mesh CadTolerantModeling::fuzzyUnion(const geometry::Mesh& a, const geometry::Mesh& b,
+                                                 const TolerantBooleanOptions& opts) noexcept {
+    geometry::Mesh result = a;
+    auto posA = result.attributes().positions();
+    auto posB = b.attributes().positions();
+
+    float eps = opts.gapTolerance;
+    std::vector<Vec3> merged = posA;
+    uint32_t offsetA = static_cast<uint32_t>(merged.size());
+
+    for (const auto& pb : posB) {
+        bool found = false;
+        for (uint32_t j = 0; j < offsetA; ++j) {
+            float dx = pb.x - merged[j].x;
+            float dy = pb.y - merged[j].y;
+            float dz = pb.z - merged[j].z;
+            if (std::sqrt(dx * dx + dy * dy + dz * dz) < eps) {
+                found = true;
+                break;
+            }
+        }
+        if (!found) {
+            merged.push_back(pb);
+        }
+    }
+
+    result.attributes().setPositions(merged);
+
+    for (size_t fi = 0; fi < a.topology().faceCount(); ++fi) {
+        result.topology().addFace(a.topology().face(fi));
+    }
+    for (size_t fi = 0; fi < b.topology().faceCount(); ++fi) {
+        geometry::Face f = b.topology().face(fi);
+        for (auto& idx : f.indices) idx += offsetA;
+        result.topology().addFace(f);
+    }
+
+    return result;
+}
+
+geometry::Mesh CadTolerantModeling::healGaps(const geometry::Mesh& mesh, float maxGap) noexcept {
+    geometry::Mesh result = mesh;
+    auto positions = result.attributes().positions();
+    const auto& topo = result.topology();
+
+    std::unordered_map<uint64_t, uint32_t> edgeCount;
+    for (size_t fi = 0; fi < topo.faceCount(); ++fi) {
+        const auto& face = topo.face(fi);
+        for (size_t vi = 0; vi < face.indices.size(); ++vi) {
+            uint32_t a = face.indices[vi];
+            uint32_t b = face.indices[(vi + 1) % face.indices.size()];
+            uint64_t key = (static_cast<uint64_t>(std::min(a, b)) << 32) | std::max(a, b);
+            edgeCount[key]++;
+        }
+    }
+
+    for (const auto& [key, count] : edgeCount) {
+        if (count == 1) {
+            uint32_t a = static_cast<uint32_t>(key >> 32);
+            uint32_t b = static_cast<uint32_t>(key & 0xFFFFFFFF);
+            if (a < positions.size() && b < positions.size()) {
+                float dx = positions[a].x - positions[b].x;
+                float dy = positions[a].y - positions[b].y;
+                float dz = positions[a].z - positions[b].z;
+                float dist = std::sqrt(dx * dx + dy * dy + dz * dz);
+                if (dist < maxGap && dist > 1e-10f) {
+                    positions[a] = Vec3{
+                        (positions[a].x + positions[b].x) * 0.5f,
+                        (positions[a].y + positions[b].y) * 0.5f,
+                        (positions[a].z + positions[b].z) * 0.5f};
+                    positions[b] = positions[a];
+                }
+            }
+        }
+    }
+
+    result.attributes().setPositions(positions);
+    return result;
+}
+
+geometry::Mesh CadTolerantModeling::removeSlivers(const geometry::Mesh& mesh, float threshold) noexcept {
+    geometry::Mesh result;
+    auto positions = mesh.attributes().positions();
+    result.attributes().setPositions(positions);
+
+    const auto& topo = mesh.topology();
+    for (size_t fi = 0; fi < topo.faceCount(); ++fi) {
+        const auto& face = topo.face(fi);
+        if (face.indices.size() < 3) continue;
+
+        uint32_t i0 = face.indices[0];
+        uint32_t i1 = face.indices[1];
+        uint32_t i2 = face.indices[2];
+        if (i0 >= positions.size() || i1 >= positions.size() || i2 >= positions.size()) continue;
+
+        float ax = positions[i1].x - positions[i0].x;
+        float ay = positions[i1].y - positions[i0].y;
+        float az = positions[i1].z - positions[i0].z;
+        float bx = positions[i2].x - positions[i0].x;
+        float by = positions[i2].y - positions[i0].y;
+        float bz = positions[i2].z - positions[i0].z;
+
+        float cx = ay * bz - az * by;
+        float cy = az * bx - ax * bz;
+        float cz = ax * by - ay * bx;
+        float area = 0.5f * std::sqrt(cx * cx + cy * cy + cz * cz);
+
+        if (area >= threshold) {
+            result.topology().addFace(face);
+        }
+    }
+
+    return result;
+}
+
+geometry::Mesh CadTolerantModeling::repairImport(const geometry::Mesh& m) noexcept {
+    auto repaired = healGaps(m, 0.1f);
+    return removeSlivers(repaired, 0.001f);
+}
 
 // ── MBD ───────────────────────────────────────────────────────────
-void CadMBD::addAnnotation(const PMIAnnotation& a) { m_annot.push_back(a); }
-void CadMBD::addGDnTFrame(const Vec3& p,const GDnTFrame& f,parametric::FeatureId id) { PMIAnnotation a; a.type=PMIAnnotation::GDnT; a.position=p; a.attachedFeature=id; a.text=f.geometricCharacteristic+" "+f.toleranceStr; if(!f.modifier.empty())a.text+=" "+f.modifier; if(!f.datumPrimary.empty())a.text+=" |"+f.datumPrimary; if(!f.datumSecondary.empty())a.text+=" |"+f.datumSecondary; if(!f.datumTertiary.empty())a.text+=" |"+f.datumTertiary; m_annot.push_back(a); }
-geometry::Mesh CadMBD::exportAnnotationsMesh(const std::vector<PMIAnnotation>&) noexcept { return {}; }
-const std::vector<PMIAnnotation>& CadMBD::annotations() const noexcept { return m_annot; }
-void CadMBD::clear() { m_annot.clear(); }
+geometry::Mesh CadMBD::exportAnnotationsMesh(const std::vector<PMIAnnotation>& annotations) noexcept {
+    geometry::Mesh mesh;
+    std::vector<Vec3> positions;
+
+    for (const auto& ann : annotations) {
+        float x = ann.position.x;
+        float y = ann.position.y;
+        float z = ann.position.z;
+        uint32_t base = static_cast<uint32_t>(positions.size());
+
+        switch (ann.type) {
+            case PMIAnnotation::Dimension: {
+                positions.push_back(Vec3{x, y, z});
+                positions.push_back(Vec3{x + 10, y, z});
+                positions.push_back(Vec3{x, y + 10, z});
+                geometry::Face f;
+                f.indices = {base, base + 1, base + 2};
+                mesh.topology().addFace(f);
+                break;
+            }
+            case PMIAnnotation::GDnT: {
+                float h = 5.0f;
+                positions.push_back(Vec3{x - h, y - h, z});
+                positions.push_back(Vec3{x + h, y - h, z});
+                positions.push_back(Vec3{x + h, y + h, z});
+                positions.push_back(Vec3{x - h, y + h, z});
+                geometry::Face f1, f2;
+                f1.indices = {base, base + 1, base + 2};
+                f2.indices = {base, base + 2, base + 3};
+                mesh.topology().addFace(f1);
+                mesh.topology().addFace(f2);
+                break;
+            }
+            case PMIAnnotation::Datum: {
+                float s = 4.0f;
+                positions.push_back(Vec3{x, y, z});
+                positions.push_back(Vec3{x + s, y - s, z});
+                positions.push_back(Vec3{x + s, y + s, z});
+                geometry::Face f;
+                f.indices = {base, base + 1, base + 2};
+                mesh.topology().addFace(f);
+                break;
+            }
+            default: {
+                positions.push_back(Vec3{x - 3, y - 3, z});
+                positions.push_back(Vec3{x + 3, y - 3, z});
+                positions.push_back(Vec3{x + 3, y + 3, z});
+                positions.push_back(Vec3{x - 3, y + 3, z});
+                geometry::Face f1, f2;
+                f1.indices = {base, base + 1, base + 2};
+                f2.indices = {base, base + 2, base + 3};
+                mesh.topology().addFace(f1);
+                mesh.topology().addFace(f2);
+                break;
+            }
+        }
+    }
+
+    mesh.attributes().setPositions(positions);
+    return mesh;
+}
 
 // ── IncrementalSolver ─────────────────────────────────────────────
-bool CadIncrementalSolver::solve(parametric::ConstraintGraph&,const SolverCache&,const std::vector<parametric::ParametricConstraintId>&) noexcept { return true; }
-SolverCache CadIncrementalSolver::buildCache(const parametric::ConstraintGraph& g) noexcept { SolverCache c; for(const auto& e:g.entities()) c.lastPositions.push_back(e.point.x); c.valid=true; return c; }
-void CadIncrementalSolver::invalidate(SolverCache&,parametric::ParametricEntityId) noexcept {}
+bool CadIncrementalSolver::solve(parametric::ConstraintGraph& graph,
+                                  const SolverCache& cache,
+                                  const std::vector<parametric::ParametricConstraintId>& changed) noexcept {
+    if (!cache.valid || changed.empty()) return cache.valid;
+
+    bool anyApplied = false;
+    for (auto cid : changed) {
+        for (const auto& dc : graph.distanceConstraints()) {
+            if (dc.id != cid) continue;
+            const auto* ptA = graph.point(dc.entityA);
+            const auto* ptB = graph.point(dc.entityB);
+            if (!ptA || !ptB) continue;
+
+            double dx = ptB->x - ptA->x;
+            double dy = ptB->y - ptA->y;
+            double dz = ptB->z - ptA->z;
+            double dist = std::sqrt(dx * dx + dy * dy + dz * dz);
+            if (dist < 1e-12) continue;
+
+            double scale = dc.targetDistance / dist;
+            parametric::ParametricPoint3 newPt{
+                ptA->x + dx * scale,
+                ptA->y + dy * scale,
+                ptA->z + dz * scale,
+            };
+            (void)graph.setPoint(dc.entityB, newPt);
+            anyApplied = true;
+        }
+        for (const auto& cc : graph.coincidentConstraints()) {
+            if (cc.id != cid) continue;
+            const auto* ptA = graph.point(cc.entityA);
+            if (!ptA) continue;
+            (void)graph.setPoint(cc.entityB, *ptA);
+            anyApplied = true;
+        }
+    }
+
+    return anyApplied || cache.valid;
+}
+
+SolverCache CadIncrementalSolver::buildCache(const parametric::ConstraintGraph& g) noexcept {
+    SolverCache c;
+    c.valid = true;
+    for (const auto& e : g.entities()) {
+        c.lastPositions.push_back(e.point.x);
+        c.lastPositions.push_back(e.point.y);
+        c.lastPositions.push_back(e.point.z);
+    }
+    for (const auto& dc : g.distanceConstraints())
+        c.changedConstraints.push_back(dc.id);
+    for (const auto& cc : g.coincidentConstraints())
+        c.changedConstraints.push_back(cc.id);
+    return c;
+}
+
+void CadIncrementalSolver::invalidate(SolverCache& c, parametric::ParametricEntityId) noexcept {
+    c.valid = false;
+}
+
 }

@@ -1,0 +1,120 @@
+{
+    "version": 6,
+    "cmakeMinimumRequired": {
+        "major": 3,
+        "minor": 28,
+        "patch": 0
+    },
+    "configurePresets": [
+        {
+            "name": "linux-vulkan",
+            "displayName": "Linux (Vulkan + OpenGL)",
+            "description": "Default Linux build with Vulkan backend and OpenGL viewport",
+            "generator": "Ninja",
+            "binaryDir": "${sourceDir}/build",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+                "NEXUS_BACKEND_VULKAN": "ON",
+                "NEXUS_BACKEND_NULL": "ON",
+                "NEXUS_ENABLE_TESTS": "ON",
+                "NEXUS_ENABLE_PYTHON": "OFF"
+            },
+            "environment": {
+                "CMAKE_PREFIX_PATH": "$env{HOME}/.local"
+            }
+        },
+        {
+            "name": "linux-debug",
+            "displayName": "Linux (Debug)",
+            "description": "Debug build with full warnings, tests, and Python bindings",
+            "generator": "Ninja",
+            "binaryDir": "${sourceDir}/build-debug",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Debug",
+                "NEXUS_BACKEND_VULKAN": "ON",
+                "NEXUS_BACKEND_NULL": "ON",
+                "NEXUS_ENABLE_TESTS": "ON",
+                "NEXUS_ENABLE_PYTHON": "ON"
+            }
+        },
+        {
+            "name": "linux-release",
+            "displayName": "Linux (Release)",
+            "description": "Fully optimized release build",
+            "generator": "Ninja",
+            "binaryDir": "${sourceDir}/build-release",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Release",
+                "NEXUS_BACKEND_VULKAN": "ON",
+                "NEXUS_BACKEND_NULL": "ON",
+                "NEXUS_ENABLE_TESTS": "OFF",
+                "NEXUS_ENABLE_PYTHON": "OFF"
+            }
+        },
+        {
+            "name": "macos-metal",
+            "displayName": "macOS (Metal + OpenGL)",
+            "description": "macOS build with Metal backend and OpenGL viewport via MoltenVK",
+            "generator": "Ninja",
+            "binaryDir": "${sourceDir}/build-macos",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+                "NEXUS_BACKEND_METAL": "ON",
+                "NEXUS_BACKEND_NULL": "ON",
+                "NEXUS_ENABLE_TESTS": "ON",
+                "NEXUS_ENABLE_PYTHON": "OFF",
+                "CMAKE_PREFIX_PATH": "/opt/homebrew;/usr/local"
+            },
+            "condition": {
+                "type": "equals",
+                "lhs": "${hostSystemName}",
+                "rhs": "Darwin"
+            }
+        },
+        {
+            "name": "windows-dx12",
+            "displayName": "Windows (DirectX 12 + OpenGL)",
+            "description": "Windows build with DX12 backend and OpenGL viewport",
+            "generator": "Ninja",
+            "binaryDir": "${sourceDir}/build-windows",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+                "NEXUS_BACKEND_DX12": "ON",
+                "NEXUS_BACKEND_NULL": "ON",
+                "NEXUS_ENABLE_TESTS": "ON",
+                "NEXUS_ENABLE_PYTHON": "OFF"
+            },
+            "condition": {
+                "type": "equals",
+                "lhs": "${hostSystemName}",
+                "rhs": "Windows"
+            }
+        }
+    ],
+    "buildPresets": [
+        {
+            "name": "linux-vulkan",
+            "configurePreset": "linux-vulkan",
+            "jobs": 0
+        },
+        {
+            "name": "macos-metal",
+            "configurePreset": "macos-metal",
+            "jobs": 0
+        },
+        {
+            "name": "windows-dx12",
+            "configurePreset": "windows-dx12",
+            "jobs": 0
+        }
+    ],
+    "testPresets": [
+        {
+            "name": "linux-vulkan",
+            "configurePreset": "linux-vulkan",
+            "output": {
+                "outputOnFailure": true
+            }
+        }
+    ]
+}

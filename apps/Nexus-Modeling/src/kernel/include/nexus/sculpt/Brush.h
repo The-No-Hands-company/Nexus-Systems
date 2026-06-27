@@ -21,9 +21,16 @@ enum class FalloffShape : uint8_t {
     Linear,
     Smooth,
     Sharp,
+    Root,
+    Sphere,
+    InverseSmooth,
+    BellCurve,
+    Custom,
 };
 
 float evaluateFalloff(FalloffShape shape, float t01) noexcept;
+float evaluatePressureCurve(float pressure, float hardness, float minRadius, float maxRadius) noexcept;
+float evaluateBrushStrength(float pressure, float hardness, float baseStrength) noexcept;
 
 struct BrushParams {
     float radius = 0.5f;

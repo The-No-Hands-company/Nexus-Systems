@@ -1,0 +1,21 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cmake build *)",
+      "Bash(echo \"configure exit=$?\")",
+      "Read(//tmp/**)",
+      "Bash(./tests/nexus_kernel_tests --gtest_filter='ApiFreezeAudit.*:AppLayer.*')",
+      "Bash(./tests/nexus_kernel_tests --gtest_filter='ApiFreezeAudit.PublicHeaderManifestMatchesWorkspace')",
+      "Bash(grep -iE \"missing|unexpected|manifest|\\\\.h$|extra|only in\")",
+      "Bash(timeout 600 ./build/tests/nexus_kernel_tests)",
+      "Bash(echo \"exit=$?\")",
+      "Bash(./build/tests/nexus_kernel_tests --gtest_filter='ApiFreezeAudit.*')",
+      "Bash(grep -c \"\\\\.h$\" tests/kernel/fixtures/api_surface_manifest_alpha_v1.txt)",
+      "Bash(sed -n '25,40p' src/kernel/src/app/EditorUI.cpp)",
+      "Bash(sed -n '20,30p' app/main.cpp)",
+      "Bash(g++ -std=c++23 -fsyntax-only test_pyhdr.cpp)",
+      "Bash(echo \"exit: $?\")",
+      "Bash(g++ -std=c++23 -fsyntax-only test_pyhdr2.cpp)"
+    ]
+  }
+}

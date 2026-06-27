@@ -1,5 +1,6 @@
 #include <nexus/sim/SimulationCoupling.h>
 #include <algorithm>
+#include <cmath>
 
 namespace nexus::sim {
 
@@ -17,9 +18,7 @@ void SimulationSceneCoupling::setBindings(std::span<const SimulationSceneBinding
 
 void SimulationSceneCoupling::applyState(const SimState& state) noexcept
 {
-    if (!m_scene) {
-        return;
-    }
+    if (!m_scene) return;
 
     for (const auto& body : state.bodies) {
         const auto it = std::find_if(m_bindings.begin(), m_bindings.end(),
@@ -27,9 +26,7 @@ void SimulationSceneCoupling::applyState(const SimState& state) noexcept
                 return binding.simBodyId == body.id;
             });
 
-        if (it == m_bindings.end() || it->sceneNodeId == render::Node::kInvalidNode) {
-            continue;
-        }
+        if (it == m_bindings.end() || it->sceneNodeId == render::Node::kInvalidNode) continue;
 
         if (render::Node* node = m_scene->findNode(it->sceneNodeId)) {
             render::Transform& xf = node->localTransform();
@@ -43,6 +40,13 @@ void SimulationSceneCoupling::applyState(const SimState& state) noexcept
             node->markDirty();
         }
     }
+}
+
+bool SimulationSceneCoupling::isBindingValid(const SimulationSceneBinding& binding) const noexcept
+{
+    if (!m_scene) return false;
+    if (binding.sceneNodeId == render::Node::kInvalidNode) return false;
+    return m_scene->findNode(binding.sceneNodeId) != nullptr;
 }
 
 } // namespace nexus::sim

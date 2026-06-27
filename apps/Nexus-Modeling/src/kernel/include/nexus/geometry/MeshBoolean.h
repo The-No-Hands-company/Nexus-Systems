@@ -13,6 +13,7 @@
 
 #include <cstdint>
 #include <string>
+#include <vector>
 
 namespace nexus::geometry {
 
@@ -31,6 +32,9 @@ struct MeshBooleanResult {
 class MeshBoolean {
 public:
     [[nodiscard]] static MeshBooleanResult compute(const Mesh& a, const Mesh& b, BooleanOp op);
+    [[nodiscard]] static MeshBooleanResult computeMultiple(const std::vector<Mesh>& meshes, BooleanOp op);
+    [[nodiscard]] static MeshBooleanResult computeWithOptions(const Mesh& a, const Mesh& b, BooleanOp op, bool preserveAttributes);
+    [[nodiscard]] static bool canCompute(const Mesh& a, const Mesh& b) noexcept;
 };
 
 } // namespace nexus::geometry

@@ -46,6 +46,13 @@ public:
     void addSlot(const MaterialSlot& slot);
     const std::vector<MaterialSlot>& slots() const;
 
+    static PBRMaterial createDefault();
+    static PBRMaterial createMetal(const std::string& name, float r, float g, float b, float roughness = 0.3f);
+    static PBRMaterial createDielectric(const std::string& name, float r, float g, float b, float roughness = 0.5f);
+    static PBRMaterial createEmissive(const std::string& name, float r, float g, float b, float strength = 1.0f);
+    static std::string generateShaderDefines(const PBRMaterial& mat);
+    static std::string generateShaderFunctions();
+
 private:
     std::vector<PBRMaterial> m_materials;
     std::vector<MaterialSlot> m_slots;

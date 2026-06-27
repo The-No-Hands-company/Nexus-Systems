@@ -39,17 +39,50 @@ DenoiserBackend OIDNDenoiser::activeDenoiser() const noexcept {
     return DenoiserBackend::None;
 }
 
-void OIDNDenoiser::denoise(nexus::gfx::CmdBufHandle /*cmd*/, const DenoiserInput& input, DenoiserOutput& /*output*/)
+void OIDNDenoiser::denoise(nexus::gfx::CmdBufHandle, const DenoiserInput& input, DenoiserOutput& output)
 {
 #if defined(NEXUS_ENABLE_OIDN)
-    if (!m_filter) return;
+    if (!m_filter) {
+        output.color = input.color;
+        return;
+    }
+
     auto dev    = static_cast<OIDNDevice>(m_device);
     auto filter = static_cast<OIDNFilter>(m_filter);
 
-    // Runtime-safe behavior until readback/writeback integration is implemented:
-    // retain a deterministic no-op denoise path.
-    (void)input; (void)dev; (void)filter;
+    size_t pixelCount = static_cast<size_t>(input.width * input.height);
+    size_t bufferSize = pixelCount * 3 * sizeof(float);
+
+    oidnSetSharedFilterImage(filter, "color",
+        const_cast<float*>(input.color.data()), OIDN_FORMAT_FLOAT3,
+        input.width, input.height, 0, sizeof(float) * 3, sizeof(float) * 3 * input.width);
+
+    if (!input.albedo.empty()) {
+        oidnSetSharedFilterImage(filter, "albedo",
+            const_cast<float*>(input.albedo.data()), OIDN_FORMAT_FLOAT3,
+            input.width, input.height, 0, sizeof(float) * 3, sizeof(float) * 3 * input.width);
+    }
+
+    if (!input.normal.empty()) {
+        oidnSetSharedFilterImage(filter, "normal",
+            const_cast<float*>(input.normal.data()), OIDN_FORMAT_FLOAT3,
+            input.width, input.height, 0, sizeof(float) * 3, sizeof(float) * 3 * input.width);
+    }
+
+    output.color.resize(pixelCount * 3, 0.0f);
+    oidnSetSharedFilterImage(filter, "output",
+        output.color.data(), OIDN_FORMAT_FLOAT3,
+        input.width, input.height, 0, sizeof(float) * 3, sizeof(float) * 3 * input.width);
+
+    oidnCommitFilter(filter);
+    oidnExecuteFilter(filter);
+
+    const char* errorMsg = nullptr;
+    if (oidnGetDeviceError(dev, &errorMsg) != OIDN_ERROR_NONE) {
+        output.color = input.color;
+    }
 #else
+    output.color = input.color;
     (void)input;
 #endif
 }

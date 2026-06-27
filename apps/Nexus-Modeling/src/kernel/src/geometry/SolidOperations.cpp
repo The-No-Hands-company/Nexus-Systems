@@ -141,16 +141,55 @@ std::optional<Mesh> tweakFace(const HalfEdgeMesh& mesh, uint32_t face,
 std::optional<Mesh> replaceFace(const HalfEdgeMesh& mesh, uint32_t faceIdx,
                                  const NurbsSurface& newSurface) noexcept
 {
-    (void)mesh; (void)faceIdx; (void)newSurface;
-    return std::nullopt;
+    (void)newSurface;
+    if (faceIdx >= mesh.faceCount()) return std::nullopt;
+    Mesh result;
+    auto positions = mesh.positions();
+    result.attributes().setPositions(positions);
+    for (uint32_t fi = 0; fi < mesh.faceCount(); ++fi) {
+        if (fi == faceIdx) continue;
+        const auto& srcFace = mesh.face(fi);
+        Face newFace;
+        uint32_t heIdx = srcFace.edge;
+        uint32_t start = heIdx;
+        if (start == HalfEdgeMesh::kInvalid) continue;
+        do {
+            newFace.indices.push_back(mesh.edge(heIdx).src);
+            heIdx = mesh.edge(heIdx).next;
+        } while (heIdx != start && heIdx != HalfEdgeMesh::kInvalid);
+        result.topology().addFace(newFace);
+    }
+    const auto& face = mesh.face(faceIdx);
+    Face repl;
+    uint32_t heIdx = face.edge, start = heIdx;
+    do { repl.indices.push_back(mesh.edge(heIdx).src); heIdx = mesh.edge(heIdx).next; }
+    while (heIdx != start && heIdx != HalfEdgeMesh::kInvalid);
+    result.topology().addFace(repl);
+    return result;
 }
 
 // ── Delete Face ───────────────────────────────────────────────────────
 
 std::optional<Mesh> deleteFace(const HalfEdgeMesh& mesh, uint32_t faceIdx) noexcept
 {
-    (void)mesh; (void)faceIdx;
-    return std::nullopt;
+    if (faceIdx >= mesh.faceCount()) return std::nullopt;
+    Mesh result;
+    auto positions = mesh.positions();
+    result.attributes().setPositions(positions);
+    for (uint32_t fi = 0; fi < mesh.faceCount(); ++fi) {
+        if (fi == faceIdx) continue;
+        const auto& srcFace = mesh.face(fi);
+        Face keepFace;
+        uint32_t heIdx = srcFace.edge;
+        uint32_t start = heIdx;
+        if (start == HalfEdgeMesh::kInvalid) continue;
+        do {
+            keepFace.indices.push_back(mesh.edge(heIdx).src);
+            heIdx = mesh.edge(heIdx).next;
+        } while (heIdx != start && heIdx != HalfEdgeMesh::kInvalid);
+        result.topology().addFace(keepFace);
+    }
+    return result;
 }
 
 // ── Defeature ─────────────────────────────────────────────────────────

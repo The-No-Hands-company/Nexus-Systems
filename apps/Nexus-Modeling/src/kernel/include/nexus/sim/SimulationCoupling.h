@@ -33,6 +33,7 @@ public:
     /// its scene node's local transform. Unbound bodies and missing nodes are
     /// skipped. Scale is left untouched (the solver does not model it).
     void applyState(const SimState& state) noexcept;
+    bool isBindingValid(const SimulationSceneBinding& binding) const noexcept;
 
     [[nodiscard]] bool hasBindings() const noexcept { return !m_bindings.empty(); }
 

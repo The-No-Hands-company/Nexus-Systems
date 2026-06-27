@@ -89,12 +89,121 @@ NurbsSurface extendSurface(const NurbsSurface& surf, const SurfaceExtensionOptio
 }
 
 Mesh offsetFaceWithDraft(const HalfEdgeMesh& mesh, uint32_t face, const FaceOffsetOptions& opts) noexcept {
-    (void)mesh;(void)face;(void)opts;
-    return {};
+    if (face >= mesh.faceCount()) return {};
+    Mesh result;
+    auto positions = mesh.positions();
+    const auto& heFace = mesh.face(face);
+
+    std::vector<Vec3> faceVerts;
+    uint32_t heIdx = heFace.edge;
+    uint32_t start = heIdx;
+    if (start == HalfEdgeMesh::kInvalid) return {};
+
+    do {
+        faceVerts.push_back(positions[mesh.edge(heIdx).src]);
+        heIdx = mesh.edge(heIdx).next;
+    } while (heIdx != start && heIdx != HalfEdgeMesh::kInvalid);
+
+    if (faceVerts.size() < 3) return {};
+
+    Vec3 e1{faceVerts[1].x - faceVerts[0].x, faceVerts[1].y - faceVerts[0].y, faceVerts[1].z - faceVerts[0].z};
+    Vec3 e2{faceVerts[2].x - faceVerts[0].x, faceVerts[2].y - faceVerts[0].y, faceVerts[2].z - faceVerts[0].z};
+    Vec3 normal{e1.y * e2.z - e1.z * e2.y, e1.z * e2.x - e1.x * e2.z, e1.x * e2.y - e1.y * e2.x};
+    float nLen = std::sqrt(normal.x * normal.x + normal.y * normal.y + normal.z * normal.z);
+    if (nLen < 1e-10f) return {};
+    normal = Vec3{normal.x / nLen, normal.y / nLen, normal.z / nLen};
+
+    float draftAngleRad = opts.draftAngleDeg * std::numbers::pi_v<float> / 180.0f;
+    float offsetDist = opts.offset;
+    float draftScale = std::tan(draftAngleRad) * offsetDist;
+
+    for (auto& v : faceVerts) {
+        v = Vec3{
+            v.x + normal.x * offsetDist + normal.x * draftScale,
+            v.y + normal.y * offsetDist + normal.y * draftScale,
+            v.z + normal.z * offsetDist + normal.z * draftScale,
+        };
+    }
+
+    Mesh outMesh;
+    outMesh.attributes().setPositions(faceVerts);
+    for (size_t i = 0; i + 2 < faceVerts.size(); ++i) {
+        Face f;
+        f.indices = {0, static_cast<uint32_t>(i + 1), static_cast<uint32_t>(i + 2)};
+        outMesh.topology().addFace(f);
+    }
+
+    return outMesh;
 }
 
 ImprintResult imprintCurveOnMesh(const Mesh& mesh, const NurbsCurve& curve, const Vec3& projDir) noexcept {
-    (void)mesh;(void)curve;(void)projDir;
-    return {};
+    ImprintResult result;
+    if (!mesh.isValid()) return result;
+
+    const auto& positions = mesh.attributes().positions();
+    const auto& topology = mesh.topology();
+
+    float dx = projDir.x, dy = projDir.y, dz = projDir.z;
+    float dLen = std::sqrt(dx * dx + dy * dy + dz * dz);
+    if (dLen < 1e-10f) { dx = 0; dy = 0; dz = 1; }
+    else { dx /= dLen; dy /= dLen; dz /= dLen; }
+
+    const int curveSamples = 64;
+    auto [domainMin, domainMax] = curve.domain();
+    for (int s = 0; s <= curveSamples; ++s) {
+        float t = static_cast<float>(s) / static_cast<float>(curveSamples);
+        Vec3 curvePt = curve.evaluate(domainMin + t * (domainMax - domainMin));
+
+        for (size_t fi = 0; fi < topology.faceCount(); ++fi) {
+            const auto& face = topology.face(fi);
+            if (face.indices.size() < 3) continue;
+
+            uint32_t i0 = face.indices[0];
+            uint32_t i1 = face.indices[1];
+            uint32_t i2 = face.indices[2];
+            if (i0 >= positions.size() || i1 >= positions.size() || i2 >= positions.size()) continue;
+
+            const Vec3& v0 = positions[i0];
+            const Vec3& v1 = positions[i1];
+            const Vec3& v2 = positions[i2];
+
+            Vec3 e1{v1.x - v0.x, v1.y - v0.y, v1.z - v0.z};
+            Vec3 e2{v2.x - v0.x, v2.y - v0.y, v2.z - v0.z};
+            Vec3 fn{e1.y * e2.z - e1.z * e2.y, e1.z * e2.x - e1.x * e2.z, e1.x * e2.y - e1.y * e2.x};
+            float fnLen = std::sqrt(fn.x * fn.x + fn.y * fn.y + fn.z * fn.z);
+            if (fnLen < 1e-10f) continue;
+            fn = Vec3{fn.x / fnLen, fn.y / fnLen, fn.z / fnLen};
+
+            float denom = fn.x * dx + fn.y * dy + fn.z * dz;
+            if (std::abs(denom) < 1e-10f) continue;
+
+            float nd = fn.x * (v0.x - curvePt.x) + fn.y * (v0.y - curvePt.y) + fn.z * (v0.z - curvePt.z);
+            float hitT = nd / denom;
+
+            Vec3 hitPt{
+                curvePt.x + dx * hitT,
+                curvePt.y + dy * hitT,
+                curvePt.z + dz * hitT,
+            };
+
+            Vec3 v0h{hitPt.x - v0.x, hitPt.y - v0.y, hitPt.z - v0.z};
+            float d00 = e1.x * v0h.x + e1.y * v0h.y + e1.z * v0h.z;
+            float d01 = e2.x * v0h.x + e2.y * v0h.y + e2.z * v0h.z;
+            float d11 = e1.x * e1.x + e1.y * e1.y + e1.z * e1.z;
+            float d12 = e1.x * e2.x + e1.y * e2.y + e1.z * e2.z;
+            float d22 = e2.x * e2.x + e2.y * e2.y + e2.z * e2.z;
+            float invDenom = 1.0f / (d11 * d22 - d12 * d12 + 1e-10f);
+            float u = (d22 * d00 - d12 * d01) * invDenom;
+            float v = (d11 * d01 - d12 * d00) * invDenom;
+
+            if (u >= 0 && v >= 0 && u + v <= 1) {
+                result.newEdges.push_back(static_cast<uint32_t>(fi));
+                result.success = true;
+                break;
+            }
+        }
+    }
+
+    return result;
 }
 }
