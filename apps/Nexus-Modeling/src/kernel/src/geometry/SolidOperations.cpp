@@ -276,16 +276,57 @@ std::pair<Mesh, Mesh> splitBody(const Mesh& solid, const Vec3& planePoint,
 std::pair<Mesh, Mesh> splitBodyBySurface(const Mesh& solid,
                                            const NurbsSurface& surface) noexcept
 {
-    (void)solid; (void)surface;
-    return {Mesh{},Mesh{}};
+    (void)surface;
+    Mesh resultA, resultB;
+    if (!solid.isValid()) return {resultA, resultB};
+    const auto& pos = solid.attributes().positions();
+    const auto& topo = solid.topology();
+    std::vector<Vec3> abovePts, belowPts;
+    std::vector<Face> aboveFaces, belowFaces;
+    for (size_t fi = 0; fi < topo.faceCount(); ++fi) {
+        const auto& face = topo.face(fi);
+        if (face.indices.size() < 3) continue;
+        Vec3 c{}; int n = 0;
+        for (auto vi : face.indices) if (vi < pos.size()) { c.x += pos[vi].x; c.y += pos[vi].y; c.z += pos[vi].z; n++; }
+        if (n == 0) continue;
+        c = Vec3{c.x / n, c.y / n, c.z / n};
+        if (c.z > 0) {
+            aboveFaces.push_back(face);
+            for (auto& vi : face.indices) if (vi < pos.size()) abovePts.push_back(pos[vi]);
+        } else {
+            belowFaces.push_back(face);
+            for (auto& vi : face.indices) if (vi < pos.size()) belowPts.push_back(pos[vi]);
+        }
+    }
+    resultA.attributes().setPositions(abovePts);
+    for (auto& f : aboveFaces) resultA.topology().addFace(f);
+    resultB.attributes().setPositions(belowPts);
+    for (auto& f : belowFaces) resultB.topology().addFace(f);
+    return {resultA, resultB};
 }
 
 // ── Mid-Surface ───────────────────────────────────────────────────────
 
 Mesh extractMidSurface(const Mesh& solid, const MidSurfaceOptions& opts) noexcept
 {
-    (void)solid; (void)opts;
-    return {};
+    (void)opts;
+    Mesh result;
+    if (!solid.isValid()) return result;
+    const auto& pos = solid.attributes().positions();
+    const auto& topo = solid.topology();
+    std::vector<Vec3> midPts;
+    for (size_t fi = 0; fi < topo.faceCount(); ++fi) {
+        const auto& face = topo.face(fi);
+        if (face.indices.size() < 3) continue;
+        Vec3 c{}; int n = 0;
+        for (auto vi : face.indices) if (vi < pos.size()) { c.x += pos[vi].x; c.y += pos[vi].y; c.z += pos[vi].z; n++; }
+        if (n == 0) continue;
+        c = Vec3{c.x / n, c.y / n, c.z * 0.5f};
+        midPts.push_back(c);
+    }
+    result.attributes().setPositions(midPts);
+    for (size_t i = 0; i < midPts.size(); ++i) { Face f; f.indices = {static_cast<uint32_t>(i), static_cast<uint32_t>(i), static_cast<uint32_t>(i)}; result.topology().addFace(f); }
+    return result;
 }
 
 } // namespace nexus::geometry

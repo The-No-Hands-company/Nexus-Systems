@@ -27,7 +27,7 @@ NurbsSurface createBlendSurface(const NurbsSurface& surfA, const NurbsSurface& s
     if (!surfA.isValid() || !surfB.isValid() || !railCurve.isValid()) return {};
 
     auto domUa = surfA.domainU(), domVa = surfA.domainV();
-    auto domUb = surfB.domainU();
+    auto domUb = surfB.domainU(), domVb = surfB.domainV();
     (void)domUb;
     auto railDom = railCurve.domain();
 
@@ -49,7 +49,7 @@ NurbsSurface createBlendSurface(const NurbsSurface& surfA, const NurbsSurface& s
         float ua = domUa.first + (domUa.second - domUa.first) * 0.5f;
         float va = domVa.first + (domVa.second - domVa.first) * 0.5f;
         float ub = domUb.first + (domUb.second - domUb.first) * 0.5f;
-        float vb = domUb.first + (domUb.second - domUb.first) * 0.5f;
+        float vb = domVb.first + (domVb.second - domVb.first) * 0.5f;
 
         Vec3 ptA = sampleSurface(surfA, ua, va);
         Vec3 ptB = sampleSurface(surfB, ub, vb);
