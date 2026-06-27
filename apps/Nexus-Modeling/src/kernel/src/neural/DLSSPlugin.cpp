@@ -92,45 +92,25 @@ void DLSSPlugin::initNGX(VkInstance instance, VkPhysicalDevice physDev, VkDevice
     m_ngxAvailable = (result == 1 /*NVSDK_NGX_Result_Success*/);
 }
 
-void DLSSPlugin::upscale(nexus::gfx::CmdBufHandle, const UpscalerInput& input, UpscalerOutput& output)
+void DLSSPlugin::upscale(nexus::gfx::CmdBufHandle /*cmd*/, const UpscalerInput& input, UpscalerOutput& output)
 {
     if (!m_ngxAvailable || !m_pfn.EvaluateFeature) {
         output.color = input.color;
         return;
     }
 
-    size_t outPixels = static_cast<size_t>(input.targetWidth * input.targetHeight);
-    output.color.resize(outPixels * 3, 0.0f);
-
-    if (m_pfn.EvaluateFeature) {
-        float jitterX = 0.0f;
-        float jitterY = 0.0f;
-        if (!input.motionVectors.empty()) {
-            jitterX = input.motionVectors[0];
-            jitterY = input.motionVectors.size() > 1 ? input.motionVectors[1] : 0.0f;
-        }
-
-        m_frameIndex++;
-
-        float scaleX = static_cast<float>(input.targetWidth) / static_cast<float>(input.sourceWidth);
-        float scaleY = static_cast<float>(input.targetHeight) / static_cast<float>(input.sourceHeight);
-
-        output.color = input.color;
-        (void)scaleX; (void)scaleY; (void)jitterX; (void)jitterY;
-    } else {
-        output.color = input.color;
-    }
+    // Until full NGX parameter wiring is integrated, keep behavior deterministic.
+    output.color = input.color;
 }
 
-void DLSSPlugin::denoise(nexus::gfx::CmdBufHandle, const DenoiserInput& input, DenoiserOutput& output)
+void DLSSPlugin::denoise(nexus::gfx::CmdBufHandle /*cmd*/, const DenoiserInput& input, DenoiserOutput& output)
 {
-    if (!m_ngxAvailable || !m_pfn.EvaluateFeature) {
+    if (!m_ngxAvailable) {
         output.color = input.color;
         return;
     }
 
-    size_t pixelCount = static_cast<size_t>(input.width * input.height);
-    output.color.resize(pixelCount * 3, 0.0f);
+    // Until full NGX parameter wiring is integrated, keep behavior deterministic.
     output.color = input.color;
 }
 

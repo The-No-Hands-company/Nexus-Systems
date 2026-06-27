@@ -68,33 +68,15 @@ void XeSSPlugin::initXeSS(VkDevice device, VkPhysicalDevice physDev)
     m_available = (result == 0 /*XESS_RESULT_SUCCESS*/);
 }
 
-void XeSSPlugin::upscale(nexus::gfx::CmdBufHandle, const UpscalerInput& input, UpscalerOutput& output)
+void XeSSPlugin::upscale(nexus::gfx::CmdBufHandle /*cmd*/, const UpscalerInput& input, UpscalerOutput& output)
 {
     if (!m_available || !m_pfn.VKExecute || !m_xessCtx) {
         output.color = input.color;
         return;
     }
 
-    size_t outPixels = static_cast<size_t>(input.targetWidth * input.targetHeight);
-    output.color.resize(outPixels * 3, 0.0f);
-
-    if (m_pfn.VKExecute) {
-        float jitterX = 0.0f;
-        float jitterY = 0.0f;
-        if (!input.motionVectors.empty()) {
-            jitterX = input.motionVectors[0];
-            jitterY = input.motionVectors.size() > 1 ? input.motionVectors[1] : 0.0f;
-        }
-
-        float scaleX = static_cast<float>(input.targetWidth) / static_cast<float>(input.sourceWidth);
-        float scaleY = static_cast<float>(input.targetHeight) / static_cast<float>(input.sourceHeight);
-
-        m_frameIndex++;
-        output.color = input.color;
-        (void)scaleX; (void)scaleY; (void)jitterX; (void)jitterY;
-    } else {
-        output.color = input.color;
-    }
+    // Until full XeSS execute parameter wiring is integrated, keep behavior deterministic.
+    output.color = input.color;
 }
 
 void XeSSPlugin::denoise(nexus::gfx::CmdBufHandle /*cmd*/, const DenoiserInput& /*input*/, DenoiserOutput& /*output*/)
