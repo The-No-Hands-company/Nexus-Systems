@@ -116,6 +116,7 @@ bool SetHeightCommand::execute(CadDocument& doc)
 
 bool SetHeightCommand::undo(CadDocument& doc)
 {
+    if (!m_executed) return false;
     doc.history().setHeight(m_featureId, m_oldHeight);
     doc.history().rebuild();
     m_executed = false;
