@@ -1,0 +1,155 @@
+{
+  "company": {
+    "name": "The No Hands Company",
+    "division": "Nexus Systems",
+    "summary": "Builds a growing ecosystem of connected tools for self-hosted, federated, and embedded operations.",
+    "primaryHub": "Nexus-Cloud"
+  },
+  "platform": {
+    "name": "Nexus Systems Ecosystem",
+    "vision": "An interoperable suite of products that can run standalone, federated, and inside the central Nexus-Cloud hub.",
+    "plannedScale": 80
+  },
+  "repositories": [
+    {
+      "id": "ecosystem-graph",
+      "name": "ecosystem-graph",
+      "repoPath": "/run/media/zajferx/Data/dev/The-No-hands-Company/projects/Nexus-Systems/ecosystem-graph",
+      "category": "mapping",
+      "deploymentModel": ["self-hosted"],
+      "federation": true,
+      "embeddedInNexusCloud": true,
+      "publicFacing": false
+    },
+    {
+      "id": "nexus",
+      "name": "Nexus",
+      "repoPath": "/run/media/zajferx/Data/dev/The-No-hands-Company/projects/Nexus-Systems/Nexus",
+      "category": "core",
+      "deploymentModel": ["self-hosted", "federated"],
+      "federation": true,
+      "embeddedInNexusCloud": true,
+      "publicFacing": true
+    },
+    {
+      "id": "nexus-ai",
+      "name": "Nexus-AI",
+      "repoPath": "/run/media/zajferx/Data/dev/The-No-hands-Company/projects/Nexus-Systems/Nexus-AI",
+      "category": "ai",
+      "deploymentModel": ["self-hosted", "embedded"],
+      "federation": true,
+      "embeddedInNexusCloud": true,
+      "publicFacing": true
+    },
+    {
+      "id": "nexusclaw",
+      "name": "Nexusclaw",
+      "repoPath": "/run/media/zajferx/Data/dev/The-No-hands-Company/projects/Nexus-Systems/Nexusclaw",
+      "category": "automation",
+      "deploymentModel": ["self-hosted", "embedded"],
+      "federation": true,
+      "embeddedInNexusCloud": true,
+      "publicFacing": false
+    },
+    {
+      "id": "nexus-cloud",
+      "name": "Nexus-Cloud",
+      "repoPath": "/run/media/zajferx/Data/dev/The-No-hands-Company/projects/Nexus-Systems/Nexus-Cloud",
+      "category": "hub",
+      "deploymentModel": ["self-hosted", "federated", "embedded"],
+      "federation": true,
+      "embeddedInNexusCloud": false,
+      "publicFacing": true
+    },
+    {
+      "id": "nexus-computer",
+      "name": "Nexus-Computer",
+      "repoPath": "/run/media/zajferx/Data/dev/The-No-hands-Company/projects/Nexus-Systems/Nexus-Computer",
+      "category": "compute",
+      "deploymentModel": ["self-hosted", "embedded"],
+      "federation": true,
+      "embeddedInNexusCloud": true,
+      "publicFacing": true
+    },
+    {
+      "id": "nexus-deploy",
+      "name": "Nexus-Deploy",
+      "repoPath": "/run/media/zajferx/Data/dev/The-No-hands-Company/projects/Nexus-Systems/Nexus-Deploy",
+      "category": "deployment",
+      "deploymentModel": ["self-hosted", "federated"],
+      "federation": true,
+      "embeddedInNexusCloud": true,
+      "publicFacing": true
+    },
+    {
+      "id": "nexus-forge",
+      "name": "Nexus-Forge",
+      "repoPath": "/run/media/zajferx/Data/dev/The-No-hands-Company/projects/Nexus-Systems/Nexus-Forge",
+      "category": "build",
+      "deploymentModel": ["self-hosted", "embedded"],
+      "federation": true,
+      "embeddedInNexusCloud": true,
+      "publicFacing": true
+    },
+    {
+      "id": "nexus-hosting",
+      "name": "Nexus-Hosting",
+      "repoPath": "/run/media/zajferx/Data/dev/The-No-hands-Company/projects/Nexus-Systems/Nexus-Hosting",
+      "category": "hosting",
+      "deploymentModel": ["self-hosted", "federated"],
+      "federation": true,
+      "embeddedInNexusCloud": true,
+      "publicFacing": true
+    },
+    {
+      "id": "nexus-network",
+      "name": "Nexus-Network",
+      "repoPath": "/run/media/zajferx/Data/dev/The-No-hands-Company/projects/Nexus-Systems/Nexus-Network",
+      "category": "network",
+      "deploymentModel": ["self-hosted", "federated", "embedded"],
+      "federation": true,
+      "embeddedInNexusCloud": true,
+      "publicFacing": true
+    },
+    {
+      "id": "nexus-porter",
+      "name": "Nexus-Porter",
+      "repoPath": "/run/media/zajferx/Data/dev/The-No-hands-Company/projects/Nexus-Systems/Nexus-Porter",
+      "category": "integration",
+      "deploymentModel": ["self-hosted", "embedded"],
+      "federation": true,
+      "embeddedInNexusCloud": true,
+      "publicFacing": true
+    },
+    {
+      "id": "nexus-vault",
+      "name": "Nexus-Vault",
+      "repoPath": "/run/media/zajferx/Data/dev/The-No-hands-Company/projects/Nexus-Systems/Nexus-Vault",
+      "category": "security",
+      "deploymentModel": ["self-hosted", "federated", "embedded"],
+      "federation": true,
+      "embeddedInNexusCloud": true,
+      "publicFacing": true
+    },
+    {
+      "id": "phantom",
+      "name": "Phantom",
+      "repoPath": "/run/media/zajferx/Data/dev/The-No-hands-Company/projects/Nexus-Systems/Phantom",
+      "category": "runtime",
+      "deploymentModel": ["self-hosted", "embedded"],
+      "federation": true,
+      "embeddedInNexusCloud": true,
+      "publicFacing": false
+    },
+    {
+      "id": "nit",
+      "name": "Nit",
+      "repoPath": "/run/media/zajferx/Data/dev/The-No-hands-Company/projects/Nexus-Systems/Nit",
+      "category": "utility",
+      "deploymentModel": ["self-hosted", "embedded"],
+      "federation": true,
+      "embeddedInNexusCloud": true,
+      "publicFacing": false
+    }
+  ]
+}

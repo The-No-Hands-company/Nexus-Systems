@@ -1,5 +1,5 @@
 #pragma once
-// Vertex edit mode — move selected vertex to cursor position
+// Vertex edit mode — move vertices with soft selection and transform constraints
 
 #include <nexus/app/AppMode.h>
 
@@ -11,6 +11,11 @@ public:
     [[nodiscard]] std::string displayName() const override;
     EventResult handleInput(AppContext& ctx, const InputEvent& event) override;
     [[nodiscard]] std::vector<ActionDescriptor> actions() const override;
+    [[nodiscard]] std::string statusText() const override;
+
+private:
+    float m_falloffRadius = 1.0f;
+    bool m_softSelect = false;
 };
 
 } // namespace nexus::app

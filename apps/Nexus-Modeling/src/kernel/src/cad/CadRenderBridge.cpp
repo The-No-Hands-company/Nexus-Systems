@@ -1,5 +1,8 @@
 #include <nexus/cad/CadRenderBridge.h>
 
+#include <nexus/geometry/Mesh.h>
+#include <nexus/render/SceneGraph.h>
+
 namespace nexus::cad {
 
 uint32_t CadRenderBridge::populateScene(
@@ -11,8 +14,11 @@ uint32_t CadRenderBridge::populateScene(
         auto* node = doc.history().node(static_cast<parametric::FeatureId>(i));
         if (!node || !node->mesh || node->deleted || node->hidden) continue;
 
-        auto* sceneNode = scene.createNode(
-            node->name.empty() ? "Feature_" + std::to_string(i) : node->name);
+        auto name = node->name.empty()
+            ? "Feature_" + std::to_string(i)
+            : node->name;
+
+        auto* sceneNode = scene.createNode(name);
 
         if (sceneNode) {
             sceneNode->parametricBindingId = static_cast<parametric::ParametricEntityId>(i);
@@ -30,8 +36,20 @@ void CadRenderBridge::updateScene(
     for (size_t i = 1; i <= doc.history().featureCount(); ++i) {
         auto* node = doc.history().node(static_cast<parametric::FeatureId>(i));
         if (!node || !node->mesh || node->deleted || node->hidden) continue;
-        // Scene graph update — positions and transforms from feature mesh.
-        (void)scene;
+
+        // Update bounds on the scene node for frustum culling
+        auto name = node->name.empty()
+            ? "Feature_" + std::to_string(i)
+            : node->name;
+
+        auto* sn = scene.findNode(name);
+        if (sn) {
+            auto bounds = node->mesh->computeBounds();
+            if (bounds.min != bounds.max) {
+                sn->setLocalBounds(bounds);
+            }
+            sn->markDirty();
+        }
     }
 }
 
@@ -39,9 +57,17 @@ void CadRenderBridge::applySelection(
     const CadSelection& selection,
     nexus::render::SceneGraph& scene) noexcept
 {
-    (void)selection;
-    (void)scene;
-    // Highlight selected nodes by modifying material or outline.
+    if (selection.empty()) return;
+
+    // Mark all known scene nodes for render update when selection changes
+    for (const auto& item : selection.items()) {
+        // Find the feature name from selection item
+        auto name = "Feature_" + std::to_string(item.index);
+        auto* sn = scene.findNode(name);
+        if (sn) {
+            sn->markDirty();
+        }
+    }
 }
 
 } // namespace nexus::cad

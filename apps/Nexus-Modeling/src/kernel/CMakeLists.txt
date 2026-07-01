@@ -12,6 +12,7 @@ add_library(nexus_gfx_core STATIC
     src/animation/AnimationSerialization.cpp
     src/animation/InverseKinematics.cpp
     src/animation/SkeletonRetargeter.cpp
+    src/animation/VideoEditor.cpp
     src/automation/AutomationScriptCommands.cpp
     src/automation/AutomationScriptUtilities.cpp
     src/cad/CadAssembly.cpp
@@ -42,12 +43,15 @@ add_library(nexus_gfx_core STATIC
     src/app/PatternMode.cpp
     src/app/PrimitiveModelingMode.cpp
     src/app/RevolveMode.cpp
+    src/app/SceneRenderer.cpp
     src/app/SelectMode.cpp
+    src/app/SelectionManager.cpp
     src/app/SelectionHighlight.cpp
     src/app/SketchMode.cpp
     src/app/SketchPreview.cpp
     src/app/TransformGizmo.cpp
     src/app/VertexEditMode.cpp
+    src/app/ViewportManager.cpp
     src/app/ViewportGrid.cpp
     src/geometry/BevelChamfer.cpp
     src/geometry/BezierCurve.cpp
@@ -60,6 +64,8 @@ add_library(nexus_gfx_core STATIC
     src/geometry/CurveFairing.cpp
     src/geometry/Delaunay2D.cpp
     src/geometry/DirectModeling.cpp
+    src/geometry/EdgeBridge.cpp
+    src/geometry/EvaluationGraph.cpp
     src/geometry/ExtrudeOperation.cpp
     src/geometry/FaceFillet.cpp
     src/geometry/FeatureLineExtractor.cpp
@@ -70,6 +76,7 @@ add_library(nexus_gfx_core STATIC
     src/geometry/HalfEdgeMesh.cpp
     src/geometry/HardSurfaceWorkflow.cpp
     src/geometry/InsetFacesOperation.cpp
+    src/geometry/KnifeTool.cpp
     src/geometry/Mesh.cpp
     src/geometry/MeshAmbientOcclusion.cpp
     src/geometry/MeshAnalysis.cpp
@@ -102,6 +109,7 @@ add_library(nexus_gfx_core STATIC
     src/geometry/MeshSignedDistanceField.cpp
     src/geometry/MeshSimplify.cpp
     src/geometry/MeshSkinning.cpp
+    src/geometry/MeshTopologyValidation.cpp
     src/geometry/MeshSurfaceNets.cpp
     src/geometry/MeshTangentSpace.cpp
     src/geometry/MeshThicken.cpp
@@ -134,6 +142,8 @@ add_library(nexus_gfx_core STATIC
     src/geometry/RailLoft.cpp
     src/geometry/RemeshOperation.cpp
     src/geometry/RobustPredicates.cpp
+    src/geometry/SnappingEngine.cpp
+    src/geometry/SectionTool.cpp
     src/geometry/SolidOperations.cpp
     src/geometry/SubdivisionSurface.cpp
     src/geometry/SurfaceBlending.cpp
@@ -148,9 +158,10 @@ add_library(nexus_gfx_core STATIC
     src/geometry/SurfaceTrim.cpp
     src/geometry/SweepLoft.cpp
     src/geometry/ProfileRevolve.cpp
-    src/geometry/CurveExtrude.cpp
+    src/geometry/ProfileTool.cpp
     src/geometry/TrimBoolean.cpp
     src/geometry/TetDelaunay3D.cpp
+    src/geometry/TransformOrientation.cpp
     src/geometry/Voronoi2D.cpp
     src/asset/SceneAsset.cpp
     src/asset/SceneAssetImporter.cpp
@@ -166,6 +177,7 @@ add_library(nexus_gfx_core STATIC
     src/render/Renderer.cpp
     src/render/RenderGraphValidator.cpp
     src/render/FrameCaptureExporter.cpp
+    src/render/ReflectionCapture.cpp
     src/parametric/ConstraintGraph.cpp
     src/parametric/ParametricSolver.cpp
     src/parametric/ParametricSerialization.cpp
@@ -182,8 +194,10 @@ add_library(nexus_gfx_core STATIC
     src/sim/SimulationCoupling.cpp
     src/sim/SimulationDriver.cpp
     src/gfx/GaussianSplatting.cpp
+    src/groom/GroomSystem.cpp
     src/render/TemporalAccumulation.cpp
     src/automation/AutomationScript.cpp
+    src/template/TemplateManager.cpp
 )
 
 target_include_directories(nexus_gfx_core

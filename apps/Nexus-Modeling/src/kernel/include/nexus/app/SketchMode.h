@@ -3,6 +3,8 @@
 
 #include <nexus/app/AppMode.h>
 
+#include <vector>
+
 namespace nexus::app {
 
 class SketchMode : public AppMode {
@@ -12,6 +14,11 @@ public:
     EventResult handleInput(AppContext& ctx, const InputEvent& event) override;
     void renderOverlay(AppContext& ctx) override;
     [[nodiscard]] std::vector<ActionDescriptor> actions() const override;
+    [[nodiscard]] std::string statusText() const override;
+
+private:
+    std::vector<Vec3> m_points;
+    bool m_started = false;
 };
 
 } // namespace nexus::app

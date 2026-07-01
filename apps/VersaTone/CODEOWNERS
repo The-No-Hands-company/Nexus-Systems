@@ -1,0 +1,41 @@
+# Code Owners
+# This file defines who is responsible for code in specific parts of the repository
+# For more information, see: https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+
+# Global owners (fallback for any file not covered by specific rules)
+* @your-username
+
+# Documentation
+*.md @your-username @docs-team
+docs/ @your-username @docs-team
+
+# Configuration files
+.github/ @your-username @devops-team
+.vscode/ @your-username @devops-team
+*.yml @your-username @devops-team
+*.yaml @your-username @devops-team
+*.json @your-username @devops-team
+
+# Build and CI/CD
+CMakeLists.txt @your-username @build-team
+build.* @your-username @build-team
+.pre-commit-config.yaml @your-username @devops-team
+
+# Source code
+src/ @your-username @dev-team
+include/ @your-username @dev-team
+*.cpp @your-username @dev-team
+*.hpp @your-username @dev-team
+*.h @your-username @dev-team
+*.c @your-username @dev-team
+
+# Tests
+tests/ @your-username @qa-team
+test/ @your-username @qa-team
+*test* @your-username @qa-team
+
+# Scripts
+scripts/ @your-username @devops-team
+*.sh @your-username @devops-team
+*.ps1 @your-username @devops-team
+*.cmd @your-username @devops-team

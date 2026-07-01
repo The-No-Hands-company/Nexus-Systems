@@ -13,6 +13,7 @@
 #include <nexus/app/TransformGizmo.h>
 #include <nexus/app/EditorUI.h>
 #include <nexus/cad/CadViewer.h>
+#include <nexus/cad/CadCommand.h>
 #include <imgui_impl_glfw.h>
 #include <nexus/cad/CadAutoConstraintSketch.h>
 #include <nexus/geometry/MeshBoolean.h>
@@ -59,6 +60,8 @@ struct AppState {
     bool gizmoDragging = false;
     Vec3 gizmoWorldCenter{};  // center of selected object world space
     Vec3 gizmoStartWorldPos{}; // world pos under mouse at drag start
+    bool shiftHeldAtClick = false;
+    std::vector<nexus::geometry::Mesh> gizmoSaved; // for multi-select undo
     bool ortho = false;       // orthographic projection toggle
     bool lighting = false;     // Phong lighting toggle
     bool quadView = false;     // quad viewport toggle
@@ -86,6 +89,7 @@ struct AppState {
     // Box-select drag state.
     bool boxSelecting = false;
     float boxStartX=0, boxStartY=0, boxEndX=0, boxEndY=0;
+    double boxClickTime = 0;
 };
 
 // Möller–Trumbore ray-triangle intersection.
@@ -108,6 +112,33 @@ static bool rayTriangleIntersect(const Vec3& ro, const Vec3& rd,
     if(tt < 1e-4f) return false;
     t = tt;
     return true;
+}
+
+// Coarse pick — ray-sphere intersection for distant/small objects.
+// Fallback when fine ray-triangle cast misses due to sub-pixel geometry.
+static FeatureId coarsePick(const nexus::cad::CadDocument& doc,
+                             const Vec3& rayOrigin, const Vec3& rayDir) {
+    using namespace nexus::parametric;
+    FeatureId best = kInvalidFeatureId;
+    float bestT = 1e30f;
+    size_t fc = doc.history().featureCount();
+    for(FeatureId i=1; i<=static_cast<FeatureId>(fc); ++i) {
+        auto* node = doc.history().node(i);
+        if(!node || !node->mesh || node->deleted || node->hidden) continue;
+        auto b = node->mesh->computeBounds();
+        Vec3 center = b.center();
+        float radius = std::max(b.extents().length() * 0.5f, 1.5f); // minimum 1.5 unit sphere
+        // Ray-sphere intersection
+        Vec3 oc = rayOrigin - center;
+        float a2 = rayDir.dot(rayDir);
+        float b2 = 2.f * oc.dot(rayDir);
+        float c2 = oc.dot(oc) - radius * radius;
+        float disc = b2 * b2 - 4.f * a2 * c2;
+        if(disc < 0) continue;
+        float t = (-b2 - std::sqrt(disc)) / (2.f * a2);
+        if(t > 0 && t < bestT) { best = i; bestT = t; }
+    }
+    return best;
 }
 
 // Full ray-cast: returns feature ID + face/edge/vertex indices + hit point.
@@ -153,7 +184,10 @@ static FeatureId pickSubObject(const nexus::cad::CadDocument& doc,
 static FeatureId pickFeature(const nexus::cad::CadDocument& doc,
                               const Vec3& rayOrigin, const Vec3& rayDir) {
     uint32_t fa, ve; Vec3 hp;
-    return pickSubObject(doc, rayOrigin, rayDir, fa, ve, hp);
+    auto fid = pickSubObject(doc, rayOrigin, rayDir, fa, ve, hp);
+    if (fid == kInvalidFeatureId)
+        fid = coarsePick(doc, rayOrigin, rayDir);
+    return fid;
 }
 static void screenToWorldRay(float mx, float my, Vec3& origin, Vec3& direction) {
     GLdouble mv[16], proj[16];
@@ -320,9 +354,9 @@ void keyCallback(GLFWwindow* w, int key, int scancode, int action, int mods) {
     }
     if(key == GLFW_KEY_M) { if(s.sketchActive){s.sketcher->endSketch();s.sketchActive=false;} s.app->orchestrator().switchTo("modeling"); return; }
 
-    // E: in select mode = gizmo scale; otherwise = extrude mode.
+    // E: gizmo scale when selected; otherwise extrude mode.
     if(key == GLFW_KEY_E) {
-        if(activeMode == "select" || activeMode == "modeling" || activeMode == "face-edit" || activeMode == "edge-edit" || activeMode == "vertex-edit") {
+        if(s.selectedId != kInvalidFeatureId) {
             s.gizmo.setMode(TransformGizmo::Mode::Scale);
         } else {
             if(s.sketchActive){s.sketcher->endSketch();s.sketchActive=false;}
@@ -330,9 +364,9 @@ void keyCallback(GLFWwindow* w, int key, int scancode, int action, int mods) {
         }
         return;
     }
-    // R: in select = gizmo rotate; otherwise = revolve mode.
+    // R: gizmo rotate when selected; otherwise revolve mode.
     if(key == GLFW_KEY_R) {
-        if(activeMode == "select" || activeMode == "modeling" || activeMode == "face-edit" || activeMode == "edge-edit" || activeMode == "vertex-edit") {
+        if(s.selectedId != kInvalidFeatureId) {
             s.gizmo.setMode(TransformGizmo::Mode::Rotate);
         } else {
             if(s.sketchActive){s.sketcher->endSketch();s.sketchActive=false;}
@@ -364,6 +398,7 @@ void keyCallback(GLFWwindow* w, int key, int scancode, int action, int mods) {
             auto* n=hist.node(i); if(n&&n->mesh&&!n->deleted&&!n->hidden) s.selectedIds.push_back(i);
         }
         s.selectedId = s.selectedIds.empty() ? kInvalidFeatureId : s.selectedIds.back();
+        s.app->context().activeSelectedFeature = s.selectedId;
         printf("Select all: %zu features\n", s.selectedIds.size());
         return;
     }
@@ -577,15 +612,30 @@ void mouseButtonCallback(GLFWwindow* w, int button, int action, int mods) {
 
     if(action == GLFW_PRESS) {
         s.app->onMouseDown(button, (float)mx, (float)my);
-        s.mouseDragging = true;
         s.lastMouseX = (float)mx;
         s.lastMouseY = (float)my;
+        if(button != GLFW_MOUSE_BUTTON_LEFT) s.mouseDragging = true;
 
-        // Select mode: pick gizmo axis first, then select object.
-        if(button == GLFW_MOUSE_BUTTON_LEFT &&
-           s.app->orchestrator().activeModeId() == "select") {
-            // If we have a selection, try gizmo pick.
-            if(s.selectedId != kInvalidFeatureId) {
+        // Gizmo pick on LMB — works in any mode when something is selected.
+        if(button == GLFW_MOUSE_BUTTON_LEFT) {
+            bool shiftHeld = (mods & GLFW_MOD_SHIFT) != 0
+                          || glfwGetKey(s.window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS
+                          || glfwGetKey(s.window, GLFW_KEY_RIGHT_SHIFT) == GLFW_PRESS;
+
+            if(shiftHeld) printf("SHIFT DETECTED on mouse press\n");
+
+            // Auto-select first visible feature if nothing selected
+            if(s.selectedId == kInvalidFeatureId && !shiftHeld) {
+                auto& hist = s.app->document().history();
+                for(FeatureId i=1; i<=static_cast<FeatureId>(hist.featureCount()); ++i) {
+                    auto* nn = hist.node(i);
+                    if(nn && nn->mesh && !nn->deleted && !nn->hidden) {
+                        s.selectedId = i; s.app->context().activeSelectedFeature = i; break;
+                    }
+                }
+            }
+            // Try gizmo pick (skip when Shift held — that means add-to-selection)
+            if(s.selectedId != kInvalidFeatureId && !shiftHeld) {
                 auto* node = s.app->document().history().node(s.selectedId);
                 if(node && node->mesh) {
                     Vec3 center = node->mesh->computeBounds().center();
@@ -596,7 +646,18 @@ void mouseButtonCallback(GLFWwindow* w, int button, int action, int mods) {
                         s.gizmoDragging = true;
                         s.activeGizmoAxis = axis;
                         s.gizmoWorldCenter = center;
-                        s.gizmoStartWorldPos = rayOrigin + rayDir * 5.f;
+                        // Project onto appropriate plane for this axis
+                        Vec3 pn{0, 1, 0};
+                        if (axis == TransformGizmo::Axis::Y) pn = {0, 0, 1};
+                        float d = rayDir.dot(pn);
+                        s.gizmoStartWorldPos = (std::fabs(d) > 1e-6f)
+                            ? rayOrigin + rayDir * (-rayOrigin.dot(pn) / d)
+                            : rayOrigin + rayDir * 5.f;
+                        s.gizmoSaved.clear();
+                        for(auto fid : s.selectedIds) {
+                            auto* sn = s.app->document().history().node(fid);
+                            if(sn && sn->mesh) s.gizmoSaved.push_back(*sn->mesh);
+                        }
                         printf("Gizmo drag start (axis %d)\n", (int)axis);
                         return;
                     }
@@ -605,35 +666,13 @@ void mouseButtonCallback(GLFWwindow* w, int button, int action, int mods) {
             // No gizmo hit: start box-select tracking (selection happens on release).
             s.gizmoDragging = false;
             s.boxSelecting = true;
+            s.boxClickTime = glfwGetTime();
+            s.shiftHeldAtClick = shiftHeld;
             s.boxStartX = (float)mx;
             s.boxStartY = (float)my;
             s.boxEndX = (float)mx;
             s.boxEndY = (float)my;
-            {
-                Vec3 rayOrigin, rayDir;
-                screenToWorldRay((float)mx, (float)my, rayOrigin, rayDir);
-                uint32_t faceIdx=~0u, vertIdx=~0u; Vec3 hit;
-                auto fid = pickSubObject(s.app->document(), rayOrigin, rayDir, faceIdx, vertIdx, hit);
-                if(fid != kInvalidFeatureId) {
-                    // Store sub-object selection.
-                    s.app->context().selectedFace = faceIdx;
-                    s.app->context().selectedVertex = vertIdx;
-                    s.app->context().hitPoint = hit;
-                    bool shift = (mods & GLFW_MOD_SHIFT) != 0;
-                    if(shift) {
-                        // Toggle in multi-selection.
-                        auto it = std::find(s.selectedIds.begin(), s.selectedIds.end(), fid);
-                        if(it!=s.selectedIds.end()) s.selectedIds.erase(it);
-                        else s.selectedIds.push_back(fid);
-                        s.selectedId = fid; // primary selection
-                    } else {
-                        s.selectedIds.clear();
-                        s.selectedIds.push_back(fid);
-                        s.selectedId = fid;
-                    }
-                    printf("Selected feature %u (%zu in set)\n", fid, s.selectedIds.size());
-                }
-            }
+            return;
         }
 
         // Modeling mode: place primitive snapped to grid.
@@ -643,9 +682,15 @@ void mouseButtonCallback(GLFWwindow* w, int button, int action, int mods) {
     } else {
         s.app->onMouseUp(button, (float)mx, (float)my);
 
-        if(s.gizmoDragging) {
+            if(s.gizmoDragging) {
             s.gizmoDragging = false;
             s.activeGizmoAxis = TransformGizmo::Axis::None;
+            for(size_t j = 0; j < s.gizmoSaved.size() && j < s.selectedIds.size(); ++j) {
+                auto cmd = std::make_unique<nexus::cad::TransformCommand>(
+                    s.selectedIds[j], std::move(s.gizmoSaved[j]));
+                s.app->document().executeCommand(std::move(cmd));
+            }
+            s.gizmoSaved.clear();
             printf("Gizmo drag end\n");
             return;
         }
@@ -654,53 +699,67 @@ void mouseButtonCallback(GLFWwindow* w, int button, int action, int mods) {
             s.boxSelecting = false;
             float dx = s.boxEndX - s.boxStartX;
             float dy = s.boxEndY - s.boxStartY;
-            if(std::fabs(dx)>3.f || std::fabs(dy)>3.f) {
-                // Box select: intersect AABB in screen space.
+            double dt = glfwGetTime() - s.boxClickTime;
+
+            // A click is: small movement OR fast release (<300ms)
+            bool isClick = (std::fabs(dx) <= 12.f && std::fabs(dy) <= 12.f) || dt < 0.3;
+
+            if (!isClick) {
+                // Box select
                 float x1=std::min(s.boxStartX,s.boxEndX), x2=std::max(s.boxStartX,s.boxEndX);
                 float y1=std::min(s.boxStartY,s.boxEndY), y2=std::max(s.boxStartY,s.boxEndY);
-                s.selectedIds.clear();
+                if(!s.shiftHeldAtClick) s.selectedIds.clear();
                 auto& hist=s.app->document().history();
                 for(FeatureId i=1;i<=static_cast<FeatureId>(hist.featureCount());++i){
                     auto* n=hist.node(i); if(!n||!n->mesh||n->deleted||n->hidden) continue;
                     auto b=n->mesh->computeBounds();
-                    // Project bounding box corners to screen.
-                    float sx[8],sy[8]; int inRect=0;
+                    float sx[8],sy[8];
                     Vec3 corners[8]={{b.min.x,b.min.y,b.min.z},{b.max.x,b.min.y,b.min.z},
                                      {b.min.x,b.max.y,b.min.z},{b.max.x,b.max.y,b.min.z},
                                      {b.min.x,b.min.y,b.max.z},{b.max.x,b.min.y,b.max.z},
                                      {b.min.x,b.max.y,b.max.z},{b.max.x,b.max.y,b.max.z}};
+                    GLdouble mv[16],proj[16]; GLint vp[4];
+                    glGetDoublev(GL_MODELVIEW_MATRIX,mv);
+                    glGetDoublev(GL_PROJECTION_MATRIX,proj);
+                    glGetIntegerv(GL_VIEWPORT,vp);
+                    float sminX=1e9f,sminY=1e9f,smaxX=-1e9f,smaxY=-1e9f;
                     for(int c=0;c<8;++c){
-                        GLdouble mx,my,mz;
-                        GLdouble mv[16],proj[16]; GLint vp[4];
-                        glGetDoublev(GL_MODELVIEW_MATRIX,mv);
-                        glGetDoublev(GL_PROJECTION_MATRIX,proj);
-                        glGetIntegerv(GL_VIEWPORT,vp);
-                        gluProject(corners[c].x,corners[c].y,corners[c].z,mv,proj,vp,&mx,&my,&mz);
-                        sx[c]=(float)mx; sy[c]=(float)(s.height-my);
-                        if(sx[c]>=x1&&sx[c]<=x2&&sy[c]>=y1&&sy[c]<=y2) inRect++;
+                        GLdouble px,py,pz;
+                        gluProject(corners[c].x,corners[c].y,corners[c].z,mv,proj,vp,&px,&py,&pz);
+                        sx[c]=(float)px; sy[c]=(float)(s.height-py);
+                        sminX=std::min(sminX,sx[c]); smaxX=std::max(smaxX,sx[c]);
+                        sminY=std::min(sminY,sy[c]); smaxY=std::max(smaxY,sy[c]);
                     }
-                    if(inRect>0){s.selectedIds.push_back(i);}
+                    if(smaxX >= x1 && sminX <= x2 && smaxY >= y1 && sminY <= y2)
+                        s.selectedIds.push_back(i);
                 }
                 s.selectedId=s.selectedIds.empty()?kInvalidFeatureId:s.selectedIds.back();
-                printf("Box select: %zu features\n",s.selectedIds.size());
+                s.app->context().activeSelectedFeature = s.selectedId;
             } else {
-                // Click (not drag): ray-cast pick.
+                // Click: ray-cast pick
                 Vec3 rayOrigin, rayDir;
                 screenToWorldRay((float)mx,(float)my,rayOrigin,rayDir);
                 uint32_t faceIdx=~0u,vertIdx=~0u; Vec3 hit;
                 auto fid=pickSubObject(s.app->document(),rayOrigin,rayDir,faceIdx,vertIdx,hit);
+                if(fid == kInvalidFeatureId)
+                    fid = coarsePick(s.app->document(), rayOrigin, rayDir);
                 if(fid!=kInvalidFeatureId){
                     s.app->context().selectedFace=faceIdx;
                     s.app->context().selectedVertex=vertIdx;
                     s.app->context().hitPoint=hit;
-                    bool shift=(mods&GLFW_MOD_SHIFT)!=0;
-                    if(shift){
+                    if(s.shiftHeldAtClick){
                         auto it=std::find(s.selectedIds.begin(),s.selectedIds.end(),fid);
-                        if(it!=s.selectedIds.end())s.selectedIds.erase(it);
+                        if(it!=s.selectedIds.end()) s.selectedIds.erase(it);
                         else s.selectedIds.push_back(fid);
-                    }else{s.selectedIds.clear();s.selectedIds.push_back(fid);}
+                    }else{
+                        s.selectedIds.clear(); s.selectedIds.push_back(fid);
+                    }
                     s.selectedId=fid;
-                    printf("Selected %u (%zu in set)\n",fid,s.selectedIds.size());
+                    s.app->context().activeSelectedFeature = fid;
+                } else if(!s.shiftHeldAtClick) {
+                    s.selectedIds.clear();
+                    s.selectedId = kInvalidFeatureId;
+                    s.app->context().activeSelectedFeature = 0;
                 }
             }
             return;
@@ -758,26 +817,35 @@ void cursorPosCallback(GLFWwindow* w, double x, double y) {
     if(s.gizmoDragging) {
         Vec3 rayOrigin, rayDir;
         screenToWorldRay((float)x, (float)y, rayOrigin, rayDir);
-        Vec3 curWorldPos = rayOrigin + rayDir * 5.f;
+        // Pick projection plane based on active axis
+        Vec3 planeN{0, 1, 0}; // default XZ
+        if (s.activeGizmoAxis == TransformGizmo::Axis::Y)
+            planeN = {0, 0, 1}; // XY plane for vertical movement
+        float denom = rayDir.dot(planeN);
+        Vec3 curWorldPos = (std::fabs(denom) > 1e-6f)
+            ? rayOrigin + rayDir * (-rayOrigin.dot(planeN) / denom)
+            : rayOrigin + rayDir * 5.f;
         float amount = axisDisplacement(s.gizmoStartWorldPos, curWorldPos, s.activeGizmoAxis);
         if(std::fabs(amount) > 0.0005f) {
             switch(s.gizmo.mode()) {
                 case TransformGizmo::Mode::Translate:
-                    if(s.snapToGrid) amount = std::round(amount);
-                    s.gizmo.translate(s.gizmoWorldCenter, s.activeGizmoAxis, amount,
-                                      s.app->document(), s.selectedId);
+                    for(auto fid : s.selectedIds)
+                        s.gizmo.translate(s.gizmoWorldCenter, s.activeGizmoAxis, amount,
+                                          s.app->document(), fid, false);
                     break;
                 case TransformGizmo::Mode::Scale: {
                     float factor = 1.f + amount * 0.3f;
                     if(factor < 0.01f) factor = 0.01f;
-                    s.gizmo.scale(s.gizmoWorldCenter, s.activeGizmoAxis, factor,
-                                  s.app->document(), s.selectedId);
+                    for(auto fid : s.selectedIds)
+                        s.gizmo.scale(s.gizmoWorldCenter, s.activeGizmoAxis, factor,
+                                      s.app->document(), fid, false);
                     break;
                 }
                 case TransformGizmo::Mode::Rotate: {
                     float angle = amount * 0.5f;
-                    s.gizmo.rotate(s.gizmoWorldCenter, s.activeGizmoAxis, angle,
-                                   s.app->document(), s.selectedId);
+                    for(auto fid : s.selectedIds)
+                        s.gizmo.rotate(s.gizmoWorldCenter, s.activeGizmoAxis, angle,
+                                       s.app->document(), fid, false);
                     break;
                 }
             }
@@ -793,7 +861,8 @@ void cursorPosCallback(GLFWwindow* w, double x, double y) {
         s.lastMouseX=(float)x; s.lastMouseY=(float)y;
         return;
     }
-    if(s.mouseDragging) {
+    if(s.mouseDragging && (glfwGetMouseButton(s.window, GLFW_MOUSE_BUTTON_MIDDLE) == GLFW_PRESS ||
+                           glfwGetMouseButton(s.window, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS)) {
         float dx = (float)(x - s.lastMouseX);
         float dy = (float)(y - s.lastMouseY);
         s.viewer->camera().orbit(dx * 3.f, dy * 3.f);
@@ -1000,8 +1069,12 @@ int main() {
         GridOptions gridOpts;
         gridOpts.workPlane = (state.app->context().workPlane == AppContext::WorkPlane::XZ) ? kWorkPlaneXZ :
                              (state.app->context().workPlane == AppContext::WorkPlane::XY) ? kWorkPlaneXY : kWorkPlaneYZ;
-        gridOpts.spacing = state.gridSpacing;
-        gridOpts.extent = state.gridExtent;
+        // Auto-scale grid extent with camera distance
+        float camDist = state.viewer->camera().distance();
+        float autoExtent = std::max(50.f, camDist * 6.f);
+        float autoSpacing = std::pow(10.f, std::round(std::log10(std::max(0.1f, camDist * 0.05f))));
+        gridOpts.spacing = std::max(autoSpacing, 0.1f);
+        gridOpts.extent = autoExtent;
         ViewportGrid grid;
         grid.render(gridOpts);
 
@@ -1012,7 +1085,8 @@ int main() {
             const auto& pos = node->mesh->attributes().positions();
             const auto& topo = node->mesh->topology();
 
-            bool isSelected = (static_cast<FeatureId>(i) == state.selectedId);
+            bool isSelected = (std::find(state.selectedIds.begin(), state.selectedIds.end(),
+                                         static_cast<FeatureId>(i)) != state.selectedIds.end());
             Vec3 color = isSelected ? Vec3{1.f, 0.6f, 0.1f} : state.selectedColor;
             // Use per-feature material albedo for color when not selected.
             if(!isSelected) {
@@ -1061,20 +1135,27 @@ int main() {
                 if(state.lighting) glDisableClientState(GL_NORMAL_ARRAY);
             }
 
-            // Wireframe overlay (reuse vertex arrays).
+            // Wireframe overlay (offset to avoid z-fight with solid)
             if(!varray.empty()) {
-                glColor3f(0.1f, 0.1f, 0.15f);
+                glEnable(GL_POLYGON_OFFSET_LINE);
+                glPolygonOffset(-1.f, -1.f);
+                glColor3f(0.05f, 0.05f, 0.08f);
                 glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
                 glEnableClientState(GL_VERTEX_ARRAY);
                 glVertexPointer(3, GL_FLOAT, 0, varray.data());
                 glDrawArrays(GL_TRIANGLES, 0, (GLsizei)varray.size()/3);
                 glDisableClientState(GL_VERTEX_ARRAY);
                 glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+                glDisable(GL_POLYGON_OFFSET_LINE);
             }
 
-            // Selection highlight with gizmo handle.
+            // Selection highlight for ALL selected objects
             if(isSelected) {
-                g_highlight.render(state.app->document(), state.selectedId);
+                g_highlight.render(state.app->document(), static_cast<FeatureId>(i));
+            }
+            // Gizmo only on the primary selected object
+            if(static_cast<FeatureId>(i) == state.selectedId && node && node->mesh) {
+                state.gizmo.render(node->mesh->computeBounds().center());
             }
         }
 

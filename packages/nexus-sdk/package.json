@@ -1,0 +1,15 @@
+{
+  "name": "@nexus/sdk",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "src/index.ts",
+  "description": "Nexus Systems SDK — ecosystem integration client for service discovery, health, auth, monitoring, and cross-service communication",
+  "scripts": {
+    "check": "bunx tsc --noEmit",
+    "test": "bun test"
+  },
+  "devDependencies": {
+    "bun-types": "^1.3.11",
+    "typescript": "^5.8.3"
+  }
+}

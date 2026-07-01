@@ -1,0 +1,17 @@
+name: Clang Tidy Post
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  clang-tidy-post:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+    - name: Run clang-tidy
+      run: |
+        # Add clang-tidy commands here
+        echo "Running clang-tidy post checks..."

@@ -127,12 +127,18 @@ bool SetHeightCommand::undo(CadDocument& doc)
 
 bool TransformCommand::execute(CadDocument& doc)
 {
-    if(m_executed) return false;
     auto* node = doc.history().node(m_featureId);
     if(!node || !node->mesh) return false;
-    m_newMesh = *node->mesh;
-    node->mesh.emplace(std::move(m_savedMesh));
-    m_executed = true;
+
+    if (!m_executed) {
+        // First execution: store current state, leave mesh as-is
+        m_newMesh = *node->mesh;
+        m_executed = true;
+    } else {
+        // Redo after undo: restore the new state
+        m_savedMesh = *node->mesh;  // save current (which is the old state after undo)
+        node->mesh.emplace(m_newMesh);
+    }
     return true;
 }
 
@@ -140,9 +146,10 @@ bool TransformCommand::undo(CadDocument& doc)
 {
     if(!m_executed) return false;
     auto* node = doc.history().node(m_featureId);
-    if(!node || !m_newMesh.isValid()) return false;
-    node->mesh.emplace(std::move(m_newMesh));
-    m_executed = false;
+    if(!node || !m_savedMesh.isValid()) return false;
+    m_newMesh = *node->mesh;            // save current for redo
+    node->mesh.emplace(std::move(m_savedMesh)); // restore original
+    m_savedMesh = nexus::geometry::Mesh{};               // consumed
     return true;
 }
 

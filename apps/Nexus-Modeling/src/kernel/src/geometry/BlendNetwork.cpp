@@ -212,6 +212,7 @@ UnfoldResult unfoldSheetMetal(const HalfEdgeMesh& bentPart,
     std::vector<float> zVals(pos.size());
     for(size_t i=0;i<pos.size();++i) zVals[i]=pos[i].z;
     std::sort(zVals.begin(),zVals.end());
+    if (zVals.empty()) return result;
     float minZ=zVals.front(), maxZ=zVals.back();
     float thickness=maxZ-minZ;
     result.developedLength=thickness+totalDev;

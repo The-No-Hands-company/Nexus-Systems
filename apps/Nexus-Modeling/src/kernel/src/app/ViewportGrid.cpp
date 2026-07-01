@@ -12,9 +12,12 @@ namespace nexus::app {
 
 void ViewportGrid::renderXZGrid(float extent, float spacing) const noexcept {
 #ifndef NEXUS_HEADLESS
+    if (spacing <= 0) spacing = 1.f;
+    int n = static_cast<int>(extent / spacing);
+    if (n < 1) n = 1;
     glColor3f(0.25f, 0.25f, 0.28f);
     glBegin(GL_LINES);
-    for(int i = -static_cast<int>(extent); i <= static_cast<int>(extent); ++i) {
+    for(int i = -n; i <= n; ++i) {
         float x = static_cast<float>(i) * spacing;
         glVertex3f(x, 0, -extent);
         glVertex3f(x, 0,  extent);

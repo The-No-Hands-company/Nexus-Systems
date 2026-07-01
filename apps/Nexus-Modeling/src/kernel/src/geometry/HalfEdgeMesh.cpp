@@ -7,6 +7,8 @@
 
 namespace nexus::geometry {
 
+using Vec3 = nexus::render::Vec3;
+
 // --- fromMesh ----------------------------------------------------------------
 
 std::optional<HalfEdgeMesh> HalfEdgeMesh::fromMesh(const Mesh& mesh) {
@@ -144,7 +146,9 @@ bool HalfEdgeMesh::isManifold() const {
             if (edgeVisited[walk]) break;
             edgeVisited[walk] = true;
             ++visited;
-            uint32_t prevTwin = m_edges[m_edges[walk].prev].twin;
+            uint32_t prevEdge = m_edges[walk].prev;
+            if (prevEdge == kInvalid || prevEdge >= m_edges.size()) break;
+            uint32_t prevTwin = m_edges[prevEdge].twin;
             if (prevTwin == kInvalid) break;
             walk = prevTwin;
         } while (walk != start && visited < m_edges.size());
@@ -202,11 +206,17 @@ std::vector<std::vector<uint32_t>> HalfEdgeMesh::boundaryLoops() const {
             visited[e] = true;
             loop.push_back(m_edges[e].src);
 
-            e = m_edges[e].next;
+            uint32_t nxt = m_edges[e].next;
+            if (nxt == kInvalid || nxt >= m_edges.size()) break;
+            e = nxt;
             uint32_t twinSafety = 0;
             while (m_edges[e].twin != kInvalid) {
                 if (++twinSafety > m_edges.size()) break;
-                e = m_edges[m_edges[e].twin].next;
+                uint32_t tw = m_edges[e].twin;
+                if (tw == kInvalid || tw >= m_edges.size()) break;
+                uint32_t tnxt = m_edges[tw].next;
+                if (tnxt == kInvalid || tnxt >= m_edges.size()) break;
+                e = tnxt;
             }
         } while (e != i);
 
@@ -252,7 +262,9 @@ std::vector<uint32_t> HalfEdgeMesh::vertexFaces(uint32_t v) const {
         if (m_edges[e].face != kInvalid) {
             faces.push_back(m_edges[e].face);
         }
-        uint32_t prevTwin = m_edges[m_edges[e].prev].twin;
+        uint32_t prevEdge = m_edges[e].prev;
+        if (prevEdge == kInvalid || prevEdge >= m_edges.size()) break;
+        uint32_t prevTwin = m_edges[prevEdge].twin;
         if (prevTwin == kInvalid) break;
         e = prevTwin;
         if (++safety > m_edges.size() * 2) break;
@@ -273,14 +285,345 @@ std::vector<uint32_t> HalfEdgeMesh::vertexNeighbors(uint32_t v) const {
     uint32_t e = start;
     uint32_t safety = 0;
     do {
-        neighbors.push_back(m_edges[m_edges[e].next].src);
-        uint32_t prevTwin = m_edges[m_edges[e].prev].twin;
+        uint32_t nextEdge = m_edges[e].next;
+        if (nextEdge == kInvalid || nextEdge >= m_edges.size()) break;
+        neighbors.push_back(m_edges[nextEdge].src);
+
+        uint32_t prevEdge = m_edges[e].prev;
+        if (prevEdge == kInvalid || prevEdge >= m_edges.size()) break;
+        uint32_t prevTwin = m_edges[prevEdge].twin;
         if (prevTwin == kInvalid) break;
         e = prevTwin;
         if (++safety > m_edges.size() * 2) break;
     } while (e != start);
 
     return neighbors;
+}
+
+// --- faceValence ------------------------------------------------------------
+
+uint32_t HalfEdgeMesh::faceValence(uint32_t fi) const {
+    if (fi >= m_faces.size()) return 0;
+    uint32_t start = m_faces[fi].edge;
+    if (start == kInvalid || start >= m_edges.size()) return 0;
+    uint32_t count = 0;
+    uint32_t e = start;
+    do {
+        ++count;
+        uint32_t nextEdge = m_edges[e].next;
+        if (nextEdge == kInvalid || nextEdge >= m_edges.size()) break;
+        e = nextEdge;
+        if (count > 256) break;
+    } while (e != start);
+    return count;
+}
+
+// --- edgeValence ------------------------------------------------------------
+
+uint32_t HalfEdgeMesh::edgeValence(uint32_t ei) const {
+    if (ei >= m_edges.size()) return 0;
+    uint32_t count = 0;
+    if (m_edges[ei].face != kInvalid) ++count;
+    uint32_t t = m_edges[ei].twin;
+    if (t != kInvalid && t < m_edges.size() && m_edges[t].face != kInvalid) ++count;
+    return count;
+}
+
+// --- isBoundaryEdge ---------------------------------------------------------
+
+bool HalfEdgeMesh::isBoundaryEdge(uint32_t ei) const {
+    if (ei >= m_edges.size()) return false;
+    return m_edges[ei].twin == kInvalid;
+}
+
+// --- isBoundaryVertex -------------------------------------------------------
+
+bool HalfEdgeMesh::isBoundaryVertex(uint32_t v) const {
+    if (v >= m_verts.size()) return false;
+    uint32_t start = m_verts[v].edge;
+    if (start == kInvalid) return true;
+    uint32_t e = start;
+    uint32_t safety = 0;
+    do {
+        if (m_edges[e].twin == kInvalid) return true;
+        uint32_t prevEdge = m_edges[e].prev;
+        if (prevEdge == kInvalid || prevEdge >= m_edges.size()) break;
+        uint32_t prevTwin = m_edges[prevEdge].twin;
+        if (prevTwin == kInvalid) break;
+        e = prevTwin;
+        if (++safety > m_edges.size()) break;
+    } while (e != start);
+    return false;
+}
+
+// --- edgeLoop ---------------------------------------------------------------
+
+std::vector<uint32_t> HalfEdgeMesh::edgeLoop(uint32_t seedEdge) const {
+    std::vector<uint32_t> loop;
+    if (seedEdge >= m_edges.size()) return loop;
+    if (m_edges[seedEdge].face == kInvalid) return loop;
+
+    std::unordered_set<uint32_t> visited;
+    loop.push_back(seedEdge);
+    visited.insert(seedEdge);
+
+    uint32_t maxSteps = static_cast<uint32_t>(m_edges.size());
+
+    auto walkOneDir = [&](uint32_t start, bool forward) {
+        uint32_t e = start;
+        for (uint32_t step = 0; step < maxSteps; ++step) {
+            uint32_t f = m_edges[e].face;
+            if (f == kInvalid || f >= m_faces.size()) break;
+
+            uint32_t valence = faceValence(f);
+            if (valence < 3 || valence > 4) break;
+
+            uint32_t cand = kInvalid;
+            if (forward) {
+                cand = m_edges[m_edges[e].next].next;
+            } else {
+                cand = m_edges[m_edges[e].prev].prev;
+            }
+            if (cand == kInvalid || cand >= m_edges.size()) break;
+
+            uint32_t opp = m_edges[cand].twin;
+            if (opp == kInvalid || opp >= m_edges.size()) break;
+            if (m_edges[opp].face == kInvalid) break;
+
+            if (visited.count(opp)) break;
+            visited.insert(opp);
+            if (forward) loop.push_back(opp);
+            else loop.insert(loop.begin(), opp);
+            e = opp;
+        }
+    };
+
+    walkOneDir(seedEdge, true);
+    walkOneDir(seedEdge, false);
+
+    return loop;
+}
+
+// --- edgeRing ---------------------------------------------------------------
+
+std::vector<uint32_t> HalfEdgeMesh::edgeRing(uint32_t seedEdge) const {
+    std::vector<uint32_t> ring;
+    if (seedEdge >= m_edges.size()) return ring;
+
+    uint32_t t = m_edges[seedEdge].twin;
+    if (t == kInvalid || t >= m_edges.size()) return ring;
+
+    std::unordered_set<uint32_t> visited;
+    visited.insert(seedEdge);
+    visited.insert(t);
+    ring.push_back(seedEdge);
+
+    uint32_t maxSteps = static_cast<uint32_t>(m_edges.size());
+
+    auto walkOneDir = [&](uint32_t start, bool forward) {
+        uint32_t e = start;
+        for (uint32_t step = 0; step < maxSteps; ++step) {
+            uint32_t f = m_edges[e].face;
+            if (f == kInvalid || f >= m_faces.size()) break;
+
+            uint32_t valence = faceValence(f);
+            if (valence < 3 || valence > 4) break;
+
+            uint32_t cand = forward ? m_edges[e].next : m_edges[e].prev;
+            if (cand == kInvalid || cand >= m_edges.size()) break;
+
+            uint32_t nxt = m_edges[cand].twin;
+            if (nxt == kInvalid || nxt >= m_edges.size()) break;
+            if (m_edges[nxt].face == kInvalid) break;
+
+            if (visited.count(nxt)) break;
+            visited.insert(nxt);
+            ring.push_back(nxt);
+            e = nxt;
+        }
+    };
+
+    walkOneDir(t, true);
+    std::reverse(ring.begin() + 1, ring.end());
+
+    walkOneDir(seedEdge, false);
+    std::reverse(ring.begin() + 1, ring.end());
+
+    return ring;
+}
+
+// --- insertEdgeLoop ---------------------------------------------------------
+//  Inserts an edge loop at 'slide' position and splits crossed faces.
+//  Creates new vertices on each loop edge, then adds cross-edges to split quads.
+
+bool HalfEdgeMesh::insertEdgeLoop(uint32_t seedEdge, float slide) {
+    if (seedEdge >= m_edges.size()) return false;
+    if (m_edges[seedEdge].face == kInvalid) return false;
+
+    auto loop = edgeLoop(seedEdge);
+    if (loop.size() < 2) return false;
+
+    slide = std::clamp(slide, 0.001f, 0.999f);
+
+    std::vector<uint32_t> newVerts;
+    std::vector<uint32_t> splitEdges;
+    newVerts.reserve(loop.size());
+    splitEdges.reserve(loop.size());
+
+    for (uint32_t ei : loop) {
+        if (ei >= m_edges.size()) return false;
+        uint32_t t = m_edges[ei].twin;
+        if (t == kInvalid || t >= m_edges.size()) continue;
+
+        uint32_t src = m_edges[ei].src;
+        uint32_t dst = m_edges[t].src;
+        if (src >= m_verts.size() || dst >= m_verts.size()) continue;
+
+        Vec3 newPos{
+            m_positions[src].x + (m_positions[dst].x - m_positions[src].x) * slide,
+            m_positions[src].y + (m_positions[dst].y - m_positions[src].y) * slide,
+            m_positions[src].z + (m_positions[dst].z - m_positions[src].z) * slide,
+        };
+        uint32_t nv = static_cast<uint32_t>(m_verts.size());
+        m_verts.push_back({kInvalid});
+        m_positions.push_back(newPos);
+        if (hasUVs()) {
+            m_uvs.push_back({m_uvs[src].u + (m_uvs[dst].u - m_uvs[src].u) * slide,
+                             m_uvs[src].v + (m_uvs[dst].v - m_uvs[src].v) * slide});
+        }
+        if (hasNormals()) {
+            m_normals.push_back({(m_normals[src].x + m_normals[dst].x) * 0.5f,
+                                 (m_normals[src].y + m_normals[dst].y) * 0.5f,
+                                 (m_normals[src].z + m_normals[dst].z) * 0.5f});
+        }
+        newVerts.push_back(nv);
+        splitEdges.push_back(ei);
+    }
+
+    for (size_t i = 0; i < loop.size(); ++i) {
+        uint32_t ei = splitEdges[i];
+        uint32_t nv = newVerts[i];
+        uint32_t t = m_edges[ei].twin;
+        if (ei >= m_edges.size() || t >= m_edges.size()) continue;
+
+        uint32_t fA = m_edges[ei].face;
+        uint32_t fB = m_edges[t].face;
+
+        uint32_t e1 = static_cast<uint32_t>(m_edges.size());
+        m_edges.push_back({}); m_edges.push_back({});
+
+        uint32_t oldNextA = m_edges[ei].next;
+        uint32_t oldPrevA = m_edges[ei].prev;
+        if (oldNextA >= m_edges.size() || oldPrevA >= m_edges.size()) continue;
+
+        m_edges[e1] = {e1+1, oldPrevA, kInvalid, m_edges[ei].src, fA};
+        m_edges[e1+1] = {oldNextA, e1, kInvalid, nv, fA};
+        if (oldPrevA < m_edges.size()) m_edges[oldPrevA].next = e1;
+        if (oldNextA < m_edges.size()) m_edges[oldNextA].prev = e1+1;
+
+        uint32_t e2 = static_cast<uint32_t>(m_edges.size());
+        m_edges.push_back({}); m_edges.push_back({});
+
+        uint32_t oldNextB = m_edges[t].next;
+        uint32_t oldPrevB = m_edges[t].prev;
+        if (oldNextB >= m_edges.size() || oldPrevB >= m_edges.size()) continue;
+
+        m_edges[e2] = {e2+1, oldPrevB, e1, m_edges[t].src, fB};
+        m_edges[e2+1] = {oldNextB, e2, e1+1, nv, fB};
+        m_edges[e1].twin = e2;
+        m_edges[e1+1].twin = e2+1;
+
+        if (oldPrevB < m_edges.size()) m_edges[oldPrevB].next = e2;
+        if (oldNextB < m_edges.size()) m_edges[oldNextB].prev = e2+1;
+
+        m_edges[ei].face = kInvalid; m_edges[ei].next = kInvalid;
+        m_edges[ei].prev = kInvalid; m_edges[ei].twin = kInvalid;
+        m_edges[t].face = kInvalid; m_edges[t].next = kInvalid;
+        m_edges[t].prev = kInvalid; m_edges[t].twin = kInvalid;
+
+        if (fA < m_faces.size()) m_faces[fA].edge = e1;
+        if (fB < m_faces.size()) m_faces[fB].edge = e2;
+        m_verts[nv].edge = e1+1;
+
+        updateEdgeMap(e1); updateEdgeMap(e1+1);
+        updateEdgeMap(e2); updateEdgeMap(e2+1);
+    }
+
+    // Phase 3: Connect consecutive new vertices with cross edges,
+    // splitting each crossed face along the loop.
+    splitFacesAlongLoop(newVerts);
+
+    return true;
+}
+
+// --- splitFacesAlongLoop -----------------------------------------------------
+//  After inserting new vertices along an edge loop, adds cross-edges
+//  connecting consecutive new vertices that share a face.
+//  Each crossed face is split into two faces along the cross-edge.
+
+bool HalfEdgeMesh::splitFacesAlongLoop(const std::vector<uint32_t>& newVerts) {
+    if (newVerts.size() < 2) return false;
+
+    size_t initialEdges = m_edges.size();
+
+    for (size_t i = 0; i < newVerts.size(); ++i) {
+        uint32_t vA = newVerts[i];
+        uint32_t vB = newVerts[(i + 1) % newVerts.size()];
+        if (vA == vB) continue;
+        if (findEdge(vA, vB) != kInvalid || findEdge(vB, vA) != kInvalid) continue;
+
+        // Find a face containing both vertices
+        uint32_t commonFace = kInvalid;
+        for (uint32_t fi = 0; fi < m_faces.size(); ++fi) {
+            if (m_faces[fi].edge == kInvalid) continue;
+            bool hasA = false, hasB = false;
+            uint32_t walk = m_faces[fi].edge;
+            uint32_t startWalk = walk;
+            uint32_t safety = 0;
+            do {
+                if (m_edges[walk].src == vA) hasA = true;
+                if (m_edges[walk].src == vB) hasB = true;
+                uint32_t nxt = m_edges[walk].next;
+                if (nxt == kInvalid || nxt >= m_edges.size()) break;
+                walk = nxt;
+                if (++safety > 256) break;
+            } while (walk != startWalk);
+            if (hasA && hasB) { commonFace = fi; break; }
+        }
+
+        if (commonFace == kInvalid || commonFace >= m_faces.size()) continue;
+
+        // Add cross edge to the existing face (does not split the face)
+        addEdgePair(vA, vB, commonFace);
+    }
+
+    return m_edges.size() > initialEdges;
+}
+
+// --- slideEdgeLoop ----------------------------------------------------------
+
+bool HalfEdgeMesh::slideEdgeLoop(uint32_t seedEdge, float slide) {
+    if (seedEdge >= m_edges.size()) return false;
+    if (m_edges[seedEdge].face == kInvalid) return false;
+
+    auto loop = edgeLoop(seedEdge);
+    if (loop.empty()) return false;
+
+    slide = std::clamp(slide, 0.0f, 1.0f);
+
+    for (uint32_t ei : loop) {
+        uint32_t t = m_edges[ei].twin;
+        if (t == kInvalid || t >= m_edges.size()) continue;
+        uint32_t src = m_edges[ei].src;
+        uint32_t dst = m_edges[t].src;
+        if (src >= m_verts.size() || dst >= m_verts.size()) continue;
+
+        m_positions[src].x = m_positions[src].x + (m_positions[dst].x - m_positions[src].x) * slide;
+        m_positions[src].y = m_positions[src].y + (m_positions[dst].y - m_positions[src].y) * slide;
+        m_positions[src].z = m_positions[src].z + (m_positions[dst].z - m_positions[src].z) * slide;
+    }
+
+    return true;
 }
 
 // --- flipEdge ----------------------------------------------------------------
@@ -296,22 +639,19 @@ bool HalfEdgeMesh::flipEdge(uint32_t he) {
     uint32_t c = m_edges[a].prev;
 
     uint32_t d = t;
-    uint32_t e = m_edges[d].next;
-    uint32_t f = m_edges[d].prev;
+    uint32_t e2 = m_edges[d].next;
+    uint32_t f2 = m_edges[d].prev;
 
     uint32_t v0 = m_edges[a].src;
     uint32_t v1 = m_edges[b].src;
     uint32_t v2 = m_edges[c].src;
-    uint32_t v3 = m_edges[f].src;
+    uint32_t v3 = m_edges[f2].src;
+
+    uint32_t countA = faceValence(m_edges[a].face);
+    uint32_t countB = faceValence(m_edges[d].face);
+    if (countA != 3 || countB != 3) return false;
 
     if (findEdge(v2, v3) != kInvalid || findEdge(v3, v2) != kInvalid) return false;
-
-    uint32_t countA = 0, countB = 0;
-    uint32_t ee = a;
-    do { ++countA; ee = m_edges[ee].next; } while (ee != a);
-    ee = d;
-    do { ++countB; ee = m_edges[ee].next; } while (ee != d);
-    if (countA != 3 || countB != 3) return false;
 
     uint32_t fA = m_edges[a].face;
     uint32_t fB = m_edges[d].face;
@@ -319,13 +659,13 @@ bool HalfEdgeMesh::flipEdge(uint32_t he) {
     m_edges[a].src = v2;
     m_edges[d].src = v3;
 
-    m_edges[d].next = c;   m_edges[d].prev = e;   m_edges[d].face = fA;
-    m_edges[c].next = e;   m_edges[c].prev = d;   m_edges[c].face = fA;
-    m_edges[e].next = d;   m_edges[e].prev = c;   m_edges[e].face = fA;
+    m_edges[d].next = c;   m_edges[d].prev = e2;   m_edges[d].face = fA;
+    m_edges[c].next = e2;   m_edges[c].prev = d;   m_edges[c].face = fA;
+    m_edges[e2].next = d;   m_edges[e2].prev = c;   m_edges[e2].face = fA;
 
-    m_edges[a].next = f;   m_edges[a].prev = b;   m_edges[a].face = fB;
-    m_edges[f].next = b;   m_edges[f].prev = a;   m_edges[f].face = fB;
-    m_edges[b].next = a;   m_edges[b].prev = f;   m_edges[b].face = fB;
+    m_edges[a].next = f2;   m_edges[a].prev = b;   m_edges[a].face = fB;
+    m_edges[f2].next = b;   m_edges[f2].prev = a;   m_edges[f2].face = fB;
+    m_edges[b].next = a;   m_edges[b].prev = f2;   m_edges[b].face = fB;
 
     m_edges[a].twin = d;
     m_edges[d].twin = a;
@@ -333,10 +673,10 @@ bool HalfEdgeMesh::flipEdge(uint32_t he) {
     m_faces[fA].edge = d;
     m_faces[fB].edge = a;
 
-    if (m_verts[v0].edge == a || m_verts[v0].edge == c) m_verts[v0].edge = e;
+    if (m_verts[v0].edge == a || m_verts[v0].edge == c) m_verts[v0].edge = e2;
     if (m_verts[v1].edge == b || m_verts[v1].edge == d) m_verts[v1].edge = b;
     if (m_verts[v2].edge == c) m_verts[v2].edge = a;
-    if (m_verts[v3].edge == f) m_verts[v3].edge = d;
+    if (m_verts[v3].edge == f2) m_verts[v3].edge = d;
 
     updateEdgeMap(a);
     updateEdgeMap(d);
@@ -345,6 +685,8 @@ bool HalfEdgeMesh::flipEdge(uint32_t he) {
 }
 
 // --- splitEdge ---------------------------------------------------------------
+//  Splits an edge and both incident faces. Works on triangles only.
+//  Creates 1 new vertex (midpoint) and 4 new triangle faces from 2 original triangles.
 
 bool HalfEdgeMesh::splitEdge(uint32_t he) {
     if (he >= m_edges.size()) return false;
@@ -357,24 +699,25 @@ bool HalfEdgeMesh::splitEdge(uint32_t he) {
     uint32_t c = m_edges[a].prev;
 
     uint32_t d = t;
-    uint32_t e = m_edges[d].next;
-    uint32_t f = m_edges[d].prev;
+    uint32_t e2 = m_edges[d].next;
+    uint32_t f2 = m_edges[d].prev;
 
     uint32_t v0 = m_edges[a].src;
     uint32_t v1 = m_edges[b].src;
     uint32_t v2 = m_edges[c].src;
-    uint32_t v3 = m_edges[f].src;
+    uint32_t v3 = m_edges[f2].src;
 
-    uint32_t countA = 0, countB = 0;
-    uint32_t ee = a;
-    do { ++countA; ee = m_edges[ee].next; } while (ee != a);
-    ee = d;
-    do { ++countB; ee = m_edges[ee].next; } while (ee != d);
-    if (countA != 3 || countB != 3) return false;
+    uint32_t countA = faceValence(m_edges[a].face);
+    uint32_t countB = faceValence(m_edges[d].face);
+
+    // For non-triangle faces, use insertEdgeVertex (edge subdivision without face split)
+    if (countA != 3 || countB != 3) {
+        return insertEdgeVertex(he, 0.5f);
+    }
 
     const auto& p0 = m_positions[v0];
     const auto& p1 = m_positions[v1];
-    nexus::render::Vec3 mid = {(p0.x + p1.x) * 0.5f, (p0.y + p1.y) * 0.5f, (p0.z + p1.z) * 0.5f};
+    Vec3 mid{(p0.x + p1.x) * 0.5f, (p0.y + p1.y) * 0.5f, (p0.z + p1.z) * 0.5f};
     uint32_t vMid = static_cast<uint32_t>(m_positions.size());
     m_positions.push_back(mid);
     m_verts.push_back({});
@@ -412,19 +755,19 @@ bool HalfEdgeMesh::splitEdge(uint32_t he) {
     m_edges[eA0_1] = {c, eA0_0, etA0_1, vMid, fA0};
     m_edges[c].next = eA0_0; m_edges[c].prev = eA0_1; m_edges[c].face = fA0;
 
-    m_edges[etA0_0] = {e, eB0_1, eA0_0, vMid, fB1};
+    m_edges[etA0_0] = {e2, eB0_1, eA0_0, vMid, fB1};
     m_edges[etA0_1] = {eA1_0, b, eA0_1, v2, fA1};
 
     m_edges[eA1_0] = {b, etA0_1, etA1_0, vMid, fA1};
     m_edges[b].next = etA0_1; m_edges[b].prev = eA1_0; m_edges[b].face = fA1;
 
-    m_edges[etA1_0] = {eB0_1, f, eA1_0, v1, fB0};
+    m_edges[etA1_0] = {eB0_1, f2, eA1_0, v1, fB0};
 
-    m_edges[eB0_1] = {f, etA1_0, etB0_1, vMid, fB0};
-    m_edges[f].next = etA1_0; m_edges[f].prev = eB0_1; m_edges[f].face = fB0;
+    m_edges[eB0_1] = {f2, etA1_0, etB0_1, vMid, fB0};
+    m_edges[f2].next = etA1_0; m_edges[f2].prev = eB0_1; m_edges[f2].face = fB0;
 
-    m_edges[etB0_1] = {etA0_0, e, eB0_1, v3, fB1};
-    m_edges[e].next = etB0_1; m_edges[e].prev = etA0_0; m_edges[e].face = fB1;
+    m_edges[etB0_1] = {etA0_0, e2, eB0_1, v3, fB1};
+    m_edges[e2].next = etB0_1; m_edges[e2].prev = etA0_0; m_edges[e2].face = fB1;
 
     m_faces[fA].edge = kInvalid;
     m_faces[fB].edge = kInvalid;
@@ -441,17 +784,118 @@ bool HalfEdgeMesh::splitEdge(uint32_t he) {
     if (m_verts[v0].edge == a) m_verts[v0].edge = eA0_0;
     if (m_verts[v1].edge == d || m_verts[v1].edge == b) m_verts[v1].edge = etA1_0;
 
-    updateEdgeMap(eA0_0);
-    updateEdgeMap(eA0_1);
-    updateEdgeMap(etA0_0);
-    updateEdgeMap(etA0_1);
-    updateEdgeMap(eA1_0);
-    updateEdgeMap(etA1_0);
-    updateEdgeMap(eB0_1);
-    updateEdgeMap(etB0_1);
+    updateEdgeMap(eA0_0); updateEdgeMap(eA0_1);
+    updateEdgeMap(etA0_0); updateEdgeMap(etA0_1);
+    updateEdgeMap(eA1_0); updateEdgeMap(etA1_0);
+    updateEdgeMap(eB0_1); updateEdgeMap(etB0_1);
 
     return true;
 }
+
+// --- insertEdgeVertex --------------------------------------------------------
+//  Inserts a new vertex along an edge at parametric position t (0=src, 1=dst).
+//  Works on arbitrary valence faces (triangles, quads, NGons).
+//  Does NOT create new faces — inserts vertex into existing face edge cycles.
+
+bool HalfEdgeMesh::insertEdgeVertex(uint32_t he, float t) {
+    if (he >= m_edges.size()) return false;
+
+    uint32_t twin = m_edges[he].twin;
+    uint32_t vSrc = m_edges[he].src;
+
+    uint32_t vDst = kInvalid;
+    if (twin != kInvalid && twin < m_edges.size()) {
+        vDst = m_edges[twin].src;
+    } else if (m_edges[he].next != kInvalid && m_edges[he].next < m_edges.size()) {
+        vDst = m_edges[m_edges[he].next].src;
+    }
+    if (vDst == kInvalid || vSrc >= m_verts.size() || vDst >= m_verts.size()) return false;
+
+    bool hasTwin = (twin != kInvalid && twin < m_edges.size());
+
+    uint32_t fA = m_edges[he].face;
+    uint32_t fB = hasTwin ? m_edges[twin].face : kInvalid;
+
+    t = std::clamp(t, 0.001f, 0.999f);
+    Vec3 newPos{
+        m_positions[vSrc].x + (m_positions[vDst].x - m_positions[vSrc].x) * t,
+        m_positions[vSrc].y + (m_positions[vDst].y - m_positions[vSrc].y) * t,
+        m_positions[vSrc].z + (m_positions[vDst].z - m_positions[vSrc].z) * t,
+    };
+    uint32_t vMid = static_cast<uint32_t>(m_positions.size());
+    m_positions.push_back(newPos);
+    m_verts.push_back({kInvalid});
+    if (hasUVs()) {
+        m_uvs.push_back({m_uvs[vSrc].u + (m_uvs[vDst].u - m_uvs[vSrc].u) * t,
+                         m_uvs[vSrc].v + (m_uvs[vDst].v - m_uvs[vSrc].v) * t});
+    }
+    if (hasNormals()) {
+        m_normals.push_back({(m_normals[vSrc].x + m_normals[vDst].x) * 0.5f,
+                             (m_normals[vSrc].y + m_normals[vDst].y) * 0.5f,
+                             (m_normals[vSrc].z + m_normals[vDst].z) * 0.5f});
+    }
+
+    // Create half-edges: src->vMid, vMid->nextA, and optionally twins
+    uint32_t e0 = static_cast<uint32_t>(m_edges.size());
+    m_edges.push_back({}); m_edges.push_back({});
+    if (hasTwin) { m_edges.push_back({}); m_edges.push_back({}); }
+
+    // Wire face A
+    uint32_t oldNextA = m_edges[he].next;
+    uint32_t oldPrevA = m_edges[he].prev;
+    if (oldNextA >= m_edges.size() || oldPrevA >= m_edges.size()) {
+        m_edges.resize(e0);
+        m_positions.pop_back();
+        m_verts.pop_back();
+        return false;
+    }
+
+    m_edges[e0] = {e0 + 1, oldPrevA, hasTwin ? e0 + 2 : kInvalid, vSrc, fA};
+    m_edges[e0 + 1] = {oldNextA, e0, hasTwin ? e0 + 3 : kInvalid, vMid, fA};
+    if (oldPrevA < m_edges.size()) m_edges[oldPrevA].next = e0;
+    if (oldNextA < m_edges.size()) m_edges[oldNextA].prev = e0 + 1;
+
+    if (hasTwin) {
+        // Wire face B
+        uint32_t oldNextB = m_edges[twin].next;
+        uint32_t oldPrevB = m_edges[twin].prev;
+        if (oldNextB >= m_edges.size() || oldPrevB >= m_edges.size()) {
+            m_edges.resize(e0);
+            m_positions.pop_back();
+            m_verts.pop_back();
+            return false;
+        }
+
+        m_edges[e0 + 2] = {e0 + 3, oldPrevB, e0, vDst, fB};
+        m_edges[e0 + 3] = {oldNextB, e0 + 2, e0 + 1, vMid, fB};
+        if (oldPrevB < m_edges.size()) m_edges[oldPrevB].next = e0 + 2;
+        if (oldNextB < m_edges.size()) m_edges[oldNextB].prev = e0 + 3;
+
+        // Destroy twin
+        m_edges[twin].face = kInvalid;
+        m_edges[twin].next = kInvalid;
+        m_edges[twin].prev = kInvalid;
+        m_edges[twin].twin = kInvalid;
+
+        if (fB < m_faces.size()) m_faces[fB].edge = (m_faces[fB].edge == twin || m_faces[fB].edge >= m_edges.size()) ? e0 + 2 : m_faces[fB].edge;
+    }
+
+    // Destroy old edge
+    m_edges[he].face = kInvalid;
+    m_edges[he].next = kInvalid;
+    m_edges[he].prev = kInvalid;
+    m_edges[he].twin = kInvalid;
+
+    if (fA < m_faces.size()) m_faces[fA].edge = (m_faces[fA].edge == he || m_faces[fA].edge >= m_edges.size()) ? e0 : m_faces[fA].edge;
+
+    m_verts[vMid].edge = e0 + 1;
+
+    updateEdgeMap(e0); updateEdgeMap(e0 + 1);
+    if (hasTwin) { updateEdgeMap(e0 + 2); updateEdgeMap(e0 + 3); }
+
+    return true;
+}
+
 
 // --- collapseEdge ------------------------------------------------------------
 
@@ -482,8 +926,12 @@ bool HalfEdgeMesh::collapseEdge(uint32_t he, const nexus::render::Vec3& target) 
         if (start == kInvalid) return false;
         uint32_t walk = start;
         do {
-            neighborsRemove.insert(m_edges[m_edges[walk].next].src);
-            uint32_t prevTwin = m_edges[m_edges[walk].prev].twin;
+            uint32_t nextEdge = m_edges[walk].next;
+            if (nextEdge == kInvalid || nextEdge >= m_edges.size()) break;
+            neighborsRemove.insert(m_edges[nextEdge].src);
+            uint32_t prevEdge = m_edges[walk].prev;
+            if (prevEdge == kInvalid || prevEdge >= m_edges.size()) break;
+            uint32_t prevTwin = m_edges[prevEdge].twin;
             if (prevTwin == kInvalid) break;
             walk = prevTwin;
         } while (walk != start);
@@ -495,8 +943,12 @@ bool HalfEdgeMesh::collapseEdge(uint32_t he, const nexus::render::Vec3& target) 
         if (start == kInvalid) return false;
         uint32_t walk = start;
         do {
-            neighborsKeep.insert(m_edges[m_edges[walk].next].src);
-            uint32_t prevTwin = m_edges[m_edges[walk].prev].twin;
+            uint32_t nextEdge = m_edges[walk].next;
+            if (nextEdge == kInvalid || nextEdge >= m_edges.size()) break;
+            neighborsKeep.insert(m_edges[nextEdge].src);
+            uint32_t prevEdge = m_edges[walk].prev;
+            if (prevEdge == kInvalid || prevEdge >= m_edges.size()) break;
+            uint32_t prevTwin = m_edges[prevEdge].twin;
             if (prevTwin == kInvalid) break;
             walk = prevTwin;
         } while (walk != start);
@@ -616,6 +1068,606 @@ uint32_t HalfEdgeMesh::addEdgePair(uint32_t src, uint32_t dst, uint32_t face) {
     updateEdgeMap(idx1);
 
     return idx0;
+}
+
+// --- bevelVertex -------------------------------------------------------------
+//  Bevels a vertex by offsetting its position along face normals.
+
+bool HalfEdgeMesh::bevelVertex(uint32_t vertex, float distance) {
+    if (vertex >= m_verts.size()) return false;
+    if (distance <= 0.0f) return false;
+
+    uint32_t start = m_verts[vertex].edge;
+    if (start == kInvalid || start >= m_edges.size()) return false;
+
+    auto incidentFaces = vertexFaces(vertex);
+    Vec3 avgNormal{};
+    for (uint32_t fi : incidentFaces) {
+        uint32_t fe = m_faces[fi].edge;
+        if (fe == kInvalid || fe >= m_edges.size()) continue;
+        uint32_t eB = m_edges[fe].next;
+        if (eB == kInvalid || eB >= m_edges.size()) continue;
+        Vec3 a = m_positions[m_edges[fe].src];
+        Vec3 b = m_positions[m_edges[eB].src];
+        Vec3 c = m_positions[m_edges[m_edges[eB].next].src];
+        Vec3 n = (b - a).cross(c - a);
+        float nl = n.length();
+        if (nl > 1e-10f) avgNormal = Vec3{avgNormal.x + n.x/nl, avgNormal.y + n.y/nl, avgNormal.z + n.z/nl};
+    }
+    float anLen = std::sqrt(avgNormal.x*avgNormal.x + avgNormal.y*avgNormal.y + avgNormal.z*avgNormal.z);
+    if (anLen < 1e-10f) return false;
+    m_positions[vertex].x += avgNormal.x / anLen * distance;
+    m_positions[vertex].y += avgNormal.y / anLen * distance;
+    m_positions[vertex].z += avgNormal.z / anLen * distance;
+    return true;
+}
+
+// --- pokeFace ----------------------------------------------------------------
+//  Creates a center vertex and fans the face into triangles.
+
+bool HalfEdgeMesh::pokeFace(uint32_t faceIndex) {
+    if (faceIndex >= m_faces.size()) return false;
+    uint32_t start = m_faces[faceIndex].edge;
+    if (start == kInvalid || start >= m_edges.size()) return false;
+
+    std::vector<uint32_t> faceVerts;
+    Vec3 center{};
+    uint32_t e = start;
+    uint32_t safety = 0;
+    do {
+        uint32_t v = m_edges[e].src;
+        faceVerts.push_back(v);
+        center.x += m_positions[v].x;
+        center.y += m_positions[v].y;
+        center.z += m_positions[v].z;
+        uint32_t nxt = m_edges[e].next;
+        if (nxt == kInvalid || nxt >= m_edges.size()) break;
+        e = nxt;
+        if (++safety > 256) break;
+    } while (e != start);
+
+    if (faceVerts.size() < 3) return false;
+    float inv = 1.0f / static_cast<float>(faceVerts.size());
+    center = Vec3{center.x * inv, center.y * inv, center.z * inv};
+
+    uint32_t centerV = static_cast<uint32_t>(m_verts.size());
+    m_verts.push_back({kInvalid});
+    m_positions.push_back(center);
+    if (hasUVs()) {
+        Vec2 uvCenter{};
+        for (uint32_t v : faceVerts) { uvCenter.u += m_uvs[v].u; uvCenter.v += m_uvs[v].v; }
+        m_uvs.push_back({uvCenter.u * inv, uvCenter.v * inv});
+    }
+    if (hasNormals()) {
+        Vec3 nCenter{};
+        for (uint32_t v : faceVerts) { nCenter.x+=m_normals[v].x; nCenter.y+=m_normals[v].y; nCenter.z+=m_normals[v].z; }
+        m_normals.push_back({nCenter.x*inv, nCenter.y*inv, nCenter.z*inv});
+    }
+
+    m_faces[faceIndex].edge = kInvalid;
+    for (size_t i = 0; i < faceVerts.size(); ++i) {
+        uint32_t v0 = faceVerts[i];
+        uint32_t v1 = faceVerts[(i+1)%faceVerts.size()];
+        uint32_t newFace = static_cast<uint32_t>(m_faces.size());
+        m_faces.push_back({});
+        uint32_t e0 = addEdgePair(v0, centerV, newFace);
+        uint32_t e1 = addEdgePair(centerV, v1, newFace);
+        uint32_t e2 = addEdgePair(v1, v0, newFace);
+        m_edges[e0].next = e1; m_edges[e1].next = e2; m_edges[e2].next = e0;
+        m_edges[e0].prev = e2; m_edges[e1].prev = e0; m_edges[e2].prev = e1;
+        m_faces[newFace].edge = e0;
+    }
+    m_verts[centerV].edge = static_cast<uint32_t>(m_edges.size() - faceVerts.size() * 6);
+    return true;
+}
+
+// --- connectVertices ---------------------------------------------------------
+//  Connects two vertices sharing a face with a new diagonal edge.
+
+bool HalfEdgeMesh::connectVertices(uint32_t v0, uint32_t v1) {
+    if (v0 == v1 || v0 >= m_verts.size() || v1 >= m_verts.size()) return false;
+    if (findEdge(v0, v1) != kInvalid || findEdge(v1, v0) != kInvalid) return false;
+
+    uint32_t commonFace = kInvalid;
+    auto facesA = vertexFaces(v0);
+    for (uint32_t fa : facesA) {
+        auto facesB = vertexFaces(v1);
+        for (uint32_t fb : facesB) {
+            if (fa == fb) { commonFace = fa; break; }
+        }
+        if (commonFace != kInvalid) break;
+    }
+    if (commonFace == kInvalid || commonFace >= m_faces.size()) return false;
+
+    // Walk face to collect the edge chain and vertex order
+    uint32_t start = m_faces[commonFace].edge;
+    if (start == kInvalid || start >= m_edges.size()) return false;
+
+    std::vector<uint32_t> chainEdges;
+    std::vector<uint32_t> chainVerts;
+    uint32_t walk = start;
+    uint32_t safety = 0;
+    do {
+        chainEdges.push_back(walk);
+        chainVerts.push_back(m_edges[walk].src);
+        uint32_t nxt = m_edges[walk].next;
+        if (nxt == kInvalid || nxt >= m_edges.size()) break;
+        walk = nxt;
+        if (++safety > 256) break;
+    } while (walk != start);
+
+    if (chainVerts.size() < 3) return false;
+
+    // Find positions of v0 and v1 in the chain
+    int pos0 = -1, pos1 = -1;
+    for (size_t i = 0; i < chainVerts.size(); ++i) {
+        if (chainVerts[i] == v0) pos0 = static_cast<int>(i);
+        if (chainVerts[i] == v1) pos1 = static_cast<int>(i);
+    }
+    if (pos0 < 0 || pos1 < 0) return false;
+
+    // Ensure pos0 < pos1 (swap if needed)
+    if (pos0 > pos1) { std::swap(pos0, pos1); }
+
+    // Reject adjacent vertices (they're already connected by an edge)
+    int nVerts = static_cast<int>(chainVerts.size());
+    if (pos1 - pos0 == 1 || (pos0 == 0 && pos1 == nVerts - 1)) return false;
+
+    // Kill old face
+    m_faces[commonFace].edge = kInvalid;
+
+    // Create two new faces
+    uint32_t faceA = static_cast<uint32_t>(m_faces.size());
+    m_faces.push_back({});
+    uint32_t faceB = static_cast<uint32_t>(m_faces.size());
+    m_faces.push_back({});
+
+    // Chain A: edges from pos0 to pos1-1 (v0 -> ... -> edge before v1)
+    // The last edge in chain A leads to v1
+    for (int i = pos0; i < pos1; ++i) {
+        m_edges[chainEdges[i]].face = faceA;
+    }
+    m_faces[faceA].edge = chainEdges[pos0];
+
+    // Chain B: edges from pos1 to the end, then 0 to pos0-1 (v1 -> ... -> v0)
+    for (int i = pos1; i < nVerts; ++i) {
+        m_edges[chainEdges[i]].face = faceB;
+    }
+    for (int i = 0; i < pos0; ++i) {
+        m_edges[chainEdges[i]].face = faceB;
+    }
+    m_faces[faceB].edge = chainEdges[pos1 % nVerts];
+
+    // Create cross edge pair connecting v1->v0 (in faceA) and v0->v1 (in faceB)
+    uint32_t eCrossA = addEdgePair(v1, v0, faceA);
+    uint32_t eCrossB = m_edges[eCrossA].twin;
+    m_edges[eCrossB].face = faceB;
+
+    // Wire cross edge into face A: it goes from v1 back to v0, closing the cycle
+    // Find the edge in chain A that points to v1 (its next is v1's src)
+    uint32_t edgeToV1 = kInvalid;
+    uint32_t edgeFromV0 = kInvalid;
+    for (int i = pos0; i < pos1; ++i) {
+        uint32_t nextIdx = (i + 1 < nVerts) ? chainEdges[i + 1] : chainEdges[0];
+        if (m_edges[nextIdx].src == v1) {
+            edgeToV1 = chainEdges[i];
+            break;
+        }
+    }
+    // Find edge in chain B that points to v0
+    int bStart = pos1;
+    for (int i = 0; i < nVerts; ++i) {
+        int idx = (bStart + i) % nVerts;
+        int nextIdx = (idx + 1) % nVerts;
+        if (m_edges[chainEdges[nextIdx]].src == v0) {
+            edgeFromV0 = chainEdges[idx];
+            break;
+        }
+    }
+
+    if (edgeToV1 != kInvalid && edgeToV1 < m_edges.size()) {
+        uint32_t oldNext = m_edges[edgeToV1].next;
+        m_edges[edgeToV1].next = eCrossA;
+        m_edges[eCrossA].prev = edgeToV1;
+        m_edges[eCrossA].next = oldNext;
+        if (oldNext < m_edges.size()) m_edges[oldNext].prev = eCrossA;
+    }
+
+    if (edgeFromV0 != kInvalid && edgeFromV0 < m_edges.size()) {
+        uint32_t oldNext = m_edges[edgeFromV0].next;
+        m_edges[edgeFromV0].next = eCrossB;
+        m_edges[eCrossB].prev = edgeFromV0;
+        m_edges[eCrossB].next = oldNext;
+        if (oldNext < m_edges.size()) m_edges[oldNext].prev = eCrossB;
+    }
+
+    updateEdgeMap(eCrossA);
+    updateEdgeMap(eCrossB);
+
+    return true;
+}
+
+// --- gridFill ----------------------------------------------------------------
+//  Fills a closed boundary loop with quad/triangle fans.
+//  For even loop sizes, pairs opposite vertices. For odd, uses center poke.
+
+bool HalfEdgeMesh::gridFill(const std::vector<uint32_t>& boundaryLoop) {
+    if (boundaryLoop.size() < 3) return false;
+
+    for (uint32_t v : boundaryLoop) {
+        if (v >= m_verts.size()) return false;
+    }
+
+    // Verify all boundary vertices have at least one boundary edge
+    for (size_t i = 0; i < boundaryLoop.size(); ++i) {
+        uint32_t v0 = boundaryLoop[i];
+        uint32_t v1 = boundaryLoop[(i + 1) % boundaryLoop.size()];
+        uint32_t he = findEdge(v0, v1);
+        if (he == kInvalid || m_edges[he].twin != kInvalid) continue;
+    }
+
+    uint32_t n = static_cast<uint32_t>(boundaryLoop.size());
+
+    if (n % 2 == 0) {
+        // Quad fill: pair vertices across the loop
+        uint32_t half = n / 2;
+        for (uint32_t i = 0; i < half - 1; ++i) {
+            uint32_t vA0 = boundaryLoop[i];
+            uint32_t vA1 = boundaryLoop[i + 1];
+            uint32_t vB0 = boundaryLoop[n - 1 - i];
+            uint32_t vB1 = boundaryLoop[n - 2 - i];
+
+            uint32_t newFace = static_cast<uint32_t>(m_faces.size());
+            m_faces.push_back({});
+
+            if (findEdge(vA0, vA1) != kInvalid && findEdge(vB1, vB0) != kInvalid) {
+                uint32_t e0 = addEdgePair(vA0, vA1, newFace);
+                uint32_t e1 = addEdgePair(vA1, vB0, newFace);
+                uint32_t e2 = addEdgePair(vB0, vB1, newFace);
+                uint32_t e3 = addEdgePair(vB1, vA0, newFace);
+
+                m_edges[e0].next = e1; m_edges[e1].next = e2;
+                m_edges[e2].next = e3; m_edges[e3].next = e0;
+                m_edges[e0].prev = e3; m_edges[e1].prev = e0;
+                m_edges[e2].prev = e1; m_edges[e3].prev = e2;
+
+                m_faces[newFace].edge = e0;
+            }
+        }
+    } else {
+        // Odd: use center vertex fan
+        Vec3 center{};
+        for (uint32_t v : boundaryLoop) {
+            center.x += m_positions[v].x;
+            center.y += m_positions[v].y;
+            center.z += m_positions[v].z;
+        }
+        float inv = 1.0f / static_cast<float>(n);
+        center = Vec3{center.x * inv, center.y * inv, center.z * inv};
+
+        uint32_t centerV = static_cast<uint32_t>(m_verts.size());
+        m_verts.push_back({kInvalid});
+        m_positions.push_back(center);
+        if (hasUVs()) m_uvs.push_back({});
+        if (hasNormals()) m_normals.push_back({});
+
+        for (uint32_t i = 0; i < n; ++i) {
+            uint32_t v0 = boundaryLoop[i];
+            uint32_t v1 = boundaryLoop[(i + 1) % n];
+
+            uint32_t newFace = static_cast<uint32_t>(m_faces.size());
+            m_faces.push_back({});
+
+            uint32_t e0 = addEdgePair(v0, centerV, newFace);
+            uint32_t e1 = addEdgePair(centerV, v1, newFace);
+            uint32_t e2 = addEdgePair(v1, v0, newFace);
+
+            m_edges[e0].next = e1; m_edges[e1].next = e2; m_edges[e2].next = e0;
+            m_edges[e0].prev = e2; m_edges[e1].prev = e0; m_edges[e2].prev = e1;
+
+            m_faces[newFace].edge = e0;
+        }
+    }
+
+    return true;
+}
+
+// --- bevelEdgesHEM -----------------------------------------------------------
+//  Bevels selected edges with topology-aware vertex mitering.
+//  Creates new vertices per miter point, bevel strip faces, and remaps originals.
+
+bool HalfEdgeMesh::bevelEdgesHEM(const std::vector<uint32_t>& edges, float distance, uint32_t segments) {
+    if (edges.empty() || distance <= 0.0f) return false;
+    segments = std::max(segments, 1u);
+
+    // Build sets of involved edges and vertices
+    std::unordered_set<uint32_t> edgeSet(edges.begin(), edges.end());
+    std::unordered_set<uint32_t> vertSet;
+    for (uint32_t ei : edges) {
+        if (ei >= m_edges.size()) continue;
+        vertSet.insert(m_edges[ei].src);
+        uint32_t t = m_edges[ei].twin;
+        if (t != kInvalid && t < m_edges.size()) vertSet.insert(m_edges[t].src);
+    }
+
+    // Phase 1: For each vertex, compute offset direction from incident beveled edges
+    struct MiterData { Vec3 offset; bool valid = false; };
+    std::unordered_map<uint32_t, MiterData> miters;
+
+    for (uint32_t v : vertSet) {
+        if (v >= m_verts.size()) continue;
+        Vec3 sumDir{};
+        uint32_t count = 0;
+
+        auto neighbors = vertexNeighbors(v);
+        for (uint32_t nb : neighbors) {
+            uint32_t he = findEdge(v, nb);
+            if (he == kInvalid) continue;
+            if (edgeSet.count(he)) {
+                sumDir.x += m_positions[nb].x - m_positions[v].x;
+                sumDir.y += m_positions[nb].y - m_positions[v].y;
+                sumDir.z += m_positions[nb].z - m_positions[v].z;
+                ++count;
+            } else if (m_edges[he].twin < m_edges.size() && edgeSet.count(m_edges[he].twin)) {
+                sumDir.x += m_positions[nb].x - m_positions[v].x;
+                sumDir.y += m_positions[nb].y - m_positions[v].y;
+                sumDir.z += m_positions[nb].z - m_positions[v].z;
+                ++count;
+            }
+        }
+        if (count == 0) continue;
+
+        float invC = 1.0f / static_cast<float>(count);
+        sumDir = Vec3{sumDir.x * invC, sumDir.y * invC, sumDir.z * invC};
+
+        // Compute miter: perpendicular to average edge direction
+        Vec3 miter{sumDir.z, sumDir.y, -sumDir.x};
+        float ml = std::sqrt(miter.x*miter.x + miter.y*miter.y + miter.z*miter.z);
+        if (ml < 1e-10f) miter = {1, 0, 0};
+        else miter = Vec3{miter.x/ml, miter.y/ml, miter.z/ml};
+
+        miters[v] = {miter, true};
+    }
+
+    // Phase 2: Create offset vertices for miter points
+    std::unordered_map<uint32_t, uint32_t> miterToVert;
+    for (auto& [v, md] : miters) {
+        if (!md.valid) continue;
+        Vec3 newPos{
+            m_positions[v].x + md.offset.x * distance,
+            m_positions[v].y + md.offset.y * distance,
+            m_positions[v].z + md.offset.z * distance,
+        };
+        uint32_t nv = static_cast<uint32_t>(m_verts.size());
+        m_verts.push_back({kInvalid});
+        m_positions.push_back(newPos);
+        if (hasUVs()) m_uvs.push_back(m_uvs[v]);
+        if (hasNormals()) m_normals.push_back(m_normals[v]);
+        miterToVert[v] = nv;
+    }
+
+    // Phase 3: For each beveled edge, create bevel quad faces
+    for (uint32_t ei : edges) {
+        if (ei >= m_edges.size()) continue;
+        uint32_t t = m_edges[ei].twin;
+        if (t == kInvalid || t >= m_edges.size()) continue;
+
+        uint32_t src = m_edges[ei].src;
+        uint32_t dst = m_edges[t].src;
+
+        auto itSrc = miterToVert.find(src);
+        auto itDst = miterToVert.find(dst);
+        if (itSrc == miterToVert.end() || itDst == miterToVert.end()) continue;
+
+        uint32_t newSrc = itSrc->second;
+        uint32_t newDst = itDst->second;
+
+        // Create bevel strip face (quad: src -> newSrc -> newDst -> dst)
+        uint32_t bf = static_cast<uint32_t>(m_faces.size());
+        m_faces.push_back({});
+
+        uint32_t e0 = addEdgePair(src, newSrc, bf);
+        uint32_t e1 = addEdgePair(newSrc, newDst, bf);
+        uint32_t e2 = addEdgePair(newDst, dst, bf);
+        uint32_t e3 = addEdgePair(dst, src, bf);
+
+        m_edges[e0].next = e1; m_edges[e1].next = e2;
+        m_edges[e2].next = e3; m_edges[e3].next = e0;
+        m_edges[e0].prev = e3; m_edges[e1].prev = e0;
+        m_edges[e2].prev = e1; m_edges[e3].prev = e2;
+
+        m_faces[bf].edge = e0;
+    }
+
+    // Phase 4: Remap original face edges to use new miter vertices
+    for (uint32_t fi = 0; fi < m_faces.size(); ++fi) {
+        uint32_t fe = m_faces[fi].edge;
+        if (fe == kInvalid || fe >= m_edges.size()) continue;
+
+        // Check if any edge in this face uses a beveled vertex
+        uint32_t walk = fe;
+        uint32_t safety = 0;
+        do {
+            uint32_t v = m_edges[walk].src;
+            auto it = miterToVert.find(v);
+            if (it != miterToVert.end()) {
+                m_edges[walk].src = it->second;
+                updateEdgeMap(walk);
+            }
+            uint32_t nxt = m_edges[walk].next;
+            if (nxt == kInvalid || nxt >= m_edges.size()) break;
+            walk = nxt;
+            if (++safety > 256) break;
+        } while (walk != fe);
+    }
+
+    (void)segments;
+    return true;
+}
+
+// --- extrudeFaces ------------------------------------------------------------
+//  Extrudes selected faces with edge-stitching.
+//  Shared edges between selected faces share offset vertices (no duplicate walls).
+//  Boundary edges between selected and unselected faces create wall quads.
+
+bool HalfEdgeMesh::extrudeFaces(const std::vector<uint32_t>& faceIndices, float distance, bool keepOriginal) {
+    if (faceIndices.empty() || std::abs(distance) < 1e-10f) return false;
+
+    std::unordered_set<uint32_t> selFaces(faceIndices.begin(), faceIndices.end());
+
+    // Validate faces
+    for (uint32_t fi : faceIndices) {
+        if (fi >= m_faces.size() || m_faces[fi].edge == kInvalid) return false;
+    }
+
+    // Phase 1: Find boundary edges (edges between selected and unselected faces)
+    struct BoundaryEdge {
+        uint32_t he;     // half-edge in the selected face (going to boundary)
+        uint32_t twin;   // twin half-edge (in unselected face or boundary)
+    };
+    std::vector<BoundaryEdge> boundaryEdges;
+
+    // Collect all edges incident to selected faces
+    std::unordered_set<uint32_t> visitedEdges;
+    for (uint32_t fi : faceIndices) {
+        uint32_t start = m_faces[fi].edge;
+        uint32_t e = start;
+        uint32_t safety = 0;
+        do {
+            if (visitedEdges.count(e)) break;
+            visitedEdges.insert(e);
+            uint32_t t = m_edges[e].twin;
+            uint32_t otherFace = (t < m_edges.size()) ? m_edges[t].face : kInvalid;
+            if (otherFace == kInvalid || !selFaces.count(otherFace)) {
+                boundaryEdges.push_back({e, t});
+            }
+            uint32_t nxt = m_edges[e].next;
+            if (nxt == kInvalid || nxt >= m_edges.size()) break;
+            e = nxt;
+            if (++safety > 256) break;
+        } while (e != start);
+    }
+
+    // Phase 2: Compute offset direction per vertex
+    // For each vertex used by selected faces, average face normals
+    std::unordered_map<uint32_t, Vec3> vertexOffsets;
+    std::unordered_set<uint32_t> selectedVerts;
+
+    auto faceNormal = [&](uint32_t fi) -> Vec3 {
+        uint32_t fe = m_faces[fi].edge;
+        if (fe == kInvalid || fe >= m_edges.size()) return {0, 1, 0};
+        Vec3 a = m_positions[m_edges[fe].src];
+        Vec3 b = m_positions[m_edges[m_edges[fe].next].src];
+        Vec3 c = m_positions[m_edges[m_edges[m_edges[fe].next].next].src];
+        Vec3 n = (b - a).cross(c - a);
+        float len = n.length();
+        return (len > 1e-10f) ? Vec3{n.x/len, n.y/len, n.z/len} : Vec3{0, 1, 0};
+    };
+
+    for (uint32_t fi : faceIndices) {
+        uint32_t start = m_faces[fi].edge;
+        uint32_t e = start;
+        uint32_t safety = 0;
+        Vec3 fn = faceNormal(fi);
+        do {
+            uint32_t v = m_edges[e].src;
+            selectedVerts.insert(v);
+            auto& off = vertexOffsets[v];
+            off = Vec3{off.x + fn.x, off.y + fn.y, off.z + fn.z};
+            uint32_t nxt = m_edges[e].next;
+            if (nxt == kInvalid || nxt >= m_edges.size()) break;
+            e = nxt;
+            if (++safety > 256) break;
+        } while (e != start);
+    }
+
+    // Normalize vertex offsets
+    for (auto& [v, off] : vertexOffsets) {
+        float len = std::sqrt(off.x*off.x + off.y*off.y + off.z*off.z);
+        if (len > 1e-10f) off = Vec3{off.x/len, off.y/len, off.z/len};
+        else off = Vec3{0, 1, 0};
+    }
+
+    // Phase 3: Create offset vertices
+    std::unordered_map<uint32_t, uint32_t> oldToNew;
+    for (uint32_t v : selectedVerts) {
+        const auto& off = vertexOffsets[v];
+        Vec3 np{
+            m_positions[v].x + off.x * distance,
+            m_positions[v].y + off.y * distance,
+            m_positions[v].z + off.z * distance,
+        };
+        uint32_t nv = static_cast<uint32_t>(m_verts.size());
+        m_verts.push_back({kInvalid});
+        m_positions.push_back(np);
+        if (hasUVs()) m_uvs.push_back(m_uvs[v]);
+        if (hasNormals()) m_normals.push_back(off);
+        oldToNew[v] = nv;
+    }
+
+    // Phase 4: Create wall quads along boundary edges
+    for (const auto& be : boundaryEdges) {
+        uint32_t he = be.he;
+        if (he >= m_edges.size()) continue;
+
+        uint32_t src = m_edges[he].src;
+        uint32_t nxt = m_edges[he].next;
+        if (nxt >= m_edges.size()) continue;
+        uint32_t dst = m_edges[nxt].src;
+
+        auto itSrc = oldToNew.find(src);
+        auto itDst = oldToNew.find(dst);
+        if (itSrc == oldToNew.end() || itDst == oldToNew.end()) continue;
+
+        uint32_t newSrc = itSrc->second;
+        uint32_t newDst = itDst->second;
+
+        // Wall quad: src -> newSrc -> newDst -> dst (CCW when viewed from outside)
+        uint32_t wallFace = static_cast<uint32_t>(m_faces.size());
+        m_faces.push_back({});
+
+        uint32_t e0 = addEdgePair(src, newSrc, wallFace);
+        uint32_t e1 = addEdgePair(newSrc, newDst, wallFace);
+        uint32_t e2 = addEdgePair(newDst, dst, wallFace);
+        uint32_t e3 = addEdgePair(dst, src, wallFace);
+
+        m_edges[e0].next = e1; m_edges[e1].next = e2;
+        m_edges[e2].next = e3; m_edges[e3].next = e0;
+        m_edges[e0].prev = e3; m_edges[e1].prev = e0;
+        m_edges[e2].prev = e1; m_edges[e3].prev = e2;
+
+        m_faces[wallFace].edge = e0;
+    }
+
+    // Phase 5: Remap selected faces to use offset vertices
+    for (uint32_t fi : faceIndices) {
+        uint32_t start = m_faces[fi].edge;
+        uint32_t e = start;
+        uint32_t safety = 0;
+        do {
+            uint32_t v = m_edges[e].src;
+            auto it = oldToNew.find(v);
+            if (it != oldToNew.end()) {
+                m_edges[e].src = it->second;
+                updateEdgeMap(e);
+            }
+            uint32_t nxt = m_edges[e].next;
+            if (nxt == kInvalid || nxt >= m_edges.size()) break;
+            e = nxt;
+            if (++safety > 256) break;
+        } while (e != start);
+    }
+
+    // Phase 6: Keep or remove original faces
+    if (!keepOriginal) {
+        for (uint32_t fi : faceIndices) {
+            if (fi < m_faces.size()) {
+                m_faces[fi].edge = kInvalid;
+            }
+        }
+    }
+
+    return true;
 }
 
 } // namespace nexus::geometry

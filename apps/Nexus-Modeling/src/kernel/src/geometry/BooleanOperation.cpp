@@ -2,6 +2,8 @@
 //  Nexus Geometry — Boolean Operations Implementation
 // ─────────────────────────────────────────────────────────────────────────────
 #include <nexus/geometry/BooleanOperation.h>
+#include <nexus/geometry/MeshBVH.h>
+#include <nexus/geometry/RobustPredicates.h>
 #include <nexus/render/Camera.h>
 #include <algorithm>
 #include <bit>
@@ -220,6 +222,23 @@ bool pointInMesh(const Vec3& point, const std::vector<Vec3>& positions,
     return (crossings & 1) == 1;
 }
 
+// BVH-accelerated point-in-mesh: uses raycast for fast outside rejection.
+// If the ray doesn't hit any BVH node, the point is definitely outside.
+// If it hits, falls back to exact triangle-by-triangle counting.
+bool pointInMeshBVH(const Vec3& point, const MeshBVH& bvh,
+                    const std::vector<Vec3>& positions,
+                    const std::vector<TriangleFace>& triangles,
+                    float tolerance = 1e-5f) noexcept
+{
+    Vec3 rayDir = vec3Normalize(Vec3{1.0f, 1.0f, 1.0f});
+    Ray ray{point, rayDir};
+
+    auto hit = bvh.raycast(ray);
+    if (hit.t == std::numeric_limits<float>::max()) return false; // fast reject: outside
+
+    return pointInMesh(point, positions, triangles, tolerance);
+}
+
 // Triangulate faces (convert quads/n-gons to triangles)
 void triangulateInputMesh(const Mesh& input, std::vector<Vec3>& posOut,
                           std::vector<TriangleFace>& trisOut,
@@ -267,6 +286,65 @@ void triangulateInputMesh(const Mesh& input, std::vector<Vec3>& posOut,
 // For union: keep triangles from A or B
 // For difference: keep triangles from A that are outside B
 // For intersection: keep triangles from A that are inside B
+// ── Post-Boolean mesh cleanup ─────────────────────────────────────────
+//  Removes degenerate triangles and merges coincident vertices.
+
+void cleanupBooleanOutput(std::vector<Vec3>& positions, std::vector<Face>& faces, float mergeEps = 1e-5f) {
+    if (faces.empty()) return;
+
+    // Phase 1: Merge coincident vertices
+    std::vector<uint32_t> vertexRemap(positions.size());
+    std::vector<Vec3> mergedPos;
+    for (size_t i = 0; i < positions.size(); ++i) {
+        bool found = false;
+        for (size_t j = 0; j < mergedPos.size(); ++j) {
+            float dx = mergedPos[j].x - positions[i].x;
+            float dy = mergedPos[j].y - positions[i].y;
+            float dz = mergedPos[j].z - positions[i].z;
+            if (dx*dx + dy*dy + dz*dz < mergeEps * mergeEps) {
+                vertexRemap[i] = static_cast<uint32_t>(j);
+                found = true;
+                break;
+            }
+        }
+        if (!found) {
+            vertexRemap[i] = static_cast<uint32_t>(mergedPos.size());
+            mergedPos.push_back(positions[i]);
+        }
+    }
+    positions = std::move(mergedPos);
+
+    // Phase 2: Remap face indices and remove degenerate faces
+    std::vector<Face> cleanFaces;
+    for (auto& f : faces) {
+        for (auto& idx : f.indices) {
+            if (idx < vertexRemap.size()) idx = vertexRemap[idx];
+        }
+        // Remove degenerate faces (duplicate indices)
+        if (f.indices.size() >= 3) {
+            bool degenerate = false;
+            for (size_t i = 0; i < f.indices.size(); ++i) {
+                if (f.indices[i] == f.indices[(i + 1) % f.indices.size()]) {
+                    degenerate = true;
+                    break;
+                }
+            }
+            if (!degenerate) {
+                // Also check zero area
+                Vec3 a = positions[f.indices[0]];
+                Vec3 b = positions[f.indices[1]];
+                Vec3 c = positions[f.indices[2]];
+                Vec3 cross = vec3Cross(vec3Sub(b, a), vec3Sub(c, a));
+                if (vec3Dot(cross, cross) > 1e-12f) {
+                    cleanFaces.push_back(f);
+                }
+            }
+        }
+    }
+    faces = std::move(cleanFaces);
+}
+
+
 void computeBooleanResult(const std::vector<Vec3>& posA, const std::vector<TriangleFace>& trisA,
                           const std::vector<Vec3>& posB, const std::vector<TriangleFace>& trisB,
                           BooleanOperationType operation, float tolerance,
@@ -274,6 +352,25 @@ void computeBooleanResult(const std::vector<Vec3>& posA, const std::vector<Trian
 {
     outPos.clear();
     outFaces.clear();
+
+    // Build BVHs for fast outside rejection
+    Mesh bvhMeshB;
+    bvhMeshB.attributes().setPositions(posB);
+    for (const auto& tri : trisB) {
+        Face f; f.indices = {tri.indices[0], tri.indices[1], tri.indices[2]};
+        bvhMeshB.topology().addFace(f);
+    }
+    MeshBVH bvhB;
+    bvhB.build(bvhMeshB);
+
+    Mesh bvhMeshA;
+    bvhMeshA.attributes().setPositions(posA);
+    for (const auto& tri : trisA) {
+        Face f; f.indices = {tri.indices[0], tri.indices[1], tri.indices[2]};
+        bvhMeshA.topology().addFace(f);
+    }
+    MeshBVH bvhA;
+    bvhA.build(bvhMeshA);
 
     std::map<uint32_t, uint32_t> posIndexRemap;  // old pos index -> new pos index
 
@@ -319,7 +416,7 @@ void computeBooleanResult(const std::vector<Vec3>& posA, const std::vector<Trian
         // Test face center against B mesh
         Vec3 center = vec3Scale(vec3Add(p0, vec3Add(vec3Scale(p1, 1.0f), vec3Scale(p2, 1.0f))),
                                 1.0f / 3.0f);
-        bool inB = pointInMesh(center, posB, trisB, tolerance);
+        bool inB = pointInMeshBVH(center, bvhB, posB, trisB, tolerance);
 
         bool keep = false;
         switch (operation) {
@@ -349,7 +446,7 @@ void computeBooleanResult(const std::vector<Vec3>& posA, const std::vector<Trian
             // Test face center against A mesh
             Vec3 center = vec3Scale(vec3Add(p0, vec3Add(vec3Scale(p1, 1.0f), vec3Scale(p2, 1.0f))),
                                     1.0f / 3.0f);
-            bool inA = pointInMesh(center, posA, trisA, tolerance);
+            bool inA = pointInMeshBVH(center, bvhA, posA, trisA, tolerance);
 
             // Only add B triangles that are outside A (to avoid duplicates)
             if (!inA) {
@@ -357,6 +454,64 @@ void computeBooleanResult(const std::vector<Vec3>& posA, const std::vector<Trian
             }
         }
     }
+
+    // Post-process: remove degenerate triangles and merge coincident vertices
+    cleanupBooleanOutput(outPos, outFaces);
+}
+
+
+
+// ── Triangle-triangle intersection line (Möller) ──────────────────────
+//  Returns the intersection segment between two triangles.
+//  Used to report where meshes intersect for visual feedback.
+
+[[nodiscard]] inline bool computeIntersectionLine(
+    const Vec3& t0a, const Vec3& t0b, const Vec3& t0c,
+    const Vec3& t1a, const Vec3& t1b, const Vec3& t1c,
+    Vec3& outA, Vec3& outB, float eps = 1e-6f) noexcept
+{
+    Vec3 n0 = vec3Cross(vec3Sub(t0b, t0a), vec3Sub(t0c, t0a));
+    float nl0 = vec3Length(n0);
+    if (nl0 < eps) return false;
+    n0 = vec3Scale(n0, 1.0f / nl0);
+
+    double d1a = RobustPredicates::orient3D(t0a, t0b, t0c, t1a);
+    double d1b = RobustPredicates::orient3D(t0a, t0b, t0c, t1b);
+    double d1c = RobustPredicates::orient3D(t0a, t0b, t0c, t1c);
+
+    int above = (d1a > 0) + (d1b > 0) + (d1c > 0);
+    int below = (d1a < 0) + (d1b < 0) + (d1c < 0);
+    if (above == 3 || below == 3) return false;
+
+    Vec3 edgePts[2];
+    int found = 0;
+    auto intersect = [&](const Vec3& va, const Vec3& vb, double da, double db) {
+        if (found >= 2 || da * db >= 0) return;
+        if (std::abs(db - da) < static_cast<double>(eps)) return;
+        double t = -da / (db - da);
+        edgePts[found++] = vec3Add(va, vec3Scale(vec3Sub(vb, va), static_cast<float>(std::clamp(t, 0.0, 1.0))));
+    };
+    intersect(t1a, t1b, d1a, d1b);
+    intersect(t1b, t1c, d1b, d1c);
+    intersect(t1c, t1a, d1c, d1a);
+
+    if (found < 2) return false;
+
+    auto pointInTri = [&](const Vec3& p) {
+        Vec3 v0 = vec3Sub(t0b, t0a), v1 = vec3Sub(t0c, t0a), v2 = vec3Sub(p, t0a);
+        float d00 = vec3Dot(v0, v0), d01 = vec3Dot(v0, v1), d11 = vec3Dot(v1, v1);
+        float d20 = vec3Dot(v2, v0), d21 = vec3Dot(v2, v1);
+        float denom = d00 * d11 - d01 * d01;
+        if (std::abs(denom) < eps) return false;
+        float v = (d11 * d20 - d01 * d21) / denom;
+        float w = (d00 * d21 - d01 * d20) / denom;
+        return v >= -eps && w >= -eps && (v + w) <= 1.0f + eps;
+    };
+
+    if (!pointInTri(edgePts[0]) && !pointInTri(edgePts[1])) return false;
+    outA = edgePts[0];
+    outB = edgePts[1];
+    return true;
 }
 
 }  // anonymous namespace

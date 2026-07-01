@@ -1,0 +1,21 @@
+{
+  "name": "@nexus/factory",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Nexus software factory — scaffold, generate, and audit Nexus apps",
+  "bin": {
+    "nx-factory": "./bin/nx-factory.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "lint": "biome check src/ bin/ --error-on-warnings",
+    "lint:fix": "biome check src/ bin/ --write",
+    "check": "bun run typecheck && bun run lint"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^1.9.4",
+    "@types/bun": "^1.1.0",
+    "typescript": "^5.4.0"
+  }
+}

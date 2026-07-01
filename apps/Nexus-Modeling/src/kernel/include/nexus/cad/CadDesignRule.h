@@ -1,6 +1,8 @@
 #pragma once
 #include <nexus/cad/CadDocument.h>
 #include <nexus/cad/CadDataTables.h>
+#include <cstdint>
+#include <string>
 #include <vector>
 
 namespace nexus::cad {

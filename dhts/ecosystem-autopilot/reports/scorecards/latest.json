@@ -1,0 +1,43 @@
+{
+  "generatedAt": "2026-04-29T00:01:54.990590+00:00",
+  "summary": {
+    "total": 5,
+    "done": 0,
+    "inProgress": 2,
+    "ready": 0,
+    "blocked": 3
+  },
+  "criticalPath": {
+    "blockedCount": 1,
+    "blocked": [
+      {
+        "lane": "qa",
+        "taskId": "NX-QA-001",
+        "blockedBy": [
+          "NX-BB-003"
+        ]
+      }
+    ]
+  },
+  "gateHealth": {
+    "pre-merge": {
+      "lastRunAt": "2026-04-29T00:01:54.989953+00:00",
+      "exitCode": 1,
+      "status": "fail",
+      "dryRun": false
+    },
+    "release": {
+      "lastRunAt": "2026-04-28T20:18:20.480025+00:00",
+      "exitCode": 0,
+      "status": "pass",
+      "dryRun": true
+    }
+  },
+  "driftTrend": {
+    "status": "unknown",
+    "recentFailures": 0,
+    "previousFailures": 0,
+    "window": 0
+  },
+  "releaseReadinessIndex": 28
+}

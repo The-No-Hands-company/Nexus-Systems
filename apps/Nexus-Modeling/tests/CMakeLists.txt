@@ -35,17 +35,21 @@ add_executable(nexus_kernel_tests
     kernel/test_CurveFairing.cpp
     kernel/test_DeepHardening.cpp
     kernel/test_Delaunay2D.cpp
+    kernel/test_DirectModelingFaceFillet.cpp
+    kernel/test_EdgeBridge.cpp
     kernel/test_EvalGraph.cpp
     kernel/test_ExtrudeOperation.cpp
     kernel/test_FeatureLineExtractor.cpp
     kernel/test_GPUAllocator.cpp
     kernel/test_Integrity.cpp
     kernel/test_InverseKinematics.cpp
+    kernel/test_KnifeTool.cpp
     kernel/test_GeodesicPath.cpp
     kernel/test_GeometryKernel.cpp
     kernel/test_GordonSurface.cpp
     kernel/test_Hardening.cpp
     kernel/test_HalfEdgeMesh.cpp
+    kernel/test_HEMOperations.cpp
     kernel/test_HardSurfaceWorkflow.cpp
     kernel/test_InsetFacesOperation.cpp
     kernel/test_Material.cpp
@@ -81,6 +85,7 @@ add_executable(nexus_kernel_tests
     kernel/test_MeshSurfaceNets.cpp
     kernel/test_MeshTangentSpace.cpp
     kernel/test_MeshThicken.cpp
+    kernel/test_MeshTopologyValidation.cpp
     kernel/test_MeshTopologyAnalysis.cpp
     kernel/test_MeshTransform.cpp
     kernel/test_MeshUVUnwrap.cpp
@@ -125,6 +130,7 @@ add_executable(nexus_kernel_tests
     kernel/test_SceneAssetImporter.cpp
     kernel/test_SceneAssetTextAdapter.cpp
     kernel/test_SceneGraph.cpp
+    kernel/test_SnappingEngine.cpp
     kernel/test_SkeletonRetargeter.cpp
     kernel/test_SceneGraphExtended.cpp
     kernel/test_SculptSession.cpp
@@ -133,6 +139,7 @@ add_executable(nexus_kernel_tests
     kernel/test_SimulationDriver.cpp
     kernel/test_ClothSolver.cpp
     kernel/test_FluidSolver.cpp
+    kernel/test_SolidOperations.cpp
     kernel/test_SubdivisionSurface.cpp
     kernel/test_SurfaceContinuity.cpp
     kernel/test_SurfaceCurvature.cpp
@@ -145,6 +152,7 @@ add_executable(nexus_kernel_tests
     kernel/test_SweepLoft.cpp
     kernel/test_ProfileRevolve.cpp
     kernel/test_TopologyGolden.cpp
+    kernel/test_TransformOrientation.cpp
     kernel/test_TrimBoolean.cpp
     kernel/test_Types.cpp
     kernel/test_TypesExtended.cpp

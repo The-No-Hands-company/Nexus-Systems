@@ -1,0 +1,10 @@
+# Git blame ignore revisions file
+# This file contains commit hashes that should be ignored by git blame
+# Useful for ignoring commits that only contain formatting changes
+
+# Example: Add commit hashes for major formatting/style changes
+# 1234567890abcdef1234567890abcdef12345678  # clang-format applied to entire codebase
+# abcdef1234567890abcdef1234567890abcdef12  # Updated .clang-tidy rules across project
+
+# How to use:
+# git config blame.ignoreRevsFile .git-blame-ignore-revs

@@ -1,0 +1,23 @@
+# Nexus Systems — Production Caddyfile
+# Terminates TLS, forwards to Bun proxy on port 8080 (which routes subdomains to backends)
+
+{
+    email admin@nexussystems.vexr.dev
+}
+
+nexussystems.vexr.dev, cloud.nexussystems.vexr.dev, chat.nexussystems.vexr.dev {
+    reverse_proxy localhost:8080 {
+        header_up Host {host}
+        header_up X-Forwarded-Proto https
+    }
+
+    header {
+        Strict-Transport-Security "max-age=63072000; includeSubDomains; preload"
+        -Server
+    }
+
+    log {
+        output file /var/log/caddy/nexussystems.log
+        format json
+    }
+}

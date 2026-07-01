@@ -1,0 +1,22 @@
+[project]
+name = "nexus-video-backend"
+version = "0.1.0"
+description = "Nexus-Video backend — FastAPI + PostgreSQL + Celery"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]",
+    "sqlalchemy[asyncio]>=2.0",
+    "asyncpg",
+    "alembic",
+    "redis>=5.0",
+    "celery>=5.4",
+    "boto3>=1.35",
+    "Pillow>=11.0",
+    "pydantic>=2.0",
+    "python-multipart",
+    "httpx>=0.28",
+]
+
+[project.scripts]
+nexus-video = "app.main:app"

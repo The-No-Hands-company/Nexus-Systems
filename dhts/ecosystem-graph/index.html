@@ -1,0 +1,290 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>Nexus Systems Ecosystem Graph</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { -webkit-text-size-adjust: 100%; }
+    body {
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+      font-family: "IBM Plex Sans", "Segoe UI", sans-serif;
+      background: radial-gradient(circle at 10% 10%, #1b2f2a 0%, #0e1514 42%, #090d0d 100%);
+      color: #dce8e4;
+      min-height: 100vh;
+      display: grid;
+      grid-template-rows: auto 1fr;
+      overflow: hidden;
+    }
+    :root { color-scheme: dark; }
+
+    button, a, [role="button"], [tabindex] {
+      touch-action: manipulation;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    header {
+      padding: 14px 18px;
+      border-bottom: 1px solid rgba(255,255,255,0.08);
+      background: rgba(8, 12, 11, 0.8);
+      backdrop-filter: blur(8px);
+      display: flex;
+      gap: 14px;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+    }
+
+    .title {
+      font-size: 18px;
+      font-weight: 700;
+      letter-spacing: 0.2px;
+    }
+
+    .meta {
+      font-size: 12px;
+      color: #98b1aa;
+      display: flex;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+
+    main {
+      display: grid;
+      grid-template-columns: 1fr 320px;
+      min-height: 0;
+    }
+
+    #graph {
+      width: 100%;
+      height: 100%;
+    }
+
+    aside {
+      border-left: 1px solid rgba(255,255,255,0.08);
+      background: rgba(9, 13, 13, 0.9);
+      padding: 16px;
+      overflow-y: auto;
+    }
+
+    .panel-title {
+      font-size: 13px;
+      font-weight: 700;
+      text-transform: uppercase;
+      color: #90a8a1;
+      letter-spacing: 0.8px;
+      margin-bottom: 12px;
+    }
+
+    .field {
+      margin-bottom: 10px;
+    }
+
+    .label {
+      font-size: 11px;
+      color: #8ba19a;
+      margin-bottom: 4px;
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+    }
+
+    .value {
+      font-size: 14px;
+      line-height: 1.45;
+      color: #deebe7;
+      word-break: break-word;
+    }
+
+    .doc-link {
+      display: inline-block;
+      margin-top: 8px;
+      text-decoration: none;
+      color: #9de6cb;
+      border: 1px solid rgba(157, 230, 203, 0.35);
+      padding: 6px 8px;
+      border-radius: 8px;
+      transition: background-color 180ms ease, color 180ms ease, border-color 180ms ease;
+    }
+
+    .doc-link:hover {
+      background-color: rgba(157, 230, 203, 0.12);
+      border-color: rgba(157, 230, 203, 0.8);
+      color: #c8f6e6;
+    }
+
+    .legend {
+      margin-top: 18px;
+      display: grid;
+      gap: 8px;
+    }
+
+    .controls {
+      margin-bottom: 14px;
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 10px;
+      padding: 10px;
+      background: rgba(255,255,255,0.02);
+      display: grid;
+      gap: 10px;
+    }
+
+    .text-input {
+      width: 100%;
+      border: 1px solid rgba(255,255,255,0.16);
+      border-radius: 8px;
+      background: rgba(255,255,255,0.03);
+      color: #e6f4f0;
+      padding: 8px 10px;
+      font-size: 13px;
+    }
+
+    .chip-grid {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      border: 1px solid rgba(255,255,255,0.16);
+      border-radius: 999px;
+      padding: 6px 8px;
+      background: rgba(255,255,255,0.03);
+      font-size: 12px;
+      color: #c9dbd6;
+    }
+
+    .chip input {
+      accent-color: #87f0ba;
+    }
+
+    .section-label {
+      font-size: 11px;
+      color: #8ba19a;
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+    }
+
+    .ghost-btn {
+      border: 1px solid rgba(255,255,255,0.2);
+      background: rgba(255,255,255,0.04);
+      color: #d8ebe6;
+      border-radius: 8px;
+      padding: 6px 8px;
+      cursor: pointer;
+      font-size: 12px;
+      width: fit-content;
+    }
+
+    .graph-wrap {
+      position: relative;
+      width: 100%;
+      height: 100%;
+    }
+
+    .state-overlay {
+      position: absolute;
+      inset: 0;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      background: rgba(6, 10, 9, 0.55);
+      text-align: center;
+      color: #bad0c9;
+      font-size: 14px;
+      z-index: 10;
+    }
+
+    .state-overlay.visible {
+      display: flex;
+    }
+
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      color: #b5c8c2;
+    }
+
+    .dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 999px;
+    }
+
+    @media (max-width: 980px) {
+      main {
+        grid-template-columns: 1fr;
+        grid-template-rows: 1fr auto;
+      }
+
+      aside {
+        border-left: none;
+        border-top: 1px solid rgba(255,255,255,0.08);
+        max-height: 42vh;
+      }
+    }
+  </style>
+  <script src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+</head>
+<body>
+  <header>
+    <div class="title">Nexus Systems Ecosystem Graph</div>
+    <div class="meta">
+      <span id="generatedAt">Generated: -</span>
+      <span id="counts">Nodes: - | Edges: -</span>
+    </div>
+  </header>
+
+  <main>
+    <div class="graph-wrap">
+      <div id="graph"></div>
+      <div id="emptyState" class="state-overlay">No nodes match the current filter set.</div>
+    </div>
+    <aside>
+      <div class="controls">
+        <div class="section-label">Search</div>
+        <input id="searchInput" class="text-input" type="search" placeholder="Search nodes..." />
+
+        <div class="section-label">Node Types</div>
+        <div class="chip-grid" id="nodeTypeFilters"></div>
+
+        <div class="section-label">Relations</div>
+        <div class="chip-grid" id="relationFilters"></div>
+
+        <button id="resetFilters" class="ghost-btn" type="button">Reset Filters</button>
+      </div>
+
+      <div class="panel-title">Selection</div>
+      <div class="field">
+        <div class="label">Node</div>
+        <div class="value" id="selectedLabel">Select a node</div>
+      </div>
+      <div class="field">
+        <div class="label">Type</div>
+        <div class="value" id="selectedType">-</div>
+      </div>
+      <div class="field">
+        <div class="label">Sources</div>
+        <div class="value" id="selectedSources">-</div>
+      </div>
+      <div id="docLinks"></div>
+
+      <div class="legend">
+        <div class="legend-item"><span class="dot" style="background:#5cc9ff"></span> System</div>
+        <div class="legend-item"><span class="dot" style="background:#87f0ba"></span> Capability</div>
+        <div class="legend-item"><span class="dot" style="background:#f7d67b"></span> Surface</div>
+        <div class="legend-item"><span class="dot" style="background:#cfb6ff"></span> Document</div>
+      </div>
+    </aside>
+  </main>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>

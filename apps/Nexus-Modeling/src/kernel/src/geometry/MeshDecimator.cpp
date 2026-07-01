@@ -163,7 +163,9 @@ void computeFacePlane(const HalfEdgeMesh& hem, uint32_t fi, Vec3& normal, float&
     uint32_t e = start;
     do {
         verts.push_back(hem.edge(e).src);
-        e = hem.edge(e).next;
+        uint32_t nextEdge = hem.edge(e).next;
+        if (nextEdge == HalfEdgeMesh::kInvalid || nextEdge >= hem.edgeCount()) break;
+        e = nextEdge;
     } while (e != start && verts.size() < 256);
 
     if (verts.size() < 3) { normal = {0,1,0}; d = 0; return; }
@@ -188,7 +190,9 @@ float computeFaceArea(const HalfEdgeMesh& hem, uint32_t fi) {
     uint32_t e = start;
     do {
         verts.push_back(hem.edge(e).src);
-        e = hem.edge(e).next;
+        uint32_t nextEdge = hem.edge(e).next;
+        if (nextEdge == HalfEdgeMesh::kInvalid || nextEdge >= hem.edgeCount()) break;
+        e = nextEdge;
     } while (e != start && verts.size() < 256);
 
     if (verts.size() < 3) return 0.f;
@@ -286,7 +290,10 @@ void recomputeQuadric(const HalfEdgeMesh& hem, std::vector<Quadric>& quadrics, u
                 quadrics[v].addPlane(normal, d);
             }
         }
-        uint32_t prevTwin = hem.edge(hem.edge(e).prev).twin;
+        uint32_t prevEdge = hem.edge(e).prev;
+        if (prevEdge == HalfEdgeMesh::kInvalid) break;
+        if (prevEdge >= hem.edgeCount()) break;
+        uint32_t prevTwin = hem.edge(prevEdge).twin;
         if (prevTwin == HalfEdgeMesh::kInvalid) break;
         e = prevTwin;
         if (++safety > hem.edgeCount() * 2) break;
@@ -495,6 +502,7 @@ MeshDecimator::decimate(const HalfEdgeMesh& mesh, const DecimationOptions& opts)
     }
 
     report.facesOut = countActiveFaces(workingMesh);
+    if (report.facesOut > targetFaces) return std::nullopt;
     return std::make_pair(std::move(workingMesh), report);
 }
 

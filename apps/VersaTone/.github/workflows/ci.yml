@@ -1,0 +1,185 @@
+# GitHub Actions workflow for DAWG project
+# Continuous integration and deployment for professional audio software
+
+name: DAWG CI/CD
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+  release:
+    types: [ published ]
+
+env:
+  BUILD_TYPE: Release
+
+jobs:
+  # Code Quality Checks
+  quality:
+    name: Code Quality
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y clang-format clang-tidy
+        
+    - name: Check formatting
+      run: |
+        find include src -name "*.h" -o -name "*.cpp" | xargs clang-format --dry-run --Werror
+        
+    - name: Static analysis
+      run: |
+        cmake -S . -B build -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+        run-clang-tidy -p build
+
+  # Build Matrix
+  build:
+    name: Build (${{ matrix.os }}, ${{ matrix.compiler }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        compiler: [gcc, clang, msvc]
+        exclude:
+          - os: ubuntu-latest
+            compiler: msvc
+          - os: macos-latest
+            compiler: msvc
+          - os: windows-latest
+            compiler: gcc
+        include:
+          - os: ubuntu-latest
+            compiler: gcc
+            cc: gcc-11
+            cxx: g++-11
+          - os: ubuntu-latest
+            compiler: clang
+            cc: clang-14
+            cxx: clang++-14
+          - os: macos-latest
+            compiler: clang
+            cc: clang
+            cxx: clang++
+          - os: windows-latest
+            compiler: msvc
+            cc: cl
+            cxx: cl
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install dependencies (Ubuntu)
+      if: matrix.os == 'ubuntu-latest'
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y build-essential cmake ninja-build
+        sudo apt-get install -y libasound2-dev libpulse-dev
+        
+    - name: Install dependencies (macOS)
+      if: matrix.os == 'macos-latest'
+      run: |
+        brew install cmake ninja
+        
+    - name: Install dependencies (Windows)
+      if: matrix.os == 'windows-latest'
+      run: |
+        choco install cmake ninja
+        
+    - name: Configure CMake
+      env:
+        CC: ${{ matrix.cc }}
+        CXX: ${{ matrix.cxx }}
+      run: |
+        cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }}
+        
+    - name: Build
+      run: cmake --build build --config ${{ env.BUILD_TYPE }}
+      
+    - name: Test
+      working-directory: build
+      run: ctest --config ${{ env.BUILD_TYPE }} --output-on-failure
+      
+    - name: Package
+      if: matrix.os == 'ubuntu-latest' && matrix.compiler == 'gcc'
+      run: |
+        cd build
+        cpack
+        
+    - name: Upload artifacts
+      if: matrix.os == 'ubuntu-latest' && matrix.compiler == 'gcc'
+      uses: actions/upload-artifact@v3
+      with:
+        name: dawg-packages
+        path: build/*.tar.gz
+
+  # Performance Benchmarks
+  benchmark:
+    name: Performance Benchmarks
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y build-essential cmake ninja-build
+        
+    - name: Configure and build benchmarks
+      run: |
+        cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DDAWG_BUILD_BENCHMARKS=ON
+        cmake --build build
+        
+    - name: Run benchmarks
+      run: |
+        cd build
+        ./dawg_benchmarks --benchmark_format=json --benchmark_out=results.json
+        
+    - name: Upload benchmark results
+      uses: actions/upload-artifact@v3
+      with:
+        name: benchmark-results
+        path: build/results.json
+
+  # Security Scan
+  security:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Initialize CodeQL
+      uses: github/codeql-action/init@v2
+      with:
+        languages: cpp
+        
+    - name: Autobuild
+      uses: github/codeql-action/autobuild@v2
+      
+    - name: Perform CodeQL Analysis
+      uses: github/codeql-action/analyze@v2
+
+  # Documentation
+  docs:
+    name: Build Documentation
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Install Doxygen
+      run: sudo apt-get install -y doxygen graphviz
+      
+    - name: Generate documentation
+      run: doxygen docs/Doxyfile
+      
+    - name: Deploy to GitHub Pages
+      if: github.ref == 'refs/heads/main'
+      uses: peaceiris/actions-gh-pages@v3
+      with:
+        github_token: ${{ secrets.GITHUB_TOKEN }}
+        publish_dir: ./docs/html

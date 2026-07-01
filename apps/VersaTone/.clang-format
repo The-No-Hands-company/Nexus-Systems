@@ -1,0 +1,68 @@
+# Code formatting configuration for DAWG project
+# Based on LLVM style with professional audio industry adaptations
+
+BasedOnStyle: LLVM
+IndentWidth: 4
+TabWidth: 4
+UseTab: Never
+ColumnLimit: 120
+
+# Alignment
+AlignAfterOpenBracket: Align
+AlignConsecutiveAssignments: true
+AlignConsecutiveDeclarations: true
+AlignEscapedNewlines: Left
+AlignOperands: true
+AlignTrailingComments: true
+
+# Breaking
+AllowShortBlocksOnASingleLine: false
+AllowShortCaseLabelsOnASingleLine: false
+AllowShortFunctionsOnASingleLine: Inline
+AllowShortIfStatementsOnASingleLine: false
+AllowShortLoopsOnASingleLine: false
+AlwaysBreakAfterReturnType: None
+AlwaysBreakBeforeMultilineStrings: false
+AlwaysBreakTemplateDeclarations: Yes
+BreakBeforeBinaryOperators: NonAssignment
+BreakBeforeBraces: Attach
+BreakBeforeTernaryOperators: true
+BreakConstructorInitializers: BeforeColon
+
+# Spacing
+SpaceAfterCStyleCast: false
+SpaceAfterTemplateKeyword: true
+SpaceBeforeAssignmentOperators: true
+SpaceBeforeCpp11BracedList: false
+SpaceBeforeCtorInitializerColon: true
+SpaceBeforeInheritanceColon: true
+SpaceBeforeParens: ControlStatements
+SpaceBeforeRangeBasedForLoopColon: true
+SpaceInEmptyParentheses: false
+SpacesBeforeTrailingComments: 2
+SpacesInAngles: false
+SpacesInCStyleCastParentheses: false
+SpacesInContainerLiterals: true
+SpacesInParentheses: false
+SpacesInSquareBrackets: false
+
+# Other
+BinPackArguments: false
+BinPackParameters: false
+Cpp11BracedListStyle: true
+DerivePointerAlignment: false
+PointerAlignment: Left
+ReflowComments: true
+SortIncludes: true
+SortUsingDeclarations: true
+
+# Keep empty lines for readability
+KeepEmptyLinesAtTheStartOfBlocks: false
+MaxEmptyLinesToKeep: 2
+
+# Indentation
+AccessModifierOffset: -4
+ConstructorInitializerIndentWidth: 4
+ContinuationIndentWidth: 4
+IndentCaseLabels: false
+IndentPPDirectives: None

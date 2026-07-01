@@ -1,0 +1,152 @@
+{
+  "wip": {
+    "maxActiveGlobal": 3,
+    "maxActivePerLane": 1
+  },
+  "organization": {
+    "company": "The No Hands Company",
+    "program": "Nexus Systems",
+    "mission": "Operate the Nexus ecosystem with major-tech execution discipline and full delivery visibility.",
+    "levels": [
+      {
+        "level": "executive",
+        "role": "cto",
+        "purpose": "Sets quarterly objectives, investment priorities, and risk appetite."
+      },
+      {
+        "level": "architecture",
+        "role": "chief-architect",
+        "purpose": "Owns cross-app architecture, standards, and bounded-context interfaces."
+      },
+      {
+        "level": "program",
+        "role": "program-manager",
+        "purpose": "Owns roadmap sequencing, dependency ordering, and release readiness."
+      },
+      {
+        "level": "delivery",
+        "role": "engineering-lead",
+        "purpose": "Controls implementation quality, technical decomposition, and review gates."
+      },
+      {
+        "level": "execution",
+        "role": "specialist-agents",
+        "purpose": "Implements, validates, and documents deliverables with role specialization."
+      }
+    ]
+  },
+  "cadence": {
+    "daily": [
+      "stack",
+      "graph",
+      "nit"
+    ],
+    "weekly": [
+      "porter",
+      "docs"
+    ],
+    "release": [
+      "stack",
+      "graph",
+      "nit",
+      "docs"
+    ]
+  },
+  "roles": {
+    "chief-architect": {
+      "description": "Maintains ecosystem architecture map, boundaries, and integration contracts.",
+      "seniority": "staff+"
+    },
+    "program-manager": {
+      "description": "Keeps execution order deterministic and dependencies unblocked.",
+      "seniority": "staff+"
+    },
+    "engineering-lead": {
+      "description": "Owns technical quality gates and implementation review control.",
+      "seniority": "senior"
+    },
+    "planner": {
+      "description": "Decomposes goals into prerequisite-aware task plans and validates execution order.",
+      "seniority": "senior"
+    },
+    "backend": {
+      "description": "Implements service/runtime behavior and contract-compatible APIs.",
+      "seniority": "junior-senior"
+    },
+    "devops": {
+      "description": "Owns infra workflows, deployment consistency, and environment determinism.",
+      "seniority": "senior"
+    },
+    "qa": {
+      "description": "Runs cross-service tests, validates acceptance criteria, and blocks regressions.",
+      "seniority": "junior-senior"
+    },
+    "docs": {
+      "description": "Maintains architecture/decision context and updates generated documentation artifacts.",
+      "seniority": "junior-senior"
+    }
+  },
+  "pipelines": {
+    "daily-backbone": [
+      "stack",
+      "graph",
+      "nit"
+    ],
+    "docs-sync": [
+      "docs",
+      "graph"
+    ],
+    "release-readiness": [
+      "stack",
+      "graph",
+      "nit",
+      "docs",
+      "porter"
+    ]
+  },
+  "qualityGates": {
+    "pre-merge": {
+      "description": "Required validations before integrating feature work into mainline.",
+      "workflows": [
+        "graph",
+        "nit"
+      ]
+    },
+    "release": {
+      "description": "Company-level release confidence gate.",
+      "workflows": [
+        "stack",
+        "graph",
+        "nit",
+        "docs",
+        "porter"
+      ]
+    }
+  },
+  "workflows": {
+    "docs": {
+      "cwd": "dhts/ecosystem-documenter",
+      "command": "npm run generate"
+    },
+    "graph": {
+      "cwd": "dhts/ecosystem-graph",
+      "command": "python3 extract_graph.py --root ../.. --out graph.json"
+    },
+    "nit": {
+      "cwd": "dhts/ecosystem-internal-testsuit",
+      "command": "bun run src/cli.ts run"
+    },
+    "stack": {
+      "cwd": ".",
+      "command": "python3 dhts/ecosystem-stack-control-and-updater/stack_control.py --workspace . --config dhts/ecosystem-stack-control-and-updater/stack-control.config.json --json-out dhts/ecosystem-stack-control-and-updater/reports/latest.json --md-out dhts/ecosystem-stack-control-and-updater/reports/latest.md"
+    },
+    "porter": {
+      "cwd": "dhts/ecosystem-porter",
+      "command": "npx tsx src/index.ts --probe"
+    },
+    "editor-debug": {
+      "cwd": "dhts/ecosystem-editor-debugger",
+      "command": "python3 editor_debugger.py scan --root ../.. --format md"
+    }
+  }
+}

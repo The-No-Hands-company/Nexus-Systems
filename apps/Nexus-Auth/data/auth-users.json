@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "counter": 2,
+  "users": [
+    {
+      "id": "usr-mqe2johw-1",
+      "username": "founder",
+      "email": "founder@nexus.local",
+      "role": "founder",
+      "passwordHash": "b9c0475a8fc85b6a24b4e48a32d287d9:6bfe8fb80e2d6697255c437747736888073a6458e98fd858e717b5868b34e3530c6d77f5e8c2dd868c0a28047b7d9318e178d9233c2610643cb7ab49a0b4a0f3",
+      "totpEnabled": false,
+      "disabled": false,
+      "createdAt": "2026-06-14T17:39:14.756Z",
+      "updatedAt": "2026-06-14T17:39:14.756Z"
+    },
+    {
+      "id": "usr-mqe2joj2-2",
+      "username": "operator",
+      "email": "operator@nexus.local",
+      "role": "operator",
+      "passwordHash": "7a52c92ac184f54f71203b17c8845477:2b1a9797f46574ea3da922ecf4811a41cdda80d8917acb65f72e41efa534f39d89d563826616dceca694affee520d74a57b11cb1363174293c7f6f91d64f2c16",
+      "totpEnabled": false,
+      "disabled": false,
+      "createdAt": "2026-06-14T17:39:14.798Z",
+      "updatedAt": "2026-06-14T17:39:14.798Z"
+    }
+  ],
+  "updatedAt": "2026-06-14T17:39:14.824Z"
+}

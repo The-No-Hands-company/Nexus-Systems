@@ -1,4 +1,11 @@
 #include <nexus/app/EditorUI.h>
+#include <nexus/cad/CadCommand.h>
+
+#include <nexus/geometry/HalfEdgeMesh.h>
+#include <nexus/geometry/MeshDecimator.h>
+#include <nexus/geometry/MeshLaplacian.h>
+#include <nexus/geometry/SubdivisionSurface.h>
+#include <nexus/geometry/DirectModeling.h>
 
 #include <imgui.h>
 #include <imgui_impl_glfw.h>
@@ -63,6 +70,9 @@ static void placePrimitive(AppContext& ctx, int primType) {
     auto fid = ctx.document->addSketch(sk);
     auto* node = ctx.document->history().node(fid);
     if(node) { node->mesh.emplace(std::move(prim)); node->dirty = false; }
+    ctx.activeSelectedFeature = fid;
+    // Note: main.cpp's AppState.selectedId will sync on next click via auto-select
+    if (ctx.orchestrator) ctx.orchestrator->switchTo("select");
     printf("Placed %s at (%.2f, %.2f, %.2f)\n", name, cwp.x, cwp.y, cwp.z);
 }
 
@@ -158,7 +168,7 @@ static void exportStl(AppContext& ctx) {
     if(!ctx.document) return;
     FILE* f = fopen("export.stl","wb");
     if(!f) { printf("Cannot open export.stl\n"); return; }
-    char header[80]={}; fprintf(f,"%-80s","Nexus STL export"); fwrite(header,1,80,f);
+    char header[80]={}; snprintf(header,sizeof(header),"%-79s","Nexus STL export"); if(fwrite(header,1,80,f)!=80){fclose(f);return;}
     uint32_t totalTris=0;
     auto& hist = ctx.document->history();
     // Count triangles.
@@ -170,7 +180,7 @@ static void exportStl(AppContext& ctx) {
             if(face.vertexCount()>=3) totalTris += static_cast<uint32_t>(face.vertexCount()-2);
         }
     }
-    fwrite(&totalTris,4,1,f);
+    if(fwrite(&totalTris,4,1,f)!=1){fclose(f);return;}
     for(parametric::FeatureId i=1; i<=static_cast<parametric::FeatureId>(hist.featureCount()); ++i) {
         auto* n=hist.node(i); if(!n||!n->mesh||n->deleted||n->hidden) continue;
         const auto& pos=n->mesh->attributes().positions();
@@ -277,8 +287,8 @@ static void exportGltf(AppContext& ctx) {
     fwrite(&jsonLen,4,1,f);fwrite(&jsonType,4,1,f);fwrite(json.data(),1,jsonLen,f);
     uint32_t binLen=(uint32_t)(allFloats.size()*4+allIndices.size()*4), binType=0x004E4942;
     fwrite(&binLen,4,1,f);fwrite(&binType,4,1,f);
-    fwrite(allFloats.data(),4,allFloats.size(),f);
-    fwrite(allIndices.data(),4,allIndices.size(),f);
+    if(fwrite(allFloats.data(),4,allFloats.size(),f)!=allFloats.size()){fclose(f);return;}
+    if(fwrite(allIndices.data(),4,allIndices.size(),f)!=allIndices.size()){fclose(f);return;}
     fclose(f);
     printf("Exported glTF: %zu verts, %zu indices → export.glb\n", (size_t)totalVertices, allIndices.size());
 }
@@ -375,6 +385,33 @@ static void applyBool(AppContext& ctx, FeatureId selectedId, nexus::geometry::Bo
     printf("Boolean %s: feature %u = %u %s %u\n", opName, fid, selectedId, opName, otherId);
 }
 
+// ── Modify helpers ──────────────────────────────────────────────────
+
+static void modifyMesh(AppContext& ctx, std::function<void(nexus::geometry::Mesh&)> op) {
+    if (!ctx.document) return;
+    auto fid = static_cast<FeatureId>(ctx.activeSelectedFeature);
+    auto* node = ctx.document->history().node(fid);
+    if (!node || !node->mesh || node->deleted) return;
+    auto saved = *node->mesh;
+    op(*node->mesh);
+    auto cmd = std::make_unique<nexus::cad::TransformCommand>(fid, std::move(saved));
+    ctx.document->executeCommand(std::move(cmd));
+}
+
+static void modifyMeshHEM(AppContext& ctx, std::function<void(nexus::geometry::HalfEdgeMesh&)> op) {
+    if (!ctx.document) return;
+    auto fid = static_cast<FeatureId>(ctx.activeSelectedFeature);
+    auto* node = ctx.document->history().node(fid);
+    if (!node || !node->mesh || node->deleted) return;
+    auto hemOpt = nexus::geometry::HalfEdgeMesh::fromMesh(*node->mesh);
+    if (!hemOpt) return;
+    auto saved = *node->mesh;
+    op(*hemOpt);
+    node->mesh.emplace(hemOpt->toMesh());
+    auto cmd = std::make_unique<nexus::cad::TransformCommand>(fid, std::move(saved));
+    ctx.document->executeCommand(std::move(cmd));
+}
+
 bool EditorUI::renderMenuBar(AppContext& ctx, TransformGizmo& gizmo,
                                ViewportController& viewport) {
     bool action = false;
@@ -384,7 +421,7 @@ bool EditorUI::renderMenuBar(AppContext& ctx, TransformGizmo& gizmo,
         if(ImGui::MenuItem("Save", "Ctrl+S")) {
             auto data = ctx.document->serialize();
             FILE* f = fopen("scene.nxm","wb");
-            if(f){fwrite(data.data(),1,data.size(),f);fclose(f); printf("Saved\n");}
+            if(f){if(fwrite(data.data(),1,data.size(),f)!=data.size()){fclose(f);return false;}fclose(f); printf("Saved\n");}
             action=true;
         }
         if(ImGui::MenuItem("Load", "Ctrl+O")) {
@@ -654,8 +691,40 @@ void EditorUI::renderOutliner(AppContext& ctx, FeatureId& selectedId) {
                     if(ImGui::MenuItem("Wireframe", nullptr, mutableNode->displayMode==DM::Wireframe)) mutableNode->displayMode=DM::Wireframe;
                     if(ImGui::MenuItem("BoundingBox", nullptr, mutableNode->displayMode==DM::BoundingBox)) mutableNode->displayMode=DM::BoundingBox;
                 }
-                ImGui::EndMenu();
-            }
+        ImGui::EndMenu();
+    }
+
+    if(ImGui::BeginMenu("Modify")) {
+        auto fid = static_cast<FeatureId>(ctx.activeSelectedFeature);
+        auto* node = ctx.document ? ctx.document->history().node(fid) : nullptr;
+        bool hasMesh = node && node->mesh && !node->deleted;
+
+        if(ImGui::MenuItem("Subdivide", nullptr, false, hasMesh)) modifyMesh(ctx, [](auto& m){ 
+            auto h = nexus::geometry::HalfEdgeMesh::fromMesh(m); if(h){nexus::geometry::SubdivisionOptions o;o.levels=1;auto r=nexus::geometry::SubdivisionSurface::catmullClark(*h,o);if(r)m=r->toMesh();} });
+        if(ImGui::MenuItem("Decimate (50%)", nullptr, false, hasMesh)) modifyMesh(ctx, [](auto& m){
+            auto h = nexus::geometry::HalfEdgeMesh::fromMesh(m); if(h){nexus::geometry::DecimationOptions o;o.targetFaceCount=static_cast<uint32_t>(m.topology().faceCount()/2);if(o.targetFaceCount<3)o.targetFaceCount=3;auto r=nexus::geometry::MeshDecimator::decimate(*h,o);if(r)m=r->first.toMesh();} });
+        if(ImGui::MenuItem("Triangulate", nullptr, false, hasMesh)) modifyMesh(ctx, [](auto& m){ (void)m.topology().triangulate(); });
+        ImGui::Separator();
+        if(ImGui::MenuItem("Flip Normals", nullptr, false, hasMesh)) modifyMesh(ctx, [](auto& m){ (void)m.computeVertexNormals(); });
+        if(ImGui::MenuItem("Poke Face", nullptr, false, hasMesh)) modifyMeshHEM(ctx, [](auto& h){ h.pokeFace(0); });
+        if(ImGui::MenuItem("Inset Faces", nullptr, false, hasMesh)) modifyMeshHEM(ctx, [](auto& h){ 
+            std::vector<uint32_t> faces; for(uint32_t fi=0;fi<h.faceCount();++fi)if(h.face(fi).edge!=nexus::geometry::HalfEdgeMesh::kInvalid)faces.push_back(fi);
+            if(!faces.empty()) { auto r = nexus::geometry::DirectModeling::pushFaces(h,faces,0.05f); (void)r; } });
+        ImGui::Separator();
+        if(ImGui::MenuItem("Grid Fill", nullptr, false, hasMesh)) modifyMeshHEM(ctx, [](auto& h){
+            auto loops=h.boundaryLoops(); for(auto& l:loops) h.gridFill(l); });
+        if(ImGui::MenuItem("Insert Edge Loop", nullptr, false, hasMesh)) modifyMeshHEM(ctx, [](auto& h){
+            for(uint32_t ei=0;ei<h.edgeCount();++ei)if(h.edge(ei).face!=nexus::geometry::HalfEdgeMesh::kInvalid&&h.edge(ei).twin!=nexus::geometry::HalfEdgeMesh::kInvalid){h.insertEdgeLoop(ei,0.5f);break;} });
+        ImGui::Separator();
+        if(ImGui::MenuItem("Smooth (Laplacian)", nullptr, false, hasMesh)) modifyMesh(ctx, [](auto& m){
+            auto r = nexus::geometry::MeshLaplacian::smooth(m); m = r; });
+        if(ImGui::MenuItem("Center Pivot", nullptr, false, hasMesh)) modifyMesh(ctx, [](auto& m){
+            auto b = m.computeBounds(); Vec3 c = b.center();
+            auto p = m.attributes().positions();
+            for(auto& v : p){ v.x -= c.x; v.y -= c.y; v.z -= c.z; }
+            m.attributes().setPositions(std::move(p)); });
+        ImGui::EndMenu();
+    }
             ImGui::EndPopup();
         }
     }
@@ -757,22 +826,6 @@ void EditorUI::renderProperties(AppContext& ctx, FeatureId selectedId) {
     }
 
     ImGui::Separator();
-    ImGui::TextUnformatted("Transform");
-    ImGui::DragFloat3("Position", pos, 0.1f);
-    // Scale derived from bounds.
-    if(ImGui::DragFloat3("Size", scl, 0.1f, 0.01f, 1000.f)) {
-        Vec3 newExt{scl[0]/2, scl[1]/2, scl[2]/2};
-        auto oldExt = n->mesh->computeBounds().extents();
-        Vec3 scaleFac{newExt.x/(oldExt.x+1e-6f), newExt.y/(oldExt.y+1e-6f), newExt.z/(oldExt.z+1e-6f)};
-        auto ctr = n->mesh->computeBounds().center();
-        auto verts = n->mesh->attributes().positions();
-        for(auto& v : verts) {
-            v.x = ctr.x + (v.x - ctr.x) * scaleFac.x;
-            v.y = ctr.y + (v.y - ctr.y) * scaleFac.y;
-            v.z = ctr.z + (v.z - ctr.z) * scaleFac.z;
-        }
-        n->mesh->attributes().setPositions(std::move(verts));
-    }
     if(ImGui::Button("Shell")) {
         if(ctx.document && selectedId != nexus::parametric::kInvalidFeatureId) {
             auto* nd = ctx.document->history().node(selectedId);

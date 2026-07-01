@@ -4,8 +4,10 @@
 #ifndef NEXUS_HEADLESS
 #ifdef __APPLE__
 #include <OpenGL/gl.h>
+#include <OpenGL/glu.h>
 #else
 #include <GL/gl.h>
+#include <GL/glu.h>
 #endif
 #endif
 
@@ -17,32 +19,95 @@ using Vec3 = nexus::render::Vec3;
 
 void TransformGizmo::render(const Vec3& center) const noexcept {
 #ifndef NEXUS_HEADLESS
-    float s = m_handleLength;
-    glLineWidth(3.f);
-    glBegin(GL_LINES);
-    glColor3f(1,0,0); glVertex3f(center.x,center.y,center.z);
-    glVertex3f(center.x+s,center.y,center.z);
-    glColor3f(0,1,0); glVertex3f(center.x,center.y,center.z);
-    glVertex3f(center.x,center.y+s,center.z);
-    glColor3f(0,0,1); glVertex3f(center.x,center.y,center.z);
-    glVertex3f(center.x,center.y,center.z+s);
-    glEnd();
+    GLdouble mv[16], proj[16]; GLint vp[4];
+    glGetDoublev(GL_MODELVIEW_MATRIX, mv);
+    glGetDoublev(GL_PROJECTION_MATRIX, proj);
+    glGetIntegerv(GL_VIEWPORT, vp);
 
-    float h = 0.3f, w = 0.15f;
-    glBegin(GL_TRIANGLES);
-    glColor3f(1,0,0);
-    glVertex3f(center.x+s,center.y,center.z);
-    glVertex3f(center.x+s-h,center.y+w,center.z);
-    glVertex3f(center.x+s-h,center.y-w,center.z);
-    glColor3f(0,1,0);
-    glVertex3f(center.x,center.y+s,center.z);
-    glVertex3f(center.x+w,center.y+s-h,center.z);
-    glVertex3f(center.x-w,center.y+s-h,center.z);
-    glColor3f(0,0,1);
-    glVertex3f(center.x,center.y,center.z+s);
-    glVertex3f(center.x+w,center.y,center.z+s-h);
-    glVertex3f(center.x-w,center.y,center.z+s-h);
-    glEnd();
+    // Constant 100 screen pixels regardless of zoom
+    GLdouble cx, cy, cz, ux, uy, uz;
+    gluProject(center.x, center.y, center.z, mv, proj, vp, &cx, &cy, &cz);
+    gluProject(center.x + 1.f, center.y, center.z, mv, proj, vp, &ux, &uy, &uz);
+    float pixelScale = std::max(std::fabs((float)(ux - cx)), 0.001f);
+    float s = 100.f / pixelScale; // constant 100 screen pixels
+    float h = s * 0.25f, w = s * 0.12f;
+
+    if (m_mode == Mode::Translate) {
+        // Three colored arrows with cone tips
+        glLineWidth(3.f);
+        glBegin(GL_LINES);
+        glColor3f(1,0,0); glVertex3f(center.x,center.y,center.z); glVertex3f(center.x+s,center.y,center.z);
+        glColor3f(0,1,0); glVertex3f(center.x,center.y,center.z); glVertex3f(center.x,center.y+s,center.z);
+        glColor3f(0,0,1); glVertex3f(center.x,center.y,center.z); glVertex3f(center.x,center.y,center.z+s);
+        glEnd();
+
+        glBegin(GL_TRIANGLES);
+        glColor3f(1,0,0);
+        glVertex3f(center.x+s,center.y,center.z); glVertex3f(center.x+s-h,center.y+w,center.z); glVertex3f(center.x+s-h,center.y-w,center.z);
+        glColor3f(0,1,0);
+        glVertex3f(center.x,center.y+s,center.z); glVertex3f(center.x+w,center.y+s-h,center.z); glVertex3f(center.x-w,center.y+s-h,center.z);
+        glColor3f(0,0,1);
+        glVertex3f(center.x,center.y,center.z+s); glVertex3f(center.x+w,center.y,center.z+s-h); glVertex3f(center.x-w,center.y,center.z+s-h);
+        glEnd();
+    } else if (m_mode == Mode::Rotate) {
+        // Three colored circle rings (rotate handles)
+        float r = s * 0.75f;
+        int segments = 48;
+        glLineWidth(3.f);
+        // X circle (YZ plane)
+        glColor3f(1,0,0);
+        glBegin(GL_LINE_LOOP);
+        for (int i = 0; i < segments; ++i) {
+            float a = (float)i / (float)segments * 6.2831853f;
+            glVertex3f(center.x, center.y + r * cosf(a), center.z + r * sinf(a));
+        }
+        glEnd();
+        // Y circle (XZ plane)
+        glColor3f(0,1,0);
+        glBegin(GL_LINE_LOOP);
+        for (int i = 0; i < segments; ++i) {
+            float a = (float)i / (float)segments * 6.2831853f;
+            glVertex3f(center.x + r * cosf(a), center.y, center.z + r * sinf(a));
+        }
+        glEnd();
+        // Z circle (XY plane)
+        glColor3f(0,0,1);
+        glBegin(GL_LINE_LOOP);
+        for (int i = 0; i < segments; ++i) {
+            float a = (float)i / (float)segments * 6.2831853f;
+            glVertex3f(center.x + r * cosf(a), center.y + r * sinf(a), center.z);
+        }
+        glEnd();
+    } else { // Scale
+        // Three colored lines with cube tips
+        glLineWidth(3.f);
+        glBegin(GL_LINES);
+        glColor3f(1,0,0); glVertex3f(center.x,center.y,center.z); glVertex3f(center.x+s,center.y,center.z);
+        glColor3f(0,1,0); glVertex3f(center.x,center.y,center.z); glVertex3f(center.x,center.y+s,center.z);
+        glColor3f(0,0,1); glVertex3f(center.x,center.y,center.z); glVertex3f(center.x,center.y,center.z+s);
+        glEnd();
+
+        float b = s * 0.08f; // box half-size
+        glBegin(GL_QUADS);
+        // X box tip (at end of X arrow)
+        glColor3f(1,0,0);
+        float x = center.x + s;
+        glVertex3f(x-b,center.y-b,center.z-b); glVertex3f(x+b,center.y-b,center.z-b);
+        glVertex3f(x+b,center.y+b,center.z-b); glVertex3f(x-b,center.y+b,center.z-b);
+        glVertex3f(x-b,center.y-b,center.z+b); glVertex3f(x+b,center.y-b,center.z+b);
+        glVertex3f(x+b,center.y+b,center.z+b); glVertex3f(x-b,center.y+b,center.z+b);
+        // Y box tip
+        glColor3f(0,1,0);
+        float y = center.y + s;
+        glVertex3f(center.x-b,y,center.z-b); glVertex3f(center.x+b,y,center.z-b);
+        glVertex3f(center.x+b,y,center.z+b); glVertex3f(center.x-b,y,center.z+b);
+        // Z box tip
+        glColor3f(0,0,1);
+        float z = center.z + s;
+        glVertex3f(center.x-b,center.y-b,z); glVertex3f(center.x+b,center.y-b,z);
+        glVertex3f(center.x+b,center.y+b,z); glVertex3f(center.x-b,center.y+b,z);
+        glEnd();
+    }
     glLineWidth(1.f);
 #else
     (void)center;
@@ -52,28 +117,68 @@ void TransformGizmo::render(const Vec3& center) const noexcept {
 TransformGizmo::Axis TransformGizmo::pickAxis(
     const Vec3& center, const Vec3& rayOrigin,
     const Vec3& rayDirection) const noexcept {
-    auto distToAxis = [](const Vec3& /*p*/, const Vec3& axisDir, const Vec3& axisOrigin,
-                          const Vec3& rayOrigin, const Vec3& rayDir) -> float {
-        Vec3 tip = axisOrigin + axisDir * 1.5f;
-        Vec3 midRay = rayOrigin + rayDir * 5.f;
-        Vec3 toTip = tip - midRay;
-        return toTip.length();
+#ifndef NEXUS_HEADLESS
+    GLdouble mv[16], proj[16]; GLint vp[4];
+    glGetDoublev(GL_MODELVIEW_MATRIX, mv);
+    glGetDoublev(GL_PROJECTION_MATRIX, proj);
+    glGetIntegerv(GL_VIEWPORT, vp);
+
+    auto screenDist = [&](const Vec3& worldPos) -> float {
+        GLdouble sx, sy, sz;
+        gluProject(worldPos.x, worldPos.y, worldPos.z, mv, proj, vp, &sx, &sy, &sz);
+        if(sz < 0.0 || sz > 1.0) return 1e9f;
+
+        GLdouble cx, cy, cz;
+        gluProject(rayOrigin.x, rayOrigin.y, rayOrigin.z, mv, proj, vp, &cx, &cy, &cz);
+
+        float dx = (float)(sx - cx);
+        float dy = (float)(sy - cy);
+        return std::sqrt(dx*dx + dy*dy) / (float)vp[2];
     };
 
-    float dX = distToAxis(center, {1,0,0}, center, rayOrigin, rayDirection);
-    float dY = distToAxis(center, {0,1,0}, center, rayOrigin, rayDirection);
-    float dZ = distToAxis(center, {0,0,1}, center, rayOrigin, rayDirection);
+    // Check distance to each axis LINE (not just the tip)
+    GLdouble px, py, pz, pux, puy, puz;
+    gluProject(center.x, center.y, center.z, mv, proj, vp, &px, &py, &pz);
+    gluProject(center.x + 1.f, center.y, center.z, mv, proj, vp, &pux, &puy, &puz);
+    float pickPixelScale = std::max(std::fabs((float)(pux - px)), 0.001f);
+    float s = 100.f / pickPixelScale; // constant 100 screen pixels
+    auto axisDist = [&](const Vec3& dir) -> float {
+        // Project cursor world position onto this axis to find the closest point
+        Vec3 ro = rayOrigin;
+        Vec3 rd = rayDirection;
+        // Find closest point on axis to the ray
+        Vec3 w = ro - center;
+        float a = rd.dot(rd);
+        float b = rd.dot(dir);
+        float c = dir.dot(dir);
+        float d = rd.dot(w);
+        float e = dir.dot(w);
+        float denom = a * c - b * b;
+        if (std::fabs(denom) < 1e-10f) return 1e9f;
+        float t = (b * e - c * d) / denom;
+        float u = e + b * t;
+        Vec3 closestOnAxis = center + dir * std::clamp(u, 0.0f, s);
+        return screenDist(closestOnAxis);
+    };
 
-    if(dX < dY && dX < dZ && dX < 2.f) return Axis::X;
-    if(dY < dX && dY < dZ && dY < 2.f) return Axis::Y;
-    if(dZ < dX && dZ < dY && dZ < 2.f) return Axis::Z;
+    float dX = axisDist({1,0,0});
+    float dY = axisDist({0,1,0});
+    float dZ = axisDist({0,0,1});
+
+    const float threshold = 0.08f;
+    if(dX < threshold && dX < dY && dX < dZ) return Axis::X;
+    if(dY < threshold && dY < dX && dY < dZ) return Axis::Y;
+    if(dZ < threshold && dZ < dX && dZ < dY) return Axis::Z;
+#else
+    (void)center; (void)rayOrigin; (void)rayDirection;
+#endif
     return Axis::None;
 }
 
 void TransformGizmo::translate(const Vec3& /*center*/, Axis axis, float amount,
                                  nexus::cad::CadDocument& doc,
-                                 nexus::parametric::FeatureId featureId) const noexcept {
-    auto* node = doc.history().node(featureId);
+                                 nexus::parametric::FeatureId fid, bool pushUndo) const noexcept {
+    auto* node = doc.history().node(fid);
     if(!node || !node->mesh) return;
 
     // Save mesh for potential undo.
@@ -89,15 +194,16 @@ void TransformGizmo::translate(const Vec3& /*center*/, Axis axis, float amount,
     for(auto& v : pos) { v.x += offset.x; v.y += offset.y; v.z += offset.z; }
     node->mesh->attributes().setPositions(std::move(pos));
 
-    // Push an undo command via the document.
-    auto cmd = std::make_unique<nexus::cad::TransformCommand>(featureId, std::move(saved));
-    (void)doc.executeCommand(std::move(cmd));
+    if (pushUndo) {
+        auto cmd = std::make_unique<nexus::cad::TransformCommand>(fid, std::move(saved));
+        (void)doc.executeCommand(std::move(cmd));
+    }
 }
 
 void TransformGizmo::scale(const Vec3& center, Axis axis, float factor,
                              nexus::cad::CadDocument& doc,
-                             nexus::parametric::FeatureId featureId) const noexcept {
-    auto* node = doc.history().node(featureId);
+                             nexus::parametric::FeatureId fid, bool pushUndo) const noexcept {
+    auto* node = doc.history().node(fid);
     if(!node || !node->mesh) return;
 
     geometry::Mesh saved = *node->mesh;
@@ -115,14 +221,16 @@ void TransformGizmo::scale(const Vec3& center, Axis axis, float factor,
     }
     node->mesh->attributes().setPositions(std::move(pos));
 
-    auto cmd = std::make_unique<nexus::cad::TransformCommand>(featureId, std::move(saved));
-    (void)doc.executeCommand(std::move(cmd));
+    if (pushUndo) {
+        auto cmd = std::make_unique<nexus::cad::TransformCommand>(fid, std::move(saved));
+        (void)doc.executeCommand(std::move(cmd));
+    }
 }
 
 void TransformGizmo::rotate(const Vec3& center, Axis axis, float angleRad,
                               nexus::cad::CadDocument& doc,
-                              nexus::parametric::FeatureId featureId) const noexcept {
-    auto* node = doc.history().node(featureId);
+                              nexus::parametric::FeatureId fid, bool pushUndo) const noexcept {
+    auto* node = doc.history().node(fid);
     if(!node || !node->mesh) return;
 
     geometry::Mesh saved = *node->mesh;
@@ -139,8 +247,10 @@ void TransformGizmo::rotate(const Vec3& center, Axis axis, float angleRad,
     }
     node->mesh->attributes().setPositions(std::move(pos));
 
-    auto cmd = std::make_unique<nexus::cad::TransformCommand>(featureId, std::move(saved));
-    (void)doc.executeCommand(std::move(cmd));
+    if (pushUndo) {
+        auto cmd = std::make_unique<nexus::cad::TransformCommand>(fid, std::move(saved));
+        (void)doc.executeCommand(std::move(cmd));
+    }
 }
 
 } // namespace nexus::app

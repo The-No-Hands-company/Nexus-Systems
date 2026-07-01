@@ -1,0 +1,127 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "version": "1.0.0",
+  "description": "DeepCode central settings — read by all DHT tools for shared configuration.",
+
+  "workspace": {
+    "name": "Nexus-Systems",
+    "root": "../..",
+    "company": "The No Hands Company",
+    "program": "Nexus Systems"
+  },
+
+  "paths": {
+    "dhtsRoot": ".",
+    "appsDir": "../../apps",
+    "reportsDir": "./reports",
+    "logsDir": "./logs",
+    "generatedDocsDir": "./ecosystem-documenter/generated-docs",
+    "decisionsDir": "./ecosystem-autopilot/decisions",
+    "handoffsDir": "./ecosystem-autopilot/handoffs",
+    "scorecardDir": "./ecosystem-autopilot/reports/scorecards",
+    "graphJsonPath": "./ecosystem-graph/graph.json",
+    "stackControlReportsDir": "./ecosystem-stack-control-and-updater/reports",
+    "nitReportsDir": "./ecosystem-internal-testsuit/reports",
+    "porterDbPath": "./ecosystem-porter/data/porter.db",
+    "nexusPayDbPath": "./nexus-pay/nexus-pay.sqlite"
+  },
+
+  "scan": {
+    "excludeDirectories": [
+      ".git", "node_modules", "dist", "build", "target",
+      "coverage", "__pycache__", ".venv", "venv", "Backups",
+      ".deepcode"
+    ],
+    "includeRoots": ["apps", "dhts"],
+    "sourceExtensions": [".js", ".jsx", ".ts", ".tsx", ".py", ".rs", ".go"],
+    "markdownExtensions": [".md", ".mdx"]
+  },
+
+  "execution": {
+    "timeoutSeconds": 900,
+    "maxConcurrency": 4,
+    "httpTimeoutSeconds": 12,
+    "retryAttempts": 2
+  },
+
+  "policy": {
+    "mode": "balanced",
+    "failOnCritical": true,
+    "failOnMajorLag": true,
+    "majorLagThreshold": 1,
+    "maxTotalOutdated": 60
+  },
+
+  "wip": {
+    "maxActiveGlobal": 3,
+    "maxActivePerLane": 1
+  },
+
+  "ai": {
+    "proxyPort": 3999,
+    "defaultProvider": "openrouter",
+    "failoverProvider": "openai",
+    "budgetAlertThreshold": 0.80
+  },
+
+  "cadence": {
+    "daily": ["stack", "graph", "nit"],
+    "weekly": ["porter", "docs"],
+    "release": ["stack", "graph", "nit", "docs"]
+  },
+
+  "pipelines": {
+    "daily-backbone": ["stack", "graph", "nit"],
+    "docs-sync": ["docs", "graph"],
+    "release-readiness": ["stack", "graph", "nit", "docs", "porter"]
+  },
+
+  "qualityGates": {
+    "pre-merge": {
+      "description": "Required validations before integrating feature work into mainline.",
+      "workflows": ["graph", "nit"]
+    },
+    "release": {
+      "description": "Company-level release confidence gate.",
+      "workflows": ["stack", "graph", "nit", "docs", "porter"]
+    }
+  },
+
+  "workflows": {
+    "docs": {
+      "cwd": "dhts/ecosystem-documenter",
+      "command": "npm run generate"
+    },
+    "graph": {
+      "cwd": "dhts/ecosystem-graph",
+      "command": "python3 extract_graph.py --root ../.. --out graph.json"
+    },
+    "nit": {
+      "cwd": "dhts/ecosystem-internal-testsuit",
+      "command": "bun run src/cli.ts run"
+    },
+    "stack": {
+      "cwd": ".",
+      "command": "python3 dhts/ecosystem-stack-control-and-updater/stack_control.py --workspace . --config dhts/ecosystem-stack-control-and-updater/stack-control.config.json --json-out dhts/ecosystem-stack-control-and-updater/reports/latest.json --md-out dhts/ecosystem-stack-control-and-updater/reports/latest.md"
+    },
+    "porter": {
+      "cwd": "dhts/ecosystem-porter",
+      "command": "npx tsx src/index.ts --probe"
+    }
+  },
+
+  "providers": {
+    "openai": {
+      "baseUrl": "https://api.openai.com/v1",
+      "defaultModel": "gpt-4o"
+    },
+    "openrouter": {
+      "baseUrl": "https://openrouter.ai/api/v1",
+      "defaultModel": "openai/gpt-4o"
+    },
+    "anthropic": {
+      "baseUrl": "https://api.anthropic.com/v1",
+      "defaultModel": "claude-sonnet-4-20250514"
+    }
+  }
+}

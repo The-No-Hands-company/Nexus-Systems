@@ -1,0 +1,98 @@
+name: Lint Commit Messages
+
+on:
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  lint-commits:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+
+    - name: Install commitlint
+      run: |
+        npm install -g @commitlint/cli @commitlint/config-conventional
+
+    - name: Create commitlint config
+      run: |
+        cat > commitlint.config.js << 'EOF'
+        module.exports = {
+          extends: ['@commitlint/config-conventional'],
+          rules: {
+            'type-enum': [
+              2,
+              'always',
+              [
+                'feat',     // New feature
+                'fix',      // Bug fix
+                'docs',     // Documentation changes
+                'style',    // Code style changes (formatting, etc.)
+                'refactor', // Code refactoring
+                'perf',     // Performance improvements
+                'test',     // Test changes
+                'build',    // Build system changes
+                'ci',       // CI configuration changes
+                'chore',    // Maintenance tasks
+                'revert',   // Revert previous commits
+                'wip',      // Work in progress
+                'hotfix',   // Hotfixes
+                'release'   // Release commits
+              ]
+            ],
+            'subject-case': [2, 'always', 'sentence-case'],
+            'subject-max-length': [2, 'always', 72],
+            'body-max-line-length': [2, 'always', 100],
+            'footer-max-line-length': [2, 'always', 100]
+          }
+        };
+        EOF
+
+    - name: Lint commit messages
+      run: |
+        # Get the list of commits in the PR
+        commits=$(git rev-list --reverse origin/${{ github.base_ref }}..HEAD)
+        
+        echo "Checking commit messages..."
+        for commit in $commits; do
+          echo "Checking commit: $commit"
+          message=$(git log --format=%B -n 1 $commit)
+          echo "$message" | npx commitlint
+        done
+
+    - name: Check for conventional commit format
+      run: |
+        echo "Checking for conventional commit format..."
+        commits=$(git rev-list --reverse origin/${{ github.base_ref }}..HEAD)
+        
+        failed_commits=""
+        for commit in $commits; do
+          subject=$(git log --format=%s -n 1 $commit)
+          echo "Checking: $subject"
+          
+          # Check if commit follows conventional format
+          if ! echo "$subject" | grep -qE '^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert|wip|hotfix|release)(\(.+\))?: .+'; then
+            failed_commits="$failed_commits\n- $commit: $subject"
+          fi
+        done
+        
+        if [ -n "$failed_commits" ]; then
+          echo "❌ The following commits do not follow conventional commit format:"
+          echo -e "$failed_commits"
+          echo ""
+          echo "Please use the format: type(scope): description"
+          echo "Example: feat(ui): add dark mode toggle"
+          echo ""
+          echo "Valid types: feat, fix, docs, style, refactor, perf, test, build, ci, chore, revert, wip, hotfix, release"
+          exit 1
+        fi
+        
+        echo "✅ All commits follow conventional commit format!"

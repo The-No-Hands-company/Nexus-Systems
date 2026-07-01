@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "tasks": [
+    {
+      "id": "nx-1",
+      "status": "done",
+      "lane": "api",
+      "priority": 1,
+      "completedAt": "2026-07-01T03:03:38.836061+00:00"
+    }
+  ],
+  "history": [
+    {
+      "at": "2026-07-01T03:03:38.836063+00:00",
+      "event": "task-completed",
+      "taskId": "nx-1"
+    }
+  ],
+  "updatedAt": "2026-07-01T03:03:38.836064+00:00"
+}

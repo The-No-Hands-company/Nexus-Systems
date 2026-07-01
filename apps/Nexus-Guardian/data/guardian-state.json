@@ -1,0 +1,4063 @@
+{
+  "version": 2,
+  "counters": {
+    "decisionCounter": 351,
+    "auditCounter": 351
+  },
+  "decisions": [
+    {
+      "id": "dec-1781507903745-337",
+      "scope": "exposure",
+      "subjectId": "nexus-video",
+      "verdict": "approve",
+      "reason": "log: Log all exposure requests — default verdict 'approve'",
+      "issuedAt": "2026-06-15T07:18:23.745Z",
+      "issuedBy": "rule-engine",
+      "actorRole": "system"
+    },
+    {
+      "id": "dec-1781507904940-340",
+      "scope": "exposure",
+      "subjectId": "nexus-graphic",
+      "verdict": "approve",
+      "reason": "log: Log all exposure requests — default verdict 'approve'",
+      "issuedAt": "2026-06-15T07:18:24.940Z",
+      "issuedBy": "rule-engine",
+      "actorRole": "system"
+    },
+    {
+      "id": "dec-1781507906141-343",
+      "scope": "exposure",
+      "subjectId": "nexus-design",
+      "verdict": "approve",
+      "reason": "log: Log all exposure requests — default verdict 'approve'",
+      "issuedAt": "2026-06-15T07:18:26.141Z",
+      "issuedBy": "rule-engine",
+      "actorRole": "system"
+    },
+    {
+      "id": "dec-1781507907353-346",
+      "scope": "exposure",
+      "subjectId": "nexus-photos",
+      "verdict": "approve",
+      "reason": "log: Log all exposure requests — default verdict 'approve'",
+      "issuedAt": "2026-06-15T07:18:27.353Z",
+      "issuedBy": "rule-engine",
+      "actorRole": "system"
+    },
+    {
+      "id": "dec-1781507910770-349",
+      "scope": "exposure",
+      "subjectId": "nexus-cloud",
+      "verdict": "approve",
+      "reason": "log: Log all exposure requests — default verdict 'approve'",
+      "issuedAt": "2026-06-15T07:18:30.770Z",
+      "issuedBy": "rule-engine",
+      "actorRole": "system"
+    },
+    {
+      "id": "dec-1781507907720-347",
+      "scope": "exposure",
+      "subjectId": "nexus-draw",
+      "verdict": "approve",
+      "reason": "log: Log all exposure requests — default verdict 'approve'",
+      "issuedAt": "2026-06-15T07:18:27.720Z",
+      "issuedBy": "rule-engine",
+      "actorRole": "system"
+    },
+    {
+      "id": "dec-1781507911135-350",
+      "scope": "exposure",
+      "subjectId": "nexus-api",
+      "verdict": "approve",
+      "reason": "log: Log all exposure requests — default verdict 'approve'",
+      "issuedAt": "2026-06-15T07:18:31.135Z",
+      "issuedBy": "rule-engine",
+      "actorRole": "system"
+    },
+    {
+      "id": "dec-1781507877733-305",
+      "scope": "exposure",
+      "subjectId": "nexus-auth",
+      "verdict": "approve",
+      "reason": "log: Log all exposure requests — default verdict 'approve'",
+      "issuedAt": "2026-06-15T07:17:57.733Z",
+      "issuedBy": "rule-engine",
+      "actorRole": "system"
+    },
+    {
+      "id": "dec-1781507879661-306",
+      "scope": "exposure",
+      "subjectId": "nexus-edge",
+      "verdict": "approve",
+      "reason": "log: Log all exposure requests — default verdict 'approve'",
+      "issuedAt": "2026-06-15T07:17:59.661Z",
+      "issuedBy": "rule-engine",
+      "actorRole": "system"
+    },
+    {
+      "id": "dec-1781507880422-307",
+      "scope": "exposure",
+      "subjectId": "nexus-files",
+      "verdict": "approve",
+      "reason": "log: Log all exposure requests — default verdict 'approve'",
+      "issuedAt": "2026-06-15T07:18:00.422Z",
+      "issuedBy": "rule-engine",
+      "actorRole": "system"
+    },
+    {
+      "id": "dec-1781507880857-308",
+      "scope": "exposure",
+      "subjectId": "nexus-guardian",
+      "verdict": "approve",
+      "reason": "log: Log all exposure requests — default verdict 'approve'",
+      "issuedAt": "2026-06-15T07:18:00.857Z",
+      "issuedBy": "rule-engine",
+      "actorRole": "system"
+    },
+    {
+      "id": "dec-1781507881323-309",
+      "scope": "exposure",
+      "subjectId": "nexus-health",
+      "verdict": "approve",
+      "reason": "log: Log all exposure requests — default verdict 'approve'",
+      "issuedAt": "2026-06-15T07:18:01.323Z",
+      "issuedBy": "rule-engine",
+      "actorRole": "system"
+    },
+    {
+      "id": "dec-1781507881891-310",
+      "scope": "exposure",
+      "subjectId": "nexus-home",
+      "verdict": "approve",
+      "reason": "log: Log all exposure requests — default verdict 'approve'",
+      "issuedAt": "2026-06-15T07:18:01.891Z",
+      "issuedBy": "rule-engine",
+      "actorRole": "system"
+    },
+    {
+      "id": "dec-1781507882458-311",
+      "scope": "exposure",
+      "subjectId": "nexus-hr",
+      "verdict": "approve",
+      "reason": "log: Log all exposure requests — default verdict 'approve'",
+      "issuedAt": "2026-06-15T07:18:02.458Z",
+      "issuedBy": "rule-engine",
+      "actorRole": "system"
+    },
+    {
+      "id": "dec-1781507882907-312",
+      "scope": "exposure",
+      "subjectId": "nexus-ide",
+      "verdict": "approve",
+      "reason": "log: Log all exposure requests — default verdict 'approve'",
+      "issuedAt": "2026-06-15T07:18:02.907Z",
+      "issuedBy": "rule-engine",
+      "actorRole": "system"
+    },
+    {
+      "id": "dec-1781507883325-313",
+      "scope": "exposure",
+      "subjectId": "nexus-inference",
+      "verdict": "approve",
+      "reason": "log: Log all exposure requests — default verdict 'approve'",
+      "issuedAt": "2026-06-15T07:18:03.325Z",
+      "issuedBy": "rule-engine",
+      "actorRole": "system"
+    },
+    {
+      "id": "dec-1781507883873-314",
+      "scope": "exposure",
+      "subjectId": "nexus-insights",
+      "verdict": "approve",
+      "reason": "log: Log all exposure requests — default verdict 'approve'",
+      "issuedAt": "2026-06-15T07:18:03.873Z",
+      "issuedBy": "rule-engine",
+      "actorRole": "system"
+    },
+    {
+      "id": "dec-1781507884473-315",
+      "scope": "exposure",
+      "subjectId": "nexus-learn",
+      "verdict": "approve",
+      "reason": "log: Log all exposure requests — default verdict 'approve'",
+      "issuedAt": "2026-06-15T07:18:04.473Z",
+      "issuedBy": "rule-engine",
+      "actorRole": "system"
+    },
+    {
+      "id": "dec-1781507885074-316",
+      "scope": "exposure",
+      "subjectId": "nexus-market",
+      "verdict": "approve",
+      "reason": "log: Log all exposure requests — default verdict 'approve'",
+      "issuedAt": "2026-06-15T07:18:05.074Z",
+      "issuedBy": "rule-engine",
+      "actorRole": "system"
+    },
+    {
+      "id": "dec-1781507885529-317",
+      "scope": "exposure",
+      "subjectId": "nexus-media",
+      "verdict": "approve",
+      "reason": "log: Log all exposure requests — default verdict 'approve'",
+      "issuedAt": "2026-06-15T07:18:05.529Z",
+      "issuedBy": "rule-engine",
+      "actorRole": "system"
+    },
+    {
+      "id": "dec-1781507885959-318",
+      "scope": "exposure",
+      "subjectId": "nexus-meet",
+      "verdict": "approve",
+      "reason": "log: Log all exposure requests — default verdict 'approve'",
+      "issuedAt": "2026-06-15T07:18:05.959Z",
+      "issuedBy": "rule-engine",
+      "actorRole": "system"
+    },
+    {
+      "id": "dec-1781507886546-319",
+      "scope": "exposure",
+      "subjectId": "nexus-mind",
+      "verdict": "approve",
+      "reason": "log: Log all exposure requests — default verdict 'approve'",
+      "issuedAt": "2026-06-15T07:18:06.546Z",
+      "issuedBy": "rule-engine",
+      "actorRole": "system"
+    },
+    {
+      "id": "dec-1781507887001-320",
+      "scope": "exposure",
+      "subjectId": "nexus-monitor",
+      "verdict": "approve",
+      "reason": "log: Log all exposure requests — default verdict 'approve'",
+      "issuedAt": "2026-06-15T07:18:07.001Z",
+      "issuedBy": "rule-engine",
+      "actorRole": "system"
+    },
+    {
+      "id": "dec-1781507887570-321",
+      "scope": "exposure",
+      "subjectId": "nexus-music",
+      "verdict": "approve",
+      "reason": "log: Log all exposure requests — default verdict 'approve'",
+      "issuedAt": "2026-06-15T07:18:07.570Z",
+      "issuedBy": "rule-engine",
+      "actorRole": "system"
+    },
+    {
+      "id": "dec-1781507889089-322",
+      "scope": "exposure",
+      "subjectId": "nexus-notes",
+      "verdict": "approve",
+      "reason": "log: Log all exposure requests — default verdict 'approve'",
+      "issuedAt": "2026-06-15T07:18:09.089Z",
+      "issuedBy": "rule-engine",
+      "actorRole": "system"
+    },
+    {
+      "id": "dec-1781507889562-323",
+      "scope": "exposure",
+      "subjectId": "nexus-nutrition",
+      "verdict": "approve",
+      "reason": "log: Log all exposure requests — default verdict 'approve'",
+      "issuedAt": "2026-06-15T07:18:09.562Z",
+      "issuedBy": "rule-engine",
+      "actorRole": "system"
+    },
+    {
+      "id": "dec-1781507890127-324",
+      "scope": "exposure",
+      "subjectId": "nexus-office",
+      "verdict": "approve",
+      "reason": "log: Log all exposure requests — default verdict 'approve'",
+      "issuedAt": "2026-06-15T07:18:10.127Z",
+      "issuedBy": "rule-engine",
+      "actorRole": "system"
+    },
+    {
+      "id": "dec-1781507890646-325",
+      "scope": "exposure",
+      "subjectId": "nexus-planner",
+      "verdict": "approve",
+      "reason": "log: Log all exposure requests — default verdict 'approve'",
+      "issuedAt": "2026-06-15T07:18:10.646Z",
+      "issuedBy": "rule-engine",
+      "actorRole": "system"
+    },
+    {
+      "id": "dec-1781507891225-326",
+      "scope": "exposure",
+      "subjectId": "nexus-play",
+      "verdict": "approve",
+      "reason": "log: Log all exposure requests — default verdict 'approve'",
+      "issuedAt": "2026-06-15T07:18:11.225Z",
+      "issuedBy": "rule-engine",
+      "actorRole": "system"
+    },
+    {
+      "id": "dec-1781507893383-327",
+      "scope": "exposure",
+      "subjectId": "nexus-presence",
+      "verdict": "approve",
+      "reason": "log: Log all exposure requests — default verdict 'approve'",
+      "issuedAt": "2026-06-15T07:18:13.383Z",
+      "issuedBy": "rule-engine",
+      "actorRole": "system"
+    },
+    {
+      "id": "dec-1781507894302-328",
+      "scope": "exposure",
+      "subjectId": "nexus-provenance",
+      "verdict": "approve",
+      "reason": "log: Log all exposure requests — default verdict 'approve'",
+      "issuedAt": "2026-06-15T07:18:14.302Z",
+      "issuedBy": "rule-engine",
+      "actorRole": "system"
+    },
+    {
+      "id": "dec-1781507894771-329",
+      "scope": "exposure",
+      "subjectId": "nexus-radio-live",
+      "verdict": "approve",
+      "reason": "log: Log all exposure requests — default verdict 'approve'",
+      "issuedAt": "2026-06-15T07:18:14.771Z",
+      "issuedBy": "rule-engine",
+      "actorRole": "system"
+    },
+    {
+      "id": "dec-1781507895275-330",
+      "scope": "exposure",
+      "subjectId": "nexus-sales",
+      "verdict": "approve",
+      "reason": "log: Log all exposure requests — default verdict 'approve'",
+      "issuedAt": "2026-06-15T07:18:15.275Z",
+      "issuedBy": "rule-engine",
+      "actorRole": "system"
+    },
+    {
+      "id": "dec-1781507897718-331",
+      "scope": "exposure",
+      "subjectId": "nexus-seo",
+      "verdict": "approve",
+      "reason": "log: Log all exposure requests — default verdict 'approve'",
+      "issuedAt": "2026-06-15T07:18:17.718Z",
+      "issuedBy": "rule-engine",
+      "actorRole": "system"
+    },
+    {
+      "id": "dec-1781507899060-332",
+      "scope": "exposure",
+      "subjectId": "nexus-social",
+      "verdict": "approve",
+      "reason": "log: Log all exposure requests — default verdict 'approve'",
+      "issuedAt": "2026-06-15T07:18:19.060Z",
+      "issuedBy": "rule-engine",
+      "actorRole": "system"
+    },
+    {
+      "id": "dec-1781507900233-334",
+      "scope": "exposure",
+      "subjectId": "nexus-spend",
+      "verdict": "approve",
+      "reason": "log: Log all exposure requests — default verdict 'approve'",
+      "issuedAt": "2026-06-15T07:18:20.233Z",
+      "issuedBy": "rule-engine",
+      "actorRole": "system"
+    },
+    {
+      "id": "dec-1781507902552-336",
+      "scope": "exposure",
+      "subjectId": "nexus-store",
+      "verdict": "approve",
+      "reason": "log: Log all exposure requests — default verdict 'approve'",
+      "issuedAt": "2026-06-15T07:18:22.552Z",
+      "issuedBy": "rule-engine",
+      "actorRole": "system"
+    },
+    {
+      "id": "dec-1781507904599-339",
+      "scope": "exposure",
+      "subjectId": "nexus-survey",
+      "verdict": "approve",
+      "reason": "log: Log all exposure requests — default verdict 'approve'",
+      "issuedAt": "2026-06-15T07:18:24.599Z",
+      "issuedBy": "rule-engine",
+      "actorRole": "system"
+    },
+    {
+      "id": "dec-1781507905578-342",
+      "scope": "exposure",
+      "subjectId": "nexus-tasks",
+      "verdict": "approve",
+      "reason": "log: Log all exposure requests — default verdict 'approve'",
+      "issuedAt": "2026-06-15T07:18:25.578Z",
+      "issuedBy": "rule-engine",
+      "actorRole": "system"
+    },
+    {
+      "id": "dec-1781507906796-345",
+      "scope": "exposure",
+      "subjectId": "nexus-terminal",
+      "verdict": "approve",
+      "reason": "log: Log all exposure requests — default verdict 'approve'",
+      "issuedAt": "2026-06-15T07:18:26.796Z",
+      "issuedBy": "rule-engine",
+      "actorRole": "system"
+    },
+    {
+      "id": "dec-1781507907913-348",
+      "scope": "exposure",
+      "subjectId": "nexus-tutor",
+      "verdict": "approve",
+      "reason": "log: Log all exposure requests — default verdict 'approve'",
+      "issuedAt": "2026-06-15T07:18:27.913Z",
+      "issuedBy": "rule-engine",
+      "actorRole": "system"
+    },
+    {
+      "id": "dec-1781507911353-351",
+      "scope": "exposure",
+      "subjectId": "nexus-vertical",
+      "verdict": "approve",
+      "reason": "log: Log all exposure requests — default verdict 'approve'",
+      "issuedAt": "2026-06-15T07:18:31.353Z",
+      "issuedBy": "rule-engine",
+      "actorRole": "system"
+    },
+    {
+      "id": "dec-1781507852686-269",
+      "scope": "exposure",
+      "subjectId": "nexus-account",
+      "verdict": "approve",
+      "reason": "log: Log all exposure requests — default verdict 'approve'",
+      "issuedAt": "2026-06-15T07:17:32.686Z",
+      "issuedBy": "rule-engine",
+      "actorRole": "system"
+    },
+    {
+      "id": "dec-1781507852690-270",
+      "scope": "exposure",
+      "subjectId": "nexus-agenda",
+      "verdict": "approve",
+      "reason": "log: Log all exposure requests — default verdict 'approve'",
+      "issuedAt": "2026-06-15T07:17:32.690Z",
+      "issuedBy": "rule-engine",
+      "actorRole": "system"
+    },
+    {
+      "id": "dec-1781507852693-271",
+      "scope": "exposure",
+      "subjectId": "nexus-agents",
+      "verdict": "approve",
+      "reason": "log: Log all exposure requests — default verdict 'approve'",
+      "issuedAt": "2026-06-15T07:17:32.693Z",
+      "issuedBy": "rule-engine",
+      "actorRole": "system"
+    },
+    {
+      "id": "dec-1781507852695-272",
+      "scope": "exposure",
+      "subjectId": "nexus-ai-hub",
+      "verdict": "approve",
+      "reason": "log: Log all exposure requests — default verdict 'approve'",
+      "issuedAt": "2026-06-15T07:17:32.695Z",
+      "issuedBy": "rule-engine",
+      "actorRole": "system"
+    },
+    {
+      "id": "dec-1781507852698-273",
+      "scope": "exposure",
+      "subjectId": "nexus-analytics",
+      "verdict": "approve",
+      "reason": "log: Log all exposure requests — default verdict 'approve'",
+      "issuedAt": "2026-06-15T07:17:32.698Z",
+      "issuedBy": "rule-engine",
+      "actorRole": "system"
+    },
+    {
+      "id": "dec-1781507852702-274",
+      "scope": "exposure",
+      "subjectId": "nexus-broadcast",
+      "verdict": "approve",
+      "reason": "log: Log all exposure requests — default verdict 'approve'",
+      "issuedAt": "2026-06-15T07:17:32.702Z",
+      "issuedBy": "rule-engine",
+      "actorRole": "system"
+    },
+    {
+      "id": "dec-1781507852705-275",
+      "scope": "exposure",
+      "subjectId": "nexus-browsing",
+      "verdict": "approve",
+      "reason": "log: Log all exposure requests — default verdict 'approve'",
+      "issuedAt": "2026-06-15T07:17:32.705Z",
+      "issuedBy": "rule-engine",
+      "actorRole": "system"
+    },
+    {
+      "id": "dec-1781507852708-276",
+      "scope": "exposure",
+      "subjectId": "nexus-converter",
+      "verdict": "approve",
+      "reason": "log: Log all exposure requests — default verdict 'approve'",
+      "issuedAt": "2026-06-15T07:17:32.708Z",
+      "issuedBy": "rule-engine",
+      "actorRole": "system"
+    },
+    {
+      "id": "dec-1781507852711-277",
+      "scope": "exposure",
+      "subjectId": "nexus-dashboard",
+      "verdict": "approve",
+      "reason": "log: Log all exposure requests — default verdict 'approve'",
+      "issuedAt": "2026-06-15T07:17:32.711Z",
+      "issuedBy": "rule-engine",
+      "actorRole": "system"
+    },
+    {
+      "id": "dec-1781507852713-278",
+      "scope": "exposure",
+      "subjectId": "nexus-data",
+      "verdict": "approve",
+      "reason": "log: Log all exposure requests — default verdict 'approve'",
+      "issuedAt": "2026-06-15T07:17:32.713Z",
+      "issuedBy": "rule-engine",
+      "actorRole": "system"
+    },
+    {
+      "id": "dec-1781507852716-279",
+      "scope": "exposure",
+      "subjectId": "nexus-academy",
+      "verdict": "approve",
+      "reason": "log: Log all exposure requests — default verdict 'approve'",
+      "issuedAt": "2026-06-15T07:17:32.716Z",
+      "issuedBy": "rule-engine",
+      "actorRole": "system"
+    },
+    {
+      "id": "dec-1781507852719-280",
+      "scope": "exposure",
+      "subjectId": "nexus-accounting",
+      "verdict": "approve",
+      "reason": "log: Log all exposure requests — default verdict 'approve'",
+      "issuedAt": "2026-06-15T07:17:32.719Z",
+      "issuedBy": "rule-engine",
+      "actorRole": "system"
+    },
+    {
+      "id": "dec-1781507852721-281",
+      "scope": "exposure",
+      "subjectId": "nexus-arcade",
+      "verdict": "approve",
+      "reason": "log: Log all exposure requests — default verdict 'approve'",
+      "issuedAt": "2026-06-15T07:17:32.721Z",
+      "issuedBy": "rule-engine",
+      "actorRole": "system"
+    },
+    {
+      "id": "dec-1781507852724-282",
+      "scope": "exposure",
+      "subjectId": "nexus-automate",
+      "verdict": "approve",
+      "reason": "log: Log all exposure requests — default verdict 'approve'",
+      "issuedAt": "2026-06-15T07:17:32.724Z",
+      "issuedBy": "rule-engine",
+      "actorRole": "system"
+    },
+    {
+      "id": "dec-1781507852728-283",
+      "scope": "exposure",
+      "subjectId": "nexus-billing",
+      "verdict": "approve",
+      "reason": "log: Log all exposure requests — default verdict 'approve'",
+      "issuedAt": "2026-06-15T07:17:32.728Z",
+      "issuedBy": "rule-engine",
+      "actorRole": "system"
+    },
+    {
+      "id": "dec-1781507852731-284",
+      "scope": "exposure",
+      "subjectId": "nexus-book",
+      "verdict": "approve",
+      "reason": "log: Log all exposure requests — default verdict 'approve'",
+      "issuedAt": "2026-06-15T07:17:32.731Z",
+      "issuedBy": "rule-engine",
+      "actorRole": "system"
+    },
+    {
+      "id": "dec-1781507852733-285",
+      "scope": "exposure",
+      "subjectId": "nexus-crm",
+      "verdict": "approve",
+      "reason": "log: Log all exposure requests — default verdict 'approve'",
+      "issuedAt": "2026-06-15T07:17:32.733Z",
+      "issuedBy": "rule-engine",
+      "actorRole": "system"
+    },
+    {
+      "id": "dec-1781507852736-286",
+      "scope": "exposure",
+      "subjectId": "nexus-calendar",
+      "verdict": "approve",
+      "reason": "log: Log all exposure requests — default verdict 'approve'",
+      "issuedAt": "2026-06-15T07:17:32.736Z",
+      "issuedBy": "rule-engine",
+      "actorRole": "system"
+    },
+    {
+      "id": "dec-1781507852739-287",
+      "scope": "exposure",
+      "subjectId": "nexus-code",
+      "verdict": "approve",
+      "reason": "log: Log all exposure requests — default verdict 'approve'",
+      "issuedAt": "2026-06-15T07:17:32.739Z",
+      "issuedBy": "rule-engine",
+      "actorRole": "system"
+    },
+    {
+      "id": "dec-1781507852742-288",
+      "scope": "exposure",
+      "subjectId": "nexus-code-review",
+      "verdict": "approve",
+      "reason": "log: Log all exposure requests — default verdict 'approve'",
+      "issuedAt": "2026-06-15T07:17:32.742Z",
+      "issuedBy": "rule-engine",
+      "actorRole": "system"
+    },
+    {
+      "id": "dec-1781507852745-289",
+      "scope": "exposure",
+      "subjectId": "nexus-confidential",
+      "verdict": "approve",
+      "reason": "log: Log all exposure requests — default verdict 'approve'",
+      "issuedAt": "2026-06-15T07:17:32.745Z",
+      "issuedBy": "rule-engine",
+      "actorRole": "system"
+    },
+    {
+      "id": "dec-1781507852748-290",
+      "scope": "exposure",
+      "subjectId": "nexus-content",
+      "verdict": "approve",
+      "reason": "log: Log all exposure requests — default verdict 'approve'",
+      "issuedAt": "2026-06-15T07:17:32.748Z",
+      "issuedBy": "rule-engine",
+      "actorRole": "system"
+    },
+    {
+      "id": "dec-1781507852750-291",
+      "scope": "exposure",
+      "subjectId": "nexus-contracts",
+      "verdict": "approve",
+      "reason": "log: Log all exposure requests — default verdict 'approve'",
+      "issuedAt": "2026-06-15T07:17:32.750Z",
+      "issuedBy": "rule-engine",
+      "actorRole": "system"
+    },
+    {
+      "id": "dec-1781507852753-292",
+      "scope": "exposure",
+      "subjectId": "nexus-finance",
+      "verdict": "approve",
+      "reason": "log: Log all exposure requests — default verdict 'approve'",
+      "issuedAt": "2026-06-15T07:17:32.753Z",
+      "issuedBy": "rule-engine",
+      "actorRole": "system"
+    },
+    {
+      "id": "dec-1781507852756-293",
+      "scope": "exposure",
+      "subjectId": "nexus-fitness",
+      "verdict": "approve",
+      "reason": "log: Log all exposure requests — default verdict 'approve'",
+      "issuedAt": "2026-06-15T07:17:32.756Z",
+      "issuedBy": "rule-engine",
+      "actorRole": "system"
+    },
+    {
+      "id": "dec-1781507852761-294",
+      "scope": "exposure",
+      "subjectId": "nexus-forms",
+      "verdict": "approve",
+      "reason": "log: Log all exposure requests — default verdict 'approve'",
+      "issuedAt": "2026-06-15T07:17:32.761Z",
+      "issuedBy": "rule-engine",
+      "actorRole": "system"
+    },
+    {
+      "id": "dec-1781507852764-295",
+      "scope": "exposure",
+      "subjectId": "nexus-game",
+      "verdict": "approve",
+      "reason": "log: Log all exposure requests — default verdict 'approve'",
+      "issuedAt": "2026-06-15T07:17:32.764Z",
+      "issuedBy": "rule-engine",
+      "actorRole": "system"
+    },
+    {
+      "id": "dec-1781507852767-296",
+      "scope": "exposure",
+      "subjectId": "nexus-search",
+      "verdict": "approve",
+      "reason": "log: Log all exposure requests — default verdict 'approve'",
+      "issuedAt": "2026-06-15T07:17:32.767Z",
+      "issuedBy": "rule-engine",
+      "actorRole": "system"
+    },
+    {
+      "id": "dec-1781507852769-297",
+      "scope": "exposure",
+      "subjectId": "nexus-team-chat",
+      "verdict": "approve",
+      "reason": "log: Log all exposure requests — default verdict 'approve'",
+      "issuedAt": "2026-06-15T07:17:32.769Z",
+      "issuedBy": "rule-engine",
+      "actorRole": "system"
+    }
+  ],
+  "auditLog": [
+    {
+      "eventId": "audit-1781458770272-1",
+      "decisionId": "dec-1781458770272-1",
+      "scope": "exposure",
+      "subjectId": "nexus-video",
+      "verdict": "approve",
+      "timestamp": "2026-06-14T17:39:30.272Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781458771326-2",
+      "decisionId": "dec-1781458771326-2",
+      "scope": "exposure",
+      "subjectId": "nexus-graphic",
+      "verdict": "approve",
+      "timestamp": "2026-06-14T17:39:31.326Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781458771935-3",
+      "decisionId": "dec-1781458771935-3",
+      "scope": "exposure",
+      "subjectId": "nexus-design",
+      "verdict": "approve",
+      "timestamp": "2026-06-14T17:39:31.935Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781458772083-4",
+      "decisionId": "dec-1781458772083-4",
+      "scope": "exposure",
+      "subjectId": "nexus-photos",
+      "verdict": "approve",
+      "timestamp": "2026-06-14T17:39:32.083Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781458772092-5",
+      "decisionId": "dec-1781458772092-5",
+      "scope": "exposure",
+      "subjectId": "nexus-cloud",
+      "verdict": "approve",
+      "timestamp": "2026-06-14T17:39:32.092Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781458772607-6",
+      "decisionId": "dec-1781458772607-6",
+      "scope": "exposure",
+      "subjectId": "nexus-draw",
+      "verdict": "approve",
+      "timestamp": "2026-06-14T17:39:32.607Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781458773021-7",
+      "decisionId": "dec-1781458773021-7",
+      "scope": "exposure",
+      "subjectId": "nexus-api",
+      "verdict": "approve",
+      "timestamp": "2026-06-14T17:39:33.021Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781458773023-8",
+      "decisionId": "dec-1781458773023-8",
+      "scope": "exposure",
+      "subjectId": "nexus-auth",
+      "verdict": "approve",
+      "timestamp": "2026-06-14T17:39:33.023Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781458773024-9",
+      "decisionId": "dec-1781458773024-9",
+      "scope": "exposure",
+      "subjectId": "nexus-edge",
+      "verdict": "approve",
+      "timestamp": "2026-06-14T17:39:33.024Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781458773026-10",
+      "decisionId": "dec-1781458773026-10",
+      "scope": "exposure",
+      "subjectId": "nexus-files",
+      "verdict": "approve",
+      "timestamp": "2026-06-14T17:39:33.026Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781458773028-11",
+      "decisionId": "dec-1781458773028-11",
+      "scope": "exposure",
+      "subjectId": "nexus-guardian",
+      "verdict": "approve",
+      "timestamp": "2026-06-14T17:39:33.028Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781458773029-12",
+      "decisionId": "dec-1781458773029-12",
+      "scope": "exposure",
+      "subjectId": "nexus-health",
+      "verdict": "approve",
+      "timestamp": "2026-06-14T17:39:33.029Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781458773031-13",
+      "decisionId": "dec-1781458773031-13",
+      "scope": "exposure",
+      "subjectId": "nexus-home",
+      "verdict": "approve",
+      "timestamp": "2026-06-14T17:39:33.031Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781458773033-14",
+      "decisionId": "dec-1781458773033-14",
+      "scope": "exposure",
+      "subjectId": "nexus-hr",
+      "verdict": "approve",
+      "timestamp": "2026-06-14T17:39:33.033Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781458773034-15",
+      "decisionId": "dec-1781458773034-15",
+      "scope": "exposure",
+      "subjectId": "nexus-ide",
+      "verdict": "approve",
+      "timestamp": "2026-06-14T17:39:33.034Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781458773036-16",
+      "decisionId": "dec-1781458773036-16",
+      "scope": "exposure",
+      "subjectId": "nexus-inference",
+      "verdict": "approve",
+      "timestamp": "2026-06-14T17:39:33.036Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781458773038-17",
+      "decisionId": "dec-1781458773038-17",
+      "scope": "exposure",
+      "subjectId": "nexus-insights",
+      "verdict": "approve",
+      "timestamp": "2026-06-14T17:39:33.038Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781458773040-18",
+      "decisionId": "dec-1781458773040-18",
+      "scope": "exposure",
+      "subjectId": "nexus-learn",
+      "verdict": "approve",
+      "timestamp": "2026-06-14T17:39:33.040Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781458773042-19",
+      "decisionId": "dec-1781458773042-19",
+      "scope": "exposure",
+      "subjectId": "nexus-market",
+      "verdict": "approve",
+      "timestamp": "2026-06-14T17:39:33.042Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781458773043-20",
+      "decisionId": "dec-1781458773043-20",
+      "scope": "exposure",
+      "subjectId": "nexus-media",
+      "verdict": "approve",
+      "timestamp": "2026-06-14T17:39:33.043Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781458773046-21",
+      "decisionId": "dec-1781458773046-21",
+      "scope": "exposure",
+      "subjectId": "nexus-meet",
+      "verdict": "approve",
+      "timestamp": "2026-06-14T17:39:33.046Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781458773047-22",
+      "decisionId": "dec-1781458773047-22",
+      "scope": "exposure",
+      "subjectId": "nexus-mind",
+      "verdict": "approve",
+      "timestamp": "2026-06-14T17:39:33.047Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781458773049-23",
+      "decisionId": "dec-1781458773049-23",
+      "scope": "exposure",
+      "subjectId": "nexus-monitor",
+      "verdict": "approve",
+      "timestamp": "2026-06-14T17:39:33.049Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781458773051-24",
+      "decisionId": "dec-1781458773051-24",
+      "scope": "exposure",
+      "subjectId": "nexus-music",
+      "verdict": "approve",
+      "timestamp": "2026-06-14T17:39:33.051Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781458773053-25",
+      "decisionId": "dec-1781458773053-25",
+      "scope": "exposure",
+      "subjectId": "nexus-notes",
+      "verdict": "approve",
+      "timestamp": "2026-06-14T17:39:33.053Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781458773055-26",
+      "decisionId": "dec-1781458773055-26",
+      "scope": "exposure",
+      "subjectId": "nexus-nutrition",
+      "verdict": "approve",
+      "timestamp": "2026-06-14T17:39:33.055Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781458773058-27",
+      "decisionId": "dec-1781458773058-27",
+      "scope": "exposure",
+      "subjectId": "nexus-office",
+      "verdict": "approve",
+      "timestamp": "2026-06-14T17:39:33.058Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781458773060-28",
+      "decisionId": "dec-1781458773060-28",
+      "scope": "exposure",
+      "subjectId": "nexus-planner",
+      "verdict": "approve",
+      "timestamp": "2026-06-14T17:39:33.060Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781458773063-29",
+      "decisionId": "dec-1781458773063-29",
+      "scope": "exposure",
+      "subjectId": "nexus-play",
+      "verdict": "approve",
+      "timestamp": "2026-06-14T17:39:33.063Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781458773066-30",
+      "decisionId": "dec-1781458773066-30",
+      "scope": "exposure",
+      "subjectId": "nexus-presence",
+      "verdict": "approve",
+      "timestamp": "2026-06-14T17:39:33.066Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781458773067-31",
+      "decisionId": "dec-1781458773067-31",
+      "scope": "exposure",
+      "subjectId": "nexus-provenance",
+      "verdict": "approve",
+      "timestamp": "2026-06-14T17:39:33.067Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781458773069-32",
+      "decisionId": "dec-1781458773069-32",
+      "scope": "exposure",
+      "subjectId": "nexus-radio-live",
+      "verdict": "approve",
+      "timestamp": "2026-06-14T17:39:33.069Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781458773071-33",
+      "decisionId": "dec-1781458773071-33",
+      "scope": "exposure",
+      "subjectId": "nexus-sales",
+      "verdict": "approve",
+      "timestamp": "2026-06-14T17:39:33.071Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781458773073-34",
+      "decisionId": "dec-1781458773073-34",
+      "scope": "exposure",
+      "subjectId": "nexus-seo",
+      "verdict": "approve",
+      "timestamp": "2026-06-14T17:39:33.073Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781458773075-35",
+      "decisionId": "dec-1781458773075-35",
+      "scope": "exposure",
+      "subjectId": "nexus-social",
+      "verdict": "approve",
+      "timestamp": "2026-06-14T17:39:33.075Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781458773076-36",
+      "decisionId": "dec-1781458773076-36",
+      "scope": "exposure",
+      "subjectId": "nexus-spend",
+      "verdict": "approve",
+      "timestamp": "2026-06-14T17:39:33.076Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781458773079-37",
+      "decisionId": "dec-1781458773079-37",
+      "scope": "exposure",
+      "subjectId": "nexus-store",
+      "verdict": "approve",
+      "timestamp": "2026-06-14T17:39:33.079Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781458773081-38",
+      "decisionId": "dec-1781458773081-38",
+      "scope": "exposure",
+      "subjectId": "nexus-survey",
+      "verdict": "approve",
+      "timestamp": "2026-06-14T17:39:33.081Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781458773082-39",
+      "decisionId": "dec-1781458773082-39",
+      "scope": "exposure",
+      "subjectId": "nexus-tasks",
+      "verdict": "approve",
+      "timestamp": "2026-06-14T17:39:33.082Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781458773084-40",
+      "decisionId": "dec-1781458773084-40",
+      "scope": "exposure",
+      "subjectId": "nexus-terminal",
+      "verdict": "approve",
+      "timestamp": "2026-06-14T17:39:33.084Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781465587766-41",
+      "decisionId": "dec-1781465587766-41",
+      "scope": "exposure",
+      "subjectId": "nexus-video",
+      "verdict": "approve",
+      "timestamp": "2026-06-14T19:33:07.766Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781465588496-42",
+      "decisionId": "dec-1781465588496-42",
+      "scope": "exposure",
+      "subjectId": "nexus-graphic",
+      "verdict": "approve",
+      "timestamp": "2026-06-14T19:33:08.496Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781465589212-43",
+      "decisionId": "dec-1781465589212-43",
+      "scope": "exposure",
+      "subjectId": "nexus-design",
+      "verdict": "approve",
+      "timestamp": "2026-06-14T19:33:09.212Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781465589714-44",
+      "decisionId": "dec-1781465589714-44",
+      "scope": "exposure",
+      "subjectId": "nexus-photos",
+      "verdict": "approve",
+      "timestamp": "2026-06-14T19:33:09.714Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781465590404-45",
+      "decisionId": "dec-1781465590404-45",
+      "scope": "exposure",
+      "subjectId": "nexus-cloud",
+      "verdict": "approve",
+      "timestamp": "2026-06-14T19:33:10.404Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781465591014-46",
+      "decisionId": "dec-1781465591014-46",
+      "scope": "exposure",
+      "subjectId": "nexus-draw",
+      "verdict": "approve",
+      "timestamp": "2026-06-14T19:33:11.014Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781465591485-47",
+      "decisionId": "dec-1781465591485-47",
+      "scope": "exposure",
+      "subjectId": "nexus-api",
+      "verdict": "approve",
+      "timestamp": "2026-06-14T19:33:11.485Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781465594779-48",
+      "decisionId": "dec-1781465594779-48",
+      "scope": "exposure",
+      "subjectId": "nexus-auth",
+      "verdict": "approve",
+      "timestamp": "2026-06-14T19:33:14.779Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781465595511-49",
+      "decisionId": "dec-1781465595511-49",
+      "scope": "exposure",
+      "subjectId": "nexus-edge",
+      "verdict": "approve",
+      "timestamp": "2026-06-14T19:33:15.511Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781465596006-50",
+      "decisionId": "dec-1781465596006-50",
+      "scope": "exposure",
+      "subjectId": "nexus-files",
+      "verdict": "approve",
+      "timestamp": "2026-06-14T19:33:16.006Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781465701617-51",
+      "decisionId": "dec-1781465701617-51",
+      "scope": "exposure",
+      "subjectId": "nexus-video",
+      "verdict": "approve",
+      "timestamp": "2026-06-14T19:35:01.617Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781465702280-52",
+      "decisionId": "dec-1781465702280-52",
+      "scope": "exposure",
+      "subjectId": "nexus-graphic",
+      "verdict": "approve",
+      "timestamp": "2026-06-14T19:35:02.280Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781465702728-53",
+      "decisionId": "dec-1781465702728-53",
+      "scope": "exposure",
+      "subjectId": "nexus-design",
+      "verdict": "approve",
+      "timestamp": "2026-06-14T19:35:02.728Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781465703374-54",
+      "decisionId": "dec-1781465703374-54",
+      "scope": "exposure",
+      "subjectId": "nexus-photos",
+      "verdict": "approve",
+      "timestamp": "2026-06-14T19:35:03.374Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781465703699-55",
+      "decisionId": "dec-1781465703699-55",
+      "scope": "exposure",
+      "subjectId": "nexus-cloud",
+      "verdict": "approve",
+      "timestamp": "2026-06-14T19:35:03.699Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781465703703-56",
+      "decisionId": "dec-1781465703703-56",
+      "scope": "exposure",
+      "subjectId": "nexus-draw",
+      "verdict": "approve",
+      "timestamp": "2026-06-14T19:35:03.703Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781465703707-57",
+      "decisionId": "dec-1781465703707-57",
+      "scope": "exposure",
+      "subjectId": "nexus-api",
+      "verdict": "approve",
+      "timestamp": "2026-06-14T19:35:03.707Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781465703710-58",
+      "decisionId": "dec-1781465703710-58",
+      "scope": "exposure",
+      "subjectId": "nexus-auth",
+      "verdict": "approve",
+      "timestamp": "2026-06-14T19:35:03.710Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781465703716-59",
+      "decisionId": "dec-1781465703716-59",
+      "scope": "exposure",
+      "subjectId": "nexus-edge",
+      "verdict": "approve",
+      "timestamp": "2026-06-14T19:35:03.716Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781465703720-60",
+      "decisionId": "dec-1781465703720-60",
+      "scope": "exposure",
+      "subjectId": "nexus-files",
+      "verdict": "approve",
+      "timestamp": "2026-06-14T19:35:03.720Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781465703723-61",
+      "decisionId": "dec-1781465703723-61",
+      "scope": "exposure",
+      "subjectId": "nexus-guardian",
+      "verdict": "approve",
+      "timestamp": "2026-06-14T19:35:03.723Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781465703726-62",
+      "decisionId": "dec-1781465703726-62",
+      "scope": "exposure",
+      "subjectId": "nexus-health",
+      "verdict": "approve",
+      "timestamp": "2026-06-14T19:35:03.726Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781465703729-63",
+      "decisionId": "dec-1781465703729-63",
+      "scope": "exposure",
+      "subjectId": "nexus-home",
+      "verdict": "approve",
+      "timestamp": "2026-06-14T19:35:03.729Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781465703733-64",
+      "decisionId": "dec-1781465703733-64",
+      "scope": "exposure",
+      "subjectId": "nexus-hr",
+      "verdict": "approve",
+      "timestamp": "2026-06-14T19:35:03.733Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781465703736-65",
+      "decisionId": "dec-1781465703736-65",
+      "scope": "exposure",
+      "subjectId": "nexus-ide",
+      "verdict": "approve",
+      "timestamp": "2026-06-14T19:35:03.736Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781465703739-66",
+      "decisionId": "dec-1781465703739-66",
+      "scope": "exposure",
+      "subjectId": "nexus-inference",
+      "verdict": "approve",
+      "timestamp": "2026-06-14T19:35:03.739Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781465703743-67",
+      "decisionId": "dec-1781465703743-67",
+      "scope": "exposure",
+      "subjectId": "nexus-insights",
+      "verdict": "approve",
+      "timestamp": "2026-06-14T19:35:03.743Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781465703747-68",
+      "decisionId": "dec-1781465703747-68",
+      "scope": "exposure",
+      "subjectId": "nexus-learn",
+      "verdict": "approve",
+      "timestamp": "2026-06-14T19:35:03.747Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781465703752-69",
+      "decisionId": "dec-1781465703752-69",
+      "scope": "exposure",
+      "subjectId": "nexus-market",
+      "verdict": "approve",
+      "timestamp": "2026-06-14T19:35:03.752Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781465703755-70",
+      "decisionId": "dec-1781465703755-70",
+      "scope": "exposure",
+      "subjectId": "nexus-media",
+      "verdict": "approve",
+      "timestamp": "2026-06-14T19:35:03.755Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781465703759-71",
+      "decisionId": "dec-1781465703759-71",
+      "scope": "exposure",
+      "subjectId": "nexus-meet",
+      "verdict": "approve",
+      "timestamp": "2026-06-14T19:35:03.759Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781465703762-72",
+      "decisionId": "dec-1781465703762-72",
+      "scope": "exposure",
+      "subjectId": "nexus-mind",
+      "verdict": "approve",
+      "timestamp": "2026-06-14T19:35:03.762Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781465703769-73",
+      "decisionId": "dec-1781465703769-73",
+      "scope": "exposure",
+      "subjectId": "nexus-monitor",
+      "verdict": "approve",
+      "timestamp": "2026-06-14T19:35:03.769Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781465703772-74",
+      "decisionId": "dec-1781465703772-74",
+      "scope": "exposure",
+      "subjectId": "nexus-music",
+      "verdict": "approve",
+      "timestamp": "2026-06-14T19:35:03.772Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781465703777-75",
+      "decisionId": "dec-1781465703777-75",
+      "scope": "exposure",
+      "subjectId": "nexus-notes",
+      "verdict": "approve",
+      "timestamp": "2026-06-14T19:35:03.777Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781465703780-76",
+      "decisionId": "dec-1781465703780-76",
+      "scope": "exposure",
+      "subjectId": "nexus-nutrition",
+      "verdict": "approve",
+      "timestamp": "2026-06-14T19:35:03.780Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781465703784-77",
+      "decisionId": "dec-1781465703784-77",
+      "scope": "exposure",
+      "subjectId": "nexus-office",
+      "verdict": "approve",
+      "timestamp": "2026-06-14T19:35:03.784Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781465703788-78",
+      "decisionId": "dec-1781465703788-78",
+      "scope": "exposure",
+      "subjectId": "nexus-planner",
+      "verdict": "approve",
+      "timestamp": "2026-06-14T19:35:03.788Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781465703791-79",
+      "decisionId": "dec-1781465703791-79",
+      "scope": "exposure",
+      "subjectId": "nexus-play",
+      "verdict": "approve",
+      "timestamp": "2026-06-14T19:35:03.791Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781465703794-80",
+      "decisionId": "dec-1781465703794-80",
+      "scope": "exposure",
+      "subjectId": "nexus-presence",
+      "verdict": "approve",
+      "timestamp": "2026-06-14T19:35:03.794Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781465703798-81",
+      "decisionId": "dec-1781465703798-81",
+      "scope": "exposure",
+      "subjectId": "nexus-provenance",
+      "verdict": "approve",
+      "timestamp": "2026-06-14T19:35:03.798Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781465703802-82",
+      "decisionId": "dec-1781465703802-82",
+      "scope": "exposure",
+      "subjectId": "nexus-radio-live",
+      "verdict": "approve",
+      "timestamp": "2026-06-14T19:35:03.802Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781465703806-83",
+      "decisionId": "dec-1781465703806-83",
+      "scope": "exposure",
+      "subjectId": "nexus-sales",
+      "verdict": "approve",
+      "timestamp": "2026-06-14T19:35:03.806Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781465703809-84",
+      "decisionId": "dec-1781465703809-84",
+      "scope": "exposure",
+      "subjectId": "nexus-seo",
+      "verdict": "approve",
+      "timestamp": "2026-06-14T19:35:03.809Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781465703812-85",
+      "decisionId": "dec-1781465703812-85",
+      "scope": "exposure",
+      "subjectId": "nexus-social",
+      "verdict": "approve",
+      "timestamp": "2026-06-14T19:35:03.812Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781465703816-86",
+      "decisionId": "dec-1781465703816-86",
+      "scope": "exposure",
+      "subjectId": "nexus-spend",
+      "verdict": "approve",
+      "timestamp": "2026-06-14T19:35:03.816Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781465703819-87",
+      "decisionId": "dec-1781465703819-87",
+      "scope": "exposure",
+      "subjectId": "nexus-store",
+      "verdict": "approve",
+      "timestamp": "2026-06-14T19:35:03.819Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781465703822-88",
+      "decisionId": "dec-1781465703822-88",
+      "scope": "exposure",
+      "subjectId": "nexus-survey",
+      "verdict": "approve",
+      "timestamp": "2026-06-14T19:35:03.822Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781465703824-89",
+      "decisionId": "dec-1781465703824-89",
+      "scope": "exposure",
+      "subjectId": "nexus-tasks",
+      "verdict": "approve",
+      "timestamp": "2026-06-14T19:35:03.824Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781465703827-90",
+      "decisionId": "dec-1781465703827-90",
+      "scope": "exposure",
+      "subjectId": "nexus-terminal",
+      "verdict": "approve",
+      "timestamp": "2026-06-14T19:35:03.827Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781465703830-91",
+      "decisionId": "dec-1781465703830-91",
+      "scope": "exposure",
+      "subjectId": "nexus-tutor",
+      "verdict": "approve",
+      "timestamp": "2026-06-14T19:35:03.830Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781465703834-92",
+      "decisionId": "dec-1781465703834-92",
+      "scope": "exposure",
+      "subjectId": "nexus-vertical",
+      "verdict": "approve",
+      "timestamp": "2026-06-14T19:35:03.834Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781465703838-93",
+      "decisionId": "dec-1781465703838-93",
+      "scope": "exposure",
+      "subjectId": "nexus-account",
+      "verdict": "approve",
+      "timestamp": "2026-06-14T19:35:03.838Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781465703842-94",
+      "decisionId": "dec-1781465703842-94",
+      "scope": "exposure",
+      "subjectId": "nexus-agenda",
+      "verdict": "approve",
+      "timestamp": "2026-06-14T19:35:03.842Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781465703845-95",
+      "decisionId": "dec-1781465703845-95",
+      "scope": "exposure",
+      "subjectId": "nexus-agents",
+      "verdict": "approve",
+      "timestamp": "2026-06-14T19:35:03.845Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781465703849-96",
+      "decisionId": "dec-1781465703849-96",
+      "scope": "exposure",
+      "subjectId": "nexus-ai-hub",
+      "verdict": "approve",
+      "timestamp": "2026-06-14T19:35:03.849Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781465703853-97",
+      "decisionId": "dec-1781465703853-97",
+      "scope": "exposure",
+      "subjectId": "nexus-analytics",
+      "verdict": "approve",
+      "timestamp": "2026-06-14T19:35:03.853Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781465703856-98",
+      "decisionId": "dec-1781465703856-98",
+      "scope": "exposure",
+      "subjectId": "nexus-broadcast",
+      "verdict": "approve",
+      "timestamp": "2026-06-14T19:35:03.856Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781465703860-99",
+      "decisionId": "dec-1781465703860-99",
+      "scope": "exposure",
+      "subjectId": "nexus-browsing",
+      "verdict": "approve",
+      "timestamp": "2026-06-14T19:35:03.860Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781465703864-100",
+      "decisionId": "dec-1781465703864-100",
+      "scope": "exposure",
+      "subjectId": "nexus-converter",
+      "verdict": "approve",
+      "timestamp": "2026-06-14T19:35:03.864Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781465703869-101",
+      "decisionId": "dec-1781465703869-101",
+      "scope": "exposure",
+      "subjectId": "nexus-dashboard",
+      "verdict": "approve",
+      "timestamp": "2026-06-14T19:35:03.869Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781465703872-102",
+      "decisionId": "dec-1781465703872-102",
+      "scope": "exposure",
+      "subjectId": "nexus-data",
+      "verdict": "approve",
+      "timestamp": "2026-06-14T19:35:03.872Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781467834453-103",
+      "decisionId": "dec-1781467834453-103",
+      "scope": "exposure",
+      "subjectId": "nexus-video",
+      "verdict": "approve",
+      "timestamp": "2026-06-14T20:10:34.453Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781467835126-104",
+      "decisionId": "dec-1781467835126-104",
+      "scope": "exposure",
+      "subjectId": "nexus-graphic",
+      "verdict": "approve",
+      "timestamp": "2026-06-14T20:10:35.126Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781467836006-105",
+      "decisionId": "dec-1781467836006-105",
+      "scope": "exposure",
+      "subjectId": "nexus-design",
+      "verdict": "approve",
+      "timestamp": "2026-06-14T20:10:36.006Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781467836634-106",
+      "decisionId": "dec-1781467836634-106",
+      "scope": "exposure",
+      "subjectId": "nexus-photos",
+      "verdict": "approve",
+      "timestamp": "2026-06-14T20:10:36.634Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781467837275-107",
+      "decisionId": "dec-1781467837275-107",
+      "scope": "exposure",
+      "subjectId": "nexus-cloud",
+      "verdict": "approve",
+      "timestamp": "2026-06-14T20:10:37.275Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781467837477-108",
+      "decisionId": "dec-1781467837477-108",
+      "scope": "exposure",
+      "subjectId": "nexus-draw",
+      "verdict": "approve",
+      "timestamp": "2026-06-14T20:10:37.477Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781467837481-109",
+      "decisionId": "dec-1781467837481-109",
+      "scope": "exposure",
+      "subjectId": "nexus-api",
+      "verdict": "approve",
+      "timestamp": "2026-06-14T20:10:37.481Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781467837486-110",
+      "decisionId": "dec-1781467837486-110",
+      "scope": "exposure",
+      "subjectId": "nexus-auth",
+      "verdict": "approve",
+      "timestamp": "2026-06-14T20:10:37.486Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781467837492-111",
+      "decisionId": "dec-1781467837492-111",
+      "scope": "exposure",
+      "subjectId": "nexus-edge",
+      "verdict": "approve",
+      "timestamp": "2026-06-14T20:10:37.492Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781467837494-112",
+      "decisionId": "dec-1781467837494-112",
+      "scope": "exposure",
+      "subjectId": "nexus-files",
+      "verdict": "approve",
+      "timestamp": "2026-06-14T20:10:37.494Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781467837498-113",
+      "decisionId": "dec-1781467837498-113",
+      "scope": "exposure",
+      "subjectId": "nexus-guardian",
+      "verdict": "approve",
+      "timestamp": "2026-06-14T20:10:37.498Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781467837504-114",
+      "decisionId": "dec-1781467837504-114",
+      "scope": "exposure",
+      "subjectId": "nexus-health",
+      "verdict": "approve",
+      "timestamp": "2026-06-14T20:10:37.504Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781467837508-115",
+      "decisionId": "dec-1781467837508-115",
+      "scope": "exposure",
+      "subjectId": "nexus-home",
+      "verdict": "approve",
+      "timestamp": "2026-06-14T20:10:37.508Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781467837512-116",
+      "decisionId": "dec-1781467837512-116",
+      "scope": "exposure",
+      "subjectId": "nexus-hr",
+      "verdict": "approve",
+      "timestamp": "2026-06-14T20:10:37.512Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781467837516-117",
+      "decisionId": "dec-1781467837516-117",
+      "scope": "exposure",
+      "subjectId": "nexus-ide",
+      "verdict": "approve",
+      "timestamp": "2026-06-14T20:10:37.516Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781467837519-118",
+      "decisionId": "dec-1781467837519-118",
+      "scope": "exposure",
+      "subjectId": "nexus-inference",
+      "verdict": "approve",
+      "timestamp": "2026-06-14T20:10:37.519Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781467837522-119",
+      "decisionId": "dec-1781467837522-119",
+      "scope": "exposure",
+      "subjectId": "nexus-insights",
+      "verdict": "approve",
+      "timestamp": "2026-06-14T20:10:37.522Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781467837525-120",
+      "decisionId": "dec-1781467837525-120",
+      "scope": "exposure",
+      "subjectId": "nexus-learn",
+      "verdict": "approve",
+      "timestamp": "2026-06-14T20:10:37.525Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781467837529-121",
+      "decisionId": "dec-1781467837529-121",
+      "scope": "exposure",
+      "subjectId": "nexus-market",
+      "verdict": "approve",
+      "timestamp": "2026-06-14T20:10:37.529Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781467837534-122",
+      "decisionId": "dec-1781467837534-122",
+      "scope": "exposure",
+      "subjectId": "nexus-media",
+      "verdict": "approve",
+      "timestamp": "2026-06-14T20:10:37.534Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781467837538-123",
+      "decisionId": "dec-1781467837538-123",
+      "scope": "exposure",
+      "subjectId": "nexus-meet",
+      "verdict": "approve",
+      "timestamp": "2026-06-14T20:10:37.538Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781467837542-124",
+      "decisionId": "dec-1781467837542-124",
+      "scope": "exposure",
+      "subjectId": "nexus-mind",
+      "verdict": "approve",
+      "timestamp": "2026-06-14T20:10:37.542Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781467837547-125",
+      "decisionId": "dec-1781467837547-125",
+      "scope": "exposure",
+      "subjectId": "nexus-monitor",
+      "verdict": "approve",
+      "timestamp": "2026-06-14T20:10:37.547Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781467837569-126",
+      "decisionId": "dec-1781467837569-126",
+      "scope": "exposure",
+      "subjectId": "nexus-music",
+      "verdict": "approve",
+      "timestamp": "2026-06-14T20:10:37.569Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781467837574-127",
+      "decisionId": "dec-1781467837574-127",
+      "scope": "exposure",
+      "subjectId": "nexus-notes",
+      "verdict": "approve",
+      "timestamp": "2026-06-14T20:10:37.574Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781467837578-128",
+      "decisionId": "dec-1781467837578-128",
+      "scope": "exposure",
+      "subjectId": "nexus-nutrition",
+      "verdict": "approve",
+      "timestamp": "2026-06-14T20:10:37.578Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781467837583-129",
+      "decisionId": "dec-1781467837583-129",
+      "scope": "exposure",
+      "subjectId": "nexus-office",
+      "verdict": "approve",
+      "timestamp": "2026-06-14T20:10:37.583Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781467837590-130",
+      "decisionId": "dec-1781467837590-130",
+      "scope": "exposure",
+      "subjectId": "nexus-planner",
+      "verdict": "approve",
+      "timestamp": "2026-06-14T20:10:37.590Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781467837597-131",
+      "decisionId": "dec-1781467837597-131",
+      "scope": "exposure",
+      "subjectId": "nexus-play",
+      "verdict": "approve",
+      "timestamp": "2026-06-14T20:10:37.597Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781467837603-132",
+      "decisionId": "dec-1781467837603-132",
+      "scope": "exposure",
+      "subjectId": "nexus-presence",
+      "verdict": "approve",
+      "timestamp": "2026-06-14T20:10:37.603Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781467837607-133",
+      "decisionId": "dec-1781467837607-133",
+      "scope": "exposure",
+      "subjectId": "nexus-provenance",
+      "verdict": "approve",
+      "timestamp": "2026-06-14T20:10:37.607Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781467837613-134",
+      "decisionId": "dec-1781467837613-134",
+      "scope": "exposure",
+      "subjectId": "nexus-radio-live",
+      "verdict": "approve",
+      "timestamp": "2026-06-14T20:10:37.613Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781467837616-135",
+      "decisionId": "dec-1781467837616-135",
+      "scope": "exposure",
+      "subjectId": "nexus-sales",
+      "verdict": "approve",
+      "timestamp": "2026-06-14T20:10:37.616Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781467837638-136",
+      "decisionId": "dec-1781467837638-136",
+      "scope": "exposure",
+      "subjectId": "nexus-seo",
+      "verdict": "approve",
+      "timestamp": "2026-06-14T20:10:37.638Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781467837646-137",
+      "decisionId": "dec-1781467837646-137",
+      "scope": "exposure",
+      "subjectId": "nexus-social",
+      "verdict": "approve",
+      "timestamp": "2026-06-14T20:10:37.646Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781467837651-138",
+      "decisionId": "dec-1781467837651-138",
+      "scope": "exposure",
+      "subjectId": "nexus-spend",
+      "verdict": "approve",
+      "timestamp": "2026-06-14T20:10:37.651Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781467837654-139",
+      "decisionId": "dec-1781467837654-139",
+      "scope": "exposure",
+      "subjectId": "nexus-store",
+      "verdict": "approve",
+      "timestamp": "2026-06-14T20:10:37.654Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781467837657-140",
+      "decisionId": "dec-1781467837657-140",
+      "scope": "exposure",
+      "subjectId": "nexus-survey",
+      "verdict": "approve",
+      "timestamp": "2026-06-14T20:10:37.657Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781467837662-141",
+      "decisionId": "dec-1781467837662-141",
+      "scope": "exposure",
+      "subjectId": "nexus-tasks",
+      "verdict": "approve",
+      "timestamp": "2026-06-14T20:10:37.662Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781467837666-142",
+      "decisionId": "dec-1781467837666-142",
+      "scope": "exposure",
+      "subjectId": "nexus-terminal",
+      "verdict": "approve",
+      "timestamp": "2026-06-14T20:10:37.666Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781467837670-143",
+      "decisionId": "dec-1781467837670-143",
+      "scope": "exposure",
+      "subjectId": "nexus-tutor",
+      "verdict": "approve",
+      "timestamp": "2026-06-14T20:10:37.670Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781467837674-144",
+      "decisionId": "dec-1781467837674-144",
+      "scope": "exposure",
+      "subjectId": "nexus-vertical",
+      "verdict": "approve",
+      "timestamp": "2026-06-14T20:10:37.674Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781467837679-145",
+      "decisionId": "dec-1781467837679-145",
+      "scope": "exposure",
+      "subjectId": "nexus-account",
+      "verdict": "approve",
+      "timestamp": "2026-06-14T20:10:37.679Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781467837682-146",
+      "decisionId": "dec-1781467837682-146",
+      "scope": "exposure",
+      "subjectId": "nexus-agenda",
+      "verdict": "approve",
+      "timestamp": "2026-06-14T20:10:37.682Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781467837686-147",
+      "decisionId": "dec-1781467837686-147",
+      "scope": "exposure",
+      "subjectId": "nexus-agents",
+      "verdict": "approve",
+      "timestamp": "2026-06-14T20:10:37.686Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781467837689-148",
+      "decisionId": "dec-1781467837689-148",
+      "scope": "exposure",
+      "subjectId": "nexus-ai-hub",
+      "verdict": "approve",
+      "timestamp": "2026-06-14T20:10:37.689Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781467837692-149",
+      "decisionId": "dec-1781467837692-149",
+      "scope": "exposure",
+      "subjectId": "nexus-analytics",
+      "verdict": "approve",
+      "timestamp": "2026-06-14T20:10:37.692Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781467837696-150",
+      "decisionId": "dec-1781467837696-150",
+      "scope": "exposure",
+      "subjectId": "nexus-broadcast",
+      "verdict": "approve",
+      "timestamp": "2026-06-14T20:10:37.696Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781467837700-151",
+      "decisionId": "dec-1781467837700-151",
+      "scope": "exposure",
+      "subjectId": "nexus-browsing",
+      "verdict": "approve",
+      "timestamp": "2026-06-14T20:10:37.700Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781467837703-152",
+      "decisionId": "dec-1781467837703-152",
+      "scope": "exposure",
+      "subjectId": "nexus-converter",
+      "verdict": "approve",
+      "timestamp": "2026-06-14T20:10:37.703Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781467837706-153",
+      "decisionId": "dec-1781467837706-153",
+      "scope": "exposure",
+      "subjectId": "nexus-dashboard",
+      "verdict": "approve",
+      "timestamp": "2026-06-14T20:10:37.706Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781467837708-154",
+      "decisionId": "dec-1781467837708-154",
+      "scope": "exposure",
+      "subjectId": "nexus-data",
+      "verdict": "approve",
+      "timestamp": "2026-06-14T20:10:37.708Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781467837711-155",
+      "decisionId": "dec-1781467837711-155",
+      "scope": "exposure",
+      "subjectId": "nexus-academy",
+      "verdict": "approve",
+      "timestamp": "2026-06-14T20:10:37.711Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781506867302-156",
+      "decisionId": "dec-1781506867302-156",
+      "scope": "exposure",
+      "subjectId": "nexus-video",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:01:07.302Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781506868006-157",
+      "decisionId": "dec-1781506868006-157",
+      "scope": "exposure",
+      "subjectId": "nexus-graphic",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:01:08.006Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781506868490-158",
+      "decisionId": "dec-1781506868490-158",
+      "scope": "exposure",
+      "subjectId": "nexus-design",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:01:08.490Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781506868941-159",
+      "decisionId": "dec-1781506868941-159",
+      "scope": "exposure",
+      "subjectId": "nexus-photos",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:01:08.941Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781506869400-160",
+      "decisionId": "dec-1781506869400-160",
+      "scope": "exposure",
+      "subjectId": "nexus-cloud",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:01:09.400Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781506869404-161",
+      "decisionId": "dec-1781506869404-161",
+      "scope": "exposure",
+      "subjectId": "nexus-draw",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:01:09.404Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781506869406-162",
+      "decisionId": "dec-1781506869406-162",
+      "scope": "exposure",
+      "subjectId": "nexus-api",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:01:09.406Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781506869408-163",
+      "decisionId": "dec-1781506869408-163",
+      "scope": "exposure",
+      "subjectId": "nexus-auth",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:01:09.408Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781506869411-164",
+      "decisionId": "dec-1781506869411-164",
+      "scope": "exposure",
+      "subjectId": "nexus-edge",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:01:09.411Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781506869415-165",
+      "decisionId": "dec-1781506869415-165",
+      "scope": "exposure",
+      "subjectId": "nexus-files",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:01:09.415Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781506869419-166",
+      "decisionId": "dec-1781506869419-166",
+      "scope": "exposure",
+      "subjectId": "nexus-guardian",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:01:09.419Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781506869448-167",
+      "decisionId": "dec-1781506869448-167",
+      "scope": "exposure",
+      "subjectId": "nexus-health",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:01:09.448Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781506869451-168",
+      "decisionId": "dec-1781506869451-168",
+      "scope": "exposure",
+      "subjectId": "nexus-home",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:01:09.451Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781506869454-169",
+      "decisionId": "dec-1781506869454-169",
+      "scope": "exposure",
+      "subjectId": "nexus-hr",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:01:09.454Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781506869457-170",
+      "decisionId": "dec-1781506869457-170",
+      "scope": "exposure",
+      "subjectId": "nexus-ide",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:01:09.457Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781506869460-171",
+      "decisionId": "dec-1781506869460-171",
+      "scope": "exposure",
+      "subjectId": "nexus-inference",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:01:09.460Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781506869464-172",
+      "decisionId": "dec-1781506869464-172",
+      "scope": "exposure",
+      "subjectId": "nexus-insights",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:01:09.464Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781506869467-173",
+      "decisionId": "dec-1781506869467-173",
+      "scope": "exposure",
+      "subjectId": "nexus-learn",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:01:09.467Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781506869470-174",
+      "decisionId": "dec-1781506869470-174",
+      "scope": "exposure",
+      "subjectId": "nexus-market",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:01:09.470Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781506869473-175",
+      "decisionId": "dec-1781506869473-175",
+      "scope": "exposure",
+      "subjectId": "nexus-media",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:01:09.473Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781506869478-176",
+      "decisionId": "dec-1781506869478-176",
+      "scope": "exposure",
+      "subjectId": "nexus-meet",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:01:09.478Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781506869481-177",
+      "decisionId": "dec-1781506869481-177",
+      "scope": "exposure",
+      "subjectId": "nexus-mind",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:01:09.481Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781506869484-178",
+      "decisionId": "dec-1781506869484-178",
+      "scope": "exposure",
+      "subjectId": "nexus-monitor",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:01:09.484Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781506869487-179",
+      "decisionId": "dec-1781506869487-179",
+      "scope": "exposure",
+      "subjectId": "nexus-music",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:01:09.487Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781506869491-180",
+      "decisionId": "dec-1781506869491-180",
+      "scope": "exposure",
+      "subjectId": "nexus-notes",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:01:09.491Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781506869528-181",
+      "decisionId": "dec-1781506869528-181",
+      "scope": "exposure",
+      "subjectId": "nexus-nutrition",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:01:09.528Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781506869531-182",
+      "decisionId": "dec-1781506869531-182",
+      "scope": "exposure",
+      "subjectId": "nexus-office",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:01:09.531Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781506869535-183",
+      "decisionId": "dec-1781506869535-183",
+      "scope": "exposure",
+      "subjectId": "nexus-planner",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:01:09.535Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781506869538-184",
+      "decisionId": "dec-1781506869538-184",
+      "scope": "exposure",
+      "subjectId": "nexus-play",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:01:09.538Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781506869540-185",
+      "decisionId": "dec-1781506869540-185",
+      "scope": "exposure",
+      "subjectId": "nexus-presence",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:01:09.540Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781506869542-186",
+      "decisionId": "dec-1781506869542-186",
+      "scope": "exposure",
+      "subjectId": "nexus-provenance",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:01:09.542Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781506869545-187",
+      "decisionId": "dec-1781506869545-187",
+      "scope": "exposure",
+      "subjectId": "nexus-radio-live",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:01:09.545Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781506869548-188",
+      "decisionId": "dec-1781506869548-188",
+      "scope": "exposure",
+      "subjectId": "nexus-sales",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:01:09.548Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781506869553-189",
+      "decisionId": "dec-1781506869553-189",
+      "scope": "exposure",
+      "subjectId": "nexus-seo",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:01:09.553Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781506869555-190",
+      "decisionId": "dec-1781506869555-190",
+      "scope": "exposure",
+      "subjectId": "nexus-social",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:01:09.555Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781506869558-191",
+      "decisionId": "dec-1781506869558-191",
+      "scope": "exposure",
+      "subjectId": "nexus-spend",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:01:09.558Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781506869561-192",
+      "decisionId": "dec-1781506869561-192",
+      "scope": "exposure",
+      "subjectId": "nexus-store",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:01:09.561Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781506869565-193",
+      "decisionId": "dec-1781506869565-193",
+      "scope": "exposure",
+      "subjectId": "nexus-survey",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:01:09.565Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781506869568-194",
+      "decisionId": "dec-1781506869568-194",
+      "scope": "exposure",
+      "subjectId": "nexus-tasks",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:01:09.568Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781506869570-195",
+      "decisionId": "dec-1781506869570-195",
+      "scope": "exposure",
+      "subjectId": "nexus-terminal",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:01:09.570Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781506869572-196",
+      "decisionId": "dec-1781506869572-196",
+      "scope": "exposure",
+      "subjectId": "nexus-tutor",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:01:09.572Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781506869575-197",
+      "decisionId": "dec-1781506869575-197",
+      "scope": "exposure",
+      "subjectId": "nexus-vertical",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:01:09.575Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781506869577-198",
+      "decisionId": "dec-1781506869577-198",
+      "scope": "exposure",
+      "subjectId": "nexus-account",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:01:09.577Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781506869580-199",
+      "decisionId": "dec-1781506869580-199",
+      "scope": "exposure",
+      "subjectId": "nexus-agenda",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:01:09.580Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781506869583-200",
+      "decisionId": "dec-1781506869583-200",
+      "scope": "exposure",
+      "subjectId": "nexus-agents",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:01:09.583Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781506869586-201",
+      "decisionId": "dec-1781506869586-201",
+      "scope": "exposure",
+      "subjectId": "nexus-ai-hub",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:01:09.586Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781506869588-202",
+      "decisionId": "dec-1781506869588-202",
+      "scope": "exposure",
+      "subjectId": "nexus-analytics",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:01:09.588Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781506869590-203",
+      "decisionId": "dec-1781506869590-203",
+      "scope": "exposure",
+      "subjectId": "nexus-broadcast",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:01:09.590Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781506869592-204",
+      "decisionId": "dec-1781506869592-204",
+      "scope": "exposure",
+      "subjectId": "nexus-browsing",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:01:09.592Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781506869595-205",
+      "decisionId": "dec-1781506869595-205",
+      "scope": "exposure",
+      "subjectId": "nexus-converter",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:01:09.595Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781506869598-206",
+      "decisionId": "dec-1781506869598-206",
+      "scope": "exposure",
+      "subjectId": "nexus-dashboard",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:01:09.598Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781506869600-207",
+      "decisionId": "dec-1781506869600-207",
+      "scope": "exposure",
+      "subjectId": "nexus-data",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:01:09.600Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781506869602-208",
+      "decisionId": "dec-1781506869602-208",
+      "scope": "exposure",
+      "subjectId": "nexus-academy",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:01:09.602Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781506869605-209",
+      "decisionId": "dec-1781506869605-209",
+      "scope": "exposure",
+      "subjectId": "nexus-accounting",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:01:09.605Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781506869607-210",
+      "decisionId": "dec-1781506869607-210",
+      "scope": "exposure",
+      "subjectId": "nexus-arcade",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:01:09.607Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781506869610-211",
+      "decisionId": "dec-1781506869610-211",
+      "scope": "exposure",
+      "subjectId": "nexus-automate",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:01:09.610Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781506869613-212",
+      "decisionId": "dec-1781506869613-212",
+      "scope": "exposure",
+      "subjectId": "nexus-billing",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:01:09.613Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781506869615-213",
+      "decisionId": "dec-1781506869615-213",
+      "scope": "exposure",
+      "subjectId": "nexus-book",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:01:09.615Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781506869618-214",
+      "decisionId": "dec-1781506869618-214",
+      "scope": "exposure",
+      "subjectId": "nexus-crm",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:01:09.618Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781506869620-215",
+      "decisionId": "dec-1781506869620-215",
+      "scope": "exposure",
+      "subjectId": "nexus-calendar",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:01:09.620Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781506869623-216",
+      "decisionId": "dec-1781506869623-216",
+      "scope": "exposure",
+      "subjectId": "nexus-code",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:01:09.623Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781506869625-217",
+      "decisionId": "dec-1781506869625-217",
+      "scope": "exposure",
+      "subjectId": "nexus-code-review",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:01:09.625Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781506869642-218",
+      "decisionId": "dec-1781506869642-218",
+      "scope": "exposure",
+      "subjectId": "nexus-confidential",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:01:09.642Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781506869646-219",
+      "decisionId": "dec-1781506869646-219",
+      "scope": "exposure",
+      "subjectId": "nexus-content",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:01:09.646Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781506869649-220",
+      "decisionId": "dec-1781506869649-220",
+      "scope": "exposure",
+      "subjectId": "nexus-contracts",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:01:09.649Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781506869651-221",
+      "decisionId": "dec-1781506869651-221",
+      "scope": "exposure",
+      "subjectId": "nexus-finance",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:01:09.651Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781506869654-222",
+      "decisionId": "dec-1781506869654-222",
+      "scope": "exposure",
+      "subjectId": "nexus-fitness",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:01:09.654Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781506869657-223",
+      "decisionId": "dec-1781506869657-223",
+      "scope": "exposure",
+      "subjectId": "nexus-forms",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:01:09.657Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781506869661-224",
+      "decisionId": "dec-1781506869661-224",
+      "scope": "exposure",
+      "subjectId": "nexus-game",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:01:09.661Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781506869664-225",
+      "decisionId": "dec-1781506869664-225",
+      "scope": "exposure",
+      "subjectId": "nexus-search",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:01:09.664Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781506869667-226",
+      "decisionId": "dec-1781506869667-226",
+      "scope": "exposure",
+      "subjectId": "nexus-team-chat",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:01:09.667Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781507850297-227",
+      "decisionId": "dec-1781507850297-227",
+      "scope": "exposure",
+      "subjectId": "nexus-video",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:17:30.297Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781507850916-228",
+      "decisionId": "dec-1781507850916-228",
+      "scope": "exposure",
+      "subjectId": "nexus-graphic",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:17:30.916Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781507851539-229",
+      "decisionId": "dec-1781507851539-229",
+      "scope": "exposure",
+      "subjectId": "nexus-design",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:17:31.539Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781507852092-230",
+      "decisionId": "dec-1781507852092-230",
+      "scope": "exposure",
+      "subjectId": "nexus-photos",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:17:32.092Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781507852541-231",
+      "decisionId": "dec-1781507852541-231",
+      "scope": "exposure",
+      "subjectId": "nexus-cloud",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:17:32.541Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781507852545-232",
+      "decisionId": "dec-1781507852545-232",
+      "scope": "exposure",
+      "subjectId": "nexus-draw",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:17:32.545Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781507852548-233",
+      "decisionId": "dec-1781507852548-233",
+      "scope": "exposure",
+      "subjectId": "nexus-api",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:17:32.548Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781507852553-234",
+      "decisionId": "dec-1781507852553-234",
+      "scope": "exposure",
+      "subjectId": "nexus-auth",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:17:32.553Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781507852558-235",
+      "decisionId": "dec-1781507852558-235",
+      "scope": "exposure",
+      "subjectId": "nexus-edge",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:17:32.558Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781507852561-236",
+      "decisionId": "dec-1781507852561-236",
+      "scope": "exposure",
+      "subjectId": "nexus-files",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:17:32.561Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781507852564-237",
+      "decisionId": "dec-1781507852564-237",
+      "scope": "exposure",
+      "subjectId": "nexus-guardian",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:17:32.564Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781507852567-238",
+      "decisionId": "dec-1781507852567-238",
+      "scope": "exposure",
+      "subjectId": "nexus-health",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:17:32.567Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781507852571-239",
+      "decisionId": "dec-1781507852571-239",
+      "scope": "exposure",
+      "subjectId": "nexus-home",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:17:32.571Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781507852574-240",
+      "decisionId": "dec-1781507852574-240",
+      "scope": "exposure",
+      "subjectId": "nexus-hr",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:17:32.574Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781507852594-241",
+      "decisionId": "dec-1781507852594-241",
+      "scope": "exposure",
+      "subjectId": "nexus-ide",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:17:32.594Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781507852597-242",
+      "decisionId": "dec-1781507852597-242",
+      "scope": "exposure",
+      "subjectId": "nexus-inference",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:17:32.597Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781507852600-243",
+      "decisionId": "dec-1781507852600-243",
+      "scope": "exposure",
+      "subjectId": "nexus-insights",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:17:32.600Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781507852604-244",
+      "decisionId": "dec-1781507852604-244",
+      "scope": "exposure",
+      "subjectId": "nexus-learn",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:17:32.604Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781507852607-245",
+      "decisionId": "dec-1781507852607-245",
+      "scope": "exposure",
+      "subjectId": "nexus-market",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:17:32.607Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781507852611-246",
+      "decisionId": "dec-1781507852611-246",
+      "scope": "exposure",
+      "subjectId": "nexus-media",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:17:32.611Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781507852614-247",
+      "decisionId": "dec-1781507852614-247",
+      "scope": "exposure",
+      "subjectId": "nexus-meet",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:17:32.614Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781507852621-248",
+      "decisionId": "dec-1781507852621-248",
+      "scope": "exposure",
+      "subjectId": "nexus-mind",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:17:32.621Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781507852623-249",
+      "decisionId": "dec-1781507852623-249",
+      "scope": "exposure",
+      "subjectId": "nexus-monitor",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:17:32.623Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781507852627-250",
+      "decisionId": "dec-1781507852627-250",
+      "scope": "exposure",
+      "subjectId": "nexus-music",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:17:32.627Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781507852630-251",
+      "decisionId": "dec-1781507852630-251",
+      "scope": "exposure",
+      "subjectId": "nexus-notes",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:17:32.630Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781507852633-252",
+      "decisionId": "dec-1781507852633-252",
+      "scope": "exposure",
+      "subjectId": "nexus-nutrition",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:17:32.633Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781507852636-253",
+      "decisionId": "dec-1781507852636-253",
+      "scope": "exposure",
+      "subjectId": "nexus-office",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:17:32.636Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781507852639-254",
+      "decisionId": "dec-1781507852639-254",
+      "scope": "exposure",
+      "subjectId": "nexus-planner",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:17:32.639Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781507852642-255",
+      "decisionId": "dec-1781507852642-255",
+      "scope": "exposure",
+      "subjectId": "nexus-play",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:17:32.642Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781507852645-256",
+      "decisionId": "dec-1781507852645-256",
+      "scope": "exposure",
+      "subjectId": "nexus-presence",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:17:32.645Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781507852648-257",
+      "decisionId": "dec-1781507852648-257",
+      "scope": "exposure",
+      "subjectId": "nexus-provenance",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:17:32.648Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781507852651-258",
+      "decisionId": "dec-1781507852651-258",
+      "scope": "exposure",
+      "subjectId": "nexus-radio-live",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:17:32.651Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781507852655-259",
+      "decisionId": "dec-1781507852655-259",
+      "scope": "exposure",
+      "subjectId": "nexus-sales",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:17:32.655Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781507852658-260",
+      "decisionId": "dec-1781507852658-260",
+      "scope": "exposure",
+      "subjectId": "nexus-seo",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:17:32.658Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781507852661-261",
+      "decisionId": "dec-1781507852661-261",
+      "scope": "exposure",
+      "subjectId": "nexus-social",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:17:32.661Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781507852664-262",
+      "decisionId": "dec-1781507852664-262",
+      "scope": "exposure",
+      "subjectId": "nexus-spend",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:17:32.664Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781507852667-263",
+      "decisionId": "dec-1781507852667-263",
+      "scope": "exposure",
+      "subjectId": "nexus-store",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:17:32.667Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781507852670-264",
+      "decisionId": "dec-1781507852670-264",
+      "scope": "exposure",
+      "subjectId": "nexus-survey",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:17:32.670Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781507852673-265",
+      "decisionId": "dec-1781507852673-265",
+      "scope": "exposure",
+      "subjectId": "nexus-tasks",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:17:32.673Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781507852677-266",
+      "decisionId": "dec-1781507852677-266",
+      "scope": "exposure",
+      "subjectId": "nexus-terminal",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:17:32.677Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781507852679-267",
+      "decisionId": "dec-1781507852679-267",
+      "scope": "exposure",
+      "subjectId": "nexus-tutor",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:17:32.679Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781507852682-268",
+      "decisionId": "dec-1781507852682-268",
+      "scope": "exposure",
+      "subjectId": "nexus-vertical",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:17:32.682Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781507852686-269",
+      "decisionId": "dec-1781507852686-269",
+      "scope": "exposure",
+      "subjectId": "nexus-account",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:17:32.686Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781507852690-270",
+      "decisionId": "dec-1781507852690-270",
+      "scope": "exposure",
+      "subjectId": "nexus-agenda",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:17:32.690Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781507852693-271",
+      "decisionId": "dec-1781507852693-271",
+      "scope": "exposure",
+      "subjectId": "nexus-agents",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:17:32.693Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781507852695-272",
+      "decisionId": "dec-1781507852695-272",
+      "scope": "exposure",
+      "subjectId": "nexus-ai-hub",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:17:32.695Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781507852698-273",
+      "decisionId": "dec-1781507852698-273",
+      "scope": "exposure",
+      "subjectId": "nexus-analytics",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:17:32.698Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781507852702-274",
+      "decisionId": "dec-1781507852702-274",
+      "scope": "exposure",
+      "subjectId": "nexus-broadcast",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:17:32.702Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781507852705-275",
+      "decisionId": "dec-1781507852705-275",
+      "scope": "exposure",
+      "subjectId": "nexus-browsing",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:17:32.705Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781507852708-276",
+      "decisionId": "dec-1781507852708-276",
+      "scope": "exposure",
+      "subjectId": "nexus-converter",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:17:32.708Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781507852711-277",
+      "decisionId": "dec-1781507852711-277",
+      "scope": "exposure",
+      "subjectId": "nexus-dashboard",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:17:32.711Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781507852713-278",
+      "decisionId": "dec-1781507852713-278",
+      "scope": "exposure",
+      "subjectId": "nexus-data",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:17:32.713Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781507852716-279",
+      "decisionId": "dec-1781507852716-279",
+      "scope": "exposure",
+      "subjectId": "nexus-academy",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:17:32.716Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781507852719-280",
+      "decisionId": "dec-1781507852719-280",
+      "scope": "exposure",
+      "subjectId": "nexus-accounting",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:17:32.719Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781507852721-281",
+      "decisionId": "dec-1781507852721-281",
+      "scope": "exposure",
+      "subjectId": "nexus-arcade",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:17:32.721Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781507852724-282",
+      "decisionId": "dec-1781507852724-282",
+      "scope": "exposure",
+      "subjectId": "nexus-automate",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:17:32.724Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781507852728-283",
+      "decisionId": "dec-1781507852728-283",
+      "scope": "exposure",
+      "subjectId": "nexus-billing",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:17:32.728Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781507852731-284",
+      "decisionId": "dec-1781507852731-284",
+      "scope": "exposure",
+      "subjectId": "nexus-book",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:17:32.731Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781507852733-285",
+      "decisionId": "dec-1781507852733-285",
+      "scope": "exposure",
+      "subjectId": "nexus-crm",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:17:32.733Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781507852736-286",
+      "decisionId": "dec-1781507852736-286",
+      "scope": "exposure",
+      "subjectId": "nexus-calendar",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:17:32.736Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781507852739-287",
+      "decisionId": "dec-1781507852739-287",
+      "scope": "exposure",
+      "subjectId": "nexus-code",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:17:32.739Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781507852742-288",
+      "decisionId": "dec-1781507852742-288",
+      "scope": "exposure",
+      "subjectId": "nexus-code-review",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:17:32.742Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781507852745-289",
+      "decisionId": "dec-1781507852745-289",
+      "scope": "exposure",
+      "subjectId": "nexus-confidential",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:17:32.745Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781507852748-290",
+      "decisionId": "dec-1781507852748-290",
+      "scope": "exposure",
+      "subjectId": "nexus-content",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:17:32.748Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781507852750-291",
+      "decisionId": "dec-1781507852750-291",
+      "scope": "exposure",
+      "subjectId": "nexus-contracts",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:17:32.750Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781507852753-292",
+      "decisionId": "dec-1781507852753-292",
+      "scope": "exposure",
+      "subjectId": "nexus-finance",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:17:32.753Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781507852756-293",
+      "decisionId": "dec-1781507852756-293",
+      "scope": "exposure",
+      "subjectId": "nexus-fitness",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:17:32.756Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781507852761-294",
+      "decisionId": "dec-1781507852761-294",
+      "scope": "exposure",
+      "subjectId": "nexus-forms",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:17:32.761Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781507852764-295",
+      "decisionId": "dec-1781507852764-295",
+      "scope": "exposure",
+      "subjectId": "nexus-game",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:17:32.764Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781507852767-296",
+      "decisionId": "dec-1781507852767-296",
+      "scope": "exposure",
+      "subjectId": "nexus-search",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:17:32.767Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781507852769-297",
+      "decisionId": "dec-1781507852769-297",
+      "scope": "exposure",
+      "subjectId": "nexus-team-chat",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:17:32.769Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781507873212-298",
+      "decisionId": "dec-1781507873212-298",
+      "scope": "exposure",
+      "subjectId": "nexus-video",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:17:53.212Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781507873985-299",
+      "decisionId": "dec-1781507873985-299",
+      "scope": "exposure",
+      "subjectId": "nexus-graphic",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:17:53.985Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781507874684-300",
+      "decisionId": "dec-1781507874684-300",
+      "scope": "exposure",
+      "subjectId": "nexus-design",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:17:54.684Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781507875232-301",
+      "decisionId": "dec-1781507875232-301",
+      "scope": "exposure",
+      "subjectId": "nexus-photos",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:17:55.232Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781507875667-302",
+      "decisionId": "dec-1781507875667-302",
+      "scope": "exposure",
+      "subjectId": "nexus-cloud",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:17:55.667Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781507876393-303",
+      "decisionId": "dec-1781507876393-303",
+      "scope": "exposure",
+      "subjectId": "nexus-draw",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:17:56.393Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781507877207-304",
+      "decisionId": "dec-1781507877207-304",
+      "scope": "exposure",
+      "subjectId": "nexus-api",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:17:57.207Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781507877733-305",
+      "decisionId": "dec-1781507877733-305",
+      "scope": "exposure",
+      "subjectId": "nexus-auth",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:17:57.733Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781507879661-306",
+      "decisionId": "dec-1781507879661-306",
+      "scope": "exposure",
+      "subjectId": "nexus-edge",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:17:59.661Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781507880422-307",
+      "decisionId": "dec-1781507880422-307",
+      "scope": "exposure",
+      "subjectId": "nexus-files",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:18:00.422Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781507880857-308",
+      "decisionId": "dec-1781507880857-308",
+      "scope": "exposure",
+      "subjectId": "nexus-guardian",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:18:00.857Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781507881323-309",
+      "decisionId": "dec-1781507881323-309",
+      "scope": "exposure",
+      "subjectId": "nexus-health",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:18:01.323Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781507881891-310",
+      "decisionId": "dec-1781507881891-310",
+      "scope": "exposure",
+      "subjectId": "nexus-home",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:18:01.891Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781507882458-311",
+      "decisionId": "dec-1781507882458-311",
+      "scope": "exposure",
+      "subjectId": "nexus-hr",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:18:02.458Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781507882907-312",
+      "decisionId": "dec-1781507882907-312",
+      "scope": "exposure",
+      "subjectId": "nexus-ide",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:18:02.907Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781507883325-313",
+      "decisionId": "dec-1781507883325-313",
+      "scope": "exposure",
+      "subjectId": "nexus-inference",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:18:03.325Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781507883873-314",
+      "decisionId": "dec-1781507883873-314",
+      "scope": "exposure",
+      "subjectId": "nexus-insights",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:18:03.873Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781507884473-315",
+      "decisionId": "dec-1781507884473-315",
+      "scope": "exposure",
+      "subjectId": "nexus-learn",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:18:04.473Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781507885074-316",
+      "decisionId": "dec-1781507885074-316",
+      "scope": "exposure",
+      "subjectId": "nexus-market",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:18:05.074Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781507885529-317",
+      "decisionId": "dec-1781507885529-317",
+      "scope": "exposure",
+      "subjectId": "nexus-media",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:18:05.529Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781507885959-318",
+      "decisionId": "dec-1781507885959-318",
+      "scope": "exposure",
+      "subjectId": "nexus-meet",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:18:05.959Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781507886546-319",
+      "decisionId": "dec-1781507886546-319",
+      "scope": "exposure",
+      "subjectId": "nexus-mind",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:18:06.546Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781507887001-320",
+      "decisionId": "dec-1781507887001-320",
+      "scope": "exposure",
+      "subjectId": "nexus-monitor",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:18:07.001Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781507887570-321",
+      "decisionId": "dec-1781507887570-321",
+      "scope": "exposure",
+      "subjectId": "nexus-music",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:18:07.570Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781507889089-322",
+      "decisionId": "dec-1781507889089-322",
+      "scope": "exposure",
+      "subjectId": "nexus-notes",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:18:09.089Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781507889562-323",
+      "decisionId": "dec-1781507889562-323",
+      "scope": "exposure",
+      "subjectId": "nexus-nutrition",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:18:09.562Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781507890127-324",
+      "decisionId": "dec-1781507890127-324",
+      "scope": "exposure",
+      "subjectId": "nexus-office",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:18:10.127Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781507890646-325",
+      "decisionId": "dec-1781507890646-325",
+      "scope": "exposure",
+      "subjectId": "nexus-planner",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:18:10.646Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781507891225-326",
+      "decisionId": "dec-1781507891225-326",
+      "scope": "exposure",
+      "subjectId": "nexus-play",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:18:11.225Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781507893383-327",
+      "decisionId": "dec-1781507893383-327",
+      "scope": "exposure",
+      "subjectId": "nexus-presence",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:18:13.383Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781507894302-328",
+      "decisionId": "dec-1781507894302-328",
+      "scope": "exposure",
+      "subjectId": "nexus-provenance",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:18:14.302Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781507894771-329",
+      "decisionId": "dec-1781507894771-329",
+      "scope": "exposure",
+      "subjectId": "nexus-radio-live",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:18:14.771Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781507895275-330",
+      "decisionId": "dec-1781507895275-330",
+      "scope": "exposure",
+      "subjectId": "nexus-sales",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:18:15.275Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781507897718-331",
+      "decisionId": "dec-1781507897718-331",
+      "scope": "exposure",
+      "subjectId": "nexus-seo",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:18:17.718Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781507899060-332",
+      "decisionId": "dec-1781507899060-332",
+      "scope": "exposure",
+      "subjectId": "nexus-social",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:18:19.060Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781507899180-333",
+      "decisionId": "dec-1781507899180-333",
+      "scope": "exposure",
+      "subjectId": "nexus-video",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:18:19.180Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781507900233-334",
+      "decisionId": "dec-1781507900233-334",
+      "scope": "exposure",
+      "subjectId": "nexus-spend",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:18:20.233Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781507901154-335",
+      "decisionId": "dec-1781507901154-335",
+      "scope": "exposure",
+      "subjectId": "nexus-graphic",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:18:21.154Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781507902552-336",
+      "decisionId": "dec-1781507902552-336",
+      "scope": "exposure",
+      "subjectId": "nexus-store",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:18:22.552Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781507903745-337",
+      "decisionId": "dec-1781507903745-337",
+      "scope": "exposure",
+      "subjectId": "nexus-video",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:18:23.745Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781507904186-338",
+      "decisionId": "dec-1781507904186-338",
+      "scope": "exposure",
+      "subjectId": "nexus-design",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:18:24.186Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781507904599-339",
+      "decisionId": "dec-1781507904599-339",
+      "scope": "exposure",
+      "subjectId": "nexus-survey",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:18:24.599Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781507904940-340",
+      "decisionId": "dec-1781507904940-340",
+      "scope": "exposure",
+      "subjectId": "nexus-graphic",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:18:24.940Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781507905362-341",
+      "decisionId": "dec-1781507905362-341",
+      "scope": "exposure",
+      "subjectId": "nexus-photos",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:18:25.362Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781507905578-342",
+      "decisionId": "dec-1781507905578-342",
+      "scope": "exposure",
+      "subjectId": "nexus-tasks",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:18:25.578Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781507906141-343",
+      "decisionId": "dec-1781507906141-343",
+      "scope": "exposure",
+      "subjectId": "nexus-design",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:18:26.141Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781507906547-344",
+      "decisionId": "dec-1781507906547-344",
+      "scope": "exposure",
+      "subjectId": "nexus-cloud",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:18:26.547Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781507906796-345",
+      "decisionId": "dec-1781507906796-345",
+      "scope": "exposure",
+      "subjectId": "nexus-terminal",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:18:26.796Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781507907353-346",
+      "decisionId": "dec-1781507907353-346",
+      "scope": "exposure",
+      "subjectId": "nexus-photos",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:18:27.353Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781507907720-347",
+      "decisionId": "dec-1781507907720-347",
+      "scope": "exposure",
+      "subjectId": "nexus-draw",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:18:27.720Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781507907913-348",
+      "decisionId": "dec-1781507907913-348",
+      "scope": "exposure",
+      "subjectId": "nexus-tutor",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:18:27.913Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781507910770-349",
+      "decisionId": "dec-1781507910770-349",
+      "scope": "exposure",
+      "subjectId": "nexus-cloud",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:18:30.770Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781507911135-350",
+      "decisionId": "dec-1781507911135-350",
+      "scope": "exposure",
+      "subjectId": "nexus-api",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:18:31.135Z",
+      "actorRole": "system"
+    },
+    {
+      "eventId": "audit-1781507911353-351",
+      "decisionId": "dec-1781507911353-351",
+      "scope": "exposure",
+      "subjectId": "nexus-vertical",
+      "verdict": "approve",
+      "timestamp": "2026-06-15T07:18:31.353Z",
+      "actorRole": "system"
+    }
+  ],
+  "policy": {
+    "policyId": "default",
+    "description": "Default guardian policy — approve unless explicitly denied",
+    "version": 1,
+    "defaultVerdict": "approve",
+    "enabled": true,
+    "publicExposureDenyRules": [],
+    "updatedAt": "2026-06-14T17:39:17.571Z"
+  },
+  "rules": [
+    {
+      "id": "rule-1781458757573-1",
+      "name": "Deny unsafe exposure",
+      "description": "Deny public exposure for services tagged as unsafe",
+      "priority": 100,
+      "enabled": true,
+      "scopes": [
+        "exposure"
+      ],
+      "conditions": [
+        {
+          "field": "safety",
+          "operator": "equals",
+          "value": "unsafe"
+        }
+      ],
+      "action": "deny",
+      "createdAt": "2026-06-14T17:39:17.573Z",
+      "updatedAt": "2026-06-14T17:39:17.573Z"
+    },
+    {
+      "id": "rule-1781458757573-2",
+      "name": "Quarantine degraded services on exposure",
+      "description": "Quarantine exposure requests when service health is degraded",
+      "priority": 90,
+      "enabled": true,
+      "scopes": [
+        "exposure",
+        "domain"
+      ],
+      "conditions": [
+        {
+          "field": "health",
+          "operator": "equals",
+          "value": "degraded"
+        }
+      ],
+      "action": "quarantine",
+      "createdAt": "2026-06-14T17:39:17.573Z",
+      "updatedAt": "2026-06-14T17:39:17.573Z"
+    },
+    {
+      "id": "rule-1781458757573-3",
+      "name": "Deny offline services",
+      "description": "Deny any request for services that are offline",
+      "priority": 80,
+      "enabled": true,
+      "scopes": [],
+      "conditions": [
+        {
+          "field": "health",
+          "operator": "equals",
+          "value": "offline"
+        }
+      ],
+      "action": "deny",
+      "createdAt": "2026-06-14T17:39:17.573Z",
+      "updatedAt": "2026-06-14T17:39:17.573Z"
+    },
+    {
+      "id": "rule-1781458757573-4",
+      "name": "Block untrusted federation peers",
+      "description": "Deny runtime operations from untrusted federation peers",
+      "priority": 70,
+      "enabled": true,
+      "scopes": [
+        "runtime"
+      ],
+      "conditions": [
+        {
+          "field": "peerTrust",
+          "operator": "equals",
+          "value": "untrusted"
+        }
+      ],
+      "action": "deny",
+      "createdAt": "2026-06-14T17:39:17.573Z",
+      "updatedAt": "2026-06-14T17:39:17.573Z"
+    },
+    {
+      "id": "rule-1781458757573-5",
+      "name": "Alert on high-severity threat",
+      "description": "Log alert when high-severity threat is detected",
+      "priority": 60,
+      "enabled": true,
+      "scopes": [
+        "agent"
+      ],
+      "conditions": [
+        {
+          "field": "threatSeverity",
+          "operator": "equals",
+          "value": "high"
+        }
+      ],
+      "action": "alert",
+      "createdAt": "2026-06-14T17:39:17.573Z",
+      "updatedAt": "2026-06-14T17:39:17.573Z"
+    },
+    {
+      "id": "rule-1781458757573-6",
+      "name": "Log all exposure requests",
+      "description": "Audit-log every exposure request for traceability",
+      "priority": 0,
+      "enabled": true,
+      "scopes": [
+        "exposure",
+        "domain"
+      ],
+      "conditions": [],
+      "action": "log",
+      "createdAt": "2026-06-14T17:39:17.573Z",
+      "updatedAt": "2026-06-14T17:39:17.573Z"
+    }
+  ],
+  "rateLimitConfigs": [
+    {
+      "id": "rl-1781458757573-1",
+      "scope": "exposure",
+      "maxRequests": 10,
+      "windowMs": 60000,
+      "description": "Max 10 exposure requests per minute per tool",
+      "enabled": true
+    },
+    {
+      "id": "rl-1781458757573-2",
+      "scope": "domain",
+      "maxRequests": 5,
+      "windowMs": 60000,
+      "description": "Max 5 domain binding requests per minute per tool",
+      "enabled": true
+    },
+    {
+      "id": "rl-1781458757573-3",
+      "scope": "runtime",
+      "maxRequests": 30,
+      "windowMs": 60000,
+      "description": "Max 30 runtime operations per minute per tool",
+      "enabled": true
+    }
+  ],
+  "alertConfigs": [
+    {
+      "id": "acfg-1781458757573-1",
+      "name": "Log all alerts",
+      "channel": "log",
+      "levels": [
+        "info",
+        "warning",
+        "error",
+        "critical"
+      ],
+      "enabled": true,
+      "eventTypes": []
+    },
+    {
+      "id": "acfg-1781458757573-2",
+      "name": "Audit policy violations",
+      "channel": "audit",
+      "levels": [
+        "warning",
+        "error",
+        "critical"
+      ],
+      "enabled": true,
+      "eventTypes": [
+        "policy_violation"
+      ]
+    }
+  ],
+  "alertHistory": [],
+  "healthSnapshots": [],
+  "updatedAt": "2026-06-15T07:18:39.135Z"
+}

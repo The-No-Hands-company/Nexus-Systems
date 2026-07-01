@@ -1,0 +1,27 @@
+#!/usr/bin/env python3
+"""
+NLPL Language Server - Standalone Entry Point
+==============================================
+
+Standalone script to run the NexusLang Language Server.
+
+Usage:
+    nlpl-lsp
+    nlpl-lsp --debug
+    nlpl-lsp --log-file /path/to/nlpl-lsp.log
+"""
+
+import sys
+import os
+
+# Add src directory to path to allow imports
+script_dir = os.path.dirname(os.path.abspath(__file__))
+project_root = os.path.dirname(script_dir)
+src_dir = os.path.join(project_root, 'src')
+sys.path.insert(0, src_dir)
+
+# Import and run the LSP server
+from nexuslang.lsp.__main__ import main
+
+if __name__ == '__main__':
+    main()

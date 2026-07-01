@@ -1,0 +1,132 @@
+name: Auto Build
+
+# This workflow is triggered automatically on push to main
+# and creates release builds for different platforms
+
+on:
+  push:
+    branches: [ main ]
+    tags: [ 'v*' ]
+  schedule:
+    # Run daily at 3 AM UTC
+    - cron: '0 3 * * *'
+
+env:
+  BUILD_TYPE: RelWithDebInfo
+
+jobs:
+  auto-build-linux:
+    if: github.event_name != 'schedule' || github.repository_owner == github.actor
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        submodules: recursive
+
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          build-essential \
+          cmake \
+          ninja-build \
+          libx11-dev \
+          libxcursor-dev \
+          libxi-dev \
+          libgl1-mesa-dev \
+          libfontconfig1-dev
+
+    - name: Configure and build
+      run: |
+        cmake -B build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -G Ninja
+        cmake --build build --config ${{env.BUILD_TYPE}}
+
+    - name: Create archive
+      run: |
+        cd build
+        tar -czf ../project-linux-x64.tar.gz bin/
+
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: project-linux-x64
+        path: project-linux-x64.tar.gz
+
+  auto-build-windows:
+    if: github.event_name != 'schedule' || github.repository_owner == github.actor
+    runs-on: windows-latest
+
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        submodules: recursive
+
+    - name: Add MSBuild to PATH
+      uses: microsoft/setup-msbuild@v1.1
+
+    - name: Configure and build
+      run: |
+        cmake -B build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -G "Visual Studio 17 2022" -A x64
+        cmake --build build --config ${{env.BUILD_TYPE}}
+
+    - name: Create archive
+      run: |
+        cd build
+        7z a ../project-windows-x64.zip bin/
+
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: project-windows-x64
+        path: project-windows-x64.zip
+
+  auto-build-macos:
+    if: github.event_name != 'schedule' || github.repository_owner == github.actor
+    runs-on: macos-latest
+
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        submodules: recursive
+
+    - name: Install dependencies
+      run: |
+        brew update
+        brew install cmake ninja
+
+    - name: Configure and build
+      run: |
+        cmake -B build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -G Ninja
+        cmake --build build --config ${{env.BUILD_TYPE}}
+
+    - name: Create archive
+      run: |
+        cd build
+        tar -czf ../project-macos-universal.tar.gz bin/
+
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: project-macos-universal
+        path: project-macos-universal.tar.gz
+
+  create-release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [auto-build-linux, auto-build-windows, auto-build-macos]
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Download all artifacts
+      uses: actions/download-artifact@v4
+
+    - name: Create Release
+      uses: softprops/action-gh-release@v2
+      with:
+        files: |
+          project-linux-x64/project-linux-x64.tar.gz
+          project-windows-x64/project-windows-x64.zip
+          project-macos-universal/project-macos-universal.tar.gz
+        draft: false
+        prerelease: false
+        generate_release_notes: true

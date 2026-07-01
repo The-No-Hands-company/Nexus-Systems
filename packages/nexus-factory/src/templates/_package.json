@@ -1,0 +1,24 @@
+{
+  "name": "{{APP_NAME}}",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "{{APP_DESCRIPTION}}",
+  "scripts": {
+    "start": "bun src/index.ts",
+    "dev": "bun --watch src/index.ts",
+    "test": "bun test",
+    "typecheck": "tsc --noEmit",
+    "lint": "biome check src tests",
+    "format": "biome check --write src tests",
+    "check": "bun run typecheck && bun run lint"
+  },
+  "dependencies": {
+    "@nexus/core": "workspace:*"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^1.9.4",
+    "@types/bun": "^1.1.0",
+    "typescript": "^5.4.0"
+  }
+}

@@ -397,4 +397,46 @@ void CadIncrementalSolver::invalidate(SolverCache& c, parametric::ParametricEnti
     c.valid = false;
 }
 
+// ── CadDesignTable ─────────────────────────────────────────────────
+
+void CadDesignTable::addParameter(const std::string& name, double defaultValue) {
+    m_params.push_back(name);
+    m_defaults.push_back(defaultValue);
+}
+
+void CadDesignTable::addRow(const std::string& name, const std::vector<double>& values) {
+    m_rows.push_back({name, values});
+}
+
+bool CadDesignTable::apply(const std::string& /*rowName*/, CadDocument& /*doc*/) const noexcept {
+    return false;
+}
+
+std::string CadDesignTable::exportCSV() const noexcept {
+    std::string csv;
+    for (size_t i = 0; i < m_params.size(); ++i) {
+        if (i > 0) csv += ',';
+        csv += m_params[i];
+    }
+    csv += '\n';
+    for (const auto& row : m_rows) {
+        csv += row.name;
+        if (!m_params.empty()) csv += ',';
+        for (size_t i = 0; i < row.values.size(); ++i) {
+            if (i > 0) csv += ',';
+            csv += std::to_string(row.values[i]);
+        }
+        csv += '\n';
+    }
+    return csv;
+}
+
+const std::vector<std::string>& CadDesignTable::parameters() const noexcept {
+    return m_params;
+}
+
+const std::vector<DesignTableRow>& CadDesignTable::rows() const noexcept {
+    return m_rows;
+}
+
 }

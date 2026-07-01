@@ -1,0 +1,167 @@
+name: Close Spam Issues
+
+on:
+  issues:
+    types: [opened]
+
+jobs:
+  close-spam:
+    runs-on: ubuntu-latest
+    if: github.repository_owner == 'yourname' # Replace with your GitHub username
+
+    steps:
+    - name: Close spam issues
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const issue = context.payload.issue;
+          const title = issue.title.toLowerCase();
+          const body = issue.body ? issue.body.toLowerCase() : '';
+          
+          // List of spam indicators
+          const spamIndicators = [
+            'buy now',
+            'click here',
+            'earn money',
+            'free money',
+            'guaranteed',
+            'limited time',
+            'no experience needed',
+            'work from home',
+            'lottery',
+            'winner',
+            'congratulations you',
+            'urgent response',
+            'act now',
+            'exclusive deal',
+            'incredible deal',
+            'risk free',
+            '100% free',
+            '100% guaranteed',
+            'amazing',
+            'bargain',
+            'best price',
+            'bonus',
+            'cheap',
+            'click below',
+            'click here',
+            'collect',
+            'compare rates',
+            'costs',
+            'deal',
+            'discount',
+            'earn per week',
+            'easy terms',
+            'f r e e',
+            'free',
+            'get it now',
+            'great offer',
+            'guarantee',
+            'have you been turned down',
+            'here',
+            'home',
+            'income',
+            'increase sales',
+            'info you requested',
+            'investment',
+            'join millions',
+            'limited',
+            'loan',
+            'make money',
+            'marketing',
+            'message contains',
+            'money',
+            'mortgage rates',
+            'new customers only',
+            'no age restrictions',
+            'no catch',
+            'no experience',
+            'no hidden',
+            'no investment',
+            'no purchase necessary',
+            'no questions asked',
+            'no strings attached',
+            'not junk',
+            'now',
+            'offer',
+            'online degree',
+            'opportunity',
+            'orders',
+            'passwords',
+            'purchase',
+            'removes',
+            'requires initial investment',
+            'reverses',
+            'sale',
+            'sample',
+            'satisfaction',
+            'save',
+            'special promotion',
+            'stuff on sale',
+            'supplies',
+            'take action',
+            'terms',
+            'the following form',
+            'trial',
+            'unlimited',
+            'unsolicited',
+            'urgent',
+            'vacation',
+            'viagra',
+            'visit our website',
+            'warranty',
+            'we hate spam',
+            'weight',
+            'what are you waiting for',
+            'why pay more',
+            'will not believe your eyes',
+            'winner',
+            'won',
+            'you are a winner',
+            'you have been selected',
+            'your income'
+          ];
+          
+          const isSpam = spamIndicators.some(indicator => 
+            title.includes(indicator) || body.includes(indicator)
+          );
+          
+          // Check for common spam patterns
+          const hasMultipleUrls = (body.match(/https?:\/\//g) || []).length > 3;
+          const hasExcessiveCaps = body.length > 0 && (body.match(/[A-Z]/g) || []).length / body.length > 0.5;
+          const hasExcessiveExclamations = (body.match(/!/g) || []).length > 5;
+          const isTooShort = body.length < 20 && !title.includes('bug') && !title.includes('feature');
+          const hasNoRelevantContent = !title.includes('bug') && !title.includes('feature') && 
+                                     !title.includes('question') && !title.includes('help') &&
+                                     !body.includes('code') && !body.includes('error') &&
+                                     !body.includes('issue') && !body.includes('problem');
+          
+          if (isSpam || hasMultipleUrls || hasExcessiveCaps || hasExcessiveExclamations || 
+              (isTooShort && hasNoRelevantContent)) {
+            
+            // Close the issue
+            await github.rest.issues.update({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: issue.number,
+              state: 'closed'
+            });
+            
+            // Add spam label
+            await github.rest.issues.addLabels({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: issue.number,
+              labels: ['spam']
+            });
+            
+            // Comment on the issue
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: issue.number,
+              body: 'This issue has been automatically closed as it appears to be spam. If this is a legitimate issue, please create a new issue with a clear description of the problem or feature request.'
+            });
+            
+            console.log(`Closed spam issue #${issue.number}: "${issue.title}"`);
+          }

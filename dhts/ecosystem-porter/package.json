@@ -1,0 +1,22 @@
+{
+  "name": "nexus-porter",
+  "version": "1.0.0",
+  "description": "Port Intelligence Tool — everything you need to know about what's listening on the machine",
+  "type": "module",
+  "bin": { "porter": "./src/index.ts" },
+  "scripts": {
+    "start":  "tsx src/index.ts",
+    "serve":  "tsx src/index.ts serve",
+    "scan":   "tsx src/index.ts --probe",
+    "free":   "tsx src/index.ts free",
+    "dev":    "tsx watch src/index.ts serve",
+    "build":  "tsc",
+    "test":   "tsx --test src/**/*.test.ts"
+  },
+  "keywords": ["ports", "network", "devops", "nexus"],
+  "devDependencies": {
+    "tsx":        "^4.19.2",
+    "typescript": "~5.9.2",
+    "@types/node": "^22.0.0"
+  }
+}

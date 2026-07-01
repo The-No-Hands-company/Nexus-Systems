@@ -1,0 +1,52 @@
+name: Nexus Release Gate
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  release-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: '1.1.18'
+
+      - name: Install release dependencies
+        run: |
+          set -euo pipefail
+          if [[ -f dhts/ecosystem-documenter/package-lock.json ]]; then
+            npm ci --prefix dhts/ecosystem-documenter
+          elif [[ -f dhts/ecosystem-documenter/package.json ]]; then
+            npm install --prefix dhts/ecosystem-documenter
+          fi
+          if [[ -f dhts/ecosystem-porter/package-lock.json ]]; then
+            npm ci --prefix dhts/ecosystem-porter
+          elif [[ -f dhts/ecosystem-porter/package.json ]]; then
+            npm install --prefix dhts/ecosystem-porter
+          fi
+          if [[ -f dhts/ecosystem-internal-testsuit/package.json ]]; then
+            (cd dhts/ecosystem-internal-testsuit && bun install)
+          fi
+
+      - name: Run release quality gate
+        run: |
+          python3 dhts/ecosystem-autopilot/autopilot.py /gate release
+      - name: Execute release readiness pipeline
+        run: |
+          python3 dhts/ecosystem-autopilot/autopilot.py /pipeline release-readiness

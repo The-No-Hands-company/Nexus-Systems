@@ -1,0 +1,29 @@
+{
+  "name": "nexus-photos-frontend",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "lucide-react": "^0.460",
+    "react": "^19.0",
+    "react-dom": "^19.0",
+    "zustand": "^5.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.3.1",
+    "@types/react": "^19.0",
+    "@types/react-dom": "^19.0",
+    "@vitejs/plugin-react": "^4.3",
+    "autoprefixer": "^10.4",
+    "postcss": "^8.4",
+    "tailwindcss": "^4.0",
+    "typescript": "^5.8",
+    "vite": "^6.0"
+  }
+}

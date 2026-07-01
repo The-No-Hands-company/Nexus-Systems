@@ -7,6 +7,7 @@
 #include <nexus/cad/CadDocument.h>
 #include <nexus/cad/CadAssembly.h>
 #include <nexus/cad/CadDataTables.h>
+#include <nexus/cad/CadDesignRule.h>
 #include <nexus/parametric/ConstraintGraph.h>
 
 #include <cstdint>
@@ -16,44 +17,6 @@
 #include <vector>
 
 namespace nexus::cad {
-
-// ──────────── Design Rule Checker ───────────────────────────────────────────
-
-enum class DesignRuleSeverity : uint8_t { Info, Warning, Error, Critical };
-
-struct DesignRule {
-    std::string id;
-    std::string description;
-    DesignRuleSeverity severity = DesignRuleSeverity::Warning;
-    bool enabled = true;
-};
-
-struct DesignRuleViolation {
-    std::string ruleId;
-    std::string message;
-    DesignRuleSeverity severity;
-    std::vector<parametric::FeatureId> relatedFeatures;
-};
-
-class CadDesignChecker {
-public:
-    // Register a custom design rule.
-    void addRule(const DesignRule& rule);
-
-    // Run all enabled rules against a document.
-    [[nodiscard]] std::vector<DesignRuleViolation> check(
-        const CadDocument& doc) const noexcept;
-
-    // Built-in rules.
-    [[nodiscard]] static std::vector<DesignRule> builtinRules() noexcept;
-
-    [[nodiscard]] const std::vector<DesignRule>& rules() const noexcept;
-    [[nodiscard]] size_t errorCount(const std::vector<DesignRuleViolation>& violations) const noexcept;
-    [[nodiscard]] size_t warningCount(const std::vector<DesignRuleViolation>& violations) const noexcept;
-
-private:
-    std::vector<DesignRule> m_rules;
-};
 
 // ──────────── Feature Dependency Graph ──────────────────────────────────────
 

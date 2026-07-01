@@ -1,5 +1,5 @@
 #pragma once
-// Edge edit mode — bevel sharp edges on click
+// Edge edit mode — bevel, slide, and loop-cut on selected edges
 
 #include <nexus/app/AppMode.h>
 
@@ -11,6 +11,11 @@ public:
     [[nodiscard]] std::string displayName() const override;
     EventResult handleInput(AppContext& ctx, const InputEvent& event) override;
     [[nodiscard]] std::vector<ActionDescriptor> actions() const override;
+    [[nodiscard]] std::string statusText() const override;
+
+private:
+    bool m_slideMode = false;
+    float m_slideAmount = 0.5f;
 };
 
 } // namespace nexus::app

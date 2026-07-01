@@ -1,0 +1,80 @@
+name: Nexus Autopilot Heartbeat
+
+on:
+  schedule:
+    - cron: '0 */6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  SCORECARD_JSON: dhts/ecosystem-autopilot/reports/scorecards/latest.json
+  SCORECARD_MD: dhts/ecosystem-autopilot/reports/scorecards/latest.md
+
+jobs:
+  heartbeat:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: '1.1.18'
+
+      - name: Install workflow dependencies
+        run: |
+          set -euo pipefail
+          if [[ -f dhts/ecosystem-documenter/package-lock.json ]]; then
+            npm ci --prefix dhts/ecosystem-documenter
+          elif [[ -f dhts/ecosystem-documenter/package.json ]]; then
+            npm install --prefix dhts/ecosystem-documenter
+          fi
+          if [[ -f dhts/ecosystem-porter/package-lock.json ]]; then
+            npm ci --prefix dhts/ecosystem-porter
+          elif [[ -f dhts/ecosystem-porter/package.json ]]; then
+            npm install --prefix dhts/ecosystem-porter
+          fi
+          if [[ -f dhts/ecosystem-internal-testsuit/package.json ]]; then
+            (cd dhts/ecosystem-internal-testsuit && bun install)
+          fi
+
+      - name: Daily brief
+        run: |
+          python3 dhts/ecosystem-autopilot/autopilot.py /brief
+      - name: Planning map
+        run: |
+          python3 dhts/ecosystem-autopilot/autopilot.py /plan
+      - name: Daily backbone dry-run
+        run: |
+          python3 dhts/ecosystem-autopilot/autopilot.py /pipeline daily-backbone --dry-run
+      - name: Generate portfolio scorecard
+        run: |
+          python3 dhts/ecosystem-autopilot/autopilot.py /scorecard --json-out "$SCORECARD_JSON" --md-out "$SCORECARD_MD"
+
+      - name: Upload scorecard artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nexus-autopilot-scorecard-${{ github.run_id }}
+          path: dhts/ecosystem-autopilot/reports/scorecards/
+          retention-days: 90
+
+      - name: Publish scorecard summary
+        if: always()
+        run: |
+          if [[ -f "$SCORECARD_MD" ]]; then
+            echo "## Nexus Ecosystem Scorecard" >> "$GITHUB_STEP_SUMMARY"
+            cat "$SCORECARD_MD" >> "$GITHUB_STEP_SUMMARY"
+          fi

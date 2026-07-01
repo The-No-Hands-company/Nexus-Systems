@@ -27,17 +27,20 @@ public:
     // Apply translation to a feature mesh along an axis.
     void translate(const Vec3& center, Axis axis, float amount,
                    nexus::cad::CadDocument& doc,
-                   nexus::parametric::FeatureId featureId) const noexcept;
+                   nexus::parametric::FeatureId fid,
+                   bool pushUndo = true) const noexcept;
 
     // Apply uniform/non-uniform scale around the center.
     void scale(const Vec3& center, Axis axis, float factor,
                nexus::cad::CadDocument& doc,
-               nexus::parametric::FeatureId featureId) const noexcept;
+               nexus::parametric::FeatureId fid,
+               bool pushUndo = true) const noexcept;
 
     // Apply rotation around an axis through the center.
     void rotate(const Vec3& center, Axis axis, float angleRad,
                 nexus::cad::CadDocument& doc,
-                nexus::parametric::FeatureId featureId) const noexcept;
+                nexus::parametric::FeatureId fid,
+                bool pushUndo = true) const noexcept;
 
     void setMode(Mode m) { m_mode = m; }
     [[nodiscard]] Mode mode() const noexcept { return m_mode; }

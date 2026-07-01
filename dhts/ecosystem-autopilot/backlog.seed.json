@@ -1,0 +1,80 @@
+{
+  "tasks": [
+    {
+      "id": "NX-BB-001",
+      "title": "Stabilize internal-cloud ingress guardrails",
+      "lane": "backbone",
+      "priority": 1,
+      "status": "not-started",
+      "owner": "backend",
+      "dependsOn": [],
+      "what": "Implement and verify trusted ingress routing for internal cloud traffic.",
+      "why": "Ensures public/internal traffic cannot bypass trust state controls.",
+      "how": "Host-header route table, trust gate checks, and route enable/disable control.",
+      "acceptance": "Ingress allows trusted routes and blocks quarantined/revoked routes.",
+      "rollback": "Disable ingress endpoints and revert to previous routing behavior."
+    },
+    {
+      "id": "NX-BB-002",
+      "title": "Reconcile tunnel routes from cloud source",
+      "lane": "backbone",
+      "priority": 2,
+      "status": "not-started",
+      "owner": "backend",
+      "dependsOn": [
+        "NX-BB-001"
+      ],
+      "what": "Continuously sync tunnel routing from cloud source-of-truth.",
+      "why": "Prevents stale/unhealthy services from remaining exposed.",
+      "how": "Periodic reconcile loop over cloud registry + trust lookups.",
+      "acceptance": "Routes auto-disable on degraded/offline/trust-drop conditions.",
+      "rollback": "Disable reconcile loop via config and keep manual route control only."
+    },
+    {
+      "id": "NX-BB-003",
+      "title": "Persist guardian policy and decisions",
+      "lane": "backbone",
+      "priority": 3,
+      "status": "not-started",
+      "owner": "backend",
+      "dependsOn": [
+        "NX-BB-002"
+      ],
+      "what": "Persist Guardian state and enforce versioned public-exposure policy controls.",
+      "why": "Ensures deterministic trust policy behavior across restarts and phases.",
+      "how": "Atomic state persistence, policy version bumping, explicit deny-rule evaluation.",
+      "acceptance": "Policy and decisions survive restart and drive allow/deny behavior.",
+      "rollback": "Revert to in-memory state and remove policy rule endpoints."
+    },
+    {
+      "id": "NX-OPS-001",
+      "title": "Run ecosystem stack freshness audit",
+      "lane": "ops",
+      "priority": 1,
+      "status": "not-started",
+      "owner": "devops",
+      "dependsOn": [],
+      "what": "Generate and review ecosystem dependency/runtime freshness report.",
+      "why": "Reduces silent security and maintenance drift across 80+ apps.",
+      "how": "Execute stack-control workflow and convert findings into backlog tasks.",
+      "acceptance": "latest.json and latest.md reports are generated and reviewed.",
+      "rollback": "Skip enforcement gate but keep report generation active."
+    },
+    {
+      "id": "NX-QA-001",
+      "title": "Run nit cross-repo verification",
+      "lane": "qa",
+      "priority": 1,
+      "status": "not-started",
+      "owner": "qa",
+      "dependsOn": [
+        "NX-BB-003"
+      ],
+      "what": "Execute ecosystem-wide test verification and publish consolidated status.",
+      "why": "Maintains one confidence signal before integrations/releases.",
+      "how": "Run NIT workflow and capture machine-readable test report.",
+      "acceptance": "NIT output generated with explicit pass/fail signals per repo.",
+      "rollback": "Use per-repo testing only until NIT issues are resolved."
+    }
+  ]
+}

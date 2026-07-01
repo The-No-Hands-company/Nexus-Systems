@@ -30,7 +30,7 @@ EventResult FaceEditMode::handleInput(AppContext& ctx, const InputEvent& event) 
     if(result) {
         node->mesh.emplace(std::move(*result));
         auto cmd = std::make_unique<nexus::cad::TransformCommand>(target, std::move(saved));
-        (void)ctx.document->executeCommand(std::move(cmd));
+        ctx.document->executeCommand(std::move(cmd));
         printf("Extruded face %u\n",ctx.selectedFace);
     } else printf("Face extrude failed\n");
     return EventResult::Consumed;

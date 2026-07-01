@@ -1,0 +1,232 @@
+#!/usr/bin/env python3
+"""
+NLPL Compiler - Full compilation pipeline
+Compiles .nlpl source to executable binaries via LLVM IR
+"""
+
+import sys
+import os
+import subprocess
+import argparse
+from pathlib import Path
+
+sys.path.insert(0, 'src')
+
+from nexuslang.parser.lexer import Lexer
+from nexuslang.parser.parser import Parser
+from nexuslang.compiler.backends.llvm_ir_generator import LLVMIRGenerator
+
+def compile_to_ir(source_file: str, output_file: str, verbose: bool = False) -> tuple:
+    """Compile NexusLang source to LLVM IR. Returns (success, imported_modules)."""
+    try:
+        # Read source
+        with open(source_file, 'r') as f:
+            source = f.read()
+        
+        if verbose:
+            print(f"Parsing {source_file}...")
+        
+        # Compile
+        lexer = Lexer(source)
+        tokens = lexer.tokenize()
+        parser = Parser(tokens)
+        ast = parser.parse()
+        
+        if verbose:
+            print(f"Generating LLVM IR...")
+        
+        generator = LLVMIRGenerator()
+        llvm_ir = generator.generate(ast, source_file=source_file)
+        
+        # Write output
+        os.makedirs(os.path.dirname(output_file) or '.', exist_ok=True)
+        with open(output_file, 'w') as f:
+            f.write(llvm_ir)
+        
+        if verbose:
+            print(f"✓ Generated LLVM IR: {output_file}")
+        
+        # Return list of imported module .ll files
+        imported_ll_files = list(generator.imported_modules.values())
+        return (True, imported_ll_files)
+    except Exception as e:
+        print(f"ERROR during compilation: {e}", file=sys.stderr)
+        if verbose:
+            import traceback
+            traceback.print_exc()
+        return (False, [])
+
+def optimize_ir(ir_file: str, opt_level: str, verbose: bool = False) -> bool:
+    """Run LLVM optimization passes on IR file."""
+    if opt_level == '0':
+        return True  # No optimization
+    
+    try:
+        optimized_file = ir_file.replace('.ll', '.opt.ll')
+        
+        if verbose:
+            print(f"Running LLVM optimization passes (O{opt_level})...")
+        
+        # Map optimization levels to LLVM opt passes
+        opt_passes = {
+            '1': ['-mem2reg', '-simplifycfg', '-instcombine'],
+            '2': ['-mem2reg', '-simplifycfg', '-instcombine', '-reassociate', 
+                  '-gvn', '-sccp', '-deadargelim', '-inline'],
+            '3': ['-mem2reg', '-simplifycfg', '-instcombine', '-reassociate',
+                  '-gvn', '-sccp', '-deadargelim', '-inline', '-loop-unroll',
+                  '-loop-vectorize', '-slp-vectorizer', '-aggressive-instcombine'],
+            's': ['-mem2reg', '-simplifycfg', '-instcombine', '-dce', '-dse']  # Size optimization
+        }
+        
+        passes = opt_passes.get(opt_level, [])
+        
+        # Use opt command if available, otherwise rely on clang optimization
+        cmd = ['opt'] + passes + ['-S', ir_file, '-o', optimized_file]
+        
+        if verbose:
+            print(f"  Optimization passes: {', '.join(passes)}")
+        
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        
+        if result.returncode == 0:
+            # Replace original IR with optimized version
+            os.replace(optimized_file, ir_file)
+            if verbose:
+                print(f"✓ Optimized IR: {ir_file}")
+            return True
+        else:
+            if verbose:
+                print(f"Warning: LLVM opt not available, will use compiler optimization only")
+            # Clean up if opt failed
+            if os.path.exists(optimized_file):
+                os.remove(optimized_file)
+            return True  # Continue anyway - clang will optimize
+            
+    except FileNotFoundError:
+        if verbose:
+            print(f"Warning: LLVM opt not found, using compiler optimization only")
+        return True  # Continue - clang will still optimize
+    except Exception as e:
+        print(f"Warning during optimization: {e}", file=sys.stderr)
+        return True  # Non-fatal, continue
+
+def link_executable(ir_file: str, output_file: str, imported_modules: list = None, 
+                    compiler: str = 'clang', opt_level: str = '0', verbose: bool = False) -> bool:
+    """Link LLVM IR to executable binary."""
+    try:
+        if verbose:
+            print(f"Linking with {compiler} -O{opt_level}...")
+        
+        # Build list of IR files to link
+        ir_files = [ir_file]
+        if imported_modules:
+            ir_files.extend(imported_modules)
+        
+        # Link against math library (-lm) and C++ standard library (-lstdc++) for exception handling
+        cmd = [compiler, f'-O{opt_level}', '-o', output_file] + ir_files + ['-lm', '-lstdc++']
+        
+        if verbose:
+            print(f"  Linking files: {ir_files}")
+        
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        
+        if result.returncode != 0:
+            print(f"ERROR during linking:", file=sys.stderr)
+            print(result.stderr, file=sys.stderr)
+            return False
+        
+        if verbose and result.stderr:
+            print("Warnings:", result.stderr)
+        
+        if verbose:
+            print(f"✓ Linked executable: {output_file}")
+        
+        return True
+    except FileNotFoundError:
+        print(f"ERROR: Compiler '{compiler}' not found in PATH", file=sys.stderr)
+        print("Install LLVM/Clang or use --compiler=gcc", file=sys.stderr)
+        return False
+    except Exception as e:
+        print(f"ERROR during linking: {e}", file=sys.stderr)
+        return False
+
+def main():
+    parser = argparse.ArgumentParser(
+        description='NLPL Compiler - Compile .nlpl to executable',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  ./nlplc program.nlpl                    # Compile to build/program
+  ./nlplc program.nlpl -o myapp           # Custom output name
+  ./nlplc program.nlpl --ir-only          # Generate IR only
+  ./nlplc program.nlpl -O2                # Optimize level 2
+  ./nlplc program.nlpl --compiler=gcc     # Use GCC instead of Clang
+        """
+    )
+    
+    parser.add_argument('source', help='Input .nlpl source file')
+    parser.add_argument('-o', '--output', help='Output executable name (default: build/<source_name>)')
+    parser.add_argument('--ir-only', action='store_true', help='Generate LLVM IR only, skip linking')
+    parser.add_argument('--ir-output', help='LLVM IR output file (default: build/output.ll)')
+    parser.add_argument('-O', '--optimize', choices=['0', '1', '2', '3', 's'], default='0',
+                        help='Optimization level (default: 0)')
+    parser.add_argument('--compiler', choices=['clang', 'gcc'], default='clang',
+                        help='C compiler to use for linking (default: clang)')
+    parser.add_argument('-v', '--verbose', action='store_true', help='Verbose output')
+    parser.add_argument('--run', action='store_true', help='Run executable after compilation')
+    
+    args = parser.parse_args()
+    
+    # Determine output files
+    source_path = Path(args.source)
+    if not source_path.exists():
+        print(f"ERROR: Source file not found: {args.source}", file=sys.stderr)
+        sys.exit(1)
+    
+    ir_file = args.ir_output or 'build/output.ll'
+    
+    if args.output:
+        exe_file = args.output
+    else:
+        exe_file = f'build/{source_path.stem}'
+    
+    # Step 1: Compile to IR
+    success, imported_modules = compile_to_ir(args.source, ir_file, args.verbose)
+    if not success:
+        sys.exit(1)
+    
+    # Step 2: Optimize IR (if requested)
+    if args.optimize != '0':
+        if not optimize_ir(ir_file, args.optimize, args.verbose):
+            print("Warning: Optimization failed, continuing with unoptimized IR", file=sys.stderr)
+        # Also optimize imported modules
+        if imported_modules:
+            for mod_ir in imported_modules:
+                optimize_ir(mod_ir, args.optimize, args.verbose)
+    
+    if args.ir_only:
+        opt_suffix = f" (O{args.optimize})" if args.optimize != '0' else ""
+        print(f"✓ Compiled {args.source} → {ir_file}{opt_suffix}")
+        sys.exit(0)
+    
+    # Step 3: Link to executable
+    if not link_executable(ir_file, exe_file, imported_modules, args.compiler, args.optimize, args.verbose):
+        sys.exit(1)
+    
+    opt_suffix = f" (O{args.optimize})" if args.optimize != '0' else ""
+    print(f"✓ Built {args.source} → {exe_file}{opt_suffix}")
+    
+    if args.verbose:
+        file_size = os.path.getsize(exe_file)
+        print(f"  Binary size: {file_size:,} bytes")
+    
+    # Step 4: Run if requested
+    if args.run:
+        print(f"\n{'='*60}")
+        print(f"Running {exe_file}:")
+        print('='*60)
+        result = subprocess.run([f'./{exe_file}'])
+        sys.exit(result.returncode)
+
+if __name__ == '__main__':
+    main()

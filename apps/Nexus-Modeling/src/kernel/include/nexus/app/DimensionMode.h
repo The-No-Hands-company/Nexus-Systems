@@ -1,5 +1,5 @@
 #pragma once
-// Dimension mode — two clicks to create linear dimension line in 3D
+// Dimension mode — measure and annotate distances, angles, and radii
 
 #include <nexus/app/AppMode.h>
 
@@ -12,9 +12,12 @@ public:
     EventResult handleInput(AppContext& ctx, const InputEvent& event) override;
     void renderOverlay(AppContext& ctx) override;
     [[nodiscard]] std::vector<ActionDescriptor> actions() const override;
+    [[nodiscard]] std::string statusText() const override;
+
 private:
-    bool m_firstSet = false;
     Vec3 m_p1{}, m_p2{};
+    bool m_firstSet = false;
+    float m_distance = 0;
 };
 
 } // namespace nexus::app

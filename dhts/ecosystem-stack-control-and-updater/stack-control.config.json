@@ -1,0 +1,145 @@
+{
+  "workspaceName": "Nexus-Systems",
+  "standards": {
+    "ecmascript": "auto",
+    "node": {
+      "channel": "current",
+      "minimumLtsMajor": "auto"
+    },
+    "typescript": {
+      "policy": "latest-stable"
+    },
+    "python": {
+      "policy": "latest-stable"
+    },
+    "rust": {
+      "policy": "latest-stable"
+    }
+  },
+  "scan": {
+    "includeRoots": [
+      "apps",
+      "dhts"
+    ],
+    "excludeDirectories": [
+      ".git",
+      "node_modules",
+      "dist",
+      "build",
+      "target",
+      "coverage",
+      "__pycache__",
+      ".venv",
+      "venv",
+      "Backups"
+    ],
+    "includeGlobs": [
+      "**/package.json",
+      "**/requirements*.txt",
+      "**/Cargo.toml",
+      "**/Dockerfile*"
+    ]
+  },
+  "report": {
+    "policyMode": "balanced",
+    "maxOutdatedPerEcosystem": 200,
+    "maxVulnerabilities": 200,
+    "failOnCritical": true,
+    "failOnOutdated": false,
+    "failOnMajorLag": true,
+    "majorLagThreshold": 1,
+    "maxTotalOutdated": 60,
+    "failOnDeprecatedUsage": false,
+    "failOnSemanticUnsupported": true
+  },
+  "codeAudit": {
+    "enabled": true,
+    "extensions": [
+      ".js",
+      ".jsx",
+      ".ts",
+      ".tsx",
+      ".py",
+      ".rs"
+    ],
+    "maxFindings": 300,
+    "patterns": [
+      {
+        "id": "node-buffer-constructor",
+        "severity": "high",
+        "description": "Deprecated Buffer constructor usage; use Buffer.from/alloc",
+        "regex": "\\bnew\\s+Buffer\\s*\\("
+      },
+      {
+        "id": "node-fs-rmdir",
+        "severity": "medium",
+        "description": "Deprecated fs.rmdir API usage",
+        "regex": "\\bfs\\.rmdir\\s*\\("
+      },
+      {
+        "id": "python-asyncio-get-event-loop",
+        "severity": "medium",
+        "description": "Legacy asyncio.get_event_loop usage in modern async code",
+        "regex": "\\basyncio\\.get_event_loop\\s*\\("
+      },
+      {
+        "id": "python-imp-module",
+        "severity": "high",
+        "description": "Deprecated imp module usage; use importlib",
+        "regex": "\\bimport\\s+imp\\b|\\bfrom\\s+imp\\s+import\\b"
+      }
+    ]
+  },
+  "semanticPhase": {
+    "enabled": true,
+    "maxFindings": 300,
+    "languageExtensions": {
+      "typescript": [
+        ".ts",
+        ".tsx",
+        ".js",
+        ".jsx",
+        ".mjs",
+        ".cjs"
+      ],
+      "python": [
+        ".py"
+      ],
+      "rust": [
+        ".rs"
+      ]
+    },
+    "rules": [
+      {
+        "id": "ts-satisfies-requires-typescript-4_9",
+        "ecosystem": "npm",
+        "dependency": "typescript",
+        "sourceEcosystem": "typescript",
+        "requiresAtLeast": "4.9.0",
+        "usageRegex": "\\bsatisfies\\b",
+        "severity": "high",
+        "description": "'satisfies' operator requires TypeScript >= 4.9"
+      },
+      {
+        "id": "py-pydantic-model-validate-requires-v2",
+        "ecosystem": "pypi",
+        "dependency": "pydantic",
+        "sourceEcosystem": "python",
+        "requiresAtLeast": "2.0.0",
+        "usageRegex": "\\bmodel_validate\\s*\\(",
+        "severity": "high",
+        "description": "pydantic.model_validate is supported in pydantic >= 2.0"
+      },
+      {
+        "id": "rs-clap-command-new-requires-v3",
+        "ecosystem": "cargo",
+        "dependency": "clap",
+        "sourceEcosystem": "rust",
+        "requiresAtLeast": "3.0.0",
+        "usageRegex": "\\bCommand::new\\s*\\(",
+        "severity": "high",
+        "description": "clap::Command::new requires clap >= 3"
+      }
+    ]
+  }
+}
