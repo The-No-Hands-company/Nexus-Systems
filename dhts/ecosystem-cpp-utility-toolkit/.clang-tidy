@@ -1,0 +1,70 @@
+---
+# Nexus Systems C++ Utility Toolkit - Clang Tidy Configuration
+Checks: >
+  -*,
+  bugprone-*,
+  -bugprone-easily-swappable-parameters,
+  -bugprone-implicit-widening-of-multiplication-result,
+  cert-*,
+  -cert-err58-cpp,
+  clang-analyzer-*,
+  concurrency-*,
+  cppcoreguidelines-*,
+  -cppcoreguidelines-avoid-magic-numbers,
+  -cppcoreguidelines-pro-type-reinterpret-cast,
+  -cppcoreguidelines-pro-type-vararg,
+  -cppcoreguidelines-avoid-do-while,
+  -cppcoreguidelines-owning-memory,
+  -cppcoreguidelines-pro-bounds-array-to-pointer-decay,
+  google-*,
+  -google-readability-todo,
+  -google-build-using-namespace,
+  hicpp-*,
+  -hicpp-avoid-c-arrays,
+  misc-*,
+  -misc-include-cleaner,
+  -misc-non-private-member-variables-in-classes,
+  -misc-no-recursion,
+  modernize-*,
+  -modernize-use-trailing-return-type,
+  -modernize-avoid-c-arrays,
+  performance-*,
+  -performance-avoid-endl,
+  portability-*,
+  readability-*,
+  -readability-identifier-length,
+  -readability-function-cognitive-complexity,
+  -readability-magic-numbers,
+  -readability-identifier-naming
+
+CheckOptions:
+  - key: readability-identifier-naming.ClassCase
+    value: CamelCase
+  - key: readability-identifier-naming.StructCase
+    value: CamelCase
+  - key: readability-identifier-naming.EnumCase
+    value: CamelCase
+  - key: readability-identifier-naming.FunctionCase
+    value: camelBack
+  - key: readability-identifier-naming.MethodCase
+    value: camelBack
+  - key: readability-identifier-naming.VariableCase
+    value: camelBack
+  - key: readability-identifier-naming.MemberCase
+    value: camelBack
+  - key: readability-identifier-naming.PrivateMemberSuffix
+    value: '_'
+  - key: readability-identifier-naming.ConstantCase
+    value: UPPER_CASE
+  - key: readability-identifier-naming.EnumConstantCase
+    value: CamelCase
+  - key: readability-identifier-naming.NamespaceCase
+    value: lower_case
+  - key: misc-non-private-member-variables-in-classes.IgnoreClassesWithAllMemberVariablesBeingPublic
+    value: true
+  - key: modernize-use-nodiscard.ReplacementString
+    value: '[[nodiscard]]'
+
+WarningsAsErrors: ''
+HeaderFilterRegex: '.*\/include\/nexus\/utility\/.*\.h'
+FormatStyle: file

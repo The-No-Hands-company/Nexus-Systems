@@ -1,0 +1,126 @@
+#include <nexus/utility/containers/thread_safe_queue.h>
+#include <nexus/utility/containers/ring_buffer.h>
+#include <nexus/utility/containers/lru_cache.h>
+#include <nexus/utility/containers/bloom_filter.h>
+#include <nexus/utility/containers/sparse_set.h>
+#include <iostream>
+#include <cassert>
+#include <thread>
+#include <vector>
+
+using namespace nexus::utility::containers;
+
+void test_thread_safe_queue() {
+    std::cout << "Testing ThreadSafeQueue...\n";
+    ThreadSafeQueue<int> queue;
+    
+    queue.push(1);
+    queue.push(2);
+    queue.push(3);
+    
+    assert(queue.size() == 3);
+    
+    auto val = queue.tryPop();
+    assert(val.has_value() && val.value() == 1);
+    
+    // Multi-threaded test
+    std::vector<std::thread> threads;
+    for (int i = 0; i < 10; ++i) {
+        threads.emplace_back([&queue, i]() {
+            queue.push(i);
+        });
+    }
+    
+    for (auto& t : threads) {
+        t.join();
+    }
+    
+    assert(queue.size() >= 10);
+    
+    std::cout << "ThreadSafeQueue passed.\n";
+}
+
+void test_ring_buffer() {
+    std::cout << "Testing RingBuffer...\n";
+    RingBuffer<int> rb(3);
+    
+    rb.push(1);
+    rb.push(2);
+    rb.push(3);
+    assert(rb.isFull());
+    
+    rb.push(4); // Overwrites 1
+    assert(rb[0] == 2);
+    assert(rb[2] == 4);
+    
+    auto val = rb.pop();
+    assert(val.has_value() && val.value() == 2);
+    assert(rb.size() == 2);
+    
+    std::cout << "RingBuffer passed.\n";
+}
+
+void test_lru_cache() {
+    std::cout << "Testing LRUCache...\n";
+    LRUCache<int, std::string> cache(2);
+    
+    cache.put(1, "one");
+    cache.put(2, "two");
+    
+    auto val = cache.get(1);
+    assert(val.has_value() && val.value() == "one");
+    
+    cache.put(3, "three"); // Evicts 2 (least recently used)
+    
+    assert(!cache.get(2).has_value());
+    assert(cache.get(1).has_value());
+    assert(cache.get(3).has_value());
+    
+    std::cout << "LRUCache passed.\n";
+}
+
+void test_bloom_filter() {
+    std::cout << "Testing BloomFilter...\n";
+    BloomFilter<int> bf(100, 0.01);
+    
+    bf.insert(42);
+    bf.insert(123);
+    
+    assert(bf.contains(42));
+    assert(bf.contains(123));
+    assert(!bf.contains(999)); // Should be false (no false negatives)
+    
+    // Note: false positives are possible but unlikely with good parameters
+    
+    std::cout << "BloomFilter passed.\n";
+}
+
+void test_sparse_set() {
+    std::cout << "Testing SparseSet...\n";
+    SparseSet ss(100);
+    
+    ss.insert(5);
+    ss.insert(42);
+    ss.insert(99);
+    
+    assert(ss.contains(5));
+    assert(ss.contains(42));
+    assert(!ss.contains(10));
+    
+    ss.remove(42);
+    assert(!ss.contains(42));
+    assert(ss.size() == 2);
+    
+    std::cout << "SparseSet passed.\n";
+}
+
+int main() {
+    test_thread_safe_queue();
+    test_ring_buffer();
+    test_lru_cache();
+    test_bloom_filter();
+    test_sparse_set();
+    
+    std::cout << "All Phase 15 tests passed!\n";
+    return 0;
+}

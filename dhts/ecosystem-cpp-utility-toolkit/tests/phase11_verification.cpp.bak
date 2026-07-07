@@ -1,0 +1,90 @@
+#include <nexus/utility/string/string_utils.h>
+#include <nexus/utility/string/string_builder.h>
+#include <nexus/utility/string/unicode_helper.h>
+#include <iostream>
+#include <cassert>
+#include <vector>
+
+using namespace nexus::utility::string;
+
+void test_string_utils() {
+    std::cout << "Testing StringUtils...\n";
+    
+    // Trim
+    assert(StringUtils::trim("  hello  ") == "hello");
+    assert(StringUtils::trimLeft("  hello") == "hello");
+    assert(StringUtils::trimRight("hello  ") == "hello");
+    assert(StringUtils::trim("   ") == "");
+    
+    // Split
+    auto tokens = StringUtils::split("a,b,c", ",");
+    assert(tokens.size() == 3);
+    assert(tokens[0] == "a" && tokens[2] == "c");
+    
+    auto tokens2 = StringUtils::split("hello", ",");
+    assert(tokens2.size() == 1);
+    
+    // Join
+    std::vector<std::string> parts = {"x", "y", "z"};
+    assert(StringUtils::join(parts, "-") == "x-y-z");
+    
+    // Case
+    assert(StringUtils::toUpper("abc") == "ABC");
+    assert(StringUtils::toLower("XYZ") == "xyz");
+    
+    std::cout << "StringUtils passed.\n";
+}
+
+void test_string_builder() {
+    std::cout << "Testing StringBuilder...\n";
+    
+    StringBuilder sb;
+    sb.append("Hello").append(", ").append("World");
+    sb << "!";
+    sb.append(123);
+    
+    std::string res = sb.toString();
+    // Hello, World!123
+    assert(res == "Hello, World!123");
+    
+    // Formatted
+    StringBuilder sb2;
+    sb2.appendFormat("Value: {}", 42);
+    assert(sb2.toString() == "Value: 42");
+    
+    std::cout << "StringBuilder passed.\n";
+}
+
+void test_unicode_helper() {
+    std::cout << "Testing UnicodeHelper...\n";
+    
+    // "€" is usually E2 82 AC in UTF-8
+    std::string euro = "\xE2\x82\xAC"; 
+    assert(UnicodeHelper::isValidUtf8(euro));
+    assert(UnicodeHelper::codePointCount(euro) == 1);
+    assert(euro.length() == 3);
+    
+    // Convert to UTF-32 (U+20AC = 8364 decimal)
+    auto u32 = UnicodeHelper::utf8ToUtf32(euro);
+    assert(u32.size() == 1);
+    assert(u32[0] == 0x20AC);
+    
+    // Round trip
+    std::string back = UnicodeHelper::utf32ToUtf8(u32);
+    assert(back == euro);
+    
+    // Invalid sequence (truncated)
+    std::string invalid = "\xE2\x82"; 
+    assert(!UnicodeHelper::isValidUtf8(invalid));
+    
+    std::cout << "UnicodeHelper passed.\n";
+}
+
+int main() {
+    test_string_utils();
+    test_string_builder();
+    test_unicode_helper();
+    
+    std::cout << "All Phase 11 tests passed!\n";
+    return 0;
+}

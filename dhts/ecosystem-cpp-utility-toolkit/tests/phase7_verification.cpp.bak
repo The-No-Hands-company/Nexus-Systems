@@ -1,0 +1,95 @@
+#include <nexus/utility/error/expected_debug.h>
+#include <nexus/utility/error/exception_context.h>
+#include <nexus/utility/error/error_reporter.h>
+#include <iostream>
+#include <cassert>
+#include <string>
+
+using namespace nexus::utility::error;
+
+// Test Custom Exception with Context
+class MyContextException : public ContextException {
+public:
+    using ContextException::ContextException;
+};
+
+void test_expected_debug() {
+    std::cout << "Testing ExpectedDebug...\n";
+    
+    auto result = []() -> ExpectedDebug<int, std::string> {
+        return nexus::utility::error::make_unexpected<std::string>("Something went wrong");
+    }();
+    
+    if (!result) {
+        std::cout << "Got expected error: " << result.error().value() << "\n";
+        // Check trace presence
+        const auto& trace = result.error().trace;
+        if (!trace.empty()) {
+            std::cout << "Stack trace captured successfully.\n"; //<< trace << "\n";
+        } else {
+            std::cerr << "FAILED: No stack trace captured!\n";
+            std::abort();
+        }
+    } else {
+        std::cerr << "FAILED: Expected error but got value!\n";
+        std::abort();
+    }
+    
+    std::cout << "ExpectedDebug passed.\n";
+}
+
+void test_exception_context() {
+    std::cout << "Testing ExceptionContext...\n";
+    
+    try {
+        try {
+            throw MyContextException("Base Error");
+        } catch (MyContextException& e) {
+            e.addContext("RequestID", 12345);
+            e.addContext("User", "admin");
+            throw; // Re-throw with context
+        }
+    } catch (const MyContextException& e) {
+        std::string fullMsg = e.getFullMessage();
+        std::cout << "Caught exception with context:\n" << fullMsg << "\n";
+        
+        assert(fullMsg.find("RequestID: 12345") != std::string::npos);
+        assert(fullMsg.find("User: admin") != std::string::npos);
+    }
+    
+    std::cout << "ExceptionContext passed.\n";
+}
+
+void test_error_reporter() {
+    std::cout << "Testing ErrorReporter...\n";
+    
+    bool errorCalled = false;
+    bool warningCalled = false;
+    
+    ErrorReporter::instance().setErrorCallback([&](const std::string& msg, auto&) {
+        errorCalled = true;
+        std::cout << "Error Callback: " << msg << "\n";
+    });
+    
+    ErrorReporter::instance().setWarningCallback([&](const std::string& msg, auto&) {
+        warningCalled = true;
+        std::cout << "Warning Callback: " << msg << "\n";
+    });
+    
+    ErrorReporter::instance().reportError("Test Error");
+    ErrorReporter::instance().reportWarning("Test Warning");
+    
+    assert(errorCalled);
+    assert(warningCalled);
+    
+    std::cout << "ErrorReporter passed.\n";
+}
+
+int main() {
+    test_expected_debug();
+    test_exception_context();
+    test_error_reporter();
+    
+    std::cout << "All Phase 7 tests passed!\n";
+    return 0;
+}

@@ -1,0 +1,147 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master, develop]
+  pull_request:
+    branches: [main, master]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CMAKE_BUILD_PARALLEL_LEVEL: 4
+  CTEST_OUTPUT_ON_FAILURE: 1
+
+jobs:
+  # ── Format Check ─────────────────────────────────────────────────────────
+  clang-format:
+    name: "Format (${{ matrix.os }})"
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install clang-format
+        run: sudo apt-get update && sudo apt-get install -y clang-format
+      - name: Check formatting
+        run: |
+          find include/ src/ tests/ -name '*.h' -o -name '*.cpp' | \
+            xargs clang-format --dry-run --Werror --style=file
+
+  # ── Build & Test Matrix ──────────────────────────────────────────────────
+  build-and-test:
+    name: "${{ matrix.name }}"
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: "GCC Debug (Ubuntu)"
+            os: ubuntu-24.04
+            cc: gcc-14
+            cxx: g++-14
+            preset: debug
+          - name: "Clang Debug (Ubuntu)"
+            os: ubuntu-24.04
+            cc: clang-19
+            cxx: clang++-19
+            preset: debug
+          - name: "GCC Release (Ubuntu)"
+            os: ubuntu-24.04
+            cc: gcc-14
+            cxx: g++-14
+            preset: release
+          - name: "Clang Release (Ubuntu)"
+            os: ubuntu-24.04
+            cc: clang-19
+            cxx: clang++-19
+            preset: release
+          - name: "GCC Sanitizers (Ubuntu)"
+            os: ubuntu-24.04
+            cc: gcc-14
+            cxx: g++-14
+            preset: sanitize
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install GCC 14
+        if: contains(matrix.cc, 'gcc')
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y g++-14
+          sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-14 100
+          sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-14 100
+
+      - name: Install Clang 19
+        if: contains(matrix.cc, 'clang')
+        run: |
+          wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | sudo tee /etc/apt/trusted.gpg.d/apt.llvm.org.asc
+          sudo add-apt-repository -y "deb http://apt.llvm.org/noble/ llvm-toolchain-noble-19 main"
+          sudo apt-get update
+          sudo apt-get install -y clang-19 libc++-19-dev libc++abi-19-dev
+          sudo update-alternatives --install /usr/bin/clang clang /usr/bin/clang-19 100
+          sudo update-alternatives --install /usr/bin/clang++ clang++ /usr/bin/clang++-19 100
+
+      - name: Install Ninja
+        run: sudo apt-get install -y ninja-build
+
+      - name: Configure
+        run: >
+          cmake --preset ${{ matrix.preset }}
+          -DCMAKE_C_COMPILER=${{ matrix.cc }}
+          -DCMAKE_CXX_COMPILER=${{ matrix.cxx }}
+          -DNEXUS_BUILD_TESTS=ON
+          -DNEXUS_WARNINGS_AS_ERRORS=ON
+
+      - name: Build
+        run: cmake --build --preset ${{ matrix.preset }}
+
+      - name: Test
+        run: ctest --preset ${{ matrix.preset }}
+
+  # ── Static Analysis ──────────────────────────────────────────────────────
+  static-analysis:
+    name: "Static Analysis"
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang-tidy clang-tools-19 g++-14 ninja-build
+          sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-14 100
+          sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-14 100
+
+      - name: Configure with clang-tidy
+        run: >
+          cmake -B build/analysis -S .
+          -G Ninja
+          -DCMAKE_BUILD_TYPE=Debug
+          -DCMAKE_C_COMPILER=gcc-14
+          -DCMAKE_CXX_COMPILER=g++-14
+          -DNEXUS_BUILD_TESTS=ON
+          -DNEXUS_ENABLE_CLANG_TIDY=ON
+
+      - name: Build (runs clang-tidy)
+        run: cmake --build build/analysis 2>&1 | tee build/analysis/clang-tidy.log
+
+  # ── CodeRabbit AI Review ─────────────────────────────────────────────────
+  code-review:
+    name: "AI Code Review"
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: coderabbitai/ai-pr-reviewer@latest
+        with:
+          openai_api_key: ${{ secrets.OPENAI_API_KEY }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          review_language: en
+          summarize: true

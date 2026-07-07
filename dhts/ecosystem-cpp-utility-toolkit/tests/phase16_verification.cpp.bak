@@ -1,0 +1,92 @@
+#include <nexus/utility/encoding/base64_encoder.h>
+#include <nexus/utility/encoding/binary_serializer.h>
+#include <nexus/utility/encoding/uuid_generator.h>
+#include <iostream>
+#include <cassert>
+#include <regex>
+
+using namespace nexus::utility::encoding;
+
+void test_base64() {
+    std::cout << "Testing Base64Encoder...\n";
+    
+    // Basic encoding
+    std::string input = "Hello, World!";
+    std::string encoded = Base64Encoder::encode(input);
+    std::cout << "Encoded: " << encoded << "\n";
+    
+    // Decode
+    auto decoded = Base64Encoder::decode(encoded);
+    std::string decoded_str(decoded.begin(), decoded.end());
+    assert(decoded_str == input);
+    
+    // Empty string
+    assert(Base64Encoder::encode("") == "");
+    
+    // Binary data
+    std::vector<uint8_t> binary = {0x00, 0xFF, 0x42, 0xAB};
+    std::string b64 = Base64Encoder::encode(binary);
+    auto decoded_binary = Base64Encoder::decode(b64);
+    assert(decoded_binary == binary);
+    
+    std::cout << "Base64Encoder passed.\n";
+}
+
+void test_binary_serializer() {
+    std::cout << "Testing BinarySerializer...\n";
+    
+    // POD struct
+    struct TestData {
+        int x;
+        double y;
+        char c;
+    };
+    
+    TestData original{42, 3.14, 'A'};
+    auto bytes = BinarySerializer::serialize(original);
+    auto restored = BinarySerializer::deserialize<TestData>(bytes);
+    
+    assert(restored.x == original.x);
+    assert(restored.y == original.y);
+    assert(restored.c == original.c);
+    
+    // Primitive types
+    int value = 12345;
+    auto int_bytes = BinarySerializer::serialize(value);
+    assert(BinarySerializer::deserialize<int>(int_bytes) == value);
+    
+    std::cout << "BinarySerializer passed.\n";
+}
+
+void test_uuid() {
+    std::cout << "Testing UUIDGenerator...\n";
+    
+    // Generate UUIDs
+    std::string uuid1 = UUIDGenerator::generate();
+    std::string uuid2 = UUIDGenerator::generate();
+    
+    std::cout << "UUID 1: " << uuid1 << "\n";
+    std::cout << "UUID 2: " << uuid2 << "\n";
+    
+    // Check format (xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx)
+    std::regex uuid_pattern(
+        "[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}"
+    );
+    
+    assert(std::regex_match(uuid1, uuid_pattern));
+    assert(std::regex_match(uuid2, uuid_pattern));
+    
+    // UUIDs should be different
+    assert(uuid1 != uuid2);
+    
+    std::cout << "UUIDGenerator passed.\n";
+}
+
+int main() {
+    test_base64();
+    test_binary_serializer();
+    test_uuid();
+    
+    std::cout << "All Phase 16 tests passed!\n";
+    return 0;
+}

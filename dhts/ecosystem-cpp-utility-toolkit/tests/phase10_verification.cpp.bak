@@ -1,0 +1,61 @@
+#include <nexus/utility/build/build_info.h>
+#include <nexus/utility/build/feature_detector.h>
+#include <nexus/utility/build/compiler_diagnostics.h>
+#include <iostream>
+#include <cassert>
+
+using namespace nexus::utility::build;
+
+// Test suppressing a warning if possible
+VOLTRON_DISABLE_WARNING_PUSH
+// GCC/Clang warning for unused var
+VOLTRON_DISABLE_WARNING("-Wunused-variable")
+void test_diagnostics() {
+    int unused = 42; // Should not trigger warning if suppression works
+    
+    // VOLTRON_HINT_FORCE_INLINE is a declaration specifier, cannot be used here.
+    // VOLTRON_HINT_NO_INLINE is also a specificier.
+    // We just test macros that can be used in statements:
+    
+    if (VOLTRON_HINT_UNLIKELY(unused == 0)) {
+         VOLTRON_HINT_UNREACHABLE();
+    }
+}
+VOLTRON_DISABLE_WARNING_POP
+
+void test_build_info() {
+    std::cout << "Testing BuildInfo...\n";
+    std::cout << "Compiler: " << BuildInfo::getCompilerName() << "\n";
+    std::cout << "Version:  " << BuildInfo::getCompilerVersion() << "\n";
+    std::cout << "Date:     " << BuildInfo::getBuildDate() << "\n";
+    std::cout << "Time:     " << BuildInfo::getBuildTime() << "\n";
+    std::cout << "Debug:    " << (BuildInfo::isDebugBuild() ? "Yes" : "No") << "\n";
+    std::cout << "Standard: " << BuildInfo::getStandardVersion() << "\n";
+    
+    // Basic sanity checks
+    assert(BuildInfo::getCompilerName() != "Unknown"); // Should be GCC
+    assert(BuildInfo::getStandardVersion() >= 202002L); // >= C++20
+}
+
+void test_features() {
+    std::cout << "Testing FeatureDetector...\n";
+    std::cout << "Has RTTI:       " << FeatureDetector::hasRTTI() << "\n";
+    std::cout << "Has Exceptions: " << FeatureDetector::hasExceptions() << "\n";
+    std::cout << "Has Threads:    " << FeatureDetector::hasThreads() << "\n";
+    std::cout << "Is C++20:       " << FeatureDetector::isCpp20() << "\n";
+    std::cout << "Is C++23:       " << FeatureDetector::isCpp23() << "\n";
+    
+    // We expect these to be true in the standard setup
+    assert(FeatureDetector::hasRTTI());
+    assert(FeatureDetector::hasExceptions());
+    assert(FeatureDetector::isCpp20());
+}
+
+int main() {
+    test_diagnostics();
+    test_build_info();
+    test_features();
+    
+    std::cout << "All Phase 10 tests passed!\n";
+    return 0;
+}

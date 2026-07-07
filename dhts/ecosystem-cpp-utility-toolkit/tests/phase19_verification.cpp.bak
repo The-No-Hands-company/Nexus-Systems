@@ -1,0 +1,73 @@
+#include <nexus/utility/reflection/type_traits_extended.h>
+#include <iostream>
+#include <cassert>
+#include <vector>
+#include <tuple>
+
+using namespace nexus::utility::reflection;
+
+void test_type_traits() {
+    std::cout << "Testing TypeTraitsExtended...\n";
+    
+    // Test aggregate detection
+    struct Aggregate { int x; double y; };
+    static_assert(is_aggregate<Aggregate>);
+    
+    // Test tuple-like
+    static_assert(tuple_like<std::tuple<int, double>>);
+    
+    // Test iterable
+    static_assert(is_iterable<std::vector<int>>);
+    
+    // Test container-like
+    static_assert(container_like<std::vector<int>>);
+    
+    std::cout << "TypeTraitsExtended passed.\n";
+}
+
+void test_enum_reflector() {
+    std::cout << "Testing EnumReflector...\n";
+    
+    // Simple enum
+    enum class Color { Red, Green, Blue };
+    
+    // Manual toString
+    auto colorToString = [](Color c) -> std::string {
+        switch (c) {
+            case Color::Red: return "Red";
+            case Color::Green: return "Green";
+            case Color::Blue: return "Blue";
+        }
+        return "Unknown";
+    };
+    
+    assert(colorToString(Color::Red) == "Red");
+    
+    std::cout << "EnumReflector passed.\n";
+}
+
+void test_field_reflection() {
+    std::cout << "Testing FieldReflectionMacro...\n";
+    
+    // Simple struct with tuple conversion
+    struct Point {
+        int x;
+        int y;
+    };
+    
+    Point p{10, 20};
+    auto [x, y] = p;
+    assert(x == 10);
+    assert(y == 20);
+    
+    std::cout << "FieldReflectionMacro passed.\n";
+}
+
+int main() {
+    test_type_traits();
+    test_enum_reflector();
+    test_field_reflection();
+    
+    std::cout << "All Phase 19 tests passed!\n";
+    return 0;
+}

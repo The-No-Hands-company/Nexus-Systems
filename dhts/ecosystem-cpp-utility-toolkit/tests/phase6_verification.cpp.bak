@@ -1,0 +1,115 @@
+#define VOLTRON_ENABLE_LOCK_TRACKING 1
+#include <nexus/utility/concurrency/thread_tracker.h>
+#include <nexus/utility/concurrency/lock_tracker.h>
+#include <nexus/utility/concurrency/mutex_wrapper.h>
+#include <nexus/utility/assertions/contract_violation_handler.h>
+#include <iostream>
+#include <thread>
+#include <atomic>
+#include <chrono>
+#include <cassert>
+
+using namespace nexus::utility::concurrency;
+using namespace nexus::utility::assertions;
+
+void test_thread_tracker() {
+    std::cout << "Testing ThreadTracker...\n";
+    
+    ThreadTracker::instance().registerThread("MainTestThread");
+    assert(ThreadTracker::instance().getCurrentThreadName() == "MainTestThread");
+    
+    std::thread t([]() {
+        ThreadTracker::instance().registerThread("WorkerThread");
+        assert(ThreadTracker::instance().getCurrentThreadName() == "WorkerThread");
+        ThreadTracker::instance().unregisterThread();
+    });
+    t.join();
+    
+    std::cout << "ThreadTracker passed.\n";
+}
+
+void test_deadlock_detection() {
+    std::cout << "Testing DeadlockDetector...\n";
+    
+    // Use Throw policy to catch deadlock instead of aborting
+    ContractViolationHandler::setPolicy(ViolationPolicy::Throw);
+    
+    TrackedMutex<std::mutex> mutexA;
+    TrackedMutex<std::mutex> mutexB;
+    
+    std::atomic<bool> t1_ready{false};
+    std::atomic<bool> t2_ready{false};
+    std::atomic<bool> deadlock_caught{false};
+    
+    std::thread t1([&]() {
+        ScopedThreadRegistration name("Thread-A");
+        try {
+            std::cout << "T1: Locking A\n";
+            mutexA.lock();
+            
+            t1_ready = true;
+            // Wait for T2 to lock B
+            while (!t2_ready) std::this_thread::yield();
+            
+            // Artificial delay to ensure T2 waits on A first? 
+            // Or just allow race. One will detect.
+            std::this_thread::sleep_for(std::chrono::milliseconds(50));
+            
+            std::cout << "T1: Attempting to lock B (should block or deadlock)\n";
+            mutexB.lock(); // Blocks here
+            
+            std::cout << "T1: Locked B\n";
+            mutexB.unlock();
+            mutexA.unlock();
+        } catch (const ContractViolationException& e) {
+            std::cout << "T1 caught exception: " << e.what() << "\n";
+            deadlock_caught = true;
+            // Clean up if we own A
+            mutexA.unlock(); 
+        }
+    });
+    
+    std::thread t2([&]() {
+        ScopedThreadRegistration name("Thread-B");
+        try {
+            // Wait for T1 to start
+            while (!t1_ready) std::this_thread::yield();
+            
+            std::cout << "T2: Locking B\n";
+            mutexB.lock();
+            t2_ready = true;
+            
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            
+            std::cout << "T2: Attempting to lock A (expect deadlock)\n";
+            mutexA.lock(); // This should trigger deadlock if T1 is blocked on B
+            
+            std::cout << "T2: Locked A\n";
+            mutexA.unlock();
+            mutexB.unlock();
+        } catch (const ContractViolationException& e) {
+            std::cout << "T2 caught exception: " << e.what() << "\n";
+            deadlock_caught = true;
+            // Clean up
+            mutexB.unlock();
+        }
+    });
+    
+    t1.join();
+    t2.join();
+    
+    if (deadlock_caught) {
+        std::cout << "DeadlockDetector passed (exception caught).\n";
+    } else {
+        std::cerr << "DeadlockDetector FAILED (no exception).\n";
+        std::abort();
+    }
+}
+
+int main() {
+    test_thread_tracker();
+    test_deadlock_detection();
+    
+    std::cout << "All Phase 6 tests passed!\n";
+    return 0;
+}

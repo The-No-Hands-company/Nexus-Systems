@@ -1,0 +1,108 @@
+#include <nexus/utility/system/environment_vars.h>
+#include <nexus/utility/system/signal_manager.h>
+#include <nexus/utility/system/dll_loader.h>
+#include <nexus/utility/system/process_spawner.h>
+#include <iostream>
+#include <cassert>
+
+using namespace nexus::utility::system;
+
+void test_environment_vars() {
+    std::cout << "Testing EnvironmentVars...\n";
+    
+    // Set and get
+    assert(EnvironmentVars::set("TEST_VAR", "test_value"));
+    auto value = EnvironmentVars::get("TEST_VAR");
+    assert(value.has_value());
+    assert(*value == "test_value");
+    
+    // Has
+    assert(EnvironmentVars::has("TEST_VAR"));
+    
+    // Unset
+    assert(EnvironmentVars::unset("TEST_VAR"));
+    assert(!EnvironmentVars::has("TEST_VAR"));
+    
+    // Parse PATH
+    EnvironmentVars::set("TEST_PATH", "/usr/bin:/usr/local/bin:/bin");
+    auto paths = EnvironmentVars::parsePath("TEST_PATH");
+    assert(paths.size() == 3);
+    assert(paths[0] == "/usr/bin");
+    
+    // Scoped env
+    {
+        EnvironmentVars::ScopedEnv scoped("SCOPED_VAR", "scoped_value");
+        assert(EnvironmentVars::get("SCOPED_VAR") == "scoped_value");
+    }
+    assert(!EnvironmentVars::has("SCOPED_VAR"));
+    
+    std::cout << "EnvironmentVars passed.\n";
+}
+
+void test_signal_manager() {
+    std::cout << "Testing SignalManager...\n";
+    
+    // Register handler (don't actually trigger signals)
+    bool handler_called = false;
+    SignalManager::registerHandler(SIGUSR1, [&](int) {
+        handler_called = true;
+    });
+    
+    // Shutdown request
+    assert(!SignalManager::shutdownRequested());
+    SignalManager::requestShutdown();
+    assert(SignalManager::shutdownRequested());
+    
+    std::cout << "SignalManager passed.\n";
+}
+
+void test_dll_loader() {
+    std::cout << "Testing DllLoader...\n";
+    
+    try {
+        // Load standard C library
+        DllLoader loader("libc.so.6");
+        
+        // Resolve a symbol (printf)
+        auto printf_ptr = loader.getSymbol<int(const char*, ...)>("printf");
+        assert(printf_ptr != nullptr);
+        
+        // Check symbol existence
+        assert(loader.hasSymbol("printf"));
+        assert(!loader.hasSymbol("nonexistent_symbol_xyz"));
+        
+        std::cout << "DllLoader passed.\n";
+    } catch (const std::exception& e) {
+        std::cout << "DllLoader test skipped (library not found): " << e.what() << "\n";
+    }
+}
+
+void test_process_spawner() {
+    std::cout << "Testing ProcessSpawner...\n";
+    
+    // Execute simple command
+    auto result = ProcessSpawner::execute("echo", {"Hello", "World"});
+    assert(result.exit_code == 0);
+    assert(result.stdout_output.find("Hello World") != std::string::npos);
+    
+    // Execute shell command
+    auto shell_result = ProcessSpawner::executeShell("echo test");
+    assert(shell_result.exit_code == 0);
+    assert(shell_result.stdout_output.find("test") != std::string::npos);
+    
+    // Test failure
+    auto fail_result = ProcessSpawner::execute("false");
+    assert(fail_result.exit_code != 0);
+    
+    std::cout << "ProcessSpawner passed.\n";
+}
+
+int main() {
+    test_environment_vars();
+    test_signal_manager();
+    test_dll_loader();
+    test_process_spawner();
+    
+    std::cout << "All Phase 18 tests passed!\n";
+    return 0;
+}

@@ -1,0 +1,84 @@
+#include <nexus/utility/logging/log_macros.h>
+#include <nexus/utility/logging/log_filter.h>
+#include <iostream>
+#include <cassert>
+#include <sstream>
+
+using namespace nexus::utility::logging;
+
+void test_log_macros() {
+    std::cout << "Testing LogMacros...\n";
+    
+    // Test basic logging (output goes to stderr)
+    LOG_DEBUG("Debug message: {}", 42);
+    LOG_INFO("Info message: {}", "test");
+    LOG_WARN("Warning message");
+    LOG_ERROR("Error message: {}", 3.14);
+    
+    // Test conditional logging
+    bool condition = true;
+    LOG_DEBUG_IF(condition, "Conditional debug: {}", "shown");
+    LOG_INFO_IF(false, "This should not appear");
+    
+    std::cout << "LogMacros passed (check stderr for output).\n";
+}
+
+void test_log_filter() {
+    std::cout << "Testing LogFilter...\n";
+    
+    // Test level filtering
+    auto level_filter = LogFilter::byLevel(LogLevel::WARN);
+    assert(LogFilter::test(level_filter, LogLevel::ERROR, "test"));
+    assert(LogFilter::test(level_filter, LogLevel::WARN, "test"));
+    assert(!LogFilter::test(level_filter, LogLevel::INFO, "test"));
+    assert(!LogFilter::test(level_filter, LogLevel::DEBUG, "test"));
+    
+    // Test substring filtering
+    auto substr_filter = LogFilter::bySubstring("important");
+    assert(LogFilter::test(substr_filter, LogLevel::INFO, "This is important"));
+    assert(!LogFilter::test(substr_filter, LogLevel::INFO, "This is not"));
+    
+    // Test pattern filtering
+    auto pattern_filter = LogFilter::byPattern("error.*code");
+    assert(LogFilter::test(pattern_filter, LogLevel::ERROR, "error with code 42"));
+    assert(!LogFilter::test(pattern_filter, LogLevel::ERROR, "error without"));
+    
+    // Test category filtering
+    auto cat_filter = LogFilter::byCategory({"network", "database"});
+    assert(LogFilter::test(cat_filter, LogLevel::INFO, "[network] Connection established"));
+    assert(LogFilter::test(cat_filter, LogLevel::INFO, "[database] Query executed"));
+    assert(!LogFilter::test(cat_filter, LogLevel::INFO, "[ui] Button clicked"));
+    
+    // Test AND filter
+    auto and_filter = LogFilter::andFilter({
+        LogFilter::byLevel(LogLevel::ERROR),
+        LogFilter::bySubstring("critical")
+    });
+    assert(LogFilter::test(and_filter, LogLevel::ERROR, "critical error"));
+    assert(!LogFilter::test(and_filter, LogLevel::WARN, "critical warning"));
+    assert(!LogFilter::test(and_filter, LogLevel::ERROR, "normal error"));
+    
+    // Test OR filter
+    auto or_filter = LogFilter::orFilter({
+        LogFilter::byLevel(LogLevel::FATAL),
+        LogFilter::bySubstring("urgent")
+    });
+    assert(LogFilter::test(or_filter, LogLevel::FATAL, "fatal error"));
+    assert(LogFilter::test(or_filter, LogLevel::INFO, "urgent message"));
+    assert(!LogFilter::test(or_filter, LogLevel::INFO, "normal message"));
+    
+    // Test NOT filter
+    auto not_filter = LogFilter::notFilter(LogFilter::byLevel(LogLevel::ERROR));
+    assert(LogFilter::test(not_filter, LogLevel::INFO, "test"));
+    assert(!LogFilter::test(not_filter, LogLevel::ERROR, "test"));
+    
+    std::cout << "LogFilter passed.\n";
+}
+
+int main() {
+    test_log_macros();
+    test_log_filter();
+    
+    std::cout << "All Phase 3 Logging Enhancement tests passed!\n";
+    return 0;
+}

@@ -1,0 +1,48 @@
+name: Code Coverage
+
+on:
+  push:
+    branches: [main, master, develop]
+  pull_request:
+    branches: [main, master]
+  workflow_dispatch:
+
+jobs:
+  coverage:
+    name: "Coverage Report"
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y g++-14 ninja-build lcov
+          sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-14 100
+          sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-14 100
+
+      - name: Configure
+        run: >
+          cmake --preset coverage
+          -DCMAKE_C_COMPILER=gcc-14
+          -DCMAKE_CXX_COMPILER=g++-14
+          -DNEXUS_BUILD_TESTS=ON
+          -DNEXUS_ENABLE_COVERAGE=ON
+
+      - name: Build
+        run: cmake --build --preset coverage
+
+      - name: Test
+        run: ctest --preset coverage || true
+
+      - name: Generate coverage
+        run: |
+          lcov --capture --directory build/coverage --output-file coverage.info
+          lcov --remove coverage.info '/usr/*' '*/tests/*' '*/_deps/*' --output-file coverage.info
+          lcov --list coverage.info
+
+      - name: Upload coverage
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage.info

@@ -1,0 +1,123 @@
+#include <nexus/utility/logging/logger.h>
+#include <nexus/utility/logging/async_logger.h>
+#include <nexus/utility/logging/structured_logger.h>
+#include <iostream>
+#include <thread>
+#include <chrono>
+#include <cassert>
+#include <filesystem>
+#include <fstream>
+
+using namespace nexus::utility::logging;
+
+void test_sinks() {
+    std::cout << "Testing Sinks...\n";
+    
+    std::string test_file = "test_log.txt";
+    if (std::filesystem::exists(test_file)) std::filesystem::remove(test_file);
+    
+    Logger::instance().clearSinks();
+    Logger::instance().addFileSink(test_file);
+    
+    VOLTRON_LOG_INFO("Test message 1");
+    Logger::instance().flush();
+    
+    // Check file content
+    std::ifstream ifs(test_file);
+    std::string line;
+    bool found = false;
+    while (std::getline(ifs, line)) {
+        if (line.find("Test message 1") != std::string::npos) {
+            found = true;
+            break;
+        }
+    }
+    assert(found);
+    ifs.close();
+    
+    std::cout << "Sinks passed.\n";
+}
+
+void test_async_logger() {
+    std::cout << "Testing AsyncLogger...\n";
+    
+    std::string async_file = "async_log.txt";
+    if (std::filesystem::exists(async_file)) std::filesystem::remove(async_file);
+    
+    auto file_sink = std::make_shared<FileSink>(async_file);
+    
+    // Setup AsyncLogger to target the file
+    AsyncLogger::instance().setTargetSink(file_sink);
+    
+    // Setup main logger to use AsyncLogger
+    Logger::instance().clearSinks();
+    // We treat AsyncLogger as a sink itself! 
+    // Is AsyncLogger a sink? Yes, it inherits LogSink.
+    // Singleton usage is tricky if we want to pass it as shared_ptr...
+    // We need a shared_ptr adapter or just make AsyncLogger explicitly managed.
+    // Logger expects shared_ptr<LogSink>.
+    
+    // We'll create a lightweight wrapper sink that forwards to AsyncLogger instance
+    class AsyncProxySink : public LogSink {
+    public:
+        void write(const LogRecord& record) override {
+            AsyncLogger::instance().write(record);
+        }
+        void flush() override {
+            AsyncLogger::instance().flush();
+        }
+    };
+    
+    Logger::instance().addSink(std::make_shared<AsyncProxySink>());
+    
+    VOLTRON_LOG_INFO("Async message 1");
+    VOLTRON_LOG_INFO("Async message 2");
+    
+    // Give thread time to write
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    // Logger flush calls sink flush which calls Async flush -> waits for queue empty
+    Logger::instance().flush();
+    
+    // Check file
+    std::ifstream ifs(async_file);
+    std::string content((std::istreambuf_iterator<char>(ifs)), (std::istreambuf_iterator<char>()));
+    assert(content.find("Async message 1") != std::string::npos);
+    assert(content.find("Async message 2") != std::string::npos);
+    
+    std::cout << "AsyncLogger passed.\n";
+}
+
+void test_structured_logger() {
+    std::cout << "Testing StructuredLogger...\n";
+    
+    LogBuilder builder;
+    builder.add("user_id", 12345).add("action", "login").add("success", true);
+    
+    // We are still logging to the async file from previous test config
+    StructuredLogger::instance().log(LogLevel::Info, "UserActivity", builder);
+    
+    Logger::instance().flush();
+    
+    std::string async_file = "async_log.txt";
+    std::ifstream ifs(async_file);
+    std::string content((std::istreambuf_iterator<char>(ifs)), (std::istreambuf_iterator<char>()));
+    
+    // Check for JSON presence
+    assert(content.find("\"user_id\": 12345") != std::string::npos);
+    assert(content.find("\"action\": \"login\"") != std::string::npos);
+    
+    std::cout << "StructuredLogger passed.\n";
+}
+
+int main() {
+    test_sinks();
+    test_async_logger();
+    test_structured_logger();
+    
+    // Manual cleanup to prevent singleton destruction order issues
+    Logger::instance().clearSinks();
+    // AsyncLogger will be destroyed at exit, but Logger won't try to use it in its dtor now.
+    
+    std::cout << "All Phase 3 tests passed!\n";
+    return 0;
+}

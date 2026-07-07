@@ -1,0 +1,60 @@
+#define VOLTRON_ENABLE_CONTRACTS 1
+#include <nexus/utility/assertions/contract_violation_handler.h>
+#include <nexus/utility/assertions/precondition.h>
+#include <nexus/utility/assertions/postcondition.h>
+#include <nexus/utility/assertions/invariant_checker.h>
+#include <nexus/utility/assertions/assert_enhanced.h>
+#include <iostream>
+#include <cassert>
+#include <stdexcept>
+
+using namespace nexus::utility::assertions;
+
+void test_policy_throw() {
+    std::cout << "Testing Policy::Throw...\n";
+    ContractViolationHandler::setPolicy(ViolationPolicy::Throw);
+    
+    // Test Precondition Exception
+    try {
+        VOLTRON_PRECONDITION(false, "This should throw");
+        assert(false && "Should have threw exception");
+    } catch (const ContractViolationException& e) {
+        std::cout << "Caught expected exception: " << e.what() << "\n";
+    }
+    
+    // Test EnhancedAssert Exception (via unified backend)
+    try {
+        VOLTRON_VERIFY(false, "Assert should throw too");
+        assert(false && "Should have threw exception");
+    } catch (const ContractViolationException& e) {
+        std::cout << "Caught assert exception: " << e.what() << "\n";
+    }
+    
+    std::cout << "Policy::Throw passed.\n";
+}
+
+void test_policy_log() {
+    std::cout << "Testing Policy::LogAndContinue...\n";
+    ContractViolationHandler::setPolicy(ViolationPolicy::LogAndContinue);
+    
+    bool callback_triggered = false;
+    ContractViolationHandler::setCallback([&](const char* type, const char* expr, const char* msg, auto&, auto&) {
+        callback_triggered = true;
+        std::cout << "Callback: " << type << " (" << msg << ")\n";
+    });
+    
+    VOLTRON_POSTCONDITION(false, "This should just log");
+    assert(callback_triggered);
+    
+    std::cout << "Policy::LogAndContinue passed.\n";
+}
+
+int main() {
+    test_policy_throw();
+    test_policy_log();
+    
+    // Note: Cannot easily test Abort policy without forking or crashing :)
+    
+    std::cout << "All Phase 5 tests passed!\n";
+    return 0;
+}

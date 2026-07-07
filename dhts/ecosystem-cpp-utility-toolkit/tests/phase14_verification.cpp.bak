@@ -1,0 +1,88 @@
+#include <nexus/utility/algorithmic/algorithm_extensions.h>
+#include <nexus/utility/math/math_constants.h>
+#include <nexus/utility/math/random_generator.h>
+#include <nexus/utility/math/crypto_hash_wrapper.h>
+#include <iostream>
+#include <cassert>
+#include <vector>
+#include <cmath>
+
+using namespace nexus::utility::algorithmic;
+using namespace nexus::utility::math;
+
+void test_algorithms() {
+    std::cout << "Testing AlgorithmExtensions...\n";
+    std::vector<int> nums = {1, 2, 3, 4, 5};
+    
+    assert(AlgorithmExtensions::contains(nums, 3));
+    assert(!AlgorithmExtensions::contains(nums, 99));
+    
+    bool hasEven = AlgorithmExtensions::containsIf(nums, [](int n) { return n % 2 == 0; });
+    assert(hasEven);
+    
+    assert(AlgorithmExtensions::clamp(10, 0, 5) == 5);
+    assert(AlgorithmExtensions::clamp(-10, 0, 5) == 0);
+    assert(AlgorithmExtensions::clamp(3, 0, 5) == 3);
+    
+    auto doubled = AlgorithmExtensions::map(nums, [](int n) { return n * 2; });
+    assert(doubled.size() == 5);
+    assert(doubled[0] == 2 && doubled[4] == 10);
+    
+    std::cout << "AlgorithmExtensions passed.\n";
+}
+
+void test_math_constants() {
+    std::cout << "Testing MathConstants...\n";
+    
+    assert(std::abs(MathConstants::PI - 3.14159) < 0.0001);
+    
+    auto deg = MathConstants::toDegrees(MathConstants::PI); // 180
+    assert(std::abs(deg - 180.0) < 0.0001);
+    
+    auto rad = MathConstants::toRadians(180.0); // PI
+    assert(std::abs(rad - MathConstants::PI) < 0.0001);
+    
+    std::cout << "MathConstants passed.\n";
+}
+
+void test_random() {
+    std::cout << "Testing RandomGenerator...\n";
+    
+    for (int i=0; i<50; ++i) {
+        int r = RandomGenerator::nextInt(10, 20);
+        assert(r >= 10 && r <= 20);
+        
+        bool b = RandomGenerator::nextBool();
+        (void)b; // consume
+    }
+    
+    std::cout << "RandomGenerator passed.\n";
+}
+
+void test_crypto() {
+    std::cout << "Testing CryptoHashWrapper...\n";
+    
+    // Test Vector from spec usually:
+    // "abc" -> ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad
+    std::string input = "abc";
+    std::string hash = CryptoHashWrapper::sha256(input);
+    
+    std::cout << "Hash('abc'): " << hash << "\n";
+    assert(hash == "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
+    
+    // Empty
+    // "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    assert(CryptoHashWrapper::sha256("") == "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855");
+
+    std::cout << "CryptoHashWrapper passed.\n";
+}
+
+int main() {
+    test_algorithms();
+    test_math_constants();
+    test_random();
+    test_crypto();
+    
+    std::cout << "All Phase 14 tests passed!\n";
+    return 0;
+}

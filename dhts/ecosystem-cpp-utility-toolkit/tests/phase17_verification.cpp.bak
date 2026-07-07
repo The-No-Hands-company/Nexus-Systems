@@ -1,0 +1,83 @@
+#include <nexus/utility/network/url_parser.h>
+#include <nexus/utility/network/socket_wrapper.h>
+#include <nexus/utility/network/http_client_simple.h>
+#include <iostream>
+#include <cassert>
+
+using namespace nexus::utility::network;
+
+void test_url_parser() {
+    std::cout << "Testing UrlParser...\n";
+    
+    // Parse full URL
+    auto url = UrlParser::parse("http://example.com:8080/path/to/resource?key=value&foo=bar#section");
+    assert(url.has_value());
+    assert(url->scheme == "http");
+    assert(url->host == "example.com");
+    assert(url->port == 8080);
+    assert(url->path == "/path/to/resource");
+    assert(url->query == "key=value&foo=bar");
+    assert(url->fragment == "section");
+    assert(url->query_params["key"] == "value");
+    assert(url->query_params["foo"] == "bar");
+    
+    // Parse simple URL
+    auto simple = UrlParser::parse("http://localhost/test");
+    assert(simple.has_value());
+    assert(simple->host == "localhost");
+    assert(simple->port == 80); // default HTTP port
+    assert(simple->path == "/test");
+    
+    // URL encoding/decoding
+    std::string encoded = UrlParser::encode("hello world!");
+    assert(encoded.find("%20") != std::string::npos || encoded.find("+") != std::string::npos);
+    
+    std::string decoded = UrlParser::decode("hello%20world");
+    assert(decoded == "hello world");
+    
+    std::cout << "UrlParser passed.\n";
+}
+
+void test_socket_wrapper() {
+    std::cout << "Testing SocketWrapper...\n";
+    
+    // Create socket
+    SocketWrapper socket(SocketWrapper::Type::TCP);
+    assert(socket.isValid());
+    assert(socket.fd() >= 0);
+    
+    // Test bind (use high port to avoid permission issues)
+    assert(socket.bind(9999));
+    
+    // Test listen
+    assert(socket.listen());
+    
+    // Test non-blocking mode
+    assert(socket.setNonBlocking(true));
+    assert(socket.setNonBlocking(false));
+    
+    std::cout << "SocketWrapper passed.\n";
+}
+
+void test_http_client() {
+    std::cout << "Testing HttpClientSimple...\n";
+    
+    // Note: Actual HTTP test would require a server
+    // We'll just test that the methods exist and can be called
+    
+    // Try to connect to a non-existent server (should fail gracefully)
+    auto response = HttpClientSimple::get("http://localhost:99999/test");
+    assert(!response.has_value()); // Should fail
+    
+    std::cout << "HttpClientSimple passed (basic test).\n";
+}
+
+int main() {
+    test_url_parser();
+    test_socket_wrapper();
+    test_http_client();
+    
+    std::cout << "All Phase 17 tests passed!\n";
+    std::cout << "Note: Full HTTP testing requires a test server.\n";
+    return 0;
+}

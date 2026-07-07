@@ -1,0 +1,114 @@
+#include <nexus/utility/types/range_validator.h>
+#include <nexus/utility/types/enum_validator.h>
+#include <nexus/utility/types/bit_field_validator.h>
+#include <nexus/utility/types/alignment_checker.h>
+#include <iostream>
+#include <cassert>
+#include <stdexcept>
+
+using namespace nexus::utility::types;
+
+enum class MyEnum : int {
+    A = 0,
+    B = 1,
+    C = 10
+};
+
+// Specialize EnumTraits
+VOLTRON_DECLARE_ENUM_RANGE(MyEnum, 0, 10); // Simple range 0..10 implies 2..9 are valid? 
+// The macro does strictly >= Min && <= Max. 
+// For sparse enums, one should specialize manually. 
+// Let's test the macro behavior first.
+
+void test_range_validator() {
+    std::cout << "Testing RangeValidator...\n";
+    
+    assert(RangeValidator::checkRange(5, 0, 10));
+    assert(!RangeValidator::checkRange(11, 0, 10));
+    
+    assert(RangeValidator::clamp(15, 0, 10) == 10);
+    assert(RangeValidator::clamp(-5, 0, 10) == 0);
+    
+    try {
+        RangeValidator::validateRange(100, 0, 10);
+        assert(false && "Should have thrown");
+    } catch (const std::out_of_range& e) {
+        std::cout << "Caught expected out_of_range: " << e.what() << "\n";
+    }
+    
+    std::cout << "RangeValidator passed.\n";
+}
+
+void test_enum_validator() {
+    std::cout << "Testing EnumValidator...\n";
+    
+    assert(EnumValidator::isValid<MyEnum>(0));
+    assert(EnumValidator::isValid<MyEnum>(10));
+    assert(!EnumValidator::isValid<MyEnum>(11));
+    
+    // Note: The macro defines a CONTIGUOUS range. So 5 is valid by the trait, even if not named.
+    // This is intentional for the simple macro.
+    assert(EnumValidator::isValid<MyEnum>(5)); 
+    
+    auto e = EnumValidator::toEnum<MyEnum>(1);
+    assert(e.has_value());
+    assert(*e == MyEnum::B);
+    
+    std::cout << "EnumValidator passed.\n";
+}
+
+void test_bit_field_validator() {
+    std::cout << "Testing BitFieldValidator...\n";
+    
+    constexpr uint8_t READ = 0x01;
+    constexpr uint8_t WRITE = 0x02;
+    constexpr uint8_t EXEC = 0x04;
+    constexpr uint8_t ALL_PERMS = READ | WRITE | EXEC;
+    
+    assert(BitFieldValidator::validateMask<uint8_t>(READ | WRITE, ALL_PERMS));
+    assert(!BitFieldValidator::validateMask<uint8_t>(0x08, ALL_PERMS)); // Invalid bit
+    
+    assert(BitFieldValidator::hasFlag(ALL_PERMS, READ));
+    assert(!BitFieldValidator::hasFlag(READ, WRITE));
+    
+    std::cout << "BitFieldValidator passed.\n";
+}
+
+void test_alignment_checker() {
+    std::cout << "Testing AlignmentChecker...\n";
+    
+    struct alignas(16) AlignedStruct {
+        int x;
+    };
+    
+    AlignedStruct s;
+    assert(AlignmentChecker::isAlignedFor<AlignedStruct>(&s));
+    
+    // Unaligned simulation (careful not to crash/UB, just check logic)
+    // We create a buffer and pick an unaligned offset
+    char buffer[32];
+    void* ptr = static_cast<void*>(buffer);
+    // Align manually to 16
+    std::size_t space = 32;
+    void* aligned_ptr = std::align(16, sizeof(int), ptr, space);
+    
+    if (aligned_ptr) {
+        assert(AlignmentChecker::isAligned(aligned_ptr, 16));
+        
+        // Offset by 1
+        void* unaligned = static_cast<char*>(aligned_ptr) + 1;
+        assert(!AlignmentChecker::isAligned(unaligned, 16));
+    }
+    
+    std::cout << "AlignmentChecker passed.\n";
+}
+
+int main() {
+    test_range_validator();
+    test_enum_validator();
+    test_bit_field_validator();
+    test_alignment_checker();
+    
+    std::cout << "All Phase 9 tests passed!\n";
+    return 0;
+}

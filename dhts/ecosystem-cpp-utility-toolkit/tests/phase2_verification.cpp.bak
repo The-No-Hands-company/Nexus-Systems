@@ -1,0 +1,116 @@
+#include <nexus/utility/crash/stacktrace_capture.h>
+#include <nexus/utility/crash/signal_handler.h>
+#include <nexus/utility/crash/crash_reporter.h>
+#include <iostream>
+#include <cassert>
+#include <csignal>
+
+using namespace nexus::utility::crash;
+
+void test_stacktrace_capture() {
+    std::cout << "Testing StacktraceCapture...\n";
+    
+    // Capture current stack trace
+    auto trace = StacktraceCapture::capture(0);
+    assert(trace.size() > 0);
+    
+    // Format it
+    std::string formatted = StacktraceCapture::format(trace);
+    std::cout << "Captured stack trace:\n" << formatted << "\n";
+    assert(!formatted.empty());
+    assert(formatted.find("Stack trace") != std::string::npos);
+    
+    // Get function names
+    auto names = StacktraceCapture::getFunctionNames(trace);
+    assert(names.size() == trace.size());
+    
+    std::cout << "StacktraceCapture passed.\n";
+}
+
+void test_signal_handler() {
+    std::cout << "Testing SignalHandler...\n";
+    
+    // Test signal name lookup
+    const char* name = SignalHandler::getSignalName(SIGSEGV);
+    assert(std::string(name).find("SIGSEGV") != std::string::npos);
+    
+    // Install handlers (but don't actually crash)
+    bool callback_invoked = false;
+    
+    SignalHandler::install([](int sig, siginfo_t* info, void* ctx) {
+        // This would be called on crash
+        // We won't actually test crashing
+    });
+    
+    // Uninstall
+    SignalHandler::uninstall();
+    
+    std::cout << "SignalHandler passed (installation/uninstallation tested).\n";
+}
+
+void test_crash_reporter() {
+    std::cout << "Testing CrashReporter...\n";
+    
+    // Generate a mock crash report
+    auto info = CrashReporter::generateReport(SIGSEGV);
+    
+    assert(info.signal == SIGSEGV);
+    assert(!info.signal_name.empty());
+    assert(!info.timestamp.empty());
+    assert(info.pid > 0);
+    assert(!info.stacktrace.empty());
+    
+    // Format it
+    std::string report = CrashReporter::formatReport(info);
+    std::cout << "Generated crash report:\n" << report << "\n";
+    
+    assert(report.find("CRASH REPORT") != std::string::npos);
+    assert(report.find("SIGSEGV") != std::string::npos);
+    
+    std::cout << "CrashReporter passed.\n";
+}
+
+void nested_function_for_trace() {
+    // This creates a deeper stack for testing
+    auto trace = StacktraceCapture::captureAndFormat(0);
+    assert(trace.find("nested_function_for_trace") != std::string::npos);
+}
+
+void test_nested_stacktrace() {
+    std::cout << "Testing nested stacktrace...\n";
+    nested_function_for_trace();
+    std::cout << "Nested stacktrace passed.\n";
+}
+
+void test_exception_tracer() {
+    std::cout << "Testing ExceptionTracer...\n";
+
+    ExceptionTracer::reset();
+
+    try {
+        VOLTRON_TRACE_THROW(std::runtime_error("This is a test exception"));
+    } catch (const std::runtime_error& e) {
+        VOLTRON_TRACE_CATCH(e);
+    }
+
+    std::string report = ExceptionTracer::generateReport();
+    std::cout << report << std::endl;
+
+    assert(report.find("This is a test exception") != std::string::npos);
+    assert(report.find("Stacktrace:") != std::string::npos);
+    assert(report.find("test_exception_tracer") != std::string::npos);
+
+    std::cout << "ExceptionTracer passed.\n";
+}
+
+int main() {
+    test_stacktrace_capture();
+    test_signal_handler();
+    test_crash_reporter();
+    test_nested_stacktrace();
+    test_exception_tracer();
+    
+    std::cout << "All Phase 2 tests passed!\n";
+    std::cout << "Note: Actual crash testing skipped (would terminate process).\n";
+    return 0;
+}

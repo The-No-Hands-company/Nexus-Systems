@@ -1,0 +1,84 @@
+#include <nexus/utility/resource/resource_tracker.h>
+#include <nexus/utility/resource/resource_leak_detector.h>
+#include <nexus/utility/resource/file_handle_tracker.h>
+#include <nexus/utility/resource/socket_tracker.h>
+#include <nexus/utility/error/error_reporter.h>
+#include <iostream>
+#include <cassert>
+#include <cstdio>
+#include <string>
+
+using namespace nexus::utility::resource;
+using namespace nexus::utility::error;
+
+void test_generic_tracker() {
+    std::cout << "Testing ResourceTracker basic...\n";
+    int dummy = 42;
+    ResourceTracker::instance().registerResource(&dummy, "Dummy", "Test Resource");
+    
+    auto resources = ResourceTracker::instance().getActiveResources();
+    assert(resources.size() == 1);
+    assert(resources[0].info.type == "Dummy");
+    
+    ResourceTracker::instance().unregisterResource(&dummy);
+    assert(ResourceTracker::instance().getActiveResources().empty());
+    
+    std::cout << "ResourceTracker basic passed.\n";
+}
+
+void test_file_tracker() {
+    std::cout << "Testing FileHandleTracker...\n";
+    
+    // Manual
+    FILE* f = fopen("/dev/null", "r");
+    if (f) {
+        FileHandleTracker::trackOpen(f, "/dev/null");
+        assert(ResourceTracker::instance().getActiveResources().size() == 1);
+        
+        FileHandleTracker::trackClose(f);
+        fclose(f);
+        assert(ResourceTracker::instance().getActiveResources().empty());
+    }
+    
+    // RAII
+    {
+        TrackedFile tf(fopen("/dev/null", "r"), "/dev/null RAII");
+        assert(ResourceTracker::instance().getActiveResources().size() == 1);
+    } // Should close and unregister here
+    assert(ResourceTracker::instance().getActiveResources().empty());
+    
+    std::cout << "FileHandleTracker passed.\n";
+}
+
+void test_leak_detector() {
+    std::cout << "Testing ResourceLeakDetector...\n";
+    
+    // Intentionally leak a resource
+    int leaked = 99;
+    ResourceTracker::instance().registerResource(&leaked, "LeakedInt", "Intentional leak");
+    
+    bool reportCalled = false;
+    ErrorReporter::instance().setErrorCallback([&](const std::string& msg, auto&) {
+        reportCalled = true;
+        std::cout << "Leak Reported: " << msg << "\n";
+        assert(msg.find("LeakedInt") != std::string::npos);
+    });
+    
+    size_t count = ResourceLeakDetector::reportLeaks();
+    assert(count == 1);
+    assert(reportCalled);
+    
+    // Cleanup
+    ResourceTracker::instance().unregisterResource(&leaked);
+    
+    std::cout << "ResourceLeakDetector passed.\n";
+}
+
+int main() {
+    test_generic_tracker();
+    test_file_tracker();
+    test_leak_detector();
+    
+    std::cout << "All Phase 8 tests passed!\n";
+    return 0;
+}

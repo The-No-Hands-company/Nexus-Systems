@@ -1,0 +1,120 @@
+#include <nexus/utility/types/numeric_overflow_detector.h>
+#include <nexus/utility/types/type_validator.h>
+#include <nexus/utility/types/concept_checker.h>
+#include <nexus/utility/assertions/assert_enhanced.h>
+#include <iostream>
+#include <cassert>
+#include <vector>
+
+using namespace nexus::utility::types;
+using namespace nexus::utility::assertions;
+
+// Concept for testing
+template<typename T>
+concept Number = std::integral<T> || std::floating_point<T>;
+
+void test_numeric_overflow() {
+    std::cout << "Testing NumericOverflowDetector...\n";
+    
+    // Test SafeInt
+    SafeInt<int> a = 100;
+    SafeInt<int> b = 200;
+    SafeInt<int> c = a + b;
+    assert(c.value() == 300);
+
+    // Test overflow
+    SafeInt<int> max = std::numeric_limits<int>::max();
+    try {
+        SafeInt<int> ret = max + 1;
+        std::cerr << "Failed to detect overflow!\n";
+        std::abort();
+    } catch (const ArithmeticOverflowException& e) {
+        std::cout << "Caught expected overflow: " << e.what() << "\n";
+    }
+
+    // Test static methods
+    auto res = NumericOverflowDetector::mul(10, 10);
+    assert(res.has_value() && *res == 100);
+
+    auto res2 = NumericOverflowDetector::mul(std::numeric_limits<int>::max(), 2);
+    assert(!res2.has_value());
+    
+    std::cout << "NumericOverflowDetector passed.\n";
+}
+
+void test_type_validator() {
+    std::cout << "Testing TypeValidator...\n";
+    
+    int x = 42;
+    std::string name = TypeValidator::getTypeName<int>();
+    std::cout << "Type name of int: " << name << "\n";
+    assert(name == "int");
+
+    struct Base { virtual ~Base() = default; };
+    struct Derived : Base {};
+
+    Derived d;
+    Base* b_ptr = &d;
+    
+    assert(TypeValidator::isInstanceOf<Derived>(b_ptr));
+    assert(TypeValidator::isExactType<Derived>(&d));
+    assert(TypeValidator::isExactType<Derived>(b_ptr)); // Dynamic type matches Derived
+    // Wait, typeid(*ptr) returns dynamic type for polymorphic types!
+    // So isExactType<Derived>(b_ptr) where b_ptr is Base* pointing to Derived should be true?
+    // Let's verify behavior. typeid(*b) is type_info of Derived.
+    
+    if (typeid(*b_ptr) == typeid(Derived)) {
+         std::cout << "typeid(*b_ptr) matches Derived correctly.\n";
+    } else {
+         std::cout << "typeid(*b_ptr) does NOT match Derived.\n";
+    }
+
+    try {
+        TypeValidator::validateType<Derived>(b_ptr);
+        std::cout << "Validation passed.\n";
+    } catch (const std::exception& e) {
+        std::cerr << "Validation failed unexpected: " << e.what() << "\n";
+        std::abort();
+    }
+    
+    std::cout << "TypeValidator passed.\n";
+}
+
+void test_concept_checker() {
+    std::cout << "Testing ConceptChecker...\n";
+    
+    assert(Number<int>);
+    assert(!Number<std::string>);
+    
+    VOLTRON_CONCEPT_CHECK(Number, int);
+    
+    std::cout << "ConceptChecker passed.\n";
+}
+
+void test_assertions() {
+    std::cout << "Testing Assertions...\n";
+    
+    bool handlerCalled = false;
+    EnhancedAssert::setHandler([&](const char* expr, const char* msg, const std::source_location&, const std::stacktrace&) {
+        std::cout << "Custom handler called for: " << expr << " - " << msg << "\n";
+        handlerCalled = true;
+    });
+
+    // Test VOLTRON_VERIFY (always on)
+    VOLTRON_VERIFY(false, "This should trigger handler");
+    
+    assert(handlerCalled);
+    
+    EnhancedAssert::resetHandler();
+    std::cout << "Assertions passed.\n";
+}
+
+int main() {
+    test_numeric_overflow();
+    test_type_validator();
+    test_concept_checker();
+    test_assertions();
+    
+    std::cout << "All tests passed!\n";
+    return 0;
+}

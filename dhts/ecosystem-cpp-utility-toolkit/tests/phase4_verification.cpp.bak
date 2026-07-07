@@ -1,0 +1,104 @@
+#include <nexus/utility/profiling/scoped_timer.h>
+#include <nexus/utility/profiling/performance_counter.h>
+#include <nexus/utility/profiling/benchmark_harness.h>
+#include <iostream>
+#include <cassert>
+#include <thread>
+#include <chrono>
+#include <vector>
+
+using namespace nexus::utility::profiling;
+
+void test_scoped_timer() {
+    std::cout << "Testing ScopedTimer...\n";
+    
+    bool callback_called = false;
+    int64_t captured_time = 0;
+    
+    {
+        ScopedTimer timer("Test Operation", [&](const std::string& name, int64_t elapsed) {
+            callback_called = true;
+            captured_time = elapsed;
+            std::cout << "Callback: " << name << " took " << elapsed << " μs\n";
+        });
+        
+        // Simulate work
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+    
+    assert(callback_called);
+    assert(captured_time >= 10000); // At least 10ms = 10000μs
+    
+    std::cout << "ScopedTimer passed.\n";
+}
+
+void test_performance_counter() {
+    std::cout << "Testing PerformanceCounter...\n";
+    
+    PerformanceCounter counter;
+    
+    // Do some work
+    volatile int sum = 0;
+    for (int i = 0; i < 1000000; ++i) {
+        sum += i;
+    }
+    
+    auto metrics = counter.measure();
+    
+    std::cout << "CPU Cycles: " << metrics.cpu_cycles << "\n";
+    std::cout << "Wall Time: " << metrics.wall_time_ns << " ns\n";
+    std::cout << "User Time: " << metrics.user_time_us << " μs\n";
+    
+    assert(metrics.cpu_cycles > 0);
+    assert(metrics.wall_time_ns > 0);
+    
+    std::cout << "PerformanceCounter passed.\n";
+}
+
+void test_benchmark_harness() {
+    std::cout << "Testing BenchmarkHarness...\n";
+    
+    // Benchmark a simple operation
+    auto result = BenchmarkHarness::run(
+        "Vector Push",
+        []() {
+            std::vector<int> v;
+            for (int i = 0; i < 100; ++i) {
+                v.push_back(i);
+            }
+        },
+        100,  // iterations
+        5     // warmup
+    );
+    
+    BenchmarkHarness::printResult(result);
+    
+    assert(result.iterations == 100);
+    assert(result.min_ns > 0);
+    assert(result.max_ns >= result.min_ns);
+    assert(result.mean_ns > 0);
+    assert(result.stddev_ns >= 0);
+    
+    std::cout << "BenchmarkHarness passed.\n";
+}
+
+void test_macro() {
+    std::cout << "Testing VOLTRON_SCOPED_TIMER macro...\n";
+    
+    {
+        VOLTRON_SCOPED_TIMER("Macro Test");
+        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+    }
+    
+    std::cout << "Macro test passed.\n";
+}
+
+int main() {
+    test_scoped_timer();
+    test_performance_counter();
+    test_benchmark_harness();
+    test_macro();
+    
+    std::cout << "All Phase 4 tests passed!\n";
+    return 0;
+}

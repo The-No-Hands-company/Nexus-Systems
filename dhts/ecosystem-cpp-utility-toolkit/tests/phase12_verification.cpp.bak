@@ -1,0 +1,91 @@
+#include <nexus/utility/filesystem/path_utils.h>
+#include <nexus/utility/filesystem/memory_mapped_file.h>
+#include <nexus/utility/filesystem/temp_file_manager.h>
+#include <iostream>
+#include <cassert>
+#include <fstream>
+#include <cstring>
+#include <span>
+
+using namespace nexus::utility::filesystem;
+namespace fs = std::filesystem;
+
+void test_path_utils() {
+    std::cout << "Testing PathUtils...\n";
+    
+    // Normalize (system dependent result, but conceptually simple)
+    // On linux a/../b -> b
+    if (fs::path("a/b").preferred_separator == '/') {
+        // Can't easily test weakly_canonical on non-existent paths on all systems
+        // But join is safe
+        auto p = PathUtils::join("folder", "subfolder", "file.txt");
+        assert(p.string() == "folder/subfolder/file.txt");
+    }
+
+    fs::path p("foo.txt");
+    assert(PathUtils::getExtension(p) == ".txt");
+    assert(PathUtils::replaceExtension(p, ".log") == "foo.log");
+    
+    std::cout << "PathUtils passed.\n";
+}
+
+void test_temp_file_manager() {
+    std::cout << "Testing TempFileManager...\n";
+    fs::path tfile, tdir;
+    
+    {
+        TempFileManager tfm;
+        tfile = tfm.createTempFile();
+        assert(fs::exists(tfile));
+        assert(fs::is_regular_file(tfile));
+        
+        tdir = tfm.createTempDirectory();
+        assert(fs::exists(tdir));
+        assert(fs::is_directory(tdir));
+        
+        // Write something to temp dir to check recursive delete
+        std::ofstream ofs(tdir / "nested.txt");
+        ofs << "nested";
+        ofs.close();
+    } // tfm destructs here
+    
+    // Check cleanup
+    assert(!fs::exists(tfile));
+    assert(!fs::exists(tdir)); // Should remove non-empty dir too
+    
+    std::cout << "TempFileManager passed.\n";
+}
+
+void test_memory_mapped_file() {
+    std::cout << "Testing MemoryMappedFile...\n";
+    
+    TempFileManager tfm;
+    fs::path file = tfm.createTempFile();
+    
+    const std::string content = "Hello Memory Map!";
+    {
+        std::ofstream ofs(file);
+        ofs << content;
+    }
+    
+    {
+        MemoryMappedFile mmap(file);
+        assert(mmap.size() == content.size());
+        assert(mmap.data() != nullptr);
+        
+        auto span = mmap.as_chars();
+        std::string read_content(span.data(), span.size());
+        assert(read_content == content);
+    }
+    
+    std::cout << "MemoryMappedFile passed.\n";
+}
+
+int main() {
+    test_path_utils();
+    test_temp_file_manager();
+    test_memory_mapped_file();
+    
+    std::cout << "All Phase 12 tests passed!\n";
+    return 0;
+}

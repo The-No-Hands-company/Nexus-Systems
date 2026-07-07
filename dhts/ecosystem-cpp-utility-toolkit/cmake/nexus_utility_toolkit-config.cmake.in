@@ -1,0 +1,5 @@
+@PACKAGE_INIT@
+
+include("${CMAKE_CURRENT_LIST_DIR}/nexus_utility_toolkit-targets.cmake")
+check_required_components(nexus_utility_toolkit)
+

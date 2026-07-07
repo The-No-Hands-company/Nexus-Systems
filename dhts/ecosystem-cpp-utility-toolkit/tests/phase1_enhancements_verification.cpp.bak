@@ -1,0 +1,136 @@
+#include <nexus/utility/memory/memory_sanitizer_wrapper.h>
+#include <nexus/utility/memory/buffer_overflow_detector.h>
+#include <nexus/utility/profiling/profiler_integration.h>
+#include <nexus/utility/profiling/allocation_profiler.h>
+#include <iostream>
+#include <cassert>
+
+using namespace nexus::utility::memory;
+using namespace nexus::utility::profiling;
+
+void test_memory_sanitizer() {
+    std::cout << "Testing MemorySanitizerWrapper...\n";
+    
+    // Check sanitizer detection (compile-time)
+    std::cout << "ASan: " << (MemorySanitizerWrapper::hasASan() ? "yes" : "no") << "\n";
+    std::cout << "TSan: " << (MemorySanitizerWrapper::hasTSan() ? "yes" : "no") << "\n";
+    std::cout << "MSan: " << (MemorySanitizerWrapper::hasMSan() ? "yes" : "no") << "\n";
+    std::cout << "UBSan: " << (MemorySanitizerWrapper::hasUBSan() ? "yes" : "no") << "\n";
+    std::cout << "Running under: " << MemorySanitizerWrapper::getSanitizerName() << "\n";
+    
+    // Test annotations (no-ops without sanitizers, but should compile)
+    int buffer[10];
+    MemorySanitizerWrapper::poisonMemory(buffer, sizeof(buffer));
+    MemorySanitizerWrapper::unpoisonMemory(buffer, sizeof(buffer));
+    
+    int sync_var = 0;
+    MemorySanitizerWrapper::annotateHappensBefore(&sync_var);
+    MemorySanitizerWrapper::annotateHappensAfter(&sync_var);
+    
+    std::cout << "MemorySanitizerWrapper passed.\n";
+}
+
+void test_buffer_overflow_detector() {
+    std::cout << "Testing BufferOverflowDetector...\n";
+    
+    // Test guarded buffer
+    BufferOverflowDetector::GuardedBuffer<int> buffer(10);
+    assert(buffer.size() == 10);
+    
+    // Normal access
+    buffer[0] = 42;
+    assert(buffer[0] == 42);
+    
+    // Check canaries
+    assert(buffer.checkCanaries());
+    
+    // Test bounds checking
+    try {
+        buffer[10] = 100; // Should throw
+        assert(false && "Should have thrown");
+    } catch (const std::out_of_range&) {
+        // Expected
+    }
+    
+    // Test checked access
+    int array[5] = {1, 2, 3, 4, 5};
+    assert(BufferOverflowDetector::checkedAccess(array, 2, 5) == 3);
+    
+    // Test bounds check
+    assert(BufferOverflowDetector::isWithinBounds(&array[2], array, 5));
+    assert(!BufferOverflowDetector::isWithinBounds(&array[10], array, 5));
+    
+    std::cout << "BufferOverflowDetector passed.\n";
+}
+
+void test_profiler_integration() {
+    std::cout << "Testing ProfilerIntegration...\n";
+    
+    // Check Valgrind detection
+    bool under_valgrind = ProfilerIntegration::isRunningUnderValgrind();
+    std::cout << "Running under Valgrind: " << (under_valgrind ? "yes" : "no") << "\n";
+    
+    // Test callgrind annotations (safe even without Valgrind)
+    ProfilerIntegration::startCallgrind();
+    ProfilerIntegration::stopCallgrind();
+    
+    // Test scoped profiling
+    {
+        ProfilerIntegration::ScopedCallgrind scoped;
+        // Some work here
+    }
+    
+    std::cout << "ProfilerIntegration passed.\n";
+}
+
+void test_allocation_profiler() {
+    std::cout << "Testing AllocationProfiler...\n";
+    
+    AllocationProfiler::reset();
+    
+    // Record some allocations
+    void* ptr1 = malloc(100);
+    AllocationProfiler::recordAllocation(ptr1, 100, "test location 1");
+    
+    void* ptr2 = malloc(200);
+    AllocationProfiler::recordAllocation(ptr2, 200, "test location 2");
+    
+    // Check stats
+    auto stats = AllocationProfiler::getStats();
+    assert(stats.total_allocations == 2);
+    assert(stats.current_allocations == 2);
+    assert(stats.current_bytes == 300);
+    
+    // Record deallocation
+    AllocationProfiler::recordDeallocation(ptr1);
+    free(ptr1);
+    
+    stats = AllocationProfiler::getStats();
+    assert(stats.current_allocations == 1);
+    assert(stats.current_bytes == 200);
+    
+    // Generate report
+    std::string report = AllocationProfiler::generateReport();
+    assert(!report.empty());
+    std::cout << "\n" << report << "\n";
+    
+    // Detect leaks
+    auto leaks = AllocationProfiler::detectLeaks();
+    assert(leaks.size() == 1);
+    
+    // Cleanup
+    AllocationProfiler::recordDeallocation(ptr2);
+    free(ptr2);
+    
+    std::cout << "AllocationProfiler passed.\n";
+}
+
+int main() {
+    test_memory_sanitizer();
+    test_buffer_overflow_detector();
+    test_profiler_integration();
+    test_allocation_profiler();
+    
+    std::cout << "All Phase 1 Enhancement tests passed!\n";
+    return 0;
+}

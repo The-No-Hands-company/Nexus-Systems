@@ -1,0 +1,98 @@
+#include <nexus/utility/cli/arg_parser.h>
+#include <nexus/utility/cli/config_file_reader.h>
+#include <nexus/utility/cli/ini_parser.h>
+#include <iostream>
+#include <cassert>
+#include <fstream>
+
+using namespace nexus::utility::cli;
+
+void test_arg_parser() {
+    std::cout << "Testing ArgParser...\n";
+    
+    ArgParser parser("test_program");
+    parser.addFlag("v", "verbose", "Enable verbose output")
+          .addOption<int>("p", "port", "Port number", 8080)
+          .addOption<std::string>("h", "host", "Host address", "localhost");
+    
+    // Simulate command line: test_program --verbose --port 9000 file.txt
+    const char* argv[] = {"test_program", "--verbose", "--port", "9000", "file.txt"};
+    int argc = 5;
+    
+    parser.parse(argc, const_cast<char**>(argv));
+    
+    assert(parser.get<bool>("verbose") == true);
+    assert(parser.get<int>("port") == 9000);
+    assert(parser.get<std::string>("host") == "localhost"); // default
+    assert(parser.getPositional().size() == 1);
+    assert(parser.getPositional()[0] == "file.txt");
+    
+    std::cout << "ArgParser passed.\n";
+}
+
+void test_config_file_reader() {
+    std::cout << "Testing ConfigFileReader...\n";
+    
+    // Create test config file
+    std::ofstream config("/tmp/test_config.txt");
+    config << "# Test configuration\n";
+    config << "port=8080\n";
+    config << "host=localhost\n";
+    config << "debug=true\n";
+    config << "timeout=30\n";
+    config.close();
+    
+    ConfigFileReader reader;
+    assert(reader.load("/tmp/test_config.txt"));
+    
+    assert(reader.get<int>("port") == 8080);
+    assert(reader.get<std::string>("host") == "localhost");
+    assert(reader.get<bool>("debug") == true);
+    assert(reader.get<int>("timeout") == 30);
+    assert(reader.get<int>("missing", 42) == 42); // default
+    
+    std::cout << "ConfigFileReader passed.\n";
+}
+
+void test_ini_parser() {
+    std::cout << "Testing IniParser...\n";
+    
+    // Create test INI file
+    std::ofstream ini("/tmp/test.ini");
+    ini << "[server]\n";
+    ini << "port=8080\n";
+    ini << "host=localhost\n";
+    ini << "\n";
+    ini << "[database]\n";
+    ini << "name=mydb\n";
+    ini << "user=admin\n";
+    ini << "enabled=true\n";
+    ini.close();
+    
+    IniParser parser;
+    assert(parser.load("/tmp/test.ini"));
+    
+    assert(parser.hasSection("server"));
+    assert(parser.hasSection("database"));
+    assert(parser.get<int>("server", "port") == 8080);
+    assert(parser.get<std::string>("server", "host") == "localhost");
+    assert(parser.get<std::string>("database", "name") == "mydb");
+    assert(parser.get<bool>("database", "enabled") == true);
+    
+    auto sections = parser.sections();
+    assert(sections.size() == 2);
+    
+    auto server_keys = parser.keys("server");
+    assert(server_keys.size() == 2);
+    
+    std::cout << "IniParser passed.\n";
+}
+
+int main() {
+    test_arg_parser();
+    test_config_file_reader();
+    test_ini_parser();
+    
+    std::cout << "All Phase 20 tests passed!\n";
+    return 0;
+}
