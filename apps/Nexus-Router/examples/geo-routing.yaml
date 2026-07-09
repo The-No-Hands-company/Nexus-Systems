@@ -1,0 +1,54 @@
+# Example: Geographic Routing Configuration
+# Route requests to appropriate regional cloud instances
+
+router:
+  port: 9999
+  hostname: "0.0.0.0"
+
+cloud:
+  url: "http://localhost:8787"
+  apiKey: "change-me"
+  heartbeat_interval_sec: 30
+
+auth:
+  phantom_enabled: true
+
+geography:
+  default_region: "us-east-1"
+  regions:
+    # Europe
+    eu:
+      cidrs:
+        - "2.0.0.0/8"          # Europe A
+        - "3.0.0.0/8"          # Europe B
+        - "5.0.0.0/8"          # Europe C
+      cloud_url: "http://nexus-eu.local:8787"
+
+    # North America
+    us:
+      cidrs:
+        - "1.0.0.0/8"          # USA
+      cloud_url: "http://nexus-us.local:8787"
+
+    # Asia Pacific
+    ap:
+      cidrs:
+        - "14.0.0.0/8"         # APAC
+        - "15.0.0.0/8"
+      cloud_url: "http://nexus-ap.local:8787"
+
+routes:
+  "/api/v1/tools":
+    upstreams:
+      - name: "nexus-cloud"
+    federation_aware: false
+
+telemetry:
+  logs:
+    enabled: true
+    elasticsearch:
+      url: "http://localhost:9200"
+  metrics:
+    enabled: true
+    prometheus:
+      url: "http://localhost:9090"

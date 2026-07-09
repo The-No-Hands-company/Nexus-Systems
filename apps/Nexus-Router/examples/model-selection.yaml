@@ -1,0 +1,68 @@
+# Example: AI Provider Routing Configuration
+# Intelligent model selection based on task complexity and type
+
+router:
+  port: 9999
+  hostname: "0.0.0.0"
+
+cloud:
+  url: "http://localhost:8787"
+  apiKey: "change-me"
+
+auth:
+  phantom_enabled: true
+
+geography:
+  default_region: "us-east-1"
+
+routes:
+  "/api/chat":
+    upstreams:
+      - name: "nexus-ai"
+    load_balance: "round_robin"
+
+ai_providers:
+  default_model: "ollama"
+  routing_rules:
+    # Legal documents → Claude (best reasoning)
+    - pattern: "legal:*"
+      model: "claude"
+      fallback: "gpt-4"
+
+    # Contracts → Claude
+    - pattern: "contract:*"
+      model: "claude"
+      fallback: "gpt-4"
+
+    # Code review → Claude or Groq
+    - pattern: "code:review"
+      model: "claude"
+      fallback: "groq"
+
+    # Quick code generation → Groq (fast)
+    - pattern: "code:generate"
+      model: "groq"
+      fallback: "ollama"
+
+    # Complex analysis → Claude
+    - pattern: "analysis:*"
+      model: "claude"
+      fallback: "gpt-4"
+
+    # Simple Q&A → Ollama (local, free)
+    - pattern: "qa:simple"
+      model: "ollama"
+      fallback: "groq"
+
+    # Everything else → Ollama
+    - pattern: "*"
+      model: "ollama"
+      fallback: "groq"
+
+telemetry:
+  logs:
+    enabled: true
+  metrics:
+    enabled: true
+  tracing:
+    enabled: true
