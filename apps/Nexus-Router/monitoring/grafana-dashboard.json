@@ -1,0 +1,106 @@
+{
+  "dashboard": {
+    "title": "Nexus Router",
+    "description": "Central orchestration engine monitoring",
+    "tags": ["nexus", "router", "observability"],
+    "timezone": "UTC",
+    "panels": [
+      {
+        "id": 1,
+        "title": "Requests Per Second",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(nexus_router_requests_total[1m])",
+            "legendFormat": "{{method}} {{route}}"
+          }
+        ]
+      },
+      {
+        "id": 2,
+        "title": "Request Latency (p50, p95, p99)",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.5, nexus_router_request_duration_seconds_bucket)",
+            "legendFormat": "p50"
+          },
+          {
+            "expr": "histogram_quantile(0.95, nexus_router_request_duration_seconds_bucket)",
+            "legendFormat": "p95"
+          },
+          {
+            "expr": "histogram_quantile(0.99, nexus_router_request_duration_seconds_bucket)",
+            "legendFormat": "p99"
+          }
+        ]
+      },
+      {
+        "id": 3,
+        "title": "Status Code Distribution",
+        "type": "piechart",
+        "targets": [
+          {
+            "expr": "sum by(status) (rate(nexus_router_requests_total[5m]))",
+            "legendFormat": "{{status}}"
+          }
+        ]
+      },
+      {
+        "id": 4,
+        "title": "Auth Failures",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(nexus_router_auth_failures_total[5m])",
+            "legendFormat": "failures/sec"
+          }
+        ]
+      },
+      {
+        "id": 5,
+        "title": "AI Provider Selection",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "sum by(provider) (rate(nexus_router_provider_selections_total[5m]))",
+            "legendFormat": "{{provider}}"
+          }
+        ]
+      },
+      {
+        "id": 6,
+        "title": "Federation Peers Health",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "nexus_router_federation_peers_healthy",
+            "legendFormat": "healthy peers"
+          }
+        ]
+      },
+      {
+        "id": 7,
+        "title": "Regional Routing",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "sum by(region) (rate(nexus_router_requests_total[1m]))",
+            "legendFormat": "{{region}}"
+          }
+        ]
+      },
+      {
+        "id": 8,
+        "title": "Request Traces",
+        "type": "logs",
+        "targets": [
+          {
+            "expr": "{job=\"nexus-router\"}",
+            "format": "json"
+          }
+        ]
+      }
+    ]
+  }
+}

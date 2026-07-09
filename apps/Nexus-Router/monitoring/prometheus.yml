@@ -1,0 +1,27 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    monitor: 'nexus-systems'
+
+scrape_configs:
+  - job_name: 'nexus-router'
+    static_configs:
+      - targets: ['localhost:9999']
+    metrics_path: '/metrics'
+    scrape_interval: 5s
+
+  - job_name: 'nexus-cloud'
+    static_configs:
+      - targets: ['localhost:8787']
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+
+  - job_name: 'nexus-ai'
+    static_configs:
+      - targets: ['localhost:3400']
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+
+rule_files:
+  - 'prometheus-rules.yaml'

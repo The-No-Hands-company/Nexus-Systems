@@ -1,0 +1,55 @@
+groups:
+  - name: nexus_router
+    interval: 30s
+    rules:
+      # Request latency
+      - record: nexus_router:request_duration_seconds:rate5m
+        expr: rate(nexus_router_request_duration_seconds_sum[5m]) / rate(nexus_router_request_duration_seconds_count[5m])
+
+      # Error rate
+      - record: nexus_router:error_rate:rate5m
+        expr: rate(nexus_router_requests_total{status=~"5.."}[5m])
+
+      # Auth failure rate
+      - record: nexus_router:auth_failure_rate:rate5m
+        expr: rate(nexus_router_auth_failures_total[5m])
+
+      # Alert: High latency
+      - alert: NexusRouterHighLatency
+        expr: nexus_router:request_duration_seconds:rate5m > 0.5
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Nexus Router high latency detected"
+          description: "Request latency > 500ms for 5 minutes"
+
+      # Alert: High error rate
+      - alert: NexusRouterHighErrorRate
+        expr: nexus_router:error_rate:rate5m > 0.05
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Nexus Router high error rate"
+          description: "Error rate > 5% for 5 minutes"
+
+      # Alert: High auth failures
+      - alert: NexusRouterHighAuthFailures
+        expr: nexus_router:auth_failure_rate:rate5m > 0.1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Nexus Router high auth failure rate"
+          description: "Auth failure rate > 10% for 5 minutes"
+
+      # Alert: Service unavailable
+      - alert: NexusRouterServiceDown
+        expr: up{job="nexus-router"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Nexus Router is down"
+          description: "Nexus Router has been down for 2+ minutes"
