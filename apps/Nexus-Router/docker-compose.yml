@@ -1,0 +1,46 @@
+version: "3.9"
+
+services:
+  nexus-router:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "9999:9999"
+    environment:
+      NEXUS_ROUTER_PORT: "9999"
+      NEXUS_CLOUD_URL: "http://nexus-cloud:8787"
+      NEXUS_CLOUD_API_KEY: "change-me"
+      CONFIG_PATH: "/app/config/routing-policy.yaml"
+      LOG_LEVEL: "debug"
+      NODE_ENV: "production"
+    volumes:
+      - ./config:/app/config:ro
+    depends_on:
+      - nexus-cloud
+    networks:
+      - nexus-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9999/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  # Reference: Nexus-Cloud would run here
+  nexus-cloud:
+    image: nexus-cloud:latest  # Would be built from apps/Nexus-Cloud
+    restart: unless-stopped
+    ports:
+      - "8787:8787"
+    environment:
+      PORT: "8787"
+      NODE_ENV: "production"
+    networks:
+      - nexus-net
+
+networks:
+  nexus-net:
+    driver: bridge
+    name: nexus-net

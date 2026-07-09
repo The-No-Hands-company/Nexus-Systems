@@ -1,0 +1,74 @@
+# Example: Federation (Multi-Cloud) Configuration
+# Route across multiple independent Nexus-Cloud instances
+
+router:
+  port: 9999
+  hostname: "0.0.0.0"
+
+cloud:
+  url: "http://nexus-us.local:8787"
+  apiKey: "change-me-us"
+  heartbeat_interval_sec: 30
+
+auth:
+  phantom_enabled: true
+
+geography:
+  default_region: "us-east-1"
+  regions:
+    eu:
+      cidrs:
+        - "2.0.0.0/8"
+      cloud_url: "http://nexus-eu.local:8787"
+    us:
+      cidrs:
+        - "1.0.0.0/8"
+      cloud_url: "http://nexus-us.local:8787"
+    ap:
+      cidrs:
+        - "14.0.0.0/8"
+      cloud_url: "http://nexus-ap.local:8787"
+
+routes:
+  "/api/host":
+    upstreams:
+      - name: "nexus-hosting"
+    federation_aware: true
+
+  "/api/forge":
+    upstreams:
+      - name: "nexus-forge"
+    federation_aware: true
+
+# Federation configuration
+federation:
+  enabled: true
+  peers:
+    - name: "cloud-eu"
+      url: "http://nexus-eu.local:8787"
+      region: "eu-west-1"
+      trust_level: "verified"
+
+    - name: "cloud-ap"
+      url: "http://nexus-ap.local:8787"
+      region: "ap-southeast-1"
+      trust_level: "verified"
+
+    - name: "cloud-sa"
+      url: "http://nexus-sa.local:8787"
+      region: "sa-east-1"
+      trust_level: "trusted"
+
+telemetry:
+  logs:
+    enabled: true
+    elasticsearch:
+      url: "http://localhost:9200"
+  metrics:
+    enabled: true
+    prometheus:
+      url: "http://localhost:9090"
+  tracing:
+    enabled: true
+    jaeger:
+      url: "http://localhost:6831"

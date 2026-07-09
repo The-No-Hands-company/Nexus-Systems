@@ -1,0 +1,116 @@
+# Nexus Router — Routing Policy Configuration
+# Define how requests flow through the ecosystem
+
+router:
+  port: 9999
+  hostname: "0.0.0.0"
+
+cloud:
+  url: "http://localhost:8787"
+  apiKey: "change-me"
+  heartbeat_interval_sec: 30
+
+auth:
+  phantom_enabled: true
+  jwt_secret: "your-jwt-secret-here"
+
+geography:
+  default_region: "us-east-1"
+  regions:
+    eu:
+      cidrs:
+        - "2.0.0.0/8"
+        - "3.0.0.0/8"
+      cloud_url: "http://nexus-eu.local:8787"
+    us:
+      cidrs:
+        - "1.0.0.0/8"
+      cloud_url: "http://nexus-us.local:8787"
+
+# API routing rules
+routes:
+  "/api/v1/tools":
+    upstreams:
+      - name: "nexus-cloud"
+        priority: 1
+    load_balance: "round_robin"
+
+  "/api/chat":
+    upstreams:
+      - name: "nexus-ai"
+        priority: 1
+      - name: "nexus-inference"
+        priority: 2
+    load_balance: "round_robin"
+
+  "/api/host":
+    upstreams:
+      - name: "nexus-hosting"
+    federation_aware: true
+
+  "/api/deploy":
+    upstreams:
+      - name: "nexus-deploy"
+
+  "/api/forge":
+    upstreams:
+      - name: "nexus-forge"
+
+  "/api/finance":
+    upstreams:
+      - name: "nexus-finance"
+
+# AI provider routing
+ai_providers:
+  default_model: "ollama"
+  routing_rules:
+    # Legal documents → Claude (most capable)
+    - pattern: "legal:*"
+      model: "claude"
+      fallback: "gpt-4"
+
+    # Code tasks → Claude or Groq
+    - pattern: "code:*"
+      model: "claude"
+      fallback: "groq"
+
+    # Research → Claude (good reasoning)
+    - pattern: "research:*"
+      model: "claude"
+      fallback: "gpt-4"
+
+    # General queries → Ollama (local, fast)
+    - pattern: "*"
+      model: "ollama"
+      fallback: "groq"
+
+# Telemetry configuration
+telemetry:
+  logs:
+    enabled: true
+    format: "json"
+    elasticsearch:
+      url: "http://localhost:9200"
+
+  metrics:
+    enabled: true
+    prometheus:
+      url: "http://localhost:9090"
+
+  tracing:
+    enabled: true
+    jaeger:
+      url: "http://localhost:6831"
+
+# Federation (multi-cloud)
+federation:
+  enabled: false
+  peers:
+    # - name: "cloud-eu"
+    #   url: "http://nexus-eu.local:8787"
+    #   region: "eu-west-1"
+    #   trust_level: "verified"
+    # - name: "cloud-ap"
+    #   url: "http://nexus-ap.local:8787"
+    #   region: "ap-southeast-1"
+    #   trust_level: "trusted"
