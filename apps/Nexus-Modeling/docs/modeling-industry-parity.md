@@ -216,7 +216,7 @@ Nexus status is grounded in the July 2026 kernel + app inventories, **not** aspi
 | Format | Direction expected | Who ships it | Nexus | Gap |
 |---|---|---|---|---|
 | OBJ | import + export | all | ✅ | import (v/vt/vn, n-gon, negative idx) + ASCII export |
-| PLY | import + export | all | 🟡 | Export only (ASCII); import next |
+| PLY | import + export | all | ✅ | ASCII + binary-LE import + ASCII export |
 | STL | import + export | all + CAD/print | ✅ | binary export + binary/ASCII import (+ optional weld) |
 | glTF 2.0 | import + export | all modern | ❌ | next up |
 | FBX | import + export | games/film | ❌ | — |
@@ -225,7 +225,7 @@ Nexus status is grounded in the July 2026 kernel + app inventories, **not** aspi
 | STEP / IGES | import + export | CAD | ❌ | — |
 | Native (.nxm) | round-trip | — | ✅ | — |
 
-**Verdict:** interchange was the most glaring gap and is now being closed. **OBJ import + STL import/export have landed** (with non-finite hardening and round-trip tests), so `import → edit → export` works for the two most universal mesh formats. Remaining: PLY import, then glTF 2.0 (modern standard), then FBX/USD/Alembic, then editor File▸Import/Export wiring.
+**Verdict:** interchange was the most glaring gap and is now being closed. **OBJ, STL, and PLY import/export have landed** (with non-finite hardening and round-trip tests), so `import → edit → export` works for the three universal mesh formats. Remaining: glTF 2.0 (modern standard, hand-rolled), then FBX/USD/Alembic, then editor File▸Import/Export wiring.
 
 ## L14 — Units, measurement & analysis
 
@@ -260,7 +260,7 @@ mode/registry architecture with the expected direct-modeling and CAD modes, gizm
 
 The gaps cluster in **four themes**, in priority order:
 
-1. **Interchange (L13)** — *in progress:* OBJ import + STL import/export landed; PLY import, glTF, and editor wiring remain. Was the top gap; now being actively closed.
+1. **Interchange (L13)** — *in progress:* OBJ, STL, and PLY import/export landed; glTF and editor wiring remain. Was the top gap; now being actively closed.
 2. **Non-destructive / procedural core (L5)** — feature history regenerates only Sketch/Extrude/Revolve; no modifier
    stack and no procedural node graph. This is the structural keystone: it makes the entire CAD façade (L6) and the
    deformer set (L8) real.
@@ -273,7 +273,7 @@ The gaps cluster in **four themes**, in priority order:
 ## Prioritized parity-closure backlog
 
 ### P0 — table-stakes; nothing new in-layer until these land
-- **IO importers + core formats:** ✅ OBJ import + STL import/export landed. Remaining: PLY import, glTF 2.0 import+export, then editor File▸Import/Export wiring. (L13)
+- **IO importers + core formats:** ✅ OBJ, STL, and PLY import/export landed. Remaining: glTF 2.0 import+export (hand-rolled), then editor File▸Import/Export wiring. (L13)
 - **Non-destructive modifier stack** (ordered, re-evaluatable) for mesh ops — the minimum viable procedural core. (L5)
 - **Viewport shading-mode switcher** (wireframe / solid / material / rendered) + x-ray + backface toggle. (L11)
 - **Box/lasso/circle select** promoted from the current bare-flag marquee. (L9)

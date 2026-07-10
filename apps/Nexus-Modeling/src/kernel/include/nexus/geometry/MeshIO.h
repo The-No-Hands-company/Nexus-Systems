@@ -3,8 +3,8 @@
 //  Nexus Geometry — Mesh Import/Export (hard-surface blockout workflow)
 //
 //  MeshIO::exportMesh() serialises a Mesh to disk in OBJ / PLY (ASCII) or STL
-//  (binary) format. MeshIO::importMesh() reads a Mesh back from OBJ or STL
-//  (binary/ASCII auto-detected), enabling import -> edit -> export round-trips.
+//  (binary) format. MeshIO::importMesh() reads a Mesh back from OBJ, STL, or
+//  PLY (binary/ASCII auto-detected), enabling import -> edit -> export round-trips.
 //
 //  Design constraints:
 //  - All paths are noexcept and headless-safe.
@@ -85,6 +85,7 @@ enum class MeshImportFormat : uint8_t {
     Auto,  // detect from file extension
     OBJ,   // Wavefront OBJ (ASCII)
     STL,   // Stereolithography (binary or ASCII, auto-detected)
+    PLY,   // Stanford PLY (ASCII or binary little-endian, auto-detected)
 };
 
 enum class MeshImportDiagnostic : uint32_t {

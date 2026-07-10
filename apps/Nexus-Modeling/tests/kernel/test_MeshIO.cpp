@@ -3,6 +3,8 @@
 
 #include <gtest/gtest.h>
 
+#include <bit>
+#include <cstdint>
 #include <cstdio>
 #include <fstream>
 #include <limits>
@@ -510,13 +512,108 @@ TEST(MeshIO, ImportSTLWeldReducesVertexCount)
     std::remove(path.c_str());
 }
 
+// ─── Import: PLY ─────────────────────────────────────────────────────────────
+
+TEST(MeshIO, ImportPLYRoundTripsExportedBox)
+{
+    const std::string path = tmpPath("rt_box.ply");
+    std::remove(path.c_str());
+
+    Mesh box = makeBox(1.f, 1.f, 1.f);
+    MeshExportOptions eopts{};
+    eopts.format         = MeshExportFormat::PLY;
+    eopts.includeNormals = false;
+    eopts.includeUVs     = false;
+    ASSERT_TRUE(MeshIO::exportMesh(box, path, eopts).valid);
+
+    Mesh loaded;
+    MeshImportOptions iopts{};
+    const MeshImportReport rep = MeshIO::importMesh(path, iopts, loaded);
+
+    ASSERT_TRUE(rep.valid);
+    EXPECT_EQ(loaded.attributes().vertexCount(), box.attributes().vertexCount());
+    EXPECT_EQ(loaded.topology().faceCount(),     box.topology().faceCount());
+
+    std::remove(path.c_str());
+}
+
+TEST(MeshIO, ImportPLYPreservesNormals)
+{
+    const std::string path = tmpPath("normals.ply");
+    std::remove(path.c_str());
+
+    Mesh box = makeBox(1.f, 1.f, 1.f);
+    (void)box.computeVertexNormals();
+    MeshExportOptions eopts{};
+    eopts.format         = MeshExportFormat::PLY;
+    eopts.includeNormals = true;
+    eopts.includeUVs     = false;
+    ASSERT_TRUE(MeshIO::exportMesh(box, path, eopts).valid);
+
+    Mesh loaded;
+    MeshImportOptions iopts{};
+    const MeshImportReport rep = MeshIO::importMesh(path, iopts, loaded);
+
+    ASSERT_TRUE(rep.valid);
+    EXPECT_TRUE(loaded.attributes().hasNormals());
+    EXPECT_EQ(loaded.attributes().normals().size(), loaded.attributes().vertexCount());
+
+    std::remove(path.c_str());
+}
+
+TEST(MeshIO, ImportPLYBinaryLittleEndian)
+{
+    const std::string path = tmpPath("bin.ply");
+    std::remove(path.c_str());
+    {
+        std::ofstream f(path, std::ios::binary);
+        f << "ply\n"
+             "format binary_little_endian 1.0\n"
+             "element vertex 3\n"
+             "property float x\nproperty float y\nproperty float z\n"
+             "element face 1\n"
+             "property list uchar int vertex_indices\n"
+             "end_header\n";
+        auto wf = [&](float v) {
+            const uint32_t bits = std::bit_cast<uint32_t>(v);
+            const char b[4] = {static_cast<char>(bits & 0xFF), static_cast<char>((bits >> 8) & 0xFF),
+                               static_cast<char>((bits >> 16) & 0xFF), static_cast<char>((bits >> 24) & 0xFF)};
+            f.write(b, 4);
+        };
+        auto wi = [&](int32_t v) {
+            const uint32_t u = static_cast<uint32_t>(v);
+            const char b[4] = {static_cast<char>(u & 0xFF), static_cast<char>((u >> 8) & 0xFF),
+                               static_cast<char>((u >> 16) & 0xFF), static_cast<char>((u >> 24) & 0xFF)};
+            f.write(b, 4);
+        };
+        wf(0.f); wf(0.f); wf(0.f);   // v0
+        wf(1.f); wf(0.f); wf(0.f);   // v1
+        wf(0.f); wf(1.f); wf(0.f);   // v2
+        const char cnt = 3;
+        f.write(&cnt, 1);            // face vertex count (uchar)
+        wi(0); wi(1); wi(2);         // indices (int)
+    }
+
+    Mesh loaded;
+    MeshImportOptions iopts{};
+    const MeshImportReport rep = MeshIO::importMesh(path, iopts, loaded);
+
+    ASSERT_TRUE(rep.valid) << (rep.messages.empty() ? "" : rep.messages.front());
+    EXPECT_EQ(loaded.attributes().vertexCount(), 3u);
+    ASSERT_EQ(loaded.topology().faceCount(), 1u);
+    EXPECT_EQ(loaded.topology().face(0).indices.size(), 3u);
+
+    std::remove(path.c_str());
+}
+
 // ─── Import: dispatch / errors ───────────────────────────────────────────────
 
 TEST(MeshIO, ImportAutoDetectsFormatFromExtension)
 {
     Mesh box = makeBox(1.f, 1.f, 1.f);
     for (const auto& fmt : {std::pair{MeshExportFormat::OBJ, std::string(".obj")},
-                            std::pair{MeshExportFormat::STL, std::string(".stl")}}) {
+                            std::pair{MeshExportFormat::STL, std::string(".stl")},
+                            std::pair{MeshExportFormat::PLY, std::string(".ply")}}) {
         const std::string path = tmpPath("auto" + fmt.second);
         std::remove(path.c_str());
         MeshExportOptions eopts{};

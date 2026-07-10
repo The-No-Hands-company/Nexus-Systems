@@ -643,6 +643,332 @@ MeshImportReport importSTL(const std::string& path, const MeshImportOptions& opt
     return report;
 }
 
+// ── PLY (ASCII + binary little-endian) import ────────────────────────────────
+enum class PlyType : uint8_t { I8, U8, I16, U16, I32, U32, F32, F64, Invalid };
+
+PlyType plyTypeFromName(const std::string& s)
+{
+    if (s == "char"   || s == "int8")    return PlyType::I8;
+    if (s == "uchar"  || s == "uint8")   return PlyType::U8;
+    if (s == "short"  || s == "int16")   return PlyType::I16;
+    if (s == "ushort" || s == "uint16")  return PlyType::U16;
+    if (s == "int"    || s == "int32")   return PlyType::I32;
+    if (s == "uint"   || s == "uint32")  return PlyType::U32;
+    if (s == "float"  || s == "float32") return PlyType::F32;
+    if (s == "double" || s == "float64") return PlyType::F64;
+    return PlyType::Invalid;
+}
+
+size_t plyTypeSize(PlyType t)
+{
+    switch (t) {
+        case PlyType::I8:
+        case PlyType::U8:  return 1;
+        case PlyType::I16:
+        case PlyType::U16: return 2;
+        case PlyType::I32:
+        case PlyType::U32:
+        case PlyType::F32: return 4;
+        case PlyType::F64: return 8;
+        default:           return 0;
+    }
+}
+
+uint64_t readLEBytes(const unsigned char* p, size_t n)
+{
+    uint64_t v = 0;
+    for (size_t i = 0; i < n; ++i) {
+        v |= static_cast<uint64_t>(p[i]) << (8 * i);
+    }
+    return v;
+}
+
+double plyBinValue(const unsigned char* p, PlyType t)
+{
+    switch (t) {
+        case PlyType::I8:  return static_cast<double>(static_cast<int8_t>(p[0]));
+        case PlyType::U8:  return static_cast<double>(p[0]);
+        case PlyType::I16: return static_cast<double>(static_cast<int16_t>(readLEBytes(p, 2)));
+        case PlyType::U16: return static_cast<double>(static_cast<uint16_t>(readLEBytes(p, 2)));
+        case PlyType::I32: return static_cast<double>(static_cast<int32_t>(readLEBytes(p, 4)));
+        case PlyType::U32: return static_cast<double>(static_cast<uint32_t>(readLEBytes(p, 4)));
+        case PlyType::F32: return static_cast<double>(std::bit_cast<float>(static_cast<uint32_t>(readLEBytes(p, 4))));
+        case PlyType::F64: return std::bit_cast<double>(readLEBytes(p, 8));
+        default:           return 0.0;
+    }
+}
+
+struct PlyProp {
+    std::string name;
+    PlyType     type = PlyType::Invalid;
+};
+
+MeshImportReport importPLY(const std::string& path, const MeshImportOptions& options, Mesh& out)
+{
+    MeshImportReport report{};
+    std::ifstream in(path, std::ios::binary);
+    if (!in) {
+        report.diagnostic = MeshImportDiagnostic::FileOpenFailed;
+        report.messages.push_back("Cannot import: failed to open file");
+        return report;
+    }
+    const std::vector<char> buf((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+    const std::string content(buf.begin(), buf.end());
+
+    const size_t hpos = content.find("end_header");
+    if (hpos == std::string::npos) {
+        report.diagnostic = MeshImportDiagnostic::ParseError;
+        report.messages.push_back("PLY: missing end_header");
+        return report;
+    }
+    const size_t nl = content.find('\n', hpos);
+    const size_t bodyStart = (nl == std::string::npos) ? content.size() : nl + 1;
+
+    enum class Fmt { Ascii, BinaryLE, BinaryBE, Unknown } fmt = Fmt::Unknown;
+    std::vector<PlyProp> vprops;
+    PlyType faceCountType = PlyType::Invalid, faceIndexType = PlyType::Invalid;
+    uint64_t vertexCount = 0, faceCount = 0;
+    std::string curElem;
+
+    std::istringstream hs(content.substr(0, hpos));
+    std::string line;
+    while (std::getline(hs, line)) {
+        std::istringstream ls(line);
+        std::string tok;
+        if (!(ls >> tok)) {
+            continue;
+        }
+        if (tok == "format") {
+            std::string f;
+            ls >> f;
+            if (f == "ascii") fmt = Fmt::Ascii;
+            else if (f == "binary_little_endian") fmt = Fmt::BinaryLE;
+            else if (f == "binary_big_endian") fmt = Fmt::BinaryBE;
+        } else if (tok == "element") {
+            std::string e;
+            uint64_t n = 0;
+            ls >> e >> n;
+            curElem = e;
+            if (e == "vertex") vertexCount = n;
+            else if (e == "face") faceCount = n;
+        } else if (tok == "property") {
+            std::string t1;
+            ls >> t1;
+            if (t1 == "list") {
+                std::string ct, it, nm;
+                ls >> ct >> it >> nm;
+                if (curElem == "face") {
+                    faceCountType = plyTypeFromName(ct);
+                    faceIndexType = plyTypeFromName(it);
+                }
+            } else if (curElem == "vertex") {
+                std::string nm;
+                ls >> nm;
+                vprops.push_back(PlyProp{nm, plyTypeFromName(t1)});
+            }
+        }
+    }
+
+    if (fmt == Fmt::Unknown) {
+        report.diagnostic = MeshImportDiagnostic::ParseError;
+        report.messages.push_back("PLY: unknown or missing format");
+        return report;
+    }
+    if (fmt == Fmt::BinaryBE) {
+        report.diagnostic = MeshImportDiagnostic::UnsupportedFormat;
+        report.messages.push_back("PLY: binary_big_endian is not supported");
+        return report;
+    }
+
+    auto idxOf = [&](const char* nm) -> int {
+        for (size_t i = 0; i < vprops.size(); ++i) {
+            if (vprops[i].name == nm) return static_cast<int>(i);
+        }
+        return -1;
+    };
+    const int ix = idxOf("x"), iy = idxOf("y"), iz = idxOf("z");
+    if (ix < 0 || iy < 0 || iz < 0) {
+        report.diagnostic = MeshImportDiagnostic::ParseError;
+        report.messages.push_back("PLY: vertex element lacks x/y/z");
+        return report;
+    }
+    const int inx = idxOf("nx"), iny = idxOf("ny"), inz = idxOf("nz");
+    int is = idxOf("s"); if (is < 0) is = idxOf("u"); if (is < 0) is = idxOf("texture_u");
+    int it = idxOf("t"); if (it < 0) it = idxOf("v"); if (it < 0) it = idxOf("texture_v");
+    const bool hasN  = inx >= 0 && iny >= 0 && inz >= 0;
+    const bool hasUV = is >= 0 && it >= 0;
+
+    std::vector<Vec3> positions, normals;
+    std::vector<Vec2> uvs;
+    std::vector<Face> faces;
+
+    auto finiteOK = [&](float a, float b, float c) {
+        return isFiniteFloat(a) && isFiniteFloat(b) && isFiniteFloat(c);
+    };
+
+    if (fmt == Fmt::Ascii) {
+        std::istringstream bs(content.substr(bodyStart));
+        std::vector<double> vals(vprops.size());
+        for (uint64_t v = 0; v < vertexCount; ++v) {
+            for (size_t k = 0; k < vprops.size(); ++k) {
+                if (!(bs >> vals[k])) {
+                    report.diagnostic = MeshImportDiagnostic::ParseError;
+                    report.messages.push_back("PLY: truncated vertex data");
+                    return report;
+                }
+            }
+            const auto px = static_cast<float>(vals[static_cast<size_t>(ix)]);
+            const auto py = static_cast<float>(vals[static_cast<size_t>(iy)]);
+            const auto pz = static_cast<float>(vals[static_cast<size_t>(iz)]);
+            if (!finiteOK(px, py, pz)) {
+                report.diagnostic = MeshImportDiagnostic::NonFiniteData;
+                report.messages.push_back("PLY: non-finite vertex position");
+                return report;
+            }
+            positions.push_back(Vec3{px, py, pz});
+            if (hasN) {
+                normals.push_back(Vec3{static_cast<float>(vals[static_cast<size_t>(inx)]),
+                                       static_cast<float>(vals[static_cast<size_t>(iny)]),
+                                       static_cast<float>(vals[static_cast<size_t>(inz)])});
+            }
+            if (hasUV) {
+                uvs.push_back(Vec2{static_cast<float>(vals[static_cast<size_t>(is)]),
+                                   static_cast<float>(vals[static_cast<size_t>(it)])});
+            }
+        }
+        for (uint64_t f = 0; f < faceCount; ++f) {
+            uint64_t cnt = 0;
+            if (!(bs >> cnt)) {
+                report.diagnostic = MeshImportDiagnostic::ParseError;
+                report.messages.push_back("PLY: truncated face data");
+                return report;
+            }
+            std::vector<uint32_t> idx;
+            idx.reserve(cnt);
+            for (uint64_t k = 0; k < cnt; ++k) {
+                long long id = 0;
+                if (!(bs >> id) || id < 0 || static_cast<uint64_t>(id) >= vertexCount) {
+                    report.diagnostic = MeshImportDiagnostic::ParseError;
+                    report.messages.push_back("PLY: face index out of range");
+                    return report;
+                }
+                idx.push_back(static_cast<uint32_t>(id));
+            }
+            if (cnt >= 3) {
+                Face fc;
+                fc.indices = std::move(idx);
+                faces.push_back(std::move(fc));
+            }
+        }
+    } else {  // BinaryLE
+        const auto* base = reinterpret_cast<const unsigned char*>(buf.data());
+        const unsigned char* p   = base + bodyStart;
+        const unsigned char* end = base + buf.size();
+
+        std::vector<size_t> off(vprops.size());
+        size_t stride = 0;
+        for (size_t k = 0; k < vprops.size(); ++k) {
+            const size_t s = plyTypeSize(vprops[k].type);
+            if (s == 0) {
+                report.diagnostic = MeshImportDiagnostic::ParseError;
+                report.messages.push_back("PLY: unknown vertex property type");
+                return report;
+            }
+            off[k] = stride;
+            stride += s;
+        }
+        for (uint64_t v = 0; v < vertexCount; ++v) {
+            if (p + stride > end) {
+                report.diagnostic = MeshImportDiagnostic::ParseError;
+                report.messages.push_back("PLY: truncated binary vertex data");
+                return report;
+            }
+            auto val = [&](int i) { return plyBinValue(p + off[static_cast<size_t>(i)], vprops[static_cast<size_t>(i)].type); };
+            const auto px = static_cast<float>(val(ix));
+            const auto py = static_cast<float>(val(iy));
+            const auto pz = static_cast<float>(val(iz));
+            if (!finiteOK(px, py, pz)) {
+                report.diagnostic = MeshImportDiagnostic::NonFiniteData;
+                report.messages.push_back("PLY: non-finite vertex position");
+                return report;
+            }
+            positions.push_back(Vec3{px, py, pz});
+            if (hasN) {
+                normals.push_back(Vec3{static_cast<float>(val(inx)), static_cast<float>(val(iny)),
+                                       static_cast<float>(val(inz))});
+            }
+            if (hasUV) {
+                uvs.push_back(Vec2{static_cast<float>(val(is)), static_cast<float>(val(it))});
+            }
+            p += stride;
+        }
+        if (faceCount > 0) {
+            const size_t ctSize = plyTypeSize(faceCountType);
+            const size_t itSize = plyTypeSize(faceIndexType);
+            if (ctSize == 0 || itSize == 0) {
+                report.diagnostic = MeshImportDiagnostic::ParseError;
+                report.messages.push_back("PLY: unknown face list type");
+                return report;
+            }
+            for (uint64_t f = 0; f < faceCount; ++f) {
+                if (p + ctSize > end) {
+                    report.diagnostic = MeshImportDiagnostic::ParseError;
+                    report.messages.push_back("PLY: truncated binary face data");
+                    return report;
+                }
+                const auto cnt = static_cast<uint64_t>(plyBinValue(p, faceCountType));
+                p += ctSize;
+                std::vector<uint32_t> idx;
+                idx.reserve(cnt);
+                for (uint64_t k = 0; k < cnt; ++k) {
+                    if (p + itSize > end) {
+                        report.diagnostic = MeshImportDiagnostic::ParseError;
+                        report.messages.push_back("PLY: truncated binary face indices");
+                        return report;
+                    }
+                    const auto id = static_cast<uint64_t>(plyBinValue(p, faceIndexType));
+                    p += itSize;
+                    if (id >= vertexCount) {
+                        report.diagnostic = MeshImportDiagnostic::ParseError;
+                        report.messages.push_back("PLY: face index out of range");
+                        return report;
+                    }
+                    idx.push_back(static_cast<uint32_t>(id));
+                }
+                if (cnt >= 3) {
+                    Face fc;
+                    fc.indices = std::move(idx);
+                    faces.push_back(std::move(fc));
+                }
+            }
+        }
+    }
+
+    if (positions.empty()) {
+        report.diagnostic = MeshImportDiagnostic::EmptyMesh;
+        report.messages.push_back("PLY: no vertices found");
+        return report;
+    }
+
+    out.attributes().setPositions(std::move(positions));
+    for (Face& f : faces) {
+        out.topology().addFace(std::move(f));
+    }
+    if (hasUV && !uvs.empty()) {
+        out.attributes().setUVs(std::move(uvs));
+    }
+    if (hasN && !normals.empty()) {
+        out.attributes().setNormals(std::move(normals));
+    } else if (options.computeNormalsIfMissing) {
+        (void)out.computeVertexNormals();
+    }
+
+    report.verticesRead = static_cast<uint32_t>(out.attributes().vertexCount());
+    report.facesRead    = static_cast<uint32_t>(out.topology().faceCount());
+    report.valid        = true;
+    return report;
+}
+
 } // namespace
 
 MeshExportReport MeshIO::exportMesh(const Mesh&              mesh,
@@ -722,6 +1048,8 @@ MeshImportReport MeshIO::importMesh(const std::string&       path,
             fmt = MeshImportFormat::OBJ;
         } else if (ext == ".stl") {
             fmt = MeshImportFormat::STL;
+        } else if (ext == ".ply") {
+            fmt = MeshImportFormat::PLY;
         } else {
             report.diagnostic = MeshImportDiagnostic::UnsupportedFormat;
             report.messages.push_back("Cannot import: unrecognized file extension");
@@ -735,6 +1063,9 @@ MeshImportReport MeshIO::importMesh(const std::string&       path,
             break;
         case MeshImportFormat::STL:
             report = importSTL(path, options, outMesh);
+            break;
+        case MeshImportFormat::PLY:
+            report = importPLY(path, options, outMesh);
             break;
         default:
             report.diagnostic = MeshImportDiagnostic::UnsupportedFormat;
