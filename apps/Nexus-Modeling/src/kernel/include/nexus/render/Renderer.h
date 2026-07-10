@@ -334,6 +334,18 @@ struct ShadowDepthPipelineDesc {
     const char*          debugName = nullptr;
 };
 
+// ── Lighting/composite pipeline assembly ──────────────────────────────────────
+// Inputs for Renderer::createLightingCompositePipeline. The caller supplies a
+// fullscreen vertex shader and a fragment shader that samples the GBuffer (set 0 =
+// compositeCoreSetLayout, set 1 = compositeShadowSetLayout) plus the final colour
+// target format (the swapchain colour format). No vertex input, no depth.
+struct LightingCompositePipelineDesc {
+    nexus::gfx::ShaderHandle vertexShader;
+    nexus::gfx::ShaderHandle fragmentShader;
+    nexus::gfx::Format       colorFormat = nexus::gfx::Format::B8G8R8A8_Srgb;
+    const char*              debugName   = nullptr;
+};
+
 // ── Renderer ──────────────────────────────────────────────────────────────────
 class Renderer {
 public:
@@ -413,6 +425,13 @@ public:
     // Returns an invalid handle if the device cannot create the pipeline.
     [[nodiscard]] static nexus::gfx::PipelineHandle createShadowDepthPipeline(
         nexus::gfx::IDevice& device, const ShadowDepthPipelineDesc& desc);
+
+    // Assembles the fullscreen lighting/composite pipeline from the published
+    // composite descriptor set layouts (set 0 core GBuffer inputs, set 1 shadow),
+    // no vertex input, no depth, one colour target in the caller's format. The
+    // fragment shader samples the GBuffer; the renderer binds the matching sets.
+    [[nodiscard]] static nexus::gfx::PipelineHandle createLightingCompositePipeline(
+        nexus::gfx::IDevice& device, const LightingCompositePipelineDesc& desc);
 
     void resetScene(SceneGraph& scene);
     void resetSceneAndDestroyTLAS(SceneGraph& scene);

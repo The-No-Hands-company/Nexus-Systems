@@ -168,8 +168,9 @@ void VulkanSwapchain::create(const SwapchainDesc& desc, uint32_t presentFamily)
     }
 
     if (m_surface == VK_NULL_HANDLE) {
-        // Headless path — no surface, no swapchain (e.g. offscreen rendering)
-        m_extent = desc.extent;
+        // Headless / offscreen path — no surface. Allocate our own colour images so
+        // the renderer still has valid targets (render-to-PNG, CI, render farm).
+        createHeadlessImages(desc);
         return;
     }
 
@@ -281,10 +282,79 @@ void VulkanSwapchain::create(const SwapchainDesc& desc, uint32_t presentFamily)
     }
 }
 
+// ── Headless offscreen images (no surface / no presentable swapchain) ─────────
+void VulkanSwapchain::createHeadlessImages(const SwapchainDesc& desc)
+{
+    m_extent = desc.extent;
+    m_format = desc.colorFormat;
+    const VkFormat fmt = vkutil::toVkFormat(desc.colorFormat);
+    const uint32_t count = std::clamp(desc.imageCount, 1u, 8u);
+
+    // No STORAGE: the frame scheduler then uses its intermediate-copy composite
+    // path. TRANSFER_SRC lets us read the result back for PNG capture.
+    m_imageUsageFlags = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT
+                      | VK_IMAGE_USAGE_TRANSFER_SRC_BIT
+                      | VK_IMAGE_USAGE_TRANSFER_DST_BIT
+                      | VK_IMAGE_USAGE_SAMPLED_BIT;
+
+    VkPhysicalDeviceMemoryProperties memProps{};
+    vkGetPhysicalDeviceMemoryProperties(m_physDev, &memProps);
+    auto findMemType = [&](uint32_t typeBits, VkMemoryPropertyFlags props) -> uint32_t {
+        for (uint32_t i = 0; i < memProps.memoryTypeCount; ++i)
+            if ((typeBits & (1u << i)) &&
+                (memProps.memoryTypes[i].propertyFlags & props) == props)
+                return i;
+        return 0;
+    };
+
+    m_images.resize(count);
+    m_imageMemory.resize(count);
+    m_imageViews.resize(count);
+    for (uint32_t i = 0; i < count; ++i) {
+        VkImageCreateInfo ici{VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO};
+        ici.imageType     = VK_IMAGE_TYPE_2D;
+        ici.format        = fmt;
+        ici.extent        = { m_extent.width, m_extent.height, 1 };
+        ici.mipLevels     = 1;
+        ici.arrayLayers   = 1;
+        ici.samples       = VK_SAMPLE_COUNT_1_BIT;
+        ici.tiling        = VK_IMAGE_TILING_OPTIMAL;
+        ici.usage         = m_imageUsageFlags;
+        ici.sharingMode   = VK_SHARING_MODE_EXCLUSIVE;
+        ici.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        if (vkCreateImage(m_device, &ici, nullptr, &m_images[i]) != VK_SUCCESS)
+            throw std::runtime_error("VulkanSwapchain(headless): vkCreateImage failed");
+
+        VkMemoryRequirements mr{};
+        vkGetImageMemoryRequirements(m_device, m_images[i], &mr);
+        VkMemoryAllocateInfo mai{VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO};
+        mai.allocationSize  = mr.size;
+        mai.memoryTypeIndex = findMemType(mr.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+        if (vkAllocateMemory(m_device, &mai, nullptr, &m_imageMemory[i]) != VK_SUCCESS)
+            throw std::runtime_error("VulkanSwapchain(headless): vkAllocateMemory failed");
+        vkBindImageMemory(m_device, m_images[i], m_imageMemory[i], 0);
+
+        VkImageViewCreateInfo vci{VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO};
+        vci.image                       = m_images[i];
+        vci.viewType                    = VK_IMAGE_VIEW_TYPE_2D;
+        vci.format                      = fmt;
+        vci.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        vci.subresourceRange.levelCount = 1;
+        vci.subresourceRange.layerCount = 1;
+        vkCreateImageView(m_device, &vci, nullptr, &m_imageViews[i]);
+    }
+}
+
 // ── Destroy ───────────────────────────────────────────────────────────────────
 void VulkanSwapchain::destroy()
 {
     for (auto v : m_imageViews)     if (v) vkDestroyImageView (m_device, v, nullptr);
+    // Headless-owned images have backing memory we allocated; destroy those too.
+    for (size_t i = 0; i < m_imageMemory.size(); ++i) {
+        if (i < m_images.size() && m_images[i]) vkDestroyImage(m_device, m_images[i], nullptr);
+        if (m_imageMemory[i]) vkFreeMemory(m_device, m_imageMemory[i], nullptr);
+    }
+    m_imageMemory.clear();
     for (auto s : m_imageAvailSems) if (s) vkDestroySemaphore (m_device, s, nullptr);
     for (auto s : m_renderDoneSems) if (s) vkDestroySemaphore (m_device, s, nullptr);
     m_imageViews.clear(); m_imageAvailSems.clear(); m_renderDoneSems.clear(); m_images.clear();

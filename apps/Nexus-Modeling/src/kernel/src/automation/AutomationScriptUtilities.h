@@ -21,6 +21,13 @@ namespace nexus::automation {
 
 bool isFiniteFloat(float v) noexcept;
 bool isFiniteDouble(double v) noexcept;
+
+// Stable scalar formatting for automation messages. Produces the shortest
+// round-trippable form but always keeps a decimal point (e.g. 4 -> "4.0",
+// 4.5 -> "4.5") so message output does not drift with the standard library's
+// std::to_string behaviour (which in C++26 drops trailing zeros).
+std::string formatScalar(double v);
+std::string formatScalar(float v);
 nexus::render::Mat4 makeTranslationMatrix(float tx, float ty, float tz) noexcept;
 nexus::render::Mat4 makeScaleMatrix(float sx, float sy, float sz) noexcept;
 

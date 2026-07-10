@@ -34,6 +34,7 @@ public:
     [[nodiscard]] const DeviceCapabilities&   caps()       const noexcept override { return m_caps; }
     [[nodiscard]] HardwareTier                tier()       const noexcept override { return m_tier; }
     [[nodiscard]] std::string_view            deviceName() const noexcept override { return m_deviceName; }
+    [[nodiscard]] NativeVulkanHandles         nativeVulkanHandles() const noexcept override;
 
     [[nodiscard]] BufferHandle     createBuffer    (const BufferDesc&)      override;
     [[nodiscard]] TextureHandle    createTexture   (const TextureDesc&)     override;

@@ -11,8 +11,17 @@
 #include <nexus/cad/CadSelection.h>
 #include <nexus/app/ViewportGrid.h>
 #include <nexus/app/TransformGizmo.h>
+#include <nexus/parametric/FeatureHistory.h>
+#include <vulkan/vulkan.h>
 
 struct GLFWwindow;
+
+namespace nexus::gfx {
+class RenderContext;
+class ISwapchain;
+class IFrameScheduler;
+class ICommandBuffer;
+}
 
 namespace nexus::app {
 
@@ -20,17 +29,23 @@ using FeatureId = nexus::parametric::FeatureId;
 
 class EditorUI {
 public:
-    // Initialize ImGui with the GLFW window.
+    // Initialize ImGui with the GLFW window (creates context, GLFW backend).
     static void initialize(GLFWwindow* window);
 
-    // Shutdown ImGui.
+    // Initialize ImGui Vulkan backend after Viewport is initialized.
+    // Requires the Vulkan RenderContext and Swapchain to get VkInstance, VkDevice,
+    // VkQueue, VkRenderPass, etc.
+    static void initializeVulkan(nexus::gfx::RenderContext* renderContext, nexus::gfx::ISwapchain* swapchain);
+
+    // Shutdown ImGui (both Vulkan and GLFW backends).
     static void shutdown();
 
     // Begin a new UI frame.
     static void beginFrame();
 
-    // End the UI frame and render.
-    static void endFrame();
+    // End the UI frame and render (records ImGui draw data into the current command buffer).
+    // Must be called inside a Vulkan render pass that has the ImGui pipeline bound.
+    static void endFrame(nexus::gfx::ICommandBuffer* cmd);
 
     // ── Menu bar ──────────────────────────────────────────────────
     // Returns true if the user triggered an action.

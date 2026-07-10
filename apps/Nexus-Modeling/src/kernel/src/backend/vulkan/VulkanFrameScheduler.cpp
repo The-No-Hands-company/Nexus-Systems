@@ -251,6 +251,8 @@ std::optional<FrameContext> VulkanFrameScheduler::beginFrame()
     ctx.finalColorLayout = m_usingIntermediateStorage ? TextureLayout::TransferSrc
                                                       : TextureLayout::Present;
     return ctx;
+    m_currentFrame = ctx;  // Store for later access
+    return ctx;
 }
 
 // ── endFrame ─────────────────────────────────────────────────────────────────
@@ -365,17 +367,34 @@ void VulkanFrameScheduler::endFrame()
         // and the caller will call onResize().  No action needed here.
     }
 
-    // 4. Advance frame slot
+// 4. Advance frame slot
     ++m_frameSlot;
 }
 
-// ── onResize ──────────────────────────────────────────────────────────────────
+// ── getCurrentFrame ─────────────────────────────────────────────────────────────
+const FrameContext* VulkanFrameScheduler::getCurrentFrame() const noexcept {
+    // We need to return the current active frame context
+    // The active frame is at slot (m_frameSlot - 1) % m_maxInFlight
+    if (m_frameSlot == 0 || m_frames.empty()) return nullptr;
+    
+    const uint32_t slot = (m_frameSlot - 1) % m_maxInFlight;
+    const PerFrame& f = m_frames[slot];
+    if (!f.cmdObj) return nullptr;
 
-void VulkanFrameScheduler::onResize(Extent2D newExtent)
-{
-    m_dev.waitIdle();
+    static thread_local FrameContext cachedCtx;
+    cachedCtx.cmd          = f.cmdObj.get();
+    cachedCtx.colorTarget  = TextureHandle{}; // Would need to be filled from swapchain
+    cachedCtx.extent       = m_sc.extent();
+    cachedCtx.frameSlot    = slot % m_maxInFlight;
+    cachedCtx.imageIndex   = m_imageIndex;
+    cachedCtx.finalColorLayout = TextureLayout::Present;
+    return &cachedCtx;
+}
+
+void nexus::gfx::VulkanFrameScheduler::onResize(nexus::gfx::Extent2D newExtent) {
     m_sc.resize(newExtent);
-    registerSwapchainImages();  // update existing pool entries with new image handles
+    registerSwapchainImages();
+    m_frameSlot = 0;
 }
 
 } // namespace nexus::gfx

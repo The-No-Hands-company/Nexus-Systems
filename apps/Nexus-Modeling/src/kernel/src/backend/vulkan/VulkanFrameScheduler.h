@@ -36,6 +36,7 @@ public:
     void endFrame()                    override;
     void onResize(Extent2D newExtent)  override;
     [[nodiscard]] uint32_t maxFramesInFlight() const noexcept override { return m_maxInFlight; }
+    [[nodiscard]] const FrameContext* getCurrentFrame() const noexcept override;
 
 private:
     void createPerFrameResources();
@@ -71,6 +72,9 @@ private:
 
     uint32_t m_frameSlot  = 0;  // advances every frame
     uint32_t m_imageIndex = 0;  // set by acquire()
+
+    // Current frame context (valid after beginFrame() returns successfully)
+    std::optional<FrameContext> m_currentFrame;
 
     // vkQueueSubmit2 function pointer (loaded once)
     PFN_vkQueueSubmit2KHR m_pfnSubmit2 = nullptr;

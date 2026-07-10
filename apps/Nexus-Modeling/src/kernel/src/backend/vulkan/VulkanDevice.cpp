@@ -127,7 +127,6 @@ VulkanDevice::~VulkanDevice()
         if (b.handle) nexus::gfx::vkDestroyBuffer(m_pool->vma, b);
     for (auto& t : m_pool->textures) {
         if (t.isExternalImage) continue;  // swapchain images owned by ISwapchain
-        if (t.defaultView) vkDestroyImageView(m_device, t.defaultView, nullptr);
         if (!t.isSparse && t.image && t.allocation)
             nexus::gfx::vkDestroyTexture(m_pool->vma, m_device, t);
         else if (t.isSparse && t.image)
@@ -488,6 +487,16 @@ void VulkanDevice::waitIdle() {
 }
 VkQueue  VulkanDevice::queue(QueueType t)       const noexcept { return m_queues[static_cast<size_t>(t)].handle; }
 uint32_t VulkanDevice::queueFamily(QueueType t) const noexcept { return m_queues[static_cast<size_t>(t)].family; }
+
+NativeVulkanHandles VulkanDevice::nativeVulkanHandles() const noexcept {
+    NativeVulkanHandles h;
+    h.instance            = m_instance;
+    h.physicalDevice      = m_physDevice;
+    h.device              = m_device;
+    h.graphicsQueue       = queue(QueueType::Graphics);
+    h.graphicsQueueFamily = queueFamily(QueueType::Graphics);
+    return h;
+}
 VulkanResourcePool* VulkanDevice::resourcePool() noexcept { return m_pool.get(); }
 
 VmaAllocator VulkanDevice::vma() const noexcept { return m_pool ? m_pool->vma : nullptr; }
@@ -1312,6 +1321,11 @@ DescriptorSetHandle VulkanDevice::allocateDescriptorSet(const DescriptorSetDesc&
 
     DescriptorSetHandle h{};
     h.id = id;
+    // Write the resource bindings (buffers/textures/samplers) supplied in `desc`
+    // into the freshly allocated set. Without this the set is allocated but empty,
+    // and a shader reading its descriptors dereferences uninitialised state.
+    // Bindings that carry no valid resource are skipped by updateDescriptorSet.
+    updateDescriptorSet(h, desc.bindings);
     return h;
 }
 

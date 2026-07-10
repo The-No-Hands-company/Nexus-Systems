@@ -28,6 +28,25 @@ std::vector<std::string> readManifest(const fs::path& path)
     return lines;
 }
 
+// Top-level subtrees under include/nexus/ that are deliberately NOT part of the
+// frozen kernel SDK contract. They live under include/nexus/ for build
+// convenience but evolve freely until explicitly promoted into the frozen
+// surface:
+//   app/      - the editor application layer (viewport, tools, gizmos, UI); a
+//               DCC never ships its editor as a frozen plugin/SDK contract.
+//   debug/    - diagnostic/instrumentation tooling, not a public contract.
+//   agent/    - the in-development AI agent; its protocol is still churning.
+//   template/ - app-level document/scene templating, pending review.
+// The freeze audit guards the kernel SDK (geometry, cad, render, sim, ...),
+// analogous to Maya's OpenMaya or Houdini's HDK. When one of these subtrees
+// stabilizes, remove it here and add its headers to the manifest in the same
+// change.
+const std::set<std::string>& nonSdkTrees()
+{
+    static const std::set<std::string> trees = {"app", "debug", "agent", "template"};
+    return trees;
+}
+
 std::vector<std::string> scanPublicHeaders(const fs::path& repoRoot)
 {
     const fs::path includeRoot = repoRoot / "src" / "kernel" / "include" / "nexus";
@@ -37,6 +56,11 @@ std::vector<std::string> scanPublicHeaders(const fs::path& repoRoot)
             continue;
         }
         if (entry.path().extension() != ".h") {
+            continue;
+        }
+        const fs::path rel = fs::relative(entry.path(), includeRoot);
+        const std::string top = rel.begin() != rel.end() ? rel.begin()->generic_string() : std::string{};
+        if (nonSdkTrees().count(top) != 0) {
             continue;
         }
         headers.push_back(fs::relative(entry.path(), repoRoot).generic_string());

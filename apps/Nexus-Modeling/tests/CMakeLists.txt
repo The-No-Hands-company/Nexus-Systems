@@ -185,12 +185,12 @@ if(NEXUS_BACKEND_VULKAN)
 endif()
 
 target_link_libraries(nexus_kernel_tests
-    PRIVATE nexus_gfx_core nexus_backend_null nexus_neural GTest::gtest_main
+    PRIVATE nexus_gfx_core nexus_app nexus_backend_null nexus_neural GTest::gtest_main
     $<$<BOOL:${NEXUS_BACKEND_VULKAN}>:nexus_backend_vulkan>
 )
 
-target_compile_features(nexus_kernel_tests PRIVATE cxx_std_23)
-target_compile_features(nexus_kernel_perf_smoke PRIVATE cxx_std_23)
+target_compile_features(nexus_kernel_tests PRIVATE cxx_std_26)
+target_compile_features(nexus_kernel_perf_smoke PRIVATE cxx_std_26)
 
 target_compile_definitions(nexus_kernel_tests PRIVATE
     NEXUS_TESTS_ROOT="${CMAKE_CURRENT_SOURCE_DIR}"

@@ -63,6 +63,12 @@ public:
     virtual void onResize(Extent2D newExtent) = 0;
 
     [[nodiscard]] virtual uint32_t maxFramesInFlight() const noexcept = 0;
+
+    // Get the currently active FrameContext (after a successful beginFrame).
+    // Returns nullptr if no frame is currently active.
+    [[nodiscard]] virtual const FrameContext* getCurrentFrame() const noexcept {
+        return nullptr;
+    }
 };
 
 } // namespace nexus::gfx

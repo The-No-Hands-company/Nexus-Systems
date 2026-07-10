@@ -229,6 +229,17 @@ struct DescriptorSetDesc {
     const char* debugName = nullptr;
 };
 
+// Opaque native Vulkan handles for interop (e.g. Dear ImGui overlay rendering).
+// Each void* is the corresponding Vk* handle (a pointer), or nullptr on non-Vulkan
+// backends. Cast back to Vk* in translation units that include <vulkan/vulkan.h>.
+struct NativeVulkanHandles {
+    void*    instance            = nullptr;  // VkInstance
+    void*    physicalDevice      = nullptr;  // VkPhysicalDevice
+    void*    device              = nullptr;  // VkDevice
+    void*    graphicsQueue       = nullptr;  // VkQueue
+    uint32_t graphicsQueueFamily = 0;
+};
+
 // ── IDevice ──────────────────────────────────────────────────────────────────
 
 class IDevice {
@@ -240,6 +251,9 @@ public:
     [[nodiscard]] virtual const DeviceCapabilities& caps() const noexcept = 0;
     [[nodiscard]] virtual HardwareTier       tier()         const noexcept = 0;
     [[nodiscard]] virtual std::string_view   deviceName()   const noexcept = 0;
+
+    // Native Vulkan handles for interop; empty (all nullptr) on non-Vulkan backends.
+    [[nodiscard]] virtual NativeVulkanHandles nativeVulkanHandles() const noexcept { return {}; }
 
     // ── Resource creation ─────────────────────────────────────────────────
     [[nodiscard]] virtual BufferHandle     createBuffer    (const BufferDesc&     desc) = 0;

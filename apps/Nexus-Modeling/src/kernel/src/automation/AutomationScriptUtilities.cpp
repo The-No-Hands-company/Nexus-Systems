@@ -34,6 +34,23 @@ bool isFiniteDouble(double value) noexcept
     return (bits & 0x7FF0000000000000ull) != 0x7FF0000000000000ull;
 }
 
+std::string formatScalar(double v)
+{
+    // std::to_string uses the shortest round-trip form in C++26 ("4", "4.5"),
+    // which silently drops trailing decimals. Keep the short form but guarantee a
+    // decimal point for whole numbers so message output stays stable ("4.0").
+    std::string s = std::to_string(v);
+    const bool hasDotOrExp = s.find('.') != std::string::npos || s.find('e') != std::string::npos ||
+                             s.find('E') != std::string::npos;
+    const bool nonFinite   = s.find('n') != std::string::npos || s.find('i') != std::string::npos; // nan/inf
+    if (!hasDotOrExp && !nonFinite) {
+        s += ".0";
+    }
+    return s;
+}
+
+std::string formatScalar(float v) { return formatScalar(static_cast<double>(v)); }
+
 nexus::render::Mat4 makeTranslationMatrix(float x, float y, float z) noexcept
 {
     nexus::render::Mat4 m = nexus::render::Mat4::identity();

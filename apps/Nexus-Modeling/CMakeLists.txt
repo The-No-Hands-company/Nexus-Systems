@@ -4,7 +4,7 @@ project(NexusModeling VERSION 0.1.0 LANGUAGES CXX C)
 # ─────────────────────────────────────────────────────────────────────────────
 #  Global C++ standard
 # ─────────────────────────────────────────────────────────────────────────────
-set(CMAKE_CXX_STANDARD 23)
+set(CMAKE_CXX_STANDARD 26)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
@@ -80,7 +80,7 @@ include(FetchContent)
 FetchContent_Declare(
     imgui
     GIT_REPOSITORY https://github.com/ocornut/imgui.git
-    GIT_TAG        v1.91.6
+    GIT_TAG        v1.91.6-docking   # docking branch, same version — dockable panels
     GIT_SHALLOW    TRUE
 )
 FetchContent_MakeAvailable(imgui)

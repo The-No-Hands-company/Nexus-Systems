@@ -223,14 +223,19 @@ enum class CameraMode : uint8_t {
 // ── Camera ────────────────────────────────────────────────────────────────────
 class Camera {
 public:
-    Camera() = default;
+    Camera();
 
     // ── Setup ──────────────────────────────────────────────────────────────
     void setPerspective(float fovYDeg, float aspect, float nearZ, float farZ) noexcept;
     void setOrthographic(float width, float height, float nearZ, float farZ) noexcept;
     void lookAt(Vec3 eye, Vec3 target, Vec3 up = {0.f, 1.f, 0.f}) noexcept;
+    void lookAt(Vec3 target, float distance) noexcept; // new overload
 
-    // ── Jitter (Halton for TAA / DLSS sample patterns) ────────────────────
+    // ── Orbit controls ─────────────────────────────────────────────────────
+    void orbit(float dx, float dy) noexcept; // dx, dy in degrees
+    void zoom(float amount) noexcept; // positive to zoom in
+
+    // ── Jitter (Halton for TAA / DLSS sample patterns) ─────────────────────
     void setJitter(float jx, float jy) noexcept;
     void clearJitter() noexcept;
 
@@ -238,6 +243,18 @@ public:
     [[nodiscard]] const CameraUBO& ubo()     const noexcept { return m_ubo; }
     [[nodiscard]] const Frustum&   frustum() const noexcept { return m_frustum; }
     [[nodiscard]] Vec3             position()const noexcept { return {m_ubo.position.x, m_ubo.position.y, m_ubo.position.z}; }
+    [[nodiscard]] Vec3             target()  const noexcept { return m_target; }
+    [[nodiscard]] Vec3             up()      const noexcept { return m_up; }
+    [[nodiscard]] float            distance()const noexcept { return m_distance; }
+
+    // ── Predefined views ───────────────────────────────────────────────────
+    void viewTop() noexcept;
+    void viewBottom() noexcept;
+    void viewLeft() noexcept;
+    void viewRight() noexcept;
+    void viewFront() noexcept;
+    void viewBack() noexcept;
+    void viewIsometric() noexcept;
 
     // ── Called each frame to advance temporal state ───────────────────────
     void tick() noexcept;
@@ -255,6 +272,11 @@ private:
     float      m_far    = 10000.f;
     float      m_orthoW = 1.f;
     float      m_orthoH = 1.f;
+
+    // Cached orbit parameters
+    Vec3       m_target{0.f, 0.f, 0.f};
+    Vec3       m_up{0.f, 1.f, 0.f};
+    float      m_distance = 10.f;
 };
 
 } // namespace nexus::render

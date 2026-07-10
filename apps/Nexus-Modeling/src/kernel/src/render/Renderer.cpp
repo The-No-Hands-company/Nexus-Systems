@@ -1332,6 +1332,28 @@ nexus::gfx::PipelineHandle Renderer::createShadowDepthPipeline(
     return device.createGraphicsPipeline(gp);
 }
 
+nexus::gfx::PipelineHandle Renderer::createLightingCompositePipeline(
+    nexus::gfx::IDevice& device, const LightingCompositePipelineDesc& desc)
+{
+    const std::array<nexus::gfx::DescriptorSetLayoutDesc, 2> sets{{
+        { compositeCoreSetLayout() },
+        { compositeShadowSetLayout() },
+    }};
+    const std::array<nexus::gfx::Format, 1> colorFormats{ desc.colorFormat };
+
+    nexus::gfx::GraphicsPipelineDesc gp{};
+    gp.vertexShader           = desc.vertexShader;
+    gp.fragmentShader         = desc.fragmentShader;
+    gp.topology               = nexus::gfx::Topology::TriangleList;
+    gp.cullMode               = nexus::gfx::CullMode::None;   // fullscreen triangle
+    gp.depthTest              = false;
+    gp.depthWrite             = false;
+    gp.colorAttachmentFormats = colorFormats;
+    gp.descriptorSetLayouts   = sets;
+    gp.debugName              = desc.debugName;
+    return device.createGraphicsPipeline(gp);
+}
+
 void Renderer::uploadCameraUniform(const Camera& camera)
 {
     auto& dev = m_ctx.device();

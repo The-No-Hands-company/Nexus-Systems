@@ -27,6 +27,12 @@ public:
     [[nodiscard]] VkFormat    vkColorFormat() const noexcept;  // computed from m_format
     [[nodiscard]] VkImageUsageFlags vkImageUsageFlags() const noexcept { return m_imageUsageFlags; }
 
+    // Index of the most recently acquired (rendered) image — for offscreen readback.
+    [[nodiscard]] uint32_t lastImageIndex() const noexcept {
+        const uint32_t n = static_cast<uint32_t>(m_images.size());
+        return n == 0 ? 0u : (m_frameIndex + n - 1u) % n;
+    }
+
     // Resolve semaphore index to Vk handle (used by VulkanDevice::submit)
     [[nodiscard]] VkSemaphore imageAvailSem(uint32_t frameIdx) const noexcept {
         return frameIdx < m_imageAvailSems.size() ? m_imageAvailSems[frameIdx] : VK_NULL_HANDLE;
@@ -37,6 +43,7 @@ public:
 
 private:
     void create(const SwapchainDesc& desc, uint32_t presentFamily);
+    void createHeadlessImages(const SwapchainDesc& desc);  // offscreen path (no surface)
     void destroy();
 
     VkInstance       m_instance   = VK_NULL_HANDLE;
@@ -47,8 +54,9 @@ private:
     VkQueue          m_presentQueue   = VK_NULL_HANDLE;
     uint32_t         m_presentFamily  = 0;
 
-    std::vector<VkImage>     m_images;
-    std::vector<VkImageView> m_imageViews;
+    std::vector<VkImage>       m_images;
+    std::vector<VkImageView>   m_imageViews;
+    std::vector<VkDeviceMemory> m_imageMemory;  // non-empty only for headless-owned images
     std::vector<VkSemaphore> m_imageAvailSems;
     std::vector<VkSemaphore> m_renderDoneSems;
 

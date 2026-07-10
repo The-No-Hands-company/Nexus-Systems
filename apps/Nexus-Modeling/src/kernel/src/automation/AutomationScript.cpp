@@ -192,6 +192,22 @@ namespace {
     return value;
 }
 
+// Stable scalar formatting for automation messages: shortest round-trippable
+// form but always keeps a decimal point (4 -> "4.0") so message output does not
+// drift with C++26's std::to_string, which drops trailing zeros.
+[[nodiscard]] std::string formatScalar(double v)
+{
+    std::string s = std::to_string(v);
+    const bool hasDotOrExp = s.find('.') != std::string::npos || s.find('e') != std::string::npos ||
+                             s.find('E') != std::string::npos;
+    const bool nonFinite = s.find('n') != std::string::npos || s.find('i') != std::string::npos; // nan/inf
+    if (!hasDotOrExp && !nonFinite) {
+        s += ".0";
+    }
+    return s;
+}
+[[nodiscard]] std::string formatScalar(float v) { return formatScalar(static_cast<double>(v)); }
+
 [[nodiscard]] std::string makePathString(const std::filesystem::path& path)
 {
     return path.lexically_normal().string();
@@ -1619,7 +1635,7 @@ void ScriptBatchHarness::registerBuiltinCommands()
             desc.velocity.z  = parseFloatArg(command, "vz").value_or(0.f);
             const nexus::BodyId id = context.rigidSolver->addBody(desc);
             messages.push_back("rigid body added id=" + std::to_string(id)
-                + " mass=" + std::to_string(desc.mass));
+                + " mass=" + formatScalar(desc.mass));
             return true;
         });
 
@@ -1655,7 +1671,7 @@ void ScriptBatchHarness::registerBuiltinCommands()
                 messages.push_back("sim.rigid.step failed (invalid dt)");
                 return false;
             }
-            messages.push_back("rigid step t=" + std::to_string(report.simulationTime)
+            messages.push_back("rigid step t=" + formatScalar(report.simulationTime)
                 + " bodies=" + std::to_string(report.bodiesIntegrated));
             return true;
         });
@@ -1708,7 +1724,7 @@ void ScriptBatchHarness::registerBuiltinCommands()
             const nexus::SimState current = context.rigidSolver->captureState();
             const std::vector<uint8_t> bytes = serializeSimState(current);
             messages.push_back("rigid summary bodies=" + std::to_string(current.bodies.size())
-                + " time=" + std::to_string(current.simulationTime)
+                + " time=" + formatScalar(current.simulationTime)
                 + " bytes=" + std::to_string(bytes.size())
                 + " hash=" + hashHex(hashBytesFnv1a64(bytes)));
             return true;
@@ -1721,10 +1737,10 @@ void ScriptBatchHarness::registerBuiltinCommands()
                 return false;
             }
             messages.push_back("rigid describe bodies=" + std::to_string(context.rigidSolver->bodyCount())
-                + " gravity=" + std::to_string(context.rigidSolver->gravity().x)
-                + "," + std::to_string(context.rigidSolver->gravity().y)
-                + "," + std::to_string(context.rigidSolver->gravity().z)
-                + " time=" + std::to_string(context.rigidSolver->simulationTime()));
+                + " gravity=" + formatScalar(context.rigidSolver->gravity().x)
+                + "," + formatScalar(context.rigidSolver->gravity().y)
+                + "," + formatScalar(context.rigidSolver->gravity().z)
+                + " time=" + formatScalar(context.rigidSolver->simulationTime()));
             return true;
         });
 
@@ -1737,12 +1753,12 @@ void ScriptBatchHarness::registerBuiltinCommands()
             const nexus::SimState state = context.rigidSolver->captureState();
             for (const auto& body : state.bodies) {
                 messages.push_back("rigid body id=" + std::to_string(body.id)
-                    + " px=" + std::to_string(body.position.x)
-                    + " py=" + std::to_string(body.position.y)
-                    + " pz=" + std::to_string(body.position.z)
-                    + " vx=" + std::to_string(body.velocity.x)
-                    + " vy=" + std::to_string(body.velocity.y)
-                    + " vz=" + std::to_string(body.velocity.z));
+                    + " px=" + formatScalar(body.position.x)
+                    + " py=" + formatScalar(body.position.y)
+                    + " pz=" + formatScalar(body.position.z)
+                    + " vx=" + formatScalar(body.velocity.x)
+                    + " vy=" + formatScalar(body.velocity.y)
+                    + " vz=" + formatScalar(body.velocity.z));
             }
             return true;
         });
@@ -1783,12 +1799,12 @@ void ScriptBatchHarness::registerBuiltinCommands()
             for (const auto& body : state.bodies) {
                 if (body.id == id) {
                     messages.push_back("rigid body id=" + std::to_string(body.id)
-                        + " px=" + std::to_string(body.position.x)
-                        + " py=" + std::to_string(body.position.y)
-                        + " pz=" + std::to_string(body.position.z)
-                        + " vx=" + std::to_string(body.velocity.x)
-                        + " vy=" + std::to_string(body.velocity.y)
-                        + " vz=" + std::to_string(body.velocity.z));
+                        + " px=" + formatScalar(body.position.x)
+                        + " py=" + formatScalar(body.position.y)
+                        + " pz=" + formatScalar(body.position.z)
+                        + " vx=" + formatScalar(body.velocity.x)
+                        + " vy=" + formatScalar(body.velocity.y)
+                        + " vz=" + formatScalar(body.velocity.z));
                     return true;
                 }
             }
@@ -1967,7 +1983,7 @@ void ScriptBatchHarness::registerBuiltinCommands()
             desc.position.z  = parseFloatArg(command, "tz").value_or(0.f);
             const nexus::ClothNodeId id = context.clothSolver->addNode(desc);
             messages.push_back("cloth node added id=" + std::to_string(id)
-                + " mass=" + std::to_string(desc.mass));
+                + " mass=" + formatScalar(desc.mass));
             return true;
         });
 
@@ -2003,7 +2019,7 @@ void ScriptBatchHarness::registerBuiltinCommands()
                 messages.push_back("sim.cloth.step failed (invalid dt)");
                 return false;
             }
-            messages.push_back("cloth step t=" + std::to_string(report.simulationTime)
+            messages.push_back("cloth step t=" + formatScalar(report.simulationTime)
                 + " nodes=" + std::to_string(report.nodesIntegrated));
             return true;
         });
@@ -2056,7 +2072,7 @@ void ScriptBatchHarness::registerBuiltinCommands()
             const nexus::ClothState current = context.clothSolver->captureState();
             const std::vector<uint8_t> bytes = serializeClothState(current);
             messages.push_back("cloth summary nodes=" + std::to_string(current.nodes.size())
-                + " time=" + std::to_string(current.simulationTime)
+                + " time=" + formatScalar(current.simulationTime)
                 + " bytes=" + std::to_string(bytes.size())
                 + " hash=" + hashHex(hashBytesFnv1a64(bytes)));
             return true;
@@ -2070,10 +2086,10 @@ void ScriptBatchHarness::registerBuiltinCommands()
             }
             const auto gravity = context.clothSolver->gravity();
             messages.push_back("cloth describe nodes=" + std::to_string(context.clothSolver->nodeCount())
-                + " gravity=" + std::to_string(gravity.x)
-                + "," + std::to_string(gravity.y)
-                + "," + std::to_string(gravity.z)
-                + " time=" + std::to_string(context.clothSolver->captureState().simulationTime));
+                + " gravity=" + formatScalar(gravity.x)
+                + "," + formatScalar(gravity.y)
+                + "," + formatScalar(gravity.z)
+                + " time=" + formatScalar(context.clothSolver->captureState().simulationTime));
             return true;
         });
 
@@ -2086,12 +2102,12 @@ void ScriptBatchHarness::registerBuiltinCommands()
             const nexus::ClothState current = context.clothSolver->captureState();
             for (const auto& node : current.nodes) {
                 messages.push_back("cloth node id=" + std::to_string(node.id)
-                    + " px=" + std::to_string(node.position.x)
-                    + " py=" + std::to_string(node.position.y)
-                    + " pz=" + std::to_string(node.position.z)
-                    + " vx=" + std::to_string(node.velocity.x)
-                    + " vy=" + std::to_string(node.velocity.y)
-                    + " vz=" + std::to_string(node.velocity.z));
+                    + " px=" + formatScalar(node.position.x)
+                    + " py=" + formatScalar(node.position.y)
+                    + " pz=" + formatScalar(node.position.z)
+                    + " vx=" + formatScalar(node.velocity.x)
+                    + " vy=" + formatScalar(node.velocity.y)
+                    + " vz=" + formatScalar(node.velocity.z));
             }
             return true;
         });
@@ -2132,12 +2148,12 @@ void ScriptBatchHarness::registerBuiltinCommands()
             for (const auto& node : current.nodes) {
                 if (node.id == id) {
                     messages.push_back("cloth node id=" + std::to_string(node.id)
-                        + " px=" + std::to_string(node.position.x)
-                        + " py=" + std::to_string(node.position.y)
-                        + " pz=" + std::to_string(node.position.z)
-                        + " vx=" + std::to_string(node.velocity.x)
-                        + " vy=" + std::to_string(node.velocity.y)
-                        + " vz=" + std::to_string(node.velocity.z));
+                        + " px=" + formatScalar(node.position.x)
+                        + " py=" + formatScalar(node.position.y)
+                        + " pz=" + formatScalar(node.position.z)
+                        + " vx=" + formatScalar(node.velocity.x)
+                        + " vy=" + formatScalar(node.velocity.y)
+                        + " vz=" + formatScalar(node.velocity.z));
                     return true;
                 }
             }
@@ -2299,7 +2315,7 @@ void ScriptBatchHarness::registerBuiltinCommands()
             desc.density     = parseFloatArg(command, "density").value_or(1000.0f);
             const nexus::FluidParticleId id = context.fluidSolver->addParticle(desc);
             messages.push_back("fluid particle added id=" + std::to_string(id)
-                + " mass=" + std::to_string(desc.mass));
+                + " mass=" + formatScalar(desc.mass));
             return true;
         });
 
@@ -2335,7 +2351,7 @@ void ScriptBatchHarness::registerBuiltinCommands()
                 messages.push_back("sim.fluid.step failed (invalid dt)");
                 return false;
             }
-            messages.push_back("fluid step t=" + std::to_string(report.simulationTime)
+            messages.push_back("fluid step t=" + formatScalar(report.simulationTime)
                 + " particles=" + std::to_string(report.particlesAdvanced));
             return true;
         });
@@ -2388,7 +2404,7 @@ void ScriptBatchHarness::registerBuiltinCommands()
             const nexus::FluidState current = context.fluidSolver->captureState();
             const std::vector<uint8_t> bytes = serializeFluidState(current);
             messages.push_back("fluid summary particles=" + std::to_string(current.particles.size())
-                + " time=" + std::to_string(current.simulationTime)
+                + " time=" + formatScalar(current.simulationTime)
                 + " bytes=" + std::to_string(bytes.size())
                 + " hash=" + hashHex(hashBytesFnv1a64(bytes)));
             return true;
@@ -2402,12 +2418,12 @@ void ScriptBatchHarness::registerBuiltinCommands()
             }
             const auto gravity = context.fluidSolver->gravity();
             messages.push_back("fluid describe particles=" + std::to_string(context.fluidSolver->particleCount())
-                + " gravity=" + std::to_string(gravity.x)
-                + "," + std::to_string(gravity.y)
-                + "," + std::to_string(gravity.z)
-                + " h=" + std::to_string(context.fluidSolver->smoothingRadius())
-                + " k=" + std::to_string(context.fluidSolver->pressureStiffness())
-                + " time=" + std::to_string(context.fluidSolver->captureState().simulationTime));
+                + " gravity=" + formatScalar(gravity.x)
+                + "," + formatScalar(gravity.y)
+                + "," + formatScalar(gravity.z)
+                + " h=" + formatScalar(context.fluidSolver->smoothingRadius())
+                + " k=" + formatScalar(context.fluidSolver->pressureStiffness())
+                + " time=" + formatScalar(context.fluidSolver->captureState().simulationTime));
             return true;
         });
 
@@ -2420,13 +2436,13 @@ void ScriptBatchHarness::registerBuiltinCommands()
             const nexus::FluidState current = context.fluidSolver->captureState();
             for (const auto& p : current.particles) {
                 messages.push_back("fluid particle id=" + std::to_string(p.id)
-                    + " px=" + std::to_string(p.position.x)
-                    + " py=" + std::to_string(p.position.y)
-                    + " pz=" + std::to_string(p.position.z)
-                    + " vx=" + std::to_string(p.velocity.x)
-                    + " vy=" + std::to_string(p.velocity.y)
-                    + " vz=" + std::to_string(p.velocity.z)
-                    + " density=" + std::to_string(p.density));
+                    + " px=" + formatScalar(p.position.x)
+                    + " py=" + formatScalar(p.position.y)
+                    + " pz=" + formatScalar(p.position.z)
+                    + " vx=" + formatScalar(p.velocity.x)
+                    + " vy=" + formatScalar(p.velocity.y)
+                    + " vz=" + formatScalar(p.velocity.z)
+                    + " density=" + formatScalar(p.density));
             }
             return true;
         });
@@ -2467,13 +2483,13 @@ void ScriptBatchHarness::registerBuiltinCommands()
             for (const auto& p : current.particles) {
                 if (p.id == id) {
                     messages.push_back("fluid particle id=" + std::to_string(p.id)
-                        + " px=" + std::to_string(p.position.x)
-                        + " py=" + std::to_string(p.position.y)
-                        + " pz=" + std::to_string(p.position.z)
-                        + " vx=" + std::to_string(p.velocity.x)
-                        + " vy=" + std::to_string(p.velocity.y)
-                        + " vz=" + std::to_string(p.velocity.z)
-                        + " density=" + std::to_string(p.density));
+                        + " px=" + formatScalar(p.position.x)
+                        + " py=" + formatScalar(p.position.y)
+                        + " pz=" + formatScalar(p.position.z)
+                        + " vx=" + formatScalar(p.velocity.x)
+                        + " vy=" + formatScalar(p.velocity.y)
+                        + " vz=" + formatScalar(p.velocity.z)
+                        + " density=" + formatScalar(p.density));
                     return true;
                 }
             }
@@ -3262,9 +3278,9 @@ void ScriptBatchHarness::registerBuiltinCommands()
                 messages.push_back("bone index=" + std::to_string(i)
                     + " name=" + context.skeleton.boneName(i)
                     + " parent=" + std::to_string(context.skeleton.parentIndex(i))
-                    + " tx=" + std::to_string(bl.translation.x)
-                    + " ty=" + std::to_string(bl.translation.y)
-                    + " tz=" + std::to_string(bl.translation.z));
+                    + " tx=" + formatScalar(bl.translation.x)
+                    + " ty=" + formatScalar(bl.translation.y)
+                    + " tz=" + formatScalar(bl.translation.z));
             }
             return true;
         });
@@ -3339,15 +3355,15 @@ void ScriptBatchHarness::registerBuiltinCommands()
             messages.push_back("cross_solver describe hash=" + combinedHash
                 + " rigid_active=" + std::string(context.hasRigidSolver ? "1" : "0")
                 + " rigid_bodies=" + std::to_string(rigidBodies)
-                + " rigid_time=" + std::to_string(rigidTime)
+                + " rigid_time=" + formatScalar(rigidTime)
                 + " rigid_hash=" + rigidHash
                 + " cloth_active=" + std::string(context.hasClothSolver ? "1" : "0")
                 + " cloth_nodes=" + std::to_string(clothNodes)
-                + " cloth_time=" + std::to_string(clothTime)
+                + " cloth_time=" + formatScalar(clothTime)
                 + " cloth_hash=" + clothHash
                 + " fluid_active=" + std::string(context.hasFluidSolver ? "1" : "0")
                 + " fluid_particles=" + std::to_string(fluidParticles)
-                + " fluid_time=" + std::to_string(fluidTime)
+                + " fluid_time=" + formatScalar(fluidTime)
                 + " fluid_hash=" + fluidHash);
             return true;
         });
@@ -3466,9 +3482,9 @@ void ScriptBatchHarness::registerBuiltinCommands()
             const double z = parseDoubleArg(command, "z").value_or(0.0);
             const auto id = context.parametricGraph.addPoint({x, y, z});
             messages.push_back("parametric entity id=" + std::to_string(id)
-                + " x=" + std::to_string(x)
-                + " y=" + std::to_string(y)
-                + " z=" + std::to_string(z));
+                + " x=" + formatScalar(x)
+                + " y=" + formatScalar(y)
+                + " z=" + formatScalar(z));
             return true;
         });
 
@@ -3530,9 +3546,9 @@ void ScriptBatchHarness::registerBuiltinCommands()
                 return false;
             }
             messages.push_back("parametric point updated id=" + std::to_string(entityId)
-                + " x=" + std::to_string(x)
-                + " y=" + std::to_string(y)
-                + " z=" + std::to_string(z));
+                + " x=" + formatScalar(x)
+                + " y=" + formatScalar(y)
+                + " z=" + formatScalar(z));
             return true;
         });
 
@@ -3558,7 +3574,7 @@ void ScriptBatchHarness::registerBuiltinCommands()
             }
             messages.push_back("parametric distance constraint id=" + std::to_string(cid)
                 + " a=" + std::to_string(idA) + " b=" + std::to_string(idB)
-                + " dist=" + std::to_string(*distArg));
+                + " dist=" + formatScalar(*distArg));
             return true;
         });
 
@@ -3624,7 +3640,7 @@ void ScriptBatchHarness::registerBuiltinCommands()
                 + " a=" + std::to_string(idA)
                 + " b=" + std::to_string(idB)
                 + " axis=" + *axisArg
-                + " dist=" + std::to_string(*distArg));
+                + " dist=" + formatScalar(*distArg));
             return true;
         });
 
@@ -3686,7 +3702,7 @@ void ScriptBatchHarness::registerBuiltinCommands()
             const auto report = nexus::parametric::ParametricSolver::solve(context.parametricGraph, cfg);
             messages.push_back("parametric solved converged=" + std::string(report.converged ? "1" : "0")
                 + " iterations=" + std::to_string(report.iterationsRan)
-                + " error=" + std::to_string(report.maxConstraintError));
+                + " error=" + formatScalar(report.maxConstraintError));
             if (!report.converged) {
                 for (const auto& err : report.errors)
                     messages.push_back("parametric solver error: " + err);
@@ -3711,9 +3727,9 @@ void ScriptBatchHarness::registerBuiltinCommands()
                 messages.push_back("parametric.get_point not found id=" + std::to_string(entityId));
                 return false;
             }
-            messages.push_back("parametric point x=" + std::to_string(pt->x)
-                + " y=" + std::to_string(pt->y)
-                + " z=" + std::to_string(pt->z));
+            messages.push_back("parametric point x=" + formatScalar(pt->x)
+                + " y=" + formatScalar(pt->y)
+                + " z=" + formatScalar(pt->z));
             return true;
         });
 
@@ -3739,9 +3755,9 @@ void ScriptBatchHarness::registerBuiltinCommands()
             }
             for (const auto& entity : context.parametricGraph.entities()) {
                 messages.push_back("parametric entity id=" + std::to_string(entity.id)
-                    + " x=" + std::to_string(entity.point.x)
-                    + " y=" + std::to_string(entity.point.y)
-                    + " z=" + std::to_string(entity.point.z));
+                    + " x=" + formatScalar(entity.point.x)
+                    + " y=" + formatScalar(entity.point.y)
+                    + " z=" + formatScalar(entity.point.z));
             }
             return true;
         });
@@ -3756,7 +3772,7 @@ void ScriptBatchHarness::registerBuiltinCommands()
                 messages.push_back("parametric constraint id=" + std::to_string(c.id)
                     + " type=distance a=" + std::to_string(c.entityA)
                     + " b=" + std::to_string(c.entityB)
-                    + " dist=" + std::to_string(c.targetDistance));
+                    + " dist=" + formatScalar(c.targetDistance));
             }
             for (const auto& c : context.parametricGraph.coincidentConstraints()) {
                 messages.push_back("parametric constraint id=" + std::to_string(c.id)
@@ -3770,7 +3786,7 @@ void ScriptBatchHarness::registerBuiltinCommands()
                     + " type=axis_aligned a=" + std::to_string(c.entityA)
                     + " b=" + std::to_string(c.entityB)
                     + " axis=" + axisStr
-                    + " dist=" + std::to_string(c.targetDistance));
+                    + " dist=" + formatScalar(c.targetDistance));
             }
             return true;
         });
@@ -3792,7 +3808,7 @@ void ScriptBatchHarness::registerBuiltinCommands()
                     messages.push_back("parametric constraint id=" + std::to_string(c.id)
                         + " type=distance a=" + std::to_string(c.entityA)
                         + " b=" + std::to_string(c.entityB)
-                        + " dist=" + std::to_string(c.targetDistance));
+                        + " dist=" + formatScalar(c.targetDistance));
                     return true;
                 }
             }
@@ -3812,7 +3828,7 @@ void ScriptBatchHarness::registerBuiltinCommands()
                         + " type=axis_aligned a=" + std::to_string(c.entityA)
                         + " b=" + std::to_string(c.entityB)
                         + " axis=" + axisStr
-                        + " dist=" + std::to_string(c.targetDistance));
+                        + " dist=" + formatScalar(c.targetDistance));
                     return true;
                 }
             }

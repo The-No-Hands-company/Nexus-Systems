@@ -30,29 +30,6 @@ add_library(nexus_gfx_core STATIC
     src/cad/CadRenderBridge.cpp
     src/cad/CadSelection.cpp
     src/cad/CadViewer.cpp
-    src/app/AppMode.cpp
-    src/app/BooleanMode.cpp
-    src/app/DimensionMode.cpp
-    src/app/EdgeEditMode.cpp
-    src/app/EditorUI.cpp
-    src/app/ExtrudeMode.cpp
-    src/app/FaceEditMode.cpp
-    src/app/FilletMode.cpp
-    src/app/MirrorMode.cpp
-    src/app/ModelingApplication.cpp
-    src/app/PatternMode.cpp
-    src/app/PrimitiveModelingMode.cpp
-    src/app/RevolveMode.cpp
-    src/app/SceneRenderer.cpp
-    src/app/SelectMode.cpp
-    src/app/SelectionManager.cpp
-    src/app/SelectionHighlight.cpp
-    src/app/SketchMode.cpp
-    src/app/SketchPreview.cpp
-    src/app/TransformGizmo.cpp
-    src/app/VertexEditMode.cpp
-    src/app/ViewportManager.cpp
-    src/app/ViewportGrid.cpp
     src/geometry/BevelChamfer.cpp
     src/geometry/BezierCurve.cpp
     src/geometry/BlendNetwork.cpp
@@ -207,7 +184,7 @@ target_include_directories(nexus_gfx_core
             ${imgui_SOURCE_DIR}/backends
 )
 
-target_compile_features(nexus_gfx_core PUBLIC cxx_std_23)
+target_compile_features(nexus_gfx_core PUBLIC cxx_std_26)
 
 # Propagate backend selection into Device.cpp (which lives in nexus_gfx_core)
 if(NEXUS_BACKEND_VULKAN)
@@ -329,6 +306,51 @@ pkg_check_modules(GLFW3 REQUIRED glfw3)
 pkg_check_modules(GLU REQUIRED glu)
 find_package(OpenGL REQUIRED)
 
+# ── Editor / application layer (ImGui-based UI) ───────────────────────────────
+#  Split out of nexus_gfx_core so the geometry/render/sim kernel — and the
+#  headless tools (nxrender) and tests that link only the kernel — build
+#  independently of the editor UI. Dependency flows one way: app -> kernel.
+add_library(nexus_app STATIC
+    src/app/AppMode.cpp
+    src/app/BooleanMode.cpp
+    src/app/DimensionMode.cpp
+    src/app/EdgeEditMode.cpp
+    src/app/ExtrudeMode.cpp
+    src/app/FaceEditMode.cpp
+    src/app/FilletMode.cpp
+    src/app/MirrorMode.cpp
+    src/app/ModelingApplication.cpp
+    src/app/PatternMode.cpp
+    src/app/PrimitiveModelingMode.cpp
+    src/app/RevolveMode.cpp
+    src/app/SceneRenderer.cpp
+    src/app/SelectMode.cpp
+    src/app/SelectionManager.cpp
+    src/app/SelectionHighlight.cpp
+    src/app/SketchMode.cpp
+    src/app/SketchPreview.cpp
+    src/app/TransformGizmo.cpp
+    src/app/Viewport.cpp
+    src/app/VertexEditMode.cpp
+    src/app/ViewportManager.cpp
+    src/app/ViewportGrid.cpp
+)
+target_include_directories(nexus_app
+    PUBLIC  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+    PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src
+            ${imgui_SOURCE_DIR}
+            ${imgui_SOURCE_DIR}/backends
+            ${GLFW3_INCLUDE_DIRS}
+)
+target_link_libraries(nexus_app PUBLIC nexus_gfx_core)
+target_compile_features(nexus_app PUBLIC cxx_std_26)
+if(MSVC)
+    target_compile_options(nexus_app PRIVATE /W4 /WX /O2 /arch:AVX2)
+else()
+    target_compile_options(nexus_app PRIVATE
+        -Wall -Wextra -Wpedantic -Werror -march=native -ffast-math)
+endif()
+
 add_executable(nexus_modeling
     ../../app/main.cpp
 )
@@ -341,20 +363,26 @@ target_include_directories(nexus_modeling PRIVATE
     ${imgui_SOURCE_DIR}/backends
 )
 target_sources(nexus_modeling PRIVATE
+    # EditorUI is the only ImGui-consuming app file and is currently mid-refactor;
+    # it is built directly into the app exe (not nexus_app) so the mode-system lib
+    # and the kernel tests that link it stay green while the editor is finished.
+    src/app/EditorUI.cpp
     ${imgui_SOURCE_DIR}/backends/imgui_impl_glfw.cpp
     ${imgui_SOURCE_DIR}/backends/imgui_impl_opengl3.cpp
+    ${imgui_SOURCE_DIR}/backends/imgui_impl_vulkan.cpp
     ${imgui_SOURCE_DIR}/imgui.cpp
     ${imgui_SOURCE_DIR}/imgui_draw.cpp
     ${imgui_SOURCE_DIR}/imgui_widgets.cpp
     ${imgui_SOURCE_DIR}/imgui_tables.cpp
 )
 target_link_libraries(nexus_modeling PRIVATE
+    nexus_app
     nexus_gfx_core
     ${GLFW3_LIBRARIES}
     ${GLU_LIBRARIES}
     OpenGL::GL
 )
-target_compile_features(nexus_modeling PRIVATE cxx_std_23)
+target_compile_features(nexus_modeling PRIVATE cxx_std_26)
 if(NEXUS_BACKEND_VULKAN)
     target_link_libraries(nexus_modeling PRIVATE nexus_backend_vulkan)
     target_compile_definitions(nexus_modeling PRIVATE NEXUS_BACKEND_VULKAN)
@@ -365,4 +393,17 @@ endif()
 
 # ── Install targets ───────────────────────────────────────────────────────────
 install(TARGETS nexus_gfx_core nexus_neural ARCHIVE DESTINATION lib)
+# ── nxrender: headless software-raster preview tool (AI visual dev-loop) ─────
+#  Renders a mesh (primitive or .nxm) to a PNG via the CPU SoftwareRasterizer.
+#  Links only the core; no GPU/window deps so it builds and runs headless in CI.
+add_executable(nxrender
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../tools/nxrender/main.cpp
+)
+target_include_directories(nxrender PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+)
+target_link_libraries(nxrender PRIVATE nexus_gfx_core)
+target_compile_features(nxrender PRIVATE cxx_std_26)
+
 install(DIRECTORY include/ DESTINATION include)

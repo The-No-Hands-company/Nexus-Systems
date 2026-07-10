@@ -24,7 +24,7 @@ target_link_libraries(nexus_runtime_viewer PRIVATE
     OpenGL::GL
 )
 
-target_compile_features(nexus_runtime_viewer PRIVATE cxx_std_23)
+target_compile_features(nexus_runtime_viewer PRIVATE cxx_std_26)
 
 target_compile_options(nexus_runtime_viewer PRIVATE
     -Wall -Wextra -Wpedantic -Werror

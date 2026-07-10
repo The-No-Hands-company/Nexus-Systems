@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Nexus Systems — Ecosystem Vision Board (Blueprint Mode)</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;500;600;700&family=Outfit:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <!-- Top Control Bar -->
+  <header class="toolbar">
+    <div class="toolbar-left">
+      <div class="blueprint-logo">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+        </svg>
+      </div>
+      <div class="title-group">
+        <h1>Nexus Ecosystem Vision Board</h1>
+        <span class="status-indicator">Blueprint Editor · <span id="connection-status" class="online">Connected</span></span>
+      </div>
+    </div>
+
+    <div class="toolbar-center">
+      <div class="search-box">
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="11" cy="11" r="8"></circle>
+          <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+        </svg>
+        <input type="text" id="search-input" placeholder="Search systems on board...">
+      </div>
+      <div class="zoom-controls">
+        <button id="zoom-out" title="Zoom Out (Scroll Down)">−</button>
+        <span id="zoom-percentage">100%</span>
+        <button id="zoom-in" title="Zoom In (Scroll Up)">+</button>
+        <button id="zoom-reset" title="Reset View (Esc)">1:1</button>
+      </div>
+    </div>
+
+    <div class="toolbar-right">
+      <button id="btn-add-comment" class="btn btn-secondary" title="Create a grouping comment box">
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 4px;">
+          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+        </svg>
+        + Comment Box
+      </button>
+      <button id="btn-auto-arrange" class="btn btn-secondary" title="Arrange nodes as a Family Tree based on dependencies">
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 4px;">
+          <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+        </svg>
+        Auto-Arrange Tree
+      </button>
+      <button id="btn-save" class="btn btn-primary" title="Save layout data to disk">
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 4px;">
+          <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
+          <polyline points="17 21 17 13 7 13 7 21"></polyline>
+          <polyline points="7 3 7 8 15 8"></polyline>
+        </svg>
+        Save Board
+      </button>
+      <button id="btn-help" class="btn btn-icon" title="Keyboard & Mouse Shortcuts">?</button>
+    </div>
+  </header>
+
+  <div class="main-container">
+    <!-- Left Sidebar: App Library drawer -->
+    <aside class="sidebar" id="sidebar-left">
+      <div class="sidebar-header">
+        <h2>App Drawer</h2>
+        <span class="count-badge" id="library-count">0</span>
+      </div>
+      <div class="sidebar-search">
+        <input type="text" id="library-search" placeholder="Filter available apps...">
+      </div>
+      <div class="category-filters" id="category-chips">
+        <!-- JS-filled category filters -->
+      </div>
+      <div class="app-list" id="library-apps">
+        <!-- JS-filled available apps -->
+        <p class="placeholder-text">Loading app registry...</p>
+      </div>
+    </aside>
+
+    <!-- Blueprint Node Canvas -->
+    <div class="viewport" id="viewport">
+      <div class="canvas" id="canvas">
+        <!-- Blueprint Grid background is styled via CSS -->
+
+        <!-- SVG Connections Layer -->
+        <svg class="svg-layer" id="svg-layer">
+          <defs>
+            <!-- Glow filter for selected cables -->
+            <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+              <feGaussianBlur stdDeviation="3" result="blur"></feGaussianBlur>
+              <feComposite in="SourceGraphic" in2="blur" operator="over"></feComposite>
+            </filter>
+            <!-- Pin connection markers (arrowheads) -->
+            <marker id="arrow" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <path d="M 0 1 L 10 5 L 0 9 z" fill="#888"></path>
+            </marker>
+          </defs>
+          <!-- Cables and connections go here -->
+          <g id="connections-group"></g>
+          <g id="reroute-lines-group"></g>
+          <path id="temp-cable" d="" fill="none" stroke="#ffb600" stroke-width="2" stroke-dasharray="4,4" style="display: none; pointer-events: none;"></path>
+        </svg>
+
+        <!-- Comment Boxes Container (rendered behind nodes) -->
+        <div id="comment-boxes-layer"></div>
+
+        <!-- Reroute Nodes Container -->
+        <div id="reroute-nodes-layer"></div>
+
+        <!-- Nodes Container -->
+        <div id="nodes-layer"></div>
+      </div>
+
+      <!-- Quick Tips & Help Bar -->
+      <div class="canvas-hud">
+        <span class="hud-item"><kbd>Right-Drag</kbd> or <kbd>Middle-Drag</kbd> to Pan</span>
+        <span class="hud-item"><kbd>Scroll</kbd> to Zoom</span>
+        <span class="hud-item"><kbd>Del</kbd> to delete selected Connection/Comment/Node</span>
+        <span class="hud-item"><kbd>Double-click line</kbd> to add Reroute Dot</span>
+      </div>
+    </div>
+
+    <!-- Right Panel: Node details / Custom configuration -->
+    <aside class="sidebar collapsed" id="sidebar-right">
+      <div class="sidebar-header">
+        <h2>System Config</h2>
+        <button class="btn-close" id="btn-close-right">×</button>
+      </div>
+      <div class="config-panel-content" id="config-content">
+        <!-- Dynamic Node Configuration Form -->
+        <div class="empty-selection">
+          <div class="icon">🔍</div>
+          <h3>No System Selected</h3>
+          <p>Click on any node on the board to view and edit its metadata, custom overrides, and connections.</p>
+        </div>
+      </div>
+    </aside>
+  </div>
+
+  <!-- Help Modal Dialog -->
+  <div class="modal-overlay" id="help-modal">
+    <div class="modal">
+      <div class="modal-header">
+        <h2>⌨️ Vision Board Shortcuts</h2>
+        <button class="modal-close" id="btn-close-modal">×</button>
+      </div>
+      <div class="modal-body">
+        <div class="shortcut-group">
+          <h3>Viewport Control</h3>
+          <div class="shortcut-row"><kbd>Right Click + Drag</kbd><span>Pan the canvas</span></div>
+          <div class="shortcut-row"><kbd>Middle Click + Drag</kbd><span>Pan the canvas</span></div>
+          <div class="shortcut-row"><kbd>Spacebar + Left Drag</kbd><span>Pan the canvas</span></div>
+          <div class="shortcut-row"><kbd>Mouse Wheel</kbd><span>Zoom in / out at mouse cursor</span></div>
+          <div class="shortcut-row"><kbd>Esc</kbd><span>Reset zoom to 100% / Clear selection</span></div>
+        </div>
+
+        <div class="shortcut-group">
+          <h3>Node Operations</h3>
+          <div class="shortcut-row"><kbd>Left Click</kbd><span>Select node or connection line</span></div>
+          <div class="shortcut-row"><kbd>Left Click + Drag</kbd><span>Move selected node(s)</span></div>
+          <div class="shortcut-row"><kbd>Double-Click Header</kbd><span>Rename custom comment box</span></div>
+          <div class="shortcut-row"><kbd>Del</kbd> or <kbd>Backspace</kbd><span>Delete selected node, connection, or comment</span></div>
+        </div>
+
+        <div class="shortcut-group">
+          <h3>Wiring / Routing</h3>
+          <div class="shortcut-row"><kbd>Click & Drag from Pin</kbd><span>Pull a connection cable. Drop on opposite pin to connect</span></div>
+          <div class="shortcut-row"><kbd>Double-Click a Cable</kbd><span>Insert a Reroute Dot (to clean up routing paths)</span></div>
+          <div class="shortcut-row"><kbd>Hover Connection</kbd><span>Highlight the full data path</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Load the main application code -->
+  <script src="app.js"></script>
+</body>
+</html>

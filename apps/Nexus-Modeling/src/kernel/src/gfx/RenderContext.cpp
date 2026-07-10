@@ -6,6 +6,7 @@
 #ifdef NEXUS_BACKEND_VULKAN
 #  include "backend/vulkan/VulkanDevice.h"
 #  include "backend/vulkan/VulkanSwapchain.h"
+#  include "backend/vulkan/VulkanFrameScheduler.h"
 #  include "backend/vulkan/VulkanAllocator.h"
 #endif
 
@@ -393,6 +394,19 @@ std::unique_ptr<ISwapchain> RenderContext::createSwapchain(const SwapchainDesc& 
 #endif
     (void)desc;  // silence -Wunused-parameter when all backends are guarded
     throw std::runtime_error("createSwapchain: no backend active");
+}
+
+std::unique_ptr<IFrameScheduler> RenderContext::createFrameScheduler(ISwapchain& swapchain)
+{
+#ifdef NEXUS_BACKEND_VULKAN
+    if (m_impl->activeBackend == Backend::Vulkan) {
+        auto* vkDev = static_cast<VulkanDevice*>(m_impl->device.get());
+        auto& vkSc  = static_cast<VulkanSwapchain&>(swapchain);
+        return std::make_unique<VulkanFrameScheduler>(*vkDev, vkSc);
+    }
+#endif
+    (void)swapchain;
+    return nullptr;
 }
 
 // ── Frame timing ──────────────────────────────────────────────────────────────

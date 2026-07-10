@@ -131,7 +131,7 @@ private:
 // ── RenderContext descriptor ───────────────────────────────────────────────
 struct RenderContextDesc {
     Backend         preferredBackend = Backend::Vulkan;
-    ValidationLevel validation       = ValidationLevel::Core;
+    ValidationLevel validation       = ValidationLevel::Off;
     bool            enableHDR        = false;
     bool            enableAsyncCompute = true;
     bool            enableMeshShaders  = true;
@@ -140,6 +140,8 @@ struct RenderContextDesc {
     std::string_view appName          = "NexusModeling";
     uint32_t         appVersion       = 1;
 };
+
+class IFrameScheduler;  // gfx/FrameScheduler.h
 
 // ── RenderContext ──────────────────────────────────────────────────────────
 class RenderContext {
@@ -157,6 +159,11 @@ public:
 
     // ── Swapchain factory ─────────────────────────────────────────────────
     [[nodiscard]] std::unique_ptr<ISwapchain> createSwapchain(const SwapchainDesc& desc);
+
+    // ── Frame scheduler factory (drives acquire→record→submit→present) ─────
+    // Returns nullptr on backends without a scheduler. The swapchain must outlive
+    // the returned scheduler.
+    [[nodiscard]] std::unique_ptr<IFrameScheduler> createFrameScheduler(ISwapchain& swapchain);
 
     // ── Frame budget monitoring ────────────────────────────────────────────
     void setFrameTimingCallback(FrameTimingCallback cb);

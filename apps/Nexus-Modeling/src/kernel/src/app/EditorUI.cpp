@@ -9,42 +9,176 @@
 
 #include <imgui.h>
 #include <imgui_impl_glfw.h>
-#include <imgui_impl_opengl3.h>
+#include <imgui_impl_vulkan.h>
 #include <GLFW/glfw3.h>
+#include <vulkan/vulkan.h>
 #include <nexus/parametric/ParametricSketchProfile.h>
+#include <nexus/geometry/Mesh.h>
+#include <nexus/geometry/SurfacePrimitives.h>
 #include <nexus/geometry/MeshBoolean.h>
 #include <nexus/geometry/SurfaceOffset.h>
 #include <nexus/geometry/FaceFillet.h>
+#include <nexus/geometry/DirectModeling.h>
+#include <nexus/gfx/RenderContext.h>
+#include <nexus/gfx/Swapchain.h>
+#include "backend/vulkan/VulkanDevice.h"
+#include "backend/vulkan/VulkanCommandBuffer.h"
 
 #include <cstdio>
 #include <vector>
 
 namespace nexus::app {
 
+using FeatureId = nexus::parametric::FeatureId;
+using Vec3 = nexus::render::Vec3;
+
+static nexus::gfx::RenderContext* g_renderContext = nullptr;
+static nexus::gfx::ISwapchain* g_swapchain = nullptr;
+static VkDescriptorPool g_imguiDescriptorPool = VK_NULL_HANDLE;
+
+static VkRenderPass createImGuiRenderPass(VkDevice device, VkFormat colorFormat) {
+    VkAttachmentDescription colorAttachment{};
+    colorAttachment.format = colorFormat;
+    colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
+    colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
+    colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+    colorAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    colorAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    colorAttachment.initialLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    colorAttachment.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+
+    VkAttachmentReference colorAttachmentRef{};
+    colorAttachmentRef.attachment = 0;
+    colorAttachmentRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
+    VkSubpassDescription subpass{};
+    subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+    subpass.colorAttachmentCount = 1;
+    subpass.pColorAttachments = &colorAttachmentRef;
+
+    VkSubpassDependency dependency{};
+    dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
+    dependency.dstSubpass = 0;
+    dependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+    dependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+    dependency.srcAccessMask = 0;
+    dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+
+    VkRenderPassCreateInfo renderPassInfo{};
+    renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+    renderPassInfo.attachmentCount = 1;
+    renderPassInfo.pAttachments = &colorAttachment;
+    renderPassInfo.subpassCount = 1;
+    renderPassInfo.pSubpasses = &subpass;
+    renderPassInfo.dependencyCount = 1;
+    renderPassInfo.pDependencies = &dependency;
+
+    VkRenderPass renderPass;
+    if (vkCreateRenderPass(device, &renderPassInfo, nullptr, &renderPass) != VK_SUCCESS) {
+        fprintf(stderr, "Failed to create ImGui render pass\n");
+        return VK_NULL_HANDLE;
+    }
+    return renderPass;
+}
+
 void EditorUI::initialize(GLFWwindow* w) {
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
+    ImGui::GetIO().ConfigFlags |= ImGuiConfigFlags_DockingEnable;
     ImGui::GetIO().IniFilename = nullptr;
-    ImGui_ImplGlfw_InitForOpenGL(w, false);
-    ImGui_ImplOpenGL3_Init("#version 330");
+    ImGui_ImplGlfw_InitForVulkan(w, true);
     ImGui::StyleColorsDark();
 }
 
+void EditorUI::initializeVulkan(nexus::gfx::RenderContext* renderContext, nexus::gfx::ISwapchain* swapchain) {
+    g_renderContext = renderContext;
+    g_swapchain = swapchain;
+
+    // Get Vulkan handles from the RenderContext
+    auto* vulkanDevice = dynamic_cast<nexus::gfx::VulkanDevice*>(&renderContext->device());
+    if (!vulkanDevice) {
+        fprintf(stderr, "EditorUI::initializeVulkan: RenderContext is not using Vulkan backend\n");
+        return;
+    }
+
+    VkInstance instance = vulkanDevice->instance();
+    VkPhysicalDevice physicalDevice = vulkanDevice->physical();
+    VkDevice device = vulkanDevice->logical();
+    uint32_t queueFamily = vulkanDevice->queueFamily(nexus::gfx::QueueType::Graphics);
+    VkQueue queue = vulkanDevice->queue(nexus::gfx::QueueType::Graphics);
+    VkFormat colorFormat = static_cast<VkFormat>(swapchain->colorFormat());
+    uint32_t imageCount = swapchain->imageCount();
+    VkDescriptorPoolSize poolSizes[] = {
+        { VK_DESCRIPTOR_TYPE_SAMPLER, 1000 },
+        { VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1000 },
+        { VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 1000 },
+        { VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1000 },
+        { VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER, 1000 },
+        { VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER, 1000 },
+        { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1000 },
+        { VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1000 },
+        { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, 1000 },
+        { VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC, 1000 },
+        { VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, 1000 }
+    };
+    VkDescriptorPoolCreateInfo poolInfo = {};
+    poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+    poolInfo.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
+    poolInfo.maxSets = 1000 * IM_ARRAYSIZE(poolSizes);
+    poolInfo.poolSizeCount = (uint32_t)IM_ARRAYSIZE(poolSizes);
+    poolInfo.pPoolSizes = poolSizes;
+
+    VkResult err = vkCreateDescriptorPool(device, &poolInfo, nullptr, &g_imguiDescriptorPool);
+    if (err != VK_SUCCESS) {
+        fprintf(stderr, "EditorUI::initializeVulkan: vkCreateDescriptorPool failed: %d\n", err);
+        return;
+    }
+
+// Initialize ImGui Vulkan backend
+    ImGui_ImplVulkan_InitInfo initInfo = {};
+    initInfo.Instance = instance;
+    initInfo.PhysicalDevice = physicalDevice;
+    initInfo.Device = device;
+    initInfo.QueueFamily = queueFamily;
+    initInfo.Queue = queue;
+    initInfo.PipelineCache = VK_NULL_HANDLE;
+    initInfo.DescriptorPool = g_imguiDescriptorPool;
+    initInfo.Subpass = 0;
+    initInfo.MinImageCount = imageCount;
+    initInfo.ImageCount = imageCount;
+    initInfo.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
+    initInfo.Allocator = nullptr;
+    initInfo.CheckVkResultFn = nullptr;
+
+    VkRenderPass renderPass = createImGuiRenderPass(device, colorFormat);
+    ImGui_ImplVulkan_Init(&initInfo);
+
+    // Upload fonts
+    ImGui_ImplVulkan_CreateFontsTexture();
+}
+
 void EditorUI::shutdown() {
-    ImGui_ImplOpenGL3_Shutdown();
+    if (g_imguiDescriptorPool != VK_NULL_HANDLE) {
+        auto* vulkanDevice = dynamic_cast<nexus::gfx::VulkanDevice*>(&g_renderContext->device());
+        if (vulkanDevice) {
+            vkDestroyDescriptorPool(vulkanDevice->logical(), g_imguiDescriptorPool, nullptr);
+        }
+    }
+    ImGui_ImplVulkan_Shutdown();
     ImGui_ImplGlfw_Shutdown();
     ImGui::DestroyContext();
 }
 
 void EditorUI::beginFrame() {
-    ImGui_ImplOpenGL3_NewFrame();
+    ImGui_ImplVulkan_NewFrame();
     ImGui_ImplGlfw_NewFrame();
     ImGui::NewFrame();
 }
 
-void EditorUI::endFrame() {
+void EditorUI::endFrame(nexus::gfx::ICommandBuffer* cmd) {
     ImGui::Render();
-    ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+    VkCommandBuffer vkCmd = static_cast<nexus::gfx::VulkanCommandBuffer*>(cmd)->handle();
+    ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), vkCmd);
 }
 
 // Helper: place a primitive mesh into the document as a feature.
