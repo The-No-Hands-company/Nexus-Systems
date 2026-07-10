@@ -2,14 +2,14 @@
 // ─────────────────────────────────────────────────────────────────────────────
 //  Nexus Geometry — Mesh Import/Export (hard-surface blockout workflow)
 //
-//  MeshIO::exportMesh() serialises a Mesh to disk in OBJ or PLY (ASCII) format.
-//  These two formats cover the primary DCC interchange requirements for the
-//  hard-surface blockout pipeline slice.
+//  MeshIO::exportMesh() serialises a Mesh to disk in OBJ / PLY (ASCII) or STL
+//  (binary) format. MeshIO::importMesh() reads a Mesh back from OBJ or STL
+//  (binary/ASCII auto-detected), enabling import -> edit -> export round-trips.
 //
 //  Design constraints:
 //  - All paths are noexcept and headless-safe.
 //  - Output is deterministic for identical input.
-//  - Import (read) is intentionally out of scope for this v0 endpoint.
+//  - Import rejects non-finite data (mirrors the export hardening).
 // ─────────────────────────────────────────────────────────────────────────────
 
 #include <nexus/geometry/Mesh.h>
@@ -26,6 +26,7 @@ namespace nexus::geometry {
 enum class MeshExportFormat : uint8_t {
     OBJ,  // Wavefront OBJ (ASCII)
     PLY,  // Stanford PLY  (ASCII)
+    STL,  // Stereolithography (binary)
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -78,6 +79,57 @@ struct MeshExportReport {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
+//  Import format
+// ─────────────────────────────────────────────────────────────────────────────
+enum class MeshImportFormat : uint8_t {
+    Auto,  // detect from file extension
+    OBJ,   // Wavefront OBJ (ASCII)
+    STL,   // Stereolithography (binary or ASCII, auto-detected)
+};
+
+enum class MeshImportDiagnostic : uint32_t {
+    Success           = 0,
+    FileOpenFailed    = 1u << 0,
+    ParseError        = 1u << 1,
+    EmptyMesh         = 1u << 2,
+    UnsupportedFormat = 1u << 3,
+    NonFiniteData     = 1u << 4,
+};
+
+inline MeshImportDiagnostic operator|(MeshImportDiagnostic a,
+                                      MeshImportDiagnostic b) noexcept
+{
+    return static_cast<MeshImportDiagnostic>(static_cast<uint32_t>(a)
+                                           | static_cast<uint32_t>(b));
+}
+
+inline bool hasDiagnostic(MeshImportDiagnostic val,
+                          MeshImportDiagnostic flag) noexcept
+{
+    return (static_cast<uint32_t>(val) & static_cast<uint32_t>(flag)) != 0;
+}
+
+struct MeshImportOptions {
+    MeshImportFormat format                 = MeshImportFormat::Auto;
+    bool             computeNormalsIfMissing = true;   // derive vertex normals when the file has none
+    bool             weldVertices            = false;  // merge coincident verts (useful for STL soup)
+    float            weldEpsilon             = 1e-5f;
+};
+
+struct MeshImportReport {
+    MeshImportDiagnostic diagnostic  = MeshImportDiagnostic::Success;
+    bool                 valid       = false;
+    uint32_t             verticesRead = 0;
+    uint32_t             facesRead    = 0;
+    std::vector<std::string> messages;
+
+    [[nodiscard]] bool isSuccess() const noexcept
+    {
+        return diagnostic == MeshImportDiagnostic::Success;
+    }
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
 //  MeshIO — stateless serialiser
 // ─────────────────────────────────────────────────────────────────────────────
 class MeshIO {
@@ -87,6 +139,13 @@ public:
     [[nodiscard]] static MeshExportReport exportMesh(const Mesh&              mesh,
                                                      const std::string&       path,
                                                      const MeshExportOptions& options) noexcept;
+
+    // Imports a mesh from the file at 'path' into 'outMesh'.
+    // Format is taken from options.format, or detected from the extension when Auto.
+    // Returns a report; report.valid == true on success. 'outMesh' is left cleared on failure.
+    [[nodiscard]] static MeshImportReport importMesh(const std::string&       path,
+                                                     const MeshImportOptions& options,
+                                                     Mesh&                    outMesh) noexcept;
 };
 
 } // namespace nexus::geometry

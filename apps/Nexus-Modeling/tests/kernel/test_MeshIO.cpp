@@ -305,4 +305,259 @@ TEST(MeshIO, ExportRejectsNonFiniteAttributeData)
     }
 }
 
+// ─── STL export ──────────────────────────────────────────────────────────────
+
+TEST(MeshIO, ExportSTLProducesBinaryFileWithCorrectSize)
+{
+    const std::string path = tmpPath("box.stl");
+    std::remove(path.c_str());
+
+    Mesh box = makeBox(1.f, 1.f, 1.f);
+    MeshExportOptions opts{};
+    opts.format = MeshExportFormat::STL;
+
+    const MeshExportReport report = MeshIO::exportMesh(box, path, opts);
+    ASSERT_TRUE(report.valid);
+    EXPECT_GT(report.facesWritten, 0u);
+    EXPECT_EQ(report.verticesWritten, report.facesWritten * 3u);
+
+    // Binary STL size == 80-byte header + 4-byte count + 50 bytes per triangle.
+    std::ifstream f(path, std::ios::binary | std::ios::ate);
+    ASSERT_TRUE(f.is_open());
+    const auto size = static_cast<size_t>(f.tellg());
+    EXPECT_EQ(size, 84u + static_cast<size_t>(report.facesWritten) * 50u);
+
+    std::remove(path.c_str());
+}
+
+// ─── Import: OBJ ─────────────────────────────────────────────────────────────
+
+TEST(MeshIO, ImportOBJRoundTripsExportedBox)
+{
+    const std::string path = tmpPath("rt_box.obj");
+    std::remove(path.c_str());
+
+    Mesh box = makeBox(1.f, 1.f, 1.f);
+    MeshExportOptions eopts{};
+    eopts.format         = MeshExportFormat::OBJ;
+    eopts.includeNormals = false;
+    eopts.includeUVs     = false;
+    ASSERT_TRUE(MeshIO::exportMesh(box, path, eopts).valid);
+
+    Mesh loaded;
+    MeshImportOptions iopts{};
+    const MeshImportReport rep = MeshIO::importMesh(path, iopts, loaded);
+
+    ASSERT_TRUE(rep.valid);
+    EXPECT_TRUE(rep.isSuccess());
+    EXPECT_EQ(loaded.attributes().vertexCount(), box.attributes().vertexCount());
+    EXPECT_EQ(loaded.topology().faceCount(),     box.topology().faceCount());
+    EXPECT_EQ(rep.verticesRead, static_cast<uint32_t>(box.attributes().vertexCount()));
+    EXPECT_EQ(rep.facesRead,    static_cast<uint32_t>(box.topology().faceCount()));
+
+    std::remove(path.c_str());
+}
+
+TEST(MeshIO, ImportOBJHandlesQuadAndNegativeIndices)
+{
+    const std::string path = tmpPath("quad_neg.obj");
+    std::remove(path.c_str());
+    {
+        std::ofstream f(path);
+        // Unit quad; face uses negative (relative) indices referencing the last 4 verts.
+        f << "v 0 0 0\n" << "v 1 0 0\n" << "v 1 1 0\n" << "v 0 1 0\n";
+        f << "f -4 -3 -2 -1\n";
+    }
+
+    Mesh loaded;
+    MeshImportOptions iopts{};
+    const MeshImportReport rep = MeshIO::importMesh(path, iopts, loaded);
+
+    ASSERT_TRUE(rep.valid);
+    EXPECT_EQ(loaded.attributes().vertexCount(), 4u);
+    ASSERT_EQ(loaded.topology().faceCount(), 1u);
+    EXPECT_EQ(loaded.topology().face(0).indices.size(), 4u);  // preserved as a quad
+    EXPECT_EQ(loaded.topology().face(0).indices[0], 0u);
+    EXPECT_EQ(loaded.topology().face(0).indices[3], 3u);
+
+    std::remove(path.c_str());
+}
+
+TEST(MeshIO, ImportOBJPreservesPerCornerUVs)
+{
+    const std::string path = tmpPath("uv_corners.obj");
+    std::remove(path.c_str());
+    {
+        std::ofstream f(path);
+        f << "v 0 0 0\nv 1 0 0\nv 0 1 0\n";
+        f << "vt 0 0\nvt 1 0\nvt 0 1\n";
+        f << "f 1/1 2/2 3/3\n";
+    }
+
+    Mesh loaded;
+    MeshImportOptions iopts{};
+    const MeshImportReport rep = MeshIO::importMesh(path, iopts, loaded);
+
+    ASSERT_TRUE(rep.valid);
+    EXPECT_EQ(loaded.attributes().vertexCount(), 3u);
+    EXPECT_TRUE(loaded.attributes().hasUVs());
+    EXPECT_EQ(loaded.attributes().uvs().size(), 3u);
+
+    std::remove(path.c_str());
+}
+
+TEST(MeshIO, ImportRejectsOutOfRangeFaceIndex)
+{
+    const std::string path = tmpPath("oob.obj");
+    std::remove(path.c_str());
+    {
+        std::ofstream f(path);
+        f << "v 0 0 0\nv 1 0 0\nv 0 1 0\nf 1 2 9\n";  // vertex 9 does not exist
+    }
+
+    Mesh loaded;
+    MeshImportOptions iopts{};
+    const MeshImportReport rep = MeshIO::importMesh(path, iopts, loaded);
+
+    EXPECT_FALSE(rep.valid);
+    EXPECT_TRUE(hasDiagnostic(rep.diagnostic, MeshImportDiagnostic::ParseError));
+    EXPECT_EQ(loaded.attributes().vertexCount(), 0u);  // output cleared on failure
+
+    std::remove(path.c_str());
+}
+
+TEST(MeshIO, ImportRejectsNonFiniteSTL)
+{
+    const std::string path = tmpPath("nan.stl");
+    std::remove(path.c_str());
+    {
+        // Craft a 1-triangle binary STL whose first vertex X is a NaN, exercising
+        // the non-finite hardening path deterministically (bit-exact, no text parse).
+        std::ofstream f(path, std::ios::binary);
+        const char header[80] = {0};
+        f.write(header, 80);
+        auto wu32 = [&](uint32_t v) {
+            const char b[4] = {static_cast<char>(v & 0xFF), static_cast<char>((v >> 8) & 0xFF),
+                               static_cast<char>((v >> 16) & 0xFF), static_cast<char>((v >> 24) & 0xFF)};
+            f.write(b, 4);
+        };
+        wu32(1);                                    // triangle count
+        wu32(0); wu32(0); wu32(0);                  // facet normal 0,0,0
+        wu32(0x7FC00000u); wu32(0); wu32(0);        // v0 = (NaN, 0, 0)
+        wu32(0x3F800000u); wu32(0); wu32(0);        // v1 = (1, 0, 0)
+        wu32(0); wu32(0x3F800000u); wu32(0);        // v2 = (0, 1, 0)
+        const char attr[2] = {0, 0};
+        f.write(attr, 2);
+    }
+
+    Mesh loaded;
+    MeshImportOptions iopts{};
+    const MeshImportReport rep = MeshIO::importMesh(path, iopts, loaded);
+
+    EXPECT_FALSE(rep.valid);
+    EXPECT_TRUE(hasDiagnostic(rep.diagnostic, MeshImportDiagnostic::NonFiniteData));
+    EXPECT_EQ(loaded.attributes().vertexCount(), 0u);  // output cleared on failure
+
+    std::remove(path.c_str());
+}
+
+// ─── Import: STL ─────────────────────────────────────────────────────────────
+
+TEST(MeshIO, ImportSTLRoundTripsExportedBox)
+{
+    const std::string path = tmpPath("rt_box.stl");
+    std::remove(path.c_str());
+
+    Mesh box = makeBox(1.f, 1.f, 1.f);
+    MeshExportOptions eopts{};
+    eopts.format = MeshExportFormat::STL;
+    const MeshExportReport erep = MeshIO::exportMesh(box, path, eopts);
+    ASSERT_TRUE(erep.valid);
+
+    Mesh loaded;
+    MeshImportOptions iopts{};  // no weld: STL is triangle soup, 3 verts per tri
+    const MeshImportReport rep = MeshIO::importMesh(path, iopts, loaded);
+
+    ASSERT_TRUE(rep.valid);
+    EXPECT_EQ(rep.facesRead, erep.facesWritten);
+    EXPECT_EQ(rep.verticesRead, erep.facesWritten * 3u);
+    EXPECT_TRUE(loaded.attributes().hasNormals());
+
+    std::remove(path.c_str());
+}
+
+TEST(MeshIO, ImportSTLWeldReducesVertexCount)
+{
+    const std::string path = tmpPath("weld_box.stl");
+    std::remove(path.c_str());
+
+    Mesh box = makeBox(1.f, 1.f, 1.f);
+    MeshExportOptions eopts{};
+    eopts.format = MeshExportFormat::STL;
+    const MeshExportReport erep = MeshIO::exportMesh(box, path, eopts);
+    ASSERT_TRUE(erep.valid);
+
+    Mesh loaded;
+    MeshImportOptions iopts{};
+    iopts.weldVertices = true;
+    const MeshImportReport rep = MeshIO::importMesh(path, iopts, loaded);
+
+    ASSERT_TRUE(rep.valid);
+    EXPECT_EQ(rep.facesRead, erep.facesWritten);
+    // Welding a closed box collapses the 3-per-tri soup to far fewer shared verts.
+    EXPECT_LT(loaded.attributes().vertexCount(), static_cast<size_t>(erep.facesWritten) * 3u);
+
+    std::remove(path.c_str());
+}
+
+// ─── Import: dispatch / errors ───────────────────────────────────────────────
+
+TEST(MeshIO, ImportAutoDetectsFormatFromExtension)
+{
+    Mesh box = makeBox(1.f, 1.f, 1.f);
+    for (const auto& fmt : {std::pair{MeshExportFormat::OBJ, std::string(".obj")},
+                            std::pair{MeshExportFormat::STL, std::string(".stl")}}) {
+        const std::string path = tmpPath("auto" + fmt.second);
+        std::remove(path.c_str());
+        MeshExportOptions eopts{};
+        eopts.format = fmt.first;
+        ASSERT_TRUE(MeshIO::exportMesh(box, path, eopts).valid);
+
+        Mesh loaded;
+        MeshImportOptions iopts{};  // Auto
+        const MeshImportReport rep = MeshIO::importMesh(path, iopts, loaded);
+        EXPECT_TRUE(rep.valid) << "format " << fmt.second;
+        EXPECT_GT(loaded.topology().faceCount(), 0u);
+        std::remove(path.c_str());
+    }
+}
+
+TEST(MeshIO, ImportRejectsMissingFile)
+{
+    Mesh loaded;
+    MeshImportOptions iopts{};
+    const MeshImportReport rep = MeshIO::importMesh(tmpPath("does_not_exist.obj"), iopts, loaded);
+    EXPECT_FALSE(rep.valid);
+    EXPECT_TRUE(hasDiagnostic(rep.diagnostic, MeshImportDiagnostic::FileOpenFailed));
+}
+
+TEST(MeshIO, ImportRejectsUnsupportedExtension)
+{
+    Mesh loaded;
+    MeshImportOptions iopts{};
+    const MeshImportReport rep = MeshIO::importMesh("model.xyz", iopts, loaded);
+    EXPECT_FALSE(rep.valid);
+    EXPECT_TRUE(hasDiagnostic(rep.diagnostic, MeshImportDiagnostic::UnsupportedFormat));
+}
+
+TEST(MeshIO, ImportMessagesAreSorted)
+{
+    Mesh loaded;
+    MeshImportOptions iopts{};
+    const MeshImportReport rep = MeshIO::importMesh("model.xyz", iopts, loaded);
+    auto sorted = rep.messages;
+    std::sort(sorted.begin(), sorted.end());
+    EXPECT_EQ(rep.messages, sorted);
+}
+
 } // namespace nexus::geometry::testing
