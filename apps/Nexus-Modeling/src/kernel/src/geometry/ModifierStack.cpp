@@ -5,11 +5,23 @@
 #include <nexus/geometry/MeshTransform.h>
 
 #include <algorithm>
+#include <bit>
+#include <cstdint>
 #include <utility>
+#include <vector>
 
 namespace nexus::geometry {
 
 namespace {
+
+constexpr uint32_t kModifierStackFormatVersion = 1;
+
+// -ffast-math makes std::isfinite unreliable; detect via IEEE-754 bit inspection.
+bool isFiniteFloat(float v) noexcept
+{
+    constexpr uint32_t kExpMask = 0x7F800000u;
+    return (std::bit_cast<uint32_t>(v) & kExpMask) != kExpMask;
+}
 
 // Mirror across an axis-aligned plane through the origin: reflect a copy of the
 // mesh, reverse its winding (a negative-determinant scale flips handedness, so
@@ -187,6 +199,97 @@ const Mesh& ModifierStack::evaluated() const
         m_cacheValid = true;
     }
     return m_cache;
+}
+
+std::vector<uint8_t> serializeModifierStack(const ModifierStack& stack)
+{
+    std::vector<uint8_t> out;
+    auto putU32 = [&](uint32_t v) {
+        out.push_back(static_cast<uint8_t>(v & 0xFF));
+        out.push_back(static_cast<uint8_t>((v >> 8) & 0xFF));
+        out.push_back(static_cast<uint8_t>((v >> 16) & 0xFF));
+        out.push_back(static_cast<uint8_t>((v >> 24) & 0xFF));
+    };
+    auto putF32 = [&](float f) { putU32(std::bit_cast<uint32_t>(f)); };
+    auto putI32 = [&](int32_t v) { putU32(static_cast<uint32_t>(v)); };
+
+    putU32(kModifierStackFormatVersion);
+    putU32(static_cast<uint32_t>(stack.modifierCount()));
+    for (const Modifier& m : stack.modifiers()) {
+        out.push_back(static_cast<uint8_t>(m.type));
+        out.push_back(m.enabled ? 1u : 0u);
+        putF32(m.vec.x);
+        putF32(m.vec.y);
+        putF32(m.vec.z);
+        putF32(m.scalar);
+        putI32(m.axis);
+        putI32(m.count);
+        out.push_back(m.merge ? 1u : 0u);
+    }
+    return out;
+}
+
+bool deserializeModifierStack(const uint8_t* data, size_t size, ModifierStack& out)
+{
+    if (data == nullptr) {
+        return false;
+    }
+    size_t p = 0;
+    auto getU32 = [&](uint32_t& v) -> bool {
+        if (p + 4 > size) return false;
+        v = static_cast<uint32_t>(data[p]) | (static_cast<uint32_t>(data[p + 1]) << 8)
+          | (static_cast<uint32_t>(data[p + 2]) << 16) | (static_cast<uint32_t>(data[p + 3]) << 24);
+        p += 4;
+        return true;
+    };
+    auto getF32 = [&](float& f) -> bool {
+        uint32_t bits = 0;
+        if (!getU32(bits)) return false;
+        f = std::bit_cast<float>(bits);
+        return isFiniteFloat(f);  // reject non-finite payloads
+    };
+    auto getI32 = [&](int32_t& v) -> bool {
+        uint32_t bits = 0;
+        if (!getU32(bits)) return false;
+        v = static_cast<int32_t>(bits);
+        return true;
+    };
+
+    uint32_t version = 0;
+    uint32_t count   = 0;
+    if (!getU32(version) || version == 0 || version > kModifierStackFormatVersion) {
+        return false;
+    }
+    if (!getU32(count)) {
+        return false;
+    }
+    // Each modifier is 27 bytes; reject counts that can't possibly fit.
+    if (static_cast<size_t>(count) * 27u > size - p) {
+        return false;
+    }
+
+    std::vector<Modifier> parsed;
+    parsed.reserve(count);
+    for (uint32_t i = 0; i < count; ++i) {
+        if (p + 2 > size) return false;
+        const uint8_t type = data[p++];
+        if (type > static_cast<uint8_t>(ModifierType::Displace)) return false;  // unknown modifier
+        Modifier m;
+        m.type    = static_cast<ModifierType>(type);
+        m.enabled = data[p++] != 0;
+        if (!getF32(m.vec.x) || !getF32(m.vec.y) || !getF32(m.vec.z) || !getF32(m.scalar)) return false;
+        if (!getI32(m.axis) || !getI32(m.count)) return false;
+        if (p + 1 > size) return false;
+        m.merge = data[p++] != 0;
+        parsed.push_back(m);
+    }
+
+    // Commit only on full success — replace the modifier list, keep the base mesh.
+    out.clearModifiers();
+    for (const Modifier& m : parsed) {
+        out.addModifier(m);
+    }
+    return true;
 }
 
 }  // namespace nexus::geometry

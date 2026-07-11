@@ -270,4 +270,79 @@ TEST(ModifierStack, SetModifierUpdatesParams)
     EXPECT_NEAR(b.minX, boundsOf(box).minX + 9.f, 1e-3f);
 }
 
+TEST(ModifierStack, SerializeRoundTrip)
+{
+    ModifierStack src;
+    src.setBaseMesh(makeBox(2.f, 2.f, 2.f));
+    Modifier a; a.type = ModifierType::Translate; a.vec = nexus::render::Vec3{5.f, 0.f, 0.f};
+    Modifier b; b.type = ModifierType::Array; b.count = 3; b.vec = nexus::render::Vec3{2.f, 0.f, 0.f}; b.merge = false;
+    Modifier c; c.type = ModifierType::Mirror; c.axis = 1; c.enabled = false;
+    src.addModifier(a); src.addModifier(b); src.addModifier(c);
+
+    const std::vector<uint8_t> blob = serializeModifierStack(src);
+    ASSERT_FALSE(blob.empty());
+
+    ModifierStack dst;
+    dst.setBaseMesh(makeBox(2.f, 2.f, 2.f));
+    ASSERT_TRUE(deserializeModifierStack(blob.data(), blob.size(), dst));
+    ASSERT_EQ(dst.modifierCount(), 3u);
+    EXPECT_EQ(dst.modifierAt(0).type, ModifierType::Translate);
+    EXPECT_NEAR(dst.modifierAt(0).vec.x, 5.f, 1e-6f);
+    EXPECT_EQ(dst.modifierAt(1).type, ModifierType::Array);
+    EXPECT_EQ(dst.modifierAt(1).count, 3);
+    EXPECT_FALSE(dst.modifierAt(1).merge);
+    EXPECT_EQ(dst.modifierAt(2).type, ModifierType::Mirror);
+    EXPECT_EQ(dst.modifierAt(2).axis, 1);
+    EXPECT_FALSE(dst.modifierAt(2).enabled);
+    EXPECT_EQ(src.evaluate().topology().faceCount(), dst.evaluate().topology().faceCount());
+}
+
+TEST(ModifierStack, SerializeIsDeterministic)
+{
+    ModifierStack s;
+    s.setBaseMesh(makeBox(2.f, 2.f, 2.f));
+    Modifier a; a.type = ModifierType::Displace; a.scalar = 0.3f;
+    s.addModifier(a);
+    EXPECT_EQ(serializeModifierStack(s), serializeModifierStack(s));
+}
+
+TEST(ModifierStack, DeserializePreservesBaseMesh)
+{
+    ModifierStack src;
+    src.setBaseMesh(makeBox(2.f, 2.f, 2.f));
+    Modifier a; a.type = ModifierType::Translate; a.vec = nexus::render::Vec3{1.f, 0.f, 0.f};
+    src.addModifier(a);
+    const std::vector<uint8_t> blob = serializeModifierStack(src);
+
+    ModifierStack dst;
+    dst.setBaseMesh(makeSphere(3.f));
+    const size_t baseVerts = dst.baseMesh().attributes().vertexCount();
+    ASSERT_TRUE(deserializeModifierStack(blob.data(), blob.size(), dst));
+    EXPECT_EQ(dst.baseMesh().attributes().vertexCount(), baseVerts);  // base left untouched
+    EXPECT_EQ(dst.modifierCount(), 1u);
+}
+
+TEST(ModifierStack, DeserializeRejectsTruncatedNullAndBadVersion)
+{
+    ModifierStack src;
+    src.setBaseMesh(makeBox(2.f, 2.f, 2.f));
+    Modifier a; a.type = ModifierType::Translate; a.vec = nexus::render::Vec3{1.f, 0.f, 0.f};
+    src.addModifier(a);
+    const std::vector<uint8_t> blob = serializeModifierStack(src);
+
+    ModifierStack dst;
+    dst.setBaseMesh(makeBox(2.f, 2.f, 2.f));
+    Modifier keep; keep.type = ModifierType::Scale; keep.vec = nexus::render::Vec3{2.f, 2.f, 2.f};
+    dst.addModifier(keep);
+
+    EXPECT_FALSE(deserializeModifierStack(blob.data(), blob.size() / 2, dst));  // truncated
+    EXPECT_EQ(dst.modifierCount(), 1u);                                         // unchanged on failure
+    EXPECT_FALSE(deserializeModifierStack(nullptr, 0, dst));
+
+    std::vector<uint8_t> bad = blob;
+    bad[0] = bad[1] = bad[2] = bad[3] = 0;  // version 0
+    EXPECT_FALSE(deserializeModifierStack(bad.data(), bad.size(), dst));
+    EXPECT_EQ(dst.modifierCount(), 1u);
+}
+
 }  // namespace nexus::geometry::testing

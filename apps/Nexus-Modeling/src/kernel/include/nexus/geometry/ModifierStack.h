@@ -14,6 +14,7 @@
 
 #include <nexus/geometry/Mesh.h>
 
+#include <cstddef>
 #include <cstdint>
 #include <vector>
 
@@ -76,5 +77,15 @@ private:
     mutable Mesh          m_cache;
     mutable bool          m_cacheValid = false;
 };
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Serialization — the modifier list only (the base mesh is owned/serialised by
+//  the containing feature/document). Byte format is versioned little-endian with
+//  backward-compatible reads: bump the version, never break old blobs.
+//  deserialize rejects malformed/truncated data and non-finite floats, and
+//  leaves out.baseMesh() untouched (only its modifier list is replaced).
+// ─────────────────────────────────────────────────────────────────────────────
+[[nodiscard]] std::vector<uint8_t> serializeModifierStack(const ModifierStack& stack);
+[[nodiscard]] bool deserializeModifierStack(const uint8_t* data, size_t size, ModifierStack& out);
 
 } // namespace nexus::geometry
