@@ -24,6 +24,7 @@
 #include <nexus/gfx/Swapchain.h>
 #include "backend/vulkan/VulkanDevice.h"
 #include "backend/vulkan/VulkanCommandBuffer.h"
+#include "backend/vulkan/VulkanSwapchain.h"
 
 #include <cstdio>
 #include <vector>
@@ -36,6 +37,9 @@ using Vec3 = nexus::render::Vec3;
 static nexus::gfx::RenderContext* g_renderContext = nullptr;
 static nexus::gfx::ISwapchain* g_swapchain = nullptr;
 static VkDescriptorPool g_imguiDescriptorPool = VK_NULL_HANDLE;
+static VkRenderPass g_imguiRenderPass = VK_NULL_HANDLE;
+static std::vector<VkFramebuffer> g_imguiFramebuffers;
+static VkExtent2D g_imguiExtent = {0, 0};
 
 static VkRenderPass createImGuiRenderPass(VkDevice device, VkFormat colorFormat) {
     VkAttachmentDescription colorAttachment{};
@@ -45,7 +49,9 @@ static VkRenderPass createImGuiRenderPass(VkDevice device, VkFormat colorFormat)
     colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
     colorAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
     colorAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-    colorAttachment.initialLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    // The 3D scene leaves the swapchain image in PRESENT_SRC (direct render path);
+    // loadOp=LOAD preserves it and we overlay the UI, ending back in PRESENT_SRC.
+    colorAttachment.initialLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
     colorAttachment.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
 
     VkAttachmentReference colorAttachmentRef{};
@@ -152,7 +158,33 @@ void EditorUI::initializeVulkan(nexus::gfx::RenderContext* renderContext, nexus:
     initInfo.CheckVkResultFn = nullptr;
 
     VkRenderPass renderPass = createImGuiRenderPass(device, colorFormat);
+    initInfo.RenderPass = renderPass;   // was previously created but never assigned
     ImGui_ImplVulkan_Init(&initInfo);
+    g_imguiRenderPass = renderPass;
+
+    // Framebuffers over each swapchain image view, for the UI overlay pass that
+    // draws ImGui on top of the rendered 3D scene each frame.
+    if (auto* vkSc = dynamic_cast<nexus::gfx::VulkanSwapchain*>(swapchain);
+        vkSc && renderPass != VK_NULL_HANDLE) {
+        const auto ext = swapchain->extent();
+        g_imguiExtent = VkExtent2D{ext.width, ext.height};
+        g_imguiFramebuffers.assign(imageCount, VK_NULL_HANDLE);
+        for (uint32_t i = 0; i < imageCount; ++i) {
+            VkImageView view = vkSc->imageView(i);
+            if (view == VK_NULL_HANDLE) continue;
+            VkFramebufferCreateInfo fci{};
+            fci.sType           = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+            fci.renderPass      = renderPass;
+            fci.attachmentCount = 1;
+            fci.pAttachments    = &view;
+            fci.width           = ext.width;
+            fci.height          = ext.height;
+            fci.layers          = 1;
+            if (vkCreateFramebuffer(device, &fci, nullptr, &g_imguiFramebuffers[i]) != VK_SUCCESS) {
+                fprintf(stderr, "EditorUI: failed to create ImGui framebuffer %u\n", i);
+            }
+        }
+    }
 
     // Upload fonts
     ImGui_ImplVulkan_CreateFontsTexture();
@@ -162,7 +194,16 @@ void EditorUI::shutdown() {
     if (g_imguiDescriptorPool != VK_NULL_HANDLE) {
         auto* vulkanDevice = dynamic_cast<nexus::gfx::VulkanDevice*>(&g_renderContext->device());
         if (vulkanDevice) {
-            vkDestroyDescriptorPool(vulkanDevice->logical(), g_imguiDescriptorPool, nullptr);
+            VkDevice dev = vulkanDevice->logical();
+            for (VkFramebuffer fb : g_imguiFramebuffers) {
+                if (fb != VK_NULL_HANDLE) vkDestroyFramebuffer(dev, fb, nullptr);
+            }
+            g_imguiFramebuffers.clear();
+            if (g_imguiRenderPass != VK_NULL_HANDLE) {
+                vkDestroyRenderPass(dev, g_imguiRenderPass, nullptr);
+                g_imguiRenderPass = VK_NULL_HANDLE;
+            }
+            vkDestroyDescriptorPool(dev, g_imguiDescriptorPool, nullptr);
         }
     }
     ImGui_ImplVulkan_Shutdown();
@@ -179,6 +220,27 @@ void EditorUI::beginFrame() {
 void EditorUI::endFrame(nexus::gfx::ICommandBuffer* cmd) {
     ImGui::Render();
     VkCommandBuffer vkCmd = static_cast<nexus::gfx::VulkanCommandBuffer*>(cmd)->handle();
+
+    // Overlay the UI onto the current swapchain image inside a load-not-clear
+    // render pass, so ImGui composites on top of the already-rendered 3D scene.
+    auto* vkSc = dynamic_cast<nexus::gfx::VulkanSwapchain*>(g_swapchain);
+    if (g_imguiRenderPass != VK_NULL_HANDLE && vkSc) {
+        const uint32_t idx = vkSc->lastImageIndex();
+        if (idx < g_imguiFramebuffers.size() && g_imguiFramebuffers[idx] != VK_NULL_HANDLE) {
+            VkRenderPassBeginInfo rpbi{};
+            rpbi.sType             = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+            rpbi.renderPass        = g_imguiRenderPass;
+            rpbi.framebuffer       = g_imguiFramebuffers[idx];
+            rpbi.renderArea.offset = {0, 0};
+            rpbi.renderArea.extent = g_imguiExtent;
+            rpbi.clearValueCount   = 0;
+            vkCmdBeginRenderPass(vkCmd, &rpbi, VK_SUBPASS_CONTENTS_INLINE);
+            ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), vkCmd);
+            vkCmdEndRenderPass(vkCmd);
+            return;
+        }
+    }
+    // Fallback (no swapchain framebuffers, e.g. headless): record bare.
     ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), vkCmd);
 }
 

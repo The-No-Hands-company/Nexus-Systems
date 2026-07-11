@@ -250,8 +250,8 @@ std::optional<FrameContext> VulkanFrameScheduler::beginFrame()
     ctx.imageIndex       = m_imageIndex;
     ctx.finalColorLayout = m_usingIntermediateStorage ? TextureLayout::TransferSrc
                                                       : TextureLayout::Present;
-    return ctx;
-    m_currentFrame = ctx;  // Store for later access
+    m_currentFrame = ctx;  // Store so getCurrentFrame()/currentCommandBuffer() see
+                           // the frame currently being recorded (not a stale slot).
     return ctx;
 }
 
@@ -373,22 +373,13 @@ void VulkanFrameScheduler::endFrame()
 
 // ── getCurrentFrame ─────────────────────────────────────────────────────────────
 const FrameContext* VulkanFrameScheduler::getCurrentFrame() const noexcept {
-    // We need to return the current active frame context
-    // The active frame is at slot (m_frameSlot - 1) % m_maxInFlight
-    if (m_frameSlot == 0 || m_frames.empty()) return nullptr;
-    
-    const uint32_t slot = (m_frameSlot - 1) % m_maxInFlight;
-    const PerFrame& f = m_frames[slot];
-    if (!f.cmdObj) return nullptr;
-
-    static thread_local FrameContext cachedCtx;
-    cachedCtx.cmd          = f.cmdObj.get();
-    cachedCtx.colorTarget  = TextureHandle{}; // Would need to be filled from swapchain
-    cachedCtx.extent       = m_sc.extent();
-    cachedCtx.frameSlot    = slot % m_maxInFlight;
-    cachedCtx.imageIndex   = m_imageIndex;
-    cachedCtx.finalColorLayout = TextureLayout::Present;
-    return &cachedCtx;
+    // Return the frame context captured by beginFrame() — the one whose command
+    // buffer is currently being recorded and will be submitted by endFrame().
+    // (Previously this recomputed a slot as (m_frameSlot-1)%max, which pointed at
+    //  a *different* slot than the frame being recorded, since m_frameSlot is only
+    //  incremented in endFrame — so ImGui/overlay work landed in an unsubmitted
+    //  command buffer.)
+    return m_currentFrame.has_value() ? &m_currentFrame.value() : nullptr;
 }
 
 void nexus::gfx::VulkanFrameScheduler::onResize(nexus::gfx::Extent2D newExtent) {
