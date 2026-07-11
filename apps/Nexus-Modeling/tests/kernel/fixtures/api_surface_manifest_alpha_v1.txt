@@ -72,6 +72,7 @@ src/kernel/include/nexus/geometry/MeshCageDeform.h
 src/kernel/include/nexus/geometry/MeshClosestPoint.h
 src/kernel/include/nexus/geometry/MeshConvexHull.h
 src/kernel/include/nexus/geometry/MeshCrossSection.h
+src/kernel/include/nexus/geometry/MeshCut.h
 src/kernel/include/nexus/geometry/MeshDecimator.h
 src/kernel/include/nexus/geometry/MeshDiagnosticOverlay.h
 src/kernel/include/nexus/geometry/MeshDisplace.h
