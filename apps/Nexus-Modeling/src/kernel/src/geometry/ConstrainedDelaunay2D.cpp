@@ -86,18 +86,25 @@ void ConstrainedDelaunay2D::buildDelaunay() {
     pts.push_back({midU - dmax, midV - dmax * 0.5f});
     pts.push_back({midU, midV + dmax * 1.5f});
     pts.push_back({midU + dmax, midV - dmax * 0.5f});
-    m_triangles.push_back({s0, s1, s2});
+    // Super-triangle must be CCW so inCircle() has a consistent orientation.
+    if (orient2D(pts[s0], pts[s1], pts[s2]) < 0) {
+        m_triangles.push_back({s0, s2, s1});
+    } else {
+        m_triangles.push_back({s0, s1, s2});
+    }
 
     for (uint32_t pi = 0; pi < static_cast<uint32_t>(pts.size()) - 3; ++pi) {
         const Vec2& p = pts[pi];
 
+        // Bowyer-Watson: every triangle whose circumcircle contains p is "bad".
+        // (The previous guard `t[*] < pi && t[0] != s0…` never flagged the
+        //  super-triangle, so no point was ever inserted — the triangulation was
+        //  always empty.)
         std::vector<bool> badMask(m_triangles.size(), false);
         for (size_t ti = 0; ti < m_triangles.size(); ++ti) {
             const auto& t = m_triangles[ti];
-            if (t[0] < pi && t[1] < pi && t[2] < pi && t[0] != s0 && t[0] != s1 && t[0] != s2) {
-                if (inCircle(pts[t[0]], pts[t[1]], pts[t[2]], p)) {
-                    badMask[ti] = true;
-                }
+            if (inCircle(pts[t[0]], pts[t[1]], pts[t[2]], p)) {
+                badMask[ti] = true;
             }
         }
 
@@ -119,7 +126,13 @@ void ConstrainedDelaunay2D::buildDelaunay() {
         }
         for (const auto& [ek, cnt] : edgeCount) {
             if (cnt == 1) {
-                newTris.push_back({ek.a, ek.b, pi});
+                // Emit each cavity-boundary triangle CCW so orientation stays
+                // consistent for subsequent inCircle tests.
+                if (orient2D(pts[ek.a], pts[ek.b], pts[pi]) < 0) {
+                    newTris.push_back({ek.b, ek.a, pi});
+                } else {
+                    newTris.push_back({ek.a, ek.b, pi});
+                }
             }
         }
 
