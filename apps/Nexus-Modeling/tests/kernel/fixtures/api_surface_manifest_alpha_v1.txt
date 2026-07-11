@@ -148,6 +148,7 @@ src/kernel/include/nexus/geometry/SurfaceTrim.h
 src/kernel/include/nexus/geometry/SweepLoft.h
 src/kernel/include/nexus/geometry/TetDelaunay3D.h
 src/kernel/include/nexus/geometry/TransformOrientation.h
+src/kernel/include/nexus/geometry/TriTriIntersect.h
 src/kernel/include/nexus/geometry/TrimBoolean.h
 src/kernel/include/nexus/geometry/Voronoi2D.h
 src/kernel/include/nexus/gfx/Allocator.h
