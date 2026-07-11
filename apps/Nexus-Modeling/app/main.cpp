@@ -977,6 +977,14 @@ int main(int argc, char** argv) {
     }
     int shotFrameCount = 0;
 
+    // Test hook: seed the scene with a box so the interactive viewport has content
+    // to render on startup (the scene is otherwise empty until the user acts).
+    if (std::getenv("NEXUS_TEST_BOX")) {
+        placeShotPrimitive(state, "box", "");
+        state.viewport->syncDocument(state.app->document());
+        printf("NEXUS_TEST_BOX: seeded a box into the scene\n");
+    }
+
     // Render loop
     while (!glfwWindowShouldClose(window)) {
         EditorUI::beginFrame();
