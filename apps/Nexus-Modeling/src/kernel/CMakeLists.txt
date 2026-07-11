@@ -92,6 +92,7 @@ add_library(nexus_gfx_core STATIC
     src/geometry/MeshThicken.cpp
     src/geometry/MeshTopologyAnalysis.cpp
     src/geometry/MeshTransform.cpp
+    src/geometry/ModifierStack.cpp
     src/geometry/MeshUVUnwrap.cpp
     src/geometry/MeshVertexWeld.cpp
     src/geometry/MeshVoxelize.cpp

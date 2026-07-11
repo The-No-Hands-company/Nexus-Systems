@@ -107,6 +107,7 @@ src/kernel/include/nexus/geometry/MeshVoxelize.h
 src/kernel/include/nexus/geometry/MeshWindingNumber.h
 src/kernel/include/nexus/geometry/Meshlet.h
 src/kernel/include/nexus/geometry/ModelingShell.h
+src/kernel/include/nexus/geometry/ModifierStack.h
 src/kernel/include/nexus/geometry/NexusFormat.h
 src/kernel/include/nexus/geometry/NurbsCurve.h
 src/kernel/include/nexus/geometry/NurbsCurveArcLength.h

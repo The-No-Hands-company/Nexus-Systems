@@ -54,6 +54,7 @@ add_executable(nexus_kernel_tests
     kernel/test_InsetFacesOperation.cpp
     kernel/test_Material.cpp
     kernel/test_Mesh.cpp
+    kernel/test_ModifierStack.cpp
     kernel/test_MeshAmbientOcclusion.cpp
     kernel/test_MeshBVH.cpp
     kernel/test_MeshBoolean.cpp
