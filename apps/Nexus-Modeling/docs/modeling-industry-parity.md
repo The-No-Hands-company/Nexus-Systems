@@ -38,6 +38,21 @@ Nexus status is grounded in the July 2026 kernel + app inventories, **not** aspi
 
 ---
 
+## Foundation & Robustness (the depth axis)
+
+The layer tables below measure **breadth** — is a feature *present*? This section measures **depth** — is the kernel foundation *production-robust*? A cell can be ✅ present yet ❌ robust (the boolean is the clearest case). **Foundation gaps outrank breadth features** in the backlog: a house needs its cement poured before more rooms.
+
+| Foundation pillar | Status | Reality (with evidence) |
+|---|---|---|
+| Exact geometric predicates | ✅ Solid | Adaptive-exact `orient2D/orient3D` (Shewchuk-style expansion arithmetic, float-fast-path→exact-fallback) in `RobustPredicates.cpp`; genuinely used by boolean/Delaunay/CDT/Voronoi |
+| Robust mesh boolean / CSG | ❌ Cosmetic | `BooleanOperation.cpp` classifies whole triangles by centroid inside/outside — **no splitting along the intersection curve** → jagged stair-stepped seams; only works on fine tessellation, fails on coarse meshes |
+| Unified topological core + Euler operators | 🟡 Fractured | Real half-edge (`HalfEdgeMesh`, twin/next/prev, `isManifold`) but an **island** — Bevel/Extrude/Inset/EdgeBridge run on raw indexed `Mesh`; **no Euler operators** (split/collapse/flip) |
+| Tolerance / units model | ❌ Missing | No central model; a dozen scattered scale-blind epsilons (`1e-10`×114, `1e-8`×37, `1e-12`×32, …) — same op misbehaves on a 0.5 mm part vs a 5 km terrain |
+| Manifold / degenerate handling | 🟡 Partial | `isManifold` + non-manifold gates + Euler-Poincaré exist, but not enforced through every op |
+| Stable element IDs across ops | 🟡 Partial | Present in several ops; not universal |
+
+**Foundation-first track (outranks breadth P0s):** ① robust boolean that splits along the intersection curve (assemble existing tri-tri intersect + CDT + exact predicates) → ② promote the half-edge to the authoritative core + Euler operators, migrate the edit ops onto it → ③ a Tolerance/units module every op consults.
+
 ## L0 — Geometry representations (the engine substrate)
 
 | Feature | Industry-standard behavior | Who ships it | Nexus | Gap |
@@ -65,7 +80,7 @@ Nexus status is grounded in the July 2026 kernel + app inventories, **not** aspi
 | Edge slide / vertex slide | all | ✅ | — |
 | Knife / cut / section | all | ✅ | — |
 | Merge / weld / remove-doubles | all | ✅ | — |
-| Boolean (union/diff/intersect) + tolerant | all | ✅ | — |
+| Boolean (union/diff/intersect) + tolerant | all | 🟡 | **cosmetic** — whole-triangle centroid classify, no intersection-curve split → jagged seams, fails on coarse meshes (see Foundation track) |
 | Solidify / thicken / shell | all | ✅ | — |
 | Displace | all | ✅ | — |
 | Loop cut / ring | all | 🟡 | App mode exists; confirm kernel loop-cut op + n-cuts/slide |
@@ -271,6 +286,11 @@ The gaps cluster in **four themes**, in priority order:
 ---
 
 ## Prioritized parity-closure backlog
+
+### Foundation (P0⁺ — the depth track, outranks the breadth P0s below)
+- **Robust mesh boolean** that splits along the intersection curve (tri-tri intersect → CDT retriangulation → classify → stitch). Fixes the cosmetic boolean; unblocks real CSG that everything CAD depends on.
+- **Unified topological core:** promote `HalfEdgeMesh` to authoritative + add Euler operators (split/collapse/flip/split-face/join-face) with invariant tests, then migrate Bevel/Extrude/Inset/EdgeBridge onto it.
+- **Tolerance/units module** (absolute + relative, scale/unit aware) every op consults, replacing the scattered epsilons.
 
 ### P0 — table-stakes; nothing new in-layer until these land
 - **IO importers + core formats:** ✅ OBJ, STL, PLY, glTF 2.0 import/export landed **and wired into the editor File menu** (routed through the tested MeshIO). Remaining polish: a file picker (fixed filenames for now). Then FBX/USD/Alembic (P1). (L13)
