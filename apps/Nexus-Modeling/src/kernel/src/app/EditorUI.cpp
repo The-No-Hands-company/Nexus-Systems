@@ -363,11 +363,13 @@ bool EditorUI::renderMenuBar(AppContext& ctx, TransformGizmo& gizmo,
         if(ImGui::MenuItem("Export PLY"))  { exportMeshFile(ctx, geometry::MeshExportFormat::PLY,  "export.ply"); action=true; }
         if(ImGui::MenuItem("Export STL"))  { exportMeshFile(ctx, geometry::MeshExportFormat::STL,  "export.stl"); action=true; }
         if(ImGui::MenuItem("Export glTF")) { exportMeshFile(ctx, geometry::MeshExportFormat::GLTF, "export.glb"); action=true; }
+        if(ImGui::MenuItem("Export USD"))  { exportMeshFile(ctx, geometry::MeshExportFormat::USDA, "export.usda"); action=true; }
         ImGui::Separator();
         if(ImGui::MenuItem("Import OBJ"))  { importMeshFile(ctx, "import.obj"); action=true; }
         if(ImGui::MenuItem("Import PLY"))  { importMeshFile(ctx, "import.ply"); action=true; }
         if(ImGui::MenuItem("Import STL"))  { importMeshFile(ctx, "import.stl"); action=true; }
         if(ImGui::MenuItem("Import glTF")) { importMeshFile(ctx, "import.glb"); action=true; }
+        if(ImGui::MenuItem("Import USD"))  { importMeshFile(ctx, "import.usda"); action=true; }
         ImGui::Separator();
         if(ImGui::MenuItem("Screenshot (PPM)")) {
             screenshotPPM(ctx);

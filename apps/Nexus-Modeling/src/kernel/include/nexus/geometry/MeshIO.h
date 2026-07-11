@@ -29,6 +29,7 @@ enum class MeshExportFormat : uint8_t {
     PLY,   // Stanford PLY  (ASCII)
     STL,   // Stereolithography (binary)
     GLTF,  // glTF 2.0 (binary .glb container, self-contained)
+    USDA,  // Pixar USD ASCII (.usda) mesh
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -89,6 +90,7 @@ enum class MeshImportFormat : uint8_t {
     STL,   // Stereolithography (binary or ASCII, auto-detected)
     PLY,   // Stanford PLY (ASCII or binary little-endian, auto-detected)
     GLTF,  // glTF 2.0 (.gltf JSON w/ data-URI or external buffers, or .glb binary)
+    USDA,  // Pixar USD ASCII (.usda / ASCII .usd) mesh
 };
 
 enum class MeshImportDiagnostic : uint32_t {

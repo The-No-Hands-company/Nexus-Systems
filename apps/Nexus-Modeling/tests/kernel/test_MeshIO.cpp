@@ -748,6 +748,100 @@ TEST(MeshIO, ImportGLTFTextWithBase64DataURI)
     std::remove(path.c_str());
 }
 
+// ─── USD ASCII (.usda) ───────────────────────────────────────────────────────
+
+TEST(MeshIO, ExportUSDAProducesFile)
+{
+    const std::string path = tmpPath("box.usda");
+    std::remove(path.c_str());
+
+    Mesh box = makeBox(1.f, 1.f, 1.f);
+    MeshExportOptions opts{};
+    opts.format = MeshExportFormat::USDA;
+
+    const MeshExportReport report = MeshIO::exportMesh(box, path, opts);
+    ASSERT_TRUE(report.valid);
+    EXPECT_GT(report.facesWritten, 0u);
+
+    const std::string content = readFile(path);
+    EXPECT_EQ(content.rfind("#usda", 0), 0u);                        // magic header
+    EXPECT_NE(content.find("def Mesh"), std::string::npos);
+    EXPECT_NE(content.find("point3f[] points"), std::string::npos);
+    EXPECT_NE(content.find("int[] faceVertexIndices"), std::string::npos);
+
+    std::remove(path.c_str());
+}
+
+TEST(MeshIO, ImportUSDARoundTripsExportedBox)
+{
+    const std::string path = tmpPath("rt_box.usda");
+    std::remove(path.c_str());
+
+    Mesh box = makeBox(1.f, 1.f, 1.f);
+    MeshExportOptions eopts{};
+    eopts.format = MeshExportFormat::USDA;
+    const MeshExportReport erep = MeshIO::exportMesh(box, path, eopts);
+    ASSERT_TRUE(erep.valid);
+
+    Mesh loaded;
+    MeshImportOptions iopts{};
+    const MeshImportReport rep = MeshIO::importMesh(path, iopts, loaded);
+
+    ASSERT_TRUE(rep.valid) << (rep.messages.empty() ? "" : rep.messages.front());
+    EXPECT_EQ(loaded.attributes().vertexCount(), box.attributes().vertexCount());
+    EXPECT_EQ(loaded.topology().faceCount(),     erep.facesWritten);  // n-gons preserved
+
+    std::remove(path.c_str());
+}
+
+TEST(MeshIO, ImportUSDAHandcraftedQuad)
+{
+    const std::string path = tmpPath("quad.usda");
+    std::remove(path.c_str());
+    {
+        std::ofstream f(path);
+        f << "#usda 1.0\n(\n    defaultPrim = \"m\"\n)\n\n"
+             "def Mesh \"m\"\n{\n"
+             "    int[] faceVertexCounts = [4]\n"
+             "    int[] faceVertexIndices = [0, 1, 2, 3]\n"
+             "    point3f[] points = [(0, 0, 0), (1, 0, 0), (1, 1, 0), (0, 1, 0)]\n"
+             "    uniform token subdivisionScheme = \"none\"\n"
+             "}\n";
+    }
+
+    Mesh loaded;
+    MeshImportOptions iopts{};
+    const MeshImportReport rep = MeshIO::importMesh(path, iopts, loaded);
+
+    ASSERT_TRUE(rep.valid) << (rep.messages.empty() ? "" : rep.messages.front());
+    EXPECT_EQ(loaded.attributes().vertexCount(), 4u);
+    ASSERT_EQ(loaded.topology().faceCount(), 1u);
+    EXPECT_EQ(loaded.topology().face(0).indices.size(), 4u);  // quad preserved
+
+    std::remove(path.c_str());
+}
+
+TEST(MeshIO, ImportUSDARejectsBinaryCrate)
+{
+    const std::string path = tmpPath("crate.usd");
+    std::remove(path.c_str());
+    {
+        std::ofstream f(path, std::ios::binary);
+        f << "PXR-USDC";  // binary USD crate magic, not ASCII
+        const char zeros[16] = {0};
+        f.write(zeros, 16);
+    }
+
+    Mesh loaded;
+    MeshImportOptions iopts{};
+    const MeshImportReport rep = MeshIO::importMesh(path, iopts, loaded);
+
+    EXPECT_FALSE(rep.valid);
+    EXPECT_TRUE(hasDiagnostic(rep.diagnostic, MeshImportDiagnostic::UnsupportedFormat));
+
+    std::remove(path.c_str());
+}
+
 // ─── Import: dispatch / errors ───────────────────────────────────────────────
 
 TEST(MeshIO, ImportAutoDetectsFormatFromExtension)
@@ -756,7 +850,8 @@ TEST(MeshIO, ImportAutoDetectsFormatFromExtension)
     for (const auto& fmt : {std::pair{MeshExportFormat::OBJ, std::string(".obj")},
                             std::pair{MeshExportFormat::STL, std::string(".stl")},
                             std::pair{MeshExportFormat::PLY, std::string(".ply")},
-                            std::pair{MeshExportFormat::GLTF, std::string(".glb")}}) {
+                            std::pair{MeshExportFormat::GLTF, std::string(".glb")},
+                            std::pair{MeshExportFormat::USDA, std::string(".usda")}}) {
         const std::string path = tmpPath("auto" + fmt.second);
         std::remove(path.c_str());
         MeshExportOptions eopts{};

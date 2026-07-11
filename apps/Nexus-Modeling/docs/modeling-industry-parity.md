@@ -220,12 +220,12 @@ Nexus status is grounded in the July 2026 kernel + app inventories, **not** aspi
 | STL | import + export | all + CAD/print | ✅ | binary export + binary/ASCII import (+ optional weld) |
 | glTF 2.0 | import + export | all modern | ✅ | hand-rolled .gltf + .glb import; .glb export |
 | FBX | import + export | games/film | ❌ | — |
-| USD / USDZ | import + export | modern pipelines | ❌ | — |
+| USD / USDZ | import + export | modern pipelines | 🟡 | .usda ASCII mesh import+export; binary crate (.usdc) + full USD later |
 | Alembic | import + export | film | ❌ | — |
 | STEP / IGES | import + export | CAD | ❌ | — |
 | Native (.nxm) | round-trip | — | ✅ | — |
 
-**Verdict:** interchange was the most glaring gap and is now largely closed. **OBJ, STL, PLY, and glTF 2.0 import/export have landed** (glTF hand-rolled: JSON parser + base64 + accessor decoding, `.gltf` & `.glb`), all with non-finite hardening and round-trip tests. `import → edit → export` now works for every universal mesh format plus the modern standard, **reachable from the editor's File menu** (all routed through MeshIO). Remaining: a proper file picker (fixed filenames for now), then FBX/USD/Alembic (heavier, likely SDK deps).
+**Verdict:** interchange was the most glaring gap and is now largely closed. **OBJ, STL, PLY, and glTF 2.0 import/export have landed** (glTF hand-rolled: JSON parser + base64 + accessor decoding, `.gltf` & `.glb`), all with non-finite hardening and round-trip tests. `import → edit → export` now works for every universal mesh format plus the modern standard, **reachable from the editor's File menu** (all routed through MeshIO). USD `.usda` (ASCII) mesh import/export is also in (hand-rolled). Remaining: a proper file picker (fixed filenames for now), then FBX/Alembic + USD binary crate (heavier, likely SDK deps).
 
 ## L14 — Units, measurement & analysis
 
@@ -281,7 +281,7 @@ The gaps cluster in **four themes**, in priority order:
 - **App-wide undo/redo stack** covering all operators. (L12)
 
 ### P1 — expected by any professional user
-- FBX + USD import/export; Alembic export. (L13)
+- 🟡 USD `.usda` (ASCII) mesh import/export landed. Remaining: FBX import/export, Alembic export, USD binary crate — the SDK-dependency decisions. (L13)
 - Back the CAD feature tree so fillet/chamfer/shell/draft/pattern/hole are **regenerable features**, not just API. (L5→L6)
 - Sculpt **dyntopo + multires + layers**; add clay-strips/scrape/snake-hook/pose brushes. (L3)
 - Missing sketch constraints (tangent/fix/collinear/midpoint). (L6)

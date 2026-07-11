@@ -1599,6 +1599,286 @@ MeshExportReport exportGLTF(const Mesh& mesh, const std::string& path, const Mes
     return report;
 }
 
+// ── USD ASCII (.usda) — hand-rolled mesh import/export ───────────────────────
+
+// Finds "<name> = [ ... ]" within a USD prim block; returns the bracketed text.
+// Matches on identifier boundaries so "points" never matches inside another token.
+bool usdaFindArray(const std::string& block, const std::string& name, std::string& content)
+{
+    auto isIdent = [](char c) {
+        return std::isalnum(static_cast<unsigned char>(c)) != 0 || c == '_' || c == ':';
+    };
+    size_t pos = 0;
+    while ((pos = block.find(name, pos)) != std::string::npos) {
+        const bool   leftOK  = (pos == 0) || !isIdent(block[pos - 1]);
+        const size_t after   = pos + name.size();
+        const bool   rightOK = (after >= block.size()) || !isIdent(block[after]);
+        if (leftOK && rightOK) {
+            const size_t eq = block.find('=', after);
+            if (eq != std::string::npos) {
+                const size_t br = block.find('[', eq);
+                if (br != std::string::npos) {
+                    const size_t end = block.find(']', br);
+                    if (end != std::string::npos) {
+                        content = block.substr(br + 1, end - br - 1);
+                        return true;
+                    }
+                }
+            }
+        }
+        pos = after;
+    }
+    return false;
+}
+
+// Parses every numeric token from an array's content (tuple parens/commas skipped).
+std::vector<double> usdaParseScalars(const std::string& content)
+{
+    std::vector<double> out;
+    const char* p = content.c_str();
+    const char* e = p + content.size();
+    while (p < e) {
+        while (p < e && !((*p >= '0' && *p <= '9') || *p == '-' || *p == '+' || *p == '.')) ++p;
+        if (p >= e) break;
+        char* endp = nullptr;
+        const double d = std::strtod(p, &endp);
+        if (endp == p) { ++p; continue; }
+        out.push_back(d);
+        p = endp;
+    }
+    return out;
+}
+
+MeshImportReport importUSDA(const std::string& path, const MeshImportOptions& options, Mesh& out)
+{
+    MeshImportReport report{};
+    std::ifstream in(path, std::ios::binary);
+    if (!in) {
+        report.diagnostic = MeshImportDiagnostic::FileOpenFailed;
+        report.messages.push_back("Cannot import: failed to open file");
+        return report;
+    }
+    const std::string content((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+    if (content.rfind("#usda", 0) != 0) {
+        report.diagnostic = MeshImportDiagnostic::UnsupportedFormat;
+        report.messages.push_back("USD: not ASCII .usda (binary USD crate is unsupported)");
+        return report;
+    }
+
+    std::vector<Vec3> outPos, outNrm;
+    std::vector<Vec2> outUV;
+    std::vector<Face> faces;
+    bool anyNrm = false, anyUV = false;
+
+    size_t pos = 0;
+    while ((pos = content.find("def Mesh", pos)) != std::string::npos) {
+        const size_t brace = content.find('{', pos);
+        if (brace == std::string::npos) break;
+        int    depth = 0;
+        size_t close = std::string::npos;
+        for (size_t i = brace; i < content.size(); ++i) {
+            if (content[i] == '{') ++depth;
+            else if (content[i] == '}') { if (--depth == 0) { close = i; break; } }
+        }
+        if (close == std::string::npos) break;
+        const std::string block = content.substr(brace + 1, close - brace - 1);
+        pos = close + 1;
+
+        std::string cPoints, cCounts, cIndices, cNormals, cST;
+        if (!usdaFindArray(block, "points", cPoints) ||
+            !usdaFindArray(block, "faceVertexIndices", cIndices) ||
+            !usdaFindArray(block, "faceVertexCounts", cCounts)) {
+            continue;  // not a renderable polygonal mesh block
+        }
+        const std::vector<double> pv     = usdaParseScalars(cPoints);
+        const std::vector<double> counts = usdaParseScalars(cCounts);
+        const std::vector<double> idx    = usdaParseScalars(cIndices);
+        if (pv.size() < 3 || (pv.size() % 3) != 0) {
+            report.diagnostic = MeshImportDiagnostic::ParseError;
+            report.messages.push_back("USD: malformed points array");
+            return report;
+        }
+        const uint32_t baseV  = static_cast<uint32_t>(outPos.size());
+        const size_t   vcount = pv.size() / 3;
+        for (size_t i = 0; i < vcount; ++i) {
+            const auto x = static_cast<float>(pv[i * 3 + 0]);
+            const auto y = static_cast<float>(pv[i * 3 + 1]);
+            const auto z = static_cast<float>(pv[i * 3 + 2]);
+            if (!isFiniteFloat(x) || !isFiniteFloat(y) || !isFiniteFloat(z)) {
+                report.diagnostic = MeshImportDiagnostic::NonFiniteData;
+                report.messages.push_back("USD: non-finite vertex position");
+                return report;
+            }
+            outPos.push_back(Vec3{x, y, z});
+        }
+
+        bool blockHasN = false;
+        if (usdaFindArray(block, "normals", cNormals)) {
+            const std::vector<double> nv = usdaParseScalars(cNormals);
+            if (nv.size() == vcount * 3) {
+                for (size_t i = 0; i < vcount; ++i) {
+                    outNrm.push_back(Vec3{static_cast<float>(nv[i * 3 + 0]),
+                                          static_cast<float>(nv[i * 3 + 1]),
+                                          static_cast<float>(nv[i * 3 + 2])});
+                }
+                blockHasN = true;
+                anyNrm    = true;
+            }
+        }
+        if (!blockHasN) {
+            for (size_t i = 0; i < vcount; ++i) outNrm.push_back(Vec3{});
+        }
+
+        bool blockHasUV = false;
+        if (usdaFindArray(block, "primvars:st", cST)) {
+            const std::vector<double> uv = usdaParseScalars(cST);
+            if (uv.size() == vcount * 2) {
+                for (size_t i = 0; i < vcount; ++i) {
+                    outUV.push_back(Vec2{static_cast<float>(uv[i * 2 + 0]), static_cast<float>(uv[i * 2 + 1])});
+                }
+                blockHasUV = true;
+                anyUV      = true;
+            }
+        }
+        if (!blockHasUV) {
+            for (size_t i = 0; i < vcount; ++i) outUV.push_back(Vec2{0.f, 0.f});
+        }
+
+        size_t cursor = 0;
+        for (double dc : counts) {
+            const int c = static_cast<int>(dc);
+            if (c < 0 || cursor + static_cast<size_t>(c) > idx.size()) {
+                report.diagnostic = MeshImportDiagnostic::ParseError;
+                report.messages.push_back("USD: faceVertexIndices/Counts mismatch");
+                return report;
+            }
+            if (c >= 3) {
+                Face fc;
+                for (int k = 0; k < c; ++k) {
+                    const long id = static_cast<long>(idx[cursor + static_cast<size_t>(k)]);
+                    if (id < 0 || static_cast<size_t>(id) >= vcount) {
+                        report.diagnostic = MeshImportDiagnostic::ParseError;
+                        report.messages.push_back("USD: face index out of range");
+                        return report;
+                    }
+                    fc.indices.push_back(baseV + static_cast<uint32_t>(id));
+                }
+                faces.push_back(std::move(fc));
+            }
+            cursor += static_cast<size_t>(c);
+        }
+    }
+
+    if (outPos.empty()) {
+        report.diagnostic = MeshImportDiagnostic::EmptyMesh;
+        report.messages.push_back("USD: no polygonal mesh found");
+        return report;
+    }
+
+    out.attributes().setPositions(std::move(outPos));
+    for (Face& f : faces) {
+        out.topology().addFace(std::move(f));
+    }
+    if (anyUV) {
+        out.attributes().setUVs(std::move(outUV));
+    }
+    if (anyNrm) {
+        out.attributes().setNormals(std::move(outNrm));
+    } else if (options.computeNormalsIfMissing) {
+        (void)out.computeVertexNormals();
+    }
+
+    report.verticesRead = static_cast<uint32_t>(out.attributes().vertexCount());
+    report.facesRead    = static_cast<uint32_t>(out.topology().faceCount());
+    report.valid        = true;
+    return report;
+}
+
+MeshExportReport exportUSDA(const Mesh& mesh, const std::string& path, const MeshExportOptions& options)
+{
+    MeshExportReport report{};
+    std::ofstream out(path);
+    if (!out) {
+        report.diagnostic = MeshExportDiagnostic::FileOpenFailed;
+        report.messages.push_back("Cannot export: failed to open file for writing");
+        std::sort(report.messages.begin(), report.messages.end());
+        return report;
+    }
+    out.precision(9);
+
+    const auto& positions = mesh.attributes().positions();
+    const bool  hasN  = options.includeNormals && mesh.attributes().hasNormals();
+    const bool  hasUV = options.includeUVs && mesh.attributes().hasUVs();
+    const auto& normals = mesh.attributes().normals();
+    const auto& uvs     = mesh.attributes().uvs();
+    const auto& topo    = mesh.topology();
+
+    out << "#usda 1.0\n(\n    defaultPrim = \"mesh\"\n    upAxis = \"Y\"\n)\n\n";
+    out << "def Mesh \"mesh\"\n{\n";
+
+    uint32_t faceCount = 0;
+    out << "    int[] faceVertexCounts = [";
+    for (size_t f = 0; f < topo.faceCount(); ++f) {
+        const auto& fc = topo.face(f);
+        if (fc.indices.size() < 3) continue;
+        if (faceCount++ != 0) out << ", ";
+        out << fc.indices.size();
+    }
+    out << "]\n";
+
+    out << "    int[] faceVertexIndices = [";
+    bool firstIdx = true;
+    for (size_t f = 0; f < topo.faceCount(); ++f) {
+        const auto& fc = topo.face(f);
+        if (fc.indices.size() < 3) continue;
+        for (const uint32_t id : fc.indices) {
+            if (!firstIdx) out << ", ";
+            firstIdx = false;
+            out << id;
+        }
+    }
+    out << "]\n";
+
+    out << "    point3f[] points = [";
+    for (size_t i = 0; i < positions.size(); ++i) {
+        if (i != 0) out << ", ";
+        out << "(" << positions[i].x << ", " << positions[i].y << ", " << positions[i].z << ")";
+    }
+    out << "]\n";
+
+    if (hasN) {
+        out << "    normal3f[] normals = [";
+        for (size_t i = 0; i < normals.size(); ++i) {
+            if (i != 0) out << ", ";
+            out << "(" << normals[i].x << ", " << normals[i].y << ", " << normals[i].z << ")";
+        }
+        out << "] (\n        interpolation = \"vertex\"\n    )\n";
+    }
+    if (hasUV) {
+        out << "    texCoord2f[] primvars:st = [";
+        for (size_t i = 0; i < uvs.size(); ++i) {
+            if (i != 0) out << ", ";
+            out << "(" << uvs[i].u << ", " << uvs[i].v << ")";
+        }
+        out << "] (\n        interpolation = \"vertex\"\n    )\n";
+    }
+
+    out << "    uniform token subdivisionScheme = \"none\"\n";
+    out << "}\n";
+
+    if (!out) {
+        report.diagnostic = MeshExportDiagnostic::WriteError;
+        report.messages.push_back("Write error while emitting USD (.usda) data");
+        std::sort(report.messages.begin(), report.messages.end());
+        return report;
+    }
+    report.verticesWritten = static_cast<uint32_t>(positions.size());
+    report.facesWritten    = faceCount;
+    report.valid           = true;
+    std::sort(report.messages.begin(), report.messages.end());
+    return report;
+}
+
 } // namespace
 
 MeshExportReport MeshIO::exportMesh(const Mesh&              mesh,
@@ -1634,6 +1914,8 @@ MeshExportReport MeshIO::exportMesh(const Mesh&              mesh,
             return exportSTL(mesh, path, options);
         case MeshExportFormat::GLTF:
             return exportGLTF(mesh, path, options);
+        case MeshExportFormat::USDA:
+            return exportUSDA(mesh, path, options);
     }
 
     report.diagnostic = MeshExportDiagnostic::UnsupportedFormat;
@@ -1684,6 +1966,8 @@ MeshImportReport MeshIO::importMesh(const std::string&       path,
             fmt = MeshImportFormat::PLY;
         } else if (ext == ".gltf" || ext == ".glb") {
             fmt = MeshImportFormat::GLTF;
+        } else if (ext == ".usda" || ext == ".usd") {
+            fmt = MeshImportFormat::USDA;
         } else {
             report.diagnostic = MeshImportDiagnostic::UnsupportedFormat;
             report.messages.push_back("Cannot import: unrecognized file extension");
@@ -1703,6 +1987,9 @@ MeshImportReport MeshIO::importMesh(const std::string&       path,
             break;
         case MeshImportFormat::GLTF:
             report = importGLTF(path, options, outMesh);
+            break;
+        case MeshImportFormat::USDA:
+            report = importUSDA(path, options, outMesh);
             break;
         default:
             report.diagnostic = MeshImportDiagnostic::UnsupportedFormat;
