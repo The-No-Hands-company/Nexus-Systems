@@ -10,6 +10,7 @@
 #include <fstream>
 #include <iterator>
 #include <limits>
+#include <map>
 #include <sstream>
 #include <string>
 #include <unordered_map>
@@ -969,6 +970,635 @@ MeshImportReport importPLY(const std::string& path, const MeshImportOptions& opt
     return report;
 }
 
+// ── glTF 2.0 (.gltf / .glb) — hand-rolled JSON + accessor decoding ────────────
+
+std::vector<uint8_t> base64Decode(const std::string& in)
+{
+    auto val = [](char c) -> int {
+        if (c >= 'A' && c <= 'Z') return c - 'A';
+        if (c >= 'a' && c <= 'z') return c - 'a' + 26;
+        if (c >= '0' && c <= '9') return c - '0' + 52;
+        if (c == '+') return 62;
+        if (c == '/') return 63;
+        return -1;
+    };
+    std::vector<uint8_t> out;
+    int buf = 0, bits = 0;
+    for (char c : in) {
+        if (c == '=') break;
+        const int v = val(c);
+        if (v < 0) continue;  // skip whitespace / non-alphabet
+        buf = (buf << 6) | v;
+        bits += 6;
+        if (bits >= 8) {
+            bits -= 8;
+            out.push_back(static_cast<uint8_t>((buf >> bits) & 0xFF));
+        }
+    }
+    return out;
+}
+
+// Minimal JSON value + recursive-descent parser (sufficient for glTF).
+struct Json {
+    enum class T { Null, Bool, Num, Str, Arr, Obj } t = T::Null;
+    bool b = false;
+    double n = 0.0;
+    std::string s;
+    std::vector<Json> a;
+    std::map<std::string, Json> o;
+
+    [[nodiscard]] const Json* get(const std::string& k) const
+    {
+        if (t != T::Obj) return nullptr;
+        const auto it = o.find(k);
+        return it == o.end() ? nullptr : &it->second;
+    }
+    [[nodiscard]] double num(double d = 0.0) const { return t == T::Num ? n : d; }
+    [[nodiscard]] const std::string& sstr() const
+    {
+        static const std::string empty;
+        return t == T::Str ? s : empty;
+    }
+    [[nodiscard]] bool isArr() const { return t == T::Arr; }
+    [[nodiscard]] bool isObj() const { return t == T::Obj; }
+};
+
+struct JsonParser {
+    const char* p;
+    const char* e;
+    bool        ok = true;
+
+    JsonParser(const char* begin, const char* end) : p(begin), e(end) {}
+
+    void ws()
+    {
+        while (p < e && (*p == ' ' || *p == '\t' || *p == '\n' || *p == '\r')) ++p;
+    }
+    bool parse(Json& out)
+    {
+        ws();
+        value(out);
+        return ok;
+    }
+    void value(Json& j)
+    {
+        if (p >= e) { ok = false; return; }
+        const char c = *p;
+        if (c == '{') object(j);
+        else if (c == '[') array(j);
+        else if (c == '"') { j.t = Json::T::Str; string(j.s); }
+        else if (c == 't' || c == 'f') boolean(j);
+        else if (c == 'n') { literal("null"); j.t = Json::T::Null; }
+        else number(j);
+    }
+    void literal(const char* lit)
+    {
+        const size_t n = std::strlen(lit);
+        if (static_cast<size_t>(e - p) < n || std::strncmp(p, lit, n) != 0) { ok = false; return; }
+        p += n;
+    }
+    void boolean(Json& j)
+    {
+        if (*p == 't') { literal("true"); j.t = Json::T::Bool; j.b = true; }
+        else { literal("false"); j.t = Json::T::Bool; j.b = false; }
+    }
+    void number(Json& j)
+    {
+        char* endp = nullptr;
+        const double d = std::strtod(p, &endp);
+        if (endp == p) { ok = false; return; }
+        p = endp;
+        j.t = Json::T::Num;
+        j.n = d;
+    }
+    void string(std::string& out)
+    {
+        ++p;  // opening quote
+        out.clear();
+        while (p < e && *p != '"') {
+            char c = *p++;
+            if (c == '\\') {
+                if (p >= e) { ok = false; return; }
+                const char x = *p++;
+                switch (x) {
+                    case '"':  out += '"';  break;
+                    case '\\': out += '\\'; break;
+                    case '/':  out += '/';  break;
+                    case 'n':  out += '\n'; break;
+                    case 't':  out += '\t'; break;
+                    case 'r':  out += '\r'; break;
+                    case 'b':  out += '\b'; break;
+                    case 'f':  out += '\f'; break;
+                    case 'u': {
+                        if (e - p < 4) { ok = false; return; }
+                        int cp = 0;
+                        for (int i = 0; i < 4; ++i) {
+                            const char h = *p++;
+                            cp <<= 4;
+                            if (h >= '0' && h <= '9') cp |= h - '0';
+                            else if (h >= 'a' && h <= 'f') cp |= h - 'a' + 10;
+                            else if (h >= 'A' && h <= 'F') cp |= h - 'A' + 10;
+                            else { ok = false; return; }
+                        }
+                        if (cp < 0x80) {
+                            out += static_cast<char>(cp);
+                        } else if (cp < 0x800) {
+                            out += static_cast<char>(0xC0 | (cp >> 6));
+                            out += static_cast<char>(0x80 | (cp & 0x3F));
+                        } else {
+                            out += static_cast<char>(0xE0 | (cp >> 12));
+                            out += static_cast<char>(0x80 | ((cp >> 6) & 0x3F));
+                            out += static_cast<char>(0x80 | (cp & 0x3F));
+                        }
+                        break;
+                    }
+                    default: ok = false; return;
+                }
+            } else {
+                out += c;
+            }
+        }
+        if (p >= e) { ok = false; return; }
+        ++p;  // closing quote
+    }
+    void array(Json& j)
+    {
+        j.t = Json::T::Arr;
+        ++p;
+        ws();
+        if (p < e && *p == ']') { ++p; return; }
+        while (p < e) {
+            Json el;
+            value(el);
+            if (!ok) return;
+            j.a.push_back(std::move(el));
+            ws();
+            if (p < e && *p == ',') { ++p; ws(); continue; }
+            if (p < e && *p == ']') { ++p; return; }
+            ok = false;
+            return;
+        }
+        ok = false;
+    }
+    void object(Json& j)
+    {
+        j.t = Json::T::Obj;
+        ++p;
+        ws();
+        if (p < e && *p == '}') { ++p; return; }
+        while (p < e) {
+            ws();
+            if (p >= e || *p != '"') { ok = false; return; }
+            std::string key;
+            string(key);
+            if (!ok) return;
+            ws();
+            if (p >= e || *p != ':') { ok = false; return; }
+            ++p;
+            ws();
+            Json v;
+            value(v);
+            if (!ok) return;
+            j.o.emplace(std::move(key), std::move(v));
+            ws();
+            if (p < e && *p == ',') { ++p; continue; }
+            if (p < e && *p == '}') { ++p; return; }
+            ok = false;
+            return;
+        }
+        ok = false;
+    }
+};
+
+int gltfCompSize(int ct)
+{
+    switch (ct) {
+        case 5120: case 5121: return 1;  // (u)byte
+        case 5122: case 5123: return 2;  // (u)short
+        case 5125: case 5126: return 4;  // uint / float
+        default:              return 0;
+    }
+}
+int gltfTypeCount(const std::string& t)
+{
+    if (t == "SCALAR") return 1;
+    if (t == "VEC2")   return 2;
+    if (t == "VEC3")   return 3;
+    if (t == "VEC4")   return 4;
+    if (t == "MAT2")   return 4;
+    if (t == "MAT3")   return 9;
+    if (t == "MAT4")   return 16;
+    return 0;
+}
+double gltfReadComp(const unsigned char* p, int ct)
+{
+    switch (ct) {
+        case 5120: return static_cast<double>(static_cast<int8_t>(p[0]));
+        case 5121: return static_cast<double>(p[0]);
+        case 5122: return static_cast<double>(static_cast<int16_t>(readLEBytes(p, 2)));
+        case 5123: return static_cast<double>(static_cast<uint16_t>(readLEBytes(p, 2)));
+        case 5125: return static_cast<double>(static_cast<uint32_t>(readLEBytes(p, 4)));
+        case 5126: return static_cast<double>(std::bit_cast<float>(static_cast<uint32_t>(readLEBytes(p, 4))));
+        default:   return 0.0;
+    }
+}
+
+// Reads accessor 'accIdx' into 'out' as flat doubles (count * compCount).
+bool gltfReadAccessor(const Json& g, const std::vector<std::vector<uint8_t>>& bufs, int accIdx,
+                      std::vector<double>& out, int& compCount, int& count)
+{
+    const Json* accessors = g.get("accessors");
+    if (!accessors || !accessors->isArr() || accIdx < 0 || accIdx >= static_cast<int>(accessors->a.size())) {
+        return false;
+    }
+    const Json& acc = accessors->a[static_cast<size_t>(accIdx)];
+    const Json* ctv = acc.get("componentType");
+    const Json* tv  = acc.get("type");
+    const Json* cv  = acc.get("count");
+    const Json* bvv = acc.get("bufferView");
+    if (!ctv || !tv || !cv || !bvv) return false;  // sparse accessors not supported
+    const int ct = static_cast<int>(ctv->num());
+    compCount    = gltfTypeCount(tv->sstr());
+    count        = static_cast<int>(cv->num());
+    const int cs = gltfCompSize(ct);
+    if (compCount == 0 || cs == 0 || count < 0) return false;
+
+    const int bvIdx = static_cast<int>(bvv->num());
+    const size_t accOffset = acc.get("byteOffset") ? static_cast<size_t>(acc.get("byteOffset")->num()) : 0;
+    const Json* bviews = g.get("bufferViews");
+    if (!bviews || !bviews->isArr() || bvIdx < 0 || bvIdx >= static_cast<int>(bviews->a.size())) return false;
+    const Json& bv = bviews->a[static_cast<size_t>(bvIdx)];
+    const Json* bufv = bv.get("buffer");
+    if (!bufv) return false;
+    const int bufIdx = static_cast<int>(bufv->num());
+    if (bufIdx < 0 || bufIdx >= static_cast<int>(bufs.size())) return false;
+    const size_t bvOffset = bv.get("byteOffset") ? static_cast<size_t>(bv.get("byteOffset")->num()) : 0;
+    const size_t stride    = bv.get("byteStride") ? static_cast<size_t>(bv.get("byteStride")->num())
+                                                   : static_cast<size_t>(compCount) * static_cast<size_t>(cs);
+    const auto& buffer = bufs[static_cast<size_t>(bufIdx)];
+    const size_t base = bvOffset + accOffset;
+
+    out.resize(static_cast<size_t>(count) * static_cast<size_t>(compCount));
+    for (int i = 0; i < count; ++i) {
+        const size_t elemOff = base + static_cast<size_t>(i) * stride;
+        if (elemOff + static_cast<size_t>(compCount) * static_cast<size_t>(cs) > buffer.size()) return false;
+        for (int c = 0; c < compCount; ++c) {
+            out[static_cast<size_t>(i) * static_cast<size_t>(compCount) + static_cast<size_t>(c)] =
+                gltfReadComp(buffer.data() + elemOff + static_cast<size_t>(c) * static_cast<size_t>(cs), ct);
+        }
+    }
+    return true;
+}
+
+MeshImportReport importGLTF(const std::string& path, const MeshImportOptions& options, Mesh& out)
+{
+    MeshImportReport report{};
+    std::ifstream in(path, std::ios::binary);
+    if (!in) {
+        report.diagnostic = MeshImportDiagnostic::FileOpenFailed;
+        report.messages.push_back("Cannot import: failed to open file");
+        return report;
+    }
+    const std::vector<char> buf((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+
+    std::string jsonText;
+    std::vector<uint8_t> glbBin;
+    if (buf.size() >= 12 && std::memcmp(buf.data(), "glTF", 4) == 0) {
+        const auto* p = reinterpret_cast<const unsigned char*>(buf.data());
+        size_t off = 12;  // skip 12-byte GLB header
+        while (off + 8 <= buf.size()) {
+            const uint32_t clen  = static_cast<uint32_t>(readLEBytes(p + off, 4));
+            const uint32_t ctype = static_cast<uint32_t>(readLEBytes(p + off + 4, 4));
+            off += 8;
+            if (off + clen > buf.size()) break;
+            if (ctype == 0x4E4F534Au) {  // "JSON"
+                jsonText.assign(reinterpret_cast<const char*>(p) + off, clen);
+            } else if (ctype == 0x004E4942u) {  // "BIN\0"
+                glbBin.assign(p + off, p + off + clen);
+            }
+            off += clen;
+            off = (off + 3) & ~static_cast<size_t>(3);
+        }
+        if (jsonText.empty()) {
+            report.diagnostic = MeshImportDiagnostic::ParseError;
+            report.messages.push_back("GLB: missing JSON chunk");
+            return report;
+        }
+    } else {
+        jsonText.assign(buf.begin(), buf.end());
+    }
+
+    Json gltf;
+    JsonParser jp(jsonText.data(), jsonText.data() + jsonText.size());
+    if (!jp.parse(gltf) || !gltf.isObj()) {
+        report.diagnostic = MeshImportDiagnostic::ParseError;
+        report.messages.push_back("glTF: invalid JSON");
+        return report;
+    }
+
+    // Resolve buffers (GLB bin chunk, data: URIs, or external files).
+    std::vector<std::vector<uint8_t>> buffers;
+    if (const Json* jbufs = gltf.get("buffers"); jbufs && jbufs->isArr()) {
+        std::string dir;
+        if (const size_t s = path.find_last_of("/\\"); s != std::string::npos) {
+            dir = path.substr(0, s + 1);
+        }
+        for (const Json& jb : jbufs->a) {
+            const Json* uri = jb.get("uri");
+            if (!uri) {
+                buffers.push_back(glbBin);
+                continue;
+            }
+            const std::string& u = uri->sstr();
+            if (u.rfind("data:", 0) == 0) {
+                const size_t comma = u.find(',');
+                if (comma == std::string::npos) {
+                    report.diagnostic = MeshImportDiagnostic::ParseError;
+                    report.messages.push_back("glTF: malformed data URI");
+                    return report;
+                }
+                buffers.push_back(base64Decode(u.substr(comma + 1)));
+            } else {
+                std::ifstream bf(dir + u, std::ios::binary);
+                if (!bf) {
+                    report.diagnostic = MeshImportDiagnostic::ParseError;
+                    report.messages.push_back("glTF: missing external buffer file");
+                    return report;
+                }
+                std::vector<uint8_t> bytes((std::istreambuf_iterator<char>(bf)),
+                                           std::istreambuf_iterator<char>());
+                buffers.push_back(std::move(bytes));
+            }
+        }
+    }
+
+    std::vector<Vec3> outPos, outNrm;
+    std::vector<Vec2> outUV;
+    std::vector<Face> faces;
+    bool anyNrm = false, anyUV = false;
+
+    const Json* meshes = gltf.get("meshes");
+    if (!meshes || !meshes->isArr()) {
+        report.diagnostic = MeshImportDiagnostic::EmptyMesh;
+        report.messages.push_back("glTF: no meshes");
+        return report;
+    }
+    for (const Json& m : meshes->a) {
+        const Json* prims = m.get("primitives");
+        if (!prims || !prims->isArr()) continue;
+        for (const Json& prim : prims->a) {
+            const int mode = prim.get("mode") ? static_cast<int>(prim.get("mode")->num()) : 4;
+            if (mode != 4) continue;  // triangles only
+            const Json* attrs = prim.get("attributes");
+            if (!attrs || !attrs->isObj()) continue;
+            const Json* posA = attrs->get("POSITION");
+            if (!posA) continue;
+
+            std::vector<double> pos;
+            int pc = 0, pcount = 0;
+            if (!gltfReadAccessor(gltf, buffers, static_cast<int>(posA->num()), pos, pc, pcount) || pc != 3) {
+                report.diagnostic = MeshImportDiagnostic::ParseError;
+                report.messages.push_back("glTF: bad POSITION accessor");
+                return report;
+            }
+            const uint32_t baseV = static_cast<uint32_t>(outPos.size());
+            for (int i = 0; i < pcount; ++i) {
+                const auto x = static_cast<float>(pos[static_cast<size_t>(i) * 3 + 0]);
+                const auto y = static_cast<float>(pos[static_cast<size_t>(i) * 3 + 1]);
+                const auto z = static_cast<float>(pos[static_cast<size_t>(i) * 3 + 2]);
+                if (!isFiniteFloat(x) || !isFiniteFloat(y) || !isFiniteFloat(z)) {
+                    report.diagnostic = MeshImportDiagnostic::NonFiniteData;
+                    report.messages.push_back("glTF: non-finite vertex position");
+                    return report;
+                }
+                outPos.push_back(Vec3{x, y, z});
+            }
+
+            std::vector<double> nn;
+            int nc = 0, ncount = 0;
+            if (const Json* nA = attrs->get("NORMAL");
+                nA && gltfReadAccessor(gltf, buffers, static_cast<int>(nA->num()), nn, nc, ncount) &&
+                nc == 3 && ncount == pcount) {
+                for (int i = 0; i < pcount; ++i) {
+                    outNrm.push_back(Vec3{static_cast<float>(nn[static_cast<size_t>(i) * 3 + 0]),
+                                          static_cast<float>(nn[static_cast<size_t>(i) * 3 + 1]),
+                                          static_cast<float>(nn[static_cast<size_t>(i) * 3 + 2])});
+                }
+                anyNrm = true;
+            } else {
+                for (int i = 0; i < pcount; ++i) outNrm.push_back(Vec3{});
+            }
+
+            std::vector<double> tt;
+            int tc = 0, tcount = 0;
+            if (const Json* tA = attrs->get("TEXCOORD_0");
+                tA && gltfReadAccessor(gltf, buffers, static_cast<int>(tA->num()), tt, tc, tcount) &&
+                tc == 2 && tcount == pcount) {
+                for (int i = 0; i < pcount; ++i) {
+                    outUV.push_back(Vec2{static_cast<float>(tt[static_cast<size_t>(i) * 2 + 0]),
+                                         static_cast<float>(tt[static_cast<size_t>(i) * 2 + 1])});
+                }
+                anyUV = true;
+            } else {
+                for (int i = 0; i < pcount; ++i) outUV.push_back(Vec2{0.f, 0.f});
+            }
+
+            if (const Json* idxA = prim.get("indices")) {
+                std::vector<double> ids;
+                int ic = 0, icount = 0;
+                if (!gltfReadAccessor(gltf, buffers, static_cast<int>(idxA->num()), ids, ic, icount) || ic != 1) {
+                    report.diagnostic = MeshImportDiagnostic::ParseError;
+                    report.messages.push_back("glTF: bad index accessor");
+                    return report;
+                }
+                for (int t = 0; t + 2 < icount; t += 3) {
+                    Face fc;
+                    fc.indices = {baseV + static_cast<uint32_t>(ids[static_cast<size_t>(t)]),
+                                  baseV + static_cast<uint32_t>(ids[static_cast<size_t>(t) + 1]),
+                                  baseV + static_cast<uint32_t>(ids[static_cast<size_t>(t) + 2])};
+                    faces.push_back(std::move(fc));
+                }
+            } else {
+                for (int i = 0; i + 2 < pcount; i += 3) {
+                    Face fc;
+                    fc.indices = {baseV + static_cast<uint32_t>(i), baseV + static_cast<uint32_t>(i + 1),
+                                  baseV + static_cast<uint32_t>(i + 2)};
+                    faces.push_back(std::move(fc));
+                }
+            }
+        }
+    }
+
+    if (outPos.empty()) {
+        report.diagnostic = MeshImportDiagnostic::EmptyMesh;
+        report.messages.push_back("glTF: no triangle geometry found");
+        return report;
+    }
+
+    out.attributes().setPositions(std::move(outPos));
+    for (Face& f : faces) {
+        out.topology().addFace(std::move(f));
+    }
+    if (anyUV) {
+        out.attributes().setUVs(std::move(outUV));
+    }
+    if (anyNrm) {
+        out.attributes().setNormals(std::move(outNrm));
+    } else if (options.computeNormalsIfMissing) {
+        (void)out.computeVertexNormals();
+    }
+
+    report.verticesRead = static_cast<uint32_t>(out.attributes().vertexCount());
+    report.facesRead    = static_cast<uint32_t>(out.topology().faceCount());
+    report.valid        = true;
+    return report;
+}
+
+MeshExportReport exportGLTF(const Mesh& mesh, const std::string& path, const MeshExportOptions& options)
+{
+    MeshExportReport report{};
+
+    Mesh tri = mesh;
+    (void)tri.topology().triangulate();
+    const auto& positions = tri.attributes().positions();
+    const bool  hasN = options.includeNormals && tri.attributes().hasNormals();
+    const bool  hasUV = options.includeUVs && tri.attributes().hasUVs();
+    const auto& normals = tri.attributes().normals();
+    const auto& uvs     = tri.attributes().uvs();
+    const uint32_t V = static_cast<uint32_t>(positions.size());
+
+    std::vector<uint32_t> indices;
+    for (size_t f = 0; f < tri.topology().faceCount(); ++f) {
+        const auto& fc = tri.topology().face(f);
+        if (fc.indices.size() == 3) {
+            indices.push_back(fc.indices[0]);
+            indices.push_back(fc.indices[1]);
+            indices.push_back(fc.indices[2]);
+        }
+    }
+    const uint32_t I = static_cast<uint32_t>(indices.size());
+
+    std::vector<uint8_t> bin;
+    auto appF = [&](float v) {
+        const uint32_t b = std::bit_cast<uint32_t>(v);
+        bin.push_back(static_cast<uint8_t>(b & 0xFF));
+        bin.push_back(static_cast<uint8_t>((b >> 8) & 0xFF));
+        bin.push_back(static_cast<uint8_t>((b >> 16) & 0xFF));
+        bin.push_back(static_cast<uint8_t>((b >> 24) & 0xFF));
+    };
+    auto appU = [&](uint32_t b) {
+        bin.push_back(static_cast<uint8_t>(b & 0xFF));
+        bin.push_back(static_cast<uint8_t>((b >> 8) & 0xFF));
+        bin.push_back(static_cast<uint8_t>((b >> 16) & 0xFF));
+        bin.push_back(static_cast<uint8_t>((b >> 24) & 0xFF));
+    };
+    auto pad4 = [&] { while (bin.size() % 4 != 0) bin.push_back(0); };
+
+    float mn[3] = {0, 0, 0}, mx[3] = {0, 0, 0};
+    if (V > 0) {
+        mn[0] = mx[0] = positions[0].x;
+        mn[1] = mx[1] = positions[0].y;
+        mn[2] = mx[2] = positions[0].z;
+    }
+    const size_t posOff = bin.size();
+    for (uint32_t i = 0; i < V; ++i) {
+        const auto& p = positions[i];
+        appF(p.x); appF(p.y); appF(p.z);
+        mn[0] = std::min(mn[0], p.x); mn[1] = std::min(mn[1], p.y); mn[2] = std::min(mn[2], p.z);
+        mx[0] = std::max(mx[0], p.x); mx[1] = std::max(mx[1], p.y); mx[2] = std::max(mx[2], p.z);
+    }
+    const size_t posLen = bin.size() - posOff;
+    pad4();
+
+    size_t nrmOff = 0, nrmLen = 0;
+    if (hasN) {
+        nrmOff = bin.size();
+        for (uint32_t i = 0; i < V; ++i) { appF(normals[i].x); appF(normals[i].y); appF(normals[i].z); }
+        nrmLen = bin.size() - nrmOff;
+        pad4();
+    }
+    size_t uvOff = 0, uvLen = 0;
+    if (hasUV) {
+        uvOff = bin.size();
+        for (uint32_t i = 0; i < V; ++i) { appF(uvs[i].u); appF(uvs[i].v); }
+        uvLen = bin.size() - uvOff;
+        pad4();
+    }
+    const size_t idxOff = bin.size();
+    for (uint32_t idx : indices) appU(idx);
+    const size_t idxLen = bin.size() - idxOff;
+    pad4();
+
+    int next = 1;
+    int accNrm = -1, bvNrm = -1;
+    if (hasN) { accNrm = next; bvNrm = next; ++next; }
+    int accUV = -1, bvUV = -1;
+    if (hasUV) { accUV = next; bvUV = next; ++next; }
+    const int accIdx = next, bvIdx = next;
+
+    auto f2 = [](float v) { return std::to_string(v); };
+    std::string j = "{\"asset\":{\"version\":\"2.0\",\"generator\":\"Nexus-Modeling\"},";
+    j += "\"scene\":0,\"scenes\":[{\"nodes\":[0]}],\"nodes\":[{\"mesh\":0}],";
+    j += "\"meshes\":[{\"primitives\":[{\"attributes\":{\"POSITION\":0";
+    if (hasN)  j += ",\"NORMAL\":" + std::to_string(accNrm);
+    if (hasUV) j += ",\"TEXCOORD_0\":" + std::to_string(accUV);
+    j += "},\"indices\":" + std::to_string(accIdx) + ",\"mode\":4}]}],";
+    j += "\"accessors\":[";
+    j += "{\"bufferView\":0,\"componentType\":5126,\"count\":" + std::to_string(V) +
+         ",\"type\":\"VEC3\",\"min\":[" + f2(mn[0]) + "," + f2(mn[1]) + "," + f2(mn[2]) +
+         "],\"max\":[" + f2(mx[0]) + "," + f2(mx[1]) + "," + f2(mx[2]) + "]}";
+    if (hasN)  j += ",{\"bufferView\":" + std::to_string(bvNrm) + ",\"componentType\":5126,\"count\":" +
+                    std::to_string(V) + ",\"type\":\"VEC3\"}";
+    if (hasUV) j += ",{\"bufferView\":" + std::to_string(bvUV) + ",\"componentType\":5126,\"count\":" +
+                    std::to_string(V) + ",\"type\":\"VEC2\"}";
+    j += ",{\"bufferView\":" + std::to_string(bvIdx) + ",\"componentType\":5125,\"count\":" +
+         std::to_string(I) + ",\"type\":\"SCALAR\"}";
+    j += "],\"bufferViews\":[";
+    j += "{\"buffer\":0,\"byteOffset\":" + std::to_string(posOff) + ",\"byteLength\":" + std::to_string(posLen) +
+         ",\"target\":34962}";
+    if (hasN)  j += ",{\"buffer\":0,\"byteOffset\":" + std::to_string(nrmOff) + ",\"byteLength\":" +
+                    std::to_string(nrmLen) + ",\"target\":34962}";
+    if (hasUV) j += ",{\"buffer\":0,\"byteOffset\":" + std::to_string(uvOff) + ",\"byteLength\":" +
+                    std::to_string(uvLen) + ",\"target\":34962}";
+    j += ",{\"buffer\":0,\"byteOffset\":" + std::to_string(idxOff) + ",\"byteLength\":" + std::to_string(idxLen) +
+         ",\"target\":34963}";
+    j += "],\"buffers\":[{\"byteLength\":" + std::to_string(bin.size()) + "}]}";
+
+    while (j.size() % 4 != 0) j.push_back(' ');
+
+    std::ofstream out(path, std::ios::binary);
+    if (!out) {
+        report.diagnostic = MeshExportDiagnostic::FileOpenFailed;
+        report.messages.push_back("Cannot export: failed to open file for writing");
+        std::sort(report.messages.begin(), report.messages.end());
+        return report;
+    }
+    const uint32_t jsonLen = static_cast<uint32_t>(j.size());
+    const uint32_t binLen  = static_cast<uint32_t>(bin.size());
+    const uint32_t total   = 12 + 8 + jsonLen + 8 + binLen;
+    out.write("glTF", 4);
+    writeU32LE(out, 2);
+    writeU32LE(out, total);
+    writeU32LE(out, jsonLen);
+    writeU32LE(out, 0x4E4F534Au);  // "JSON"
+    out.write(j.data(), static_cast<std::streamsize>(jsonLen));
+    writeU32LE(out, binLen);
+    writeU32LE(out, 0x004E4942u);  // "BIN\0"
+    out.write(reinterpret_cast<const char*>(bin.data()), static_cast<std::streamsize>(binLen));
+
+    if (!out) {
+        report.diagnostic = MeshExportDiagnostic::WriteError;
+        report.messages.push_back("Write error while emitting glTF (.glb) data");
+        std::sort(report.messages.begin(), report.messages.end());
+        return report;
+    }
+    report.verticesWritten = V;
+    report.facesWritten    = I / 3;
+    report.valid           = true;
+    std::sort(report.messages.begin(), report.messages.end());
+    return report;
+}
+
 } // namespace
 
 MeshExportReport MeshIO::exportMesh(const Mesh&              mesh,
@@ -1002,6 +1632,8 @@ MeshExportReport MeshIO::exportMesh(const Mesh&              mesh,
             return exportPLY(mesh, path, options);
         case MeshExportFormat::STL:
             return exportSTL(mesh, path, options);
+        case MeshExportFormat::GLTF:
+            return exportGLTF(mesh, path, options);
     }
 
     report.diagnostic = MeshExportDiagnostic::UnsupportedFormat;
@@ -1050,6 +1682,8 @@ MeshImportReport MeshIO::importMesh(const std::string&       path,
             fmt = MeshImportFormat::STL;
         } else if (ext == ".ply") {
             fmt = MeshImportFormat::PLY;
+        } else if (ext == ".gltf" || ext == ".glb") {
+            fmt = MeshImportFormat::GLTF;
         } else {
             report.diagnostic = MeshImportDiagnostic::UnsupportedFormat;
             report.messages.push_back("Cannot import: unrecognized file extension");
@@ -1066,6 +1700,9 @@ MeshImportReport MeshIO::importMesh(const std::string&       path,
             break;
         case MeshImportFormat::PLY:
             report = importPLY(path, options, outMesh);
+            break;
+        case MeshImportFormat::GLTF:
+            report = importGLTF(path, options, outMesh);
             break;
         default:
             report.diagnostic = MeshImportDiagnostic::UnsupportedFormat;

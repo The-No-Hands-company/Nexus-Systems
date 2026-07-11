@@ -606,6 +606,148 @@ TEST(MeshIO, ImportPLYBinaryLittleEndian)
     std::remove(path.c_str());
 }
 
+// ─── glTF 2.0 ────────────────────────────────────────────────────────────────
+
+TEST(MeshIO, ExportGLTFProducesValidGLB)
+{
+    const std::string path = tmpPath("box.glb");
+    std::remove(path.c_str());
+
+    Mesh box = makeBox(1.f, 1.f, 1.f);
+    MeshExportOptions opts{};
+    opts.format = MeshExportFormat::GLTF;
+
+    const MeshExportReport report = MeshIO::exportMesh(box, path, opts);
+    ASSERT_TRUE(report.valid);
+    EXPECT_GT(report.facesWritten, 0u);
+
+    std::ifstream f(path, std::ios::binary);
+    ASSERT_TRUE(f.is_open());
+    std::vector<char> bytes((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+    ASSERT_GE(bytes.size(), 12u);
+    EXPECT_EQ(std::string(bytes.data(), 4), "glTF");                       // magic
+    const auto rdU32 = [&](size_t o) {
+        return static_cast<uint32_t>(static_cast<unsigned char>(bytes[o])) |
+               (static_cast<uint32_t>(static_cast<unsigned char>(bytes[o + 1])) << 8) |
+               (static_cast<uint32_t>(static_cast<unsigned char>(bytes[o + 2])) << 16) |
+               (static_cast<uint32_t>(static_cast<unsigned char>(bytes[o + 3])) << 24);
+    };
+    EXPECT_EQ(rdU32(4), 2u);                                              // version 2
+    EXPECT_EQ(rdU32(8), bytes.size());                                   // total length == file size
+
+    std::remove(path.c_str());
+}
+
+TEST(MeshIO, ImportGLTFRoundTripsExportedBox)
+{
+    const std::string path = tmpPath("rt_box.glb");
+    std::remove(path.c_str());
+
+    Mesh box = makeBox(1.f, 1.f, 1.f);
+    MeshExportOptions eopts{};
+    eopts.format = MeshExportFormat::GLTF;
+    const MeshExportReport erep = MeshIO::exportMesh(box, path, eopts);
+    ASSERT_TRUE(erep.valid);
+
+    Mesh loaded;
+    MeshImportOptions iopts{};
+    const MeshImportReport rep = MeshIO::importMesh(path, iopts, loaded);
+
+    ASSERT_TRUE(rep.valid) << (rep.messages.empty() ? "" : rep.messages.front());
+    EXPECT_EQ(loaded.attributes().vertexCount(), box.attributes().vertexCount());
+    EXPECT_EQ(loaded.topology().faceCount(),     erep.facesWritten);  // triangulated
+
+    std::remove(path.c_str());
+}
+
+TEST(MeshIO, ImportGLTFPreservesNormals)
+{
+    const std::string path = tmpPath("normals.glb");
+    std::remove(path.c_str());
+
+    Mesh box = makeBox(1.f, 1.f, 1.f);
+    (void)box.computeVertexNormals();
+    MeshExportOptions eopts{};
+    eopts.format         = MeshExportFormat::GLTF;
+    eopts.includeNormals = true;
+    ASSERT_TRUE(MeshIO::exportMesh(box, path, eopts).valid);
+
+    Mesh loaded;
+    MeshImportOptions iopts{};
+    const MeshImportReport rep = MeshIO::importMesh(path, iopts, loaded);
+
+    ASSERT_TRUE(rep.valid);
+    EXPECT_TRUE(loaded.attributes().hasNormals());
+
+    std::remove(path.c_str());
+}
+
+TEST(MeshIO, ImportGLTFTextWithBase64DataURI)
+{
+    // Hand-crafted .gltf (JSON text) with an embedded base64 buffer — exercises the
+    // JSON parser, base64 decode, and uint32 index path independent of GLB.
+    const std::string path = tmpPath("tri.gltf");
+    std::remove(path.c_str());
+
+    std::vector<uint8_t> raw;
+    auto pf = [&](float v) {
+        const uint32_t b = std::bit_cast<uint32_t>(v);
+        raw.push_back(static_cast<uint8_t>(b & 0xFF));
+        raw.push_back(static_cast<uint8_t>((b >> 8) & 0xFF));
+        raw.push_back(static_cast<uint8_t>((b >> 16) & 0xFF));
+        raw.push_back(static_cast<uint8_t>((b >> 24) & 0xFF));
+    };
+    auto pu = [&](uint32_t v) {
+        raw.push_back(static_cast<uint8_t>(v & 0xFF));
+        raw.push_back(static_cast<uint8_t>((v >> 8) & 0xFF));
+        raw.push_back(static_cast<uint8_t>((v >> 16) & 0xFF));
+        raw.push_back(static_cast<uint8_t>((v >> 24) & 0xFF));
+    };
+    pf(0.f); pf(0.f); pf(0.f);   // v0
+    pf(1.f); pf(0.f); pf(0.f);   // v1
+    pf(0.f); pf(1.f); pf(0.f);   // v2
+    pu(0); pu(1); pu(2);         // indices (uint32)
+
+    // Standard base64 encode.
+    static const char* tbl = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    std::string b64;
+    for (size_t i = 0; i < raw.size(); i += 3) {
+        const uint32_t n = static_cast<uint32_t>(raw[i]) << 16 |
+                           (i + 1 < raw.size() ? static_cast<uint32_t>(raw[i + 1]) << 8 : 0) |
+                           (i + 2 < raw.size() ? static_cast<uint32_t>(raw[i + 2]) : 0);
+        b64 += tbl[(n >> 18) & 63];
+        b64 += tbl[(n >> 12) & 63];
+        b64 += (i + 1 < raw.size()) ? tbl[(n >> 6) & 63] : '=';
+        b64 += (i + 2 < raw.size()) ? tbl[n & 63] : '=';
+    }
+
+    const std::string gltf =
+        std::string("{\"asset\":{\"version\":\"2.0\"},\"scene\":0,\"scenes\":[{\"nodes\":[0]}],") +
+        "\"nodes\":[{\"mesh\":0}],\"meshes\":[{\"primitives\":[{\"attributes\":{\"POSITION\":0},"
+        "\"indices\":1,\"mode\":4}]}]," +
+        "\"accessors\":[{\"bufferView\":0,\"componentType\":5126,\"count\":3,\"type\":\"VEC3\","
+        "\"min\":[0,0,0],\"max\":[1,1,0]},"
+        "{\"bufferView\":1,\"componentType\":5125,\"count\":3,\"type\":\"SCALAR\"}]," +
+        "\"bufferViews\":[{\"buffer\":0,\"byteOffset\":0,\"byteLength\":36,\"target\":34962},"
+        "{\"buffer\":0,\"byteOffset\":36,\"byteLength\":12,\"target\":34963}]," +
+        "\"buffers\":[{\"byteLength\":48,\"uri\":\"data:application/octet-stream;base64," + b64 + "\"}]}";
+    {
+        std::ofstream f(path);
+        f << gltf;
+    }
+
+    Mesh loaded;
+    MeshImportOptions iopts{};
+    const MeshImportReport rep = MeshIO::importMesh(path, iopts, loaded);
+
+    ASSERT_TRUE(rep.valid) << (rep.messages.empty() ? "" : rep.messages.front());
+    EXPECT_EQ(loaded.attributes().vertexCount(), 3u);
+    ASSERT_EQ(loaded.topology().faceCount(), 1u);
+    EXPECT_EQ(loaded.topology().face(0).indices.size(), 3u);
+
+    std::remove(path.c_str());
+}
+
 // ─── Import: dispatch / errors ───────────────────────────────────────────────
 
 TEST(MeshIO, ImportAutoDetectsFormatFromExtension)
@@ -613,7 +755,8 @@ TEST(MeshIO, ImportAutoDetectsFormatFromExtension)
     Mesh box = makeBox(1.f, 1.f, 1.f);
     for (const auto& fmt : {std::pair{MeshExportFormat::OBJ, std::string(".obj")},
                             std::pair{MeshExportFormat::STL, std::string(".stl")},
-                            std::pair{MeshExportFormat::PLY, std::string(".ply")}}) {
+                            std::pair{MeshExportFormat::PLY, std::string(".ply")},
+                            std::pair{MeshExportFormat::GLTF, std::string(".glb")}}) {
         const std::string path = tmpPath("auto" + fmt.second);
         std::remove(path.c_str());
         MeshExportOptions eopts{};

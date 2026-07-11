@@ -3,8 +3,9 @@
 //  Nexus Geometry — Mesh Import/Export (hard-surface blockout workflow)
 //
 //  MeshIO::exportMesh() serialises a Mesh to disk in OBJ / PLY (ASCII) or STL
-//  (binary) format. MeshIO::importMesh() reads a Mesh back from OBJ, STL, or
-//  PLY (binary/ASCII auto-detected), enabling import -> edit -> export round-trips.
+//  (binary) or glTF 2.0 (.glb) format. MeshIO::importMesh() reads a Mesh back
+//  from OBJ, STL, PLY, or glTF (.gltf/.glb), enabling import -> edit -> export
+//  round-trips. Formats and binary/ASCII variants are auto-detected.
 //
 //  Design constraints:
 //  - All paths are noexcept and headless-safe.
@@ -24,9 +25,10 @@ namespace nexus::geometry {
 //  Export format
 // ─────────────────────────────────────────────────────────────────────────────
 enum class MeshExportFormat : uint8_t {
-    OBJ,  // Wavefront OBJ (ASCII)
-    PLY,  // Stanford PLY  (ASCII)
-    STL,  // Stereolithography (binary)
+    OBJ,   // Wavefront OBJ (ASCII)
+    PLY,   // Stanford PLY  (ASCII)
+    STL,   // Stereolithography (binary)
+    GLTF,  // glTF 2.0 (binary .glb container, self-contained)
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -86,6 +88,7 @@ enum class MeshImportFormat : uint8_t {
     OBJ,   // Wavefront OBJ (ASCII)
     STL,   // Stereolithography (binary or ASCII, auto-detected)
     PLY,   // Stanford PLY (ASCII or binary little-endian, auto-detected)
+    GLTF,  // glTF 2.0 (.gltf JSON w/ data-URI or external buffers, or .glb binary)
 };
 
 enum class MeshImportDiagnostic : uint32_t {
