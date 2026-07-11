@@ -14,6 +14,7 @@
 #include <vulkan/vulkan.h>
 #include <nexus/parametric/ParametricSketchProfile.h>
 #include <nexus/geometry/Mesh.h>
+#include <nexus/geometry/MeshIO.h>
 #include <nexus/geometry/SurfacePrimitives.h>
 #include <nexus/geometry/MeshBoolean.h>
 #include <nexus/geometry/SurfaceOffset.h>
@@ -210,253 +211,45 @@ static void placePrimitive(AppContext& ctx, int primType) {
     printf("Placed %s at (%.2f, %.2f, %.2f)\n", name, cwp.x, cwp.y, cwp.z);
 }
 
-static void exportObj(AppContext& ctx) {
-    if(!ctx.document) return;
-    FILE* f = fopen("export.obj","w");
-    FILE* mtl = fopen("export.mtl","w");
-    if(!f) { printf("Cannot open export.obj\n"); return; }
-    int matId = 1;
-    fprintf(f,"# Nexus Modeling export\n");
-    fprintf(f,"mtllib export.mtl\n");
-    size_t totalV=0, totalF=0;
+
+// ── Import / Export ──────────────────────────────────────────────────────────
+// All mesh interchange routes through the kernel's MeshIO (OBJ/STL/PLY/glTF),
+// which is the tested, hardened path — the editor is just the trigger.
+
+// Combines every visible, non-deleted feature mesh into a single mesh for export.
+static bool buildCombinedMesh(AppContext& ctx, geometry::Mesh& out) {
+    if(!ctx.document) return false;
     auto& hist = ctx.document->history();
+    bool any = false;
     for(parametric::FeatureId i=1; i<=static_cast<parametric::FeatureId>(hist.featureCount()); ++i) {
         auto* n = hist.node(i);
-        if(!n||!n->mesh||n->deleted||n->hidden) continue;
-        const auto& pos = n->mesh->attributes().positions();
-        const auto& topo = n->mesh->topology();
-        bool hasNorms = n->mesh->attributes().hasNormals();
-        fprintf(f,"usemtl mat_%d\n", matId);
-        if(mtl) {
-            auto& mat = n->material;
-            fprintf(mtl,"newmtl mat_%d\n",matId);
-            fprintf(mtl,"Kd %.3f %.3f %.3f\n",mat.albedo[0],mat.albedo[1],mat.albedo[2]);
-            fprintf(mtl,"Ns %.1f\n",(1.f-mat.roughness)*128.f);
-            fprintf(mtl,"Ni 1.0\n");
-            fprintf(mtl,"d %.3f\n",mat.albedo[3]);
-        }
-        matId++;
-        uint32_t voff = static_cast<uint32_t>(totalV);
-        for(size_t vi=0; vi<pos.size(); ++vi) {
-            fprintf(f,"v %f %f %f\n",pos[vi].x,pos[vi].y,pos[vi].z);
-            if(hasNorms) {
-                const auto& nrm = n->mesh->attributes().normals();
-                fprintf(f,"vn %f %f %f\n",nrm[vi].x,nrm[vi].y,nrm[vi].z);
-            }
-        }
-        for(uint32_t fi=0; fi<topo.faceCount(); ++fi) {
-            const auto& face = topo.face(fi);
-            fprintf(f,"f");
-            for(size_t j=0; j<face.vertexCount(); ++j) {
-                uint32_t idx = face.indices[j]+1+voff;
-                fprintf(f, hasNorms ? " %u//%u" : " %u", idx, idx);
-            }
-            fprintf(f,"\n");
-        }
-        totalV += pos.size(); totalF += topo.faceCount();
+        if(!n || !n->mesh || n->deleted || n->hidden) continue;
+        if(!any) { out = *n->mesh; any = true; }
+        else     { (void)out.appendMesh(*n->mesh); }
     }
-    fclose(f); if(mtl) fclose(mtl);
-    printf("Exported OBJ: %zu verts, %zu faces -> export.obj\n", totalV, totalF);
+    return any;
 }
 
-static void importObj(AppContext& ctx) {
-    if(!ctx.document) return;
-    FILE* f = fopen("import.obj","r");
-    if(!f) { printf("Cannot open import.obj\n"); return; }
-    std::vector<Vec3> verts, normals;
-    std::vector<std::vector<uint32_t>> faces;
-    char line[512];
-    while(fgets(line,sizeof(line),f)) {
-        if(line[0]=='v' && line[1]=='n' && line[2]==' ') {
-            float x,y,z; if(sscanf(line+3,"%f%f%f",&x,&y,&z)==3) normals.emplace_back(x,y,z);
-        } else if(line[0]=='v' && line[1]==' ') {
-            float x,y,z; if(sscanf(line+2,"%f%f%f",&x,&y,&z)==3) verts.emplace_back(x,y,z);
-        } else if(line[0]=='f' && line[1]==' ') {
-            std::vector<uint32_t> fi; char* p=line+2; int idx;
-            while(sscanf(p,"%d",&idx)==1) {
-                fi.push_back(static_cast<uint32_t>(idx < 0 ? static_cast<int>(verts.size()) + idx : idx - 1));
-                while(*p && *p!=' ' && *p!='/') ++p;
-                while(*p=='/'||*p==' ') ++p;
-                if(!*p||*p=='\n') break;
-            }
-            if(fi.size()>=3) faces.push_back(std::move(fi));
-        }
-    }
-    fclose(f);
-    if(verts.empty()||faces.empty()) { printf("OBJ empty\n"); return; }
-    nexus::geometry::Mesh mesh;
-    mesh.attributes().setPositions(std::move(verts));
-    for(auto& fc : faces) {
-        nexus::geometry::Face face; face.indices = std::move(fc);
-        mesh.topology().addFace(std::move(face));
-    }
-    (void)mesh.computeVertexNormals();
-    auto sk = nexus::parametric::ParametricSketchFactory::createSketch();
-    auto fid = ctx.document->addSketch(sk);
-    auto* node = ctx.document->history().node(fid);
-    if(node) { node->mesh.emplace(std::move(mesh)); node->dirty=false; }
-    printf("Imported OBJ: %zu faces → feature %u\n", faces.size(), fid);
+static void exportMeshFile(AppContext& ctx, geometry::MeshExportFormat fmt, const char* path) {
+    geometry::Mesh m;
+    if(!buildCombinedMesh(ctx, m)) { printf("Export: nothing visible to export\n"); return; }
+    geometry::MeshExportOptions opts; opts.format = fmt;
+    const auto rep = geometry::MeshIO::exportMesh(m, path, opts);
+    if(rep.valid) printf("Exported %u verts / %u faces -> %s\n", rep.verticesWritten, rep.facesWritten, path);
+    else printf("Export failed (%s): %s\n", path, rep.messages.empty() ? "" : rep.messages.front().c_str());
 }
 
-static void exportStl(AppContext& ctx) {
+static void importMeshFile(AppContext& ctx, const char* path) {
     if(!ctx.document) return;
-    FILE* f = fopen("export.stl","wb");
-    if(!f) { printf("Cannot open export.stl\n"); return; }
-    char header[80]={}; snprintf(header,sizeof(header),"%-79s","Nexus STL export"); if(fwrite(header,1,80,f)!=80){fclose(f);return;}
-    uint32_t totalTris=0;
-    auto& hist = ctx.document->history();
-    // Count triangles.
-    for(parametric::FeatureId i=1; i<=static_cast<parametric::FeatureId>(hist.featureCount()); ++i) {
-        auto* n=hist.node(i); if(!n||!n->mesh||n->deleted||n->hidden) continue;
-        const auto& topo=n->mesh->topology();
-        for(uint32_t fi=0; fi<topo.faceCount(); ++fi) {
-            const auto& face=topo.face(fi);
-            if(face.vertexCount()>=3) totalTris += static_cast<uint32_t>(face.vertexCount()-2);
-        }
-    }
-    if(fwrite(&totalTris,4,1,f)!=1){fclose(f);return;}
-    for(parametric::FeatureId i=1; i<=static_cast<parametric::FeatureId>(hist.featureCount()); ++i) {
-        auto* n=hist.node(i); if(!n||!n->mesh||n->deleted||n->hidden) continue;
-        const auto& pos=n->mesh->attributes().positions();
-        const auto& topo=n->mesh->topology();
-        for(uint32_t fi=0; fi<topo.faceCount(); ++fi) {
-            const auto& face=topo.face(fi);
-            if(face.vertexCount()<3) continue;
-            auto& p0=pos[face.indices[0]];
-            for(size_t j=0; j+2<face.vertexCount(); ++j) {
-                auto& p1=pos[face.indices[j+1]], &p2=pos[face.indices[j+2]];
-                Vec3 n=(p1-p0).cross(p2-p0).normalize();
-                float nx=n.x,ny=n.y,nz=n.z;
-                fwrite(&nx,4,1,f);fwrite(&ny,4,1,f);fwrite(&nz,4,1,f);
-                float v[9]={p0.x,p0.y,p0.z,p1.x,p1.y,p1.z,p2.x,p2.y,p2.z};
-                fwrite(v,4,9,f);
-                uint16_t attr=0; fwrite(&attr,2,1,f);
-            }
-        }
-    }
-    fclose(f);
-    printf("Exported STL: %u triangles → export.stl\n", totalTris);
-}
-
-static void exportGltf(AppContext& ctx) {
-    if(!ctx.document) return;
-    // Minimal glTF 2.0 GLB export.
-    auto& hist = ctx.document->history();
-    std::string json = "{";
-    json += "\"asset\":{\"version\":\"2.0\"},";
-    json += "\"scene\":0,";
-    json += "\"scenes\":[{\"nodes\":[]}],";
-    json += "\"nodes\":[],";
-    json += "\"meshes\":[";
-    std::vector<float> allFloats; // interleaved pos + normal per vertex
-    std::vector<uint32_t> allIndices;
-    std::vector<uint32_t> meshPrimCounts;
-    uint32_t totalVertices=0;
-    bool firstMesh=true;
-    for(parametric::FeatureId i=1; i<=static_cast<parametric::FeatureId>(hist.featureCount()); ++i) {
-        auto* n=hist.node(i); if(!n||!n->mesh||n->deleted||n->hidden) continue;
-        const auto& pos=n->mesh->attributes().positions();
-        bool hasN=n->mesh->attributes().hasNormals();
-        const auto& nrm=hasN?n->mesh->attributes().normals():pos;
-        uint32_t vc=(uint32_t)pos.size();
-        uint32_t baseIdx=(uint32_t)allIndices.size();
-        // Write indices.
-        const auto& topo=n->mesh->topology();
-        for(uint32_t fi=0;fi<topo.faceCount();++fi){
-            const auto& f=topo.face(fi);if(f.vertexCount()<3)continue;
-            for(size_t j=0;j+2<f.vertexCount();++j){
-                allIndices.push_back(totalVertices+f.indices[0]);
-                allIndices.push_back(totalVertices+f.indices[j+1]);
-                allIndices.push_back(totalVertices+f.indices[j+2]);
-            }
-        }
-        // Write vertices (pos + normal interleaved).
-        for(uint32_t vi=0;vi<vc;++vi){
-            allFloats.push_back(pos[vi].x);allFloats.push_back(pos[vi].y);allFloats.push_back(pos[vi].z);
-            allFloats.push_back(hasN?nrm[vi].x:0);allFloats.push_back(hasN?nrm[vi].y:0);allFloats.push_back(hasN?nrm[vi].z:1);
-        }
-        totalVertices+=vc;
-        // Mesh primitive entry.
-        char mbuf[512];
-        snprintf(mbuf,sizeof(mbuf),
-            "%s{\"primitives\":[{\"attributes\":{\"POSITION\":%d,\"NORMAL\":%d},\"indices\":%d,\"material\":%d}]}",
-            firstMesh?"":",", (int)(meshPrimCounts.size()*2), (int)(meshPrimCounts.size()*2+1),
-            (int)(meshPrimCounts.size()*3), 0);
-        json+=mbuf;
-        meshPrimCounts.push_back((uint32_t)allIndices.size()-baseIdx);
-        firstMesh=false;
-    }
-    json+="],\"materials\":[{\"pbrMetallicRoughness\":{\"baseColorFactor\":[0.7,0.7,0.7,1.0],\"metallicFactor\":0,\"roughnessFactor\":0.5}}],";
-    // Accessors, bufferViews, buffers.
-    json+="\"accessors\":[";
-    uint32_t accCount=0;
-    for(size_t mi=0;mi<meshPrimCounts.size();++mi){
-        char abuf[256];
-        snprintf(abuf,sizeof(abuf),"%s{\"bufferView\":%d,\"componentType\":5126,\"count\":%d,\"type\":\"VEC3\",\"min\":[0,0,0],\"max\":[0,0,0]},",mi>0?",":"",accCount++,totalVertices);
-        json+=abuf;
-        snprintf(abuf,sizeof(abuf),"{\"bufferView\":%d,\"componentType\":5126,\"count\":%d,\"type\":\"VEC3\"},",accCount++,totalVertices);
-        json+=abuf;
-        snprintf(abuf,sizeof(abuf),"{\"bufferView\":%d,\"componentType\":5125,\"count\":%d,\"type\":\"SCALAR\"}%s",accCount++,(int)meshPrimCounts[mi],mi+1<meshPrimCounts.size()?",":"");
-        json+=abuf;
-    }
-    json+="],\"bufferViews\":[";
-    uint32_t byteOffset=0;
-    for(size_t mi=0;mi<meshPrimCounts.size();++mi){
-        char bbuf[256];
-        uint32_t posSize=totalVertices*12, nrmSize=totalVertices*12, idxSize=(uint32_t)(meshPrimCounts[mi]*4);
-        snprintf(bbuf,sizeof(bbuf),"%s{\"buffer\":0,\"byteOffset\":%d,\"byteLength\":%d},{\"buffer\":0,\"byteOffset\":%d,\"byteLength\":%d},{\"buffer\":0,\"byteOffset\":%d,\"byteLength\":%d}",mi>0?",":"",byteOffset,posSize,byteOffset+posSize,nrmSize,byteOffset+posSize+nrmSize,idxSize);
-        json+=bbuf;
-        byteOffset+=posSize+nrmSize+idxSize;
-    }
-    json+="],\"buffers\":[{\"byteLength\":"+std::to_string(byteOffset)+"}]}";
-    // Pad JSON to 4-byte alignment.
-    while(json.size()%4)json+=' ';
-    // Write GLB.
-    FILE* f=fopen("export.glb","wb");
-    if(!f){printf("Cannot write export.glb\n");return;}
-    uint32_t magic=0x46546C67, version=2;
-    uint32_t totalLen=12+8+(uint32_t)json.size()+8+(uint32_t)(allFloats.size()*4+allIndices.size()*4);
-    fwrite(&magic,4,1,f);fwrite(&version,4,1,f);fwrite(&totalLen,4,1,f);
-    uint32_t jsonLen=(uint32_t)json.size(), jsonType=0x4E4F534A;
-    fwrite(&jsonLen,4,1,f);fwrite(&jsonType,4,1,f);fwrite(json.data(),1,jsonLen,f);
-    uint32_t binLen=(uint32_t)(allFloats.size()*4+allIndices.size()*4), binType=0x004E4942;
-    fwrite(&binLen,4,1,f);fwrite(&binType,4,1,f);
-    if(fwrite(allFloats.data(),4,allFloats.size(),f)!=allFloats.size()){fclose(f);return;}
-    if(fwrite(allIndices.data(),4,allIndices.size(),f)!=allIndices.size()){fclose(f);return;}
-    fclose(f);
-    printf("Exported glTF: %zu verts, %zu indices → export.glb\n", (size_t)totalVertices, allIndices.size());
-}
-
-static void importStl(AppContext& ctx) {
-    if(!ctx.document) return;
-    FILE* f = fopen("import.stl","rb");
-    if(!f) { printf("Cannot open import.stl\n"); return; }
-    fseek(f,80,SEEK_SET);
-    uint32_t triCount; if(fread(&triCount,4,1,f)!=1){fclose(f);return;}
-    if(triCount>50000000){fclose(f);return;}
-    std::vector<Vec3> verts;
-    std::vector<std::vector<uint32_t>> faces;
-    for(uint32_t t=0; t<triCount; ++t) {
-        float nx,ny,nz;
-        fread(&nx,4,1,f);fread(&ny,4,1,f);fread(&nz,4,1,f);
-        float v[9]; fread(v,4,9,f);
-        uint16_t attr; fread(&attr,2,1,f);
-        uint32_t base = static_cast<uint32_t>(verts.size());
-        verts.emplace_back(v[0],v[1],v[2]);
-        verts.emplace_back(v[3],v[4],v[5]);
-        verts.emplace_back(v[6],v[7],v[8]);
-        faces.push_back({base,base+1,base+2});
-    }
-    fclose(f);
     geometry::Mesh mesh;
-    mesh.attributes().setPositions(std::move(verts));
-    for(auto& fc:faces){geometry::Face face;face.indices=std::move(fc);mesh.topology().addFace(std::move(face));}
-    (void)mesh.computeVertexNormals();
-    auto sk = nexus::parametric::ParametricSketchFactory::createSketch();
+    geometry::MeshImportOptions opts;  // format auto-detected from the extension
+    const auto rep = geometry::MeshIO::importMesh(path, opts, mesh);
+    if(!rep.valid) { printf("Import failed (%s): %s\n", path, rep.messages.empty() ? "" : rep.messages.front().c_str()); return; }
+    auto sk  = nexus::parametric::ParametricSketchFactory::createSketch();
     auto fid = ctx.document->addSketch(sk);
     auto* node = ctx.document->history().node(fid);
-    if(node){node->mesh.emplace(std::move(mesh));node->dirty=false;}
-    printf("Imported STL: %u triangles → feature %u\n", triCount, fid);
+    if(node) { node->mesh.emplace(std::move(mesh)); node->dirty = false; }
+    printf("Imported %u verts / %u faces (%s) -> feature %u\n", rep.verticesRead, rep.facesRead, path, fid);
 }
 
 static void mirrorSelected(AppContext& ctx, FeatureId selectedId, int axis) {
@@ -566,26 +359,15 @@ bool EditorUI::renderMenuBar(AppContext& ctx, TransformGizmo& gizmo,
             action=true;
         }
         ImGui::Separator();
-        if(ImGui::MenuItem("Export OBJ")) {
-            exportObj(ctx);
-            action=true;
-        }
-        if(ImGui::MenuItem("Export STL")) {
-            exportStl(ctx);
-            action=true;
-        }
-        if(ImGui::MenuItem("Export glTF")) {
-            exportGltf(ctx);
-            action=true;
-        }
-        if(ImGui::MenuItem("Import OBJ")) {
-            importObj(ctx);
-            action=true;
-        }
-        if(ImGui::MenuItem("Import STL")) {
-            importStl(ctx);
-            action=true;
-        }
+        if(ImGui::MenuItem("Export OBJ"))  { exportMeshFile(ctx, geometry::MeshExportFormat::OBJ,  "export.obj"); action=true; }
+        if(ImGui::MenuItem("Export PLY"))  { exportMeshFile(ctx, geometry::MeshExportFormat::PLY,  "export.ply"); action=true; }
+        if(ImGui::MenuItem("Export STL"))  { exportMeshFile(ctx, geometry::MeshExportFormat::STL,  "export.stl"); action=true; }
+        if(ImGui::MenuItem("Export glTF")) { exportMeshFile(ctx, geometry::MeshExportFormat::GLTF, "export.glb"); action=true; }
+        ImGui::Separator();
+        if(ImGui::MenuItem("Import OBJ"))  { importMeshFile(ctx, "import.obj"); action=true; }
+        if(ImGui::MenuItem("Import PLY"))  { importMeshFile(ctx, "import.ply"); action=true; }
+        if(ImGui::MenuItem("Import STL"))  { importMeshFile(ctx, "import.stl"); action=true; }
+        if(ImGui::MenuItem("Import glTF")) { importMeshFile(ctx, "import.glb"); action=true; }
         ImGui::Separator();
         if(ImGui::MenuItem("Screenshot (PPM)")) {
             screenshotPPM(ctx);

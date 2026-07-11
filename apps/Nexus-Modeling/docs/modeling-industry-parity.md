@@ -225,7 +225,7 @@ Nexus status is grounded in the July 2026 kernel + app inventories, **not** aspi
 | STEP / IGES | import + export | CAD | ❌ | — |
 | Native (.nxm) | round-trip | — | ✅ | — |
 
-**Verdict:** interchange was the most glaring gap and is now largely closed. **OBJ, STL, PLY, and glTF 2.0 import/export have landed** (glTF hand-rolled: JSON parser + base64 + accessor decoding, `.gltf` & `.glb`), all with non-finite hardening and round-trip tests. `import → edit → export` now works for every universal mesh format plus the modern standard. Remaining: FBX/USD/Alembic (heavier, likely SDK deps), then editor File▸Import/Export wiring.
+**Verdict:** interchange was the most glaring gap and is now largely closed. **OBJ, STL, PLY, and glTF 2.0 import/export have landed** (glTF hand-rolled: JSON parser + base64 + accessor decoding, `.gltf` & `.glb`), all with non-finite hardening and round-trip tests. `import → edit → export` now works for every universal mesh format plus the modern standard, **reachable from the editor's File menu** (all routed through MeshIO). Remaining: a proper file picker (fixed filenames for now), then FBX/USD/Alembic (heavier, likely SDK deps).
 
 ## L14 — Units, measurement & analysis
 
@@ -273,7 +273,7 @@ The gaps cluster in **four themes**, in priority order:
 ## Prioritized parity-closure backlog
 
 ### P0 — table-stakes; nothing new in-layer until these land
-- **IO importers + core formats:** ✅ OBJ, STL, PLY, and glTF 2.0 import/export landed. Remaining: editor File▸Import/Export wiring (P0), then FBX/USD/Alembic (P1). (L13)
+- **IO importers + core formats:** ✅ OBJ, STL, PLY, glTF 2.0 import/export landed **and wired into the editor File menu** (routed through the tested MeshIO). Remaining polish: a file picker (fixed filenames for now). Then FBX/USD/Alembic (P1). (L13)
 - **Non-destructive modifier stack** (ordered, re-evaluatable) for mesh ops — the minimum viable procedural core. (L5)
 - **Viewport shading-mode switcher** (wireframe / solid / material / rendered) + x-ray + backface toggle. (L11)
 - **Box/lasso/circle select** promoted from the current bare-flag marquee. (L9)
