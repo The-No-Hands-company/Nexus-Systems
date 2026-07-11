@@ -119,7 +119,7 @@ Nexus status is grounded in the July 2026 kernel + app inventories, **not** aspi
 | Feature | Who ships it | Nexus | Gap |
 |---|---|---|---|
 | Feature history / regeneration | CAD apps | 🟡 | Regenerates only Sketch/Extrude/Revolve; the CAD façade outruns this core |
-| Modifier stack (ordered, non-destructive) | 3ds Max, Blender | 🟡 | Kernel `ModifierStack` landed (Translate/Rotate/Scale/Mirror/Solidify, non-destructive re-eval); more modifiers + editor wiring next |
+| Modifier stack (ordered, non-destructive) | 3ds Max, Blender | 🟡 | Kernel `ModifierStack`: Translate/Rotate/Scale/Mirror/Solidify/Array/Displace, non-destructive re-eval + result caching; editor wiring + more ops (Subdivision/Bevel/Boolean) next |
 | Procedural node graph (Geometry Nodes / SOPs) | Houdini, Blender | ❌ | `EvaluationGraph` exists for ops but no user-facing node modeling |
 | Expression/parameter-driven dimensions | CAD apps | 🟡 | `CadExpressionEngine`/equation sketch API present; end-to-end wiring TBD |
 
