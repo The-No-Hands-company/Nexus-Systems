@@ -123,6 +123,7 @@ add_library(nexus_gfx_core STATIC
     src/geometry/TriTriIntersect.cpp
     src/geometry/TriangleRetriangulate.cpp
     src/geometry/MeshCut.cpp
+    src/geometry/MeshBooleanRobust.cpp
     src/geometry/SnappingEngine.cpp
     src/geometry/SectionTool.cpp
     src/geometry/SolidOperations.cpp

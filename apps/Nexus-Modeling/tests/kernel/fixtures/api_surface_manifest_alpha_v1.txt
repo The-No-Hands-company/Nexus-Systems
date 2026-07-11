@@ -67,6 +67,7 @@ src/kernel/include/nexus/geometry/MeshAmbientOcclusion.h
 src/kernel/include/nexus/geometry/MeshAnalysis.h
 src/kernel/include/nexus/geometry/MeshBVH.h
 src/kernel/include/nexus/geometry/MeshBoolean.h
+src/kernel/include/nexus/geometry/MeshBooleanRobust.h
 src/kernel/include/nexus/geometry/MeshBoundaryLoop.h
 src/kernel/include/nexus/geometry/MeshCageDeform.h
 src/kernel/include/nexus/geometry/MeshClosestPoint.h
