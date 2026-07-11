@@ -181,4 +181,93 @@ TEST(ModifierStack, RemoveAndClear)
     EXPECT_EQ(stack.modifierCount(), 0u);
 }
 
+TEST(ModifierStack, ArrayCreatesCopies)
+{
+    Mesh box = makeBox(2.f, 2.f, 2.f);
+    ModifierStack stack;
+    stack.setBaseMesh(box);
+    Modifier arr;
+    arr.type  = ModifierType::Array;
+    arr.count = 3;
+    arr.vec   = nexus::render::Vec3{5.f, 0.f, 0.f};
+    arr.merge = false;  // exact triple
+    stack.addModifier(arr);
+
+    const Mesh out = stack.evaluate();
+    EXPECT_EQ(out.topology().faceCount(), box.topology().faceCount() * 3u);
+    const Bounds b = boundsOf(out);
+    EXPECT_NEAR(b.maxX - b.minX, (boundsOf(box).maxX - boundsOf(box).minX) + 10.f, 1e-3f);
+}
+
+TEST(ModifierStack, ArrayCountOneIsIdentity)
+{
+    Mesh box = makeBox(2.f, 2.f, 2.f);
+    ModifierStack stack;
+    stack.setBaseMesh(box);
+    Modifier arr;
+    arr.type  = ModifierType::Array;
+    arr.count = 1;
+    arr.vec   = nexus::render::Vec3{5.f, 0.f, 0.f};
+    stack.addModifier(arr);
+
+    EXPECT_EQ(stack.evaluate().topology().faceCount(), box.topology().faceCount());
+}
+
+TEST(ModifierStack, DisplacePushesAlongNormals)
+{
+    Mesh sphere = makeSphere(2.f);
+    ModifierStack stack;
+    stack.setBaseMesh(sphere);
+    Modifier d;
+    d.type   = ModifierType::Displace;
+    d.scalar = 0.5f;
+    stack.addModifier(d);
+
+    const Bounds b0 = boundsOf(sphere);
+    const Bounds b1 = boundsOf(stack.evaluate());
+    // Outward normal displacement grows the radius.
+    EXPECT_GT(b1.maxX, b0.maxX);
+    EXPECT_LT(b1.minX, b0.minX);
+    EXPECT_TRUE(stack.evaluate().isValid());
+}
+
+TEST(ModifierStack, EvaluatedIsCachedAndInvalidatedOnChange)
+{
+    Mesh box = makeBox(2.f, 2.f, 2.f);
+    ModifierStack stack;
+    stack.setBaseMesh(box);
+
+    const Mesh& a = stack.evaluated();
+    const Mesh& b = stack.evaluated();
+    EXPECT_EQ(&a, &b);  // same cached object returned without recompute
+    const size_t baseFaces = a.topology().faceCount();
+
+    Modifier arr;
+    arr.type  = ModifierType::Array;
+    arr.count = 2;
+    arr.vec   = nexus::render::Vec3{5.f, 0.f, 0.f};
+    arr.merge = false;
+    stack.addModifier(arr);  // must invalidate the cache
+    EXPECT_EQ(stack.evaluated().topology().faceCount(), baseFaces * 2u);
+}
+
+TEST(ModifierStack, SetModifierUpdatesParams)
+{
+    Mesh box = makeBox(2.f, 2.f, 2.f);
+    ModifierStack stack;
+    stack.setBaseMesh(box);
+    Modifier t;
+    t.type = ModifierType::Translate;
+    t.vec  = nexus::render::Vec3{1.f, 0.f, 0.f};
+    stack.addModifier(t);
+
+    Modifier t2 = t;
+    t2.vec = nexus::render::Vec3{9.f, 0.f, 0.f};
+    ASSERT_TRUE(stack.setModifier(0, t2));
+    EXPECT_FALSE(stack.setModifier(3, t2));
+
+    const Bounds b = boundsOf(stack.evaluate());
+    EXPECT_NEAR(b.minX, boundsOf(box).minX + 9.f, 1e-3f);
+}
+
 }  // namespace nexus::geometry::testing
