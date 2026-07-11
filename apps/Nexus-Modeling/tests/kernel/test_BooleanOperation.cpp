@@ -5,7 +5,12 @@
 // ─────────────────────────────────────────────────────────────────────────────
 #include <nexus/geometry/BooleanOperation.h>
 #include <nexus/geometry/Mesh.h>
+#include <nexus/geometry/MeshMassProperties.h>
+#include <nexus/geometry/MeshTopologyValidation.h>
 #include <gtest/gtest.h>
+
+#include <cmath>
+#include <utility>
 
 #include <limits>
 
@@ -460,6 +465,31 @@ TEST(BooleanOperation, ComputeMultipleWarningMessagesAreLexicographicallySorted)
     EXPECT_TRUE(foundDegenerate) << "Expected degenerate-skip message";
     EXPECT_TRUE(foundInputA)     << "Expected Input A non-triangle warning";
     EXPECT_TRUE(foundInputB)     << "Expected Input B non-triangle warning";
+}
+
+// Public-API regression for the robust pipeline: on COARSE boxes the boolean
+// must be watertight + 2-manifold (Euler χ=2, genus-0 closed) with exact volumes
+// — the property the old whole-triangle classifier never had.
+TEST(BooleanOperation, CoarseBoxesAreWatertightWithCorrectVolume)
+{
+    Mesh a = makeBox(2.f, 2.f, 2.f);              // [-1,1]^3, vol 8
+    Mesh b = makeBox(2.f, 2.f, 2.f);
+    auto bp = b.attributes().positions();
+    for (auto& v : bp) { v.x += 1.f; v.y += 1.f; v.z += 1.f; }  // [0,2]^3, overlap [0,1]^3 vol 1
+    b.attributes().setPositions(std::move(bp));
+
+    struct Case { BooleanOperationType op; float vol; };
+    for (const Case c : {Case{BooleanOperationType::Union, 15.f},
+                         Case{BooleanOperationType::Intersection, 1.f},
+                         Case{BooleanOperationType::Difference, 7.f}}) {
+        Mesh out;
+        const auto report = BooleanOperation::compute(a, b, c.op, out);
+        ASSERT_TRUE(report.isSuccess()) << "op=" << static_cast<int>(c.op);
+        EXPECT_NEAR(std::abs(MeshMassProperties::compute(out).volume), c.vol, 0.1f)
+            << "op=" << static_cast<int>(c.op);
+        EXPECT_EQ(MeshTopologyValidation::validate(out).euler, 2)
+            << "op=" << static_cast<int>(c.op);  // closed genus-0 shell
+    }
 }
 
 }  // namespace nexus::geometry::testing

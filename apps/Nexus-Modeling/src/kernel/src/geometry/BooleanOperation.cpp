@@ -3,6 +3,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 #include <nexus/geometry/BooleanOperation.h>
 #include <nexus/geometry/MeshBVH.h>
+#include <nexus/geometry/MeshBooleanRobust.h>
 #include <nexus/geometry/RobustPredicates.h>
 #include <nexus/render/Camera.h>
 #include <algorithm>
@@ -172,72 +173,6 @@ Vec3 computeFaceNormal(const Vec3& p0, const Vec3& p1, const Vec3& p2)
 }
 
 // Point-in-mesh test using ray casting
-bool pointInMesh(const Vec3& point, const std::vector<Vec3>& positions,
-                 const std::vector<TriangleFace>& triangles, float tolerance = 1e-5f)
-{
-    // Ray direction (fixed for determinism)
-    Vec3 rayDir = vec3Normalize(Vec3{1.0f, 1.0f, 1.0f});
-
-    // Count ray-triangle intersections
-    int crossings = 0;
-    for (const auto& tri : triangles) {
-        if (tri.indices[0] >= positions.size() ||
-            tri.indices[1] >= positions.size() ||
-            tri.indices[2] >= positions.size()) continue;
-        const Vec3& p0 = positions[tri.indices[0]];
-        const Vec3& p1 = positions[tri.indices[1]];
-        const Vec3& p2 = positions[tri.indices[2]];
-
-        // Möller-Trumbore intersection test
-        Vec3 e1 = vec3Sub(p1, p0);
-        Vec3 e2 = vec3Sub(p2, p0);
-        Vec3 h = vec3Cross(rayDir, e2);
-        float a = vec3Dot(e1, h);
-
-        if (std::abs(a) < tolerance) {
-            continue;  // Parallel or degenerate
-        }
-
-        float f = 1.0f / a;
-        Vec3 s = vec3Sub(point, p0);
-        float u = f * vec3Dot(s, h);
-
-        if (u < 0.0f || u > 1.0f) {
-            continue;
-        }
-
-        Vec3 q = vec3Cross(s, e1);
-        float v = f * vec3Dot(rayDir, q);
-
-        if (v < 0.0f || u + v > 1.0f) {
-            continue;
-        }
-
-        float t = f * vec3Dot(e2, q);
-        if (t > tolerance) {
-            crossings++;
-        }
-    }
-
-    return (crossings & 1) == 1;
-}
-
-// BVH-accelerated point-in-mesh: uses raycast for fast outside rejection.
-// If the ray doesn't hit any BVH node, the point is definitely outside.
-// If it hits, falls back to exact triangle-by-triangle counting.
-bool pointInMeshBVH(const Vec3& point, const MeshBVH& bvh,
-                    const std::vector<Vec3>& positions,
-                    const std::vector<TriangleFace>& triangles,
-                    float tolerance = 1e-5f) noexcept
-{
-    Vec3 rayDir = vec3Normalize(Vec3{1.0f, 1.0f, 1.0f});
-    Ray ray{point, rayDir};
-
-    auto hit = bvh.raycast(ray);
-    if (hit.t == std::numeric_limits<float>::max()) return false; // fast reject: outside
-
-    return pointInMesh(point, positions, triangles, tolerance);
-}
 
 // Triangulate faces (convert quads/n-gons to triangles)
 void triangulateInputMesh(const Mesh& input, std::vector<Vec3>& posOut,
@@ -289,175 +224,8 @@ void triangulateInputMesh(const Mesh& input, std::vector<Vec3>& posOut,
 // ── Post-Boolean mesh cleanup ─────────────────────────────────────────
 //  Removes degenerate triangles and merges coincident vertices.
 
-void cleanupBooleanOutput(std::vector<Vec3>& positions, std::vector<Face>& faces, float mergeEps = 1e-5f) {
-    if (faces.empty()) return;
-
-    // Phase 1: Merge coincident vertices
-    std::vector<uint32_t> vertexRemap(positions.size());
-    std::vector<Vec3> mergedPos;
-    for (size_t i = 0; i < positions.size(); ++i) {
-        bool found = false;
-        for (size_t j = 0; j < mergedPos.size(); ++j) {
-            float dx = mergedPos[j].x - positions[i].x;
-            float dy = mergedPos[j].y - positions[i].y;
-            float dz = mergedPos[j].z - positions[i].z;
-            if (dx*dx + dy*dy + dz*dz < mergeEps * mergeEps) {
-                vertexRemap[i] = static_cast<uint32_t>(j);
-                found = true;
-                break;
-            }
-        }
-        if (!found) {
-            vertexRemap[i] = static_cast<uint32_t>(mergedPos.size());
-            mergedPos.push_back(positions[i]);
-        }
-    }
-    positions = std::move(mergedPos);
-
-    // Phase 2: Remap face indices and remove degenerate faces
-    std::vector<Face> cleanFaces;
-    for (auto& f : faces) {
-        for (auto& idx : f.indices) {
-            if (idx < vertexRemap.size()) idx = vertexRemap[idx];
-        }
-        // Remove degenerate faces (duplicate indices)
-        if (f.indices.size() >= 3) {
-            bool degenerate = false;
-            for (size_t i = 0; i < f.indices.size(); ++i) {
-                if (f.indices[i] == f.indices[(i + 1) % f.indices.size()]) {
-                    degenerate = true;
-                    break;
-                }
-            }
-            if (!degenerate) {
-                // Also check zero area
-                Vec3 a = positions[f.indices[0]];
-                Vec3 b = positions[f.indices[1]];
-                Vec3 c = positions[f.indices[2]];
-                Vec3 cross = vec3Cross(vec3Sub(b, a), vec3Sub(c, a));
-                if (vec3Dot(cross, cross) > 1e-12f) {
-                    cleanFaces.push_back(f);
-                }
-            }
-        }
-    }
-    faces = std::move(cleanFaces);
-}
 
 
-void computeBooleanResult(const std::vector<Vec3>& posA, const std::vector<TriangleFace>& trisA,
-                          const std::vector<Vec3>& posB, const std::vector<TriangleFace>& trisB,
-                          BooleanOperationType operation, float tolerance,
-                          std::vector<Vec3>& outPos, std::vector<Face>& outFaces)
-{
-    outPos.clear();
-    outFaces.clear();
-
-    // Build BVHs for fast outside rejection
-    Mesh bvhMeshB;
-    bvhMeshB.attributes().setPositions(posB);
-    for (const auto& tri : trisB) {
-        Face f; f.indices = {tri.indices[0], tri.indices[1], tri.indices[2]};
-        bvhMeshB.topology().addFace(f);
-    }
-    MeshBVH bvhB;
-    bvhB.build(bvhMeshB);
-
-    Mesh bvhMeshA;
-    bvhMeshA.attributes().setPositions(posA);
-    for (const auto& tri : trisA) {
-        Face f; f.indices = {tri.indices[0], tri.indices[1], tri.indices[2]};
-        bvhMeshA.topology().addFace(f);
-    }
-    MeshBVH bvhA;
-    bvhA.build(bvhMeshA);
-
-    std::map<uint32_t, uint32_t> posIndexRemap;  // old pos index -> new pos index
-
-    auto addTriangle = [&](const Vec3& p0, const Vec3& p1, const Vec3& p2) {
-        // Find or create indices
-        auto findOrAddPos = [&](const Vec3& p) {
-            // Simple pointer comparison for determinism
-            uint32_t oldIdx = 0;
-            float minDist = std::numeric_limits<float>::max();
-            for (size_t i = 0; i < posA.size(); ++i) {
-                float d = vec3Length(vec3Sub(posA[i], p));
-                if (d < minDist) {
-                    minDist = d;
-                    oldIdx = i;
-                }
-            }
-
-            auto it = posIndexRemap.find(oldIdx);
-            if (it != posIndexRemap.end()) {
-                return it->second;
-            }
-
-            uint32_t newIdx = static_cast<uint32_t>(outPos.size());
-            outPos.push_back(p);
-            posIndexRemap[oldIdx] = newIdx;
-            return newIdx;
-        };
-
-        Face f;
-        f.indices.push_back(findOrAddPos(p0));
-        f.indices.push_back(findOrAddPos(p1));
-        f.indices.push_back(findOrAddPos(p2));
-        outFaces.push_back(f);
-    };
-
-    // Process triangles from A
-    for (const auto& tri : trisA) {
-        if (tri.indices[0] >= posA.size() || tri.indices[1] >= posA.size() || tri.indices[2] >= posA.size()) continue;
-        const Vec3& p0 = posA[tri.indices[0]];
-        const Vec3& p1 = posA[tri.indices[1]];
-        const Vec3& p2 = posA[tri.indices[2]];
-
-        // Test face center against B mesh
-        Vec3 center = vec3Scale(vec3Add(p0, vec3Add(vec3Scale(p1, 1.0f), vec3Scale(p2, 1.0f))),
-                                1.0f / 3.0f);
-        bool inB = pointInMeshBVH(center, bvhB, posB, trisB, tolerance);
-
-        bool keep = false;
-        switch (operation) {
-            case BooleanOperationType::Union:
-                keep = true;  // Always keep A in union
-                break;
-            case BooleanOperationType::Difference:
-                keep = !inB;  // Keep A triangles outside B
-                break;
-            case BooleanOperationType::Intersection:
-                keep = inB;  // Keep A triangles inside B
-                break;
-        }
-
-        if (keep) {
-            addTriangle(p0, p1, p2);
-        }
-    }
-
-    // Process triangles from B (only for union)
-    if (operation == BooleanOperationType::Union) {
-        for (const auto& tri : trisB) {
-            const Vec3& p0 = posB[tri.indices[0]];
-            const Vec3& p1 = posB[tri.indices[1]];
-            const Vec3& p2 = posB[tri.indices[2]];
-
-            // Test face center against A mesh
-            Vec3 center = vec3Scale(vec3Add(p0, vec3Add(vec3Scale(p1, 1.0f), vec3Scale(p2, 1.0f))),
-                                    1.0f / 3.0f);
-            bool inA = pointInMeshBVH(center, bvhA, posA, trisA, tolerance);
-
-            // Only add B triangles that are outside A (to avoid duplicates)
-            if (!inA) {
-                addTriangle(p0, p1, p2);
-            }
-        }
-    }
-
-    // Post-process: remove degenerate triangles and merge coincident vertices
-    cleanupBooleanOutput(outPos, outFaces);
-}
 
 
 
@@ -744,8 +512,17 @@ BooleanOperationReport BooleanOperation::compute(
     std::vector<Vec3> outPos;
     std::vector<Face> outFaces;
 
-    computeBooleanResult(posA, trisA, posB, trisB, operation, options.geometricTolerance, outPos,
-                         outFaces);
+    // Robust CSG: cut both meshes along the intersection curve, classify each
+    // sub-triangle inside/outside the other, stitch the seam — a clean watertight
+    // result on coarse meshes (replaces the legacy whole-triangle classifier).
+    {
+        const Mesh rb = robustMeshBoolean(meshA, meshB, operation);
+        outPos = rb.attributes().positions();
+        outFaces.reserve(rb.topology().faceCount());
+        for (size_t f = 0; f < rb.topology().faceCount(); ++f) {
+            outFaces.push_back(rb.topology().face(f));
+        }
+    }
 
     if (outPos.empty() || outFaces.empty()) {
         report.code = BooleanOperationDiagnostic::OutputEmpty;
