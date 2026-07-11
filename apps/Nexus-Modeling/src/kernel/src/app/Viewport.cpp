@@ -22,6 +22,10 @@
 #include <nexus/app/SelectionHighlight.h>
 #include <nexus/app/SketchPreview.h>
 #include <nexus/parametric/ParametricSketchProfile.h>
+#ifdef NEXUS_BACKEND_VULKAN
+#  define GLFW_INCLUDE_VULKAN
+#  include <GLFW/glfw3.h>   // pulls <vulkan/vulkan.h>; provides glfwCreateWindowSurface
+#endif
 #include <imgui.h>
 #include <imgui_impl_glfw.h>
 #include <imgui_impl_vulkan.h>
@@ -187,7 +191,26 @@ bool Viewport::initialize() {
 
     // Create swapchain
     nexus::gfx::SwapchainDesc scDesc;
-    scDesc.nativeWindowHandle = nullptr; // Will be set by platform-specific code
+    scDesc.nativeWindowHandle = nullptr;
+#ifdef NEXUS_BACKEND_VULKAN
+    // Build a real window surface for on-screen presentation. GLFW handles the
+    // X11/Wayland/Win32 specifics. Hidden windows (headless / --shot) are skipped
+    // so they keep the offscreen render-to-PNG path.
+    if (m_window && glfwGetWindowAttrib(m_window, GLFW_VISIBLE)) {
+        const auto vk = m_renderContext->device().nativeVulkanHandles();
+        if (vk.instance) {
+            VkSurfaceKHR surface = VK_NULL_HANDLE;
+            const VkResult sr = glfwCreateWindowSurface(
+                reinterpret_cast<VkInstance>(vk.instance), m_window, nullptr, &surface);
+            if (sr == VK_SUCCESS && surface != VK_NULL_HANDLE) {
+                scDesc.preCreatedSurface = reinterpret_cast<void*>(surface);
+            } else {
+                std::fprintf(stderr,
+                    "Viewport: glfwCreateWindowSurface failed (%d) — headless fallback\n", sr);
+            }
+        }
+    }
+#endif
     scDesc.extent = nexus::gfx::Extent2D{m_width, m_height};
     scDesc.colorFormat = nexus::gfx::Format::B8G8R8A8_Srgb;
     scDesc.imageCount = 3;

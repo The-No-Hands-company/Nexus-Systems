@@ -30,6 +30,8 @@ struct HdrMetadata {
 struct SwapchainDesc {
     void*       nativeWindowHandle = nullptr;  // HWND / xcb_window_t / NSWindow*
     void*       nativeDisplayHandle= nullptr;  // X11 Display* / nullptr elsewhere
+    void*       preCreatedSurface  = nullptr;  // opaque VkSurfaceKHR (e.g. from glfwCreateWindowSurface);
+                                               // if set, the backend adopts it instead of building its own
     Extent2D    extent;
     Format      colorFormat  = Format::B8G8R8A8_Srgb;
     uint32_t    imageCount   = 3;              // triple-buffer default

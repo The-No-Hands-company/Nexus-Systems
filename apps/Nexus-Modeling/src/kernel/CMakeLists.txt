@@ -343,6 +343,11 @@ target_include_directories(nexus_app
             ${GLFW3_INCLUDE_DIRS}
 )
 target_link_libraries(nexus_app PUBLIC nexus_gfx_core)
+if(NEXUS_BACKEND_VULKAN)
+    # Viewport creates the window surface via glfwCreateWindowSurface, which needs
+    # the Vulkan + GLFW-Vulkan headers (link is resolved by the app exe).
+    target_link_libraries(nexus_app PRIVATE Vulkan::Vulkan)
+endif()
 target_compile_features(nexus_app PUBLIC cxx_std_26)
 if(MSVC)
     target_compile_options(nexus_app PRIVATE /W4 /WX /O2 /arch:AVX2)

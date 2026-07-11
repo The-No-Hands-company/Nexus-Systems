@@ -1014,10 +1014,11 @@ int main(int argc, char** argv) {
             }
         }
 
-        // Viewport render
+        // Viewport render (geometry). endFrame() — which submits + presents — is
+        // deferred until after ImGui is recorded, so the UI lands in the same
+        // command buffer / frame before present.
         state.viewport->beginFrame();
         state.viewport->render();
-        state.viewport->endFrame();
 
         // Editor UI
         state.app->context().activeSelectedFeature = state.selectedId;
@@ -1061,10 +1062,11 @@ int main(int argc, char** argv) {
             float y2 = std::max(state.boxStartY, state.boxEndY);
             dl->AddRect(ImVec2(x1, y1), ImVec2(x2, y2), IM_COL32(100, 180, 255, 128), 0.f, 0, 1.5f);
         }
-        // Render ImGui into the Vulkan command buffer
+        // Record ImGui into the viewport's command buffer, then submit + present.
         if (auto* cmd = state.viewport->currentCommandBuffer()) {
             EditorUI::endFrame(cmd);
         }
+        state.viewport->endFrame();
 
         // Headless screenshot
 

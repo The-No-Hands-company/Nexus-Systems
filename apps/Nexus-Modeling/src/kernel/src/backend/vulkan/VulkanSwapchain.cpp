@@ -162,7 +162,12 @@ static VkPresentModeKHR choosePresentMode(VkPhysicalDevice pd, VkSurfaceKHR surf
 void VulkanSwapchain::create(const SwapchainDesc& desc, uint32_t presentFamily)
 {
     // 1. Surface
-    if (desc.nativeWindowHandle) {
+    if (desc.preCreatedSurface) {
+        // App supplied a surface (e.g. glfwCreateWindowSurface, which handles the
+        // X11/Wayland/Win32 specifics robustly). We adopt it; destroy() releases it
+        // like any surface we own.
+        m_surface = reinterpret_cast<VkSurfaceKHR>(desc.preCreatedSurface);
+    } else if (desc.nativeWindowHandle) {
         m_surface = createPlatformSurface(m_instance, desc.nativeWindowHandle,
                                           desc.nativeDisplayHandle);
     }
