@@ -114,4 +114,58 @@ TEST(HEMEulerIntegrity, EverySuccessfulSplitPreservesIntegrity)
     EXPECT_GT(splits, 0) << "no edge was splittable — test is vacuous";
 }
 
+namespace {
+// Quad box (un-triangulated): 6 quad faces, exercises the n-gon paths.
+HalfEdgeMesh quadBoxHE()
+{
+    auto hem = HalfEdgeMesh::fromMesh(makeBox(1.f, 1.f, 1.f));
+    EXPECT_TRUE(hem.has_value());
+    return std::move(*hem);
+}
+}  // namespace
+
+// insertEdgeVertex subdivides an edge without splitting faces (turns the two
+// incident quads into pentagons). Regression for two bugs the validator caught:
+// crossed twin pairing and an un-repaired endpoint vertex pointer.
+TEST(HEMEulerIntegrity, EverySuccessfulInsertEdgeVertexPreservesIntegrity)
+{
+    const HalfEdgeMesh base = quadBoxHE();
+    int inserts = 0;
+    for (uint32_t e = 0; e < base.edgeCount(); ++e) {
+        HalfEdgeMesh hem = base;
+        if (!hem.insertEdgeVertex(e, 0.5f)) continue;
+        ++inserts;
+        const auto r = hem.checkIntegrity();
+        ASSERT_TRUE(r.ok) << "insertEdgeVertex edge " << e << ": " << r.reason;
+        EXPECT_EQ(r.boundaryEdges, 0u) << "insertEdgeVertex opened a boundary, edge " << e;
+        EXPECT_EQ(closedEuler(r), 2u) << "insertEdgeVertex broke genus-0, edge " << e;
+    }
+    EXPECT_GT(inserts, 0) << "no edge accepted insertEdgeVertex — test is vacuous";
+}
+
+// splitEdge on a quad face delegates to insertEdgeVertex; guard that path too.
+TEST(HEMEulerIntegrity, SplitEdgeOnQuadPreservesIntegrity)
+{
+    const HalfEdgeMesh base = quadBoxHE();
+    int splits = 0;
+    for (uint32_t e = 0; e < base.edgeCount(); ++e) {
+        HalfEdgeMesh hem = base;
+        if (!hem.splitEdge(e)) continue;
+        ++splits;
+        const auto r = hem.checkIntegrity();
+        ASSERT_TRUE(r.ok) << "splitEdge(quad) edge " << e << ": " << r.reason;
+        EXPECT_EQ(r.boundaryEdges, 0u) << "splitEdge(quad) opened a boundary, edge " << e;
+    }
+    EXPECT_GT(splits, 0) << "no quad edge accepted splitEdge — test is vacuous";
+}
+
+// bevelVertex is (and must stay) integrity-clean.
+TEST(HEMEulerIntegrity, BevelVertexPreservesIntegrity)
+{
+    HalfEdgeMesh hem = quadBoxHE();
+    ASSERT_TRUE(hem.bevelVertex(0, 0.2f));
+    const auto r = hem.checkIntegrity();
+    EXPECT_TRUE(r.ok) << r.reason;
+}
+
 }  // namespace nexus::geometry::testing

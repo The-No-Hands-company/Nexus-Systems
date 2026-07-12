@@ -968,8 +968,11 @@ bool HalfEdgeMesh::insertEdgeVertex(uint32_t he, float t) {
         return false;
     }
 
-    m_edges[e0] = {e0 + 1, oldPrevA, hasTwin ? e0 + 2 : kInvalid, vSrc, fA};
-    m_edges[e0 + 1] = {oldNextA, e0, hasTwin ? e0 + 3 : kInvalid, vMid, fA};
+    // Twin pairing must match half-edge directions: e0 is (vSrc→vMid) and
+    // e0+1 is (vMid→vDst); their opposites on face B are e0+3 (vMid→vSrc) and
+    // e0+2 (vDst→vMid) respectively — NOT the crossed e0+2/e0+3 pairing.
+    m_edges[e0] = {e0 + 1, oldPrevA, hasTwin ? e0 + 3 : kInvalid, vSrc, fA};
+    m_edges[e0 + 1] = {oldNextA, e0, hasTwin ? e0 + 2 : kInvalid, vMid, fA};
     if (oldPrevA < m_edges.size()) m_edges[oldPrevA].next = e0;
     if (oldNextA < m_edges.size()) m_edges[oldNextA].prev = e0 + 1;
 
@@ -984,8 +987,8 @@ bool HalfEdgeMesh::insertEdgeVertex(uint32_t he, float t) {
             return false;
         }
 
-        m_edges[e0 + 2] = {e0 + 3, oldPrevB, e0, vDst, fB};
-        m_edges[e0 + 3] = {oldNextB, e0 + 2, e0 + 1, vMid, fB};
+        m_edges[e0 + 2] = {e0 + 3, oldPrevB, e0 + 1, vDst, fB};
+        m_edges[e0 + 3] = {oldNextB, e0 + 2, e0, vMid, fB};
         if (oldPrevB < m_edges.size()) m_edges[oldPrevB].next = e0 + 2;
         if (oldNextB < m_edges.size()) m_edges[oldNextB].prev = e0 + 3;
 
@@ -1007,6 +1010,11 @@ bool HalfEdgeMesh::insertEdgeVertex(uint32_t he, float t) {
     if (fA < m_faces.size()) m_faces[fA].edge = (m_faces[fA].edge == he || m_faces[fA].edge >= m_edges.size()) ? e0 : m_faces[fA].edge;
 
     m_verts[vMid].edge = e0 + 1;
+
+    // Re-root the endpoints if they referenced the now-dead original edges:
+    // e0 is rooted at vSrc, e0+2 (face B) is rooted at vDst.
+    if (m_verts[vSrc].edge == he) m_verts[vSrc].edge = e0;
+    if (hasTwin && vDst < m_verts.size() && m_verts[vDst].edge == twin) m_verts[vDst].edge = e0 + 2;
 
     updateEdgeMap(e0); updateEdgeMap(e0 + 1);
     if (hasTwin) { updateEdgeMap(e0 + 2); updateEdgeMap(e0 + 3); }
