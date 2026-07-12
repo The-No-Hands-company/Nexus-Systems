@@ -1269,12 +1269,15 @@ bool HalfEdgeMesh::pokeFace(uint32_t faceIndex) {
     uint32_t start = m_faces[faceIndex].edge;
     if (start == kInvalid || start >= m_edges.size()) return false;
 
+    // Walk the face collecting its perimeter half-edges (in order) and vertices.
+    std::vector<uint32_t> perim;
     std::vector<uint32_t> faceVerts;
     Vec3 center{};
     uint32_t e = start;
     uint32_t safety = 0;
     do {
         uint32_t v = m_edges[e].src;
+        perim.push_back(e);
         faceVerts.push_back(v);
         center.x += m_positions[v].x;
         center.y += m_positions[v].y;
@@ -1285,8 +1288,9 @@ bool HalfEdgeMesh::pokeFace(uint32_t faceIndex) {
         if (++safety > 256) break;
     } while (e != start);
 
-    if (faceVerts.size() < 3) return false;
-    float inv = 1.0f / static_cast<float>(faceVerts.size());
+    const size_t n = faceVerts.size();
+    if (n < 3) return false;
+    float inv = 1.0f / static_cast<float>(n);
     center = Vec3{center.x * inv, center.y * inv, center.z * inv};
 
     uint32_t centerV = static_cast<uint32_t>(m_verts.size());
@@ -1303,20 +1307,43 @@ bool HalfEdgeMesh::pokeFace(uint32_t faceIndex) {
         m_normals.push_back({nCenter.x*inv, nCenter.y*inv, nCenter.z*inv});
     }
 
-    m_faces[faceIndex].edge = kInvalid;
-    for (size_t i = 0; i < faceVerts.size(); ++i) {
-        uint32_t v0 = faceVerts[i];
-        uint32_t v1 = faceVerts[(i+1)%faceVerts.size()];
-        uint32_t newFace = static_cast<uint32_t>(m_faces.size());
-        m_faces.push_back({});
-        uint32_t e0 = addEdgePair(v0, centerV, newFace);
-        uint32_t e1 = addEdgePair(centerV, v1, newFace);
-        uint32_t e2 = addEdgePair(v1, v0, newFace);
-        m_edges[e0].next = e1; m_edges[e1].next = e2; m_edges[e2].next = e0;
-        m_edges[e0].prev = e2; m_edges[e1].prev = e0; m_edges[e2].prev = e1;
-        m_faces[newFace].edge = e0;
+    // Create 2n spoke half-edges: out[i] = v_i -> center, in[i] = center -> v_i,
+    // twinned to each other. Faces/next/prev are assigned when the fan is built.
+    std::vector<uint32_t> outE(n), inE(n);
+    for (size_t i = 0; i < n; ++i) {
+        outE[i] = static_cast<uint32_t>(m_edges.size());
+        HEEdge oe; oe.src = faceVerts[i]; m_edges.push_back(oe);
+        inE[i] = static_cast<uint32_t>(m_edges.size());
+        HEEdge ie; ie.src = centerV; m_edges.push_back(ie);
+        m_edges[outE[i]].twin = inE[i];
+        m_edges[inE[i]].twin = outE[i];
     }
-    m_verts[centerV].edge = static_cast<uint32_t>(m_edges.size() - faceVerts.size() * 6);
+
+    // Fan triangles: triangle i REUSES the perimeter half-edge perim[i]
+    // (v_i -> v_{i+1}) as its base, plus out[i+1] (v_{i+1} -> center) and
+    // in[i] (center -> v_i). Adjacent triangles share a spoke vertex, so
+    // out[j]/in[j] are naturally twins. Reuse the old face slot for triangle 0
+    // (so no face is orphaned) and allocate fresh slots for the rest.
+    for (size_t i = 0; i < n; ++i) {
+        uint32_t f = (i == 0) ? faceIndex : static_cast<uint32_t>(m_faces.size());
+        if (i != 0) m_faces.push_back({});
+        uint32_t p = perim[i];
+        uint32_t o = outE[(i + 1) % n];
+        uint32_t in = inE[i];
+        m_edges[p].face = f;  m_edges[p].next = o;   m_edges[p].prev = in;
+        m_edges[o].face = f;  m_edges[o].next = in;  m_edges[o].prev = p;
+        m_edges[in].face = f; m_edges[in].next = p;  m_edges[in].prev = o;
+        m_faces[f].edge = p;
+    }
+
+    m_verts[centerV].edge = inE[0];
+    for (size_t i = 0; i < n; ++i) {
+        // perim[i] is still live and rooted at v_i; keep the vertex ptr valid.
+        m_verts[faceVerts[i]].edge = perim[i];
+        updateEdgeMap(perim[i]);
+        updateEdgeMap(outE[i]);
+        updateEdgeMap(inE[i]);
+    }
     return true;
 }
 

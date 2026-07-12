@@ -168,4 +168,24 @@ TEST(HEMEulerIntegrity, BevelVertexPreservesIntegrity)
     EXPECT_TRUE(r.ok) << r.reason;
 }
 
+// pokeFace fans a face into triangles around a new centroid vertex; it must
+// stay integrity-clean and closed (χ-neutral: +1 vertex, +2n half-edges,
+// face count grows by n-1 ⇒ Δχ = 0). Regression for the old 6n-half-edge
+// addEdgePair misuse that orphaned the perimeter edges on a dead face.
+TEST(HEMEulerIntegrity, EverySuccessfulPokeFacePreservesIntegrity)
+{
+    const HalfEdgeMesh base = quadBoxHE();
+    int pokes = 0;
+    for (uint32_t f = 0; f < base.faceCount(); ++f) {
+        HalfEdgeMesh hem = base;
+        if (!hem.pokeFace(f)) continue;
+        ++pokes;
+        const auto r = hem.checkIntegrity();
+        ASSERT_TRUE(r.ok) << "pokeFace " << f << ": " << r.reason;
+        EXPECT_EQ(r.boundaryEdges, 0u) << "pokeFace opened a boundary, face " << f;
+        EXPECT_EQ(closedEuler(r), 2u) << "pokeFace broke genus-0, face " << f;
+    }
+    EXPECT_GT(pokes, 0) << "no face accepted pokeFace — test is vacuous";
+}
+
 }  // namespace nexus::geometry::testing
