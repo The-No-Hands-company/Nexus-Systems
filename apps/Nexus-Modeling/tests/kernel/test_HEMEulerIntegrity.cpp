@@ -188,4 +188,26 @@ TEST(HEMEulerIntegrity, EverySuccessfulPokeFacePreservesIntegrity)
     EXPECT_GT(pokes, 0) << "no face accepted pokeFace — test is vacuous";
 }
 
+// connectVertices splits a face by a diagonal between two of its vertices; it
+// must leave both sub-faces integrity-clean and the shell closed (χ-neutral:
+// +1 edge, +1 face ⇒ Δχ = 0). Regression for the old cross-edge wiring that let
+// face A's cycle spill into face B.
+TEST(HEMEulerIntegrity, EverySuccessfulConnectVerticesPreservesIntegrity)
+{
+    const HalfEdgeMesh base = quadBoxHE();
+    int connects = 0;
+    for (uint32_t a = 0; a < base.vertexCount(); ++a) {
+        for (uint32_t b = a + 1; b < base.vertexCount(); ++b) {
+            HalfEdgeMesh hem = base;
+            if (!hem.connectVertices(a, b)) continue;
+            ++connects;
+            const auto r = hem.checkIntegrity();
+            ASSERT_TRUE(r.ok) << "connectVertices(" << a << "," << b << "): " << r.reason;
+            EXPECT_EQ(r.boundaryEdges, 0u) << "connectVertices opened a boundary (" << a << "," << b << ")";
+            EXPECT_EQ(closedEuler(r), 2u) << "connectVertices broke genus-0 (" << a << "," << b << ")";
+        }
+    }
+    EXPECT_GT(connects, 0) << "no vertex pair accepted connectVertices — test is vacuous";
+}
+
 }  // namespace nexus::geometry::testing

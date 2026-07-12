@@ -1424,48 +1424,36 @@ bool HalfEdgeMesh::connectVertices(uint32_t v0, uint32_t v1) {
     }
     m_faces[faceB].edge = chainEdges[pos1 % nVerts];
 
-    // Create cross edge pair connecting v1->v0 (in faceA) and v0->v1 (in faceB)
-    uint32_t eCrossA = addEdgePair(v1, v0, faceA);
-    uint32_t eCrossB = m_edges[eCrossA].twin;
+    // After the pos0<pos1 ordering, the endpoints are the chain vertices AT
+    // those positions — NOT necessarily the original (v0,v1), which the pos
+    // swap may have decoupled. Segment A runs vA -> ... -> vB; close it with the
+    // cross edge vB -> vA (face A). Segment B runs vB -> ... -> vA; close it
+    // with vA -> vB (face B).
+    const uint32_t vA = chainVerts[pos0];  // start of segment A
+    const uint32_t vB = chainVerts[pos1];  // end of segment A / start of segment B
+
+    uint32_t eCrossA = addEdgePair(vB, vA, faceA);  // vB -> vA, closes face A
+    uint32_t eCrossB = m_edges[eCrossA].twin;        // vA -> vB, on face B
     m_edges[eCrossB].face = faceB;
 
-    // Wire cross edge into face A: it goes from v1 back to v0, closing the cycle
-    // Find the edge in chain A that points to v1 (its next is v1's src)
-    uint32_t edgeToV1 = kInvalid;
-    uint32_t edgeFromV0 = kInvalid;
-    for (int i = pos0; i < pos1; ++i) {
-        uint32_t nextIdx = (i + 1 < nVerts) ? chainEdges[i + 1] : chainEdges[0];
-        if (m_edges[nextIdx].src == v1) {
-            edgeToV1 = chainEdges[i];
-            break;
-        }
-    }
-    // Find edge in chain B that points to v0
-    int bStart = pos1;
-    for (int i = 0; i < nVerts; ++i) {
-        int idx = (bStart + i) % nVerts;
-        int nextIdx = (idx + 1) % nVerts;
-        if (m_edges[chainEdges[nextIdx]].src == v0) {
-            edgeFromV0 = chainEdges[idx];
-            break;
-        }
-    }
+    // Close each sub-face cycle with the diagonal, using the known chain layout.
+    // (The previous code linked the cross edges to the *original* successors,
+    //  which lived on the other sub-face — hence "face-cycle spans multiple
+    //  faces". Wire them to each sub-face's own first edge instead.)
+    const uint32_t firstA = chainEdges[pos0];        // starts at vA
+    const uint32_t lastA  = chainEdges[pos1 - 1];    // ends at vB
+    const uint32_t firstB = chainEdges[pos1];        // starts at vB
+    const uint32_t lastB  = chainEdges[(pos0 == 0) ? (nVerts - 1) : (pos0 - 1)]; // ends at vA
 
-    if (edgeToV1 != kInvalid && edgeToV1 < m_edges.size()) {
-        uint32_t oldNext = m_edges[edgeToV1].next;
-        m_edges[edgeToV1].next = eCrossA;
-        m_edges[eCrossA].prev = edgeToV1;
-        m_edges[eCrossA].next = oldNext;
-        if (oldNext < m_edges.size()) m_edges[oldNext].prev = eCrossA;
-    }
+    m_edges[lastA].next = eCrossA; m_edges[eCrossA].prev = lastA;
+    m_edges[eCrossA].next = firstA; m_edges[firstA].prev = eCrossA;
 
-    if (edgeFromV0 != kInvalid && edgeFromV0 < m_edges.size()) {
-        uint32_t oldNext = m_edges[edgeFromV0].next;
-        m_edges[edgeFromV0].next = eCrossB;
-        m_edges[eCrossB].prev = edgeFromV0;
-        m_edges[eCrossB].next = oldNext;
-        if (oldNext < m_edges.size()) m_edges[oldNext].prev = eCrossB;
-    }
+    m_edges[lastB].next = eCrossB; m_edges[eCrossB].prev = lastB;
+    m_edges[eCrossB].next = firstB; m_edges[firstB].prev = eCrossB;
+
+    // Keep the diagonal endpoints rooted on live outgoing edges.
+    m_verts[vA].edge = firstA;  // vA -> ...
+    m_verts[vB].edge = firstB;  // vB -> ...
 
     updateEdgeMap(eCrossA);
     updateEdgeMap(eCrossB);
