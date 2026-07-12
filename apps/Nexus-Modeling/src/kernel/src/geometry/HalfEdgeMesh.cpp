@@ -36,6 +36,11 @@ std::optional<HalfEdgeMesh> HalfEdgeMesh::fromMesh(const Mesh& mesh) {
     hem.m_positions = attrs.positions();
     if (attrs.hasUVs()) hem.m_uvs = attrs.uvs();
     if (attrs.hasNormals()) hem.m_normals = attrs.normals();
+    if (attrs.hasTangents()) hem.m_tangents = attrs.tangents();
+    if (attrs.hasSkinning()) {
+        hem.m_jointIndices = attrs.jointIndices();
+        hem.m_jointWeights = attrs.jointWeights();
+    }
 
     std::unordered_map<uint64_t, uint32_t> edgeMap;
     std::vector<std::vector<uint32_t>> faceEdges(nFaces);
@@ -97,9 +102,18 @@ std::optional<HalfEdgeMesh> HalfEdgeMesh::fromMesh(const Mesh& mesh) {
 
 Mesh HalfEdgeMesh::toMesh() const {
     Mesh mesh;
+    const size_t nv = m_positions.size();
     mesh.attributes().setPositions(m_positions);
-    if (!m_uvs.empty()) mesh.attributes().setUVs(m_uvs);
-    if (!m_normals.empty()) mesh.attributes().setNormals(m_normals);
+    // Emit each optional stream only when it is per-vertex consistent. Some
+    // vertex-adding ops don't yet maintain every stream; emitting a desynced
+    // buffer would corrupt the mesh, so guard on an exact size match rather
+    // than mere non-emptiness.
+    if (m_uvs.size() == nv) mesh.attributes().setUVs(m_uvs);
+    if (m_normals.size() == nv) mesh.attributes().setNormals(m_normals);
+    if (m_tangents.size() == nv) mesh.attributes().setTangents(m_tangents);
+    if (m_jointIndices.size() == nv && m_jointWeights.size() == nv) {
+        mesh.attributes().setSkinning(m_jointIndices, m_jointWeights);
+    }
 
     for (uint32_t fi = 0; fi < static_cast<uint32_t>(m_faces.size()); ++fi) {
         std::vector<uint32_t> verts;

@@ -97,8 +97,19 @@ public:
     std::vector<Vec2>& uvs() { return m_uvs; }
     const std::vector<nexus::render::Vec3>& normals() const { return m_normals; }
     std::vector<nexus::render::Vec3>& normals() { return m_normals; }
+    const std::vector<Vec4>& tangents() const { return m_tangents; }
+    std::vector<Vec4>& tangents() { return m_tangents; }
+    const std::vector<JointIndex4>& jointIndices() const { return m_jointIndices; }
+    std::vector<JointIndex4>& jointIndices() { return m_jointIndices; }
+    const std::vector<JointWeight4>& jointWeights() const { return m_jointWeights; }
+    std::vector<JointWeight4>& jointWeights() { return m_jointWeights; }
     [[nodiscard]] bool hasUVs() const noexcept { return !m_uvs.empty(); }
     [[nodiscard]] bool hasNormals() const noexcept { return !m_normals.empty(); }
+    [[nodiscard]] bool hasTangents() const noexcept { return !m_tangents.empty(); }
+    [[nodiscard]] bool hasSkinning() const noexcept
+    {
+        return !m_jointIndices.empty() && !m_jointWeights.empty();
+    }
 
     uint32_t findEdge(uint32_t src, uint32_t dst) const;
 
@@ -109,6 +120,9 @@ private:
     std::vector<nexus::render::Vec3> m_positions;
     std::vector<Vec2> m_uvs;
     std::vector<nexus::render::Vec3> m_normals;
+    std::vector<Vec4> m_tangents;
+    std::vector<JointIndex4> m_jointIndices;
+    std::vector<JointWeight4> m_jointWeights;
     std::unordered_map<uint64_t, uint32_t> m_edgeMap;
 
     uint32_t addEdgePair(uint32_t src, uint32_t dst, uint32_t face);
