@@ -188,6 +188,108 @@ bool HalfEdgeMesh::isTriangulated() const {
     return !m_faces.empty();
 }
 
+// --- checkIntegrity ----------------------------------------------------------
+//  Direct validation of the half-edge invariants over the *live* sub-complex
+//  (edges/faces are tombstoned in-place by the Euler ops rather than compacted,
+//  so we must skip the dead ones and — crucially — verify that no live element
+//  ever references a dead one). Reports the first violation for debuggability.
+
+HalfEdgeMesh::IntegrityReport HalfEdgeMesh::checkIntegrity() const {
+    IntegrityReport r;
+    const uint32_t E = static_cast<uint32_t>(m_edges.size());
+    const uint32_t V = static_cast<uint32_t>(m_verts.size());
+    const uint32_t F = static_cast<uint32_t>(m_faces.size());
+
+    auto fail = [&](std::string why) -> IntegrityReport {
+        IntegrityReport bad;
+        bad.ok = false;
+        bad.reason = std::move(why);
+        return bad;
+    };
+    auto edgeLive = [&](uint32_t e) -> bool {
+        return e < E && m_edges[e].face != kInvalid;
+    };
+
+    std::vector<bool> vertUsed(V, false);
+
+    for (uint32_t e = 0; e < E; ++e) {
+        const auto& he = m_edges[e];
+        if (he.face == kInvalid) continue;  // tombstoned — dead half-edge
+        ++r.liveEdges;
+
+        // face back-reference must be a live face
+        if (he.face >= F || m_faces[he.face].edge == kInvalid)
+            return fail("live edge " + std::to_string(e) + " points to dead/invalid face");
+
+        // next / prev must be live and mutually inverse, sharing this face
+        if (!edgeLive(he.next))
+            return fail("live edge " + std::to_string(e) + " has dead/invalid next");
+        if (!edgeLive(he.prev))
+            return fail("live edge " + std::to_string(e) + " has dead/invalid prev");
+        if (m_edges[he.next].prev != e)
+            return fail("next.prev mismatch at edge " + std::to_string(e));
+        if (m_edges[he.prev].next != e)
+            return fail("prev.next mismatch at edge " + std::to_string(e));
+        if (m_edges[he.next].face != he.face || m_edges[he.prev].face != he.face)
+            return fail("face-cycle spans multiple faces at edge " + std::to_string(e));
+
+        // src must be a valid vertex
+        if (he.src >= V)
+            return fail("live edge " + std::to_string(e) + " has invalid src");
+        vertUsed[he.src] = true;
+
+        // twin: either a boundary (kInvalid) or a live, reciprocal, opposite-face
+        // half-edge whose src is this edge's destination.
+        if (he.twin == kInvalid) {
+            ++r.boundaryEdges;
+        } else {
+            if (!edgeLive(he.twin))
+                return fail("live edge " + std::to_string(e) + " has dead/invalid twin");
+            if (m_edges[he.twin].twin != e)
+                return fail("twin is not reciprocal at edge " + std::to_string(e));
+            if (m_edges[he.twin].face == he.face)
+                return fail("twin shares face (non-manifold fold) at edge " + std::to_string(e));
+            if (m_edges[he.twin].src != m_edges[he.next].src)
+                return fail("twin.src != edge destination at edge " + std::to_string(e));
+        }
+    }
+
+    // Every live face's edge points back to a live half-edge on that face,
+    // and its cycle is a bounded simple loop.
+    for (uint32_t f = 0; f < F; ++f) {
+        if (m_faces[f].edge == kInvalid) continue;  // tombstoned — dead face
+        ++r.liveFaces;
+        uint32_t start = m_faces[f].edge;
+        if (!edgeLive(start) || m_edges[start].face != f)
+            return fail("face " + std::to_string(f) + " edge does not belong to it");
+        uint32_t walk = start, steps = 0;
+        do {
+            if (m_edges[walk].face != f)
+                return fail("face " + std::to_string(f) + " cycle leaves the face");
+            walk = m_edges[walk].next;
+            if (++steps > E)
+                return fail("face " + std::to_string(f) + " cycle does not close");
+        } while (walk != start);
+        if (steps < 3)
+            return fail("face " + std::to_string(f) + " has fewer than 3 sides");
+    }
+
+    // Vertex edge references, when set, must point at a live half-edge rooted here.
+    for (uint32_t v = 0; v < V; ++v) {
+        uint32_t ve = m_verts[v].edge;
+        if (ve == kInvalid) continue;
+        if (!edgeLive(ve))
+            return fail("vertex " + std::to_string(v) + " points to a dead/invalid edge");
+        if (m_edges[ve].src != v)
+            return fail("vertex " + std::to_string(v) + " edge is not rooted at it");
+    }
+
+    for (bool used : vertUsed)
+        if (used) ++r.liveVerts;
+
+    return r;
+}
+
 // --- boundaryLoops -----------------------------------------------------------
 
 std::vector<std::vector<uint32_t>> HalfEdgeMesh::boundaryLoops() const {
@@ -755,7 +857,9 @@ bool HalfEdgeMesh::splitEdge(uint32_t he) {
     m_edges[eA0_1] = {c, eA0_0, etA0_1, vMid, fA0};
     m_edges[c].next = eA0_0; m_edges[c].prev = eA0_1; m_edges[c].face = fA0;
 
-    m_edges[etA0_0] = {e2, eB0_1, eA0_0, vMid, fB1};
+    // fB1 cycle is etA0_0 → e2 → etB0_1 → etA0_0, so etA0_0's predecessor is
+    // etB0_1 (not eB0_1, which lives on face fB0).
+    m_edges[etA0_0] = {e2, etB0_1, eA0_0, vMid, fB1};
     m_edges[etA0_1] = {eA1_0, b, eA0_1, v2, fA1};
 
     m_edges[eA1_0] = {b, etA0_1, etA1_0, vMid, fA1};
@@ -920,6 +1024,10 @@ bool HalfEdgeMesh::collapseEdge(uint32_t he, const nexus::render::Vec3& target) 
 
     if (vKeep == vRemove) return false;
 
+    // This collapse assumes both incident faces are triangles (it stitches the
+    // two wing edges of each). Reject non-triangle faces rather than corrupt them.
+    if (faceValence(m_edges[a].face) != 3 || faceValence(m_edges[d].face) != 3) return false;
+
     std::unordered_set<uint32_t> neighborsRemove;
     {
         uint32_t start = m_verts[vRemove].edge;
@@ -978,6 +1086,16 @@ bool HalfEdgeMesh::collapseEdge(uint32_t he, const nexus::render::Vec3& target) 
         updateEdgeMap(ei);
     }
 
+    // Capture the *outer* twins of the four wing edges before we destroy them.
+    // Collapsing triangle A merges edges b and c onto the surviving (vKeep,vl)
+    // wing: their outer neighbours (bo, co) become each other's twins. Likewise
+    // (eo, fo) for triangle B. Without this rebond the survivors keep pointing
+    // at now-dead half-edges (the "dead twin" integrity violation).
+    const uint32_t bo = m_edges[b].twin;
+    const uint32_t co = m_edges[c].twin;
+    const uint32_t eo = m_edges[e].twin;
+    const uint32_t fo = m_edges[f].twin;
+
     auto killEdge = [&](uint32_t ei) {
         if (ei < m_edges.size()) {
             m_edges[ei].face = kInvalid;
@@ -990,6 +1108,17 @@ bool HalfEdgeMesh::collapseEdge(uint32_t he, const nexus::render::Vec3& target) 
 
     killEdge(a); killEdge(b); killEdge(c);
     killEdge(d); killEdge(e); killEdge(f);
+
+    // Rebond wing survivors (or open a boundary if one side had no outer twin).
+    auto rebond = [&](uint32_t x, uint32_t y) {
+        const bool lx = (x != kInvalid && x < m_edges.size());
+        const bool ly = (y != kInvalid && y < m_edges.size());
+        if (lx && ly) { m_edges[x].twin = y; m_edges[y].twin = x; }
+        else if (lx)  { m_edges[x].twin = kInvalid; }
+        else if (ly)  { m_edges[y].twin = kInvalid; }
+    };
+    rebond(bo, co);
+    rebond(eo, fo);
 
     for (uint32_t eid : {a, b, c, d, e, f}) {
         if (eid < static_cast<uint32_t>(m_edges.size())) {
@@ -1010,17 +1139,25 @@ bool HalfEdgeMesh::collapseEdge(uint32_t he, const nexus::render::Vec3& target) 
     if (faceA < m_faces.size()) m_faces[faceA].edge = kInvalid;
     if (faceB < m_faces.size()) m_faces[faceB].edge = kInvalid;
 
-    if (m_verts[vKeep].edge == a || m_verts[vKeep].edge == b ||
-        m_verts[vKeep].edge == c || m_verts[vKeep].edge == d ||
-        m_verts[vKeep].edge == e || m_verts[vKeep].edge == f) {
-        m_verts[vKeep].edge = kInvalid;
+    // Any vertex that referenced one of the six destroyed half-edges (vKeep and
+    // the two wing apices vl/vr) must be re-rooted onto a surviving live edge.
+    auto repairVertexEdge = [&](uint32_t v) {
+        if (v >= m_verts.size()) return;
+        uint32_t ve = m_verts[v].edge;
+        const bool dead = (ve == kInvalid) || (ve >= m_edges.size()) ||
+                          (m_edges[ve].face == kInvalid) || (m_edges[ve].src != v);
+        if (!dead) return;
+        m_verts[v].edge = kInvalid;
         for (uint32_t ei = 0; ei < static_cast<uint32_t>(m_edges.size()); ++ei) {
-            if (m_edges[ei].src == vKeep && m_edges[ei].face != kInvalid && m_edges[ei].next != kInvalid) {
-                m_verts[vKeep].edge = ei;
+            if (m_edges[ei].src == v && m_edges[ei].face != kInvalid && m_edges[ei].next != kInvalid) {
+                m_verts[v].edge = ei;
                 break;
             }
         }
-    }
+    };
+    repairVertexEdge(vKeep);
+    repairVertexEdge(vl);
+    repairVertexEdge(vr);
 
     m_verts[vRemove].edge = kInvalid;
 

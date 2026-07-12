@@ -6,6 +6,7 @@
 
 #include <cstdint>
 #include <optional>
+#include <string>
 #include <unordered_map>
 #include <vector>
 
@@ -26,6 +27,22 @@ public:
     bool isManifold() const;
     bool isClosed() const;
     bool isTriangulated() const;
+
+    // Connectivity-integrity validator. Unlike isManifold()/toMesh().isValid(),
+    // this inspects the raw half-edge invariants directly, walking only *live*
+    // elements (tombstoned edges have face==kInvalid; tombstoned faces have
+    // edge==kInvalid). It is the authoritative post-condition every Euler
+    // operator (flip/split/collapse) is expected to preserve. Counts refer to
+    // live elements only; `boundaryEdges` are live half-edges with no twin.
+    struct IntegrityReport {
+        bool ok = true;
+        std::string reason;      // first violation encountered; empty when ok
+        uint32_t liveEdges = 0;  // live directed half-edges
+        uint32_t liveFaces = 0;
+        uint32_t liveVerts = 0;  // vertices that are src of some live half-edge
+        uint32_t boundaryEdges = 0;
+    };
+    [[nodiscard]] IntegrityReport checkIntegrity() const;
 
     uint32_t edgeCount() const { return static_cast<uint32_t>(m_edges.size()); }
     uint32_t vertexCount() const { return static_cast<uint32_t>(m_verts.size()); }
