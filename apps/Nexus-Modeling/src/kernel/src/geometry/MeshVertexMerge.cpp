@@ -1,4 +1,5 @@
 #include <nexus/geometry/MeshVertexMerge.h>
+#include <nexus/geometry/Tolerance.h>
 #include <unordered_map>
 #include <cmath>
 
@@ -37,9 +38,12 @@ MergeReport MeshVertexMerge::mergeByDistance(HalfEdgeMesh& mesh, float tolerance
     MergeReport report;
     uint32_t removed = 0;
 
+    // Absolute-distance coincidence via the central Tolerance module (squared
+    // distance, no sqrt — friendlier under -ffast-math than the old .length()).
+    const Tolerance tol{tolerance, 0.f};
     for (size_t i = 0; i < positions.size(); ++i) {
         for (size_t j = i + 1; j < positions.size(); ++j) {
-            if ((positions[i] - positions[j]).length() < tolerance) {
+            if (coincident(positions[i], positions[j], tol)) {
                 mergeToVertex(mesh, (uint32_t)j, (uint32_t)i);
                 removed++;
             }

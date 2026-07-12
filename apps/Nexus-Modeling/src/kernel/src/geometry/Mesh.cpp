@@ -1,4 +1,5 @@
 #include <nexus/geometry/Mesh.h>
+#include <nexus/geometry/Tolerance.h>
 
 #include <algorithm>
 #include <bit>
@@ -56,12 +57,6 @@ float vec3Dot(const nexus::render::Vec3& a, const nexus::render::Vec3& b) noexce
 float vec3Length(const nexus::render::Vec3& v) noexcept
 {
     return std::sqrt(vec3Dot(v, v));
-}
-
-float vec3DistanceSq(const nexus::render::Vec3& a, const nexus::render::Vec3& b) noexcept
-{
-    const nexus::render::Vec3 delta = vec3Sub(a, b);
-    return vec3Dot(delta, delta);
 }
 
 nexus::render::Vec3 vec3Scale(const nexus::render::Vec3& v, float s) noexcept
@@ -193,7 +188,7 @@ bool vertexRowsEquivalent(const MeshAttributes& attributes,
                           size_t b,
                           float epsilon) noexcept
 {
-    if (vec3DistanceSq(attributes.positions()[a], attributes.positions()[b]) > epsilon * epsilon) {
+    if (!coincident(attributes.positions()[a], attributes.positions()[b], Tolerance{epsilon, 0.f})) {
         return false;
     }
     if (attributes.hasNormals()
