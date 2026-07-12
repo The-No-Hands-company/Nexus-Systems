@@ -45,7 +45,7 @@ The layer tables below measure **breadth** — is a feature *present*? This sect
 | Foundation pillar | Status | Reality (with evidence) |
 |---|---|---|
 | Exact geometric predicates | ✅ Solid | Adaptive-exact `orient2D/orient3D` (Shewchuk-style expansion arithmetic, float-fast-path→exact-fallback) in `RobustPredicates.cpp`; genuinely used by boolean/Delaunay/CDT/Voronoi |
-| Robust mesh boolean / CSG | ❌ Cosmetic *(foundation in progress)* | `BooleanOperation.cpp` still classifies whole triangles by centroid → jagged seams on coarse meshes. **Rebuild ~done, awaiting swap:** ① tri-tri **segment** ✓ · ② per-triangle **retriangulation** ✓ (also fixed a broken `ConstrainedDelaunay2D`) · ③ **whole-mesh cut** ✓ · ④ **classify+assemble+stitch** (`robustMeshBoolean`) ✓ — **PROVEN on coarse boxes**: union/intersection/difference give exact volumes (15/1/7) and watertight 2-manifold shells (Euler χ=2). Final step: swap `BooleanOperation` onto it (then this cell → Have) |
+| Robust mesh boolean / CSG | ✅ Solid | Real CSG pipeline — `TriTriIntersect` → `TriangleRetriangulate` → `MeshCut` → `robustMeshBoolean`, **now wired into `BooleanOperation`** (old whole-triangle classifier deleted). Watertight, 2-manifold, exact volumes on **coarse** boxes (union 15 / intersection 1 / difference 7, Euler χ=2). Also fixed a fully-broken `ConstrainedDelaunay2D` en route. Remaining: coplanar-overlap faces |
 | Unified topological core + Euler operators | 🟡 Fractured | Real half-edge (`HalfEdgeMesh`, twin/next/prev, `isManifold`) but an **island** — Bevel/Extrude/Inset/EdgeBridge run on raw indexed `Mesh`; **no Euler operators** (split/collapse/flip) |
 | Tolerance / units model | ❌ Missing | No central model; a dozen scattered scale-blind epsilons (`1e-10`×114, `1e-8`×37, `1e-12`×32, …) — same op misbehaves on a 0.5 mm part vs a 5 km terrain |
 | Manifold / degenerate handling | 🟡 Partial | `isManifold` + non-manifold gates + Euler-Poincaré exist, but not enforced through every op |
@@ -80,7 +80,7 @@ The layer tables below measure **breadth** — is a feature *present*? This sect
 | Edge slide / vertex slide | all | ✅ | — |
 | Knife / cut / section | all | ✅ | — |
 | Merge / weld / remove-doubles | all | ✅ | — |
-| Boolean (union/diff/intersect) + tolerant | all | 🟡 | **cosmetic** — whole-triangle centroid classify, no intersection-curve split → jagged seams, fails on coarse meshes (see Foundation track) |
+| Boolean (union/diff/intersect) + tolerant | all | ✅ | robust — splits along the intersection curve → watertight / 2-manifold / correct-volume on coarse meshes (`BooleanOperation` now uses the real CSG pipeline) |
 | Solidify / thicken / shell | all | ✅ | — |
 | Displace | all | ✅ | — |
 | Loop cut / ring | all | 🟡 | App mode exists; confirm kernel loop-cut op + n-cuts/slide |
