@@ -22,7 +22,10 @@ public:
 
     [[nodiscard]] static std::optional<HalfEdgeMesh> fromMesh(const Mesh& mesh);
 
-    Mesh toMesh() const;
+    // Converts back to an indexed Mesh. By default faces are fan-triangulated
+    // (most consumers expect triangles); pass triangulate=false to preserve the
+    // original n-gon faces (e.g. quad-preserving edit ops).
+    Mesh toMesh(bool triangulate = true) const;
 
     bool isManifold() const;
     bool isClosed() const;

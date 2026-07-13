@@ -100,7 +100,7 @@ std::optional<HalfEdgeMesh> HalfEdgeMesh::fromMesh(const Mesh& mesh) {
 
 // --- toMesh ------------------------------------------------------------------
 
-Mesh HalfEdgeMesh::toMesh() const {
+Mesh HalfEdgeMesh::toMesh(bool triangulate) const {
     Mesh mesh;
     const size_t nv = m_positions.size();
     mesh.attributes().setPositions(m_positions);
@@ -126,9 +126,16 @@ Mesh HalfEdgeMesh::toMesh() const {
             e = m_edges[e].next;
         } while (e != start);
 
-        for (size_t i = 2; i < verts.size(); ++i) {
+        if (verts.size() < 3) continue;
+        if (triangulate) {
+            for (size_t i = 2; i < verts.size(); ++i) {
+                Face f;
+                f.indices = {verts[0], verts[static_cast<uint32_t>(i) - 1], verts[i]};
+                mesh.topology().addFace(std::move(f));
+            }
+        } else {
             Face f;
-            f.indices = {verts[0], verts[static_cast<uint32_t>(i) - 1], verts[i]};
+            f.indices = std::move(verts);
             mesh.topology().addFace(std::move(f));
         }
     }

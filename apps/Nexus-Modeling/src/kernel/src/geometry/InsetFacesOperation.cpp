@@ -1,4 +1,5 @@
 #include <nexus/geometry/InsetFacesOperation.h>
+#include <nexus/geometry/HalfEdgeMesh.h>
 
 #include <algorithm>
 #include <cmath>
@@ -111,6 +112,52 @@ InsetReport InsetFacesOperation::applyToAllFaces(const Mesh&      input,
         report.diagnostic = InsetDiagnostic::InvalidInputMesh;
         report.messages.push_back("Input mesh has no geometry");
         return report;
+    }
+
+    // Fast path: route the common Factor + replaceOriginal case through the
+    // hardened half-edge core. HalfEdgeMesh::insetFace preserves the full
+    // attribute set and is integrity-proven (inner ring + border quads per
+    // face). Falls back to the raw index path below when the mesh isn't
+    // half-edge-constructible (non-manifold / duplicate-index faces).
+    if (desc.mode == InsetMode::Factor && desc.replaceOriginal) {
+        std::vector<uint32_t> faceSides(originalFaceCount);
+        for (size_t fi = 0; fi < originalFaceCount; ++fi) {
+            faceSides[fi] = static_cast<uint32_t>(input.topology().face(fi).indices.size());
+        }
+        if (auto hem = HalfEdgeMesh::fromMesh(input)) {
+            uint32_t inset = 0;
+            for (uint32_t fi = 0; fi < static_cast<uint32_t>(originalFaceCount); ++fi) {
+                if (faceSides[fi] >= 3u && hem->insetFace(fi, desc.amount)) ++inset;
+            }
+            if (inset > 0u) {
+                output = hem->toMesh(/*triangulate=*/false);  // preserve inner ring + quad borders
+                report.insetFaceCount   = inset;
+                report.addedVertexCount = static_cast<uint32_t>(
+                    output.attributes().vertexCount() - originalVertexCount);
+                report.addedFaceCount   = static_cast<uint32_t>(output.topology().faceCount());
+
+                if (desc.recomputeNormals) {
+                    if (!output.computeVertexNormals()) {
+                        report.diagnostic = report.diagnostic | InsetDiagnostic::NormalRebuildFailed;
+                        report.messages.push_back("Normal rebuild failed after inset");
+                    }
+                    output.attributes().clearTangents();
+                }
+                output.rebuildStableElementIds();
+                if (!output.isValid()) {
+                    report.diagnostic = report.diagnostic | InsetDiagnostic::OutputTopologyInvalid;
+                    report.messages.push_back("Output mesh topology is invalid");
+                    report.valid = false;
+                    return report;
+                }
+                report.diagnostic = (report.diagnostic == InsetDiagnostic::Success)
+                    ? InsetDiagnostic::Success
+                    : (report.diagnostic | InsetDiagnostic::SuccessWithWarnings);
+                report.valid = true;
+                return report;
+            }
+        }
+        // Not half-edge-constructible or nothing inset — fall through to raw path.
     }
 
     // Snapshot input (handles input == output aliasing)
