@@ -52,6 +52,7 @@ add_executable(nexus_kernel_tests
     kernel/test_HEMOperations.cpp
     kernel/test_HEMEulerIntegrity.cpp
     kernel/test_Tolerance.cpp
+    kernel/test_ManifoldEnforcement.cpp
     kernel/test_HardSurfaceWorkflow.cpp
     kernel/test_InsetFacesOperation.cpp
     kernel/test_Material.cpp
