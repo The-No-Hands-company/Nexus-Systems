@@ -210,6 +210,26 @@ TEST(HEMEulerIntegrity, EverySuccessfulConnectVerticesPreservesIntegrity)
     EXPECT_GT(connects, 0) << "no vertex pair accepted connectVertices — test is vacuous";
 }
 
+// insertEdgeLoop splits each edge of a loop and connects the new vertices,
+// cutting the crossed faces — the result must stay integrity-clean and (on a
+// closed solid) closed genus-0. Regression for the crossed split-edge twins and
+// the dangling addEdgePair cross edges in splitFacesAlongLoop.
+TEST(HEMEulerIntegrity, EverySuccessfulInsertEdgeLoopPreservesIntegrity)
+{
+    const HalfEdgeMesh base = quadBoxHE();
+    int loops = 0;
+    for (uint32_t e = 0; e < base.edgeCount(); ++e) {
+        HalfEdgeMesh hem = base;
+        if (!hem.insertEdgeLoop(e, 0.5f)) continue;
+        ++loops;
+        const auto r = hem.checkIntegrity();
+        ASSERT_TRUE(r.ok) << "insertEdgeLoop seed " << e << ": " << r.reason;
+        EXPECT_EQ(r.boundaryEdges, 0u) << "insertEdgeLoop opened a boundary, seed " << e;
+        EXPECT_EQ(closedEuler(r), 2u) << "insertEdgeLoop broke genus-0, seed " << e;
+    }
+    EXPECT_GT(loops, 0) << "no seed accepted insertEdgeLoop — test is vacuous";
+}
+
 // extrudeFaces (keepOriginal) pushes a face out and skirts it with wall quads;
 // on a closed solid the result stays closed genus-0 (the pushed face is the new
 // cap). Regression for the old addEdgePair misuse that mis-twinned the walls.

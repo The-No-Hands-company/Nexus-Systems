@@ -624,6 +624,8 @@ bool HalfEdgeMesh::insertEdgeLoop(uint32_t seedEdge, float slide) {
 
         uint32_t fA = m_edges[ei].face;
         uint32_t fB = m_edges[t].face;
+        uint32_t srcV = m_edges[ei].src;   // ei: srcV -> dstV
+        uint32_t dstV = m_edges[t].src;    // t : dstV -> srcV
 
         uint32_t e1 = static_cast<uint32_t>(m_edges.size());
         m_edges.push_back({}); m_edges.push_back({});
@@ -632,8 +634,8 @@ bool HalfEdgeMesh::insertEdgeLoop(uint32_t seedEdge, float slide) {
         uint32_t oldPrevA = m_edges[ei].prev;
         if (oldNextA >= m_edges.size() || oldPrevA >= m_edges.size()) continue;
 
-        m_edges[e1] = {e1+1, oldPrevA, kInvalid, m_edges[ei].src, fA};
-        m_edges[e1+1] = {oldNextA, e1, kInvalid, nv, fA};
+        m_edges[e1] = {e1+1, oldPrevA, kInvalid, srcV, fA};   // srcV -> nv
+        m_edges[e1+1] = {oldNextA, e1, kInvalid, nv, fA};      // nv   -> dstV
         if (oldPrevA < m_edges.size()) m_edges[oldPrevA].next = e1;
         if (oldNextA < m_edges.size()) m_edges[oldNextA].prev = e1+1;
 
@@ -644,10 +646,13 @@ bool HalfEdgeMesh::insertEdgeLoop(uint32_t seedEdge, float slide) {
         uint32_t oldPrevB = m_edges[t].prev;
         if (oldNextB >= m_edges.size() || oldPrevB >= m_edges.size()) continue;
 
-        m_edges[e2] = {e2+1, oldPrevB, e1, m_edges[t].src, fB};
-        m_edges[e2+1] = {oldNextB, e2, e1+1, nv, fB};
-        m_edges[e1].twin = e2;
-        m_edges[e1+1].twin = e2+1;
+        // Twin pairing must match directions: e1 (srcV->nv) opposes e2+1
+        // (nv->srcV), and e1+1 (nv->dstV) opposes e2 (dstV->nv). NOT the crossed
+        // e1<->e2 / e1+1<->e2+1 pairing (same bug class as insertEdgeVertex).
+        m_edges[e2] = {e2+1, oldPrevB, e1+1, dstV, fB};   // dstV -> nv
+        m_edges[e2+1] = {oldNextB, e2, e1, nv, fB};        // nv   -> srcV
+        m_edges[e1].twin = e2+1;
+        m_edges[e1+1].twin = e2;
 
         if (oldPrevB < m_edges.size()) m_edges[oldPrevB].next = e2;
         if (oldNextB < m_edges.size()) m_edges[oldNextB].prev = e2+1;
@@ -660,6 +665,9 @@ bool HalfEdgeMesh::insertEdgeLoop(uint32_t seedEdge, float slide) {
         if (fA < m_faces.size()) m_faces[fA].edge = e1;
         if (fB < m_faces.size()) m_faces[fB].edge = e2;
         m_verts[nv].edge = e1+1;
+        // Re-root the split endpoints off the now-dead ei / t.
+        if (srcV < m_verts.size() && m_verts[srcV].edge == ei) m_verts[srcV].edge = e1;
+        if (dstV < m_verts.size() && m_verts[dstV].edge == t) m_verts[dstV].edge = e2;
 
         updateEdgeMap(e1); updateEdgeMap(e1+1);
         updateEdgeMap(e2); updateEdgeMap(e2+1);
@@ -680,40 +688,19 @@ bool HalfEdgeMesh::insertEdgeLoop(uint32_t seedEdge, float slide) {
 bool HalfEdgeMesh::splitFacesAlongLoop(const std::vector<uint32_t>& newVerts) {
     if (newVerts.size() < 2) return false;
 
-    size_t initialEdges = m_edges.size();
-
+    // Each consecutive pair of loop vertices shares one crossed face; splitting
+    // that face along the diagonal is exactly connectVertices (which properly
+    // creates two faces with cross edges wired into their cycles). The previous
+    // implementation added a dangling, un-wired edge pair via addEdgePair and
+    // left the mesh integrity-broken.
+    bool any = false;
     for (size_t i = 0; i < newVerts.size(); ++i) {
         uint32_t vA = newVerts[i];
         uint32_t vB = newVerts[(i + 1) % newVerts.size()];
         if (vA == vB) continue;
-        if (findEdge(vA, vB) != kInvalid || findEdge(vB, vA) != kInvalid) continue;
-
-        // Find a face containing both vertices
-        uint32_t commonFace = kInvalid;
-        for (uint32_t fi = 0; fi < m_faces.size(); ++fi) {
-            if (m_faces[fi].edge == kInvalid) continue;
-            bool hasA = false, hasB = false;
-            uint32_t walk = m_faces[fi].edge;
-            uint32_t startWalk = walk;
-            uint32_t safety = 0;
-            do {
-                if (m_edges[walk].src == vA) hasA = true;
-                if (m_edges[walk].src == vB) hasB = true;
-                uint32_t nxt = m_edges[walk].next;
-                if (nxt == kInvalid || nxt >= m_edges.size()) break;
-                walk = nxt;
-                if (++safety > 256) break;
-            } while (walk != startWalk);
-            if (hasA && hasB) { commonFace = fi; break; }
-        }
-
-        if (commonFace == kInvalid || commonFace >= m_faces.size()) continue;
-
-        // Add cross edge to the existing face (does not split the face)
-        addEdgePair(vA, vB, commonFace);
+        if (connectVertices(vA, vB)) any = true;
     }
-
-    return m_edges.size() > initialEdges;
+    return any;
 }
 
 // --- slideEdgeLoop ----------------------------------------------------------
