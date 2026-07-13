@@ -40,6 +40,24 @@ TEST(ModifierStack, EmptyStackReturnsBaseUnchanged)
     EXPECT_EQ(out.topology().faceCount(), box.topology().faceCount());
 }
 
+// Foundation sweep: the evaluated result carries stable element IDs, whether
+// the stack is empty or ran modifiers (was previously skipped).
+TEST(ModifierStack, EvaluatedResultHasStableElementIds)
+{
+    Mesh box = makeBox(2.f, 2.f, 2.f);
+    ModifierStack empty;
+    empty.setBaseMesh(box);
+    EXPECT_TRUE(empty.evaluate().hasStableElementIds());
+
+    ModifierStack withMod;
+    withMod.setBaseMesh(box);
+    Modifier solid;
+    solid.type = ModifierType::Solidify;
+    solid.scalar = 0.1f;
+    withMod.addModifier(solid);
+    EXPECT_TRUE(withMod.evaluate().hasStableElementIds());
+}
+
 TEST(ModifierStack, EvaluateIsNonDestructive)
 {
     Mesh box = makeBox(2.f, 2.f, 2.f);

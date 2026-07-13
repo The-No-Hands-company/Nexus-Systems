@@ -130,6 +130,10 @@ BridgeReport EdgeBridge::bridge(
         }
     }
 
+    // Assign stable element IDs to the freshly-built bridge geometry so the
+    // output participates in ID-based selection/history like the other edit ops.
+    output.rebuildStableElementIds();
+
     report.success = true;
     return report;
 }

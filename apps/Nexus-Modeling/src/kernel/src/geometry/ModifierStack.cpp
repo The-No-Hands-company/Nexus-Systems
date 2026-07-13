@@ -184,6 +184,10 @@ Mesh ModifierStack::computeResult() const
             }
         }
     }
+    // Canonical stable element IDs on the evaluated result, so downstream
+    // ID-based selection/history sees a consistent, rebuilt set regardless of
+    // which modifiers ran (or none).
+    result.rebuildStableElementIds();
     return result;
 }
 

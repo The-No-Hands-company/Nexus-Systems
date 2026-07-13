@@ -24,6 +24,9 @@ TEST(EdgeBridge, BridgeTwoEqualLoopsCreatesQuads) {
     EXPECT_TRUE(report.success);
     EXPECT_GT(report.facesCreated, 0u);
     EXPECT_GT(output.topology().faceCount(), 0u);
+    // Foundation sweep: the bridge output carries stable element IDs like the
+    // other edit ops (was previously skipped).
+    EXPECT_TRUE(output.hasStableElementIds());
 }
 
 TEST(EdgeBridge, MismatchedLoopsInterpolates) {
