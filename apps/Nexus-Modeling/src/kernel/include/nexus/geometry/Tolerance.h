@@ -20,7 +20,24 @@
 
 #include <nexus/render/Camera.h>  // nexus::render::Vec3
 
+#include <bit>
+#include <cstdint>
+
 namespace nexus::geometry {
+
+// Canonical non-finite check for the geometry kernel. `-ffast-math` (enabled
+// project-wide) lets the compiler assume operands are finite, so std::isfinite /
+// std::isnan are unreliable — detect NaN and ±Inf by inspecting the IEEE-754
+// exponent field directly (all-ones exponent ⇒ non-finite). Public API entry
+// points use this to reject non-finite float inputs.
+[[nodiscard]] constexpr bool isFinite(float v) noexcept
+{
+    return (std::bit_cast<std::uint32_t>(v) & 0x7F800000u) != 0x7F800000u;
+}
+[[nodiscard]] constexpr bool isFinite(const nexus::render::Vec3& v) noexcept
+{
+    return isFinite(v.x) && isFinite(v.y) && isFinite(v.z);
+}
 
 struct Tolerance {
     // Absolute floor, in model units. Two magnitudes closer than this are

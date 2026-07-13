@@ -7,9 +7,36 @@
 
 #include <gtest/gtest.h>
 
+#include <bit>
+#include <cstdint>
+
 namespace nexus::geometry::testing {
 
 using nexus::render::Vec3;
+
+// Non-finite detection must survive -ffast-math. Construct NaN/±Inf via bit
+// patterns (not 0.0/0.0, which the optimizer may fold) so the test genuinely
+// exercises the bit-inspection path and guards against a regression to
+// std::isfinite (which -ffast-math renders unreliable).
+TEST(Tolerance, IsFiniteRejectsNonFiniteUnderFastMath)
+{
+    const float qnan = std::bit_cast<float>(0x7FC00000u);
+    const float posInf = std::bit_cast<float>(0x7F800000u);
+    const float negInf = std::bit_cast<float>(0xFF800000u);
+    EXPECT_FALSE(isFinite(qnan));
+    EXPECT_FALSE(isFinite(posInf));
+    EXPECT_FALSE(isFinite(negInf));
+
+    EXPECT_TRUE(isFinite(0.f));
+    EXPECT_TRUE(isFinite(-0.f));
+    EXPECT_TRUE(isFinite(1e30f));
+    EXPECT_TRUE(isFinite(-1e-30f));
+    EXPECT_TRUE(isFinite(std::bit_cast<float>(0x00000001u)));  // smallest denormal
+
+    EXPECT_TRUE(isFinite(Vec3{1.f, 2.f, 3.f}));
+    EXPECT_FALSE(isFinite(Vec3{1.f, qnan, 3.f}));
+    EXPECT_FALSE(isFinite(Vec3{posInf, 2.f, 3.f}));
+}
 
 TEST(Tolerance, DefaultsAreConfusionScale)
 {
