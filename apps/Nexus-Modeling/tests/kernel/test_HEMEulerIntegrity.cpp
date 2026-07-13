@@ -210,6 +210,60 @@ TEST(HEMEulerIntegrity, EverySuccessfulConnectVerticesPreservesIntegrity)
     EXPECT_GT(connects, 0) << "no vertex pair accepted connectVertices — test is vacuous";
 }
 
+// insetFace reuses the face as an inner ring bordered by n quads; it must stay
+// integrity-clean and closed genus-0 on a solid (χ-neutral: +n verts, +2n
+// edges, +n faces). This is the HEM-native inset primitive the raw-index
+// InsetFacesOperation will migrate onto.
+TEST(HEMEulerIntegrity, EverySuccessfulInsetFacePreservesIntegrity)
+{
+    const HalfEdgeMesh base = quadBoxHE();
+    int insets = 0;
+    for (uint32_t f = 0; f < base.faceCount(); ++f) {
+        HalfEdgeMesh hem = base;
+        if (!hem.insetFace(f, 0.5f)) continue;
+        ++insets;
+        const auto r = hem.checkIntegrity();
+        ASSERT_TRUE(r.ok) << "insetFace " << f << ": " << r.reason;
+        EXPECT_EQ(r.boundaryEdges, 0u) << "insetFace opened a boundary, face " << f;
+        EXPECT_EQ(closedEuler(r), 2u) << "insetFace broke genus-0, face " << f;
+    }
+    EXPECT_GT(insets, 0) << "no face accepted insetFace — test is vacuous";
+}
+
+// insetFace must interpolate and carry the FULL attribute set (tangents + skin
+// included) onto its new inner-ring vertices, so an attribute-aware edit op can
+// migrate onto it without losing data.
+TEST(HEMEulerIntegrity, InsetFacePreservesFullAttributes)
+{
+    Mesh box = makeBox(1.f, 1.f, 1.f);
+    const size_t nv0 = box.attributes().vertexCount();
+    std::vector<Vec4> tangents(nv0);
+    std::vector<JointIndex4> ji(nv0);
+    std::vector<JointWeight4> jw(nv0);
+    for (size_t i = 0; i < nv0; ++i) {
+        tangents[i] = Vec4{1.f, 0.f, 0.f, 1.f};
+        ji[i] = JointIndex4{static_cast<uint16_t>(i), 0u, 0u, 0u};
+        jw[i] = JointWeight4{1.f, 0.f, 0.f, 0.f};
+    }
+    box.attributes().setTangents(tangents);
+    box.attributes().setSkinning(ji, jw);
+
+    auto hem = HalfEdgeMesh::fromMesh(box);
+    ASSERT_TRUE(hem.has_value());
+    ASSERT_TRUE(hem->insetFace(0, 0.5f));
+    ASSERT_TRUE(hem->hasTangents());
+    ASSERT_TRUE(hem->hasSkinning());
+
+    const Mesh out = hem->toMesh();
+    // 8 original + 4 inner-ring vertices, all streams still per-vertex consistent
+    // (so toMesh's size guard emits them rather than dropping them).
+    EXPECT_EQ(out.attributes().vertexCount(), nv0 + 4u);
+    EXPECT_TRUE(out.attributes().hasTangents());
+    EXPECT_TRUE(out.attributes().hasSkinning());
+    EXPECT_EQ(out.attributes().tangents().size(), nv0 + 4u);
+    EXPECT_EQ(out.attributes().jointIndices().size(), nv0 + 4u);
+}
+
 // insertEdgeLoop splits each edge of a loop and connects the new vertices,
 // cutting the crossed faces — the result must stay integrity-clean and (on a
 // closed solid) closed genus-0. Regression for the crossed split-edge twins and

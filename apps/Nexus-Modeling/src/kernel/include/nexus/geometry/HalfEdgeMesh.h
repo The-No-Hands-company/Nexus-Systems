@@ -71,6 +71,10 @@ public:
     bool splitFacesAlongLoop(const std::vector<uint32_t>& newVerts);
 
     bool bevelVertex(uint32_t vertex, float distance);
+    // Insets one face toward its centroid by factor t in [0,1] (0 = no inset):
+    // the face becomes an inner ring, ringed by n border quads. Interpolates the
+    // full attribute set (position/uv/normal/tangent/skin) per new vertex.
+    bool insetFace(uint32_t faceIndex, float t);
     bool pokeFace(uint32_t faceIndex);
     bool connectVertices(uint32_t v0, uint32_t v1);
     bool gridFill(const std::vector<uint32_t>& boundaryLoop);

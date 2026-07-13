@@ -1248,6 +1248,101 @@ bool HalfEdgeMesh::bevelVertex(uint32_t vertex, float distance) {
     return true;
 }
 
+// --- insetFace ---------------------------------------------------------------
+//  Insets a face toward its centroid: the face slot is reused for the inner
+//  ring, and n border quads bridge the original perimeter to the inner ring.
+//  The perimeter half-edges are reused (keeping their external twins), so no
+//  neighbour topology changes — mirrors the pokeFace / extrude wiring idioms.
+
+bool HalfEdgeMesh::insetFace(uint32_t faceIndex, float t) {
+    if (faceIndex >= m_faces.size() || m_faces[faceIndex].edge == kInvalid) return false;
+    t = std::clamp(t, 0.f, 1.f);
+
+    // Walk the face: perimeter half-edges and vertices, in order.
+    std::vector<uint32_t> perim, fv;
+    uint32_t start = m_faces[faceIndex].edge, e = start, safety = 0;
+    do {
+        perim.push_back(e);
+        fv.push_back(m_edges[e].src);
+        uint32_t nxt = m_edges[e].next;
+        if (nxt == kInvalid || nxt >= m_edges.size()) break;
+        e = nxt;
+        if (++safety > 256) break;
+    } while (e != start);
+
+    const size_t n = fv.size();
+    if (n < 3) return false;
+    const float inv = 1.f / static_cast<float>(n);
+
+    // Face centroids for position + uv (attribute policy matches
+    // InsetFacesOperation: pos/uv lerp toward centroid, normal/tangent/skin copy).
+    Vec3 cpos{};
+    for (uint32_t v : fv) { cpos.x += m_positions[v].x; cpos.y += m_positions[v].y; cpos.z += m_positions[v].z; }
+    cpos = Vec3{cpos.x * inv, cpos.y * inv, cpos.z * inv};
+    Vec2 cuv{};
+    if (hasUVs()) { for (uint32_t v : fv) { cuv.u += m_uvs[v].u; cuv.v += m_uvs[v].v; } cuv = Vec2{cuv.u * inv, cuv.v * inv}; }
+
+    // Create the n inner-ring vertices with full attribute interpolation.
+    std::vector<uint32_t> iv(n);
+    for (size_t i = 0; i < n; ++i) {
+        uint32_t v = fv[i];
+        iv[i] = static_cast<uint32_t>(m_verts.size());
+        m_verts.push_back({kInvalid});
+        m_positions.push_back(Vec3{
+            m_positions[v].x + (cpos.x - m_positions[v].x) * t,
+            m_positions[v].y + (cpos.y - m_positions[v].y) * t,
+            m_positions[v].z + (cpos.z - m_positions[v].z) * t});
+        if (hasUVs()) m_uvs.push_back(Vec2{m_uvs[v].u + (cuv.u - m_uvs[v].u) * t,
+                                           m_uvs[v].v + (cuv.v - m_uvs[v].v) * t});
+        if (hasNormals()) m_normals.push_back(m_normals[v]);
+        if (hasTangents()) m_tangents.push_back(m_tangents[v]);
+        if (hasSkinning()) { m_jointIndices.push_back(m_jointIndices[v]); m_jointWeights.push_back(m_jointWeights[v]); }
+    }
+
+    // Allocate inner-ring edges ie[i] (iv_i -> iv_{i+1}) + per-quad qr/qt/ql.
+    std::vector<uint32_t> ie(n), qr(n), qt(n), ql(n);
+    auto push = [&](uint32_t s, uint32_t f) {
+        uint32_t idx = static_cast<uint32_t>(m_edges.size());
+        HEEdge he; he.src = s; he.face = f; m_edges.push_back(he);
+        return idx;
+    };
+    for (size_t i = 0; i < n; ++i) ie[i] = push(iv[i], faceIndex);  // inner face reuses the slot
+    std::vector<uint32_t> bq(n);
+    for (size_t i = 0; i < n; ++i) {
+        bq[i] = static_cast<uint32_t>(m_faces.size());
+        m_faces.push_back({});
+        uint32_t vNext = fv[(i + 1) % n];
+        qr[i] = push(vNext, bq[i]);          // v_{i+1} -> iv_{i+1}
+        qt[i] = push(iv[(i + 1) % n], bq[i]); // iv_{i+1} -> iv_i
+        ql[i] = push(iv[i], bq[i]);           // iv_i -> v_i
+    }
+
+    // Wire the inner face ring (ie[i] twins the quad top qt[i]).
+    for (size_t i = 0; i < n; ++i) {
+        uint32_t a = ie[i], nx = ie[(i + 1) % n], pv = ie[(i + n - 1) % n];
+        m_edges[a].next = nx; m_edges[a].prev = pv; m_edges[a].twin = qt[i];
+    }
+    m_faces[faceIndex].edge = ie[0];
+
+    // Wire each border quad: perim[i] -> qr[i] -> qt[i] -> ql[i].
+    for (size_t i = 0; i < n; ++i) {
+        uint32_t p = perim[i];
+        m_edges[p].face = bq[i]; m_edges[p].next = qr[i]; m_edges[p].prev = ql[i];
+        m_edges[qr[i]].next = qt[i]; m_edges[qr[i]].prev = p;   m_edges[qr[i]].twin = ql[(i + 1) % n];
+        m_edges[qt[i]].next = ql[i]; m_edges[qt[i]].prev = qr[i]; m_edges[qt[i]].twin = ie[i];
+        m_edges[ql[i]].next = p;     m_edges[ql[i]].prev = qt[i]; m_edges[ql[i]].twin = qr[(i + n - 1) % n];
+        m_faces[bq[i]].edge = p;
+    }
+
+    // Root vertices and refresh the edge map.
+    for (size_t i = 0; i < n; ++i) {
+        m_verts[iv[i]].edge = ie[i];
+        m_verts[fv[i]].edge = perim[i];
+        updateEdgeMap(ie[i]); updateEdgeMap(qr[i]); updateEdgeMap(qt[i]); updateEdgeMap(ql[i]); updateEdgeMap(perim[i]);
+    }
+    return true;
+}
+
 // --- pokeFace ----------------------------------------------------------------
 //  Creates a center vertex and fans the face into triangles.
 
