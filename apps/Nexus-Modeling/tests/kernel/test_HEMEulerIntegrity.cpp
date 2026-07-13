@@ -210,4 +210,34 @@ TEST(HEMEulerIntegrity, EverySuccessfulConnectVerticesPreservesIntegrity)
     EXPECT_GT(connects, 0) << "no vertex pair accepted connectVertices — test is vacuous";
 }
 
+// extrudeFaces (keepOriginal) pushes a face out and skirts it with wall quads;
+// on a closed solid the result stays closed genus-0 (the pushed face is the new
+// cap). Regression for the old addEdgePair misuse that mis-twinned the walls.
+TEST(HEMEulerIntegrity, EverySuccessfulExtrudeKeepPreservesIntegrity)
+{
+    const HalfEdgeMesh base = quadBoxHE();
+    int extrudes = 0;
+    for (uint32_t f = 0; f < base.faceCount(); ++f) {
+        HalfEdgeMesh hem = base;
+        if (!hem.extrudeFaces({f}, 0.5f, true)) continue;
+        ++extrudes;
+        const auto r = hem.checkIntegrity();
+        ASSERT_TRUE(r.ok) << "extrude keep face " << f << ": " << r.reason;
+        EXPECT_EQ(r.boundaryEdges, 0u) << "extrude keep opened a boundary, face " << f;
+        EXPECT_EQ(closedEuler(r), 2u) << "extrude keep broke genus-0, face " << f;
+    }
+    EXPECT_GT(extrudes, 0) << "no face accepted extrudeFaces — test is vacuous";
+}
+
+// extrudeFaces(keepOriginal=false) discards the cap, leaving an open skirt; it
+// must still be integrity-clean (boundary edges are expected, not a defect).
+TEST(HEMEulerIntegrity, ExtrudeDiscardOriginalIsIntegrityClean)
+{
+    HalfEdgeMesh hem = quadBoxHE();
+    ASSERT_TRUE(hem.extrudeFaces({0}, 0.5f, false));
+    const auto r = hem.checkIntegrity();
+    EXPECT_TRUE(r.ok) << r.reason;
+    EXPECT_GT(r.boundaryEdges, 0u) << "discarding the cap should open a boundary";
+}
+
 }  // namespace nexus::geometry::testing

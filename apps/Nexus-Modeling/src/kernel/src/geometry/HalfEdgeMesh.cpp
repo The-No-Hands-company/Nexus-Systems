@@ -1779,7 +1779,34 @@ bool HalfEdgeMesh::extrudeFaces(const std::vector<uint32_t>& faceIndices, float 
         oldToNew[v] = nv;
     }
 
-    // Phase 4: Create wall quads along boundary edges
+    // Phase 4: Create a wall quad along each boundary edge.
+    //
+    // For boundary edge he (src -> dst) with old external twin be.twin (dst ->
+    // src in the neighbour / boundary), the wall cycle is
+    //     wb: src -> dst      (bottom, re-twinned to be.twin)
+    //     wr: dst -> newDst    (right vertical)
+    //     wt: newDst -> newSrc (top, re-twinned to the cap edge he)
+    //     wl: newSrc -> src    (left vertical)
+    // Verticals are shared between adjacent walls (wr of one == reverse of wl of
+    // the next around a shared rim vertex) and are paired via a local reverse
+    // map. addEdgePair() is deliberately NOT used here: it would twin the two
+    // directions to each other on the same face, which is wrong for walls.
+    std::unordered_map<uint64_t, uint32_t> wallEdgeMap;
+    auto wkey = [](uint32_t a, uint32_t b) {
+        return (static_cast<uint64_t>(a) << 32) | static_cast<uint64_t>(b);
+    };
+    auto makeWallHE = [&](uint32_t s, uint32_t d, uint32_t face) -> uint32_t {
+        uint32_t idx = static_cast<uint32_t>(m_edges.size());
+        HEEdge he2; he2.src = s; he2.face = face; m_edges.push_back(he2);
+        auto it = wallEdgeMap.find(wkey(d, s));
+        if (it != wallEdgeMap.end()) {
+            m_edges[idx].twin = it->second;
+            m_edges[it->second].twin = idx;
+        }
+        wallEdgeMap[wkey(s, d)] = idx;
+        return idx;
+    };
+
     for (const auto& be : boundaryEdges) {
         uint32_t he = be.he;
         if (he >= m_edges.size()) continue;
@@ -1796,21 +1823,36 @@ bool HalfEdgeMesh::extrudeFaces(const std::vector<uint32_t>& faceIndices, float 
         uint32_t newSrc = itSrc->second;
         uint32_t newDst = itDst->second;
 
-        // Wall quad: src -> newSrc -> newDst -> dst (CCW when viewed from outside)
         uint32_t wallFace = static_cast<uint32_t>(m_faces.size());
         m_faces.push_back({});
 
-        uint32_t e0 = addEdgePair(src, newSrc, wallFace);
-        uint32_t e1 = addEdgePair(newSrc, newDst, wallFace);
-        uint32_t e2 = addEdgePair(newDst, dst, wallFace);
-        uint32_t e3 = addEdgePair(dst, src, wallFace);
+        uint32_t wb = makeWallHE(src, dst, wallFace);
+        uint32_t wr = makeWallHE(dst, newDst, wallFace);
+        uint32_t wt = makeWallHE(newDst, newSrc, wallFace);
+        uint32_t wl = makeWallHE(newSrc, src, wallFace);
 
-        m_edges[e0].next = e1; m_edges[e1].next = e2;
-        m_edges[e2].next = e3; m_edges[e3].next = e0;
-        m_edges[e0].prev = e3; m_edges[e1].prev = e0;
-        m_edges[e2].prev = e1; m_edges[e3].prev = e2;
+        m_edges[wb].next = wr; m_edges[wr].next = wt;
+        m_edges[wt].next = wl; m_edges[wl].next = wb;
+        m_edges[wb].prev = wl; m_edges[wr].prev = wb;
+        m_edges[wt].prev = wr; m_edges[wl].prev = wt;
+        m_faces[wallFace].edge = wb;
 
-        m_faces[wallFace].edge = e0;
+        // wb re-twins the old neighbour edge (open boundary => stays boundary).
+        if (be.twin != kInvalid && be.twin < m_edges.size()) {
+            m_edges[wb].twin = be.twin;
+            m_edges[be.twin].twin = wb;
+        }
+        // wt re-twins the cap edge he (Phase 5 remaps it to newSrc -> newDst).
+        m_edges[wt].twin = he;
+        m_edges[he].twin = wt;
+
+        // Rim/new vertices are rooted on live wall edges.
+        m_verts[src].edge = wb;
+        m_verts[dst].edge = wr;
+        m_verts[newDst].edge = wt;
+        m_verts[newSrc].edge = wl;
+
+        updateEdgeMap(wb); updateEdgeMap(wr); updateEdgeMap(wt); updateEdgeMap(wl);
     }
 
     // Phase 5: Remap selected faces to use offset vertices
@@ -1832,11 +1874,45 @@ bool HalfEdgeMesh::extrudeFaces(const std::vector<uint32_t>& faceIndices, float 
         } while (e != start);
     }
 
-    // Phase 6: Keep or remove original faces
+    // Phase 6: Keep or remove the original (now offset) cap faces.
+    // keepOriginal=false discards the cap, leaving an open-topped wall skirt.
+    // The cap half-edges must be tombstoned too (not just the face), and their
+    // wall-top twins (wt) re-opened to boundary — otherwise those walls point at
+    // a dead face / dead twin.
     if (!keepOriginal) {
         for (uint32_t fi : faceIndices) {
-            if (fi < m_faces.size()) {
-                m_faces[fi].edge = kInvalid;
+            if (fi >= m_faces.size() || m_faces[fi].edge == kInvalid) continue;
+            uint32_t start = m_faces[fi].edge;
+            uint32_t e = start;
+            uint32_t safety = 0;
+            do {
+                uint32_t nxt = m_edges[e].next;
+                uint32_t tw = m_edges[e].twin;
+                if (tw != kInvalid && tw < m_edges.size()) m_edges[tw].twin = kInvalid;
+                m_edges[e].face = kInvalid;
+                m_edges[e].twin = kInvalid;
+                if (nxt == kInvalid || nxt >= m_edges.size()) break;
+                e = nxt;
+                if (++safety > 256) break;
+            } while (e != start);
+            m_faces[fi].edge = kInvalid;
+        }
+    }
+
+    // Re-root any old selected vertex whose edge pointer went stale after the
+    // remap / cap removal. A vertex fully absorbed by its offset copy (interior
+    // of a multi-face selection) becomes orphaned (kInvalid); rim vertices point
+    // at their wall edges.
+    for (uint32_t v : selectedVerts) {
+        uint32_t cur = m_verts[v].edge;
+        const bool ok = cur != kInvalid && cur < m_edges.size() &&
+                        m_edges[cur].face != kInvalid && m_edges[cur].src == v;
+        if (ok) continue;
+        m_verts[v].edge = kInvalid;
+        for (uint32_t e = 0; e < static_cast<uint32_t>(m_edges.size()); ++e) {
+            if (m_edges[e].face != kInvalid && m_edges[e].src == v) {
+                m_verts[v].edge = e;
+                break;
             }
         }
     }
