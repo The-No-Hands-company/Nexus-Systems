@@ -78,6 +78,11 @@ public:
     // the face becomes an inner ring, ringed by n border quads. Interpolates the
     // full attribute set (position/uv/normal/tangent/skin) per new vertex.
     bool insetFace(uint32_t faceIndex, float t);
+    // Extrudes one face into a prism: the face slot becomes a new cap ring
+    // offset along the face normal by `distance`, ringed by n wall quads (the
+    // original base is not retained). Same topology as insetFace; cap vertices
+    // copy the full attribute set. Integrity-clean on a manifold input.
+    bool extrudeFacePrism(uint32_t faceIndex, float distance);
     bool pokeFace(uint32_t faceIndex);
     bool connectVertices(uint32_t v0, uint32_t v1);
     bool gridFill(const std::vector<uint32_t>& boundaryLoop);

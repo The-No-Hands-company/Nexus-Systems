@@ -1,6 +1,8 @@
 #include <nexus/geometry/ExtrudeOperation.h>
 #include <nexus/geometry/GeometryKernel.h>
+#include <nexus/geometry/HalfEdgeMesh.h>
 #include <nexus/geometry/Mesh.h>
+#include <nexus/geometry/MeshTopologyValidation.h>
 
 #include <gtest/gtest.h>
 
@@ -193,6 +195,42 @@ TEST(ExtrudeOperation, CapVerticesDisplacedByDistance)
     for (size_t i = 3; i < 6; ++i) {
         EXPECT_NEAR(pos[i].z, 1.f, 1e-5f);
     }
+}
+
+// keepOriginalFaces=false is routed through the hardened half-edge core
+// (HalfEdgeMesh::extrudeFacePrism). On a closed box the result must be a
+// watertight, half-edge-constructible (manifold) genus-0 shell of quads, with
+// the full attribute set carried through when normals aren't recomputed.
+TEST(ExtrudeOperation, OpenExtrudeRoutesThroughHalfEdgeCore)
+{
+    Mesh box = makeBox(1.f, 1.f, 1.f);
+    const size_t nv0 = box.attributes().vertexCount();
+    const size_t nf0 = box.topology().faceCount();
+
+    std::vector<Vec4> tan(nv0, Vec4{1.f, 0.f, 0.f, 1.f});
+    std::vector<JointIndex4> ji(nv0, JointIndex4{0u, 0u, 0u, 0u});
+    std::vector<JointWeight4> jw(nv0, JointWeight4{1.f, 0.f, 0.f, 0.f});
+    box.attributes().setTangents(tan);
+    box.attributes().setSkinning(ji, jw);
+
+    ExtrudeDesc desc{};
+    desc.distance          = 0.3f;
+    desc.keepOriginalFaces = false;
+    desc.recomputeNormals  = false;  // keep attributes intact
+
+    Mesh out;
+    const ExtrudeReport r = ExtrudeOperation::applyToAllFaces(box, desc, out);
+    ASSERT_TRUE(r.valid);
+    EXPECT_EQ(r.extrudedFaceCount, static_cast<uint32_t>(nf0));
+    // 6 cap quads + 6*4 wall quads = 30 quad faces (NOT triangulated).
+    EXPECT_EQ(out.topology().faceCount(), 30u);
+    EXPECT_EQ(out.attributes().vertexCount(), nv0 + 4u * nf0);
+    EXPECT_TRUE(out.isValid());
+    // Watertight + manifold (half-edge-constructible), closed genus-0.
+    EXPECT_TRUE(HalfEdgeMesh::fromMesh(out).has_value());
+    EXPECT_EQ(MeshTopologyValidation::validate(out).euler, 2);
+    EXPECT_TRUE(out.attributes().hasTangents());
+    EXPECT_TRUE(out.attributes().hasSkinning());
 }
 
 } // namespace nexus::geometry::testing

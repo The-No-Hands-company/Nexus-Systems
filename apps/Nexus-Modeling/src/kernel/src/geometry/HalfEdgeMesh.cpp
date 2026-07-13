@@ -1350,6 +1350,97 @@ bool HalfEdgeMesh::insetFace(uint32_t faceIndex, float t) {
     return true;
 }
 
+// --- extrudeFacePrism --------------------------------------------------------
+//  Same topology as insetFace (face slot -> new ring + n wall quads), but the
+//  new ring is the extruded cap: each cap vertex = original + faceNormal*dist,
+//  with the full attribute set copied (matching ExtrudeOperation's policy). The
+//  original base face is not retained (keepOriginalFaces=false semantics).
+
+bool HalfEdgeMesh::extrudeFacePrism(uint32_t faceIndex, float distance) {
+    if (faceIndex >= m_faces.size() || m_faces[faceIndex].edge == kInvalid) return false;
+
+    std::vector<uint32_t> perim, fv;
+    uint32_t start = m_faces[faceIndex].edge, e = start, safety = 0;
+    do {
+        perim.push_back(e);
+        fv.push_back(m_edges[e].src);
+        uint32_t nxt = m_edges[e].next;
+        if (nxt == kInvalid || nxt >= m_edges.size()) break;
+        e = nxt;
+        if (++safety > 256) break;
+    } while (e != start);
+
+    const size_t n = fv.size();
+    if (n < 3) return false;
+
+    // Face normal via Newell's method (robust for non-planar n-gons).
+    Vec3 nrm{};
+    for (size_t i = 0; i < n; ++i) {
+        const Vec3& cur = m_positions[fv[i]];
+        const Vec3& nxt = m_positions[fv[(i + 1) % n]];
+        nrm.x += (cur.y - nxt.y) * (cur.z + nxt.z);
+        nrm.y += (cur.z - nxt.z) * (cur.x + nxt.x);
+        nrm.z += (cur.x - nxt.x) * (cur.y + nxt.y);
+    }
+    const float len = std::sqrt(nrm.x * nrm.x + nrm.y * nrm.y + nrm.z * nrm.z);
+    if (len > 1e-20f) nrm = Vec3{nrm.x / len, nrm.y / len, nrm.z / len};
+    else nrm = Vec3{0.f, 1.f, 0.f};
+    const Vec3 off{nrm.x * distance, nrm.y * distance, nrm.z * distance};
+
+    // Cap-ring vertices: original + normal offset, full attribute copy.
+    std::vector<uint32_t> cv(n);
+    for (size_t i = 0; i < n; ++i) {
+        uint32_t v = fv[i];
+        cv[i] = static_cast<uint32_t>(m_verts.size());
+        m_verts.push_back({kInvalid});
+        m_positions.push_back(Vec3{m_positions[v].x + off.x, m_positions[v].y + off.y, m_positions[v].z + off.z});
+        if (hasUVs()) m_uvs.push_back(m_uvs[v]);
+        if (hasNormals()) m_normals.push_back(m_normals[v]);
+        if (hasTangents()) m_tangents.push_back(m_tangents[v]);
+        if (hasSkinning()) { m_jointIndices.push_back(m_jointIndices[v]); m_jointWeights.push_back(m_jointWeights[v]); }
+    }
+
+    // Same edge layout as insetFace: cap ring ce[i] (cv_i -> cv_{i+1}) reuses the
+    // face slot; per wall quad qr/qt/ql; perimeter edges are the quad bases.
+    std::vector<uint32_t> ce(n), qr(n), qt(n), ql(n);
+    auto push = [&](uint32_t s, uint32_t f) {
+        uint32_t idx = static_cast<uint32_t>(m_edges.size());
+        HEEdge he; he.src = s; he.face = f; m_edges.push_back(he);
+        return idx;
+    };
+    for (size_t i = 0; i < n; ++i) ce[i] = push(cv[i], faceIndex);
+    std::vector<uint32_t> bq(n);
+    for (size_t i = 0; i < n; ++i) {
+        bq[i] = static_cast<uint32_t>(m_faces.size());
+        m_faces.push_back({});
+        qr[i] = push(fv[(i + 1) % n], bq[i]);  // v_{i+1} -> cv_{i+1}
+        qt[i] = push(cv[(i + 1) % n], bq[i]);  // cv_{i+1} -> cv_i
+        ql[i] = push(cv[i], bq[i]);            // cv_i -> v_i
+    }
+
+    for (size_t i = 0; i < n; ++i) {
+        uint32_t a = ce[i], nx = ce[(i + 1) % n], pv = ce[(i + n - 1) % n];
+        m_edges[a].next = nx; m_edges[a].prev = pv; m_edges[a].twin = qt[i];
+    }
+    m_faces[faceIndex].edge = ce[0];
+
+    for (size_t i = 0; i < n; ++i) {
+        uint32_t p = perim[i];
+        m_edges[p].face = bq[i]; m_edges[p].next = qr[i]; m_edges[p].prev = ql[i];
+        m_edges[qr[i]].next = qt[i]; m_edges[qr[i]].prev = p;    m_edges[qr[i]].twin = ql[(i + 1) % n];
+        m_edges[qt[i]].next = ql[i]; m_edges[qt[i]].prev = qr[i]; m_edges[qt[i]].twin = ce[i];
+        m_edges[ql[i]].next = p;     m_edges[ql[i]].prev = qt[i]; m_edges[ql[i]].twin = qr[(i + n - 1) % n];
+        m_faces[bq[i]].edge = p;
+    }
+
+    for (size_t i = 0; i < n; ++i) {
+        m_verts[cv[i]].edge = ce[i];
+        m_verts[fv[i]].edge = perim[i];
+        updateEdgeMap(ce[i]); updateEdgeMap(qr[i]); updateEdgeMap(qt[i]); updateEdgeMap(ql[i]); updateEdgeMap(perim[i]);
+    }
+    return true;
+}
+
 // --- pokeFace ----------------------------------------------------------------
 //  Creates a center vertex and fans the face into triangles.
 

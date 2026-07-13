@@ -1,4 +1,5 @@
 #include <nexus/geometry/ExtrudeOperation.h>
+#include <nexus/geometry/HalfEdgeMesh.h>
 
 #include <algorithm>
 #include <cmath>
@@ -133,6 +134,53 @@ ExtrudeReport ExtrudeOperation::applyToAllFaces(const Mesh&        input,
         report.diagnostic = ExtrudeDiagnostic::InvalidInputMesh;
         report.messages.push_back("Input mesh has no geometry");
         return report;
+    }
+
+    // Fast path: keepOriginalFaces=false is a manifold per-face prism extrude —
+    // route it through the hardened half-edge core (extrudeFacePrism, integrity-
+    // proven, full attribute copy). keepOriginalFaces=true retains the base as an
+    // overlapping (non-manifold) prism the half-edge core can't represent, so it
+    // stays on the raw path below; likewise any input that isn't
+    // half-edge-constructible falls back.
+    if (!desc.keepOriginalFaces) {
+        std::vector<uint32_t> faceSides(originalFaceCount);
+        for (size_t fi = 0; fi < originalFaceCount; ++fi) {
+            faceSides[fi] = static_cast<uint32_t>(input.topology().face(fi).indices.size());
+        }
+        if (auto hem = HalfEdgeMesh::fromMesh(input)) {
+            uint32_t extruded = 0;
+            for (uint32_t fi = 0; fi < static_cast<uint32_t>(originalFaceCount); ++fi) {
+                if (faceSides[fi] >= 3u && hem->extrudeFacePrism(fi, desc.distance)) ++extruded;
+            }
+            if (extruded > 0u) {
+                output = hem->toMesh(/*triangulate=*/false);
+                report.extrudedFaceCount = extruded;
+                report.addedVertexCount  = static_cast<uint32_t>(
+                    output.attributes().vertexCount() - originalVertexCount);
+                report.addedFaceCount    = static_cast<uint32_t>(output.topology().faceCount());
+
+                if (desc.recomputeNormals) {
+                    if (!output.computeVertexNormals()) {
+                        report.diagnostic = report.diagnostic | ExtrudeDiagnostic::NormalRebuildFailed;
+                        report.messages.push_back("Normal rebuild failed after extrusion");
+                    }
+                    output.attributes().clearTangents();
+                }
+                output.rebuildStableElementIds();
+                if (!output.isValid()) {
+                    report.diagnostic = report.diagnostic | ExtrudeDiagnostic::OutputTopologyInvalid;
+                    report.messages.push_back("Output mesh topology is invalid");
+                    report.valid = false;
+                    return report;
+                }
+                report.diagnostic = (report.diagnostic == ExtrudeDiagnostic::Success)
+                    ? ExtrudeDiagnostic::Success
+                    : (report.diagnostic | ExtrudeDiagnostic::SuccessWithWarnings);
+                report.valid = true;
+                return report;
+            }
+        }
+        // Not half-edge-constructible or nothing extruded — fall through to raw.
     }
 
     // Snapshot all input data before writing to output (handles input == output)
