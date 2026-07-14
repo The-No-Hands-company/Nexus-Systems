@@ -1041,6 +1041,78 @@ Body::PointContainment Body::classifyFace(uint32_t faceId, const Body& other, To
     return other.classifyPoint(faceCentroid(faceId), tol);
 }
 
+bool Body::transform(const nexus::render::Mat4& mat)
+{
+    using nexus::render::Vec4;
+    // Reject non-finite matrices up front (before any mutation).
+    for (int i = 0; i < 4; ++i)
+        for (int j = 0; j < 4; ++j)
+            if (!isFinite(mat.m[i][j])) return false;
+    // The bottom row must be affine [0 0 0 1].
+    if (mat.m[3][0] != 0.f || mat.m[3][1] != 0.f || mat.m[3][2] != 0.f || mat.m[3][3] != 1.f)
+        return false;
+    // NURBS-backed faces store control points we do not transform here — a follow-up.
+    if (!m_nurbsSurfaces.empty()) return false;
+
+    // Linear part columns (image of the basis vectors). Require a proper rotation
+    // times a single UNIFORM scale: equal-length, mutually orthogonal, det > 0.
+    const Vec3 a0{mat.m[0][0], mat.m[1][0], mat.m[2][0]};
+    const Vec3 a1{mat.m[0][1], mat.m[1][1], mat.m[2][1]};
+    const Vec3 a2{mat.m[0][2], mat.m[1][2], mat.m[2][2]};
+    const float s0 = length(a0), s1 = length(a1), s2 = length(a2);
+    if (s0 < 1e-12f || s1 < 1e-12f || s2 < 1e-12f) return false;
+    const float sTol = 1e-4f * s0;
+    if (std::abs(s0 - s1) > sTol || std::abs(s0 - s2) > sTol) return false;  // non-uniform
+    const float oTol = 1e-4f * s0 * s0;
+    if (std::abs(dot(a0, a1)) > oTol || std::abs(dot(a0, a2)) > oTol ||
+        std::abs(dot(a1, a2)) > oTol)
+        return false;  // shear
+    if (dot(a0, cross(a1, a2)) <= 0.f) return false;  // reflection / degenerate
+    const float s = s0;  // uniform scale factor
+
+    auto xformPoint = [&](const Vec3& p) {
+        const Vec4 r = mat * Vec4{p.x, p.y, p.z, 1.f};
+        return Vec3{r.x, r.y, r.z};
+    };
+    // Direction: linear part only, renormalized (proper rotation ⇒ unit preserved).
+    auto xformDir = [&](const Vec3& d) {
+        const Vec4 r = mat * Vec4{d.x, d.y, d.z, 0.f};
+        return normalize(Vec3{r.x, r.y, r.z});
+    };
+
+    for (auto& v : m_verts) v.point = xformPoint(v.point);
+    for (auto& c : m_curves) {
+        c.origin = xformPoint(c.origin);
+        c.dir = xformDir(c.dir);
+        c.ref = xformDir(c.ref);
+        c.radius *= s;  // Circle radius scales; Line ignores radius
+    }
+    // Line edge params are arc-length (distance) ⇒ scale by s; Circle params are
+    // angles ⇒ preserved. (Curve::eval then still reproduces the endpoints.)
+    for (auto& e : m_edges) {
+        if (e.curve < m_curves.size() && m_curves[e.curve].kind == CurveKind::Line) {
+            e.t0 *= s;
+            e.t1 *= s;
+        }
+    }
+    for (auto& sf : m_surfaces) {
+        sf.origin = xformPoint(sf.origin);
+        sf.normal = xformDir(sf.normal);
+        sf.uAxis = xformDir(sf.uAxis);
+        sf.radius *= s;  // Cylinder / Sphere radius; Plane ignores radius
+    }
+    return true;
+}
+
+bool Body::translate(const Vec3& t)
+{
+    nexus::render::Mat4 m = nexus::render::Mat4::identity();
+    m.m[0][3] = t.x;
+    m.m[1][3] = t.y;
+    m.m[2][3] = t.z;
+    return transform(m);
+}
+
 // ──────────── Tessellation ───────────────────────────────────────────────────
 
 Mesh Body::toMesh(uint32_t subdivisions) const

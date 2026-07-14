@@ -257,6 +257,21 @@ public:
     [[nodiscard]] PointContainment classifyFace(uint32_t faceId, const Body& other,
                                                 Tolerance tol = {}) const;
 
+    // Apply an affine transform to the WHOLE body — vertex points AND every
+    // analytic Curve (Line/Circle) and Surface (Plane/Cylinder/Sphere) frame —
+    // so both validators stay clean afterward (moving only the vertices would
+    // leave the curves/surfaces stale and corrupt toMesh). The linear part must
+    // be a proper rotation optionally times a UNIFORM scale (radii and Line
+    // param ranges scale by that factor; Circle angles are preserved); shear,
+    // non-uniform scale and reflections are not representable on the analytic
+    // geometry. Returns false — leaving the body unchanged — for a non-finite
+    // matrix, an unsupported linear part, or a body with NURBS-backed faces (a
+    // follow-up). Deterministic.
+    bool transform(const nexus::render::Mat4& m);
+
+    // Pure-translation shortcut for transform().
+    bool translate(const Vec3& t);
+
     // Evaluates a face's surface at (u,v), dispatching to the stored NURBS
     // surface when the face is on one, else to the analytic Surface::eval.
     [[nodiscard]] Vec3 surfacePoint(uint32_t surfaceId, float u, float v) const;
