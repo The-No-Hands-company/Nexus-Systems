@@ -1025,6 +1025,22 @@ Body::PointContainment Body::classifyPoint(const Vec3& p, Tolerance tol) const
     return (crossings & 1) ? PointContainment::Inside : PointContainment::Outside;
 }
 
+Vec3 Body::faceCentroid(uint32_t faceId) const
+{
+    const std::vector<uint32_t> vs = faceVertices(faceId);
+    if (vs.empty()) return {};
+    Vec3 c{0.f, 0.f, 0.f};
+    for (uint32_t v : vs)
+        if (v < m_verts.size()) c = add(c, m_verts[v].point);
+    return scale(c, 1.f / static_cast<float>(vs.size()));
+}
+
+Body::PointContainment Body::classifyFace(uint32_t faceId, const Body& other, Tolerance tol) const
+{
+    if (faceId >= m_faces.size() || !m_faces[faceId].alive) return PointContainment::Outside;
+    return other.classifyPoint(faceCentroid(faceId), tol);
+}
+
 // ──────────── Tessellation ───────────────────────────────────────────────────
 
 Mesh Body::toMesh(uint32_t subdivisions) const

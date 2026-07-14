@@ -243,6 +243,20 @@ public:
     // a body with no faces.
     [[nodiscard]] PointContainment classifyPoint(const Vec3& p, Tolerance tol = {}) const;
 
+    // A representative interior point of a face — the average of its outer-loop
+    // vertices. For a planar face this centroid lies exactly on the face (and,
+    // for the convex faces the boolean produces, inside it); it is the sample
+    // point used to classify the face against another solid.
+    [[nodiscard]] Vec3 faceCentroid(uint32_t faceId) const;
+
+    // Classify a whole face against another solid, via its centroid: Inside /
+    // Outside `other`, or OnBoundary when the centroid lies on other's boundary
+    // (coincident faces). This is the boolean's per-face keep/discard decision
+    // (imprint → classify each sub-face against the OTHER solid → select per op →
+    // sew). Returns Outside for a dead/invalid face.
+    [[nodiscard]] PointContainment classifyFace(uint32_t faceId, const Body& other,
+                                                Tolerance tol = {}) const;
+
     // Evaluates a face's surface at (u,v), dispatching to the stored NURBS
     // surface when the face is on one, else to the analytic Surface::eval.
     [[nodiscard]] Vec3 surfacePoint(uint32_t surfaceId, float u, float v) const;
