@@ -188,6 +188,12 @@ public:
     // (ΔV=-1, ΔE=-1, ΔF=0). Returns true on success. Round-trips with splitEdge.
     bool joinEdges(uint32_t vertexId);
 
+    // Euler operator (inverse of splitFace / kill-edge-face) — remove the shared
+    // edge between two adjacent faces, splicing their loops into one and merging
+    // the faces (tombstoning the removed edge/coedges/face/loop). χ-neutral
+    // (ΔV=0, ΔE=-1, ΔF=-1). Returns true on success. Round-trips with splitFace.
+    bool mergeFaces(uint32_t edgeId);
+
     // Validates that the analytic geometry is consistent with the topology:
     // every edge's curve reproduces its endpoint vertices over its param range,
     // all geometry is finite, surface normals are unit length, and partnered

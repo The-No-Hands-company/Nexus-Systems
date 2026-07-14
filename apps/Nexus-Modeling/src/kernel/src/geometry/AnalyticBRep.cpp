@@ -725,6 +725,75 @@ bool Body::joinEdges(uint32_t nv)
     return true;
 }
 
+bool Body::mergeFaces(uint32_t edgeId)
+{
+    const uint32_t C = static_cast<uint32_t>(m_coedges.size());
+    if (edgeId >= m_edges.size() || !m_edges[edgeId].alive) return false;
+
+    auto startV = [&](uint32_t c) { const Coedge& e = m_coedges[c]; return e.reversed ? m_edges[e.edge].v1 : m_edges[e.edge].v0; };
+
+    const uint32_t cA = m_edges[edgeId].coedge;
+    if (cA >= C || !m_coedges[cA].alive) return false;
+    const uint32_t cB = m_coedges[cA].partner;
+    if (cB == kInvalid || cB >= C || !m_coedges[cB].alive) return false;  // boundary edge
+
+    const uint32_t lA = m_coedges[cA].loop, lB = m_coedges[cB].loop;
+    if (lA >= m_loops.size() || lB >= m_loops.size() || lA == lB) return false;
+    const uint32_t fA = m_loops[lA].face, fB = m_loops[lB].face;
+    if (fA == fB) return false;  // both coedges on one face (a seam/slit) — not a merge
+
+    const uint32_t pA = m_coedges[cA].prev, nA = m_coedges[cA].next;
+    const uint32_t pB = m_coedges[cB].prev, nB = m_coedges[cB].next;
+    // If either side would collapse (a face was a single-edge sliver), refuse.
+    if (pA == cA || nA == cA || pB == cB || nB == cB) return false;
+
+    // Collect loop B's coedges (excluding cB) before splicing, to re-home them.
+    std::vector<uint32_t> loopBCoedges;
+    {
+        uint32_t w = nB, guard = 0;
+        while (w != cB) {
+            loopBCoedges.push_back(w);
+            w = m_coedges[w].next;
+            if (++guard > C) return false;
+        }
+    }
+
+    // Splice the two rings into one by bypassing cA and cB:
+    //   cA.prev -> cB.next   and   cB.prev -> cA.next.
+    m_coedges[pA].next = nB; m_coedges[nB].prev = pA;
+    m_coedges[pB].next = nA; m_coedges[nA].prev = pB;
+
+    // Re-home loop B's coedges onto loop A (the surviving loop).
+    for (uint32_t c : loopBCoedges) m_coedges[c].loop = lA;
+    m_loops[lA].first = pA;  // pA is live and on loop A
+
+    // Tombstone the removed edge, its two coedges, face B and its loop.
+    m_edges[edgeId].alive = false;
+    m_coedges[cA].alive = false;
+    m_coedges[cB].alive = false;
+    m_faces[fB].alive = false;
+    m_loops[lB].alive = false;
+
+    // Drop face B from its shell's list (defensive: no dead id lingering).
+    const uint32_t sh = m_faces[fB].shell;
+    if (sh < m_shells.size()) {
+        auto& fs = m_shells[sh].faces;
+        fs.erase(std::remove(fs.begin(), fs.end(), fB), fs.end());
+    }
+
+    // Re-root the removed edge's endpoints onto a live outgoing coedge.
+    auto reroot = [&](uint32_t x) {
+        const uint32_t cur = m_verts[x].coedge;
+        if (cur < C && m_coedges[cur].alive && startV(cur) == x) return;
+        m_verts[x].coedge = kInvalid;
+        for (uint32_t c = 0; c < static_cast<uint32_t>(m_coedges.size()); ++c)
+            if (m_coedges[c].alive && startV(c) == x) { m_verts[x].coedge = c; break; }
+    };
+    reroot(m_edges[edgeId].v0);
+    reroot(m_edges[edgeId].v1);
+    return true;
+}
+
 // ──────────── Surface evaluation ─────────────────────────────────────────────
 
 Vec3 Body::surfacePoint(uint32_t surfaceId, float u, float v) const

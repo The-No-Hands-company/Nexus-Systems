@@ -389,6 +389,42 @@ TEST(AnalyticBRep, JoinEdgesRejectsNonDegree2Vertex)
     EXPECT_TRUE(box.checkIntegrity().ok); // unchanged
 }
 
+// mergeFaces is the inverse of splitFace (kill-edge-face): splitting a face then
+// merging along the new diagonal edge restores the exact LIVE counts and euler,
+// both validators clean — the loop-splice + tombstoning leave no dangling refs.
+TEST(AnalyticBRep, MergeFacesRoundTripsSplitFace)
+{
+    for (uint32_t f = 0; f < 6u; ++f) {
+        Body b = makeBox(2.f, 2.f, 2.f);
+        const auto orig = b.checkIntegrity();
+        const auto v = b.faceVertices(f);
+        ASSERT_GE(v.size(), 4u);
+        ASSERT_NE(b.splitFace(f, v[0], v[2]), kInvalid) << "face " << f;
+        const uint32_t diagonal = static_cast<uint32_t>(b.edgeCount()) - 1u;  // splitFace's new edge
+        ASSERT_TRUE(b.mergeFaces(diagonal)) << "face " << f;
+        const auto ti = b.checkIntegrity();
+        ASSERT_TRUE(ti.ok) << "face " << f << ": " << ti.reason;
+        const auto tg = b.checkGeometry();
+        ASSERT_TRUE(tg.ok) << "face " << f << ": " << tg.reason;
+        EXPECT_EQ(ti.vertices, orig.vertices) << "face " << f;  // live counts restored
+        EXPECT_EQ(ti.edges, orig.edges) << "face " << f;
+        EXPECT_EQ(ti.faces, orig.faces) << "face " << f;
+        EXPECT_EQ(ti.euler, 2) << "face " << f;
+    }
+}
+
+TEST(AnalyticBRep, MergeFacesRejectsBoundaryOrInvalid)
+{
+    Body box = makeBox(1.f, 1.f, 1.f);
+    EXPECT_FALSE(box.mergeFaces(9999u));  // invalid edge
+    // Every box edge is a manifold shared edge between two faces, so mergeFaces
+    // succeeds on it, but re-merging or invalid ids must fail.
+    Body b2 = makeBox(1.f, 1.f, 1.f);
+    ASSERT_TRUE(b2.mergeFaces(0));            // merge two adjacent box faces
+    EXPECT_TRUE(b2.checkIntegrity().ok);      // still a valid (open-ish) shell
+    EXPECT_FALSE(b2.mergeFaces(0));           // edge 0 is now dead → refused
+}
+
 TEST(AnalyticBRep, FromFacesRejectsMalformedInput)
 {
     // No points / no faces.
