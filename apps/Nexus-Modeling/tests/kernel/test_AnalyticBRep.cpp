@@ -465,6 +465,27 @@ TEST(AnalyticBRep, CylinderHasArcEdgesAndTessellatesOnSurface)
         EXPECT_NEAR(std::sqrt(p.x * p.x + p.y * p.y), radius, 1e-3f);
 }
 
+// Every sphere edge is a Circle arc (latitude rings + meridian great circles),
+// so the analytic sphere is exact and toMesh subdivides directly onto it: every
+// tessellated vertex sits on the sphere radius, at any resolution.
+TEST(AnalyticBRep, SphereHasAllArcEdgesAndTessellatesOnSurface)
+{
+    const float R = 2.f;
+    const Body sph = makeSphere(R, 6, 10);
+    EXPECT_TRUE(sph.checkIntegrity().ok);
+    EXPECT_TRUE(sph.checkGeometry().ok) << "arc-edge curves must still meet their vertices";
+
+    for (uint32_t e = 0; e < sph.edgeCount(); ++e)
+        EXPECT_EQ(sph.curve(sph.edge(e).curve).kind, CurveKind::Circle) << "edge " << e;
+
+    for (uint32_t s : {1u, 4u}) {
+        const Mesh m = sph.toMesh(s);
+        EXPECT_EQ(MeshTopologyValidation::validate(m).euler, 2) << "subdiv " << s;
+        for (const Vec3& p : m.attributes().positions())
+            EXPECT_NEAR(std::sqrt(p.x * p.x + p.y * p.y + p.z * p.z), R, 1e-3f) << "subdiv " << s;
+    }
+}
+
 TEST(AnalyticBRep, FromFacesRejectsMalformedInput)
 {
     // No points / no faces.

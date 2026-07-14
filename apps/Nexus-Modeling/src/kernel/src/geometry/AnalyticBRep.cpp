@@ -1110,7 +1110,24 @@ Body makeSphere(float radius, uint32_t latSegments, uint32_t lonSegments)
         defs.push_back(sphereFace({northPole, vid(topRing, j), vid(topRing, j + 1u)}));
 
     auto b = Body::fromFaces(pts, defs);
-    return b.has_value() ? std::move(*b) : Body{};
+    if (!b.has_value()) return Body{};
+    // Every sphere edge is a circle arc: latitude rings are small circles about
+    // the axis at their height; meridians (band verticals + pole spokes) are
+    // great circles through the sphere centre. Upgrading them makes toMesh
+    // tessellate exactly on the sphere.
+    for (uint32_t e = 0; e < static_cast<uint32_t>(b->edgeCount()); ++e) {
+        const Vec3& p0 = b->vertex(b->edge(e).v0).point;
+        const Vec3& p1 = b->vertex(b->edge(e).v1).point;
+        const float r0 = std::sqrt(p0.x * p0.x + p0.y * p0.y);
+        const float r1 = std::sqrt(p1.x * p1.x + p1.y * p1.y);
+        if (std::abs(p0.z - p1.z) < 1e-5f && std::abs(r0 - r1) < 1e-5f) {
+            b->setEdgeArc(e, {0.f, 0.f, p0.z}, {0.f, 0.f, 1.f}, r0);  // latitude ring
+        } else {
+            const Vec3 ax = normalize(cross(p0, p1));                 // meridian great circle
+            b->setEdgeArc(e, {0.f, 0.f, 0.f}, ax, radius);
+        }
+    }
+    return std::move(*b);
 }
 
 }  // namespace nexus::geometry::brep
