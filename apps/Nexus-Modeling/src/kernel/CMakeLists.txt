@@ -34,6 +34,7 @@ add_library(nexus_gfx_core STATIC
     src/geometry/BezierCurve.cpp
     src/geometry/BlendNetwork.cpp
     src/geometry/AnalyticBRep.cpp
+    src/geometry/BRepSurfaceIntersect.cpp
     src/geometry/BRepBody.cpp
     src/geometry/BooleanOperation.cpp
     src/geometry/ConstrainedDelaunay2D.cpp

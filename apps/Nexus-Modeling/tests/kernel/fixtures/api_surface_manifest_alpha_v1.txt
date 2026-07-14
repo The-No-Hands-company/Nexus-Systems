@@ -39,6 +39,7 @@ src/kernel/include/nexus/cad/CadViewer.h
 src/kernel/include/nexus/eval/EvalGraph.h
 src/kernel/include/nexus/geometry/AnalyticBRep.h
 src/kernel/include/nexus/geometry/BRepBody.h
+src/kernel/include/nexus/geometry/BRepSurfaceIntersect.h
 src/kernel/include/nexus/geometry/BevelChamfer.h
 src/kernel/include/nexus/geometry/BezierCurve.h
 src/kernel/include/nexus/geometry/BlendNetwork.h
