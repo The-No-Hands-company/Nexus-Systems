@@ -404,6 +404,96 @@ Body::GeometryReport Body::checkGeometry(Tolerance tol) const
     return r;
 }
 
+// ──────────── Euler operators ────────────────────────────────────────────────
+
+uint32_t Body::splitEdge(uint32_t edgeId, float t)
+{
+    if (edgeId >= m_edges.size()) return kInvalid;
+    const uint32_t curveId = m_edges[edgeId].curve;
+    const uint32_t v0 = m_edges[edgeId].v0;
+    const uint32_t v1 = m_edges[edgeId].v1;
+    if (curveId >= m_curves.size() || v0 >= m_verts.size() || v1 >= m_verts.size()) return kInvalid;
+    const float et0 = m_edges[edgeId].t0, et1 = m_edges[edgeId].t1;
+    t = std::clamp(t, 0.01f, 0.99f);
+    const float tm = et0 + (et1 - et0) * t;
+
+    // New vertex on the shared curve.
+    const uint32_t nv = static_cast<uint32_t>(m_verts.size());
+    {
+        Vertex vtx;
+        vtx.point = m_curves[curveId].eval(tm);
+        m_verts.push_back(vtx);
+    }
+
+    // Edge A reuses `edgeId` (v0 -> nv over [t0,tm]); edge B is new (nv -> v1).
+    const uint32_t edgeA = edgeId;
+    const uint32_t edgeB = static_cast<uint32_t>(m_edges.size());
+    {
+        Edge b;
+        b.curve = curveId;
+        b.v0 = nv;
+        b.v1 = v1;
+        b.t0 = tm;
+        b.t1 = et1;
+        m_edges.push_back(b);
+    }
+    m_edges[edgeA].v1 = nv;
+    m_edges[edgeA].t1 = tm;
+
+    // The (up to two) coedges over the original edge.
+    const uint32_t c = m_edges[edgeA].coedge;
+    if (c >= m_coedges.size()) return kInvalid;
+    const uint32_t p = m_coedges[c].partner;
+
+    // Split one coedge: reuse it as sub1, insert a sub2 after it in its loop.
+    // A forward coedge (reversed=false) reads v0->v1, so sub1 is over edge A and
+    // sub2 over edge B; a reversed coedge reads v1->v0, so sub1 is over edge B
+    // and sub2 over edge A. Returns sub2's id.
+    auto splitCoedge = [&](uint32_t ce) -> uint32_t {
+        const bool rev = m_coedges[ce].reversed;
+        const uint32_t oldNext = m_coedges[ce].next;
+        const uint32_t sub2 = static_cast<uint32_t>(m_coedges.size());
+        Coedge nc;
+        nc.reversed = rev;
+        nc.loop = m_coedges[ce].loop;
+        nc.prev = ce;
+        nc.next = oldNext;
+        nc.edge = rev ? edgeA : edgeB;
+        m_coedges.push_back(nc);
+        m_coedges[ce].next = sub2;
+        if (oldNext < m_coedges.size()) m_coedges[oldNext].prev = sub2;
+        m_coedges[ce].edge = rev ? edgeB : edgeA;
+        return sub2;
+    };
+
+    const uint32_t cNew = splitCoedge(c);
+    uint32_t pNew = kInvalid;
+    if (p != kInvalid && p < m_coedges.size()) pNew = splitCoedge(p);
+
+    // Of a (coedge, its new sub2) pair, which sub sits over edge A / edge B.
+    auto overA = [&](uint32_t ce, uint32_t ceNew) { return m_coedges[ce].reversed ? ceNew : ce; };
+    auto overB = [&](uint32_t ce, uint32_t ceNew) { return m_coedges[ce].reversed ? ce : ceNew; };
+
+    if (pNew != kInvalid) {
+        const uint32_t cA = overA(c, cNew), cB = overB(c, cNew);
+        const uint32_t pA = overA(p, pNew), pB = overB(p, pNew);
+        m_coedges[cA].partner = pA; m_coedges[pA].partner = cA;
+        m_coedges[cB].partner = pB; m_coedges[pB].partner = cB;
+    } else {
+        m_coedges[c].partner = kInvalid;
+        m_coedges[cNew].partner = kInvalid;
+    }
+
+    // Edge back-references and the new vertex's outgoing coedge.
+    m_edges[edgeA].coedge = overA(c, cNew);
+    m_edges[edgeB].coedge = overB(c, cNew);
+    // The coedge that starts at nv: over edge B if c is forward (nv->v1), over
+    // edge A if c is reversed (nv->v0).
+    m_verts[nv].coedge = m_coedges[c].reversed ? overA(c, cNew) : overB(c, cNew);
+
+    return nv;
+}
+
 // ──────────── Surface evaluation ─────────────────────────────────────────────
 
 Vec3 Body::surfacePoint(uint32_t surfaceId, float u, float v) const

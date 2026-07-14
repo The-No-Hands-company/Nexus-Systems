@@ -241,6 +241,40 @@ TEST(AnalyticBRep, SurfacePointUsesAnalyticEvalForPlaneFaces)
     }
 }
 
+// Euler operator splitEdge: inserting a vertex on any edge is χ-neutral
+// (ΔV=+1, ΔE=+1, ΔF=0 ⇒ euler unchanged) and preserves BOTH validators — the
+// topology stays a watertight coedge-partnered solid and the geometry stays
+// consistent (new edges share the curve; new vertex lies on it).
+TEST(AnalyticBRep, SplitEdgePreservesBothValidatorsAndEuler)
+{
+    auto exercise = [](const Body& base) {
+        for (uint32_t e = 0; e < base.edgeCount(); ++e) {
+            Body b = base;
+            const auto before = b.checkIntegrity();
+            const uint32_t nv = b.splitEdge(e, 0.5f);
+            ASSERT_NE(nv, kInvalid) << "edge " << e;
+            const auto ti = b.checkIntegrity();
+            ASSERT_TRUE(ti.ok) << "edge " << e << ": " << ti.reason;
+            const auto tg = b.checkGeometry();
+            ASSERT_TRUE(tg.ok) << "edge " << e << ": " << tg.reason;
+            EXPECT_EQ(ti.euler, before.euler) << "edge " << e;        // χ-neutral
+            EXPECT_EQ(ti.vertices, before.vertices + 1u) << "edge " << e;
+            EXPECT_EQ(ti.edges, before.edges + 1u) << "edge " << e;
+            EXPECT_EQ(ti.faces, before.faces) << "edge " << e;
+            EXPECT_EQ(ti.boundaryEdges, before.boundaryEdges) << "edge " << e;
+        }
+    };
+    exercise(makeBox(2.f, 2.f, 2.f));
+    exercise(makeCylinder(1.f, 2.f, 8));
+    exercise(makeSphere(1.f, 4, 6));
+}
+
+TEST(AnalyticBRep, SplitEdgeRejectsInvalidEdge)
+{
+    Body box = makeBox(1.f, 1.f, 1.f);
+    EXPECT_EQ(box.splitEdge(9999u, 0.5f), kInvalid);
+}
+
 TEST(AnalyticBRep, FromFacesRejectsMalformedInput)
 {
     // No points / no faces.

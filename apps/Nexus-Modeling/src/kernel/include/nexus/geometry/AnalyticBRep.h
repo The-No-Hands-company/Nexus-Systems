@@ -161,6 +161,13 @@ public:
     // Direct half-edge/analytic-invariant validation over all entities.
     [[nodiscard]] IntegrityReport checkIntegrity() const;
 
+    // Euler operator — split an edge at parameter t in (0,1): inserts a vertex
+    // on the edge's curve, replacing the edge with two edges sharing the curve
+    // over restricted param ranges, and splitting the coedge(s) on the incident
+    // face(s) accordingly. χ-neutral (ΔV=+1, ΔE=+1, ΔF=0). Returns the new
+    // vertex id, or kInvalid on failure. Preserves checkIntegrity + checkGeometry.
+    uint32_t splitEdge(uint32_t edgeId, float t);
+
     // Validates that the analytic geometry is consistent with the topology:
     // every edge's curve reproduces its endpoint vertices over its param range,
     // all geometry is finite, surface normals are unit length, and partnered
