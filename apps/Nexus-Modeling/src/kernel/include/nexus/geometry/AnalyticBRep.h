@@ -182,6 +182,12 @@ public:
     // The vertices of a face's outer loop, in order (for queries / editing).
     [[nodiscard]] std::vector<uint32_t> faceVertices(uint32_t faceId) const;
 
+    // Euler operator (inverse of splitEdge / kill-edge-vertex) — remove a
+    // degree-2 vertex whose two incident edges share a curve, merging them into
+    // one edge (dead entities are tombstoned + unlinked). χ-neutral
+    // (ΔV=-1, ΔE=-1, ΔF=0). Returns true on success. Round-trips with splitEdge.
+    bool joinEdges(uint32_t vertexId);
+
     // Validates that the analytic geometry is consistent with the topology:
     // every edge's curve reproduces its endpoint vertices over its param range,
     // all geometry is finite, surface normals are unit length, and partnered

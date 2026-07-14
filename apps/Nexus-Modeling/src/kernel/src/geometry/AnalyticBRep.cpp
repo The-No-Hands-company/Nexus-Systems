@@ -632,6 +632,99 @@ uint32_t Body::splitFace(uint32_t faceId, uint32_t vA, uint32_t vB)
     return faceB;
 }
 
+bool Body::joinEdges(uint32_t nv)
+{
+    const uint32_t C = static_cast<uint32_t>(m_coedges.size());
+    if (nv >= m_verts.size() || !m_verts[nv].alive) return false;
+
+    auto startV = [&](uint32_t c) { const Coedge& e = m_coedges[c]; return e.reversed ? m_edges[e.edge].v1 : m_edges[e.edge].v0; };
+    auto endV   = [&](uint32_t c) { const Coedge& e = m_coedges[c]; return e.reversed ? m_edges[e.edge].v0 : m_edges[e.edge].v1; };
+
+    // The two live edges incident to nv (must be exactly two, same curve).
+    uint32_t e1 = kInvalid, e2 = kInvalid;
+    for (uint32_t e = 0; e < m_edges.size(); ++e) {
+        if (!m_edges[e].alive) continue;
+        if (m_edges[e].v0 == nv || m_edges[e].v1 == nv) {
+            if (e1 == kInvalid) e1 = e;
+            else if (e2 == kInvalid) e2 = e;
+            else return false;  // degree > 2
+        }
+    }
+    if (e1 == kInvalid || e2 == kInvalid) return false;
+    if (m_edges[e1].curve != m_edges[e2].curve) return false;  // not collinear
+
+    // Non-nv endpoints and their curve parameters.
+    const uint32_t a1 = (m_edges[e1].v0 == nv) ? m_edges[e1].v1 : m_edges[e1].v0;
+    const float    pa1 = (m_edges[e1].v0 == nv) ? m_edges[e1].t1 : m_edges[e1].t0;
+    const uint32_t a2 = (m_edges[e2].v0 == nv) ? m_edges[e2].v1 : m_edges[e2].v0;
+    const float    pa2 = (m_edges[e2].v0 == nv) ? m_edges[e2].t1 : m_edges[e2].t0;
+    if (a1 == a2) return false;  // would collapse to a duplicate/degenerate edge
+
+    const uint32_t vLow  = (pa1 < pa2) ? a1 : a2;
+    const uint32_t vHigh = (pa1 < pa2) ? a2 : a1;
+    const float    tLow  = (pa1 < pa2) ? pa1 : pa2;
+    const float    tHigh = (pa1 < pa2) ? pa2 : pa1;
+
+    // Merge pairs: each coedge that ENDS at nv (over e1 or e2), with its next
+    // (which starts at nv over the other edge). One pair per incident face.
+    struct Pair { uint32_t ceIn, ceOut, sIn; };
+    std::vector<Pair> pairs;
+    for (uint32_t c = 0; c < C; ++c) {
+        if (!m_coedges[c].alive) continue;
+        const uint32_t ed = m_coedges[c].edge;
+        if (ed != e1 && ed != e2) continue;
+        if (endV(c) != nv) continue;
+        const uint32_t ceOut = m_coedges[c].next;
+        if (ceOut >= C || !m_coedges[ceOut].alive || startV(ceOut) != nv) return false;
+        pairs.push_back({c, ceOut, startV(c)});
+    }
+    if (pairs.empty() || pairs.size() > 2) return false;
+
+    const uint32_t survivor = e1;
+    std::vector<uint32_t> merged;
+    for (const Pair& pr : pairs) {
+        const uint32_t on = m_coedges[pr.ceOut].next;
+        m_coedges[pr.ceIn].edge = survivor;
+        m_coedges[pr.ceIn].reversed = (pr.sIn == vHigh);
+        m_coedges[pr.ceIn].next = on;
+        if (on < C) m_coedges[on].prev = pr.ceIn;
+        const uint32_t lp = m_coedges[pr.ceIn].loop;
+        if (lp < m_loops.size() && m_loops[lp].first == pr.ceOut) m_loops[lp].first = pr.ceIn;
+        m_coedges[pr.ceOut].alive = false;
+        merged.push_back(pr.ceIn);
+    }
+
+    // Survivor edge now spans vLow -> vHigh over [tLow, tHigh].
+    m_edges[survivor].v0 = vLow;
+    m_edges[survivor].v1 = vHigh;
+    m_edges[survivor].t0 = tLow;
+    m_edges[survivor].t1 = tHigh;
+    m_edges[survivor].coedge = merged[0];
+
+    if (merged.size() == 2) {
+        m_coedges[merged[0]].partner = merged[1];
+        m_coedges[merged[1]].partner = merged[0];
+    } else {
+        m_coedges[merged[0]].partner = kInvalid;
+    }
+
+    // Tombstone the removed vertex + edge.
+    m_edges[e2].alive = false;
+    m_verts[nv].alive = false;
+
+    // Re-root the surviving endpoints onto a live outgoing coedge.
+    auto reroot = [&](uint32_t x) {
+        const uint32_t cur = m_verts[x].coedge;
+        if (cur < C && m_coedges[cur].alive && startV(cur) == x) return;
+        m_verts[x].coedge = kInvalid;
+        for (uint32_t c = 0; c < static_cast<uint32_t>(m_coedges.size()); ++c)
+            if (m_coedges[c].alive && startV(c) == x) { m_verts[x].coedge = c; break; }
+    };
+    reroot(vLow);
+    reroot(vHigh);
+    return true;
+}
+
 // ──────────── Surface evaluation ─────────────────────────────────────────────
 
 Vec3 Body::surfacePoint(uint32_t surfaceId, float u, float v) const

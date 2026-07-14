@@ -352,6 +352,43 @@ TEST(AnalyticBRep, LivenessAwareValidatorsNoRegression)
     }
 }
 
+// joinEdges is the inverse of splitEdge (kill-edge-vertex): splitting an edge
+// then joining at the new vertex restores the exact LIVE counts and euler, with
+// both validators clean — the tombstoned entities leave no dangling references
+// (the liveness guard would fire otherwise).
+TEST(AnalyticBRep, JoinEdgesRoundTripsSplitEdge)
+{
+    auto exercise = [](const Body& base) {
+        const auto orig = base.checkIntegrity();
+        for (uint32_t e = 0; e < base.edgeCount(); ++e) {
+            Body b = base;
+            const uint32_t nv = b.splitEdge(e, 0.4f);
+            ASSERT_NE(nv, kInvalid) << "edge " << e;
+            ASSERT_TRUE(b.joinEdges(nv)) << "edge " << e;
+            const auto ti = b.checkIntegrity();
+            ASSERT_TRUE(ti.ok) << "edge " << e << ": " << ti.reason;
+            const auto tg = b.checkGeometry();
+            ASSERT_TRUE(tg.ok) << "edge " << e << ": " << tg.reason;
+            EXPECT_EQ(ti.vertices, orig.vertices) << "edge " << e;  // live counts restored
+            EXPECT_EQ(ti.edges, orig.edges) << "edge " << e;
+            EXPECT_EQ(ti.faces, orig.faces) << "edge " << e;
+            EXPECT_EQ(ti.euler, 2) << "edge " << e;
+        }
+    };
+    exercise(makeBox(2.f, 2.f, 2.f));
+    exercise(makeCylinder(1.f, 2.f, 8));
+    exercise(makeSphere(1.f, 4, 6));
+}
+
+// A corner of a box has degree 3, not 2 — joinEdges must refuse it.
+TEST(AnalyticBRep, JoinEdgesRejectsNonDegree2Vertex)
+{
+    Body box = makeBox(1.f, 1.f, 1.f);
+    EXPECT_FALSE(box.joinEdges(0));       // a cube corner (degree 3)
+    EXPECT_FALSE(box.joinEdges(9999u));   // invalid vertex
+    EXPECT_TRUE(box.checkIntegrity().ok); // unchanged
+}
+
 TEST(AnalyticBRep, FromFacesRejectsMalformedInput)
 {
     // No points / no faces.
