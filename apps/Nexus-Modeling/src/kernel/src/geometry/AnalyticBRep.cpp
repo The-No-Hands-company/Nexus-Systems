@@ -256,28 +256,35 @@ Body::IntegrityReport Body::checkIntegrity() const
     };
     auto startV = [&](uint32_t c) { const Coedge& e = m_coedges[c]; return e.reversed ? m_edges[e.edge].v1 : m_edges[e.edge].v0; };
     auto endV   = [&](uint32_t c) { const Coedge& e = m_coedges[c]; return e.reversed ? m_edges[e.edge].v0 : m_edges[e.edge].v1; };
+    // Liveness predicates: an entity is live iff in range AND its alive flag set.
+    auto vLive = [&](uint32_t i) { return i < V && m_verts[i].alive; };
+    auto eLive = [&](uint32_t i) { return i < E && m_edges[i].alive; };
+    auto cLive = [&](uint32_t i) { return i < C && m_coedges[i].alive; };
+    auto lLive = [&](uint32_t i) { return i < L && m_loops[i].alive; };
+    auto fLive = [&](uint32_t i) { return i < F && m_faces[i].alive; };
 
+    // Only LIVE edges are validated; a live edge must reference live vertices.
     for (uint32_t e = 0; e < E; ++e) {
+        if (!m_edges[e].alive) continue;
         const Edge& ed = m_edges[e];
         if (ed.curve >= m_curves.size()) return fail("edge " + std::to_string(e) + " has invalid curve");
-        if (ed.v0 >= V || ed.v1 >= V) return fail("edge " + std::to_string(e) + " has invalid vertex");
+        if (!vLive(ed.v0) || !vLive(ed.v1)) return fail("live edge " + std::to_string(e) + " references a dead/invalid vertex");
         if (ed.v0 == ed.v1) return fail("edge " + std::to_string(e) + " is degenerate (v0==v1)");
     }
 
     std::vector<uint32_t> coedgesPerEdge(E, 0u);
     for (uint32_t c = 0; c < C; ++c) {
+        if (!m_coedges[c].alive) continue;
         const Coedge& ce = m_coedges[c];
-        if (ce.edge >= E) return fail("coedge " + std::to_string(c) + " has invalid edge");
-        if (ce.loop >= L) return fail("coedge " + std::to_string(c) + " has invalid loop");
-        if (!(ce.next < C) || !(ce.prev < C)) return fail("coedge " + std::to_string(c) + " has invalid next/prev");
+        if (!eLive(ce.edge)) return fail("live coedge " + std::to_string(c) + " references a dead/invalid edge");
+        if (!lLive(ce.loop)) return fail("live coedge " + std::to_string(c) + " references a dead/invalid loop");
+        if (!cLive(ce.next) || !cLive(ce.prev)) return fail("live coedge " + std::to_string(c) + " has dead/invalid next/prev");
         if (m_coedges[ce.next].prev != c) return fail("next.prev mismatch at coedge " + std::to_string(c));
         if (m_coedges[ce.prev].next != c) return fail("prev.next mismatch at coedge " + std::to_string(c));
         if (m_coedges[ce.next].loop != ce.loop) return fail("loop cycle spans multiple loops at coedge " + std::to_string(c));
-        // Vertex continuity: this coedge's end vertex is the next's start vertex.
         if (endV(c) != startV(ce.next)) return fail("vertex discontinuity at coedge " + std::to_string(c));
-        // Partner: reciprocal, same edge, opposite orientation, different loop.
         if (ce.partner != kInvalid) {
-            if (ce.partner >= C) return fail("coedge " + std::to_string(c) + " has invalid partner");
+            if (!cLive(ce.partner)) return fail("live coedge " + std::to_string(c) + " has a dead/invalid partner");
             const Coedge& pt = m_coedges[ce.partner];
             if (pt.partner != c) return fail("partner not reciprocal at coedge " + std::to_string(c));
             if (pt.edge != ce.edge) return fail("partner uses a different edge at coedge " + std::to_string(c));
@@ -289,9 +296,10 @@ Body::IntegrityReport Body::checkIntegrity() const
     }
 
     for (uint32_t l = 0; l < L; ++l) {
+        if (!m_loops[l].alive) continue;
         const Loop& lp = m_loops[l];
-        if (lp.face >= F) return fail("loop " + std::to_string(l) + " has invalid face");
-        if (lp.first >= C) return fail("loop " + std::to_string(l) + " has invalid first coedge");
+        if (!fLive(lp.face)) return fail("live loop " + std::to_string(l) + " references a dead/invalid face");
+        if (!cLive(lp.first)) return fail("live loop " + std::to_string(l) + " references a dead/invalid first coedge");
         uint32_t walk = lp.first, steps = 0;
         do {
             if (m_coedges[walk].loop != l) return fail("loop " + std::to_string(l) + " ring leaves the loop");
@@ -303,13 +311,14 @@ Body::IntegrityReport Body::checkIntegrity() const
     }
 
     for (uint32_t f = 0; f < F; ++f) {
+        if (!m_faces[f].alive) continue;
         const Face& fc = m_faces[f];
         if (fc.surface >= m_surfaces.size()) return fail("face " + std::to_string(f) + " has invalid surface");
-        if (fc.outerLoop >= L) return fail("face " + std::to_string(f) + " has invalid outer loop");
+        if (!lLive(fc.outerLoop)) return fail("live face " + std::to_string(f) + " references a dead/invalid outer loop");
         if (!m_loops[fc.outerLoop].outer) return fail("face " + std::to_string(f) + " outer loop is not marked outer");
         if (m_loops[fc.outerLoop].face != f) return fail("face " + std::to_string(f) + " outer loop points elsewhere");
         for (uint32_t il : fc.innerLoops) {
-            if (il >= L) return fail("face " + std::to_string(f) + " has invalid inner loop");
+            if (!lLive(il)) return fail("live face " + std::to_string(f) + " references a dead/invalid inner loop");
             if (m_loops[il].outer) return fail("face " + std::to_string(f) + " inner loop marked outer");
             if (m_loops[il].face != f) return fail("face " + std::to_string(f) + " inner loop points elsewhere");
         }
@@ -317,21 +326,23 @@ Body::IntegrityReport Body::checkIntegrity() const
     }
 
     for (uint32_t v = 0; v < V; ++v) {
+        if (!m_verts[v].alive) continue;
+        ++r.vertices;
         if (m_verts[v].coedge != kInvalid) {
-            if (m_verts[v].coedge >= C) return fail("vertex " + std::to_string(v) + " has invalid coedge");
+            if (!cLive(m_verts[v].coedge)) return fail("live vertex " + std::to_string(v) + " references a dead/invalid coedge");
             if (startV(m_verts[v].coedge) != v) return fail("vertex " + std::to_string(v) + " coedge not rooted here");
         }
     }
 
     for (uint32_t e = 0; e < E; ++e) {
+        if (!m_edges[e].alive) continue;
+        ++r.edges;
         if (coedgesPerEdge[e] == 0u) return fail("edge " + std::to_string(e) + " is orphaned (no coedge)");
         if (coedgesPerEdge[e] > 2u) return fail("edge " + std::to_string(e) + " is non-manifold (>2 coedges)");
         if (coedgesPerEdge[e] == 1u) ++r.boundaryEdges;
     }
 
-    r.vertices = V;
-    r.edges = E;
-    r.euler = static_cast<int>(V) - static_cast<int>(E) + static_cast<int>(F);
+    r.euler = static_cast<int>(r.vertices) - static_cast<int>(r.edges) + static_cast<int>(r.faces);
     r.shells = static_cast<uint32_t>(m_shells.size());
     return r;
 }
@@ -355,9 +366,9 @@ Body::GeometryReport Body::checkGeometry(Tolerance tol) const
         return bad;
     };
 
-    // All vertex points are finite.
+    // All (live) vertex points are finite.
     for (uint32_t v = 0; v < m_verts.size(); ++v)
-        if (!isFinite(m_verts[v].point))
+        if (m_verts[v].alive && !isFinite(m_verts[v].point))
             return fail("vertex " + std::to_string(v) + " has a non-finite point");
 
     // All curve geometry is finite.
@@ -378,6 +389,7 @@ Body::GeometryReport Body::checkGeometry(Tolerance tol) const
 
     // Each edge's curve reproduces its endpoint vertices over its param range.
     for (uint32_t e = 0; e < m_edges.size(); ++e) {
+        if (!m_edges[e].alive) continue;
         const Edge& ed = m_edges[e];
         if (ed.curve >= m_curves.size() || ed.v0 >= m_verts.size() || ed.v1 >= m_verts.size())
             return fail("edge " + std::to_string(e) + " has invalid references");
@@ -394,6 +406,7 @@ Body::GeometryReport Body::checkGeometry(Tolerance tol) const
     auto sVert = [&](const Coedge& x) { return x.reversed ? m_edges[x.edge].v1 : m_edges[x.edge].v0; };
     auto eVert = [&](const Coedge& x) { return x.reversed ? m_edges[x.edge].v0 : m_edges[x.edge].v1; };
     for (uint32_t c = 0; c < m_coedges.size(); ++c) {
+        if (!m_coedges[c].alive) continue;
         const Coedge& ce = m_coedges[c];
         if (ce.partner == kInvalid || ce.partner >= m_coedges.size()) continue;
         const Coedge& pt = m_coedges[ce.partner];
@@ -497,7 +510,7 @@ uint32_t Body::splitEdge(uint32_t edgeId, float t)
 std::vector<uint32_t> Body::faceVertices(uint32_t faceId) const
 {
     std::vector<uint32_t> out;
-    if (faceId >= m_faces.size()) return out;
+    if (faceId >= m_faces.size() || !m_faces[faceId].alive) return out;
     const uint32_t loopId = m_faces[faceId].outerLoop;
     if (loopId >= m_loops.size()) return out;
     uint32_t w = m_loops[loopId].first, guard = 0;
@@ -640,7 +653,7 @@ Mesh Body::toMesh() const
     mesh.attributes().setPositions(pos);
 
     for (const Face& fc : m_faces) {
-        if (fc.outerLoop >= m_loops.size()) continue;
+        if (!fc.alive || fc.outerLoop >= m_loops.size()) continue;
         std::vector<uint32_t> ring;
         const uint32_t first = m_loops[fc.outerLoop].first;
         uint32_t walk = first, steps = 0;

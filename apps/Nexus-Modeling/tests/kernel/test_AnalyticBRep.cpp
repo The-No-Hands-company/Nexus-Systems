@@ -322,6 +322,36 @@ TEST(AnalyticBRep, EulerOpsComposeAndStayValid)
     EXPECT_EQ(b.checkIntegrity().euler, 2);
 }
 
+// Liveness: the validators count only live entities and — the crucial guard,
+// the same class that caught the HalfEdgeMesh bugs — a LIVE entity must never
+// reference a DEAD one. Marking a face dead while a loop still references it is
+// caught by checkIntegrity.
+TEST(AnalyticBRep, CheckIntegrityCatchesLiveReferenceToDeadEntity)
+{
+    Body box = makeBox(2.f, 2.f, 2.f);
+    ASSERT_TRUE(box.checkIntegrity().ok);
+    box.faceMut(0).alive = false;  // tombstoned without unlinking its loop
+    const auto r = box.checkIntegrity();
+    EXPECT_FALSE(r.ok);
+    EXPECT_NE(r.reason.find("dead"), std::string::npos) << r.reason;
+}
+
+// The liveness-aware validators are a no-op regression-wise: with nothing dead,
+// every primitive still validates and the live counts equal the totals.
+TEST(AnalyticBRep, LivenessAwareValidatorsNoRegression)
+{
+    for (const Body& b : {makeBox(1.f, 2.f, 3.f), makeCylinder(1.f, 2.f, 8),
+                          makeCone(1.f, 2.f, 6), makeSphere(1.f, 5, 8)}) {
+        const auto r = b.checkIntegrity();
+        EXPECT_TRUE(r.ok) << r.reason;
+        EXPECT_TRUE(b.checkGeometry().ok);
+        EXPECT_EQ(r.euler, 2);
+        EXPECT_EQ(r.vertices, b.vertexCount());  // nothing dead ⇒ live == total
+        EXPECT_EQ(r.edges, b.edgeCount());
+        EXPECT_EQ(r.faces, b.faceCount());
+    }
+}
+
 TEST(AnalyticBRep, FromFacesRejectsMalformedInput)
 {
     // No points / no faces.

@@ -80,6 +80,7 @@ struct Surface {
 struct Vertex {
     Vec3     point{};
     uint32_t coedge = kInvalid;     // one coedge starting here
+    bool     alive = true;          // tombstone flag (dead entities are skipped)
 };
 
 struct Edge {
@@ -87,6 +88,7 @@ struct Edge {
     uint32_t v0 = kInvalid, v1 = kInvalid;   // curve runs v0 → v1 over [t0,t1]
     float    t0 = 0.f, t1 = 1.f;
     uint32_t coedge = kInvalid;     // one coedge using this edge
+    bool     alive = true;          // tombstone flag (dead entities are skipped)
 };
 
 struct Coedge {
@@ -95,12 +97,14 @@ struct Coedge {
     uint32_t loop = kInvalid;
     uint32_t next = kInvalid, prev = kInvalid;  // around the loop
     uint32_t partner = kInvalid;    // the coedge on the adjacent face (same edge)
+    bool     alive = true;          // tombstone flag (dead entities are skipped)
 };
 
 struct Loop {
     uint32_t face = kInvalid;
     uint32_t first = kInvalid;      // a coedge in the ring
     bool     outer = true;          // outer boundary vs inner hole
+    bool     alive = true;          // tombstone flag (dead entities are skipped)
 };
 
 struct Face {
@@ -109,6 +113,7 @@ struct Face {
     uint32_t outerLoop = kInvalid;
     std::vector<uint32_t> innerLoops;
     uint32_t shell = kInvalid;
+    bool     alive = true;          // tombstone flag (dead entities are skipped)
 };
 
 struct Shell {
@@ -204,6 +209,7 @@ public:
     // Mutable vertex access (for editing ops; checkGeometry guards consistency
     // after any geometry change).
     [[nodiscard]] Vertex& vertexMut(uint32_t i) { return m_verts[i]; }
+    [[nodiscard]] Face& faceMut(uint32_t i) { return m_faces[i]; }
     [[nodiscard]] const Edge&    edge(uint32_t i)   const { return m_edges[i]; }
     [[nodiscard]] const Coedge&  coedge(uint32_t i) const { return m_coedges[i]; }
     [[nodiscard]] const Loop&    loop(uint32_t i)   const { return m_loops[i]; }
