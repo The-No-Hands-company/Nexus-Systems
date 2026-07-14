@@ -1,5 +1,6 @@
 #include <nexus/geometry/AnalyticBRep.h>
 
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <unordered_map>
@@ -405,6 +406,115 @@ Body makeBox(float width, float height, float depth)
 
     auto body = Body::fromFaces(pts, defs);
     return body.has_value() ? std::move(*body) : Body{};
+}
+
+// A capped cylinder along +Z: n side quads on a Cylinder surface + top/bottom
+// planar n-gon caps. V=2n, E=3n, F=n+2 → euler 2.
+Body makeCylinder(float radius, float height, uint32_t segments)
+{
+    const uint32_t n = std::max(segments, 3u);
+    const float h = height * 0.5f;
+    const float twoPi = 6.28318530717958647692f;
+
+    std::vector<Vec3> pts(static_cast<size_t>(n) * 2u);
+    for (uint32_t i = 0; i < n; ++i) {
+        const float ang = twoPi * static_cast<float>(i) / static_cast<float>(n);
+        const float cx = std::cos(ang) * radius, cy = std::sin(ang) * radius;
+        pts[i] = {cx, cy, -h};              // bottom ring
+        pts[static_cast<size_t>(n) + i] = {cx, cy, h};  // top ring
+    }
+
+    auto planeSurface = [](const Vec3& o, const Vec3& nrm) {
+        Surface s;
+        s.kind = SurfaceKind::Plane;
+        s.origin = o;
+        s.normal = nrm;
+        s.uAxis = {1.f, 0.f, 0.f};
+        return s;
+    };
+
+    std::vector<Body::FaceDef> defs;
+    defs.reserve(static_cast<size_t>(n) + 2u);
+
+    // Bottom cap: descending indices → CW in XY → CCW seen from −Z (outward −Z).
+    Body::FaceDef bottom;
+    bottom.loop.reserve(n);
+    bottom.loop.push_back(0u);
+    for (uint32_t i = n; i-- > 1;) bottom.loop.push_back(i);
+    bottom.surface = planeSurface({0.f, 0.f, -h}, {0.f, 0.f, -1.f});
+    defs.push_back(std::move(bottom));
+
+    // Top cap: ascending indices → CCW seen from +Z (outward +Z).
+    Body::FaceDef top;
+    top.loop.reserve(n);
+    for (uint32_t i = 0; i < n; ++i) top.loop.push_back(n + i);
+    top.surface = planeSurface({0.f, 0.f, h}, {0.f, 0.f, 1.f});
+    defs.push_back(std::move(top));
+
+    // Side quads: {bottom[i], bottom[i+1], top[i+1], top[i]} — traverses each
+    // shared edge opposite to its cap / neighbour side, so coedges partner.
+    for (uint32_t i = 0; i < n; ++i) {
+        const uint32_t j = (i + 1) % n;
+        Body::FaceDef side;
+        side.loop = {i, j, n + j, n + i};
+        side.surface.kind = SurfaceKind::Cylinder;
+        side.surface.origin = {0.f, 0.f, 0.f};
+        side.surface.normal = {0.f, 0.f, 1.f};  // axis
+        side.surface.uAxis = {1.f, 0.f, 0.f};
+        side.surface.radius = radius;
+        defs.push_back(std::move(side));
+    }
+
+    auto b = Body::fromFaces(pts, defs);
+    return b.has_value() ? std::move(*b) : Body{};
+}
+
+// A cone along +Z: apex + bottom ring, n triangular sides + one planar cap.
+// V=n+1, E=2n, F=n+1 → euler 2.
+Body makeCone(float radius, float height, uint32_t segments)
+{
+    const uint32_t n = std::max(segments, 3u);
+    const float h = height * 0.5f;
+    const float twoPi = 6.28318530717958647692f;
+
+    std::vector<Vec3> pts(static_cast<size_t>(n) + 1u);
+    for (uint32_t i = 0; i < n; ++i) {
+        const float ang = twoPi * static_cast<float>(i) / static_cast<float>(n);
+        pts[i] = {std::cos(ang) * radius, std::sin(ang) * radius, -h};
+    }
+    const uint32_t apex = n;
+    pts[apex] = {0.f, 0.f, h};
+
+    std::vector<Body::FaceDef> defs;
+    defs.reserve(static_cast<size_t>(n) + 1u);
+
+    // Bottom cap (descending → outward −Z), opposite winding to the side tris.
+    Body::FaceDef bottom;
+    bottom.loop.reserve(n);
+    bottom.loop.push_back(0u);
+    for (uint32_t i = n; i-- > 1;) bottom.loop.push_back(i);
+    bottom.surface.kind = SurfaceKind::Plane;
+    bottom.surface.origin = {0.f, 0.f, -h};
+    bottom.surface.normal = {0.f, 0.f, -1.f};
+    bottom.surface.uAxis = {1.f, 0.f, 0.f};
+    defs.push_back(std::move(bottom));
+
+    // Side triangles: {bottom[i], bottom[i+1], apex} — traverses bottom[i]→
+    // bottom[i+1] (opposite the cap) and shares apex spokes with neighbours.
+    for (uint32_t i = 0; i < n; ++i) {
+        const uint32_t j = (i + 1) % n;
+        Body::FaceDef side;
+        side.loop = {i, j, apex};
+        side.surface.kind = SurfaceKind::Cylinder;  // conical surface approx (Nurbs later)
+        side.surface.origin = {0.f, 0.f, 0.f};
+        side.surface.normal = {0.f, 0.f, 1.f};
+        side.surface.uAxis = {1.f, 0.f, 0.f};
+        side.surface.radius = radius;
+        defs.push_back(std::move(side));
+    }
+
+    auto b = Body::fromFaces(pts, defs);
+    return b.has_value() ? std::move(*b) : Body{};
 }
 
 }  // namespace nexus::geometry::brep

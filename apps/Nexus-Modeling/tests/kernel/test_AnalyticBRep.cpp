@@ -78,6 +78,53 @@ TEST(AnalyticBRep, AnalyticGeometryEvaluatesConsistently)
     }
 }
 
+// The analytic cylinder is a watertight solid for any segment count: V=2n,
+// E=3n, F=n+2 ⇒ euler 2, with coedges partnered (side quads on a Cylinder
+// surface + two planar caps). Winding is proven by checkIntegrity, not eyeball.
+TEST(AnalyticBRep, CylinderIsWatertightForAnySegmentCount)
+{
+    for (uint32_t n : {3u, 4u, 8u, 16u, 32u}) {
+        const Body cyl = makeCylinder(1.f, 2.f, n);
+        const auto r = cyl.checkIntegrity();
+        ASSERT_TRUE(r.ok) << "n=" << n << ": " << r.reason;
+        EXPECT_EQ(r.vertices, 2u * n) << "n=" << n;
+        EXPECT_EQ(r.edges, 3u * n) << "n=" << n;
+        EXPECT_EQ(r.faces, n + 2u) << "n=" << n;
+        EXPECT_EQ(r.boundaryEdges, 0u) << "n=" << n;
+        EXPECT_EQ(r.euler, 2) << "n=" << n;
+        EXPECT_TRUE(cyl.isClosed()) << "n=" << n;
+        EXPECT_EQ(MeshTopologyValidation::validate(cyl.toMesh()).euler, 2) << "n=" << n;
+    }
+}
+
+// The analytic cone: apex + bottom ring, V=n+1, E=2n, F=n+1 ⇒ euler 2.
+TEST(AnalyticBRep, ConeIsWatertightForAnySegmentCount)
+{
+    for (uint32_t n : {3u, 5u, 8u, 24u}) {
+        const Body cone = makeCone(1.f, 2.f, n);
+        const auto r = cone.checkIntegrity();
+        ASSERT_TRUE(r.ok) << "n=" << n << ": " << r.reason;
+        EXPECT_EQ(r.vertices, n + 1u) << "n=" << n;
+        EXPECT_EQ(r.edges, 2u * n) << "n=" << n;
+        EXPECT_EQ(r.faces, n + 1u) << "n=" << n;
+        EXPECT_EQ(r.boundaryEdges, 0u) << "n=" << n;
+        EXPECT_EQ(r.euler, 2) << "n=" << n;
+        EXPECT_TRUE(cone.isClosed()) << "n=" << n;
+        EXPECT_EQ(MeshTopologyValidation::validate(cone.toMesh()).euler, 2) << "n=" << n;
+    }
+}
+
+// Cylinder side vertices lie exactly on the cylinder of the given radius.
+TEST(AnalyticBRep, CylinderVerticesLieOnRadius)
+{
+    const float radius = 2.5f;
+    const Body cyl = makeCylinder(radius, 3.f, 12);
+    for (uint32_t v = 0; v < cyl.vertexCount(); ++v) {
+        const Vec3& p = cyl.vertex(v).point;
+        EXPECT_NEAR(std::sqrt(p.x * p.x + p.y * p.y), radius, 1e-4f);
+    }
+}
+
 TEST(AnalyticBRep, FromFacesRejectsMalformedInput)
 {
     // No points / no faces.

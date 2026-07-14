@@ -189,4 +189,12 @@ private:
 // edges, 6 planar faces, one closed shell. The canonical analytic-B-rep proof.
 [[nodiscard]] Body makeBox(float width, float height, float depth);
 
+// A capped cylinder along +Z (n side quads on a Cylinder surface + two planar
+// n-gon caps). Watertight solid, euler 2.
+[[nodiscard]] Body makeCylinder(float radius, float height, uint32_t segments);
+
+// A cone along +Z (apex + bottom ring: n triangular sides + one planar cap).
+// Watertight solid, euler 2.
+[[nodiscard]] Body makeCone(float radius, float height, uint32_t segments);
+
 }  // namespace nexus::geometry::brep
