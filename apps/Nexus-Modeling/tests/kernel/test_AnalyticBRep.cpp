@@ -125,6 +125,38 @@ TEST(AnalyticBRep, CylinderVerticesLieOnRadius)
     }
 }
 
+// The analytic UV sphere is a watertight solid for any (lat,lon): pole triangle
+// fans + latitude quad bands on a Sphere surface. V = 2 + (lat-1)*lon,
+// F = lat*lon, E = lon*(2*lat-1) ⇒ euler 2. Winding proven by checkIntegrity.
+TEST(AnalyticBRep, SphereIsWatertightForAnyResolution)
+{
+    struct Res { uint32_t lat, lon; };
+    for (Res res : {Res{2, 3}, Res{2, 8}, Res{3, 4}, Res{4, 8}, Res{8, 16}, Res{16, 24}}) {
+        const uint32_t lat = res.lat, lon = res.lon;
+        const Body sph = makeSphere(1.f, lat, lon);
+        const auto r = sph.checkIntegrity();
+        ASSERT_TRUE(r.ok) << "lat=" << lat << " lon=" << lon << ": " << r.reason;
+        EXPECT_EQ(r.vertices, 2u + (lat - 1u) * lon) << "lat=" << lat << " lon=" << lon;
+        EXPECT_EQ(r.faces, lat * lon) << "lat=" << lat << " lon=" << lon;
+        EXPECT_EQ(r.edges, lon * (2u * lat - 1u)) << "lat=" << lat << " lon=" << lon;
+        EXPECT_EQ(r.boundaryEdges, 0u) << "lat=" << lat << " lon=" << lon;
+        EXPECT_EQ(r.euler, 2) << "lat=" << lat << " lon=" << lon;
+        EXPECT_TRUE(sph.isClosed());
+        EXPECT_EQ(MeshTopologyValidation::validate(sph.toMesh()).euler, 2)
+            << "lat=" << lat << " lon=" << lon;
+    }
+}
+
+TEST(AnalyticBRep, SphereVerticesLieOnRadius)
+{
+    const float radius = 3.25f;
+    const Body sph = makeSphere(radius, 6, 10);
+    for (uint32_t v = 0; v < sph.vertexCount(); ++v) {
+        const Vec3& p = sph.vertex(v).point;
+        EXPECT_NEAR(std::sqrt(p.x * p.x + p.y * p.y + p.z * p.z), radius, 1e-4f);
+    }
+}
+
 TEST(AnalyticBRep, FromFacesRejectsMalformedInput)
 {
     // No points / no faces.

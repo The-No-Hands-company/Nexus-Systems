@@ -517,4 +517,65 @@ Body makeCone(float radius, float height, uint32_t segments)
     return b.has_value() ? std::move(*b) : Body{};
 }
 
+// A UV sphere: south + north pole vertices, (lat-1) latitude rings of `lon`
+// verts, a triangle fan at each pole and quad bands between rings. All verts on
+// the radius. V = 2 + (lat-1)*lon, F = lat*lon, E = lon*(2*lat-1) → euler 2.
+Body makeSphere(float radius, uint32_t latSegments, uint32_t lonSegments)
+{
+    const uint32_t lat = std::max(latSegments, 2u);
+    const uint32_t lon = std::max(lonSegments, 3u);
+    const float pi = 3.14159265358979323846f;
+    const float twoPi = 6.28318530717958647692f;
+
+    // Vertex of latitude ring L (1..lat-1) at longitude j (wrapped).
+    auto vid = [lon](uint32_t L, uint32_t j) -> uint32_t {
+        return 1u + (L - 1u) * lon + (j % lon);
+    };
+    const uint32_t southPole = 0u;
+    const uint32_t northPole = 1u + (lat - 1u) * lon;
+
+    std::vector<Vec3> pts(2u + static_cast<size_t>(lat - 1u) * lon);
+    pts[southPole] = {0.f, 0.f, -radius};
+    pts[northPole] = {0.f, 0.f, radius};
+    for (uint32_t L = 1u; L < lat; ++L) {
+        const float v = -0.5f * pi + pi * static_cast<float>(L) / static_cast<float>(lat);
+        const float cv = std::cos(v), sv = std::sin(v);
+        for (uint32_t j = 0u; j < lon; ++j) {
+            const float u = twoPi * static_cast<float>(j) / static_cast<float>(lon);
+            pts[vid(L, j)] = {radius * cv * std::cos(u), radius * cv * std::sin(u), radius * sv};
+        }
+    }
+
+    auto sphereFace = [radius](std::vector<uint32_t> loop) {
+        Body::FaceDef fd;
+        fd.loop = std::move(loop);
+        fd.surface.kind = SurfaceKind::Sphere;
+        fd.surface.origin = {0.f, 0.f, 0.f};
+        fd.surface.normal = {0.f, 0.f, 1.f};
+        fd.surface.uAxis = {1.f, 0.f, 0.f};
+        fd.surface.radius = radius;
+        return fd;
+    };
+
+    std::vector<Body::FaceDef> defs;
+    defs.reserve(static_cast<size_t>(lat) * lon);
+
+    // South pole fan — wound opposite to band 1 along the ring-1 edges.
+    for (uint32_t j = 0u; j < lon; ++j)
+        defs.push_back(sphereFace({southPole, vid(1u, j + 1u), vid(1u, j)}));
+
+    // Latitude bands between ring L and L+1.
+    for (uint32_t L = 1u; L + 1u < lat; ++L)
+        for (uint32_t j = 0u; j < lon; ++j)
+            defs.push_back(sphereFace({vid(L, j), vid(L, j + 1u), vid(L + 1u, j + 1u), vid(L + 1u, j)}));
+
+    // North pole fan — wound opposite to the last band along the top-ring edges.
+    const uint32_t topRing = lat - 1u;
+    for (uint32_t j = 0u; j < lon; ++j)
+        defs.push_back(sphereFace({northPole, vid(topRing, j), vid(topRing, j + 1u)}));
+
+    auto b = Body::fromFaces(pts, defs);
+    return b.has_value() ? std::move(*b) : Body{};
+}
+
 }  // namespace nexus::geometry::brep

@@ -197,4 +197,8 @@ private:
 // Watertight solid, euler 2.
 [[nodiscard]] Body makeCone(float radius, float height, uint32_t segments);
 
+// A UV sphere (pole triangle fans + latitude quad bands) on a Sphere surface.
+// Watertight solid, euler 2. latSegments ≥ 2, lonSegments ≥ 3.
+[[nodiscard]] Body makeSphere(float radius, uint32_t latSegments, uint32_t lonSegments);
+
 }  // namespace nexus::geometry::brep
