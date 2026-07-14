@@ -9,6 +9,8 @@ namespace nexus::geometry::brep {
 
 namespace {
 Vec3 sub(const Vec3& a, const Vec3& b) { return {a.x - b.x, a.y - b.y, a.z - b.z}; }
+Vec3 add(const Vec3& a, const Vec3& b) { return {a.x + b.x, a.y + b.y, a.z + b.z}; }
+Vec3 scale(const Vec3& a, float s) { return {a.x * s, a.y * s, a.z * s}; }
 Vec3 cross(const Vec3& a, const Vec3& b)
 {
     return {a.y * b.z - a.z * b.y, a.z * b.x - a.x * b.z, a.x * b.y - a.y * b.x};
@@ -19,6 +21,45 @@ Vec3 normalize(const Vec3& a)
 {
     const float l = length(a);
     return (l > 1e-20f) ? Vec3{a.x / l, a.y / l, a.z / l} : Vec3{0.f, 0.f, 0.f};
+}
+
+// Parameter on an analytic curve that evaluates (closest) to point p. For a Line
+// this is the projection distance along dir; for a Circle the sweep angle in the
+// (ref, dir×ref) frame — matching Curve::eval so eval(paramOnCurve(c,p)) ≈ p when
+// p lies on the curve.
+float paramOnCurve(const Curve& c, const Vec3& p)
+{
+    if (c.kind == CurveKind::Circle) {
+        const Vec3 bi = cross(c.dir, c.ref);
+        const Vec3 w = sub(p, c.origin);
+        return std::atan2(dot(w, bi), dot(w, c.ref));
+    }
+    return dot(sub(p, c.origin), c.dir);  // Line (Nurbs handled elsewhere)
+}
+
+// Fraction s in (0,1) at which the straight segment A→B crosses the Line imprint
+// `curve` in a single interior point (the two lines meet, i.e. are near-coplanar
+// and non-parallel). Returns false otherwise. Only a Line imprint is handled
+// here: a Line lies in the planar face's plane, so the resulting cut edge lies on
+// the face — geometrically valid. (Circle imprint, whose valid forms are the
+// coplanar in-face "bite" and cuts on curved faces, is a dedicated follow-up.)
+bool segmentLineCrossing(const Vec3& A, const Vec3& B, const Curve& curve, float eps,
+                         float& sOut)
+{
+    if (curve.kind != CurveKind::Line) return false;
+    const Vec3 E = sub(B, A);
+    const Vec3 D = curve.dir;
+    const Vec3 ExD = cross(E, D);
+    const float denom = dot(ExD, ExD);
+    if (denom < 1e-20f) return false;  // parallel
+    const float s = dot(cross(sub(curve.origin, A), D), ExD) / denom;
+    if (s <= 0.02f || s >= 0.98f) return false;  // interior crossing only
+    const Vec3 P = add(A, scale(E, s));
+    const Vec3 w = sub(P, curve.origin);
+    const Vec3 perp = sub(w, scale(D, dot(w, D)));  // component off the imprint line
+    if (length(perp) > eps) return false;           // lines skew, no true meeting
+    sOut = s;
+    return true;
 }
 uint64_t edgeKey(uint32_t a, uint32_t b)
 {
@@ -526,6 +567,12 @@ std::vector<uint32_t> Body::faceVertices(uint32_t faceId) const
 
 uint32_t Body::splitFace(uint32_t faceId, uint32_t vA, uint32_t vB)
 {
+    return cutFaceBetween(faceId, vA, vB, nullptr);
+}
+
+uint32_t Body::cutFaceBetween(uint32_t faceId, uint32_t vA, uint32_t vB,
+                              const Curve* explicitCurve)
+{
     if (faceId >= m_faces.size() || vA == vB) return kInvalid;
     const uint32_t loopId = m_faces[faceId].outerLoop;
     if (loopId >= m_loops.size() || m_loops[loopId].first >= m_coedges.size()) return kInvalid;
@@ -564,15 +611,23 @@ uint32_t Body::splitFace(uint32_t faceId, uint32_t vA, uint32_t vB)
     for (int i = posB; i < n; ++i) segB.push_back(ce[static_cast<size_t>(i)]);
     for (int i = 0; i < posA; ++i) segB.push_back(ce[static_cast<size_t>(i)]);
 
-    // New diagonal edge (Line vStart -> vEnd).
-    const Vec3 d = sub(m_verts[vEnd].point, m_verts[vStart].point);
+    // New cut edge (vStart -> vEnd). splitFace builds a straight Line chord;
+    // imprintCurve supplies the intersection curve itself, its param range set to
+    // reproduce the two endpoints so checkGeometry holds.
     const uint32_t curveId = static_cast<uint32_t>(m_curves.size());
-    {
+    float et0 = 0.f, et1 = 0.f;
+    if (explicitCurve != nullptr) {
+        m_curves.push_back(*explicitCurve);
+        et0 = paramOnCurve(*explicitCurve, m_verts[vStart].point);
+        et1 = paramOnCurve(*explicitCurve, m_verts[vEnd].point);
+    } else {
+        const Vec3 d = sub(m_verts[vEnd].point, m_verts[vStart].point);
         Curve cu;
         cu.kind = CurveKind::Line;
         cu.origin = m_verts[vStart].point;
         cu.dir = normalize(d);
         m_curves.push_back(cu);
+        et1 = length(d);
     }
     const uint32_t edgeId = static_cast<uint32_t>(m_edges.size());
     {
@@ -580,8 +635,8 @@ uint32_t Body::splitFace(uint32_t faceId, uint32_t vA, uint32_t vB)
         e.curve = curveId;
         e.v0 = vStart;
         e.v1 = vEnd;
-        e.t0 = 0.f;
-        e.t1 = length(d);
+        e.t0 = et0;
+        e.t1 = et1;
         m_edges.push_back(e);
     }
 
@@ -630,6 +685,50 @@ uint32_t Body::splitFace(uint32_t faceId, uint32_t vA, uint32_t vB)
     if (sh < m_shells.size()) m_shells[sh].faces.push_back(faceB);
     m_edges[edgeId].coedge = dA;
     return faceB;
+}
+
+uint32_t Body::imprintCurve(uint32_t faceId, const Curve& curve, Tolerance tol)
+{
+    if (faceId >= m_faces.size() || !m_faces[faceId].alive) return kInvalid;
+    const uint32_t loopId = m_faces[faceId].outerLoop;
+    if (loopId >= m_loops.size() || m_loops[loopId].first >= m_coedges.size()) return kInvalid;
+    // Crossing test tolerance, proportioned to the face (unit-ish characteristic).
+    const float eps = tol.at(1.f) * 10.f;
+
+    // Walk the outer loop; collect the boundary edges the curve pierces. Only
+    // Line boundary edges are supported (planar-face cut, the common case);
+    // the pierce fraction is measured along the edge's straight chord.
+    struct Cross { uint32_t edge; float frac; };
+    std::vector<Cross> crossings;
+    {
+        uint32_t w = m_loops[loopId].first, guard = 0;
+        do {
+            const uint32_t e = m_coedges[w].edge;
+            if (e < m_edges.size()) {
+                const uint32_t cu = m_edges[e].curve;
+                if (cu < m_curves.size() && m_curves[cu].kind == CurveKind::Line) {
+                    const Vec3 A = m_verts[m_edges[e].v0].point;
+                    const Vec3 B = m_verts[m_edges[e].v1].point;
+                    float s = 0.f;
+                    if (segmentLineCrossing(A, B, curve, eps, s))
+                        crossings.push_back({e, s});
+                }
+            }
+            w = m_coedges[w].next;
+            if (++guard > m_coedges.size() + 1) return kInvalid;
+        } while (w != m_loops[loopId].first);
+    }
+    if (crossings.size() != 2) return kInvalid;  // need a clean entry + exit
+
+    // Introduce a vertex at each piercing. The two target edges are distinct, so
+    // splitting the first leaves the second's id/fraction valid.
+    const uint32_t vA = splitEdge(crossings[0].edge, crossings[0].frac);
+    if (vA == kInvalid) return kInvalid;
+    const uint32_t vB = splitEdge(crossings[1].edge, crossings[1].frac);
+    if (vB == kInvalid) return kInvalid;
+
+    // Cut the face between the two pierce vertices with the imprint curve itself.
+    return cutFaceBetween(faceId, vA, vB, &curve);
 }
 
 bool Body::joinEdges(uint32_t nv)

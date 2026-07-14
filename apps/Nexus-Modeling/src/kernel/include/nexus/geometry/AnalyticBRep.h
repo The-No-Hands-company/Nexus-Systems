@@ -182,6 +182,19 @@ public:
     // The vertices of a face's outer loop, in order (for queries / editing).
     [[nodiscard]] std::vector<uint32_t> faceVertices(uint32_t faceId) const;
 
+    // Imprint an analytic intersection curve onto a planar face (the B-rep
+    // boolean's imprint step). The curve — a Line from intersectSurfaces(), e.g.
+    // plane∩plane — must pierce the face's outer boundary in exactly two interior
+    // points on Line boundary edges. A vertex is introduced at each piercing
+    // (reusing splitEdge), then the face is cut between them by a NEW edge that
+    // carries `curve` itself (not a straight chord), so the shared edge lies
+    // exactly on the intersection curve and, being a Line in the face's plane,
+    // on the face. χ-neutral (ΔV=+2, ΔE=+3, ΔF=+1). Returns the new face id, or
+    // kInvalid if the curve does not cross the boundary in exactly two interior
+    // points. Preserves both validators. (Circle imprint — the coplanar in-face
+    // "bite" and cuts on curved faces — is a dedicated follow-up increment.)
+    uint32_t imprintCurve(uint32_t faceId, const Curve& curve, Tolerance tol = {});
+
     // Reclassify an edge's curve as a Circle arc about `center`/`axis` at
     // `radius` (the endpoints must lie on that circle). Its param range is set so
     // the curve still reproduces the endpoint vertices — so checkGeometry holds
@@ -254,6 +267,14 @@ private:
     std::vector<Curve>   m_curves;
     std::vector<Surface> m_surfaces;
     std::vector<NurbsSurface> m_nurbsSurfaces;  // exact surfaces referenced by Nurbs faces
+
+    // Shared core of splitFace / imprintCurve: cut `faceId` between two of its
+    // outer-loop vertices with a new edge. When `explicitCurve` is null a
+    // straight Line chord is built (splitFace); otherwise the new edge carries
+    // *explicitCurve with its param range set to reproduce the two endpoints
+    // (imprintCurve). Returns the new face id, or kInvalid on failure.
+    uint32_t cutFaceBetween(uint32_t faceId, uint32_t vA, uint32_t vB,
+                            const Curve* explicitCurve);
 };
 
 // ──────────── Primitives ─────────────────────────────────────────────────────
