@@ -494,6 +494,131 @@ uint32_t Body::splitEdge(uint32_t edgeId, float t)
     return nv;
 }
 
+std::vector<uint32_t> Body::faceVertices(uint32_t faceId) const
+{
+    std::vector<uint32_t> out;
+    if (faceId >= m_faces.size()) return out;
+    const uint32_t loopId = m_faces[faceId].outerLoop;
+    if (loopId >= m_loops.size()) return out;
+    uint32_t w = m_loops[loopId].first, guard = 0;
+    if (w >= m_coedges.size()) return out;
+    do {
+        const Coedge& x = m_coedges[w];
+        out.push_back(x.reversed ? m_edges[x.edge].v1 : m_edges[x.edge].v0);
+        w = m_coedges[w].next;
+        if (++guard > m_coedges.size() + 1) break;
+    } while (w != m_loops[loopId].first);
+    return out;
+}
+
+uint32_t Body::splitFace(uint32_t faceId, uint32_t vA, uint32_t vB)
+{
+    if (faceId >= m_faces.size() || vA == vB) return kInvalid;
+    const uint32_t loopId = m_faces[faceId].outerLoop;
+    if (loopId >= m_loops.size() || m_loops[loopId].first >= m_coedges.size()) return kInvalid;
+
+    // Walk the outer loop: coedges in order + their start vertices.
+    std::vector<uint32_t> ce, sv;
+    {
+        uint32_t w = m_loops[loopId].first, guard = 0;
+        do {
+            ce.push_back(w);
+            const Coedge& x = m_coedges[w];
+            sv.push_back(x.reversed ? m_edges[x.edge].v1 : m_edges[x.edge].v0);
+            w = m_coedges[w].next;
+            if (++guard > m_coedges.size() + 1) return kInvalid;
+        } while (w != m_loops[loopId].first);
+    }
+    const int n = static_cast<int>(ce.size());
+    if (n < 4) return kInvalid;  // need a non-adjacent diagonal
+
+    int posA = -1, posB = -1;
+    for (int i = 0; i < n; ++i) {
+        if (sv[static_cast<size_t>(i)] == vA) posA = i;
+        if (sv[static_cast<size_t>(i)] == vB) posB = i;
+    }
+    if (posA < 0 || posB < 0) return kInvalid;
+    if (posA > posB) std::swap(posA, posB);
+    if (posB - posA == 1 || (posA == 0 && posB == n - 1)) return kInvalid;  // adjacent
+
+    const uint32_t vStart = sv[static_cast<size_t>(posA)];
+    const uint32_t vEnd = sv[static_cast<size_t>(posB)];
+
+    // Partition the loop's coedges into the two sub-loops (segment A: posA..posB-1;
+    // segment B: posB..end, 0..posA-1).
+    std::vector<uint32_t> segA, segB;
+    for (int i = posA; i < posB; ++i) segA.push_back(ce[static_cast<size_t>(i)]);
+    for (int i = posB; i < n; ++i) segB.push_back(ce[static_cast<size_t>(i)]);
+    for (int i = 0; i < posA; ++i) segB.push_back(ce[static_cast<size_t>(i)]);
+
+    // New diagonal edge (Line vStart -> vEnd).
+    const Vec3 d = sub(m_verts[vEnd].point, m_verts[vStart].point);
+    const uint32_t curveId = static_cast<uint32_t>(m_curves.size());
+    {
+        Curve cu;
+        cu.kind = CurveKind::Line;
+        cu.origin = m_verts[vStart].point;
+        cu.dir = normalize(d);
+        m_curves.push_back(cu);
+    }
+    const uint32_t edgeId = static_cast<uint32_t>(m_edges.size());
+    {
+        Edge e;
+        e.curve = curveId;
+        e.v0 = vStart;
+        e.v1 = vEnd;
+        e.t0 = 0.f;
+        e.t1 = length(d);
+        m_edges.push_back(e);
+    }
+
+    // Face B + loop B (face A reuses faceId + its loop).
+    const uint32_t faceB = static_cast<uint32_t>(m_faces.size());
+    {
+        Face f;
+        f.surface = m_faces[faceId].surface;
+        f.reversed = m_faces[faceId].reversed;
+        f.shell = m_faces[faceId].shell;
+        m_faces.push_back(f);
+    }
+    const uint32_t loopB = static_cast<uint32_t>(m_loops.size());
+    {
+        Loop l;
+        l.face = faceB;
+        l.outer = true;
+        m_loops.push_back(l);
+    }
+    m_faces[faceB].outerLoop = loopB;
+
+    // Diagonal coedges: dA closes loop A (vEnd->vStart, reversed on the new
+    // edge), dB closes loop B (vStart->vEnd, forward). They are partners.
+    const uint32_t dA = static_cast<uint32_t>(m_coedges.size());
+    { Coedge x; x.edge = edgeId; x.reversed = true;  x.loop = loopId; m_coedges.push_back(x); }
+    const uint32_t dB = static_cast<uint32_t>(m_coedges.size());
+    { Coedge x; x.edge = edgeId; x.reversed = false; x.loop = loopB;  m_coedges.push_back(x); }
+    m_coedges[dA].partner = dB;
+    m_coedges[dB].partner = dA;
+
+    for (uint32_t cb : segB) m_coedges[cb].loop = loopB;
+
+    // Wire loop A: segA (in existing order) then dA back to the front.
+    const uint32_t aFirst = segA.front(), aLast = segA.back();
+    m_coedges[aLast].next = dA; m_coedges[dA].prev = aLast;
+    m_coedges[dA].next = aFirst; m_coedges[aFirst].prev = dA;
+    m_loops[loopId].first = aFirst;
+
+    // Wire loop B: segB then dB back to the front.
+    const uint32_t bFirst = segB.front(), bLast = segB.back();
+    m_coedges[bLast].next = dB; m_coedges[dB].prev = bLast;
+    m_coedges[dB].next = bFirst; m_coedges[bFirst].prev = dB;
+    m_loops[loopB].first = bFirst;
+
+    const uint32_t sh = m_faces[faceId].shell;
+    if (sh < m_shells.size()) m_shells[sh].faces.push_back(faceB);
+    m_edges[edgeId].coedge = dA;
+    return faceB;
+}
+
 // ──────────── Surface evaluation ─────────────────────────────────────────────
 
 Vec3 Body::surfacePoint(uint32_t surfaceId, float u, float v) const

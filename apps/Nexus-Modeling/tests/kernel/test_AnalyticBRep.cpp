@@ -275,6 +275,53 @@ TEST(AnalyticBRep, SplitEdgeRejectsInvalidEdge)
     EXPECT_EQ(box.splitEdge(9999u, 0.5f), kInvalid);
 }
 
+// Euler operator splitFace: adding a diagonal edge across a face is χ-neutral
+// (ΔV=0, ΔE=+1, ΔF=+1 ⇒ euler unchanged) and preserves both validators — the
+// two sub-faces inherit the surface and the diagonal coedges are partners.
+TEST(AnalyticBRep, SplitFacePreservesBothValidatorsAndEuler)
+{
+    for (uint32_t f = 0; f < 6u; ++f) {
+        Body b = makeBox(2.f, 2.f, 2.f);
+        const auto verts = b.faceVertices(f);
+        ASSERT_GE(verts.size(), 4u);
+        const auto before = b.checkIntegrity();
+        const uint32_t nf = b.splitFace(f, verts[0], verts[2]);  // diagonal
+        ASSERT_NE(nf, kInvalid) << "face " << f;
+        const auto ti = b.checkIntegrity();
+        ASSERT_TRUE(ti.ok) << "face " << f << ": " << ti.reason;
+        const auto tg = b.checkGeometry();
+        ASSERT_TRUE(tg.ok) << "face " << f << ": " << tg.reason;
+        EXPECT_EQ(ti.euler, before.euler) << "face " << f;         // χ-neutral
+        EXPECT_EQ(ti.vertices, before.vertices) << "face " << f;
+        EXPECT_EQ(ti.edges, before.edges + 1u) << "face " << f;
+        EXPECT_EQ(ti.faces, before.faces + 1u) << "face " << f;
+        EXPECT_EQ(ti.boundaryEdges, before.boundaryEdges) << "face " << f;
+    }
+}
+
+TEST(AnalyticBRep, SplitFaceRejectsAdjacentOrInvalid)
+{
+    Body box = makeBox(1.f, 1.f, 1.f);
+    const auto v = box.faceVertices(0);
+    ASSERT_GE(v.size(), 4u);
+    EXPECT_EQ(box.splitFace(0, v[0], v[1]), kInvalid);  // adjacent → no diagonal
+    EXPECT_EQ(box.splitFace(0, v[0], v[0]), kInvalid);  // same vertex
+    EXPECT_EQ(box.splitFace(9999u, v[0], v[2]), kInvalid);  // invalid face
+}
+
+// splitEdge then splitFace compose: an Euler-op sequence keeps the solid valid.
+TEST(AnalyticBRep, EulerOpsComposeAndStayValid)
+{
+    Body b = makeBox(2.f, 2.f, 2.f);
+    ASSERT_NE(b.splitEdge(0, 0.5f), kInvalid);
+    const auto v = b.faceVertices(1);
+    ASSERT_GE(v.size(), 4u);
+    ASSERT_NE(b.splitFace(1, v[0], v[2]), kInvalid);
+    EXPECT_TRUE(b.checkIntegrity().ok);
+    EXPECT_TRUE(b.checkGeometry().ok);
+    EXPECT_EQ(b.checkIntegrity().euler, 2);
+}
+
 TEST(AnalyticBRep, FromFacesRejectsMalformedInput)
 {
     // No points / no faces.

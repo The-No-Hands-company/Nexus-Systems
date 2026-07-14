@@ -168,6 +168,15 @@ public:
     // vertex id, or kInvalid on failure. Preserves checkIntegrity + checkGeometry.
     uint32_t splitEdge(uint32_t edgeId, float t);
 
+    // Euler operator — split a face by a new edge (a Line) between two
+    // NON-ADJACENT vertices of its outer loop, producing two faces that inherit
+    // the original surface. χ-neutral (ΔV=0, ΔE=+1, ΔF=+1). Returns the new
+    // face id, or kInvalid on failure. Preserves checkIntegrity + checkGeometry.
+    uint32_t splitFace(uint32_t faceId, uint32_t vA, uint32_t vB);
+
+    // The vertices of a face's outer loop, in order (for queries / editing).
+    [[nodiscard]] std::vector<uint32_t> faceVertices(uint32_t faceId) const;
+
     // Validates that the analytic geometry is consistent with the topology:
     // every edge's curve reproduces its endpoint vertices over its param range,
     // all geometry is finite, surface normals are unit length, and partnered
