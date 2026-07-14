@@ -9,7 +9,9 @@
 
 #include <gtest/gtest.h>
 
+#include <bit>
 #include <cmath>
+#include <cstdint>
 
 namespace nexus::geometry::brep::testing {
 
@@ -155,6 +157,44 @@ TEST(AnalyticBRep, SphereVerticesLieOnRadius)
         const Vec3& p = sph.vertex(v).point;
         EXPECT_NEAR(std::sqrt(p.x * p.x + p.y * p.y + p.z * p.z), radius, 1e-4f);
     }
+}
+
+// Geometric consistency: for every primitive, the analytic geometry agrees with
+// the topology (edge curves reproduce their vertices, geometry finite, normals
+// unit). Topological validity (checkIntegrity) is necessary but NOT sufficient.
+TEST(AnalyticBRep, CheckGeometryPassesForAllPrimitives)
+{
+    EXPECT_TRUE(makeBox(2.f, 3.f, 4.f).checkGeometry().ok);
+    EXPECT_TRUE(makeCylinder(1.5f, 2.f, 12).checkGeometry().ok);
+    EXPECT_TRUE(makeCone(1.f, 2.f, 10).checkGeometry().ok);
+    const auto g = makeSphere(2.f, 8, 12).checkGeometry();
+    EXPECT_TRUE(g.ok) << g.reason;
+    EXPECT_GT(g.checkedEdges, 0u);
+}
+
+// Moving a vertex without updating its incident edge curves leaves the curve
+// endpoint stale — checkGeometry must catch it (checkIntegrity, being purely
+// topological, would still pass).
+TEST(AnalyticBRep, CheckGeometryCatchesStaleCurveAfterVertexMove)
+{
+    Body box = makeBox(2.f, 2.f, 2.f);
+    ASSERT_TRUE(box.checkGeometry().ok);
+    box.vertexMut(0).point = {99.f, 99.f, 99.f};  // curves not updated
+    EXPECT_TRUE(box.checkIntegrity().ok);          // topology still fine
+    const auto g = box.checkGeometry();
+    EXPECT_FALSE(g.ok);
+    EXPECT_NE(g.reason.find("curve"), std::string::npos) << g.reason;
+}
+
+// A non-finite vertex point is rejected (bit-pattern NaN defeats -ffast-math
+// folding, exercising the IEEE-754 bit-inspection path).
+TEST(AnalyticBRep, CheckGeometryCatchesNonFinitePoint)
+{
+    Body box = makeBox(2.f, 2.f, 2.f);
+    box.vertexMut(1).point.x = std::bit_cast<float>(0x7FC00000u);  // quiet NaN
+    const auto g = box.checkGeometry();
+    EXPECT_FALSE(g.ok);
+    EXPECT_NE(g.reason.find("non-finite"), std::string::npos) << g.reason;
 }
 
 TEST(AnalyticBRep, FromFacesRejectsMalformedInput)

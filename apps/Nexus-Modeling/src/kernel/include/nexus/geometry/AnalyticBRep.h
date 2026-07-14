@@ -133,6 +133,15 @@ public:
         int euler = 0;              // V - E + F
     };
 
+    // Result of the geometric-consistency validator: the analytic geometry
+    // agrees with the topology (as opposed to checkIntegrity, which validates
+    // only the topology). Both must hold; ops must preserve both.
+    struct GeometryReport {
+        bool ok = true;
+        std::string reason;        // first violation; empty when ok
+        uint32_t checkedEdges = 0;
+    };
+
     // One face definition for fromFaces(): a CCW vertex-index ring + its surface.
     struct FaceDef {
         std::vector<uint32_t> loop;
@@ -148,6 +157,12 @@ public:
     // Direct half-edge/analytic-invariant validation over all entities.
     [[nodiscard]] IntegrityReport checkIntegrity() const;
 
+    // Validates that the analytic geometry is consistent with the topology:
+    // every edge's curve reproduces its endpoint vertices over its param range,
+    // all geometry is finite, surface normals are unit length, and partnered
+    // coedges agree on the shared edge's endpoints. Uses the central Tolerance.
+    [[nodiscard]] GeometryReport checkGeometry(Tolerance tol = {}) const;
+
     // Polygonal tessellation of the shell (each face's outer loop, fan-
     // triangulated) — for display and cross-checking against the mesh validator.
     [[nodiscard]] Mesh toMesh() const;
@@ -161,6 +176,9 @@ public:
     [[nodiscard]] size_t solidCount()  const noexcept { return m_solids.size(); }
 
     [[nodiscard]] const Vertex&  vertex(uint32_t i) const { return m_verts[i]; }
+    // Mutable vertex access (for editing ops; checkGeometry guards consistency
+    // after any geometry change).
+    [[nodiscard]] Vertex& vertexMut(uint32_t i) { return m_verts[i]; }
     [[nodiscard]] const Edge&    edge(uint32_t i)   const { return m_edges[i]; }
     [[nodiscard]] const Coedge&  coedge(uint32_t i) const { return m_coedges[i]; }
     [[nodiscard]] const Loop&    loop(uint32_t i)   const { return m_loops[i]; }

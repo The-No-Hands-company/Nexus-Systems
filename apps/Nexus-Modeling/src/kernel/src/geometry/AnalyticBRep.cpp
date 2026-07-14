@@ -337,6 +337,67 @@ bool Body::isClosed() const noexcept
     return !m_shells.empty();
 }
 
+// ──────────── Geometric-consistency validation ───────────────────────────────
+
+Body::GeometryReport Body::checkGeometry(Tolerance tol) const
+{
+    GeometryReport r;
+    auto fail = [&](std::string why) -> GeometryReport {
+        GeometryReport bad;
+        bad.ok = false;
+        bad.reason = std::move(why);
+        return bad;
+    };
+
+    // All vertex points are finite.
+    for (uint32_t v = 0; v < m_verts.size(); ++v)
+        if (!isFinite(m_verts[v].point))
+            return fail("vertex " + std::to_string(v) + " has a non-finite point");
+
+    // All curve geometry is finite.
+    for (uint32_t c = 0; c < m_curves.size(); ++c) {
+        const Curve& cu = m_curves[c];
+        if (!isFinite(cu.origin) || !isFinite(cu.dir) || !isFinite(cu.ref) || !isFinite(cu.radius))
+            return fail("curve " + std::to_string(c) + " has non-finite geometry");
+    }
+
+    // All surface geometry is finite and normals are unit length.
+    for (uint32_t s = 0; s < m_surfaces.size(); ++s) {
+        const Surface& su = m_surfaces[s];
+        if (!isFinite(su.origin) || !isFinite(su.normal) || !isFinite(su.uAxis) || !isFinite(su.radius))
+            return fail("surface " + std::to_string(s) + " has non-finite geometry");
+        if (!tol.nearlyEqual(length(su.normal), 1.f))
+            return fail("surface " + std::to_string(s) + " normal is not unit length");
+    }
+
+    // Each edge's curve reproduces its endpoint vertices over its param range.
+    for (uint32_t e = 0; e < m_edges.size(); ++e) {
+        const Edge& ed = m_edges[e];
+        if (ed.curve >= m_curves.size() || ed.v0 >= m_verts.size() || ed.v1 >= m_verts.size())
+            return fail("edge " + std::to_string(e) + " has invalid references");
+        const Curve& cu = m_curves[ed.curve];
+        if (!coincident(cu.eval(ed.t0), m_verts[ed.v0].point, tol))
+            return fail("edge " + std::to_string(e) + " curve does not meet v0 at t0");
+        if (!coincident(cu.eval(ed.t1), m_verts[ed.v1].point, tol))
+            return fail("edge " + std::to_string(e) + " curve does not meet v1 at t1");
+        ++r.checkedEdges;
+    }
+
+    // Partnered coedges traverse the shared edge in opposite directions, so the
+    // start vertex of one is the end vertex of the other (and vice versa).
+    auto sVert = [&](const Coedge& x) { return x.reversed ? m_edges[x.edge].v1 : m_edges[x.edge].v0; };
+    auto eVert = [&](const Coedge& x) { return x.reversed ? m_edges[x.edge].v0 : m_edges[x.edge].v1; };
+    for (uint32_t c = 0; c < m_coedges.size(); ++c) {
+        const Coedge& ce = m_coedges[c];
+        if (ce.partner == kInvalid || ce.partner >= m_coedges.size()) continue;
+        const Coedge& pt = m_coedges[ce.partner];
+        if (sVert(ce) != eVert(pt) || eVert(ce) != sVert(pt))
+            return fail("coedge " + std::to_string(c) + " and partner disagree on shared-edge endpoints");
+    }
+
+    return r;
+}
+
 // ──────────── Tessellation ───────────────────────────────────────────────────
 
 Mesh Body::toMesh() const
