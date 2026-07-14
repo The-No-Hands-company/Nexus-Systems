@@ -228,6 +228,21 @@ public:
     // control-vertex tessellation. Dead entities are skipped.
     [[nodiscard]] Mesh toMesh(uint32_t subdivisions = 0) const;
 
+    // Classification of a point against the solid (the B-rep boolean's classify
+    // step): Inside / Outside the shell, or OnBoundary (on a face within tol).
+    enum class PointContainment : uint8_t { Outside, Inside, OnBoundary };
+
+    // Classify a point against the (closed) solid boundary. Casts a ray from p
+    // and counts crossings of the watertight, crack-free triangulation of the
+    // shell (odd ⇒ Inside); an irrational ray direction with degeneracy-retry
+    // keeps it robust to grazing hits, and the result is deterministic.
+    // OnBoundary is reported when p lies within tol of the tessellated boundary
+    // — exact for planar-faced solids (box / prisms / caps) and to tessellation
+    // resolution for curved faces, which is the consistent semantics the boolean
+    // needs when classifying tessellated sub-face centroids. Returns Outside for
+    // a body with no faces.
+    [[nodiscard]] PointContainment classifyPoint(const Vec3& p, Tolerance tol = {}) const;
+
     // Evaluates a face's surface at (u,v), dispatching to the stored NURBS
     // surface when the face is on one, else to the analytic Surface::eval.
     [[nodiscard]] Vec3 surfacePoint(uint32_t surfaceId, float u, float v) const;

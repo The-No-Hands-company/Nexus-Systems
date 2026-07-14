@@ -70,6 +70,72 @@ uint64_t dirKey(uint32_t a, uint32_t b)
 {
     return (static_cast<uint64_t>(a) << 32) | b;
 }
+// Ray/triangle intersection (Möller–Trumbore). On a forward hit (t > tEps)
+// returns true and flags `degenerate` when the hit grazes an edge/vertex or the
+// ray is near-parallel — the caller then re-casts along a different direction so
+// crossing parity stays exact.
+bool rayTriangle(const Vec3& o, const Vec3& d, const Vec3& v0, const Vec3& v1,
+                 const Vec3& v2, bool& degenerate)
+{
+    constexpr float kParEps = 1e-8f;   // near-parallel determinant
+    constexpr float kEdgeEps = 1e-6f;  // barycentric edge/vertex grazing
+    constexpr float kTEps = 1e-7f;     // forward-hit threshold
+    const Vec3 e1 = sub(v1, v0), e2 = sub(v2, v0);
+    const Vec3 h = cross(d, e2);
+    const float a = dot(e1, h);
+    if (a > -kParEps && a < kParEps) return false;  // parallel: measure-zero, skip
+    const float f = 1.f / a;
+    const Vec3 s = sub(o, v0);
+    const float u = f * dot(s, h);
+    const Vec3 q = cross(s, e1);
+    const float v = f * dot(d, q);
+    const float t = f * dot(e2, q);
+    // Grazing an edge/vertex ⇒ ambiguous parity; ask for a re-cast.
+    if (u > -kEdgeEps && u < kEdgeEps) degenerate = true;
+    if (v > -kEdgeEps && v < kEdgeEps) degenerate = true;
+    if (u + v > 1.f - kEdgeEps && u + v < 1.f + kEdgeEps) degenerate = true;
+    if (t > -kTEps && t < kTEps) degenerate = true;
+    if (u < 0.f || u > 1.f || v < 0.f || u + v > 1.f) return false;
+    return t > kTEps;
+}
+
+// Squared distance from point p to triangle (a,b,c). Standard region-based
+// closest-point-on-triangle (Ericson, Real-Time Collision Detection).
+float pointTriangleDist2(const Vec3& p, const Vec3& a, const Vec3& b, const Vec3& c)
+{
+    const Vec3 ab = sub(b, a), ac = sub(c, a), ap = sub(p, a);
+    const float d1 = dot(ab, ap), d2 = dot(ac, ap);
+    if (d1 <= 0.f && d2 <= 0.f) return dot(ap, ap);
+    const Vec3 bp = sub(p, b);
+    const float d3 = dot(ab, bp), d4 = dot(ac, bp);
+    if (d3 >= 0.f && d4 <= d3) return dot(bp, bp);
+    const Vec3 cp = sub(p, c);
+    const float d5 = dot(ab, cp), d6 = dot(ac, cp);
+    if (d6 >= 0.f && d5 <= d6) return dot(cp, cp);
+    const float vc = d1 * d4 - d3 * d2;
+    if (vc <= 0.f && d1 >= 0.f && d3 <= 0.f) {
+        const float w = d1 / (d1 - d3);
+        const Vec3 q = add(a, scale(ab, w));
+        return dot(sub(p, q), sub(p, q));
+    }
+    const float vb = d5 * d2 - d1 * d6;
+    if (vb <= 0.f && d2 >= 0.f && d6 <= 0.f) {
+        const float w = d2 / (d2 - d6);
+        const Vec3 q = add(a, scale(ac, w));
+        return dot(sub(p, q), sub(p, q));
+    }
+    const float va = d3 * d6 - d5 * d4;
+    if (va <= 0.f && (d4 - d3) >= 0.f && (d5 - d6) >= 0.f) {
+        const float w = (d4 - d3) / ((d4 - d3) + (d5 - d6));
+        const Vec3 q = add(b, scale(sub(c, b), w));
+        return dot(sub(p, q), sub(p, q));
+    }
+    const float denom = 1.f / (va + vb + vc);
+    const float w2 = vb * denom, w3 = vc * denom;
+    const Vec3 q = add(a, add(scale(ab, w2), scale(ac, w3)));
+    return dot(sub(p, q), sub(p, q));
+}
+
 }  // namespace
 
 // ──────────── Geometry evaluation ────────────────────────────────────────────
@@ -902,6 +968,61 @@ Vec3 Body::surfacePoint(uint32_t surfaceId, float u, float v) const
     if (s.kind == SurfaceKind::Nurbs && s.nurbs < m_nurbsSurfaces.size())
         return m_nurbsSurfaces[s.nurbs].evaluate(u, v);
     return s.eval(u, v);
+}
+
+Body::PointContainment Body::classifyPoint(const Vec3& p, Tolerance tol) const
+{
+    // Tessellate the shell to a watertight, crack-free triangle set. subdivisions
+    // are placed per shared edge, so curved faces are approximated coherently.
+    Mesh mesh = toMesh(6);
+    (void)mesh.topology().triangulate();
+    const auto& pos = mesh.attributes().positions();
+    const auto& topo = mesh.topology();
+    const size_t triCount = topo.faceCount();
+    if (triCount == 0) return PointContainment::Outside;
+
+    // OnBoundary: within tol of the tessellated boundary.
+    const float tolAbs2 = tol.absolute * tol.absolute;
+    for (size_t i = 0; i < triCount; ++i) {
+        const auto& idx = topo.face(i).indices;
+        if (idx.size() != 3) continue;
+        if (pointTriangleDist2(p, pos[idx[0]], pos[idx[1]], pos[idx[2]]) <= tolAbs2)
+            return PointContainment::OnBoundary;
+    }
+
+    // Parity ray cast. Try a small fixed set of irrational directions and use the
+    // first that yields no grazing/degenerate hit, so the count is exact and the
+    // result is deterministic.
+    static constexpr Vec3 kDirs[4] = {
+        {0.4680f, 0.6301f, 0.6201f},
+        {0.8017f, -0.2673f, 0.5345f},
+        {-0.3333f, 0.6667f, -0.6667f},
+        {0.5774f, -0.5774f, -0.5774f},
+    };
+    for (const Vec3& raw : kDirs) {
+        const Vec3 d = normalize(raw);
+        bool degenerate = false;
+        int crossings = 0;
+        for (size_t i = 0; i < triCount; ++i) {
+            const auto& idx = topo.face(i).indices;
+            if (idx.size() != 3) continue;
+            if (rayTriangle(p, d, pos[idx[0]], pos[idx[1]], pos[idx[2]], degenerate))
+                ++crossings;
+            if (degenerate) break;  // ambiguous: re-cast along the next direction
+        }
+        if (!degenerate)
+            return (crossings & 1) ? PointContainment::Inside : PointContainment::Outside;
+    }
+    // Extremely unlikely fallback: last direction's parity (all directions grazed).
+    const Vec3 d = normalize(kDirs[0]);
+    bool degenerate = false;
+    int crossings = 0;
+    for (size_t i = 0; i < triCount; ++i) {
+        const auto& idx = topo.face(i).indices;
+        if (idx.size() != 3) continue;
+        if (rayTriangle(p, d, pos[idx[0]], pos[idx[1]], pos[idx[2]], degenerate)) ++crossings;
+    }
+    return (crossings & 1) ? PointContainment::Inside : PointContainment::Outside;
 }
 
 // ──────────── Tessellation ───────────────────────────────────────────────────
