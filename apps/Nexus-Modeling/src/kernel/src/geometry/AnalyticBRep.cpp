@@ -807,21 +807,50 @@ Vec3 Body::surfacePoint(uint32_t surfaceId, float u, float v) const
 
 // ──────────── Tessellation ───────────────────────────────────────────────────
 
-Mesh Body::toMesh() const
+Mesh Body::toMesh(uint32_t subdivisions) const
 {
     Mesh mesh;
-    std::vector<nexus::render::Vec3> pos(m_verts.size());
-    for (size_t i = 0; i < m_verts.size(); ++i) pos[i] = m_verts[i].point;
+
+    // Output vertices: live B-rep vertices (compacted), then `subdivisions`
+    // intermediate points per live edge — placed via the edge's curve so BOTH
+    // incident faces reference the SAME points (crack-free / watertight).
+    std::vector<nexus::render::Vec3> pos;
+    std::vector<int> vOut(m_verts.size(), -1);
+    for (uint32_t v = 0; v < m_verts.size(); ++v) {
+        if (!m_verts[v].alive) continue;
+        vOut[v] = static_cast<int>(pos.size());
+        pos.push_back(m_verts[v].point);
+    }
+    std::vector<std::vector<uint32_t>> edgeMid(m_edges.size());
+    if (subdivisions > 0) {
+        for (uint32_t e = 0; e < m_edges.size(); ++e) {
+            if (!m_edges[e].alive || m_edges[e].curve >= m_curves.size()) continue;
+            const Edge& ed = m_edges[e];
+            const Curve& cu = m_curves[ed.curve];
+            edgeMid[e].reserve(subdivisions);
+            for (uint32_t k = 1; k <= subdivisions; ++k) {
+                const float f = static_cast<float>(k) / static_cast<float>(subdivisions + 1u);
+                edgeMid[e].push_back(static_cast<uint32_t>(pos.size()));
+                pos.push_back(cu.eval(ed.t0 + (ed.t1 - ed.t0) * f));
+            }
+        }
+    }
     mesh.attributes().setPositions(pos);
 
     for (const Face& fc : m_faces) {
         if (!fc.alive || fc.outerLoop >= m_loops.size()) continue;
-        std::vector<uint32_t> ring;
+        std::vector<uint32_t> ring;  // output vertex indices around the boundary
         const uint32_t first = m_loops[fc.outerLoop].first;
         uint32_t walk = first, steps = 0;
         do {
             const Coedge& ce = m_coedges[walk];
-            ring.push_back(ce.reversed ? m_edges[ce.edge].v1 : m_edges[ce.edge].v0);
+            const uint32_t sv = ce.reversed ? m_edges[ce.edge].v1 : m_edges[ce.edge].v0;
+            if (sv < vOut.size() && vOut[sv] >= 0) ring.push_back(static_cast<uint32_t>(vOut[sv]));
+            const std::vector<uint32_t>& mids = edgeMid[ce.edge];
+            if (!ce.reversed)
+                for (uint32_t m : mids) ring.push_back(m);
+            else
+                for (auto it = mids.rbegin(); it != mids.rend(); ++it) ring.push_back(*it);
             walk = ce.next;
             if (++steps > m_coedges.size()) break;
         } while (walk != first);
@@ -832,6 +861,35 @@ Mesh Body::toMesh() const
         }
     }
     return mesh;
+}
+
+bool Body::setEdgeArc(uint32_t edgeId, const Vec3& center, const Vec3& axis, float radius, Tolerance tol)
+{
+    if (edgeId >= m_edges.size() || !m_edges[edgeId].alive) return false;
+    const uint32_t v0 = m_edges[edgeId].v0, v1 = m_edges[edgeId].v1;
+    if (v0 >= m_verts.size() || v1 >= m_verts.size()) return false;
+    const Vec3 p0 = m_verts[v0].point, p1 = m_verts[v1].point;
+    const Vec3 ax = normalize(axis);
+    const Vec3 d0 = sub(p0, center), d1 = sub(p1, center);
+    // Both endpoints must lie on the circle (radius, in the plane through center
+    // perpendicular to axis).
+    if (!tol.nearlyEqual(length(d0), radius) || !tol.nearlyEqual(length(d1), radius)) return false;
+    if (!tol.isZero(dot(d0, ax)) || !tol.isZero(dot(d1, ax))) return false;
+
+    const Vec3 ref0 = normalize(d0);      // radius direction at v0 (t = 0)
+    const Vec3 bi = cross(ax, ref0);      // sweep direction
+    const float ang = std::atan2(dot(d1, bi), dot(d1, ref0));  // signed short-arc angle
+
+    const uint32_t curveId = m_edges[edgeId].curve;
+    Curve& cu = m_curves[curveId];        // per-edge curve (not shared) — safe to retag
+    cu.kind = CurveKind::Circle;
+    cu.origin = center;
+    cu.dir = ax;
+    cu.ref = ref0;
+    cu.radius = radius;
+    m_edges[edgeId].t0 = 0.f;
+    m_edges[edgeId].t1 = ang;
+    return true;
 }
 
 // ──────────── Primitives ─────────────────────────────────────────────────────
@@ -934,7 +992,16 @@ Body makeCylinder(float radius, float height, uint32_t segments)
     }
 
     auto b = Body::fromFaces(pts, defs);
-    return b.has_value() ? std::move(*b) : Body{};
+    if (!b.has_value()) return Body{};
+    // Upgrade the ring edges (both endpoints at the same height) to Circle arcs
+    // about the axis, so toMesh(subdivisions) renders the cylinder smoothly.
+    for (uint32_t e = 0; e < static_cast<uint32_t>(b->edgeCount()); ++e) {
+        const Vec3& p0 = b->vertex(b->edge(e).v0).point;
+        const Vec3& p1 = b->vertex(b->edge(e).v1).point;
+        if (std::abs(p0.z - p1.z) < 1e-5f)
+            b->setEdgeArc(e, {0.f, 0.f, p0.z}, {0.f, 0.f, 1.f}, radius);
+    }
+    return std::move(*b);
 }
 
 // A cone along +Z: apex + bottom ring, n triangular sides + one planar cap.

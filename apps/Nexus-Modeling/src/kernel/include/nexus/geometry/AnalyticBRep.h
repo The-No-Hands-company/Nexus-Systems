@@ -182,6 +182,14 @@ public:
     // The vertices of a face's outer loop, in order (for queries / editing).
     [[nodiscard]] std::vector<uint32_t> faceVertices(uint32_t faceId) const;
 
+    // Reclassify an edge's curve as a Circle arc about `center`/`axis` at
+    // `radius` (the endpoints must lie on that circle). Its param range is set so
+    // the curve still reproduces the endpoint vertices — so checkGeometry holds
+    // and toMesh(subdivisions) now tessellates it smoothly. Returns false if the
+    // endpoints are not on the circle within tolerance.
+    bool setEdgeArc(uint32_t edgeId, const Vec3& center, const Vec3& axis, float radius,
+                    Tolerance tol = {});
+
     // Euler operator (inverse of splitEdge / kill-edge-vertex) — remove a
     // degree-2 vertex whose two incident edges share a curve, merging them into
     // one edge (dead entities are tombstoned + unlinked). χ-neutral
@@ -200,9 +208,12 @@ public:
     // coedges agree on the shared edge's endpoints. Uses the central Tolerance.
     [[nodiscard]] GeometryReport checkGeometry(Tolerance tol = {}) const;
 
-    // Polygonal tessellation of the shell (each face's outer loop, fan-
-    // triangulated) — for display and cross-checking against the mesh validator.
-    [[nodiscard]] Mesh toMesh() const;
+    // Tessellation of the shell to a triangle mesh. `subdivisions` intermediate
+    // points are placed on each EDGE via its curve — shared by both incident
+    // faces, so the result is watertight (crack-free) at any level; curved edges
+    // (Circle / NURBS) therefore tessellate smoothly. subdivisions=0 is the flat
+    // control-vertex tessellation. Dead entities are skipped.
+    [[nodiscard]] Mesh toMesh(uint32_t subdivisions = 0) const;
 
     // Evaluates a face's surface at (u,v), dispatching to the stored NURBS
     // surface when the face is on one, else to the analytic Surface::eval.

@@ -425,6 +425,46 @@ TEST(AnalyticBRep, MergeFacesRejectsBoundaryOrInvalid)
     EXPECT_FALSE(b2.mergeFaces(0));           // edge 0 is now dead → refused
 }
 
+// toMesh(subdivisions) places intermediate points per EDGE (shared by both
+// incident faces), so the tessellation is watertight (crack-free) at any level.
+TEST(AnalyticBRep, ToMeshSubdivisionsStayWatertight)
+{
+    for (const Body& b : {makeBox(2.f, 2.f, 2.f), makeCylinder(1.f, 2.f, 8),
+                          makeCone(1.f, 2.f, 6), makeSphere(1.f, 5, 8)}) {
+        size_t prevVerts = 0;
+        for (uint32_t s : {0u, 1u, 2u, 4u}) {
+            const Mesh m = b.toMesh(s);
+            EXPECT_TRUE(m.isValid());
+            EXPECT_EQ(MeshTopologyValidation::validate(m).euler, 2) << "subdiv " << s;
+            if (s > 0) EXPECT_GT(m.attributes().vertexCount(), prevVerts) << "subdiv " << s;
+            prevVerts = m.attributes().vertexCount();
+        }
+    }
+}
+
+// The cylinder's ring edges are true Circle arcs, so its subdivided tessellation
+// lies exactly on the cylinder (not on chords) — proven by every tessellated
+// vertex sitting on the given radius, while both validators still pass.
+TEST(AnalyticBRep, CylinderHasArcEdgesAndTessellatesOnSurface)
+{
+    const float radius = 2.f;
+    const Body cyl = makeCylinder(radius, 3.f, 8);
+    EXPECT_TRUE(cyl.checkIntegrity().ok);
+    EXPECT_TRUE(cyl.checkGeometry().ok) << "arc-edge curves must still meet their vertices";
+
+    // At least one edge is now a Circle arc.
+    bool anyArc = false;
+    for (uint32_t e = 0; e < cyl.edgeCount(); ++e)
+        if (cyl.curve(cyl.edge(e).curve).kind == CurveKind::Circle) anyArc = true;
+    EXPECT_TRUE(anyArc);
+
+    // Every tessellated vertex lies on the cylinder of the given radius.
+    const Mesh m = cyl.toMesh(4);
+    EXPECT_EQ(MeshTopologyValidation::validate(m).euler, 2);
+    for (const Vec3& p : m.attributes().positions())
+        EXPECT_NEAR(std::sqrt(p.x * p.x + p.y * p.y), radius, 1e-3f);
+}
+
 TEST(AnalyticBRep, FromFacesRejectsMalformedInput)
 {
     // No points / no faces.
