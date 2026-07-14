@@ -26,6 +26,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 #include <nexus/geometry/Mesh.h>
+#include <nexus/geometry/NurbsSurface.h>
 #include <nexus/geometry/Tolerance.h>
 #include <nexus/render/Camera.h>
 
@@ -143,9 +144,12 @@ public:
     };
 
     // One face definition for fromFaces(): a CCW vertex-index ring + its surface.
+    // If nurbsSurface is set, the face lies on that exact NURBS surface (stored
+    // in the Body); `surface` is then tagged Nurbs with a handle into the store.
     struct FaceDef {
         std::vector<uint32_t> loop;
         Surface surface;
+        std::optional<NurbsSurface> nurbsSurface;
     };
 
     // Assemble a body from a point set and per-face vertex rings. Edges are
@@ -166,6 +170,11 @@ public:
     // Polygonal tessellation of the shell (each face's outer loop, fan-
     // triangulated) — for display and cross-checking against the mesh validator.
     [[nodiscard]] Mesh toMesh() const;
+
+    // Evaluates a face's surface at (u,v), dispatching to the stored NURBS
+    // surface when the face is on one, else to the analytic Surface::eval.
+    [[nodiscard]] Vec3 surfacePoint(uint32_t surfaceId, float u, float v) const;
+    [[nodiscard]] size_t nurbsSurfaceCount() const noexcept { return m_nurbsSurfaces.size(); }
 
     [[nodiscard]] size_t vertexCount() const noexcept { return m_verts.size(); }
     [[nodiscard]] size_t edgeCount()   const noexcept { return m_edges.size(); }
@@ -199,6 +208,7 @@ private:
     std::vector<Solid>   m_solids;
     std::vector<Curve>   m_curves;
     std::vector<Surface> m_surfaces;
+    std::vector<NurbsSurface> m_nurbsSurfaces;  // exact surfaces referenced by Nurbs faces
 };
 
 // ──────────── Primitives ─────────────────────────────────────────────────────

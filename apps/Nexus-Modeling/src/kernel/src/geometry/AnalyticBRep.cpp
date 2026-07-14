@@ -148,6 +148,12 @@ std::optional<Body> Body::fromFaces(const std::vector<Vec3>& points,
 
         const uint32_t surfaceId = static_cast<uint32_t>(b.m_surfaces.size());
         b.m_surfaces.push_back(fd.surface);
+        if (fd.nurbsSurface.has_value()) {
+            const uint32_t handle = static_cast<uint32_t>(b.m_nurbsSurfaces.size());
+            b.m_nurbsSurfaces.push_back(*fd.nurbsSurface);
+            b.m_surfaces[surfaceId].kind = SurfaceKind::Nurbs;
+            b.m_surfaces[surfaceId].nurbs = handle;
+        }
 
         const uint32_t faceId = static_cast<uint32_t>(b.m_faces.size());
         b.m_faces.push_back({});
@@ -396,6 +402,17 @@ Body::GeometryReport Body::checkGeometry(Tolerance tol) const
     }
 
     return r;
+}
+
+// ──────────── Surface evaluation ─────────────────────────────────────────────
+
+Vec3 Body::surfacePoint(uint32_t surfaceId, float u, float v) const
+{
+    if (surfaceId >= m_surfaces.size()) return {};
+    const Surface& s = m_surfaces[surfaceId];
+    if (s.kind == SurfaceKind::Nurbs && s.nurbs < m_nurbsSurfaces.size())
+        return m_nurbsSurfaces[s.nurbs].evaluate(u, v);
+    return s.eval(u, v);
 }
 
 // ──────────── Tessellation ───────────────────────────────────────────────────

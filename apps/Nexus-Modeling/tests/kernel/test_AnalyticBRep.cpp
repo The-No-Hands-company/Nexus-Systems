@@ -6,6 +6,7 @@
 
 #include <nexus/geometry/AnalyticBRep.h>
 #include <nexus/geometry/MeshTopologyValidation.h>
+#include <nexus/geometry/NurbsSurface.h>
 
 #include <gtest/gtest.h>
 
@@ -195,6 +196,49 @@ TEST(AnalyticBRep, CheckGeometryCatchesNonFinitePoint)
     const auto g = box.checkGeometry();
     EXPECT_FALSE(g.ok);
     EXPECT_NE(g.reason.find("non-finite"), std::string::npos) << g.reason;
+}
+
+// A B-rep face can lie on an exact NURBS surface: the surface is stored on the
+// Body, the face is tagged Nurbs with a handle, and Body::surfacePoint delegates
+// eval to the NURBS toolkit. Both validators still pass.
+TEST(AnalyticBRep, NurbsSurfaceFaceValidatesAndEvaluates)
+{
+    // Bilinear patch (degree 1×1, 2×2 control points) = a flat quad in z=0.
+    const std::vector<Vec3> pts = {{0, 0, 0}, {2, 0, 0}, {2, 2, 0}, {0, 2, 0}};
+    const std::vector<Vec3> ctl = {{0, 0, 0}, {0, 2, 0}, {2, 0, 0}, {2, 2, 0}};  // i*nV+j
+    NurbsSurface patch(1, 1, {0, 0, 1, 1}, {0, 0, 1, 1}, ctl, 2, 2);
+    ASSERT_TRUE(patch.isValid());
+
+    Body::FaceDef fd;
+    fd.loop = {0u, 1u, 2u, 3u};
+    fd.nurbsSurface = patch;
+    const auto body = Body::fromFaces(pts, {fd});
+    ASSERT_TRUE(body.has_value());
+
+    EXPECT_TRUE(body->checkIntegrity().ok);
+    EXPECT_TRUE(body->checkGeometry().ok);
+    EXPECT_EQ(body->nurbsSurfaceCount(), 1u);
+
+    // surfacePoint dispatches to the NURBS surface: bilinear centre = corner avg.
+    const Vec3 c = body->surfacePoint(body->face(0).surface, 0.5f, 0.5f);
+    EXPECT_NEAR(c.x, 1.f, 1e-4f);
+    EXPECT_NEAR(c.y, 1.f, 1e-4f);
+    EXPECT_NEAR(c.z, 0.f, 1e-4f);
+}
+
+// surfacePoint dispatches to the analytic Surface::eval for non-NURBS faces.
+TEST(AnalyticBRep, SurfacePointUsesAnalyticEvalForPlaneFaces)
+{
+    const Body box = makeBox(2.f, 2.f, 2.f);
+    EXPECT_EQ(box.nurbsSurfaceCount(), 0u);
+    for (uint32_t f = 0; f < box.faceCount(); ++f) {
+        const uint32_t sid = box.face(f).surface;
+        const Vec3 viaBody = box.surfacePoint(sid, 0.3f, 0.7f);
+        const Vec3 viaSurface = box.surface(sid).eval(0.3f, 0.7f);
+        EXPECT_FLOAT_EQ(viaBody.x, viaSurface.x);
+        EXPECT_FLOAT_EQ(viaBody.y, viaSurface.y);
+        EXPECT_FLOAT_EQ(viaBody.z, viaSurface.z);
+    }
 }
 
 TEST(AnalyticBRep, FromFacesRejectsMalformedInput)
