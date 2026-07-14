@@ -37,6 +37,7 @@ src/kernel/include/nexus/cad/CadTolerantModeling.h
 src/kernel/include/nexus/cad/CadUnitSystem.h
 src/kernel/include/nexus/cad/CadViewer.h
 src/kernel/include/nexus/eval/EvalGraph.h
+src/kernel/include/nexus/geometry/AnalyticBRep.h
 src/kernel/include/nexus/geometry/BRepBody.h
 src/kernel/include/nexus/geometry/BevelChamfer.h
 src/kernel/include/nexus/geometry/BezierCurve.h

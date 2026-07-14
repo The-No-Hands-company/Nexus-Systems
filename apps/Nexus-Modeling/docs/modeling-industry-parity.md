@@ -61,7 +61,7 @@ The layer tables below measure **breadth** — is a feature *present*? This sect
 |---|---|---|---|---|
 | Indexed polygon mesh (n-gon) | Positions/normals/UV/tangents, stable IDs, skin weights | all | ✅ | — |
 | Half-edge / BMesh topology | Adjacency for interactive edit ops | Blender, Maya, Modo | ✅ | — |
-| Boundary representation (B-rep) | Typed vertex/edge/face/shell with exact topology | CAD apps, Plasticity | 🟡 | Mesh-backed B-rep; not analytic NURBS-trimmed solid |
+| Boundary representation (B-rep) | Typed vertex/edge/face/shell with exact topology | CAD apps, Plasticity | 🟡 *(analytic core underway)* | Mesh-backed `BRepBody` exists; **a true analytic B-rep is now being built** — `brep::Body` (`AnalyticBRep.h`) binds typed topology (vertex/edge/**coedge**/loop/face/shell/solid) to analytic geometry (Line/Circle curves, Plane/Cylinder/Sphere surfaces), with a `checkIntegrity()` validator (coedge partners reciprocal + opposite-oriented, loop rings close, vertex continuity, no non-manifold edges) and a `fromFaces` assembler. Increment 1 proven: the analytic box is a watertight coedge-partnered solid (V8/E12/F6/24 coedges, euler 2). Next: analytic primitives (cylinder/sphere), NURBS-surface faces + trim loops, tessellation to display, then boolean/Euler ops |
 | NURBS curves & surfaces | Trimmed NURBS, fit/offset/intersect | Rhino, Maya, CAD | ✅ | — |
 | Subdivision surfaces (Catmull-Clark) | Levels + edge/vertex creasing (OpenSubdiv-grade) | all | ✅ | Verify crease + UV-boundary rules vs OpenSubdiv |
 | Implicit / SDF | Signed-distance fields, surface nets, winding number | Houdini, ZBrush, nTop | ✅ | — |
