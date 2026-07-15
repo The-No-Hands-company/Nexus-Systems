@@ -65,6 +65,7 @@ add_executable(nexus_kernel_tests
     kernel/test_BRepBooleanCoincident.cpp
     kernel/test_BRepMergeCoplanar.cpp
     kernel/test_BRepSimplify.cpp
+    kernel/test_BRepSerialize.cpp
     kernel/test_HardSurfaceWorkflow.cpp
     kernel/test_InsetFacesOperation.cpp
     kernel/test_Material.cpp

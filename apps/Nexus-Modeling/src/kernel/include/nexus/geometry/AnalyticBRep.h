@@ -245,6 +245,14 @@ public:
     // coedges agree on the shared edge's endpoints. Uses the central Tolerance.
     [[nodiscard]] GeometryReport checkGeometry(Tolerance tol = {}) const;
 
+    // Versioned binary serialization of the full analytic B-rep (topology +
+    // analytic geometry + the NURBS-surface store). Deterministic byte output.
+    // deserialize returns nullopt on a bad magic/version, a truncated/garbage
+    // buffer, or a non-finite float in the stream (bit-inspection checked). The
+    // format is forward-versioned: a reader accepts its own and earlier versions.
+    [[nodiscard]] std::vector<std::uint8_t> serialize() const;
+    [[nodiscard]] static std::optional<Body> deserialize(const std::vector<std::uint8_t>& bytes);
+
     // Tessellation of the shell to a triangle mesh. `subdivisions` intermediate
     // points are placed on each EDGE via its curve — shared by both incident
     // faces, so the result is watertight (crack-free) at any level; curved edges

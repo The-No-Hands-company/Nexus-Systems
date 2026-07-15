@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <cstring>
 #include <unordered_map>
 
 namespace nexus::geometry::brep {
@@ -1356,6 +1357,296 @@ bool Body::setEdgeArc(uint32_t edgeId, const Vec3& center, const Vec3& axis, flo
     m_edges[edgeId].t0 = 0.f;
     m_edges[edgeId].t1 = ang;
     return true;
+}
+
+// ──────────── Serialization ──────────────────────────────────────────────────
+
+namespace {
+constexpr std::uint32_t kBRepMagic = 0x5242584Eu;  // 'NXBR'
+constexpr std::uint32_t kBRepVersion = 1u;
+
+void putU8(std::vector<std::uint8_t>& o, std::uint8_t v) { o.push_back(v); }
+void putU32(std::vector<std::uint8_t>& o, std::uint32_t v)
+{
+    o.push_back(static_cast<std::uint8_t>(v & 0xFFu));
+    o.push_back(static_cast<std::uint8_t>((v >> 8) & 0xFFu));
+    o.push_back(static_cast<std::uint8_t>((v >> 16) & 0xFFu));
+    o.push_back(static_cast<std::uint8_t>((v >> 24) & 0xFFu));
+}
+void putI32(std::vector<std::uint8_t>& o, std::int32_t v) { putU32(o, std::bit_cast<std::uint32_t>(v)); }
+void putF32(std::vector<std::uint8_t>& o, float v) { putU32(o, std::bit_cast<std::uint32_t>(v)); }
+void putVec3(std::vector<std::uint8_t>& o, const Vec3& v) { putF32(o, v.x); putF32(o, v.y); putF32(o, v.z); }
+
+struct Reader {
+    const std::vector<std::uint8_t>& b;
+    std::size_t off = 0;
+    bool ok = true;
+    bool u8(std::uint8_t& out)
+    {
+        if (!ok || off + 1 > b.size()) return ok = false;
+        out = b[off++];
+        return true;
+    }
+    bool u32(std::uint32_t& out)
+    {
+        if (!ok || off + 4 > b.size()) return ok = false;
+        out = static_cast<std::uint32_t>(b[off]) | (static_cast<std::uint32_t>(b[off + 1]) << 8) |
+              (static_cast<std::uint32_t>(b[off + 2]) << 16) |
+              (static_cast<std::uint32_t>(b[off + 3]) << 24);
+        off += 4;
+        return true;
+    }
+    bool i32(std::int32_t& out)
+    {
+        std::uint32_t u = 0;
+        if (!u32(u)) return false;
+        out = std::bit_cast<std::int32_t>(u);
+        return true;
+    }
+    bool f32(float& out)
+    {
+        std::uint32_t u = 0;
+        if (!u32(u)) return false;
+        out = std::bit_cast<float>(u);
+        if (!isFinite(out)) return ok = false;  // reject non-finite on read
+        return true;
+    }
+    bool vec3(Vec3& out) { return f32(out.x) && f32(out.y) && f32(out.z); }
+    bool boolean(bool& out)
+    {
+        std::uint8_t v = 0;
+        if (!u8(v)) return false;
+        out = (v != 0);
+        return true;
+    }
+    // A length prefix that cannot exceed the remaining bytes (each element ≥1B),
+    // so a garbage buffer can't trigger a huge allocation.
+    bool count(std::uint32_t& out)
+    {
+        if (!u32(out)) return false;
+        if (out > b.size()) return ok = false;
+        return true;
+    }
+    bool u32Vec(std::vector<std::uint32_t>& out)
+    {
+        std::uint32_t n = 0;
+        if (!count(n)) return false;
+        out.resize(n);
+        for (auto& e : out)
+            if (!u32(e)) return false;
+        return true;
+    }
+    bool floatVec(std::vector<float>& out)
+    {
+        std::uint32_t n = 0;
+        if (!count(n)) return false;
+        out.resize(n);
+        for (auto& e : out)
+            if (!f32(e)) return false;
+        return true;
+    }
+    bool vec3Vec(std::vector<Vec3>& out)
+    {
+        std::uint32_t n = 0;
+        if (!count(n)) return false;
+        out.resize(n);
+        for (auto& e : out)
+            if (!vec3(e)) return false;
+        return true;
+    }
+};
+}  // namespace
+
+std::vector<std::uint8_t> Body::serialize() const
+{
+    std::vector<std::uint8_t> o;
+    putU32(o, kBRepMagic);
+    putU32(o, kBRepVersion);
+
+    putU32(o, static_cast<std::uint32_t>(m_verts.size()));
+    for (const Vertex& v : m_verts) {
+        putVec3(o, v.point);
+        putU32(o, v.coedge);
+        putU8(o, v.alive ? 1u : 0u);
+    }
+    putU32(o, static_cast<std::uint32_t>(m_edges.size()));
+    for (const Edge& e : m_edges) {
+        putU32(o, e.curve);
+        putU32(o, e.v0);
+        putU32(o, e.v1);
+        putF32(o, e.t0);
+        putF32(o, e.t1);
+        putU32(o, e.coedge);
+        putU8(o, e.alive ? 1u : 0u);
+    }
+    putU32(o, static_cast<std::uint32_t>(m_coedges.size()));
+    for (const Coedge& c : m_coedges) {
+        putU32(o, c.edge);
+        putU8(o, c.reversed ? 1u : 0u);
+        putU32(o, c.loop);
+        putU32(o, c.next);
+        putU32(o, c.prev);
+        putU32(o, c.partner);
+        putU8(o, c.alive ? 1u : 0u);
+    }
+    putU32(o, static_cast<std::uint32_t>(m_loops.size()));
+    for (const Loop& l : m_loops) {
+        putU32(o, l.face);
+        putU32(o, l.first);
+        putU8(o, l.outer ? 1u : 0u);
+        putU8(o, l.alive ? 1u : 0u);
+    }
+    putU32(o, static_cast<std::uint32_t>(m_faces.size()));
+    for (const Face& f : m_faces) {
+        putU32(o, f.surface);
+        putU8(o, f.reversed ? 1u : 0u);
+        putU32(o, f.outerLoop);
+        putU32(o, static_cast<std::uint32_t>(f.innerLoops.size()));
+        for (std::uint32_t il : f.innerLoops) putU32(o, il);
+        putU32(o, f.shell);
+        putU8(o, f.alive ? 1u : 0u);
+    }
+    putU32(o, static_cast<std::uint32_t>(m_shells.size()));
+    for (const Shell& s : m_shells) {
+        putU32(o, static_cast<std::uint32_t>(s.faces.size()));
+        for (std::uint32_t fi : s.faces) putU32(o, fi);
+        putU8(o, s.closed ? 1u : 0u);
+    }
+    putU32(o, static_cast<std::uint32_t>(m_solids.size()));
+    for (const Solid& s : m_solids) {
+        putU32(o, static_cast<std::uint32_t>(s.shells.size()));
+        for (std::uint32_t sh : s.shells) putU32(o, sh);
+    }
+    putU32(o, static_cast<std::uint32_t>(m_curves.size()));
+    for (const Curve& c : m_curves) {
+        putU8(o, static_cast<std::uint8_t>(c.kind));
+        putVec3(o, c.origin);
+        putVec3(o, c.dir);
+        putVec3(o, c.ref);
+        putF32(o, c.radius);
+        putU32(o, c.nurbs);
+    }
+    putU32(o, static_cast<std::uint32_t>(m_surfaces.size()));
+    for (const Surface& s : m_surfaces) {
+        putU8(o, static_cast<std::uint8_t>(s.kind));
+        putVec3(o, s.origin);
+        putVec3(o, s.normal);
+        putVec3(o, s.uAxis);
+        putF32(o, s.radius);
+        putU32(o, s.nurbs);
+    }
+    putU32(o, static_cast<std::uint32_t>(m_nurbsSurfaces.size()));
+    for (const NurbsSurface& n : m_nurbsSurfaces) {
+        putI32(o, n.degreeU());
+        putI32(o, n.degreeV());
+        putI32(o, n.controlPointCountU());
+        putI32(o, n.controlPointCountV());
+        putU32(o, static_cast<std::uint32_t>(n.knotU().size()));
+        for (float k : n.knotU()) putF32(o, k);
+        putU32(o, static_cast<std::uint32_t>(n.knotV().size()));
+        for (float k : n.knotV()) putF32(o, k);
+        putU32(o, static_cast<std::uint32_t>(n.controlPoints().size()));
+        for (const Vec3& p : n.controlPoints()) putVec3(o, p);
+        putU32(o, static_cast<std::uint32_t>(n.weights().size()));
+        for (float w : n.weights()) putF32(o, w);
+    }
+    return o;
+}
+
+std::optional<Body> Body::deserialize(const std::vector<std::uint8_t>& bytes)
+{
+    Reader r{bytes};
+    std::uint32_t magic = 0, version = 0;
+    if (!r.u32(magic) || magic != kBRepMagic) return std::nullopt;
+    if (!r.u32(version) || version < 1u || version > kBRepVersion) return std::nullopt;
+
+    Body b;
+    std::uint32_t n = 0;
+
+    if (!r.count(n)) return std::nullopt;
+    b.m_verts.resize(n);
+    for (Vertex& v : b.m_verts)
+        if (!r.vec3(v.point) || !r.u32(v.coedge) || !r.boolean(v.alive)) return std::nullopt;
+
+    if (!r.count(n)) return std::nullopt;
+    b.m_edges.resize(n);
+    for (Edge& e : b.m_edges)
+        if (!r.u32(e.curve) || !r.u32(e.v0) || !r.u32(e.v1) || !r.f32(e.t0) || !r.f32(e.t1) ||
+            !r.u32(e.coedge) || !r.boolean(e.alive))
+            return std::nullopt;
+
+    if (!r.count(n)) return std::nullopt;
+    b.m_coedges.resize(n);
+    for (Coedge& c : b.m_coedges)
+        if (!r.u32(c.edge) || !r.boolean(c.reversed) || !r.u32(c.loop) || !r.u32(c.next) ||
+            !r.u32(c.prev) || !r.u32(c.partner) || !r.boolean(c.alive))
+            return std::nullopt;
+
+    if (!r.count(n)) return std::nullopt;
+    b.m_loops.resize(n);
+    for (Loop& l : b.m_loops)
+        if (!r.u32(l.face) || !r.u32(l.first) || !r.boolean(l.outer) || !r.boolean(l.alive))
+            return std::nullopt;
+
+    if (!r.count(n)) return std::nullopt;
+    b.m_faces.resize(n);
+    for (Face& f : b.m_faces) {
+        if (!r.u32(f.surface) || !r.boolean(f.reversed) || !r.u32(f.outerLoop)) return std::nullopt;
+        if (!r.u32Vec(f.innerLoops)) return std::nullopt;
+        if (!r.u32(f.shell) || !r.boolean(f.alive)) return std::nullopt;
+    }
+
+    if (!r.count(n)) return std::nullopt;
+    b.m_shells.resize(n);
+    for (Shell& s : b.m_shells) {
+        if (!r.u32Vec(s.faces)) return std::nullopt;
+        if (!r.boolean(s.closed)) return std::nullopt;
+    }
+
+    if (!r.count(n)) return std::nullopt;
+    b.m_solids.resize(n);
+    for (Solid& s : b.m_solids)
+        if (!r.u32Vec(s.shells)) return std::nullopt;
+
+    if (!r.count(n)) return std::nullopt;
+    b.m_curves.resize(n);
+    for (Curve& c : b.m_curves) {
+        std::uint8_t kind = 0;
+        if (!r.u8(kind) || !r.vec3(c.origin) || !r.vec3(c.dir) || !r.vec3(c.ref) ||
+            !r.f32(c.radius) || !r.u32(c.nurbs))
+            return std::nullopt;
+        c.kind = static_cast<CurveKind>(kind);
+    }
+
+    if (!r.count(n)) return std::nullopt;
+    b.m_surfaces.resize(n);
+    for (Surface& s : b.m_surfaces) {
+        std::uint8_t kind = 0;
+        if (!r.u8(kind) || !r.vec3(s.origin) || !r.vec3(s.normal) || !r.vec3(s.uAxis) ||
+            !r.f32(s.radius) || !r.u32(s.nurbs))
+            return std::nullopt;
+        s.kind = static_cast<SurfaceKind>(kind);
+    }
+
+    if (!r.count(n)) return std::nullopt;
+    b.m_nurbsSurfaces.reserve(n);
+    for (std::uint32_t i = 0; i < n; ++i) {
+        std::int32_t degU = 0, degV = 0, nU = 0, nV = 0;
+        std::vector<float> knotU, knotV, weights;
+        std::vector<Vec3> ctl;
+        if (!r.i32(degU) || !r.i32(degV) || !r.i32(nU) || !r.i32(nV)) return std::nullopt;
+        if (!r.floatVec(knotU) || !r.floatVec(knotV) || !r.vec3Vec(ctl) || !r.floatVec(weights))
+            return std::nullopt;
+        if (weights.empty())
+            b.m_nurbsSurfaces.emplace_back(degU, degV, std::move(knotU), std::move(knotV),
+                                           std::move(ctl), nU, nV);
+        else
+            b.m_nurbsSurfaces.emplace_back(degU, degV, std::move(knotU), std::move(knotV),
+                                           std::move(ctl), nU, nV, std::move(weights));
+    }
+
+    if (!r.ok) return std::nullopt;
+    return b;
 }
 
 // ──────────── Primitives ─────────────────────────────────────────────────────
