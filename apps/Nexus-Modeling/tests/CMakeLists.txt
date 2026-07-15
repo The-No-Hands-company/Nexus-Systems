@@ -56,6 +56,7 @@ add_executable(nexus_kernel_tests
     kernel/test_AnalyticBRep.cpp
     kernel/test_BRepSurfaceIntersect.cpp
     kernel/test_BRepImprint.cpp
+    kernel/test_BRepImprintCircle.cpp
     kernel/test_BRepClassifyPoint.cpp
     kernel/test_BRepClassifyFace.cpp
     kernel/test_BRepTransform.cpp

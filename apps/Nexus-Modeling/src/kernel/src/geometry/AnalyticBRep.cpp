@@ -64,6 +64,45 @@ bool segmentLineCrossing(const Vec3& A, const Vec3& B, const Curve& curve, float
     sOut = s;
     return true;
 }
+// Fractions s in (0.02, 0.98) at which the straight segment A→B crosses the
+// circle of centre C radius r (both coplanar): roots of |A + sE − C|² = r².
+// Returns 0/1/2 interior crossings (a tangent counts once).
+int circleSegmentFracs(const Vec3& A, const Vec3& B, const Vec3& C, float r, float out[2])
+{
+    const Vec3 E = sub(B, A), d = sub(A, C);
+    const float a = dot(E, E);
+    if (a < 1e-20f) return 0;
+    const float b = 2.f * dot(d, E), c = dot(d, d) - r * r;
+    const float disc = b * b - 4.f * a * c;
+    if (disc < 0.f) return 0;
+    const float sq = std::sqrt(disc);
+    int cnt = 0;
+    const float s0 = (-b - sq) / (2.f * a), s1 = (-b + sq) / (2.f * a);
+    if (s0 > 0.02f && s0 < 0.98f) out[cnt++] = s0;
+    if (sq > 1e-9f && s1 > 0.02f && s1 < 0.98f) out[cnt++] = s1;  // skip tangent duplicate
+    return cnt;
+}
+
+// Point-in-polygon for a planar polygon `poly` with normal `n`, projected to the
+// plane's 2D frame (ray-crossing rule).
+bool pointInPlanarPolygon(const Vec3& p, const std::vector<Vec3>& poly, const Vec3& n)
+{
+    if (poly.size() < 3) return false;
+    const Vec3 u = normalize(sub(poly[1], poly[0]));
+    const Vec3 v = cross(n, u);
+    auto x2 = [&](const Vec3& q) { return dot(sub(q, poly[0]), u); };
+    auto y2 = [&](const Vec3& q) { return dot(sub(q, poly[0]), v); };
+    const float px = x2(p), py = y2(p);
+    bool inside = false;
+    const size_t m = poly.size();
+    for (size_t i = 0, j = m - 1; i < m; j = i++) {
+        const float xi = x2(poly[i]), yi = y2(poly[i]);
+        const float xj = x2(poly[j]), yj = y2(poly[j]);
+        if (((yi > py) != (yj > py)) && (px < (xj - xi) * (py - yi) / (yj - yi) + xi))
+            inside = !inside;
+    }
+    return inside;
+}
 uint64_t edgeKey(uint32_t a, uint32_t b)
 {
     const uint32_t lo = a < b ? a : b, hi = a < b ? b : a;
@@ -759,7 +798,7 @@ uint32_t Body::cutFaceBetween(uint32_t faceId, uint32_t vA, uint32_t vB,
 uint32_t Body::imprintCurve(uint32_t faceId, const Curve& curve, Tolerance tol)
 {
     if (faceId >= m_faces.size() || !m_faces[faceId].alive) return kInvalid;
-    if (curve.kind != CurveKind::Line) return kInvalid;  // only Line imprint here
+    if (curve.kind != CurveKind::Line && curve.kind != CurveKind::Circle) return kInvalid;
     const uint32_t loopId = m_faces[faceId].outerLoop;
     if (loopId >= m_loops.size() || m_loops[loopId].first >= m_coedges.size()) return kInvalid;
     // Crossing test tolerance, proportioned to the face (unit-ish characteristic).
@@ -779,6 +818,61 @@ uint32_t Body::imprintCurve(uint32_t faceId, const Curve& curve, Tolerance tol)
     }
     const size_t n = bVerts.size();
 
+    // ── Circle imprint (arc bite crossing two distinct boundary edges) ──────────
+    if (curve.kind == CurveKind::Circle) {
+        // The face must be planar and the circle coplanar with it, so the arc lies
+        // ON the face (axis ⟂ the plane, centre on the plane).
+        const uint32_t sid = m_faces[faceId].surface;
+        if (sid >= m_surfaces.size() || m_surfaces[sid].kind != SurfaceKind::Plane) return kInvalid;
+        const Vec3 fn = m_surfaces[sid].normal;
+        if (std::abs(dot(normalize(curve.dir), fn)) < 1.f - 1e-4f) return kInvalid;
+        if (std::abs(dot(sub(curve.origin, m_surfaces[sid].origin), fn)) > eps) return kInvalid;
+
+        // Boundary polygon (captured before any split) for the inside-arc test.
+        std::vector<Vec3> poly;
+        poly.reserve(n);
+        for (uint32_t v : bVerts) poly.push_back(m_verts[v].point);
+
+        // Circle × each Line boundary edge → crossings; need exactly two, on two
+        // DISTINCT edges. (Same-edge bite and fully-interior circle → inner-loop
+        // hole are follow-up increments.)
+        struct CCross { uint32_t edge; float frac; };
+        std::vector<CCross> cc;
+        for (size_t i = 0; i < n; ++i) {
+            const uint32_t e = bEdges[i];
+            if (e >= m_edges.size()) continue;
+            const uint32_t cu = m_edges[e].curve;
+            if (cu >= m_curves.size() || m_curves[cu].kind != CurveKind::Line) continue;
+            float fr[2];
+            const int k = circleSegmentFracs(m_verts[m_edges[e].v0].point,
+                                             m_verts[m_edges[e].v1].point, curve.origin,
+                                             curve.radius, fr);
+            for (int j = 0; j < k; ++j) cc.push_back({e, fr[j]});
+        }
+        if (cc.size() != 2 || cc[0].edge == cc[1].edge) return kInvalid;
+
+        const uint32_t vA = splitEdge(cc[0].edge, cc[0].frac);
+        const uint32_t vB = splitEdge(cc[1].edge, cc[1].frac);
+        if (vA == kInvalid || vB == kInvalid || vA == vB) return kInvalid;
+
+        const uint32_t ce = static_cast<uint32_t>(m_edges.size());  // the cut edge id
+        const uint32_t newFace = cutFaceBetween(faceId, vA, vB, &curve);
+        if (newFace == kInvalid) return kInvalid;
+
+        // cutFaceBetween set the cut edge's param range from the raw endpoint
+        // angles, tracing one of the two arcs. Keep the one lying INSIDE the face
+        // (both share the endpoints, so checkGeometry holds either way).
+        if (ce < m_edges.size()) {
+            const float t0 = m_edges[ce].t0, t1 = m_edges[ce].t1;
+            if (!pointInPlanarPolygon(curve.eval((t0 + t1) * 0.5f), poly, fn)) {
+                constexpr float kTwoPi = 6.28318530717958647692f;
+                m_edges[ce].t1 = (t1 > t0) ? (t1 - kTwoPi) : (t1 + kTwoPi);
+            }
+        }
+        return newFace;
+    }
+
+    // ── Line imprint ────────────────────────────────────────────────────────────
     // Perpendicular distance of a point to the (infinite) imprint line.
     auto distToLine = [&](const Vec3& p) {
         const Vec3 w = sub(p, curve.origin);
