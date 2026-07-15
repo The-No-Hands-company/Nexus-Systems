@@ -62,6 +62,44 @@ bool keepFace(PC cls, BooleanOp op, bool isA, bool& reverse)
     }
     return false;
 }
+
+// Select a face for the result, handling the COINCIDENT (coplanar-overlap) case
+// that keepFace can't: when a face classifies OnBoundary against the other solid
+// it lies on a shared coplanar boundary (a coincident face pair). Only the
+// A-side of such a pair can survive; the B-side is always dropped so the pair
+// contributes at most one face. Whether A's copy survives depends on the
+// relative outward orientation, found by probing just inside A's face: if the
+// other solid's interior is on the SAME side (probe point is inside it) the two
+// interiors overlap here and the face bounds Union/Intersection; if OPPOSITE the
+// solids merely touch and the face is interior to Union/Intersection but stays
+// on A's outer skin for Difference.
+//
+//   op \ normals     SAME (interiors same side)   OPPOSITE (touch)
+//   Union            keep A                        drop
+//   Intersection     keep A                        drop
+//   Difference A-B   drop                          keep A
+bool selectFace(const Body& body, uint32_t f, const Body& other, BooleanOp op, bool isA,
+                Tolerance tol, bool& reverse)
+{
+    reverse = false;
+    const PC cls = body.classifyFace(f, other, tol);
+    if (cls != PC::OnBoundary) return keepFace(cls, op, isA, reverse);
+
+    if (!isA) return false;  // coincident pair is represented by the A-side face
+    const Vec3 c = body.faceCentroid(f);
+    const Vec3 nA = faceOutwardNormal(body, f);
+    const float eps = std::max(tol.absolute * 100.f, 1e-3f);
+    const Vec3 pIn{c.x - eps * nA.x, c.y - eps * nA.y, c.z - eps * nA.z};  // just inside A
+    const bool same = (other.classifyPoint(pIn, tol) == PC::Inside);
+    switch (op) {
+        case BooleanOp::Union:
+        case BooleanOp::Intersection:
+            return same;
+        case BooleanOp::Difference:
+            return !same;
+    }
+    return false;
+}
 }  // namespace
 
 Mesh booleanToMesh(const Body& a, const Body& b, BooleanOp op, Tolerance tol)
@@ -79,14 +117,14 @@ Mesh booleanToMesh(const Body& a, const Body& b, BooleanOp op, Tolerance tol)
     for (uint32_t f = 0; f < A.faceCount(); ++f) {
         if (!A.face(f).alive) continue;
         bool reverse = false;
-        if (keepFace(A.classifyFace(f, B, tol), op, /*isA=*/true, reverse))
+        if (selectFace(A, f, B, op, /*isA=*/true, tol, reverse))
             emitFace(A, f, reverse, positions, topo);
     }
     // Select + emit B's kept faces (classified against A).
     for (uint32_t f = 0; f < B.faceCount(); ++f) {
         if (!B.face(f).alive) continue;
         bool reverse = false;
-        if (keepFace(B.classifyFace(f, A, tol), op, /*isA=*/false, reverse))
+        if (selectFace(B, f, A, op, /*isA=*/false, tol, reverse))
             emitFace(B, f, reverse, positions, topo);
     }
 
@@ -121,7 +159,7 @@ Body booleanToBody(const Body& a, const Body& b, BooleanOp op, Tolerance tol)
         for (uint32_t f = 0; f < body.faceCount(); ++f) {
             if (!body.face(f).alive) continue;
             bool reverse = false;
-            if (!keepFace(body.classifyFace(f, other, tol), op, isA, reverse)) continue;
+            if (!selectFace(body, f, other, op, isA, tol, reverse)) continue;
             std::vector<uint32_t> vs = body.faceVertices(f);
             if (vs.size() < 3) continue;
             if (reverse) std::reverse(vs.begin(), vs.end());  // outward for the cavity
