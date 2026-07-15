@@ -284,6 +284,7 @@ public:
     [[nodiscard]] size_t faceCount()   const noexcept { return m_faces.size(); }
     [[nodiscard]] size_t shellCount()  const noexcept { return m_shells.size(); }
     [[nodiscard]] size_t solidCount()  const noexcept { return m_solids.size(); }
+    [[nodiscard]] size_t surfaceCount() const noexcept { return m_surfaces.size(); }
 
     [[nodiscard]] const Vertex&  vertex(uint32_t i) const { return m_verts[i]; }
     // Mutable vertex access (for editing ops; checkGeometry guards consistency
@@ -338,5 +339,18 @@ private:
 // A UV sphere (pole triangle fans + latitude quad bands) on a Sphere surface.
 // Watertight solid, euler 2. latSegments ≥ 2, lonSegments ≥ 3.
 [[nodiscard]] Body makeSphere(float radius, uint32_t latSegments, uint32_t lonSegments);
+
+// ──────────── Boolean building blocks ────────────────────────────────────────
+
+// Mutual imprint of two overlapping solids — the B-rep boolean's SEGMENTATION
+// step. Imprints onto each body every intersection Line where a planar face of
+// the OTHER body transects one of its faces (intersectSurfaces → imprintCurve),
+// iterating to a fixpoint. Afterwards no face of either body straddles the
+// other's boundary: every face is entirely Inside, entirely Outside, or on the
+// other solid — the precondition for selecting and sewing sub-faces per boolean
+// op. Both bodies are modified in place; checkIntegrity / checkGeometry stay
+// clean. Handles planar (Line-imprint) faces; curved-face imprint is a
+// follow-up. Deterministic.
+void imprintMutually(Body& a, Body& b, Tolerance tol = {});
 
 }  // namespace nexus::geometry::brep

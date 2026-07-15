@@ -1,5 +1,7 @@
 #include <nexus/geometry/AnalyticBRep.h>
 
+#include <nexus/geometry/BRepSurfaceIntersect.h>
+
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
@@ -756,44 +758,69 @@ uint32_t Body::cutFaceBetween(uint32_t faceId, uint32_t vA, uint32_t vB,
 uint32_t Body::imprintCurve(uint32_t faceId, const Curve& curve, Tolerance tol)
 {
     if (faceId >= m_faces.size() || !m_faces[faceId].alive) return kInvalid;
+    if (curve.kind != CurveKind::Line) return kInvalid;  // only Line imprint here
     const uint32_t loopId = m_faces[faceId].outerLoop;
     if (loopId >= m_loops.size() || m_loops[loopId].first >= m_coedges.size()) return kInvalid;
     // Crossing test tolerance, proportioned to the face (unit-ish characteristic).
     const float eps = tol.at(1.f) * 10.f;
 
-    // Walk the outer loop; collect the boundary edges the curve pierces. Only
-    // Line boundary edges are supported (planar-face cut, the common case);
-    // the pierce fraction is measured along the edge's straight chord.
-    struct Cross { uint32_t edge; float frac; };
-    std::vector<Cross> crossings;
+    // Walk the outer loop → ordered boundary vertices + their outgoing edges.
+    std::vector<uint32_t> bVerts, bEdges;
     {
         uint32_t w = m_loops[loopId].first, guard = 0;
         do {
-            const uint32_t e = m_coedges[w].edge;
-            if (e < m_edges.size()) {
-                const uint32_t cu = m_edges[e].curve;
-                if (cu < m_curves.size() && m_curves[cu].kind == CurveKind::Line) {
-                    const Vec3 A = m_verts[m_edges[e].v0].point;
-                    const Vec3 B = m_verts[m_edges[e].v1].point;
-                    float s = 0.f;
-                    if (segmentLineCrossing(A, B, curve, eps, s))
-                        crossings.push_back({e, s});
-                }
-            }
-            w = m_coedges[w].next;
+            const Coedge& x = m_coedges[w];
+            bVerts.push_back(x.reversed ? m_edges[x.edge].v1 : m_edges[x.edge].v0);
+            bEdges.push_back(x.edge);
+            w = x.next;
             if (++guard > m_coedges.size() + 1) return kInvalid;
         } while (w != m_loops[loopId].first);
     }
+    const size_t n = bVerts.size();
+
+    // Perpendicular distance of a point to the (infinite) imprint line.
+    auto distToLine = [&](const Vec3& p) {
+        const Vec3 w = sub(p, curve.origin);
+        return length(sub(w, scale(curve.dir, dot(w, curve.dir))));
+    };
+
+    // A boundary crossing is EITHER an existing boundary vertex the line passes
+    // through, OR an interior point on a boundary edge. Recognising the vertex
+    // case is essential for repeated/mutual imprinting: a neighbouring face's
+    // imprint drops a vertex on the shared edge exactly where a later cut line
+    // meets this face, so that meeting point is a vertex, not an edge interior.
+    std::vector<bool> vOnLine(n, false);
+    for (size_t i = 0; i < n; ++i) vOnLine[i] = distToLine(m_verts[bVerts[i]].point) <= eps;
+
+    struct Cross { bool isVertex; uint32_t vertex; uint32_t edge; float frac; };
+    std::vector<Cross> crossings;
+    for (size_t i = 0; i < n; ++i) {
+        if (vOnLine[i]) {
+            crossings.push_back({true, bVerts[i], kInvalid, 0.f});
+            continue;
+        }
+        // Interior crossing on edge i (skip if its far endpoint is on the line —
+        // that crossing is already represented by the vertex case).
+        if (vOnLine[(i + 1) % n]) continue;
+        const uint32_t e = bEdges[i];
+        if (e >= m_edges.size()) continue;
+        const uint32_t cu = m_edges[e].curve;
+        if (cu >= m_curves.size() || m_curves[cu].kind != CurveKind::Line) continue;
+        float s = 0.f;
+        if (segmentLineCrossing(m_verts[m_edges[e].v0].point, m_verts[m_edges[e].v1].point,
+                                curve, eps, s))
+            crossings.push_back({false, kInvalid, e, s});
+    }
     if (crossings.size() != 2) return kInvalid;  // need a clean entry + exit
 
-    // Introduce a vertex at each piercing. The two target edges are distinct, so
-    // splitting the first leaves the second's id/fraction valid.
-    const uint32_t vA = splitEdge(crossings[0].edge, crossings[0].frac);
-    if (vA == kInvalid) return kInvalid;
-    const uint32_t vB = splitEdge(crossings[1].edge, crossings[1].frac);
-    if (vB == kInvalid) return kInvalid;
+    // Resolve each crossing to a vertex (splitting the edge where interior). The
+    // two edges are distinct, so splitting one leaves the other's frac valid.
+    auto resolve = [&](const Cross& c) { return c.isVertex ? c.vertex : splitEdge(c.edge, c.frac); };
+    const uint32_t vA = resolve(crossings[0]);
+    const uint32_t vB = resolve(crossings[1]);
+    if (vA == kInvalid || vB == kInvalid || vA == vB) return kInvalid;
 
-    // Cut the face between the two pierce vertices with the imprint curve itself.
+    // Cut the face between the two crossing vertices with the imprint curve itself.
     return cutFaceBetween(faceId, vA, vB, &curve);
 }
 
@@ -1436,6 +1463,57 @@ Body makeSphere(float radius, uint32_t latSegments, uint32_t lonSegments)
         }
     }
     return std::move(*b);
+}
+
+// ──────────── Boolean building blocks ────────────────────────────────────────
+
+namespace {
+// Imprint onto `target` every intersection Line where a planar face of `tool`
+// transects one of target's faces, iterating to a fixpoint: each successful
+// imprintCurve splits a straddling face, and the resulting sub-faces are
+// re-scanned until no tool plane cuts any target face's interior. This leaves no
+// target face straddling a tool face-plane.
+void imprintOneWay(Body& target, const Body& tool, Tolerance tol)
+{
+    // Snapshot tool surfaces once (tool is not modified here).
+    std::vector<Surface> toolSurfaces;
+    toolSurfaces.reserve(tool.faceCount());
+    for (uint32_t ft = 0; ft < tool.faceCount(); ++ft) {
+        if (!tool.face(ft).alive) continue;
+        const uint32_t sIdx = tool.face(ft).surface;
+        if (sIdx < tool.surfaceCount()) toolSurfaces.push_back(tool.surface(sIdx));
+    }
+
+    // Fixpoint: one imprint per outer pass (face indices shift as sub-faces are
+    // appended, so we re-scan from the front after each successful cut).
+    bool changed = true;
+    size_t safety = 0;
+    const size_t cap = 100000;
+    while (changed && ++safety < cap) {
+        changed = false;
+        const uint32_t fcount = static_cast<uint32_t>(target.faceCount());
+        for (uint32_t f = 0; f < fcount && !changed; ++f) {
+            if (!target.face(f).alive) continue;
+            const uint32_t saIdx = target.face(f).surface;
+            if (saIdx >= target.surfaceCount()) continue;
+            const Surface sa = target.surface(saIdx);
+            for (const Surface& sb : toolSurfaces) {
+                const SurfaceIntersection si = intersectSurfaces(sa, sb, tol);
+                if (si.kind != SurfaceIntersectionKind::Line) continue;
+                if (target.imprintCurve(f, si.curve, tol) != kInvalid) {
+                    changed = true;  // f was split; restart the scan
+                    break;
+                }
+            }
+        }
+    }
+}
+}  // namespace
+
+void imprintMutually(Body& a, Body& b, Tolerance tol)
+{
+    imprintOneWay(a, b, tol);
+    imprintOneWay(b, a, tol);
 }
 
 }  // namespace nexus::geometry::brep
