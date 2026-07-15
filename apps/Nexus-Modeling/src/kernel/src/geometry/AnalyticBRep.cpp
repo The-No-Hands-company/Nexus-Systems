@@ -498,9 +498,19 @@ Body::IntegrityReport Body::checkIntegrity() const
 
 bool Body::isClosed() const noexcept
 {
-    for (const Shell& s : m_shells)
-        if (!s.closed) return false;
-    return !m_shells.empty();
+    // Topologically closed ⇔ every live edge is used by exactly two coedges (no
+    // boundary edge). Reflects the actual complex, incl. holes/open faces, rather
+    // than a possibly-stale shell flag.
+    std::vector<uint32_t> cnt(m_edges.size(), 0u);
+    for (const Coedge& c : m_coedges)
+        if (c.alive && c.edge < cnt.size()) ++cnt[c.edge];
+    bool anyLive = false;
+    for (uint32_t e = 0; e < m_edges.size(); ++e) {
+        if (!m_edges[e].alive) continue;
+        anyLive = true;
+        if (cnt[e] != 2u) return false;
+    }
+    return anyLive;
 }
 
 // ──────────── Geometric-consistency validation ───────────────────────────────
@@ -849,27 +859,85 @@ uint32_t Body::imprintCurve(uint32_t faceId, const Curve& curve, Tolerance tol)
                                              curve.radius, fr);
             for (int j = 0; j < k; ++j) cc.push_back({e, fr[j]});
         }
-        if (cc.size() != 2 || cc[0].edge == cc[1].edge) return kInvalid;
+        constexpr float kTwoPi = 6.28318530717958647692f;
 
-        const uint32_t vA = splitEdge(cc[0].edge, cc[0].frac);
-        const uint32_t vB = splitEdge(cc[1].edge, cc[1].frac);
-        if (vA == kInvalid || vB == kInvalid || vA == vB) return kInvalid;
+        // Arc bite: the circle crosses the boundary at two points on two distinct
+        // edges → split the face along the arc between them.
+        if (cc.size() == 2 && cc[0].edge != cc[1].edge) {
+            const uint32_t vA = splitEdge(cc[0].edge, cc[0].frac);
+            const uint32_t vB = splitEdge(cc[1].edge, cc[1].frac);
+            if (vA == kInvalid || vB == kInvalid || vA == vB) return kInvalid;
 
-        const uint32_t ce = static_cast<uint32_t>(m_edges.size());  // the cut edge id
-        const uint32_t newFace = cutFaceBetween(faceId, vA, vB, &curve);
-        if (newFace == kInvalid) return kInvalid;
+            const uint32_t ce = static_cast<uint32_t>(m_edges.size());  // the cut edge id
+            const uint32_t newFace = cutFaceBetween(faceId, vA, vB, &curve);
+            if (newFace == kInvalid) return kInvalid;
 
-        // cutFaceBetween set the cut edge's param range from the raw endpoint
-        // angles, tracing one of the two arcs. Keep the one lying INSIDE the face
-        // (both share the endpoints, so checkGeometry holds either way).
-        if (ce < m_edges.size()) {
-            const float t0 = m_edges[ce].t0, t1 = m_edges[ce].t1;
-            if (!pointInPlanarPolygon(curve.eval((t0 + t1) * 0.5f), poly, fn)) {
-                constexpr float kTwoPi = 6.28318530717958647692f;
-                m_edges[ce].t1 = (t1 > t0) ? (t1 - kTwoPi) : (t1 + kTwoPi);
+            // cutFaceBetween set the cut edge's param range from the raw endpoint
+            // angles, tracing one of the two arcs. Keep the one lying INSIDE the
+            // face (both share the endpoints, so checkGeometry holds either way).
+            if (ce < m_edges.size()) {
+                const float t0 = m_edges[ce].t0, t1 = m_edges[ce].t1;
+                if (!pointInPlanarPolygon(curve.eval((t0 + t1) * 0.5f), poly, fn))
+                    m_edges[ce].t1 = (t1 > t0) ? (t1 - kTwoPi) : (t1 + kTwoPi);
             }
+            return newFace;
         }
-        return newFace;
+        if (!cc.empty()) return kInvalid;  // same-edge bite / odd crossings deferred
+
+        // Fully-interior circle → an INNER LOOP (hole) of the face. The centre and
+        // the whole circle must lie inside the outer boundary.
+        if (!pointInPlanarPolygon(curve.origin, poly, fn)) return kInvalid;
+        constexpr uint32_t K = 8;  // arc segments around the hole ring
+        for (uint32_t k = 0; k < K; ++k)
+            if (!pointInPlanarPolygon(curve.eval(kTwoPi * static_cast<float>(k) / K), poly, fn))
+                return kInvalid;
+
+        // One shared Circle curve + K arc edges + K coedges wound CW (opposite the
+        // outer loop, so the ring bounds a hole) + one inner loop on this face.
+        const uint32_t cid = static_cast<uint32_t>(m_curves.size());
+        m_curves.push_back(curve);
+        const uint32_t v0 = static_cast<uint32_t>(m_verts.size());
+        for (uint32_t k = 0; k < K; ++k) {
+            Vertex vt;
+            vt.point = curve.eval(kTwoPi * static_cast<float>(k) / K);
+            m_verts.push_back(vt);
+        }
+        const uint32_t e0 = static_cast<uint32_t>(m_edges.size());
+        for (uint32_t k = 0; k < K; ++k) {
+            Edge e;
+            e.curve = cid;
+            e.v0 = v0 + k;
+            e.v1 = v0 + (k + 1) % K;
+            e.t0 = kTwoPi * static_cast<float>(k) / K;
+            e.t1 = kTwoPi * static_cast<float>(k + 1) / K;
+            m_edges.push_back(e);
+        }
+        const uint32_t loopId = static_cast<uint32_t>(m_loops.size());
+        {
+            Loop l;
+            l.face = faceId;
+            l.outer = false;
+            m_loops.push_back(l);
+        }
+        const uint32_t c0 = static_cast<uint32_t>(m_coedges.size());
+        // Coedge CE_k reverses edge E_k (traverses V_{k+1}→V_k); the ring goes
+        // CE_0 → CE_{K-1} → … → CE_1 → CE_0 (clockwise about the axis).
+        for (uint32_t k = 0; k < K; ++k) {
+            Coedge c;
+            c.edge = e0 + k;
+            c.reversed = true;
+            c.loop = loopId;
+            c.next = c0 + (k + K - 1) % K;
+            c.prev = c0 + (k + 1) % K;
+            m_coedges.push_back(c);
+        }
+        m_loops[loopId].first = c0;
+        for (uint32_t k = 0; k < K; ++k) {
+            m_edges[e0 + k].coedge = c0 + k;
+            m_verts[v0 + k].coedge = c0 + (k + K - 1) % K;  // coedge starting at V_k
+        }
+        m_faces[faceId].innerLoops.push_back(loopId);
+        return faceId;
     }
 
     // ── Line imprint ────────────────────────────────────────────────────────────
@@ -1398,11 +1466,12 @@ Mesh Body::toMesh(uint32_t subdivisions) const
     }
     mesh.attributes().setPositions(pos);
 
-    for (const Face& fc : m_faces) {
-        if (!fc.alive || fc.outerLoop >= m_loops.size()) continue;
-        std::vector<uint32_t> ring;  // output vertex indices around the boundary
-        const uint32_t first = m_loops[fc.outerLoop].first;
-        uint32_t walk = first, steps = 0;
+    // Output-vertex indices around a loop, with per-edge subdivision points
+    // inserted in traversal order (crack-free with the neighbouring face).
+    auto buildRing = [&](uint32_t firstCoedge) {
+        std::vector<uint32_t> ring;
+        if (firstCoedge >= m_coedges.size()) return ring;
+        uint32_t walk = firstCoedge, steps = 0;
         do {
             const Coedge& ce = m_coedges[walk];
             const uint32_t sv = ce.reversed ? m_edges[ce.edge].v1 : m_edges[ce.edge].v0;
@@ -1414,12 +1483,117 @@ Mesh Body::toMesh(uint32_t subdivisions) const
                 for (auto it = mids.rbegin(); it != mids.rend(); ++it) ring.push_back(*it);
             walk = ce.next;
             if (++steps > m_coedges.size()) break;
-        } while (walk != first);
-        for (size_t i = 2; i < ring.size(); ++i) {
-            nexus::geometry::Face f;  // the mesh Face, not brep::Face
-            f.indices = {ring[0], ring[static_cast<uint32_t>(i) - 1], ring[i]};
-            mesh.topology().addFace(std::move(f));
+        } while (walk != firstCoedge);
+        return ring;
+    };
+    auto emitTri = [&](uint32_t a, uint32_t b, uint32_t c, const nexus::render::Vec3& nrm) {
+        const nexus::render::Vec3 g = cross(sub(pos[b], pos[a]), sub(pos[c], pos[a]));
+        nexus::geometry::Face f;  // the mesh Face, not brep::Face
+        if (dot(g, nrm) < 0.f) f.indices = {a, c, b};
+        else f.indices = {a, b, c};
+        mesh.topology().addFace(std::move(f));
+    };
+
+    for (const Face& fc : m_faces) {
+        if (!fc.alive || fc.outerLoop >= m_loops.size()) continue;
+        const std::vector<uint32_t> ring = buildRing(m_loops[fc.outerLoop].first);
+        if (ring.size() < 3) continue;
+
+        if (fc.innerLoops.empty()) {
+            for (size_t i = 2; i < ring.size(); ++i) {
+                nexus::geometry::Face f;
+                f.indices = {ring[0], ring[static_cast<uint32_t>(i) - 1], ring[i]};
+                mesh.topology().addFace(std::move(f));
+            }
+            continue;
         }
+
+        // Face with a hole: bridge the first inner ring into the outer ring to
+        // form one simple polygon, then ear-clip it. (Multiple holes on one face
+        // are a rare follow-up.)
+        nexus::render::Vec3 nrm{0.f, 0.f, 1.f};
+        if (fc.surface < m_surfaces.size()) nrm = m_surfaces[fc.surface].normal;
+        if (fc.reversed) nrm = {-nrm.x, -nrm.y, -nrm.z};
+
+        std::vector<uint32_t> inner;
+        for (uint32_t il : fc.innerLoops) {
+            if (il >= m_loops.size()) continue;
+            inner = buildRing(m_loops[il].first);
+            if (inner.size() >= 3) break;
+            inner.clear();
+        }
+        if (inner.empty()) {  // no usable hole → fan the outer as a fallback
+            for (size_t i = 2; i < ring.size(); ++i)
+                emitTri(ring[0], ring[static_cast<uint32_t>(i) - 1], ring[i], nrm);
+            continue;
+        }
+
+        // 2D frame of the face plane.
+        const nexus::render::Vec3 u = normalize(sub(pos[ring[1]], pos[ring[0]]));
+        const nexus::render::Vec3 vv = cross(nrm, u);
+        const nexus::render::Vec3 org = pos[ring[0]];
+        auto X = [&](uint32_t idx) { return dot(sub(pos[idx], org), u); };
+        auto Y = [&](uint32_t idx) { return dot(sub(pos[idx], org), vv); };
+
+        // Bridge the rightmost inner vertex M to the rightmost outer vertex P
+        // (both to the right of the hole → the bridge crosses neither ring, for a
+        // convex-ish outer + convex hole).
+        size_t pOut = 0;
+        for (size_t k = 1; k < ring.size(); ++k)
+            if (X(ring[k]) > X(ring[pOut])) pOut = k;
+        size_t mIn = 0;
+        for (size_t k = 1; k < inner.size(); ++k)
+            if (X(inner[k]) > X(inner[mIn])) mIn = k;
+
+        std::vector<uint32_t> poly;
+        poly.reserve(ring.size() + inner.size() + 2);
+        for (size_t k = 0; k <= pOut; ++k) poly.push_back(ring[k]);
+        for (size_t k = 0; k < inner.size(); ++k) poly.push_back(inner[(mIn + k) % inner.size()]);
+        poly.push_back(inner[mIn]);
+        for (size_t k = pOut; k < ring.size(); ++k) poly.push_back(ring[k]);
+
+        // Ear-clip the simple polygon (CCW). Duplicate bridge vertices share their
+        // pos index, so they are excluded from the containment test by identity.
+        auto cross2 = [&](uint32_t a, uint32_t b, uint32_t c) {
+            return (X(b) - X(a)) * (Y(c) - Y(a)) - (Y(b) - Y(a)) * (X(c) - X(a));
+        };
+        std::vector<uint32_t> idx(poly.size());
+        for (uint32_t k = 0; k < poly.size(); ++k) idx[k] = k;
+        float area = 0.f;
+        for (size_t k = 0; k < idx.size(); ++k)
+            area += cross2(poly[idx[0]], poly[idx[k]],
+                           poly[idx[(k + 1) % idx.size()]]);  // sign only
+        if (area < 0.f) std::reverse(idx.begin(), idx.end());
+        auto inTri = [&](uint32_t p, uint32_t a, uint32_t b, uint32_t c) {
+            const float d1 = cross2(a, b, p), d2 = cross2(b, c, p), d3 = cross2(c, a, p);
+            const bool neg = d1 < 0.f || d2 < 0.f || d3 < 0.f;
+            const bool ppos = d1 > 0.f || d2 > 0.f || d3 > 0.f;
+            return !(neg && ppos);
+        };
+        size_t guard = 0;
+        while (idx.size() > 3 && guard++ < 20000) {
+            bool clipped = false;
+            const size_t m2 = idx.size();
+            for (size_t a = 0; a < m2; ++a) {
+                const uint32_t pv = poly[idx[(a + m2 - 1) % m2]];
+                const uint32_t cv = poly[idx[a]];
+                const uint32_t nv = poly[idx[(a + 1) % m2]];
+                if (cross2(pv, cv, nv) <= 1e-12f) continue;  // reflex / collinear
+                bool ok = true;
+                for (size_t k = 0; k < m2 && ok; ++k) {
+                    const uint32_t q = poly[idx[k]];
+                    if (q == pv || q == cv || q == nv) continue;  // skip bridge dups
+                    if (inTri(q, pv, cv, nv)) ok = false;
+                }
+                if (!ok) continue;
+                emitTri(pv, cv, nv, nrm);
+                idx.erase(idx.begin() + static_cast<long>(a));
+                clipped = true;
+                break;
+            }
+            if (!clipped) break;
+        }
+        if (idx.size() == 3) emitTri(poly[idx[0]], poly[idx[1]], poly[idx[2]], nrm);
     }
     return mesh;
 }

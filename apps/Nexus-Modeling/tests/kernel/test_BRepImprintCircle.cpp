@@ -114,14 +114,17 @@ TEST(BRepImprintCircle, NonCoplanarCircleRejected)
     EXPECT_EQ(b.checkIntegrity().faces, 6u);  // unchanged
 }
 
-TEST(BRepImprintCircle, FullyInteriorCircleRejected)
+TEST(BRepImprintCircle, FullyInteriorCircleAddsHole)
 {
     Body b = makeBox(2.f, 2.f, 2.f);
     const uint32_t tf = topFace(b);
-    // Circle entirely inside the face → 0 boundary crossings (an inner-loop hole,
-    // a deferred follow-up) → kInvalid, body unchanged.
-    EXPECT_EQ(b.imprintCurve(tf, circleZ1({0, 0, 1}, 0.3f)), kInvalid);
-    EXPECT_EQ(b.checkIntegrity().faces, 6u);
+    // Circle entirely inside the face → an inner loop (hole), not a split. It
+    // returns the same face and adds one inner loop. (Full hole behaviour is
+    // covered by test_BRepInnerLoop.)
+    EXPECT_EQ(b.imprintCurve(tf, circleZ1({0, 0, 1}, 0.3f)), tf);
+    EXPECT_EQ(b.face(tf).innerLoops.size(), 1u);
+    EXPECT_TRUE(b.checkIntegrity().ok);
+    EXPECT_TRUE(b.checkGeometry().ok);
 }
 
 TEST(BRepImprintCircle, LineImprintStillWorks)
