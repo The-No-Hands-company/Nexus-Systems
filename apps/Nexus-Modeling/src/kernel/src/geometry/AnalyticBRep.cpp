@@ -2233,6 +2233,92 @@ Body makeSphere(float radius, uint32_t latSegments, uint32_t lonSegments)
     return std::move(*b);
 }
 
+// ──────────── Creation ───────────────────────────────────────────────────────
+
+Body extrudeProfile(const std::vector<Vec3>& profile, const Vec3& dir)
+{
+    const size_t n = profile.size();
+    if (n < 3) return Body{};
+    for (const Vec3& p : profile)
+        if (!isFinite(p)) return Body{};
+    if (!isFinite(dir)) return Body{};
+
+    // Profile plane normal (Newell's method; length = 2·area) → consistent with a
+    // CCW winding about +N.
+    Vec3 N{0.f, 0.f, 0.f};
+    for (size_t i = 0; i < n; ++i) {
+        const Vec3& a = profile[i];
+        const Vec3& b = profile[(i + 1) % n];
+        N.x += (a.y - b.y) * (a.z + b.z);
+        N.y += (a.z - b.z) * (a.x + b.x);
+        N.z += (a.x - b.x) * (a.y + b.y);
+    }
+    const float area2 = length(N);
+    if (area2 < 1e-10f) return Body{};  // degenerate / near-zero-area profile
+    N = scale(N, 1.f / area2);
+
+    float h = dot(dir, N);
+    if (h > -1e-9f && h < 1e-9f) return Body{};  // dir parallel to the plane
+
+    // Orient so the profile is CCW about the extrusion direction (+N side gets the
+    // top cap, giving a positive-volume outward solid regardless of dir's sign).
+    std::vector<Vec3> poly = profile;
+    if (h < 0.f) {
+        std::reverse(poly.begin(), poly.end());
+        N = {-N.x, -N.y, -N.z};
+    }
+
+    // Points: [0,n) bottom = poly, [n,2n) top = poly + dir.
+    std::vector<Vec3> pts;
+    pts.reserve(2 * n);
+    for (const Vec3& p : poly) pts.push_back(p);
+    for (const Vec3& p : poly) pts.push_back(add(p, dir));
+
+    const Vec3 uAxis = normalize(sub(poly[1], poly[0]));
+    std::vector<Body::FaceDef> defs;
+    defs.reserve(n + 2);
+
+    // Bottom cap: poly reversed → outward −N.
+    {
+        Body::FaceDef fd;
+        for (size_t k = 0; k < n; ++k) fd.loop.push_back(static_cast<uint32_t>(n - 1 - k));
+        fd.surface.kind = SurfaceKind::Plane;
+        fd.surface.origin = poly[0];
+        fd.surface.normal = {-N.x, -N.y, -N.z};
+        fd.surface.uAxis = uAxis;
+        defs.push_back(std::move(fd));
+    }
+    // Top cap: poly order (shifted) → outward +N.
+    {
+        Body::FaceDef fd;
+        for (size_t k = 0; k < n; ++k) fd.loop.push_back(static_cast<uint32_t>(n + k));
+        fd.surface.kind = SurfaceKind::Plane;
+        fd.surface.origin = pts[n];
+        fd.surface.normal = N;
+        fd.surface.uAxis = uAxis;
+        defs.push_back(std::move(fd));
+    }
+    // Side quads: [b_i, b_{i+1}, t_{i+1}, t_i] — CCW from outside.
+    for (size_t i = 0; i < n; ++i) {
+        const uint32_t bi = static_cast<uint32_t>(i);
+        const uint32_t bj = static_cast<uint32_t>((i + 1) % n);
+        const uint32_t tj = static_cast<uint32_t>(n + (i + 1) % n);
+        const uint32_t ti = static_cast<uint32_t>(n + i);
+        Body::FaceDef fd;
+        fd.loop = {bi, bj, tj, ti};
+        const Vec3 e1 = sub(pts[bj], pts[bi]);
+        const Vec3 e2 = sub(pts[ti], pts[bi]);
+        fd.surface.kind = SurfaceKind::Plane;
+        fd.surface.origin = pts[bi];
+        fd.surface.normal = normalize(cross(e1, e2));
+        fd.surface.uAxis = normalize(e1);
+        defs.push_back(std::move(fd));
+    }
+
+    auto body = Body::fromFaces(pts, defs);
+    return body.has_value() ? std::move(*body) : Body{};
+}
+
 // ──────────── Boolean building blocks ────────────────────────────────────────
 
 namespace {

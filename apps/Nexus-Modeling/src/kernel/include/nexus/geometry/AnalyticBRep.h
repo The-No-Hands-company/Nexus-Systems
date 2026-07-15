@@ -385,6 +385,16 @@ private:
 // Watertight solid, euler 2. latSegments ≥ 2, lonSegments ≥ 3.
 [[nodiscard]] Body makeSphere(float radius, uint32_t latSegments, uint32_t lonSegments);
 
+// ──────────── Creation ───────────────────────────────────────────────────────
+
+// Extrude a closed planar profile (≥3 CCW points, seen from +its plane normal)
+// along `dir` into a prism solid: a bottom cap, a top cap (profile + dir), and
+// one quad side per profile edge, assembled watertight with outward-consistent
+// winding. Generalises makeBox. Returns an empty Body for degenerate input:
+// fewer than 3 points, a non-finite coordinate, a near-zero-area profile, or a
+// `dir` parallel to the profile plane (zero projected height).
+[[nodiscard]] Body extrudeProfile(const std::vector<Vec3>& profile, const Vec3& dir);
+
 // ──────────── Boolean building blocks ────────────────────────────────────────
 
 // Mutual imprint of two overlapping solids — the B-rep boolean's SEGMENTATION
