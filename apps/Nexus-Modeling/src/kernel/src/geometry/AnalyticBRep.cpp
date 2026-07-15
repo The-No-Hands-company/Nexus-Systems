@@ -824,7 +824,9 @@ uint32_t Body::imprintCurve(uint32_t faceId, const Curve& curve, Tolerance tol)
     return cutFaceBetween(faceId, vA, vB, &curve);
 }
 
-bool Body::joinEdges(uint32_t nv)
+bool Body::joinEdges(uint32_t nv) { return joinEdgesImpl(nv, /*requireSameCurve=*/true, {}); }
+
+bool Body::joinEdgesImpl(uint32_t nv, bool requireSameCurve, Tolerance tol)
 {
     const uint32_t C = static_cast<uint32_t>(m_coedges.size());
     if (nv >= m_verts.size() || !m_verts[nv].alive) return false;
@@ -832,7 +834,7 @@ bool Body::joinEdges(uint32_t nv)
     auto startV = [&](uint32_t c) { const Coedge& e = m_coedges[c]; return e.reversed ? m_edges[e.edge].v1 : m_edges[e.edge].v0; };
     auto endV   = [&](uint32_t c) { const Coedge& e = m_coedges[c]; return e.reversed ? m_edges[e.edge].v0 : m_edges[e.edge].v1; };
 
-    // The two live edges incident to nv (must be exactly two, same curve).
+    // The two live edges incident to nv (must be exactly two).
     uint32_t e1 = kInvalid, e2 = kInvalid;
     for (uint32_t e = 0; e < m_edges.size(); ++e) {
         if (!m_edges[e].alive) continue;
@@ -843,14 +845,39 @@ bool Body::joinEdges(uint32_t nv)
         }
     }
     if (e1 == kInvalid || e2 == kInvalid) return false;
-    if (m_edges[e1].curve != m_edges[e2].curve) return false;  // not collinear
 
-    // Non-nv endpoints and their curve parameters.
+    // Non-nv endpoints.
     const uint32_t a1 = (m_edges[e1].v0 == nv) ? m_edges[e1].v1 : m_edges[e1].v0;
-    const float    pa1 = (m_edges[e1].v0 == nv) ? m_edges[e1].t1 : m_edges[e1].t0;
     const uint32_t a2 = (m_edges[e2].v0 == nv) ? m_edges[e2].v1 : m_edges[e2].v0;
-    const float    pa2 = (m_edges[e2].v0 == nv) ? m_edges[e2].t1 : m_edges[e2].t0;
     if (a1 == a2) return false;  // would collapse to a duplicate/degenerate edge
+
+    // Parameters of a1 / a2 in the SURVIVOR (e1) curve's frame. When the two
+    // edges already share a curve (joinEdges, e.g. re-joining a split arc), use
+    // the stored params directly. Otherwise (mergeCollinearEdges) the two edges
+    // must be COLLINEAR Lines — verify and project the far endpoints onto e1's
+    // line to get their params.
+    float pa1, pa2;
+    if (m_edges[e1].curve == m_edges[e2].curve) {
+        pa1 = (m_edges[e1].v0 == nv) ? m_edges[e1].t1 : m_edges[e1].t0;
+        pa2 = (m_edges[e2].v0 == nv) ? m_edges[e2].t1 : m_edges[e2].t0;
+    } else {
+        if (requireSameCurve) return false;
+        const uint32_t cid1 = m_edges[e1].curve, cid2 = m_edges[e2].curve;
+        if (cid1 >= m_curves.size() || cid2 >= m_curves.size()) return false;
+        const Curve& cs = m_curves[cid1];
+        const Curve& co = m_curves[cid2];
+        if (cs.kind != CurveKind::Line || co.kind != CurveKind::Line) return false;
+        if (std::abs(dot(cs.dir, co.dir)) < 1.f - 1e-4f) return false;  // not parallel
+        const float dTol = tol.at(1.f) * 10.f;
+        auto onLine = [&](uint32_t v) {
+            const Vec3 w = sub(m_verts[v].point, cs.origin);
+            return length(sub(w, scale(cs.dir, dot(w, cs.dir)))) <= dTol;
+        };
+        if (!onLine(a2)) return false;  // e2 not on e1's supporting line
+        auto param = [&](uint32_t v) { return dot(sub(m_verts[v].point, cs.origin), cs.dir); };
+        pa1 = param(a1);
+        pa2 = param(a2);
+    }
 
     const uint32_t vLow  = (pa1 < pa2) ? a1 : a2;
     const uint32_t vHigh = (pa1 < pa2) ? a2 : a1;
@@ -1056,6 +1083,38 @@ uint32_t Body::mergeCoplanarFaces(Tolerance tol)
         }
     }
     return merges;
+}
+
+uint32_t Body::mergeCollinearEdges(Tolerance tol)
+{
+    uint32_t removed = 0;
+    bool changed = true;
+    size_t safety = 0;
+    while (changed && ++safety < 100000) {
+        changed = false;
+        for (uint32_t v = 0; v < m_verts.size(); ++v) {
+            if (!m_verts[v].alive) continue;
+            if (joinEdgesImpl(v, /*requireSameCurve=*/false, tol)) {
+                ++removed;
+                changed = true;
+                break;  // liveness shifted; restart the scan
+            }
+        }
+    }
+    return removed;
+}
+
+uint32_t Body::simplify(Tolerance tol)
+{
+    uint32_t total = 0, pass = 0;
+    do {
+        // Each pass unlocks the other: merging collinear edges exposes new
+        // single-shared-edge coplanar pairs, and merging faces exposes new
+        // degree-2 collinear vertices.
+        pass = mergeCoplanarFaces(tol) + mergeCollinearEdges(tol);
+        total += pass;
+    } while (pass > 0);
+    return total;
 }
 
 // ──────────── Surface evaluation ─────────────────────────────────────────────

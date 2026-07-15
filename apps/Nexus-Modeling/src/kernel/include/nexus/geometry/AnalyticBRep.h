@@ -225,6 +225,20 @@ public:
     // pass. Returns the number of merges performed. Deterministic.
     uint32_t mergeCoplanarFaces(Tolerance tol = {});
 
+    // Cleanup: remove redundant degree-2 vertices whose two incident edges are
+    // COLLINEAR Lines (same supporting line within tol) — merging them into one
+    // edge (the general kill-edge-vertex for collinear separate-curve Lines, the
+    // counterpart of mergeCoplanarFaces for edges). Iterates to a fixpoint;
+    // χ-neutral, volume-preserving. Returns the number of vertices removed.
+    uint32_t mergeCollinearEdges(Tolerance tol = {});
+
+    // Cleanup to a minimal B-rep: alternate mergeCoplanarFaces + mergeCollinearEdges
+    // to a combined fixpoint (each unlocks the other — merging collinear edges
+    // exposes new single-shared-edge coplanar pairs, and vice versa). Preserves
+    // the solid (validators clean, euler/closedness/volume unchanged). Returns the
+    // total number of merge operations performed.
+    uint32_t simplify(Tolerance tol = {});
+
     // Validates that the analytic geometry is consistent with the topology:
     // every edge's curve reproduces its endpoint vertices over its param range,
     // all geometry is finite, surface normals are unit length, and partnered
@@ -330,6 +344,10 @@ private:
     // (imprintCurve). Returns the new face id, or kInvalid on failure.
     uint32_t cutFaceBetween(uint32_t faceId, uint32_t vA, uint32_t vB,
                             const Curve* explicitCurve);
+
+    // Shared kill-edge-vertex core of joinEdges (requireSameCurve) and
+    // mergeCollinearEdges (geometrically-collinear separate-curve Lines).
+    bool joinEdgesImpl(uint32_t vertexId, bool requireSameCurve, Tolerance tol);
 };
 
 // ──────────── Primitives ─────────────────────────────────────────────────────
