@@ -1,5 +1,6 @@
 #include <nexus/geometry/BRepBoolean.h>
 
+#include <algorithm>
 #include <utility>
 #include <vector>
 
@@ -93,6 +94,53 @@ Mesh booleanToMesh(const Body& a, const Body& b, BooleanOp op, Tolerance tol)
     // Merge coincident seam vertices so A's and B's kept patches join watertight.
     (void)mesh.weldCoincidentVertices(tol.absolute > 0.f ? tol.absolute * 10.f : 1e-4f);
     return mesh;
+}
+
+Body booleanToBody(const Body& a, const Body& b, BooleanOp op, Tolerance tol)
+{
+    Body A = a;
+    Body B = b;
+    imprintMutually(A, B, tol);
+
+    const float weldEps = tol.absolute > 0.f ? tol.absolute * 10.f : 1e-4f;
+    std::vector<Vec3> points;
+    std::vector<Body::FaceDef> defs;
+
+    // Weld a point into the shared list (dedup within weldEps → seam vertices of
+    // A and B collapse to one, so fromFaces can partner across the seam).
+    auto weld = [&](const Vec3& p) -> uint32_t {
+        for (uint32_t i = 0; i < points.size(); ++i) {
+            const Vec3 d = points[i] - p;
+            if (d.dot(d) <= weldEps * weldEps) return i;
+        }
+        points.push_back(p);
+        return static_cast<uint32_t>(points.size() - 1);
+    };
+
+    auto addKept = [&](const Body& body, const Body& other, bool isA) {
+        for (uint32_t f = 0; f < body.faceCount(); ++f) {
+            if (!body.face(f).alive) continue;
+            bool reverse = false;
+            if (!keepFace(body.classifyFace(f, other, tol), op, isA, reverse)) continue;
+            std::vector<uint32_t> vs = body.faceVertices(f);
+            if (vs.size() < 3) continue;
+            if (reverse) std::reverse(vs.begin(), vs.end());  // outward for the cavity
+            Body::FaceDef fd;
+            fd.loop.reserve(vs.size());
+            for (uint32_t v : vs) fd.loop.push_back(weld(body.vertex(v).point));
+            const Face& face = body.face(f);
+            fd.surface = (face.surface < body.surfaceCount()) ? body.surface(face.surface)
+                                                              : Surface{};
+            if (reverse) fd.surface.normal = {-fd.surface.normal.x, -fd.surface.normal.y,
+                                              -fd.surface.normal.z};
+            defs.push_back(std::move(fd));
+        }
+    };
+    addKept(A, B, /*isA=*/true);
+    addKept(B, A, /*isA=*/false);
+
+    auto sewn = Body::fromFaces(points, defs);
+    return sewn.has_value() ? std::move(*sewn) : Body{};
 }
 
 }  // namespace nexus::geometry::brep

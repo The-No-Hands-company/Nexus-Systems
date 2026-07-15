@@ -36,4 +36,15 @@ enum class BooleanOp : uint8_t {
 [[nodiscard]] Mesh booleanToMesh(const Body& a, const Body& b, BooleanOp op,
                                  Tolerance tol = {});
 
+// Regularised boolean of two solids, sewn into a fully analytic Body (not just a
+// mesh). Same pipeline as booleanToMesh — copy, mutually imprint, select kept
+// faces per op — but the kept analytic faces are re-assembled via Body::fromFaces
+// (their seam vertices welded so A's and B's patches share edges, and the
+// Difference-B faces reversed so orientation stays outward). The result is a
+// first-class solid whose checkIntegrity/checkGeometry are clean and that can
+// feed another boolean. Returns an empty Body if the kept faces do not sew into
+// a valid solid. Deterministic. Targets solids with no coincident faces.
+[[nodiscard]] Body booleanToBody(const Body& a, const Body& b, BooleanOp op,
+                                 Tolerance tol = {});
+
 }  // namespace nexus::geometry::brep
