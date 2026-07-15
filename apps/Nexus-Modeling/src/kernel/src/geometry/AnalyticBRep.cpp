@@ -986,6 +986,78 @@ bool Body::mergeFaces(uint32_t edgeId)
     return true;
 }
 
+uint32_t Body::mergeCoplanarFaces(Tolerance tol)
+{
+    auto faceOfCoedge = [&](uint32_t c) -> uint32_t {
+        if (c >= m_coedges.size() || !m_coedges[c].alive) return kInvalid;
+        const uint32_t l = m_coedges[c].loop;
+        return l < m_loops.size() ? m_loops[l].face : kInvalid;
+    };
+    // Outward normal of a planar face (surface normal, flipped when reversed).
+    auto outwardN = [&](uint32_t f) -> Vec3 {
+        const Face& fc = m_faces[f];
+        const Vec3 n = (fc.surface < m_surfaces.size()) ? m_surfaces[fc.surface].normal
+                                                        : Vec3{0.f, 0.f, 1.f};
+        return fc.reversed ? Vec3{-n.x, -n.y, -n.z} : n;
+    };
+    // Coplanar: planar faces, equal outward normal, and fB's points on fA's plane.
+    auto coplanar = [&](uint32_t fA, uint32_t fB) -> bool {
+        const Face &FA = m_faces[fA], &FB = m_faces[fB];
+        if (FA.surface >= m_surfaces.size() || FB.surface >= m_surfaces.size()) return false;
+        const Surface &sA = m_surfaces[FA.surface], &sB = m_surfaces[FB.surface];
+        if (sA.kind != SurfaceKind::Plane || sB.kind != SurfaceKind::Plane) return false;
+        const Vec3 nA = outwardN(fA), nB = outwardN(fB);
+        if (dot(nA, nB) < 1.f - 1e-4f) return false;  // parallel & co-oriented
+        const std::vector<uint32_t> vs = faceVertices(fB);
+        if (vs.empty()) return false;
+        const float dTol = tol.at(1.f) * 10.f;
+        for (uint32_t v : vs)
+            if (std::abs(dot(sub(m_verts[v].point, sA.origin), nA)) > dTol) return false;
+        return true;
+    };
+    // Number of edges the two faces share (via a coedge and its partner).
+    auto sharedEdges = [&](uint32_t fA, uint32_t fB) -> int {
+        int shared = 0;
+        const uint32_t loopId = m_faces[fA].outerLoop;
+        if (loopId >= m_loops.size()) return 0;
+        uint32_t w = m_loops[loopId].first, guard = 0;
+        if (w >= m_coedges.size()) return 0;
+        do {
+            const uint32_t p = m_coedges[w].partner;
+            if (p != kInvalid && p < m_coedges.size() && m_coedges[p].alive &&
+                faceOfCoedge(p) == fB)
+                ++shared;
+            w = m_coedges[w].next;
+            if (++guard > m_coedges.size() + 1) break;
+        } while (w != m_loops[loopId].first);
+        return shared;
+    };
+
+    uint32_t merges = 0;
+    bool changed = true;
+    size_t safety = 0;
+    while (changed && ++safety < 100000) {
+        changed = false;
+        for (uint32_t e = 0; e < m_edges.size(); ++e) {
+            if (!m_edges[e].alive) continue;
+            const uint32_t cA = m_edges[e].coedge;
+            if (cA >= m_coedges.size() || !m_coedges[cA].alive) continue;
+            const uint32_t cB = m_coedges[cA].partner;
+            if (cB == kInvalid || cB >= m_coedges.size() || !m_coedges[cB].alive) continue;
+            const uint32_t fA = faceOfCoedge(cA), fB = faceOfCoedge(cB);
+            if (fA == kInvalid || fB == kInvalid || fA == fB) continue;
+            if (!coplanar(fA, fB)) continue;
+            if (sharedEdges(fA, fB) != 1) continue;  // 2+ shared → would slit
+            if (mergeFaces(e)) {
+                ++merges;
+                changed = true;
+                break;  // indices shifted; restart the scan
+            }
+        }
+    }
+    return merges;
+}
+
 // ──────────── Surface evaluation ─────────────────────────────────────────────
 
 Vec3 Body::surfacePoint(uint32_t surfaceId, float u, float v) const

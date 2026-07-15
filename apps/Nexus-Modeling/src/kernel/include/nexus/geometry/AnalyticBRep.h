@@ -215,6 +215,16 @@ public:
     // (ΔV=0, ΔE=-1, ΔF=-1). Returns true on success. Round-trips with splitFace.
     bool mergeFaces(uint32_t edgeId);
 
+    // Cleanup: merge adjacent COPLANAR faces (planes with equal outward normal
+    // and the same offset, within tol) that share EXACTLY ONE edge — via the
+    // mergeFaces Euler op — iterating to a fixpoint. Collapses the coplanar
+    // over-segmentation left by imprint / boolean without changing the solid
+    // (χ-neutral, volume-preserving; euler and closedness are unchanged). Pairs
+    // sharing 2+ edges are left (their internal edge would become a slit); the
+    // collinear-edge / degree-2-vertex cleanup that unlocks those is a separate
+    // pass. Returns the number of merges performed. Deterministic.
+    uint32_t mergeCoplanarFaces(Tolerance tol = {});
+
     // Validates that the analytic geometry is consistent with the topology:
     // every edge's curve reproduces its endpoint vertices over its param range,
     // all geometry is finite, surface normals are unit length, and partnered
