@@ -26,6 +26,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 #include <nexus/geometry/Mesh.h>
+#include <nexus/geometry/MeshMassProperties.h>
 #include <nexus/geometry/NurbsSurface.h>
 #include <nexus/geometry/Tolerance.h>
 #include <nexus/render/Camera.h>
@@ -303,6 +304,14 @@ public:
 
     // Pure-translation shortcut for transform().
     bool translate(const Vec3& t);
+
+    // Mass properties of the solid — volume, centroid, and the inertia tensor
+    // about the centroid — integrated over the watertight boundary tessellation
+    // via the divergence theorem (delegated to MeshMassProperties). `density`
+    // scales the inertia (mass = density·volume; volume and centroid are the
+    // geometric ones). Meaningful only for a closed solid; an open/degenerate
+    // body yields a zero result.
+    [[nodiscard]] nexus::geometry::MassProperties massProperties(float density = 1.f) const;
 
     // Evaluates a face's surface at (u,v), dispatching to the stored NURBS
     // surface when the face is on one, else to the analytic Surface::eval.
