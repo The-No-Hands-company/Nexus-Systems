@@ -2319,6 +2319,86 @@ Body extrudeProfile(const std::vector<Vec3>& profile, const Vec3& dir)
     return body.has_value() ? std::move(*body) : Body{};
 }
 
+Body revolveProfile(const std::vector<Vec3>& profile, const Vec3& axisOrigin,
+                    const Vec3& axisDir, uint32_t segments)
+{
+    const size_t m = profile.size();
+    if (m < 3 || segments < 3) return Body{};
+    for (const Vec3& p : profile)
+        if (!isFinite(p)) return Body{};
+    if (!isFinite(axisOrigin) || !isFinite(axisDir)) return Body{};
+    const float axisLen = length(axisDir);
+    if (axisLen < 1e-9f) return Body{};
+    const Vec3 n = scale(axisDir, 1.f / axisLen);
+
+    // Non-degenerate profile area (Newell).
+    Vec3 Nprof{0.f, 0.f, 0.f};
+    for (size_t i = 0; i < m; ++i) {
+        const Vec3& a = profile[i];
+        const Vec3& b = profile[(i + 1) % m];
+        Nprof.x += (a.y - b.y) * (a.z + b.z);
+        Nprof.y += (a.z - b.z) * (a.x + b.x);
+        Nprof.z += (a.x - b.x) * (a.y + b.y);
+    }
+    if (length(Nprof) < 1e-10f) return Body{};
+
+    // The profile must lie to ONE side of the axis: strictly positive radial
+    // distance and all radial directions on the same side (no crossing/touching).
+    Vec3 rHat{0.f, 0.f, 0.f};
+    for (size_t i = 0; i < m; ++i) {
+        const Vec3 v = sub(profile[i], axisOrigin);
+        const Vec3 rad = sub(v, scale(n, dot(v, n)));
+        const float rl = length(rad);
+        if (rl < 1e-6f) return Body{};  // on the axis
+        if (i == 0) rHat = scale(rad, 1.f / rl);
+        else if (dot(rad, rHat) <= 1e-6f) return Body{};  // crossed to the other side
+    }
+
+    // Rotate a point about the axis by `ang` (Rodrigues).
+    auto rot = [&](const Vec3& p, float ang) {
+        const Vec3 v = sub(p, axisOrigin);
+        const float c = std::cos(ang), s = std::sin(ang);
+        const Vec3 r = add(add(scale(v, c), scale(cross(n, v), s)),
+                           scale(n, dot(n, v) * (1.f - c)));
+        return add(axisOrigin, r);
+    };
+
+    const float twoPi = 6.28318530717958647692f;
+    std::vector<Vec3> pts;
+    pts.reserve(m * segments);
+    for (uint32_t j = 0; j < segments; ++j) {
+        const float ang = twoPi * static_cast<float>(j) / static_cast<float>(segments);
+        for (size_t i = 0; i < m; ++i) pts.push_back(rot(profile[i], ang));
+    }
+    auto idx = [&](size_t i, uint32_t j) {
+        return static_cast<uint32_t>((j % segments) * m + i);
+    };
+
+    // One quad per (profile edge, angular step); a full revolution has no caps.
+    std::vector<Body::FaceDef> defs;
+    defs.reserve(m * segments);
+    for (uint32_t j = 0; j < segments; ++j) {
+        for (size_t i = 0; i < m; ++i) {
+            const uint32_t a = idx(i, j);
+            const uint32_t b = idx((i + 1) % m, j);
+            const uint32_t c = idx((i + 1) % m, j + 1);
+            const uint32_t d = idx(i, j + 1);
+            Body::FaceDef fd;
+            // Wound so the face normal points outward (away from the axis) for a
+            // CCW-about-+N profile revolved in +angle.
+            fd.loop = {a, d, c, b};
+            fd.surface.kind = SurfaceKind::Plane;
+            fd.surface.origin = pts[a];
+            fd.surface.normal = normalize(cross(sub(pts[d], pts[a]), sub(pts[b], pts[a])));
+            fd.surface.uAxis = normalize(sub(pts[d], pts[a]));
+            defs.push_back(std::move(fd));
+        }
+    }
+
+    auto body = Body::fromFaces(pts, defs);
+    return body.has_value() ? std::move(*body) : Body{};
+}
+
 // ──────────── Boolean building blocks ────────────────────────────────────────
 
 namespace {

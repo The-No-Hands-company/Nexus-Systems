@@ -395,6 +395,17 @@ private:
 // `dir` parallel to the profile plane (zero projected height).
 [[nodiscard]] Body extrudeProfile(const std::vector<Vec3>& profile, const Vec3& dir);
 
+// Revolve a closed planar profile a full 360° about an axis into a solid of
+// revolution (a ring/torus-like solid), in `segments` (≥3) angular steps: each
+// profile edge sweeps a band of quad faces; the full revolution needs no end
+// caps. The profile must lie to ONE side of the axis (not cross or touch it).
+// Returns an empty Body for degenerate input: fewer than 3 profile points,
+// segments < 3, a non-finite coordinate, a zero-length axis, a near-zero-area
+// profile, or a profile that touches/crosses the axis. Watertight; being
+// torus-like its boundary has euler characteristic 0 (genus 1).
+[[nodiscard]] Body revolveProfile(const std::vector<Vec3>& profile, const Vec3& axisOrigin,
+                                  const Vec3& axisDir, uint32_t segments);
+
 // ──────────── Boolean building blocks ────────────────────────────────────────
 
 // Mutual imprint of two overlapping solids — the B-rep boolean's SEGMENTATION
