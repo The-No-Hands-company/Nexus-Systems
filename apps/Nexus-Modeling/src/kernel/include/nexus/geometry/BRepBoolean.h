@@ -56,4 +56,12 @@ enum class BooleanOp : uint8_t {
 // removed wedge has volume ½·setback²·edgeLength. Returns a watertight solid.
 [[nodiscard]] Body chamferBoxEdge(const Body& box, int axis, int s1, int s2, float setback);
 
+// Rounded (fillet) of one axis-aligned box edge, as a boolean difference with a
+// cutting prism whose cross-section is the corner minus a quarter-disk of the
+// given `radius` (its arc faceted into `segments` chords, so the tool is
+// all-planar). Same edge selector/clamping as chamferBoxEdge; radius ≤ 0 returns
+// the box. The removed wedge → radius²·(1 − π/4)·edgeLength as segments grow.
+[[nodiscard]] Body filletBoxEdge(const Body& box, int axis, int s1, int s2, float radius,
+                                 uint32_t segments = 8);
+
 }  // namespace nexus::geometry::brep

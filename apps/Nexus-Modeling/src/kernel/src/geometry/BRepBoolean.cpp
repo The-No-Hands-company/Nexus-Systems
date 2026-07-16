@@ -242,4 +242,59 @@ Body chamferBoxEdge(const Body& box, int axis, int s1, int s2, float setback)
     return booleanToBody(box, tool, BooleanOp::Difference);
 }
 
+Body filletBoxEdge(const Body& box, int axis, int s1, int s2, float radius, uint32_t segments)
+{
+    if (axis < 0 || axis > 2 || radius <= 0.f || !isFinite(radius) || box.vertexCount() == 0 ||
+        segments < 1)
+        return box;
+
+    Vec3 lo = box.vertex(0).point, hi = lo;
+    for (uint32_t v = 1; v < box.vertexCount(); ++v) {
+        const Vec3 p = box.vertex(v).point;
+        for (int i = 0; i < 3; ++i) {
+            setc(lo, i, std::min(getc(lo, i), getc(p, i)));
+            setc(hi, i, std::max(getc(hi, i), getc(p, i)));
+        }
+    }
+
+    const int a1 = (axis + 1) % 3, a2 = (axis + 2) % 3;
+    const float size1 = getc(hi, a1) - getc(lo, a1);
+    const float size2 = getc(hi, a2) - getc(lo, a2);
+    const float r = std::min(radius, std::min(size1, size2) * 0.49f);
+    const float d1 = (s1 >= 0) ? 1.f : -1.f;
+    const float d2 = (s2 >= 0) ? 1.f : -1.f;
+    const float c1 = (s1 >= 0) ? getc(hi, a1) : getc(lo, a1);
+    const float c2 = (s2 >= 0) ? getc(hi, a2) : getc(lo, a2);
+    const float in1 = c1 - d1 * r, in2 = c2 - d2 * r;  // quarter-circle centre
+
+    const float axLo = getc(lo, axis), axHi = getc(hi, axis);
+    const float margin = (axHi - axLo) * 0.5f + 1.f;
+    auto mk = [&](float v1, float v2) {
+        Vec3 p{0, 0, 0};
+        setc(p, axis, axLo - margin);
+        setc(p, a1, v1);
+        setc(p, a2, v2);
+        return p;
+    };
+
+    // Cutting prism cross-section = the corner beyond the quarter-cylinder: the
+    // corner vertex (pushed slightly OUTSIDE the box so the tool's straight legs
+    // don't coincide with the box faces — that tangent coincidence otherwise makes
+    // the boolean degenerate at certain segment counts) plus the faceted arc from
+    // one tangent point to the other. box ∩ tool is unchanged by the outward push.
+    const float out = r * 0.5f;
+    std::vector<Vec3> poly;
+    poly.reserve(segments + 2);
+    poly.push_back(mk(c1 + d1 * out, c2 + d2 * out));  // corner, outside the box
+    constexpr float kHalfPi = 1.57079632679489662f;
+    for (uint32_t k = 0; k <= segments; ++k) {
+        const float th = kHalfPi * static_cast<float>(k) / static_cast<float>(segments);
+        poly.push_back(mk(in1 + d1 * r * std::cos(th), in2 + d2 * r * std::sin(th)));
+    }
+    Vec3 dir{0, 0, 0};
+    setc(dir, axis, (axHi - axLo) + 2.f * margin);
+    const Body tool = extrudeProfile(poly, dir);
+    return booleanToBody(box, tool, BooleanOp::Difference);
+}
+
 }  // namespace nexus::geometry::brep
