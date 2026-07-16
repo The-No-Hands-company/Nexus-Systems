@@ -313,6 +313,11 @@ public:
     // body yields a zero result.
     [[nodiscard]] nexus::geometry::MassProperties massProperties(float density = 1.f) const;
 
+    // Total boundary surface area of the solid, summed over its watertight
+    // triangulation (curved arc edges subdivided so cylinder/sphere converge,
+    // planar faces exact). Deterministic.
+    [[nodiscard]] float surfaceArea() const;
+
     // Evaluates a face's surface at (u,v), dispatching to the stored NURBS
     // surface when the face is on one, else to the analytic Surface::eval.
     [[nodiscard]] Vec3 surfacePoint(uint32_t surfaceId, float u, float v) const;

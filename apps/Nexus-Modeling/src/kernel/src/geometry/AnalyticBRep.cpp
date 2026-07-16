@@ -1362,6 +1362,21 @@ Body::PointContainment Body::classifyFace(uint32_t faceId, const Body& other, To
     return other.classifyPoint(faceCentroid(faceId), tol);
 }
 
+float Body::surfaceArea() const
+{
+    const Mesh mesh = toMesh(3);
+    const auto& pos = mesh.attributes().positions();
+    const auto& topo = mesh.topology();
+    double area = 0.0;
+    for (size_t t = 0; t < topo.faceCount(); ++t) {
+        const auto& id = topo.face(t).indices;
+        if (id.size() != 3) continue;
+        const Vec3 a = pos[id[0]], b = pos[id[1]], c = pos[id[2]];
+        area += 0.5 * static_cast<double>(length(cross(sub(b, a), sub(c, a))));
+    }
+    return static_cast<float>(area);
+}
+
 nexus::geometry::MassProperties Body::massProperties(float density) const
 {
     // Integrate volume / centroid / inertia over the watertight boundary
