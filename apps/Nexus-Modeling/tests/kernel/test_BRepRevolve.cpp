@@ -72,6 +72,55 @@ TEST(BRepRevolve, DegenerateInputRejected)
     EXPECT_EQ(revolveProfile(bad, {0, 0, 0}, {0, 0, 1}, 16).faceCount(), 0u);
 }
 
+TEST(BRepRevolve, SemicircleRevolvesToSphere)
+{
+    // Polygonal semicircle (radius 1): the two ends sit on the z-axis (poles),
+    // the arc bulges to +x; the closing diameter edge lies on the axis. Revolved
+    // 360° → a faceted sphere (a FILLED, genus-0 solid → euler 2).
+    const float r = 1.f;
+    const int K = 48;
+    std::vector<Vec3> semi;
+    semi.push_back({0, 0, -r});  // bottom pole (on axis)
+    for (int k = 1; k < K; ++k) {
+        const float a = -static_cast<float>(M_PI) / 2.f + static_cast<float>(M_PI) * k / K;
+        semi.push_back({r * std::cos(a), 0.f, r * std::sin(a)});
+    }
+    semi.push_back({0, 0, r});  // top pole (on axis)
+
+    const Body b = revolveProfile(semi, {0, 0, 0}, {0, 0, 1}, 64);
+    const auto ig = b.checkIntegrity();
+    EXPECT_TRUE(ig.ok) << ig.reason;
+    EXPECT_EQ(ig.euler, 2);  // sphere boundary: genus 0
+    EXPECT_EQ(ig.boundaryEdges, 0u);
+    EXPECT_TRUE(b.isClosed());
+    EXPECT_TRUE(b.checkGeometry().ok) << b.checkGeometry().reason;
+    EXPECT_NEAR(b.massProperties().volume, static_cast<float>(4.0 / 3.0 * M_PI), 0.05f);
+}
+
+TEST(BRepRevolve, TriangleRevolvesToCone)
+{
+    // Triangle with two vertices on the axis (apex-line) → a cone r=1, h=2.
+    const std::vector<Vec3> tri = {{0, 0, 0}, {1, 0, 0}, {0, 0, 2}};
+    const Body b = revolveProfile(tri, {0, 0, 0}, {0, 0, 1}, 64);
+    const auto ig = b.checkIntegrity();
+    EXPECT_TRUE(ig.ok) << ig.reason;
+    EXPECT_EQ(ig.euler, 2);
+    EXPECT_TRUE(b.isClosed());
+    EXPECT_TRUE(b.checkGeometry().ok);
+    EXPECT_NEAR(b.massProperties().volume, static_cast<float>(M_PI / 3.0 * 1.0 * 1.0 * 2.0),
+                0.02f);  // ⅓ π r² h
+}
+
+TEST(BRepRevolve, NonTouchingRingStaysEuler0)
+{
+    // The pole handling must not regress the non-axis-touching ring (torus).
+    const std::vector<Vec3> ring = {{2, 0, 0}, {3, 0, 0}, {3, 0, 1}, {2, 0, 1}};
+    const Body b = revolveProfile(ring, {0, 0, 0}, {0, 0, 1}, 32);
+    EXPECT_TRUE(b.checkIntegrity().ok);
+    EXPECT_EQ(b.checkIntegrity().euler, 0);  // genus 1
+    EXPECT_TRUE(b.isClosed());
+}
+
 TEST(BRepRevolve, Deterministic)
 {
     const std::vector<Vec3> sq = {{2, 0, 0}, {3, 0, 0}, {3, 0, 1}, {2, 0, 1}};

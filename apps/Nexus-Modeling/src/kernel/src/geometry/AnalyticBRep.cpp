@@ -2342,17 +2342,24 @@ Body revolveProfile(const std::vector<Vec3>& profile, const Vec3& axisOrigin,
     }
     if (length(Nprof) < 1e-10f) return Body{};
 
-    // The profile must lie to ONE side of the axis: strictly positive radial
-    // distance and all radial directions on the same side (no crossing/touching).
+    // The profile must lie to ONE side of the axis: it may TOUCH the axis (a
+    // vertex on it → a pole), but not cross to the other side. Off-axis vertices
+    // must all share the same radial side.
+    std::vector<bool> onAxis(m, false);
     Vec3 rHat{0.f, 0.f, 0.f};
+    bool haveRHat = false;
     for (size_t i = 0; i < m; ++i) {
         const Vec3 v = sub(profile[i], axisOrigin);
         const Vec3 rad = sub(v, scale(n, dot(v, n)));
         const float rl = length(rad);
-        if (rl < 1e-6f) return Body{};  // on the axis
-        if (i == 0) rHat = scale(rad, 1.f / rl);
+        if (rl < 1e-6f) {
+            onAxis[i] = true;  // pole vertex
+            continue;
+        }
+        if (!haveRHat) { rHat = scale(rad, 1.f / rl); haveRHat = true; }
         else if (dot(rad, rHat) <= 1e-6f) return Body{};  // crossed to the other side
     }
+    if (!haveRHat) return Body{};  // entirely on the axis → degenerate
 
     // Rotate a point about the axis by `ang` (Rodrigues).
     auto rot = [&](const Vec3& p, float ang) {
@@ -2363,34 +2370,48 @@ Body revolveProfile(const std::vector<Vec3>& profile, const Vec3& axisOrigin,
         return add(axisOrigin, r);
     };
 
+    // Vertices: an on-axis profile vertex welds to ONE pole point; an off-axis one
+    // fans into `segments` rotated copies.
     const float twoPi = 6.28318530717958647692f;
     std::vector<Vec3> pts;
-    pts.reserve(m * segments);
-    for (uint32_t j = 0; j < segments; ++j) {
-        const float ang = twoPi * static_cast<float>(j) / static_cast<float>(segments);
-        for (size_t i = 0; i < m; ++i) pts.push_back(rot(profile[i], ang));
+    std::vector<uint32_t> ringStart(m);  // pole index, or start of the ring of copies
+    for (size_t i = 0; i < m; ++i) {
+        ringStart[i] = static_cast<uint32_t>(pts.size());
+        if (onAxis[i]) {
+            pts.push_back(profile[i]);  // single welded pole vertex
+        } else {
+            for (uint32_t j = 0; j < segments; ++j)
+                pts.push_back(rot(profile[i], twoPi * static_cast<float>(j) /
+                                                  static_cast<float>(segments)));
+        }
     }
-    auto idx = [&](size_t i, uint32_t j) {
-        return static_cast<uint32_t>((j % segments) * m + i);
+    auto vAt = [&](size_t i, uint32_t j) {
+        return onAxis[i] ? ringStart[i] : ringStart[i] + (j % segments);
     };
 
-    // One quad per (profile edge, angular step); a full revolution has no caps.
+    // One face per (profile edge, angular step): a quad, or — where an endpoint is
+    // a pole — a collapsed triangle; a profile edge lying ON the axis contributes
+    // nothing. A full revolution needs no end caps.
     std::vector<Body::FaceDef> defs;
     defs.reserve(m * segments);
     for (uint32_t j = 0; j < segments; ++j) {
         for (size_t i = 0; i < m; ++i) {
-            const uint32_t a = idx(i, j);
-            const uint32_t b = idx((i + 1) % m, j);
-            const uint32_t c = idx((i + 1) % m, j + 1);
-            const uint32_t d = idx(i, j + 1);
+            const size_t i1 = (i + 1) % m;
+            // Outward winding (away from the axis).
+            const uint32_t L[4] = {vAt(i, j), vAt(i, j + 1), vAt(i1, j + 1), vAt(i1, j)};
+            std::vector<uint32_t> loop;
+            for (int k = 0; k < 4; ++k)
+                if (loop.empty() || loop.back() != L[k]) loop.push_back(L[k]);
+            if (loop.size() >= 2 && loop.front() == loop.back()) loop.pop_back();
+            if (loop.size() < 3) continue;  // degenerate (edge on the axis)
+
             Body::FaceDef fd;
-            // Wound so the face normal points outward (away from the axis) for a
-            // CCW-about-+N profile revolved in +angle.
-            fd.loop = {a, d, c, b};
+            fd.loop = loop;
             fd.surface.kind = SurfaceKind::Plane;
-            fd.surface.origin = pts[a];
-            fd.surface.normal = normalize(cross(sub(pts[d], pts[a]), sub(pts[b], pts[a])));
-            fd.surface.uAxis = normalize(sub(pts[d], pts[a]));
+            fd.surface.origin = pts[loop[0]];
+            fd.surface.normal = normalize(
+                cross(sub(pts[loop[1]], pts[loop[0]]), sub(pts[loop[2]], pts[loop[0]])));
+            fd.surface.uAxis = normalize(sub(pts[loop[1]], pts[loop[0]]));
             defs.push_back(std::move(fd));
         }
     }
