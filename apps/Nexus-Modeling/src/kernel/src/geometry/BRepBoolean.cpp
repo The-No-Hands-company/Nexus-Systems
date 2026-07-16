@@ -178,7 +178,12 @@ Body booleanToBody(const Body& a, const Body& b, BooleanOp op, Tolerance tol)
     addKept(B, A, /*isA=*/false);
 
     auto sewn = Body::fromFaces(points, defs);
-    return sewn.has_value() ? std::move(*sewn) : Body{};
+    // Invariant: booleanToBody never returns a corrupt Body. fromFaces already
+    // rejects non-manifold sews (returns nullopt); this also drops any result
+    // that fails the integrity validator (e.g. a degenerate near-coincident-facet
+    // sew) in favour of a clean empty Body.
+    if (!sewn.has_value() || !sewn->checkIntegrity().ok) return Body{};
+    return std::move(*sewn);
 }
 
 }  // namespace nexus::geometry::brep

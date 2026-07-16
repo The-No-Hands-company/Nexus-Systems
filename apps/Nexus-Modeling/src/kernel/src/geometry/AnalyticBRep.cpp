@@ -354,12 +354,19 @@ std::optional<Body> Body::fromFaces(const std::vector<Vec3>& points,
             if (b.m_edges[edgeId].coedge == kInvalid) b.m_edges[edgeId].coedge = coedgeId;
             if (b.m_verts[a].coedge == kInvalid) b.m_verts[a].coedge = coedgeId;
 
-            dirCoedge[dirKey(a, c)] = coedgeId;
+            // Reject non-manifold input (rather than silently building a corrupt
+            // Body): the same directed edge a→c used twice, or a shared edge that
+            // already has both its coedges — either would over-write a partner and
+            // leave a non-reciprocal link. Degenerate boolean sews (near-coincident
+            // welded facets) surface here, so the caller gets a clean nullopt.
+            if (dirCoedge.count(dirKey(a, c))) return std::nullopt;  // directed edge reused
             auto pit = dirCoedge.find(dirKey(c, a));
             if (pit != dirCoedge.end()) {
+                if (b.m_coedges[pit->second].partner != kInvalid) return std::nullopt;  // 3rd coedge
                 b.m_coedges[coedgeId].partner = pit->second;
                 b.m_coedges[pit->second].partner = coedgeId;
             }
+            dirCoedge[dirKey(a, c)] = coedgeId;
         }
 
         for (size_t j = 0; j < n; ++j) {

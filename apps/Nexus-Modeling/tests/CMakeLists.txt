@@ -71,6 +71,7 @@ add_executable(nexus_kernel_tests
     kernel/test_BRepBooleanCoincident.cpp
     kernel/test_BRepFacetedBoolean.cpp
     kernel/test_BRepFacetedSphere.cpp
+    kernel/test_BRepBooleanInvariant.cpp
     kernel/test_BRepMergeCoplanar.cpp
     kernel/test_BRepSimplify.cpp
     kernel/test_BRepSerialize.cpp
