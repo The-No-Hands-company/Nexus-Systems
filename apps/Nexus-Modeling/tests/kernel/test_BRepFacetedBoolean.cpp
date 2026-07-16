@@ -78,6 +78,20 @@ TEST(BRepFacetedBoolean, ConvergesToSmoothCylinder)
     EXPECT_LT(e24, 0.05);  // and quite close by n=24
 }
 
+TEST(BRepFacetedBoolean, HighFacetCountIsPracticalAndWatertight)
+{
+    // The full-pass imprint fixpoint makes a 48-facet cylinder boolean practical
+    // (it was impractically slow with the restart-per-imprint scan). The result
+    // is watertight and its half-volume is close to the smooth cylinder's π.
+    const Body c = makeFacetedCylinder(1.f, 2.f, 48);
+    const Body slab = boxMinMax({-2, -2, 0}, {2, 2, 2});
+    const Body inter = booleanToBody(c, slab, BooleanOp::Intersection);
+    expectWatertight(inter);
+    EXPECT_NEAR(inter.massProperties().volume, static_cast<float>(M_PI), 0.02);
+    EXPECT_NEAR(inter.massProperties().volume,
+                static_cast<float>(prismVolume(1.f, 2.f, 48) / 2.0), 1e-3f);  // exact prism half
+}
+
 TEST(BRepFacetedBoolean, UnionAndDifferenceWithBox)
 {
     const Body c = makeFacetedCylinder(1.f, 2.f, 12);

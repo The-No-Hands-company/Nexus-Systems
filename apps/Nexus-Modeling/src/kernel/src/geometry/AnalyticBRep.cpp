@@ -2468,15 +2468,19 @@ void imprintOneWay(Body& target, const Body& tool, Tolerance tol)
         if (sIdx < tool.surfaceCount()) toolSurfaces.push_back(tool.surface(sIdx));
     }
 
-    // Fixpoint: one imprint per outer pass (face indices shift as sub-faces are
-    // appended, so we re-scan from the front after each successful cut).
+    // Fixpoint by FULL passes: each pass sweeps every current face once, cutting
+    // it by the first tool plane that applies (inner break), and continues to the
+    // next face rather than restarting the scan after every cut. Sub-faces
+    // appended mid-pass are handled on the following pass. Same fixpoint result as
+    // a restart-per-imprint scan, but without its O(imprints·faces·tools) rescans.
+    // Deterministic (faces swept in index order).
     bool changed = true;
     size_t safety = 0;
     const size_t cap = 100000;
     while (changed && ++safety < cap) {
         changed = false;
         const uint32_t fcount = static_cast<uint32_t>(target.faceCount());
-        for (uint32_t f = 0; f < fcount && !changed; ++f) {
+        for (uint32_t f = 0; f < fcount; ++f) {
             if (!target.face(f).alive) continue;
             const uint32_t saIdx = target.face(f).surface;
             if (saIdx >= target.surfaceCount()) continue;
@@ -2485,7 +2489,7 @@ void imprintOneWay(Body& target, const Body& tool, Tolerance tol)
                 const SurfaceIntersection si = intersectSurfaces(sa, sb, tol);
                 if (si.kind != SurfaceIntersectionKind::Line) continue;
                 if (target.imprintCurve(f, si.curve, tol) != kInvalid) {
-                    changed = true;  // f was split; restart the scan
+                    changed = true;  // f was split; move on to the next face
                     break;
                 }
             }
