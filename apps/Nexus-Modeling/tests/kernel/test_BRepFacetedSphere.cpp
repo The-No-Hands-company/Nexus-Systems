@@ -82,6 +82,18 @@ TEST(BRepFacetedSphere, ConvergesToSmoothHemisphere)
     EXPECT_LT(eFine, 0.4);
 }
 
+TEST(BRepFacetedSphere, HighFacetCountIsPracticalAfterBroadPhase)
+{
+    // The AABB broad-phase in the imprint prunes the O(tool-faces²) slab-face
+    // explosion, so a 16×24 sphere boolean (was seconds, now ~0.15s) is practical
+    // and its hemisphere volume is close to the smooth 2/3·π·r³.
+    const Body s = makeFacetedSphere(1.f, 16, 24);
+    const Body slab = boxMinMax({-2, -2, 0}, {2, 2, 2});
+    const Body inter = booleanToBody(s, slab, BooleanOp::Intersection);
+    expectWatertight(inter);
+    EXPECT_NEAR(inter.massProperties().volume, static_cast<float>(2.0 / 3.0 * M_PI), 0.06f);
+}
+
 TEST(BRepFacetedSphere, DifferenceAndUnionWithBox)
 {
     const Body s = makeFacetedSphere(1.f, 6, 8);

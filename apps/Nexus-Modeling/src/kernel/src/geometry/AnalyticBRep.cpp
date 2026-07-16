@@ -2472,23 +2472,51 @@ namespace {
 // imprintCurve splits a straddling face, and the resulting sub-faces are
 // re-scanned until no tool plane cuts any target face's interior. This leaves no
 // target face straddling a tool face-plane.
+// Axis-aligned bounding box of a face, padded by `pad`.
+struct FaceBox {
+    Vec3 lo{0, 0, 0}, hi{0, 0, 0};
+    bool valid = false;
+};
+FaceBox faceBox(const Body& b, uint32_t f, float pad)
+{
+    FaceBox box;
+    for (uint32_t v : b.faceVertices(f)) {
+        const Vec3 p = b.vertex(v).point;
+        if (!box.valid) { box.lo = box.hi = p; box.valid = true; }
+        box.lo = {std::min(box.lo.x, p.x), std::min(box.lo.y, p.y), std::min(box.lo.z, p.z)};
+        box.hi = {std::max(box.hi.x, p.x), std::max(box.hi.y, p.y), std::max(box.hi.z, p.z)};
+    }
+    box.lo = {box.lo.x - pad, box.lo.y - pad, box.lo.z - pad};
+    box.hi = {box.hi.x + pad, box.hi.y + pad, box.hi.z + pad};
+    return box;
+}
+bool boxesOverlap(const FaceBox& a, const FaceBox& b)
+{
+    return a.valid && b.valid && a.lo.x <= b.hi.x && b.lo.x <= a.hi.x && a.lo.y <= b.hi.y &&
+           b.lo.y <= a.hi.y && a.lo.z <= b.hi.z && b.lo.z <= a.hi.z;
+}
+
 void imprintOneWay(Body& target, const Body& tool, Tolerance tol)
 {
-    // Snapshot tool surfaces once (tool is not modified here).
-    std::vector<Surface> toolSurfaces;
-    toolSurfaces.reserve(tool.faceCount());
+    // Snapshot each tool face's surface + AABB once (tool is not modified here).
+    // The AABB is the broad-phase key: a tool face can only cut a target face if
+    // their boxes overlap, which prunes the spurious cuts a far tool plane's
+    // infinite intersection line would otherwise imprint (the source of the
+    // O(tool-faces²) face explosion).
+    const float pad = tol.at(1.f) * 10.f;
+    struct ToolFace { Surface surf; FaceBox box; };
+    std::vector<ToolFace> toolFaces;
+    toolFaces.reserve(tool.faceCount());
     for (uint32_t ft = 0; ft < tool.faceCount(); ++ft) {
         if (!tool.face(ft).alive) continue;
         const uint32_t sIdx = tool.face(ft).surface;
-        if (sIdx < tool.surfaceCount()) toolSurfaces.push_back(tool.surface(sIdx));
+        if (sIdx < tool.surfaceCount()) toolFaces.push_back({tool.surface(sIdx), faceBox(tool, ft, pad)});
     }
 
     // Fixpoint by FULL passes: each pass sweeps every current face once, cutting
     // it by the first tool plane that applies (inner break), and continues to the
     // next face rather than restarting the scan after every cut. Sub-faces
-    // appended mid-pass are handled on the following pass. Same fixpoint result as
-    // a restart-per-imprint scan, but without its O(imprints·faces·tools) rescans.
-    // Deterministic (faces swept in index order).
+    // appended mid-pass are handled on the following pass. Deterministic.
     bool changed = true;
     size_t safety = 0;
     const size_t cap = 100000;
@@ -2500,8 +2528,10 @@ void imprintOneWay(Body& target, const Body& tool, Tolerance tol)
             const uint32_t saIdx = target.face(f).surface;
             if (saIdx >= target.surfaceCount()) continue;
             const Surface sa = target.surface(saIdx);
-            for (const Surface& sb : toolSurfaces) {
-                const SurfaceIntersection si = intersectSurfaces(sa, sb, tol);
+            const FaceBox tbox = faceBox(target, f, pad);
+            for (const ToolFace& tf : toolFaces) {
+                if (!boxesOverlap(tbox, tf.box)) continue;  // broad-phase prune
+                const SurfaceIntersection si = intersectSurfaces(sa, tf.surf, tol);
                 if (si.kind != SurfaceIntersectionKind::Line) continue;
                 if (target.imprintCurve(f, si.curve, tol) != kInvalid) {
                     changed = true;  // f was split; move on to the next face
