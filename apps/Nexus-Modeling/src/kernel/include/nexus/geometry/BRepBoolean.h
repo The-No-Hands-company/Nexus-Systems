@@ -47,4 +47,13 @@ enum class BooleanOp : uint8_t {
 [[nodiscard]] Body booleanToBody(const Body& a, const Body& b, BooleanOp op,
                                  Tolerance tol = {});
 
+// Flat (45°) chamfer of one axis-aligned edge of a box, as a boolean difference
+// with a triangular cutting prism (a right-triangle profile of legs = setback,
+// extruded along the edge). `axis` (0=X, 1=Y, 2=Z) is the edge's direction;
+// `s1`/`s2` (each −1 or +1) pick the edge by the sign of the two OTHER box
+// coordinates (so a box has 12 edges: 4 per axis). `setback` is the leg length,
+// clamped to the box; a non-positive setback returns the box unchanged. The
+// removed wedge has volume ½·setback²·edgeLength. Returns a watertight solid.
+[[nodiscard]] Body chamferBoxEdge(const Body& box, int axis, int s1, int s2, float setback);
+
 }  // namespace nexus::geometry::brep

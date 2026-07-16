@@ -186,4 +186,60 @@ Body booleanToBody(const Body& a, const Body& b, BooleanOp op, Tolerance tol)
     return std::move(*sewn);
 }
 
+namespace {
+float getc(const Vec3& v, int i) { return i == 0 ? v.x : (i == 1 ? v.y : v.z); }
+void setc(Vec3& v, int i, float x)
+{
+    if (i == 0) v.x = x;
+    else if (i == 1) v.y = x;
+    else v.z = x;
+}
+}  // namespace
+
+Body chamferBoxEdge(const Body& box, int axis, int s1, int s2, float setback)
+{
+    if (axis < 0 || axis > 2 || setback <= 0.f || !isFinite(setback) || box.vertexCount() == 0)
+        return box;
+
+    // Axis-aligned bounds of the box.
+    Vec3 lo = box.vertex(0).point, hi = lo;
+    for (uint32_t v = 1; v < box.vertexCount(); ++v) {
+        const Vec3 p = box.vertex(v).point;
+        for (int i = 0; i < 3; ++i) {
+            setc(lo, i, std::min(getc(lo, i), getc(p, i)));
+            setc(hi, i, std::max(getc(hi, i), getc(p, i)));
+        }
+    }
+
+    const int a1 = (axis + 1) % 3, a2 = (axis + 2) % 3;
+    const float size1 = getc(hi, a1) - getc(lo, a1);
+    const float size2 = getc(hi, a2) - getc(lo, a2);
+    // Clamp so the wedge stays within this edge's quadrant (never past the box
+    // centre onto the opposite edges), keeping the result a clean single chamfer.
+    const float sb = std::min(setback, std::min(size1, size2) * 0.49f);
+    const float d1 = (s1 >= 0) ? 1.f : -1.f;
+    const float d2 = (s2 >= 0) ? 1.f : -1.f;
+    const float c1 = (s1 >= 0) ? getc(hi, a1) : getc(lo, a1);  // edge coord on the two other axes
+    const float c2 = (s2 >= 0) ? getc(hi, a2) : getc(lo, a2);
+    const float in1 = c1 - d1 * sb;  // setback point into the box
+    const float in2 = c2 - d2 * sb;
+
+    // Cutting prism: the right-triangle wedge at the edge, extruded along the edge
+    // and past both box ends (so its caps don't coincide with the box's).
+    const float axLo = getc(lo, axis), axHi = getc(hi, axis);
+    const float margin = (axHi - axLo) * 0.5f + 1.f;
+    auto mk = [&](float v1, float v2) {
+        Vec3 p{0, 0, 0};
+        setc(p, axis, axLo - margin);
+        setc(p, a1, v1);
+        setc(p, a2, v2);
+        return p;
+    };
+    std::vector<Vec3> tri = {mk(c1, c2), mk(in1, c2), mk(c1, in2)};
+    Vec3 dir{0, 0, 0};
+    setc(dir, axis, (axHi - axLo) + 2.f * margin);
+    const Body tool = extrudeProfile(tri, dir);
+    return booleanToBody(box, tool, BooleanOp::Difference);
+}
+
 }  // namespace nexus::geometry::brep
