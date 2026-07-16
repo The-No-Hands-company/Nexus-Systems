@@ -2334,6 +2334,20 @@ Body extrudeProfile(const std::vector<Vec3>& profile, const Vec3& dir)
     return body.has_value() ? std::move(*body) : Body{};
 }
 
+Body makeFacetedCylinder(float radius, float height, uint32_t segments)
+{
+    const uint32_t n = std::max(segments, 3u);
+    const float h = height * 0.5f;
+    const float twoPi = 6.28318530717958647692f;
+    std::vector<Vec3> ring;  // regular n-gon at z = -h, CCW about +Z
+    ring.reserve(n);
+    for (uint32_t k = 0; k < n; ++k) {
+        const float a = twoPi * static_cast<float>(k) / static_cast<float>(n);
+        ring.push_back({radius * std::cos(a), radius * std::sin(a), -h});
+    }
+    return extrudeProfile(ring, {0.f, 0.f, height});  // all-planar prism
+}
+
 Body revolveProfile(const std::vector<Vec3>& profile, const Vec3& axisOrigin,
                     const Vec3& axisDir, uint32_t segments)
 {

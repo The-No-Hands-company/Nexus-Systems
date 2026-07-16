@@ -400,6 +400,13 @@ private:
 // `dir` parallel to the profile plane (zero projected height).
 [[nodiscard]] Body extrudeProfile(const std::vector<Vec3>& profile, const Vec3& dir);
 
+// An ALL-PLANAR faceted cylinder: a regular `segments`-gon prism along +Z of the
+// given radius/height, centred at the origin. Unlike makeCylinder (whose side
+// carries a curved Cylinder surface), every face here is a Plane, so it composes
+// with the planar boolean — the pragmatic faceted path for curved-solid booleans.
+// segments ≥ 3; watertight, euler 2.
+[[nodiscard]] Body makeFacetedCylinder(float radius, float height, uint32_t segments);
+
 // Revolve a closed planar profile a full 360° about an axis into a solid of
 // revolution (a ring/torus-like solid), in `segments` (≥3) angular steps: each
 // profile edge sweeps a band of quad faces; the full revolution needs no end
