@@ -407,6 +407,12 @@ private:
 // segments ≥ 3; watertight, euler 2.
 [[nodiscard]] Body makeFacetedCylinder(float radius, float height, uint32_t segments);
 
+// An ALL-PLANAR faceted sphere (a UV-sphere-like polyhedron): a polygonal
+// semicircle of `latSegments` bands revolved in `lonSegments` steps, all faces
+// Plane, so it composes with the planar boolean. latSegments ≥ 2, lonSegments ≥
+// 3; watertight, euler 2. The smooth-sphere stand-in for booleans.
+[[nodiscard]] Body makeFacetedSphere(float radius, uint32_t latSegments, uint32_t lonSegments);
+
 // Revolve a closed planar profile a full 360° about an axis into a solid of
 // revolution (a ring/torus-like solid), in `segments` (≥3) angular steps: each
 // profile edge sweeps a band of quad faces; the full revolution needs no end

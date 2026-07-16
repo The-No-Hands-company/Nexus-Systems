@@ -2348,6 +2348,21 @@ Body makeFacetedCylinder(float radius, float height, uint32_t segments)
     return extrudeProfile(ring, {0.f, 0.f, height});  // all-planar prism
 }
 
+Body makeFacetedSphere(float radius, uint32_t latSegments, uint32_t lonSegments)
+{
+    const uint32_t lat = std::max(latSegments, 2u);
+    const float pi = 3.14159265358979323846f;
+    // Polygonal semicircle from the bottom pole up to the top pole, in the xz
+    // half-plane x ≥ 0, revolved about the z-axis. Endpoints are on the axis.
+    std::vector<Vec3> semi;
+    semi.reserve(lat + 1);
+    for (uint32_t k = 0; k <= lat; ++k) {
+        const float a = -pi * 0.5f + pi * static_cast<float>(k) / static_cast<float>(lat);
+        semi.push_back({radius * std::cos(a), 0.f, radius * std::sin(a)});
+    }
+    return revolveProfile(semi, {0.f, 0.f, 0.f}, {0.f, 0.f, 1.f}, std::max(lonSegments, 3u));
+}
+
 Body revolveProfile(const std::vector<Vec3>& profile, const Vec3& axisOrigin,
                     const Vec3& axisDir, uint32_t segments)
 {
