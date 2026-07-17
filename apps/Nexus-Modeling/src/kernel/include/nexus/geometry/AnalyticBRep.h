@@ -92,12 +92,27 @@ struct Edge {
     bool     alive = true;          // tombstone flag (dead entities are skipped)
 };
 
+// A parameter-space trim curve (pcurve): the 2D image of a coedge in the (u,v)
+// parameter domain of its owning face's surface. On a trimmed surface — the
+// point of a NURBS B-rep face — the trim boundary is defined ON the parameter
+// domain, and surfacePoint maps a pcurve endpoint back to the coedge's 3D
+// vertex. A pcurve is stored per-COEDGE, not per-edge, because the two faces
+// sharing an edge have distinct parameter domains (and thus distinct pcurves).
+// For now a straight segment in (u,v) — the parameter-space analog of a Line
+// curve — running the coedge's directed start → end.
+struct Pcurve {
+    bool  present = false;
+    float u0 = 0.f, v0 = 0.f;       // param-space start (maps to the coedge start vertex)
+    float u1 = 0.f, v1 = 0.f;       // param-space end   (maps to the coedge end vertex)
+};
+
 struct Coedge {
     uint32_t edge = kInvalid;
     bool     reversed = false;      // true ⇒ traverses the edge v1 → v0
     uint32_t loop = kInvalid;
     uint32_t next = kInvalid, prev = kInvalid;  // around the loop
     uint32_t partner = kInvalid;    // the coedge on the adjacent face (same edge)
+    Pcurve   pcurve;                // optional parameter-space trim curve on the face
     bool     alive = true;          // tombstone flag (dead entities are skipped)
 };
 
@@ -203,6 +218,18 @@ public:
     // endpoints are not on the circle within tolerance.
     bool setEdgeArc(uint32_t edgeId, const Vec3& center, const Vec3& axis, float radius,
                     Tolerance tol = {});
+
+    // Attach a parameter-space trim curve (pcurve) to a coedge: a straight
+    // segment in the owning face's surface (u,v) domain from (u0,v0) to (u1,v1),
+    // running the coedge's directed start → end. This is what makes a NURBS face
+    // a *trimmed* surface — the boundary is defined on the parameter domain, not
+    // just in 3D. Validated on attach (and re-checked by checkGeometry):
+    // surfacePoint(face surface, u,v) at each endpoint must reproduce the
+    // coedge's directed 3D endpoint vertices within tol. Returns false — leaving
+    // the coedge unchanged — on invalid ids, a non-finite parameter, or endpoints
+    // that do not map back to the coedge's vertices.
+    bool setCoedgePcurve(uint32_t coedgeId, float u0, float v0, float u1, float v1,
+                         Tolerance tol = {});
 
     // Euler operator (inverse of splitEdge / kill-edge-vertex) — remove a
     // degree-2 vertex whose two incident edges share a curve, merging them into

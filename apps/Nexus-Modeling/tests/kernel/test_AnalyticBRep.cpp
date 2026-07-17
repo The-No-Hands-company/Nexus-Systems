@@ -226,6 +226,172 @@ TEST(AnalyticBRep, NurbsSurfaceFaceValidatesAndEvaluates)
     EXPECT_NEAR(c.z, 0.f, 1e-4f);
 }
 
+// ──────────── Trimmed NURBS faces: parameter-space trim curves (pcurves) ──────
+//
+// A trimmed surface's boundary is defined ON the surface's (u,v) parameter
+// domain (a pcurve per coedge), not just in 3D. These build the same bilinear
+// NURBS patch face and attach a pcurve to every outer-loop coedge, mapping the
+// coedge's directed 3D endpoints back to their (u,v) — the hallmark of a real
+// trimmed B-rep face.
+namespace {
+// Build the flat bilinear NURBS-patch face (z=0 unit-ish quad) as a Body.
+Body makeNurbsQuadFace()
+{
+    const std::vector<Vec3> pts = {{0, 0, 0}, {2, 0, 0}, {2, 2, 0}, {0, 2, 0}};
+    const std::vector<Vec3> ctl = {{0, 0, 0}, {0, 2, 0}, {2, 0, 0}, {2, 2, 0}};  // i*nV+j
+    NurbsSurface patch(1, 1, {0, 0, 1, 1}, {0, 0, 1, 1}, ctl, 2, 2);
+    Body::FaceDef fd;
+    fd.loop = {0u, 1u, 2u, 3u};
+    fd.nurbsSurface = patch;
+    return *Body::fromFaces(pts, {fd});
+}
+// For this patch, evaluate(u,v) = (2u, 2v, 0), so a 3D point maps back to
+// (u,v) = (x/2, y/2).
+std::pair<float, float> uvOfQuad(const Vec3& p) { return {p.x * 0.5f, p.y * 0.5f}; }
+
+// Attach a correct pcurve to every outer-loop coedge of face 0; returns the
+// number attached.
+uint32_t attachOuterLoopPcurves(Body& b)
+{
+    const uint32_t first = b.loop(b.face(0).outerLoop).first;
+    uint32_t c = first, added = 0;
+    do {
+        const Coedge& ce = b.coedge(c);
+        const Edge& ed = b.edge(ce.edge);
+        const uint32_t sV = ce.reversed ? ed.v1 : ed.v0;
+        const uint32_t eV = ce.reversed ? ed.v0 : ed.v1;
+        const auto [su, sv] = uvOfQuad(b.vertex(sV).point);
+        const auto [eu, ev] = uvOfQuad(b.vertex(eV).point);
+        if (b.setCoedgePcurve(c, su, sv, eu, ev)) ++added;
+        c = ce.next;
+    } while (c != first);
+    return added;
+}
+}  // namespace
+
+TEST(AnalyticBRepPcurve, AttachAndValidateOnNurbsFace)
+{
+    Body b = makeNurbsQuadFace();
+    ASSERT_TRUE(b.checkGeometry().ok);
+
+    EXPECT_EQ(attachOuterLoopPcurves(b), 4u);  // all four outer coedges trimmed
+
+    // Every outer coedge now carries a present pcurve, and checkGeometry proves
+    // the parameter-space endpoints map back to the 3D vertices.
+    const auto g = b.checkGeometry();
+    EXPECT_TRUE(g.ok) << g.reason;
+
+    uint32_t present = 0;
+    for (uint32_t c = 0; c < b.coedgeCount(); ++c)
+        if (b.coedge(c).pcurve.present) ++present;
+    EXPECT_EQ(present, 4u);
+}
+
+TEST(AnalyticBRepPcurve, RejectsEndpointsThatDoNotMapBack)
+{
+    Body b = makeNurbsQuadFace();
+    const uint32_t first = b.loop(b.face(0).outerLoop).first;
+
+    // (0.9,0.9) maps to (1.8,1.8,0) — nowhere near the coedge's start vertex.
+    EXPECT_FALSE(b.setCoedgePcurve(first, 0.9f, 0.9f, 0.1f, 0.1f));
+    EXPECT_FALSE(b.coedge(first).pcurve.present);  // unchanged
+
+    // Non-finite parameters are rejected.
+    const float inf = std::bit_cast<float>(0x7F800000u);
+    EXPECT_FALSE(b.setCoedgePcurve(first, inf, 0.f, 1.f, 0.f));
+    EXPECT_FALSE(b.coedge(first).pcurve.present);
+
+    // Out-of-range coedge id is rejected.
+    EXPECT_FALSE(b.setCoedgePcurve(9999u, 0.f, 0.f, 1.f, 0.f));
+}
+
+TEST(AnalyticBRepPcurve, SwappedEndpointsRejected)
+{
+    Body b = makeNurbsQuadFace();
+    const uint32_t first = b.loop(b.face(0).outerLoop).first;
+    const Coedge& ce = b.coedge(first);
+    const Edge& ed = b.edge(ce.edge);
+    const uint32_t sV = ce.reversed ? ed.v1 : ed.v0;
+    const uint32_t eV = ce.reversed ? ed.v0 : ed.v1;
+    const auto [su, sv] = uvOfQuad(b.vertex(sV).point);
+    const auto [eu, ev] = uvOfQuad(b.vertex(eV).point);
+    // Correct order attaches; reversed order (end params in start slot) must not.
+    EXPECT_FALSE(b.setCoedgePcurve(first, eu, ev, su, sv));
+    EXPECT_TRUE(b.setCoedgePcurve(first, su, sv, eu, ev));
+}
+
+TEST(AnalyticBRepPcurve, RoundTripsThroughSerialization)
+{
+    Body b = makeNurbsQuadFace();
+    ASSERT_EQ(attachOuterLoopPcurves(b), 4u);
+
+    const std::vector<std::uint8_t> bytes = b.serialize();
+    const auto rt = Body::deserialize(bytes);
+    ASSERT_TRUE(rt.has_value());
+    EXPECT_TRUE(rt->checkGeometry().ok);
+    EXPECT_EQ(bytes, rt->serialize());  // byte-identical re-serialization
+
+    // The pcurve payload survives exactly.
+    uint32_t present = 0;
+    for (uint32_t c = 0; c < rt->coedgeCount(); ++c) {
+        const Pcurve& a = b.coedge(c).pcurve;
+        const Pcurve& d = rt->coedge(c).pcurve;
+        EXPECT_EQ(a.present, d.present);
+        if (d.present) {
+            ++present;
+            EXPECT_FLOAT_EQ(a.u0, d.u0);
+            EXPECT_FLOAT_EQ(a.v0, d.v0);
+            EXPECT_FLOAT_EQ(a.u1, d.u1);
+            EXPECT_FLOAT_EQ(a.v1, d.v1);
+        }
+    }
+    EXPECT_EQ(present, 4u);
+}
+
+TEST(AnalyticBRepPcurve, LegacyV1BlobDecodes)
+{
+    // A pcurve-FREE body serializes to v2 with only an empty trailing pcurve
+    // section; patch the version byte back to 1 and it must still decode
+    // identically (the v1 reader stops before the trailing section).
+    const Body box = makeBox(2.f, 2.f, 2.f);
+    std::vector<std::uint8_t> bytes = box.serialize();
+    ASSERT_GT(bytes.size(), 8u);
+    EXPECT_EQ(bytes[4], 2u);  // magic(4) then version at byte 4
+    bytes[4] = 1u;            // masquerade as a legacy v1 blob
+
+    const auto rt = Body::deserialize(bytes);
+    ASSERT_TRUE(rt.has_value());
+    EXPECT_TRUE(rt->checkIntegrity().ok);
+    EXPECT_TRUE(rt->checkGeometry().ok);
+    EXPECT_NEAR(rt->massProperties().volume, 8.0f, 1e-4f);
+}
+
+TEST(AnalyticBRepPcurve, WrongPcurveFailsCheckGeometry)
+{
+    // Inject an inconsistent pcurve past the setCoedgePcurve front door by
+    // corrupting the serialized parameter (deserialize loads geometry without
+    // re-validating it), so checkGeometry's pcurve clause is what catches it.
+    Body b = makeNurbsQuadFace();
+    ASSERT_EQ(attachOuterLoopPcurves(b), 4u);
+
+    std::vector<std::uint8_t> bytes = b.serialize();
+    ASSERT_GT(bytes.size(), 4u);
+    // The trailing pcurve section ends the blob; its last float is the last
+    // present coedge's v1. Overwrite it with a finite-but-wrong value.
+    const std::uint32_t bad = std::bit_cast<std::uint32_t>(9.0f);
+    bytes[bytes.size() - 4] = static_cast<std::uint8_t>(bad & 0xFFu);
+    bytes[bytes.size() - 3] = static_cast<std::uint8_t>((bad >> 8) & 0xFFu);
+    bytes[bytes.size() - 2] = static_cast<std::uint8_t>((bad >> 16) & 0xFFu);
+    bytes[bytes.size() - 1] = static_cast<std::uint8_t>((bad >> 24) & 0xFFu);
+
+    const auto rt = Body::deserialize(bytes);
+    ASSERT_TRUE(rt.has_value());               // loads fine (value is finite)
+    EXPECT_TRUE(rt->checkIntegrity().ok);       // topology untouched
+    const auto g = rt->checkGeometry();
+    EXPECT_FALSE(g.ok);                          // the stale pcurve is caught
+    EXPECT_NE(g.reason.find("pcurve"), std::string::npos);
+}
+
 // surfacePoint dispatches to the analytic Surface::eval for non-NURBS faces.
 TEST(AnalyticBRep, SurfacePointUsesAnalyticEvalForPlaneFaces)
 {

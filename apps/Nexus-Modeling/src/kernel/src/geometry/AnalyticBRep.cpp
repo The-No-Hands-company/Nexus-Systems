@@ -580,6 +580,32 @@ Body::GeometryReport Body::checkGeometry(Tolerance tol) const
             return fail("coedge " + std::to_string(c) + " and partner disagree on shared-edge endpoints");
     }
 
+    // Pcurves (parameter-space trim curves) map back onto their coedge's 3D
+    // endpoint vertices through the owning face's surface — the consistency that
+    // makes a trimmed (NURBS) surface valid.
+    for (uint32_t c = 0; c < m_coedges.size(); ++c) {
+        const Coedge& ce = m_coedges[c];
+        if (!ce.alive || !ce.pcurve.present) continue;
+        const Pcurve& pc = ce.pcurve;
+        if (!isFinite(pc.u0) || !isFinite(pc.v0) || !isFinite(pc.u1) || !isFinite(pc.v1))
+            return fail("coedge " + std::to_string(c) + " has a non-finite pcurve");
+        if (ce.edge >= m_edges.size() || ce.loop >= m_loops.size())
+            return fail("coedge " + std::to_string(c) + " pcurve has invalid references");
+        const Edge& ed = m_edges[ce.edge];
+        if (ed.v0 >= m_verts.size() || ed.v1 >= m_verts.size())
+            return fail("coedge " + std::to_string(c) + " pcurve edge has invalid vertices");
+        const uint32_t faceId = m_loops[ce.loop].face;
+        if (faceId >= m_faces.size() || m_faces[faceId].surface >= m_surfaces.size())
+            return fail("coedge " + std::to_string(c) + " pcurve has invalid surface");
+        const uint32_t surfId = m_faces[faceId].surface;
+        const uint32_t sV = ce.reversed ? ed.v1 : ed.v0;
+        const uint32_t eV = ce.reversed ? ed.v0 : ed.v1;
+        if (!coincident(surfacePoint(surfId, pc.u0, pc.v0), m_verts[sV].point, tol))
+            return fail("coedge " + std::to_string(c) + " pcurve start does not map to its start vertex");
+        if (!coincident(surfacePoint(surfId, pc.u1, pc.v1), m_verts[eV].point, tol))
+            return fail("coedge " + std::to_string(c) + " pcurve end does not map to its end vertex");
+    }
+
     return r;
 }
 
@@ -1727,11 +1753,36 @@ bool Body::setEdgeArc(uint32_t edgeId, const Vec3& center, const Vec3& axis, flo
     return true;
 }
 
+bool Body::setCoedgePcurve(uint32_t coedgeId, float u0, float v0, float u1, float v1, Tolerance tol)
+{
+    if (coedgeId >= m_coedges.size() || !m_coedges[coedgeId].alive) return false;
+    if (!isFinite(u0) || !isFinite(v0) || !isFinite(u1) || !isFinite(v1)) return false;
+    Coedge& ce = m_coedges[coedgeId];
+    if (ce.edge >= m_edges.size() || ce.loop >= m_loops.size()) return false;
+    const Edge& ed = m_edges[ce.edge];
+    if (ed.v0 >= m_verts.size() || ed.v1 >= m_verts.size()) return false;
+    const uint32_t faceId = m_loops[ce.loop].face;
+    if (faceId >= m_faces.size()) return false;
+    const uint32_t surfId = m_faces[faceId].surface;
+    if (surfId >= m_surfaces.size()) return false;
+
+    // Directed endpoints: a pcurve runs the coedge's start → end vertex.
+    const uint32_t sV = ce.reversed ? ed.v1 : ed.v0;
+    const uint32_t eV = ce.reversed ? ed.v0 : ed.v1;
+    // Each parameter-space endpoint must map (through the face surface) back onto
+    // the corresponding 3D vertex — else the pcurve does not trim this boundary.
+    if (!coincident(surfacePoint(surfId, u0, v0), m_verts[sV].point, tol)) return false;
+    if (!coincident(surfacePoint(surfId, u1, v1), m_verts[eV].point, tol)) return false;
+
+    ce.pcurve = Pcurve{true, u0, v0, u1, v1};
+    return true;
+}
+
 // ──────────── Serialization ──────────────────────────────────────────────────
 
 namespace {
 constexpr std::uint32_t kBRepMagic = 0x5242584Eu;  // 'NXBR'
-constexpr std::uint32_t kBRepVersion = 1u;
+constexpr std::uint32_t kBRepVersion = 2u;  // v2 adds per-coedge pcurves (trim curves)
 
 void putU8(std::vector<std::uint8_t>& o, std::uint8_t v) { o.push_back(v); }
 void putU32(std::vector<std::uint8_t>& o, std::uint32_t v)
@@ -1918,6 +1969,22 @@ std::vector<std::uint8_t> Body::serialize() const
         putU32(o, static_cast<std::uint32_t>(n.weights().size()));
         for (float w : n.weights()) putF32(o, w);
     }
+    // v2: parameter-space trim curves (pcurves), a SPARSE trailing section keyed
+    // by coedge index — so a v1 blob (which lacks it) decodes identically under
+    // the v2 reader, and only coedges that carry a pcurve cost bytes.
+    std::uint32_t nPc = 0;
+    for (const Coedge& c : m_coedges)
+        if (c.pcurve.present) ++nPc;
+    putU32(o, nPc);
+    for (std::uint32_t i = 0; i < m_coedges.size(); ++i) {
+        const Pcurve& pc = m_coedges[i].pcurve;
+        if (!pc.present) continue;
+        putU32(o, i);
+        putF32(o, pc.u0);
+        putF32(o, pc.v0);
+        putF32(o, pc.u1);
+        putF32(o, pc.v1);
+    }
     return o;
 }
 
@@ -2011,6 +2078,20 @@ std::optional<Body> Body::deserialize(const std::vector<std::uint8_t>& bytes)
         else
             b.m_nurbsSurfaces.emplace_back(degU, degV, std::move(knotU), std::move(knotV),
                                            std::move(ctl), nU, nV, std::move(weights));
+    }
+
+    // v2: sparse pcurve trailing section (absent in v1 blobs → skipped).
+    if (version >= 2u) {
+        if (!r.count(n)) return std::nullopt;
+        for (std::uint32_t i = 0; i < n; ++i) {
+            std::uint32_t idx = 0;
+            Pcurve pc;
+            if (!r.u32(idx) || !r.f32(pc.u0) || !r.f32(pc.v0) || !r.f32(pc.u1) || !r.f32(pc.v1))
+                return std::nullopt;
+            if (idx >= b.m_coedges.size()) return std::nullopt;
+            pc.present = true;
+            b.m_coedges[idx].pcurve = pc;
+        }
     }
 
     if (!r.ok) return std::nullopt;
