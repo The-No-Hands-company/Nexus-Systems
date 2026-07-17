@@ -1,10 +1,23 @@
 #include <nexus/geometry/BRepSurfaceIntersect.h>
 
+#include <nexus/geometry/RobustPredicates.h>
+
 #include <cmath>
 
 namespace nexus::geometry::brep {
 
 namespace {
+// EXACT collinearity of two vectors: u × v == 0 iff all three 2×2 minors vanish,
+// each an orient2D determinant about the origin (Shewchuk adaptive-exact). Robust
+// where a float |cross|² < eps threshold mis-classifies a genuine shallow angle.
+bool exactlyCollinear(const Vec3& u, const Vec3& v)
+{
+    const nexus::geometry::Vec2 O{0.f, 0.f};
+    const double mx = RobustPredicates::orient2D(O, {u.y, u.z}, {v.y, v.z});  // u.y·v.z − u.z·v.y
+    const double my = RobustPredicates::orient2D(O, {u.z, u.x}, {v.z, v.x});  // u.z·v.x − u.x·v.z
+    const double mz = RobustPredicates::orient2D(O, {u.x, u.y}, {v.x, v.y});  // u.x·v.y − u.y·v.x
+    return mx == 0.0 && my == 0.0 && mz == 0.0;
+}
 Vec3 sub(const Vec3& a, const Vec3& b) { return {a.x - b.x, a.y - b.y, a.z - b.z}; }
 Vec3 add(const Vec3& a, const Vec3& b) { return {a.x + b.x, a.y + b.y, a.z + b.z}; }
 Vec3 scale(const Vec3& a, float s) { return {a.x * s, a.y * s, a.z * s}; }
@@ -51,7 +64,12 @@ SurfaceIntersection planePlane(const Surface& a, const Surface& b, Tolerance tol
     const Vec3 nA = normalize(a.normal), nB = normalize(b.normal);
     const Vec3 dir = cross(nA, nB);
     const float L2 = dot(dir, dir);
-    if (L2 < 1e-12f) {  // parallel: coincident or disjoint
+    // EXACT parallel decision on the stored normals — the planes are parallel iff
+    // their normals are collinear. This is robust where the old `L2 < 1e-12`
+    // float threshold mis-classified a genuine shallow-angle pair as parallel
+    // (missing its real intersection Line) or vice-versa. The Line geometry below
+    // is unchanged, so non-shallow cases are byte-identical.
+    if (exactlyCollinear(a.normal, b.normal) || L2 < 1e-30f) {  // parallel (guard div-by-0)
         SurfaceIntersection r;
         r.kind = tol.isZero(dot(sub(b.origin, a.origin), nA)) ? SurfaceIntersectionKind::Unsupported
                                                               : SurfaceIntersectionKind::None;
