@@ -1,6 +1,7 @@
 #include <nexus/geometry/AnalyticBRep.h>
 
 #include <nexus/geometry/BRepSurfaceIntersect.h>
+#include <nexus/geometry/RobustPredicates.h>
 
 #include <algorithm>
 #include <cmath>
@@ -1253,9 +1254,12 @@ uint32_t Body::mergeCoplanarFaces(Tolerance tol)
         if (dot(nA, nB) < 1.f - 1e-4f) return false;  // parallel & co-oriented
         const std::vector<uint32_t> vs = faceVertices(fB);
         if (vs.empty()) return false;
-        const float dTol = tol.at(1.f) * 10.f;
+        // Every vertex of fB must lie ON fA's plane. Use the EXACT orient3D-based
+        // side test (band = tol.at(1)*10, matching the historic distance band) so
+        // near-coplanar/borderline vertices are decided without float-cancellation
+        // sign flips.
         for (uint32_t v : vs)
-            if (std::abs(dot(sub(m_verts[v].point, sA.origin), nA)) > dTol) return false;
+            if (facePlaneSide(fA, m_verts[v].point, tol) != 0) return false;
         return true;
     };
     // Number of edges the two faces share (via a coedge and its partner).
@@ -1413,6 +1417,50 @@ Body::PointContainment Body::classifyFace(uint32_t faceId, const Body& other, To
 {
     if (faceId >= m_faces.size() || !m_faces[faceId].alive) return PointContainment::Outside;
     return other.classifyPoint(faceCentroid(faceId), tol);
+}
+
+int Body::facePlaneSide(uint32_t faceId, const Vec3& p, Tolerance tol) const
+{
+    if (faceId >= m_faces.size() || !m_faces[faceId].alive) return 0;
+    const std::vector<uint32_t> vs = faceVertices(faceId);
+    if (vs.size() < 3) return 0;
+
+    // Three non-collinear outer-loop vertices define the supporting plane.
+    const Vec3 a = m_verts[vs[0]].point;
+    Vec3 b{}, c{};
+    bool haveB = false, haveC = false;
+    for (size_t i = 1; i < vs.size(); ++i) {
+        const Vec3 q = m_verts[vs[i]].point;
+        if (!haveB) {
+            if (dot(sub(q, a), sub(q, a)) > 0.f) { b = q; haveB = true; }
+            continue;
+        }
+        // c is non-collinear iff (b-a)×(q-a) is non-degenerate.
+        const Vec3 cr = cross(sub(b, a), sub(q, a));
+        if (dot(cr, cr) > 0.f) { c = q; haveC = true; break; }
+    }
+    if (!haveB || !haveC) return 0;  // degenerate face (all points collinear)
+
+    // Exact orientation: sign(orient3D) is the exact side w.r.t. the geometric
+    // normal g = (b-a)×(c-a); |orient3D|/|g| is the perpendicular distance.
+    const double o3 = RobustPredicates::orient3D(a, b, c, p);
+    const Vec3 g = cross(sub(b, a), sub(c, a));
+    const double glen = std::sqrt(static_cast<double>(dot(g, g)));
+    if (glen <= 0.0) return 0;
+    const double dist = o3 / glen;
+    const float band = tol.at(1.f) * 10.f;
+    if (std::abs(dist) <= static_cast<double>(band)) return 0;  // on-boundary band
+
+    // Map the exact sign to the face's OUTWARD normal. g is parallel to the
+    // surface normal, so the alignment sign is float-robust (never near zero).
+    Vec3 n = (m_faces[faceId].surface < m_surfaces.size()) ? m_surfaces[m_faces[faceId].surface].normal
+                                                           : Vec3{0.f, 0.f, 1.f};
+    if (m_faces[faceId].reversed) n = Vec3{-n.x, -n.y, -n.z};
+    // RobustPredicates::orient3D(a,b,c,p) is NEGATIVE on the +g = (b-a)×(c-a)
+    // side, so sign along g is -sign(o3); then rotate onto the outward normal.
+    int s = (o3 < 0.0) ? 1 : -1;
+    if (dot(n, g) < 0.f) s = -s;
+    return s;
 }
 
 float Body::surfaceArea() const

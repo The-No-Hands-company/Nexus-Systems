@@ -756,6 +756,82 @@ TEST(AnalyticBRepTrimHole, AddTrimHoleRejectsBadInput)
     EXPECT_TRUE(b.checkIntegrity().ok);  // rejects left the body intact
 }
 
+// ──────────── Exact point-vs-plane predicate (facePlaneSide via orient3D) ─────
+
+// On a box, the exact predicate maps to the outward normal with an on-plane band.
+TEST(AnalyticBRepExactPredicate, FacePlaneSideOnBox)
+{
+    const Body box = makeBox(2.f, 2.f, 2.f);
+    for (uint32_t f = 0; f < box.faceCount(); ++f) {
+        const Surface& s = box.surface(box.face(f).surface);
+        Vec3 n = s.normal;
+        if (box.face(f).reversed) n = Vec3{-n.x, -n.y, -n.z};
+        const Vec3 c = box.faceCentroid(f);
+        const Vec3 outP{c.x + n.x * 0.5f, c.y + n.y * 0.5f, c.z + n.z * 0.5f};
+        const Vec3 inP{c.x - n.x * 0.5f, c.y - n.y * 0.5f, c.z - n.z * 0.5f};
+        EXPECT_EQ(box.facePlaneSide(f, outP), 1) << "face " << f;   // outward side
+        EXPECT_EQ(box.facePlaneSide(f, inP), -1) << "face " << f;   // inward side
+        EXPECT_EQ(box.facePlaneSide(f, c), 0) << "face " << f;      // on the plane (band)
+    }
+    EXPECT_EQ(box.facePlaneSide(999u, Vec3{0, 0, 0}), 0);  // bad face id
+}
+
+// A near-degenerate configuration: a planar face on 3x+5y+7z=0 with large integer
+// coordinates. The exact orient3D-based side always matches the double-precision
+// ground truth, while a naive float32 plane-distance flips sign on some points.
+TEST(AnalyticBRepExactPredicate, FacePlaneSideBeatsNaiveFloat)
+{
+    // Large float32-exact integer coordinates on the plane 3x+5y+7z=0. The ground
+    // truth is the LINEAR plane value 3x+5y+7z (exact in int64 at any magnitude);
+    // orient3D (exact) matches it, while the old float32 signed-distance method
+    // (dot(P, normalize((3,5,7)))) flips sign near the plane at this scale.
+    const float K = 1000000.f;  // corners exactly on the plane, integer-representable
+    const std::vector<Vec3> pts = {
+        {7 * K, 0, -3 * K}, {0, 7 * K, -5 * K}, {-7 * K, 0, 3 * K}, {0, -7 * K, 5 * K}};
+    Body::FaceDef fd;
+    fd.loop = {0u, 1u, 2u, 3u};
+    fd.surface.kind = SurfaceKind::Plane;
+    fd.surface.origin = Vec3{0, 0, 0};
+    const float inv83 = 1.f / std::sqrt(83.f);
+    const Vec3 nHat{3 * inv83, 5 * inv83, 7 * inv83};  // float32 unit normal (irrational)
+    fd.surface.normal = nHat;
+    const float inv58 = 1.f / std::sqrt(58.f);
+    fd.surface.uAxis = Vec3{7 * inv58, 0, -3 * inv58};
+    const auto body = Body::fromFaces(pts, {fd});
+    ASSERT_TRUE(body.has_value());
+
+    int definite = 0, exactWrong = 0, naiveWrong = 0;
+    for (int i = 0; i < 80; ++i) {
+        for (int j = 0; j < 80; ++j) {
+            const long long Px = 5000000LL + static_cast<long long>(i) * 131;
+            const long long Py = -3000000LL - static_cast<long long>(j) * 91;
+            const long long Pz = std::llround(-(3.0 * static_cast<double>(Px) +
+                                                5.0 * static_cast<double>(Py)) / 7.0);
+            // Ground truth: the EXACT plane value in int64 (plane is 3x+5y+7z=0).
+            const long long gt = 3 * Px + 5 * Py + 7 * Pz;
+            const int gtSign = gt > 0 ? 1 : (gt < 0 ? -1 : 0);
+            const Vec3 P{static_cast<float>(Px), static_cast<float>(Py), static_cast<float>(Pz)};
+            const int exact = body->facePlaneSide(0, P);
+            // The old non-robust method: float32 signed distance to the plane.
+            const float naive = P.x * nHat.x + P.y * nHat.y + P.z * nHat.z;
+            const int naiveSign = naive > 0.f ? 1 : (naive < 0.f ? -1 : 0);
+
+            if (gtSign == 0) continue;                 // exactly on the plane — skip
+            if (exact == 0) continue;                  // within the on-plane band — skip
+            ++definite;
+            if (exact != gtSign) ++exactWrong;         // the exact predicate must never err
+            if (naiveSign != gtSign) ++naiveWrong;     // the naive float path does
+        }
+    }
+    EXPECT_GT(definite, 100);
+    EXPECT_EQ(exactWrong, 0);   // orient3D is exact on every definite point
+    EXPECT_GT(naiveWrong, 0);   // naive float32 mis-signs at least one — the point of exactness
+
+    // Deterministic.
+    const Vec3 probe{5000131.f, -3000091.f, -21428.f};
+    EXPECT_EQ(body->facePlaneSide(0, probe), body->facePlaneSide(0, probe));
+}
+
 // surfacePoint dispatches to the analytic Surface::eval for non-NURBS faces.
 TEST(AnalyticBRep, SurfacePointUsesAnalyticEvalForPlaneFaces)
 {

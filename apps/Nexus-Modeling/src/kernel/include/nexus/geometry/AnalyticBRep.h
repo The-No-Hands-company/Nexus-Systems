@@ -359,6 +359,16 @@ public:
     [[nodiscard]] PointContainment classifyFace(uint32_t faceId, const Body& other,
                                                 Tolerance tol = {}) const;
 
+    // EXACT side of a point relative to a face's supporting plane, using the
+    // Shewchuk adaptive-exact orient3D predicate (float fast path → exact
+    // fallback) rather than a plain-float signed distance that can flip sign
+    // under catastrophic cancellation. Returns +1 when p is on the OUTWARD-normal
+    // side, -1 on the inward side, and 0 when p lies within `tol` of the plane
+    // (a genuine on-boundary band). This is the robust core of the boolean's
+    // which-side / face-straddle / coplanar decisions. Returns 0 for a
+    // dead/invalid/degenerate face.
+    [[nodiscard]] int facePlaneSide(uint32_t faceId, const Vec3& p, Tolerance tol = {}) const;
+
     // Apply an affine transform to the WHOLE body — vertex points AND every
     // analytic Curve (Line/Circle) and Surface (Plane/Cylinder/Sphere) frame —
     // so both validators stay clean afterward (moving only the vertices would
