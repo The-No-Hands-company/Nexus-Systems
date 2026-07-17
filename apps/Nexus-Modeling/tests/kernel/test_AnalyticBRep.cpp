@@ -13,6 +13,7 @@
 #include <bit>
 #include <cmath>
 #include <cstdint>
+#include <set>
 
 namespace nexus::geometry::brep::testing {
 
@@ -390,6 +391,109 @@ TEST(AnalyticBRepPcurve, WrongPcurveFailsCheckGeometry)
     const auto g = rt->checkGeometry();
     EXPECT_FALSE(g.ok);                          // the stale pcurve is caught
     EXPECT_NE(g.reason.find("pcurve"), std::string::npos);
+}
+
+// ──────────── Trimmed-NURBS tessellation: toMesh walks the trim region ────────
+//
+// tessellateTrimmedFace samples the NURBS surface across its (u,v) domain and
+// keeps only the region inside the coedge pcurves — so the tessellation lies on
+// the surface AND honors the parameter-space trim, not the 3D loop.
+namespace {
+// A patch spanning (u,v)∈[0,1]² → (4u,4v,0), whose FACE is the inner 2×2 quad
+// [1,3]² — so the pcurve trim loop is the sub-square (u,v)∈[0.25,0.75]², a
+// proper trim (the face is smaller than the full surface domain).
+Body makeSubTrimmedNurbsFace()
+{
+    const std::vector<Vec3> ctl = {{0, 0, 0}, {0, 4, 0}, {4, 0, 0}, {4, 4, 0}};  // i*nV+j
+    NurbsSurface patch(1, 1, {0, 0, 1, 1}, {0, 0, 1, 1}, ctl, 2, 2);
+    const std::vector<Vec3> pts = {{1, 1, 0}, {3, 1, 0}, {3, 3, 0}, {1, 3, 0}};
+    Body::FaceDef fd;
+    fd.loop = {0u, 1u, 2u, 3u};
+    fd.nurbsSurface = patch;
+    Body b = *Body::fromFaces(pts, {fd});
+    const uint32_t first = b.loop(b.face(0).outerLoop).first;
+    uint32_t c = first;
+    do {  // pcurve param = (x/4, y/4)
+        const Coedge& ce = b.coedge(c);
+        const Edge& ed = b.edge(ce.edge);
+        const uint32_t sV = ce.reversed ? ed.v1 : ed.v0;
+        const uint32_t eV = ce.reversed ? ed.v0 : ed.v1;
+        const Vec3 sp = b.vertex(sV).point, ep = b.vertex(eV).point;
+        b.setCoedgePcurve(c, sp.x * 0.25f, sp.y * 0.25f, ep.x * 0.25f, ep.y * 0.25f);
+        c = ce.next;
+    } while (c != first);
+    return b;
+}
+double meshArea(const Mesh& m)
+{
+    double a = 0.0;
+    const auto& p = m.attributes().positions();
+    for (size_t f = 0; f < m.topology().faceCount(); ++f) {
+        const auto& id = m.topology().face(f).indices;
+        if (id.size() != 3) continue;
+        const Vec3 A = p[id[0]], B = p[id[1]], C = p[id[2]];
+        const float x1 = B.x - A.x, y1 = B.y - A.y, z1 = B.z - A.z;
+        const float x2 = C.x - A.x, y2 = C.y - A.y, z2 = C.z - A.z;
+        const float cx = y1 * z2 - z1 * y2, cy = z1 * x2 - x1 * z2, cz = x1 * y2 - y1 * x2;
+        a += 0.5 * std::sqrt(static_cast<double>(cx * cx + cy * cy + cz * cz));
+    }
+    return a;
+}
+}  // namespace
+
+TEST(AnalyticBRepTrimTessellate, HonorsPcurveTrimRegion)
+{
+    Body b = makeSubTrimmedNurbsFace();
+    ASSERT_TRUE(b.checkGeometry().ok);
+
+    // res=40: the trim boundary 0.25/0.75 lands exactly on grid lines, so the
+    // conservative interior sampling reproduces the trim area EXACTLY.
+    const Mesh m = b.tessellateTrimmedFace(0, 40);
+    ASSERT_GT(m.topology().faceCount(), 0u);
+    EXPECT_NEAR(meshArea(m), 4.0, 1e-3);  // inner 2×2 quad, not the 4×4 full patch (16)
+
+    // Every referenced vertex lies on the surface (z=0) and inside the trim
+    // ([1,3]²) — nothing from the untrimmed [0,4] domain leaks through.
+    std::set<uint32_t> ref;
+    for (size_t f = 0; f < m.topology().faceCount(); ++f)
+        for (uint32_t i : m.topology().face(f).indices) ref.insert(i);
+    const auto& p = m.attributes().positions();
+    for (uint32_t i : ref) {
+        EXPECT_NEAR(p[i].z, 0.f, 1e-4f);
+        EXPECT_GE(p[i].x, 1.f - 1e-4f);
+        EXPECT_LE(p[i].x, 3.f + 1e-4f);
+        EXPECT_GE(p[i].y, 1.f - 1e-4f);
+        EXPECT_LE(p[i].y, 3.f + 1e-4f);
+    }
+}
+
+TEST(AnalyticBRepTrimTessellate, CoarseAlignedExactAndConservativeOtherwise)
+{
+    Body b = makeSubTrimmedNurbsFace();
+    // res=4 also aligns (0.25·4=1, 0.75·4=3) → exact trimmed area.
+    EXPECT_NEAR(meshArea(b.tessellateTrimmedFace(0, 4)), 4.0, 1e-3);
+    // A misaligned grid (res=7: no cell centre lands on the 0.25/0.75 boundary)
+    // undertessellates — strictly less than the trimmed area, but a fair fraction.
+    const double a7 = meshArea(b.tessellateTrimmedFace(0, 7));
+    EXPECT_LT(a7, 4.0);
+    EXPECT_GT(a7, 2.0);
+}
+
+TEST(AnalyticBRepTrimTessellate, DeterministicAndRejectsNonTrimmedFaces)
+{
+    Body b = makeSubTrimmedNurbsFace();
+    const Mesh m1 = b.tessellateTrimmedFace(0, 16);
+    const Mesh m2 = b.tessellateTrimmedFace(0, 16);
+    ASSERT_EQ(m1.topology().faceCount(), m2.topology().faceCount());
+    ASSERT_EQ(m1.attributes().positions().size(), m2.attributes().positions().size());
+    EXPECT_EQ(m1.topology().face(0).indices, m2.topology().face(0).indices);
+
+    // A plane (non-NURBS) face → empty; a NURBS face WITHOUT pcurves → empty.
+    const Body box = makeBox(2.f, 2.f, 2.f);
+    EXPECT_EQ(box.tessellateTrimmedFace(0, 8).topology().faceCount(), 0u);
+    const Body untrimmed = makeNurbsQuadFace();
+    EXPECT_EQ(untrimmed.tessellateTrimmedFace(0, 8).topology().faceCount(), 0u);
+    EXPECT_EQ(b.tessellateTrimmedFace(999u, 8).topology().faceCount(), 0u);  // bad face id
 }
 
 // surfacePoint dispatches to the analytic Surface::eval for non-NURBS faces.

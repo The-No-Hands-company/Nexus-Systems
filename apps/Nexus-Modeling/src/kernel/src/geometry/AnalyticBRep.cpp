@@ -1724,6 +1724,119 @@ Mesh Body::toMesh(uint32_t subdivisions) const
     return mesh;
 }
 
+Mesh Body::tessellateTrimmedFace(uint32_t faceId, uint32_t gridRes, Tolerance tol) const
+{
+    Mesh out;
+    if (faceId >= m_faces.size() || !m_faces[faceId].alive) return out;
+    const Face& fc = m_faces[faceId];
+    if (fc.surface >= m_surfaces.size()) return out;
+    const Surface& surf = m_surfaces[fc.surface];
+    if (surf.kind != SurfaceKind::Nurbs || surf.nurbs >= m_nurbsSurfaces.size()) return out;
+    if (gridRes < 1u) return out;
+
+    // Assemble a loop's pcurve chain into a closed (u,v) polygon. Every coedge of
+    // the loop must carry a pcurve, and consecutive pcurves must join (end of one
+    // == start of the next) — else the loop is not fully trimmed and we bail.
+    auto buildTrimLoop = [&](uint32_t firstCoedge,
+                             std::vector<std::pair<float, float>>& poly) -> bool {
+        poly.clear();
+        if (firstCoedge >= m_coedges.size()) return false;
+        uint32_t walk = firstCoedge, steps = 0;
+        do {
+            const Coedge& ce = m_coedges[walk];
+            if (!ce.pcurve.present) return false;
+            const std::pair<float, float> start{ce.pcurve.u0, ce.pcurve.v0};
+            if (!poly.empty()) {
+                // The previous pcurve's end must meet this one's start.
+                const auto& prevEnd = poly.back();
+                if (!tol.nearlyEqual(prevEnd.first, start.first) ||
+                    !tol.nearlyEqual(prevEnd.second, start.second))
+                    return false;
+                poly.pop_back();  // drop the shared point; re-added as this start
+            }
+            poly.push_back(start);
+            poly.emplace_back(ce.pcurve.u1, ce.pcurve.v1);
+            walk = ce.next;
+            if (++steps > m_coedges.size()) return false;
+        } while (walk != firstCoedge);
+        // The last pcurve's end must close back to the first's start.
+        if (poly.size() < 4) return false;
+        if (!tol.nearlyEqual(poly.front().first, poly.back().first) ||
+            !tol.nearlyEqual(poly.front().second, poly.back().second))
+            return false;
+        poly.pop_back();  // drop the duplicated closing point
+        return poly.size() >= 3;
+    };
+
+    std::vector<std::vector<std::pair<float, float>>> loops;
+    {
+        std::vector<std::pair<float, float>> outer;
+        if (fc.outerLoop >= m_loops.size()) return out;
+        if (!buildTrimLoop(m_loops[fc.outerLoop].first, outer)) return out;
+        loops.push_back(std::move(outer));
+        for (uint32_t il : fc.innerLoops) {  // inner loops are trim holes
+            if (il >= m_loops.size()) continue;
+            std::vector<std::pair<float, float>> inner;
+            if (buildTrimLoop(m_loops[il].first, inner)) loops.push_back(std::move(inner));
+        }
+    }
+
+    // Even-odd point-in-region test across all trim loops (ray cast +u).
+    auto inRegion = [&](float u, float v) -> bool {
+        bool inside = false;
+        for (const auto& lp : loops) {
+            const size_t n = lp.size();
+            for (size_t i = 0, j = n - 1; i < n; j = i++) {
+                const float ui = lp[i].first, vi = lp[i].second;
+                const float uj = lp[j].first, vj = lp[j].second;
+                if (((vi > v) != (vj > v)) &&
+                    (u < (uj - ui) * (v - vi) / (vj - vi) + ui))
+                    inside = !inside;
+            }
+        }
+        return inside;
+    };
+
+    const NurbsSurface& ns = m_nurbsSurfaces[surf.nurbs];
+    const auto [u0, u1] = ns.domainU();
+    const auto [v0, v1] = ns.domainV();
+    if (!isFinite(u0) || !isFinite(u1) || !isFinite(v0) || !isFinite(v1)) return out;
+
+    const uint32_t g = gridRes;
+    const uint32_t stride = g + 1u;
+    auto uAt = [&](uint32_t i) { return u0 + (u1 - u0) * (static_cast<float>(i) / static_cast<float>(g)); };
+    auto vAt = [&](uint32_t j) { return v0 + (v1 - v0) * (static_cast<float>(j) / static_cast<float>(g)); };
+    // Grid-sample the parameter domain; every sample is evaluated ON the surface.
+    std::vector<nexus::render::Vec3> pos(static_cast<size_t>(stride) * stride);
+    for (uint32_t j = 0; j <= g; ++j)
+        for (uint32_t i = 0; i <= g; ++i)
+            pos[static_cast<size_t>(j) * stride + i] = ns.evaluate(uAt(i), vAt(j));
+    out.attributes().setPositions(pos);
+
+    // Emit a cell's two triangles when its CENTRE lies inside the trim region.
+    // Classifying by centre (never on a grid line, so robust even when the trim
+    // boundary is grid-aligned) makes the tessellated area converge to the true
+    // trimmed area — exact when the trim boundary lands on grid lines.
+    for (uint32_t j = 0; j < g; ++j) {
+        const float vc = 0.5f * (vAt(j) + vAt(j + 1));
+        for (uint32_t i = 0; i < g; ++i) {
+            const float uc = 0.5f * (uAt(i) + uAt(i + 1));
+            if (!inRegion(uc, vc)) continue;
+            const uint32_t a = j * stride + i;
+            const uint32_t b = j * stride + (i + 1);
+            const uint32_t c = (j + 1) * stride + (i + 1);
+            const uint32_t d = (j + 1) * stride + i;
+            nexus::geometry::Face f0;
+            f0.indices = {a, b, c};
+            out.topology().addFace(std::move(f0));
+            nexus::geometry::Face f1;
+            f1.indices = {a, c, d};
+            out.topology().addFace(std::move(f1));
+        }
+    }
+    return out;
+}
+
 bool Body::setEdgeArc(uint32_t edgeId, const Vec3& center, const Vec3& axis, float radius, Tolerance tol)
 {
     if (edgeId >= m_edges.size() || !m_edges[edgeId].alive) return false;

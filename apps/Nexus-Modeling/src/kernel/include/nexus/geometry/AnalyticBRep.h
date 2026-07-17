@@ -288,6 +288,21 @@ public:
     // control-vertex tessellation. Dead entities are skipped.
     [[nodiscard]] Mesh toMesh(uint32_t subdivisions = 0) const;
 
+    // Tessellate a SINGLE trimmed NURBS face by walking its parameter-space trim
+    // curves (pcurves), not its 3D loop. The face must be on a NURBS surface and
+    // its outer loop (and any inner loops) must be fully pcurve-trimmed. The trim
+    // loops are assembled in (u,v) space, the surface is grid-sampled across its
+    // parameter domain at `gridRes`×`gridRes`, and a cell's two triangles are
+    // emitted — with vertices evaluated ON the NURBS surface — when the cell's
+    // CENTRE lies inside the trim region (even-odd across all loops; centre
+    // classification is robust even when the trim boundary is grid-aligned). So
+    // every emitted vertex lies exactly on the surface, and the tessellated area
+    // converges to the true trimmed area (exact when the trim boundary lands on
+    // grid lines). Returns an empty Mesh if the face is not a fully-pcurve-trimmed
+    // NURBS face. Deterministic.
+    [[nodiscard]] Mesh tessellateTrimmedFace(uint32_t faceId, uint32_t gridRes,
+                                             Tolerance tol = {}) const;
+
     // Classification of a point against the solid (the B-rep boolean's classify
     // step): Inside / Outside the shell, or OnBoundary (on a face within tol).
     enum class PointContainment : uint8_t { Outside, Inside, OnBoundary };
