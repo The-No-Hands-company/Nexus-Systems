@@ -320,6 +320,16 @@ public:
     [[nodiscard]] Mesh tessellateTrimmedFace(uint32_t faceId, uint32_t gridRes,
                                              Tolerance tol = {}) const;
 
+    // Add an INNER trim loop (a hole) to a face: builds a ring of new vertices at
+    // `ringPoints` (which should lie on the face's surface), Line edges between
+    // them, and a coedge ring marked as an inner loop, appended to the face's
+    // innerLoops. The hole boundary is unpartnered (a hole punched in the surface,
+    // not a passage through a solid). The caller then attaches a pcurve to each
+    // returned inner coedge so tessellateTrimmedFace excludes the hole in (u,v).
+    // Returns the first coedge id of the new inner loop, or kInvalid on failure
+    // (bad face id, <3 points, non-finite point). Preserves checkIntegrity.
+    uint32_t addTrimHole(uint32_t faceId, const std::vector<Vec3>& ringPoints);
+
     // Classification of a point against the solid (the B-rep boolean's classify
     // step): Inside / Outside the shell, or OnBoundary (on a face within tol).
     enum class PointContainment : uint8_t { Outside, Inside, OnBoundary };

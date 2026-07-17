@@ -1858,6 +1858,69 @@ Mesh Body::tessellateTrimmedFace(uint32_t faceId, uint32_t gridRes, Tolerance to
     return out;
 }
 
+uint32_t Body::addTrimHole(uint32_t faceId, const std::vector<Vec3>& ring)
+{
+    if (faceId >= m_faces.size() || !m_faces[faceId].alive) return kInvalid;
+    const size_t n = ring.size();
+    if (n < 3) return kInvalid;
+    for (const Vec3& p : ring)
+        if (!isFinite(p)) return kInvalid;
+
+    // New ring vertices (the hole boundary).
+    const uint32_t baseV = static_cast<uint32_t>(m_verts.size());
+    for (const Vec3& p : ring) {
+        Vertex vx;
+        vx.point = p;
+        m_verts.push_back(vx);
+    }
+
+    // Inner loop.
+    const uint32_t loopId = static_cast<uint32_t>(m_loops.size());
+    m_loops.push_back({});
+    m_loops[loopId].face = faceId;
+    m_loops[loopId].outer = false;
+
+    const uint32_t firstCoedge = static_cast<uint32_t>(m_coedges.size());
+    for (size_t j = 0; j < n; ++j) {
+        const uint32_t a = baseV + static_cast<uint32_t>(j);
+        const uint32_t c = baseV + static_cast<uint32_t>((j + 1) % n);
+
+        const uint32_t curveId = static_cast<uint32_t>(m_curves.size());
+        Curve cur;
+        cur.kind = CurveKind::Line;
+        cur.origin = m_verts[a].point;
+        const Vec3 d = sub(m_verts[c].point, m_verts[a].point);
+        cur.dir = normalize(d);
+        m_curves.push_back(cur);
+
+        const uint32_t edgeId = static_cast<uint32_t>(m_edges.size());
+        Edge ed;
+        ed.curve = curveId;
+        ed.v0 = a;
+        ed.v1 = c;
+        ed.t0 = 0.f;
+        ed.t1 = length(d);
+        m_edges.push_back(ed);
+
+        const uint32_t coedgeId = static_cast<uint32_t>(m_coedges.size());
+        Coedge ce;
+        ce.edge = edgeId;
+        ce.reversed = false;  // edge stored a→c
+        ce.loop = loopId;
+        m_coedges.push_back(ce);
+        m_edges[edgeId].coedge = coedgeId;
+        if (m_verts[a].coedge == kInvalid) m_verts[a].coedge = coedgeId;
+    }
+    for (size_t j = 0; j < n; ++j) {
+        const uint32_t cur = firstCoedge + static_cast<uint32_t>(j);
+        m_coedges[cur].next = firstCoedge + static_cast<uint32_t>((j + 1) % n);
+        m_coedges[cur].prev = firstCoedge + static_cast<uint32_t>((j + n - 1) % n);
+    }
+    m_loops[loopId].first = firstCoedge;
+    m_faces[faceId].innerLoops.push_back(loopId);
+    return firstCoedge;
+}
+
 bool Body::setEdgeArc(uint32_t edgeId, const Vec3& center, const Vec3& axis, float radius, Tolerance tol)
 {
     if (edgeId >= m_edges.size() || !m_edges[edgeId].alive) return false;

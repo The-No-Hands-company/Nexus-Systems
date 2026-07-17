@@ -676,6 +676,86 @@ TEST(AnalyticBRepTrimTessellate, LegacyV1AndV2BlobsDecode)
     EXPECT_TRUE(rt->coedge(first).pcurve.interior.empty());
 }
 
+// ──────────── Interior trim-loop holes (parameter-space holes) ────────────────
+namespace {
+// Punch a square hole [lo,hi]² (in u,v) into face 0 of a (4u,4v)-patch body and
+// attach its inner-loop pcurves. Returns true on success.
+bool addSquareHole(Body& b, float lo, float hi)
+{
+    const std::vector<Vec3> ring = {
+        {4 * lo, 4 * lo, 0}, {4 * hi, 4 * lo, 0}, {4 * hi, 4 * hi, 0}, {4 * lo, 4 * hi, 0}};
+    const uint32_t first = b.addTrimHole(0, ring);
+    if (first == kInvalid) return false;
+    uint32_t c = first;
+    do {  // inner-loop pcurve param = (x/4, y/4)
+        const Coedge& ce = b.coedge(c);
+        const Edge& ed = b.edge(ce.edge);
+        const uint32_t sV = ce.reversed ? ed.v1 : ed.v0;
+        const uint32_t eV = ce.reversed ? ed.v0 : ed.v1;
+        const Vec3 sp = b.vertex(sV).point, ep = b.vertex(eV).point;
+        if (!b.setCoedgePcurve(c, sp.x * 0.25f, sp.y * 0.25f, ep.x * 0.25f, ep.y * 0.25f))
+            return false;
+        c = ce.next;
+    } while (c != first);
+    return true;
+}
+}  // namespace
+
+TEST(AnalyticBRepTrimHole, ExcludesInteriorHole)
+{
+    Body b = makeSubTrimmedNurbsFace();       // outer trim [0.25,0.75]² → area 4.0
+    ASSERT_TRUE(addSquareHole(b, 0.4f, 0.6f));  // hole [0.4,0.6]² → removes 0.04·16
+    EXPECT_TRUE(b.checkIntegrity().ok);
+    const auto g = b.checkGeometry();
+    EXPECT_TRUE(g.ok) << g.reason;
+
+    // res=40 lands every boundary (0.25/0.4/0.6/0.75) on a grid line → exact.
+    const Mesh m = b.tessellateTrimmedFace(0, 40);
+    EXPECT_NEAR(meshArea(m), (0.25 - 0.04) * 16.0, 1e-3);  // 3.36 (< the hole-less 4.0)
+
+    // No referenced vertex is strictly inside the hole ([1.6,2.4]²), and all lie
+    // on the surface — the hole is genuinely excluded.
+    const auto& p = m.attributes().positions();
+    std::set<uint32_t> ref;
+    for (size_t f = 0; f < m.topology().faceCount(); ++f)
+        for (uint32_t i : m.topology().face(f).indices) ref.insert(i);
+    for (uint32_t i : ref) {
+        const bool inHole = p[i].x > 1.6f + 1e-4f && p[i].x < 2.4f - 1e-4f &&
+                            p[i].y > 1.6f + 1e-4f && p[i].y < 2.4f - 1e-4f;
+        EXPECT_FALSE(inHole);
+        EXPECT_NEAR(p[i].z, 0.f, 1e-4f);
+    }
+}
+
+TEST(AnalyticBRepTrimHole, SerializesAndDeterministic)
+{
+    Body b = makeSubTrimmedNurbsFace();
+    ASSERT_TRUE(addSquareHole(b, 0.4f, 0.6f));
+
+    const std::vector<std::uint8_t> bytes = b.serialize();
+    const auto rt = Body::deserialize(bytes);
+    ASSERT_TRUE(rt.has_value());
+    EXPECT_TRUE(rt->checkIntegrity().ok);
+    EXPECT_TRUE(rt->checkGeometry().ok);
+    EXPECT_EQ(bytes, rt->serialize());  // byte-identical (inner-loop pcurves survive)
+    EXPECT_NEAR(meshArea(rt->tessellateTrimmedFace(0, 40)), 3.36, 1e-3);
+
+    EXPECT_EQ(b.tessellateTrimmedFace(0, 24).topology().faceCount(),
+              b.tessellateTrimmedFace(0, 24).topology().faceCount());
+}
+
+TEST(AnalyticBRepTrimHole, AddTrimHoleRejectsBadInput)
+{
+    Body b = makeSubTrimmedNurbsFace();
+    const float inf = std::bit_cast<float>(0x7F800000u);
+    EXPECT_EQ(b.addTrimHole(0, {{1.6f, 1.6f, 0}, {2.4f, 1.6f, 0}}), kInvalid);  // <3 points
+    EXPECT_EQ(b.addTrimHole(99u, {{1.6f, 1.6f, 0}, {2.4f, 1.6f, 0}, {2.4f, 2.4f, 0}}),
+              kInvalid);  // bad face id
+    EXPECT_EQ(b.addTrimHole(0, {{inf, 1.6f, 0}, {2.4f, 1.6f, 0}, {2.4f, 2.4f, 0}}),
+              kInvalid);  // non-finite point
+    EXPECT_TRUE(b.checkIntegrity().ok);  // rejects left the body intact
+}
+
 // surfacePoint dispatches to the analytic Surface::eval for non-NURBS faces.
 TEST(AnalyticBRep, SurfacePointUsesAnalyticEvalForPlaneFaces)
 {
