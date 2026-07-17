@@ -86,6 +86,15 @@ public:
     // empty or its first feature is not a base.
     [[nodiscard]] Body evaluate() const;
 
+    // Versioned binary serialization of the parametric history (every Feature's
+    // kind + parameters + profile + transform), so an EDITABLE model can be saved
+    // and reopened — not just the baked solid. Deterministic. deserialize returns
+    // nullopt on a bad magic/version, a truncated/garbage buffer, or a non-finite
+    // float in the stream (bit-inspection checked).
+    [[nodiscard]] std::vector<std::uint8_t> serialize() const;
+    [[nodiscard]] static std::optional<FeatureStack> deserialize(
+        const std::vector<std::uint8_t>& bytes);
+
 private:
     std::vector<Feature> m_features;
 };

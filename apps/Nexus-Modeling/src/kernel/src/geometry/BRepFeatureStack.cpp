@@ -2,6 +2,8 @@
 
 #include <nexus/geometry/BRepBoolean.h>
 
+#include <bit>
+#include <cstdint>
 #include <utility>
 
 namespace nexus::geometry::brep {
@@ -149,6 +151,139 @@ Body FeatureStack::evaluate() const
 
     if (!cur.checkIntegrity().ok) return Body{};
     return cur;
+}
+
+// ──────────── Serialization ──────────────────────────────────────────────────
+
+namespace {
+constexpr std::uint32_t kStackMagic = 0x5346584Eu;  // 'NXFS'
+constexpr std::uint32_t kStackVersion = 1u;
+
+void putU8(std::vector<std::uint8_t>& o, std::uint8_t v) { o.push_back(v); }
+void putU32(std::vector<std::uint8_t>& o, std::uint32_t v)
+{
+    o.push_back(static_cast<std::uint8_t>(v & 0xFFu));
+    o.push_back(static_cast<std::uint8_t>((v >> 8) & 0xFFu));
+    o.push_back(static_cast<std::uint8_t>((v >> 16) & 0xFFu));
+    o.push_back(static_cast<std::uint8_t>((v >> 24) & 0xFFu));
+}
+void putI32(std::vector<std::uint8_t>& o, std::int32_t v) { putU32(o, std::bit_cast<std::uint32_t>(v)); }
+void putF32(std::vector<std::uint8_t>& o, float v) { putU32(o, std::bit_cast<std::uint32_t>(v)); }
+void putVec3(std::vector<std::uint8_t>& o, const Vec3& v) { putF32(o, v.x); putF32(o, v.y); putF32(o, v.z); }
+
+struct Reader {
+    const std::vector<std::uint8_t>& b;
+    std::size_t off = 0;
+    bool ok = true;
+    bool u8(std::uint8_t& out)
+    {
+        if (!ok || off + 1 > b.size()) return ok = false;
+        out = b[off++];
+        return true;
+    }
+    bool u32(std::uint32_t& out)
+    {
+        if (!ok || off + 4 > b.size()) return ok = false;
+        out = static_cast<std::uint32_t>(b[off]) | (static_cast<std::uint32_t>(b[off + 1]) << 8) |
+              (static_cast<std::uint32_t>(b[off + 2]) << 16) |
+              (static_cast<std::uint32_t>(b[off + 3]) << 24);
+        off += 4;
+        return true;
+    }
+    bool i32(std::int32_t& out)
+    {
+        std::uint32_t u = 0;
+        if (!u32(u)) return false;
+        out = std::bit_cast<std::int32_t>(u);
+        return true;
+    }
+    bool f32(float& out)
+    {
+        std::uint32_t u = 0;
+        if (!u32(u)) return false;
+        out = std::bit_cast<float>(u);
+        if (!isFinite(out)) return ok = false;  // reject non-finite on read
+        return true;
+    }
+    bool vec3(Vec3& out) { return f32(out.x) && f32(out.y) && f32(out.z); }
+    bool count(std::uint32_t& out)  // length prefix bounded by remaining bytes
+    {
+        if (!u32(out)) return false;
+        if (out > b.size()) return ok = false;
+        return true;
+    }
+};
+
+void writeFeature(std::vector<std::uint8_t>& o, const Feature& f)
+{
+    putU8(o, static_cast<std::uint8_t>(f.kind));
+    putF32(o, f.w);
+    putF32(o, f.h);
+    putF32(o, f.d);
+    putF32(o, f.amount);
+    putU32(o, f.segments);
+    putU32(o, f.lat);
+    putU32(o, f.lon);
+    putI32(o, f.axis);
+    putI32(o, f.s1);
+    putI32(o, f.s2);
+    for (int i = 0; i < 4; ++i)
+        for (int j = 0; j < 4; ++j) putF32(o, f.xform.m[i][j]);
+    putVec3(o, f.dir);
+    putVec3(o, f.axisOrigin);
+    putVec3(o, f.axisDir);
+    putU32(o, static_cast<std::uint32_t>(f.profile.size()));
+    for (const Vec3& p : f.profile) putVec3(o, p);
+}
+
+bool readFeature(Reader& r, Feature& f)
+{
+    std::uint8_t kind = 0;
+    if (!r.u8(kind)) return false;
+    if (kind > static_cast<std::uint8_t>(FeatureKind::Fillet)) return false;  // unknown kind
+    f.kind = static_cast<FeatureKind>(kind);
+    if (!r.f32(f.w) || !r.f32(f.h) || !r.f32(f.d) || !r.f32(f.amount)) return false;
+    if (!r.u32(f.segments) || !r.u32(f.lat) || !r.u32(f.lon)) return false;
+    if (!r.i32(f.axis) || !r.i32(f.s1) || !r.i32(f.s2)) return false;
+    for (int i = 0; i < 4; ++i)
+        for (int j = 0; j < 4; ++j)
+            if (!r.f32(f.xform.m[i][j])) return false;
+    if (!r.vec3(f.dir) || !r.vec3(f.axisOrigin) || !r.vec3(f.axisDir)) return false;
+    std::uint32_t n = 0;
+    if (!r.count(n)) return false;
+    f.profile.resize(n);
+    for (Vec3& p : f.profile)
+        if (!r.vec3(p)) return false;
+    return true;
+}
+}  // namespace
+
+std::vector<std::uint8_t> FeatureStack::serialize() const
+{
+    std::vector<std::uint8_t> o;
+    putU32(o, kStackMagic);
+    putU32(o, kStackVersion);
+    putU32(o, static_cast<std::uint32_t>(m_features.size()));
+    for (const Feature& f : m_features) writeFeature(o, f);
+    return o;
+}
+
+std::optional<FeatureStack> FeatureStack::deserialize(const std::vector<std::uint8_t>& bytes)
+{
+    Reader r{bytes};
+    std::uint32_t magic = 0, version = 0, n = 0;
+    if (!r.u32(magic) || magic != kStackMagic) return std::nullopt;
+    if (!r.u32(version) || version < 1u || version > kStackVersion) return std::nullopt;
+    if (!r.count(n)) return std::nullopt;
+
+    FeatureStack s;
+    for (std::uint32_t i = 0; i < n; ++i) {
+        Feature f;
+        if (!readFeature(r, f)) return std::nullopt;
+        s.add(std::move(f));
+    }
+    if (!r.ok) return std::nullopt;
+    return s;
 }
 
 }  // namespace nexus::geometry::brep
