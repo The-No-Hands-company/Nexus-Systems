@@ -6,6 +6,7 @@
 
 #include <nexus/geometry/AnalyticBRep.h>
 #include <nexus/geometry/BRepSurfaceIntersect.h>
+#include <nexus/geometry/RobustPredicates.h>
 
 #include <gtest/gtest.h>
 
@@ -136,6 +137,91 @@ TEST(BRepImprint, ComposesWithMergeFacesInverse)
     const auto ig = box.checkIntegrity();
     EXPECT_TRUE(ig.ok) << ig.reason;
     EXPECT_EQ(ig.faces, static_cast<uint32_t>(F0));  // face count restored
+    EXPECT_EQ(ig.euler, 2);
+    EXPECT_TRUE(box.checkGeometry().ok);
+}
+
+// ──────────── Exact in-plane straddle (imprint crossing decision) ─────────────
+
+// The exact orient3D-based in-plane straddle now used by segmentLineCrossing
+// matches an exact int64 2D ground truth on every case, while the old float
+// closest-approach `s` + band path mis-decides near-endpoint crossings at large
+// coordinates (a crossing at s < 0.02 is rejected though the edge truly crosses).
+TEST(BRepImprint, ExactInPlaneStraddleBeatsNaiveFloat)
+{
+    using nexus::geometry::RobustPredicates;
+    const Vec3 O{0, 0, 0};
+    const float inv2 = 0.70710678f;
+    const Vec3 D{inv2, inv2, 0.f};  // imprint line direction (the line y=x in z=0)
+    const Vec3 nrm{0, 0, 1};        // face-plane normal
+
+    // Exact in-plane side via orient3D(O, O+D, P, O+n) — what the code computes.
+    auto exactSide = [&](const Vec3& P) {
+        return RobustPredicates::orient3D(O, {O.x + D.x, O.y + D.y, O.z + D.z}, P,
+                                          {O.x + nrm.x, O.y + nrm.y, O.z + nrm.z});
+    };
+    // The OLD float path: closest-approach fraction s + interior band + coplanar.
+    auto vcross = [](const Vec3& u, const Vec3& v) {
+        return Vec3{u.y * v.z - u.z * v.y, u.z * v.x - u.x * v.z, u.x * v.y - u.y * v.x};
+    };
+    auto vdot = [](const Vec3& u, const Vec3& v) { return u.x * v.x + u.y * v.y + u.z * v.z; };
+    auto naiveCross = [&](const Vec3& A, const Vec3& B) {
+        const Vec3 E{B.x - A.x, B.y - A.y, B.z - A.z};
+        const Vec3 ExD = vcross(E, D);
+        const float denom = vdot(ExD, ExD);
+        if (denom < 1e-20f) return false;
+        const Vec3 OmA{O.x - A.x, O.y - A.y, O.z - A.z};
+        const float s = vdot(vcross(OmA, D), ExD) / denom;
+        if (s <= 0.02f || s >= 0.98f) return false;
+        const Vec3 P{A.x + E.x * s, A.y + E.y * s, A.z + E.z * s};
+        const Vec3 w{P.x - O.x, P.y - O.y, P.z - O.z};
+        const float wd = vdot(w, D);
+        const Vec3 perp{w.x - D.x * wd, w.y - D.y * wd, w.z - D.z * wd};
+        return std::sqrt(vdot(perp, perp)) <= 1e-3f;
+    };
+
+    const long long Qb = 2000000;          // large float32-exact base
+    const long long Boff = 1000000;        // B far on the − side of y=x
+    int definite = 0, exactWrong = 0, naiveWrong = 0;
+    for (long long a : {-40000LL, -500LL, -3LL, 3LL, 50LL, 800LL, 30000LL, 300000LL}) {
+        const Vec3 A{static_cast<float>(Qb + a), static_cast<float>(Qb), 0.f};
+        const Vec3 B{static_cast<float>(Qb), static_cast<float>(Qb + Boff), 0.f};
+        // Ground truth (exact int64): A,B straddle y=x iff (Ax−Ay) and (Bx−By)
+        // have opposite signs. Bx−By = −Boff (< 0), so straddle ⇔ a > 0.
+        const bool gt = a > 0;
+        const double sa = exactSide(A), sb = exactSide(B);
+        const bool exact = (sa != 0.0 && sb != 0.0) && ((sa > 0.0) != (sb > 0.0));
+        const bool naive = naiveCross(A, B);
+        ++definite;
+        if (exact != gt) ++exactWrong;
+        if (naive != gt) ++naiveWrong;
+    }
+    EXPECT_GT(definite, 5);
+    EXPECT_EQ(exactWrong, 0);  // orient3D straddle is exact on every case
+    EXPECT_GT(naiveWrong, 0);  // the old float s+band mis-decides near-endpoint crossings
+}
+
+// The wired path: a Line imprint on a LARGE-coordinate planar face stays exact —
+// χ-neutral and both validators clean — where the float parameter would be shaky.
+TEST(BRepImprint, LargeCoordinateLineImprintIsClean)
+{
+    Body box = makeBox(2000000.f, 2000000.f, 2000000.f);  // [-1e6, 1e6]^3
+    ASSERT_TRUE(box.checkIntegrity().ok);
+
+    const uint32_t f = topFace(box, 1000000.f);
+    ASSERT_NE(f, kInvalid);
+    // top plane (z = +1e6) ∩ plane x=0 → the Line x=0 in that plane.
+    const auto ssi = intersectSurfaces(plane({0, 0, 1000000}, {0, 0, 1}), plane({0, 0, 0}, {1, 0, 0}));
+    ASSERT_EQ(ssi.kind, SurfaceIntersectionKind::Line);
+
+    const size_t V0 = box.vertexCount(), E0 = box.edgeCount(), F0 = box.faceCount();
+    const uint32_t nf = box.imprintCurve(f, ssi.curve);
+    ASSERT_NE(nf, kInvalid);
+    EXPECT_EQ(box.vertexCount(), V0 + 2);
+    EXPECT_EQ(box.edgeCount(), E0 + 3);
+    EXPECT_EQ(box.faceCount(), F0 + 1);
+    const auto ig = box.checkIntegrity();
+    EXPECT_TRUE(ig.ok) << ig.reason;
     EXPECT_EQ(ig.euler, 2);
     EXPECT_TRUE(box.checkGeometry().ok);
 }

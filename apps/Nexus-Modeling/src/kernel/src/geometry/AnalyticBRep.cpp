@@ -42,27 +42,38 @@ float paramOnCurve(const Curve& c, const Vec3& p)
 }
 
 // Fraction s in (0,1) at which the straight segment A→B crosses the Line imprint
-// `curve` in a single interior point (the two lines meet, i.e. are near-coplanar
-// and non-parallel). Returns false otherwise. Only a Line imprint is handled
-// here: a Line lies in the planar face's plane, so the resulting cut edge lies on
-// the face — geometrically valid. (Circle imprint, whose valid forms are the
-// coplanar in-face "bite" and cuts on curved faces, is a dedicated follow-up.)
-bool segmentLineCrossing(const Vec3& A, const Vec3& B, const Curve& curve, float eps,
-                         float& sOut)
+// `curve` in a single interior point. The crossing DECISION is exact: the face is
+// planar (normal `n`), and both the edge A→B and the imprint Line (origin O, dir
+// D) lie in that plane, so A and B cross the line iff they lie on strictly
+// OPPOSITE sides of it — decided by the exact sign of orient3D(O, O+D, ·, O+n)
+// (the in-plane side determinant), immune to the catastrophic cancellation of a
+// float closest-approach parameter. The split fraction `s` (a coordinate, not a
+// combinatorial decision) stays float and is snapped onto the curve by splitEdge.
+// Only a Line imprint is handled (a Line in the planar face lies on the face).
+bool segmentLineCrossing(const Vec3& A, const Vec3& B, const Curve& curve, const Vec3& n,
+                         float eps, float& sOut)
 {
     if (curve.kind != CurveKind::Line) return false;
+    const Vec3 O = curve.origin, D = curve.dir;
+    const Vec3 O1{O.x + D.x, O.y + D.y, O.z + D.z};
+    const Vec3 On{O.x + n.x, O.y + n.y, O.z + n.z};
+    // Exact in-plane side of each endpoint relative to the directed imprint line.
+    const double sa = RobustPredicates::orient3D(O, O1, A, On);
+    const double sb = RobustPredicates::orient3D(O, O1, B, On);
+    if (sa == 0.0 || sb == 0.0) return false;    // endpoint on the line ⇒ the vertex case
+    if ((sa > 0.0) == (sb > 0.0)) return false;  // same side ⇒ no crossing
+    // Split location: closest-approach fraction of A→B to the imprint line.
     const Vec3 E = sub(B, A);
-    const Vec3 D = curve.dir;
     const Vec3 ExD = cross(E, D);
     const float denom = dot(ExD, ExD);
-    if (denom < 1e-20f) return false;  // parallel
-    const float s = dot(cross(sub(curve.origin, A), D), ExD) / denom;
-    if (s <= 0.02f || s >= 0.98f) return false;  // interior crossing only
+    if (denom < 1e-20f) return false;  // parallel (defensive; a straddle implies not)
+    const float s = dot(cross(sub(O, A), D), ExD) / denom;
+    // Coplanarity sanity guard: the meeting point must lie on the line (a planar
+    // face guarantees it; rejects a genuinely skew edge).
     const Vec3 P = add(A, scale(E, s));
-    const Vec3 w = sub(P, curve.origin);
-    const Vec3 perp = sub(w, scale(D, dot(w, D)));  // component off the imprint line
-    if (length(perp) > eps) return false;           // lines skew, no true meeting
-    sOut = s;
+    const Vec3 w = sub(P, O);
+    if (length(sub(w, scale(D, dot(w, D)))) > eps) return false;
+    sOut = std::clamp(s, 0.001f, 0.999f);
     return true;
 }
 // Fractions s in (0.02, 0.98) at which the straight segment A→B crosses the
@@ -995,6 +1006,11 @@ uint32_t Body::imprintCurve(uint32_t faceId, const Curve& curve, Tolerance tol)
     }
 
     // ── Line imprint ────────────────────────────────────────────────────────────
+    // The planar face's normal — the plane in which the exact in-plane straddle
+    // (orient3D) decides edge/line crossings.
+    const uint32_t lineSid = m_faces[faceId].surface;
+    const Vec3 faceNormal =
+        (lineSid < m_surfaces.size()) ? m_surfaces[lineSid].normal : Vec3{0.f, 0.f, 1.f};
     // Perpendicular distance of a point to the (infinite) imprint line.
     auto distToLine = [&](const Vec3& p) {
         const Vec3 w = sub(p, curve.origin);
@@ -1025,7 +1041,7 @@ uint32_t Body::imprintCurve(uint32_t faceId, const Curve& curve, Tolerance tol)
         if (cu >= m_curves.size() || m_curves[cu].kind != CurveKind::Line) continue;
         float s = 0.f;
         if (segmentLineCrossing(m_verts[m_edges[e].v0].point, m_verts[m_edges[e].v1].point,
-                                curve, eps, s))
+                                curve, faceNormal, eps, s))
             crossings.push_back({false, kInvalid, e, s});
     }
     if (crossings.size() != 2) return kInvalid;  // need a clean entry + exit
