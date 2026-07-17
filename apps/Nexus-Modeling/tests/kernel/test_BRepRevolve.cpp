@@ -131,4 +131,70 @@ TEST(BRepRevolve, Deterministic)
     EXPECT_EQ(a.massProperties().volume, b.massProperties().volume);
 }
 
+// ──────────── Partial revolve (arc solid with two end caps) ───────────────────
+
+// A partial revolve is a CAPPED arc: genus 0 (euler 2, watertight), with volume
+// = (θ/2π)·(full Pappus volume) = θ·R̄·A.  Unit square at x∈[1.5,2.5] (R̄=2, A=1).
+TEST(BRepRevolvePartial, CappedArcMatchesPartialPappus)
+{
+    const std::vector<Vec3> sq = {{1.5, 0, -0.5}, {2.5, 0, -0.5}, {2.5, 0, 0.5}, {1.5, 0, 0.5}};
+    const uint32_t seg = 128;
+    for (float frac : {0.25f, 0.5f, 0.75f}) {
+        const float theta = static_cast<float>(2.0 * M_PI) * frac;
+        const Body b = revolveProfilePartial(sq, {0, 0, 0}, {0, 0, 1}, seg, theta);
+        const auto ig = b.checkIntegrity();
+        ASSERT_TRUE(ig.ok) << "frac=" << frac << ": " << ig.reason;
+        EXPECT_EQ(ig.euler, 2) << "frac=" << frac;          // genus 0, NOT the torus
+        EXPECT_EQ(ig.boundaryEdges, 0u) << "frac=" << frac;  // watertight (caps close it)
+        EXPECT_TRUE(b.isClosed()) << "frac=" << frac;
+        EXPECT_TRUE(b.checkGeometry().ok) << b.checkGeometry().reason;
+        // Topology: V = m·(seg+1), F = m·seg + 2 caps.
+        EXPECT_EQ(ig.vertices, 4u * (seg + 1u)) << "frac=" << frac;
+        EXPECT_EQ(ig.faces, 4u * seg + 2u) << "frac=" << frac;
+        // Volume = θ·R̄·A (winding must be OUTWARD → positive, not clamped to 0).
+        const double expected = static_cast<double>(theta) * 2.0 * 1.0;
+        EXPECT_GT(b.massProperties().volume, 0.f) << "frac=" << frac;
+        EXPECT_NEAR(b.massProperties().volume, static_cast<float>(expected), 0.02)
+            << "frac=" << frac;
+    }
+}
+
+// θ ≥ 2π delegates to the full revolve → the genus-1 ring (euler 0), byte-identical.
+TEST(BRepRevolvePartial, FullSweepDelegatesToRing)
+{
+    const std::vector<Vec3> sq = {{2, 0, 0}, {3, 0, 0}, {3, 0, 1}, {2, 0, 1}};
+    const Body partial = revolveProfilePartial(sq, {0, 0, 0}, {0, 0, 1}, 64,
+                                               static_cast<float>(2.0 * M_PI));
+    const Body full = revolveProfile(sq, {0, 0, 0}, {0, 0, 1}, 64);
+    EXPECT_EQ(partial.checkIntegrity().euler, 0);  // torus
+    EXPECT_EQ(partial.serialize(), full.serialize());  // byte-identical to the full path
+}
+
+TEST(BRepRevolvePartial, DegenerateInputRejected)
+{
+    const std::vector<Vec3> sq = {{1.5, 0, -0.5}, {2.5, 0, -0.5}, {2.5, 0, 0.5}, {1.5, 0, 0.5}};
+    const float half = static_cast<float>(M_PI);
+    EXPECT_EQ(revolveProfilePartial(sq, {0, 0, 0}, {0, 0, 1}, 16, 0.f).faceCount(), 0u);    // θ=0
+    EXPECT_EQ(revolveProfilePartial(sq, {0, 0, 0}, {0, 0, 1}, 16, -1.f).faceCount(), 0u);   // θ<0
+    EXPECT_EQ(revolveProfilePartial(sq, {0, 0, 0}, {0, 0, 1}, 2, half).faceCount(), 0u);    // seg<3
+    EXPECT_EQ(revolveProfilePartial({{2, 0, 0}, {3, 0, 0}}, {0, 0, 0}, {0, 0, 1}, 16, half)
+                  .faceCount(), 0u);                                                        // <3 pts
+    EXPECT_EQ(revolveProfilePartial(sq, {0, 0, 0}, {0, 0, 0}, 16, half).faceCount(), 0u);   // zero axis
+    // Axis-touching profile (a vertex on the axis) is unsupported for partial.
+    const std::vector<Vec3> touch = {{0, 0, 0}, {1, 0, 0}, {1, 0, 1}};
+    EXPECT_EQ(revolveProfilePartial(touch, {0, 0, 0}, {0, 0, 1}, 16, half).faceCount(), 0u);
+    // Non-finite sweep angle.
+    const float inf = std::bit_cast<float>(0x7F800000u);
+    EXPECT_EQ(revolveProfilePartial(sq, {0, 0, 0}, {0, 0, 1}, 16, inf).faceCount(), 0u);
+}
+
+TEST(BRepRevolvePartial, Deterministic)
+{
+    const std::vector<Vec3> sq = {{1.5, 0, -0.5}, {2.5, 0, -0.5}, {2.5, 0, 0.5}, {1.5, 0, 0.5}};
+    const float t = static_cast<float>(M_PI) * 0.5f;
+    const Body a = revolveProfilePartial(sq, {0, 0, 0}, {0, 0, 1}, 40, t);
+    const Body b = revolveProfilePartial(sq, {0, 0, 0}, {0, 0, 1}, 40, t);
+    EXPECT_EQ(a.serialize(), b.serialize());
+}
+
 }  // namespace nexus::geometry::brep::testing

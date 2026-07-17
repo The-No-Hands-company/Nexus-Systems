@@ -2885,6 +2885,110 @@ Body revolveProfile(const std::vector<Vec3>& profile, const Vec3& axisOrigin,
     return body.has_value() ? std::move(*body) : Body{};
 }
 
+Body revolveProfilePartial(const std::vector<Vec3>& profile, const Vec3& axisOrigin,
+                           const Vec3& axisDir, uint32_t segments, float sweepRadians)
+{
+    const float twoPi = 6.28318530717958647692f;
+    if (!isFinite(sweepRadians) || sweepRadians <= 1e-6f) return Body{};
+    if (sweepRadians >= twoPi - 1e-5f)  // a full turn → the genus-1 ring path
+        return revolveProfile(profile, axisOrigin, axisDir, segments);
+
+    const size_t m = profile.size();
+    if (m < 3 || segments < 3) return Body{};
+    for (const Vec3& p : profile)
+        if (!isFinite(p)) return Body{};
+    if (!isFinite(axisOrigin) || !isFinite(axisDir)) return Body{};
+    const float axisLen = length(axisDir);
+    if (axisLen < 1e-9f) return Body{};
+    const Vec3 n = scale(axisDir, 1.f / axisLen);
+
+    // Non-degenerate profile area (Newell).
+    Vec3 Nprof{0.f, 0.f, 0.f};
+    for (size_t i = 0; i < m; ++i) {
+        const Vec3& a = profile[i];
+        const Vec3& b = profile[(i + 1) % m];
+        Nprof.x += (a.y - b.y) * (a.z + b.z);
+        Nprof.y += (a.z - b.z) * (a.x + b.x);
+        Nprof.z += (a.x - b.x) * (a.y + b.y);
+    }
+    if (length(Nprof) < 1e-10f) return Body{};
+
+    // Every vertex must be OFF the axis and on the SAME radial side (an
+    // axis-touching partial revolve — a pie-slice with a pole — is a follow-up).
+    Vec3 rHat{0.f, 0.f, 0.f};
+    bool haveRHat = false;
+    for (size_t i = 0; i < m; ++i) {
+        const Vec3 v = sub(profile[i], axisOrigin);
+        const Vec3 rad = sub(v, scale(n, dot(v, n)));
+        const float rl = length(rad);
+        if (rl < 1e-6f) return Body{};  // touches the axis
+        if (!haveRHat) { rHat = scale(rad, 1.f / rl); haveRHat = true; }
+        else if (dot(rad, rHat) <= 1e-6f) return Body{};  // crossed to the other side
+    }
+
+    auto rot = [&](const Vec3& p, float ang) {
+        const Vec3 v = sub(p, axisOrigin);
+        const float c = std::cos(ang), s = std::sin(ang);
+        const Vec3 r = add(add(scale(v, c), scale(cross(n, v), s)),
+                           scale(n, dot(n, v) * (1.f - c)));
+        return add(axisOrigin, r);
+    };
+
+    // (segments+1) rotated copies of each profile vertex — an OPEN arc of rings.
+    std::vector<Vec3> pts;
+    pts.reserve(m * (segments + 1u));
+    for (size_t i = 0; i < m; ++i)
+        for (uint32_t k = 0; k <= segments; ++k)
+            pts.push_back(rot(profile[i], sweepRadians * static_cast<float>(k) /
+                                              static_cast<float>(segments)));
+    auto vAt = [&](size_t i, uint32_t k) {
+        return static_cast<uint32_t>(i * (segments + 1u) + k);
+    };
+
+    auto planeDef = [&](std::vector<uint32_t> loop) {
+        Body::FaceDef fd;
+        fd.surface.kind = SurfaceKind::Plane;
+        fd.surface.origin = pts[loop[0]];
+        fd.surface.normal = normalize(
+            cross(sub(pts[loop[1]], pts[loop[0]]), sub(pts[loop[2]], pts[loop[0]])));
+        fd.surface.uAxis = normalize(sub(pts[loop[1]], pts[loop[0]]));
+        fd.loop = std::move(loop);
+        return fd;
+    };
+
+    std::vector<Body::FaceDef> defs;
+    defs.reserve(m * segments + 2u);
+    // Swept side bands (outward winding, same convention as revolveProfile; k not
+    // wrapped — this is an open arc).
+    for (uint32_t k = 0; k < segments; ++k) {
+        for (size_t i = 0; i < m; ++i) {
+            const size_t i1 = (i + 1) % m;
+            const uint32_t L[4] = {vAt(i, k), vAt(i, k + 1), vAt(i1, k + 1), vAt(i1, k)};
+            std::vector<uint32_t> loop;
+            for (int q = 0; q < 4; ++q)
+                if (loop.empty() || loop.back() != L[q]) loop.push_back(L[q]);
+            if (loop.size() >= 2 && loop.front() == loop.back()) loop.pop_back();
+            if (loop.size() < 3) continue;
+            defs.push_back(planeDef(std::move(loop)));
+        }
+    }
+    // Two end caps. The start cap (angle 0) walks the profile FORWARD; the end cap
+    // (angle θ) walks it REVERSED — so each cap's coedges oppose the side band's on
+    // their shared boundary edges, giving a consistent outward-wound closed shell.
+    {
+        std::vector<uint32_t> start, end;
+        start.reserve(m);
+        end.reserve(m);
+        for (size_t i = 0; i < m; ++i) start.push_back(vAt(i, 0));
+        for (size_t i = 0; i < m; ++i) end.push_back(vAt(m - 1 - i, segments));
+        defs.push_back(planeDef(std::move(start)));
+        defs.push_back(planeDef(std::move(end)));
+    }
+
+    auto body = Body::fromFaces(pts, defs);
+    return body.has_value() ? std::move(*body) : Body{};
+}
+
 // ──────────── Boolean building blocks ────────────────────────────────────────
 
 namespace {
