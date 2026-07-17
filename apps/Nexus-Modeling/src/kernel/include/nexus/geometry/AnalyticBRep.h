@@ -34,6 +34,7 @@
 #include <cstdint>
 #include <optional>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace nexus::geometry::brep {
@@ -98,12 +99,16 @@ struct Edge {
 // domain, and surfacePoint maps a pcurve endpoint back to the coedge's 3D
 // vertex. A pcurve is stored per-COEDGE, not per-edge, because the two faces
 // sharing an edge have distinct parameter domains (and thus distinct pcurves).
-// For now a straight segment in (u,v) — the parameter-space analog of a Line
-// curve — running the coedge's directed start → end.
+//
+// A pcurve is a POLYLINE start → interior… → end in (u,v): with no interior
+// points it is a straight segment (the parameter-space analog of a Line); with
+// interior points it approximates a CURVED trim (an arc is a sampled polyline),
+// so a NURBS face can be bounded by curved trims that follow the surface.
 struct Pcurve {
     bool  present = false;
     float u0 = 0.f, v0 = 0.f;       // param-space start (maps to the coedge start vertex)
     float u1 = 0.f, v1 = 0.f;       // param-space end   (maps to the coedge end vertex)
+    std::vector<std::pair<float, float>> interior;  // (u,v) points strictly between start & end
 };
 
 struct Coedge {
@@ -230,6 +235,18 @@ public:
     // that do not map back to the coedge's vertices.
     bool setCoedgePcurve(uint32_t coedgeId, float u0, float v0, float u1, float v1,
                          Tolerance tol = {});
+
+    // Attach a CURVED (polyline) parameter-space trim curve to a coedge: the
+    // (u,v) points run the coedge's directed start → end, with `points.front()`
+    // mapping to the start vertex and `points.back()` to the end vertex (all
+    // validated by surfacePoint within tol, as setCoedgePcurve). Interior points
+    // approximate a curved trim (an arc sampled into a polyline); they must be
+    // finite and inside the surface's parameter domain. Requires ≥2 points.
+    // Returns false — leaving the coedge unchanged — on too few points, a
+    // non-finite / out-of-domain point, or endpoints that do not map back.
+    bool setCoedgePcurvePolyline(uint32_t coedgeId,
+                                 const std::vector<std::pair<float, float>>& points,
+                                 Tolerance tol = {});
 
     // Euler operator (inverse of splitEdge / kill-edge-vertex) — remove a
     // degree-2 vertex whose two incident edges share a curve, merging them into

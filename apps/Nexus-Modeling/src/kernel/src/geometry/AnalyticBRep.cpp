@@ -604,6 +604,26 @@ Body::GeometryReport Body::checkGeometry(Tolerance tol) const
             return fail("coedge " + std::to_string(c) + " pcurve start does not map to its start vertex");
         if (!coincident(surfacePoint(surfId, pc.u1, pc.v1), m_verts[eV].point, tol))
             return fail("coedge " + std::to_string(c) + " pcurve end does not map to its end vertex");
+        // Curved (polyline) interior points must be finite and inside the
+        // surface's parameter domain so tessellation samples the surface validly.
+        const Surface& psurf = m_surfaces[surfId];
+        bool haveDomain = false;
+        float du0 = 0.f, du1 = 0.f, dv0 = 0.f, dv1 = 0.f;
+        if (psurf.kind == SurfaceKind::Nurbs && psurf.nurbs < m_nurbsSurfaces.size()) {
+            const auto [a, b] = m_nurbsSurfaces[psurf.nurbs].domainU();
+            const auto [cc, d] = m_nurbsSurfaces[psurf.nurbs].domainV();
+            du0 = a; du1 = b; dv0 = cc; dv1 = d;
+            haveDomain = isFinite(a) && isFinite(b) && isFinite(cc) && isFinite(d);
+        }
+        const float su = haveDomain ? tol.at(du1 - du0) : 0.f;
+        const float sv = haveDomain ? tol.at(dv1 - dv0) : 0.f;
+        for (const auto& ip : pc.interior) {
+            if (!isFinite(ip.first) || !isFinite(ip.second))
+                return fail("coedge " + std::to_string(c) + " pcurve has a non-finite interior point");
+            if (haveDomain && (ip.first < du0 - su || ip.first > du1 + su ||
+                               ip.second < dv0 - sv || ip.second > dv1 + sv))
+                return fail("coedge " + std::to_string(c) + " pcurve interior point is outside the surface domain");
+        }
     }
 
     return r;
@@ -1755,6 +1775,7 @@ Mesh Body::tessellateTrimmedFace(uint32_t faceId, uint32_t gridRes, Tolerance to
                 poly.pop_back();  // drop the shared point; re-added as this start
             }
             poly.push_back(start);
+            for (const auto& ip : ce.pcurve.interior) poly.push_back(ip);  // curved trim samples
             poly.emplace_back(ce.pcurve.u1, ce.pcurve.v1);
             walk = ce.next;
             if (++steps > m_coedges.size()) return false;
@@ -1887,7 +1908,63 @@ bool Body::setCoedgePcurve(uint32_t coedgeId, float u0, float v0, float u1, floa
     if (!coincident(surfacePoint(surfId, u0, v0), m_verts[sV].point, tol)) return false;
     if (!coincident(surfacePoint(surfId, u1, v1), m_verts[eV].point, tol)) return false;
 
-    ce.pcurve = Pcurve{true, u0, v0, u1, v1};
+    ce.pcurve = Pcurve{true, u0, v0, u1, v1, {}};
+    return true;
+}
+
+bool Body::setCoedgePcurvePolyline(uint32_t coedgeId,
+                                   const std::vector<std::pair<float, float>>& points,
+                                   Tolerance tol)
+{
+    if (points.size() < 2) return false;
+    if (coedgeId >= m_coedges.size() || !m_coedges[coedgeId].alive) return false;
+    Coedge& ce = m_coedges[coedgeId];
+    if (ce.edge >= m_edges.size() || ce.loop >= m_loops.size()) return false;
+    const Edge& ed = m_edges[ce.edge];
+    if (ed.v0 >= m_verts.size() || ed.v1 >= m_verts.size()) return false;
+    const uint32_t faceId = m_loops[ce.loop].face;
+    if (faceId >= m_faces.size()) return false;
+    const uint32_t surfId = m_faces[faceId].surface;
+    if (surfId >= m_surfaces.size()) return false;
+
+    // Parameter domain (for the in-domain guard on curved trims).
+    const Surface& surf = m_surfaces[surfId];
+    bool haveDomain = false;
+    float du0 = 0.f, du1 = 0.f, dv0 = 0.f, dv1 = 0.f;
+    if (surf.kind == SurfaceKind::Nurbs && surf.nurbs < m_nurbsSurfaces.size()) {
+        const auto [a, b] = m_nurbsSurfaces[surf.nurbs].domainU();
+        const auto [c, d] = m_nurbsSurfaces[surf.nurbs].domainV();
+        du0 = a; du1 = b; dv0 = c; dv1 = d;
+        haveDomain = isFinite(a) && isFinite(b) && isFinite(c) && isFinite(d);
+    }
+    const float su = haveDomain ? tol.at(du1 - du0) : 0.f;
+    const float sv = haveDomain ? tol.at(dv1 - dv0) : 0.f;
+    for (const auto& p : points) {
+        if (!isFinite(p.first) || !isFinite(p.second)) return false;
+        if (haveDomain && (p.first < du0 - su || p.first > du1 + su ||
+                           p.second < dv0 - sv || p.second > dv1 + sv))
+            return false;  // trim point outside the surface's parameter domain
+    }
+
+    // Endpoints must map (through the surface) onto the coedge's directed 3D
+    // vertices, exactly as for a straight pcurve.
+    const uint32_t sV = ce.reversed ? ed.v1 : ed.v0;
+    const uint32_t eV = ce.reversed ? ed.v0 : ed.v1;
+    if (!coincident(surfacePoint(surfId, points.front().first, points.front().second),
+                    m_verts[sV].point, tol))
+        return false;
+    if (!coincident(surfacePoint(surfId, points.back().first, points.back().second),
+                    m_verts[eV].point, tol))
+        return false;
+
+    Pcurve pc;
+    pc.present = true;
+    pc.u0 = points.front().first;
+    pc.v0 = points.front().second;
+    pc.u1 = points.back().first;
+    pc.v1 = points.back().second;
+    pc.interior.assign(points.begin() + 1, points.end() - 1);
+    ce.pcurve = std::move(pc);
     return true;
 }
 
@@ -1895,7 +1972,7 @@ bool Body::setCoedgePcurve(uint32_t coedgeId, float u0, float v0, float u1, floa
 
 namespace {
 constexpr std::uint32_t kBRepMagic = 0x5242584Eu;  // 'NXBR'
-constexpr std::uint32_t kBRepVersion = 2u;  // v2 adds per-coedge pcurves (trim curves)
+constexpr std::uint32_t kBRepVersion = 3u;  // v2: per-coedge pcurves; v3: curved (polyline) pcurves
 
 void putU8(std::vector<std::uint8_t>& o, std::uint8_t v) { o.push_back(v); }
 void putU32(std::vector<std::uint8_t>& o, std::uint32_t v)
@@ -2097,6 +2174,12 @@ std::vector<std::uint8_t> Body::serialize() const
         putF32(o, pc.v0);
         putF32(o, pc.u1);
         putF32(o, pc.v1);
+        // v3: curved (polyline) interior points.
+        putU32(o, static_cast<std::uint32_t>(pc.interior.size()));
+        for (const auto& ip : pc.interior) {
+            putF32(o, ip.first);
+            putF32(o, ip.second);
+        }
     }
     return o;
 }
@@ -2201,9 +2284,16 @@ std::optional<Body> Body::deserialize(const std::vector<std::uint8_t>& bytes)
             Pcurve pc;
             if (!r.u32(idx) || !r.f32(pc.u0) || !r.f32(pc.v0) || !r.f32(pc.u1) || !r.f32(pc.v1))
                 return std::nullopt;
+            if (version >= 3u) {  // v3: curved (polyline) interior points
+                std::uint32_t m = 0;
+                if (!r.count(m)) return std::nullopt;
+                pc.interior.resize(m);
+                for (auto& ip : pc.interior)
+                    if (!r.f32(ip.first) || !r.f32(ip.second)) return std::nullopt;
+            }
             if (idx >= b.m_coedges.size()) return std::nullopt;
             pc.present = true;
-            b.m_coedges[idx].pcurve = pc;
+            b.m_coedges[idx].pcurve = std::move(pc);
         }
     }
 

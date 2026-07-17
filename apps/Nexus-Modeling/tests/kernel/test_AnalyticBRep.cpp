@@ -351,13 +351,13 @@ TEST(AnalyticBRepPcurve, RoundTripsThroughSerialization)
 
 TEST(AnalyticBRepPcurve, LegacyV1BlobDecodes)
 {
-    // A pcurve-FREE body serializes to v2 with only an empty trailing pcurve
-    // section; patch the version byte back to 1 and it must still decode
-    // identically (the v1 reader stops before the trailing section).
+    // A pcurve-FREE body serializes with only an empty trailing pcurve section;
+    // patch the version byte back to 1 and it must still decode identically (the
+    // v1 reader stops before the trailing section).
     const Body box = makeBox(2.f, 2.f, 2.f);
     std::vector<std::uint8_t> bytes = box.serialize();
     ASSERT_GT(bytes.size(), 8u);
-    EXPECT_EQ(bytes[4], 2u);  // magic(4) then version at byte 4
+    EXPECT_EQ(bytes[4], 3u);  // magic(4) then version at byte 4 (current: v3)
     bytes[4] = 1u;            // masquerade as a legacy v1 blob
 
     const auto rt = Body::deserialize(bytes);
@@ -376,14 +376,15 @@ TEST(AnalyticBRepPcurve, WrongPcurveFailsCheckGeometry)
     ASSERT_EQ(attachOuterLoopPcurves(b), 4u);
 
     std::vector<std::uint8_t> bytes = b.serialize();
-    ASSERT_GT(bytes.size(), 4u);
-    // The trailing pcurve section ends the blob; its last float is the last
-    // present coedge's v1. Overwrite it with a finite-but-wrong value.
+    ASSERT_GT(bytes.size(), 8u);
+    // The last pcurve entry ends with [u0,v0,u1,v1, interiorCount(=0)] (v3), so
+    // the last present coedge's v1 float sits 8 bytes from the end (the 4-byte
+    // interior count trails it). Overwrite it with a finite-but-wrong value.
     const std::uint32_t bad = std::bit_cast<std::uint32_t>(9.0f);
-    bytes[bytes.size() - 4] = static_cast<std::uint8_t>(bad & 0xFFu);
-    bytes[bytes.size() - 3] = static_cast<std::uint8_t>((bad >> 8) & 0xFFu);
-    bytes[bytes.size() - 2] = static_cast<std::uint8_t>((bad >> 16) & 0xFFu);
-    bytes[bytes.size() - 1] = static_cast<std::uint8_t>((bad >> 24) & 0xFFu);
+    bytes[bytes.size() - 8] = static_cast<std::uint8_t>(bad & 0xFFu);
+    bytes[bytes.size() - 7] = static_cast<std::uint8_t>((bad >> 8) & 0xFFu);
+    bytes[bytes.size() - 6] = static_cast<std::uint8_t>((bad >> 16) & 0xFFu);
+    bytes[bytes.size() - 5] = static_cast<std::uint8_t>((bad >> 24) & 0xFFu);
 
     const auto rt = Body::deserialize(bytes);
     ASSERT_TRUE(rt.has_value());               // loads fine (value is finite)
@@ -494,6 +495,185 @@ TEST(AnalyticBRepTrimTessellate, DeterministicAndRejectsNonTrimmedFaces)
     const Body untrimmed = makeNurbsQuadFace();
     EXPECT_EQ(untrimmed.tessellateTrimmedFace(0, 8).topology().faceCount(), 0u);
     EXPECT_EQ(b.tessellateTrimmedFace(999u, 8).topology().faceCount(), 0u);  // bad face id
+}
+
+// ──────────── Curved (polyline) pcurves: curved trim boundaries ───────────────
+namespace {
+// Find the outer-loop coedge of face 0 whose directed 3D endpoints are s → e.
+uint32_t findCoedge(const Body& b, const Vec3& s, const Vec3& e)
+{
+    auto near = [](const Vec3& a, const Vec3& q) {
+        return std::abs(a.x - q.x) < 1e-4f && std::abs(a.y - q.y) < 1e-4f &&
+               std::abs(a.z - q.z) < 1e-4f;
+    };
+    const uint32_t first = b.loop(b.face(0).outerLoop).first;
+    uint32_t c = first;
+    do {
+        const Coedge& ce = b.coedge(c);
+        const Edge& ed = b.edge(ce.edge);
+        const Vec3 sv = b.vertex(ce.reversed ? ed.v1 : ed.v0).point;
+        const Vec3 ev = b.vertex(ce.reversed ? ed.v0 : ed.v1).point;
+        if (near(sv, s) && near(ev, e)) return c;
+        c = ce.next;
+    } while (c != first);
+    return kInvalid;
+}
+// Shoelace area of a (u,v) polygon, scaled by the (4u,4v) patch jacobian (16).
+double shoelace16(const std::vector<std::pair<float, float>>& poly)
+{
+    double a = 0.0;
+    for (size_t i = 0, n = poly.size(); i < n; ++i) {
+        const auto& p = poly[i];
+        const auto& q = poly[(i + 1) % n];
+        a += static_cast<double>(p.first) * q.second - static_cast<double>(q.first) * p.second;
+    }
+    return std::abs(a) * 0.5 * 16.0;
+}
+}  // namespace
+
+TEST(AnalyticBRepTrimTessellate, PolylineRectangularNotchExactArea)
+{
+    Body b = makeSubTrimmedNurbsFace();  // outer trim = [0.25,0.75]² (straight pcurves)
+    const uint32_t bottom = findCoedge(b, Vec3{1, 1, 0}, Vec3{3, 1, 0});
+    ASSERT_NE(bottom, kInvalid);
+    // Replace the bottom straight pcurve with a rectangular notch bulging up into
+    // the square: removes [0.4,0.6]×[0.25,0.35] (uv area 0.02).
+    const std::vector<std::pair<float, float>> notch = {
+        {0.25f, 0.25f}, {0.4f, 0.25f}, {0.4f, 0.35f},
+        {0.6f, 0.35f},  {0.6f, 0.25f}, {0.75f, 0.25f}};
+    ASSERT_TRUE(b.setCoedgePcurvePolyline(bottom, notch));
+    ASSERT_TRUE(b.checkGeometry().ok);
+
+    // The full trim polygon (bottom notched + the three straight sides).
+    const std::vector<std::pair<float, float>> poly = {
+        {0.25f, 0.25f}, {0.4f, 0.25f}, {0.4f, 0.35f}, {0.6f, 0.35f}, {0.6f, 0.25f},
+        {0.75f, 0.25f}, {0.75f, 0.75f}, {0.25f, 0.75f}};
+    const double expected = shoelace16(poly);  // (0.25 − 0.02)·16 = 3.68
+    EXPECT_NEAR(expected, 3.68, 1e-4);
+
+    // res=40 puts every notch boundary (0.25/0.4/0.6/0.75/0.35) on a grid line →
+    // centre classification is exact.
+    EXPECT_NEAR(meshArea(b.tessellateTrimmedFace(0, 40)), expected, 1e-3);
+}
+
+TEST(AnalyticBRepTrimTessellate, ArcTrimConvergesAndOnSurface)
+{
+    Body b = makeSubTrimmedNurbsFace();
+    const uint32_t bottom = findCoedge(b, Vec3{1, 1, 0}, Vec3{3, 1, 0});
+    ASSERT_NE(bottom, kInvalid);
+    // A semicircular notch (centre (0.5,0.25), r=0.15) bulging up into the square,
+    // sampled into a polyline arc between (0.35,0.25) and (0.65,0.25).
+    std::vector<std::pair<float, float>> arc;
+    arc.emplace_back(0.25f, 0.25f);
+    const int N = 32;
+    for (int k = 0; k <= N; ++k) {  // angle π → 0 (upper half)
+        const float t = 3.14159265f * (1.f - static_cast<float>(k) / static_cast<float>(N));
+        arc.emplace_back(0.5f + 0.15f * std::cos(t), 0.25f + 0.15f * std::sin(t));
+    }
+    arc.emplace_back(0.75f, 0.25f);
+    ASSERT_TRUE(b.setCoedgePcurvePolyline(bottom, arc));
+    ASSERT_TRUE(b.checkGeometry().ok);
+
+    // Expected = the sampled-polyline trim area (exact for that polyline).
+    std::vector<std::pair<float, float>> poly = arc;
+    poly.emplace_back(0.75f, 0.75f);
+    poly.emplace_back(0.25f, 0.75f);
+    const double expected = shoelace16(poly);
+    EXPECT_LT(expected, 4.0);   // notch removed material
+    EXPECT_GT(expected, 3.2);
+
+    // Finer grids converge toward the trimmed-polyline area.
+    const double coarse = meshArea(b.tessellateTrimmedFace(0, 40));
+    const double fine = meshArea(b.tessellateTrimmedFace(0, 240));
+    EXPECT_LT(std::abs(fine - expected), 0.12);
+    EXPECT_LE(std::abs(fine - expected), std::abs(coarse - expected) + 1e-9);
+
+    // Every emitted vertex lies on the surface (z=0) and inside the trim ([1,3]²).
+    const Mesh m = b.tessellateTrimmedFace(0, 240);
+    const auto& p = m.attributes().positions();
+    std::set<uint32_t> ref;
+    for (size_t f = 0; f < m.topology().faceCount(); ++f)
+        for (uint32_t i : m.topology().face(f).indices) ref.insert(i);
+    for (uint32_t i : ref) {
+        EXPECT_NEAR(p[i].z, 0.f, 1e-4f);
+        EXPECT_GE(p[i].x, 1.f - 1e-4f);
+        EXPECT_LE(p[i].x, 3.f + 1e-4f);
+        EXPECT_GE(p[i].y, 1.f - 1e-4f);
+        EXPECT_LE(p[i].y, 3.f + 1e-4f);
+    }
+}
+
+TEST(AnalyticBRepTrimTessellate, PolylineRejectsBadInput)
+{
+    // Un-trimmed patch (evaluate = (2u,2v,0), domain [0,1]); bottom coedge
+    // (0,0,0)→(2,0,0) maps to (u,v) (0,0)→(1,0).
+    Body b = makeNurbsQuadFace();
+    const uint32_t bottom = findCoedge(b, Vec3{0, 0, 0}, Vec3{2, 0, 0});
+    ASSERT_NE(bottom, kInvalid);
+    const float inf = std::bit_cast<float>(0x7F800000u);
+
+    EXPECT_FALSE(b.setCoedgePcurvePolyline(bottom, {{0.0f, 0.0f}}));  // <2 points
+    // Interior point outside the [0,1] parameter domain.
+    EXPECT_FALSE(b.setCoedgePcurvePolyline(
+        bottom, {{0.0f, 0.0f}, {5.0f, 5.0f}, {1.0f, 0.0f}}));
+    // Non-finite interior point.
+    EXPECT_FALSE(b.setCoedgePcurvePolyline(
+        bottom, {{0.0f, 0.0f}, {inf, 0.3f}, {1.0f, 0.0f}}));
+    // Endpoint that does not map to the coedge's start vertex.
+    EXPECT_FALSE(b.setCoedgePcurvePolyline(
+        bottom, {{0.6f, 0.6f}, {0.5f, 0.3f}, {1.0f, 0.0f}}));
+    EXPECT_FALSE(b.coedge(bottom).pcurve.present);  // all rejects left it unattached
+
+    // A valid curved polyline attaches and validates.
+    EXPECT_TRUE(b.setCoedgePcurvePolyline(bottom, {{0.0f, 0.0f}, {0.5f, 0.2f}, {1.0f, 0.0f}}));
+    EXPECT_TRUE(b.checkGeometry().ok);
+}
+
+TEST(AnalyticBRepTrimTessellate, PolylineSerializationV3RoundTrips)
+{
+    Body b = makeSubTrimmedNurbsFace();
+    const uint32_t bottom = findCoedge(b, Vec3{1, 1, 0}, Vec3{3, 1, 0});
+    ASSERT_NE(bottom, kInvalid);
+    ASSERT_TRUE(b.setCoedgePcurvePolyline(
+        bottom, {{0.25f, 0.25f}, {0.4f, 0.35f}, {0.6f, 0.35f}, {0.75f, 0.25f}}));
+
+    const std::vector<std::uint8_t> bytes = b.serialize();
+    EXPECT_EQ(bytes[4], 3u);  // writer stamps v3
+    const auto rt = Body::deserialize(bytes);
+    ASSERT_TRUE(rt.has_value());
+    EXPECT_TRUE(rt->checkGeometry().ok);
+    EXPECT_EQ(bytes, rt->serialize());  // byte-identical
+    EXPECT_EQ(rt->coedge(bottom).pcurve.interior.size(), 2u);  // curved trim survives
+}
+
+TEST(AnalyticBRepTrimTessellate, LegacyV1AndV2BlobsDecode)
+{
+    // v1: a body with no pcurves decodes when the version byte is patched to 1.
+    const Body box = makeBox(2.f, 2.f, 2.f);
+    std::vector<std::uint8_t> v1 = box.serialize();
+    v1[4] = 1u;
+    ASSERT_TRUE(Body::deserialize(v1).has_value());
+
+    // v2: a body with a single STRAIGHT pcurve — its v3 interior-count (0) is the
+    // trailing bytes, so patching the version to 2 still decodes (the v2 reader
+    // stops before the interior count, leaving it as ignored trailing bytes).
+    Body b = makeNurbsQuadFace();
+    const uint32_t first = b.loop(b.face(0).outerLoop).first;
+    const Coedge& ce = b.coedge(first);
+    const Edge& ed = b.edge(ce.edge);
+    const uint32_t sV = ce.reversed ? ed.v1 : ed.v0;
+    const uint32_t eV = ce.reversed ? ed.v0 : ed.v1;
+    const Vec3 sp = b.vertex(sV).point, ep = b.vertex(eV).point;
+    ASSERT_TRUE(b.setCoedgePcurve(first, sp.x * 0.5f, sp.y * 0.5f, ep.x * 0.5f, ep.y * 0.5f));
+
+    std::vector<std::uint8_t> v2 = b.serialize();
+    ASSERT_EQ(v2[4], 3u);
+    v2[4] = 2u;
+    const auto rt = Body::deserialize(v2);
+    ASSERT_TRUE(rt.has_value());
+    EXPECT_TRUE(rt->checkGeometry().ok);
+    EXPECT_TRUE(rt->coedge(first).pcurve.present);
+    EXPECT_TRUE(rt->coedge(first).pcurve.interior.empty());
 }
 
 // surfacePoint dispatches to the analytic Surface::eval for non-NURBS faces.
