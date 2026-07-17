@@ -76,6 +76,29 @@ TEST(BRepSurfaceIntersect, PlanePerpendicularToCylinderIsCircle)
     EXPECT_LT(curveOnBoth(r, p, c), 1e-4f);
 }
 
+// A plane whose normal is truly collinear with the cylinder axis (even scaled /
+// anti-parallel) is exactly perpendicular → a Circle; a near-perpendicular plane
+// (normal NOT collinear with the axis) is an ellipse, not a circle, and must NOT
+// be reported as one — where the old nearlyEqual(|n·ax|,1) float band would.
+TEST(BRepSurfaceIntersect, ExactPlaneCylinderPerpendicularity)
+{
+    // Exactly perpendicular (axis +Z, plane normal −2Z, collinear) → Circle.
+    const Surface pPerp = plane({0, 0, 1}, {0, 0, -2});
+    const Surface c = cylinder({0, 0, 0}, {0, 0, 1}, 1.5f);
+    EXPECT_EQ(intersectSurfaces(pPerp, c).kind, SurfaceIntersectionKind::Circle);
+
+    // Near-perpendicular: normal (0, 1, 16000000) — its float |n·ax| rounds to 1
+    // (the old band → "circle") but the normal is NOT collinear with the axis
+    // (int64 cross-x = 1·1 − 16000000·0 = 1 ≠ 0), so the true section is an
+    // ellipse. The exact test declines the bogus Circle.
+    const long long az = 16000000;
+    ASSERT_NE(1LL * 1 - az * 0, 0);  // int64: normal not collinear with (0,0,1)
+    const Surface pTilt = plane({0, 0, 1}, {0.f, 1.f, static_cast<float>(az)});
+    const float la = std::sqrt(1.f + static_cast<float>(az) * static_cast<float>(az));
+    EXPECT_NEAR(std::abs(static_cast<float>(az) / la), 1.f, 1e-6f);  // float |n̂·ax| ≈ 1
+    EXPECT_NE(intersectSurfaces(pTilt, c).kind, SurfaceIntersectionKind::Circle);
+}
+
 TEST(BRepSurfaceIntersect, SphereSphereIsCircleOnBoth)
 {
     const Surface a = sphere({0, 0, 0}, 2.f);

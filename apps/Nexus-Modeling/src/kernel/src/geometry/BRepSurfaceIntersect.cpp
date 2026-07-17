@@ -104,13 +104,17 @@ SurfaceIntersection planeSphere(const Surface& plane, const Surface& sphere, Tol
 
 SurfaceIntersection planeCylinder(const Surface& plane, const Surface& cyl, Tolerance tol)
 {
+    (void)tol;  // the perpendicularity decision is now exact (no tolerance band)
     const Vec3 n = normalize(plane.normal);
     const Vec3 ax = normalize(cyl.normal);  // cylinder axis
-    const float ndotax = dot(n, ax);
     SurfaceIntersection r;
-    if (tol.nearlyEqual(std::abs(ndotax), 1.f)) {  // plane ⟂ axis → a circle
+    // EXACT: the plane is perpendicular to the axis — so the section is a true
+    // CIRCLE — iff the plane normal is collinear with the axis (nA × ax == 0).
+    // Robust where the old float nearlyEqual(|n·ax|, 1) band mis-classified a
+    // near-perpendicular plane, whose real section is an ellipse, as a circle.
+    if (exactlyCollinear(plane.normal, cyl.normal)) {
         // Axis line: cyl.origin + t*ax; find t where it meets the plane.
-        const float denom = dot(ax, n);
+        const float denom = dot(ax, n);  // ±1 for collinear unit vectors → nonzero
         const float t = dot(sub(plane.origin, cyl.origin), n) / denom;
         const Vec3 center = add(cyl.origin, scale(ax, t));
         r.kind = SurfaceIntersectionKind::Circle;
