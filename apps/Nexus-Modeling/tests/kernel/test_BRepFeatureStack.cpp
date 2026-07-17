@@ -193,4 +193,152 @@ TEST(BRepFeatureStackSerialize, RejectsBadAndNonFiniteBuffers)
     EXPECT_FALSE(FeatureStack::deserialize(nf).has_value());
 }
 
+// ──────────── 2-body Boolean feature (parametric CSG tree) ───────────────────
+
+namespace {
+// A translation matrix (row-major, translation in the last column).
+nexus::render::Mat4 translate(float x, float y, float z)
+{
+    nexus::render::Mat4 m = nexus::render::Mat4::identity();
+    m.m[0][3] = x;
+    m.m[1][3] = y;
+    m.m[2][3] = z;
+    return m;
+}
+// A box centred at the origin, translated by (t,t,t): [−1,1]³ → [t−1,t+1]³.
+std::vector<Feature> shiftedUnitCube(float t)
+{
+    return {Feature::box(2.f, 2.f, 2.f), Feature::transform(translate(t, t, t))};
+}
+}  // namespace
+
+TEST(BRepFeatureStackBoolean, UnionMergesOverlappingCubes)
+{
+    // Base [−1,1]³ (vol 8) ∪ secondary [0,2]³ (vol 8), overlap [0,1]³ (vol 1).
+    FeatureStack s;
+    s.add(Feature::box(2.f, 2.f, 2.f));
+    s.add(Feature::booleanWith(BooleanOp::Union, shiftedUnitCube(1.f)));
+
+    const Body r = s.evaluate();
+    EXPECT_TRUE(r.checkIntegrity().ok);
+    EXPECT_TRUE(r.isClosed());
+    EXPECT_NEAR(vol(r), 8.0 + 8.0 - 1.0, 1e-4);  // 15
+}
+
+TEST(BRepFeatureStackBoolean, DifferenceCutsOverlap)
+{
+    FeatureStack s;
+    s.add(Feature::box(2.f, 2.f, 2.f));
+    s.add(Feature::booleanWith(BooleanOp::Difference, shiftedUnitCube(1.f)));
+
+    const Body r = s.evaluate();
+    EXPECT_TRUE(r.checkIntegrity().ok);
+    EXPECT_TRUE(r.isClosed());
+    EXPECT_NEAR(vol(r), 8.0 - 1.0, 1e-4);  // 7
+}
+
+TEST(BRepFeatureStackBoolean, IntersectionKeepsOverlap)
+{
+    FeatureStack s;
+    s.add(Feature::box(2.f, 2.f, 2.f));
+    s.add(Feature::booleanWith(BooleanOp::Intersection, shiftedUnitCube(1.f)));
+
+    const Body r = s.evaluate();
+    EXPECT_TRUE(r.checkIntegrity().ok);
+    EXPECT_TRUE(r.isClosed());
+    EXPECT_NEAR(vol(r), 1.0, 1e-4);  // [0,1]³
+}
+
+TEST(BRepFeatureStackBoolean, EditingSecondaryParameterCascades)
+{
+    FeatureStack s;
+    s.add(Feature::box(2.f, 2.f, 2.f));
+    s.add(Feature::booleanWith(BooleanOp::Difference, shiftedUnitCube(1.f)));
+
+    const double before = vol(s.evaluate());  // 8 − 1 = 7
+    // Push the cutter further out so the overlap shrinks (t=1.5 → [0.5,1]³ = 0.125).
+    s.at(1).secondary[1] = Feature::transform(translate(1.5f, 1.5f, 1.5f));
+    const double after = vol(s.evaluate());    // 8 − 0.125 = 7.875
+    EXPECT_GT(after, before);
+    EXPECT_NEAR(after, 8.0 - 0.125, 1e-4);
+}
+
+TEST(BRepFeatureStackBoolean, NeverCorruptOnDegenerateSecondary)
+{
+    // A secondary whose first feature is a modifier (not a base) evaluates to an
+    // empty Body → the Boolean is skipped, leaving the base untouched.
+    FeatureStack s;
+    s.add(Feature::box(2.f, 2.f, 2.f));
+    s.add(Feature::booleanWith(BooleanOp::Union, {Feature::chamfer(0, 1, 1, 0.3f)}));
+
+    const Body r = s.evaluate();
+    EXPECT_TRUE(r.checkIntegrity().ok);
+    EXPECT_NEAR(vol(r), 8.0, 1e-4);  // unchanged base
+}
+
+TEST(BRepFeatureStackBoolean, SerializesAndRoundTrips)
+{
+    FeatureStack s;
+    s.add(Feature::box(2.f, 2.f, 2.f));
+    s.add(Feature::booleanWith(BooleanOp::Difference, shiftedUnitCube(1.f)));
+    s.add(Feature::chamfer(2, -1, -1, 0.2f));  // a modifier AFTER the boolean
+
+    const std::vector<std::uint8_t> bytes = s.serialize();
+    const auto rt = FeatureStack::deserialize(bytes);
+    ASSERT_TRUE(rt.has_value());
+    EXPECT_EQ(rt->size(), s.size());
+    EXPECT_EQ(bytes, rt->serialize());  // history is canonical
+    EXPECT_EQ(rt->at(1).secondary.size(), 2u);
+    EXPECT_EQ(rt->at(1).booleanOp, BooleanOp::Difference);
+    EXPECT_EQ(s.evaluate().serialize(), rt->evaluate().serialize());
+}
+
+TEST(BRepFeatureStackBoolean, NestedBooleanRoundTrips)
+{
+    // A Boolean whose secondary itself contains a Boolean — recursive history.
+    std::vector<Feature> inner;
+    inner.push_back(Feature::box(2.f, 2.f, 2.f));
+    inner.push_back(Feature::booleanWith(BooleanOp::Difference, shiftedUnitCube(1.f)));
+
+    FeatureStack s;
+    s.add(Feature::box(4.f, 4.f, 4.f));
+    s.add(Feature::booleanWith(BooleanOp::Union, std::move(inner)));
+
+    const auto rt = FeatureStack::deserialize(s.serialize());
+    ASSERT_TRUE(rt.has_value());
+    EXPECT_EQ(s.serialize(), rt->serialize());
+    EXPECT_EQ(rt->at(1).secondary.at(1).secondary.size(), 2u);
+}
+
+TEST(BRepFeatureStackBoolean, DecodesLegacyV1Blob)
+{
+    // Build a v1-era stack (no Boolean features) and patch the version byte back
+    // to 1 — it must still decode identically under the v2 reader, proving the
+    // common record layout is unchanged.
+    FeatureStack s;
+    s.add(Feature::box(2.f, 2.f, 2.f));
+    s.add(Feature::chamfer(0, +1, +1, 0.3f));
+    s.add(Feature::fillet(2, -1, -1, 0.25f, 8));
+
+    std::vector<std::uint8_t> bytes = s.serialize();
+    ASSERT_GT(bytes.size(), 8u);
+    // Layout: [magic u32][version u32]... — version starts at byte 4.
+    EXPECT_EQ(bytes[4], 2u);  // current writer stamps v2
+    bytes[4] = 1u;            // masquerade as a v1 blob
+
+    const auto rt = FeatureStack::deserialize(bytes);
+    ASSERT_TRUE(rt.has_value());
+    EXPECT_EQ(rt->size(), 3u);
+    EXPECT_EQ(s.evaluate().serialize(), rt->evaluate().serialize());
+}
+
+TEST(BRepFeatureStackBoolean, IsDeterministic)
+{
+    FeatureStack s;
+    s.add(Feature::box(2.f, 2.f, 2.f));
+    s.add(Feature::booleanWith(BooleanOp::Intersection, shiftedUnitCube(1.f)));
+    EXPECT_EQ(s.evaluate().serialize(), s.evaluate().serialize());
+    EXPECT_EQ(s.serialize(), s.serialize());
+}
+
 }  // namespace nexus::geometry::brep::testing

@@ -15,6 +15,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 #include <nexus/geometry/AnalyticBRep.h>
+#include <nexus/geometry/BRepBoolean.h>  // BooleanOp, booleanToBody
 #include <nexus/render/Camera.h>
 
 #include <cstdint>
@@ -33,6 +34,7 @@ enum class FeatureKind : std::uint8_t {
     Transform,
     Chamfer,
     Fillet,
+    Boolean,  // combine with a secondary sub-model (union / intersect / difference)
 };
 
 // One parametric operation. Only the fields relevant to `kind` are used; edit
@@ -52,6 +54,11 @@ struct Feature {
     float amount = 0.f;                                           // Chamfer setback / Fillet radius
     int axis = 0, s1 = 1, s2 = 1;                                 // Chamfer / Fillet edge selector
 
+    // Boolean feature: combine the running solid with `secondary` (a sub-stack
+    // whose first entry is a base) using `booleanOp`.
+    BooleanOp booleanOp = BooleanOp::Union;
+    std::vector<Feature> secondary;
+
     [[nodiscard]] bool isBase() const noexcept
     {
         return kind == FeatureKind::Box || kind == FeatureKind::FacetedCylinder ||
@@ -69,6 +76,7 @@ struct Feature {
     [[nodiscard]] static Feature chamfer(int axis, int s1, int s2, float setback);
     [[nodiscard]] static Feature fillet(int axis, int s1, int s2, float radius,
                                         std::uint32_t segments);
+    [[nodiscard]] static Feature booleanWith(BooleanOp op, std::vector<Feature> secondary);
 };
 
 class FeatureStack {

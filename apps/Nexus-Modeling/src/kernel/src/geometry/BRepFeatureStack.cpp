@@ -82,6 +82,14 @@ Feature Feature::fillet(int axis, int s1, int s2, float radius, std::uint32_t se
     f.segments = segments;
     return f;
 }
+Feature Feature::booleanWith(BooleanOp op, std::vector<Feature> secondary)
+{
+    Feature f;
+    f.kind = FeatureKind::Boolean;
+    f.booleanOp = op;
+    f.secondary = std::move(secondary);
+    return f;
+}
 
 void FeatureStack::add(Feature f) { m_features.push_back(std::move(f)); }
 void FeatureStack::insert(std::size_t index, Feature f)
@@ -115,30 +123,39 @@ Body buildBase(const Feature& f)
 }
 }  // namespace
 
-Body FeatureStack::evaluate() const
+namespace {
+// Evaluate a feature list (base + modifiers) into a solid. Shared by the
+// top-level stack and each Boolean feature's secondary sub-model; `depth` bounds
+// nesting so a maliciously deep tree can't overflow the stack.
+Body evaluateFeatures(const std::vector<Feature>& features, int depth)
 {
-    if (m_features.empty() || !m_features[0].isBase()) return Body{};
+    if (features.empty() || !features[0].isBase() || depth > 64) return Body{};
 
-    Body cur = buildBase(m_features[0]);
+    Body cur = buildBase(features[0]);
 
-    for (std::size_t k = 1; k < m_features.size(); ++k) {
-        const Feature& f = m_features[k];
+    for (std::size_t k = 1; k < features.size(); ++k) {
+        const Feature& f = features[k];
         Body next;
         bool applied = false;
         switch (f.kind) {
-            case FeatureKind::Transform: {
+            case FeatureKind::Transform:
                 next = cur;
                 applied = next.transform(f.xform);  // false on unsupported/non-finite
                 break;
-            }
-            case FeatureKind::Chamfer: {
+            case FeatureKind::Chamfer:
                 next = chamferBoxEdge(cur, f.axis, f.s1, f.s2, f.amount);
                 applied = next.faceCount() > 0;
                 break;
-            }
-            case FeatureKind::Fillet: {
+            case FeatureKind::Fillet:
                 next = filletBoxEdge(cur, f.axis, f.s1, f.s2, f.amount, f.segments);
                 applied = next.faceCount() > 0;
+                break;
+            case FeatureKind::Boolean: {
+                const Body secondary = evaluateFeatures(f.secondary, depth + 1);
+                if (secondary.faceCount() > 0) {
+                    next = booleanToBody(cur, secondary, f.booleanOp);
+                    applied = next.faceCount() > 0;
+                }
                 break;
             }
             default:
@@ -152,12 +169,15 @@ Body FeatureStack::evaluate() const
     if (!cur.checkIntegrity().ok) return Body{};
     return cur;
 }
+}  // namespace
+
+Body FeatureStack::evaluate() const { return evaluateFeatures(m_features, 0); }
 
 // ──────────── Serialization ──────────────────────────────────────────────────
 
 namespace {
 constexpr std::uint32_t kStackMagic = 0x5346584Eu;  // 'NXFS'
-constexpr std::uint32_t kStackVersion = 1u;
+constexpr std::uint32_t kStackVersion = 2u;  // v2 adds Boolean features (op + secondary sub-stack)
 
 void putU8(std::vector<std::uint8_t>& o, std::uint8_t v) { o.push_back(v); }
 void putU32(std::vector<std::uint8_t>& o, std::uint32_t v)
@@ -214,6 +234,10 @@ struct Reader {
     }
 };
 
+// Recursive: a Boolean feature carries a secondary sub-stack. The common record
+// layout is byte-identical to v1; Boolean-only data (op + secondary list) is
+// appended ONLY when kind==Boolean, so a v1 blob (which has no Boolean features)
+// serializes and deserializes identically under v2.
 void writeFeature(std::vector<std::uint8_t>& o, const Feature& f)
 {
     putU8(o, static_cast<std::uint8_t>(f.kind));
@@ -234,13 +258,19 @@ void writeFeature(std::vector<std::uint8_t>& o, const Feature& f)
     putVec3(o, f.axisDir);
     putU32(o, static_cast<std::uint32_t>(f.profile.size()));
     for (const Vec3& p : f.profile) putVec3(o, p);
+    if (f.kind == FeatureKind::Boolean) {
+        putU8(o, static_cast<std::uint8_t>(f.booleanOp));
+        putU32(o, static_cast<std::uint32_t>(f.secondary.size()));
+        for (const Feature& s : f.secondary) writeFeature(o, s);
+    }
 }
 
-bool readFeature(Reader& r, Feature& f)
+bool readFeature(Reader& r, Feature& f, int depth)
 {
+    if (depth > 64) return false;  // bound recursion on hostile input
     std::uint8_t kind = 0;
     if (!r.u8(kind)) return false;
-    if (kind > static_cast<std::uint8_t>(FeatureKind::Fillet)) return false;  // unknown kind
+    if (kind > static_cast<std::uint8_t>(FeatureKind::Boolean)) return false;  // unknown kind
     f.kind = static_cast<FeatureKind>(kind);
     if (!r.f32(f.w) || !r.f32(f.h) || !r.f32(f.d) || !r.f32(f.amount)) return false;
     if (!r.u32(f.segments) || !r.u32(f.lat) || !r.u32(f.lon)) return false;
@@ -254,6 +284,17 @@ bool readFeature(Reader& r, Feature& f)
     f.profile.resize(n);
     for (Vec3& p : f.profile)
         if (!r.vec3(p)) return false;
+    if (f.kind == FeatureKind::Boolean) {
+        std::uint8_t op = 0;
+        if (!r.u8(op)) return false;
+        if (op > static_cast<std::uint8_t>(BooleanOp::Difference)) return false;
+        f.booleanOp = static_cast<BooleanOp>(op);
+        std::uint32_t sn = 0;
+        if (!r.count(sn)) return false;
+        f.secondary.resize(sn);
+        for (Feature& s : f.secondary)
+            if (!readFeature(r, s, depth + 1)) return false;
+    }
     return true;
 }
 }  // namespace
@@ -279,7 +320,7 @@ std::optional<FeatureStack> FeatureStack::deserialize(const std::vector<std::uin
     FeatureStack s;
     for (std::uint32_t i = 0; i < n; ++i) {
         Feature f;
-        if (!readFeature(r, f)) return std::nullopt;
+        if (!readFeature(r, f, 0)) return std::nullopt;
         s.add(std::move(f));
     }
     if (!r.ok) return std::nullopt;
