@@ -832,6 +832,63 @@ TEST(AnalyticBRepExactPredicate, FacePlaneSideBeatsNaiveFloat)
     EXPECT_EQ(body->facePlaneSide(0, probe), body->facePlaneSide(0, probe));
 }
 
+// ──────────── Exact segment-vs-triangle predicate ────────────────────────────
+
+// segmentCrossesTriangleExact agrees with an exact int64 point-in-triangle ground
+// truth on a near-degenerate sweep, while a naive float32 Möller–Trumbore
+// barycentric test mis-classifies near the hypotenuse at large coordinates.
+TEST(AnalyticBRepExactPredicate, SegmentTriangleBeatsNaiveFloat)
+{
+    const float K = 8000000.f;  // float32-exact (< 2^24); products break float32 M-T
+    const Vec3 v0{0, 0, 0}, v1{K, 0, 0}, v2{0, K, 0};  // right triangle in z=0
+
+    // Naive float32 Möller–Trumbore crossing test for a vertical downward segment.
+    auto naiveCross = [&](const Vec3& A) -> bool {
+        const Vec3 d{0.f, 0.f, -2.f};
+        const Vec3 e1{v1.x - v0.x, v1.y - v0.y, v1.z - v0.z};
+        const Vec3 e2{v2.x - v0.x, v2.y - v0.y, v2.z - v0.z};
+        const Vec3 h{d.y * e2.z - d.z * e2.y, d.z * e2.x - d.x * e2.z, d.x * e2.y - d.y * e2.x};
+        const float a = e1.x * h.x + e1.y * h.y + e1.z * h.z;
+        if (a == 0.f) return false;
+        const float f = 1.f / a;
+        const Vec3 s{A.x - v0.x, A.y - v0.y, A.z - v0.z};
+        const float u = f * (s.x * h.x + s.y * h.y + s.z * h.z);
+        const Vec3 q{s.y * e1.z - s.z * e1.y, s.z * e1.x - s.x * e1.z, s.x * e1.y - s.y * e1.x};
+        const float vv = f * (d.x * q.x + d.y * q.y + d.z * q.z);
+        return u >= 0.f && u <= 1.f && vv >= 0.f && u + vv <= 1.f;
+    };
+
+    int definite = 0, exactWrong = 0, naiveWrong = 0;
+    for (int i = 0; i < 40; ++i) {
+        for (int m = -6; m <= 6; ++m) {
+            const long long Qx = 4000000LL + static_cast<long long>(i) * 17;
+            const long long Qy = 4000000LL - static_cast<long long>(i) * 17 + m;
+            // Ground truth (exact int64): strictly inside the right triangle.
+            const bool gtInside = Qx > 0 && Qy > 0 && (Qx + Qy) < static_cast<long long>(K);
+            if (Qx + Qy == static_cast<long long>(K)) continue;  // on the hypotenuse — skip
+            const Vec3 A{static_cast<float>(Qx), static_cast<float>(Qy), 1.f};
+            const Vec3 B{static_cast<float>(Qx), static_cast<float>(Qy), -1.f};
+            bool degenerate = false;
+            const bool exact = segmentCrossesTriangleExact(A, B, v0, v1, v2, degenerate);
+            if (degenerate) continue;  // exact edge/vertex hit
+            ++definite;
+            if (exact != gtInside) ++exactWrong;
+            if (naiveCross(A) != gtInside) ++naiveWrong;
+        }
+    }
+    EXPECT_GT(definite, 100);
+    EXPECT_EQ(exactWrong, 0);   // orient3D-based test is exact on every definite point
+    EXPECT_GT(naiveWrong, 0);   // naive float32 barycentric mis-classifies near the edge
+
+    // A clean interior crossing and a clean miss, and determinism.
+    bool dg = false;
+    EXPECT_TRUE(segmentCrossesTriangleExact({1000000.f, 1000000.f, 1.f},
+                                            {1000000.f, 1000000.f, -1.f}, v0, v1, v2, dg));
+    EXPECT_FALSE(dg);
+    EXPECT_FALSE(segmentCrossesTriangleExact({7000000.f, 7000000.f, 1.f},
+                                             {7000000.f, 7000000.f, -1.f}, v0, v1, v2, dg));
+}
+
 // surfacePoint dispatches to the analytic Surface::eval for non-NURBS faces.
 TEST(AnalyticBRep, SurfacePointUsesAnalyticEvalForPlaneFaces)
 {

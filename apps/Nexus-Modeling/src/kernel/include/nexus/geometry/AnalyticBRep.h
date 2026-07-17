@@ -516,4 +516,22 @@ private:
 // follow-up. Deterministic.
 void imprintMutually(Body& a, Body& b, Tolerance tol = {});
 
+// EXACT segment-vs-triangle intersection test built on the Shewchuk adaptive
+// orient3D predicate — an exact building block for the boolean's ray-parity /
+// segment-intersection decisions (planar paths; a fully-exact ray parity over a
+// tessellated CURVED shell additionally needs Simulation-of-Simplicity, since
+// pole triangles are near-coplanar with interior query points).
+// Returns true iff the segment A→B pierces the triangle (v0,v1,v2) interior: A
+// and B strictly on opposite sides of the triangle's plane AND the line A→B
+// passing on the same rotational side of all three edges — every branch decided
+// from the EXACT sign of orient3D. A coplanar segment or a degenerate (zero-area)
+// triangle contributes nothing (returns false, no flag). `degenerate` is set
+// (and the result is false) when EXACTLY one endpoint lies on the plane or the
+// line grazes an edge/vertex exactly (an exact orient3D zero), so the caller can
+// re-cast. A near-miss is NOT flagged, unlike a float barycentric band, which
+// both false-flags near-misses and can mis-sign true crossings under
+// cancellation. Deterministic.
+[[nodiscard]] bool segmentCrossesTriangleExact(const Vec3& A, const Vec3& B, const Vec3& v0,
+                                               const Vec3& v1, const Vec3& v2, bool& degenerate);
+
 }  // namespace nexus::geometry::brep

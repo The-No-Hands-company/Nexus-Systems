@@ -1370,7 +1370,10 @@ Body::PointContainment Body::classifyPoint(const Vec3& p, Tolerance tol) const
 
     // Parity ray cast. Try a small fixed set of irrational directions and use the
     // first that yields no grazing/degenerate hit, so the count is exact and the
-    // result is deterministic.
+    // result is deterministic. (Fully-exact orient3D parity over a tessellated
+    // curved shell needs Simulation-of-Simplicity because pole triangles are
+    // near-coplanar with interior query points; the exact segment predicate
+    // `segmentCrossesTriangleExact` is available for planar boolean paths.)
     static constexpr Vec3 kDirs[4] = {
         {0.4680f, 0.6301f, 0.6201f},
         {0.8017f, -0.2673f, 0.5345f},
@@ -2949,6 +2952,35 @@ void imprintMutually(Body& a, Body& b, Tolerance tol)
 {
     imprintOneWay(a, b, tol);
     imprintOneWay(b, a, tol);
+}
+
+bool segmentCrossesTriangleExact(const Vec3& A, const Vec3& B, const Vec3& v0, const Vec3& v1,
+                                 const Vec3& v2, bool& degenerate)
+{
+    // A and B must lie strictly on opposite sides of the triangle's plane.
+    const double oa = RobustPredicates::orient3D(v0, v1, v2, A);
+    const double ob = RobustPredicates::orient3D(v0, v1, v2, B);
+    // Both zero ⇒ the segment is coplanar with the triangle, OR the triangle is
+    // degenerate (zero-area: orient3D is 0 for every 4th point). Neither is a
+    // transversal crossing, so contribute nothing WITHOUT flagging a retry.
+    if (oa == 0.0 && ob == 0.0) return false;
+    if (oa == 0.0 || ob == 0.0) {
+        degenerate = true;  // exactly one endpoint on the plane ⇒ genuine grazing
+        return false;
+    }
+    if ((oa > 0.0) == (ob > 0.0)) return false;  // same side ⇒ no crossing
+
+    // The line A→B must pass on the SAME rotational side of all three edges to
+    // pierce the interior. Each orient3D is exactly signed.
+    const double e0 = RobustPredicates::orient3D(A, B, v0, v1);
+    const double e1 = RobustPredicates::orient3D(A, B, v1, v2);
+    const double e2 = RobustPredicates::orient3D(A, B, v2, v0);
+    if (e0 == 0.0 || e1 == 0.0 || e2 == 0.0) {
+        degenerate = true;  // the line grazes an edge/vertex exactly
+        return false;
+    }
+    const bool p0 = e0 > 0.0, p1 = e1 > 0.0, p2 = e2 > 0.0;
+    return p0 == p1 && p1 == p2;
 }
 
 }  // namespace nexus::geometry::brep
