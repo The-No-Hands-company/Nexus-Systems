@@ -2755,6 +2755,103 @@ Body extrudeProfile(const std::vector<Vec3>& profile, const Vec3& dir)
     return body.has_value() ? std::move(*body) : Body{};
 }
 
+Body loftProfiles(const std::vector<Vec3>& bottom, const std::vector<Vec3>& top)
+{
+    const size_t n = bottom.size();
+    if (n < 3 || top.size() != n) return Body{};
+    for (const Vec3& p : bottom)
+        if (!isFinite(p)) return Body{};
+    for (const Vec3& p : top)
+        if (!isFinite(p)) return Body{};
+
+    auto newell = [](const std::vector<Vec3>& poly) {
+        Vec3 N{0.f, 0.f, 0.f};
+        const size_t c = poly.size();
+        for (size_t i = 0; i < c; ++i) {
+            const Vec3& a = poly[i];
+            const Vec3& b = poly[(i + 1) % c];
+            N.x += (a.y - b.y) * (a.z + b.z);
+            N.y += (a.z - b.z) * (a.x + b.x);
+            N.z += (a.x - b.x) * (a.y + b.y);
+        }
+        return N;
+    };
+    auto centroid = [](const std::vector<Vec3>& poly) {
+        Vec3 c{0.f, 0.f, 0.f};
+        for (const Vec3& p : poly) c = add(c, p);
+        return scale(c, 1.f / static_cast<float>(poly.size()));
+    };
+
+    Vec3 N = newell(bottom);
+    const float area2 = length(N);
+    if (area2 < 1e-10f) return Body{};       // degenerate bottom
+    if (length(newell(top)) < 1e-10f) return Body{};  // degenerate top
+    N = scale(N, 1.f / area2);               // bottom plane normal (CCW about +N)
+
+    // Orient so +N points from the bottom toward the top (positive-volume solid).
+    const float h = dot(sub(centroid(top), centroid(bottom)), N);
+    if (h > -1e-9f && h < 1e-9f) return Body{};  // top in the bottom's plane → undefined
+    std::vector<Vec3> b = bottom, t = top;
+    if (h < 0.f) {
+        std::reverse(b.begin(), b.end());
+        std::reverse(t.begin(), t.end());  // reverse BOTH → the i↔i pairing is preserved
+        N = {-N.x, -N.y, -N.z};
+    }
+
+    // Points: [0,n) bottom, [n,2n) top.
+    std::vector<Vec3> pts;
+    pts.reserve(2 * n);
+    for (const Vec3& p : b) pts.push_back(p);
+    for (const Vec3& p : t) pts.push_back(p);
+
+    const Vec3 uAxis = normalize(sub(b[1], b[0]));
+    std::vector<Body::FaceDef> defs;
+    defs.reserve(n + 2);
+
+    // Bottom cap: reversed order → outward −N.
+    {
+        Body::FaceDef fd;
+        for (size_t k = 0; k < n; ++k) fd.loop.push_back(static_cast<uint32_t>(n - 1 - k));
+        fd.surface.kind = SurfaceKind::Plane;
+        fd.surface.origin = b[0];
+        fd.surface.normal = {-N.x, -N.y, -N.z};
+        fd.surface.uAxis = uAxis;
+        defs.push_back(std::move(fd));
+    }
+    // Top cap: forward (shifted) order → outward +Nt (from the top's own winding).
+    {
+        Body::FaceDef fd;
+        for (size_t k = 0; k < n; ++k) fd.loop.push_back(static_cast<uint32_t>(n + k));
+        Vec3 Nt = newell(t);
+        Nt = normalize(Nt);
+        fd.surface.kind = SurfaceKind::Plane;
+        fd.surface.origin = pts[n];
+        fd.surface.normal = Nt;
+        fd.surface.uAxis = normalize(sub(t[1], t[0]));
+        defs.push_back(std::move(fd));
+    }
+    // Side quads: [b_i, b_{i+1}, t_{i+1}, t_i] — CCW from outside (ruled trapezoid;
+    // planar for similar scaled profiles, faceted otherwise).
+    for (size_t i = 0; i < n; ++i) {
+        const uint32_t bi = static_cast<uint32_t>(i);
+        const uint32_t bj = static_cast<uint32_t>((i + 1) % n);
+        const uint32_t tj = static_cast<uint32_t>(n + (i + 1) % n);
+        const uint32_t ti = static_cast<uint32_t>(n + i);
+        Body::FaceDef fd;
+        fd.loop = {bi, bj, tj, ti};
+        const Vec3 e1 = sub(pts[bj], pts[bi]);
+        const Vec3 e2 = sub(pts[ti], pts[bi]);
+        fd.surface.kind = SurfaceKind::Plane;
+        fd.surface.origin = pts[bi];
+        fd.surface.normal = normalize(cross(e1, e2));
+        fd.surface.uAxis = normalize(e1);
+        defs.push_back(std::move(fd));
+    }
+
+    auto body = Body::fromFaces(pts, defs);
+    return body.has_value() ? std::move(*body) : Body{};
+}
+
 Body makeFacetedCylinder(float radius, float height, uint32_t segments)
 {
     const uint32_t n = std::max(segments, 3u);

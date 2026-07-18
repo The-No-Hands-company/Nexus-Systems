@@ -479,6 +479,19 @@ private:
 // `dir` parallel to the profile plane (zero projected height).
 [[nodiscard]] Body extrudeProfile(const std::vector<Vec3>& profile, const Vec3& dir);
 
+// Loft (ruled solid) between two closed planar profiles with the SAME vertex
+// count and CORRESPONDING order (vertex i of `bottom` pairs with vertex i of
+// `top`): a bottom cap, a top cap, and one quad side per matching edge pair,
+// assembled watertight with outward-consistent winding. Generalises
+// extrudeProfile (a loft whose top is the bottom translated). For similar
+// profiles scaled about a common axis the sides are planar trapezoids and the
+// volume is the exact frustum h/3·(A₀+A₁+√(A₀·A₁)). Returns an empty Body for
+// degenerate input: fewer than 3 points, mismatched vertex counts, a non-finite
+// coordinate, a near-zero-area profile, or a top whose centroid lies in the
+// bottom's plane (no offset → an undefined loft). Inconsistent windings that
+// cannot sew manifold also yield an empty Body.
+[[nodiscard]] Body loftProfiles(const std::vector<Vec3>& bottom, const std::vector<Vec3>& top);
+
 // An ALL-PLANAR faceted cylinder: a regular `segments`-gon prism along +Z of the
 // given radius/height, centred at the origin. Unlike makeCylinder (whose side
 // carries a curved Cylinder surface), every face here is a Plane, so it composes
