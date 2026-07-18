@@ -606,4 +606,20 @@ void imprintMutually(Body& a, Body& b, Tolerance tol = {});
 [[nodiscard]] bool segmentCrossesTriangleExact(const Vec3& A, const Vec3& B, const Vec3& v0,
                                                const Vec3& v1, const Vec3& v2, bool& degenerate);
 
+// EXACT, never-ambiguous side of a point relative to a triangle's plane, with the
+// degenerate (exactly-coplanar) case resolved by Simulation-of-Simplicity — the
+// first proven building block toward an exact ray-parity classifyPoint on curved
+// shells (whose pole triangles are coplanar with interior query points, so
+// orient3D returns EXACTLY 0 pervasively and a plain exact test stalls).
+//
+// Returns +1 or −1 for any NON-degenerate triangle (never 0): when
+// orient3D(v0,v1,v2,p) ≠ 0 it is that exact sign; when it is exactly 0 (p on the
+// plane) the tie is broken by the consistent symbolic perturbation p → p+(ε,ε²,ε³)
+// as ε→0⁺, whose sign is −sign of the first non-zero component of the geometric
+// normal g=(v1−v0)×(v2−v0) — each component an EXACT orient2D minor. Returns 0
+// ONLY for a genuinely degenerate (zero-area / collinear) triangle, which
+// contributes nothing to a parity count. Deterministic; the same p is resolved
+// independently and consistently against every triangle.
+[[nodiscard]] int pointPlaneSideSoS(const Vec3& v0, const Vec3& v1, const Vec3& v2, const Vec3& p);
+
 }  // namespace nexus::geometry::brep

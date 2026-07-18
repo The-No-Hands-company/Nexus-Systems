@@ -3455,4 +3455,26 @@ bool segmentCrossesTriangleExact(const Vec3& A, const Vec3& B, const Vec3& v0, c
     return p0 == p1 && p1 == p2;
 }
 
+int pointPlaneSideSoS(const Vec3& v0, const Vec3& v1, const Vec3& v2, const Vec3& p)
+{
+    const double o = RobustPredicates::orient3D(v0, v1, v2, p);
+    if (o > 0.0) return 1;
+    if (o < 0.0) return -1;
+
+    // p lies exactly on the plane (or the triangle is degenerate). Resolve the
+    // tie by the consistent symbolic perturbation p → p+(ε,ε²,ε³): since
+    // orient3D is NEGATIVE on the +g side (g=(v1−v0)×(v2−v0)), the perturbed sign
+    // is −sign(ε·gx + ε²·gy + ε³·gz), i.e. −sign of the FIRST non-zero component
+    // of g in x,y,z order. Each component is an EXACT orient2D minor over the
+    // triangle's projection onto a coordinate plane.
+    using nexus::geometry::Vec2;
+    const double gx = RobustPredicates::orient2D({v0.y, v0.z}, {v1.y, v1.z}, {v2.y, v2.z});
+    if (gx != 0.0) return gx > 0.0 ? -1 : 1;
+    const double gy = RobustPredicates::orient2D({v0.z, v0.x}, {v1.z, v1.x}, {v2.z, v2.x});
+    if (gy != 0.0) return gy > 0.0 ? -1 : 1;
+    const double gz = RobustPredicates::orient2D({v0.x, v0.y}, {v1.x, v1.y}, {v2.x, v2.y});
+    if (gz != 0.0) return gz > 0.0 ? -1 : 1;
+    return 0;  // g == 0 ⇒ a genuinely degenerate (zero-area / collinear) triangle
+}
+
 }  // namespace nexus::geometry::brep
