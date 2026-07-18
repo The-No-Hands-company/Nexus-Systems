@@ -7,6 +7,8 @@
 
 #include <gtest/gtest.h>
 
+#include <vector>
+
 namespace nexus::geometry::brep::testing {
 
 using nexus::render::Vec3;
@@ -70,6 +72,36 @@ TEST(BRepClassifyPoint, EmptyBodyIsOutside)
 {
     Body b;  // no faces
     EXPECT_EQ(b.classifyPoint({0.f, 0.f, 0.f}), PC::Outside);
+}
+
+// The exact SoS ray-parity (classifyPoint now uses segmentCrossesTriangleSoS)
+// resolves the pole-coplanarity degeneracies that the old float ray-cast could
+// only paper over with multi-direction retries — the query point exactly at a
+// curved solid's CENTRE (coplanar with every pole triangle) and on the pole AXIS
+// classify exactly and deterministically, on both the analytic and the faceted
+// primitives.
+TEST(BRepClassifyPoint, PoleCoplanarDegeneraciesResolvedExactly)
+{
+    struct Solid { const char* name; Body body; };
+    std::vector<Solid> solids;
+    solids.push_back({"sphere", makeSphere(1.f, 8, 12)});
+    solids.push_back({"cylinder", makeCylinder(1.f, 2.f, 16)});
+    solids.push_back({"faceted-sphere", makeFacetedSphere(1.f, 8, 12)});
+    solids.push_back({"faceted-cylinder", makeFacetedCylinder(1.f, 2.f, 12)});
+
+    for (const Solid& s : solids) {
+        // Centre (coplanar with the pole triangles) is unambiguously Inside.
+        EXPECT_EQ(s.body.classifyPoint({0, 0, 0}), PC::Inside) << s.name;
+        // On the pole AXIS: a point inside is Inside, one beyond the pole Outside.
+        EXPECT_EQ(s.body.classifyPoint({0, 0, 0.5f}), PC::Inside) << s.name;
+        EXPECT_EQ(s.body.classifyPoint({0, 0, 5.f}), PC::Outside) << s.name;
+        EXPECT_EQ(s.body.classifyPoint({5, 0, 0}), PC::Outside) << s.name;
+        // Deterministic across repeats (a single fixed ray direction, no retry).
+        for (const Vec3& p : {Vec3{0, 0, 0}, Vec3{0, 0, 0.5f}, Vec3{0.5f, 0, 0}}) {
+            const PC first = s.body.classifyPoint(p);
+            for (int r = 0; r < 4; ++r) EXPECT_EQ(s.body.classifyPoint(p), first) << s.name;
+        }
+    }
 }
 
 }  // namespace nexus::geometry::brep::testing

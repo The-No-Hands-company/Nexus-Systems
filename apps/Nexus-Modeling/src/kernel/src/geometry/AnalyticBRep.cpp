@@ -124,34 +124,6 @@ uint64_t dirKey(uint32_t a, uint32_t b)
 {
     return (static_cast<uint64_t>(a) << 32) | b;
 }
-// Ray/triangle intersection (Möller–Trumbore). On a forward hit (t > tEps)
-// returns true and flags `degenerate` when the hit grazes an edge/vertex or the
-// ray is near-parallel — the caller then re-casts along a different direction so
-// crossing parity stays exact.
-bool rayTriangle(const Vec3& o, const Vec3& d, const Vec3& v0, const Vec3& v1,
-                 const Vec3& v2, bool& degenerate)
-{
-    constexpr float kParEps = 1e-8f;   // near-parallel determinant
-    constexpr float kEdgeEps = 1e-6f;  // barycentric edge/vertex grazing
-    constexpr float kTEps = 1e-7f;     // forward-hit threshold
-    const Vec3 e1 = sub(v1, v0), e2 = sub(v2, v0);
-    const Vec3 h = cross(d, e2);
-    const float a = dot(e1, h);
-    if (a > -kParEps && a < kParEps) return false;  // parallel: measure-zero, skip
-    const float f = 1.f / a;
-    const Vec3 s = sub(o, v0);
-    const float u = f * dot(s, h);
-    const Vec3 q = cross(s, e1);
-    const float v = f * dot(d, q);
-    const float t = f * dot(e2, q);
-    // Grazing an edge/vertex ⇒ ambiguous parity; ask for a re-cast.
-    if (u > -kEdgeEps && u < kEdgeEps) degenerate = true;
-    if (v > -kEdgeEps && v < kEdgeEps) degenerate = true;
-    if (u + v > 1.f - kEdgeEps && u + v < 1.f + kEdgeEps) degenerate = true;
-    if (t > -kTEps && t < kTEps) degenerate = true;
-    if (u < 0.f || u > 1.f || v < 0.f || u + v > 1.f) return false;
-    return t > kTEps;
-}
 
 // Squared distance from point p to triangle (a,b,c). Standard region-based
 // closest-point-on-triangle (Ericson, Real-Time Collision Detection).
@@ -1384,40 +1356,27 @@ Body::PointContainment Body::classifyPoint(const Vec3& p, Tolerance tol) const
             return PointContainment::OnBoundary;
     }
 
-    // Parity ray cast. Try a small fixed set of irrational directions and use the
-    // first that yields no grazing/degenerate hit, so the count is exact and the
-    // result is deterministic. (Fully-exact orient3D parity over a tessellated
-    // curved shell needs Simulation-of-Simplicity because pole triangles are
-    // near-coplanar with interior query points; the exact segment predicate
-    // `segmentCrossesTriangleExact` is available for planar boolean paths.)
-    static constexpr Vec3 kDirs[4] = {
-        {0.4680f, 0.6301f, 0.6201f},
-        {0.8017f, -0.2673f, 0.5345f},
-        {-0.3333f, 0.6667f, -0.6667f},
-        {0.5774f, -0.5774f, -0.5774f},
-    };
-    for (const Vec3& raw : kDirs) {
-        const Vec3 d = normalize(raw);
-        bool degenerate = false;
-        int crossings = 0;
-        for (size_t i = 0; i < triCount; ++i) {
-            const auto& idx = topo.face(i).indices;
-            if (idx.size() != 3) continue;
-            if (rayTriangle(p, d, pos[idx[0]], pos[idx[1]], pos[idx[2]], degenerate))
-                ++crossings;
-            if (degenerate) break;  // ambiguous: re-cast along the next direction
-        }
-        if (!degenerate)
-            return (crossings & 1) ? PointContainment::Inside : PointContainment::Outside;
+    // EXACT parity ray cast (Simulation-of-Simplicity). Cast from p along ONE fixed
+    // generic direction to a far endpoint B beyond every mesh vertex, and count the
+    // triangles the segment p→B crosses via segmentCrossesTriangleSoS. SoS
+    // symbolically perturbs p so NO test is ever ambiguous — a query point coplanar
+    // with a pole triangle, a ray through a shared edge/vertex — all resolve
+    // consistently (a ray through a shared edge is counted for exactly one of the
+    // two triangles), so the odd/even parity is exact and a single direction
+    // suffices (no retry). Zero-area tessellation triangles contribute nothing.
+    float R = 0.f;
+    for (const auto& q : pos) {
+        const float dq = length(sub(q, p));
+        if (dq > R) R = dq;
     }
-    // Extremely unlikely fallback: last direction's parity (all directions grazed).
-    const Vec3 d = normalize(kDirs[0]);
-    bool degenerate = false;
+    const Vec3 d = normalize(Vec3{0.4680f, 0.6301f, 0.6201f});  // one fixed generic direction
+    const Vec3 B = add(p, scale(d, 2.f * R + 1.f));             // beyond every vertex
+
     int crossings = 0;
     for (size_t i = 0; i < triCount; ++i) {
         const auto& idx = topo.face(i).indices;
         if (idx.size() != 3) continue;
-        if (rayTriangle(p, d, pos[idx[0]], pos[idx[1]], pos[idx[2]], degenerate)) ++crossings;
+        if (segmentCrossesTriangleSoS(p, B, pos[idx[0]], pos[idx[1]], pos[idx[2]])) ++crossings;
     }
     return (crossings & 1) ? PointContainment::Inside : PointContainment::Outside;
 }
