@@ -530,12 +530,15 @@ private:
 // Partial revolve: sweep a closed planar profile through `sweepRadians` (0 < θ <
 // 2π) into a watertight ARC solid — the swept side bands PLUS two planar END CAPS
 // (the profile at angle 0 and at θ). Unlike the full revolve (a genus-1 ring),
-// the capped arc is genus 0 (euler 2), with volume = (θ/2π)·(full Pappus volume)
-// = θ·R̄·A. θ ≥ 2π−ε delegates to the full revolveProfile (byte-identical).
-// Returns an empty Body for degenerate input: θ ≤ 0 or non-finite, fewer than 3
-// profile points, segments < 3, a non-finite coordinate, a zero-length axis, a
-// near-zero-area profile, or a profile that touches OR crosses the axis (an
-// axis-touching pie-slice with a pole is a follow-up).
+// the capped arc is genus 0 (euler 2). A profile that TOUCHES the axis is
+// supported: on-axis vertices weld to a single pole and the adjacent bands
+// collapse to triangle fans, giving a pie-slice / cylindrical-sector solid (still
+// genus 0, euler 2). For a non-axis-touching (ring-offset) profile the volume is
+// (θ/2π)·(full Pappus volume) = θ·R̄·A. θ ≥ 2π−ε delegates to the full
+// revolveProfile (byte-identical). Returns an empty Body for degenerate input:
+// θ ≤ 0 or non-finite, fewer than 3 profile points, segments < 3, a non-finite
+// coordinate, a zero-length axis, a near-zero-area profile, a profile that
+// CROSSES to the other side of the axis, or one lying entirely on the axis.
 [[nodiscard]] Body revolveProfilePartial(const std::vector<Vec3>& profile, const Vec3& axisOrigin,
                                          const Vec3& axisDir, uint32_t segments, float sweepRadians);
 

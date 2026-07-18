@@ -180,12 +180,50 @@ TEST(BRepRevolvePartial, DegenerateInputRejected)
     EXPECT_EQ(revolveProfilePartial({{2, 0, 0}, {3, 0, 0}}, {0, 0, 0}, {0, 0, 1}, 16, half)
                   .faceCount(), 0u);                                                        // <3 pts
     EXPECT_EQ(revolveProfilePartial(sq, {0, 0, 0}, {0, 0, 0}, 16, half).faceCount(), 0u);   // zero axis
-    // Axis-touching profile (a vertex on the axis) is unsupported for partial.
-    const std::vector<Vec3> touch = {{0, 0, 0}, {1, 0, 0}, {1, 0, 1}};
-    EXPECT_EQ(revolveProfilePartial(touch, {0, 0, 0}, {0, 0, 1}, 16, half).faceCount(), 0u);
+    // A profile that CROSSES the axis (both radial sides) is still rejected.
+    const std::vector<Vec3> crossing = {{-1, 0, 0}, {1, 0, 0}, {1, 0, 1}, {-1, 0, 1}};
+    EXPECT_EQ(revolveProfilePartial(crossing, {0, 0, 0}, {0, 0, 1}, 16, half).faceCount(), 0u);
     // Non-finite sweep angle.
     const float inf = std::bit_cast<float>(0x7F800000u);
     EXPECT_EQ(revolveProfilePartial(sq, {0, 0, 0}, {0, 0, 1}, 16, inf).faceCount(), 0u);
+}
+
+// An axis-TOUCHING profile (a rectangle with one edge on the axis) partially
+// revolved is a CYLINDRICAL SECTOR (pie slice): on-axis vertices weld to poles,
+// the shell stays genus-0 (euler 2), and the faceted volume of the R=2/h=1
+// rectangle over angle θ is ½·R²·n·sin(θ/n)·h = 2·n·sin(θ/n) → 2θ.
+TEST(BRepRevolvePartial, AxisTouchingIsCylindricalSector)
+{
+    const std::vector<Vec3> rect = {{0, 0, 0}, {2, 0, 0}, {2, 0, 1}, {0, 0, 1}};  // x=0 edge on axis
+    for (float frac : {0.25f, 0.5f}) {
+        const float theta = static_cast<float>(2.0 * M_PI) * frac;
+        const uint32_t n = 64;
+        const Body b = revolveProfilePartial(rect, {0, 0, 0}, {0, 0, 1}, n, theta);
+        const auto ig = b.checkIntegrity();
+        ASSERT_TRUE(ig.ok) << "frac=" << frac << ": " << ig.reason;
+        EXPECT_EQ(ig.euler, 2) << "frac=" << frac;          // pie slice is genus 0
+        EXPECT_EQ(ig.boundaryEdges, 0u) << "frac=" << frac;  // watertight
+        EXPECT_TRUE(b.isClosed()) << "frac=" << frac;
+        EXPECT_TRUE(b.checkGeometry().ok) << b.checkGeometry().reason;
+        const double expected = 2.0 * n * std::sin(theta / n);  // ½·4·1·n·sin(θ/n)
+        EXPECT_GT(b.massProperties().volume, 0.f) << "frac=" << frac;   // outward winding
+        EXPECT_NEAR(b.massProperties().volume, static_cast<float>(expected), 2e-3) << "frac=" << frac;
+    }
+}
+
+// A profile touching the axis at ONE vertex (a right triangle) revolves to a cone
+// sector — still a watertight genus-0 solid with positive volume.
+TEST(BRepRevolvePartial, AxisTouchingConeSector)
+{
+    const std::vector<Vec3> tri = {{0, 0, 0}, {2, 0, 0}, {0, 0, 2}};  // two verts on axis
+    const Body b = revolveProfilePartial(tri, {0, 0, 0}, {0, 0, 1}, 48,
+                                         static_cast<float>(M_PI) * 0.5f);
+    const auto ig = b.checkIntegrity();
+    ASSERT_TRUE(ig.ok) << ig.reason;
+    EXPECT_EQ(ig.euler, 2);
+    EXPECT_TRUE(b.isClosed());
+    EXPECT_TRUE(b.checkGeometry().ok);
+    EXPECT_GT(b.massProperties().volume, 0.f);
 }
 
 TEST(BRepRevolvePartial, Deterministic)

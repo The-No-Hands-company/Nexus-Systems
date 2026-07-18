@@ -3064,18 +3064,21 @@ Body revolveProfilePartial(const std::vector<Vec3>& profile, const Vec3& axisOri
     }
     if (length(Nprof) < 1e-10f) return Body{};
 
-    // Every vertex must be OFF the axis and on the SAME radial side (an
-    // axis-touching partial revolve — a pie-slice with a pole — is a follow-up).
+    // The profile must lie to ONE side of the axis: it may TOUCH the axis (a
+    // vertex on it → a welded pole shared across all angles and both caps), but
+    // not cross to the other side. Off-axis vertices share one radial side.
+    std::vector<bool> onAxis(m, false);
     Vec3 rHat{0.f, 0.f, 0.f};
     bool haveRHat = false;
     for (size_t i = 0; i < m; ++i) {
         const Vec3 v = sub(profile[i], axisOrigin);
         const Vec3 rad = sub(v, scale(n, dot(v, n)));
         const float rl = length(rad);
-        if (rl < 1e-6f) return Body{};  // touches the axis
+        if (rl < 1e-6f) { onAxis[i] = true; continue; }  // pole vertex
         if (!haveRHat) { rHat = scale(rad, 1.f / rl); haveRHat = true; }
         else if (dot(rad, rHat) <= 1e-6f) return Body{};  // crossed to the other side
     }
+    if (!haveRHat) return Body{};  // entirely on the axis → degenerate
 
     auto rot = [&](const Vec3& p, float ang) {
         const Vec3 v = sub(p, axisOrigin);
@@ -3085,15 +3088,22 @@ Body revolveProfilePartial(const std::vector<Vec3>& profile, const Vec3& axisOri
         return add(axisOrigin, r);
     };
 
-    // (segments+1) rotated copies of each profile vertex — an OPEN arc of rings.
+    // An on-axis profile vertex welds to ONE pole point (rotation leaves it
+    // fixed); an off-axis one fans into (segments+1) rotated copies (an OPEN arc).
     std::vector<Vec3> pts;
-    pts.reserve(m * (segments + 1u));
-    for (size_t i = 0; i < m; ++i)
-        for (uint32_t k = 0; k <= segments; ++k)
-            pts.push_back(rot(profile[i], sweepRadians * static_cast<float>(k) /
-                                              static_cast<float>(segments)));
+    std::vector<uint32_t> ringStart(m);
+    for (size_t i = 0; i < m; ++i) {
+        ringStart[i] = static_cast<uint32_t>(pts.size());
+        if (onAxis[i]) {
+            pts.push_back(profile[i]);  // single welded pole
+        } else {
+            for (uint32_t k = 0; k <= segments; ++k)
+                pts.push_back(rot(profile[i], sweepRadians * static_cast<float>(k) /
+                                                  static_cast<float>(segments)));
+        }
+    }
     auto vAt = [&](size_t i, uint32_t k) {
-        return static_cast<uint32_t>(i * (segments + 1u) + k);
+        return onAxis[i] ? ringStart[i] : ringStart[i] + k;
     };
 
     auto planeDef = [&](std::vector<uint32_t> loop) {
@@ -3123,17 +3133,26 @@ Body revolveProfilePartial(const std::vector<Vec3>& profile, const Vec3& axisOri
             defs.push_back(planeDef(std::move(loop)));
         }
     }
-    // Two end caps. The start cap (angle 0) walks the profile FORWARD; the end cap
-    // (angle θ) walks it REVERSED — so each cap's coedges oppose the side band's on
-    // their shared boundary edges, giving a consistent outward-wound closed shell.
+    // Two end caps — the flat radial faces (the profile at angle 0 and at θ). The
+    // start cap walks the profile FORWARD; the end cap REVERSED — so each cap's
+    // coedges oppose the side band's on their shared boundary edges, giving a
+    // consistent outward-wound shell. A cap loop may contain a pole vertex (when
+    // the profile touches the axis); duplicates are deduped so it stays simple.
+    auto addCap = [&](std::vector<uint32_t> loop) {
+        std::vector<uint32_t> simple;
+        for (uint32_t v : loop)
+            if (simple.empty() || simple.back() != v) simple.push_back(v);
+        if (simple.size() >= 2 && simple.front() == simple.back()) simple.pop_back();
+        if (simple.size() >= 3) defs.push_back(planeDef(std::move(simple)));
+    };
     {
         std::vector<uint32_t> start, end;
         start.reserve(m);
         end.reserve(m);
         for (size_t i = 0; i < m; ++i) start.push_back(vAt(i, 0));
         for (size_t i = 0; i < m; ++i) end.push_back(vAt(m - 1 - i, segments));
-        defs.push_back(planeDef(std::move(start)));
-        defs.push_back(planeDef(std::move(end)));
+        addCap(std::move(start));
+        addCap(std::move(end));
     }
 
     auto body = Body::fromFaces(pts, defs);
