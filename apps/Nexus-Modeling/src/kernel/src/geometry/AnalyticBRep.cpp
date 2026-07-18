@@ -3477,4 +3477,40 @@ int pointPlaneSideSoS(const Vec3& v0, const Vec3& v1, const Vec3& v2, const Vec3
     return 0;  // g == 0 ⇒ a genuinely degenerate (zero-area / collinear) triangle
 }
 
+bool segmentCrossesTriangleSoS(const Vec3& p, const Vec3& B, const Vec3& v0, const Vec3& v1,
+                               const Vec3& v2)
+{
+    // Plane-side of the two ray endpoints, exact even when p (or B) is coplanar.
+    const int sp = pointPlaneSideSoS(v0, v1, v2, p);
+    const int sb = pointPlaneSideSoS(v0, v1, v2, B);
+    if (sp == 0 || sb == 0) return false;  // degenerate (zero-area) triangle
+    if (sp == sb) return false;            // both endpoints on the same side → no crossing
+
+    // The perturbed ray-line p→B must pass on the SAME rotational side of all three
+    // edges. Each edge test is orient3D(p,B,vi,vj); an exact zero (the ray-line
+    // through the edge/vertex) is resolved by the p→p+(ε,ε²,ε³) perturbation, whose
+    // sign is −sign(first non-zero of (B−p)×(vj−vi)) (κ=−1, calibrated).
+    const double dx = static_cast<double>(B.x) - p.x;
+    const double dy = static_cast<double>(B.y) - p.y;
+    const double dz = static_cast<double>(B.z) - p.z;
+    auto edgeSide = [&](const Vec3& vi, const Vec3& vj) -> int {
+        const double e = RobustPredicates::orient3D(p, B, vi, vj);
+        if (e > 0.0) return 1;
+        if (e < 0.0) return -1;
+        const double ex = static_cast<double>(vj.x) - vi.x;
+        const double ey = static_cast<double>(vj.y) - vi.y;
+        const double ez = static_cast<double>(vj.z) - vi.z;
+        const double wx = dy * ez - dz * ey;
+        if (wx != 0.0) return wx > 0.0 ? -1 : 1;
+        const double wy = dz * ex - dx * ez;
+        if (wy != 0.0) return wy > 0.0 ? -1 : 1;
+        const double wz = dx * ey - dy * ex;
+        if (wz != 0.0) return wz > 0.0 ? -1 : 1;
+        return 0;  // ray parallel to a degenerate/zero-length edge
+    };
+    const int s0 = edgeSide(v0, v1), s1 = edgeSide(v1, v2), s2 = edgeSide(v2, v0);
+    if (s0 == 0 || s1 == 0 || s2 == 0) return false;  // degenerate edge → no contribution
+    return s0 == s1 && s1 == s2;
+}
+
 }  // namespace nexus::geometry::brep

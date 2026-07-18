@@ -622,4 +622,18 @@ void imprintMutually(Body& a, Body& b, Tolerance tol = {});
 // independently and consistently against every triangle.
 [[nodiscard]] int pointPlaneSideSoS(const Vec3& v0, const Vec3& v1, const Vec3& v2, const Vec3& p);
 
+// EXACT, degeneracy-free "does the ray/segment p→B cross triangle (v0,v1,v2)?"
+// using Simulation-of-Simplicity — SoS step 2, the ray-parity core for an exact
+// classifyPoint. The query point p is symbolically perturbed by (ε,ε²,ε³) (the
+// far endpoint B shifts with it, so the ray direction is unchanged), so NO test is
+// ever exactly zero: the two plane-side tests use pointPlaneSideSoS, and each of
+// the three edge tests — orient3D(p,B,vi,vj), zero when the ray-line passes
+// exactly through an edge/vertex — is resolved by the perturbation to
+// −sign(first non-zero component of (B−p)×(vj−vi)). Returns true iff p and B are
+// on (SoS-)opposite sides of the plane AND the perturbed ray-line lies on the same
+// side of all three edges. A degenerate (zero-area) triangle contributes nothing
+// (returns false). Deterministic; matches the true perturbation limit.
+[[nodiscard]] bool segmentCrossesTriangleSoS(const Vec3& p, const Vec3& B, const Vec3& v0,
+                                             const Vec3& v1, const Vec3& v2);
+
 }  // namespace nexus::geometry::brep
