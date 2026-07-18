@@ -62,6 +62,7 @@ add_executable(nexus_kernel_tests
     kernel/test_BRepSurfaceArea.cpp
     kernel/test_BRepExtrude.cpp
     kernel/test_BRepLoft.cpp
+    kernel/test_BRepPyramid.cpp
     kernel/test_BRepRevolve.cpp
     kernel/test_BRepTube.cpp
     kernel/test_BRepClassifyPoint.cpp

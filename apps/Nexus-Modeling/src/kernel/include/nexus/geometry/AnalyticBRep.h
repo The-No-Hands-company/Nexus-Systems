@@ -492,6 +492,16 @@ private:
 // cannot sew manifold also yield an empty Body.
 [[nodiscard]] Body loftProfiles(const std::vector<Vec3>& bottom, const std::vector<Vec3>& top);
 
+// Pyramid (or cone): a closed planar `base` polygon (≥3 points) fanned to a single
+// `apex` point off the base plane — one triangular side per base edge plus the
+// base cap, watertight with outward-consistent winding (the base is reversed when
+// needed so the apex is on the base normal's +side → positive volume). An n-gon
+// base gives a faceted cone. Genus 0 (euler 2); volume = ⅓·A·h where A is the base
+// area and h the perpendicular apex height. Returns an empty Body for fewer than 3
+// base points, a non-finite coordinate, a near-zero-area base, or an apex lying in
+// the base plane (zero height).
+[[nodiscard]] Body makePyramid(const std::vector<Vec3>& base, const Vec3& apex);
+
 // An ALL-PLANAR faceted cylinder: a regular `segments`-gon prism along +Z of the
 // given radius/height, centred at the origin. Unlike makeCylinder (whose side
 // carries a curved Cylinder surface), every face here is a Plane, so it composes

@@ -2852,6 +2852,66 @@ Body loftProfiles(const std::vector<Vec3>& bottom, const std::vector<Vec3>& top)
     return body.has_value() ? std::move(*body) : Body{};
 }
 
+Body makePyramid(const std::vector<Vec3>& base, const Vec3& apex)
+{
+    const size_t n = base.size();
+    if (n < 3) return Body{};
+    for (const Vec3& p : base)
+        if (!isFinite(p)) return Body{};
+    if (!isFinite(apex)) return Body{};
+
+    // Base plane normal (Newell; length = 2·area) → consistent with a CCW winding.
+    Vec3 N{0.f, 0.f, 0.f};
+    for (size_t i = 0; i < n; ++i) {
+        const Vec3& a = base[i];
+        const Vec3& b = base[(i + 1) % n];
+        N.x += (a.y - b.y) * (a.z + b.z);
+        N.y += (a.z - b.z) * (a.x + b.x);
+        N.z += (a.x - b.x) * (a.y + b.y);
+    }
+    if (length(N) < 1e-10f) return Body{};  // degenerate / near-zero-area base
+    N = normalize(N);
+
+    // Orient so the apex is on the +N side (positive-volume outward solid).
+    const float hgt = dot(sub(apex, base[0]), N);
+    if (hgt > -1e-9f && hgt < 1e-9f) return Body{};  // apex in the base plane
+    std::vector<Vec3> poly = base;
+    if (hgt < 0.f) {
+        std::reverse(poly.begin(), poly.end());
+        N = {-N.x, -N.y, -N.z};
+    }
+
+    std::vector<Vec3> pts = poly;
+    pts.push_back(apex);
+    const uint32_t A = static_cast<uint32_t>(n);  // apex index
+
+    auto planeDef = [&](std::vector<uint32_t> loop) {
+        Body::FaceDef fd;
+        fd.surface.kind = SurfaceKind::Plane;
+        fd.surface.origin = pts[loop[0]];
+        fd.surface.normal = normalize(
+            cross(sub(pts[loop[1]], pts[loop[0]]), sub(pts[loop[2]], pts[loop[0]])));
+        fd.surface.uAxis = normalize(sub(pts[loop[1]], pts[loop[0]]));
+        fd.loop = std::move(loop);
+        return fd;
+    };
+
+    std::vector<Body::FaceDef> defs;
+    defs.reserve(n + 1);
+    // Base cap: reversed order → outward −N (the apex is on +N).
+    {
+        std::vector<uint32_t> loop;
+        for (size_t k = 0; k < n; ++k) loop.push_back(static_cast<uint32_t>(n - 1 - k));
+        defs.push_back(planeDef(std::move(loop)));
+    }
+    // Side triangles: base[i] → base[i+1] → apex (outward-facing).
+    for (size_t i = 0; i < n; ++i)
+        defs.push_back(planeDef({static_cast<uint32_t>(i), static_cast<uint32_t>((i + 1) % n), A}));
+
+    auto body = Body::fromFaces(pts, defs);
+    return body.has_value() ? std::move(*body) : Body{};
+}
+
 Body makeFacetedCylinder(float radius, float height, uint32_t segments)
 {
     const uint32_t n = std::max(segments, 3u);
