@@ -2866,6 +2866,60 @@ Body makeFacetedCylinder(float radius, float height, uint32_t segments)
     return extrudeProfile(ring, {0.f, 0.f, height});  // all-planar prism
 }
 
+Body makeTube(float outerRadius, float innerRadius, float height, uint32_t segments)
+{
+    if (!isFinite(outerRadius) || !isFinite(innerRadius) || !isFinite(height)) return Body{};
+    if (outerRadius <= innerRadius || innerRadius <= 0.f || height <= 0.f) return Body{};
+    const uint32_t n = std::max(segments, 3u);
+    const float h = height * 0.5f;
+    const float twoPi = 6.28318530717958647692f;
+
+    // Four rings of n vertices: outer-bottom, outer-top, inner-bottom, inner-top.
+    std::vector<Vec3> pts;
+    pts.reserve(4u * n);
+    auto ring = [&](float radius, float z) {
+        for (uint32_t k = 0; k < n; ++k) {
+            const float a = twoPi * static_cast<float>(k) / static_cast<float>(n);
+            pts.push_back({radius * std::cos(a), radius * std::sin(a), z});
+        }
+    };
+    ring(outerRadius, -h);  // [0,n)  outer bottom
+    ring(outerRadius, +h);  // [n,2n) outer top
+    ring(innerRadius, -h);  // [2n,3n) inner bottom
+    ring(innerRadius, +h);  // [3n,4n) inner top
+    auto oB = [&](uint32_t k) { return k % n; };
+    auto oT = [&](uint32_t k) { return n + k % n; };
+    auto iB = [&](uint32_t k) { return 2u * n + k % n; };
+    auto iT = [&](uint32_t k) { return 3u * n + k % n; };
+
+    auto planeDef = [&](std::vector<uint32_t> loop) {
+        Body::FaceDef fd;
+        fd.surface.kind = SurfaceKind::Plane;
+        fd.surface.origin = pts[loop[0]];
+        fd.surface.normal = normalize(
+            cross(sub(pts[loop[1]], pts[loop[0]]), sub(pts[loop[2]], pts[loop[0]])));
+        fd.surface.uAxis = normalize(sub(pts[loop[1]], pts[loop[0]]));
+        fd.loop = std::move(loop);
+        return fd;
+    };
+
+    std::vector<Body::FaceDef> defs;
+    defs.reserve(4u * n);
+    for (uint32_t k = 0; k < n; ++k) {
+        // Outer wall — outward (away from the axis).
+        defs.push_back(planeDef({oB(k), oB(k + 1), oT(k + 1), oT(k)}));
+        // Inner wall — inward (toward the axis: the reversed winding).
+        defs.push_back(planeDef({iT(k), iT(k + 1), iB(k + 1), iB(k)}));
+        // Top annular cap (+Z outward).
+        defs.push_back(planeDef({oT(k), oT(k + 1), iT(k + 1), iT(k)}));
+        // Bottom annular cap (−Z outward).
+        defs.push_back(planeDef({iB(k), iB(k + 1), oB(k + 1), oB(k)}));
+    }
+
+    auto body = Body::fromFaces(pts, defs);
+    return body.has_value() ? std::move(*body) : Body{};
+}
+
 Body makeFacetedSphere(float radius, uint32_t latSegments, uint32_t lonSegments)
 {
     const uint32_t lat = std::max(latSegments, 2u);

@@ -499,6 +499,17 @@ private:
 // segments ≥ 3; watertight, euler 2.
 [[nodiscard]] Body makeFacetedCylinder(float radius, float height, uint32_t segments);
 
+// An ALL-PLANAR faceted TUBE (hollow cylinder / pipe / washer) along +Z, centred
+// at the origin: `segments`-gon outer and inner walls plus annular top and bottom
+// caps (4·segments planar quads), built DIRECTLY (not via a boolean, so it is
+// robust at any segment count). The through-hole makes it genus 1 → euler 0
+// (a single connected boundary), watertight; faceted material volume =
+// ½·segments·(outerRadius²−innerRadius²)·sin(2π/segments)·height → π(R²−r²)h as
+// segments grow. segments ≥ 3. Returns empty for outerRadius ≤ innerRadius,
+// innerRadius ≤ 0, height ≤ 0, or a non-finite parameter.
+[[nodiscard]] Body makeTube(float outerRadius, float innerRadius, float height,
+                            uint32_t segments);
+
 // An ALL-PLANAR faceted sphere (a UV-sphere-like polyhedron): a polygonal
 // semicircle of `latSegments` bands revolved in `lonSegments` steps, all faces
 // Plane, so it composes with the planar boolean. latSegments ≥ 2, lonSegments ≥
