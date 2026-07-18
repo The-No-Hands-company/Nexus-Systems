@@ -297,4 +297,25 @@ Body filletBoxEdge(const Body& box, int axis, int s1, int s2, float radius, uint
     return booleanToBody(box, tool, BooleanOp::Difference);
 }
 
+Body hollowBox(float width, float height, float depth, float thickness)
+{
+    // A degenerate outer box is empty; a non-positive thickness (or one too large
+    // to leave a cavity) yields the plain solid box.
+    if (!isFinite(width) || !isFinite(height) || !isFinite(depth) || width <= 0.f ||
+        height <= 0.f || depth <= 0.f)
+        return Body{};
+    const Body outer = makeBox(width, height, depth);
+    if (outer.faceCount() == 0) return Body{};
+    if (!isFinite(thickness) || thickness <= 0.f) return outer;
+    const float m = std::min(width, std::min(height, depth));
+    if (2.f * thickness >= m) return outer;  // no room for a cavity → stays solid
+
+    // Concentric inner box, each dimension inset by 2·thickness → a sealed shell.
+    const Body inner = makeBox(width - 2.f * thickness, height - 2.f * thickness,
+                               depth - 2.f * thickness);
+    Body shell = booleanToBody(outer, inner, BooleanOp::Difference);
+    // Never-corrupt: if the difference failed to sew, fall back to the solid box.
+    return shell.checkIntegrity().ok ? std::move(shell) : outer;
+}
+
 }  // namespace nexus::geometry::brep

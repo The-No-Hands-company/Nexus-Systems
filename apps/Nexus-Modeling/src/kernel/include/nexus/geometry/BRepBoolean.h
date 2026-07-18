@@ -64,4 +64,16 @@ enum class BooleanOp : uint8_t {
 [[nodiscard]] Body filletBoxEdge(const Body& box, int axis, int s1, int s2, float radius,
                                  uint32_t segments = 8);
 
+// Hollow (shell) an axis-aligned box centred at the origin: subtract a concentric
+// inner box, each dimension inset by 2·`thickness`, via a boolean difference —
+// leaving a SEALED wall of the given thickness. The result is a valid solid with
+// TWO boundary shells (outer surface + inner cavity, the cavity faces pointing
+// inward) → euler 4, watertight (boundaryEdges 0), material volume =
+// w·h·d − (w−2t)(h−2t)(d−2t). If 2·thickness ≥ the smallest dimension (no room
+// for a cavity) the plain solid box is returned; non-positive/non-finite
+// thickness or dimensions likewise return the plain box (or empty for a
+// degenerate box). Deterministic. (An OPEN container — a removed top face — is a
+// follow-up.)
+[[nodiscard]] Body hollowBox(float width, float height, float depth, float thickness);
+
 }  // namespace nexus::geometry::brep
