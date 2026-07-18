@@ -457,6 +457,16 @@ private:
 // edges, 6 planar faces, one closed shell. The canonical analytic-B-rep proof.
 [[nodiscard]] Body makeBox(float width, float height, float depth);
 
+// An OPEN box shell (a tray / single-thickness container) centred at the origin:
+// a floor (−Z) plus four walls, with the top (+Z) OMITTED. This is the kernel's
+// open-surface / sheet-body path — the result is NOT a closed solid: its top rim
+// (4 edges) are boundary edges, `isClosed()` is false, and `checkIntegrity()` is
+// clean but reports euler 1 (a disk-topology sheet). `massProperties` is not
+// meaningful (no enclosed volume); the surface area is width·depth (floor) +
+// 2·(width+depth)·height (walls). Returns empty for a non-positive/non-finite
+// dimension. `width`/`depth` are the floor extents; `height` the wall height.
+[[nodiscard]] Body makeOpenBox(float width, float depth, float height);
+
 // A capped cylinder along +Z (n side quads on a Cylinder surface + two planar
 // n-gon caps). Watertight solid, euler 2.
 [[nodiscard]] Body makeCylinder(float radius, float height, uint32_t segments);

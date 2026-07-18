@@ -59,6 +59,7 @@ add_executable(nexus_kernel_tests
     kernel/test_BRepImprintCircle.cpp
     kernel/test_BRepInnerLoop.cpp
     kernel/test_BRepMassProperties.cpp
+    kernel/test_BRepOpenBox.cpp
     kernel/test_BRepSurfaceArea.cpp
     kernel/test_BRepExtrude.cpp
     kernel/test_BRepLoft.cpp

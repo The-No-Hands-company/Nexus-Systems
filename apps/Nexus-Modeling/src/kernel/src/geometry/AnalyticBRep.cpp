@@ -2473,6 +2473,41 @@ Body makeBox(float width, float height, float depth)
     return body.has_value() ? std::move(*body) : Body{};
 }
 
+Body makeOpenBox(float width, float depth, float height)
+{
+    if (!isFinite(width) || !isFinite(depth) || !isFinite(height) || width <= 0.f ||
+        depth <= 0.f || height <= 0.f)
+        return Body{};
+    const float x = width * 0.5f, y = depth * 0.5f, z = height * 0.5f;
+    // b0..b3 floor ring (z=−z), t0..t3 rim ring (z=+z).
+    const std::vector<Vec3> pts = {
+        {-x, -y, -z}, {x, -y, -z}, {x, y, -z}, {-x, y, -z},
+        {-x, -y, z},  {x, -y, z},  {x, y, z},  {-x, y, z},
+    };
+    auto planeDef = [&](std::vector<uint32_t> loop) {
+        Body::FaceDef fd;
+        fd.surface.kind = SurfaceKind::Plane;
+        fd.surface.origin = pts[loop[0]];
+        fd.surface.normal = normalize(
+            cross(sub(pts[loop[1]], pts[loop[0]]), sub(pts[loop[2]], pts[loop[0]])));
+        fd.surface.uAxis = normalize(sub(pts[loop[1]], pts[loop[0]]));
+        fd.loop = std::move(loop);
+        return fd;
+    };
+    // Floor + four walls, outward-wound; the +Z top is OMITTED → an open shell
+    // whose top rim (t0..t3) edges are boundary edges.
+    std::vector<Body::FaceDef> defs;
+    defs.reserve(5);
+    defs.push_back(planeDef({0, 3, 2, 1}));  // floor (−Z outward)
+    defs.push_back(planeDef({0, 1, 5, 4}));  // −Y wall
+    defs.push_back(planeDef({1, 2, 6, 5}));  // +X wall
+    defs.push_back(planeDef({2, 3, 7, 6}));  // +Y wall
+    defs.push_back(planeDef({3, 0, 4, 7}));  // −X wall
+
+    auto body = Body::fromFaces(pts, defs);
+    return body.has_value() ? std::move(*body) : Body{};
+}
+
 // A capped cylinder along +Z: n side quads on a Cylinder surface + top/bottom
 // planar n-gon caps. V=2n, E=3n, F=n+2 → euler 2.
 Body makeCylinder(float radius, float height, uint32_t segments)
