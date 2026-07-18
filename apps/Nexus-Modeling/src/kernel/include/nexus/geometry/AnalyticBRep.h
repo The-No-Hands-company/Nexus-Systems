@@ -502,6 +502,19 @@ private:
 // cannot sew manifold also yield an empty Body.
 [[nodiscard]] Body loftProfiles(const std::vector<Vec3>& bottom, const std::vector<Vec3>& top);
 
+// Twisted extrude: sweep a closed planar profile along `dir` while rotating it
+// about the extrusion axis (through the profile centroid) by a total of
+// `twistRadians`, in `layers` (≥1) stacked bands → a twisted prism. Because a
+// rotation preserves cross-sectional area, the true volume is exactly the base
+// area × height (Cavalieri); the faceted result converges to it FROM BELOW as
+// `layers` grows (a single layer pinches the straight-ruled sides inward).
+// twistRadians = 0 is a plain prism (exact volume). Genus 0 (euler 2), watertight.
+// Returns an empty Body for fewer than 3 points, layers < 1, a non-finite input, a
+// near-zero-area profile, or a `dir` parallel to the profile plane. Use MODERATE
+// twists — a very large total twist over few layers can self-intersect.
+[[nodiscard]] Body twistExtrude(const std::vector<Vec3>& profile, const Vec3& dir,
+                                float twistRadians, uint32_t layers = 16);
+
 // Pyramid (or cone): a closed planar `base` polygon (≥3 points) fanned to a single
 // `apex` point off the base plane — one triangular side per base edge plus the
 // base cap, watertight with outward-consistent winding (the base is reversed when

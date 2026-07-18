@@ -2887,6 +2887,93 @@ Body loftProfiles(const std::vector<Vec3>& bottom, const std::vector<Vec3>& top)
     return body.has_value() ? std::move(*body) : Body{};
 }
 
+Body twistExtrude(const std::vector<Vec3>& profile, const Vec3& dir, float twistRadians,
+                  uint32_t layers)
+{
+    const size_t n = profile.size();
+    if (n < 3 || layers < 1u) return Body{};
+    if (!isFinite(twistRadians)) return Body{};
+    for (const Vec3& p : profile)
+        if (!isFinite(p)) return Body{};
+    if (!isFinite(dir)) return Body{};
+
+    // Profile plane normal (Newell) + centroid.
+    Vec3 N{0.f, 0.f, 0.f};
+    Vec3 C{0.f, 0.f, 0.f};
+    for (size_t i = 0; i < n; ++i) {
+        const Vec3& a = profile[i];
+        const Vec3& b = profile[(i + 1) % n];
+        N.x += (a.y - b.y) * (a.z + b.z);
+        N.y += (a.z - b.z) * (a.x + b.x);
+        N.z += (a.x - b.x) * (a.y + b.y);
+        C = add(C, a);
+    }
+    if (length(N) < 1e-10f) return Body{};  // degenerate / near-zero-area profile
+    N = normalize(N);
+    C = scale(C, 1.f / static_cast<float>(n));
+    if (length(dir) < 1e-9f) return Body{};
+    const float h = dot(dir, N);
+    if (h > -1e-9f && h < 1e-9f) return Body{};  // dir parallel to the plane
+
+    // Orient so the profile is CCW about the extrusion direction (positive-volume
+    // outward solid regardless of dir's sign).
+    std::vector<Vec3> poly = profile;
+    if (h < 0.f) {
+        std::reverse(poly.begin(), poly.end());
+        N = {-N.x, -N.y, -N.z};
+    }
+    const Vec3 axis = normalize(dir);  // twist axis through the centroid
+
+    auto rot = [&](const Vec3& p, float ang) {
+        const Vec3 v = sub(p, C);
+        const float c = std::cos(ang), s = std::sin(ang);
+        const Vec3 r = add(add(scale(v, c), scale(cross(axis, v), s)),
+                           scale(axis, dot(axis, v) * (1.f - c)));
+        return add(C, r);
+    };
+
+    // (layers+1) rings: ring j rotated by twist·j/L and translated by dir·j/L.
+    std::vector<Vec3> pts;
+    pts.reserve((layers + 1u) * n);
+    for (uint32_t j = 0; j <= layers; ++j) {
+        const float f = static_cast<float>(j) / static_cast<float>(layers);
+        for (size_t i = 0; i < n; ++i)
+            pts.push_back(add(rot(poly[i], twistRadians * f), scale(dir, f)));
+    }
+    auto V = [&](uint32_t j, size_t i) { return static_cast<uint32_t>(j * n + i); };
+
+    auto planeDef = [&](std::vector<uint32_t> loop) {
+        Body::FaceDef fd;
+        fd.surface.kind = SurfaceKind::Plane;
+        fd.surface.origin = pts[loop[0]];
+        fd.surface.normal = normalize(
+            cross(sub(pts[loop[1]], pts[loop[0]]), sub(pts[loop[2]], pts[loop[0]])));
+        fd.surface.uAxis = normalize(sub(pts[loop[1]], pts[loop[0]]));
+        fd.loop = std::move(loop);
+        return fd;
+    };
+
+    std::vector<Body::FaceDef> defs;
+    defs.reserve(layers * n + 2u);
+    // Bottom cap (ring 0, reversed → outward −N) and top cap (ring L, forward).
+    {
+        std::vector<uint32_t> lo, hi;
+        for (size_t i = 0; i < n; ++i) lo.push_back(V(0, n - 1 - i));
+        for (size_t i = 0; i < n; ++i) hi.push_back(V(layers, i));
+        defs.push_back(planeDef(std::move(lo)));
+        defs.push_back(planeDef(std::move(hi)));
+    }
+    // Side quads between consecutive rings.
+    for (uint32_t j = 0; j < layers; ++j)
+        for (size_t i = 0; i < n; ++i) {
+            const size_t i1 = (i + 1) % n;
+            defs.push_back(planeDef({V(j, i), V(j, i1), V(j + 1, i1), V(j + 1, i)}));
+        }
+
+    auto body = Body::fromFaces(pts, defs);
+    return body.has_value() ? std::move(*body) : Body{};
+}
+
 Body makePyramid(const std::vector<Vec3>& base, const Vec3& apex)
 {
     const size_t n = base.size();
