@@ -201,4 +201,35 @@ TEST(MeshBooleanExactClassify, AxisAlignedCoplanarSeamsAreWatertightAndVolumeExa
     }
 }
 
+namespace {
+Mesh scaledBox(float extent, float s) { return primitives::makeBox(extent * s, extent * s, extent * s); }
+}  // namespace
+
+// SCALE-AWARE seam weld (Phase T tolerance migration): the boolean's seam stitch
+// used a FIXED 1e-5 weld, which fails to merge coincident seam vertices on large
+// models (at coordinate magnitude M the two copies of a seam point differ by ~M·1e-6
+// of float precision > 1e-5) — a large-scale-only leak. With a scale-proportioned
+// weld tolerance the SAME generic-position boolean stays watertight and volume-exact
+// across five orders of magnitude, while unit scale is byte-for-byte unchanged.
+TEST(MeshBooleanExactClassify, SeamWeldIsScaleAwareAcrossOrdersOfMagnitude)
+{
+    for (float s : {1.f, 100.f, 5000.f, 100000.f}) {
+        // Diagonal-offset boxes (watertight generic position), uniformly scaled by s.
+        const Mesh A = scaledBox(2.f, s);
+        const Mesh B = translated(scaledBox(2.f, s), {1.f * s, 1.f * s, 1.f * s});
+        for (auto op : {BooleanOperationType::Union, BooleanOperationType::Intersection,
+                        BooleanOperationType::Difference}) {
+            const Mesh r = robustMeshBoolean(A, B, op);
+            const auto v = MeshTopologyValidation::validate(r);
+            EXPECT_EQ(v.boundaryLoops, 0u) << "s=" << s << " op=" << static_cast<int>(op)
+                                           << " leaked (fixed-epsilon weld would fail here)";
+            EXPECT_EQ(v.euler, 2) << "s=" << s << " op=" << static_cast<int>(op);
+        }
+        // Volume scales as s^3 (union of the two boxes overlapping in a unit-cube-times-s^3).
+        const float s3 = s * s * s;
+        EXPECT_NEAR(vol(robustMeshBoolean(A, B, BooleanOperationType::Union)), 15.f * s3, 15.f * s3 * 1e-3f)
+            << "s=" << s;
+    }
+}
+
 }  // namespace nexus::geometry::testing

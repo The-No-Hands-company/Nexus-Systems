@@ -2,6 +2,7 @@
 
 #include <nexus/geometry/AnalyticBRep.h>  // brep::segmentCrossesTriangleSoS (exact ray parity)
 #include <nexus/geometry/MeshCut.h>
+#include <nexus/geometry/Tolerance.h>  // scale-aware weld tolerance (Phase T migration)
 
 #include <algorithm>
 #include <array>
@@ -196,7 +197,13 @@ Mesh robustMeshBoolean(const Mesh& a, const Mesh& b, BooleanOperationType op) no
     for (Face& f : outFaces) {
         out.topology().addFace(std::move(f));
     }
-    (void)out.weldCoincidentVertices(1e-5f);  // stitch the shared seam
+    // Stitch the shared seam with a SCALE-AWARE weld tolerance. A fixed 1e-5 fails to
+    // merge coincident seam vertices on large models: at coordinate magnitude M the two
+    // independently-computed copies of a seam point differ by ~M·1e-6 (float precision),
+    // so a 1e-5 weld leaves boundary loops (a large-scale-only leak). Tolerance{}.at(L)
+    // = max(1e-5, 1e-6·L) keeps the unit-scale floor EXACTLY (1e-5 until L>10) and grows
+    // in proportion for large models. L is the coordinate span already computed above.
+    (void)out.weldCoincidentVertices(Tolerance{}.at(hi - lo));
     (void)out.computeVertexNormals();
     return out;
 }
