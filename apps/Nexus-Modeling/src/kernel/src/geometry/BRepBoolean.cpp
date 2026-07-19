@@ -178,11 +178,13 @@ Body booleanToBody(const Body& a, const Body& b, BooleanOp op, Tolerance tol)
     addKept(B, A, /*isA=*/false);
 
     auto sewn = Body::fromFaces(points, defs);
-    // Invariant: booleanToBody never returns a corrupt Body. fromFaces already
-    // rejects non-manifold sews (returns nullopt); this also drops any result
-    // that fails the integrity validator (e.g. a degenerate near-coincident-facet
-    // sew) in favour of a clean empty Body.
-    if (!sewn.has_value() || !sewn->checkIntegrity().ok) return Body{};
+    // Invariant: booleanToBody returns a WATERTIGHT solid or a clean empty Body —
+    // never a corrupt or leaky one. fromFaces already rejects non-manifold sews
+    // (returns nullopt); this also drops any result that fails the integrity
+    // validator OR is not closed (a near-degenerate sew that dropped/duplicated a
+    // face leaves an OPEN shell — checkIntegrity permits boundary edges, so the
+    // watertightness must be checked separately) in favour of a clean empty Body.
+    if (!sewn.has_value() || !sewn->checkIntegrity().ok || !sewn->isClosed()) return Body{};
     return std::move(*sewn);
 }
 
