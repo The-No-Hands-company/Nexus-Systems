@@ -9,16 +9,21 @@
 
 #include <nexus/geometry/AnalyticBRep.h>
 #include <nexus/geometry/BRepBoolean.h>
+#include <nexus/geometry/BooleanOperation.h>
 #include <nexus/geometry/HalfEdgeMesh.h>
 #include <nexus/geometry/Mesh.h>
 #include <nexus/geometry/MeshBooleanRobust.h>
 #include <nexus/geometry/MeshMassProperties.h>
+#include <nexus/geometry/MeshRepair.h>
 #include <nexus/geometry/MeshTopologyValidation.h>
+#include <nexus/geometry/MeshVertexWeld.h>
+#include <nexus/geometry/Tolerance.h>
 #include <nexus/render/Camera.h>
 
 #include <gtest/gtest.h>
 
 #include <cmath>
+#include <limits>
 #include <optional>
 #include <random>
 #include <utility>
@@ -210,6 +215,70 @@ TEST(KernelFuzz, LivenessQueryTracksTombstonesAndOpsRefuseDeadIndices)
     EXPECT_FALSE(hem.insertEdgeLoop(dead, 0.5f));
     EXPECT_FALSE(hem.slideEdgeLoop(dead, 0.3f));
     EXPECT_TRUE(hem.checkIntegrity().ok);
+}
+
+namespace {
+Mesh rawMesh(std::vector<Vec3> pos, std::vector<std::vector<uint32_t>> faces)
+{
+    Mesh m;
+    m.attributes().setPositions(std::move(pos));
+    for (auto& f : faces) { Face fc; fc.indices = std::move(f); m.topology().addFace(fc); }
+    return m;
+}
+}  // namespace
+
+// MALFORMED-INPUT hardening (GAP-TEST1): feed adversarial (but in-range) mesh
+// archetypes through every public entry point and assert the kernel handles them
+// GRACEFULLY — no crash, no heap corruption, no NaN/±Inf propagated into an output
+// that claims success. This battery surfaced (and this increment fixed) that
+// MeshVertexWeld::weld and MeshRepair::repair(All) previously PROPAGATED non-finite
+// positions; they now reject (weld→empty) / decline (repair→ok=false), matching the
+// pervasive non-finite-rejection convention the boolean already followed.
+TEST(KernelFuzz, MalformedInputsHandledGracefullyNoCrashNoNaNLeak)
+{
+    const float NaN = std::numeric_limits<float>::quiet_NaN();
+    const float Inf = std::numeric_limits<float>::infinity();
+    std::vector<std::pair<const char*, Mesh>> archetypes;
+    archetypes.emplace_back("nonmanifold-edge",
+        rawMesh({{0,0,0},{1,0,0},{0,1,0},{0,-1,0},{0,0,1}}, {{0,1,2},{0,1,3},{0,1,4}}));
+    archetypes.emplace_back("degenerate-collinear", rawMesh({{0,0,0},{1,0,0},{2,0,0}}, {{0,1,2}}));
+    archetypes.emplace_back("duplicate-verts",
+        rawMesh({{0,0,0},{1,0,0},{0,1,0},{0,0,0}}, {{0,1,2},{3,1,2}}));
+    archetypes.emplace_back("self-intersect",
+        rawMesh({{-1,-1,0},{1,-1,0},{0,1,0},{0,-1,-1},{0,-1,1},{0,1,0.5f}}, {{0,1,2},{3,4,5}}));
+    archetypes.emplace_back("nan-pos", rawMesh({{0,0,0},{NaN,0,0},{0,1,0}}, {{0,1,2}}));
+    archetypes.emplace_back("inf-pos", rawMesh({{0,0,0},{Inf,0,0},{0,1,0}}, {{0,1,2}}));
+    archetypes.emplace_back("empty", Mesh{});
+    archetypes.emplace_back("single-tri", rawMesh({{0,0,0},{1,0,0},{0,1,0}}, {{0,1,2}}));
+
+    auto allFinite = [](const Mesh& m) {
+        for (const auto& p : m.attributes().positions())
+            if (!isFinite(p)) return false;
+        return true;
+    };
+
+    const Mesh box = primitives::makeBox(2.f, 2.f, 2.f);
+    for (const auto& [name, m] : archetypes) {
+        for (auto op : {BooleanOperationType::Union, BooleanOperationType::Intersection,
+                        BooleanOperationType::Difference}) {
+            // The mesh boolean rejects/guards non-finite → output is always finite.
+            EXPECT_TRUE(allFinite(robustMeshBoolean(m, box, op))) << name << " robustMB(m,box)";
+            EXPECT_TRUE(allFinite(robustMeshBoolean(box, m, op))) << name << " robustMB(box,m)";
+            Mesh out;
+            (void)BooleanOperation::compute(m, box, op, out);  // must not crash
+            EXPECT_TRUE(allFinite(out)) << name << " compute";
+        }
+        (void)BooleanOperation::validateMesh(m);         // must not crash
+        (void)MeshTopologyValidation::validate(m);       // must not crash
+        (void)HalfEdgeMesh::fromMesh(m);                 // nullopt on non-manifold, never crash
+
+        // weld rejects non-finite by returning empty → output always finite.
+        EXPECT_TRUE(allFinite(MeshVertexWeld::weld(m))) << name << " weld";
+        // repair either succeeds with finite output, or declines (ok=false).
+        Mesh c = m;
+        const auto rr = MeshRepair::repairAll(c);
+        if (rr.ok) EXPECT_TRUE(allFinite(c)) << name << " repairAll claimed ok but leaked non-finite";
+    }
 }
 
 }  // namespace nexus::geometry::testing

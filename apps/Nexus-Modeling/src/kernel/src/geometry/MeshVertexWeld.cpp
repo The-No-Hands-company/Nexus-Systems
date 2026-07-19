@@ -1,5 +1,7 @@
 #include <nexus/geometry/MeshVertexWeld.h>
 
+#include <nexus/geometry/Tolerance.h>  // geometry::isFinite (non-finite rejection convention)
+
 #include <algorithm>
 #include <cmath>
 #include <unordered_map>
@@ -42,6 +44,13 @@ struct UnionFind {
 Mesh MeshVertexWeld::weld(const Mesh& mesh, const WeldOptions& opts) {
     Mesh result = mesh;
     if (!result.isValid()) return result;
+
+    // Reject non-finite input rather than propagate NaN/±Inf into the welded output
+    // (welding compares squared distances — undefined with NaN). Matches the kernel's
+    // pervasive non-finite-rejection convention (e.g. robustMeshBoolean returns empty).
+    for (const auto& p : mesh.attributes().positions()) {
+        if (!isFinite(p)) return Mesh{};
+    }
 
     const auto& topo = mesh.topology();
     const auto& pos = mesh.attributes().positions();

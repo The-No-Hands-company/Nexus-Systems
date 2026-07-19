@@ -1,6 +1,7 @@
 #include <nexus/geometry/MeshRepair.h>
 #include <nexus/geometry/HalfEdgeMesh.h>
 #include <nexus/geometry/MeshVertexWeld.h>
+#include <nexus/geometry/Tolerance.h>  // geometry::isFinite (non-finite rejection convention)
 
 #include <algorithm>
 #include <cmath>
@@ -406,6 +407,13 @@ RepairReport MeshRepair::repairAll(Mesh& mesh) {
         report.error = "Input mesh is not valid";
         return report;
     }
+    for (const auto& p : mesh.attributes().positions()) {
+        if (!isFinite(p)) {  // decline non-finite geometry; leave the mesh unchanged
+            report.ok = false;
+            report.error = "Input mesh has non-finite positions";
+            return report;
+        }
+    }
 
     report.duplicateVerticesRemoved = removeDuplicateVertices(mesh);
     report.zeroAreaFacesRemoved = removeZeroAreaFaces(mesh) ? 1 : 0;
@@ -426,6 +434,13 @@ RepairReport MeshRepair::repair(Mesh& mesh, const RepairOptions& opts) {
         report.ok = false;
         report.error = "Input mesh is not valid";
         return report;
+    }
+    for (const auto& p : mesh.attributes().positions()) {
+        if (!isFinite(p)) {  // decline non-finite geometry; leave the mesh unchanged
+            report.ok = false;
+            report.error = "Input mesh has non-finite positions";
+            return report;
+        }
     }
 
     auto& topo = mesh.topology();
