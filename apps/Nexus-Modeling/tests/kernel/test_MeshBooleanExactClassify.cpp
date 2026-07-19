@@ -118,6 +118,29 @@ TEST(MeshBooleanExactClassify, GenericPositionBooleansAreWatertightAndVolumeExac
     }
 }
 
+// OPERAND-ORDER SYMMETRY (partial): the coincident-face classification is now
+// winding-INDEPENDENT — each sub-triangle's normal is re-oriented outward by an
+// exact self-test (pointInside against its own solid) rather than trusting the
+// retriangulation's winding. With that, these coplanar-face-sharing box booleans
+// are watertight in BOTH operand orders (A∘B and B∘A), not just the canonical one.
+// (dx=0.5's larger overlap still has an order-dependent seam-diagonal mismatch —
+// the residual shared-seam-triangulation gap, tracked next; not asserted here.)
+TEST(MeshBooleanExactClassify, CoplanarBooleansWatertightInBothOperandOrders)
+{
+    using primitives::makeBox;
+    for (float dx : {1.f, 1.5f}) {
+        const Mesh A = makeBox(2.f, 2.f, 2.f);
+        const Mesh B = translated(makeBox(2.f, 2.f, 2.f), {dx, 0.f, 0.f});
+        for (auto op : {BooleanOperationType::Union, BooleanOperationType::Intersection,
+                        BooleanOperationType::Difference}) {
+            const auto vab = MeshTopologyValidation::validate(robustMeshBoolean(A, B, op));
+            const auto vba = MeshTopologyValidation::validate(robustMeshBoolean(B, A, op));
+            EXPECT_EQ(vab.boundaryLoops, 0u) << "A∘B dx=" << dx << " op=" << static_cast<int>(op);
+            EXPECT_EQ(vba.boundaryLoops, 0u) << "B∘A dx=" << dx << " op=" << static_cast<int>(op);
+        }
+    }
+}
+
 // The exact classification decision is direction-independent and stable, so the
 // whole pipeline is byte-for-byte deterministic — even across grazing, near-
 // coincident, face-touching and rotated configurations that stress the seam.

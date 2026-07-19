@@ -127,8 +127,8 @@ Mesh robustMeshBoolean(const Mesh& a, const Mesh& b, BooleanOperationType op) no
     // boundary passes through c parallel to n). Rule table matches the B-rep boolean:
     // coincident SAME-normal → keep on the A side only (drop B's duplicate); coincident
     // OPPOSITE-normal → kept only for Difference; otherwise the plain region test.
-    auto classify = [&](const V& p0, const V& p1, const V& p2, const Soup& other, bool isA,
-                        bool& keep, bool& flip) {
+    auto classify = [&](const V& p0, const V& p1, const V& p2, const Soup& self, const Soup& other,
+                        bool isA, bool& keep, bool& flip) {
         keep = false;
         flip = false;
         const V c{(p0.x + p1.x + p2.x) / 3.f, (p0.y + p1.y + p2.y) / 3.f, (p0.z + p1.z + p2.z) / 3.f};
@@ -138,6 +138,13 @@ Mesh robustMeshBoolean(const Mesh& a, const Mesh& b, BooleanOperationType op) no
         const float nl = std::sqrt(n.x * n.x + n.y * n.y + n.z * n.z);
         if (nl < 1e-20f) return;  // degenerate sub-triangle contributes nothing
         n = {n.x / nl * eps, n.y / nl * eps, n.z / nl * eps};
+        // TriangleRetriangulate does NOT guarantee winding, so a sub-triangle's
+        // geometric normal may point inward. Re-orient it OUTWARD (relative to its
+        // own solid) with an exact self-test — c+n must be outside self — so the
+        // coincidence/region tests below can't be inverted by a flipped winding.
+        if (pointInside({c.x + n.x, c.y + n.y, c.z + n.z}, self)) {
+            n = {-n.x, -n.y, -n.z};
+        }
         const bool inFront = pointInside({c.x + n.x, c.y + n.y, c.z + n.z}, other);  // just outside self
         const bool inBehind = pointInside({c.x - n.x, c.y - n.y, c.z - n.z}, other); // just inside self
         if (inFront != inBehind) {
@@ -165,7 +172,7 @@ Mesh robustMeshBoolean(const Mesh& a, const Mesh& b, BooleanOperationType op) no
         if (fc.indices.size() != 3) continue;
         const V p0 = pA[fc.indices[0]], p1 = pA[fc.indices[1]], p2 = pA[fc.indices[2]];
         bool keep = false, flip = false;
-        classify(p0, p1, p2, soupB, /*isA=*/true, keep, flip);
+        classify(p0, p1, p2, soupA, soupB, /*isA=*/true, keep, flip);
         if (keep) addTri(p0, p1, p2, flip);
     }
 
@@ -175,7 +182,7 @@ Mesh robustMeshBoolean(const Mesh& a, const Mesh& b, BooleanOperationType op) no
         if (fc.indices.size() != 3) continue;
         const V p0 = pB[fc.indices[0]], p1 = pB[fc.indices[1]], p2 = pB[fc.indices[2]];
         bool keep = false, flip = false;
-        classify(p0, p1, p2, soupA, /*isA=*/false, keep, flip);
+        classify(p0, p1, p2, soupB, soupA, /*isA=*/false, keep, flip);
         if (keep) addTri(p0, p1, p2, flip);
     }
 
