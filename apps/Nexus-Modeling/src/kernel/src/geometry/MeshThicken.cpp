@@ -1,5 +1,6 @@
 #include <nexus/geometry/MeshThicken.h>
 #include <nexus/geometry/GeometryKernel.h>
+#include <nexus/geometry/Tolerance.h>  // geometry::isFinite (non-finite rejection convention)
 
 #include <algorithm>
 #include <cmath>
@@ -13,6 +14,8 @@ using Vec3 = nexus::render::Vec3;
 Mesh MeshThicken::solidify(const Mesh& mesh, const ThickenOptions& opts) {
     Mesh result;
     if (!mesh.isValid() || opts.thickness <= 0.f) return result;
+    for (const auto& p : mesh.attributes().positions())
+        if (!isFinite(p)) return result;  // reject non-finite input (convention)
 
     const auto& topo = mesh.topology();
     const auto& pos = mesh.attributes().positions();

@@ -1,4 +1,5 @@
 #include <nexus/geometry/MeshLaplacian.h>
+#include <nexus/geometry/Tolerance.h>  // geometry::isFinite (non-finite rejection convention)
 
 #include <cmath>
 #include <map>
@@ -24,6 +25,8 @@ float cotan(const Vec3& a, const Vec3& b) {
 Mesh MeshLaplacian::smooth(const Mesh& mesh, const SmoothOptions& opts) {
     Mesh result = mesh;
     if (!result.isValid()) return result;
+    for (const auto& p : mesh.attributes().positions())
+        if (!isFinite(p)) return Mesh{};  // reject non-finite input (convention)
 
     const auto& topo = mesh.topology();
     const auto& pos = mesh.attributes().positions();

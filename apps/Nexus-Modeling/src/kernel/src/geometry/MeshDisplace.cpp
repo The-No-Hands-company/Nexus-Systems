@@ -1,4 +1,5 @@
 #include <nexus/geometry/MeshDisplace.h>
+#include <nexus/geometry/Tolerance.h>  // geometry::isFinite (non-finite rejection convention)
 
 #include <algorithm>
 #include <cmath>
@@ -54,6 +55,8 @@ Mesh MeshDisplace::displaceByScalar(
 
     Mesh result = mesh;
     if (!result.isValid()) return result;
+    for (const auto& p : mesh.attributes().positions())
+        if (!isFinite(p)) return Mesh{};  // reject non-finite input (convention)
 
     std::vector<Vec3> positions = result.attributes().positions();
     std::vector<Vec3> vnorms = computeAreaWeightedNormals(result);
@@ -85,6 +88,8 @@ Mesh MeshDisplace::displaceByVector(
 
     Mesh result = mesh;
     if (!result.isValid()) return result;
+    for (const auto& p : mesh.attributes().positions())
+        if (!isFinite(p)) return Mesh{};  // reject non-finite input (convention)
 
     std::vector<Vec3> positions = result.attributes().positions();
 

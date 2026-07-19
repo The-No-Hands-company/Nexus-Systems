@@ -14,9 +14,14 @@
 #include <nexus/geometry/Mesh.h>
 #include <nexus/geometry/MeshBooleanRobust.h>
 #include <nexus/geometry/MeshMassProperties.h>
+#include <nexus/geometry/MeshDisplace.h>
+#include <nexus/geometry/MeshLaplacian.h>
 #include <nexus/geometry/MeshRepair.h>
+#include <nexus/geometry/MeshSimplify.h>
+#include <nexus/geometry/MeshThicken.h>
 #include <nexus/geometry/MeshTopologyValidation.h>
 #include <nexus/geometry/MeshVertexWeld.h>
+#include <nexus/geometry/SubdivisionSurface.h>
 #include <nexus/geometry/Tolerance.h>
 #include <nexus/render/Camera.h>
 
@@ -278,6 +283,41 @@ TEST(KernelFuzz, MalformedInputsHandledGracefullyNoCrashNoNaNLeak)
         Mesh c = m;
         const auto rr = MeshRepair::repairAll(c);
         if (rr.ok) EXPECT_TRUE(allFinite(c)) << name << " repairAll claimed ok but leaked non-finite";
+    }
+}
+
+// The non-finite-rejection convention, applied breadth-wise: every mesh-RETURNING
+// processing op must refuse NaN/±Inf input rather than propagate it into a "result".
+// (inc59 fixed weld/repair; this audit found the same gap in the decimate / thicken /
+// smooth / displace / subdivide surface and fixed all of them.)
+TEST(KernelFuzz, NonFiniteRejectedAcrossMeshReturningOps)
+{
+    auto allFinite = [](const Mesh& m) {
+        for (const auto& p : m.attributes().positions())
+            if (!isFinite(p)) return false;
+        return true;
+    };
+    for (float bad : {std::numeric_limits<float>::quiet_NaN(),
+                      std::numeric_limits<float>::infinity()}) {
+        Mesh m = primitives::makeBox(2.f, 2.f, 2.f);
+        (void)m.topology().triangulate();
+        auto pos = m.attributes().positions();
+        ASSERT_FALSE(pos.empty());
+        pos[0] = {bad, 0.5f, 0.5f};
+        m.attributes().setPositions(std::move(pos));
+
+        EXPECT_TRUE(allFinite(MeshSimplify::decimateByRatio(m, 0.5f))) << "decimateByRatio";
+        EXPECT_TRUE(allFinite(MeshSimplify::decimateToTarget(m, 4u))) << "decimateToTarget";
+        EXPECT_TRUE(allFinite(MeshThicken::solidify(m))) << "solidify";
+        EXPECT_TRUE(allFinite(MeshLaplacian::smooth(m))) << "smooth";
+        EXPECT_TRUE(allFinite(MeshDisplace::displaceByScalar(m, [](const Vec3&) { return 0.1f; })))
+            << "displaceByScalar";
+        EXPECT_TRUE(allFinite(MeshDisplace::displaceByVector(m, [](const Vec3& q) { return q; })))
+            << "displaceByVector";
+        if (auto hem = HalfEdgeMesh::fromMesh(m)) {
+            EXPECT_FALSE(SubdivisionSurface::catmullClark(*hem).has_value()) << "catmullClark";
+            EXPECT_FALSE(SubdivisionSurface::loopSubdivide(*hem).has_value()) << "loopSubdivide";
+        }
     }
 }
 

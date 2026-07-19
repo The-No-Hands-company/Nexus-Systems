@@ -1,4 +1,5 @@
 #include <nexus/geometry/SubdivisionSurface.h>
+#include <nexus/geometry/Tolerance.h>  // geometry::isFinite (non-finite rejection convention)
 
 #include <algorithm>
 #include <cmath>
@@ -69,6 +70,8 @@ Vec3 faceCentroidNormal(const HalfEdgeMesh& hem, uint32_t fi) {
 std::optional<HalfEdgeMesh>
 SubdivisionSurface::catmullClark(const HalfEdgeMesh& mesh, const SubdivisionOptions& opts) {
     if (opts.levels == 0) return mesh;
+    for (const auto& p : mesh.positions())
+        if (!isFinite(p)) return std::nullopt;  // reject non-finite input (convention)
 
     HalfEdgeMesh current = mesh;
     CreaseEdgeSet currentCreases = opts.creases;
@@ -474,6 +477,8 @@ std::optional<HalfEdgeMesh>
 SubdivisionSurface::loopSubdivide(const HalfEdgeMesh& mesh, const SubdivisionOptions& opts) {
     if (opts.levels == 0) return mesh;
     if (!mesh.isTriangulated()) return std::nullopt;
+    for (const auto& p : mesh.positions())
+        if (!isFinite(p)) return std::nullopt;  // reject non-finite input (convention)
 
     HalfEdgeMesh current = mesh;
     CreaseEdgeSet currentCreases = opts.creases;

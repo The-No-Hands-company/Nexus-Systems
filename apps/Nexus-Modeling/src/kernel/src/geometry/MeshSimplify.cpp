@@ -1,6 +1,7 @@
 #include <nexus/geometry/MeshSimplify.h>
 #include <nexus/geometry/MeshDecimator.h>
 #include <nexus/geometry/HalfEdgeMesh.h>
+#include <nexus/geometry/Tolerance.h>  // geometry::isFinite (non-finite rejection convention)
 
 #include <algorithm>
 #include <cmath>
@@ -9,6 +10,8 @@ namespace nexus::geometry {
 
 Mesh MeshSimplify::decimate(const Mesh& mesh, const SimplifyOptions& opts) {
     if (!mesh.isValid()) return mesh;
+    for (const auto& p : mesh.attributes().positions())
+        if (!isFinite(p)) return Mesh{};  // reject non-finite input (convention)
 
     const size_t currentFaces = mesh.topology().faceCount();
     if (currentFaces == 0) return mesh;
@@ -28,6 +31,8 @@ Mesh MeshSimplify::decimate(const Mesh& mesh, const SimplifyOptions& opts) {
 
 Mesh MeshSimplify::decimateToTarget(const Mesh& mesh, uint32_t targetFaces) {
     if (!mesh.isValid()) return mesh;
+    for (const auto& p : mesh.attributes().positions())
+        if (!isFinite(p)) return Mesh{};  // reject non-finite input (convention)
 
     size_t currentFaces = mesh.topology().faceCount();
     if (currentFaces <= targetFaces) return mesh;
