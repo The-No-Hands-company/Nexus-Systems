@@ -111,4 +111,71 @@ TEST(BRepBooleanTorture, NearFaceTouchIsNeverLeaky)
     }
 }
 
+namespace {
+Body tr(Body b, Vec3 o)
+{
+    b.translate(o);
+    return b;
+}
+}  // namespace
+
+// CHAINED 3-way booleans ((A∪B)−C, (A−B)∩C) over near-degenerate offsets stay
+// watertight-or-empty and deterministic — the whole exact stack composes.
+TEST(BRepBooleanTorture, ChainedThreeWayWatertightOrEmpty)
+{
+    for (float d1 : {0.5f, 1.f, 1.9999f, 2.f}) {
+        for (float d2 : {0.5f, 1.f, 1.9999f}) {
+            const Body A = makeBox(2.f, 2.f, 2.f);
+            const Body B = tr(makeBox(2.f, 2.f, 2.f), {d1, 0.f, 0.f});
+            const Body C = tr(makeBox(2.f, 2.f, 2.f), {0.f, d2, 0.f});
+            const Body r1 = booleanToBody(booleanToBody(A, B, BooleanOp::Union), C,
+                                          BooleanOp::Difference);
+            expectWatertightOrEmpty(r1, "(AuB)-C");
+            EXPECT_EQ(r1.serialize(), booleanToBody(booleanToBody(A, B, BooleanOp::Union), C,
+                                                    BooleanOp::Difference)
+                                          .serialize());
+            const Body r2 = booleanToBody(booleanToBody(A, B, BooleanOp::Difference), C,
+                                          BooleanOp::Intersection);
+            expectWatertightOrEmpty(r2, "(A-B)nC");
+        }
+    }
+}
+
+// MIXED primitive types (box × faceted-cylinder × faceted-sphere), both operand
+// orders, over a sweep of offsets — watertight-or-empty and deterministic.
+TEST(BRepBooleanTorture, MixedPrimitivesWatertightOrEmpty)
+{
+    for (float dx : {0.f, 0.5f, 1.f, 1.5f}) {
+        const Body box = makeBox(2.f, 2.f, 2.f);
+        const Body fcyl = tr(makeFacetedCylinder(1.f, 3.f, 12), {dx, 0.f, 0.f});
+        const Body fsph = tr(makeFacetedSphere(1.2f, 8, 12), {dx, 0.f, 0.f});
+        for (BooleanOp op : {BooleanOp::Union, BooleanOp::Intersection, BooleanOp::Difference}) {
+            expectWatertightOrEmpty(booleanToBody(box, fcyl, op), "box?fcyl");
+            expectWatertightOrEmpty(booleanToBody(fcyl, box, op), "fcyl?box");
+            expectWatertightOrEmpty(booleanToBody(box, fsph, op), "box?fsph");
+            EXPECT_EQ(booleanToBody(box, fcyl, op).serialize(),
+                      booleanToBody(box, fcyl, op).serialize());
+        }
+    }
+}
+
+// A DIFFERENCE that splits the target into TWO disconnected pieces is a valid
+// multi-component watertight result: a 6×1×1 bar minus a w×3×3 slab through the
+// middle → two bars, each watertight, total volume 6−w, euler 4 (two genus-0
+// shells). Proves the pipeline handles component-splitting cleanly.
+TEST(BRepBooleanTorture, DifferenceSplitProducesTwoWatertightPieces)
+{
+    for (float w : {0.3f, 0.5f, 1.f}) {
+        const Body bar = makeBox(6.f, 1.f, 1.f);
+        const Body slab = makeBox(w, 3.f, 3.f);  // spans the bar's full cross-section
+        const Body r = booleanToBody(bar, slab, BooleanOp::Difference);
+        const auto ig = r.checkIntegrity();
+        ASSERT_TRUE(ig.ok) << "w=" << w << ": " << ig.reason;
+        EXPECT_TRUE(r.isClosed()) << "w=" << w;
+        EXPECT_EQ(ig.boundaryEdges, 0u) << "w=" << w;
+        EXPECT_EQ(ig.euler, 4) << "w=" << w;  // two disconnected genus-0 pieces
+        EXPECT_NEAR(r.massProperties().volume, 6.f - w, 1e-3f) << "w=" << w;
+    }
+}
+
 }  // namespace nexus::geometry::brep::testing
