@@ -95,6 +95,7 @@ add_executable(nexus_kernel_tests
     kernel/test_TriangleRetriangulate.cpp
     kernel/test_MeshCut.cpp
     kernel/test_MeshBooleanRobust.cpp
+    kernel/test_MeshBooleanExactClassify.cpp
     kernel/test_ModifierStack.cpp
     kernel/test_MeshAmbientOcclusion.cpp
     kernel/test_MeshBVH.cpp

@@ -1,9 +1,11 @@
 #include <nexus/geometry/MeshBooleanRobust.h>
 
+#include <nexus/geometry/AnalyticBRep.h>  // brep::segmentCrossesTriangleSoS (exact ray parity)
 #include <nexus/geometry/MeshCut.h>
 
 #include <array>
 #include <bit>
+#include <cmath>
 #include <cstdint>
 #include <utility>
 #include <vector>
@@ -19,13 +21,6 @@ bool isFiniteF(float x) noexcept
     constexpr uint32_t kExpMask = 0x7F800000u;
     return (std::bit_cast<uint32_t>(x) & kExpMask) != kExpMask;
 }
-
-V    sub(const V& a, const V& b) noexcept { return {a.x - b.x, a.y - b.y, a.z - b.z}; }
-V    cross(const V& a, const V& b) noexcept
-{
-    return {a.y * b.z - a.z * b.y, a.z * b.x - a.x * b.z, a.x * b.y - a.y * b.x};
-}
-float dot(const V& a, const V& b) noexcept { return a.x * b.x + a.y * b.y + a.z * b.z; }
 
 struct Soup {
     std::vector<V>                       pos;
@@ -47,31 +42,36 @@ Soup gather(const Mesh& src)
     return s;
 }
 
-// Ray-cast point-in-mesh: shoot a slightly off-axis ray and count triangle
-// crossings (Möller-Trumbore). Odd count → inside.
+// EXACT point-in-mesh classification via Simulation-of-Simplicity ray parity.
+//
+// The previous float Möller-Trumbore ray-cast (fixed off-axis dir + 1e-7 band)
+// was a NON-exact combinatorial decision: a centroid lying near the other surface
+// — pervasive after cutting, since sub-triangle centroids sit right against the
+// seam — could flip the crossing count, misclassifying a sub-triangle and opening
+// a boundary. This shoots a segment from p to a far endpoint beyond the mesh and
+// counts crossings with brep::segmentCrossesTriangleSoS, whose SoS perturbation
+// makes EVERY orient3D test non-zero and counts each shared triangle edge exactly
+// once (watertight parity). The decision is now exact and direction-independent —
+// the same p is resolved consistently against every triangle. Odd count → inside.
 bool pointInside(const V& p, const Soup& s) noexcept
 {
-    const V   dir{1.f, 0.0013f, 0.0007f};  // off-axis avoids edge/vertex degeneracies
-    int       crossings = 0;
-    constexpr float kEps = 1e-7f;
+    if (s.tris.empty()) return false;
+    // Far endpoint beyond every mesh vertex along a fixed generic direction; SoS
+    // makes the parity independent of the direction, so any non-axis dir works.
+    float maxD2 = 1.f;
+    for (const V& q : s.pos) {
+        const float dx = q.x - p.x, dy = q.y - p.y, dz = q.z - p.z;
+        const float d2 = dx * dx + dy * dy + dz * dz;
+        if (d2 > maxD2) maxD2 = d2;
+    }
+    const float reach = 2.f * std::sqrt(maxD2) + 1.f;
+    constexpr float dl = 0.4680f, dm = 0.6301f, dn = 0.6201f;  // generic, |·|≈1
+    const float inv = reach / std::sqrt(dl * dl + dm * dm + dn * dn);
+    const V B{p.x + dl * inv, p.y + dm * inv, p.z + dn * inv};
+    int crossings = 0;
     for (const auto& t : s.tris) {
-        const V& v0 = s.pos[t[0]];
-        const V& v1 = s.pos[t[1]];
-        const V& v2 = s.pos[t[2]];
-        const V  e1 = sub(v1, v0);
-        const V  e2 = sub(v2, v0);
-        const V  h  = cross(dir, e2);
-        const float a = dot(e1, h);
-        if (a > -kEps && a < kEps) continue;  // ray parallel to triangle
-        const float f = 1.f / a;
-        const V     sv = sub(p, v0);
-        const float u = f * dot(sv, h);
-        if (u < 0.f || u > 1.f) continue;
-        const V     q = cross(sv, e1);
-        const float v = f * dot(dir, q);
-        if (v < 0.f || u + v > 1.f) continue;
-        const float tt = f * dot(e2, q);
-        if (tt > kEps) ++crossings;
+        if (brep::segmentCrossesTriangleSoS(p, B, s.pos[t[0]], s.pos[t[1]], s.pos[t[2]]))
+            ++crossings;
     }
     return (crossings & 1) != 0;
 }
