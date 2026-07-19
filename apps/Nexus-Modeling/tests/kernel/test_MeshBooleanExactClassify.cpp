@@ -1,23 +1,29 @@
-// Foundation — the MESH boolean (world #2, the half-edge/DCC CSG path) now makes
-// its point-in-solid CLASSIFICATION decision EXACTLY: robustMeshBoolean classifies
-// each cut sub-triangle with an exact Simulation-of-Simplicity ray parity
-// (brep::segmentCrossesTriangleSoS) instead of a fragile float Möller-Trumbore
-// ray-cast that could flip near the seam. This pins the guarantees that decision
-// buys — and honestly bounds the one that is still pending the seam rebuild.
+// Foundation — the MESH boolean (world #2, the half-edge/DCC CSG path). Two exact
+// decisions make robustMeshBoolean watertight on the cases that used to leak:
+//   (1) point-in-solid CLASSIFICATION is an exact Simulation-of-Simplicity ray
+//       parity (brep::segmentCrossesTriangleSoS), not a fragile float ray-cast; and
+//   (2) COPLANAR-overlap faces are now handled — MeshCut imprints each triangle's
+//       edges onto the other (exact orient2D clip) so both surfaces share seam
+//       vertices along the overlap, and robustMeshBoolean resolves the resulting
+//       coincident faces with the B-rep boolean's selectFace rule table (probe just
+//       outside each face along its normal; same-normal coincident → keep A's copy
+//       only, opposite-normal → kept for Difference).
 //
 // WHAT IS PROVEN HERE:
 //   • Generic-position (fully transversal) booleans are WATERTIGHT (closed genus-0,
-//     zero boundary loops) AND volume-EXACT — the classifier keeps exactly the
-//     right sub-triangles, so no hole is opened by a misjudged centroid.
+//     zero boundary loops) AND volume-EXACT.
+//   • AXIS-ALIGNED / COPLANAR-face-sharing box booleans are now ALSO watertight AND
+//     volume-exact (the seam-rebuild win — these leaked before this increment).
 //   • The whole pipeline is byte-for-byte DETERMINISTIC across a wide near-
-//     degenerate sweep (the exact decision is direction-independent and stable).
+//     degenerate sweep.
 //
-// WHAT IS HONESTLY CHARACTERISED (not yet watertight — the pending world-#2 arc):
-//   • When operands share coplanar / axis-parallel faces, the result SOLID is still
-//     volume-correct, but its surface mesh has boundary loops: MeshCut leaves
-//     coplanar overlaps un-split and parallel-face seams T-junction, so the shared
-//     seam is not a single T-junction-free topology. That is the keystone gap the
-//     mesh-CSG exact rebuild targets next — NOT a classification error.
+// STILL HONESTLY BOUNDED (the remaining world-#2 gap — hard degeneracies):
+//   • Fully-coincident (identical operands), single-vertex / single-edge touch, and
+//     grazing near-coincident (sub-tolerance offset) configurations can still leave
+//     boundary loops. Those are the residual seam degeneracies, tracked next — NOT a
+//     classification or coplanar error. Curved primitives (makeCylinder/makeSphere)
+//     remain approximate here too. The determinism sweep below asserts only what
+//     holds across ALL configs (finite + deterministic), never false watertightness.
 
 #include <nexus/geometry/Mesh.h>
 #include <nexus/geometry/MeshBooleanRobust.h>
@@ -140,25 +146,35 @@ TEST(MeshBooleanExactClassify, DeterministicAndFiniteAcrossNearDegenerateSweep)
     EXPECT_GT(checked, 90);
 }
 
-// HONEST CHARACTERISATION of the pending world-#2 seam gap: when operands share
-// coplanar / axis-parallel faces, the result SOLID is still volume-EXACT (the
-// classifier keeps the right material), but its surface mesh is NOT yet watertight
-// — the shared seam T-junctions because MeshCut leaves coplanar overlaps un-split.
-// This test pins the guarantee that DOES hold (correct volume) and documents the
-// one that does not, so the eventual seam rebuild has a precise before/after.
-TEST(MeshBooleanExactClassify, AxisAlignedSeamsAreVolumeExactPendingSeamRebuild)
+// THE SEAM-REBUILD WIN: axis-aligned box booleans SHARE coplanar faces (both boxes
+// span y,z ∈ [-1,1]; only x is offset), so every one of these used to leak. With
+// coplanar imprint (MeshCut) + coincident-face resolution (robustMeshBoolean) they
+// are now WATERTIGHT closed genus-0 solids with EXACT volumes. NOTE: the coincident
+// resolution keeps the shared face from the FIRST operand, so this pins the
+// canonical operand order A∘B; the reversed order B∘A of a coplanar pair is not yet
+// symmetric (a residual seam degeneracy tracked for the next increment).
+TEST(MeshBooleanExactClassify, AxisAlignedCoplanarSeamsAreWatertightAndVolumeExact)
 {
     using primitives::makeBox;
     for (float dx : {0.5f, 1.f, 1.5f}) {
         const Vec3 o{dx, 0.f, 0.f};
-        const float ov = overlapVol(o);  // = (2-dx)*2*2
+        const float ov = overlapVol(o);  // = (2-dx)*2*2, coplanar y & z faces overlap
         const Mesh A = makeBox(2.f, 2.f, 2.f);
         const Mesh B = translated(makeBox(2.f, 2.f, 2.f), o);
-        EXPECT_NEAR(vol(robustMeshBoolean(A, B, BooleanOperationType::Union)), 16.f - ov, 1e-3f);
-        EXPECT_NEAR(vol(robustMeshBoolean(A, B, BooleanOperationType::Intersection)), ov, 1e-3f);
-        EXPECT_NEAR(vol(robustMeshBoolean(A, B, BooleanOperationType::Difference)), 8.f - ov, 1e-3f);
-        // NOTE: watertightness (boundaryLoops==0) is intentionally NOT asserted here
-        // — the coplanar/parallel-face seam is the next exact-rebuild target.
+        struct Case { BooleanOperationType op; float expect; const char* n; };
+        const Case cases[] = {
+            {BooleanOperationType::Union, 16.f - ov, "union"},
+            {BooleanOperationType::Intersection, ov, "intersection"},
+            {BooleanOperationType::Difference, 8.f - ov, "difference"},
+        };
+        for (const Case& c : cases) {
+            const Mesh r = robustMeshBoolean(A, B, c.op);
+            const auto v = MeshTopologyValidation::validate(r);
+            EXPECT_TRUE(v.valid) << c.n << " dx=" << dx;
+            EXPECT_EQ(v.boundaryLoops, 0u) << c.n << " dx=" << dx << " must be watertight";
+            EXPECT_EQ(v.euler, 2) << c.n << " dx=" << dx << " must be closed genus-0";
+            EXPECT_NEAR(vol(r), c.expect, 1e-3f) << c.n << " dx=" << dx;
+        }
     }
 }
 

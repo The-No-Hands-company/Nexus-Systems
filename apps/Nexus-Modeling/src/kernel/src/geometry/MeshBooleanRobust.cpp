@@ -3,6 +3,7 @@
 #include <nexus/geometry/AnalyticBRep.h>  // brep::segmentCrossesTriangleSoS (exact ray parity)
 #include <nexus/geometry/MeshCut.h>
 
+#include <algorithm>
 #include <array>
 #include <bit>
 #include <cmath>
@@ -106,19 +107,65 @@ Mesh robustMeshBoolean(const Mesh& a, const Mesh& b, BooleanOperationType op) no
     const auto& pA = cutR.a.attributes().positions();
     const auto& pB = cutR.b.attributes().positions();
 
+    // Scale-aware probe offset for the along-normal classification. Big enough to
+    // clear float noise off a face, far smaller than the nearest parallel feature.
+    float lo = 0.f, hi = 0.f;
+    for (const Soup* sp : {&soupA, &soupB}) {
+        for (const V& q : sp->pos) {
+            lo = std::min({lo, q.x, q.y, q.z});
+            hi = std::max({hi, q.x, q.y, q.z});
+        }
+    }
+    const float eps = std::max((hi - lo) * 1e-4f, 1e-4f);
+
+    // Along-normal face classification with COINCIDENT-face resolution — the mesh
+    // analogue of the B-rep boolean's selectFace (which resolves faces that share a
+    // plane with the other solid). For a sub-triangle with outward normal n and
+    // centroid c, the region just OUTSIDE its own solid is c+eps·n; probing both
+    // sides against `other` (exact pointInside) both classifies the face AND detects
+    // coincidence (the two sides fall in different in/out states iff `other`'s
+    // boundary passes through c parallel to n). Rule table matches the B-rep boolean:
+    // coincident SAME-normal → keep on the A side only (drop B's duplicate); coincident
+    // OPPOSITE-normal → kept only for Difference; otherwise the plain region test.
+    auto classify = [&](const V& p0, const V& p1, const V& p2, const Soup& other, bool isA,
+                        bool& keep, bool& flip) {
+        keep = false;
+        flip = false;
+        const V c{(p0.x + p1.x + p2.x) / 3.f, (p0.y + p1.y + p2.y) / 3.f, (p0.z + p1.z + p2.z) / 3.f};
+        V n{(p1.y - p0.y) * (p2.z - p0.z) - (p1.z - p0.z) * (p2.y - p0.y),
+            (p1.z - p0.z) * (p2.x - p0.x) - (p1.x - p0.x) * (p2.z - p0.z),
+            (p1.x - p0.x) * (p2.y - p0.y) - (p1.y - p0.y) * (p2.x - p0.x)};
+        const float nl = std::sqrt(n.x * n.x + n.y * n.y + n.z * n.z);
+        if (nl < 1e-20f) return;  // degenerate sub-triangle contributes nothing
+        n = {n.x / nl * eps, n.y / nl * eps, n.z / nl * eps};
+        const bool inFront = pointInside({c.x + n.x, c.y + n.y, c.z + n.z}, other);  // just outside self
+        const bool inBehind = pointInside({c.x - n.x, c.y - n.y, c.z - n.z}, other); // just inside self
+        if (inFront != inBehind) {
+            // Coincident: `other`'s boundary passes through c parallel to n.
+            const bool sameNormal = inBehind && !inFront;  // other's material on self's inside
+            if (!isA) return;  // drop every B-side coincident face (A's copy represents the pair)
+            switch (op) {
+                case BooleanOperationType::Union:
+                case BooleanOperationType::Intersection: keep = sameNormal; break;
+                case BooleanOperationType::Difference:   keep = !sameNormal; break;
+            }
+            return;
+        }
+        // Non-coincident: classify by the region just outside self.
+        switch (op) {
+            case BooleanOperationType::Union:        keep = !inFront; break;
+            case BooleanOperationType::Intersection: keep = inFront;  break;
+            case BooleanOperationType::Difference:   keep = isA ? !inFront : inFront; flip = !isA; break;
+        }
+    };
+
     // A' sub-triangles, classified against B.
     for (size_t f = 0; f < cutR.a.topology().faceCount(); ++f) {
         const Face& fc = cutR.a.topology().face(f);
         if (fc.indices.size() != 3) continue;
         const V p0 = pA[fc.indices[0]], p1 = pA[fc.indices[1]], p2 = pA[fc.indices[2]];
-        const V centroid{(p0.x + p1.x + p2.x) / 3.f, (p0.y + p1.y + p2.y) / 3.f, (p0.z + p1.z + p2.z) / 3.f};
-        const bool inB = pointInside(centroid, soupB);
         bool keep = false, flip = false;
-        switch (op) {
-            case BooleanOperationType::Union:        keep = !inB; break;
-            case BooleanOperationType::Intersection: keep = inB;  break;
-            case BooleanOperationType::Difference:   keep = !inB; break;  // A outside B
-        }
+        classify(p0, p1, p2, soupB, /*isA=*/true, keep, flip);
         if (keep) addTri(p0, p1, p2, flip);
     }
 
@@ -127,14 +174,8 @@ Mesh robustMeshBoolean(const Mesh& a, const Mesh& b, BooleanOperationType op) no
         const Face& fc = cutR.b.topology().face(f);
         if (fc.indices.size() != 3) continue;
         const V p0 = pB[fc.indices[0]], p1 = pB[fc.indices[1]], p2 = pB[fc.indices[2]];
-        const V centroid{(p0.x + p1.x + p2.x) / 3.f, (p0.y + p1.y + p2.y) / 3.f, (p0.z + p1.z + p2.z) / 3.f};
-        const bool inA = pointInside(centroid, soupA);
         bool keep = false, flip = false;
-        switch (op) {
-            case BooleanOperationType::Union:        keep = !inA; break;
-            case BooleanOperationType::Intersection: keep = inA;  break;
-            case BooleanOperationType::Difference:   keep = inA;  flip = true; break;  // B inside A, inward-facing
-        }
+        classify(p0, p1, p2, soupA, /*isA=*/false, keep, flip);
         if (keep) addTri(p0, p1, p2, flip);
     }
 
