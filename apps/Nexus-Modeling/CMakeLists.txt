@@ -16,6 +16,31 @@ if(NOT CMAKE_BUILD_TYPE)
 endif()
 
 # ─────────────────────────────────────────────────────────────────────────────
+#  Fast linker (developer iteration speed)
+#
+#  The unit-test binary links ~180 translation units against several static libs,
+#  so the default BFD linker dominates the change-one-test → rebuild cycle. Prefer
+#  mold, then lld, when present — a drop-in link-time win (often 3-8×) with no code
+#  impact. Opt out with -DNEXUS_FAST_LINKER=OFF; override with -DNEXUS_LINKER=<name>.
+# ─────────────────────────────────────────────────────────────────────────────
+option(NEXUS_FAST_LINKER "Use mold/lld if available for faster linking" ON)
+if(NEXUS_FAST_LINKER AND (CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang") AND NOT WIN32)
+    if(NOT DEFINED NEXUS_LINKER)
+        find_program(NEXUS_MOLD_EXE mold)
+        find_program(NEXUS_LLD_EXE ld.lld)
+        if(NEXUS_MOLD_EXE)
+            set(NEXUS_LINKER "mold")
+        elseif(NEXUS_LLD_EXE)
+            set(NEXUS_LINKER "lld")
+        endif()
+    endif()
+    if(NEXUS_LINKER)
+        add_link_options("-fuse-ld=${NEXUS_LINKER}")
+        message(STATUS "Nexus: using '${NEXUS_LINKER}' linker for faster iteration")
+    endif()
+endif()
+
+# ─────────────────────────────────────────────────────────────────────────────
 #  Options
 # ─────────────────────────────────────────────────────────────────────────────
 option(NEXUS_BACKEND_VULKAN   "Build Vulkan backend"          ON)
