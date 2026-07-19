@@ -492,4 +492,55 @@ TEST(BooleanOperation, CoarseBoxesAreWatertightWithCorrectVolume)
     }
 }
 
+namespace {
+Mesh uniformScaled(Mesh m, float s)
+{
+    auto p = m.attributes().positions();
+    for (auto& v : p) { v.x *= s; v.y *= s; v.z *= s; }
+    m.attributes().setPositions(std::move(p));
+    return m;
+}
+Mesh shifted(Mesh m, float d)
+{
+    auto p = m.attributes().positions();
+    for (auto& v : p) { v.x += d; v.y += d; v.z += d; }
+    m.attributes().setPositions(std::move(p));
+    return m;
+}
+}  // namespace
+
+// SCALE-INVARIANT degeneracy (Phase T): the degenerate-triangle test used a FIXED
+// absolute |cross|² < 1e-16 floor. Because |cross|² scales as length⁴, it wrongly
+// dropped valid sub-millimetre triangles — making small-scale booleans fail with an
+// EMPTY, invalid result. The relative test (area vs the triangle's own edge²) keeps
+// the SAME boolean valid + non-empty from a 0.05 mm model up to a 5 km model, while
+// unit scale is unchanged. (A fixed 1e-16 floor produced 0 faces below ~5e-5.)
+TEST(BooleanOperation, DegeneracyIsScaleInvariantAcrossOrdersOfMagnitude)
+{
+    for (float s : {5e-5f, 1e-2f, 1.f, 100.f, 5000.f}) {
+        Mesh a = uniformScaled(makeBox(2.f, 2.f, 2.f), s);
+        Mesh b = shifted(uniformScaled(makeBox(2.f, 2.f, 2.f), s), 1.f * s);  // diagonal overlap
+        Mesh out;
+        const auto report = BooleanOperation::compute(a, b, BooleanOperationType::Union, out);
+        EXPECT_TRUE(report.valid) << "s=" << s << " (small-scale boolean must not fail on valid input)";
+        EXPECT_GT(out.topology().faceCount(), 0u) << "s=" << s << " (valid tris wrongly dropped)";
+    }
+}
+
+// A genuinely degenerate (collinear, zero-area) triangle is STILL rejected at ANY
+// scale — the relative test flags |cross|²==0 everywhere, so making it scale-aware
+// did not weaken real degeneracy detection.
+TEST(BooleanOperation, GenuineDegenerateTriangleStillRejectedAtEveryScale)
+{
+    for (float s : {1e-4f, 1.f, 1000.f}) {
+        Mesh m;
+        m.attributes().setPositions({{0.f, 0.f, 0.f}, {s, 0.f, 0.f}, {2.f * s, 0.f, 0.f}});  // collinear
+        Face f; f.indices = {0, 1, 2};
+        m.topology().addFace(f);
+        const auto report = BooleanOperation::validateMesh(m);
+        EXPECT_TRUE(hasCode(report.code, BooleanOperationDiagnostic::GeometricDegeneracy))
+            << "collinear triangle must be flagged degenerate at s=" << s;
+    }
+}
+
 }  // namespace nexus::geometry::testing

@@ -110,12 +110,25 @@ inline bool isFiniteVec3(const Vec3& v)
     return isFiniteFloat(v.x) && isFiniteFloat(v.y) && isFiniteFloat(v.z);
 }
 
-inline bool isDegenerateTriangle(const Vec3& p0, const Vec3& p1, const Vec3& p2, float eps)
+// Scale-INVARIANT degeneracy test. `|cross|² = (2·area)²` scales as length⁴, so a
+// FIXED absolute floor (the old 1e-16 on |cross|²) is scale-blind: it wrongly drops
+// perfectly valid sub-millimetre triangles (edge ≲ 1e-4 → |cross|² < 1e-16) — which
+// makes small-scale booleans fail with an empty result — and wrongly keeps genuine
+// slivers on huge models. Instead compare the area to a `relEps`-fraction of the
+// triangle's OWN largest edge²: |cross|² ≤ (relEps · maxEdgeLen²)². Equivalent to
+// "the triangle's thin dimension (height = |cross|/|maxEdge|) is below a scale-
+// relative linear tolerance relEps·|maxEdge|", so the decision is identical in
+// proportion at any model scale. `relEps` is DIMENSIONLESS; 1e-8 reproduces the old
+// unit-scale behaviour (|cross|² ≤ 1e-16 at maxEdgeLen² ≈ 1).
+inline bool isDegenerateTriangle(const Vec3& p0, const Vec3& p1, const Vec3& p2, float relEps)
 {
     const Vec3 e1 = vec3Sub(p1, p0);
     const Vec3 e2 = vec3Sub(p2, p0);
+    const Vec3 e3 = vec3Sub(p2, p1);
     const Vec3 c = vec3Cross(e1, e2);
-    return vec3Dot(c, c) <= eps;
+    const float maxLen2 = std::max({vec3Dot(e1, e1), vec3Dot(e2, e2), vec3Dot(e3, e3)});
+    const float floor2 = relEps * maxLen2;  // relEps·maxEdge²  (units: length²)
+    return vec3Dot(c, c) <= floor2 * floor2;  // |cross|² ≤ (relEps·maxEdge²)²
 }
 
 inline EdgeKey makeEdgeKey(uint32_t a, uint32_t b)
@@ -204,7 +217,7 @@ void triangulateInputMesh(const Mesh& input, std::vector<Vec3>& posOut,
             if (isDegenerateTriangle(posOut[tri.indices[0]],
                                      posOut[tri.indices[1]],
                                      posOut[tri.indices[2]],
-                                     1e-16f)) {
+                                     1e-8f)) {  // dimensionless relative degeneracy
                 ++degenerateTrianglesSkipped;
                 continue;
             }
@@ -363,7 +376,7 @@ BooleanOperationReport BooleanOperation::validateMesh(const Mesh& mesh) noexcept
                 const Vec3& p0 = attrs.positions()[face.indices[0]];
                 const Vec3& p1 = attrs.positions()[face.indices[1]];
                 const Vec3& p2 = attrs.positions()[face.indices[2]];
-                if (isDegenerateTriangle(p0, p1, p2, 1e-16f)) {
+                if (isDegenerateTriangle(p0, p1, p2, 1e-8f)) {  // dimensionless relative degeneracy
                     hasDegenerate = true;
                 }
             }
