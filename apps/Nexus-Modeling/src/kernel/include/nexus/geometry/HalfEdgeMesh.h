@@ -51,6 +51,19 @@ public:
     uint32_t vertexCount() const { return static_cast<uint32_t>(m_verts.size()); }
     uint32_t faceCount() const { return static_cast<uint32_t>(m_faces.size()); }
 
+    // Liveness queries. edgeCount()/faceCount() include TOMBSTONED slots that the
+    // Euler operators leave behind (they tombstone in place rather than compact), so
+    // a caller iterating [0, edgeCount()) will visit dead elements. The mutating ops
+    // reject a dead index (succeed-or-refuse-never-corrupt), but these let callers
+    // skip dead slots directly. A tombstoned edge has face==kInvalid; a tombstoned
+    // face has edge==kInvalid.
+    [[nodiscard]] bool isLiveEdge(uint32_t he) const noexcept {
+        return he < m_edges.size() && m_edges[he].face != kInvalid;
+    }
+    [[nodiscard]] bool isLiveFace(uint32_t f) const noexcept {
+        return f < m_faces.size() && m_faces[f].edge != kInvalid;
+    }
+
     std::vector<std::vector<uint32_t>> boundaryLoops() const;
 
     bool flipEdge(uint32_t he);

@@ -22,6 +22,7 @@
 #include <optional>
 #include <random>
 #include <utility>
+#include <vector>
 
 namespace nexus::geometry::testing {
 
@@ -153,21 +154,62 @@ TEST(KernelFuzz, HalfEdgeOpsPreserveIntegrityUnderRandomSequences)
             ASSERT_TRUE(hemOpt.has_value());
             HalfEdgeMesh hem = std::move(*hemOpt);
             ASSERT_TRUE(hem.checkIntegrity().ok);
-            for (int step = 0; step < 12; ++step) {
-                const uint32_t ec = hem.edgeCount();
-                if (ec == 0) break;
-                const uint32_t he = rng() % ec;
-                switch (rng() % 4u) {
-                    case 0: (void)hem.flipEdge(he); break;
-                    case 1: (void)hem.splitEdge(he); break;
-                    case 2: (void)hem.insertEdgeVertex(he, 0.5f); break;
-                    default: (void)hem.collapseEdge(he, Vec3{0.f, 0.f, 0.f}); break;
+            for (int step = 0; step < 16; ++step) {
+                const uint32_t ec = hem.edgeCount(), vc = hem.vertexCount(), fc = hem.faceCount();
+                if (ec == 0 || vc == 0 || fc == 0) break;
+                // Random in-range indices INCLUDING tombstoned slots — the whole point:
+                // every mutating op must refuse a dead index rather than corrupt.
+                const uint32_t he = rng() % ec, v = rng() % vc, v2 = rng() % vc, f = rng() % fc;
+                switch (rng() % 13u) {
+                    case 0:  (void)hem.flipEdge(he); break;
+                    case 1:  (void)hem.splitEdge(he); break;
+                    case 2:  (void)hem.insertEdgeVertex(he, 0.5f); break;
+                    case 3:  (void)hem.collapseEdge(he, Vec3{0.f, 0.f, 0.f}); break;
+                    case 4:  (void)hem.insertEdgeLoop(he, 0.5f); break;
+                    case 5:  (void)hem.slideEdgeLoop(he, 0.3f); break;
+                    case 6:  (void)hem.bevelVertex(v, 0.1f); break;
+                    case 7:  (void)hem.pokeFace(f); break;
+                    case 8:  (void)hem.connectVertices(v, v2); break;
+                    case 9:  (void)hem.insetFace(f, 0.3f); break;
+                    case 10: (void)hem.extrudeFacePrism(f, 0.2f); break;
+                    case 11: (void)hem.extrudeFaces(std::vector<uint32_t>{f}, 0.2f, (rng() & 1u) != 0u); break;
+                    default: (void)hem.splitFacesAlongLoop(std::vector<uint32_t>{v, v2}); break;
                 }
                 const auto ig = hem.checkIntegrity();
                 ASSERT_TRUE(ig.ok) << "seed op corrupted HEM: " << ig.reason;
             }
         }
     }
+}
+
+// The public liveness query mirrors the tombstone state, and every edge-index
+// mutating op REFUSES a dead index (the succeed-or-refuse-never-corrupt contract
+// that keeps the fuzz sweep above safe on the raw [0,edgeCount()) index space).
+TEST(KernelFuzz, LivenessQueryTracksTombstonesAndOpsRefuseDeadIndices)
+{
+    auto hemOpt = HalfEdgeMesh::fromMesh(primitives::makeBox(2.f, 2.f, 2.f));
+    ASSERT_TRUE(hemOpt.has_value());
+    HalfEdgeMesh hem = std::move(*hemOpt);
+    for (uint32_t e = 0; e < hem.edgeCount(); ++e) EXPECT_TRUE(hem.isLiveEdge(e));
+    for (uint32_t f = 0; f < hem.faceCount(); ++f) EXPECT_TRUE(hem.isLiveFace(f));
+
+    ASSERT_TRUE(hem.insertEdgeVertex(0, 0.5f));  // an Euler op tombstones split-away edges
+    ASSERT_TRUE(hem.checkIntegrity().ok);
+
+    uint32_t dead = HalfEdgeMesh::kInvalid;
+    for (uint32_t e = 0; e < hem.edgeCount(); ++e) {
+        if (!hem.isLiveEdge(e)) { dead = e; break; }
+    }
+    ASSERT_NE(dead, HalfEdgeMesh::kInvalid) << "the Euler op should tombstone at least one edge";
+
+    // Every edge-index mutating op refuses the dead index and leaves the mesh clean.
+    EXPECT_FALSE(hem.flipEdge(dead));
+    EXPECT_FALSE(hem.splitEdge(dead));
+    EXPECT_FALSE(hem.insertEdgeVertex(dead, 0.5f));
+    EXPECT_FALSE(hem.collapseEdge(dead, Vec3{0.f, 0.f, 0.f}));
+    EXPECT_FALSE(hem.insertEdgeLoop(dead, 0.5f));
+    EXPECT_FALSE(hem.slideEdgeLoop(dead, 0.3f));
+    EXPECT_TRUE(hem.checkIntegrity().ok);
 }
 
 }  // namespace nexus::geometry::testing

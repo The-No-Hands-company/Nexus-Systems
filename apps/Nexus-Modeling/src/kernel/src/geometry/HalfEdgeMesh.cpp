@@ -623,7 +623,13 @@ bool HalfEdgeMesh::insertEdgeLoop(uint32_t seedEdge, float slide) {
         splitEdges.push_back(ei);
     }
 
-    for (size_t i = 0; i < loop.size(); ++i) {
+    // Iterate over splitEdges (== newVerts), NOT loop: Phase 1 skips boundary/dead
+    // edges (continue), so splitEdges can be SHORTER than loop. Indexing by
+    // loop.size() would read splitEdges[i]/newVerts[i] out of bounds and then write
+    // through the garbage indices — a heap corruption reachable whenever the loop
+    // contains a boundary edge (e.g. after a prior op opened one). The fuzzer
+    // (test_KernelFuzz) surfaced this as a double-free under adversarial op sequences.
+    for (size_t i = 0; i < splitEdges.size(); ++i) {
         uint32_t ei = splitEdges[i];
         uint32_t nv = newVerts[i];
         uint32_t t = m_edges[ei].twin;
