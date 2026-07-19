@@ -740,6 +740,7 @@ bool HalfEdgeMesh::slideEdgeLoop(uint32_t seedEdge, float slide) {
 
 bool HalfEdgeMesh::flipEdge(uint32_t he) {
     if (he >= m_edges.size()) return false;
+    if (m_edges[he].face == kInvalid) return false;  // reject tombstoned (dead) half-edges
 
     uint32_t t = m_edges[he].twin;
     if (t == kInvalid || t >= m_edges.size()) return false;
@@ -800,6 +801,7 @@ bool HalfEdgeMesh::flipEdge(uint32_t he) {
 
 bool HalfEdgeMesh::splitEdge(uint32_t he) {
     if (he >= m_edges.size()) return false;
+    if (m_edges[he].face == kInvalid) return false;  // reject tombstoned (dead) half-edges
 
     uint32_t t = m_edges[he].twin;
     if (t == kInvalid || t >= m_edges.size()) return false;
@@ -911,6 +913,7 @@ bool HalfEdgeMesh::splitEdge(uint32_t he) {
 
 bool HalfEdgeMesh::insertEdgeVertex(uint32_t he, float t) {
     if (he >= m_edges.size()) return false;
+    if (m_edges[he].face == kInvalid) return false;  // reject tombstoned (dead) half-edges
 
     uint32_t twin = m_edges[he].twin;
     uint32_t vSrc = m_edges[he].src;
@@ -1021,6 +1024,7 @@ bool HalfEdgeMesh::insertEdgeVertex(uint32_t he, float t) {
 
 bool HalfEdgeMesh::collapseEdge(uint32_t he, const nexus::render::Vec3& target) {
     if (he >= m_edges.size()) return false;
+    if (m_edges[he].face == kInvalid) return false;  // reject tombstoned (dead) half-edges
 
     uint32_t t = m_edges[he].twin;
     if (t == kInvalid || t >= m_edges.size()) return false;
