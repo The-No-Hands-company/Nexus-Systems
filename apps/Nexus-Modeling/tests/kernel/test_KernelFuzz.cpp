@@ -23,6 +23,8 @@
 #include <nexus/geometry/MeshThicken.h>
 #include <nexus/geometry/MeshTopologyValidation.h>
 #include <nexus/geometry/MeshVertexWeld.h>
+#include <nexus/geometry/MeshSurfaceNets.h>  // included WITH MeshVoxelize.h below: compile-time regression guard for the VoxelGrid double-def
+#include <nexus/geometry/MeshVoxelize.h>
 #include <nexus/geometry/SubdivisionSurface.h>
 #include <nexus/geometry/Tolerance.h>
 #include <nexus/render/Camera.h>
@@ -346,6 +348,26 @@ TEST(KernelFuzz, NonFiniteRejectedByDecimateAndRemesh)
             EXPECT_FALSE(MeshDecimator::decimate(*hem).has_value()) << "decimate must reject non-finite";
         }
     }
+}
+
+// Voxelization rejects non-finite input (empty grid, not a finite-but-garbage one).
+// This test's inclusion of both MeshVoxelize.h and MeshSurfaceNets.h is also the
+// compile-time regression guard for the VoxelGrid double-definition (now: VoxelGrid
+// in MeshVoxelize.h, SurfaceNetsGrid in MeshSurfaceNets.h — no clash).
+TEST(KernelFuzz, VoxelizeRejectsNonFiniteInput)
+{
+    for (float bad : {std::numeric_limits<float>::quiet_NaN(),
+                      std::numeric_limits<float>::infinity()}) {
+        Mesh m = primitives::makeBox(2.f, 2.f, 2.f);
+        (void)m.topology().triangulate();
+        auto pos = m.attributes().positions();
+        ASSERT_FALSE(pos.empty());
+        pos[0] = {bad, 0.5f, 0.5f};
+        m.attributes().setPositions(std::move(pos));
+        EXPECT_TRUE(MeshVoxelize::voxelize(m).occupancy.empty()) << "voxelize must reject non-finite input";
+    }
+    // A valid mesh still voxelizes to a non-empty grid (behaviour unchanged).
+    EXPECT_FALSE(MeshVoxelize::voxelize(primitives::makeBox(2.f, 2.f, 2.f)).occupancy.empty());
 }
 
 }  // namespace nexus::geometry::testing

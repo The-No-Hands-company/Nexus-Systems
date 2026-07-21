@@ -11,9 +11,9 @@ namespace {
 
 using namespace nexus::geometry;
 
-static VoxelGrid makeSphereGrid(int32_t size)
+static SurfaceNetsGrid makeSphereGrid(int32_t size)
 {
-    VoxelGrid grid;
+    SurfaceNetsGrid grid;
     grid.nx = size;
     grid.ny = size;
     grid.nz = size;
@@ -57,7 +57,7 @@ TEST(MeshSurfaceNets, ProducesMeshFromSphereGrid)
 
 TEST(MeshSurfaceNets, AllInsideGridNoSurface)
 {
-    VoxelGrid grid;
+    SurfaceNetsGrid grid;
     grid.nx = 8;
     grid.ny = 8;
     grid.nz = 8;
@@ -69,7 +69,7 @@ TEST(MeshSurfaceNets, AllInsideGridNoSurface)
 
 TEST(MeshSurfaceNets, AllOutsideGridNoSurface)
 {
-    VoxelGrid grid;
+    SurfaceNetsGrid grid;
     grid.nx = 8;
     grid.ny = 8;
     grid.nz = 8;
@@ -81,7 +81,7 @@ TEST(MeshSurfaceNets, AllOutsideGridNoSurface)
 
 TEST(MeshSurfaceNets, TooSmallGridReturnsEmpty)
 {
-    VoxelGrid grid;
+    SurfaceNetsGrid grid;
     grid.nx = 1;
     grid.ny = 1;
     grid.nz = 1;
@@ -93,7 +93,7 @@ TEST(MeshSurfaceNets, TooSmallGridReturnsEmpty)
 
 TEST(MeshSurfaceNets, OccupiedCountReturnsCorrectCount)
 {
-    VoxelGrid grid;
+    SurfaceNetsGrid grid;
     grid.nx = 4;
     grid.ny = 4;
     grid.nz = 4;

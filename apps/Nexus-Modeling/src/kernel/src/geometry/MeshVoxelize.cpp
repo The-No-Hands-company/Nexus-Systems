@@ -1,5 +1,6 @@
 #include <nexus/geometry/MeshVoxelize.h>
 #include <nexus/geometry/MeshBVH.h>
+#include <nexus/geometry/Tolerance.h>  // geometry::isFinite (non-finite rejection convention)
 
 #include <algorithm>
 #include <cmath>
@@ -113,6 +114,11 @@ bool satOverlap(const Vec3& v0, const Vec3& v1, const Vec3& v2,
 } // namespace
 
 VoxelGrid MeshVoxelize::voxelize(const Mesh& mesh, const VoxelizeOptions& opts) {
+    // Reject non-finite input rather than rasterize NaN/±Inf geometry into a
+    // finite-but-garbage grid (the non-finite-rejection convention: empty on bad input).
+    for (const auto& p : mesh.attributes().positions())
+        if (!isFinite(p)) return VoxelGrid{};
+
     VoxelGrid grid;
     grid.resolution = opts.resolution;
     grid.origin = opts.origin;

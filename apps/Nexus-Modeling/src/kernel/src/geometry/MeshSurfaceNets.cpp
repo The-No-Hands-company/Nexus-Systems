@@ -6,7 +6,7 @@ namespace nexus::geometry {
 
 using Vec3 = nexus::render::Vec3;
 
-Mesh MeshSurfaceNets::extract(const VoxelGrid& grid, const SurfaceNetsOptions& opts) {
+Mesh MeshSurfaceNets::extract(const SurfaceNetsGrid& grid, const SurfaceNetsOptions& opts) {
     Mesh result;
 
     if (grid.nx < 2 || grid.ny < 2 || grid.nz < 2) return result;

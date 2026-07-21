@@ -7,7 +7,7 @@
 
 namespace nexus::geometry {
 
-struct VoxelGrid {
+struct SurfaceNetsGrid {
     int32_t nx = 0, ny = 0, nz = 0;
     std::vector<uint8_t> data;
 
@@ -29,7 +29,7 @@ struct SurfaceNetsOptions {
 
 class MeshSurfaceNets {
 public:
-    [[nodiscard]] static Mesh extract(const VoxelGrid& grid,
+    [[nodiscard]] static Mesh extract(const SurfaceNetsGrid& grid,
                                       const SurfaceNetsOptions& opts = {});
 };
 
