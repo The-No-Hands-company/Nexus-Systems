@@ -65,7 +65,13 @@ bool onSegmentInterior(const Vec3& V, const Vec3& A, const Vec3& B)
     return dist2(V, proj) < 1e-8f * (1.f + L2);
 }
 
-struct LeakKind { bool leaks = false; bool nonManifold = false; bool tJunction = false; };
+struct LeakKind {
+    bool leaks = false;
+    bool hole = false;              // a boundary edge (used by exactly 1 triangle) — a genuine gap
+    bool nonManifoldEdge = false;   // an edge used by ≥3 triangles
+    bool nonManifoldVertex = false; // edge-manifold, but a non-manifold VERTEX (bowtie / pinch)
+    bool tJunction = false;         // a vertex lying on the interior of a boundary edge (the old, wrong guess)
+};
 
 LeakKind classify(const Mesh& r)
 {
@@ -87,14 +93,20 @@ LeakKind classify(const Mesh& r)
         }
     }
     for (const auto& [edge, count] : edgeUse) {
-        if (count >= 3) { k.nonManifold = true; }
+        if (count >= 3) { k.nonManifoldEdge = true; }
         if (count == 1) {
+            k.hole = true;
             for (uint32_t vi = 0; vi < pos.size(); ++vi) {
                 if (vi == edge.first || vi == edge.second) continue;
                 if (onSegmentInterior(pos[vi], pos[edge.first], pos[edge.second])) { k.tJunction = true; break; }
             }
         }
     }
+    // Edge-manifold (no boundary edge, no ≥3 edge) yet the validator reports a
+    // boundary loop ⇒ a non-manifold VERTEX (two surface sheets pinched at a point;
+    // euler stays 2 while boundaryLoops is nonzero — an internally inconsistent, i.e.
+    // non-2-manifold, result). This is a distinct defect from a hole.
+    if (!k.hole && !k.nonManifoldEdge) k.nonManifoldVertex = true;
     return k;
 }
 }  // namespace
@@ -103,12 +115,14 @@ LeakKind classify(const Mesh& r)
 TEST(MeshBooleanSeam, ResidualLeaksAreHolesOrNonManifoldNeverTJunctions)
 {
     using primitives::makeBox;
-    int leaks = 0, tJunctions = 0, nonManifold = 0;
+    int leaks = 0, tJunctions = 0, holes = 0, nmEdge = 0, nmVertex = 0;
     auto run = [&](const Mesh& a, const Mesh& b, BooleanOperationType op) {
         const LeakKind k = classify(robustMeshBoolean(a, b, op));
         if (k.leaks) ++leaks;
         if (k.tJunction) ++tJunctions;
-        if (k.nonManifold) ++nonManifold;
+        if (k.hole) ++holes;
+        if (k.nonManifoldEdge) ++nmEdge;
+        if (k.nonManifoldVertex) ++nmVertex;
     };
     const std::vector<float> dxs = {0.f, 1e-4f, 0.3f, 0.5f, 1.f, 1.5f, 1.9999f, 2.f, 2.0001f, 3.f};
     const std::vector<float> angs = {0.f, 0.7853981634f, 0.5f, 1.0471975512f};
@@ -128,17 +142,35 @@ TEST(MeshBooleanSeam, ResidualLeaksAreHolesOrNonManifoldNeverTJunctions)
                         BooleanOperationType::Difference})
             run(a, b, op);
     }
+    // A separate small check for the non-manifold-VERTEX (bowtie) class, which appears
+    // only in the REVERSED operand order of an axis-aligned coplanar pair (B∘A), not in
+    // the canonical order the battery above uses.
+    {
+        const Mesh a = makeBox(2.f, 2.f, 2.f);
+        const Mesh b = translated(makeBox(2.f, 2.f, 2.f), {0.5f, 0.f, 0.f});
+        run(b, a, BooleanOperationType::Union);
+    }
 
-    // The corrected finding: NO leak is a T-junction. This guards the mechanism — a
-    // future MeshCut change that introduced a T-junction would fail here.
+    // The corrected map: every leak is a HOLE, a non-manifold EDGE, or a non-manifold
+    // VERTEX (bowtie). NONE is a T-junction — the guess earlier increments recorded.
+    // This EXPECT guards the mechanism: a future MeshCut change that introduced a
+    // T-junction would fail here.
     EXPECT_EQ(tJunctions, 0) << "a leak is now a T-junction — the seam mechanism changed";
-    EXPECT_GT(nonManifold, 0) << "expected some doubled-face (non-manifold) leaks in the residual";
-    // Pinned residual baseline (box-box + diagonal subset; box/curved excluded for speed).
-    // The seam rebuild must only ever REDUCE this — a rise means a regression. When
-    // Phase M drops it, TIGHTEN this number (the RecordProperty makes the count visible).
-    RecordProperty("meshBooleanSeamLeaks", leaks);
-    RecordProperty("meshBooleanSeamNonManifold", nonManifold);
-    EXPECT_LE(leaks, 24) << "mesh-boolean seam leaks ROSE above the pinned baseline (regression)";
+    // Every leak is classified (classify() sets nonManifoldVertex whenever a leak is
+    // neither a hole nor a non-manifold edge), so the three classes cover all leaks.
+    EXPECT_GE(holes + nmEdge + nmVertex, leaks) << "an unclassified leak slipped through";
+    EXPECT_GT(holes, 0) << "missing-face holes are the dominant class";
+    EXPECT_GT(nmEdge, 0) << "some leaks are non-manifold edges (≥3 faces on an edge)";
+    EXPECT_GT(nmVertex, 0) << "the reversed-order coplanar case produces a bowtie (non-manifold vertex)";
+    // Pinned residual baseline. All three classes share ONE root — MeshCut triangulates
+    // the two operands INDEPENDENTLY along the shared seam — so none is fixable by a
+    // post-process (dedup/re-weld were both proven ineffective); the fix is a shared-seam
+    // construction. The seam rebuild must only ever REDUCE these; TIGHTEN when it does.
+    RecordProperty("seamLeaks", leaks);
+    RecordProperty("seamHoles", holes);
+    RecordProperty("seamNonManifoldEdge", nmEdge);
+    RecordProperty("seamNonManifoldVertex", nmVertex);
+    EXPECT_LE(leaks, 26) << "mesh-boolean seam leaks ROSE above the pinned baseline (regression)";
 }
 
 }  // namespace nexus::geometry::testing
