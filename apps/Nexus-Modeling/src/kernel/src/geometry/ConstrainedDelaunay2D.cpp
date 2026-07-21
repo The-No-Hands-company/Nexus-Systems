@@ -283,31 +283,42 @@ void ConstrainedDelaunay2D::enforceConstraint(uint32_t a, uint32_t b) {
         return o1 != 0 && o2 != 0 && o3 != 0 && o4 != 0 && o1 != o2 && o3 != o4;
     };
 
+    // The crossing parameter of edge (ea,eb) along a-b (0 at a, 1 at b), for Sloan's
+    // proven-terminating ORDERED flipping: process crossings nearest `a` first.
+    auto crossParam = [&](uint32_t ea, uint32_t eb) -> double {
+        const double da = RobustPredicates::orient2D(m_vertices[ea], m_vertices[eb], m_vertices[a]);
+        const double db = RobustPredicates::orient2D(m_vertices[ea], m_vertices[eb], m_vertices[b]);
+        const double den = da - db;
+        return (den != 0.0) ? da / den : 0.5;
+    };
+
     constexpr int kMaxIter = 4096;
     for (int iter = 0; iter < kMaxIter; ++iter) {
         if (edgeExists(a, b)) return;
+        // Among the convex, non-constrained edges that cross a-b, flip the one whose
+        // crossing point is NEAREST `a` (Sloan's order). A convex flip never INCREASES
+        // the number of edges crossing a-b, and processing crossings front-to-back
+        // guarantees termination and recovery — even through configurations where NO
+        // single flip makes immediate progress (the case a strict "progress only" rule
+        // deadlocked on). Every sidedness decision is an exact orient2D.
         uint32_t fea = kInvalid, feb = kInvalid;
+        double   bestT = 2.0;
         for (const auto& t : m_triangles) {
-            for (int e = 0; e < 3 && fea == kInvalid; ++e) {
+            for (int e = 0; e < 3; ++e) {
                 const uint32_t ea = t[e], eb = t[(e + 1) % 3];
                 if (isConstrained(ea, eb)) continue;
-                if (!properCross(a, b, ea, eb)) continue;           // edge crosses a-b
+                if (!properCross(a, b, ea, eb)) continue;            // edge crosses a-b
                 uint32_t oppA = kInvalid, oppB = kInvalid;
                 apexes(ea, eb, oppA, oppB);
                 if (oppA == kInvalid || oppB == kInvalid) continue;  // boundary edge, no flip
                 const int s1 = orient2D(m_vertices[oppA], m_vertices[oppB], m_vertices[ea]);
                 const int s2 = orient2D(m_vertices[oppA], m_vertices[oppB], m_vertices[eb]);
                 if (s1 == 0 || s2 == 0 || s1 == s2) continue;        // quad not strictly convex
-                // Require progress: the replacement diagonal must not itself cross a-b
-                // (prevents flip/flip-back cycling). oppA/oppB coincident with a or b
-                // means the flip yields the constraint edge directly — that IS progress.
-                const bool touchesAB = (oppA == a || oppA == b || oppB == a || oppB == b);
-                if (!touchesAB && properCross(a, b, oppA, oppB)) continue;
-                fea = ea; feb = eb;
+                const double tc = crossParam(ea, eb);
+                if (tc < bestT) { bestT = tc; fea = ea; feb = eb; }
             }
-            if (fea != kInvalid) break;
         }
-        if (fea == kInvalid) break;  // no progress flip available → give up safely
+        if (fea == kInvalid) break;  // no convex crossing edge available → give up safely
         flipEdge(fea, feb);
     }
 }

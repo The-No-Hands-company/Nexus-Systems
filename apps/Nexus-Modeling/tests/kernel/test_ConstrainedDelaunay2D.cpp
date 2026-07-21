@@ -52,6 +52,35 @@ TEST(ConstrainedDelaunay2D, RecoversConstraintCrossingMultipleEdges)
     }
 }
 
+// A configuration where the crossing edges of the constraint form a region in which NO
+// single flip makes immediate progress (every convex crossing edge's flip leaves a new
+// edge that still crosses). A "flip only edges that make progress" rule deadlocks here
+// and gives up with the edge unrecovered. Sloan's ordered recovery — flip the convex
+// crossing edge NEAREST endpoint a, progress-making or not — passes through such a
+// configuration and terminates with the edge in place. These exact points deadlocked
+// before the ordered rule; guard that they now recover, cleanly (all triangles CCW).
+TEST(ConstrainedDelaunay2D, RecoversConstraintThroughNoImmediateProgressConfiguration)
+{
+    const std::vector<Vec2> pts = {
+        {-2.5432f, -0.1975f}, {-1.7761f, -1.4278f}, {4.3089f, -3.5644f}, {3.8288f, 2.9164f},
+        {0.7839f, -1.9134f},  {-3.6628f, 0.2524f},  {3.0856f, 2.0393f},  {-0.7040f, -0.5792f}};
+    const CDTResult r = ConstrainedDelaunay2D::triangulate(pts, {{5u, 2u}});
+    ASSERT_TRUE(r.ok);
+    ASSERT_FALSE(r.triangles.empty());
+
+    bool hasEdge = false;
+    for (const auto& t : r.triangles) {
+        for (int e = 0; e < 3; ++e) {
+            const uint32_t x = t[e], y = t[(e + 1) % 3];
+            if ((x == 5u && y == 2u) || (x == 2u && y == 5u)) hasEdge = true;
+        }
+    }
+    EXPECT_TRUE(hasEdge) << "constraint edge 5-2 was not recovered (deadlock reintroduced)";
+    for (const auto& t : r.triangles) {
+        EXPECT_GT(cdtTriArea2(r.vertices, t), 0.0) << "an inverted/degenerate triangle survived";
+    }
+}
+
 // Invariant: recovering ANY single constraint edge must never produce an inverted or
 // overlapping triangle — every output triangle stays CCW. Before the fix, ~14% of
 // random inputs came out with mixed winding (overlapping triangulation); the
