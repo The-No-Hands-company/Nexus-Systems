@@ -113,6 +113,14 @@ RemeshReport RemeshOperation::apply(const Mesh& input,
         report.messages.push_back("Input mesh is invalid");
         return report;
     }
+    for (const auto& p : input.attributes().positions()) {
+        if (!isFiniteFloat(p.x) || !isFiniteFloat(p.y) || !isFiniteFloat(p.z)) {
+            // Reject non-finite input rather than report valid with NaN/Inf output.
+            report.diagnostic = RemeshDiagnostic::InvalidInputMesh;
+            report.messages.push_back("Input mesh has non-finite positions");
+            return report;
+        }
+    }
 
     if (desc.targetEdgeLength <= 0.f || !isFiniteFloat(desc.targetEdgeLength)
         || desc.splitThresholdMultiplier < 1.0f || !isFiniteFloat(desc.splitThresholdMultiplier)) {

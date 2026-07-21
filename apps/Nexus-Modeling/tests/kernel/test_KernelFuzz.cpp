@@ -14,9 +14,11 @@
 #include <nexus/geometry/Mesh.h>
 #include <nexus/geometry/MeshBooleanRobust.h>
 #include <nexus/geometry/MeshMassProperties.h>
+#include <nexus/geometry/MeshDecimator.h>
 #include <nexus/geometry/MeshDisplace.h>
 #include <nexus/geometry/MeshLaplacian.h>
 #include <nexus/geometry/MeshRepair.h>
+#include <nexus/geometry/RemeshOperation.h>
 #include <nexus/geometry/MeshSimplify.h>
 #include <nexus/geometry/MeshThicken.h>
 #include <nexus/geometry/MeshTopologyValidation.h>
@@ -317,6 +319,31 @@ TEST(KernelFuzz, NonFiniteRejectedAcrossMeshReturningOps)
         if (auto hem = HalfEdgeMesh::fromMesh(m)) {
             EXPECT_FALSE(SubdivisionSurface::catmullClark(*hem).has_value()) << "catmullClark";
             EXPECT_FALSE(SubdivisionSurface::loopSubdivide(*hem).has_value()) << "loopSubdivide";
+        }
+    }
+}
+
+// The last two mesh-processing ops with a different result shape: MeshDecimator
+// (returns optional) and RemeshOperation (returns a report + out-param mesh). Both
+// previously propagated non-finite — decimation into its output HEM, and remesh
+// reporting VALID with a NaN output mesh (the worst kind). They now reject.
+TEST(KernelFuzz, NonFiniteRejectedByDecimateAndRemesh)
+{
+    for (float bad : {std::numeric_limits<float>::quiet_NaN(),
+                      std::numeric_limits<float>::infinity()}) {
+        Mesh m = primitives::makeBox(2.f, 2.f, 2.f);
+        (void)m.topology().triangulate();
+        auto pos = m.attributes().positions();
+        ASSERT_FALSE(pos.empty());
+        pos[0] = {bad, 0.5f, 0.5f};
+        m.attributes().setPositions(std::move(pos));
+
+        Mesh out;
+        const RemeshReport rep = RemeshOperation::apply(m, RemeshDesc{}, out);
+        EXPECT_FALSE(rep.valid) << "remesh must decline non-finite input, not report valid";
+
+        if (auto hem = HalfEdgeMesh::fromMesh(m)) {
+            EXPECT_FALSE(MeshDecimator::decimate(*hem).has_value()) << "decimate must reject non-finite";
         }
     }
 }

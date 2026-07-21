@@ -1,4 +1,5 @@
 #include <nexus/geometry/MeshDecimator.h>
+#include <nexus/geometry/Tolerance.h>  // geometry::isFinite (non-finite rejection convention)
 
 #include <algorithm>
 #include <cmath>
@@ -307,6 +308,8 @@ MeshDecimator::decimate(const HalfEdgeMesh& mesh, const DecimationOptions& opts)
     DecimationReport report;
     report.facesIn = countActiveFaces(mesh);
     if (report.facesIn == 0) return std::nullopt;
+    for (const auto& p : mesh.positions())
+        if (!isFinite(p)) return std::nullopt;  // reject non-finite input (convention)
 
     size_t targetFaces = opts.targetFaceCount;
     if (targetFaces == 0) {
