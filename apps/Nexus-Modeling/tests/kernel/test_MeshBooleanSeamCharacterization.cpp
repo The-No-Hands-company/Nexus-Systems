@@ -1,19 +1,22 @@
-// Foundation — PHASE M (mesh-boolean shared-seam rebuild) begins with an honest map.
-// The mesh boolean's exact classification and coplanar imprint are done, but ~29
-// near-degenerate configs still leak. Earlier increments GUESSED the mechanism was
-// T-junctions (a vertex landing on the interior of another triangle's edge). A
-// boundary-edge characterization DISPROVES that: across the whole torture battery,
-// ZERO leaks are T-junctions. The residual is instead:
-//   • HOLES — genuine missing faces at the seam, where MeshCut retriangulates the two
-//     operands INDEPENDENTLY so their seam neighbourhoods don't tile consistently
-//     (the dominant class); a flat cap would be geometrically WRONG, so the real fix
-//     is generating the missing seam faces correctly (a shared-seam construction).
-//   • NON-MANIFOLD — an edge shared by ≥3 triangles, from doubled coincident faces
-//     (the coplanar operand-order-dependent cases).
-// This test PINS that corrected diagnosis (0 T-junctions) and the residual leak count
-// as a baseline, so the seam-rebuild increments can measure progress and no change can
-// silently reintroduce a T-junction. It does NOT assert full watertightness (the
-// residual is the open arc) — only what is true and measured today.
+// Foundation — PHASE M (mesh-boolean shared-seam rebuild), pinning honest progress.
+// Earlier increments GUESSED the residual leak mechanism was T-junctions (a vertex
+// landing on the interior of another triangle's edge). A boundary-edge
+// characterization DISPROVED that: ZERO leaks are T-junctions. The residual is:
+//   • HOLES — missing faces at the seam, where MeshCut retriangulates the two operands
+//     INDEPENDENTLY so their seam neighbourhoods don't tile consistently (dominant).
+//   • NON-MANIFOLD EDGE — an edge shared by ≥3 triangles (doubled coincident faces).
+//   • (formerly) a bowtie NON-MANIFOLD VERTEX in one reversed-order coplanar case —
+//     now ELIMINATED, see below.
+// Progress: making the per-triangle CDT (ConstrainedDelaunay2D) robustly ENFORCE its
+// constraint edges — convexity-checked edge recovery plus splitting a constraint at any
+// vertex lying exactly on it — removed the STRADDLING sub-triangles that most
+// transverse-seam leaks came from. That HALVED the leak count (30→15 on the full
+// torture battery, 26→9 on this battery) and eliminated the bowtie class entirely, all
+// while keeping determinism and introducing zero inverted/overlapping triangles.
+// This test PINS the corrected diagnosis (0 T-junctions, 0 bowties) and the tightened
+// residual leak count, so the seam-rebuild increments keep measuring progress and no
+// change can silently regress. It does NOT assert full watertightness (the residual —
+// dominated by the coplanar-cap / side-wall 3-way junction — is the open arc).
 
 #include <nexus/geometry/Mesh.h>
 #include <nexus/geometry/MeshBooleanRobust.h>
@@ -151,26 +154,33 @@ TEST(MeshBooleanSeam, ResidualLeaksAreHolesOrNonManifoldNeverTJunctions)
         run(b, a, BooleanOperationType::Union);
     }
 
-    // The corrected map: every leak is a HOLE, a non-manifold EDGE, or a non-manifold
-    // VERTEX (bowtie). NONE is a T-junction — the guess earlier increments recorded.
-    // This EXPECT guards the mechanism: a future MeshCut change that introduced a
-    // T-junction would fail here.
+    // The corrected map: every leak is a HOLE or a non-manifold EDGE. NONE is a
+    // T-junction — the guess earlier increments recorded. This EXPECT guards the
+    // mechanism: a future change that introduced a T-junction would fail here.
     EXPECT_EQ(tJunctions, 0) << "a leak is now a T-junction — the seam mechanism changed";
     // Every leak is classified (classify() sets nonManifoldVertex whenever a leak is
-    // neither a hole nor a non-manifold edge), so the three classes cover all leaks.
+    // neither a hole nor a non-manifold edge), so the classes cover all leaks.
     EXPECT_GE(holes + nmEdge + nmVertex, leaks) << "an unclassified leak slipped through";
     EXPECT_GT(holes, 0) << "missing-face holes are the dominant class";
     EXPECT_GT(nmEdge, 0) << "some leaks are non-manifold edges (≥3 faces on an edge)";
-    EXPECT_GT(nmVertex, 0) << "the reversed-order coplanar case produces a bowtie (non-manifold vertex)";
-    // Pinned residual baseline. All three classes share ONE root — MeshCut triangulates
-    // the two operands INDEPENDENTLY along the shared seam — so none is fixable by a
-    // post-process (dedup/re-weld were both proven ineffective); the fix is a shared-seam
-    // construction. The seam rebuild must only ever REDUCE these; TIGHTEN when it does.
+    // The bowtie (non-manifold VERTEX) class was ELIMINATED by the CDT constraint-
+    // enforcement fix: the reversed-order coplanar case that used to pinch two sheets
+    // at a point is now clean. Guard that it stays eliminated.
+    EXPECT_EQ(nmVertex, 0) << "a bowtie (non-manifold vertex) leak reappeared";
+    // Pinned residual baseline. The residual leaks share ONE root — MeshCut triangulates
+    // the two operands INDEPENDENTLY along the coplanar-cap seam (proven: each operand's
+    // cut is individually watertight; the leak is the cap/side-wall 3-way junction) — so
+    // none is fixable by a post-process (dedup/re-weld were both proven ineffective); the
+    // fix is a shared-seam construction. The count was HALVED (30→15 on the full torture
+    // battery, 26→9 here) by making the per-triangle CDT robustly ENFORCE its constraint
+    // edges (convexity-checked recovery + on-constraint-vertex splitting), which removed
+    // the straddling sub-triangles that most transverse-seam leaks came from. The seam
+    // rebuild must only ever REDUCE these; TIGHTEN when it does.
     RecordProperty("seamLeaks", leaks);
     RecordProperty("seamHoles", holes);
     RecordProperty("seamNonManifoldEdge", nmEdge);
     RecordProperty("seamNonManifoldVertex", nmVertex);
-    EXPECT_LE(leaks, 26) << "mesh-boolean seam leaks ROSE above the pinned baseline (regression)";
+    EXPECT_LE(leaks, 9) << "mesh-boolean seam leaks ROSE above the pinned baseline (regression)";
 }
 
 }  // namespace nexus::geometry::testing

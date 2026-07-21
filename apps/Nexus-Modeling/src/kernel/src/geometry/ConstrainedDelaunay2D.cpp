@@ -199,60 +199,116 @@ void ConstrainedDelaunay2D::flipEdge(uint32_t a, uint32_t b) {
             }
             if (oppA == kInvalid || oppB == kInvalid) return;
 
-            ta = {a, oppA, oppB};
-            tb = {b, oppA, oppB};
+            // Emit both new triangles CCW so orientation stays consistent across the
+            // mesh (buildDelaunay establishes CCW; a raw flip must preserve it,
+            // otherwise the triangulation acquires mixed winding).
+            ta = (orient2D(m_vertices[a], m_vertices[oppA], m_vertices[oppB]) < 0)
+                     ? std::array<uint32_t, 3>{a, oppB, oppA}
+                     : std::array<uint32_t, 3>{a, oppA, oppB};
+            tb = (orient2D(m_vertices[b], m_vertices[oppA], m_vertices[oppB]) < 0)
+                     ? std::array<uint32_t, 3>{b, oppB, oppA}
+                     : std::array<uint32_t, 3>{b, oppA, oppB};
             return;
         }
     }
 }
 
 void ConstrainedDelaunay2D::enforceConstraint(uint32_t a, uint32_t b) {
-    EdgeKey ek{a, b};
-    m_constrainedEdges[ek] = true;
+    m_constrainedEdges[EdgeKey{a, b}] = true;
 
-    for (int ti = 0; ti < static_cast<int>(m_triangles.size()); ++ti) {
-        const auto& t = m_triangles[ti];
-        for (int e = 0; e < 3; ++e) {
-            uint32_t ea = t[e], eb = t[(e + 1) % 3];
-            if ((ea == a && eb == b) || (ea == b && eb == a))
-                return;
+    auto edgeExists = [&](uint32_t x, uint32_t y) -> bool {
+        for (const auto& t : m_triangles) {
+            for (int e = 0; e < 3; ++e) {
+                const uint32_t ea = t[e], eb = t[(e + 1) % 3];
+                if ((ea == x && eb == y) || (ea == y && eb == x)) return true;
+            }
+        }
+        return false;
+    };
+    if (edgeExists(a, b)) return;
+
+    // If a vertex lies EXACTLY on the constraint's interior, the edge a-b cannot be a
+    // single triangle edge — split the constraint at the NEAREST such vertex and
+    // recover each half. This is the collinear / T-junction case that edge flipping
+    // alone can never resolve (a straddling triangle would survive otherwise). The
+    // on-segment decision is EXACT: orient2D == 0 ⇔ collinear (Shewchuk predicate).
+    {
+        const Vec2&  va     = m_vertices[a];
+        const Vec2&  vb     = m_vertices[b];
+        const double abu    = static_cast<double>(vb.u) - va.u;
+        const double abv    = static_cast<double>(vb.v) - va.v;
+        const double abLen2 = abu * abu + abv * abv;
+        uint32_t     best   = kInvalid;
+        double       bestT  = 2.0;
+        if (abLen2 > 0.0) {
+            for (uint32_t m = 0; m < static_cast<uint32_t>(m_vertices.size()); ++m) {
+                if (m == a || m == b) continue;
+                if (orient2D(va, vb, m_vertices[m]) != 0) continue;  // not collinear (exact)
+                const double t = ((static_cast<double>(m_vertices[m].u) - va.u) * abu
+                                  + (static_cast<double>(m_vertices[m].v) - va.v) * abv) / abLen2;
+                if (t > 1e-6 && t < 1.0 - 1e-6 && t < bestT) { bestT = t; best = m; }
+            }
+        }
+        if (best != kInvalid) {
+            enforceConstraint(a, best);
+            enforceConstraint(best, b);
+            return;
         }
     }
 
-    for (int iter = 0; iter < 100; ++iter) {
-        bool found = false;
-        for (int ti = 0; ti < static_cast<int>(m_triangles.size()); ++ti) {
-            const auto& t = m_triangles[ti];
-            for (int e = 0; e < 3; ++e) {
-                uint32_t ea = t[e], eb = t[(e + 1) % 3];
-                if ((ea == a && eb == b) || (ea == b && eb == a)) {
-                    found = true;
-                    break;
-                }
+    // Recover the edge by flipping — but ONLY an edge whose two triangles form a
+    // strictly CONVEX quad (a non-convex flip produces overlapping/inverted
+    // triangles), AND whose flip makes PROGRESS: the new diagonal must no longer
+    // cross a-b. Anglada's theorem guarantees such an edge always exists while any
+    // edge still crosses the constraint, so this terminates and recovers a-b. Every
+    // sidedness test is EXACT orient2D.
+    auto apexes = [&](uint32_t ea, uint32_t eb, uint32_t& oppA, uint32_t& oppB) {
+        oppA = kInvalid; oppB = kInvalid;
+        for (const auto& t : m_triangles) {
+            bool ha = false, hb = false; uint32_t o = kInvalid;
+            for (int i = 0; i < 3; ++i) {
+                if (t[i] == ea)      ha = true;
+                else if (t[i] == eb) hb = true;
+                else                 o = t[i];
             }
-            if (found) break;
+            if (ha && hb) { if (oppA == kInvalid) oppA = o; else if (oppB == kInvalid) oppB = o; }
         }
-        if (found) return;
+    };
+    auto properCross = [&](uint32_t s0, uint32_t s1, uint32_t t0, uint32_t t1) -> bool {
+        if (s0 == t0 || s0 == t1 || s1 == t0 || s1 == t1) return false;  // share an endpoint
+        const int o1 = orient2D(m_vertices[s0], m_vertices[s1], m_vertices[t0]);
+        const int o2 = orient2D(m_vertices[s0], m_vertices[s1], m_vertices[t1]);
+        const int o3 = orient2D(m_vertices[t0], m_vertices[t1], m_vertices[s0]);
+        const int o4 = orient2D(m_vertices[t0], m_vertices[t1], m_vertices[s1]);
+        return o1 != 0 && o2 != 0 && o3 != 0 && o4 != 0 && o1 != o2 && o3 != o4;
+    };
 
-        bool flipped = false;
-        for (int ti = 0; ti < static_cast<int>(m_triangles.size()) && !flipped; ++ti) {
-            const auto& t = m_triangles[ti];
-            for (int e = 0; e < 3 && !flipped; ++e) {
-                uint32_t ea = t[e], eb = t[(e + 1) % 3];
-                if ((ea == a && eb == b) || (ea == b && eb == a)) continue;
-
-                EdgeKey ek2{ea, eb};
-                auto it = m_constrainedEdges.find(ek2);
-                if (it != m_constrainedEdges.end() && it->second) continue;
-
-                if (segmentsCross(m_vertices[a], m_vertices[b],
-                                  m_vertices[ea], m_vertices[eb])) {
-                    flipEdge(ea, eb);
-                    flipped = true;
-                }
+    constexpr int kMaxIter = 4096;
+    for (int iter = 0; iter < kMaxIter; ++iter) {
+        if (edgeExists(a, b)) return;
+        uint32_t fea = kInvalid, feb = kInvalid;
+        for (const auto& t : m_triangles) {
+            for (int e = 0; e < 3 && fea == kInvalid; ++e) {
+                const uint32_t ea = t[e], eb = t[(e + 1) % 3];
+                if (isConstrained(ea, eb)) continue;
+                if (!properCross(a, b, ea, eb)) continue;           // edge crosses a-b
+                uint32_t oppA = kInvalid, oppB = kInvalid;
+                apexes(ea, eb, oppA, oppB);
+                if (oppA == kInvalid || oppB == kInvalid) continue;  // boundary edge, no flip
+                const int s1 = orient2D(m_vertices[oppA], m_vertices[oppB], m_vertices[ea]);
+                const int s2 = orient2D(m_vertices[oppA], m_vertices[oppB], m_vertices[eb]);
+                if (s1 == 0 || s2 == 0 || s1 == s2) continue;        // quad not strictly convex
+                // Require progress: the replacement diagonal must not itself cross a-b
+                // (prevents flip/flip-back cycling). oppA/oppB coincident with a or b
+                // means the flip yields the constraint edge directly — that IS progress.
+                const bool touchesAB = (oppA == a || oppA == b || oppB == a || oppB == b);
+                if (!touchesAB && properCross(a, b, oppA, oppB)) continue;
+                fea = ea; feb = eb;
             }
+            if (fea != kInvalid) break;
         }
-        if (!flipped) break;
+        if (fea == kInvalid) break;  // no progress flip available → give up safely
+        flipEdge(fea, feb);
     }
 }
 
