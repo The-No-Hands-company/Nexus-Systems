@@ -3332,7 +3332,7 @@ bool boxesOverlap(const FaceBox& a, const FaceBox& b)
            b.lo.y <= a.hi.y && a.lo.z <= b.hi.z && b.lo.z <= a.hi.z;
 }
 
-void imprintOneWay(Body& target, const Body& tool, Tolerance tol)
+bool imprintOneWay(Body& target, const Body& tool, Tolerance tol)
 {
     // Snapshot each tool face's surface + AABB once (tool is not modified here).
     // The AABB is the broad-phase key: a tool face can only cut a target face if
@@ -3353,10 +3353,20 @@ void imprintOneWay(Body& target, const Body& tool, Tolerance tol)
     // it by the first tool plane that applies (inner break), and continues to the
     // next face rather than restarting the scan after every cut. Sub-faces
     // appended mid-pass are handled on the following pass. Deterministic.
+    // Bound the total work. A near-tangent faceted config — e.g. a faceted sphere
+    // grazing a box face by ~1e-4 — makes the tool's facet planes imprint an O(n²)
+    // line arrangement on the target face, one cut per pass, growing toward a
+    // thousand-plus faces (found by the near-tangent torture: the Boolean effectively
+    // hung). Cap the imprinted face count relative to the inputs; when it is exceeded
+    // the imprint stops incomplete, and booleanToBody's watertight-or-empty invariant
+    // then returns a clean empty Body rather than hanging on a degenerate tangency.
+    const size_t faceBudget =
+        128 + 4 * (static_cast<size_t>(target.faceCount()) + toolFaces.size());
     bool changed = true;
     size_t safety = 0;
     const size_t cap = 100000;
     while (changed && ++safety < cap) {
+        if (target.faceCount() > faceBudget) return false;  // degenerate explosion → bail
         changed = false;
         const uint32_t fcount = static_cast<uint32_t>(target.faceCount());
         for (uint32_t f = 0; f < fcount; ++f) {
@@ -3376,13 +3386,15 @@ void imprintOneWay(Body& target, const Body& tool, Tolerance tol)
             }
         }
     }
+    return safety < cap;  // false ⇒ hit the safety cap (degenerate)
 }
 }  // namespace
 
-void imprintMutually(Body& a, Body& b, Tolerance tol)
+bool imprintMutually(Body& a, Body& b, Tolerance tol)
 {
-    imprintOneWay(a, b, tol);
-    imprintOneWay(b, a, tol);
+    const bool ok1 = imprintOneWay(a, b, tol);
+    const bool ok2 = imprintOneWay(b, a, tol);
+    return ok1 && ok2;  // false ⇒ a degenerate/near-tangent config blew the imprint budget
 }
 
 bool segmentCrossesTriangleExact(const Vec3& A, const Vec3& B, const Vec3& v0, const Vec3& v1,

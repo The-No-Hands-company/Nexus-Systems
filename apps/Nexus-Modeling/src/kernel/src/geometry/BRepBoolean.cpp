@@ -107,7 +107,11 @@ Mesh booleanToMesh(const Body& a, const Body& b, BooleanOp op, Tolerance tol)
     // Copy + segment so no face straddles the other's boundary.
     Body A = a;
     Body B = b;
-    imprintMutually(A, B, tol);
+    // A degenerate/near-tangent config can blow the imprint's face budget (a faceted
+    // sphere grazing a box face imprints an O(n²) line arrangement). Bail to an empty
+    // result rather than grinding through the exploded body — the honest watertight-
+    // or-empty contract, and it keeps the Boolean bounded instead of effectively hung.
+    if (!imprintMutually(A, B, tol)) return Mesh{};
 
     std::vector<Vec3> positions;
     Mesh mesh;
@@ -138,7 +142,9 @@ Body booleanToBody(const Body& a, const Body& b, BooleanOp op, Tolerance tol)
 {
     Body A = a;
     Body B = b;
-    imprintMutually(A, B, tol);
+    // Degenerate/near-tangent config → the imprint budget is blown → return a clean
+    // empty Body (watertight-or-empty; never a hang on a pathological tangency).
+    if (!imprintMutually(A, B, tol)) return Body{};
 
     const float weldEps = tol.absolute > 0.f ? tol.absolute * 10.f : 1e-4f;
     std::vector<Vec3> points;

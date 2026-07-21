@@ -586,7 +586,7 @@ private:
 // op. Both bodies are modified in place; checkIntegrity / checkGeometry stay
 // clean. Handles planar (Line-imprint) faces; curved-face imprint is a
 // follow-up. Deterministic.
-void imprintMutually(Body& a, Body& b, Tolerance tol = {});
+[[nodiscard]] bool imprintMutually(Body& a, Body& b, Tolerance tol = {});
 
 // EXACT segment-vs-triangle intersection test built on the Shewchuk adaptive
 // orient3D predicate — an exact building block for the boolean's ray-parity /

@@ -80,6 +80,7 @@ add_executable(nexus_kernel_tests
     kernel/test_BRepFacetedSphere.cpp
     kernel/test_BRepBooleanInvariant.cpp
     kernel/test_BRepBooleanTorture.cpp
+    kernel/test_BRepNearTangentTorture.cpp
     kernel/test_BRepChamfer.cpp
     kernel/test_BRepFillet.cpp
     kernel/test_BRepHollow.cpp
