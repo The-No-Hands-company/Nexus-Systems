@@ -173,6 +173,7 @@ add_executable(nexus_kernel_tests
     kernel/test_Renderer.cpp
     kernel/test_RendererBehavior.cpp
     kernel/test_RobustPredicates.cpp
+    kernel/test_RobustPredicatesExactness.cpp
     kernel/test_SceneAsset.cpp
     kernel/test_SceneAssetImporter.cpp
     kernel/test_SceneAssetTextAdapter.cpp

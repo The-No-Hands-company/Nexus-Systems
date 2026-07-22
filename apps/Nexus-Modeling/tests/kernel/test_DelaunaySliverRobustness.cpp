@@ -137,21 +137,19 @@ TEST(DelaunaySliver, HullIsTiledOnModeratelyThinInput)
     }
 }
 
-// KNOWN RESIDUAL, tracked not asserted.
+// The hull is tiled at EVERY thinness, down to the limit of float resolution.
 //
-// Sizing the super-triangle to the input's thinness stopped the catastrophic failure —
-// whole triangulations coming back empty — but a SECOND, independent defect remains in
-// Bowyer-Watson at extreme thinness: the cavity retriangulation can leave the convex hull
-// under-filled. It is a distinct mechanism (a point whose deviation from a hull edge is
-// down at float resolution ends up treated as interior by the insertion while the exact
-// hull puts it outside), and no super-triangle size fixes it.
+// This started as a tracked residual — 125 of 400 thin sets came back with the convex hull
+// under-filled, and it looked like a second defect in the Bowyer-Watson cavity, since the
+// cavity was provably never empty, never disconnected and always star-shaped. It was not a
+// cavity defect at all. inCircle was returning the WRONG SIGN on sliver configurations, so
+// the cavity was correctly computed from an incorrect set of "bad" triangles. Rebuilding
+// the predicates on genuine expansion arithmetic took this to zero.
 //
-// This pins the rate so the next increment on the cavity has a baseline to drive down.
-// Note it also CORRECTS an earlier reading that put the under-fill at ~3% and attributed
-// it to noise in the measurement: measured with an accurate area (orient2D fan rather than
-// the shoelace formula, which loses most of its digits on a sliver) the under-fill is real
-// and considerably more common in thin regimes.
-TEST(DelaunaySliver, HullUnderfillAtExtremeThinnessIsTracked)
+// It stays asserted at zero because it is the sharpest end-to-end witness the suite has
+// that the predicates are still exact: a wrong sign anywhere in inCircle shows up here as
+// missing area long before it shows up as a leaking boolean.
+TEST(DelaunaySliver, HullIsTiledAtEveryThinness)
 {
     int sets = 0, gaps = 0;
     double worst = 0.0;
@@ -174,8 +172,9 @@ TEST(DelaunaySliver, HullUnderfillAtExtremeThinnessIsTracked)
     RecordProperty("sliverHullSets", sets);
     RecordProperty("sliverHullGaps", gaps);
     ASSERT_GT(sets, 300) << "the battery degenerated — nothing was actually exercised";
-    // Baseline measured 2026-07-22: 125 of 400. A RISE means the cavity handling regressed.
-    EXPECT_LE(gaps, 130) << "hull under-fill rose above the pinned baseline";
+    EXPECT_EQ(gaps, 0) << "the triangulation under-filled its own convex hull in " << gaps
+                       << " of " << sets << " thin sets (worst deficit " << worst
+                       << ") — suspect the exactness of inCircle";
 }
 
 // A vertex that reaches no triangle is invisible to constraint recovery: nothing crosses
