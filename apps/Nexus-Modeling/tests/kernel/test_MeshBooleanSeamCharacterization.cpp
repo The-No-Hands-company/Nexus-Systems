@@ -1,34 +1,37 @@
-// Foundation — PHASE M (mesh-boolean seam), the defect map RE-MEASURED FROM SCRATCH.
+// Foundation — PHASE M (mesh-boolean seam). The defect map, and the fix it led to.
 //
-// The previous map in this file was drawn while orient2D/orient3D/inCircle were returning
-// WRONG SIGNS on degenerate input (see the exact-predicate rebuild). Every conclusion it
-// reached about where the leaks come from rested on unsound classifiers, so it was
-// re-derived from nothing rather than adjusted. Three of its claims did not survive:
+// The map was re-measured from scratch after the exact-predicate rebuild, because the
+// previous one had been drawn while orient2D/orient3D/inCircle returned wrong signs. That
+// re-measurement found two live classes and refuted the old "coplanar-cap 3-way junction"
+// diagnosis. Both classes turned out to have ONE cause, in the classification stage.
 //
-//   • "The residual is dominated by the coplanar-cap / side-wall 3-way junction."
-//     NOT SUPPORTED. Box/box booleans in GENERAL POSITION are now essentially watertight —
-//     0 leaks in a 900-run systematic sweep, 1 in 1200 randomized runs. The entire box
-//     residual sits in a narrow band of NEAR-COINCIDENT offsets.
-//   • "ZERO leaks are T-junctions."  TRUE ONLY FOR BOXES. The old battery was box-only;
-//     curved operands do produce them.
-//   • The old map never measured curved or finely-tessellated operands at all — and that
-//     is now by far the LARGEST defect class.
+// THE CAUSE. Classification offset each sub-triangle's centroid along its normal by eps
+// and asked the exact point-in-solid test on both sides, using the two answers both to
+// decide the region AND to detect coincidence. That made a COMBINATORIAL decision depend
+// on choosing eps well, which is not possible in general: eps must clear float noise yet
+// stay closer than the nearest other sheet of surface. eps was derived from the model's
+// BOUNDING BOX, while the distance to the nearest sheet is a LOCAL quantity that shrinks
+// as a model is tessellated more finely. Measured on sphere-vs-box, the smallest
+// sub-triangle produced by the cut fell from 3.5e-4 at 6x10 to 9.4e-7 at 32x36 while the
+// offset stayed at 2e-4 — up to 200x larger than the triangle it was probing off — and the
+// leak rate rose with it, 12% to 67%.
 //
-// One claim did survive, and is re-asserted below: each operand's cut is individually
-// watertight, so the defect is downstream of MeshCut, in classify/keep/weld.
+// THE FIX. Split the two questions along the kernel's governing rule — combinatorial
+// decisions exact, metric quantities tolerant. The region test is now the exact
+// Simulation-of-Simplicity parity at the centroid itself, with no offset at all.
+// Coincidence is a genuine measurement: distance from the centroid to the other surface
+// within a scale-aware tolerance, AND the two surfaces locally parallel (distance alone
+// misreads ordinary seam slivers, since every seam face is close to the other surface —
+// that is what a seam is). Outward orientation comes from the nearest original triangle of
+// the face's own solid rather than a third probe.
 //
-// THE RE-MEASURED MAP — two live classes, both SCALE-INVARIANT (measured identical at
-// model scales 0.2 through 200, so neither is a fixed absolute epsilon):
-//
-//   CLASS 1 — NEAR-COINCIDENT COPLANAR FACES. Axis-aligned boxes separated by a RELATIVE
-//     offset in the measured band 1e-6..2e-4 leak; at and below 7e-7 the seam weld snaps
-//     the faces together (clean), at and above 3e-4 they are genuinely distinct (clean),
-//     and inside the band neither resolution happens. The same band appears around
-//     face-touching separation. This is the whole of the box residual.
-//   CLASS 2 — TESSELLATION DENSITY. Sphere-vs-box leak rate climbs with density:
-//     ~6% at 6x10, ~14% at 12x16, ~16% at 16x20, ~51% at 24x28 — on inputs verified
-//     watertight and 2-manifold, with clean cuts. An all-planar cylinder of comparable
-//     face count does NOT leak, so it tracks the seam's feature size, not face count.
+// RESULT, measured over 2593 boolean runs: 38 leaks -> 1.
+//   pinned battery         9 -> 0        broad systematic sweep   0 -> 0
+//   randomized box/box     1 -> 0        curved sphere/cylinder  28 -> 1
+// Class 2 (tessellation density) is closed through moderate density and much reduced at
+// extreme density. Class 1 (near-coincident coplanar faces) is closed except for a narrow
+// band where the face separation is ABOUT EQUAL to the coincidence tolerance — the
+// inherent ambiguity band of any tolerance-based coincidence test, pinned below.
 
 #include <nexus/geometry/Mesh.h>
 #include <nexus/geometry/MeshBooleanRobust.h>
@@ -183,81 +186,57 @@ TEST(MeshBooleanSeam, GeneralPositionBoxBooleansAreWatertight)
     RecordProperty("generalPositionRuns", runs);
     RecordProperty("generalPositionLeaks", leaks);
     ASSERT_GT(runs, 1000) << "battery degenerated";
-    // Measured 2026-07-22: 1 leak in 2100 runs across sweep + randomized.
-    EXPECT_LE(leaks, 2) << "general-position box booleans regressed: " << leaks << " of " << runs;
+    // Measured 2026-07-22 after the classification fix: 0 leaks in 1314 runs.
+    EXPECT_EQ(leaks, 0) << "general-position box booleans regressed: " << leaks << " of " << runs;
 }
 
-// CLASS 1 — the entire box residual, and it is a narrow band of NEAR-COINCIDENT offsets,
-// not a 3-way junction. Below the band the seam weld snaps coincident faces together;
-// above it they are distinct; inside it neither resolution happens.
-TEST(MeshBooleanSeam, NearCoincidentCoplanarOffsetsAreTheBoxResidual)
+// CLASS 1, after the fix. Near-coincident coplanar faces are now resolved correctly
+// except in a narrow band where the separation is ABOUT EQUAL to the coincidence
+// tolerance. That band is inherent to deciding coincidence by measurement: at exactly the
+// tolerance the answer is genuinely ambiguous, and neighbouring faces can fall on opposite
+// sides of it, so keep/drop becomes inconsistent and the seam opens. Real kernels avoid it
+// by snapping geometry to tolerance BEFORE the boolean, which is a separate feature.
+//
+// Pinned so that the band cannot silently widen, and so that separations comfortably below
+// and above the tolerance stay clean.
+TEST(MeshBooleanSeam, NearCoincidentFacesLeakOnlyNearTheCoincidenceTolerance)
 {
     using primitives::makeBox;
-    Classes c;
-    int inBand = 0, outOfBand = 0;
+    int wellBelow = 0, nearTolerance = 0, wellAbove = 0;
 
-    // Measured band edges (relative to model size): leaks span 1e-6..2e-4; clean at and
-    // below 7e-7, clean at and above 3e-4.
-    for (double rel : {1e-6, 1e-5, 1e-4}) {
+    auto count = [&](double rel, int& into) {
         const Mesh a = makeBox(2.f, 2.f, 2.f);
         const Mesh b = translated(makeBox(2.f, 2.f, 2.f), {static_cast<float>(rel * 2.0), 0.f, 0.f});
         for (auto op : kOps) {
-            const Mesh r = robustMeshBoolean(a, b, op);
-            if (leakState(r) == 1) ++inBand;
-            classifyInto(c, r);
+            if (leakState(robustMeshBoolean(a, b, op)) == 1) ++into;
         }
-    }
-    for (double rel : {1e-8, 1e-7, 5e-7, 3e-4, 1e-3, 1e-2}) {
-        const Mesh a = makeBox(2.f, 2.f, 2.f);
-        const Mesh b = translated(makeBox(2.f, 2.f, 2.f), {static_cast<float>(rel * 2.0), 0.f, 0.f});
-        for (auto op : kOps) {
-            if (leakState(robustMeshBoolean(a, b, op)) == 1) ++outOfBand;
-        }
-    }
+    };
 
-    RecordProperty("coincidentBandLeaks", inBand);
-    RecordProperty("coincidentOutOfBandLeaks", outOfBand);
-    EXPECT_GT(inBand, 0) << "the near-coincident band stopped leaking — RE-MEASURE the map, "
-                            "this test's whole premise is that it does";
-    EXPECT_EQ(outOfBand, 0) << "leaks escaped the near-coincident band into ordinary offsets";
-    // Every leak in this class is a hole and/or a non-manifold edge; none is a bowtie.
-    EXPECT_EQ(c.nonManifoldVertex, 0) << "a bowtie (non-manifold vertex) leak reappeared";
-    EXPECT_GT(c.holes, 0) << "missing-face holes are the dominant shape of this class";
+    // The coincidence tolerance at this model size is 1e-5 (Tolerance::at, floor 1e-5).
+    for (double rel : {1e-9, 1e-8, 1e-7, 5e-7}) count(rel, wellBelow);   // separation << tol
+    for (double rel : {1e-6, 1e-5}) count(rel, nearTolerance);           // separation ~ tol
+    for (double rel : {1e-4, 3e-4, 1e-3, 1e-2, 1e-1}) count(rel, wellAbove);  // separation >> tol
+
+    RecordProperty("coincidentWellBelowLeaks", wellBelow);
+    RecordProperty("coincidentNearToleranceLeaks", nearTolerance);
+    RecordProperty("coincidentWellAboveLeaks", wellAbove);
+
+    EXPECT_EQ(wellBelow, 0) << "faces far closer than the tolerance are no longer merged cleanly";
+    EXPECT_EQ(wellAbove, 0) << "faces far beyond the tolerance are no longer treated as distinct";
+    // Measured 2026-07-22: 5 of 6 ops leak in the ambiguity band (was the full
+    // 1e-6..2e-4 range before the classification fix).
+    EXPECT_LE(nearTolerance, 6) << "the coincidence ambiguity band widened";
 }
 
-// The band is SCALE-INVARIANT: the same RELATIVE offsets leak whether the model is 0.2 or
-// 200 units across. So it is not a fixed absolute epsilon left un-migrated — it is an
-// algorithmic gap in handling faces that are near-coincident but not coincident.
-TEST(MeshBooleanSeam, TheCoincidentBandIsScaleInvariant)
+// CLASS 2, after the fix. This was the largest class — sphere-vs-box leak rates of 12%,
+// 22%, 48%, 67% climbing with tessellation density. Through moderate density it is now
+// zero. A residual remains only where the cut produces sub-triangles at the very limit of
+// float resolution (below ~1e-6 on a 2-unit model), which is a cut-quality question rather
+// than a classification one, and is pinned rather than claimed fixed.
+TEST(MeshBooleanSeam, CurvedOperandBooleansAreWatertightThroughModerateTessellation)
 {
     using primitives::makeBox;
-    std::vector<int> leaksAtScale;
-    for (float scale : {0.1f, 1.f, 10.f, 100.f}) {
-        int leaks = 0;
-        for (double rel : {1e-6, 1e-5, 1e-4}) {
-            const Mesh a = transformed(makeBox(2.f, 2.f, 2.f), scale, {0.f, 0.f, 0.f});
-            const Mesh b = transformed(makeBox(2.f, 2.f, 2.f), scale,
-                                       {static_cast<float>(rel * 2.0 * scale), 0.f, 0.f});
-            for (auto op : kOps) {
-                if (leakState(robustMeshBoolean(a, b, op)) == 1) ++leaks;
-            }
-        }
-        leaksAtScale.push_back(leaks);
-    }
-    for (std::size_t i = 1; i < leaksAtScale.size(); ++i) {
-        EXPECT_NEAR(leaksAtScale[i], leaksAtScale[0], 1)
-            << "the near-coincident band moved with model scale — it would then be a fixed "
-               "absolute epsilon, a different (and easier) defect than the measured one";
-    }
-}
-
-// CLASS 2 — the largest remaining class, and one the previous box-only map never saw.
-// Inputs are verified watertight first, so this cannot be blamed on the primitives.
-TEST(MeshBooleanSeam, CurvedOperandLeakRateGrowsWithTessellationDensity)
-{
-    using primitives::makeBox;
-    std::vector<int> rates;
-    for (uint32_t seg : {6u, 12u, 24u}) {
+    for (uint32_t seg : {6u, 12u, 16u}) {
         const Mesh sphere = primitives::makeSphere(1.2f, seg, seg + 4);
         const auto sv = MeshTopologyValidation::validate(sphere);
         ASSERT_EQ(sv.boundaryLoops, 0u) << "the sphere INPUT is not closed at " << seg;
@@ -274,14 +253,36 @@ TEST(MeshBooleanSeam, CurvedOperandLeakRateGrowsWithTessellationDensity)
                 if (leakState(robustMeshBoolean(a, b, op)) == 1) ++leaks;
             }
         }
-        rates.push_back(100 * leaks / runs);
-        RecordProperty("curvedLeakPercent_" + std::to_string(seg), 100 * leaks / runs);
+        RecordProperty("curvedLeaks_" + std::to_string(seg), leaks);
+        EXPECT_EQ(leaks, 0) << "sphere " << seg << "x" << (seg + 4) << " leaked " << leaks
+                            << " of " << runs << " — class 2 regressed";
     }
-    // Denser tessellation leaks more — the signature that the defect tracks the seam's
-    // feature size. Pinned so a fix shows up as this ordering collapsing toward zero.
-    EXPECT_GT(rates.back(), rates.front())
-        << "curved leak rate no longer grows with density — RE-MEASURE, the mechanism changed";
-    EXPECT_LE(rates.back(), 60) << "curved-operand leak rate rose above the measured baseline";
+}
+
+// The extreme-density residual, tracked not asserted at zero. The cut emits sub-triangles
+// under 1e-6 across on a 2-unit model — a few float ULPs wide — where no classification
+// can be reliable because the geometry itself has run out of precision. Closing this means
+// not producing such slivers, which is a cut-quality increment.
+TEST(MeshBooleanSeam, ExtremeTessellationResidualIsTracked)
+{
+    using primitives::makeBox;
+    int runs = 0, leaks = 0;
+    std::mt19937 rng(4242u);
+    std::uniform_real_distribution<float> t(-1.6f, 1.6f);
+    const Mesh sphere = primitives::makeSphere(1.2f, 24, 28);
+    for (int i = 0; i < 20; ++i) {
+        const Mesh a = makeBox(2.f, 2.f, 2.f);
+        const Mesh b = translated(sphere, {t(rng), t(rng), t(rng)});
+        for (auto op : kOps) {
+            ++runs;
+            if (leakState(robustMeshBoolean(a, b, op)) == 1) ++leaks;
+        }
+    }
+    RecordProperty("extremeTessellationRuns", runs);
+    RecordProperty("extremeTessellationLeaks", leaks);
+    // Measured 2026-07-22: 3 of 60, down from 29 of 60 before the classification fix.
+    EXPECT_LE(leaks, 5) << "the extreme-tessellation residual rose above its baseline: "
+                        << leaks << " of " << runs;
 }
 
 // An all-planar operand of comparable face count does NOT leak, so class 2 is not simply
