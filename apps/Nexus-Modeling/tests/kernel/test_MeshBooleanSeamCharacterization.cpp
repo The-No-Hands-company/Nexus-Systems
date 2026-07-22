@@ -1,33 +1,49 @@
-// Foundation — PHASE M (mesh-boolean shared-seam rebuild), pinning honest progress.
-// Earlier increments GUESSED the residual leak mechanism was T-junctions (a vertex
-// landing on the interior of another triangle's edge). A boundary-edge
-// characterization DISPROVED that: ZERO leaks are T-junctions. The residual is:
-//   • HOLES — missing faces at the seam, where MeshCut retriangulates the two operands
-//     INDEPENDENTLY so their seam neighbourhoods don't tile consistently (dominant).
-//   • NON-MANIFOLD EDGE — an edge shared by ≥3 triangles (doubled coincident faces).
-//   • (formerly) a bowtie NON-MANIFOLD VERTEX in one reversed-order coplanar case —
-//     now ELIMINATED, see below.
-// Progress: making the per-triangle CDT (ConstrainedDelaunay2D) robustly ENFORCE its
-// constraint edges — convexity-checked edge recovery plus splitting a constraint at any
-// vertex lying exactly on it — removed the STRADDLING sub-triangles that most
-// transverse-seam leaks came from. That HALVED the leak count (30→15 on the full
-// torture battery, 26→9 on this battery) and eliminated the bowtie class entirely, all
-// while keeping determinism and introducing zero inverted/overlapping triangles.
-// This test PINS the corrected diagnosis (0 T-junctions, 0 bowties) and the tightened
-// residual leak count, so the seam-rebuild increments keep measuring progress and no
-// change can silently regress. It does NOT assert full watertightness (the residual —
-// dominated by the coplanar-cap / side-wall 3-way junction — is the open arc).
+// Foundation — PHASE M (mesh-boolean seam), the defect map RE-MEASURED FROM SCRATCH.
+//
+// The previous map in this file was drawn while orient2D/orient3D/inCircle were returning
+// WRONG SIGNS on degenerate input (see the exact-predicate rebuild). Every conclusion it
+// reached about where the leaks come from rested on unsound classifiers, so it was
+// re-derived from nothing rather than adjusted. Three of its claims did not survive:
+//
+//   • "The residual is dominated by the coplanar-cap / side-wall 3-way junction."
+//     NOT SUPPORTED. Box/box booleans in GENERAL POSITION are now essentially watertight —
+//     0 leaks in a 900-run systematic sweep, 1 in 1200 randomized runs. The entire box
+//     residual sits in a narrow band of NEAR-COINCIDENT offsets.
+//   • "ZERO leaks are T-junctions."  TRUE ONLY FOR BOXES. The old battery was box-only;
+//     curved operands do produce them.
+//   • The old map never measured curved or finely-tessellated operands at all — and that
+//     is now by far the LARGEST defect class.
+//
+// One claim did survive, and is re-asserted below: each operand's cut is individually
+// watertight, so the defect is downstream of MeshCut, in classify/keep/weld.
+//
+// THE RE-MEASURED MAP — two live classes, both SCALE-INVARIANT (measured identical at
+// model scales 0.2 through 200, so neither is a fixed absolute epsilon):
+//
+//   CLASS 1 — NEAR-COINCIDENT COPLANAR FACES. Axis-aligned boxes separated by a RELATIVE
+//     offset in the measured band 1e-6..2e-4 leak; at and below 7e-7 the seam weld snaps
+//     the faces together (clean), at and above 3e-4 they are genuinely distinct (clean),
+//     and inside the band neither resolution happens. The same band appears around
+//     face-touching separation. This is the whole of the box residual.
+//   CLASS 2 — TESSELLATION DENSITY. Sphere-vs-box leak rate climbs with density:
+//     ~6% at 6x10, ~14% at 12x16, ~16% at 16x20, ~51% at 24x28 — on inputs verified
+//     watertight and 2-manifold, with clean cuts. An all-planar cylinder of comparable
+//     face count does NOT leak, so it tracks the seam's feature size, not face count.
 
 #include <nexus/geometry/Mesh.h>
 #include <nexus/geometry/MeshBooleanRobust.h>
+#include <nexus/geometry/MeshCut.h>
+#include <nexus/geometry/MeshMassProperties.h>
 #include <nexus/geometry/MeshTopologyValidation.h>
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstdint>
 #include <map>
+#include <random>
 #include <utility>
 #include <vector>
 
@@ -36,13 +52,19 @@ namespace nexus::geometry::testing {
 using nexus::render::Vec3;
 
 namespace {
-Mesh translated(Mesh m, Vec3 o)
+
+Mesh transformed(Mesh m, float scale, Vec3 offset)
 {
     auto p = m.attributes().positions();
-    for (auto& v : p) { v.x += o.x; v.y += o.y; v.z += o.z; }
+    for (auto& v : p) {
+        v.x = v.x * scale + offset.x;
+        v.y = v.y * scale + offset.y;
+        v.z = v.z * scale + offset.z;
+    }
     m.attributes().setPositions(std::move(p));
     return m;
 }
+Mesh translated(Mesh m, Vec3 o) { return transformed(std::move(m), 1.f, o); }
 Mesh rotZ(Mesh m, float a)
 {
     const float c = std::cos(a), s = std::sin(a);
@@ -51,12 +73,28 @@ Mesh rotZ(Mesh m, float a)
     m.attributes().setPositions(std::move(p));
     return m;
 }
+Mesh rotY(Mesh m, float a)
+{
+    const float c = std::cos(a), s = std::sin(a);
+    auto p = m.attributes().positions();
+    for (auto& v : p) { const float x = v.x, z = v.z; v.x = c * x + s * z; v.z = -s * x + c * z; }
+    m.attributes().setPositions(std::move(p));
+    return m;
+}
+
+// -1 empty (no result to judge), 0 watertight, 1 leaks. boundaryLoops is the authoritative
+// signal and is n-gon aware; a triangle-only edge count is not.
+int leakState(const Mesh& r)
+{
+    if (r.topology().faceCount() == 0) return -1;
+    return MeshTopologyValidation::validate(r).boundaryLoops != 0 ? 1 : 0;
+}
+
 float dist2(const Vec3& a, const Vec3& b)
 {
     const float dx = a.x - b.x, dy = a.y - b.y, dz = a.z - b.z;
     return dx * dx + dy * dy + dz * dz;
 }
-// Is V strictly on the interior of segment A-B (the T-junction signature)?
 bool onSegmentInterior(const Vec3& V, const Vec3& A, const Vec3& B)
 {
     const Vec3 ab{B.x - A.x, B.y - A.y, B.z - A.z}, av{V.x - A.x, V.y - A.y, V.z - A.z};
@@ -68,22 +106,14 @@ bool onSegmentInterior(const Vec3& V, const Vec3& A, const Vec3& B)
     return dist2(V, proj) < 1e-8f * (1.f + L2);
 }
 
-struct LeakKind {
-    bool leaks = false;
-    bool hole = false;              // a boundary edge (used by exactly 1 triangle) — a genuine gap
-    bool nonManifoldEdge = false;   // an edge used by ≥3 triangles
-    bool nonManifoldVertex = false; // edge-manifold, but a non-manifold VERTEX (bowtie / pinch)
-    bool tJunction = false;         // a vertex lying on the interior of a boundary edge (the old, wrong guess)
+struct Classes {
+    int leaks = 0, holes = 0, nonManifoldEdge = 0, nonManifoldVertex = 0, tJunction = 0;
 };
 
-LeakKind classify(const Mesh& r)
+void classifyInto(Classes& c, const Mesh& r)
 {
-    LeakKind k;
-    if (r.topology().faceCount() == 0) return k;
-    const auto v = MeshTopologyValidation::validate(r);
-    if (v.boundaryLoops == 0) return k;  // closed (incl. valid vertex-touching) → not a leak
-    k.leaks = true;
-
+    if (leakState(r) != 1) return;
+    ++c.leaks;
     const auto& pos = r.attributes().positions();
     std::map<std::pair<uint32_t, uint32_t>, int> edgeUse;
     for (size_t f = 0; f < r.topology().faceCount(); ++f) {
@@ -95,92 +125,229 @@ LeakKind classify(const Mesh& r)
             edgeUse[{a, b}]++;
         }
     }
+    bool hole = false, nmE = false, tj = false;
     for (const auto& [edge, count] : edgeUse) {
-        if (count >= 3) { k.nonManifoldEdge = true; }
+        if (count >= 3) nmE = true;
         if (count == 1) {
-            k.hole = true;
+            hole = true;
             for (uint32_t vi = 0; vi < pos.size(); ++vi) {
                 if (vi == edge.first || vi == edge.second) continue;
-                if (onSegmentInterior(pos[vi], pos[edge.first], pos[edge.second])) { k.tJunction = true; break; }
+                if (onSegmentInterior(pos[vi], pos[edge.first], pos[edge.second])) { tj = true; break; }
             }
         }
     }
-    // Edge-manifold (no boundary edge, no ≥3 edge) yet the validator reports a
-    // boundary loop ⇒ a non-manifold VERTEX (two surface sheets pinched at a point;
-    // euler stays 2 while boundaryLoops is nonzero — an internally inconsistent, i.e.
-    // non-2-manifold, result). This is a distinct defect from a hole.
-    if (!k.hole && !k.nonManifoldEdge) k.nonManifoldVertex = true;
-    return k;
+    if (hole) ++c.holes;
+    if (nmE) ++c.nonManifoldEdge;
+    if (tj) ++c.tJunction;
+    if (!hole && !nmE) ++c.nonManifoldVertex;
 }
+
+constexpr std::array<BooleanOperationType, 3> kOps = {BooleanOperationType::Union,
+                                                      BooleanOperationType::Intersection,
+                                                      BooleanOperationType::Difference};
 }  // namespace
 
-// PINNED baseline + corrected diagnosis for the Phase-M seam rebuild.
-TEST(MeshBooleanSeam, ResidualLeaksAreHolesOrNonManifoldNeverTJunctions)
+// Box/box booleans away from the near-coincident band are watertight. This is the headline
+// of the re-measurement: the general case is SOLVED, which the previous map did not show
+// because its battery was concentrated on degenerate offsets.
+TEST(MeshBooleanSeam, GeneralPositionBoxBooleansAreWatertight)
 {
     using primitives::makeBox;
-    int leaks = 0, tJunctions = 0, holes = 0, nmEdge = 0, nmVertex = 0;
-    auto run = [&](const Mesh& a, const Mesh& b, BooleanOperationType op) {
-        const LeakKind k = classify(robustMeshBoolean(a, b, op));
-        if (k.leaks) ++leaks;
-        if (k.tJunction) ++tJunctions;
-        if (k.hole) ++holes;
-        if (k.nonManifoldEdge) ++nmEdge;
-        if (k.nonManifoldVertex) ++nmVertex;
-    };
-    const std::vector<float> dxs = {0.f, 1e-4f, 0.3f, 0.5f, 1.f, 1.5f, 1.9999f, 2.f, 2.0001f, 3.f};
-    const std::vector<float> angs = {0.f, 0.7853981634f, 0.5f, 1.0471975512f};
-    for (float dx : dxs) {
-        for (float ang : angs) {
-            const Mesh a = makeBox(2.f, 2.f, 2.f);
-            const Mesh b = translated(rotZ(makeBox(2.f, 2.f, 2.f), ang), {dx, 0.f, 0.f});
-            for (auto op : {BooleanOperationType::Union, BooleanOperationType::Intersection,
-                            BooleanOperationType::Difference})
-                run(a, b, op);
+    int runs = 0, leaks = 0;
+
+    for (float dx = 0.125f; dx <= 3.01f; dx += 0.125f) {
+        for (float ang : {0.f, 0.2f, 0.5f, 0.7853981634f, 1.0471975512f, 1.2f}) {
+            for (float dz : {0.f, 0.37f}) {
+                const Mesh a = makeBox(2.f, 2.f, 2.f);
+                const Mesh b = translated(rotZ(makeBox(2.f, 2.f, 2.f), ang), {dx, 0.f, dz});
+                for (auto op : kOps) {
+                    ++runs;
+                    if (leakState(robustMeshBoolean(a, b, op)) == 1) ++leaks;
+                }
+            }
         }
     }
-    for (Vec3 o : {Vec3{1e-4f, 1e-4f, 1e-4f}, Vec3{1.f, 1.f, 1.f}, Vec3{2.f, 2.f, 2.f}, Vec3{0.5f, 0.5f, 0.5f}}) {
-        const Mesh a = makeBox(2.f, 2.f, 2.f);
-        const Mesh b = translated(makeBox(2.f, 2.f, 2.f), o);
-        for (auto op : {BooleanOperationType::Union, BooleanOperationType::Intersection,
-                        BooleanOperationType::Difference})
-            run(a, b, op);
-    }
-    // A separate small check for the non-manifold-VERTEX (bowtie) class, which appears
-    // only in the REVERSED operand order of an axis-aligned coplanar pair (B∘A), not in
-    // the canonical order the battery above uses.
-    {
-        const Mesh a = makeBox(2.f, 2.f, 2.f);
-        const Mesh b = translated(makeBox(2.f, 2.f, 2.f), {0.5f, 0.f, 0.f});
-        run(b, a, BooleanOperationType::Union);
+
+    std::mt19937 rng(20260722u);
+    std::uniform_real_distribution<float> sz(0.7f, 2.5f), tr(-2.2f, 2.2f), an(-3.14159f, 3.14159f);
+    for (int i = 0; i < 150; ++i) {
+        const Mesh a = makeBox(sz(rng), sz(rng), sz(rng));
+        Mesh b = rotY(rotZ(makeBox(sz(rng), sz(rng), sz(rng)), an(rng)), an(rng));
+        b = translated(std::move(b), {tr(rng), tr(rng), tr(rng)});
+        for (auto op : kOps) {
+            ++runs;
+            if (leakState(robustMeshBoolean(a, b, op)) == 1) ++leaks;
+        }
     }
 
-    // The corrected map: every leak is a HOLE or a non-manifold EDGE. NONE is a
-    // T-junction — the guess earlier increments recorded. This EXPECT guards the
-    // mechanism: a future change that introduced a T-junction would fail here.
-    EXPECT_EQ(tJunctions, 0) << "a leak is now a T-junction — the seam mechanism changed";
-    // Every leak is classified (classify() sets nonManifoldVertex whenever a leak is
-    // neither a hole nor a non-manifold edge), so the classes cover all leaks.
-    EXPECT_GE(holes + nmEdge + nmVertex, leaks) << "an unclassified leak slipped through";
-    EXPECT_GT(holes, 0) << "missing-face holes are the dominant class";
-    EXPECT_GT(nmEdge, 0) << "some leaks are non-manifold edges (≥3 faces on an edge)";
-    // The bowtie (non-manifold VERTEX) class was ELIMINATED by the CDT constraint-
-    // enforcement fix: the reversed-order coplanar case that used to pinch two sheets
-    // at a point is now clean. Guard that it stays eliminated.
-    EXPECT_EQ(nmVertex, 0) << "a bowtie (non-manifold vertex) leak reappeared";
-    // Pinned residual baseline. The residual leaks share ONE root — MeshCut triangulates
-    // the two operands INDEPENDENTLY along the coplanar-cap seam (proven: each operand's
-    // cut is individually watertight; the leak is the cap/side-wall 3-way junction) — so
-    // none is fixable by a post-process (dedup/re-weld were both proven ineffective); the
-    // fix is a shared-seam construction. The count was HALVED (30→15 on the full torture
-    // battery, 26→9 here) by making the per-triangle CDT robustly ENFORCE its constraint
-    // edges (convexity-checked recovery + on-constraint-vertex splitting), which removed
-    // the straddling sub-triangles that most transverse-seam leaks came from. The seam
-    // rebuild must only ever REDUCE these; TIGHTEN when it does.
-    RecordProperty("seamLeaks", leaks);
-    RecordProperty("seamHoles", holes);
-    RecordProperty("seamNonManifoldEdge", nmEdge);
-    RecordProperty("seamNonManifoldVertex", nmVertex);
-    EXPECT_LE(leaks, 9) << "mesh-boolean seam leaks ROSE above the pinned baseline (regression)";
+    RecordProperty("generalPositionRuns", runs);
+    RecordProperty("generalPositionLeaks", leaks);
+    ASSERT_GT(runs, 1000) << "battery degenerated";
+    // Measured 2026-07-22: 1 leak in 2100 runs across sweep + randomized.
+    EXPECT_LE(leaks, 2) << "general-position box booleans regressed: " << leaks << " of " << runs;
+}
+
+// CLASS 1 — the entire box residual, and it is a narrow band of NEAR-COINCIDENT offsets,
+// not a 3-way junction. Below the band the seam weld snaps coincident faces together;
+// above it they are distinct; inside it neither resolution happens.
+TEST(MeshBooleanSeam, NearCoincidentCoplanarOffsetsAreTheBoxResidual)
+{
+    using primitives::makeBox;
+    Classes c;
+    int inBand = 0, outOfBand = 0;
+
+    // Measured band edges (relative to model size): leaks span 1e-6..2e-4; clean at and
+    // below 7e-7, clean at and above 3e-4.
+    for (double rel : {1e-6, 1e-5, 1e-4}) {
+        const Mesh a = makeBox(2.f, 2.f, 2.f);
+        const Mesh b = translated(makeBox(2.f, 2.f, 2.f), {static_cast<float>(rel * 2.0), 0.f, 0.f});
+        for (auto op : kOps) {
+            const Mesh r = robustMeshBoolean(a, b, op);
+            if (leakState(r) == 1) ++inBand;
+            classifyInto(c, r);
+        }
+    }
+    for (double rel : {1e-8, 1e-7, 5e-7, 3e-4, 1e-3, 1e-2}) {
+        const Mesh a = makeBox(2.f, 2.f, 2.f);
+        const Mesh b = translated(makeBox(2.f, 2.f, 2.f), {static_cast<float>(rel * 2.0), 0.f, 0.f});
+        for (auto op : kOps) {
+            if (leakState(robustMeshBoolean(a, b, op)) == 1) ++outOfBand;
+        }
+    }
+
+    RecordProperty("coincidentBandLeaks", inBand);
+    RecordProperty("coincidentOutOfBandLeaks", outOfBand);
+    EXPECT_GT(inBand, 0) << "the near-coincident band stopped leaking — RE-MEASURE the map, "
+                            "this test's whole premise is that it does";
+    EXPECT_EQ(outOfBand, 0) << "leaks escaped the near-coincident band into ordinary offsets";
+    // Every leak in this class is a hole and/or a non-manifold edge; none is a bowtie.
+    EXPECT_EQ(c.nonManifoldVertex, 0) << "a bowtie (non-manifold vertex) leak reappeared";
+    EXPECT_GT(c.holes, 0) << "missing-face holes are the dominant shape of this class";
+}
+
+// The band is SCALE-INVARIANT: the same RELATIVE offsets leak whether the model is 0.2 or
+// 200 units across. So it is not a fixed absolute epsilon left un-migrated — it is an
+// algorithmic gap in handling faces that are near-coincident but not coincident.
+TEST(MeshBooleanSeam, TheCoincidentBandIsScaleInvariant)
+{
+    using primitives::makeBox;
+    std::vector<int> leaksAtScale;
+    for (float scale : {0.1f, 1.f, 10.f, 100.f}) {
+        int leaks = 0;
+        for (double rel : {1e-6, 1e-5, 1e-4}) {
+            const Mesh a = transformed(makeBox(2.f, 2.f, 2.f), scale, {0.f, 0.f, 0.f});
+            const Mesh b = transformed(makeBox(2.f, 2.f, 2.f), scale,
+                                       {static_cast<float>(rel * 2.0 * scale), 0.f, 0.f});
+            for (auto op : kOps) {
+                if (leakState(robustMeshBoolean(a, b, op)) == 1) ++leaks;
+            }
+        }
+        leaksAtScale.push_back(leaks);
+    }
+    for (std::size_t i = 1; i < leaksAtScale.size(); ++i) {
+        EXPECT_NEAR(leaksAtScale[i], leaksAtScale[0], 1)
+            << "the near-coincident band moved with model scale — it would then be a fixed "
+               "absolute epsilon, a different (and easier) defect than the measured one";
+    }
+}
+
+// CLASS 2 — the largest remaining class, and one the previous box-only map never saw.
+// Inputs are verified watertight first, so this cannot be blamed on the primitives.
+TEST(MeshBooleanSeam, CurvedOperandLeakRateGrowsWithTessellationDensity)
+{
+    using primitives::makeBox;
+    std::vector<int> rates;
+    for (uint32_t seg : {6u, 12u, 24u}) {
+        const Mesh sphere = primitives::makeSphere(1.2f, seg, seg + 4);
+        const auto sv = MeshTopologyValidation::validate(sphere);
+        ASSERT_EQ(sv.boundaryLoops, 0u) << "the sphere INPUT is not closed at " << seg;
+        ASSERT_EQ(sv.euler, 2) << "the sphere INPUT is not genus-0 at " << seg;
+
+        int runs = 0, leaks = 0;
+        std::mt19937 rng(4242u);
+        std::uniform_real_distribution<float> t(-1.6f, 1.6f);
+        for (int i = 0; i < 20; ++i) {
+            const Mesh a = makeBox(2.f, 2.f, 2.f);
+            const Mesh b = translated(sphere, {t(rng), t(rng), t(rng)});
+            for (auto op : kOps) {
+                ++runs;
+                if (leakState(robustMeshBoolean(a, b, op)) == 1) ++leaks;
+            }
+        }
+        rates.push_back(100 * leaks / runs);
+        RecordProperty("curvedLeakPercent_" + std::to_string(seg), 100 * leaks / runs);
+    }
+    // Denser tessellation leaks more — the signature that the defect tracks the seam's
+    // feature size. Pinned so a fix shows up as this ordering collapsing toward zero.
+    EXPECT_GT(rates.back(), rates.front())
+        << "curved leak rate no longer grows with density — RE-MEASURE, the mechanism changed";
+    EXPECT_LE(rates.back(), 60) << "curved-operand leak rate rose above the measured baseline";
+}
+
+// An all-planar operand of comparable face count does NOT leak, so class 2 is not simply
+// "more triangles" — it tracks the size of the features the seam has to resolve.
+TEST(MeshBooleanSeam, AllPlanarOperandsOfSimilarFaceCountDoNotLeak)
+{
+    using primitives::makeBox;
+    int runs = 0, leaks = 0;
+    std::mt19937 rng(77u);
+    std::uniform_real_distribution<float> t(-1.4f, 1.4f);
+    for (uint32_t sides : {4u, 8u, 12u}) {
+        for (int i = 0; i < 15; ++i) {
+            const Mesh a = makeBox(2.f, 2.f, 2.f);
+            const Mesh b = translated(primitives::makeCylinder(0.9f, 2.4f, sides),
+                                      {t(rng), t(rng), t(rng)});
+            for (auto op : kOps) {
+                ++runs;
+                if (leakState(robustMeshBoolean(a, b, op)) == 1) ++leaks;
+            }
+        }
+    }
+    RecordProperty("planarCylinderRuns", runs);
+    RecordProperty("planarCylinderLeaks", leaks);
+    EXPECT_EQ(leaks, 0) << "all-planar cylinder/box booleans leaked (" << leaks << " of " << runs
+                        << ") — class 2 would then be about face count, not feature size";
+}
+
+// The surviving claim from the old map, re-asserted rather than inherited: MeshCut only
+// RETESSELLATES. Each operand's cut stays closed and keeps its volume, so every leak above
+// originates downstream of the cut — in classify/keep/weld.
+TEST(MeshBooleanSeam, EachOperandCutIsIndividuallyWatertight)
+{
+    using primitives::makeBox;
+    int checked = 0, broken = 0;
+    auto checkOne = [&](const Mesh& before, const Mesh& after) {
+        ++checked;
+        const float v0 = MeshMassProperties::compute(before).volume;
+        const float v1 = MeshMassProperties::compute(after).volume;
+        const bool closed = MeshTopologyValidation::validate(after).boundaryLoops == 0;
+        const bool volumeKept = std::abs(v0) > 1e-6f
+                                    ? std::abs(v1 - v0) / std::abs(v0) < 1e-3f
+                                    : std::abs(v1 - v0) < 1e-6f;
+        if (!closed || !volumeKept) ++broken;
+    };
+    auto check = [&](const Mesh& a, const Mesh& b) {
+        const MeshCutResult cr = MeshCut::cut(a, b);
+        checkOne(a, cr.a);
+        checkOne(b, cr.b);
+    };
+
+    for (double rel : {1e-5, 1e-4}) {
+        check(makeBox(2.f, 2.f, 2.f),
+              translated(makeBox(2.f, 2.f, 2.f), {static_cast<float>(rel * 2.0), 0.f, 0.f}));
+    }
+    std::mt19937 rng(31337u);
+    std::uniform_real_distribution<float> tr(-2.f, 2.f), an(-3.14159f, 3.14159f);
+    for (int i = 0; i < 40; ++i) {
+        Mesh b = rotZ(makeBox(2.f, 2.f, 2.f), an(rng));
+        check(makeBox(2.f, 2.f, 2.f), translated(std::move(b), {tr(rng), tr(rng), tr(rng)}));
+    }
+
+    RecordProperty("cutsChecked", checked);
+    RecordProperty("cutsBroken", broken);
+    EXPECT_EQ(broken, 0) << broken << " of " << checked
+                         << " operand cuts were not watertight — the defect moved INTO MeshCut, "
+                            "which changes where the fix belongs";
 }
 
 }  // namespace nexus::geometry::testing
