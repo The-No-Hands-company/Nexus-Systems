@@ -1,0 +1,530 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Shader Pipeline — Nexus Modeling Docs</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
+</head>
+<body>
+    <nav class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+            <div class="sidebar-title">Nexus Modeling</div>
+            <div class="sidebar-subtitle">Documentation v0.1.0-dev</div>
+        </div>
+        <div class="sidebar-section">
+<div class="sidebar-section-title">📚 Developer Documentation</div>
+<a class="sidebar-link" href="architecture.html">Architecture Overview</a>
+<a class="sidebar-link" href="kernel-api.html">Kernel API Reference</a>
+<a class="sidebar-link" href="geometry-kernel.html">Geometry Kernel</a>
+<a class="sidebar-link" href="renderer.html">Render System</a>
+<a class="sidebar-link" href="editor-architecture.html">Editor Architecture</a>
+<a class="sidebar-link" href="build-system.html">Build System</a>
+<a class="sidebar-link" href="testing.html">Testing</a>
+<a class="sidebar-link" href="contributing.html">Contributing</a>
+<a class="sidebar-link" href="adding-geometry-op.html">Adding Geometry Op</a>
+<a class="sidebar-link" href="adding-cad-feature.html">Adding CAD Feature</a>
+<a class="sidebar-link" href="mesh-operations.html">Mesh Operations</a>
+<a class="sidebar-link" href="boolean-csg.html">Boolean/CSG Deep Dive</a>
+<a class="sidebar-link" href="halfedge-mesh.html">Half-edge Mesh</a>
+<a class="sidebar-link" href="analytic-brep.html">Analytic B-rep</a>
+<a class="sidebar-link" href="mesh-io.html">Mesh I/O</a>
+<a class="sidebar-link" href="tolerance.html">Tolerance System</a>
+<a class="sidebar-link" href="porting.html">Porting Guide</a>
+</div>
+<div class="sidebar-section">
+<div class="sidebar-section-title">🎨 Expert User Documentation</div>
+</div>
+<div class="sidebar-section">
+<div class="sidebar-section-title">👤 Beginner / User Documentation</div>
+<a class="sidebar-link" href="getting-started.html">Getting Started</a>
+</div>
+<div class="sidebar-section">
+<div class="sidebar-section-title">🔧 API Reference</div>
+</div>
+<div class="sidebar-section">
+<div class="sidebar-section-title">📚 Additional Resources</div>
+<a class="sidebar-link" href="design-decisions.html">Design Decisions</a>
+<a class="sidebar-link" href="testing-strategy.html">Testing Strategy</a>
+<a class="sidebar-link" href="graphics-kernel.html">Graphics Kernel</a>
+<a class="sidebar-link" href="vision-and-roadmap.html">Vision & Roadmap</a>
+<a class="sidebar-link" href="reference-roadmap.html">Reference Roadmap</a>
+<a class="sidebar-link" href="modeling-industry-parity.html">Modeling Industry Parity</a>
+<a class="sidebar-link" href="modeling-parity-index.html">Modeling Parity Index</a>
+<a class="sidebar-link" href="modeling-reference-roadmap.html">Modeling Reference Roadmap</a>
+</div>
+    </nav>
+    
+    <div class="main-content">
+        <header class="header">
+            <button class="btn btn-icon" id="mobile-menu-btn" aria-label="Toggle menu" style="display: none;">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="3" y1="12" x2="21" y2="12"></line>
+                    <line x1="3" y1="6" x2="21" y2="6"></line>
+                    <line x1="3" y1="18" x2="21" y2="18"></line>
+                </svg>
+            </button>
+            <div class="header-title">Shader Pipeline</div>
+            <div class="header-actions">
+                
+<button class="btn btn-icon" id="theme-toggle" aria-label="Toggle dark/light theme" title="Toggle theme (Ctrl+Shift+L)">
+    <svg class="theme-icon-sun" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display: none;">
+        <circle cx="12" cy="12" r="5"></circle>
+        <line x1="12" y1="1" x2="12" y2="3"></line>
+        <line x1="12" y1="21" x2="12" y2="23"></line>
+        <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+        <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+        <line x1="1" y1="12" x2="3" y2="12"></line>
+        <line x1="21" y1="12" x2="23" y2="12"></line>
+        <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+        <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+    </svg>
+    <svg class="theme-icon-moon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display: none;">
+        <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+    </svg>
+</button>
+
+                <a href="https://github.com/nexus-systems/nexus-modeling" class="btn btn-secondary" target="_blank" rel="noopener">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M12 0C5.374 0 0 5.373 0 12c0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23A11.509 11.509 0 0112 5.803c1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576C20.566 21.797 24 17.3 24 12c0-6.627-5.373-12-12-12z"/>
+                    </svg>
+                    <span class="btn-text">GitHub</span>
+                </a>
+                <a href="index.html" class="btn btn-primary">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
+                        <polyline points="9 22 9 12 15 12 15 22"></polyline>
+                    </svg>
+                    <span class="btn-text">Home</span>
+                </a>
+            </div>
+        </header>
+        
+        <main class="content">
+            <div class="toc"><h3>On This Page</h3><ul><li><a href="#shader-pipeline">Shader Pipeline</a></li>
+  <li><a href="#overview">Overview</a></li>
+  <li><a href="#shaderdesc-dispatch-rules">ShaderDesc dispatch rules</a></li>
+    <li><a href="#file-extension-dispatch-when-sourcepath-is-set">File extension dispatch (when <code>sourcePath</code> is set)</a></li>
+  <li><a href="#glsl-version-and-target">GLSL version and target</a></li>
+  <li><a href="#low-level-api-nexus-gfx-vkshader">Low-level API — <code>nexus::gfx::vkshader</code></a></li>
+  <li><a href="#pre-compiling-shaders-for-release">Pre-compiling shaders for release</a></li>
+<li><a href="#using-glslangvalidator-from-vulkan-sdk">Using glslangValidator (from Vulkan SDK)</a></li>
+<li><a href="#using-glslc-from-shaderc-vulkan-sdk">Using glslc (from shaderc / Vulkan SDK)</a></li>
+    <li><a href="#cmake-integration-optional">CMake integration (optional)</a></li>
+  <li><a href="#push-constants-layout-convention">Push constants layout convention</a></li>
+  <li><a href="#shader-debugging">Shader debugging</a></li>
+    <li><a href="#renderdoc">RenderDoc</a></li>
+    <li><a href="#printf-in-shaders-vulkan-debug-utils">Printf in shaders (Vulkan debug utils)</a></li>
+  <li><a href="#glslang-dependency-notes">glslang dependency notes</a></li>
+</ul></div>
+            <h1 id="shader-pipeline">Shader Pipeline</h1>
+
+<p>
+Everything about how shaders are authored, compiled, loaded, and bound in the Nexus kernel.
+</p>
+
+<hr>
+
+<h2 id="overview">Overview</h2>
+
+<pre><code class="language-">Author writes GLSL
+<p>
+        │
+        ├─ Dev path  ──── .glsl file ─────► glslang (runtime) ──► SPIR-V bytes
+        │                  or inline src                            │
+        ├─ Release path ── .spv file ─────────────────────────────►│
+        │                                                           │
+        └─────────────── spirvCode span ─────────────────────────►│
+                                                                    ▼
+                                                          VkShaderModule
+                                                                    │
+                                                                    ▼
+                                                          VkGraphicsPipeline /
+                                                          VkComputePipeline /
+                                                          VkRayTracingPipeline</code></pre>
+</p>
+
+<p>
+The dispatch happens inside <code>IDevice::createShader()</code>. The caller never calls glslang directly.
+</p>
+
+<hr>
+
+<h2 id="shaderdesc-dispatch-rules">ShaderDesc dispatch rules</h2>
+
+<p>
+<code>ShaderDesc</code> has three mutually exclusive source fields. The kernel checks them in priority order:
+</p>
+
+<p>
+| Priority | Field | Action |
+|---|---|---|
+| 1 (highest) | <code>spirvCode</code> (non-empty span) | Used directly — no file I/O, no compile |
+| 2 | <code>sourcePath</code> (non-empty string) | File extension determines action (see table below) |
+| 3 | <code>glslSource</code> (non-empty string) | Compiled from memory via glslang |
+</p>
+
+<p>
+If all three are empty, <code>createShader</code> returns an invalid handle and logs an error.
+</p>
+
+<h3 id="file-extension-dispatch-when-sourcepath-is-set">File extension dispatch (when <code>sourcePath</code> is set)</h3>
+
+<p>
+| Extension | Action |
+|---|---|
+| <code>.spv</code> | Raw binary load — no compilation |
+| <code>.glsl</code> | glslang compile |
+| <code>.vert</code>, <code>.frag</code>, <code>.comp</code>, <code>.geom</code>, <code>.tesc</code>, <code>.tese</code> | glslang compile, stage inferred from extension |
+| <code>.rgen</code>, <code>.rmiss</code>, <code>.rchit</code>, <code>.rahit</code>, <code>.rint</code> | glslang compile, ray-tracing stage inferred |
+| <code>.mesh</code>, <code>.task</code> | glslang compile, mesh/task stage |
+</p>
+
+<p>
+If the extension is unrecognised, compilation is attempted and will fail with a diagnostic.
+</p>
+
+<hr>
+
+<h2 id="glsl-version-and-target">GLSL version and target</h2>
+
+<p>
+All shaders compiled by glslang target:
+</p>
+
+<ul>
+<li><strong>GLSL version</strong>: <code>#version 460 core</code></li>
+<li><strong>Vulkan target</strong>: Vulkan 1.3 (<code>glslang::EShTargetVulkan_1_3</code>)</li>
+<li><strong>SPIR-V version</strong>: 1.6 (<code>glslang::EShTargetSpv_1_6</code>)</li>
+<li><strong>Entry point</strong>: <code>main</code> by default — overridden via <code>ShaderDesc::entryPoint</code></li>
+<li><strong>Messages</strong>: <code>EShMsgSpvRules | EShMsgVulkanRules</code></li>
+</ul>
+
+<hr>
+
+<h2 id="low-level-api-nexus-gfx-vkshader">Low-level API — <code>nexus::gfx::vkshader</code></h2>
+
+<p>
+For code that needs direct access to the compiler (e.g., offline tools, shader cache builders):
+</p>
+
+<pre><code class="language-cpp">#include <nexus/gfx/vulkan/ShaderCompiler.h>
+
+<p>
+using namespace nexus::gfx::vkshader;
+</p>
+
+<p>
+// Compile GLSL string to SPIR-V
+ShaderCompileOutput out;
+bool ok = compileGlslToSpirv(
+    glslSource,          // std::string_view
+    ShaderStage::Vertex, // stage
+    out,                 // output: spirv vector + errorLog string
+    "main",              // entry point
+    "my_shader.vert"     // debug name (used in error messages)
+);
+if (!ok) {
+    std::cerr << out.errorLog;
+}
+</p>
+
+<p>
+// Load from file (dispatches on extension)
+ShaderCompileOutput spvOut;
+bool loaded = loadShaderFileToSpirv("shaders/mesh.frag.glsl", ShaderStage::Fragment, spvOut);
+</p>
+
+<p>
+// Create VkShaderModule directly (convenience)
+std::string err;
+VkShaderModule mod = vkCompileShader(
+    device, glslSource, ShaderStage::Fragment, "main", &err
+);
+</p>
+
+<p>
+VkShaderModule fileMod = vkCreateShaderModuleFromFile(
+    device, "shaders/triangle.vert.spv", ShaderStage::Vertex, "main"
+);</code></pre>
+</p>
+
+<hr>
+
+<h2 id="pre-compiling-shaders-for-release">Pre-compiling shaders for release</h2>
+
+<p>
+Runtime glslang compilation adds ~5–50ms per shader at startup. For release builds, pre-compile:
+</p>
+
+<pre><code class="language-bash"><h1 id="using-glslangvalidator-from-vulkan-sdk">Using glslangValidator (from Vulkan SDK)</h1>
+<p>
+glslangValidator -V shaders/mesh.vert.glsl    -o shaders/mesh.vert.spv
+glslangValidator -V shaders/mesh.frag.glsl    -o shaders/mesh.frag.spv
+glslangValidator -V shaders/skinning.comp.glsl -o shaders/skinning.comp.spv
+</p>
+
+<h1 id="using-glslc-from-shaderc-vulkan-sdk">Using glslc (from shaderc / Vulkan SDK)</h1>
+<p>
+glslc shaders/mesh.vert.glsl    -o shaders/mesh.vert.spv
+glslc shaders/mesh.frag.glsl    -o shaders/mesh.frag.spv</code></pre>
+</p>
+
+<p>
+Then point <code>ShaderDesc::sourcePath</code> at the <code>.spv</code> files — no compile overhead.
+</p>
+
+<h3 id="cmake-integration-optional">CMake integration (optional)</h3>
+
+<pre><code class="language-cmake">find_program(GLSLANG glslangValidator REQUIRED)
+
+<p>
+function(compile_shader target glsl_file spv_output)
+    add_custom_command(
+        OUTPUT  ${spv_output}
+        COMMAND ${GLSLANG} -V ${glsl_file} -o ${spv_output}
+        DEPENDS ${glsl_file}
+        COMMENT "Compiling ${glsl_file}"
+    )
+    target_sources(${target} PRIVATE ${spv_output})
+endfunction()
+</p>
+
+<p>
+compile_shader(my_app shaders/mesh.vert.glsl ${CMAKE_BINARY_DIR}/shaders/mesh.vert.spv)</code></pre>
+</p>
+
+<hr>
+
+<h2 id="push-constants-layout-convention">Push constants layout convention</h2>
+
+<p>
+By convention, all Nexus shaders use a <strong>single push constant block</strong> at binding 0 covering all stages. The layout is free — each pipeline defines its own struct. The kernel allocates 128 bytes for push constants in every <code>VkPipelineLayout</code>.
+</p>
+
+<p>
+Example per-draw push constant:
+</p>
+
+<pre><code class="language-glsl">// GLSL
+<p>
+layout(push_constant) uniform PushConstants {
+    mat4  modelViewProj;   // 64 bytes
+    uint  materialIndex;   // 4 bytes
+    uint  drawId;          // 4 bytes
+    float time;            // 4 bytes
+    uint  _pad;            // 4 bytes
+} pc;                      // total: 80 bytes ≤ 128</code></pre>
+</p>
+
+<pre><code class="language-cpp">// C++
+<p>
+struct PushConstants {
+    glm::mat4 modelViewProj;
+    uint32_t  materialIndex;
+    uint32_t  drawId;
+    float     time;
+    uint32_t  _pad{};
+};
+cb.pushConstants(ShaderStage::Vertex | ShaderStage::Fragment, &pc, sizeof(pc));</code></pre>
+</p>
+
+<hr>
+
+<h2 id="shader-debugging">Shader debugging</h2>
+
+<h3 id="renderdoc">RenderDoc</h3>
+
+<p>
+RenderDoc intercepts all Vulkan calls and captures SPIR-V bytecode. For best source-level debugging:
+</p>
+
+<ol>
+<li>Compile shaders with <code>-g</code> (debug info): <code>glslangValidator -V -g shader.vert.glsl -o shader.vert.spv</code></li>
+<li>Enable <code>ValidationLevel::Full</code> in <code>RenderContextDesc</code>.</li>
+<li>Open RenderDoc and launch the application — shader source appears in the pipeline state viewer.</li>
+</ol>
+
+<h3 id="printf-in-shaders-vulkan-debug-utils">Printf in shaders (Vulkan debug utils)</h3>
+
+<pre><code class="language-glsl">#extension GL_EXT_debug_printf : enable
+
+<p>
+void main() {
+    debugPrintfEXT("vertex id %d pos %f %f %f\n",
+        gl_VertexIndex, inPos.x, inPos.y, inPos.z);
+}</code></pre>
+</p>
+
+<p>
+Requires <code>VK_KHR_shader_non_semantic_info</code> and validation layer <code>VK_LAYER_KHRONOS_validation</code> with <code>printf_enable=1</code>.
+</p>
+
+<hr>
+
+<h2 id="glslang-dependency-notes">glslang dependency notes</h2>
+
+<p>
+glslang is fetched via CMake <code>FetchContent</code> from the official release archive. Key build configuration:
+</p>
+
+<pre><code class="language-cmake">set(ENABLE_OPT           0 CACHE BOOL "" FORCE)  # no SPIRV-Tools optimizer required
+<p>
+set(ENABLE_GLSLANG_BINARIES OFF CACHE BOOL "" FORCE)
+set(ENABLE_SPVREMAPPER       OFF CACHE BOOL "" FORCE)</code></pre>
+</p>
+
+<p>
+<strong>CMake targets exposed</strong>:
+</p>
+<ul>
+<li><code>glslang::glslang</code> — compiler library</li>
+<li><code>glslang::SPIRV</code> — SPIR-V code generator</li>
+<li><code>glslang-default-resource-limits</code> — <code>GetDefaultResources()</code> (required for built-in limits)</li>
+</ul>
+
+<p>
+<strong>Do not</strong> set <code>ENABLE_OPT=1</code> in the current scaffold. SPIRV-Tools' parallel <code>ar</code> step corrupts archives on EXFAT/NTFS mount points. When SPIRV-Tools optimisation is needed, vendor a pre-built SPIRV-Tools static library instead.
+</p>
+
+        </main>
+    </div>
+    
+    <script>
+// Theme management
+const THEME_KEY = 'nexus-docs-theme';
+const themeToggle = document.getElementById('theme-toggle');
+const sunIcon = themeToggle.querySelector('.theme-icon-sun');
+const moonIcon = themeToggle.querySelector('.theme-icon-moon');
+
+function applyTheme(theme) {
+    document.documentElement.setAttribute('data-theme', theme);
+    if (theme === 'light') {
+        sunIcon.style.display = 'block';
+        moonIcon.style.display = 'none';
+    } else {
+        sunIcon.style.display = 'none';
+        moonIcon.style.display = 'block';
+    }
+    localStorage.setItem(THEME_KEY, theme);
+}
+
+function getPreferredTheme() {
+    const stored = localStorage.getItem(THEME_KEY);
+    if (stored) return stored;
+    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+}
+
+function initTheme() {
+    const theme = getPreferredTheme();
+    applyTheme(theme);
+}
+
+function toggleTheme() {
+    const current = document.documentElement.getAttribute('data-theme') || 'dark';
+    applyTheme(current === 'dark' ? 'light' : 'dark');
+}
+
+themeToggle.addEventListener('click', toggleTheme);
+
+// Keyboard shortcut: Ctrl+Shift+L
+document.addEventListener('keydown', (e) => {
+    if (e.ctrlKey && e.shiftKey && e.key === 'L') {
+        e.preventDefault();
+        toggleTheme();
+    }
+});
+
+// Listen for system theme changes
+window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => {
+    if (!localStorage.getItem(THEME_KEY)) {
+        applyTheme(e.matches ? 'dark' : 'light');
+    }
+});
+
+// Initialize theme immediately to prevent flash
+initTheme();
+
+// Mobile sidebar toggle
+const sidebar = document.getElementById('sidebar');
+const mobileMenuBtn = document.getElementById('mobile-menu-btn');
+
+if (mobileMenuBtn) {
+    mobileMenuBtn.addEventListener('click', () => {
+        sidebar.classList.toggle('open');
+    });
+}
+
+document.addEventListener('click', (e) => {
+    if (window.innerWidth <= 768) {
+        if (!sidebar.contains(e.target) && !e.target.closest('.header')) {
+            sidebar.classList.remove('open');
+        }
+    }
+});
+
+// Smooth scroll for anchor links
+document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+    anchor.addEventListener('click', function(e) {
+        const target = document.querySelector(this.getAttribute('href'));
+        if (target) {
+            e.preventDefault();
+            target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            if (window.innerWidth <= 768) {
+                sidebar.classList.remove('open');
+            }
+        }
+    });
+});
+
+// Active link highlighting based on scroll position
+const sections = document.querySelectorAll('.content h2, .content h3');
+const sidebarLinks = document.querySelectorAll('.sidebar-link[href^="#"]');
+
+function updateActiveLink() {
+    let current = '';
+    sections.forEach(section => {
+        const rect = section.getBoundingClientRect();
+        if (rect.top <= 100) {
+            current = '#' + section.id;
+        }
+    });
+
+    sidebarLinks.forEach(link => {
+        link.classList.remove('active');
+        if (link.getAttribute('href') === current) {
+            link.classList.add('active');
+        }
+    });
+}
+
+window.addEventListener('scroll', updateActiveLink, { passive: true });
+window.addEventListener('load', updateActiveLink);
+
+// Highlight.js initialization
+if (typeof hljs !== 'undefined') {
+    hljs.highlightAll();
+}
+
+// Mobile menu button visibility
+const mobileMenuBtn = document.getElementById('mobile-menu-btn');
+function checkMobile() {
+    if (window.innerWidth <= 768) {
+        mobileMenuBtn.style.display = 'flex';
+    } else {
+        mobileMenuBtn.style.display = 'none';
+        document.getElementById('sidebar').classList.remove('open');
+    }
+}
+checkMobile();
+window.addEventListener('resize', checkMobile);
+
+mobileMenuBtn.addEventListener('click', () => {
+    document.getElementById('sidebar').classList.toggle('open');
+});
+</script>

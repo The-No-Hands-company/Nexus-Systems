@@ -1,0 +1,778 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vision and Roadmap — Nexus Modeling Docs</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
+</head>
+<body>
+    <nav class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+            <div class="sidebar-title">Nexus Modeling</div>
+            <div class="sidebar-subtitle">Documentation v0.1.0-dev</div>
+        </div>
+        <div class="sidebar-section">
+<div class="sidebar-section-title">📚 Developer Documentation</div>
+<a class="sidebar-link" href="architecture.html">Architecture Overview</a>
+<a class="sidebar-link" href="kernel-api.html">Kernel API Reference</a>
+<a class="sidebar-link" href="geometry-kernel.html">Geometry Kernel</a>
+<a class="sidebar-link" href="renderer.html">Render System</a>
+<a class="sidebar-link" href="editor-architecture.html">Editor Architecture</a>
+<a class="sidebar-link" href="build-system.html">Build System</a>
+<a class="sidebar-link" href="testing.html">Testing</a>
+<a class="sidebar-link" href="contributing.html">Contributing</a>
+<a class="sidebar-link" href="adding-geometry-op.html">Adding Geometry Op</a>
+<a class="sidebar-link" href="adding-cad-feature.html">Adding CAD Feature</a>
+<a class="sidebar-link" href="mesh-operations.html">Mesh Operations</a>
+<a class="sidebar-link" href="boolean-csg.html">Boolean/CSG Deep Dive</a>
+<a class="sidebar-link" href="halfedge-mesh.html">Half-edge Mesh</a>
+<a class="sidebar-link" href="analytic-brep.html">Analytic B-rep</a>
+<a class="sidebar-link" href="mesh-io.html">Mesh I/O</a>
+<a class="sidebar-link" href="tolerance.html">Tolerance System</a>
+<a class="sidebar-link" href="porting.html">Porting Guide</a>
+</div>
+<div class="sidebar-section">
+<div class="sidebar-section-title">🎨 Expert User Documentation</div>
+</div>
+<div class="sidebar-section">
+<div class="sidebar-section-title">👤 Beginner / User Documentation</div>
+<a class="sidebar-link" href="getting-started.html">Getting Started</a>
+</div>
+<div class="sidebar-section">
+<div class="sidebar-section-title">🔧 API Reference</div>
+</div>
+<div class="sidebar-section">
+<div class="sidebar-section-title">📚 Additional Resources</div>
+<a class="sidebar-link" href="design-decisions.html">Design Decisions</a>
+<a class="sidebar-link" href="testing-strategy.html">Testing Strategy</a>
+<a class="sidebar-link" href="graphics-kernel.html">Graphics Kernel</a>
+<a class="sidebar-link active" href="vision-and-roadmap.html">Vision & Roadmap</a>
+<a class="sidebar-link" href="reference-roadmap.html">Reference Roadmap</a>
+<a class="sidebar-link" href="modeling-industry-parity.html">Modeling Industry Parity</a>
+<a class="sidebar-link" href="modeling-parity-index.html">Modeling Parity Index</a>
+<a class="sidebar-link" href="modeling-reference-roadmap.html">Modeling Reference Roadmap</a>
+</div>
+    </nav>
+    
+    <div class="main-content">
+        <header class="header">
+            <button class="btn btn-icon" id="mobile-menu-btn" aria-label="Toggle menu" style="display: none;">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="3" y1="12" x2="21" y2="12"></line>
+                    <line x1="3" y1="6" x2="21" y2="6"></line>
+                    <line x1="3" y1="18" x2="21" y2="18"></line>
+                </svg>
+            </button>
+            <div class="header-title">Vision and Roadmap</div>
+            <div class="header-actions">
+                
+<button class="btn btn-icon" id="theme-toggle" aria-label="Toggle dark/light theme" title="Toggle theme (Ctrl+Shift+L)">
+    <svg class="theme-icon-sun" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display: none;">
+        <circle cx="12" cy="12" r="5"></circle>
+        <line x1="12" y1="1" x2="12" y2="3"></line>
+        <line x1="12" y1="21" x2="12" y2="23"></line>
+        <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+        <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+        <line x1="1" y1="12" x2="3" y2="12"></line>
+        <line x1="21" y1="12" x2="23" y2="12"></line>
+        <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+        <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+    </svg>
+    <svg class="theme-icon-moon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display: none;">
+        <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+    </svg>
+</button>
+
+                <a href="https://github.com/nexus-systems/nexus-modeling" class="btn btn-secondary" target="_blank" rel="noopener">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M12 0C5.374 0 0 5.373 0 12c0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23A11.509 11.509 0 0112 5.803c1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576C20.566 21.797 24 17.3 24 12c0-6.627-5.373-12-12-12z"/>
+                    </svg>
+                    <span class="btn-text">GitHub</span>
+                </a>
+                <a href="index.html" class="btn btn-primary">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
+                        <polyline points="9 22 9 12 15 12 15 22"></polyline>
+                    </svg>
+                    <span class="btn-text">Home</span>
+                </a>
+            </div>
+        </header>
+        
+        <main class="content">
+            <div class="toc"><h3>On This Page</h3><ul><li><a href="#vision-and-roadmap">Vision and Roadmap</a></li>
+  <li><a href="#vision">Vision</a></li>
+  <li><a href="#kernel-direction-hybrid-and-multi-engine">Kernel Direction: Hybrid and Multi-Engine</a></li>
+  <li><a href="#ux-doctrine-progressive-disclosure">UX Doctrine: Progressive Disclosure</a></li>
+  <li><a href="#execution-ratio-monthly">Execution Ratio (Monthly)</a></li>
+  <li><a href="#12-month-roadmap-scope-safe">12-Month Roadmap (Scope-Safe)</a></li>
+  <li><a href="#month-1-kernel-baseline-lock">Month 1: Kernel Baseline Lock</a></li>
+  <li><a href="#month-2-geometry-core-v0">Month 2: Geometry Core v0</a></li>
+  <li><a href="#month-3-render-pipeline-v1">Month 3: Render Pipeline v1</a></li>
+  <li><a href="#month-4-parametric-foundation">Month 4: Parametric Foundation</a></li>
+  <li><a href="#month-5-modeling-workflow-slice-1">Month 5: Modeling Workflow Slice 1</a></li>
+  <li><a href="#month-6-asset-and-pipeline-core">Month 6: Asset and Pipeline Core</a></li>
+  <li><a href="#month-7-animation-and-rigging-core-v0">Month 7: Animation and Rigging Core v0</a></li>
+  <li><a href="#month-8-procedural-and-evaluation-graph">Month 8: Procedural and Evaluation Graph</a></li>
+  <li><a href="#month-9-simulation-interfaces-v0">Month 9: Simulation Interfaces v0</a></li>
+  <li><a href="#month-10-advanced-rendering-track">Month 10: Advanced Rendering Track</a></li>
+  <li><a href="#month-11-scripting-and-automation-layer">Month 11: Scripting and Automation Layer</a></li>
+  <li><a href="#month-12-alpha-kernel-release">Month 12: Alpha Kernel Release</a></li>
+  <li><a href="#start-month-1-now-measurable-baselines">Start Month 1 Now (Measurable Baselines)</a></li>
+  <li><a href="#deliverables">Deliverables</a></li>
+  <li><a href="#baseline-metrics-initial-targets">Baseline Metrics (Initial Targets)</a></li>
+  <li><a href="#month-1-done-criteria">Month 1 Done Criteria</a></li>
+  <li><a href="#month-2-single-geometry-slice-decision">Month 2 Single Geometry Slice Decision</a></li>
+  <li><a href="#anti-scope-collapse-rules">Anti-Scope-Collapse Rules</a></li>
+  <li><a href="#governance-notes">Governance Notes</a></li>
+</ul></div>
+            <h1 id="vision-and-roadmap">Vision and Roadmap</h1>
+
+<p>
+This page is the single north-star reference for Nexus Modeling direction, execution cadence, and scope control.
+</p>
+
+<p>
+It consolidates and complements:
+</p>
+
+<ul>
+<li><a href="PRD.md">PRD</a></li>
+<li><a href="SDD.md">SDD</a></li>
+<li><a href="kernel-capability-map.md">Kernel Capability Map</a></li>
+<li><a href="api-freeze-v0.md">API Freeze v0</a></li>
+<li><a href="ux-baseline-charter.md">UX Baseline Charter</a></li>
+<li><a href="kernel-baseline-report.md">Kernel Baseline Report</a></li>
+</ul>
+
+<h2 id="vision">Vision</h2>
+
+<p>
+Nexus Modeling is building a production-grade, open-source 3D creation kernel that can evolve into a full all-in-one DCC pipeline over time.
+</p>
+
+<p>
+Near-term, the kernel is geometry and rendering focused. Long-term, it must support modeling, rendering, animation, rigging, simulation, scripting, and data pipeline automation under one stable architecture.
+</p>
+
+<p>
+The user experience target is explicit:
+</p>
+
+<ol>
+<li>New users should not face a wall of tools on first launch.</li>
+<li>Experts should be able to surface advanced capability quickly through deep customization.</li>
+<li>The product should feel simple by default and powerful by intent.</li>
+</ol>
+
+<p>
+The strategy is ambitious vision with disciplined execution:
+</p>
+
+<ol>
+<li>Build complete vertical slices.</li>
+<li>Keep contracts explicit and deterministic.</li>
+<li>Expand into new domains only when current milestone exits are met.</li>
+</ol>
+
+<h2 id="kernel-direction-hybrid-and-multi-engine">Kernel Direction: Hybrid and Multi-Engine</h2>
+
+<p>
+Nexus Modeling is not a mesh-only kernel.
+</p>
+
+<p>
+Mesh is the universal interchange and real-time rendering language, but it is not the only authoring or simulation representation the kernel should understand. The long-term architecture target is a hybrid, multi-engine kernel that can host multiple geometry representations behind stable contracts.
+</p>
+
+<p>
+Planned representation families:
+</p>
+
+<ol>
+<li>Polygon and subdivision surfaces for broad compatibility, games, and animation.</li>
+<li>Parametric curve and surface representations for CAD-grade precision.</li>
+<li>Implicit and signed-distance-field representations for booleans, sculpting, lattices, and field-driven design.</li>
+<li>Voxels and volume grids for simulation, analysis, and AI-friendly spatial data.</li>
+<li>Point-cloud and radiance-field domains such as Gaussian splats for scanned or neural scene capture.</li>
+</ol>
+
+<p>
+Architecture rules for this direction:
+</p>
+
+<ol>
+<li>No single representation should leak assumptions into the whole kernel.</li>
+<li>Shared systems such as scene graph, evaluation, rendering, scripting, and asset versioning must remain representation-agnostic where practical.</li>
+<li>Conversion boundaries must be explicit, testable, and loss-aware.</li>
+<li>Mesh remains the baseline render and interchange path during early milestones, but it is a foundation slice, not the end-state product boundary.</li>
+</ol>
+
+<h2 id="ux-doctrine-progressive-disclosure">UX Doctrine: Progressive Disclosure</h2>
+
+<p>
+This project adopts progressive disclosure as a hard product principle.
+</p>
+
+<p>
+Default experience (new user):
+</p>
+
+<ol>
+<li>Guided introduction on first launch.</li>
+<li>Lean creation start with 6 to 10 core primitives.</li>
+<li>Immediate access to core modeling actions (inset, extrude, transform) without UI noise.</li>
+</ol>
+
+<p>
+Advanced experience (expert user):
+</p>
+
+<ol>
+<li>Large settings and preferences surface for deep control.</li>
+<li>User-defined workspace layouts, profile presets, and quick-access tool surfacing.</li>
+<li>Optional exposure of advanced systems by domain and context, not by default.</li>
+</ol>
+
+<p>
+Design rules:
+</p>
+
+<ol>
+<li>Context over clutter: show tools relevant to current selection/mode.</li>
+<li>Process-first language: prefer user-intent phrasing where possible.</li>
+<li>Customization without lock-in: all defaults can be overridden by profiles.</li>
+<li>No regressions in onboarding clarity when adding advanced features.</li>
+</ol>
+
+<h2 id="execution-ratio-monthly">Execution Ratio (Monthly)</h2>
+
+<p>
+Every month follows the same effort split:
+</p>
+
+<ol>
+<li>65% feature implementation</li>
+<li>25% tests and regression hardening</li>
+<li>10% docs and design notes</li>
+</ol>
+
+<h2 id="12-month-roadmap-scope-safe">12-Month Roadmap (Scope-Safe)</h2>
+
+<h2 id="month-1-kernel-baseline-lock">Month 1: Kernel Baseline Lock</h2>
+
+<p>
+Goals:
+</p>
+
+<ol>
+<li>Freeze v0 public API boundaries for render, scene, camera, and resource handles.</li>
+<li>Define performance and determinism baselines on Null and Vulkan.</li>
+<li>Ship one kernel health dashboard in CI: build, tests, perf smoke, memory leaks.</li>
+<li>Publish UX baseline charter for progressive disclosure and customization boundaries.</li>
+</ol>
+
+<p>
+Exit criteria:
+</p>
+
+<ol>
+<li>Zero ambiguous ownership for current modules.</li>
+<li>Reproducible baseline metrics.</li>
+<li>UX baseline charter merged with acceptance checks for first-launch simplicity.</li>
+</ol>
+
+<h2 id="month-2-geometry-core-v0">Month 2: Geometry Core v0</h2>
+
+<p>
+Goals:
+</p>
+
+<ol>
+<li>Add robust mesh data model primitives: topology validation, attribute channels, stable IDs.</li>
+<li>Implement first geometry ops set: transform, merge, split, weld, normals/tangents rebuild.</li>
+<li>Add deterministic geometry regression suite with golden topology checks.</li>
+<li>Keep the mesh slice aligned with the broader multi-engine plan so later NURBS, implicit, voxel, and neural representations can plug in without core rewrites.</li>
+</ol>
+
+<p>
+Exit criteria:
+</p>
+
+<ol>
+<li>Geometry ops are script-callable.</li>
+<li>Geometry ops are deterministic across repeated runs.</li>
+</ol>
+
+<h2 id="month-3-render-pipeline-v1">Month 3: Render Pipeline v1</h2>
+
+<p>
+Goals:
+</p>
+
+<ol>
+<li>Finalize deferred baseline: GBuffer, shadow chain, composite contracts, descriptor lifecycle.</li>
+<li>Add render graph validation hooks for pass ordering and resource state transitions.</li>
+<li>Add frame capture metadata export for debugging and CI artifacts.</li>
+</ol>
+
+<p>
+Exit criteria:
+</p>
+
+<ol>
+<li>Stable multi-frame rendering with deterministic descriptor/state behavior.</li>
+</ol>
+
+<h2 id="month-4-parametric-foundation">Month 4: Parametric Foundation</h2>
+
+<p>
+Goals:
+</p>
+
+<ol>
+<li>Introduce constraint graph core and parametric entity representation.</li>
+<li>Implement solver v0 for basic geometric constraints.</li>
+<li>Add serialization for parametric graph and replay tests.</li>
+</ol>
+
+<p>
+Exit criteria:
+</p>
+
+<ol>
+<li>A simple parametric model can be evaluated, saved, and reloaded deterministically.</li>
+</ol>
+
+<h2 id="month-5-modeling-workflow-slice-1">Month 5: Modeling Workflow Slice 1</h2>
+
+<p>
+Goals:
+</p>
+
+<ol>
+<li>Build one end-to-end workflow: hard-surface blockout to clean mesh output.</li>
+<li>Add boolean v0, bevel/chamfer v0, remesh v0 with robust failure diagnostics.</li>
+<li>Integrate viewport overlays for topology and diagnostics data (kernel-generated, UI-consumed).</li>
+<li>Ship first "simple by default" modeling shell with guided intro and lean starter toolset.</li>
+</ol>
+
+<p>
+Exit criteria:
+</p>
+
+<ol>
+<li>One daily-usable modeling slice from import to export.</li>
+<li>New-user flow can complete first model without enabling advanced panels.</li>
+</ol>
+
+<h2 id="month-6-asset-and-pipeline-core">Month 6: Asset and Pipeline Core</h2>
+
+<p>
+Goals:
+</p>
+
+<ol>
+<li>Introduce scene/package format v0 with versioning and migration hooks.</li>
+<li>Add import/export adapters v0 (one mesh format and one scene format first).</li>
+<li>Add asset dependency graph and deterministic load order.</li>
+</ol>
+
+<p>
+Exit criteria:
+</p>
+
+<ol>
+<li>Round-trip scene fidelity for target baseline formats.</li>
+</ol>
+
+<h2 id="month-7-animation-and-rigging-core-v0">Month 7: Animation and Rigging Core v0</h2>
+
+<p>
+Goals:
+</p>
+
+<ol>
+<li>Implement skeleton, skinning, and pose evaluation core contracts.</li>
+<li>Add animation clip sampling, blending primitives, and retargeting hooks.</li>
+<li>Add deterministic animation playback tests across frame rates.</li>
+</ol>
+
+<p>
+Exit criteria:
+</p>
+
+<ol>
+<li>Rigged mesh playback is stable in viewport and headless runs.</li>
+</ol>
+
+<h2 id="month-8-procedural-and-evaluation-graph">Month 8: Procedural and Evaluation Graph</h2>
+
+<p>
+Goals:
+</p>
+
+<ol>
+<li>Add node-based evaluation runtime (no full UI in this phase), with typed compute nodes.</li>
+<li>Implement geometry and animation nodes for procedural workflows.</li>
+<li>Add cache invalidation and dependency-cycle detection.</li>
+</ol>
+
+<p>
+Exit criteria:
+</p>
+
+<ol>
+<li>Procedural graph executes deterministically with cache correctness.</li>
+</ol>
+
+<h2 id="month-9-simulation-interfaces-v0">Month 9: Simulation Interfaces v0</h2>
+
+<p>
+Goals:
+</p>
+
+<ol>
+<li>Define solver API contracts for rigid, cloth, and fluid integration points.</li>
+<li>Implement rigid-body solver baseline with cacheable sim state format.</li>
+<li>Add deterministic step/replay testing and rollback checks.</li>
+</ol>
+
+<p>
+Exit criteria:
+</p>
+
+<ol>
+<li>One simulation domain usable end-to-end with reproducible results.</li>
+</ol>
+
+<h2 id="month-10-advanced-rendering-track">Month 10: Advanced Rendering Track</h2>
+
+<p>
+Goals:
+</p>
+
+<ol>
+<li>Add high-value hybrid path features: temporal accumulation, denoising hooks, material extensions.</li>
+<li>Introduce representation abstraction for point/raster/volume pipelines.</li>
+<li>Start Gaussian Splatting as an optional rendering domain behind stable interfaces.</li>
+<li>Validate coexistence of mesh-authored and scan-authored scene content under the same scene/runtime contracts.</li>
+</ol>
+
+<p>
+Exit criteria:
+</p>
+
+<ol>
+<li>Gaussian module can load, render, and coexist with mesh pipeline without core rewrites.</li>
+</ol>
+
+<h2 id="month-11-scripting-and-automation-layer">Month 11: Scripting and Automation Layer</h2>
+
+<p>
+Goals:
+</p>
+
+<ol>
+<li>Expose stable command API for geometry, render, animation, and asset operations.</li>
+<li>Add scripting bindings v0 and deterministic script execution harness.</li>
+<li>Add pipeline automation examples for batch workflows and cloud execution.</li>
+</ol>
+
+<p>
+Exit criteria:
+</p>
+
+<ol>
+<li>Full sample pipeline runs via script only, with no manual editor dependency.</li>
+</ol>
+
+<h2 id="month-12-alpha-kernel-release">Month 12: Alpha Kernel Release</h2>
+
+<p>
+Goals:
+</p>
+
+<ol>
+<li>Stabilize API version 1.0-alpha and publish compatibility guarantees.</li>
+<li>Run reliability sprint: crash triage, memory/perf tuning, determinism gaps.</li>
+<li>Publish capability report and next-year roadmap based on measured gaps.</li>
+</ol>
+
+<p>
+Exit criteria:
+</p>
+
+<ol>
+<li>Alpha-grade kernel with one production-relevant end-to-end DCC slice.</li>
+</ol>
+
+<h2 id="start-month-1-now-measurable-baselines">Start Month 1 Now (Measurable Baselines)</h2>
+
+<p>
+This section is active immediately.
+</p>
+
+<h2 id="deliverables">Deliverables</h2>
+
+<ol>
+<li>API boundary freeze record:</li>
+<li>Explicitly list v0 public surface roots under src/kernel/include/nexus.</li>
+<li>Record change policy: additive-first, no silent breakage.</li>
+<li>Baseline benchmark matrix:</li>
+<li>Null backend: frame time baseline, deterministic output checks, test pass rate.</li>
+<li>Vulkan backend: frame time baseline, startup/shader path smoke checks.</li>
+<li>CI kernel health dashboard:</li>
+<li>Build status</li>
+<li>Test status</li>
+<li>Perf smoke status</li>
+<li>Memory/lifetime checks status</li>
+<li>Ownership lock:</li>
+<li>Every active module mapped to a primary owner domain per <a href="kernel-capability-map.md">Kernel Capability Map</a>.</li>
+<li>UX baseline charter:</li>
+<li>Define first-launch screen behavior and starter tool policy.</li>
+<li>Define expert-surface customization policy and profile model.</li>
+</ol>
+
+<h2 id="baseline-metrics-initial-targets">Baseline Metrics (Initial Targets)</h2>
+
+<ol>
+<li>Build reliability:</li>
+<li>100% successful CI builds on required targets.</li>
+<li>Test reliability:</li>
+<li>100% pass on required test gates.</li>
+<li>No flaky tests in required suites.</li>
+<li>Determinism:</li>
+<li>Null backend runs produce stable behavior signatures across repeated runs.</li>
+<li>Perf smoke:</li>
+<li>Track median frame time for selected smoke scenes and report trend deltas.</li>
+<li>Memory/lifetime:</li>
+<li>No unbounded resource growth across fixed-length frame loops.</li>
+<li>Onboarding clarity:</li>
+<li>First-launch path exposes only starter primitives and core modeling operations.</li>
+<li>Guided introduction path is present and runnable.</li>
+</ol>
+
+<h2 id="month-1-done-criteria">Month 1 Done Criteria</h2>
+
+<p>
+Month 1 is complete only when all are true:
+</p>
+
+<ol>
+<li>Public API v0 freeze document is merged.</li>
+<li>Baseline benchmark data is captured and reproducible.</li>
+<li>CI health dashboard is visible to contributors.</li>
+<li>Module ownership has zero ambiguous areas.</li>
+<li>UX baseline charter and onboarding checks are merged.</li>
+</ol>
+
+<h2 id="month-2-single-geometry-slice-decision">Month 2 Single Geometry Slice Decision</h2>
+
+<p>
+Before any new major rendering branch, the project commits to one geometry slice:
+</p>
+
+<p>
+Geometry Slice: Deterministic Mesh Foundation v0
+</p>
+
+<p>
+Execution checklist: <a href="month-2-geometry-checklist.md">month-2-geometry-checklist.md</a>
+</p>
+
+<p>
+In scope:
+</p>
+
+<ol>
+<li>Mesh topology validation primitives (manifold checks, index validity, section bounds).</li>
+<li>Attribute channel framework (normals, tangents, UV sets, color channels).</li>
+<li>Stable mesh element IDs for deterministic references across edits.</li>
+<li>Core operations: transform, merge, split, weld, normals/tangents rebuild.</li>
+<li>Script-callable API hooks for each operation.</li>
+<li>Golden topology regression tests for repeatable outputs.</li>
+</ol>
+
+<p>
+Out of scope for Month 2:
+</p>
+
+<ol>
+<li>New major rendering branch features.</li>
+<li>Full CAD solver work.</li>
+<li>High-level UI authoring workflows.</li>
+</ol>
+
+<p>
+Month 2 completion gate:
+</p>
+
+<ol>
+<li>All listed operations pass deterministic golden tests.</li>
+<li>Operations are callable from scripting layer contracts.</li>
+<li>No new major rendering branch starts until this gate passes.</li>
+</ol>
+
+<h2 id="anti-scope-collapse-rules">Anti-Scope-Collapse Rules</h2>
+
+<p>
+These rules are mandatory for roadmap execution:
+</p>
+
+<ol>
+<li>Only one major domain expansion every two months.</li>
+<li>No new subsystem starts unless one current subsystem exits with defined done criteria.</li>
+<li>Every feature PR declares owner domain per <a href="kernel-capability-map.md">kernel-capability-map.md</a>.</li>
+<li>Test additions must be tied to shipped behavior; avoid speculative test growth.</li>
+<li>Maintain a quarterly kill-list of deferred ideas to preserve focus.</li>
+</ol>
+
+<h2 id="governance-notes">Governance Notes</h2>
+
+<ol>
+<li>This document sets execution direction. Detailed requirements remain in <a href="PRD.md">PRD</a>, <a href="SDD.md">SDD</a>, and <a href="FRD.md">FRD</a>.</li>
+<li>If any milestone changes, update this page and reference the design decision in <a href="design-decisions.md">design-decisions.md</a>.</li>
+</ol>
+        </main>
+    </div>
+    
+    <script>
+// Theme management
+const THEME_KEY = 'nexus-docs-theme';
+const themeToggle = document.getElementById('theme-toggle');
+const sunIcon = themeToggle.querySelector('.theme-icon-sun');
+const moonIcon = themeToggle.querySelector('.theme-icon-moon');
+
+function applyTheme(theme) {
+    document.documentElement.setAttribute('data-theme', theme);
+    if (theme === 'light') {
+        sunIcon.style.display = 'block';
+        moonIcon.style.display = 'none';
+    } else {
+        sunIcon.style.display = 'none';
+        moonIcon.style.display = 'block';
+    }
+    localStorage.setItem(THEME_KEY, theme);
+}
+
+function getPreferredTheme() {
+    const stored = localStorage.getItem(THEME_KEY);
+    if (stored) return stored;
+    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+}
+
+function initTheme() {
+    const theme = getPreferredTheme();
+    applyTheme(theme);
+}
+
+function toggleTheme() {
+    const current = document.documentElement.getAttribute('data-theme') || 'dark';
+    applyTheme(current === 'dark' ? 'light' : 'dark');
+}
+
+themeToggle.addEventListener('click', toggleTheme);
+
+// Keyboard shortcut: Ctrl+Shift+L
+document.addEventListener('keydown', (e) => {
+    if (e.ctrlKey && e.shiftKey && e.key === 'L') {
+        e.preventDefault();
+        toggleTheme();
+    }
+});
+
+// Listen for system theme changes
+window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => {
+    if (!localStorage.getItem(THEME_KEY)) {
+        applyTheme(e.matches ? 'dark' : 'light');
+    }
+});
+
+// Initialize theme immediately to prevent flash
+initTheme();
+
+// Mobile sidebar toggle
+const sidebar = document.getElementById('sidebar');
+const mobileMenuBtn = document.getElementById('mobile-menu-btn');
+
+if (mobileMenuBtn) {
+    mobileMenuBtn.addEventListener('click', () => {
+        sidebar.classList.toggle('open');
+    });
+}
+
+document.addEventListener('click', (e) => {
+    if (window.innerWidth <= 768) {
+        if (!sidebar.contains(e.target) && !e.target.closest('.header')) {
+            sidebar.classList.remove('open');
+        }
+    }
+});
+
+// Smooth scroll for anchor links
+document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+    anchor.addEventListener('click', function(e) {
+        const target = document.querySelector(this.getAttribute('href'));
+        if (target) {
+            e.preventDefault();
+            target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            if (window.innerWidth <= 768) {
+                sidebar.classList.remove('open');
+            }
+        }
+    });
+});
+
+// Active link highlighting based on scroll position
+const sections = document.querySelectorAll('.content h2, .content h3');
+const sidebarLinks = document.querySelectorAll('.sidebar-link[href^="#"]');
+
+function updateActiveLink() {
+    let current = '';
+    sections.forEach(section => {
+        const rect = section.getBoundingClientRect();
+        if (rect.top <= 100) {
+            current = '#' + section.id;
+        }
+    });
+
+    sidebarLinks.forEach(link => {
+        link.classList.remove('active');
+        if (link.getAttribute('href') === current) {
+            link.classList.add('active');
+        }
+    });
+}
+
+window.addEventListener('scroll', updateActiveLink, { passive: true });
+window.addEventListener('load', updateActiveLink);
+
+// Highlight.js initialization
+if (typeof hljs !== 'undefined') {
+    hljs.highlightAll();
+}
+
+// Mobile menu button visibility
+const mobileMenuBtn = document.getElementById('mobile-menu-btn');
+function checkMobile() {
+    if (window.innerWidth <= 768) {
+        mobileMenuBtn.style.display = 'flex';
+    } else {
+        mobileMenuBtn.style.display = 'none';
+        document.getElementById('sidebar').classList.remove('open');
+    }
+}
+checkMobile();
+window.addEventListener('resize', checkMobile);
+
+mobileMenuBtn.addEventListener('click', () => {
+    document.getElementById('sidebar').classList.toggle('open');
+});
+</script>

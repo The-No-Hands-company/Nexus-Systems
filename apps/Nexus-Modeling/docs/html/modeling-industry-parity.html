@@ -1,0 +1,696 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nexus-Modeling — Industry Modeling Standards & Parity Reference — Nexus Modeling Docs</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
+</head>
+<body>
+    <nav class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+            <div class="sidebar-title">Nexus Modeling</div>
+            <div class="sidebar-subtitle">Documentation v0.1.0-dev</div>
+        </div>
+        <div class="sidebar-section">
+<div class="sidebar-section-title">📚 Developer Documentation</div>
+<a class="sidebar-link" href="architecture.html">Architecture Overview</a>
+<a class="sidebar-link" href="kernel-api.html">Kernel API Reference</a>
+<a class="sidebar-link" href="geometry-kernel.html">Geometry Kernel</a>
+<a class="sidebar-link" href="renderer.html">Render System</a>
+<a class="sidebar-link" href="editor-architecture.html">Editor Architecture</a>
+<a class="sidebar-link" href="build-system.html">Build System</a>
+<a class="sidebar-link" href="testing.html">Testing</a>
+<a class="sidebar-link" href="contributing.html">Contributing</a>
+<a class="sidebar-link" href="adding-geometry-op.html">Adding Geometry Op</a>
+<a class="sidebar-link" href="adding-cad-feature.html">Adding CAD Feature</a>
+<a class="sidebar-link" href="mesh-operations.html">Mesh Operations</a>
+<a class="sidebar-link" href="boolean-csg.html">Boolean/CSG Deep Dive</a>
+<a class="sidebar-link" href="halfedge-mesh.html">Half-edge Mesh</a>
+<a class="sidebar-link" href="analytic-brep.html">Analytic B-rep</a>
+<a class="sidebar-link" href="mesh-io.html">Mesh I/O</a>
+<a class="sidebar-link" href="tolerance.html">Tolerance System</a>
+<a class="sidebar-link" href="porting.html">Porting Guide</a>
+</div>
+<div class="sidebar-section">
+<div class="sidebar-section-title">🎨 Expert User Documentation</div>
+</div>
+<div class="sidebar-section">
+<div class="sidebar-section-title">👤 Beginner / User Documentation</div>
+<a class="sidebar-link" href="getting-started.html">Getting Started</a>
+</div>
+<div class="sidebar-section">
+<div class="sidebar-section-title">🔧 API Reference</div>
+</div>
+<div class="sidebar-section">
+<div class="sidebar-section-title">📚 Additional Resources</div>
+<a class="sidebar-link" href="design-decisions.html">Design Decisions</a>
+<a class="sidebar-link" href="testing-strategy.html">Testing Strategy</a>
+<a class="sidebar-link" href="graphics-kernel.html">Graphics Kernel</a>
+<a class="sidebar-link" href="vision-and-roadmap.html">Vision & Roadmap</a>
+<a class="sidebar-link" href="reference-roadmap.html">Reference Roadmap</a>
+<a class="sidebar-link active" href="modeling-industry-parity.html">Modeling Industry Parity</a>
+<a class="sidebar-link" href="modeling-parity-index.html">Modeling Parity Index</a>
+<a class="sidebar-link" href="modeling-reference-roadmap.html">Modeling Reference Roadmap</a>
+</div>
+    </nav>
+    
+    <div class="main-content">
+        <header class="header">
+            <button class="btn btn-icon" id="mobile-menu-btn" aria-label="Toggle menu" style="display: none;">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="3" y1="12" x2="21" y2="12"></line>
+                    <line x1="3" y1="6" x2="21" y2="6"></line>
+                    <line x1="3" y1="18" x2="21" y2="18"></line>
+                </svg>
+            </button>
+            <div class="header-title">Nexus-Modeling — Industry Modeling Standards & Parity Reference</div>
+            <div class="header-actions">
+                
+<button class="btn btn-icon" id="theme-toggle" aria-label="Toggle dark/light theme" title="Toggle theme (Ctrl+Shift+L)">
+    <svg class="theme-icon-sun" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display: none;">
+        <circle cx="12" cy="12" r="5"></circle>
+        <line x1="12" y1="1" x2="12" y2="3"></line>
+        <line x1="12" y1="21" x2="12" y2="23"></line>
+        <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+        <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+        <line x1="1" y1="12" x2="3" y2="12"></line>
+        <line x1="21" y1="12" x2="23" y2="12"></line>
+        <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+        <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+    </svg>
+    <svg class="theme-icon-moon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display: none;">
+        <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+    </svg>
+</button>
+
+                <a href="https://github.com/nexus-systems/nexus-modeling" class="btn btn-secondary" target="_blank" rel="noopener">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M12 0C5.374 0 0 5.373 0 12c0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23A11.509 11.509 0 0112 5.803c1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576C20.566 21.797 24 17.3 24 12c0-6.627-5.373-12-12-12z"/>
+                    </svg>
+                    <span class="btn-text">GitHub</span>
+                </a>
+                <a href="index.html" class="btn btn-primary">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
+                        <polyline points="9 22 9 12 15 12 15 22"></polyline>
+                    </svg>
+                    <span class="btn-text">Home</span>
+                </a>
+            </div>
+        </header>
+        
+        <main class="content">
+            <div class="toc"><h3>On This Page</h3><ul><li><a href="#nexus-modeling-industry-modeling-standards-parity-reference">Nexus-Modeling — Industry Modeling Standards & Parity Reference</a></li>
+  <li><a href="#how-to-read-the-parity-tables">How to read the parity tables</a></li>
+  <li><a href="#reference-dccs-surveyed">Reference DCCs surveyed</a></li>
+  <li><a href="#foundation-robustness-the-depth-axis">Foundation & Robustness (the depth axis)</a></li>
+  <li><a href="#l0-geometry-representations-the-engine-substrate">L0 — Geometry representations (the engine substrate)</a></li>
+  <li><a href="#l1-mesh-direct-modeling-toolset-edit-mode">L1 — Mesh direct-modeling toolset (edit mode)</a></li>
+  <li><a href="#l2-retopology-remeshing">L2 — Retopology & remeshing</a></li>
+  <li><a href="#l3-sculpting">L3 — Sculpting</a></li>
+  <li><a href="#l4-curves-surfaces">L4 — Curves & surfaces</a></li>
+  <li><a href="#l5-parametric-procedural-non-destructive">L5 — Parametric / procedural / non-destructive</a></li>
+  <li><a href="#l6-cad-solid-modeling">L6 — CAD / solid modeling</a></li>
+  <li><a href="#l7-uv-unwrapping">L7 — UV & unwrapping</a></li>
+  <li><a href="#l8-modifiers-deformers">L8 — Modifiers & deformers</a></li>
+  <li><a href="#l9-selection-snapping-transforms-precision">L9 — Selection, snapping, transforms, precision</a></li>
+  <li><a href="#l10-scene-organization-instancing">L10 — Scene organization & instancing</a></li>
+  <li><a href="#l11-viewport-display-visual-feedback">L11 — Viewport, display & visual feedback</a></li>
+  <li><a href="#l12-history-undo-non-destructive-workflow">L12 — History, undo, non-destructive workflow</a></li>
+  <li><a href="#l13-interchange-io">L13 — Interchange / IO</a></li>
+  <li><a href="#l14-units-measurement-analysis">L14 — Units, measurement & analysis</a></li>
+  <li><a href="#l15-ux-onboarding-discoverability">L15 — UX, onboarding & discoverability</a></li>
+  <li><a href="#current-state-summary">Current-state summary</a></li>
+  <li><a href="#prioritized-parity-closure-backlog">Prioritized parity-closure backlog</a></li>
+    <li><a href="#foundation-p0-the-depth-track-outranks-the-breadth-p0s-below">Foundation (P0⁺ — the depth track, outranks the breadth P0s below)</a></li>
+    <li><a href="#p0-table-stakes-nothing-new-in-layer-until-these-land">P0 — table-stakes; nothing new in-layer until these land</a></li>
+    <li><a href="#p1-expected-by-any-professional-user">P1 — expected by any professional user</a></li>
+    <li><a href="#p2-depth-pipeline-maturity">P2 — depth & pipeline maturity</a></li>
+  <li><a href="#parity-first-working-policy-definition-of-done">Parity-first working policy (definition of done)</a></li>
+</ul></div>
+            <h1 id="nexus-modeling-industry-modeling-standards-parity-reference">Nexus-Modeling — Industry Modeling Standards & Parity Reference</h1>
+
+<p>
+<strong>Status:</strong> living document · <strong>Owner:</strong> modeling · <strong>Purpose:</strong> the governing checklist for reaching
+feature parity with the industry-standard 3D modeling toolset <em>before</em> net-new modeling features are added.
+</p>
+
+<blockquote><strong>Parity-first policy.</strong> Nexus-Modeling's near-term modeling goal is not novelty — it is to ship</blockquote>
+<blockquote><em>exactly what every professional DCC already ships</em>, done correctly. This document enumerates that</blockquote>
+<blockquote>standard toolset layer by layer (geometry engine → user-facing feature/visual), records where Nexus</blockquote>
+<blockquote>stands today, and prioritizes the gaps. **No new modeling capability is greenlit while a P0 parity gap</blockquote>
+<blockquote>in the same layer is open.**</blockquote>
+
+<h2 id="how-to-read-the-parity-tables">How to read the parity tables</h2>
+
+<p>
+Each layer below is a table with a Nexus status per feature:
+</p>
+
+<p>
+| Symbol | Meaning |
+|---|---|
+| ✅ <strong>Have</strong> | Real, working capability (backed by implementation + tests). |
+| 🟡 <strong>Partial</strong> | Exists but limited, or an API <em>façade</em> whose generative core is thin (see note). |
+| ❌ <strong>Missing</strong> | Not present. |
+</p>
+
+<p>
+"Who ships it" lists representative apps that treat the feature as table-stakes.
+Nexus status is grounded in the July 2026 kernel + app inventories, <strong>not</strong> aspirational.
+</p>
+
+<h2 id="reference-dccs-surveyed">Reference DCCs surveyed</h2>
+
+<p>
+| App | Signature strength (what it defines the standard for) |
+|---|---|
+| <strong>Blender</strong> | Poly modeling breadth, Geometry Nodes (procedural), sculpt, all-in-one FOSS baseline |
+| <strong>Maya</strong> | Poly modeling + rigging/animation pipeline, industry film/games standard |
+| <strong>3ds Max</strong> | The <strong>modifier stack</strong> paradigm, arch-viz, game-asset modeling |
+| <strong>Houdini</strong> | Procedural node modeling (SOPs), the gold standard for non-destructive/parametric |
+| <strong>Modo</strong> | Workflow ergonomics, MeshFusion (live booleans), poly/sub-d |
+| <strong>ZBrush</strong> | Digital sculpting: dyntopo/dynamesh, multires, sculpt brushes, VDMs |
+| <strong>Plasticity</strong> | Artist-friendly CAD/NURBS solids, the "CAD for concept artists" bar |
+| <strong>Rhino / Fusion / SolidWorks</strong> | NURBS + parametric solid CAD, sketches/constraints, drawings, assemblies |
+| <strong>Silo / Wings3D</strong> | Pure, focused subdivision poly-modeling ergonomics |
+</p>
+
+<hr>
+
+<h2 id="foundation-robustness-the-depth-axis">Foundation & Robustness (the depth axis)</h2>
+
+<p>
+The layer tables below measure <strong>breadth</strong> — is a feature <em>present</em>? This section measures <strong>depth</strong> — is the kernel foundation <em>production-robust</em>? A cell can be ✅ present yet ❌ robust (the boolean is the clearest case). <strong>Foundation gaps outrank breadth features</strong> in the backlog: a house needs its cement poured before more rooms.
+</p>
+
+<p>
+| Foundation pillar | Status | Reality (with evidence) |
+|---|---|---|
+| Exact geometric predicates | ✅ Solid | Adaptive-exact <code>orient2D/orient3D</code> (Shewchuk-style expansion arithmetic, float-fast-path→exact-fallback) in <code>RobustPredicates.cpp</code>; genuinely used by boolean/Delaunay/CDT/Voronoi |
+| Robust mesh boolean / CSG | ✅ Solid | Real CSG pipeline — <code>TriTriIntersect</code> → <code>TriangleRetriangulate</code> → <code>MeshCut</code> → <code>robustMeshBoolean</code>, <strong>now wired into <code>BooleanOperation</code></strong> (old whole-triangle classifier deleted). Watertight, 2-manifold, exact volumes on <strong>coarse</strong> boxes (union 15 / intersection 1 / difference 7, Euler χ=2). Also fixed a fully-broken <code>ConstrainedDelaunay2D</code> en route. Remaining: coplanar-overlap faces |
+| Unified topological core + Euler operators | 🟡 Fractured <em>(Euler ops now solid)</em> | Real half-edge (<code>HalfEdgeMesh</code>) <strong>with</strong> Euler operators (flip / split / collapse) that are now <strong>proven integrity-clean</strong>: added <code>checkIntegrity()</code> — a direct half-edge-invariant validator (twin reciprocity, face-cycle closure, no live→dead references) — plus property tests asserting <em>every</em> successful flip/split/collapse preserves connectivity + genus on a triangulated solid. Fixed <strong>two real bugs</strong> the validator exposed: <code>collapseEdge</code> left the collapsed triangles' outer wing-twins dangling on dead half-edges (+ no triangle guard); <code>splitEdge</code> mis-wired one sub-face's <code>prev</code>. Prerequisite cleared: <code>HalfEdgeMesh</code> now round-trips the <strong>full</strong> vertex-attribute set losslessly (positions/uvs/normals/tangents/skin), size-guarded. <strong>But an audit with <code>checkIntegrity()</code> found the half-edge's own local ops are mostly broken</strong> — 5 of 6 (<code>pokeFace</code>, <code>extrudeFaces</code>, <code>connectVertices</code>, <code>insertEdgeLoop</code>, <code>insertEdgeVertex</code>) produced corrupt topology, invisible because <code>toMesh</code> rebuilds a fresh index mesh. Fixed <strong><code>insertEdgeVertex</code></strong> (crossed twin pairing + un-repaired endpoint roots — it backs <code>splitEdge</code> on n-gons) and <strong><code>pokeFace</code></strong> (misused <code>addEdgePair</code> created 6n half-edges per fan with garbage twins/faces and orphaned the perimeter on a dead face — rewritten to reuse the perimeter edges + 2n proper spoke edges). and <strong><code>connectVertices</code></strong> (the face-split diagonal linked its cross edges to the <em>original</em> successors on the other sub-face, and a `pos0<pos1` swap decoupled the endpoints from `v0/v1` — reworked to close each sub-face on its own first edge, deriving endpoints from chain positions). **`extrudeFaces`** (manual walls with correct bottom↔neighbour / top↔cap twin pairing), and **`insertEdgeLoop`** (same crossed split-edge twins as insertEdgeVertex, plus `splitFacesAlongLoop` added *dangling un-wired* cross edges via `addEdgePair` — reworked to split each crossed face through the fixed `connectVertices`). **All 6 of 6 HEM local ops are now proven integrity-clean** (`bevelVertex`, `insertEdgeVertex`, `pokeFace`, `connectVertices`, `extrudeFaces`, `insertEdgeLoop`), each with a property test asserting connectivity + genus preservation. The half-edge core's own operators are sound. **Migration underway:** a HEM-native `insetFace` primitive lands the inner-ring + border-quad topology directly on the half-edge (full attribute interpolation, integrity/genus/attribute-preserving, proven), and **two raw-index edit ops now route through it**: `InsetFacesOperation` (Factor + replaceOriginal) via `insetFace`, and `ExtrudeOperation` (keepOriginalFaces=false) via `extrudeFacePrism` — both `fromMesh → per-face op → toMesh(triangulate=false)`, quad + full-attribute preserving, with a raw-index fallback for non-manifold input. (Extrude's `keepOriginalFaces=true` retains the base as overlapping non-manifold prisms the half-edge core can't represent, so it stays raw — a real semantic boundary.) **Next:** Bevel / EdgeBridge |
+| Tolerance / units model | 🟡 Module landed | Central `Tolerance` (`geometry/Tolerance.h`) now exists — absolute floor + relative-to-magnitude term, with `nearlyEqual`/`isZero`/`coincident`/`at` and a `forCharacteristicLength()` factory that proportions the floor to model size. **Proven scale-aware**: coincidence behaves correctly at both a 0.5 mm part and a 5 km terrain, and a test demonstrates a fixed `1e-5` epsilon fails one scale while `Tolerance` handles both. First high-traffic sites migrated (`weldCoincidentVertices`, `MeshVertexMerge::mergeByDistance`). **Remaining**: migrate the ~180 scattered scale-blind literals (`1e-10`×115, `1e-8`×37, `1e-12`×32, …) op-by-op and make per-op defaults derive from the model's characteristic length |
+| Manifold / degenerate handling | ✅ Solid | **Foundation sweep verified**: the ops that must produce manifold/watertight output do — solidify (open surface → closed euler-2 shell; closed box → manifold double-shell), boolean union/diff/intersect (watertight euler-2), and the migrated inset/extrude (euler-2) — all confirmed 2-manifold-constructible (`HalfEdgeMesh::fromMesh`) + Euler-correct, and degenerate faces (repeated index, <3 sides) are rejected at the half-edge boundary. Locked in by `test_ManifoldEnforcement`. (`isManifold`/non-manifold gates/Euler-Poincaré remain available for callers that need per-op assertions.) |
+| Stable element IDs across ops | ✅ Solid | Sweep found 3 candidate gaps; `MeshFillet` was a false positive (operates on `HalfEdgeMesh`, which has no Mesh-level IDs). Closed the two real ones — `EdgeBridge` and `ModifierStack::computeResult` now `rebuildStableElementIds()` on their output (tested). Every Mesh-producing edit op now emits stable IDs |
+| Non-finite input hardening | ✅ Solid | **Foundation sweep verified sound**: every public geometry op rejects non-finite scalars via IEEE-754 **bit inspection** (`(bits & 0x7F800000) != 0x7F800000`) — none use the `-ffast-math`-unreliable `std::isfinite`. Consolidated into a canonical `geometry::isFinite(float/Vec3)` in `Tolerance.h` with a fast-math regression-guard test (constructs NaN/±Inf via bit patterns) |
+| Determinism (Null backend) | ✅ Solid | Boolean union/difference/intersection have explicit cross-run determinism tests; inset/extrude/bevel + solvers likewise. Snapshot/serialization byte formats versioned with backward-compatible reads |
+</p>
+
+<p>
+<strong>Foundation-first track (outranks breadth P0s):</strong> ① robust boolean that splits along the intersection curve ✅ <strong>done</strong> → ② promote the half-edge to the authoritative core + Euler operators <em>(Euler ops flip/split/collapse validated integrity-clean ✅; full attribute round-trip incl. tangents+skin ✅; <code>checkIntegrity()</code> audit found 5/6 HEM local ops corrupt topology — all 6/6 HEM local ops now integrity-clean ✅ (insertEdgeVertex, pokeFace, connectVertices, extrudeFaces, insertEdgeLoop fixed + bevelVertex); next: migrate the raw-index edit ops onto the hardened core)</em> → ③ a Tolerance/units module every op consults <em>(module landed + proven scale-aware ✅; weld/merge migrated; ~180 scattered epsilons still to migrate op-by-op)</em>.
+</p>
+
+<h2 id="l0-geometry-representations-the-engine-substrate">L0 — Geometry representations (the engine substrate)</h2>
+
+<p>
+| Feature | Industry-standard behavior | Who ships it | Nexus | Gap |
+|---|---|---|---|---|
+| Indexed polygon mesh (n-gon) | Positions/normals/UV/tangents, stable IDs, skin weights | all | ✅ | — |
+| Half-edge / BMesh topology | Adjacency for interactive edit ops | Blender, Maya, Modo | ✅ | — |
+| Boundary representation (B-rep) | Typed vertex/edge/face/shell with exact topology | CAD apps, Plasticity | 🟡 <em>(analytic core underway)</em> | Mesh-backed <code>BRepBody</code> exists; <strong>a true analytic B-rep is now being built</strong> — <code>brep::Body</code> (<code>AnalyticBRep.h</code>) binds typed topology (vertex/edge/<strong>coedge</strong>/loop/face/shell/solid) to analytic geometry (Line/Circle curves, Plane/Cylinder/Sphere surfaces), with a <code>checkIntegrity()</code> validator (coedge partners reciprocal + opposite-oriented, loop rings close, vertex continuity, no non-manifold edges) and a <code>fromFaces</code> assembler. Proven so far: analytic <strong>box</strong> (euler 2), <strong>cylinder</strong> (Cylinder-surface sides), <strong>cone</strong>, and <strong>UV sphere</strong> (pole triangle fans + latitude quad bands on a Sphere surface; V=2+(lat-1)·lon, F=lat·lon, E=lon·(2lat-1) ⇒ euler 2) — all watertight coedge-partnered solids for any segment/resolution count, winding validated by <code>checkIntegrity</code> (not eyeballed) and cross-checked against the mesh validator; all verts lie exactly on the analytic surface. A second validator <code>checkGeometry()</code> proves the analytic <strong>geometry</strong> agrees with the topology (edge curves reproduce their endpoint vertices via the Tolerance module, geometry finite, normals unit, partner endpoints consistent) — topological validity ≠ geometric consistency, and it catches stale-curve / non-finite corruption. <strong>NURBS-surface faces wired in</strong>: a face can lie on an exact <code>NurbsSurface</code> (stored on the <code>Body</code>, referenced by handle) and <code>Body::surfacePoint</code> dispatches evaluation to the existing NURBS toolkit — proven by building a NURBS-patch face that validates on both checkers and evaluates correctly. <strong>Euler operators started</strong>: <code>splitEdge</code> (make-edge-vertex) inserts a vertex on an edge, splitting it into two curve-sharing edges and re-linking the incident coedges + partners — proven χ-neutral (ΔV+1/ΔE+1) across every edge of box/cylinder/sphere; and <strong><code>splitFace</code></strong> (make-edge-face) adds a diagonal edge splitting a face into two surface-inheriting sub-faces with partnered diagonal coedges (ΔE+1/ΔF+1) — both proven χ-neutral on both validators, and they <strong>compose</strong> (split-edge then split-face stays valid). <strong>Entity liveness/tombstoning</strong> added (the prerequisite for removal ops + boolean): entities carry an <code>alive</code> flag, both validators skip dead entities, count only live, and enforce the "no live entity references a dead one" guard (the check that flushed out the half-edge bugs) — proven by a negative test. <strong>Removal Euler op</strong> <code>joinEdges</code> (kill-edge-vertex) lands the inverse of <code>splitEdge</code> — merge the two same-curve edges at a degree-2 vertex, tombstoning the removed vertex/edge/coedges — proven by the <strong>round-trip</strong>: <code>splitEdge</code> then <code>joinEdges</code> restores the exact live V/E/F counts and euler on every box/cylinder/sphere edge, both validators clean. <strong><code>mergeFaces</code></strong> (kill-edge-face) completes the pair — remove a shared edge, splice the two loops, merge the faces — proven round-tripping with <code>splitFace</code> (split then merge restores exact live counts). <strong>The make/kill Euler algebra (edge-vertex ↔ edge-face) is now complete and invertible.</strong> <strong>Curved tessellation</strong>: <code>toMesh(subdivisions)</code> places intermediate points per <em>edge</em> (shared by both incident faces → watertight/crack-free at any level, proven euler-2 on all primitives), and the cylinder's ring edges and <strong>every sphere edge</strong> (latitude rings + meridian great circles) are now true <strong>Circle arcs</strong> (<code>setEdgeArc</code>, validated by <code>checkGeometry</code>) — so the analytic cylinder and sphere are <em>exact curved solids</em> that tessellate directly onto the surface (every vertex on-radius to float precision, at any resolution), not on chords. <strong>B-rep boolean prerequisite chain</strong>: (1) analytic <strong>surface–surface intersection</strong> (<code>BRepSurfaceIntersect.h</code>) returns exact <code>brep::Curve</code>s — plane∩plane→Line, plane∩sphere/plane∩cylinder⊥/sphere∩sphere→Circle, None for parallel/miss/disjoint — proven every sampled point lies on <em>both</em> surfaces (<code>surfaceDistance</code>) to float precision; (2) <strong>imprint</strong> (<code>Body::imprintCurve</code>) cuts a planar face along a Line intersection curve: introduces a vertex where the curve pierces each boundary edge (via <code>splitEdge</code>), then splits the face with a NEW edge carrying the curve itself — the shared edge lies exactly on both surfaces, χ stays neutral (ΔV+2/ΔE+3/ΔF+1), both validators clean, composes with <code>mergeFaces</code>; (3) <strong>point classification</strong> (<code>Body::classifyPoint</code> → Inside/Outside/OnBoundary) ray-casts against the watertight crack-free triangulation of the shell (odd crossings ⇒ Inside; irrational ray + degeneracy-retry ⇒ robust & deterministic), proven on box/cylinder/sphere for interior, exterior, and on-face/edge/vertex points; (4) <strong>face-vs-solid classification</strong> (<code>Body::classifyFace</code> + <code>faceCentroid</code>) samples a face's centroid and classifies it against another solid — the boolean's per-face keep/discard decision — proven on overlapping boxes (faces inside/outside the other solid, coincident face → OnBoundary); (5) <strong>affine transform</strong> (<code>Body::transform</code>/<code>translate</code>) moves the whole body consistently — vertices AND every analytic Curve/Surface frame (radii + Line params scale with a uniform scale, Circle angles preserved) — so both validators stay clean; shear/non-uniform/reflection/non-finite are rejected leaving the body unchanged; classification is transform-invariant. Next: mutual imprint of two positioned solids along their intersection curves → select faces per op → sew = <strong>B-rep boolean</strong> |
+| NURBS curves & surfaces | Trimmed NURBS, fit/offset/intersect | Rhino, Maya, CAD | ✅ | — |
+| Subdivision surfaces (Catmull-Clark) | Levels + edge/vertex creasing (OpenSubdiv-grade) | all | ✅ | Verify crease + UV-boundary rules vs OpenSubdiv |
+| Implicit / SDF | Signed-distance fields, surface nets, winding number | Houdini, ZBrush, nTop | ✅ | — |
+| Voxel | Voxelize / VDB-style volumes | Houdini, ZBrush | ✅ | No sparse-VDB hierarchy |
+| Point cloud / Gaussian splat | Import, normals, render | modern DCCs | ✅ | — |
+</p>
+
+<p>
+<strong>Verdict:</strong> L0 is a genuine strength — Nexus has <em>more</em> representation families than most DCCs. Main gap is a true analytic solid B-rep (vs mesh-backed).
+</p>
+
+<h2 id="l1-mesh-direct-modeling-toolset-edit-mode">L1 — Mesh direct-modeling toolset (edit mode)</h2>
+
+<p>
+| Feature | Who ships it | Nexus | Gap |
+|---|---|---|---|
+| Extrude (region/individual/along normal) | all | ✅ | — |
+| Inset faces | all | ✅ | — |
+| Bevel / Chamfer (edge & vertex) | all | ✅ | — |
+| Fillet (mesh & face) | all | ✅ | — |
+| Bridge edge loops | all | ✅ | — |
+| Edge slide / vertex slide | all | ✅ | — |
+| Knife / cut / section | all | ✅ | — |
+| Merge / weld / remove-doubles | all | ✅ | — |
+| Boolean (union/diff/intersect) + tolerant | all | ✅ | robust — splits along the intersection curve → watertight / 2-manifold / correct-volume on coarse meshes (<code>BooleanOperation</code> now uses the real CSG pipeline) |
+| Solidify / thicken / shell | all | ✅ | — |
+| Displace | all | ✅ | — |
+| Loop cut / ring | all | 🟡 | App mode exists; confirm kernel loop-cut op + n-cuts/slide |
+| Dissolve / collapse / limited-dissolve | all | 🟡 | Decimate/simplify present; explicit edit-mode dissolve not surfaced |
+| Spin / screw / duplicate-along | Blender, Max | ❌ | No spin/screw op |
+| Rip / rip-fill / vert-rip | Blender, Maya | ❌ | — |
+| Separate / join / split by loose parts | all | 🟡 | Island decomposition exists; artist-facing separate/join TBD |
+| Grid/subdivide/poke/triangulate/quadrangulate | all | 🟡 | Subdiv + tri/quad remesh exist; per-selection subdivide/poke TBD |
+</p>
+
+<p>
+<strong>Verdict:</strong> the destructive toolset is broad and mature; missing pieces are ergonomic edit-mode ops (spin, rip, dissolve, poke) that artists expect.
+</p>
+
+<h2 id="l2-retopology-remeshing">L2 — Retopology & remeshing</h2>
+
+<p>
+| Feature | Who ships it | Nexus | Gap |
+|---|---|---|---|
+| Quad remesh (auto-retopo) | ZBrush, Blender, Modo | ✅ | Validate quad-flow quality |
+| Voxel remesh (dynamesh) | ZBrush, Blender | ✅ | — |
+| Decimate / simplify (ratio, planar) | all | ✅ | — |
+| Manual retopo tools (poly-draw, relax, snap-to-surface) | Maya, Modo, 3dCoat | 🟡 | Snapping + closest-point exist; dedicated retopo brush/tool UX TBD |
+| Shrinkwrap / project to surface | all | ❌ | No shrinkwrap modifier/op |
+</p>
+
+<h2 id="l3-sculpting">L3 — Sculpting</h2>
+
+<p>
+| Feature | Who ships it | Nexus | Gap |
+|---|---|---|---|
+| Core brushes (draw/clay/smooth/inflate/flatten/pinch/crease/grab) | ZBrush, Blender | 🟡 | 7 brushes present; missing clay-strips, scrape, snake-hook, pose, cloth, elastic |
+| Masking (+ invert/flood/blur) | all | ✅ | Blur/gradient masks TBD |
+| Symmetry (planar + radial) | all | ✅ | Radial/tiling TBD |
+| Dynamic topology (dyntopo) | ZBrush, Blender | ❌ | Static-mesh sculpt only |
+| Multiresolution | ZBrush, Blender, Mudbox | ❌ | — |
+| Sculpt layers | ZBrush, Mudbox | ❌ | — |
+| In-session remesh / dynamesh | ZBrush, Blender | ❌ | Remesh exists in kernel; not wired into stroke loop |
+| Vector-displacement / alpha brushes | ZBrush, Mudbox | ❌ | — |
+</p>
+
+<p>
+<strong>Verdict:</strong> competent basic vertex-displacement sculptor; a real gap vs ZBrush/Blender-sculpt (dyntopo/multires/layers is the table-stakes trio).
+</p>
+
+<h2 id="l4-curves-surfaces">L4 — Curves & surfaces</h2>
+
+<p>
+| Feature | Who ships it | Nexus | Gap |
+|---|---|---|---|
+| NURBS/Bezier curves (edit, fit, offset, split) | Rhino, Maya | ✅ | — |
+| NURBS surfaces (fit, offset, trim, intersect) | Rhino, CAD | ✅ | — |
+| Sweep / loft / revolve / rail / network (Gordon) | Rhino, Maya | ✅ | — |
+| Blend / patch network | Rhino, CAD | ✅ | — |
+| Continuity control G0–G3 + curvature comb / zebra | Class-A CAD | ✅ | — |
+</p>
+
+<p>
+<strong>Verdict:</strong> surfacing is a standout — near Rhino-class breadth already.
+</p>
+
+<h2 id="l5-parametric-procedural-non-destructive">L5 — Parametric / procedural / non-destructive</h2>
+
+<p>
+| Feature | Who ships it | Nexus | Gap |
+|---|---|---|---|
+| Feature history / regeneration | CAD apps | 🟡 | Regenerates only Sketch/Extrude/Revolve; the CAD façade outruns this core |
+| Modifier stack (ordered, non-destructive) | 3ds Max, Blender | 🟡 | Kernel <code>ModifierStack</code>: 7 modifiers, non-destructive re-eval + result caching + versioned serialization (save/IO round-trip); editor wiring + more ops (Subdivision/Bevel/Boolean) next |
+| Procedural node graph (Geometry Nodes / SOPs) | Houdini, Blender | ❌ | <code>EvaluationGraph</code> exists for ops but no user-facing node modeling |
+| Expression/parameter-driven dimensions | CAD apps | 🟡 | <code>CadExpressionEngine</code>/equation sketch API present; end-to-end wiring TBD |
+</p>
+
+<p>
+<strong>Verdict:</strong> <strong>the single most important structural gap.</strong> Non-destructive/procedural modeling (modifier stack <em>or</em> node graph) is table-stakes in every modern DCC, and the CAD feature tree only regenerates two feature types. Closing this unlocks the whole CAD façade.
+</p>
+
+<h2 id="l6-cad-solid-modeling">L6 — CAD / solid modeling</h2>
+
+<p>
+| Feature | Who ships it | Nexus | Gap |
+|---|---|---|---|
+| 2D sketch + constraint solver | all CAD | ✅ | Missing tangent/fix/collinear/midpoint constraint types |
+| Sketch auto-constraint inference | Fusion, SW | ✅ | — |
+| Extrude / revolve features | all CAD | ✅ | — |
+| Fillet / chamfer / shell / draft / rib features | all CAD | 🟡 | API present; not regenerable feature-tree ops yet |
+| Patterns (linear/circular) | all CAD | 🟡 | API present; generative backing TBD |
+| Hole wizard, sheet metal, direct edit | SW, Fusion | 🟡 | Rich API façade; needs generative core |
+| Assemblies + mates (mate/align/gear/dist/angle) | all CAD | 🟡 | Types defined; solver/regeneration TBD |
+| Drawings / views / BOM / configurations | all CAD | 🟡 | API defined; output pipeline TBD |
+| GD&T / MBD / PMI annotations | SW, NX | 🟡 | Data model present; authoring/render TBD |
+| Design rules / interference / measure | all CAD | 🟡 | Checkers defined; wiring TBD |
+</p>
+
+<p>
+<strong>Verdict:</strong> SolidWorks-shaped breadth on paper; depends entirely on L5 (regeneration engine) to become real.
+</p>
+
+<h2 id="l7-uv-unwrapping">L7 — UV & unwrapping</h2>
+
+<p>
+| Feature | Who ships it | Nexus | Gap |
+|---|---|---|---|
+| Unwrap (LSCM/ABF/angle-based) | all | ✅ (LSCM) | Add ABF++/conformal options |
+| Seams / pin / live-unwrap | all | 🟡 | Seam data TBD; interactive live unwrap missing |
+| Packing / islands / margin | all | ❌ | No packer surfaced |
+| UDIM / multi-tile | Maya, Blender, Mari | ❌ | — |
+| Checker/distortion overlay | all | ❌ | — |
+</p>
+
+<h2 id="l8-modifiers-deformers">L8 — Modifiers & deformers</h2>
+
+<p>
+| Feature | Who ships it | Nexus | Gap |
+|---|---|---|---|
+| Cage / lattice deform | all | ✅ | Lattice UX on top of cage TBD |
+| Displace | all | ✅ | — |
+| Skin / skeleton bind | Maya, Blender | ✅ | — |
+| Bend / twist / taper / stretch | 3ds Max, Blender | ❌ | — |
+| Wrap / mesh-deform / surface-deform | all | ❌ | — |
+| Shrinkwrap | all | ❌ | — |
+| Morph targets / blend shapes | all | ✅ | — |
+</p>
+
+<p>
+<em>(Deformers become truly useful once L5's non-destructive stack exists.)</em>
+</p>
+
+<h2 id="l9-selection-snapping-transforms-precision">L9 — Selection, snapping, transforms, precision</h2>
+
+<p>
+| Feature | Who ships it | Nexus | Gap |
+|---|---|---|---|
+| Object + component (vert/edge/face) select | all | ✅ | — |
+| Box / lasso / circle / paint select | all | 🟡 | Marquee is a bare flag; lasso/circle/paint missing |
+| Soft / proportional edit | all | ✅ | Falloff-curve options TBD |
+| Snapping (vertex/edge-mid/face/grid) | all | ✅ | Add snap-to-normal, incremental, angle snap |
+| Numeric entry during transform | all | 🟡 | Confirm typed-value + axis-lock flow |
+| Transform orientations & pivots (cursor/median/active) | all | 🟡 | <code>TransformOrientation</code> exists; pivot modes TBD |
+| Symmetry / mirror editing | all | 🟡 | Mirror mode exists; live topological symmetry TBD |
+</p>
+
+<h2 id="l10-scene-organization-instancing">L10 — Scene organization & instancing</h2>
+
+<p>
+| Feature | Who ships it | Nexus | Gap |
+|---|---|---|---|
+| Scene graph / parenting | all | ✅ | — |
+| Instancing (linked duplicates) | all | ✅ | — |
+| Outliner / hierarchy panel | all | ❌ | No user-facing outliner surfaced |
+| Collections / layers / groups | all | ❌ | — |
+| References / linked libraries | Maya, Blender | ❌ | — |
+</p>
+
+<h2 id="l11-viewport-display-visual-feedback">L11 — Viewport, display & visual feedback</h2>
+
+<p>
+| Feature | Who ships it | Nexus | Gap |
+|---|---|---|---|
+| Gizmos (translate/rotate/scale) | all | ✅ | — |
+| Grid / working plane / ortho-persp | all | ✅ | — |
+| Selection outline / highlight | all | ✅ | — |
+| Constraint & sketch overlays | CAD | ✅ | — |
+| Measurement HUD / dimensions | all | ✅ | — |
+| <strong>Shading mode switch</strong> (wire/solid/material/rendered) | all | ❌ | <strong>No app-level shading switcher</strong> — a visible parity gap |
+| Matcap / studio-light shading | ZBrush, Blender | 🟡 | Kernel shading exists; matcap UX TBD |
+| X-ray / see-through, backface cull toggle | all | ❌ | — |
+| Cavity / AO / wireframe-overlay display | all | 🟡 | <code>MeshAmbientOcclusion</code> in kernel; viewport toggle TBD |
+| Retopo / on-surface overlay | Maya, Modo | ❌ | — |
+</p>
+
+<h2 id="l12-history-undo-non-destructive-workflow">L12 — History, undo, non-destructive workflow</h2>
+
+<p>
+| Feature | Who ships it | Nexus | Gap |
+|---|---|---|---|
+| Global undo/redo (all ops) | all | 🟡 | Sculpt-stroke undo ✅; <code>CadCommand</code> pattern exists; app-wide undo stack TBD |
+| Non-destructive edit history | Houdini, CAD | 🟡 | Feature history partial (L5) |
+| Operator redo-panel / adjust-last-op | Blender | ❌ | — |
+</p>
+
+<h2 id="l13-interchange-io">L13 — Interchange / IO</h2>
+
+<p>
+| Format | Direction expected | Who ships it | Nexus | Gap |
+|---|---|---|---|---|
+| OBJ | import + export | all | ✅ | import (v/vt/vn, n-gon, negative idx) + ASCII export |
+| PLY | import + export | all | ✅ | ASCII + binary-LE import + ASCII export |
+| STL | import + export | all + CAD/print | ✅ | binary export + binary/ASCII import (+ optional weld) |
+| glTF 2.0 | import + export | all modern | ✅ | hand-rolled .gltf + .glb import; .glb export |
+| FBX | import + export | games/film | ❌ | — |
+| USD / USDZ | import + export | modern pipelines | 🟡 | .usda ASCII mesh import+export; binary crate (.usdc) + full USD later |
+| Alembic | import + export | film | ❌ | — |
+| STEP / IGES | import + export | CAD | ❌ | — |
+| Native (.nxm) | round-trip | — | ✅ | — |
+</p>
+
+<p>
+<strong>Verdict:</strong> interchange was the most glaring gap and is now largely closed. <strong>OBJ, STL, PLY, and glTF 2.0 import/export have landed</strong> (glTF hand-rolled: JSON parser + base64 + accessor decoding, <code>.gltf</code> & <code>.glb</code>), all with non-finite hardening and round-trip tests. <code>import → edit → export</code> now works for every universal mesh format plus the modern standard, <strong>reachable from the editor's File menu</strong> (all routed through MeshIO). USD <code>.usda</code> (ASCII) mesh import/export is also in (hand-rolled). Remaining: a proper file picker (fixed filenames for now), then FBX/Alembic + USD binary crate (heavier, likely SDK deps).
+</p>
+
+<h2 id="l14-units-measurement-analysis">L14 — Units, measurement & analysis</h2>
+
+<p>
+| Feature | Who ships it | Nexus | Gap |
+|---|---|---|---|
+| Unit system (metric/imperial, precision) | CAD | ✅ | — |
+| Dimensions / measure (dist/angle/radius) | all | ✅ | — |
+| Mass / volume / inertia properties | CAD | ✅ | — |
+| Curvature / zebra / draft analysis | Class-A CAD | ✅ | Draft/wall-thickness surfacing TBD |
+| Mesh health (non-manifold, holes, self-intersect) | all | ✅ | — |
+</p>
+
+<p>
+<strong>Verdict:</strong> analysis/diagnostics is another strength.
+</p>
+
+<h2 id="l15-ux-onboarding-discoverability">L15 — UX, onboarding & discoverability</h2>
+
+<p>
+| Feature | Who ships it | Nexus | Gap |
+|---|---|---|---|
+| "Simple by default" starter surface | modern DCCs | 🟡 | Charter defined (<code>ux-baseline-charter.md</code>); implementation TBD |
+| Progressive disclosure / context tools | Modo, Fusion | 🟡 | Planned; mode system supports it |
+| Keymap / customization | all | 🟡 | <code>Keybindings.h</code> new; remap UI TBD |
+| Guided intro / templates | Fusion, modern apps | 🟡 | <code>TemplateManager</code> present |
+</p>
+
+<hr>
+
+<h2 id="current-state-summary">Current-state summary</h2>
+
+<p>
+Nexus-Modeling is, structurally, <strong>much further along than a young project usually is</strong>: a broad, well-instrumented
+mesh + NURBS kernel with dual topology reps, a mesh-backed B-rep, robust exact predicates, the full destructive
+modeling op suite, multiple remesh/decimation/subdiv paths, implicit/voxel/SDF tooling, and Rhino-class surfacing.
+Diagnostics (Euler-Poincaré, genus, non-manifold gates, Hausdorff, repair) are excellent. The editor has a clean
+mode/registry architecture with the expected direct-modeling and CAD modes, gizmos, snapping, and a new Vulkan viewport.
+</p>
+
+<p>
+The gaps cluster in <strong>four themes</strong>, in priority order:
+</p>
+
+<ol>
+<li><strong>Interchange (L13)</strong> — <em>largely done:</em> OBJ, STL, PLY, and glTF 2.0 import/export landed; only editor wiring (+ FBX/USD/Alembic) remain. Was the top gap; now mostly closed.</li>
+<li><strong>Non-destructive / procedural core (L5)</strong> — feature history regenerates only Sketch/Extrude/Revolve; no modifier</li>
+</ol>
+<p>
+   stack and no procedural node graph. This is the structural keystone: it makes the entire CAD façade (L6) and the
+   deformer set (L8) real.
+</p>
+<ol>
+<li><strong>Sculpting depth (L3)</strong> — no dyntopo / multires / layers.</li>
+<li><strong>Editor polish (L1/L9/L11)</strong> — spin/rip/dissolve edit ops, box/lasso select, a viewport shading-mode switcher,</li>
+</ol>
+<p>
+   an outliner, and consolidating the duplicated camera controllers.
+</p>
+
+<hr>
+
+<h2 id="prioritized-parity-closure-backlog">Prioritized parity-closure backlog</h2>
+
+<h3 id="foundation-p0-the-depth-track-outranks-the-breadth-p0s-below">Foundation (P0⁺ — the depth track, outranks the breadth P0s below)</h3>
+<ul>
+<li><strong>Robust mesh boolean</strong> that splits along the intersection curve (tri-tri intersect → CDT retriangulation → classify → stitch). Fixes the cosmetic boolean; unblocks real CSG that everything CAD depends on.</li>
+<li><strong>Unified topological core:</strong> promote <code>HalfEdgeMesh</code> to authoritative + add Euler operators (split/collapse/flip/split-face/join-face) with invariant tests, then migrate Bevel/Extrude/Inset/EdgeBridge onto it.</li>
+<li><strong>Tolerance/units module</strong> (absolute + relative, scale/unit aware) every op consults, replacing the scattered epsilons.</li>
+</ul>
+
+<h3 id="p0-table-stakes-nothing-new-in-layer-until-these-land">P0 — table-stakes; nothing new in-layer until these land</h3>
+<ul>
+<li><strong>IO importers + core formats:</strong> ✅ OBJ, STL, PLY, glTF 2.0 import/export landed <strong>and wired into the editor File menu</strong> (routed through the tested MeshIO). Remaining polish: a file picker (fixed filenames for now). Then FBX/USD/Alembic (P1). (L13)</li>
+<li><strong>Non-destructive modifier stack</strong> (ordered, re-evaluatable) for mesh ops — the minimum viable procedural core. (L5)</li>
+<li><strong>Viewport shading-mode switcher</strong> (wireframe / solid / material / rendered) + x-ray + backface toggle. (L11)</li>
+<li><strong>Box/lasso/circle select</strong> promoted from the current bare-flag marquee. (L9)</li>
+<li><strong>Consolidate <code>ViewportController</code>/<code>ViewportManager</code></strong> into one camera controller. (editor debt)</li>
+<li><strong>App-wide undo/redo stack</strong> covering all operators. (L12)</li>
+</ul>
+
+<h3 id="p1-expected-by-any-professional-user">P1 — expected by any professional user</h3>
+<ul>
+<li>🟡 USD <code>.usda</code> (ASCII) mesh import/export landed. Remaining: FBX import/export, Alembic export, USD binary crate — the SDK-dependency decisions. (L13)</li>
+<li>Back the CAD feature tree so fillet/chamfer/shell/draft/pattern/hole are <strong>regenerable features</strong>, not just API. (L5→L6)</li>
+<li>Sculpt <strong>dyntopo + multires + layers</strong>; add clay-strips/scrape/snake-hook/pose brushes. (L3)</li>
+<li>Missing sketch constraints (tangent/fix/collinear/midpoint). (L6)</li>
+<li>Edit-mode ops: spin/screw, rip, dissolve/limited-dissolve, poke, separate/join. (L1)</li>
+<li>Outliner + collections/layers. (L10)</li>
+<li>UV packing + UDIM + distortion overlay + live unwrap. (L7)</li>
+</ul>
+
+<h3 id="p2-depth-pipeline-maturity">P2 — depth & pipeline maturity</h3>
+<ul>
+<li>Procedural <strong>node graph</strong> (Geometry-Nodes/SOP-style) on top of the modifier core. (L5)</li>
+<li>Deformers: bend/twist/taper, wrap/surface-deform, shrinkwrap. (L8)</li>
+<li>STEP/IGES for CAD interchange; assemblies/mates solver; drawings/BOM/GD&T output. (L6/L13)</li>
+<li>Retopo tools + on-surface overlay; matcap/studio shading; adjust-last-op redo panel.</li>
+</ul>
+
+<hr>
+
+<h2 id="parity-first-working-policy-definition-of-done">Parity-first working policy (definition of done)</h2>
+
+<p>
+A modeling layer is <strong>"at parity"</strong> when every feature marked table-stakes for that layer (the P0/P1 rows above)
+is ✅ <strong>Have</strong> — real, tested, and reachable from the editor UI — not 🟡 façade. Until a layer reaches parity:
+</p>
+
+<ol>
+<li>Work in that layer targets its open P0 → P1 gaps, in that order.</li>
+<li>New/novel capability in that layer is deferred (logged here, not built).</li>
+<li>A feature counts only when it is wired end-to-end: <strong>kernel op → editor tool → visible result → round-trips through save/IO</strong>.</li>
+</ol>
+
+<p>
+This document is the source of truth; update the status column as gaps close, and keep the Artifact rendering in sync.
+</p>
+
+        </main>
+    </div>
+    
+    <script>
+// Theme management
+const THEME_KEY = 'nexus-docs-theme';
+const themeToggle = document.getElementById('theme-toggle');
+const sunIcon = themeToggle.querySelector('.theme-icon-sun');
+const moonIcon = themeToggle.querySelector('.theme-icon-moon');
+
+function applyTheme(theme) {
+    document.documentElement.setAttribute('data-theme', theme);
+    if (theme === 'light') {
+        sunIcon.style.display = 'block';
+        moonIcon.style.display = 'none';
+    } else {
+        sunIcon.style.display = 'none';
+        moonIcon.style.display = 'block';
+    }
+    localStorage.setItem(THEME_KEY, theme);
+}
+
+function getPreferredTheme() {
+    const stored = localStorage.getItem(THEME_KEY);
+    if (stored) return stored;
+    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+}
+
+function initTheme() {
+    const theme = getPreferredTheme();
+    applyTheme(theme);
+}
+
+function toggleTheme() {
+    const current = document.documentElement.getAttribute('data-theme') || 'dark';
+    applyTheme(current === 'dark' ? 'light' : 'dark');
+}
+
+themeToggle.addEventListener('click', toggleTheme);
+
+// Keyboard shortcut: Ctrl+Shift+L
+document.addEventListener('keydown', (e) => {
+    if (e.ctrlKey && e.shiftKey && e.key === 'L') {
+        e.preventDefault();
+        toggleTheme();
+    }
+});
+
+// Listen for system theme changes
+window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => {
+    if (!localStorage.getItem(THEME_KEY)) {
+        applyTheme(e.matches ? 'dark' : 'light');
+    }
+});
+
+// Initialize theme immediately to prevent flash
+initTheme();
+
+// Mobile sidebar toggle
+const sidebar = document.getElementById('sidebar');
+const mobileMenuBtn = document.getElementById('mobile-menu-btn');
+
+if (mobileMenuBtn) {
+    mobileMenuBtn.addEventListener('click', () => {
+        sidebar.classList.toggle('open');
+    });
+}
+
+document.addEventListener('click', (e) => {
+    if (window.innerWidth <= 768) {
+        if (!sidebar.contains(e.target) && !e.target.closest('.header')) {
+            sidebar.classList.remove('open');
+        }
+    }
+});
+
+// Smooth scroll for anchor links
+document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+    anchor.addEventListener('click', function(e) {
+        const target = document.querySelector(this.getAttribute('href'));
+        if (target) {
+            e.preventDefault();
+            target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            if (window.innerWidth <= 768) {
+                sidebar.classList.remove('open');
+            }
+        }
+    });
+});
+
+// Active link highlighting based on scroll position
+const sections = document.querySelectorAll('.content h2, .content h3');
+const sidebarLinks = document.querySelectorAll('.sidebar-link[href^="#"]');
+
+function updateActiveLink() {
+    let current = '';
+    sections.forEach(section => {
+        const rect = section.getBoundingClientRect();
+        if (rect.top <= 100) {
+            current = '#' + section.id;
+        }
+    });
+
+    sidebarLinks.forEach(link => {
+        link.classList.remove('active');
+        if (link.getAttribute('href') === current) {
+            link.classList.add('active');
+        }
+    });
+}
+
+window.addEventListener('scroll', updateActiveLink, { passive: true });
+window.addEventListener('load', updateActiveLink);
+
+// Highlight.js initialization
+if (typeof hljs !== 'undefined') {
+    hljs.highlightAll();
+}
+
+// Mobile menu button visibility
+const mobileMenuBtn = document.getElementById('mobile-menu-btn');
+function checkMobile() {
+    if (window.innerWidth <= 768) {
+        mobileMenuBtn.style.display = 'flex';
+    } else {
+        mobileMenuBtn.style.display = 'none';
+        document.getElementById('sidebar').classList.remove('open');
+    }
+}
+checkMobile();
+window.addEventListener('resize', checkMobile);
+
+mobileMenuBtn.addEventListener('click', () => {
+    document.getElementById('sidebar').classList.toggle('open');
+});
+</script>

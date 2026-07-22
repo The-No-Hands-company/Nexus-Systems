@@ -1,0 +1,624 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nexus-Modeling · Modeling Parity Index — Nexus Modeling Docs</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
+</head>
+<body>
+    <nav class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+            <div class="sidebar-title">Nexus Modeling</div>
+            <div class="sidebar-subtitle">Documentation v0.1.0-dev</div>
+        </div>
+        <div class="sidebar-section">
+<div class="sidebar-section-title">📚 Developer Documentation</div>
+<a class="sidebar-link" href="architecture.html">Architecture Overview</a>
+<a class="sidebar-link" href="kernel-api.html">Kernel API Reference</a>
+<a class="sidebar-link" href="geometry-kernel.html">Geometry Kernel</a>
+<a class="sidebar-link" href="renderer.html">Render System</a>
+<a class="sidebar-link" href="editor-architecture.html">Editor Architecture</a>
+<a class="sidebar-link" href="build-system.html">Build System</a>
+<a class="sidebar-link" href="testing.html">Testing</a>
+<a class="sidebar-link" href="contributing.html">Contributing</a>
+<a class="sidebar-link" href="adding-geometry-op.html">Adding Geometry Op</a>
+<a class="sidebar-link" href="adding-cad-feature.html">Adding CAD Feature</a>
+<a class="sidebar-link" href="mesh-operations.html">Mesh Operations</a>
+<a class="sidebar-link" href="boolean-csg.html">Boolean/CSG Deep Dive</a>
+<a class="sidebar-link" href="halfedge-mesh.html">Half-edge Mesh</a>
+<a class="sidebar-link" href="analytic-brep.html">Analytic B-rep</a>
+<a class="sidebar-link" href="mesh-io.html">Mesh I/O</a>
+<a class="sidebar-link" href="tolerance.html">Tolerance System</a>
+<a class="sidebar-link" href="porting.html">Porting Guide</a>
+</div>
+<div class="sidebar-section">
+<div class="sidebar-section-title">🎨 Expert User Documentation</div>
+</div>
+<div class="sidebar-section">
+<div class="sidebar-section-title">👤 Beginner / User Documentation</div>
+<a class="sidebar-link" href="getting-started.html">Getting Started</a>
+</div>
+<div class="sidebar-section">
+<div class="sidebar-section-title">🔧 API Reference</div>
+</div>
+<div class="sidebar-section">
+<div class="sidebar-section-title">📚 Additional Resources</div>
+<a class="sidebar-link" href="design-decisions.html">Design Decisions</a>
+<a class="sidebar-link" href="testing-strategy.html">Testing Strategy</a>
+<a class="sidebar-link" href="graphics-kernel.html">Graphics Kernel</a>
+<a class="sidebar-link" href="vision-and-roadmap.html">Vision & Roadmap</a>
+<a class="sidebar-link" href="reference-roadmap.html">Reference Roadmap</a>
+<a class="sidebar-link" href="modeling-industry-parity.html">Modeling Industry Parity</a>
+<a class="sidebar-link active" href="modeling-parity-index.html">Modeling Parity Index</a>
+<a class="sidebar-link" href="modeling-reference-roadmap.html">Modeling Reference Roadmap</a>
+</div>
+    </nav>
+    
+    <div class="main-content">
+        <header class="header">
+            <button class="btn btn-icon" id="mobile-menu-btn" aria-label="Toggle menu" style="display: none;">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="3" y1="12" x2="21" y2="12"></line>
+                    <line x1="3" y1="6" x2="21" y2="6"></line>
+                    <line x1="3" y1="18" x2="21" y2="18"></line>
+                </svg>
+            </button>
+            <div class="header-title">Nexus-Modeling · Modeling Parity Index</div>
+            <div class="header-actions">
+                
+<button class="btn btn-icon" id="theme-toggle" aria-label="Toggle dark/light theme" title="Toggle theme (Ctrl+Shift+L)">
+    <svg class="theme-icon-sun" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display: none;">
+        <circle cx="12" cy="12" r="5"></circle>
+        <line x1="12" y1="1" x2="12" y2="3"></line>
+        <line x1="12" y1="21" x2="12" y2="23"></line>
+        <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+        <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+        <line x1="1" y1="12" x2="3" y2="12"></line>
+        <line x1="21" y1="12" x2="23" y2="12"></line>
+        <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+        <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+    </svg>
+    <svg class="theme-icon-moon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display: none;">
+        <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+    </svg>
+</button>
+
+                <a href="https://github.com/nexus-systems/nexus-modeling" class="btn btn-secondary" target="_blank" rel="noopener">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M12 0C5.374 0 0 5.373 0 12c0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23A11.509 11.509 0 0112 5.803c1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576C20.566 21.797 24 17.3 24 12c0-6.627-5.373-12-12-12z"/>
+                    </svg>
+                    <span class="btn-text">GitHub</span>
+                </a>
+                <a href="index.html" class="btn btn-primary">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
+                        <polyline points="9 22 9 12 15 12 15 22"></polyline>
+                    </svg>
+                    <span class="btn-text">Home</span>
+                </a>
+            </div>
+        </header>
+        
+        <main class="content">
+            <div class="toc"><h3>On This Page</h3><ul><li><a href="#nexus-modeling-modeling-parity-index">Nexus-Modeling · Modeling Parity Index</a></li>
+  <li><a href="#four-gap-themes-priority-order">Four gap themes (priority order)</a></li>
+    <li><a href="#interchange-io-done">✓ Interchange (IO) — done</a></li>
+    <li><a href="#2-non-destructive-core">2 Non-destructive core</a></li>
+    <li><a href="#3-sculpt-depth">3 Sculpt depth</a></li>
+    <li><a href="#4-editor-polish">4 Editor polish</a></li>
+  <li><a href="#foundation-robustness-the-depth-axis">Foundation & Robustness — the depth axis</a></li>
+    <li><a href="#foundation-first-track-outranks-the-breadth-p0s">Foundation-first track (outranks the breadth P0s):</a></li>
+  <li><a href="#status-legend">Status Legend</a></li>
+  <li><a href="#layer-parity-matrix">Layer Parity Matrix</a></li>
+    <li><a href="#l0-geometry-representations">L0 Geometry representations</a></li>
+    <li><a href="#l1-mesh-direct-modeling">L1 Mesh direct-modeling</a></li>
+    <li><a href="#l2-retopology-remeshing">L2 Retopology & remeshing</a></li>
+    <li><a href="#l3-sculpting">L3 Sculpting</a></li>
+    <li><a href="#l4-curves-surfaces">L4 Curves & surfaces</a></li>
+    <li><a href="#l5-parametric-procedural">L5 Parametric / procedural</a></li>
+    <li><a href="#l6-cad-solid-modeling">L6 CAD / solid modeling</a></li>
+    <li><a href="#l7-uv-unwrapping">L7 UV & unwrapping</a></li>
+    <li><a href="#l8-modifiers-deformers">L8 Modifiers & deformers</a></li>
+    <li><a href="#l9-selection-transform-precision">L9 Selection / transform / precision</a></li>
+    <li><a href="#l10-scene-org-instancing">L10 Scene org & instancing</a></li>
+    <li><a href="#l11-viewport-visual-feedback">L11 Viewport & visual feedback</a></li>
+    <li><a href="#l12-history-undo">L12 History & undo</a></li>
+    <li><a href="#l13-interchange-io">L13 Interchange / IO</a></li>
+    <li><a href="#l14-units-measure-analysis">L14 Units, measure & analysis</a></li>
+    <li><a href="#l15-ux-onboarding">L15 UX & onboarding</a></li>
+  <li><a href="#parity-closure-backlog">Parity-closure backlog</a></li>
+    <li><a href="#p0-table-stakes-nothing-new-in-layer-until-these-land">P0 — Table-stakes (nothing new in-layer until these land)</a></li>
+    <li><a href="#p1-expected-by-any-professional-user">P1 — Expected by any professional user</a></li>
+    <li><a href="#p2-depth-pipeline-maturity">P2 — Depth & pipeline maturity</a></li>
+  <li><a href="#parity-first-definition-of-done">Parity-first · definition of done</a></li>
+</ul></div>
+            <h1 id="nexus-modeling-modeling-parity-index">Nexus-Modeling · Modeling Parity Index</h1>
+<p>
+Every tool the industry ships, before anything new
+</p>
+
+<p>
+A layer-by-layer audit of the standard 3D-modeling toolset — geometry engine to user-facing visual — measured against Blender, Maya, 3ds Max, Houdini, Modo, ZBrush, Plasticity and Rhino, with Nexus's real status today. Grounded in the July 2026 kernel + editor inventory, not aspiration. This is the governing checklist: close the P0 gap in a layer before adding anything new to it.
+</p>
+
+<p>
+<strong>Overall parity · 112 tracked features</strong>  
+56 Have | 31 Partial / façade | 25 Missing  
+<strong>50% shipped (breadth)</strong> — but see Foundation & Robustness below: the boolean is now a real CSG pipeline (✅), while the topological core + tolerance model remain the thin foundation. Loop stays foundation-first.
+</p>
+
+<hr>
+
+<h2 id="four-gap-themes-priority-order">Four gap themes (priority order)</h2>
+
+<h3 id="interchange-io-done">✓ Interchange (IO) — done</h3>
+<p>
+OBJ/STL/PLY/glTF import+export shipped and wired into the editor File menu. Only FBX/USD/Alembic (P1) remain.
+</p>
+
+<h3 id="2-non-destructive-core">2 Non-destructive core</h3>
+<p>
+History regenerates only Sketch/Extrude/Revolve — no modifier stack or node graph. The keystone that makes CAD & deformers real.
+</p>
+
+<h3 id="3-sculpt-depth">3 Sculpt depth</h3>
+<p>
+No dyntopo / multires / layers.
+</p>
+
+<h3 id="4-editor-polish">4 Editor polish</h3>
+<p>
+Box-select, shading-mode switch, outliner, spin/rip/dissolve, dedupe camera controllers.
+</p>
+
+<hr>
+
+<h2 id="foundation-robustness-the-depth-axis">Foundation & Robustness — the depth axis</h2>
+
+<p>
+The layer matrix below measures breadth (is a feature present?). This measures depth (is the foundation production-robust?). A cell can be present yet not robust — the boolean is the clearest case. Foundation gaps outrank breadth features.
+</p>
+
+<p>
+| Aspect | Status | Notes |
+|--------|--------|-------|
+| <strong>Exact geometric predicates</strong> | Solid | Adaptive-exact orient2D/3D (Shewchuk-style expansion arithmetic, float fast-path → exact fallback), genuinely used by boolean / Delaunay / CDT / Voronoi. |
+| <strong>Robust mesh boolean / CSG</strong> | Solid | Real CSG pipeline — tri-tri segment → per-triangle retriangulation → whole-mesh cut → classify/stitch — now wired into BooleanOperation (the old whole-triangle classifier is deleted). Watertight, 2-manifold, exact volumes on coarse boxes (union 15 / intersection 1 / difference 7, Euler χ=2). Fixed a fully-broken ConstrainedDelaunay2D en route. Remaining: coplanar-overlap faces. |
+| <strong>Unified topological core + Euler operators</strong> | Fractured | Half-edge with Euler operators (flip / split / collapse) now proven integrity-clean: added checkIntegrity() — a direct invariant validator (twin reciprocity, face-cycle closure, no live→dead refs) — + property tests that every successful flip/split/collapse preserves connectivity & genus. Fixed two real bugs it exposed (collapse left dangling wing-twins; split mis-wired a face's prev). Prerequisite cleared — the half-edge now preserves the full attribute set losslessly (size-guarded toMesh). But a checkIntegrity() audit found 5 of 6 HEM local ops corrupt the topology (pokeFace, extrudeFaces, connectVertices, insertEdgeLoop, insertEdgeVertex) — invisible because toMesh rebuilds a fresh index mesh. Fixed insertEdgeVertex (crossed twins + un-repaired vertex roots) and pokeFace (misused addEdgePair → 6n garbage half-edges + orphaned perimeter; rewritten to reuse perimeter edges + 2n spokes). connectVertices (face-split cross edges into the wrong sub-face + a pos-swap decoupled the endpoints), extrudeFaces (walls mis-twinned; rewired bottom↔neighbour / top↔cap), and insertEdgeLoop (crossed split-edge twins + splitFacesAlongLoop added dangling un-wired cross edges — reworked through the fixed connectVertices). <strong>All 6 of 6 HEM local ops are now integrity-clean</strong> (bevelVertex, insertEdgeVertex, pokeFace, connectVertices, extrudeFaces, insertEdgeLoop), each with a property test. The half-edge core's own operators are sound. Migration underway: HEM-native insetFace + extrudeFacePrism primitives (full-attribute, integrity-proven) now back TWO raw-index edit ops — InsetFacesOperation (Factor+replace) and ExtrudeOperation (keep=false) — via fromMesh → per-face op → toMesh(false), quad+attribute preserving, raw fallback. (Extrude keep=true keeps the base as overlapping non-manifold prisms the half-edge can't represent → stays raw, a real semantic boundary.) Next: Bevel/EdgeBridge. |
+| <strong>Tolerance / units model</strong> | Module in | Central Tolerance (geometry/Tolerance.h) now exists — absolute floor + relative-to-magnitude, with nearlyEqual / isZero / coincident / at and a forCharacteristicLength() factory that proportions the floor to model size. <strong>Proven scale-aware</strong>: coincidence behaves correctly at a 0.5 mm part and a 5 km terrain (a fixed 1e-5 epsilon fails one scale; Tolerance handles both). First high-traffic sites migrated (weld / mergeByDistance). Remaining: migrate the ~180 scattered scale-blind literals op-by-op. |
+| <strong>Manifold / degenerate handling</strong> | Solid | Foundation sweep verified: solidify (open→closed euler-2 shell), boolean (watertight euler-2), migrated inset/extrude (euler-2) all confirmed 2-manifold-constructible + Euler-correct; degenerate faces (repeated index, <3 sides) rejected at the half-edge boundary. Locked in by test_ManifoldEnforcement. |
+| **Non-finite input hardening** | Solid | Foundation sweep verified: every public geometry op rejects non-finite scalars via IEEE-754 bit inspection (not the -ffast-math-unreliable std::isfinite). Consolidated into a canonical geometry::isFinite in Tolerance.h with a fast-math regression-guard test. |
+</p>
+
+<h3 id="foundation-first-track-outranks-the-breadth-p0s">Foundation-first track (outranks the breadth P0s):</h3>
+<ol>
+<li>Robust boolean that splits along the intersection curve ✅ done</li>
+<li>Half-edge authoritative core + Euler operators (flip/split/collapse + insertEdgeVertex integrity-clean ✅; full-attribute round-trip ✅; audit found 5/6 HEM local ops corrupt topology — all 6/6 HEM local ops integrity-clean ✅; edit-op migration underway — Inset (Factor+replace) + Extrude (keep=false) now route through HEM insetFace/extrudeFacePrism, quad + attribute preserving with raw fallback; next: Bevel/EdgeBridge)</li>
+<li>A tolerance/units module every op consults (module landed + proven scale-aware ✅; weld/merge migrated; ~180 scattered epsilons still to migrate)</li>
+</ol>
+
+<p>
+<strong>Foundation sweep COMPLETE</strong>: non-finite ✅ (consolidated + fast-math guard); determinism ✅ (boolean cross-run tests); stable element IDs ✅ (EdgeBridge + ModifierStack fixed); manifold/degenerate enforcement ✅ (verified + locked by test_ManifoldEnforcement). <strong>Only analytic B-rep remains — a major feature, not a foundation fix.</strong>
+</p>
+
+<hr>
+
+<h2 id="status-legend">Status Legend</h2>
+<ul>
+<li><strong>Have</strong> — real & tested</li>
+<li><strong>Partial</strong> — limited or API façade</li>
+<li><strong>Missing</strong></li>
+</ul>
+
+<hr>
+
+<h2 id="layer-parity-matrix">Layer Parity Matrix</h2>
+
+<h3 id="l0-geometry-representations">L0 Geometry representations</h3>
+<p>
+| Feature | Have | Partial | Missing |
+|---------|------|---------|---------|
+| Indexed n-gon mesh | ✅ | | |
+| Half-edge / BMesh | ✅ | | |
+| B-rep (typed topology) | ◐ | mesh-backed | NURBS-backed |
+| NURBS curves & surfaces | ✅ | | |
+| Subdivision + creases | | ✅ | |
+| Implicit / SDF | | | ✅ |
+| Voxel / sparse VDB | | | ✅ |
+| Point / Gaussian splat | | | ✅ |
+</p>
+
+<h3 id="l1-mesh-direct-modeling">L1 Mesh direct-modeling</h3>
+<p>
+| Feature | Have | Partial | Missing |
+|---------|------|---------|---------|
+| Extrude / inset | ✅ | | |
+| Bevel / chamfer | | ✅ | |
+| Fillet (mesh/face) | | ✅ | |
+| Bridge loops | | ✅ | |
+| Edge / vertex slide | | ✅ | |
+| Knife / cut / section | | | ✅ |
+| Merge / weld | ✅ | | |
+| Boolean + tolerant robust CSG | ✅ | splits curve | |
+| Solidify / thicken | | | ✅ |
+| Displace | | | ✅ |
+| Loop cut / ring n-cuts | | | ✅ |
+| Dissolve / collapse | ✅ | | |
+| Separate / join | ✅ | | |
+| Subdivide / poke | ✅ | | |
+| Spin / screw | | | ✅ |
+| Rip / rip-fill | | ✅ | |
+| Separate / join | ✅ | | |
+</p>
+
+<h3 id="l2-retopology-remeshing">L2 Retopology & remeshing</h3>
+<p>
+| Feature | Have | Partial | Missing |
+|---------|------|---------|---------|
+| Quad remesh | ✅ | | |
+| Voxel remesh | ✅ | | |
+| Decimate / simplify | ✅ | | |
+| Manual retopo tools | | | ✅ |
+| Shrinkwrap / project | | ✅ | |
+</p>
+
+<h3 id="l3-sculpting">L3 Sculpting</h3>
+<p>
+| Feature | Have | Partial | Missing |
+|---------|------|---------|---------|
+| Masking (+flood/invert) | | ✅ | |
+| Symmetry (planar/radial) | | | ✅ |
+| Core brushes (7) + clay/scrape/pose | | | ✅ |
+| Dynamic topology | | | ✅ |
+| Multiresolution | | | ✅ |
+| Sculpt layers | | | ✅ |
+| In-session remesh | ✅ | kernel has it | |
+| Vector displacement | | | ✅ |
+</p>
+
+<h3 id="l4-curves-surfaces">L4 Curves & surfaces</h3>
+<p>
+| Feature | Have | Partial | Missing |
+|---------|------|---------|---------|
+| NURBS/Bezier curves | ✅ | | |
+| NURBS surfaces | ✅ | | |
+| Sweep/loft/revolve/rail | | | ✅ |
+| Blend / patch network | | ✅ | |
+| Continuity G0–G3 + zebra | | ✅ | |
+</p>
+
+<h3 id="l5-parametric-procedural">L5 Parametric / procedural</h3>
+<p>
+| Feature | Have | Partial | Missing |
+|---------|------|---------|---------|
+| Feature history / regen | ✅ | Sketch/Extrude/Revolve only | |
+| Expression-driven dims | | | wiring TBD |
+| Modifier stack | | | 7 modifiers + caching + serialize |
+| Procedural node graph | | | TBD |
+</p>
+
+<h3 id="l6-cad-solid-modeling">L6 CAD / solid modeling</h3>
+<p>
+| Feature | Have | Partial | Missing |
+|---------|------|---------|---------|
+| Sketch + constraint solver | | ✅ | tangent/fix TBD |
+| Auto-constraint | | | ✅ |
+| Extrude / revolve features | ✅ | | |
+| Fillet/chamfer/shell features | | façade | |
+| Patterns | | façade | |
+| Hole/sheet-metal/direct | | façade | |
+| Assemblies + mates solver | | | ✅ |
+| Drawings / BOM / configs output | | | ✅ |
+| GD&T / MBD / PMI authoring | | | ✅ |
+| Design rules / interference | | | ✅ |
+</p>
+
+<h3 id="l7-uv-unwrapping">L7 UV & unwrapping</h3>
+<p>
+| Feature | Have | Partial | Missing |
+|---------|------|---------|---------|
+| Unwrap (LSCM) + ABF | ✅ | | |
+| Seams / pin | ✅ | | |
+| Packing / islands | ✅ | | |
+| UDIM / multi-tile | | | ✅ |
+| Distortion overlay | | | ✅ |
+</p>
+
+<h3 id="l8-modifiers-deformers">L8 Modifiers & deformers</h3>
+<p>
+| Feature | Have | Partial | Missing |
+|---------|------|---------|---------|
+| Cage / lattice deform | | | ✅ |
+| Displace | | | ✅ |
+| Skin / bind | | | ✅ |
+| Morph / blend shapes | | | ✅ |
+| Bend / twist / taper | | | ✅ |
+| Wrap / surface-deform | | | ✅ |
+| Shrinkwrap | | | ✅ |
+</p>
+
+<h3 id="l9-selection-transform-precision">L9 Selection / transform / precision</h3>
+<p>
+| Feature | Have | Partial | Missing |
+|---------|------|---------|---------|
+| Object + component select | ✅ | | |
+| Soft / proportional edit | | | ✅ |
+| Snapping (vert/edge/face/grid) + angle/normal | | ✅ | |
+| Box / lasso / circle select | | ✅ | bare flag |
+| Numeric transform entry | | ✅ | |
+| Orientations & pivots | | ✅ | |
+| Symmetry / mirror editing | ✅ | | |
+</p>
+
+<h3 id="l10-scene-org-instancing">L10 Scene org & instancing</h3>
+<p>
+| Feature | Have | Partial | Missing |
+|---------|------|---------|---------|
+| Scene graph / parenting | ✅ | | |
+| Instancing (linked dup) | | | ✅ |
+| Outliner panel | | | ✅ |
+| Collections / layers | | | ✅ |
+| References / libraries | | | ✅ |
+</p>
+
+<h3 id="l11-viewport-visual-feedback">L11 Viewport & visual feedback</h3>
+<p>
+| Feature | Have | Partial | Missing |
+|---------|------|---------|---------|
+| Transform gizmos | ◐ | TransformGizmo coded | |
+| Grid / working plane / ortho | ✅ | | |
+| Selection outline | ○ | wireframe stub | |
+| Constraint & sketch overlays | | | ✅ |
+| Measurement HUD | | | ✅ |
+| Shading-mode switch | | visible gap | |
+| Matcap / studio light | ✅ | kernel has it | |
+| Cavity / AO display | | ✅ | kernel has AO |
+| X-ray / retopo overlay | | | ✅ |
+</p>
+
+<h3 id="l12-history-undo">L12 History & undo</h3>
+<p>
+| Feature | Have | Partial | Missing |
+|---------|------|---------|---------|
+| Global undo/redo | | ✅ | sculpt only |
+| Non-destructive history | | | ✅ |
+| Adjust-last-op panel | | | ✅ |
+</p>
+
+<h3 id="l13-interchange-io">L13 Interchange / IO</h3>
+<p>
+| Feature | Have | Partial | Missing |
+|---------|------|---------|---------|
+| Native .nxm round-trip | ✅ | | |
+| OBJ import + export | ✅ | | |
+| STL import + export | ✅ | | |
+| PLY import + export | ✅ | | |
+| glTF 2.0 import + export | ✅ | | |
+| USD .usda ASCII | | mesh in+out | |
+| FBX | | | SDK |
+| Alembic | | | SDK |
+| STEP / IGES | | | ✅ |
+</p>
+
+<h3 id="l14-units-measure-analysis">L14 Units, measure & analysis</h3>
+<p>
+| Feature | Have | Partial | Missing |
+|---------|------|---------|---------|
+| Unit system | ✅ | | |
+| Dimensions / measure | | ✅ | |
+| Mass / volume / inertia | | | ✅ |
+| Curvature / zebra / draft | | | ✅ |
+| Mesh health / diagnostics | | | ✅ |
+</p>
+
+<h3 id="l15-ux-onboarding">L15 UX & onboarding</h3>
+<p>
+| Feature | Have | Partial | Missing |
+|---------|------|---------|---------|
+| Simple-by-default surface | | | charter set |
+| Progressive disclosure | | | ✅ |
+| Keymap / customization | | | new |
+| Guided intro / templates | | | ✅ |
+</p>
+
+<hr>
+
+<h2 id="parity-closure-backlog">Parity-closure backlog</h2>
+<p>
+<strong>What to build, in order</strong>
+</p>
+
+<h3 id="p0-table-stakes-nothing-new-in-layer-until-these-land">P0 — Table-stakes (nothing new in-layer until these land)</h3>
+<p>
+| Item | Layer |
+|------|-------|
+| IO: ✅ OBJ/STL/PLY/glTF in+out + editor File-menu wiring done · polish: a file picker | L13 |
+| Non-destructive modifier stack for mesh ops — minimum procedural core | L5 |
+| Viewport shading-mode switch (wire/solid/material/rendered) + x-ray/backface | L11 |
+| Box / lasso / circle select (promote the bare marquee) | L9 |
+| Consolidate ViewportController / ViewportManager debt | — |
+| App-wide undo/redo stack across all operators | L12 |
+</p>
+
+<h3 id="p1-expected-by-any-professional-user">P1 — Expected by any professional user</h3>
+<p>
+| Item | Layer |
+|------|-------|
+| FBX + USD in/out; Alembic export | L13 |
+| Back the CAD tree: fillet/chamfer/shell/draft/pattern/hole as regenerable features | L5→L6 |
+| Sculpt dyntopo + multires + layers; clay-strips/scrape/snake-hook/pose | L3 |
+| Sketch constraints: tangent / fix / collinear / midpoint | L6 |
+| Edit ops: spin/screw, rip, dissolve, poke, separate/join | L1 |
+| Outliner + collections/layers | L10 |
+| UV packing + UDIM + distortion overlay + live unwrap | L7 |
+</p>
+
+<h3 id="p2-depth-pipeline-maturity">P2 — Depth & pipeline maturity</h3>
+<p>
+| Item | Layer |
+|------|-------|
+| Procedural node graph (Geometry-Nodes / SOP-style) on the modifier core | L5 |
+| Deformers: bend/twist/taper, wrap/surface-deform, shrinkwrap | L8 |
+| STEP/IGES; assemblies + mates solver; drawings/BOM/GD&T output | L6/L13 |
+| Retopo tools + on-surface overlay; matcap/studio shading; adjust-last-op panel | L1/L11 |
+</p>
+
+<hr>
+
+<h2 id="parity-first-definition-of-done">Parity-first · definition of done</h2>
+
+<p>
+A layer is at parity when its table-stakes features are <strong>Have</strong> — real, tested, reachable from the editor — not façade. A feature counts only when wired end-to-end: kernel op → editor tool → visible result → round-trips through save/IO. Until then, work in a layer targets its open P0 → P1 gaps, and novel capability is deferred.
+</p>
+
+<p>
+<strong>Source of truth</strong>: <code>docs/modeling-industry-parity.md</code> · keep this rendering in sync
+</p>
+
+<hr>
+
+<p>
+<em>Inventoried July 2026</em>
+</p>
+        </main>
+    </div>
+    
+    <script>
+// Theme management
+const THEME_KEY = 'nexus-docs-theme';
+const themeToggle = document.getElementById('theme-toggle');
+const sunIcon = themeToggle.querySelector('.theme-icon-sun');
+const moonIcon = themeToggle.querySelector('.theme-icon-moon');
+
+function applyTheme(theme) {
+    document.documentElement.setAttribute('data-theme', theme);
+    if (theme === 'light') {
+        sunIcon.style.display = 'block';
+        moonIcon.style.display = 'none';
+    } else {
+        sunIcon.style.display = 'none';
+        moonIcon.style.display = 'block';
+    }
+    localStorage.setItem(THEME_KEY, theme);
+}
+
+function getPreferredTheme() {
+    const stored = localStorage.getItem(THEME_KEY);
+    if (stored) return stored;
+    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+}
+
+function initTheme() {
+    const theme = getPreferredTheme();
+    applyTheme(theme);
+}
+
+function toggleTheme() {
+    const current = document.documentElement.getAttribute('data-theme') || 'dark';
+    applyTheme(current === 'dark' ? 'light' : 'dark');
+}
+
+themeToggle.addEventListener('click', toggleTheme);
+
+// Keyboard shortcut: Ctrl+Shift+L
+document.addEventListener('keydown', (e) => {
+    if (e.ctrlKey && e.shiftKey && e.key === 'L') {
+        e.preventDefault();
+        toggleTheme();
+    }
+});
+
+// Listen for system theme changes
+window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => {
+    if (!localStorage.getItem(THEME_KEY)) {
+        applyTheme(e.matches ? 'dark' : 'light');
+    }
+});
+
+// Initialize theme immediately to prevent flash
+initTheme();
+
+// Mobile sidebar toggle
+const sidebar = document.getElementById('sidebar');
+const mobileMenuBtn = document.getElementById('mobile-menu-btn');
+
+if (mobileMenuBtn) {
+    mobileMenuBtn.addEventListener('click', () => {
+        sidebar.classList.toggle('open');
+    });
+}
+
+document.addEventListener('click', (e) => {
+    if (window.innerWidth <= 768) {
+        if (!sidebar.contains(e.target) && !e.target.closest('.header')) {
+            sidebar.classList.remove('open');
+        }
+    }
+});
+
+// Smooth scroll for anchor links
+document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+    anchor.addEventListener('click', function(e) {
+        const target = document.querySelector(this.getAttribute('href'));
+        if (target) {
+            e.preventDefault();
+            target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            if (window.innerWidth <= 768) {
+                sidebar.classList.remove('open');
+            }
+        }
+    });
+});
+
+// Active link highlighting based on scroll position
+const sections = document.querySelectorAll('.content h2, .content h3');
+const sidebarLinks = document.querySelectorAll('.sidebar-link[href^="#"]');
+
+function updateActiveLink() {
+    let current = '';
+    sections.forEach(section => {
+        const rect = section.getBoundingClientRect();
+        if (rect.top <= 100) {
+            current = '#' + section.id;
+        }
+    });
+
+    sidebarLinks.forEach(link => {
+        link.classList.remove('active');
+        if (link.getAttribute('href') === current) {
+            link.classList.add('active');
+        }
+    });
+}
+
+window.addEventListener('scroll', updateActiveLink, { passive: true });
+window.addEventListener('load', updateActiveLink);
+
+// Highlight.js initialization
+if (typeof hljs !== 'undefined') {
+    hljs.highlightAll();
+}
+
+// Mobile menu button visibility
+const mobileMenuBtn = document.getElementById('mobile-menu-btn');
+function checkMobile() {
+    if (window.innerWidth <= 768) {
+        mobileMenuBtn.style.display = 'flex';
+    } else {
+        mobileMenuBtn.style.display = 'none';
+        document.getElementById('sidebar').classList.remove('open');
+    }
+}
+checkMobile();
+window.addEventListener('resize', checkMobile);
+
+mobileMenuBtn.addEventListener('click', () => {
+    document.getElementById('sidebar').classList.toggle('open');
+});
+</script>

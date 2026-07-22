@@ -1,0 +1,1207 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nexus Modeling — Build System — Nexus Modeling Docs</title>
+    <link rel="stylesheet" href="../styles.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
+</head>
+<body>
+    <nav class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+            <div class="sidebar-title">Nexus Modeling</div>
+            <div class="sidebar-subtitle">Documentation v0.1.0-dev</div>
+        </div>
+        <div class="sidebar-section">
+<div class="sidebar-section-title">📚 Developer Documentation</div>
+<a class="sidebar-link" href="../architecture.html">Architecture Overview</a>
+<a class="sidebar-link" href="../kernel-api.html">Kernel API Reference</a>
+<a class="sidebar-link" href="../geometry-kernel.html">Geometry Kernel</a>
+<a class="sidebar-link" href="../renderer.html">Render System</a>
+<a class="sidebar-link" href="../editor-architecture.html">Editor Architecture</a>
+<a class="sidebar-link" href="../build-system.html">Build System</a>
+<a class="sidebar-link" href="../testing.html">Testing</a>
+<a class="sidebar-link" href="../contributing.html">Contributing</a>
+<a class="sidebar-link" href="../adding-geometry-op.html">Adding Geometry Op</a>
+<a class="sidebar-link" href="../adding-cad-feature.html">Adding CAD Feature</a>
+<a class="sidebar-link" href="../mesh-operations.html">Mesh Operations</a>
+<a class="sidebar-link" href="../boolean-csg.html">Boolean/CSG Deep Dive</a>
+<a class="sidebar-link" href="../halfedge-mesh.html">Half-edge Mesh</a>
+<a class="sidebar-link" href="../analytic-brep.html">Analytic B-rep</a>
+<a class="sidebar-link" href="../mesh-io.html">Mesh I/O</a>
+<a class="sidebar-link" href="../tolerance.html">Tolerance System</a>
+<a class="sidebar-link" href="../porting.html">Porting Guide</a>
+</div>
+<div class="sidebar-section">
+<div class="sidebar-section-title">🎨 Expert User Documentation</div>
+</div>
+<div class="sidebar-section">
+<div class="sidebar-section-title">👤 Beginner / User Documentation</div>
+<a class="sidebar-link" href="../getting-started.html">Getting Started</a>
+</div>
+<div class="sidebar-section">
+<div class="sidebar-section-title">🔧 API Reference</div>
+</div>
+<div class="sidebar-section">
+<div class="sidebar-section-title">📚 Additional Resources</div>
+<a class="sidebar-link" href="../design-decisions.html">Design Decisions</a>
+<a class="sidebar-link" href="../testing-strategy.html">Testing Strategy</a>
+<a class="sidebar-link" href="../graphics-kernel.html">Graphics Kernel</a>
+<a class="sidebar-link" href="../vision-and-roadmap.html">Vision & Roadmap</a>
+<a class="sidebar-link" href="../reference-roadmap.html">Reference Roadmap</a>
+<a class="sidebar-link" href="../modeling-industry-parity.html">Modeling Industry Parity</a>
+<a class="sidebar-link" href="../modeling-parity-index.html">Modeling Parity Index</a>
+<a class="sidebar-link" href="../modeling-reference-roadmap.html">Modeling Reference Roadmap</a>
+</div>
+    </nav>
+    
+    <div class="main-content">
+        <header class="header">
+            <button class="btn btn-icon" id="mobile-menu-btn" aria-label="Toggle menu" style="display: none;">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="3" y1="12" x2="21" y2="12"></line>
+                    <line x1="3" y1="6" x2="21" y2="6"></line>
+                    <line x1="3" y1="18" x2="21" y2="18"></line>
+                </svg>
+            </button>
+            <div class="header-title">Nexus Modeling — Build System</div>
+            <div class="header-actions">
+                
+<button class="btn btn-icon" id="theme-toggle" aria-label="Toggle dark/light theme" title="Toggle theme (Ctrl+Shift+L)">
+    <svg class="theme-icon-sun" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display: none;">
+        <circle cx="12" cy="12" r="5"></circle>
+        <line x1="12" y1="1" x2="12" y2="3"></line>
+        <line x1="12" y1="21" x2="12" y2="23"></line>
+        <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+        <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+        <line x1="1" y1="12" x2="3" y2="12"></line>
+        <line x1="21" y1="12" x2="23" y2="12"></line>
+        <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+        <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+    </svg>
+    <svg class="theme-icon-moon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display: none;">
+        <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+    </svg>
+</button>
+
+                <a href="https://github.com/nexus-systems/nexus-modeling" class="btn btn-secondary" target="_blank" rel="noopener">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M12 0C5.374 0 0 5.373 0 12c0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23A11.509 11.509 0 0112 5.803c1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576C20.566 21.797 24 17.3 24 12c0-6.627-5.373-12-12-12z"/>
+                    </svg>
+                    <span class="btn-text">GitHub</span>
+                </a>
+                <a href="../index.html" class="btn btn-primary">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
+                        <polyline points="9 22 9 12 15 12 15 22"></polyline>
+                    </svg>
+                    <span class="btn-text">Home</span>
+                </a>
+            </div>
+        </header>
+        
+        <main class="content">
+            <div class="toc"><h3>On This Page</h3><ul><li><a href="#nexus-modeling-build-system">Nexus Modeling — Build System</a></li>
+  <li><a href="#requirements">Requirements</a></li>
+    <li><a href="#linux-fedora-rhel-centos">Linux (Fedora/RHEL/CentOS)</a></li>
+    <li><a href="#linux-ubuntu-debian">Linux (Ubuntu/Debian)</a></li>
+    <li><a href="#windows-msvc">Windows (MSVC)</a></li>
+<li><a href="#install-via-chocolatey">Install via Chocolatey</a></li>
+<li><a href="#or-vcpkg">Or vcpkg</a></li>
+    <li><a href="#macos">macOS</a></li>
+  <li><a href="#quick-start">Quick Start</a></li>
+<li><a href="#clone">Clone</a></li>
+<li><a href="#configure-first-time">Configure (first time)</a></li>
+<li><a href="#build">Build</a></li>
+<li><a href="#test">Test</a></li>
+<li><a href="#run-app">Run app</a></li>
+  <li><a href="#cmake-options">CMake Options</a></li>
+    <li><a href="#example-configurations">Example Configurations</a></li>
+  <li><a href="#project-structure">Project Structure</a></li>
+  <li><a href="#kernel-library-src-kernel-cmakelists-txt">Kernel Library (<code>src/kernel/CMakeLists.txt</code>)</a></li>
+<li><a href="#core-target-nexus_gfx_core-static">Core target: nexus_gfx_core (STATIC)</a></li>
+<li><a href="#c-26">C++26</a></li>
+<li><a href="#include-directories">Include directories</a></li>
+<li><a href="#public-dependencies">Public dependencies</a></li>
+<li><a href="#private-dependencies">Private dependencies</a></li>
+<li><a href="#sources-alphabetical-within-module">Sources (alphabetical within module)</a></li>
+<li><a href="#compile-definitions">Compile definitions</a></li>
+<li><a href="#api-freeze-public-header-manifest">API Freeze: public header manifest</a></li>
+  <li><a href="#application-executable-app-cmakelists-txt">Application Executable (<code>app/CMakeLists.txt</code>)</a></li>
+<li><a href="#resources-shaders-fonts">Resources (shaders, fonts)</a></li>
+<li><a href="#copy-resources-to-build-dir">Copy resources to build dir</a></li>
+  <li><a href="#tests-tests-cmakelists-txt">Tests (<code>tests/CMakeLists.txt</code>)</a></li>
+<li><a href="#kernel-tests">Kernel tests</a></li>
+<li><a href="#test-fixtures">Test fixtures</a></li>
+<li><a href="#integration-tests">Integration tests</a></li>
+<li><a href="#performance-tests">Performance tests</a></li>
+<li><a href="#register-with-ctest">Register with CTest</a></li>
+<li><a href="#test-properties">Test properties</a></li>
+<li><a href="#run-tests-in-parallel">Run tests in parallel</a></li>
+  <li><a href="#dependency-management">Dependency Management</a></li>
+    <li><a href="#find-modules-cmake-find-cmake">Find Modules (cmake/Find*.cmake)</a></li>
+<li><a href="#cmake-findvulkan-cmake">cmake/FindVulkan.cmake</a></li>
+<li><a href="#cmake-findvma-cmake">cmake/FindVMA.cmake</a></li>
+<li><a href="#cmake-findglslang-cmake">cmake/FindGLSLang.cmake</a></li>
+<li><a href="#cmake-findspirvtools-cmake">cmake/FindSPIRVTools.cmake</a></li>
+<li><a href="#cmake-findspirvcross-cmake">cmake/FindSPIRVCross.cmake</a></li>
+    <li><a href="#fetchcontent-header-only-deps">FetchContent (Header-only deps)</a></li>
+<li><a href="#eigen">Eigen</a></li>
+<li><a href="#nlohmann-json">nlohmann/json</a></li>
+<li><a href="#fmt">fmt</a></li>
+<li><a href="#spdlog">spdlog</a></li>
+<li><a href="#googletest">googletest</a></li>
+<li><a href="#benchmark">benchmark</a></li>
+<li><a href="#xxhash">xxHash</a></li>
+  <li><a href="#shader-compilation">Shader Compilation</a></li>
+    <li><a href="#offline-build-time">Offline (Build-time)</a></li>
+<li><a href="#compile-glsl-spir-v-at-build-time">Compile GLSL → SPIR-V at build time</a></li>
+<li><a href="#usage">Usage</a></li>
+    <li><a href="#runtime-hot-reload">Runtime (Hot Reload)</a></li>
+  <li><a href="#cross-compilation">Cross-Compilation</a></li>
+    <li><a href="#linux-windows-mingw">Linux → Windows (MinGW)</a></li>
+<li><a href="#cmake-mingw64-cmake">cmake/mingw64.cmake</a></li>
+    <li><a href="#linux-macos-osxcross">Linux → macOS (osxcross)</a></li>
+    <li><a href="#webassembly-emscripten">WebAssembly (Emscripten)</a></li>
+  <li><a href="#installation">Installation</a></li>
+<li><a href="#install-to-system">Install to system</a></li>
+<li><a href="#or-package">Or package</a></li>
+    <li><a href="#cpack-config">CPack Config</a></li>
+<li><a href="#cpackconfig-cmake">CPackConfig.cmake</a></li>
+  <li><a href="#ide-integration">IDE Integration</a></li>
+    <li><a href="#vs-code-vscode-settings-json">VS Code (<code>.vscode/settings.json</code>)</a></li>
+    <li><a href="#clion">CLion</a></li>
+  <li><a href="#troubleshooting">Troubleshooting</a></li>
+    <li><a href="#vulkan-not-found">Vulkan Not Found</a></li>
+<li><a href="#check-sdk">Check SDK</a></li>
+<li><a href="#set-manually">Set manually</a></li>
+    <li><a href="#c-26-not-supported">C++26 Not Supported</a></li>
+<li><a href="#check-compiler">Check compiler</a></li>
+<li><a href="#use-newer-compiler">Use newer compiler</a></li>
+    <li><a href="#linker-errors-missing-sources">Linker Errors (Missing Sources)</a></li>
+<li><a href="#check-cmakelists-txt-for-missing-cpp-files">Check CMakeLists.txt for missing .cpp files</a></li>
+<li><a href="#every-new-cpp-must-be-added-to-appropriate-sources-list">Every new .cpp MUST be added to appropriate SOURCES list</a></li>
+    <li><a href="#test-failures-headless">Test Failures (Headless)</a></li>
+<li><a href="#use-xvfb-run-for-vulkan-tests-without-display">Use xvfb-run for Vulkan tests without display</a></li>
+</ul></div>
+            <h1 id="nexus-modeling-build-system">Nexus Modeling — Build System</h1>
+
+<p>
+<em>Complete CMake configuration, dependency management, and cross-platform build guide.</em>
+</p>
+
+<hr>
+
+<h2 id="requirements">Requirements</h2>
+
+<p>
+| Tool | Minimum Version | Recommended |
+|------|----------------|-------------|
+| CMake | 3.28 | 4.3.4 |
+| C++ Compiler | GCC 13 / Clang 17 / MSVC 19.40 | Latest |
+| Ninja | 1.11 | Latest |
+| Vulkan SDK | 1.3.250 | Latest |
+| Python | 3.10 | 3.12 (for scripts) |
+</p>
+
+<h3 id="linux-fedora-rhel-centos">Linux (Fedora/RHEL/CentOS)</h3>
+
+<pre><code class="language-bash">sudo dnf install cmake gcc-c++ ninja-build vulkan-devel glfw-devel \
+<p>
+    vulkan-memory-allocator-devel glslang-devel spirv-tools-devel \
+    python3-devel</code></pre>
+</p>
+
+<h3 id="linux-ubuntu-debian">Linux (Ubuntu/Debian)</h3>
+
+<pre><code class="language-bash">sudo apt update && sudo apt install -y \
+<p>
+    cmake g++ ninja-build libvulkan-dev libglfw3-dev \
+    libvma-dev glslang-dev spirv-tools-dev \
+    python3-dev</code></pre>
+</p>
+
+<h3 id="windows-msvc">Windows (MSVC)</h3>
+
+<pre><code class="language-powershell"><h1 id="install-via-chocolatey">Install via Chocolatey</h1>
+<p>
+choco install cmake ninja vulkansdk glfw
+</p>
+
+<h1 id="or-vcpkg">Or vcpkg</h1>
+<p>
+vcpkg install vulkan glfw3 vma glslang spirv-tools</code></pre>
+</p>
+
+<h3 id="macos">macOS</h3>
+
+<pre><code class="language-bash">brew install cmake ninja vulkan-sdk glfw vulkan-memory-allocator glslang spirv-tools</code></pre>
+
+<hr>
+
+<h2 id="quick-start">Quick Start</h2>
+
+<pre><code class="language-bash"><h1 id="clone">Clone</h1>
+<p>
+git clone https://github.com/nexus-systems/nexus-modeling.git
+cd nexus-modeling/apps/Nexus-Modeling
+</p>
+
+<h1 id="configure-first-time">Configure (first time)</h1>
+<p>
+cmake -S . -B build -G Ninja \
+    -DNEXUS_BACKEND_VULKAN=ON \
+    -DNEXUS_BACKEND_NULL=ON \
+    -DCMAKE_BUILD_TYPE=RelWithDebInfo
+</p>
+
+<h1 id="build">Build</h1>
+<p>
+cmake --build build -j$(nproc)
+</p>
+
+<h1 id="test">Test</h1>
+<p>
+ctest --test-dir build --output-on-failure
+</p>
+
+<h1 id="run-app">Run app</h1>
+<p>
+./build/src/kernel/nexus_modeling</code></pre>
+</p>
+
+<hr>
+
+<h2 id="cmake-options">CMake Options</h2>
+
+<p>
+| Option | Default | Description |
+|--------|---------|-------------|
+| <code>NEXUS_BACKEND_VULKAN</code> | ON | Build Vulkan backend |
+| <code>NEXUS_BACKEND_NULL</code> | ON | Build Null (headless) backend |
+| <code>NEXUS_BUILD_TESTS</code> | ON | Build test suite |
+| <code>NEXUS_BUILD_TOOLS</code> | ON | Build CLI tools |
+| <code>NEXUS_ENABLE_ASAN</code> | OFF (Debug) | AddressSanitizer |
+| <code>NEXUS_ENABLE_UBSAN</code> | OFF (Debug) | UndefinedBehaviorSanitizer |
+| <code>NEXUS_ENABLE_TSAN</code> | OFF | ThreadSanitizer |
+| <code>NEXUS_ENABLE_MSAN</code> | OFF | MemorySanitizer (Clang only) |
+| <code>NEXUS_ENABLE_COVERAGE</code> | OFF | Code coverage (gcov/llvm-cov) |
+| <code>NEXUS_API_FREEZE</code> | ON | Enforce API freeze audit |
+| <code>CMAKE_CXX_STANDARD</code> | 26 | C++ standard version |
+</p>
+
+<h3 id="example-configurations">Example Configurations</h3>
+
+<p>
+<strong>Release Optimized:</strong>
+</p>
+<pre><code class="language-bash">cmake -S . -B build_release -G Ninja \
+<p>
+    -DCMAKE_BUILD_TYPE=Release \
+    -DNEXUS_BACKEND_VULKAN=ON \
+    -DNEXUS_BACKEND_NULL=ON \
+    -DNEXUS_BUILD_TESTS=OFF</code></pre>
+</p>
+
+<p>
+<strong>Debug with Sanitizers:</strong>
+</p>
+<pre><code class="language-bash">cmake -S . -B build_asan -G Ninja \
+<p>
+    -DCMAKE_BUILD_TYPE=Debug \
+    -DNEXUS_ENABLE_ASAN=ON \
+    -DNEXUS_ENABLE_UBSAN=ON</code></pre>
+</p>
+
+<p>
+<strong>Coverage:</strong>
+</p>
+<pre><code class="language-bash">cmake -S . -B build_cov -G Ninja \
+<p>
+    -DCMAKE_BUILD_TYPE=Debug \
+    -DNEXUS_ENABLE_COVERAGE=ON</code></pre>
+</p>
+
+<hr>
+
+<h2 id="project-structure">Project Structure</h2>
+
+<pre><code class="language-">nexus-modeling/
+<p>
+├── CMakeLists.txt                 # Root
+├── cmake/
+│   ├── FindVulkan.cmake
+│   ├── FindVMA.cmake
+│   ├── FindGLFW.cmake
+│   ├── FindGLSLang.cmake
+│   ├── FindSPIRVTools.cmake
+│   └── FindSPIRVCross.cmake
+├── src/
+│   └── kernel/
+│       ├── CMakeLists.txt         # Kernel library
+│       ├── include/nexus/         # Public headers
+│       │   ├── geometry/
+│       │   ├── cad/
+│       │   ├── render/
+│       │   ├── gfx/
+│       │   ├── app/
+│       │   ├── animation/
+│       │   ├── sim/
+│       │   ├── sculpt/
+│       │   ├── parametric/
+│       │   └── Kernel.h
+│       └── src/                   # Private implementation
+│           ├── geometry/
+│           ├── cad/
+│           ├── render/
+│           ├── gfx/
+│           │   └── vulkan/
+│           ├── app/
+│           ├── animation/
+│           ├── sim/
+│           ├── sculpt/
+│           └── parametric/
+├── app/
+│   └── CMakeLists.txt             # nexus_modeling executable
+│   └── main.cpp
+├── tests/
+│   └── CMakeLists.txt             # Test suite
+├── tools/
+│   └── CMakeLists.txt             # CLI tools
+└── docs/                          # Documentation</code></pre>
+</p>
+
+<hr>
+
+<h2 id="kernel-library-src-kernel-cmakelists-txt">Kernel Library (<code>src/kernel/CMakeLists.txt</code>)</h2>
+
+<pre><code class="language-cmake"><h1 id="core-target-nexus_gfx_core-static">Core target: nexus_gfx_core (STATIC)</h1>
+<p>
+add_library(nexus_gfx_core STATIC)
+</p>
+
+<h1 id="c-26">C++26</h1>
+<p>
+target_compile_features(nexus_gfx_core PRIVATE cxx_std_26)
+</p>
+
+<h1 id="include-directories">Include directories</h1>
+<p>
+target_include_directories(nexus_gfx_core
+    PUBLIC
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+        $<INSTALL_INTERFACE:include/nexus>
+    PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/src
+)
+</p>
+
+<h1 id="public-dependencies">Public dependencies</h1>
+<p>
+target_link_libraries(nexus_gfx_core PUBLIC
+    eigen3::eigen
+    fmt::fmt
+    spdlog::spdlog
+    nlohmann_json::nlohmann_json
+    xxhash::xxhash
+    Vulkan::Vulkan
+    glfw
+    VulkanMemoryAllocator::VulkanMemoryAllocator
+    glslang::glslang
+    SPIRV::SPIRV-Tools
+    SPIRV::SPIRV-Cross
+)
+</p>
+
+<h1 id="private-dependencies">Private dependencies</h1>
+<p>
+target_link_libraries(nexus_gfx_core PRIVATE
+    # Internal only
+)
+</p>
+
+<h1 id="sources-alphabetical-within-module">Sources (alphabetical within module)</h1>
+<p>
+set(CORE_SOURCES
+    src/core/Assert.cpp
+    src/core/Log.cpp
+    src/core/Profiler.cpp
+    src/core/UUID.cpp
+)
+</p>
+
+<p>
+set(GEOMETRY_SOURCES
+    src/geometry/Aabb.cpp
+    src/geometry/AnalyticBRep.cpp
+    src/geometry/BooleanOperation.cpp
+    src/geometry/ConstrainedDelaunay2D.cpp
+    src/geometry/Delaunay2D.cpp
+    src/geometry/HalfEdgeMesh.cpp
+    src/geometry/Mesh.cpp
+    src/geometry/MeshAttributes.cpp
+    src/geometry/MeshBVH.cpp
+    src/geometry/MeshBoolean.cpp
+    src/geometry/MeshDecimator.cpp
+    src/geometry/MeshIO.cpp
+    src/geometry/MeshLaplacian.cpp
+    src/geometry/MeshRemesh.cpp
+    src/geometry/MeshTopology.cpp
+    src/geometry/Obb.cpp
+    src/geometry/Plane.cpp
+    src/geometry/Primitives.cpp
+    src/geometry/Ray.cpp
+    src/geometry/RobustPredicates.cpp
+    src/geometry/Segment.cpp
+    src/geometry/SubdivisionSurface.cpp
+    src/geometry/TetDelaunay3D.cpp
+    src/geometry/Tolerance.cpp
+    src/geometry/Triangle.cpp
+    src/geometry/Vec2.cpp
+    src/geometry/Vec3.cpp
+)
+</p>
+
+<p>
+set(CAD_SOURCES
+    src/cad/CadAutoConstraintSketch.cpp
+    src/cad/CadCommand.cpp
+    src/cad/CadDocument.cpp
+    src/cad/CadExport.cpp
+    src/cad/CadFeature.cpp
+    src/cad/CadFeatureFactory.cpp
+    src/cad/CadHistory.cpp
+    src/cad/CadImport.cpp
+    src/cad/CadSelection.cpp
+    src/cad/CadSketch.cpp
+    src/cad/CadSolver.cpp
+    src/cad/CadViewer.cpp
+)
+</p>
+
+<p>
+set(RENDER_SOURCES
+    src/render/Camera.cpp
+    src/render/Environment.cpp
+    src/render/Frustum.cpp
+    src/render/Light.cpp
+    src/render/Material.cpp
+    src/render/Mesh.cpp
+    src/render/Picking.cpp
+    src/render/Renderer.cpp
+    src/render/SceneGraph.cpp
+    src/render/SceneNode.cpp
+    src/render/Viewport.cpp
+)
+</p>
+
+<p>
+set(GFX_SOURCES
+    src/gfx/Buffer.cpp
+    src/gfx/CommandBuffer.cpp
+    src/gfx/DescriptorSet.cpp
+    src/gfx/Device.cpp
+    src/gfx/FrameScheduler.cpp
+    src/gfx/Pipeline.cpp
+    src/gfx/RenderContext.cpp
+    src/gfx/Renderer.cpp
+    src/gfx/Shader.cpp
+    src/gfx/Swapchain.cpp
+    src/gfx/Texture.cpp
+    src/gfx/Types.cpp
+    src/gfx/FrameCapture.cpp
+    src/gfx/RenderGraphValidator.cpp
+    src/gfx/vulkan/VulkanAllocator.cpp
+    src/gfx/vulkan/VulkanBuffer.cpp
+    src/gfx/vulkan/VulkanCommandBuffer.cpp
+    src/gfx/vulkan/VulkanDescriptorSet.cpp
+    src/gfx/vulkan/VulkanDevice.cpp
+    src/gfx/vulkan/VulkanFrameScheduler.cpp
+    src/gfx/vulkan/VulkanPipeline.cpp
+    src/gfx/vulkan/VulkanShader.cpp
+    src/gfx/vulkan/VulkanSwapchain.cpp
+    src/gfx/vulkan/VulkanTexture.cpp
+    src/gfx/null/NullDevice.cpp
+    src/gfx/null/NullCommandBuffer.cpp
+    src/gfx/null/NullSwapchain.cpp
+    src/gfx/null/NullFrameScheduler.cpp
+)
+</p>
+
+<p>
+set(APP_SOURCES
+    src/app/AppContext.cpp
+    src/app/AppMode.cpp
+    src/app/AssetBrowser.cpp
+    src/app/CommandDispatcher.cpp
+    src/app/EditorUI.cpp
+    src/app/ModeOrchestrator.cpp
+    src/app/ModeRegistry.cpp
+    src/app/SelectionManager.cpp
+    src/app/TransformGizmo.cpp
+    src/app/ViewportAxes.cpp
+    src/app/ViewportController.cpp
+    src/app/ViewportGrid.cpp
+    src/app/WorkspaceManager.cpp
+)
+</p>
+
+<p>
+target_sources(nexus_gfx_core PRIVATE
+    ${CORE_SOURCES}
+    ${GEOMETRY_SOURCES}
+    ${CAD_SOURCES}
+    ${RENDER_SOURCES}
+    ${GFX_SOURCES}
+    ${APP_SOURCES}
+)
+</p>
+
+<h1 id="compile-definitions">Compile definitions</h1>
+<p>
+target_compile_definitions(nexus_gfx_core PRIVATE
+    NEXUS_KERNEL_BUILD
+    NEXUS_BACKEND_VULKAN=$<BOOL:${NEXUS_BACKEND_VULKAN}>
+    NEXUS_BACKEND_NULL=$<BOOL:${NEXUS_BACKEND_NULL}>
+)
+</p>
+
+<h1 id="api-freeze-public-header-manifest">API Freeze: public header manifest</h1>
+<p>
+if(NEXUS_API_FREEZE)
+    add_custom_target(ApiFreezeAudit
+        COMMAND ${CMAKE_COMMAND} -E echo "Checking API surface..."
+        COMMAND python3 ${CMAKE_SOURCE_DIR}/tools/api_freeze_check.py
+            --manifest ${CMAKE_SOURCE_DIR}/tests/kernel/fixtures/api_surface_manifest_alpha_v1.txt
+            --include-dir ${CMAKE_CURRENT_SOURCE_DIR}/include
+        DEPENDS nexus_gfx_core
+    )
+    add_dependencies(nexus_gfx_core ApiFreezeAudit)
+endif()</code></pre>
+</p>
+
+<hr>
+
+<h2 id="application-executable-app-cmakelists-txt">Application Executable (<code>app/CMakeLists.txt</code>)</h2>
+
+<pre><code class="language-cmake">add_executable(nexus_modeling main.cpp)
+
+<p>
+target_compile_features(nexus_modeling PRIVATE cxx_std_26)
+</p>
+
+<p>
+target_link_libraries(nexus_modeling PRIVATE
+    nexus_gfx_core
+)
+</p>
+
+<h1 id="resources-shaders-fonts">Resources (shaders, fonts)</h1>
+<p>
+target_include_directories(nexus_modeling PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/resources
+)
+</p>
+
+<h1 id="copy-resources-to-build-dir">Copy resources to build dir</h1>
+<p>
+add_custom_command(TARGET nexus_modeling POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+        ${CMAKE_CURRENT_SOURCE_DIR}/resources/shaders
+        $<TARGET_FILE_DIR:nexus_modeling>/shaders
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+        ${CMAKE_CURRENT_SOURCE_DIR}/resources/fonts
+        $<TARGET_FILE_DIR:nexus_modeling>/fonts
+)</code></pre>
+</p>
+
+<hr>
+
+<h2 id="tests-tests-cmakelists-txt">Tests (<code>tests/CMakeLists.txt</code>)</h2>
+
+<pre><code class="language-cmake">if(NOT NEXUS_BUILD_TESTS)
+<p>
+    return()
+endif()
+</p>
+
+<p>
+enable_testing()
+</p>
+
+<h1 id="kernel-tests">Kernel tests</h1>
+<p>
+add_executable(nexus_kernel_tests
+    kernel/test_AnalyticBRep.cpp
+    kernel/test_BooleanOperation.cpp
+    kernel/test_HalfEdgeMesh.cpp
+    kernel/test_MeshBoolean.cpp
+    kernel/test_MeshDecimator.cpp
+    kernel/test_MeshLaplacian.cpp
+    kernel/test_MeshRemesh.cpp
+    kernel/test_SubdivisionSurface.cpp
+    kernel/test_Delaunay2D.cpp
+    kernel/test_TetDelaunay3D.cpp
+    kernel/test_RobustPredicates.cpp
+    kernel/test_Tolerance.cpp
+    kernel/test_MeshIO.cpp
+    kernel/test_Primitives.cpp
+    kernel/test_SceneGraph.cpp
+    kernel/test_Camera.cpp
+    kernel/test_Frustum.cpp
+    kernel/test_Picking.cpp
+    kernel/test_Transform.cpp
+    kernel/test_Quaternion.cpp
+    kernel/test_Mat4.cpp
+    kernel/test_Vec3.cpp
+    kernel/test_CadDocument.cpp
+    kernel/test_CadFeature.cpp
+    kernel/test_CadSketch.cpp
+    kernel/test_CadSolver.cpp
+    kernel/test_ConstraintSolver.cpp
+    kernel/test_Animation.cpp
+    kernel/test_Simulation.cpp
+    kernel/test_Sculpt.cpp
+    kernel/test_Parameterization.cpp
+    kernel/test_Integrity.cpp
+    kernel/test_ApiFreeze.cpp
+    kernel/test_PropertyBased.cpp
+)
+</p>
+
+<p>
+target_compile_features(nexus_kernel_tests PRIVATE cxx_std_26)
+target_link_libraries(nexus_kernel_tests PRIVATE
+    nexus_gfx_core
+    gtest_main
+    gmock_main
+)
+</p>
+
+<h1 id="test-fixtures">Test fixtures</h1>
+<p>
+target_include_directories(nexus_kernel_tests PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/kernel/fixtures
+)
+</p>
+
+<h1 id="integration-tests">Integration tests</h1>
+<p>
+add_executable(nexus_integration_tests
+    integration/test_RenderPipeline.cpp
+    integration/test_HeadlessRender.cpp
+    integration/test_ViewportPicking.cpp
+)
+</p>
+
+<p>
+target_link_libraries(nexus_integration_tests PRIVATE
+    nexus_gfx_core
+    gtest_main
+)
+</p>
+
+<h1 id="performance-tests">Performance tests</h1>
+<p>
+add_executable(nexus_kernel_perf_smoke
+    perf/test_BooleanPerf.cpp
+    perf/test_ExtrudePerf.cpp
+    perf/test_DecimatePerf.cpp
+    perf/test_SubdivisionPerf.cpp
+)
+</p>
+
+<p>
+target_link_libraries(nexus_kernel_perf_smoke PRIVATE
+    nexus_gfx_core
+    benchmark::benchmark
+)
+</p>
+
+<h1 id="register-with-ctest">Register with CTest</h1>
+<p>
+add_test(NAME nexus_kernel_tests COMMAND nexus_kernel_tests)
+add_test(NAME nexus_integration_tests COMMAND nexus_integration_tests)
+add_test(NAME nexus_kernel_perf_smoke COMMAND nexus_kernel_perf_smoke)
+</p>
+
+<h1 id="test-properties">Test properties</h1>
+<p>
+set_tests_properties(nexus_kernel_tests PROPERTIES
+    TIMEOUT 300
+    ENVIRONMENT "NEXUS_TESTS_ROOT=${CMAKE_CURRENT_SOURCE_DIR}/kernel/fixtures"
+)
+</p>
+
+<p>
+set_tests_properties(nexus_integration_tests PROPERTIES
+    TIMEOUT 60
+)
+</p>
+
+<h1 id="run-tests-in-parallel">Run tests in parallel</h1>
+<p>
+set(CTEST_PARALLEL_LEVEL ${PROCESSOR_COUNT})</code></pre>
+</p>
+
+<hr>
+
+<h2 id="dependency-management">Dependency Management</h2>
+
+<h3 id="find-modules-cmake-find-cmake">Find Modules (cmake/Find*.cmake)</h3>
+
+<pre><code class="language-cmake"><h1 id="cmake-findvulkan-cmake">cmake/FindVulkan.cmake</h1>
+<p>
+find_package(Vulkan REQUIRED)
+if(NOT Vulkan_FOUND)
+    message(FATAL_ERROR "Vulkan SDK not found. Install Vulkan SDK.")
+endif()
+</p>
+
+<h1 id="cmake-findvma-cmake">cmake/FindVMA.cmake</h1>
+<p>
+find_path(VMA_INCLUDE_DIR vk_mem_alloc.h
+    PATHS ${VULKAN_SDK}/include
+)
+find_library(VMA_LIBRARY vma
+    PATHS ${VULKAN_SDK}/lib
+)
+if(VMA_INCLUDE_DIR AND VMA_LIBRARY)
+    add_library(VulkanMemoryAllocator::VulkanMemoryAllocator INTERFACE IMPORTED)
+    set_target_properties(VulkanMemoryAllocator::VulkanMemoryAllocator PROPERTIES
+        INTERFACE_INCLUDE_DIRECTORIES ${VMA_INCLUDE_DIR}
+        INTERFACE_LINK_LIBRARIES ${VMA_LIBRARY}
+    )
+endif()
+</p>
+
+<h1 id="cmake-findglslang-cmake">cmake/FindGLSLang.cmake</h1>
+<p>
+find_package(glslang REQUIRED)
+</p>
+
+<h1 id="cmake-findspirvtools-cmake">cmake/FindSPIRVTools.cmake</h1>
+<p>
+find_package(SPIRV-Tools REQUIRED)
+</p>
+
+<h1 id="cmake-findspirvcross-cmake">cmake/FindSPIRVCross.cmake</h1>
+<p>
+find_package(SPIRV-Cross REQUIRED)</code></pre>
+</p>
+
+<h3 id="fetchcontent-header-only-deps">FetchContent (Header-only deps)</h3>
+
+<pre><code class="language-cmake"><h1 id="eigen">Eigen</h1>
+<p>
+FetchContent_Declare(eigen
+    GIT_REPOSITORY https://gitlab.com/libeigen/eigen.git
+    GIT_TAG 3.4.0
+)
+</p>
+
+<h1 id="nlohmann-json">nlohmann/json</h1>
+<p>
+FetchContent_Declare(nlohmann_json
+    GIT_REPOSITORY https://github.com/nlohmann/json.git
+    GIT_TAG v3.11.2
+)
+</p>
+
+<h1 id="fmt">fmt</h1>
+<p>
+FetchContent_Declare(fmt
+    GIT_REPOSITORY https://github.com/fmtlib/fmt.git
+    GIT_TAG 10.2.1
+)
+</p>
+
+<h1 id="spdlog">spdlog</h1>
+<p>
+FetchContent_Declare(spdlog
+    GIT_REPOSITORY https://github.com/gabime/spdlog.git
+    GIT_TAG v1.13.0
+)
+</p>
+
+<h1 id="googletest">googletest</h1>
+<p>
+FetchContent_Declare(googletest
+    GIT_REPOSITORY https://github.com/google/googletest.git
+    GIT_TAG v1.14.0
+)
+</p>
+
+<h1 id="benchmark">benchmark</h1>
+<p>
+FetchContent_Declare(benchmark
+    GIT_REPOSITORY https://github.com/google/benchmark.git
+    GIT_TAG v1.8.3
+)
+</p>
+
+<h1 id="xxhash">xxHash</h1>
+<p>
+FetchContent_Declare(xxhash
+    GIT_REPOSITORY https://github.com/Cyan4973/xxHash.git
+    GIT_TAG v0.8.2
+)
+</p>
+
+<p>
+FetchContent_MakeAvailable(
+    eigen nlohmann_json fmt spdlog googletest benchmark xxhash
+)</code></pre>
+</p>
+
+<hr>
+
+<h2 id="shader-compilation">Shader Compilation</h2>
+
+<h3 id="offline-build-time">Offline (Build-time)</h3>
+
+<pre><code class="language-cmake"><h1 id="compile-glsl-spir-v-at-build-time">Compile GLSL → SPIR-V at build time</h1>
+<p>
+function(compile_shader TARGET NAME SRC STAGE)
+    add_custom_command(
+        OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/shaders/${NAME}.spv
+        COMMAND glslangValidator
+            -V -S ${STAGE}
+            -o ${CMAKE_CURRENT_BINARY_DIR}/shaders/${NAME}.spv
+            ${CMAKE_CURRENT_SOURCE_DIR}/resources/shaders/${SRC}
+        DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/resources/shaders/${SRC}
+        COMMENT "Compiling ${SRC} to SPIR-V"
+        VERBATIM
+    )
+    target_sources(${TARGET} PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/shaders/${NAME}.spv)
+endfunction()
+</p>
+
+<h1 id="usage">Usage</h1>
+<p>
+compile_shader(nexus_gfx_core gbuffer_vert gbuffer.vert vert)
+compile_shader(nexus_gfx_core gbuffer_frag gbuffer.frag frag)
+compile_shader(nexus_gfx_core lighting_frag lighting.frag frag)
+compile_shader(nexus_gfx_core shadow_vert shadow.vert vert)</code></pre>
+</p>
+
+<h3 id="runtime-hot-reload">Runtime (Hot Reload)</h3>
+
+<pre><code class="language-cpp">// Shader hot-reload in development
+<p>
+class ShaderManager {
+    std::filesystem::file_time_type lastWriteTime;
+</p>
+    
+<p>
+    void checkReload() {
+        auto current = std::filesystem::last_write_time(shaderPath);
+        if (current > lastWriteTime) {
+            recompile();
+            lastWriteTime = current;
+        }
+    }
+};</code></pre>
+</p>
+
+<hr>
+
+<h2 id="cross-compilation">Cross-Compilation</h2>
+
+<h3 id="linux-windows-mingw">Linux → Windows (MinGW)</h3>
+
+<pre><code class="language-bash">cmake -S . -B build_win -G Ninja \
+<p>
+    -DCMAKE_TOOLCHAIN_FILE=cmake/mingw64.cmake \
+    -DCMAKE_BUILD_TYPE=Release</code></pre>
+</p>
+
+<pre><code class="language-cmake"><h1 id="cmake-mingw64-cmake">cmake/mingw64.cmake</h1>
+<p>
+set(CMAKE_SYSTEM_NAME Windows)
+set(CMAKE_C_COMPILER x86_64-w64-mingw32-gcc)
+set(CMAKE_CXX_COMPILER x86_64-w64-mingw32-g++)
+set(CMAKE_RC_COMPILER x86_64-w64-mingw32-windres)
+set(CMAKE_FIND_ROOT_PATH /usr/x86_64-w64-mingw32)
+set(CMAKE_FIND_ROOT_PATH_MODE_PROGRAM NEVER)
+set(CMAKE_FIND_ROOT_PATH_MODE_LIBRARY ONLY)
+set(CMAKE_FIND_ROOT_PATH_MODE_INCLUDE ONLY)</code></pre>
+</p>
+
+<h3 id="linux-macos-osxcross">Linux → macOS (osxcross)</h3>
+
+<pre><code class="language-bash">cmake -S . -B build_mac -G Ninja \
+<p>
+    -DCMAKE_TOOLCHAIN_FILE=cmake/osxcross.cmake</code></pre>
+</p>
+
+<h3 id="webassembly-emscripten">WebAssembly (Emscripten)</h3>
+
+<pre><code class="language-bash">cmake -S . -B build_wasm -G Ninja \
+<p>
+    -DCMAKE_TOOLCHAIN_FILE=${EMSCRIPTEN}/cmake/Modules/Platform/Emscripten.cmake \
+    -DNEXUS_BACKEND_VULKAN=OFF \
+    -DNEXUS_BACKEND_NULL=ON</code></pre>
+</p>
+
+<hr>
+
+<h2 id="installation">Installation</h2>
+
+<pre><code class="language-bash"><h1 id="install-to-system">Install to system</h1>
+<p>
+cmake --install build --prefix /usr/local
+</p>
+
+<h1 id="or-package">Or package</h1>
+<p>
+cpack -G DEB  # Debian package
+cpack -G RPM  # RPM package
+cpack -G TGZ  # Tarball</code></pre>
+</p>
+
+<h3 id="cpack-config">CPack Config</h3>
+
+<pre><code class="language-cmake"><h1 id="cpackconfig-cmake">CPackConfig.cmake</h1>
+<p>
+include(InstallRequiredSystemLibraries)
+</p>
+
+<p>
+set(CPACK_PACKAGE_NAME "Nexus-Modeling")
+set(CPACK_PACKAGE_VERSION "${PROJECT_VERSION}")
+set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "Vulkan-first geometry kernel")
+set(CPACK_PACKAGE_VENDOR "Nexus Systems")
+set(CPACK_PACKAGE_CONTACT "team@nexus-systems.dev")
+</p>
+
+<p>
+set(CPACK_GENERATOR "TGZ;DEB;RPM")
+set(CPACK_DEBIAN_PACKAGE_MAINTAINER "Nexus Team <team@nexus-systems.dev>")
+set(CPACK_RPM_PACKAGE_LICENSE "Apache-2.0")
+</p>
+
+<p>
+include(CPack)</code></pre>
+</p>
+
+<hr>
+
+<h2 id="ide-integration">IDE Integration</h2>
+
+<h3 id="vs-code-vscode-settings-json">VS Code (<code>.vscode/settings.json</code>)</h3>
+
+<pre><code class="language-json">{
+<p>
+    "cmake.configureSettings": {
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+        "NEXUS_BACKEND_VULKAN": "ON",
+        "NEXUS_BACKEND_NULL": "ON"
+    },
+    "cmake.buildArgs": ["-j", "16"],
+    "C_Cpp.default.cppStandard": "c++26",
+    "C_Cpp.default.compilerPath": "/usr/bin/g++-13",
+    "files.associations": {
+        "*.h": "cpp",
+        "*.cpp": "cpp"
+    }
+}</code></pre>
+</p>
+
+<h3 id="clion">CLion</h3>
+
+<ul>
+<li>Open as CMake project</li>
+<li>Set CMake options in Settings → Build → CMake</li>
+<li>Enable "Run configurations" for tests</li>
+</ul>
+
+<hr>
+
+<h2 id="troubleshooting">Troubleshooting</h2>
+
+<h3 id="vulkan-not-found">Vulkan Not Found</h3>
+
+<pre><code class="language-bash"><h1 id="check-sdk">Check SDK</h1>
+<p>
+echo $VULKAN_SDK
+ls $VULKAN_SDK/include/vulkan/vulkan.h
+</p>
+
+<h1 id="set-manually">Set manually</h1>
+<p>
+cmake -DVULKAN_SDK=/path/to/vulkan/sdk ...</code></pre>
+</p>
+
+<h3 id="c-26-not-supported">C++26 Not Supported</h3>
+
+<pre><code class="language-bash"><h1 id="check-compiler">Check compiler</h1>
+<p>
+g++ --version  # Need 13+
+clang++ --version  # Need 17+
+</p>
+
+<h1 id="use-newer-compiler">Use newer compiler</h1>
+<p>
+export CC=gcc-13 CXX=g++-13
+cmake ...</code></pre>
+</p>
+
+<h3 id="linker-errors-missing-sources">Linker Errors (Missing Sources)</h3>
+
+<pre><code class="language-bash"><h1 id="check-cmakelists-txt-for-missing-cpp-files">Check CMakeLists.txt for missing .cpp files</h1>
+<h1 id="every-new-cpp-must-be-added-to-appropriate-sources-list">Every new .cpp MUST be added to appropriate SOURCES list</h1></code></pre>
+
+<h3 id="test-failures-headless">Test Failures (Headless)</h3>
+
+<pre><code class="language-bash"><h1 id="use-xvfb-run-for-vulkan-tests-without-display">Use xvfb-run for Vulkan tests without display</h1>
+<p>
+xvfb-run -a ctest --test-dir build --output-on-failure</code></pre>
+</p>
+
+<hr>
+
+<p>
+<em>Kernel v0.1.0-dev | 2026 tests passing | C++26 | Vulkan 1.3</em>
+</p>
+        </main>
+    </div>
+    
+    <script>
+// Theme management
+const THEME_KEY = 'nexus-docs-theme';
+const themeToggle = document.getElementById('theme-toggle');
+const sunIcon = themeToggle.querySelector('.theme-icon-sun');
+const moonIcon = themeToggle.querySelector('.theme-icon-moon');
+
+function applyTheme(theme) {
+    document.documentElement.setAttribute('data-theme', theme);
+    if (theme === 'light') {
+        sunIcon.style.display = 'block';
+        moonIcon.style.display = 'none';
+    } else {
+        sunIcon.style.display = 'none';
+        moonIcon.style.display = 'block';
+    }
+    localStorage.setItem(THEME_KEY, theme);
+}
+
+function getPreferredTheme() {
+    const stored = localStorage.getItem(THEME_KEY);
+    if (stored) return stored;
+    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+}
+
+function initTheme() {
+    const theme = getPreferredTheme();
+    applyTheme(theme);
+}
+
+function toggleTheme() {
+    const current = document.documentElement.getAttribute('data-theme') || 'dark';
+    applyTheme(current === 'dark' ? 'light' : 'dark');
+}
+
+themeToggle.addEventListener('click', toggleTheme);
+
+// Keyboard shortcut: Ctrl+Shift+L
+document.addEventListener('keydown', (e) => {
+    if (e.ctrlKey && e.shiftKey && e.key === 'L') {
+        e.preventDefault();
+        toggleTheme();
+    }
+});
+
+// Listen for system theme changes
+window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => {
+    if (!localStorage.getItem(THEME_KEY)) {
+        applyTheme(e.matches ? 'dark' : 'light');
+    }
+});
+
+// Initialize theme immediately to prevent flash
+initTheme();
+
+// Mobile sidebar toggle
+const sidebar = document.getElementById('sidebar');
+const mobileMenuBtn = document.getElementById('mobile-menu-btn');
+
+if (mobileMenuBtn) {
+    mobileMenuBtn.addEventListener('click', () => {
+        sidebar.classList.toggle('open');
+    });
+}
+
+document.addEventListener('click', (e) => {
+    if (window.innerWidth <= 768) {
+        if (!sidebar.contains(e.target) && !e.target.closest('.header')) {
+            sidebar.classList.remove('open');
+        }
+    }
+});
+
+// Smooth scroll for anchor links
+document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+    anchor.addEventListener('click', function(e) {
+        const target = document.querySelector(this.getAttribute('href'));
+        if (target) {
+            e.preventDefault();
+            target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            if (window.innerWidth <= 768) {
+                sidebar.classList.remove('open');
+            }
+        }
+    });
+});
+
+// Active link highlighting based on scroll position
+const sections = document.querySelectorAll('.content h2, .content h3');
+const sidebarLinks = document.querySelectorAll('.sidebar-link[href^="#"]');
+
+function updateActiveLink() {
+    let current = '';
+    sections.forEach(section => {
+        const rect = section.getBoundingClientRect();
+        if (rect.top <= 100) {
+            current = '#' + section.id;
+        }
+    });
+
+    sidebarLinks.forEach(link => {
+        link.classList.remove('active');
+        if (link.getAttribute('href') === current) {
+            link.classList.add('active');
+        }
+    });
+}
+
+window.addEventListener('scroll', updateActiveLink, { passive: true });
+window.addEventListener('load', updateActiveLink);
+
+// Highlight.js initialization
+if (typeof hljs !== 'undefined') {
+    hljs.highlightAll();
+}
+
+// Mobile menu button visibility
+const mobileMenuBtn = document.getElementById('mobile-menu-btn');
+function checkMobile() {
+    if (window.innerWidth <= 768) {
+        mobileMenuBtn.style.display = 'flex';
+    } else {
+        mobileMenuBtn.style.display = 'none';
+        document.getElementById('sidebar').classList.remove('open');
+    }
+}
+checkMobile();
+window.addEventListener('resize', checkMobile);
+
+mobileMenuBtn.addEventListener('click', () => {
+    document.getElementById('sidebar').classList.toggle('open');
+});
+</script>

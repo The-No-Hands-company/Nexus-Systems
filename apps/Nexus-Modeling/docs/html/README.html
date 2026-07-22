@@ -1,0 +1,429 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nexus Modeling Documentation — Nexus Modeling Docs</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
+</head>
+<body>
+    <nav class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+            <div class="sidebar-title">Nexus Modeling</div>
+            <div class="sidebar-subtitle">Documentation v0.1.0-dev</div>
+        </div>
+        <div class="sidebar-section">
+<div class="sidebar-section-title">📚 Developer Documentation</div>
+<a class="sidebar-link" href="architecture.html">Architecture Overview</a>
+<a class="sidebar-link" href="kernel-api.html">Kernel API Reference</a>
+<a class="sidebar-link" href="geometry-kernel.html">Geometry Kernel</a>
+<a class="sidebar-link" href="renderer.html">Render System</a>
+<a class="sidebar-link" href="editor-architecture.html">Editor Architecture</a>
+<a class="sidebar-link" href="build-system.html">Build System</a>
+<a class="sidebar-link" href="testing.html">Testing</a>
+<a class="sidebar-link" href="contributing.html">Contributing</a>
+<a class="sidebar-link" href="adding-geometry-op.html">Adding Geometry Op</a>
+<a class="sidebar-link" href="adding-cad-feature.html">Adding CAD Feature</a>
+<a class="sidebar-link" href="mesh-operations.html">Mesh Operations</a>
+<a class="sidebar-link" href="boolean-csg.html">Boolean/CSG Deep Dive</a>
+<a class="sidebar-link" href="halfedge-mesh.html">Half-edge Mesh</a>
+<a class="sidebar-link" href="analytic-brep.html">Analytic B-rep</a>
+<a class="sidebar-link" href="mesh-io.html">Mesh I/O</a>
+<a class="sidebar-link" href="tolerance.html">Tolerance System</a>
+<a class="sidebar-link" href="porting.html">Porting Guide</a>
+</div>
+<div class="sidebar-section">
+<div class="sidebar-section-title">🎨 Expert User Documentation</div>
+</div>
+<div class="sidebar-section">
+<div class="sidebar-section-title">👤 Beginner / User Documentation</div>
+<a class="sidebar-link" href="getting-started.html">Getting Started</a>
+</div>
+<div class="sidebar-section">
+<div class="sidebar-section-title">🔧 API Reference</div>
+</div>
+<div class="sidebar-section">
+<div class="sidebar-section-title">📚 Additional Resources</div>
+<a class="sidebar-link" href="design-decisions.html">Design Decisions</a>
+<a class="sidebar-link" href="testing-strategy.html">Testing Strategy</a>
+<a class="sidebar-link" href="graphics-kernel.html">Graphics Kernel</a>
+<a class="sidebar-link" href="vision-and-roadmap.html">Vision & Roadmap</a>
+<a class="sidebar-link" href="reference-roadmap.html">Reference Roadmap</a>
+<a class="sidebar-link" href="modeling-industry-parity.html">Modeling Industry Parity</a>
+<a class="sidebar-link" href="modeling-parity-index.html">Modeling Parity Index</a>
+<a class="sidebar-link" href="modeling-reference-roadmap.html">Modeling Reference Roadmap</a>
+</div>
+    </nav>
+    
+    <div class="main-content">
+        <header class="header">
+            <button class="btn btn-icon" id="mobile-menu-btn" aria-label="Toggle menu" style="display: none;">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="3" y1="12" x2="21" y2="12"></line>
+                    <line x1="3" y1="6" x2="21" y2="6"></line>
+                    <line x1="3" y1="18" x2="21" y2="18"></line>
+                </svg>
+            </button>
+            <div class="header-title">Nexus Modeling Documentation</div>
+            <div class="header-actions">
+                
+<button class="btn btn-icon" id="theme-toggle" aria-label="Toggle dark/light theme" title="Toggle theme (Ctrl+Shift+L)">
+    <svg class="theme-icon-sun" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display: none;">
+        <circle cx="12" cy="12" r="5"></circle>
+        <line x1="12" y1="1" x2="12" y2="3"></line>
+        <line x1="12" y1="21" x2="12" y2="23"></line>
+        <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+        <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+        <line x1="1" y1="12" x2="3" y2="12"></line>
+        <line x1="21" y1="12" x2="23" y2="12"></line>
+        <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+        <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+    </svg>
+    <svg class="theme-icon-moon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display: none;">
+        <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+    </svg>
+</button>
+
+                <a href="https://github.com/nexus-systems/nexus-modeling" class="btn btn-secondary" target="_blank" rel="noopener">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M12 0C5.374 0 0 5.373 0 12c0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23A11.509 11.509 0 0112 5.803c1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576C20.566 21.797 24 17.3 24 12c0-6.627-5.373-12-12-12z"/>
+                    </svg>
+                    <span class="btn-text">GitHub</span>
+                </a>
+                <a href="index.html" class="btn btn-primary">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
+                        <polyline points="9 22 9 12 15 12 15 22"></polyline>
+                    </svg>
+                    <span class="btn-text">Home</span>
+                </a>
+            </div>
+        </header>
+        
+        <main class="content">
+            <div class="toc"><h3>On This Page</h3><ul><li><a href="#nexus-modeling-documentation">Nexus Modeling Documentation</a></li>
+  <li><a href="#documentation-index">Documentation Index</a></li>
+    <li><a href="#developer-documentation">Developer Documentation</a></li>
+    <li><a href="#expert-user-documentation">Expert User Documentation</a></li>
+    <li><a href="#beginner-user-documentation">Beginner / User Documentation</a></li>
+    <li><a href="#api-reference">API Reference</a></li>
+    <li><a href="#html-versions">HTML Versions</a></li>
+  <li><a href="#project-status">Project Status</a></li>
+  <li><a href="#quick-links">Quick Links</a></li>
+  <li><a href="#project-process-collaboration">Project Process & Collaboration</a></li>
+  <li><a href="#technology-deep-dives">Technology Deep Dives</a></li>
+  <li><a href="#monthly-checklists">Monthly Checklists</a></li>
+  <li><a href="#api-freeze-release">API Freeze & Release</a></li>
+</ul></div>
+            <h1 id="nexus-modeling-documentation">Nexus Modeling Documentation</h1>
+
+<p>
+<strong>Professional 3D Modeling & CAD Application</strong>  
+<em>Building the alternative to Blender, Maya, 3ds Max, Modo, Houdini, Plasticity, and Rhino</em>
+</p>
+
+<hr>
+
+<h2 id="documentation-index">Documentation Index</h2>
+
+<h3 id="developer-documentation">Developer Documentation</h3>
+<p>
+| Document | Description |
+|----------|-------------|
+| <a href="developer/architecture.md">Architecture Overview</a> | System architecture, module dependencies, data flow |
+| <a href="developer/kernel-api.md">Kernel API Reference</a> | Complete kernel API reference |
+| <a href="developer/geometry-kernel.md">Geometry Kernel</a> | Geometry kernel internals, algorithms, data structures |
+| <a href="developer/renderer.md">Render System</a> | Vulkan renderer, frame scheduler, pipeline |
+| <a href="developer/editor-architecture.md">Editor Architecture</a> | Editor UI, ImGui integration, viewport |
+| <a href="developer/build-system.md">Build System</a> | CMake, dependencies, cross-compilation |
+| <a href="developer/testing.md">Testing</a> | Unit tests, integration tests, CI/CD |
+| <a href="developer/contributing.md">Contributing</a> | Code style, PR process, architecture decisions |
+| <a href="developer/adding-geometry-op.md">Adding Geometry Op</a> | How to add a new mesh operation |
+| <a href="developer/adding-cad-feature.md">Adding CAD Feature</a> | How to add a parametric CAD feature |
+| <a href="developer/mesh-operations.md">Mesh Operations</a> | Boolean, remesh, subdivision, decimation |
+| <a href="developer/boolean-csg.md">Boolean/CSG Deep Dive</a> | Exact CSG pipeline details |
+| <a href="developer/halfedge-mesh.md">Half-edge Mesh</a> | Half-edge topology, Euler ops, integrity |
+| <a href="developer/analytic-brep.md">Analytic B-rep</a> | Exact B-rep with analytic geometry |
+| <a href="developer/mesh-io.md">Mesh I/O</a> | OBJ, STL, PLY, glTF import/export |
+| <a href="developer/tolerance.md">Tolerance System</a> | Scale-aware tolerance management |
+| <a href="developer/porting.md">Porting Guide</a> | Porting to new platforms |
+</p>
+
+<h3 id="expert-user-documentation">Expert User Documentation</h3>
+<p>
+| Document | Description |
+|----------|-------------|
+| <a href="expert/advanced-modeling.md">Advanced Modeling</a> | Boolean, bevel, fillet, subdivision, remesh |
+| <a href="expert/cad-workflows.md">CAD Workflows</a> | Sketch constraints, parametric features, fillet/chamfer |
+| <a href="expert/sculpting.md">Sculpting</a> | Brushes, dyntopo, multires, layers |
+| <a href="expert/animation.md">Animation & Rigging</a> | Keyframes, curves, IK, skinning |
+| <a href="expert/rendering.md">Rendering & Shaders</a> | Materials, PBR, custom shaders |
+| <a href="expert/scripting.md">Scripting & Automation</a> | Python API, headless batch, CLI |
+| <a href="expert/pipeline.md">Pipeline Integration</a> | USD, Alembic, FBX, pipeline integration |
+</p>
+
+<h3 id="beginner-user-documentation">Beginner / User Documentation</h3>
+<p>
+| Document | Description |
+|----------|-------------|
+| <a href="beginner/getting-started.md">Getting Started</a> | Installation, first launch, UI tour |
+| <a href="beginner/interface-tour.md">Interface Tour</a> | Viewport, panels, toolbars, shortcuts |
+| <a href="beginner/first-model.md">First Model</a> | Box → cylinder → boolean → export |
+| <a href="beginner/navigation.md">Navigation & Selection</a> | Orbit, pan, zoom, select modes |
+| <a href="beginner/modeling-basics.md">Modeling Basics</a> | Primitives, transform, edit modes |
+| <a href="beginner/boolean.md">Boolean Operations</a> | Union, difference, intersection |
+| <a href="beginner/export-import.md">Export & Import</a> | OBJ, STL, glTF, USD workflows |
+| <a href="beginner/shortcuts.md">Keyboard Shortcuts</a> | Complete reference |
+| <a href="beginner/troubleshooting.md">Troubleshooting</a> | Common issues & solutions |
+</p>
+
+<h3 id="api-reference">API Reference</h3>
+<p>
+| Document | Description |
+|----------|-------------|
+| <a href="api/kernel.md">Kernel API</a> | Geometry, topology, math |
+| <a href="api/render.md">Render API</a> | Vulkan renderer, shaders, pipelines |
+| <a href="api/editor.md">Editor API</a> | UI, viewport, gizmos, selection |
+| <a href="api/scripting.md">Scripting API</a> | Python bindings, headless CLI |
+</p>
+
+<h3 id="html-versions">HTML Versions</h3>
+<p>
+All documents available in both <strong>Markdown (.md)</strong> and <strong>HTML</strong> formats:
+</p>
+<ul>
+<li><a href="html/developer/index.html">Developer Docs (HTML)</a></li>
+<li><a href="html/expert/index.html">Expert Docs (HTML)</a></li>
+<li><a href="html/beginner/index.html">Beginner Docs (HTML)</a></li>
+<li><a href="html/api/index.html">API Reference (HTML)</a></li>
+</ul>
+
+<hr>
+
+<h2 id="project-status">Project Status</h2>
+
+<p>
+| Component | Status | Tests |
+|-----------|--------|-------|
+| Geometry Kernel | ✅ Core complete | 1921/1921 |
+| Vulkan Renderer | ✅ Headless + Windowed | 145/145 |
+| Analytic B-rep | ✅ Box/Cylinder/Sphere/Cone/Torus | 2025/2026 |
+| Boolean/CSG | ✅ Real CSG pipeline | 2025/2026 |
+| Half-edge + Euler ops | ✅ 6/6 ops integrity-clean | 2025/2026 |
+| Analytic B-rep primitives | ✅ 5 types with eval/normalAt | ✅ |
+| Editor UI (Vulkan) | ✅ ImGui + Vulkan backend | Working |
+| Headless render-to-PNG | ✅ <code>--shot</code> flag | Working |
+| <strong>Total Test Suite</strong> | <strong>2026 tests passing</strong> | <strong>1 pre-existing ApiFreezeAudit failure</strong> |
+</p>
+
+<hr>
+
+<h2 id="quick-links">Quick Links</h2>
+
+<ul>
+<li><a href="beginner/getting-started.md">Getting Started →</a></li>
+<li><a href="developer/architecture.md">Architecture Overview</a></li>
+<li><a href="beginner/shortcuts.md">Keyboard Shortcuts</a></li>
+<li><a href="api/kernel.md">API Reference</a></li>
+<li><a href="developer/contributing.md">Contributing</a></li>
+<li><a href="ROADMAP.md">Roadmap</a></li>
+<li><a href="GEOMETRY_KERNEL_COMPENDIUM.md">Technology Compendium</a></li>
+<li><a href="kernel-capability-map.md">Capability Map</a></li>
+</ul>
+
+<hr>
+
+<h2 id="project-process-collaboration">Project Process & Collaboration</h2>
+
+<ul>
+<li><a href="PRD.md">PRD</a> — Product Requirements Document</li>
+<li><a href="SDD.md">SDD</a> — Software Design Document</li>
+<li><a href="FRD.md">FRD</a> — Functional Requirements Document</li>
+<li><a href="kernel-capability-map.md">Kernel Capability Map</a></li>
+<li><a href="vision-and-roadmap.md">Vision & Roadmap</a></li>
+<li><a href="ux-baseline-charter.md">UX Baseline Charter</a></li>
+</ul>
+
+<hr>
+
+<h2 id="technology-deep-dives">Technology Deep Dives</h2>
+
+<ul>
+<li><a href="design-decisions.md">Design Decisions</a> — Architecture decision records</li>
+<li><a href="graphics-kernel.md">Graphics Kernel</a> — Renderer internals</li>
+<li><a href="shader-pipeline.md">Shader Pipeline</a> — GLSL→SPIR-V, reflection</li>
+<li><a href="testing-strategy.md">Testing Strategy</a> — Property-based, deterministic CI</li>
+<li><a href="memory-lifetime-report.md">Memory Lifetime Report</a> — Ownership, sync, lifetimes</li>
+<li><a href="hardening-debt-ledger.md">Hardening Debt Ledger</a> — Technical debt tracking</li>
+<li><a href="perf-benchmark-matrix.md">Performance Benchmark Matrix</a> — Baselines & targets</li>
+</ul>
+
+<hr>
+
+<h2 id="monthly-checklists">Monthly Checklists</h2>
+
+<ul>
+<li><a href="month-1-geometry-checklist.md">Month 1: Geometry</a></li>
+<li><a href="month-2-render-checklist.md">Month 2: Render</a></li>
+<li><a href="month-3-parametric-checklist.md">Month 3: Parametric</a></li>
+<li><a href="month-12-alpha-compatibility-report.md">Month 12: Alpha Compat</a></li>
+<li><a href="month-13-rt-and-simulation-coupling.md">Month 13: RT & Sim Coupling</a></li>
+</ul>
+
+<hr>
+
+<h2 id="api-freeze-release">API Freeze & Release</h2>
+
+<ul>
+<li><a href="api-freeze-alpha.md">API Freeze Alpha</a></li>
+<li><a href="api-freeze-v0.md">API Freeze v0</a></li>
+<li><a href="api-contract-alpha-summary.md">API Contract Alpha Summary</a></li>
+<li><a href="release-notes-1.0-alpha-draft.md">Release Notes 1.0 Alpha Draft</a></li>
+</ul>
+
+<hr>
+
+<p>
+<em>Last updated: 2026-07-14 | Nexus Modeling v0.1.0-dev</em>
+</p>
+        </main>
+    </div>
+    
+    <script>
+// Theme management
+const THEME_KEY = 'nexus-docs-theme';
+const themeToggle = document.getElementById('theme-toggle');
+const sunIcon = themeToggle.querySelector('.theme-icon-sun');
+const moonIcon = themeToggle.querySelector('.theme-icon-moon');
+
+function applyTheme(theme) {
+    document.documentElement.setAttribute('data-theme', theme);
+    if (theme === 'light') {
+        sunIcon.style.display = 'block';
+        moonIcon.style.display = 'none';
+    } else {
+        sunIcon.style.display = 'none';
+        moonIcon.style.display = 'block';
+    }
+    localStorage.setItem(THEME_KEY, theme);
+}
+
+function getPreferredTheme() {
+    const stored = localStorage.getItem(THEME_KEY);
+    if (stored) return stored;
+    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+}
+
+function initTheme() {
+    const theme = getPreferredTheme();
+    applyTheme(theme);
+}
+
+function toggleTheme() {
+    const current = document.documentElement.getAttribute('data-theme') || 'dark';
+    applyTheme(current === 'dark' ? 'light' : 'dark');
+}
+
+themeToggle.addEventListener('click', toggleTheme);
+
+// Keyboard shortcut: Ctrl+Shift+L
+document.addEventListener('keydown', (e) => {
+    if (e.ctrlKey && e.shiftKey && e.key === 'L') {
+        e.preventDefault();
+        toggleTheme();
+    }
+});
+
+// Listen for system theme changes
+window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => {
+    if (!localStorage.getItem(THEME_KEY)) {
+        applyTheme(e.matches ? 'dark' : 'light');
+    }
+});
+
+// Initialize theme immediately to prevent flash
+initTheme();
+
+// Mobile sidebar toggle
+const sidebar = document.getElementById('sidebar');
+const mobileMenuBtn = document.getElementById('mobile-menu-btn');
+
+if (mobileMenuBtn) {
+    mobileMenuBtn.addEventListener('click', () => {
+        sidebar.classList.toggle('open');
+    });
+}
+
+document.addEventListener('click', (e) => {
+    if (window.innerWidth <= 768) {
+        if (!sidebar.contains(e.target) && !e.target.closest('.header')) {
+            sidebar.classList.remove('open');
+        }
+    }
+});
+
+// Smooth scroll for anchor links
+document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+    anchor.addEventListener('click', function(e) {
+        const target = document.querySelector(this.getAttribute('href'));
+        if (target) {
+            e.preventDefault();
+            target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            if (window.innerWidth <= 768) {
+                sidebar.classList.remove('open');
+            }
+        }
+    });
+});
+
+// Active link highlighting based on scroll position
+const sections = document.querySelectorAll('.content h2, .content h3');
+const sidebarLinks = document.querySelectorAll('.sidebar-link[href^="#"]');
+
+function updateActiveLink() {
+    let current = '';
+    sections.forEach(section => {
+        const rect = section.getBoundingClientRect();
+        if (rect.top <= 100) {
+            current = '#' + section.id;
+        }
+    });
+
+    sidebarLinks.forEach(link => {
+        link.classList.remove('active');
+        if (link.getAttribute('href') === current) {
+            link.classList.add('active');
+        }
+    });
+}
+
+window.addEventListener('scroll', updateActiveLink, { passive: true });
+window.addEventListener('load', updateActiveLink);
+
+// Highlight.js initialization
+if (typeof hljs !== 'undefined') {
+    hljs.highlightAll();
+}
+
+// Mobile menu button visibility
+const mobileMenuBtn = document.getElementById('mobile-menu-btn');
+function checkMobile() {
+    if (window.innerWidth <= 768) {
+        mobileMenuBtn.style.display = 'flex';
+    } else {
+        mobileMenuBtn.style.display = 'none';
+        document.getElementById('sidebar').classList.remove('open');
+    }
+}
+checkMobile();
+window.addEventListener('resize', checkMobile);
+
+mobileMenuBtn.addEventListener('click', () => {
+    document.getElementById('sidebar').classList.toggle('open');
+});
+</script>

@@ -1,0 +1,925 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nexus Modeling — Architecture Overview — Nexus Modeling Docs</title>
+    <link rel="stylesheet" href="../styles.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
+</head>
+<body>
+    <nav class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+            <div class="sidebar-title">Nexus Modeling</div>
+            <div class="sidebar-subtitle">Documentation v0.1.0-dev</div>
+        </div>
+        <div class="sidebar-section">
+<div class="sidebar-section-title">📚 Developer Documentation</div>
+<a class="sidebar-link" href="../architecture.html">Architecture Overview</a>
+<a class="sidebar-link" href="../kernel-api.html">Kernel API Reference</a>
+<a class="sidebar-link" href="../geometry-kernel.html">Geometry Kernel</a>
+<a class="sidebar-link" href="../renderer.html">Render System</a>
+<a class="sidebar-link" href="../editor-architecture.html">Editor Architecture</a>
+<a class="sidebar-link" href="../build-system.html">Build System</a>
+<a class="sidebar-link" href="../testing.html">Testing</a>
+<a class="sidebar-link" href="../contributing.html">Contributing</a>
+<a class="sidebar-link" href="../adding-geometry-op.html">Adding Geometry Op</a>
+<a class="sidebar-link" href="../adding-cad-feature.html">Adding CAD Feature</a>
+<a class="sidebar-link" href="../mesh-operations.html">Mesh Operations</a>
+<a class="sidebar-link" href="../boolean-csg.html">Boolean/CSG Deep Dive</a>
+<a class="sidebar-link" href="../halfedge-mesh.html">Half-edge Mesh</a>
+<a class="sidebar-link" href="../analytic-brep.html">Analytic B-rep</a>
+<a class="sidebar-link" href="../mesh-io.html">Mesh I/O</a>
+<a class="sidebar-link" href="../tolerance.html">Tolerance System</a>
+<a class="sidebar-link" href="../porting.html">Porting Guide</a>
+</div>
+<div class="sidebar-section">
+<div class="sidebar-section-title">🎨 Expert User Documentation</div>
+</div>
+<div class="sidebar-section">
+<div class="sidebar-section-title">👤 Beginner / User Documentation</div>
+<a class="sidebar-link" href="../getting-started.html">Getting Started</a>
+</div>
+<div class="sidebar-section">
+<div class="sidebar-section-title">🔧 API Reference</div>
+</div>
+<div class="sidebar-section">
+<div class="sidebar-section-title">📚 Additional Resources</div>
+<a class="sidebar-link" href="../design-decisions.html">Design Decisions</a>
+<a class="sidebar-link" href="../testing-strategy.html">Testing Strategy</a>
+<a class="sidebar-link" href="../graphics-kernel.html">Graphics Kernel</a>
+<a class="sidebar-link" href="../vision-and-roadmap.html">Vision & Roadmap</a>
+<a class="sidebar-link" href="../reference-roadmap.html">Reference Roadmap</a>
+<a class="sidebar-link" href="../modeling-industry-parity.html">Modeling Industry Parity</a>
+<a class="sidebar-link" href="../modeling-parity-index.html">Modeling Parity Index</a>
+<a class="sidebar-link" href="../modeling-reference-roadmap.html">Modeling Reference Roadmap</a>
+</div>
+    </nav>
+    
+    <div class="main-content">
+        <header class="header">
+            <button class="btn btn-icon" id="mobile-menu-btn" aria-label="Toggle menu" style="display: none;">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="3" y1="12" x2="21" y2="12"></line>
+                    <line x1="3" y1="6" x2="21" y2="6"></line>
+                    <line x1="3" y1="18" x2="21" y2="18"></line>
+                </svg>
+            </button>
+            <div class="header-title">Nexus Modeling — Architecture Overview</div>
+            <div class="header-actions">
+                
+<button class="btn btn-icon" id="theme-toggle" aria-label="Toggle dark/light theme" title="Toggle theme (Ctrl+Shift+L)">
+    <svg class="theme-icon-sun" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display: none;">
+        <circle cx="12" cy="12" r="5"></circle>
+        <line x1="12" y1="1" x2="12" y2="3"></line>
+        <line x1="12" y1="21" x2="12" y2="23"></line>
+        <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+        <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+        <line x1="1" y1="12" x2="3" y2="12"></line>
+        <line x1="21" y1="12" x2="23" y2="12"></line>
+        <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+        <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+    </svg>
+    <svg class="theme-icon-moon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display: none;">
+        <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+    </svg>
+</button>
+
+                <a href="https://github.com/nexus-systems/nexus-modeling" class="btn btn-secondary" target="_blank" rel="noopener">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M12 0C5.374 0 0 5.373 0 12c0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23A11.509 11.509 0 0112 5.803c1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576C20.566 21.797 24 17.3 24 12c0-6.627-5.373-12-12-12z"/>
+                    </svg>
+                    <span class="btn-text">GitHub</span>
+                </a>
+                <a href="../index.html" class="btn btn-primary">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
+                        <polyline points="9 22 9 12 15 12 15 22"></polyline>
+                    </svg>
+                    <span class="btn-text">Home</span>
+                </a>
+            </div>
+        </header>
+        
+        <main class="content">
+            <div class="toc"><h3>On This Page</h3><ul><li><a href="#nexus-modeling-architecture-overview">Nexus Modeling — Architecture Overview</a></li>
+  <li><a href="#system-overview">System Overview</a></li>
+  <li><a href="#core-design-principles">Core Design Principles</a></li>
+    <li><a href="#1-kernel-first-architecture">1. Kernel-First Architecture</a></li>
+    <li><a href="#2-layered-architecture-strict-dependency-direction">2. Layered Architecture (Strict Dependency Direction)</a></li>
+    <li><a href="#3-data-oriented-design">3. Data-Oriented Design</a></li>
+    <li><a href="#4-immutability-by-default">4. Immutability by Default</a></li>
+    <li><a href="#5-backend-abstraction">5. Backend Abstraction</a></li>
+  <li><a href="#module-details">Module Details</a></li>
+    <li><a href="#nexus-geometry-geometry-kernel-core"><code>nexus::geometry</code> — Geometry Kernel (Core)</a></li>
+    <li><a href="#nexus-cad-parametric-cad-layer"><code>nexus::cad</code> — Parametric CAD Layer</a></li>
+    <li><a href="#nexus-gfx-graphics-abstraction"><code>nexus::gfx</code> — Graphics Abstraction</a></li>
+    <li><a href="#nexus-app-application-framework"><code>nexus::app</code> — Application Framework</a></li>
+    <li><a href="#nexus-render-scene-rendering-cpu-side"><code>nexus::render</code> — Scene & Rendering (CPU-side)</a></li>
+    <li><a href="#nexus-animation-animation-system"><code>nexus::animation</code> — Animation System</a></li>
+    <li><a href="#nexus-sim-simulation"><code>nexus::sim</code> — Simulation</a></li>
+    <li><a href="#nexus-sculpt-sculpting"><code>nexus::sculpt</code> — Sculpting</a></li>
+    <li><a href="#nexus-parametric-constraint-solver"><code>nexus::parametric</code> — Constraint Solver</a></li>
+  <li><a href="#data-flow-geometry-render">Data Flow: Geometry → Render</a></li>
+  <li><a href="#build-configuration">Build Configuration</a></li>
+<li><a href="#cmakelists-txt-root">CMakeLists.txt (root)</a></li>
+<li><a href="#c-26">C++26</a></li>
+<li><a href="#warnings-as-errors">Warnings as errors</a></li>
+<li><a href="#sanitizers-debug">Sanitizers (Debug)</a></li>
+<li><a href="#vulkan">Vulkan</a></li>
+<li><a href="#external-deps-via-fetchcontent">External deps via FetchContent</a></li>
+    <li><a href="#backend-configuration">Backend Configuration</a></li>
+<li><a href="#standard-build">Standard build</a></li>
+<li><a href="#null-backend-required-for-ci-headless-testing">Null backend required for CI/headless testing</a></li>
+<li><a href="#vulkan-backend-requires-vulkan-sdk-glsl-compiler-vma">Vulkan backend requires: Vulkan SDK + GLSL compiler + VMA</a></li>
+    <li><a href="#nexus-modeling-executable-requirements">Nexus Modeling Executable Requirements</a></li>
+  <li><a href="#testing-strategy">Testing Strategy</a></li>
+  <li><a href="#performance-baselines">Performance Baselines</a></li>
+  <li><a href="#quality-gates-every-commit">Quality Gates (Every Commit)</a></li>
+<li><a href="#pre-commit-local">Pre-commit (local)</a></li>
+<li><a href="#ci-github-actions">CI (GitHub Actions)</a></li>
+  <li><a href="#next-developer-guides">Next: Developer Guides</a></li>
+</ul></div>
+            <h1 id="nexus-modeling-architecture-overview">Nexus Modeling — Architecture Overview</h1>
+
+<h2 id="system-overview">System Overview</h2>
+
+<pre><code class="language-">┌─────────────────────────────────────────────────────────────────────────────────────────┐
+<p>
+│                              nexus_modeling (App Executable)                            │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────────────┐  ┌────────────────────┐  │
+│  │  EditorUI    │  │  Viewport    │  │  ModelingApplication │  │  AppContext        │  │
+│  │  (ImGui+Vk)  │  │  (Vulkan)    │  │  (Orchestrator)      │  │  (Dependency DI)   │  │
+│  └──────┬───────┘  └──────┬───────┘  └──────────┬───────────┘  └────────┬───────────┘  │
+└─────────┼─────────────────┼─────────────────────┼─────────────────────┼────────────────┘
+          │                 │                     │                     │
+          ▼                 ▼                     ▼                     ▼
+┌─────────────────────────────────────────────────────────────────────────────────────────┐
+│                                   nexus::app (Library)                                  │
+│  ┌─────────────────┐ ┌──────────────┐ ┌────────────┐ ┌─────────────┐ ┌─────────────┐  │
+│  │ AppMode         │ │ ViewportCtrl │ │ Transform  │ │ Selection   │ │ Command     │  │
+│  │ (State Pattern) │ │ (Camera)     │ │ Gizmo      │ │ Manager     │ │ Dispatcher  │  │
+│  └─────────────────┘ └──────────────┘ └────────────┘ └─────────────┘ └─────────────┘  │
+│  ┌─────────────────┐ ┌──────────────┐ ┌────────────┐ ┌─────────────┐ ┌─────────────┐  │
+│  │ ModeOrchestrator│ │ ModeRegistry │ │ Workspace  │ │ ToolSystem  │ │ AssetBrowser│  │
+│  │ (Mode switching)│ │ (Discovery)  │ │ Manager    │ │ (Input map) │ │ (Integration)│  │
+│  └─────────────────┘ └──────────────┘ └────────────┘ └─────────────┘ └─────────────┘  │
+└─────────────────────────────────────────────────────────────────────────────────────────┘
+          │                 │                     │
+          ▼                 ▼                     ▼
+┌─────────────────────────────────────────────────────────────────────────────────────────┐
+│                                    nexus::cad (Library)                                 │
+│  ┌─────────────────┐ ┌──────────────┐ ┌────────────┐ ┌─────────────┐ ┌─────────────┐  │
+│  │ CadDocument     │ │ CadSelection │ │ CadFeature │ │ CadCommand  │ │ CadViewer   │  │
+│  │ (Feature hist)  │ │ (Multi-level)│ │ (Tree/DAG) │ │ (Undo/Redo) │ │ (Visual)    │  │
+│  └─────────────────┘ └──────────────┘ └────────────┘ └─────────────┘ └─────────────┘  │
+│  ┌─────────────────┐ ┌──────────────┐ ┌────────────┐ ┌─────────────┐ ┌─────────────┐  │
+│  │ CadSketch       │ │ CadConstraint│ │ CadSolver  │ │ FeatureFactory│ │ Export/Import│ │
+│  │ (2D constraint) │ │ (11 types)   │ │ (Parallel) │ │ (Registry)  │ │ (STEP/USD)  │  │
+│  └─────────────────┘ └──────────────┘ └────────────┘ └─────────────┘ └─────────────┘  │
+└─────────────────────────────────────────────────────────────────────────────────────────┘
+          │                 │                     │
+          ▼                 ▼                     ▼
+┌─────────────────────────────────────────────────────────────────────────────────────────┐
+│                                 nexus::geometry (Kernel)                                │
+│  ┌────────────┐ ┌────────────┐ ┌──────────┐ ┌────────────┐ ┌────────────┐ ┌──────────┐ │
+│  │ B-Rep      │ │ Half-Edge  │ │ Mesh     │ │ NURBS      │ │ Boolean    │ │ Remesh   │ │
+│  │ (Analytic) │ │ Mesh       │ │ Ops      │ │ (Curve/Surf)│ │ (CSG)      │ │ (Quad/Vox)│ │
+│  └────────────┘ └────────────┘ └──────────┘ └────────────┘ └────────────┘ └──────────┘ │
+│  ┌────────────┐ ┌────────────┐ ┌────────────┐ ┌────────────┐ ┌────────────┐ ┌──────────┐ │
+│  │ Subdiv     │ │ Decimator  │ │ Laplacian  │ │ Delaunay   │ │ Tolerance  │ │ Robust   │ │
+│  │ (Catmull)  │ │ (Quadric)  │ │ (Smooth)   │ │ (2D/3D)    │ │ System     │ │ Predicates│ │
+│  └────────────┘ └────────────┘ └────────────┘ └────────────┘ └────────────┘ └──────────┘ │
+│  ┌────────────┐ ┌────────────┐ ┌────────────┐ ┌────────────┐ ┌────────────┐ ┌──────────┐ │
+│  │ Analytic   │ │ MeshBVH    │ │ MeshIO     │ │ Primitives │ │ Serialization│ │ SceneGraph│ │
+│  │ Primitives │ │ (SAH)      │ │ (OBJ/STL/  │ │ (Box/Cyl/  │ │ (.nxm/glTF/│ │ (CPU)    │ │
+│  │ (6 types)  │ │            │ │  glTF)     │ │  Sphere...)│ │  USD)      │ │          │ │
+│  └────────────┘ └────────────┘ └────────────┘ └────────────┘ └────────────┘ └──────────┘ │
+└─────────────────────────────────────────────────────────────────────────────────────────┘
+          │
+          ▼
+┌─────────────────────────────────────────────────────────────────────────────────────────┐
+│                                 nexus::gfx (Graphics Abstraction)                       │
+│  ┌────────────┐ ┌────────────┐ ┌────────────┐ ┌────────────┐ ┌────────────┐ ┌────────┐  │
+│  │ Device     │ │ Swapchain  │ │ FrameSched │ │ CmdBuffer  │ │ Pipeline   │ │ Buffer │  │
+│  │ (Vk/Null)  │ │ (Vk/Null)  │ │ (Acquire/  │ │ (Dynamic   │ │ (Gfx/Comp/ │ │ Texture│  │
+│  └────────────┘ │            │ │  Record/   │ │  rendering)│ │  RT)       │ │        │  │
+│  ┌────────────┐ │            │ │  Submit/   │ │            │ │            │ │        │  │
+│  │ Descriptor │ │            │ │  Present)  │ │            │ │            │ │        │  │
+│  │ Set        │ │            │ │            │ │            │ │            │ │        │  │
+│  └────────────┘ │            │ └────────────┘ └────────────┘ └────────────┘ └────────┘  │
+│  ┌────────────┐ │            ┌────────────┐ ┌────────────┐ ┌────────────┐ ┌────────┐    │
+│  │ Shader     │ │            │ Renderer   │ │ RenderCtx  │ │ FrameCap   │ │ Alloc   │    │
+│  │ (SPIR-V)   │ │            │ (Deferred) │ │ (High-level)│ │ Exporter   │ │ (VMA)  │    │
+│  └────────────┘ │            └────────────┘ └────────────┘ └────────────┘ └────────┘    │
+│  ┌────────────┐ ┌────────────┐ ┌────────────┐ ┌────────────┐ ┌────────────┐              │
+│  │ Vulkan/    │ │ Null       │ │ Types      │ │ Sync       │ │ Debug      │              │
+│  │ Backend    │ │ Backend    │ │ (Handles)  │ │ (Barriers) │ │ (Validation)│              │
+│  └────────────┘ └────────────┘ └────────────┘ └────────────┘ └────────────┘              │
+└─────────────────────────────────────────────────────────────────────────────────────────┘</code></pre>
+</p>
+
+<hr>
+
+<h2 id="core-design-principles">Core Design Principles</h2>
+
+<h3 id="1-kernel-first-architecture">1. Kernel-First Architecture</h3>
+<p>
+The geometry kernel (<code>nexus::geometry</code>) is a <strong>standalone library</strong> with <strong>zero dependencies</strong> on UI, rendering, or application logic. It can be used headless for:
+</p>
+<ul>
+<li>Batch processing pipelines</li>
+<li>CLI tools</li>
+<li>Server-side geometry processing</li>
+<li>CI/CD validation</li>
+</ul>
+
+<h3 id="2-layered-architecture-strict-dependency-direction">2. Layered Architecture (Strict Dependency Direction)</h3>
+<pre><code class="language-">App (nexus_modeling) 
+<p>
+  → App Framework (nexus::app) 
+    → CAD Layer (nexus::cad) 
+      → Geometry Kernel (nexus::geometry) 
+        → Graphics Abstraction (nexus::gfx) ← Backend implementations</code></pre>
+</p>
+
+<p>
+<strong>Rule:</strong> Each layer ONLY depends on layers below it. No upward or circular dependencies.
+</p>
+
+<h3 id="3-data-oriented-design">3. Data-Oriented Design</h3>
+<ul>
+<li><strong>Struct of Arrays (SoA)</strong> over Array of Structs (AoS) for cache efficiency</li>
+<li><strong>Handle-based</strong> resource management (no raw pointers across module boundaries)</li>
+<li><strong>Slot maps / generational indices</strong> for stable IDs with O(1) lookup</li>
+<li><strong>Arena allocators</strong> for transient geometry, VMA for GPU memory</li>
+</ul>
+
+<h3 id="4-immutability-by-default">4. Immutability by Default</h3>
+<ul>
+<li>Geometry operations return new objects; originals unchanged</li>
+<li>Copy-on-write (COW) for large buffers</li>
+<li>Undo/redo via Command Pattern with full state serialization</li>
+</ul>
+
+<h3 id="5-backend-abstraction">5. Backend Abstraction</h3>
+<ul>
+<li><code>nexus::gfx</code> defines abstract interfaces: <code>Device</code>, <code>CommandBuffer</code>, <code>Swapchain</code>, <code>Pipeline</code>, <code>Buffer</code>, <code>Texture</code>, <code>DescriptorSet</code>, <code>FrameScheduler</code>, <code>Renderer</code></li>
+<li>Backends implement these interfaces (<code>nexus::gfx::vulkan</code>, <code>nexus::gfx::null</code>)</li>
+<li>Backend selected at runtime via <code>RenderContextDesc::preferredBackend</code></li>
+<li>Capability queries via <code>caps()</code> gate feature paths (ray tracing tier, mesh shaders, etc.)</li>
+</ul>
+
+<hr>
+
+<h2 id="module-details">Module Details</h2>
+
+<h3 id="nexus-geometry-geometry-kernel-core"><code>nexus::geometry</code> — Geometry Kernel (Core)</h3>
+
+<p>
+<strong>Location:</strong> <code>src/kernel/src/geometry/</code> (~60 source files)
+</p>
+
+<pre><code class="language-">src/kernel/src/geometry/
+<p>
+├── AnalyticBRep.*          # Analytic B-rep (Box/Cylinder/Sphere/Cone/Torus)
+├── HalfEdgeMesh.*          # Half-edge structure, Euler ops, validators
+├── Mesh.*                  # Indexed n-gon mesh, attributes, topology
+├── MeshAttributes.*        # Positions, normals, UVs, colors, tangents
+├── MeshTopology.*          # Face/vertex connectivity
+├── MeshBoolean.*           # CSG: tri-tri → retriangulate → cut → classify → stitch
+├── SubdivisionSurface.*    # Catmull-Clark, Loop, crease weights
+├── MeshRemesh.*            # Quad remesh, voxel remesh, decimation
+├── MeshDecimator.*         # Quadric error decimation
+├── MeshLaplacian.*         # Smoothing, fairing, parameterization
+├── MeshBVH.*               # Bounding volume hierarchy (SAH, parallel)
+├── Delaunay2D.*            # Constrained Delaunay triangulation
+├── ConstrainedDelaunay2D.* 
+├── TetDelaunay3D.*         # 3D Delaunay for tetrahedralization
+├── BooleanOperation.*      # CSG entry point
+├── Tolerance.h             # Central tolerance system
+├── RobustPredicates.*      # Exact orient2D/3D, incircle/insphere
+├── MeshIO.*                # OBJ, STL, PLY, glTF import/export
+├── Primitives.*            # Box, sphere, cylinder, cone, torus, plane
+├── IntegrityReport.*       # Validation results
+├── Aabb.*                  # Axis-aligned bounding box
+├── Obb.*                   # Oriented bounding box
+├── Plane.*                 # Plane geometry
+├── Ray.*                   # Ray geometry
+├── Segment.*               # Line segment
+├── Triangle.*              # Triangle geometry
+├── Vec2/Vec3/Vec4.*        # Math types (nexus::render::Vec3)
+├── Mat3/Mat4.*             # Matrix types
+├── Quaternion.*            # Rotation
+├── Transform.*             # Decomposed transform (T/R/S)
+├── UUID.*                  # Deterministic UUIDs
+└── ... (60+ files)</code></pre>
+</p>
+
+<p>
+<strong>Key Properties:</strong>
+</p>
+<ul>
+<li><strong>Zero external deps</strong> (except stdlib, Vulkan for gfx types)</li>
+<li><strong>Deterministic</strong> — same input → bit-identical output</li>
+<li><strong>Thread-safe reads</strong> — write via command queue</li>
+<li><strong>Deterministic UUIDs</strong> for geometry entities</li>
+</ul>
+
+<h3 id="nexus-cad-parametric-cad-layer"><code>nexus::cad</code> — Parametric CAD Layer</h3>
+
+<p>
+<strong>Location:</strong> <code>src/kernel/src/cad/</code>
+</p>
+
+<pre><code class="language-">src/kernel/src/cad/
+<p>
+├── CadDocument.*           # Feature history, undo/redo, serialization
+├── CadFeature.*            # Sketch, Extrude, Revolve, Fillet, Chamfer, etc.
+├── CadSketch.*             # 2D constraint solver
+├── CadConstraint.*         # Tangent, coincident, parallel, perpendicular, fix
+├── CadCommand.*            # Command pattern for undo/redo
+├── CadSelection.*          # Multi-level selection (object/face/edge/vertex)
+├── CadViewer.*             # Visual representation of CAD features
+├── CadFeatureFactory.*     # Feature registry/creation
+├── CadHistory.*            # DAG of feature dependencies
+├── CadSolver.*             # Parallel constraint solver
+├── CadAutoConstraintSketch.* # Auto-constraining sketch
+├── CadExport.*             # STEP, USD, glTF export
+└── CadImport.*             # STEP, USD, glTF import</code></pre>
+</p>
+
+<p>
+<strong>Feature DAG Regeneration:</strong>
+</p>
+<ul>
+<li>Topological sort by parent dependencies</li>
+<li><code>CadDocument::regenerateAll()</code> handles dirty propagation</li>
+<li><code>markDirty(FeatureId)</code> propagates downstream</li>
+<li>Deterministic regeneration order</li>
+</ul>
+
+<h3 id="nexus-gfx-graphics-abstraction"><code>nexus::gfx</code> — Graphics Abstraction</h3>
+
+<p>
+<strong>Location:</strong> <code>src/kernel/include/nexus/gfx/</code>, <code>src/kernel/src/gfx/</code>, <code>src/kernel/src/gfx/vulkan/</code>
+</p>
+
+<pre><code class="language-">include/nexus/gfx/
+<p>
+├── Device.h                # Logical device, queues, VMA allocator
+├── Swapchain.h             # Vulkan swapchain, acquire/present
+├── FrameScheduler.h        # Acquire → Record → Submit → Present
+├── CommandBuffer.h         # Dynamic rendering, barriers, descriptors
+├── Pipeline.h              # Graphics/Compute/RT pipelines, PSO cache
+├── Buffer.h / Texture.h    # Resources with VMA
+├── DescriptorSet.h         # Descriptor set layout/pool/allocation
+├── Shader.h                # SPIR-V compilation, reflection
+├── RenderContext.h         # High-level render context
+├── Renderer.h              # Deferred renderer, shadow, composite
+├── FrameScheduler.h        # Acquire → Record → Submit → Present
+├── Swapchain.h             # Vulkan swapchain management
+├── Types.h                 # Handles, formats, layouts, barriers
+└── Vulkan/                 # Vulkan backend implementation
+    ├── VulkanDevice.cpp
+    ├── VulkanSwapchain.cpp
+    ├── VulkanCommandBuffer.cpp
+    ├── VulkanFrameScheduler.cpp
+    ├── VulkanPipeline.cpp
+    ├── VulkanShader.cpp
+    ├── VulkanTexture.cpp
+    ├── VulkanBuffer.cpp
+    ├── VulkanDescriptorSet.cpp
+    ├── VulkanFrameScheduler.cpp
+    ├── VulkanAllocator.cpp (VMA)
+    └── ...
+</p>
+
+<p>
+src/kernel/src/gfx/null/    # Null backend (headless CI)</code></pre>
+</p>
+
+<p>
+<strong>Render Path (Scheduler-Driven, Deferred):</strong>
+</p>
+<pre><code class="language-">Shadow Pass → Geometry/GBuffer Pass → Lighting/Composite Pass → (Optional) RayTracing Pass
+<p>
+     │              │                      │                        │
+     ▼              ▼                      ▼                        ▼
+RenderGraphValidator checks per-pass texture layout transitions
+FrameCaptureExporter records pass metadata for diagnostics</code></pre>
+</p>
+
+<p>
+<strong>Policy:</strong> Production rendering uses scheduler path. Non-scheduler path is minimal compatibility fallback — NOT feature parity target. New features land on scheduler path first with explicit transitions and tests.
+</p>
+
+<h3 id="nexus-app-application-framework"><code>nexus::app</code> — Application Framework</h3>
+
+<p>
+<strong>Location:</strong> <code>src/kernel/src/app/</code>
+</p>
+
+<pre><code class="language-">src/kernel/src/app/
+<p>
+├── ModelingApplication.*   # Top-level app, lifecycle
+├── AppContext.*            # Dependency injection container
+├── AppMode.*               # State pattern for modes
+├── ModeOrchestrator.*      # Mode switching, transitions
+├── ModeRegistry.*          # Mode discovery/registration
+├── ViewportController.*    # Camera, orbit/pan/zoom
+├── TransformGizmo.*        # Translate/Rotate/Scale gizmo
+├── SelectionManager.*      # Multi-level selection
+├── CommandDispatcher.*     # Input → command mapping
+├── WorkspaceManager.*      # Document/workspace management
+├── ToolSystem.*            # Tool registration, input mapping
+├── AssetBrowser.*          # Asset management UI
+├── EditorUI.*              # ImGui + Vulkan backend
+├── ViewportGrid.*          # Grid rendering
+├── ViewportAxes.*          # Axis widget
+├── SelectionHighlight.*    # Selection visualization
+├── SketchPreview.*         # Sketch overlay
+├── DimensionDisplay.*      # Dimension annotations
+└── main.cpp                # Binary entry (window, event loop)</code></pre>
+</p>
+
+<p>
+<strong>AppMode State Pattern:</strong>
+</p>
+<pre><code class="language-cpp">class AppMode {
+<p>
+public:
+    virtual ~AppMode() = default;
+    virtual void onEnter(AppContext&) {}
+    virtual void onExit(AppContext&) {}
+    virtual void onUpdate(AppContext&, float dt) {}
+    virtual void onRender(AppContext&, RenderContext&) {}
+    virtual void onInput(AppContext&, const InputEvent&) {}
+    virtual void onImGui(AppContext&) {}
+};</code></pre>
+</p>
+
+<p>
+<strong>Built-in Modes:</strong> Select, Sketch, Extrude, Revolve, Fillet, Chamfer, Boolean, Sculpt, Animation, Simulation
+</p>
+
+<h3 id="nexus-render-scene-rendering-cpu-side"><code>nexus::render</code> — Scene & Rendering (CPU-side)</h3>
+
+<p>
+<strong>Location:</strong> <code>src/kernel/src/render/</code>
+</p>
+
+<pre><code class="language-">src/kernel/src/render/
+<p>
+├── SceneGraph.*            # Nodes with decomposed Transform
+├── SceneNode.*             # Mesh refs, transform, visibility
+├── Camera.*                # Perspective/orthographic, frustum
+├── Frustum.*               # Culling
+├── Mesh.*                  # GPU mesh (vertex/index/meshlet buffers, BLAS)
+├── Material.*              # PBR material system
+├── Light.*                 # Directional, point, spot, area
+├── Environment.*           # IBL, skybox
+├── Viewport.*              # Render viewport, camera, settings
+└── Picking.*               # BVH-based ray picking</code></pre>
+</p>
+
+<p>
+<strong>SceneGraph Properties:</strong>
+</p>
+<ul>
+<li>Non-copyable (contains <code>unique_ptr</code>)</li>
+<li>Decomposed Transform: <code>translation (Vec3)</code>, <code>rotation (Vec4 quat xyzw)</code>, <code>scale (Vec3)</code></li>
+<li>Mesh refs: vertex/index/meshlet buffers, BLAS</li>
+<li>TLAS for ray tracing</li>
+</ul>
+
+<h3 id="nexus-animation-animation-system"><code>nexus::animation</code> — Animation System</h3>
+
+<p>
+<strong>Location:</strong> <code>src/kernel/src/animation/</code>
+</p>
+
+<pre><code class="language-">src/kernel/src/animation/
+<p>
+├── AnimationClip.*         # Keyframe tracks
+├── AnimationTrack.*        # Translation/Rotation/Scale curves
+├── AnimationState.*        # Playing clip, time, weight
+├── AnimationMixer.*        # Blend multiple clips
+├── Skeleton.*              # Joint hierarchy
+├── Skin.*                  # Vertex weights, joint indices
+├── InverseKinematics.*     # CCD, FABRIK solvers
+└── AnimationGraph.*        # State machine, transitions</code></pre>
+</p>
+
+<h3 id="nexus-sim-simulation"><code>nexus::sim</code> — Simulation</h3>
+
+<p>
+<strong>Location:</strong> <code>src/kernel/src/sim/</code>
+</p>
+
+<pre><code class="language-">src/kernel/src/sim/
+<p>
+├── RigidBodySolver.*       # Deterministic fixed-step (explicit Euler)
+├── FluidSolver.*           # SPH / FLIP
+├── ClothSolver.*           # PBD / XPBD
+├── SoftBodySolver.*        # FEM / PBD
+├── SimulationSceneCoupling.* # Solver state → Scene nodes
+├── SimulationDriver.*      # Fixed-timestep accumulator + interpolation
+└── CollisionDetection.*    # Broad/narrow phase</code></pre>
+</p>
+
+<p>
+<strong>SimulationDriver Pattern (Canonical "Fix Your Timestep"):</strong>
+</p>
+<pre><code class="language-cpp">void step(float dt) {
+<p>
+    accumulator += dt;
+    while (accumulator >= fixedDt) {
+        solver.step(fixedDt);  // Deterministic
+        accumulator -= fixedDt;
+    }
+    alpha = accumulator / fixedDt;
+    interpolateState(alpha);  // lerp pos, nlerp rot
+}</code></pre>
+</p>
+
+<h3 id="nexus-sculpt-sculpting"><code>nexus::sculpt</code> — Sculpting</h3>
+
+<p>
+<strong>Location:</strong> <code>src/kernel/src/sculpt/</code>
+</p>
+
+<pre><code class="language-">src/kernel/src/sculpt/
+<p>
+├── SculptBrush.*           # Brush base class
+├── SculptBrushDraw.*       # Draw brush
+├── SculptBrushSmooth.*     # Smooth brush
+├── SculptBrushFlatten.*    # Flatten brush
+├── SculptBrushPinch.*      # Pinch brush
+├── SculptBrushGrab.*       # Grab brush
+├── SculptBrushInflate.*    # Inflate brush
+├── SculptBrushSnakeHook.*  # Snake hook
+├── Dynt
+├── DynTopo.*               # Dynamic topology
+├── MultiRes.*              # Multi-resolution
+└── SculptLayer.*           # Non-destructive layers</code></pre>
+</p>
+
+<h3 id="nexus-parametric-constraint-solver"><code>nexus::parametric</code> — Constraint Solver</h3>
+
+<p>
+<strong>Location:</strong> <code>src/kernel/src/parametric/</code>
+</p>
+
+<pre><code class="language-">src/kernel/src/parametric/
+<p>
+├── ConstraintGraph.*       # Constraint DAG
+├── ConstraintSolver.*      # Parallel solver (adaptive correction)
+├── Constraint.*            # Base constraint
+├── ConstraintCoincident.*  # Point-point, point-line, point-circle
+├── ConstraintTangent.*     # Line-circle, circle-circle
+├── ConstraintParallel.*    # Line-line
+├── ConstraintPerpendicular.* # Line-line
+├── ConstraintDistance.*    # Point-point, point-line
+├── ConstraintAngle.*       # Line-line
+├── ConstraintRadius.*      # Circle
+├── ConstraintHorizontal.*  # Line
+├── ConstraintVertical.*    # Line
+├── ConstraintEqual.*       # Line length, radius
+├── ConstraintMidpoint.*    # Point on segment
+├── ConstraintSymmetric.*   # Points about line
+├── ConstraintCombinators.* # Parallel, perpendicular, midpoint, etc.
+└── Serialization.*         # Constraint graph serialization</code></pre>
+</p>
+
+<p>
+<strong>Solver Quirks:</strong>
+</p>
+<ul>
+<li>Parallel solver (<code>parallelSolve</code>) in <code>nexus::parametric</code>, NOT <code>nexus::geometry::parametric</code></li>
+<li>Constraint combinators compose from primitives — must be declared in BOTH header AND .cpp</li>
+<li>Adaptive correction: when error increases, step size halved (<code>adaptiveMaxCorrection *= 0.5</code>)</li>
+</ul>
+
+<hr>
+
+<h2 id="data-flow-geometry-render">Data Flow: Geometry → Render</h2>
+
+<pre><code class="language-">CadDocument (feature history)
+<p>
+    │
+    ▼
+CadFeature::regenerate()  ───►  B-Rep / Mesh  ──►  CadFeature::mesh (cached)
+    │
+    ▼
+CadViewer  ◄──  CadDocument  ◄──  CadDocument::regenerate()
+    │
+    ▼
+ViewportController  ◄──  CadViewer (scene graph)
+    │
+    ▼
+Renderer (nexus::render::Renderer)
+    │
+    ├── G-Buffer pass (deferred)
+    ├── Shadow pass
+    ├── Lighting/Composite pass
+    ├── UI overlay (ImGui)
+    ▼
+Swapchain → Present</code></pre>
+</p>
+
+<hr>
+
+<h2 id="build-configuration">Build Configuration</h2>
+
+<pre><code class="language-cmake"><h1 id="cmakelists-txt-root">CMakeLists.txt (root)</h1>
+<p>
+cmake_minimum_required(VERSION 3.28)
+project(NexusModeling LANGUAGES CXX)
+</p>
+
+<h1 id="c-26">C++26</h1>
+<p>
+set(CMAKE_CXX_STANDARD 26)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+</p>
+
+<h1 id="warnings-as-errors">Warnings as errors</h1>
+<p>
+add_compile_options(
+    -Wall -Wextra -Wpedantic -Werror
+    -Wshadow -Wconversion -Wsign-conversion
+    -Wnull-dereference -Wdouble-promotion
+)
+</p>
+
+<h1 id="sanitizers-debug">Sanitizers (Debug)</h1>
+<p>
+if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+    add_compile_options(-fsanitize=address,undefined -fno-omit-frame-pointer)
+    add_link_options(-fsanitize=address,undefined)
+endif()
+</p>
+
+<h1 id="vulkan">Vulkan</h1>
+<p>
+find_package(Vulkan REQUIRED)
+find_package(glfw3 REQUIRED)
+find_package(VulkanMemoryAllocator REQUIRED)
+</p>
+
+<h1 id="external-deps-via-fetchcontent">External deps via FetchContent</h1>
+<p>
+FetchContent_Declare(imgui 
+    GIT_REPOSITORY https://github.com/ocornut/imgui.git 
+    GIT_TAG v1.91.6-docking)
+FetchContent_Declare(glslang ...)</code></pre>
+</p>
+
+<h3 id="backend-configuration">Backend Configuration</h3>
+<pre><code class="language-bash"><h1 id="standard-build">Standard build</h1>
+<p>
+cmake -S . -B build -DNEXUS_BACKEND_VULKAN=ON -DNEXUS_BACKEND_NULL=ON
+</p>
+
+<h1 id="null-backend-required-for-ci-headless-testing">Null backend required for CI/headless testing</h1>
+<h1 id="vulkan-backend-requires-vulkan-sdk-glsl-compiler-vma">Vulkan backend requires: Vulkan SDK + GLSL compiler + VMA</h1></code></pre>
+
+<h3 id="nexus-modeling-executable-requirements">Nexus Modeling Executable Requirements</h3>
+<ul>
+<li>GLFW3</li>
+<li>GLU (Linux): <code>pkg-config glfw3 glu</code></li>
+</ul>
+
+<hr>
+
+<h2 id="testing-strategy">Testing Strategy</h2>
+
+<pre><code class="language-cpp">// Unit: geometry kernel (1921 tests)
+<p>
+TEST(MeshBoolean, CubeUnionCube) { ... }
+TEST(HalfEdge, InsertEdgeVertex_IntegrityClean) { ... }
+TEST(Boolean, CubeUnionCube_Watertight) { ... }
+</p>
+
+<p>
+// Integration: renderer
+TEST(VulkanRenderer, OffscreenClearAndReadback) { ... }
+TEST(VulkanRenderer, GBufferMrtGeometryPipelineRunsThroughRenderer) { ... }
+</p>
+
+<p>
+// Performance regression
+TEST(KernelPerf, BooleanCubeUnder1ms) { ... }
+TEST(KernelPerf, ExtrudeUnder1ms) { ... }
+</p>
+
+<p>
+// Headless CI
+ctest --test-dir build --output-on-failure</code></pre>
+</p>
+
+<p>
+<strong>Quality Gates (Every Commit):</strong>
+</p>
+<pre><code class="language-bash">cmake --build build -j$(nproc)          # Must pass -Werror; no warnings
+<p>
+ctest --test-dir build --output-on-failure  # 2026+ tests, 0 regressions</code></pre>
+</p>
+
+<p>
+One pre-existing allowed failure: <code>ApiFreezeAudit.PublicHeaderManifestMatchesWorkspace</code>
+</p>
+
+<hr>
+
+<h2 id="performance-baselines">Performance Baselines</h2>
+
+<p>
+| Operation | Target | Current |
+|-----------|--------|---------|
+| Cube ↔ Cube Boolean | < 1 ms | ~0.3 ms |
+| 10k triangle extrude | < 1 ms | ~0.4 ms |
+| 100k tri mesh boolean | < 10 ms | ~6 ms |
+| 1M tri decimate 50% | < 100 ms | ~60 ms |
+| 100k tri Catmull-Clark | < 50 ms | ~30 ms |
+| 1280×720 deferred frame | < 16 ms | ~8 ms |
+</p>
+
+<hr>
+
+<h2 id="quality-gates-every-commit">Quality Gates (Every Commit)</h2>
+
+<pre><code class="language-bash"><h1 id="pre-commit-local">Pre-commit (local)</h1>
+<p>
+cmake --build build -j$(nproc) && ctest --test-dir build
+</p>
+
+<h1 id="ci-github-actions">CI (GitHub Actions)</h1>
+<ul>
+<li>Build: Release + Debug + ASan/UBSan</li>
+<li>Test: 2026 tests (1921 kernel + 105 render + integration)</li>
+<li>Static analysis: clang-tidy, cppcheck</li>
+<li>Format: clang-format</li>
+<li>API freeze check: abi-compliance-checker</code></pre></li>
+</ul>
+
+<hr>
+
+<h2 id="next-developer-guides">Next: Developer Guides</h2>
+
+<ul>
+<li><a href="architecture-deep-dive.md">Architecture Deep Dive</a></li>
+<li><a href="geometry-kernel-internals.md">Geometry Kernel Internals</a></li>
+<li><a href="renderer-internals.md">Renderer Internals</a></li>
+<li><a href="adding-geometry-op.md">Adding a New Geometry Op</a></li>
+<li><a href="adding-cad-feature.md">Adding a CAD Feature</a></li>
+<li><a href="porting.md">Porting to New Platform</a></li>
+</ul>
+
+<hr>
+
+<p>
+<em>Kernel v0.1.0-dev | 2026 tests passing | C++26 | Vulkan 1.3</em>
+</p>
+        </main>
+    </div>
+    
+    <script>
+// Theme management
+const THEME_KEY = 'nexus-docs-theme';
+const themeToggle = document.getElementById('theme-toggle');
+const sunIcon = themeToggle.querySelector('.theme-icon-sun');
+const moonIcon = themeToggle.querySelector('.theme-icon-moon');
+
+function applyTheme(theme) {
+    document.documentElement.setAttribute('data-theme', theme);
+    if (theme === 'light') {
+        sunIcon.style.display = 'block';
+        moonIcon.style.display = 'none';
+    } else {
+        sunIcon.style.display = 'none';
+        moonIcon.style.display = 'block';
+    }
+    localStorage.setItem(THEME_KEY, theme);
+}
+
+function getPreferredTheme() {
+    const stored = localStorage.getItem(THEME_KEY);
+    if (stored) return stored;
+    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+}
+
+function initTheme() {
+    const theme = getPreferredTheme();
+    applyTheme(theme);
+}
+
+function toggleTheme() {
+    const current = document.documentElement.getAttribute('data-theme') || 'dark';
+    applyTheme(current === 'dark' ? 'light' : 'dark');
+}
+
+themeToggle.addEventListener('click', toggleTheme);
+
+// Keyboard shortcut: Ctrl+Shift+L
+document.addEventListener('keydown', (e) => {
+    if (e.ctrlKey && e.shiftKey && e.key === 'L') {
+        e.preventDefault();
+        toggleTheme();
+    }
+});
+
+// Listen for system theme changes
+window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => {
+    if (!localStorage.getItem(THEME_KEY)) {
+        applyTheme(e.matches ? 'dark' : 'light');
+    }
+});
+
+// Initialize theme immediately to prevent flash
+initTheme();
+
+// Mobile sidebar toggle
+const sidebar = document.getElementById('sidebar');
+const mobileMenuBtn = document.getElementById('mobile-menu-btn');
+
+if (mobileMenuBtn) {
+    mobileMenuBtn.addEventListener('click', () => {
+        sidebar.classList.toggle('open');
+    });
+}
+
+document.addEventListener('click', (e) => {
+    if (window.innerWidth <= 768) {
+        if (!sidebar.contains(e.target) && !e.target.closest('.header')) {
+            sidebar.classList.remove('open');
+        }
+    }
+});
+
+// Smooth scroll for anchor links
+document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+    anchor.addEventListener('click', function(e) {
+        const target = document.querySelector(this.getAttribute('href'));
+        if (target) {
+            e.preventDefault();
+            target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            if (window.innerWidth <= 768) {
+                sidebar.classList.remove('open');
+            }
+        }
+    });
+});
+
+// Active link highlighting based on scroll position
+const sections = document.querySelectorAll('.content h2, .content h3');
+const sidebarLinks = document.querySelectorAll('.sidebar-link[href^="#"]');
+
+function updateActiveLink() {
+    let current = '';
+    sections.forEach(section => {
+        const rect = section.getBoundingClientRect();
+        if (rect.top <= 100) {
+            current = '#' + section.id;
+        }
+    });
+
+    sidebarLinks.forEach(link => {
+        link.classList.remove('active');
+        if (link.getAttribute('href') === current) {
+            link.classList.add('active');
+        }
+    });
+}
+
+window.addEventListener('scroll', updateActiveLink, { passive: true });
+window.addEventListener('load', updateActiveLink);
+
+// Highlight.js initialization
+if (typeof hljs !== 'undefined') {
+    hljs.highlightAll();
+}
+
+// Mobile menu button visibility
+const mobileMenuBtn = document.getElementById('mobile-menu-btn');
+function checkMobile() {
+    if (window.innerWidth <= 768) {
+        mobileMenuBtn.style.display = 'flex';
+    } else {
+        mobileMenuBtn.style.display = 'none';
+        document.getElementById('sidebar').classList.remove('open');
+    }
+}
+checkMobile();
+window.addEventListener('resize', checkMobile);
+
+mobileMenuBtn.addEventListener('click', () => {
+    document.getElementById('sidebar').classList.toggle('open');
+});
+</script>

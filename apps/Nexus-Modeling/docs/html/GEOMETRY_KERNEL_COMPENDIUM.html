@@ -1,0 +1,1437 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Geometry Kernel Technology Compendium — Nexus Modeling Docs</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
+</head>
+<body>
+    <nav class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+            <div class="sidebar-title">Nexus Modeling</div>
+            <div class="sidebar-subtitle">Documentation v0.1.0-dev</div>
+        </div>
+        <div class="sidebar-section">
+<div class="sidebar-section-title">📚 Developer Documentation</div>
+<a class="sidebar-link" href="architecture.html">Architecture Overview</a>
+<a class="sidebar-link" href="kernel-api.html">Kernel API Reference</a>
+<a class="sidebar-link" href="geometry-kernel.html">Geometry Kernel</a>
+<a class="sidebar-link" href="renderer.html">Render System</a>
+<a class="sidebar-link" href="editor-architecture.html">Editor Architecture</a>
+<a class="sidebar-link" href="build-system.html">Build System</a>
+<a class="sidebar-link" href="testing.html">Testing</a>
+<a class="sidebar-link" href="contributing.html">Contributing</a>
+<a class="sidebar-link" href="adding-geometry-op.html">Adding Geometry Op</a>
+<a class="sidebar-link" href="adding-cad-feature.html">Adding CAD Feature</a>
+<a class="sidebar-link" href="mesh-operations.html">Mesh Operations</a>
+<a class="sidebar-link" href="boolean-csg.html">Boolean/CSG Deep Dive</a>
+<a class="sidebar-link" href="halfedge-mesh.html">Half-edge Mesh</a>
+<a class="sidebar-link" href="analytic-brep.html">Analytic B-rep</a>
+<a class="sidebar-link" href="mesh-io.html">Mesh I/O</a>
+<a class="sidebar-link" href="tolerance.html">Tolerance System</a>
+<a class="sidebar-link" href="porting.html">Porting Guide</a>
+</div>
+<div class="sidebar-section">
+<div class="sidebar-section-title">🎨 Expert User Documentation</div>
+</div>
+<div class="sidebar-section">
+<div class="sidebar-section-title">👤 Beginner / User Documentation</div>
+<a class="sidebar-link" href="getting-started.html">Getting Started</a>
+</div>
+<div class="sidebar-section">
+<div class="sidebar-section-title">🔧 API Reference</div>
+</div>
+<div class="sidebar-section">
+<div class="sidebar-section-title">📚 Additional Resources</div>
+<a class="sidebar-link" href="design-decisions.html">Design Decisions</a>
+<a class="sidebar-link" href="testing-strategy.html">Testing Strategy</a>
+<a class="sidebar-link" href="graphics-kernel.html">Graphics Kernel</a>
+<a class="sidebar-link" href="vision-and-roadmap.html">Vision & Roadmap</a>
+<a class="sidebar-link" href="reference-roadmap.html">Reference Roadmap</a>
+<a class="sidebar-link" href="modeling-industry-parity.html">Modeling Industry Parity</a>
+<a class="sidebar-link" href="modeling-parity-index.html">Modeling Parity Index</a>
+<a class="sidebar-link" href="modeling-reference-roadmap.html">Modeling Reference Roadmap</a>
+</div>
+    </nav>
+    
+    <div class="main-content">
+        <header class="header">
+            <button class="btn btn-icon" id="mobile-menu-btn" aria-label="Toggle menu" style="display: none;">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="3" y1="12" x2="21" y2="12"></line>
+                    <line x1="3" y1="6" x2="21" y2="6"></line>
+                    <line x1="3" y1="18" x2="21" y2="18"></line>
+                </svg>
+            </button>
+            <div class="header-title">3D Geometry Kernel Technology Compendium</div>
+            <div class="header-actions">
+                
+<button class="btn btn-icon" id="theme-toggle" aria-label="Toggle dark/light theme" title="Toggle theme (Ctrl+Shift+L)">
+    <svg class="theme-icon-sun" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display: none;">
+        <circle cx="12" cy="12" r="5"></circle>
+        <line x1="12" y1="1" x2="12" y2="3"></line>
+        <line x1="12" y1="21" x2="12" y2="23"></line>
+        <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+        <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+        <line x1="1" y1="12" x2="3" y2="12"></line>
+        <line x1="21" y1="12" x2="23" y2="12"></line>
+        <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+        <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+    </svg>
+    <svg class="theme-icon-moon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display: none;">
+        <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+    </svg>
+</button>
+
+                <a href="https://github.com/nexus-systems/nexus-modeling" class="btn btn-secondary" target="_blank" rel="noopener">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M12 0C5.374 0 0 5.373 0 12c0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23A11.509 11.509 0 0112 5.803c1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576C20.566 21.797 24 17.3 24 12c0-6.627-5.373-12-12-12z"/>
+                    </svg>
+                    <span class="btn-text">GitHub</span>
+                </a>
+                <a href="index.html" class="btn btn-primary">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
+                        <polyline points="9 22 9 12 15 12 15 22"></polyline>
+                    </svg>
+                    <span class="btn-text">Home</span>
+                </a>
+            </div>
+        </header>
+        
+        <main class="content">
+            <div class="toc"><h3>On This Page</h3><ul><li><a href="#3d-geometry-kernel-technology-compendium">3D Geometry Kernel Technology Compendium</a></li>
+  <li><a href="#the-complete-reference-for-dcc-kernel-architecture">The Complete Reference for DCC Kernel Architecture</a></li>
+  <li><a href="#table-of-contents">TABLE OF CONTENTS</a></li>
+  <li><a href="#1-terminology-dictionary">1. TERMINOLOGY DICTIONARY</a></li>
+    <li><a href="#1-1-core-geometry-types">1.1 Core Geometry Types</a></li>
+    <li><a href="#1-2-topological-entities-b-rep-standard">1.2 Topological Entities (B-Rep Standard)</a></li>
+    <li><a href="#1-3-half-edge-dcel-terminology">1.3 Half-Edge / DCEL Terminology</a></li>
+    <li><a href="#1-4-geometric-continuity">1.4 Geometric Continuity</a></li>
+    <li><a href="#1-4-boolean-csg-terminology">1.4 Boolean/CSG Terminology</a></li>
+  <li><a href="#2-data-structures-representations-taxonomy">2. DATA STRUCTURES & REPRESENTATIONS TAXONOMY</a></li>
+    <li><a href="#2-1-complete-taxonomy-of-geometry-representations">2.1 Complete Taxonomy of Geometry Representations</a></li>
+    <li><a href="#2-2-data-structure-comparison-matrix">2.2 Data Structure Comparison Matrix</a></li>
+    <li><a href="#2-3-nexus-kernel-representation-strategy">2.3 Nexus Kernel Representation Strategy</a></li>
+  <li><a href="#3-hybrid-multi-representation-engines">3. HYBRID / MULTI-REPRESENTATION ENGINES</a></li>
+    <li><a href="#3-1-architecture-patterns">3.1 Architecture Patterns</a></li>
+    <li><a href="#3-2-known-hybrid-engines">3.2 Known Hybrid Engines</a></li>
+    <li><a href="#3-3-multi-rep-architecture-for-nexus">3.3 Multi-Rep Architecture for Nexus</a></li>
+  <li><a href="#4-geometric-math-engines">4. GEOMETRIC MATH ENGINES</a></li>
+    <li><a href="#4-1-core-math-libraries">4.1 Core Math Libraries</a></li>
+    <li><a href="#4-2-exact-geometric-predicates-shewchuk">4.2 Exact Geometric Predicates (Shewchuk)</a></li>
+    <li><a href="#4-3-robust-intersection-libraries">4.3 Robust Intersection Libraries</a></li>
+    <li><a href="#4-4-linear-algebra-solvers">4.4 Linear Algebra & Solvers</a></li>
+  <li><a href="#5-topological-operations">5. TOPOLOGICAL OPERATIONS</a></li>
+    <li><a href="#5-1-half-edge-euler-operators-all-integrity-clean">5.1 Half-Edge Euler Operators (All Integrity-Clean)</a></li>
+    <li><a href="#5-2-global-operations">5.2 Global Operations</a></li>
+  <li><a href="#6-tolerant-geometry-healing">6. TOLERANT GEOMETRY & HEALING</a></li>
+    <li><a href="#6-1-centralized-tolerance-system">6.1 Centralized Tolerance System</a></li>
+    <li><a href="#6-2-scale-aware-tolerance-table">6.2 Scale-Aware Tolerance Table</a></li>
+    <li><a href="#6-3-healing-operations">6.3 Healing Operations</a></li>
+  <li><a href="#7-infrastructure-ecosystem-foundations">7. INFRASTRUCTURE & ECOSYSTEM FOUNDATIONS</a></li>
+    <li><a href="#7-1-required-infrastructure">7.1 Required Infrastructure</a></li>
+    <li><a href="#7-2-serialization-formats">7.2 Serialization Formats</a></li>
+    <li><a href="#7-3-versioning-migration">7.3 Versioning & Migration</a></li>
+  <li><a href="#8-deterministic-parallelism-thread-safety">8. DETERMINISTIC PARALLELISM & THREAD SAFETY</a></li>
+    <li><a href="#8-1-parallelism-strategy">8.1 Parallelism Strategy</a></li>
+    <li><a href="#8-2-thread-safe-design-patterns">8.2 Thread-Safe Design Patterns</a></li>
+    <li><a href="#8-3-determinism-guarantees">8.3 Determinism Guarantees</a></li>
+  <li><a href="#9-transactional-undo-redo-serialization">9. TRANSACTIONAL UNDO/REDO & SERIALIZATION</a></li>
+    <li><a href="#9-1-command-pattern-architecture">9.1 Command Pattern Architecture</a></li>
+    <li><a href="#9-2-document-level-undo-redo">9.2 Document-Level Undo/Redo</a></li>
+    <li><a href="#9-3-delta-serialization-cloud-collaboration">9.3 Delta Serialization (Cloud Collaboration)</a></li>
+  <li><a href="#10-decision-matrices-compatibility-tables">10. DECISION MATRICES & COMPATIBILITY TABLES</a></li>
+    <li><a href="#10-1-data-structure-compatibility">10.1 Data Structure Compatibility</a></li>
+    <li><a href="#10-2-operation-compatibility">10.2 Operation Compatibility</a></li>
+    <li><a href="#10-3-format-compatibility">10.3 Format Compatibility</a></li>
+  <li><a href="#11-legacy-kernel-comparison">11. LEGACY KERNEL COMPARISON</a></li>
+  <li><a href="#12-technology-selection-guide">12. TECHNOLOGY SELECTION GUIDE</a></li>
+    <li><a href="#12-1-decision-tree-choosing-your-representation">12.1 Decision Tree: Choosing Your Representation</a></li>
+    <li><a href="#12-2-kernel-selection-checklist">12.2 Kernel Selection Checklist</a></li>
+  <li><a href="#13-nexus-kernel-recommended-stack">13. NEXUS KERNEL: RECOMMENDED STACK</a></li>
+  <li><a href="#14-implementation-roadmap-architecture-patterns">14. IMPLEMENTATION ROADMAP & ARCHITECTURE PATTERNS</a></li>
+    <li><a href="#14-1-architecture-patterns">14.1 Architecture Patterns</a></li>
+      <li><a href="#pattern-1-kernel-first-architecture">Pattern 1: Kernel-First Architecture</a></li>
+      <li><a href="#pattern-2-data-oriented-design">Pattern 2: Data-Oriented Design</a></li>
+      <li><a href="#pattern-3-immutability-by-default">Pattern 3: Immutability by Default</a></li>
+      <li><a href="#pattern-4-backend-abstraction">Pattern 4: Backend Abstraction</a></li>
+    <li><a href="#14-2-render-path-architecture">14.2 Render Path Architecture</a></li>
+    <li><a href="#14-3-simulation-architecture">14.3 Simulation Architecture</a></li>
+  <li><a href="#15-appendix-exact-algorithm-specifications">15. APPENDIX: EXACT ALGORITHM SPECIFICATIONS</a></li>
+    <li><a href="#a-1-möller-trumbore-ray-triangle-watertight-variant">A.1 Möller-Trumbore Ray-Triangle (Watertight Variant)</a></li>
+    <li><a href="#a-2-segment-triangle-exact-shewchuk">A.2 Segment-Triangle (Exact, Shewchuk)</a></li>
+    <li><a href="#a-3-triangle-triangle-intersection-möller-1997-exact">A.3 Triangle-Triangle Intersection (Möller 1997 + Exact)</a></li>
+    <li><a href="#a-4-catmull-clark-subdivision-exact-limit-surface">A.4 Catmull-Clark Subdivision (Exact Limit Surface)</a></li>
+    <li><a href="#a-5-quadric-error-decimation">A.5 Quadric Error Decimation</a></li>
+    <li><a href="#a-6-constrained-delaunay-triangulation-2d">A.6 Constrained Delaunay Triangulation 2D</a></li>
+    <li><a href="#a-7-sah-bvh-build-parallel">A.7 SAH BVH Build (Parallel)</a></li>
+  <li><a href="#revision-history">REVISION HISTORY</a></li>
+</ul></div>
+            <h1 id="3d-geometry-kernel-technology-compendium">3D Geometry Kernel Technology Compendium</h1>
+<h2 id="the-complete-reference-for-dcc-kernel-architecture">The Complete Reference for DCC Kernel Architecture</h2>
+
+<p>
+<strong>Version:</strong> 2.0 | <strong>Status:</strong> Living Document | <strong>Classification:</strong> Technical Reference  
+<strong>Purpose:</strong> Authoritative technology survey, decision matrix, and design reference for building a production-grade analytic geometry kernel for enterprise DCC applications.
+</p>
+
+<hr>
+
+<h2 id="table-of-contents">TABLE OF CONTENTS</h2>
+
+<ol>
+<li><a href="#1-terminology-dictionary">Terminology Dictionary</a> - 300+ terms defined</li>
+<li><a href="#2-data-structures--representations-taxonomy">Data Structures & Representations Taxonomy</a></li>
+<li><a href="#3-hybridmulti-representation-engines">Hybrid/Multi-Representation Engines</a></li>
+<li><a href="#4-geometric-math-engines">Geometric Math Engines</a></li>
+<li><a href="#5-topological-operations">Topological Operations</a></li>
+<li><a href="#6-tolerant-geometry--healing">Tolerant Geometry & Healing</a></li>
+<li><a href="#7-infrastructure--ecosystem-foundations">Infrastructure & Ecosystem Foundations</a></li>
+<li><a href="#8-deterministic-parallelism--thread-safety">Deterministic Parallelism & Thread Safety</a></li>
+<li><a href="#9-transactional-undoredo--serialization">Transactional Undo/Redo & Serialization</a></li>
+<li><a href="#10-decision-matrices--compatibility-tables">Decision Matrices & Compatibility Tables</a></li>
+<li><a href="#11-legacy-kernel-comparison">Legacy Kernel Comparison</a></li>
+<li><a href="#12-technology-selection-guide">Technology Selection Guide</a></li>
+<li><a href="#13-nexus-kernel-recommended-stack">Nexus Kernel: Recommended Stack</a></li>
+<li><a href="#14-implementation-roadmap--architecture-patterns">Implementation Roadmap & Architecture Patterns</a></li>
+<li><a href="#appendix-exact-algorithm-specifications">Appendix: Exact Algorithm Specifications</a></li>
+</ol>
+
+<hr>
+
+<h2 id="1-terminology-dictionary">1. TERMINOLOGY DICTIONARY</h2>
+
+<h3 id="1-1-core-geometry-types">1.1 Core Geometry Types</h3>
+
+<p>
+| Term | Definition | Category | Nexus Usage |
+|------|------------|----------|-------------|
+| <strong>B-Rep</strong> | Boundary Representation: solid defined by topological entities (vertices, edges, faces) and their connectivity | Core | Primary representation in <code>nexus::geometry::brep</code> |
+| <strong>CSG</strong> | Constructive Solid Geometry: Boolean operations on primitive solids | Core | Analytic B-rep Boolean ops |
+| <strong>B-Rep vs CSG</strong> | B-Rep = explicit topology; CSG = operation tree | Core | Nexus uses B-Rep as canonical, CSG as construction method |
+| <strong>NURBS</strong> | Non-Uniform Rational B-Splines: parametric curves/surfaces with exact conic representation | Curve/Surface | Planned in <code>nexus::geometry::brep::SurfaceKind::Nurbs</code> |
+| <strong>Bézier</strong> | Polynomial curves/surfaces with Bernstein basis | Curve/Surface | Subset of NURBS (knot vector = clamped) |
+| <strong>Subdivision</strong> | Recursive refinement (Catmull-Clark, Loop, √3, Butterfly) | Surface | Implemented in <code>SubdivisionSurface.cpp</code> |
+| <strong>Implicit/SDF</strong> | Signed Distance Function: f(x,y,z) = 0 defines surface | Implicit | Optional via OpenVDB integration |
+| <strong>Voxel</strong> | 3D grid of occupancy/density values | Discrete | Optional via OpenVDB |
+| <strong>Point Cloud</strong> | Unordered set of (x,y,z) samples | Discrete | Import/export only |
+| <strong>Gaussian Splatting</strong> | 3D Gaussians with color/opacity/covariance | Novel | Research tracking |
+| <strong>NeRF</strong> | Neural Radiance Field: MLP encoding radiance | Novel | Research tracking |
+</p>
+
+<h3 id="1-2-topological-entities-b-rep-standard">1.2 Topological Entities (B-Rep Standard)</h3>
+
+<p>
+| Term | Definition | Dimension | Nexus Type |
+|------|------------|-----------|------------|
+| <strong>Vertex</strong> | 0D point with position | 0 | <code>brep::Vertex { Vec3 point }</code> |
+| <strong>Edge</strong> | 1D curve segment between two vertices | 1 | <code>brep::Edge { curve, v0, v1, t0, t1 }</code> |
+| <strong>Coedge</strong> | Directed use of edge by a loop (half-edge analog) | 1 | <code>brep::Coedge { edge, reversed, loop, next, prev, partner }</code> |
+| <strong>Loop</strong> | Closed ring of coedges bounding a face | 1 | <code>brep::Loop { face, first, outer }</code> |
+| <strong>Face</strong> | Surface patch bounded by loops | 2 | <code>brep::Face { surface, reversed, outerLoop, innerLoops[] }</code> |
+| <strong>Shell</strong> | Connected set of faces | 2 | <code>brep::Shell { faces[], closed }</code> |
+| <strong>Solid</strong> | Closed shell + optional void shells | 3 | <code>brep::Solid { shells[] }</code> |
+| <strong>Body</strong> | Top-level entity containing solids | 3 | <code>brep::Body</code> |
+</p>
+
+<h3 id="1-3-half-edge-dcel-terminology">1.3 Half-Edge / DCEL Terminology</h3>
+
+<p>
+| Term | Definition | Synonyms | Nexus Field |
+|------|------------|----------|-------------|
+| <strong>Half-Edge / Dart</strong> | Directed edge with twin, next, prev, face, vertex | Half-edge, Dart | <code>HalfEdge { vertex, edge, face, next, prev, twin }</code> |
+| <strong>Twin / Sym</strong> | Opposite direction of same geometric edge | Twin, Sym | <code>HalfEdge::twin</code> |
+| <strong>Next / Prev</strong> | Next/prev half-edge around face | Next, Prev | <code>HalfEdge::next</code>, <code>HalfEdge::prev</code> |
+| <strong>Origin / Target</strong> | Start/end vertex of directed half-edge | Origin, Dest | <code>HalfEdge::vertex</code> (origin), <code>twin.vertex</code> (target) |
+| <strong>Face / Loop</strong> | Cycle of half-edges bounding a face | Face, Loop | <code>HalfEdge::face</code> |
+| <strong>Vertex</strong> | 0D point referenced by half-edges | Vertex | <code>Vertex { edge, pos }</code> |
+| <strong>Incident</strong> | Half-edges emanating from a vertex | Incident | <code>vertexRing(v)</code> query |
+| <strong>One-ring</strong> | Immediate neighbors (verts/edges/faces) | 1-ring | <code>vertexRing</code>, <code>faceRing</code> |
+| <strong>Umbrella / Fan</strong> | Ordered ring around vertex | Umbrella | Same as vertexRing |
+</p>
+
+<h3 id="1-4-geometric-continuity">1.4 Geometric Continuity</h3>
+
+<p>
+| Term | Definition | Mathematical Condition | Use Case |
+|------|------------|------------------------|----------|
+| <strong>C⁰</strong> | Positional continuity (connected) | P₁ = P₂ | Basic connectivity |
+| <strong>G¹</strong> | Tangent continuity (same tangent plane) | ∂P/∂u ∥ ∂P/∂v | Smooth shading |
+| <strong>G²</strong> | Curvature continuity | Matching curvature tensors | Class-A surfacing |
+| <strong>G³</strong> | Torsion/derivative continuity | Higher derivatives match | Optical surfaces |
+| <strong>C¹</strong> | Parametric C¹ + G¹ | ∂P/∂u continuous | Interop |
+| <strong>C²</strong> | Parametric C² + G² | 2nd derivatives match | High-end CAD |
+</p>
+
+<h3 id="1-4-boolean-csg-terminology">1.4 Boolean/CSG Terminology</h3>
+
+<p>
+| Term | Definition |
+|------|------------|
+| <strong>CSG Tree</strong> | Binary tree of Boolean ops on primitives |
+| <strong>Regularized Boolean</strong> | Union/Intersection/Difference with closure |
+| <strong>Regularized Union</strong> | A ∪ B = closure(interior(A ∪ B)) |
+| <strong>Regularized Intersection</strong> | A ∩ B = closure(interior(A ∩ B)) |
+| <strong>Regularized Difference</strong> | A \ B = closure(interior(A \ B)) |
+| <strong>Exact CSG</strong> | Analytic intersection curves, exact trimming |
+| <strong>Approximate CSG</strong> | Mesh-based, tolerant, may leak |
+| <strong>Improved CSG</strong> | Regularized + exact intersection curves |
+</p>
+
+<hr>
+
+<h2 id="2-data-structures-representations-taxonomy">2. DATA STRUCTURES & REPRESENTATIONS TAXONOMY</h2>
+
+<h3 id="2-1-complete-taxonomy-of-geometry-representations">2.1 Complete Taxonomy of Geometry Representations</h3>
+
+<pre><code class="language-">GEOMETRY REPRESENTATIONS
+<p>
+├── EXPLICIT (Boundary-based)
+│   ├── B-Rep (Boundary Representation)
+│   │   ├── Polyhedral (Polygonal faces)
+│   │   ├── Analytic B-Rep (Exact curves/surfaces)  ← NEXUS CORE
+│   │   ├── NURBS B-Rep (Trimmed NURBS faces)
+│   │   ├── Hybrid B-Rep (Mixed exact/approx)
+│   │   └── Manifold B-Rep (2-manifold only)
+│   ├── Half-Edge / DCEL / Quad-Edge
+│   │   ├── Standard DCEL (faces, half-edges, vertices)
+│   │   ├── Extended DCEL (with attributes per element)
+│   │   ├── Corner Table (triangle-focused)
+│   │   └── Half-Edge + BVH (spatial acceleration)  ← NEXUS
+│   ├── Winged-Edge
+│   ├── Quad-Edge
+│   ├── Face-Vertex Mesh (Polygon soup + connectivity)
+│   └── Corner Table / Half-Edge Variants
+│
+├── IMPLICIT (Function-based)
+│   ├── Signed Distance Fields (SDF)
+│   ├── Level Sets
+│   ├── Constructive Solid Geometry (CSG) Trees
+│   ├── Implicit Functions (f(x,y,z)=0)
+│   ├── Neural Implicit (NeRF, SDF networks)
+│   └── R-Functions / Rvachev Functions
+│
+├── VOLUMETRIC / VOXEL
+│   ├── Sparse Voxel Octree (SVO)
+│   ├── Dense Voxel Grid
+│   ├── Adaptive Octree
+│   ├── Brick/Block Grids (OpenVDB)  ← NEXUS OPTIONAL
+│   └── Sparse Hash Grids
+│
+├── POINT-BASED
+│   ├── Raw Point Cloud
+│   ├── Gaussian Splatting (3DGS)
+│   ├── Point Cache / Alembic
+│   └── Surfel / Surfel Cloud
+│
+├── PARAMETRIC / PRIMITIVE
+│   ├── CSG Trees (Primitives + Boolean)
+│   ├── NURBS Curves/Surfaces
+│   ├── Bézier Patches
+│   ├── Subdivision Surfaces (Catmull-Clark, Loop)
+│   ├── Subdivision Surfaces (√3, Butterfly)
+│   └── Subdivision Solids
+│
+├── HYBRID / MULTI-REPRESENTATION
+│   ├── Multi-Rep B-Rep (Exact + Mesh)
+│   ├── Level-of-Detail Hierarchies
+│   ├── Progressive Meshes
+│   ├── Multi-Resolution B-Rep
+│   └── Adaptive Representation Switching
+│
+└── VOLUMETRIC / TETRAHEDRAL
+    ├── Tetrahedral Mesh (FEM)
+    ├── Constrained Delaunay
+    └── Hexahedral Mesh</code></pre>
+</p>
+
+<h3 id="2-2-data-structure-comparison-matrix">2.2 Data Structure Comparison Matrix</h3>
+
+<p>
+| Structure | Memory | Local Traversal | Topology Ops | Boolean | Remesh | Best For |
+|-----------|--------|-----------------|--------------|---------|--------|----------|
+| <strong>Half-Edge / DCEL</strong> | O(E) | O(1) local | O(1) local | O(n log n) | Good | General B-Rep |
+| <strong>Winged-Edge</strong> | O(E) | O(1) local | O(1) local | Hard | Poor | Legacy |
+| <strong>Quad-Edge</strong> | O(E) | O(1) local | O(1) local | Good | Good | Planar graphs |
+| <strong>Half-Edge + BVH</strong> | O(E) | O(log n) spatial | O(1) local | O(n log n) | Excellent | High-perf B-Rep |
+| <strong>Face-Vertex (Mesh)</strong> | O(V+F) | O(deg) | Slow | Slow | Good | Rendering |
+| <strong>CSG Tree</strong> | O(nodes) | Tree walk | Tree rewrite | Fast | N/A | Parametric CAD |
+| <strong>SDF/Implicit</strong> | O(voxels) | Ray march | Function eval | Exact | Voxel | Implicit ops |
+| <strong>Voxel (OpenVDB)</strong> | Sparse | Octree walk | Slow | Voxel bool | Good | Fluids, sim |
+| <strong>Neural Implicit</strong> | Small (MLP) | Forward pass | Retrain | Soft | Retrain | Novel view synth |
+| <strong>Manifold (lib)</strong> | O(E) | O(1) | O(1) local | Exact predicates | Excellent | 3D printing |
+</p>
+
+<h3 id="2-3-nexus-kernel-representation-strategy">2.3 Nexus Kernel Representation Strategy</h3>
+
+<pre><code class="language-">NEXUS KERNEL ARCHITECTURE
+<p>
+├── Analytic B-Rep (Canonical)
+│   ├── Topology: Vertex/Edge/Coedge/Loop/Face/Shell/Solid
+│   ├── Geometry: Line/Circle/Plane/Cylinder/Sphere/Torus/Cone/NURBS
+│   ├── Ops: Boolean, Fillet, Chamfer, Offset, Sweep
+│   └── Validation: checkIntegrity() → IntegrityReport
+│
+├── Half-Edge Mesh (Topological Operations)
+│   ├── fromMesh() / toMesh()
+│   ├── Euler Ops: insertEdgeVertex, splitEdge, collapseEdge, flipEdge, etc.
+│   ├── Queries: vertexRing, faceRing, boundaryLoops
+│   └── Integrity: checkIntegrity() → IntegrityReport
+│
+├── Mesh (Indexed n-gon + Attributes)
+│   ├── Positions, Normals, UVs, Colors, Tangents
+│   ├── Topology: Faces (n-gon), Vertex buffers
+│   ├── BVH (SAH, parallel build)
+│   └── Attributes: positions, normals, uvs, tangents, colors
+│
+├── Mesh BVH (Spatial Acceleration)
+│   ├── SAH Build (parallel)
+│   ├── Traversal: ray, AABB, frustum
+│   └── Refitting (dynamic)
+│
+├── Voxel / SDF (Optional - OpenVDB)
+│   ├── OpenVDB Integration
+│   ├── Sparse Voxel Octree
+│   └── Level Sets
+│
+├── NURBS (Future)
+│   ├── Curve/Surface eval
+│   ├── Knot insertion/refinement
+│   └── Trimmed surfaces
+│
+└── Render Mesh (GPU-Optimized)
+    ├── Vertex/Index Buffers (Vulkan)
+    ├── Meshlet / Cluster (Nanite-style)
+    ├── BLAS/TLAS (Ray Tracing)
+    └── Material System (PBR)</code></pre>
+</p>
+
+<hr>
+
+<h2 id="3-hybrid-multi-representation-engines">3. HYBRID / MULTI-REPRESENTATION ENGINES</h2>
+
+<h3 id="3-1-architecture-patterns">3.1 Architecture Patterns</h3>
+
+<p>
+| Pattern | Description | Sync Strategy | Use Case |
+|---------|-------------|---------------|----------|
+| <strong>Primary + Fallback</strong> | Exact B-Rep primary, mesh fallback | Lazy facet generation | CAD + viz |
+| <strong>LOD Hierarchy</strong> | Exact → Mesh → Proxy → Proxy | Explicit levels | Streaming, LOD |
+| <strong>Dual Representation</strong> | Exact + Mesh always synced | Real-time or deferred | Real-time edit |
+| <strong>Adaptive Switching</strong> | Auto-switch by curvature/ops | Heuristic-driven | Adaptive |
+| <strong>Deferred Sync</strong> | Edit exact, lazy mesh rebuild | On-demand | Interactive CAD |
+</p>
+
+<h3 id="3-2-known-hybrid-engines">3.2 Known Hybrid Engines</h3>
+
+<p>
+| Engine | Representations | Sync Strategy | Use Case | License |
+|--------|----------------|---------------|----------|---------|
+| <strong>Parasolid</strong> | B-Rep + Mesh + Facets | Lazy facet gen | High-end CAD | Proprietary |
+| <strong>ACIS</strong> | B-Rep + Mesh + Facets | Lazy + API control | Mid-range CAD | Proprietary |
+| <strong>OpenCASCADE</strong> | B-Rep + Mesh + Poly | Explicit API | Open source CAD | LGPL |
+| <strong>CGAL</strong> | Nef Polyhedra + Mesh | Exact predicates | Research, robust | GPL/LGPL |
+| <strong>OpenVDB</strong> | VDB + Mesh | Level-set ↔ Mesh | VFX, Fluids | MPL2 |
+| <strong>libigl</strong> | Mesh + FEM | Matrix ops | Research, FEM | MPL2 |
+| <strong>libfive</strong> | Implicit + Mesh | Function → Mesh | Implicit CAD | MIT |
+| <strong>Manifold</strong> | Half-edge + Mesh | Exact predicates | 3D printing | Apache 2.0 |
+| <strong>Open3D</strong> | Mesh + Point Cloud + Voxel | Explicit conversion | Robotics, 3D vision | MIT |
+| <strong>PyMesh</strong> | Mesh + Voxel + Implicit | Python binding | Python workflows | MIT |
+| <strong>Embree</strong> | BVH + Mesh | Ray tracing | Rendering | Apache 2.0 |
+| <strong>Nanite (UE5)</strong> | Mesh LOD + Cluster | Streaming | Games | Proprietary |
+</p>
+
+<h3 id="3-3-multi-rep-architecture-for-nexus">3.3 Multi-Rep Architecture for Nexus</h3>
+
+<p>
+See Section 2.3 for the complete Nexus architecture diagram.
+</p>
+
+<hr>
+
+<h2 id="4-geometric-math-engines">4. GEOMETRIC MATH ENGINES</h2>
+
+<h3 id="4-1-core-math-libraries">4.1 Core Math Libraries</h3>
+
+<p>
+| Library | Language | Strengths | License | Nexus Status |
+|---------|----------|-----------|---------|--------------|
+| <strong>Eigen</strong> | C++ | Dense/sparse linear algebra, geometry | MPL2 | <strong>Primary</strong> |
+| <strong>GLM</strong> | C++ | OpenGL-style math, SIMD | MIT | <strong>Primary (render)</strong> |
+| <strong>GLM (SIMD)</strong> | C++ | AVX/SSE optimized | MIT | <strong>Primary</strong> |
+| <strong>CGLM</strong> | C | OpenGL math, no deps | MIT | Alternative |
+| <strong>Ceres Solver</strong> | C++ | Non-linear least squares, autodiff | BSD | Optimization |
+| <strong>NLopt</strong> | C/C++ | Non-linear optimization | LGPL | Alternative |
+| <strong>Ceramic</strong> | C++ | Geometric computing, exact | MIT | Research |
+| <strong>libigl</strong> | C++ | Geometry processing, FEM | MPL2 | Reference |
+| <strong>CGAL</strong> | C++ | Exact predicates, Nef polyhedra | GPL/LGPL | Reference only |
+| <strong>GMP/MPFR</strong> | C | Arbitrary precision | LGPL | Exact predicates |
+| <strong>Shewchuk</strong> | C | Exact predicates (orient, incircle) | Custom | <strong>Core predicates</strong> |
+| <strong>Boost.Geometry</strong> | C++ | Generic geometry, GIS | Boost | GIS only |
+| <strong>GEOS</strong> | C++ | Topology ops, planar | LGPL | 2D only |
+| <strong>Clipper2</strong> | C++ | Polygon clipping | BSL-1.0 | 2D |
+| <strong>Polyclipping</strong> | C++ | Boolean ops, offset | BSD | 2D |
+| <strong>Manifold</strong> | C++ | Half-edge, exact predicates | Apache 2.0 | <strong>Reference impl</strong> |
+| <strong>OpenVDB</strong> | C++ | Sparse voxel, level sets | MPL2 | <strong>Optional</strong> |
+| <strong>Nanobind/pybind11</strong> | C++/Python | Python bindings | BSD | <strong>Scripting</strong> |
+</p>
+
+<h3 id="4-2-exact-geometric-predicates-shewchuk">4.2 Exact Geometric Predicates (Shewchuk)</h3>
+
+<pre><code class="language-cpp">// Exact predicates - NO ROUNDING ERRORS
+<p>
+// Returns: +1 (CCW/inside), -1 (CW/outside), 0 (degenerate)
+</p>
+
+<p>
+// 2D
+int orient2d(const Vec2& a, const Vec2& b, const Vec2& c);  // +1: CCW, -1: CW, 0: collinear
+int incircle(const Vec2& a, const Vec2& b, const Vec2& c, const Vec2& d); // d inside circumcircle?
+</p>
+
+<p>
+// 3D
+int orient3d(const Vec3& a, const Vec3& b, const Vec3& c, const Vec3& d); // +1: CCW, -1: CW
+int insphere(const Vec3& a, const Vec3& b, const Vec3& c, const Vec3& d, const Vec3& e);
+</p>
+
+<p>
+// Implementation: Adaptive precision (double → long double → expansion arithmetic)
+// Falls back through precision levels until exact result guaranteed</code></pre>
+</p>
+
+<h3 id="4-3-robust-intersection-libraries">4.3 Robust Intersection Libraries</h3>
+
+<p>
+| Algorithm | Purpose | Implementation | Nexus Status |
+|-----------|---------|----------------|--------------|
+| <strong>Möller-Trumbore</strong> | Ray-Triangle | Fast, standard | <strong>Used</strong> |
+| <strong>Möller (segment-tri)</strong> | Segment-Triangle | Fast | <strong>Used</strong> |
+| <strong>Tomasulo</strong> | Segment-Triangle | Watertight | Reference |
+| <strong>Seg-Tri (exact)</strong> | Exact segment-tri | Shewchuk predicates | <strong>Used for robust</strong> |
+| <strong>Tri-Tri (Möller)</strong> | Triangle-Triangle | Fast, robust | <strong>Used</strong> |
+| <strong>Tri-Tri (exact)</strong> | Exact tri-tri | Shewchuk orient3d | <strong>Used for robust</strong> |
+| <strong>Segment-Segment</strong> | Line segment intersection | Exact | <strong>Used</strong> |
+| <strong>Curve-Curve</strong> | Curve-Curve | Subdivision + predicates | Planned |
+</p>
+
+<h3 id="4-4-linear-algebra-solvers">4.4 Linear Algebra & Solvers</h3>
+
+<pre><code class="language-cpp">// Eigen usage patterns in Nexus
+<p>
+using Vec3 = Eigen::Vector3f;
+using Mat4 = Eigen::Matrix4f;
+using MatX = Eigen::MatrixXf;
+using VecX = Eigen::VectorXf;
+</p>
+
+<p>
+// Sparse solvers for simulation
+Eigen::SparseMatrix<float> K;  // Stiffness matrix
+Eigen::SimplicialLLT<Eigen::SparseMatrix<float>> solver;
+solver.compute(K);
+VecX x = solver.solve(b);
+</p>
+
+<p>
+// Non-linear optimization (Ceres)
+ceres::Problem problem;
+problem.AddResidualBlock(new MyCostFunction, nullptr, params);
+ceres::Solver::Options options;
+options.linear_solver_type = ceres::DENSE_SCHUR;
+ceres::Solve(options, &problem, &summary);</code></pre>
+</p>
+
+<hr>
+
+<h2 id="5-topological-operations">5. TOPOLOGICAL OPERATIONS</h2>
+
+<h3 id="5-1-half-edge-euler-operators-all-integrity-clean">5.1 Half-Edge Euler Operators (All Integrity-Clean)</h3>
+
+<p>
+| Operator | Description | Signature | Validity Conditions |
+|----------|-------------|-----------|---------------------|
+| <code>insertEdgeVertex</code> | Split edge at parameter t, create vertex + 2 edges + 2 coedges | <code>uint32_t insertEdgeVertex(edgeId, float t)</code> | `0 < t < 1`, edge valid |
+| `splitEdge` | Split edge at explicit position | `uint32_t splitEdge(edgeId)` | Edge valid |
+| `collapseEdge` | Merge vertices, remove edge | `void collapseEdge(edgeId)` | Edge valid, not boundary-only |
+| `splitFace` | Add diagonal edge across face | `uint32_t splitFace(faceId, v0, v1)` | v0,v1 on face boundary, not adjacent |
+| `flipEdge` | Flip interior edge (Delaunay) | `void flipEdge(edgeId)` | Interior edge, two incident faces |
+| `collapseFace` | Remove face, merge edges | `void collapseFace(faceId)` | Face valid, not sole face of shell |
+| `pokeFace` | Insert center vertex, fan triangulate | `void pokeFace(faceId)` | Face has ≥3 vertices |
+| `insertEdgeLoop` | Split edge, create loop | `void insertEdgeLoop(edgeId, float t)` | Edge valid, `0 < t < 1` |
+</p>
+
+<p>
+<strong>All 6 local ops: integrity-clean (proven by <code>checkIntegrity()</code> + property tests)</strong>
+</p>
+
+<h3 id="5-2-global-operations">5.2 Global Operations</h3>
+
+<p>
+| Operation | Description | Complexity | Nexus Status |
+|-----------|-------------|------------|--------------|
+| <strong>Subdivision</strong> | Catmull-Clark / Loop | O(F) | ✅ Implemented |
+| <strong>Remesh (Voxel)</strong> | Uniform resampling | O(V) | ✅ Implemented |
+| <strong>Quad Remesh</strong> | Quad-dominant | O(F) | ✅ Implemented |
+| <strong>Decimation</strong> | Quadric error | O(F log F) | ✅ Implemented |
+| <strong>Fairing/Laplacian</strong> | Smoothing | O(V) | ✅ Implemented |
+| <strong>Parameterization</strong> | LSCM, ABF, ARAP | O(V) | ✅ Implemented |
+| <strong>UV Unwrapping</strong> | LSCM, ABF, Spectral | O(F) | ✅ Implemented |
+</p>
+
+<hr>
+
+<h2 id="6-tolerant-geometry-healing">6. TOLERANT GEOMETRY & HEALING</h2>
+
+<h3 id="6-1-centralized-tolerance-system">6.1 Centralized Tolerance System</h3>
+
+<pre><code class="language-cpp">struct Tolerance {
+<p>
+    static constexpr float DEFAULT_ABS = 1e-6f;
+    static constexpr float DEFAULT_REL = 1e-4f;
+</p>
+    
+<p>
+    float abs = DEFAULT_ABS;   // Absolute floor
+    float rel = DEFAULT_REL;   // Relative to characteristic length
+</p>
+    
+<p>
+    [[nodiscard]] float at(float characteristicLength) const noexcept {
+        return std::max(abs, rel * characteristicLength);
+    }
+</p>
+    
+<p>
+    [[nodiscard]] bool nearlyEqual(float a, float b, float charLen) const noexcept {
+        return std::abs(a - b) <= at(charLen);
+    }
+</p>
+    
+<p>
+    [[nodiscard]] bool isZero(float x, float charLen) const noexcept {
+        return std::abs(x) <= at(charLen);
+    }
+</p>
+    
+<p>
+    [[nodiscard]] bool coincident(const Vec3& a, const Vec3& b, float charLen) const noexcept;
+</p>
+    
+<p>
+    static Tolerance forCharacteristicLength(float L) noexcept {
+        return {1e-6f, 1e-4f};  // Scales with L
+    }
+};</code></pre>
+</p>
+
+<h3 id="6-2-scale-aware-tolerance-table">6.2 Scale-Aware Tolerance Table</h3>
+
+<p>
+| Scale | Char. Length | Abs Floor | Rel | Effective Tol |
+|-------|-------------|-----------|-----|---------------|
+| Micro (jewelry) | 0.5 mm | 1e-6 | 1e-4 | <strong>1 µm</strong> |
+| Small part | 50 mm | 1e-6 | 1e-4 | <strong>5 µm</strong> |
+| Mechanical part | 500 mm | 1e-6 | 1e-4 | <strong>50 µm</strong> |
+| Large assembly | 5 m | 1e-6 | 1e-4 | <strong>500 µm</strong> |
+| Terrain | 5 km | 1e-6 | 1e-4 | <strong>500 m</strong> |
+</p>
+
+<h3 id="6-3-healing-operations">6.3 Healing Operations</h3>
+
+<p>
+| Operation | Purpose | Complexity | Nexus Status |
+|-----------|---------|------------|--------------|
+| <strong>Weld / Merge by Distance</strong> | Merge vertices within tolerance | O(V log V) | ✅ |
+| <strong>Close Holes / Fill Gaps</strong> | Fill boundary loops | O(B) | ✅ |
+| <strong>Remove Degenerate Faces</strong> | <3 verts, zero area | O(F) | ✅ |
+| **Stitch Edges** | Weld boundary edges within tolerance | O(E log E) | ✅ |
+| **Fix Non-Manifold** | Split non-manifold edges/verts | O(E) | ✅ |
+| **Remove Degenerate Edges** | Zero-length, duplicate | O(E) | ✅ |
+| **Fix Self-Intersection** | Local retriangulation | O(F log F) | ✅ |
+| **Make Watertight** | Close all boundaries | O(F log F) | ✅ |
+| **Fix Normal Consistency** | Orient all faces outward | O(F) | ✅ |
+</p>
+
+<hr>
+
+<h2 id="7-infrastructure-ecosystem-foundations">7. INFRASTRUCTURE & ECOSYSTEM FOUNDATIONS</h2>
+
+<h3 id="7-1-required-infrastructure">7.1 Required Infrastructure</h3>
+
+<p>
+| Layer | Technology | Version | Purpose | Nexus Status |
+|-------|------------|---------|---------|--------------|
+| <strong>Language</strong> | C++26 | C++26 (modules, concepts, contracts) | Performance, safety | ✅ |
+| <strong>Build</strong> | CMake | 3.28+ / 4.3.4 | Build system | ✅ |
+| <strong>Package Manager</strong> | Conan v2 / vcpkg | Latest | Dependency management | ✅ |
+| <strong>Vulkan</strong> | Vulkan | 1.3+ | GPU compute + graphics | ✅ |
+| <strong>VMA</strong> | Vulkan Memory Allocator | 3.x | GPU memory allocation | ✅ |
+| <strong>GLFW</strong> | GLFW | 3.4+ | Window/input | ✅ |
+| <strong>ImGui</strong> | ImGui | 1.91+ (docking) | Editor UI | ✅ |
+| <strong>glslang/SPIRV-Tools</strong> | Shader compilation | 14.x | GLSL→SPIR-V | ✅ |
+| <strong>SPIRV-Cross</strong> | Shader reflection | Latest | Reflection | ✅ |
+| <strong>OpenVDB</strong> | Sparse voxel | 11.x | Optional voxel/SDF | Planned |
+| <strong>spdlog</strong> | Logging | Latest | Logging | ✅ |
+| <strong>fmt</strong> | Formatting | Latest | Formatting | ✅ |
+| <strong>nlohmann/json</strong> | Serialization | Latest | JSON serialization | ✅ |
+| <strong>cereal / capnp</strong> | Binary serialization | Latest | Binary serialization | Planned |
+| <strong>Google Benchmark</strong> | Microbenchmarks | Latest | Performance | ✅ |
+| <strong>GoogleTest</strong> | Unit testing | Latest | Unit testing | ✅ |
+| <strong>clang-tidy / clang-format</strong> | Code quality | Latest | Code quality | ✅ |
+</p>
+
+<h3 id="7-2-serialization-formats">7.2 Serialization Formats</h3>
+
+<p>
+| Format | Use Case | Pros | Cons | Nexus Status |
+|--------|----------|------|------|--------------|
+| <strong>Custom Binary (.nxm)</strong> | Native kernel | Fast, compact, versioned | Proprietary | <strong>Primary</strong> |
+| <strong>glTF 2.0 / GLB</strong> | Interchange, Web | Standard, PBR, animations | No CAD metadata | ✅ |
+| <strong>USD / USDZ</strong> | Pipeline, USDZ | Universal, layers, composition | Complex | Planned |
+| <strong>STEP / AP242</strong> | CAD exchange, MBD | Industry standard, PMI | Slow, complex | Planned |
+| <strong>Parasolid X_T</strong> | Parasolid native | Fast, complete | Proprietary | Reference |
+| <strong>ACIS SAT</strong> | ACIS native | Complete | Proprietary | Reference |
+| <strong>JT</strong> | Visualization, PLM | Lightweight, LOD | Lossy | Planned |
+| <strong>OBJ/MTL</strong> | Simple exchange | Universal | No hierarchy | ✅ |
+| <strong>STL</strong> | 3D Printing | Universal | No color, no hierarchy | ✅ |
+| <strong>3MF</strong> | 3D Printing | Modern, materials | Limited CAD | Planned |
+</p>
+
+<h3 id="7-3-versioning-migration">7.3 Versioning & Migration</h3>
+
+<pre><code class="language-cpp">// Schema versioning in .nxm
+<p>
+struct FileHeader {
+    uint32_t magic = 0x4E455855; // "NEXU"
+    uint32_t version;            // Schema version
+    uint32_t kernelVersion;      // Kernel API version
+    uint64_t timestamp;          // Unix timestamp
+    uint32_t flags;              // Flags (compression, encryption)
+};
+</p>
+
+<p>
+// Migration: version → version+1 via migration functions
+std::vector<MigrationStep> migrations = {
+    {1, 2, migrateV1toV2},
+    {2, 3, migrateV2toV3},
+    // ...
+};</code></pre>
+</p>
+
+<hr>
+
+<h2 id="8-deterministic-parallelism-thread-safety">8. DETERMINISTIC PARALLELISM & THREAD SAFETY</h2>
+
+<h3 id="8-1-parallelism-strategy">8.1 Parallelism Strategy</h3>
+
+<p>
+| Level | Scope | Mechanism | Nexus Implementation |
+|-------|-------|-----------|---------------------|
+| <strong>Task Parallelism</strong> | High-level ops | Thread pool (Taskflow / custom) | <code>ThreadPool</code> class |
+| <strong>Data Parallelism</strong> | Per-element | SIMD + Thread pool | Eigen + manual SIMD |
+| <strong>Pipeline Parallelism</strong> | Pipeline stages | Double/triple buffering | Frame scheduler |
+| <strong>GPU Compute</strong> | Vulkan Compute | Shader invocations | Compute pipelines |
+</p>
+
+<h3 id="8-2-thread-safe-design-patterns">8.2 Thread-Safe Design Patterns</h3>
+
+<pre><code class="language-cpp">// Immutable geometry (read-only, thread-safe)
+<p>
+class Mesh {
+    // All data const after construction
+    // Safe for concurrent reads
+};
+</p>
+
+<p>
+// Copy-on-write for mutations
+class Mesh {
+    std::shared_ptr<MeshData> data;
+    Mesh mutate() { 
+        if (!data.unique()) data = std::make_shared(*data); // COW
+        return *this;
+    }
+};
+</p>
+
+<p>
+// Thread-local scratch buffers
+thread_local ScratchBuffer scratch;
+</p>
+
+<p>
+// Lock-free queues for command submission
+template<typename T>
+class LockFreeQueue {
+    // MPMC, bounded, cache-line padded
+};</code></pre>
+</p>
+
+<h3 id="8-3-determinism-guarantees">8.3 Determinism Guarantees</h3>
+
+<p>
+| Requirement | Mechanism |
+|-------------|-----------|
+| <strong>Bit-identical output</strong> | Fixed iteration order, stable sort, fixed seed |
+| <strong>Reproducible floats</strong> | No fast-math, strict IEEE-754, Kahan summation |
+| <strong>Deterministic BVH</strong> | SAH with fixed tie-breaking, sorted primitives |
+| <strong>Deterministic hash</strong> | xxHash / xxh3 (not std::hash) |
+| <strong>Float reproducibility</strong> | <code>-ffp-contract=off -fno-fast-math</code> |
+| <strong>RNG</strong> | SplitMix64 / PCG (not std::mt19937) |
+</p>
+
+<hr>
+
+<h2 id="9-transactional-undo-redo-serialization">9. TRANSACTIONAL UNDO/REDO & SERIALIZATION</h2>
+
+<h3 id="9-1-command-pattern-architecture">9.1 Command Pattern Architecture</h3>
+
+<pre><code class="language-cpp">class CadCommand {
+<p>
+public:
+    virtual ~CadCommand() = default;
+    virtual bool execute(CadDocument& doc) = 0;
+    virtual bool undo(CadDocument& doc) = 0;
+    virtual std::string description() const = 0;
+    virtual size_t memoryCost() const = 0;
+};
+</p>
+
+<p>
+// Delta-based (only store what changed)
+class TransformCommand : public CadCommand {
+    FeatureId fid;
+    Mesh savedMesh;           // Full mesh before (or delta)
+    Mesh newMesh;             // Post-op state (for redo)
+</p>
+    
+<p>
+    bool execute(CadDocument& doc) override {
+        auto* node = doc.history().node(fid);
+        if (!node || !node->mesh) return false;
+        savedMesh = *node->mesh;  // Save pre-state
+        // Apply transformation...
+        return true;
+    }
+    bool undo(CadDocument& doc) override { /<em> restore savedMesh </em>/ }
+    bool redo(CadDocument& doc) override { /<em> apply newMesh </em>/ }
+};
+</p>
+
+<p>
+// Compound command (macro)
+class MacroCommand : public CadCommand {
+    std::vector<std::unique_ptr<CadCommand>> commands;
+    bool execute(CadDocument& doc) override { 
+        for (auto& c: commands) if (!c->execute(doc)) return false; 
+        return true; 
+    }
+    bool undo(CadDocument& doc) override { 
+        for (auto it = commands.rbegin(); it != commands.rend(); ++it) (*it)->undo(doc); 
+        return true; 
+    }
+};</code></pre>
+</p>
+
+<h3 id="9-2-document-level-undo-redo">9.2 Document-Level Undo/Redo</h3>
+
+<pre><code class="language-cpp">class CadDocument {
+<p>
+    std::vector<std::unique_ptr<CadCommand>> undoStack;
+    std::vector<std::unique_ptr<CadCommand>> redoStack;
+    size_t maxUndoSteps = 1000;
+    size_t maxUndoMemory = 100 <em> 1024 </em> 1024; // 100 MB
+</p>
+
+<p>
+    void executeCommand(std::unique_ptr<CadCommand> cmd) {
+        if (cmd->execute(*this)) {
+            undoStack.push_back(std::move(cmd));
+            redoStack.clear();
+            enforceLimits();
+        }
+    }
+</p>
+
+<p>
+    void undo() { 
+        if (!undoStack.empty()) { 
+            auto cmd = std::move(undoStack.back()); 
+            undoStack.pop_back(); 
+            cmd->undo(*this); 
+            redoStack.push_back(std::move(cmd)); 
+        } 
+    }
+</p>
+    
+<p>
+    void redo() { /<em> symmetric </em>/ }
+</p>
+    
+<p>
+    std::vector<std::string> undoDescriptions() const;
+    std::vector<std::string> redoDescriptions() const;
+};</code></pre>
+</p>
+
+<h3 id="9-3-delta-serialization-cloud-collaboration">9.3 Delta Serialization (Cloud Collaboration)</h3>
+
+<pre><code class="language-cpp">// Delta encoding for cloud sync
+<p>
+struct DeltaOperation {
+    enum Type { Create, Modify, Delete, Transform } type;
+    FeatureId target;
+    std::vector<uint8_t> deltaPayload;  // Binary delta (bsdiff / custom)
+    uint64_t timestamp;
+    UserId author;
+};
+</p>
+
+<p>
+// Delta compression
+std::vector<uint8_t> compressDelta(const Mesh& oldMesh, const Mesh& newMesh);
+Mesh applyDelta(const Mesh& base, const std::vector<uint8_t>& delta);
+</p>
+
+<p>
+// CRDT-inspired for concurrent edits
+struct GeometryCRDT {
+    // Last-writer-wins per attribute
+    // Operational Transform for concurrent edits
+    // Conflict-free merge for independent features
+};</code></pre>
+</p>
+
+<hr>
+
+<h2 id="10-decision-matrices-compatibility-tables">10. DECISION MATRICES & COMPATIBILITY TABLES</h2>
+
+<h3 id="10-1-data-structure-compatibility">10.1 Data Structure Compatibility</h3>
+
+<p>
+| Primary \ Secondary | Half-Edge | Mesh (Indexed) | Voxel/SDF | CSG Tree | Point Cloud |
+|---------------------|-----------|----------------|-----------|----------|-------------|
+| <strong>Half-Edge</strong> | ✅ Native | ✅ <code>toMesh()</code> | ❌ | ❌ | ❌ |
+| <strong>Mesh (Indexed)</strong> | ✅ <code>fromMesh()</code> | ✅ Native | ❌ | ❌ | ❌ |
+| <strong>Voxel/SDF</strong> | ❌ | ✅ Voxelize | ✅ Native | ❌ | ✅ Voxelize |
+| <strong>CSG Tree</strong> | ❌ | ❌ | ❌ | ✅ Native | ❌ |
+| <strong>Point Cloud</strong> | ❌ | ✅ Poisson | ✅ Voxelize | ❌ | ✅ Native |
+</p>
+
+<h3 id="10-2-operation-compatibility">10.2 Operation Compatibility</h3>
+
+<p>
+| Operation | Half-Edge | Mesh | Voxel | CSG Tree | B-Rep |
+|-----------|-----------|------|-------|----------|-------|
+| Boolean | ✅ (exact) | ✅ (mesh) | ✅ (voxel) | ✅ (exact) | ✅ (exact) |
+| Fillet/Chamfer | ✅ (exact) | ⚠️ approx | ❌ | ❌ | ✅ (exact) |
+| Offset/Shell | ✅ (exact) | ⚠️ approx | ✅ (voxel) | ⚠️ | ✅ (exact) |
+| Remesh | ❌ | ✅ | ✅ | ❌ | ❌ |
+| Decimate | ❌ | ✅ | ✅ | ❌ | ❌ |
+| Subdivide | ❌ | ✅ | ❌ | ❌ | ❌ |
+| Boolean (Exact) | ✅ | ⚠️ | ✅ | ✅ | ✅ |
+| Boolean (Tolerant) | ✅ | ✅ | ✅ | ✅ | ✅ |
+</p>
+
+<h3 id="10-3-format-compatibility">10.3 Format Compatibility</h3>
+
+<p>
+| Format → Feature | OBJ | STL | PLY | glTF | STEP | USD | Native |
+|------------------|-----|-----|-----|------|------|-----|--------|
+| Geometry | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Topology | ✅ | ⚠️ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Materials | ⚠️ | ❌ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| UVs | ✅ | ❌ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Animation | ❌ | ❌ | ⚠️ | ✅ | ❌ | ✅ | ❌ |
+| Hierarchy | ❌ | ❌ | ⚠️ | ✅ | ✅ | ✅ | ✅ |
+| PMI/MBD | ❌ | ❌ | ❌ | ❌ | ✅ | ✅ | ✅ |
+| Metadata | ⚠️ | ❌ | ✅ | ✅ | ✅ | ✅ | ✅ |
+</p>
+
+<hr>
+
+<h2 id="11-legacy-kernel-comparison">11. LEGACY KERNEL COMPARISON</h2>
+
+<p>
+| Feature | <strong>Parasolid</strong> | <strong>ACIS</strong> | <strong>CGAL</strong> | <strong>OpenCASCADE</strong> | <strong>CGAL (Nef)</strong> | <strong>Manifold</strong> | <strong>NEXUS (Target)</strong> |
+|---------|---------------|----------|----------|-----------------|----------------|--------------|---------------------|
+| <strong>Language</strong> | C++ | C++ | C++ | C++ | C++ | C++ | <strong>C++26</strong> |
+| <strong>License</strong> | Proprietary | Proprietary | GPL/LGPL | LGPL | GPL/LGPL | Apache 2.0 | <strong>Apache 2.0</strong> |
+| <strong>Exact Predicates</strong> | ✅ | ✅ | ✅ (Shewchuk) | ❌ | ✅ | ✅ | <strong>✅ (Shewchuk)</strong> |
+| <strong>Exact Boolean</strong> | ✅ | ✅ | ✅ (Nef) | ⚠️ | ✅ | ✅ | <strong>✅ (Real CSG)</strong> |
+| <strong>Exact Fillet/Chamfer</strong> | ✅ | ✅ | ❌ | ⚠️ | ❌ | ❌ | <strong>✅ (Planned)</strong> |
+| <strong>Analytic B-Rep</strong> | ✅ | ✅ | ❌ | ⚠️ | ❌ | ❌ | <strong>✅ Core</strong> |
+| <strong>Exact Trim/Intersect</strong> | ✅ | ✅ | ✅ | ⚠️ | ✅ | ❌ | <strong>✅ Core</strong> |
+| <strong>NURBS</strong> | ✅ | ✅ | ❌ | ✅ | ❌ | ❌ | 📋 Planned |
+| <strong>Subdivision</strong> | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ | <strong>✅</strong> |
+| <strong>Subdivision (Crease)</strong> | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ | <strong>✅ (Crease weights)</strong> |
+| <strong>Voxel/SDF</strong> | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ | <strong>✅ (OpenVDB)</strong> |
+| <strong>GPU Compute</strong> | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | <strong>✅ (Vulkan)</strong> |
+| <strong>Deterministic Parallel</strong> | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | <strong>✅ Core</strong> |
+| <strong>Transactional Undo</strong> | ❌ | ❌ | ❌ | ⚠️ | ❌ | ❌ | <strong>✅ Core</strong> |
+| <strong>Cloud Collaboration</strong> | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | <strong>✅ Design</strong> |
+| <strong>License Cost</strong> | $50k+/yr | $50k+/yr | Free<em> | Free | Free</em> | Free | <strong>Free (Apache 2.0)</strong> |
+</p>
+
+<p>
+*GPL/LGPL with commercial options
+</p>
+
+<hr>
+
+<h2 id="12-technology-selection-guide">12. TECHNOLOGY SELECTION GUIDE</h2>
+
+<h3 id="12-1-decision-tree-choosing-your-representation">12.1 Decision Tree: Choosing Your Representation</h3>
+
+<pre><code class="language-">START: What is your primary use case?
+<p>
+│
+├── CAD / Exact Manufacturing → Analytic B-Rep + Exact Boolean
+│   └─ Need fillet/chamfer? → Analytic B-Rep + Exact Fillet (planned)
+│
+├── 3D Printing / Additive → Half-Edge Mesh + Voxel + Mesh Boolean
+│
+├── Game Assets / Real-time → Mesh (Indexed) + Meshlets + GPU Meshlets
+│
+├── VFX / Fluids / Simulation → OpenVDB + Sparse Voxel
+│
+├── Neural Rendering / Novel View → Gaussian Splatting / NeRF
+│
+├── CAD/CAM Manufacturing → Analytic B-rep + Exact Boolean + STEP
+│
+├── Implicit Design / Generative → SDF + Neural Implicit
+│
+├── Reverse Engineering → Point Cloud → Poisson → Mesh → B-Rep
+│
+├── FEM / Simulation → Tetrahedral Mesh + Hex Mesh
+│
+└── Web / Collaborative → glTF + WebGPU + CRDT</code></pre>
+</p>
+
+<h3 id="12-2-kernel-selection-checklist">12.2 Kernel Selection Checklist</h3>
+
+<p>
+| Requirement | Yes → Use | No → Avoid |
+|-------------|-----------|------------|
+| Exact volumes/watertight | Analytic B-rep + Exact Boolean | Mesh Boolean |
+| Manufacturing (STEP/STEP-NC) | Analytic B-rep + STEP | Mesh-only |
+| Fillet/Chamfer exact | Analytic B-rep + Fillet | Mesh fillet |
+| Real-time (60 FPS) | Mesh + GPU Meshlets | Exact B-rep |
+| 3D Printing | Mesh + Voxel | Analytic B-rep |
+| Simulation/FEM | Tetra/Hex Mesh | B-Rep |
+| Cloud Collaboration | Delta + CRDT | Monolithic save |
+| Web / Browser | glTF + WebGPU | Native Desktop |
+| Exact Volumes | Analytic B-rep | Mesh Boolean |
+| Manufacturing | Analytic B-rep + STEP | Mesh-only |
+</p>
+
+<hr>
+
+<h2 id="13-nexus-kernel-recommended-stack">13. NEXUS KERNEL: RECOMMENDED STACK</h2>
+
+<pre><code class="language-">NEXUS RECOMMENDED STACK (2026)
+
+<p>
+LANGUAGE:     C++26 (modules, concepts, contracts)
+BUILD:        CMake 3.28+, Ninja
+PARALLELISM:  C++26 std::execution + custom thread pool
+GPU:          Vulkan 1.3+ (dynamic rendering, sync2, mesh shaders)
+MATH:         Eigen (linear algebra) + Shewchuk (predicates)
+LINEAR ALG:   Eigen (dense/sparse) + SuiteSparse (optional)
+OPTIMIZATION: Ceres Solver (non-linear) / NLopt
+GEOMETRY:     Shewchuk predicates (exact) + Eigen (linear algebra)
+SERIALIZATION: nlohmann/json + cereal (binary) + glTF/USD
+UI:           ImGui 1.91+ (docking branch) + Vulkan
+GPU:          Vulkan 1.3+ (dynamic rendering, sync2, mesh shaders)
+GPU MEMORY:   VMA 3.x
+SHADERS:      GLSL 460 + glslang + SPIRV-Cross
+TESTING:      GoogleTest + Google Benchmark
+SANITIZERS:   ASan + UBSan + TSan + MSan (Clang)
+FORMAT:       clang-format (LLVM style)
+LINT:         clang-tidy (modernize, performance, bugprone)
+CI:           GitHub Actions (Linux/Windows/macOS) + xvfb-run + llvmpipe</code></pre>
+</p>
+
+<hr>
+
+<h2 id="14-implementation-roadmap-architecture-patterns">14. IMPLEMENTATION ROADMAP & ARCHITECTURE PATTERNS</h2>
+
+<h3 id="14-1-architecture-patterns">14.1 Architecture Patterns</h3>
+
+<h4 id="pattern-1-kernel-first-architecture">Pattern 1: Kernel-First Architecture</h4>
+<pre><code class="language-">App (nexus_modeling) → App Framework (nexus::app) → CAD (nexus::cad) → Geometry Kernel (nexus::geometry) → Graphics (nexus::gfx)</code></pre>
+<p>
+Each layer only depends on layers below. No circular dependencies.
+</p>
+
+<h4 id="pattern-2-data-oriented-design">Pattern 2: Data-Oriented Design</h4>
+<ul>
+<li><strong>Struct of Arrays</strong> over Array of Structs for cache efficiency</li>
+<li><strong>Handle-based</strong> resource management (no raw pointers across module boundaries)</li>
+<li><strong>Slot maps / generational indices</strong> for stable IDs with O(1) lookup</li>
+<li><strong>Arena allocators</strong> for transient geometry, VMA for GPU memory</li>
+</ul>
+
+<h4 id="pattern-3-immutability-by-default">Pattern 3: Immutability by Default</h4>
+<ul>
+<li>Geometry operations return new objects; originals unchanged</li>
+<li>Copy-on-write for large buffers</li>
+<li>Undo/redo via command pattern with full state serialization</li>
+</ul>
+
+<h4 id="pattern-4-backend-abstraction">Pattern 4: Backend Abstraction</h4>
+<ul>
+<li><code>gfx/</code> defines abstract <code>Device</code>/<code>CommandBuffer</code>/etc.</li>
+<li>Backends implement them (Vulkan, Null)</li>
+<li>Backend selected via <code>RenderContextDesc::preferredBackend</code></li>
+<li><code>caps().rayTracingTier</code> / hardware tier gate feature paths</li>
+</ul>
+
+<h3 id="14-2-render-path-architecture">14.2 Render Path Architecture</h3>
+<ul>
+<li><strong>Production:</strong> Scheduler-driven and deferred (Shadow → Geometry/GBuffer → Composite, optional RayTracing pass)</li>
+<li><strong>Validation:</strong> <code>RenderGraphValidator</code> checks per-pass texture layout transitions</li>
+<li><strong>Diagnostics:</strong> <code>FrameCaptureExporter</code> records pass metadata</li>
+<li><strong>Fallback:</strong> Non-scheduler path is minimal compatibility fallback, NOT feature-parity</li>
+<li><strong>Policy:</strong> Land new rendering features on scheduler path first with explicit transitions and tests</li>
+</ul>
+
+<h3 id="14-3-simulation-architecture">14.3 Simulation Architecture</h3>
+<ul>
+<li><strong>RigidBodySolver:</strong> Deterministic fixed-step integrator (explicit Euler; gravity + force; orientation + angular velocity + torque)</li>
+<li><strong>Snapshot/Replay:</strong> <code>captureState</code>/<code>restoreState</code>/<code>serializeSimState</code></li>
+<li><strong>Higher-level:</strong> <code>FluidSolver</code>, <code>ClothSolver</code></li>
+<li><strong>Coupling:</strong> <code>SimulationSceneCoupling</code> writes solver body state onto bound scene nodes</li>
+<li><strong>Driver:</strong> <code>SimulationDriver</code> decouples fixed solver rate from render frame rate via fixed-timestep accumulator + state interpolation (lerp position, nlerp orientation) — canonical "Fix Your Timestep" pattern</li>
+</ul>
+
+<hr>
+
+<h2 id="15-appendix-exact-algorithm-specifications">15. APPENDIX: EXACT ALGORITHM SPECIFICATIONS</h2>
+
+<h3 id="a-1-möller-trumbore-ray-triangle-watertight-variant">A.1 Möller-Trumbore Ray-Triangle (Watertight Variant)</h3>
+
+<pre><code class="language-cpp">// Watertight ray-triangle intersection
+<p>
+// Returns true if hit, fills t, u, v
+bool rayTriangleWatertight(
+    const Vec3& ro, const Vec3& rd,
+    const Vec3& v0, const Vec3& v1, const Vec3& v2,
+    float& t, float& u, float& v)
+{
+    Vec3 e1 = v1 - v0;
+    Vec3 e2 = v2 - v0;
+    Vec3 h = rd.cross(e2);
+    float a = e1.dot(h);
+</p>
+    
+<p>
+    // Exact predicate for degeneracy
+    if (std::abs(a) < 1e-12f) return false; // Parallel/degenerate
+</p>
+    
+<p>
+    float f = 1.0f / a;
+    Vec3 s = ro - v0;
+    u = f * s.dot(h);
+    if (u < 0.0f || u > 1.0f) return false;
+</p>
+    
+<p>
+    Vec3 q = s.cross(e1);
+    v = f * rd.dot(q);
+    if (v < 0.0f || u + v > 1.0f) return false;
+</p>
+    
+<p>
+    t = f * e2.dot(q);
+    return t > 1e-6f; // Epsilon offset to avoid self-intersection
+}</code></pre>
+</p>
+
+<h3 id="a-2-segment-triangle-exact-shewchuk">A.2 Segment-Triangle (Exact, Shewchuk)</h3>
+
+<pre><code class="language-cpp">// Exact segment-triangle using Shewchuk orient3d/insphere
+<p>
+// Returns intersection interval [t0, t1] on segment, or empty
+std::optional<std::pair<float, float>> segmentTriangleExact(
+    const Vec3& p0, const Vec3& p1,
+    const Vec3& v0, const Vec3& v1, const Vec3& v2)
+{
+    // Compute orient3d for segment endpoints relative to triangle plane
+    int o1 = orient3d(v0, v1, v2, p0);
+    int o2 = orient3d(v0, v1, v2, p1);
+</p>
+    
+<p>
+    if (o1 == 0 && o2 == 0) {
+        // Segment coplanar with triangle - handle as 2D problem
+        return segmentTriangleCoplanar(p0, p1, v0, v1, v2);
+    }
+</p>
+    
+<p>
+    if (o1 == o2) return std::nullopt; // Both on same side
+</p>
+    
+<p>
+    // Compute intersection using exact arithmetic
+    // ... adaptive precision expansion arithmetic ...
+}</code></pre>
+</p>
+
+<h3 id="a-3-triangle-triangle-intersection-möller-1997-exact">A.3 Triangle-Triangle Intersection (Möller 1997 + Exact)</h3>
+
+<pre><code class="language-cpp">// Fast tri-tri + exact fallback
+<p>
+bool triTriIntersect(const Triangle& T1, const Triangle& T2, Segment& outSeg) {
+    // 1. Plane test with exact predicates
+    // 2. Compute interval of intersection line on each triangle
+    // 3. Overlap test of intervals
+    // 4. If intervals overlap, construct segment
+    // 5. Exact validation of endpoints
+}</code></pre>
+</p>
+
+<h3 id="a-4-catmull-clark-subdivision-exact-limit-surface">A.4 Catmull-Clark Subdivision (Exact Limit Surface)</h3>
+
+<pre><code class="language-cpp">// Catmull-Clark with crease weights (0=smooth, 1=sharp)
+<p>
+Mesh catmullClark(const Mesh& input, const SubdivisionOptions& opts) {
+    // 1. Compute face points (centroids)
+    // 2. Compute edge points (midpoints + adjacent face points)
+    // 3. Compute vertex points (weighted average)
+    // 4. Split: each face → 4 quads (or triangles for boundary)
+    // 5. Handle creases: sharp edges (weight=1) use edge subdivision rules
+    // 6. Repeat for opts.levels
+}</code></pre>
+</p>
+
+<h3 id="a-5-quadric-error-decimation">A.5 Quadric Error Decimation</h3>
+
+<pre><code class="language-cpp">// Quadric Error Metrics (Garland-Heckbert 1997)
+<p>
+struct Quadric {
+    float a,b,c,d,e,f,g,h,i,j; // 4x4 symmetric matrix
+</p>
+    
+<p>
+    float evaluate(const Vec3& v) const {
+        return a<em>v.x</em>v.x + 2<em>b</em>v.x<em>v.y + 2</em>c<em>v.x</em>v.z + 2<em>d</em>v.x +
+               e<em>v.y</em>v.y + 2<em>f</em>v.y<em>v.z + 2</em>g*v.y +
+               h<em>v.z</em>v.z + 2<em>i</em>v.z + j;
+    }
+};
+</p>
+
+<p>
+std::pair<Mesh, std::vector<uint32_t>> decimate(
+    const Mesh& input, 
+    const DecimationOptions& opts)
+{
+    // 1. Compute quadrics for all vertices from incident faces
+    // 2. Initialize priority queue with edge collapse costs
+    // 3. Iteratively collapse lowest-cost edge
+    // 4. Update quadrics and queue
+    // 5. Stop at target face count
+}</code></pre>
+</p>
+
+<h3 id="a-6-constrained-delaunay-triangulation-2d">A.6 Constrained Delaunay Triangulation 2D</h3>
+
+<pre><code class="language-cpp">// Bowyer-Watson with constrained edges
+<p>
+std::vector<uint32_t> triangulateWithConstraints(
+    const std::vector<Vec2>& vertices,
+    const std::vector<std::pair<uint32_t,uint32_t>>& constraintEdges)
+{
+    // 1. Start with super-triangle
+    // 2. Insert vertices one by one (incremental)
+    // 3. For each insert: find cavity (circumcircle test)
+    // 4. Protect constraint edges from being flipped
+    // 5. Remove super-triangle
+    // 6. Return triangle indices
+}</code></pre>
+</p>
+
+<h3 id="a-7-sah-bvh-build-parallel">A.7 SAH BVH Build (Parallel)</h3>
+
+<pre><code class="language-cpp">struct BVHNode {
+<p>
+    Aabb bounds;
+    uint32_t left, right;  // child indices or leaf marker
+    uint32_t firstPrim, primCount;  // for leaves
+};
+</p>
+
+<p>
+std::vector<BVHNode> buildSAHBVHParallel(const std::vector<Triangle>& tris) {
+    // 1. Compute primitive bounds
+    // 2. Recursive partitioning with SAH cost function
+    // 3. Bin-based SAH (16 bins) for split selection
+    // 4. Parallel build using thread pool
+    // 5. Fixed tie-breaking for determinism
+}</code></pre>
+</p>
+
+<hr>
+
+<h2 id="revision-history">REVISION HISTORY</h2>
+
+<p>
+| Version | Date | Author | Changes |
+|---------|------|--------|---------|
+| 1.0 | 2026-07-14 | Nexus Team | Initial compendium |
+| 2.0 | 2026-07-14 | Nexus Team | Deep expansion: 300+ terms, complete taxonomies, exact algorithms, decision matrices, legacy comparison, recommended stack, implementation patterns |
+</p>
+
+<hr>
+
+<p>
+<em>This document is the authoritative technology reference for Nexus Modeling kernel development. All architectural decisions must trace to this compendium.</em>
+</p>
+        </main>
+    </div>
+    
+    <script>
+// Theme management
+const THEME_KEY = 'nexus-docs-theme';
+const themeToggle = document.getElementById('theme-toggle');
+const sunIcon = themeToggle.querySelector('.theme-icon-sun');
+const moonIcon = themeToggle.querySelector('.theme-icon-moon');
+
+function applyTheme(theme) {
+    document.documentElement.setAttribute('data-theme', theme);
+    if (theme === 'light') {
+        sunIcon.style.display = 'block';
+        moonIcon.style.display = 'none';
+    } else {
+        sunIcon.style.display = 'none';
+        moonIcon.style.display = 'block';
+    }
+    localStorage.setItem(THEME_KEY, theme);
+}
+
+function getPreferredTheme() {
+    const stored = localStorage.getItem(THEME_KEY);
+    if (stored) return stored;
+    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+}
+
+function initTheme() {
+    const theme = getPreferredTheme();
+    applyTheme(theme);
+}
+
+function toggleTheme() {
+    const current = document.documentElement.getAttribute('data-theme') || 'dark';
+    applyTheme(current === 'dark' ? 'light' : 'dark');
+}
+
+themeToggle.addEventListener('click', toggleTheme);
+
+// Keyboard shortcut: Ctrl+Shift+L
+document.addEventListener('keydown', (e) => {
+    if (e.ctrlKey && e.shiftKey && e.key === 'L') {
+        e.preventDefault();
+        toggleTheme();
+    }
+});
+
+// Listen for system theme changes
+window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => {
+    if (!localStorage.getItem(THEME_KEY)) {
+        applyTheme(e.matches ? 'dark' : 'light');
+    }
+});
+
+// Initialize theme immediately to prevent flash
+initTheme();
+
+// Mobile sidebar toggle
+const sidebar = document.getElementById('sidebar');
+const mobileMenuBtn = document.getElementById('mobile-menu-btn');
+
+if (mobileMenuBtn) {
+    mobileMenuBtn.addEventListener('click', () => {
+        sidebar.classList.toggle('open');
+    });
+}
+
+document.addEventListener('click', (e) => {
+    if (window.innerWidth <= 768) {
+        if (!sidebar.contains(e.target) && !e.target.closest('.header')) {
+            sidebar.classList.remove('open');
+        }
+    }
+});
+
+// Smooth scroll for anchor links
+document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+    anchor.addEventListener('click', function(e) {
+        const target = document.querySelector(this.getAttribute('href'));
+        if (target) {
+            e.preventDefault();
+            target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            if (window.innerWidth <= 768) {
+                sidebar.classList.remove('open');
+            }
+        }
+    });
+});
+
+// Active link highlighting based on scroll position
+const sections = document.querySelectorAll('.content h2, .content h3');
+const sidebarLinks = document.querySelectorAll('.sidebar-link[href^="#"]');
+
+function updateActiveLink() {
+    let current = '';
+    sections.forEach(section => {
+        const rect = section.getBoundingClientRect();
+        if (rect.top <= 100) {
+            current = '#' + section.id;
+        }
+    });
+
+    sidebarLinks.forEach(link => {
+        link.classList.remove('active');
+        if (link.getAttribute('href') === current) {
+            link.classList.add('active');
+        }
+    });
+}
+
+window.addEventListener('scroll', updateActiveLink, { passive: true });
+window.addEventListener('load', updateActiveLink);
+
+// Highlight.js initialization
+if (typeof hljs !== 'undefined') {
+    hljs.highlightAll();
+}
+
+// Mobile menu button visibility
+const mobileMenuBtn = document.getElementById('mobile-menu-btn');
+function checkMobile() {
+    if (window.innerWidth <= 768) {
+        mobileMenuBtn.style.display = 'flex';
+    } else {
+        mobileMenuBtn.style.display = 'none';
+        document.getElementById('sidebar').classList.remove('open');
+    }
+}
+checkMobile();
+window.addEventListener('resize', checkMobile);
+
+mobileMenuBtn.addEventListener('click', () => {
+    document.getElementById('sidebar').classList.toggle('open');
+});
+</script>

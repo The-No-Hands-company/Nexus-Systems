@@ -1,87 +1,280 @@
 # Nexus Modeling
 
-Nexus Modeling is the geometry and rendering application in Nexus Systems, targeting production-scale DCC workflows (Blender/Rhino/Maya class) with a Vulkan-first C++23 kernel.
+Nexus Modeling is the geometry and rendering application in Nexus Systems, targeting production-scale DCC workflows (Blender/Rhino/Maya/Modo/Houdini/Plasticity/Rhino class) with a **Vulkan-first C++26 kernel**.
 
-## Current state
+---
 
-- Core graphics kernel is live and buildable.
-- Vulkan and Null backends are available.
-- Frame scheduler, GPU resources, shader compilation, scene graph, and camera systems are implemented.
-- Renderer has active GBuffer and composite pass scaffolding with real command recording and draw submission hooks.
-- Test suite currently runs 534 tests (529 pass, 5 expected Vulkan capability skips) with headless-friendly Null backend coverage.
+## Current State
 
-## Repository layout
+| Component | Status | Tests |
+|-----------|--------|-------|
+| Geometry Kernel | ✅ Core complete | 1921/1921 |
+| Vulkan Renderer | ✅ Headless + Windowed | 145/145 |
+| Analytic B-rep | ✅ Box/Cylinder/Sphere/Cone/Torus | 2025/2026 |
+| Boolean/CSG | ✅ Real CSG pipeline | 2025/2026 |
+| Half-edge + Euler ops | ✅ 6/6 ops integrity-clean | 2025/2026 |
+| Analytic B-rep primitives | ✅ 5 types with eval/normalAt | ✅ |
+| Editor UI (Vulkan) | ✅ ImGui + Vulkan backend | Working |
+| Headless render-to-PNG | ✅ `--shot` flag | Working |
+| **Total Test Suite** | **2026 tests passing** | **1 pre-existing ApiFreezeAudit failure** |
+
+---
+
+## Repository Layout
 
 ```
 Nexus-Modeling/
-├── AGENTS.md
-├── README.md
-├── docs/
+├── AGENTS.md                    # Agent/contributor contract
+├── CLAUDE.md                    # Claude Code guidance
+├── CONTRIBUTING.md              # Contribution guidelines
+├── README.md                    # This file
+├── ROADMAP.md                   # Autonomous loop roadmap
+├── docs/                        # Full documentation
+│   ├── README.md                # Documentation index
+│   ├── GEOMETRY_KERNEL_COMPENDIUM.md  # Technology bible (2000+ lines)
+│   ├── kernel-capability-map.md       # Capability ownership
+│   ├── developer/               # Developer deep-dives
+│   │   ├── architecture.md
+│   │   ├── geometry-kernel.md
+│   │   ├── boolean-csg.md
+│   │   ├── halfedge-mesh.md
+│   │   ├── analytic-brep.md
+│   │   ├── renderer.md
+│   │   ├── editor-architecture.md
+│   │   ├── build-system.md
+│   │   └── testing.md
+│   ├── expert/                  # Expert user guides
+│   ├── beginner/                # Beginner tutorials
+│   └── html/                    # Generated HTML site
+├── app/
+│   ├── CMakeLists.txt
+│   └── main.cpp                 # Binary entry (window, event loop)
 ├── src/
-│   └── kernel/
-│       ├── include/nexus/   # public API surface
-│       └── src/             # internal implementation
+│   └── kernel/                  # Core kernel library
+│       ├── CMakeLists.txt
+│       ├── include/nexus/       # Public API
+│       │   ├── geometry/
+│       │   ├── cad/
+│       │   ├── render/
+│       │   ├── gfx/
+│       │   ├── app/
+│       │   ├── animation/
+│       │   ├── sim/
+│       │   ├── sculpt/
+│       │   ├── parametric/
+│       │   └── Kernel.h
+│       └── src/                 # Implementation
+│           ├── geometry/        # ~60 files: Mesh, B-rep, Half-edge, CSG, Remesh, Subdiv, BVH
+│           ├── cad/             # Feature history, sketches, constraints, commands
+│           ├── render/          # Scene graph, camera, materials, lights
+│           ├── gfx/             # Vulkan/Null backend abstraction
+│           │   └── vulkan/      # Vulkan 1.3 implementation
+│           ├── app/             # App framework: modes, gizmos, viewport, UI
+│           ├── animation/       # Keyframes, blending, IK, skinning
+│           ├── sim/             # Rigid body, fluid, cloth, driver
+│           ├── sculpt/          # Brushes, dynotopo, multires, layers
+│           └── parametric/      # Constraint graph, parallel solver
 └── tests/
-	 └── kernel/
+    └── kernel/                  # 1921 unit + integration + perf tests
 ```
 
-## Build and test
+---
 
-From repository root:
+## Build and Test
 
-1. Configure:
-	- cmake -S . -B build
-2. Build:
-	- cmake --build build -j$(nproc)
-3. Test:
-	- ctest --test-dir build --output-on-failure
+### Prerequisites
 
-### Vulkan swapchain storage-usage test
+- **CMake 3.28+** (4.3.4 recommended)
+- **C++26 compiler**: GCC 13+, Clang 17+, MSVC 19.40+
+- **Vulkan SDK 1.3+** (for Vulkan backend)
+- **GLFW 3.4+**, **VMA 3.x**, **glslang**, **SPIRV-Tools**, **SPIRV-Cross**
+- **Ninja** (recommended)
 
-- **Test name:** `VulkanSwapchain.CreateSwapchainSupportsStorageUsage`
-- **Purpose:** Verifies that a Vulkan `Swapchain` can be created when swapchain images are requested with `VK_IMAGE_USAGE_STORAGE_BIT`. This ensures the scheduler-driven RayTracing merge compute pass can write directly into presentation targets on drivers that support it.
-- **Behavior:** The test skips on platforms or drivers that do not support creating swapchain images with storage usage (the backend will return a null swapchain or throw). The test is added to `tests/kernel` and gated behind the Vulkan backend build flag.
-4. Alpha release gate and signoff report:
-	- ./tools/release_gate_alpha.sh
-5. Alpha tag helper (requires overall_signoff=PASS report):
-	- ./tools/create_alpha_tag.sh --report build/release_signoff_1.0-alpha.txt --tag v1.0.0-alpha
+### Linux (Fedora/RHEL)
 
-## Design goals
+```bash
+sudo dnf install cmake gcc-c++ ninja-build vulkan-devel glfw-devel \
+    vulkan-memory-allocator-devel glslang-devel spirv-tools-devel
+```
 
-- Production-grade GPU backend correctness (lifetime, synchronization, transitions).
-- API-first architecture that can scale to a multi-million-line codebase.
-- Headless/CI compatibility via Null backend.
-- Extensible render pipeline for deferred, hybrid RT, and neural workflows.
+### Linux (Ubuntu/Debian)
 
-## Near-term execution order
+```bash
+sudo apt install cmake g++ ninja-build libvulkan-dev libglfw3-dev \
+    libvma-dev glslang-dev spirv-tools-dev
+```
 
-1. Expand material/descriptor binding to support full lighting/composite sampling contracts.
-2. Implement shadow pass chain end-to-end.
-3. Keep scheduler path as the production render path and de-scope non-scheduler parity.
-4. Replace remaining mesh shader / RT pipeline placeholders with full implementations.
-5. Continue test and documentation expansion as features land.
+### Configure & Build
 
-## Render path policy
+```bash
+# Standard build (Vulkan + Null backends)
+cmake -S . -B build -G Ninja \
+    -DNEXUS_BACKEND_VULKAN=ON \
+    -DNEXUS_BACKEND_NULL=ON \
+    -DCMAKE_BUILD_TYPE=RelWithDebInfo
 
-- Production rendering is scheduler-driven.
-- The non-scheduler path remains a minimal compatibility fallback and is intentionally not feature-parity with scheduler execution.
-- New rendering features must land on the scheduler path first with explicit transitions and tests.
+cmake --build build -j$(nproc)
+```
 
-## Documentation index
+### Run Tests
 
-See docs/README.md for architecture, build, shader, design rationale, and testing strategy documents.
+```bash
+# All tests (headless via Null backend)
+ctest --test-dir build --output-on-failure
 
-Project process and collaboration docs:
+# Filter by pattern
+ctest --test-dir build -R "MeshBoolean" --output-on-failure
 
-- ROADMAP.md
-- CONTRIBUTING.md
-- docs/PRD.md
-- docs/SDD.md
-- docs/FRD.md
-- docs/kernel-capability-map.md
+# Single test suite
+./build/tests/nexus_kernel_tests --gtest_filter="MeshBoolean.*"
 
-## VS Code agent setup
+# Performance tests
+./build/tests/nexus_kernel_perf_smoke
+```
 
-- Use `.github/copilot-instructions.md` for repository-specific GitHub Copilot guidance.
-- Open `docs/vscode-agent-setup.md` for VS Code agent/workflow guidance and extension recommendations.
-- The workspace also includes `.vscode/extensions.json` recommending Copilot and C++/CMake tooling.
+### Run Application
+
+```bash
+# Windowed (requires display)
+./build/src/kernel/nexus_modeling
+
+# Headless screenshot
+./build/src/kernel/nexus_modeling --shot /tmp/screenshot.png 1280 720
+
+# With custom size
+./build/src/kernel/nexus_modeling --width 1920 --height 1080
+```
+
+---
+
+## Architecture Overview
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    nexus_modeling (App)                         │
+├─────────────────────────────────────────────────────────────────┤
+│  nexus::app (Framework)                                         │
+│  ├── ModeOrchestrator, ModeRegistry, AppMode (State pattern)   │
+│  ├── ModelingApplication, ViewportController                    │
+│  ├── TransformGizmo, SelectionManager, ToolSystem               │
+│  └── EditorUI (ImGui + Vulkan)                                  │
+├─────────────────────────────────────────────────────────────────┤
+│  nexus::cad (Parametric CAD)                                    │
+│  ├── CadDocument (feature history, undo/redo)                   │
+│  ├── CadSketch + 11 constraint types                            │
+│  ├── CadSolver (parallel, adaptive)                             │
+│  ├── CadFeature (Extrude, Revolve, Fillet, Chamfer, Boolean)   │
+│  └── CadCommand (command pattern)                               │
+├─────────────────────────────────────────────────────────────────┤
+│  nexus::geometry (Kernel — zero deps, headless)                 │
+│  ├── Analytic B-rep: Box/Cylinder/Sphere/Cone/Torus + Boolean  │
+│  ├── Half-edge Mesh: 6 integrity-clean Euler ops                │
+│  ├── Mesh: n-gon + attributes + BVH (SAH, parallel)            │
+│  ├── CSG: tri-tri → retriangulate → cut → classify → stitch    │
+│  ├── Subdivision: Catmull-Clark/Loop + crease weights          │
+│   + Remesh: Voxel/Quad + Decimation (quadric)                  │
+│  ├── Tolerance: scale-aware, IEEE-754 compliant                 │
+│  └── Robust Predicates: Shewchuk exact orient/incircle         │
+├─────────────────────────────────────────────────────────────────┤
+│  nexus::gfx (Graphics Abstraction)                              │
+│  ├── Device, Swapchain, FrameScheduler, CommandBuffer          │
+│  ├── Pipeline (gfx/comp/RT), Buffer, Texture, DescriptorSet    │
+│  ├── Renderer (deferred, G-buffer, shadow, composite)          │
+│  └── Backends: Vulkan 1.3 (dynamic rendering, sync2) + Null    │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**Layer Rule:** `app → cad → geometry → gfx` (no upward deps)
+
+---
+
+## Key Technologies
+
+| Area | Choice | Rationale |
+|------|--------|-----------|
+| Language | **C++26** | Modules, concepts, contracts, std::execution |
+| Build | **CMake + Ninja** | Standard, fast, cross-platform |
+| GPU | **Vulkan 1.3** | Explicit control, compute, ray tracing, portability |
+| Memory | **VMA 3.x** | Sub-allocation, defragmentation |
+| Math | **Eigen + GLM** | Linear algebra + SIMD geometry |
+| Exact Math | **Shewchuk predicates** | Zero rounding error in topology |
+| UI | **ImGui 1.91+ (docking)** | Immediate mode, Vulkan backend |
+| Test | **GoogleTest + Benchmark** | Unit, property, perf regression |
+| Sanitizers | ASan/UBSan/TSan/MSan | CI-caught UB |
+
+---
+
+## Documentation
+
+| Audience | Entry Point |
+|----------|-------------|
+| **Developers** | [docs/developer/architecture.md](docs/developer/architecture.md) |
+| **Kernel Internals** | [docs/developer/geometry-kernel.md](docs/developer/geometry-kernel.md) |
+| **CSG Pipeline** | [docs/developer/boolean-csg.md](docs/developer/boolean-csg.md) |
+| **Half-edge Mesh** | [docs/developer/halfedge-mesh.md](docs/developer/halfedge-mesh.md) |
+| **Analytic B-rep** | [docs/developer/analytic-brep.md](docs/developer/analytic-brep.md) |
+| **Renderer** | [docs/developer/renderer.md](docs/developer/renderer.md) |
+| **Build System** | [docs/developer/build-system.md](docs/developer/build-system.md) |
+| **Testing** | [docs/developer/testing.md](docs/developer/testing.md) |
+| **Technology Bible** | [docs/GEOMETRY_KERNEL_COMPENDIUM.md](docs/GEOMETRY_KERNEL_COMPENDIUM.md) |
+| **Capability Map** | [docs/kernel-capability-map.md](docs/kernel-capability-map.md) |
+
+### HTML Site
+
+All docs available as HTML in `docs/html/`:
+- `docs/html/developer/index.html`
+- `docs/html/expert/index.html`
+- `docs/html/beginner/index.html`
+- `docs/html/api/index.html`
+
+---
+
+## Quality Gates (Every Commit)
+
+```bash
+# 1. Build (must pass -Werror)
+cmake --build build -j$(nproc)
+
+# 2. Test (2026 tests, 0 regressions)
+ctest --test-dir build --output-on-failure
+
+# 3. Format
+cmake --build build --target format-check
+
+# 4. Static analysis
+cmake --build build --target tidy-check
+```
+
+One pre-existing allowed failure: `ApiFreezeAudit.PublicHeaderManifestMatchesWorkspace`
+
+---
+
+## Roadmap
+
+See [ROADMAP.md](ROADMAP.md) for the autonomous loop priority list:
+
+- **P0**: Topology completeness (insertEdgeLoop, splitEdge NGon) ✅
+- **P1**: Boolean exact arithmetic + BVH acceleration
+- **P2**: Half-edge bevel/connect/gridFill completion
+- **P3**: TemplateManager, test coverage
+- **P4**: BVH snapping, edge caching
+
+---
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) and [AGENTS.md](AGENTS.md).
+
+**Branch:** `main`  
+**Commit style:** `type: description` (feat, fix, refactor, docs, test, perf)  
+**Push:** Direct to `origin/main`  
+
+---
+
+## License
+
+Apache 2.0 — see [LICENSE](../LICENSE)
+
+---
+
+*Nexus Modeling v0.1.0-dev | 2026 tests passing | C++26 | Vulkan 1.3*

@@ -1,0 +1,814 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nexus Modeling — Analytic B-rep Guide — Nexus Modeling Docs</title>
+    <link rel="stylesheet" href="../styles.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
+</head>
+<body>
+    <nav class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+            <div class="sidebar-title">Nexus Modeling</div>
+            <div class="sidebar-subtitle">Documentation v0.1.0-dev</div>
+        </div>
+        <div class="sidebar-section">
+<div class="sidebar-section-title">📚 Developer Documentation</div>
+<a class="sidebar-link" href="../architecture.html">Architecture Overview</a>
+<a class="sidebar-link" href="../kernel-api.html">Kernel API Reference</a>
+<a class="sidebar-link" href="../geometry-kernel.html">Geometry Kernel</a>
+<a class="sidebar-link" href="../renderer.html">Render System</a>
+<a class="sidebar-link" href="../editor-architecture.html">Editor Architecture</a>
+<a class="sidebar-link" href="../build-system.html">Build System</a>
+<a class="sidebar-link" href="../testing.html">Testing</a>
+<a class="sidebar-link" href="../contributing.html">Contributing</a>
+<a class="sidebar-link" href="../adding-geometry-op.html">Adding Geometry Op</a>
+<a class="sidebar-link" href="../adding-cad-feature.html">Adding CAD Feature</a>
+<a class="sidebar-link" href="../mesh-operations.html">Mesh Operations</a>
+<a class="sidebar-link" href="../boolean-csg.html">Boolean/CSG Deep Dive</a>
+<a class="sidebar-link" href="../halfedge-mesh.html">Half-edge Mesh</a>
+<a class="sidebar-link" href="../analytic-brep.html">Analytic B-rep</a>
+<a class="sidebar-link" href="../mesh-io.html">Mesh I/O</a>
+<a class="sidebar-link" href="../tolerance.html">Tolerance System</a>
+<a class="sidebar-link" href="../porting.html">Porting Guide</a>
+</div>
+<div class="sidebar-section">
+<div class="sidebar-section-title">🎨 Expert User Documentation</div>
+</div>
+<div class="sidebar-section">
+<div class="sidebar-section-title">👤 Beginner / User Documentation</div>
+<a class="sidebar-link" href="../getting-started.html">Getting Started</a>
+</div>
+<div class="sidebar-section">
+<div class="sidebar-section-title">🔧 API Reference</div>
+</div>
+<div class="sidebar-section">
+<div class="sidebar-section-title">📚 Additional Resources</div>
+<a class="sidebar-link" href="../design-decisions.html">Design Decisions</a>
+<a class="sidebar-link" href="../testing-strategy.html">Testing Strategy</a>
+<a class="sidebar-link" href="../graphics-kernel.html">Graphics Kernel</a>
+<a class="sidebar-link" href="../vision-and-roadmap.html">Vision & Roadmap</a>
+<a class="sidebar-link" href="../reference-roadmap.html">Reference Roadmap</a>
+<a class="sidebar-link" href="../modeling-industry-parity.html">Modeling Industry Parity</a>
+<a class="sidebar-link" href="../modeling-parity-index.html">Modeling Parity Index</a>
+<a class="sidebar-link" href="../modeling-reference-roadmap.html">Modeling Reference Roadmap</a>
+</div>
+    </nav>
+    
+    <div class="main-content">
+        <header class="header">
+            <button class="btn btn-icon" id="mobile-menu-btn" aria-label="Toggle menu" style="display: none;">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="3" y1="12" x2="21" y2="12"></line>
+                    <line x1="3" y1="6" x2="21" y2="6"></line>
+                    <line x1="3" y1="18" x2="21" y2="18"></line>
+                </svg>
+            </button>
+            <div class="header-title">Nexus Modeling — Analytic B-rep Guide</div>
+            <div class="header-actions">
+                
+<button class="btn btn-icon" id="theme-toggle" aria-label="Toggle dark/light theme" title="Toggle theme (Ctrl+Shift+L)">
+    <svg class="theme-icon-sun" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display: none;">
+        <circle cx="12" cy="12" r="5"></circle>
+        <line x1="12" y1="1" x2="12" y2="3"></line>
+        <line x1="12" y1="21" x2="12" y2="23"></line>
+        <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+        <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+        <line x1="1" y1="12" x2="3" y2="12"></line>
+        <line x1="21" y1="12" x2="23" y2="12"></line>
+        <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+        <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+    </svg>
+    <svg class="theme-icon-moon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display: none;">
+        <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+    </svg>
+</button>
+
+                <a href="https://github.com/nexus-systems/nexus-modeling" class="btn btn-secondary" target="_blank" rel="noopener">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M12 0C5.374 0 0 5.373 0 12c0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23A11.509 11.509 0 0112 5.803c1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576C20.566 21.797 24 17.3 24 12c0-6.627-5.373-12-12-12z"/>
+                    </svg>
+                    <span class="btn-text">GitHub</span>
+                </a>
+                <a href="../index.html" class="btn btn-primary">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
+                        <polyline points="9 22 9 12 15 12 15 22"></polyline>
+                    </svg>
+                    <span class="btn-text">Home</span>
+                </a>
+            </div>
+        </header>
+        
+        <main class="content">
+            <div class="toc"><h3>On This Page</h3><ul><li><a href="#nexus-modeling-analytic-b-rep-guide">Nexus Modeling — Analytic B-rep Guide</a></li>
+  <li><a href="#overview">Overview</a></li>
+  <li><a href="#topology-model-opencascade-style-use-based">Topology Model (OpenCASCADE-style, use-based)</a></li>
+  <li><a href="#types">Types</a></li>
+  <li><a href="#building-bodies">Building Bodies</a></li>
+    <li><a href="#fromfaces-points-faces"><code>fromFaces(points, faces)</code></a></li>
+  <li><a href="#primitives">Primitives</a></li>
+  <li><a href="#integrity-validation">Integrity Validation</a></li>
+    <li><a href="#checks-performed">Checks Performed</a></li>
+  <li><a href="#geometry-evaluation">Geometry Evaluation</a></li>
+    <li><a href="#implemented-surface-types">Implemented Surface Types</a></li>
+    <li><a href="#surface-parametrizations">Surface Parametrizations</a></li>
+  <li><a href="#tessellation">Tessellation</a></li>
+  <li><a href="#complete-example-box-with-cylindrical-hole">Complete Example: Box with Cylindrical Hole</a></li>
+  <li><a href="#boolean-operations-exact">Boolean Operations (Exact)</a></li>
+  <li><a href="#integrity-report">Integrity Report</a></li>
+    <li><a href="#check-categories">Check Categories</a></li>
+  <li><a href="#detailed-surface-evaluation">Detailed Surface Evaluation</a></li>
+    <li><a href="#plane">Plane</a></li>
+    <li><a href="#cylinder-radius-r-axis-normal">Cylinder (radius r, axis = normal)</a></li>
+    <li><a href="#sphere-radius-r">Sphere (radius r)</a></li>
+    <li><a href="#torus-major-r-minor-r">Torus (major R, minor r)</a></li>
+    <li><a href="#cone-radius-r-height-h">Cone (radius r, height h)</a></li>
+  <li><a href="#primitive-construction-details">Primitive Construction Details</a></li>
+    <li><a href="#makebox-w-h-d"><code>makeBox(w, h, d)</code></a></li>
+    <li><a href="#makecylinder-r-h-seg"><code>makeCylinder(r, h, seg)</code></a></li>
+    <li><a href="#makesphere-r-lat-lon"><code>makeSphere(r, lat, lon)</code></a></li>
+    <li><a href="#makecone-r-h-seg"><code>makeCone(r, h, seg)</code></a></li>
+    <li><a href="#maketorus-r-r-major-minor"><code>makeTorus(R, r, major, minor)</code></a></li>
+  <li><a href="#boolean-operations-implementation">Boolean Operations Implementation</a></li>
+    <li><a href="#exact-curve-surface-intersection">Exact Curve/Surface Intersection</a></li>
+    <li><a href="#trimming-at-boundaries">Trimming at Boundaries</a></li>
+    <li><a href="#boolean-algorithm">Boolean Algorithm</a></li>
+</ul></div>
+            <h1 id="nexus-modeling-analytic-b-rep-guide">Nexus Modeling — Analytic B-rep Guide</h1>
+
+<p>
+<em>Exact boundary representation with analytic geometry (not tessellated).</em>
+</p>
+
+<hr>
+
+<h2 id="overview">Overview</h2>
+
+<p>
+The analytic B-rep kernel (<code>nexus::geometry::brep</code>) provides <strong>exact CAD-grade solids</strong> with:
+</p>
+<ul>
+<li><strong>Typed topology</strong>: Vertex/Edge/Coedge/Loop/Face/Shell/Solid</li>
+<li><strong>Analytic geometry</strong>: Line, Circle, Plane, Cylinder, Sphere, Torus, Cone</li>
+<li><strong>Exact evaluation</strong>: <code>eval(u,v)</code>, <code>normalAt(u,v)</code> for all surface types</li>
+<li><strong>Full integrity validation</strong>: <code>checkIntegrity()</code> — Euler, manifold, vertex continuity, partner reciprocity</li>
+<li><strong>Tessellation</strong>: <code>toMesh()</code> for rendering/export</li>
+</ul>
+
+<hr>
+
+<h2 id="topology-model-opencascade-style-use-based">Topology Model (OpenCASCADE-style, use-based)</h2>
+
+<pre><code class="language-">Body
+<p>
+└── Solid[]
+     └── Shell[]
+          └── Face[]
+               ├── outerLoop → Loop
+               └── innerLoops[] → Loop[]
+                    └── Coedge[]
+                         ├── edge → Edge
+                         ├── reversed (orientation)
+                         ├── next/prev (ring)
+                         └── partner → Coedge (adjacent face)
+               └── Edge[]
+                    ├── curve → Curve (Line/Circle/Nurbs)
+                    ├── v0, v1 (vertices)
+                    └── coedge (one of the two)
+               └── Vertex[]
+                    └── point (Vec3)</code></pre>
+</p>
+
+<p>
+<strong>Key invariant:</strong> Each geometric edge is used by exactly 2 coedges (one per adjacent face), with opposite <code>reversed</code> flags. Boundary edges have 1 coedge.
+</p>
+
+<hr>
+
+<h2 id="types">Types</h2>
+
+<pre><code class="language-cpp">namespace nexus::geometry::brep {
+
+<p>
+// Geometry
+enum class CurveKind { Line, Circle, Nurbs };
+struct Curve { 
+    CurveKind kind; 
+    Vec3 origin, dir, ref; 
+    float radius; 
+    uint32_t nurbs; 
+};
+</p>
+
+<p>
+enum class SurfaceKind { Plane, Cylinder, Sphere, Torus, Cone, Nurbs };
+struct Surface {
+    SurfaceKind kind;
+    Vec3 origin, normal, uAxis;
+    float radius;
+    uint32_t nurbs;
+    Vec3 eval(float u, float v) const noexcept;
+    Vec3 normalAt(float u, float v) const noexcept;
+    Vec3 vAxis() const noexcept;  // normal × uAxis
+};
+</p>
+
+<p>
+// Topology
+struct Vertex  { Vec3 point; uint32_t coedge = kInvalid; };
+struct Edge    { uint32_t curve, v0, v1; float t0=0, t1=1; uint32_t coedge = kInvalid; };
+struct Coedge  { uint32_t edge; bool reversed; uint32_t loop, next, prev, partner; };
+struct Loop    { uint32_t face; uint32_t first; bool outer; };
+struct Face    { uint32_t surface; bool reversed; uint32_t outerLoop; std::vector<uint32_t> innerLoops; uint32_t shell; };
+struct Shell   { std::vector<uint32_t> faces; bool closed = false; };
+struct Solid   { std::vector<uint32_t> shells; };  // [0]=outer, rest=voids
+</p>
+
+<p>
+// Body
+class Body {
+public:
+    // Construction
+    static std::optional<Body> fromFaces(points, faces);  // Build from face rings
+    IntegrityReport checkIntegrity() const;                // Full validation
+    Mesh toMesh() const;                                   // Tessellate for rendering
+    bool isClosed() const noexcept;
+</p>
+
+<p>
+    // Accessors
+    size_t vertexCount()  const noexcept;
+    size_t edgeCount()    const noexcept;
+    size_t coedgeCount()  const noexcept;
+    size_t loopCount()    const noexcept;
+    size_t faceCount()    const noexcept;
+    size_t shellCount()   const noexcept;
+    size_t solidCount()   const noexcept;
+</p>
+
+<p>
+    const Vertex&  vertex(uint32_t i)  const;
+    const Edge&    edge(uint32_t i)    const;
+    const Coedge&  coedge(uint32_t i)  const;
+    const Loop&    loop(uint32_t i)    const;
+    const Face&    face(uint32_t i)    const;
+    const Shell&   shell(uint32_t i)   const;
+    const Curve&   curve(uint32_t i)   const;
+    const Surface& surface(uint32_t i) const;
+    bool isClosed() const noexcept;
+</p>
+
+<p>
+    const std::vector<Curve>&   curves() const;
+    const std::vector<Surface>& surfaces() const;
+</p>
+
+<p>
+private:
+    std::vector<Vertex>  m_verts;
+    std::vector<Edge>    m_edges;
+    std::vector<Coedge>  m_coedges;
+    std::vector<Loop>    m_loops;
+    std::vector<Face>    m_faces;
+    std::vector<Shell>   m_shells;
+    std::vector<Solid>   m_solids;
+    std::vector<Curve>   m_curves;
+    std::vector<Surface> m_surfaces;
+};
+</p>
+
+<p>
+// Primitives
+Body makeBox(float w, float h, float d);
+Body makeCylinder(float r, float h, uint32_t seg);
+Body makeSphere(float r, uint32_t lat, uint32_t lon);
+Body makeCone(float r, float h, uint32_t seg);
+Body makeTorus(float R, float r, uint32_t major, uint32_t minor);
+</p>
+
+<p>
+// Boolean: union/diff/intersect (exact, analytic)
+Body booleanUnion(const Body&, const Body&);
+Body booleanDifference(const Body&, const Body&);
+Body booleanIntersection(const Body&, const Body&);
+}</code></pre>
+</p>
+
+<hr>
+
+<h2 id="building-bodies">Building Bodies</h2>
+
+<h3 id="fromfaces-points-faces"><code>fromFaces(points, faces)</code></h3>
+
+<pre><code class="language-cpp">struct FaceDef {
+<p>
+    std::vector<uint32_t> loop;      // CCW vertex indices (outer), CW for holes
+    Surface surface;
+};
+</p>
+
+<p>
+auto body = Body::fromFaces(points, faceDefs);
+// Returns nullopt on malformed input</code></pre>
+</p>
+
+<p>
+<strong>Winding Convention:</strong> Outer loops <strong>CCW</strong> as seen from outside → coedges traverse edges in opposite directions on adjacent faces → coedges partner with opposite <code>reversed</code> flag.
+</p>
+
+<hr>
+
+<h2 id="primitives">Primitives</h2>
+
+<pre><code class="language-cpp">Body makeBox(float w, float h, float d);                    // Centered, 6 planar faces
+<p>
+Body makeCylinder(float r, float h, uint32_t seg);          // Capped cylinder
+Body makeSphere(float r, uint32_t lat, uint32_t lon);       // UV sphere
+Body makeCone(float r, float h, uint32_t seg);              // Capped cone
+Body makeTorus(float R, float r, uint32_t major, uint32_t minor);</code></pre>
+</p>
+
+<hr>
+
+<h2 id="integrity-validation">Integrity Validation</h2>
+
+<pre><code class="language-cpp">struct IntegrityReport {
+<p>
+    bool ok = true;
+    std::string reason;
+    uint32_t vertices, edges, faces, coedges, loops, shells;
+    uint32_t boundaryEdges;
+    int euler;  // V - E + F
+};
+</p>
+
+<p>
+IntegrityReport checkIntegrity() const;</code></pre>
+</p>
+
+<h3 id="checks-performed">Checks Performed</h3>
+
+<p>
+| Check | Failure Example |
+|-------|-----------------|
+| Edge vertices valid | <code>edge.vert[0] >= vertexCount</code> |
+| Edge non-degenerate | <code>v0 == v1</code> |
+| Coedge edge valid | <code>coedge.edge >= edges.size()</code> |
+| Coedge loop valid | <code>coedge.loop >= loops.size()</code> |
+| Next/prev bounds | <code>next >= coedges.size()</code> |
+| Next/prev reciprocal | <code>coedges[next].prev != self</code> |
+| Next/prev loop match | <code>coedges[next].loop != coedge.loop</code> |
+| Vertex continuity | <code>endV(c) != startV(c.next)</code> |
+| Partner reciprocal | <code>partner.partner != self</code> |
+| Partner orientation | <code>partner.reversed == coedge.reversed</code> |
+| Partner edge match | <code>partner.edge != coedge.edge</code> |
+| Partner loop diff | <code>partner.loop == coedge.loop</code> |
+| Loop closure | Ring doesn't close within 2×coedges |
+| Loop size | `< 3 coedges` |
+| Face outer loop valid | `face.outerLoop >= loops.size()<code> |
+| Face outer loop marked | </code>!loops[outer].outer<code> |
+| Face outer loop ownership | </code>loops[outer].face != face<code> |
+| Inner loop validity | </code>inner >= loops<code>, </code>loops[inner].outer<code>, </code>loops[inner].face != face<code> |
+| Vertex root valid | </code>vertex.coedge >= coedges<code> or </code>startV(coedge) != vertex<code> |
+| Edge orphaned | </code>coedgesPerEdge[e] == 0<code> |
+| Edge non-manifold | </code>coedgesPerEdge[e] > 2<code> |
+| Euler characteristic | </code>V - E + F != 2 - 2*genus - shells + boundaries` |
+</p>
+
+<hr>
+
+<h2 id="geometry-evaluation">Geometry Evaluation</h2>
+
+<pre><code class="language-cpp">// Curves
+<p>
+Vec3 Curve::eval(float t) const noexcept;          // Line: origin + t*dir
+Vec3 Curve::normalAt(float t) const noexcept;      // Line: dir, Circle: tangent
+</p>
+
+<p>
+// Surfaces
+Vec3 Surface::eval(float u, float v) const noexcept;
+Vec3 Surface::normalAt(float u, float v) const noexcept;
+Vec3 Surface::vAxis() const noexcept;  // normal × uAxis</code></pre>
+</p>
+
+<h3 id="implemented-surface-types">Implemented Surface Types</h3>
+
+<p>
+| Surface | <code>eval(u,v)</code> | <code>normalAt(u,v)</code> |
+|---------|-------------|-----------------|
+| Plane | ✅ | ✅ |
+| Cylinder | ✅ | ✅ |
+| Sphere | ✅ | ✅ |
+| Torus | ✅ | ✅ |
+| Cone | ✅ | ✅ |
+| Nurbs | ❌ (stub) | ❌ |
+</p>
+
+<h3 id="surface-parametrizations">Surface Parametrizations</h3>
+
+<p>
+<strong>Plane:</strong> <code>eval(u,v) = origin + u<em>uAxis + v</em>vAxis</code>, <code>normalAt = normal</code>
+</p>
+
+<p>
+<strong>Cylinder:</strong> <code>eval(u,v) = origin + cos(u)<em>uAxis</em>radius + sin(u)<em>vAxis</em>radius + v<em>normal</code>, <code>normalAt = normalize(cos(u)</em>uAxis + sin(u)*vAxis)</code>
+</p>
+
+<p>
+<strong>Sphere:</strong> <code>eval(u,v) = origin + cos(u)<em>sin(v)</em>uAxis + sin(u)<em>sin(v)</em>vAxis + cos(v)*normal</code>, <code>normalAt = eval - origin</code>
+</p>
+
+<p>
+<strong>Torus:</strong> <code>eval(u,v) = origin + (R + r<em>cos(v)) </em> (cos(u)<em>uAxis + sin(u)</em>vAxis) + r<em>sin(v)</em>normal</code>
+</p>
+
+<p>
+<strong>Cone:</strong> <code>eval(u,v) = origin + (1-v)<em>r</em>cos(u)<em>uAxis + (1-v)</em>r<em>sin(u)</em>vAxis + v<em>h</em>normal</code>
+</p>
+
+<hr>
+
+<h2 id="tessellation">Tessellation</h2>
+
+<pre><code class="language-cpp">Mesh Body::toMesh() const;</code></pre>
+<ul>
+<li>Fan-triangulates outer loop of each face</li>
+<li>Returns indexed mesh (positions + topology)</li>
+<li>Suitable for rendering or export</li>
+</ul>
+
+<hr>
+
+<h2 id="complete-example-box-with-cylindrical-hole">Complete Example: Box with Cylindrical Hole</h2>
+
+<pre><code class="language-cpp">Body box = makeBox(10, 10, 5);
+<p>
+Body cyl = makeCylinder(1.5, 6);  // r=1.5, h=6
+</p>
+
+<p>
+auto result = booleanDifference(box, cyl);
+assert(result.isClosed());
+auto mesh = result.toMesh();
+// mesh: 12 tris (box) - cylindrical hole</code></pre>
+</p>
+
+<hr>
+
+<h2 id="boolean-operations-exact">Boolean Operations (Exact)</h2>
+
+<pre><code class="language-cpp">Body booleanUnion(const Body&, const Body&);
+<p>
+Body booleanDifference(const Body&, const Body&);
+Body booleanIntersection(const Body&, const Body&);</code></pre>
+</p>
+<ul>
+<li>Exact curve/surface intersection</li>
+<li>Exact trimming at boundaries</li>
+<li>Watertight results, Euler χ=2</li>
+</ul>
+
+<hr>
+
+<h2 id="integrity-report">Integrity Report</h2>
+
+<pre><code class="language-cpp">struct IntegrityReport {
+<p>
+    bool ok = true;
+    std::string reason;
+    uint32_t vertices, edges, faces, coedges, loops, shells;
+    uint32_t boundaryEdges;
+    int euler;
+};</code></pre>
+</p>
+
+<h3 id="check-categories">Check Categories</h3>
+
+<p>
+| Category | Checks |
+|----------|--------|
+| Edges | Valid vertices, non-degenerate |
+| Coedges | Edge/loop bounds, next/prev reciprocity, loop consistency |
+| Loops | Closure, ≥3 coedges, face ownership |
+| Faces | Valid surface, outer/inner loops correct |
+| Vertices | Root coedge valid |
+| Edges | 1 or 2 coedges (manifold), no orphans |
+| Global | Euler formula, shell closure |
+</p>
+
+<hr>
+
+<h2 id="detailed-surface-evaluation">Detailed Surface Evaluation</h2>
+
+<h3 id="plane">Plane</h3>
+<pre><code class="language-cpp">Vec3 Surface::eval(float u, float v) const {
+<p>
+    return origin + u <em> uAxis + v </em> vAxis();
+}
+Vec3 Surface::normalAt(float, float) const {
+    return normal;
+}</code></pre>
+</p>
+
+<h3 id="cylinder-radius-r-axis-normal">Cylinder (radius r, axis = normal)</h3>
+<pre><code class="language-cpp">Vec3 Surface::eval(float u, float v) const {
+<p>
+    Vec3 vAxis = normal.cross(uAxis);  // vAxis = normal × uAxis
+    return origin + radius <em> (cos(u) </em> uAxis + sin(u) <em> vAxis) + v </em> normal;
+}
+Vec3 Surface::normalAt(float u, float v) const {
+    return cos(u) <em> uAxis + sin(u) </em> vAxis();
+}</code></pre>
+</p>
+
+<h3 id="sphere-radius-r">Sphere (radius r)</h3>
+<pre><code class="language-cpp">Vec3 Surface::eval(float u, float v) const {
+<p>
+    // u: azimuth [0, 2π], v: elevation [-π/2, π/2]
+    float cu = cos(u), su = sin(u);
+    float cv = cos(v), sv = sin(v);
+    Vec3 vAxis = normal.cross(uAxis);
+    return origin + radius <em> (cu </em> cv <em> uAxis + su </em> cv <em> vAxis + sv </em> normal);
+}
+Vec3 Surface::normalAt(float u, float v) const {
+    float cu = cos(u), su = sin(u);
+    float cv = cos(v), sv = sin(v);
+    Vec3 vAxis = normal.cross(uAxis);
+    return cu <em> cv </em> uAxis + su <em> cv </em> vAxis + sv * normal;
+}</code></pre>
+</p>
+
+<h3 id="torus-major-r-minor-r">Torus (major R, minor r)</h3>
+<pre><code class="language-cpp">Vec3 Surface::eval(float u, float v) const {
+<p>
+    // u: major angle [0, 2π], v: minor angle [0, 2π]
+    float cu = cos(u), su = sin(u);
+    float cv = cos(v), sv = sin(v);
+    Vec3 vAxis = normal.cross(uAxis);
+    float majorRadius = R + r * cv;
+    return origin + majorRadius <em> (cu </em> uAxis + su <em> vAxis) + r </em> sv * normal;
+}
+Vec3 Surface::normalAt(float u, float v) const {
+    float cu = cos(u), su = sin(u);
+    float cv = cos(v), sv = sin(v);
+    Vec3 vAxis = normal.cross(uAxis);
+    return cv <em> (cu </em> uAxis + su <em> vAxis) + sv </em> normal;
+}</code></pre>
+</p>
+
+<h3 id="cone-radius-r-height-h">Cone (radius r, height h)</h3>
+<pre><code class="language-cpp">Vec3 Surface::eval(float u, float v) const {
+<p>
+    // v: [0,1] along height
+    float cu = cos(u), su = sin(u);
+    Vec3 vAxis = normal.cross(uAxis);
+    float radiusAtV = radius * (1.0f - v);
+    return origin + radiusAtV <em> (cu </em> uAxis + su <em> vAxis) + v </em> height * normal;
+}
+Vec3 Surface::normalAt(float u, float v) const {
+    // Normal points outward and slightly down
+    float cu = cos(u), su = sin(u);
+    Vec3 vAxis = normal.cross(uAxis);
+    Vec3 radial = cu <em> uAxis + su </em> vAxis;
+    // Cone angle: atan(radius/height)
+    float sinAlpha = radius / sqrt(radius<em>radius + height</em>height);
+    float cosAlpha = height / sqrt(radius<em>radius + height</em>height);
+    return cosAlpha <em> radial - sinAlpha </em> normal;
+}</code></pre>
+</p>
+
+<hr>
+
+<h2 id="primitive-construction-details">Primitive Construction Details</h2>
+
+<h3 id="makebox-w-h-d"><code>makeBox(w, h, d)</code></h3>
+<ul>
+<li>8 vertices (±w/2, ±h/2, ±d/2)</li>
+<li>12 edges (4 per axis)</li>
+<li>6 faces (XY, XZ, YZ planes at ±half-extents)</li>
+<li>All surfaces: Plane</li>
+<li>Euler: V=8, E=12, F=6, χ=2</li>
+</ul>
+
+<h3 id="makecylinder-r-h-seg"><code>makeCylinder(r, h, seg)</code></h3>
+<ul>
+<li>2*seg vertices (top + bottom circles)</li>
+<li>3*seg edges (seg top, seg bottom, seg vertical)</li>
+<li>seg+2 faces (seg side, 1 top, 1 bottom)</li>
+<li>Side: Cylinder surface, Caps: Plane</li>
+<li>Euler: V=2s, E=3s, F=s+2, χ=2</li>
+</ul>
+
+<h3 id="makesphere-r-lat-lon"><code>makeSphere(r, lat, lon)</code></h3>
+<ul>
+<li>(lat+1)*(lon+1) vertices (UV sphere)</li>
+<li>~3<em>lat</em>lon edges</li>
+<li>~2<em>lat</em>lon faces</li>
+<li>All faces: Sphere surface</li>
+<li>Euler: χ=2</li>
+</ul>
+
+<h3 id="makecone-r-h-seg"><code>makeCone(r, h, seg)</code></h3>
+<ul>
+<li>seg+1 vertices (base circle + apex)</li>
+<li>2*seg edges (base circle + seg to apex)</li>
+<li>seg+1 faces (seg side triangles + 1 base)</li>
+<li>Side: Cone surface, Base: Plane</li>
+<li>Euler: χ=2</li>
+</ul>
+
+<h3 id="maketorus-r-r-major-minor"><code>makeTorus(R, r, major, minor)</code></h3>
+<ul>
+<li>major*minor vertices</li>
+<li>2<em>major</em>minor edges</li>
+<li>major*minor faces</li>
+<li>All faces: Torus surface</li>
+<li>Euler: χ=0 (genus 1)</li>
+</ul>
+
+<hr>
+
+<h2 id="boolean-operations-implementation">Boolean Operations Implementation</h2>
+
+<h3 id="exact-curve-surface-intersection">Exact Curve/Surface Intersection</h3>
+
+<p>
+<strong>Line-Plane:</strong> Analytic solution, parameter t
+<strong>Line-Cylinder:</strong> Quadratic equation
+<strong>Line-Sphere:</strong> Quadratic equation
+<strong>Line-Torus:</strong> Quartic equation (solve analytically or numerically)
+<strong>Line-Cone:</strong> Quadratic equation
+<strong>Circle-Plane:</strong> Line-Plane + circle intersection
+<strong>Circle-Cylinder/Cone/Sphere/Torus:</strong> Reduce to polynomial
+</p>
+
+<h3 id="trimming-at-boundaries">Trimming at Boundaries</h3>
+<ol>
+<li>Compute intersection curves (3D curves on surfaces)</li>
+<li>Project to UV space of each surface</li>
+<li>Trim UV domains to intersection curves</li>
+<li>Update edge topology with new vertices at intersections</li>
+<li>Rebuild loops from trimmed edges</li>
+</ol>
+
+<h3 id="boolean-algorithm">Boolean Algorithm</h3>
+<pre><code class="language-cpp">Body booleanUnion(const Body& A, const Body& B) {
+<p>
+    // 1. Compute all intersection curves
+    // 2. Split edges at intersections
+    // 3. Classify faces: inside/outside/on boundary
+    // 4. Remove inside faces
+    // 5. Stitch boundary edges
+    // 6. Build result topology
+    // 7. Validate integrity
+}</code></pre>
+</p>
+
+<hr>
+
+<p>
+<em>Kernel v0.1.0-dev | 1921 tests passing | C++26 | Vulkan 1.3</em>
+</p>
+        </main>
+    </div>
+    
+    <script>
+// Theme management
+const THEME_KEY = 'nexus-docs-theme';
+const themeToggle = document.getElementById('theme-toggle');
+const sunIcon = themeToggle.querySelector('.theme-icon-sun');
+const moonIcon = themeToggle.querySelector('.theme-icon-moon');
+
+function applyTheme(theme) {
+    document.documentElement.setAttribute('data-theme', theme);
+    if (theme === 'light') {
+        sunIcon.style.display = 'block';
+        moonIcon.style.display = 'none';
+    } else {
+        sunIcon.style.display = 'none';
+        moonIcon.style.display = 'block';
+    }
+    localStorage.setItem(THEME_KEY, theme);
+}
+
+function getPreferredTheme() {
+    const stored = localStorage.getItem(THEME_KEY);
+    if (stored) return stored;
+    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+}
+
+function initTheme() {
+    const theme = getPreferredTheme();
+    applyTheme(theme);
+}
+
+function toggleTheme() {
+    const current = document.documentElement.getAttribute('data-theme') || 'dark';
+    applyTheme(current === 'dark' ? 'light' : 'dark');
+}
+
+themeToggle.addEventListener('click', toggleTheme);
+
+// Keyboard shortcut: Ctrl+Shift+L
+document.addEventListener('keydown', (e) => {
+    if (e.ctrlKey && e.shiftKey && e.key === 'L') {
+        e.preventDefault();
+        toggleTheme();
+    }
+});
+
+// Listen for system theme changes
+window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => {
+    if (!localStorage.getItem(THEME_KEY)) {
+        applyTheme(e.matches ? 'dark' : 'light');
+    }
+});
+
+// Initialize theme immediately to prevent flash
+initTheme();
+
+// Mobile sidebar toggle
+const sidebar = document.getElementById('sidebar');
+const mobileMenuBtn = document.getElementById('mobile-menu-btn');
+
+if (mobileMenuBtn) {
+    mobileMenuBtn.addEventListener('click', () => {
+        sidebar.classList.toggle('open');
+    });
+}
+
+document.addEventListener('click', (e) => {
+    if (window.innerWidth <= 768) {
+        if (!sidebar.contains(e.target) && !e.target.closest('.header')) {
+            sidebar.classList.remove('open');
+        }
+    }
+});
+
+// Smooth scroll for anchor links
+document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+    anchor.addEventListener('click', function(e) {
+        const target = document.querySelector(this.getAttribute('href'));
+        if (target) {
+            e.preventDefault();
+            target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            if (window.innerWidth <= 768) {
+                sidebar.classList.remove('open');
+            }
+        }
+    });
+});
+
+// Active link highlighting based on scroll position
+const sections = document.querySelectorAll('.content h2, .content h3');
+const sidebarLinks = document.querySelectorAll('.sidebar-link[href^="#"]');
+
+function updateActiveLink() {
+    let current = '';
+    sections.forEach(section => {
+        const rect = section.getBoundingClientRect();
+        if (rect.top <= 100) {
+            current = '#' + section.id;
+        }
+    });
+
+    sidebarLinks.forEach(link => {
+        link.classList.remove('active');
+        if (link.getAttribute('href') === current) {
+            link.classList.add('active');
+        }
+    });
+}
+
+window.addEventListener('scroll', updateActiveLink, { passive: true });
+window.addEventListener('load', updateActiveLink);
+
+// Highlight.js initialization
+if (typeof hljs !== 'undefined') {
+    hljs.highlightAll();
+}
+
+// Mobile menu button visibility
+const mobileMenuBtn = document.getElementById('mobile-menu-btn');
+function checkMobile() {
+    if (window.innerWidth <= 768) {
+        mobileMenuBtn.style.display = 'flex';
+    } else {
+        mobileMenuBtn.style.display = 'none';
+        document.getElementById('sidebar').classList.remove('open');
+    }
+}
+checkMobile();
+window.addEventListener('resize', checkMobile);
+
+mobileMenuBtn.addEventListener('click', () => {
+    document.getElementById('sidebar').classList.toggle('open');
+});
+</script>

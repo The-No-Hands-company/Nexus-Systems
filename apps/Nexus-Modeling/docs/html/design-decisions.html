@@ -1,0 +1,494 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kernel Design Decisions — Nexus Modeling Docs</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
+</head>
+<body>
+    <nav class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+            <div class="sidebar-title">Nexus Modeling</div>
+            <div class="sidebar-subtitle">Documentation v0.1.0-dev</div>
+        </div>
+        <div class="sidebar-section">
+<div class="sidebar-section-title">📚 Developer Documentation</div>
+<a class="sidebar-link" href="architecture.html">Architecture Overview</a>
+<a class="sidebar-link" href="kernel-api.html">Kernel API Reference</a>
+<a class="sidebar-link" href="geometry-kernel.html">Geometry Kernel</a>
+<a class="sidebar-link" href="renderer.html">Render System</a>
+<a class="sidebar-link" href="editor-architecture.html">Editor Architecture</a>
+<a class="sidebar-link" href="build-system.html">Build System</a>
+<a class="sidebar-link" href="testing.html">Testing</a>
+<a class="sidebar-link" href="contributing.html">Contributing</a>
+<a class="sidebar-link" href="adding-geometry-op.html">Adding Geometry Op</a>
+<a class="sidebar-link" href="adding-cad-feature.html">Adding CAD Feature</a>
+<a class="sidebar-link" href="mesh-operations.html">Mesh Operations</a>
+<a class="sidebar-link" href="boolean-csg.html">Boolean/CSG Deep Dive</a>
+<a class="sidebar-link" href="halfedge-mesh.html">Half-edge Mesh</a>
+<a class="sidebar-link" href="analytic-brep.html">Analytic B-rep</a>
+<a class="sidebar-link" href="mesh-io.html">Mesh I/O</a>
+<a class="sidebar-link" href="tolerance.html">Tolerance System</a>
+<a class="sidebar-link" href="porting.html">Porting Guide</a>
+</div>
+<div class="sidebar-section">
+<div class="sidebar-section-title">🎨 Expert User Documentation</div>
+</div>
+<div class="sidebar-section">
+<div class="sidebar-section-title">👤 Beginner / User Documentation</div>
+<a class="sidebar-link" href="getting-started.html">Getting Started</a>
+</div>
+<div class="sidebar-section">
+<div class="sidebar-section-title">🔧 API Reference</div>
+</div>
+<div class="sidebar-section">
+<div class="sidebar-section-title">📚 Additional Resources</div>
+<a class="sidebar-link active" href="design-decisions.html">Design Decisions</a>
+<a class="sidebar-link" href="testing-strategy.html">Testing Strategy</a>
+<a class="sidebar-link" href="graphics-kernel.html">Graphics Kernel</a>
+<a class="sidebar-link" href="vision-and-roadmap.html">Vision & Roadmap</a>
+<a class="sidebar-link" href="reference-roadmap.html">Reference Roadmap</a>
+<a class="sidebar-link" href="modeling-industry-parity.html">Modeling Industry Parity</a>
+<a class="sidebar-link" href="modeling-parity-index.html">Modeling Parity Index</a>
+<a class="sidebar-link" href="modeling-reference-roadmap.html">Modeling Reference Roadmap</a>
+</div>
+    </nav>
+    
+    <div class="main-content">
+        <header class="header">
+            <button class="btn btn-icon" id="mobile-menu-btn" aria-label="Toggle menu" style="display: none;">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="3" y1="12" x2="21" y2="12"></line>
+                    <line x1="3" y1="6" x2="21" y2="6"></line>
+                    <line x1="3" y1="18" x2="21" y2="18"></line>
+                </svg>
+            </button>
+            <div class="header-title">Kernel Design Decisions</div>
+            <div class="header-actions">
+                
+<button class="btn btn-icon" id="theme-toggle" aria-label="Toggle dark/light theme" title="Toggle theme (Ctrl+Shift+L)">
+    <svg class="theme-icon-sun" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display: none;">
+        <circle cx="12" cy="12" r="5"></circle>
+        <line x1="12" y1="1" x2="12" y2="3"></line>
+        <line x1="12" y1="21" x2="12" y2="23"></line>
+        <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+        <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+        <line x1="1" y1="12" x2="3" y2="12"></line>
+        <line x1="21" y1="12" x2="23" y2="12"></line>
+        <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+        <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+    </svg>
+    <svg class="theme-icon-moon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display: none;">
+        <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+    </svg>
+</button>
+
+                <a href="https://github.com/nexus-systems/nexus-modeling" class="btn btn-secondary" target="_blank" rel="noopener">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M12 0C5.374 0 0 5.373 0 12c0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23A11.509 11.509 0 0112 5.803c1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576C20.566 21.797 24 17.3 24 12c0-6.627-5.373-12-12-12z"/>
+                    </svg>
+                    <span class="btn-text">GitHub</span>
+                </a>
+                <a href="index.html" class="btn btn-primary">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
+                        <polyline points="9 22 9 12 15 12 15 22"></polyline>
+                    </svg>
+                    <span class="btn-text">Home</span>
+                </a>
+            </div>
+        </header>
+        
+        <main class="content">
+            <div class="toc"><h3>On This Page</h3><ul><li><a href="#kernel-design-decisions">Kernel Design Decisions</a></li>
+  <li><a href="#vulkan-first-not-cross-platform-first">Vulkan-first, not cross-platform-first</a></li>
+  <li><a href="#dynamic-rendering-no-vkrenderpass">Dynamic Rendering — no VkRenderPass</a></li>
+  <li><a href="#reversed-z-depth">Reversed-Z depth</a></li>
+  <li><a href="#typed-handle-system-instead-of-pointers">Typed handle system instead of pointers</a></li>
+  <li><a href="#vma-for-gpu-memory-management">VMA for GPU memory management</a></li>
+  <li><a href="#push-constants-over-descriptor-sets-for-per-draw-data">Push constants over descriptor sets for per-draw data</a></li>
+  <li><a href="#glslang-runtime-shader-compilation">glslang runtime shader compilation</a></li>
+  <li><a href="#neural-plugins-via-runtime-dlopen">Neural plugins via runtime dlopen</a></li>
+  <li><a href="#hardware-tier-system">Hardware tier system</a></li>
+  <li><a href="#async-compute-on-a-separate-queue">Async compute on a separate queue</a></li>
+  <li><a href="#single-pass-gbuffer-vs-deferred">Single-pass GBuffer vs deferred</a></li>
+</ul></div>
+            <h1 id="kernel-design-decisions">Kernel Design Decisions</h1>
+
+<p>
+This document records the <em>why</em> behind each major technical choice in the graphics kernel. Future contributors and the Nexus-Cloud integration team should read this before proposing changes to the core.
+</p>
+
+<hr>
+
+<h2 id="vulkan-first-not-cross-platform-first">Vulkan-first, not cross-platform-first</h2>
+
+<p>
+<strong>Decision</strong>: The primary backend is Vulkan 1.4. Metal and DX12 backends exist in the layer map but are not implemented during the scaffold phase.
+</p>
+
+<p>
+<strong>Rationale</strong>:
+</p>
+<ul>
+<li>Nexus Modeling's primary platform is Linux/Windows. Vulkan covers both natively.</li>
+<li>Vulkan 1.4 gives access to every modern GPU feature needed: mesh shaders, ray tracing, timeline semaphores, descriptor indexing, dynamic rendering.</li>
+<li>Vulkan's explicit model forces correct resource tracking up front — bugs are caught at validation layer time, not silently on some platforms.</li>
+<li>SPIR-V as the universal shader IR means Metal/DX12 backends can transpile from the same compiled shaders via SPIRV-Cross/DXC — no duplicate HLSL/MSL authoring needed.</li>
+<li>Apple's Metal has first-class Vulkan via MoltenVK, so iOS/macOS reach is not blocked.</li>
+</ul>
+
+<p>
+<strong>What this is not</strong>: The <code>IDevice</code> abstraction is intentionally thin and backend-agnostic. Nothing in application code should depend on Vulkan types.
+</p>
+
+<hr>
+
+<h2 id="dynamic-rendering-no-vkrenderpass">Dynamic Rendering — no VkRenderPass</h2>
+
+<p>
+<strong>Decision</strong>: All Vulkan rendering uses <code>VK_KHR_dynamic_rendering</code> (<code>vkCmdBeginRenderingKHR</code>). No <code>VkRenderPass</code> objects are created at runtime.
+</p>
+
+<p>
+<strong>Rationale</strong>:
+</p>
+<ul>
+<li>Render passes in Vulkan 1.0/1.1 were tile-based-GPU metadata. On all modern discrete GPUs, the tiling benefit is marginal; the cost is subpass/dependency boilerplate.</li>
+<li>Dynamic rendering is core in Vulkan 1.3+ and promoted from extension in 1.2.</li>
+<li>This simplifies the <code>IDevice</code> interface: <code>RenderPassHandle</code> in <code>GraphicsPipelineDesc</code> is a format-only descriptor, not a heavyweight Vulkan object.</li>
+<li>RenderDoc, Nsight, and all major capture tools fully support dynamic rendering.</li>
+</ul>
+
+<p>
+<strong>Trade-off</strong>: Tile-based GPUs (mobile, some ARM) lose some implicit bandwidth optimisations. When a mobile Vulkan backend is added, a render-pass fallback path should be offered for VK_QCOM_render_pass_transform.
+</p>
+
+<hr>
+
+<h2 id="reversed-z-depth">Reversed-Z depth</h2>
+
+<p>
+<strong>Decision</strong>: Depth buffer uses reversed-Z — far plane maps to 0.0, near plane to 1.0. Compare op is <code>VK_COMPARE_OP_GREATER_OR_EQUAL</code>.
+</p>
+
+<p>
+<strong>Rationale</strong>:
+</p>
+<ul>
+<li>Float32 depth precision is distributed logarithmically from 0.0. Reversed-Z places the dense precision region at distance (far), not at the camera (near), which is where z-fighting actually occurs.</li>
+<li>CAD and architectural modelling commonly have scenes spanning metres to millimetres in the same view — standard-Z z-fight visibly at even moderate camera distances.</li>
+<li>NVIDIA, AMD, and Intel all recommend reversed-Z in their developer guides.</li>
+<li>Cost: zero at runtime. Projection matrix is negated once in <code>Camera::projection()</code>.</li>
+</ul>
+
+<hr>
+
+<h2 id="typed-handle-system-instead-of-pointers">Typed handle system instead of pointers</h2>
+
+<p>
+<strong>Decision</strong>: All GPU resources are returned as `Handle<Tag><code> — a 64-bit integer keyed into a backend slot-map. No raw pointers or </code>std::shared_ptr<code> cross the </code>IDevice` boundary.
+</p>
+
+<p>
+<strong>Rationale</strong>:
+</p>
+<ul>
+<li>Handles are trivially copyable, storable in arrays, hashable, and safe to pass to Nexus-Cloud over IPC/JSON without pointer fixup.</li>
+<li>The slot-map (fixed-size array with free-list) gives O(1) alloc/free and pointer-stable storage with no heap fragmentation.</li>
+<li>Incorrect use (use-after-destroy, double-free) is caught at the slot-map level in debug builds — far cleaner than dangling pointer UB.</li>
+<li><code>kNullHandle = UINT64_MAX</code> — safe sentinel distinct from index 0, no ambiguity.</li>
+</ul>
+
+<p>
+<strong>Pattern</strong>: <code>handle.valid()</code> before any use. The backend checks in debug; in release it trusts the caller (no overhead).
+</p>
+
+<hr>
+
+<h2 id="vma-for-gpu-memory-management">VMA for GPU memory management</h2>
+
+<p>
+<strong>Decision</strong>: <code>VulkanMemoryAllocator</code> (VMA) 3.1.0 is the only allocator used by the Vulkan backend.
+</p>
+
+<p>
+<strong>Rationale</strong>:
+</p>
+<ul>
+<li>VMA is the de-facto standard for Vulkan memory management — used by Godot, Unreal, Filament, and hundreds of shipping titles.</li>
+<li>It implements sub-allocation, defragmentation, budget tracking (<code>VK_EXT_memory_budget</code>), and DEDICATED_ALLOCATION automatically.</li>
+<li><code>VMA_ALLOCATOR_CREATE_BUFFER_DEVICE_ADDRESS_BIT</code> enables BDA on all allocations, required for ray tracing and mesh shaders.</li>
+<li>A single <code>VMA_IMPLEMENTATION</code> translation unit (<code>VulkanAllocator.cpp</code>) prevents multiple-definition ODR issues.</li>
+</ul>
+
+<p>
+<strong>Configuration</strong>:
+</p>
+<pre><code class="language-cpp">// Dynamic Vulkan function loading — no static link to libvulkan needed
+<p>
+VMA_STATIC_VULKAN_FUNCTIONS  0
+VMA_DYNAMIC_VULKAN_FUNCTIONS 1</code></pre>
+</p>
+
+<hr>
+
+<h2 id="push-constants-over-descriptor-sets-for-per-draw-data">Push constants over descriptor sets for per-draw data</h2>
+
+<p>
+<strong>Decision</strong>: <code>createGraphicsPipeline</code> always creates a <code>VkPipelineLayout</code> with a 128-byte push constant range covering all stages. Descriptor sets are used only for large/persistent data.
+</p>
+
+<p>
+<strong>Rationale</strong>:
+</p>
+<ul>
+<li>128 bytes covers a <code>mat4</code> (64B) + <code>vec4</code> + a few <code>uint</code> indices — sufficient for most per-draw data (transform, material index, draw ID).</li>
+<li>Push constants are register-backed on all modern Vulkan drivers — zero overhead, no descriptor pool management.</li>
+<li><code>ICommandBuffer::pushConstants()</code> exposes this cleanly: <code>cb.pushConstants(stages, &data, sizeof(data))</code>.</li>
+<li>128 bytes is the guaranteed minimum push constant space in Vulkan spec (many drivers give 256+).</li>
+</ul>
+
+<hr>
+
+<h2 id="glslang-runtime-shader-compilation">glslang runtime shader compilation</h2>
+
+<p>
+<strong>Decision</strong>: glslang is a FetchContent dependency that compiles GLSL to SPIR-V at runtime when <code>.glsl</code> source is provided.
+</p>
+
+<p>
+<strong>Rationale</strong>:
+</p>
+<ul>
+<li>Artists and shader developers iterate fastest with hot-reload from source files.</li>
+<li>Pre-compiled <code>.spv</code> is the release path — zero runtime compile cost in shipping builds.</li>
+<li><code>ENABLE_OPT=0</code> (no SPIRV-Tools): removes the SPIRV-Tools transitive dependency, which is large and has filesystem cleanup issues on some mount types (EXFAT). GLSL correctness validation is sufficient in glslang alone.</li>
+<li>The compiler is wrapped behind <code>nexus::gfx::vkshader::compileGlslToSpirv()</code> — callers never touch glslang headers directly.</li>
+</ul>
+
+<p>
+<strong>Warning</strong>: Do not enable <code>ENABLE_OPT=1</code> without first verifying SPIRV-Tools archives build cleanly on your filesystem. The parallel <code>ar</code> tool corrupts archives on EXFAT/NTFS mounts.
+</p>
+
+<hr>
+
+<h2 id="neural-plugins-via-runtime-dlopen">Neural plugins via runtime dlopen</h2>
+
+<p>
+<strong>Decision</strong>: DLSS4, XeSS, and OIDN are loaded at runtime via <code>dlopen</code>/<code>LoadLibrary</code>. None are linked at compile time.
+</p>
+
+<p>
+<strong>Rationale</strong>:
+</p>
+<ul>
+<li>DLSS requires NVIDIA hardware. XeSS requires Intel hardware. OIDN runs on CPU. Zero reason to hard-link all three everywhere.</li>
+<li>Runtime loading means the binary ships without SDK redistributables and falls back gracefully on hardware that lacks a given feature.</li>
+<li>Build options <code>NEXUS_ENABLE_DLSS</code>, <code>NEXUS_ENABLE_XESS</code>, <code>NEXUS_ENABLE_OIDN</code> only control <em>whether to attempt loading</em> — they do not create link-time dependencies.</li>
+<li>The <code>nexus::neural::NeuralRenderer::create(device)</code> factory encapsulates all probing; application code sees only <code>INeuralRenderer</code>.</li>
+</ul>
+
+<hr>
+
+<h2 id="hardware-tier-system">Hardware tier system</h2>
+
+<p>
+<strong>Decision</strong>: Four tiers (Low / Mid / High / Ultra) gate feature activation at runtime. No features are hard-disabled at build time.
+</p>
+
+<p>
+<strong>Rationale</strong>:
+</p>
+<ul>
+<li>A modelling suite must run on integrated graphics (students, low-cost workstations) as well as flagship workstation GPUs.</li>
+<li>Compile-time feature gates create multiple binaries to maintain. Runtime gates keep one binary with graceful degradation.</li>
+<li>The tier is computed once during <code>RenderContext::create()</code> from <code>DeviceCapabilities::vram</code> and feature presence.</li>
+<li>All code paths degrade cleanly — e.g., if <code>caps.meshShaders == false</code>, <code>IDevice::createMeshShaderPipeline</code> returns an invalid handle and the renderer falls back to indexed triangle lists.</li>
+</ul>
+
+<p>
+| Tier | VRAM threshold | Key feature unlocks |
+|---|---|---|
+| Low | < 4 GB | Rasterisation only, bilinear upscale, OIDN CPU denoising |
+| Mid | 4–8 GB | Ray queries, FSR3 |
+| High | 8–16 GB | Full RT pipeline, mesh shaders, XeSS/DLSS |
+| Ultra | > 16 GB | Neural texture decode, DLSS4 Ray Reconstruction |
+</p>
+
+<hr>
+
+<h2 id="async-compute-on-a-separate-queue">Async compute on a separate queue</h2>
+
+<p>
+<strong>Decision</strong>: Denoising, upscaling, and skinning compute workloads submit to a dedicated async compute queue when <code>caps.asyncCompute == true</code>.
+</p>
+
+<p>
+<strong>Rationale</strong>:
+</p>
+<ul>
+<li>On AMD and NVIDIA, the async compute engine runs concurrently with the graphics pipeline — denoising overlaps with the next frame's geometry stage.</li>
+<li>Timeline semaphores (<code>VK_KHR_timeline_semaphore</code>) sequence the async compute queue relative to the graphics queue without CPU round-trips.</li>
+<li>When async compute is unavailable (single-queue devices), work falls back to the graphics queue inline — same <code>ICommandBuffer</code> API, different <code>QueueType</code> parameter.</li>
+</ul>
+
+<hr>
+
+<h2 id="single-pass-gbuffer-vs-deferred">Single-pass GBuffer vs deferred</h2>
+
+<p>
+<strong>Decision</strong>: The high-level frame pipeline is designed for <strong>deferred rendering</strong> with a GBuffer pass, but the kernel itself is pipeline-agnostic.
+</p>
+
+<p>
+<strong>Rationale</strong>:
+</p>
+<ul>
+<li>Nexus Modeling scenes are geometry-heavy (millions of mesh faces, hundreds of materials). Deferred shading allows arbitrary material complexity with a single geometry pass.</li>
+<li>The <code>Renderer</code> class composes the frame: GBuffer → lighting → post (TAA, denoise, upscale). The kernel (<code>IDevice</code>, <code>ICommandBuffer</code>) has no opinion on the composition.</li>
+<li>Forward+ is a valid alternative for lower-tier hardware — the abstraction layer does not prevent it.</li>
+</ul>
+
+        </main>
+    </div>
+    
+    <script>
+// Theme management
+const THEME_KEY = 'nexus-docs-theme';
+const themeToggle = document.getElementById('theme-toggle');
+const sunIcon = themeToggle.querySelector('.theme-icon-sun');
+const moonIcon = themeToggle.querySelector('.theme-icon-moon');
+
+function applyTheme(theme) {
+    document.documentElement.setAttribute('data-theme', theme);
+    if (theme === 'light') {
+        sunIcon.style.display = 'block';
+        moonIcon.style.display = 'none';
+    } else {
+        sunIcon.style.display = 'none';
+        moonIcon.style.display = 'block';
+    }
+    localStorage.setItem(THEME_KEY, theme);
+}
+
+function getPreferredTheme() {
+    const stored = localStorage.getItem(THEME_KEY);
+    if (stored) return stored;
+    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+}
+
+function initTheme() {
+    const theme = getPreferredTheme();
+    applyTheme(theme);
+}
+
+function toggleTheme() {
+    const current = document.documentElement.getAttribute('data-theme') || 'dark';
+    applyTheme(current === 'dark' ? 'light' : 'dark');
+}
+
+themeToggle.addEventListener('click', toggleTheme);
+
+// Keyboard shortcut: Ctrl+Shift+L
+document.addEventListener('keydown', (e) => {
+    if (e.ctrlKey && e.shiftKey && e.key === 'L') {
+        e.preventDefault();
+        toggleTheme();
+    }
+});
+
+// Listen for system theme changes
+window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => {
+    if (!localStorage.getItem(THEME_KEY)) {
+        applyTheme(e.matches ? 'dark' : 'light');
+    }
+});
+
+// Initialize theme immediately to prevent flash
+initTheme();
+
+// Mobile sidebar toggle
+const sidebar = document.getElementById('sidebar');
+const mobileMenuBtn = document.getElementById('mobile-menu-btn');
+
+if (mobileMenuBtn) {
+    mobileMenuBtn.addEventListener('click', () => {
+        sidebar.classList.toggle('open');
+    });
+}
+
+document.addEventListener('click', (e) => {
+    if (window.innerWidth <= 768) {
+        if (!sidebar.contains(e.target) && !e.target.closest('.header')) {
+            sidebar.classList.remove('open');
+        }
+    }
+});
+
+// Smooth scroll for anchor links
+document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+    anchor.addEventListener('click', function(e) {
+        const target = document.querySelector(this.getAttribute('href'));
+        if (target) {
+            e.preventDefault();
+            target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            if (window.innerWidth <= 768) {
+                sidebar.classList.remove('open');
+            }
+        }
+    });
+});
+
+// Active link highlighting based on scroll position
+const sections = document.querySelectorAll('.content h2, .content h3');
+const sidebarLinks = document.querySelectorAll('.sidebar-link[href^="#"]');
+
+function updateActiveLink() {
+    let current = '';
+    sections.forEach(section => {
+        const rect = section.getBoundingClientRect();
+        if (rect.top <= 100) {
+            current = '#' + section.id;
+        }
+    });
+
+    sidebarLinks.forEach(link => {
+        link.classList.remove('active');
+        if (link.getAttribute('href') === current) {
+            link.classList.add('active');
+        }
+    });
+}
+
+window.addEventListener('scroll', updateActiveLink, { passive: true });
+window.addEventListener('load', updateActiveLink);
+
+// Highlight.js initialization
+if (typeof hljs !== 'undefined') {
+    hljs.highlightAll();
+}
+
+// Mobile menu button visibility
+const mobileMenuBtn = document.getElementById('mobile-menu-btn');
+function checkMobile() {
+    if (window.innerWidth <= 768) {
+        mobileMenuBtn.style.display = 'flex';
+    } else {
+        mobileMenuBtn.style.display = 'none';
+        document.getElementById('sidebar').classList.remove('open');
+    }
+}
+checkMobile();
+window.addEventListener('resize', checkMobile);
+
+mobileMenuBtn.addEventListener('click', () => {
+    document.getElementById('sidebar').classList.toggle('open');
+});
+</script>

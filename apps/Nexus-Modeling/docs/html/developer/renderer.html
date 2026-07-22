@@ -1,0 +1,977 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nexus Modeling — Renderer Internals — Nexus Modeling Docs</title>
+    <link rel="stylesheet" href="../styles.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
+</head>
+<body>
+    <nav class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+            <div class="sidebar-title">Nexus Modeling</div>
+            <div class="sidebar-subtitle">Documentation v0.1.0-dev</div>
+        </div>
+        <div class="sidebar-section">
+<div class="sidebar-section-title">📚 Developer Documentation</div>
+<a class="sidebar-link" href="../architecture.html">Architecture Overview</a>
+<a class="sidebar-link" href="../kernel-api.html">Kernel API Reference</a>
+<a class="sidebar-link" href="../geometry-kernel.html">Geometry Kernel</a>
+<a class="sidebar-link" href="../renderer.html">Render System</a>
+<a class="sidebar-link" href="../editor-architecture.html">Editor Architecture</a>
+<a class="sidebar-link" href="../build-system.html">Build System</a>
+<a class="sidebar-link" href="../testing.html">Testing</a>
+<a class="sidebar-link" href="../contributing.html">Contributing</a>
+<a class="sidebar-link" href="../adding-geometry-op.html">Adding Geometry Op</a>
+<a class="sidebar-link" href="../adding-cad-feature.html">Adding CAD Feature</a>
+<a class="sidebar-link" href="../mesh-operations.html">Mesh Operations</a>
+<a class="sidebar-link" href="../boolean-csg.html">Boolean/CSG Deep Dive</a>
+<a class="sidebar-link" href="../halfedge-mesh.html">Half-edge Mesh</a>
+<a class="sidebar-link" href="../analytic-brep.html">Analytic B-rep</a>
+<a class="sidebar-link" href="../mesh-io.html">Mesh I/O</a>
+<a class="sidebar-link" href="../tolerance.html">Tolerance System</a>
+<a class="sidebar-link" href="../porting.html">Porting Guide</a>
+</div>
+<div class="sidebar-section">
+<div class="sidebar-section-title">🎨 Expert User Documentation</div>
+</div>
+<div class="sidebar-section">
+<div class="sidebar-section-title">👤 Beginner / User Documentation</div>
+<a class="sidebar-link" href="../getting-started.html">Getting Started</a>
+</div>
+<div class="sidebar-section">
+<div class="sidebar-section-title">🔧 API Reference</div>
+</div>
+<div class="sidebar-section">
+<div class="sidebar-section-title">📚 Additional Resources</div>
+<a class="sidebar-link" href="../design-decisions.html">Design Decisions</a>
+<a class="sidebar-link" href="../testing-strategy.html">Testing Strategy</a>
+<a class="sidebar-link" href="../graphics-kernel.html">Graphics Kernel</a>
+<a class="sidebar-link" href="../vision-and-roadmap.html">Vision & Roadmap</a>
+<a class="sidebar-link" href="../reference-roadmap.html">Reference Roadmap</a>
+<a class="sidebar-link" href="../modeling-industry-parity.html">Modeling Industry Parity</a>
+<a class="sidebar-link" href="../modeling-parity-index.html">Modeling Parity Index</a>
+<a class="sidebar-link" href="../modeling-reference-roadmap.html">Modeling Reference Roadmap</a>
+</div>
+    </nav>
+    
+    <div class="main-content">
+        <header class="header">
+            <button class="btn btn-icon" id="mobile-menu-btn" aria-label="Toggle menu" style="display: none;">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="3" y1="12" x2="21" y2="12"></line>
+                    <line x1="3" y1="6" x2="21" y2="6"></line>
+                    <line x1="3" y1="18" x2="21" y2="18"></line>
+                </svg>
+            </button>
+            <div class="header-title">Nexus Modeling — Renderer Internals</div>
+            <div class="header-actions">
+                
+<button class="btn btn-icon" id="theme-toggle" aria-label="Toggle dark/light theme" title="Toggle theme (Ctrl+Shift+L)">
+    <svg class="theme-icon-sun" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display: none;">
+        <circle cx="12" cy="12" r="5"></circle>
+        <line x1="12" y1="1" x2="12" y2="3"></line>
+        <line x1="12" y1="21" x2="12" y2="23"></line>
+        <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+        <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+        <line x1="1" y1="12" x2="3" y2="12"></line>
+        <line x1="21" y1="12" x2="23" y2="12"></line>
+        <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+        <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+    </svg>
+    <svg class="theme-icon-moon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display: none;">
+        <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+    </svg>
+</button>
+
+                <a href="https://github.com/nexus-systems/nexus-modeling" class="btn btn-secondary" target="_blank" rel="noopener">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M12 0C5.374 0 0 5.373 0 12c0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23A11.509 11.509 0 0112 5.803c1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576C20.566 21.797 24 17.3 24 12c0-6.627-5.373-12-12-12z"/>
+                    </svg>
+                    <span class="btn-text">GitHub</span>
+                </a>
+                <a href="../index.html" class="btn btn-primary">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
+                        <polyline points="9 22 9 12 15 12 15 22"></polyline>
+                    </svg>
+                    <span class="btn-text">Home</span>
+                </a>
+            </div>
+        </header>
+        
+        <main class="content">
+            <div class="toc"><h3>On This Page</h3><ul><li><a href="#nexus-modeling-renderer-internals">Nexus Modeling — Renderer Internals</a></li>
+  <li><a href="#overview">Overview</a></li>
+  <li><a href="#architecture">Architecture</a></li>
+  <li><a href="#render-graph-scheduler">Render Graph (Scheduler)</a></li>
+    <li><a href="#pass-resource-declaration">Pass Resource Declaration</a></li>
+    <li><a href="#transition-planning">Transition Planning</a></li>
+  <li><a href="#frame-scheduler">Frame Scheduler</a></li>
+    <li><a href="#frame-timeline">Frame Timeline</a></li>
+    <li><a href="#synchronization">Synchronization</a></li>
+  <li><a href="#deferred-g-buffer-pipeline">Deferred G-Buffer Pipeline</a></li>
+    <li><a href="#vertex-shader">Vertex Shader</a></li>
+    <li><a href="#fragment-shader">Fragment Shader</a></li>
+  <li><a href="#lighting-composite-pass">Lighting/Composite Pass</a></li>
+    <li><a href="#clustered-forward-tiled-clustered">Clustered Forward+ (Tiled/Clustered)</a></li>
+    <li><a href="#lighting-shader">Lighting Shader</a></li>
+  <li><a href="#shadow-mapping">Shadow Mapping</a></li>
+    <li><a href="#cascade-shadow-maps-csm">Cascade Shadow Maps (CSM)</a></li>
+    <li><a href="#shadow-shader">Shadow Shader</a></li>
+  <li><a href="#ray-tracing-optional">Ray Tracing (Optional)</a></li>
+    <li><a href="#bottom-level-acceleration-structure-blas">Bottom-Level Acceleration Structure (BLAS)</a></li>
+    <li><a href="#top-level-acceleration-structure-tlas">Top-Level Acceleration Structure (TLAS)</a></li>
+    <li><a href="#ray-generation-shader">Ray Generation Shader</a></li>
+    <li><a href="#closest-hit-shader">Closest Hit Shader</a></li>
+  <li><a href="#resource-management">Resource Management</a></li>
+    <li><a href="#buffer-pool">Buffer Pool</a></li>
+    <li><a href="#descriptor-allocator">Descriptor Allocator</a></li>
+    <li><a href="#pipeline-cache-pso">Pipeline Cache (PSO)</a></li>
+  <li><a href="#frame-capture-diagnostics">Frame Capture & Diagnostics</a></li>
+  <li><a href="#render-graph-validator">Render Graph Validator</a></li>
+  <li><a href="#performance-optimizations">Performance Optimizations</a></li>
+  <li><a href="#debugging">Debugging</a></li>
+<li><a href="#enable-validation-layers">Enable validation layers</a></li>
+<li><a href="#renderdoc-capture">RenderDoc capture</a></li>
+<li><a href="#frame-capture">Frame capture</a></li>
+<li><a href="#gpu-timers">GPU timers</a></li>
+</ul></div>
+            <h1 id="nexus-modeling-renderer-internals">Nexus Modeling — Renderer Internals</h1>
+
+<p>
+<em>Deep dive into the Vulkan renderer architecture, frame scheduler, and render graph.</em>
+</p>
+
+<hr>
+
+<h2 id="overview">Overview</h2>
+
+<p>
+The renderer (<code>nexus::render</code>) is a <strong>scheduler-driven, deferred rendering system</strong> built on the <code>nexus::gfx</code> abstraction layer. It supports both Vulkan and Null (headless) backends.
+</p>
+
+<p>
+<strong>Key Properties:</strong>
+</p>
+<ul>
+<li><strong>Scheduler-driven</strong> (production path)</li>
+<li><strong>Deferred rendering</strong> with G-Buffer</li>
+<li><strong>Dynamic rendering</strong> (no render passes)</li>
+<li><strong>Explicit synchronization</strong> (Vulkan sync2)</li>
+<li><strong>Ray tracing support</strong> (optional, hardware-gated)</li>
+<li><strong>Frame capture</strong> for diagnostics</li>
+</ul>
+
+<hr>
+
+<h2 id="architecture">Architecture</h2>
+
+<pre><code class="language-">nexus::render::Renderer
+<p>
+├── RenderGraph (scheduler)
+│   ├── Shadow Pass
+│   ├── G-Buffer Pass (Geometry)
+│   ├── Lighting/Composite Pass
+│   └── Ray Tracing Pass (optional)
+├── FrameScheduler
+│   ├── Acquire → Record → Submit → Present
+├── SceneGraph (CPU-side)
+│   ├── Nodes (transform, mesh refs, BLAS)
+│   └── TLAS (ray tracing)
+├── Resource Management
+│   ├── BufferPool (vertex/index/meshlet)
+│   ├── TextureAtlas
+│   └── DescriptorAllocator
+└── Pipeline Cache (PSO)
+    ├── Graphics Pipelines
+    ├── Compute Pipelines
+    └── Ray Tracing Pipelines</code></pre>
+</p>
+
+<hr>
+
+<h2 id="render-graph-scheduler">Render Graph (Scheduler)</h2>
+
+<p>
+The render graph is a <strong>DAG of render passes</strong> with explicit resource dependencies.
+</p>
+
+<pre><code class="language-cpp">struct RenderPass {
+<p>
+    virtual ~RenderPass() = default;
+    virtual void setup(RenderGraphBuilder& builder) = 0;
+    virtual void execute(const RenderContext& ctx, CommandBuffer& cmd) = 0;
+    virtual std::string name() const = 0;
+};
+</p>
+
+<p>
+class RenderGraph {
+    std::vector<std::unique_ptr<RenderPass>> passes;
+    ResourceRegistry resources;
+</p>
+    
+<p>
+    void addPass(std::unique_ptr<RenderPass> pass);
+    void compile();  // Topological sort, transition planning
+    void execute(CommandBuffer& cmd);
+};</code></pre>
+</p>
+
+<h3 id="pass-resource-declaration">Pass Resource Declaration</h3>
+
+<pre><code class="language-cpp">void ShadowPass::setup(RenderGraphBuilder& builder) {
+<p>
+    // Read
+    builder.read<Texture>("scene.depth");
+</p>
+    
+<p>
+    // Write
+    builder.write<Texture>("shadow.map")
+        .format(VK_FORMAT_D32_SFLOAT)
+        .usage(VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT)
+        .dimensions(4096, 4096);
+</p>
+    
+<p>
+    // Side-effect: updates global light view-proj
+    builder.sideEffect("shadow.lightVP");
+}
+</p>
+
+<p>
+void GBufferPass::setup(RenderGraphBuilder& builder) {
+    builder.read<Texture>("shadow.map");
+    builder.read<Texture>("shadow.lightVP");
+</p>
+    
+<p>
+    builder.write<Texture>("gbuffer.position", VK_FORMAT_R16G16B16A16_SFLOAT, ...);
+    builder.write<Texture>("gbuffer.normal",   VK_FORMAT_R16G16B16A16_SFLOAT, ...);
+    builder.write<Texture>("gbuffer.albedo",   VK_FORMAT_R8G8B8A8_UNORM, ...);
+    builder.write<Texture>("gbuffer.material", VK_FORMAT_R8G8B8A8_UNORM, ...);
+    builder.write<Texture>("gbuffer.depth",    VK_FORMAT_D32_SFLOAT, ...);
+}
+</p>
+
+<p>
+void LightingPass::setup(RenderGraphBuilder& builder) {
+    builder.read<Texture>("gbuffer.position");
+    builder.read<Texture>("gbuffer.normal");
+    builder.read<Texture>("gbuffer.albedo");
+    builder.read<Texture>("gbuffer.material");
+    builder.read<Texture>("shadow.map");
+</p>
+    
+<p>
+    builder.write<Texture>("swapchain.image")
+        .format(VK_FORMAT_B8G8R8A8_SRGB)
+        .usage(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT);
+}</code></pre>
+</p>
+
+<h3 id="transition-planning">Transition Planning</h3>
+
+<pre><code class="language-cpp">struct ResourceTransition {
+<p>
+    TextureHandle texture;
+    VkImageLayout oldLayout, newLayout;
+    VkPipelineStageFlags2 srcStage, dstStage;
+    VkAccessFlags2 srcAccess, dstAccess;
+};
+</p>
+
+<p>
+std::vector<ResourceTransition> RenderGraph::planTransitions() {
+    // For each resource, track last writer and next reader
+    // Insert barriers at pass boundaries
+    // Use sync2: VkImageMemoryBarrier2
+}</code></pre>
+</p>
+
+<hr>
+
+<h2 id="frame-scheduler">Frame Scheduler</h2>
+
+<pre><code class="language-cpp">class FrameScheduler {
+<p>
+public:
+    struct FrameData {
+        CommandBuffer cmd;
+        std::vector<Semaphore> waitSemaphores, signalSemaphores;
+        Fence fence;
+        uint64_t frameIndex;
+    };
+</p>
+    
+<p>
+    FrameData acquire();           // Acquire swapchain image
+    void record(FrameData&, RenderGraph&);  // Record commands
+    void submit(FrameData&);       // Submit to queue
+    void present(FrameData&);      // Present to swapchain
+</p>
+    
+<p>
+    // In-flight frame management (triple buffering)
+    static constexpr uint32_t MAX_FRAMES_IN_FLIGHT = 3;
+};</code></pre>
+</p>
+
+<h3 id="frame-timeline">Frame Timeline</h3>
+
+<pre><code class="language-">CPU Timeline                    GPU Timeline
+<p>
+─────────────────────────────────────────────────────────
+Frame N:   Acquire ──────► Record ──────► Submit ──────► Present
+                │            │             │             │
+                ▼            ▼             ▼             ▼
+Frame N-1:              [GPU executing Frame N-1 commands]
+Frame N-2:                                                 [GPU executing Frame N-2]</code></pre>
+</p>
+
+<h3 id="synchronization">Synchronization</h3>
+
+<pre><code class="language-cpp">void FrameScheduler::submit(FrameData& frame) {
+<p>
+    VkSubmitInfo2 submit = {};
+    submit.waitSemaphoreInfos = frame.waitSemaphores;
+    submit.signalSemaphoreInfos = frame.signalSemaphores;
+    submit.commandBufferInfos = {frame.cmd};
+</p>
+    
+<p>
+    // Timeline semaphores for fine-grained sync
+    vkQueueSubmit2(queue, 1, &submit, frame.fence);
+}</code></pre>
+</p>
+
+<hr>
+
+<h2 id="deferred-g-buffer-pipeline">Deferred G-Buffer Pipeline</h2>
+
+<h3 id="vertex-shader">Vertex Shader</h3>
+
+<pre><code class="language-glsl">// gbuffer.vert
+<p>
+#version 460
+layout(location = 0) in vec3 inPosition;
+layout(location = 1) in vec3 inNormal;
+layout(location = 2) in vec2 inUV;
+layout(location = 3) in vec4 inTangent;
+</p>
+
+<p>
+layout(set = 0, binding = 0) uniform CameraData {
+    mat4 viewProj;
+    mat4 view;
+    mat4 proj;
+    vec3 cameraPos;
+} camera;
+</p>
+
+<p>
+layout(set = 1, binding = 0) uniform InstanceData {
+    mat4 model;
+    mat4 normalMatrix;
+    uint materialId;
+} instance;
+</p>
+
+<p>
+layout(location = 0) out vec3 vWorldPos;
+layout(location = 1) out vec3 vNormal;
+layout(location = 2) out vec2 vUV;
+layout(location = 3) out vec4 vTangent;
+</p>
+
+<p>
+void main() {
+    vec4 worldPos = instance.model * vec4(inPosition, 1.0);
+    vWorldPos = worldPos.xyz;
+    vNormal = normalize((instance.normalMatrix * vec4(inNormal, 0.0)).xyz);
+    vUV = inUV;
+    vTangent = inTangent;
+    gl_Position = camera.viewProj * worldPos;
+}</code></pre>
+</p>
+
+<h3 id="fragment-shader">Fragment Shader</h3>
+
+<pre><code class="language-glsl">// gbuffer.frag
+<p>
+#version 460
+layout(location = 0) in vec3 vWorldPos;
+layout(location = 1) in vec3 vNormal;
+layout(location = 2) in vec2 vUV;
+layout(location = 3) in vec4 vTangent;
+</p>
+
+<p>
+layout(set = 2, binding = 0) uniform sampler2D albedoMap;
+layout(set = 2, binding = 1) uniform sampler2D normalMap;
+layout(set = 2, binding = 2) uniform sampler2D materialMap;
+</p>
+
+<p>
+layout(location = 0) out vec4 outPosition;  // R16G16B16A16_SFLOAT
+layout(location = 1) out vec4 outNormal;    // R16G16B16A16_SFLOAT
+layout(location = 2) out vec4 outAlbedo;    // R8G8B8A8_UNORM
+layout(location = 3) out vec4 outMaterial;  // R8G8B8A8_UNORM
+</p>
+
+<p>
+void main() {
+    vec3 albedo = texture(albedoMap, vUV).rgb;
+    vec3 normal = texture(normalMap, vUV).xyz * 2.0 - 1.0;
+</p>
+    
+<p>
+    // Tangent space normal mapping
+    vec3 T = normalize(vTangent.xyz);
+    vec3 B = cross(vNormal, T) * vTangent.w;
+    mat3 TBN = mat3(T, B, vNormal);
+    normal = normalize(TBN * normal);
+</p>
+    
+<p>
+    outPosition = vec4(vWorldPos, 1.0);
+    outNormal = vec4(normal, 0.0);
+    outAlbedo = vec4(albedo, 1.0);
+    outMaterial = texture(materialMap, vUV);
+}</code></pre>
+</p>
+
+<hr>
+
+<h2 id="lighting-composite-pass">Lighting/Composite Pass</h2>
+
+<h3 id="clustered-forward-tiled-clustered">Clustered Forward+ (Tiled/Clustered)</h3>
+
+<pre><code class="language-cpp">struct ClusterData {
+<p>
+    uint32_t lightCount;
+    uint32_t lightIndices[MAX_LIGHTS_PER_CLUSTER];
+};
+</p>
+
+<p>
+struct LightData {
+    vec3 position;
+    float radius;
+    vec3 color;
+    float intensity;
+    uint32_t type;  // 0=point, 1=spot, 2=directional
+    vec3 direction;
+    float innerCone, outerCone;
+};
+</p>
+
+<p>
+// Compute pass: build light clusters
+// Fragment pass: shade using cluster data</code></pre>
+</p>
+
+<h3 id="lighting-shader">Lighting Shader</h3>
+
+<pre><code class="language-glsl">// lighting.frag
+<p>
+#version 460
+layout(set = 0, binding = 0) uniform CameraData { ... } camera;
+layout(set = 1, binding = 0) uniform LightData { LightData lights[MAX_LIGHTS]; } lights;
+layout(set = 2, binding = 0) uniform sampler2D positionMap;
+layout(set = 2, binding = 1) uniform sampler2D normalMap;
+layout(set = 2, binding = 2) uniform sampler2D albedoMap;
+layout(set = 2, binding = 3) uniform sampler2D materialMap;
+layout(set = 2, binding = 4) uniform sampler2D shadowMap;
+layout(set = 2, binding = 5) uniform sampler2D shadowVP;
+</p>
+
+<p>
+layout(location = 0) out vec4 outColor;
+</p>
+
+<p>
+void main() {
+    vec3 pos = texture(positionMap, uv).xyz;
+    vec3 normal = texture(normalMap, uv).xyz;
+    vec3 albedo = texture(albedoMap, uv).rgb;
+    vec4 material = texture(materialMap, uv);
+</p>
+    
+<p>
+    float metallic = material.r;
+    float roughness = material.g;
+    float ao = material.b;
+</p>
+    
+<p>
+    vec3 viewDir = normalize(camera.cameraPos - pos);
+    vec3 lighting = vec3(0.0);
+</p>
+    
+<p>
+    // Clustered light iteration
+    // ...
+</p>
+    
+<p>
+    // PBR BRDF
+    vec3 F0 = mix(vec3(0.04), albedo, metallic);
+    // ... GGX + Smith + Schlick
+</p>
+    
+<p>
+    outColor = vec4(lighting, 1.0);
+}</code></pre>
+</p>
+
+<hr>
+
+<h2 id="shadow-mapping">Shadow Mapping</h2>
+
+<h3 id="cascade-shadow-maps-csm">Cascade Shadow Maps (CSM)</h3>
+
+<pre><code class="language-cpp">struct ShadowCascade {
+<p>
+    float splitDepth;
+    mat4 lightViewProj;
+    TextureHandle depthMap;
+};
+</p>
+
+<p>
+void ShadowPass::execute(const RenderContext& ctx, CommandBuffer& cmd) {
+    for (int i = 0; i < NUM_CASCADES; ++i) {
+        // Update light view-proj for cascade split
+        // Render depth-only
+        // Use conservative rasterization for contact hardening
+    }
+}</code></pre>
+</p>
+
+<h3 id="shadow-shader">Shadow Shader</h3>
+
+<pre><code class="language-glsl">// shadow.vert
+<p>
+#version 460
+layout(location = 0) in vec3 inPosition;
+layout(set = 0, binding = 0) uniform mat4 cascadeViewProj[MAX_CASCADES];
+layout(set = 1, binding = 0) uniform mat4 model;
+</p>
+
+<p>
+void main() {
+    vec4 worldPos = model * vec4(inPosition, 1.0);
+    for (int i = 0; i < MAX_CASCADES; ++i) {
+        gl_Position = cascadeViewProj[i] * worldPos;
+        gl_Layer = i;  // Layered rendering
+        EmitVertex();
+        EndPrimitive();
+    }
+}</code></pre>
+</p>
+
+<hr>
+
+<h2 id="ray-tracing-optional">Ray Tracing (Optional)</h2>
+
+<h3 id="bottom-level-acceleration-structure-blas">Bottom-Level Acceleration Structure (BLAS)</h3>
+
+<pre><code class="language-cpp">struct BLAS {
+<p>
+    VkAccelerationStructureKHR handle;
+    Buffer vertexBuffer, indexBuffer;
+    VkDeviceAddress vertexAddr, indexAddr;
+};
+</p>
+
+<p>
+BLAS Renderer::createBLAS(const Mesh& mesh) {
+    VkAccelerationStructureGeometryKHR geom = {};
+    geom.geometryType = VK_GEOMETRY_TYPE_TRIANGLES_KHR;
+    geom.geometry.triangles.vertexFormat = VK_FORMAT_R32G32B32_SFLOAT;
+    geom.geometry.triangles.vertexData.deviceAddress = vertexAddr;
+    geom.geometry.triangles.indexType = VK_INDEX_TYPE_UINT32;
+    geom.geometry.triangles.indexData.deviceAddress = indexAddr;
+    geom.geometry.triangles.maxVertex = mesh.vertexCount();
+</p>
+    
+<p>
+    VkAccelerationStructureBuildGeometryInfoKHR buildInfo = {};
+    buildInfo.type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR;
+    buildInfo.flags = VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR;
+    buildInfo.geometryCount = 1;
+    buildInfo.pGeometries = &geom;
+</p>
+    
+<p>
+    // Build...
+}</code></pre>
+</p>
+
+<h3 id="top-level-acceleration-structure-tlas">Top-Level Acceleration Structure (TLAS)</h3>
+
+<pre><code class="language-cpp">struct TLAS {
+<p>
+    VkAccelerationStructureKHR handle;
+    Buffer instanceBuffer;
+};
+</p>
+
+<p>
+TLAS Renderer::updateTLAS(const SceneGraph& scene) {
+    // Gather instance data (transform, BLAS handle, instance ID, hit group)
+    // Build TLAS with refit if possible
+}</code></pre>
+</p>
+
+<h3 id="ray-generation-shader">Ray Generation Shader</h3>
+
+<pre><code class="language-glsl">// raygen.rgen
+<p>
+#version 460
+#extension GL_EXT_ray_tracing : require
+</p>
+
+<p>
+layout(set = 0, binding = 0) uniform accelerationStructureEXT tlas;
+layout(set = 0, binding = 1, rgba16f) uniform image2D outputImage;
+layout(set = 1, binding = 0) uniform CameraData { ... } camera;
+</p>
+
+<p>
+void main() {
+    vec2 pixel = vec2(gl_LaunchIDEXT.xy);
+    vec2 resolution = vec2(gl_LaunchSizeEXT.xy);
+    vec2 uv = (pixel + 0.5) / resolution;
+</p>
+    
+<p>
+    // Generate ray from camera
+    vec3 rayOrigin = camera.cameraPos;
+    vec3 rayDir = normalize(...);
+</p>
+    
+<p>
+    // Trace
+    traceRayEXT(tlas, RAY_FLAG_NONE, 0xFF, 0, 1, 0, 
+                rayOrigin, 0.001, rayDir, 1e30, 0);
+}</code></pre>
+</p>
+
+<h3 id="closest-hit-shader">Closest Hit Shader</h3>
+
+<pre><code class="language-glsl">// chit.rchit
+<p>
+#version 460
+#extension GL_EXT_ray_tracing : require
+</p>
+
+<p>
+layout(location = 0) rayPayloadEXT vec3 hitColor;
+</p>
+
+<p>
+void main() {
+    // Access geometry data via gl_InstanceCustomIndexEXT
+    // Compute PBR lighting
+    hitColor = lighting(...);
+}</code></pre>
+</p>
+
+<hr>
+
+<h2 id="resource-management">Resource Management</h2>
+
+<h3 id="buffer-pool">Buffer Pool</h3>
+
+<pre><code class="language-cpp">class BufferPool {
+<p>
+    struct Allocation { Buffer buffer; VkDeviceAddress address; size_t offset, size; };
+</p>
+    
+<p>
+    Allocation allocate(size_t size, VkBufferUsageFlags usage, VmaMemoryUsage memUsage);
+    void free(Allocation& alloc);
+    void reset();  // Frame reset for transient buffers
+};</code></pre>
+</p>
+
+<h3 id="descriptor-allocator">Descriptor Allocator</h3>
+
+<pre><code class="language-cpp">class DescriptorAllocator {
+<p>
+    struct Pool { VkDescriptorPool pool; uint32_t setsAllocated; };
+    std::vector<Pool> pools;
+</p>
+    
+<p>
+    VkDescriptorSet allocate(VkDescriptorSetLayout layout);
+    void reset();  // Frame reset
+};</code></pre>
+</p>
+
+<h3 id="pipeline-cache-pso">Pipeline Cache (PSO)</h3>
+
+<pre><code class="language-cpp">class PipelineCache {
+<p>
+    std::unordered_map<size_t, VkPipeline> graphicsCache;
+    std::unordered_map<size_t, VkPipeline> computeCache;
+    std::unordered_map<size_t, VkPipeline> raytracingCache;
+</p>
+    
+<p>
+    VkPipeline getGraphics(const GraphicsPipelineKey& key);
+    VkPipeline getCompute(const ComputePipelineKey& key);
+};</code></pre>
+</p>
+
+<hr>
+
+<h2 id="frame-capture-diagnostics">Frame Capture & Diagnostics</h2>
+
+<pre><code class="language-cpp">struct FrameCapture {
+<p>
+    struct PassInfo {
+        std::string name;
+        VkRect2D renderArea;
+        std::vector<TextureInfo> inputs, outputs;
+        double cpuTimeMs, gpuTimeMs;
+    };
+</p>
+    
+<p>
+    std::vector<PassInfo> passes;
+    uint64_t frameNumber;
+    double totalFrameTimeMs;
+};
+</p>
+
+<p>
+class FrameCaptureExporter {
+    void beginFrame(uint64_t frameNumber);
+    void recordPass(const PassInfo& info);
+    void endFrame();
+    void exportJSON(const std::string& path);
+    void exportChromeTrace(const std::string& path);
+};</code></pre>
+</p>
+
+<hr>
+
+<h2 id="render-graph-validator">Render Graph Validator</h2>
+
+<pre><code class="language-cpp">class RenderGraphValidator {
+<p>
+public:
+    enum class Severity { Error, Warning, Info };
+</p>
+    
+<p>
+    struct Issue {
+        Severity severity;
+        std::string passName;
+        std::string message;
+    };
+</p>
+    
+<p>
+    std::vector<Issue> validate(const RenderGraph& graph) {
+        // Check:
+        // 1. Resource write-read dependencies satisfied
+        // 2. Layout transitions valid
+        // 3. No circular dependencies
+        // 4. All resources have valid formats/usages
+        // 5. Synchronization barriers correct
+        // 6. Render area coverage
+    }
+};</code></pre>
+</p>
+
+<hr>
+
+<h2 id="performance-optimizations">Performance Optimizations</h2>
+
+<p>
+| Technique | Implementation |
+|-----------|----------------|
+| <strong>Meshlets</strong> | 64-triangle clusters, cluster culling |
+| <strong>Bindless</strong> | Descriptor indexing, single descriptor set |
+| <strong>Async Compute</strong> | Separate queue for compute (ray tracing, culling) |
+| <strong>Timeline Semaphores</strong> | Fine-grained GPU-GPU sync |
+| <strong>Dynamic Rendering</strong> | No render pass objects, explicit barriers |
+| <strong>Shader Compilation</strong> | glslang → SPIR-V offline, pipeline cache online |
+</p>
+
+<hr>
+
+<h2 id="debugging">Debugging</h2>
+
+<pre><code class="language-bash"><h1 id="enable-validation-layers">Enable validation layers</h1>
+<p>
+VK_INSTANCE_LAYERS=VK_LAYER_KHRONOS_validation ./nexus_modeling
+</p>
+
+<h1 id="renderdoc-capture">RenderDoc capture</h1>
+<p>
+renderdoc capture ./nexus_modeling
+</p>
+
+<h1 id="frame-capture">Frame capture</h1>
+<p>
+./nexus_modeling --capture-frame 100 --output frame.json
+</p>
+
+<h1 id="gpu-timers">GPU timers</h1>
+<p>
+./nexus_modeling --gpu-timers</code></pre>
+</p>
+
+<hr>
+
+<p>
+<em>Kernel v0.1.0-dev | 2026 tests passing | C++26 | Vulkan 1.3</em>
+</p>
+        </main>
+    </div>
+    
+    <script>
+// Theme management
+const THEME_KEY = 'nexus-docs-theme';
+const themeToggle = document.getElementById('theme-toggle');
+const sunIcon = themeToggle.querySelector('.theme-icon-sun');
+const moonIcon = themeToggle.querySelector('.theme-icon-moon');
+
+function applyTheme(theme) {
+    document.documentElement.setAttribute('data-theme', theme);
+    if (theme === 'light') {
+        sunIcon.style.display = 'block';
+        moonIcon.style.display = 'none';
+    } else {
+        sunIcon.style.display = 'none';
+        moonIcon.style.display = 'block';
+    }
+    localStorage.setItem(THEME_KEY, theme);
+}
+
+function getPreferredTheme() {
+    const stored = localStorage.getItem(THEME_KEY);
+    if (stored) return stored;
+    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+}
+
+function initTheme() {
+    const theme = getPreferredTheme();
+    applyTheme(theme);
+}
+
+function toggleTheme() {
+    const current = document.documentElement.getAttribute('data-theme') || 'dark';
+    applyTheme(current === 'dark' ? 'light' : 'dark');
+}
+
+themeToggle.addEventListener('click', toggleTheme);
+
+// Keyboard shortcut: Ctrl+Shift+L
+document.addEventListener('keydown', (e) => {
+    if (e.ctrlKey && e.shiftKey && e.key === 'L') {
+        e.preventDefault();
+        toggleTheme();
+    }
+});
+
+// Listen for system theme changes
+window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => {
+    if (!localStorage.getItem(THEME_KEY)) {
+        applyTheme(e.matches ? 'dark' : 'light');
+    }
+});
+
+// Initialize theme immediately to prevent flash
+initTheme();
+
+// Mobile sidebar toggle
+const sidebar = document.getElementById('sidebar');
+const mobileMenuBtn = document.getElementById('mobile-menu-btn');
+
+if (mobileMenuBtn) {
+    mobileMenuBtn.addEventListener('click', () => {
+        sidebar.classList.toggle('open');
+    });
+}
+
+document.addEventListener('click', (e) => {
+    if (window.innerWidth <= 768) {
+        if (!sidebar.contains(e.target) && !e.target.closest('.header')) {
+            sidebar.classList.remove('open');
+        }
+    }
+});
+
+// Smooth scroll for anchor links
+document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+    anchor.addEventListener('click', function(e) {
+        const target = document.querySelector(this.getAttribute('href'));
+        if (target) {
+            e.preventDefault();
+            target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            if (window.innerWidth <= 768) {
+                sidebar.classList.remove('open');
+            }
+        }
+    });
+});
+
+// Active link highlighting based on scroll position
+const sections = document.querySelectorAll('.content h2, .content h3');
+const sidebarLinks = document.querySelectorAll('.sidebar-link[href^="#"]');
+
+function updateActiveLink() {
+    let current = '';
+    sections.forEach(section => {
+        const rect = section.getBoundingClientRect();
+        if (rect.top <= 100) {
+            current = '#' + section.id;
+        }
+    });
+
+    sidebarLinks.forEach(link => {
+        link.classList.remove('active');
+        if (link.getAttribute('href') === current) {
+            link.classList.add('active');
+        }
+    });
+}
+
+window.addEventListener('scroll', updateActiveLink, { passive: true });
+window.addEventListener('load', updateActiveLink);
+
+// Highlight.js initialization
+if (typeof hljs !== 'undefined') {
+    hljs.highlightAll();
+}
+
+// Mobile menu button visibility
+const mobileMenuBtn = document.getElementById('mobile-menu-btn');
+function checkMobile() {
+    if (window.innerWidth <= 768) {
+        mobileMenuBtn.style.display = 'flex';
+    } else {
+        mobileMenuBtn.style.display = 'none';
+        document.getElementById('sidebar').classList.remove('open');
+    }
+}
+checkMobile();
+window.addEventListener('resize', checkMobile);
+
+mobileMenuBtn.addEventListener('click', () => {
+    document.getElementById('sidebar').classList.toggle('open');
+});
+</script>

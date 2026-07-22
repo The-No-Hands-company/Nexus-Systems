@@ -1,0 +1,585 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nexus Modeling — Porting Guide — Nexus Modeling Docs</title>
+    <link rel="stylesheet" href="../styles.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
+</head>
+<body>
+    <nav class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+            <div class="sidebar-title">Nexus Modeling</div>
+            <div class="sidebar-subtitle">Documentation v0.1.0-dev</div>
+        </div>
+        <div class="sidebar-section">
+<div class="sidebar-section-title">📚 Developer Documentation</div>
+<a class="sidebar-link" href="../architecture.html">Architecture Overview</a>
+<a class="sidebar-link" href="../kernel-api.html">Kernel API Reference</a>
+<a class="sidebar-link" href="../geometry-kernel.html">Geometry Kernel</a>
+<a class="sidebar-link" href="../renderer.html">Render System</a>
+<a class="sidebar-link" href="../editor-architecture.html">Editor Architecture</a>
+<a class="sidebar-link" href="../build-system.html">Build System</a>
+<a class="sidebar-link" href="../testing.html">Testing</a>
+<a class="sidebar-link" href="../contributing.html">Contributing</a>
+<a class="sidebar-link" href="../adding-geometry-op.html">Adding Geometry Op</a>
+<a class="sidebar-link" href="../adding-cad-feature.html">Adding CAD Feature</a>
+<a class="sidebar-link" href="../mesh-operations.html">Mesh Operations</a>
+<a class="sidebar-link" href="../boolean-csg.html">Boolean/CSG Deep Dive</a>
+<a class="sidebar-link" href="../halfedge-mesh.html">Half-edge Mesh</a>
+<a class="sidebar-link" href="../analytic-brep.html">Analytic B-rep</a>
+<a class="sidebar-link" href="../mesh-io.html">Mesh I/O</a>
+<a class="sidebar-link" href="../tolerance.html">Tolerance System</a>
+<a class="sidebar-link" href="../porting.html">Porting Guide</a>
+</div>
+<div class="sidebar-section">
+<div class="sidebar-section-title">🎨 Expert User Documentation</div>
+</div>
+<div class="sidebar-section">
+<div class="sidebar-section-title">👤 Beginner / User Documentation</div>
+<a class="sidebar-link" href="../getting-started.html">Getting Started</a>
+</div>
+<div class="sidebar-section">
+<div class="sidebar-section-title">🔧 API Reference</div>
+</div>
+<div class="sidebar-section">
+<div class="sidebar-section-title">📚 Additional Resources</div>
+<a class="sidebar-link" href="../design-decisions.html">Design Decisions</a>
+<a class="sidebar-link" href="../testing-strategy.html">Testing Strategy</a>
+<a class="sidebar-link" href="../graphics-kernel.html">Graphics Kernel</a>
+<a class="sidebar-link" href="../vision-and-roadmap.html">Vision & Roadmap</a>
+<a class="sidebar-link" href="../reference-roadmap.html">Reference Roadmap</a>
+<a class="sidebar-link" href="../modeling-industry-parity.html">Modeling Industry Parity</a>
+<a class="sidebar-link" href="../modeling-parity-index.html">Modeling Parity Index</a>
+<a class="sidebar-link" href="../modeling-reference-roadmap.html">Modeling Reference Roadmap</a>
+</div>
+    </nav>
+    
+    <div class="main-content">
+        <header class="header">
+            <button class="btn btn-icon" id="mobile-menu-btn" aria-label="Toggle menu" style="display: none;">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="3" y1="12" x2="21" y2="12"></line>
+                    <line x1="3" y1="6" x2="21" y2="6"></line>
+                    <line x1="3" y1="18" x2="21" y2="18"></line>
+                </svg>
+            </button>
+            <div class="header-title">Nexus Modeling — Porting Guide</div>
+            <div class="header-actions">
+                
+<button class="btn btn-icon" id="theme-toggle" aria-label="Toggle dark/light theme" title="Toggle theme (Ctrl+Shift+L)">
+    <svg class="theme-icon-sun" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display: none;">
+        <circle cx="12" cy="12" r="5"></circle>
+        <line x1="12" y1="1" x2="12" y2="3"></line>
+        <line x1="12" y1="21" x2="12" y2="23"></line>
+        <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+        <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+        <line x1="1" y1="12" x2="3" y2="12"></line>
+        <line x1="21" y1="12" x2="23" y2="12"></line>
+        <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+        <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+    </svg>
+    <svg class="theme-icon-moon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display: none;">
+        <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+    </svg>
+</button>
+
+                <a href="https://github.com/nexus-systems/nexus-modeling" class="btn btn-secondary" target="_blank" rel="noopener">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M12 0C5.374 0 0 5.373 0 12c0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23A11.509 11.509 0 0112 5.803c1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576C20.566 21.797 24 17.3 24 12c0-6.627-5.373-12-12-12z"/>
+                    </svg>
+                    <span class="btn-text">GitHub</span>
+                </a>
+                <a href="../index.html" class="btn btn-primary">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
+                        <polyline points="9 22 9 12 15 12 15 22"></polyline>
+                    </svg>
+                    <span class="btn-text">Home</span>
+                </a>
+            </div>
+        </header>
+        
+        <main class="content">
+            <div class="toc"><h3>On This Page</h3><ul><li><a href="#nexus-modeling-porting-guide">Nexus Modeling — Porting Guide</a></li>
+  <li><a href="#supported-platforms">Supported Platforms</a></li>
+  <li><a href="#linux-x86_64">Linux (x86_64)</a></li>
+    <li><a href="#dependencies">Dependencies</a></li>
+<li><a href="#ubuntu-debian">Ubuntu/Debian</a></li>
+<li><a href="#fedora-rhel">Fedora/RHEL</a></li>
+<li><a href="#arch">Arch</a></li>
+    <li><a href="#build">Build</a></li>
+    <li><a href="#headless-ci">Headless CI</a></li>
+<li><a href="#or">or</a></li>
+  <li><a href="#windows-msvc">Windows (MSVC)</a></li>
+    <li><a href="#prerequisites">Prerequisites</a></li>
+    <li><a href="#build-developer-command-prompt">Build (Developer Command Prompt)</a></li>
+    <li><a href="#visual-studio-ide">Visual Studio IDE</a></li>
+    <li><a href="#vulkan-sdk-path">Vulkan SDK Path</a></li>
+  <li><a href="#macos-apple-silicon">macOS (Apple Silicon)</a></li>
+    <li><a href="#prerequisites">Prerequisites</a></li>
+<li><a href="#moltenvk-is-included-in-vulkan-sdk">MoltenVK is included in Vulkan SDK</a></li>
+    <li><a href="#build">Build</a></li>
+    <li><a href="#moltenvk">MoltenVK</a></li>
+    <li><a href="#known-issues">Known Issues</a></li>
+  <li><a href="#android-arm64">Android (ARM64)</a></li>
+    <li><a href="#toolchain">Toolchain</a></li>
+    <li><a href="#requirements">Requirements</a></li>
+  <li><a href="#web-wasm-planned">Web (WASM) — Planned</a></li>
+    <li><a href="#emscripten">Emscripten</a></li>
+    <li><a href="#requirements">Requirements</a></li>
+  <li><a href="#cross-compilation-matrix">Cross-Compilation Matrix</a></li>
+  <li><a href="#platform-specific-code">Platform-Specific Code</a></li>
+    <li><a href="#platform-abstraction-layer">Platform Abstraction Layer</a></li>
+    <li><a href="#window-handle-abstraction">Window Handle Abstraction</a></li>
+    <li><a href="#platform-specific-entry-points">Platform-Specific Entry Points</a></li>
+  <li><a href="#platform-specific-builds">Platform-Specific Builds</a></li>
+    <li><a href="#linux-package-appimage">Linux Package (AppImage)</a></li>
+<li><a href="#linuxdeploy-appimagetool">linuxdeploy + appimagetool</a></li>
+    <li><a href="#macos-bundle">macOS Bundle</a></li>
+<li><a href="#cmake-generates-app-bundle">CMake generates .app bundle</a></li>
+<li><a href="#creates-nexus-modeling-app">Creates Nexus Modeling.app/</a></li>
+    <li><a href="#windows-installer-nsis">Windows Installer (NSIS)</a></li>
+  <li><a href="#ci-cd-matrix">CI/CD Matrix</a></li>
+<li><a href="#github-workflows-ci-yml">.github/workflows/ci.yml</a></li>
+</ul></div>
+            <h1 id="nexus-modeling-porting-guide">Nexus Modeling — Porting Guide</h1>
+
+<p>
+<em>Platform-specific considerations for bringing Nexus Modeling to new targets.</em>
+</p>
+
+<hr>
+
+<h2 id="supported-platforms">Supported Platforms</h2>
+
+<p>
+| Platform | Status | Backend |
+|----------|--------|---------|
+| Linux (x86_64) | ✅ Production | Vulkan / Null |
+| Windows 10/11 (x64) | ✅ Production | Vulkan |
+| macOS (Apple Silicon) | 🚧 Beta | MoltenVK |
+| Android (ARM64) | 🚧 Experimental | Vulkan |
+| Web (WASM) | 📋 Planned | WebGPU |
+</p>
+
+<hr>
+
+<h2 id="linux-x86_64">Linux (x86_64)</h2>
+
+<h3 id="dependencies">Dependencies</h3>
+<pre><code class="language-bash"><h1 id="ubuntu-debian">Ubuntu/Debian</h1>
+<p>
+sudo apt install cmake ninja-build g++-13 libvulkan-dev libglfw3-dev libglu1-mesa-dev
+</p>
+
+<h1 id="fedora-rhel">Fedora/RHEL</h1>
+<p>
+sudo dnf install cmake ninja-build gcc-c++ vulkan-devel glfw-devel mesa-libGLU-devel
+</p>
+
+<h1 id="arch">Arch</h1>
+<p>
+sudo pacman -S cmake ninja gcc vulkan-headers vulkan-icd-loader glfw glu</code></pre>
+</p>
+
+<h3 id="build">Build</h3>
+<pre><code class="language-bash">cmake -S . -B build -DNEXUS_BACKEND_VULKAN=ON -DNEXUS_BACKEND_NULL=ON
+<p>
+cmake --build build -j$(nproc)</code></pre>
+</p>
+
+<h3 id="headless-ci">Headless CI</h3>
+<pre><code class="language-bash">xvfb-run -a ctest --test-dir build --output-on-failure
+<h1 id="or">or</h1>
+<p>
+VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/lvp_icd.json ./build/src/kernel/nexus_modeling --shot out.png --place box</code></pre>
+</p>
+
+<hr>
+
+<h2 id="windows-msvc">Windows (MSVC)</h2>
+
+<h3 id="prerequisites">Prerequisites</h3>
+<ul>
+<li>Visual Studio 2022 (17.8+) with C++ workload</li>
+<li>Vulkan SDK 1.3.280+</li>
+<li>CMake 3.28+, Ninja</li>
+<li>Git for Windows</li>
+</ul>
+
+<h3 id="build-developer-command-prompt">Build (Developer Command Prompt)</h3>
+<pre><code class="language-cmd">cmake -S . -B build ^
+<p>
+  -G Ninja ^
+  -DCMAKE_BUILD_TYPE=Release ^
+  -DNEXUS_BACKEND_VULKAN=ON ^
+  -DCMAKE_CXX_COMPILER=cl.exe
+</p>
+
+<p>
+cmake --build build --config Release</code></pre>
+</p>
+
+<h3 id="visual-studio-ide">Visual Studio IDE</h3>
+<ol>
+<li>Open <code>CMakeLists.txt</code> via <strong>File → Open → CMake</strong></li>
+<li>Add CMake Settings: <code>Release</code>, <code>Debug</code></li>
+<li>CMake settings: <code>NEXUS_BACKEND_VULKAN=ON</code></li>
+<li>Build → Build All</li>
+</ol>
+
+<h3 id="vulkan-sdk-path">Vulkan SDK Path</h3>
+<pre><code class="language-cmd">set VULKAN_SDK=C:\VulkanSDK\1.3.290.0
+<p>
+set PATH=%VULKAN_SDK%\Bin;%PATH%</code></pre>
+</p>
+
+<hr>
+
+<h2 id="macos-apple-silicon">macOS (Apple Silicon)</h2>
+
+<h3 id="prerequisites">Prerequisites</h3>
+<pre><code class="language-bash">brew install cmake ninja vulkan-sdk glfw
+<h1 id="moltenvk-is-included-in-vulkan-sdk">MoltenVK is included in Vulkan SDK</h1></code></pre>
+
+<h3 id="build">Build</h3>
+<pre><code class="language-bash">cmake -S . -B build \
+<p>
+  -DNEXUS_BACKEND_VULKAN=ON \
+  -DNEXUS_BACKEND_NULL=ON \
+  -DCMAKE_OSX_ARCHITECTURES=arm64 \
+  -DCMAKE_OSX_DEPLOYMENT_TARGET=13.0
+cmake --build build -j$(sysctl -n hw.logicalcpu)</code></pre>
+</p>
+
+<h3 id="moltenvk">MoltenVK</h3>
+<pre><code class="language-bash">export VK_ICD_FILENAMES=/opt/homebrew/share/vulkan/icd.d/MoltenVK_icd.json
+<p>
+export VK_LAYER_PATH=/opt/homebrew/share/vulkan/explicit_layer.d</code></pre>
+</p>
+
+<h3 id="known-issues">Known Issues</h3>
+<p>
+| Issue | Workaround |
+|-------|------------|
+| MoltenVK descriptor limits | Reduce descriptor pool sizes |
+| Metal validation errors | Disable validation layers (<code>ValidationLevel::Off</code>) |
+| Swapchain recreation | Handle <code>VK_ERROR_OUT_OF_DATE_KHR</code> in resize |
+</p>
+
+<hr>
+
+<h2 id="android-arm64">Android (ARM64)</h2>
+
+<h3 id="toolchain">Toolchain</h3>
+<pre><code class="language-bash">cmake -S . -B build_android \
+<p>
+  -DCMAKE_TOOLCHAIN_FILE=$ANDROID_NDK/build/cmake/android.toolchain.cmake \
+  -DANDROID_ABI=arm64-v8a \
+  -DANDROID_PLATFORM=android-28 \
+  -DANDROID_STL=c++_shared \
+  -DNEXUS_BACKEND_VULKAN=ON</code></pre>
+</p>
+
+<h3 id="requirements">Requirements</h3>
+<ul>
+<li>Android 10+ (API 29+)</li>
+<li>Vulkan 1.1+ device</li>
+<li><code>android.hardware.vulkan.version</code> ≥ 1.1 in manifest</li>
+</ul>
+
+<hr>
+
+<h2 id="web-wasm-planned">Web (WASM) — Planned</h2>
+
+<h3 id="emscripten">Emscripten</h3>
+<pre><code class="language-bash">emcmake cmake -S . -B build_wasm \
+<p>
+  -DCMAKE_BUILD_TYPE=Release \
+  -DNEXUS_BACKEND_WEBGPU=ON \
+  -DCMAKE_CXX_FLAGS="-s USE_WEBGPU=1 -s WASM=1"
+emmake cmake --build build_wasm</code></pre>
+</p>
+
+<h3 id="requirements">Requirements</h3>
+<ul>
+<li>Emscripten 3.1.50+</li>
+<li>WebGPU enabled browser (Chrome 113+, Firefox 120+)</li>
+<li><code>webgpu</code> feature in emscripten</li>
+</ul>
+
+<hr>
+
+<h2 id="cross-compilation-matrix">Cross-Compilation Matrix</h2>
+
+<p>
+| Host → Target | Toolchain | Status |
+|---------------|-----------|--------|
+| Linux x64 → Linux x64 | Native | ✅ |
+| Linux x64 → Windows x64 | mingw-w64 | ✅ |
+| Linux x64 → Linux ARM64 | aarch64-linux-gnu | ✅ |
+| Linux x64 → Android ARM64 | NDK r26+ | 🚧 |
+| Linux x64 → WASM | Emscripten | 📋 |
+| macOS ARM64 → macOS ARM64 | Native | ✅ |
+| Windows x64 → Windows x64 | MSVC | ✅ |
+</p>
+
+<hr>
+
+<h2 id="platform-specific-code">Platform-Specific Code</h2>
+
+<h3 id="platform-abstraction-layer">Platform Abstraction Layer</h3>
+<pre><code class="language-cpp">// src/kernel/src/platform/Platform.h
+<p>
+#if defined(_WIN32)
+  #include "PlatformWindows.cpp"
+#elif defined(__linux__)
+  #include "PlatformLinux.cpp"
+#elif defined(__APPLE__)
+  #include "PlatformMacOS.cpp"
+#elif defined(__ANDROID__)
+  #include "PlatformAndroid.cpp"
+#elif defined(__EMSCRIPTEN__)
+  #include "PlatformWasm.cpp"
+#endif</code></pre>
+</p>
+
+<h3 id="window-handle-abstraction">Window Handle Abstraction</h3>
+<pre><code class="language-cpp">struct NativeWindowHandle {
+<p>
+#if defined(_WIN32)
+    HWND hwnd;
+#elif defined(__linux__)
+    ::Window xwindow;  // X11
+    // or wl_surface* for Wayland
+#elif defined(__APPLE__)
+    NSView<em> nsview;  // or CAMetalLayer</em>
+#elif defined(__ANDROID__)
+    ANativeWindow* window;
+#elif defined(__EMSCRIPTEN__)
+    EMSCRIPTEN_WEBGL_CONTEXT_HANDLE context;
+#endif
+};</code></pre>
+</p>
+
+<h3 id="platform-specific-entry-points">Platform-Specific Entry Points</h3>
+<pre><code class="language-cpp">// Platform abstraction
+<p>
+namespace nexus::platform {
+    std::unique_ptr<IWindow> createWindow(const WindowDesc&);
+    void pollEvents();
+    void* getVulkanSurface(VkInstance, const IWindow&);
+}</code></pre>
+</p>
+
+<hr>
+
+<h2 id="platform-specific-builds">Platform-Specific Builds</h2>
+
+<h3 id="linux-package-appimage">Linux Package (AppImage)</h3>
+<pre><code class="language-bash"><h1 id="linuxdeploy-appimagetool">linuxdeploy + appimagetool</h1>
+<p>
+linuxdeploy --appdir AppDir --output appimage</code></pre>
+</p>
+
+<h3 id="macos-bundle">macOS Bundle</h3>
+<pre><code class="language-bash"><h1 id="cmake-generates-app-bundle">CMake generates .app bundle</h1>
+<p>
+cmake -DCMAKE_BUNDLE=ON
+</p>
+<h1 id="creates-nexus-modeling-app">Creates Nexus Modeling.app/</h1></code></pre>
+
+<h3 id="windows-installer-nsis">Windows Installer (NSIS)</h3>
+<pre><code class="language-nsis">!include MUI2.nsh
+<p>
+Name "Nexus Modeling"
+OutFile "Nexus-Modeling-Setup.exe"
+InstallDir "$PROGRAMFILES\Nexus Modeling"
+Page directory
+Page instfiles
+Section
+  SetOutPath $INSTDIR
+  File /r "build\Release\*.exe"
+  File /r "build\Release\*.dll"
+SectionEnd</code></pre>
+</p>
+
+<hr>
+
+<h2 id="ci-cd-matrix">CI/CD Matrix</h2>
+
+<pre><code class="language-yaml"><h1 id="github-workflows-ci-yml">.github/workflows/ci.yml</h1>
+<p>
+strategy:
+  matrix:
+    include:
+</p>
+<ul>
+<li>os: ubuntu-latest</li>
+</ul>
+<p>
+        target: linux-x64
+        backend: vulkan
+</p>
+<ul>
+<li>os: windows-latest</li>
+</ul>
+<p>
+        target: windows-x64
+        backend: vulkan
+</p>
+<ul>
+<li>os: macos-latest</li>
+</ul>
+<p>
+        target: macos-arm64
+        backend: vulkan  # MoltenVK</code></pre>
+</p>
+
+<hr>
+
+<p>
+<em>Porting guide v0.1.0-dev | Updated 2026-07-14</em>
+</p>
+        </main>
+    </div>
+    
+    <script>
+// Theme management
+const THEME_KEY = 'nexus-docs-theme';
+const themeToggle = document.getElementById('theme-toggle');
+const sunIcon = themeToggle.querySelector('.theme-icon-sun');
+const moonIcon = themeToggle.querySelector('.theme-icon-moon');
+
+function applyTheme(theme) {
+    document.documentElement.setAttribute('data-theme', theme);
+    if (theme === 'light') {
+        sunIcon.style.display = 'block';
+        moonIcon.style.display = 'none';
+    } else {
+        sunIcon.style.display = 'none';
+        moonIcon.style.display = 'block';
+    }
+    localStorage.setItem(THEME_KEY, theme);
+}
+
+function getPreferredTheme() {
+    const stored = localStorage.getItem(THEME_KEY);
+    if (stored) return stored;
+    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+}
+
+function initTheme() {
+    const theme = getPreferredTheme();
+    applyTheme(theme);
+}
+
+function toggleTheme() {
+    const current = document.documentElement.getAttribute('data-theme') || 'dark';
+    applyTheme(current === 'dark' ? 'light' : 'dark');
+}
+
+themeToggle.addEventListener('click', toggleTheme);
+
+// Keyboard shortcut: Ctrl+Shift+L
+document.addEventListener('keydown', (e) => {
+    if (e.ctrlKey && e.shiftKey && e.key === 'L') {
+        e.preventDefault();
+        toggleTheme();
+    }
+});
+
+// Listen for system theme changes
+window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => {
+    if (!localStorage.getItem(THEME_KEY)) {
+        applyTheme(e.matches ? 'dark' : 'light');
+    }
+});
+
+// Initialize theme immediately to prevent flash
+initTheme();
+
+// Mobile sidebar toggle
+const sidebar = document.getElementById('sidebar');
+const mobileMenuBtn = document.getElementById('mobile-menu-btn');
+
+if (mobileMenuBtn) {
+    mobileMenuBtn.addEventListener('click', () => {
+        sidebar.classList.toggle('open');
+    });
+}
+
+document.addEventListener('click', (e) => {
+    if (window.innerWidth <= 768) {
+        if (!sidebar.contains(e.target) && !e.target.closest('.header')) {
+            sidebar.classList.remove('open');
+        }
+    }
+});
+
+// Smooth scroll for anchor links
+document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+    anchor.addEventListener('click', function(e) {
+        const target = document.querySelector(this.getAttribute('href'));
+        if (target) {
+            e.preventDefault();
+            target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            if (window.innerWidth <= 768) {
+                sidebar.classList.remove('open');
+            }
+        }
+    });
+});
+
+// Active link highlighting based on scroll position
+const sections = document.querySelectorAll('.content h2, .content h3');
+const sidebarLinks = document.querySelectorAll('.sidebar-link[href^="#"]');
+
+function updateActiveLink() {
+    let current = '';
+    sections.forEach(section => {
+        const rect = section.getBoundingClientRect();
+        if (rect.top <= 100) {
+            current = '#' + section.id;
+        }
+    });
+
+    sidebarLinks.forEach(link => {
+        link.classList.remove('active');
+        if (link.getAttribute('href') === current) {
+            link.classList.add('active');
+        }
+    });
+}
+
+window.addEventListener('scroll', updateActiveLink, { passive: true });
+window.addEventListener('load', updateActiveLink);
+
+// Highlight.js initialization
+if (typeof hljs !== 'undefined') {
+    hljs.highlightAll();
+}
+
+// Mobile menu button visibility
+const mobileMenuBtn = document.getElementById('mobile-menu-btn');
+function checkMobile() {
+    if (window.innerWidth <= 768) {
+        mobileMenuBtn.style.display = 'flex';
+    } else {
+        mobileMenuBtn.style.display = 'none';
+        document.getElementById('sidebar').classList.remove('open');
+    }
+}
+checkMobile();
+window.addEventListener('resize', checkMobile);
+
+mobileMenuBtn.addEventListener('click', () => {
+    document.getElementById('sidebar').classList.toggle('open');
+});
+</script>

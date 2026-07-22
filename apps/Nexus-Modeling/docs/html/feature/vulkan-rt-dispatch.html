@@ -1,0 +1,473 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vulkan Ray-Tracing Dispatch — Shader Binding Table — Nexus Modeling Docs</title>
+    <link rel="stylesheet" href="../styles.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
+</head>
+<body>
+    <nav class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+            <div class="sidebar-title">Nexus Modeling</div>
+            <div class="sidebar-subtitle">Documentation v0.1.0-dev</div>
+        </div>
+        <div class="sidebar-section">
+<div class="sidebar-section-title">📚 Developer Documentation</div>
+<a class="sidebar-link" href="../architecture.html">Architecture Overview</a>
+<a class="sidebar-link" href="../kernel-api.html">Kernel API Reference</a>
+<a class="sidebar-link" href="../geometry-kernel.html">Geometry Kernel</a>
+<a class="sidebar-link" href="../renderer.html">Render System</a>
+<a class="sidebar-link" href="../editor-architecture.html">Editor Architecture</a>
+<a class="sidebar-link" href="../build-system.html">Build System</a>
+<a class="sidebar-link" href="../testing.html">Testing</a>
+<a class="sidebar-link" href="../contributing.html">Contributing</a>
+<a class="sidebar-link" href="../adding-geometry-op.html">Adding Geometry Op</a>
+<a class="sidebar-link" href="../adding-cad-feature.html">Adding CAD Feature</a>
+<a class="sidebar-link" href="../mesh-operations.html">Mesh Operations</a>
+<a class="sidebar-link" href="../boolean-csg.html">Boolean/CSG Deep Dive</a>
+<a class="sidebar-link" href="../halfedge-mesh.html">Half-edge Mesh</a>
+<a class="sidebar-link" href="../analytic-brep.html">Analytic B-rep</a>
+<a class="sidebar-link" href="../mesh-io.html">Mesh I/O</a>
+<a class="sidebar-link" href="../tolerance.html">Tolerance System</a>
+<a class="sidebar-link" href="../porting.html">Porting Guide</a>
+</div>
+<div class="sidebar-section">
+<div class="sidebar-section-title">🎨 Expert User Documentation</div>
+</div>
+<div class="sidebar-section">
+<div class="sidebar-section-title">👤 Beginner / User Documentation</div>
+<a class="sidebar-link" href="../getting-started.html">Getting Started</a>
+</div>
+<div class="sidebar-section">
+<div class="sidebar-section-title">🔧 API Reference</div>
+</div>
+<div class="sidebar-section">
+<div class="sidebar-section-title">📚 Additional Resources</div>
+<a class="sidebar-link" href="../design-decisions.html">Design Decisions</a>
+<a class="sidebar-link" href="../testing-strategy.html">Testing Strategy</a>
+<a class="sidebar-link" href="../graphics-kernel.html">Graphics Kernel</a>
+<a class="sidebar-link" href="../vision-and-roadmap.html">Vision & Roadmap</a>
+<a class="sidebar-link" href="../reference-roadmap.html">Reference Roadmap</a>
+<a class="sidebar-link" href="../modeling-industry-parity.html">Modeling Industry Parity</a>
+<a class="sidebar-link" href="../modeling-parity-index.html">Modeling Parity Index</a>
+<a class="sidebar-link" href="../modeling-reference-roadmap.html">Modeling Reference Roadmap</a>
+</div>
+    </nav>
+    
+    <div class="main-content">
+        <header class="header">
+            <button class="btn btn-icon" id="mobile-menu-btn" aria-label="Toggle menu" style="display: none;">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="3" y1="12" x2="21" y2="12"></line>
+                    <line x1="3" y1="6" x2="21" y2="6"></line>
+                    <line x1="3" y1="18" x2="21" y2="18"></line>
+                </svg>
+            </button>
+            <div class="header-title">Vulkan Ray-Tracing Dispatch — Shader Binding Table</div>
+            <div class="header-actions">
+                
+<button class="btn btn-icon" id="theme-toggle" aria-label="Toggle dark/light theme" title="Toggle theme (Ctrl+Shift+L)">
+    <svg class="theme-icon-sun" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display: none;">
+        <circle cx="12" cy="12" r="5"></circle>
+        <line x1="12" y1="1" x2="12" y2="3"></line>
+        <line x1="12" y1="21" x2="12" y2="23"></line>
+        <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+        <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+        <line x1="1" y1="12" x2="3" y2="12"></line>
+        <line x1="21" y1="12" x2="23" y2="12"></line>
+        <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+        <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+    </svg>
+    <svg class="theme-icon-moon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display: none;">
+        <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+    </svg>
+</button>
+
+                <a href="https://github.com/nexus-systems/nexus-modeling" class="btn btn-secondary" target="_blank" rel="noopener">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M12 0C5.374 0 0 5.373 0 12c0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23A11.509 11.509 0 0112 5.803c1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576C20.566 21.797 24 17.3 24 12c0-6.627-5.373-12-12-12z"/>
+                    </svg>
+                    <span class="btn-text">GitHub</span>
+                </a>
+                <a href="../index.html" class="btn btn-primary">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
+                        <polyline points="9 22 9 12 15 12 15 22"></polyline>
+                    </svg>
+                    <span class="btn-text">Home</span>
+                </a>
+            </div>
+        </header>
+        
+        <main class="content">
+            <div class="toc"><h3>On This Page</h3><ul><li><a href="#vulkan-ray-tracing-dispatch-shader-binding-table">Vulkan Ray-Tracing Dispatch — Shader Binding Table</a></li>
+  <li><a href="#summary">Summary</a></li>
+  <li><a href="#what-landed">What landed</a></li>
+  <li><a href="#verification-status">Verification status</a></li>
+  <li><a href="#bring-up-shaders-hardware-gated-test">Bring-up shaders & hardware-gated test</a></li>
+  <li><a href="#descriptor-binding-readback-completing-the-dispatch-path">Descriptor binding + readback (completing the dispatch path)</a></li>
+  <li><a href="#pipeline-descriptor-set-layouts-raster-multi-set">Pipeline descriptor set layouts (raster + multi-set)</a></li>
+  <li><a href="#deferred-draw-integration-harness">Deferred-draw integration harness</a></li>
+    <li><a href="#software-rasterizer-gate-lavapipe-llvmpipe">Software-rasterizer gate (lavapipe/llvmpipe)</a></li>
+  <li><a href="#follow-ups">Follow-ups</a></li>
+</ul></div>
+            <h1 id="vulkan-ray-tracing-dispatch-shader-binding-table">Vulkan Ray-Tracing Dispatch — Shader Binding Table</h1>
+
+<h2 id="summary">Summary</h2>
+
+<p>
+Completes the CPU-side plumbing for real <code>vkCmdTraceRaysKHR</code> dispatch on RT-capable
+hardware. The ray-tracing <em>pipeline</em> was already created (raygen/miss/hit groups via
+<code>vkCreateRayTracingPipelinesKHR</code>), but <code>traceRays</code> ran with empty shader-binding-table
+(SBT) regions — so no shaders could be reached. This adds SBT construction and binds
+it automatically, closing roadmap month-13 #1.
+</p>
+
+<h2 id="what-landed">What landed</h2>
+
+<ul>
+<li><strong>SBT layout math</strong> (<a href="../../src/kernel/src/backend/vulkan/VulkanShaderBindingTable.h">VulkanShaderBindingTable.h</a>):</li>
+</ul>
+<p>
+  pure, GPU-free <code>computeShaderBindingTableLayout(handleSize, handleAlignment,
+  baseAlignment, missCount, hitCount)</code> implementing the Vulkan alignment rules
+  (per-record stride = <code>align(handleSize, handleAlignment)</code>; each region base-aligned;
+  raygen <code>size == stride</code>). <strong>Unit-tested</strong> in <code>tests/kernel/test_VulkanShaderBindingTable.cpp</code>.
+</p>
+<ul>
+<li><strong>RT pipeline properties</strong> (<a href="../../src/kernel/src/backend/vulkan/VulkanDevice.cpp">VulkanDevice</a>):</li>
+</ul>
+<p>
+  query <code>VkPhysicalDeviceRayTracingPipelinePropertiesKHR</code> (chained into the existing
+  <code>VkPhysicalDeviceProperties2</code>), exposed via <code>rtPipelineProps()</code>.
+</p>
+<ul>
+<li><strong>SBT build</strong> (<a href="../../src/kernel/src/backend/vulkan/VulkanRayTracing.cpp">VulkanRayTracing.cpp</a></li>
+</ul>
+<p>
+  <code>buildShaderBindingTable</code>): <code>vkGetRayTracingShaderGroupHandlesKHR</code> → host-visible,
+  device-address SBT buffer, handles copied into raygen/miss/hit slots at the computed
+  offsets → strided device-address regions.
+</p>
+<ul>
+<li><strong>Wiring</strong>: <code>vkCreateRayTracingPipeline</code> builds and stores the SBT in the pipeline</li>
+</ul>
+<p>
+  entry; <code>VulkanCommandBuffer::bindPipeline</code> activates those regions when an RT pipeline
+  is bound, so the existing <code>bindPipeline → traceRays</code> path now dispatches with a valid
+  SBT. <code>vkDestroyPipeline</code> frees the SBT buffer.
+</p>
+
+<h2 id="verification-status">Verification status</h2>
+
+<ul>
+<li><strong>Unit-tested:</strong> SBT layout/alignment arithmetic (the error-prone part).</li>
+<li><strong>Compile-verified:</strong> all SBT/pipeline/command-buffer wiring builds clean against the</li>
+</ul>
+<p>
+  Vulkan headers (<code>-Werror</code>); full kernel suite green with no regressions.
+</p>
+<ul>
+<li><strong>Not yet runtime-verified:</strong> the actual ray dispatch requires a GPU exposing</li>
+</ul>
+<p>
+  <code>VK_KHR_ray_tracing_pipeline</code> (tier 2). On software/CI ICDs without it,
+  <code>rtPipelineProps</code> is zero and <code>buildShaderBindingTable</code> returns an invalid table;
+  <code>traceRays</code> is null-guarded — so non-RT paths are unaffected. Needs validation on
+  RT hardware (RenderDoc/Nsight capture + a known-good raygen/miss/hit shader set).
+</p>
+
+<h2 id="bring-up-shaders-hardware-gated-test">Bring-up shaders & hardware-gated test</h2>
+
+<ul>
+<li><strong>Shaders</strong> (<a href="../../shaders/rt/">shaders/rt/raytrace.{rgen,rmiss,rchit}</a>): a minimal</li>
+</ul>
+<p>
+  raygen (one primary ray/pixel → output image), miss (background color), and
+  closest-hit (barycentric debug color) set — the canonical assets for RT bring-up.
+</p>
+<ul>
+<li><strong>Test</strong> (<a href="../../tests/kernel/test_VulkanRayTracingDispatch.cpp">tests/kernel/test_VulkanRayTracingDispatch.cpp</a>):</li>
+<li><code>ShadersCompileToModules</code> — runs wherever a Vulkan device exists (GLSL→SPIR-V +</li>
+</ul>
+<p>
+    module creation need no GPU RT support). <strong>Verifies the bring-up shaders compile.</strong>
+</p>
+<ul>
+<li><code>RayTracingPipelineBuildsOnHardware</code> — gated on <code>caps().rayTracingTier >= 2</code>;</li>
+</ul>
+<p>
+    creates the RT pipeline (exercising the SBT build) on real RT hardware, skips
+    otherwise.
+</p>
+<ul>
+<li><code>DispatchAndReadbackOnHardware</code> — gated on tier 2; the full path: triangle</li>
+</ul>
+<p>
+    BLAS/TLAS → RT pipeline + SBT → <code>traceRays</code> into an SSBO → readback → asserts a
+    mix of hit (barycentric) and miss (background) pixels. Skips on this CI device.
+</p>
+
+<h2 id="descriptor-binding-readback-completing-the-dispatch-path">Descriptor binding + readback (completing the dispatch path)</h2>
+
+<p>
+A real dispatch must bind the TLAS and an output target and read results back; both
+were missing from the public API and are now added:
+</p>
+
+<ul>
+<li><code>DescriptorType::AccelerationStructure</code> + <code>DescriptorBindingDesc::accelStruct</code>, with</li>
+</ul>
+<p>
+  the Vulkan <code>updateDescriptorSet</code> path writing <code>VkWriteDescriptorSetAccelerationStructureKHR</code>.
+</p>
+<ul>
+<li><code>RayTracingPipelineDesc::descriptorBindings</code> — RT pipeline creation now builds a</li>
+</ul>
+<p>
+  set-0 <code>VkDescriptorSetLayout</code> from these (previously pipeline layouts were
+  push-constant-only with <code>setLayoutCount = 0</code>, so nothing could be bound). The layout
+  is built to match <code>allocateDescriptorSet</code>, so a descriptor set with the same bindings
+  is layout-compatible. Freed in <code>vkDestroyPipeline</code>.
+</p>
+<ul>
+<li><code>IDevice::readbackBuffer</code> — maps a host-visible (<code>GpuToCpu</code>) buffer and copies to host</li>
+</ul>
+<p>
+  (Vulkan invalidates the allocation first); default no-op on backends that don't support it.
+</p>
+
+<h2 id="pipeline-descriptor-set-layouts-raster-multi-set">Pipeline descriptor set layouts (raster + multi-set)</h2>
+
+<p>
+The same descriptor-set-layout wiring now covers all pipeline types, not just RT:
+</p>
+<ul>
+<li><code>GraphicsPipelineDesc</code> / <code>ComputePipelineDesc</code> / <code>MeshShaderPipelineDesc</code> /</li>
+</ul>
+<p>
+  <code>RayTracingPipelineDesc</code> each take <code>descriptorBindings</code> (a convenience for a single
+  set 0) and <code>descriptorSetLayouts</code> (<code>DescriptorSetLayoutDesc[]</code>, index = set number)
+  for pipelines needing multiple sets. Previously every pipeline layout was
+  push-constant-only (<code>setLayoutCount = 0</code>), so descriptor binding was invalid on
+  hardware — only exercised on the Null backend.
+</p>
+<ul>
+<li>A shared <code>buildPipelineSetLayouts()</code> builds the per-set <code>VkDescriptorSetLayout</code>s to</li>
+</ul>
+<p>
+  match <code>allocateDescriptorSet</code> (descriptorCount 1, stage ALL); the pipeline owns and
+  frees them.
+</p>
+<ul>
+<li>The deferred composite path is now hardware-complete: <code>Renderer::compositeCoreSetLayout()</code></li>
+</ul>
+<p>
+  (set 0) + <code>compositeShadowSetLayout()</code> (set 1) feed a two-set pipeline layout, verified
+  on a real device by <code>VulkanPipeline.CompositeTwoSetLayoutCreatesValidPipeline</code> (pipeline
+  valid + both descriptor sets layout-compatible). The renderer binds from the same tables,
+  so layout and runtime bindings cannot drift.
+</p>
+
+<h2 id="deferred-draw-integration-harness">Deferred-draw integration harness</h2>
+
+<p>
+<code>tests/kernel/test_VulkanDeferredDraw.cpp</code> exercises the deferred path end-to-end on a
+real Vulkan device (passes on the software rasterizer, so it runs in CI):
+</p>
+<ul>
+<li><code>OffscreenClearAndReadback</code> — render to an offscreen color target, copy it to a buffer</li>
+</ul>
+<p>
+  via the new <code>ICommandBuffer::copyTextureToBuffer</code>, read back, and verify the cleared
+  pixels. Establishes the render-target + readback verification mechanism.
+</p>
+<ul>
+<li><code>DescriptorBoundDrawReadsUniformBuffer</code> — a fullscreen draw whose fragment shader reads a</li>
+</ul>
+<p>
+  UBO bound through a descriptor set; readback confirms the bound value reached the shader.
+</p>
+<ul>
+<li><code>DescriptorBoundDrawReadsTwoSets</code> — the full composite shape: a fragment shader reads a</li>
+</ul>
+<p>
+  UBO from set 0 and a UBO from set 1 and writes their sum; readback confirms multi-set
+  descriptor binding is valid AT DRAW TIME.
+</p>
+
+<p>
+Note: fullscreen-triangle passes set <code>cullMode = CullMode::None</code> — the standard
+fullscreen triangle is back-facing under Vulkan's Y-down clip space and would otherwise be
+culled by the default back-face culling.
+</p>
+
+<h3 id="software-rasterizer-gate-lavapipe-llvmpipe">Software-rasterizer gate (lavapipe/llvmpipe)</h3>
+
+<p>
+CPU software rasterizers <strong>advertise</strong> <code>VK_KHR_ray_tracing_pipeline</code> but their
+implementations are incomplete and <strong>crash during RT pipeline creation</strong> (observed:
+SIGSEGV in <code>lvp_CreateRayTracingPipelinesKHR</code>). <code>VulkanDevice::queryCapabilities</code> now
+detects <code>VK_PHYSICAL_DEVICE_TYPE_CPU</code> (<code>DeviceCapabilities::softwareDevice</code>) and refuses
+to report RT capability on such devices (<code>rayTracingPipeline</code>/<code>rayQuery</code> forced false,
+tier 0). This keeps both the renderer and the bring-up test off the broken path — the
+test skips cleanly instead of crashing.
+</p>
+
+<h2 id="follow-ups">Follow-ups</h2>
+
+<ul>
+<li>Stage the SBT to device-local memory (currently host-visible; fine for correctness,</li>
+</ul>
+<p>
+  not the fast path).
+</p>
+<ul>
+<li>Per-geometry hit-group indexing (SBT record offsets) once material→hit-group mapping</li>
+</ul>
+<p>
+  is defined.
+</p>
+
+        </main>
+    </div>
+    
+    <script>
+// Theme management
+const THEME_KEY = 'nexus-docs-theme';
+const themeToggle = document.getElementById('theme-toggle');
+const sunIcon = themeToggle.querySelector('.theme-icon-sun');
+const moonIcon = themeToggle.querySelector('.theme-icon-moon');
+
+function applyTheme(theme) {
+    document.documentElement.setAttribute('data-theme', theme);
+    if (theme === 'light') {
+        sunIcon.style.display = 'block';
+        moonIcon.style.display = 'none';
+    } else {
+        sunIcon.style.display = 'none';
+        moonIcon.style.display = 'block';
+    }
+    localStorage.setItem(THEME_KEY, theme);
+}
+
+function getPreferredTheme() {
+    const stored = localStorage.getItem(THEME_KEY);
+    if (stored) return stored;
+    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+}
+
+function initTheme() {
+    const theme = getPreferredTheme();
+    applyTheme(theme);
+}
+
+function toggleTheme() {
+    const current = document.documentElement.getAttribute('data-theme') || 'dark';
+    applyTheme(current === 'dark' ? 'light' : 'dark');
+}
+
+themeToggle.addEventListener('click', toggleTheme);
+
+// Keyboard shortcut: Ctrl+Shift+L
+document.addEventListener('keydown', (e) => {
+    if (e.ctrlKey && e.shiftKey && e.key === 'L') {
+        e.preventDefault();
+        toggleTheme();
+    }
+});
+
+// Listen for system theme changes
+window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => {
+    if (!localStorage.getItem(THEME_KEY)) {
+        applyTheme(e.matches ? 'dark' : 'light');
+    }
+});
+
+// Initialize theme immediately to prevent flash
+initTheme();
+
+// Mobile sidebar toggle
+const sidebar = document.getElementById('sidebar');
+const mobileMenuBtn = document.getElementById('mobile-menu-btn');
+
+if (mobileMenuBtn) {
+    mobileMenuBtn.addEventListener('click', () => {
+        sidebar.classList.toggle('open');
+    });
+}
+
+document.addEventListener('click', (e) => {
+    if (window.innerWidth <= 768) {
+        if (!sidebar.contains(e.target) && !e.target.closest('.header')) {
+            sidebar.classList.remove('open');
+        }
+    }
+});
+
+// Smooth scroll for anchor links
+document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+    anchor.addEventListener('click', function(e) {
+        const target = document.querySelector(this.getAttribute('href'));
+        if (target) {
+            e.preventDefault();
+            target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            if (window.innerWidth <= 768) {
+                sidebar.classList.remove('open');
+            }
+        }
+    });
+});
+
+// Active link highlighting based on scroll position
+const sections = document.querySelectorAll('.content h2, .content h3');
+const sidebarLinks = document.querySelectorAll('.sidebar-link[href^="#"]');
+
+function updateActiveLink() {
+    let current = '';
+    sections.forEach(section => {
+        const rect = section.getBoundingClientRect();
+        if (rect.top <= 100) {
+            current = '#' + section.id;
+        }
+    });
+
+    sidebarLinks.forEach(link => {
+        link.classList.remove('active');
+        if (link.getAttribute('href') === current) {
+            link.classList.add('active');
+        }
+    });
+}
+
+window.addEventListener('scroll', updateActiveLink, { passive: true });
+window.addEventListener('load', updateActiveLink);
+
+// Highlight.js initialization
+if (typeof hljs !== 'undefined') {
+    hljs.highlightAll();
+}
+
+// Mobile menu button visibility
+const mobileMenuBtn = document.getElementById('mobile-menu-btn');
+function checkMobile() {
+    if (window.innerWidth <= 768) {
+        mobileMenuBtn.style.display = 'flex';
+    } else {
+        mobileMenuBtn.style.display = 'none';
+        document.getElementById('sidebar').classList.remove('open');
+    }
+}
+checkMobile();
+window.addEventListener('resize', checkMobile);
+
+mobileMenuBtn.addEventListener('click', () => {
+    document.getElementById('sidebar').classList.toggle('open');
+});
+</script>

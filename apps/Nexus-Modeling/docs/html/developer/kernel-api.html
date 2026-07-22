@@ -1,0 +1,980 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nexus Modeling — Geometry Kernel Reference — Nexus Modeling Docs</title>
+    <link rel="stylesheet" href="../styles.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
+</head>
+<body>
+    <nav class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+            <div class="sidebar-title">Nexus Modeling</div>
+            <div class="sidebar-subtitle">Documentation v0.1.0-dev</div>
+        </div>
+        <div class="sidebar-section">
+<div class="sidebar-section-title">📚 Developer Documentation</div>
+<a class="sidebar-link" href="../architecture.html">Architecture Overview</a>
+<a class="sidebar-link" href="../kernel-api.html">Kernel API Reference</a>
+<a class="sidebar-link" href="../geometry-kernel.html">Geometry Kernel</a>
+<a class="sidebar-link" href="../renderer.html">Render System</a>
+<a class="sidebar-link" href="../editor-architecture.html">Editor Architecture</a>
+<a class="sidebar-link" href="../build-system.html">Build System</a>
+<a class="sidebar-link" href="../testing.html">Testing</a>
+<a class="sidebar-link" href="../contributing.html">Contributing</a>
+<a class="sidebar-link" href="../adding-geometry-op.html">Adding Geometry Op</a>
+<a class="sidebar-link" href="../adding-cad-feature.html">Adding CAD Feature</a>
+<a class="sidebar-link" href="../mesh-operations.html">Mesh Operations</a>
+<a class="sidebar-link" href="../boolean-csg.html">Boolean/CSG Deep Dive</a>
+<a class="sidebar-link" href="../halfedge-mesh.html">Half-edge Mesh</a>
+<a class="sidebar-link" href="../analytic-brep.html">Analytic B-rep</a>
+<a class="sidebar-link" href="../mesh-io.html">Mesh I/O</a>
+<a class="sidebar-link" href="../tolerance.html">Tolerance System</a>
+<a class="sidebar-link" href="../porting.html">Porting Guide</a>
+</div>
+<div class="sidebar-section">
+<div class="sidebar-section-title">🎨 Expert User Documentation</div>
+</div>
+<div class="sidebar-section">
+<div class="sidebar-section-title">👤 Beginner / User Documentation</div>
+<a class="sidebar-link" href="../getting-started.html">Getting Started</a>
+</div>
+<div class="sidebar-section">
+<div class="sidebar-section-title">🔧 API Reference</div>
+</div>
+<div class="sidebar-section">
+<div class="sidebar-section-title">📚 Additional Resources</div>
+<a class="sidebar-link" href="../design-decisions.html">Design Decisions</a>
+<a class="sidebar-link" href="../testing-strategy.html">Testing Strategy</a>
+<a class="sidebar-link" href="../graphics-kernel.html">Graphics Kernel</a>
+<a class="sidebar-link" href="../vision-and-roadmap.html">Vision & Roadmap</a>
+<a class="sidebar-link" href="../reference-roadmap.html">Reference Roadmap</a>
+<a class="sidebar-link" href="../modeling-industry-parity.html">Modeling Industry Parity</a>
+<a class="sidebar-link" href="../modeling-parity-index.html">Modeling Parity Index</a>
+<a class="sidebar-link" href="../modeling-reference-roadmap.html">Modeling Reference Roadmap</a>
+</div>
+    </nav>
+    
+    <div class="main-content">
+        <header class="header">
+            <button class="btn btn-icon" id="mobile-menu-btn" aria-label="Toggle menu" style="display: none;">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="3" y1="12" x2="21" y2="12"></line>
+                    <line x1="3" y1="6" x2="21" y2="6"></line>
+                    <line x1="3" y1="18" x2="21" y2="18"></line>
+                </svg>
+            </button>
+            <div class="header-title">Nexus Modeling — Geometry Kernel Reference</div>
+            <div class="header-actions">
+                
+<button class="btn btn-icon" id="theme-toggle" aria-label="Toggle dark/light theme" title="Toggle theme (Ctrl+Shift+L)">
+    <svg class="theme-icon-sun" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display: none;">
+        <circle cx="12" cy="12" r="5"></circle>
+        <line x1="12" y1="1" x2="12" y2="3"></line>
+        <line x1="12" y1="21" x2="12" y2="23"></line>
+        <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+        <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+        <line x1="1" y1="12" x2="3" y2="12"></line>
+        <line x1="21" y1="12" x2="23" y2="12"></line>
+        <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+        <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+    </svg>
+    <svg class="theme-icon-moon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display: none;">
+        <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+    </svg>
+</button>
+
+                <a href="https://github.com/nexus-systems/nexus-modeling" class="btn btn-secondary" target="_blank" rel="noopener">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M12 0C5.374 0 0 5.373 0 12c0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23A11.509 11.509 0 0112 5.803c1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576C20.566 21.797 24 17.3 24 12c0-6.627-5.373-12-12-12z"/>
+                    </svg>
+                    <span class="btn-text">GitHub</span>
+                </a>
+                <a href="../index.html" class="btn btn-primary">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
+                        <polyline points="9 22 9 12 15 12 15 22"></polyline>
+                    </svg>
+                    <span class="btn-text">Home</span>
+                </a>
+            </div>
+        </header>
+        
+        <main class="content">
+            <div class="toc"><h3>On This Page</h3><ul><li><a href="#nexus-modeling-geometry-kernel-reference">Nexus Modeling — Geometry Kernel Reference</a></li>
+  <li><a href="#module-overview">Module Overview</a></li>
+  <li><a href="#quick-start">Quick Start</a></li>
+  <li><a href="#core-types">Core Types</a></li>
+    <li><a href="#nexus-render-vec3-vec4"><code>nexus::render::Vec3</code> / <code>Vec4</code></a></li>
+    <li><a href="#nexus-geometry-mesh"><code>nexus::geometry::Mesh</code></a></li>
+    <li><a href="#nexus-geometry-face"><code>nexus::geometry::Face</code></a></li>
+    <li><a href="#nexus-render-aabb"><code>nexus::render::Aabb</code></a></li>
+  <li><a href="#mesh-creation">Mesh Creation</a></li>
+    <li><a href="#primitives">Primitives</a></li>
+    <li><a href="#from-raw-data">From Raw Data</a></li>
+  <li><a href="#mesh-operations">Mesh Operations</a></li>
+    <li><a href="#boolean-csg">Boolean / CSG</a></li>
+    <li><a href="#remeshing-decimation">Remeshing & Decimation</a></li>
+    <li><a href="#subdivision">Subdivision</a></li>
+    <li><a href="#boolean-operations-real-csg-pipeline">Boolean Operations (Real CSG Pipeline)</a></li>
+    <li><a href="#remeshing">Remeshing</a></li>
+    <li><a href="#decimation">Decimation</a></li>
+    <li><a href="#subdivision">Subdivision</a></li>
+    <li><a href="#mesh-analysis">Mesh Analysis</a></li>
+  <li><a href="#half-edge-mesh-halfedgemesh">Half-Edge Mesh (<code>HalfEdgeMesh</code>)</a></li>
+    <li><a href="#euler-operators-all-integrity-clean">Euler Operators (all integrity-clean)</a></li>
+  <li><a href="#analytic-b-rep-nexus-geometry-brep">Analytic B-rep (<code>nexus::geometry::brep</code>)</a></li>
+  <li><a href="#mesh-i-o">Mesh I/O</a></li>
+  <li><a href="#tolerance-system">Tolerance System</a></li>
+    <li><a href="#migration-guide-legacy-epsilons">Migration Guide (Legacy Epsilons)</a></li>
+  <li><a href="#robust-predicates">Robust Predicates</a></li>
+  <li><a href="#mesh-i-o-formats">Mesh I/O Formats</a></li>
+  <li><a href="#error-handling">Error Handling</a></li>
+  <li><a href="#performance-notes">Performance Notes</a></li>
+  <li><a href="#related">Related</a></li>
+</ul></div>
+            <h1 id="nexus-modeling-geometry-kernel-reference">Nexus Modeling — Geometry Kernel Reference</h1>
+
+<p>
+<em>Complete API reference for the geometry kernel (nexus::geometry)</em>
+</p>
+
+<hr>
+
+<h2 id="module-overview">Module Overview</h2>
+
+<p>
+The geometry kernel (<code>nexus::geometry</code>) is a <strong>standalone library</strong> with zero dependencies on UI, rendering, or application logic. It can be used headless for batch processing, CLI tools, or server-side geometry processing.
+</p>
+
+<pre><code class="language-">nexus::geometry
+<p>
+├── Mesh.*              // Indexed n-gon mesh, attributes, topology
+├── HalfEdgeMesh.*      // Half-edge structure, Euler ops, validators
+├── MeshBoolean.*       // CSG: tri-tri → retriangulate → cut → classify → stitch
+├── SubdivisionSurface.* // Catmull-Clark, Loop, crease weights
+├── MeshRemesh.*        // Quad remesh, voxel remesh, decimation
+├── MeshDecimator.*     // Quadric error decimation
+├── MeshLaplacian.*     // Smoothing, fairing, parameterization
+├── MeshBoolean.*       // CSG: tri-tri → retriangulate → cut → classify → stitch
+├── MeshBVH.*           // Bounding volume hierarchy for ray queries
+├── Delaunay2D.*        // Constrained Delaunay triangulation
+├── ConstrainedDelaunay2D.*
+├── TetDelaunay3D.*     // 3D Delaunay for tetrahedralization
+├── AnalyticBRep.*      // Analytic B-rep (Box/Cylinder/Sphere/Cone/Torus)
+├── Tolerance.h          // Central tolerance system
+├── RobustPredicates.*   // Exact orient2D/3D, incircle/insphere
+└── ... (60+ files)</code></pre>
+</p>
+
+<hr>
+
+<h2 id="quick-start">Quick Start</h2>
+
+<pre><code class="language-cpp">#include <nexus/geometry/Mesh.h>
+<p>
+#include <nexus/geometry/MeshBoolean.h>
+#include <nexus/geometry/primitives.h>
+#include <nexus/geometry/AnalyticBRep.h>
+</p>
+
+<p>
+using namespace nexus::geometry;
+using namespace nexus::render;
+</p>
+
+<p>
+// Create primitives
+Mesh box = primitives::makeBox(2.0f, 3.0f, 4.0f);
+Mesh sphere = primitives::makeSphere(1.5f);
+Mesh cylinder = primitives::makeCylinder(1.0f, 5.0f);
+</p>
+
+<p>
+// Boolean operations
+auto result = MeshBoolean::compute(box, sphere, BooleanOp::Difference);
+</p>
+
+<p>
+// Analytic B-rep primitives
+auto box = brep::makeBox(10, 20, 5);
+auto cylinder = brep::makeCylinder(5, 10);
+auto sphere = brep::makeSphere(5);
+</p>
+
+<p>
+// Convert to mesh for rendering
+Mesh mesh = brepBody.toMesh();</code></pre>
+</p>
+
+<hr>
+
+<h2 id="core-types">Core Types</h2>
+
+<h3 id="nexus-render-vec3-vec4"><code>nexus::render::Vec3</code> / <code>Vec4</code></h3>
+<pre><code class="language-cpp">struct Vec3 { float x, y, z; };
+<p>
+// Operators: +, -, *, /, dot(), cross(), length(), normalize()
+// Constructors: Vec3(), Vec3(float), Vec3(x,y,z)</code></pre>
+</p>
+
+<h3 id="nexus-geometry-mesh"><code>nexus::geometry::Mesh</code></h3>
+<pre><code class="language-cpp">class Mesh {
+<p>
+    // Topology
+    uint32_t vertexCount() const;
+    uint32_t faceCount() const;
+    const std::vector<Vec3>& positions() const;
+    const std::vector<Face>& topology() const;
+</p>
+    
+<p>
+    // Attributes
+    bool hasNormals() const;
+    const std::vector<Vec3>& normals() const;
+    bool hasUVs() const;
+    const std::vector<Vec2>& uvs() const;
+</p>
+    
+<p>
+    // Mutation
+    void setPositions(std::vector<Vec3>&&);
+    void setNormals(std::vector<Vec3>&&);
+    bool computeVertexNormals();  // Recompute from faces
+</p>
+    
+<p>
+    // Validation
+    bool isValid() const;
+    Aabb computeBounds() const;
+    float volume() const;          // Signed volume (closed mesh)
+    float surfaceArea() const;
+};</code></pre>
+</p>
+
+<h3 id="nexus-geometry-face"><code>nexus::geometry::Face</code></h3>
+<pre><code class="language-cpp">struct Face {
+<p>
+    std::vector<uint32_t> indices;  // Vertex indices (CCW winding)
+    uint32_t material = 0;           // Material slot
+};</code></pre>
+</p>
+
+<h3 id="nexus-render-aabb"><code>nexus::render::Aabb</code></h3>
+<pre><code class="language-cpp">struct Aabb {
+<p>
+    Vec3 min, max;
+    Vec3 center() const;
+    Vec3 extents() const;
+    bool contains(const Vec3& p) const;
+    bool intersects(const Aabb& other) const;
+    void expand(const Vec3& p);
+    void expand(const Aabb& other);
+};</code></pre>
+</p>
+
+<hr>
+
+<h2 id="mesh-creation">Mesh Creation</h2>
+
+<h3 id="primitives">Primitives</h3>
+<pre><code class="language-cpp">namespace nexus::geometry::primitives {
+<p>
+    Mesh makeBox(float w, float h, float d);                    // Centered at origin
+    Mesh makeSphere(float radius, uint32_t lat=24, uint32_t lon=24);
+    Mesh makeCylinder(float radius, float height, uint32_t seg=24);
+    Mesh makeCone(float radius, float height, uint32_t seg=24);
+    Mesh makeTorus(float majorR, float minorR, uint32_t majorSeg, uint32_t minorSeg);
+    Mesh makePlane(float w, float h, uint32_t segW, uint32_t segH);
+    Mesh makeTorus(float majorR, float minorR, uint32_t majorSeg, uint32_t minorSeg);
+}</code></pre>
+</p>
+
+<h3 id="from-raw-data">From Raw Data</h3>
+<pre><code class="language-cpp">Mesh mesh;
+<p>
+mesh.attributes().setPositions(std::move(positions));
+mesh.topology().addFace({0, 1, 2});  // Triangle
+mesh.topology().addFace({0, 1, 2, 3});  // Quad (auto-triangulated)
+mesh.topology().addFace(Face{indices, materialId});
+mesh.attributes().setPositions(std::move(positions));
+// Optional
+mesh.attributes().setNormals(std::move(normals));
+mesh.attributes().setUVs(std::move(uvs));
+mesh.computeVertexNormals();  // Auto-compute from faces</code></pre>
+</p>
+
+<hr>
+
+<h2 id="mesh-operations">Mesh Operations</h2>
+
+<h3 id="boolean-csg">Boolean / CSG</h3>
+<pre><code class="language-cpp">enum class BooleanOp { Union, Difference, Intersection };
+
+<p>
+struct BooleanResult {
+    bool ok;
+    std::string error;
+    Mesh result;
+    std::vector<uint32_t> faceClassification;  // Inside/Outside/OnSurface
+};
+</p>
+
+<p>
+BooleanResult MeshBoolean::compute(const Mesh& A, const Mesh& B, BooleanOp op);
+// Returns exact CSG result with exact volumes, watertight 2-manifold</code></pre>
+</p>
+
+<h3 id="remeshing-decimation">Remeshing & Decimation</h3>
+<pre><code class="language-cpp">// Voxel remesh (uniform)
+<p>
+struct RemeshOptions {
+    float targetEdgeLength = 1.0f;
+    uint32_t iterations = 3;
+    bool preserveSharpEdges = true;
+    float sharpAngleDeg = 30.0f;
+};
+Mesh MeshRemesh::voxelRemesh(const Mesh& input, const RemeshOptions&);
+</p>
+
+<p>
+// Quad remesh (quad-dominant)
+struct QuadRemeshOptions {
+    uint32_t targetFaceCount = 0;  // 0 = auto
+    float adaptivity = 1.0f;
+    uint32_t iterations = 10;
+};
+Mesh MeshRemesh::quadRemesh(const Mesh&, const QuadRemeshOptions&);
+</p>
+
+<p>
+// Decimation
+struct DecimationOptions {
+    uint32_t targetFaceCount;
+    bool preserveBoundary = true;
+    float boundaryWeight = 10.0f;
+};
+std::pair<Mesh, std::vector<uint32_t>> MeshDecimator::decimate(const Mesh&, const DecimationOptions&);
+// Returns {decimatedMesh, oldToNewVertexMap}</code></pre>
+</p>
+
+<h3 id="subdivision">Subdivision</h3>
+<pre><code class="language-cpp">struct SubdivisionOptions {
+<p>
+    uint32_t levels = 1;
+    enum class Scheme { CatmullClark, Loop } scheme = Scheme::CatmullClark;
+    std::vector<uint32_t> creaseEdges;  // Edge indices to crease
+    std::vector<float> creaseWeights;   // 0=smooth, 1=sharp
+};
+std::optional<Mesh> SubdivisionSurface::catmullClark(const Mesh&, const SubdivisionOptions&);</code></pre>
+</p>
+
+<h3 id="boolean-operations-real-csg-pipeline">Boolean Operations (Real CSG Pipeline)</h3>
+<pre><code class="language-cpp">enum class BooleanOp { Union, Difference, Intersection };
+
+<p>
+struct BooleanResult {
+    bool ok;
+    std::string error;
+    Mesh result;
+    std::vector<uint32_t> faceClassification;  // Inside/Outside/OnSurface
+};
+</p>
+
+<p>
+BooleanResult MeshBoolean::compute(const Mesh& A, const Mesh& B, BooleanOp op);
+</p>
+
+<p>
+// Pipeline:
+// 1. Triangle-triangle intersection (robust, exact predicates)
+// 2. Per-triangle retriangulation at intersections
+// 3. Whole-mesh cut (classify vertices: inside/outside/on-surface)
+// 4. Classify & stitch (inside→remove, outside→keep, on→stitch)
+// Result: Watertight 2-manifold, exact volumes, Euler χ=2</code></pre>
+</p>
+
+<h3 id="remeshing">Remeshing</h3>
+<pre><code class="language-cpp">struct RemeshOptions {
+<p>
+    float targetEdgeLength = 1.0f;
+    uint32_t iterations = 3;
+    bool preserveSharpEdges = true;
+    float sharpAngleDeg = 30.0f;
+};
+</p>
+
+<p>
+Mesh MeshRemesh::voxelRemesh(const Mesh& input, const RemeshOptions&);</code></pre>
+</p>
+
+<h3 id="decimation">Decimation</h3>
+<pre><code class="language-cpp">struct DecimationOptions {
+<p>
+    uint32_t targetFaceCount;
+    bool preserveBoundary = true;
+    float boundaryWeight = 10.0f;
+};
+</p>
+
+<p>
+std::pair<Mesh, std::vector<uint32_t>> MeshDecimator::decimate(const Mesh&, const DecimationOptions&);
+// Returns {decimatedMesh, oldToNewVertexMap}</code></pre>
+</p>
+
+<h3 id="subdivision">Subdivision</h3>
+<pre><code class="language-cpp">enum class SubdivisionScheme { CatmullClark, Loop };
+
+<p>
+struct SubdivisionOptions {
+    uint32_t levels = 1;
+    Scheme scheme = Scheme::CatmullClark;
+    std::vector<uint32_t> creaseEdges;
+    std::vector<float> creaseWeights;  // 0=smooth, 1=sharp
+};
+</p>
+
+<p>
+std::optional<Mesh> SubdivisionSurface::catmullClark(const Mesh&, const SubdivisionOptions&);
+std::optional<Mesh> SubdivisionSurface::loopSubdivision(const Mesh&, const SubdivisionOptions&);</code></pre>
+</p>
+
+<h3 id="mesh-analysis">Mesh Analysis</h3>
+<pre><code class="language-cpp">struct MeshAnalysis {
+<p>
+    float volume;           // Signed (closed mesh)
+    float surfaceArea;
+    Aabb bounds;
+    bool isWatertight;
+    bool isManifold;
+    int eulerCharacteristic;  // V - E + F
+    uint32_t boundaryEdges;
+    uint32_t nonManifoldEdges;
+    uint32_t degenerateFaces;
+    std::vector<std::string> issues;
+};
+</p>
+
+<p>
+MeshAnalysis MeshAnalysis::analyze(const Mesh&);
+bool Mesh::isValid() const;  // Quick validation</code></pre>
+</p>
+
+<hr>
+
+<h2 id="half-edge-mesh-halfedgemesh">Half-Edge Mesh (<code>HalfEdgeMesh</code>)</h2>
+
+<p>
+Full topological structure with Euler operators:
+</p>
+
+<pre><code class="language-cpp">class HalfEdgeMesh {
+<p>
+    // Construction
+    static std::optional<HalfEdgeMesh> fromMesh(const Mesh&);
+    Mesh toMesh() const;
+</p>
+
+<p>
+    // Topology
+    struct Vertex { uint32_t edge = kInvalid; Vec3 pos; };
+    struct Edge { uint32_t vert[2] = {kInvalid, kInvalid}; uint32_t face[2] = {kInvalid, kInvalid}; };
+    struct HalfEdge { uint32_t vertex, edge, face, next, prev, twin; };
+    struct Face { uint32_t halfEdge = kInvalid; };
+</p>
+
+<p>
+    // Local Euler operators (all integrity-clean)
+    uint32_t insertEdgeVertex(uint32_t edgeId, float t);
+    uint32_t splitEdge(uint32_t edgeId);
+    void collapseEdge(uint32_t edgeId);
+    uint32_t splitFace(uint32_t faceId, uint32_t v0, uint32_t v1);
+    void flipEdge(uint32_t edgeId);
+    void collapseFace(uint32_t faceId);
+    void pokeFace(uint32_t faceId);
+    void insertEdgeLoop(uint32_t edgeId, float t);
+</p>
+    
+<p>
+    // Queries
+    std::vector<uint32_t> vertexRing(uint32_t vert) const;
+    std::vector<uint32_t> faceRing(uint32_t face) const;
+    std::vector<uint32_t> boundaryLoops() const;
+</p>
+    
+<p>
+    // Validation
+    struct IntegrityReport { bool ok; std::string reason; ... };
+    IntegrityReport checkIntegrity() const;
+</p>
+    
+<p>
+    // To/from indexed mesh
+    static std::optional<HalfEdgeMesh> fromMesh(const Mesh&);
+    Mesh toMesh() const;
+};</code></pre>
+</p>
+
+<h3 id="euler-operators-all-integrity-clean">Euler Operators (all integrity-clean)</h3>
+<pre><code class="language-cpp">// Local ops (all 6 integrity-clean, property-tested)
+<p>
+insertEdgeVertex    // split edge, create vertex + 2 edges + 2 coedges
+splitEdge           // same, but explicit position
+collapseEdge        // merge vertices, remove edge
+splitFace           // add diagonal edge across face
+flipEdge            // flip interior edge (Delaunay)
+collapseFace        // remove face, merge edges
+pokeFace            // insert center vertex, fan triangulate</code></pre>
+</p>
+
+<hr>
+
+<h2 id="analytic-b-rep-nexus-geometry-brep">Analytic B-rep (<code>nexus::geometry::brep</code>)</h2>
+
+<p>
+Exact boundary representation with analytic geometry (not tessellated).
+</p>
+
+<pre><code class="language-cpp">namespace nexus::geometry::brep {
+<p>
+    // Topology
+    struct Vertex { Vec3 point; uint32_t coedge = kInvalid; };
+    struct Edge { uint32_t curve, v0, v1; float t0=0, t1=1; uint32_t coedge = kInvalid; };
+    struct Coedge { uint32_t edge; bool reversed; uint32_t loop, next, prev, partner; };
+    struct Loop { uint32_t face; uint32_t first; bool outer; };
+    struct Face { uint32_t surface; bool reversed; uint32_t outerLoop; std::vector<uint32_t> innerLoops; uint32_t shell; };
+    struct Shell { std::vector<uint32_t> faces; bool closed = false; };
+    struct Solid { std::vector<uint32_t> shells; };  // [0]=outer, rest=voids
+</p>
+    
+<p>
+    // Curves
+    enum CurveKind { Line, Circle, Nurbs };
+    struct Curve { CurveKind kind; Vec3 origin, dir, ref; float radius; uint32_t nurbs; };
+</p>
+    
+<p>
+    // Surfaces
+    enum SurfaceKind { Plane, Cylinder, Sphere, Torus, Cone, Nurbs };
+    struct Surface {
+        SurfaceKind kind;
+        Vec3 origin, normal, uAxis;
+        float radius;
+        uint32_t nurbs;
+        Vec3 eval(float u, float v) const noexcept;
+        Vec3 normalAt(float u, float v) const noexcept;
+        Vec3 vAxis() const noexcept;
+    };
+</p>
+    
+<p>
+    class Body {
+        // ... topology storage ...
+        std::optional<Body> fromFaces(points, faces);  // Build from face rings
+        IntegrityReport checkIntegrity() const;        // Full validation
+        Mesh toMesh() const;                           // Tessellate for rendering
+        bool isClosed() const noexcept;
+    };
+</p>
+    
+<p>
+    // Primitives
+    Body makeBox(float w, float h, float d);
+    Body makeCylinder(float r, float h, uint32_t seg);
+    Body makeSphere(float r, uint32_t lat, uint32_t lon);
+    Body makeCone(float r, float h, uint32_t seg);
+    Body makeTorus(float R, float r, uint32_t major, uint32_t minor);
+    // Boolean: union/diff/intersect (exact, analytic)
+}</code></pre>
+</p>
+
+<hr>
+
+<h2 id="mesh-i-o">Mesh I/O</h2>
+
+<pre><code class="language-cpp">enum class MeshExportFormat { OBJ, STL, PLY, GLTF };
+<p>
+enum class MeshImportFormat { OBJ, STL, PLY, GLTF };
+</p>
+
+<p>
+struct MeshExportOptions {
+    MeshExportFormat format = MeshExportFormat::OBJ;
+    bool writeNormals = true;
+    bool writeUVs = true;
+    bool triangulate = true;
+    std::string materialLib;
+};
+</p>
+
+<p>
+struct MeshExportReport {
+    bool valid = true;
+    std::vector<std::string> errors;
+    size_t verticesWritten = 0;
+    size_t facesWritten = 0;
+};
+</p>
+
+<p>
+struct MeshImportOptions {
+    MeshImportFormat format = MeshImportFormat::OBJ;
+    float scale = 1.0f;
+    bool computeNormals = true;
+    bool generateUVs = false;
+};
+</p>
+
+<p>
+struct MeshImportReport {
+    bool valid = true;
+    std::vector<std::string> errors;
+    size_t verticesRead = 0;
+    size_t facesRead = 0;
+};
+</p>
+
+<p>
+// Export
+MeshExportReport MeshIO::exportMesh(const Mesh&, const std::string& path, const MeshExportOptions&);
+</p>
+
+<p>
+// Import
+MeshImportReport MeshIO::importMesh(const std::string& path, Mesh& out, const MeshImportOptions&);
+</p>
+
+<p>
+// Supported formats:
+ // Export: OBJ, STL (binary/ASCII), PLY, glTF 2.0 (GLB/GLTF)
+ // Import:  OBJ, STL, PLY, glTF 2.0 (GLB/GLTF)</code></pre>
+</p>
+
+<hr>
+
+<h2 id="tolerance-system">Tolerance System</h2>
+
+<p>
+Centralized, scale-aware tolerance management:
+</p>
+
+<pre><code class="language-cpp">#include <nexus/geometry/Tolerance.h>
+
+<p>
+struct Tolerance {
+    static constexpr float DEFAULT_ABS = 1e-6f;
+    static constexpr float DEFAULT_REL = 1e-4f;
+</p>
+    
+<p>
+    float abs = DEFAULT_ABS;   // Absolute floor
+    float rel = DEFAULT_REL;   // Relative to characteristic length
+</p>
+    
+<p>
+    [[nodiscard]] float at(float characteristicLength) const noexcept {
+        return std::max(abs, rel * characteristicLength);
+    }
+</p>
+    
+<p>
+    [[nodiscard]] bool nearlyEqual(float a, float b, float charLen) const noexcept {
+        return std::abs(a - b) <= at(charLen);
+    }
+</p>
+    
+<p>
+    [[nodiscard]] bool isZero(float x, float charLen) const noexcept {
+        return std::abs(x) <= at(charLen);
+    }
+</p>
+    
+<p>
+    [[nodiscard]] bool coincident(const Vec3& a, const Vec3& b, float charLen) const noexcept;
+};
+</p>
+
+<p>
+// Factory
+Tolerance Tolerance::forCharacteristicLength(float L) noexcept {
+    return {1e-6f, 1e-4f};  // Scales with L
+}</code></pre>
+</p>
+
+<h3 id="migration-guide-legacy-epsilons">Migration Guide (Legacy Epsilons)</h3>
+<pre><code class="language-cpp">// OLD (scattered literals)
+<p>
+if (std::abs(a - b) < 1e-5f) ...
+if (len < 1e-6f) ...
+</p>
+
+<p>
+// NEW (centralized)
+Tolerance tol = Tolerance::forCharacteristicLength(charLen);
+if (tol.nearlyEqual(a, b, charLen)) ...
+if (tol.isZero(len, charLen)) ...</code></pre>
+</p>
+
+<hr>
+
+<h2 id="robust-predicates">Robust Predicates</h2>
+
+<p>
+Exact geometric predicates using Shewchuk's adaptive expansion arithmetic:
+</p>
+
+<pre><code class="language-cpp">#include <nexus/geometry/RobustPredicates.h>
+
+<p>
+// 2D
+int orient2d(const Vec2& a, const Vec2& b, const Vec2& c);  // +1: CCW, -1: CW, 0: collinear
+int incircle(const Vec2& a, const Vec2& b, const Vec2& c, const Vec2& d);  // inside circle?
+</p>
+
+<p>
+// 3D
+int orient3d(const Vec3& a, const Vec3& b, const Vec3& c, const Vec3& d);  // +1: CCW, -1: CW
+int insphere(const Vec3& a, const Vec3& b, const Vec3& c, const Vec3& d, const Vec3& e);
+</p>
+
+<p>
+// Exact arithmetic: adaptive precision, no rounding errors
+// Falls back to double → long double → adaptive expansion as needed</code></pre>
+</p>
+
+<hr>
+
+<h2 id="mesh-i-o-formats">Mesh I/O Formats</h2>
+
+<p>
+| Format | Import | Export | Notes |
+|--------|--------|--------|-------|
+| OBJ | ✅ | ✅ | Materials, UVs, groups |
+| STL | ✅ | ✅ | Binary + ASCII |
+| PLY | ✅ | ✅ | Binary/ASCII, properties |
+| glTF 2.0 | ✅ | ✅ | GLB/GLTF, PBR materials, animations |
+| STL (binary) | ✅ | ✅ | Preferred for 3D printing |
+| OBJ + MTL | ✅ | ✅ | Materials + UVs |
+</p>
+
+<pre><code class="language-cpp">// Export
+<p>
+MeshIO::exportMesh(mesh, "model.obj", MeshExportOptions{MeshExportFormat::OBJ});
+MeshIO::exportMesh(mesh, "model.stl", MeshExportOptions{MeshExportFormat::STL});
+MeshIO::exportMesh(mesh, "model.gltf", MeshExportOptions{MeshExportFormat::GLTF});
+</p>
+
+<p>
+// Import
+MeshImportReport rep = MeshIO::importMesh("model.obj", mesh, MeshImportOptions{});
+if (!rep.valid) { /<em> handle errors </em>/ }</code></pre>
+</p>
+
+<hr>
+
+<h2 id="error-handling">Error Handling</h2>
+
+<p>
+All fallible operations return `Result<T><code> or </code>std::optional<T>`:
+</p>
+
+<pre><code class="language-cpp">// Boolean
+<p>
+auto result = MeshBoolean::compute(a, b, BooleanOp::Union);
+if (!result.ok) { logError(result.error); return; }
+Mesh resultMesh = std::move(result.result);
+</p>
+
+<p>
+// Mesh operations
+auto result = MeshRemesh::voxelRemesh(mesh, opts);
+if (!result.has_value()) { /<em> handle </em>/ }
+Mesh remeshed = std::move(*result);
+</p>
+
+<p>
+// FromFaces (analytic B-rep)
+auto body = Body::fromFaces(points, faces);
+if (!body.has_value()) { /<em> malformed input </em>/ }</code></pre>
+</p>
+
+<hr>
+
+<h2 id="performance-notes">Performance Notes</h2>
+
+<p>
+| Operation | Target | Typical |
+|-----------|--------|---------|
+| Cube↔Cube boolean | < 1 ms | ~0.3 ms |
+| 10k tri extrude | < 1 ms | ~0.4 ms |
+| 100k tri boolean | < 10 ms | ~6 ms |
+| 1M tri decimate 50% | < 100 ms | ~60 ms |
+| 100k tri Catmull-Clark | < 50 ms | ~30 ms |
+</p>
+
+<ul>
+<li><strong>SIMD-accelerated</strong> math (Vec3/4 use SSE/AVX where available)</li>
+<li><strong>Parallel</strong> BVH build, voxel remesh, decimation</li>
+<li><strong>Zero-copy</strong> mesh view where possible</li>
+<li><strong>Arena allocation</strong> for transient geometry</li>
+</ul>
+
+<hr>
+
+<h2 id="related">Related</h2>
+
+<ul>
+<li><a href="mesh-operations.md">Mesh Operations Guide</a></li>
+<li><a href="boolean-csg.md">Boolean/CSG Deep Dive</a></li>
+<li><a href="halfedge-mesh.md">Half-edge Mesh Guide</a></li>
+<li><a href="analytic-brep.md">Analytic B-rep Guide</a></li>
+<li><a href="mesh-io.md">Mesh I/O Guide</a></li>
+<li><a href="tolerance.md">Tolerance System</a></li>
+</ul>
+
+<hr>
+
+<p>
+<em>Kernel v0.1.0-dev | 1921 tests passing | C++26 | Vulkan 1.3</em>
+</p>
+        </main>
+    </div>
+    
+    <script>
+// Theme management
+const THEME_KEY = 'nexus-docs-theme';
+const themeToggle = document.getElementById('theme-toggle');
+const sunIcon = themeToggle.querySelector('.theme-icon-sun');
+const moonIcon = themeToggle.querySelector('.theme-icon-moon');
+
+function applyTheme(theme) {
+    document.documentElement.setAttribute('data-theme', theme);
+    if (theme === 'light') {
+        sunIcon.style.display = 'block';
+        moonIcon.style.display = 'none';
+    } else {
+        sunIcon.style.display = 'none';
+        moonIcon.style.display = 'block';
+    }
+    localStorage.setItem(THEME_KEY, theme);
+}
+
+function getPreferredTheme() {
+    const stored = localStorage.getItem(THEME_KEY);
+    if (stored) return stored;
+    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+}
+
+function initTheme() {
+    const theme = getPreferredTheme();
+    applyTheme(theme);
+}
+
+function toggleTheme() {
+    const current = document.documentElement.getAttribute('data-theme') || 'dark';
+    applyTheme(current === 'dark' ? 'light' : 'dark');
+}
+
+themeToggle.addEventListener('click', toggleTheme);
+
+// Keyboard shortcut: Ctrl+Shift+L
+document.addEventListener('keydown', (e) => {
+    if (e.ctrlKey && e.shiftKey && e.key === 'L') {
+        e.preventDefault();
+        toggleTheme();
+    }
+});
+
+// Listen for system theme changes
+window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => {
+    if (!localStorage.getItem(THEME_KEY)) {
+        applyTheme(e.matches ? 'dark' : 'light');
+    }
+});
+
+// Initialize theme immediately to prevent flash
+initTheme();
+
+// Mobile sidebar toggle
+const sidebar = document.getElementById('sidebar');
+const mobileMenuBtn = document.getElementById('mobile-menu-btn');
+
+if (mobileMenuBtn) {
+    mobileMenuBtn.addEventListener('click', () => {
+        sidebar.classList.toggle('open');
+    });
+}
+
+document.addEventListener('click', (e) => {
+    if (window.innerWidth <= 768) {
+        if (!sidebar.contains(e.target) && !e.target.closest('.header')) {
+            sidebar.classList.remove('open');
+        }
+    }
+});
+
+// Smooth scroll for anchor links
+document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+    anchor.addEventListener('click', function(e) {
+        const target = document.querySelector(this.getAttribute('href'));
+        if (target) {
+            e.preventDefault();
+            target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            if (window.innerWidth <= 768) {
+                sidebar.classList.remove('open');
+            }
+        }
+    });
+});
+
+// Active link highlighting based on scroll position
+const sections = document.querySelectorAll('.content h2, .content h3');
+const sidebarLinks = document.querySelectorAll('.sidebar-link[href^="#"]');
+
+function updateActiveLink() {
+    let current = '';
+    sections.forEach(section => {
+        const rect = section.getBoundingClientRect();
+        if (rect.top <= 100) {
+            current = '#' + section.id;
+        }
+    });
+
+    sidebarLinks.forEach(link => {
+        link.classList.remove('active');
+        if (link.getAttribute('href') === current) {
+            link.classList.add('active');
+        }
+    });
+}
+
+window.addEventListener('scroll', updateActiveLink, { passive: true });
+window.addEventListener('load', updateActiveLink);
+
+// Highlight.js initialization
+if (typeof hljs !== 'undefined') {
+    hljs.highlightAll();
+}
+
+// Mobile menu button visibility
+const mobileMenuBtn = document.getElementById('mobile-menu-btn');
+function checkMobile() {
+    if (window.innerWidth <= 768) {
+        mobileMenuBtn.style.display = 'flex';
+    } else {
+        mobileMenuBtn.style.display = 'none';
+        document.getElementById('sidebar').classList.remove('open');
+    }
+}
+checkMobile();
+window.addEventListener('resize', checkMobile);
+
+mobileMenuBtn.addEventListener('click', () => {
+    document.getElementById('sidebar').classList.toggle('open');
+});
+</script>

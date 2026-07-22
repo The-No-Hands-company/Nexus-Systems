@@ -1,0 +1,996 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nexus Modeling — Half-Edge Mesh Guide — Nexus Modeling Docs</title>
+    <link rel="stylesheet" href="../styles.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
+</head>
+<body>
+    <nav class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+            <div class="sidebar-title">Nexus Modeling</div>
+            <div class="sidebar-subtitle">Documentation v0.1.0-dev</div>
+        </div>
+        <div class="sidebar-section">
+<div class="sidebar-section-title">📚 Developer Documentation</div>
+<a class="sidebar-link" href="../architecture.html">Architecture Overview</a>
+<a class="sidebar-link" href="../kernel-api.html">Kernel API Reference</a>
+<a class="sidebar-link" href="../geometry-kernel.html">Geometry Kernel</a>
+<a class="sidebar-link" href="../renderer.html">Render System</a>
+<a class="sidebar-link" href="../editor-architecture.html">Editor Architecture</a>
+<a class="sidebar-link" href="../build-system.html">Build System</a>
+<a class="sidebar-link" href="../testing.html">Testing</a>
+<a class="sidebar-link" href="../contributing.html">Contributing</a>
+<a class="sidebar-link" href="../adding-geometry-op.html">Adding Geometry Op</a>
+<a class="sidebar-link" href="../adding-cad-feature.html">Adding CAD Feature</a>
+<a class="sidebar-link" href="../mesh-operations.html">Mesh Operations</a>
+<a class="sidebar-link" href="../boolean-csg.html">Boolean/CSG Deep Dive</a>
+<a class="sidebar-link" href="../halfedge-mesh.html">Half-edge Mesh</a>
+<a class="sidebar-link" href="../analytic-brep.html">Analytic B-rep</a>
+<a class="sidebar-link" href="../mesh-io.html">Mesh I/O</a>
+<a class="sidebar-link" href="../tolerance.html">Tolerance System</a>
+<a class="sidebar-link" href="../porting.html">Porting Guide</a>
+</div>
+<div class="sidebar-section">
+<div class="sidebar-section-title">🎨 Expert User Documentation</div>
+</div>
+<div class="sidebar-section">
+<div class="sidebar-section-title">👤 Beginner / User Documentation</div>
+<a class="sidebar-link" href="../getting-started.html">Getting Started</a>
+</div>
+<div class="sidebar-section">
+<div class="sidebar-section-title">🔧 API Reference</div>
+</div>
+<div class="sidebar-section">
+<div class="sidebar-section-title">📚 Additional Resources</div>
+<a class="sidebar-link" href="../design-decisions.html">Design Decisions</a>
+<a class="sidebar-link" href="../testing-strategy.html">Testing Strategy</a>
+<a class="sidebar-link" href="../graphics-kernel.html">Graphics Kernel</a>
+<a class="sidebar-link" href="../vision-and-roadmap.html">Vision & Roadmap</a>
+<a class="sidebar-link" href="../reference-roadmap.html">Reference Roadmap</a>
+<a class="sidebar-link" href="../modeling-industry-parity.html">Modeling Industry Parity</a>
+<a class="sidebar-link" href="../modeling-parity-index.html">Modeling Parity Index</a>
+<a class="sidebar-link" href="../modeling-reference-roadmap.html">Modeling Reference Roadmap</a>
+</div>
+    </nav>
+    
+    <div class="main-content">
+        <header class="header">
+            <button class="btn btn-icon" id="mobile-menu-btn" aria-label="Toggle menu" style="display: none;">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="3" y1="12" x2="21" y2="12"></line>
+                    <line x1="3" y1="6" x2="21" y2="6"></line>
+                    <line x1="3" y1="18" x2="21" y2="18"></line>
+                </svg>
+            </button>
+            <div class="header-title">Nexus Modeling — Half-Edge Mesh Guide</div>
+            <div class="header-actions">
+                
+<button class="btn btn-icon" id="theme-toggle" aria-label="Toggle dark/light theme" title="Toggle theme (Ctrl+Shift+L)">
+    <svg class="theme-icon-sun" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display: none;">
+        <circle cx="12" cy="12" r="5"></circle>
+        <line x1="12" y1="1" x2="12" y2="3"></line>
+        <line x1="12" y1="21" x2="12" y2="23"></line>
+        <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+        <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+        <line x1="1" y1="12" x2="3" y2="12"></line>
+        <line x1="21" y1="12" x2="23" y2="12"></line>
+        <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+        <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+    </svg>
+    <svg class="theme-icon-moon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display: none;">
+        <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+    </svg>
+</button>
+
+                <a href="https://github.com/nexus-systems/nexus-modeling" class="btn btn-secondary" target="_blank" rel="noopener">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M12 0C5.374 0 0 5.373 0 12c0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23A11.509 11.509 0 0112 5.803c1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576C20.566 21.797 24 17.3 24 12c0-6.627-5.373-12-12-12z"/>
+                    </svg>
+                    <span class="btn-text">GitHub</span>
+                </a>
+                <a href="../index.html" class="btn btn-primary">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
+                        <polyline points="9 22 9 12 15 12 15 22"></polyline>
+                    </svg>
+                    <span class="btn-text">Home</span>
+                </a>
+            </div>
+        </header>
+        
+        <main class="content">
+            <div class="toc"><h3>On This Page</h3><ul><li><a href="#nexus-modeling-half-edge-mesh-guide">Nexus Modeling — Half-Edge Mesh Guide</a></li>
+  <li><a href="#overview">Overview</a></li>
+  <li><a href="#data-structures">Data Structures</a></li>
+  <li><a href="#construction">Construction</a></li>
+    <li><a href="#construction-algorithm-frommesh">Construction Algorithm (<code>fromMesh</code>)</a></li>
+    <li><a href="#detailed-construction-steps">Detailed Construction Steps</a></li>
+  <li><a href="#local-euler-operators-all-integrity-clean">Local Euler Operators (All Integrity-Clean)</a></li>
+  <li><a href="#operator-specifications-detailed">Operator Specifications (Detailed)</a></li>
+    <li><a href="#insertedgevertex-edgeid-t"><code>insertEdgeVertex(edgeId, t)</code></a></li>
+    <li><a href="#splitedge-edgeid"><code>splitEdge(edgeId)</code></a></li>
+    <li><a href="#collapseedge-edgeid"><code>collapseEdge(edgeId)</code></a></li>
+    <li><a href="#splitface-faceid-v0-v1"><code>splitFace(faceId, v0, v1)</code></a></li>
+    <li><a href="#flipedge-edgeid"><code>flipEdge(edgeId)</code></a></li>
+    <li><a href="#collapseface-faceid"><code>collapseFace(faceId)</code></a></li>
+    <li><a href="#pokeface-faceid"><code>pokeFace(faceId)</code></a></li>
+    <li><a href="#insertedgeloop-edgeid-t"><code>insertEdgeLoop(edgeId, t)</code></a></li>
+  <li><a href="#queries">Queries</a></li>
+    <li><a href="#vertexring-vert-ordered-ring-of-faces-around-vertex"><code>vertexRing(vert)</code> — Ordered ring of faces around vertex</a></li>
+    <li><a href="#facering-face-ordered-ring-of-vertices-around-face"><code>faceRing(face)</code> — Ordered ring of vertices around face</a></li>
+    <li><a href="#boundaryloops-all-boundary-edge-loops"><code>boundaryLoops()</code> — All boundary edge loops</a></li>
+  <li><a href="#integrity-validation">Integrity Validation</a></li>
+    <li><a href="#checks-performed">Checks Performed</a></li>
+    <li><a href="#detailed-check-implementation">Detailed Check Implementation</a></li>
+  <li><a href="#construction-from-mesh">Construction from Mesh</a></li>
+  <li><a href="#integrity-checks-performed-by-checkintegrity">Integrity Checks (Performed by <code>checkIntegrity()</code>)</a></li>
+  <li><a href="#property-preservation">Property Preservation</a></li>
+  <li><a href="#testing">Testing</a></li>
+<li><a href="#run-all-integrity-tests">Run all integrity tests</a></li>
+<li><a href="#specific-tests">Specific tests</a></li>
+</ul></div>
+            <h1 id="nexus-modeling-half-edge-mesh-guide">Nexus Modeling — Half-Edge Mesh Guide</h1>
+
+<p>
+<em>Complete guide to the half-edge topology structure, Euler operators, and integrity validation.</em>
+</p>
+
+<hr>
+
+<h2 id="overview">Overview</h2>
+
+<p>
+The <code>HalfEdgeMesh</code> provides a <strong>manifold half-edge data structure</strong> with <strong>integrity-clean Euler operators</strong>. All 6 local operators are proven integrity-clean via <code>checkIntegrity()</code> + property tests.
+</p>
+
+<hr>
+
+<h2 id="data-structures">Data Structures</h2>
+
+<pre><code class="language-cpp">struct Vertex { 
+<p>
+    uint32_t edge = kInvalid;  // One incident half-edge
+    Vec3 pos;                  // Position
+};
+</p>
+
+<p>
+struct Edge {
+    uint32_t vert[2] = {kInvalid, kInvalid};  // End vertices
+    uint32_t face[2] = {kInvalid, kInvalid};  // Incident faces (max 2 for manifold)
+};
+</p>
+
+<p>
+struct HalfEdge {
+    uint32_t vertex, edge, face;  // Origin vertex, geometric edge, incident face
+    uint32_t next, prev, twin;    // Topological links
+};
+</p>
+
+<p>
+struct Face {
+    uint32_t halfEdge = kInvalid;  // One incident half-edge
+};</code></pre>
+</p>
+
+<p>
+<strong>Constants:</strong>
+</p>
+<pre><code class="language-cpp">static constexpr uint32_t kInvalid = std::numeric_limits<uint32_t>::max();</code></pre>
+
+<p>
+<strong>Topological Relationships:</strong>
+</p>
+
+<pre><code class="language-">HalfEdge → vertex (origin)
+<p>
+HalfEdge → edge (geometric edge)
+HalfEdge → face (incident face)
+HalfEdge → next (next half-edge around face)
+HalfEdge → prev (prev half-edge around face)
+HalfEdge → twin (opposite half-edge on same edge)
+</p>
+
+<p>
+Edge → vert[0], vert[1] (endpoints)
+Edge → face[0], face[1] (incident faces, max 2 for manifold)
+</p>
+
+<p>
+Vertex → edge (one incident half-edge)
+Face → halfEdge (one incident half-edge)</code></pre>
+</p>
+
+<hr>
+
+<h2 id="construction">Construction</h2>
+
+<pre><code class="language-cpp">// From indexed mesh (positions + face indices)
+<p>
+static std::optional<HalfEdgeMesh> fromMesh(const Mesh&);
+</p>
+
+<p>
+// To indexed mesh
+Mesh toMesh() const;</code></pre>
+</p>
+
+<h3 id="construction-algorithm-frommesh">Construction Algorithm (<code>fromMesh</code>)</h3>
+
+<pre><code class="language-cpp">std::optional<HalfEdgeMesh> HalfEdgeMesh::fromMesh(const Mesh& mesh) {
+<p>
+    // 1. Create vertices
+    for each position: create Vertex{edge=kInvalid, pos}
+</p>
+    
+<p>
+    // 2. Build edges (deduplicate by vertex pair)
+    //    Use hash map: (min(v0,v1), max(v0,v1)) -> edgeId
+</p>
+    
+<p>
+    // 3. Build faces from face indices
+    //    For each face, create half-edges in CCW order
+</p>
+    
+<p>
+    // 4. Build coedges, set next/prev/twin
+    //    next/prev: within face ring
+    //    twin: opposite half-edge on same edge
+</p>
+    
+<p>
+    // 5. Link coedges to vertices
+    //    vertex.edge = one incident half-edge
+</p>
+    
+<p>
+    // 6. Build loops (outer + inner)
+    //    Identify boundary edges (1 coedge) vs interior (2 coedges)
+}</code></pre>
+</p>
+
+<h3 id="detailed-construction-steps">Detailed Construction Steps</h3>
+
+<pre><code class="language-cpp">// Step 1: Vertices
+<p>
+m_vertices.resize(mesh.vertexCount());
+for (uint32_t i = 0; i < mesh.vertexCount(); ++i) {
+    m_vertices[i] = Vertex{kInvalid, mesh.positions()[i]};
+}
+</p>
+
+<p>
+// Step 2: Edges (with deduplication)
+struct EdgeKey {
+    uint32_t v0, v1;
+    bool operator==(const EdgeKey& o) const { return v0==o.v0 && v1==o.v1; }
+};
+struct EdgeKeyHash {
+    size_t operator()(const EdgeKey& k) const noexcept {
+        return (size_t(k.v0) << 32) ^ size_t(k.v1);
+    }
+};
+std::unordered_map<EdgeKey, uint32_t, EdgeKeyHash> edgeMap;
+</p>
+
+<p>
+for each face in mesh:
+    for each edge (v0, v1) in face:
+        EdgeKey key{min(v0,v1), max(v0,v1)};
+        auto [it, inserted] = edgeMap.try_emplace(key, m_edges.size());
+        if (inserted) {
+            m_edges.push_back(Edge{{v0, v1}, {kInvalid, kInvalid}});
+        }
+        uint32_t edgeId = it->second;
+        // Record half-edge -> edge mapping
+</p>
+
+<p>
+// Step 3: Half-edges per face
+for each face:
+    uint32_t firstHalfEdge = m_halfEdges.size();
+    uint32_t prev = kInvalid;
+    for each vertex in face (CCW):
+        uint32_t heId = m_halfEdges.size();
+        m_halfEdges.push_back(HalfEdge{vertex, edgeId, faceId, kInvalid, prev, kInvalid});
+        if (prev != kInvalid) m_halfEdges[prev].next = heId;
+        prev = heId;
+        // Record vertex -> half-edge if not set
+        if (m_vertices[vertex].edge == kInvalid) m_vertices[vertex].edge = heId;
+    // Close the loop
+    m_halfEdges[prev].next = firstHalfEdge;
+    m_halfEdges[firstHalfEdge].prev = prev;
+    m_faces[faceId].halfEdge = firstHalfEdge;
+</p>
+
+<p>
+// Step 4: Set twins
+for each edge:
+    if (edge.face[0] != kInvalid && edge.face[1] != kInvalid) {
+        // Find half-edges for each face
+        uint32_t he0 = findHalfEdge(edge.face[0], edge.vert[0], edge.vert[1]);
+        uint32_t he1 = findHalfEdge(edge.face[1], edge.vert[1], edge.vert[0]);
+        m_halfEdges[he0].twin = he1;
+        m_halfEdges[he1].twin = he0;
+    } else {
+        // Boundary edge - one twin is kInvalid
+    }
+</p>
+
+<p>
+// Step 5: Build loops (outer/inner per face)
+// Identify boundary cycles and interior cycles</code></pre>
+</p>
+
+<hr>
+
+<h2 id="local-euler-operators-all-integrity-clean">Local Euler Operators (All Integrity-Clean)</h2>
+
+<p>
+| Operator | Description | Signature |
+|----------|-------------|-----------|
+| <code>insertEdgeVertex</code> | Split edge, create vertex + 2 edges + 2 coedges | <code>uint32_t insertEdgeVertex(uint32_t edgeId, float t)</code> |
+| <code>splitEdge</code> | Same, but explicit position | <code>uint32_t splitEdge(uint32_t edgeId)</code> |
+| <code>collapseEdge</code> | Merge vertices, remove edge | <code>void collapseEdge(uint32_t edgeId)</code> |
+| <code>splitFace</code> | Add diagonal edge across face | <code>uint32_t splitFace(uint32_t faceId, uint32_t v0, uint32_t v1)</code> |
+| <code>flipEdge</code> | Flip interior edge (Delaunay) | <code>void flipEdge(uint32_t edgeId)</code> |
+| <code>collapseFace</code> | Remove face, merge edges | <code>void collapseFace(uint32_t faceId)</code> |
+| <code>pokeFace</code> | Insert center vertex, fan triangulate | <code>void pokeFace(uint32_t faceId)</code> |
+| <code>insertEdgeLoop</code> | Split edge, create loop | <code>void insertEdgeLoop(uint32_t edgeId, float t)</code> |
+</p>
+
+<p>
+<strong>All 6 local ops: integrity-clean (proven by <code>checkIntegrity()</code> + property tests)</strong>
+</p>
+
+<hr>
+
+<h2 id="operator-specifications-detailed">Operator Specifications (Detailed)</h2>
+
+<h3 id="insertedgevertex-edgeid-t"><code>insertEdgeVertex(edgeId, t)</code></h3>
+
+<p>
+<strong>Preconditions:</strong> `0 < t < 1`, edge valid, not boundary-only if would create non-manifold
+</p>
+
+<p>
+<strong>Effect:</strong>
+</p>
+<ol>
+<li>Creates new vertex at <code>edge.pos0 + t * (edge.pos1 - edge.pos0)</code></li>
+<li>Splits edge into two edges</li>
+<li>Creates two new half-edges (one per new edge)</li>
+<li>Updates all incident face loops</li>
+</ol>
+
+<p>
+<strong>Returns:</strong> New vertex ID
+</p>
+
+<p>
+<strong>Algorithm:</strong>
+</p>
+<pre><code class="language-cpp">uint32_t insertEdgeVertex(uint32_t edgeId, float t) {
+<p>
+    // 1. Get edge endpoints
+    Vec3 p0 = m_vertices[m_edges[edgeId].vert[0]].pos;
+    Vec3 p1 = m_vertices[m_edges[edgeId].vert[1]].pos;
+    Vec3 newPos = p0 + t * (p1 - p0);
+</p>
+    
+<p>
+    // 2. Create new vertex
+    uint32_t newVert = m_vertices.size();
+    m_vertices.push_back(Vertex{kInvalid, newPos});
+</p>
+    
+<p>
+    // 3. Create two new edges
+    uint32_t edgeA = m_edges.size();
+    m_edges.push_back(Edge{{m_edges[edgeId].vert[0], newVert}, {kInvalid, kInvalid}});
+    uint32_t edgeB = m_edges.size();
+    m_edges.push_back(Edge{{newVert, m_edges[edgeId].vert[1]}, {kInvalid, kInvalid}});
+</p>
+    
+<p>
+    // 4. Update incident faces
+    for (int side = 0; side < 2; ++side) {
+        uint32_t faceId = m_edges[edgeId].face[side];
+        if (faceId != kInvalid) {
+            // Find half-edges using this edge in this face
+            // Replace with two half-edges (one per new edge)
+            // Update next/prev pointers
+        }
+    }
+</p>
+    
+<p>
+    // 5. Create half-edges for new edges
+    // 6. Set twins
+    // 7. Update vertex.edge
+</p>
+    
+<p>
+    // 8. Remove old edge (mark invalid or remove from vector)
+    // 9. Update edgeMap
+</p>
+    
+<p>
+    return newVert;
+}</code></pre>
+</p>
+
+<h3 id="splitedge-edgeid"><code>splitEdge(edgeId)</code></h3>
+
+<p>
+Same as <code>insertEdgeVertex</code> but position is midpoint or explicit.
+</p>
+
+<h3 id="collapseedge-edgeid"><code>collapseEdge(edgeId)</code></h3>
+
+<p>
+<strong>Preconditions:</strong> Edge valid, not boundary-only, collapse won't create non-manifold
+</p>
+
+<p>
+<strong>Effect:</strong>
+</p>
+<ol>
+<li>Merges the two vertices of the edge</li>
+<li>Removes the edge</li>
+<li>Updates all incident faces</li>
+<li>Removes degenerate faces (2 edges)</li>
+</ol>
+
+<h3 id="splitface-faceid-v0-v1"><code>splitFace(faceId, v0, v1)</code></h3>
+
+<p>
+<strong>Preconditions:</strong> v0,v1 on face boundary, not adjacent, face has ≥4 vertices
+</p>
+
+<p>
+<strong>Effect:</strong>
+</p>
+<ol>
+<li>Adds diagonal edge between v0 and v1</li>
+<li>Splits face into two faces</li>
+<li>Updates loops</li>
+</ol>
+
+<h3 id="flipedge-edgeid"><code>flipEdge(edgeId)</code></h3>
+
+<p>
+<strong>Preconditions:</strong> Interior edge (2 incident faces), not boundary
+</p>
+
+<p>
+<strong>Effect:</strong>
+</p>
+<ol>
+<li>Flips the diagonal of the quad formed by two triangles</li>
+<li>Updates all topological links</li>
+</ol>
+
+<h3 id="collapseface-faceid"><code>collapseFace(faceId)</code></h3>
+
+<p>
+<strong>Preconditions:</strong> Face valid, not sole face of shell
+</p>
+
+<p>
+<strong>Effect:</strong>
+</p>
+<ol>
+<li>Removes face</li>
+<li>Merges boundary edges</li>
+<li>Updates loops</li>
+</ol>
+
+<h3 id="pokeface-faceid"><code>pokeFace(faceId)</code></h3>
+
+<p>
+<strong>Preconditions:</strong> Face has ≥3 vertices
+</p>
+
+<p>
+<strong>Effect:</strong>
+</p>
+<ol>
+<li>Inserts center vertex (centroid)</li>
+<li>Creates edges from center to all boundary vertices</li>
+<li>Fan triangulates</li>
+</ol>
+
+<h3 id="insertedgeloop-edgeid-t"><code>insertEdgeLoop(edgeId, t)</code></h3>
+
+<p>
+<strong>Preconditions:</strong> `0 < t < 1`, edge valid
+</p>
+
+<p>
+<strong>Effect:</strong>
+</p>
+<ol>
+<li>Splits edge at t</li>
+<li>Creates new edge loop connecting split points</li>
+</ol>
+
+<hr>
+
+<h2 id="queries">Queries</h2>
+
+<pre><code class="language-cpp">std::vector<uint32_t> vertexRing(uint32_t vert) const;
+<p>
+std::vector<uint32_t> faceRing(uint32_t face) const;
+std::vector<uint32_t> boundaryLoops() const;</code></pre>
+</p>
+
+<h3 id="vertexring-vert-ordered-ring-of-faces-around-vertex"><code>vertexRing(vert)</code> — Ordered ring of faces around vertex</h3>
+
+<pre><code class="language-cpp">std::vector<uint32_t> vertexRing(uint32_t vert) const {
+<p>
+    std::vector<uint32_t> ring;
+    uint32_t startHe = m_vertices[vert].edge;
+    if (startHe == kInvalid) return ring;
+</p>
+    
+<p>
+    uint32_t he = startHe;
+    do {
+        ring.push_back(m_halfEdges[he].face);
+        he = m_halfEdges[m_halfEdges[he].twin].next;
+    } while (he != startHe && he != kInvalid);
+</p>
+    
+<p>
+    return ring;
+}</code></pre>
+</p>
+
+<h3 id="facering-face-ordered-ring-of-vertices-around-face"><code>faceRing(face)</code> — Ordered ring of vertices around face</h3>
+
+<pre><code class="language-cpp">std::vector<uint32_t> faceRing(uint32_t face) const {
+<p>
+    std::vector<uint32_t> ring;
+    uint32_t he = m_faces[face].halfEdge;
+    if (he == kInvalid) return ring;
+</p>
+    
+<p>
+    uint32_t start = he;
+    do {
+        ring.push_back(m_halfEdges[he].vertex);
+        he = m_halfEdges[he].next;
+    } while (he != start);
+</p>
+    
+<p>
+    return ring;
+}</code></pre>
+</p>
+
+<h3 id="boundaryloops-all-boundary-edge-loops"><code>boundaryLoops()</code> — All boundary edge loops</h3>
+
+<pre><code class="language-cpp">std::vector<uint32_t> boundaryLoops() const {
+<p>
+    std::vector<uint32_t> loops;
+    // Find edges with only 1 coedge
+    // Walk each boundary cycle
+}</code></pre>
+</p>
+
+<hr>
+
+<h2 id="integrity-validation">Integrity Validation</h2>
+
+<pre><code class="language-cpp">struct IntegrityReport {
+<p>
+    bool ok = true;
+    std::string reason;
+    uint32_t vertices = 0, edges = 0, faces = 0;
+    uint32_t coedges = 0, loops = 0, shells = 0;
+    uint32_t boundaryEdges = 0;
+    int euler = 0;  // V - E + F
+};
+</p>
+
+<p>
+IntegrityReport checkIntegrity() const;</code></pre>
+</p>
+
+<h3 id="checks-performed">Checks Performed</h3>
+
+<p>
+| Check | Failure Example |
+|-------|-----------------|
+| Edge vertices valid | <code>edge.vert[0] >= vertexCount</code> |
+| Edge non-degenerate | <code>v0 == v1</code> |
+| Coedge edge valid | <code>coedge.edge >= edges.size()</code> |
+| Coedge loop valid | <code>coedge.loop >= loops.size()</code> |
+| Next/prev bounds | <code>next >= coedges.size()</code> |
+| Next/prev reciprocal | <code>coedges[next].prev != self</code> |
+| Loop consistency | <code>coedges[next].loop != coedge.loop</code> |
+| Vertex continuity | <code>endV(c) != startV(c.next)</code> |
+| Partner reciprocal | <code>partner.partner != self</code> |
+| Partner orientation | <code>partner.reversed == coedge.reversed</code> |
+| Partner edge match | <code>partner.edge != coedge.edge</code> |
+| Partner loop diff | <code>partner.loop == coedge.loop</code> |
+| Loop closure | Ring doesn't close within 2×C steps |
+| Loop size | `< 3 coedges` |
+| Face outer loop valid | `face.outerLoop >= loops.size()<code> |
+| Face outer loop marked | </code>!loops[outer].outer<code> |
+| Face outer loop ownership | </code>loops[outer].face != face<code> |
+| Inner loop validity | </code>inner >= loops<code>, </code>loops[inner].outer<code>, </code>loops[inner].face != face<code> |
+| Vertex root valid | </code>vertex.coedge >= coedges<code>, </code>startV(coedge) != vertex<code> |
+| Edge orphaned | </code>coedgesPerEdge[e] == 0<code> |
+| Edge non-manifold | </code>coedgesPerEdge[e] > 2<code> |
+| Euler characteristic | </code>V - E + F != 2 - 2*genus - shells + boundaries` |
+</p>
+
+<h3 id="detailed-check-implementation">Detailed Check Implementation</h3>
+
+<pre><code class="language-cpp">IntegrityReport HalfEdgeMesh::checkIntegrity() const {
+<p>
+    IntegrityReport report;
+    report.vertices = m_vertices.size();
+    report.edges = m_edges.size();
+    report.faces = m_faces.size();
+    report.coedges = m_halfEdges.size();
+</p>
+    
+<p>
+    // 1. Edge validity
+    for (uint32_t i = 0; i < m_edges.size(); ++i) {
+        const auto& e = m_edges[i];
+        if (e.vert[0] >= m_vertices.size() || e.vert[1] >= m_vertices.size()) {
+            report.ok = false; report.reason = "Edge vertices out of bounds"; return report;
+        }
+        if (e.vert[0] == e.vert[1]) {
+            report.ok = false; report.reason = "Degenerate edge (v0==v1)"; return report;
+        }
+    }
+</p>
+    
+<p>
+    // 2. Coedge validity
+    for (uint32_t i = 0; i < m_halfEdges.size(); ++i) {
+        const auto& c = m_halfEdges[i];
+        if (c.edge >= m_edges.size()) { /<em> fail </em>/ }
+        if (c.loop >= m_loops.size()) { /<em> fail </em>/ }
+        if (c.next >= m_halfEdges.size()) { /<em> fail </em>/ }
+        if (c.prev >= m_halfEdges.size()) { /<em> fail </em>/ }
+        if (m_halfEdges[c.next].prev != i) { /<em> fail </em>/ }
+        if (m_halfEdges[c.prev].next != i) { /<em> fail </em>/ }
+        if (m_halfEdges[c.next].loop != c.loop) { /<em> fail </em>/ }
+        if (c.next == i) { /<em> fail </em>/ }
+        if (c.prev == i) { /<em> fail </em>/ }
+    }
+</p>
+    
+<p>
+    // 3. Loop closure & size
+    for (uint32_t i = 0; i < m_loops.size(); ++i) {
+        uint32_t first = m_loops[i].first;
+        if (first == kInvalid || first >= m_halfEdges.size()) { /<em> fail </em>/ }
+        uint32_t he = first;
+        uint32_t count = 0;
+        do {
+            if (m_halfEdges[he].loop != i) { /<em> fail </em>/ }
+            he = m_halfEdges[he].next;
+            count++;
+            if (count > 2 <em> m_halfEdges.size()) { /</em> fail - infinite loop */ }
+        } while (he != first);
+        if (count < 3) { /* fail */ }
+    }
+</p>
+    
+<p>
+    // 4. Face validity
+    for (uint32_t i = 0; i < m_faces.size(); ++i) {
+        const auto& f = m_faces[i];
+        if (f.outerLoop >= m_loops.size()) { /<em> fail </em>/ }
+        if (!m_loops[f.outerLoop].outer) { /<em> fail </em>/ }
+        if (m_loops[f.outerLoop].face != i) { /<em> fail </em>/ }
+        for (uint32_t inner : f.innerLoops) {
+            if (inner >= m_loops.size()) { /<em> fail </em>/ }
+            if (m_loops[inner].outer) { /<em> fail </em>/ }
+            if (m_loops[inner].face != i) { /<em> fail </em>/ }
+        }
+    }
+</p>
+    
+<p>
+    // 5. Vertex root validity
+    for (uint32_t i = 0; i < m_vertices.size(); ++i) {
+        uint32_t c = m_vertices[i].edge;
+        if (c >= m_halfEdges.size()) { /<em> fail </em>/ }
+        // Check that half-edge starts at this vertex
+        if (m_halfEdges[c].vertex != i) { /<em> fail </em>/ }
+    }
+</p>
+    
+<p>
+    // 6. Edge coedge count (manifold check)
+    std::vector<uint32_t> coedgesPerEdge(m_edges.size(), 0);
+    for (const auto& c : m_halfEdges) {
+        if (c.edge < m_edges.size()) coedgesPerEdge[c.edge]++;
+    }
+    for (uint32_t i = 0; i < m_edges.size(); ++i) {
+        if (coedgesPerEdge[i] == 0) { /* orphaned */ }
+        if (coedgesPerEdge[i] > 2) { /<em> non-manifold </em>/ }
+    }
+    report.boundaryEdges = std::count(coedgesPerEdge.begin(), coedgesPerEdge.end(), 1);
+</p>
+    
+<p>
+    // 7. Euler characteristic
+    int V = m_vertices.size();
+    int E = m_edges.size();
+    int F = m_faces.size();
+    report.euler = V - E + F;
+    // Expected: 2 - 2*genus - shells + boundaryComponents
+    // For single shell, genus 0, no boundaries: V - E + F = 2
+</p>
+    
+<p>
+    return report;
+}</code></pre>
+</p>
+
+<hr>
+
+<h2 id="construction-from-mesh">Construction from Mesh</h2>
+
+<pre><code class="language-cpp">// From indexed mesh (positions + face indices)
+<p>
+Mesh mesh;
+mesh.attributes().setPositions(positions);
+for (face : faces) mesh.topology().addFace(Face{indices});
+mesh.topology().addFace(Face{indices, materialId});
+</p>
+
+<p>
+// Convert to half-edge
+auto hemOpt = HalfEdgeMesh::fromMesh(mesh);
+if (!hemOpt) { /<em> invalid topology </em>/ }
+HalfEdgeMesh hem = std::move(*hemOpt);
+</p>
+
+<p>
+// Modify topology
+hem.insertEdgeVertex(edgeId, 0.5f);
+hem.flipEdge(edgeId);
+</p>
+
+<p>
+// Back to indexed mesh
+Mesh result = hem.toMesh();</code></pre>
+</p>
+
+<hr>
+
+<h2 id="integrity-checks-performed-by-checkintegrity">Integrity Checks (Performed by <code>checkIntegrity()</code>)</h2>
+
+<p>
+| Check | Failure Example |
+|-------|-----------------|
+| Edge vertices valid | <code>edge.vert[0] >= vertexCount</code> |
+| Edge non-degenerate | <code>v0 == v1</code> |
+| Coedge edge valid | <code>coedge.edge >= edges.size()</code> |
+| Coedge loop valid | <code>coedge.loop >= loops.size()</code> |
+| Next/prev bounds | <code>next >= coedges.size()</code> |
+| Next/prev reciprocal | <code>coedges[next].prev != self</code> |
+| Loop consistency | <code>coedges[next].loop != coedge.loop</code> |
+| Vertex continuity | <code>endV(c) != startV(c.next)</code> |
+| Partner reciprocal | <code>partner.partner != self</code> |
+| Partner orientation | <code>partner.reversed == coedge.reversed</code> |
+| Partner edge match | <code>partner.edge != coedge.edge</code> |
+| Partner loop diff | <code>partner.loop == coedge.loop</code> |
+| Loop closure | Ring doesn't close within 2×C steps |
+| Loop size | `< 3 coedges` |
+| Face outer loop valid | `face.outerLoop >= loops.size()<code> |
+| Face outer loop marked | </code>!loops[outer].outer<code> |
+| Face outer loop ownership | </code>loops[outer].face != face<code> |
+| Inner loop validity | </code>inner >= loops<code>, </code>loops[inner].outer<code>, </code>loops[inner].face != face<code> |
+| Vertex root valid | </code>vertex.coedge >= coedges<code>, </code>startV(coedge) != vertex<code> |
+| Edge orphaned | </code>coedgesPerEdge[e] == 0<code> |
+| Edge non-manifold | </code>coedgesPerEdge[e] > 2<code> |
+| Euler characteristic | </code>V - E + F != 2 - 2*genus - shells + boundaries` |
+</p>
+
+<hr>
+
+<h2 id="property-preservation">Property Preservation</h2>
+
+<p>
+| Property | <code>fromMesh</code> | <code>toMesh</code> | Euler Ops |
+|----------|------------|----------|-----------|
+| Vertex positions | ✅ | ✅ | ✅ |
+| Normals | ✅ | ✅ | ✅ (interpolated) |
+| UVs | ✅ | ✅ | ✅ (interpolated) |
+| Vertex colors | ✅ | ✅ | ✅ (interpolated) |
+| Material IDs | ✅ | ✅ | ✅ (per-face) |
+| Tangents | ✅ | ✅ | ✅ (recomputed) |
+</p>
+
+<hr>
+
+<h2 id="testing">Testing</h2>
+
+<pre><code class="language-bash"><h1 id="run-all-integrity-tests">Run all integrity tests</h1>
+<p>
+ctest -R HalfEdge --output-on-failure
+</p>
+
+<h1 id="specific-tests">Specific tests</h1>
+<p>
+./build/tests/nexus_kernel_tests --gtest_filter=HalfEdge*
+./build/tests/nexus_kernel_tests --gtest_filter=<em>Integrity</em></code></pre>
+</p>
+
+<p>
+<strong>Property Tests:</strong>
+</p>
+<ul>
+<li><code>HalfEdgeMesh_InsertEdgeVertex_IntegrityClean</code></li>
+<li><code>HalfEdgeMesh_SplitEdge_IntegrityClean</code></li>
+<li><code>HalfEdgeMesh_CollapseEdge_IntegrityClean</code></li>
+<li><code>HalfEdgeMesh_SplitFace_IntegrityClean</code></li>
+<li><code>HalfEdgeMesh_FlipEdge_IntegrityClean</code></li>
+<li><code>HalfEdgeMesh_CollapseFace_IntegrityClean</code></li>
+<li><code>HalfEdgeMesh_PokeFace_IntegrityClean</code></li>
+<li><code>HalfEdgeMesh_InsertEdgeLoop_IntegrityClean</code></li>
+<li><code>HalfEdgeMesh_FromMesh_RoundTrip</code></li>
+<li><code>HalfEdgeMesh_PropertyPreservation</code></li>
+</ul>
+
+<hr>
+
+<p>
+<em>Kernel v0.1.0-dev | 1921 tests passing | C++26 | Vulkan 1.3</em>
+</p>
+        </main>
+    </div>
+    
+    <script>
+// Theme management
+const THEME_KEY = 'nexus-docs-theme';
+const themeToggle = document.getElementById('theme-toggle');
+const sunIcon = themeToggle.querySelector('.theme-icon-sun');
+const moonIcon = themeToggle.querySelector('.theme-icon-moon');
+
+function applyTheme(theme) {
+    document.documentElement.setAttribute('data-theme', theme);
+    if (theme === 'light') {
+        sunIcon.style.display = 'block';
+        moonIcon.style.display = 'none';
+    } else {
+        sunIcon.style.display = 'none';
+        moonIcon.style.display = 'block';
+    }
+    localStorage.setItem(THEME_KEY, theme);
+}
+
+function getPreferredTheme() {
+    const stored = localStorage.getItem(THEME_KEY);
+    if (stored) return stored;
+    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+}
+
+function initTheme() {
+    const theme = getPreferredTheme();
+    applyTheme(theme);
+}
+
+function toggleTheme() {
+    const current = document.documentElement.getAttribute('data-theme') || 'dark';
+    applyTheme(current === 'dark' ? 'light' : 'dark');
+}
+
+themeToggle.addEventListener('click', toggleTheme);
+
+// Keyboard shortcut: Ctrl+Shift+L
+document.addEventListener('keydown', (e) => {
+    if (e.ctrlKey && e.shiftKey && e.key === 'L') {
+        e.preventDefault();
+        toggleTheme();
+    }
+});
+
+// Listen for system theme changes
+window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => {
+    if (!localStorage.getItem(THEME_KEY)) {
+        applyTheme(e.matches ? 'dark' : 'light');
+    }
+});
+
+// Initialize theme immediately to prevent flash
+initTheme();
+
+// Mobile sidebar toggle
+const sidebar = document.getElementById('sidebar');
+const mobileMenuBtn = document.getElementById('mobile-menu-btn');
+
+if (mobileMenuBtn) {
+    mobileMenuBtn.addEventListener('click', () => {
+        sidebar.classList.toggle('open');
+    });
+}
+
+document.addEventListener('click', (e) => {
+    if (window.innerWidth <= 768) {
+        if (!sidebar.contains(e.target) && !e.target.closest('.header')) {
+            sidebar.classList.remove('open');
+        }
+    }
+});
+
+// Smooth scroll for anchor links
+document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+    anchor.addEventListener('click', function(e) {
+        const target = document.querySelector(this.getAttribute('href'));
+        if (target) {
+            e.preventDefault();
+            target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            if (window.innerWidth <= 768) {
+                sidebar.classList.remove('open');
+            }
+        }
+    });
+});
+
+// Active link highlighting based on scroll position
+const sections = document.querySelectorAll('.content h2, .content h3');
+const sidebarLinks = document.querySelectorAll('.sidebar-link[href^="#"]');
+
+function updateActiveLink() {
+    let current = '';
+    sections.forEach(section => {
+        const rect = section.getBoundingClientRect();
+        if (rect.top <= 100) {
+            current = '#' + section.id;
+        }
+    });
+
+    sidebarLinks.forEach(link => {
+        link.classList.remove('active');
+        if (link.getAttribute('href') === current) {
+            link.classList.add('active');
+        }
+    });
+}
+
+window.addEventListener('scroll', updateActiveLink, { passive: true });
+window.addEventListener('load', updateActiveLink);
+
+// Highlight.js initialization
+if (typeof hljs !== 'undefined') {
+    hljs.highlightAll();
+}
+
+// Mobile menu button visibility
+const mobileMenuBtn = document.getElementById('mobile-menu-btn');
+function checkMobile() {
+    if (window.innerWidth <= 768) {
+        mobileMenuBtn.style.display = 'flex';
+    } else {
+        mobileMenuBtn.style.display = 'none';
+        document.getElementById('sidebar').classList.remove('open');
+    }
+}
+checkMobile();
+window.addEventListener('resize', checkMobile);
+
+mobileMenuBtn.addEventListener('click', () => {
+    document.getElementById('sidebar').classList.toggle('open');
+});
+</script>

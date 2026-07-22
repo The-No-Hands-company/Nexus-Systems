@@ -1,0 +1,516 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nexus Modeling · Reference & Roadmap — Nexus Modeling Docs</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
+</head>
+<body>
+    <nav class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+            <div class="sidebar-title">Nexus Modeling</div>
+            <div class="sidebar-subtitle">Documentation v0.1.0-dev</div>
+        </div>
+        <div class="sidebar-section">
+<div class="sidebar-section-title">📚 Developer Documentation</div>
+<a class="sidebar-link" href="architecture.html">Architecture Overview</a>
+<a class="sidebar-link" href="kernel-api.html">Kernel API Reference</a>
+<a class="sidebar-link" href="geometry-kernel.html">Geometry Kernel</a>
+<a class="sidebar-link" href="renderer.html">Render System</a>
+<a class="sidebar-link" href="editor-architecture.html">Editor Architecture</a>
+<a class="sidebar-link" href="build-system.html">Build System</a>
+<a class="sidebar-link" href="testing.html">Testing</a>
+<a class="sidebar-link" href="contributing.html">Contributing</a>
+<a class="sidebar-link" href="adding-geometry-op.html">Adding Geometry Op</a>
+<a class="sidebar-link" href="adding-cad-feature.html">Adding CAD Feature</a>
+<a class="sidebar-link" href="mesh-operations.html">Mesh Operations</a>
+<a class="sidebar-link" href="boolean-csg.html">Boolean/CSG Deep Dive</a>
+<a class="sidebar-link" href="halfedge-mesh.html">Half-edge Mesh</a>
+<a class="sidebar-link" href="analytic-brep.html">Analytic B-rep</a>
+<a class="sidebar-link" href="mesh-io.html">Mesh I/O</a>
+<a class="sidebar-link" href="tolerance.html">Tolerance System</a>
+<a class="sidebar-link" href="porting.html">Porting Guide</a>
+</div>
+<div class="sidebar-section">
+<div class="sidebar-section-title">🎨 Expert User Documentation</div>
+</div>
+<div class="sidebar-section">
+<div class="sidebar-section-title">👤 Beginner / User Documentation</div>
+<a class="sidebar-link" href="getting-started.html">Getting Started</a>
+</div>
+<div class="sidebar-section">
+<div class="sidebar-section-title">🔧 API Reference</div>
+</div>
+<div class="sidebar-section">
+<div class="sidebar-section-title">📚 Additional Resources</div>
+<a class="sidebar-link" href="design-decisions.html">Design Decisions</a>
+<a class="sidebar-link" href="testing-strategy.html">Testing Strategy</a>
+<a class="sidebar-link" href="graphics-kernel.html">Graphics Kernel</a>
+<a class="sidebar-link" href="vision-and-roadmap.html">Vision & Roadmap</a>
+<a class="sidebar-link" href="reference-roadmap.html">Reference Roadmap</a>
+<a class="sidebar-link" href="modeling-industry-parity.html">Modeling Industry Parity</a>
+<a class="sidebar-link" href="modeling-parity-index.html">Modeling Parity Index</a>
+<a class="sidebar-link active" href="modeling-reference-roadmap.html">Modeling Reference Roadmap</a>
+</div>
+    </nav>
+    
+    <div class="main-content">
+        <header class="header">
+            <button class="btn btn-icon" id="mobile-menu-btn" aria-label="Toggle menu" style="display: none;">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="3" y1="12" x2="21" y2="12"></line>
+                    <line x1="3" y1="6" x2="21" y2="6"></line>
+                    <line x1="3" y1="18" x2="21" y2="18"></line>
+                </svg>
+            </button>
+            <div class="header-title">Nexus Modeling · Reference & Roadmap</div>
+            <div class="header-actions">
+                
+<button class="btn btn-icon" id="theme-toggle" aria-label="Toggle dark/light theme" title="Toggle theme (Ctrl+Shift+L)">
+    <svg class="theme-icon-sun" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display: none;">
+        <circle cx="12" cy="12" r="5"></circle>
+        <line x1="12" y1="1" x2="12" y2="3"></line>
+        <line x1="12" y1="21" x2="12" y2="23"></line>
+        <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+        <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+        <line x1="1" y1="12" x2="3" y2="12"></line>
+        <line x1="21" y1="12" x2="23" y2="12"></line>
+        <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+        <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+    </svg>
+    <svg class="theme-icon-moon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display: none;">
+        <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+    </svg>
+</button>
+
+                <a href="https://github.com/nexus-systems/nexus-modeling" class="btn btn-secondary" target="_blank" rel="noopener">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M12 0C5.374 0 0 5.373 0 12c0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23A11.509 11.509 0 0112 5.803c1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576C20.566 21.797 24 17.3 24 12c0-6.627-5.373-12-12-12z"/>
+                    </svg>
+                    <span class="btn-text">GitHub</span>
+                </a>
+                <a href="index.html" class="btn btn-primary">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
+                        <polyline points="9 22 9 12 15 12 15 22"></polyline>
+                    </svg>
+                    <span class="btn-text">Home</span>
+                </a>
+            </div>
+        </header>
+        
+        <main class="content">
+            <div class="toc"><h3>On This Page</h3><ul><li><a href="#nexus-modeling-reference-roadmap">Nexus Modeling · Reference & Roadmap</a></li>
+  <li><a href="#01-where-nexus-stands-today">01 · Where Nexus stands today</a></li>
+  <li><a href="#02-the-four-pillars-of-a-modeler">02 · The four pillars of a modeler</a></li>
+    <li><a href="#a-selection-highlight">A Selection & highlight</a></li>
+    <li><a href="#b-modes-component-editing">B Modes & component editing</a></li>
+    <li><a href="#c-viewport-visuals">C Viewport visuals</a></li>
+    <li><a href="#d-application-shell-ux">D Application shell & UX</a></li>
+  <li><a href="#03-the-competitive-field">03 · The competitive field</a></li>
+  <li><a href="#04-the-strategic-split">04 · The strategic split</a></li>
+  <li><a href="#05-the-roadmap">05 · The roadmap</a></li>
+    <li><a href="#foundation-done">✓ Foundation — Done</a></li>
+    <li><a href="#0-make-the-app-runnable-again-the-gate-next">0 Make the app runnable again — The gate · next</a></li>
+    <li><a href="#1-selection-highlight-to-standard-partly-headless">1 Selection & highlight to standard — Partly headless</a></li>
+    <li><a href="#2-viewport-visuals-prototypable-now">2 Viewport visuals — Prototypable now</a></li>
+    <li><a href="#3-the-mode-system-surfaced-planned">3 The mode system, surfaced — Planned</a></li>
+    <li><a href="#3-app-shell-ux-the-differentiator-planned">3 App shell & UX — the differentiator — Planned</a></li>
+  <li><a href="#sources">Sources</a></li>
+</ul></div>
+            <h1 id="nexus-modeling-reference-roadmap">Nexus Modeling · Reference & Roadmap</h1>
+<p>
+<strong>Toward industry standard</strong>  
+Perfecting the modeler, pixel by pixel
+</p>
+
+<p>
+A working map from where Nexus Modeling stands today to the bar set by Blender, Maya, 3ds Max, Modo, Houdini and Plasticity — and a decision about where the differentiation actually lives. Match the interaction grammar users already know; win on the learning curve and the seams between tools.
+</p>
+
+<p>
+<strong>Scope</strong> · the modeler, before the suite  
+<strong>Principle</strong> · standard on the core, distinctive on UX  
+<strong>Compiled</strong> · 2026-07-09
+</p>
+
+<hr>
+
+<h2 id="01-where-nexus-stands-today">01 · Where Nexus stands today</h2>
+
+<p>
+The kernel is strong. The shell is the gate.
+</p>
+
+<p>
+Grounded in the current tree — not aspiration. The geometry kernel and the new headless visual loop are healthy; almost everything a user would touch lives in the editor layer, which does not currently build.
+</p>
+
+<p>
+<strong>Geometry kernel</strong> · Solid  
+1921 tests green. Booleans, bevel, remesh, half-edge, subdivision.
+</p>
+
+<p>
+<strong>Visual dev-loop · nxrender</strong> · Working  
+Headless render-to-PNG. Trustworthy images the AI can see & diagnose.
+</p>
+
+<p>
+<strong>Viewport shading</strong> · Standard  
+Flat / angle auto-smooth / real wireframe. Reversed-Z & two-sided fixed.
+</p>
+
+<p>
+<strong>Modes</strong> · 15 coded  
+No UI Select, Vertex/Edge/Face edit, Boolean, Extrude, Fillet… no switcher.
+</p>
+
+<p>
+<strong>Selection highlight</strong> · Stub  
+One method: "draw a wireframe around selected." Far from standard.
+</p>
+
+<p>
+<strong>Editor shell</strong> · Broken  
+Mid-refactor EditorUI.cpp doesn't build. The gate for all app work.
+</p>
+
+<p>
+<strong>ImGui</strong> · v1.91.6  
+Master tag — no docking branch. No dockable panels yet.
+</p>
+
+<p>
+<strong>Console</strong> · Absent  
+No dedicated module found; if F2 toggles one it's inline & needs promoting.
+</p>
+
+<hr>
+
+<h2 id="02-the-four-pillars-of-a-modeler">02 · The four pillars of a modeler</h2>
+
+<p>
+What "industry standard" decomposes into
+</p>
+
+<p>
+Every DCC differs in flavor, but the modeling experience rests on the same four pillars. Nexus must be fluent in all four before the suite ambitions matter.
+</p>
+
+<h3 id="a-selection-highlight">A Selection & highlight</h3>
+
+<p>
+The single most-used interaction. The standard is: a hover pre-highlight (the element under the cursor lights up before you click — Maya calls it preselection highlight), a distinct selected color, and a brighter active element (Blender: orange selected, near-white active; the active element is the reference for many ops).
+</p>
+
+<p>
+The "pixel-perfect" part is the outline itself: production apps draw a post-process silhouette off an object/ID buffer — the Jump Flood Algorithm turns the mask into a distance field for crisp, adjustable-width outlines — not a wireframe. Add box / lasso / circle select, X-ray select-through, and soft-selection falloffs (Modo, Maya) for organic work.
+</p>
+
+<h3 id="b-modes-component-editing">B Modes & component editing</h3>
+
+<p>
+The Object ↔ Edit split is the backbone. In edit mode you select components: Blender exposes vertex / edge / face; 3ds Max's Editable Poly adds border and element (5 levels); Maya switches component masks via marking menus.
+</p>
+
+<p>
+Two philosophies to borrow deliberately: 3ds Max's modifier stack (non-destructive, re-orderable history) and Houdini's node graph (fully procedural, groups = saved selections). Nexus already has a parametric feature history and a constraint graph — the raw material for a modern, non-destructive stack is present.
+</p>
+
+<h3 id="c-viewport-visuals">C Viewport visuals</h3>
+
+<p>
+Adaptive grid & axes with distance fade, transform gizmos (screen-constant size, axis-colored, with plane and screen-space handles), and shading modes: wireframe, solid, material/matcap, rendered. Overlays for normals, statistics, and origins.
+</p>
+
+<p>
+Nexus is closest to standard here — the rasterizer now shades and outlines correctly, and nxrender lets this be tuned to the pixel without the app even running.
+</p>
+
+<h3 id="d-application-shell-ux">D Application shell & UX</h3>
+
+<p>
+Dockable, saveable panel layouts (ImGui's docking branch); mode/workspace tabs; a real console/log; and fast command access — Blender's pie menus, Maya's marking menus, Max's quad menus, or a modern command palette.
+</p>
+
+<p>
+This is the layer Nexus deliberately rethinks. Plasticity is the proof point: it took Blender's grammar and wrapped it in context-sensitive pop-up widgets that first-timers grasp immediately — "CAD for artists."
+</p>
+
+<hr>
+
+<h2 id="03-the-competitive-field">03 · The competitive field</h2>
+
+<p>
+How the majors handle it
+</p>
+
+<p>
+A capability matrix, not a scoreboard — the point is to see the conventions that users arrive already knowing, and where Nexus sits today.  
+● strong · ◐ partial / different model · ○ absent
+</p>
+
+<p>
+| Capability | Blender | Maya | 3ds Max | Modo | Plasticity | Nexus · now |
+|------------|---------|------|---------|------|------------|-------------|
+| Hover pre-highlight | ● on | ● preselection | ● on | ● on | ● on | ○ none |
+| Selected vs active | ● orange / white | ● green / white | ● white / red | ● yes | ● yes | ○ single color |
+| Component levels | ● vert/edge/face | ● +UV, multi | ● +border/element | ● vert/edge/poly | ◐ solids-first | ◐ coded, no UI |
+| Silhouette outline | ● post-process | ● yes | ● yes | ● yes | ● yes | ○ wireframe stub |
+| Soft-select / falloff | ● prop. edit | ● soft select | ● soft sel | ● falloffs (best) | ◐ n/a NURBS | ○ — |
+| Non-destructive stack | ● modifiers | ● history | ● modifier stack | ● mesh ops | ● history | ◐ feature history exists |
+| Transform gizmos | ● yes | ● yes | ● yes | ● action centers | ● yes | ◐ TransformGizmo coded |
+| Dockable panels | ● areas | ● yes | ● yes | ● yes | ● yes | ○ no docking |
+| Fast command access | ● pie + F3 search | ● marking menus | ● quad menus | ● pie menus | ● context widgets | ○ — |
+</p>
+
+<hr>
+
+<h2 id="04-the-strategic-split">04 · The strategic split</h2>
+
+<p>
+What to match, and where to win
+</p>
+
+<p>
+The trap is reinventing the interaction grammar — muscle memory that took users years to build. Spend the originality where it compounds: the onboarding curve and the seams between tools.
+</p>
+
+<p>
+<strong>Match the standard</strong>  
+Table stakes · don't be clever here
+</p>
+
+<ul>
+<li>Selection model — hover-highlight, selected/active distinction, component levels, box/lasso/circle, X-ray.</li>
+<li>Gizmos & snapping — axis-colored move/rotate/scale, grid/vertex/edge snapping, numeric entry.</li>
+<li>Shading modes — wire / solid / material / rendered, with matcap studio lighting.</li>
+<li>Undo/redo & a non-destructive history users can trust and re-order.</li>
+<li>A keymap that respects the reflexes of Blender/Max refugees.</li>
+</ul>
+
+<p>
+<strong>Win on these</strong>  
+Nexus's edge · where originality pays
+</p>
+
+<ul>
+<li>Zero-tutorial onboarding — context-sensitive widgets & a discoverable command palette instead of a wall of memorized hotkeys.</li>
+<li>One coherent suite — model → sculpt → paint → engine share selection, history, and UI grammar. No re-learning per tool.</li>
+<li>Modern docking & workspaces from day one, not bolted on.</li>
+<li>The AI visual loop — the engine can see its own output and self-correct; a genuinely novel development & assist capability.</li>
+<li>Consistency as a feature — one mental model across the whole creative pipeline.</li>
+</ul>
+
+<hr>
+
+<h2 id="05-the-roadmap">05 · The roadmap</h2>
+
+<p>
+A dependency-ordered path
+</p>
+
+<p>
+These phases are a real sequence, not a menu — each is gated on the one before it. The recent kernel & rasterizer work already de-risks the rendering inside Phases 1–2.
+</p>
+
+<h3 id="foundation-done">✓ Foundation — Done</h3>
+<p>
+Kernel green (1921 tests). Headless nxrender visual loop. Rasterizer to standard: true flat shading, angle-based auto-smooth (hard cubes + smooth spheres, no topology change), real-edge wireframe, plus the reversed-Z and two-sided fixes those exposed. Editor split into nexus_app so kernel work never blocks on the UI.  
+Verified by eye via nxrender. <strong>Unblocks everything below</strong>
+</p>
+
+<h3 id="0-make-the-app-runnable-again-the-gate-next">0 Make the app runnable again — The gate · next</h3>
+<p>
+Resolve the broken EditorUI.cpp — finish the in-flight refactor or reset it to the last-good base and rebuild the shell intentionally. Nothing a user touches (selection display, mode tabs, console, docking) can be seen or run until nexus_modeling launches.  
+Verify · app launches, tests stay green  
+<strong>Blocks · Phases 3–4 entirely</strong>
+</p>
+
+<h3 id="1-selection-highlight-to-standard-partly-headless">1 Selection & highlight to standard — Partly headless</h3>
+<p>
+An object/ID pick buffer; hover pre-highlight; a real selected-vs-active distinction; component modes (vertex / edge / face) wired to the existing edit modes; and a Jump-Flood silhouette outline replacing the wireframe stub. The outline and component display can be prototyped and tuned in nxrender before the app is even up.  
+Verify · nxrender first, then in-app  
+<strong>Needs · Phase 0 for in-app pick</strong>
+</p>
+
+<h3 id="2-viewport-visuals-prototypable-now">2 Viewport visuals — Prototypable now</h3>
+<p>
+Adaptive grid & axes with fade, transform gizmos (screen-constant, axis-colored, plane/screen handles), shading modes (wire/solid/matcap/rendered), and overlays (normals, stats, origins). Nexus is closest to standard here; much can advance headlessly.  
+Verify · nxrender + in-app  
+<strong>Leans on · Foundation rasterizer</strong>
+</p>
+
+<h3 id="3-the-mode-system-surfaced-planned">3 The mode system, surfaced — Planned</h3>
+<p>
+Give the 15 already-coded modes a face: an Object ↔ Edit toggle, a component-level bar (vert/edge/face/border/element), and a mode switcher that exposes Boolean / Extrude / Fillet / Revolve as first-class. Header and status bar reflecting current mode and selection counts.  
+Verify · in-app  
+<strong>Needs · Phase 0</strong>
+</p>
+
+<h3 id="3-app-shell-ux-the-differentiator-planned">3 App shell & UX — the differentiator — Planned</h3>
+<p>
+Migrate ImGui v1.91.6 → docking branch; dockable, saveable layouts; a proper console/log panel and a command palette (the anti-tutorial); a browsable keymap; and the context-sensitive, first-timer-friendly widgets that are Nexus's reason to exist. This is where "an alternative to all of them" gets earned.  
+Verify · in-app, real users  
+<strong>Needs · Phases 0–3</strong>
+</p>
+
+<hr>
+
+<h2 id="sources">Sources</h2>
+<p>
+Cross-DCC conventions verified against primary documentation and reference material, July 2026:
+</p>
+<ul>
+<li>Blender Manual — Selecting Objects</li>
+<li>Blender selection & active outline colors</li>
+<li>Maya — Highlight components before selecting (preselection)</li>
+<li>3ds Max — Editable Poly sub-object levels</li>
+<li>Modo — Selection falloffs</li>
+<li>Modo — Action centers</li>
+<li>Plasticity — Product tour (CAD for artists)</li>
+<li>Ben Golus — Jump-flood silhouette outlines</li>
+</ul>
+        </main>
+    </div>
+    
+    <script>
+// Theme management
+const THEME_KEY = 'nexus-docs-theme';
+const themeToggle = document.getElementById('theme-toggle');
+const sunIcon = themeToggle.querySelector('.theme-icon-sun');
+const moonIcon = themeToggle.querySelector('.theme-icon-moon');
+
+function applyTheme(theme) {
+    document.documentElement.setAttribute('data-theme', theme);
+    if (theme === 'light') {
+        sunIcon.style.display = 'block';
+        moonIcon.style.display = 'none';
+    } else {
+        sunIcon.style.display = 'none';
+        moonIcon.style.display = 'block';
+    }
+    localStorage.setItem(THEME_KEY, theme);
+}
+
+function getPreferredTheme() {
+    const stored = localStorage.getItem(THEME_KEY);
+    if (stored) return stored;
+    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+}
+
+function initTheme() {
+    const theme = getPreferredTheme();
+    applyTheme(theme);
+}
+
+function toggleTheme() {
+    const current = document.documentElement.getAttribute('data-theme') || 'dark';
+    applyTheme(current === 'dark' ? 'light' : 'dark');
+}
+
+themeToggle.addEventListener('click', toggleTheme);
+
+// Keyboard shortcut: Ctrl+Shift+L
+document.addEventListener('keydown', (e) => {
+    if (e.ctrlKey && e.shiftKey && e.key === 'L') {
+        e.preventDefault();
+        toggleTheme();
+    }
+});
+
+// Listen for system theme changes
+window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => {
+    if (!localStorage.getItem(THEME_KEY)) {
+        applyTheme(e.matches ? 'dark' : 'light');
+    }
+});
+
+// Initialize theme immediately to prevent flash
+initTheme();
+
+// Mobile sidebar toggle
+const sidebar = document.getElementById('sidebar');
+const mobileMenuBtn = document.getElementById('mobile-menu-btn');
+
+if (mobileMenuBtn) {
+    mobileMenuBtn.addEventListener('click', () => {
+        sidebar.classList.toggle('open');
+    });
+}
+
+document.addEventListener('click', (e) => {
+    if (window.innerWidth <= 768) {
+        if (!sidebar.contains(e.target) && !e.target.closest('.header')) {
+            sidebar.classList.remove('open');
+        }
+    }
+});
+
+// Smooth scroll for anchor links
+document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+    anchor.addEventListener('click', function(e) {
+        const target = document.querySelector(this.getAttribute('href'));
+        if (target) {
+            e.preventDefault();
+            target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            if (window.innerWidth <= 768) {
+                sidebar.classList.remove('open');
+            }
+        }
+    });
+});
+
+// Active link highlighting based on scroll position
+const sections = document.querySelectorAll('.content h2, .content h3');
+const sidebarLinks = document.querySelectorAll('.sidebar-link[href^="#"]');
+
+function updateActiveLink() {
+    let current = '';
+    sections.forEach(section => {
+        const rect = section.getBoundingClientRect();
+        if (rect.top <= 100) {
+            current = '#' + section.id;
+        }
+    });
+
+    sidebarLinks.forEach(link => {
+        link.classList.remove('active');
+        if (link.getAttribute('href') === current) {
+            link.classList.add('active');
+        }
+    });
+}
+
+window.addEventListener('scroll', updateActiveLink, { passive: true });
+window.addEventListener('load', updateActiveLink);
+
+// Highlight.js initialization
+if (typeof hljs !== 'undefined') {
+    hljs.highlightAll();
+}
+
+// Mobile menu button visibility
+const mobileMenuBtn = document.getElementById('mobile-menu-btn');
+function checkMobile() {
+    if (window.innerWidth <= 768) {
+        mobileMenuBtn.style.display = 'flex';
+    } else {
+        mobileMenuBtn.style.display = 'none';
+        document.getElementById('sidebar').classList.remove('open');
+    }
+}
+checkMobile();
+window.addEventListener('resize', checkMobile);
+
+mobileMenuBtn.addEventListener('click', () => {
+    document.getElementById('sidebar').classList.toggle('open');
+});
+</script>

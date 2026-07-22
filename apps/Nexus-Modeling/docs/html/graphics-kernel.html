@@ -1,0 +1,1039 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nexus Modeling — Graphics Kernel Architecture — Nexus Modeling Docs</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
+</head>
+<body>
+    <nav class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+            <div class="sidebar-title">Nexus Modeling</div>
+            <div class="sidebar-subtitle">Documentation v0.1.0-dev</div>
+        </div>
+        <div class="sidebar-section">
+<div class="sidebar-section-title">📚 Developer Documentation</div>
+<a class="sidebar-link" href="architecture.html">Architecture Overview</a>
+<a class="sidebar-link" href="kernel-api.html">Kernel API Reference</a>
+<a class="sidebar-link" href="geometry-kernel.html">Geometry Kernel</a>
+<a class="sidebar-link" href="renderer.html">Render System</a>
+<a class="sidebar-link" href="editor-architecture.html">Editor Architecture</a>
+<a class="sidebar-link" href="build-system.html">Build System</a>
+<a class="sidebar-link" href="testing.html">Testing</a>
+<a class="sidebar-link" href="contributing.html">Contributing</a>
+<a class="sidebar-link" href="adding-geometry-op.html">Adding Geometry Op</a>
+<a class="sidebar-link" href="adding-cad-feature.html">Adding CAD Feature</a>
+<a class="sidebar-link" href="mesh-operations.html">Mesh Operations</a>
+<a class="sidebar-link" href="boolean-csg.html">Boolean/CSG Deep Dive</a>
+<a class="sidebar-link" href="halfedge-mesh.html">Half-edge Mesh</a>
+<a class="sidebar-link" href="analytic-brep.html">Analytic B-rep</a>
+<a class="sidebar-link" href="mesh-io.html">Mesh I/O</a>
+<a class="sidebar-link" href="tolerance.html">Tolerance System</a>
+<a class="sidebar-link" href="porting.html">Porting Guide</a>
+</div>
+<div class="sidebar-section">
+<div class="sidebar-section-title">🎨 Expert User Documentation</div>
+</div>
+<div class="sidebar-section">
+<div class="sidebar-section-title">👤 Beginner / User Documentation</div>
+<a class="sidebar-link" href="getting-started.html">Getting Started</a>
+</div>
+<div class="sidebar-section">
+<div class="sidebar-section-title">🔧 API Reference</div>
+</div>
+<div class="sidebar-section">
+<div class="sidebar-section-title">📚 Additional Resources</div>
+<a class="sidebar-link" href="design-decisions.html">Design Decisions</a>
+<a class="sidebar-link" href="testing-strategy.html">Testing Strategy</a>
+<a class="sidebar-link active" href="graphics-kernel.html">Graphics Kernel</a>
+<a class="sidebar-link" href="vision-and-roadmap.html">Vision & Roadmap</a>
+<a class="sidebar-link" href="reference-roadmap.html">Reference Roadmap</a>
+<a class="sidebar-link" href="modeling-industry-parity.html">Modeling Industry Parity</a>
+<a class="sidebar-link" href="modeling-parity-index.html">Modeling Parity Index</a>
+<a class="sidebar-link" href="modeling-reference-roadmap.html">Modeling Reference Roadmap</a>
+</div>
+    </nav>
+    
+    <div class="main-content">
+        <header class="header">
+            <button class="btn btn-icon" id="mobile-menu-btn" aria-label="Toggle menu" style="display: none;">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="3" y1="12" x2="21" y2="12"></line>
+                    <line x1="3" y1="6" x2="21" y2="6"></line>
+                    <line x1="3" y1="18" x2="21" y2="18"></line>
+                </svg>
+            </button>
+            <div class="header-title">Nexus Modeling — Graphics Kernel Architecture</div>
+            <div class="header-actions">
+                
+<button class="btn btn-icon" id="theme-toggle" aria-label="Toggle dark/light theme" title="Toggle theme (Ctrl+Shift+L)">
+    <svg class="theme-icon-sun" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display: none;">
+        <circle cx="12" cy="12" r="5"></circle>
+        <line x1="12" y1="1" x2="12" y2="3"></line>
+        <line x1="12" y1="21" x2="12" y2="23"></line>
+        <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+        <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+        <line x1="1" y1="12" x2="3" y2="12"></line>
+        <line x1="21" y1="12" x2="23" y2="12"></line>
+        <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+        <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+    </svg>
+    <svg class="theme-icon-moon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display: none;">
+        <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+    </svg>
+</button>
+
+                <a href="https://github.com/nexus-systems/nexus-modeling" class="btn btn-secondary" target="_blank" rel="noopener">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M12 0C5.374 0 0 5.373 0 12c0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23A11.509 11.509 0 0112 5.803c1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576C20.566 21.797 24 17.3 24 12c0-6.627-5.373-12-12-12z"/>
+                    </svg>
+                    <span class="btn-text">GitHub</span>
+                </a>
+                <a href="index.html" class="btn btn-primary">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
+                        <polyline points="9 22 9 12 15 12 15 22"></polyline>
+                    </svg>
+                    <span class="btn-text">Home</span>
+                </a>
+            </div>
+        </header>
+        
+        <main class="content">
+            <div class="toc"><h3>On This Page</h3><ul><li><a href="#nexus-modeling-graphics-kernel-architecture">Nexus Modeling — Graphics Kernel Architecture</a></li>
+  <li><a href="#overview">Overview</a></li>
+  <li><a href="#layer-map">Layer Map</a></li>
+  <li><a href="#key-files">Key Files</a></li>
+  <li><a href="#hardware-tier-scaling">Hardware Tier Scaling</a></li>
+  <li><a href="#frame-pipeline-high-ultra-tier">Frame Pipeline (High/Ultra tier)</a></li>
+  <li><a href="#vulkan-feature-requirements">Vulkan Feature Requirements</a></li>
+  <li><a href="#build">Build</a></li>
+  <li><a href="#nexus-cloud-api-contract">Nexus-Cloud API Contract</a></li>
+  <li><a href="#geometry-ownership-contract">Geometry Ownership Contract</a></li>
+  <li><a href="#api-reference">API Reference</a></li>
+    <li><a href="#nexus-gfx-rendercontext"><code>nexus::gfx::RenderContext</code></a></li>
+    <li><a href="#nexus-gfx-idevice"><code>nexus::gfx::IDevice</code></a></li>
+      <li><a href="#buffer-lifecycle">Buffer lifecycle</a></li>
+      <li><a href="#texture-lifecycle">Texture lifecycle</a></li>
+      <li><a href="#shader-creation">Shader creation</a></li>
+      <li><a href="#pipeline-creation">Pipeline creation</a></li>
+      <li><a href="#command-buffer-submission">Command buffer submission</a></li>
+      <li><a href="#pipeline-state-object-pso-caching">Pipeline State Object (PSO) caching</a></li>
+    <li><a href="#handle-system">Handle system</a></li>
+    <li><a href="#nexus-gfx-icommandbuffer"><code>nexus::gfx::ICommandBuffer</code></a></li>
+    <li><a href="#nexus-gfx-iswapchain"><code>nexus::gfx::ISwapchain</code></a></li>
+    <li><a href="#nexus-gfx-igpuallocator"><code>nexus::gfx::IGPUAllocator</code></a></li>
+    <li><a href="#hardware-tier-capabilities">Hardware Tier capabilities</a></li>
+    <li><a href="#neural-renderer-nexus-neural">Neural renderer (<code>nexus::neural</code>)</a></li>
+  <li><a href="#implementation-status">Implementation status</a></li>
+</ul></div>
+            <h1 id="nexus-modeling-graphics-kernel-architecture">Nexus Modeling — Graphics Kernel Architecture</h1>
+
+<h2 id="overview">Overview</h2>
+
+<p>
+The graphics kernel is a <strong>C++23</strong> library (<code>nexus_gfx_core</code>) that provides a
+backend-agnostic, hardware-scalable rendering foundation for all types of 3D
+modeling (geometric, mesh, parametric, simulation, data visualization).
+</p>
+
+<hr>
+
+<h2 id="layer-map">Layer Map</h2>
+
+<pre><code class="language-">┌──────────────────────────────────────────────────────┐
+<p>
+│             Application / Python Bindings             │
+├──────────────────────────────────────────────────────┤
+│   nexus::render                                       │
+│   Renderer · SceneGraph · Camera · NeuralRenderer     │
+├──────────────────────────────────────────────────────┤
+│   nexus::gfx  (abstraction layer)                     │
+│   RenderContext · IDevice · ICommandBuffer            │
+│   ISwapchain · IGPUAllocator                          │
+├──────────────────────────────────────────────────────┤
+│   Backends                                            │
+│   ┌─────────┐  ┌──────┐  ┌──────┐  ┌──────────┐     │
+│   │ Vulkan  │  │ DX12 │  │Metal │  │   Null   │     │
+│   │  1.4    │  │ (Win)│  │(Mac) │  │(headless)│     │
+│   └─────────┘  └──────┘  └──────┘  └──────────┘     │
+└──────────────────────────────────────────────────────┘</code></pre>
+</p>
+
+<hr>
+
+<h2 id="key-files">Key Files</h2>
+
+<p>
+| Path | Purpose |
+|---|---|
+| <code>include/nexus/gfx/Types.h</code> | All shared enums, handles, capability structs |
+| <code>include/nexus/gfx/Device.h</code> | <code>IDevice</code> — resource creation interface |
+| <code>include/nexus/gfx/CommandBuffer.h</code> | <code>ICommandBuffer</code> — draw/dispatch recording |
+| <code>include/nexus/gfx/Swapchain.h</code> | <code>ISwapchain</code> — surface presentation |
+| <code>include/nexus/gfx/Allocator.h</code> | <code>IGPUAllocator</code> — GPU memory / tiled resources |
+| <code>include/nexus/gfx/RenderContext.h</code> | Top-level kernel entry point |
+| <code>include/nexus/render/Camera.h</code> | Perspective/ortho camera + frustum extraction |
+| <code>include/nexus/render/SceneGraph.h</code> | Node hierarchy + frustum culling |
+| <code>include/nexus/render/Renderer.h</code> | Frame pipeline orchestrator |
+| <code>include/nexus/neural/NeuralRenderer.h</code> | Denoising / upscaling (DLSS4/XeSS/OIDN) |
+</p>
+
+<hr>
+
+<h2 id="hardware-tier-scaling">Hardware Tier Scaling</h2>
+
+<p>
+| Tier | VRAM | Features active |
+|---|---|---|
+| Low | < 4 GB | Rasterize only, bilinear upscale, OIDN CPU denoise |
+| Mid | 4–8 GB | + Hybrid RT (ray queries), FSR3 |
+| High | 8–16 GB | + Full RT pipeline, mesh shaders, XeSS/DLSS |
+| Ultra | 16 GB+ | + Neural texture decode, DLSS4 RayReconstruction |
+</p>
+
+<p>
+Zero hard requirements — every code path degrades gracefully to Low tier.
+</p>
+
+<hr>
+
+<h2 id="frame-pipeline-high-ultra-tier">Frame Pipeline (High/Ultra tier)</h2>
+
+<pre><code class="language-">beginFrame()
+<p>
+  └─ waitForFence / reset
+render(camera, scene)
+  ├─ CPU frustum cull  (SceneGraph::collectVisible)
+  ├─ GPU indirect draw prep (mesh shader task stage)
+  ├─ Rasterize GBuffer  OR  Path-trace accumulation
+  ├─ Async compute queue:
+  │   ├─ Denoising  (DLSS4 / OIDN fallback)
+  │   └─ Up-scaling (DLSS4 / XeSS / FSR3 / bilinear)
+  ├─ TAA temporal resolve
+  └─ Tone map → swapchain image
+endFrame()
+  └─ acquire → present</code></pre>
+</p>
+
+<hr>
+
+<h2 id="vulkan-feature-requirements">Vulkan Feature Requirements</h2>
+
+<p>
+| Feature | Extension | Required |
+|---|---|---|
+| Dynamic Rendering | <code>VK_KHR_dynamic_rendering</code> | Yes |
+| Synchronization 2 | <code>VK_KHR_synchronization2</code> | Yes |
+| Descriptor Indexing | <code>VK_EXT_descriptor_indexing</code> | Yes |
+| Buffer Device Address | <code>VK_KHR_buffer_device_address</code> | Yes |
+| Mesh Shaders | <code>VK_EXT_mesh_shader</code> | Optional (tier High+) |
+| RT Pipeline | <code>VK_KHR_ray_tracing_pipeline</code> | Optional (tier High+) |
+| Ray Query | <code>VK_KHR_ray_query</code> | Optional (tier Mid+) |
+| Acceleration Structure | <code>VK_KHR_acceleration_structure</code> | Optional |
+| Timeline Semaphores | <code>VK_KHR_timeline_semaphore</code> | Yes |
+</p>
+
+<hr>
+
+<h2 id="build">Build</h2>
+
+<pre><code class="language-bash">cmake -B build -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+<p>
+      -DNEXUS_BACKEND_VULKAN=ON \
+      -DNEXUS_ENABLE_TESTS=ON
+cmake --build build -j$(nproc)
+ctest --test-dir build --output-on-failure</code></pre>
+</p>
+
+<p>
+Dependencies (install via vcpkg or system package manager):
+</p>
+<ul>
+<li>Vulkan SDK ≥ 1.3  (<code>libvulkan-dev</code> / <code>vulkan-sdk</code>)</li>
+<li>VMA — Vulkan Memory Allocator  (<code>vcpkg install vk-memory-allocator</code>)</li>
+<li>GoogleTest (auto-fetched by CMake)</li>
+<li>Intel OIDN ≥ 2.0  (optional, <code>vcpkg install oidn</code>)</li>
+</ul>
+
+<hr>
+
+<h2 id="nexus-cloud-api-contract">Nexus-Cloud API Contract</h2>
+
+<ul>
+<li>The kernel exposes a <strong>headless render path</strong> (Null backend) for server-side</li>
+</ul>
+<p>
+  rendering jobs dispatched from Nexus-Cloud.
+</p>
+<ul>
+<li><code>RenderContext</code> is created with <code>preferredBackend = Backend::Null</code> in</li>
+</ul>
+<p>
+  cloud/CI environments.
+</p>
+<ul>
+<li>Frame output textures can be readback via <code>IDevice::uploadBuffer</code> inverse</li>
+</ul>
+<p>
+  path for image export.
+</p>
+
+<hr>
+
+<h2 id="geometry-ownership-contract">Geometry Ownership Contract</h2>
+
+<p>
+Use the geometry bridge handoff helpers based on ownership intent:
+</p>
+
+<ul>
+<li><code>GeometryRenderBridge::assignUploadedMeshToNode(...)</code></li>
+<li>Use when the upload container remains the owner of GPU resources.</li>
+<li>Node receives a copy of mesh handles and section packets.</li>
+<li>Caller must still destroy the <code>UploadedGeometryMesh</code> explicitly.</li>
+</ul>
+
+<ul>
+<li><code>GeometryRenderBridge::adoptUploadedMeshByNode(...)</code></li>
+<li>Use when ownership should move from upload container to scene node.</li>
+<li>Upload container is invalidated (handles and packets cleared).</li>
+<li>Node becomes the sole owner of payload lifetime.</li>
+</ul>
+
+<ul>
+<li><code>SceneGraph</code> auto-destroy on remove (<code>enableAutoDestroyNodeGpuPayloadOnRemove(...)</code>)</li>
+<li>Use for node-owned payload lifetimes where scene graph controls teardown.</li>
+<li><code>removeNode(...)</code> and <code>clear()</code> tear down node payloads recursively before detach.</li>
+<li>Combine with <code>adoptUploadedMeshByNode(...)</code> for one-owner semantics.</li>
+</ul>
+
+<p>
+For full scene resets that must also release top-level RT state, use
+<code>SceneGraph::clearAndDestroyTLAS(device)</code>.
+</p>
+
+<p>
+Renderer integration helpers:
+</p>
+
+<ul>
+<li><code>Renderer::resetScene(scene)</code></li>
+<li>Calls <code>scene.clear()</code> and invalidates renderer-side cached draw/material bindings.</li>
+<li>Use when TLAS is managed externally or not active.</li>
+</ul>
+
+<ul>
+<li><code>Renderer::resetSceneAndDestroyTLAS(scene)</code></li>
+<li>Calls <code>scene.clearAndDestroyTLAS(device)</code> and invalidates renderer-side cached state.</li>
+<li>Use for full scene reset boundaries where scene-owned TLAS must be explicitly released.</li>
+</ul>
+
+<hr>
+
+<h2 id="api-reference">API Reference</h2>
+
+<h3 id="nexus-gfx-rendercontext"><code>nexus::gfx::RenderContext</code></h3>
+
+<p>
+Top-level entry point. Owns the device, allocator, and queue manager.
+</p>
+
+<pre><code class="language-cpp">#include <nexus/gfx/RenderContext.h>
+
+<p>
+RenderContextDesc desc{
+    .preferredBackend  = Backend::Vulkan,
+    .validation        = ValidationLevel::Core,  // Off in release
+    .enableRayTracing  = true,
+    .enableMeshShaders = true,
+    .appName           = "MyApp",
+};
+auto ctx = RenderContext::create(desc);
+</p>
+
+<p>
+IDevice&       dev  = ctx->device();
+IGPUAllocator& mem  = ctx->allocator();
+HardwareTier   tier = ctx->hardwareTier();
+</p>
+
+<p>
+// Async compute convenience wrappers on RenderContext
+ctx->submitCompute({cmd});
+ctx->submitComputeWithTimeline(
+  {cmd},
+  {waitSemaphore}, {waitValue},
+  {signalSemaphore}, {signalValue}
+);
+</p>
+
+<p>
+CrossQueueTimelineSubmitDesc crossQueue{};
+crossQueue.graphicsCmds      = {graphicsCmd};
+crossQueue.computeCmds       = {computeCmd};
+crossQueue.dependency        = CrossQueueTimelineDependency::ComputeToGraphics;
+crossQueue.timelineSemaphore = timeline;
+crossQueue.dependencyValue   = 1;
+ctx->submitCrossQueueWithTimeline(crossQueue);
+</p>
+
+<p>
+// Or build the descriptor from pass declarations + edges.
+RenderPassGraphPlanner planner{};
+auto cullPass  = planner.addPass({QueueType::Compute,  {computeCmd}});
+auto shadePass = planner.addPass({QueueType::Graphics, {graphicsCmd}});
+planner.addDependency(cullPass, shadePass);
+</p>
+
+<p>
+auto planned = planner.buildCrossQueueSubmitDesc(timeline, 1);
+ctx->submitCrossQueueWithTimeline(planned);
+</p>
+
+<p>
+// For larger graphs, build a full ordered submission chain.
+// Optional: assign completion fences to terminal passes for frame orchestration.
+std::array<FenceHandle, 1> terminalFences{frameFence};
+auto chain = planner.buildSubmissionPlan(
+  timeline,
+  1,
+  FencePolicy::AutoFenceTerminalPasses,
+  std::span<const FenceHandle>(terminalFences));
+// terminalSubmitIndices points at completion submits in chain.submits.
+for (uint32_t idx : chain.terminalSubmitIndices) {
+  (void)idx;
+}
+auto completion = RenderPassGraphPlanner::buildCompletionWaitDesc(chain);
+ctx->submitPlannedTimelineChain(chain);</code></pre>
+</p>
+
+<p>
+<strong><code>ValidationLevel</code></strong> values:
+</p>
+
+<p>
+| Level | Overhead | Notes |
+|---|---|---|
+| <code>Off</code> | Zero | Release builds |
+| <code>Core</code> | Low | Vulkan validation layers — catches API misuse |
+| <code>Full</code> | Medium | + GPU-assisted validation, sync checks |
+| <code>Aftermath</code> | Medium | + NVIDIA Aftermath breadcrumbs (requires <code>NEXUS_ENABLE_AFTERMATH</code>) |
+</p>
+
+<hr>
+
+<h3 id="nexus-gfx-idevice"><code>nexus::gfx::IDevice</code></h3>
+
+<p>
+Resource creation and submission interface. Never instantiated directly — obtain via <code>RenderContext::device()</code>.
+</p>
+
+<h4 id="buffer-lifecycle">Buffer lifecycle</h4>
+
+<pre><code class="language-cpp">BufferHandle vbo = dev.createBuffer({
+<p>
+    .sizeBytes = sizeof(vertices),
+    .usage     = BufferUsage::VertexBuffer | BufferUsage::TransferDst,
+    .memory    = MemoryHint::GpuOnly,
+    .debugName = "Cube VBO",
+});
+</p>
+
+<p>
+dev.uploadBuffer(vbo, vertices.data(), sizeof(vertices));
+</p>
+
+<p>
+dev.destroyBuffer(vbo);</code></pre>
+</p>
+
+<h4 id="texture-lifecycle">Texture lifecycle</h4>
+
+<pre><code class="language-cpp">TextureHandle tex = dev.createTexture({
+<p>
+    .extent     = { 1024, 1024, 1 },
+    .mipLevels  = 10,
+    .format     = Format::R8G8B8A8_Srgb,
+    .usage      = TextureUsage::Sampled | TextureUsage::TransferDst,
+    .debugName  = "Albedo",
+});
+// uploadTexture() — planned, currently stubbed
+dev.destroyTexture(tex);</code></pre>
+</p>
+
+<h4 id="shader-creation">Shader creation</h4>
+
+<p>
+Three input modes — the kernel dispatches automatically based on which field is populated:
+</p>
+
+<pre><code class="language-cpp">// 1. Pre-compiled SPIR-V bytes (fastest path)
+<p>
+ShaderHandle sh = dev.createShader({
+    .spirvCode = std::span<const uint32_t>{ spv_data, spv_size },
+    .stage     = ShaderStage::Vertex,
+    .debugName = "triangle.vert",
+});
+</p>
+
+<p>
+// 2. In-memory GLSL source (compiled via glslang at runtime)
+ShaderHandle sh = dev.createShader({
+    .glslSource = R"(#version 460 core
+        layout(location = 0) in vec3 inPos;
+        void main() { gl_Position = vec4(inPos, 1.0); }
+    )",
+    .stage     = ShaderStage::Vertex,
+    .debugName = "inline.vert",
+});
+</p>
+
+<p>
+// 3. File path (.spv loaded raw, .glsl compiled)
+ShaderHandle sh = dev.createShader({
+    .sourcePath = "shaders/mesh.vert.glsl",
+    .stage      = ShaderStage::Vertex,
+});</code></pre>
+</p>
+
+<h4 id="pipeline-creation">Pipeline creation</h4>
+
+<pre><code class="language-cpp">// Graphics pipeline (rasterisation)
+<p>
+PipelineHandle pipe = dev.createGraphicsPipeline({
+    .vertexShader   = vert,
+    .fragmentShader = frag,
+    .topology       = Topology::TriangleList,
+    .depthTest      = true,
+    .depthWrite     = true,
+    .blendEnable    = false,
+    .debugName      = "MeshOpaque",
+});
+</p>
+
+<p>
+// Compute pipeline
+PipelineHandle csPipe = dev.createComputePipeline({
+    .computeShader = cs,
+    .debugName     = "Skinning",
+});
+</p>
+
+<p>
+// Ray-tracing pipeline (requires tier Mid+)
+PipelineHandle rtPipe = dev.createRayTracingPipeline({
+    .rayGenShader       = rgen,
+    .missShaders        = missSh,
+    .closestHitShaders  = chitSh,
+    .maxRecursionDepth  = 2,
+});
+</p>
+
+<p>
+// Mesh-shader pipeline (requires tier High+)
+PipelineHandle msPipe = dev.createMeshShaderPipeline({
+    .taskShader     = task,    // optional
+    .meshShader     = mesh,
+    .fragmentShader = frag,
+});
+</p>
+
+<p>
+// Sparse/tiled texture page management (requires caps().tiledResources)
+TextureHandle tiledTex = dev.createTexture({
+  .extent   = { 256, 256, 1 },
+  .format   = Format::R8G8B8A8_Unorm,
+  .usage    = TextureUsage::Sampled | TextureUsage::TransferDst,
+  .isTiled  = true,
+  .debugName = "SparseAtlas",
+});
+</p>
+
+<p>
+// Commit and evict individual pages (tileX, tileY, mipLevel)
+ctx.allocator().commitTile(tiledTex, 0, 0, 0);
+ctx.allocator().evictTile (tiledTex, 0, 0, 0);</code></pre>
+</p>
+
+<p>
+Sparse tile ownership contract:
+</p>
+
+<ul>
+<li><code>commitTile(texture, x, y, mip)</code> binds physical memory for a sparse page.</li>
+<li><code>evictTile(texture, x, y, mip)</code> unbinds and releases that page memory.</li>
+<li>Calling commit/evict on non-sparse textures is a no-op.</li>
+<li>Use <code>caps().tiledResources</code> to gate sparse paging features at runtime.</li>
+</ul>
+
+<p>
+Timeline semaphore contract:
+</p>
+
+<ul>
+<li>Create via <code>createTimelineSemaphore(initialValue)</code>.</li>
+<li>Signal from CPU via <code>signalSemaphore(sem, value)</code>.</li>
+<li>Wait from CPU via <code>waitSemaphore(sem, value, timeoutNs)</code>.</li>
+<li>Observe progress via <code>querySemaphoreValue(sem)</code>.</li>
+<li>For GPU queue orchestration, use <code>submitWithTimeline(...)</code> and provide per-submit</li>
+</ul>
+<p>
+  wait/signal value arrays that are positionally matched with wait/signal semaphores.
+</p>
+<ul>
+<li><code>RenderContext::submitComputeWithTimeline(...)</code> forwards this contract on the</li>
+</ul>
+<p>
+  compute queue for higher-level async workflow code.
+</p>
+<ul>
+<li><code>RenderContext::submitCrossQueueWithTimeline(...)</code> accepts one descriptor and</li>
+</ul>
+<p>
+  emits ordered timeline submissions across compute/graphics queues.
+</p>
+<ul>
+<li>Supported dependency directions are <code>ComputeToGraphics</code> and <code>GraphicsToCompute</code>.</li>
+<li><code>RenderPassGraphPlanner</code> can derive this descriptor directly from declared</li>
+</ul>
+<p>
+  pass nodes and dependency edges, avoiding manual queue-array assembly.
+</p>
+<ul>
+<li><code>RenderPassGraphPlanner::buildSubmissionPlan(...)</code> topologically orders graph</li>
+</ul>
+<p>
+  passes and assigns timeline wait/signal values for each cross-queue edge.
+</p>
+<ul>
+<li><code>RenderPassSubmissionPlan::terminalSubmitIndices</code> exposes terminal completion</li>
+</ul>
+<p>
+  submits directly for frame orchestration.
+</p>
+<ul>
+<li><code>RenderPassGraphPlanner::buildCompletionWaitDesc(...)</code> returns compact terminal</li>
+</ul>
+<p>
+  completion waits (<code>fences</code> + <code>timelineWaitValues</code>) ready for frame sync code.
+</p>
+<ul>
+<li><code>FencePolicy::AutoFenceTerminalPasses</code> can assign provided fences to terminal</li>
+</ul>
+<p>
+  passes so frame orchestration can consume completion points directly.
+</p>
+<ul>
+<li><code>FencePolicy::ExplicitFences</code> enforces exact fence count matching terminal pass</li>
+</ul>
+<p>
+  count, useful for strict frame-graph contracts.
+</p>
+<ul>
+<li><code>RenderContext::submitPlannedTimelineChain(...)</code> executes that ordered chain</li>
+</ul>
+<p>
+  through <code>IDevice::submitWithTimeline(...)</code> per step.
+</p>
+<ul>
+<li>This enables async compute/graphics dependency chains without CPU stalls.</li>
+<li>Backends without native timeline support may fall back to binary/no-op semantics.</li>
+</ul>
+
+<h4 id="command-buffer-submission">Command buffer submission</h4>
+
+<pre><code class="language-cpp">CmdBufHandle cmd = dev.allocateCommandBuffer();
+<p>
+ICommandBuffer& cb = *dev.getCommandBuffer(cmd);
+</p>
+
+<p>
+cb.begin();
+</p>
+<h4 id="pipeline-state-object-pso-caching">Pipeline State Object (PSO) caching</h4>
+
+<p>
+Pipeline creation is automatically cached by descriptor hash to avoid redundant Vulkan PSO compilations.
+When two <code>createGraphicsPipeline()</code> / <code>createComputePipeline()</code> / etc. calls use descriptors with identical
+shader handles, blend states, depth states, and other immutable properties, the second call returns the
+<strong>same cached handle</strong> without recompiling.
+</p>
+
+<p>
+<strong>Example:</strong></code></pre>cpp
+// First call: compiles and caches
+PipelineHandle pipe1 = dev.createGraphicsPipeline({
+  .vertexShader   = vert,
+  .fragmentShader = frag,
+  .depthTest      = true,
+  // ... other state ...
+});
+</p>
+
+<p>
+// Second call with identical state: returns cached handle immediately
+PipelineHandle pipe2 = dev.createGraphicsPipeline({
+  .vertexShader   = vert,
+  .fragmentShader = frag,
+  .depthTest      = true,
+  // ... other state ...
+});
+</p>
+
+<p>
+// Both are the same resource:
+assert(pipe1.id == pipe2.id);
+</p>
+<pre><code class="language-">
+<p>
+This optimization is transparent — no API changes required. Use for frame-to-frame pipeline reuse,
+shader-to-material binding tables, and deferred rendering pass setup.
+</p>
+
+<p>
+cb.setViewport({ .x=0, .y=0, .width=1920, .height=1080, .minDepth=0, .maxDepth=1 });
+cb.setScissor ({ .offset={0,0}, .extent={1920,1080} });
+</p>
+
+<p>
+cb.beginRenderPass(renderPass, colorTargets, depthTarget, clearValues, renderArea);
+cb.bindPipeline(pipe);
+cb.bindVertexBuffer(vbo);
+cb.bindIndexBuffer(ibo);
+cb.pushConstants(ShaderStage::Vertex | ShaderStage::Fragment, &pc, sizeof(pc));
+cb.drawIndexed(indexCount);
+cb.endRenderPass();
+cb.end();
+</p>
+
+<p>
+dev.submit(cmd, QueueType::Graphics, fence);
+dev.freeCommandBuffer(cmd);</code></pre>
+</p>
+
+<hr>
+
+<h3 id="handle-system">Handle system</h3>
+
+<p>
+All GPU resources are represented as `Handle<Tag><code> — a 64-bit integer with a sentinel </code>kNullHandle = UINT64_MAX`:
+</p>
+
+<pre><code class="language-cpp">// Check validity before use
+<p>
+if (!myBuffer.valid()) { /<em> allocation failed </em>/ }
+</p>
+
+<p>
+// Handles are value types — copy freely
+BufferHandle copy = myBuffer;
+</p>
+
+<p>
+// Null handle constant
+BufferHandle empty{}; // empty.valid() == false</code></pre>
+</p>
+
+<p>
+<strong>Why handles, not pointers</strong>: Handles are safe to copy, compare, store in arrays, and transmit over IPC/RPC to Nexus-Cloud. The concrete GPU resource lives inside the backend's slot-map; the handle is just the key.
+</p>
+
+<hr>
+
+<h3 id="nexus-gfx-icommandbuffer"><code>nexus::gfx::ICommandBuffer</code></h3>
+
+<p>
+| Category | Methods |
+|---|---|
+| Lifecycle | <code>begin()</code>, <code>end()</code>, <code>reset()</code> |
+| Render pass | <code>beginRenderPass(…)</code>, <code>endRenderPass()</code> |
+| Viewport/scissor | <code>setViewport()</code>, <code>setScissor()</code> |
+| Pipeline | <code>bindPipeline()</code> |
+| Vertex/index | <code>bindVertexBuffer()</code>, <code>bindIndexBuffer()</code> |
+| Draw | <code>draw()</code>, <code>drawIndexed()</code>, <code>drawIndirect()</code>, <code>drawIndexedIndirect()</code> |
+| Mesh shaders | <code>drawMeshTasks()</code>, <code>drawMeshTasksIndirect()</code> |
+| Compute | <code>dispatch()</code>, <code>dispatchIndirect()</code> |
+| Ray tracing | <code>traceRays()</code> |
+| Push constants | <code>pushConstants(stages, data, sizeBytes)</code> |
+| Barriers | <code>globalMemoryBarrier()</code> |
+| Debug | <code>beginDebugLabel()</code>, <code>endDebugLabel()</code>, <code>insertDebugLabel()</code> |
+</p>
+
+<hr>
+
+<h3 id="nexus-gfx-iswapchain"><code>nexus::gfx::ISwapchain</code></h3>
+
+<pre><code class="language-cpp">// Acquire the next frame image
+<p>
+AcquiredFrame frame = swapchain->acquire();
+if (frame.result == AcquireResult::OutOfDate) {
+    swapchain->resize(newExtent);
+    return;
+}
+</p>
+
+<p>
+// … record commands targeting frame.colorTarget …
+</p>
+
+<p>
+// Present
+PresentResult pr = swapchain->present(frame);
+if (pr == PresentResult::OutOfDate) swapchain->resize(newExtent);</code></pre>
+</p>
+
+<p>
+<strong><code>PresentMode</code></strong> options:
+</p>
+
+<p>
+| Mode | Tearing | Latency | Use case |
+|---|---|---|---|
+| <code>Immediate</code> | Yes | Lowest | Benchmarking, no-vsync dev |
+| <code>Fifo</code> | No | 1 frame | Default |
+| <code>FifoRelaxed</code> | Possible if late | 1 frame | Smoother on GPU spikes |
+| <code>Mailbox</code> | No | Low | Triple-buffered gaming |
+</p>
+
+<hr>
+
+<h3 id="nexus-gfx-igpuallocator"><code>nexus::gfx::IGPUAllocator</code></h3>
+
+<p>
+Backed by <strong>VMA 3.1.0</strong> on Vulkan.
+</p>
+
+<pre><code class="language-cpp">// Tiled / sparse textures (streaming large textures)
+<p>
+bool supported = allocator.supportsTiledResources();
+</p>
+
+<p>
+// Memory budget query
+MemoryBudget budget = allocator.queryBudget();
+// budget.totalBytes / budget.usedBytes</code></pre>
+</p>
+
+<p>
+Direct buffer/texture allocation happens through <code>IDevice</code> — <code>IGPUAllocator</code> provides supplementary operations for tiled resources and budget monitoring.
+</p>
+
+<hr>
+
+<h3 id="hardware-tier-capabilities">Hardware Tier capabilities</h3>
+
+<p>
+Query at runtime via <code>IDevice::caps()</code>:
+</p>
+
+<pre><code class="language-cpp">const DeviceCapabilities& caps = dev.caps();
+
+<p>
+if (caps.rayTracingTier >= 1) { /<em> use RT pipeline </em>/ }
+if (caps.meshShaders)         { /<em> use mesh shader path </em>/ }
+if (caps.asyncCompute)        { /<em> submit to async compute queue </em>/ }</code></pre>
+</p>
+
+<p>
+| Field | Type | Meaning |
+|---|---|---|
+| <code>rayTracingTier</code> | <code>uint8_t</code> | 0=none, 1=ray queries, 2=full RT pipeline |
+| <code>meshShaders</code> | <code>bool</code> | VK_EXT_mesh_shader available |
+| <code>asyncCompute</code> | <code>bool</code> | Separate compute queue available |
+| <code>descriptorIndexing</code> | <code>bool</code> | Bindless descriptor arrays |
+| <code>bufferDeviceAddress</code> | <code>bool</code> | GPU pointer arithmetic |
+| <code>timelineSemaphores</code> | <code>bool</code> | Fine-grained async sync |
+| <code>vram</code> | <code>uint64_t</code> | Dedicated VRAM in bytes |
+| <code>unifiedMemory</code> | <code>bool</code> | Integrated / shared-memory architecture |
+</p>
+
+<hr>
+
+<h3 id="neural-renderer-nexus-neural">Neural renderer (<code>nexus::neural</code>)</h3>
+
+<pre><code class="language-cpp">#include <nexus/neural/NeuralRenderer.h>
+
+<p>
+// Factory selects best available implementation at runtime
+auto nr = nexus::neural::NeuralRenderer::create(device);
+</p>
+
+<p>
+nr->denoise(colorTarget, albedoTarget, normalTarget, outputTarget);
+nr->upscale(lowResTarget, outputTarget, jitter, motionVectors);</code></pre>
+</p>
+
+<p>
+The factory probes (in order): <strong>DLSS4</strong> (NVIDIA) → <strong>XeSS</strong> (Intel/any) → <strong>OIDN</strong> (CPU fallback). All are loaded at runtime via <code>dlopen</code>/<code>LoadLibrary</code> — no hard link dependency.
+</p>
+
+<hr>
+
+<h2 id="implementation-status">Implementation status</h2>
+
+<p>
+| System | Status | Notes |
+|---|---|---|
+| <code>IDevice</code> interface | ✅ Complete | All virtual methods defined |
+| Null backend | ✅ Complete | All methods stubbed, CI-safe |
+| Vulkan backend — init | ✅ Complete | Instance, device, queues |
+| Vulkan buffer/texture | ✅ Complete | VMA-backed |
+| Vulkan command buffer | ✅ Complete | Full <code>vkCmd*</code> implementation |
+| Vulkan swapchain | ✅ Complete | Wayland/XCB/X11/Win32/Metal surfaces, HDR |
+| Vulkan allocator | ✅ Complete | VMA 3.1 with budget extension |
+| Vulkan ray tracing | ✅ Complete | BLAS/TLAS build helpers |
+| Neural renderer | ✅ Complete | DLSS4/XeSS/OIDN factory |
+| Shader compilation | ✅ Complete | glslang runtime compile, .spv/.glsl file load |
+| Graphics pipeline | ✅ Complete | VkPipelineLayout + VkGraphicsPipeline, dynamic rendering |
+| Compute pipeline | ✅ Complete | <code>vkCreateComputePipeline</code> with PSO cache, <code>vkCmdDispatch</code> / <code>vkCmdDispatchIndirect</code> |
+| Ray-tracing pipeline | ✅ Complete | <code>vkCreateRayTracingPipelinesKHR</code> with shader groups, SBT, <code>vkCmdTraceRaysKHR</code> |
+| Mesh-shader pipeline | ✅ Complete | <code>vkCreateGraphicsPipelines</code> with task/mesh/fragment stages, <code>vkCmdDrawMeshTasksEXT</code> |
+| Texture upload | ✅ Complete | Staging buffer → <code>vkCmdCopyBufferToImage</code> with UNDEFINED→TRANSFER_DST→SHADER_READ_ONLY barriers |
+| Render loop | ✅ Complete | <code>VulkanFrameScheduler</code>: full Acquire→Record→Submit→Present with headless swapchain support |
+| Frame synchronisation | ✅ Complete | Timeline semaphores, per-frame fence/semaphore slots, cross-queue timeline chains |
+| GPU timestamps | ✅ Complete | <code>vkCmdWriteTimestamp2</code>, <code>VulkanDevice::readbackTimestamps</code> with timestamp period query |
+</p>
+
+        </main>
+    </div>
+    
+    <script>
+// Theme management
+const THEME_KEY = 'nexus-docs-theme';
+const themeToggle = document.getElementById('theme-toggle');
+const sunIcon = themeToggle.querySelector('.theme-icon-sun');
+const moonIcon = themeToggle.querySelector('.theme-icon-moon');
+
+function applyTheme(theme) {
+    document.documentElement.setAttribute('data-theme', theme);
+    if (theme === 'light') {
+        sunIcon.style.display = 'block';
+        moonIcon.style.display = 'none';
+    } else {
+        sunIcon.style.display = 'none';
+        moonIcon.style.display = 'block';
+    }
+    localStorage.setItem(THEME_KEY, theme);
+}
+
+function getPreferredTheme() {
+    const stored = localStorage.getItem(THEME_KEY);
+    if (stored) return stored;
+    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+}
+
+function initTheme() {
+    const theme = getPreferredTheme();
+    applyTheme(theme);
+}
+
+function toggleTheme() {
+    const current = document.documentElement.getAttribute('data-theme') || 'dark';
+    applyTheme(current === 'dark' ? 'light' : 'dark');
+}
+
+themeToggle.addEventListener('click', toggleTheme);
+
+// Keyboard shortcut: Ctrl+Shift+L
+document.addEventListener('keydown', (e) => {
+    if (e.ctrlKey && e.shiftKey && e.key === 'L') {
+        e.preventDefault();
+        toggleTheme();
+    }
+});
+
+// Listen for system theme changes
+window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => {
+    if (!localStorage.getItem(THEME_KEY)) {
+        applyTheme(e.matches ? 'dark' : 'light');
+    }
+});
+
+// Initialize theme immediately to prevent flash
+initTheme();
+
+// Mobile sidebar toggle
+const sidebar = document.getElementById('sidebar');
+const mobileMenuBtn = document.getElementById('mobile-menu-btn');
+
+if (mobileMenuBtn) {
+    mobileMenuBtn.addEventListener('click', () => {
+        sidebar.classList.toggle('open');
+    });
+}
+
+document.addEventListener('click', (e) => {
+    if (window.innerWidth <= 768) {
+        if (!sidebar.contains(e.target) && !e.target.closest('.header')) {
+            sidebar.classList.remove('open');
+        }
+    }
+});
+
+// Smooth scroll for anchor links
+document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+    anchor.addEventListener('click', function(e) {
+        const target = document.querySelector(this.getAttribute('href'));
+        if (target) {
+            e.preventDefault();
+            target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            if (window.innerWidth <= 768) {
+                sidebar.classList.remove('open');
+            }
+        }
+    });
+});
+
+// Active link highlighting based on scroll position
+const sections = document.querySelectorAll('.content h2, .content h3');
+const sidebarLinks = document.querySelectorAll('.sidebar-link[href^="#"]');
+
+function updateActiveLink() {
+    let current = '';
+    sections.forEach(section => {
+        const rect = section.getBoundingClientRect();
+        if (rect.top <= 100) {
+            current = '#' + section.id;
+        }
+    });
+
+    sidebarLinks.forEach(link => {
+        link.classList.remove('active');
+        if (link.getAttribute('href') === current) {
+            link.classList.add('active');
+        }
+    });
+}
+
+window.addEventListener('scroll', updateActiveLink, { passive: true });
+window.addEventListener('load', updateActiveLink);
+
+// Highlight.js initialization
+if (typeof hljs !== 'undefined') {
+    hljs.highlightAll();
+}
+
+// Mobile menu button visibility
+const mobileMenuBtn = document.getElementById('mobile-menu-btn');
+function checkMobile() {
+    if (window.innerWidth <= 768) {
+        mobileMenuBtn.style.display = 'flex';
+    } else {
+        mobileMenuBtn.style.display = 'none';
+        document.getElementById('sidebar').classList.remove('open');
+    }
+}
+checkMobile();
+window.addEventListener('resize', checkMobile);
+
+mobileMenuBtn.addEventListener('click', () => {
+    document.getElementById('sidebar').classList.toggle('open');
+});
+</script>

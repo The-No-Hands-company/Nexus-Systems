@@ -1,0 +1,788 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nexus Modeling — Testing Strategy — Nexus Modeling Docs</title>
+    <link rel="stylesheet" href="../styles.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
+</head>
+<body>
+    <nav class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+            <div class="sidebar-title">Nexus Modeling</div>
+            <div class="sidebar-subtitle">Documentation v0.1.0-dev</div>
+        </div>
+        <div class="sidebar-section">
+<div class="sidebar-section-title">📚 Developer Documentation</div>
+<a class="sidebar-link" href="../architecture.html">Architecture Overview</a>
+<a class="sidebar-link" href="../kernel-api.html">Kernel API Reference</a>
+<a class="sidebar-link" href="../geometry-kernel.html">Geometry Kernel</a>
+<a class="sidebar-link" href="../renderer.html">Render System</a>
+<a class="sidebar-link" href="../editor-architecture.html">Editor Architecture</a>
+<a class="sidebar-link" href="../build-system.html">Build System</a>
+<a class="sidebar-link" href="../testing.html">Testing</a>
+<a class="sidebar-link" href="../contributing.html">Contributing</a>
+<a class="sidebar-link" href="../adding-geometry-op.html">Adding Geometry Op</a>
+<a class="sidebar-link" href="../adding-cad-feature.html">Adding CAD Feature</a>
+<a class="sidebar-link" href="../mesh-operations.html">Mesh Operations</a>
+<a class="sidebar-link" href="../boolean-csg.html">Boolean/CSG Deep Dive</a>
+<a class="sidebar-link" href="../halfedge-mesh.html">Half-edge Mesh</a>
+<a class="sidebar-link" href="../analytic-brep.html">Analytic B-rep</a>
+<a class="sidebar-link" href="../mesh-io.html">Mesh I/O</a>
+<a class="sidebar-link" href="../tolerance.html">Tolerance System</a>
+<a class="sidebar-link" href="../porting.html">Porting Guide</a>
+</div>
+<div class="sidebar-section">
+<div class="sidebar-section-title">🎨 Expert User Documentation</div>
+</div>
+<div class="sidebar-section">
+<div class="sidebar-section-title">👤 Beginner / User Documentation</div>
+<a class="sidebar-link" href="../getting-started.html">Getting Started</a>
+</div>
+<div class="sidebar-section">
+<div class="sidebar-section-title">🔧 API Reference</div>
+</div>
+<div class="sidebar-section">
+<div class="sidebar-section-title">📚 Additional Resources</div>
+<a class="sidebar-link" href="../design-decisions.html">Design Decisions</a>
+<a class="sidebar-link" href="../testing-strategy.html">Testing Strategy</a>
+<a class="sidebar-link" href="../graphics-kernel.html">Graphics Kernel</a>
+<a class="sidebar-link" href="../vision-and-roadmap.html">Vision & Roadmap</a>
+<a class="sidebar-link" href="../reference-roadmap.html">Reference Roadmap</a>
+<a class="sidebar-link" href="../modeling-industry-parity.html">Modeling Industry Parity</a>
+<a class="sidebar-link" href="../modeling-parity-index.html">Modeling Parity Index</a>
+<a class="sidebar-link" href="../modeling-reference-roadmap.html">Modeling Reference Roadmap</a>
+</div>
+    </nav>
+    
+    <div class="main-content">
+        <header class="header">
+            <button class="btn btn-icon" id="mobile-menu-btn" aria-label="Toggle menu" style="display: none;">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="3" y1="12" x2="21" y2="12"></line>
+                    <line x1="3" y1="6" x2="21" y2="6"></line>
+                    <line x1="3" y1="18" x2="21" y2="18"></line>
+                </svg>
+            </button>
+            <div class="header-title">Nexus Modeling — Testing Strategy</div>
+            <div class="header-actions">
+                
+<button class="btn btn-icon" id="theme-toggle" aria-label="Toggle dark/light theme" title="Toggle theme (Ctrl+Shift+L)">
+    <svg class="theme-icon-sun" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display: none;">
+        <circle cx="12" cy="12" r="5"></circle>
+        <line x1="12" y1="1" x2="12" y2="3"></line>
+        <line x1="12" y1="21" x2="12" y2="23"></line>
+        <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+        <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+        <line x1="1" y1="12" x2="3" y2="12"></line>
+        <line x1="21" y1="12" x2="23" y2="12"></line>
+        <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+        <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+    </svg>
+    <svg class="theme-icon-moon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display: none;">
+        <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+    </svg>
+</button>
+
+                <a href="https://github.com/nexus-systems/nexus-modeling" class="btn btn-secondary" target="_blank" rel="noopener">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M12 0C5.374 0 0 5.373 0 12c0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23A11.509 11.509 0 0112 5.803c1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576C20.566 21.797 24 17.3 24 12c0-6.627-5.373-12-12-12z"/>
+                    </svg>
+                    <span class="btn-text">GitHub</span>
+                </a>
+                <a href="../index.html" class="btn btn-primary">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
+                        <polyline points="9 22 9 12 15 12 15 22"></polyline>
+                    </svg>
+                    <span class="btn-text">Home</span>
+                </a>
+            </div>
+        </header>
+        
+        <main class="content">
+            <div class="toc"><h3>On This Page</h3><ul><li><a href="#nexus-modeling-testing-strategy">Nexus Modeling — Testing Strategy</a></li>
+  <li><a href="#test-philosophy">Test Philosophy</a></li>
+  <li><a href="#test-categories">Test Categories</a></li>
+    <li><a href="#1-unit-tests-googletest">1. Unit Tests (GoogleTest)</a></li>
+    <li><a href="#2-property-based-tests-rapidcheck-style">2. Property-Based Tests (RapidCheck-style)</a></li>
+    <li><a href="#3-integration-tests">3. Integration Tests</a></li>
+    <li><a href="#4-performance-regression-tests">4. Performance Regression Tests</a></li>
+    <li><a href="#5-api-freeze-audit">5. API Freeze Audit</a></li>
+  <li><a href="#test-infrastructure">Test Infrastructure</a></li>
+    <li><a href="#fixtures">Fixtures</a></li>
+    <li><a href="#test-utilities">Test Utilities</a></li>
+  <li><a href="#running-tests">Running Tests</a></li>
+    <li><a href="#all-tests-ci">All Tests (CI)</a></li>
+<li><a href="#configure">Configure</a></li>
+<li><a href="#build">Build</a></li>
+<li><a href="#run-all-tests-headless-via-null-backend">Run all tests (headless via Null backend)</a></li>
+<li><a href="#with-verbose-output">With verbose output</a></li>
+    <li><a href="#filtered-tests">Filtered Tests</a></li>
+<li><a href="#run-specific-pattern">Run specific pattern</a></li>
+<li><a href="#run-single-test-suite">Run single test suite</a></li>
+<li><a href="#run-single-test">Run single test</a></li>
+<li><a href="#list-all-tests">List all tests</a></li>
+    <li><a href="#performance-tests">Performance Tests</a></li>
+<li><a href="#run-perf-tests">Run perf tests</a></li>
+<li><a href="#with-benchmark-output">With benchmark output</a></li>
+    <li><a href="#debug-build-with-sanitizers">Debug Build with Sanitizers</a></li>
+  <li><a href="#test-organization">Test Organization</a></li>
+  <li><a href="#test-naming-conventions">Test Naming Conventions</a></li>
+  <li><a href="#coverage-goals">Coverage Goals</a></li>
+<li><a href="#generate-coverage-report">Generate coverage report</a></li>
+  <li><a href="#determinism-requirements">Determinism Requirements</a></li>
+  <li><a href="#continuous-integration">Continuous Integration</a></li>
+<li><a href="#github-workflows-test-yml">.github/workflows/test.yml</a></li>
+</ul></div>
+            <h1 id="nexus-modeling-testing-strategy">Nexus Modeling — Testing Strategy</h1>
+
+<p>
+<em>Comprehensive testing approach: unit, integration, property-based, performance, and deterministic CI.</em>
+</p>
+
+<hr>
+
+<h2 id="test-philosophy">Test Philosophy</h2>
+
+<ol>
+<li><strong>Determinism First</strong> — All tests must pass on Null backend (headless, no GPU)</li>
+<li><strong>Property-Based</strong> — Test invariants, not just examples</li>
+<li><strong>Regression Gates</strong> — Performance baselines, API freeze checks</li>
+<li><strong>Fast Feedback</strong> — Unit tests < 1s, full suite < 30s</li>
+<li><strong>Real Coverage</strong> — Test actual kernel code paths, not mocks</li>
+</ol>
+
+<hr>
+
+<h2 id="test-categories">Test Categories</h2>
+
+<h3 id="1-unit-tests-googletest">1. Unit Tests (GoogleTest)</h3>
+
+<p>
+<strong>Location:</strong> <code>tests/kernel/</code>
+<strong>Target:</strong> <code>nexus_kernel_tests</code>
+<strong>Count:</strong> 1921+ tests
+</p>
+
+<pre><code class="language-cpp">// tests/kernel/test_HalfEdgeMesh.cpp
+<p>
+TEST(HalfEdgeMesh, InsertEdgeVertex_IntegrityClean) {
+    Mesh cube = primitives::makeBox(2,2,2);
+    auto hem = HalfEdgeMesh::fromMesh(cube);
+    ASSERT_TRUE(hem.has_value());
+</p>
+    
+<p>
+    uint32_t edgeId = 0;  // Pick an edge
+    uint32_t newVert = hem->insertEdgeVertex(edgeId, 0.5f);
+</p>
+    
+<p>
+    auto report = hem->checkIntegrity();
+    EXPECT_TRUE(report.ok) << report.reason;
+    EXPECT_EQ(report.euler, 2);  // Cube: V=8,E=12,F=6 → 8-12+6=2
+}
+</p>
+
+<p>
+TEST(HalfEdgeMesh, CollapseEdge_PreservesManifold) {
+    // Property test: collapseEdge on manifold mesh → manifold mesh
+}
+</p>
+
+<p>
+TEST(MeshBoolean, CubeUnionCube_Watertight) {
+    Mesh a = primitives::makeBox(2,2,2);
+    Mesh b = primitives::makeBox(2,2,2);
+    b.translate({1,0,0});  // Overlap
+</p>
+    
+<p>
+    auto result = MeshBoolean::compute(a, b, BooleanOp::Union);
+    ASSERT_TRUE(result.ok);
+</p>
+    
+<p>
+    auto analysis = MeshAnalysis::analyze(result.result);
+    EXPECT_TRUE(analysis.isWatertight);
+    EXPECT_TRUE(analysis.isManifold);
+    EXPECT_EQ(analysis.eulerCharacteristic, 2);
+}</code></pre>
+</p>
+
+<h3 id="2-property-based-tests-rapidcheck-style">2. Property-Based Tests (RapidCheck-style)</h3>
+
+<pre><code class="language-cpp">// tests/kernel/test_PropertyBased.cpp
+<p>
+#include <rapidcheck.h>
+</p>
+
+<p>
+RC_GTEST_PROP(HalfEdgeMesh, EulerInvariantHolds, ()) {
+    // Generate random mesh
+    Mesh mesh = *rc::gen::arbitrary<Mesh>();
+</p>
+    
+<p>
+    // Convert to half-edge
+    auto hem = HalfEdgeMesh::fromMesh(mesh);
+    RC_PRE(hem.has_value());
+</p>
+    
+<p>
+    // Apply random sequence of Euler ops
+    for (int i = 0; i < 100; ++i) {
+        auto op = *rc::gen::element(
+            rc::gen::just([]{ return "insertEdgeVertex"; }),
+            rc::gen::just([]{ return "splitEdge"; }),
+            rc::gen::just([]{ return "flipEdge"; }),
+            rc::gen::just([]{ return "pokeFace"; })
+        );
+        // ... apply op ...
+</p>
+        
+<p>
+        // Invariant: integrity always clean
+        auto report = hem->checkIntegrity();
+        RC_ASSERT(report.ok);
+    }
+}
+</p>
+
+<p>
+RC_GTEST_PROP(MeshBoolean, UnionCommutative, ()) {
+    Mesh a = *rc::gen::arbitrary<Mesh>();
+    Mesh b = *rc::gen::arbitrary<Mesh>();
+</p>
+    
+<p>
+    auto r1 = MeshBoolean::compute(a, b, BooleanOp::Union);
+    auto r2 = MeshBoolean::compute(b, a, BooleanOp::Union);
+</p>
+    
+<p>
+    RC_PRE(r1.ok && r2.ok);
+</p>
+    
+<p>
+    // Volumes should be equal (within tolerance)
+    RC_ASSERT(std::abs(r1.result.volume() - r2.result.volume()) < 1e-4f);
+}</code></pre>
+</p>
+
+<h3 id="3-integration-tests">3. Integration Tests</h3>
+
+<pre><code class="language-cpp">// tests/integration/test_RenderPipeline.cpp
+<p>
+TEST(VulkanRenderer, OffscreenClearAndReadback) {
+    RenderContext ctx = createHeadlessContext();
+    Renderer renderer(ctx);
+</p>
+    
+<p>
+    // Render a frame
+    renderer.beginFrame();
+    renderer.clear({0.1f, 0.2f, 0.3f, 1.0f});
+    renderer.endFrame();
+</p>
+    
+<p>
+    // Read back
+    auto pixels = renderer.readbackColor();
+    EXPECT_NEAR(pixels[0], 0.1f * 255, 2);
+    EXPECT_NEAR(pixels[1], 0.2f * 255, 2);
+    EXPECT_NEAR(pixels[2], 0.3f * 255, 2);
+}
+</p>
+
+<p>
+TEST(VulkanRenderer, GBufferMrtGeometryPipelineRunsThroughRenderer) {
+    // Full G-buffer pass with mesh
+}</code></pre>
+</p>
+
+<h3 id="4-performance-regression-tests">4. Performance Regression Tests</h3>
+
+<pre><code class="language-cpp">// tests/perf/test_BooleanPerf.cpp
+<p>
+TEST(KernelPerf, BooleanCubeUnder1ms) {
+    Mesh a = primitives::makeBox(2,2,2);
+    Mesh b = primitives::makeBox(2,2,2);
+    b.translate({1,0,0});
+</p>
+    
+<p>
+    auto start = std::chrono::high_resolution_clock::now();
+    for (int i = 0; i < 100; ++i) {
+        auto result = MeshBoolean::compute(a, b, BooleanOp::Union);
+        EXPECT_TRUE(result.ok);
+    }
+    auto end = std::chrono::high_resolution_clock::now();
+</p>
+    
+<p>
+    auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
+    EXPECT_LT(ms, 100);  // 100 iterations < 100ms → <1ms each
+}
+</p>
+
+<p>
+TEST(KernelPerf, ExtrudeUnder1ms) {
+    // ...
+}
+</p>
+
+<p>
+TEST(KernelPerf, Decimate100kTri50PercentUnder100ms) {
+    // ...
+}</code></pre>
+</p>
+
+<h3 id="5-api-freeze-audit">5. API Freeze Audit</h3>
+
+<pre><code class="language-cpp">// tests/kernel/test_ApiFreeze.cpp
+<p>
+TEST(ApiFreezeAudit, PublicHeaderManifestMatchesWorkspace) {
+    // Scans src/kernel/include/nexus/**/*.h
+    // Compares against tests/kernel/fixtures/api_surface_manifest_alpha_v1.txt
+    // Fails if mismatch (added/removed public API)
+}</code></pre>
+</p>
+
+<hr>
+
+<h2 id="test-infrastructure">Test Infrastructure</h2>
+
+<h3 id="fixtures">Fixtures</h3>
+
+<pre><code class="language-cpp">// tests/kernel/fixtures/TestFixtures.h
+<p>
+namespace nexus::test {
+</p>
+
+<p>
+Mesh makeCube(float size = 1.0f) {
+    return primitives::makeBox(size, size, size);
+}
+</p>
+
+<p>
+Mesh makeSphere(float radius = 1.0f, int seg = 16) {
+    return primitives::makeSphere(radius, seg, seg);
+}
+</p>
+
+<p>
+Mesh makeTorus(float R = 2.0f, float r = 0.5f) {
+    return primitives::makeTorus(R, r, 32, 16);
+}
+</p>
+
+<p>
+CadDocument makeSimpleDocument() {
+    CadDocument doc;
+    // Add box feature
+    // Add extrude feature
+    return doc;
+}
+</p>
+
+<p>
+} // namespace nexus::test</code></pre>
+</p>
+
+<h3 id="test-utilities">Test Utilities</h3>
+
+<pre><code class="language-cpp">// tests/kernel/test_Utils.h
+<p>
+namespace nexus::test {
+</p>
+
+<p>
+bool meshesEqual(const Mesh& a, const Mesh& b, float tol = 1e-5f);
+bool meshIsWatertight(const Mesh& m);
+bool meshIsManifold(const Mesh& m);
+float meshVolume(const Mesh& m);
+float meshSurfaceArea(const Mesh& m);
+void checkMeshIntegrity(const Mesh& m);
+</p>
+
+<p>
+std::string meshToString(const Mesh& m);
+void dumpMesh(const Mesh& m, const std::string& path);
+</p>
+
+<p>
+} // namespace nexus::test</code></pre>
+</p>
+
+<hr>
+
+<h2 id="running-tests">Running Tests</h2>
+
+<h3 id="all-tests-ci">All Tests (CI)</h3>
+
+<pre><code class="language-bash"><h1 id="configure">Configure</h1>
+<p>
+cmake -S . -B build -DNEXUS_BACKEND_VULKAN=ON -DNEXUS_BACKEND_NULL=ON
+</p>
+
+<h1 id="build">Build</h1>
+<p>
+cmake --build build -j$(nproc)
+</p>
+
+<h1 id="run-all-tests-headless-via-null-backend">Run all tests (headless via Null backend)</h1>
+<p>
+ctest --test-dir build --output-on-failure
+</p>
+
+<h1 id="with-verbose-output">With verbose output</h1>
+<p>
+ctest --test-dir build --output-on-failure -V</code></pre>
+</p>
+
+<h3 id="filtered-tests">Filtered Tests</h3>
+
+<pre><code class="language-bash"><h1 id="run-specific-pattern">Run specific pattern</h1>
+<p>
+ctest --test-dir build -R "HalfEdge" --output-on-failure
+</p>
+
+<h1 id="run-single-test-suite">Run single test suite</h1>
+<p>
+./build/tests/nexus_kernel_tests --gtest_filter="MeshBoolean.*"
+</p>
+
+<h1 id="run-single-test">Run single test</h1>
+<p>
+./build/tests/nexus_kernel_tests --gtest_filter="MeshBoolean.CubeUnionCube_Watertight"
+</p>
+
+<h1 id="list-all-tests">List all tests</h1>
+<p>
+./build/tests/nexus_kernel_tests --gtest_list_tests</code></pre>
+</p>
+
+<h3 id="performance-tests">Performance Tests</h3>
+
+<pre><code class="language-bash"><h1 id="run-perf-tests">Run perf tests</h1>
+<p>
+./build/tests/nexus_kernel_perf_smoke
+</p>
+
+<h1 id="with-benchmark-output">With benchmark output</h1>
+<p>
+./build/tests/nexus_kernel_perf_smoke --benchmark_format=json --benchmark_out=perf.json</code></pre>
+</p>
+
+<h3 id="debug-build-with-sanitizers">Debug Build with Sanitizers</h3>
+
+<pre><code class="language-bash">cmake -S . -B build_asan -DCMAKE_BUILD_TYPE=Debug
+<p>
+cmake --build build_asan -j$(nproc)
+ASAN_OPTIONS=detect_leaks=1 ctest --test-dir build_asan --output-on-failure</code></pre>
+</p>
+
+<hr>
+
+<h2 id="test-organization">Test Organization</h2>
+
+<pre><code class="language-">tests/
+<p>
+├── kernel/
+│   ├── test_AnalyticBRep.cpp
+│   ├── test_BooleanOperation.cpp
+│   ├── test_HalfEdgeMesh.cpp
+│   ├── test_MeshBoolean.cpp
+│   ├── test_MeshDecimator.cpp
+│   ├── test_MeshLaplacian.cpp
+│   ├── test_MeshRemesh.cpp
+│   ├── test_SubdivisionSurface.cpp
+│   ├── test_Delaunay2D.cpp
+│   ├── test_TetDelaunay3D.cpp
+│   ├── test_RobustPredicates.cpp
+│   ├── test_Tolerance.cpp
+│   ├── test_MeshIO.cpp
+│   ├── test_Primitives.cpp
+│   ├── test_SceneGraph.cpp
+│   ├── test_Camera.cpp
+│   ├── test_Frustum.cpp
+│   ├── test_Picking.cpp
+│   ├── test_Transform.cpp
+│   ├── test_Quaternion.cpp
+│   ├── test_Mat4.cpp
+│   ├── test_Vec3.cpp
+│   ├── test_CadDocument.cpp
+│   ├── test_CadFeature.cpp
+│   ├── test_CadSketch.cpp
+│   ├── test_CadSolver.cpp
+│   ├── test_ConstraintSolver.cpp
+│   ├── test_Animation.cpp
+│   ├── test_Simulation.cpp
+│   ├── test_Sculpt.cpp
+│   ├── test_Parameterization.cpp
+│   ├── test_Integrity.cpp
+│   ├── test_ApiFreeze.cpp
+│   ├── test_PropertyBased.cpp
+│   ├── test_Utils.h
+│   └── fixtures/
+│       ├── api_surface_manifest_alpha_v1.txt
+│       ├── test_models/
+│       └── reference_images/
+└── integration/
+    ├── test_RenderPipeline.cpp
+    ├── test_HeadlessRender.cpp
+    └── test_ViewportPicking.cpp</code></pre>
+</p>
+
+<hr>
+
+<h2 id="test-naming-conventions">Test Naming Conventions</h2>
+
+<pre><code class="language-cpp">// Suite: Component/Feature
+<p>
+// Test: Scenario_ExpectedBehavior
+</p>
+
+<p>
+TEST(MeshBoolean, CubeUnionCube_Watertight) { }
+TEST(HalfEdgeMesh, InsertEdgeVertex_IntegrityClean) { }
+TEST(CadSketch, ConstraintCoincident_SolvesCorrectly) { }
+TEST(SubdivisionSurface, CatmullClark_CreasePreserved) { }
+TEST(BooleanOperation, Difference_CoplanarFaces_Handled) { }</code></pre>
+</p>
+
+<hr>
+
+<h2 id="coverage-goals">Coverage Goals</h2>
+
+<p>
+| Component | Target | Current |
+|-----------|--------|---------|
+| Geometry Kernel | 95% | 92% |
+| CAD Layer | 90% | 85% |
+| Renderer | 80% | 70% |
+| Simulation | 85% | 60% |
+| Animation | 80% | 50% |
+| Overall | 90% | 82% |
+</p>
+
+<pre><code class="language-bash"><h1 id="generate-coverage-report">Generate coverage report</h1>
+<p>
+cmake -S . -B build_cov -DCMAKE_BUILD_TYPE=Debug -DENABLE_COVERAGE=ON
+cmake --build build_cov -j$(nproc)
+ctest --test-dir build_cov
+lcov --capture --directory build_cov --output-file coverage.info
+genhtml coverage.info --output-directory coverage_html</code></pre>
+</p>
+
+<hr>
+
+<h2 id="determinism-requirements">Determinism Requirements</h2>
+
+<p>
+All tests <strong>must</strong> produce identical results across:
+</p>
+<ul>
+<li>Debug/Release builds</li>
+<li>Different compilers (GCC/Clang/MSVC)</li>
+<li>Different optimization levels</li>
+<li>Vulkan/Null backends</li>
+</ul>
+
+<p>
+<strong>Enforced by:</strong>
+</p>
+<ul>
+<li><code>-ffp-contract=off -fno-fast-math</code></li>
+<li>Fixed iteration order in algorithms</li>
+<li>Stable sorts with deterministic tie-breaking</li>
+<li>xxHash for hashing (not std::hash)</li>
+<li>Fixed RNG seeds (SplitMix64)</li>
+</ul>
+
+<hr>
+
+<h2 id="continuous-integration">Continuous Integration</h2>
+
+<pre><code class="language-yaml"><h1 id="github-workflows-test-yml">.github/workflows/test.yml</h1>
+<p>
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        compiler: [gcc-13, clang-17]
+        build_type: [Debug, Release]
+    steps:
+</p>
+<ul>
+<li>uses: actions/checkout@v4</li>
+<li>name: Install deps</li>
+</ul>
+<p>
+        run: sudo apt-get install -y libvulkan-dev libglfw3-dev
+</p>
+<ul>
+<li>name: Build</li>
+</ul>
+<p>
+        run: |
+          cmake -S . -B build -DCMAKE_CXX_COMPILER=${{ matrix.compiler }} -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
+          cmake --build build -j$(nproc)
+</p>
+<ul>
+<li>name: Test</li>
+</ul>
+<p>
+        run: xvfb-run ctest --test-dir build --output-on-failure</code></pre>
+</p>
+
+<hr>
+
+<p>
+<em>Kernel v0.1.0-dev | 2026 tests passing | C++26 | Vulkan 1.3</em>
+</p>
+        </main>
+    </div>
+    
+    <script>
+// Theme management
+const THEME_KEY = 'nexus-docs-theme';
+const themeToggle = document.getElementById('theme-toggle');
+const sunIcon = themeToggle.querySelector('.theme-icon-sun');
+const moonIcon = themeToggle.querySelector('.theme-icon-moon');
+
+function applyTheme(theme) {
+    document.documentElement.setAttribute('data-theme', theme);
+    if (theme === 'light') {
+        sunIcon.style.display = 'block';
+        moonIcon.style.display = 'none';
+    } else {
+        sunIcon.style.display = 'none';
+        moonIcon.style.display = 'block';
+    }
+    localStorage.setItem(THEME_KEY, theme);
+}
+
+function getPreferredTheme() {
+    const stored = localStorage.getItem(THEME_KEY);
+    if (stored) return stored;
+    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+}
+
+function initTheme() {
+    const theme = getPreferredTheme();
+    applyTheme(theme);
+}
+
+function toggleTheme() {
+    const current = document.documentElement.getAttribute('data-theme') || 'dark';
+    applyTheme(current === 'dark' ? 'light' : 'dark');
+}
+
+themeToggle.addEventListener('click', toggleTheme);
+
+// Keyboard shortcut: Ctrl+Shift+L
+document.addEventListener('keydown', (e) => {
+    if (e.ctrlKey && e.shiftKey && e.key === 'L') {
+        e.preventDefault();
+        toggleTheme();
+    }
+});
+
+// Listen for system theme changes
+window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => {
+    if (!localStorage.getItem(THEME_KEY)) {
+        applyTheme(e.matches ? 'dark' : 'light');
+    }
+});
+
+// Initialize theme immediately to prevent flash
+initTheme();
+
+// Mobile sidebar toggle
+const sidebar = document.getElementById('sidebar');
+const mobileMenuBtn = document.getElementById('mobile-menu-btn');
+
+if (mobileMenuBtn) {
+    mobileMenuBtn.addEventListener('click', () => {
+        sidebar.classList.toggle('open');
+    });
+}
+
+document.addEventListener('click', (e) => {
+    if (window.innerWidth <= 768) {
+        if (!sidebar.contains(e.target) && !e.target.closest('.header')) {
+            sidebar.classList.remove('open');
+        }
+    }
+});
+
+// Smooth scroll for anchor links
+document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+    anchor.addEventListener('click', function(e) {
+        const target = document.querySelector(this.getAttribute('href'));
+        if (target) {
+            e.preventDefault();
+            target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            if (window.innerWidth <= 768) {
+                sidebar.classList.remove('open');
+            }
+        }
+    });
+});
+
+// Active link highlighting based on scroll position
+const sections = document.querySelectorAll('.content h2, .content h3');
+const sidebarLinks = document.querySelectorAll('.sidebar-link[href^="#"]');
+
+function updateActiveLink() {
+    let current = '';
+    sections.forEach(section => {
+        const rect = section.getBoundingClientRect();
+        if (rect.top <= 100) {
+            current = '#' + section.id;
+        }
+    });
+
+    sidebarLinks.forEach(link => {
+        link.classList.remove('active');
+        if (link.getAttribute('href') === current) {
+            link.classList.add('active');
+        }
+    });
+}
+
+window.addEventListener('scroll', updateActiveLink, { passive: true });
+window.addEventListener('load', updateActiveLink);
+
+// Highlight.js initialization
+if (typeof hljs !== 'undefined') {
+    hljs.highlightAll();
+}
+
+// Mobile menu button visibility
+const mobileMenuBtn = document.getElementById('mobile-menu-btn');
+function checkMobile() {
+    if (window.innerWidth <= 768) {
+        mobileMenuBtn.style.display = 'flex';
+    } else {
+        mobileMenuBtn.style.display = 'none';
+        document.getElementById('sidebar').classList.remove('open');
+    }
+}
+checkMobile();
+window.addEventListener('resize', checkMobile);
+
+mobileMenuBtn.addEventListener('click', () => {
+    document.getElementById('sidebar').classList.toggle('open');
+});
+</script>

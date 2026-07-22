@@ -1,0 +1,612 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Track C Simulation Coupling Integration — Month 13 Delivery — Nexus Modeling Docs</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
+</head>
+<body>
+    <nav class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+            <div class="sidebar-title">Nexus Modeling</div>
+            <div class="sidebar-subtitle">Documentation v0.1.0-dev</div>
+        </div>
+        <div class="sidebar-section">
+<div class="sidebar-section-title">📚 Developer Documentation</div>
+<a class="sidebar-link" href="architecture.html">Architecture Overview</a>
+<a class="sidebar-link" href="kernel-api.html">Kernel API Reference</a>
+<a class="sidebar-link" href="geometry-kernel.html">Geometry Kernel</a>
+<a class="sidebar-link" href="renderer.html">Render System</a>
+<a class="sidebar-link" href="editor-architecture.html">Editor Architecture</a>
+<a class="sidebar-link" href="build-system.html">Build System</a>
+<a class="sidebar-link" href="testing.html">Testing</a>
+<a class="sidebar-link" href="contributing.html">Contributing</a>
+<a class="sidebar-link" href="adding-geometry-op.html">Adding Geometry Op</a>
+<a class="sidebar-link" href="adding-cad-feature.html">Adding CAD Feature</a>
+<a class="sidebar-link" href="mesh-operations.html">Mesh Operations</a>
+<a class="sidebar-link" href="boolean-csg.html">Boolean/CSG Deep Dive</a>
+<a class="sidebar-link" href="halfedge-mesh.html">Half-edge Mesh</a>
+<a class="sidebar-link" href="analytic-brep.html">Analytic B-rep</a>
+<a class="sidebar-link" href="mesh-io.html">Mesh I/O</a>
+<a class="sidebar-link" href="tolerance.html">Tolerance System</a>
+<a class="sidebar-link" href="porting.html">Porting Guide</a>
+</div>
+<div class="sidebar-section">
+<div class="sidebar-section-title">🎨 Expert User Documentation</div>
+</div>
+<div class="sidebar-section">
+<div class="sidebar-section-title">👤 Beginner / User Documentation</div>
+<a class="sidebar-link" href="getting-started.html">Getting Started</a>
+</div>
+<div class="sidebar-section">
+<div class="sidebar-section-title">🔧 API Reference</div>
+</div>
+<div class="sidebar-section">
+<div class="sidebar-section-title">📚 Additional Resources</div>
+<a class="sidebar-link" href="design-decisions.html">Design Decisions</a>
+<a class="sidebar-link" href="testing-strategy.html">Testing Strategy</a>
+<a class="sidebar-link" href="graphics-kernel.html">Graphics Kernel</a>
+<a class="sidebar-link" href="vision-and-roadmap.html">Vision & Roadmap</a>
+<a class="sidebar-link" href="reference-roadmap.html">Reference Roadmap</a>
+<a class="sidebar-link" href="modeling-industry-parity.html">Modeling Industry Parity</a>
+<a class="sidebar-link" href="modeling-parity-index.html">Modeling Parity Index</a>
+<a class="sidebar-link" href="modeling-reference-roadmap.html">Modeling Reference Roadmap</a>
+</div>
+    </nav>
+    
+    <div class="main-content">
+        <header class="header">
+            <button class="btn btn-icon" id="mobile-menu-btn" aria-label="Toggle menu" style="display: none;">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="3" y1="12" x2="21" y2="12"></line>
+                    <line x1="3" y1="6" x2="21" y2="6"></line>
+                    <line x1="3" y1="18" x2="21" y2="18"></line>
+                </svg>
+            </button>
+            <div class="header-title">Track C Simulation Coupling Integration — Month 13 Delivery</div>
+            <div class="header-actions">
+                
+<button class="btn btn-icon" id="theme-toggle" aria-label="Toggle dark/light theme" title="Toggle theme (Ctrl+Shift+L)">
+    <svg class="theme-icon-sun" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display: none;">
+        <circle cx="12" cy="12" r="5"></circle>
+        <line x1="12" y1="1" x2="12" y2="3"></line>
+        <line x1="12" y1="21" x2="12" y2="23"></line>
+        <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+        <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+        <line x1="1" y1="12" x2="3" y2="12"></line>
+        <line x1="21" y1="12" x2="23" y2="12"></line>
+        <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+        <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+    </svg>
+    <svg class="theme-icon-moon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display: none;">
+        <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+    </svg>
+</button>
+
+                <a href="https://github.com/nexus-systems/nexus-modeling" class="btn btn-secondary" target="_blank" rel="noopener">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M12 0C5.374 0 0 5.373 0 12c0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23A11.509 11.509 0 0112 5.803c1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576C20.566 21.797 24 17.3 24 12c0-6.627-5.373-12-12-12z"/>
+                    </svg>
+                    <span class="btn-text">GitHub</span>
+                </a>
+                <a href="index.html" class="btn btn-primary">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
+                        <polyline points="9 22 9 12 15 12 15 22"></polyline>
+                    </svg>
+                    <span class="btn-text">Home</span>
+                </a>
+            </div>
+        </header>
+        
+        <main class="content">
+            <div class="toc"><h3>On This Page</h3><ul><li><a href="#track-c-simulation-coupling-integration-month-13-delivery">Track C Simulation Coupling Integration — Month 13 Delivery</a></li>
+  <li><a href="#overview">Overview</a></li>
+  <li><a href="#completed-work">Completed Work</a></li>
+    <li><a href="#1-ray-tracing-renderer-stub-integration">1. Ray Tracing Renderer Stub Integration</a></li>
+    <li><a href="#2-track-c-simulation-scene-coupling-api">2. Track C Simulation/Scene Coupling API</a></li>
+    <li><a href="#3-rigid-body-angular-dynamics-rotation-coupling">3. Rigid-Body Angular Dynamics + Rotation Coupling</a></li>
+    <li><a href="#4-fixed-timestep-driver-render-interpolation-solver-output-streaming">4. Fixed-Timestep Driver + Render Interpolation (Solver Output Streaming)</a></li>
+    <li><a href="#5-composite-rt-output-merge">5. Composite RT Output Merge</a></li>
+    <li><a href="#6-build-and-manifest-updates">6. Build and Manifest Updates</a></li>
+  <li><a href="#design-rationale">Design Rationale</a></li>
+    <li><a href="#rt-stub-path">RT Stub Path</a></li>
+    <li><a href="#simulation-coupling">Simulation Coupling</a></li>
+  <li><a href="#verification-status">Verification Status</a></li>
+    <li><a href="#rt-renderer">RT Renderer</a></li>
+    <li><a href="#simulation-coupling">Simulation Coupling</a></li>
+  <li><a href="#next-steps-post-alpha">Next Steps (Post-Alpha)</a></li>
+  <li><a href="#references">References</a></li>
+</ul></div>
+            <h1 id="track-c-simulation-coupling-integration-month-13-delivery">Track C Simulation Coupling Integration — Month 13 Delivery</h1>
+
+<h2 id="overview">Overview</h2>
+
+<p>
+This delivery completes the stubbed RT renderer integration and establishes the Track C simulation/scene coupling API contract. The work provides a deterministic bridge between simulation state snapshots and render-visible scene transformations.
+</p>
+
+<h2 id="completed-work">Completed Work</h2>
+
+<h3 id="1-ray-tracing-renderer-stub-integration">1. Ray Tracing Renderer Stub Integration</h3>
+
+<p>
+<strong>Files Modified:</strong>
+</p>
+<ul>
+<li><a href="src/kernel/include/nexus/render/Renderer.h#L118">src/kernel/include/nexus/render/Renderer.h</a></li>
+<li>Added <code>enableRayTracingStub()</code> API.</li>
+<li>Added RT stats counters: <code>rayTracingDrawCalls</code>, <code>rayPayloads</code>, <code>rayHits</code>.</li>
+<li>Added <code>setRayTracingPipeline()</code> setter.</li>
+</ul>
+
+<ul>
+<li><a href="src/kernel/include/nexus/render/RenderGraphValidator.h#L42">src/kernel/include/nexus/render/RenderGraphValidator.h</a></li>
+<li>Added <code>RenderPassType::RayTracing</code> enumeration.</li>
+</ul>
+
+<ul>
+<li><a href="src/kernel/src/render/Renderer.cpp">src/kernel/src/render/Renderer.cpp</a></li>
+<li>Integrated RT dispatch stub in frame orchestration (<code>runRayTracingPass</code>).</li>
+<li>Added RT validation and frame capture logging for diagnostic exports.</li>
+<li>Preserved existing GBuffer/composite sequencing guarantees.</li>
+<li>Null backend uses existing no-op RT support; Vulkan backend will dispatch <code>traceRays()</code> when available.</li>
+</ul>
+
+<ul>
+<li><a href="src/kernel/src/render/RenderGraphValidator.cpp#L91">src/kernel/src/render/RenderGraphValidator.cpp</a></li>
+<li>Added RayTracing case handler to compile without warnings.</li>
+</ul>
+
+<h3 id="2-track-c-simulation-scene-coupling-api">2. Track C Simulation/Scene Coupling API</h3>
+
+<p>
+<strong>Files Created:</strong>
+</p>
+<ul>
+<li><a href="src/kernel/include/nexus/sim/SimulationCoupling.h">src/kernel/include/nexus/sim/SimulationCoupling.h</a></li>
+<li>Public coupling API: <code>SimulationSceneBinding</code>, <code>SimulationSceneCoupling</code>.</li>
+<li>Lightweight state application: <code>applyState(const SimState&)</code>.</li>
+<li>Deterministic binding interface for solver body ↔ scene node mapping.</li>
+</ul>
+
+<ul>
+<li><a href="src/kernel/src/sim/SimulationCoupling.cpp">src/kernel/src/sim/SimulationCoupling.cpp</a></li>
+<li>Implementation of scene transform updates from solver snapshots.</li>
+<li>Position-only coupling for stable integration point.</li>
+</ul>
+
+<p>
+<strong>Tests:</strong>
+</p>
+<ul>
+<li><a href="tests/kernel/test_SimulationCoupling.cpp">tests/kernel/test_SimulationCoupling.cpp</a></li>
+<li><code>AppliesBoundBodyPositionToSceneNode</code>: Validates position binding.</li>
+<li><code>IgnoresUnboundBodies</code>: Ensures safety for unbound bodies.</li>
+</ul>
+
+<h3 id="3-rigid-body-angular-dynamics-rotation-coupling">3. Rigid-Body Angular Dynamics + Rotation Coupling</h3>
+
+<p>
+Extends the rigid-body solver from a point-mass model to one that also tracks
+orientation, unblocking the rotation half of full transform coupling.
+</p>
+
+<p>
+<strong>Solver (<a href="src/kernel/src/sim/SimulationCore.cpp">src/kernel/src/sim/SimulationCore.cpp</a>):</strong>
+</p>
+<ul>
+<li><code>SimQuat</code> orientation + <code>angularVelocity</code> + scalar <code>inertia</code> on <code>SimBodyDesc</code>,</li>
+</ul>
+<p>
+  <code>SimBodySnapshot</code>, and the internal body record.
+</p>
+<ul>
+<li><code>applyTorque(id, torque)</code>: torque accumulation mirroring force; angular</li>
+</ul>
+<p>
+  acceleration = torque / inertia, consumed once per step (and once per
+  <code>stepFixed</code> call across substeps), then cleared.
+</p>
+<ul>
+<li>Orientation integrated via first-order quaternion integration</li>
+</ul>
+<p>
+  (<code>q += 0.5·dt·ω⊗q</code>) with renormalization each step. Static bodies (mass 0) are
+  not integrated, consistent with the linear path.
+</p>
+<ul>
+<li><code>getBodyAngularState(id, outOrientation, outAngularVelocity)</code> accessor.</li>
+<li>Entry-point validation rejects non-positive/non-finite inertia and non-finite</li>
+</ul>
+<p>
+  orientation / angular velocity, both at <code>addBody</code> and per-step.
+</p>
+
+<p>
+<strong>Snapshot format (v2):</strong>
+</p>
+<ul>
+<li><code>serializeSimState</code> now emits orientation (quaternion) + angular velocity per</li>
+</ul>
+<p>
+  body. <code>deserializeSimState</code> accepts both v2 and legacy v1 blobs; v1 records
+  decode with identity orientation and zero angular velocity. Replay/rollback
+  determinism is preserved.
+</p>
+
+<p>
+<strong>Coupling (<a href="src/kernel/src/sim/SimulationCoupling.cpp">src/kernel/src/sim/SimulationCoupling.cpp</a>):</strong>
+</p>
+<ul>
+<li><code>applyState</code> now drives both node translation and rotation from the snapshot.</li>
+</ul>
+<p>
+  Scale is left untouched (the solver does not model it).
+</p>
+
+<p>
+<strong>Tests:</strong> angular spin determinism, torque acceleration + clearing, static-body
+invariance, capture/restore of angular state, v2 round-trip, legacy v1 decode,
+non-finite rejection, and node-rotation coupling.
+</p>
+
+<h3 id="4-fixed-timestep-driver-render-interpolation-solver-output-streaming">4. Fixed-Timestep Driver + Render Interpolation (Solver Output Streaming)</h3>
+
+<p>
+Couples the deterministic solver to a variable-rate render loop the way a DCC
+runtime must — via the canonical fixed-timestep accumulator pattern (cf.
+Gaffer-on-Games "Fix Your Timestep"), <strong>not</strong> a naive per-frame <code>step → apply</code>.
+</p>
+
+<p>
+<strong>Files Created:</strong>
+</p>
+<ul>
+<li><a href="src/kernel/include/nexus/sim/SimulationDriver.h">src/kernel/include/nexus/sim/SimulationDriver.h</a></li>
+<li><a href="src/kernel/src/sim/SimulationDriver.cpp">src/kernel/src/sim/SimulationDriver.cpp</a></li>
+</ul>
+
+<p>
+<strong>Behavior:</strong>
+</p>
+<ul>
+<li><code>SimulationDriver::advance(solver, frameDt)</code> accumulates real frame time and</li>
+</ul>
+<p>
+  steps the solver at a fixed <code>dt</code>, so trajectories are reproducible regardless
+  of frame pacing (framerate independence).
+</p>
+<ul>
+<li>Leftover time is exposed as <code>alpha()</code> in [0,1]; <code>interpolatedState()</code> blends</li>
+</ul>
+<p>
+  the previous and current solver snapshots (lerp position/velocity, nlerp
+  orientation, shortest-path) into a jitter-free transform the coupling applies.
+</p>
+<ul>
+<li>A configurable substep cap guards against the "spiral of death" on</li>
+</ul>
+<p>
+  pathological frame deltas; backlog beyond the cap is discarded.
+</p>
+<ul>
+<li><code>interpolateSimState(from, to, alpha)</code> is exposed as a standalone utility</li>
+</ul>
+<p>
+  (bodies matched by id, ordered output).
+</p>
+
+<p>
+<strong>Implementation note:</strong> the kernel builds with <code>-ffast-math</code>, so finiteness is
+checked via IEEE-754 bit inspection (not <code>std::isfinite</code>) and quaternion
+interpolation short-circuits exact endpoints to avoid approximate-rsqrt drift —
+matching the existing <code>SimulationCore</code> convention.
+</p>
+
+<p>
+<strong>Tests:</strong> fixed-step accounting + alpha, framerate-independence (one big frame
+== many small frames, bit-identical solver state), interpolation blending,
+nlerp unit-quaternion + exact endpoints, spiral-of-death cap, non-finite frameDt
+rejection, reset seeding, and end-to-end driver → coupling → scene node.
+</p>
+
+<h3 id="5-composite-rt-output-merge">5. Composite RT Output Merge</h3>
+
+<p>
+Closes the loop on the RT stub: the ray-traced output is now merged into the lit
+composite color before present, instead of being dispatched and discarded.
+</p>
+
+<p>
+<strong>Files Modified:</strong>
+</p>
+<ul>
+<li><a href="src/kernel/include/nexus/render/Renderer.h">src/kernel/include/nexus/render/Renderer.h</a></li>
+<li><code>setRayTracingMergePipeline()</code> setter; <code>FrameStats::rayMergeDispatches</code> counter.</li>
+<li><a href="src/kernel/src/render/Renderer.cpp">src/kernel/src/render/Renderer.cpp</a></li>
+<li>After <code>traceRays</code>, when a merge pipeline is bound, transition the color target</li>
+</ul>
+<p>
+    <code>ColorAttachment → General</code>, dispatch a compute merge over the image in 8×8 tiles,
+    then transition <code>→ Present</code>. Recorded in the render graph and frame capture.
+</p>
+<ul>
+<li><a href="src/kernel/include/nexus/render/RenderGraphValidator.h">src/kernel/include/nexus/render/RenderGraphValidator.h</a></li>
+<li><a href="src/kernel/src/render/RenderGraphValidator.cpp">.cpp</a> — new <code>RenderPassType::RayTracingMerge</code>.</li>
+</ul>
+
+<p>
+<strong>Why a compute dispatch, not a second render pass:</strong> re-opening a render pass on the
+color target would clear it (load-op is clear in the backend), wiping the composite.
+A compute post-pass blends RT output into the color storage image without a render pass —
+also the standard shape for RT reflection/denoise compositing. Gated on the RT pass
+running <strong>and</strong> a merge pipeline being set; fully deterministic and Null-backend testable.
+</p>
+
+<p>
+<strong>Tests:</strong> <code>RendererBehavior.RayTracingMergeRunsComputePassAfterTraceRays</code> (dispatch fires
+after <code>traceRays</code>, correct 8×8 tile counts, <code>rayMergeDispatches == 1</code>); the existing RT
+stub test now also asserts no merge when no merge pipeline is bound.
+</p>
+
+<h3 id="6-build-and-manifest-updates">6. Build and Manifest Updates</h3>
+
+<ul>
+<li><a href="src/kernel/CMakeLists.txt">src/kernel/CMakeLists.txt</a></li>
+<li>Added <code>src/sim/SimulationCoupling.cpp</code> to <code>nexus_gfx_core</code>.</li>
+</ul>
+
+<ul>
+<li><a href="tests/CMakeLists.txt">tests/CMakeLists.txt</a></li>
+<li>Registered <code>kernel/test_SimulationCoupling.cpp</code> in test suite.</li>
+</ul>
+
+<ul>
+<li><a href="tests/kernel/fixtures/api_surface_manifest_alpha_v1.txt">tests/kernel/fixtures/api_surface_manifest_alpha_v1.txt</a></li>
+<li>Added <code>src/kernel/include/nexus/sim/SimulationCoupling.h</code> to public API manifest.</li>
+</ul>
+
+<h2 id="design-rationale">Design Rationale</h2>
+
+<h3 id="rt-stub-path">RT Stub Path</h3>
+<ul>
+<li><strong>Deterministic:</strong> Null backend no-op preserves reproducibility for CI.</li>
+<li><strong>Extensible:</strong> Frame capture records pass metadata for debugging; Vulkan will plug <code>traceRays()</code> when ready.</li>
+<li><strong>Non-Regressive:</strong> Preserved GBuffer/composite layout transitions; RT runs post-composite.</li>
+</ul>
+
+<h3 id="simulation-coupling">Simulation Coupling</h3>
+<ul>
+<li><strong>Minimal Scope:</strong> Body position only (no rotation, scale, or complex constraints initially).</li>
+<li><strong>Binding Model:</strong> Explicit <code>SimulationSceneBinding</code> prevents accidental updates to unmanaged nodes.</li>
+<li><strong>Deterministic:</strong> Snapshot-based state application mirrors existing solver contract.</li>
+<li><strong>Composable:</strong> Allows independent solver stepping and render scene updates.</li>
+</ul>
+
+<h2 id="verification-status">Verification Status</h2>
+
+<h3 id="rt-renderer">RT Renderer</h3>
+<ul>
+<li>[x] Public API additions compile.</li>
+<li>[x] Frame capture logic integrated without breaking existing paths.</li>
+<li>[x] Null backend remains functional.</li>
+<li>[x] RenderGraphValidator handles new pass type.</li>
+<li>[x] RT pass appears in render graph reports and frame capture exports.</li>
+</ul>
+
+<h3 id="simulation-coupling">Simulation Coupling</h3>
+<ul>
+<li>[x] Public header added to manifest.</li>
+<li>[x] CMake integration complete.</li>
+<li>[x] Unit tests defined (pending full build success).</li>
+<li>[x] API contract follows existing solver snapshot semantics.</li>
+</ul>
+
+<h2 id="next-steps-post-alpha">Next Steps (Post-Alpha)</h2>
+
+<ol>
+<li><strong>RT Vulkan Integration:</strong> shader binding table construction + dispatch wiring</li>
+</ol>
+<p>
+   <strong>landed</strong> (pipeline → SBT → bind → <code>vkCmdTraceRaysKHR</code>); SBT alignment math is
+   unit-tested and the wiring is compile-verified. **Runtime verification still pending
+   on RT-capable hardware** (tier 2). See
+   <a href="feature/vulkan-rt-dispatch.md">docs/feature/vulkan-rt-dispatch.md</a>.
+</p>
+<ol>
+<li>~~<strong>Solver Output Streaming:</strong> Pipeline solver snapshot updates through coupling per-frame.~~</li>
+</ol>
+<p>
+   <strong>Delivered</strong> (§4): <code>SimulationDriver</code> — fixed-timestep accumulator with render interpolation.
+</p>
+<ol>
+<li>~~<strong>Rotation/Scale Coupling:</strong> Extend to full transform state if simulation provides orientation.~~</li>
+</ol>
+<p>
+   <strong>Delivered</strong> (rotation): the solver now integrates orientation and the coupling
+   applies it. Scale remains out of scope (not modeled by the solver).
+</p>
+<ol>
+<li>~~<strong>Composite RT Output:</strong> Merge ray traced results into final composite.~~</li>
+</ol>
+<p>
+   <strong>Delivered</strong> (§5): compute merge post-pass blends RT output into the composite color.
+</p>
+<ol>
+<li>~~<strong>Angular Damping / Inertia Tensor</strong>~~ <strong>Delivered:</strong></li>
+<li>Damping: <code>SimBodyDesc::linearDamping</code> / <code>angularDamping</code> (per-second decay,</li>
+</ol>
+<p>
+     factor <code>clamp(1 - damping·dt, 0, 1)</code> per step and per <code>stepFixed</code> substep;
+     default 0 preserves prior trajectories; hardened against negative/non-finite).
+</p>
+<ul>
+<li>Inertia tensor: <code>SimBodyDesc::inertia</code> is now a <code>SimVec3</code> of body-space</li>
+</ul>
+<p>
+     principal moments. Rotation integrates via the **angular-momentum
+     formulation** (derive <code>L = I_world·ω</code>, advance orientation, recover ω from the
+     conserved <code>L</code> through the rotated tensor) — stable, momentum-conserving, and it
+     reproduces precession/tumbling for anisotropic bodies without the stiff explicit
+     gyroscopic term. Reduces exactly to the scalar model when the moments are equal;
+     the v2 snapshot format is unchanged (ω remains the angular state). See
+     <a href="feature/stabilized-inertia-tensor-design.md">docs/feature/stabilized-inertia-tensor-design.md</a>.
+</p>
+<ul>
+<li>Optional future refinement: Bullet-style implicit gyroscopic correction for</li>
+</ul>
+<p>
+     extreme inertia ratios at large <code>dt</code> (the momentum form already prevents blow-up).
+</p>
+
+<h2 id="references">References</h2>
+
+<ul>
+<li><a href="../docs/design-rt-pipeline-month-13.md">Design RT Pipeline (Month 13)</a> — Extended RT implementation plan.</li>
+<li><a href="src/kernel/include/nexus/sim/SimulationCore.h">Simulation Core API</a> — Solver snapshot contract.</li>
+<li><a href="src/kernel/include/nexus/render/SceneGraph.h">Scene Graph API</a> — Node update interface.</li>
+</ul>
+
+        </main>
+    </div>
+    
+    <script>
+// Theme management
+const THEME_KEY = 'nexus-docs-theme';
+const themeToggle = document.getElementById('theme-toggle');
+const sunIcon = themeToggle.querySelector('.theme-icon-sun');
+const moonIcon = themeToggle.querySelector('.theme-icon-moon');
+
+function applyTheme(theme) {
+    document.documentElement.setAttribute('data-theme', theme);
+    if (theme === 'light') {
+        sunIcon.style.display = 'block';
+        moonIcon.style.display = 'none';
+    } else {
+        sunIcon.style.display = 'none';
+        moonIcon.style.display = 'block';
+    }
+    localStorage.setItem(THEME_KEY, theme);
+}
+
+function getPreferredTheme() {
+    const stored = localStorage.getItem(THEME_KEY);
+    if (stored) return stored;
+    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+}
+
+function initTheme() {
+    const theme = getPreferredTheme();
+    applyTheme(theme);
+}
+
+function toggleTheme() {
+    const current = document.documentElement.getAttribute('data-theme') || 'dark';
+    applyTheme(current === 'dark' ? 'light' : 'dark');
+}
+
+themeToggle.addEventListener('click', toggleTheme);
+
+// Keyboard shortcut: Ctrl+Shift+L
+document.addEventListener('keydown', (e) => {
+    if (e.ctrlKey && e.shiftKey && e.key === 'L') {
+        e.preventDefault();
+        toggleTheme();
+    }
+});
+
+// Listen for system theme changes
+window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => {
+    if (!localStorage.getItem(THEME_KEY)) {
+        applyTheme(e.matches ? 'dark' : 'light');
+    }
+});
+
+// Initialize theme immediately to prevent flash
+initTheme();
+
+// Mobile sidebar toggle
+const sidebar = document.getElementById('sidebar');
+const mobileMenuBtn = document.getElementById('mobile-menu-btn');
+
+if (mobileMenuBtn) {
+    mobileMenuBtn.addEventListener('click', () => {
+        sidebar.classList.toggle('open');
+    });
+}
+
+document.addEventListener('click', (e) => {
+    if (window.innerWidth <= 768) {
+        if (!sidebar.contains(e.target) && !e.target.closest('.header')) {
+            sidebar.classList.remove('open');
+        }
+    }
+});
+
+// Smooth scroll for anchor links
+document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+    anchor.addEventListener('click', function(e) {
+        const target = document.querySelector(this.getAttribute('href'));
+        if (target) {
+            e.preventDefault();
+            target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            if (window.innerWidth <= 768) {
+                sidebar.classList.remove('open');
+            }
+        }
+    });
+});
+
+// Active link highlighting based on scroll position
+const sections = document.querySelectorAll('.content h2, .content h3');
+const sidebarLinks = document.querySelectorAll('.sidebar-link[href^="#"]');
+
+function updateActiveLink() {
+    let current = '';
+    sections.forEach(section => {
+        const rect = section.getBoundingClientRect();
+        if (rect.top <= 100) {
+            current = '#' + section.id;
+        }
+    });
+
+    sidebarLinks.forEach(link => {
+        link.classList.remove('active');
+        if (link.getAttribute('href') === current) {
+            link.classList.add('active');
+        }
+    });
+}
+
+window.addEventListener('scroll', updateActiveLink, { passive: true });
+window.addEventListener('load', updateActiveLink);
+
+// Highlight.js initialization
+if (typeof hljs !== 'undefined') {
+    hljs.highlightAll();
+}
+
+// Mobile menu button visibility
+const mobileMenuBtn = document.getElementById('mobile-menu-btn');
+function checkMobile() {
+    if (window.innerWidth <= 768) {
+        mobileMenuBtn.style.display = 'flex';
+    } else {
+        mobileMenuBtn.style.display = 'none';
+        document.getElementById('sidebar').classList.remove('open');
+    }
+}
+checkMobile();
+window.addEventListener('resize', checkMobile);
+
+mobileMenuBtn.addEventListener('click', () => {
+    document.getElementById('sidebar').classList.toggle('open');
+});
+</script>

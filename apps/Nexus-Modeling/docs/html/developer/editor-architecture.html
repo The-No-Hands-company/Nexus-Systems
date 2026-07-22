@@ -1,0 +1,1056 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nexus Modeling — Editor Architecture — Nexus Modeling Docs</title>
+    <link rel="stylesheet" href="../styles.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
+</head>
+<body>
+    <nav class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+            <div class="sidebar-title">Nexus Modeling</div>
+            <div class="sidebar-subtitle">Documentation v0.1.0-dev</div>
+        </div>
+        <div class="sidebar-section">
+<div class="sidebar-section-title">📚 Developer Documentation</div>
+<a class="sidebar-link" href="../architecture.html">Architecture Overview</a>
+<a class="sidebar-link" href="../kernel-api.html">Kernel API Reference</a>
+<a class="sidebar-link" href="../geometry-kernel.html">Geometry Kernel</a>
+<a class="sidebar-link" href="../renderer.html">Render System</a>
+<a class="sidebar-link" href="../editor-architecture.html">Editor Architecture</a>
+<a class="sidebar-link" href="../build-system.html">Build System</a>
+<a class="sidebar-link" href="../testing.html">Testing</a>
+<a class="sidebar-link" href="../contributing.html">Contributing</a>
+<a class="sidebar-link" href="../adding-geometry-op.html">Adding Geometry Op</a>
+<a class="sidebar-link" href="../adding-cad-feature.html">Adding CAD Feature</a>
+<a class="sidebar-link" href="../mesh-operations.html">Mesh Operations</a>
+<a class="sidebar-link" href="../boolean-csg.html">Boolean/CSG Deep Dive</a>
+<a class="sidebar-link" href="../halfedge-mesh.html">Half-edge Mesh</a>
+<a class="sidebar-link" href="../analytic-brep.html">Analytic B-rep</a>
+<a class="sidebar-link" href="../mesh-io.html">Mesh I/O</a>
+<a class="sidebar-link" href="../tolerance.html">Tolerance System</a>
+<a class="sidebar-link" href="../porting.html">Porting Guide</a>
+</div>
+<div class="sidebar-section">
+<div class="sidebar-section-title">🎨 Expert User Documentation</div>
+</div>
+<div class="sidebar-section">
+<div class="sidebar-section-title">👤 Beginner / User Documentation</div>
+<a class="sidebar-link" href="../getting-started.html">Getting Started</a>
+</div>
+<div class="sidebar-section">
+<div class="sidebar-section-title">🔧 API Reference</div>
+</div>
+<div class="sidebar-section">
+<div class="sidebar-section-title">📚 Additional Resources</div>
+<a class="sidebar-link" href="../design-decisions.html">Design Decisions</a>
+<a class="sidebar-link" href="../testing-strategy.html">Testing Strategy</a>
+<a class="sidebar-link" href="../graphics-kernel.html">Graphics Kernel</a>
+<a class="sidebar-link" href="../vision-and-roadmap.html">Vision & Roadmap</a>
+<a class="sidebar-link" href="../reference-roadmap.html">Reference Roadmap</a>
+<a class="sidebar-link" href="../modeling-industry-parity.html">Modeling Industry Parity</a>
+<a class="sidebar-link" href="../modeling-parity-index.html">Modeling Parity Index</a>
+<a class="sidebar-link" href="../modeling-reference-roadmap.html">Modeling Reference Roadmap</a>
+</div>
+    </nav>
+    
+    <div class="main-content">
+        <header class="header">
+            <button class="btn btn-icon" id="mobile-menu-btn" aria-label="Toggle menu" style="display: none;">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="3" y1="12" x2="21" y2="12"></line>
+                    <line x1="3" y1="6" x2="21" y2="6"></line>
+                    <line x1="3" y1="18" x2="21" y2="18"></line>
+                </svg>
+            </button>
+            <div class="header-title">Nexus Modeling — Editor Architecture</div>
+            <div class="header-actions">
+                
+<button class="btn btn-icon" id="theme-toggle" aria-label="Toggle dark/light theme" title="Toggle theme (Ctrl+Shift+L)">
+    <svg class="theme-icon-sun" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display: none;">
+        <circle cx="12" cy="12" r="5"></circle>
+        <line x1="12" y1="1" x2="12" y2="3"></line>
+        <line x1="12" y1="21" x2="12" y2="23"></line>
+        <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+        <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+        <line x1="1" y1="12" x2="3" y2="12"></line>
+        <line x1="21" y1="12" x2="23" y2="12"></line>
+        <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+        <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+    </svg>
+    <svg class="theme-icon-moon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display: none;">
+        <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+    </svg>
+</button>
+
+                <a href="https://github.com/nexus-systems/nexus-modeling" class="btn btn-secondary" target="_blank" rel="noopener">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M12 0C5.374 0 0 5.373 0 12c0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23A11.509 11.509 0 0112 5.803c1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576C20.566 21.797 24 17.3 24 12c0-6.627-5.373-12-12-12z"/>
+                    </svg>
+                    <span class="btn-text">GitHub</span>
+                </a>
+                <a href="../index.html" class="btn btn-primary">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
+                        <polyline points="9 22 9 12 15 12 15 22"></polyline>
+                    </svg>
+                    <span class="btn-text">Home</span>
+                </a>
+            </div>
+        </header>
+        
+        <main class="content">
+            <div class="toc"><h3>On This Page</h3><ul><li><a href="#nexus-modeling-editor-architecture">Nexus Modeling — Editor Architecture</a></li>
+  <li><a href="#overview">Overview</a></li>
+  <li><a href="#application-framework">Application Framework</a></li>
+    <li><a href="#main-entry-point">Main Entry Point</a></li>
+    <li><a href="#appcontext-dependency-injection">AppContext (Dependency Injection)</a></li>
+  <li><a href="#mode-system-state-pattern">Mode System (State Pattern)</a></li>
+    <li><a href="#appmode-base-class">AppMode Base Class</a></li>
+    <li><a href="#modeorchestrator">ModeOrchestrator</a></li>
+    <li><a href="#moderegistry">ModeRegistry</a></li>
+    <li><a href="#built-in-modes">Built-in Modes</a></li>
+  <li><a href="#editorui-imgui-vulkan">EditorUI (ImGui + Vulkan)</a></li>
+    <li><a href="#initialization">Initialization</a></li>
+    <li><a href="#main-layout">Main Layout</a></li>
+    <li><a href="#vertical-toolbar-with-groups">Vertical Toolbar with Groups</a></li>
+    <li><a href="#hover-pre-highlight-pale-cyan-outline">Hover Pre-Highlight (Pale Cyan Outline)</a></li>
+    <li><a href="#inspector-panel">Inspector Panel</a></li>
+  <li><a href="#viewportcontroller">ViewportController</a></li>
+    <li><a href="#camera">Camera</a></li>
+    <li><a href="#viewportcontroller">ViewportController</a></li>
+  <li><a href="#transformgizmo">TransformGizmo</a></li>
+  <li><a href="#selectionmanager">SelectionManager</a></li>
+  <li><a href="#commanddispatcher">CommandDispatcher</a></li>
+    <li><a href="#default-key-bindings">Default Key Bindings</a></li>
+  <li><a href="#workspacemanager">WorkspaceManager</a></li>
+  <li><a href="#assetbrowser">AssetBrowser</a></li>
+  <li><a href="#integration-with-kernel">Integration with Kernel</a></li>
+    <li><a href="#cadviewer-visual-representation">CadViewer (Visual Representation)</a></li>
+</ul></div>
+            <h1 id="nexus-modeling-editor-architecture">Nexus Modeling — Editor Architecture</h1>
+
+<p>
+<em>Deep dive into the application framework, UI system, and editor integration.</em>
+</p>
+
+<hr>
+
+<h2 id="overview">Overview</h2>
+
+<p>
+The editor (<code>nexus::app</code>) is built on <strong>ImGui + Vulkan</strong> with a <strong>mode-based state architecture</strong>. It follows the kernel-first principle: all editor operations consume kernel APIs, never the reverse.
+</p>
+
+<hr>
+
+<h2 id="application-framework">Application Framework</h2>
+
+<h3 id="main-entry-point">Main Entry Point</h3>
+
+<pre><code class="language-cpp">// app/main.cpp
+<p>
+int main(int argc, char** argv) {
+    // 1. Parse args (--shot for headless render)
+    // 2. Initialize GLFW window
+    // 3. Create AppContext (DI container)
+    // 4. Initialize Vulkan/Null backend
+    // 5. Create ModelingApplication
+    // 6. Run event loop
+    // 7. Cleanup
+}</code></pre>
+</p>
+
+<h3 id="appcontext-dependency-injection">AppContext (Dependency Injection)</h3>
+
+<pre><code class="language-cpp">struct AppContext {
+<p>
+    // Core services
+    std::unique_ptr<VulkanContext> vulkan;
+    std::unique_ptr<RenderContext> renderContext;
+    std::unique_ptr<Renderer> renderer;
+</p>
+    
+<p>
+    // Application state
+    std::unique_ptr<CadDocument> document;
+    std::unique_ptr<CadViewer> viewer;
+    std::unique_ptr<ViewportController> viewport;
+    std::unique_ptr<ModeOrchestrator> orchestrator;
+    std::unique_ptr<EditorUI> editorUI;
+    std::unique_ptr<TransformGizmo> gizmo;
+    std::unique_ptr<SelectionManager> selection;
+    std::unique_ptr<CommandDispatcher> commands;
+    std::unique_ptr<WorkspaceManager> workspace;
+    std::unique_ptr<AssetBrowser> assetBrowser;
+</p>
+    
+<p>
+    // Input
+    InputState input;
+    bool headless = false;
+    std::string shotPath;
+};</code></pre>
+</p>
+
+<hr>
+
+<h2 id="mode-system-state-pattern">Mode System (State Pattern)</h2>
+
+<h3 id="appmode-base-class">AppMode Base Class</h3>
+
+<pre><code class="language-cpp">class AppMode {
+<p>
+public:
+    virtual ~AppMode() = default;
+    virtual void onEnter(AppContext&) {}
+    virtual void onExit(AppContext&) {}
+    virtual void onUpdate(AppContext&, float dt) {}
+    virtual void onRender(AppContext&, RenderContext&) {}
+    virtual void onInput(AppContext&, const InputEvent&) {}
+    virtual void onImGui(AppContext&) {}
+    virtual std::string name() const = 0;
+    virtual std::string group() const { return "Modes"; }
+    virtual bool isModal() const { return false; }
+};</code></pre>
+</p>
+
+<h3 id="modeorchestrator">ModeOrchestrator</h3>
+
+<pre><code class="language-cpp">class ModeOrchestrator {
+<p>
+    std::unique_ptr<AppMode> currentMode;
+    std::unordered_map<std::string, std::function<std::unique_ptr<AppMode>()>> modeFactories;
+</p>
+    
+<p>
+    void switchTo(AppContext& ctx, const std::string& modeName) {
+        if (currentMode) currentMode->onExit(ctx);
+        currentMode = modeFactories[modeName]();
+        currentMode->onEnter(ctx);
+    }
+</p>
+    
+<p>
+    void update(AppContext& ctx, float dt) {
+        if (currentMode) currentMode->onUpdate(ctx, dt);
+    }
+</p>
+    
+<p>
+    // ... render, input, imgui forwarding
+};</code></pre>
+</p>
+
+<h3 id="moderegistry">ModeRegistry</h3>
+
+<pre><code class="language-cpp">class ModeRegistry {
+<p>
+    struct ModeDesc {
+        std::string id;
+        std::string displayName;
+        std::string group;      // "Modes", "Transform", "Primitives", "Viewport"
+        std::string icon;       // ImGui font icon
+        std::function<std::unique_ptr<AppMode>()> factory;
+        std::vector<std::string> dependencies;  // Required modes
+    };
+</p>
+    
+<p>
+    void registerMode(const ModeDesc& desc);
+    std::vector<ModeDesc> getModesByGroup(const std::string& group);
+    std::optional<ModeDesc> findMode(const std::string& id);
+};</code></pre>
+</p>
+
+<h3 id="built-in-modes">Built-in Modes</h3>
+
+<p>
+| Mode ID | Display Name | Group | Description |
+|---------|-------------|-------|-------------|
+| <code>select</code> | Select | Modes | Object/face/edge/vertex selection |
+| <code>sketch</code> | Sketch | Modes | 2D constraint sketching |
+| <code>extrude</code> | Extrude | Modes | Extrude sketch/profile |
+| <code>revolve</code> | Revolve | Modes | Revolve sketch/profile |
+| <code>fillet</code> | Fillet | Modes | Edge fillet |
+| <code>chamfer</code> | Chamfer | Modes | Edge chamfer |
+| <code>boolean</code> | Boolean | Modes | Union/difference/intersect |
+| <code>translate</code> | Translate | Transform | Move gizmo |
+| <code>rotate</code> | Rotate | Transform | Rotate gizmo |
+| <code>scale</code> | Scale | Transform | Scale gizmo |
+| <code>box</code> | Box | Primitives | Create box |
+| <code>cylinder</code> | Cylinder | Primitives | Create cylinder |
+| <code>sphere</code> | Sphere | Primitives | Create sphere |
+| <code>cone</code> | Cone | Primitives | Create cone |
+| <code>torus</code> | Torus | Primitives | Create torus |
+</p>
+
+<hr>
+
+<h2 id="editorui-imgui-vulkan">EditorUI (ImGui + Vulkan)</h2>
+
+<h3 id="initialization">Initialization</h3>
+
+<pre><code class="language-cpp">class EditorUI {
+<p>
+    ImGuiContext* imguiCtx = nullptr;
+    VkPipeline pipeline;
+    VkPipelineLayout pipelineLayout;
+    VkDescriptorPool descriptorPool;
+</p>
+    
+<p>
+    bool initializeVulkan(VkDevice device, VkPhysicalDevice physDevice,
+                          VkRenderPass renderPass, uint32_t subpass,
+                          VkDescriptorPool pool) {
+        // 1. Create ImGui context
+        // 2. Setup ImGui Vulkan backend
+        // 3. Create font atlas
+        // 4. Create pipeline for ImGui draw data
+        // 5. Upload font texture
+    }
+</p>
+    
+<p>
+    void shutdownVulkan() {
+        // Destroy pipeline, descriptor pool, font texture
+        // ImGui::DestroyContext()
+    }
+</p>
+    
+<p>
+    void newFrame() {
+        ImGui_ImplVulkan_NewFrame();
+        ImGui_ImplGlfw_NewFrame();
+        ImGui::NewFrame();
+        ImGui::DockSpaceOverViewport();
+    }
+</p>
+    
+<p>
+    void render(CommandBuffer& cmd) {
+        ImGui::Render();
+        ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), cmd);
+    }
+};</code></pre>
+</p>
+
+<h3 id="main-layout">Main Layout</h3>
+
+<pre><code class="language-cpp">void EditorUI::renderMainLayout(AppContext& ctx) {
+<p>
+    // Dockspace
+    ImGui::DockSpaceOverViewport(ImGui::GetMainViewport());
+</p>
+    
+<p>
+    // Menu bar
+    renderMenuBar(ctx);
+</p>
+    
+<p>
+    // Toolbar (vertical, left)
+    renderToolbar(ctx);
+</p>
+    
+<p>
+    // Viewport (center)
+    renderViewport(ctx);
+</p>
+    
+<p>
+    // Panels (right/bottom)
+    renderOutliner(ctx);
+    renderInspector(ctx);
+    renderAssetBrowser(ctx);
+    renderConsole(ctx);
+}</code></pre>
+</p>
+
+<h3 id="vertical-toolbar-with-groups">Vertical Toolbar with Groups</h3>
+
+<pre><code class="language-cpp">void EditorUI::renderToolbar(AppContext& ctx) {
+<p>
+    ImGui::Begin("##Toolbar", nullptr, 
+        ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | 
+        ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoScrollbar);
+</p>
+    
+<p>
+    ImGui::SetWindowPos(ImVec2(0, 0));
+    ImGui::SetWindowSize(ImVec2(52, 0));
+</p>
+    
+<p>
+    // Group: Modes
+    renderToolGroup(ctx, "Modes", {
+        {"select", ICON_FA_MOUSE_POINTER},
+        {"sketch", ICON_FA_PENCIL_ALT},
+        {"extrude", ICON_FA_ARROW_UP},
+        {"revolve", ICON_FA_SYNC_ALT},
+        {"fillet", ICON_FA_CIRCLE},
+        {"chamfer", ICON_FA_CUT},
+        {"boolean", ICON_FA_CUBES},
+    });
+</p>
+    
+<p>
+    ImGui::Separator();
+</p>
+    
+<p>
+    // Group: Transform
+    renderToolGroup(ctx, "Transform", {
+        {"translate", ICON_FA_ARROWS_ALT},
+        {"rotate", ICON_FA_UNDO},
+        {"scale", ICON_FA_EXPAND_ARROWS_ALT},
+    });
+</p>
+    
+<p>
+    ImGui::Separator();
+</p>
+    
+<p>
+    // Group: Primitives
+    renderToolGroup(ctx, "Primitives", {
+        {"box", ICON_FA_CUBE},
+        {"cylinder", ICON_FA_CIRCLE},
+        {"sphere", ICON_FA_GLOBE},
+        {"cone", ICON_FA_CONE},
+        {"torus", ICON_FA_DONUT},
+    });
+</p>
+    
+<p>
+    ImGui::Separator();
+</p>
+    
+<p>
+    // Group: Viewport
+    renderToolGroup(ctx, "Viewport", {
+        {"wireframe", ICON_FA_BORDER_NONE},
+        {"shaded", ICON_FA_SQUARE},
+        {"grid", ICON_FA_TH},
+        {"axes", ICON_FA_ARROWS_ALT_H},
+    });
+</p>
+    
+<p>
+    ImGui::End();
+}
+</p>
+
+<p>
+void EditorUI::renderToolGroup(AppContext& ctx, const char* groupName, 
+                                const std::vector<std::pair<std::string, std::string>>& tools) {
+    ImGui::TextUnformatted(groupName);
+    for (auto& [modeId, icon] : tools) {
+        bool active = ctx.orchestrator->currentMode() == modeId;
+        if (ImGui::ToolbarButton(icon.c_str(), active)) {
+            ctx.orchestrator->switchTo(ctx, modeId);
+        }
+        // Hover pre-highlight
+        if (ImGui::IsItemHovered()) {
+            // Show tooltip with mode description
+        }
+    }
+}</code></pre>
+</p>
+
+<h3 id="hover-pre-highlight-pale-cyan-outline">Hover Pre-Highlight (Pale Cyan Outline)</h3>
+
+<pre><code class="language-cpp">void EditorUI::renderViewport(AppContext& ctx) {
+<p>
+    ImGui::Begin("Viewport");
+</p>
+    
+<p>
+    // Get viewport size
+    ImVec2 size = ImGui::GetContentRegionAvail();
+    ctx.viewport->resize(size.x, size.y);
+</p>
+    
+<p>
+    // Render scene to texture
+    TextureHandle sceneTexture = ctx.renderer->renderScene(
+        <em>ctx.viewport, </em>ctx.viewer, *ctx.document);
+</p>
+    
+<p>
+    // Display with ImGui
+    ImGui::Image((ImTextureID)sceneTexture, size);
+</p>
+    
+<p>
+    // Hover pre-highlight
+    if (ImGui::IsWindowHovered() && !ImGui::IsAnyItemActive()) {
+        ImVec2 mousePos = ImGui::GetMousePos();
+        ImVec2 windowPos = ImGui::GetWindowPos();
+        Vec2 localPos = {mousePos.x - windowPos.x, mousePos.y - windowPos.y};
+</p>
+        
+<p>
+        // Raycast from viewport camera
+        auto pick = ctx.viewport->pick(localPos.x, localPos.y, size.x, size.y);
+        if (pick.has_value()) {
+            // Draw pale cyan outline
+            drawHoverHighlight(ctx, pick.value());
+        }
+    }
+</p>
+    
+<p>
+    ImGui::End();
+}
+</p>
+
+<p>
+void EditorUI::drawHoverHighlight(AppContext& ctx, FeatureId featureId) {
+    // Get mesh for feature
+    // Render to stencil buffer
+    // Draw scaled outline in pale cyan
+    // Stencil test: only where stencil == 0 (not the object itself)
+}</code></pre>
+</p>
+
+<h3 id="inspector-panel">Inspector Panel</h3>
+
+<pre><code class="language-cpp">void EditorUI::renderInspector(AppContext& ctx) {
+<p>
+    ImGui::Begin("Inspector");
+</p>
+    
+<p>
+    if (ctx.selection->hasSelection()) {
+        FeatureId fid = ctx.selection->primary();
+        if (auto* node = ctx.document->history().node(fid)) {
+            renderFeatureInspector(ctx, *node);
+        }
+    }
+</p>
+    
+<p>
+    ImGui::End();
+}
+</p>
+
+<p>
+void EditorUI::renderFeatureInspector(AppContext& ctx, CadFeatureNode& node) {
+    ImGui::Text("%s", node.feature->name.c_str());
+    ImGui::Separator();
+</p>
+    
+<p>
+    // Common properties
+    ImGui::Checkbox("Visible", &node.visible);
+    ImGui::Checkbox("Locked", &node.locked);
+    ImGui::DragFloat3("Position", &node.transform.translation.x);
+    ImGui::DragFloat4("Rotation", &node.transform.rotation.x, 0.01f);
+    ImGui::DragFloat3("Scale", &node.transform.scale.x, 0.01f);
+</p>
+    
+<p>
+    // Feature-specific properties
+    if (auto* extrude = dynamic_cast<ExtrudeFeature*>(node.feature.get())) {
+        ImGui::DragFloat("Depth", &extrude->params.depth, 0.1f, 0.1f, 1000.0f);
+        ImGui::Checkbox("Symmetric", &extrude->params.symmetric);
+        ImGui::Combo("Direction", &extrude->params.direction, "Normal\0Reverse\0Both\0");
+        if (ImGui::Button("Regenerate")) {
+            auto cmd = std::make_unique<RegenerateCommand>(node.id);
+            ctx.commands->execute(std::move(cmd));
+        }
+    }
+    // ... other feature types
+}</code></pre>
+</p>
+
+<hr>
+
+<h2 id="viewportcontroller">ViewportController</h2>
+
+<h3 id="camera">Camera</h3>
+
+<pre><code class="language-cpp">struct Camera {
+<p>
+    enum class Type { Perspective, Orthographic };
+    Type type = Type::Perspective;
+    float fov = 60.0f;        // degrees
+    float nearPlane = 0.1f;
+    float farPlane = 10000.0f;
+    float orthoSize = 10.0f;
+</p>
+    
+<p>
+    Vec3 position = {0, 0, 10};
+    Vec3 target = {0, 0, 0};
+    Vec3 up = {0, 1, 0};
+</p>
+    
+<p>
+    Mat4 view() const;
+    Mat4 proj(float aspect) const;
+    Mat4 viewProj(float aspect) const;
+    Frustum frustum(float aspect) const;
+};</code></pre>
+</p>
+
+<h3 id="viewportcontroller">ViewportController</h3>
+
+<pre><code class="language-cpp">class ViewportController {
+<p>
+    Camera camera;
+    bool orbiting = false, panning = false, zooming = false;
+    Vec2 lastMousePos;
+</p>
+    
+<p>
+    void onInput(AppContext& ctx, const InputEvent& e) {
+        if (e.type == InputEvent::MouseButton) {
+            if (e.button == MouseButton::Middle) {
+                orbiting = e.pressed;
+            } else if (e.button == MouseButton::Right) {
+                panning = e.pressed;
+            } else if (e.button == MouseButton::Left && e.modifiers & KeyMod::Alt) {
+                orbiting = e.pressed;
+            }
+        } else if (e.type == InputEvent::MouseMove) {
+            Vec2 delta = e.position - lastMousePos;
+            if (orbiting) orbit(delta);
+            else if (panning) pan(delta);
+            lastMousePos = e.position;
+        } else if (e.type == InputEvent::Scroll) {
+            zoom(e.scroll.y);
+        }
+    }
+</p>
+    
+<p>
+    void orbit(const Vec2& delta) {
+        // Spherical coordinates around target
+    }
+</p>
+    
+<p>
+    void pan(const Vec2& delta) {
+        // Move target in view plane
+    }
+</p>
+    
+<p>
+    void zoom(float delta) {
+        // Dolly camera or adjust ortho size
+    }
+</p>
+    
+<p>
+    // Picking
+    std::optional<PickResult> pick(float x, float y, float width, float height) {
+        // 1. Coarse pick (BVH sphere test on features)
+        // 2. Fine pick (BVH ray-mesh test)
+        // Return {featureId, faceId, edgeId, vertexId, worldPos, normal}
+    }
+};</code></pre>
+</p>
+
+<hr>
+
+<h2 id="transformgizmo">TransformGizmo</h2>
+
+<pre><code class="language-cpp">class TransformGizmo {
+<p>
+    enum class Mode { Translate, Rotate, Scale };
+    Mode mode = Mode::Translate;
+    enum class Space { World, Local };
+    Space space = Space::World;
+</p>
+    
+<p>
+    bool active = false;
+    FeatureId targetFeature;
+    Vec3 startPosition;
+    Quat startRotation;
+    Vec3 startScale;
+    int activeAxis = -1;  // 0=X, 1=Y, 2=Z, 3=XY, 4=YZ, 5=ZX
+</p>
+    
+<p>
+    void render(const Camera& camera, const Vec3& targetPos, const Quat& targetRot) {
+        // Draw axes/handles
+        // Handle input
+        // Return delta transform
+    }
+</p>
+    
+<p>
+    std::optional<Transform> getDelta() const {
+        if (!active) return std::nullopt;
+        return Transform{deltaPos, deltaRot, deltaScale};
+    }
+};</code></pre>
+</p>
+
+<hr>
+
+<h2 id="selectionmanager">SelectionManager</h2>
+
+<pre><code class="language-cpp">class SelectionManager {
+<p>
+    std::unordered_set<FeatureId> selected;
+    FeatureId active = kInvalidFeatureId;  // Last selected
+</p>
+    
+<p>
+    void select(FeatureId id, bool additive = false) {
+        if (!additive) selected.clear();
+        selected.insert(id);
+        active = id;
+    }
+</p>
+    
+<p>
+    void deselect(FeatureId id) {
+        selected.erase(id);
+        if (active == id) active = selected.empty() ? kInvalidFeatureId : *selected.begin();
+    }
+</p>
+    
+<p>
+    void clear() { selected.clear(); active = kInvalidFeatureId; }
+</p>
+    
+<p>
+    bool hasSelection() const { return !selected.empty(); }
+    FeatureId primary() const { return active; }
+    const std::unordered_set<FeatureId>& all() const { return selected; }
+</p>
+    
+<p>
+    // Multi-level: object/face/edge/vertex
+    enum class Level { Object, Face, Edge, Vertex };
+    Level level = Level::Object;
+    std::unordered_set<uint32_t> subSelection;  // Face/edge/vertex indices
+};</code></pre>
+</p>
+
+<hr>
+
+<h2 id="commanddispatcher">CommandDispatcher</h2>
+
+<pre><code class="language-cpp">class CommandDispatcher {
+<p>
+    std::unordered_map<std::string, std::function<void(AppContext&)>> commands;
+</p>
+    
+<p>
+    void registerCommand(const std::string& name, std::function<void(AppContext&)> fn) {
+        commands[name] = std::move(fn);
+    }
+</p>
+    
+<p>
+    bool execute(const std::string& name, AppContext& ctx) {
+        auto it = commands.find(name);
+        if (it != commands.end()) {
+            it->second(ctx);
+            return true;
+        }
+        return false;
+    }
+</p>
+    
+<p>
+    // Input mapping
+    struct KeyBinding { std::string command; Key key; KeyMod mods; };
+    std::vector<KeyBinding> bindings;
+</p>
+    
+<p>
+    void onKey(AppContext& ctx, Key key, KeyMod mods, bool pressed) {
+        for (auto& b : bindings) {
+            if (b.key == key && b.mods == mods && pressed) {
+                execute(b.command, ctx);
+            }
+        }
+    }
+};</code></pre>
+</p>
+
+<h3 id="default-key-bindings">Default Key Bindings</h3>
+
+<p>
+| Key | Mod | Command |
+|-----|-----|---------|
+| <code>Escape</code> | - | <code>mode.select</code> |
+| <code>S</code> | - | <code>mode.sketch</code> |
+| <code>E</code> | - | <code>mode.extrude</code> |
+| <code>R</code> | - | <code>mode.revolve</code> |
+| <code>F</code> | - | <code>mode.fillet</code> |
+| <code>C</code> | - | <code>mode.chamfer</code> |
+| <code>B</code> | - | <code>mode.boolean</code> |
+| <code>G</code> | - | <code>gizmo.translate</code> |
+| <code>R</code> | - | <code>gizmo.rotate</code> |
+| <code>S</code> | Shift | <code>gizmo.scale</code> |
+| <code>1</code> | - | <code>primitive.box</code> |
+| <code>2</code> | - | <code>primitive.cylinder</code> |
+| <code>3</code> | - | <code>primitive.sphere</code> |
+| <code>4</code> | - | <code>primitive.cone</code> |
+| <code>5</code> | - | <code>primitive.torus</code> |
+| <code>W</code> | - | <code>viewport.wireframe</code> |
+| <code>Z</code> | - | <code>viewport.shaded</code> |
+| <code>Grid</code> | - | <code>viewport.grid</code> |
+| <code>A</code> | - | <code>viewport.axes</code> |
+</p>
+
+<hr>
+
+<h2 id="workspacemanager">WorkspaceManager</h2>
+
+<pre><code class="language-cpp">class WorkspaceManager {
+<p>
+    std::filesystem::path workspaceRoot;
+    std::string currentProject;
+</p>
+    
+<p>
+    bool createProject(const std::string& name);
+    bool openProject(const std::string& name);
+    bool saveProject();
+    bool closeProject();
+</p>
+    
+<p>
+    // Document management
+    std::unique_ptr<CadDocument> newDocument();
+    bool openDocument(const std::filesystem::path& path);
+    bool saveDocument(const CadDocument& doc, const std::filesystem::path& path);
+    bool saveDocumentAs(const CadDocument& doc);
+</p>
+    
+<p>
+    // Recent files
+    std::vector<std::string> recentProjects;
+    std::vector<std::string> recentDocuments;
+};</code></pre>
+</p>
+
+<hr>
+
+<h2 id="assetbrowser">AssetBrowser</h2>
+
+<pre><code class="language-cpp">class AssetBrowser {
+<p>
+    std::filesystem::path assetRoot;
+    std::vector<AssetEntry> entries;
+</p>
+    
+<p>
+    struct AssetEntry {
+        std::filesystem::path path;
+        AssetType type;  // Mesh, Texture, Material, Scene, Script
+        std::string preview;  // Thumbnail path
+        FileTime modified;
+    };
+</p>
+    
+<p>
+    void refresh();
+    void filter(AssetType type, const std::string& search);
+    void render(AppContext& ctx);
+</p>
+    
+<p>
+    // Drag-drop
+    bool beginDragDropSource(const AssetEntry& entry);
+    bool acceptDragDropPayload(const std::filesystem::path& path);
+};</code></pre>
+</p>
+
+<hr>
+
+<h2 id="integration-with-kernel">Integration with Kernel</h2>
+
+<h3 id="cadviewer-visual-representation">CadViewer (Visual Representation)</h3>
+
+<pre><code class="language-cpp">class CadViewer {
+<p>
+    CadDocument& document;
+    std::unordered_map<FeatureId, Mesh> featureMeshes;
+    std::unordered_map<FeatureId, BVH> featureBVHs;
+</p>
+    
+<p>
+    void regenerate(FeatureId fid) {
+        auto* node = document.history().node(fid);
+        if (node && node->feature) {
+            node->feature->regenerate(document);
+            if (node->mesh) {
+                featureMeshes[fid] = *node->mesh;
+                featureBVHs[fid] = BVH::build(*node->mesh);
+            }
+        }
+    }
+</p>
+    
+<p>
+    void render(RenderContext& ctx, const Viewport& viewport) {
+        for (auto& [fid, mesh] : featureMeshes) {
+            auto* node = document.history().node(fid);
+            if (!node || node->deleted || node->hidden) continue;
+</p>
+            
+<p>
+            // Draw mesh with material
+            ctx.renderer->drawMesh(mesh, node->transform, node->material);
+        }
+    }
+};</code></pre>
+</p>
+
+<hr>
+
+<p>
+<em>Kernel v0.1.0-dev | 2026 tests passing | C++26 | Vulkan 1.3</em>
+</p>
+        </main>
+    </div>
+    
+    <script>
+// Theme management
+const THEME_KEY = 'nexus-docs-theme';
+const themeToggle = document.getElementById('theme-toggle');
+const sunIcon = themeToggle.querySelector('.theme-icon-sun');
+const moonIcon = themeToggle.querySelector('.theme-icon-moon');
+
+function applyTheme(theme) {
+    document.documentElement.setAttribute('data-theme', theme);
+    if (theme === 'light') {
+        sunIcon.style.display = 'block';
+        moonIcon.style.display = 'none';
+    } else {
+        sunIcon.style.display = 'none';
+        moonIcon.style.display = 'block';
+    }
+    localStorage.setItem(THEME_KEY, theme);
+}
+
+function getPreferredTheme() {
+    const stored = localStorage.getItem(THEME_KEY);
+    if (stored) return stored;
+    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+}
+
+function initTheme() {
+    const theme = getPreferredTheme();
+    applyTheme(theme);
+}
+
+function toggleTheme() {
+    const current = document.documentElement.getAttribute('data-theme') || 'dark';
+    applyTheme(current === 'dark' ? 'light' : 'dark');
+}
+
+themeToggle.addEventListener('click', toggleTheme);
+
+// Keyboard shortcut: Ctrl+Shift+L
+document.addEventListener('keydown', (e) => {
+    if (e.ctrlKey && e.shiftKey && e.key === 'L') {
+        e.preventDefault();
+        toggleTheme();
+    }
+});
+
+// Listen for system theme changes
+window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => {
+    if (!localStorage.getItem(THEME_KEY)) {
+        applyTheme(e.matches ? 'dark' : 'light');
+    }
+});
+
+// Initialize theme immediately to prevent flash
+initTheme();
+
+// Mobile sidebar toggle
+const sidebar = document.getElementById('sidebar');
+const mobileMenuBtn = document.getElementById('mobile-menu-btn');
+
+if (mobileMenuBtn) {
+    mobileMenuBtn.addEventListener('click', () => {
+        sidebar.classList.toggle('open');
+    });
+}
+
+document.addEventListener('click', (e) => {
+    if (window.innerWidth <= 768) {
+        if (!sidebar.contains(e.target) && !e.target.closest('.header')) {
+            sidebar.classList.remove('open');
+        }
+    }
+});
+
+// Smooth scroll for anchor links
+document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+    anchor.addEventListener('click', function(e) {
+        const target = document.querySelector(this.getAttribute('href'));
+        if (target) {
+            e.preventDefault();
+            target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            if (window.innerWidth <= 768) {
+                sidebar.classList.remove('open');
+            }
+        }
+    });
+});
+
+// Active link highlighting based on scroll position
+const sections = document.querySelectorAll('.content h2, .content h3');
+const sidebarLinks = document.querySelectorAll('.sidebar-link[href^="#"]');
+
+function updateActiveLink() {
+    let current = '';
+    sections.forEach(section => {
+        const rect = section.getBoundingClientRect();
+        if (rect.top <= 100) {
+            current = '#' + section.id;
+        }
+    });
+
+    sidebarLinks.forEach(link => {
+        link.classList.remove('active');
+        if (link.getAttribute('href') === current) {
+            link.classList.add('active');
+        }
+    });
+}
+
+window.addEventListener('scroll', updateActiveLink, { passive: true });
+window.addEventListener('load', updateActiveLink);
+
+// Highlight.js initialization
+if (typeof hljs !== 'undefined') {
+    hljs.highlightAll();
+}
+
+// Mobile menu button visibility
+const mobileMenuBtn = document.getElementById('mobile-menu-btn');
+function checkMobile() {
+    if (window.innerWidth <= 768) {
+        mobileMenuBtn.style.display = 'flex';
+    } else {
+        mobileMenuBtn.style.display = 'none';
+        document.getElementById('sidebar').classList.remove('open');
+    }
+}
+checkMobile();
+window.addEventListener('resize', checkMobile);
+
+mobileMenuBtn.addEventListener('click', () => {
+    document.getElementById('sidebar').classList.toggle('open');
+});
+</script>

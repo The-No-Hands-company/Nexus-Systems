@@ -1,0 +1,562 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nexus Modeling — Getting Started (Beginner Guide) — Nexus Modeling Docs</title>
+    <link rel="stylesheet" href="../styles.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
+</head>
+<body>
+    <nav class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+            <div class="sidebar-title">Nexus Modeling</div>
+            <div class="sidebar-subtitle">Documentation v0.1.0-dev</div>
+        </div>
+        <div class="sidebar-section">
+<div class="sidebar-section-title">📚 Developer Documentation</div>
+<a class="sidebar-link" href="../architecture.html">Architecture Overview</a>
+<a class="sidebar-link" href="../kernel-api.html">Kernel API Reference</a>
+<a class="sidebar-link" href="../geometry-kernel.html">Geometry Kernel</a>
+<a class="sidebar-link" href="../renderer.html">Render System</a>
+<a class="sidebar-link" href="../editor-architecture.html">Editor Architecture</a>
+<a class="sidebar-link" href="../build-system.html">Build System</a>
+<a class="sidebar-link" href="../testing.html">Testing</a>
+<a class="sidebar-link" href="../contributing.html">Contributing</a>
+<a class="sidebar-link" href="../adding-geometry-op.html">Adding Geometry Op</a>
+<a class="sidebar-link" href="../adding-cad-feature.html">Adding CAD Feature</a>
+<a class="sidebar-link" href="../mesh-operations.html">Mesh Operations</a>
+<a class="sidebar-link" href="../boolean-csg.html">Boolean/CSG Deep Dive</a>
+<a class="sidebar-link" href="../halfedge-mesh.html">Half-edge Mesh</a>
+<a class="sidebar-link" href="../analytic-brep.html">Analytic B-rep</a>
+<a class="sidebar-link" href="../mesh-io.html">Mesh I/O</a>
+<a class="sidebar-link" href="../tolerance.html">Tolerance System</a>
+<a class="sidebar-link" href="../porting.html">Porting Guide</a>
+</div>
+<div class="sidebar-section">
+<div class="sidebar-section-title">🎨 Expert User Documentation</div>
+</div>
+<div class="sidebar-section">
+<div class="sidebar-section-title">👤 Beginner / User Documentation</div>
+<a class="sidebar-link" href="../getting-started.html">Getting Started</a>
+</div>
+<div class="sidebar-section">
+<div class="sidebar-section-title">🔧 API Reference</div>
+</div>
+<div class="sidebar-section">
+<div class="sidebar-section-title">📚 Additional Resources</div>
+<a class="sidebar-link" href="../design-decisions.html">Design Decisions</a>
+<a class="sidebar-link" href="../testing-strategy.html">Testing Strategy</a>
+<a class="sidebar-link" href="../graphics-kernel.html">Graphics Kernel</a>
+<a class="sidebar-link" href="../vision-and-roadmap.html">Vision & Roadmap</a>
+<a class="sidebar-link" href="../reference-roadmap.html">Reference Roadmap</a>
+<a class="sidebar-link" href="../modeling-industry-parity.html">Modeling Industry Parity</a>
+<a class="sidebar-link" href="../modeling-parity-index.html">Modeling Parity Index</a>
+<a class="sidebar-link" href="../modeling-reference-roadmap.html">Modeling Reference Roadmap</a>
+</div>
+    </nav>
+    
+    <div class="main-content">
+        <header class="header">
+            <button class="btn btn-icon" id="mobile-menu-btn" aria-label="Toggle menu" style="display: none;">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="3" y1="12" x2="21" y2="12"></line>
+                    <line x1="3" y1="6" x2="21" y2="6"></line>
+                    <line x1="3" y1="18" x2="21" y2="18"></line>
+                </svg>
+            </button>
+            <div class="header-title">Nexus Modeling — Getting Started (Beginner Guide)</div>
+            <div class="header-actions">
+                
+<button class="btn btn-icon" id="theme-toggle" aria-label="Toggle dark/light theme" title="Toggle theme (Ctrl+Shift+L)">
+    <svg class="theme-icon-sun" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display: none;">
+        <circle cx="12" cy="12" r="5"></circle>
+        <line x1="12" y1="1" x2="12" y2="3"></line>
+        <line x1="12" y1="21" x2="12" y2="23"></line>
+        <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+        <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+        <line x1="1" y1="12" x2="3" y2="12"></line>
+        <line x1="21" y1="12" x2="23" y2="12"></line>
+        <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+        <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+    </svg>
+    <svg class="theme-icon-moon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display: none;">
+        <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+    </svg>
+</button>
+
+                <a href="https://github.com/nexus-systems/nexus-modeling" class="btn btn-secondary" target="_blank" rel="noopener">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M12 0C5.374 0 0 5.373 0 12c0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23A11.509 11.509 0 0112 5.803c1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576C20.566 21.797 24 17.3 24 12c0-6.627-5.373-12-12-12z"/>
+                    </svg>
+                    <span class="btn-text">GitHub</span>
+                </a>
+                <a href="../index.html" class="btn btn-primary">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
+                        <polyline points="9 22 9 12 15 12 15 22"></polyline>
+                    </svg>
+                    <span class="btn-text">Home</span>
+                </a>
+            </div>
+        </header>
+        
+        <main class="content">
+            <div class="toc"><h3>On This Page</h3><ul><li><a href="#nexus-modeling-getting-started-beginner-guide">Nexus Modeling — Getting Started (Beginner Guide)</a></li>
+  <li><a href="#what-is-nexus-modeling">What is Nexus Modeling?</a></li>
+  <li><a href="#5-minute-quick-start">5-Minute Quick Start</a></li>
+    <li><a href="#1-launch">1. Launch</a></li>
+<li><a href="#linux-vulkan">Linux (Vulkan)</a></li>
+<li><a href="#or-with-a-test-primitive">Or with a test primitive</a></li>
+    <li><a href="#2-first-30-seconds">2. First 30 Seconds</a></li>
+  <li><a href="#your-first-model-a-phone-stand-5-minutes">Your First Model: A Phone Stand (5 minutes)</a></li>
+    <li><a href="#step-1-base-sketch">Step 1: Base Sketch</a></li>
+    <li><a href="#step-2-extrude">Step 2: Extrude</a></li>
+    <li><a href="#step-3-cut-the-phone-slot">Step 3: Cut the Phone Slot</a></li>
+    <li><a href="#step-4-fillet-edges">Step 4: Fillet Edges</a></li>
+    <li><a href="#step-5-export-for-3d-printing">Step 5: Export for 3D Printing</a></li>
+  <li><a href="#core-concepts-mental-model">Core Concepts (Mental Model)</a></li>
+    <li><a href="#1-exact-geometry-not-polygons">1. <strong>Exact Geometry, Not Polygons</strong></a></li>
+    <li><a href="#2-non-destructive-history">2. <strong>Non-Destructive History</strong></a></li>
+    <li><a href="#3-selection-modes">3. <strong>Selection Modes</strong></a></li>
+    <li><a href="#3-sketch-feature-workflow">3. <strong>Sketch → Feature Workflow</strong></a></li>
+  <li><a href="#essential-shortcuts-memorize-these-10">Essential Shortcuts (Memorize These 10)</a></li>
+  <li><a href="#navigation-cheatsheet">Navigation Cheatsheet</a></li>
+  <li><a href="#file-operations">File Operations</a></li>
+  <li><a href="#troubleshooting-first-5-minutes">Troubleshooting (First 5 Minutes)</a></li>
+  <li><a href="#next-steps-your-learning-path">Next Steps (Your Learning Path)</a></li>
+  <li><a href="#where-to-get-help">Where to Get Help</a></li>
+  <li><a href="#what-s-next">What's Next?</a></li>
+</ul></div>
+            <h1 id="nexus-modeling-getting-started-beginner-guide">Nexus Modeling — Getting Started (Beginner Guide)</h1>
+
+<p>
+<em>Welcome to Nexus Modeling! This guide takes you from zero to productive in 30 minutes.</em>
+</p>
+
+<hr>
+
+<h2 id="what-is-nexus-modeling">What is Nexus Modeling?</h2>
+
+<p>
+<strong>Nexus Modeling</strong> is a professional-grade 3D CAD/modeling application built for precision engineering, product design, and creative 3D work. It combines:
+</p>
+
+<ul>
+<li><strong>Exact geometry kernel</strong> — Real CAD math, not polygon approximations</li>
+<li><strong>Modern Vulkan renderer</strong> — GPU-accelerated, 60+ FPS at 4K</li>
+<li><strong>Non-destructive workflow</strong> — Every operation stays editable</li>
+<li><strong>Headless automation</strong> — Scriptable, CI-friendly, AI-ready</li>
+</ul>
+
+<p>
+Think: <em>Blender's flexibility</em> + <em>SolidWorks' precision</em> + <em>Houdini's procedural power</em> — in one native, fast, native app.
+</p>
+
+<hr>
+
+<h2 id="5-minute-quick-start">5-Minute Quick Start</h2>
+
+<h3 id="1-launch">1. Launch</h3>
+<pre><code class="language-bash"><h1 id="linux-vulkan">Linux (Vulkan)</h1>
+<p>
+./build/src/kernel/nexus_modeling
+</p>
+
+<h1 id="or-with-a-test-primitive">Or with a test primitive</h1>
+<p>
+NEXUS_TEST_BOX=1 ./build/src/kernel/nexus_modeling</code></pre>
+</p>
+
+<h3 id="2-first-30-seconds">2. First 30 Seconds</h3>
+<p>
+| Key | Action |
+|-----|--------|
+| <code>ESC</code> | Select mode (default) |
+| <code>S</code> | Sketch mode — draw on grid |
+| <code>E</code> | Extrude selected face |
+| <code>F</code> | Fillet selected edge |
+| <code>M</code> | Modeling mode (primitives) |
+| <code>Q</code> | Face edit mode |
+| <code>B</code> | Edge edit mode |
+| <code>V</code> | Vertex edit mode |
+</p>
+
+<p>
+<strong>Mouse:</strong>
+| Action | Mouse |
+|--------|-------|
+| Orbit | Middle drag |
+| Pan | Shift + Middle drag |
+| Zoom | Scroll wheel |
+| Select | Left click |
+| Multi-select | Shift + Left click |
+| Box select | Left drag |
+</p>
+
+<hr>
+
+<h2 id="your-first-model-a-phone-stand-5-minutes">Your First Model: A Phone Stand (5 minutes)</h2>
+
+<h3 id="step-1-base-sketch">Step 1: Base Sketch</h3>
+<ol>
+<li>Press <strong><code>S</code></strong> → Sketch mode</li>
+<li>Press <strong><code>2</code></strong> → Rectangle tool</li>
+<li>Click origin, drag to <strong>80×40 mm</strong></li>
+<li>Press <strong><code>ESC</code></strong> → Exit sketch</li>
+</ol>
+
+<h3 id="step-2-extrude">Step 2: Extrude</h3>
+<ol>
+<li>Press <strong><code>E</code></strong> → Extrude mode</li>
+<li>Click the sketch → drag up <strong>10 mm</strong></li>
+<li>Press <strong><code>ESC</code></strong> → Done</li>
+</ol>
+
+<h3 id="step-3-cut-the-phone-slot">Step 3: Cut the Phone Slot</h3>
+<ol>
+<li>Press <strong><code>S</code></strong> → Sketch on top face</li>
+<li>Press <strong><code>2</code></strong> → Rectangle</li>
+<li>Draw <strong>70×10 mm</strong> centered</li>
+<li>Press <strong><code>ESC</code></strong> → Exit sketch</li>
+<li>Press <strong><code>E</code></strong> → Extrude <strong>Cut</strong> through all</li>
+</ol>
+
+<h3 id="step-4-fillet-edges">Step 4: Fillet Edges</h3>
+<ol>
+<li>Press <strong><code>F</code></strong> → Fillet mode</li>
+<li>Click bottom edges → drag <strong>3 mm</strong></li>
+<li>Press <strong><code>ESC</code></strong></li>
+</ol>
+
+<h3 id="step-5-export-for-3d-printing">Step 5: Export for 3D Printing</h3>
+<p>
+<strong>File → Export → STL</strong> → <code>phone_stand.stl</code>
+</p>
+
+<hr>
+
+<h2 id="core-concepts-mental-model">Core Concepts (Mental Model)</h2>
+
+<h3 id="1-exact-geometry-not-polygons">1. <strong>Exact Geometry, Not Polygons</strong></h3>
+<p>
+Nexus stores <strong>exact math</strong> (NURBS, analytic surfaces), not triangles.
+</p>
+<ul>
+<li>Boolean operations are <strong>exact CSG</strong> — no mesh artifacts</li>
+<li>Fillets are <strong>analytic</strong> — perfect tangent continuity</li>
+<li>Export to STEP/IGES for manufacturing</li>
+</ul>
+
+<h3 id="2-non-destructive-history">2. <strong>Non-Destructive History</strong></h3>
+<p>
+Every operation lives in the <strong>Feature Tree</strong> (left panel):
+</p>
+<ul>
+<li>Double-click any feature → edit parameters</li>
+<li>Drag to reorder → model updates instantly</li>
+<li>Right-click → Suppress/Delete without breaking downstream</li>
+</ul>
+
+<h3 id="3-selection-modes">3. <strong>Selection Modes</strong></h3>
+<p>
+| Mode | Key | What you select |
+|------|-----|-----------------|
+| Object | <code>ESC</code> | Whole features |
+| Vertex | <code>V</code> | Points |
+| Edge | <code>B</code> | Edges |
+| Face | <code>Q</code> | Faces |
+</p>
+
+<h3 id="3-sketch-feature-workflow">3. <strong>Sketch → Feature Workflow</strong></h3>
+<pre><code class="language-">Sketch (2D) → Constraint Solver → 3D Feature → History</code></pre>
+<ul>
+<li>Sketches are <strong>fully constrained</strong> (blue = free, black = fixed)</li>
+<li>Dimensions drive geometry — change a dim, model updates</li>
+<li>Constraints: coincident, tangent, parallel, perpendicular, equal, midpoint</li>
+</ul>
+
+<hr>
+
+<h2 id="essential-shortcuts-memorize-these-10">Essential Shortcuts (Memorize These 10)</h2>
+
+<p>
+| Key | Action |
+|-----|--------|
+| <code>ESC</code> | Select mode / cancel |
+| <code>S</code> | Sketch mode |
+| <code>E</code> | Extrude |
+| <code>F</code> | Fillet |
+| <code>M</code> | Modeling (primitives) |
+| <code>Q</code> | Face edit |
+| <code>B</code> | Edge edit |
+| <code>V</code> | Vertex edit |
+| <code>F1</code> | Keybinding cheat sheet |
+| <code>F5</code> | Performance overlay |
+</p>
+
+<p>
+<strong>Mouse + Keys:</strong>
+| Combo | Action |
+|-------|--------|
+| Middle drag | Orbit |
+| Shift + Middle | Pan |
+| Scroll | Zoom |
+| Shift + Click | Multi-select |
+| Ctrl + Drag | Box select |
+| Shift + Middle | Pan view |
+</p>
+
+<hr>
+
+<h2 id="navigation-cheatsheet">Navigation Cheatsheet</h2>
+
+<p>
+| Goal | How |
+|------|-----|
+| "Reset view" | <code>Home</code> key |
+| "View all" | <code>Home</code> (double-tap) |
+| "Top view" | <code>Numpad 7</code> |
+| "Front view" | <code>Numpad 1</code> |
+| "Right view" | <code>Numpad 3</code> |
+| "Isometric" | <code>Numpad 0</code> |
+| "Orthographic" | <code>Numpad 5</code> / <code>O</code> |
+</p>
+
+<hr>
+
+<h2 id="file-operations">File Operations</h2>
+
+<p>
+| Action | Shortcut |
+|--------|----------|
+| New | <code>Ctrl+N</code> |
+| Save | <code>Ctrl+S</code> |
+| Save As | <code>Ctrl+Shift+S</code> |
+| Open | <code>Ctrl+O</code> |
+| Export STL | <code>Ctrl+Shift+E</code> |
+| Import | <code>Ctrl+I</code> |
+</p>
+
+<p>
+<strong>Formats:</strong>
+| Format | Import | Export |
+|--------|--------|--------|
+| <code>.nxm</code> (native) | ✅ | ✅ |
+| STL | ✅ | ✅ |
+| OBJ | ✅ | ✅ |
+| glTF 2.0 | ✅ | ✅ |
+| STEP | ❌ | P1 |
+| STEP/IGES | P1 | P1 |
+</p>
+
+<hr>
+
+<h2 id="troubleshooting-first-5-minutes">Troubleshooting (First 5 Minutes)</h2>
+
+<p>
+| Problem | Fix |
+|---------|-----|
+| "Window doesn't appear" | Check <code>VK_ICD_FILENAMES</code> points to <code>lvp_icd.x86_64.json</code> (llvmpipe) |
+| "Vulkan init failed" | Update GPU drivers; try <code>VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/lvp_icd.x86_64.json</code> |
+| "GLFW error" | <code>sudo apt install libglfw3 libglu1-mesa</code> |
+| Window opens then closes | Check <code>glfwInit()</code> — try <code>GLFW_CLIENT_API=GLFW_NO_API</code> |
+| Black screen | <code>VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/lvp_icd.x86_64.json</code> |
+</p>
+
+<hr>
+
+<h2 id="next-steps-your-learning-path">Next Steps (Your Learning Path)</h2>
+
+<p>
+| Week | Goal | Resources |
+|------|------|-----------|
+| 1 | Complete phone stand, export STL, 3D print | This guide |
+| 2 | Learn sketch constraints (tangent, equal, midpoint) | <code>docs/user/sketching.md</code> |
+| 2 | Master fillet/chamfer/shell | <code>docs/user/modeling.md</code> |
+| 3 | Parametric design — driven dimensions, equations | <code>docs/user/parametric.md</code> |
+| 4 | Assemblies & mates | <code>docs/user/assemblies.md</code> |
+| 3 | Export STEP for manufacturing | <code>docs/user/manufacturing.md</code> |
+</p>
+
+<hr>
+
+<h2 id="where-to-get-help">Where to Get Help</h2>
+
+<p>
+| Channel | Purpose |
+|---------|---------|
+| <code>F1</code> | In-app keybinding cheat sheet |
+| <code>F5</code> | Performance overlay (FPS, triangles, draw calls) |
+| <code>docs/user/</code> | Complete user manual |
+| <code>docs/developer/</code> | API & architecture docs |
+| GitHub Issues | Bug reports, feature requests |
+| Discord <code>#nexus-modeling</code> | Community help |
+</p>
+
+<hr>
+
+<h2 id="what-s-next">What's Next?</h2>
+
+<p>
+| You want to... | Read this |
+|----------------|-----------|
+| "Draw my first sketch properly" | <code>docs/user/sketching.md</code> |
+| "Understand constraints" | <code>docs/user/constraints.md</code> |
+| "Make a parametric part" | <code>docs/user/parametric.md</code> |
+| "Export for 3D printing" | <code>docs/user/3d-printing.md</code> |
+| "Export STEP for manufacturing" | <code>docs/user/manufacturing.md</code> |
+| "Report a bug" | GitHub Issues → "Bug Report" template |
+</p>
+
+<hr>
+
+<p>
+<em>Welcome to Nexus Modeling. Build something precise.</em>
+</p>
+
+<hr>
+
+<p>
+<em>Next: <a href="sketching.md">Sketching Fundamentals →</a></em>
+</p>
+        </main>
+    </div>
+    
+    <script>
+// Theme management
+const THEME_KEY = 'nexus-docs-theme';
+const themeToggle = document.getElementById('theme-toggle');
+const sunIcon = themeToggle.querySelector('.theme-icon-sun');
+const moonIcon = themeToggle.querySelector('.theme-icon-moon');
+
+function applyTheme(theme) {
+    document.documentElement.setAttribute('data-theme', theme);
+    if (theme === 'light') {
+        sunIcon.style.display = 'block';
+        moonIcon.style.display = 'none';
+    } else {
+        sunIcon.style.display = 'none';
+        moonIcon.style.display = 'block';
+    }
+    localStorage.setItem(THEME_KEY, theme);
+}
+
+function getPreferredTheme() {
+    const stored = localStorage.getItem(THEME_KEY);
+    if (stored) return stored;
+    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+}
+
+function initTheme() {
+    const theme = getPreferredTheme();
+    applyTheme(theme);
+}
+
+function toggleTheme() {
+    const current = document.documentElement.getAttribute('data-theme') || 'dark';
+    applyTheme(current === 'dark' ? 'light' : 'dark');
+}
+
+themeToggle.addEventListener('click', toggleTheme);
+
+// Keyboard shortcut: Ctrl+Shift+L
+document.addEventListener('keydown', (e) => {
+    if (e.ctrlKey && e.shiftKey && e.key === 'L') {
+        e.preventDefault();
+        toggleTheme();
+    }
+});
+
+// Listen for system theme changes
+window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => {
+    if (!localStorage.getItem(THEME_KEY)) {
+        applyTheme(e.matches ? 'dark' : 'light');
+    }
+});
+
+// Initialize theme immediately to prevent flash
+initTheme();
+
+// Mobile sidebar toggle
+const sidebar = document.getElementById('sidebar');
+const mobileMenuBtn = document.getElementById('mobile-menu-btn');
+
+if (mobileMenuBtn) {
+    mobileMenuBtn.addEventListener('click', () => {
+        sidebar.classList.toggle('open');
+    });
+}
+
+document.addEventListener('click', (e) => {
+    if (window.innerWidth <= 768) {
+        if (!sidebar.contains(e.target) && !e.target.closest('.header')) {
+            sidebar.classList.remove('open');
+        }
+    }
+});
+
+// Smooth scroll for anchor links
+document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+    anchor.addEventListener('click', function(e) {
+        const target = document.querySelector(this.getAttribute('href'));
+        if (target) {
+            e.preventDefault();
+            target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            if (window.innerWidth <= 768) {
+                sidebar.classList.remove('open');
+            }
+        }
+    });
+});
+
+// Active link highlighting based on scroll position
+const sections = document.querySelectorAll('.content h2, .content h3');
+const sidebarLinks = document.querySelectorAll('.sidebar-link[href^="#"]');
+
+function updateActiveLink() {
+    let current = '';
+    sections.forEach(section => {
+        const rect = section.getBoundingClientRect();
+        if (rect.top <= 100) {
+            current = '#' + section.id;
+        }
+    });
+
+    sidebarLinks.forEach(link => {
+        link.classList.remove('active');
+        if (link.getAttribute('href') === current) {
+            link.classList.add('active');
+        }
+    });
+}
+
+window.addEventListener('scroll', updateActiveLink, { passive: true });
+window.addEventListener('load', updateActiveLink);
+
+// Highlight.js initialization
+if (typeof hljs !== 'undefined') {
+    hljs.highlightAll();
+}
+
+// Mobile menu button visibility
+const mobileMenuBtn = document.getElementById('mobile-menu-btn');
+function checkMobile() {
+    if (window.innerWidth <= 768) {
+        mobileMenuBtn.style.display = 'flex';
+    } else {
+        mobileMenuBtn.style.display = 'none';
+        document.getElementById('sidebar').classList.remove('open');
+    }
+}
+checkMobile();
+window.addEventListener('resize', checkMobile);
+
+mobileMenuBtn.addEventListener('click', () => {
+    document.getElementById('sidebar').classList.toggle('open');
+});
+</script>

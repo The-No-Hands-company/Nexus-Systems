@@ -1,0 +1,493 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stabilized Inertia-Tensor Rigid-Body Solver — Design — Nexus Modeling Docs</title>
+    <link rel="stylesheet" href="../styles.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
+</head>
+<body>
+    <nav class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+            <div class="sidebar-title">Nexus Modeling</div>
+            <div class="sidebar-subtitle">Documentation v0.1.0-dev</div>
+        </div>
+        <div class="sidebar-section">
+<div class="sidebar-section-title">📚 Developer Documentation</div>
+<a class="sidebar-link" href="../architecture.html">Architecture Overview</a>
+<a class="sidebar-link" href="../kernel-api.html">Kernel API Reference</a>
+<a class="sidebar-link" href="../geometry-kernel.html">Geometry Kernel</a>
+<a class="sidebar-link" href="../renderer.html">Render System</a>
+<a class="sidebar-link" href="../editor-architecture.html">Editor Architecture</a>
+<a class="sidebar-link" href="../build-system.html">Build System</a>
+<a class="sidebar-link" href="../testing.html">Testing</a>
+<a class="sidebar-link" href="../contributing.html">Contributing</a>
+<a class="sidebar-link" href="../adding-geometry-op.html">Adding Geometry Op</a>
+<a class="sidebar-link" href="../adding-cad-feature.html">Adding CAD Feature</a>
+<a class="sidebar-link" href="../mesh-operations.html">Mesh Operations</a>
+<a class="sidebar-link" href="../boolean-csg.html">Boolean/CSG Deep Dive</a>
+<a class="sidebar-link" href="../halfedge-mesh.html">Half-edge Mesh</a>
+<a class="sidebar-link" href="../analytic-brep.html">Analytic B-rep</a>
+<a class="sidebar-link" href="../mesh-io.html">Mesh I/O</a>
+<a class="sidebar-link" href="../tolerance.html">Tolerance System</a>
+<a class="sidebar-link" href="../porting.html">Porting Guide</a>
+</div>
+<div class="sidebar-section">
+<div class="sidebar-section-title">🎨 Expert User Documentation</div>
+</div>
+<div class="sidebar-section">
+<div class="sidebar-section-title">👤 Beginner / User Documentation</div>
+<a class="sidebar-link" href="../getting-started.html">Getting Started</a>
+</div>
+<div class="sidebar-section">
+<div class="sidebar-section-title">🔧 API Reference</div>
+</div>
+<div class="sidebar-section">
+<div class="sidebar-section-title">📚 Additional Resources</div>
+<a class="sidebar-link" href="../design-decisions.html">Design Decisions</a>
+<a class="sidebar-link" href="../testing-strategy.html">Testing Strategy</a>
+<a class="sidebar-link" href="../graphics-kernel.html">Graphics Kernel</a>
+<a class="sidebar-link" href="../vision-and-roadmap.html">Vision & Roadmap</a>
+<a class="sidebar-link" href="../reference-roadmap.html">Reference Roadmap</a>
+<a class="sidebar-link" href="../modeling-industry-parity.html">Modeling Industry Parity</a>
+<a class="sidebar-link" href="../modeling-parity-index.html">Modeling Parity Index</a>
+<a class="sidebar-link" href="../modeling-reference-roadmap.html">Modeling Reference Roadmap</a>
+</div>
+    </nav>
+    
+    <div class="main-content">
+        <header class="header">
+            <button class="btn btn-icon" id="mobile-menu-btn" aria-label="Toggle menu" style="display: none;">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="3" y1="12" x2="21" y2="12"></line>
+                    <line x1="3" y1="6" x2="21" y2="6"></line>
+                    <line x1="3" y1="18" x2="21" y2="18"></line>
+                </svg>
+            </button>
+            <div class="header-title">Stabilized Inertia-Tensor Rigid-Body Solver — Design</div>
+            <div class="header-actions">
+                
+<button class="btn btn-icon" id="theme-toggle" aria-label="Toggle dark/light theme" title="Toggle theme (Ctrl+Shift+L)">
+    <svg class="theme-icon-sun" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display: none;">
+        <circle cx="12" cy="12" r="5"></circle>
+        <line x1="12" y1="1" x2="12" y2="3"></line>
+        <line x1="12" y1="21" x2="12" y2="23"></line>
+        <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+        <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+        <line x1="1" y1="12" x2="3" y2="12"></line>
+        <line x1="21" y1="12" x2="23" y2="12"></line>
+        <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+        <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+    </svg>
+    <svg class="theme-icon-moon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display: none;">
+        <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+    </svg>
+</button>
+
+                <a href="https://github.com/nexus-systems/nexus-modeling" class="btn btn-secondary" target="_blank" rel="noopener">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M12 0C5.374 0 0 5.373 0 12c0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23A11.509 11.509 0 0112 5.803c1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576C20.566 21.797 24 17.3 24 12c0-6.627-5.373-12-12-12z"/>
+                    </svg>
+                    <span class="btn-text">GitHub</span>
+                </a>
+                <a href="../index.html" class="btn btn-primary">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
+                        <polyline points="9 22 9 12 15 12 15 22"></polyline>
+                    </svg>
+                    <span class="btn-text">Home</span>
+                </a>
+            </div>
+        </header>
+        
+        <main class="content">
+            <div class="toc"><h3>On This Page</h3><ul><li><a href="#stabilized-inertia-tensor-rigid-body-solver-design">Stabilized Inertia-Tensor Rigid-Body Solver — Design</a></li>
+  <li><a href="#status">Status</a></li>
+  <li><a href="#motivation">Motivation</a></li>
+  <li><a href="#chosen-approach-angular-momentum-integration">Chosen approach — angular-momentum integration</a></li>
+    <li><a href="#per-step-angular-update-per-dynamic-body">Per-step angular update (per dynamic body)</a></li>
+    <li><a href="#optional-refinement-future-not-in-first-cut">Optional refinement (future, not in first cut)</a></li>
+  <li><a href="#backward-compatibility-key-property">Backward compatibility (key property)</a></li>
+  <li><a href="#api-state-changes">API / state changes</a></li>
+  <li><a href="#determinism-build-constraints">Determinism & build constraints</a></li>
+  <li><a href="#validation-hardening">Validation / hardening</a></li>
+  <li><a href="#test-plan-deterministic-null-backend">Test plan (deterministic, Null backend)</a></li>
+  <li><a href="#migration-impact-files">Migration impact (files)</a></li>
+  <li><a href="#risks-alternatives">Risks & alternatives</a></li>
+</ul></div>
+            <h1 id="stabilized-inertia-tensor-rigid-body-solver-design">Stabilized Inertia-Tensor Rigid-Body Solver — Design</h1>
+
+<h2 id="status">Status</h2>
+
+<p>
+Design (architect). Implements roadmap month-13 #5 (remaining half). Targets the
+simulation kernel <code>RigidBodySolver</code> in <code>src/kernel/{include/nexus,src}/sim/SimulationCore.*</code>.
+</p>
+
+<h2 id="motivation">Motivation</h2>
+
+<p>
+The angular model today uses a single <strong>scalar</strong> moment of inertia
+(<code>SimBodyDesc::inertia : float</code>), so angular acceleration is <code>τ / I</code> about every
+axis. That treats every body as a uniform sphere. A best-in-class DCC needs true
+rigid-body rotation: anisotropic bodies (boxes, rods, discs) that **precess and
+tumble** correctly — including the intermediate-axis (Dzhanibekov) effect.
+</p>
+
+<p>
+The physically correct model is Euler's equation with a full inertia tensor:
+</p>
+
+<pre><code class="language-">I_body · ω̇_body + ω_body × (I_body · ω_body) = τ_body</code></pre>
+
+<p>
+The cross term <code>ω × (Iω)</code> is the <strong>gyroscopic term</strong>. It is what produces
+precession/tumbling — and it is <strong>stiff</strong>: integrating <code>ω̇ = I⁻¹(τ − ω×(Iω))</code>
+with explicit Euler injects energy and diverges (elongated bodies, large <code>dt</code>).
+This is why naive explicit integration is unacceptable and why PhysX/Bullet
+historically disabled or specially handled gyroscopic forces.
+</p>
+
+<h2 id="chosen-approach-angular-momentum-integration">Chosen approach — angular-momentum integration</h2>
+
+<p>
+Integrate <strong>angular momentum L</strong> in world space rather than ω directly:
+</p>
+
+<ul>
+<li>Under zero torque, world angular momentum is conserved, so <code>‖L‖</code> is constant by</li>
+</ul>
+<p>
+  construction — the integrator cannot blow up the way explicit ω does.
+</p>
+<ul>
+<li>Torque integrates momentum linearly: <code>L += τ·dt</code> (no stiff term to integrate).</li>
+<li>ω is recovered from L each step through the <em>rotating</em> world inertia tensor,</li>
+</ul>
+<p>
+  which is exactly what produces precession/tumbling — no explicit gyroscopic
+  term is needed; it falls out of <code>I_world</code> changing as the body rotates.
+</p>
+
+<p>
+Because the body-space tensor is <strong>diagonal</strong> in its principal frame
+(<code>I_body = diag(Ix, Iy, Iz)</code>), the world tensor multiply/inverse need only
+quaternion vector-rotation + component-wise scale — no 3×3 matrix assembly:
+</p>
+
+<pre><code class="language-">L_world      = R · ( I_body ⊙ (Rᵀ · ω_world) )
+<p>
+ω_world      = R · ( (Rᵀ · L_world) ⊘ I_body )</code></pre>
+</p>
+
+<p>
+(<code>R</code> = orientation as rotation; <code>⊙</code>/<code>⊘</code> = component-wise mul/div by (Ix,Iy,Iz).)
+</p>
+
+<h3 id="per-step-angular-update-per-dynamic-body">Per-step angular update (per dynamic body)</h3>
+
+<pre><code class="language-">R          = orientation                              // start-of-step
+<p>
+ω_body     = invRotate(R, angularVelocity)
+L_world    = rotate(R, ω_body ⊙ inertia)              // L = I_world · ω
+L_world   += torque · dt                              // torque integrates momentum
+ω_world    = rotate(R, invRotate(R, L_world) ⊘ inertia)   // ω = I_world⁻¹ · L
+angularVelocity = ω_world · dampingFactor(angularDamping, dt)
+orientation     = integrateOrientation(R, angularVelocity, dt)   // existing helper
+// torque cleared per step / once per stepFixed call (unchanged policy)</code></pre>
+</p>
+
+<p>
+Linear integration (gravity + force + linear damping) is <strong>unchanged</strong>.
+</p>
+
+<h3 id="optional-refinement-future-not-in-first-cut">Optional refinement (future, not in first cut)</h3>
+
+<p>
+For extreme inertia ratios at large <code>dt</code>, add Bullet's implicit gyroscopic
+correction (one Newton step on <code>ω₂ − ω₁ + I⁻¹(ω₂ × Iω₂)·dt = 0</code>,
+Jacobian <code>I + dt(skew(ω)I − skew(Iω))</code>). The momentum form already prevents
+blow-up, so this is a precision refinement, gated behind a flag if added.
+</p>
+
+<h2 id="backward-compatibility-key-property">Backward compatibility (key property)</h2>
+
+<p>
+When the principal moments are equal (<code>Ix = Iy = Iz = I</code>), the momentum update
+reduces <strong>exactly</strong> to the current scalar model: <code>L = I·ω</code>, <code>L += τ·dt</code>,
+<code>ω = L/I = ω + (τ/I)·dt</code>. So:
+</p>
+
+<ul>
+<li>Existing scalar-inertia behavior is preserved for <code>inertia = {I, I, I}</code>.</li>
+<li>The <strong>angular state stays ω</strong> (world angular velocity). The snapshot keeps</li>
+</ul>
+<p>
+  storing <code>orientation</code> + <code>angularVelocity</code> — **no serialization format change;
+  SimState stays v2**. Inertia is a body <em>property</em> (like mass/damping) and is not
+  serialized, so <code>restoreState</code> is unaffected.
+</p>
+
+<h2 id="api-state-changes">API / state changes</h2>
+
+<ul>
+<li><code>SimBodyDesc::inertia</code> and <code>RigidBodySolver::Body::inertia</code>: <strong><code>float</code> → <code>SimVec3</code></strong></li>
+</ul>
+<p>
+  (principal moments in body space, default <code>{1,1,1}</code>). This is a breaking change to
+  a field added earlier this milestone; acceptable in alpha (no external consumers).
+</p>
+<ul>
+<li>New file-local helpers in <code>SimulationCore.cpp</code> (anonymous namespace):</li>
+</ul>
+<p>
+  <code>rotateByQuat(q, v)</code> and <code>invRotateByQuat(q, v)</code> via the standard
+  <code>t = 2·cross(q.xyz, v); v' = v + q.w·t + cross(q.xyz, t)</code> form (deterministic,
+  no <code>quatMul</code> of a pure-vector quat), plus a small <code>cross()</code> on <code>SimVec3</code>.
+</p>
+<ul>
+<li>No new public header → <strong>no API-freeze manifest change</strong>.</li>
+</ul>
+
+<h2 id="determinism-build-constraints">Determinism & build constraints</h2>
+
+<ul>
+<li>All single-precision, fixed operation order → deterministic and Null-backend safe.</li>
+<li>Build is <code>-ffast-math</code>: validate finiteness with IEEE-754 bit tests</li>
+</ul>
+<p>
+  (<code>isFiniteVec3</code>/<code>isFiniteFloat</code>), never <code>std::isfinite</code>; keep the existing
+  exact-endpoint handling in <code>integrateOrientation</code>/<code>normalizeQuat</code>.
+</p>
+
+<h2 id="validation-hardening">Validation / hardening</h2>
+
+<ul>
+<li><code>addBody</code> rejects an inertia with any non-finite or <strong>≤ 0</strong> principal moment</li>
+</ul>
+<p>
+  (replacing the current scalar `inertia <= 0` check, applied per component).
+</p>
+<ul>
+<li>Per-step runtime guard already rejects non-finite body state; extend it to the</li>
+</ul>
+<p>
+  <code>SimVec3</code> inertia.
+</p>
+
+<h2 id="test-plan-deterministic-null-backend">Test plan (deterministic, Null backend)</h2>
+
+<ul>
+<li><strong>Isotropic equivalence:</strong> <code>inertia = {2,2,2}</code> reproduces the current scalar-2</li>
+</ul>
+<p>
+  torque result (regression bridge to existing behavior).
+</p>
+<ul>
+<li><strong>Angular-momentum conservation:</strong> zero torque, anisotropic inertia, spin about a</li>
+</ul>
+<p>
+  non-principal axis → <code>‖L_world‖</code> constant over many steps (tight tolerance) while
+  ω direction changes (precession).
+</p>
+<ul>
+<li><strong>Energy bounded:</strong> rotational KE <code>½ ωᵀ I_world ω</code> stays bounded over a long run</li>
+</ul>
+<p>
+  (no blow-up) — the property naive explicit integration fails.
+</p>
+<ul>
+<li><strong>Principal-axis stability:</strong> pure spin about a principal axis stays on that axis</li>
+</ul>
+<p>
+  (no spurious precession).
+</p>
+<ul>
+<li><strong>Validation:</strong> reject non-finite / non-positive principal moments.</li>
+<li><strong>Determinism:</strong> identical setup → identical trajectory.</li>
+</ul>
+
+<h2 id="migration-impact-files">Migration impact (files)</h2>
+
+<ul>
+<li><code>src/kernel/include/nexus/sim/SimulationCore.h</code> — <code>inertia</code> field type; <code>Body</code> field.</li>
+<li><code>src/kernel/src/sim/SimulationCore.cpp</code> — <code>addBody</code> validation + emplace; new</li>
+</ul>
+<p>
+  helpers; <code>step</code> and <code>stepFixed</code> angular blocks.
+</p>
+<ul>
+<li><code>tests/kernel/test_SimulationCore.cpp</code> — update the few tests setting</li>
+</ul>
+<p>
+  <code>desc.inertia</code> to the <code>SimVec3</code> form (<code>TorqueAcceleratesAngularVelocityThenClears</code>,
+  <code>AddBodyRejectsNonPositiveInertia</code>); add the new tensor tests above.
+</p>
+<ul>
+<li><code>docs/month-13-rt-and-simulation-coupling.md</code> — mark #5 fully delivered.</li>
+</ul>
+
+<h2 id="risks-alternatives">Risks & alternatives</h2>
+
+<ul>
+<li><strong>Long-run energy drift:</strong> the momentum integrator conserves <code>‖L‖</code> exactly but can</li>
+</ul>
+<p>
+  drift energy slightly over very long runs; bounded and non-explosive. The implicit
+  gyroscopic correction (above) is the mitigation if ever needed.
+</p>
+<ul>
+<li><strong>Large <code>dt</code>:</strong> recommend <code>stepFixed</code> with small substeps for fast-spinning,</li>
+</ul>
+<p>
+  high-aspect-ratio bodies; substep angular integration already exists.
+</p>
+<ul>
+<li><strong>Alternative considered — store L as state:</strong> rejected; it would change the</li>
+</ul>
+<p>
+  snapshot format (v3) and the public angular accessor for no stability gain over
+  recomputing L from ω each step.
+</p>
+
+        </main>
+    </div>
+    
+    <script>
+// Theme management
+const THEME_KEY = 'nexus-docs-theme';
+const themeToggle = document.getElementById('theme-toggle');
+const sunIcon = themeToggle.querySelector('.theme-icon-sun');
+const moonIcon = themeToggle.querySelector('.theme-icon-moon');
+
+function applyTheme(theme) {
+    document.documentElement.setAttribute('data-theme', theme);
+    if (theme === 'light') {
+        sunIcon.style.display = 'block';
+        moonIcon.style.display = 'none';
+    } else {
+        sunIcon.style.display = 'none';
+        moonIcon.style.display = 'block';
+    }
+    localStorage.setItem(THEME_KEY, theme);
+}
+
+function getPreferredTheme() {
+    const stored = localStorage.getItem(THEME_KEY);
+    if (stored) return stored;
+    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+}
+
+function initTheme() {
+    const theme = getPreferredTheme();
+    applyTheme(theme);
+}
+
+function toggleTheme() {
+    const current = document.documentElement.getAttribute('data-theme') || 'dark';
+    applyTheme(current === 'dark' ? 'light' : 'dark');
+}
+
+themeToggle.addEventListener('click', toggleTheme);
+
+// Keyboard shortcut: Ctrl+Shift+L
+document.addEventListener('keydown', (e) => {
+    if (e.ctrlKey && e.shiftKey && e.key === 'L') {
+        e.preventDefault();
+        toggleTheme();
+    }
+});
+
+// Listen for system theme changes
+window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => {
+    if (!localStorage.getItem(THEME_KEY)) {
+        applyTheme(e.matches ? 'dark' : 'light');
+    }
+});
+
+// Initialize theme immediately to prevent flash
+initTheme();
+
+// Mobile sidebar toggle
+const sidebar = document.getElementById('sidebar');
+const mobileMenuBtn = document.getElementById('mobile-menu-btn');
+
+if (mobileMenuBtn) {
+    mobileMenuBtn.addEventListener('click', () => {
+        sidebar.classList.toggle('open');
+    });
+}
+
+document.addEventListener('click', (e) => {
+    if (window.innerWidth <= 768) {
+        if (!sidebar.contains(e.target) && !e.target.closest('.header')) {
+            sidebar.classList.remove('open');
+        }
+    }
+});
+
+// Smooth scroll for anchor links
+document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+    anchor.addEventListener('click', function(e) {
+        const target = document.querySelector(this.getAttribute('href'));
+        if (target) {
+            e.preventDefault();
+            target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            if (window.innerWidth <= 768) {
+                sidebar.classList.remove('open');
+            }
+        }
+    });
+});
+
+// Active link highlighting based on scroll position
+const sections = document.querySelectorAll('.content h2, .content h3');
+const sidebarLinks = document.querySelectorAll('.sidebar-link[href^="#"]');
+
+function updateActiveLink() {
+    let current = '';
+    sections.forEach(section => {
+        const rect = section.getBoundingClientRect();
+        if (rect.top <= 100) {
+            current = '#' + section.id;
+        }
+    });
+
+    sidebarLinks.forEach(link => {
+        link.classList.remove('active');
+        if (link.getAttribute('href') === current) {
+            link.classList.add('active');
+        }
+    });
+}
+
+window.addEventListener('scroll', updateActiveLink, { passive: true });
+window.addEventListener('load', updateActiveLink);
+
+// Highlight.js initialization
+if (typeof hljs !== 'undefined') {
+    hljs.highlightAll();
+}
+
+// Mobile menu button visibility
+const mobileMenuBtn = document.getElementById('mobile-menu-btn');
+function checkMobile() {
+    if (window.innerWidth <= 768) {
+        mobileMenuBtn.style.display = 'flex';
+    } else {
+        mobileMenuBtn.style.display = 'none';
+        document.getElementById('sidebar').classList.remove('open');
+    }
+}
+checkMobile();
+window.addEventListener('resize', checkMobile);
+
+mobileMenuBtn.addEventListener('click', () => {
+    document.getElementById('sidebar').classList.toggle('open');
+});
+</script>

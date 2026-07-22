@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kernel Capability Map — Nexus Modeling Docs</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
+</head>
+<body>
+    <nav class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+            <div class="sidebar-title">Nexus Modeling</div>
+            <div class="sidebar-subtitle">Documentation v0.1.0-dev</div>
+        </div>
+        <div class="sidebar-section">
+<div class="sidebar-section-title">📚 Developer Documentation</div>
+<a class="sidebar-link" href="architecture.html">Architecture Overview</a>
+<a class="sidebar-link" href="kernel-api.html">Kernel API Reference</a>
+<a class="sidebar-link" href="geometry-kernel.html">Geometry Kernel</a>
+<a class="sidebar-link" href="renderer.html">Render System</a>
+<a class="sidebar-link" href="editor-architecture.html">Editor Architecture</a>
+<a class="sidebar-link" href="build-system.html">Build System</a>
+<a class="sidebar-link" href="testing.html">Testing</a>
+<a class="sidebar-link" href="contributing.html">Contributing</a>
+<a class="sidebar-link" href="adding-geometry-op.html">Adding Geometry Op</a>
+<a class="sidebar-link" href="adding-cad-feature.html">Adding CAD Feature</a>
+<a class="sidebar-link" href="mesh-operations.html">Mesh Operations</a>
+<a class="sidebar-link" href="boolean-csg.html">Boolean/CSG Deep Dive</a>
+<a class="sidebar-link" href="halfedge-mesh.html">Half-edge Mesh</a>
+<a class="sidebar-link" href="analytic-brep.html">Analytic B-rep</a>
+<a class="sidebar-link" href="mesh-io.html">Mesh I/O</a>
+<a class="sidebar-link" href="tolerance.html">Tolerance System</a>
+<a class="sidebar-link" href="porting.html">Porting Guide</a>
+</div>
+<div class="sidebar-section">
+<div class="sidebar-section-title">🎨 Expert User Documentation</div>
+</div>
+<div class="sidebar-section">
+<div class="sidebar-section-title">👤 Beginner / User Documentation</div>
+<a class="sidebar-link" href="getting-started.html">Getting Started</a>
+</div>
+<div class="sidebar-section">
+<div class="sidebar-section-title">🔧 API Reference</div>
+</div>
+<div class="sidebar-section">
+<div class="sidebar-section-title">📚 Additional Resources</div>
+<a class="sidebar-link" href="design-decisions.html">Design Decisions</a>
+<a class="sidebar-link" href="testing-strategy.html">Testing Strategy</a>
+<a class="sidebar-link" href="graphics-kernel.html">Graphics Kernel</a>
+<a class="sidebar-link" href="vision-and-roadmap.html">Vision & Roadmap</a>
+<a class="sidebar-link" href="reference-roadmap.html">Reference Roadmap</a>
+<a class="sidebar-link" href="modeling-industry-parity.html">Modeling Industry Parity</a>
+<a class="sidebar-link" href="modeling-parity-index.html">Modeling Parity Index</a>
+<a class="sidebar-link" href="modeling-reference-roadmap.html">Modeling Reference Roadmap</a>
+</div>
+    </nav>
+    
+    <div class="main-content">
+        <header class="header">
+            <button class="btn btn-icon" id="mobile-menu-btn" aria-label="Toggle menu" style="display: none;">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="3" y1="12" x2="21" y2="12"></line>
+                    <line x1="3" y1="6" x2="21" y2="6"></line>
+                    <line x1="3" y1="18" x2="21" y2="18"></line>
+                </svg>
+            </button>
+            <div class="header-title">Kernel Capability Map</div>
+            <div class="header-actions">
+                
+<button class="btn btn-icon" id="theme-toggle" aria-label="Toggle dark/light theme" title="Toggle theme (Ctrl+Shift+L)">
+    <svg class="theme-icon-sun" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display: none;">
+        <circle cx="12" cy="12" r="5"></circle>
+        <line x1="12" y1="1" x2="12" y2="3"></line>
+        <line x1="12" y1="21" x2="12" y2="23"></line>
+        <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+        <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+        <line x1="1" y1="12" x2="3" y2="12"></line>
+        <line x1="21" y1="12" x2="23" y2="12"></line>
+        <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+        <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+    </svg>
+    <svg class="theme-icon-moon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display: none;">
+        <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+    </svg>
+</button>
+
+                <a href="https://github.com/nexus-systems/nexus-modeling" class="btn btn-secondary" target="_blank" rel="noopener">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M12 0C5.374 0 0 5.373 0 12c0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23A11.509 11.509 0 0112 5.803c1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576C20.566 21.797 24 17.3 24 12c0-6.627-5.373-12-12-12z"/>
+                    </svg>
+                    <span class="btn-text">GitHub</span>
+                </a>
+                <a href="index.html" class="btn btn-primary">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
+                        <polyline points="9 22 9 12 15 12 15 22"></polyline>
+                    </svg>
+                    <span class="btn-text">Home</span>
+                </a>
+            </div>
+        </header>
+        
+        <main class="content">
+            <div class="toc"><h3>On This Page</h3><ul><li><a href="#kernel-capability-map">Kernel Capability Map</a></li>
+  <li><a href="#purpose">Purpose</a></li>
+  <li><a href="#layer-model">Layer Model</a></li>
+  <li><a href="#capability-domains-and-ownership">Capability Domains and Ownership</a></li>
+  <li><a href="#ownership-rules">Ownership Rules</a></li>
+  <li><a href="#boundary-rules">Boundary Rules</a></li>
+  <li><a href="#placement-decision-checklist">Placement Decision Checklist</a></li>
+  <li><a href="#feature-routing-examples">Feature Routing Examples</a></li>
+  <li><a href="#test-ownership-matrix">Test Ownership Matrix</a></li>
+  <li><a href="#documentation-ownership">Documentation Ownership</a></li>
+  <li><a href="#non-goals">Non-Goals</a></li>
+</ul></div>
+            <h1 id="kernel-capability-map">Kernel Capability Map</h1>
+
+<p>
+This document defines where capabilities belong in Nexus Modeling so contributors can place new features in the correct subsystem with clear ownership.
+</p>
+
+<h2 id="purpose">Purpose</h2>
+
+<ul>
+<li>Prevent architecture drift and cross-layer shortcuts.</li>
+<li>Keep public APIs stable and intentional.</li>
+<li>Ensure each feature has a clear technical owner and test strategy.</li>
+</ul>
+
+<h2 id="layer-model">Layer Model</h2>
+
+<p>
+Nexus Modeling is organized into layered responsibilities:
+</p>
+
+<ol>
+<li>Kernel Core</li>
+<li>Deterministic, reusable runtime capabilities.</li>
+<li>Public contracts under src/kernel/include/nexus.</li>
+<li>Internal implementation under src/kernel/src.</li>
+</ol>
+
+<ol>
+<li>Product and Tooling Layer</li>
+<li>Authoring workflows, editor UX, and user-facing tool behavior.</li>
+<li>Built on top of kernel contracts.</li>
+</ol>
+
+<ol>
+<li>Integration Layer</li>
+<li>Import/export bridges, scripting adapters, cloud orchestration, plugin hosts.</li>
+<li>Depends on kernel APIs and product workflows.</li>
+</ol>
+
+<h2 id="capability-domains-and-ownership">Capability Domains and Ownership</h2>
+
+<p>
+| Domain | In Kernel Scope | Out of Kernel Scope | Primary Owner | Secondary Owner | Primary API Roots |
+|---|---|---|---|---|---|
+| Geometry | Topology, mesh ops, subdivision, parametric/B-Rep data model, implicit/field and voxel representation contracts, point/splat representation bridges, booleans, remesh, acceleration structures | Editor tools, manipulator UX, one-off interactive operators | Geometry Core | Runtime and Evaluation | src/kernel/include/nexus/render, src/kernel/include/nexus/gfx |
+| Rendering | Device abstraction, frame scheduler, pass sequencing, transitions, material binding contracts, shadow/gbuffer/composite, mesh and RT pipeline creation | Render settings panels, viewport UI overlays, workflow presets | Render Core | Platform Backend | src/kernel/include/nexus/gfx, src/kernel/include/nexus/render |
+| Animation | Time sampling primitives, transform evaluation contracts, skinning/pose data structures, dependency graph hooks | Timeline UX, graph editor UX, rig authoring widgets | Evaluation and Animation Core | Geometry Core | src/kernel/include/nexus/render |
+| Simulation | Deterministic solver interfaces, step orchestration contracts, cacheable sim state formats | Simulation authoring UI, bake management UX, per-project presets | Simulation Core | Evaluation and Animation | src/kernel/include/nexus/render, src/kernel/include/nexus/gfx |
+| Asset and Data | Scene serialization contracts, versioning, stable IDs/handles, import/export interface boundaries | App-level content browser UX, project templates, ad-hoc migration scripts | Asset and Data Core | Integration and Cloud | src/kernel/include/nexus, docs format specs |
+| Scripting | Stable command API surfaces, deterministic execution hooks, typed bindings to kernel contracts | IDE-like script editor UX, package manager UI, tutorial workflows | Scripting and Integration Core | Domain owners per API | src/kernel/include/nexus public API surface |
+</p>
+
+<h2 id="ownership-rules">Ownership Rules</h2>
+
+<ul>
+<li>Every feature PR must declare one primary domain owner.</li>
+<li>Cross-domain features must list a reviewer from each affected domain.</li>
+<li>If ownership is unclear, the change is blocked until the capability is mapped.</li>
+</ul>
+
+<h2 id="boundary-rules">Boundary Rules</h2>
+
+<ol>
+<li>Public API boundary</li>
+<li>Anything exposed under src/kernel/include/nexus is a contract and must be version-safe.</li>
+<li>Internal helper code must not leak into public headers.</li>
+</ol>
+
+<ol>
+<li>Runtime determinism boundary</li>
+<li>Kernel behavior must remain deterministic on Null backend for CI and headless workflows.</li>
+<li>Non-deterministic behavior must be isolated behind optional feature flags.</li>
+</ol>
+
+<ol>
+<li>Rendering authority boundary</li>
+<li>Scheduler path is authoritative for production rendering flow.</li>
+<li>Non-scheduler path is compatibility fallback and is not feature parity target.</li>
+</ol>
+
+<ol>
+<li>Synchronization and lifetime boundary</li>
+<li>Render features must define explicit transitions and ownership.</li>
+<li>Resource lifecycle behavior requires regression tests.</li>
+</ol>
+
+<h2 id="placement-decision-checklist">Placement Decision Checklist</h2>
+
+<p>
+When adding a feature, answer in order:
+</p>
+
+<ol>
+<li>Is this reusable runtime logic across tools and workflows?</li>
+<li>Yes: kernel domain implementation.</li>
+<li>No: product/tooling layer.</li>
+</ol>
+
+<ol>
+<li>Does it require stable API contracts for integrations or plugins?</li>
+<li>Yes: kernel public API.</li>
+<li>No: internal implementation or app layer.</li>
+</ol>
+
+<ol>
+<li>Does it impact synchronization, resource transitions, or deterministic execution?</li>
+<li>Yes: kernel render/runtime ownership and mandatory behavior tests.</li>
+</ol>
+
+<ol>
+<li>Is this primarily UX/editor workflow?</li>
+<li>Yes: outside kernel; consume kernel APIs.</li>
+</ol>
+
+<h2 id="feature-routing-examples">Feature Routing Examples</h2>
+
+<ul>
+<li>Cascaded shadow maps with light matrix contracts: Rendering domain in kernel.</li>
+<li>Bone transform evaluation and skinning buffer contract: Animation domain in kernel.</li>
+<li>Representation bridge from implicit field asset to mesh render proxy: Geometry domain in kernel.</li>
+<li>Gaussian splat scene payload routed through shared scene/runtime contracts: Geometry and Rendering domain review.</li>
+<li>Timeline scrubber and keyframe panel: Product layer, not kernel.</li>
+<li>New importer for external format: Integration layer with Asset domain review.</li>
+<li>Python script command binding for mesh boolean operation: Scripting layer with Geometry and Scripting domain owners.</li>
+</ul>
+
+<h2 id="test-ownership-matrix">Test Ownership Matrix</h2>
+
+<p>
+| Domain | Required Test Type | Minimum Location |
+|---|---|---|
+| Geometry | Behavior and regression tests | tests/kernel |
+| Rendering | Pass ordering, transitions, lifecycle regressions | tests/kernel |
+| Animation | Deterministic evaluation and transform invariants | tests/kernel |
+| Simulation | Deterministic step and cache consistency | tests/kernel |
+| Asset and Data | Round-trip serialization and schema version migration | tests/kernel or integration suites |
+| Scripting | Binding contract and deterministic command execution | tests/kernel or integration suites |
+</p>
+
+<h2 id="documentation-ownership">Documentation Ownership</h2>
+
+<ul>
+<li>Domain owners update docs for architecture-impacting changes in the same PR.</li>
+<li>Update this capability map when a new subsystem or boundary is introduced.</li>
+<li>If a feature crosses domains, record the chosen ownership split in docs design notes.</li>
+</ul>
+
+<h2 id="non-goals">Non-Goals</h2>
+
+<ul>
+<li>This map does not define UI roadmap or release scheduling.</li>
+<li>This map does not replace PRD, SDD, or FRD. It complements them by defining technical placement and ownership.</li>
+</ul>
+
+        </main>
+    </div>
+    
+    <script>
+// Theme management
+const THEME_KEY = 'nexus-docs-theme';
+const themeToggle = document.getElementById('theme-toggle');
+const sunIcon = themeToggle.querySelector('.theme-icon-sun');
+const moonIcon = themeToggle.querySelector('.theme-icon-moon');
+
+function applyTheme(theme) {
+    document.documentElement.setAttribute('data-theme', theme);
+    if (theme === 'light') {
+        sunIcon.style.display = 'block';
+        moonIcon.style.display = 'none';
+    } else {
+        sunIcon.style.display = 'none';
+        moonIcon.style.display = 'block';
+    }
+    localStorage.setItem(THEME_KEY, theme);
+}
+
+function getPreferredTheme() {
+    const stored = localStorage.getItem(THEME_KEY);
+    if (stored) return stored;
+    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+}
+
+function initTheme() {
+    const theme = getPreferredTheme();
+    applyTheme(theme);
+}
+
+function toggleTheme() {
+    const current = document.documentElement.getAttribute('data-theme') || 'dark';
+    applyTheme(current === 'dark' ? 'light' : 'dark');
+}
+
+themeToggle.addEventListener('click', toggleTheme);
+
+// Keyboard shortcut: Ctrl+Shift+L
+document.addEventListener('keydown', (e) => {
+    if (e.ctrlKey && e.shiftKey && e.key === 'L') {
+        e.preventDefault();
+        toggleTheme();
+    }
+});
+
+// Listen for system theme changes
+window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => {
+    if (!localStorage.getItem(THEME_KEY)) {
+        applyTheme(e.matches ? 'dark' : 'light');
+    }
+});
+
+// Initialize theme immediately to prevent flash
+initTheme();
+
+// Mobile sidebar toggle
+const sidebar = document.getElementById('sidebar');
+const mobileMenuBtn = document.getElementById('mobile-menu-btn');
+
+if (mobileMenuBtn) {
+    mobileMenuBtn.addEventListener('click', () => {
+        sidebar.classList.toggle('open');
+    });
+}
+
+document.addEventListener('click', (e) => {
+    if (window.innerWidth <= 768) {
+        if (!sidebar.contains(e.target) && !e.target.closest('.header')) {
+            sidebar.classList.remove('open');
+        }
+    }
+});
+
+// Smooth scroll for anchor links
+document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+    anchor.addEventListener('click', function(e) {
+        const target = document.querySelector(this.getAttribute('href'));
+        if (target) {
+            e.preventDefault();
+            target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            if (window.innerWidth <= 768) {
+                sidebar.classList.remove('open');
+            }
+        }
+    });
+});
+
+// Active link highlighting based on scroll position
+const sections = document.querySelectorAll('.content h2, .content h3');
+const sidebarLinks = document.querySelectorAll('.sidebar-link[href^="#"]');
+
+function updateActiveLink() {
+    let current = '';
+    sections.forEach(section => {
+        const rect = section.getBoundingClientRect();
+        if (rect.top <= 100) {
+            current = '#' + section.id;
+        }
+    });
+
+    sidebarLinks.forEach(link => {
+        link.classList.remove('active');
+        if (link.getAttribute('href') === current) {
+            link.classList.add('active');
+        }
+    });
+}
+
+window.addEventListener('scroll', updateActiveLink, { passive: true });
+window.addEventListener('load', updateActiveLink);
+
+// Highlight.js initialization
+if (typeof hljs !== 'undefined') {
+    hljs.highlightAll();
+}
+
+// Mobile menu button visibility
+const mobileMenuBtn = document.getElementById('mobile-menu-btn');
+function checkMobile() {
+    if (window.innerWidth <= 768) {
+        mobileMenuBtn.style.display = 'flex';
+    } else {
+        mobileMenuBtn.style.display = 'none';
+        document.getElementById('sidebar').classList.remove('open');
+    }
+}
+checkMobile();
+window.addEventListener('resize', checkMobile);
+
+mobileMenuBtn.addEventListener('click', () => {
+    document.getElementById('sidebar').classList.toggle('open');
+});
+</script>

@@ -1,0 +1,537 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Getting Started — Nexus Modeling — Nexus Modeling Docs</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
+</head>
+<body>
+    <nav class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+            <div class="sidebar-title">Nexus Modeling</div>
+            <div class="sidebar-subtitle">Documentation v0.1.0-dev</div>
+        </div>
+        <div class="sidebar-section">
+<div class="sidebar-section-title">📚 Developer Documentation</div>
+<a class="sidebar-link" href="architecture.html">Architecture Overview</a>
+<a class="sidebar-link" href="kernel-api.html">Kernel API Reference</a>
+<a class="sidebar-link" href="geometry-kernel.html">Geometry Kernel</a>
+<a class="sidebar-link" href="renderer.html">Render System</a>
+<a class="sidebar-link" href="editor-architecture.html">Editor Architecture</a>
+<a class="sidebar-link" href="build-system.html">Build System</a>
+<a class="sidebar-link" href="testing.html">Testing</a>
+<a class="sidebar-link" href="contributing.html">Contributing</a>
+<a class="sidebar-link" href="adding-geometry-op.html">Adding Geometry Op</a>
+<a class="sidebar-link" href="adding-cad-feature.html">Adding CAD Feature</a>
+<a class="sidebar-link" href="mesh-operations.html">Mesh Operations</a>
+<a class="sidebar-link" href="boolean-csg.html">Boolean/CSG Deep Dive</a>
+<a class="sidebar-link" href="halfedge-mesh.html">Half-edge Mesh</a>
+<a class="sidebar-link" href="analytic-brep.html">Analytic B-rep</a>
+<a class="sidebar-link" href="mesh-io.html">Mesh I/O</a>
+<a class="sidebar-link" href="tolerance.html">Tolerance System</a>
+<a class="sidebar-link" href="porting.html">Porting Guide</a>
+</div>
+<div class="sidebar-section">
+<div class="sidebar-section-title">🎨 Expert User Documentation</div>
+</div>
+<div class="sidebar-section">
+<div class="sidebar-section-title">👤 Beginner / User Documentation</div>
+<a class="sidebar-link active" href="getting-started.html">Getting Started</a>
+</div>
+<div class="sidebar-section">
+<div class="sidebar-section-title">🔧 API Reference</div>
+</div>
+<div class="sidebar-section">
+<div class="sidebar-section-title">📚 Additional Resources</div>
+<a class="sidebar-link" href="design-decisions.html">Design Decisions</a>
+<a class="sidebar-link" href="testing-strategy.html">Testing Strategy</a>
+<a class="sidebar-link" href="graphics-kernel.html">Graphics Kernel</a>
+<a class="sidebar-link" href="vision-and-roadmap.html">Vision & Roadmap</a>
+<a class="sidebar-link" href="reference-roadmap.html">Reference Roadmap</a>
+<a class="sidebar-link" href="modeling-industry-parity.html">Modeling Industry Parity</a>
+<a class="sidebar-link" href="modeling-parity-index.html">Modeling Parity Index</a>
+<a class="sidebar-link" href="modeling-reference-roadmap.html">Modeling Reference Roadmap</a>
+</div>
+    </nav>
+    
+    <div class="main-content">
+        <header class="header">
+            <button class="btn btn-icon" id="mobile-menu-btn" aria-label="Toggle menu" style="display: none;">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="3" y1="12" x2="21" y2="12"></line>
+                    <line x1="3" y1="6" x2="21" y2="6"></line>
+                    <line x1="3" y1="18" x2="21" y2="18"></line>
+                </svg>
+            </button>
+            <div class="header-title">Getting Started — Nexus Modeling</div>
+            <div class="header-actions">
+                
+<button class="btn btn-icon" id="theme-toggle" aria-label="Toggle dark/light theme" title="Toggle theme (Ctrl+Shift+L)">
+    <svg class="theme-icon-sun" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display: none;">
+        <circle cx="12" cy="12" r="5"></circle>
+        <line x1="12" y1="1" x2="12" y2="3"></line>
+        <line x1="12" y1="21" x2="12" y2="23"></line>
+        <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+        <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+        <line x1="1" y1="12" x2="3" y2="12"></line>
+        <line x1="21" y1="12" x2="23" y2="12"></line>
+        <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+        <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+    </svg>
+    <svg class="theme-icon-moon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display: none;">
+        <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+    </svg>
+</button>
+
+                <a href="https://github.com/nexus-systems/nexus-modeling" class="btn btn-secondary" target="_blank" rel="noopener">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M12 0C5.374 0 0 5.373 0 12c0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23A11.509 11.509 0 0112 5.803c1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576C20.566 21.797 24 17.3 24 12c0-6.627-5.373-12-12-12z"/>
+                    </svg>
+                    <span class="btn-text">GitHub</span>
+                </a>
+                <a href="index.html" class="btn btn-primary">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
+                        <polyline points="9 22 9 12 15 12 15 22"></polyline>
+                    </svg>
+                    <span class="btn-text">Home</span>
+                </a>
+            </div>
+        </header>
+        
+        <main class="content">
+            <div class="toc"><h3>On This Page</h3><ul><li><a href="#getting-started-nexus-modeling">Getting Started — Nexus Modeling</a></li>
+  <li><a href="#prerequisites">Prerequisites</a></li>
+    <li><a href="#linux-ubuntu-24-04-arch-fedora">Linux (Ubuntu 24.04 / Arch / Fedora)</a></li>
+<li><a href="#ubuntu-debian">Ubuntu/Debian</a></li>
+<li><a href="#arch">Arch</a></li>
+<li><a href="#fedora">Fedora</a></li>
+    <li><a href="#windows">Windows</a></li>
+    <li><a href="#macos">macOS</a></li>
+<li><a href="#install-vulkan-sdk-from-https-vulkan-lunarg-com-sdk-home-moltenvk-included">Install Vulkan SDK from https://vulkan.lunarg.com/sdk/home (MoltenVK included)</a></li>
+  <li><a href="#clone-and-build">Clone and build</a></li>
+<li><a href="#configure">Configure</a></li>
+<li><a href="#build-parallel">Build (parallel)</a></li>
+    <li><a href="#cmake-options">CMake options</a></li>
+  <li><a href="#running-tests">Running tests</a></li>
+<li><a href="#run-all-tests">Run all tests</a></li>
+<li><a href="#run-only-a-specific-test-suite">Run only a specific test suite</a></li>
+<li><a href="#verbose-output">Verbose output</a></li>
+    <li><a href="#test-suites">Test suites</a></li>
+    <li><a href="#running-on-headless-ci-without-a-gpu">Running on headless CI without a GPU</a></li>
+<li><a href="#option-1-software-renderer-mesa-lavapipe">Option 1 — Software renderer (Mesa lavapipe)</a></li>
+<li><a href="#option-2-force-null-backend-only-skips-vulkan-tests">Option 2 — Force Null backend only (skips Vulkan tests)</a></li>
+  <li><a href="#using-the-kernel-api">Using the kernel API</a></li>
+    <li><a href="#cmakelists-txt">CMakeLists.txt</a></li>
+    <li><a href="#main-cpp"><code>main.cpp</code></a></li>
+  <li><a href="#shader-files">Shader files</a></li>
+  <li><a href="#debug-tools">Debug tools</a></li>
+</ul></div>
+            <h1 id="getting-started-nexus-modeling">Getting Started — Nexus Modeling</h1>
+
+<h2 id="prerequisites">Prerequisites</h2>
+
+<p>
+| Requirement | Minimum version | Notes |
+|---|---|---|
+| C++ compiler | GCC 13 / Clang 17 / MSVC 19.38 | C++23 required |
+| CMake | 3.28 | <code>cmake --version</code> |
+| Vulkan SDK | 1.3 (1.4 recommended) | <code>vulkaninfo</code> to verify |
+| Python | 3.11+ | Only needed with <code>NEXUS_ENABLE_PYTHON=ON</code> |
+</p>
+
+<h3 id="linux-ubuntu-24-04-arch-fedora">Linux (Ubuntu 24.04 / Arch / Fedora)</h3>
+
+<pre><code class="language-bash"><h1 id="ubuntu-debian">Ubuntu/Debian</h1>
+<p>
+sudo apt install build-essential cmake libvulkan-dev vulkan-tools glslang-tools
+</p>
+
+<h1 id="arch">Arch</h1>
+<p>
+sudo pacman -S base-devel cmake vulkan-devel glslang
+</p>
+
+<h1 id="fedora">Fedora</h1>
+<p>
+sudo dnf install gcc-c++ cmake vulkan-devel glslang</code></pre>
+</p>
+
+<h3 id="windows">Windows</h3>
+
+<ol>
+<li>Install <a href="https://vulkan.lunarg.com/sdk/home">Vulkan SDK</a> — ensure <code>VULKAN_SDK</code> env variable is set.</li>
+<li>Install <a href="https://cmake.org/download/">CMake</a> ≥ 3.28.</li>
+<li>Use Visual Studio 2022 (v143 toolset) or LLVM Clang 17+.</li>
+</ol>
+
+<h3 id="macos">macOS</h3>
+
+<pre><code class="language-bash">brew install cmake glslang
+<h1 id="install-vulkan-sdk-from-https-vulkan-lunarg-com-sdk-home-moltenvk-included">Install Vulkan SDK from https://vulkan.lunarg.com/sdk/home (MoltenVK included)</h1></code></pre>
+
+<hr>
+
+<h2 id="clone-and-build">Clone and build</h2>
+
+<pre><code class="language-bash">git clone https://github.com/The-No-hands-Company/Nexus-Modeling.git
+<p>
+cd Nexus-Modeling
+</p>
+
+<h1 id="configure">Configure</h1>
+<p>
+cmake -B build \
+      -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+      -DNEXUS_BACKEND_VULKAN=ON \
+      -DNEXUS_ENABLE_TESTS=ON
+</p>
+
+<h1 id="build-parallel">Build (parallel)</h1>
+<p>
+cmake --build build -j$(nproc)</code></pre>
+</p>
+
+<h3 id="cmake-options">CMake options</h3>
+
+<p>
+| Option | Default | Description |
+|---|---|---|
+| <code>NEXUS_BACKEND_VULKAN</code> | <code>ON</code> | Build Vulkan backend |
+| <code>NEXUS_BACKEND_NULL</code> | <code>ON</code> | Build headless Null backend (always keep ON for tests) |
+| <code>NEXUS_ENABLE_TESTS</code> | <code>ON</code> | Build unit and integration tests |
+| <code>NEXUS_ENABLE_PYTHON</code> | <code>OFF</code> | Build Python bindings |
+| <code>NEXUS_ENABLE_OIDN</code> | <code>ON</code> | Intel Open Image Denoise (CPU denoiser fallback) |
+| <code>NEXUS_ENABLE_DLSS</code> | <code>OFF</code> | NVIDIA DLSS 4 (requires DLSS SDK) |
+| <code>NEXUS_ENABLE_XESS</code> | <code>OFF</code> | Intel XeSS (requires XeSS SDK) |
+| <code>NEXUS_ENABLE_AFTERMATH</code> | <code>OFF</code> | NVIDIA Aftermath crash breadcrumbs |
+| <code>CMAKE_BUILD_TYPE</code> | <code>RelWithDebInfo</code> | <code>Debug</code> / <code>Release</code> / <code>RelWithDebInfo</code> |
+</p>
+
+<hr>
+
+<h2 id="running-tests">Running tests</h2>
+
+<pre><code class="language-bash"><h1 id="run-all-tests">Run all tests</h1>
+<p>
+ctest --test-dir build --output-on-failure
+</p>
+
+<h1 id="run-only-a-specific-test-suite">Run only a specific test suite</h1>
+<p>
+ctest --test-dir build -R VulkanShaderCompiler --output-on-failure
+</p>
+
+<h1 id="verbose-output">Verbose output</h1>
+<p>
+ctest --test-dir build -V</code></pre>
+</p>
+
+<h3 id="test-suites">Test suites</h3>
+
+<p>
+| Suite | Count | Notes |
+|---|---|---|
+| <code>Types.*</code> | 4 | Handle defaults, usage flag bitwise ops |
+| <code>NullDeviceTest.*</code> | 6 | Null backend: buffer, texture, fence, cmd buf, wait-idle |
+| <code>Camera.*</code> | 5 | Perspective, look-at, jitter, TAA tick |
+| <code>SceneGraph.*</code> | 6 | Node hierarchy, frustum culling, traversal |
+| <code>RenderContext.*</code> | 4 | Context creation, device/allocator/swapchain access |
+| <code>VulkanShaderCompiler.*</code> | 2 | GLSL → SPIR-V compile, .spv file load |
+| <code>VulkanPipeline.*</code> | 1 | Graphics pipeline from inline GLSL (skipped if no ICD) |
+</p>
+
+<p>
+Tests that need a physical Vulkan ICD (GPU or software renderer) are <strong>skip-safe</strong> — they emit <code>[  SKIPPED ]</code> instead of failing in headless/CI environments.
+</p>
+
+<h3 id="running-on-headless-ci-without-a-gpu">Running on headless CI without a GPU</h3>
+
+<pre><code class="language-bash"><h1 id="option-1-software-renderer-mesa-lavapipe">Option 1 — Software renderer (Mesa lavapipe)</h1>
+<p>
+sudo apt install mesa-vulkan-drivers
+MESA_VK_DEVICE_SELECT=llvmpipe ctest --test-dir build --output-on-failure
+</p>
+
+<h1 id="option-2-force-null-backend-only-skips-vulkan-tests">Option 2 — Force Null backend only (skips Vulkan tests)</h1>
+<p>
+ctest --test-dir build -R "Types|NullDevice|Camera|SceneGraph|RenderContext"</code></pre>
+</p>
+
+<hr>
+
+<h2 id="using-the-kernel-api">Using the kernel API</h2>
+
+<p>
+A minimal C++ application linking against <code>nexus_gfx_core</code>:
+</p>
+
+<h3 id="cmakelists-txt">CMakeLists.txt</h3>
+
+<pre><code class="language-cmake">find_package(NexusModeling REQUIRED)  # or add_subdirectory
+
+<p>
+add_executable(my_app main.cpp)
+target_link_libraries(my_app PRIVATE nexus_gfx_core nexus_backend_vulkan)</code></pre>
+</p>
+
+<h3 id="main-cpp"><code>main.cpp</code></h3>
+
+<pre><code class="language-cpp">#include <nexus/gfx/RenderContext.h>
+<p>
+#include <nexus/gfx/Device.h>
+#include <nexus/gfx/CommandBuffer.h>
+</p>
+
+<p>
+using namespace nexus::gfx;
+</p>
+
+<p>
+int main() {
+    // 1. Create context
+    auto ctx = RenderContext::create({
+        .preferredBackend = Backend::Vulkan,
+        .validation       = ValidationLevel::Core,
+    });
+</p>
+
+<p>
+    IDevice& dev = ctx->device();
+</p>
+
+<p>
+    // 2. Create resources
+    ShaderHandle vert = dev.createShader({
+        .sourcePath = "shaders/triangle.vert.glsl",
+        .stage      = ShaderStage::Vertex,
+    });
+    ShaderHandle frag = dev.createShader({
+        .sourcePath = "shaders/triangle.frag.glsl",
+        .stage      = ShaderStage::Fragment,
+    });
+</p>
+
+<p>
+    PipelineHandle pipe = dev.createGraphicsPipeline({
+        .vertexShader   = vert,
+        .fragmentShader = frag,
+        .topology       = Topology::TriangleList,
+        .depthTest      = true,
+    });
+</p>
+
+<p>
+    // 3. Record and submit commands
+    CmdBufHandle cmd = dev.allocateCommandBuffer();
+    ICommandBuffer& cb = *dev.getCommandBuffer(cmd);
+</p>
+
+<p>
+    cb.begin();
+    cb.bindPipeline(pipe);
+    cb.draw(3);  // full-screen triangle
+    cb.end();
+</p>
+
+<p>
+    FenceHandle fence = dev.createFence();
+    dev.submit(cmd, QueueType::Graphics, fence);
+    dev.waitForFence(fence);
+</p>
+
+<p>
+    // 4. Cleanup
+    dev.freeCommandBuffer(cmd);
+    dev.destroyFence(fence);
+    dev.destroyPipeline(pipe);
+    dev.destroyShader(vert);
+    dev.destroyShader(frag);
+}</code></pre>
+</p>
+
+<hr>
+
+<h2 id="shader-files">Shader files</h2>
+
+<p>
+Place GLSL shaders anywhere reachable at runtime and pass the path to <code>ShaderDesc::sourcePath</code>. The kernel dispatches based on extension:
+</p>
+
+<p>
+| Extension | Action |
+|---|---|
+| <code>.spv</code> | Loaded as raw SPIR-V — no compilation |
+| <code>.glsl</code> | Compiled at runtime via glslang |
+| <code>.vert</code>, <code>.frag</code>, <code>.comp</code> | Same as <code>.glsl</code> — compiled |
+</p>
+
+<p>
+For pre-compilation (recommended in release), use <code>glslangValidator</code> or <code>glslc</code>:
+</p>
+
+<pre><code class="language-bash">glslangValidator -V triangle.vert.glsl -o triangle.vert.spv
+<p>
+glslc -fshader-stage=vert triangle.vert.glsl -o triangle.vert.spv</code></pre>
+</p>
+
+<p>
+Then supply the <code>.spv</code> path — zero compile cost at runtime.
+</p>
+
+<hr>
+
+<h2 id="debug-tools">Debug tools</h2>
+
+<p>
+| Tool | How to enable |
+|---|---|
+| Vulkan validation layers | <code>ValidationLevel::Core</code> or <code>Full</code> in <code>RenderContextDesc</code> |
+| RenderDoc | Attach to process — works transparently with dynamic rendering |
+| NVIDIA Nsight | Attach to process |
+| GPU crash breadcrumbs | <code>NEXUS_ENABLE_AFTERMATH=ON</code> + <code>ValidationLevel::Aftermath</code> |
+| Debug labels | <code>cb.beginDebugLabel("GBuffer Pass")</code> / <code>cb.endDebugLabel()</code> |
+</p>
+
+        </main>
+    </div>
+    
+    <script>
+// Theme management
+const THEME_KEY = 'nexus-docs-theme';
+const themeToggle = document.getElementById('theme-toggle');
+const sunIcon = themeToggle.querySelector('.theme-icon-sun');
+const moonIcon = themeToggle.querySelector('.theme-icon-moon');
+
+function applyTheme(theme) {
+    document.documentElement.setAttribute('data-theme', theme);
+    if (theme === 'light') {
+        sunIcon.style.display = 'block';
+        moonIcon.style.display = 'none';
+    } else {
+        sunIcon.style.display = 'none';
+        moonIcon.style.display = 'block';
+    }
+    localStorage.setItem(THEME_KEY, theme);
+}
+
+function getPreferredTheme() {
+    const stored = localStorage.getItem(THEME_KEY);
+    if (stored) return stored;
+    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+}
+
+function initTheme() {
+    const theme = getPreferredTheme();
+    applyTheme(theme);
+}
+
+function toggleTheme() {
+    const current = document.documentElement.getAttribute('data-theme') || 'dark';
+    applyTheme(current === 'dark' ? 'light' : 'dark');
+}
+
+themeToggle.addEventListener('click', toggleTheme);
+
+// Keyboard shortcut: Ctrl+Shift+L
+document.addEventListener('keydown', (e) => {
+    if (e.ctrlKey && e.shiftKey && e.key === 'L') {
+        e.preventDefault();
+        toggleTheme();
+    }
+});
+
+// Listen for system theme changes
+window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => {
+    if (!localStorage.getItem(THEME_KEY)) {
+        applyTheme(e.matches ? 'dark' : 'light');
+    }
+});
+
+// Initialize theme immediately to prevent flash
+initTheme();
+
+// Mobile sidebar toggle
+const sidebar = document.getElementById('sidebar');
+const mobileMenuBtn = document.getElementById('mobile-menu-btn');
+
+if (mobileMenuBtn) {
+    mobileMenuBtn.addEventListener('click', () => {
+        sidebar.classList.toggle('open');
+    });
+}
+
+document.addEventListener('click', (e) => {
+    if (window.innerWidth <= 768) {
+        if (!sidebar.contains(e.target) && !e.target.closest('.header')) {
+            sidebar.classList.remove('open');
+        }
+    }
+});
+
+// Smooth scroll for anchor links
+document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+    anchor.addEventListener('click', function(e) {
+        const target = document.querySelector(this.getAttribute('href'));
+        if (target) {
+            e.preventDefault();
+            target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            if (window.innerWidth <= 768) {
+                sidebar.classList.remove('open');
+            }
+        }
+    });
+});
+
+// Active link highlighting based on scroll position
+const sections = document.querySelectorAll('.content h2, .content h3');
+const sidebarLinks = document.querySelectorAll('.sidebar-link[href^="#"]');
+
+function updateActiveLink() {
+    let current = '';
+    sections.forEach(section => {
+        const rect = section.getBoundingClientRect();
+        if (rect.top <= 100) {
+            current = '#' + section.id;
+        }
+    });
+
+    sidebarLinks.forEach(link => {
+        link.classList.remove('active');
+        if (link.getAttribute('href') === current) {
+            link.classList.add('active');
+        }
+    });
+}
+
+window.addEventListener('scroll', updateActiveLink, { passive: true });
+window.addEventListener('load', updateActiveLink);
+
+// Highlight.js initialization
+if (typeof hljs !== 'undefined') {
+    hljs.highlightAll();
+}
+
+// Mobile menu button visibility
+const mobileMenuBtn = document.getElementById('mobile-menu-btn');
+function checkMobile() {
+    if (window.innerWidth <= 768) {
+        mobileMenuBtn.style.display = 'flex';
+    } else {
+        mobileMenuBtn.style.display = 'none';
+        document.getElementById('sidebar').classList.remove('open');
+    }
+}
+checkMobile();
+window.addEventListener('resize', checkMobile);
+
+mobileMenuBtn.addEventListener('click', () => {
+    document.getElementById('sidebar').classList.toggle('open');
+});
+</script>
