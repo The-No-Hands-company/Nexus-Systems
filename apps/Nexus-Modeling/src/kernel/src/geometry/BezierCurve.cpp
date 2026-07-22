@@ -182,7 +182,14 @@ NurbsCurve ConicCurve::arc(const Vec3& center, const Vec3& normal,
     // Solve 2D in the plane (u, v).
     Vec3 d = p2 - p0;
     float denom = tan2.x * tan0.y - tan2.y * tan0.x;
-    if (std::abs(denom) < 1e-10f) return circle(center, normal, radius);
+    // Check if lines are parallel (denominator near zero) with scale-adaptive tolerance
+    float lineScale = std::max({
+        std::abs(tan0.x), std::abs(tan0.y), std::abs(tan0.z),
+        std::abs(tan2.x), std::abs(tan2.y), std::abs(tan2.z),
+        std::abs(d.x), std::abs(d.y), std::abs(d.z)
+    });
+    float denomTolerance = std::max(lineScale * 1e-8f, 1e-12f); // Relative tolerance with floor
+    if (std::abs(denom) < denomTolerance) return circle(center, normal, radius);
 
     float t = (d.x * tan2.y - d.y * tan2.x) / denom;
     Vec3 p1 = p0 + tan0 * t;

@@ -2,6 +2,7 @@
 
 #include <nexus/geometry/Mesh.h>
 
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <unordered_map>
@@ -65,16 +66,26 @@ inline void buildCotangentFan(const nexus::geometry::Mesh& mesh,
             const float crossY = ez * fx - ex * fz;
             const float crossZ = ex * fy - ey * fx;
 
-            const float area2x = 0.5f * std::sqrt(crossX * crossX +
-                                                   crossY * crossY +
-                                                   crossZ * crossZ);
+const float area2x = 0.5f * std::sqrt(crossX * crossX +
+                                                    crossY * crossY +
+                                                    crossZ * crossZ);
 
-            if (area2x < 1e-10f) continue;
+            // Scale-adaptive check for degenerate triangle (near-zero area)
+            float maxCoord = std::max({
+                std::max(std::abs(pPrev.x), std::max(std::abs(pPrev.y), std::abs(pPrev.z))),
+                std::max(std::abs(pCurr.x), std::max(std::abs(pCurr.y), std::abs(pCurr.z))),
+                std::max(std::abs(pNext.x), std::max(std::abs(pNext.y), std::abs(pNext.z)))
+            });
+            float areaTolerance = std::max(maxCoord * maxCoord * 1e-8f, 1e-20f); // Area scales with length^2
+            if (area2x < areaTolerance) continue;
 
             const float cosAngle = (aLenSq + bLenSq - cLenSq);
             const float sinAngle = 2.0f * area2x;
 
-            const float cotVal = cosAngle / (sinAngle + 1e-30f);
+            // Scale-adaptive epsilon to avoid division by zero
+            float sinAngleScale = std::max(std::abs(sinAngle), 1.0f);
+            float sinAngleEpsilon = sinAngleScale * 1e-8f; // Relative tolerance
+            const float cotVal = cosAngle / (sinAngle + std::max(sinAngleEpsilon, 1e-30f));
 
             fan[idxPrev].push_back(FanEntry{idxNext, cotVal});
             fan[idxNext].push_back(FanEntry{idxPrev, cotVal});

@@ -52,7 +52,10 @@ CurveExtrudeReport CurveExtrudeOperation::extrude(const NurbsCurve&        profi
     }
 
     float dirLen = desc.direction.length();
-    if (dirLen < 1e-10f) {
+    // Scale-adaptive zero check for direction vector
+    float maxCoord = std::max({std::abs(desc.direction.x), std::abs(desc.direction.y), std::abs(desc.direction.z)});
+    float dirLenTolerance = std::max(maxCoord * 1e-8f, 1e-12f); // Relative tolerance with floor
+    if (dirLen < dirLenTolerance) {
         report.diagnostic = CurveExtrudeDiagnostic::InvalidDirection;
         report.converged  = false;
         return report;
@@ -77,7 +80,10 @@ CurveExtrudeReport CurveExtrudeOperation::extrude(const NurbsCurve&        profi
     // scale = 1 - fraction * draftFactor * height, so scale >= 0 when
     // fraction <= 1 / (draftFactor * height) for positive draftFactor,
     // and fraction >= 1 / (draftFactor * height) for negative draftFactor.
-    const float maxFraction = (draftFactor * totalHeight > 1e-10f)
+    // Scale-adaptive check for near-zero denominator to avoid numerical instability
+    float heightScale = std::max(std::abs(totalHeight), 1.0f); // Use height as scale reference with floor
+    float denomThreshold = heightScale * 1e-8f; // Relative tolerance
+    const float maxFraction = (std::abs(draftFactor * totalHeight) > denomThreshold)
         ? 1.f / (draftFactor * totalHeight)
         : std::numeric_limits<float>::max();
 

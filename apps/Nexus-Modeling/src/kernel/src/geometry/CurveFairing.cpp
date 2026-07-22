@@ -1,4 +1,5 @@
 #include <nexus/geometry/CurveFairing.h>
+#include <nexus/geometry/Tolerance.h>
 
 #include <algorithm>
 #include <cmath>
@@ -11,7 +12,44 @@ using Vec3 = nexus::render::Vec3;
 
 namespace {
 
-static void solveSystem(std::vector<float>& A, std::vector<float>& b, int32_t n)
+// Compute the 3D bounding box of control points for scale-adaptive tolerances
+static void computeControlPointBounds(const NurbsCurve& curve, 
+                                    float& minX, float& minY, float& minZ,
+                                    float& maxX, float& maxY, float& maxZ) {
+    const auto& ctrlPts = curve.controlPoints();
+    if (ctrlPts.empty()) return;
+
+    minX = maxX = ctrlPts[0].x;
+    minY = maxY = ctrlPts[0].y;
+    minZ = maxZ = ctrlPts[0].z;
+
+    for (size_t i = 1; i < ctrlPts.size(); ++i) {
+        const Vec3& p = ctrlPts[i];
+        minX = std::min(minX, p.x);
+        maxX = std::max(maxX, p.x);
+        minY = std::min(minY, p.y);
+        maxY = std::max(maxY, p.y);
+        minZ = std::min(minZ, p.z);
+        maxZ = std::max(maxZ, p.z);
+    }
+}
+
+// Compute scale-adaptive tolerance for pivot checks in linear solving
+static float computePivotTolerance(const NurbsCurve& curve) {
+    // Zero-init to satisfy GCC-15 -Werror=maybe-uninitialized (computeControlPointBounds
+    // fills these by reference, but the compiler cannot prove the empty-input path does).
+    float minX = 0.f, minY = 0.f, minZ = 0.f, maxX = 0.f, maxY = 0.f, maxZ = 0.f;
+    computeControlPointBounds(curve, minX, minY, minZ, maxX, maxY, maxZ);
+    
+    // Compute the diagonal length of the bounding box as a scale measure
+    float dx = maxX - minX;
+    float dy = maxY - minY;
+    float dz = maxZ - minZ;
+    float maxDim = std::max({dx, dy, dz});
+    return std::max(maxDim, 1.0f); // Ensure minimum scale of 1.0 to avoid division by zero
+}
+
+static void solveSystem(std::vector<float>& A, std::vector<float>& b, int32_t n, float pivotTolerance)
 {
     auto at = [&](int32_t r, int32_t c) -> float& {
         return A[static_cast<size_t>(r) * static_cast<size_t>(n) + static_cast<size_t>(c)];
@@ -34,7 +72,7 @@ static void solveSystem(std::vector<float>& A, std::vector<float>& b, int32_t n)
             std::swap(b[static_cast<size_t>(col)], b[static_cast<size_t>(maxRow)]);
         }
         float pivot = at(col, col);
-        if (std::abs(pivot) < 1e-12f) continue;
+        if (std::abs(pivot) < pivotTolerance) continue;
         for (int32_t row = col + 1; row < n; ++row) {
             float factor = at(row, col) / pivot;
             if (factor == 0.f) continue;
@@ -134,7 +172,7 @@ NurbsCurve CurveFairing::fair(const NurbsCurve& curve,
             }
 
             buildSystem(A, b, oldChannel.data(), lambda, opts.fixEndpoints, n);
-            solveSystem(A, b, n);
+            solveSystem(A, b, n, 1e-12f * computePivotTolerance(curve));
 
             for (int32_t i = 0; i < n; ++i) {
                 size_t si = static_cast<size_t>(i);

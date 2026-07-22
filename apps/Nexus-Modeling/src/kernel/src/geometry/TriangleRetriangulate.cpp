@@ -1,6 +1,7 @@
 #include <nexus/geometry/TriangleRetriangulate.h>
 
 #include <nexus/geometry/ConstrainedDelaunay2D.h>
+#include <nexus/geometry/RobustPredicates.h>
 
 #include <algorithm>
 #include <bit>
@@ -112,7 +113,35 @@ RetriangulationResult TriangleRetriangulate::apply(const V& a, const V& b, const
     for (const Vec2& v : cdt.vertices) {
         out.points.push_back(addv(a, addv(mul(U, v.u), mul(Vv, v.v))));
     }
-    out.triangles = cdt.triangles;
+
+    // Restrict the result to the triangle's DOMAIN. The general CDT triangulates the
+    // convex hull of all input points, and a seam endpoint that projects a hair
+    // OUTSIDE this triangle (float noise on the plane projection) makes the CDT emit
+    // sub-triangles that spill past the triangle's edges — extra area that overlaps the
+    // neighbouring triangle's retriangulation and opens a boolean seam. A retriangulated
+    // triangle must tile EXACTLY itself, so keep only sub-triangles whose centroid lies
+    // inside triangle abc. Vertices 0,1,2 are a,b,c (added first); sidedness is EXACT
+    // orient2D on the 2D projection.
+    const Vec2& A2 = cdt.vertices[0];
+    const Vec2& B2 = cdt.vertices[1];
+    const Vec2& C2 = cdt.vertices[2];
+    const double triOrient = RobustPredicates::orient2D(A2, B2, C2);
+    out.triangles.reserve(cdt.triangles.size());
+    for (const auto& t : cdt.triangles) {
+        const Vec2& q0 = cdt.vertices[t[0]];
+        const Vec2& q1 = cdt.vertices[t[1]];
+        const Vec2& q2 = cdt.vertices[t[2]];
+        const Vec2  ctr{(q0.u + q1.u + q2.u) / 3.f, (q0.v + q1.v + q2.v) / 3.f};
+        const double d0 = RobustPredicates::orient2D(A2, B2, ctr);
+        const double d1 = RobustPredicates::orient2D(B2, C2, ctr);
+        const double d2 = RobustPredicates::orient2D(C2, A2, ctr);
+        const bool inside = (triOrient >= 0.0) ? (d0 >= 0.0 && d1 >= 0.0 && d2 >= 0.0)
+                                               : (d0 <= 0.0 && d1 <= 0.0 && d2 <= 0.0);
+        if (inside) out.triangles.push_back(t);
+    }
+    if (out.triangles.empty()) {
+        return single();  // domain filter removed everything (degenerate) → safe fallback
+    }
     return out;
 }
 
