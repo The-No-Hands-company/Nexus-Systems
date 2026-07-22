@@ -1,6 +1,8 @@
 #include <nexus/geometry/ConstrainedDelaunay2D.h>
 #include <nexus/geometry/RobustPredicates.h>
 
+#include "DelaunaySuperTriangle.h"
+
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
@@ -66,9 +68,21 @@ bool ConstrainedDelaunay2D::segmentsCross(const Vec2& p1, const Vec2& p2,
 }
 
 void ConstrainedDelaunay2D::buildDelaunay() {
+    // Build at increasing super-triangle scales until the triangulation covers the input's
+    // convex hull. A sliver triple's circumcircle can swallow a too-small super-triangle,
+    // in which case the sliver is never emitted and stripping the super-triangle deletes
+    // real area — see DelaunaySuperTriangle.h. Well-conditioned inputs succeed on the
+    // first (historical) scale, so they are unaffected.
+    const double hullArea = detail::convexHullArea(m_vertices);
+    for (const float scale : detail::kSuperTriangleScales) {
+        if (buildDelaunayAtScale(scale, hullArea)) return;
+    }
+}
+
+bool ConstrainedDelaunay2D::buildDelaunayAtScale(float scale, double hullArea) {
     m_triangles.clear();
     auto& pts = m_vertices;
-    if (pts.size() < 3) return;
+    if (pts.size() < 3) return true;
 
     float minU = pts[0].u, maxU = pts[0].u;
     float minV = pts[0].v, maxV = pts[0].v;
@@ -77,8 +91,8 @@ void ConstrainedDelaunay2D::buildDelaunay() {
         minV = std::min(minV, p.v); maxV = std::max(maxV, p.v);
     }
     float dx = maxU - minU, dy = maxV - minV;
-    float dmax = std::max(dx, dy) * 20.f;
-    if (dmax < 1.f) dmax = 20.f;
+    float dmax = std::max(dx, dy) * scale;
+    if (dmax < 1.f) dmax = scale;
     float midU = (minU + maxU) * 0.5f, midV = (minV + maxV) * 0.5f;
 
     uint32_t s0 = static_cast<uint32_t>(pts.size());
@@ -147,6 +161,15 @@ void ConstrainedDelaunay2D::buildDelaunay() {
         }
     }
     pts.resize(s0);
+
+    // Coverage check: the triangles that survived stripping must tile the convex hull. A
+    // deficit means the super-triangle was inside some sliver's circumcircle and real
+    // triangles were consumed with it — the caller retries at a larger scale.
+    double area = 0.0;
+    for (const auto& t : m_triangles) {
+        area += std::abs(RobustPredicates::orient2D(pts[t[0]], pts[t[1]], pts[t[2]])) * 0.5;
+    }
+    return detail::coversHull(area, hullArea);
 }
 
 int ConstrainedDelaunay2D::findTriangleContaining(const Vec2& p) const noexcept {

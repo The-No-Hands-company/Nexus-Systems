@@ -54,6 +54,11 @@ private:
                                             const Vec2& q1, const Vec2& q2) noexcept;
 
     void buildDelaunay();
+    // One Bowyer-Watson pass with the super-triangle sized at `scale` times the input's
+    // bounding-box extent. Returns whether the result tiles the input's convex hull
+    // (`hullArea`); a false return means the super-triangle was too small and the caller
+    // must retry larger. See src/geometry/DelaunaySuperTriangle.h.
+    bool buildDelaunayAtScale(float scale, double hullArea);
     void enforceConstraint(uint32_t a, uint32_t b);
     int findTriangleContaining(const Vec2& p) const noexcept;
     int findAdjacentTriangle(uint32_t edgeA, uint32_t edgeB, int excludeTri) const noexcept;

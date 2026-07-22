@@ -1,6 +1,8 @@
 #include <nexus/geometry/Delaunay2D.h>
 #include <nexus/geometry/RobustPredicates.h>
 
+#include "DelaunaySuperTriangle.h"
+
 #include <algorithm>
 #include <cmath>
 #include <limits>
@@ -22,14 +24,34 @@ namespace {
 // --- triangulate --------------------------------------------------------------
 
 DelaunayResult Delaunay2D::triangulate(const std::vector<Vec2>& points) {
-    DelaunayResult result;
     if (points.size() < 3) {
+        DelaunayResult result;
         result.ok = points.size() == 2;
         if (!result.ok)
             result.error = "Need at least 3 points for triangulation";
         return result;
     }
 
+    // Build at increasing super-triangle scales until the result tiles the input's convex
+    // hull. A near-collinear triple has an enormous circumcircle that can swallow a small
+    // super-triangle, taking real triangles with it when the super-triangle is stripped
+    // (see DelaunaySuperTriangle.h). Well-conditioned inputs succeed on the first pass.
+    const double hullArea = detail::convexHullArea(points);
+    DelaunayResult result;
+    for (const float scale : detail::kSuperTriangleScales) {
+        result = triangulateAtScale(points, scale);
+        double area = 0.0;
+        for (const auto& t : result.triangles) {
+            area += std::abs(RobustPredicates::orient2D(result.vertices[t[0]], result.vertices[t[1]],
+                                                        result.vertices[t[2]])) * 0.5;
+        }
+        if (detail::coversHull(area, hullArea)) break;
+    }
+    return result;
+}
+
+DelaunayResult Delaunay2D::triangulateAtScale(const std::vector<Vec2>& points, float scale) {
+    DelaunayResult result;
     result.vertices = points;
 
     // --- Compute AABB ---------------------------------------------------------
@@ -45,8 +67,8 @@ DelaunayResult Delaunay2D::triangulate(const std::vector<Vec2>& points) {
     float dv = maxv - minv;
     if (du < 1e-8f) du = 1.0f;
     if (dv < 1e-8f) dv = 1.0f;
-    float expand = std::max(du, dv) * 0.5f;
-    float margin = expand * 1.5f; // 50% of max extent
+    float expand = std::max(du, dv) * scale;
+    float margin = expand * 1.5f;
 
     float superMinU = minu - margin;
     float superMaxU = maxu + margin;

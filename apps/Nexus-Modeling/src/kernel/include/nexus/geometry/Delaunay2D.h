@@ -20,6 +20,13 @@ struct DelaunayResult {
 class Delaunay2D {
 public:
     [[nodiscard]] static DelaunayResult triangulate(const std::vector<Vec2>& points);
+
+private:
+    // One Bowyer-Watson pass with the super-triangle sized at `scale` times the input's
+    // bounding-box extent. `triangulate` retries at larger scales until the result tiles
+    // the input's convex hull. See src/geometry/DelaunaySuperTriangle.h.
+    [[nodiscard]] static DelaunayResult triangulateAtScale(const std::vector<Vec2>& points,
+                                                           float scale);
 };
 
 } // namespace nexus::geometry

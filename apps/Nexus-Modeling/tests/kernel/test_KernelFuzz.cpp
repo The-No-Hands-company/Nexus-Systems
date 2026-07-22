@@ -147,10 +147,15 @@ TEST(KernelFuzz, MeshBooleanFiniteAndDeterministicUnderRandom)
             ASSERT_EQ(r.attributes().positions().size(), r2.attributes().positions().size());
         }
     }
-    // The residual mesh-boolean leak rate is a tracked metric, not a failure.
     RecordProperty("meshBooleanChecked", checked);
     RecordProperty("meshBooleanLeaks", leaks);
-    EXPECT_LT(leaks, checked);  // sanity: not everything leaks
+    // This was a tracked metric while the randomized battery still leaked. Sizing the
+    // Bowyer-Watson super-triangle to the input's thinness (rather than a fixed multiple
+    // of its bounding box) took it to zero: a sliver triple's circumcircle no longer
+    // swallows the super-triangle, so no cut face loses real area. It is an assertion now
+    // — a leak here is a regression, not a known residual.
+    EXPECT_EQ(leaks, 0) << "a randomized mesh boolean leaked (" << leaks << " of " << checked
+                        << ") — watertightness regressed";
 }
 
 // Every half-edge Euler operator either succeeds cleanly or refuses — it must NEVER

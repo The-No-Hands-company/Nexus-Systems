@@ -35,6 +35,7 @@ add_executable(nexus_kernel_tests
     kernel/test_CurveFairing.cpp
     kernel/test_DeepHardening.cpp
     kernel/test_Delaunay2D.cpp
+    kernel/test_DelaunaySliverRobustness.cpp
     kernel/test_DirectModelingFaceFillet.cpp
     kernel/test_EdgeBridge.cpp
     kernel/test_EvalGraph.cpp
