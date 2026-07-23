@@ -1,6 +1,8 @@
 #include <nexus/geometry/MeshTopologyValidation.h>
 
 #include <algorithm>
+#include <map>
+#include <utility>
 #include <cmath>
 #include <unordered_map>
 #include <unordered_set>
@@ -22,14 +24,60 @@ TopologyValidityResult MeshTopologyValidation::validate(const Mesh& mesh) {
         r.violations.push_back({TopologyViolation::NonManifoldVertex, "Failed to build half-edge structure", 0});
         return r;
     }
-    return validateHEM(*hemOpt);
+    r = validateHEM(*hemOpt);
+
+    // Non-manifold edges have to be found on the FACE LIST, not through the half-edge
+    // structure. A half-edge mesh cannot represent three faces meeting at one edge — the
+    // third face's half-edge simply never gets a twin — so by the time the structure
+    // exists the evidence is gone: the extra face reads as a boundary, no edge ever shows
+    // a valence above two, and the check that looks for one can never fire. Three
+    // triangles sharing an edge, the textbook non-manifold case, was reported VALID with
+    // no violations at all.
+    //
+    // Counting how many faces use each undirected edge is exact and needs no structure.
+    std::map<std::pair<uint32_t, uint32_t>, uint32_t> edgeUse;
+    const auto& topo = mesh.topology();
+    for (size_t fi = 0; fi < topo.faceCount(); ++fi) {
+        const Face& face = topo.face(fi);
+        if (face.indices.size() < 3) continue;
+        for (size_t k = 0; k < face.indices.size(); ++k) {
+            uint32_t a = face.indices[k];
+            uint32_t b = face.indices[(k + 1) % face.indices.size()];
+            if (a > b) std::swap(a, b);
+            edgeUse[{a, b}]++;
+        }
+    }
+    uint32_t edgeIndex = 0;
+    for (const auto& [edge, uses] : edgeUse) {
+        if (uses > 2) {
+            r.valid = false;
+            r.violations.push_back({TopologyViolation::NonManifoldEdge,
+                                    "Edge is used by " + std::to_string(uses) + " faces",
+                                    edgeIndex});
+        }
+        ++edgeIndex;
+    }
+    return r;
 }
 
 TopologyValidityResult MeshTopologyValidation::validateHEM(const HalfEdgeMesh& hem) {
     TopologyValidityResult r;
     uint32_t V = hem.vertexCount();
     uint32_t F = hem.faceCount();
-    uint32_t E = hem.edgeCount() / 2;
+
+    // Count each undirected edge once. Dividing the half-edge count by two assumes every
+    // edge carries two half-edges, which is true only on a CLOSED surface — a boundary
+    // edge has one. On an open mesh that undercounts E by half the boundary, and the Euler
+    // characteristic comes out too high by exactly that much: a 4x4 plane, whose sixteen
+    // boundary edges make it a disk with chi = 1, reported 9.
+    //
+    // Nothing caught it because every test here used a closed cube, or called the static
+    // arithmetic helpers with numbers written down by hand.
+    uint32_t E = 0;
+    for (uint32_t ei = 0; ei < hem.edgeCount(); ++ei) {
+        const uint32_t twin = hem.edge(ei).twin;
+        if (twin == HalfEdgeMesh::kInvalid || ei < twin) ++E;  // boundary, or the lower of a pair
+    }
 
     // Euler characteristic: V - E + F = 2(1 - G) + B for orientable surfaces
     r.euler = computeEulerCharacteristic(V, E, F);
@@ -149,11 +197,14 @@ int MeshTopologyValidation::computeEulerCharacteristic(
 
 int MeshTopologyValidation::computeGenus(
     int eulerCharacteristic, uint32_t boundaryLoops) noexcept {
-    if (boundaryLoops == 0) {
-        int g = (2 - eulerCharacteristic) / 2;
-        return g >= 0 ? g : 0;
-    }
-    int g = (2 - boundaryLoops - eulerCharacteristic) / 2;
+    // chi = 2 - 2g - b, so g = (2 - b - chi) / 2.
+    //
+    // boundaryLoops is unsigned, and `2 - boundaryLoops - eulerCharacteristic` promoted the
+    // whole expression to unsigned: with one boundary loop and chi = 3 it evaluated
+    // 1u - 3 = 4294967294, halved to 2147483647, and every open mesh reported that as its
+    // genus. Convert first, then do signed arithmetic.
+    const int b = static_cast<int>(boundaryLoops);
+    const int g = (2 - b - eulerCharacteristic) / 2;
     return g >= 0 ? g : 0;
 }
 

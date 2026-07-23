@@ -49,7 +49,15 @@ Mesh MeshThicken::solidify(const Mesh& mesh, const ThickenOptions& opts) {
         n = n.normalize();
     }
 
+    // Record each boundary edge in the DIRECTION its face traverses it, not sorted.
+    // Sorting the endpoints throws that direction away, and the side walls built from it
+    // then come out wound arbitrarily: about half of them traversed their shared edge the
+    // same way as the surface they were joining, which no half-edge structure can pair.
+    // The shell was closed as a set of triangles yet not consistently oriented — six
+    // directed edges on a solidified unit plane were each used twice in the same
+    // direction — so it read as open, with two spurious boundary loops.
     std::map<uint64_t, int32_t> edgeCount;
+    std::map<uint64_t, std::pair<uint32_t, uint32_t>> edgeDir;
     for (size_t fi = 0; fi < fc; ++fi) {
         const Face& face = topo.face(fi);
         if (!face.indicesInBounds(vc)) continue;
@@ -61,15 +69,14 @@ Mesh MeshThicken::solidify(const Mesh& mesh, const ThickenOptions& opts) {
             uint32_t v1 = std::max(a, b);
             uint64_t key = (static_cast<uint64_t>(v0) << 32) | v1;
             ++edgeCount[key];
+            edgeDir.emplace(key, std::pair<uint32_t, uint32_t>{a, b});
         }
     }
 
     std::vector<std::pair<uint32_t, uint32_t>> boundaryEdges;
     for (const auto& [key, cnt] : edgeCount) {
         if (cnt == 1) {
-            uint32_t v0 = static_cast<uint32_t>(key >> 32);
-            uint32_t v1 = static_cast<uint32_t>(key & 0xFFFFFFFF);
-            boundaryEdges.push_back({v0, v1});
+            boundaryEdges.push_back(edgeDir[key]);  // as the single owning face saw it
         }
     }
 
@@ -107,11 +114,14 @@ Mesh MeshThicken::solidify(const Mesh& mesh, const ThickenOptions& opts) {
         }
     }
 
-    for (const auto& [v0, v1] : boundaryEdges) {
-        uint32_t i0 = v0;
-        uint32_t i1 = v1;
-        uint32_t i2 = v1 + static_cast<uint32_t>(vc);
-        uint32_t i3 = v0 + static_cast<uint32_t>(vc);
+    for (const auto& [a, b] : boundaryEdges) {
+        // The outer surface traverses this edge a->b, so the wall must traverse it b->a to
+        // meet it consistently; the far side then runs a+vc -> b+vc, which opposes the
+        // inner surface's b+vc -> a+vc. Every shared edge is traversed once each way.
+        uint32_t i0 = b;
+        uint32_t i1 = a;
+        uint32_t i2 = a + static_cast<uint32_t>(vc);
+        uint32_t i3 = b + static_cast<uint32_t>(vc);
 
         resTopo.addFace(Face{{i0, i1, i2}});
         resTopo.addFace(Face{{i0, i2, i3}});
