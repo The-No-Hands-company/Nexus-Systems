@@ -333,6 +333,92 @@ TEST(MeshBooleanSeam, ALeakIsALocalHoleNotADisintegratedResult)
     EXPECT_LE(total, 200) << "total boundary-edge damage rose to " << total;
 }
 
+// WHAT THE EXTREME-DENSITY RESIDUAL ACTUALLY IS — and what it is not.
+//
+// It was previously recorded as T-junctions (a seam edge split on one operand and not the
+// other) at "34% of boundary edges". That measurement was WRONG: it searched every vertex
+// for one lying on a boundary edge's interior without excluding the edge's OWN opposite
+// corner, so it counted a degenerate triangle's own apex as a foreign vertex.
+//
+// Measured correctly, every residual boundary edge (20 of 20) is owned by a CAP: a triangle whose
+// third vertex lies on its opposite edge, ~3e-8 off a ~0.12-long edge, at a parameter well
+// inside the span (0.77..0.96). The cut's retriangulation emits it because, with exact
+// predicates, those three points genuinely are not collinear — they are only collinear to
+// within float resolution — so a valid but degenerate triangle is the correct answer to
+// the question as posed. Its long edge has no partner, because the region on the other
+// side is tiled through the apex instead, and that unpartnered edge is the leak.
+//
+// This test pins the mechanism so the next attempt starts from the right place: the fix
+// belongs in the retriangulation (snapping a near-collinear seam point onto the edge so it
+// SPLITS the edge instead of forming a cap), not in a conforming pass over the cut — a
+// conforming pass was written against the T-junction diagnosis and correctly found nothing
+// to do.
+TEST(MeshBooleanSeam, ExtremeDensityResidualIsCapTrianglesNotTJunctions)
+{
+    using primitives::makeBox;
+    int boundaryEdges = 0, ownApexOnEdge = 0, foreignVertexOnEdge = 0;
+    std::mt19937 rng(4242u);
+    std::uniform_real_distribution<float> t(-1.6f, 1.6f);
+    const Mesh sphere = primitives::makeSphere(1.2f, 32, 36);
+
+    for (int i = 0; i < 20; ++i) {
+        const Mesh a = makeBox(2.f, 2.f, 2.f);
+        const Mesh b = translated(sphere, {t(rng), t(rng), t(rng)});
+        const MeshCutResult cr = MeshCut::cut(a, b);
+        for (const Mesh* m : {&cr.a, &cr.b}) {
+            const auto& pos = m->attributes().positions();
+            std::map<std::pair<uint32_t, uint32_t>, int> use;
+            for (size_t f = 0; f < m->topology().faceCount(); ++f) {
+                const auto& fc = m->topology().face(f);
+                if (fc.indices.size() != 3) continue;
+                for (int e = 0; e < 3; ++e) {
+                    uint32_t x = fc.indices[e], y = fc.indices[(e + 1) % 3];
+                    if (x > y) std::swap(x, y);
+                    use[{x, y}]++;
+                }
+            }
+            for (size_t f = 0; f < m->topology().faceCount(); ++f) {
+                const auto& fc = m->topology().face(f);
+                if (fc.indices.size() != 3) continue;
+                for (int e = 0; e < 3; ++e) {
+                    const uint32_t ia = fc.indices[e], ib = fc.indices[(e + 1) % 3];
+                    const uint32_t ic = fc.indices[(e + 2) % 3];
+                    const uint32_t lo = std::min(ia, ib), hi = std::max(ia, ib);
+                    const auto it = use.find({lo, hi});
+                    if (it == use.end() || it->second != 1) continue;
+                    ++boundaryEdges;
+                    // Is this face's own apex on the edge (a cap), or some other vertex
+                    // (a genuine T-junction)?
+                    if (onSegmentInterior(pos[ic], pos[ia], pos[ib])) ++ownApexOnEdge;
+                    for (uint32_t v = 0; v < pos.size(); ++v) {
+                        if (v == ia || v == ib || v == ic) continue;
+                        if (onSegmentInterior(pos[v], pos[ia], pos[ib])) {
+                            ++foreignVertexOnEdge;
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    RecordProperty("cutBoundaryEdges", boundaryEdges);
+    RecordProperty("cutCapApexOnEdge", ownApexOnEdge);
+    RecordProperty("cutForeignVertexOnEdge", foreignVertexOnEdge);
+    ASSERT_GT(boundaryEdges, 0) << "the cut stopped leaking at 32x36 — RE-MEASURE, this "
+                                   "test's whole premise is that it still does";
+    EXPECT_EQ(ownApexOnEdge, boundaryEdges)
+        << "not every residual boundary edge is a cap any more (" << ownApexOnEdge << " of "
+        << boundaryEdges << ") — the mechanism changed";
+    // A couple of these edges ALSO have some unrelated vertex near them (measured 2 of
+    // 20) — near-degenerate neighbourhoods are crowded. That is a co-occurrence, not the
+    // mechanism: every one of them is a cap first.
+    EXPECT_LE(foreignVertexOnEdge, 4)
+        << foreignVertexOnEdge << " of " << boundaryEdges << " residual boundary edges now "
+        << "carry a foreign vertex — genuine T-junctions may have become the mechanism, "
+        << "so re-derive before fixing";
+}
+
 // An all-planar operand of comparable face count does NOT leak, so class 2 is not simply
 // "more triangles" — it tracks the size of the features the seam has to resolve.
 TEST(MeshBooleanSeam, AllPlanarOperandsOfSimilarFaceCountDoNotLeak)
