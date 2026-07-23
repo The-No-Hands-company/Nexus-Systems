@@ -1,6 +1,7 @@
 #include <nexus/geometry/MeshBooleanRobust.h>
 
 #include <nexus/geometry/AnalyticBRep.h>  // brep::segmentCrossesTriangleSoS (exact ray parity)
+#include <nexus/geometry/MeshBVH.h>
 #include <nexus/geometry/MeshCut.h>
 #include <nexus/geometry/Tolerance.h>  // scale-aware weld tolerance (Phase T migration)
 
@@ -28,6 +29,16 @@ bool isFiniteF(float x) noexcept
 struct Soup {
     std::vector<V>                       pos;
     std::vector<std::array<uint32_t, 3>> tris;
+    // Both per-sub-triangle queries below — nearest surface and point-in-solid parity —
+    // were linear scans over every triangle, making the boolean quadratic in operand size
+    // (measured: 51x the triangles cost 476x the time). The BVH turns both logarithmic.
+    // It ACCELERATES only: every candidate it returns is still decided by the same exact
+    // predicate, so results are unchanged.
+    MeshBVH                              bvh;
+    // Source-FACE index -> this soup's triangle index. Both BVH queries report a source
+    // face (closestPoint directly; a segment candidate via its triangle's srcFace), not a
+    // position in the BVH's own permuted triangle array.
+    std::vector<uint32_t>                triOfFace;
 };
 
 Soup gather(const Mesh& src)
@@ -36,12 +47,16 @@ Soup gather(const Mesh& src)
     (void)m.topology().triangulate();
     Soup s;
     s.pos = m.attributes().positions();
+    std::vector<uint32_t> faceToTri(m.topology().faceCount(), 0xFFFFFFFFu);
     for (size_t f = 0; f < m.topology().faceCount(); ++f) {
         const Face& fc = m.topology().face(f);
         if (fc.indices.size() == 3 && fc.indicesInBounds(s.pos.size())) {
+            faceToTri[f] = static_cast<uint32_t>(s.tris.size());
             s.tris.push_back({fc.indices[0], fc.indices[1], fc.indices[2]});
         }
     }
+    s.bvh.build(m);
+    s.triOfFace = std::move(faceToTri);
     return s;
 }
 
@@ -72,6 +87,25 @@ bool pointInside(const V& p, const Soup& s) noexcept
     const float inv = reach / std::sqrt(dl * dl + dm * dm + dn * dn);
     const V B{p.x + dl * inv, p.y + dm * inv, p.z + dn * inv};
     int crossings = 0;
+    if (s.bvh.isValid() && !s.triOfFace.empty()) {
+        // Only triangles whose box the segment passes through can cross it. The candidate
+        // set is conservative, and each candidate is still resolved by the same exact SoS
+        // test, so the parity is identical to scanning everything.
+        thread_local std::vector<uint32_t> candidates;
+        s.bvh.collectSegmentCandidates(p, B, candidates);
+        const auto& bvhTris = s.bvh.tris();
+        for (const uint32_t bi : candidates) {
+            if (bi >= bvhTris.size()) continue;
+            const uint32_t face = bvhTris[bi].srcFace;
+            if (face >= s.triOfFace.size()) continue;
+            const uint32_t ti = s.triOfFace[face];
+            if (ti >= s.tris.size()) continue;
+            const auto& t = s.tris[ti];
+            if (brep::segmentCrossesTriangleSoS(p, B, s.pos[t[0]], s.pos[t[1]], s.pos[t[2]]))
+                ++crossings;
+        }
+        return (crossings & 1) != 0;
+    }
     for (const auto& t : s.tris) {
         if (brep::segmentCrossesTriangleSoS(p, B, s.pos[t[0]], s.pos[t[1]], s.pos[t[2]]))
             ++crossings;
@@ -130,8 +164,21 @@ float pointTriangleDist2(const V& p, const V& a, const V& b, const V& c, V& norm
 // normal (soups come from closed meshes with consistent outward winding).
 float nearestSurface(const V& p, const Soup& s, V& normalOut) noexcept
 {
-    float best = std::numeric_limits<float>::max();
     normalOut = {0.f, 0.f, 0.f};
+    if (s.bvh.isValid() && !s.triOfFace.empty()) {
+        const ClosestPointHit hit = s.bvh.closestPoint(p);
+        // triangleIndex is the SOURCE FACE, not a BVH array position.
+        if (hit.valid && hit.triangleIndex < s.triOfFace.size()) {
+            const uint32_t ti = s.triOfFace[hit.triangleIndex];
+            if (ti < s.tris.size()) {
+                const auto& t = s.tris[ti];
+                // Recompute through the same helper the linear scan used, so the normal
+                // convention (unnormalized, from this soup's vertex order) is identical.
+                return pointTriangleDist2(p, s.pos[t[0]], s.pos[t[1]], s.pos[t[2]], normalOut);
+            }
+        }
+    }
+    float best = std::numeric_limits<float>::max();
     for (const auto& t : s.tris) {
         V n;
         const float d2 = pointTriangleDist2(p, s.pos[t[0]], s.pos[t[1]], s.pos[t[2]], n);

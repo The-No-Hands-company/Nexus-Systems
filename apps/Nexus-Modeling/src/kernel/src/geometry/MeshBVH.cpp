@@ -210,17 +210,35 @@ void MeshBVH::build(const Mesh& mesh) {
             bt.aabbMin = vecMin(vecMin(v0, v1), v2);
             bt.aabbMax = vecMax(vecMax(v0, v1), v2);
             bt.srcFace = static_cast<uint32_t>(fi);
+            bt.triIndex = static_cast<uint32_t>(m_tris.size() - 1);
             buildTris.push_back(bt);
         }
     }
 
     if (buildTris.empty()) return;
 
-    buildNode(buildTris, 0, static_cast<int32_t>(buildTris.size()));
+    buildNode(buildTris, 0, static_cast<int32_t>(buildTris.size()), 0);
+
+    // Permute m_tris into the order the build produced. buildNode partitions its entries
+    // with nth_element, and every leaf stores firstTri/triCount as a range into THAT
+    // order — while queries read m_tris. Left unpermuted, every leaf addressed unrelated
+    // triangles, so each query returned some triangle rather than the right one: the
+    // nearest-point query disagreed with an exhaustive scan on 2,764 of 3,000 points, and
+    // always by returning too LARGE a distance, the signature of looking in the wrong
+    // place. It stayed hidden while a separate build defect capped the tree at ~71 nodes,
+    // because leaves then spanned half the mesh and happened to contain the answer.
+    std::vector<Tri> ordered;
+    ordered.reserve(buildTris.size());
+    for (const BuildTri& bt : buildTris) {
+        if (bt.triIndex < m_tris.size()) ordered.push_back(m_tris[bt.triIndex]);
+    }
+    m_tris.swap(ordered);
+
     m_valid = true;
 }
 
-int32_t MeshBVH::buildNode(std::vector<BuildTri>& items, int32_t first, int32_t count) {
+int32_t MeshBVH::buildNode(std::vector<BuildTri>& items, int32_t first, int32_t count,
+                           int32_t depth) {
     if (count <= 0) return -1;
 
     Vec3 nodeMin = items[static_cast<size_t>(first)].aabbMin;
@@ -236,7 +254,14 @@ int32_t MeshBVH::buildNode(std::vector<BuildTri>& items, int32_t first, int32_t 
     m_nodes.back().min = nodeMin;
     m_nodes.back().max = nodeMax;
 
-    if (count <= kMaxLeafTris || static_cast<int32_t>(m_nodes.size()) > kMaxDepth) {
+    // Stop on the recursion DEPTH, not on how many nodes exist so far. This compared
+    // m_nodes.size() against kMaxDepth, so once the tree held 64 nodes every further node
+    // became a leaf holding whatever triangles remained — the tree stopped growing at ~71
+    // nodes for ANY mesh, and a single leaf ended up with half the model (4,284 of 8,568
+    // triangles on a tessellated sphere). The structure still answered queries correctly,
+    // by scanning those leaves, so nothing failed visibly; it simply stopped accelerating,
+    // which is the failure mode an acceleration structure hides best.
+    if (count <= kMaxLeafTris || depth >= kMaxDepth) {
         m_nodes.back().isLeaf = true;
         m_nodes.back().firstTri = first;
         m_nodes.back().triCount = count;
@@ -256,8 +281,8 @@ int32_t MeshBVH::buildNode(std::vector<BuildTri>& items, int32_t first, int32_t 
                      });
 
     int32_t mid = count / 2;
-    int32_t leftIdx = buildNode(items, first, mid);
-    int32_t rightIdx = buildNode(items, first + mid, count - mid);
+    int32_t leftIdx = buildNode(items, first, mid, depth + 1);
+    int32_t rightIdx = buildNode(items, first + mid, count - mid, depth + 1);
 
     m_nodes[static_cast<size_t>(nodeIdx)].leftChild = leftIdx;
     m_nodes[static_cast<size_t>(nodeIdx)].firstTri = rightIdx;
@@ -369,6 +394,76 @@ RayHit MeshBVH::raycast(const Ray& ray) const noexcept {
 
 bool MeshBVH::isValid() const noexcept {
     return m_valid && !m_nodes.empty();
+}
+
+void MeshBVH::collectSegmentCandidates(const Vec3& a, const Vec3& b,
+                                       std::vector<uint32_t>& out) const {
+    out.clear();
+    if (!m_valid || m_nodes.empty()) return;
+
+    // Segment bounding box, padded. The pad is relative to the segment's own extent so it
+    // behaves identically at any model scale, with an absolute floor for a degenerate
+    // (point-like) segment. Padding only ever ADDS candidates, which is the safe direction.
+    const float segMinX = std::min(a.x, b.x), segMaxX = std::max(a.x, b.x);
+    const float segMinY = std::min(a.y, b.y), segMaxY = std::max(a.y, b.y);
+    const float segMinZ = std::min(a.z, b.z), segMaxZ = std::max(a.z, b.z);
+    const float extent = std::max({segMaxX - segMinX, segMaxY - segMinY, segMaxZ - segMinZ});
+    const float pad = std::max(extent * 1e-5f, 1e-6f);
+
+    const Vec3 dir{b.x - a.x, b.y - a.y, b.z - a.z};
+
+    // Slab test of the SEGMENT (parameter clamped to [0,1]) against a padded box.
+    auto segmentHitsBox = [&](const Node& n) noexcept -> bool {
+        if (segMaxX < n.min.x - pad || segMinX > n.max.x + pad) return false;
+        if (segMaxY < n.min.y - pad || segMinY > n.max.y + pad) return false;
+        if (segMaxZ < n.min.z - pad || segMinZ > n.max.z + pad) return false;
+
+        float t0 = 0.f, t1 = 1.f;
+        const float lo[3] = {n.min.x - pad, n.min.y - pad, n.min.z - pad};
+        const float hi[3] = {n.max.x + pad, n.max.y + pad, n.max.z + pad};
+        const float org[3] = {a.x, a.y, a.z};
+        const float d[3] = {dir.x, dir.y, dir.z};
+        for (int axis = 0; axis < 3; ++axis) {
+            if (std::abs(d[axis]) < 1e-30f) {
+                // Parallel to this slab: inside or nothing. The box overlap above already
+                // established the segment's extent overlaps, so accept.
+                if (org[axis] < lo[axis] || org[axis] > hi[axis]) return false;
+                continue;
+            }
+            const float inv = 1.f / d[axis];
+            float tn = (lo[axis] - org[axis]) * inv;
+            float tf = (hi[axis] - org[axis]) * inv;
+            if (tn > tf) std::swap(tn, tf);
+            t0 = std::max(t0, tn);
+            t1 = std::min(t1, tf);
+            if (t0 > t1) return false;
+        }
+        return true;
+    };
+
+    std::vector<int32_t> stack;
+    stack.reserve(64);
+    stack.push_back(0);
+    while (!stack.empty()) {
+        const int32_t idx = stack.back();
+        stack.pop_back();
+        if (idx < 0 || static_cast<size_t>(idx) >= m_nodes.size()) continue;
+        const Node& node = m_nodes[static_cast<size_t>(idx)];
+        if (!segmentHitsBox(node)) continue;
+
+        if (node.isLeaf) {
+            for (int32_t i = 0; i < node.triCount; ++i) {
+                const size_t triIdx = static_cast<size_t>(node.firstTri + i);
+                if (triIdx < m_tris.size()) out.push_back(static_cast<uint32_t>(triIdx));
+            }
+            continue;
+        }
+        // For an INTERIOR node the left child is `leftChild` and the right child is stored
+        // in `firstTri` (that field is only a triangle offset on leaf nodes) — the same
+        // convention raycast uses.
+        if (node.leftChild >= 0) stack.push_back(node.leftChild);
+        if (node.firstTri > 0) stack.push_back(node.firstTri);
+    }
 }
 
 ClosestPointHit MeshBVH::closestPoint(const Vec3& query) const noexcept {
