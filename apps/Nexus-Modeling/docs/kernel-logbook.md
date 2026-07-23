@@ -305,6 +305,36 @@ Three of my own measurements in this chapter were wrong before they were right, 
 
 **What was proven.** The random source is now asserted as a *distribution* — mean, range, and the occupancy of every decile — because a generator whose range has collapsed still returns numbers, still runs, and still reports no error. Poisson-disk sampling matches packing theory across three surfaces and five spacings; point sampling is area-weighted to within four per cent on a deliberately lopsided box; ambient occlusion is uniformly open on a convex body, separates a shadowed patch from open surface by seven tenths, and agrees exactly between its accelerated and exhaustive paths; the instancer covers its target and reproduces. And six features that sit on the hierarchy are checked against references derived independently of them, on meshes large enough that the hierarchy has to work — which is the property their previous tests lacked, and the reason none of this was found sooner.
 
+## 26. What the cube could not show
+
+The previous chapter's method suggests its own next question. If a test that cannot fail when the layer beneath it is broken protects nothing, then the thing worth auditing next is whatever the most claims rest on while being itself least examined.
+
+For this kernel that is not a subtle choice. Every assertion of watertightness in the entire Boolean and seam campaign — every leak counted, every residual closed, every "the cut is individually watertight" — reduces to a single number returned by a single function: the count of boundary loops in a mesh. If that number is wrong, none of it means what it says.
+
+Its tests were four calls to the static arithmetic helpers with vertex, edge and face counts written down by hand — arithmetic, with no mesh anywhere near it — and two that validated an actual mesh, both of them a closed cube.
+
+A closed cube is precisely the shape on which the defects cancel.
+
+The reassuring half first, because it is the half that matters most: closed surfaces were always correct. A cube, a sphere and a torus each report the right boundary count, the right Euler characteristic and the right genus — a torus being the case that distinguishes genus from Euler characteristic at all. Everything the seam work claimed rests on closed meshes, and it stands.
+
+Open surfaces were another matter, in three independent ways.
+
+The edge count was taken as half the number of half-edges. That is exact when every edge carries two of them, which is the definition of closed; a boundary edge carries one. So the count came out short by half the boundary, and the Euler characteristic correspondingly too high — a flat four-by-four plane, which is a disk and has characteristic one, reported nine. The genus calculation subtracted an unsigned boundary count from a small integer, which promoted the whole expression to unsigned: one boundary loop against a characteristic of three evaluated as four billion and change, halved, and every open mesh in the kernel was reported to have a genus of 2,147,483,647.
+
+The third is the interesting one. Three triangles meeting along a single edge is the textbook non-manifold configuration, and the validator reported it valid, with no violations at all. The check was looking for an edge whose half-edge valence exceeded two — a reasonable thing to look for, except that a half-edge structure *cannot represent* three faces on an edge. The third face never receives a twin, is therefore indistinguishable from a boundary, and no valence ever rises above two. The defect had been asked about in a language that cannot express it.
+
+> The structure meant to expose the defect was the thing destroying the evidence.
+
+Counting how many faces use each edge, straight off the face list before any structure exists, needs nothing and is exact.
+
+Then repairing the edge count turned a passing test red, and that is the part of this chapter worth keeping. Solidifying an open surface — thickening it into a shell — is supposed to produce something closed. It builds side walls along the original boundary, and it had been storing those boundary edges as sorted pairs of endpoints, which quietly discards the direction the owning face traversed them. About half the walls therefore came out wound backwards. The result was closed as a *set of triangles* while not being consistently *oriented*: six directed edges on a solidified unit plane were each traversed twice in the same direction, a configuration no half-edge structure can pair, and the shell reported two boundary loops it did not have.
+
+And the old halve-the-half-edges arithmetic had been cancelling exactly that error out, returning a characteristic of two — the right answer — by coincidence. Two defects, each concealing the other, precisely as the hierarchy's two had done three chapters earlier. The pattern has now happened often enough to state plainly: a repair that turns another test red is more often a second defect losing its cover than a regression.
+
+The walls now keep the direction their face gave them and are wound to oppose the surface they join. The shell comes out with every one of its thirty-six directed edges traversed exactly once, characteristic two, genus zero, no boundary.
+
+**What was proven.** Euler characteristics are checked against topology rather than against previous output, for closed surfaces and open ones alike — two for a sphere, zero for a torus, one for a disk and for a punctured sphere. Genus is exercised across a grid of characteristic and boundary-count combinations, so the arithmetic cannot wrap again for any plausible input. Non-manifold edges are detected and reported. And a closed surface must now traverse every directed edge exactly once — an orientation property that no measurement of area, volume, boundary count or Euler characteristic could see, and whose absence had been sitting inside a passing test.
+
 ---
 
 *This edition ends here, but the logbook does not. Snapping geometry to tolerance before a Boolean remains the last of the seam's known gaps, classification is once again the dominant cost, and the tolerance migration and the representation-abstraction decision are still owed — one proven passage at a time.*
