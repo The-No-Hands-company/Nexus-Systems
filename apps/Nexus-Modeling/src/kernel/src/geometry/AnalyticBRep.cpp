@@ -1,5 +1,7 @@
 #include <nexus/geometry/AnalyticBRep.h>
 
+#include <nexus/geometry/MeshMassProperties.h>
+
 #include <nexus/geometry/BRepSurfaceIntersect.h>
 #include <nexus/geometry/RobustPredicates.h>
 
@@ -1458,79 +1460,22 @@ float Body::surfaceArea() const
 
 nexus::geometry::MassProperties Body::massProperties(float density) const
 {
-    // Integrate volume / centroid / inertia over the watertight boundary
-    // triangulation via the divergence theorem — Eberly's exact "Polyhedral Mass
-    // Properties" surface integrals. Subdivisions refine the curved (arc) edges so
-    // cylinder/sphere converge; box faces are flat, so they stay exact.
-    nexus::geometry::MassProperties mp;
-    const Mesh mesh = toMesh(3);
-    const auto& pos = mesh.attributes().positions();
-    const auto& topo = mesh.topology();
+    // Integrate over the watertight boundary triangulation. Subdivisions refine the curved
+    // (arc) edges so cylinder and sphere converge; box faces are flat and stay exact.
+    //
+    // This used to carry its own copy of Eberly's polyhedral integrals, because the mesh
+    // implementation returned a wrong inertia tensor — negative diagonal moments — and
+    // could not be trusted. That has been repaired, and the two agreed to zero difference
+    // on a 2x3x4 box (volume, all three moments, and the products), so the duplicate is
+    // gone rather than left to drift away from the original.
+    nexus::geometry::MassProperties mp = nexus::geometry::MeshMassProperties::compute(toMesh(3));
+    if (mp.volume <= 0.f) return nexus::geometry::MassProperties{};
 
-    // intg: volume, ∫x ∫y ∫z, ∫x² ∫y² ∫z², ∫xy ∫yz ∫zx (un-normalised).
-    double intg[10] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
-    auto sub = [](double w0, double w1, double w2, double& f1, double& f2, double& f3,
-                  double& g0, double& g1, double& g2) {
-        const double t0 = w0 + w1, t1 = w0 * w0, t2 = t1 + w1 * t0;
-        f1 = t0 + w2;
-        f2 = t2 + w2 * f1;
-        f3 = w0 * t1 + w1 * t2 + w2 * f2;
-        g0 = f2 + w0 * (f1 + w0);
-        g1 = f2 + w1 * (f1 + w1);
-        g2 = f2 + w2 * (f1 + w2);
-    };
-    for (size_t t = 0; t < topo.faceCount(); ++t) {
-        const auto& id = topo.face(t).indices;
-        if (id.size() != 3) continue;
-        const nexus::render::Vec3 p0 = pos[id[0]], p1 = pos[id[1]], p2 = pos[id[2]];
-        const double x0 = p0.x, y0 = p0.y, z0 = p0.z;
-        const double x1 = p1.x, y1 = p1.y, z1 = p1.z;
-        const double x2 = p2.x, y2 = p2.y, z2 = p2.z;
-        const double a1 = x1 - x0, b1 = y1 - y0, c1 = z1 - z0;
-        const double a2 = x2 - x0, b2 = y2 - y0, c2 = z2 - z0;
-        const double d0 = b1 * c2 - b2 * c1;  // (p1-p0)×(p2-p0), un-normalised normal
-        const double d1 = a2 * c1 - a1 * c2;
-        const double d2 = a1 * b2 - a2 * b1;
-        double f1x, f2x, f3x, g0x, g1x, g2x, f1y, f2y, f3y, g0y, g1y, g2y, f1z, f2z, f3z, g0z,
-            g1z, g2z;
-        sub(x0, x1, x2, f1x, f2x, f3x, g0x, g1x, g2x);
-        sub(y0, y1, y2, f1y, f2y, f3y, g0y, g1y, g2y);
-        sub(z0, z1, z2, f1z, f2z, f3z, g0z, g1z, g2z);
-        intg[0] += d0 * f1x;
-        intg[1] += d0 * f2x;
-        intg[2] += d1 * f2y;
-        intg[3] += d2 * f2z;
-        intg[4] += d0 * f3x;
-        intg[5] += d1 * f3y;
-        intg[6] += d2 * f3z;
-        intg[7] += d0 * (y0 * g0x + y1 * g1x + y2 * g2x);
-        intg[8] += d1 * (z0 * g0y + z1 * g1y + z2 * g2y);
-        intg[9] += d2 * (x0 * g0z + x1 * g1z + x2 * g2z);
+    // Volume and centroid are geometric; only the inertia carries mass, so only it scales.
+    for (int i = 0; i < 3; ++i) {
+        for (int j = 0; j < 3; ++j) mp.inertia[i][j] *= density;
+        mp.principalMoments[i] *= density;
     }
-    static constexpr double mult[10] = {1.0 / 6,  1.0 / 24, 1.0 / 24, 1.0 / 24,  1.0 / 60,
-                                        1.0 / 60, 1.0 / 60, 1.0 / 120, 1.0 / 120, 1.0 / 120};
-    for (int i = 0; i < 10; ++i) intg[i] *= mult[i];
-
-    const double vol = intg[0];
-    if (vol <= 1e-12) return mp;  // open / degenerate / inward → zero result
-    mp.volume = static_cast<float>(vol);
-    const double cx = intg[1] / vol, cy = intg[2] / vol, cz = intg[3] / vol;
-    mp.centroid = {static_cast<float>(cx), static_cast<float>(cy), static_cast<float>(cz)};
-
-    // Inertia tensor about the centroid, scaled by density (mass = density·vol).
-    const double d = static_cast<double>(density);
-    const double Ixx = d * (intg[5] + intg[6] - vol * (cy * cy + cz * cz));
-    const double Iyy = d * (intg[4] + intg[6] - vol * (cz * cz + cx * cx));
-    const double Izz = d * (intg[4] + intg[5] - vol * (cx * cx + cy * cy));
-    const double Ixy = d * -(intg[7] - vol * cx * cy);
-    const double Iyz = d * -(intg[8] - vol * cy * cz);
-    const double Ixz = d * -(intg[9] - vol * cz * cx);
-    mp.inertia[0][0] = static_cast<float>(Ixx);
-    mp.inertia[1][1] = static_cast<float>(Iyy);
-    mp.inertia[2][2] = static_cast<float>(Izz);
-    mp.inertia[0][1] = mp.inertia[1][0] = static_cast<float>(Ixy);
-    mp.inertia[1][2] = mp.inertia[2][1] = static_cast<float>(Iyz);
-    mp.inertia[0][2] = mp.inertia[2][0] = static_cast<float>(Ixz);
     return mp;
 }
 
