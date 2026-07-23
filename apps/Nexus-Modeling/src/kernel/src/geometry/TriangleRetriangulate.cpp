@@ -137,7 +137,38 @@ RetriangulationResult TriangleRetriangulate::apply(const V& a, const V& b, const
         const double d2 = RobustPredicates::orient2D(C2, A2, ctr);
         const bool inside = (triOrient >= 0.0) ? (d0 >= 0.0 && d1 >= 0.0 && d2 >= 0.0)
                                                : (d0 <= 0.0 && d1 <= 0.0 && d2 <= 0.0);
-        if (inside) out.triangles.push_back(t);
+        if (!inside) continue;
+
+        // Drop CAP sub-triangles: one corner sitting on the opposite edge, so the triangle
+        // encloses no area. These are spurious. Where a seam point lands a hair off an
+        // edge of this triangle, the CDT emits both the correct sub-triangles that use the
+        // split path through that point AND a cap spanning the whole unsplit edge. The cap
+        // duplicates area already covered: measured on a cut sphere, a cap's two shared
+        // edges were each used THREE times (its own use plus the two real triangles that
+        // split there) while its long edge was used once and had no partner — which is the
+        // leak. Removing it takes those edges to two and the long edge out of existence.
+        //
+        // Losing area is not a risk: a cap encloses none. The test is SCALE-INVARIANT —
+        // area against the triangle's own edge lengths, so it means the same for a 0.5mm
+        // part and a 5km terrain — and it is deliberately strict, catching only triangles
+        // that are degenerate to within float resolution rather than merely thin.
+        const double e0u = q1.u - q0.u, e0v = q1.v - q0.v;
+        const double e1u = q2.u - q1.u, e1v = q2.v - q1.v;
+        const double e2u = q0.u - q2.u, e2v = q0.v - q2.v;
+        const double sumSq = e0u * e0u + e0v * e0v + e1u * e1u + e1v * e1v
+                           + e2u * e2u + e2v * e2v;
+        if (sumSq > 0.0) {
+            const double twiceArea = std::abs(RobustPredicates::orient2D(q0, q1, q2));
+            // 2*area / (sum of squared edges) is dimensionless: ~0.29 for an equilateral
+            // triangle, →0 as it degenerates. The threshold is measured, not guessed: over
+            // 54,643 sub-triangles of a cut sphere the caps occupy 1.0e-7..4.5e-7 and the
+            // next non-cap triangle is at 3e-6, with the 0.1th percentile of ordinary
+            // geometry at 2.6e-4. 1e-6 sits in that gap with room on both sides.
+            constexpr double kCapThinness = 1e-6;
+            if (twiceArea / sumSq < kCapThinness) continue;
+        }
+
+        out.triangles.push_back(t);
     }
     if (out.triangles.empty()) {
         return single();  // domain filter removed everything (degenerate) → safe fallback

@@ -228,15 +228,14 @@ TEST(MeshBooleanSeam, NearCoincidentFacesLeakOnlyNearTheCoincidenceTolerance)
     EXPECT_LE(nearTolerance, 6) << "the coincidence ambiguity band widened";
 }
 
-// CLASS 2, after the fix. This was the largest class — sphere-vs-box leak rates of 12%,
-// 22%, 48%, 67% climbing with tessellation density. Through moderate density it is now
-// zero. A residual remains only where the cut produces sub-triangles at the very limit of
-// float resolution (below ~1e-6 on a 2-unit model), which is a cut-quality question rather
-// than a classification one, and is pinned rather than claimed fixed.
+// CLASS 2, CLOSED. This was the largest class — sphere-vs-box leak rates of 12%, 22%, 48%
+// and 67% climbing with tessellation density. It is now zero at every density here,
+// including the two that used to be the worst, after two fixes: classifying without a
+// probe offset, and dropping the CAP sub-triangles the retriangulation emitted.
 TEST(MeshBooleanSeam, CurvedOperandBooleansAreWatertightThroughModerateTessellation)
 {
     using primitives::makeBox;
-    for (uint32_t seg : {6u, 12u, 16u}) {
+    for (uint32_t seg : {6u, 12u, 16u, 24u, 32u}) {
         const Mesh sphere = primitives::makeSphere(1.2f, seg, seg + 4);
         const auto sv = MeshTopologyValidation::validate(sphere);
         ASSERT_EQ(sv.boundaryLoops, 0u) << "the sphere INPUT is not closed at " << seg;
@@ -259,11 +258,12 @@ TEST(MeshBooleanSeam, CurvedOperandBooleansAreWatertightThroughModerateTessellat
     }
 }
 
-// The extreme-density residual, tracked not asserted at zero. The cut emits sub-triangles
-// under 1e-6 across on a 2-unit model — a few float ULPs wide — where no classification
-// can be reliable because the geometry itself has run out of precision. Closing this means
-// not producing such slivers, which is a cut-quality increment.
-TEST(MeshBooleanSeam, ExtremeTessellationResidualIsTracked)
+// The former extreme-density residual, now closed and asserted at zero. It was caused by
+// cap sub-triangles, not by geometry running out of precision as first supposed: the
+// retriangulation emitted a zero-area triangle spanning an edge that its own apex sat on,
+// duplicating area the real sub-triangles already covered and leaving that edge without a
+// partner. Dropping caps removed it.
+TEST(MeshBooleanSeam, ExtremeTessellationIsWatertight)
 {
     using primitives::makeBox;
     int runs = 0, leaks = 0;
@@ -280,9 +280,9 @@ TEST(MeshBooleanSeam, ExtremeTessellationResidualIsTracked)
     }
     RecordProperty("extremeTessellationRuns", runs);
     RecordProperty("extremeTessellationLeaks", leaks);
-    // Measured 2026-07-22: 3 of 60, down from 29 of 60 before the classification fix.
-    EXPECT_LE(leaks, 5) << "the extreme-tessellation residual rose above its baseline: "
-                        << leaks << " of " << runs;
+    // 29 of 60 before the classification fix, 3 of 60 after it, 0 once caps are dropped.
+    EXPECT_EQ(leaks, 0) << "extreme-tessellation booleans leaked again: " << leaks << " of "
+                        << runs;
 }
 
 // SEVERITY, not just incidence. A leak that costs a handful of boundary edges is a small
@@ -333,30 +333,23 @@ TEST(MeshBooleanSeam, ALeakIsALocalHoleNotADisintegratedResult)
     EXPECT_LE(total, 200) << "total boundary-edge damage rose to " << total;
 }
 
-// WHAT THE EXTREME-DENSITY RESIDUAL ACTUALLY IS — and what it is not.
+// The cut emits no CAP sub-triangles, and its output is watertight at high density.
 //
-// It was previously recorded as T-junctions (a seam edge split on one operand and not the
-// other) at "34% of boundary edges". That measurement was WRONG: it searched every vertex
-// for one lying on a boundary edge's interior without excluding the edge's OWN opposite
-// corner, so it counted a degenerate triangle's own apex as a foreign vertex.
+// A cap is a triangle whose third corner lies on its own opposite edge, enclosing no area.
+// The retriangulation used to emit one wherever a seam point landed a hair off an edge:
+// the correct sub-triangles that split through the point, AND a cap spanning the whole
+// unsplit edge. The cap duplicated covered area — its two shared edges were each used
+// THREE times while its long edge was used once and had no partner, which is exactly the
+// leak. TriangleRetriangulate now drops them.
 //
-// Measured correctly, every residual boundary edge (20 of 20) is owned by a CAP: a triangle whose
-// third vertex lies on its opposite edge, ~3e-8 off a ~0.12-long edge, at a parameter well
-// inside the span (0.77..0.96). The cut's retriangulation emits it because, with exact
-// predicates, those three points genuinely are not collinear — they are only collinear to
-// within float resolution — so a valid but degenerate triangle is the correct answer to
-// the question as posed. Its long edge has no partner, because the region on the other
-// side is tiled through the apex instead, and that unpartnered edge is the leak.
-//
-// This test pins the mechanism so the next attempt starts from the right place: the fix
-// belongs in the retriangulation (snapping a near-collinear seam point onto the edge so it
-// SPLITS the edge instead of forming a cap), not in a conforming pass over the cut — a
-// conforming pass was written against the T-junction diagnosis and correctly found nothing
-// to do.
-TEST(MeshBooleanSeam, ExtremeDensityResidualIsCapTrianglesNotTJunctions)
+// Guarded by thinness, 2*area over the sum of squared edge lengths: dimensionless, ~0.29
+// for an equilateral triangle and →0 as it degenerates, so the check means the same thing
+// at any model scale.
+TEST(MeshBooleanSeam, CutEmitsNoCapTrianglesAndStaysWatertightAtHighDensity)
 {
     using primitives::makeBox;
-    int boundaryEdges = 0, ownApexOnEdge = 0, foreignVertexOnEdge = 0;
+    int cuts = 0, brokenCuts = 0, caps = 0, faces = 0;
+    double thinnest = 1.0;
     std::mt19937 rng(4242u);
     std::uniform_real_distribution<float> t(-1.6f, 1.6f);
     const Mesh sphere = primitives::makeSphere(1.2f, 32, 36);
@@ -366,57 +359,68 @@ TEST(MeshBooleanSeam, ExtremeDensityResidualIsCapTrianglesNotTJunctions)
         const Mesh b = translated(sphere, {t(rng), t(rng), t(rng)});
         const MeshCutResult cr = MeshCut::cut(a, b);
         for (const Mesh* m : {&cr.a, &cr.b}) {
+            ++cuts;
+            if (MeshTopologyValidation::validate(*m).boundaryLoops != 0) ++brokenCuts;
             const auto& pos = m->attributes().positions();
-            std::map<std::pair<uint32_t, uint32_t>, int> use;
             for (size_t f = 0; f < m->topology().faceCount(); ++f) {
                 const auto& fc = m->topology().face(f);
                 if (fc.indices.size() != 3) continue;
-                for (int e = 0; e < 3; ++e) {
-                    uint32_t x = fc.indices[e], y = fc.indices[(e + 1) % 3];
-                    if (x > y) std::swap(x, y);
-                    use[{x, y}]++;
-                }
-            }
-            for (size_t f = 0; f < m->topology().faceCount(); ++f) {
-                const auto& fc = m->topology().face(f);
-                if (fc.indices.size() != 3) continue;
-                for (int e = 0; e < 3; ++e) {
-                    const uint32_t ia = fc.indices[e], ib = fc.indices[(e + 1) % 3];
-                    const uint32_t ic = fc.indices[(e + 2) % 3];
-                    const uint32_t lo = std::min(ia, ib), hi = std::max(ia, ib);
-                    const auto it = use.find({lo, hi});
-                    if (it == use.end() || it->second != 1) continue;
-                    ++boundaryEdges;
-                    // Is this face's own apex on the edge (a cap), or some other vertex
-                    // (a genuine T-junction)?
-                    if (onSegmentInterior(pos[ic], pos[ia], pos[ib])) ++ownApexOnEdge;
-                    for (uint32_t v = 0; v < pos.size(); ++v) {
-                        if (v == ia || v == ib || v == ic) continue;
-                        if (onSegmentInterior(pos[v], pos[ia], pos[ib])) {
-                            ++foreignVertexOnEdge;
-                            break;
-                        }
-                    }
-                }
+                ++faces;
+                const Vec3& p0 = pos[fc.indices[0]];
+                const Vec3& p1 = pos[fc.indices[1]];
+                const Vec3& p2 = pos[fc.indices[2]];
+                const double ux = p1.x - p0.x, uy = p1.y - p0.y, uz = p1.z - p0.z;
+                const double vx = p2.x - p0.x, vy = p2.y - p0.y, vz = p2.z - p0.z;
+                const double wx = p2.x - p1.x, wy = p2.y - p1.y, wz = p2.z - p1.z;
+                const double cx = uy * vz - uz * vy, cy = uz * vx - ux * vz, cz = ux * vy - uy * vx;
+                const double twiceArea = std::sqrt(cx * cx + cy * cy + cz * cz);
+                const double sumSq = ux * ux + uy * uy + uz * uz + vx * vx + vy * vy + vz * vz
+                                   + wx * wx + wy * wy + wz * wz;
+                if (sumSq <= 0.0) continue;
+                const double thinness = twiceArea / sumSq;
+                thinnest = std::min(thinnest, thinness);
+                if (thinness < 1e-6) ++caps;
             }
         }
     }
 
-    RecordProperty("cutBoundaryEdges", boundaryEdges);
-    RecordProperty("cutCapApexOnEdge", ownApexOnEdge);
-    RecordProperty("cutForeignVertexOnEdge", foreignVertexOnEdge);
-    ASSERT_GT(boundaryEdges, 0) << "the cut stopped leaking at 32x36 — RE-MEASURE, this "
-                                   "test's whole premise is that it still does";
-    EXPECT_EQ(ownApexOnEdge, boundaryEdges)
-        << "not every residual boundary edge is a cap any more (" << ownApexOnEdge << " of "
-        << boundaryEdges << ") — the mechanism changed";
-    // A couple of these edges ALSO have some unrelated vertex near them (measured 2 of
-    // 20) — near-degenerate neighbourhoods are crowded. That is a co-occurrence, not the
-    // mechanism: every one of them is a cap first.
-    EXPECT_LE(foreignVertexOnEdge, 4)
-        << foreignVertexOnEdge << " of " << boundaryEdges << " residual boundary edges now "
-        << "carry a foreign vertex — genuine T-junctions may have become the mechanism, "
-        << "so re-derive before fixing";
+    RecordProperty("cutsChecked", cuts);
+    RecordProperty("cutFaces", faces);
+    RecordProperty("capsEmitted", caps);
+    ASSERT_GT(faces, 10000) << "battery degenerated";
+    EXPECT_EQ(caps, 0) << caps << " cap sub-triangles survived the retriangulation filter";
+    EXPECT_EQ(brokenCuts, 0) << brokenCuts << " of " << cuts
+                             << " operand cuts were not watertight at 32x36";
+}
+
+// Dropping caps must not delete real area. A cap encloses none, so union and intersection
+// volumes still have to sum to the sum of the operand volumes.
+TEST(MeshBooleanSeam, DroppingCapsPreservesVolume)
+{
+    using primitives::makeBox;
+    double worst = 0.0;
+    int checked = 0;
+    std::mt19937 rng(4242u);
+    std::uniform_real_distribution<float> t(-1.6f, 1.6f);
+    const Mesh sphere = primitives::makeSphere(1.2f, 32, 36);
+    for (int i = 0; i < 10; ++i) {
+        const Mesh a = makeBox(2.f, 2.f, 2.f);
+        const Mesh b = translated(sphere, {t(rng), t(rng), t(rng)});
+        const Mesh u = robustMeshBoolean(a, b, BooleanOperationType::Union);
+        const Mesh n = robustMeshBoolean(a, b, BooleanOperationType::Intersection);
+        if (u.topology().faceCount() == 0 || n.topology().faceCount() == 0) continue;
+        const double va = MeshMassProperties::compute(a).volume;
+        const double vb = MeshMassProperties::compute(b).volume;
+        const double vu = MeshMassProperties::compute(u).volume;
+        const double vn = MeshMassProperties::compute(n).volume;
+        worst = std::max(worst, std::abs((vu + vn) - (va + vb)) / std::abs(va + vb));
+        ++checked;
+    }
+    RecordProperty("volumeWorstRelError", static_cast<int>(worst * 1e9));
+    ASSERT_GT(checked, 5) << "battery degenerated";
+    // |A| + |B| == |A U B| + |A n B|. Measured worst 3.7e-6 — float precision, not lost area.
+    EXPECT_LT(worst, 1e-4) << "union+intersection volume drifted by " << worst
+                           << " — the cap filter may be deleting real geometry";
 }
 
 // An all-planar operand of comparable face count does NOT leak, so class 2 is not simply
