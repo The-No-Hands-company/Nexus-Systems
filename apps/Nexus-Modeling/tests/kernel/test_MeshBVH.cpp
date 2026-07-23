@@ -436,3 +436,55 @@ TEST(MeshBVH, SegmentCandidatesContainEveryTriangleTheSegmentCrosses)
     EXPECT_EQ(missed, 0) << missed << " of " << crossings
                          << " genuine segment crossings were absent from the candidate set";
 }
+
+// The box query is the cut's broad phase: which triangles of one mesh can possibly meet a
+// given triangle of the other. Pairing them by brute force is quadratic — at 1,288 against
+// 1,288 triangles it tested 1,658,944 pairs where the hierarchy proposes 4,271.
+// Conservative in the same way as the segment query, so a caller can re-apply its own
+// exact box test and get precisely the brute-force set.
+TEST(MeshBVH, BoxCandidatesContainEveryOverlappingTriangle)
+{
+    using namespace nexus::geometry;
+    const Mesh m = tessellatedSphere();
+    MeshBVH bvh;
+    bvh.build(m);
+    ASSERT_TRUE(bvh.isValid());
+
+    std::mt19937 rng(2024u);
+    std::uniform_real_distribution<float> c(-1.6f, 1.6f), e(0.02f, 0.4f);
+    std::vector<uint32_t> candidates;
+    int missed = 0, overlaps = 0;
+    for (int i = 0; i < 300; ++i) {
+        const nexus::render::Vec3 centre{c(rng), c(rng), c(rng)};
+        const float half = e(rng);
+        const nexus::render::Vec3 lo{centre.x - half, centre.y - half, centre.z - half};
+        const nexus::render::Vec3 hi{centre.x + half, centre.y + half, centre.z + half};
+
+        bvh.collectBoxCandidates(lo, hi, candidates);
+        std::vector<char> present(bvh.tris().size(), 0);
+        for (const uint32_t bi : candidates) {
+            if (bi < present.size()) present[bi] = 1;
+        }
+        for (std::size_t ti = 0; ti < bvh.tris().size(); ++ti) {
+            const auto& t = bvh.tris()[ti];
+            const nexus::render::Vec3 b{t.v0.x + t.e1.x, t.v0.y + t.e1.y, t.v0.z + t.e1.z};
+            const nexus::render::Vec3 d{t.v0.x + t.e2.x, t.v0.y + t.e2.y, t.v0.z + t.e2.z};
+            const float tlo[3] = {std::min({t.v0.x, b.x, d.x}), std::min({t.v0.y, b.y, d.y}),
+                                  std::min({t.v0.z, b.z, d.z})};
+            const float thi[3] = {std::max({t.v0.x, b.x, d.x}), std::max({t.v0.y, b.y, d.y}),
+                                  std::max({t.v0.z, b.z, d.z})};
+            const float qlo[3] = {lo.x, lo.y, lo.z};
+            const float qhi[3] = {hi.x, hi.y, hi.z};
+            bool overlap = true;
+            for (int k = 0; k < 3; ++k) {
+                if (thi[k] < qlo[k] || tlo[k] > qhi[k]) overlap = false;
+            }
+            if (!overlap) continue;
+            ++overlaps;
+            if (!present[ti]) ++missed;
+        }
+    }
+    ASSERT_GT(overlaps, 500) << "battery degenerated — the boxes overlap almost nothing";
+    EXPECT_EQ(missed, 0) << missed << " of " << overlaps
+                         << " overlapping triangles were absent from the candidate set";
+}

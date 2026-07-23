@@ -3,6 +3,10 @@
 
 #include <gtest/gtest.h>
 
+#include <chrono>
+#include <random>
+#include <vector>
+
 #include <cmath>
 #include <limits>
 
@@ -380,6 +384,104 @@ TEST(Mesh, WeldCoincidentVerticesRejectsFaceCollapse)
 // boolean that is catastrophic — one sliver anywhere leaves every triangle isolated, and
 // the result disintegrates into a triangle soup (measured: 5,958 boundary edges from 1,986
 // faces, i.e. every edge a boundary). DropCollapsedFace removes just the zero-area face.
+// The weld pairs vertices through a spatial hash instead of comparing every vertex with
+// every earlier one. That took it from O(V^2) — a measured constant 320 ns per V^2, so
+// 40,000 vertices cost 486 ms for a SINGLE weld — to near-linear, 11 ms at the same size.
+// Because the mesh cut welds both operands and the boolean welds again, this was the
+// dominant cost of a boolean on any detailed model.
+//
+// The optimisation is only legitimate if it changes nothing. The original bound each
+// vertex to the FIRST (smallest-indexed) earlier vertex equivalent to it; this checks the
+// hashed implementation against that rule directly, on clustered points where welding
+// actually happens.
+TEST(Mesh, WeldMatchesBruteForceFirstMatchSemantics)
+{
+    std::mt19937 rng(12345u);
+    int compared = 0;
+    for (int trial = 0; trial < 200; ++trial) {
+        const int n = 20 + static_cast<int>(rng() % 300);
+        constexpr float eps = 1e-3f;
+        std::uniform_real_distribution<float> spread(-1.f, 1.f), jitter(-1.5e-3f, 1.5e-3f);
+
+        std::vector<nexus::render::Vec3> seeds;
+        for (int i = 0; i < n / 4 + 1; ++i) seeds.push_back({spread(rng), spread(rng), spread(rng)});
+        std::vector<nexus::render::Vec3> pts;
+        for (int i = 0; i < n; ++i) {
+            const auto& s = seeds[rng() % seeds.size()];
+            pts.push_back({s.x + jitter(rng), s.y + jitter(rng), s.z + jitter(rng)});
+        }
+
+        // Reference: original semantics, first earlier match wins.
+        std::vector<uint32_t> ref(pts.size());
+        for (size_t i = 0; i < pts.size(); ++i) ref[i] = static_cast<uint32_t>(i);
+        for (size_t i = 0; i < pts.size(); ++i) {
+            for (size_t j = 0; j < i; ++j) {
+                const float dx = pts[i].x - pts[j].x, dy = pts[i].y - pts[j].y,
+                            dz = pts[i].z - pts[j].z;
+                if (dx * dx + dy * dy + dz * dz <= eps * eps) { ref[i] = ref[j]; break; }
+            }
+        }
+        size_t refSurvivors = 0;
+        for (size_t i = 0; i < pts.size(); ++i) {
+            if (ref[i] == i) ++refSurvivors;
+        }
+
+        Mesh mesh;
+        mesh.attributes().setPositions(std::vector<nexus::render::Vec3>(pts));
+        bool degenerate = false;
+        for (size_t i = 0; i + 2 < pts.size(); i += 3) {
+            if (ref[i] == ref[i + 1] || ref[i + 1] == ref[i + 2] || ref[i] == ref[i + 2]) {
+                degenerate = true;
+            }
+            Face f{};
+            f.indices = {static_cast<uint32_t>(i), static_cast<uint32_t>(i + 1),
+                         static_cast<uint32_t>(i + 2)};
+            mesh.topology().addFace(f);
+        }
+        if (degenerate || !mesh.isValid()) continue;  // that is the reject-whole path
+
+        ++compared;
+        ASSERT_TRUE(mesh.weldCoincidentVertices(eps)) << "weld refused at trial " << trial;
+        ASSERT_EQ(mesh.attributes().vertexCount(), refSurvivors)
+            << "hashed weld disagreed with brute force at trial " << trial;
+    }
+    EXPECT_GT(compared, 50) << "battery degenerated — almost nothing was actually welded";
+}
+
+// Guard the complexity itself. A quadratic weld still passes every correctness test; it
+// just makes the kernel unusable on real meshes, which is why this asserts on SHAPE rather
+// than on absolute time: doubling the vertex count must not roughly quadruple the work.
+TEST(Mesh, WeldCostGrowsSubQuadratically)
+{
+    auto buildAndWeld = [](int n) -> double {
+        std::mt19937 rng(7u);
+        std::uniform_real_distribution<float> u(-1.f, 1.f);
+        Mesh mesh;
+        std::vector<nexus::render::Vec3> pts;
+        pts.reserve(static_cast<size_t>(n));
+        for (int i = 0; i < n; ++i) pts.push_back({u(rng), u(rng), u(rng)});
+        mesh.attributes().setPositions(std::move(pts));
+        for (int i = 0; i + 2 < n; i += 3) {
+            Face f{};
+            f.indices = {static_cast<uint32_t>(i), static_cast<uint32_t>(i + 1),
+                         static_cast<uint32_t>(i + 2)};
+            mesh.topology().addFace(f);
+        }
+        const auto t0 = std::chrono::steady_clock::now();
+        (void)mesh.weldCoincidentVertices(1e-5f);
+        return std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0)
+            .count();
+    };
+
+    const double small = buildAndWeld(8000);
+    const double large = buildAndWeld(32000);  // 4x the vertices
+    // Quadratic would be ~16x. Generous headroom so this fails on a complexity regression,
+    // not on machine noise.
+    EXPECT_LT(large, std::max(small, 0.5) * 8.0)
+        << "welding 32k vertices took " << large << " ms against " << small
+        << " ms for 8k — the weld looks quadratic again";
+}
+
 TEST(Mesh, WeldCollapsePolicyDropRemovesOnlyTheCollapsedFace)
 {
     Mesh mesh;

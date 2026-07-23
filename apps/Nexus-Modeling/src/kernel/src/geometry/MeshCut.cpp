@@ -1,5 +1,7 @@
 #include <nexus/geometry/MeshCut.h>
 
+#include <nexus/geometry/MeshBVH.h>
+
 #include <nexus/geometry/RobustPredicates.h>
 #include <nexus/geometry/TriTriIntersect.h>
 #include <nexus/geometry/TriangleRetriangulate.h>
@@ -206,9 +208,46 @@ MeshCutResult MeshCut::cut(const Mesh& a, const Mesh& b) noexcept
     std::vector<std::vector<IntersectionSegment>> bSegs(TB.size());
 
     constexpr float kTol = 1e-6f;
+
+    // Broad phase. Pairing every triangle of A against every triangle of B is quadratic
+    // and was the dominant cost of a boolean once classification had been accelerated
+    // (235 ms of 312 on a 12-vs-8,568-triangle case). B's hierarchy answers "which
+    // triangles can possibly meet this box" in log time instead.
+    //
+    // The candidate set is then filtered by the SAME exact box test as before and visited
+    // in ASCENDING triangle order, so the pairs considered — and the order they are
+    // considered in — are identical to the brute-force loop. That matters beyond tidiness:
+    // the order segments are appended in feeds the per-triangle retriangulation, so a
+    // different order could produce a different (still valid) tessellation. Sorting keeps
+    // this a pure acceleration, and the output byte-for-byte unchanged.
+    MeshBVH bvhB;
+    bvhB.build(tb);
+    const bool useBroadPhase = bvhB.isValid();
+    std::vector<uint32_t> candidates;
+    std::vector<size_t>   pairs;
+
     for (size_t i = 0; i < TA.size(); ++i) {
         if (!TA[i].box.valid) continue;
-        for (size_t j = 0; j < TB.size(); ++j) {
+
+        pairs.clear();
+        if (useBroadPhase) {
+            const V qlo{TA[i].box.lo.x - kTol, TA[i].box.lo.y - kTol, TA[i].box.lo.z - kTol};
+            const V qhi{TA[i].box.hi.x + kTol, TA[i].box.hi.y + kTol, TA[i].box.hi.z + kTol};
+            bvhB.collectBoxCandidates(qlo, qhi, candidates);
+            const auto& bt = bvhB.tris();
+            pairs.reserve(candidates.size());
+            for (const uint32_t ci : candidates) {
+                if (ci < bt.size()) pairs.push_back(static_cast<size_t>(bt[ci].srcFace));
+            }
+            std::sort(pairs.begin(), pairs.end());
+            pairs.erase(std::unique(pairs.begin(), pairs.end()), pairs.end());
+        } else {
+            pairs.reserve(TB.size());
+            for (size_t j = 0; j < TB.size(); ++j) pairs.push_back(j);
+        }
+
+        for (const size_t j : pairs) {
+            if (j >= TB.size()) continue;
             if (!TB[j].box.valid || !overlap(TA[i].box, TB[j].box, kTol)) {
                 continue;
             }

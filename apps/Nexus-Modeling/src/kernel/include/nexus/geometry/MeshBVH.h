@@ -77,6 +77,16 @@ public:
     void collectSegmentCandidates(const nexus::render::Vec3& a, const nexus::render::Vec3& b,
                                   std::vector<uint32_t>& out) const;
 
+    // Every triangle whose bounding box overlaps the query box, appended to `out` (cleared
+    // first). The broad phase for pairing two meshes: without it, finding which triangles
+    // of B can meet a triangle of A means testing all of them.
+    //
+    // Conservative in the same way as the segment query — it may return triangles whose
+    // boxes only just miss, never omit one that overlaps — so a caller may re-apply its own
+    // exact box test and get precisely the set it would have found by brute force.
+    void collectBoxCandidates(const nexus::render::Vec3& lo, const nexus::render::Vec3& hi,
+                              std::vector<uint32_t>& out) const;
+
     [[nodiscard]] const std::vector<Node>& nodes() const noexcept { return m_nodes; }
     [[nodiscard]] const std::vector<Tri>& tris() const noexcept { return m_tris; }
 

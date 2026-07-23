@@ -441,7 +441,8 @@ void MeshBVH::collectSegmentCandidates(const Vec3& a, const Vec3& b,
         return true;
     };
 
-    std::vector<int32_t> stack;
+    thread_local std::vector<int32_t> stack;
+    stack.clear();
     stack.reserve(64);
     stack.push_back(0);
     while (!stack.empty()) {
@@ -461,6 +462,40 @@ void MeshBVH::collectSegmentCandidates(const Vec3& a, const Vec3& b,
         // For an INTERIOR node the left child is `leftChild` and the right child is stored
         // in `firstTri` (that field is only a triangle offset on leaf nodes) — the same
         // convention raycast uses.
+        if (node.leftChild >= 0) stack.push_back(node.leftChild);
+        if (node.firstTri > 0) stack.push_back(node.firstTri);
+    }
+}
+
+void MeshBVH::collectBoxCandidates(const Vec3& lo, const Vec3& hi,
+                                   std::vector<uint32_t>& out) const {
+    out.clear();
+    if (!m_valid || m_nodes.empty()) return;
+
+    // One scratch stack reused across calls: these traversals run once per query, and a
+    // fresh vector each time is a heap allocation per query.
+    thread_local std::vector<int32_t> stack;
+    stack.clear();
+    stack.reserve(64);
+    stack.push_back(0);
+    while (!stack.empty()) {
+        const int32_t idx = stack.back();
+        stack.pop_back();
+        if (idx < 0 || static_cast<size_t>(idx) >= m_nodes.size()) continue;
+        const Node& node = m_nodes[static_cast<size_t>(idx)];
+
+        if (hi.x < node.min.x || lo.x > node.max.x) continue;
+        if (hi.y < node.min.y || lo.y > node.max.y) continue;
+        if (hi.z < node.min.z || lo.z > node.max.z) continue;
+
+        if (node.isLeaf) {
+            for (int32_t i = 0; i < node.triCount; ++i) {
+                const size_t triIdx = static_cast<size_t>(node.firstTri + i);
+                if (triIdx < m_tris.size()) out.push_back(static_cast<uint32_t>(triIdx));
+            }
+            continue;
+        }
+        // Interior: left child in leftChild, right child in firstTri.
         if (node.leftChild >= 0) stack.push_back(node.leftChild);
         if (node.firstTri > 0) stack.push_back(node.firstTri);
     }
