@@ -61,14 +61,19 @@ struct Curve {
     [[nodiscard]] Vec3 normalAt(float t) const noexcept;
 };
 
-enum class SurfaceKind : uint8_t { Plane, Cylinder, Sphere, Nurbs };
+enum class SurfaceKind : uint8_t { Plane, Cylinder, Sphere, Cone, Nurbs };
 
 struct Surface {
     SurfaceKind kind = SurfaceKind::Plane;
-    Vec3  origin{};                 // point on surface / centre / axis base
-    Vec3  normal{0.f, 0.f, 1.f};    // Plane normal; Cylinder & Sphere axis
+    // Cone reuses the existing fields rather than adding new ones, so the serialised
+    // layout is unchanged and older files (which cannot contain a cone) still read:
+    //   origin = APEX, normal = axis pointing apex -> base, radius = SLOPE (tan of the
+    //   half-angle, i.e. base radius / height). Its v parameter is axial distance from
+    //   the apex, so the ring radius at v is radius*v and v = 0 is the apex itself.
+    Vec3  origin{};                 // point on surface / centre / axis base / cone apex
+    Vec3  normal{0.f, 0.f, 1.f};    // Plane normal; Cylinder, Sphere & Cone axis
     Vec3  uAxis{1.f, 0.f, 0.f};     // in-surface u direction (param frame)
-    float radius = 0.f;             // Cylinder / Sphere radius
+    float radius = 0.f;             // Cylinder / Sphere radius; Cone SLOPE
     uint32_t nurbs = kInvalid;      // index into a NurbsSurface store (future)
 
     [[nodiscard]] Vec3 eval(float u, float v) const noexcept;

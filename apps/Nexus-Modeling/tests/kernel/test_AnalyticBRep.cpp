@@ -1164,4 +1164,115 @@ TEST(AnalyticBRep, FromFacesRejectsMalformedInput)
     EXPECT_FALSE(Body::fromFaces(pts, {oob}).has_value());
 }
 
+// ── Faces must describe their own geometry ──────────────────────────────────────
+
+// A cone's lateral faces were tagged with a Cylinder surface "as an approximation". It was
+// not an approximation: the tagged cylinder of radius r does not contain the apex at all,
+// so 16 of a cone's 48 lateral vertices sat a full unit off the surface that every
+// surface-based query would consult for them — and checkGeometry called the body clean.
+TEST(AnalyticBRep, ConeFacesCarryATrueConicalSurface)
+{
+    const Body cone = makeCone(1.f, 2.f, 16);
+    ASSERT_TRUE(cone.checkIntegrity().ok);
+    ASSERT_TRUE(cone.checkGeometry().ok);
+
+    int lateral = 0, offSurface = 0;
+    for (uint32_t f = 0; f < cone.faceCount(); ++f) {
+        const auto& face = cone.face(f);
+        if (!face.alive) continue;
+        const auto& s = cone.surface(face.surface);
+        if (s.kind != SurfaceKind::Cone) continue;
+        ++lateral;
+        for (const uint32_t vid : cone.faceVertices(f)) {
+            const auto p = cone.vertex(vid).point;
+            const float dx = p.x - s.origin.x, dy = p.y - s.origin.y, dz = p.z - s.origin.z;
+            const float axial = dx * s.normal.x + dy * s.normal.y + dz * s.normal.z;
+            const float px = dx - axial * s.normal.x, py = dy - axial * s.normal.y,
+                        pz = dz - axial * s.normal.z;
+            const float radial = std::sqrt(px * px + py * py + pz * pz);
+            // On a cone the ring radius is slope * (axial distance from the apex).
+            if (std::abs(radial - s.radius * axial) > 1e-3f) ++offSurface;
+        }
+    }
+    EXPECT_GT(lateral, 0) << "the cone carries no conical surface at all";
+    EXPECT_EQ(offSurface, 0) << offSurface << " cone vertices are off their own surface";
+}
+
+TEST(AnalyticBRep, ConeSurfaceEvaluatesAndNormalsArePerpendicularToTheRuling)
+{
+    const Body cone = makeCone(1.f, 2.f, 16);
+    const Surface* cs = nullptr;
+    for (uint32_t f = 0; f < cone.faceCount() && !cs; ++f) {
+        const auto& face = cone.face(f);
+        if (face.alive && cone.surface(face.surface).kind == SurfaceKind::Cone) {
+            cs = &cone.surface(face.surface);
+        }
+    }
+    ASSERT_NE(cs, nullptr);
+
+    // v is axial distance from the apex; at v = height the ring has the base radius.
+    const auto p = cs->eval(0.f, 2.f);
+    EXPECT_NEAR(p.x, 1.f, 1e-4f);
+    EXPECT_NEAR(p.y, 0.f, 1e-4f);
+    EXPECT_NEAR(p.z, -1.f, 1e-4f);
+
+    // The normal must be perpendicular to the ruling through that point, and unit length.
+    const auto n = cs->normalAt(0.f, 2.f);
+    EXPECT_NEAR(std::sqrt(n.x * n.x + n.y * n.y + n.z * n.z), 1.f, 1e-4f);
+    const float rx = p.x - cs->origin.x, ry = p.y - cs->origin.y, rz = p.z - cs->origin.z;
+    const float len = std::sqrt(rx * rx + ry * ry + rz * rz);
+    EXPECT_NEAR((n.x * rx + n.y * ry + n.z * rz) / len, 0.f, 1e-4f)
+        << "the cone normal is not perpendicular to its ruling";
+}
+
+// The check that would have caught the cone. Build a body whose face is handed a surface
+// that is not its surface: the topology is perfectly valid and the geometry is a lie, and
+// only the geometric validator can tell the difference — which is the whole reason there
+// are two checkers.
+TEST(AnalyticBRep, CheckGeometryRejectsAFaceWhoseSurfaceDoesNotContainIt)
+{
+    // A tetrahedron, with one face declared to lie on a sphere it is nowhere near.
+    const std::vector<nexus::render::Vec3> pts = {
+        {0.f, 0.f, 0.f}, {1.f, 0.f, 0.f}, {0.f, 1.f, 0.f}, {0.f, 0.f, 1.f}};
+
+    auto planeFace = [&](std::vector<uint32_t> loop) {
+        Body::FaceDef fd;
+        fd.loop = loop;
+        fd.surface.kind = SurfaceKind::Plane;
+        fd.surface.origin = pts[loop[0]];
+        const auto a = pts[loop[0]], b = pts[loop[1]], c = pts[loop[2]];
+        const float ux = b.x - a.x, uy = b.y - a.y, uz = b.z - a.z;
+        const float vx = c.x - a.x, vy = c.y - a.y, vz = c.z - a.z;
+        float nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
+        const float len = std::sqrt(nx * nx + ny * ny + nz * nz);
+        fd.surface.normal = {nx / len, ny / len, nz / len};
+        fd.surface.uAxis = {ux, uy, uz};
+        const float ul = std::sqrt(ux * ux + uy * uy + uz * uz);
+        fd.surface.uAxis = {ux / ul, uy / ul, uz / ul};
+        return fd;
+    };
+
+    std::vector<Body::FaceDef> good = {
+        planeFace({0, 2, 1}), planeFace({0, 1, 3}), planeFace({1, 2, 3}), planeFace({0, 3, 2})};
+    const auto sound = Body::fromFaces(pts, good);
+    ASSERT_TRUE(sound.has_value());
+    ASSERT_TRUE(sound->checkIntegrity().ok);
+    ASSERT_TRUE(sound->checkGeometry().ok) << "the honest tetrahedron should validate";
+
+    // Same topology, but one face claims to lie on a unit sphere centred far away.
+    std::vector<Body::FaceDef> lying = good;
+    lying[0].surface.kind = SurfaceKind::Sphere;
+    lying[0].surface.origin = {10.f, 10.f, 10.f};
+    lying[0].surface.normal = {0.f, 0.f, 1.f};
+    lying[0].surface.uAxis = {1.f, 0.f, 0.f};
+    lying[0].surface.radius = 1.f;
+
+    const auto bad = Body::fromFaces(pts, lying);
+    ASSERT_TRUE(bad.has_value());
+    EXPECT_TRUE(bad->checkIntegrity().ok) << "the topology is untouched and should still pass";
+    const auto g = bad->checkGeometry();
+    EXPECT_FALSE(g.ok) << "a face whose surface does not contain it was accepted";
+    EXPECT_NE(g.reason.find("surface"), std::string::npos) << "reason was: " << g.reason;
+}
+
 }  // namespace nexus::geometry::brep::testing

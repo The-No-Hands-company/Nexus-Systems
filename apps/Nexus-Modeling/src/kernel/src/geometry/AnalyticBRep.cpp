@@ -229,6 +229,16 @@ Vec3 Surface::eval(float u, float v) const noexcept
                     origin.y + radius * (su * uAxis.y + cu * cv * va.y + cu * sv * normal.y),
                     origin.z + radius * (su * uAxis.z + cu * cv * va.z + cu * sv * normal.z)};
         }
+        case SurfaceKind::Cone: {
+            // origin = apex, normal = axis (apex -> base), radius = slope.
+            // v is axial distance from the apex; the ring radius there is slope*v.
+            const Vec3 va = vAxis();
+            const float c = std::cos(u), sn = std::sin(u);
+            const float rr = radius * v;
+            return {origin.x + v * normal.x + rr * (c * uAxis.x + sn * va.x),
+                    origin.y + v * normal.y + rr * (c * uAxis.y + sn * va.y),
+                    origin.z + v * normal.z + rr * (c * uAxis.z + sn * va.z)};
+        }
         case SurfaceKind::Nurbs:
         default:
             return origin;
@@ -254,6 +264,16 @@ Vec3 Surface::normalAt(float u, float v) const noexcept
             return normalize({su * uAxis.x + cu * cv * va.x + cu * sv * normal.x,
                               su * uAxis.y + cu * cv * va.y + cu * sv * normal.y,
                               su * uAxis.z + cu * cv * va.z + cu * sv * normal.z});
+        }
+        case SurfaceKind::Cone: {
+            // On a cone |p_perp| = slope*(p . axis), so the gradient of that implicit
+            // form gives the outward normal: radial direction minus slope along the axis,
+            // normalised. It does not depend on v — every point up a ruling shares it.
+            const Vec3 va = vAxis();
+            const float c = std::cos(u), sn = std::sin(u);
+            return normalize({c * uAxis.x + sn * va.x - radius * normal.x,
+                              c * uAxis.y + sn * va.y - radius * normal.y,
+                              c * uAxis.z + sn * va.z - radius * normal.z});
         }
         default:
             (void)v;
@@ -609,6 +629,52 @@ Body::GeometryReport Body::checkGeometry(Tolerance tol) const
             if (haveDomain && (ip.first < du0 - su || ip.first > du1 + su ||
                                ip.second < dv0 - sv || ip.second > dv1 + sv))
                 return fail("coedge " + std::to_string(c) + " pcurve interior point is outside the surface domain");
+        }
+    }
+
+
+    // Every face's own vertices must LIE ON that face's surface.
+    //
+    // Nothing checked this, and a body could therefore carry a surface that simply was not
+    // the surface of its face. makeCone tagged its lateral faces as cylinders "as an
+    // approximation"; the tagged cylinder does not contain the apex at all, so 16 of a
+    // cone's 48 lateral vertices sat a full unit off the surface every query would consult
+    // for them — and checkGeometry reported the body clean. Topological validity is not
+    // geometric consistency, which is why there are two checkers; this is the check that
+    // makes the second one mean what its name says.
+    for (uint32_t fi = 0; fi < static_cast<uint32_t>(m_faces.size()); ++fi) {
+        const Face& face = m_faces[fi];
+        if (!face.alive || face.surface == kInvalid) continue;
+        if (face.surface >= m_surfaces.size()) continue;
+        const Surface& su = m_surfaces[face.surface];
+        if (su.kind == SurfaceKind::Nurbs) continue;  // evaluated through the NURBS store
+
+        const float scale = std::max(1.f, std::abs(su.radius));
+        for (const uint32_t vid : faceVertices(fi)) {
+            if (vid >= m_verts.size() || !m_verts[vid].alive) continue;
+            const Vec3 p = m_verts[vid].point;
+            const Vec3 d{p.x - su.origin.x, p.y - su.origin.y, p.z - su.origin.z};
+            const Vec3 va = su.vAxis();
+            const float axial = d.x * su.normal.x + d.y * su.normal.y + d.z * su.normal.z;
+            const Vec3 perp{d.x - axial * su.normal.x, d.y - axial * su.normal.y,
+                            d.z - axial * su.normal.z};
+            const float radial = length(perp);
+
+            float deviation = 0.f;
+            switch (su.kind) {
+                case SurfaceKind::Plane:    deviation = std::abs(axial); break;
+                case SurfaceKind::Cylinder: deviation = std::abs(radial - su.radius); break;
+                case SurfaceKind::Sphere:   deviation = std::abs(length(d) - su.radius); break;
+                // Ring radius grows as slope * axial distance from the apex.
+                case SurfaceKind::Cone:     deviation = std::abs(radial - su.radius * axial); break;
+                default:                    deviation = 0.f; break;
+            }
+            (void)va;
+            if (!(deviation <= 1e-3f * scale)) {
+                return fail("face " + std::to_string(fi) + " vertex " + std::to_string(vid)
+                            + " is not on its own surface " + std::to_string(face.surface)
+                            + " (deviation " + std::to_string(deviation) + ")");
+            }
         }
     }
 
@@ -2518,11 +2584,18 @@ Body makeCone(float radius, float height, uint32_t segments)
         const uint32_t j = (i + 1) % n;
         Body::FaceDef side;
         side.loop = {i, j, apex};
-        side.surface.kind = SurfaceKind::Cylinder;  // conical surface approx (Nurbs later)
-        side.surface.origin = {0.f, 0.f, 0.f};
-        side.surface.normal = {0.f, 0.f, 1.f};
+        // A real conical surface. This used to be tagged Cylinder "as an approximation",
+        // which was not an approximation but a false statement: the tagged cylinder of
+        // radius `radius` does not contain the apex at all — measured, 16 of a cone's 48
+        // lateral vertices sat a full unit off their own face's surface, and every
+        // surface-based query on a cone was reading from that.
+        // apex is at +h, base at -h, so the axis runs apex -> base along -Z and the slope
+        // (base radius over height) is radius/height.
+        side.surface.kind = SurfaceKind::Cone;
+        side.surface.origin = {0.f, 0.f, h};       // apex
+        side.surface.normal = {0.f, 0.f, -1.f};    // axis, apex -> base
         side.surface.uAxis = {1.f, 0.f, 0.f};
-        side.surface.radius = radius;
+        side.surface.radius = (height > 0.f) ? (radius / height) : 0.f;  // slope
         defs.push_back(std::move(side));
     }
 
@@ -2867,11 +2940,20 @@ Body twistExtrude(const std::vector<Vec3>& profile, const Vec3& dir, float twist
         defs.push_back(planeDef(std::move(lo)));
         defs.push_back(planeDef(std::move(hi)));
     }
-    // Side quads between consecutive rings.
+    // Side walls between consecutive rings, as TRIANGLES.
+    //
+    // A twisted quad is warped — its four corners are not coplanar — so describing it with
+    // a Plane surface states something false about it. Measured on a twisted box, every
+    // side quad deviated from its own tagged plane, by as much as 0.24 units at four
+    // layers, and the deviation only shrinks with finer layering rather than vanishing. A
+    // triangle is planar by construction, so splitting each wall makes the surface an
+    // exact description instead of an approximate one, and removes the ambiguity of what a
+    // warped quad even bounds.
     for (uint32_t j = 0; j < layers; ++j)
         for (size_t i = 0; i < n; ++i) {
             const size_t i1 = (i + 1) % n;
-            defs.push_back(planeDef({V(j, i), V(j, i1), V(j + 1, i1), V(j + 1, i)}));
+            defs.push_back(planeDef({V(j, i), V(j, i1), V(j + 1, i1)}));
+            defs.push_back(planeDef({V(j, i), V(j + 1, i1), V(j + 1, i)}));
         }
 
     auto body = Body::fromFaces(pts, defs);

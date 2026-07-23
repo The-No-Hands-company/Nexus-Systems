@@ -84,4 +84,39 @@ TEST(BRepTwistExtrude, Deterministic)
               twistExtrude(kSquare, {0, 0, 3}, 0.6f, 24).serialize());
 }
 
+// A twisted quad is WARPED — its four corners are not coplanar — so tagging it with a
+// Plane surface asserted something false about the solid. Measured before the fix, every
+// side face of a twisted box deviated from its own plane, by as much as 0.24 units at four
+// layers, and finer layering only shrank the error rather than removing it. Side walls are
+// now triangles, which are planar by construction.
+TEST(BRepTwistExtrude, SideWallsArePlanarByConstruction)
+{
+    const std::vector<nexus::render::Vec3> profile = {
+        {0.f, 0.f, 0.f}, {1.f, 0.f, 0.f}, {1.f, 1.f, 0.f}, {0.f, 1.f, 0.f}};
+    for (const uint32_t layers : {4u, 16u, 64u}) {
+        const Body b =
+            twistExtrude(profile, {0.f, 0.f, 2.f}, 1.f, layers);
+        ASSERT_TRUE(b.checkIntegrity().ok) << "layers=" << layers;
+        ASSERT_TRUE(b.checkGeometry().ok) << "layers=" << layers;
+
+        int nonPlanar = 0;
+        float worst = 0.f;
+        for (uint32_t f = 0; f < b.faceCount(); ++f) {
+            const auto& face = b.face(f);
+            if (!face.alive) continue;
+            const auto& s = b.surface(face.surface);
+            if (s.kind != SurfaceKind::Plane) continue;
+            for (const uint32_t vid : b.faceVertices(f)) {
+                const auto p = b.vertex(vid).point;
+                const float d = std::abs((p.x - s.origin.x) * s.normal.x
+                                       + (p.y - s.origin.y) * s.normal.y
+                                       + (p.z - s.origin.z) * s.normal.z);
+                if (d > 1e-3f) { ++nonPlanar; worst = std::max(worst, d); }
+            }
+        }
+        EXPECT_EQ(nonPlanar, 0) << "layers=" << layers << ": " << nonPlanar
+                                << " vertices lie off their own plane, worst " << worst;
+    }
+}
+
 }  // namespace nexus::geometry::brep::testing
