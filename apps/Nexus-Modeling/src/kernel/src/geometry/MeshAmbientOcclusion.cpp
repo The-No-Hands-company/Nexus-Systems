@@ -81,6 +81,23 @@ EvalResult evaluateAtPoint(
     uint32_t hitCount = 0;
     Vec3 unoccludedDirSum{0.f, 0.f, 0.f};
 
+    // Shadow-ray bias. The ray starts ON the surface, so the very first thing it meets is
+    // the triangle it started from, at t == 0. The BVH reports only the NEAREST hit, so
+    // that self-intersection is all it ever returns and the `t > epsilon` guard below then
+    // reads it as "nothing was hit" — every ray came back unoccluded and the whole bake
+    // was a uniform 1.0 no matter what stood in the way. Measured on a plane with a sphere
+    // resting on it: vertices directly beneath the sphere scored exactly the same as the
+    // far rim.
+    //
+    // Lifting the origin off the surface by a hair removes the self-hit entirely, and the
+    // occluder behind it becomes visible: the same ray goes from t == -0 to t == 0.05.
+    // The offset is scale-aware — a fraction of the query's own reach, plus a term for the
+    // float resolution at this coordinate magnitude — so it behaves the same on a
+    // millimetre part as on a kilometre of terrain.
+    const float magnitude = std::max({std::abs(P.x), std::abs(P.y), std::abs(P.z), 1.f});
+    const float bias = std::max(maxDistance * 1e-4f, magnitude * 1e-5f);
+    const Vec3 origin{P.x + N.x * bias, P.y + N.y * bias, P.z + N.z * bias};
+
     for (uint32_t r = 0; r < sampleCount; ++r) {
         float u1 = static_cast<float>(rng.uniform01());
         float u2 = static_cast<float>(rng.uniform01());
@@ -89,7 +106,7 @@ EvalResult evaluateAtPoint(
         bool hit = false;
 
         if (bvh) {
-            Ray ray{P, rayDir};
+            Ray ray{origin, rayDir};
             auto hitResult = bvh->raycast(ray);
             if (hitResult.t < maxDistance && hitResult.t > 1e-6f) {
                 hit = true;
@@ -107,7 +124,7 @@ EvalResult evaluateAtPoint(
                     const Vec3& b = pos[face.indices[vi]];
                     const Vec3& c = pos[face.indices[vi + 1]];
                     float t, u, v;
-                    if (rayTriangleIntersect(P, rayDir, a, b, c, t, u, v)) {
+                    if (rayTriangleIntersect(origin, rayDir, a, b, c, t, u, v)) {
                         if (t > 1e-6f && t < bestT) {
                             bestT = t;
                             hit = true;

@@ -16,6 +16,9 @@
 #include <nexus/geometry/Mesh.h>
 #include <nexus/geometry/MeshClosestPoint.h>
 #include <nexus/geometry/MeshHausdorffDistance.h>
+#include <nexus/geometry/MeshAmbientOcclusion.h>
+#include <nexus/geometry/MeshInstancer.h>
+#include <nexus/geometry/MeshPointSample.h>
 #include <nexus/geometry/MeshPoissonDisk.h>
 #include <nexus/geometry/MeshSignedDistanceField.h>
 #include <nexus/geometry/SnappingEngine.h>
@@ -297,5 +300,186 @@ TEST(BvhDependentFeatures, RandomSourceIsUniformOverTheUnitInterval)
         EXPECT_GT(bucket[b], kDraws / kBuckets / 2)
             << "decile " << b << " holds only " << bucket[b] << " of " << kDraws;
         EXPECT_LT(bucket[b], kDraws / kBuckets * 2) << "decile " << b << " is overfull";
+    }
+}
+
+// ── The remaining consumers of the random source ────────────────────────────────
+//
+// Point sampling, ambient occlusion and the instancer all draw from SplitMix64 and had
+// never been verified — they simply had their randomness restored. Each check below is a
+// property a collapsed generator would violate.
+
+// A sampler must place points in proportion to AREA. Uniform-per-triangle would put as
+// many samples on a sliver as on a face a hundred times larger. A stretched box makes the
+// difference measurable.
+TEST(BvhDependentFeatures, PointSamplingIsAreaWeightedAndOnTheSurface)
+{
+    Mesh box = primitives::makeBox(4.f, 1.f, 1.f);
+    ASSERT_TRUE(box.topology().triangulate());
+    const auto& pos = box.attributes().positions();
+
+    std::vector<double> area;
+    std::vector<std::array<Vec3, 3>> tri;
+    for (std::size_t f = 0; f < box.topology().faceCount(); ++f) {
+        const auto& fc = box.topology().face(f);
+        if (fc.indices.size() != 3) continue;
+        tri.push_back({pos[fc.indices[0]], pos[fc.indices[1]], pos[fc.indices[2]]});
+        const Vec3& a = tri.back()[0];
+        const Vec3& b = tri.back()[1];
+        const Vec3& c = tri.back()[2];
+        const double ux = b.x - a.x, uy = b.y - a.y, uz = b.z - a.z;
+        const double vx = c.x - a.x, vy = c.y - a.y, vz = c.z - a.z;
+        const double cx = uy * vz - uz * vy, cy = uz * vx - ux * vz, cz = ux * vy - uy * vx;
+        area.push_back(0.5 * std::sqrt(cx * cx + cy * cy + cz * cz));
+    }
+    double total = 0.0;
+    for (double a : area) total += a;
+
+    PointSampleOptions opts;
+    opts.count = 20000;
+    opts.seed = 7;
+    const PointSampleResult r = MeshPointSample::sample(box, opts);
+    ASSERT_EQ(r.points.size(), opts.count);
+
+    std::vector<int> hist(area.size(), 0);
+    for (const uint32_t t : r.triangles) {
+        if (t < hist.size()) hist[t]++;
+    }
+    double worstRel = 0.0;
+    int compared = 0;
+    for (std::size_t t = 0; t < area.size(); ++t) {
+        const double expect = static_cast<double>(r.points.size()) * area[t] / total;
+        if (expect < 50.0) continue;  // too few to judge
+        ++compared;
+        worstRel = std::max(worstRel, std::abs(hist[t] - expect) / expect);
+    }
+    ASSERT_GT(compared, 4) << "not enough triangles carried a measurable share";
+    EXPECT_LT(worstRel, 0.25) << "sample counts deviate from triangle area by " << worstRel
+                              << " — the sampler is not area-weighted";
+}
+
+// A CONVEX body cannot occlude itself, so its ambient occlusion must be uniformly open.
+TEST(BvhDependentFeatures, AmbientOcclusionIsOpenOnAConvexBody)
+{
+    Mesh sphere = primitives::makeSphere(1.f, 24, 28);
+    ASSERT_TRUE(sphere.computeVertexNormals());
+    AmbientOcclusionOptions opts;
+    opts.sampleCount = 128;
+    opts.seed = 5;
+    opts.maxDistance = 3.f;
+
+    const AmbientOcclusionResult r = MeshAmbientOcclusion::bake(sphere, opts);
+    ASSERT_EQ(r.ao.size(), sphere.attributes().vertexCount());
+    for (const float v : r.ao) {
+        ASSERT_GE(v, 0.f);
+        ASSERT_LE(v, 1.f);
+        EXPECT_GT(v, 0.9f) << "a convex body reported self-occlusion";
+    }
+}
+
+// And it must actually SEE an occluder. This is the check that was missing: the bake
+// returned a uniform 1.0 for every scene, because each ray hit the triangle it started
+// from — the BVH reports only the nearest hit — and that self-intersection was then
+// discarded as "no hit". A plane with a sphere resting on it separates the two populations
+// unambiguously.
+TEST(BvhDependentFeatures, AmbientOcclusionDetectsAnOccluder)
+{
+    Mesh plane = primitives::makePlane(8.f, 8.f, 40, 40);
+    Mesh ball = primitives::makeSphere(1.f, 16, 20);
+    {
+        auto p = ball.attributes().positions();
+        for (auto& v : p) v.y += 1.05f;
+        ball.attributes().setPositions(std::move(p));
+    }
+    const std::size_t planeVerts = plane.attributes().vertexCount();
+    Mesh scene = plane;
+    // Both carry UVs, which appendMesh requires — it rejects mismatched channel sets.
+    ASSERT_TRUE(scene.appendMesh(ball)) << "scene assembly failed; the test would be vacuous";
+    ASSERT_TRUE(scene.computeVertexNormals());
+
+    AmbientOcclusionOptions opts;
+    opts.sampleCount = 128;
+    opts.seed = 5;
+    opts.maxDistance = 5.f;
+    const AmbientOcclusionResult r = MeshAmbientOcclusion::bake(scene, opts);
+    ASSERT_FALSE(r.ao.empty());
+
+    const auto& p = scene.attributes().positions();
+    double beneath = 0.0, rim = 0.0;
+    int nb = 0, nr = 0;
+    for (std::size_t i = 0; i < planeVerts && i < r.ao.size(); ++i) {
+        const float d = std::sqrt(p[i].x * p[i].x + p[i].z * p[i].z);
+        if (d < 0.6f) { beneath += r.ao[i]; ++nb; }
+        else if (d > 3.2f) { rim += r.ao[i]; ++nr; }
+    }
+    ASSERT_GT(nb, 5);
+    ASSERT_GT(nr, 50);
+    EXPECT_GT(rim / nr - beneath / nb, 0.3)
+        << "occlusion beneath the sphere (" << beneath / nb << ") is not separated from the "
+        << "open rim (" << rim / nr << ") — the bake is not measuring occlusion";
+}
+
+// Two independent implementations of the same question must agree. The accelerated path
+// and the exhaustive one share nothing but the sampling directions.
+TEST(BvhDependentFeatures, AmbientOcclusionAgreesBetweenAcceleratedAndExhaustivePaths)
+{
+    Mesh plane = primitives::makePlane(8.f, 8.f, 20, 20);
+    Mesh ball = primitives::makeSphere(1.f, 16, 20);
+    {
+        auto p = ball.attributes().positions();
+        for (auto& v : p) v.y += 1.05f;
+        ball.attributes().setPositions(std::move(p));
+    }
+    Mesh scene = plane;
+    ASSERT_TRUE(scene.appendMesh(ball));
+    ASSERT_TRUE(scene.computeVertexNormals());
+
+    AmbientOcclusionOptions accelerated;
+    accelerated.sampleCount = 128;
+    accelerated.seed = 5;
+    accelerated.maxDistance = 3.f;
+    accelerated.useBVH = true;
+    AmbientOcclusionOptions exhaustive = accelerated;
+    exhaustive.useBVH = false;
+
+    const auto fast = MeshAmbientOcclusion::bake(scene, accelerated);
+    const auto slow = MeshAmbientOcclusion::bake(scene, exhaustive);
+    ASSERT_EQ(fast.ao.size(), slow.ao.size());
+    ASSERT_FALSE(fast.ao.empty());
+
+    float worst = 0.f;
+    for (std::size_t i = 0; i < fast.ao.size(); ++i) {
+        worst = std::max(worst, std::abs(fast.ao[i] - slow.ao[i]));
+    }
+    EXPECT_LT(worst, 0.02f) << "the accelerated and exhaustive paths disagree by " << worst;
+}
+
+// Instances must cover the target rather than pile up, and be reproducible.
+TEST(BvhDependentFeatures, InstancerCoversTheTargetAndIsDeterministic)
+{
+    const Mesh source = primitives::makeBox(0.2f, 0.2f, 0.2f);
+    const Mesh target = primitives::makePlane(4.f, 4.f, 1, 1);
+    InstancerOptions opts;
+    opts.scaleMin = 1.f;
+    opts.scaleMax = 1.f;
+    opts.seed = 3;
+
+    const Mesh a = MeshInstancer::scatter(source, target, opts);
+    const Mesh b = MeshInstancer::scatter(source, target, opts);
+    ASSERT_TRUE(a.isValid());
+    ASSERT_GT(a.attributes().vertexCount(), 0u);
+
+    const auto bounds = a.computeBounds();
+    EXPECT_GT(bounds.max.x - bounds.min.x, 3.f)
+        << "instances did not spread across the 4-unit target";
+    EXPECT_GT(bounds.max.z - bounds.min.z, 3.f);
+
+    ASSERT_EQ(a.attributes().vertexCount(), b.attributes().vertexCount());
+    const auto& pa = a.attributes().positions();
+    const auto& pb = b.attributes().positions();
+    for (std::size_t i = 0; i < pa.size(); ++i) {
+        ASSERT_FLOAT_EQ(pa[i].x, pb[i].x) << "instancing is not reproducible at vertex " << i;
+        ASSERT_FLOAT_EQ(pa[i].y, pb[i].y);
+        ASSERT_FLOAT_EQ(pa[i].z, pb[i].z);
     }
 }
