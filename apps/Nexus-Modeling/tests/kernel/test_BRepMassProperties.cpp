@@ -154,21 +154,49 @@ TEST(BRepMassProperties, BoxStaysExactThroughTheFlatPath)
             if (i != j) EXPECT_NEAR(p.inertia[i][j], 0.f, 1e-3);
 }
 
-// The sphere is deliberately still tessellated (its parameter convention here does not
-// match the exact patch), so it must remain CORRECT and converge with density rather than
-// return a confidently-wrong "exact" value. This guards that the gating did not let a
-// broken exact sphere through.
-TEST(BRepMassProperties, SphereStaysCorrectAndConvergesWithTessellation)
+// The sphere is integrated exactly, like the cylinder and cone. It was the hard case: its
+// faces are triangles, and integrating each over its bounding rectangle over-counted the
+// region between adjacent triangles (the whole body came out 1.5x its volume). Integrating
+// each face over its parameter-space polygon instead is exact for any tessellation, and it
+// is also the fix that made the method robust rather than reliant on grid-aligned faces.
+TEST(BRepMassProperties, SphereVolumeAndMomentAreExactRegardlessOfTessellation)
 {
     const double PI = 3.14159265358979323846;
     const double r = 1.0, Vround = 4.0 / 3.0 * PI * r * r * r;
+    const double Iround = 0.4 * Vround * r * r;  // 2/5 m r^2 about any axis
 
-    const double coarse = std::abs(makeSphere(1.f, 8, 12).massProperties(1.f).volume - Vround);
-    const double fine   = std::abs(makeSphere(1.f, 48, 64).massProperties(1.f).volume - Vround);
-    EXPECT_LT(fine, coarse) << "finer tessellation did not improve the sphere";
-    EXPECT_LT(fine, Vround * 0.01) << "the fine sphere is still more than 1% off";
-    // And never wildly wrong (the broken exact path inflated it past the true volume).
-    EXPECT_LT(makeSphere(1.f, 8, 12).massProperties(1.f).volume, Vround * 1.1);
+    for (const uint32_t lat : {4u, 8u, 16u}) {
+        for (const uint32_t lon : {6u, 12u}) {
+            const MassProperties p = makeSphere(1.f, lat, lon).massProperties(1.f);
+            EXPECT_NEAR(p.volume, Vround, Vround * 1e-5)
+                << "sphere volume not exact at " << lat << "x" << lon;
+            for (int i = 0; i < 3; ++i)
+                EXPECT_NEAR(p.inertia[i][i], Iround, Iround * 1e-4)
+                    << "sphere moment " << i << " not exact at " << lat << "x" << lon;
+            for (int i = 0; i < 3; ++i)
+                for (int j = 0; j < 3; ++j)
+                    if (i != j) EXPECT_NEAR(p.inertia[i][j], 0.f, Iround * 1e-3)
+                        << "sphere product " << i << j << " non-zero";
+        }
+    }
+}
+
+// ODD longitude counts put a face across the +/-pi seam, where the round patch and its
+// tessellated neighbours would not close. The body then falls back to tessellation as a
+// whole, which must stay CORRECT and converge with resolution rather than return the
+// non-convergent garbage the gap produced. This guards that the all-or-nothing fallback
+// actually fires.
+TEST(BRepMassProperties, OddLongitudeSphereFallsBackToConvergentTessellation)
+{
+    const double PI = 3.14159265358979323846;
+    const double Vround = 4.0 / 3.0 * PI;
+
+    const double coarse = std::abs(makeSphere(1.f, 8, 5).massProperties(1.f).volume - Vround);
+    const double fine   = std::abs(makeSphere(1.f, 48, 45).massProperties(1.f).volume - Vround);
+    EXPECT_LT(fine, coarse) << "odd-longitude sphere did not converge with tessellation";
+    EXPECT_LT(fine, Vround * 0.02) << "fine odd sphere still more than 2% off";
+    // Never wildly wrong (the un-guarded gap gave ~50% error at coarse counts).
+    EXPECT_LT(coarse, Vround * 0.5) << "coarse odd sphere is grossly wrong — the guard did not fire";
 }
 
 // Density scales the inertia and nothing else.
