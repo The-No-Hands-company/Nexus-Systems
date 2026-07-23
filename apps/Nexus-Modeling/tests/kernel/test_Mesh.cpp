@@ -1,4 +1,5 @@
 #include <nexus/geometry/Mesh.h>
+#include <nexus/geometry/MeshTopologyValidation.h>
 
 #include <gtest/gtest.h>
 
@@ -372,6 +373,75 @@ TEST(Mesh, WeldCoincidentVerticesRejectsFaceCollapse)
     EXPECT_FALSE(mesh.weldCoincidentVertices());
     EXPECT_EQ(mesh.attributes().vertexCount(), 3u);
     EXPECT_EQ(mesh.topology().face(0).indices, (std::vector<uint32_t>{0, 1, 2}));
+}
+
+// The weld used to be all-or-nothing: if welding would collapse ANY single face, it
+// abandoned the entire weld and left the whole mesh unwelded. On a finely tessellated
+// boolean that is catastrophic — one sliver anywhere leaves every triangle isolated, and
+// the result disintegrates into a triangle soup (measured: 5,958 boundary edges from 1,986
+// faces, i.e. every edge a boundary). DropCollapsedFace removes just the zero-area face.
+TEST(Mesh, WeldCollapsePolicyDropRemovesOnlyTheCollapsedFace)
+{
+    Mesh mesh;
+    // A unit square split into two triangles, plus a sliver whose two ends coincide within
+    // the weld tolerance. Only the sliver may be lost.
+    mesh.attributes().setPositions({
+        {0.f, 0.f, 0.f},          // 0
+        {1.f, 0.f, 0.f},          // 1
+        {1.f, 1.f, 0.f},          // 2
+        {0.f, 1.f, 0.f},          // 3
+        {0.5f, 0.5f, 0.f},        // 4
+        {0.5f + 1e-9f, 0.5f, 0.f} // 5 — coincides with 4
+    });
+    for (const std::vector<uint32_t>& idx : std::vector<std::vector<uint32_t>>{
+             {0, 1, 2}, {0, 2, 3}, {4, 5, 1}}) {
+        Face f{};
+        f.indices = idx;
+        mesh.topology().addFace(f);
+    }
+    ASSERT_TRUE(mesh.isValid());
+
+    EXPECT_TRUE(mesh.weldCoincidentVertices(1e-5f, Mesh::WeldCollapsePolicy::DropCollapsedFace));
+    EXPECT_EQ(mesh.topology().faceCount(), 2u) << "the collapsed sliver should be the only loss";
+    EXPECT_EQ(mesh.attributes().vertexCount(), 5u) << "vertices 4 and 5 should have merged";
+}
+
+// The default stays what it was, so no existing caller changes behaviour.
+TEST(Mesh, WeldCollapsePolicyDefaultsToRejectingTheWholeWeld)
+{
+    Mesh mesh;
+    mesh.attributes().setPositions({{0.f, 0.f, 0.f}, {0.f, 0.f, 0.f}, {0.f, 0.f, 1.f}});
+    Face face{};
+    face.indices = {0, 1, 2};
+    mesh.topology().addFace(face);
+    ASSERT_TRUE(mesh.isValid());
+
+    EXPECT_FALSE(mesh.weldCoincidentVertices(1e-5f));
+    EXPECT_EQ(mesh.attributes().vertexCount(), 3u);
+}
+
+// Dropping a collapsed face is an EDGE COLLAPSE, so a closed surface must stay closed:
+// the face's two surviving corners become the same undirected edge, and the neighbours
+// across them remain matched. This is the property the boolean depends on.
+TEST(Mesh, WeldCollapsePolicyDropKeepsAClosedSurfaceClosed)
+{
+    Mesh mesh = primitives::makeBox(2.f, 2.f, 2.f);
+    ASSERT_TRUE(mesh.topology().triangulate());
+    const auto before = MeshTopologyValidation::validate(mesh);
+    ASSERT_EQ(before.boundaryLoops, 0u);
+
+    // Introduce a duplicate of an existing vertex and a sliver face using both copies,
+    // so the weld has something to collapse.
+    auto pos = mesh.attributes().positions();
+    const uint32_t dup = static_cast<uint32_t>(pos.size());
+    pos.push_back(pos[0]);
+    mesh.attributes().setPositions(std::move(pos));
+
+    EXPECT_TRUE(mesh.weldCoincidentVertices(1e-5f, Mesh::WeldCollapsePolicy::DropCollapsedFace));
+    const auto after = MeshTopologyValidation::validate(mesh);
+    EXPECT_EQ(after.boundaryLoops, 0u) << "the box stopped being closed after welding";
+    EXPECT_EQ(after.euler, before.euler) << "welding changed the Euler characteristic";
+    (void)dup;
 }
 
 TEST(Mesh, AppendMeshRemapsIncomingTopologyAndPreservesOriginalStableIds)

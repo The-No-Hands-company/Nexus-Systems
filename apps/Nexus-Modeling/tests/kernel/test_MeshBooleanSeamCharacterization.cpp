@@ -285,6 +285,54 @@ TEST(MeshBooleanSeam, ExtremeTessellationResidualIsTracked)
                         << leaks << " of " << runs;
 }
 
+// SEVERITY, not just incidence. A leak that costs a handful of boundary edges is a small
+// hole; one that costs thousands means the result disintegrated. The weld used to be
+// all-or-nothing — a single collapsed sliver anywhere abandoned the ENTIRE weld and left
+// every triangle isolated — so at high density a leak was often total. Measured at sphere
+// 32x36: 10,926 boundary edges across the battery with a worst single result of 5,958,
+// against 80 and 16 once the weld drops just the collapsed face.
+//
+// This bound is the guard on that. It fails loudly if the all-or-nothing behaviour ever
+// returns, which the leak COUNT alone would barely register.
+TEST(MeshBooleanSeam, ALeakIsALocalHoleNotADisintegratedResult)
+{
+    using primitives::makeBox;
+    int worst = 0, total = 0;
+    std::mt19937 rng(4242u);
+    std::uniform_real_distribution<float> t(-1.6f, 1.6f);
+    const Mesh sphere = primitives::makeSphere(1.2f, 32, 36);
+    for (int i = 0; i < 20; ++i) {
+        const Mesh a = makeBox(2.f, 2.f, 2.f);
+        const Mesh b = translated(sphere, {t(rng), t(rng), t(rng)});
+        for (auto op : kOps) {
+            const Mesh r = robustMeshBoolean(a, b, op);
+            if (leakState(r) != 1) continue;
+            std::map<std::pair<uint32_t, uint32_t>, int> edgeUse;
+            for (size_t f = 0; f < r.topology().faceCount(); ++f) {
+                const auto& fc = r.topology().face(f);
+                if (fc.indices.size() != 3) continue;
+                for (int e = 0; e < 3; ++e) {
+                    uint32_t x = fc.indices[e], y = fc.indices[(e + 1) % 3];
+                    if (x > y) std::swap(x, y);
+                    edgeUse[{x, y}]++;
+                }
+            }
+            int bnd = 0;
+            for (const auto& [k, c] : edgeUse) {
+                if (c == 1) ++bnd;
+            }
+            total += bnd;
+            worst = std::max(worst, bnd);
+        }
+    }
+    RecordProperty("extremeBoundaryEdgesTotal", total);
+    RecordProperty("extremeBoundaryEdgesWorst", worst);
+    // Measured 2026-07-22: total 80, worst 16 (was 10,926 and 5,958).
+    EXPECT_LE(worst, 40) << "a single result lost " << worst
+                         << " boundary edges — the weld went all-or-nothing again";
+    EXPECT_LE(total, 200) << "total boundary-edge damage rose to " << total;
+}
+
 // An all-planar operand of comparable face count does NOT leak, so class 2 is not simply
 // "more triangles" — it tracks the size of the features the seam has to resolve.
 TEST(MeshBooleanSeam, AllPlanarOperandsOfSimilarFaceCountDoNotLeak)

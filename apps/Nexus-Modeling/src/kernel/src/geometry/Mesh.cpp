@@ -1060,7 +1060,7 @@ bool Mesh::splitFaceRange(size_t firstFace, size_t faceCount, Mesh& out) noexcep
     return true;
 }
 
-bool Mesh::weldCoincidentVertices(float epsilon) noexcept
+bool Mesh::weldCoincidentVertices(float epsilon, WeldCollapsePolicy policy) noexcept
 {
     if (!isValid() || epsilon < 0.f) {
         return false;
@@ -1103,12 +1103,22 @@ bool Mesh::weldCoincidentVertices(float epsilon) noexcept
             remappedFace.indices.push_back(canonicalOldIndices[index]);
         }
 
-        for (size_t i = 0; i < remappedFace.indices.size(); ++i) {
+        bool collapsed = false;
+        for (size_t i = 0; i < remappedFace.indices.size() && !collapsed; ++i) {
             for (size_t j = i + 1; j < remappedFace.indices.size(); ++j) {
                 if (remappedFace.indices[i] == remappedFace.indices[j]) {
-                    return false;
+                    collapsed = true;
+                    break;
                 }
             }
+        }
+        if (collapsed) {
+            // RejectWhole abandons the entire weld; DropCollapsedFace removes only this
+            // zero-area face, which is an edge collapse and keeps a closed surface closed.
+            if (policy == WeldCollapsePolicy::RejectWhole) {
+                return false;
+            }
+            continue;
         }
 
         canonicalFaces.push_back(std::move(remappedFace));

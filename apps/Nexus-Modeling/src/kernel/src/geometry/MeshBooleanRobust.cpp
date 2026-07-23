@@ -301,7 +301,8 @@ Mesh robustMeshBoolean(const Mesh& a, const Mesh& b, BooleanOperationType op) no
     // so a 1e-5 weld leaves boundary loops (a large-scale-only leak). Tolerance{}.at(L)
     // = max(1e-5, 1e-6·L) keeps the unit-scale floor EXACTLY (1e-5 until L>10) and grows
     // in proportion for large models. L is the coordinate span already computed above.
-    (void)out.weldCoincidentVertices(Tolerance{}.at(hi - lo));
+    (void)out.weldCoincidentVertices(Tolerance{}.at(hi - lo),
+                                     Mesh::WeldCollapsePolicy::DropCollapsedFace);
     (void)out.computeVertexNormals();
     return out;
 }

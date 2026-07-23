@@ -183,7 +183,7 @@ Mesh rebuild(const std::vector<Tri>& tris, const std::vector<std::vector<Interse
     for (Face& f : outFaces) {
         m.topology().addFace(std::move(f));
     }
-    (void)m.weldCoincidentVertices(1e-5f);
+    (void)m.weldCoincidentVertices(1e-5f, Mesh::WeldCollapsePolicy::DropCollapsedFace);
     (void)m.computeVertexNormals();
     return m;
 }

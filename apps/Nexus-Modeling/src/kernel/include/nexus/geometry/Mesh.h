@@ -217,11 +217,28 @@ public:
     // indices. Rejects whole-mesh extraction so both results remain valid meshes.
     [[nodiscard]] bool splitFaceRange(size_t firstFace, size_t faceCount, Mesh& out) noexcept;
 
+    // What to do with a face that the weld would collapse (two of its corners becoming
+    // the same vertex).
+    enum class WeldCollapsePolicy {
+        // Refuse: abandon the ENTIRE weld and leave the mesh untouched. The safe default
+        // for general editing, where silently deleting a face would be a surprise.
+        RejectWhole,
+        // Drop just that face and weld everything else. A collapsed triangle has zero
+        // area, and removing it is exactly an edge collapse: its two surviving corners
+        // become the same undirected edge, so the neighbours across them stay matched and
+        // a closed surface STAYS closed. Callers that need a watertight result from
+        // near-degenerate input — the booleans and the mesh cut — want this, because one
+        // sliver anywhere would otherwise leave the whole mesh unwelded.
+        DropCollapsedFace,
+    };
+
     // Welds duplicate vertices whose positions and optional attribute channels match
-    // within the provided epsilon. The operation is constrained to preserve face arity;
-    // if any weld would collapse a face or merge distinct attribute seams, it fails.
+    // within the provided epsilon. Merging distinct attribute seams always fails. A face
+    // the weld would collapse is handled per `policy`.
     // When stable element IDs are present, retained vertex/face IDs are preserved.
-    [[nodiscard]] bool weldCoincidentVertices(float epsilon = 1e-5f) noexcept;
+    [[nodiscard]] bool weldCoincidentVertices(
+        float epsilon = 1e-5f,
+        WeldCollapsePolicy policy = WeldCollapsePolicy::RejectWhole) noexcept;
 
     // Rebuilds deterministic stable element IDs for the current mesh shape.
     // IDs are stable for unchanged topology and attribute-only edits such as transforms.
