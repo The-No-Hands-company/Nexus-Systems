@@ -18,10 +18,17 @@ public:
         return z ^ (z >> 31);
     }
 
+    // Uniform in [0, 1).
+    //
+    // The shift discards the low 11 bits to leave a 53-bit integer — exactly a double's
+    // mantissa — so the scale factor must be 2^-53. Dividing by 2^64 instead, as this did,
+    // returned values in [0, 2^-11]: never more than 0.000488, a constant for every
+    // practical purpose. Everything drawing "random" numbers here was drawing ~0, which
+    // left Poisson-disk sampling throwing every dart in the same direction at the same
+    // distance and returning a single point.
     [[nodiscard]] double uniform01() noexcept {
-        static constexpr double kInvMax = 1.0 / static_cast<double>(
-            std::numeric_limits<uint64_t>::max());
-        return static_cast<double>(next() >> 11) * kInvMax;
+        constexpr double kInv53 = 1.0 / static_cast<double>(1ULL << 53);
+        return static_cast<double>(next() >> 11) * kInv53;
     }
 
 private:

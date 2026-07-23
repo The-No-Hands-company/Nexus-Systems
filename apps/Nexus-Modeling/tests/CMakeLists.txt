@@ -34,6 +34,7 @@ add_executable(nexus_kernel_tests
     kernel/test_CurveCurveIntersect.cpp
     kernel/test_CurveFairing.cpp
     kernel/test_DeepHardening.cpp
+    kernel/test_BvhDependentFeatures.cpp
     kernel/test_Delaunay2D.cpp
     kernel/test_DelaunaySliverRobustness.cpp
     kernel/test_DirectModelingFaceFillet.cpp
@@ -231,6 +232,12 @@ if(NEXUS_BACKEND_VULKAN)
         ${CMAKE_CURRENT_SOURCE_DIR}/../src/kernel/src/backend/vulkan
     )
 endif()
+
+# Internal geometry headers, so tests can reach implementation-side utilities such as the
+# random source directly rather than only through the features that consume it.
+target_include_directories(nexus_kernel_tests PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/kernel/src/geometry
+)
 
 target_link_libraries(nexus_kernel_tests
     PRIVATE nexus_gfx_core nexus_app nexus_backend_null nexus_neural GTest::gtest_main

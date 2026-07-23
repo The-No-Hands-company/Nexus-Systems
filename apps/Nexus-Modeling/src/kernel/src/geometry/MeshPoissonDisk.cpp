@@ -1,5 +1,7 @@
 #include <nexus/geometry/MeshPoissonDisk.h>
 #include <nexus/geometry/MeshPointSample.h>
+
+#include <limits>
 #include <nexus/geometry/MeshBVH.h>
 #include "SplitMix64.h"
 
@@ -19,7 +21,13 @@ PoissonDiskResult MeshPoissonDisk::sample(const Mesh& mesh, const PoissonDiskOpt
     bvh.build(mesh);
 
     const uint32_t candidatePoolSize = opts.maxAttempts * 8;
-    const uint32_t maxOut = (opts.maxPoints > 0) ? opts.maxPoints : candidatePoolSize;
+    // maxPoints == 0 means "as many as the spacing allows". It used to fall back to the
+    // candidate POOL size — maxAttempts * 8, or 240 by default — which is a property of the
+    // seeding, not of the surface, so any request fine enough to need more than 240 points
+    // silently returned exactly 240. Dart-throwing terminates on its own when no active
+    // point can accept another neighbour, so no artificial ceiling is needed.
+    const uint32_t maxOut =
+        (opts.maxPoints > 0) ? opts.maxPoints : std::numeric_limits<uint32_t>::max();
     PointSampleOptions sampOpts;
     sampOpts.count = candidatePoolSize;
     sampOpts.seed = opts.seed;

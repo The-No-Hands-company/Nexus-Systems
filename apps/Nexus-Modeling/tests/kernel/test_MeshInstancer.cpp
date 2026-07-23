@@ -40,15 +40,43 @@ TEST(MeshInstancer, MismatchedSizesReturnsEmpty) {
 }
 
 TEST(MeshInstancer, ScaleApplied) {
+    // Scattering 0.5-scaled unit boxes over a 2x2 plane spans roughly the plane's own
+    // extent plus half an instance at each end — about 2.5, not something under 1.5.
+    //
+    // The old bound of 1.5 held only because SplitMix64::uniform01 returned values in
+    // [0, 0.000488] instead of [0, 1): every instance landed on top of the first one, so
+    // the result was about as wide as a single box. With the generator fixed the scatter
+    // covers the surface, and the assertion that actually tests SCALE is a comparison
+    // between two scales rather than an absolute width.
     Mesh source = makeBox(1.f, 1.f, 1.f);
     Mesh target = makePlane(2.f, 2.f, 1, 1);
-    InstancerOptions opts;
-    opts.scaleMin = 0.5f;
-    opts.scaleMax = 0.5f;
-    opts.seed = 99;
-    Mesh result = MeshInstancer::scatter(source, target, opts);
-    EXPECT_TRUE(result.isValid());
-    EXPECT_LT(result.computeBounds().max.x - result.computeBounds().min.x, 1.5f);
+
+    InstancerOptions small;
+    small.scaleMin = 0.5f;
+    small.scaleMax = 0.5f;
+    small.seed = 99;
+    const Mesh smallResult = MeshInstancer::scatter(source, target, small);
+    ASSERT_TRUE(smallResult.isValid());
+
+    InstancerOptions large = small;
+    large.scaleMin = 1.f;
+    large.scaleMax = 1.f;
+    const Mesh largeResult = MeshInstancer::scatter(source, target, large);
+    ASSERT_TRUE(largeResult.isValid());
+
+    const float smallWidth =
+        smallResult.computeBounds().max.x - smallResult.computeBounds().min.x;
+    const float largeWidth =
+        largeResult.computeBounds().max.x - largeResult.computeBounds().min.x;
+
+    // Same seed, same placements: the only difference is instance size, so the smaller
+    // scale must produce a strictly narrower result, by about the half-box difference.
+    EXPECT_LT(smallWidth, largeWidth) << "halving the scale did not shrink the result";
+    EXPECT_NEAR(largeWidth - smallWidth, 0.5f, 0.2f)
+        << "scale difference " << (largeWidth - smallWidth) << " does not match the "
+        << "0.5 change in instance size";
+    // And the scatter must actually cover the target rather than pile up at one point.
+    EXPECT_GT(smallWidth, 2.f) << "instances did not spread across the 2-unit plane";
 }
 
 TEST(MeshInstancer, IncludeNormalsWhenSourceHasThem) {

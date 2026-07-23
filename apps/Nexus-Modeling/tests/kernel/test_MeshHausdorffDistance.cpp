@@ -27,10 +27,16 @@ TEST(MeshHausdorffDistance, ParallelOffsetEqualsGap) {
     HausdorffOptions opts;
     opts.seed = 12345;
     HausdorffResult r = MeshHausdorffDistance::compute(a, b, opts);
-    // 1×1×1 box translated by +3 on X: forward from A to B ≈ 3.0,
-    // backward from B to A ≈ 2.0 (nearest-face gap after translating past self-extent)
+    // A 1x1x1 box spans -0.5..0.5, so translating it by +3 gives 2.5..3.5. The
+    // configuration is SYMMETRIC: A's far face (x=-0.5) is 3.0 from B's nearest (x=2.5),
+    // and B's far face (x=3.5) is 3.0 from A's nearest (x=0.5). Both directions are 3.
+    //
+    // This previously expected 2.0 backward, with a comment about a "nearest-face gap".
+    // That was never geometrically true — it passed because SplitMix64::uniform01 returned
+    // values in [0, 0.000488] instead of [0, 1), so sampling never reached the far face.
+    // With the generator fixed, the measurement matches the geometry.
     EXPECT_NEAR(r.forwardMax, 3.f, 0.15f);
-    EXPECT_NEAR(r.backwardMax, 2.f, 0.15f);
+    EXPECT_NEAR(r.backwardMax, 3.f, 0.15f);
 }
 
 TEST(MeshHausdorffDistance, EmptyMeshReturnsZero) {
