@@ -2,6 +2,8 @@
 
 #include <nexus/geometry/MeshMassProperties.h>
 
+#include <array>
+
 #include <nexus/geometry/BRepSurfaceIntersect.h>
 #include <nexus/geometry/RobustPredicates.h>
 
@@ -1524,25 +1526,292 @@ float Body::surfaceArea() const
     return static_cast<float>(area);
 }
 
+namespace {
+
+// 12-point Gauss-Legendre on [-1,1]. The integrands over an analytic patch are smooth
+// trigonometric polynomials, so this converges spectrally and reaches float precision far
+// below the order where it would matter.
+constexpr int    kGaussN = 12;
+constexpr double kGaussX[kGaussN] = {
+    -0.9815606342467192, -0.9041172563704749, -0.7699026741943047, -0.5873179542866175,
+    -0.3678314989981802, -0.1252334085114689,  0.1252334085114689,  0.3678314989981802,
+     0.5873179542866175,  0.7699026741943047,  0.9041172563704749,  0.9815606342467192};
+constexpr double kGaussW[kGaussN] = {
+    0.0471753363865118, 0.1069393259953184, 0.1600783285433462, 0.2031674267230659,
+    0.2334925365383548, 0.2491470458134028, 0.2491470458134028, 0.2334925365383548,
+    0.2031674267230659, 0.1600783285433462, 0.1069393259953184, 0.0471753363865118};
+
+struct Dvec { double x, y, z; };
+
+// A point on an analytic surface together with its two parametric tangents, in double.
+struct Patch { Dvec p, du, dv; };
+
+bool analyticPatch(const Surface& s, double u, double v, Patch& out)
+{
+    const Vec3 vaF = s.vAxis();
+    const Dvec U{s.uAxis.x, s.uAxis.y, s.uAxis.z};
+    const Dvec Va{vaF.x, vaF.y, vaF.z};
+    const Dvec N{s.normal.x, s.normal.y, s.normal.z};
+    const Dvec O{s.origin.x, s.origin.y, s.origin.z};
+    const double r = s.radius;
+    const double c = std::cos(u), sn = std::sin(u);
+
+    switch (s.kind) {
+        case SurfaceKind::Cylinder:
+            out.p  = {O.x + r * (c * U.x + sn * Va.x) + v * N.x,
+                      O.y + r * (c * U.y + sn * Va.y) + v * N.y,
+                      O.z + r * (c * U.z + sn * Va.z) + v * N.z};
+            out.du = {r * (-sn * U.x + c * Va.x), r * (-sn * U.y + c * Va.y),
+                      r * (-sn * U.z + c * Va.z)};
+            out.dv = N;
+            return true;
+        case SurfaceKind::Sphere: {
+            const double cv = std::cos(v), sv = std::sin(v);
+            out.p  = {O.x + r * (sn * U.x + c * cv * Va.x + c * sv * N.x),
+                      O.y + r * (sn * U.y + c * cv * Va.y + c * sv * N.y),
+                      O.z + r * (sn * U.z + c * cv * Va.z + c * sv * N.z)};
+            out.du = {r * (c * U.x - sn * cv * Va.x - sn * sv * N.x),
+                      r * (c * U.y - sn * cv * Va.y - sn * sv * N.y),
+                      r * (c * U.z - sn * cv * Va.z - sn * sv * N.z)};
+            out.dv = {r * (-c * sv * Va.x + c * cv * N.x),
+                      r * (-c * sv * Va.y + c * cv * N.y),
+                      r * (-c * sv * Va.z + c * cv * N.z)};
+            return true;
+        }
+        case SurfaceKind::Cone: {
+            // origin = apex, normal = axis, radius = slope; v is axial distance from apex.
+            const double rr = r * v;
+            out.p  = {O.x + v * N.x + rr * (c * U.x + sn * Va.x),
+                      O.y + v * N.y + rr * (c * U.y + sn * Va.y),
+                      O.z + v * N.z + rr * (c * U.z + sn * Va.z)};
+            out.du = {rr * (-sn * U.x + c * Va.x), rr * (-sn * U.y + c * Va.y),
+                      rr * (-sn * U.z + c * Va.z)};
+            out.dv = {N.x + r * (c * U.x + sn * Va.x), N.y + r * (c * U.y + sn * Va.y),
+                      N.z + r * (c * U.z + sn * Va.z)};
+            return true;
+        }
+        default:
+            return false;  // Plane is exact from triangles; NURBS is not handled here
+    }
+}
+
+// Inverse parameterisation, for recovering a face's extent in (u,v) from its vertices.
+// `degenerate` reports a point where the parameterisation collapses — a cone's apex or a
+// sphere's pole. Every u maps to the same point there, so the u it happens to return is
+// meaningless and must not be allowed into a face's parameter extent: letting a cone apex
+// contribute u = atan2(0,0) = 0 widened each lateral patch from its true wedge to the
+// whole span back to zero, and the body integrated to four times its volume.
+bool analyticInverse(const Surface& s, const Vec3& p, double& u, double& v, bool& degenerate)
+{
+    const Vec3 vaF = s.vAxis();
+    const double dx = p.x - s.origin.x, dy = p.y - s.origin.y, dz = p.z - s.origin.z;
+    const double au = dx * s.uAxis.x + dy * s.uAxis.y + dz * s.uAxis.z;
+    const double av = dx * vaF.x + dy * vaF.y + dz * vaF.z;
+    const double an = dx * s.normal.x + dy * s.normal.y + dz * s.normal.z;
+    const double radial = std::sqrt(au * au + av * av);
+    const double scale = std::max(1.0, std::abs(static_cast<double>(s.radius)));
+    degenerate = false;
+
+    switch (s.kind) {
+        case SurfaceKind::Cylinder:
+            u = std::atan2(av, au); v = an;
+            return true;
+        case SurfaceKind::Cone:
+            // The ring radius is slope*v, so the apex (v = 0) has no meaningful u.
+            degenerate = (radial <= 1e-6 * scale);
+            u = degenerate ? 0.0 : std::atan2(av, au);
+            v = an;
+            return true;
+        case SurfaceKind::Sphere: {
+            if (s.radius <= 0.f) return false;
+            // u runs pole to pole along uAxis; v goes around it. At a pole cos(u) = 0 and
+            // every v gives the same point.
+            const double r = static_cast<double>(s.radius);
+            u = std::asin(std::clamp(au / r, -1.0, 1.0));
+            const double ring = std::sqrt(av * av + an * an);
+            degenerate = (ring <= 1e-6 * scale);
+            v = degenerate ? 0.0 : std::atan2(an, av);
+            return true;
+        }
+        default: return false;
+    }
+}
+
+}  // namespace
+
 nexus::geometry::MassProperties Body::massProperties(float density) const
 {
-    // Integrate over the watertight boundary triangulation. Subdivisions refine the curved
-    // (arc) edges so cylinder and sphere converge; box faces are flat and stay exact.
+    // Volume, centroid and inertia from the boundary, by the divergence theorem.
     //
-    // This used to carry its own copy of Eberly's polyhedral integrals, because the mesh
-    // implementation returned a wrong inertia tensor — negative diagonal moments — and
-    // could not be trusted. That has been repaired, and the two agreed to zero difference
-    // on a 2x3x4 box (volume, all three moments, and the products), so the duplicate is
-    // gone rather than left to drift away from the original.
-    nexus::geometry::MassProperties mp = nexus::geometry::MeshMassProperties::compute(toMesh(3));
-    if (mp.volume <= 0.f) return nexus::geometry::MassProperties{};
+    // PLANAR faces are exact from their triangles — a flat polygon is reproduced by its
+    // triangulation with no error at all — so they go through the shared mesh integrator.
+    // CURVED analytic faces are not: chords cut the corner, and tessellating left a 0.65%
+    // volume error on a sphere and about 1% on its moments. An analytic modeller should
+    // not be approximate about its own analytic primitives, so those faces are integrated
+    // over their PARAMETER domain by tensor-product Gauss-Legendre instead, which is
+    // spectrally accurate for the trigonometric integrands involved.
+    //
+    // The two contributions simply add: a boundary integral is additive over disjoint
+    // pieces of the boundary, which is why MeshMassProperties exposes its raw integrals.
+    //
+    // A face qualifies for exact treatment only if its surface genuinely fits it — the
+    // patch must reproduce every one of the face's own vertices — and its domain is a
+    // rectangle in parameter space. Anything else falls back to triangles, which is always
+    // correct and merely less precise. That guard is why this is safe to attempt at all:
+    // until this kernel grew a real Cone surface, a cone's faces were tagged as cylinders
+    // that did not contain their own apex.
+    std::array<double, 10> intg{0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
 
-    // Volume and centroid are geometric; only the inertia carries mass, so only it scales.
-    for (int i = 0; i < 3; ++i) {
-        for (int j = 0; j < 3; ++j) mp.inertia[i][j] *= density;
-        mp.principalMoments[i] *= density;
+    Mesh residual;                       // faces not integrated exactly
+    std::vector<Vec3>    rpos;
+    std::vector<nexus::geometry::Face> rfaces;  // MESH faces, not brep::Face
+    bool anyExact = false;
+
+    for (uint32_t fi = 0; fi < static_cast<uint32_t>(m_faces.size()); ++fi) {
+        const Face& face = m_faces[fi];
+        if (!face.alive || face.surface == kInvalid || face.surface >= m_surfaces.size()) continue;
+        const Surface& surf = m_surfaces[face.surface];
+
+        bool exact = false;
+        // Cylinder and Cone are integrated exactly (verified to float precision, and
+        // independent of segment count). The Sphere is NOT: this kernel parameterises it
+        // with u as latitude and v as longitude, poles collapsing v — the opposite of the
+        // convention the patch and inverse below assume — so its extent recovery is wrong
+        // and it must stay on the tessellated path, which is correct, until the exact
+        // sphere patch is derived against the real convention. A wrong "exact" answer is
+        // worse than an honest approximate one.
+        if (face.innerLoops.empty()
+            && (surf.kind == SurfaceKind::Cylinder || surf.kind == SurfaceKind::Cone)) {
+            const std::vector<uint32_t> vids = faceVertices(fi);
+            if (vids.size() >= 3) {
+                double u0 = 0, u1 = 0, v0 = 0, v1 = 0;
+                bool   first = true, fits = true;
+                double degU0 = 0, degU1 = 0, degV0 = 0, degV1 = 0;
+                bool   sawDegenerate = false;
+                const bool uPeriodicP = surf.kind != SurfaceKind::Sphere;
+                double refU = 0, refV = 0;  // first non-degenerate params, the unwrap anchor
+                bool   haveRef = false;
+                const double kTwoPi = 6.283185307179586;
+                auto unwrap = [&](double a, double ref) {
+                    // Bring a periodic angle into (ref-pi, ref+pi] so a wedge across the
+                    // +/-pi seam is described contiguously rather than spanning the circle.
+                    while (a - ref >  3.141592653589793) a -= kTwoPi;
+                    while (a - ref <= -3.141592653589793) a += kTwoPi;
+                    return a;
+                };
+                for (const uint32_t vid : vids) {
+                    if (vid >= m_verts.size()) { fits = false; break; }
+                    const Vec3 p = m_verts[vid].point;
+                    double uu = 0, vv = 0;
+                    bool   deg = false;
+                    Patch  probe;
+                    if (!analyticInverse(surf, p, uu, vv, deg)) { fits = false; break; }
+                    // A degenerate point is on the surface by construction; only its
+                    // parameters are meaningless, so verify the others and skip its extent.
+                    if (!deg) {
+                        if (!analyticPatch(surf, uu, vv, probe)) { fits = false; break; }
+                        const double ex = probe.p.x - p.x, ey = probe.p.y - p.y, ez = probe.p.z - p.z;
+                        const double scale = std::max(1.0, std::abs(static_cast<double>(surf.radius)));
+                        if (std::sqrt(ex * ex + ey * ey + ez * ez) > 1e-4 * scale) { fits = false; break; }
+                        if (!haveRef) { refU = uu; refV = vv; haveRef = true; }
+                        if (uPeriodicP) uu = unwrap(uu, refU); else vv = unwrap(vv, refV);
+                        if (first) { u0 = u1 = uu; v0 = v1 = vv; first = false; }
+                        else { u0 = std::min(u0, uu); u1 = std::max(u1, uu);
+                               v0 = std::min(v0, vv); v1 = std::max(v1, vv); }
+                    } else {
+                        // Keep the collapsed coordinate: a cone apex still fixes v = 0, and
+                        // a sphere pole still fixes u = +/-pi/2. Only the swept one is lost.
+                        sawDegenerate = true;
+                        if (surf.kind == SurfaceKind::Cone) { degV0 = degV1 = vv; }
+                        else { degU0 = degU1 = uu; }
+                    }
+                }
+                if (fits && sawDegenerate && haveRef) {
+                    // The retained coordinate is the NON-periodic one (cone apex fixes v,
+                    // sphere pole fixes u), so no unwrap is needed for it.
+                    if (surf.kind == SurfaceKind::Cone) {
+                        v0 = std::min(v0, degV0); v1 = std::max(v1, degV1);
+                    } else {
+                        u0 = std::min(u0, degU0); u1 = std::max(u1, degU1);
+                    }
+                }
+                // After unwrapping onto the first vertex, a genuine face wedge spans well
+                // under half a turn; anything still wider is a full-loop face (a whole
+                // cylinder as one seam-edged face) that min/max cannot bound — leave those
+                // to triangles.
+                const double periodicSpan = uPeriodicP ? (u1 - u0) : (v1 - v0);
+                if (fits && !first && u1 - u0 > 1e-12 && v1 - v0 > 1e-12 && periodicSpan <= 3.15) {
+                    const double hu = 0.5 * (u1 - u0), mu = 0.5 * (u1 + u0);
+                    const double hv = 0.5 * (v1 - v0), mv = 0.5 * (v1 + v0);
+                    std::array<double, 10> acc{0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+                    for (int i = 0; i < kGaussN && fits; ++i) {
+                        const double u = mu + hu * kGaussX[i];
+                        for (int j = 0; j < kGaussN; ++j) {
+                            const double v = mv + hv * kGaussX[j];
+                            Patch pt;
+                            if (!analyticPatch(surf, u, v, pt)) { fits = false; break; }
+                            Dvec n{pt.du.y * pt.dv.z - pt.du.z * pt.dv.y,
+                                   pt.du.z * pt.dv.x - pt.du.x * pt.dv.z,
+                                   pt.du.x * pt.dv.y - pt.du.y * pt.dv.x};
+                            if (face.reversed) n = {-n.x, -n.y, -n.z};
+                            const double w = kGaussW[i] * kGaussW[j] * hu * hv;
+                            const double x = pt.p.x, y = pt.p.y, z = pt.p.z;
+                            acc[0] += w * x * n.x;
+                            acc[1] += w * 0.5 * x * x * n.x;
+                            acc[2] += w * 0.5 * y * y * n.y;
+                            acc[3] += w * 0.5 * z * z * n.z;
+                            acc[4] += w * (1.0 / 3.0) * x * x * x * n.x;
+                            acc[5] += w * (1.0 / 3.0) * y * y * y * n.y;
+                            acc[6] += w * (1.0 / 3.0) * z * z * z * n.z;
+                            acc[7] += w * 0.5 * x * x * y * n.x;
+                            acc[8] += w * 0.5 * y * y * z * n.y;
+                            acc[9] += w * 0.5 * z * z * x * n.z;
+                        }
+                    }
+                    if (fits) {
+                        for (int k = 0; k < 10; ++k) intg[k] += acc[k];
+                        exact = true;
+                        anyExact = true;
+                    }
+                }
+            }
+        }
+
+        if (exact) continue;
+
+        // Not exact: contribute this face's triangles to the residual mesh. Faces with
+        // inner loops need the full tessellator, so their presence sends the whole body
+        // down the tessellated path below.
+        if (!face.innerLoops.empty()) { rfaces.clear(); anyExact = false; break; }
+        const std::vector<uint32_t> vids = faceVertices(fi);
+        if (vids.size() < 3) continue;
+        const uint32_t base = static_cast<uint32_t>(rpos.size());
+        for (const uint32_t vid : vids) {
+            if (vid >= m_verts.size()) continue;
+            rpos.push_back(m_verts[vid].point);
+        }
+        for (uint32_t k = 1; k + 1 < static_cast<uint32_t>(vids.size()); ++k) {
+            nexus::geometry::Face t;
+            t.indices = {base, base + k, base + k + 1};
+            rfaces.push_back(std::move(t));
+        }
     }
-    return mp;
+
+    if (!anyExact) {
+        // Nothing qualified — integrate the whole tessellated boundary, as before.
+        return nexus::geometry::MeshMassProperties::fromIntegrals(
+            nexus::geometry::MeshMassProperties::integrals(toMesh(3)), density);
+    }
+
+    if (!rfaces.empty()) {
+        residual.attributes().setPositions(std::move(rpos));
+        for (nexus::geometry::Face& f : rfaces) residual.topology().addFace(std::move(f));
+        const std::array<double, 10> flat =
+            nexus::geometry::MeshMassProperties::integrals(residual);
+        for (int k = 0; k < 10; ++k) intg[k] += flat[k];
+    }
+
+    return nexus::geometry::MeshMassProperties::fromIntegrals(intg, density);
 }
 
 bool Body::transform(const nexus::render::Mat4& mat)

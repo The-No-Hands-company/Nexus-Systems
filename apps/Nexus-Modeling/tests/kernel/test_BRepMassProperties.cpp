@@ -100,4 +100,88 @@ TEST(BRepMassProperties, Deterministic)
     EXPECT_EQ(m1.centroid.x, m2.centroid.x);
 }
 
+// The B-rep integrates its CURVED analytic faces exactly over their own parameter domain
+// rather than tessellating them. For a cylinder and a cone — surfaces this kernel
+// represents truthfully — that makes the side-wall contribution exact to float precision
+// and, crucially, INDEPENDENT of segment count: doubling the facets does not change the
+// answer, because the answer is not coming from the facets.
+TEST(BRepMassProperties, CylinderVolumeAndAxialMomentAreExactRegardlessOfSegments)
+{
+    const double PI = 3.14159265358979323846;
+    const double r = 1.0, h = 2.0;
+    const double Vround = PI * r * r * h;
+    const double IzzRound = 0.5 * Vround * r * r;  // about the cylinder's axis (+Z here)
+
+    for (const uint32_t segs : {8u, 16u, 64u}) {
+        const MassProperties p = makeCylinder(1.f, 2.f, segs).massProperties(1.f);
+        EXPECT_NEAR(p.volume, Vround, Vround * 1e-5)
+            << "cylinder volume is not exact at " << segs << " segments";
+        // The axial moment [2][2] comes entirely from the exactly-integrated side wall.
+        // The transverse moments carry the flat-cap facet error and are NOT exact — which
+        // is correct, a faceted cap really is an inscribed n-gon.
+        EXPECT_NEAR(p.inertia[2][2], IzzRound, IzzRound * 1e-5)
+            << "cylinder axial moment is not exact at " << segs << " segments";
+    }
+}
+
+TEST(BRepMassProperties, ConeVolumeAndAxialMomentAreExactRegardlessOfSegments)
+{
+    const double PI = 3.14159265358979323846;
+    const double r = 1.0, h = 2.0;
+    const double Vround = PI * r * r * h / 3.0;
+    const double IzzRound = 0.3 * Vround * r * r;  // solid cone about its axis (+Z here)
+
+    for (const uint32_t segs : {8u, 16u, 64u}) {
+        const MassProperties p = makeCone(1.f, 2.f, segs).massProperties(1.f);
+        EXPECT_NEAR(p.volume, Vround, Vround * 1e-5)
+            << "cone volume is not exact at " << segs << " segments";
+        EXPECT_NEAR(p.inertia[2][2], IzzRound, IzzRound * 1e-5)
+            << "cone axial moment is not exact at " << segs << " segments";
+    }
+}
+
+// Planar bodies stay exactly what they were — a box goes entirely through the flat path.
+TEST(BRepMassProperties, BoxStaysExactThroughTheFlatPath)
+{
+    const double a = 2, b = 3, c = 4, m = a * b * c;
+    const MassProperties p = makeBox(2.f, 3.f, 4.f).massProperties(1.f);
+    EXPECT_NEAR(p.volume, m, 1e-4);
+    EXPECT_NEAR(p.inertia[0][0], m * (b * b + c * c) / 12.0, 1e-3);
+    EXPECT_NEAR(p.inertia[1][1], m * (a * a + c * c) / 12.0, 1e-3);
+    EXPECT_NEAR(p.inertia[2][2], m * (a * a + b * b) / 12.0, 1e-3);
+    for (int i = 0; i < 3; ++i)
+        for (int j = 0; j < 3; ++j)
+            if (i != j) EXPECT_NEAR(p.inertia[i][j], 0.f, 1e-3);
+}
+
+// The sphere is deliberately still tessellated (its parameter convention here does not
+// match the exact patch), so it must remain CORRECT and converge with density rather than
+// return a confidently-wrong "exact" value. This guards that the gating did not let a
+// broken exact sphere through.
+TEST(BRepMassProperties, SphereStaysCorrectAndConvergesWithTessellation)
+{
+    const double PI = 3.14159265358979323846;
+    const double r = 1.0, Vround = 4.0 / 3.0 * PI * r * r * r;
+
+    const double coarse = std::abs(makeSphere(1.f, 8, 12).massProperties(1.f).volume - Vround);
+    const double fine   = std::abs(makeSphere(1.f, 48, 64).massProperties(1.f).volume - Vround);
+    EXPECT_LT(fine, coarse) << "finer tessellation did not improve the sphere";
+    EXPECT_LT(fine, Vround * 0.01) << "the fine sphere is still more than 1% off";
+    // And never wildly wrong (the broken exact path inflated it past the true volume).
+    EXPECT_LT(makeSphere(1.f, 8, 12).massProperties(1.f).volume, Vround * 1.1);
+}
+
+// Density scales the inertia and nothing else.
+TEST(BRepMassProperties, DensityScalesInertiaOnly)
+{
+    const MassProperties unit = makeCylinder(1.f, 2.f, 32).massProperties(1.f);
+    const MassProperties dense = makeCylinder(1.f, 2.f, 32).massProperties(2.5f);
+    EXPECT_NEAR(dense.volume, unit.volume, 1e-5);
+    EXPECT_NEAR(dense.centroid.y, unit.centroid.y, 1e-5);
+    for (int i = 0; i < 3; ++i)
+        for (int j = 0; j < 3; ++j)
+            EXPECT_NEAR(dense.inertia[i][j], 2.5f * unit.inertia[i][j],
+                        std::max(1e-4, std::abs(unit.inertia[i][j]) * 1e-4));
+}
+
 }  // namespace nexus::geometry::brep::testing

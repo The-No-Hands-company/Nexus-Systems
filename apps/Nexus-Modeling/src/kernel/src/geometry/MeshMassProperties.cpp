@@ -2,6 +2,7 @@
 #include "EigenSolver3x3.h"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <limits>
 
@@ -25,16 +26,14 @@ using Vec3 = nexus::render::Vec3;
 // worked around it by integrating its own. So this is not a new formulation — it is the
 // one already proven exact there, brought to the mesh side so the two agree and neither
 // has to route around the other.
-MassProperties MeshMassProperties::compute(const Mesh& mesh) {
-    MassProperties result;
-    if (!mesh.isValid()) return result;
+std::array<double, 10> MeshMassProperties::integrals(const Mesh& mesh) {
+    // volume, then the integrals of x y z, x^2 y^2 z^2, xy yz zx (un-normalised).
+    std::array<double, 10> intg{0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+    if (!mesh.isValid()) return intg;
 
     const auto& topo = mesh.topology();
     const auto& pos = mesh.attributes().positions();
-    if (pos.empty()) return result;
-
-    // intg: volume, then the integrals of x y z, x^2 y^2 z^2, xy yz zx (un-normalised).
-    double intg[10] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+    if (pos.empty()) return intg;
 
     auto sub = [](double w0, double w1, double w2, double& f1, double& f2, double& f3,
                   double& g0, double& g1, double& g2) {
@@ -90,8 +89,15 @@ MassProperties MeshMassProperties::compute(const Mesh& mesh) {
     static constexpr double mult[10] = {1.0 / 6,  1.0 / 24, 1.0 / 24,  1.0 / 24,  1.0 / 60,
                                         1.0 / 60, 1.0 / 60, 1.0 / 120, 1.0 / 120, 1.0 / 120};
     for (int i = 0; i < 10; ++i) intg[i] *= mult[i];
+    return intg;
+}
 
-    // An inward-wound mesh integrates to a negative volume. Negating every integral is
+MassProperties MeshMassProperties::fromIntegrals(const std::array<double, 10>& raw,
+                                                 float density) {
+    MassProperties result;
+    std::array<double, 10> intg = raw;
+
+    // An inward-wound boundary integrates to a negative volume. Negating every integral is
     // exactly equivalent to reversing the winding, so the moments stay correct either way
     // rather than silently inheriting the sign.
     double vol = intg[0];
@@ -113,12 +119,13 @@ MassProperties MeshMassProperties::compute(const Mesh& mesh) {
     const double Iyz = -(intg[8] - vol * cy * cz);
     const double Ixz = -(intg[9] - vol * cz * cx);
 
-    result.inertia[0][0] = static_cast<float>(Ixx);
-    result.inertia[1][1] = static_cast<float>(Iyy);
-    result.inertia[2][2] = static_cast<float>(Izz);
-    result.inertia[0][1] = result.inertia[1][0] = static_cast<float>(Ixy);
-    result.inertia[1][2] = result.inertia[2][1] = static_cast<float>(Iyz);
-    result.inertia[0][2] = result.inertia[2][0] = static_cast<float>(Ixz);
+    const double d = static_cast<double>(density);
+    result.inertia[0][0] = static_cast<float>(d * Ixx);
+    result.inertia[1][1] = static_cast<float>(d * Iyy);
+    result.inertia[2][2] = static_cast<float>(d * Izz);
+    result.inertia[0][1] = result.inertia[1][0] = static_cast<float>(d * Ixy);
+    result.inertia[1][2] = result.inertia[2][1] = static_cast<float>(d * Iyz);
+    result.inertia[0][2] = result.inertia[2][0] = static_cast<float>(d * Ixz);
 
     const float mPacked[6] = {
         result.inertia[0][0], result.inertia[1][1], result.inertia[2][2],
@@ -136,6 +143,10 @@ MassProperties MeshMassProperties::compute(const Mesh& mesh) {
     }
 
     return result;
+}
+
+MassProperties MeshMassProperties::compute(const Mesh& mesh) {
+    return fromIntegrals(integrals(mesh), 1.f);
 }
 
 } // namespace nexus::geometry
