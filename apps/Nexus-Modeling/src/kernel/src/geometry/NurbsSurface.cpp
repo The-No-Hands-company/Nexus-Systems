@@ -45,6 +45,65 @@ int32_t findSpanInternal(int32_t n, int32_t p, const std::vector<float>& knots,
     return mid;
 }
 
+// Derivative basis functions ders[k][j] = d^k/dt^k of basis N_{span-p+j,p}(t), for
+// k = 0..order, j = 0..p. The NURBS Book, Algorithm A2.3 (DersBasisFuns). ders[0][.] is
+// exactly the plain basis-function row, so a single call gives both the values and their
+// derivatives.
+void dersBasisFuns(int32_t p, const std::vector<float>& knots, int32_t span, float t,
+                   int32_t order, std::vector<std::vector<float>>& ders) {
+    std::vector<std::vector<float>> ndu(static_cast<size_t>(p + 1),
+                                        std::vector<float>(static_cast<size_t>(p + 1)));
+    std::vector<float> left(static_cast<size_t>(p + 1)), right(static_cast<size_t>(p + 1));
+    ndu[0][0] = 1.f;
+    for (int32_t j = 1; j <= p; ++j) {
+        left[j]  = t - knots[static_cast<size_t>(span + 1 - j)];
+        right[j] = knots[static_cast<size_t>(span + j)] - t;
+        float saved = 0.f;
+        for (int32_t r = 0; r < j; ++r) {
+            ndu[j][r] = right[r + 1] + left[j - r];  // lower triangle: knot differences
+            const float temp = ndu[r][j - 1] / ndu[j][r];
+            ndu[r][j] = saved + right[r + 1] * temp;
+            saved = left[j - r] * temp;
+        }
+        ndu[j][j] = saved;
+    }
+
+    ders.assign(static_cast<size_t>(order + 1),
+                std::vector<float>(static_cast<size_t>(p + 1), 0.f));
+    for (int32_t j = 0; j <= p; ++j) ders[0][j] = ndu[j][p];
+
+    std::vector<std::vector<float>> a(2, std::vector<float>(static_cast<size_t>(p + 1)));
+    for (int32_t r = 0; r <= p; ++r) {
+        int32_t s1 = 0, s2 = 1;
+        a[0][0] = 1.f;
+        for (int32_t k = 1; k <= order; ++k) {
+            float d = 0.f;
+            const int32_t rk = r - k, pk = p - k;
+            if (r >= k) {
+                a[s2][0] = a[s1][0] / ndu[pk + 1][rk];
+                d = a[s2][0] * ndu[rk][pk];
+            }
+            const int32_t j1 = (rk >= -1) ? 1 : -rk;
+            const int32_t j2 = (r - 1 <= pk) ? (k - 1) : (p - r);
+            for (int32_t j = j1; j <= j2; ++j) {
+                a[s2][j] = (a[s1][j] - a[s1][j - 1]) / ndu[pk + 1][rk + j];
+                d += a[s2][j] * ndu[rk + j][pk];
+            }
+            if (r <= pk) {
+                a[s2][k] = -a[s1][k - 1] / ndu[pk + 1][r];
+                d += a[s2][k] * ndu[r][pk];
+            }
+            ders[k][r] = d;
+            std::swap(s1, s2);
+        }
+    }
+    float fac = static_cast<float>(p);
+    for (int32_t k = 1; k <= order; ++k) {
+        for (int32_t j = 0; j <= p; ++j) ders[k][j] *= fac;
+        fac *= static_cast<float>(p - k);
+    }
+}
+
 } // namespace
 
 int32_t NurbsSurface::findSpanU(float u) const noexcept {
@@ -102,130 +161,108 @@ Vec3 NurbsSurface::evaluate(float u, float v) const noexcept {
     return pt;
 }
 
+// First partial dS/du. The previous implementation summed the u-direction difference
+// control points weighted only by the v-basis, omitting the degree-(pu-1) basis functions
+// N_{i,pu-1}(u) that must weight each one — the same defect the curve derivative had. That
+// is correct only when pu == 1; for any higher u-degree it summed the derivative control
+// points with weight 1 instead of their basis values.
+//
+// Correct form (The NURBS Book, tensor-product surface derivative): take the first-order
+// derivative basis in u (A2.3) and the plain basis in v, combine over the control net; for
+// a rational surface apply the first-order quotient rule S_u = (A_u - w_u S) / w.
 Vec3 NurbsSurface::derivativeU(float u, float v) const noexcept {
     if (!isValid()) return Vec3{};
-    int32_t pu = m_degU, pv = m_degV;
-    int32_t su = findSpanU(u);
-    int32_t sv = findSpanV(v);
-    std::vector<float> Nu(static_cast<size_t>(pu + 1));
+    const int32_t pu = m_degU, pv = m_degV;
+    const int32_t su = findSpanU(u), sv = findSpanV(v);
+
+    std::vector<std::vector<float>> dNu;  // dNu[0][i] = value, dNu[1][i] = d/du
+    dersBasisFuns(pu, m_knotU, su, u, 1, dNu);
     std::vector<float> Nv(static_cast<size_t>(pv + 1));
-    basisFunsInternal(pu, m_knotU, su, u, Nu);
     basisFunsInternal(pv, m_knotV, sv, v, Nv);
 
-    Vec3 dAu{};
-    float dwu = 0.f;
+    const int32_t baseU = su - pu, baseV = sv - pv;
 
-    for (int32_t j = 0; j <= pv; ++j) {
-        int32_t cj = sv - pv + j;
-        for (int32_t i = 0; i < pu; ++i) {
-            float denom = m_knotU[static_cast<size_t>(su + i + 1)] -
-                          m_knotU[static_cast<size_t>(su - pu + i + 1)];
-            float alpha = (std::abs(denom) > kEpsilon) ? static_cast<float>(pu) / denom : 0.f;
-            int32_t idx0 = su - pu + i;
-            int32_t idx1 = su - pu + i + 1;
-            float   bf   = alpha * Nv[j];
-            size_t  i0   = static_cast<size_t>(idx0 * m_nV + cj);
-            size_t  i1   = static_cast<size_t>(idx1 * m_nV + cj);
-            dAu.x += bf * (m_ctlPts[i1].x - m_ctlPts[i0].x);
-            dAu.y += bf * (m_ctlPts[i1].y - m_ctlPts[i0].y);
-            dAu.z += bf * (m_ctlPts[i1].z - m_ctlPts[i0].z);
+    if (!isRational()) {
+        Vec3 d{};
+        for (int32_t i = 0; i <= pu; ++i) {
+            for (int32_t j = 0; j <= pv; ++j) {
+                const float b = dNu[1][i] * Nv[j];
+                const Vec3& P = m_ctlPts[static_cast<size_t>((baseU + i) * m_nV + (baseV + j))];
+                d.x += b * P.x; d.y += b * P.y; d.z += b * P.z;
+            }
         }
+        return d;
     }
 
-    if (!isRational()) return dAu;
-
-    for (int32_t j = 0; j <= pv; ++j) {
-        int32_t cj = sv - pv + j;
-        for (int32_t i = 0; i < pu; ++i) {
-            float denom = m_knotU[static_cast<size_t>(su + i + 1)] -
-                          m_knotU[static_cast<size_t>(su - pu + i + 1)];
-            float alpha = (std::abs(denom) > kEpsilon) ? static_cast<float>(pu) / denom : 0.f;
-            int32_t idx0 = su - pu + i;
-            int32_t idx1 = su - pu + i + 1;
-            float bf = alpha * Nv[j];
-            size_t i0 = static_cast<size_t>(idx0 * m_nV + cj);
-            size_t i1 = static_cast<size_t>(idx1 * m_nV + cj);
-            dwu += bf * (m_weights[i1] - m_weights[i0]);
-        }
-    }
-
-    Vec3 S = evaluate(u, v);
-    float wSum = 0.f;
+    Vec3 A{}, Au{};
+    float w = 0.f, wu = 0.f;
     for (int32_t i = 0; i <= pu; ++i) {
-        int32_t ci = su - pu + i;
         for (int32_t j = 0; j <= pv; ++j) {
-            int32_t cj = sv - pv + j;
-            wSum += Nu[i] * Nv[j] * m_weights[static_cast<size_t>(ci * m_nV + cj)];
+            const size_t idx = static_cast<size_t>((baseU + i) * m_nV + (baseV + j));
+            const float wt = m_weights[idx];
+            const Vec3& P = m_ctlPts[idx];
+            const float b0 = dNu[0][i] * Nv[j];
+            const float b1 = dNu[1][i] * Nv[j];
+            A.x  += b0 * wt * P.x; A.y  += b0 * wt * P.y; A.z  += b0 * wt * P.z;
+            w    += b0 * wt;
+            Au.x += b1 * wt * P.x; Au.y += b1 * wt * P.y; Au.z += b1 * wt * P.z;
+            wu   += b1 * wt;
         }
     }
-    if (std::abs(wSum) <= kEpsilon) return Vec3{};
-    float invW = 1.f / wSum;
-    return {(dAu.x - dwu * S.x) * invW,
-            (dAu.y - dwu * S.y) * invW,
-            (dAu.z - dwu * S.z) * invW};
+    if (std::abs(w) <= kEpsilon) return Vec3{};
+    const float invW = 1.f / w;
+    const Vec3 S{A.x * invW, A.y * invW, A.z * invW};
+    return {(Au.x - wu * S.x) * invW,
+            (Au.y - wu * S.y) * invW,
+            (Au.z - wu * S.z) * invW};
 }
 
+// First partial dS/dv — mirror of derivativeU with the derivative basis taken in v.
 Vec3 NurbsSurface::derivativeV(float u, float v) const noexcept {
     if (!isValid()) return Vec3{};
-    int32_t pu = m_degU, pv = m_degV;
-    int32_t su = findSpanU(u);
-    int32_t sv = findSpanV(v);
+    const int32_t pu = m_degU, pv = m_degV;
+    const int32_t su = findSpanU(u), sv = findSpanV(v);
+
     std::vector<float> Nu(static_cast<size_t>(pu + 1));
-    std::vector<float> Nv(static_cast<size_t>(pv + 1));
     basisFunsInternal(pu, m_knotU, su, u, Nu);
-    basisFunsInternal(pv, m_knotV, sv, v, Nv);
+    std::vector<std::vector<float>> dNv;  // dNv[0][j] = value, dNv[1][j] = d/dv
+    dersBasisFuns(pv, m_knotV, sv, v, 1, dNv);
 
-    Vec3 dAv{};
-    float dwv = 0.f;
+    const int32_t baseU = su - pu, baseV = sv - pv;
 
-    for (int32_t i = 0; i <= pu; ++i) {
-        int32_t ci = su - pu + i;
-        for (int32_t j = 0; j < pv; ++j) {
-            float d = m_knotV[static_cast<size_t>(sv + j + 1)] -
-                      m_knotV[static_cast<size_t>(sv - pv + j + 1)];
-            float alpha = (std::abs(d) > kEpsilon) ? static_cast<float>(pv) / d : 0.f;
-            int32_t cj0 = sv - pv + j;
-            int32_t cj1 = sv - pv + j + 1;
-            float   bf  = Nu[i] * alpha;
-            size_t  i0  = static_cast<size_t>(ci * m_nV + cj0);
-            size_t  i1  = static_cast<size_t>(ci * m_nV + cj1);
-            dAv.x += bf * (m_ctlPts[i1].x - m_ctlPts[i0].x);
-            dAv.y += bf * (m_ctlPts[i1].y - m_ctlPts[i0].y);
-            dAv.z += bf * (m_ctlPts[i1].z - m_ctlPts[i0].z);
+    if (!isRational()) {
+        Vec3 d{};
+        for (int32_t i = 0; i <= pu; ++i) {
+            for (int32_t j = 0; j <= pv; ++j) {
+                const float b = Nu[i] * dNv[1][j];
+                const Vec3& P = m_ctlPts[static_cast<size_t>((baseU + i) * m_nV + (baseV + j))];
+                d.x += b * P.x; d.y += b * P.y; d.z += b * P.z;
+            }
         }
+        return d;
     }
 
-    if (!isRational()) return dAv;
-
+    Vec3 A{}, Av{};
+    float w = 0.f, wv = 0.f;
     for (int32_t i = 0; i <= pu; ++i) {
-        int32_t ci = su - pu + i;
-        for (int32_t j = 0; j < pv; ++j) {
-            float d = m_knotV[static_cast<size_t>(sv + j + 1)] -
-                      m_knotV[static_cast<size_t>(sv - pv + j + 1)];
-            float alpha = (std::abs(d) > kEpsilon) ? static_cast<float>(pv) / d : 0.f;
-            int32_t cj0 = sv - pv + j;
-            int32_t cj1 = sv - pv + j + 1;
-            float bf = Nu[i] * alpha;
-            size_t i0 = static_cast<size_t>(ci * m_nV + cj0);
-            size_t i1 = static_cast<size_t>(ci * m_nV + cj1);
-            dwv += bf * (m_weights[i1] - m_weights[i0]);
-        }
-    }
-
-    Vec3 S = evaluate(u, v);
-    float wSum = 0.f;
-    for (int32_t i = 0; i <= pu; ++i) {
-        int32_t ci = su - pu + i;
         for (int32_t j = 0; j <= pv; ++j) {
-            int32_t cj = sv - pv + j;
-            wSum += Nu[i] * Nv[j] * m_weights[static_cast<size_t>(ci * m_nV + cj)];
+            const size_t idx = static_cast<size_t>((baseU + i) * m_nV + (baseV + j));
+            const float wt = m_weights[idx];
+            const Vec3& P = m_ctlPts[idx];
+            const float b0 = Nu[i] * dNv[0][j];
+            const float b1 = Nu[i] * dNv[1][j];
+            A.x  += b0 * wt * P.x; A.y  += b0 * wt * P.y; A.z  += b0 * wt * P.z;
+            w    += b0 * wt;
+            Av.x += b1 * wt * P.x; Av.y += b1 * wt * P.y; Av.z += b1 * wt * P.z;
+            wv   += b1 * wt;
         }
     }
-    if (std::abs(wSum) <= kEpsilon) return Vec3{};
-    float invW = 1.f / wSum;
-    return {(dAv.x - dwv * S.x) * invW,
-            (dAv.y - dwv * S.y) * invW,
-            (dAv.z - dwv * S.z) * invW};
+    if (std::abs(w) <= kEpsilon) return Vec3{};
+    const float invW = 1.f / w;
+    const Vec3 S{A.x * invW, A.y * invW, A.z * invW};
+    return {(Av.x - wv * S.x) * invW,
+            (Av.y - wv * S.y) * invW,
+            (Av.z - wv * S.z) * invW};
 }
 
 NurbsSurface NurbsSurface::insertKnotU(float u, int32_t r) const {
