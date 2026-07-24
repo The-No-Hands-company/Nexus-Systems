@@ -23,6 +23,24 @@ static NurbsSurface makeFlatSurface()
         3, 3);
 }
 
+// Exact quarter-cylinder (unit radius, height 1, rational quarter circle in v). Surface
+// closest-point runs a 2D Newton on the u/v partials, so a wrong partial lands the
+// projection on the wrong point of a curved surface.
+static NurbsSurface makeQuarterCylinder()
+{
+    const float s = 1.f / std::sqrt(2.f);
+    return NurbsSurface(
+        1, 2,
+        {0.f, 0.f, 1.f, 1.f},
+        {0.f, 0.f, 0.f, 1.f, 1.f, 1.f},
+        {
+            Vec3{1.f, 0.f, 0.f}, Vec3{1.f, 1.f, 0.f}, Vec3{0.f, 1.f, 0.f},
+            Vec3{1.f, 0.f, 1.f}, Vec3{1.f, 1.f, 1.f}, Vec3{0.f, 1.f, 1.f},
+        },
+        2, 3,
+        {1.f, s, 1.f, 1.f, s, 1.f});
+}
+
 TEST(NurbsSurfaceClosestPoint, PointOnSurfaceReturnsItself)
 {
     auto surface = makeFlatSurface();
@@ -48,6 +66,30 @@ TEST(NurbsSurfaceClosestPoint, PointAbovePlaneReturnsCorrectProjection)
     EXPECT_NEAR(result.point.z, 0.f, 1e-3f);
     EXPECT_NEAR(result.distance, 3.f, 1e-2f);
     EXPECT_TRUE(result.converged);
+}
+
+TEST(NurbsSurfaceClosestPoint, ExternalPointProjectsRadiallyOntoCylinder)
+{
+    auto surface = makeQuarterCylinder();
+    ASSERT_TRUE(surface.isValid());
+
+    NurbsSurfaceClosestPointOptions opts;
+    opts.gridSizeU = 16;
+    opts.gridSizeV = 16;
+
+    // A point outside the cylinder, with its angle inside the first-quadrant arc and its
+    // height inside [0,1], projects to (xy/|xy|, z): radial in xy, unchanged in z.
+    const float queries[][3] = {
+        {2.f, 2.f, 0.5f}, {3.f, 0.6f, 0.3f}, {0.6f, 3.f, 0.75f}, {2.5f, 1.2f, 0.2f},
+    };
+    for (const auto& q : queries) {
+        const float rxy = std::sqrt(q[0] * q[0] + q[1] * q[1]);
+        auto result = NurbsSurfaceClosestPoint::project(surface, {q[0], q[1], q[2]}, opts);
+        EXPECT_NEAR(result.point.x, q[0] / rxy, 3e-3f) << "q=(" << q[0] << "," << q[1] << ")";
+        EXPECT_NEAR(result.point.y, q[1] / rxy, 3e-3f) << "q=(" << q[0] << "," << q[1] << ")";
+        EXPECT_NEAR(result.point.z, q[2], 3e-3f)       << "q=(" << q[0] << "," << q[1] << ")";
+        EXPECT_NEAR(result.distance, rxy - 1.f, 3e-3f) << "q=(" << q[0] << "," << q[1] << ")";
+    }
 }
 
 TEST(NurbsSurfaceClosestPoint, EmptySurfaceFails)
