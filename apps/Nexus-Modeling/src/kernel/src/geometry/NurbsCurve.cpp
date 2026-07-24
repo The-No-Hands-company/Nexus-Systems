@@ -86,63 +86,119 @@ Vec3 NurbsCurve::derivative(float u, int32_t order) const noexcept {
     if (!isValid() || order < 0) return Vec3{};
     if (order == 0) return evaluate(u);
 
-    int32_t p = m_degree;
-    int32_t span = findSpan(u);
-    std::vector<float> N(static_cast<size_t>(p + 1));
-    basisFuns(span, u, N);
+    const int32_t p = m_degree;
+    if (order > p) return Vec3{};  // derivatives above the degree are identically zero
 
-    std::vector<Vec3> PK(static_cast<size_t>(p + 1));
-    std::vector<float> WK;
-    if (isRational()) WK.resize(static_cast<size_t>(p + 1));
+    const int32_t span = findSpan(u);
 
-    for (int32_t i = 0; i <= p; ++i) {
-        int32_t idx = span - p + i;
-        if (isRational()) {
-            float w = m_weights[idx];
-            PK[i] = {m_ctlPts[idx].x * w, m_ctlPts[idx].y * w, m_ctlPts[idx].z * w};
-            WK[i] = w;
-        } else {
-            PK[i] = m_ctlPts[idx];
+    // Derivative basis functions ders[k][j] = d^k/du^k of basis N_{span-p+j,p} at u, for
+    // k = 0..order, j = 0..p. The NURBS Book, Algorithm A2.3 (DersBasisFuns). The previous
+    // implementation differenced the control points but then returned a single derivative
+    // control point instead of combining them with the lower-degree basis, so it was wrong
+    // for any degree above 1 (a circle's tangent came out ~70 degrees off).
+    std::vector<std::vector<float>> ndu(static_cast<size_t>(p + 1),
+                                        std::vector<float>(static_cast<size_t>(p + 1)));
+    std::vector<float> left(static_cast<size_t>(p + 1)), right(static_cast<size_t>(p + 1));
+    ndu[0][0] = 1.f;
+    for (int32_t j = 1; j <= p; ++j) {
+        left[j]  = u - m_knots[static_cast<size_t>(span + 1 - j)];
+        right[j] = m_knots[static_cast<size_t>(span + j)] - u;
+        float saved = 0.f;
+        for (int32_t r = 0; r < j; ++r) {
+            ndu[j][r] = right[r + 1] + left[j - r];  // lower triangle: knot differences
+            const float temp = ndu[r][j - 1] / ndu[j][r];
+            ndu[r][j] = saved + right[r + 1] * temp;
+            saved = left[j - r] * temp;
         }
+        ndu[j][j] = saved;
     }
 
-    for (int32_t k = 1; k <= order; ++k) {
-        if (k > p) return Vec3{};
-        for (int32_t i = 0; i <= p - k; ++i) {
-            int32_t idx = span - p + i;
-            float denom = m_knots[static_cast<size_t>(idx + p + 1)] -
-                          m_knots[static_cast<size_t>(idx + k)];
-            if (std::abs(denom) > kEpsilon) {
-                float alpha = static_cast<float>(p - k + 1) / denom;
-                PK[i].x = alpha * (PK[i + 1].x - PK[i].x);
-                PK[i].y = alpha * (PK[i + 1].y - PK[i].y);
-                PK[i].z = alpha * (PK[i + 1].z - PK[i].z);
-                if (isRational())
-                    WK[i] = alpha * (WK[i + 1] - WK[i]);
-            } else {
-                PK[i] = Vec3{};
-                if (isRational()) WK[i] = 0.f;
+    std::vector<std::vector<float>> ders(static_cast<size_t>(order + 1),
+                                         std::vector<float>(static_cast<size_t>(p + 1), 0.f));
+    for (int32_t j = 0; j <= p; ++j) ders[0][j] = ndu[j][p];
+
+    std::vector<std::vector<float>> a(2, std::vector<float>(static_cast<size_t>(p + 1)));
+    for (int32_t r = 0; r <= p; ++r) {
+        int32_t s1 = 0, s2 = 1;
+        a[0][0] = 1.f;
+        for (int32_t k = 1; k <= order; ++k) {
+            float d = 0.f;
+            const int32_t rk = r - k, pk = p - k;
+            if (r >= k) {
+                a[s2][0] = a[s1][0] / ndu[pk + 1][rk];
+                d = a[s2][0] * ndu[rk][pk];
             }
+            const int32_t j1 = (rk >= -1) ? 1 : -rk;
+            const int32_t j2 = (r - 1 <= pk) ? (k - 1) : (p - r);
+            for (int32_t j = j1; j <= j2; ++j) {
+                a[s2][j] = (a[s1][j] - a[s1][j - 1]) / ndu[pk + 1][rk + j];
+                d += a[s2][j] * ndu[rk + j][pk];
+            }
+            if (r <= pk) {
+                a[s2][k] = -a[s1][k - 1] / ndu[pk + 1][r];
+                d += a[s2][k] * ndu[r][pk];
+            }
+            ders[k][r] = d;
+            std::swap(s1, s2);
         }
     }
-
-    if (!isRational()) return PK[0];
-
-    Vec3 Cpt = evaluate(u);
-    float wVal = 0.f;
-    for (int32_t i = 0; i <= p; ++i) {
-        int32_t idx = span - p + i;
-        wVal += N[i] * m_weights[idx];
+    // Multiply through by the factorial factors p!/(p-k)!.
+    float fac = static_cast<float>(p);
+    for (int32_t k = 1; k <= order; ++k) {
+        for (int32_t j = 0; j <= p; ++j) ders[k][j] *= fac;
+        fac *= static_cast<float>(p - k);
     }
-    if (wVal <= kEpsilon) return Vec3{};
 
-    float invW = 1.f / wVal;
-    Vec3 A_deriv = PK[0];
-    float w_deriv = WK[0];
+    const int32_t base = span - p;
+    if (!isRational()) {
+        Vec3 ck{};
+        for (int32_t j = 0; j <= p; ++j) {
+            const Vec3& P = m_ctlPts[static_cast<size_t>(base + j)];
+            ck.x += ders[order][j] * P.x;
+            ck.y += ders[order][j] * P.y;
+            ck.z += ders[order][j] * P.z;
+        }
+        return ck;
+    }
 
-    return {(A_deriv.x - w_deriv * Cpt.x) * invW,
-            (A_deriv.y - w_deriv * Cpt.y) * invW,
-            (A_deriv.z - w_deriv * Cpt.z) * invW};
+    // Rational: differentiate the homogeneous curve, then apply the quotient rule — The
+    // NURBS Book, Algorithm A4.2 (RatCurveDerivs). Aders[k] is the k-th derivative of the
+    // weighted-point numerator, wders[k] of the weight denominator.
+    std::vector<Vec3>  Aders(static_cast<size_t>(order + 1), Vec3{});
+    std::vector<float> wders(static_cast<size_t>(order + 1), 0.f);
+    for (int32_t k = 0; k <= order; ++k) {
+        for (int32_t j = 0; j <= p; ++j) {
+            const int32_t idx = base + j;
+            const float w = m_weights[static_cast<size_t>(idx)];
+            const Vec3& P = m_ctlPts[static_cast<size_t>(idx)];
+            Aders[k].x += ders[k][j] * (P.x * w);
+            Aders[k].y += ders[k][j] * (P.y * w);
+            Aders[k].z += ders[k][j] * (P.z * w);
+            wders[k]   += ders[k][j] * w;
+        }
+    }
+    if (std::abs(wders[0]) <= kEpsilon) return Vec3{};
+
+    // Binomial coefficients for the quotient rule.
+    std::vector<std::vector<float>> bin(static_cast<size_t>(order + 1),
+                                        std::vector<float>(static_cast<size_t>(order + 1), 0.f));
+    for (int32_t i = 0; i <= order; ++i) {
+        bin[i][0] = 1.f;
+        for (int32_t j = 1; j <= i; ++j) bin[i][j] = bin[i - 1][j - 1] + bin[i - 1][j];
+    }
+
+    std::vector<Vec3> CK(static_cast<size_t>(order + 1), Vec3{});
+    for (int32_t k = 0; k <= order; ++k) {
+        Vec3 v = Aders[k];
+        for (int32_t i = 1; i <= k; ++i) {
+            const float b = bin[k][i] * wders[i];
+            v.x -= b * CK[k - i].x;
+            v.y -= b * CK[k - i].y;
+            v.z -= b * CK[k - i].z;
+        }
+        CK[k] = {v.x / wders[0], v.y / wders[0], v.z / wders[0]};
+    }
+    return CK[order];
 }
 
 NurbsCurve NurbsCurve::insertKnot(float u, int32_t r) const {

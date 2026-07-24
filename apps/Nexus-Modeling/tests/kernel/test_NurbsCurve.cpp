@@ -178,3 +178,78 @@ TEST(NurbsCurve, DerivativeDifferentOrders) {
     EXPECT_GT(d1.x * d1.x + d1.y * d1.y + d1.z * d1.z, 0.f);
     EXPECT_GE(d3.x * d3.x + d3.y * d3.y + d3.z * d3.z, 0.f);
 }
+
+// The derivative had been fundamentally wrong: after differencing the control points it
+// returned a single derivative control point instead of combining them with the
+// lower-degree basis, so it was correct only for a linear curve. A unit circle's tangent
+// came out ~70 degrees off, and anything built on it — arc length, closest point, offsets,
+// swept frames — was wrong. These check it against finite differences and against the exact
+// geometry of a rational NURBS circle. The prior test only asserted |derivative| >= 0,
+// which no broken direction could ever fail.
+
+namespace {
+NurbsCurve makeUnitCircle()
+{
+    const float w = 1.f / std::sqrt(2.f);
+    return NurbsCurve(
+        2,
+        {0, 0, 0, 0.25f, 0.25f, 0.5f, 0.5f, 0.75f, 0.75f, 1, 1, 1},
+        {{1, 0, 0}, {1, 1, 0}, {0, 1, 0}, {-1, 1, 0}, {-1, 0, 0},
+         {-1, -1, 0}, {0, -1, 0}, {1, -1, 0}, {1, 0, 0}},
+        {1, w, 1, w, 1, w, 1, w, 1});
+}
+}  // namespace
+
+TEST(NurbsCurve, FirstDerivativeMatchesFiniteDifference)
+{
+    // A rational cubic with genuinely varying weights (exercises the quotient rule).
+    NurbsCurve c(3, {0, 0, 0, 0, 0.5f, 1, 1, 1, 1},
+                 {{0, 0, 0}, {1, 2, 0}, {3, -1, 1}, {4, 1, 0}, {5, 0, 2}},
+                 {1, 2, 0.5f, 3, 1});
+    const float h = 1e-3f;
+    for (int i = 5; i < 95; ++i) {
+        const float u = 0.01f * static_cast<float>(i);
+        const Vec3 d = c.derivative(u, 1);
+        const Vec3 a = c.evaluate(u - h), b = c.evaluate(u + h);
+        EXPECT_NEAR(d.x, (b.x - a.x) / (2 * h), 5e-3f) << "at u=" << u;
+        EXPECT_NEAR(d.y, (b.y - a.y) / (2 * h), 5e-3f) << "at u=" << u;
+        EXPECT_NEAR(d.z, (b.z - a.z) / (2 * h), 5e-3f) << "at u=" << u;
+    }
+}
+
+TEST(NurbsCurve, SecondDerivativeMatchesFiniteDifference)
+{
+    NurbsCurve c(3, {0, 0, 0, 0, 0.5f, 1, 1, 1, 1},
+                 {{0, 0, 0}, {1, 2, 0}, {3, -1, 1}, {4, 1, 0}, {5, 0, 2}},
+                 {1, 2, 0.5f, 3, 1});
+    const float h = 2e-3f;
+    for (int i = 10; i < 90; ++i) {
+        const float u = 0.01f * static_cast<float>(i);
+        // Skip the interior knot at 0.5: a centered finite difference of the first
+        // derivative straddles the span boundary there and is not a valid reference, even
+        // though the analytic second derivative is continuous (the curve is C2 at a
+        // multiplicity-1 knot). The first-derivative test already covers this point.
+        if (std::abs(u - 0.5f) < 2.f * h) continue;
+        const Vec3 d2 = c.derivative(u, 2);
+        const Vec3 da = c.derivative(u - h, 1), db = c.derivative(u + h, 1);
+        EXPECT_NEAR(d2.x, (db.x - da.x) / (2 * h), 2e-2f) << "at u=" << u;
+        EXPECT_NEAR(d2.y, (db.y - da.y) / (2 * h), 2e-2f) << "at u=" << u;
+        EXPECT_NEAR(d2.z, (db.z - da.z) / (2 * h), 2e-2f) << "at u=" << u;
+    }
+}
+
+TEST(NurbsCurve, CircleTangentIsPerpendicularToTheRadius)
+{
+    const NurbsCurve circle = makeUnitCircle();
+    for (int i = 1; i < 200; ++i) {
+        const float u = static_cast<float>(i) / 200.f;
+        const Vec3 p = circle.evaluate(u);
+        const Vec3 d = circle.derivative(u, 1);
+        const float dl = std::sqrt(d.x * d.x + d.y * d.y + d.z * d.z);
+        const float pl = std::sqrt(p.x * p.x + p.y * p.y);
+        ASSERT_GT(dl, 1e-6f);
+        ASSERT_GT(pl, 1e-6f);
+        // Tangent of a circle is perpendicular to the position (radius) vector.
+        EXPECT_NEAR((d.x * p.x + d.y * p.y) / (dl * pl), 0.f, 1e-4f) << "at u=" << u;
+    }
+}
