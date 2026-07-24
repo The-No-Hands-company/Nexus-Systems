@@ -463,3 +463,73 @@ TEST(SceneGraphExtended, CollectVisibleUsesSanitizedCenterForNonFiniteTranslatio
     ASSERT_EQ(out.size(), 1u);
     EXPECT_EQ(out[0], n);
 }
+
+// ── Transform::toMatrix — TRS composition order ──────────────────────────────
+//
+// A decomposed local transform must compose as M = T * R * S (scale applied first,
+// in the object's local space) — the glTF / Unity / Unreal convention, and the one
+// the engine's own scale-recovery assumes: conservativeWorldRadius reads each scale
+// factor back as the length of a world-matrix COLUMN, which only holds when scale
+// multiplies column j by s_j (i.e. R * S). The matrix must NOT build S * R (scaling
+// world axes after rotation), which differs whenever scale is non-uniform AND there
+// is a rotation.
+namespace {
+Vec4 axisAngleQuat(Vec3 axis, float degrees) {
+    const float r = degrees * 3.14159265358979323846f / 180.f;
+    const float s = std::sin(r * 0.5f);
+    return {axis.x * s, axis.y * s, axis.z * s, std::cos(r * 0.5f)};
+}
+} // namespace
+
+TEST(TransformToMatrix, ScaleIsAppliedInLocalSpaceBeforeRotation) {
+    Transform t;
+    t.rotation = axisAngleQuat({0.f, 0.f, 1.f}, 90.f);  // +90 deg about Z
+    t.scale    = {2.f, 1.f, 1.f};                        // stretch local X by 2
+
+    const Mat4 m = t.toMatrix();
+
+    // Local +X is scaled to length 2, then rotated 90 deg about Z onto world +Y.
+    // T*R*S gives (0,2,0); the wrong S*R order gives (0,1,0) (the x-scale is lost
+    // because the vector points along Y after the rotation).
+    const Vec4 x = m * Vec4{1.f, 0.f, 0.f, 1.f};
+    EXPECT_NEAR(x.x, 0.f, 1e-5f);
+    EXPECT_NEAR(x.y, 2.f, 1e-5f);
+    EXPECT_NEAR(x.z, 0.f, 1e-5f);
+
+    // Local +Y (scale 1) rotates 90 deg about Z onto world -X, length 1.
+    const Vec4 y = m * Vec4{0.f, 1.f, 0.f, 1.f};
+    EXPECT_NEAR(y.x, -1.f, 1e-5f);
+    EXPECT_NEAR(y.y, 0.f, 1e-5f);
+    EXPECT_NEAR(y.z, 0.f, 1e-5f);
+}
+
+TEST(TransformToMatrix, ColumnLengthsRecoverPerAxisScale) {
+    // The engine recovers each axis scale from the length of the corresponding
+    // world-matrix column (see conservativeWorldRadius / axisScaleLength). With a
+    // rotation and non-uniform scale, that identity only holds for R * S.
+    Transform t;
+    t.rotation = axisAngleQuat({0.3f, 0.7f, 0.64807f}, 52.f);  // arbitrary tilt
+    t.scale    = {2.f, 3.f, 4.f};
+
+    const Mat4 m = t.toMatrix();
+    const float sx = std::sqrt(m.m[0][0]*m.m[0][0] + m.m[1][0]*m.m[1][0] + m.m[2][0]*m.m[2][0]);
+    const float sy = std::sqrt(m.m[0][1]*m.m[0][1] + m.m[1][1]*m.m[1][1] + m.m[2][1]*m.m[2][1]);
+    const float sz = std::sqrt(m.m[0][2]*m.m[0][2] + m.m[1][2]*m.m[1][2] + m.m[2][2]*m.m[2][2]);
+    EXPECT_NEAR(sx, 2.f, 1e-4f);
+    EXPECT_NEAR(sy, 3.f, 1e-4f);
+    EXPECT_NEAR(sz, 4.f, 1e-4f);
+}
+
+TEST(TransformToMatrix, TranslationIsAppliedAfterRotationAndScale) {
+    Transform t;
+    t.translation = {5.f, -3.f, 2.f};
+    t.rotation    = axisAngleQuat({0.f, 1.f, 0.f}, 90.f);
+    t.scale       = {2.f, 2.f, 2.f};
+
+    const Mat4 m = t.toMatrix();
+    // Origin maps to the translation exactly.
+    const Vec4 o = m * Vec4{0.f, 0.f, 0.f, 1.f};
+    EXPECT_NEAR(o.x, 5.f, 1e-5f);
+    EXPECT_NEAR(o.y, -3.f, 1e-5f);
+    EXPECT_NEAR(o.z, 2.f, 1e-5f);
+}

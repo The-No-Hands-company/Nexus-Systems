@@ -84,15 +84,21 @@ Mat4 Transform::toMatrix() const noexcept
     float xy = qx*qy, xz = qx*qz, yz = qy*qz;
     float wx = qw*qx, wy = qw*qy, wz = qw*qz;
 
+    // M = T * R * S: the scale is applied first, in the object's local space, so it
+    // multiplies COLUMN j of the rotation by s_j (the upper 3x3 is R * S). Scaling by the
+    // row index instead builds S * R — scaling world axes after the rotation — which is
+    // wrong for any non-uniform scale combined with a rotation, and is also inconsistent
+    // with how the engine recovers scale (conservativeWorldRadius reads s_j as the length
+    // of world-matrix column j, which only holds for R * S).
     Mat4 m{};
     m.m[0][0] = sx * (1 - 2*(yy+zz));
-    m.m[0][1] = sx * 2*(xy - wz);
-    m.m[0][2] = sx * 2*(xz + wy);
-    m.m[1][0] = sy * 2*(xy + wz);
+    m.m[0][1] = sy * 2*(xy - wz);
+    m.m[0][2] = sz * 2*(xz + wy);
+    m.m[1][0] = sx * 2*(xy + wz);
     m.m[1][1] = sy * (1 - 2*(xx+zz));
-    m.m[1][2] = sy * 2*(yz - wx);
-    m.m[2][0] = sz * 2*(xz - wy);
-    m.m[2][1] = sz * 2*(yz + wx);
+    m.m[1][2] = sz * 2*(yz - wx);
+    m.m[2][0] = sx * 2*(xz - wy);
+    m.m[2][1] = sy * 2*(yz + wx);
     m.m[2][2] = sz * (1 - 2*(xx+yy));
     m.m[0][3] = sanitized.translation.x;
     m.m[1][3] = sanitized.translation.y;
