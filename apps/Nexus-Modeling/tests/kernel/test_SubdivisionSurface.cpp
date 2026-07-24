@@ -2,7 +2,9 @@
 
 #include <nexus/geometry/SubdivisionSurface.h>
 #include <nexus/geometry/Mesh.h>
+#include <nexus/geometry/HalfEdgeMesh.h>
 
+#include <cmath>
 #include <cstdint>
 #include <unordered_map>
 #include <vector>
@@ -275,4 +277,148 @@ TEST(SubdivisionSurface, InvalidInputHandled) {
 
     Mesh resultL = loopSubdivide(invalid);
     EXPECT_FALSE(resultL.isValid());
+}
+
+// -----------------------------------------------------------------------------
+// The tests above exercise a reimplementation local to this file. The production
+// entry points SubdivisionSurface::catmullClark / loopSubdivide operate on a
+// HalfEdgeMesh and are what actually ship (the editor's subdivide command and the
+// evaluation graph call them). Those had no positive correctness coverage at all —
+// only a fuzz test asserting they reject non-finite input. The tests below pin the
+// real code to exact Catmull-Clark / Loop results.
+// -----------------------------------------------------------------------------
+
+namespace {
+
+// Watertight closed mesh: every live half-edge has a twin.
+bool halfEdgeMeshIsClosed(const HalfEdgeMesh& hem) {
+    for (uint32_t e = 0; e < hem.edgeCount(); ++e) {
+        const auto& he = hem.edge(e);
+        if (he.src == HalfEdgeMesh::kInvalid) continue;  // tombstone
+        if (he.twin == HalfEdgeMesh::kInvalid) return false;
+    }
+    return true;
+}
+
+} // namespace
+
+// One Catmull-Clark step on the unit-side-2 cube has an exact, fully determined
+// result. The 6 face points are the face centroids (±1,0,0)-type; the 12 edge points
+// are (v0+v1+f0+f1)/4 = (±0.75,±0.75,0)-type; each valence-3 corner maps to
+// (n-3)/n*P + 2R/n^2 + F/n^2, which at n=3 is (5/9,5/9,5/9)-type. Any error in the
+// face-point, edge-point or vertex rule moves at least one of these off its lattice.
+TEST(SubdivisionSurface, CatmullClarkCubeExactLevelOne) {
+    auto hem = HalfEdgeMesh::fromMesh(primitives::makeBox(2.f, 2.f, 2.f));
+    ASSERT_TRUE(hem.has_value());
+
+    SubdivisionOptions opts;
+    opts.levels = 1;
+    auto res = SubdivisionSurface::catmullClark(*hem, opts);
+    ASSERT_TRUE(res.has_value());
+
+    EXPECT_TRUE(halfEdgeMeshIsClosed(*res)) << "Catmull-Clark output must stay watertight";
+
+    // Exact vertex set: V' = V + E + F = 8 + 12 + 6 = 26, split 8 corner / 12 edge /
+    // 6 face points, classified by how many coordinates are zero.
+    const float tol = 1e-4f;
+    int faceCount = 0, edgeCount = 0, cornerCount = 0, live = 0;
+    Vec3 centroid{0, 0, 0};
+    for (const auto& p : res->positions()) {
+        ++live;
+        centroid = centroid + p;
+
+        // Convex-hull containment: the limit surface, and every level, lie inside the
+        // control mesh's hull.
+        EXPECT_LE(std::abs(p.x), 1.f + tol);
+        EXPECT_LE(std::abs(p.y), 1.f + tol);
+        EXPECT_LE(std::abs(p.z), 1.f + tol);
+
+        const int zeros = (std::abs(p.x) < tol) + (std::abs(p.y) < tol) + (std::abs(p.z) < tol);
+        if (zeros == 2) {
+            ++faceCount;
+            const float m = std::max({std::abs(p.x), std::abs(p.y), std::abs(p.z)});
+            EXPECT_NEAR(m, 1.f, tol) << "face point must be a face centroid at distance 1";
+        } else if (zeros == 1) {
+            ++edgeCount;
+            for (float c : {p.x, p.y, p.z})
+                if (std::abs(c) > tol) EXPECT_NEAR(std::abs(c), 0.75f, tol) << "edge point coord";
+        } else if (zeros == 0) {
+            ++cornerCount;
+            EXPECT_NEAR(std::abs(p.x), 5.f / 9.f, tol) << "corner point coord";
+            EXPECT_NEAR(std::abs(p.y), 5.f / 9.f, tol);
+            EXPECT_NEAR(std::abs(p.z), 5.f / 9.f, tol);
+        }
+    }
+    EXPECT_EQ(live, 26);
+    EXPECT_EQ(faceCount, 6);
+    EXPECT_EQ(edgeCount, 12);
+    EXPECT_EQ(cornerCount, 8);
+
+    // A symmetric cube keeps its centroid at the origin.
+    centroid = centroid * (1.f / static_cast<float>(live));
+    EXPECT_NEAR(centroid.x, 0.f, 1e-4f);
+    EXPECT_NEAR(centroid.y, 0.f, 1e-4f);
+    EXPECT_NEAR(centroid.z, 0.f, 1e-4f);
+
+    // Every resulting face is a quad (Catmull-Clark refines any n-gon into quads).
+    Mesh m = res->toMesh(false);
+    for (size_t f = 0; f < m.topology().faceCount(); ++f)
+        EXPECT_TRUE(m.topology().face(f).isQuad());
+}
+
+TEST(SubdivisionSurface, CatmullClarkPlanarGridStaysPlanar) {
+    // makePlane lays a flat grid in the XZ plane (y = 0). Catmull-Clark reproduces a plane
+    // exactly, so every subdivided vertex must keep y = 0.
+    auto hem = HalfEdgeMesh::fromMesh(primitives::makePlane(4.f, 4.f, 3, 3));
+    ASSERT_TRUE(hem.has_value());
+
+    SubdivisionOptions opts;
+    opts.levels = 2;
+    auto res = SubdivisionSurface::catmullClark(*hem, opts);
+    ASSERT_TRUE(res.has_value());
+
+    for (const auto& p : res->positions())
+        EXPECT_NEAR(p.y, 0.f, 1e-5f) << "planar input must remain planar";
+}
+
+TEST(SubdivisionSurface, CatmullClarkConvergesInsideHull) {
+    // Repeated subdivision converges: successive levels stay inside the cube's hull and
+    // the mesh does not blow up.
+    auto hem = HalfEdgeMesh::fromMesh(primitives::makeBox(2.f, 2.f, 2.f));
+    ASSERT_TRUE(hem.has_value());
+
+    SubdivisionOptions opts;
+    opts.levels = 4;
+    auto res = SubdivisionSurface::catmullClark(*hem, opts);
+    ASSERT_TRUE(res.has_value());
+    EXPECT_TRUE(halfEdgeMeshIsClosed(*res));
+
+    for (const auto& p : res->positions()) {
+        EXPECT_LE(std::abs(p.x), 1.f + 1e-4f);
+        EXPECT_LE(std::abs(p.y), 1.f + 1e-4f);
+        EXPECT_LE(std::abs(p.z), 1.f + 1e-4f);
+        EXPECT_TRUE(std::isfinite(p.x) && std::isfinite(p.y) && std::isfinite(p.z));
+    }
+}
+
+TEST(SubdivisionSurface, LoopSubdivideStaysClosedAndInsideHull) {
+    // Loop subdivision is defined on triangles, so triangulate the box first (toMesh(true))
+    // before rebuilding the half-edge mesh. A closed convex triangle mesh stays watertight
+    // and inside its convex hull under Loop.
+    auto quadHem = HalfEdgeMesh::fromMesh(primitives::makeBox(2.f, 2.f, 2.f));
+    ASSERT_TRUE(quadHem.has_value());
+    auto hem = HalfEdgeMesh::fromMesh(quadHem->toMesh(true));  // triangulated
+    ASSERT_TRUE(hem.has_value());
+
+    SubdivisionOptions opts;
+    opts.levels = 2;
+    auto res = SubdivisionSurface::loopSubdivide(*hem, opts);
+    ASSERT_TRUE(res.has_value());
+    EXPECT_TRUE(halfEdgeMeshIsClosed(*res));
+
+    for (const auto& p : res->positions()) {
+        EXPECT_LE(std::abs(p.x), 1.f + 1e-4f);
+        EXPECT_LE(std::abs(p.y), 1.f + 1e-4f);
+        EXPECT_LE(std::abs(p.z), 1.f + 1e-4f);
+    }
 }
