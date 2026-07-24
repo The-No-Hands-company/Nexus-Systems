@@ -1729,7 +1729,159 @@ bool integrateFaceParametric(const Surface& surf, const std::vector<Vec3>& pts, 
     return true;
 }
 
+// One boundary edge of a planar face, as a curve segment traversed start -> end.
+struct PlanarEdge {
+    Curve  curve;
+    double c0, c1;  // curve parameters at the segment's start and end (in traversal order)
+};
+
+// Exact contribution of a PLANAR face (possibly bounded by circular arcs) to the ten
+// divergence-theorem boundary integrals and to its area, via Green's theorem in the plane.
+//
+// A flat face's contribution to a surface integral of a constant-normal field is n times
+// the 2D area integral over the region: intg-term = n_component * coeff * integral of a
+// cubic monomial in x,y,z over the face. Each coordinate is linear in the in-plane
+// coordinates (s,t) — x = O.x + s*e1.x + t*e2.x — so every such integral is a combination
+// of the 2D area moments m_ij = integral of s^i t^j dA (i+j <= 3). Each moment is in turn
+// a boundary line integral, m_ij = closed integral of (1/(i+1)) s^(i+1) t^j dt (Green),
+// evaluated exactly per edge: a Line edge gives a polynomial, a Circle arc a trigonometric
+// integrand that 12-point Gauss resolves to float precision. This is what makes a
+// cylinder or cone cap a true pi*r^2 disk rather than the inscribed n-gon a triangulation
+// would give.
+//
+// `nOut` is the outward unit normal; e1,e2 are an in-plane orthonormal frame with
+// e1 x e2 = nOut, and O a point in the plane.
+bool assemblePlanarFace(const std::vector<PlanarEdge>& edges, const Vec3& O, const Vec3& e1,
+                        const Vec3& e2, const Vec3& nOut, std::array<double, 10>& intg,
+                        double& area)
+{
+    if (edges.size() < 2) return false;
+
+    // 2D area moments m[i][j] = integral of s^i t^j dA over the region, i+j <= 3.
+    double m[4][4] = {{0, 0, 0, 0}, {0, 0, 0, 0}, {0, 0, 0, 0}, {0, 0, 0, 0}};
+    for (const PlanarEdge& pe : edges) {
+        const Curve& cu = pe.curve;
+        if (cu.kind == CurveKind::Nurbs) return false;  // not supported: caller tessellates
+        const double cs = pe.c0, ce = pe.c1;
+        const double hc = 0.5 * (ce - cs), mc = 0.5 * (ce + cs);
+        for (int g = 0; g < kGaussN; ++g) {
+            const double c = mc + hc * kGaussX[g];
+            const Vec3 p = cu.eval(static_cast<float>(c));
+            // in-plane coordinates and the boundary tangent's t-component
+            const double dxp = p.x - O.x, dyp = p.y - O.y, dzp = p.z - O.z;
+            const double sC = dxp * e1.x + dyp * e1.y + dzp * e1.z;
+            const double tC = dxp * e2.x + dyp * e2.y + dzp * e2.z;
+            // dp/dc analytically per curve kind (kept in double).
+            double dpx, dpy, dpz;
+            if (cu.kind == CurveKind::Line) {
+                dpx = cu.dir.x; dpy = cu.dir.y; dpz = cu.dir.z;  // p = origin + c*dir
+            } else {  // Circle: centre + R(cos c * ref + sin c * (dir x ref))
+                const double wx = cu.dir.y * cu.ref.z - cu.dir.z * cu.ref.y;
+                const double wy = cu.dir.z * cu.ref.x - cu.dir.x * cu.ref.z;
+                const double wz = cu.dir.x * cu.ref.y - cu.dir.y * cu.ref.x;
+                const double sc = std::sin(c), cc = std::cos(c);
+                dpx = cu.radius * (-sc * cu.ref.x + cc * wx);
+                dpy = cu.radius * (-sc * cu.ref.y + cc * wy);
+                dpz = cu.radius * (-sc * cu.ref.z + cc * wz);
+            }
+            const double dtdc = dpx * e2.x + dpy * e2.y + dpz * e2.z;
+            const double wG = kGaussW[g] * hc * dtdc;  // dt = (dp . e2) dc
+            for (int i = 0; i < 4; ++i)
+                for (int j = 0; j + i < 4; ++j)
+                    m[i][j] += wG * (1.0 / (i + 1)) * std::pow(sC, i + 1) * std::pow(tC, j);
+        }
+    }
+
+    if (m[0][0] <= 1e-14) return false;  // degenerate / zero-area
+    area += m[0][0];
+
+    // Integrals over the face of products of the linear forms x=(ax,bx,cx).(1,s,t), etc.
+    const double ax = O.x, bx = e1.x, cx = e2.x;
+    const double ay = O.y, by = e1.y, cy = e2.y;
+    const double az = O.z, bz = e1.z, cz = e2.z;
+    auto I1 = [&](double a, double b, double c) {
+        return a * m[0][0] + b * m[1][0] + c * m[0][1];
+    };
+    auto I2 = [&](double a1, double b1, double c1, double a2, double b2, double c2) {
+        return a1 * a2 * m[0][0] + (a1 * b2 + a2 * b1) * m[1][0] + (a1 * c2 + a2 * c1) * m[0][1]
+             + b1 * b2 * m[2][0] + (b1 * c2 + b2 * c1) * m[1][1] + c1 * c2 * m[0][2];
+    };
+    auto I3 = [&](double a1, double b1, double c1, double a2, double b2, double c2, double a3,
+                  double b3, double c3) {
+        const double bv[3][3] = {{a1, b1, c1}, {a2, b2, c2}, {a3, b3, c3}};
+        const int es[3] = {0, 1, 0}, et[3] = {0, 0, 1};
+        double C[4][4] = {{0, 0, 0, 0}, {0, 0, 0, 0}, {0, 0, 0, 0}, {0, 0, 0, 0}};
+        for (int u = 0; u < 3; ++u)
+            for (int v = 0; v < 3; ++v)
+                for (int w = 0; w < 3; ++w)
+                    C[es[u] + es[v] + es[w]][et[u] + et[v] + et[w]] += bv[0][u] * bv[1][v] * bv[2][w];
+        double r = 0;
+        for (int i = 0; i < 4; ++i)
+            for (int j = 0; j + i < 4; ++j) r += C[i][j] * m[i][j];
+        return r;
+    };
+
+    intg[0] += nOut.x * I1(ax, bx, cx);
+    intg[1] += 0.5 * nOut.x * I2(ax, bx, cx, ax, bx, cx);
+    intg[2] += 0.5 * nOut.y * I2(ay, by, cy, ay, by, cy);
+    intg[3] += 0.5 * nOut.z * I2(az, bz, cz, az, bz, cz);
+    intg[4] += (1.0 / 3.0) * nOut.x * I3(ax, bx, cx, ax, bx, cx, ax, bx, cx);
+    intg[5] += (1.0 / 3.0) * nOut.y * I3(ay, by, cy, ay, by, cy, ay, by, cy);
+    intg[6] += (1.0 / 3.0) * nOut.z * I3(az, bz, cz, az, bz, cz, az, bz, cz);
+    intg[7] += 0.5 * nOut.x * I3(ax, bx, cx, ax, bx, cx, ay, by, cy);
+    intg[8] += 0.5 * nOut.y * I3(ay, by, cy, ay, by, cy, az, bz, cz);
+    intg[9] += 0.5 * nOut.z * I3(az, bz, cz, az, bz, cz, ax, bx, cx);
+    return true;
+}
+
 }  // namespace
+
+bool Body::integratePlanarFace(uint32_t faceId, std::array<double, 10>& intg, double& area) const
+{
+    const Face& face = m_faces[faceId];
+    if (!face.alive || face.surface == kInvalid || face.surface >= m_surfaces.size()) return false;
+    const Surface& surf = m_surfaces[face.surface];
+    if (surf.kind != SurfaceKind::Plane) return false;
+    if (!face.innerLoops.empty()) return false;   // holes need the loop subtracted; tessellate
+    if (face.outerLoop == kInvalid || face.outerLoop >= m_loops.size()) return false;
+
+    // Outward frame: e1 in-plane, e2 = nOut x e1 so e1 x e2 = nOut.
+    const Vec3 nOut = face.reversed
+                          ? Vec3{-surf.normal.x, -surf.normal.y, -surf.normal.z}
+                          : surf.normal;
+    Vec3 e1 = surf.uAxis;
+    const float e1l = length(e1);
+    if (e1l < 1e-12f) return false;
+    e1 = {e1.x / e1l, e1.y / e1l, e1.z / e1l};
+    const Vec3 e2{nOut.y * e1.z - nOut.z * e1.y, nOut.z * e1.x - nOut.x * e1.z,
+                  nOut.x * e1.y - nOut.y * e1.x};
+    const Vec3 O = surf.origin;
+
+    // Walk the outer loop's coedges into oriented curve segments (start -> end).
+    std::vector<PlanarEdge> edges;
+    const uint32_t first = m_loops[face.outerLoop].first;
+    if (first == kInvalid || first >= m_coedges.size()) return false;
+    uint32_t cur = first;
+    for (int guard = 0; guard < 100000; ++guard) {
+        const Coedge& ce = m_coedges[cur];
+        if (ce.edge == kInvalid || ce.edge >= m_edges.size()) return false;
+        const Edge& ed = m_edges[ce.edge];
+        if (ed.curve == kInvalid || ed.curve >= m_curves.size()) return false;
+        const Curve& cu = m_curves[ed.curve];
+        if (cu.kind == CurveKind::Nurbs) return false;  // caller tessellates
+        // The edge's curve runs v0 -> v1 over [t0,t1]; a reversed coedge traverses it e1->e0.
+        PlanarEdge pe;
+        pe.curve = cu;
+        pe.c0 = ce.reversed ? ed.t1 : ed.t0;
+        pe.c1 = ce.reversed ? ed.t0 : ed.t1;
+        edges.push_back(pe);
+        cur = ce.next;
+        if (cur == first) break;
+        if (cur == kInvalid || cur >= m_coedges.size()) return false;
+    }
+
+    return assemblePlanarFace(edges, O, e1, e2, nOut, intg, area);
+}
 
 float Body::surfaceArea() const
 {
@@ -1763,7 +1915,15 @@ float Body::surfaceArea() const
         }
         if (exact) continue;
 
-        // Fall back: this face's flat-triangle area, which is exact for a planar face.
+        // Planar faces: exact via Green's theorem over the boundary (arc caps become true
+        // disks, not inscribed n-gons). Only the area output is used here.
+        {
+            std::array<double, 10> dummy{0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+            double planarArea = 0.0;
+            if (integratePlanarFace(fi, dummy, planarArea)) { area += planarArea; continue; }
+        }
+
+        // Fall back: this face's flat-triangle area (a planar face bounded only by chords).
         const std::vector<uint32_t> vids = faceVertices(fi);
         for (uint32_t k = 1; k + 1 < static_cast<uint32_t>(vids.size()); ++k) {
             if (vids[0] >= m_verts.size() || vids[k] >= m_verts.size()
@@ -1855,6 +2015,18 @@ nexus::geometry::MassProperties Body::massProperties(float density) const
         }
 
         if (exact) continue;
+
+        // Planar faces: exact via Green's theorem over the boundary (arc-bounded caps are
+        // true disks, closing the transverse-moment facet error a triangulated cap left).
+        {
+            std::array<double, 10> planar{0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+            double dummyArea = 0.0;
+            if (integratePlanarFace(fi, planar, dummyArea)) {
+                for (int k = 0; k < 10; ++k) intg[k] += planar[k];
+                anyExact = true;
+                continue;
+            }
+        }
 
         // Not exact: contribute this face's triangles to the residual mesh. Faces with
         // inner loops need the full tessellator, so their presence sends the whole body

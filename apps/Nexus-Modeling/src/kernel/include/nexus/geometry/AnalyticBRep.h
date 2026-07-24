@@ -32,6 +32,7 @@
 #include <nexus/render/Camera.h>
 
 #include <cstdint>
+#include <array>
 #include <optional>
 #include <string>
 #include <utility>
@@ -432,6 +433,13 @@ public:
     [[nodiscard]] bool isClosed() const noexcept;
 
 private:
+    // Exact contribution of a PLANAR face (possibly arc-bounded) to the ten
+    // divergence-theorem boundary integrals and to `area`, via Green's theorem over its
+    // boundary edges. Returns false — leaving intg/area untouched — for a NURBS-bounded or
+    // holed face, so the caller falls back to tessellation. Defined in the .cpp.
+    [[nodiscard]] bool integratePlanarFace(uint32_t faceId, std::array<double, 10>& intg,
+                                           double& area) const;
+
     std::vector<Vertex>  m_verts;
     std::vector<Edge>    m_edges;
     std::vector<Coedge>  m_coedges;

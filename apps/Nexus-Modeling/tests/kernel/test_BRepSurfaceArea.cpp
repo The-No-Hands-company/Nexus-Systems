@@ -39,29 +39,26 @@ TEST(BRepSurfaceArea, SphereIsExact)
     }
 }
 
-// The cylinder's curved LATERAL surface is integrated exactly (2*pi*r*h, independent of
-// segment count); its flat caps are triangulated, so they contribute their inscribed
-// n-gon area rather than the round pi*r^2. The total therefore equals the exact round wall
-// plus the exact n-gon caps — pinning that the wall is exact-round and only the planar
-// caps facet (the same residual as the cylinder's transverse moment; exact planar-face-
-// with-curved-boundary integration is a separate piece of work).
-TEST(BRepSurfaceArea, CylinderLateralIsExactAndCapsAreInscribedPolygons)
+// The cylinder's total area is now exact: the curved lateral surface (2*pi*r*h) is
+// integrated over its parameter domain, and its two flat caps — which are bounded by
+// circular ARCS, so they are true disks — are integrated over their boundary by Green's
+// theorem, giving pi*r^2 each rather than the inscribed n-gon a triangulation would.
+TEST(BRepSurfaceArea, CylinderIsExact)
 {
-    const double r = 1.0, h = 2.0, roundWall = 2.0 * M_PI * r * h;
+    const double r = 1.0, h = 2.0;
+    const double total = 2.0 * M_PI * r * h + 2.0 * M_PI * r * r;
     for (const uint32_t n : {8u, 16u, 64u}) {
-        const double capNgon = 2.0 * (0.5 * n * std::sin(2.0 * M_PI / n) * r * r);
         const float a = makeCylinder(1.f, 2.f, n).surfaceArea();
-        EXPECT_NEAR(a, static_cast<float>(roundWall + capNgon),
-                    static_cast<float>(roundWall + capNgon) * 1e-5)
-            << "cylinder area is not (exact round wall + exact n-gon caps) at n=" << n;
-        EXPECT_LT(std::abs(a - (roundWall + 2.0 * M_PI * r * r)),
-                  std::abs(makeCylinder(1.f, 2.f, n / 2).surfaceArea()
-                           - (roundWall + 2.0 * M_PI * r * r)));
+        EXPECT_NEAR(a, static_cast<float>(total), static_cast<float>(total) * 1e-5)
+            << "cylinder area not exact at n=" << n;
     }
 }
 
-// The cone's lateral surface is likewise exact (pi*r*slant), its base a flat n-gon.
-TEST(BRepSurfaceArea, ConeLateralIsExact)
+// The cone's lateral surface is exact (pi*r*slant). Its base, unlike the cylinder's caps,
+// is bounded by straight CHORD edges (fromFaces derives Line edges), so the base genuinely
+// is an inscribed n-gon and is integrated exactly as such — the total is lateral + n-gon
+// base to float precision, which is the correct area of the body as built.
+TEST(BRepSurfaceArea, ConeLateralIsExactBaseIsExactPolygon)
 {
     const double r = 1.0, hh = 2.0, slant = std::sqrt(r * r + hh * hh);
     const double lateral = M_PI * r * slant;

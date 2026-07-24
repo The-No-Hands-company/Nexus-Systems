@@ -116,11 +116,16 @@ TEST(BRepMassProperties, CylinderVolumeAndAxialMomentAreExactRegardlessOfSegment
         const MassProperties p = makeCylinder(1.f, 2.f, segs).massProperties(1.f);
         EXPECT_NEAR(p.volume, Vround, Vround * 1e-5)
             << "cylinder volume is not exact at " << segs << " segments";
-        // The axial moment [2][2] comes entirely from the exactly-integrated side wall.
-        // The transverse moments carry the flat-cap facet error and are NOT exact — which
-        // is correct, a faceted cap really is an inscribed n-gon.
+        // Every moment is now exact: the side wall over its parameter domain, and the
+        // disk caps (arc boundary) via Green's theorem. The transverse-moment facet error a
+        // triangulated cap used to leave is gone.
         EXPECT_NEAR(p.inertia[2][2], IzzRound, IzzRound * 1e-5)
             << "cylinder axial moment is not exact at " << segs << " segments";
+        const double IxxRound = Vround * (3 * r * r + h * h) / 12.0;
+        EXPECT_NEAR(p.inertia[0][0], IxxRound, IxxRound * 1e-5)
+            << "cylinder transverse moment is not exact at " << segs << " segments";
+        EXPECT_NEAR(p.inertia[1][1], IxxRound, IxxRound * 1e-5)
+            << "cylinder transverse moment is not exact at " << segs << " segments";
     }
 }
 
