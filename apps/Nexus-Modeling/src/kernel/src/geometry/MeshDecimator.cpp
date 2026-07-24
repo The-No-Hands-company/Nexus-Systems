@@ -306,10 +306,26 @@ void recomputeQuadric(const HalfEdgeMesh& hem, std::vector<Quadric>& quadrics, u
 std::optional<std::pair<HalfEdgeMesh, DecimationReport>>
 MeshDecimator::decimate(const HalfEdgeMesh& mesh, const DecimationOptions& opts) {
     DecimationReport report;
-    report.facesIn = countActiveFaces(mesh);
-    if (report.facesIn == 0) return std::nullopt;
+    if (countActiveFaces(mesh) == 0) return std::nullopt;
     for (const auto& p : mesh.positions())
         if (!isFinite(p)) return std::nullopt;  // reject non-finite input (convention)
+
+    // Decimation is a triangle operation, so triangulate up front and measure the entire
+    // face budget on the triangulated mesh. Previously facesIn, the target, and the loop's
+    // running face count were taken from the pre-triangulation polygon mesh while the loop
+    // actually edited the triangulated one: a quad/tri sphere reported 576 faces in but
+    // decimated ~1100 triangles, so the accounting was inconsistent, the loop stopped far
+    // short of the requested reduction, and facesOut could even exceed the reported facesIn.
+    HalfEdgeMesh workingMesh = mesh;
+    if (!workingMesh.isTriangulated()) {
+        Mesh m = workingMesh.toMesh();
+        auto opt = HalfEdgeMesh::fromMesh(m);
+        if (!opt) return std::nullopt;
+        workingMesh = std::move(*opt);
+    }
+
+    report.facesIn = countActiveFaces(workingMesh);
+    if (report.facesIn == 0) return std::nullopt;
 
     size_t targetFaces = opts.targetFaceCount;
     if (targetFaces == 0) {
@@ -317,15 +333,8 @@ MeshDecimator::decimate(const HalfEdgeMesh& mesh, const DecimationOptions& opts)
     }
     if (targetFaces < 3) targetFaces = 3;
     if (targetFaces >= report.facesIn) {
-        return std::make_pair(mesh, report);
-    }
-
-    HalfEdgeMesh workingMesh = mesh;
-    if (!workingMesh.isTriangulated()) {
-        Mesh m = workingMesh.toMesh();
-        auto opt = HalfEdgeMesh::fromMesh(m);
-        if (!opt) return std::nullopt;
-        workingMesh = std::move(*opt);
+        report.facesOut = report.facesIn;
+        return std::make_pair(std::move(workingMesh), report);
     }
 
     bool use5D = opts.preserveAttributes && workingMesh.hasUVs();
@@ -504,8 +513,16 @@ MeshDecimator::decimate(const HalfEdgeMesh& mesh, const DecimationOptions& opts)
         }
     }
 
+    // Best-effort: return whatever valid decimation was achieved even when the target face
+    // count could not be reached exactly. Collapses legitimately stall — boundary
+    // preservation, the maxError budget (whose whole purpose is to stop before quality
+    // degrades), or link-condition rejections that would make a collapse non-manifold.
+    // Returning nullopt here discarded a correct, already-computed partial decimation, and
+    // every caller reads nullopt as "keep the ORIGINAL mesh", so a mesh that could not be
+    // reduced to the exact target was left completely undecimated. report.facesOut carries
+    // how far decimation actually got, so a caller that needs the exact target can still
+    // tell.
     report.facesOut = countActiveFaces(workingMesh);
-    if (report.facesOut > targetFaces) return std::nullopt;
     return std::make_pair(std::move(workingMesh), report);
 }
 
