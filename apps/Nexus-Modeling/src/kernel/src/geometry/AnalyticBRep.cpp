@@ -1511,21 +1511,6 @@ int Body::facePlaneSide(uint32_t faceId, const Vec3& p, Tolerance tol) const
     return s;
 }
 
-float Body::surfaceArea() const
-{
-    const Mesh mesh = toMesh(3);
-    const auto& pos = mesh.attributes().positions();
-    const auto& topo = mesh.topology();
-    double area = 0.0;
-    for (size_t t = 0; t < topo.faceCount(); ++t) {
-        const auto& id = topo.face(t).indices;
-        if (id.size() != 3) continue;
-        const Vec3 a = pos[id[0]], b = pos[id[1]], c = pos[id[2]];
-        area += 0.5 * static_cast<double>(length(cross(sub(b, a), sub(c, a))));
-    }
-    return static_cast<float>(area);
-}
-
 namespace {
 
 // 12-point Gauss-Legendre on [-1,1]. The integrands over an analytic patch are smooth
@@ -1639,7 +1624,160 @@ bool analyticInverse(const Surface& s, const Vec3& p, double& u, double& v, bool
     }
 }
 
+// Integrate over a curved analytic face's image in PARAMETER space, calling `sample` at
+// each quadrature point with the surface point, the (reversed-as-needed) area-weighted
+// normal du x dv, and the quadrature weight. Returns whether the face was integrated
+// exactly; a face whose surface does not reproduce its vertices, or a NURBS/plane face,
+// returns false so the caller can fall back to tessellation.
+//
+// The polygon is the face's vertices mapped to (u,v), with a pole/apex vertex expanded
+// into the two edges meeting there (its swept parameter is meaningless but the Jacobian
+// vanishes at the pole, so the value does not matter). The periodic parameter is unwrapped
+// by walking the loop so a wedge crossing the +/-pi seam is contiguous. Each parameter-
+// space triangle is integrated by mapping the unit square onto it (Duffy).
+template <class Sample>
+bool integrateFaceParametric(const Surface& surf, const std::vector<Vec3>& pts, bool reversed,
+                             Sample&& sample)
+{
+    if (surf.kind != SurfaceKind::Cylinder && surf.kind != SurfaceKind::Cone
+        && surf.kind != SurfaceKind::Sphere) {
+        return false;
+    }
+    const int n = static_cast<int>(pts.size());
+    if (n < 3) return false;
+
+    std::vector<double> U(n), V(n);
+    std::vector<char>   isPole(n, 0);
+    const double kPi = 3.141592653589793, kTwoPi = 6.283185307179586;
+
+    for (int k = 0; k < n; ++k) {
+        double uu = 0, vv = 0;
+        bool   deg = false;
+        if (!analyticInverse(surf, pts[k], uu, vv, deg)) return false;
+        if (!deg) {
+            Patch probe;
+            if (!analyticPatch(surf, uu, vv, probe)) return false;
+            const double ex = probe.p.x - pts[k].x, ey = probe.p.y - pts[k].y, ez = probe.p.z - pts[k].z;
+            const double scale = std::max(1.0, std::abs(static_cast<double>(surf.radius)));
+            if (std::sqrt(ex * ex + ey * ey + ez * ez) > 1e-4 * scale) return false;
+        }
+        U[k] = uu;
+        V[k] = vv;
+        isPole[k] = deg ? 1 : 0;
+    }
+
+    // Unwrap the periodic parameter by walking the loop.
+    const bool vPeriodic = surf.kind == SurfaceKind::Sphere;
+    int firstNP = -1;
+    for (int k = 0; k < n; ++k) if (!isPole[k]) { firstNP = k; break; }
+    if (firstNP < 0) return false;
+    {
+        double prev = vPeriodic ? V[firstNP] : U[firstNP];
+        for (int step = 1; step < n; ++step) {
+            const int k = (firstNP + step) % n;
+            if (isPole[k]) continue;
+            double& a = vPeriodic ? V[k] : U[k];
+            while (a - prev >  kPi) a -= kTwoPi;
+            while (a - prev <= -kPi) a += kTwoPi;
+            prev = a;
+        }
+    }
+
+    // Build the parameter-space polygon, expanding a pole/apex vertex into two edge points.
+    std::vector<double> PU, PV;
+    PU.reserve(n + 2);
+    PV.reserve(n + 2);
+    const bool sweptIsV = surf.kind != SurfaceKind::Cone;  // cone apex fixes v
+    for (int k = 0; k < n; ++k) {
+        if (!isPole[k]) { PU.push_back(U[k]); PV.push_back(V[k]); continue; }
+        const int prev = (k + n - 1) % n, next = (k + 1) % n;
+        if (sweptIsV) {
+            PU.push_back(U[k]); PV.push_back(V[prev]);
+            PU.push_back(U[k]); PV.push_back(V[next]);
+        } else {
+            PU.push_back(U[prev]); PV.push_back(V[k]);
+            PU.push_back(U[next]); PV.push_back(V[k]);
+        }
+    }
+
+    const int m = static_cast<int>(PU.size());
+    for (int k = 1; k + 1 < m; ++k) {
+        const double q0u = PU[0], q0v = PV[0];
+        const double q1u = PU[k], q1v = PV[k];
+        const double q2u = PU[k + 1], q2v = PV[k + 1];
+        const double twoA = std::abs((q1u - q0u) * (q2v - q0v) - (q2u - q0u) * (q1v - q0v));
+        if (twoA < 1e-14) continue;
+        for (int i = 0; i < kGaussN; ++i) {
+            for (int j = 0; j < kGaussN; ++j) {
+                const double a = 0.5 * (kGaussX[i] + 1.0);
+                const double b = 0.5 * (kGaussX[j] + 1.0);
+                const double l0 = 1.0 - a, l1 = a * (1.0 - b), l2 = a * b;
+                const double u = l0 * q0u + l1 * q1u + l2 * q2u;
+                const double v = l0 * q0v + l1 * q1v + l2 * q2v;
+                Patch pt;
+                if (!analyticPatch(surf, u, v, pt)) return false;
+                Dvec nrm{pt.du.y * pt.dv.z - pt.du.z * pt.dv.y,
+                         pt.du.z * pt.dv.x - pt.du.x * pt.dv.z,
+                         pt.du.x * pt.dv.y - pt.du.y * pt.dv.x};
+                if (reversed) nrm = {-nrm.x, -nrm.y, -nrm.z};
+                // 0.25 maps [-1,1]^2 -> [0,1]^2; twoA*a is the parameter-triangle Jacobian.
+                const double w = 0.25 * kGaussW[i] * kGaussW[j] * twoA * a;
+                sample(pt.p, nrm, w);
+            }
+        }
+    }
+    return true;
+}
+
 }  // namespace
+
+float Body::surfaceArea() const
+{
+    // Surface area is the sum of face areas with no closure constraint, so unlike volume
+    // it needs no all-or-nothing guard: each curved analytic face is integrated exactly
+    // over its parameter domain (area = integral of |dp/du x dp/dv| du dv), independently,
+    // and any face that cannot be — planar, NURBS, or one whose surface does not fit it —
+    // contributes its exact flat-triangle area instead. Tessellating a flat polygon is
+    // exact, so the only faces that gain from the analytic path are the curved ones, which
+    // is exactly where the chord error was: a tessellated sphere was 6.8% high.
+    double area = 0.0;
+
+    for (uint32_t fi = 0; fi < static_cast<uint32_t>(m_faces.size()); ++fi) {
+        const Face& face = m_faces[fi];
+        if (!face.alive || face.surface == kInvalid || face.surface >= m_surfaces.size()) continue;
+        const Surface& surf = m_surfaces[face.surface];
+
+        bool exact = false;
+        if (face.innerLoops.empty()) {
+            std::vector<Vec3> pts;
+            for (const uint32_t vid : faceVertices(fi))
+                if (vid < m_verts.size()) pts.push_back(m_verts[vid].point);
+
+            double acc = 0.0;
+            // |du x dv| is the area element; winding does not affect its magnitude.
+            const bool ok = integrateFaceParametric(
+                surf, pts, false, [&](const Dvec&, const Dvec& nrm, double w) {
+                    acc += w * std::sqrt(nrm.x * nrm.x + nrm.y * nrm.y + nrm.z * nrm.z);
+                });
+            if (ok) { area += acc; exact = true; }
+        }
+        if (exact) continue;
+
+        // Fall back: this face's flat-triangle area, which is exact for a planar face.
+        const std::vector<uint32_t> vids = faceVertices(fi);
+        for (uint32_t k = 1; k + 1 < static_cast<uint32_t>(vids.size()); ++k) {
+            if (vids[0] >= m_verts.size() || vids[k] >= m_verts.size()
+                || vids[k + 1] >= m_verts.size()) continue;
+            const Vec3 a = m_verts[vids[0]].point;
+            const Vec3 b = m_verts[vids[k]].point;
+            const Vec3 c = m_verts[vids[k + 1]].point;
+            area += 0.5 * static_cast<double>(length(cross(sub(b, a), sub(c, a))));
+        }
+    }
+
+    return static_cast<float>(area);
+}
+
 
 nexus::geometry::MassProperties Body::massProperties(float density) const
 {
@@ -1683,147 +1821,37 @@ nexus::geometry::MassProperties Body::massProperties(float density) const
         const Surface& surf = m_surfaces[face.surface];
 
         bool exact = false;
-        // Cylinder, Cone and Sphere are integrated exactly (verified to float precision,
-        // and independent of segment count). The patch and inverse follow THIS kernel's
-        // sphere convention — u latitude with the poles at u = +/-pi/2 where the longitude
-        // v collapses — which an earlier attempt had inverted; getting it right is what
-        // took the sphere from a volume that grew with subdivision to float precision.
-        if (face.innerLoops.empty()
-            && (surf.kind == SurfaceKind::Cylinder || surf.kind == SurfaceKind::Cone
-                || surf.kind == SurfaceKind::Sphere)) {
-            const std::vector<uint32_t> vids = faceVertices(fi);
-            if (vids.size() >= 3) {
-                // Integrate this face over its image in PARAMETER space, not over a
-                // bounding rectangle. A bounding box works only when the face is already a
-                // grid-aligned rectangle; a triangle's box over-covers, so adjacent
-                // triangles of a tessellated band double-count the region between them
-                // (measured: a sphere came out 1.5x its volume). Mapping the face to a
-                // (u,v) polygon and integrating that exactly is correct for any tessellation.
-                const int n = static_cast<int>(vids.size());
-                std::vector<double> U(n), V(n);
-                std::vector<char>   isPole(n, 0);
-                bool   fits = true;
-                double refV = 0;
-                bool   haveRef = false;
-                const double kPi = 3.141592653589793, kTwoPi = 6.283185307179586;
+        // Curved analytic faces (Cylinder, Cone, Sphere) are integrated exactly over their
+        // parameter domain; see integrateFaceParametric. Planar and NURBS faces return
+        // false and go to the tessellated residual below.
+        if (face.innerLoops.empty()) {
+            std::vector<Vec3> pts;
+            for (const uint32_t vid : faceVertices(fi))
+                if (vid < m_verts.size()) pts.push_back(m_verts[vid].point);
 
-                for (int k = 0; k < n && fits; ++k) {
-                    if (vids[k] >= m_verts.size()) { fits = false; break; }
-                    const Vec3 p = m_verts[vids[k]].point;
-                    double uu = 0, vv = 0;
-                    bool   deg = false;
-                    if (!analyticInverse(surf, p, uu, vv, deg)) { fits = false; break; }
-
-                    // Confirm the surface actually reproduces this vertex (a degenerate
-                    // point — cone apex, sphere pole — is on the surface by construction,
-                    // only its swept parameter is meaningless).
-                    if (!deg) {
-                        Patch probe;
-                        if (!analyticPatch(surf, uu, vv, probe)) { fits = false; break; }
-                        const double ex = probe.p.x - p.x, ey = probe.p.y - p.y, ez = probe.p.z - p.z;
-                        const double scale = std::max(1.0, std::abs(static_cast<double>(surf.radius)));
-                        if (std::sqrt(ex * ex + ey * ey + ez * ez) > 1e-4 * scale) { fits = false; break; }
-                    }
-                    U[k] = uu;
-                    V[k] = vv;
-                    isPole[k] = deg ? 1 : 0;
-                    if (!deg && !haveRef) { refV = surf.kind == SurfaceKind::Sphere ? vv : uu; haveRef = true; }
-                }
-
-                if (fits && haveRef) {
-                    (void)refV;
-                    // Unwrap the PERIODIC parameter by WALKING the loop: each vertex is
-                    // brought within +/-pi of the PREVIOUS one, so a wedge crossing the seam
-                    // is described contiguously no matter where the seam falls. u is
-                    // periodic for cylinder and cone, v for the sphere.
-                    const bool vPeriodic = surf.kind == SurfaceKind::Sphere;
-                    int firstNP = -1;
-                    for (int k = 0; k < n; ++k) if (!isPole[k]) { firstNP = k; break; }
-                    if (firstNP < 0) { fits = false; }
-                    else {
-                        double prev = vPeriodic ? V[firstNP] : U[firstNP];
-                        for (int step = 1; step < n; ++step) {
-                            const int k = (firstNP + step) % n;
-                            if (isPole[k]) continue;
-                            double& a = vPeriodic ? V[k] : U[k];
-                            while (a - prev >  kPi) a -= kTwoPi;
-                            while (a - prev <= -kPi) a += kTwoPi;
-                            prev = a;
-                        }
-                    }
-
-                    // Build the parameter-space polygon. A degenerate (pole/apex) vertex is
-                    // EXPANDED into two points — one at each loop-neighbour's swept value —
-                    // because the flat fan triangle's true parameter image is a rectangle
-                    // whose two edges meet at the collapsed point. Its swept coordinate is
-                    // meaningless but the surface Jacobian vanishes there, so the value
-                    // taken does not affect the integral; the expansion just gives the
-                    // polygon the right shape.
-                    std::vector<double> PU, PV;
-                    PU.reserve(n + 2);
-                    PV.reserve(n + 2);
-                    const bool sweptIsV = surf.kind != SurfaceKind::Cone;  // cone apex fixes v
-                    for (int k = 0; k < n; ++k) {
-                        if (!isPole[k]) { PU.push_back(U[k]); PV.push_back(V[k]); continue; }
-                        const int prev = (k + n - 1) % n, next = (k + 1) % n;
-                        if (sweptIsV) {
-                            PU.push_back(U[k]); PV.push_back(V[prev]);
-                            PU.push_back(U[k]); PV.push_back(V[next]);
-                        } else {
-                            PU.push_back(U[prev]); PV.push_back(V[k]);
-                            PU.push_back(U[next]); PV.push_back(V[k]);
-                        }
-                    }
-
-                    // Fan-triangulate the polygon and integrate each triangle by mapping the
-                    // unit square onto it (Duffy: barycentric (1-a, a(1-b), ab), Jacobian a),
-                    // with the analytic surface's own point and area-normal at each sample.
-                    std::array<double, 10> acc{0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
-                    const int m = static_cast<int>(PU.size());
-                    for (int k = 1; k + 1 < m && fits; ++k) {
-                        const double q0u = PU[0], q0v = PV[0];
-                        const double q1u = PU[k], q1v = PV[k];
-                        const double q2u = PU[k + 1], q2v = PV[k + 1];
-                        const double twoA = std::abs((q1u - q0u) * (q2v - q0v)
-                                                   - (q2u - q0u) * (q1v - q0v));
-                        if (twoA < 1e-14) continue;
-                        for (int i = 0; i < kGaussN && fits; ++i) {
-                            for (int j = 0; j < kGaussN; ++j) {
-                                const double a = 0.5 * (kGaussX[i] + 1.0);
-                                const double b = 0.5 * (kGaussX[j] + 1.0);
-                                const double l0 = 1.0 - a, l1 = a * (1.0 - b), l2 = a * b;
-                                const double u = l0 * q0u + l1 * q1u + l2 * q2u;
-                                const double v = l0 * q0v + l1 * q1v + l2 * q2v;
-                                Patch pt;
-                                if (!analyticPatch(surf, u, v, pt)) { fits = false; break; }
-                                Dvec nrm{pt.du.y * pt.dv.z - pt.du.z * pt.dv.y,
-                                         pt.du.z * pt.dv.x - pt.du.x * pt.dv.z,
-                                         pt.du.x * pt.dv.y - pt.du.y * pt.dv.x};
-                                if (face.reversed) nrm = {-nrm.x, -nrm.y, -nrm.z};
-                                // 0.25 maps [-1,1]^2 -> [0,1]^2; twoA*a is the triangle Jacobian.
-                                const double w = 0.25 * kGaussW[i] * kGaussW[j] * twoA * a;
-                                const double x = pt.p.x, y = pt.p.y, z = pt.p.z;
-                                acc[0] += w * x * nrm.x;
-                                acc[1] += w * 0.5 * x * x * nrm.x;
-                                acc[2] += w * 0.5 * y * y * nrm.y;
-                                acc[3] += w * 0.5 * z * z * nrm.z;
-                                acc[4] += w * (1.0 / 3.0) * x * x * x * nrm.x;
-                                acc[5] += w * (1.0 / 3.0) * y * y * y * nrm.y;
-                                acc[6] += w * (1.0 / 3.0) * z * z * z * nrm.z;
-                                acc[7] += w * 0.5 * x * x * y * nrm.x;
-                                acc[8] += w * 0.5 * y * y * z * nrm.y;
-                                acc[9] += w * 0.5 * z * z * x * nrm.z;
-                            }
-                        }
-                    }
-                    if (fits) {
-                        for (int k = 0; k < 10; ++k) intg[k] += acc[k];
-                        exact = true;
-                        anyExact = true;
-                    }
-                }
+            std::array<double, 10> acc{0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+            const bool ok = integrateFaceParametric(
+                surf, pts, face.reversed, [&](const Dvec& q, const Dvec& nrm, double w) {
+                    const double x = q.x, y = q.y, z = q.z;
+                    acc[0] += w * x * nrm.x;
+                    acc[1] += w * 0.5 * x * x * nrm.x;
+                    acc[2] += w * 0.5 * y * y * nrm.y;
+                    acc[3] += w * 0.5 * z * z * nrm.z;
+                    acc[4] += w * (1.0 / 3.0) * x * x * x * nrm.x;
+                    acc[5] += w * (1.0 / 3.0) * y * y * y * nrm.y;
+                    acc[6] += w * (1.0 / 3.0) * z * z * z * nrm.z;
+                    acc[7] += w * 0.5 * x * x * y * nrm.x;
+                    acc[8] += w * 0.5 * y * y * z * nrm.y;
+                    acc[9] += w * 0.5 * z * z * x * nrm.z;
+                });
+            if (ok) {
+                for (int k = 0; k < 10; ++k) intg[k] += acc[k];
+                exact = true;
+                anyExact = true;
+            } else if (surf.kind == SurfaceKind::Cylinder || surf.kind == SurfaceKind::Cone
+                       || surf.kind == SurfaceKind::Sphere) {
+                curvedFail = true;  // a curved face that could not be integrated
             }
-            if (!exact) curvedFail = true;  // a curved face that could not be integrated
         }
 
         if (exact) continue;
