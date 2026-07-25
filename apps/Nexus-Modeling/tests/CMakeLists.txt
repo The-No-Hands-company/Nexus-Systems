@@ -206,6 +206,7 @@ add_executable(nexus_kernel_tests
     kernel/test_ProfileRevolve.cpp
     kernel/test_TopologyGolden.cpp
     kernel/test_TransformOrientation.cpp
+    kernel/test_VideoEditor.cpp
     kernel/test_TrimBoolean.cpp
     kernel/test_Types.cpp
     kernel/test_TypesExtended.cpp

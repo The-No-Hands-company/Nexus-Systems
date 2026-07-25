@@ -50,16 +50,24 @@ void VideoEditor::moveClip(uint32_t cid, float timelineStart) {
 }
 
 void VideoEditor::splitClip(uint32_t cid, float splitTime) {
-    for (auto& c : g_clips) {
-        if (c.id == cid && splitTime > c.timelineStart && splitTime < c.timelineEnd) {
-            VideoClip newClip = c;
-            newClip.id = g_cid++;
-            newClip.timelineStart = splitTime;
-            newClip.sourceStart = c.sourceStart + (splitTime - c.timelineStart);
-            c.timelineEnd = splitTime;
-            c.sourceEnd = newClip.sourceStart;
-            g_clips.push_back(newClip);
-        }
+    // Iterate by index over a FIXED bound, not a range-for: g_clips.push_back below can
+    // reallocate the vector, which invalidates a range-for's cached begin/end iterators and
+    // the reference `c` — undefined behaviour. Indexing re-fetches each element and the bound
+    // n is captured before any insertion, so the appended clip is never re-scanned (its id is
+    // new anyway). We copy the split-off fields out before the push_back, since the reference
+    // into g_clips is dangling the moment it reallocates.
+    const size_t n = g_clips.size();
+    for (size_t i = 0; i < n; ++i) {
+        VideoClip& c = g_clips[i];
+        if (c.id != cid || splitTime <= c.timelineStart || splitTime >= c.timelineEnd) continue;
+
+        VideoClip newClip = c;
+        newClip.id = g_cid++;
+        newClip.timelineStart = splitTime;
+        newClip.sourceStart = c.sourceStart + (splitTime - c.timelineStart);
+        c.timelineEnd = splitTime;
+        c.sourceEnd = newClip.sourceStart;
+        g_clips.push_back(newClip);  // may reallocate; c is not touched afterwards
     }
 }
 
@@ -99,6 +107,9 @@ float VideoEditor::getTransitionAlpha(uint32_t fromClip, uint32_t toClip, float 
             for (auto& c : g_clips) {
                 if (c.id == toClip) { transStart = c.timelineStart; break; }
             }
+            // An instantaneous (zero- or negative-duration) transition has no ramp: it is
+            // fully "to" from its start onward. Guard before dividing.
+            if (t.duration <= 0.0f) return time >= transStart ? 1.0f : 0.0f;
             float transEnd = transStart + t.duration;
             if (time >= transStart && time <= transEnd) {
                 return (time - transStart) / t.duration;
@@ -111,21 +122,31 @@ float VideoEditor::getTransitionAlpha(uint32_t fromClip, uint32_t toClip, float 
 }
 
 void VideoEditor::rippleDelete(uint32_t cid) {
-    float deletedDuration = 0;
+    float deletedDuration = 0.f;
+    float deletedStart = 0.f;
     uint32_t deletedTrack = 0;
+    bool found = false;
 
     for (auto it = g_clips.begin(); it != g_clips.end(); ) {
         if (it->id == cid) {
             deletedDuration = it->timelineEnd - it->timelineStart;
+            deletedStart = it->timelineStart;
             deletedTrack = it->trackId;
+            found = true;
             it = g_clips.erase(it);
         } else {
             ++it;
         }
     }
+    if (!found) return;
 
+    // Close the gap by pulling only the clips that came AFTER the deleted one on its track
+    // toward it. The previous version shifted every clip on the track with timelineStart > 0,
+    // including clips that started BEFORE the deleted clip — dragging them left (often to
+    // negative time) and corrupting the timeline. Ripple-delete removes a span and closes the
+    // hole; clips ahead of the hole must stay put.
     for (auto& c : g_clips) {
-        if (c.trackId == deletedTrack && c.timelineStart > 0) {
+        if (c.trackId == deletedTrack && c.timelineStart >= deletedStart) {
             c.timelineStart -= deletedDuration;
             c.timelineEnd -= deletedDuration;
         }
