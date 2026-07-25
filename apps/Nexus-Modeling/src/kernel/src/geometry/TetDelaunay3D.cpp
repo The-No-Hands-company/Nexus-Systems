@@ -1,11 +1,10 @@
 #include <nexus/geometry/TetDelaunay3D.h>
+#include <nexus/geometry/RobustPredicates.h>
 
 #include <algorithm>
 #include <array>
-#include <cmath>
 #include <limits>
 #include <unordered_map>
-#include <unordered_set>
 
 namespace nexus::geometry {
 
@@ -15,8 +14,6 @@ namespace {
 
 struct Tet {
     std::array<uint32_t, 4> v;
-    Vec3 center;
-    float radiusSq = 0.f;
 
     bool isValid() const noexcept {
         return v[0] != v[1] && v[0] != v[2] && v[0] != v[3]
@@ -25,79 +22,25 @@ struct Tet {
     }
 };
 
-// Solve a 3x3 linear system Ax = b using Cramer's rule.
-// Returns false if singular.
-bool solve3x3(const float A[3][3], const float b[3], float x[3]) noexcept
-{
-    float det = A[0][0] * (A[1][1]*A[2][2] - A[1][2]*A[2][1])
-              - A[0][1] * (A[1][0]*A[2][2] - A[1][2]*A[2][0])
-              + A[0][2] * (A[1][0]*A[2][1] - A[1][1]*A[2][0]);
-    if (std::fabs(det) < 1e-20f) return false;
-    float invDet = 1.f / det;
-
-    float A0[3][3] = {{b[0], A[0][1], A[0][2]}, {b[1], A[1][1], A[1][2]}, {b[2], A[2][1], A[2][2]}};
-    float det0 = A0[0][0]*(A0[1][1]*A0[2][2]-A0[1][2]*A0[2][1])
-               - A0[0][1]*(A0[1][0]*A0[2][2]-A0[1][2]*A0[2][0])
-               + A0[0][2]*(A0[1][0]*A0[2][1]-A0[1][1]*A0[2][0]);
-    x[0] = det0 * invDet;
-
-    float A1[3][3] = {{A[0][0], b[0], A[0][2]}, {A[1][0], b[1], A[1][2]}, {A[2][0], b[2], A[2][2]}};
-    float det1 = A1[0][0]*(A1[1][1]*A1[2][2]-A1[1][2]*A1[2][1])
-               - A1[0][1]*(A1[1][0]*A1[2][2]-A1[1][2]*A1[2][0])
-               + A1[0][2]*(A1[1][0]*A1[2][1]-A1[1][1]*A1[2][0]);
-    x[1] = det1 * invDet;
-
-    float A2[3][3] = {{A[0][0], A[0][1], b[0]}, {A[1][0], A[1][1], b[1]}, {A[2][0], A[2][1], b[2]}};
-    float det2 = A2[0][0]*(A2[1][1]*A2[2][2]-A2[1][2]*A2[2][1])
-               - A2[0][1]*(A2[1][0]*A2[2][2]-A2[1][2]*A2[2][0])
-               + A2[0][2]*(A2[1][0]*A2[2][1]-A2[1][1]*A2[2][0]);
-    x[2] = det2 * invDet;
-    return true;
+// A tetrahedron is non-degenerate iff its four vertices are not coplanar.
+bool nonDegenerate(const std::array<uint32_t, 4>& v, const std::vector<Vec3>& pts) noexcept {
+    return RobustPredicates::orient3D(pts[v[0]], pts[v[1]], pts[v[2]], pts[v[3]]) != 0.0;
 }
 
-// Compute circumsphere of tetrahedron (a,b,c,d).
-// Returns center and squared radius. Fills tet.center and tet.radiusSq.
-bool computeCircumsphere(Tet& tet, const std::vector<Vec3>& pts) noexcept
-{
-    const Vec3& a = pts[tet.v[0]];
-    const Vec3& b = pts[tet.v[1]];
-    const Vec3& c = pts[tet.v[2]];
-    const Vec3& d = pts[tet.v[3]];
-
-    // Circumcenter O satisfies |O - a|^2 = |O - b|^2 = |O - c|^2 = |O - d|^2.
-    // Expanding: 2*(b-a)·O = |b|^2 - |a|^2, etc.
-    // Form the 3x3 system: 2*[b-a; c-a; d-a] * O = [|b|^2-|a|^2; |c|^2-|a|^2; |d|^2-|a|^2]
-    float A[3][3] = {
-        {2.f*(b.x - a.x), 2.f*(b.y - a.y), 2.f*(b.z - a.z)},
-        {2.f*(c.x - a.x), 2.f*(c.y - a.y), 2.f*(c.z - a.z)},
-        {2.f*(d.x - a.x), 2.f*(d.y - a.y), 2.f*(d.z - a.z)}
-    };
-    float a2 = a.x*a.x + a.y*a.y + a.z*a.z;
-    float B[3] = {
-        b.x*b.x + b.y*b.y + b.z*b.z - a2,
-        c.x*c.x + c.y*c.y + c.z*c.z - a2,
-        d.x*d.x + d.y*d.y + d.z*d.z - a2
-    };
-
-    float O[3];
-    if (!solve3x3(A, B, O)) return false;
-
-    tet.center = {O[0], O[1], O[2]};
-    float dx = tet.center.x - a.x;
-    float dy = tet.center.y - a.y;
-    float dz = tet.center.z - a.z;
-    tet.radiusSq = dx*dx + dy*dy + dz*dz;
-    return true;
-}
-
-// Check if point p is inside the circumsphere of tet.
-bool pointInCircumsphere(const Vec3& p, const Tet& tet, float eps) noexcept
-{
-    float dx = p.x - tet.center.x;
-    float dy = p.y - tet.center.y;
-    float dz = p.z - tet.center.z;
-    float distSq = dx*dx + dy*dy + dz*dz;
-    return distSq <= tet.radiusSq + eps;
+// Exact circumsphere-containment: p is strictly inside the circumsphere of tet (a,b,c,d) iff
+// the exact in-sphere determinant and the tet's orientation share a sign. The old test built
+// the circumcenter in float and compared squared distances with an epsilon slop, which is
+// exactly where cospherical / near-cospherical configurations (a cube's corners, dense
+// tessellations) misclassify and leave holes. This routes through the exact predicate.
+bool pointInCircumsphere(const Vec3& p, const std::array<uint32_t, 4>& v,
+                         const std::vector<Vec3>& pts) noexcept {
+    const Vec3& a = pts[v[0]];
+    const Vec3& b = pts[v[1]];
+    const Vec3& c = pts[v[2]];
+    const Vec3& d = pts[v[3]];
+    const double o = RobustPredicates::orient3D(a, b, c, d);
+    if (o == 0.0) return false;  // flat tet has no circumsphere
+    return RobustPredicates::inSphere(a, b, c, d, p) * o > 0.0;
 }
 
 // Hash for sorted triangle (3 vertex indices).
@@ -159,11 +102,13 @@ TetMesh TetDelaunay3D::compute(const std::vector<Vec3>& points,
     const uint32_t sv3 = sv0 + 3;
     const uint32_t nPoints = static_cast<uint32_t>(points.size());
 
+    (void)opts;  // the exact in-sphere predicate needs no epsilon slop
+
     // Start with the super-tetrahedron.
     std::vector<Tet> tets;
     Tet super;
     super.v = std::array<uint32_t, 4>{sv0, sv1, sv2, sv3};
-    if (computeCircumsphere(super, result.vertices)) {
+    if (nonDegenerate(super.v, result.vertices)) {
         tets.push_back(super);
     }
 
@@ -174,7 +119,7 @@ TetMesh TetDelaunay3D::compute(const std::vector<Vec3>& points,
         // Find all tetrahedra whose circumsphere contains p (cavity).
         std::vector<size_t> cavity;
         for (size_t ti = 0; ti < tets.size(); ++ti) {
-            if (pointInCircumsphere(p, tets[ti], opts.epsilon)) {
+            if (pointInCircumsphere(p, tets[ti].v, result.vertices)) {
                 cavity.push_back(ti);
             }
         }
@@ -203,7 +148,7 @@ TetMesh TetDelaunay3D::compute(const std::vector<Vec3>& points,
             if (count != 1) continue;
             Tet newTet;
             newTet.v = {pi, key.v[0], key.v[1], key.v[2]};
-            if (computeCircumsphere(newTet, result.vertices)) {
+            if (nonDegenerate(newTet.v, result.vertices)) {
                 tets.push_back(newTet);
             }
         }

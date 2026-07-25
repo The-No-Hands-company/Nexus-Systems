@@ -222,6 +222,56 @@ double inCircleExact(const Vec2& a, const Vec2& b, const Vec2& c, const Vec2& d)
     return expansionSign(det);
 }
 
+// The 4x4 lift determinant for the in-sphere test, exact. Shewchuk's decomposition: the
+// 2x2 minors of the xy columns (ab..bd), the z-weighted 3x3 cofactors (abc..dab), the
+// squared-distance lifts, then det = (dlift*abc - clift*dab) + (blift*cda - alift*bcd).
+double inSphereExact(const nexus::render::Vec3& a, const nexus::render::Vec3& b,
+                     const nexus::render::Vec3& c, const nexus::render::Vec3& d,
+                     const nexus::render::Vec3& e) {
+    const Expansion aex = fromPair(twoDiff(a.x, e.x));
+    const Expansion aey = fromPair(twoDiff(a.y, e.y));
+    const Expansion aez = fromPair(twoDiff(a.z, e.z));
+    const Expansion bex = fromPair(twoDiff(b.x, e.x));
+    const Expansion bey = fromPair(twoDiff(b.y, e.y));
+    const Expansion bez = fromPair(twoDiff(b.z, e.z));
+    const Expansion cex = fromPair(twoDiff(c.x, e.x));
+    const Expansion cey = fromPair(twoDiff(c.y, e.y));
+    const Expansion cez = fromPair(twoDiff(c.z, e.z));
+    const Expansion dex = fromPair(twoDiff(d.x, e.x));
+    const Expansion dey = fromPair(twoDiff(d.y, e.y));
+    const Expansion dez = fromPair(twoDiff(d.z, e.z));
+
+    const Expansion ab = expansionSub(expansionMul(aex, bey), expansionMul(bex, aey));
+    const Expansion bc = expansionSub(expansionMul(bex, cey), expansionMul(cex, bey));
+    const Expansion cd = expansionSub(expansionMul(cex, dey), expansionMul(dex, cey));
+    const Expansion da = expansionSub(expansionMul(dex, aey), expansionMul(aex, dey));
+    const Expansion ac = expansionSub(expansionMul(aex, cey), expansionMul(cex, aey));
+    const Expansion bd = expansionSub(expansionMul(bex, dey), expansionMul(dex, bey));
+
+    const Expansion abc = expansionSum(expansionSub(expansionMul(aez, bc), expansionMul(bez, ac)),
+                                       expansionMul(cez, ab));
+    const Expansion bcd = expansionSum(expansionSub(expansionMul(bez, cd), expansionMul(cez, bd)),
+                                       expansionMul(dez, bc));
+    const Expansion cda = expansionSum(expansionSum(expansionMul(cez, da), expansionMul(dez, ac)),
+                                       expansionMul(aez, cd));
+    const Expansion dab = expansionSum(expansionSum(expansionMul(dez, ab), expansionMul(aez, bd)),
+                                       expansionMul(bez, da));
+
+    const Expansion alift = expansionSum(expansionSum(expansionMul(aex, aex), expansionMul(aey, aey)),
+                                         expansionMul(aez, aez));
+    const Expansion blift = expansionSum(expansionSum(expansionMul(bex, bex), expansionMul(bey, bey)),
+                                         expansionMul(bez, bez));
+    const Expansion clift = expansionSum(expansionSum(expansionMul(cex, cex), expansionMul(cey, cey)),
+                                         expansionMul(cez, cez));
+    const Expansion dlift = expansionSum(expansionSum(expansionMul(dex, dex), expansionMul(dey, dey)),
+                                         expansionMul(dez, dez));
+
+    const Expansion det = expansionSum(
+        expansionSub(expansionMul(dlift, abc), expansionMul(clift, dab)),
+        expansionSub(expansionMul(blift, cda), expansionMul(alift, bcd)));
+    return expansionSign(det);
+}
+
 }  // anonymous namespace
 
 // --- orient2D ---------------------------------------------------------------
@@ -312,6 +362,21 @@ double RobustPredicates::inCircle(const Vec2& a, const Vec2& b, const Vec2& c, c
     if (det > errBound || -det > errBound) return det;
 
     return inCircleExact(a, b, c, d);
+}
+
+// --- inSphere ---------------------------------------------------------------
+//
+// Sign of the 4x4 lift determinant deciding whether e lies inside/on/outside the sphere
+// through a, b, c, d. Combined with the orientation, e is inside the circumsphere of the tet
+// iff inSphere(a,b,c,d,e) and orient3D(a,b,c,d) share a sign (product > 0); == 0 is exactly
+// cospherical. Evaluated in exact expansion arithmetic on every call — a float-filtered
+// in-sphere test needs Shewchuk's full permanent to stay sound, and a subtly-wrong bound
+// would reintroduce exactly the silent sign errors this predicate exists to prevent. The
+// only caller (3D Delaunay) is not on a hot path.
+double RobustPredicates::inSphere(const nexus::render::Vec3& a, const nexus::render::Vec3& b,
+                                  const nexus::render::Vec3& c, const nexus::render::Vec3& d,
+                                  const nexus::render::Vec3& e) noexcept {
+    return inSphereExact(a, b, c, d, e);
 }
 
 } // namespace nexus::geometry

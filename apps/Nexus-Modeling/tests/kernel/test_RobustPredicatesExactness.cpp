@@ -68,6 +68,36 @@ std::int64_t exactInCircle(const Vec2& a, const Vec2& b, const Vec2& c, const Ve
          + (cdx * cdx + cdy * cdy) * (adx * bdy - ady * bdx);
 }
 
+// Exact 4x4 lift determinant in int64. For coords in [-64, 64] the differences are <= 2^7
+// and the determinant magnitude stays well under 2^63, so int64 is exact.
+std::int64_t exactInSphere(const Vec3& a, const Vec3& b, const Vec3& c, const Vec3& d,
+                           const Vec3& e)
+{
+    const std::int64_t aex = iv(a.x) - iv(e.x), aey = iv(a.y) - iv(e.y), aez = iv(a.z) - iv(e.z);
+    const std::int64_t bex = iv(b.x) - iv(e.x), bey = iv(b.y) - iv(e.y), bez = iv(b.z) - iv(e.z);
+    const std::int64_t cex = iv(c.x) - iv(e.x), cey = iv(c.y) - iv(e.y), cez = iv(c.z) - iv(e.z);
+    const std::int64_t dex = iv(d.x) - iv(e.x), dey = iv(d.y) - iv(e.y), dez = iv(d.z) - iv(e.z);
+
+    const std::int64_t ab = aex * bey - bex * aey;
+    const std::int64_t bc = bex * cey - cex * bey;
+    const std::int64_t cd = cex * dey - dex * cey;
+    const std::int64_t da = dex * aey - aex * dey;
+    const std::int64_t ac = aex * cey - cex * aey;
+    const std::int64_t bd = bex * dey - dex * bey;
+
+    const std::int64_t abc = aez * bc - bez * ac + cez * ab;
+    const std::int64_t bcd = bez * cd - cez * bd + dez * bc;
+    const std::int64_t cda = cez * da + dez * ac + aez * cd;
+    const std::int64_t dab = dez * ab + aez * bd + bez * da;
+
+    const std::int64_t alift = aex * aex + aey * aey + aez * aez;
+    const std::int64_t blift = bex * bex + bey * bey + bez * bez;
+    const std::int64_t clift = cex * cex + cey * cey + cez * cez;
+    const std::int64_t dlift = dex * dex + dey * dey + dez * dez;
+
+    return (dlift * abc - clift * dab) + (blift * cda - alift * bcd);
+}
+
 // Integer lattice points hugging the line y = x/2 — the sliver regime, where the
 // determinant is tiny relative to the coordinates and the fast path must give way.
 Vec2 sliverPoint(std::mt19937& rng, std::int64_t span, std::int64_t wobble)
@@ -188,4 +218,54 @@ TEST(RobustPredicatesExactness, PredicatesAreDeterministic)
         ASSERT_EQ(RobustPredicates::orient2D(a, b, c), RobustPredicates::orient2D(a, b, c));
         ASSERT_EQ(RobustPredicates::inCircle(a, b, c, d), RobustPredicates::inCircle(a, b, c, d));
     }
+}
+
+TEST(RobustPredicatesExactness, InSphereSignMatchesExactIntegerDeterminant)
+{
+    std::mt19937 rng(24680);
+    std::uniform_int_distribution<int> coord(-64, 64);
+    auto pt = [&] { return Vec3{float(coord(rng)), float(coord(rng)), float(coord(rng))}; };
+
+    int checked = 0;
+    for (int i = 0; i < 200000; ++i) {
+        Vec3 a = pt(), b = pt(), c = pt(), d = pt(), e = pt();
+        // Skip flat tetrahedra: the in-sphere sign is only meaningful for a real sphere.
+        if (exactOrient3D(a, b, c, d) == 0) continue;
+        ++checked;
+        const std::int64_t want = exactInSphere(a, b, c, d, e);
+        ASSERT_EQ(sign(RobustPredicates::inSphere(a, b, c, d, e)), sign(want))
+            << "mismatch at iteration " << i;
+    }
+    EXPECT_GT(checked, 1000);
+    // The exactly-cospherical (== 0) case is exercised separately by the known-geometry and
+    // cube-corner tests below; random coordinates are effectively never cospherical.
+}
+
+// The circumsphere of the unit corner tetrahedron is centred at (0.5,0.5,0.5), radius^2 3/4.
+// Combined with orientation, e is inside iff inSphere(a,b,c,d,e) and orient3D(a,b,c,d) share
+// a sign; exactly on the sphere gives zero.
+TEST(RobustPredicatesExactness, InSphereConventionMatchesKnownGeometry)
+{
+    const Vec3 a{0, 0, 0}, b{1, 0, 0}, c{0, 1, 0}, d{0, 0, 1};
+    const double o = RobustPredicates::orient3D(a, b, c, d);
+    ASSERT_NE(o, 0.0);
+
+    // (0.4,0.4,0.4): distance^2 to centre = 0.03 < 0.75 -> strictly inside.
+    EXPECT_GT(RobustPredicates::inSphere(a, b, c, d, {0.4f, 0.4f, 0.4f}) * o, 0.0);
+    // (2,2,2): far outside.
+    EXPECT_LT(RobustPredicates::inSphere(a, b, c, d, {2.f, 2.f, 2.f}) * o, 0.0);
+    // (1,1,1): distance^2 = 0.75 -> exactly on the sphere.
+    EXPECT_EQ(RobustPredicates::inSphere(a, b, c, d, {1.f, 1.f, 1.f}), 0.0);
+    // The four defining points are on the sphere by construction.
+    EXPECT_EQ(RobustPredicates::inSphere(a, b, c, d, a), 0.0);
+}
+
+// The eight unit-cube corners are cospherical, so any four spanning a real tet report the
+// other corners as exactly on the sphere.
+TEST(RobustPredicatesExactness, CubeCornersAreExactlyCospherical)
+{
+    const Vec3 a{0, 0, 0}, b{1, 0, 0}, c{0, 1, 0}, d{0, 0, 1};
+    for (const Vec3& e : {Vec3{1, 1, 0}, Vec3{1, 0, 1}, Vec3{0, 1, 1}, Vec3{1, 1, 1}})
+        EXPECT_EQ(RobustPredicates::inSphere(a, b, c, d, e), 0.0)
+            << "corner (" << e.x << "," << e.y << "," << e.z << ") should be cospherical";
 }
