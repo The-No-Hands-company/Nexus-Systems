@@ -533,3 +533,37 @@ TEST(TransformToMatrix, TranslationIsAppliedAfterRotationAndScale) {
     EXPECT_NEAR(o.y, -3.f, 1e-5f);
     EXPECT_NEAR(o.z, 2.f, 1e-5f);
 }
+
+TEST(TransformToMatrix, NonUnitQuaternionIsNormalizedToAPureRotation) {
+    // toMatrix assumes a unit quaternion. A non-unit one (here (0,0,1,1), which is a
+    // 90 deg-about-Z rotation scaled by sqrt(2)) must be normalized to a pure rotation,
+    // not baked into the matrix as a spurious scale/shear. Scale is left at 1, so the
+    // result must be an orthonormal rotation: local +X -> world +Y at unit length.
+    Transform t;
+    t.rotation = {0.f, 0.f, 1.f, 1.f};  // deliberately non-unit
+
+    const Mat4 m = t.toMatrix();
+
+    const Vec4 x = m * Vec4{1.f, 0.f, 0.f, 1.f};
+    EXPECT_NEAR(x.x, 0.f, 1e-5f);
+    EXPECT_NEAR(x.y, 1.f, 1e-5f);
+    EXPECT_NEAR(x.z, 0.f, 1e-5f);
+
+    // Every upper-3x3 column is unit length (a genuine rotation, no residual scale).
+    for (int c = 0; c < 3; ++c) {
+        const float len = std::sqrt(m.m[0][c]*m.m[0][c] + m.m[1][c]*m.m[1][c] + m.m[2][c]*m.m[2][c]);
+        EXPECT_NEAR(len, 1.f, 1e-5f) << "column " << c << " not unit length";
+    }
+}
+
+TEST(TransformToMatrix, DegenerateQuaternionFallsBackToIdentityRotation) {
+    Transform t;
+    t.rotation = {0.f, 0.f, 0.f, 0.f};  // zero quaternion -> identity rotation
+    t.scale    = {1.f, 1.f, 1.f};
+
+    const Mat4 m = t.toMatrix();
+    const Vec4 x = m * Vec4{1.f, 0.f, 0.f, 1.f};
+    EXPECT_NEAR(x.x, 1.f, 1e-5f);
+    EXPECT_NEAR(x.y, 0.f, 1e-5f);
+    EXPECT_NEAR(x.z, 0.f, 1e-5f);
+}

@@ -35,7 +35,20 @@ namespace {
         && isFiniteFloat(in.rotation.z)
         && isFiniteFloat(in.rotation.w);
     if (rotationFinite) {
-        out.rotation = in.rotation;
+        // toMatrix uses the unit-quaternion rotation form (the hard-coded factor 2 in
+        // 1 - 2(yy+zz) assumes |q| = 1), so a non-unit quaternion — from nlerp drift, a
+        // caller that never normalized, etc. — would produce a matrix that is not even a
+        // rotation. Normalize here, the single validity gate before toMatrix; fall back to
+        // identity for a degenerate (near-zero) quaternion.
+        const float n2 = in.rotation.x * in.rotation.x + in.rotation.y * in.rotation.y
+                       + in.rotation.z * in.rotation.z + in.rotation.w * in.rotation.w;
+        if (n2 > 1e-12f) {
+            const float invN = 1.f / std::sqrt(n2);
+            out.rotation = {in.rotation.x * invN, in.rotation.y * invN,
+                            in.rotation.z * invN, in.rotation.w * invN};
+        } else {
+            out.rotation = {0.f, 0.f, 0.f, 1.f};
+        }
     } else {
         out.rotation = {0.f, 0.f, 0.f, 1.f};
     }
