@@ -194,6 +194,7 @@ add_executable(nexus_kernel_tests
     kernel/test_SurfaceCurvature.cpp
     kernel/test_SurfaceCurveProjection.cpp
     kernel/test_SurfaceIntegration.cpp
+    kernel/test_EdgeSlideVertexMerge.cpp
     kernel/test_SectionProfileTools.cpp
     kernel/test_TetDelaunay3D.cpp
     kernel/test_SurfaceOffset.cpp

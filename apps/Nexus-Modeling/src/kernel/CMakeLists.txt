@@ -46,6 +46,7 @@ add_library(nexus_gfx_core STATIC
     src/geometry/Delaunay2D.cpp
     src/geometry/DirectModeling.cpp
     src/geometry/EdgeBridge.cpp
+    src/geometry/EdgeSlide.cpp
     src/geometry/EvaluationGraph.cpp
     src/geometry/ExtrudeOperation.cpp
     src/geometry/FaceFillet.cpp
@@ -98,6 +99,7 @@ add_library(nexus_gfx_core STATIC
     src/geometry/MeshTransform.cpp
     src/geometry/ModifierStack.cpp
     src/geometry/MeshUVUnwrap.cpp
+    src/geometry/MeshVertexMerge.cpp
     src/geometry/MeshVertexWeld.cpp
     src/geometry/MeshVoxelize.cpp
     src/geometry/MeshWindingNumber.cpp
