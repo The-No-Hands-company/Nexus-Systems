@@ -18,8 +18,11 @@ std::vector<Vec3> SectionTool::computeSection(const Mesh& m, const Vec3& planePo
     if (nl < 1e-10f) return section;
     nx /= nl; ny /= nl; nz /= nl;
 
-    struct EdgeHit { Vec3 point; uint32_t edgeA, edgeB; };
-    std::vector<EdgeHit> hits;
+    // Each cut edge is shared by two faces, so a per-face-edge scan finds every crossing
+    // twice. Key each crossing by its undirected edge (min,max vertex pair) and keep it
+    // once — otherwise the section carries every point doubled, producing zero-length
+    // segments for any perimeter/area consumer downstream.
+    std::unordered_map<uint64_t, Vec3> hitsByEdge;
 
     for (size_t fi = 0; fi < topology.faceCount(); ++fi) {
         const auto& face = topology.face(fi);
@@ -42,13 +45,16 @@ std::vector<Vec3> SectionTool::computeSection(const Mesh& m, const Vec3& planePo
                     positions[a].y + (positions[b].y - positions[a].y) * t,
                     positions[a].z + (positions[b].z - positions[a].z) * t,
                 };
-                hits.push_back({pt, a, b});
+                const uint64_t key = (static_cast<uint64_t>(std::min(a, b)) << 32) | std::max(a, b);
+                hitsByEdge.emplace(key, pt);  // first crossing per edge wins; the twin is identical
             }
         }
     }
 
-    for (const auto& h : hits) {
-        section.push_back(h.point);
+    section.reserve(hitsByEdge.size());
+    for (const auto& [key, pt] : hitsByEdge) {
+        (void)key;
+        section.push_back(pt);
     }
 
     if (section.size() > 1) {

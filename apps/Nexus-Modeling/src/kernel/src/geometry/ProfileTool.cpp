@@ -18,8 +18,10 @@ std::vector<Vec3> ProfileTool::extractProfile(const Mesh& m, const Vec3& planePo
     if (nl < 1e-10f) return profile;
     nx /= nl; ny /= nl; nz /= nl;
 
-    struct Edge { uint32_t a, b; };
-    std::vector<Edge> intersections;
+    // Each cut edge is shared by two faces, so the per-face-edge scan finds every crossing
+    // twice. Key by the undirected edge and keep one point per edge — otherwise the profile
+    // carries every point doubled.
+    std::unordered_map<uint64_t, Vec3> hitsByEdge;
 
     for (size_t fi = 0; fi < topology.faceCount(); ++fi) {
         const auto& face = topology.face(fi);
@@ -42,10 +44,16 @@ std::vector<Vec3> ProfileTool::extractProfile(const Mesh& m, const Vec3& planePo
                     positions[a].y + (positions[b].y - positions[a].y) * t,
                     positions[a].z + (positions[b].z - positions[a].z) * t,
                 };
-                profile.push_back(pt);
-                intersections.push_back({a, b});
+                const uint64_t key = (static_cast<uint64_t>(std::min(a, b)) << 32) | std::max(a, b);
+                hitsByEdge.emplace(key, pt);
             }
         }
+    }
+
+    profile.reserve(hitsByEdge.size());
+    for (const auto& [key, pt] : hitsByEdge) {
+        (void)key;
+        profile.push_back(pt);
     }
 
     if (profile.size() < 2) return profile;
