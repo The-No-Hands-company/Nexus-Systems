@@ -42,6 +42,7 @@ add_executable(nexus_kernel_tests
     kernel/test_EvalGraph.cpp
     kernel/test_ExtrudeOperation.cpp
     kernel/test_FeatureLineExtractor.cpp
+    kernel/test_FeatureRecognition.cpp
     kernel/test_GPUAllocator.cpp
     kernel/test_Integrity.cpp
     kernel/test_InverseKinematics.cpp
