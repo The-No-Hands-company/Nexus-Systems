@@ -348,7 +348,17 @@ Mesh robustMeshBoolean(const Mesh& a, const Mesh& b, BooleanOperationType op) no
     // so a 1e-5 weld leaves boundary loops (a large-scale-only leak). Tolerance{}.at(L)
     // = max(1e-5, 1e-6·L) keeps the unit-scale floor EXACTLY (1e-5 until L>10) and grows
     // in proportion for large models. L is the coordinate span already computed above.
-    (void)out.weldCoincidentVertices(Tolerance{}.at(hi - lo),
+    //
+    // The weld runs at 3x the coincidence tolerance T, not 1x. When two operands are
+    // separated by up to T — which the classifier still treats as coincident — the cut
+    // produces seam vertices offset by up to T from the shared corner on each side, so the
+    // distinct copies that must be stitched span up to 2·√2·T ≈ 2.83·T across a corner
+    // cluster (the diagonal of a T-by-T offset). A weld at only T cannot close that corner
+    // and leaves a boundary loop (the class-1 near-coincidence leak); 3·T covers the whole
+    // cluster with margin. It stays far below any legitimate feature size (mesh vertex
+    // spacing is orders of magnitude larger than 3·T), so it does not over-merge — the full
+    // seam battery, curved-operand and extreme-tessellation cases included, is unaffected.
+    (void)out.weldCoincidentVertices(3.f * Tolerance{}.at(hi - lo),
                                      Mesh::WeldCollapsePolicy::DropCollapsedFace);
     (void)out.computeVertexNormals();
     return out;

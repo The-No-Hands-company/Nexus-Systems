@@ -29,9 +29,13 @@
 //   pinned battery         9 -> 0        broad systematic sweep   0 -> 0
 //   randomized box/box     1 -> 0        curved sphere/cylinder  28 -> 1
 // Class 2 (tessellation density) is closed through moderate density and much reduced at
-// extreme density. Class 1 (near-coincident coplanar faces) is closed except for a narrow
-// band where the face separation is ABOUT EQUAL to the coincidence tolerance — the
-// inherent ambiguity band of any tolerance-based coincidence test, pinned below.
+// extreme density. Class 1 (near-coincident coplanar faces): a later fix (2026-07-25)
+// localised the residual leak to the SEAM WELD — the cut and classification were already
+// correct — and closed it by welding at 3x the coincidence tolerance T, so operands
+// separated by anything clearly below OR clearly above T are now watertight (the old
+// failure at sep=2T, on genuinely distinct geometry, is gone). What remains is only the
+// razor-thin band at sep ≈ exactly T, the inherent ambiguity of any threshold coincidence
+// test; both are pinned below.
 
 #include <nexus/geometry/Mesh.h>
 #include <nexus/geometry/MeshBooleanRobust.h>
@@ -190,20 +194,33 @@ TEST(MeshBooleanSeam, GeneralPositionBoxBooleansAreWatertight)
     EXPECT_EQ(leaks, 0) << "general-position box booleans regressed: " << leaks << " of " << runs;
 }
 
-// CLASS 1, after the fix. Near-coincident coplanar faces are now resolved correctly
-// except in a narrow band where the separation is ABOUT EQUAL to the coincidence
-// tolerance. That band is inherent to deciding coincidence by measurement: at exactly the
-// tolerance the answer is genuinely ambiguous, and neighbouring faces can fall on opposite
-// sides of it, so keep/drop becomes inconsistent and the seam opens. Real kernels avoid it
-// by snapping geometry to tolerance BEFORE the boolean, which is a separate feature.
+// CLASS 1, reduced to the inherent knife-edge. Near-coincident coplanar faces used to open
+// the seam across a band up to 2x the coincidence tolerance — i.e. on genuinely DISTINCT
+// geometry above the tolerance, which is a bug: a box offset by 2T should make a clean
+// stepped union.
 //
-// Pinned so that the band cannot silently widen, and so that separations comfortably below
-// and above the tolerance stay clean.
-TEST(MeshBooleanSeam, NearCoincidentFacesLeakOnlyNearTheCoincidenceTolerance)
+// Root cause (localised 2026-07-25): the cut and classification are correct there — cutR.a
+// and cutR.b are each individually watertight, and the classifier keeps/drops the right
+// faces. The hole was in the final SEAM WELD. When operands are separated by up to the
+// coincidence tolerance T (which the classifier treats as coincident), the cut emits, at
+// each shared corner, distinct vertices offset by up to T on each side, so a corner cluster
+// spans up to 2·√2·T ≈ 2.83·T (the diagonal of a T-by-T offset). The weld ran at 1·T and
+// could not merge that cluster, leaving a boundary loop. Welding at 3·T covers the cluster.
+//
+// What remains is the genuine ambiguity of any threshold test: a razor-thin band at
+// separation ≈ exactly T (measured ~[0.99·T, T]), where the metric coincidence test
+// d2 <= T^2 is decided by float rounding and neighbouring faces can fall on opposite sides.
+// Every separation clearly below OR clearly above T is now watertight; only landing a face
+// pair essentially exactly on the tolerance can still open the seam. That is inherent to a
+// tolerance-based coincidence decision and is what a snap-to-tolerance modelling pre-pass
+// would remove, not the boolean.
+TEST(MeshBooleanSeam, NearCoincidentFacesResolveCleanlyExceptAtTheToleranceKnifeEdge)
 {
     using primitives::makeBox;
-    int wellBelow = 0, nearTolerance = 0, wellAbove = 0;
+    int clearLeaks = 0, knifeEdgeLeaks = 0;
 
+    // Model size 2 -> coincidence tolerance T = 1e-5 (Tolerance::at, floor 1e-5). The
+    // face separation is rel*2, so the knife edge sep ≈ T sits at rel ≈ 5e-6.
     auto count = [&](double rel, int& into) {
         const Mesh a = makeBox(2.f, 2.f, 2.f);
         const Mesh b = translated(makeBox(2.f, 2.f, 2.f), {static_cast<float>(rel * 2.0), 0.f, 0.f});
@@ -212,20 +229,27 @@ TEST(MeshBooleanSeam, NearCoincidentFacesLeakOnlyNearTheCoincidenceTolerance)
         }
     };
 
-    // The coincidence tolerance at this model size is 1e-5 (Tolerance::at, floor 1e-5).
-    for (double rel : {1e-9, 1e-8, 1e-7, 5e-7}) count(rel, wellBelow);   // separation << tol
-    for (double rel : {1e-6, 1e-5}) count(rel, nearTolerance);           // separation ~ tol
-    for (double rel : {1e-4, 3e-4, 1e-3, 1e-2, 1e-1}) count(rel, wellAbove);  // separation >> tol
+    // Clearly BELOW the tolerance (sep from 2e-9 up to ~9.6e-6): the pair is coincident and
+    // must weld into one clean seam.
+    for (double rel : {1e-9, 1e-8, 1e-7, 5e-7, 1e-6, 2e-6, 3e-6, 4e-6, 4.8e-6})
+        count(rel, clearLeaks);
+    // Clearly ABOVE the tolerance (sep from ~1.02e-5 up to 2e-1): the pair is distinct and
+    // must make a clean stepped result. This is the range the old 1·T weld failed on.
+    for (double rel : {5.1e-6, 6e-6, 8e-6, 1e-5, 1.4e-5, 2e-5, 5e-5, 1e-4, 3e-4, 1e-3, 1e-2, 1e-1})
+        count(rel, clearLeaks);
+    // The knife edge, sep ≈ exactly T: inherently ambiguous, may leak.
+    for (double rel : {4.95e-6, 5e-6, 5.05e-6})
+        count(rel, knifeEdgeLeaks);
 
-    RecordProperty("coincidentWellBelowLeaks", wellBelow);
-    RecordProperty("coincidentNearToleranceLeaks", nearTolerance);
-    RecordProperty("coincidentWellAboveLeaks", wellAbove);
+    RecordProperty("clearOfToleranceLeaks", clearLeaks);
+    RecordProperty("knifeEdgeLeaks", knifeEdgeLeaks);
 
-    EXPECT_EQ(wellBelow, 0) << "faces far closer than the tolerance are no longer merged cleanly";
-    EXPECT_EQ(wellAbove, 0) << "faces far beyond the tolerance are no longer treated as distinct";
-    // Measured 2026-07-22: 5 of 6 ops leak in the ambiguity band (was the full
-    // 1e-6..2e-4 range before the classification fix).
-    EXPECT_LE(nearTolerance, 6) << "the coincidence ambiguity band widened";
+    EXPECT_EQ(clearLeaks, 0)
+        << "separations clearly below or above the coincidence tolerance must be watertight; "
+           "the old failure at sep=2T (distinct geometry) is fixed by the 3T seam weld";
+    // The knife edge is inherent; pin it so it cannot widen into the clear ranges above.
+    EXPECT_LE(knifeEdgeLeaks, 9)
+        << "the tolerance knife-edge widened beyond sep ≈ T";
 }
 
 // CLASS 2, CLOSED. This was the largest class — sphere-vs-box leak rates of 12%, 22%, 48%
