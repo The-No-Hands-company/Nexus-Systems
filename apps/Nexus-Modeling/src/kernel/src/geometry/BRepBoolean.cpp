@@ -183,6 +183,39 @@ Body booleanToBody(const Body& a, const Body& b, BooleanOp op, Tolerance tol)
     addKept(A, B, /*isA=*/true);
     addKept(B, A, /*isA=*/false);
 
+    // Drop duplicate coplanar faces before sewing. When A and B share a coplanar region
+    // (e.g. two boxes with matching cross-sections, overlapping in a thin slab), the imprint
+    // splits both operands' faces there into coincident sub-faces welded onto the SAME
+    // vertices. selectFace resolves the coincident pair by keeping the A-side copy and
+    // dropping the B-side one — but that resolution rests on classifyFace's OnBoundary test,
+    // which is a metric decision and flips under float noise for thin slivers, occasionally
+    // keeping BOTH copies. Two faces on the same welded vertex loop are byte-identical and
+    // wind the same way, so every directed edge is traversed twice and fromFaces correctly
+    // rejects the non-manifold input — the whole Boolean then bailed to empty on legitimate
+    // overlaps (measured: box/box dx≈1.8/1.9, cyl/cyl dx≈1.0). A duplicate coplanar face is
+    // never valid in a 2-manifold solid, so removing the redundant copy is always safe and
+    // resolves the coincident pair the classifier failed to. Keyed by the sorted vertex set,
+    // which is rotation- and reflection-invariant, so it catches the duplicate regardless of
+    // where each loop starts or which way it is wound.
+    {
+        std::vector<Body::FaceDef> unique;
+        unique.reserve(defs.size());
+        std::vector<std::vector<uint32_t>> seenKeys;
+        seenKeys.reserve(defs.size());
+        for (auto& fd : defs) {
+            std::vector<uint32_t> key = fd.loop;
+            std::sort(key.begin(), key.end());
+            bool dup = false;
+            for (const auto& k : seenKeys) {
+                if (k == key) { dup = true; break; }
+            }
+            if (dup) continue;
+            seenKeys.push_back(std::move(key));
+            unique.push_back(std::move(fd));
+        }
+        defs = std::move(unique);
+    }
+
     auto sewn = Body::fromFaces(points, defs);
     // Invariant: booleanToBody returns a WATERTIGHT solid or a clean empty Body —
     // never a corrupt or leaky one. fromFaces already rejects non-manifold sews

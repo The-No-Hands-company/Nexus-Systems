@@ -43,14 +43,24 @@ TEST(BRepBooleanInvariant, ResultAlwaysPassesCheckIntegrity)
     }
 }
 
-TEST(BRepBooleanInvariant, DegenerateUnionIsCleanEmptyNotCorrupt)
+TEST(BRepBooleanInvariant, FormerlyDegenerateUnionNowResolvesWatertight)
 {
-    // The specific formerly-corrupt case: two identical faceted cylinders offset
-    // by 0.6. It now returns a clean empty Body (valid), not a "partner not
-    // reciprocal" corpse.
-    const Body r = booleanToBody(makeFacetedCylinder(1.f, 2.f, 12), cylAt(0.6f), BooleanOp::Union);
-    EXPECT_TRUE(r.checkIntegrity().ok);
-    EXPECT_EQ(r.faceCount(), 0u);  // clean empty fallback
+    // Two identical faceted cylinders offset by 0.6. This once produced a "partner not
+    // reciprocal" corpse, then (after fromFaces learned to reject non-manifold sews) a clean
+    // empty Body. The coplanar-duplicate-face dedup in booleanToBody now resolves the
+    // coincident sliver pair the classifier left doubled, so it produces the CORRECT
+    // watertight union — verified by the exact inclusion-exclusion identity vol(U)+vol(I) =
+    // vol(A)+vol(B) (measured U=8.3035, I=3.6965, A=B=6.0 → 12.0).
+    const Body a = makeFacetedCylinder(1.f, 2.f, 12);
+    const Body b = cylAt(0.6f);
+    const Body u = booleanToBody(a, b, BooleanOp::Union);
+    const Body i = booleanToBody(a, b, BooleanOp::Intersection);
+    EXPECT_TRUE(u.checkIntegrity().ok);
+    EXPECT_TRUE(u.isClosed());
+    EXPECT_GT(u.faceCount(), 0u);
+    const float sum = u.massProperties(1.f).volume + i.massProperties(1.f).volume;
+    const float ab = a.massProperties(1.f).volume + b.massProperties(1.f).volume;
+    EXPECT_NEAR(sum, ab, 1e-2f) << "union+intersection must equal A+B";
 }
 
 TEST(BRepBooleanInvariant, CleanCasesUnchanged)
