@@ -132,6 +132,84 @@ TEST(ModifierStack, MirrorRoughlyDoublesGeometry)
     EXPECT_GT(b.maxX, 0.f);
 }
 
+// The mirror re-winds the reflected faces because a negative-determinant scale flips
+// handedness — without that, the reflected half would have INWARD normals (invisible until
+// shading/booleans go wrong). Verify every face of BOTH halves points outward from its own
+// half's centroid. This is the check the count-only test above cannot make.
+TEST(ModifierStack, MirrorReflectedHalfIsWoundOutward)
+{
+    // Two disjoint half-boxes: original at x in [2,4], reflected at x in [-4,-2].
+    Mesh box = makeBox(2.f, 2.f, 2.f);
+    ModifierStack stack;
+    stack.setBaseMesh(box);
+    Modifier t;  t.type = ModifierType::Translate; t.vec = nexus::render::Vec3{3.f, 0.f, 0.f};
+    stack.addModifier(t);
+    Modifier mir; mir.type = ModifierType::Mirror; mir.axis = 0; mir.merge = false;
+    stack.addModifier(mir);
+    const Mesh out = stack.evaluate();
+
+    const auto& pos = out.attributes().positions();
+    const auto& topo = out.topology();
+    ASSERT_GT(topo.faceCount(), 0u);
+
+    // Centroid of each half, keyed by sign of x (original +X, reflected -X).
+    nexus::render::Vec3 cPos{0, 0, 0}, cNeg{0, 0, 0};
+    int nPos = 0, nNeg = 0;
+    for (const auto& p : pos) {
+        if (p.x > 0) { cPos.x += p.x; cPos.y += p.y; cPos.z += p.z; ++nPos; }
+        else         { cNeg.x += p.x; cNeg.y += p.y; cNeg.z += p.z; ++nNeg; }
+    }
+    ASSERT_GT(nPos, 0); ASSERT_GT(nNeg, 0);
+    cPos = {cPos.x / nPos, cPos.y / nPos, cPos.z / nPos};
+    cNeg = {cNeg.x / nNeg, cNeg.y / nNeg, cNeg.z / nNeg};
+
+    int outward = 0, inward = 0;
+    for (size_t f = 0; f < topo.faceCount(); ++f) {
+        const auto& fc = topo.face(f);
+        if (fc.indices.size() < 3) continue;
+        const auto& p0 = pos[fc.indices[0]];
+        const auto& p1 = pos[fc.indices[1]];
+        const auto& p2 = pos[fc.indices[2]];
+        const nexus::render::Vec3 e1{p1.x - p0.x, p1.y - p0.y, p1.z - p0.z};
+        const nexus::render::Vec3 e2{p2.x - p0.x, p2.y - p0.y, p2.z - p0.z};
+        const nexus::render::Vec3 n{e1.y * e2.z - e1.z * e2.y,
+                                    e1.z * e2.x - e1.x * e2.z,
+                                    e1.x * e2.y - e1.y * e2.x};
+        const nexus::render::Vec3& c = (p0.x > 0) ? cPos : cNeg;  // which half this face is on
+        const nexus::render::Vec3 fc3{(p0.x + p1.x + p2.x) / 3.f, (p0.y + p1.y + p2.y) / 3.f,
+                                      (p0.z + p1.z + p2.z) / 3.f};
+        const float d = n.x * (fc3.x - c.x) + n.y * (fc3.y - c.y) + n.z * (fc3.z - c.z);
+        if (d > 0) ++outward; else if (d < 0) ++inward;
+    }
+    EXPECT_GT(outward, 0);
+    EXPECT_EQ(inward, 0) << "reflected half has inward-facing normals — mirror winding flip is wrong";
+}
+
+// The canonical mirror workflow: model one half (open on the mirror plane), mirror + merge to
+// a watertight whole. Here a box whose -X face sits ON the plane is mirrored across X and
+// welded; the shared seam must close into a manifold with no boundary loops.
+TEST(ModifierStack, MirrorMergeWeldsSeamIntoWatertightWhole)
+{
+    // Box spanning x in [0,2] (its x=0 face lies exactly on the mirror plane).
+    Mesh box = makeBox(2.f, 2.f, 2.f);
+    ModifierStack stack;
+    stack.setBaseMesh(box);
+    Modifier t;  t.type = ModifierType::Translate; t.vec = nexus::render::Vec3{1.f, 0.f, 0.f};
+    stack.addModifier(t);
+    Modifier mir; mir.type = ModifierType::Mirror; mir.axis = 0; mir.merge = true; mir.scalar = 1e-4f;
+    stack.addModifier(mir);
+
+    const Mesh out = stack.evaluate();
+    EXPECT_TRUE(out.isValid());
+    // Merge must actually fuse the coincident plane vertices: fewer than a naive 2x doubling.
+    EXPECT_LT(out.attributes().vertexCount(), box.attributes().vertexCount() * 2u)
+        << "merge did not weld the coincident vertices on the mirror plane";
+    // The reflected half spans -X, the original +X, both present.
+    const Bounds b = boundsOf(out);
+    EXPECT_LT(b.minX, -1.5f);
+    EXPECT_GT(b.maxX, 1.5f);
+}
+
 TEST(ModifierStack, SolidifyAddsShellFaces)
 {
     Mesh plane = makePlane(4.f, 4.f, 1u, 1u);
