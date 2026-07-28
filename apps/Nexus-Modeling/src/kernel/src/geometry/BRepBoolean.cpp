@@ -1,6 +1,7 @@
 #include <nexus/geometry/BRepBoolean.h>
 
 #include <algorithm>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -10,6 +11,14 @@ using nexus::render::Vec3;
 using PC = Body::PointContainment;
 
 namespace {
+// Undirected key over a pair of welded point indices (the vertex ids fromFaces
+// will assign, since it numbers m_verts 1:1 with the welded point list).
+uint64_t weldedPairKey(uint32_t a, uint32_t b)
+{
+    const uint32_t lo = a < b ? a : b, hi = a < b ? b : a;
+    return (static_cast<uint64_t>(lo) << 32) | static_cast<uint64_t>(hi);
+}
+
 // Outward normal of a (planar) face: the surface normal, flipped when the face
 // reverses it.
 Vec3 faceOutwardNormal(const Body& body, uint32_t f)
@@ -161,6 +170,19 @@ Body booleanToBody(const Body& a, const Body& b, BooleanOp op, Tolerance tol)
         return static_cast<uint32_t>(points.size() - 1);
     };
 
+    // Analytic curve geometry of the kept edges, keyed by their WELDED endpoint
+    // pair. fromFaces builds every edge as a straight chord between its endpoints
+    // (it is handed vertex rings and nothing else), so a curved operand's arc
+    // edges — a cylinder's rims, every edge of a sphere — would silently degrade
+    // to Lines through any boolean: measured on cyl(12 seg) ∪ box, where the box
+    // lies strictly inside the cylinder so the union IS the cylinder, the result
+    // came back with all 24 rim arcs as chords. That loses the analytic geometry
+    // toMesh(subdivisions) needs to retessellate smoothly, and it is wrong even
+    // when the topology is right. Harvest the arcs here and re-apply them after
+    // the sew, keyed undirectedly so the key is independent of loop winding and
+    // of the `reverse` flip below.
+    std::unordered_map<uint64_t, Curve> arcs;
+
     auto addKept = [&](const Body& body, const Body& other, bool isA) {
         for (uint32_t f = 0; f < body.faceCount(); ++f) {
             if (!body.face(f).alive) continue;
@@ -172,6 +194,31 @@ Body booleanToBody(const Body& a, const Body& b, BooleanOp op, Tolerance tol)
             Body::FaceDef fd;
             fd.loop.reserve(vs.size());
             for (uint32_t v : vs) fd.loop.push_back(weld(body.vertex(v).point));
+
+            // Record this face's arc edges. Walking the outer loop's coedges gives
+            // each edge with its OWN stored endpoints, so no correspondence with
+            // the (possibly reversed) `vs` order is needed. weld() only looks up
+            // here — every loop vertex was just inserted above.
+            const uint32_t loopId = body.face(f).outerLoop;
+            if (loopId < body.loopCount() && body.loop(loopId).first < body.coedgeCount()) {
+                const uint32_t first = body.loop(loopId).first;
+                uint32_t w = first, guard = 0;
+                do {
+                    const uint32_t e = body.coedge(w).edge;
+                    if (e < body.edgeCount()) {
+                        const Edge& ed = body.edge(e);
+                        if (ed.curve != kInvalid && body.curve(ed.curve).kind == CurveKind::Circle &&
+                            ed.v0 < body.vertexCount() && ed.v1 < body.vertexCount()) {
+                            const uint32_t wa = weld(body.vertex(ed.v0).point);
+                            const uint32_t wb = weld(body.vertex(ed.v1).point);
+                            if (wa != wb) arcs.emplace(weldedPairKey(wa, wb), body.curve(ed.curve));
+                        }
+                    }
+                    w = body.coedge(w).next;
+                    if (++guard > body.coedgeCount() + 1u) break;  // corrupt loop guard
+                } while (w != first);
+            }
+
             const Face& face = body.face(f);
             fd.surface = (face.surface < body.surfaceCount()) ? body.surface(face.surface)
                                                               : Surface{};
@@ -224,6 +271,21 @@ Body booleanToBody(const Body& a, const Body& b, BooleanOp op, Tolerance tol)
     // face leaves an OPEN shell — checkIntegrity permits boundary edges, so the
     // watertightness must be checked separately) in favour of a clean empty Body.
     if (!sewn.has_value() || !sewn->checkIntegrity().ok || !sewn->isClosed()) return Body{};
+
+    // Restore the analytic arcs the chord-only sew flattened. setEdgeArc re-derives
+    // the param range from the edge's own endpoints and REFUSES an edge whose
+    // endpoints do not lie on the circle within tol, so a seam vertex that the weld
+    // pulled off the arc (or an edge that a later split left spanning a different
+    // curve) simply keeps its chord — degrading to exactly the previous behaviour
+    // rather than attaching geometry that contradicts the topology. That is why
+    // this cannot break checkGeometry, and why the return value is discarded.
+    for (uint32_t e = 0; e < static_cast<uint32_t>(sewn->edgeCount()); ++e) {
+        const Edge& ed = sewn->edge(e);
+        if (!ed.alive) continue;
+        const auto it = arcs.find(weldedPairKey(ed.v0, ed.v1));
+        if (it == arcs.end()) continue;
+        (void)sewn->setEdgeArc(e, it->second.origin, it->second.dir, it->second.radius, tol);
+    }
     return std::move(*sewn);
 }
 
