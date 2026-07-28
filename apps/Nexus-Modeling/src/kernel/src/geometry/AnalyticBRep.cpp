@@ -134,6 +134,99 @@ bool pointInPlanarPolygon(const Vec3& p, const std::vector<Vec3>& poly, const Ve
     }
     return inside;
 }
+// Whether `circle` lies ON `s`, i.e. every point of the circle is a point of the
+// surface — the precondition for imprinting it as a trim curve of a face on `s`.
+//   Plane:    the circle's plane IS the surface plane (axis ∥ normal, centre on it).
+//   Cylinder: a LATITUDE circle — axis ∥ the cylinder axis, centre on the axis, and
+//             the same radius, which is the only circle a cylinder contains.
+// `eps` is the face-proportioned coincidence tolerance the caller already derived.
+bool circleLiesOnSurface(const Surface& s, const Curve& circle, float eps)
+{
+    if (circle.radius <= 0.f || !isFinite(circle.radius)) return false;
+    const Vec3 cAxis = normalize(circle.dir);
+    switch (s.kind) {
+        case SurfaceKind::Plane: {
+            const Vec3 n = s.normal;
+            if (std::abs(dot(cAxis, n)) < 1.f - 1e-4f) return false;  // circle plane ∥ face plane
+            return std::abs(dot(sub(circle.origin, s.origin), n)) <= eps;  // and coincident
+        }
+        case SurfaceKind::Cylinder: {
+            const Vec3 ax = normalize(s.normal);
+            if (std::abs(dot(cAxis, ax)) < 1.f - 1e-4f) return false;  // circle plane ⟂ axis
+            if (std::abs(circle.radius - s.radius) > eps) return false;
+            // Centre on the axis: the component of centre-origin across the axis is 0.
+            const Vec3 d = sub(circle.origin, s.origin);
+            return length(sub(d, scale(ax, dot(d, ax)))) <= eps;
+        }
+        default:
+            return false;  // sphere/cone/NURBS circle imprints are a later increment
+    }
+}
+
+// Parameter-domain image (u,v) of a point lying on `s`, inverting Surface::eval for
+// the kinds circleLiesOnSurface admits. Containment on a TRIMMED face is defined in
+// the parameter domain (the same reason a Pcurve is stored there), which is what
+// makes a curved face's boundary testable with the ordinary planar rule.
+bool surfaceUV(const Surface& s, const Vec3& p, float& u, float& v)
+{
+    const Vec3 d = sub(p, s.origin);
+    switch (s.kind) {
+        case SurfaceKind::Plane:
+            u = dot(d, s.uAxis);
+            v = dot(d, s.vAxis());
+            return true;
+        case SurfaceKind::Cylinder: {
+            const Vec3 ax = normalize(s.normal);
+            v = dot(d, ax);
+            const Vec3 radial = sub(d, scale(ax, v));
+            u = std::atan2(dot(radial, s.vAxis()), dot(radial, s.uAxis));
+            return true;
+        }
+        default:
+            return false;
+    }
+}
+
+// Point-in-face test for a face on a CURVED surface: map the boundary ring and the
+// query point into (u,v) and apply the planar rule there. The periodic u of a
+// cylinder is UNWRAPPED along the ring — each successive u is shifted by whole turns
+// so it stays within half a turn of its predecessor — which reconstructs a
+// non-wrapping polygon even for a patch straddling the u = ±π seam. The query point
+// is then placed on whichever branch of u falls inside the polygon's own u range, so
+// a candidate arc's midpoint is compared against the patch on the same branch the
+// patch occupies rather than against an aliased copy of it.
+bool pointInSurfacePatchUV(const Surface& s, const Vec3& p, const std::vector<Vec3>& poly)
+{
+    if (poly.size() < 3) return false;
+    constexpr float kTwoPi = 6.28318530717958647692f;
+    const bool periodic = (s.kind == SurfaceKind::Cylinder);
+
+    std::vector<Vec3> uv;
+    uv.reserve(poly.size());
+    float prevU = 0.f;
+    for (size_t i = 0; i < poly.size(); ++i) {
+        float u = 0.f, v = 0.f;
+        if (!surfaceUV(s, poly[i], u, v)) return false;
+        if (periodic && i > 0) {
+            while (u - prevU > kTwoPi * 0.5f) u -= kTwoPi;
+            while (prevU - u > kTwoPi * 0.5f) u += kTwoPi;
+        }
+        prevU = u;
+        uv.push_back({u, v, 0.f});
+    }
+
+    float pu = 0.f, pv = 0.f;
+    if (!surfaceUV(s, p, pu, pv)) return false;
+    if (periodic) {
+        float lo = uv[0].x, hi = uv[0].x;
+        for (const Vec3& q : uv) { lo = std::min(lo, q.x); hi = std::max(hi, q.x); }
+        const float mid = (lo + hi) * 0.5f;
+        while (pu - mid > kTwoPi * 0.5f) pu -= kTwoPi;
+        while (mid - pu > kTwoPi * 0.5f) pu += kTwoPi;
+    }
+    return pointInPlanarPolygon({pu, pv, 0.f}, uv, {0.f, 0.f, 1.f});
+}
+
 uint64_t edgeKey(uint32_t a, uint32_t b)
 {
     const uint32_t lo = a < b ? a : b, hi = a < b ? b : a;
@@ -977,13 +1070,23 @@ uint32_t Body::imprintCurve(uint32_t faceId, const Curve& curve, Tolerance tol)
 
     // ── Circle imprint (arc bite crossing two distinct boundary edges) ──────────
     if (curve.kind == CurveKind::Circle) {
-        // The face must be planar and the circle coplanar with it, so the arc lies
-        // ON the face (axis ⟂ the plane, centre on the plane).
+        // The circle must lie ON the face's surface, so the arc it cuts is a curve of
+        // the face rather than something merely passing nearby. That holds for a
+        // coplanar circle on a PLANE and for a latitude circle on a CYLINDER — the
+        // seam a plane cuts on a cylinder, i.e. the cylinder-through-box case.
         const uint32_t sid = m_faces[faceId].surface;
-        if (sid >= m_surfaces.size() || m_surfaces[sid].kind != SurfaceKind::Plane) return kInvalid;
-        const Vec3 fn = m_surfaces[sid].normal;
-        if (std::abs(dot(normalize(curve.dir), fn)) < 1.f - 1e-4f) return kInvalid;
-        if (std::abs(dot(sub(curve.origin, m_surfaces[sid].origin), fn)) > eps) return kInvalid;
+        if (sid >= m_surfaces.size()) return kInvalid;
+        const Surface& fsurf = m_surfaces[sid];
+        const bool onPlane = fsurf.kind == SurfaceKind::Plane;
+        if (!circleLiesOnSurface(fsurf, curve, eps)) return kInvalid;
+        const Vec3 fn = fsurf.normal;
+        // Whether a candidate point lies inside this face's boundary. A planar face
+        // keeps the direct 3D test; a curved one is decided in the parameter domain,
+        // where the boundary is an ordinary polygon.
+        auto insideFace = [&](const Vec3& q, const std::vector<Vec3>& ring) {
+            return onPlane ? pointInPlanarPolygon(q, ring, fn)
+                           : pointInSurfacePatchUV(fsurf, q, ring);
+        };
 
         // Boundary polygon (captured before any split) for the inside-arc test.
         std::vector<Vec3> poly;
@@ -1065,15 +1168,18 @@ uint32_t Body::imprintCurve(uint32_t faceId, const Curve& curve, Tolerance tol)
             // face (both share the endpoints, so checkGeometry holds either way).
             if (ce < m_edges.size()) {
                 const float t0 = m_edges[ce].t0, t1 = m_edges[ce].t1;
-                if (!pointInPlanarPolygon(curve.eval((t0 + t1) * 0.5f), poly, fn))
+                if (!insideFace(curve.eval((t0 + t1) * 0.5f), poly))
                     m_edges[ce].t1 = (t1 > t0) ? (t1 - kTwoPi) : (t1 + kTwoPi);
             }
             return newFace;
         }
         if (!cc.empty()) return kInvalid;  // same-edge bite / odd crossings deferred
 
-        // Fully-interior circle → an INNER LOOP (hole) of the face. The centre and
-        // the whole circle must lie inside the outer boundary.
+        // Fully-interior circle → an INNER LOOP (hole) of the face. PLANE only: a
+        // latitude circle wraps its whole cylinder, so it always leaves the patch and
+        // can never be interior to one — and its centre lies on the axis, which is not
+        // a point of the surface at all, so the interior test below is meaningless there.
+        if (!onPlane) return kInvalid;
         if (!pointInPlanarPolygon(curve.origin, poly, fn)) return kInvalid;
         constexpr uint32_t K = 8;  // arc segments around the hole ring
         for (uint32_t k = 0; k < K; ++k)
