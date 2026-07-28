@@ -143,4 +143,40 @@ TEST(BRepImprintCircle, LineImprintStillWorks)
     EXPECT_TRUE(b.checkGeometry().ok);
 }
 
+// Regression: a legitimate arc bite whose boundary crossings land close to (but
+// not on) a corner must NOT be dropped. The circle centred beyond the +X/+Y
+// corner crosses the +X edge at y≈0.98 and the +Y edge at x≈0.98 — ~1% of the
+// edge (frac ≈0.99) from the shared (1,1) corner, hundreds of times the
+// coincidence tolerance. The former fixed (0.02, 0.98) crossing-fraction clamp
+// silently discarded both, so imprintCurve wrongly returned kInvalid.
+TEST(BRepImprintCircle, ArcBiteNearCornerNotDropped)
+{
+    Body b = makeBox(2.f, 2.f, 2.f);  // top face z=1, x,y ∈ [-1,1]
+    const uint32_t tf = topFace(b);
+    ASSERT_NE(tf, kInvalid);
+    const auto i0 = b.checkIntegrity();
+
+    const Curve circ = circleZ1({1.5f, 1.5f, 1.f}, 0.72139f);
+    const uint32_t nf = b.imprintCurve(tf, circ);
+    ASSERT_NE(nf, kInvalid) << "valid near-corner arc bite wrongly rejected";
+
+    const auto i1 = b.checkIntegrity();
+    EXPECT_TRUE(i1.ok) << i1.reason;
+    EXPECT_EQ(i1.euler, 2);                    // χ-neutral planar cut
+    EXPECT_EQ(i1.faces, i0.faces + 1);         // corner actually split off
+    EXPECT_EQ(i1.boundaryEdges, 0u);           // still watertight
+    EXPECT_TRUE(b.isClosed());
+    EXPECT_TRUE(b.checkGeometry().ok) << b.checkGeometry().reason;
+    EXPECT_NEAR(signedVolume(b.toMesh(4)), 8.0, 1e-4);  // planar cut, solid unchanged
+
+    // The shared cut edge is a real Circle arc of radius 0.72139 about the centre.
+    bool foundArc = false;
+    for (uint32_t e = 0; e < b.edgeCount(); ++e) {
+        const auto& ed = b.edge(e);
+        if (!ed.alive || b.curve(ed.curve).kind != CurveKind::Circle) continue;
+        foundArc = true;
+    }
+    EXPECT_TRUE(foundArc);
+}
+
 }  // namespace nexus::geometry::brep::testing

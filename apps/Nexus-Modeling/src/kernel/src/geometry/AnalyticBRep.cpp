@@ -88,9 +88,16 @@ bool segmentLineCrossing(const Vec3& A, const Vec3& B, const Curve& curve, const
     sOut = std::clamp(s, 0.f, 1.f);
     return true;
 }
-// Fractions s in (0.02, 0.98) at which the straight segment A→B crosses the
-// circle of centre C radius r (both coplanar): roots of |A + sE − C|² = r².
-// Returns 0/1/2 interior crossings (a tangent counts once).
+// Fractions s in (0, 1) at which the straight segment A→B crosses the circle of
+// centre C radius r (both coplanar): roots of |A + sE − C|² = r². Returns 0/1/2
+// interior crossings (a tangent counts once). The roots are returned at their
+// true position — a crossing near an endpoint is NOT dropped or snapped here;
+// the caller decides, from the unperturbed fraction, whether it is within a
+// coincidence tolerance of an existing boundary vertex and resolves it onto that
+// vertex, exactly as the line-imprint path does. (The former fixed (0.02, 0.98)
+// band silently discarded legitimate near-corner arc bites — a crossing ~2% of
+// an edge from a vertex is ~hundreds of times the coincidence tolerance, so it
+// is a real crossing, not a degeneracy.)
 int circleSegmentFracs(const Vec3& A, const Vec3& B, const Vec3& C, float r, float out[2])
 {
     const Vec3 E = sub(B, A), d = sub(A, C);
@@ -102,8 +109,8 @@ int circleSegmentFracs(const Vec3& A, const Vec3& B, const Vec3& C, float r, flo
     const float sq = std::sqrt(disc);
     int cnt = 0;
     const float s0 = (-b - sq) / (2.f * a), s1 = (-b + sq) / (2.f * a);
-    if (s0 > 0.02f && s0 < 0.98f) out[cnt++] = s0;
-    if (sq > 1e-9f && s1 > 0.02f && s1 < 0.98f) out[cnt++] = s1;  // skip tangent duplicate
+    if (s0 > 0.f && s0 < 1.f) out[cnt++] = s0;
+    if (sq > 1e-9f && s1 > 0.f && s1 < 1.f) out[cnt++] = s1;  // skip tangent duplicate
     return cnt;
 }
 
@@ -984,28 +991,69 @@ uint32_t Body::imprintCurve(uint32_t faceId, const Curve& curve, Tolerance tol)
         for (uint32_t v : bVerts) poly.push_back(m_verts[v].point);
 
         // Circle × each Line boundary edge → crossings; need exactly two, on two
-        // DISTINCT edges. (Same-edge bite and fully-interior circle → inner-loop
-        // hole are follow-up increments.)
-        struct CCross { uint32_t edge; float frac; };
+        // DISTINCT boundary points. (Same-edge bite and fully-interior circle →
+        // inner-loop hole are follow-up increments.) A crossing within the face's
+        // coincidence tolerance `eps` of an edge endpoint is resolved onto that
+        // EXISTING vertex instead of split — mirroring the line-imprint path, so
+        // a near-vertex crossing does not manufacture a near-duplicate vertex.
+        struct CCross { bool isVertex; uint32_t vertex; uint32_t edge; float frac; };
         std::vector<CCross> cc;
         for (size_t i = 0; i < n; ++i) {
             const uint32_t e = bEdges[i];
             if (e >= m_edges.size()) continue;
             const uint32_t cu = m_edges[e].curve;
             if (cu >= m_curves.size() || m_curves[cu].kind != CurveKind::Line) continue;
+            const Vec3 p0 = m_verts[m_edges[e].v0].point;
+            const Vec3 p1 = m_verts[m_edges[e].v1].point;
+            const float edgeLen = length(sub(p1, p0));
             float fr[2];
-            const int k = circleSegmentFracs(m_verts[m_edges[e].v0].point,
-                                             m_verts[m_edges[e].v1].point, curve.origin,
-                                             curve.radius, fr);
-            for (int j = 0; j < k; ++j) cc.push_back({e, fr[j]});
+            const int k = circleSegmentFracs(p0, p1, curve.origin, curve.radius, fr);
+            for (int j = 0; j < k; ++j) {
+                const float s = fr[j];
+                // circleSegmentFracs measures s along the STORED edge (v0->v1);
+                // map s=0 onto v0's boundary vertex regardless of coedge winding.
+                const bool storedForward = (m_edges[e].v0 == bVerts[i]);
+                const uint32_t nearVertex = storedForward ? bVerts[i] : bVerts[(i + 1) % n];
+                const uint32_t farVertex = storedForward ? bVerts[(i + 1) % n] : bVerts[i];
+                // Carry the source edge id even for a snapped-to-vertex crossing,
+                // so the same-edge-bite guard below is self-contained (a vertex
+                // and an interior crossing that both belong to edge `e` are a
+                // degenerate same-edge bite, not a valid two-point arc).
+                if (s * edgeLen <= eps)
+                    cc.push_back({true, nearVertex, e, 0.f});
+                else if ((1.f - s) * edgeLen <= eps)
+                    cc.push_back({true, farVertex, e, 0.f});
+                else
+                    cc.push_back({false, kInvalid, e, s});
+            }
+        }
+        // A crossing at a shared corner is reported once by each incident edge;
+        // collapse those duplicate vertex crossings so the two-crossing test below
+        // counts distinct boundary points, not edges.
+        if (cc.size() > 1) {
+            std::vector<CCross> uniq;
+            uniq.reserve(cc.size());
+            for (const CCross& x : cc) {
+                bool dup = false;
+                if (x.isVertex)
+                    for (const CCross& y : uniq)
+                        if (y.isVertex && y.vertex == x.vertex) { dup = true; break; }
+                if (!dup) uniq.push_back(x);
+            }
+            cc = std::move(uniq);
         }
         constexpr float kTwoPi = 6.28318530717958647692f;
 
-        // Arc bite: the circle crosses the boundary at two points on two distinct
-        // edges → split the face along the arc between them.
-        if (cc.size() == 2 && cc[0].edge != cc[1].edge) {
-            const uint32_t vA = splitEdge(cc[0].edge, cc[0].frac, tol);
-            const uint32_t vB = splitEdge(cc[1].edge, cc[1].frac, tol);
+        // Arc bite: the circle crosses the boundary at two distinct points (each a
+        // fresh edge split or an existing vertex) → split the face along the arc
+        // between them. Reject a same-edge double crossing (deferred).
+        const bool sameEdgeBite = cc.size() == 2 && cc[0].edge == cc[1].edge;
+        if (cc.size() == 2 && !sameEdgeBite) {
+            auto resolve = [&](const CCross& c) {
+                return c.isVertex ? c.vertex : splitEdge(c.edge, c.frac, tol);
+            };
+            const uint32_t vA = resolve(cc[0]);
+            const uint32_t vB = resolve(cc[1]);
             if (vA == kInvalid || vB == kInvalid || vA == vB) return kInvalid;
 
             const uint32_t ce = static_cast<uint32_t>(m_edges.size());  // the cut edge id
