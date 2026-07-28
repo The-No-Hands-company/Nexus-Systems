@@ -77,7 +77,15 @@ bool segmentLineCrossing(const Vec3& A, const Vec3& B, const Curve& curve, const
     const Vec3 P = add(A, scale(E, s));
     const Vec3 w = sub(P, O);
     if (length(sub(w, scale(D, dot(w, D)))) > eps) return false;
-    sOut = std::clamp(s, 0.001f, 0.999f);
+    // Only clamp away genuine roundoff outside [0,1] (the orient3D straddle test
+    // already guarantees a crossing strictly between A and B). Do NOT push a
+    // near-0/1 result away from the endpoint it belongs to — the caller decides,
+    // from the *unperturbed* value, whether the crossing is close enough to an
+    // existing boundary vertex to be resolved onto it rather than split (see
+    // imprintCurve). Squashing the fraction here used to manufacture a spurious
+    // vertex up to ~1% of the edge's length away from a true shared corner,
+    // which is exactly the seam-vertex mismatch that opened the sewn shell.
+    sOut = std::clamp(s, 0.f, 1.f);
     return true;
 }
 // Fractions s in (0.02, 0.98) at which the straight segment A→B crosses the
@@ -685,7 +693,7 @@ Body::GeometryReport Body::checkGeometry(Tolerance tol) const
 
 // ──────────── Euler operators ────────────────────────────────────────────────
 
-uint32_t Body::splitEdge(uint32_t edgeId, float t)
+uint32_t Body::splitEdge(uint32_t edgeId, float t, Tolerance tol)
 {
     if (edgeId >= m_edges.size()) return kInvalid;
     const uint32_t curveId = m_edges[edgeId].curve;
@@ -693,8 +701,33 @@ uint32_t Body::splitEdge(uint32_t edgeId, float t)
     const uint32_t v1 = m_edges[edgeId].v1;
     if (curveId >= m_curves.size() || v0 >= m_verts.size() || v1 >= m_verts.size()) return kInvalid;
     const float et0 = m_edges[edgeId].t0, et1 = m_edges[edgeId].t1;
-    t = std::clamp(t, 0.01f, 0.99f);
+    // Floor `t` away from 0/1 only enough to keep both sub-edges at/above the
+    // Tolerance floor for THIS edge's own length — a degenerate-length safety
+    // net, sized to the edge, not a fixed fraction of it. The previous fixed
+    // [0.01, 0.99] clamp forced any near-endpoint split at least 1% of the
+    // edge's length away from the true crossing; for a seam imprint that true
+    // crossing legitimately sits within a coincidence tolerance of an existing
+    // vertex on ONE operand but not (yet) recognised as such, that 1% forced
+    // move manufactured a vertex measurably off the shared corner — the two
+    // operands then disagreed on where the seam vertex sat and the sewn shell
+    // was left open. A tolerance-scaled floor keeps the split at its true
+    // computed position whenever that position is not already within a hair of
+    // an endpoint, and callers that DO land within a coincidence tolerance of
+    // an endpoint are expected to resolve directly onto that vertex instead of
+    // calling this at all (see imprintCurve's crossing resolution).
+    const float edgeLen = std::abs(et1 - et0);
+    const float floorT = (edgeLen > 0.f) ? std::min(0.5f, tol.at(edgeLen) / edgeLen) : 1e-4f;
+    t = std::clamp(t, floorT, 1.f - floorT);
     const float tm = et0 + (et1 - et0) * t;
+    // Guard the far-from-origin case the tolerance-scaled floor alone does not:
+    // for a huge |et0|/|et1| the sub-edge param delta can be smaller than the
+    // endpoint's float ULP, so `tm` rounds back onto an endpoint and the split
+    // would emit a zero-length edge. Reject cleanly (as splitEdge does for every
+    // other failure) rather than manufacture a degenerate — the caller then
+    // treats the imprint as a no-op, preserving watertight-or-empty. Handles
+    // either param direction (Circle arc ranges may store t1 < t0).
+    const float loT = std::min(et0, et1), hiT = std::max(et0, et1);
+    if (!(tm > loT && tm < hiT)) return kInvalid;
 
     // New vertex on the shared curve.
     const uint32_t nv = static_cast<uint32_t>(m_verts.size());
@@ -971,8 +1004,8 @@ uint32_t Body::imprintCurve(uint32_t faceId, const Curve& curve, Tolerance tol)
         // Arc bite: the circle crosses the boundary at two points on two distinct
         // edges → split the face along the arc between them.
         if (cc.size() == 2 && cc[0].edge != cc[1].edge) {
-            const uint32_t vA = splitEdge(cc[0].edge, cc[0].frac);
-            const uint32_t vB = splitEdge(cc[1].edge, cc[1].frac);
+            const uint32_t vA = splitEdge(cc[0].edge, cc[0].frac, tol);
+            const uint32_t vB = splitEdge(cc[1].edge, cc[1].frac, tol);
             if (vA == kInvalid || vB == kInvalid || vA == vB) return kInvalid;
 
             const uint32_t ce = static_cast<uint32_t>(m_edges.size());  // the cut edge id
@@ -1082,17 +1115,52 @@ uint32_t Body::imprintCurve(uint32_t faceId, const Curve& curve, Tolerance tol)
         const uint32_t cu = m_edges[e].curve;
         if (cu >= m_curves.size() || m_curves[cu].kind != CurveKind::Line) continue;
         float s = 0.f;
-        if (segmentLineCrossing(m_verts[m_edges[e].v0].point, m_verts[m_edges[e].v1].point,
-                                curve, faceNormal, eps, s))
+        if (!segmentLineCrossing(m_verts[m_edges[e].v0].point, m_verts[m_edges[e].v1].point,
+                                 curve, faceNormal, eps, s))
+            continue;
+
+        // s is the fraction along the STORED edge (v0->v1), which may run either
+        // direction relative to the loop walk (bVerts[i] -> bVerts[i+1]) depending
+        // on this coedge's winding. Map s back onto whichever boundary vertex it
+        // is closest to in absolute terms.
+        const bool storedForward = (m_edges[e].v0 == bVerts[i]);
+        const uint32_t nearVertex = storedForward ? bVerts[i] : bVerts[(i + 1) % n];
+        const uint32_t farVertex = storedForward ? bVerts[(i + 1) % n] : bVerts[i];
+        const float edgeLen = length(sub(m_verts[m_edges[e].v1].point, m_verts[m_edges[e].v0].point));
+
+        // Snap a crossing that lands within `eps` of one of the edge's own
+        // endpoints onto that EXISTING vertex instead of splitting. Without this,
+        // a crossing whose true position is a hair past a vertex (but not close
+        // enough for the whole-loop `vOnLine` scan above, e.g. because that scan's
+        // target — the OTHER operand's matching seam vertex — has not yet been
+        // imprinted here) manufactures a fresh, near-duplicate vertex a few ulps
+        // to a few tenths of a percent of the edge away from the real corner.
+        // Two operands computing that same physical crossing independently then
+        // disagree on where it sits, so their seam polylines cannot pair up
+        // coedge-for-coedge and the sewn shell is left open. Reusing the
+        // pre-existing vertex when the crossing is within the same coincidence
+        // tolerance already used for the whole-loop scan (`eps`, itself
+        // `tol.at(1.f) * 10`, i.e. scaled off this face's characteristic size)
+        // keeps both operands landing on the identical point whenever they should.
+        if (s * edgeLen <= eps) {
+            crossings.push_back({true, nearVertex, kInvalid, 0.f});
+        } else if ((1.f - s) * edgeLen <= eps) {
+            crossings.push_back({true, farVertex, kInvalid, 0.f});
+        } else {
             crossings.push_back({false, kInvalid, e, s});
+        }
     }
     if (crossings.size() != 2) return kInvalid;  // need a clean entry + exit
 
     // Resolve each crossing to a vertex (splitting the edge where interior). The
     // two edges are distinct, so splitting one leaves the other's frac valid.
-    auto resolve = [&](const Cross& c) { return c.isVertex ? c.vertex : splitEdge(c.edge, c.frac); };
+    auto resolve = [&](const Cross& c) { return c.isVertex ? c.vertex : splitEdge(c.edge, c.frac, tol); };
     const uint32_t vA = resolve(crossings[0]);
     const uint32_t vB = resolve(crossings[1]);
+    // vA == vB is the within-eps corner-clip case: both crossings snapped to the
+    // SAME existing boundary vertex (the line grazes a single corner). That is a
+    // tolerance-correct no-op, not an error — imprintMutually treats kInvalid as
+    // "this tool face did not split this face" and moves on, so nothing is lost.
     if (vA == kInvalid || vB == kInvalid || vA == vB) return kInvalid;
 
     // Cut the face between the two crossing vertices with the imprint curve itself.

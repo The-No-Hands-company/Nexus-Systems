@@ -120,12 +120,20 @@ TEST(BRepBooleanVolumeIdentity, BoxCylinderOverlap) {
         Body cyl = makeFacetedCylinder(1.f, 4.f, 24);
         cyl.translate({dx, 0.f, 0.f});
         const float vc = vol(cyl);
-        const float u = vol(booleanToBody(box, cyl, BooleanOp::Union));
-        const float i = vol(booleanToBody(box, cyl, BooleanOp::Intersection));
-        const float d = vol(booleanToBody(box, cyl, BooleanOp::Difference));
+        const Body uniBody = booleanToBody(box, cyl, BooleanOp::Union);
+        const Body interBody = booleanToBody(box, cyl, BooleanOp::Intersection);
+        const Body diffBody = booleanToBody(box, cyl, BooleanOp::Difference);
+        const float vU = vol(uniBody);
+        const float vI = vol(interBody);
+        const float vD = vol(diffBody);
         const float tol = 2e-3f * (vBox + vc) + 1e-2f;
-        if (std::abs((u + i) - (vBox + vc)) > tol) ++violations;
-        if (std::abs((d + i) - vBox) > tol) ++violations;
+        if (std::abs((vU + vI) - (vBox + vc)) > tol) ++violations;
+        if (std::abs((vD + vI) - vBox) > tol) ++violations;
+        // If union is non-empty, it must be watertight and pass integrity.
+        if (uniBody.vertexCount() > 0) {
+            if (!uniBody.isClosed()) ++violations;
+            if (!uniBody.checkIntegrity().ok) ++violations;
+        }
     }
     EXPECT_LE(violations, 2) << "box/cylinder identity violations widened beyond the one "
                                 "characterised curved-sew bail";
@@ -155,6 +163,25 @@ TEST(BRepBooleanVolumeIdentity, SelfAndDisjointAnchors) {
     EXPECT_NEAR(vol(booleanToBody(a, far, BooleanOp::Union)), 16.f, 1e-2f);
     EXPECT_NEAR(vol(booleanToBody(a, far, BooleanOp::Intersection)), 0.f, 1e-2f);
     EXPECT_NEAR(vol(booleanToBody(a, far, BooleanOp::Difference)), 8.f, 1e-2f);
+}
+
+TEST(BRepBooleanVolumeIdentity, CylinderBoxUnionWatertight) {
+    const Body box = makeBox(3.f, 3.f, 3.f);
+    Body cyl = makeFacetedCylinder(1.f, 4.f, 24);
+    cyl.translate({0.5f, 0.f, 0.f});
+    const Body uni = booleanToBody(box, cyl, BooleanOp::Union);
+    // Expect non-empty union
+    EXPECT_GT(uni.faceCount(), 0u);
+    // Expect watertight and manifold
+    EXPECT_TRUE(uni.checkIntegrity().ok);
+    EXPECT_TRUE(uni.isClosed());
+    // Volume identity: vol(union) + vol(intersection) = vol(box) + vol(cyl)
+    const float vBox = vol(box);
+    const float vc = vol(cyl);
+    const float u = vol(uni);
+    const float i = vol(booleanToBody(box, cyl, BooleanOp::Intersection));
+    const float tol = 2e-3f * (vBox + vc) + 1e-2f;
+    EXPECT_NEAR(u + i, vBox + vc, tol);
 }
 
 }  // namespace nexus::geometry::brep::testing

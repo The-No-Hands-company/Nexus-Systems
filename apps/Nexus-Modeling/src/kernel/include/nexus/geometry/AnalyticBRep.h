@@ -198,7 +198,14 @@ public:
     // over restricted param ranges, and splitting the coedge(s) on the incident
     // face(s) accordingly. χ-neutral (ΔV=+1, ΔE=+1, ΔF=0). Returns the new
     // vertex id, or kInvalid on failure. Preserves checkIntegrity + checkGeometry.
-    uint32_t splitEdge(uint32_t edgeId, float t);
+    // `t` is floored away from 0/1 by just enough to keep the shorter sub-edge at
+    // or above `tol`'s absolute floor at this edge's own length — a degenerate-
+    // length safety net, not a coincidence tolerance. A caller imprinting a
+    // curve that lands within a genuine coincidence tolerance of an existing
+    // endpoint must recognise that and reuse the endpoint vertex itself (see
+    // imprintCurve) rather than rely on this floor, which would otherwise
+    // manufacture a new vertex measurably offset from the true crossing.
+    uint32_t splitEdge(uint32_t edgeId, float t, Tolerance tol = {});
 
     // Euler operator — split a face by a new edge (a Line) between two
     // NON-ADJACENT vertices of its outer loop, producing two faces that inherit
