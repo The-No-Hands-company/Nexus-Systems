@@ -59,6 +59,15 @@ Body interiorBox() { return makeBox(1.f, 1.f, 1.f); }
 }  // namespace
 
 // The rim arcs of a cylinder survive a boolean whose result IS that cylinder.
+//
+// The result is the same SOLID as the cylinder but not the same face PARTITION: once
+// the driver offers Circle seams to the imprint, the interior box's ±Z planes cut
+// legitimate latitude seams on the cylinder's side faces (on the 8 of 12 whose bounding
+// box overlaps the box's — the broad-phase correctly prunes the rest), so faces and arc
+// edges both increase. That is correct-but-not-minimal: removing a seam that does not
+// bound a change of surface is the job of a face-unification pass, not of the boolean.
+// So the assertion here is that no arc was LOST and the solid is unchanged — the volume
+// identity is what pins the latter, and it is exact.
 TEST(BRepBooleanCurvePreservation, IdentityLikeUnionKeepsEveryRimArc)
 {
     const Body cyl = makeCylinder(1.f, 2.f, 12);
@@ -66,11 +75,20 @@ TEST(BRepBooleanCurvePreservation, IdentityLikeUnionKeepsEveryRimArc)
     ASSERT_EQ(in.circle, 24u) << "makeCylinder should carry 2 rings × 12 arc edges";
 
     const Body uni = booleanToBody(cyl, interiorBox(), BooleanOp::Union);
-    ASSERT_EQ(uni.faceCount(), cyl.faceCount()) << "union with an interior box is the cylinder";
+    ASSERT_GT(uni.faceCount(), 0u) << "union with an interior box must not bail to empty";
 
     const CurveCensus out = census(uni);
-    EXPECT_EQ(out.circle, in.circle) << "boolean flattened rim arcs to chords";
-    EXPECT_EQ(out.line, in.line);
+    EXPECT_GE(out.circle, in.circle)
+        << "boolean flattened rim arcs to chords (arcs may only be ADDED by new seams)";
+    EXPECT_GT(out.circle, 0u);
+
+    // Same solid: the union of a cylinder with a box strictly inside it is the cylinder,
+    // and π·r²·h is reproduced exactly rather than to a tessellation tolerance.
+    EXPECT_TRUE(uni.isClosed());
+    EXPECT_TRUE(uni.checkIntegrity().ok) << uni.checkIntegrity().reason;
+    EXPECT_TRUE(uni.checkGeometry().ok) << uni.checkGeometry().reason;
+    EXPECT_NEAR(uni.massProperties().volume, cyl.massProperties().volume, 1e-5f)
+        << "the union is a different solid, not merely a finer partition of the same one";
 }
 
 // THE load-bearing check: the restored arcs are real geometry, because they

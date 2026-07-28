@@ -1101,6 +1101,34 @@ uint32_t Body::imprintCurve(uint32_t faceId, const Curve& curve, Tolerance tol)
         // a near-vertex crossing does not manufacture a near-duplicate vertex.
         struct CCross { bool isVertex; uint32_t vertex; uint32_t edge; float frac; };
         std::vector<CCross> cc;
+
+        // Fractions along one boundary Line edge where the circle crosses it.
+        //
+        // On a PLANE the circle and the edge are coplanar, so |p(s) − centre| = r is a
+        // transversal root and solving that quadratic is well conditioned.
+        //
+        // On a CYLINDER it is not. A latitude circle meets an axis-parallel edge at the
+        // one axial level where that edge — which sits at exactly the cylinder's radius
+        // along its whole length — touches the circle, so the same quadratic has a
+        // DOUBLE root. A double root computed in float carries √ε error, not ε:
+        // measured at 1.22e-4 on a unit-scale cylinder, a thousand times the
+        // coincidence tolerance, which put the split vertex at z = −0.9999 for a circle
+        // lying at z = −1 and made checkGeometry fail on the arc built through it.
+        // A latitude circle IS the level set of the cylinder's axial parameter, so
+        // solve for that level linearly, which is exact to the last bit float allows.
+        auto edgeCrossings = [&](const Vec3& q0, const Vec3& q1, float fr[2]) -> int {
+            if (onPlane) return circleSegmentFracs(q0, q1, curve.origin, curve.radius, fr);
+            const Vec3 ax = normalize(fsurf.normal);
+            const float a0 = dot(sub(q0, fsurf.origin), ax);
+            const float a1 = dot(sub(q1, fsurf.origin), ax);
+            const float at = dot(sub(curve.origin, fsurf.origin), ax);
+            const float d = a1 - a0;
+            if (std::abs(d) <= 1e-12f) return 0;  // edge lies at a constant axial level
+            const float s = (at - a0) / d;
+            if (!(s > 0.f && s < 1.f)) return 0;
+            fr[0] = s;
+            return 1;
+        };
         for (size_t i = 0; i < n; ++i) {
             const uint32_t e = bEdges[i];
             if (e >= m_edges.size()) continue;
@@ -1110,7 +1138,7 @@ uint32_t Body::imprintCurve(uint32_t faceId, const Curve& curve, Tolerance tol)
             const Vec3 p1 = m_verts[m_edges[e].v1].point;
             const float edgeLen = length(sub(p1, p0));
             float fr[2];
-            const int k = circleSegmentFracs(p0, p1, curve.origin, curve.radius, fr);
+            const int k = edgeCrossings(p0, p1, fr);
             for (int j = 0; j < k; ++j) {
                 const float s = fr[j];
                 // circleSegmentFracs measures s along the STORED edge (v0->v1);
@@ -1180,6 +1208,31 @@ uint32_t Body::imprintCurve(uint32_t faceId, const Curve& curve, Tolerance tol)
         // can never be interior to one — and its centre lies on the axis, which is not
         // a point of the surface at all, so the interior test below is meaningless there.
         if (!onPlane) return kInvalid;
+
+        // IDEMPOTENCE. If this face already carries an inner loop lying on THIS
+        // circle it has already been imprinted, and imprinting again must refuse.
+        // The arc-bite path above consumes its own precondition — it splits the face,
+        // so the curve no longer crosses that face's interior — but the hole path
+        // leaves the circle exactly as interior as it found it. The boolean's driver
+        // imprints to a fixpoint and re-offers every tool surface on every pass, and
+        // its explosion guard watches the FACE count, which a hole does not change.
+        // So the same ring was appended once per pass until the iteration cap: a
+        // six-face box against a sixteen-segment cylinder reached 1,599,992 vertices.
+        for (uint32_t il : m_faces[faceId].innerLoops) {
+            if (il >= m_loops.size() || !m_loops[il].alive) continue;
+            const uint32_t ic = m_loops[il].first;
+            if (ic >= m_coedges.size()) continue;
+            const uint32_t ie = m_coedges[ic].edge;
+            if (ie >= m_edges.size()) continue;
+            const uint32_t icu = m_edges[ie].curve;
+            if (icu >= m_curves.size() || m_curves[icu].kind != CurveKind::Circle) continue;
+            const Curve& ex = m_curves[icu];
+            if (std::abs(ex.radius - curve.radius) <= eps &&
+                length(sub(ex.origin, curve.origin)) <= eps &&
+                std::abs(dot(normalize(ex.dir), normalize(curve.dir))) >= 1.f - 1e-4f)
+                return kInvalid;  // this hole is already here
+        }
+
         if (!pointInPlanarPolygon(curve.origin, poly, fn)) return kInvalid;
         constexpr uint32_t K = 8;  // arc segments around the hole ring
         for (uint32_t k = 0; k < K; ++k)
@@ -4130,11 +4183,20 @@ bool imprintOneWay(Body& target, const Body& tool, Tolerance tol)
     // then returns a clean empty Body rather than hanging on a degenerate tangency.
     const size_t faceBudget =
         128 + 4 * (static_cast<size_t>(target.faceCount()) + toolFaces.size());
+    // A face count alone does not bound the work: an inner-loop (hole) imprint adds
+    // vertices and edges while leaving the face count untouched, so a non-idempotent
+    // one ran to the iteration cap below and reached 1.6 million vertices on a
+    // six-face box. imprintCurve now refuses a hole it has already made, but the
+    // guard is kept honest by bounding the entity count too — whatever else may fail
+    // to terminate, it cannot do so unboundedly.
+    const size_t vertexBudget =
+        256 + 16 * (static_cast<size_t>(target.vertexCount()) + toolFaces.size());
     bool changed = true;
     size_t safety = 0;
     const size_t cap = 100000;
     while (changed && ++safety < cap) {
-        if (target.faceCount() > faceBudget) return false;  // degenerate explosion → bail
+        if (target.faceCount() > faceBudget) return false;    // degenerate explosion → bail
+        if (target.vertexCount() > vertexBudget) return false;  // non-face-growing runaway
         changed = false;
         const uint32_t fcount = static_cast<uint32_t>(target.faceCount());
         for (uint32_t f = 0; f < fcount; ++f) {
@@ -4146,8 +4208,31 @@ bool imprintOneWay(Body& target, const Body& tool, Tolerance tol)
             for (const ToolFace& tf : toolFaces) {
                 if (!boxesOverlap(tbox, tf.box)) continue;  // broad-phase prune
                 const SurfaceIntersection si = intersectSurfaces(sa, tf.surf, tol);
-                if (si.kind != SurfaceIntersectionKind::Line) continue;
-                if (target.imprintCurve(f, si.curve, tol) != kInvalid) {
+                // Every seam branch intersectSurfaces can express analytically is
+                // offered to the imprint, not just the straight one. A Circle is the
+                // seam a plane cuts on a sphere or square across a cylinder, and
+                // dropping it was what left curved operands straddling; TwoLines
+                // simply has a second Line branch, and imprinting only the first
+                // would leave the face straddling the other. imprintCurve is the
+                // authority on whether a given curve actually lies on this face and
+                // crosses its boundary cleanly, so an inapplicable branch costs one
+                // refused call rather than needing to be pre-filtered here.
+                bool cut = false;
+                switch (si.kind) {
+                    case SurfaceIntersectionKind::Line:
+                    case SurfaceIntersectionKind::Circle:
+                        cut = target.imprintCurve(f, si.curve, tol) != kInvalid;
+                        break;
+                    case SurfaceIntersectionKind::TwoLines:
+                        cut = target.imprintCurve(f, si.curve, tol) != kInvalid ||
+                              target.imprintCurve(f, si.curve2, tol) != kInvalid;
+                        break;
+                    case SurfaceIntersectionKind::None:
+                    case SurfaceIntersectionKind::Point:
+                    case SurfaceIntersectionKind::Unsupported:
+                        break;  // nothing to imprint (tangency is a measure-zero touch)
+                }
+                if (cut) {
                     changed = true;  // f was split; move on to the next face
                     break;
                 }
