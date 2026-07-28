@@ -84,6 +84,7 @@ add_executable(nexus_kernel_tests
     kernel/test_BRepBooleanInvariant.cpp
     kernel/test_BRepBooleanVolumeIdentity.cpp
     kernel/test_BRepBooleanTorture.cpp
+    kernel/test_BRepCurvedBooleanBaseline.cpp
     kernel/test_BRepNearTangentTorture.cpp
     kernel/test_BRepChamfer.cpp
     kernel/test_BRepFillet.cpp
