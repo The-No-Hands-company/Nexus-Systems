@@ -8,6 +8,11 @@ set(CMAKE_CXX_STANDARD 26)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+# Export a compile_commands.json at the build root so clangd / clang-tidy / IDE
+# tooling can resolve headers and reproduce the real compile flags. The file is
+# not consumed by any build rule, so this has no effect on the -Werror gate.
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
 # ─────────────────────────────────────────────────────────────────────────────
 #  Build type default
 # ─────────────────────────────────────────────────────────────────────────────

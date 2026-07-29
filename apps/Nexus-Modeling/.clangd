@@ -1,0 +1,23 @@
+# IDE / clangd configuration for Nexus Modeling.
+# This file does NOT affect CMake builds — it only helps clangd resolve headers for
+# the editor's diagnostics, code completion, and go-to-definition. The canonical
+# truth is the compile_commands.json symlinked from build/ (see CMakeLists.txt
+# CMAKE_EXPORT_COMPILE_COMMANDS=ON), which is what the real -Werror build honours.
+# This Add config exists so a freshly-cloned tree can be edited before its first
+# configure, and so files that are not yet wired into a CMake target still resolve.
+
+CompileFlags:
+  Add:
+    - -std=c++26
+    - -Isrc/kernel/include                 # public API headers (nexus/...)
+    - -Isrc/kernel/src/geometry            # internal geometry impl headers used by tests
+    - -Isrc/kernel/src/backend/vulkan      # SBT layout headers
+    - -DNEXUS_BACKEND_VULKAN=1
+    - -DNEXUS_BACKEND_NULL=1
+    - -DNEXUS_TESTS_ROOT="..."
+    - -Wno-everything                      # the gate runs the real -Werror build, not clangd
+
+Diagnostics:
+  UnusedIncludes: Strict
+  MissingIncludes: Strict
+  Suppress: [undirect-prerequisite-parameter]   # internal stdlib noise on libc++ headers

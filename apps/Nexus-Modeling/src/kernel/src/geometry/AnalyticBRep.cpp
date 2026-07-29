@@ -1249,8 +1249,19 @@ uint32_t Body::imprintCurve(uint32_t faceId, const Curve& curve, Tolerance tol,
             const float d = a1 - a0;
             if (std::abs(d) <= 1e-12f) return 0;  // edge lies at a constant axial level
             const float s = (at - a0) / d;
-            if (!(s > 0.f && s < 1.f)) return 0;
-            fr[0] = s;
+            // Accept a crossing AT an endpoint, not only strictly inside the edge. The
+            // level routinely falls exactly on an existing boundary vertex: once one
+            // face of a cylinder has been cut at this latitude, its neighbour's upright
+            // edges are already split there, so every remaining edge meets the level at
+            // s = 0 or s = 1. Rejecting those reported the face as UNCROSSED, it fell
+            // through to the interior-hole case, and was refused — which is why a side
+            // face crossed by two planes only ever got one of its two cuts. The
+            // caller's snap-to-vertex step turns an endpoint fraction into a reuse of
+            // that vertex, exactly as the planar path already did.
+            const float len = length(sub(q1, q0));
+            const float slack = (len > 0.f) ? (eps / len) : 0.f;
+            if (!(s > -slack && s < 1.f + slack)) return 0;
+            fr[0] = std::min(std::max(s, 0.f), 1.f);
             return 1;
         };
         for (size_t i = 0; i < n; ++i) {
