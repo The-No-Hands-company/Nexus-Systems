@@ -326,16 +326,35 @@ TEST(ArcBiteSeam, TheCentredCylinderStillSews)
 // boolean still returns empty, so it stays under the watertight-or-empty contract rather
 // than returning something leaky.
 //
-// The remaining cause is located and is a SHARED-SEAM problem, the same family as Phase 4a.
-// After the imprint the offered union face set has 30 one-sided edges and zero reused
-// directed edges — nothing is non-manifold, pieces are simply missing their partners. The
-// survivors say where: the box's vertical seams at (1, ±0.4, ±1) and cylinder generatrix
-// vertices such as (1.054, 0.354, ±1), which is a facet vertex at the cylinder's own radius
-// rather than a point on the x = 1 plane. So the box's +X wall is cut along the two
-// generatrices while the CYLINDER's side faces keep their facet boundaries there: the two
-// operands do not share the vertical seam, exactly as they once did not share the latitude
-// ring. Next step is to make the TwoLines imprint coordinate its vertices across both
-// operands, the way the shared seam ring already does for a circle.
+// The remaining cause is located: the two operands do not share the VERTICAL seam. After
+// the imprint the offered union face set has 30 one-sided edges and zero reused directed
+// edges — nothing is non-manifold, pieces are simply missing their partners — and the
+// survivors say where: the box's vertical seams at (1, ±0.4, ±1) against cylinder facet
+// vertices such as (1.054, 0.354, ±1), which sits at the cylinder's own radius rather than
+// on the x = 1 plane. The box's +X wall is cut along the two generatrices; the cylinder's
+// side faces are not cut there at all.
+//
+// The mechanism is known exactly, and it is NOT the coordination problem the latitude ring
+// had. A cylindrical side face is bounded by two rim ARCS and two uprights; the generatrix
+// to be imprinted is PARALLEL to the uprights, so its only possible crossings are on the
+// arcs — and the Line-imprint path tests only boundary edges whose curve is a Line, so it
+// finds no crossings and refuses. Nothing about vertex coordination is involved: once the
+// cylinder IS cut, the crossings land at (1, ±0.4, ±1) by construction, which is already
+// exactly where the box's are, so the weld pairs them with no protocol at all.
+//
+// An attempt at this was made and REVERTED, and the reason is the useful part. Teaching the
+// Line path to cross an arc (solve the line against the arc's plane, confirm the hit is on
+// the circle, read off its parameter) does cut the cylinder — measured, it gained the 12
+// seam-plane vertices including all four at (1, ±0.4, ±1), and both operands stayed valid
+// and closed. But it also produced four ZERO-AREA faces on the cylinder, each with all its
+// vertices on one rim, joining a point on the +0.4 generatrix straight across to one on the
+// −0.4 generatrix. Some face is being cut between two crossings that lie on the SAME rim
+// rather than one on each. checkIntegrity, checkGeometry, isClosed and euler all pass on
+// that body — none of them measures area — and the corruption only showed up as two of the
+// box's faces flipping to OnBoundary and two reused directed edges appearing in the offered
+// set. So the next attempt needs, in addition to the arc crossing: a guard that the two
+// crossings of a generatrix lie on OPPOSITE rims, and an area assertion on the imprinted
+// cylinder, because that is the only invariant here with any power.
 TEST(ArcBiteSeam, OffsetCylinderBooleanStillBailsToEmptyButCleanly)
 {
     const Body box = makeBox(2.f, 2.f, 2.f);
