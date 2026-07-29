@@ -104,7 +104,9 @@ SurfaceIntersection planeSphere(const Surface& plane, const Surface& sphere, Tol
 
 SurfaceIntersection planeCylinder(const Surface& plane, const Surface& cyl, Tolerance tol)
 {
-    (void)tol;  // the perpendicularity decision is now exact (no tolerance band)
+    // The perpendicularity decision is exact (no tolerance band); the PARALLEL branch below
+    // does need tol, since "the axis lies in the plane" is a metric test.
+
     const Vec3 n = normalize(plane.normal);
     const Vec3 ax = normalize(cyl.normal);  // cylinder axis
     SurfaceIntersection r;
@@ -121,7 +123,46 @@ SurfaceIntersection planeCylinder(const Surface& plane, const Surface& cyl, Tole
         r.curve = circleCurve(center, ax, cyl.radius);
         return r;
     }
-    r.kind = SurfaceIntersectionKind::Unsupported;  // parallel/skew → lines/ellipse (follow-up)
+    // The plane CONTAINS the axis direction — it is parallel to the axis — iff the axis is
+    // perpendicular to the plane normal. Then the section is not a curve of second degree at
+    // all: the plane slices the cylinder along two straight generatrices (one, where it is
+    // tangent; none, where it misses). This is the other half of the cylinder-through-box
+    // case: the ±Z planes cut latitude circles, and the side walls cut exactly this pair of
+    // uprights. Leaving it Unsupported meant an OFFSET cylinder never got its side wall
+    // imprinted, so nothing could sew, and the box's own side face was never cut either.
+    //
+    // The decision is a dot product against zero, which is what a tolerance is for — but the
+    // BRANCH is exact-adjacent: the perpendicular case above already claimed every plane
+    // collinear with the axis, so what remains is genuinely either parallel or skew, and
+    // only the parallel one is analytic here. A skew plane cuts an ELLIPSE and stays
+    // Unsupported.
+    const float axisDotNormal = dot(ax, n);
+    if (std::abs(axisDotNormal) <= tol.at(1.f)) {
+        // Distance from the axis to the plane, measured along the plane normal.
+        const float d = dot(sub(cyl.origin, plane.origin), n);
+        const float rad = cyl.radius;
+        const float half2 = rad * rad - d * d;
+        if (half2 < -tol.at(rad) * rad) {  // plane misses the cylinder entirely
+            r.kind = SurfaceIntersectionKind::None;
+            return r;
+        }
+        // Foot of the axis on the plane, and the in-plane direction perpendicular to the
+        // axis — the direction the two generatrices are offset along.
+        const Vec3 foot = sub(cyl.origin, scale(n, d));
+        const Vec3 across = normalize(cross(ax, n));
+        if (half2 <= tol.at(rad) * rad) {  // tangent: the two lines coincide
+            r.kind = SurfaceIntersectionKind::Line;
+            r.curve = lineCurve(foot, ax);
+            return r;
+        }
+        const float half = std::sqrt(half2);
+        r.kind = SurfaceIntersectionKind::TwoLines;
+        r.curve = lineCurve(add(foot, scale(across, half)), ax);
+        r.curve2 = lineCurve(sub(foot, scale(across, half)), ax);
+        return r;
+    }
+
+    r.kind = SurfaceIntersectionKind::Unsupported;  // skew → ellipse (follow-up)
     return r;
 }
 

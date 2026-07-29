@@ -953,23 +953,52 @@ Vec3 Body::faceSamplePoint(uint32_t faceId) const
     if (faceId >= m_faces.size() || !m_faces[faceId].alive) return {};
     const Vec3 centroid = faceCentroid(faceId);
 
-    // No holes → the outline's average IS on the face, and returning it unchanged keeps
-    // every existing caller bit-for-bit identical.
     const std::vector<std::vector<uint32_t>> holeRings = faceInnerLoopVertices(faceId);
-    if (holeRings.empty()) return centroid;
 
-    // The material test is a planar point-in-polygon one, so a curved holed face falls
+    // The material test is a planar point-in-polygon one, so a curved face falls
     // back to the centroid rather than being answered wrongly.
     const uint32_t sid = m_faces[faceId].surface;
     if (sid >= m_surfaces.size() || m_surfaces[sid].kind != SurfaceKind::Plane) return centroid;
     const Vec3 n = m_surfaces[sid].normal;
 
-    const std::vector<uint32_t> outer = faceVertices(faceId);
-    if (outer.size() < 3) return centroid;
+    // The boundary as a polygon — but built by REFINING each curved edge, not by taking its
+    // endpoints. A ring of bare vertices replaces every arc with its chord, and for an arc
+    // that bulges INTO the face that chord encloses material the face does not own. The arc
+    // bite is exactly that shape: the remainder of a bitten square has a chord along the
+    // original straight edge, so as a bare-vertex polygon it reads as the whole square and
+    // the lens that was removed looks like part of it. Sampling the arc puts the boundary
+    // back where it is. Straight edges are unaffected, so a face with no curved boundary
+    // produces the identical ring it always did.
     std::vector<Vec3> outerPts;
-    outerPts.reserve(outer.size());
-    for (uint32_t v : outer)
-        if (v < m_verts.size()) outerPts.push_back(m_verts[v].point);
+    {
+        const uint32_t loopId = m_faces[faceId].outerLoop;
+        if (loopId >= m_loops.size() || m_loops[loopId].first >= m_coedges.size())
+            return centroid;
+        constexpr uint32_t kArcSamples = 8;  // intermediate points per arc edge
+        const uint32_t first = m_loops[loopId].first;
+        uint32_t w = first, guard = 0;
+        do {
+            const Coedge& ce = m_coedges[w];
+            if (ce.edge >= m_edges.size()) return centroid;
+            const Edge& ed = m_edges[ce.edge];
+            const uint32_t vs = ce.reversed ? ed.v1 : ed.v0;
+            if (vs >= m_verts.size()) return centroid;
+            outerPts.push_back(m_verts[vs].point);
+            // Interior samples of a curved edge, walked in the coedge's own direction so the
+            // ring stays ordered.
+            if (ed.curve < m_curves.size() && m_curves[ed.curve].kind == CurveKind::Circle) {
+                const Curve& cu = m_curves[ed.curve];
+                for (uint32_t k = 1; k < kArcSamples; ++k) {
+                    const float f = static_cast<float>(k) / static_cast<float>(kArcSamples);
+                    const float t = ce.reversed ? (ed.t1 + (ed.t0 - ed.t1) * f)
+                                                : (ed.t0 + (ed.t1 - ed.t0) * f);
+                    outerPts.push_back(cu.eval(t));
+                }
+            }
+            w = ce.next;
+            if (++guard > m_coedges.size() + 1u) return centroid;  // corrupt loop guard
+        } while (w != first);
+    }
     if (outerPts.size() < 3) return centroid;
 
     std::vector<std::vector<Vec3>> holes;
@@ -981,7 +1010,6 @@ Vec3 Body::faceSamplePoint(uint32_t faceId) const
             if (v < m_verts.size()) pts.push_back(m_verts[v].point);
         if (pts.size() >= 3) holes.push_back(std::move(pts));
     }
-    if (holes.empty()) return centroid;
 
     // On the material = inside the outer boundary and inside none of the holes.
     auto onMaterial = [&](const Vec3& p) {
@@ -990,6 +1018,22 @@ Vec3 Body::faceSamplePoint(uint32_t faceId) const
             if (pointInPlanarPolygon(p, h, n)) return false;
         return true;
     };
+
+    // A face with no holes whose centroid is genuinely on it needs nothing further, and
+    // returning the centroid unchanged keeps every such caller bit-for-bit identical.
+    //
+    // But "no holes" is NOT the same as "the outline's average is on the face", which is
+    // what this used to assume. That holds for a CONVEX face and fails for a concave one —
+    // and an arc bite produces concave faces by construction. Take the square left when a
+    // circle bites a lens out of one edge: its outline average sits inside the lens, i.e.
+    // in the part that was removed. Measured on box(2,2,2) against a cylinder offset to
+    // straddle the +X wall, the average of the remainder face's six boundary vertices is
+    // (0.333, 0), which is 0.367 from the cylinder's axis and so INSIDE it — where the
+    // face's own material is almost entirely outside. Five of the box's ten faces were
+    // classified Inside, the ±Z remainders were dropped from the union, and the offered
+    // face set had 38 one-sided edges. Same failure as the holed case, different geometry
+    // producing it, so the candidate search below now serves both.
+    if (holes.empty() && onMaterial(centroid)) return centroid;
 
     // Candidates are generated in a FIXED order and the first valid one wins, so the
     // answer is reproducible — the classification that consumes it must be.
@@ -1310,11 +1354,77 @@ uint32_t Body::imprintCurve(uint32_t faceId, const Curve& curve, Tolerance tol,
         }
         constexpr float kTwoPi = 6.28318530717958647692f;
 
-        // Arc bite: the circle crosses the boundary at two distinct points (each a
-        // fresh edge split or an existing vertex) → split the face along the arc
-        // between them. Reject a same-edge double crossing (deferred).
-        const bool sameEdgeBite = cc.size() == 2 && cc[0].edge == cc[1].edge;
-        if (cc.size() == 2 && !sameEdgeBite) {
+        // Selects, of the two arcs sharing the cut edge's endpoints, the one lying INSIDE
+        // the face. cutFaceBetween sets the range from the raw endpoint angles, which
+        // traces whichever arc the angles happen to bracket; both share the endpoints, so
+        // checkGeometry holds either way and only this test tells them apart.
+        auto keepArcInsideFace = [&](uint32_t cutEdge) {
+            if (cutEdge >= m_edges.size()) return;
+            const float t0 = m_edges[cutEdge].t0, t1 = m_edges[cutEdge].t1;
+            if (!insideFace(curve.eval((t0 + t1) * 0.5f), poly))
+                m_edges[cutEdge].t1 = (t1 > t0) ? (t1 - kTwoPi) : (t1 + kTwoPi);
+        };
+
+        // ── SAME-EDGE ARC BITE ──────────────────────────────────────────────────────
+        // The circle enters and leaves through the SAME boundary edge, cutting a lens off
+        // it. This is not an exotic case: it is what an OFFSET cylinder does to the face it
+        // pierces the moment its footprint reaches a side wall, so every offset
+        // cylinder-through-box boolean depended on it and it was deferred.
+        //
+        // Why it needed its own path. The natural topology here is a two-sided face — the
+        // arc plus the chord it cuts across the edge — and a loop of two coedges is
+        // rejected by checkIntegrity, which requires three. That rule is stricter than a
+        // B-rep strictly needs, but it is load-bearing for everything built on it, so the
+        // fix is not to weaken it: split the chord at its MIDPOINT first. The bite is then
+        // bounded by three edges (arc + two collinear chord halves), the two crossing
+        // vertices are no longer adjacent in the loop — which is separately what
+        // cutFaceBetween requires — and the extra vertex sits exactly on the original
+        // straight boundary, so it adds a redundant vertex and not one micron of geometric
+        // error. mergeCollinearEdges removes it later if a caller wants the minimal body.
+        if (cc.size() == 2 && cc[0].edge == cc[1].edge) {
+            // Both crossings must be interior to the edge. A bite that starts or ends ON an
+            // existing corner is a different topology — the chord degenerates into part of
+            // an adjacent edge — and is still deferred rather than half-handled.
+            if (cc[0].isVertex || cc[1].isVertex) return kInvalid;
+            const uint32_t e0 = cc[0].edge;
+            if (e0 >= m_edges.size()) return kInvalid;
+            float fA = cc[0].frac, fB = cc[1].frac;
+            if (fA > fB) std::swap(fA, fB);
+            // Parameter of the SECOND crossing on the shared curve, captured before the
+            // first split rewrites this edge's range.
+            const float et0 = m_edges[e0].t0, et1 = m_edges[e0].t1;
+            const float tSecond = et0 + (et1 - et0) * fB;
+
+            // splitEdge reuses e0 for the near half and appends the far half, so the second
+            // crossing lands on that appended edge — whose id is the current edge count.
+            const uint32_t eFar = static_cast<uint32_t>(m_edges.size());
+            const uint32_t vA = splitEdge(e0, fA, tol);
+            if (vA == kInvalid || eFar >= m_edges.size()) return kInvalid;
+
+            // Re-express the second crossing as a fraction of the far half's ACTUAL range:
+            // splitEdge floors the split away from either endpoint, so the realised first
+            // split may not sit exactly where it was asked to.
+            const float fT0 = m_edges[eFar].t0, fT1 = m_edges[eFar].t1;
+            if (!(std::abs(fT1 - fT0) > 0.f)) return kInvalid;
+            const float localB = (tSecond - fT0) / (fT1 - fT0);
+            if (!(localB > 0.f && localB < 1.f)) return kInvalid;
+            const uint32_t vB = splitEdge(eFar, localB, tol);
+            if (vB == kInvalid || vB == vA) return kInvalid;
+
+            // eFar now spans vA → vB: halve it so the two crossings are two edges apart.
+            if (splitEdge(eFar, 0.5f, tol) == kInvalid) return kInvalid;
+
+            const uint32_t ce = static_cast<uint32_t>(m_edges.size());  // the cut edge id
+            const uint32_t newFace = cutFaceBetween(faceId, vA, vB, &curve);
+            if (newFace == kInvalid) return kInvalid;
+            keepArcInsideFace(ce);
+            return newFace;
+        }
+
+        // Arc bite across TWO distinct boundary edges: the circle crosses the boundary at
+        // two points (each a fresh edge split or an existing vertex) → split the face along
+        // the arc between them.
+        if (cc.size() == 2) {
             auto resolve = [&](const CCross& c) {
                 return c.isVertex ? c.vertex : splitEdge(c.edge, c.frac, tol);
             };
@@ -1325,18 +1435,10 @@ uint32_t Body::imprintCurve(uint32_t faceId, const Curve& curve, Tolerance tol,
             const uint32_t ce = static_cast<uint32_t>(m_edges.size());  // the cut edge id
             const uint32_t newFace = cutFaceBetween(faceId, vA, vB, &curve);
             if (newFace == kInvalid) return kInvalid;
-
-            // cutFaceBetween set the cut edge's param range from the raw endpoint
-            // angles, tracing one of the two arcs. Keep the one lying INSIDE the
-            // face (both share the endpoints, so checkGeometry holds either way).
-            if (ce < m_edges.size()) {
-                const float t0 = m_edges[ce].t0, t1 = m_edges[ce].t1;
-                if (!insideFace(curve.eval((t0 + t1) * 0.5f), poly))
-                    m_edges[ce].t1 = (t1 > t0) ? (t1 - kTwoPi) : (t1 + kTwoPi);
-            }
+            keepArcInsideFace(ce);
             return newFace;
         }
-        if (!cc.empty()) return kInvalid;  // same-edge bite / odd crossings deferred
+        if (!cc.empty()) return kInvalid;  // odd crossing count → deferred
 
         // Fully-interior circle → the face is SEGMENTED along it: the circle becomes an
         // inner loop of this face and the disk it encloses becomes a face of its own,
@@ -1352,15 +1454,25 @@ uint32_t Body::imprintCurve(uint32_t faceId, const Curve& curve, Tolerance tol,
                    length(sub(ex.origin, curve.origin)) <= eps &&
                    std::abs(dot(normalize(ex.dir), normalize(curve.dir))) >= 1.f - 1e-4f;
         };
-        // The curve of a loop's first edge, or nullptr if it has none.
-        auto loopFirstCurve = [&](uint32_t l) -> const Curve* {
-            if (l >= m_loops.size() || !m_loops[l].alive) return nullptr;
-            const uint32_t ic = m_loops[l].first;
-            if (ic >= m_coedges.size()) return nullptr;
-            const uint32_t ie = m_coedges[ic].edge;
-            if (ie >= m_edges.size()) return nullptr;
-            const uint32_t icu = m_edges[ie].curve;
-            return (icu < m_curves.size()) ? &m_curves[icu] : nullptr;
+        // Whether ANY edge of a loop already lies on this circle. The whole ring is walked
+        // rather than just its first edge, because after an arc bite the circle is one edge
+        // among several on each of the two sub-faces, and where in the ring it lands is an
+        // accident of the loop's starting coedge.
+        auto loopLiesOnCircle = [&](uint32_t l) {
+            if (l >= m_loops.size() || !m_loops[l].alive) return false;
+            const uint32_t first = m_loops[l].first;
+            if (first >= m_coedges.size()) return false;
+            uint32_t w = first, guard = 0;
+            do {
+                const uint32_t ie = m_coedges[w].edge;
+                if (ie < m_edges.size()) {
+                    const uint32_t icu = m_edges[ie].curve;
+                    if (icu < m_curves.size() && sameCircle(m_curves[icu])) return true;
+                }
+                w = m_coedges[w].next;
+                if (++guard > m_coedges.size() + 1u) break;  // corrupt loop guard
+            } while (w != first);
+            return false;
         };
 
         // IDEMPOTENCE. If this face already carries an inner loop lying on THIS
@@ -1372,19 +1484,14 @@ uint32_t Body::imprintCurve(uint32_t faceId, const Curve& curve, Tolerance tol,
         // explosion guard watches the FACE count, which the ring alone barely changes.
         // So the same ring was appended once per pass until the iteration cap: a
         // six-face box against a sixteen-segment cylinder reached 1,599,992 vertices.
-        for (uint32_t il : m_faces[faceId].innerLoops) {
-            const Curve* ex = loopFirstCurve(il);
-            if (ex != nullptr && sameCircle(*ex)) return kInvalid;  // this ring is already here
-        }
-        // The same refusal from the other side: a face whose own OUTER boundary lies on
-        // this circle has nothing interior to segment — and that face is precisely the
-        // disk this path splits off, which the driver then re-offers the very seam that
-        // created it. Left unguarded, the disk would be handed a ring equal to its own
-        // outline, every point of it exactly ON the boundary polygon where the
-        // containment test is a coin toss, and the segmentation would recur inward.
-        if (const Curve* ob = loopFirstCurve(m_faces[faceId].outerLoop);
-            ob != nullptr && sameCircle(*ob))
-            return kInvalid;
+        for (uint32_t il : m_faces[faceId].innerLoops)
+            if (loopLiesOnCircle(il)) return kInvalid;  // this ring is already here
+        // The same refusal from the other side: a face with this circle already on its OUTER
+        // boundary has nothing left to segment. That covers the disk this path splits off,
+        // which the driver re-offers the very seam that created it — left unguarded it would
+        // be handed a ring equal to its own outline, every point exactly ON the boundary
+        // polygon where containment is a coin toss, and the segmentation would recur inward.
+        if (loopLiesOnCircle(m_faces[faceId].outerLoop)) return kInvalid;
 
         if (!pointInPlanarPolygon(curve.origin, poly, fn)) return kInvalid;
 
@@ -2739,18 +2846,6 @@ Mesh Body::toMesh(uint32_t subdivisions) const
         const std::vector<uint32_t> ring = buildRing(m_loops[fc.outerLoop].first);
         if (ring.size() < 3) continue;
 
-        if (fc.innerLoops.empty()) {
-            for (size_t i = 2; i < ring.size(); ++i) {
-                nexus::geometry::Face f;
-                f.indices = {ring[0], ring[static_cast<uint32_t>(i) - 1], ring[i]};
-                mesh.topology().addFace(std::move(f));
-            }
-            continue;
-        }
-
-        // Face with a hole: bridge the first inner ring into the outer ring to
-        // form one simple polygon, then ear-clip it. (Multiple holes on one face
-        // are a rare follow-up.)
         nexus::render::Vec3 nrm{0.f, 0.f, 1.f};
         if (fc.surface < m_surfaces.size()) nrm = m_surfaces[fc.surface].normal;
         if (fc.reversed) nrm = {-nrm.x, -nrm.y, -nrm.z};
@@ -2762,12 +2857,66 @@ Mesh Body::toMesh(uint32_t subdivisions) const
             if (inner.size() >= 3) break;
             inner.clear();
         }
-        if (inner.empty()) {  // no usable hole → fan the outer as a fallback
-            for (size_t i = 2; i < ring.size(); ++i)
-                emitTri(ring[0], ring[static_cast<uint32_t>(i) - 1], ring[i], nrm);
-            continue;
+
+        // A CONVEX outer ring with no hole fans from its first vertex — the cheapest
+        // correct triangulation, and the one every face used to get.
+        //
+        // It is only correct for a convex ring, though, and that used to be guaranteed: a
+        // Line imprint splits a convex face into two convex faces, and an interior circle
+        // takes the hole path below. An ARC BITE breaks it — the remainder of a bitten face
+        // is concave by construction, its boundary dipping inward along the arc — and a fan
+        // over a concave ring emits triangles that cover the notch a second time. Measured
+        // on the +Z face of box(2,2,2) bitten by a cylinder offset to straddle the +X wall:
+        // the remainder tessellated to area 4.65 where the whole face is 4.0, double-counting
+        // the 0.65 lens that had just been cut away from it. Signed volume happened to
+        // survive that (the duplicate triangles cancel), which is why the validators and the
+        // volume all looked clean; only the unsigned area showed it. It matters beyond area:
+        // toMesh feeds classifyPoint's parity ray, so a double-covered region flips
+        // inside/outside for anything behind it.
+        //
+        // So convexity is now TESTED rather than assumed, and a concave ring goes to the
+        // ear-clipper below — the same one the hole path already used.
+        // The convexity test is a PLANAR one — it measures turns about the face normal — and
+        // for a curved face `nrm` is not a face normal at all: a Cylinder surface stores its
+        // AXIS there. Projecting a cylindrical side patch along its own axis collapses the
+        // two upright edges to points, so the turns degenerate and the ring reads as concave;
+        // it would then be ear-clipped in a frame that does not describe it. A non-planar
+        // face therefore keeps the fan unconditionally, exactly as before — measured
+        // consequence of getting this wrong: the centred cylinder-through-box boolean stopped
+        // sewing, because classifyPoint's parity ray runs against this tessellation.
+        {
+            const bool planar = fc.surface < m_surfaces.size() &&
+                                m_surfaces[fc.surface].kind == SurfaceKind::Plane;
+            bool convex = inner.empty();
+            if (convex && planar && ring.size() >= 3) {
+                // Sign of the turn at each corner, in the face plane; a convex ring turns the
+                // same way throughout. Collinear corners (zero) are ignored, not counted as
+                // a reversal, so a redundant midpoint vertex — which the arc bite leaves on
+                // the chord by design — does not misread as concavity.
+                int turnSign = 0;
+                for (size_t i = 0; i < ring.size() && convex; ++i) {
+                    const nexus::render::Vec3& a = pos[ring[i]];
+                    const nexus::render::Vec3& b = pos[ring[(i + 1) % ring.size()]];
+                    const nexus::render::Vec3& c = pos[ring[(i + 2) % ring.size()]];
+                    const float t = dot(cross(sub(b, a), sub(c, b)), nrm);
+                    const int s = (t > 1e-12f) ? 1 : (t < -1e-12f ? -1 : 0);
+                    if (s == 0) continue;
+                    if (turnSign == 0) turnSign = s;
+                    else if (s != turnSign) convex = false;
+                }
+            }
+            if (convex) {
+                for (size_t i = 2; i < ring.size(); ++i) {
+                    nexus::geometry::Face f;
+                    f.indices = {ring[0], ring[static_cast<uint32_t>(i) - 1], ring[i]};
+                    mesh.topology().addFace(std::move(f));
+                }
+                continue;
+            }
         }
 
+        // Face with a hole (bridged into one simple polygon), or a concave face without
+        // one: ear-clip it. (Multiple holes on one face are a rare follow-up.)
         // 2D frame of the face plane.
         const nexus::render::Vec3 u = normalize(sub(pos[ring[1]], pos[ring[0]]));
         const nexus::render::Vec3 vv = cross(nrm, u);
@@ -2786,11 +2935,16 @@ Mesh Body::toMesh(uint32_t subdivisions) const
             if (X(inner[k]) > X(inner[mIn])) mIn = k;
 
         std::vector<uint32_t> poly;
-        poly.reserve(ring.size() + inner.size() + 2);
-        for (size_t k = 0; k <= pOut; ++k) poly.push_back(ring[k]);
-        for (size_t k = 0; k < inner.size(); ++k) poly.push_back(inner[(mIn + k) % inner.size()]);
-        poly.push_back(inner[mIn]);
-        for (size_t k = pOut; k < ring.size(); ++k) poly.push_back(ring[k]);
+        if (inner.empty()) {
+            poly = ring;  // concave, no hole → ear-clip the outer ring as it stands
+        } else {
+            poly.reserve(ring.size() + inner.size() + 2);
+            for (size_t k = 0; k <= pOut; ++k) poly.push_back(ring[k]);
+            for (size_t k = 0; k < inner.size(); ++k)
+                poly.push_back(inner[(mIn + k) % inner.size()]);
+            poly.push_back(inner[mIn]);
+            for (size_t k = pOut; k < ring.size(); ++k) poly.push_back(ring[k]);
+        }
 
         // Ear-clip the simple polygon (CCW). Duplicate bridge vertices share their
         // pos index, so they are excluded from the containment test by identity.
