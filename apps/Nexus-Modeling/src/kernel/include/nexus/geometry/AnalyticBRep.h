@@ -182,6 +182,12 @@ public:
         std::vector<uint32_t> loop;
         Surface surface;
         std::optional<NurbsSurface> nurbsSurface;
+        // Inner (hole) rings of this face, each an ordered vertex ring wound OPPOSITE
+        // the outer loop so it bounds a hole rather than a second outer boundary. A
+        // boolean seam that pierces the middle of a face — a cylinder through a box's
+        // face — produces exactly this, and a face with a hole cannot be assembled
+        // without it. Empty for the ordinary single-boundary face.
+        std::vector<std::vector<uint32_t>> innerLoops;
     };
 
     // Assemble a body from a point set and per-face vertex rings. Edges are
@@ -215,6 +221,12 @@ public:
 
     // The vertices of a face's outer loop, in order (for queries / editing).
     [[nodiscard]] std::vector<uint32_t> faceVertices(uint32_t faceId) const;
+
+    // The vertices of each of a face's INNER (hole) loops, in order — the companion to
+    // faceVertices, which reports only the outer boundary. Empty for a face with no
+    // holes. A caller reassembling a face (the boolean's sew) needs both, or the holes
+    // are silently lost.
+    [[nodiscard]] std::vector<std::vector<uint32_t>> faceInnerLoopVertices(uint32_t faceId) const;
 
     // Imprint an analytic intersection curve onto a planar face (the B-rep
     // boolean's imprint step). The curve — a Line from intersectSurfaces(), e.g.

@@ -195,6 +195,24 @@ Body booleanToBody(const Body& a, const Body& b, BooleanOp op, Tolerance tol)
             fd.loop.reserve(vs.size());
             for (uint32_t v : vs) fd.loop.push_back(weld(body.vertex(v).point));
 
+            // Carry the face's HOLES. A seam that pierces the middle of a face — a
+            // cylinder through a box's face — leaves it bounded outside and holed
+            // inside; faceVertices reports only the outer boundary, so the hole used to
+            // be dropped here and the pierced face was reassembled solid, which both
+            // loses the opening and leaves the other operand's ring edges with nothing
+            // to partner. The same outward flip that reverses the outer loop has to
+            // reverse each hole too, or the hole would wind with the boundary instead of
+            // against it and bound a second outer region rather than an opening.
+            std::vector<std::vector<uint32_t>> holes = body.faceInnerLoopVertices(f);
+            for (std::vector<uint32_t>& hole : holes) {
+                if (hole.size() < 3) continue;
+                if (reverse) std::reverse(hole.begin(), hole.end());
+                std::vector<uint32_t> welded;
+                welded.reserve(hole.size());
+                for (uint32_t v : hole) welded.push_back(weld(body.vertex(v).point));
+                fd.innerLoops.push_back(std::move(welded));
+            }
+
             // Record this face's arc edges. Walking the outer loop's coedges gives
             // each edge with its OWN stored endpoints, so no correspondence with
             // the (possibly reversed) `vs` order is needed. weld() only looks up

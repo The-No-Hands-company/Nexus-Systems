@@ -405,35 +405,22 @@ std::optional<Body> Body::fromFaces(const std::vector<Vec3>& points,
     std::unordered_map<uint64_t, uint32_t> edgeMap;    // undirected -> edge id
     std::unordered_map<uint64_t, uint32_t> dirCoedge;  // directed (a,b) -> coedge id
 
-    for (const FaceDef& fd : faces) {
-        const size_t n = fd.loop.size();
-        if (n < 3) return std::nullopt;
-        for (uint32_t vi : fd.loop)
-            if (vi >= points.size()) return std::nullopt;
-
-        const uint32_t surfaceId = static_cast<uint32_t>(b.m_surfaces.size());
-        b.m_surfaces.push_back(fd.surface);
-        if (fd.nurbsSurface.has_value()) {
-            const uint32_t handle = static_cast<uint32_t>(b.m_nurbsSurfaces.size());
-            b.m_nurbsSurfaces.push_back(*fd.nurbsSurface);
-            b.m_surfaces[surfaceId].kind = SurfaceKind::Nurbs;
-            b.m_surfaces[surfaceId].nurbs = handle;
-        }
-
-        const uint32_t faceId = static_cast<uint32_t>(b.m_faces.size());
-        b.m_faces.push_back({});
-        const uint32_t loopId = static_cast<uint32_t>(b.m_loops.size());
-        b.m_loops.push_back({});
-        b.m_faces[faceId].surface = surfaceId;
-        b.m_faces[faceId].outerLoop = loopId;
-        b.m_loops[loopId].face = faceId;
-        b.m_loops[loopId].outer = true;
+    // Build one coedge ring for `loopId` from an ordered vertex list, deduplicating
+    // edges across every ring of every face and partnering opposite traversals. Outer
+    // and inner (hole) rings are topologically the same construction — a hole differs
+    // only in winding and in being listed as an inner loop — so both go through here
+    // rather than the inner case getting a second, subtly different implementation.
+    auto buildRing = [&](const std::vector<uint32_t>& ring, uint32_t loopId) -> bool {
+        const size_t n = ring.size();
+        if (n < 3) return false;
+        for (uint32_t vi : ring)
+            if (vi >= points.size()) return false;
 
         const uint32_t firstCoedge = static_cast<uint32_t>(b.m_coedges.size());
         for (size_t j = 0; j < n; ++j) {
-            const uint32_t a = fd.loop[j];
-            const uint32_t c = fd.loop[(j + 1) % n];
-            if (a == c) return std::nullopt;  // degenerate edge
+            const uint32_t a = ring[j];
+            const uint32_t c = ring[(j + 1) % n];
+            if (a == c) return false;  // degenerate edge
 
             const uint64_t ek = edgeKey(a, c);
             uint32_t edgeId;
@@ -475,10 +462,10 @@ std::optional<Body> Body::fromFaces(const std::vector<Vec3>& points,
             // already has both its coedges — either would over-write a partner and
             // leave a non-reciprocal link. Degenerate boolean sews (near-coincident
             // welded facets) surface here, so the caller gets a clean nullopt.
-            if (dirCoedge.count(dirKey(a, c))) return std::nullopt;  // directed edge reused
+            if (dirCoedge.count(dirKey(a, c))) return false;  // directed edge reused
             auto pit = dirCoedge.find(dirKey(c, a));
             if (pit != dirCoedge.end()) {
-                if (b.m_coedges[pit->second].partner != kInvalid) return std::nullopt;  // 3rd coedge
+                if (b.m_coedges[pit->second].partner != kInvalid) return false;  // 3rd coedge
                 b.m_coedges[coedgeId].partner = pit->second;
                 b.m_coedges[pit->second].partner = coedgeId;
             }
@@ -491,6 +478,44 @@ std::optional<Body> Body::fromFaces(const std::vector<Vec3>& points,
             b.m_coedges[cur].prev = firstCoedge + static_cast<uint32_t>((j + n - 1) % n);
         }
         b.m_loops[loopId].first = firstCoedge;
+        return true;
+    };
+
+    for (const FaceDef& fd : faces) {
+        if (fd.loop.size() < 3) return std::nullopt;
+
+        const uint32_t surfaceId = static_cast<uint32_t>(b.m_surfaces.size());
+        b.m_surfaces.push_back(fd.surface);
+        if (fd.nurbsSurface.has_value()) {
+            const uint32_t handle = static_cast<uint32_t>(b.m_nurbsSurfaces.size());
+            b.m_nurbsSurfaces.push_back(*fd.nurbsSurface);
+            b.m_surfaces[surfaceId].kind = SurfaceKind::Nurbs;
+            b.m_surfaces[surfaceId].nurbs = handle;
+        }
+
+        const uint32_t faceId = static_cast<uint32_t>(b.m_faces.size());
+        b.m_faces.push_back({});
+        const uint32_t loopId = static_cast<uint32_t>(b.m_loops.size());
+        b.m_loops.push_back({});
+        b.m_faces[faceId].surface = surfaceId;
+        b.m_faces[faceId].outerLoop = loopId;
+        b.m_loops[loopId].face = faceId;
+        b.m_loops[loopId].outer = true;
+        if (!buildRing(fd.loop, loopId)) return std::nullopt;
+
+        // Inner (hole) rings. A boolean seam through the middle of a face — a cylinder
+        // piercing a box's face — leaves the face bounded outside and holed inside, and
+        // until now that hole could not be expressed here at all, so it was dropped and
+        // the sew failed. Each ring is wound opposite the outer loop by the caller.
+        for (const std::vector<uint32_t>& hole : fd.innerLoops) {
+            if (hole.size() < 3) return std::nullopt;
+            const uint32_t innerId = static_cast<uint32_t>(b.m_loops.size());
+            b.m_loops.push_back({});
+            b.m_loops[innerId].face = faceId;
+            b.m_loops[innerId].outer = false;
+            if (!buildRing(hole, innerId)) return std::nullopt;
+            b.m_faces[faceId].innerLoops.push_back(innerId);
+        }
     }
 
     // One shell of all faces; closed iff every edge is used by two coedges.
@@ -920,6 +945,28 @@ std::vector<uint32_t> Body::faceVertices(uint32_t faceId) const
         w = m_coedges[w].next;
         if (++guard > m_coedges.size() + 1) break;
     } while (w != m_loops[loopId].first);
+    return out;
+}
+
+std::vector<std::vector<uint32_t>> Body::faceInnerLoopVertices(uint32_t faceId) const
+{
+    std::vector<std::vector<uint32_t>> out;
+    if (faceId >= m_faces.size() || !m_faces[faceId].alive) return out;
+    for (uint32_t loopId : m_faces[faceId].innerLoops) {
+        if (loopId >= m_loops.size() || !m_loops[loopId].alive) continue;
+        const uint32_t first = m_loops[loopId].first;
+        if (first >= m_coedges.size()) continue;
+        std::vector<uint32_t> ring;
+        uint32_t w = first, guard = 0;
+        do {
+            const Coedge& x = m_coedges[w];
+            if (x.edge >= m_edges.size()) break;
+            ring.push_back(x.reversed ? m_edges[x.edge].v1 : m_edges[x.edge].v0);
+            w = m_coedges[w].next;
+            if (++guard > m_coedges.size() + 1) break;
+        } while (w != first);
+        if (ring.size() >= 3) out.push_back(std::move(ring));
+    }
     return out;
 }
 
