@@ -110,8 +110,13 @@ void Camera::lookAt(Vec3 eye, Vec3 target, Vec3 up) noexcept
 
 void Camera::lookAt(Vec3 target, float distance) noexcept
 {
-    if (!std::isfinite(target.x) || !std::isfinite(target.y) || !std::isfinite(target.z) ||
-        !std::isfinite(distance) || distance <= 0.0f) {
+    // isFiniteFloat, not std::isfinite — as everywhere else in this file. The two are not
+    // interchangeable: under -ffast-math std::isfinite returns TRUE for NaN and Inf, so
+    // this guard was dead and a NaN target reached the view matrix. The build no longer
+    // enables that flag, but the bit-inspecting helper is correct under either policy and
+    // the rest of the file already used it — these two calls were simply stragglers.
+    if (!isFiniteFloat(target.x) || !isFiniteFloat(target.y) || !isFiniteFloat(target.z) ||
+        !isFiniteFloat(distance) || distance <= 0.0f) {
         return;
     }
 

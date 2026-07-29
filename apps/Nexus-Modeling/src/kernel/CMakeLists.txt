@@ -2,6 +2,9 @@
 #  Nexus Graphics Kernel
 # ─────────────────────────────────────────────────────────────────────────────
 
+# NEXUS_ARCH_BASELINE comes from the root CMakeLists (nexus_arch_baseline). It replaces
+# -march=native; see the floating-point policy note further down for why.
+
 # ── Core abstraction library ──────────────────────────────────────────────────
 add_library(nexus_gfx_core STATIC
     src/gfx/RenderContext.cpp
@@ -205,15 +208,49 @@ if(NEXUS_BACKEND_NULL)
     target_compile_definitions(nexus_gfx_core PUBLIC NEXUS_BACKEND_NULL)
 endif()
 
-# Aggressive optimisation flags per-platform
+# ── Floating-point policy — IEEE-754 SEMANTICS ARE LOAD-BEARING ───────────────
+#
+# This kernel decides topology with exact arithmetic, and exact arithmetic is built out
+# of error-free transformations (RobustPredicates' twoSum / twoDiff / twoProduct, the
+# Knuth/Dekker construction Shewchuk's predicates rest on). Every one of those captures a
+# rounding error with an expression that is ALGEBRAICALLY ZERO — `(a - (s - bv)) + (b - bv)`
+# for `s = a + b`. A compiler permitted to reassociate folds it to a literal zero, which
+# does not fail loudly: the expansion arithmetic silently degenerates to plain double.
+#
+# `-ffast-math` grants exactly that permission, and it was enabled here. Measured, with
+# everything else held identical:
+#
+#   -O2 -march=native -ffast-math   twoSum error term = 0            (folded)
+#   -O2 -march=native                twoSum error term = 8.67e-19    (survives)
+#
+# and on the resulting predicate, against an exact __int128 reference over integer-valued
+# float coordinates whose intermediates exceed 2^53:
+#
+#   with    -ffast-math   6 WRONG SIGNS in 5,675 cases, every one on exactly-coplanar
+#                         input, where orient3D returned a confident +/-512, +/-1024, ...
+#                         instead of 0 — so the Simulation-of-Simplicity tie-break, and
+#                         every degeneracy strategy built on it, never fired at all
+#   without -ffast-math   0 wrong signs in 400,000 cases (537 exact degeneracies)
+#
+# So: no fast-math, and no FP contraction in the predicates (an FMA changes where the
+# rounding lands, which is the one thing an error-free transformation may not tolerate).
+#
+# -march=native is also gone. It bakes the build machine's ISA into the binary, which
+# makes the result non-portable AND makes FMA/vectorisation decisions differ per host —
+# and this kernel's contract is that a result is reproducible. Determinism outranks the
+# tuning. x86-64-v2 (SSE4.2/POPCNT, ~2009 onward) is the portable baseline.
 if(MSVC)
-    target_compile_options(nexus_gfx_core PRIVATE /W4 /WX /O2 /arch:AVX2)
+    # /fp:precise is MSVC's default but state it, since the whole point is that this is a
+    # deliberate choice. /fp:contract=off keeps FMA out of the error-free transformations.
+    target_compile_options(nexus_gfx_core PRIVATE /W4 /WX /O2 /fp:precise /fp:contract=off)
 else()
     target_compile_options(nexus_gfx_core PRIVATE
         -Wall -Wextra -Wpedantic -Werror
-        -march=native          # host-side frequency-bound code benefits from native tuning
-        -ffast-math            # safe for non-IEEE geometry math
+        -ffp-contract=off      # no FMA contraction: exact predicates depend on where rounding lands
     )
+    if(NEXUS_ARCH_BASELINE)
+        target_compile_options(nexus_gfx_core PRIVATE ${NEXUS_ARCH_BASELINE})
+    endif()
 endif()
 
 # ── Vulkan backend ────────────────────────────────────────────────────────────
@@ -361,10 +398,16 @@ if(NEXUS_BACKEND_VULKAN)
 endif()
 target_compile_features(nexus_app PUBLIC cxx_std_26)
 if(MSVC)
-    target_compile_options(nexus_app PRIVATE /W4 /WX /O2 /arch:AVX2)
+    target_compile_options(nexus_app PRIVATE /W4 /WX /O2 /fp:precise /fp:contract=off)
 else()
+    # Same floating-point policy as nexus_gfx_core — the app calls straight into the
+    # kernel's geometry, so a different FP regime here would mean the same predicate
+    # answering differently depending on which target inlined it.
     target_compile_options(nexus_app PRIVATE
-        -Wall -Wextra -Wpedantic -Werror -march=native -ffast-math)
+        -Wall -Wextra -Wpedantic -Werror -ffp-contract=off)
+    if(NEXUS_ARCH_BASELINE)
+        target_compile_options(nexus_app PRIVATE ${NEXUS_ARCH_BASELINE})
+    endif()
 endif()
 
 add_executable(nexus_modeling

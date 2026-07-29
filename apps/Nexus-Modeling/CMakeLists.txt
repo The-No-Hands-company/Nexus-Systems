@@ -115,6 +115,23 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(imgui)
 
+# ── Portable ISA baseline (replaces the former -march=native) ─────────────────────────
+# A FIXED baseline rather than the build host's ISA. Two reasons, and the second is the
+# binding one: a -march=native binary does not run on an older machine, and it makes
+# FMA/vectorisation decisions vary per host — so the same source yields different
+# floating-point results on different builders. This kernel's contract is that a result is
+# reproducible, and determinism outranks the tuning. x86-64-v2 is SSE4.2 + POPCNT,
+# universal from ~2009. Newer instructions belong behind per-function dispatch in a
+# measured hot spot, not in a global -march.
+include(CheckCXXCompilerFlag)
+set(NEXUS_ARCH_BASELINE "" CACHE INTERNAL "Portable ISA baseline flags for every Nexus target")
+if(NOT MSVC)
+    check_cxx_compiler_flag("-march=x86-64-v2" NEXUS_HAS_X86_64_V2)
+    if(NEXUS_HAS_X86_64_V2)
+        set(NEXUS_ARCH_BASELINE "-march=x86-64-v2" CACHE INTERNAL "" FORCE)
+    endif()
+endif()
+
 add_subdirectory(src/kernel)
 
 if(NEXUS_ENABLE_TESTS)

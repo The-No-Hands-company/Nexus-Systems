@@ -24,13 +24,14 @@ ctest --test-dir build --output-on-failure                   # run all tests + p
 
 ## Non-obvious rules that will bite you
 
-- **`-ffast-math` is DISABLED** (and `-march=native`). `std::isfinite` / `std::isnan` are reliable. The compiler does NOT assume operands are finite. Detect non-finite values via standard library functions. The kernel uses centralized `Tolerance` system with scale-aware comparisons.
+- **IEEE-754 semantics are load-bearing — do not add `-ffast-math`, and detect non-finite values by INSPECTING THE EXPONENT BITS, not with `std::isfinite`.** The build compiles with `-ffp-contract=off` and a fixed `-march=x86-64-v2` baseline (never `-march=native`: it makes FP results differ per build host, which breaks the determinism contract). The reason is `RobustPredicates`: Shewchuk's exact predicates are built from error-free transformations whose error terms are *algebraically zero* expressions, so a compiler allowed to reassociate folds them to literal zero and the predicates silently degrade to plain `double`. That was the state until 2026-07-30 — measured at 6 wrong signs in 5,675 cases, every one on exactly-coplanar input where `orient3D` returned a confident ±512 instead of 0, so the Simulation-of-Simplicity tie-break never fired at all. `test_RobustPredicatesExactness` now carries a `__int128`-referenced battery past 2^53 plus a recorded fixture (`MeasuredCoplanarFixtureThatFastMathGetsWrong`) that fails immediately if the policy regresses; the pre-existing int64 batteries cannot see it, because their coordinate bound keeps the determinant under 2^53 where double is also exact. Use the local bit-inspecting helper for non-finite checks — `geometry::isFinite` (Tolerance.h) or a file-local `isFiniteFloat` — since `std::isfinite` returns **true** for NaN/Inf under fast-math and those guards then become dead code (two such stragglers were found and fixed in `Camera.cpp` / `FluidSolver.cpp`). The kernel uses the centralized `Tolerance` system with scale-aware comparisons.
 - **Warnings are errors**: `-Wall -Wextra -Wpedantic -Werror` (GCC/Clang), `/W4 /WX` (MSVC). A warning fails the build.
 - **API freeze audit**: the `ApiFreezeAudit.PublicHeaderManifestMatchesWorkspace` test enforces an exact match between every header under `src/kernel/include/nexus/**/*.h` and the manifest at `tests/kernel/fixtures/api_surface_manifest_alpha_v1.txt`. Adding/removing a public header **requires** updating that fixture or the suite fails.
 - **Public vs internal headers**: `src/kernel/include/nexus/` is the public API surface; headers under `src/kernel/src/` are internal — never expose them publicly.
 - **Input hardening**: public API entry points reject non-finite float inputs (pervasive convention; see the `harden:` git history). New numeric APIs should too.
 - **Determinism**: behavior must be reproducible on the Null backend. Snapshot / serialization byte formats are **versioned with backward-compatible reads** (e.g. `serializeSimState` v2 still decodes v1) — bump the version, don't break old blobs.
 - **Reversed-Z** depth convention is assumed throughout the renderer.
+- **The kernel is entirely single-threaded** — no `std::thread`, `std::async`, `std::execution` policy, OpenMP or job system anywhere in the ~72k lines. Do not introduce ad-hoc threads: parallelism arrives as one task system, applied to measured hot spots, and it has to preserve the determinism contract. Anything you read describing a "parallel" build or solver means the geometric *parallel constraint*, not concurrency.
 
 ## Adding code (wiring checklist)
 
@@ -61,11 +62,11 @@ Three build targets form the kernel:
 - `MeshBoolean` — real CSG pipeline: tri-tri intersection → retriangulation → cut → classify → stitch (watertight, χ=2)
 - `SubdivisionSurface` — Catmull-Clark, Loop, crease weights
 - `MeshRemesh` / `MeshDecimator` / `MeshLaplacian` — voxel/quad remesh, quadric decimation, smoothing/fairing/parameterization
-- `MeshBVH` — SAH BVH, parallel build, refit, ray/AABB/frustum traversal
+- `MeshBVH` — SAH BVH, refit, ray/AABB/frustum traversal (build is SERIAL; the kernel has no threading at all — see below)
 - `Tolerance` — centralized, scale-aware, IEEE-754 compliant
 - `RobustPredicates` — Shewchuk exact orient2D/3D, incircle/insphere
 
-**CAD (`cad/`).** Feature DAG with undo/redo, 2D constraint sketch (7 base + 11 combinators), parallel solver with adaptive correction.
+**CAD (`cad/`).** Feature DAG with undo/redo, 2D constraint sketch (7 base + 11 combinators), iterative solver with adaptive correction ("parallel" here means the geometric parallel CONSTRAINT — the solver is single-threaded).
 
 **App (`app/`).** State-pattern `AppMode` (Select, Sketch, Extrude, Revolve, Fillet, Chamfer, Boolean, Sculpt, Animation, Simulation), `ModeOrchestrator`/`ModeRegistry`, `ViewportController`, `TransformGizmo`, `EditorUI` (ImGui + Vulkan), vertical toolbar with grouped modes, hover pre-highlight (pale cyan outline).
 
@@ -92,7 +93,7 @@ Headers in `nexus/geometry/` that use `Vec3` must declare the using or fully qua
 
 ## Constraint Solver Quirks
 
-- The parallel solver (`parallelSolve`) is in `nexus::parametric`, not `nexus::geometry::parametric`.
+- The solver lives in `nexus::parametric`, not `nexus::geometry::parametric`. (There is no `parallelSolve` symbol; nothing in the kernel is threaded.)
 - Constraint combinators (parallel, perpendicular, midpoint, etc.) compose from existing primitives. They must be declared in BOTH the header AND implemented in the .cpp.
 - The solver uses adaptive correction — when error increases, step size is halved (`adaptiveMaxCorrection *= 0.5`).
 
@@ -112,7 +113,7 @@ The `nexus_modeling` executable additionally requires GLFW3 and GLU (Linux): `pk
 
 ## Existing Scaffolding (Do Not Break)
 
-- Test count: 2026 (one pre-existing API freeze audit failure allowed)
+- Test count: 2474 via `ctest`, all passing (5 Vulkan-hardware skips). The API-freeze audit passes — there is no longer any allowed failure, so a red suite means you broke something.
 - All tests run headless via Null backend where Vulkan is unavailable
 - `nexus_kernel_perf_smoke` — separate performance benchmark binary
 - Sources in `src/automation/` — scripting infrastructure; maintain API compatibility

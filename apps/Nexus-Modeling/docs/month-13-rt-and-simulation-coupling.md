@@ -97,7 +97,7 @@ Gaffer-on-Games "Fix Your Timestep"), **not** a naive per-frame `step → apply`
 - `interpolateSimState(from, to, alpha)` is exposed as a standalone utility
   (bodies matched by id, ordered output).
 
-**Implementation note:** the kernel builds with `-ffast-math`, so finiteness is
+**Implementation note:** finiteness is (deliberately, and formerly of necessity — the kernel built with `-ffast-math` until 2026-07-30)
 checked via IEEE-754 bit inspection (not `std::isfinite`) and quaternion
 interpolation short-circuits exact endpoints to avoid approximate-rsqrt drift —
 matching the existing `SimulationCore` convention.

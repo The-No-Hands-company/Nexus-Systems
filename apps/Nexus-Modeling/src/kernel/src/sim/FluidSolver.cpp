@@ -212,7 +212,11 @@ void  FluidSolver::setGravity(FluidVec3 gravity) noexcept { m_impl->grav = gravi
 FluidVec3 FluidSolver::gravity() const noexcept            { return m_impl->grav; }
 
 void  FluidSolver::setSmoothingRadius(float h) noexcept {
-    if (std::isfinite(h) && h > 0.0f) {
+    // isFiniteFloat, not std::isfinite — the neighbouring setters already use it, and the
+    // two differ: std::isfinite reports NaN and Inf as finite under -ffast-math, so this
+    // guard was dead and a NaN smoothing radius was accepted, poisoning every kernel
+    // weight from then on. The bit-inspecting helper holds under either FP policy.
+    if (isFiniteFloat(h) && h > 0.0f) {
         m_impl->h = h;
     }
 }

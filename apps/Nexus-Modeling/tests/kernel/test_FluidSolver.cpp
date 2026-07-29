@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 #include "nexus/sim/FluidSolver.h"
 
+#include <cmath>
 #include <limits>
 
 using namespace nexus;
@@ -254,4 +255,34 @@ TEST(FluidSolver, DeserializeRejectsMalformedBlob) {
     EXPECT_FALSE(deserializeFluidState({}, out));
     // Partial header (5 bytes).
     EXPECT_FALSE(deserializeFluidState({0x46, 0x44, 0x4c, 0x31, 0x01}, out));
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  setSmoothingRadius rejects non-finite input.
+//
+//  Every other setter on this solver guards with the file's bit-inspecting isFiniteFloat;
+//  this one was written with std::isfinite, which under the kernel's former -ffast-math
+//  build reported NaN and Inf as finite. A NaN smoothing radius is not a contained fault:
+//  h is the denominator of every SPH kernel weight, so one accepted NaN turns the whole
+//  particle field non-finite on the next step. The flag is gone and the guard now matches
+//  its neighbours; this pins it.
+// ─────────────────────────────────────────────────────────────────────────────
+TEST(FluidSolver, SmoothingRadiusRejectsNonFiniteInput)
+{
+    const float nan = std::numeric_limits<float>::quiet_NaN();
+    const float inf = std::numeric_limits<float>::infinity();
+
+    FluidSolver solver;
+    solver.setSmoothingRadius(0.5f);
+    ASSERT_FLOAT_EQ(solver.smoothingRadius(), 0.5f);
+
+    for (const float bad : {nan, inf, -inf, 0.f, -1.f}) {
+        solver.setSmoothingRadius(bad);
+        EXPECT_FLOAT_EQ(solver.smoothingRadius(), 0.5f)
+            << "a rejected smoothing radius was stored anyway";
+    }
+
+    // The guard rejects; it does not disable the setter.
+    solver.setSmoothingRadius(0.25f);
+    EXPECT_FLOAT_EQ(solver.smoothingRadius(), 0.25f);
 }

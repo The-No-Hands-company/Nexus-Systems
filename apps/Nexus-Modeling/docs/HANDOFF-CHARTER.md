@@ -83,8 +83,19 @@ ctest --test-dir build --output-on-failure                   # tests + perf smok
 
 ## 3. Rules that WILL bite you (non-negotiable)
 
-- **`-ffast-math` and `-march=native` are DISABLED.** `std::isfinite`/`isnan` are
-  reliable; the compiler does NOT assume finiteness.
+- **`-ffast-math` and `-march=native` must stay OUT of the build, and non-finite checks
+  must inspect the exponent bits rather than call `std::isfinite`.** Both flags *were*
+  enabled until 2026-07-30, and this line claimed the opposite while they were — so treat
+  it as a rule with teeth, not a description. `-ffast-math` lets the compiler reassociate,
+  which folds the algebraically-zero error terms inside `RobustPredicates`' error-free
+  transformations to literal zero; the exact predicates then quietly degrade to plain
+  `double` and return a confident side for points that are exactly coplanar (measured: 6
+  wrong signs in 5,675 cases, so Simulation-of-Simplicity never got a tie to break). It
+  also makes `std::isfinite` report NaN/Inf as finite, which silently killed two input
+  guards. The build now uses `-ffp-contract=off` plus a fixed `-march=x86-64-v2` baseline
+  (host-specific ISA would make FP results differ per build machine, breaking the
+  determinism contract). `RobustPredicatesExactness.MeasuredCoplanarFixtureThatFastMathGetsWrong`
+  plus the `__int128` batteries beyond 2^53 fail immediately if this regresses.
 - **Warnings are errors:** `-Wall -Wextra -Wpedantic -Werror` (GCC/Clang), `/W4 /WX`
   (MSVC). One warning fails the build. GCC-15 `-Werror=maybe-uninitialized` is
   aggressive — zero-init float min/max locals; `std::max({...})` needs `<algorithm>`.

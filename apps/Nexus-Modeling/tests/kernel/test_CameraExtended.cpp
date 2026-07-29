@@ -166,3 +166,57 @@ TEST(CameraExtended, Vec3DotCrossNormalizeBehave)
     EXPECT_NEAR(n.y, 0.f, 1e-6f);
     EXPECT_NEAR(n.z, 0.f, 1e-6f);
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  The distance overload of lookAt rejects non-finite input.
+//
+//  Its sibling lookAt(target, eye, up) has been covered above for a long time; this
+//  overload was not, and its guard was written with std::isfinite while every other guard
+//  in Camera.cpp uses the file's own bit-inspecting isFiniteFloat. That difference was not
+//  cosmetic: the kernel was built with -ffast-math, under which std::isfinite reports NaN
+//  and Inf as FINITE, so the guard passed them straight through and a NaN target reached
+//  rebuildMatrices — from where it contaminates the view matrix, every world transform
+//  derived from it, and any culling decision downstream. The flag is gone and the guard now
+//  uses isFiniteFloat, which is correct either way. This pins the behaviour so neither can
+//  regress silently again.
+// ─────────────────────────────────────────────────────────────────────────────
+TEST(CameraExtended, LookAtWithDistanceRejectsNonFiniteInput)
+{
+    const float nan = std::numeric_limits<float>::quiet_NaN();
+    const float inf = std::numeric_limits<float>::infinity();
+
+    Camera cam;
+    cam.setPerspective(60.f, 16.f / 9.f, 0.1f, 100.f);
+    cam.lookAt({4.f, 3.f, 10.f}, {0.f, 0.f, 0.f});
+    const CameraUBO good = cam.ubo();
+
+    auto unchanged = [&](const char* what) {
+        const CameraUBO now = cam.ubo();
+        for (int r = 0; r < 4; ++r)
+            for (int c = 0; c < 4; ++c)
+                EXPECT_FLOAT_EQ(now.view.m[r][c], good.view.m[r][c])
+                    << what << " modified the view matrix at [" << r << "][" << c << "]";
+        EXPECT_FLOAT_EQ(now.position.x, good.position.x) << what;
+        EXPECT_FLOAT_EQ(now.position.y, good.position.y) << what;
+        EXPECT_FLOAT_EQ(now.position.z, good.position.z) << what;
+    };
+
+    cam.lookAt({nan, 0.f, 0.f}, 5.f);   unchanged("NaN target x");
+    cam.lookAt({0.f, nan, 0.f}, 5.f);   unchanged("NaN target y");
+    cam.lookAt({0.f, 0.f, nan}, 5.f);   unchanged("NaN target z");
+    cam.lookAt({0.f, 0.f, 0.f}, nan);   unchanged("NaN distance");
+    cam.lookAt({inf, 0.f, 0.f}, 5.f);   unchanged("Inf target x");
+    cam.lookAt({0.f, 0.f, 0.f}, inf);   unchanged("Inf distance");
+    cam.lookAt({0.f, 0.f, 0.f}, -inf);  unchanged("-Inf distance");
+    cam.lookAt({0.f, 0.f, 0.f}, 0.f);   unchanged("zero distance");
+    cam.lookAt({0.f, 0.f, 0.f}, -1.f);  unchanged("negative distance");
+
+    // And a finite call still works, so the guard rejects rather than disables.
+    cam.lookAt({1.f, 2.f, 3.f}, 7.f);
+    const CameraUBO after = cam.ubo();
+    bool anyFinite = true;
+    for (int r = 0; r < 4 && anyFinite; ++r)
+        for (int c = 0; c < 4; ++c)
+            if (!std::isfinite(after.view.m[r][c])) { anyFinite = false; break; }
+    EXPECT_TRUE(anyFinite) << "a valid lookAt produced a non-finite view matrix";
+}
