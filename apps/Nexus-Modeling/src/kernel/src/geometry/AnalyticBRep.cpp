@@ -1045,7 +1045,8 @@ uint32_t Body::cutFaceBetween(uint32_t faceId, uint32_t vA, uint32_t vB,
     return faceB;
 }
 
-uint32_t Body::imprintCurve(uint32_t faceId, const Curve& curve, Tolerance tol)
+uint32_t Body::imprintCurve(uint32_t faceId, const Curve& curve, Tolerance tol,
+                            const std::vector<Vec3>* ringPoints)
 {
     if (faceId >= m_faces.size() || !m_faces[faceId].alive) return kInvalid;
     if (curve.kind != CurveKind::Line && curve.kind != CurveKind::Circle) return kInvalid;
@@ -1234,10 +1235,54 @@ uint32_t Body::imprintCurve(uint32_t faceId, const Curve& curve, Tolerance tol)
         }
 
         if (!pointInPlanarPolygon(curve.origin, poly, fn)) return kInvalid;
-        constexpr uint32_t K = 8;  // arc segments around the hole ring
-        for (uint32_t k = 0; k < K; ++k)
-            if (!pointInPlanarPolygon(curve.eval(kTwoPi * static_cast<float>(k) / K), poly, fn))
-                return kInvalid;
+
+        // The ring's DISCRETIZATION. A hole ring used to be built at a fixed eight
+        // segments, which is fine in isolation and wrong the moment the ring is a
+        // boolean seam: the other operand discretizes the SAME circle by its own
+        // topology, and a sixteen-segment cylinder therefore met an eight-segment hole.
+        // Both rings were the same circle — the eight vertices coincided with eight of
+        // the sixteen to 1.7e-7 — but each hole edge spanned two of the cylinder's, so
+        // no edge could ever find a partner and the sew could not close. When the
+        // caller knows the other operand's vertices on this circle it passes them, and
+        // the ring is built on exactly those points so the two sides agree by
+        // construction rather than by luck. Absent that, the old uniform ring stands.
+        std::vector<Vec3> ring;
+        if (ringPoints != nullptr && ringPoints->size() >= 3) {
+            // Accept only points genuinely on this circle; a caller's list is a hint,
+            // not an authority, and a stray point would put a vertex off the curve and
+            // break checkGeometry.
+            for (const Vec3& p : *ringPoints) {
+                const Vec3 d = sub(p, curve.origin);
+                const float axial = dot(d, normalize(curve.dir));
+                const float radial = length(sub(d, scale(normalize(curve.dir), axial)));
+                if (std::abs(axial) <= eps && std::abs(radial - curve.radius) <= eps)
+                    ring.push_back(p);
+            }
+            if (ring.size() < 3) ring.clear();
+        }
+        if (ring.empty()) {
+            // A caller that passes a (possibly empty) ring list is coordinating this
+            // circle across two operands, and committing to a resolution before the
+            // partner's vertices exist is what produced the 8-against-16 mismatch. So
+            // refuse: the caller runs another round once the other side is imprinted.
+            // A caller that passes nothing is imprinting a lone body and a uniform ring
+            // is the only sensible answer — that path is unchanged.
+            if (ringPoints != nullptr) return kInvalid;
+            constexpr uint32_t kUniform = 8;  // arc segments when no partner is involved
+            for (uint32_t k = 0; k < kUniform; ++k)
+                ring.push_back(curve.eval(kTwoPi * static_cast<float>(k) / kUniform));
+        }
+        // Order the ring by angle on the circle so consecutive points bound a forward
+        // arc, then keep the parameters monotonically increasing across the ring so
+        // every edge's [t0,t1] is a forward sweep that reproduces its own endpoints.
+        std::sort(ring.begin(), ring.end(), [&](const Vec3& a, const Vec3& b) {
+            return paramOnCurve(curve, a) < paramOnCurve(curve, b);
+        });
+        const uint32_t K = static_cast<uint32_t>(ring.size());
+        std::vector<float> tAt(K);
+        for (uint32_t k = 0; k < K; ++k) tAt[k] = paramOnCurve(curve, ring[k]);
+        for (const Vec3& p : ring)
+            if (!pointInPlanarPolygon(p, poly, fn)) return kInvalid;
 
         // One shared Circle curve + K arc edges + K coedges wound CW (opposite the
         // outer loop, so the ring bounds a hole) + one inner loop on this face.
@@ -1246,7 +1291,7 @@ uint32_t Body::imprintCurve(uint32_t faceId, const Curve& curve, Tolerance tol)
         const uint32_t v0 = static_cast<uint32_t>(m_verts.size());
         for (uint32_t k = 0; k < K; ++k) {
             Vertex vt;
-            vt.point = curve.eval(kTwoPi * static_cast<float>(k) / K);
+            vt.point = ring[k];
             m_verts.push_back(vt);
         }
         const uint32_t e0 = static_cast<uint32_t>(m_edges.size());
@@ -1255,8 +1300,10 @@ uint32_t Body::imprintCurve(uint32_t faceId, const Curve& curve, Tolerance tol)
             e.curve = cid;
             e.v0 = v0 + k;
             e.v1 = v0 + (k + 1) % K;
-            e.t0 = kTwoPi * static_cast<float>(k) / K;
-            e.t1 = kTwoPi * static_cast<float>(k + 1) / K;
+            e.t0 = tAt[k];
+            // The closing edge wraps, so its end parameter is the first point's angle
+            // one full turn on; every other edge ends at its successor's angle.
+            e.t1 = (k + 1 == K) ? tAt[0] + kTwoPi : tAt[k + 1];
             m_edges.push_back(e);
         }
         const uint32_t loopId = static_cast<uint32_t>(m_loops.size());
@@ -4220,9 +4267,26 @@ bool imprintOneWay(Body& target, const Body& tool, Tolerance tol)
                 bool cut = false;
                 switch (si.kind) {
                     case SurfaceIntersectionKind::Line:
-                    case SurfaceIntersectionKind::Circle:
                         cut = target.imprintCurve(f, si.curve, tol) != kInvalid;
                         break;
+                    case SurfaceIntersectionKind::Circle: {
+                        // Collect the TOOL's vertices lying on this seam circle and pass
+                        // them along. A hole ring must be discretized the same way the
+                        // other operand discretized the same circle, or the two rings
+                        // cannot partner edge-for-edge and the sew cannot close.
+                        const Vec3 cax = normalize(si.curve.dir);
+                        std::vector<Vec3> onCircle;
+                        for (uint32_t tv = 0; tv < static_cast<uint32_t>(tool.vertexCount()); ++tv) {
+                            if (!tool.vertex(tv).alive) continue;
+                            const Vec3 d = sub(tool.vertex(tv).point, si.curve.origin);
+                            const float axial = dot(d, cax);
+                            const float radial = length(sub(d, scale(cax, axial)));
+                            if (std::abs(axial) <= pad && std::abs(radial - si.curve.radius) <= pad)
+                                onCircle.push_back(tool.vertex(tv).point);
+                        }
+                        cut = target.imprintCurve(f, si.curve, tol, &onCircle) != kInvalid;
+                        break;
+                    }
                     case SurfaceIntersectionKind::TwoLines:
                         cut = target.imprintCurve(f, si.curve, tol) != kInvalid ||
                               target.imprintCurve(f, si.curve2, tol) != kInvalid;
@@ -4245,9 +4309,18 @@ bool imprintOneWay(Body& target, const Body& tool, Tolerance tol)
 
 bool imprintMutually(Body& a, Body& b, Tolerance tol)
 {
-    const bool ok1 = imprintOneWay(a, b, tol);
-    const bool ok2 = imprintOneWay(b, a, tol);
-    return ok1 && ok2;  // false ⇒ a degenerate/near-tangent config blew the imprint budget
+    // Two rounds, not one. A hole-ring seam must be discretized to match the OTHER
+    // operand's vertices on the same circle, which on the first pass may not exist yet:
+    // a cylinder's latitude ring is created by imprinting the box onto it, so a box
+    // imprinted first has no partner ring to match and defers. The second round makes
+    // those deferred cuts. Everything already imprinted is idempotent and refuses, so
+    // the extra round converges rather than accumulating.
+    bool ok = true;
+    for (int round = 0; round < 2; ++round) {
+        ok = imprintOneWay(a, b, tol) && ok;
+        ok = imprintOneWay(b, a, tol) && ok;
+    }
+    return ok;  // false ⇒ a degenerate/near-tangent config blew the imprint budget
 }
 
 bool segmentCrossesTriangleExact(const Vec3& A, const Vec3& B, const Vec3& v0, const Vec3& v1,
