@@ -88,20 +88,43 @@ TEST(BRepFaceSamplePoint, PiercedFaceSamplesItsMaterialNotTheOpening)
     EXPECT_EQ(pierced, 2u) << "the cylinder should pierce the box's two ±Z faces";
 }
 
-// And therefore the face itself classifies correctly. Every face of a box pierced by a
-// cylinder has material lying wholly outside that cylinder, so every one is Outside.
-TEST(BRepFaceSamplePoint, PiercedBoxClassifiesEveryFaceOutsideTheCylinder)
+// And therefore the face itself classifies correctly. The imprint segments each pierced
+// ±Z face into a ring outside the cylinder and the disk inside it, and each half must be
+// classified by the material it actually carries: every ring Outside (its centroid falls
+// in the opening, which is what used to call it Inside), every disk Inside.
+TEST(BRepFaceSamplePoint, PiercedBoxClassifiesEachSegmentByItsOwnMaterial)
 {
     Body box = makeBox(2.f, 2.f, 2.f);
     Body cyl = makeCylinder(kCylR, 4.f, 16);
     ASSERT_TRUE(imprintMutually(box, cyl));
 
+    size_t rings = 0, disks = 0;
     for (uint32_t f = 0; f < static_cast<uint32_t>(box.faceCount()); ++f) {
         if (!box.face(f).alive) continue;
-        EXPECT_EQ(box.classifyFace(f, cyl), PC::Outside)
-            << "box face " << f << " has no material inside the cylinder, so it cannot be "
-               "classified Inside";
+        // A disk is the segment lying on the seam circle: it is the only kind of face here
+        // whose whole boundary is arcs, every vertex of it at the cylinder's radius.
+        const std::vector<uint32_t> vs = box.faceVertices(f);
+        bool allOnCylinder = !vs.empty();
+        for (uint32_t v : vs) {
+            const auto& p = box.vertex(v).point;
+            if (std::fabs(std::sqrt(p.x * p.x + p.y * p.y) - kCylR) > 1e-3f) {
+                allOnCylinder = false;
+                break;
+            }
+        }
+        if (allOnCylinder) {
+            ++disks;
+            EXPECT_EQ(box.classifyFace(f, cyl), PC::Inside)
+                << "box face " << f << " is the disk inside the cylinder";
+        } else {
+            if (!box.faceInnerLoopVertices(f).empty()) ++rings;
+            EXPECT_EQ(box.classifyFace(f, cyl), PC::Outside)
+                << "box face " << f << " has no material inside the cylinder, so it cannot be "
+                   "classified Inside";
+        }
     }
+    EXPECT_EQ(disks, 2u) << "the cylinder should leave a disk in each of the box's ±Z faces";
+    EXPECT_EQ(rings, 2u) << "and the remainder of each of those faces is a ring with a hole";
 }
 
 // The case that rules out every averaging scheme, pinned so the reasoning survives: for

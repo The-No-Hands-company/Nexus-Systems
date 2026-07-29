@@ -1,8 +1,9 @@
-// Foundation — analytic B-rep inner loops (holes). A circle lying fully inside a
-// planar face imprints as an INNER LOOP (a cylinder-through-face hole): the
-// validators accept the holed face, its edges are boundary edges (open shell in
-// isolation), and toMesh tessellates the face-with-hole watertight (area = outer
-// − hole). Bodies without holes are unaffected.
+// Foundation — analytic B-rep inner loops. A circle lying fully inside a planar face
+// SEGMENTS it: the circle becomes an inner loop of that face and the disk it encloses
+// becomes a face of its own, the two sharing the ring's arcs edge for edge. So the
+// validators accept the holed face, the solid stays CLOSED (an imprint segments the
+// boundary and never removes material), and the two segments together still tessellate
+// to the whole original face. Bodies without inner loops are unaffected.
 
 #include <nexus/geometry/AnalyticBRep.h>
 
@@ -71,35 +72,51 @@ Curve circleZ1(Vec3 c, float r)
 }
 }  // namespace
 
-TEST(BRepInnerLoop, InteriorCircleAddsHole)
+TEST(BRepInnerLoop, InteriorCircleSegmentsTheFaceAndKeepsTheSolidClosed)
 {
     Body b = makeBox(2.f, 2.f, 2.f);  // top face z=1, area 4
     const uint32_t tf = topFace(b);
     ASSERT_NE(tf, kInvalid);
 
-    ASSERT_EQ(b.imprintCurve(tf, circleZ1({0, 0, 1}, 0.4f)), tf);  // returns the face
+    // The circle segments the face: it becomes an inner loop of the cut face and the
+    // enclosed disk becomes a face of its own, which is what is returned.
+    const uint32_t disk = b.imprintCurve(tf, circleZ1({0, 0, 1}, 0.4f));
+    ASSERT_NE(disk, kInvalid);
+    EXPECT_NE(disk, tf);
     EXPECT_EQ(b.face(tf).innerLoops.size(), 1u);
+    EXPECT_TRUE(b.faceInnerLoopVertices(disk).empty());  // the disk itself has no hole
 
-    // Topology + geometry are valid; the hole's edges are boundary edges, so in
-    // isolation the shell is OPEN (a following boolean caps it with the tool wall).
+    // An imprint segments the boundary; it never removes material. So the solid is
+    // still CLOSED — every arc of the ring is shared by the cut face's inner loop and
+    // the disk's outer loop, with no boundary edge anywhere.
     const auto ig = b.checkIntegrity();
     EXPECT_TRUE(ig.ok) << ig.reason;
     EXPECT_TRUE(b.checkGeometry().ok) << b.checkGeometry().reason;
-    EXPECT_EQ(ig.boundaryEdges, 8u);  // K=8 arc edges around the hole
-    EXPECT_FALSE(b.isClosed());
+    EXPECT_EQ(ig.boundaryEdges, 0u);
+    EXPECT_TRUE(b.isClosed());
+    EXPECT_EQ(ig.faces, 7u);  // the six box faces, one of them now split in two
 }
 
-TEST(BRepInnerLoop, HoleTessellationHasCorrectArea)
+TEST(BRepInnerLoop, SegmentedFaceStillTessellatesToTheWholeFace)
 {
     Body b = makeBox(2.f, 2.f, 2.f);
     const uint32_t tf = topFace(b);
     const float r = 0.4f;
-    ASSERT_EQ(b.imprintCurve(tf, circleZ1({0, 0, 1}, r)), tf);
+    const uint32_t disk = b.imprintCurve(tf, circleZ1({0, 0, 1}, r));
+    ASSERT_NE(disk, kInvalid);
 
-    // The top face tessellates to area 4 − π r² (within the arc-polygon tolerance).
-    const double expected = 4.0 - M_PI * static_cast<double>(r) * static_cast<double>(r);
-    EXPECT_NEAR(areaAtZ(b.toMesh(8), 1.f), expected, 0.02);
-    EXPECT_LT(areaAtZ(b.toMesh(8), 1.f), 4.0);  // strictly less than the full face
+    // Segmentation is area-preserving: the ring-and-disk together still tile the whole
+    // 2×2 face. The volume is likewise untouched — this is why a boolean can imprint an
+    // operand and then classify against it, which an opened shell makes meaningless.
+    EXPECT_NEAR(areaAtZ(b.toMesh(8), 1.f), 4.0, 1e-4);
+    EXPECT_NEAR(signedVolume(b.toMesh(8)), 8.0, 1e-4);
+
+    // The disk carries its own share of that area (π r² up to the arc-chord deficit).
+    const double diskArea = M_PI * static_cast<double>(r) * static_cast<double>(r);
+    Body onlyDisk = b;
+    for (uint32_t f = 0; f < static_cast<uint32_t>(onlyDisk.faceCount()); ++f)
+        if (f != disk) onlyDisk.faceMut(f).alive = false;
+    EXPECT_NEAR(areaAtZ(onlyDisk.toMesh(8), 1.f), diskArea, 0.02);
 }
 
 TEST(BRepInnerLoop, CircleTooLargeRejected)

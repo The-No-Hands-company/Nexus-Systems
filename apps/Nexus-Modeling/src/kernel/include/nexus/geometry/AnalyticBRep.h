@@ -248,13 +248,19 @@ public:
     // kInvalid if the curve does not cross the boundary in exactly two interior
     // points. Preserves both validators. (Circle imprint — the coplanar in-face
     // "bite" and cuts on curved faces — is a dedicated follow-up increment.)
+    // A Circle that lies entirely INSIDE the face's boundary segments it instead of
+    // cutting it: the ring becomes an inner loop of the face and the disk it encloses
+    // becomes a face of its own, the two sharing the ring's arc edges (so a closed
+    // solid stays closed — an imprint segments the boundary and never removes
+    // material). Returns the new disk face. Refused if the face already carries that
+    // ring, or if the face's own outer boundary is that circle.
     // `ringPoints`, when given, are candidate vertex positions on `curve` supplied by
     // the caller — in practice the OTHER operand's vertices on this same seam circle.
-    // They matter only for the fully-interior (inner-loop) case, where the ring's
-    // discretization has to agree with whatever the other operand chose or the two
-    // rings can never partner edge-for-edge. Points not actually on the circle are
-    // ignored, and fewer than three usable ones falls back to a uniform ring, so the
-    // list is a hint and never a way to place a vertex off the curve.
+    // They matter only for the fully-interior case, where the ring's discretization has
+    // to agree with whatever the other operand chose or the two rings can never partner
+    // edge-for-edge. Points not actually on the circle are ignored, and fewer than three
+    // usable ones falls back to a uniform ring, so the list is a hint and never a way to
+    // place a vertex off the curve.
     uint32_t imprintCurve(uint32_t faceId, const Curve& curve, Tolerance tol = {},
                           const std::vector<Vec3>* ringPoints = nullptr);
 

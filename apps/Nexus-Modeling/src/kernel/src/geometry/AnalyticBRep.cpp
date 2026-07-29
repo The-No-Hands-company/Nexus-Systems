@@ -1338,35 +1338,53 @@ uint32_t Body::imprintCurve(uint32_t faceId, const Curve& curve, Tolerance tol,
         }
         if (!cc.empty()) return kInvalid;  // same-edge bite / odd crossings deferred
 
-        // Fully-interior circle → an INNER LOOP (hole) of the face. PLANE only: a
-        // latitude circle wraps its whole cylinder, so it always leaves the patch and
-        // can never be interior to one — and its centre lies on the axis, which is not
-        // a point of the surface at all, so the interior test below is meaningless there.
+        // Fully-interior circle → the face is SEGMENTED along it: the circle becomes an
+        // inner loop of this face and the disk it encloses becomes a face of its own,
+        // the two sharing the ring edge for edge. PLANE only: a latitude circle wraps
+        // its whole cylinder, so it always leaves the patch and can never be interior
+        // to one — and its centre lies on the axis, which is not a point of the surface
+        // at all, so the interior test below is meaningless there.
         if (!onPlane) return kInvalid;
+
+        // Whether two circles are the same one, within the face's coincidence eps.
+        auto sameCircle = [&](const Curve& ex) {
+            return ex.kind == CurveKind::Circle && std::abs(ex.radius - curve.radius) <= eps &&
+                   length(sub(ex.origin, curve.origin)) <= eps &&
+                   std::abs(dot(normalize(ex.dir), normalize(curve.dir))) >= 1.f - 1e-4f;
+        };
+        // The curve of a loop's first edge, or nullptr if it has none.
+        auto loopFirstCurve = [&](uint32_t l) -> const Curve* {
+            if (l >= m_loops.size() || !m_loops[l].alive) return nullptr;
+            const uint32_t ic = m_loops[l].first;
+            if (ic >= m_coedges.size()) return nullptr;
+            const uint32_t ie = m_coedges[ic].edge;
+            if (ie >= m_edges.size()) return nullptr;
+            const uint32_t icu = m_edges[ie].curve;
+            return (icu < m_curves.size()) ? &m_curves[icu] : nullptr;
+        };
 
         // IDEMPOTENCE. If this face already carries an inner loop lying on THIS
         // circle it has already been imprinted, and imprinting again must refuse.
         // The arc-bite path above consumes its own precondition — it splits the face,
-        // so the curve no longer crosses that face's interior — but the hole path
-        // leaves the circle exactly as interior as it found it. The boolean's driver
-        // imprints to a fixpoint and re-offers every tool surface on every pass, and
-        // its explosion guard watches the FACE count, which a hole does not change.
+        // so the curve no longer crosses that face's interior — but this path leaves
+        // the circle exactly as interior as it found it. The boolean's driver imprints
+        // to a fixpoint and re-offers every tool surface on every pass, and its
+        // explosion guard watches the FACE count, which the ring alone barely changes.
         // So the same ring was appended once per pass until the iteration cap: a
         // six-face box against a sixteen-segment cylinder reached 1,599,992 vertices.
         for (uint32_t il : m_faces[faceId].innerLoops) {
-            if (il >= m_loops.size() || !m_loops[il].alive) continue;
-            const uint32_t ic = m_loops[il].first;
-            if (ic >= m_coedges.size()) continue;
-            const uint32_t ie = m_coedges[ic].edge;
-            if (ie >= m_edges.size()) continue;
-            const uint32_t icu = m_edges[ie].curve;
-            if (icu >= m_curves.size() || m_curves[icu].kind != CurveKind::Circle) continue;
-            const Curve& ex = m_curves[icu];
-            if (std::abs(ex.radius - curve.radius) <= eps &&
-                length(sub(ex.origin, curve.origin)) <= eps &&
-                std::abs(dot(normalize(ex.dir), normalize(curve.dir))) >= 1.f - 1e-4f)
-                return kInvalid;  // this hole is already here
+            const Curve* ex = loopFirstCurve(il);
+            if (ex != nullptr && sameCircle(*ex)) return kInvalid;  // this ring is already here
         }
+        // The same refusal from the other side: a face whose own OUTER boundary lies on
+        // this circle has nothing interior to segment — and that face is precisely the
+        // disk this path splits off, which the driver then re-offers the very seam that
+        // created it. Left unguarded, the disk would be handed a ring equal to its own
+        // outline, every point of it exactly ON the boundary polygon where the
+        // containment test is a coin toss, and the segmentation would recur inward.
+        if (const Curve* ob = loopFirstCurve(m_faces[faceId].outerLoop);
+            ob != nullptr && sameCircle(*ob))
+            return kInvalid;
 
         if (!pointInPlanarPolygon(curve.origin, poly, fn)) return kInvalid;
 
@@ -1418,8 +1436,36 @@ uint32_t Body::imprintCurve(uint32_t faceId, const Curve& curve, Tolerance tol,
         for (const Vec3& p : ring)
             if (!pointInPlanarPolygon(p, poly, fn)) return kInvalid;
 
-        // One shared Circle curve + K arc edges + K coedges wound CW (opposite the
-        // outer loop, so the ring bounds a hole) + one inner loop on this face.
+        // ORIENTATION. The ring runs in increasing-parameter order, which turns either
+        // way about this face's normal depending only on where the seam circle's axis
+        // happens to point: a plane cutting a cylinder yields ONE circle per level, and
+        // its axis agrees with the normal of the face above it and opposes the face
+        // below. Assuming a direction therefore gets one of any two such rings backwards
+        // — an inner loop wound WITH the outer boundary bounds a second outer region
+        // instead of an opening, and the disk below would come out inside-out. So read
+        // the convention off the face actually being cut: whichever way its own outer
+        // loop turns about fn is outer-like, the ring bounding the opening must turn the
+        // other way, and the disk's own boundary the same way.
+        auto turnAboutNormal = [&](const std::vector<Vec3>& r) {
+            Vec3 acc{0.f, 0.f, 0.f};  // Newell: 2·area·n, independent of the origin
+            for (size_t i = 0; i < r.size(); ++i)
+                acc = add(acc, cross(r[i], r[(i + 1) % r.size()]));
+            return dot(acc, fn);
+        };
+        const bool ringForwardIsOuterLike =
+            (turnAboutNormal(ring) > 0.f) == (turnAboutNormal(poly) > 0.f);
+
+        // One shared Circle curve + K arc edges, each traversed TWICE: once by this
+        // face's new inner loop and once by the disk face's outer loop. Segmenting a
+        // face is not the same as opening it — the disk is still part of the solid, and
+        // an imprint that removed it would leave the shell with a boundary. That is not
+        // a cosmetic difference: classifyPoint counts ray crossings of the tessellated
+        // shell, so a shell with an opening classifies points BEHIND that opening as
+        // inside, and the boolean's own classification of the other operand's faces
+        // silently went wrong (measured on a cylinder driven through a box: five of the
+        // cylinder's sixteen faces a whole unit clear of the box came back Inside).
+        // Beyond that, the material inside the ring is what caps the intersection — with
+        // the disk discarded, box ∩ cylinder could never be closed at all.
         const uint32_t cid = static_cast<uint32_t>(m_curves.size());
         m_curves.push_back(curve);
         const uint32_t v0 = static_cast<uint32_t>(m_verts.size());
@@ -1440,32 +1486,64 @@ uint32_t Body::imprintCurve(uint32_t faceId, const Curve& curve, Tolerance tol,
             e.t1 = (k + 1 == K) ? tAt[0] + kTwoPi : tAt[k + 1];
             m_edges.push_back(e);
         }
-        const uint32_t loopId = static_cast<uint32_t>(m_loops.size());
+
+        // This face's inner loop + the disk face and its outer loop.
+        const uint32_t innerLoopId = static_cast<uint32_t>(m_loops.size());
         {
             Loop l;
             l.face = faceId;
             l.outer = false;
             m_loops.push_back(l);
         }
-        const uint32_t c0 = static_cast<uint32_t>(m_coedges.size());
-        // Coedge CE_k reverses edge E_k (traverses V_{k+1}→V_k); the ring goes
-        // CE_0 → CE_{K-1} → … → CE_1 → CE_0 (clockwise about the axis).
-        for (uint32_t k = 0; k < K; ++k) {
-            Coedge c;
-            c.edge = e0 + k;
-            c.reversed = true;
-            c.loop = loopId;
-            c.next = c0 + (k + K - 1) % K;
-            c.prev = c0 + (k + 1) % K;
-            m_coedges.push_back(c);
+        const uint32_t diskFace = static_cast<uint32_t>(m_faces.size());
+        {
+            Face f;  // the disk lies in the parent's surface, oriented the same way
+            f.surface = m_faces[faceId].surface;
+            f.reversed = m_faces[faceId].reversed;
+            f.shell = m_faces[faceId].shell;
+            m_faces.push_back(f);
         }
-        m_loops[loopId].first = c0;
-        for (uint32_t k = 0; k < K; ++k) {
-            m_edges[e0 + k].coedge = c0 + k;
-            m_verts[v0 + k].coedge = c0 + (k + K - 1) % K;  // coedge starting at V_k
+        const uint32_t diskLoopId = static_cast<uint32_t>(m_loops.size());
+        {
+            Loop l;
+            l.face = diskFace;
+            l.outer = true;
+            m_loops.push_back(l);
         }
-        m_faces[faceId].innerLoops.push_back(loopId);
-        return faceId;
+        m_faces[diskFace].outerLoop = diskLoopId;
+
+        // A closed coedge ring over the K arc edges, traversing each either FORWARD
+        // (V_k → V_{k+1}, increasing parameter) or backward. Coedge index k is always
+        // the one on arc edge e0+k, so the two rings partner edge for edge.
+        auto buildArcRing = [&](uint32_t ownerLoop, bool forward) {
+            const uint32_t c0 = static_cast<uint32_t>(m_coedges.size());
+            for (uint32_t k = 0; k < K; ++k) {
+                Coedge c;
+                c.edge = e0 + k;
+                c.reversed = !forward;
+                c.loop = ownerLoop;
+                // Forward, CE_k ends at V_{k+1} so its successor is CE_{k+1}; backward,
+                // CE_k runs V_{k+1}→V_k so its successor is CE_{k−1}.
+                c.next = c0 + (forward ? (k + 1) % K : (k + K - 1) % K);
+                c.prev = c0 + (forward ? (k + K - 1) % K : (k + 1) % K);
+                m_coedges.push_back(c);
+            }
+            m_loops[ownerLoop].first = c0;
+            for (uint32_t k = 0; k < K; ++k)  // a vertex points at a coedge STARTING there
+                m_verts[forward ? (v0 + k) : (v0 + (k + 1) % K)].coedge = c0 + k;
+            return c0;
+        };
+        const uint32_t innerC0 = buildArcRing(innerLoopId, !ringForwardIsOuterLike);
+        const uint32_t diskC0 = buildArcRing(diskLoopId, ringForwardIsOuterLike);
+        for (uint32_t k = 0; k < K; ++k) {
+            m_coedges[innerC0 + k].partner = diskC0 + k;
+            m_coedges[diskC0 + k].partner = innerC0 + k;
+            m_edges[e0 + k].coedge = innerC0 + k;
+        }
+        m_faces[faceId].innerLoops.push_back(innerLoopId);
+        const uint32_t sh = m_faces[faceId].shell;
+        if (sh < m_shells.size()) m_shells[sh].faces.push_back(diskFace);
+        return diskFace;
     }
 
     // ── Line imprint ────────────────────────────────────────────────────────────
