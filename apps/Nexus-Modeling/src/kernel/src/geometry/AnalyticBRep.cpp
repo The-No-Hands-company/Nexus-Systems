@@ -948,6 +948,82 @@ std::vector<uint32_t> Body::faceVertices(uint32_t faceId) const
     return out;
 }
 
+Vec3 Body::faceSamplePoint(uint32_t faceId) const
+{
+    if (faceId >= m_faces.size() || !m_faces[faceId].alive) return {};
+    const Vec3 centroid = faceCentroid(faceId);
+
+    // No holes → the outline's average IS on the face, and returning it unchanged keeps
+    // every existing caller bit-for-bit identical.
+    const std::vector<std::vector<uint32_t>> holeRings = faceInnerLoopVertices(faceId);
+    if (holeRings.empty()) return centroid;
+
+    // The material test is a planar point-in-polygon one, so a curved holed face falls
+    // back to the centroid rather than being answered wrongly.
+    const uint32_t sid = m_faces[faceId].surface;
+    if (sid >= m_surfaces.size() || m_surfaces[sid].kind != SurfaceKind::Plane) return centroid;
+    const Vec3 n = m_surfaces[sid].normal;
+
+    const std::vector<uint32_t> outer = faceVertices(faceId);
+    if (outer.size() < 3) return centroid;
+    std::vector<Vec3> outerPts;
+    outerPts.reserve(outer.size());
+    for (uint32_t v : outer)
+        if (v < m_verts.size()) outerPts.push_back(m_verts[v].point);
+    if (outerPts.size() < 3) return centroid;
+
+    std::vector<std::vector<Vec3>> holes;
+    holes.reserve(holeRings.size());
+    for (const std::vector<uint32_t>& ring : holeRings) {
+        std::vector<Vec3> pts;
+        pts.reserve(ring.size());
+        for (uint32_t v : ring)
+            if (v < m_verts.size()) pts.push_back(m_verts[v].point);
+        if (pts.size() >= 3) holes.push_back(std::move(pts));
+    }
+    if (holes.empty()) return centroid;
+
+    // On the material = inside the outer boundary and inside none of the holes.
+    auto onMaterial = [&](const Vec3& p) {
+        if (!pointInPlanarPolygon(p, outerPts, n)) return false;
+        for (const std::vector<Vec3>& h : holes)
+            if (pointInPlanarPolygon(p, h, n)) return false;
+        return true;
+    };
+
+    // Candidates are generated in a FIXED order and the first valid one wins, so the
+    // answer is reproducible — the classification that consumes it must be.
+    //
+    // A midpoint between an outer vertex and a hole vertex is tried first because it is
+    // the candidate that survives the case which defeats every averaging scheme: a hole
+    // concentric with its face, where the outline's average and the area-weighted
+    // centroid are both the hole's centre.
+    for (const Vec3& o : outerPts)
+        for (const std::vector<Vec3>& h : holes)
+            for (const Vec3& hp : h) {
+                const Vec3 mid{(o.x + hp.x) * 0.5f, (o.y + hp.y) * 0.5f, (o.z + hp.z) * 0.5f};
+                if (onMaterial(mid)) return mid;
+            }
+
+    // Then points drawn in from the outer boundary — an edge midpoint and a vertex,
+    // each pulled a quarter of the way toward the centroid.
+    for (float t : {0.25f, 0.5f, 0.75f})
+        for (size_t i = 0; i < outerPts.size(); ++i) {
+            const Vec3& a = outerPts[i];
+            const Vec3& b = outerPts[(i + 1) % outerPts.size()];
+            const Vec3 edgeMid{(a.x + b.x) * 0.5f, (a.y + b.y) * 0.5f, (a.z + b.z) * 0.5f};
+            const Vec3 p{edgeMid.x + (centroid.x - edgeMid.x) * t,
+                         edgeMid.y + (centroid.y - edgeMid.y) * t,
+                         edgeMid.z + (centroid.z - edgeMid.z) * t};
+            if (onMaterial(p)) return p;
+            const Vec3 q{a.x + (centroid.x - a.x) * t, a.y + (centroid.y - a.y) * t,
+                         a.z + (centroid.z - a.z) * t};
+            if (onMaterial(q)) return q;
+        }
+
+    return centroid;  // nothing found → no worse than before
+}
+
 std::vector<std::vector<uint32_t>> Body::faceInnerLoopVertices(uint32_t faceId) const
 {
     std::vector<std::vector<uint32_t>> out;
@@ -1833,7 +1909,11 @@ Vec3 Body::faceCentroid(uint32_t faceId) const
 Body::PointContainment Body::classifyFace(uint32_t faceId, const Body& other, Tolerance tol) const
 {
     if (faceId >= m_faces.size() || !m_faces[faceId].alive) return PointContainment::Outside;
-    return other.classifyPoint(faceCentroid(faceId), tol);
+    // faceSamplePoint, not faceCentroid: on a face pierced by a hole the outline's
+    // average is the hole's centre — the one point the face does not occupy — which
+    // classified a box face whose material lies entirely outside a cylinder as being
+    // inside it. Identical to the centroid for a face without holes.
+    return other.classifyPoint(faceSamplePoint(faceId), tol);
 }
 
 int Body::facePlaneSide(uint32_t faceId, const Vec3& p, Tolerance tol) const

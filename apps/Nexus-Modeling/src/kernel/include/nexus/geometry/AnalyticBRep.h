@@ -222,6 +222,15 @@ public:
     // The vertices of a face's outer loop, in order (for queries / editing).
     [[nodiscard]] std::vector<uint32_t> faceVertices(uint32_t faceId) const;
 
+    // A point lying ON the face's material — inside its outer boundary and outside
+    // every hole. For a face with no holes this is exactly faceCentroid; for a pierced
+    // one the centroid can fall in the opening, which is the one region the face does
+    // not occupy, so anything classifying a face by sampling it must use this instead.
+    // Note that an area-weighted centroid would NOT do: for a hole concentric with its
+    // face both regions share the same centre. Deterministic, and falls back to the
+    // centroid for a curved holed face (the material test is planar).
+    [[nodiscard]] Vec3 faceSamplePoint(uint32_t faceId) const;
+
     // The vertices of each of a face's INNER (hole) loops, in order — the companion to
     // faceVertices, which reports only the outer boundary. Empty for a face with no
     // holes. A caller reassembling a face (the boolean's sew) needs both, or the holes

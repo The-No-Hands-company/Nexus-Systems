@@ -95,7 +95,7 @@ bool selectFace(const Body& body, uint32_t f, const Body& other, BooleanOp op, b
     if (cls != PC::OnBoundary) return keepFace(cls, op, isA, reverse);
 
     if (!isA) return false;  // coincident pair is represented by the A-side face
-    const Vec3 c = body.faceCentroid(f);
+    const Vec3 c = body.faceSamplePoint(f);  // on the material, not inside a hole
     const Vec3 nA = faceOutwardNormal(body, f);
     const float eps = std::max(tol.absolute * 100.f, 1e-3f);
     const Vec3 pIn{c.x - eps * nA.x, c.y - eps * nA.y, c.z - eps * nA.z};  // just inside A
