@@ -14,7 +14,6 @@
 
 namespace nexus::geometry::brep::testing {
 
-using nexus::render::Vec3;
 
 namespace {
 // Ground truth for the coplanar case: the sign of orient3D at the symbolically

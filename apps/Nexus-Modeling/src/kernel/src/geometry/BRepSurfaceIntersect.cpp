@@ -96,7 +96,7 @@ SurfaceIntersection planeSphere(const Surface& plane, const Surface& sphere, Tol
         r.point = foot;
         return r;
     }
-    const float cr = std::sqrt(std::max(0.f, sphere.radius * sphere.radius - d * d));
+    const double cr = std::sqrt(std::max(0.0, sphere.radius * sphere.radius - d * d));
     r.kind = SurfaceIntersectionKind::Circle;
     r.curve = circleCurve(foot, n, cr);
     return r;

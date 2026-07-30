@@ -34,7 +34,6 @@
 
 namespace nexus::geometry::brep::testing {
 
-using nexus::render::Vec3;
 
 namespace {
 
@@ -55,7 +54,7 @@ size_t liveFaces(const Body& b)
 // parameter range, misses the vertex it is supposed to meet.
 float worstEndpointError(const Body& b)
 {
-    float worst = 0.f;
+    double worst = 0.f;
     for (uint32_t e = 0; e < static_cast<uint32_t>(b.edgeCount()); ++e) {
         if (!b.edge(e).alive) continue;
         const Edge& ed = b.edge(e);

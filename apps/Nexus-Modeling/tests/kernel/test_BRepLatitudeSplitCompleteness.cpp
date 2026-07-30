@@ -25,14 +25,13 @@
 
 namespace nexus::geometry::brep::testing {
 
-using nexus::render::Vec3;
 
 namespace {
 
 constexpr float kR = 0.5f;
 constexpr uint32_t kSeg = 16;
 
-struct Band { float lo, hi; };
+struct Band { double lo, hi; };
 
 // z-extent of every cylindrical face, bucketed to a hundredth.
 std::map<std::pair<int, int>, int> cylindricalBands(const Body& b)
@@ -42,7 +41,7 @@ std::map<std::pair<int, int>, int> cylindricalBands(const Body& b)
         if (!b.face(f).alive) continue;
         const uint32_t s = b.face(f).surface;
         if (s >= b.surfaceCount() || b.surface(s).kind != SurfaceKind::Cylinder) continue;
-        float lo = 1e30f, hi = -1e30f;
+        double lo = 1e30f, hi = -1e30f;
         for (uint32_t v : b.faceVertices(f)) {
             lo = std::min(lo, b.vertex(v).point.z);
             hi = std::max(hi, b.vertex(v).point.z);
@@ -75,7 +74,7 @@ TEST(BRepLatitudeSplitCompleteness, NoCylinderFaceStraddlesACuttingPlane)
     ASSERT_TRUE(imprintMutually(box, cyl));
 
     for (const auto& [extent, count] : cylindricalBands(cyl)) {
-        const float lo = extent.first / 100.f, hi = extent.second / 100.f;
+        const double lo = extent.first / 100.f, hi = extent.second / 100.f;
         for (float plane : {-1.f, 1.f})
             EXPECT_FALSE(lo < plane - 1e-3f && hi > plane + 1e-3f)
                 << count << " cylindrical face(s) span z ∈ [" << lo << ", " << hi
@@ -146,7 +145,7 @@ TEST(BRepLatitudeSplitCompleteness, RepeatedLatitudesAllSplit)
     const std::map<std::pair<int, int>, int> bands = cylindricalBands(cyl);
     EXPECT_GE(bands.size(), 6u) << "repeated latitudes did not all cut";
     for (const auto& [extent, count] : bands) {
-        const float lo = extent.first / 100.f, hi = extent.second / 100.f;
+        const double lo = extent.first / 100.f, hi = extent.second / 100.f;
         for (float plane : {-2.f, -1.f, -0.5f, 0.5f, 1.f, 2.f})
             EXPECT_FALSE(lo < plane - 1e-3f && hi > plane + 1e-3f)
                 << count << " face(s) span [" << lo << ", " << hi << "] across z = " << plane;

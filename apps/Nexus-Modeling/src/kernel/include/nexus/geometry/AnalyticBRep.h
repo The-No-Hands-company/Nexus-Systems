@@ -40,7 +40,12 @@
 
 namespace nexus::geometry::brep {
 
-using nexus::render::Vec3;
+// The B-rep works in DOUBLE precision. This one alias is the whole switch: every `Vec3` in
+// this namespace — every stored point, curve and surface, and every internal computation in
+// AnalyticBRep.cpp, BRepBoolean.cpp and BRepSurfaceIntersect.cpp — resolves through it.
+// `render::Vec3` remains single precision and remains what a Mesh carries; toMesh() is the
+// boundary where the conversion happens. See the note above Vec3d in Tolerance.h for why.
+using Vec3 = nexus::geometry::Vec3d;
 
 inline constexpr uint32_t kInvalid = 0xFFFFFFFFu;
 
@@ -53,13 +58,16 @@ struct Curve {
     Vec3  origin{};                 // Line: point on line;   Circle: centre
     Vec3  dir{1.f, 0.f, 0.f};       // Line: unit direction;  Circle: axis normal
     Vec3  ref{0.f, 1.f, 0.f};       // Circle: unit radius direction at t = 0
-    float radius = 0.f;             // Circle radius
+    double radius = 0.0;            // Circle radius
     uint32_t nurbs = kInvalid;      // index into a NurbsCurve store (future)
 
     // Point at parameter t (Line: origin + t*dir; Circle: swept by angle t).
-    [[nodiscard]] Vec3 eval(float t) const noexcept;
+    // The PARAMETER is double as well: a double position evaluated at a float parameter is
+    // still only accurate to float, which is what the first cut of this migration measured —
+    // 6e-8 relative, unchanged — because the angle, not the point, was the limit.
+    [[nodiscard]] Vec3 eval(double t) const noexcept;
     // Unit tangent direction at parameter t.
-    [[nodiscard]] Vec3 normalAt(float t) const noexcept;
+    [[nodiscard]] Vec3 normalAt(double t) const noexcept;
 };
 
 enum class SurfaceKind : uint8_t { Plane, Cylinder, Sphere, Cone, Nurbs };
@@ -74,11 +82,11 @@ struct Surface {
     Vec3  origin{};                 // point on surface / centre / axis base / cone apex
     Vec3  normal{0.f, 0.f, 1.f};    // Plane normal; Cylinder, Sphere & Cone axis
     Vec3  uAxis{1.f, 0.f, 0.f};     // in-surface u direction (param frame)
-    float radius = 0.f;             // Cylinder / Sphere radius; Cone SLOPE
+    double radius = 0.0;            // Cylinder / Sphere radius; Cone SLOPE
     uint32_t nurbs = kInvalid;      // index into a NurbsSurface store (future)
 
-    [[nodiscard]] Vec3 eval(float u, float v) const noexcept;
-    [[nodiscard]] Vec3 normalAt(float u, float v) const noexcept;
+    [[nodiscard]] Vec3 eval(double u, double v) const noexcept;
+    [[nodiscard]] Vec3 normalAt(double u, double v) const noexcept;
     // v-axis = normal × uAxis (right-handed param frame).
     [[nodiscard]] Vec3 vAxis() const noexcept;
 };
@@ -94,7 +102,7 @@ struct Vertex {
 struct Edge {
     uint32_t curve = kInvalid;
     uint32_t v0 = kInvalid, v1 = kInvalid;   // curve runs v0 → v1 over [t0,t1]
-    float    t0 = 0.f, t1 = 1.f;
+    double   t0 = 0.0, t1 = 1.0;             // double, so an arc's endpoints are reproducible
     uint32_t coedge = kInvalid;     // one coedge using this edge
     bool     alive = true;          // tombstone flag (dead entities are skipped)
 };

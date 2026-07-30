@@ -206,7 +206,7 @@ TEST(AnalyticBRep, NurbsSurfaceFaceValidatesAndEvaluates)
 {
     // Bilinear patch (degree 1×1, 2×2 control points) = a flat quad in z=0.
     const std::vector<Vec3> pts = {{0, 0, 0}, {2, 0, 0}, {2, 2, 0}, {0, 2, 0}};
-    const std::vector<Vec3> ctl = {{0, 0, 0}, {0, 2, 0}, {2, 0, 0}, {2, 2, 0}};  // i*nV+j
+    const std::vector<nexus::render::Vec3> ctl = {{0, 0, 0}, {0, 2, 0}, {2, 0, 0}, {2, 2, 0}};  // i*nV+j
     NurbsSurface patch(1, 1, {0, 0, 1, 1}, {0, 0, 1, 1}, ctl, 2, 2);
     ASSERT_TRUE(patch.isValid());
 
@@ -239,7 +239,7 @@ namespace {
 Body makeNurbsQuadFace()
 {
     const std::vector<Vec3> pts = {{0, 0, 0}, {2, 0, 0}, {2, 2, 0}, {0, 2, 0}};
-    const std::vector<Vec3> ctl = {{0, 0, 0}, {0, 2, 0}, {2, 0, 0}, {2, 2, 0}};  // i*nV+j
+    const std::vector<nexus::render::Vec3> ctl = {{0, 0, 0}, {0, 2, 0}, {2, 0, 0}, {2, 2, 0}};  // i*nV+j
     NurbsSurface patch(1, 1, {0, 0, 1, 1}, {0, 0, 1, 1}, ctl, 2, 2);
     Body::FaceDef fd;
     fd.loop = {0u, 1u, 2u, 3u};
@@ -351,14 +351,16 @@ TEST(AnalyticBRepPcurve, RoundTripsThroughSerialization)
 
 TEST(AnalyticBRepPcurve, LegacyV1BlobDecodes)
 {
-    // A pcurve-FREE body serializes with only an empty trailing pcurve section;
-    // patch the version byte back to 1 and it must still decode identically (the
-    // v1 reader stops before the trailing section).
+    // This used to relabel a CURRENT blob as v1 and require it to decode, which only worked
+    // while every version shared one payload layout. v4 stores positions as double, so a
+    // relabelled blob is not a legacy blob at all — it is a v4 payload with a v1 header, and
+    // decoding it as v1 would be reading doubles as floats. A real legacy blob is read from
+    // the fixture instead (see BRepSerialize.LegacyV3FixtureStillDecodes); what remains
+    // testable here is that the trailing-section rule holds for the CURRENT version.
     const Body box = makeBox(2.f, 2.f, 2.f);
     std::vector<std::uint8_t> bytes = box.serialize();
     ASSERT_GT(bytes.size(), 8u);
-    EXPECT_EQ(bytes[4], 3u);  // magic(4) then version at byte 4 (current: v3)
-    bytes[4] = 1u;            // masquerade as a legacy v1 blob
+    EXPECT_EQ(bytes[4], 4u);  // magic(4) then version at byte 4 (current: v4)
 
     const auto rt = Body::deserialize(bytes);
     ASSERT_TRUE(rt.has_value());
@@ -405,7 +407,7 @@ namespace {
 // proper trim (the face is smaller than the full surface domain).
 Body makeSubTrimmedNurbsFace()
 {
-    const std::vector<Vec3> ctl = {{0, 0, 0}, {0, 4, 0}, {4, 0, 0}, {4, 4, 0}};  // i*nV+j
+    const std::vector<nexus::render::Vec3> ctl = {{0, 0, 0}, {0, 4, 0}, {4, 0, 0}, {4, 4, 0}};  // i*nV+j
     NurbsSurface patch(1, 1, {0, 0, 1, 1}, {0, 0, 1, 1}, ctl, 2, 2);
     const std::vector<Vec3> pts = {{1, 1, 0}, {3, 1, 0}, {3, 3, 0}, {1, 3, 0}};
     Body::FaceDef fd;
@@ -638,7 +640,7 @@ TEST(AnalyticBRepTrimTessellate, PolylineSerializationV3RoundTrips)
         bottom, {{0.25f, 0.25f}, {0.4f, 0.35f}, {0.6f, 0.35f}, {0.75f, 0.25f}}));
 
     const std::vector<std::uint8_t> bytes = b.serialize();
-    EXPECT_EQ(bytes[4], 3u);  // writer stamps v3
+    EXPECT_EQ(bytes[4], 4u);  // writer stamps v4
     const auto rt = Body::deserialize(bytes);
     ASSERT_TRUE(rt.has_value());
     EXPECT_TRUE(rt->checkGeometry().ok);
@@ -646,17 +648,20 @@ TEST(AnalyticBRepTrimTessellate, PolylineSerializationV3RoundTrips)
     EXPECT_EQ(rt->coedge(bottom).pcurve.interior.size(), 2u);  // curved trim survives
 }
 
-TEST(AnalyticBRepTrimTessellate, LegacyV1AndV2BlobsDecode)
+// This test used to synthesise "legacy" blobs by writing a CURRENT one and patching its
+// version byte down. That only worked because v1, v2 and v3 shared a payload layout and
+// differed solely in which trailing sections existed. v4 widened stored positions from
+// float to double, so a relabelled blob is not a legacy blob — it is a v4 payload with an
+// older header, and decoding it as v1 would read doubles as floats. The trick had to go.
+//
+// Genuine backward compatibility is covered where it can be checked honestly, against a
+// real v3 blob committed as a fixture: BRepSerialize.LegacyV3FixtureStillDecodes.
+//
+// What is still worth asserting here is the part v4 did NOT touch. The pcurve sections are
+// unchanged — they were single precision before and remain so — so a pcurve must survive a
+// round trip exactly as it did, and an unknown future version must still be refused.
+TEST(AnalyticBRepTrimTessellate, PcurveSectionsAreUnaffectedByTheWidening)
 {
-    // v1: a body with no pcurves decodes when the version byte is patched to 1.
-    const Body box = makeBox(2.f, 2.f, 2.f);
-    std::vector<std::uint8_t> v1 = box.serialize();
-    v1[4] = 1u;
-    ASSERT_TRUE(Body::deserialize(v1).has_value());
-
-    // v2: a body with a single STRAIGHT pcurve — its v3 interior-count (0) is the
-    // trailing bytes, so patching the version to 2 still decodes (the v2 reader
-    // stops before the interior count, leaving it as ignored trailing bytes).
     Body b = makeNurbsQuadFace();
     const uint32_t first = b.loop(b.face(0).outerLoop).first;
     const Coedge& ce = b.coedge(first);
@@ -664,16 +669,23 @@ TEST(AnalyticBRepTrimTessellate, LegacyV1AndV2BlobsDecode)
     const uint32_t sV = ce.reversed ? ed.v1 : ed.v0;
     const uint32_t eV = ce.reversed ? ed.v0 : ed.v1;
     const Vec3 sp = b.vertex(sV).point, ep = b.vertex(eV).point;
-    ASSERT_TRUE(b.setCoedgePcurve(first, sp.x * 0.5f, sp.y * 0.5f, ep.x * 0.5f, ep.y * 0.5f));
+    ASSERT_TRUE(b.setCoedgePcurve(first, static_cast<float>(sp.x) * 0.5f,
+                                  static_cast<float>(sp.y) * 0.5f,
+                                  static_cast<float>(ep.x) * 0.5f,
+                                  static_cast<float>(ep.y) * 0.5f));
 
-    std::vector<std::uint8_t> v2 = b.serialize();
-    ASSERT_EQ(v2[4], 3u);
-    v2[4] = 2u;
-    const auto rt = Body::deserialize(v2);
+    std::vector<std::uint8_t> bytes = b.serialize();
+    ASSERT_EQ(bytes[4], 4u);
+    const auto rt = Body::deserialize(bytes);
     ASSERT_TRUE(rt.has_value());
     EXPECT_TRUE(rt->checkGeometry().ok);
     EXPECT_TRUE(rt->coedge(first).pcurve.present);
     EXPECT_TRUE(rt->coedge(first).pcurve.interior.empty());
+    EXPECT_EQ(bytes, rt->serialize());  // byte-identical
+
+    // A version beyond what this reader knows is refused rather than guessed at.
+    bytes[4] = 99u;
+    EXPECT_FALSE(Body::deserialize(bytes).has_value());
 }
 
 // ──────────── Interior trim-loop holes (parameter-space holes) ────────────────
@@ -843,17 +855,24 @@ TEST(AnalyticBRepExactPredicate, SegmentTriangleBeatsNaiveFloat)
     const Vec3 v0{0, 0, 0}, v1{K, 0, 0}, v2{0, K, 0};  // right triangle in z=0
 
     // Naive float32 Möller–Trumbore crossing test for a vertical downward segment.
-    auto naiveCross = [&](const Vec3& A) -> bool {
-        const Vec3 d{0.f, 0.f, -2.f};
-        const Vec3 e1{v1.x - v0.x, v1.y - v0.y, v1.z - v0.z};
-        const Vec3 e2{v2.x - v0.x, v2.y - v0.y, v2.z - v0.z};
-        const Vec3 h{d.y * e2.z - d.z * e2.y, d.z * e2.x - d.x * e2.z, d.x * e2.y - d.y * e2.x};
+    // Explicitly render::Vec3: the B-rep's own Vec3 is double now, and computing this
+    // comparison in double would make the "naive" method accurate and quietly turn the
+    // assertion below into a tautology. The point is that FLOAT32 mis-classifies here.
+    using F3 = nexus::render::Vec3;
+    auto naiveCross = [&](const F3& A) -> bool {
+        const F3 d{0.f, 0.f, -2.f};
+        const F3 e1{static_cast<float>(v1.x - v0.x), static_cast<float>(v1.y - v0.y),
+                    static_cast<float>(v1.z - v0.z)};
+        const F3 e2{static_cast<float>(v2.x - v0.x), static_cast<float>(v2.y - v0.y),
+                    static_cast<float>(v2.z - v0.z)};
+        const F3 h{d.y * e2.z - d.z * e2.y, d.z * e2.x - d.x * e2.z, d.x * e2.y - d.y * e2.x};
         const float a = e1.x * h.x + e1.y * h.y + e1.z * h.z;
         if (a == 0.f) return false;
         const float f = 1.f / a;
-        const Vec3 s{A.x - v0.x, A.y - v0.y, A.z - v0.z};
+        const F3 s{A.x - static_cast<float>(v0.x), A.y - static_cast<float>(v0.y),
+                   A.z - static_cast<float>(v0.z)};
         const float u = f * (s.x * h.x + s.y * h.y + s.z * h.z);
-        const Vec3 q{s.y * e1.z - s.z * e1.y, s.z * e1.x - s.x * e1.z, s.x * e1.y - s.y * e1.x};
+        const F3 q{s.y * e1.z - s.z * e1.y, s.z * e1.x - s.x * e1.z, s.x * e1.y - s.y * e1.x};
         const float vv = f * (d.x * q.x + d.y * q.y + d.z * q.z);
         return u >= 0.f && u <= 1.f && vv >= 0.f && u + vv <= 1.f;
     };
@@ -873,7 +892,7 @@ TEST(AnalyticBRepExactPredicate, SegmentTriangleBeatsNaiveFloat)
             if (degenerate) continue;  // exact edge/vertex hit
             ++definite;
             if (exact != gtInside) ++exactWrong;
-            if (naiveCross(A) != gtInside) ++naiveWrong;
+            if (naiveCross(A.toFloat()) != gtInside) ++naiveWrong;
         }
     }
     EXPECT_GT(definite, 100);
@@ -1232,7 +1251,7 @@ TEST(AnalyticBRep, ConeSurfaceEvaluatesAndNormalsArePerpendicularToTheRuling)
 TEST(AnalyticBRep, CheckGeometryRejectsAFaceWhoseSurfaceDoesNotContainIt)
 {
     // A tetrahedron, with one face declared to lie on a sphere it is nowhere near.
-    const std::vector<nexus::render::Vec3> pts = {
+    const std::vector<Vec3> pts = {
         {0.f, 0.f, 0.f}, {1.f, 0.f, 0.f}, {0.f, 1.f, 0.f}, {0.f, 0.f, 1.f}};
 
     auto planeFace = [&](std::vector<uint32_t> loop) {

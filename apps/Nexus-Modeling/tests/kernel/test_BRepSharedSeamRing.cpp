@@ -28,7 +28,6 @@
 
 namespace nexus::geometry::brep::testing {
 
-using nexus::render::Vec3;
 
 namespace {
 
@@ -51,9 +50,9 @@ std::vector<Vec3> ringVertices(const Body& b, float z, float r)
 
 float worstNearestDistance(const std::vector<Vec3>& from, const std::vector<Vec3>& to)
 {
-    float worst = 0.f;
+    double worst = 0.;
     for (const Vec3& p : from) {
-        float best = 1e30f;
+        double best = 1e30;
         for (const Vec3& q : to) {
             const Vec3 d = q - p;
             best = std::min(best, std::sqrt(d.dot(d)));

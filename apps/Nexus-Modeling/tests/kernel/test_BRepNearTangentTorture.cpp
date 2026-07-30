@@ -21,7 +21,6 @@
 
 namespace nexus::geometry::brep::testing {
 
-using nexus::render::Vec3;
 
 namespace {
 Surface plane(Vec3 o, Vec3 n) { return {SurfaceKind::Plane, o, n, {1, 0, 0}, 0.f, kInvalid}; }

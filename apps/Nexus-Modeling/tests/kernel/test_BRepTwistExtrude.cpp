@@ -14,7 +14,6 @@
 
 namespace nexus::geometry::brep::testing {
 
-using nexus::render::Vec3;
 
 namespace {
 const std::vector<Vec3> kSquare = {{-1, -1, 0}, {1, -1, 0}, {1, 1, 0}, {-1, 1, 0}};  // area 4
@@ -91,7 +90,7 @@ TEST(BRepTwistExtrude, Deterministic)
 // now triangles, which are planar by construction.
 TEST(BRepTwistExtrude, SideWallsArePlanarByConstruction)
 {
-    const std::vector<nexus::render::Vec3> profile = {
+    const std::vector<Vec3> profile = {
         {0.f, 0.f, 0.f}, {1.f, 0.f, 0.f}, {1.f, 1.f, 0.f}, {0.f, 1.f, 0.f}};
     for (const uint32_t layers : {4u, 16u, 64u}) {
         const Body b =
@@ -100,7 +99,7 @@ TEST(BRepTwistExtrude, SideWallsArePlanarByConstruction)
         ASSERT_TRUE(b.checkGeometry().ok) << "layers=" << layers;
 
         int nonPlanar = 0;
-        float worst = 0.f;
+        double worst = 0.;
         for (uint32_t f = 0; f < b.faceCount(); ++f) {
             const auto& face = b.face(f);
             if (!face.alive) continue;
@@ -108,7 +107,7 @@ TEST(BRepTwistExtrude, SideWallsArePlanarByConstruction)
             if (s.kind != SurfaceKind::Plane) continue;
             for (const uint32_t vid : b.faceVertices(f)) {
                 const auto p = b.vertex(vid).point;
-                const float d = std::abs((p.x - s.origin.x) * s.normal.x
+                const double d = std::abs((p.x - s.origin.x) * s.normal.x
                                        + (p.y - s.origin.y) * s.normal.y
                                        + (p.z - s.origin.z) * s.normal.z);
                 if (d > 1e-3f) { ++nonPlanar; worst = std::max(worst, d); }

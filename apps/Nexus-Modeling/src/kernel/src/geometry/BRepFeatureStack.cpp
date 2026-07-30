@@ -225,7 +225,15 @@ struct Reader {
         if (!isFinite(out)) return ok = false;  // reject non-finite on read
         return true;
     }
-    bool vec3(Vec3& out) { return f32(out.x) && f32(out.y) && f32(out.z); }
+    // This format stores single-precision components; the B-rep's Vec3 is now double, so
+    // read into floats and widen. The stored layout is unchanged.
+    bool vec3(Vec3& out)
+    {
+        float x = 0.f, y = 0.f, z = 0.f;
+        if (!f32(x) || !f32(y) || !f32(z)) return false;
+        out = Vec3{x, y, z};
+        return true;
+    }
     bool count(std::uint32_t& out)  // length prefix bounded by remaining bytes
     {
         if (!u32(out)) return false;

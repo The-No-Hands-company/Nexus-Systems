@@ -25,7 +25,6 @@
 
 namespace nexus::geometry::brep::testing {
 
-using nexus::render::Vec3;
 using PC = Body::PointContainment;
 
 namespace {
@@ -42,7 +41,7 @@ uint32_t firstPlanarFace(const Body& b)
     return kInvalid;
 }
 
-float dist(const Vec3& a, const Vec3& b)
+double dist(const Vec3d& a, const Vec3d& b)
 {
     const Vec3 d = a - b;
     return std::sqrt(d.dot(d));
@@ -59,7 +58,7 @@ TEST(BRepFaceSamplePoint, EqualsCentroidWhenTheFaceHasNoHoles)
         for (uint32_t f = 0; f < static_cast<uint32_t>(b.faceCount()); ++f) {
             if (!b.face(f).alive) continue;
             ASSERT_TRUE(b.faceInnerLoopVertices(f).empty());
-            const Vec3 c = b.faceCentroid(f), s = b.faceSamplePoint(f);
+            const auto c = b.faceCentroid(f), s = b.faceSamplePoint(f);
             EXPECT_FLOAT_EQ(s.x, c.x) << "face " << f;
             EXPECT_FLOAT_EQ(s.y, c.y) << "face " << f;
             EXPECT_FLOAT_EQ(s.z, c.z) << "face " << f;
@@ -136,7 +135,7 @@ TEST(BRepFaceSamplePoint, ConcentricHoleDefeatsAnyAveragedCentroid)
     const uint32_t f = firstPlanarFace(b);
     ASSERT_NE(f, kInvalid);
 
-    const Vec3 centre = b.faceCentroid(f);
+    const auto centre = b.faceCentroid(f);
     constexpr float holeR = 0.4f;
     Curve c;
     c.kind = CurveKind::Circle;
@@ -152,7 +151,7 @@ TEST(BRepFaceSamplePoint, ConcentricHoleDefeatsAnyAveragedCentroid)
         << "the outline average should be unchanged by punching a concentric hole";
 
     // The sample point is outside the hole's radius, hence on the material.
-    const Vec3 s = b.faceSamplePoint(f);
+    const auto s = b.faceSamplePoint(f);
     EXPECT_GT(dist(s, centre), holeR)
         << "the sample point is inside the concentric hole (distance " << dist(s, centre)
         << " < radius " << holeR << ")";

@@ -13,7 +13,6 @@
 
 namespace nexus::geometry::brep::testing {
 
-using nexus::render::Vec3;
 
 namespace {
 Body boxMinMax(Vec3 lo, Vec3 hi)

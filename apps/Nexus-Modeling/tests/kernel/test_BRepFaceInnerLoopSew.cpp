@@ -25,7 +25,6 @@
 
 namespace nexus::geometry::brep::testing {
 
-using nexus::render::Vec3;
 
 namespace {
 
@@ -59,7 +58,7 @@ Body boxWithAHoledFace(uint32_t& holedFace)
 // This is exactly the round trip the boolean's sew performs.
 std::optional<Body> roundTrip(const Body& b)
 {
-    std::vector<Vec3> pts;
+    std::vector<Vec3d> pts;
     pts.reserve(b.vertexCount());
     for (uint32_t v = 0; v < static_cast<uint32_t>(b.vertexCount()); ++v)
         pts.push_back(b.vertex(v).point);

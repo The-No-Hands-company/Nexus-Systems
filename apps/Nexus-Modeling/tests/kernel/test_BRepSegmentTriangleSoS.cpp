@@ -15,7 +15,6 @@
 
 namespace nexus::geometry::brep::testing {
 
-using nexus::render::Vec3;
 
 namespace {
 // Ground truth: evaluate the whole crossing at the concretely-perturbed endpoints

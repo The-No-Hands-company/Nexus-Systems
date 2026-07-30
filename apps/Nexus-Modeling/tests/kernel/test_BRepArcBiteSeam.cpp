@@ -62,7 +62,6 @@
 
 namespace nexus::geometry::brep::testing {
 
-using nexus::render::Vec3;
 
 namespace {
 
@@ -397,7 +396,7 @@ TEST(ArcBiteSeam, TheTwoOperandsShareTheSeamVertexForVertex)
         EXPECT_EQ(bp.size(), cp.size()) << "z=" << z << ": the two operands disagree on the "
                                            "seam's discretization";
         for (const Vec3& p : bp) {
-            float best = 1e30f;
+            double best = 1e30;
             for (const Vec3& q : cp)
                 best = std::min(best, std::hypot(std::hypot(p.x - q.x, p.y - q.y), p.z - q.z));
             EXPECT_LT(best, 1e-5f) << "z=" << z << ": box seam point (" << p.x << "," << p.y

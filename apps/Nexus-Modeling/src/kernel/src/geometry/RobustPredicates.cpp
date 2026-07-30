@@ -169,7 +169,7 @@ inline double expansionSign(const Expansion& e) noexcept {
 
 // --- Exact determinants ------------------------------------------------------------
 
-double orient2DExact(const Vec2& a, const Vec2& b, const Vec2& c) {
+double orient2DExact(const Vec2d& a, const Vec2d& b, const Vec2d& c) {
     const Expansion acx = fromPair(twoDiff(a.u, c.u));
     const Expansion acy = fromPair(twoDiff(a.v, c.v));
     const Expansion bcx = fromPair(twoDiff(b.u, c.u));
@@ -178,8 +178,8 @@ double orient2DExact(const Vec2& a, const Vec2& b, const Vec2& c) {
     return expansionSign(expansionSub(expansionMul(acx, bcy), expansionMul(acy, bcx)));
 }
 
-double orient3DExact(const nexus::render::Vec3& a, const nexus::render::Vec3& b,
-                     const nexus::render::Vec3& c, const nexus::render::Vec3& d) {
+double orient3DExact(const Vec3d& a, const Vec3d& b,
+                     const Vec3d& c, const Vec3d& d) {
     const Expansion adx = fromPair(twoDiff(a.x, d.x));
     const Expansion ady = fromPair(twoDiff(a.y, d.y));
     const Expansion adz = fromPair(twoDiff(a.z, d.z));
@@ -200,7 +200,7 @@ double orient3DExact(const nexus::render::Vec3& a, const nexus::render::Vec3& b,
     return expansionSign(det);
 }
 
-double inCircleExact(const Vec2& a, const Vec2& b, const Vec2& c, const Vec2& d) {
+double inCircleExact(const Vec2d& a, const Vec2d& b, const Vec2d& c, const Vec2d& d) {
     const Expansion adx = fromPair(twoDiff(a.u, d.u));
     const Expansion ady = fromPair(twoDiff(a.v, d.v));
     const Expansion bdx = fromPair(twoDiff(b.u, d.u));
@@ -225,9 +225,9 @@ double inCircleExact(const Vec2& a, const Vec2& b, const Vec2& c, const Vec2& d)
 // The 4x4 lift determinant for the in-sphere test, exact. Shewchuk's decomposition: the
 // 2x2 minors of the xy columns (ab..bd), the z-weighted 3x3 cofactors (abc..dab), the
 // squared-distance lifts, then det = (dlift*abc - clift*dab) + (blift*cda - alift*bcd).
-double inSphereExact(const nexus::render::Vec3& a, const nexus::render::Vec3& b,
-                     const nexus::render::Vec3& c, const nexus::render::Vec3& d,
-                     const nexus::render::Vec3& e) {
+double inSphereExact(const Vec3d& a, const Vec3d& b,
+                     const Vec3d& c, const Vec3d& d,
+                     const Vec3d& e) {
     const Expansion aex = fromPair(twoDiff(a.x, e.x));
     const Expansion aey = fromPair(twoDiff(a.y, e.y));
     const Expansion aez = fromPair(twoDiff(a.z, e.z));
@@ -276,7 +276,7 @@ double inSphereExact(const nexus::render::Vec3& a, const nexus::render::Vec3& b,
 
 // --- orient2D ---------------------------------------------------------------
 
-double RobustPredicates::orient2D(const Vec2& a, const Vec2& b, const Vec2& c) noexcept {
+double RobustPredicates::orient2D(const Vec2d& a, const Vec2d& b, const Vec2d& c) noexcept {
     const double acx = static_cast<double>(a.u) - c.u;
     const double bcx = static_cast<double>(b.u) - c.u;
     const double acy = static_cast<double>(a.v) - c.v;
@@ -307,8 +307,8 @@ double RobustPredicates::orient2D(const Vec2& a, const Vec2& b, const Vec2& c) n
 
 // --- orient3D ---------------------------------------------------------------
 
-double RobustPredicates::orient3D(const nexus::render::Vec3& a, const nexus::render::Vec3& b,
-                                  const nexus::render::Vec3& c, const nexus::render::Vec3& d) noexcept {
+double RobustPredicates::orient3D(const Vec3d& a, const Vec3d& b,
+                                  const Vec3d& c, const Vec3d& d) noexcept {
     const double adx = static_cast<double>(a.x) - d.x;
     const double ady = static_cast<double>(a.y) - d.y;
     const double adz = static_cast<double>(a.z) - d.z;
@@ -338,7 +338,7 @@ double RobustPredicates::orient3D(const nexus::render::Vec3& a, const nexus::ren
 
 // --- inCircle ---------------------------------------------------------------
 
-double RobustPredicates::inCircle(const Vec2& a, const Vec2& b, const Vec2& c, const Vec2& d) noexcept {
+double RobustPredicates::inCircle(const Vec2d& a, const Vec2d& b, const Vec2d& c, const Vec2d& d) noexcept {
     const double adx = static_cast<double>(a.u) - d.u, ady = static_cast<double>(a.v) - d.v;
     const double bdx = static_cast<double>(b.u) - d.u, bdy = static_cast<double>(b.v) - d.v;
     const double cdx = static_cast<double>(c.u) - d.u, cdy = static_cast<double>(c.v) - d.v;
@@ -373,9 +373,9 @@ double RobustPredicates::inCircle(const Vec2& a, const Vec2& b, const Vec2& c, c
 // in-sphere test needs Shewchuk's full permanent to stay sound, and a subtly-wrong bound
 // would reintroduce exactly the silent sign errors this predicate exists to prevent. The
 // only caller (3D Delaunay) is not on a hot path.
-double RobustPredicates::inSphere(const nexus::render::Vec3& a, const nexus::render::Vec3& b,
-                                  const nexus::render::Vec3& c, const nexus::render::Vec3& d,
-                                  const nexus::render::Vec3& e) noexcept {
+double RobustPredicates::inSphere(const Vec3d& a, const Vec3d& b,
+                                  const Vec3d& c, const Vec3d& d,
+                                  const Vec3d& e) noexcept {
     return inSphereExact(a, b, c, d, e);
 }
 

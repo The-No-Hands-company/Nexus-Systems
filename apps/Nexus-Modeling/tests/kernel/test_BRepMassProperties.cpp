@@ -11,7 +11,6 @@
 
 namespace nexus::geometry::brep::testing {
 
-using nexus::render::Vec3;
 
 namespace {
 Body boxAt(Vec3 c, float w, float h, float d)

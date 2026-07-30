@@ -74,7 +74,7 @@ TEST(BRepSurfaceArea, ConeLateralIsExactBaseIsExactPolygon)
 TEST(BRepSurfaceArea, ExtrudedAndRevolvedSolids)
 {
     // Unit square extruded by 3 → a 1×1×3 box: area = 2·1 + 4·3 = 14.
-    const std::vector<nexus::render::Vec3> sq = {{0, 0, 0}, {1, 0, 0}, {1, 1, 0}, {0, 1, 0}};
+    const std::vector<Vec3> sq = {{0, 0, 0}, {1, 0, 0}, {1, 1, 0}, {0, 1, 0}};
     EXPECT_NEAR(extrudeProfile(sq, {0, 0, 3}).surfaceArea(), 14.f, 1e-3f);
 }
 

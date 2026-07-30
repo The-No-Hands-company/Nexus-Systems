@@ -12,7 +12,6 @@
 
 namespace nexus::geometry::brep::testing {
 
-using nexus::render::Vec3;
 
 namespace {
 double signedVolume(const Mesh& m)
@@ -77,7 +76,7 @@ TEST(BRepImprintCircle, ArcSplitsCoplanarFace)
     // The shared cut edge is a Circle arc; its samples lie on the circle (radius
     // 1.5 from the centre) and on the face plane (z=1).
     int arc = -1;
-    float maxRErr = 0.f, maxZErr = 0.f;
+    double maxRErr = 0.f, maxZErr = 0.f;
     for (uint32_t e = 0; e < b.edgeCount(); ++e) {
         const auto& ed = b.edge(e);
         if (!ed.alive) continue;
@@ -89,7 +88,7 @@ TEST(BRepImprintCircle, ArcSplitsCoplanarFace)
         for (int k = 0; k <= 12; ++k) {
             const float t = ed.t0 + (ed.t1 - ed.t0) * static_cast<float>(k) / 12.f;
             const Vec3 p = cu.eval(t);
-            const float rr = std::sqrt((p.x - 1.f) * (p.x - 1.f) + (p.y - 1.f) * (p.y - 1.f));
+            const double rr = std::sqrt((p.x - 1.f) * (p.x - 1.f) + (p.y - 1.f) * (p.y - 1.f));
             maxRErr = std::max(maxRErr, std::abs(rr - 1.5f));
             maxZErr = std::max(maxZErr, std::abs(p.z - 1.f));
         }

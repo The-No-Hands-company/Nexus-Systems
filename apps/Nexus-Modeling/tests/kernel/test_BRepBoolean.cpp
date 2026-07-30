@@ -11,7 +11,6 @@
 
 namespace nexus::geometry::brep::testing {
 
-using nexus::render::Vec3;
 
 namespace {
 // Signed volume enclosed by a closed triangle mesh (divergence theorem):

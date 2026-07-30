@@ -12,7 +12,6 @@
 
 namespace nexus::geometry::brep::testing {
 
-using nexus::render::Vec3;
 
 // A square pyramid: base area 4, apex height 3 → volume ⅓·4·3 = 4.
 TEST(BRepPyramid, SquarePyramidExactVolume)

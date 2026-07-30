@@ -218,9 +218,9 @@ bool pointInSurfacePatchUV(const Surface& s, const Vec3& p, const std::vector<Ve
     float pu = 0.f, pv = 0.f;
     if (!surfaceUV(s, p, pu, pv)) return false;
     if (periodic) {
-        float lo = uv[0].x, hi = uv[0].x;
+        double lo = uv[0].x, hi = uv[0].x;
         for (const Vec3& q : uv) { lo = std::min(lo, q.x); hi = std::max(hi, q.x); }
-        const float mid = (lo + hi) * 0.5f;
+        const float mid = static_cast<float>((lo + hi) * 0.5);
         while (pu - mid > kTwoPi * 0.5f) pu -= kTwoPi;
         while (mid - pu > kTwoPi * 0.5f) pu += kTwoPi;
     }
@@ -278,14 +278,14 @@ float pointTriangleDist2(const Vec3& p, const Vec3& a, const Vec3& b, const Vec3
 
 // ──────────── Geometry evaluation ────────────────────────────────────────────
 
-Vec3 Curve::eval(float t) const noexcept
+Vec3 Curve::eval(double t) const noexcept
 {
     switch (kind) {
         case CurveKind::Line:
             return {origin.x + dir.x * t, origin.y + dir.y * t, origin.z + dir.z * t};
         case CurveKind::Circle: {
             const Vec3 bi = cross(dir, ref);  // dir = axis normal, ref = radius dir
-            const float c = std::cos(t), s = std::sin(t);
+            const double c = std::cos(t), s = std::sin(t);
             return {origin.x + radius * (c * ref.x + s * bi.x),
                     origin.y + radius * (c * ref.y + s * bi.y),
                     origin.z + radius * (c * ref.z + s * bi.z)};
@@ -296,7 +296,7 @@ Vec3 Curve::eval(float t) const noexcept
     }
 }
 
-Vec3 Curve::normalAt(float t) const noexcept
+Vec3 Curve::normalAt(double t) const noexcept
 {
     switch (kind) {
         case CurveKind::Line:
@@ -314,7 +314,7 @@ Vec3 Curve::normalAt(float t) const noexcept
 
 Vec3 Surface::vAxis() const noexcept { return cross(normal, uAxis); }
 
-Vec3 Surface::eval(float u, float v) const noexcept
+Vec3 Surface::eval(double u, double v) const noexcept
 {
     switch (kind) {
         case SurfaceKind::Plane: {
@@ -355,7 +355,7 @@ Vec3 Surface::eval(float u, float v) const noexcept
     }
 }
 
-Vec3 Surface::normalAt(float u, float v) const noexcept
+Vec3 Surface::normalAt(double u, double v) const noexcept
 {
     switch (kind) {
         case SurfaceKind::Plane:
@@ -785,7 +785,7 @@ Body::GeometryReport Body::checkGeometry(Tolerance tol) const
         const Surface& su = m_surfaces[face.surface];
         if (su.kind == SurfaceKind::Nurbs) continue;  // evaluated through the NURBS store
 
-        const float scale = std::max(1.f, std::abs(su.radius));
+        const double scale = std::max(1.0, std::abs(su.radius));
         for (const uint32_t vid : faceVertices(fi)) {
             if (vid >= m_verts.size() || !m_verts[vid].alive) continue;
             const Vec3 p = m_verts[vid].point;
@@ -2849,7 +2849,11 @@ nexus::geometry::MassProperties Body::massProperties(float density) const
     }
 
     if (!rfaces.empty()) {
-        residual.attributes().setPositions(std::move(rpos));
+        // Render boundary again: the residual Mesh carries single precision.
+        std::vector<nexus::render::Vec3> rposF;
+        rposF.reserve(rpos.size());
+        for (const Vec3& rp : rpos) rposF.push_back(rp.toFloat());
+        residual.attributes().setPositions(std::move(rposF));
         for (nexus::geometry::Face& f : rfaces) residual.topology().addFace(std::move(f));
         const std::array<double, 10> flat =
             nexus::geometry::MeshMassProperties::integrals(residual);
@@ -2888,14 +2892,29 @@ bool Body::transform(const nexus::render::Mat4& mat)
     if (dot(a0, cross(a1, a2)) <= 0.f) return false;  // reflection / degenerate
     const float s = s0;  // uniform scale factor
 
+    // Mat4's ENTRIES are single precision, but the point must not be: narrowing the point
+    // to float for the multiply and widening the result back throws away exactly the
+    // precision this type exists to keep, and it does so even for a transform that changes
+    // nothing. Measured when it did: translating a cylinder by (0,0,0) perturbed its
+    // coordinates enough that it no longer compared coincident with an untranslated copy of
+    // itself, and the identity boolean of two identical cylinders returned empty. So promote
+    // the matrix and do the arithmetic in double; only the matrix's own precision limits it.
     auto xformPoint = [&](const Vec3& p) {
-        const Vec4 r = mat * Vec4{p.x, p.y, p.z, 1.f};
-        return Vec3{r.x, r.y, r.z};
+        const double m00 = mat.m[0][0], m01 = mat.m[0][1], m02 = mat.m[0][2], m03 = mat.m[0][3];
+        const double m10 = mat.m[1][0], m11 = mat.m[1][1], m12 = mat.m[1][2], m13 = mat.m[1][3];
+        const double m20 = mat.m[2][0], m21 = mat.m[2][1], m22 = mat.m[2][2], m23 = mat.m[2][3];
+        return Vec3{m00 * p.x + m01 * p.y + m02 * p.z + m03,
+                    m10 * p.x + m11 * p.y + m12 * p.z + m13,
+                    m20 * p.x + m21 * p.y + m22 * p.z + m23};
     };
     // Direction: linear part only, renormalized (proper rotation ⇒ unit preserved).
     auto xformDir = [&](const Vec3& d) {
-        const Vec4 r = mat * Vec4{d.x, d.y, d.z, 0.f};
-        return normalize(Vec3{r.x, r.y, r.z});
+        const double m00 = mat.m[0][0], m01 = mat.m[0][1], m02 = mat.m[0][2];
+        const double m10 = mat.m[1][0], m11 = mat.m[1][1], m12 = mat.m[1][2];
+        const double m20 = mat.m[2][0], m21 = mat.m[2][1], m22 = mat.m[2][2];
+        return normalize(Vec3{m00 * d.x + m01 * d.y + m02 * d.z,
+                              m10 * d.x + m11 * d.y + m12 * d.z,
+                              m20 * d.x + m21 * d.y + m22 * d.z});
     };
 
     for (auto& v : m_verts) v.point = xformPoint(v.point);
@@ -2945,7 +2964,7 @@ Mesh Body::toMesh(uint32_t subdivisions) const
     for (uint32_t v = 0; v < m_verts.size(); ++v) {
         if (!m_verts[v].alive) continue;
         vOut[v] = static_cast<int>(pos.size());
-        pos.push_back(m_verts[v].point);
+        pos.push_back(m_verts[v].point.toFloat());
     }
     std::vector<std::vector<uint32_t>> edgeMid(m_edges.size());
     if (subdivisions > 0) {
@@ -2957,7 +2976,7 @@ Mesh Body::toMesh(uint32_t subdivisions) const
             for (uint32_t k = 1; k <= subdivisions; ++k) {
                 const float f = static_cast<float>(k) / static_cast<float>(subdivisions + 1u);
                 edgeMid[e].push_back(static_cast<uint32_t>(pos.size()));
-                pos.push_back(cu.eval(ed.t0 + (ed.t1 - ed.t0) * f));
+                pos.push_back(cu.eval(ed.t0 + (ed.t1 - ed.t0) * f).toFloat());
             }
         }
     }
@@ -2983,8 +3002,8 @@ Mesh Body::toMesh(uint32_t subdivisions) const
         } while (walk != firstCoedge);
         return ring;
     };
-    auto emitTri = [&](uint32_t a, uint32_t b, uint32_t c, const nexus::render::Vec3& nrm) {
-        const nexus::render::Vec3 g = cross(sub(pos[b], pos[a]), sub(pos[c], pos[a]));
+    auto emitTri = [&](uint32_t a, uint32_t b, uint32_t c, const Vec3& nrm) {
+        const Vec3 g = cross(sub(pos[b], pos[a]), sub(pos[c], pos[a]));
         nexus::geometry::Face f;  // the mesh Face, not brep::Face
         if (dot(g, nrm) < 0.f) f.indices = {a, c, b};
         else f.indices = {a, b, c};
@@ -2996,7 +3015,7 @@ Mesh Body::toMesh(uint32_t subdivisions) const
         const std::vector<uint32_t> ring = buildRing(m_loops[fc.outerLoop].first);
         if (ring.size() < 3) continue;
 
-        nexus::render::Vec3 nrm{0.f, 0.f, 1.f};
+        Vec3 nrm{0.0, 0.0, 1.0};
         if (fc.surface < m_surfaces.size()) nrm = m_surfaces[fc.surface].normal;
         if (fc.reversed) nrm = {-nrm.x, -nrm.y, -nrm.z};
 
@@ -3068,9 +3087,9 @@ Mesh Body::toMesh(uint32_t subdivisions) const
         // Face with a hole (bridged into one simple polygon), or a concave face without
         // one: ear-clip it. (Multiple holes on one face are a rare follow-up.)
         // 2D frame of the face plane.
-        const nexus::render::Vec3 u = normalize(sub(pos[ring[1]], pos[ring[0]]));
-        const nexus::render::Vec3 vv = cross(nrm, u);
-        const nexus::render::Vec3 org = pos[ring[0]];
+        const Vec3 u = normalize(sub(pos[ring[1]], pos[ring[0]]));
+        const Vec3 vv = cross(nrm, u);
+        const Vec3 org = pos[ring[0]];
         auto X = [&](uint32_t idx) { return dot(sub(pos[idx], org), u); };
         auto Y = [&](uint32_t idx) { return dot(sub(pos[idx], org), vv); };
 
@@ -3446,7 +3465,7 @@ bool Body::setCoedgePcurvePolyline(uint32_t coedgeId,
 
 namespace {
 constexpr std::uint32_t kBRepMagic = 0x5242584Eu;  // 'NXBR'
-constexpr std::uint32_t kBRepVersion = 3u;  // v2: per-coedge pcurves; v3: curved (polyline) pcurves
+constexpr std::uint32_t kBRepVersion = 4u;  // v2: per-coedge pcurves; v3: curved pcurves; v4: DOUBLE positions
 
 void putU8(std::vector<std::uint8_t>& o, std::uint8_t v) { o.push_back(v); }
 void putU32(std::vector<std::uint8_t>& o, std::uint32_t v)
@@ -3456,9 +3475,18 @@ void putU32(std::vector<std::uint8_t>& o, std::uint32_t v)
     o.push_back(static_cast<std::uint8_t>((v >> 16) & 0xFFu));
     o.push_back(static_cast<std::uint8_t>((v >> 24) & 0xFFu));
 }
+void putU64(std::vector<std::uint8_t>& o, std::uint64_t v)
+{
+    for (int i = 0; i < 8; ++i) o.push_back(static_cast<std::uint8_t>((v >> (i * 8)) & 0xFFu));
+}
 void putI32(std::vector<std::uint8_t>& o, std::int32_t v) { putU32(o, std::bit_cast<std::uint32_t>(v)); }
 void putF32(std::vector<std::uint8_t>& o, float v) { putU32(o, std::bit_cast<std::uint32_t>(v)); }
-void putVec3(std::vector<std::uint8_t>& o, const Vec3& v) { putF32(o, v.x); putF32(o, v.y); putF32(o, v.z); }
+void putF64(std::vector<std::uint8_t>& o, double v) { putU64(o, std::bit_cast<std::uint64_t>(v)); }
+// v4 writes positions as DOUBLE. Earlier versions wrote float and are still read as float —
+// the reader branches on the version, so every existing .nxb keeps loading.
+void putVec3(std::vector<std::uint8_t>& o, const Vec3& v) { putF64(o, v.x); putF64(o, v.y); putF64(o, v.z); }
+// The NURBS control-point store is still single precision; it is written as it always was.
+void putVec3f(std::vector<std::uint8_t>& o, const nexus::render::Vec3& v) { putF32(o, v.x); putF32(o, v.y); putF32(o, v.z); }
 
 struct Reader {
     const std::vector<std::uint8_t>& b;
@@ -3468,6 +3496,14 @@ struct Reader {
     {
         if (!ok || off + 1 > b.size()) return ok = false;
         out = b[off++];
+        return true;
+    }
+    bool u64(std::uint64_t& out)
+    {
+        if (!ok || off + 8 > b.size()) return ok = false;
+        out = 0;
+        for (int i = 0; i < 8; ++i) out |= static_cast<std::uint64_t>(b[off + i]) << (i * 8);
+        off += 8;
         return true;
     }
     bool u32(std::uint32_t& out)
@@ -3494,7 +3530,33 @@ struct Reader {
         if (!isFinite(out)) return ok = false;  // reject non-finite on read
         return true;
     }
-    bool vec3(Vec3& out) { return f32(out.x) && f32(out.y) && f32(out.z); }
+    // v4 stores doubles; v1-3 stored floats. The reader is told which by the caller.
+    bool f64(double& out)
+    {
+        std::uint64_t u = 0;
+        if (!u64(u)) return false;
+        out = std::bit_cast<double>(u);
+        if (!isFinite(out)) return ok = false;  // reject non-finite on read
+        return true;
+    }
+    // Curve/surface radii and edge parameters widened with the positions in v4.
+    bool scalar(double& out, bool wide)
+    {
+        if (wide) return f64(out);
+        float f = 0.f;
+        if (!f32(f)) return false;
+        out = f;
+        return true;
+    }
+    bool vec3(Vec3& out, bool wide)
+    {
+        if (wide) return f64(out.x) && f64(out.y) && f64(out.z);
+        float x = 0.f, y = 0.f, z = 0.f;
+        if (!f32(x) || !f32(y) || !f32(z)) return false;
+        out = Vec3{x, y, z};
+        return true;
+    }
+    bool vec3f(nexus::render::Vec3& out) { return f32(out.x) && f32(out.y) && f32(out.z); }
     bool boolean(bool& out)
     {
         std::uint8_t v = 0;
@@ -3528,13 +3590,15 @@ struct Reader {
             if (!f32(e)) return false;
         return true;
     }
-    bool vec3Vec(std::vector<Vec3>& out)
+    // NURBS control points are single precision (that is what NurbsSurface holds), so this
+    // reader is explicitly the float one — it is not the B-rep's own position reader.
+    bool vec3Vec(std::vector<nexus::render::Vec3>& out)
     {
         std::uint32_t n = 0;
         if (!count(n)) return false;
         out.resize(n);
         for (auto& e : out)
-            if (!vec3(e)) return false;
+            if (!vec3f(e)) return false;   // NURBS control points stay single precision
         return true;
     }
 };
@@ -3557,8 +3621,8 @@ std::vector<std::uint8_t> Body::serialize() const
         putU32(o, e.curve);
         putU32(o, e.v0);
         putU32(o, e.v1);
-        putF32(o, e.t0);
-        putF32(o, e.t1);
+        putF64(o, e.t0);
+        putF64(o, e.t1);
         putU32(o, e.coedge);
         putU8(o, e.alive ? 1u : 0u);
     }
@@ -3606,7 +3670,7 @@ std::vector<std::uint8_t> Body::serialize() const
         putVec3(o, c.origin);
         putVec3(o, c.dir);
         putVec3(o, c.ref);
-        putF32(o, c.radius);
+        putF64(o, c.radius);
         putU32(o, c.nurbs);
     }
     putU32(o, static_cast<std::uint32_t>(m_surfaces.size()));
@@ -3615,7 +3679,7 @@ std::vector<std::uint8_t> Body::serialize() const
         putVec3(o, s.origin);
         putVec3(o, s.normal);
         putVec3(o, s.uAxis);
-        putF32(o, s.radius);
+        putF64(o, s.radius);
         putU32(o, s.nurbs);
     }
     putU32(o, static_cast<std::uint32_t>(m_nurbsSurfaces.size()));
@@ -3629,7 +3693,7 @@ std::vector<std::uint8_t> Body::serialize() const
         putU32(o, static_cast<std::uint32_t>(n.knotV().size()));
         for (float k : n.knotV()) putF32(o, k);
         putU32(o, static_cast<std::uint32_t>(n.controlPoints().size()));
-        for (const Vec3& p : n.controlPoints()) putVec3(o, p);
+        for (const nexus::render::Vec3& p : n.controlPoints()) putVec3f(o, p);
         putU32(o, static_cast<std::uint32_t>(n.weights().size()));
         for (float w : n.weights()) putF32(o, w);
     }
@@ -3664,6 +3728,8 @@ std::optional<Body> Body::deserialize(const std::vector<std::uint8_t>& bytes)
     std::uint32_t magic = 0, version = 0;
     if (!r.u32(magic) || magic != kBRepMagic) return std::nullopt;
     if (!r.u32(version) || version < 1u || version > kBRepVersion) return std::nullopt;
+    // v4 onward stores positions as double; everything earlier stored float.
+    const bool wide = version >= 4u;
 
     Body b;
     std::uint32_t n = 0;
@@ -3671,13 +3737,13 @@ std::optional<Body> Body::deserialize(const std::vector<std::uint8_t>& bytes)
     if (!r.count(n)) return std::nullopt;
     b.m_verts.resize(n);
     for (Vertex& v : b.m_verts)
-        if (!r.vec3(v.point) || !r.u32(v.coedge) || !r.boolean(v.alive)) return std::nullopt;
+        if (!r.vec3(v.point, wide) || !r.u32(v.coedge) || !r.boolean(v.alive)) return std::nullopt;
 
     if (!r.count(n)) return std::nullopt;
     b.m_edges.resize(n);
     for (Edge& e : b.m_edges)
-        if (!r.u32(e.curve) || !r.u32(e.v0) || !r.u32(e.v1) || !r.f32(e.t0) || !r.f32(e.t1) ||
-            !r.u32(e.coedge) || !r.boolean(e.alive))
+        if (!r.u32(e.curve) || !r.u32(e.v0) || !r.u32(e.v1) || !r.scalar(e.t0, wide) ||
+            !r.scalar(e.t1, wide) || !r.u32(e.coedge) || !r.boolean(e.alive))
             return std::nullopt;
 
     if (!r.count(n)) return std::nullopt;
@@ -3717,8 +3783,8 @@ std::optional<Body> Body::deserialize(const std::vector<std::uint8_t>& bytes)
     b.m_curves.resize(n);
     for (Curve& c : b.m_curves) {
         std::uint8_t kind = 0;
-        if (!r.u8(kind) || !r.vec3(c.origin) || !r.vec3(c.dir) || !r.vec3(c.ref) ||
-            !r.f32(c.radius) || !r.u32(c.nurbs))
+        if (!r.u8(kind) || !r.vec3(c.origin, wide) || !r.vec3(c.dir, wide) || !r.vec3(c.ref, wide) ||
+            !r.scalar(c.radius, wide) || !r.u32(c.nurbs))
             return std::nullopt;
         c.kind = static_cast<CurveKind>(kind);
     }
@@ -3727,8 +3793,8 @@ std::optional<Body> Body::deserialize(const std::vector<std::uint8_t>& bytes)
     b.m_surfaces.resize(n);
     for (Surface& s : b.m_surfaces) {
         std::uint8_t kind = 0;
-        if (!r.u8(kind) || !r.vec3(s.origin) || !r.vec3(s.normal) || !r.vec3(s.uAxis) ||
-            !r.f32(s.radius) || !r.u32(s.nurbs))
+        if (!r.u8(kind) || !r.vec3(s.origin, wide) || !r.vec3(s.normal, wide) || !r.vec3(s.uAxis, wide) ||
+            !r.scalar(s.radius, wide) || !r.u32(s.nurbs))
             return std::nullopt;
         s.kind = static_cast<SurfaceKind>(kind);
     }
@@ -3738,7 +3804,7 @@ std::optional<Body> Body::deserialize(const std::vector<std::uint8_t>& bytes)
     for (std::uint32_t i = 0; i < n; ++i) {
         std::int32_t degU = 0, degV = 0, nU = 0, nV = 0;
         std::vector<float> knotU, knotV, weights;
-        std::vector<Vec3> ctl;
+        std::vector<nexus::render::Vec3> ctl;  // NURBS control points are single precision
         if (!r.i32(degU) || !r.i32(degV) || !r.i32(nU) || !r.i32(nV)) return std::nullopt;
         if (!r.floatVec(knotU) || !r.floatVec(knotV) || !r.vec3Vec(ctl) || !r.floatVec(weights))
             return std::nullopt;

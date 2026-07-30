@@ -14,7 +14,6 @@
 
 namespace nexus::geometry::brep::testing {
 
-using nexus::render::Vec3;
 
 namespace {
 // The +Z face of a box centred at the origin (all four verts at z = +halfDepth).

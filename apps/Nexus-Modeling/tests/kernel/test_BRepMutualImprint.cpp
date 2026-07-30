@@ -13,7 +13,6 @@
 
 namespace nexus::geometry::brep::testing {
 
-using nexus::render::Vec3;
 using PC = Body::PointContainment;
 
 namespace {

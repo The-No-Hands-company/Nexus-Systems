@@ -13,7 +13,6 @@
 
 namespace nexus::geometry::brep::testing {
 
-using nexus::render::Vec3;
 
 namespace {
 double vol(const Body& b) { return static_cast<double>(b.massProperties().volume); }

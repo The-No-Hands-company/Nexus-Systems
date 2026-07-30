@@ -141,7 +141,12 @@ Mesh booleanToMesh(const Body& a, const Body& b, BooleanOp op, Tolerance tol)
             emitFace(B, f, reverse, positions, topo);
     }
 
-    mesh.attributes().setPositions(std::move(positions));
+    // The render boundary: a Mesh carries single-precision positions, so the B-rep's doubles
+    // are narrowed here, once, deliberately.
+    std::vector<nexus::render::Vec3> meshPositions;
+    meshPositions.reserve(positions.size());
+    for (const Vec3& p : positions) meshPositions.push_back(p.toFloat());
+    mesh.attributes().setPositions(std::move(meshPositions));
     // Merge coincident seam vertices so A's and B's kept patches join watertight.
     (void)mesh.weldCoincidentVertices(tol.absolute > 0.f ? tol.absolute * 10.f : 1e-4f);
     return mesh;

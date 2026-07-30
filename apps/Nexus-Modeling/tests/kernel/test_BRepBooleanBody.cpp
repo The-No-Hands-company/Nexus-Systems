@@ -9,7 +9,6 @@
 
 namespace nexus::geometry::brep::testing {
 
-using nexus::render::Vec3;
 
 namespace {
 double signedVolume(const Mesh& m)

@@ -14,7 +14,6 @@
 
 namespace nexus::geometry::brep::testing {
 
-using nexus::render::Vec3;
 
 // Equal profiles offset vertically → a prism (here a 2×2×3 box, volume 24/2=12).
 TEST(BRepLoft, EqualProfilesIsPrism)
