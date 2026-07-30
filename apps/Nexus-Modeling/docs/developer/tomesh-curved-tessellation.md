@@ -139,13 +139,56 @@ and reverted. It is worth being precise, because it bounds the design:
   mesh — caught by `ArcBiteSeam.EveryClosedBodyTessellatesToAClosedMesh`, which had been
   shipped one increment earlier as hardening for a path believed unreachable.
 
-**The crack's cause is NOT yet root-caused, and finding it is step 1 of the work.** What is
-known: the failing body was a *boolean result* at subdivisions 4; primitives were unaffected.
-The likely candidates, in order — a `(u,v)` polygon that is self-intersecting after
-unwrapping on an imprinted face; `surfaceUV` returning an inconsistent branch for a face
-whose ring crosses the seam twice; or the ear-clip stalling and the remnant-fan emitting
-triangles that fail to cover a boundary edge. Do not build Tier 1 on top of an unexplained
-crack.
+### 6.1 Step 1 result — root-caused, and all three candidates were wrong
+
+The three candidates listed here originally (a self-intersecting `(u,v)` polygon, a bad
+`surfaceUV` branch, an ear-clip stall) were each tested and **each disproven**:
+
+- The `(u,v)` polygons are simple — zero self-intersections on every cylindrical face.
+- The ear-clipper does not stall — instrumented, no stall on any face.
+- There is no missing triangle. Counting mesh edges by index: **zero used once**, and
+  **four used more than twice**. It was never a hole; it was overlap.
+
+Counting the same thing on the *committed* build settles it: **six** over-used edges, versus
+four with the `(u,v)` change. The defect is **pre-existing and the change reduced it.**
+
+The over-used edges are on the box's *planar* faces, and the triangles responsible have
+**area exactly 0.000000** — for example `(0,3,46)` and `(0,46,3)`, the same three collinear
+points wound both ways. They come from fanning a face whose boundary contains **collinear
+refined points**: refining a straight edge puts intermediate points along it, and a fan from
+`ring[0]` connects consecutive points of that same edge.
+
+The mechanism that produced the symptom:
+
+> A zero-area triangle has no defined orientation — its geometric normal is the zero vector,
+> so `emitTri`'s `dot(g, nrm) < 0` test compares against nothing and picks a winding
+> arbitrarily. It is stable only by accident. Changing how a face is triangulated changes
+> that accident, and a directed-edge analysis then reports a closed body as having a
+> boundary. The `(u,v)` change did not open the mesh; it disturbed the arbitrary winding of
+> triangles that were already wrong.
+
+### 6.2 And they are load-bearing, which is the real finding
+
+The obvious repair — drop degenerate triangles in `emitTri`, since they contribute no
+surface — was implemented and **reverted**. It takes the over-used edges from six to zero
+and then opens **57 one-sided edges**, with `boundaryLoops` going 0 → 18 on a cylinder and
+0 → 746 on a sphere at subdivisions 16.
+
+So the zero-area triangles are not litter. **`toMesh`'s watertightness currently depends on
+them**: they are stitching something, and removing them exposes what.
+
+That changes the order of work. Interior sampling cannot be built on a tessellation whose
+manifoldness rests on degenerate triangles, because every step of §4 and §5 changes exactly
+the connectivity they are compensating for — which is what the reverted attempt demonstrated
+in miniature.
+
+**The next question, and the true step 1:** what are those triangles stitching? The evidence
+points at a mismatch between the coarse boundary edge and its refined chain — `edgeMid` is
+populated per edge and `buildRing` inserts it in traversal order, which *should* be
+crack-free, so the disagreement is somewhere between that intent and the emitted triangles.
+Find it by taking one closed primitive at `subdivisions = 1`, listing every triangle each
+face emits, and checking the boundary-edge coverage rule of §8.4 face by face. Do not
+proceed to §4 until a cylinder tessellates watertight **without** any zero-area triangle.
 
 ## 7. Parameterisation work required
 
