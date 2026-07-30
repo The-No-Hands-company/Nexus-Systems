@@ -658,4 +658,91 @@ TEST(ArcBiteSeam, EveryClosedBodyTessellatesToAClosedMesh)
     EXPECT_GT(bodies.size(), 10u) << "the battery collapsed — nothing was actually checked";
 }
 
+// ── CHAINING: A RESULT USED AS AN OPERAND ───────────────────────────────────────
+//
+// Marking a bore's walls reversed is only half of it. A boolean must also CARRY what its
+// input faces already said about themselves, and addKept did not — it built each kept
+// FaceDef's surface from the input face and left `reversed` at its default. Nothing noticed
+// while operands were only ever primitives, because a primitive has no reversed face. Feed a
+// difference back in and it shows at once: box(3) intersected with box(2)-minus-a-cylinder
+// came back at 6.147149, which is precisely the volume the bore had before it could be
+// marked reversed at all. The walls arrived reversed and left plain.
+//
+// The rule is the composition, not an assignment: carry the input's flag, and for a curved
+// surface TOGGLE it when the operation reverses the face. Planar faces keep expressing
+// reversal by a negated normal, and that composes correctly on its own — negating an
+// already-reversed plane's normal while carrying the flag gives back the opposite outward
+// direction, which is what reversing it means.
+TEST(ArcBiteSeam, ABooleanResultCanBeUsedAsAnOperandAgain)
+{
+    const Body box = makeBox(2.f, 2.f, 2.f);
+    const Body cyl = offsetCylinder(0.5f, 0.7f);
+    const Body bored = booleanToBody(box, cyl, BooleanOp::Difference);
+    ASSERT_GT(bored.faceCount(), 0u);
+    const double vBored = bored.massProperties().volume;
+    ASSERT_NEAR(vBored, 6.652851, 1e-5) << "the fixture body is not the one this test means";
+
+    // Bored walls must survive into a result that KEEPS them un-reversed.
+    const Body big = makeBox(3.f, 3.f, 3.f);
+    const Body inside = booleanToBody(big, bored, BooleanOp::Intersection);
+    ASSERT_GT(inside.faceCount(), 0u) << "chaining as the tool went empty";
+    EXPECT_TRUE(inside.isClosed());
+    EXPECT_TRUE(inside.checkIntegrity().ok) << inside.checkIntegrity().reason;
+    // box(3) wholly contains box(2), so the intersection IS the bored box.
+    EXPECT_NEAR(inside.massProperties().volume, vBored, 1e-5)
+        << "the bore's reversal was lost on the way through a second boolean";
+
+    // And into one that reverses them a second time, which must compose rather than stick.
+    const Body cut = booleanToBody(big, bored, BooleanOp::Difference);
+    ASSERT_GT(cut.faceCount(), 0u);
+    EXPECT_TRUE(cut.isClosed());
+    EXPECT_NEAR(cut.massProperties().volume, 27.0 - vBored, 1e-5)
+        << "box(3) minus the bored box is not the complement of it";
+
+    // Every cylindrical face that came through still carries the cylinder's own axis.
+    for (uint32_t f = 0; f < static_cast<uint32_t>(inside.faceCount()); ++f) {
+        if (!inside.face(f).alive) continue;
+        const uint32_t sid = inside.face(f).surface;
+        if (sid >= inside.surfaceCount() ||
+            inside.surface(sid).kind != SurfaceKind::Cylinder)
+            continue;
+        EXPECT_GT(inside.surface(sid).normal.z, 0.f)
+            << "face " << f << ": a chained boolean negated a cylinder's axis";
+        EXPECT_TRUE(inside.face(f).reversed)
+            << "face " << f << ": a bore wall came through un-reversed";
+    }
+}
+
+// CHARACTERIZATION — the other direction does not work yet, and it is a refusal rather than
+// a wrong answer. Using a bored body as the LEFT operand of a second bore returns empty for
+// all three operations, so watertight-or-empty holds. What is already ruled out: the same
+// second cut works fine on a plain box (19 faces), and imprintMutually(bored, cyl2) SUCCEEDS
+// with both operands valid and closed. So the imprint is not the blocker — it is downstream,
+// in classification or the sew, on an operand whose faces are already bitten and concave.
+TEST(ArcBiteSeam, ChainingAsTheLeftOperandStillBailsToEmpty)
+{
+    const Body box = makeBox(2.f, 2.f, 2.f);
+    const Body bored = booleanToBody(box, offsetCylinder(0.5f, 0.7f), BooleanOp::Difference);
+    ASSERT_GT(bored.faceCount(), 0u);
+    const Body other = offsetCylinder(0.5f, -0.7f);
+
+    // The same cut on a plain box is fine, so the operand is what makes the difference.
+    ASSERT_GT(booleanToBody(box, other, BooleanOp::Difference).faceCount(), 0u);
+    // And the imprint stage is not the blocker.
+    Body a = bored, b = other;
+    ASSERT_TRUE(imprintMutually(a, b));
+    EXPECT_TRUE(a.isClosed());
+    EXPECT_TRUE(a.checkIntegrity().ok) << a.checkIntegrity().reason;
+    EXPECT_TRUE(b.isClosed());
+
+    for (BooleanOp op : {BooleanOp::Union, BooleanOp::Intersection, BooleanOp::Difference}) {
+        const Body r = booleanToBody(bored, other, op);
+        EXPECT_TRUE(r.faceCount() == 0u || (r.isClosed() && r.checkIntegrity().ok))
+            << "neither empty nor a valid closed solid";
+        EXPECT_EQ(r.faceCount(), 0u)
+            << "a second bore through an already-bored body now produces output — replace "
+               "this characterization with volume identities against the unchained result";
+    }
+}
+
 }  // namespace nexus::geometry::brep::testing

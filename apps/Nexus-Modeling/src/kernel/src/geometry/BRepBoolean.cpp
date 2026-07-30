@@ -257,12 +257,19 @@ Body booleanToBody(const Body& a, const Body& b, BooleanOp op, Tolerance tol)
             // parameterization AND the flag for the orientation, so a difference through a
             // cylinder reported the wrong volume (6.147 against a true 6.653). Say it with
             // the flag instead, and leave the axis alone.
+            // Carry what the INPUT face already said about itself. Without this a boolean
+            // silently un-reverses an operand's reversed faces, which nothing noticed while
+            // operands were only ever primitives — a primitive has none. Feed a difference
+            // back in and it shows immediately: box(3) intersected with box(2) minus a
+            // cylinder came back with the volume the bore had before it could be marked
+            // reversed at all, because the bore walls arrived reversed and left plain.
+            fd.reversed = face.reversed;
             if (reverse) {
                 if (fd.surface.kind == SurfaceKind::Plane)
                     fd.surface.normal = {-fd.surface.normal.x, -fd.surface.normal.y,
                                          -fd.surface.normal.z};
                 else
-                    fd.reversed = true;
+                    fd.reversed = !fd.reversed;
             }
             defs.push_back(std::move(fd));
         }
