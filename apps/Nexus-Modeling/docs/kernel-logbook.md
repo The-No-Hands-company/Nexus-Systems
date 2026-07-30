@@ -511,6 +511,47 @@ One more thing had to be undone before that worked, and it is the most instructi
 
 That measurement, made properly, turned up something else on its way past: the analytic volume of a *difference* through a curved solid is wrong, while planar differences and every intersection are exact. A face is reversed by negating its surface's stored normal, and that field means the outward direction for a plane but the *axis* for a cylinder, a sphere or a cone. Negating it flips a plane correctly and merely re-parameterizes a cylinder, reversing nothing. The face definition handed to the assembler has no way to say "reversed" at all, so the Boolean cannot express what it means, and the curved integrator — which does honour that flag — is simply never told. It is recorded, bounded by a test that fails when it is fixed, and left for its own passage.
 
+## 37. Six digits, and the four calls that kept them
+
+The last chapter closed by naming two decisions rather than defects, and said each gets more expensive with everything built on top of it. This chapter spends one of them.
+
+The B-rep stored coordinates as `float`. Cheap, GPU-shaped, and the same choice the mesh side makes for good reasons. It also caps the representation at about six decimal digits, which is a *relative* cap: a model a hundred metres across can be trusted to a tenth of a millimetre and no further, and every industrial kernel this one means to stand beside — Parasolid, ACIS, OCCT — uses double throughout. A kernel cannot promise exact predicates on inputs it has already rounded. So the decision was not close; the only real question was how to make the change without a month of edits.
+
+The lever turned out to be one line. The geometry namespace pulled `Vec3` in from the renderer with a using-declaration, so replacing that declaration with an alias to a new double-width vector migrated every declaration in the namespace at once. The new type widens implicitly from the float one and narrows only through an explicit `toFloat()`, which means the compiler finds each boundary where geometry hands a point back to the renderer and refuses to cross it silently. What remained was the arithmetic the alias could not see: parameter ranges, radii, the serialized format.
+
+That format was a version bump, and version bumps in this kernel must not break existing files. The rule had been checked all along by taking a *current* blob and relabelling it with an older version byte — which had only ever worked because every version happened to share one payload layout. Across a change of width the trick tests nothing at all: it produces a new payload wearing an old header, and decoding it as the old version reads doubles as floats. So a real blob, written by the old writer before the migration, is committed as bytes. It cannot drift with the code, which is the whole point of it.
+
+> A compatibility fixture that the current code can regenerate is not a fixture. It is a mirror.
+
+The primitives came next and taught the sharper lesson. Widening one of them — the cylinder alone, as a cautious first step — improved the cylinder's construction error from 5.9 × 10⁻⁸ to 4.4 × 10⁻⁸ and made the *box* worse, from about 6 × 10⁻⁸ to 1.2 × 10⁻⁷. Two solids that must agree along a seam had been built at different widths, and agreement between two approximations is not improved by making one of them better. All fourteen went together after that. The same trap caught the body transform, which multiplied double points through a float matrix: an identity translation perturbed every coordinate, and a Boolean of two identical cylinders returned empty.
+
+And then the migration was complete, every declaration on the path was double, and a vertex still disagreed with the curve it sits on by 4.371 × 10⁻⁸ — single precision — at every scale. The number named itself. Half of sin(float π) is 4.3711390 × 10⁻⁸ exactly: a radius times the error in a π that had been rounded to float. Something in the chain was still narrow, and no declaration in it was.
+
+They were in the helpers. Four lines of file-local convenience, in two files:
+
+```
+float dot(const Vec3& a, const Vec3& b) { return a.x*b.x + a.y*b.y + a.z*b.z; }
+float length(const Vec3& a)             { return std::sqrt(dot(a, a)); }
+```
+
+Every arc parameter in this kernel is an `atan2(dot(w, bi), dot(w, ref))`, and `atan2` cannot return a double angle from float arguments. However wide the points were, each parameter was rounded on its way *out* of a three-line helper — and then stored into a double field, where it looked perfectly wide. Widening them moved the box from 4.371 × 10⁻⁸ to 2.0 × 10⁻¹⁶, eight orders of magnitude, for a diff of twenty lines.
+
+The cylinder did not move. It stayed at 4.371 × 10⁻⁸ exactly, and the test written to pin the fix is what said so: a check that a half-turn arc parameter equals double π rather than float π, run over *both* operands. It reported 3.1415927410125732 — float π, to the last bit. The box's arcs come from the imprint's parameter pair and the cylinder's from the seam ring, and the two were being rounded by different code. A handful of locals held the second set: the imprint's own `et0`/`et1`, the crossing fractions, the edge parameters, the accessor pair that reads and writes a vector's components, the line-crossing solver's output. All of them declared `float`, all of them assigned from double expressions and into double fields.
+
+> Every declaration on the path was already double. The narrowing was in return values, three calls down. Types could not show it and did not.
+
+**What was proven.** Worst curve-to-vertex disagreement on a cylinder-through-box imprint, both operands, at three scales:
+
+| scale | box | cylinder | relative |
+|---|---|---|---|
+| 1 | 4.371e-08 → 2.001e-16 | 4.371e-08 → 1.531e-16 | 2.0e-16 |
+| 100 | 4.371e-06 → 1.589e-14 | 4.371e-06 → 1.531e-14 | 1.6e-16 |
+| 10000 | 4.371e-04 → 2.417e-12 | 4.371e-04 → 1.531e-12 | 2.4e-16 |
+
+The relative error is now flat at about 2 × 10⁻¹⁶ across four orders of scale, which is what double looks like. A float in the chain looks like a fixed 10⁻⁷ that grows in absolute terms with the model — and a test at a single scale cannot tell those two apart, which is exactly how this survived the entire migration. The guard measures rather than inspects, asserts both operands, asserts the bound relatively, and keeps the π fingerprint that found the second half. Two thousand four hundred and ninety-nine tests pass.
+
+One thing this was expected to unlock and did not. The tolerance defaults were sized for float at roughly eight units in the last place, and the plan was to tighten them once the ceiling lifted. Tightened to 10⁻⁶, six tests fail. Five of them pin the constants themselves and would move with them — four tolerance tests, and a mesh-seam characterization whose sample separations are chosen relative to the current value. The sixth is real: random box-through-sphere Booleans at five tessellations stay watertight only with the loose weld band, because the mesh Boolean still runs on float positions. So the band is not the B-rep's any more. It belongs to the mesh side, and tightening it is that migration's problem rather than this one's.
+
 ---
 
-*This edition ends here, but the logbook does not. The curved Boolean works now, centred or offset, exact on the analytic volume — and the ground it stands on has been checked, which it had not been. Two habits earned their place in this stretch. Measure the subject against an oracle that does not share its weaknesses, or the agreement means nothing. And when a change alters how a face is bounded, measure its area, because every other invariant this kernel owns will happily certify a face that is geometrically wrong. What remains is named: a circle imprinted on a sphere's face, which box-and-sphere still waits on; a reversed curved face that cannot say it is reversed, so its volume comes out wrong; a tessellator that under-refines the inside of a curved patch. Beyond those, the decisions rather than the defects — an attribute layer, and whether coordinates should be double — each of which gets more expensive with everything built on top of it.*
+*This edition ends here, but the logbook does not. The curved Boolean works now, centred or offset, exact on the analytic volume; the ground it stands on has been checked, which it had not been; and the representation underneath is double from storage through parameters, primitives and the file format, verified by measurement at four orders of scale rather than by reading its own type declarations. Three habits earned their place in this stretch. Measure the subject against an oracle that does not share its weaknesses, or the agreement means nothing. When a change alters how a face is bounded, measure its area, because every other invariant this kernel owns will happily certify a face that is geometrically wrong. And a precision claim must be tested at more than one scale, because the signature of a lost digit is a relative error that holds steady while the absolute one grows. What remains is named: a circle imprinted on a sphere's face, which box-and-sphere still waits on; a tessellator that under-refines the inside of a curved patch, now known to be held there by degenerate triangles that turn out to be load-bearing; a chained Boolean that still fails as the left operand; and a mesh side still on float, which is what now holds the tolerance open. Beyond those, one decision rather than a defect — an attribute layer — which gets more expensive with everything built on top of it.*
