@@ -20,13 +20,17 @@ bool exactlyCollinear(const Vec3& u, const Vec3& v)
 }
 Vec3 sub(const Vec3& a, const Vec3& b) { return {a.x - b.x, a.y - b.y, a.z - b.z}; }
 Vec3 add(const Vec3& a, const Vec3& b) { return {a.x + b.x, a.y + b.y, a.z + b.z}; }
-Vec3 scale(const Vec3& a, float s) { return {a.x * s, a.y * s, a.z * s}; }
-float dot(const Vec3& a, const Vec3& b) { return a.x * b.x + a.y * b.y + a.z * b.z; }
+Vec3 scale(const Vec3& a, double s) { return {a.x * s, a.y * s, a.z * s}; }
+// Returns DOUBLE. Returning float here quietly re-rounded every length, every angle and
+// every projection in the B-rep back to single precision, however wide the points were:
+// atan2(dot(...), dot(...)) cannot give a double angle from float arguments. This was the
+// last float in the construction chain, and it was in the three-line helpers.
+double dot(const Vec3& a, const Vec3& b) { return a.x * b.x + a.y * b.y + a.z * b.z; }
 Vec3 cross(const Vec3& a, const Vec3& b)
 {
     return {a.y * b.z - a.z * b.y, a.z * b.x - a.x * b.z, a.x * b.y - a.y * b.x};
 }
-float length(const Vec3& a) { return std::sqrt(dot(a, a)); }
+double length(const Vec3& a) { return std::sqrt(dot(a, a)); }
 Vec3 normalize(const Vec3& a)
 {
     const double l = length(a);

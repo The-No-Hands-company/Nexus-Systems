@@ -18,13 +18,17 @@ namespace nexus::geometry::brep {
 namespace {
 Vec3 sub(const Vec3& a, const Vec3& b) { return {a.x - b.x, a.y - b.y, a.z - b.z}; }
 Vec3 add(const Vec3& a, const Vec3& b) { return {a.x + b.x, a.y + b.y, a.z + b.z}; }
-Vec3 scale(const Vec3& a, float s) { return {a.x * s, a.y * s, a.z * s}; }
+Vec3 scale(const Vec3& a, double s) { return {a.x * s, a.y * s, a.z * s}; }
 Vec3 cross(const Vec3& a, const Vec3& b)
 {
     return {a.y * b.z - a.z * b.y, a.z * b.x - a.x * b.z, a.x * b.y - a.y * b.x};
 }
-float dot(const Vec3& a, const Vec3& b) { return a.x * b.x + a.y * b.y + a.z * b.z; }
-float length(const Vec3& a) { return std::sqrt(dot(a, a)); }
+// Returns DOUBLE. Returning float here quietly re-rounded every length, every angle and
+// every projection in the B-rep back to single precision, however wide the points were:
+// atan2(dot(...), dot(...)) cannot give a double angle from float arguments. This was the
+// last float in the construction chain, and it was in the three-line helpers.
+double dot(const Vec3& a, const Vec3& b) { return a.x * b.x + a.y * b.y + a.z * b.z; }
+double length(const Vec3& a) { return std::sqrt(dot(a, a)); }
 Vec3 normalize(const Vec3& a)
 {
     const double l = length(a);
@@ -57,10 +61,10 @@ double paramOnCurve(const Curve& c, const Vec3& p)
 // OPPOSITE sides of it — decided by the exact sign of orient3D(O, O+D, ·, O+n)
 // (the in-plane side determinant), immune to the catastrophic cancellation of a
 // float closest-approach parameter. The split fraction `s` (a coordinate, not a
-// combinatorial decision) stays float and is snapped onto the curve by splitEdge.
+// combinatorial decision) is carried in double and snapped onto the curve by splitEdge.
 // Only a Line imprint is handled (a Line in the planar face lies on the face).
 bool segmentLineCrossing(const Vec3& A, const Vec3& B, const Curve& curve, const Vec3& n,
-                         float eps, float& sOut)
+                         double eps, double& sOut)
 {
     if (curve.kind != CurveKind::Line) return false;
     const Vec3 O = curve.origin, D = curve.dir;
@@ -1148,7 +1152,9 @@ uint32_t Body::cutFaceBetween(uint32_t faceId, uint32_t vA, uint32_t vB,
     // imprintCurve supplies the intersection curve itself, its param range set to
     // reproduce the two endpoints so checkGeometry holds.
     const uint32_t curveId = static_cast<uint32_t>(m_curves.size());
-    float et0 = 0.f, et1 = 0.f;
+    // DOUBLE: these are curve parameters. Narrowing them here re-rounded every arc an
+    // imprint builds back to float, which is where the seam ring's float pi came from.
+    double et0 = 0.0, et1 = 0.0;
     if (explicitCurve != nullptr) {
         m_curves.push_back(*explicitCurve);
         et0 = paramOnCurve(*explicitCurve, m_verts[vStart].point);
@@ -1308,7 +1314,7 @@ uint32_t Body::imprintCurve(uint32_t faceId, const Curve& curve, Tolerance tol,
             if (params.empty()) return 0u;
             // Split the FAR end first, so every remaining target stays inside the edge that
             // keeps the near end (and keeps this edge id).
-            std::sort(params.begin(), params.end(), [&](float a, float b) {
+            std::sort(params.begin(), params.end(), [&](double a, double b) {
                 return (spanT1 > spanT0) ? (a > b) : (a < b);
             });
             uint32_t splits = 0;
@@ -1550,7 +1556,7 @@ uint32_t Body::imprintCurve(uint32_t faceId, const Curve& curve, Tolerance tol,
             if (cc[0].isVertex || cc[1].isVertex) return kInvalid;
             const uint32_t e0 = cc[0].edge;
             if (e0 >= m_edges.size()) return kInvalid;
-            float fA = cc[0].frac, fB = cc[1].frac;
+            double fA = cc[0].frac, fB = cc[1].frac;
             if (fA > fB) std::swap(fA, fB);
             // Parameter of the SECOND crossing on the shared curve, captured before the
             // first split rewrites this edge's range.
@@ -1806,7 +1812,7 @@ uint32_t Body::imprintCurve(uint32_t faceId, const Curve& curve, Tolerance tol,
         if (e >= m_edges.size()) continue;
         const uint32_t cu = m_edges[e].curve;
         if (cu >= m_curves.size()) continue;
-        float s = 0.f;
+        double s = 0.0;
         if (m_curves[cu].kind == CurveKind::Circle) {
             // The boundary edge is an ARC. Skipping these was why a generatrix could not be
             // imprinted onto a cylindrical face at all — and that is the whole reason the
@@ -1929,7 +1935,7 @@ bool Body::joinEdgesImpl(uint32_t nv, bool requireSameCurve, Tolerance tol)
     // the stored params directly. Otherwise (mergeCollinearEdges) the two edges
     // must be COLLINEAR Lines — verify and project the far endpoints onto e1's
     // line to get their params.
-    float pa1, pa2;
+    double pa1, pa2;
     if (m_edges[e1].curve == m_edges[e2].curve) {
         pa1 = (m_edges[e1].v0 == nv) ? m_edges[e1].t1 : m_edges[e1].t0;
         pa2 = (m_edges[e2].v0 == nv) ? m_edges[e2].t1 : m_edges[e2].t0;
@@ -2232,7 +2238,7 @@ Body::PointContainment Body::classifyPoint(const Vec3& p, Tolerance tol) const
     // consistently (a ray through a shared edge is counted for exactly one of the
     // two triangles), so the odd/even parity is exact and a single direction
     // suffices (no retry). Zero-area tessellation triangles contribute nothing.
-    float R = 0.f;
+    double R = 0.0;
     for (const auto& q : pos) {
         const double dq = length(sub(q, p));
         if (dq > R) R = dq;
@@ -3129,11 +3135,11 @@ Mesh Body::toMesh(uint32_t subdivisions) const
         };
         std::vector<uint32_t> idx(poly.size());
         for (uint32_t k = 0; k < poly.size(); ++k) idx[k] = k;
-        float area = 0.f;
+        double area = 0.0;
         for (size_t k = 0; k < idx.size(); ++k)
             area += cross2(poly[idx[0]], poly[idx[k]],
                            poly[idx[(k + 1) % idx.size()]]);  // sign only
-        if (area < 0.f) std::reverse(idx.begin(), idx.end());
+        if (area < 0.0) std::reverse(idx.begin(), idx.end());
         auto inTri = [&](uint32_t p, uint32_t a, uint32_t b, uint32_t c) {
             const double d1 = cross2(a, b, p), d2 = cross2(b, c, p), d3 = cross2(c, a, p);
             const bool neg = d1 < 0.f || d2 < 0.f || d3 < 0.f;

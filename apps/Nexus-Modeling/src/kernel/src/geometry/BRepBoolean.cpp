@@ -342,8 +342,8 @@ Body booleanToBody(const Body& a, const Body& b, BooleanOp op, Tolerance tol)
 }
 
 namespace {
-float getc(const Vec3& v, int i) { return i == 0 ? v.x : (i == 1 ? v.y : v.z); }
-void setc(Vec3& v, int i, float x)
+double getc(const Vec3& v, int i) { return i == 0 ? v.x : (i == 1 ? v.y : v.z); }
+void setc(Vec3& v, int i, double x)
 {
     if (i == 0) v.x = x;
     else if (i == 1) v.y = x;
@@ -441,9 +441,9 @@ Body filletBoxEdge(const Body& box, int axis, int s1, int s2, float radius, uint
     std::vector<Vec3> poly;
     poly.reserve(segments + 2);
     poly.push_back(mk(c1 + d1 * out, c2 + d2 * out));  // corner, outside the box
-    constexpr float kHalfPi = 1.57079632679489662f;
+    constexpr double kHalfPi = 1.57079632679489662;
     for (uint32_t k = 0; k <= segments; ++k) {
-        const double th = kHalfPi * static_cast<float>(k) / static_cast<float>(segments);
+        const double th = kHalfPi * static_cast<double>(k) / static_cast<double>(segments);
         poly.push_back(mk(in1 + d1 * r * std::cos(th), in2 + d2 * r * std::sin(th)));
     }
     Vec3 dir{0, 0, 0};
