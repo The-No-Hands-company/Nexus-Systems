@@ -240,8 +240,30 @@ Body booleanToBody(const Body& a, const Body& b, BooleanOp op, Tolerance tol)
             const Face& face = body.face(f);
             fd.surface = (face.surface < body.surfaceCount()) ? body.surface(face.surface)
                                                               : Surface{};
-            if (reverse) fd.surface.normal = {-fd.surface.normal.x, -fd.surface.normal.y,
-                                              -fd.surface.normal.z};
+            // Reversing a kept face — the cavity wall of a Difference, whose material is on
+            // the far side of it — is expressed differently for the two kinds of surface,
+            // because `Surface::normal` means two different things.
+            //
+            // For a PLANE it is the outward normal, so negating it says exactly what is
+            // meant, and that is left untouched: it is what every planar boolean in this
+            // kernel has been built on.
+            //
+            // For a CYLINDER, SPHERE or CONE it is the AXIS. Negating it does not reverse
+            // the face at all — it re-parameterizes the surface, leaving a cylindrical bore
+            // whose stored axis points the wrong way and whose orientation is still
+            // unreversed. Nothing downstream noticed, because the tessellator derives its
+            // normal as (axis, flipped if Face::reversed) and those two errors cancel there.
+            // The analytic mass-properties integrator does not: it needs the axis for the
+            // parameterization AND the flag for the orientation, so a difference through a
+            // cylinder reported the wrong volume (6.147 against a true 6.653). Say it with
+            // the flag instead, and leave the axis alone.
+            if (reverse) {
+                if (fd.surface.kind == SurfaceKind::Plane)
+                    fd.surface.normal = {-fd.surface.normal.x, -fd.surface.normal.y,
+                                         -fd.surface.normal.z};
+                else
+                    fd.reversed = true;
+            }
             defs.push_back(std::move(fd));
         }
     };

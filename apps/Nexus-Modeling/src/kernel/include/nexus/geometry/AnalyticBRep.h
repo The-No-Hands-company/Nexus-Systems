@@ -188,6 +188,16 @@ public:
         // face — produces exactly this, and a face with a hole cannot be assembled
         // without it. Empty for the ordinary single-boundary face.
         std::vector<std::vector<uint32_t>> innerLoops;
+        // Whether the face's outward direction is OPPOSITE its surface's natural one.
+        //
+        // For a Plane a caller can express that by handing over a flipped `surface.normal`,
+        // because a plane's normal IS its outward direction. For a Cylinder, Sphere or Cone
+        // it cannot: `Surface::normal` holds the AXIS there, so negating it re-parameterizes
+        // the surface and reverses nothing. A boolean difference builds exactly such faces —
+        // the cavity wall of a cylindrical bore points inward — and without this flag it had
+        // no way to say so. Set it instead of flipping the axis; the assembler copies it onto
+        // Face::reversed, which the tessellator and the analytic integrator both honour.
+        bool reversed = false;
     };
 
     // Assemble a body from a point set and per-face vertex rings. Edges are

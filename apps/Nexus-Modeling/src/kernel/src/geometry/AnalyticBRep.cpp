@@ -498,6 +498,7 @@ std::optional<Body> Body::fromFaces(const std::vector<Vec3>& points,
         const uint32_t loopId = static_cast<uint32_t>(b.m_loops.size());
         b.m_loops.push_back({});
         b.m_faces[faceId].surface = surfaceId;
+        b.m_faces[faceId].reversed = fd.reversed;
         b.m_faces[faceId].outerLoop = loopId;
         b.m_loops[loopId].face = faceId;
         b.m_loops[loopId].outer = true;

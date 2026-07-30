@@ -44,7 +44,9 @@
 // analytic volume at every offset. (An earlier revision of this file claimed a residual
 // there; that was toMesh under-refining curved patches, not the boolean — see the note on
 // InclusionExclusionIsExactOnTheAnalyticVolume.) The measurement that established it also
-// turned up a separate pre-existing defect in massProperties, characterized at the end.
+// turned up a separate pre-existing defect — a reversed CURVED face could not say it was
+// reversed, so a difference through a cylinder had the wrong analytic volume — fixed at the
+// end of this file.
 
 #include <nexus/geometry/AnalyticBRep.h>
 #include <nexus/geometry/BRepBoolean.h>
@@ -489,48 +491,70 @@ TEST(ArcBiteSeam, InclusionExclusionIsExactOnTheAnalyticVolume)
     }
 }
 
-// CHARACTERIZATION of a separate, PRE-EXISTING defect this measurement uncovered, recorded
-// here because this is where the evidence is.
+// A DIFFERENCE THROUGH A CURVED SOLID HAS THE RIGHT ANALYTIC VOLUME.
 //
-// massProperties returns a wrong volume for a boolean DIFFERENCE through a curved solid.
-// Planar differences are fine (box minus box, and hollowBox, both exact), and so is the
-// intersection, which keeps the tool's faces un-reversed. Only the difference is wrong, and
-// only where the reversed faces are curved.
+// It did not, and the reason is a word meaning two things. Surface::normal is the outward
+// normal for a Plane but the AXIS for a cylinder, sphere or cone — the header says so. The
+// boolean reversed a kept face by negating that field, which states the truth for a plane
+// and, for a cylinder, merely re-parameterizes the surface while reversing nothing. The
+// resulting bore carried an axis pointing the wrong way with its orientation flag unset.
 //
-// The cause is in how a face is reversed. Surface::normal means the outward normal for a
-// PLANE but the AXIS for a cylinder, sphere or cone — the header says so. booleanToBody
-// reverses a kept face by negating that field, which flips the outward direction of a plane
-// correctly and merely flips the AXIS of a cylinder, re-parameterizing the surface without
-// reversing the face at all. Body::FaceDef has no `reversed` flag, so the boolean currently
-// has no way to express the thing it means. The curved integrator does honour
-// Face::reversed; it is simply never told.
+// Nothing caught it for a long time because the tessellator derives its normal as the axis
+// flipped by Face::reversed, so the two errors cancel exactly there — the mesh, and every
+// volume measured from it, came out right. The analytic integrator does not cancel them: it
+// needs the axis for the parameterization AND the flag for the orientation. A difference
+// through a cylinder reported 6.147 where the truth is 6.653.
 //
-// Scope beyond mass properties is not yet established: anything reading surface.normal on
-// such a face — uv inversion, containment, a chained boolean — is reading a flipped axis.
-TEST(ArcBiteSeam, DifferenceThroughACurvedSolidHasAWrongAnalyticVolume)
+// FaceDef now carries `reversed`, fromFaces copies it onto the face, and the boolean sets it
+// for curved surfaces while leaving the planar negation exactly as it was.
+TEST(ArcBiteSeam, DifferenceThroughACurvedSolidHasTheRightAnalyticVolume)
 {
     const Body box = makeBox(2.f, 2.f, 2.f);
+    for (float dx : {0.7f, 1.0f, 1.3f}) {
+        const Body cyl = offsetCylinder(0.5f, dx);
+        const Body I = booleanToBody(box, cyl, BooleanOp::Intersection);
+        const Body D = booleanToBody(box, cyl, BooleanOp::Difference);
+        ASSERT_GT(I.faceCount(), 0u) << "dx=" << dx;
+        ASSERT_GT(D.faceCount(), 0u) << "dx=" << dx;
+        EXPECT_NEAR(D.massProperties().volume + I.massProperties().volume,
+                    box.massProperties().volume, 1e-5)
+            << "dx=" << dx << ": (A-B) + (A n B) != A on the analytic volume";
+    }
+
+    // The bore's faces keep the cylinder's own axis and say they are reversed, rather than
+    // carrying a flipped axis and claiming not to be. This is the mechanism, asserted
+    // directly, because the volume above would also pass if both were flipped together.
     const Body cyl = offsetCylinder(0.5f, 0.7f);
-    const Body I = booleanToBody(box, cyl, BooleanOp::Intersection);
     const Body D = booleanToBody(box, cyl, BooleanOp::Difference);
-    ASSERT_GT(I.faceCount(), 0u);
-    ASSERT_GT(D.faceCount(), 0u);
+    size_t curved = 0, reversedCurved = 0;
+    for (uint32_t f = 0; f < static_cast<uint32_t>(D.faceCount()); ++f) {
+        if (!D.face(f).alive) continue;
+        const uint32_t sid = D.face(f).surface;
+        if (sid >= D.surfaceCount() || D.surface(sid).kind != SurfaceKind::Cylinder) continue;
+        ++curved;
+        EXPECT_GT(D.surface(sid).normal.z, 0.f)
+            << "face " << f << ": the bore's stored axis was negated instead of the face "
+               "being marked reversed";
+        if (D.face(f).reversed) ++reversedCurved;
+    }
+    EXPECT_GT(curved, 0u) << "the difference has no cylindrical faces to check";
+    EXPECT_EQ(reversedCurved, curved) << "a cavity wall is not marked reversed";
+}
 
-    // The intersection is exact, so the truth for the difference is known.
-    const double truth = box.massProperties().volume - I.massProperties().volume;
-    const double got = D.massProperties().volume;
-    EXPECT_GT(std::abs(got - truth), 1e-3)
-        << "the analytic volume of a difference through a cylinder is now correct — remove "
-           "this characterization and assert (A-B) + (A n B) == A on the analytic volume";
-    // Bounded, so a regression cannot make it quietly worse.
-    EXPECT_LT(std::abs(got - truth), 1.0) << "the error grew";
-
-    // The tessellated volume of the same body IS right, which is what localizes the fault
-    // to the analytic patch path rather than to the boolean's topology.
-    EXPECT_NEAR(signedVolume(D.toMesh(0)) + signedVolume(I.toMesh(0)),
-                signedVolume(box.toMesh(0)), 1e-5)
-        << "the difference's tessellated volume is wrong too — the fault is not confined "
-           "to the analytic path";
+// Planar reversal is untouched — it was correct, it is what every planar boolean in this
+// kernel rests on, and the change was scoped to leave it alone.
+TEST(ArcBiteSeam, PlanarDifferenceVolumesAreUnchanged)
+{
+    const Body A = makeBox(2.f, 2.f, 2.f);
+    Body B = makeBox(1.f, 1.f, 1.f);
+    B.translate({1.f, 1.f, 1.f});  // overlaps A in a 0.5^3 corner
+    EXPECT_NEAR(booleanToBody(A, B, BooleanOp::Difference).massProperties().volume, 8.0 - 0.125,
+                1e-5);
+    EXPECT_NEAR(booleanToBody(A, B, BooleanOp::Intersection).massProperties().volume, 0.125, 1e-5);
+    EXPECT_NEAR(booleanToBody(A, B, BooleanOp::Union).massProperties().volume, 8.0 + 1.0 - 0.125,
+                1e-5);
+    // hollowBox is itself a difference, and predates all of this.
+    EXPECT_NEAR(hollowBox(4.f, 4.f, 4.f, 0.5f).massProperties().volume, 64.0 - 27.0, 1e-5);
 }
 
 // ── CONTRACTS THE SEAM WORK PUT UNDER STRAIN ────────────────────────────────────
