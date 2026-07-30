@@ -188,9 +188,13 @@ wrong signs in 5,675 cases, every one on exactly-coplanar input where the predic
 return zero for Simulation of Simplicity to have a tie to break. This choice only works if
 the exact half is genuinely exact, and nothing was checking.
 
-## `float` coordinates — the one that is still open
+## `float` coordinates — reversed, and executed
 
-**Decision**: positions, curves and surfaces are stored as 32-bit float.
+**Original decision**: positions, curves and surfaces were stored as 32-bit float. **This was
+reversed.** The B-rep is now double throughout — storage, curve and surface parameters, all
+fourteen primitive builders, the crossing solvers and the file format. The analysis below is
+kept because it is the record of *why*, and because the measurement in it is what ruled out
+the cheap alternative. See "What the migration actually cost" at the end for the outcome.
 
 **The alternative**: double throughout, which is what Parasolid, ACIS, OCCT and Rhino all do.
 
@@ -234,9 +238,62 @@ Staged: introduce the scalar alias and the double vector; migrate `Surface` and 
 `Vertex`; then serialization v4; then re-tighten `Tolerance`'s defaults, which are currently
 sized to float and are the visible symptom of the whole decision.
 
-**Status: decided in principle, not executed.** It is a multi-session mechanical migration
-and the risk in doing it hurriedly is a subtly-wrong precision change, which is the class of
-bug that hides longest.
+### What the migration actually cost
+
+**Status: executed**, across three increments, at 2499/2499. The staging above held, with two
+corrections the plan did not anticipate.
+
+**The lever was one line.** `nexus::geometry` pulled `Vec3` in from the renderer with a
+using-declaration, so pointing that declaration at a double-width vector migrated every
+declaration in the namespace at once. `Vec3d` widens implicitly from `render::Vec3` and
+narrows only through an explicit `toFloat()`, which makes the compiler enumerate the
+geometry-to-renderer boundaries instead of letting them convert silently.
+
+**Primitives migrate together or not at all.** Widening `makeCylinder` alone as a cautious
+first step improved the cylinder (5.9e-8 → 4.4e-8) and made the *box worse* (≈6e-8 → 1.24e-7).
+Two solids that must agree along a seam had been built at different widths, and agreement
+between two approximations does not improve by fixing one of them. All fourteen went in one
+commit. The same trap caught `Body::transform`, which multiplied double points through a
+float `Mat4`: an identity translation perturbed every coordinate, and a boolean of two
+identical cylinders returned empty.
+
+**A relabelled current blob is not a compatibility fixture.** Backward-read had been checked
+by taking a current blob and stamping an older version byte on it, which only ever worked
+because every version shared one payload layout. Across a width change that produces a v4
+payload with a v1 header, and decoding it as v1 reads doubles as floats. A genuine v3 blob is
+now committed as bytes (`tests/kernel/fixtures/brep_v3_box.nxb`); it cannot drift with the
+code, which is the point.
+
+**The ceiling was not in any declaration.** With storage, parameters, primitives and the
+format all double, a vertex still disagreed with its own curve by 4.371e-08 — single
+precision — at every scale. The number identified itself: 0.5·sin(float π) is 4.3711390e-08.
+The narrowing was in *return values and locals* three calls down — `float dot()`, `float
+length()`, and a set of `float` locals holding arc parameters and crossing fractions. Every
+arc parameter is `atan2(dot(w, bi), dot(w, ref))`, and `atan2` cannot return a double angle
+from float arguments, so each was rounded on the way out of a three-line helper and then
+stored into a double field where it looked wide. Twenty lines of fix, eight orders of
+magnitude:
+
+| scale | box | cylinder | relative |
+|---:|---:|---:|---:|
+| 1 | 4.371e-08 → 2.001e-16 | 4.371e-08 → 1.531e-16 | 2.0e-16 |
+| 100 | 4.371e-06 → 1.589e-14 | 4.371e-06 → 1.531e-14 | 1.6e-16 |
+| 10,000 | 4.371e-04 → 2.417e-12 | 4.371e-04 → 1.531e-12 | 2.4e-16 |
+
+**Test precision claims at more than one scale.** A float in the chain is a *fixed relative*
+error whose absolute size grows with the model; genuine double is a flat ~2e-16 at every
+scale. A single-scale test cannot distinguish them, which is how this survived the whole
+migration. `test_BRepPrecisionCeiling` measures rather than inspects types (the defect was
+invisible in the types), asserts both operands (they were rounded by different helpers —
+fixing one left the other entirely single-precision), asserts relatively across four orders
+of scale, and keeps the π fingerprint, which is what caught the second half.
+
+**`Tolerance` did not come with it.** The defaults were sized to float at ~8 ULP and the plan
+was to re-tighten them last. At 1e-6/1e-7 six tests fail. Five pin the constants themselves
+and would move with them. The sixth is real: random box-through-sphere booleans across five
+tessellations stay watertight only with the loose weld band, because the *mesh* boolean still
+runs on float positions. The band is no longer the B-rep's — it belongs to the mesh side, and
+tightening it is that migration's problem.
 
 ## Watertight-or-empty as a hard contract
 
