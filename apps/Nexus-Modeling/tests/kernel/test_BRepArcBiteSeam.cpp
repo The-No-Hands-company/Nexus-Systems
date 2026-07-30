@@ -33,9 +33,16 @@
 //     from the cylinder's axis of radius 0.5 — inside it — while the face's own material is
 //     almost entirely outside.
 //
-// The offset-cylinder BOOLEAN still returns empty; a fourth layer remains, and it is named
-// at the bottom of this file. What is proven here is each of the three fixes, on its own
-// terms, and that the centred case did not regress.
+// (4) THE TWO OPERANDS DISCRETIZED THE SEAM DIFFERENTLY — the box got ONE arc from entry
+//     to exit where the cylinder's rim had twelve, so nothing could partner. Fixed by
+//     subdividing the bite's arc at the other operand's vertices, with a face already
+//     segmented along the circle RECONCILING its discretization on a later round rather
+//     than merely refusing (the mutual imprint cuts one operand at a time, so on the round
+//     that made the cut there was nothing yet to match).
+//
+// With those, the offset-cylinder boolean SEWS. Difference and intersection are exact at
+// every offset; the union is exact where the seam lands on facet vertices and carries a
+// bounded, characterized residual where it does not — see the last test.
 
 #include <nexus/geometry/AnalyticBRep.h>
 #include <nexus/geometry/BRepBoolean.h>
@@ -104,6 +111,27 @@ double areaAtZ(const Mesh& m, float level)
     return a;
 }
 
+double signedVolume(const Mesh& m)
+{
+    Mesh t = m;
+    (void)t.topology().triangulate();
+    const auto& p = t.attributes().positions();
+    double v = 0.0;
+    for (size_t i = 0; i < t.topology().faceCount(); ++i) {
+        const auto& idx = t.topology().face(i).indices;
+        if (idx.size() != 3) continue;
+        const auto &a = p[idx[0]], &b2 = p[idx[1]], &c = p[idx[2]];
+        v += (static_cast<double>(a.x) *
+                  (static_cast<double>(b2.y) * c.z - static_cast<double>(b2.z) * c.y) -
+              static_cast<double>(a.y) *
+                  (static_cast<double>(b2.x) * c.z - static_cast<double>(b2.z) * c.x) +
+              static_cast<double>(a.z) *
+                  (static_cast<double>(b2.x) * c.y - static_cast<double>(b2.y) * c.x)) /
+             6.0;
+    }
+    return std::abs(v);
+}
+
 size_t arcEdgeCount(const Body& b)
 {
     size_t n = 0;
@@ -127,18 +155,24 @@ TEST(ArcBiteSeam, SameEdgeBiteSplitsTheFaceAndStaysValid)
     Body cyl = offsetCylinder(0.5f, 0.7f);
     ASSERT_TRUE(imprintMutually(box, cyl));
 
-    // Per bitten face: 3 new vertices (both crossings + the chord midpoint), 4 new edges
-    // (two crossing splits, the midpoint split, the arc), 1 new face. Two ±Z faces are
-    // bitten, and the +X wall is cut by the two generatrices of fix (2).
-    EXPECT_EQ(box.vertexCount(), 8u + 3u * 2u) << "unexpected vertex count after two bites";
+    // Each bitten face gains the two crossings, the chord midpoint, and then a vertex per
+    // cylinder rim vertex the seam arc is subdivided at (fix 4) — so the count is not a
+    // fixed number, but the box must have grown and every vertex must still be on the box.
+    EXPECT_GT(box.vertexCount(), 8u + 3u * 2u) << "the seam arc was not subdivided";
+    for (uint32_t v = 0; v < static_cast<uint32_t>(box.vertexCount()); ++v) {
+        if (!box.vertex(v).alive) continue;
+        const auto& p = box.vertex(v).point;
+        EXPECT_LE(std::max(std::max(std::fabs(p.x), std::fabs(p.y)), std::fabs(p.z)), 1.f + 1e-5f)
+            << "an imprint moved a vertex outside the box";
+    }
     EXPECT_TRUE(box.isClosed()) << "the bite opened the shell";
     EXPECT_EQ(box.checkIntegrity().boundaryEdges, 0u);
     EXPECT_TRUE(box.checkIntegrity().ok) << box.checkIntegrity().reason;
     EXPECT_TRUE(box.checkGeometry().ok) << box.checkGeometry().reason;
 
-    // Each bite contributes ONE arc, shared by the lens and the remainder — so four faces
-    // carry an arc and there are two arc edges in total, not four.
-    EXPECT_EQ(arcEdgeCount(box), 2u) << "each bite should add exactly one arc edge";
+    // Each bite contributes one seam arc, shared by the lens and the remainder — but that
+    // arc is then subdivided at the cylinder's rim vertices, so it is a CHAIN of arc edges.
+    EXPECT_GE(arcEdgeCount(box), 2u) << "the bites produced no arc edges at all";
 
     // The crossings sit exactly where the geometry says: 1 = dx + r*cos, so y = ±0.4.
     size_t atCrossing = 0;
@@ -284,22 +318,24 @@ TEST(ArcBiteSeam, BittenRemainderClassifiesOutsideAndTheLensInside)
     EXPECT_EQ(inside, 3u) << "wrong number of box faces classified inside the cylinder";
     EXPECT_EQ(inside + outside, box.faceCount()) << "a face was neither";
 
-    // And the mechanism, pinned directly: the outline average of the remainder face lies
-    // inside the cylinder while the sample point does not.
-    bool checkedRemainder = false;
+    // And the mechanism, pinned without depending on where the centroid happens to land:
+    // on every bitten ±Z face whose outline average is NOT on its material, the sample point
+    // must be — and must classify differently. Before fix (3) there was no such point and
+    // the whole face was called Inside.
+    size_t checkedRemainder = 0;
     for (uint32_t f = 0; f < static_cast<uint32_t>(box.faceCount()); ++f) {
         if (!box.face(f).alive) continue;
         const Vec3 c = box.faceCentroid(f);
-        // The -Z remainder: on the z=-1 plane, and its outline average is the point at
-        // roughly (1/3, 0) that used to defeat the classifier.
-        if (std::fabs(c.z + 1.f) > 1e-5f || std::fabs(c.x - 0.3333f) > 0.02f) continue;
-        checkedRemainder = true;
-        EXPECT_EQ(cyl.classifyPoint(c), Body::PointContainment::Inside)
-            << "fixture drifted: the outline average was expected inside the cylinder";
-        EXPECT_NE(cyl.classifyPoint(box.faceSamplePoint(f)), Body::PointContainment::Inside)
-            << "the sample point is not on the face's material";
+        if (std::fabs(std::fabs(c.z) - 1.f) > 1e-5f) continue;  // a ±Z face
+        if (cyl.classifyPoint(c) != Body::PointContainment::Inside) continue;
+        const Vec3 sp = box.faceSamplePoint(f);
+        if (sp.x == c.x && sp.y == c.y && sp.z == c.z) continue;  // centroid was fine here
+        ++checkedRemainder;
+        EXPECT_NE(cyl.classifyPoint(sp), Body::PointContainment::Inside)
+            << "face " << f << ": the sample point is not on the face's material";
     }
-    EXPECT_TRUE(checkedRemainder) << "the remainder face fixture was not found";
+    EXPECT_GT(checkedRemainder, 0u)
+        << "no face had a centroid off its own material — the fixture no longer exercises this";
 }
 
 // ── NO REGRESSION ON THE CENTRED CASE ────────────────────────────────────────────
@@ -321,57 +357,134 @@ TEST(ArcBiteSeam, TheCentredCylinderStillSews)
     }
 }
 
-// CHARACTERIZATION, and the handoff. Both operands of an offset cylinder are now cut
-// correctly, valid and closed, and every face is classified by its own material — but the
-// boolean still returns empty, so it stays under the watertight-or-empty contract rather
-// than returning something leaky.
-//
-// The remaining cause is located: the two operands do not share the VERTICAL seam. After
-// the imprint the offered union face set has 30 one-sided edges and zero reused directed
-// edges — nothing is non-manifold, pieces are simply missing their partners — and the
-// survivors say where: the box's vertical seams at (1, ±0.4, ±1) against cylinder facet
-// vertices such as (1.054, 0.354, ±1), which sits at the cylinder's own radius rather than
-// on the x = 1 plane. The box's +X wall is cut along the two generatrices; the cylinder's
-// side faces are not cut there at all.
-//
-// The mechanism is known exactly, and it is NOT the coordination problem the latitude ring
-// had. A cylindrical side face is bounded by two rim ARCS and two uprights; the generatrix
-// to be imprinted is PARALLEL to the uprights, so its only possible crossings are on the
-// arcs — and the Line-imprint path tests only boundary edges whose curve is a Line, so it
-// finds no crossings and refuses. Nothing about vertex coordination is involved: once the
-// cylinder IS cut, the crossings land at (1, ±0.4, ±1) by construction, which is already
-// exactly where the box's are, so the weld pairs them with no protocol at all.
-//
-// An attempt at this was made and REVERTED, and the reason is the useful part. Teaching the
-// Line path to cross an arc (solve the line against the arc's plane, confirm the hit is on
-// the circle, read off its parameter) does cut the cylinder — measured, it gained the 12
-// seam-plane vertices including all four at (1, ±0.4, ±1), and both operands stayed valid
-// and closed. But it also produced four ZERO-AREA faces on the cylinder, each with all its
-// vertices on one rim, joining a point on the +0.4 generatrix straight across to one on the
-// −0.4 generatrix. Some face is being cut between two crossings that lie on the SAME rim
-// rather than one on each. checkIntegrity, checkGeometry, isClosed and euler all pass on
-// that body — none of them measures area — and the corruption only showed up as two of the
-// box's faces flipping to OnBoundary and two reused directed edges appearing in the offered
-// set. So the next attempt needs, in addition to the arc crossing: a guard that the two
-// crossings of a generatrix lie on OPPOSITE rims, and an area assertion on the imprinted
-// cylinder, because that is the only invariant here with any power.
-TEST(ArcBiteSeam, OffsetCylinderBooleanStillBailsToEmptyButCleanly)
+// ── (5) THE SEAM IS SHARED, AND THE OFFSET BOOLEAN SEWS ─────────────────────────
+// The last thing between the operands was discretization. Cutting a box face along the
+// seam circle gives the box ONE arc from entry to exit; the cylinder's rim over the same
+// stretch is a chain of facet arcs. Measured at the z = -1 seam: 2 vertices on the box
+// against 13 on the cylinder, so 1 edge facing 12 and not one of them able to partner —
+// the identical failure the latitude ring had at 8-against-16. Fixed the same way: the
+// bite subdivides its arc at the other operand's vertices, and because the mutual imprint
+// cuts one operand at a time, a face already segmented along the circle RECONCILES its
+// discretization on the next round instead of merely refusing.
+TEST(ArcBiteSeam, TheTwoOperandsShareTheSeamVertexForVertex)
+{
+    Body box = makeBox(2.f, 2.f, 2.f);
+    Body cyl = offsetCylinder(0.5f, 0.7f);
+    ASSERT_TRUE(imprintMutually(box, cyl));
+
+    // Every point of the seam circle at z = -1 that either operand has, the other must have
+    // too. Only the x <= 1 stretch is shared — beyond the wall the seam is not a seam.
+    auto seamPoints = [](const Body& b, float z) {
+        std::vector<Vec3> out;
+        for (uint32_t v = 0; v < static_cast<uint32_t>(b.vertexCount()); ++v) {
+            if (!b.vertex(v).alive) continue;
+            const Vec3 p = b.vertex(v).point;
+            if (std::fabs(p.z - z) > 1e-4f || p.x > 1.f + 1e-4f) continue;
+            if (std::fabs(std::hypot(p.x - 0.7f, p.y) - 0.5f) > 1e-3f) continue;
+            out.push_back(p);
+        }
+        return out;
+    };
+    for (float z : {-1.f, 1.f}) {
+        const std::vector<Vec3> bp = seamPoints(box, z), cp = seamPoints(cyl, z);
+        EXPECT_GE(bp.size(), 13u) << "z=" << z << ": the box's seam arc was not subdivided";
+        EXPECT_EQ(bp.size(), cp.size()) << "z=" << z << ": the two operands disagree on the "
+                                           "seam's discretization";
+        for (const Vec3& p : bp) {
+            float best = 1e30f;
+            for (const Vec3& q : cp)
+                best = std::min(best, std::hypot(std::hypot(p.x - q.x, p.y - q.y), p.z - q.z));
+            EXPECT_LT(best, 1e-5f) << "z=" << z << ": box seam point (" << p.x << "," << p.y
+                                   << ") has no counterpart on the cylinder";
+        }
+    }
+}
+
+// And so the boolean produces a solid where it used to produce nothing.
+TEST(ArcBiteSeam, OffsetCylinderBooleanSews)
 {
     const Body box = makeBox(2.f, 2.f, 2.f);
     for (float dx : {0.7f, 1.0f, 1.3f}) {
         const Body cyl = offsetCylinder(0.5f, dx);
         for (BooleanOp op : {BooleanOp::Union, BooleanOp::Intersection, BooleanOp::Difference}) {
             const Body r = booleanToBody(box, cyl, op);
-            // Watertight-or-empty holds either way; this is a characterization, so when the
-            // shared vertical seam lands it should FAIL and be replaced by the real
-            // assertions (closed + the inclusion-exclusion volume identity).
-            EXPECT_TRUE(r.faceCount() == 0u || (r.isClosed() && r.checkIntegrity().ok))
-                << "dx=" << dx << ": neither empty nor a valid closed solid";
-            EXPECT_EQ(r.faceCount(), 0u)
-                << "dx=" << dx << ": the offset-cylinder boolean now produces output — the "
-                   "shared vertical seam has landed; replace this characterization with a "
-                   "watertight + volume-identity assertion";
+            ASSERT_GT(r.faceCount(), 0u) << "dx=" << dx << ": still empty";
+            EXPECT_TRUE(r.isClosed()) << "dx=" << dx;
+            EXPECT_TRUE(r.checkIntegrity().ok) << "dx=" << dx << ": " << r.checkIntegrity().reason;
+            EXPECT_TRUE(r.checkGeometry().ok) << "dx=" << dx << ": " << r.checkGeometry().reason;
+            EXPECT_EQ(r.checkIntegrity().boundaryEdges, 0u) << "dx=" << dx;
         }
+    }
+}
+
+// The difference identity is EXACT at every offset and every refinement level: (A-B) and
+// (A∩B) tile A to within a hundred-thousandth. That is the strong statement available here
+// — it says the seam divides the box's material correctly and nothing is lost or doubled
+// on the inside.
+TEST(ArcBiteSeam, DifferencePlusIntersectionTilesTheBoxExactly)
+{
+    const Body box = makeBox(2.f, 2.f, 2.f);
+    for (float dx : {0.7f, 1.0f, 1.3f}) {
+        const Body cyl = offsetCylinder(0.5f, dx);
+        const Body I = booleanToBody(box, cyl, BooleanOp::Intersection);
+        const Body D = booleanToBody(box, cyl, BooleanOp::Difference);
+        ASSERT_GT(I.faceCount(), 0u);
+        ASSERT_GT(D.faceCount(), 0u);
+        for (uint32_t s : {0u, 1u, 2u, 4u})
+            EXPECT_NEAR(signedVolume(D.toMesh(s)) + signedVolume(I.toMesh(s)),
+                        signedVolume(box.toMesh(s)), 1e-5)
+                << "dx=" << dx << " sub=" << s << ": D + I does not tile the box";
+    }
+}
+
+// When the seam's endpoints land ON the cylinder's own facet vertices, everything is exact
+// — inclusion-exclusion included, and the intersection matches the chord-level arithmetic
+// to the last digit. At dx = 1.0 the circle is centred on the wall, so its two crossings
+// are at ±90°, which a 16-gon has vertices at.
+TEST(ArcBiteSeam, FacetAlignedOffsetIsExactThroughout)
+{
+    const Body box = makeBox(2.f, 2.f, 2.f);
+    const Body cyl = offsetCylinder(0.5f, 1.0f);
+    const Body U = booleanToBody(box, cyl, BooleanOp::Union);
+    const Body I = booleanToBody(box, cyl, BooleanOp::Intersection);
+    ASSERT_GT(U.faceCount(), 0u);
+    ASSERT_GT(I.faceCount(), 0u);
+    for (uint32_t s : {0u, 1u, 2u, 4u})
+        EXPECT_NEAR(signedVolume(U.toMesh(s)) + signedVolume(I.toMesh(s)),
+                    signedVolume(box.toMesh(s)) + signedVolume(cyl.toMesh(s)), 1e-5)
+            << "sub=" << s << ": inclusion-exclusion fails at the facet-aligned offset";
+    // Half the 16-gon, two units tall.
+    EXPECT_NEAR(signedVolume(I.toMesh(0)), 0.765367, 1e-5);
+}
+
+// CHARACTERIZATION — the residual, stated with its numbers so the next increment has a
+// target rather than a hunch. Where the seam's endpoints do NOT land on facet vertices
+// (dx = 0.7 and 1.3, whose crossings fall at ±53.13° between the 16-gon's 22.5° steps),
+// inclusion-exclusion is off by roughly seven thousandths on a total of eleven:
+//
+//     dx=0.70  U+I = 11.068386   box+cyl = 11.061467   excess 0.006919
+//     dx=1.30  U+I = 11.068386   box+cyl = 11.061468   excess 0.006918
+//
+// What is NOT the cause, measured: the seam vertex sets are identical on both operands
+// (the test above), every offered face is consumed (43 offered, 43 in the union), the sew
+// reports no reused directed edge, and D + I tiles the box exactly — so the error is
+// outside the box, in the union's account of the cylinder's protruding part, not in the
+// seam's division of the interior. The difference and intersection are unaffected.
+TEST(ArcBiteSeam, UnionVolumeIsNotYetExactAtNonFacetAlignedOffsets)
+{
+    const Body box = makeBox(2.f, 2.f, 2.f);
+    for (float dx : {0.7f, 1.3f}) {
+        const Body cyl = offsetCylinder(0.5f, dx);
+        const Body U = booleanToBody(box, cyl, BooleanOp::Union);
+        const Body I = booleanToBody(box, cyl, BooleanOp::Intersection);
+        ASSERT_GT(U.faceCount(), 0u);
+        const double lhs = signedVolume(U.toMesh(0)) + signedVolume(I.toMesh(0));
+        const double rhs = signedVolume(box.toMesh(0)) + signedVolume(cyl.toMesh(0));
+        // Bounded, so it cannot silently grow.
+        EXPECT_LT(std::abs(lhs - rhs), 0.01) << "dx=" << dx << ": the union error grew";
+        EXPECT_GT(std::abs(lhs - rhs), 1e-5)
+            << "dx=" << dx << ": inclusion-exclusion now holds — the union is exact, so "
+               "replace this characterization with the identity assertion";
     }
 }
 

@@ -9,6 +9,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <functional>
 #include <cstdint>
 #include <cstring>
 #include <unordered_map>
@@ -1256,6 +1257,148 @@ uint32_t Body::imprintCurve(uint32_t faceId, const Curve& curve, Tolerance tol,
                            : pointInSurfacePatchUV(fsurf, q, ring);
         };
 
+        // Subdivide an arc edge at every supplied ring point lying strictly inside its span.
+        //
+        // This is what makes an arc-bite seam SHARED. The two operands discretize the same
+        // seam circle by their own topology: cutting a box face along the circle gives the
+        // box ONE arc edge from entry to exit, while the cylinder's rim over that same
+        // stretch is a chain of facet arcs. Measured at the z=-1 seam of box(2,2,2) against
+        // an offset cylinder(r=0.5,16): 2 vertices on the box's side against 13 on the
+        // cylinder's, so 1 edge facing 12. Not one of them can partner, which is the same
+        // failure the latitude ring had at 8-against-16 and is fixed the same way — build on
+        // the points the other operand already chose rather than on an independent guess.
+        //
+        // Splitting proceeds from the FAR end back, and each fraction is recomputed against
+        // the edge's current range, because splitEdge keeps the near half under the same id
+        // and appends the far one: taking the largest parameter first leaves every remaining
+        // point inside the retained edge. Points already at an endpoint fall outside the
+        // strict bounds and are skipped, which is what makes a second pass a no-op.
+        auto subdivideArcAt = [&](uint32_t arcEdge) {
+            if (ringPoints == nullptr || arcEdge >= m_edges.size()) return;
+            const Vec3 axis = normalize(curve.dir);
+            const float spanT0 = m_edges[arcEdge].t0, spanT1 = m_edges[arcEdge].t1;
+            if (std::abs(spanT1 - spanT0) <= 1e-12f) return;
+            constexpr float kTwoPiS = 6.28318530717958647692f;
+
+            // Target PARAMETERS on the shared curve, not fractions: a fraction goes stale
+            // the moment the edge is split, a parameter does not.
+            std::vector<float> params;
+            for (const Vec3& p : *ringPoints) {
+                // Only points genuinely on this circle — a caller's list is a hint, and a
+                // stray point would place a vertex off the curve.
+                const Vec3 d = sub(p, curve.origin);
+                const float axial = dot(d, axis);
+                const float radial = length(sub(d, scale(axis, axial)));
+                if (std::abs(axial) > eps || std::abs(radial - curve.radius) > eps) continue;
+                float tp = paramOnCurve(curve, p);
+                while (tp < std::min(spanT0, spanT1)) tp += kTwoPiS;
+                while (tp > std::max(spanT0, spanT1)) tp -= kTwoPiS;
+                const float f = (tp - spanT0) / (spanT1 - spanT0);
+                if (f > 1e-5f && f < 1.f - 1e-5f) params.push_back(tp);
+            }
+            if (params.empty()) return;
+            // Split the FAR end first, so every remaining target stays inside the edge that
+            // keeps the near end (and keeps this edge id).
+            std::sort(params.begin(), params.end(), [&](float a, float b) {
+                return (spanT1 > spanT0) ? (a > b) : (a < b);
+            });
+            for (const float tp : params) {
+                const float t0 = m_edges[arcEdge].t0, t1 = m_edges[arcEdge].t1;
+                if (std::abs(t1 - t0) <= 1e-12f) break;
+                const float f = (tp - t0) / (t1 - t0);  // recomputed against what is left
+                if (!(f > 1e-5f && f < 1.f - 1e-5f)) continue;
+                (void)splitEdge(arcEdge, f, tol);
+            }
+        };
+
+        // ── ALREADY-SEGMENTED GUARD, ahead of every circle path ─────────────────────
+        // If this face's boundary already lies on this circle there is nothing left to
+        // imprint: the face has been segmented along it, and it is on one side of it.
+        //
+        // This has to be checked BEFORE the crossing search, not after. A cylinder side
+        // face spanning two latitudes has its own rim ON the latitude circle, and that
+        // circle meets each of the face's uprights at the upright's ENDPOINT — which
+        // Phase 4d taught the crossing solver to accept, correctly, because that is how a
+        // neighbour's cut is recognised. Two endpoint crossings then look exactly like a
+        // clean two-point arc bite, and the face gets "cut" from one end of its own rim to
+        // the other, producing a zero-area lune bounded by the rim and a second copy of it.
+        //
+        // Nothing downstream catches that: the result passes checkIntegrity, checkGeometry,
+        // isClosed and euler, because a degenerate face is topologically ordinary. What had
+        // been preventing it was pure luck — the two rim corners were ADJACENT in the loop
+        // and cutFaceBetween refuses adjacent vertices. The moment anything drops a vertex
+        // between them (the generatrix imprint below does exactly that) the accident stops
+        // protecting it and four flat faces appear on the cylinder. Measured that way round:
+        // 4 flat cuts with the generatrix imprint enabled, 0 with it disabled — the
+        // generatrix only exposed a hazard the circle path already had.
+        {
+            auto sameCircle = [&](const Curve& ex) {
+                return ex.kind == CurveKind::Circle &&
+                       std::abs(ex.radius - curve.radius) <= eps &&
+                       length(sub(ex.origin, curve.origin)) <= eps &&
+                       std::abs(dot(normalize(ex.dir), normalize(curve.dir))) >= 1.f - 1e-4f;
+            };
+            // Whether ANY edge of a loop lies on this circle. The whole ring is walked
+            // rather than just its first edge, because after an arc bite the circle is one
+            // edge among several and where it lands in the ring is an accident of the
+            // loop's starting coedge.
+            auto loopLiesOnCircle = [&](uint32_t l) {
+                if (l >= m_loops.size() || !m_loops[l].alive) return false;
+                const uint32_t first = m_loops[l].first;
+                if (first >= m_coedges.size()) return false;
+                uint32_t w = first, guard = 0;
+                do {
+                    const uint32_t ie = m_coedges[w].edge;
+                    if (ie < m_edges.size()) {
+                        const uint32_t icu = m_edges[ie].curve;
+                        if (icu < m_curves.size() && sameCircle(m_curves[icu])) return true;
+                    }
+                    w = m_coedges[w].next;
+                    if (++guard > m_coedges.size() + 1u) break;  // corrupt loop guard
+                } while (w != first);
+                return false;
+            };
+            // The outer boundary: covers the cylinder rim above, and the disk that the
+            // interior-circle path splits off — which the driver re-offers the very seam
+            // that created it, and which left unguarded would be handed a ring equal to its
+            // own outline, every point exactly ON the polygon where containment is a coin
+            // toss, segmenting inward for ever.
+            if (loopLiesOnCircle(m_faces[faceId].outerLoop)) {
+                // Already segmented — but not necessarily agreeing with the other operand on
+                // HOW FINELY. Reconcile before leaving: the cut that produced this boundary
+                // ran before the other operand had been cut at all (the mutual imprint does
+                // one direction at a time), so at that moment there were no partner vertices
+                // to build on. This is the same ordering trap the latitude ring hit, and the
+                // same answer — the information arrives on a later round, so use it then.
+                // Splitting at points that are already vertices is a no-op, which is what
+                // lets this run every pass without accumulating.
+                uint32_t w = m_loops[m_faces[faceId].outerLoop].first;
+                const uint32_t first = w;
+                uint32_t guard = 0;
+                std::vector<uint32_t> onCircleEdges;
+                do {
+                    const uint32_t ie = m_coedges[w].edge;
+                    if (ie < m_edges.size()) {
+                        const uint32_t icu = m_edges[ie].curve;
+                        if (icu < m_curves.size() && sameCircle(m_curves[icu]))
+                            onCircleEdges.push_back(ie);
+                    }
+                    w = m_coedges[w].next;
+                    if (++guard > m_coedges.size() + 1u) break;
+                } while (w != first);
+                for (const uint32_t ie : onCircleEdges) subdivideArcAt(ie);
+                return kInvalid;  // no face was split; the topology of the cut is unchanged
+            }
+            // And the holes: the interior path leaves the circle exactly as interior as it
+            // found it, so without this the driver — which imprints to a fixpoint and
+            // re-offers every tool surface each pass, with an explosion guard watching the
+            // FACE count that a ring barely changes — appended the same ring once per pass
+            // until the iteration cap: a six-face box against a sixteen-segment cylinder
+            // reached 1,599,992 vertices.
+            for (uint32_t il : m_faces[faceId].innerLoops)
+                if (loopLiesOnCircle(il)) return kInvalid;
+        }
+
         // Boundary polygon (captured before any split) for the inside-arc test.
         std::vector<Vec3> poly;
         poly.reserve(n);
@@ -1418,6 +1561,7 @@ uint32_t Body::imprintCurve(uint32_t faceId, const Curve& curve, Tolerance tol,
             const uint32_t newFace = cutFaceBetween(faceId, vA, vB, &curve);
             if (newFace == kInvalid) return kInvalid;
             keepArcInsideFace(ce);
+            subdivideArcAt(ce);  // match the other operand's discretization of this seam
             return newFace;
         }
 
@@ -1436,6 +1580,7 @@ uint32_t Body::imprintCurve(uint32_t faceId, const Curve& curve, Tolerance tol,
             const uint32_t newFace = cutFaceBetween(faceId, vA, vB, &curve);
             if (newFace == kInvalid) return kInvalid;
             keepArcInsideFace(ce);
+            subdivideArcAt(ce);  // match the other operand's discretization of this seam
             return newFace;
         }
         if (!cc.empty()) return kInvalid;  // odd crossing count → deferred
@@ -1447,51 +1592,6 @@ uint32_t Body::imprintCurve(uint32_t faceId, const Curve& curve, Tolerance tol,
         // to one — and its centre lies on the axis, which is not a point of the surface
         // at all, so the interior test below is meaningless there.
         if (!onPlane) return kInvalid;
-
-        // Whether two circles are the same one, within the face's coincidence eps.
-        auto sameCircle = [&](const Curve& ex) {
-            return ex.kind == CurveKind::Circle && std::abs(ex.radius - curve.radius) <= eps &&
-                   length(sub(ex.origin, curve.origin)) <= eps &&
-                   std::abs(dot(normalize(ex.dir), normalize(curve.dir))) >= 1.f - 1e-4f;
-        };
-        // Whether ANY edge of a loop already lies on this circle. The whole ring is walked
-        // rather than just its first edge, because after an arc bite the circle is one edge
-        // among several on each of the two sub-faces, and where in the ring it lands is an
-        // accident of the loop's starting coedge.
-        auto loopLiesOnCircle = [&](uint32_t l) {
-            if (l >= m_loops.size() || !m_loops[l].alive) return false;
-            const uint32_t first = m_loops[l].first;
-            if (first >= m_coedges.size()) return false;
-            uint32_t w = first, guard = 0;
-            do {
-                const uint32_t ie = m_coedges[w].edge;
-                if (ie < m_edges.size()) {
-                    const uint32_t icu = m_edges[ie].curve;
-                    if (icu < m_curves.size() && sameCircle(m_curves[icu])) return true;
-                }
-                w = m_coedges[w].next;
-                if (++guard > m_coedges.size() + 1u) break;  // corrupt loop guard
-            } while (w != first);
-            return false;
-        };
-
-        // IDEMPOTENCE. If this face already carries an inner loop lying on THIS
-        // circle it has already been imprinted, and imprinting again must refuse.
-        // The arc-bite path above consumes its own precondition — it splits the face,
-        // so the curve no longer crosses that face's interior — but this path leaves
-        // the circle exactly as interior as it found it. The boolean's driver imprints
-        // to a fixpoint and re-offers every tool surface on every pass, and its
-        // explosion guard watches the FACE count, which the ring alone barely changes.
-        // So the same ring was appended once per pass until the iteration cap: a
-        // six-face box against a sixteen-segment cylinder reached 1,599,992 vertices.
-        for (uint32_t il : m_faces[faceId].innerLoops)
-            if (loopLiesOnCircle(il)) return kInvalid;  // this ring is already here
-        // The same refusal from the other side: a face with this circle already on its OUTER
-        // boundary has nothing left to segment. That covers the disk this path splits off,
-        // which the driver re-offers the very seam that created it — left unguarded it would
-        // be handed a ring equal to its own outline, every point exactly ON the boundary
-        // polygon where containment is a coin toss, and the segmentation would recur inward.
-        if (loopLiesOnCircle(m_faces[faceId].outerLoop)) return kInvalid;
 
         if (!pointInPlanarPolygon(curve.origin, poly, fn)) return kInvalid;
 
@@ -1686,11 +1786,49 @@ uint32_t Body::imprintCurve(uint32_t faceId, const Curve& curve, Tolerance tol,
         const uint32_t e = bEdges[i];
         if (e >= m_edges.size()) continue;
         const uint32_t cu = m_edges[e].curve;
-        if (cu >= m_curves.size() || m_curves[cu].kind != CurveKind::Line) continue;
+        if (cu >= m_curves.size()) continue;
         float s = 0.f;
-        if (!segmentLineCrossing(m_verts[m_edges[e].v0].point, m_verts[m_edges[e].v1].point,
-                                 curve, faceNormal, eps, s))
-            continue;
+        if (m_curves[cu].kind == CurveKind::Circle) {
+            // The boundary edge is an ARC. Skipping these was why a generatrix could not be
+            // imprinted onto a cylindrical face at all — and that is the whole reason the
+            // two operands never shared a vertical seam. Such a face is bounded by two rim
+            // arcs and two uprights, and the generatrix runs PARALLEL to the uprights, so
+            // the only crossings it can possibly have are on the arcs. The box's side wall
+            // was cut along the two generatrices while the cylinder kept its facet
+            // boundaries, and the sew had nothing to pair.
+            //
+            // Solve it on the geometry the arc provides rather than by a generic distance
+            // equation, for the same reason a latitude crossing is solved on the cylinder's
+            // axial parameter: the line meets the arc's PLANE in exactly one point, and that
+            // is transversal and well conditioned. Find it, confirm it is on the circle, and
+            // read off its parameter.
+            const Curve& arc = m_curves[cu];
+            const Vec3 aAxis = normalize(arc.dir);
+            const float denom = dot(curve.dir, aAxis);
+            if (std::abs(denom) <= 1e-12f) continue;  // line parallel to the arc's plane
+            const float tHit = dot(sub(arc.origin, curve.origin), aAxis) / denom;
+            const Vec3 hit = add(curve.origin, scale(curve.dir, tHit));
+            if (std::abs(length(sub(hit, arc.origin)) - arc.radius) > eps) continue;  // misses
+            const float at0 = m_edges[e].t0, at1 = m_edges[e].t1;
+            if (std::abs(at1 - at0) <= 1e-12f) continue;
+            constexpr float kTwoPiA = 6.28318530717958647692f;
+            float tp = paramOnCurve(arc, hit);
+            while (tp < std::min(at0, at1)) tp += kTwoPiA;
+            while (tp > std::max(at0, at1)) tp -= kTwoPiA;
+            s = (tp - at0) / (at1 - at0);
+            // Strictly inside this arc's span, with no slack: a crossing AT an endpoint is
+            // the whole-loop `vOnLine` case above, which reports it once as a vertex, and
+            // allowing slack here would let both arcs meeting at that endpoint each report
+            // it. The eps snap below still pulls a genuinely interior crossing that lands
+            // near an endpoint onto that vertex.
+            if (!(s > 0.f && s < 1.f)) continue;
+        } else if (m_curves[cu].kind == CurveKind::Line) {
+            if (!segmentLineCrossing(m_verts[m_edges[e].v0].point, m_verts[m_edges[e].v1].point,
+                                     curve, faceNormal, eps, s))
+                continue;
+        } else {
+            continue;  // NURBS boundary edge — not analytically crossed here
+        }
 
         // s is the fraction along the STORED edge (v0->v1), which may run either
         // direction relative to the loop walk (bVerts[i] -> bVerts[i+1]) depending
