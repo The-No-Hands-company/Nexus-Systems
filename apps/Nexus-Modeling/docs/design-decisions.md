@@ -288,12 +288,41 @@ invisible in the types), asserts both operands (they were rounded by different h
 fixing one left the other entirely single-precision), asserts relatively across four orders
 of scale, and keeps the π fingerprint, which is what caught the second half.
 
-**`Tolerance` did not come with it.** The defaults were sized to float at ~8 ULP and the plan
-was to re-tighten them last. At 1e-6/1e-7 six tests fail. Five pin the constants themselves
-and would move with them. The sixth is real: random box-through-sphere booleans across five
-tessellations stay watertight only with the loose weld band, because the *mesh* boolean still
-runs on float positions. The band is no longer the B-rep's — it belongs to the mesh side, and
-tightening it is that migration's problem.
+**`Tolerance` did not come with it, and the reason is not what it first appeared to be.** The
+defaults were sized to float at ~8 ULP and the plan was to re-tighten them last. At 1e-6/1e-7
+six tests fail. Five pin the constants themselves and would move with them. The sixth —
+random box-through-sphere booleans across five tessellations — was written up here as a
+float-storage problem: the mesh boolean runs on float positions, so the loose weld band
+looked like a precision workaround that a mesh-side migration would remove.
+
+**That was wrong, and probing it is what showed so.** At a tightened 1e-6, exactly one
+configuration out of 300 leaks, under all three operators, and the points it cannot weld are
+3.19e-06 apart — about 25× float epsilon at unit scale, far too large to be rounding. The
+geometry is unambiguous:
+
+```
+v64  (-0.126088738, 0.526467443, 1.000000000)   seam crossing, on the box face and the sphere
+v66  (-0.126070619, 0.526456952, 1.000000000)   seam crossing, on the box face and the sphere
+v204 (-0.126087785, 0.526467562, 0.999996960)   a SPHERE VERTEX, 3.04e-06 below the face
+```
+
+All three lie on the sphere to within a micron of its 1.2 radius. At that random offset the
+sphere grazes the box's top face closely enough that its tessellation drops a vertex three
+microns under the plane, while the seam crossing for the same region lands exactly on it.
+Whether those are one point or two is not a precision question — it is the coincidence
+decision itself, and the tolerance is the parameter that makes it.
+
+So the band is a **modeling scale, not a numerical workaround**. Widening the mesh boolean's
+arithmetic would not move it by one bit, because the distance being bridged is real.
+Tightening it does not clean anything up either; it redefines what "the same point" means,
+and a grazing sphere then cannot close its seam. That is a deliberate decision about what
+this kernel considers coincident at a given model size — available to make, but it belongs
+to whoever is willing to say that three-micron features in a two-unit model are distinct,
+and it buys nothing on its own. `test_MeshBooleanGrazingCoincidence` pins the configuration
+and the measurement so the reason survives.
+
+> Verify that an epsilon's problem is *reachable and fixable* before migrating it. This one
+> is neither: the tolerance is doing exactly the job it exists for.
 
 ## Watertight-or-empty as a hard contract
 
