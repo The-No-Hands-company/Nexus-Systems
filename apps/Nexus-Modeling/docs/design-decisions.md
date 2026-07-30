@@ -154,3 +154,212 @@ VMA_DYNAMIC_VULKAN_FUNCTIONS 1
 - Nexus Modeling scenes are geometry-heavy (millions of mesh faces, hundreds of materials). Deferred shading allows arbitrary material complexity with a single geometry pass.
 - The `Renderer` class composes the frame: GBuffer → lighting → post (TAA, denoise, upscale). The kernel (`IDevice`, `ICommandBuffer`) has no opinion on the composition.
 - Forward+ is a valid alternative for lower-tier hardware — the abstraction layer does not prevent it.
+
+---
+
+# Geometry kernel — the trade-offs, and what each one costs
+
+Everything below was chosen deliberately, and each entry names the alternative that was not
+taken and the price of the one that was. Where a cost has actually been paid — a real defect
+that traces back to the choice — it is recorded, because a trade-off with a measured price is
+worth more than one described in the abstract.
+
+## Exact topological decisions, floating-point geometric constructions
+
+**Decision**: *Which side* is answered by exact predicates. *Where* is computed in floating
+point against a tolerance.
+
+**The alternative**: exact geometry throughout — rational or algebraic arithmetic on the
+constructions themselves, so an intersection point is represented exactly rather than
+approximated.
+
+**Why not**: the degree explodes. The intersection of two exact quadric surfaces is an
+algebraic number; feeding that result into another boolean compounds it, and after a few
+operations the representation is unusable in both size and speed. Parasolid and ACIS made the
+same call for the same reason.
+
+**What it costs**: every constructed point carries error, so coincidence is a *judgement*
+(the tolerance) rather than a fact. Most of the hard bugs in the boolean arc live exactly
+there — two operands computing the same physical seam point independently and disagreeing.
+
+**Price paid**: `-ffast-math` was enabled for years, which silently disabled the exact half
+by folding the error-free transformations that Shewchuk's predicates are built from. Six
+wrong signs in 5,675 cases, every one on exactly-coplanar input where the predicate must
+return zero for Simulation of Simplicity to have a tie to break. This choice only works if
+the exact half is genuinely exact, and nothing was checking.
+
+## `float` coordinates — the one that is still open
+
+**Decision**: positions, curves and surfaces are stored as 32-bit float.
+
+**The alternative**: double throughout, which is what Parasolid, ACIS, OCCT and Rhino all do.
+
+**Why float was chosen**: half the memory on the largest arrays in the system, and it is the
+format the GPU consumes, so mesh data reaches a vertex buffer without conversion.
+
+**What it costs**: about six usable decimal digits. A part one kilometre across resolves to
+roughly 0.06 mm and no finer, and cannot carry a micron feature at all. The tolerance model
+is built correctly *for* float — `kDefaultRelative = 1e-6` is about 8 ULP at unit scale — but
+that number is the ceiling, not a tuning choice.
+
+**Measured, so the cheap fix can be ruled out**: computing constructions in double and
+rounding once to float was implemented and measured against a long-double reference over
+200,000 random circle evaluations:
+
+| coordinate scale | float throughout (worst) | double then round (worst) | gain |
+|---:|---:|---:|---:|
+| 1 | 1.02e-07 | 8.31e-08 | 1.2× |
+| 100 | 1.25e-05 | 8.81e-06 | 1.4× |
+| 10,000 | 1.10e-03 | 6.87e-04 | 1.6× |
+
+Under 2×, because rounding the *result* to float is the floor. **The ceiling is the storage,
+not the arithmetic**, so the mitigation is not worth shipping and was not shipped. The only
+real fix is double storage.
+
+**Migration, sized rather than hand-waved.** The B-rep is separable from the renderer, which
+is what makes this tractable:
+
+- ~400 `Vec3` uses across five B-rep sources (`AnalyticBRep` 292, `BRepSurfaceIntersect` 32,
+  `BRepBoolean` 26, `BRepFeatureStack` 9) plus 36 in the public header.
+- Exactly **one** kernel source outside those files uses `brep::` types. 48 test files do,
+  and most of their literals (`{1.f, 2.f, 3.f}`) convert to double implicitly.
+- `toMesh` is already the render boundary: it produces a `Mesh` whose attributes are
+  `render::Vec3`, so the float conversion happens in one place that already exists.
+- Serialization is already versioned at v3 with a documented read-earlier-versions rule, so
+  a v4 that writes doubles and still reads v1–v3 floats is the established pattern, not a
+  new one.
+
+Staged: introduce the scalar alias and the double vector; migrate `Surface` and `Curve`
+(few instances, and they are the ground truth vertices are validated against); then
+`Vertex`; then serialization v4; then re-tighten `Tolerance`'s defaults, which are currently
+sized to float and are the visible symptom of the whole decision.
+
+**Status: decided in principle, not executed.** It is a multi-session mechanical migration
+and the risk in doing it hurriedly is a subtly-wrong precision change, which is the class of
+bug that hides longest.
+
+## Watertight-or-empty as a hard contract
+
+**Decision**: `booleanToBody` returns a valid closed solid or an empty body. Never a leaky or
+corrupt one.
+
+**The alternative**: best-effort output, with a diagnostic — what most mesh booleans do.
+
+**Why**: a corrupt solid is silent and travels. It becomes the input to the next operation,
+and the eventual failure is arbitrarily far from the cause. An empty result is loud, local,
+and testable, and it makes "did this configuration work" a property a test battery can assert
+over thousands of cases.
+
+**What it costs**: a great many configurations return nothing rather than something nearly
+right — tangent cylinders, chained-left booleans, and every arc-bite seam until recently.
+That is a real usability cost and it is chosen deliberately.
+
+## Two geometry worlds — analytic B-rep and mesh — with converters
+
+**Decision**: the analytic solid and the triangle mesh are separate representations joined by
+`toMesh` / `fromMesh`, not a single unified one.
+
+**The alternative**: one representation, or a representation-agnostic trait that both
+implement.
+
+**Why**: they answer different questions. A B-rep answers *exactly* and must be watertight; a
+mesh answers *approximately* and must be fast and GPU-shaped. Neither Parasolid nor OCCT has
+a universal representation trait either — a dominant B-rep with mesh output is the industry
+shape, and premature abstraction across two things that differ this much is its own failure
+mode.
+
+**What it costs**: duplicated concepts, and the conversion is lossy in one direction. Worth
+blessing explicitly as intentional rather than leaving as an unexamined default.
+
+## Manifold-only half-edge
+
+**Decision**: `HalfEdgeMesh` enforces manifoldness and refuses non-manifold input.
+
+**The alternative**: a non-manifold-tolerant structure, which is what Blender's BMesh is.
+
+**Why**: it is what makes the six Euler operators provable and the watertightness guarantees
+mean anything.
+
+**What it costs**: polygon editing routinely passes *through* non-manifold states — a wire
+edge, three faces on an edge mid-operation, a bowtie the user is about to fix — and this
+structure cannot hold them. The answer is not to weaken the manifold core but to be explicit
+that there are two tiers with a defined promotion path. Currently the tolerant tier is
+absent.
+
+## A separate analytic mass-properties path
+
+**Decision**: `massProperties` integrates curved faces over their parameter domain by
+Gauss-Legendre rather than trusting the tessellation, and only falls back to triangles when a
+face does not qualify.
+
+**The alternative**: one implementation — measure everything from the mesh.
+
+**Why**: chords cut the corner. Tessellating cost about 0.65% of a sphere's volume and around
+1% of its moments, and an analytic modeller should not be approximate about its own analytic
+primitives.
+
+**What it costs**: two implementations of the same quantity, which can disagree — normally a
+smell. Here it has twice been the most valuable property in the system: the disagreement
+between the two is what exposed a reversed-curved-face bug that every topological invariant
+passed, and what proved the union was correct when the tessellated oracle said otherwise.
+**Independent oracles are worth their duplication.**
+
+## `Surface::normal` means "normal" for a plane and "axis" for a cylinder
+
+**Decision**: one field, two meanings, chosen so the serialised layout did not have to grow
+when cones were added.
+
+**The alternative**: separate `normal` and `axis` fields, or a per-kind variant.
+
+**What it costs**: a bug that hid for a long time. The boolean reversed a face by negating
+that field — correct for a plane, and for a cylinder it re-parameterises the surface while
+reversing nothing. It survived because the tessellator derives its normal as *(axis, flipped
+if reversed)*, so a flipped axis with the flag unset and a true axis with the flag set give
+the same answer and the two errors cancel exactly. Only the analytic integrator, which needs
+the axis and the flag for different purposes, could see it.
+
+**The general lesson**: an overloaded field is a defect that stays hidden until something
+reads only one of its meanings. If this is ever revisited, splitting the field is cheap now
+and gets more expensive per serialised format version.
+
+## Fan triangulation of a face
+
+**Decision**: a face with a convex boundary is triangulated by a fan from its first vertex.
+
+**Why**: it is the cheapest correct triangulation, and every face *was* convex — a straight
+imprint splits convex into convex, and an interior circle takes the hole path.
+
+**What it costs**: the assumption became false the moment an arc bite produced a concave
+face, and three separate defects came through that door — a face double-covering the lens cut
+from it, zero-area triangles from fanning collinear refined points, and a curved patch whose
+interior is never sampled so its volume converges to the wrong number. The fan is also why
+`toMesh` currently depends on degenerate triangles for its watertightness. See
+`tomesh-curved-tessellation.md`.
+
+## Single-threaded, deliberately
+
+**Decision**: no threads anywhere in the kernel, by choice, until correctness is settled.
+
+**Why the sequence is right**: parallelising code whose predicates were deciding
+exactly-degenerate cases by coin flip would have turned a reproducible wrong answer into an
+irreproducible one.
+
+**What it costs**: roughly 94% of a modern workstation sits idle. This is a deferral with a
+condition attached, not a position — and the condition (exact predicates, verified) is now
+met.
+
+## Hand-picked test configurations, plus one fuzzer
+
+**Decision**: batteries of specific, reasoned configurations, with a seeded fuzzer added
+later for the unknown-unknowns.
+
+**What it costs**: a test can only see what its author imagined. The exactness battery is the
+cautionary case: its coordinate bound was chosen so its *own* reference stayed exact in
+64-bit integers, and that same bound kept the determinant below what a double holds — so it
+validated the predicate precisely in the regime where any implementation passes. The bound
+that made the oracle trustworthy is the bound that made the defect invisible.
+
+**The habit that came out of it**: when an oracle and its subject share a path, the oracle
+proves nothing. And for anything that changes how a face is bounded, assert **unsigned area** —
+signed volume cancels duplicate triangles, and every topological invariant in this kernel
+will certify a face that is geometrically wrong.
