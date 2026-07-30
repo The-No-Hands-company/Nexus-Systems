@@ -27,7 +27,7 @@ float dot(const Vec3& a, const Vec3& b) { return a.x * b.x + a.y * b.y + a.z * b
 float length(const Vec3& a) { return std::sqrt(dot(a, a)); }
 Vec3 normalize(const Vec3& a)
 {
-    const float l = length(a);
+    const double l = length(a);
     return (l > 1e-20f) ? Vec3{a.x / l, a.y / l, a.z / l} : Vec3{0.f, 0.f, 0.f};
 }
 
@@ -35,7 +35,12 @@ Vec3 normalize(const Vec3& a)
 // this is the projection distance along dir; for a Circle the sweep angle in the
 // (ref, dir×ref) frame — matching Curve::eval so eval(paramOnCurve(c,p)) ≈ p when
 // p lies on the curve.
-float paramOnCurve(const Curve& c, const Vec3& p)
+// Returns DOUBLE. A float parameter was the last float in the construction chain: the ring
+// vertex is placed in double, its angle is recovered here, and eval() puts it back — so a
+// float angle re-rounded the point to float accuracy no matter how wide everything else was.
+// Measured: the worst curve/vertex mismatch on an imprinted box sat at 1.24e-7, which is
+// float's epsilon and not a coincidence.
+double paramOnCurve(const Curve& c, const Vec3& p)
 {
     if (c.kind == CurveKind::Circle) {
         const Vec3 bi = cross(c.dir, c.ref);
@@ -69,9 +74,9 @@ bool segmentLineCrossing(const Vec3& A, const Vec3& B, const Curve& curve, const
     // Split location: closest-approach fraction of A→B to the imprint line.
     const Vec3 E = sub(B, A);
     const Vec3 ExD = cross(E, D);
-    const float denom = dot(ExD, ExD);
+    const double denom = dot(ExD, ExD);
     if (denom < 1e-20f) return false;  // parallel (defensive; a straddle implies not)
-    const float s = dot(cross(sub(O, A), D), ExD) / denom;
+    const double s = dot(cross(sub(O, A), D), ExD) / denom;
     // Coplanarity sanity guard: the meeting point must lie on the line (a planar
     // face guarantees it; rejects a genuinely skew edge).
     const Vec3 P = add(A, scale(E, s));
@@ -85,7 +90,7 @@ bool segmentLineCrossing(const Vec3& A, const Vec3& B, const Curve& curve, const
     // imprintCurve). Squashing the fraction here used to manufacture a spurious
     // vertex up to ~1% of the edge's length away from a true shared corner,
     // which is exactly the seam-vertex mismatch that opened the sewn shell.
-    sOut = std::clamp(s, 0.f, 1.f);
+    sOut = std::clamp(s, 0.0, 1.0);
     return true;
 }
 // Fractions s in (0, 1) at which the straight segment A→B crosses the circle of
@@ -98,17 +103,17 @@ bool segmentLineCrossing(const Vec3& A, const Vec3& B, const Curve& curve, const
 // band silently discarded legitimate near-corner arc bites — a crossing ~2% of
 // an edge from a vertex is ~hundreds of times the coincidence tolerance, so it
 // is a real crossing, not a degeneracy.)
-int circleSegmentFracs(const Vec3& A, const Vec3& B, const Vec3& C, float r, float out[2])
+int circleSegmentFracs(const Vec3& A, const Vec3& B, const Vec3& C, double r, double out[2])
 {
     const Vec3 E = sub(B, A), d = sub(A, C);
-    const float a = dot(E, E);
+    const double a = dot(E, E);
     if (a < 1e-20f) return 0;
-    const float b = 2.f * dot(d, E), c = dot(d, d) - r * r;
-    const float disc = b * b - 4.f * a * c;
+    const double b = 2.f * dot(d, E), c = dot(d, d) - r * r;
+    const double disc = b * b - 4.f * a * c;
     if (disc < 0.f) return 0;
-    const float sq = std::sqrt(disc);
+    const double sq = std::sqrt(disc);
     int cnt = 0;
-    const float s0 = (-b - sq) / (2.f * a), s1 = (-b + sq) / (2.f * a);
+    const double s0 = (-b - sq) / (2.f * a), s1 = (-b + sq) / (2.f * a);
     if (s0 > 0.f && s0 < 1.f) out[cnt++] = s0;
     if (sq > 1e-9f && s1 > 0.f && s1 < 1.f) out[cnt++] = s1;  // skip tangent duplicate
     return cnt;
@@ -123,12 +128,12 @@ bool pointInPlanarPolygon(const Vec3& p, const std::vector<Vec3>& poly, const Ve
     const Vec3 v = cross(n, u);
     auto x2 = [&](const Vec3& q) { return dot(sub(q, poly[0]), u); };
     auto y2 = [&](const Vec3& q) { return dot(sub(q, poly[0]), v); };
-    const float px = x2(p), py = y2(p);
+    const double px = x2(p), py = y2(p);
     bool inside = false;
     const size_t m = poly.size();
     for (size_t i = 0, j = m - 1; i < m; j = i++) {
-        const float xi = x2(poly[i]), yi = y2(poly[i]);
-        const float xj = x2(poly[j]), yj = y2(poly[j]);
+        const double xi = x2(poly[i]), yi = y2(poly[i]);
+        const double xj = x2(poly[j]), yj = y2(poly[j]);
         if (((yi > py) != (yj > py)) && (px < (xj - xi) * (py - yi) / (yj - yi) + xi))
             inside = !inside;
     }
@@ -198,7 +203,7 @@ bool surfaceUV(const Surface& s, const Vec3& p, float& u, float& v)
 bool pointInSurfacePatchUV(const Surface& s, const Vec3& p, const std::vector<Vec3>& poly)
 {
     if (poly.size() < 3) return false;
-    constexpr float kTwoPi = 6.28318530717958647692f;
+    constexpr double kTwoPi = 6.283185307179586476925286766559;
     const bool periodic = (s.kind == SurfaceKind::Cylinder);
 
     std::vector<Vec3> uv;
@@ -220,7 +225,7 @@ bool pointInSurfacePatchUV(const Surface& s, const Vec3& p, const std::vector<Ve
     if (periodic) {
         double lo = uv[0].x, hi = uv[0].x;
         for (const Vec3& q : uv) { lo = std::min(lo, q.x); hi = std::max(hi, q.x); }
-        const float mid = static_cast<float>((lo + hi) * 0.5);
+        const double mid = static_cast<float>((lo + hi) * 0.5);
         while (pu - mid > kTwoPi * 0.5f) pu -= kTwoPi;
         while (mid - pu > kTwoPi * 0.5f) pu += kTwoPi;
     }
@@ -242,34 +247,34 @@ uint64_t dirKey(uint32_t a, uint32_t b)
 float pointTriangleDist2(const Vec3& p, const Vec3& a, const Vec3& b, const Vec3& c)
 {
     const Vec3 ab = sub(b, a), ac = sub(c, a), ap = sub(p, a);
-    const float d1 = dot(ab, ap), d2 = dot(ac, ap);
+    const double d1 = dot(ab, ap), d2 = dot(ac, ap);
     if (d1 <= 0.f && d2 <= 0.f) return dot(ap, ap);
     const Vec3 bp = sub(p, b);
-    const float d3 = dot(ab, bp), d4 = dot(ac, bp);
+    const double d3 = dot(ab, bp), d4 = dot(ac, bp);
     if (d3 >= 0.f && d4 <= d3) return dot(bp, bp);
     const Vec3 cp = sub(p, c);
-    const float d5 = dot(ab, cp), d6 = dot(ac, cp);
+    const double d5 = dot(ab, cp), d6 = dot(ac, cp);
     if (d6 >= 0.f && d5 <= d6) return dot(cp, cp);
-    const float vc = d1 * d4 - d3 * d2;
+    const double vc = d1 * d4 - d3 * d2;
     if (vc <= 0.f && d1 >= 0.f && d3 <= 0.f) {
-        const float w = d1 / (d1 - d3);
+        const double w = d1 / (d1 - d3);
         const Vec3 q = add(a, scale(ab, w));
         return dot(sub(p, q), sub(p, q));
     }
-    const float vb = d5 * d2 - d1 * d6;
+    const double vb = d5 * d2 - d1 * d6;
     if (vb <= 0.f && d2 >= 0.f && d6 <= 0.f) {
-        const float w = d2 / (d2 - d6);
+        const double w = d2 / (d2 - d6);
         const Vec3 q = add(a, scale(ac, w));
         return dot(sub(p, q), sub(p, q));
     }
-    const float va = d3 * d6 - d5 * d4;
+    const double va = d3 * d6 - d5 * d4;
     if (va <= 0.f && (d4 - d3) >= 0.f && (d5 - d6) >= 0.f) {
-        const float w = (d4 - d3) / ((d4 - d3) + (d5 - d6));
+        const double w = (d4 - d3) / ((d4 - d3) + (d5 - d6));
         const Vec3 q = add(b, scale(sub(c, b), w));
         return dot(sub(p, q), sub(p, q));
     }
-    const float denom = 1.f / (va + vb + vc);
-    const float w2 = vb * denom, w3 = vc * denom;
+    const double denom = 1.f / (va + vb + vc);
+    const double w2 = vb * denom, w3 = vc * denom;
     const Vec3 q = add(a, add(scale(ab, w2), scale(ac, w3)));
     return dot(sub(p, q), sub(p, q));
 }
@@ -303,7 +308,7 @@ Vec3 Curve::normalAt(double t) const noexcept
             return dir;  // tangent = direction
         case CurveKind::Circle: {
             const Vec3 bi = cross(dir, ref);
-            const float c = std::cos(t), s = std::sin(t);
+            const double c = std::cos(t), s = std::sin(t);
             return {c * ref.x + s * bi.x, c * ref.y + s * bi.y, c * ref.z + s * bi.z};
         }
         case CurveKind::Nurbs:
@@ -325,15 +330,15 @@ Vec3 Surface::eval(double u, double v) const noexcept
         }
         case SurfaceKind::Cylinder: {
             const Vec3 va = vAxis();
-            const float c = std::cos(u), s = std::sin(u);
+            const double c = std::cos(u), s = std::sin(u);
             return {origin.x + radius * (c * uAxis.x + s * va.x) + v * normal.x,
                     origin.y + radius * (c * uAxis.y + s * va.y) + v * normal.y,
                     origin.z + radius * (c * uAxis.z + s * va.z) + v * normal.z};
         }
         case SurfaceKind::Sphere: {
             const Vec3 va = vAxis();
-            const float cu = std::cos(u), su = std::sin(u);
-            const float cv = std::cos(v), sv = std::sin(v);
+            const double cu = std::cos(u), su = std::sin(u);
+            const double cv = std::cos(v), sv = std::sin(v);
             // u = longitude [-π,π], v = latitude [-π/2, π/2]
             return {origin.x + radius * (su * uAxis.x + cu * cv * va.x + cu * sv * normal.x),
                     origin.y + radius * (su * uAxis.y + cu * cv * va.y + cu * sv * normal.y),
@@ -343,8 +348,8 @@ Vec3 Surface::eval(double u, double v) const noexcept
             // origin = apex, normal = axis (apex -> base), radius = slope.
             // v is axial distance from the apex; the ring radius there is slope*v.
             const Vec3 va = vAxis();
-            const float c = std::cos(u), sn = std::sin(u);
-            const float rr = radius * v;
+            const double c = std::cos(u), sn = std::sin(u);
+            const double rr = radius * v;
             return {origin.x + v * normal.x + rr * (c * uAxis.x + sn * va.x),
                     origin.y + v * normal.y + rr * (c * uAxis.y + sn * va.y),
                     origin.z + v * normal.z + rr * (c * uAxis.z + sn * va.z)};
@@ -361,15 +366,15 @@ Vec3 Surface::normalAt(double u, double v) const noexcept
         case SurfaceKind::Plane:
             return normal;
         case SurfaceKind::Cylinder: {
-            const float c = std::cos(u), s = std::sin(u);
+            const double c = std::cos(u), s = std::sin(u);
             return normalize({c * uAxis.x + s * vAxis().x,
                               c * uAxis.y + s * vAxis().y,
                               c * uAxis.z + s * vAxis().z});
         }
         case SurfaceKind::Sphere: {
             const Vec3 va = vAxis();
-            const float cu = std::cos(u), su = std::sin(u);
-            const float cv = std::cos(v), sv = std::sin(v);
+            const double cu = std::cos(u), su = std::sin(u);
+            const double cv = std::cos(v), sv = std::sin(v);
             // outward normal = position - center = radius * (su*uAxis + cu*cv*va + cu*sv*normal)
             return normalize({su * uAxis.x + cu * cv * va.x + cu * sv * normal.x,
                               su * uAxis.y + cu * cv * va.y + cu * sv * normal.y,
@@ -380,7 +385,7 @@ Vec3 Surface::normalAt(double u, double v) const noexcept
             // form gives the outward normal: radial direction minus slope along the axis,
             // normalised. It does not depend on v — every point up a ruling shares it.
             const Vec3 va = vAxis();
-            const float c = std::cos(u), sn = std::sin(u);
+            const double c = std::cos(u), sn = std::sin(u);
             return normalize({c * uAxis.x + sn * va.x - radius * normal.x,
                               c * uAxis.y + sn * va.y - radius * normal.y,
                               c * uAxis.z + sn * va.z - radius * normal.z});
@@ -757,8 +762,8 @@ Body::GeometryReport Body::checkGeometry(Tolerance tol) const
             du0 = a; du1 = b; dv0 = cc; dv1 = d;
             haveDomain = isFinite(a) && isFinite(b) && isFinite(cc) && isFinite(d);
         }
-        const float su = haveDomain ? tol.at(du1 - du0) : 0.f;
-        const float sv = haveDomain ? tol.at(dv1 - dv0) : 0.f;
+        const double su = haveDomain ? tol.at(du1 - du0) : 0.f;
+        const double sv = haveDomain ? tol.at(dv1 - dv0) : 0.f;
         for (const auto& ip : pc.interior) {
             if (!isFinite(ip.first) || !isFinite(ip.second))
                 return fail("coedge " + std::to_string(c) + " pcurve has a non-finite interior point");
@@ -791,10 +796,10 @@ Body::GeometryReport Body::checkGeometry(Tolerance tol) const
             const Vec3 p = m_verts[vid].point;
             const Vec3 d{p.x - su.origin.x, p.y - su.origin.y, p.z - su.origin.z};
             const Vec3 va = su.vAxis();
-            const float axial = d.x * su.normal.x + d.y * su.normal.y + d.z * su.normal.z;
+            const double axial = d.x * su.normal.x + d.y * su.normal.y + d.z * su.normal.z;
             const Vec3 perp{d.x - axial * su.normal.x, d.y - axial * su.normal.y,
                             d.z - axial * su.normal.z};
-            const float radial = length(perp);
+            const double radial = length(perp);
 
             float deviation = 0.f;
             switch (su.kind) {
@@ -819,14 +824,14 @@ Body::GeometryReport Body::checkGeometry(Tolerance tol) const
 
 // ──────────── Euler operators ────────────────────────────────────────────────
 
-uint32_t Body::splitEdge(uint32_t edgeId, float t, Tolerance tol)
+uint32_t Body::splitEdge(uint32_t edgeId, double t, Tolerance tol)
 {
     if (edgeId >= m_edges.size()) return kInvalid;
     const uint32_t curveId = m_edges[edgeId].curve;
     const uint32_t v0 = m_edges[edgeId].v0;
     const uint32_t v1 = m_edges[edgeId].v1;
     if (curveId >= m_curves.size() || v0 >= m_verts.size() || v1 >= m_verts.size()) return kInvalid;
-    const float et0 = m_edges[edgeId].t0, et1 = m_edges[edgeId].t1;
+    const double et0 = m_edges[edgeId].t0, et1 = m_edges[edgeId].t1;
     // Floor `t` away from 0/1 only enough to keep both sub-edges at/above the
     // Tolerance floor for THIS edge's own length — a degenerate-length safety
     // net, sized to the edge, not a fixed fraction of it. The previous fixed
@@ -841,10 +846,12 @@ uint32_t Body::splitEdge(uint32_t edgeId, float t, Tolerance tol)
     // an endpoint, and callers that DO land within a coincidence tolerance of
     // an endpoint are expected to resolve directly onto that vertex instead of
     // calling this at all (see imprintCurve's crossing resolution).
-    const float edgeLen = std::abs(et1 - et0);
-    const float floorT = (edgeLen > 0.f) ? std::min(0.5f, tol.at(edgeLen) / edgeLen) : 1e-4f;
-    t = std::clamp(t, floorT, 1.f - floorT);
-    const float tm = et0 + (et1 - et0) * t;
+    const double edgeLen = std::abs(et1 - et0);
+    const double floorT = (edgeLen > 0.0)
+                              ? std::min(0.5, static_cast<double>(tol.at(static_cast<float>(edgeLen))) / edgeLen)
+                              : 1e-4;
+    t = std::clamp(t, floorT, 1.0 - floorT);
+    const double tm = et0 + (et1 - et0) * t;
     // Guard the far-from-origin case the tolerance-scaled floor alone does not:
     // for a huge |et0|/|et1| the sub-edge param delta can be smaller than the
     // endpoint's float ULP, so `tm` rounds back onto an endpoint and the split
@@ -852,7 +859,7 @@ uint32_t Body::splitEdge(uint32_t edgeId, float t, Tolerance tol)
     // other failure) rather than manufacture a degenerate — the caller then
     // treats the imprint as a no-op, preserving watertight-or-empty. Handles
     // either param direction (Circle arc ranges may store t1 < t0).
-    const float loT = std::min(et0, et1), hiT = std::max(et0, et1);
+    const double loT = std::min(et0, et1), hiT = std::max(et0, et1);
     if (!(tm > loT && tm < hiT)) return kInvalid;
 
     // New vertex on the shared curve.
@@ -990,8 +997,8 @@ Vec3 Body::faceSamplePoint(uint32_t faceId) const
             if (ed.curve < m_curves.size() && m_curves[ed.curve].kind == CurveKind::Circle) {
                 const Curve& cu = m_curves[ed.curve];
                 for (uint32_t k = 1; k < kArcSamples; ++k) {
-                    const float f = static_cast<float>(k) / static_cast<float>(kArcSamples);
-                    const float t = ce.reversed ? (ed.t1 + (ed.t0 - ed.t1) * f)
+                    const double f = static_cast<float>(k) / static_cast<float>(kArcSamples);
+                    const double t = ce.reversed ? (ed.t1 + (ed.t0 - ed.t1) * f)
                                                 : (ed.t0 + (ed.t1 - ed.t0) * f);
                     outerPts.push_back(cu.eval(t));
                 }
@@ -1221,7 +1228,7 @@ uint32_t Body::imprintCurve(uint32_t faceId, const Curve& curve, Tolerance tol,
     const uint32_t loopId = m_faces[faceId].outerLoop;
     if (loopId >= m_loops.size() || m_loops[loopId].first >= m_coedges.size()) return kInvalid;
     // Crossing test tolerance, proportioned to the face (unit-ish characteristic).
-    const float eps = tol.at(1.f) * 10.f;
+    const double eps = tol.at(1.f) * 10.f;
 
     // Walk the outer loop → ordered boundary vertices + their outgoing edges.
     std::vector<uint32_t> bVerts, bEdges;
@@ -1278,24 +1285,24 @@ uint32_t Body::imprintCurve(uint32_t faceId, const Curve& curve, Tolerance tol,
         auto subdivideArcAt = [&](uint32_t arcEdge) -> uint32_t {
             if (ringPoints == nullptr || arcEdge >= m_edges.size()) return 0u;
             const Vec3 axis = normalize(curve.dir);
-            const float spanT0 = m_edges[arcEdge].t0, spanT1 = m_edges[arcEdge].t1;
+            const double spanT0 = m_edges[arcEdge].t0, spanT1 = m_edges[arcEdge].t1;
             if (std::abs(spanT1 - spanT0) <= 1e-12f) return 0u;
-            constexpr float kTwoPiS = 6.28318530717958647692f;
+            constexpr double kTwoPiS = 6.283185307179586476925286766559;
 
             // Target PARAMETERS on the shared curve, not fractions: a fraction goes stale
             // the moment the edge is split, a parameter does not.
-            std::vector<float> params;
+            std::vector<double> params;
             for (const Vec3& p : *ringPoints) {
                 // Only points genuinely on this circle — a caller's list is a hint, and a
                 // stray point would place a vertex off the curve.
                 const Vec3 d = sub(p, curve.origin);
-                const float axial = dot(d, axis);
-                const float radial = length(sub(d, scale(axis, axial)));
+                const double axial = dot(d, axis);
+                const double radial = length(sub(d, scale(axis, axial)));
                 if (std::abs(axial) > eps || std::abs(radial - curve.radius) > eps) continue;
-                float tp = paramOnCurve(curve, p);
+                double tp = paramOnCurve(curve, p);
                 while (tp < std::min(spanT0, spanT1)) tp += kTwoPiS;
                 while (tp > std::max(spanT0, spanT1)) tp -= kTwoPiS;
-                const float f = (tp - spanT0) / (spanT1 - spanT0);
+                const double f = (tp - spanT0) / (spanT1 - spanT0);
                 if (f > 1e-5f && f < 1.f - 1e-5f) params.push_back(tp);
             }
             if (params.empty()) return 0u;
@@ -1305,10 +1312,10 @@ uint32_t Body::imprintCurve(uint32_t faceId, const Curve& curve, Tolerance tol,
                 return (spanT1 > spanT0) ? (a > b) : (a < b);
             });
             uint32_t splits = 0;
-            for (const float tp : params) {
-                const float t0 = m_edges[arcEdge].t0, t1 = m_edges[arcEdge].t1;
+            for (const double tp : params) {
+                const double t0 = m_edges[arcEdge].t0, t1 = m_edges[arcEdge].t1;
                 if (std::abs(t1 - t0) <= 1e-12f) break;
-                const float f = (tp - t0) / (t1 - t0);  // recomputed against what is left
+                const double f = (tp - t0) / (t1 - t0);  // recomputed against what is left
                 if (!(f > 1e-5f && f < 1.f - 1e-5f)) continue;
                 if (splitEdge(arcEdge, f, tol) != kInvalid) ++splits;
             }
@@ -1422,7 +1429,7 @@ uint32_t Body::imprintCurve(uint32_t faceId, const Curve& curve, Tolerance tol,
         // coincidence tolerance `eps` of an edge endpoint is resolved onto that
         // EXISTING vertex instead of split — mirroring the line-imprint path, so
         // a near-vertex crossing does not manufacture a near-duplicate vertex.
-        struct CCross { bool isVertex; uint32_t vertex; uint32_t edge; float frac; };
+        struct CCross { bool isVertex; uint32_t vertex; uint32_t edge; double frac; };
         std::vector<CCross> cc;
 
         // Fractions along one boundary Line edge where the circle crosses it.
@@ -1439,15 +1446,15 @@ uint32_t Body::imprintCurve(uint32_t faceId, const Curve& curve, Tolerance tol,
         // lying at z = −1 and made checkGeometry fail on the arc built through it.
         // A latitude circle IS the level set of the cylinder's axial parameter, so
         // solve for that level linearly, which is exact to the last bit float allows.
-        auto edgeCrossings = [&](const Vec3& q0, const Vec3& q1, float fr[2]) -> int {
+        auto edgeCrossings = [&](const Vec3& q0, const Vec3& q1, double fr[2]) -> int {
             if (onPlane) return circleSegmentFracs(q0, q1, curve.origin, curve.radius, fr);
             const Vec3 ax = normalize(fsurf.normal);
-            const float a0 = dot(sub(q0, fsurf.origin), ax);
-            const float a1 = dot(sub(q1, fsurf.origin), ax);
-            const float at = dot(sub(curve.origin, fsurf.origin), ax);
-            const float d = a1 - a0;
+            const double a0 = dot(sub(q0, fsurf.origin), ax);
+            const double a1 = dot(sub(q1, fsurf.origin), ax);
+            const double at = dot(sub(curve.origin, fsurf.origin), ax);
+            const double d = a1 - a0;
             if (std::abs(d) <= 1e-12f) return 0;  // edge lies at a constant axial level
-            const float s = (at - a0) / d;
+            const double s = (at - a0) / d;
             // Accept a crossing AT an endpoint, not only strictly inside the edge. The
             // level routinely falls exactly on an existing boundary vertex: once one
             // face of a cylinder has been cut at this latitude, its neighbour's upright
@@ -1457,10 +1464,10 @@ uint32_t Body::imprintCurve(uint32_t faceId, const Curve& curve, Tolerance tol,
             // face crossed by two planes only ever got one of its two cuts. The
             // caller's snap-to-vertex step turns an endpoint fraction into a reuse of
             // that vertex, exactly as the planar path already did.
-            const float len = length(sub(q1, q0));
-            const float slack = (len > 0.f) ? (eps / len) : 0.f;
-            if (!(s > -slack && s < 1.f + slack)) return 0;
-            fr[0] = std::min(std::max(s, 0.f), 1.f);
+            const double len = length(sub(q1, q0));
+            const double slack = (len > 0.0) ? (eps / len) : 0.0;
+            if (!(s > -slack && s < 1.0 + slack)) return 0;
+            fr[0] = std::min(std::max(s, 0.0), 1.0);
             return 1;
         };
         for (size_t i = 0; i < n; ++i) {
@@ -1470,11 +1477,11 @@ uint32_t Body::imprintCurve(uint32_t faceId, const Curve& curve, Tolerance tol,
             if (cu >= m_curves.size() || m_curves[cu].kind != CurveKind::Line) continue;
             const Vec3 p0 = m_verts[m_edges[e].v0].point;
             const Vec3 p1 = m_verts[m_edges[e].v1].point;
-            const float edgeLen = length(sub(p1, p0));
-            float fr[2];
+            const double edgeLen = length(sub(p1, p0));
+            double fr[2];
             const int k = edgeCrossings(p0, p1, fr);
             for (int j = 0; j < k; ++j) {
-                const float s = fr[j];
+                const double s = fr[j];
                 // circleSegmentFracs measures s along the STORED edge (v0->v1);
                 // map s=0 onto v0's boundary vertex regardless of coedge winding.
                 const bool storedForward = (m_edges[e].v0 == bVerts[i]);
@@ -1485,9 +1492,9 @@ uint32_t Body::imprintCurve(uint32_t faceId, const Curve& curve, Tolerance tol,
                 // and an interior crossing that both belong to edge `e` are a
                 // degenerate same-edge bite, not a valid two-point arc).
                 if (s * edgeLen <= eps)
-                    cc.push_back({true, nearVertex, e, 0.f});
+                    cc.push_back({true, nearVertex, e, 0.0});
                 else if ((1.f - s) * edgeLen <= eps)
-                    cc.push_back({true, farVertex, e, 0.f});
+                    cc.push_back({true, farVertex, e, 0.0});
                 else
                     cc.push_back({false, kInvalid, e, s});
             }
@@ -1507,7 +1514,7 @@ uint32_t Body::imprintCurve(uint32_t faceId, const Curve& curve, Tolerance tol,
             }
             cc = std::move(uniq);
         }
-        constexpr float kTwoPi = 6.28318530717958647692f;
+        constexpr double kTwoPi = 6.283185307179586476925286766559;
 
         // Selects, of the two arcs sharing the cut edge's endpoints, the one lying INSIDE
         // the face. cutFaceBetween sets the range from the raw endpoint angles, which
@@ -1515,7 +1522,7 @@ uint32_t Body::imprintCurve(uint32_t faceId, const Curve& curve, Tolerance tol,
         // checkGeometry holds either way and only this test tells them apart.
         auto keepArcInsideFace = [&](uint32_t cutEdge) {
             if (cutEdge >= m_edges.size()) return;
-            const float t0 = m_edges[cutEdge].t0, t1 = m_edges[cutEdge].t1;
+            const double t0 = m_edges[cutEdge].t0, t1 = m_edges[cutEdge].t1;
             if (!insideFace(curve.eval((t0 + t1) * 0.5f), poly))
                 m_edges[cutEdge].t1 = (t1 > t0) ? (t1 - kTwoPi) : (t1 + kTwoPi);
         };
@@ -1547,8 +1554,8 @@ uint32_t Body::imprintCurve(uint32_t faceId, const Curve& curve, Tolerance tol,
             if (fA > fB) std::swap(fA, fB);
             // Parameter of the SECOND crossing on the shared curve, captured before the
             // first split rewrites this edge's range.
-            const float et0 = m_edges[e0].t0, et1 = m_edges[e0].t1;
-            const float tSecond = et0 + (et1 - et0) * fB;
+            const double et0 = m_edges[e0].t0, et1 = m_edges[e0].t1;
+            const double tSecond = et0 + (et1 - et0) * fB;
 
             // splitEdge reuses e0 for the near half and appends the far half, so the second
             // crossing lands on that appended edge — whose id is the current edge count.
@@ -1559,9 +1566,9 @@ uint32_t Body::imprintCurve(uint32_t faceId, const Curve& curve, Tolerance tol,
             // Re-express the second crossing as a fraction of the far half's ACTUAL range:
             // splitEdge floors the split away from either endpoint, so the realised first
             // split may not sit exactly where it was asked to.
-            const float fT0 = m_edges[eFar].t0, fT1 = m_edges[eFar].t1;
+            const double fT0 = m_edges[eFar].t0, fT1 = m_edges[eFar].t1;
             if (!(std::abs(fT1 - fT0) > 0.f)) return kInvalid;
-            const float localB = (tSecond - fT0) / (fT1 - fT0);
+            const double localB = (tSecond - fT0) / (fT1 - fT0);
             if (!(localB > 0.f && localB < 1.f)) return kInvalid;
             const uint32_t vB = splitEdge(eFar, localB, tol);
             if (vB == kInvalid || vB == vA) return kInvalid;
@@ -1624,8 +1631,8 @@ uint32_t Body::imprintCurve(uint32_t faceId, const Curve& curve, Tolerance tol,
             // break checkGeometry.
             for (const Vec3& p : *ringPoints) {
                 const Vec3 d = sub(p, curve.origin);
-                const float axial = dot(d, normalize(curve.dir));
-                const float radial = length(sub(d, scale(normalize(curve.dir), axial)));
+                const double axial = dot(d, normalize(curve.dir));
+                const double radial = length(sub(d, scale(normalize(curve.dir), axial)));
                 if (std::abs(axial) <= eps && std::abs(radial - curve.radius) <= eps)
                     ring.push_back(p);
             }
@@ -1650,7 +1657,7 @@ uint32_t Body::imprintCurve(uint32_t faceId, const Curve& curve, Tolerance tol,
             return paramOnCurve(curve, a) < paramOnCurve(curve, b);
         });
         const uint32_t K = static_cast<uint32_t>(ring.size());
-        std::vector<float> tAt(K);
+        std::vector<double> tAt(K);
         for (uint32_t k = 0; k < K; ++k) tAt[k] = paramOnCurve(curve, ring[k]);
         for (const Vec3& p : ring)
             if (!pointInPlanarPolygon(p, poly, fn)) return kInvalid;
@@ -1785,11 +1792,11 @@ uint32_t Body::imprintCurve(uint32_t faceId, const Curve& curve, Tolerance tol,
     std::vector<bool> vOnLine(n, false);
     for (size_t i = 0; i < n; ++i) vOnLine[i] = distToLine(m_verts[bVerts[i]].point) <= eps;
 
-    struct Cross { bool isVertex; uint32_t vertex; uint32_t edge; float frac; };
+    struct Cross { bool isVertex; uint32_t vertex; uint32_t edge; double frac; };
     std::vector<Cross> crossings;
     for (size_t i = 0; i < n; ++i) {
         if (vOnLine[i]) {
-            crossings.push_back({true, bVerts[i], kInvalid, 0.f});
+            crossings.push_back({true, bVerts[i], kInvalid, 0.0});
             continue;
         }
         // Interior crossing on edge i (skip if its far endpoint is on the line —
@@ -1816,15 +1823,15 @@ uint32_t Body::imprintCurve(uint32_t faceId, const Curve& curve, Tolerance tol,
             // read off its parameter.
             const Curve& arc = m_curves[cu];
             const Vec3 aAxis = normalize(arc.dir);
-            const float denom = dot(curve.dir, aAxis);
+            const double denom = dot(curve.dir, aAxis);
             if (std::abs(denom) <= 1e-12f) continue;  // line parallel to the arc's plane
-            const float tHit = dot(sub(arc.origin, curve.origin), aAxis) / denom;
+            const double tHit = dot(sub(arc.origin, curve.origin), aAxis) / denom;
             const Vec3 hit = add(curve.origin, scale(curve.dir, tHit));
             if (std::abs(length(sub(hit, arc.origin)) - arc.radius) > eps) continue;  // misses
-            const float at0 = m_edges[e].t0, at1 = m_edges[e].t1;
+            const double at0 = m_edges[e].t0, at1 = m_edges[e].t1;
             if (std::abs(at1 - at0) <= 1e-12f) continue;
-            constexpr float kTwoPiA = 6.28318530717958647692f;
-            float tp = paramOnCurve(arc, hit);
+            constexpr double kTwoPiA = 6.283185307179586476925286766559;
+            double tp = paramOnCurve(arc, hit);
             while (tp < std::min(at0, at1)) tp += kTwoPiA;
             while (tp > std::max(at0, at1)) tp -= kTwoPiA;
             s = (tp - at0) / (at1 - at0);
@@ -1849,7 +1856,7 @@ uint32_t Body::imprintCurve(uint32_t faceId, const Curve& curve, Tolerance tol,
         const bool storedForward = (m_edges[e].v0 == bVerts[i]);
         const uint32_t nearVertex = storedForward ? bVerts[i] : bVerts[(i + 1) % n];
         const uint32_t farVertex = storedForward ? bVerts[(i + 1) % n] : bVerts[i];
-        const float edgeLen = length(sub(m_verts[m_edges[e].v1].point, m_verts[m_edges[e].v0].point));
+        const double edgeLen = length(sub(m_verts[m_edges[e].v1].point, m_verts[m_edges[e].v0].point));
 
         // Snap a crossing that lands within `eps` of one of the edge's own
         // endpoints onto that EXISTING vertex instead of splitting. Without this,
@@ -1866,9 +1873,9 @@ uint32_t Body::imprintCurve(uint32_t faceId, const Curve& curve, Tolerance tol,
         // `tol.at(1.f) * 10`, i.e. scaled off this face's characteristic size)
         // keeps both operands landing on the identical point whenever they should.
         if (s * edgeLen <= eps) {
-            crossings.push_back({true, nearVertex, kInvalid, 0.f});
+            crossings.push_back({true, nearVertex, kInvalid, 0.0});
         } else if ((1.f - s) * edgeLen <= eps) {
-            crossings.push_back({true, farVertex, kInvalid, 0.f});
+            crossings.push_back({true, farVertex, kInvalid, 0.0});
         } else {
             crossings.push_back({false, kInvalid, e, s});
         }
@@ -1934,7 +1941,7 @@ bool Body::joinEdgesImpl(uint32_t nv, bool requireSameCurve, Tolerance tol)
         const Curve& co = m_curves[cid2];
         if (cs.kind != CurveKind::Line || co.kind != CurveKind::Line) return false;
         if (std::abs(dot(cs.dir, co.dir)) < 1.f - 1e-4f) return false;  // not parallel
-        const float dTol = tol.at(1.f) * 10.f;
+        const double dTol = tol.at(1.f) * 10.f;
         auto onLine = [&](uint32_t v) {
             const Vec3 w = sub(m_verts[v].point, cs.origin);
             return length(sub(w, scale(cs.dir, dot(w, cs.dir)))) <= dTol;
@@ -1947,8 +1954,8 @@ bool Body::joinEdgesImpl(uint32_t nv, bool requireSameCurve, Tolerance tol)
 
     const uint32_t vLow  = (pa1 < pa2) ? a1 : a2;
     const uint32_t vHigh = (pa1 < pa2) ? a2 : a1;
-    const float    tLow  = (pa1 < pa2) ? pa1 : pa2;
-    const float    tHigh = (pa1 < pa2) ? pa2 : pa1;
+    const double    tLow  = (pa1 < pa2) ? pa1 : pa2;
+    const double    tHigh = (pa1 < pa2) ? pa2 : pa1;
 
     // Merge pairs: each coedge that ENDS at nv (over e1 or e2), with its next
     // (which starts at nv over the other edge). One pair per incident face.
@@ -2209,7 +2216,7 @@ Body::PointContainment Body::classifyPoint(const Vec3& p, Tolerance tol) const
     if (triCount == 0) return PointContainment::Outside;
 
     // OnBoundary: within tol of the tessellated boundary.
-    const float tolAbs2 = tol.absolute * tol.absolute;
+    const double tolAbs2 = tol.absolute * tol.absolute;
     for (size_t i = 0; i < triCount; ++i) {
         const auto& idx = topo.face(i).indices;
         if (idx.size() != 3) continue;
@@ -2227,7 +2234,7 @@ Body::PointContainment Body::classifyPoint(const Vec3& p, Tolerance tol) const
     // suffices (no retry). Zero-area tessellation triangles contribute nothing.
     float R = 0.f;
     for (const auto& q : pos) {
-        const float dq = length(sub(q, p));
+        const double dq = length(sub(q, p));
         if (dq > R) R = dq;
     }
     const Vec3 d = normalize(Vec3{0.4680f, 0.6301f, 0.6201f});  // one fixed generic direction
@@ -2291,7 +2298,7 @@ int Body::facePlaneSide(uint32_t faceId, const Vec3& p, Tolerance tol) const
     const double glen = std::sqrt(static_cast<double>(dot(g, g)));
     if (glen <= 0.0) return 0;
     const double dist = o3 / glen;
-    const float band = tol.at(1.f) * 10.f;
+    const double band = tol.at(1.f) * 10.f;
     if (std::abs(dist) <= static_cast<double>(band)) return 0;  // on-boundary band
 
     // Map the exact sign to the face's OUTWARD normal. g is parallel to the
@@ -2645,7 +2652,7 @@ bool Body::integratePlanarFace(uint32_t faceId, std::array<double, 10>& intg, do
                           ? Vec3{-surf.normal.x, -surf.normal.y, -surf.normal.z}
                           : surf.normal;
     Vec3 e1 = surf.uAxis;
-    const float e1l = length(e1);
+    const double e1l = length(e1);
     if (e1l < 1e-12f) return false;
     e1 = {e1.x / e1l, e1.y / e1l, e1.z / e1l};
     const Vec3 e2{nOut.y * e1.z - nOut.z * e1.y, nOut.z * e1.x - nOut.x * e1.z,
@@ -2881,16 +2888,16 @@ bool Body::transform(const nexus::render::Mat4& mat)
     const Vec3 a0{mat.m[0][0], mat.m[1][0], mat.m[2][0]};
     const Vec3 a1{mat.m[0][1], mat.m[1][1], mat.m[2][1]};
     const Vec3 a2{mat.m[0][2], mat.m[1][2], mat.m[2][2]};
-    const float s0 = length(a0), s1 = length(a1), s2 = length(a2);
+    const double s0 = length(a0), s1 = length(a1), s2 = length(a2);
     if (s0 < 1e-12f || s1 < 1e-12f || s2 < 1e-12f) return false;
-    const float sTol = 1e-4f * s0;
+    const double sTol = 1e-4f * s0;
     if (std::abs(s0 - s1) > sTol || std::abs(s0 - s2) > sTol) return false;  // non-uniform
-    const float oTol = 1e-4f * s0 * s0;
+    const double oTol = 1e-4f * s0 * s0;
     if (std::abs(dot(a0, a1)) > oTol || std::abs(dot(a0, a2)) > oTol ||
         std::abs(dot(a1, a2)) > oTol)
         return false;  // shear
     if (dot(a0, cross(a1, a2)) <= 0.f) return false;  // reflection / degenerate
-    const float s = s0;  // uniform scale factor
+    const double s = s0;  // uniform scale factor
 
     // Mat4's ENTRIES are single precision, but the point must not be: narrowing the point
     // to float for the multiply and widening the result back throws away exactly the
@@ -2974,7 +2981,7 @@ Mesh Body::toMesh(uint32_t subdivisions) const
             const Curve& cu = m_curves[ed.curve];
             edgeMid[e].reserve(subdivisions);
             for (uint32_t k = 1; k <= subdivisions; ++k) {
-                const float f = static_cast<float>(k) / static_cast<float>(subdivisions + 1u);
+                const double f = static_cast<float>(k) / static_cast<float>(subdivisions + 1u);
                 edgeMid[e].push_back(static_cast<uint32_t>(pos.size()));
                 pos.push_back(cu.eval(ed.t0 + (ed.t1 - ed.t0) * f).toFloat());
             }
@@ -3067,7 +3074,7 @@ Mesh Body::toMesh(uint32_t subdivisions) const
                     const nexus::render::Vec3& a = pos[ring[i]];
                     const nexus::render::Vec3& b = pos[ring[(i + 1) % ring.size()]];
                     const nexus::render::Vec3& c = pos[ring[(i + 2) % ring.size()]];
-                    const float t = dot(cross(sub(b, a), sub(c, b)), nrm);
+                    const double t = dot(cross(sub(b, a), sub(c, b)), nrm);
                     const int s = (t > 1e-12f) ? 1 : (t < -1e-12f ? -1 : 0);
                     if (s == 0) continue;
                     if (turnSign == 0) turnSign = s;
@@ -3128,7 +3135,7 @@ Mesh Body::toMesh(uint32_t subdivisions) const
                            poly[idx[(k + 1) % idx.size()]]);  // sign only
         if (area < 0.f) std::reverse(idx.begin(), idx.end());
         auto inTri = [&](uint32_t p, uint32_t a, uint32_t b, uint32_t c) {
-            const float d1 = cross2(a, b, p), d2 = cross2(b, c, p), d3 = cross2(c, a, p);
+            const double d1 = cross2(a, b, p), d2 = cross2(b, c, p), d3 = cross2(c, a, p);
             const bool neg = d1 < 0.f || d2 < 0.f || d3 < 0.f;
             const bool ppos = d1 > 0.f || d2 > 0.f || d3 > 0.f;
             return !(neg && ppos);
@@ -3238,8 +3245,8 @@ Mesh Body::tessellateTrimmedFace(uint32_t faceId, uint32_t gridRes, Tolerance to
         for (const auto& lp : loops) {
             const size_t n = lp.size();
             for (size_t i = 0, j = n - 1; i < n; j = i++) {
-                const float ui = lp[i].first, vi = lp[i].second;
-                const float uj = lp[j].first, vj = lp[j].second;
+                const double ui = lp[i].first, vi = lp[i].second;
+                const double uj = lp[j].first, vj = lp[j].second;
                 if (((vi > v) != (vj > v)) &&
                     (u < (uj - ui) * (v - vi) / (vj - vi) + ui))
                     inside = !inside;
@@ -3269,9 +3276,9 @@ Mesh Body::tessellateTrimmedFace(uint32_t faceId, uint32_t gridRes, Tolerance to
     // boundary is grid-aligned) makes the tessellated area converge to the true
     // trimmed area — exact when the trim boundary lands on grid lines.
     for (uint32_t j = 0; j < g; ++j) {
-        const float vc = 0.5f * (vAt(j) + vAt(j + 1));
+        const double vc = 0.5f * (vAt(j) + vAt(j + 1));
         for (uint32_t i = 0; i < g; ++i) {
-            const float uc = 0.5f * (uAt(i) + uAt(i + 1));
+            const double uc = 0.5f * (uAt(i) + uAt(i + 1));
             if (!inRegion(uc, vc)) continue;
             const uint32_t a = j * stride + i;
             const uint32_t b = j * stride + (i + 1);
@@ -3351,7 +3358,7 @@ uint32_t Body::addTrimHole(uint32_t faceId, const std::vector<Vec3>& ring)
     return firstCoedge;
 }
 
-bool Body::setEdgeArc(uint32_t edgeId, const Vec3& center, const Vec3& axis, float radius, Tolerance tol)
+bool Body::setEdgeArc(uint32_t edgeId, const Vec3& center, const Vec3& axis, double radius, Tolerance tol)
 {
     if (edgeId >= m_edges.size() || !m_edges[edgeId].alive) return false;
     const uint32_t v0 = m_edges[edgeId].v0, v1 = m_edges[edgeId].v1;
@@ -3366,7 +3373,7 @@ bool Body::setEdgeArc(uint32_t edgeId, const Vec3& center, const Vec3& axis, flo
 
     const Vec3 ref0 = normalize(d0);      // radius direction at v0 (t = 0)
     const Vec3 bi = cross(ax, ref0);      // sweep direction
-    const float ang = std::atan2(dot(d1, bi), dot(d1, ref0));  // signed short-arc angle
+    const double ang = std::atan2(dot(d1, bi), dot(d1, ref0));  // signed short-arc angle
 
     const uint32_t curveId = m_edges[edgeId].curve;
     Curve& cu = m_curves[curveId];        // per-edge curve (not shared) — safe to retag
@@ -3430,8 +3437,8 @@ bool Body::setCoedgePcurvePolyline(uint32_t coedgeId,
         du0 = a; du1 = b; dv0 = c; dv1 = d;
         haveDomain = isFinite(a) && isFinite(b) && isFinite(c) && isFinite(d);
     }
-    const float su = haveDomain ? tol.at(du1 - du0) : 0.f;
-    const float sv = haveDomain ? tol.at(dv1 - dv0) : 0.f;
+    const double su = haveDomain ? tol.at(du1 - du0) : 0.f;
+    const double sv = haveDomain ? tol.at(dv1 - dv0) : 0.f;
     for (const auto& p : points) {
         if (!isFinite(p.first) || !isFinite(p.second)) return false;
         if (haveDomain && (p.first < du0 - su || p.first > du1 + su ||
@@ -3845,7 +3852,7 @@ std::optional<Body> Body::deserialize(const std::vector<std::uint8_t>& bytes)
 
 Body makeBox(float width, float height, float depth)
 {
-    const float w = width * 0.5f, h = height * 0.5f, d = depth * 0.5f;
+    const double w = width * 0.5, h = height * 0.5, d = depth * 0.5;
     const std::vector<Vec3> pts = {
         {-w, -h, -d}, {w, -h, -d}, {w, h, -d}, {-w, h, -d},
         {-w, -h, d},  {w, -h, d},  {w, h, d},  {-w, h, d},
@@ -3885,10 +3892,10 @@ Body makeBox(float width, float height, float depth)
 
 Body makeOpenBox(float width, float depth, float height)
 {
-    if (!isFinite(width) || !isFinite(depth) || !isFinite(height) || width <= 0.f ||
-        depth <= 0.f || height <= 0.f)
+    if (!isFinite(width) || !isFinite(depth) || !isFinite(height) || width <= 0. ||
+        depth <= 0. || height <= 0.)
         return Body{};
-    const float x = width * 0.5f, y = depth * 0.5f, z = height * 0.5f;
+    const double x = width * 0.5, y = depth * 0.5, z = height * 0.5;
     // b0..b3 floor ring (z=−z), t0..t3 rim ring (z=+z).
     const std::vector<Vec3> pts = {
         {-x, -y, -z}, {x, -y, -z}, {x, y, -z}, {-x, y, -z},
@@ -3923,13 +3930,13 @@ Body makeOpenBox(float width, float depth, float height)
 Body makeCylinder(float radius, float height, uint32_t segments)
 {
     const uint32_t n = std::max(segments, 3u);
-    const float h = height * 0.5f;
-    const float twoPi = 6.28318530717958647692f;
+    const double h = height * 0.5;
+    const double twoPi = 6.283185307179586476925286766559;
 
     std::vector<Vec3> pts(static_cast<size_t>(n) * 2u);
     for (uint32_t i = 0; i < n; ++i) {
-        const float ang = twoPi * static_cast<float>(i) / static_cast<float>(n);
-        const float cx = std::cos(ang) * radius, cy = std::sin(ang) * radius;
+        const double ang = twoPi * static_cast<double>(i) / static_cast<double>(n);
+        const double cx = std::cos(ang) * radius, cy = std::sin(ang) * radius;
         pts[i] = {cx, cy, -h};              // bottom ring
         pts[static_cast<size_t>(n) + i] = {cx, cy, h};  // top ring
     }
@@ -3939,7 +3946,7 @@ Body makeCylinder(float radius, float height, uint32_t segments)
         s.kind = SurfaceKind::Plane;
         s.origin = o;
         s.normal = nrm;
-        s.uAxis = {1.f, 0.f, 0.f};
+        s.uAxis = {1., 0., 0.};
         return s;
     };
 
@@ -3951,14 +3958,14 @@ Body makeCylinder(float radius, float height, uint32_t segments)
     bottom.loop.reserve(n);
     bottom.loop.push_back(0u);
     for (uint32_t i = n; i-- > 1;) bottom.loop.push_back(i);
-    bottom.surface = planeSurface({0.f, 0.f, -h}, {0.f, 0.f, -1.f});
+    bottom.surface = planeSurface({0., 0., -h}, {0., 0., -1.});
     defs.push_back(std::move(bottom));
 
     // Top cap: ascending indices → CCW seen from +Z (outward +Z).
     Body::FaceDef top;
     top.loop.reserve(n);
     for (uint32_t i = 0; i < n; ++i) top.loop.push_back(n + i);
-    top.surface = planeSurface({0.f, 0.f, h}, {0.f, 0.f, 1.f});
+    top.surface = planeSurface({0., 0., h}, {0., 0., 1.});
     defs.push_back(std::move(top));
 
     // Side quads: {bottom[i], bottom[i+1], top[i+1], top[i]} — traverses each
@@ -3968,9 +3975,9 @@ Body makeCylinder(float radius, float height, uint32_t segments)
         Body::FaceDef side;
         side.loop = {i, j, n + j, n + i};
         side.surface.kind = SurfaceKind::Cylinder;
-        side.surface.origin = {0.f, 0.f, 0.f};
-        side.surface.normal = {0.f, 0.f, 1.f};  // axis
-        side.surface.uAxis = {1.f, 0.f, 0.f};
+        side.surface.origin = {0., 0., 0.};
+        side.surface.normal = {0., 0., 1.};  // axis
+        side.surface.uAxis = {1., 0., 0.};
         side.surface.radius = radius;
         defs.push_back(std::move(side));
     }
@@ -3983,7 +3990,7 @@ Body makeCylinder(float radius, float height, uint32_t segments)
         const Vec3& p0 = b->vertex(b->edge(e).v0).point;
         const Vec3& p1 = b->vertex(b->edge(e).v1).point;
         if (std::abs(p0.z - p1.z) < 1e-5f)
-            b->setEdgeArc(e, {0.f, 0.f, p0.z}, {0.f, 0.f, 1.f}, radius);
+            b->setEdgeArc(e, {0., 0., p0.z}, {0., 0., 1.}, radius);
     }
     return std::move(*b);
 }
@@ -3993,16 +4000,16 @@ Body makeCylinder(float radius, float height, uint32_t segments)
 Body makeCone(float radius, float height, uint32_t segments)
 {
     const uint32_t n = std::max(segments, 3u);
-    const float h = height * 0.5f;
-    const float twoPi = 6.28318530717958647692f;
+    const double h = height * 0.5;
+    const double twoPi = 6.283185307179586476925286766559;
 
     std::vector<Vec3> pts(static_cast<size_t>(n) + 1u);
     for (uint32_t i = 0; i < n; ++i) {
-        const float ang = twoPi * static_cast<float>(i) / static_cast<float>(n);
+        const double ang = twoPi * static_cast<double>(i) / static_cast<double>(n);
         pts[i] = {std::cos(ang) * radius, std::sin(ang) * radius, -h};
     }
     const uint32_t apex = n;
-    pts[apex] = {0.f, 0.f, h};
+    pts[apex] = {0., 0., h};
 
     std::vector<Body::FaceDef> defs;
     defs.reserve(static_cast<size_t>(n) + 1u);
@@ -4013,9 +4020,9 @@ Body makeCone(float radius, float height, uint32_t segments)
     bottom.loop.push_back(0u);
     for (uint32_t i = n; i-- > 1;) bottom.loop.push_back(i);
     bottom.surface.kind = SurfaceKind::Plane;
-    bottom.surface.origin = {0.f, 0.f, -h};
-    bottom.surface.normal = {0.f, 0.f, -1.f};
-    bottom.surface.uAxis = {1.f, 0.f, 0.f};
+    bottom.surface.origin = {0., 0., -h};
+    bottom.surface.normal = {0., 0., -1.};
+    bottom.surface.uAxis = {1., 0., 0.};
     defs.push_back(std::move(bottom));
 
     // Side triangles: {bottom[i], bottom[i+1], apex} — traverses bottom[i]→
@@ -4032,10 +4039,10 @@ Body makeCone(float radius, float height, uint32_t segments)
         // apex is at +h, base at -h, so the axis runs apex -> base along -Z and the slope
         // (base radius over height) is radius/height.
         side.surface.kind = SurfaceKind::Cone;
-        side.surface.origin = {0.f, 0.f, h};       // apex
-        side.surface.normal = {0.f, 0.f, -1.f};    // axis, apex -> base
-        side.surface.uAxis = {1.f, 0.f, 0.f};
-        side.surface.radius = (height > 0.f) ? (radius / height) : 0.f;  // slope
+        side.surface.origin = {0., 0., h};       // apex
+        side.surface.normal = {0., 0., -1.};    // axis, apex -> base
+        side.surface.uAxis = {1., 0., 0.};
+        side.surface.radius = (height > 0.) ? (radius / height) : 0.;  // slope
         defs.push_back(std::move(side));
     }
 
@@ -4050,8 +4057,8 @@ Body makeSphere(float radius, uint32_t latSegments, uint32_t lonSegments)
 {
     const uint32_t lat = std::max(latSegments, 2u);
     const uint32_t lon = std::max(lonSegments, 3u);
-    const float pi = 3.14159265358979323846f;
-    const float twoPi = 6.28318530717958647692f;
+    const double pi = 3.141592653589793238462643383279;
+    const double twoPi = 6.283185307179586476925286766559;
 
     // Vertex of latitude ring L (1..lat-1) at longitude j (wrapped).
     auto vid = [lon](uint32_t L, uint32_t j) -> uint32_t {
@@ -4061,13 +4068,13 @@ Body makeSphere(float radius, uint32_t latSegments, uint32_t lonSegments)
     const uint32_t northPole = 1u + (lat - 1u) * lon;
 
     std::vector<Vec3> pts(2u + static_cast<size_t>(lat - 1u) * lon);
-    pts[southPole] = {0.f, 0.f, -radius};
-    pts[northPole] = {0.f, 0.f, radius};
+    pts[southPole] = {0., 0., -radius};
+    pts[northPole] = {0., 0., radius};
     for (uint32_t L = 1u; L < lat; ++L) {
-        const float v = -0.5f * pi + pi * static_cast<float>(L) / static_cast<float>(lat);
-        const float cv = std::cos(v), sv = std::sin(v);
+        const double v = -0.5 * pi + pi * static_cast<double>(L) / static_cast<double>(lat);
+        const double cv = std::cos(v), sv = std::sin(v);
         for (uint32_t j = 0u; j < lon; ++j) {
-            const float u = twoPi * static_cast<float>(j) / static_cast<float>(lon);
+            const double u = twoPi * static_cast<double>(j) / static_cast<double>(lon);
             pts[vid(L, j)] = {radius * cv * std::cos(u), radius * cv * std::sin(u), radius * sv};
         }
     }
@@ -4076,9 +4083,9 @@ Body makeSphere(float radius, uint32_t latSegments, uint32_t lonSegments)
         Body::FaceDef fd;
         fd.loop = std::move(loop);
         fd.surface.kind = SurfaceKind::Sphere;
-        fd.surface.origin = {0.f, 0.f, 0.f};
-        fd.surface.normal = {0.f, 0.f, 1.f};
-        fd.surface.uAxis = {1.f, 0.f, 0.f};
+        fd.surface.origin = {0., 0., 0.};
+        fd.surface.normal = {0., 0., 1.};
+        fd.surface.uAxis = {1., 0., 0.};
         fd.surface.radius = radius;
         return fd;
     };
@@ -4109,13 +4116,13 @@ Body makeSphere(float radius, uint32_t latSegments, uint32_t lonSegments)
     for (uint32_t e = 0; e < static_cast<uint32_t>(b->edgeCount()); ++e) {
         const Vec3& p0 = b->vertex(b->edge(e).v0).point;
         const Vec3& p1 = b->vertex(b->edge(e).v1).point;
-        const float r0 = std::sqrt(p0.x * p0.x + p0.y * p0.y);
-        const float r1 = std::sqrt(p1.x * p1.x + p1.y * p1.y);
+        const double r0 = std::sqrt(p0.x * p0.x + p0.y * p0.y);
+        const double r1 = std::sqrt(p1.x * p1.x + p1.y * p1.y);
         if (std::abs(p0.z - p1.z) < 1e-5f && std::abs(r0 - r1) < 1e-5f) {
-            b->setEdgeArc(e, {0.f, 0.f, p0.z}, {0.f, 0.f, 1.f}, r0);  // latitude ring
+            b->setEdgeArc(e, {0., 0., p0.z}, {0., 0., 1.}, r0);  // latitude ring
         } else {
             const Vec3 ax = normalize(cross(p0, p1));                 // meridian great circle
-            b->setEdgeArc(e, {0.f, 0.f, 0.f}, ax, radius);
+            b->setEdgeArc(e, {0., 0., 0.}, ax, radius);
         }
     }
     return std::move(*b);
@@ -4133,7 +4140,7 @@ Body extrudeProfile(const std::vector<Vec3>& profile, const Vec3& dir)
 
     // Profile plane normal (Newell's method; length = 2·area) → consistent with a
     // CCW winding about +N.
-    Vec3 N{0.f, 0.f, 0.f};
+    Vec3 N{0., 0., 0.};
     for (size_t i = 0; i < n; ++i) {
         const Vec3& a = profile[i];
         const Vec3& b = profile[(i + 1) % n];
@@ -4141,17 +4148,17 @@ Body extrudeProfile(const std::vector<Vec3>& profile, const Vec3& dir)
         N.y += (a.z - b.z) * (a.x + b.x);
         N.z += (a.x - b.x) * (a.y + b.y);
     }
-    const float area2 = length(N);
+    const double area2 = length(N);
     if (area2 < 1e-10f) return Body{};  // degenerate / near-zero-area profile
-    N = scale(N, 1.f / area2);
+    N = scale(N, 1. / area2);
 
-    float h = dot(dir, N);
+    double h = dot(dir, N);
     if (h > -1e-9f && h < 1e-9f) return Body{};  // dir parallel to the plane
 
     // Orient so the profile is CCW about the extrusion direction (+N side gets the
     // top cap, giving a positive-volume outward solid regardless of dir's sign).
     std::vector<Vec3> poly = profile;
-    if (h < 0.f) {
+    if (h < 0.) {
         std::reverse(poly.begin(), poly.end());
         N = {-N.x, -N.y, -N.z};
     }
@@ -4217,7 +4224,7 @@ Body loftProfiles(const std::vector<Vec3>& bottom, const std::vector<Vec3>& top)
         if (!isFinite(p)) return Body{};
 
     auto newell = [](const std::vector<Vec3>& poly) {
-        Vec3 N{0.f, 0.f, 0.f};
+        Vec3 N{0., 0., 0.};
         const size_t c = poly.size();
         for (size_t i = 0; i < c; ++i) {
             const Vec3& a = poly[i];
@@ -4229,22 +4236,22 @@ Body loftProfiles(const std::vector<Vec3>& bottom, const std::vector<Vec3>& top)
         return N;
     };
     auto centroid = [](const std::vector<Vec3>& poly) {
-        Vec3 c{0.f, 0.f, 0.f};
+        Vec3 c{0., 0., 0.};
         for (const Vec3& p : poly) c = add(c, p);
-        return scale(c, 1.f / static_cast<float>(poly.size()));
+        return scale(c, 1. / static_cast<double>(poly.size()));
     };
 
     Vec3 N = newell(bottom);
-    const float area2 = length(N);
+    const double area2 = length(N);
     if (area2 < 1e-10f) return Body{};       // degenerate bottom
     if (length(newell(top)) < 1e-10f) return Body{};  // degenerate top
-    N = scale(N, 1.f / area2);               // bottom plane normal (CCW about +N)
+    N = scale(N, 1. / area2);               // bottom plane normal (CCW about +N)
 
     // Orient so +N points from the bottom toward the top (positive-volume solid).
-    const float h = dot(sub(centroid(top), centroid(bottom)), N);
+    const double h = dot(sub(centroid(top), centroid(bottom)), N);
     if (h > -1e-9f && h < 1e-9f) return Body{};  // top in the bottom's plane → undefined
     std::vector<Vec3> b = bottom, t = top;
-    if (h < 0.f) {
+    if (h < 0.) {
         std::reverse(b.begin(), b.end());
         std::reverse(t.begin(), t.end());  // reverse BOTH → the i↔i pairing is preserved
         N = {-N.x, -N.y, -N.z};
@@ -4315,8 +4322,8 @@ Body twistExtrude(const std::vector<Vec3>& profile, const Vec3& dir, float twist
     if (!isFinite(dir)) return Body{};
 
     // Profile plane normal (Newell) + centroid.
-    Vec3 N{0.f, 0.f, 0.f};
-    Vec3 C{0.f, 0.f, 0.f};
+    Vec3 N{0., 0., 0.};
+    Vec3 C{0., 0., 0.};
     for (size_t i = 0; i < n; ++i) {
         const Vec3& a = profile[i];
         const Vec3& b = profile[(i + 1) % n];
@@ -4327,25 +4334,25 @@ Body twistExtrude(const std::vector<Vec3>& profile, const Vec3& dir, float twist
     }
     if (length(N) < 1e-10f) return Body{};  // degenerate / near-zero-area profile
     N = normalize(N);
-    C = scale(C, 1.f / static_cast<float>(n));
+    C = scale(C, 1. / static_cast<double>(n));
     if (length(dir) < 1e-9f) return Body{};
-    const float h = dot(dir, N);
+    const double h = dot(dir, N);
     if (h > -1e-9f && h < 1e-9f) return Body{};  // dir parallel to the plane
 
     // Orient so the profile is CCW about the extrusion direction (positive-volume
     // outward solid regardless of dir's sign).
     std::vector<Vec3> poly = profile;
-    if (h < 0.f) {
+    if (h < 0.) {
         std::reverse(poly.begin(), poly.end());
         N = {-N.x, -N.y, -N.z};
     }
     const Vec3 axis = normalize(dir);  // twist axis through the centroid
 
-    auto rot = [&](const Vec3& p, float ang) {
+    auto rot = [&](const Vec3& p, double ang) {
         const Vec3 v = sub(p, C);
-        const float c = std::cos(ang), s = std::sin(ang);
+        const double c = std::cos(ang), s = std::sin(ang);
         const Vec3 r = add(add(scale(v, c), scale(cross(axis, v), s)),
-                           scale(axis, dot(axis, v) * (1.f - c)));
+                           scale(axis, dot(axis, v) * (1. - c)));
         return add(C, r);
     };
 
@@ -4353,7 +4360,7 @@ Body twistExtrude(const std::vector<Vec3>& profile, const Vec3& dir, float twist
     std::vector<Vec3> pts;
     pts.reserve((layers + 1u) * n);
     for (uint32_t j = 0; j <= layers; ++j) {
-        const float f = static_cast<float>(j) / static_cast<float>(layers);
+        const double f = static_cast<double>(j) / static_cast<double>(layers);
         for (size_t i = 0; i < n; ++i)
             pts.push_back(add(rot(poly[i], twistRadians * f), scale(dir, f)));
     }
@@ -4409,7 +4416,7 @@ Body makePyramid(const std::vector<Vec3>& base, const Vec3& apex)
     if (!isFinite(apex)) return Body{};
 
     // Base plane normal (Newell; length = 2·area) → consistent with a CCW winding.
-    Vec3 N{0.f, 0.f, 0.f};
+    Vec3 N{0., 0., 0.};
     for (size_t i = 0; i < n; ++i) {
         const Vec3& a = base[i];
         const Vec3& b = base[(i + 1) % n];
@@ -4421,10 +4428,10 @@ Body makePyramid(const std::vector<Vec3>& base, const Vec3& apex)
     N = normalize(N);
 
     // Orient so the apex is on the +N side (positive-volume outward solid).
-    const float hgt = dot(sub(apex, base[0]), N);
+    const double hgt = dot(sub(apex, base[0]), N);
     if (hgt > -1e-9f && hgt < 1e-9f) return Body{};  // apex in the base plane
     std::vector<Vec3> poly = base;
-    if (hgt < 0.f) {
+    if (hgt < 0.) {
         std::reverse(poly.begin(), poly.end());
         N = {-N.x, -N.y, -N.z};
     }
@@ -4463,31 +4470,31 @@ Body makePyramid(const std::vector<Vec3>& base, const Vec3& apex)
 Body makeFacetedCylinder(float radius, float height, uint32_t segments)
 {
     const uint32_t n = std::max(segments, 3u);
-    const float h = height * 0.5f;
-    const float twoPi = 6.28318530717958647692f;
+    const double h = height * 0.5;
+    const double twoPi = 6.283185307179586476925286766559;
     std::vector<Vec3> ring;  // regular n-gon at z = -h, CCW about +Z
     ring.reserve(n);
     for (uint32_t k = 0; k < n; ++k) {
-        const float a = twoPi * static_cast<float>(k) / static_cast<float>(n);
+        const double a = twoPi * static_cast<double>(k) / static_cast<double>(n);
         ring.push_back({radius * std::cos(a), radius * std::sin(a), -h});
     }
-    return extrudeProfile(ring, {0.f, 0.f, height});  // all-planar prism
+    return extrudeProfile(ring, {0., 0., height});  // all-planar prism
 }
 
 Body makeTube(float outerRadius, float innerRadius, float height, uint32_t segments)
 {
     if (!isFinite(outerRadius) || !isFinite(innerRadius) || !isFinite(height)) return Body{};
-    if (outerRadius <= innerRadius || innerRadius <= 0.f || height <= 0.f) return Body{};
+    if (outerRadius <= innerRadius || innerRadius <= 0. || height <= 0.) return Body{};
     const uint32_t n = std::max(segments, 3u);
-    const float h = height * 0.5f;
-    const float twoPi = 6.28318530717958647692f;
+    const double h = height * 0.5;
+    const double twoPi = 6.283185307179586476925286766559;
 
     // Four rings of n vertices: outer-bottom, outer-top, inner-bottom, inner-top.
     std::vector<Vec3> pts;
     pts.reserve(4u * n);
     auto ring = [&](float radius, float z) {
         for (uint32_t k = 0; k < n; ++k) {
-            const float a = twoPi * static_cast<float>(k) / static_cast<float>(n);
+            const double a = twoPi * static_cast<double>(k) / static_cast<double>(n);
             pts.push_back({radius * std::cos(a), radius * std::sin(a), z});
         }
     };
@@ -4531,16 +4538,16 @@ Body makeTube(float outerRadius, float innerRadius, float height, uint32_t segme
 Body makeFacetedSphere(float radius, uint32_t latSegments, uint32_t lonSegments)
 {
     const uint32_t lat = std::max(latSegments, 2u);
-    const float pi = 3.14159265358979323846f;
+    const double pi = 3.141592653589793238462643383279;
     // Polygonal semicircle from the bottom pole up to the top pole, in the xz
     // half-plane x ≥ 0, revolved about the z-axis. Endpoints are on the axis.
     std::vector<Vec3> semi;
     semi.reserve(lat + 1);
     for (uint32_t k = 0; k <= lat; ++k) {
-        const float a = -pi * 0.5f + pi * static_cast<float>(k) / static_cast<float>(lat);
-        semi.push_back({radius * std::cos(a), 0.f, radius * std::sin(a)});
+        const double a = -pi * 0.5 + pi * static_cast<double>(k) / static_cast<double>(lat);
+        semi.push_back({radius * std::cos(a), 0., radius * std::sin(a)});
     }
-    return revolveProfile(semi, {0.f, 0.f, 0.f}, {0.f, 0.f, 1.f}, std::max(lonSegments, 3u));
+    return revolveProfile(semi, {0., 0., 0.}, {0., 0., 1.}, std::max(lonSegments, 3u));
 }
 
 Body revolveProfile(const std::vector<Vec3>& profile, const Vec3& axisOrigin,
@@ -4551,12 +4558,12 @@ Body revolveProfile(const std::vector<Vec3>& profile, const Vec3& axisOrigin,
     for (const Vec3& p : profile)
         if (!isFinite(p)) return Body{};
     if (!isFinite(axisOrigin) || !isFinite(axisDir)) return Body{};
-    const float axisLen = length(axisDir);
+    const double axisLen = length(axisDir);
     if (axisLen < 1e-9f) return Body{};
-    const Vec3 n = scale(axisDir, 1.f / axisLen);
+    const Vec3 n = scale(axisDir, 1. / axisLen);
 
     // Non-degenerate profile area (Newell).
-    Vec3 Nprof{0.f, 0.f, 0.f};
+    Vec3 Nprof{0., 0., 0.};
     for (size_t i = 0; i < m; ++i) {
         const Vec3& a = profile[i];
         const Vec3& b = profile[(i + 1) % m];
@@ -4570,33 +4577,33 @@ Body revolveProfile(const std::vector<Vec3>& profile, const Vec3& axisOrigin,
     // vertex on it → a pole), but not cross to the other side. Off-axis vertices
     // must all share the same radial side.
     std::vector<bool> onAxis(m, false);
-    Vec3 rHat{0.f, 0.f, 0.f};
+    Vec3 rHat{0., 0., 0.};
     bool haveRHat = false;
     for (size_t i = 0; i < m; ++i) {
         const Vec3 v = sub(profile[i], axisOrigin);
         const Vec3 rad = sub(v, scale(n, dot(v, n)));
-        const float rl = length(rad);
+        const double rl = length(rad);
         if (rl < 1e-6f) {
             onAxis[i] = true;  // pole vertex
             continue;
         }
-        if (!haveRHat) { rHat = scale(rad, 1.f / rl); haveRHat = true; }
+        if (!haveRHat) { rHat = scale(rad, 1. / rl); haveRHat = true; }
         else if (dot(rad, rHat) <= 1e-6f) return Body{};  // crossed to the other side
     }
     if (!haveRHat) return Body{};  // entirely on the axis → degenerate
 
     // Rotate a point about the axis by `ang` (Rodrigues).
-    auto rot = [&](const Vec3& p, float ang) {
+    auto rot = [&](const Vec3& p, double ang) {
         const Vec3 v = sub(p, axisOrigin);
-        const float c = std::cos(ang), s = std::sin(ang);
+        const double c = std::cos(ang), s = std::sin(ang);
         const Vec3 r = add(add(scale(v, c), scale(cross(n, v), s)),
-                           scale(n, dot(n, v) * (1.f - c)));
+                           scale(n, dot(n, v) * (1. - c)));
         return add(axisOrigin, r);
     };
 
     // Vertices: an on-axis profile vertex welds to ONE pole point; an off-axis one
     // fans into `segments` rotated copies.
-    const float twoPi = 6.28318530717958647692f;
+    const double twoPi = 6.283185307179586476925286766559;
     std::vector<Vec3> pts;
     std::vector<uint32_t> ringStart(m);  // pole index, or start of the ring of copies
     for (size_t i = 0; i < m; ++i) {
@@ -4605,8 +4612,8 @@ Body revolveProfile(const std::vector<Vec3>& profile, const Vec3& axisOrigin,
             pts.push_back(profile[i]);  // single welded pole vertex
         } else {
             for (uint32_t j = 0; j < segments; ++j)
-                pts.push_back(rot(profile[i], twoPi * static_cast<float>(j) /
-                                                  static_cast<float>(segments)));
+                pts.push_back(rot(profile[i], twoPi * static_cast<double>(j) /
+                                                  static_cast<double>(segments)));
         }
     }
     auto vAt = [&](size_t i, uint32_t j) {
@@ -4647,7 +4654,7 @@ Body revolveProfile(const std::vector<Vec3>& profile, const Vec3& axisOrigin,
 Body revolveProfilePartial(const std::vector<Vec3>& profile, const Vec3& axisOrigin,
                            const Vec3& axisDir, uint32_t segments, float sweepRadians)
 {
-    const float twoPi = 6.28318530717958647692f;
+    const double twoPi = 6.283185307179586476925286766559;
     if (!isFinite(sweepRadians) || sweepRadians <= 1e-6f) return Body{};
     if (sweepRadians >= twoPi - 1e-5f)  // a full turn → the genus-1 ring path
         return revolveProfile(profile, axisOrigin, axisDir, segments);
@@ -4657,12 +4664,12 @@ Body revolveProfilePartial(const std::vector<Vec3>& profile, const Vec3& axisOri
     for (const Vec3& p : profile)
         if (!isFinite(p)) return Body{};
     if (!isFinite(axisOrigin) || !isFinite(axisDir)) return Body{};
-    const float axisLen = length(axisDir);
+    const double axisLen = length(axisDir);
     if (axisLen < 1e-9f) return Body{};
-    const Vec3 n = scale(axisDir, 1.f / axisLen);
+    const Vec3 n = scale(axisDir, 1. / axisLen);
 
     // Non-degenerate profile area (Newell).
-    Vec3 Nprof{0.f, 0.f, 0.f};
+    Vec3 Nprof{0., 0., 0.};
     for (size_t i = 0; i < m; ++i) {
         const Vec3& a = profile[i];
         const Vec3& b = profile[(i + 1) % m];
@@ -4676,23 +4683,23 @@ Body revolveProfilePartial(const std::vector<Vec3>& profile, const Vec3& axisOri
     // vertex on it → a welded pole shared across all angles and both caps), but
     // not cross to the other side. Off-axis vertices share one radial side.
     std::vector<bool> onAxis(m, false);
-    Vec3 rHat{0.f, 0.f, 0.f};
+    Vec3 rHat{0., 0., 0.};
     bool haveRHat = false;
     for (size_t i = 0; i < m; ++i) {
         const Vec3 v = sub(profile[i], axisOrigin);
         const Vec3 rad = sub(v, scale(n, dot(v, n)));
-        const float rl = length(rad);
+        const double rl = length(rad);
         if (rl < 1e-6f) { onAxis[i] = true; continue; }  // pole vertex
-        if (!haveRHat) { rHat = scale(rad, 1.f / rl); haveRHat = true; }
+        if (!haveRHat) { rHat = scale(rad, 1. / rl); haveRHat = true; }
         else if (dot(rad, rHat) <= 1e-6f) return Body{};  // crossed to the other side
     }
     if (!haveRHat) return Body{};  // entirely on the axis → degenerate
 
-    auto rot = [&](const Vec3& p, float ang) {
+    auto rot = [&](const Vec3& p, double ang) {
         const Vec3 v = sub(p, axisOrigin);
-        const float c = std::cos(ang), s = std::sin(ang);
+        const double c = std::cos(ang), s = std::sin(ang);
         const Vec3 r = add(add(scale(v, c), scale(cross(n, v), s)),
-                           scale(n, dot(n, v) * (1.f - c)));
+                           scale(n, dot(n, v) * (1. - c)));
         return add(axisOrigin, r);
     };
 
@@ -4806,7 +4813,7 @@ bool imprintOneWay(Body& target, const Body& tool, Tolerance tol)
     // their boxes overlap, which prunes the spurious cuts a far tool plane's
     // infinite intersection line would otherwise imprint (the source of the
     // O(tool-faces²) face explosion).
-    const float pad = tol.at(1.f) * 10.f;
+    const double pad = tol.at(1.f) * 10.f;
     struct ToolFace { Surface surf; FaceBox box; };
     std::vector<ToolFace> toolFaces;
     toolFaces.reserve(tool.faceCount());
@@ -4878,8 +4885,8 @@ bool imprintOneWay(Body& target, const Body& tool, Tolerance tol)
                         for (uint32_t tv = 0; tv < static_cast<uint32_t>(tool.vertexCount()); ++tv) {
                             if (!tool.vertex(tv).alive) continue;
                             const Vec3 d = sub(tool.vertex(tv).point, si.curve.origin);
-                            const float axial = dot(d, cax);
-                            const float radial = length(sub(d, scale(cax, axial)));
+                            const double axial = dot(d, cax);
+                            const double radial = length(sub(d, scale(cax, axial)));
                             if (std::abs(axial) <= pad && std::abs(radial - si.curve.radius) <= pad)
                                 onCircle.push_back(tool.vertex(tv).point);
                         }

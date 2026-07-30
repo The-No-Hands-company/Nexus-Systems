@@ -97,7 +97,7 @@ bool selectFace(const Body& body, uint32_t f, const Body& other, BooleanOp op, b
     if (!isA) return false;  // coincident pair is represented by the A-side face
     const Vec3 c = body.faceSamplePoint(f);  // on the material, not inside a hole
     const Vec3 nA = faceOutwardNormal(body, f);
-    const float eps = std::max(tol.absolute * 100.f, 1e-3f);
+    const double eps = std::max(tol.absolute * 100.f, 1e-3f);
     const Vec3 pIn{c.x - eps * nA.x, c.y - eps * nA.y, c.z - eps * nA.z};  // just inside A
     const bool same = (other.classifyPoint(pIn, tol) == PC::Inside);
     switch (op) {
@@ -160,7 +160,7 @@ Body booleanToBody(const Body& a, const Body& b, BooleanOp op, Tolerance tol)
     // empty Body (watertight-or-empty; never a hang on a pathological tangency).
     if (!imprintMutually(A, B, tol)) return Body{};
 
-    const float weldEps = tol.absolute > 0.f ? tol.absolute * 10.f : 1e-4f;
+    const double weldEps = tol.absolute > 0.f ? tol.absolute * 10.f : 1e-4f;
     std::vector<Vec3> points;
     std::vector<Body::FaceDef> defs;
 
@@ -367,22 +367,22 @@ Body chamferBoxEdge(const Body& box, int axis, int s1, int s2, float setback)
     }
 
     const int a1 = (axis + 1) % 3, a2 = (axis + 2) % 3;
-    const float size1 = getc(hi, a1) - getc(lo, a1);
-    const float size2 = getc(hi, a2) - getc(lo, a2);
+    const double size1 = getc(hi, a1) - getc(lo, a1);
+    const double size2 = getc(hi, a2) - getc(lo, a2);
     // Clamp so the wedge stays within this edge's quadrant (never past the box
     // centre onto the opposite edges), keeping the result a clean single chamfer.
-    const float sb = std::min(setback, std::min(size1, size2) * 0.49f);
-    const float d1 = (s1 >= 0) ? 1.f : -1.f;
-    const float d2 = (s2 >= 0) ? 1.f : -1.f;
-    const float c1 = (s1 >= 0) ? getc(hi, a1) : getc(lo, a1);  // edge coord on the two other axes
-    const float c2 = (s2 >= 0) ? getc(hi, a2) : getc(lo, a2);
-    const float in1 = c1 - d1 * sb;  // setback point into the box
-    const float in2 = c2 - d2 * sb;
+    const double sb = std::min(static_cast<double>(setback), std::min(size1, size2) * 0.49);
+    const double d1 = (s1 >= 0) ? 1.f : -1.f;
+    const double d2 = (s2 >= 0) ? 1.f : -1.f;
+    const double c1 = (s1 >= 0) ? getc(hi, a1) : getc(lo, a1);  // edge coord on the two other axes
+    const double c2 = (s2 >= 0) ? getc(hi, a2) : getc(lo, a2);
+    const double in1 = c1 - d1 * sb;  // setback point into the box
+    const double in2 = c2 - d2 * sb;
 
     // Cutting prism: the right-triangle wedge at the edge, extruded along the edge
     // and past both box ends (so its caps don't coincide with the box's).
-    const float axLo = getc(lo, axis), axHi = getc(hi, axis);
-    const float margin = (axHi - axLo) * 0.5f + 1.f;
+    const double axLo = getc(lo, axis), axHi = getc(hi, axis);
+    const double margin = (axHi - axLo) * 0.5f + 1.f;
     auto mk = [&](float v1, float v2) {
         Vec3 p{0, 0, 0};
         setc(p, axis, axLo - margin);
@@ -413,17 +413,17 @@ Body filletBoxEdge(const Body& box, int axis, int s1, int s2, float radius, uint
     }
 
     const int a1 = (axis + 1) % 3, a2 = (axis + 2) % 3;
-    const float size1 = getc(hi, a1) - getc(lo, a1);
-    const float size2 = getc(hi, a2) - getc(lo, a2);
-    const float r = std::min(radius, std::min(size1, size2) * 0.49f);
-    const float d1 = (s1 >= 0) ? 1.f : -1.f;
-    const float d2 = (s2 >= 0) ? 1.f : -1.f;
-    const float c1 = (s1 >= 0) ? getc(hi, a1) : getc(lo, a1);
-    const float c2 = (s2 >= 0) ? getc(hi, a2) : getc(lo, a2);
-    const float in1 = c1 - d1 * r, in2 = c2 - d2 * r;  // quarter-circle centre
+    const double size1 = getc(hi, a1) - getc(lo, a1);
+    const double size2 = getc(hi, a2) - getc(lo, a2);
+    const double r = std::min(static_cast<double>(radius), std::min(size1, size2) * 0.49);
+    const double d1 = (s1 >= 0) ? 1.f : -1.f;
+    const double d2 = (s2 >= 0) ? 1.f : -1.f;
+    const double c1 = (s1 >= 0) ? getc(hi, a1) : getc(lo, a1);
+    const double c2 = (s2 >= 0) ? getc(hi, a2) : getc(lo, a2);
+    const double in1 = c1 - d1 * r, in2 = c2 - d2 * r;  // quarter-circle centre
 
-    const float axLo = getc(lo, axis), axHi = getc(hi, axis);
-    const float margin = (axHi - axLo) * 0.5f + 1.f;
+    const double axLo = getc(lo, axis), axHi = getc(hi, axis);
+    const double margin = (axHi - axLo) * 0.5f + 1.f;
     auto mk = [&](float v1, float v2) {
         Vec3 p{0, 0, 0};
         setc(p, axis, axLo - margin);
@@ -437,13 +437,13 @@ Body filletBoxEdge(const Body& box, int axis, int s1, int s2, float radius, uint
     // don't coincide with the box faces — that tangent coincidence otherwise makes
     // the boolean degenerate at certain segment counts) plus the faceted arc from
     // one tangent point to the other. box ∩ tool is unchanged by the outward push.
-    const float out = r * 0.5f;
+    const double out = r * 0.5f;
     std::vector<Vec3> poly;
     poly.reserve(segments + 2);
     poly.push_back(mk(c1 + d1 * out, c2 + d2 * out));  // corner, outside the box
     constexpr float kHalfPi = 1.57079632679489662f;
     for (uint32_t k = 0; k <= segments; ++k) {
-        const float th = kHalfPi * static_cast<float>(k) / static_cast<float>(segments);
+        const double th = kHalfPi * static_cast<float>(k) / static_cast<float>(segments);
         poly.push_back(mk(in1 + d1 * r * std::cos(th), in2 + d2 * r * std::sin(th)));
     }
     Vec3 dir{0, 0, 0};
@@ -462,7 +462,7 @@ Body hollowBox(float width, float height, float depth, float thickness)
     const Body outer = makeBox(width, height, depth);
     if (outer.faceCount() == 0) return Body{};
     if (!isFinite(thickness) || thickness <= 0.f) return outer;
-    const float m = std::min(width, std::min(height, depth));
+    const double m = std::min(width, std::min(height, depth));
     if (2.f * thickness >= m) return outer;  // no room for a cavity → stays solid
 
     // Concentric inner box, each dimension inset by 2·thickness → a sealed shell.

@@ -229,7 +229,7 @@ public:
     // endpoint must recognise that and reuse the endpoint vertex itself (see
     // imprintCurve) rather than rely on this floor, which would otherwise
     // manufacture a new vertex measurably offset from the true crossing.
-    uint32_t splitEdge(uint32_t edgeId, float t, Tolerance tol = {});
+    uint32_t splitEdge(uint32_t edgeId, double t, Tolerance tol = {});
 
     // Euler operator — split a face by a new edge (a Line) between two
     // NON-ADJACENT vertices of its outer loop, producing two faces that inherit
@@ -287,7 +287,7 @@ public:
     // the curve still reproduces the endpoint vertices — so checkGeometry holds
     // and toMesh(subdivisions) now tessellates it smoothly. Returns false if the
     // endpoints are not on the circle within tolerance.
-    bool setEdgeArc(uint32_t edgeId, const Vec3& center, const Vec3& axis, float radius,
+    bool setEdgeArc(uint32_t edgeId, const Vec3& center, const Vec3& axis, double radius,
                     Tolerance tol = {});
 
     // Attach a parameter-space trim curve (pcurve) to a coedge: a straight

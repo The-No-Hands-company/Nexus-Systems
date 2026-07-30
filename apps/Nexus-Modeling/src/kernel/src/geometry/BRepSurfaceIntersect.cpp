@@ -29,7 +29,7 @@ Vec3 cross(const Vec3& a, const Vec3& b)
 float length(const Vec3& a) { return std::sqrt(dot(a, a)); }
 Vec3 normalize(const Vec3& a)
 {
-    const float l = length(a);
+    const double l = length(a);
     return (l > 1e-20f) ? Vec3{a.x / l, a.y / l, a.z / l} : Vec3{0.f, 0.f, 0.f};
 }
 // A unit vector perpendicular to n.
@@ -63,7 +63,7 @@ SurfaceIntersection planePlane(const Surface& a, const Surface& b, Tolerance tol
 {
     const Vec3 nA = normalize(a.normal), nB = normalize(b.normal);
     const Vec3 dir = cross(nA, nB);
-    const float L2 = dot(dir, dir);
+    const double L2 = dot(dir, dir);
     // EXACT parallel decision on the stored normals — the planes are parallel iff
     // their normals are collinear. This is robust where the old `L2 < 1e-12`
     // float threshold mis-classified a genuine shallow-angle pair as parallel
@@ -75,7 +75,7 @@ SurfaceIntersection planePlane(const Surface& a, const Surface& b, Tolerance tol
                                                               : SurfaceIntersectionKind::None;
         return r;  // coincident planes → whole-plane overlap (Unsupported here)
     }
-    const float dA = dot(nA, a.origin), dB = dot(nB, b.origin);  // plane: dot(n,x)=d
+    const double dA = dot(nA, a.origin), dB = dot(nB, b.origin);  // plane: dot(n,x)=d
     // Point on both planes nearest the origin: ((dA nB - dB nA) × dir) / |dir|².
     const Vec3 p0 = scale(cross(sub(scale(nB, dA), scale(nA, dB)), dir), 1.f / L2);
     SurfaceIntersection r;
@@ -87,7 +87,7 @@ SurfaceIntersection planePlane(const Surface& a, const Surface& b, Tolerance tol
 SurfaceIntersection planeSphere(const Surface& plane, const Surface& sphere, Tolerance tol)
 {
     const Vec3 n = normalize(plane.normal);
-    const float d = dot(sub(sphere.origin, plane.origin), n);  // signed dist centre→plane
+    const double d = dot(sub(sphere.origin, plane.origin), n);  // signed dist centre→plane
     const Vec3 foot = sub(sphere.origin, scale(n, d));         // centre projected to plane
     SurfaceIntersection r;
     if (std::abs(d) > sphere.radius + tol.absolute) { r.kind = SurfaceIntersectionKind::None; return r; }
@@ -116,8 +116,8 @@ SurfaceIntersection planeCylinder(const Surface& plane, const Surface& cyl, Tole
     // near-perpendicular plane, whose real section is an ellipse, as a circle.
     if (exactlyCollinear(plane.normal, cyl.normal)) {
         // Axis line: cyl.origin + t*ax; find t where it meets the plane.
-        const float denom = dot(ax, n);  // ±1 for collinear unit vectors → nonzero
-        const float t = dot(sub(plane.origin, cyl.origin), n) / denom;
+        const double denom = dot(ax, n);  // ±1 for collinear unit vectors → nonzero
+        const double t = dot(sub(plane.origin, cyl.origin), n) / denom;
         const Vec3 center = add(cyl.origin, scale(ax, t));
         r.kind = SurfaceIntersectionKind::Circle;
         r.curve = circleCurve(center, ax, cyl.radius);
@@ -136,12 +136,12 @@ SurfaceIntersection planeCylinder(const Surface& plane, const Surface& cyl, Tole
     // collinear with the axis, so what remains is genuinely either parallel or skew, and
     // only the parallel one is analytic here. A skew plane cuts an ELLIPSE and stays
     // Unsupported.
-    const float axisDotNormal = dot(ax, n);
+    const double axisDotNormal = dot(ax, n);
     if (std::abs(axisDotNormal) <= tol.at(1.f)) {
         // Distance from the axis to the plane, measured along the plane normal.
-        const float d = dot(sub(cyl.origin, plane.origin), n);
-        const float rad = cyl.radius;
-        const float half2 = rad * rad - d * d;
+        const double d = dot(sub(cyl.origin, plane.origin), n);
+        const double rad = cyl.radius;
+        const double half2 = rad * rad - d * d;
         if (half2 < -tol.at(rad) * rad) {  // plane misses the cylinder entirely
             r.kind = SurfaceIntersectionKind::None;
             return r;
@@ -155,7 +155,7 @@ SurfaceIntersection planeCylinder(const Surface& plane, const Surface& cyl, Tole
             r.curve = lineCurve(foot, ax);
             return r;
         }
-        const float half = std::sqrt(half2);
+        const double half = std::sqrt(half2);
         r.kind = SurfaceIntersectionKind::TwoLines;
         r.curve = lineCurve(add(foot, scale(across, half)), ax);
         r.curve2 = lineCurve(sub(foot, scale(across, half)), ax);
@@ -169,7 +169,7 @@ SurfaceIntersection planeCylinder(const Surface& plane, const Surface& cyl, Tole
 SurfaceIntersection sphereSphere(const Surface& a, const Surface& b, Tolerance tol)
 {
     const Vec3 delta = sub(b.origin, a.origin);
-    const float dist = length(delta);
+    const double dist = length(delta);
     SurfaceIntersection r;
     if (dist < 1e-9f) { r.kind = SurfaceIntersectionKind::None; return r; }  // concentric
     if (dist > a.radius + b.radius + tol.absolute ||
@@ -178,9 +178,9 @@ SurfaceIntersection sphereSphere(const Surface& a, const Surface& b, Tolerance t
         return r;
     }
     const Vec3 u = scale(delta, 1.f / dist);
-    const float s = (dist * dist + a.radius * a.radius - b.radius * b.radius) / (2.f * dist);
+    const double s = (dist * dist + a.radius * a.radius - b.radius * b.radius) / (2.f * dist);
     const Vec3 center = add(a.origin, scale(u, s));
-    const float cr2 = a.radius * a.radius - s * s;
+    const double cr2 = a.radius * a.radius - s * s;
     if (cr2 <= tol.absolute * tol.absolute) {
         r.kind = SurfaceIntersectionKind::Point;
         r.point = center;
