@@ -9,7 +9,6 @@
 
 #include <algorithm>
 #include <cmath>
-#include <functional>
 #include <cstdint>
 #include <cstring>
 #include <unordered_map>
@@ -1273,11 +1272,13 @@ uint32_t Body::imprintCurve(uint32_t faceId, const Curve& curve, Tolerance tol,
         // and appends the far one: taking the largest parameter first leaves every remaining
         // point inside the retained edge. Points already at an endpoint fall outside the
         // strict bounds and are skipped, which is what makes a second pass a no-op.
-        auto subdivideArcAt = [&](uint32_t arcEdge) {
-            if (ringPoints == nullptr || arcEdge >= m_edges.size()) return;
+        // Returns how many splits it performed, so a caller can honour imprintCurve's
+        // contract: kInvalid must mean the body was NOT touched.
+        auto subdivideArcAt = [&](uint32_t arcEdge) -> uint32_t {
+            if (ringPoints == nullptr || arcEdge >= m_edges.size()) return 0u;
             const Vec3 axis = normalize(curve.dir);
             const float spanT0 = m_edges[arcEdge].t0, spanT1 = m_edges[arcEdge].t1;
-            if (std::abs(spanT1 - spanT0) <= 1e-12f) return;
+            if (std::abs(spanT1 - spanT0) <= 1e-12f) return 0u;
             constexpr float kTwoPiS = 6.28318530717958647692f;
 
             // Target PARAMETERS on the shared curve, not fractions: a fraction goes stale
@@ -1296,19 +1297,21 @@ uint32_t Body::imprintCurve(uint32_t faceId, const Curve& curve, Tolerance tol,
                 const float f = (tp - spanT0) / (spanT1 - spanT0);
                 if (f > 1e-5f && f < 1.f - 1e-5f) params.push_back(tp);
             }
-            if (params.empty()) return;
+            if (params.empty()) return 0u;
             // Split the FAR end first, so every remaining target stays inside the edge that
             // keeps the near end (and keeps this edge id).
             std::sort(params.begin(), params.end(), [&](float a, float b) {
                 return (spanT1 > spanT0) ? (a > b) : (a < b);
             });
+            uint32_t splits = 0;
             for (const float tp : params) {
                 const float t0 = m_edges[arcEdge].t0, t1 = m_edges[arcEdge].t1;
                 if (std::abs(t1 - t0) <= 1e-12f) break;
                 const float f = (tp - t0) / (t1 - t0);  // recomputed against what is left
                 if (!(f > 1e-5f && f < 1.f - 1e-5f)) continue;
-                (void)splitEdge(arcEdge, f, tol);
+                if (splitEdge(arcEdge, f, tol) != kInvalid) ++splits;
             }
+            return splits;
         };
 
         // ── ALREADY-SEGMENTED GUARD, ahead of every circle path ─────────────────────
@@ -1386,8 +1389,16 @@ uint32_t Body::imprintCurve(uint32_t faceId, const Curve& curve, Tolerance tol,
                     w = m_coedges[w].next;
                     if (++guard > m_coedges.size() + 1u) break;
                 } while (w != first);
-                for (const uint32_t ie : onCircleEdges) subdivideArcAt(ie);
-                return kInvalid;  // no face was split; the topology of the cut is unchanged
+                uint32_t splits = 0;
+                for (const uint32_t ie : onCircleEdges) splits += subdivideArcAt(ie);
+                // Report the truth. No FACE was split, but if the seam was subdivided the
+                // body changed, and imprintCurve's kInvalid means "nothing was touched" —
+                // the mutual imprint's fixpoint reads it that way, and a test asserts it.
+                // Returning this face when work was done also keeps the driver iterating
+                // until the reconciliation settles, which it must: splitting at a point
+                // that is already a vertex is a no-op, so the very next call returns 0 and
+                // the fixpoint closes.
+                return splits > 0 ? faceId : kInvalid;
             }
             // And the holes: the interior path leaves the circle exactly as interior as it
             // found it, so without this the driver — which imprints to a fixpoint and
@@ -1561,7 +1572,7 @@ uint32_t Body::imprintCurve(uint32_t faceId, const Curve& curve, Tolerance tol,
             const uint32_t newFace = cutFaceBetween(faceId, vA, vB, &curve);
             if (newFace == kInvalid) return kInvalid;
             keepArcInsideFace(ce);
-            subdivideArcAt(ce);  // match the other operand's discretization of this seam
+            (void)subdivideArcAt(ce);  // match the other operand's discretization
             return newFace;
         }
 
@@ -1580,7 +1591,7 @@ uint32_t Body::imprintCurve(uint32_t faceId, const Curve& curve, Tolerance tol,
             const uint32_t newFace = cutFaceBetween(faceId, vA, vB, &curve);
             if (newFace == kInvalid) return kInvalid;
             keepArcInsideFace(ce);
-            subdivideArcAt(ce);  // match the other operand's discretization of this seam
+            (void)subdivideArcAt(ce);  // match the other operand's discretization
             return newFace;
         }
         if (!cc.empty()) return kInvalid;  // odd crossing count → deferred
@@ -3125,7 +3136,20 @@ Mesh Body::toMesh(uint32_t subdivisions) const
             }
             if (!clipped) break;
         }
-        if (idx.size() == 3) emitTri(poly[idx[0]], poly[idx[1]], poly[idx[2]], nrm);
+        // Emit whatever is left. Normally that is the final triangle; but the loop above
+        // gives up when it can find no ear (a self-touching ring, a bridge that grazes, a
+        // numerically flat corner), and this used to emit NOTHING unless exactly three
+        // vertices remained — silently dropping the remnant and leaving a HOLE in a shell
+        // that is supposed to be closed. A hole is the worst outcome available here:
+        // classifyPoint casts a parity ray against this tessellation, so a missing patch
+        // flips inside/outside for everything behind it, and the whole watertight-or-empty
+        // contract rests on that classification. Fanning the remnant can overlap itself
+        // where the leftover is concave, which costs area accuracy — a real cost, but a
+        // bounded one, and never a hole. Previously only holed faces reached this code;
+        // routing concave faces here (so they stop being fanned wholesale) made the stall
+        // path reachable for far more shapes, which is why it is no longer left silent.
+        for (size_t k = 2; k < idx.size(); ++k)
+            emitTri(poly[idx[0]], poly[idx[k - 1]], poly[idx[k]], nrm);
     }
     return mesh;
 }

@@ -40,18 +40,22 @@
 //     than merely refusing (the mutual imprint cuts one operand at a time, so on the round
 //     that made the cut there was nothing yet to match).
 //
-// With those, the offset-cylinder boolean SEWS. Difference and intersection are exact at
-// every offset; the union is exact where the seam lands on facet vertices and carries a
-// bounded, characterized residual where it does not — see the last test.
+// With those, the offset-cylinder boolean SEWS, and inclusion-exclusion is EXACT on the
+// analytic volume at every offset. (An earlier revision of this file claimed a residual
+// there; that was toMesh under-refining curved patches, not the boolean — see the note on
+// InclusionExclusionIsExactOnTheAnalyticVolume.) The measurement that established it also
+// turned up a separate pre-existing defect in massProperties, characterized at the end.
 
 #include <nexus/geometry/AnalyticBRep.h>
 #include <nexus/geometry/BRepBoolean.h>
 #include <nexus/geometry/BRepSurfaceIntersect.h>
 #include <nexus/geometry/Mesh.h>
+#include <nexus/geometry/MeshTopologyValidation.h>
 
 #include <gtest/gtest.h>
 
 #include <cmath>
+#include <utility>
 #include <vector>
 
 namespace nexus::geometry::brep::testing {
@@ -457,35 +461,177 @@ TEST(ArcBiteSeam, FacetAlignedOffsetIsExactThroughout)
     EXPECT_NEAR(signedVolume(I.toMesh(0)), 0.765367, 1e-5);
 }
 
-// CHARACTERIZATION — the residual, stated with its numbers so the next increment has a
-// target rather than a hunch. Where the seam's endpoints do NOT land on facet vertices
-// (dx = 0.7 and 1.3, whose crossings fall at ±53.13° between the 16-gon's 22.5° steps),
-// inclusion-exclusion is off by roughly seven thousandths on a total of eleven:
+// THE UNION IS EXACT — measured against the ANALYTIC volume rather than a tessellation.
 //
-//     dx=0.70  U+I = 11.068386   box+cyl = 11.061467   excess 0.006919
-//     dx=1.30  U+I = 11.068386   box+cyl = 11.061468   excess 0.006918
+// An earlier version of this file claimed the opposite, and the claim was wrong in a way
+// worth recording. Inclusion-exclusion measured on toMesh output misses by ~0.0069, and
+// that was written up as "the union's account of the cylinder's protruding part" — a cause
+// that had been reasoned to, not measured. It is not the boolean. toMesh under-refines the
+// INTERIOR of a curved patch (a lone cylinder converges to 3.088 where pi*r^2*h is 3.1416;
+// its flat caps refine exactly, its side patches do not), and the two sides of the identity
+// carry different amounts of curved surface, so that error does not cancel between them.
 //
-// What is NOT the cause, measured: the seam vertex sets are identical on both operands
-// (the test above), every offered face is consumed (43 offered, 43 in the union), the sew
-// reports no reused directed edge, and D + I tiles the box exactly — so the error is
-// outside the box, in the union's account of the cylinder's protruding part, not in the
-// seam's division of the interior. The difference and intersection are unaffected.
-TEST(ArcBiteSeam, UnionVolumeIsNotYetExactAtNonFacetAlignedOffsets)
+// Ask the analytic integrator instead and the identity is exact to the last bit at every
+// offset that produces a result. Which is the lesson: when an oracle and a subject share a
+// known-approximate path, the oracle proves nothing about the subject.
+TEST(ArcBiteSeam, InclusionExclusionIsExactOnTheAnalyticVolume)
 {
     const Body box = makeBox(2.f, 2.f, 2.f);
-    for (float dx : {0.7f, 1.3f}) {
+    for (float dx : {0.7f, 1.0f, 1.3f}) {
         const Body cyl = offsetCylinder(0.5f, dx);
         const Body U = booleanToBody(box, cyl, BooleanOp::Union);
         const Body I = booleanToBody(box, cyl, BooleanOp::Intersection);
-        ASSERT_GT(U.faceCount(), 0u);
-        const double lhs = signedVolume(U.toMesh(0)) + signedVolume(I.toMesh(0));
-        const double rhs = signedVolume(box.toMesh(0)) + signedVolume(cyl.toMesh(0));
-        // Bounded, so it cannot silently grow.
-        EXPECT_LT(std::abs(lhs - rhs), 0.01) << "dx=" << dx << ": the union error grew";
-        EXPECT_GT(std::abs(lhs - rhs), 1e-5)
-            << "dx=" << dx << ": inclusion-exclusion now holds — the union is exact, so "
-               "replace this characterization with the identity assertion";
+        ASSERT_GT(U.faceCount(), 0u) << "dx=" << dx;
+        ASSERT_GT(I.faceCount(), 0u) << "dx=" << dx;
+        EXPECT_NEAR(U.massProperties().volume + I.massProperties().volume,
+                    box.massProperties().volume + cyl.massProperties().volume, 1e-5)
+            << "dx=" << dx << ": |A u B| + |A n B| != |A| + |B|";
     }
+}
+
+// CHARACTERIZATION of a separate, PRE-EXISTING defect this measurement uncovered, recorded
+// here because this is where the evidence is.
+//
+// massProperties returns a wrong volume for a boolean DIFFERENCE through a curved solid.
+// Planar differences are fine (box minus box, and hollowBox, both exact), and so is the
+// intersection, which keeps the tool's faces un-reversed. Only the difference is wrong, and
+// only where the reversed faces are curved.
+//
+// The cause is in how a face is reversed. Surface::normal means the outward normal for a
+// PLANE but the AXIS for a cylinder, sphere or cone — the header says so. booleanToBody
+// reverses a kept face by negating that field, which flips the outward direction of a plane
+// correctly and merely flips the AXIS of a cylinder, re-parameterizing the surface without
+// reversing the face at all. Body::FaceDef has no `reversed` flag, so the boolean currently
+// has no way to express the thing it means. The curved integrator does honour
+// Face::reversed; it is simply never told.
+//
+// Scope beyond mass properties is not yet established: anything reading surface.normal on
+// such a face — uv inversion, containment, a chained boolean — is reading a flipped axis.
+TEST(ArcBiteSeam, DifferenceThroughACurvedSolidHasAWrongAnalyticVolume)
+{
+    const Body box = makeBox(2.f, 2.f, 2.f);
+    const Body cyl = offsetCylinder(0.5f, 0.7f);
+    const Body I = booleanToBody(box, cyl, BooleanOp::Intersection);
+    const Body D = booleanToBody(box, cyl, BooleanOp::Difference);
+    ASSERT_GT(I.faceCount(), 0u);
+    ASSERT_GT(D.faceCount(), 0u);
+
+    // The intersection is exact, so the truth for the difference is known.
+    const double truth = box.massProperties().volume - I.massProperties().volume;
+    const double got = D.massProperties().volume;
+    EXPECT_GT(std::abs(got - truth), 1e-3)
+        << "the analytic volume of a difference through a cylinder is now correct — remove "
+           "this characterization and assert (A-B) + (A n B) == A on the analytic volume";
+    // Bounded, so a regression cannot make it quietly worse.
+    EXPECT_LT(std::abs(got - truth), 1.0) << "the error grew";
+
+    // The tessellated volume of the same body IS right, which is what localizes the fault
+    // to the analytic patch path rather than to the boolean's topology.
+    EXPECT_NEAR(signedVolume(D.toMesh(0)) + signedVolume(I.toMesh(0)),
+                signedVolume(box.toMesh(0)), 1e-5)
+        << "the difference's tessellated volume is wrong too — the fault is not confined "
+           "to the analytic path";
+}
+
+// ── CONTRACTS THE SEAM WORK PUT UNDER STRAIN ────────────────────────────────────
+//
+// imprintCurve reports kInvalid to mean "this tool curve did not apply here", and the
+// mutual imprint's fixpoint reads it as "nothing changed" — it stops iterating when every
+// offer comes back kInvalid. Reconciling a seam's discretization (fix 4) modifies the body
+// without splitting any face, so for a while it did both: it subdivided and then returned
+// kInvalid, which is a fixpoint that can terminate with work still outstanding and a
+// caller that has been told the body is untouched. It now returns the face when it changed
+// something. This pins the pair of properties that makes that safe.
+TEST(ArcBiteSeam, ReconcilingASeamReportsItAndThenSettles)
+{
+    Body box = makeBox(2.f, 2.f, 2.f);
+    Body cyl = offsetCylinder(0.5f, 0.7f);
+    ASSERT_TRUE(imprintMutually(box, cyl));
+
+    // Converged: a further mutual imprint must change nothing at all.
+    const size_t v = box.vertexCount(), e = box.edgeCount(), f = box.faceCount();
+    const size_t cv = cyl.vertexCount(), ce = cyl.edgeCount(), cf = cyl.faceCount();
+    ASSERT_TRUE(imprintMutually(box, cyl));
+    EXPECT_EQ(box.vertexCount(), v) << "the imprint had not reached a fixpoint";
+    EXPECT_EQ(box.edgeCount(), e);
+    EXPECT_EQ(box.faceCount(), f);
+    EXPECT_EQ(cyl.vertexCount(), cv);
+    EXPECT_EQ(cyl.edgeCount(), ce);
+    EXPECT_EQ(cyl.faceCount(), cf);
+    EXPECT_TRUE(box.checkIntegrity().ok) << box.checkIntegrity().reason;
+    EXPECT_TRUE(cyl.checkIntegrity().ok) << cyl.checkIntegrity().reason;
+
+    // And re-offering the seam circle directly to a seam-bearing face reports kInvalid —
+    // having, by then, nothing left to reconcile — without touching the body.
+    Curve seam;
+    seam.kind = CurveKind::Circle;
+    seam.origin = {0.7f, 0.f, 1.f};
+    seam.dir = {0.f, 0.f, 1.f};
+    seam.ref = {1.f, 0.f, 0.f};
+    seam.radius = 0.5f;
+    std::vector<Vec3> ring;
+    for (uint32_t iv = 0; iv < static_cast<uint32_t>(cyl.vertexCount()); ++iv) {
+        if (!cyl.vertex(iv).alive) continue;
+        const Vec3 p = cyl.vertex(iv).point;
+        if (std::fabs(p.z - 1.f) < 1e-4f) ring.push_back(p);
+    }
+    size_t offered = 0;
+    for (uint32_t fi = 0; fi < static_cast<uint32_t>(box.faceCount()); ++fi) {
+        if (!box.face(fi).alive) continue;
+        if (std::fabs(box.faceCentroid(fi).z - 1.f) > 1e-4f) continue;
+        const size_t vBefore = box.vertexCount(), eBefore = box.edgeCount();
+        const uint32_t got = box.imprintCurve(fi, seam, Tolerance{}, &ring);
+        ++offered;
+        if (got == kInvalid) {
+            EXPECT_EQ(box.vertexCount(), vBefore)
+                << "face " << fi << ": imprintCurve returned kInvalid but added vertices";
+            EXPECT_EQ(box.edgeCount(), eBefore)
+                << "face " << fi << ": imprintCurve returned kInvalid but added edges";
+        }
+    }
+    EXPECT_GT(offered, 0u) << "no +Z face was offered the seam circle";
+}
+
+// A closed solid must tessellate to a CLOSED mesh, at every refinement level.
+//
+// This is the invariant the ear-clipper quietly broke. It gives up when it can find no ear,
+// and used to emit the remnant only if exactly three vertices were left — otherwise
+// dropping it and leaving a hole. Nothing detected that: the Body is still valid, euler is
+// still right, the hole is in the MESH. And classifyPoint casts its parity ray against
+// exactly this mesh, so a hole flips inside/outside for everything behind it, which is the
+// foundation the whole boolean stands on. Concave faces only started reaching that code
+// with the arc bite, so this battery covers the bitten bodies and every boolean built from
+// them, not just the primitives.
+TEST(ArcBiteSeam, EveryClosedBodyTessellatesToAClosedMesh)
+{
+    std::vector<std::pair<const char*, Body>> bodies;
+    bodies.emplace_back("box", makeBox(2.f, 2.f, 2.f));
+    bodies.emplace_back("cylinder", makeCylinder(0.5f, 4.f, kSeg));
+    bodies.emplace_back("sphere", makeSphere(1.f, 8, 12));
+    for (float dx : {0.f, 0.7f, 1.0f, 1.3f}) {
+        Body b = makeBox(2.f, 2.f, 2.f);
+        Body c = offsetCylinder(0.5f, dx);
+        if (!imprintMutually(b, c)) continue;
+        bodies.emplace_back("imprinted box", std::move(b));
+        bodies.emplace_back("imprinted cylinder", std::move(c));
+        const Body box = makeBox(2.f, 2.f, 2.f), cyl = offsetCylinder(0.5f, dx);
+        for (BooleanOp op : {BooleanOp::Union, BooleanOp::Intersection, BooleanOp::Difference}) {
+            Body r = booleanToBody(box, cyl, op);
+            if (r.faceCount() > 0) bodies.emplace_back("boolean result", std::move(r));
+        }
+    }
+
+    for (const auto& [name, body] : bodies) {
+        if (!body.isClosed()) continue;  // only closed solids owe a closed mesh
+        for (uint32_t s : {0u, 1u, 4u}) {
+            const Mesh m = body.toMesh(s);
+            const auto rep = MeshTopologyValidation::validate(m);
+            EXPECT_EQ(rep.boundaryLoops, 0u)
+                << name << " at subdivisions " << s
+                << ": a closed solid tessellated to a mesh with a hole in it";
+        }
+    }
+    EXPECT_GT(bodies.size(), 10u) << "the battery collapsed — nothing was actually checked";
 }
 
 }  // namespace nexus::geometry::brep::testing
