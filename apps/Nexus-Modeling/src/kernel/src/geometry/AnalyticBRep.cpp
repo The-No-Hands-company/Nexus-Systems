@@ -3621,12 +3621,17 @@ Mesh Body::toMesh(uint32_t subdivisions) const
     // Output vertices: live B-rep vertices (compacted), then `subdivisions`
     // intermediate points per live edge — placed via the edge's curve so BOTH
     // incident faces reference the SAME points (crack-free / watertight).
+    // `posD` is the same points before the narrowing to float. The mesh carries floats
+    // because that is what the mesh is, but the TRIANGULATION DECISIONS below are read from
+    // the doubles — see the convexity test for why that distinction is load-bearing.
     std::vector<nexus::render::Vec3> pos;
+    std::vector<Vec3> posD;
     std::vector<int> vOut(m_verts.size(), -1);
     for (uint32_t v = 0; v < m_verts.size(); ++v) {
         if (!m_verts[v].alive) continue;
         vOut[v] = static_cast<int>(pos.size());
         pos.push_back(m_verts[v].point.toFloat());
+        posD.push_back(m_verts[v].point);
     }
     std::vector<std::vector<uint32_t>> edgeMid(m_edges.size());
     if (subdivisions > 0) {
@@ -3638,7 +3643,9 @@ Mesh Body::toMesh(uint32_t subdivisions) const
             for (uint32_t k = 1; k <= subdivisions; ++k) {
                 const double f = static_cast<float>(k) / static_cast<float>(subdivisions + 1u);
                 edgeMid[e].push_back(static_cast<uint32_t>(pos.size()));
-                pos.push_back(cu.eval(ed.t0 + (ed.t1 - ed.t0) * f).toFloat());
+                const Vec3 p = cu.eval(ed.t0 + (ed.t1 - ed.t0) * f);
+                pos.push_back(p.toFloat());
+                posD.push_back(p);
             }
         }
     }
@@ -3731,14 +3738,44 @@ Mesh Body::toMesh(uint32_t subdivisions) const
                 // Sign of the turn at each corner, in the face plane; a convex ring turns the
                 // same way throughout. Collinear corners (zero) are ignored, not counted as
                 // a reversal, so a redundant midpoint vertex — which the arc bite leaves on
-                // the chord by design — does not misread as concavity.
+                // the chord by design, and which every subdivided straight edge contributes
+                // two of — does not misread as concavity.
+                //
+                // This reads `posD`, the DOUBLE positions, not the float ones the mesh
+                // carries. A subdivision point on a straight edge is exactly collinear with
+                // its neighbours, so its turn is algebraically zero — but narrowing the three
+                // points to float perturbs each by an ulp and leaves a residue with a
+                // confident SIGN. Measured on a box face bitten by a sphere (fuzz seed
+                // 0xA17E51, iteration 102): the identical face read +0.0 at those corners in
+                // one body and +1.47e-08 / −1.48e-08 in another whose vertices differ by a
+                // single ulp. The negative one counted as a reversal, so the same face was
+                // fanned in one body and ear-clipped in the other. The exact data was sitting
+                // right there in the B-rep; only the copy the decision was read from had lost
+                // the collinearity. The threshold is relative to match — the sine of the turn
+                // angle, not the raw cross product, which scales with both edge lengths and
+                // so asks a different question at every corner.
+                //
+                // Be precise about what this is worth, because it is easy to overclaim. It
+                // moves NO volume and NO area: the flip only ever goes convex → "concave",
+                // which routes a convex ring to the ear-clipper, and both routes cover the
+                // ring exactly (swept over 2000 fuzz configurations, every planar face's
+                // triangles sum to its own ring area). Reverting it leaves the conservation
+                // identities unchanged to the digit. What it does buy is that the same patch
+                // is cut into the SAME TRIANGLES wherever it appears — with this reverted, 13
+                // of 1220 triangles still differ between operand and result on the fixture
+                // above. That is the property BRepFanApexStability asserts, and it is
+                // strictly stronger than any total, which is the whole reason this class of
+                // defect survived so long behind clean validators.
                 int turnSign = 0;
                 for (size_t i = 0; i < ring.size() && convex; ++i) {
-                    const nexus::render::Vec3& a = pos[ring[i]];
-                    const nexus::render::Vec3& b = pos[ring[(i + 1) % ring.size()]];
-                    const nexus::render::Vec3& c = pos[ring[(i + 2) % ring.size()]];
-                    const double t = dot(cross(sub(b, a), sub(c, b)), nrm);
-                    const int s = (t > 1e-12f) ? 1 : (t < -1e-12f ? -1 : 0);
+                    const Vec3& a = posD[ring[i]];
+                    const Vec3& b = posD[ring[(i + 1) % ring.size()]];
+                    const Vec3& c = posD[ring[(i + 2) % ring.size()]];
+                    const Vec3 e1 = b - a, e2 = c - b;
+                    const double sc2 = std::sqrt(e1.dot(e1)) * std::sqrt(e2.dot(e2));
+                    if (sc2 <= 0.0) continue;  // a repeated point turns nowhere
+                    const double t = e1.cross(e2).dot(nrm) / sc2;
+                    const int s = (t > 1e-9) ? 1 : (t < -1e-9 ? -1 : 0);
                     if (s == 0) continue;
                     if (turnSign == 0) turnSign = s;
                     else if (s != turnSign) convex = false;
@@ -3773,12 +3810,46 @@ Mesh Body::toMesh(uint32_t subdivisions) const
                 // traversed — only the winding flips, which is precisely what is wanted — so
                 // pinning the apex to a property of the geometry makes the two copies
                 // cancel exactly rather than approximately.
+                //
+                // "The same geometry" has to mean the same to WITHIN ROUNDING, though, and
+                // the first cut of this took it to mean bitwise. It compared the float
+                // positions with `==`, so a tie fell through to the next axis only when the
+                // two coordinates agreed in every bit — and on a seam, sharing a coordinate
+                // is the normal case, not a coincidence: every point imprinted onto a box
+                // face carries that face's plane coordinate exactly. Which means the tie-
+                // break was being decided by whatever noise sat in the last bit.
+                //
+                // MEASURED (fuzz seed 0xA17E51, iteration 102, sphere r1.51 against a box):
+                // one ring held a B-rep vertex and an arc midpoint both at x = -0.45200936…,
+                // agreeing to 15 significant figures. In the imprinted operand the midpoint's
+                // x was 2.8e-16 MORE NEGATIVE and took the apex; in the union the two were
+                // bitwise equal, the comparison fell through to y, and the vertex took it.
+                // A different apex on a CURVED patch spans different diagonals and encloses
+                // a different volume — over the body, U + I came out 1.2e-02 short of A + B,
+                // on faces that are otherwise identical point for point.
+                //
+                // So the comparison is made on the DOUBLE positions, quantized to a grid far
+                // above the rounding noise and far below any real feature. Rounding to a grid
+                // (rather than comparing "within a tolerance") keeps this a total order, so
+                // the minimum does not depend on where the ring starts. What remains is two
+                // ring points landing on opposite sides of one grid boundary while being
+                // 1e-16 apart — possible, no longer systematic, and worth 1e-12 of volume
+                // rather than 1e-2.
+                double sc = 1.0;
+                for (const uint32_t vi : ring) {
+                    const Vec3& p = posD[vi];
+                    sc = std::max(sc, std::max(std::abs(p.x), std::max(std::abs(p.y),
+                                                                       std::abs(p.z))));
+                }
+                const double grid = sc * 1e-12;
+                auto snap = [grid](double v) { return std::floor(v / grid + 0.5) * grid; };
                 size_t apex = 0;
                 for (size_t i = 1; i < ring.size(); ++i) {
-                    const nexus::render::Vec3& p = pos[ring[i]];
-                    const nexus::render::Vec3& q = pos[ring[apex]];
-                    if (p.x < q.x || (p.x == q.x && (p.y < q.y || (p.y == q.y && p.z < q.z))))
-                        apex = i;
+                    const Vec3& p = posD[ring[i]];
+                    const Vec3& q = posD[ring[apex]];
+                    const double px = snap(p.x), py = snap(p.y), pz = snap(p.z);
+                    const double qx = snap(q.x), qy = snap(q.y), qz = snap(q.z);
+                    if (px < qx || (px == qx && (py < qy || (py == qy && pz < qz)))) apex = i;
                 }
                 const size_t rn = ring.size();
                 for (size_t i = 2; i < rn; ++i) {

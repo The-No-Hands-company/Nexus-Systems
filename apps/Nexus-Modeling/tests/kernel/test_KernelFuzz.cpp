@@ -239,15 +239,16 @@ TEST(KernelFuzz, AnalyticSurfaceBooleansWatertightDeterministicAndVolumeConservi
     EXPECT_GT(watertight, 100) << "the generator produced almost no real results";
     EXPECT_GT(empty, 0) << "nothing was declined — the out-of-scope pairs are not being hit";
 
-    // The known, unexplained refinement disagreement — bounded on BOTH sides so it can
-    // neither grow nor be quietly fixed without this saying so.
-    EXPECT_LE(identityViolations, 4)
+    // This used to allow up to 4 violations at up to 2e-3, bounded on both sides so the
+    // "known, unexplained refinement disagreement" could neither grow nor be quietly fixed.
+    // It has since been explained and fixed: the fan apex was chosen by an exact comparison
+    // of coordinates that a seam makes equal, so the last bit decided how a curved patch was
+    // cut (see BRepFanApexStability). Over 2000 configurations of this same generator the
+    // count went 14 → 1 and the worst went 8.8e-04 → 1.3e-06, so the allowance is spent and
+    // the gate is now zero across this sweep.
+    EXPECT_EQ(identityViolations, 0)
         << "volume-identity violations rose to " << identityViolations
         << " (worst " << worstIdentity << ") — a boolean is returning the wrong size";
-    EXPECT_LT(worstIdentity, 2e-3)
-        << "the refinement disagreement grew to " << worstIdentity;
-    if (identityViolations == 0)
-        RecordProperty("note", "volume identities now hold everywhere; tighten this test");
 }
 
 // Mesh boolean: assert only the guarantees the kernel makes today — every output is
