@@ -210,8 +210,21 @@ bool circleLiesOnSurface(const Surface& s, const Curve& circle, float eps)
             return std::abs(std::sqrt(dot(d, d) + circle.radius * circle.radius) - s.radius)
                    <= eps;
         }
+        case SurfaceKind::Cone: {
+            // A cone's own circles are its rings: centred on the axis, perpendicular to it,
+            // and — unlike a cylinder's, which all share one radius — of radius slope*v at
+            // axial distance v from the apex. So the radius is not a constant to compare
+            // against but a function of where along the axis the circle sits.
+            const Vec3 ax = normalize(s.normal);
+            if (std::abs(dot(cAxis, ax)) < 1.0 - 1e-6) return false;
+            const Vec3 d = sub(circle.origin, s.origin);
+            const double v = dot(d, ax);
+            if (v < 0.0) return false;  // single-napped: nothing behind the apex
+            if (length(sub(d, scale(ax, v))) > eps) return false;  // centre off the axis
+            return std::abs(circle.radius - s.radius * v) <= eps;
+        }
         default:
-            return false;  // cone/NURBS circle imprints are a later increment
+            return false;  // NURBS circle imprints are a later increment
     }
 }
 
@@ -226,6 +239,7 @@ int periodicParam(const Surface& s)
     switch (s.kind) {
         case SurfaceKind::Cylinder: return 0;  // u sweeps the circumference
         case SurfaceKind::Sphere:   return 1;  // v is longitude; u is latitude
+        case SurfaceKind::Cone:     return 0;  // u sweeps the ring; v is axial distance
         default:                    return -1;
     }
 }
@@ -261,6 +275,20 @@ bool surfaceUV(const Surface& s, const Vec3& p, double& u, double& v)
             const double su = std::min(1.0, std::max(-1.0, dot(d, s.uAxis) / s.radius));
             u = std::asin(su);
             v = std::atan2(dot(d, s.normal), dot(d, s.vAxis()));
+            return true;
+        }
+        case SurfaceKind::Cone: {
+            // Inverting eval: p = apex + v*axis + (slope*v)(cos u * uAxis + sin u * vAxis).
+            // v is the axial distance from the apex, and the angle comes from the radial
+            // part exactly as on a cylinder — the radius varying with v does not move it.
+            const Vec3 ax = normalize(s.normal);
+            v = dot(d, ax);
+            const Vec3 radial = sub(d, scale(ax, v));
+            if (length(radial) < 1e-12) {
+                u = 0.0;  // on the axis, i.e. the apex, where the angle has no value
+                return true;
+            }
+            u = std::atan2(dot(radial, s.vAxis()), dot(radial, s.uAxis));
             return true;
         }
         default:

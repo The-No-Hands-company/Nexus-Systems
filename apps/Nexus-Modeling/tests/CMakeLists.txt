@@ -104,6 +104,7 @@ add_executable(nexus_kernel_tests
     kernel/test_BRepSeamReconcileAndPole.cpp
     kernel/test_BRepSeamRadiusPrecision.cpp
     kernel/test_BRepSphereFaceImprint.cpp
+    kernel/test_BRepConeSection.cpp
     kernel/test_BRepChamfer.cpp
     kernel/test_BRepFillet.cpp
     kernel/test_BRepHollow.cpp
