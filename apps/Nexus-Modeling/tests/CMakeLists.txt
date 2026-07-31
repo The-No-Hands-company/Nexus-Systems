@@ -65,6 +65,7 @@ add_executable(nexus_kernel_tests
     kernel/test_BRepPrecisionCeiling.cpp
     kernel/test_BRepMassProperties.cpp
     kernel/test_BRepOpenBox.cpp
+    kernel/test_BRepParallelCylinders.cpp
     kernel/test_BRepPointPlaneSideSoS.cpp
     kernel/test_BRepSegmentTriangleSoS.cpp
     kernel/test_BRepSurfaceArea.cpp

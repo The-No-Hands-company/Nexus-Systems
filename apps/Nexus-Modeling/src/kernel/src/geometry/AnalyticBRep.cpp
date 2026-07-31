@@ -1660,6 +1660,7 @@ uint32_t Body::imprintCurve(uint32_t faceId, const Curve& curve, Tolerance tol,
         // gives t = phi ± acos(-A/R): exact, and giving BOTH roots, since an arc can cross
         // a plane twice — which the two-crossing bite test downstream depends on.
         auto arcCrossings = [&](uint32_t e, double fr[2]) -> int {
+            constexpr double kTwoPiA = 6.283185307179586476925286766559;
             const Curve& arc = m_curves[m_edges[e].curve];
             const double at0 = m_edges[e].t0, at1 = m_edges[e].t1;
             if (std::abs(at1 - at0) <= 1e-12) return 0;
@@ -1669,12 +1670,53 @@ uint32_t Body::imprintCurve(uint32_t faceId, const Curve& curve, Tolerance tol,
             const double B = arc.radius * dot(arc.ref, nrm);
             const double C = arc.radius * dot(bi, nrm);
             const double R = std::sqrt(B * B + C * C);
-            if (R <= 1e-12) return 0;             // arc lies in a plane parallel to the cut
+            if (R <= 1e-12) {
+                // The arc does not cross the cut plane transversally. Either it is parallel
+                // to it and misses — nothing to do — or it lies IN it, and then the two are
+                // coplanar circles whose meeting is not a plane crossing at all but an
+                // ordinary circle-circle intersection solved in that shared plane.
+                //
+                // This is the boundary of every planar face that is bounded by arcs rather
+                // than by straight edges: a cylinder's cap, a cone's base, a disk. Solving
+                // it as a plane crossing reports NOTHING, so such a face was never cut.
+                // MEASURED on two parallel cylinders — r1 and r0.7 with axes 1.0 apart —
+                // the caps were offered their seam circle and refused it, staying two faces
+                // throughout while the side walls cut correctly, and every operator returned
+                // empty with 24 boundary edges left one-sided.
+                if (std::abs(A) > eps) return 0;  // parallel plane, genuinely no meeting
+                const Vec3 dc = sub(curve.origin, arc.origin);
+                const double dd = length(sub(dc, scale(nrm, dot(dc, nrm))));
+                if (dd <= 1e-12) return 0;  // concentric: coincident or never meeting
+                if (dd > arc.radius + curve.radius || dd < std::abs(arc.radius - curve.radius))
+                    return 0;
+                const Vec3 uu = scale(dc, 1.0 / dd);
+                const Vec3 ww = cross(nrm, uu);
+                const double tt = (dd * dd + arc.radius * arc.radius -
+                                   curve.radius * curve.radius) / (2.0 * dd);
+                const double hh2 = arc.radius * arc.radius - tt * tt;
+                if (hh2 < 0.0) return 0;
+                const double hh = std::sqrt(hh2);
+                const Vec3 mid = add(arc.origin, scale(uu, tt));
+                const double arcLen0 = std::abs(at1 - at0) * arc.radius;
+                const double slack0 = (arcLen0 > 0.0) ? (eps / arcLen0) : 0.0;
+                int got = 0;
+                for (const double sgn : {1.0, -1.0}) {
+                    const Vec3 hit = add(mid, scale(ww, sgn * hh));
+                    double tp = paramOnCurve(arc, hit);
+                    while (tp < std::min(at0, at1)) tp += kTwoPiA;
+                    while (tp > std::max(at0, at1)) tp -= kTwoPiA;
+                    double sfrac = (tp - at0) / (at1 - at0);
+                    if (!(sfrac > -slack0 && sfrac < 1.0 + slack0)) continue;
+                    sfrac = std::min(std::max(sfrac, 0.0), 1.0);
+                    if (got < 2) fr[got++] = sfrac;
+                }
+                if (got == 2 && std::abs(fr[0] - fr[1]) * arcLen0 <= eps) got = 1;
+                return got;
+            }
             const double cosArg = -A / R;
             if (cosArg < -1.0 || cosArg > 1.0) return 0;  // never reaches the plane
             const double phi = std::atan2(C, B);
             const double da = std::acos(std::min(1.0, std::max(-1.0, cosArg)));
-            constexpr double kTwoPiA = 6.283185307179586476925286766559;
             // Accept a crossing AT an endpoint, not only strictly inside the arc — the same
             // rule the Line branch above needs, and for the same reason, which is worth
             // stating because it is the second time it has had to be learned. On a sphere

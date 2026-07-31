@@ -206,6 +206,71 @@ SurfaceIntersection planeCylinder(const Surface& plane, const Surface& cyl, Tole
 // The cone is single-napped — v is a distance from the apex along the axis — so a plane on
 // the far side of the apex misses it entirely, and one through the apex meets it at exactly
 // that point.
+// CYLINDER against CYLINDER, for the case whose answer is straight: PARALLEL AXES.
+//
+// Two cylinders that share an axis direction meet along RULINGS — lines parallel to that
+// direction — because the whole problem collapses to two circles in the plane
+// perpendicular to it. Solve the circle pair there and extrude each solution point along
+// the axis. Everything is decided by the perpendicular distance d between the axes:
+//
+//   d > rA + rB          apart, nothing
+//   d = rA + rB          externally tangent, ONE ruling
+//   |rA-rB| < d < rA+rB  two rulings
+//   d = |rA - rB|        internally tangent, ONE ruling
+//   d < |rA - rB|        one bore inside the other, nothing
+//   d = 0, rA = rB       the same surface twice — Unsupported, as coincident planes are
+//
+// Axes that are skew or crossing are a different problem entirely: the section is a
+// quartic space curve (the bicylinder / Steinmetz curve), which is neither a Line nor a
+// Circle and is not approximated here.
+SurfaceIntersection cylinderCylinder(const Surface& a, const Surface& b, Tolerance tol)
+{
+    SurfaceIntersection r;
+    if (!exactlyCollinear(a.normal, b.normal)) {
+        r.kind = SurfaceIntersectionKind::Unsupported;  // quartic; not a Line or a Circle
+        return r;
+    }
+    const Vec3 ax = normalize(a.normal);
+    // Offset between the axes, measured perpendicular to them — the axial part is
+    // irrelevant, which is exactly why parallel axes are tractable at all.
+    const Vec3 delta = sub(b.origin, a.origin);
+    const Vec3 perp = sub(delta, scale(ax, dot(delta, ax)));
+    const double d = length(perp);
+    const double rA = a.radius, rB = b.radius;
+
+    if (d <= tol.absolute) {
+        // Concentric: either the same surface or two that never meet.
+        r.kind = tol.nearlyEqual(rA, rB) ? SurfaceIntersectionKind::Unsupported
+                                         : SurfaceIntersectionKind::None;
+        return r;
+    }
+    if (d > rA + rB + tol.absolute || d < std::abs(rA - rB) - tol.absolute) {
+        r.kind = SurfaceIntersectionKind::None;
+        return r;
+    }
+
+    // Circle-pair solution in the perpendicular plane: the radical line sits at axial
+    // offset `t` from A's centre, and the two solutions are ±h off it.
+    const Vec3 u = scale(perp, 1.0 / d);
+    const Vec3 w = cross(ax, u);  // unit: ax and u are perpendicular unit vectors
+    const double t = (d * d + rA * rA - rB * rB) / (2.0 * d);
+    const double h2 = rA * rA - t * t;
+    const Vec3 base = add(a.origin, scale(u, t));
+
+    if (h2 <= tol.absolute * tol.absolute) {
+        // Tangent — the two rulings have merged into one. Reported as a single Line rather
+        // than as two coincident ones, so a caller cannot imprint the same seam twice.
+        r.kind = SurfaceIntersectionKind::Line;
+        r.curve = lineCurve(base, ax);
+        return r;
+    }
+    const double h = std::sqrt(h2);
+    r.kind = SurfaceIntersectionKind::TwoLines;
+    r.curve = lineCurve(add(base, scale(w, h)), ax);
+    r.curve2 = lineCurve(sub(base, scale(w, h)), ax);
+    return r;
+}
+
 SurfaceIntersection planeCone(const Surface& plane, const Surface& cone, Tolerance tol)
 {
     const Vec3 n = normalize(plane.normal);
@@ -298,6 +363,7 @@ SurfaceIntersection intersectSurfaces(const Surface& a, const Surface& b, Tolera
     if (a.kind == K::Plane && b.kind == K::Cylinder) return planeCylinder(a, b, tol);
     if (a.kind == K::Cylinder && b.kind == K::Plane) return planeCylinder(b, a, tol);
     if (a.kind == K::Sphere && b.kind == K::Sphere) return sphereSphere(a, b, tol);
+    if (a.kind == K::Cylinder && b.kind == K::Cylinder) return cylinderCylinder(a, b, tol);
     if (a.kind == K::Plane && b.kind == K::Cone) return planeCone(a, b, tol);
     if (a.kind == K::Cone && b.kind == K::Plane) return planeCone(b, a, tol);
     SurfaceIntersection r;
