@@ -52,7 +52,23 @@ Curve lineCurve(const Vec3& origin, const Vec3& dir)
     c.dir = normalize(dir);
     return c;
 }
-Curve circleCurve(const Vec3& center, const Vec3& axis, float radius)
+// DOUBLE radius, for the same reason `dot` above returns double. Every caller computes
+// the radius as a double — sqrt(R² − d²) for a plane section, the chord formula for
+// sphere∩sphere — and `Curve::radius` stores a double, so a float parameter here rounded
+// the value on its way between two double quantities and nothing downstream could see it.
+//
+// Measured on box(2³) against sphere(r=1.2): the seam radius came out
+// 0.66332507133483887 where the exact value is 0.66332504433416373 — wrong by 2.7e-08,
+// which is float resolution at this magnitude and nothing to do with the geometry. The
+// box's ring was cut at the rounded radius while the sphere's ring, whose vertices are
+// pinned to both the sphere and the cutting plane, landed at the exact one, leaving two
+// concentric rings 2.7e-08 apart where there is only one circle. With the parameter
+// widened they agree to 5.6e-17.
+//
+// Scope, stated honestly: this is a real narrowing and it is fixed here, but it is NOT
+// why box/sphere sews to empty. That failure survives the fix unchanged, because the two
+// rings are duplicated as SEPARATE VERTICES regardless of how exactly they agree.
+Curve circleCurve(const Vec3& center, const Vec3& axis, double radius)
 {
     Curve c;
     c.kind = CurveKind::Circle;
