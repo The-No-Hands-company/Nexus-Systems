@@ -54,20 +54,28 @@ TEST(BRepSurfaceArea, CylinderIsExact)
     }
 }
 
-// The cone's lateral surface is exact (pi*r*slant). Its base, unlike the cylinder's caps,
-// is bounded by straight CHORD edges (fromFaces derives Line edges), so the base genuinely
-// is an inscribed n-gon and is integrated exactly as such — the total is lateral + n-gon
-// base to float precision, which is the correct area of the body as built.
-TEST(BRepSurfaceArea, ConeLateralIsExactBaseIsExactPolygon)
+// The cone's area is now exact throughout — lateral pi*r*slant plus a true disk base —
+// and, like the cylinder's, independent of the segment count.
+//
+// This test previously asserted the opposite for the base: that it is an inscribed n-gon,
+// because `fromFaces` derives Line edges and the cone was left with them. That was a
+// faithful description of the body as built, and the body as built was WRONG. A cone's side
+// face declares an exact Cone surface, so its bottom boundary must be a curve lying on that
+// cone; the chord between two base points is not one. Nothing caught it because
+// checkGeometry tests vertices, and a chord's endpoints do lie on the cone — but put a
+// vertex anywhere else along that chord, which is precisely what an imprint does, and it
+// sits up to 0.025 off the surface its own face claims.
+//
+// The base ring is now upgraded to Circle arcs exactly as the cylinder's rims always were,
+// so the base is a true disk and the n-gon reading is gone. See BRepConeBaseArc.
+TEST(BRepSurfaceArea, ConeIsExact)
 {
     const double r = 1.0, hh = 2.0, slant = std::sqrt(r * r + hh * hh);
-    const double lateral = M_PI * r * slant;
+    const double total = M_PI * r * slant + M_PI * r * r;
     for (const uint32_t n : {8u, 16u, 64u}) {
-        const double baseNgon = 0.5 * n * std::sin(2.0 * M_PI / n) * r * r;
         const float a = makeCone(1.f, 2.f, n).surfaceArea();
-        EXPECT_NEAR(a, static_cast<float>(lateral + baseNgon),
-                    static_cast<float>(lateral + baseNgon) * 1e-5)
-            << "cone area is not (exact lateral + exact n-gon base) at n=" << n;
+        EXPECT_NEAR(a, static_cast<float>(total), static_cast<float>(total) * 1e-5)
+            << "cone area is not (exact lateral + exact disk base) at n=" << n;
     }
 }
 

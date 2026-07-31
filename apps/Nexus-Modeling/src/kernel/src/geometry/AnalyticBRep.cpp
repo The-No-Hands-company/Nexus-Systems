@@ -4953,7 +4953,34 @@ Body makeCone(float radius, float height, uint32_t segments)
     }
 
     auto b = Body::fromFaces(pts, defs);
-    return b.has_value() ? std::move(*b) : Body{};
+    if (!b.has_value()) return Body{};
+
+    // Upgrade the base ring to Circle arcs about the axis — the same step the cylinder
+    // does for its two rims, and which the cone simply never got.
+    //
+    // It is not a smoothness nicety here, it is a CONSISTENCY requirement. A side face
+    // declares an exact Cone surface, so its bottom boundary has to be a curve lying on
+    // that cone. The circle where the cone meets the base plane does; the CHORD between two
+    // of its points does not — it dips inside everywhere except at its two endpoints. The
+    // body still validated as built, because checkGeometry tests VERTICES against surfaces
+    // and a chord's endpoints are on the cone. Put a vertex anywhere else on that chord and
+    // it is not, which is exactly what an imprint does.
+    //
+    // MEASURED (fuzz seed 0xA17E51, iteration 923: a cone of radius 1.3289 and height
+    // 2.2657 against a box): the imprint put crossings on eight base chords, and the
+    // imprinted CONE ALONE — before any Boolean — failed checkGeometry with "vertex is not
+    // on its own surface", deviations of 0.019 to 0.025. It carried through into the Union
+    // and the Difference, which is the whole of the watertight-or-empty invariant's failure
+    // over 2000 configurations: two non-empty results that no validator would accept, both
+    // from this one cone.
+    for (uint32_t e = 0; e < static_cast<uint32_t>(b->edgeCount()); ++e) {
+        const Vec3& p0 = b->vertex(b->edge(e).v0).point;
+        const Vec3& p1 = b->vertex(b->edge(e).v1).point;
+        // the base ring, not the apex spokes: both ends sit on the base plane
+        if (std::abs(p0.z + h) < 1e-5 && std::abs(p1.z + h) < 1e-5)
+            b->setEdgeArc(e, {0., 0., -h}, {0., 0., 1.}, radius);
+    }
+    return std::move(*b);
 }
 
 // A UV sphere: south + north pole vertices, (lat-1) latitude rings of `lon`
