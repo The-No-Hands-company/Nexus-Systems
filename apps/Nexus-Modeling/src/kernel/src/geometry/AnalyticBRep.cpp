@@ -3679,31 +3679,12 @@ Mesh Body::toMesh(uint32_t subdivisions) const
         mesh.topology().addFace(std::move(f));
     };
 
-    for (const Face& fc : m_faces) {
-        if (!fc.alive || fc.outerLoop >= m_loops.size()) continue;
-        const std::vector<uint32_t> ring = buildRing(m_loops[fc.outerLoop].first);
-        if (ring.size() < 3) continue;
-
-        Vec3 nrm{0.0, 0.0, 1.0};
-        if (fc.surface < m_surfaces.size()) nrm = m_surfaces[fc.surface].normal;
-        if (fc.reversed) nrm = {-nrm.x, -nrm.y, -nrm.z};
-
-        // EVERY inner ring, not just the first. This used to keep one and break, which is
-        // wrong for any face with two holes in it — a plate drilled twice, which is to say
-        // most real parts. The consequence is not a cosmetic one: a hole that never reaches
-        // the tessellation is not a hole as far as classifyPoint is concerned, because that
-        // is a parity ray cast against these triangles. MEASURED on a 4x4x1 plate drilled
-        // four times in sequence — the canonical chain — the second bore's own wall facets
-        // were reported OUTSIDE the plate they sit inside (3 of 50 faces), were dropped from
-        // the difference, left 8 boundary edges with one face instead of two, and the sew
-        // refused. The chain died at the second hole.
-        std::vector<std::vector<uint32_t>> inners;
-        for (uint32_t il : fc.innerLoops) {
-            if (il >= m_loops.size()) continue;
-            std::vector<uint32_t> r = buildRing(m_loops[il].first);
-            if (r.size() >= 3) inners.push_back(std::move(r));
-        }
-
+    // Triangulating ONE simple loop (plus any holes belonging to it). Pulled out of the
+    // face loop because a pinched loop splits into several simple loops, each of which
+    // has to be triangulated in its own right.
+    auto triangulateLoop = [&](const std::vector<uint32_t>& ring2,
+                               std::vector<std::vector<uint32_t>> inners,  // sorted below
+                               const Vec3& nrm, const Face& fc) {
         // A CONVEX outer ring with no hole fans from its first vertex — the cheapest
         // correct triangulation, and the one every face used to get.
         //
@@ -3734,7 +3715,7 @@ Mesh Body::toMesh(uint32_t subdivisions) const
             const bool planar = fc.surface < m_surfaces.size() &&
                                 m_surfaces[fc.surface].kind == SurfaceKind::Plane;
             bool convex = inners.empty();
-            if (convex && planar && ring.size() >= 3) {
+            if (convex && planar && ring2.size() >= 3) {
                 // Sign of the turn at each corner, in the face plane; a convex ring turns the
                 // same way throughout. Collinear corners (zero) are ignored, not counted as
                 // a reversal, so a redundant midpoint vertex — which the arc bite leaves on
@@ -3758,8 +3739,8 @@ Mesh Body::toMesh(uint32_t subdivisions) const
                 // Be precise about what this is worth, because it is easy to overclaim. It
                 // moves NO volume and NO area: the flip only ever goes convex → "concave",
                 // which routes a convex ring to the ear-clipper, and both routes cover the
-                // ring exactly (swept over 2000 fuzz configurations, every planar face's
-                // triangles sum to its own ring area). Reverting it leaves the conservation
+                // ring2 exactly (swept over 2000 fuzz configurations, every planar face's
+                // triangles sum to its own ring2 area). Reverting it leaves the conservation
                 // identities unchanged to the digit. What it does buy is that the same patch
                 // is cut into the SAME TRIANGLES wherever it appears — with this reverted, 13
                 // of 1220 triangles still differ between operand and result on the fixture
@@ -3767,10 +3748,10 @@ Mesh Body::toMesh(uint32_t subdivisions) const
                 // strictly stronger than any total, which is the whole reason this class of
                 // defect survived so long behind clean validators.
                 int turnSign = 0;
-                for (size_t i = 0; i < ring.size() && convex; ++i) {
-                    const Vec3& a = posD[ring[i]];
-                    const Vec3& b = posD[ring[(i + 1) % ring.size()]];
-                    const Vec3& c = posD[ring[(i + 2) % ring.size()]];
+                for (size_t i = 0; i < ring2.size() && convex; ++i) {
+                    const Vec3& a = posD[ring2[i]];
+                    const Vec3& b = posD[ring2[(i + 1) % ring2.size()]];
+                    const Vec3& c = posD[ring2[(i + 2) % ring2.size()]];
                     const Vec3 e1 = b - a, e2 = c - b;
                     const double sc2 = std::sqrt(e1.dot(e1)) * std::sqrt(e2.dot(e2));
                     if (sc2 <= 0.0) continue;  // a repeated point turns nowhere
@@ -3793,8 +3774,8 @@ Mesh Body::toMesh(uint32_t subdivisions) const
                 // first vertex.
                 //
                 // That is exactly the freedom a Boolean cannot afford. Difference reverses
-                // the vertex ring of every face it takes from the second operand, and a
-                // reversed ring starts at a different vertex, so the SAME patch was
+                // the vertex ring2 of every face it takes from the second operand, and a
+                // reversed ring2 starts at a different vertex, so the SAME patch was
                 // triangulated one way inside the intersection and the other way inside the
                 // difference. The two are supposed to cancel — the identity D + I = A holds
                 // because the shared patch appears once in each with opposite orientation —
@@ -3820,7 +3801,7 @@ Mesh Body::toMesh(uint32_t subdivisions) const
                 // break was being decided by whatever noise sat in the last bit.
                 //
                 // MEASURED (fuzz seed 0xA17E51, iteration 102, sphere r1.51 against a box):
-                // one ring held a B-rep vertex and an arc midpoint both at x = -0.45200936…,
+                // one ring2 held a B-rep vertex and an arc midpoint both at x = -0.45200936…,
                 // agreeing to 15 significant figures. In the imprinted operand the midpoint's
                 // x was 2.8e-16 MORE NEGATIVE and took the apex; in the union the two were
                 // bitwise equal, the comparison fell through to y, and the vertex took it.
@@ -3832,11 +3813,11 @@ Mesh Body::toMesh(uint32_t subdivisions) const
                 // above the rounding noise and far below any real feature. Rounding to a grid
                 // (rather than comparing "within a tolerance") keeps this a total order, so
                 // the minimum does not depend on where the ring starts. What remains is two
-                // ring points landing on opposite sides of one grid boundary while being
+                // ring2 points landing on opposite sides of one grid boundary while being
                 // 1e-16 apart — possible, no longer systematic, and worth 1e-12 of volume
                 // rather than 1e-2.
                 double sc = 1.0;
-                for (const uint32_t vi : ring) {
+                for (const uint32_t vi : ring2) {
                     const Vec3& p = posD[vi];
                     sc = std::max(sc, std::max(std::abs(p.x), std::max(std::abs(p.y),
                                                                        std::abs(p.z))));
@@ -3844,45 +3825,45 @@ Mesh Body::toMesh(uint32_t subdivisions) const
                 const double grid = sc * 1e-12;
                 auto snap = [grid](double v) { return std::floor(v / grid + 0.5) * grid; };
                 size_t apex = 0;
-                for (size_t i = 1; i < ring.size(); ++i) {
-                    const Vec3& p = posD[ring[i]];
-                    const Vec3& q = posD[ring[apex]];
+                for (size_t i = 1; i < ring2.size(); ++i) {
+                    const Vec3& p = posD[ring2[i]];
+                    const Vec3& q = posD[ring2[apex]];
                     const double px = snap(p.x), py = snap(p.y), pz = snap(p.z);
                     const double qx = snap(q.x), qy = snap(q.y), qz = snap(q.z);
                     if (px < qx || (px == qx && (py < qy || (py == qy && pz < qz)))) apex = i;
                 }
-                const size_t rn = ring.size();
+                const size_t rn = ring2.size();
                 for (size_t i = 2; i < rn; ++i) {
                     nexus::geometry::Face f;
-                    f.indices = {ring[apex], ring[(apex + i - 1) % rn], ring[(apex + i) % rn]};
+                    f.indices = {ring2[apex], ring2[(apex + i - 1) % rn], ring2[(apex + i) % rn]};
                     mesh.topology().addFace(std::move(f));
                 }
-                continue;
+                return;
             }
         }
 
         // Face with a hole (bridged into one simple polygon), or a concave face without
         // one: ear-clip it. (Multiple holes on one face are a rare follow-up.)
         // 2D frame of the face plane.
-        const Vec3 u = normalize(sub(pos[ring[1]], pos[ring[0]]));
+        const Vec3 u = normalize(sub(pos[ring2[1]], pos[ring2[0]]));
         const Vec3 vv = cross(nrm, u);
-        const Vec3 org = pos[ring[0]];
+        const Vec3 org = pos[ring2[0]];
         auto X = [&](uint32_t idx) { return dot(sub(pos[idx], org), u); };
         auto Y = [&](uint32_t idx) { return dot(sub(pos[idx], org), vv); };
 
-        // Bridge every hole into the outer ring, one at a time, so what reaches the
+        // Bridge every hole into the outer ring2, one at a time, so what reaches the
         // ear-clipper is a single simple polygon.
         //
         // Each hole is joined by a two-way cut from its RIGHTMOST vertex M: cast a ray in
         // +X from M, take the first edge of the polygon-so-far that it meets, and bridge to
         // that edge's right-hand endpoint. The holes are merged right to left, so a hole
         // bridging leftward may land on a hole already merged — which is correct, and is why
-        // the ray is cast against the growing polygon rather than against the outer ring.
+        // the ray is cast against the growing polygon rather than against the outer ring2.
         //
         // The bridge duplicates both endpoints, giving a degenerate channel of zero width
         // that the ear-clipper walks around; the duplicated indices are the SAME position
         // index, which is what lets its containment test exclude them by identity.
-        std::vector<uint32_t> poly = ring;  // no holes → ear-clip the outer ring as it stands
+        std::vector<uint32_t> poly = ring2;  // no holes → ear-clip the outer ring as it stands
         if (!inners.empty()) {
             auto rightmostX = [&](const std::vector<uint32_t>& h) {
                 double m = X(h[0]);
@@ -3977,7 +3958,7 @@ Mesh Body::toMesh(uint32_t subdivisions) const
             if (!clipped) break;
         }
         // Emit whatever is left. Normally that is the final triangle; but the loop above
-        // gives up when it can find no ear (a self-touching ring, a bridge that grazes, a
+        // gives up when it can find no ear (a self-touching ring2, a bridge that grazes, a
         // numerically flat corner), and this used to emit NOTHING unless exactly three
         // vertices remained — silently dropping the remnant and leaving a HOLE in a shell
         // that is supposed to be closed. A hole is the worst outcome available here:
@@ -3990,6 +3971,118 @@ Mesh Body::toMesh(uint32_t subdivisions) const
         // path reachable for far more shapes, which is why it is no longer left silent.
         for (size_t k = 2; k < idx.size(); ++k)
             emitTri(poly[idx[0]], poly[idx[k - 1]], poly[idx[k]], nrm);
+    
+    };
+
+    for (const Face& fc : m_faces) {
+        if (!fc.alive || fc.outerLoop >= m_loops.size()) continue;
+        const std::vector<uint32_t> ring = buildRing(m_loops[fc.outerLoop].first);
+        if (ring.size() < 3) continue;
+
+        Vec3 nrm{0.0, 0.0, 1.0};
+        if (fc.surface < m_surfaces.size()) nrm = m_surfaces[fc.surface].normal;
+        if (fc.reversed) nrm = {-nrm.x, -nrm.y, -nrm.z};
+
+        // EVERY inner ring, not just the first. This used to keep one and break, which is
+        // wrong for any face with two holes in it — a plate drilled twice, which is to say
+        // most real parts. The consequence is not a cosmetic one: a hole that never reaches
+        // the tessellation is not a hole as far as classifyPoint is concerned, because that
+        // is a parity ray cast against these triangles. MEASURED on a 4x4x1 plate drilled
+        // four times in sequence — the canonical chain — the second bore's own wall facets
+        // were reported OUTSIDE the plate they sit inside (3 of 50 faces), were dropped from
+        // the difference, left 8 boundary edges with one face instead of two, and the sew
+        // refused. The chain died at the second hole.
+        std::vector<std::vector<uint32_t>> inners;
+        for (uint32_t il : fc.innerLoops) {
+            if (il >= m_loops.size()) continue;
+            std::vector<uint32_t> r = buildRing(m_loops[il].first);
+            if (r.size() >= 3) inners.push_back(std::move(r));
+        }
+
+        // A loop can walk out along a chain and back — a zero-width SLIT — when a seam is
+        // imprinted twice and the second cut retraces the first. The two sides are distinct
+        // vertices at the same place (measured 2.2e-16, 1.1e-16 and exactly 0.0 apart), and
+        // a loop like that is NOT a simple polygon, which is what everything below assumes.
+        //
+        // What it costs, measured on fuzz seed 0xA17E51 iteration 1781 (a sphere of radius
+        // 0.7688 quarter-turned about X, against a box): the ear clipper could not find a
+        // single ear, because every candidate was blocked by the duplicate sitting exactly
+        // on one of its own corners. It stalled with 18 of 39 vertices left and fanned the
+        // remnant, and the face covered its own area TWICE — 0.1728 against a true 0.0812.
+        // classifyPoint casts its parity ray against this tessellation, so a doubly-covered
+        // region flips inside/outside for everything behind it.
+        //
+        // The repair is to split the loop at the pinch, which is the standard reading of a
+        // self-touching polygon: at a repeated position i < j, [i,j) and [j,i) are each
+        // closed loops, and recursing separates every slit. The slit pieces come out with
+        // zero area and are dropped; what is left is the material.
+        //
+        // Fixing it upstream was tried first and rejected on measurement. Refusing a cut
+        // that retraces boundary does remove the slit, but no rule tried (refuse on any
+        // loop vertex in the span, refuse on a retraced edge, or shorten the cut to the
+        // vertex) cost less than 5 of 2000 configurations losing every one of their three
+        // Booleans — and NONE of those 5 had duplicate vertices, so the guards were
+        // refusing legitimate cuts. The malformed loop is worth handling where it is read.
+        std::vector<std::vector<uint32_t>> ringPieces;
+        {
+            double rs = 1.0;
+            for (const uint32_t vi : ring)
+                rs = std::max(rs, std::max(std::abs(posD[vi].x),
+                                           std::max(std::abs(posD[vi].y),
+                                                    std::abs(posD[vi].z))));
+            const double rg = rs * 1e-12;
+            auto rsnap = [rg](double v) { return std::floor(v / rg + 0.5) * rg; };
+            auto samePos = [&](uint32_t a, uint32_t b) {
+                return a == b || (rsnap(posD[a].x) == rsnap(posD[b].x) &&
+                                  rsnap(posD[a].y) == rsnap(posD[b].y) &&
+                                  rsnap(posD[a].z) == rsnap(posD[b].z));
+            };
+            std::vector<std::vector<uint32_t>> work{ring};
+            size_t splitGuard = 0;
+            while (!work.empty() && ++splitGuard < 4096) {
+                std::vector<uint32_t> r = std::move(work.back());
+                work.pop_back();
+                if (r.size() < 3) continue;
+                size_t ri = 0, rj = 0;
+                bool pinched = false;
+                for (size_t i = 0; i < r.size() && !pinched; ++i)
+                    for (size_t j = i + 1; j < r.size(); ++j)
+                        if (samePos(r[i], r[j])) { ri = i; rj = j; pinched = true; break; }
+                if (!pinched) { ringPieces.push_back(std::move(r)); continue; }
+                std::vector<uint32_t> a(r.begin() + static_cast<long>(ri),
+                                        r.begin() + static_cast<long>(rj));
+                std::vector<uint32_t> b(r.begin() + static_cast<long>(rj), r.end());
+                b.insert(b.end(), r.begin(), r.begin() + static_cast<long>(ri));
+                work.push_back(std::move(a));
+                work.push_back(std::move(b));
+            }
+            // drop the slits: pieces enclosing no area
+            auto pieceArea = [&](const std::vector<uint32_t>& r) {
+                Vec3 acc{0.0, 0.0, 0.0};
+                for (size_t k = 0; k < r.size(); ++k)
+                    acc = acc + posD[r[k]].cross(posD[r[(k + 1) % r.size()]]);
+                return 0.5 * std::abs(acc.dot(nrm));
+            };
+            const double areaFloor = rs * rs * 1e-12;
+            std::vector<std::vector<uint32_t>> kept;
+            for (std::vector<uint32_t>& r : ringPieces)
+                if (r.size() >= 3 && pieceArea(r) > areaFloor) kept.push_back(std::move(r));
+            ringPieces = std::move(kept);
+        }
+        // One call per simple loop. A pinch that genuinely divides the face yields more
+        // than one — measured on the sphere/box above, a ring of 39 splits into pieces of
+        // 18 and 9, with the remaining 12 points forming the zero-area slit between them —
+        // so keeping only the largest would drop real material.
+        //
+        // Holes ride along only when the loop was NOT split. Assigning each hole to the
+        // piece containing it is the general answer, but no configuration in the
+        // 2000-configuration sweep carries both a pinch and a hole on one face, so the
+        // unsplit path stays exactly as it was rather than resting on an untested rule.
+        if (!inners.empty() || ringPieces.empty())
+            triangulateLoop(ring, inners, nrm, fc);
+        else
+            for (const std::vector<uint32_t>& piece : ringPieces)
+                triangulateLoop(piece, inners, nrm, fc);
     }
     return mesh;
 }

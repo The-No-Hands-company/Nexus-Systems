@@ -98,6 +98,7 @@ add_executable(nexus_kernel_tests
     kernel/test_BRepFanApexStability.cpp
     kernel/test_BRepCurvedImprintDriver.cpp
     kernel/test_BRepSharedSeamRing.cpp
+    kernel/test_BRepSlitLoopTessellation.cpp
     kernel/test_BRepFaceInnerLoopSew.cpp
     kernel/test_BRepFaceSampleClearance.cpp
     kernel/test_BRepFaceSamplePoint.cpp
