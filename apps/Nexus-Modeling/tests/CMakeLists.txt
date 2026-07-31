@@ -94,6 +94,7 @@ add_executable(nexus_kernel_tests
     kernel/test_BRepCurvedBooleanBaseline.cpp
     kernel/test_BRepCurvedBooleanSew.cpp
     kernel/test_BRepCurvedFaceImprint.cpp
+    kernel/test_BRepCurvedHoledFaceSample.cpp
     kernel/test_BRepCurvedImprintDriver.cpp
     kernel/test_BRepSharedSeamRing.cpp
     kernel/test_BRepFaceInnerLoopSew.cpp

@@ -1141,9 +1141,93 @@ Vec3 Body::faceSamplePoint(uint32_t faceId) const
     // Projecting restores the invariant the sample point exists to have: it lies on the
     // face. A plane needs no projection and gets none, so every planar caller is unchanged.
     if (m_surfaces[sid].kind != SurfaceKind::Plane) {
-        Vec3 onSurface{};
-        if (projectOntoSurface(m_surfaces[sid], centroid, onSurface)) return onSurface;
-        return centroid;
+        const Surface& surf = m_surfaces[sid];
+        Vec3 projected{};
+        const bool haveProjection = projectOntoSurface(surf, centroid, projected);
+        if (!haveProjection) return centroid;
+        if (holeRings.empty()) return projected;
+
+        // A curved face WITH a hole needs the same treatment the planar one gets, for the
+        // same reason: the outline's average is drawn toward the middle, and on a face
+        // whose middle is an opening that is exactly where it must not be. Projecting alone
+        // does not help — it moves the point onto the surface while leaving it over the
+        // hole.
+        //
+        // Not reachable through the imprint today: sweeping every configuration this kernel
+        // can imprint — 254 bodies across box/sphere, box/cylinder, box/cone, cylinder
+        // pairs, sphere pairs and chained plates — produces NO curved face carrying an
+        // inner loop, because the interior-circle path is gated to planes and every curved
+        // pair that could cut one is a quartic this kernel declines. It is reachable
+        // through `fromFaces`, which is public: a cylindrical patch with a hole punched in
+        // it was sampled at the exact centre of the hole.
+        //
+        // Containment is decided in the surface's (u,v) domain, where a trimmed face's
+        // boundary is an ordinary polygon, and every candidate is projected onto the
+        // surface before being judged — so the point that wins is on the face in both
+        // senses. If the parametrisation cannot answer (it is singular at a sphere's
+        // poles), the projected centroid stands, which is no worse than before.
+        std::vector<Vec3> outerUV;
+        for (const uint32_t v : faceVertices(faceId))
+            if (v < m_verts.size()) outerUV.push_back(m_verts[v].point);
+        if (outerUV.size() < 3) return projected;
+
+        std::vector<std::vector<Vec3>> holePts;
+        for (const std::vector<uint32_t>& ring : holeRings) {
+            std::vector<Vec3> pts;
+            for (const uint32_t v : ring)
+                if (v < m_verts.size()) pts.push_back(m_verts[v].point);
+            if (pts.size() >= 3) holePts.push_back(std::move(pts));
+        }
+        if (holePts.empty()) return projected;
+
+        auto onCurvedMaterial = [&](const Vec3& p) {
+            if (!pointInSurfacePatchUV(surf, p, outerUV)) return false;
+            for (const std::vector<Vec3>& h : holePts)
+                if (pointInSurfacePatchUV(surf, p, h)) return false;
+            return true;
+        };
+        auto ringDistance = [](const Vec3& p, const std::vector<Vec3>& ring) {
+            double best = std::numeric_limits<double>::max();
+            for (size_t i = 0; i < ring.size(); ++i) {
+                const Vec3& a = ring[i];
+                const Vec3& b = ring[(i + 1) % ring.size()];
+                const Vec3 ab = sub(b, a);
+                const double den = dot(ab, ab);
+                double t = (den > 0.0) ? (dot(sub(p, a), ab) / den) : 0.0;
+                t = std::min(1.0, std::max(0.0, t));
+                best = std::min(best, length(sub(p, add(a, scale(ab, t)))));
+            }
+            return best;
+        };
+
+        Vec3 best = projected;
+        double bestClear = -1.0;
+        auto offerCurved = [&](const Vec3& raw) {
+            Vec3 p{};
+            if (!projectOntoSurface(surf, raw, p)) return;
+            if (!onCurvedMaterial(p)) return;
+            double c = ringDistance(p, outerUV);
+            for (const std::vector<Vec3>& h : holePts) c = std::min(c, ringDistance(p, h));
+            if (c > bestClear) {
+                bestClear = c;
+                best = p;
+            }
+        };
+        // Same candidate order as the planar ladder: the outer-to-hole midpoints first,
+        // since those are what survive a hole concentric with its face.
+        for (const Vec3& o : outerUV)
+            for (const std::vector<Vec3>& h : holePts)
+                for (const Vec3& hp : h)
+                    offerCurved({(o.x + hp.x) * 0.5, (o.y + hp.y) * 0.5, (o.z + hp.z) * 0.5});
+        for (const double t : {0.25, 0.5, 0.75})
+            for (size_t i = 0; i < outerUV.size(); ++i) {
+                const Vec3& a = outerUV[i];
+                const Vec3& b = outerUV[(i + 1) % outerUV.size()];
+                const Vec3 mid{(a.x + b.x) * 0.5, (a.y + b.y) * 0.5, (a.z + b.z) * 0.5};
+                offerCurved({mid.x + (centroid.x - mid.x) * t, mid.y + (centroid.y - mid.y) * t,
+                             mid.z + (centroid.z - mid.z) * t});
+            }
+        return bestClear >= 0.0 ? best : projected;
     }
     const Vec3 n = m_surfaces[sid].normal;
 
