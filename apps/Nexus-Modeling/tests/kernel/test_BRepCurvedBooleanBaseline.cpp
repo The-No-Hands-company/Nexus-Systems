@@ -10,9 +10,9 @@
 //
 //   1. WatertightOrEmpty invariant (PERMANENT) — a curved boolean is never a
 //      leaky/corrupt body; it is either empty or a valid closed solid.
-//   2. Curved box/sphere, box/cylinder, sphere/sphere pairs currently bail to
-//      empty (CHARACTERIZATION — Phase 4 is expected to FLIP these to non-empty
-//      watertight results; the failure message says so).
+//   2. Which curved pairs sew (CHARACTERIZATION). sphere/sphere now does; the
+//      box/sphere and box/cylinder pairs still bail to empty and are expected to
+//      FLIP to non-empty watertight results in turn; the failure message says so.
 //   3. Genuinely out-of-scope surface pairs (cyl∩cyl, sphere∩cyl, cone∩*) stay
 //      Unsupported and bail to empty (PERMANENT — outside the Circle-seam v1).
 //   4. A high-facet curved pair does not blow up / hang — the imprint face-budget
@@ -94,8 +94,8 @@ TEST(CurvedBooleanBaseline, WatertightOrEmptyInvariantHolds)
     }
 }
 
-// (2) CHARACTERIZATION: curved Circle seams are not yet imprinted, so these bail
-// to empty. Phase 4 (assemble across curved seams) is expected to FLIP them.
+// (2) CHARACTERIZATION: which curved pairs sew today. sphere/sphere now does; the two
+// pairs involving a BOX still bail to empty, and are expected to FLIP in turn.
 TEST(CurvedBooleanBaseline, CurvedPairsCurrentlyBailToEmpty)
 {
     const Body box = makeBox(2.f, 2.f, 2.f);
@@ -109,8 +109,15 @@ TEST(CurvedBooleanBaseline, CurvedPairsCurrentlyBailToEmpty)
            "replace this baseline with a watertight + volume-identity assertion";
     EXPECT_EQ(booleanToBody(box, cyl, BooleanOp::Union).faceCount(), 0u)
         << "curved box/cylinder union is now non-empty — update this baseline";
-    EXPECT_EQ(booleanToBody(sphA, sphB, BooleanOp::Union).faceCount(), 0u)
-        << "sphere/sphere union is now non-empty — update this baseline";
+
+    // sphere/sphere HAS flipped: once a Circle seam could be imprinted onto a spherical
+    // face and the seam closed into a ring, this pair sews. Kept here as the positive
+    // half of the same characterization so the entry stays honest about which curved
+    // pairs work — the full assertions (watertight, inclusion-exclusion) live in
+    // test_BRepSphereFaceImprint.cpp.
+    const Body ssU = booleanToBody(sphA, sphB, BooleanOp::Union);
+    EXPECT_GT(ssU.faceCount(), 0u) << "sphere/sphere union regressed to empty";
+    EXPECT_TRUE(ssU.isClosed());
 }
 
 // (3a) PERMANENT: the Circle-seam v1 scope is plane∩sphere, plane∩cylinder-perp,

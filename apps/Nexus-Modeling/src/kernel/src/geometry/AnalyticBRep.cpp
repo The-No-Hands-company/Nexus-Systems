@@ -167,8 +167,39 @@ bool circleLiesOnSurface(const Surface& s, const Curve& circle, float eps)
             const Vec3 d = sub(circle.origin, s.origin);
             return length(sub(d, scale(ax, dot(d, ax)))) <= eps;
         }
+        case SurfaceKind::Sphere: {
+            // A sphere carries a far richer circle family than a cylinder does. Every
+            // plane section of a sphere is a circle, so rather than one radius at one
+            // orientation there is a two-parameter family — which is exactly what a box
+            // face cutting a sphere produces, and why this case is the one box/sphere
+            // waits on. The condition: writing d for centre-to-centre, every point of
+            // the circle is |d + r·w|² = |d|² + 2r·(d·w) + r² for a unit w in the
+            // circle's plane, and that is constant in w only when d ⟂ that plane — i.e.
+            // d lies along the circle's own axis. Then the constant is |d|² + r², which
+            // must be the sphere's R².
+            const Vec3 d = sub(circle.origin, s.origin);
+            const double along = dot(d, cAxis);
+            if (length(sub(d, scale(cAxis, along))) > eps) return false;  // centre off the axis
+            return std::abs(std::sqrt(dot(d, d) + circle.radius * circle.radius) - s.radius)
+                   <= eps;
+        }
         default:
-            return false;  // sphere/cone/NURBS circle imprints are a later increment
+            return false;  // cone/NURBS circle imprints are a later increment
+    }
+}
+
+// Which parameter of `s` wraps every 2π, or -1 for none.
+//
+// NOT a formality: a cylinder sweeps its circumference in u, but a sphere's eval puts
+// the poles on ±uAxis and sweeps LONGITUDE IN V — the opposite convention. Assuming
+// "u wraps" would unwrap a sphere's latitude, which is bounded and must not be shifted,
+// while leaving the genuinely periodic parameter to alias across the seam.
+int periodicParam(const Surface& s)
+{
+    switch (s.kind) {
+        case SurfaceKind::Cylinder: return 0;  // u sweeps the circumference
+        case SurfaceKind::Sphere:   return 1;  // v is longitude; u is latitude
+        default:                    return -1;
     }
 }
 
@@ -176,7 +207,9 @@ bool circleLiesOnSurface(const Surface& s, const Curve& circle, float eps)
 // the kinds circleLiesOnSurface admits. Containment on a TRIMMED face is defined in
 // the parameter domain (the same reason a Pcurve is stored there), which is what
 // makes a curved face's boundary testable with the ordinary planar rule.
-bool surfaceUV(const Surface& s, const Vec3& p, float& u, float& v)
+// DOUBLE out-params: `u` is an atan2 of two projections, and the whole point of the
+// double migration was that such an angle cannot be recovered from float arguments.
+bool surfaceUV(const Surface& s, const Vec3& p, double& u, double& v)
 {
     const Vec3 d = sub(p, s.origin);
     switch (s.kind) {
@@ -189,6 +222,18 @@ bool surfaceUV(const Surface& s, const Vec3& p, float& u, float& v)
             v = dot(d, ax);
             const Vec3 radial = sub(d, scale(ax, v));
             u = std::atan2(dot(radial, s.vAxis()), dot(radial, s.uAxis));
+            return true;
+        }
+        case SurfaceKind::Sphere: {
+            // Inverting eval: p = origin + R(sin u·uAxis + cos u cos v·vAxis + cos u sin v·normal).
+            // So u (LATITUDE, poles on ±uAxis) comes from the uAxis component, and v
+            // (longitude) from the remaining two. Guard the asin argument: a point on the
+            // sphere gives |·| ≤ 1 exactly in exact arithmetic, and a hair over it in
+            // floating point, where asin would return NaN.
+            if (!(s.radius > 0.0)) return false;
+            const double su = std::min(1.0, std::max(-1.0, dot(d, s.uAxis) / s.radius));
+            u = std::asin(su);
+            v = std::atan2(dot(d, s.normal), dot(d, s.vAxis()));
             return true;
         }
         default:
@@ -208,32 +253,41 @@ bool pointInSurfacePatchUV(const Surface& s, const Vec3& p, const std::vector<Ve
 {
     if (poly.size() < 3) return false;
     constexpr double kTwoPi = 6.283185307179586476925286766559;
-    const bool periodic = (s.kind == SurfaceKind::Cylinder);
+    // WHICH parameter wraps is surface-dependent — u on a cylinder, v on a sphere — so the
+    // unwrapping selects a component rather than assuming one. Getting this backwards would
+    // shift a bounded latitude by whole turns and leave the periodic one aliasing.
+    const int per = periodicParam(s);
 
     std::vector<Vec3> uv;
     uv.reserve(poly.size());
-    float prevU = 0.f;
+    double prev = 0.0;
     for (size_t i = 0; i < poly.size(); ++i) {
-        float u = 0.f, v = 0.f;
+        double u = 0.0, v = 0.0;
         if (!surfaceUV(s, poly[i], u, v)) return false;
-        if (periodic && i > 0) {
-            while (u - prevU > kTwoPi * 0.5f) u -= kTwoPi;
-            while (prevU - u > kTwoPi * 0.5f) u += kTwoPi;
+        double* cyc = (per == 0) ? &u : (per == 1) ? &v : nullptr;
+        if (cyc != nullptr && i > 0) {
+            while (*cyc - prev > kTwoPi * 0.5) *cyc -= kTwoPi;
+            while (prev - *cyc > kTwoPi * 0.5) *cyc += kTwoPi;
         }
-        prevU = u;
-        uv.push_back({u, v, 0.f});
+        if (cyc != nullptr) prev = *cyc;
+        uv.push_back({u, v, 0.0});
     }
 
-    float pu = 0.f, pv = 0.f;
+    double pu = 0.0, pv = 0.0;
     if (!surfaceUV(s, p, pu, pv)) return false;
-    if (periodic) {
-        double lo = uv[0].x, hi = uv[0].x;
-        for (const Vec3& q : uv) { lo = std::min(lo, q.x); hi = std::max(hi, q.x); }
-        const double mid = static_cast<float>((lo + hi) * 0.5);
-        while (pu - mid > kTwoPi * 0.5f) pu -= kTwoPi;
-        while (mid - pu > kTwoPi * 0.5f) pu += kTwoPi;
+    if (per >= 0) {
+        double* q = (per == 0) ? &pu : &pv;
+        double lo = (per == 0) ? uv[0].x : uv[0].y, hi = lo;
+        for (const Vec3& e : uv) {
+            const double c = (per == 0) ? e.x : e.y;
+            lo = std::min(lo, c);
+            hi = std::max(hi, c);
+        }
+        const double mid = (lo + hi) * 0.5;
+        while (*q - mid > kTwoPi * 0.5) *q -= kTwoPi;
+        while (mid - *q > kTwoPi * 0.5) *q += kTwoPi;
     }
-    return pointInPlanarPolygon({pu, pv, 0.f}, uv, {0.f, 0.f, 1.f});
+    return pointInPlanarPolygon({pu, pv, 0.0}, uv, {0.0, 0.0, 1.0});
 }
 
 uint64_t edgeKey(uint32_t a, uint32_t b)
@@ -1454,13 +1508,19 @@ uint32_t Body::imprintCurve(uint32_t faceId, const Curve& curve, Tolerance tol,
         // solve for that level linearly, which is exact to the last bit float allows.
         auto edgeCrossings = [&](const Vec3& q0, const Vec3& q1, double fr[2]) -> int {
             if (onPlane) return circleSegmentFracs(q0, q1, curve.origin, curve.radius, fr);
-            const Vec3 ax = normalize(fsurf.normal);
-            const double a0 = dot(sub(q0, fsurf.origin), ax);
-            const double a1 = dot(sub(q1, fsurf.origin), ax);
-            const double at = dot(sub(curve.origin, fsurf.origin), ax);
+            // Stated generally, because a sphere has no axis to borrow: the circle IS the
+            // section of this surface by the plane through its centre with normal
+            // circle.dir, so an edge lying on the surface meets the circle exactly where it
+            // crosses that plane. Solving the plane is linear and exact to the last bit,
+            // where the distance equation has the double root described above. For a
+            // cylinder's latitude circle circle.dir IS the axis, so this reduces to the
+            // axial level set it replaces — same arithmetic, one less assumption.
+            const Vec3 ax = normalize(curve.dir);
+            const double a0 = dot(sub(q0, curve.origin), ax);
+            const double a1 = dot(sub(q1, curve.origin), ax);
             const double d = a1 - a0;
-            if (std::abs(d) <= 1e-12f) return 0;  // edge lies at a constant axial level
-            const double s = (at - a0) / d;
+            if (std::abs(d) <= 1e-12) return 0;  // edge lies in the circle's plane
+            const double s = -a0 / d;
             // Accept a crossing AT an endpoint, not only strictly inside the edge. The
             // level routinely falls exactly on an existing boundary vertex: once one
             // face of a cylinder has been cut at this latitude, its neighbour's upright
@@ -1473,19 +1533,98 @@ uint32_t Body::imprintCurve(uint32_t faceId, const Curve& curve, Tolerance tol,
             const double len = length(sub(q1, q0));
             const double slack = (len > 0.0) ? (eps / len) : 0.0;
             if (!(s > -slack && s < 1.0 + slack)) return 0;
-            fr[0] = std::min(std::max(s, 0.0), 1.0);
+            const double sc = std::min(std::max(s, 0.0), 1.0);
+            // Crossing the circle's PLANE only implies meeting the circle when the edge lies
+            // on the surface. A cylinder's uprights and a sphere's arcs do; a straight chord
+            // across a curved face would not, and would otherwise be split at a point that
+            // is not on the curve at all. Cheap to verify, so verify rather than assume.
+            const Vec3 hit = add(q0, scale(sub(q1, q0), sc));
+            if (std::abs(length(sub(hit, curve.origin)) - curve.radius) > eps) return 0;
+            fr[0] = sc;
             return 1;
         };
+        // Where an ARC boundary edge meets the imprint circle, as a fraction of the arc's
+        // own parameter span. Restricting the crossing hunt to Line edges was what kept a
+        // circle off a SPHERE entirely: a cylinder's side face is bounded by two uprights
+        // and two rim arcs, so the uprights carried it, but a sphere's lat-lon patch is
+        // bounded by four ARCS and has no straight edge anywhere. Every crossing there is
+        // on an arc, so a Line-only search finds none, the face is reported uncrossed, and
+        // it falls through to the interior-hole case which refuses a non-planar face.
+        //
+        // Solved in closed form on the geometry, like its Line counterpart. The imprint
+        // circle is the section of this surface by the plane through curve.origin with
+        // normal curve.dir, and the boundary arc meets that plane where
+        //     dot(arc(t) - curve.origin, n) = A + B·cos t + C·sin t = 0
+        // with A the centre offset along n and (B, C) the arc's radius projected onto n
+        // through its own frame. Writing that as R·cos(t - phi) = -A with R = hypot(B, C)
+        // gives t = phi ± acos(-A/R): exact, and giving BOTH roots, since an arc can cross
+        // a plane twice — which the two-crossing bite test downstream depends on.
+        auto arcCrossings = [&](uint32_t e, double fr[2]) -> int {
+            const Curve& arc = m_curves[m_edges[e].curve];
+            const double at0 = m_edges[e].t0, at1 = m_edges[e].t1;
+            if (std::abs(at1 - at0) <= 1e-12) return 0;
+            const Vec3 nrm = normalize(curve.dir);
+            const Vec3 bi = cross(arc.dir, arc.ref);
+            const double A = dot(sub(arc.origin, curve.origin), nrm);
+            const double B = arc.radius * dot(arc.ref, nrm);
+            const double C = arc.radius * dot(bi, nrm);
+            const double R = std::sqrt(B * B + C * C);
+            if (R <= 1e-12) return 0;             // arc lies in a plane parallel to the cut
+            const double cosArg = -A / R;
+            if (cosArg < -1.0 || cosArg > 1.0) return 0;  // never reaches the plane
+            const double phi = std::atan2(C, B);
+            const double da = std::acos(std::min(1.0, std::max(-1.0, cosArg)));
+            constexpr double kTwoPiA = 6.283185307179586476925286766559;
+            // Accept a crossing AT an endpoint, not only strictly inside the arc — the same
+            // rule the Line branch above needs, and for the same reason, which is worth
+            // stating because it is the second time it has had to be learned. On a sphere
+            // EVERY boundary is an arc, so the moment one lat-lon patch is cut, its
+            // neighbours' shared boundary arcs are already split at that crossing and the
+            // circle meets them exactly at an endpoint. Demanding a strictly interior
+            // fraction reports those neighbours UNCROSSED, so the seam stops at the first
+            // face and comes out as disconnected bites instead of a ring. Measured on
+            // box(2³)/sphere(r1.2,8,12): 6 isolated arcs per seam, 12 of whose 12 endpoints
+            // were degree-1, versus a closed ring once the endpoint is admitted.
+            const double arcLen = std::abs(at1 - at0) * arc.radius;
+            const double slack = (arcLen > 0.0) ? (eps / arcLen) : 0.0;
+            int found = 0;
+            for (const double root : {phi + da, phi - da}) {
+                double tp = root;
+                while (tp < std::min(at0, at1)) tp += kTwoPiA;
+                while (tp > std::max(at0, at1)) tp -= kTwoPiA;
+                double s = (tp - at0) / (at1 - at0);
+                if (!(s > -slack && s < 1.0 + slack)) continue;  // outside this arc's own span
+                s = std::min(std::max(s, 0.0), 1.0);
+                // Meeting the plane is only meeting the circle if the point is also at the
+                // circle's radius. On one sphere that holds by construction; verified
+                // rather than assumed, so a boundary arc lying on some OTHER surface can
+                // never contribute a split at a point that is not on the curve.
+                const double tc = at0 + s * (at1 - at0);
+                if (std::abs(length(sub(arc.eval(tc), curve.origin)) - curve.radius) > eps)
+                    continue;
+                if (found < 2) fr[found++] = s;
+            }
+            return found;
+        };
+
         for (size_t i = 0; i < n; ++i) {
             const uint32_t e = bEdges[i];
             if (e >= m_edges.size()) continue;
             const uint32_t cu = m_edges[e].curve;
-            if (cu >= m_curves.size() || m_curves[cu].kind != CurveKind::Line) continue;
+            if (cu >= m_curves.size()) continue;
+            const bool arcEdge = m_curves[cu].kind == CurveKind::Circle;
+            if (!arcEdge && m_curves[cu].kind != CurveKind::Line) continue;
             const Vec3 p0 = m_verts[m_edges[e].v0].point;
             const Vec3 p1 = m_verts[m_edges[e].v1].point;
-            const double edgeLen = length(sub(p1, p0));
+            // For an arc the fraction is measured in PARAMETER space (which is what
+            // splitEdge consumes), so the endpoint-snap test below must compare against the
+            // arc's own length rather than its chord.
+            const double edgeLen = arcEdge
+                                       ? std::abs(m_edges[e].t1 - m_edges[e].t0)
+                                             * m_curves[cu].radius
+                                       : length(sub(p1, p0));
             double fr[2];
-            const int k = edgeCrossings(p0, p1, fr);
+            const int k = arcEdge ? arcCrossings(e, fr) : edgeCrossings(p0, p1, fr);
             for (int j = 0; j < k; ++j) {
                 const double s = fr[j];
                 // circleSegmentFracs measures s along the STORED edge (v0->v1);
