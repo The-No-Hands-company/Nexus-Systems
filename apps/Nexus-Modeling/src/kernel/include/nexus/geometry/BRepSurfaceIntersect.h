@@ -20,6 +20,8 @@ enum class SurfaceIntersectionKind : uint8_t {
     Line,        // `curve` is a Line
     Circle,      // `curve` is a Circle
     TwoLines,    // `curve` and `curve2` are Lines
+    TwoCircles,  // `curve` and `curve2` are Circles — a sphere centred on a cylinder's
+                 // axis meets it in TWO rings, one either side of the sphere's centre
     Unsupported  // not handled analytically (e.g. skew cylinder∩plane, NURBS)
 };
 

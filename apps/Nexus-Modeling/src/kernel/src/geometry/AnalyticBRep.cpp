@@ -150,6 +150,46 @@ int circleSegmentFracs(const Vec3& A, const Vec3& B, const Vec3& C, double r, do
     return cnt;
 }
 
+// Nearest point of an analytic surface to `p`, where that has a closed form. Returns false
+// for kinds without one — a plane needs none, and NURBS has no closed form here — so the
+// caller can leave the point alone rather than invent one.
+bool projectOntoSurface(const Surface& s, const Vec3& p, Vec3& out)
+{
+    switch (s.kind) {
+        case SurfaceKind::Sphere: {
+            const Vec3 d = sub(p, s.origin);
+            const double l = length(d);
+            if (!(l > 1e-12) || !(s.radius > 0.0)) return false;
+            out = add(s.origin, scale(d, s.radius / l));
+            return true;
+        }
+        case SurfaceKind::Cylinder: {
+            const Vec3 ax = normalize(s.normal);
+            const Vec3 d = sub(p, s.origin);
+            const double axial = dot(d, ax);
+            const Vec3 radial = sub(d, scale(ax, axial));
+            const double rl = length(radial);
+            if (!(rl > 1e-12) || !(s.radius > 0.0)) return false;
+            out = add(add(s.origin, scale(ax, axial)), scale(radial, s.radius / rl));
+            return true;
+        }
+        case SurfaceKind::Cone: {
+            // origin = apex, normal = axis apex->base, radius = slope.
+            const Vec3 ax = normalize(s.normal);
+            const Vec3 d = sub(p, s.origin);
+            const double v = dot(d, ax);
+            if (!(v > 1e-12) || !(s.radius > 0.0)) return false;
+            const Vec3 radial = sub(d, scale(ax, v));
+            const double rl = length(radial);
+            if (!(rl > 1e-12)) return false;
+            out = add(add(s.origin, scale(ax, v)), scale(radial, (s.radius * v) / rl));
+            return true;
+        }
+        default:
+            return false;
+    }
+}
+
 // Point-in-polygon for a planar polygon `poly` with normal `n`, projected to the
 // plane's 2D frame (ray-crossing rule).
 bool pointInPlanarPolygon(const Vec3& p, const std::vector<Vec3>& poly, const Vec3& n)
@@ -1076,10 +1116,35 @@ Vec3 Body::faceSamplePoint(uint32_t faceId) const
 
     const std::vector<std::vector<uint32_t>> holeRings = faceInnerLoopVertices(faceId);
 
-    // The material test is a planar point-in-polygon one, so a curved face falls
-    // back to the centroid rather than being answered wrongly.
     const uint32_t sid = m_faces[faceId].surface;
-    if (sid >= m_surfaces.size() || m_surfaces[sid].kind != SurfaceKind::Plane) return centroid;
+    if (sid >= m_surfaces.size()) return centroid;
+
+    // A CURVED face is sampled at its outline's centroid PROJECTED ONTO ITS SURFACE.
+    //
+    // The material test below is a planar point-in-polygon one, so a curved face cannot use
+    // the candidate search and falls back to the centroid. But the centroid of a ring of
+    // points on a curved surface does not lie on that surface — it sags inside, by the
+    // chord-versus-arc difference. The point that decides how a whole face is classified is
+    // then a point the face does not contain, which is the same mistake the holed-planar
+    // case was fixed for, wearing different clothes.
+    //
+    // It is not a small effect at the scale that matters. MEASURED on a sphere of radius
+    // 1.10 meeting a cylinder of radius 1 along its axis: every one of the sphere's 120
+    // face samples sat at |p| = 1.0735 rather than 1.10, and for the 24 narrow faces
+    // between the seam and the neighbouring grid latitude that sag was enough to move the
+    // sample from radius 1.008 — outside the cylinder, where the face's material is — to
+    // 0.978, inside it. All 24 were classified Inside, dropped from the union, and left 72
+    // boundary edges one-sided; the boolean returned empty. At radius 1.30 the same sag is
+    // not enough to flip anything, which is why neighbouring configurations worked and made
+    // the failure look like a property of the radius.
+    //
+    // Projecting restores the invariant the sample point exists to have: it lies on the
+    // face. A plane needs no projection and gets none, so every planar caller is unchanged.
+    if (m_surfaces[sid].kind != SurfaceKind::Plane) {
+        Vec3 onSurface{};
+        if (projectOntoSurface(m_surfaces[sid], centroid, onSurface)) return onSurface;
+        return centroid;
+    }
     const Vec3 n = m_surfaces[sid].normal;
 
     // The boundary as a polygon — but built by REFINING each curved edge, not by taking its
@@ -5463,32 +5528,43 @@ bool imprintOneWay(Body& target, const Body& tool, Tolerance tol)
                 // authority on whether a given curve actually lies on this face and
                 // crosses its boundary cleanly, so an inapplicable branch costs one
                 // refused call rather than needing to be pre-filtered here.
+                // Collect the TOOL's vertices lying on a seam circle and pass them along.
+                // A hole ring must be discretized the same way the other operand
+                // discretized the same circle, or the two rings cannot partner
+                // edge-for-edge and the sew cannot close.
+                auto cutAlongCircle = [&](const Curve& seam) {
+                    const Vec3 cax = normalize(seam.dir);
+                    std::vector<Vec3> onCircle;
+                    for (uint32_t tv = 0; tv < static_cast<uint32_t>(tool.vertexCount()); ++tv) {
+                        if (!tool.vertex(tv).alive) continue;
+                        const Vec3 d = sub(tool.vertex(tv).point, seam.origin);
+                        const double axial = dot(d, cax);
+                        const double radial = length(sub(d, scale(cax, axial)));
+                        if (std::abs(axial) <= pad && std::abs(radial - seam.radius) <= pad)
+                            onCircle.push_back(tool.vertex(tv).point);
+                    }
+                    return target.imprintCurve(f, seam, tol, &onCircle) != kInvalid;
+                };
+
                 bool cut = false;
                 switch (si.kind) {
                     case SurfaceIntersectionKind::Line:
                         cut = target.imprintCurve(f, si.curve, tol) != kInvalid;
                         break;
-                    case SurfaceIntersectionKind::Circle: {
-                        // Collect the TOOL's vertices lying on this seam circle and pass
-                        // them along. A hole ring must be discretized the same way the
-                        // other operand discretized the same circle, or the two rings
-                        // cannot partner edge-for-edge and the sew cannot close.
-                        const Vec3 cax = normalize(si.curve.dir);
-                        std::vector<Vec3> onCircle;
-                        for (uint32_t tv = 0; tv < static_cast<uint32_t>(tool.vertexCount()); ++tv) {
-                            if (!tool.vertex(tv).alive) continue;
-                            const Vec3 d = sub(tool.vertex(tv).point, si.curve.origin);
-                            const double axial = dot(d, cax);
-                            const double radial = length(sub(d, scale(cax, axial)));
-                            if (std::abs(axial) <= pad && std::abs(radial - si.curve.radius) <= pad)
-                                onCircle.push_back(tool.vertex(tv).point);
-                        }
-                        cut = target.imprintCurve(f, si.curve, tol, &onCircle) != kInvalid;
+                    case SurfaceIntersectionKind::Circle:
+                        cut = cutAlongCircle(si.curve);
                         break;
-                    }
                     case SurfaceIntersectionKind::TwoLines:
                         cut = target.imprintCurve(f, si.curve, tol) != kInvalid ||
                               target.imprintCurve(f, si.curve2, tol) != kInvalid;
+                        break;
+                    case SurfaceIntersectionKind::TwoCircles:
+                        // Both rings are offered, and BOTH are attempted rather than
+                        // short-circuiting on the first: one face can be crossed by both
+                        // rings of a sphere spanning the bore, and imprinting only one
+                        // would leave it straddling the other.
+                        cut = cutAlongCircle(si.curve);
+                        cut = cutAlongCircle(si.curve2) || cut;
                         break;
                     case SurfaceIntersectionKind::None:
                     case SurfaceIntersectionKind::Point:

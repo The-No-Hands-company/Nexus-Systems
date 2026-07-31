@@ -49,9 +49,16 @@ double dist(const Vec3d& a, const Vec3d& b)
 
 }  // namespace
 
-// Backward compatibility, exactly: with no holes the sample point IS the centroid, so
-// every pre-existing classification is bit-for-bit unchanged.
-TEST(BRepFaceSamplePoint, EqualsCentroidWhenTheFaceHasNoHoles)
+// The sample point's guarantee, stated for each kind of face it can be asked about.
+//
+// For a PLANAR face with no holes it IS the centroid, bit for bit, so every classification
+// that predates the sample point is unchanged. That was once asserted for curved faces
+// too, and it should not have been: the centroid of a ring of points on a curved surface
+// does not lie on that surface — it sags inside by the chord-versus-arc difference — so
+// what the assertion pinned was the sample point failing to be on its own face. It is now
+// projected onto the surface, and the guarantee below is the stronger one: the point lies
+// where it claims to.
+TEST(BRepFaceSamplePoint, PlanarFacesKeepTheirCentroidAndCurvedOnesLieOnTheirSurface)
 {
     for (const Body& b : {makeBox(2.f, 2.f, 2.f), makeCylinder(1.f, 2.f, 12),
                           makeSphere(1.f, 6, 10), makeCone(1.f, 2.f, 8)}) {
@@ -59,9 +66,25 @@ TEST(BRepFaceSamplePoint, EqualsCentroidWhenTheFaceHasNoHoles)
             if (!b.face(f).alive) continue;
             ASSERT_TRUE(b.faceInnerLoopVertices(f).empty());
             const auto c = b.faceCentroid(f), s = b.faceSamplePoint(f);
-            EXPECT_FLOAT_EQ(s.x, c.x) << "face " << f;
-            EXPECT_FLOAT_EQ(s.y, c.y) << "face " << f;
-            EXPECT_FLOAT_EQ(s.z, c.z) << "face " << f;
+            const Surface& surf = b.surface(b.face(f).surface);
+            if (surf.kind == SurfaceKind::Plane) {
+                EXPECT_FLOAT_EQ(s.x, c.x) << "face " << f;
+                EXPECT_FLOAT_EQ(s.y, c.y) << "face " << f;
+                EXPECT_FLOAT_EQ(s.z, c.z) << "face " << f;
+                continue;
+            }
+            // on the surface, which the centroid it came from was not
+            if (surf.kind == SurfaceKind::Sphere) {
+                EXPECT_NEAR(dist(s, surf.origin), surf.radius, 1e-9) << "face " << f;
+                EXPECT_GT(std::abs(dist(c, surf.origin) - surf.radius), 1e-9)
+                    << "face " << f << ": the centroid was already on the sphere, so this "
+                                       "fixture cannot show the difference";
+            } else if (surf.kind == SurfaceKind::Cylinder) {
+                const Vec3 d = s - surf.origin;
+                const Vec3 ax = surf.normal;
+                const Vec3 rad = d - ax * d.dot(ax);
+                EXPECT_NEAR(std::sqrt(rad.dot(rad)), surf.radius, 1e-9) << "face " << f;
+            }
         }
     }
 }

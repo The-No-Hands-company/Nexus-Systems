@@ -149,10 +149,17 @@ TEST(CurvedBooleanBaseline, OutOfScopeSurfacePairsStayUnsupported)
     const Surface cone = coneSurface({0.f, 0.f, 0.f}, {0.f, 0.f, 1.f}, 0.5f);
 
     using SIK = SurfaceIntersectionKind;
-    EXPECT_EQ(intersectSurfaces(cyl, cyl2).kind, SIK::Unsupported);   // cylinder∩cylinder
-    EXPECT_EQ(intersectSurfaces(sph, cyl).kind, SIK::Unsupported);    // sphere∩cylinder
+    // Genuinely out of scope: each of these is a quartic space curve, not a Line or Circle.
+    EXPECT_EQ(intersectSurfaces(cyl, cyl2).kind, SIK::Unsupported);   // crossing axes
     EXPECT_EQ(intersectSurfaces(cone, sph).kind, SIK::Unsupported);   // cone∩sphere
     EXPECT_EQ(intersectSurfaces(cone, cone).kind, SIK::Unsupported);  // cone∩cone
+
+    // sphere∩cylinder has moved PARTLY in scope, and the boundary is where the symmetry
+    // is: a sphere centred ON the axis meets the cylinder in two rings, and one centred
+    // anywhere else meets it in a quartic that is still declined.
+    EXPECT_EQ(intersectSurfaces(sph, cyl).kind, SIK::TwoCircles) << "centre on the axis";
+    const Surface offAxis = sphereSurface({0.4f, 0.f, 0.f}, 1.2f);
+    EXPECT_EQ(intersectSurfaces(offAxis, cyl).kind, SIK::Unsupported) << "centre off the axis";
 }
 
 // (3b) PERMANENT: solids whose overlap would need an unsupported seam bail to

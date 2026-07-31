@@ -223,6 +223,49 @@ SurfaceIntersection planeCylinder(const Surface& plane, const Surface& cyl, Tole
 // Axes that are skew or crossing are a different problem entirely: the section is a
 // quartic space curve (the bicylinder / Steinmetz curve), which is neither a Line nor a
 // Circle and is not approximated here.
+// SPHERE against CYLINDER, for the case whose answer is circular: the sphere's centre ON
+// the cylinder's axis.
+//
+// Then the whole configuration is a surface of revolution about that axis, so the meeting
+// must be too — rings, not a general space curve. A point on both lies at the cylinder's
+// radius rc from the axis and at the sphere's radius R from its centre, so writing z for
+// the axial offset from that centre, rc² + z² = R²: two rings at z = ±sqrt(R² − rc²),
+// each of radius rc, one either side of the sphere's centre. They merge into one where the
+// sphere's radius equals the cylinder's — the sphere inscribed in the bore, touching along
+// a single ring — and there is nothing at all when the sphere is narrower than the bore.
+//
+// Move the centre OFF the axis and the symmetry is gone: the meeting becomes a quartic
+// space curve, which is neither a Line nor a Circle, and is not approximated here.
+SurfaceIntersection sphereCylinder(const Surface& sphere, const Surface& cyl, Tolerance tol)
+{
+    SurfaceIntersection r;
+    const Vec3 ax = normalize(cyl.normal);
+    const Vec3 d = sub(sphere.origin, cyl.origin);
+    const double along = dot(d, ax);
+    if (length(sub(d, scale(ax, along))) > tol.absolute) {
+        r.kind = SurfaceIntersectionKind::Unsupported;  // off-axis: a quartic
+        return r;
+    }
+    const double R = sphere.radius, rc = cyl.radius;
+    if (R < rc - tol.absolute) {
+        r.kind = SurfaceIntersectionKind::None;  // sphere narrower than the bore
+        return r;
+    }
+    const Vec3 centre = add(cyl.origin, scale(ax, along));  // sphere centre, on the axis
+    if (tol.nearlyEqual(R, rc)) {
+        // Inscribed: the two rings have merged. Reported as ONE circle rather than two
+        // coincident ones, so a caller cannot imprint the same seam twice.
+        r.kind = SurfaceIntersectionKind::Circle;
+        r.curve = circleCurve(centre, ax, rc);
+        return r;
+    }
+    const double z = std::sqrt(R * R - rc * rc);
+    r.kind = SurfaceIntersectionKind::TwoCircles;
+    r.curve = circleCurve(add(centre, scale(ax, z)), ax, rc);
+    r.curve2 = circleCurve(sub(centre, scale(ax, z)), ax, rc);
+    return r;
+}
+
 SurfaceIntersection cylinderCylinder(const Surface& a, const Surface& b, Tolerance tol)
 {
     SurfaceIntersection r;
@@ -364,6 +407,8 @@ SurfaceIntersection intersectSurfaces(const Surface& a, const Surface& b, Tolera
     if (a.kind == K::Cylinder && b.kind == K::Plane) return planeCylinder(b, a, tol);
     if (a.kind == K::Sphere && b.kind == K::Sphere) return sphereSphere(a, b, tol);
     if (a.kind == K::Cylinder && b.kind == K::Cylinder) return cylinderCylinder(a, b, tol);
+    if (a.kind == K::Sphere && b.kind == K::Cylinder) return sphereCylinder(a, b, tol);
+    if (a.kind == K::Cylinder && b.kind == K::Sphere) return sphereCylinder(b, a, tol);
     if (a.kind == K::Plane && b.kind == K::Cone) return planeCone(a, b, tol);
     if (a.kind == K::Cone && b.kind == K::Plane) return planeCone(b, a, tol);
     SurfaceIntersection r;
