@@ -3421,9 +3421,45 @@ Mesh Body::toMesh(uint32_t subdivisions) const
                 }
             }
             if (convex) {
-                for (size_t i = 2; i < ring.size(); ++i) {
+                // The fan's apex is chosen by GEOMETRY — the lexicographically smallest
+                // vertex position — rather than by wherever the ring happens to start.
+                //
+                // For a PLANAR face this changes nothing that can be measured: every fan of
+                // a planar polygon covers the same region and encloses the same volume. For
+                // a CURVED patch it decides the answer. A four-vertex patch on a sphere is
+                // not planar, so its two diagonals span different surfaces and enclose
+                // different volumes, and which one a fan picks depends only on the ring's
+                // first vertex.
+                //
+                // That is exactly the freedom a Boolean cannot afford. Difference reverses
+                // the vertex ring of every face it takes from the second operand, and a
+                // reversed ring starts at a different vertex, so the SAME patch was
+                // triangulated one way inside the intersection and the other way inside the
+                // difference. The two are supposed to cancel — the identity D + I = A holds
+                // because the shared patch appears once in each with opposite orientation —
+                // and they did not. Measured on box(2³) against sphere(r1.2) offset 0.5: the
+                // box triangles summed to 8.000000010 as they should, while the 116 shared
+                // sphere triangles came to +2.189830002 in the intersection and
+                // -2.192173031 in the difference, leaving the difference short of the volume
+                // it owed by 2.3e-03 — a few parts in ten thousand, watertight, and
+                // invisible to every validator this kernel owns, since all of them are
+                // topological and none of them weighs anything.
+                //
+                // A fan from a FIXED apex emits the same diagonals whichever way the ring is
+                // traversed — only the winding flips, which is precisely what is wanted — so
+                // pinning the apex to a property of the geometry makes the two copies
+                // cancel exactly rather than approximately.
+                size_t apex = 0;
+                for (size_t i = 1; i < ring.size(); ++i) {
+                    const nexus::render::Vec3& p = pos[ring[i]];
+                    const nexus::render::Vec3& q = pos[ring[apex]];
+                    if (p.x < q.x || (p.x == q.x && (p.y < q.y || (p.y == q.y && p.z < q.z))))
+                        apex = i;
+                }
+                const size_t rn = ring.size();
+                for (size_t i = 2; i < rn; ++i) {
                     nexus::geometry::Face f;
-                    f.indices = {ring[0], ring[static_cast<uint32_t>(i) - 1], ring[i]};
+                    f.indices = {ring[apex], ring[(apex + i - 1) % rn], ring[(apex + i) % rn]};
                     mesh.topology().addFace(std::move(f));
                 }
                 continue;

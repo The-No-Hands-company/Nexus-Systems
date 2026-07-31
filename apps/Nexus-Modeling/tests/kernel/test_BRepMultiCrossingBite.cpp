@@ -180,38 +180,9 @@ TEST(BRepMultiCrossingBite, InteriorCircleAndConcentricAnswersAreUnchanged)
     EXPECT_EQ(booleanToBody(A, S, BooleanOp::Intersection).faceCount(), S.faceCount());
 }
 
-// CHARACTERIZATION, not an endorsement. Difference does NOT conserve volume on some
-// offset configurations: D + I should equal A exactly, and it comes up short by a few
-// parts in ten thousand. It is a PRE-EXISTING defect, measured on configurations that
-// already sewed before the multi-crossing bite landed (R=0.8 at dx 0.5/0.7/0.9 gave
-// -4.06e-4 / -3.39e-4 / -2.03e-4 beforehand); the bite only makes it reachable in more
-// places. It is pinned here so it cannot drift unnoticed and so nobody reads the
-// watertight assertions above as saying Difference is correct.
-//
-// The residual is NOT a tessellation artifact — refining does not shrink it. At R=1.2
-// dx=0.5 it converges: -2.93e-4, -2.68e-4, -2.63e-4, -2.62e-4, -2.61e-4 across
-// subdivisions 0 to 4. A tessellation error would tend to zero; this settles on a
-// constant, so a real piece of volume is missing.
-TEST(BRepMultiCrossingBite, DifferenceVolumeResidualIsPinnedAsAKnownGap)
-{
-    const Body A = makeBox(2.f, 2.f, 2.f);
-    const Body B = sphereAt(1.2, 0.5);
-    const Body I = booleanToBody(A, B, BooleanOp::Intersection);
-    const Body D = booleanToBody(A, B, BooleanOp::Difference);
-    ASSERT_GT(I.faceCount(), 0u);
-    ASSERT_GT(D.faceCount(), 0u);
-    EXPECT_TRUE(D.isClosed()) << "whatever the volume, the contract is watertight-or-empty";
-
-    Body Ai = A, Bi = B;
-    ASSERT_TRUE(imprintMutually(Ai, Bi));
-    const double rel =
-        (meshVolume(D, 4) + meshVolume(I, 4) - meshVolume(Ai, 4)) / meshVolume(Ai, 4);
-
-    EXPECT_LT(rel, 0.0) << "the residual has flipped sign — re-measure before trusting it";
-    EXPECT_GT(std::abs(rel), 1e-5)
-        << "D + I now agrees with A to better than 1e-5 — the gap may be FIXED; verify and "
-           "replace this characterization with a real conservation assertion";
-    EXPECT_LT(std::abs(rel), 1e-3) << "the difference residual got materially worse: " << rel;
-}
+// The Difference volume residual this file used to characterize as a known gap has been
+// FIXED — see test_BRepVolumeConservation.cpp, which asserts D + I == A directly. The
+// characterization is gone rather than loosened, because a test that permits a defect is
+// worse than no test once the defect is repaired.
 
 }  // namespace nexus::geometry::brep::testing
