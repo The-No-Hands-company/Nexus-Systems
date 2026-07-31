@@ -1749,8 +1749,41 @@ uint32_t Body::imprintCurve(uint32_t faceId, const Curve& curve, Tolerance tol,
             // The two are not independent — exactly one of them lies in the face — so a
             // single test that comes back "outside" is only evidence for the other one if
             // the test is trustworthy for this face. When it discriminates, it decides.
-            const bool inA = insideFace(midA, poly);
-            const bool inB = insideFace(midB, poly);
+            // The face's own extent. Being inside it is a NECESSARY condition — an arc
+            // lying in the face cannot leave the box that bounds the face's boundary — so
+            // this is used twice below: to VETO a containment verdict that contradicts it,
+            // and to break a tie the containment test cannot.
+            Vec3 lo = poly[0], hi = poly[0];
+            for (const Vec3& q : poly) {
+                lo = {std::min(lo.x, q.x), std::min(lo.y, q.y), std::min(lo.z, q.z)};
+                hi = {std::max(hi.x, q.x), std::max(hi.y, q.y), std::max(hi.z, q.z)};
+            }
+            auto inBoundaryBox = [&](const Vec3& q) {
+                return q.x >= lo.x - eps && q.x <= hi.x + eps && q.y >= lo.y - eps &&
+                       q.y <= hi.y + eps && q.z >= lo.z - eps && q.z <= hi.z + eps;
+            };
+            const bool boxA = inBoundaryBox(midA), boxB = inBoundaryBox(midB);
+
+            // Ask about BOTH candidates rather than testing one and flipping on failure.
+            // The two are not independent — exactly one of them lies in the face — so a
+            // single test that comes back "outside" is only evidence for the other one if
+            // the test is trustworthy for this face.
+            //
+            // And it is not always trustworthy. Containment on a curved face is decided in
+            // the surface's (u,v) domain, and an analytic sphere's parametrisation is
+            // SINGULAR at ±uAxis, where v is an atan2 with no value. Near that pole the test
+            // does not merely become uncertain — it can be confidently WRONG. MEASURED on
+            // box(2³) against sphere(r0.8) offset 0.3, where the seam sits at 61° of
+            // latitude: of eight seam arcs, seven were decided correctly and one — on the
+            // face mirroring one that was decided correctly, with identical spans — chose the
+            // complement, 5.3716 rad against a true 0.9116.
+            //
+            // The veto is what catches that, and it is logic rather than a heuristic: the
+            // box is a necessary condition, so a containment verdict the box contradicts
+            // cannot be right. Vetoing it turns a confidently wrong answer into an
+            // undecided one, which the tie-break below then resolves correctly.
+            const bool inA = insideFace(midA, poly) && boxA;
+            const bool inB = insideFace(midB, poly) && boxB;
             if (inA != inB) {
                 if (!inA) m_edges[cutEdge].t1 = alt;
                 return;
@@ -1784,16 +1817,6 @@ uint32_t Body::imprintCurve(uint32_t faceId, const Curve& curve, Tolerance tol,
             // cases rather than assumed — on the same fixture it agrees with the (u,v) test
             // on all 71 of them, in both directions (65 keep, 6 flip), and resolves the 1
             // it cannot answer.
-            Vec3 lo = poly[0], hi = poly[0];
-            for (const Vec3& q : poly) {
-                lo = {std::min(lo.x, q.x), std::min(lo.y, q.y), std::min(lo.z, q.z)};
-                hi = {std::max(hi.x, q.x), std::max(hi.y, q.y), std::max(hi.z, q.z)};
-            }
-            auto inBoundaryBox = [&](const Vec3& q) {
-                return q.x >= lo.x - eps && q.x <= hi.x + eps && q.y >= lo.y - eps &&
-                       q.y <= hi.y + eps && q.z >= lo.z - eps && q.z <= hi.z + eps;
-            };
-            const bool boxA = inBoundaryBox(midA), boxB = inBoundaryBox(midB);
             if (boxA != boxB) {
                 if (!boxA) m_edges[cutEdge].t1 = alt;
                 return;
