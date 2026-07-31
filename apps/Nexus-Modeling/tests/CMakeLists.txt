@@ -18,6 +18,7 @@ add_executable(nexus_kernel_tests
     kernel/test_AnimationCore.cpp
     kernel/test_AnimationSerialization.cpp
     kernel/test_ApiFreezeAudit.cpp
+    kernel/test_AppAnalyticBooleanWiring.cpp
     kernel/test_AppLayer.cpp
     kernel/test_AssetDependencyGraph.cpp
     kernel/test_AutomationScript.cpp

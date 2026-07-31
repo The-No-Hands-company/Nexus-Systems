@@ -8,6 +8,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 #include <nexus/geometry/CurveExtrude.h>
+#include <nexus/geometry/AnalyticBRep.h>
 #include <nexus/geometry/Mesh.h>
 #include <nexus/geometry/NurbsSurface.h>
 #include <nexus/geometry/ProfileRevolve.h>
@@ -50,6 +51,19 @@ struct FeatureNode {
     // Cached output.
     std::optional<geometry::Mesh>        mesh;
     std::optional<geometry::NurbsSurface> surf;
+
+    // The ANALYTIC solid, when this feature has one.
+    //
+    // `mesh` is what gets drawn and picked; this is what the feature actually IS. A
+    // primitive placed as a box or a sphere carries the exact B-rep here, and an operation
+    // between two features that both have one is evaluated analytically — on real planes,
+    // cylinders and spheres — rather than on their triangles, with `mesh` regenerated from
+    // the result for display.
+    //
+    // Optional on purpose. Not every feature has an analytic form (a torus, an imported
+    // mesh, a sculpted body), and the operations fall back to the mesh path for those, so
+    // this can be filled in feature by feature rather than all at once.
+    std::optional<geometry::brep::Body> body;
 
     // Material (simple PBR approximation).
     struct Material {
