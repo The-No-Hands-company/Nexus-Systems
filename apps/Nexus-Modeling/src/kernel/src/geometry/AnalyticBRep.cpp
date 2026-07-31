@@ -107,7 +107,24 @@ bool segmentLineCrossing(const Vec3& A, const Vec3& B, const Curve& curve, const
 // band silently discarded legitimate near-corner arc bites — a crossing ~2% of
 // an edge from a vertex is ~hundreds of times the coincidence tolerance, so it
 // is a real crossing, not a degeneracy.)
-int circleSegmentFracs(const Vec3& A, const Vec3& B, const Vec3& C, double r, double out[2])
+// `eps` is a length tolerance on the segment's own ends. A crossing that lands exactly ON
+// an endpoint has to COUNT, and demanding a strictly interior root is the same mistake
+// this file has now made three times — once on a cylinder's uprights, once on a sphere's
+// bounding arcs, and here on the planar path, which is the oldest of the three.
+//
+// It is not a rare tie. Two seam circles cut by two box faces that share an edge MEET on
+// that edge, necessarily: both are sections of the same sphere, so their common points are
+// exactly where the sphere crosses the shared edge. Whichever face is imprinted first
+// splits that edge there, and the second circle then meets the edge precisely at a vertex.
+//
+// Which side of the boundary the root lands on is then pure rounding. MEASURED on
+// box(2³) against sphere(r1.2): at offset 0.5 all eight crossings came back at
+// s = 0.9999999999999999 and were accepted, and the face was cut correctly; at offset 0.7
+// the same eight landed a few ulp the other side of 1, every edge reported zero crossings,
+// and the +X face was left uncut and straddling — ten box faces where fourteen were owed,
+// and all three operators empty. The two configurations differ by nothing structural.
+int circleSegmentFracs(const Vec3& A, const Vec3& B, const Vec3& C, double r, double out[2],
+                       double eps)
 {
     const Vec3 E = sub(B, A), d = sub(A, C);
     const double a = dot(E, E);
@@ -116,10 +133,19 @@ int circleSegmentFracs(const Vec3& A, const Vec3& B, const Vec3& C, double r, do
     const double disc = b * b - 4.f * a * c;
     if (disc < 0.f) return 0;
     const double sq = std::sqrt(disc);
+    const double len = std::sqrt(a);
+    const double slack = (len > 0.0) ? (eps / len) : 0.0;
+    auto accept = [&](double s, double& dst) {
+        if (!(s > -slack && s < 1.0 + slack)) return false;
+        dst = std::min(std::max(s, 0.0), 1.0);  // caller snaps a clamped end to its vertex
+        return true;
+    };
     int cnt = 0;
     const double s0 = (-b - sq) / (2.f * a), s1 = (-b + sq) / (2.f * a);
-    if (s0 > 0.f && s0 < 1.f) out[cnt++] = s0;
-    if (sq > 1e-9f && s1 > 0.f && s1 < 1.f) out[cnt++] = s1;  // skip tangent duplicate
+    if (accept(s0, out[cnt])) ++cnt;
+    if (sq > 1e-9f && accept(s1, out[cnt])) ++cnt;  // skip tangent duplicate
+    // Both roots snapping to the SAME end is one crossing seen twice, not two.
+    if (cnt == 2 && std::abs(out[0] - out[1]) * len <= eps) cnt = 1;
     return cnt;
 }
 
@@ -1507,7 +1533,7 @@ uint32_t Body::imprintCurve(uint32_t faceId, const Curve& curve, Tolerance tol,
         // A latitude circle IS the level set of the cylinder's axial parameter, so
         // solve for that level linearly, which is exact to the last bit float allows.
         auto edgeCrossings = [&](const Vec3& q0, const Vec3& q1, double fr[2]) -> int {
-            if (onPlane) return circleSegmentFracs(q0, q1, curve.origin, curve.radius, fr);
+            if (onPlane) return circleSegmentFracs(q0, q1, curve.origin, curve.radius, fr, eps);
             // Stated generally, because a sphere has no axis to borrow: the circle IS the
             // section of this surface by the plane through its centre with normal
             // circle.dir, so an edge lying on the surface meets the circle exactly where it
@@ -1625,6 +1651,7 @@ uint32_t Body::imprintCurve(uint32_t faceId, const Curve& curve, Tolerance tol,
                                        : length(sub(p1, p0));
             double fr[2];
             const int k = arcEdge ? arcCrossings(e, fr) : edgeCrossings(p0, p1, fr);
+
             for (int j = 0; j < k; ++j) {
                 const double s = fr[j];
                 // circleSegmentFracs measures s along the STORED edge (v0->v1);
@@ -1659,6 +1686,7 @@ uint32_t Body::imprintCurve(uint32_t faceId, const Curve& curve, Tolerance tol,
             }
             cc = std::move(uniq);
         }
+
         constexpr double kTwoPi = 6.283185307179586476925286766559;
 
         // Selects, of the two arcs sharing the cut edge's endpoints, the one lying INSIDE

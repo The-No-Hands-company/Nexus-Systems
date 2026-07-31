@@ -98,6 +98,7 @@ add_executable(nexus_kernel_tests
     kernel/test_BRepFaceSamplePoint.cpp
     kernel/test_BRepLatitudeSplitCompleteness.cpp
     kernel/test_BRepNearTangentTorture.cpp
+    kernel/test_BRepSeamCrossingAtVertex.cpp
     kernel/test_BRepSeamRadiusPrecision.cpp
     kernel/test_BRepSphereFaceImprint.cpp
     kernel/test_BRepChamfer.cpp

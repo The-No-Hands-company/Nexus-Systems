@@ -10,10 +10,9 @@
 //
 //   1. WatertightOrEmpty invariant (PERMANENT) — a curved boolean is never a
 //      leaky/corrupt body; it is either empty or a valid closed solid.
-//   2. Which curved pairs sew (CHARACTERIZATION). sphere/sphere, box/sphere and
-//      box/cylinder all sew now. The one fixture still pinned empty is box/sphere at
-//      dx = 0.7 with r = 1.2, a configuration whose exit circle clears the face
-//      entirely; it is expected to FLIP in turn and the message says so.
+//   2. All three curved pairs — box/sphere, box/cylinder, sphere/sphere — SEW. This
+//      entry began life pinning them as empty; every fixture has flipped, so it now
+//      guards against regression instead.
 //   3. Genuinely out-of-scope surface pairs (cyl∩cyl, sphere∩cyl, cone∩*) stay
 //      Unsupported and bail to empty (PERMANENT — outside the Circle-seam v1).
 //   4. A high-facet curved pair does not blow up / hang — the imprint face-budget
@@ -95,12 +94,13 @@ TEST(CurvedBooleanBaseline, WatertightOrEmptyInvariantHolds)
     }
 }
 
-// (2) CHARACTERIZATION: which curved pairs sew today. sphere/sphere, box/cylinder and
-// box/sphere all do; the single box/sphere fixture below (dx = 0.7, r = 1.2) is one of
-// the configurations that still bails. Reading this entry as "box/sphere is empty" is
-// wrong — the positive assertions live in test_BRepArcComplementSelection.cpp and
-// test_BRepMultiCrossingBite.cpp.
-TEST(CurvedBooleanBaseline, CurvedPairsCurrentlyBailToEmpty)
+// (2) All three curved pairs this file was created to watch now SEW. The entry began as
+// a characterization of what bailed to empty; every fixture in it has since flipped, so it
+// is now an assertion that they stay working. The detailed correctness — volume
+// conservation, seam ring closure, face segmentation — lives in the increments that landed
+// each one: test_BRepSphereFaceImprint, test_BRepArcComplementSelection,
+// test_BRepMultiCrossingBite and test_BRepVolumeConservation.
+TEST(CurvedBooleanBaseline, CurvedPairsSewWatertight)
 {
     const Body box = makeBox(2.f, 2.f, 2.f);
     const Body sph = sphereAt(1.2f, 8, 12, {0.7f, 0.f, 0.f});
@@ -108,23 +108,35 @@ TEST(CurvedBooleanBaseline, CurvedPairsCurrentlyBailToEmpty)
     const Body sphA = makeSphere(1.2f, 8, 12);
     const Body sphB = sphereAt(1.2f, 8, 12, {1.0f, 0.f, 0.f});
 
-    EXPECT_EQ(booleanToBody(box, sph, BooleanOp::Union).faceCount(), 0u)
-        << "an OFFSET box/sphere union is now non-empty — verify it is watertight and "
-           "conserves volume, then move it beside the centred case";
-    // box/cylinder has flipped too: the offset cylinder's exit face is crossed by its
-    // seam more than twice, and cutting it there is what this fixture was waiting on.
-    const Body bcU = booleanToBody(box, cyl, BooleanOp::Union);
-    EXPECT_GT(bcU.faceCount(), 0u) << "offset box/cylinder union regressed to empty";
-    EXPECT_TRUE(bcU.isClosed());
+    struct Pair { const char* name; const Body* a; const Body* b; };
+    const Pair pairs[] = {{"offset box/sphere", &box, &sph},
+                          {"offset box/cylinder", &box, &cyl},
+                          {"sphere/sphere", &sphA, &sphB}};
 
-    // sphere/sphere HAS flipped: once a Circle seam could be imprinted onto a spherical
-    // face and the seam closed into a ring, this pair sews. Kept here as the positive
-    // half of the same characterization so the entry stays honest about which curved
-    // pairs work — the full assertions (watertight, inclusion-exclusion) live in
-    // test_BRepSphereFaceImprint.cpp.
-    const Body ssU = booleanToBody(sphA, sphB, BooleanOp::Union);
-    EXPECT_GT(ssU.faceCount(), 0u) << "sphere/sphere union regressed to empty";
-    EXPECT_TRUE(ssU.isClosed());
+    for (const Pair& p : pairs) {
+        for (BooleanOp op : {BooleanOp::Union, BooleanOp::Intersection}) {
+            const Body r = booleanToBody(*p.a, *p.b, op);
+            EXPECT_GT(r.faceCount(), 0u)
+                << p.name << " op " << static_cast<int>(op) << " regressed to empty";
+            EXPECT_TRUE(r.isClosed()) << p.name << " op " << static_cast<int>(op);
+            EXPECT_TRUE(r.checkIntegrity().ok) << p.name << " op " << static_cast<int>(op);
+        }
+    }
+
+    // Difference sews for two of the three. Named individually rather than looped, so the
+    // one that does not is stated rather than averaged away.
+    for (const Pair& p : {pairs[0], pairs[2]}) {
+        const Body r = booleanToBody(*p.a, *p.b, BooleanOp::Difference);
+        EXPECT_GT(r.faceCount(), 0u) << p.name << " difference regressed to empty";
+        EXPECT_TRUE(r.isClosed()) << p.name << " difference";
+    }
+
+    // REMAINING GAP: the offset cylinder's difference is the last empty result among these
+    // fixtures. Union and intersection of the same pair both sew, so the segmentation is
+    // right and it is the difference's own selection or sew that fails.
+    EXPECT_EQ(booleanToBody(box, cyl, BooleanOp::Difference).faceCount(), 0u)
+        << "offset box/cylinder difference now sews — verify it is watertight and conserves "
+           "volume (D + I == A), then move it up beside the other two";
 }
 
 // (3a) PERMANENT: the Circle-seam v1 scope is plane∩sphere, plane∩cylinder-perp,
