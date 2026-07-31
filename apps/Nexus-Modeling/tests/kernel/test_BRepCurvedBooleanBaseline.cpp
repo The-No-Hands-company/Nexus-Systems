@@ -10,9 +10,9 @@
 //
 //   1. WatertightOrEmpty invariant (PERMANENT) — a curved boolean is never a
 //      leaky/corrupt body; it is either empty or a valid closed solid.
-//   2. Which curved pairs sew (CHARACTERIZATION). sphere/sphere now does; the
-//      box/sphere and box/cylinder pairs still bail to empty and are expected to
-//      FLIP to non-empty watertight results in turn; the failure message says so.
+//   2. Which curved pairs sew (CHARACTERIZATION). sphere/sphere does, and so does
+//      CONCENTRIC box/sphere; the OFFSET box/sphere and box/cylinder fixtures here
+//      still bail to empty and are expected to FLIP in turn; the messages say so.
 //   3. Genuinely out-of-scope surface pairs (cyl∩cyl, sphere∩cyl, cone∩*) stay
 //      Unsupported and bail to empty (PERMANENT — outside the Circle-seam v1).
 //   4. A high-facet curved pair does not blow up / hang — the imprint face-budget
@@ -94,8 +94,11 @@ TEST(CurvedBooleanBaseline, WatertightOrEmptyInvariantHolds)
     }
 }
 
-// (2) CHARACTERIZATION: which curved pairs sew today. sphere/sphere now does; the two
-// pairs involving a BOX still bail to empty, and are expected to FLIP in turn.
+// (2) CHARACTERIZATION: which curved pairs sew today. sphere/sphere does, and so does
+// box/sphere when the two are CONCENTRIC — the fixture below is deliberately OFFSET
+// (dx = 0.7), which does not sew yet. The distinction matters: reading this entry as
+// "box/sphere is empty" is now wrong, and the centred case is asserted positively in
+// test_BRepArcComplementSelection.cpp. box/cylinder remains empty at any offset.
 TEST(CurvedBooleanBaseline, CurvedPairsCurrentlyBailToEmpty)
 {
     const Body box = makeBox(2.f, 2.f, 2.f);
@@ -105,8 +108,8 @@ TEST(CurvedBooleanBaseline, CurvedPairsCurrentlyBailToEmpty)
     const Body sphB = sphereAt(1.2f, 8, 12, {1.0f, 0.f, 0.f});
 
     EXPECT_EQ(booleanToBody(box, sph, BooleanOp::Union).faceCount(), 0u)
-        << "curved box/sphere union is now non-empty — Phase 4 has landed; "
-           "replace this baseline with a watertight + volume-identity assertion";
+        << "an OFFSET box/sphere union is now non-empty — verify it is watertight and "
+           "conserves volume, then move it beside the centred case";
     EXPECT_EQ(booleanToBody(box, cyl, BooleanOp::Union).faceCount(), 0u)
         << "curved box/cylinder union is now non-empty — update this baseline";
 

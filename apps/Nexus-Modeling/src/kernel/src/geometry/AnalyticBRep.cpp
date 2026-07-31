@@ -1666,10 +1666,69 @@ uint32_t Body::imprintCurve(uint32_t faceId, const Curve& curve, Tolerance tol,
         // traces whichever arc the angles happen to bracket; both share the endpoints, so
         // checkGeometry holds either way and only this test tells them apart.
         auto keepArcInsideFace = [&](uint32_t cutEdge) {
-            if (cutEdge >= m_edges.size()) return;
+            if (cutEdge >= m_edges.size() || poly.empty()) return;
             const double t0 = m_edges[cutEdge].t0, t1 = m_edges[cutEdge].t1;
-            if (!insideFace(curve.eval((t0 + t1) * 0.5f), poly))
-                m_edges[cutEdge].t1 = (t1 > t0) ? (t1 - kTwoPi) : (t1 + kTwoPi);
+            const double alt = (t1 > t0) ? (t1 - kTwoPi) : (t1 + kTwoPi);
+            const Vec3 midA = curve.eval((t0 + t1) * 0.5);
+            const Vec3 midB = curve.eval((t0 + alt) * 0.5);
+            // Ask about BOTH candidates rather than testing one and flipping on failure.
+            // The two are not independent — exactly one of them lies in the face — so a
+            // single test that comes back "outside" is only evidence for the other one if
+            // the test is trustworthy for this face. When it discriminates, it decides.
+            const bool inA = insideFace(midA, poly);
+            const bool inB = insideFace(midB, poly);
+            if (inA != inB) {
+                if (!inA) m_edges[cutEdge].t1 = alt;
+                return;
+            }
+
+            // The test could not tell them apart, which for a curved face is a real and
+            // reachable condition rather than a paranoid branch. Containment on a curved
+            // patch is decided in the surface's (u,v) domain, and an analytic sphere's
+            // parametrisation is SINGULAR at ±uAxis: v is an atan2 that becomes undefined
+            // there, so a patch near that pole has no well-formed (u,v) polygon and points
+            // on either side of it can both read as outside. makeSphere puts uAxis on X
+            // while its tessellation's grid poles are on Z, so the singularity sits in the
+            // middle of ordinary patches near ±X — exactly where a box's ±X faces cut
+            // their seam. Measured on box(2³)/sphere(r1.2, 8x12): of the 72 seam arcs, 71
+            // discriminate cleanly and ONE — the patch straddling the parametric pole —
+            // reports both candidates outside.
+            //
+            // What made that one silent is that both arcs share their endpoints, so the
+            // wrong one still reproduces its own vertices and checkGeometry, checkIntegrity,
+            // isClosed and Euler are all satisfied by the complement. It surfaces only much
+            // later, as a seam that will not sew: the complement spans 96% of the circle
+            // (6.0333 rad against the true 0.2499), swallowing ten ring vertices that
+            // belong to its neighbours, and the reconcile pass then splits it at each of
+            // them and manufactures ten duplicate vertices.
+            //
+            // Break the tie on the face's own extent. The arc lying in the face cannot
+            // leave the bounding box of the face's boundary, while the complement — going
+            // the long way round the circle — leaves it immediately. This is a coarser
+            // question than containment, which is exactly why it survives the singularity:
+            // it never evaluates the parametrisation. Verified against the discriminating
+            // cases rather than assumed — on the same fixture it agrees with the (u,v) test
+            // on all 71 of them, in both directions (65 keep, 6 flip), and resolves the 1
+            // it cannot answer.
+            Vec3 lo = poly[0], hi = poly[0];
+            for (const Vec3& q : poly) {
+                lo = {std::min(lo.x, q.x), std::min(lo.y, q.y), std::min(lo.z, q.z)};
+                hi = {std::max(hi.x, q.x), std::max(hi.y, q.y), std::max(hi.z, q.z)};
+            }
+            auto inBoundaryBox = [&](const Vec3& q) {
+                return q.x >= lo.x - eps && q.x <= hi.x + eps && q.y >= lo.y - eps &&
+                       q.y <= hi.y + eps && q.z >= lo.z - eps && q.z <= hi.z + eps;
+            };
+            const bool boxA = inBoundaryBox(midA), boxB = inBoundaryBox(midB);
+            if (boxA != boxB) {
+                if (!boxA) m_edges[cutEdge].t1 = alt;
+                return;
+            }
+            // Both still tied: keep the SHORTER arc. A cut between two boundary points of
+            // one patch is the short way round far more often than not, and leaving the
+            // range untouched here would mean keeping whichever arc the raw endpoint
+            // angles happened to bracket — a coin toss rather than a decision.
+            if (std::abs(alt - t0) < std::abs(t1 - t0)) m_edges[cutEdge].t1 = alt;
         };
 
         // ── SAME-EDGE ARC BITE ──────────────────────────────────────────────────────

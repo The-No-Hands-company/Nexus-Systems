@@ -87,6 +87,7 @@ add_executable(nexus_kernel_tests
     kernel/test_BRepBooleanVolumeIdentity.cpp
     kernel/test_BRepBooleanTorture.cpp
     kernel/test_BRepArcBiteSeam.cpp
+    kernel/test_BRepArcComplementSelection.cpp
     kernel/test_BRepCurvedBooleanBaseline.cpp
     kernel/test_BRepCurvedBooleanSew.cpp
     kernel/test_BRepCurvedFaceImprint.cpp
