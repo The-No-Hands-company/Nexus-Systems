@@ -9,6 +9,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 #include <cstdint>
 #include <cstring>
 #include <unordered_map>
@@ -1127,37 +1128,82 @@ Vec3 Body::faceSamplePoint(uint32_t faceId) const
     // producing it, so the candidate search below now serves both.
     if (holes.empty() && onMaterial(centroid)) return centroid;
 
-    // Candidates are generated in a FIXED order and the first valid one wins, so the
-    // answer is reproducible — the classification that consumes it must be.
+    // Distance from a point to a ring, treated as a polyline. This is what turns "on the
+    // material" into "SAFELY on the material", and the difference is not cosmetic.
     //
-    // A midpoint between an outer vertex and a hole vertex is tried first because it is
+    // Every ring here is a CHORDAL POLYGON standing in for the face's real boundary, and
+    // for a seam the real boundary is a circle. Between the polygon and the circle it
+    // approximates lies a sliver — bounded by the polygon's inradius and its circumradius —
+    // that is outside the polygon and inside the true curve. A point there passes
+    // `onMaterial` and is nonetheless not on the face at all.
+    //
+    // MEASURED on box(2³) against sphere(r1.2) offset 0.1: the +X face's annulus got a
+    // sample at radius 0.750609 from the seam centre, where the twelve-sided hole polygon
+    // has inradius 0.743719 and the true seam circle has radius 0.793725. Outside the
+    // polygon by seven thousandths, inside the circle by four hundredths. classifyPoint
+    // then judged it against the SPHERE, not against the polygon, and reported the annulus
+    // as touching the sphere — so selectFace treated it as a coincident-face pair and kept a
+    // face whose material is entirely outside. Every seam edge gained a third user and the
+    // sew refused; the intersection and difference of that pair returned empty.
+    auto distToRing = [](const Vec3& p, const std::vector<Vec3>& ring) {
+        double best = std::numeric_limits<double>::max();
+        for (size_t i = 0; i < ring.size(); ++i) {
+            const Vec3& a = ring[i];
+            const Vec3& b = ring[(i + 1) % ring.size()];
+            const Vec3 ab = sub(b, a);
+            const double denom = dot(ab, ab);
+            double t = (denom > 0.0) ? (dot(sub(p, a), ab) / denom) : 0.0;
+            t = std::min(1.0, std::max(0.0, t));
+            best = std::min(best, length(sub(p, add(a, scale(ab, t)))));
+        }
+        return best;
+    };
+    auto clearance = [&](const Vec3& p) {
+        double c = distToRing(p, outerPts);
+        for (const std::vector<Vec3>& h : holes) c = std::min(c, distToRing(p, h));
+        return c;
+    };
+
+    // Candidates are generated in a FIXED order and the one with the greatest clearance
+    // wins — ties keeping the earlier, so the answer stays reproducible and the
+    // classification that consumes it stays deterministic. Taking the FIRST valid candidate
+    // is what allowed a marginal one to be chosen while a comfortable one existed.
+    //
+    // A midpoint between an outer vertex and a hole vertex is generated first because it is
     // the candidate that survives the case which defeats every averaging scheme: a hole
     // concentric with its face, where the outline's average and the area-weighted
     // centroid are both the hole's centre.
+    Vec3 best = centroid;
+    double bestClear = -1.0;
+    auto offer = [&](const Vec3& p) {
+        if (!onMaterial(p)) return;
+        const double c = clearance(p);
+        if (c > bestClear) {
+            bestClear = c;
+            best = p;
+        }
+    };
+
     for (const Vec3& o : outerPts)
         for (const std::vector<Vec3>& h : holes)
-            for (const Vec3& hp : h) {
-                const Vec3 mid{(o.x + hp.x) * 0.5f, (o.y + hp.y) * 0.5f, (o.z + hp.z) * 0.5f};
-                if (onMaterial(mid)) return mid;
-            }
+            for (const Vec3& hp : h)
+                offer({(o.x + hp.x) * 0.5f, (o.y + hp.y) * 0.5f, (o.z + hp.z) * 0.5f});
 
     // Then points drawn in from the outer boundary — an edge midpoint and a vertex,
-    // each pulled a quarter of the way toward the centroid.
+    // each pulled part of the way toward the centroid.
     for (float t : {0.25f, 0.5f, 0.75f})
         for (size_t i = 0; i < outerPts.size(); ++i) {
             const Vec3& a = outerPts[i];
             const Vec3& b = outerPts[(i + 1) % outerPts.size()];
             const Vec3 edgeMid{(a.x + b.x) * 0.5f, (a.y + b.y) * 0.5f, (a.z + b.z) * 0.5f};
-            const Vec3 p{edgeMid.x + (centroid.x - edgeMid.x) * t,
-                         edgeMid.y + (centroid.y - edgeMid.y) * t,
-                         edgeMid.z + (centroid.z - edgeMid.z) * t};
-            if (onMaterial(p)) return p;
-            const Vec3 q{a.x + (centroid.x - a.x) * t, a.y + (centroid.y - a.y) * t,
-                         a.z + (centroid.z - a.z) * t};
-            if (onMaterial(q)) return q;
+            offer({edgeMid.x + (centroid.x - edgeMid.x) * t,
+                   edgeMid.y + (centroid.y - edgeMid.y) * t,
+                   edgeMid.z + (centroid.z - edgeMid.z) * t});
+            offer({a.x + (centroid.x - a.x) * t, a.y + (centroid.y - a.y) * t,
+                   a.z + (centroid.z - a.z) * t});
         }
 
-    return centroid;  // nothing found → no worse than before
+    return bestClear >= 0.0 ? best : centroid;  // nothing found → no worse than before
 }
 
 std::vector<std::vector<uint32_t>> Body::faceInnerLoopVertices(uint32_t faceId) const

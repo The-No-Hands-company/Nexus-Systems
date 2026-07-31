@@ -1,6 +1,9 @@
 #include <nexus/geometry/BRepBoolean.h>
 
 #include <algorithm>
+#include <cstdio>   // TEMPORARY DIAGNOSTIC
+#include <cstdlib>  // TEMPORARY DIAGNOSTIC
+#include <map>      // TEMPORARY DIAGNOSTIC
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -313,6 +316,34 @@ Body booleanToBody(const Body& a, const Body& b, BooleanOp op, Tolerance tol)
             unique.push_back(std::move(fd));
         }
         defs = std::move(unique);
+    }
+
+    if (std::getenv("NEXUS_SEW_DBG") != nullptr) {  // TEMPORARY DIAGNOSTIC
+        std::map<uint64_t, int> und, dir;
+        auto walk = [&](const std::vector<uint32_t>& r) {
+            for (size_t i = 0; i < r.size(); ++i) {
+                const uint32_t a = r[i], b = r[(i + 1) % r.size()];
+                if (a == b) continue;
+                ++und[weldedPairKey(a, b)];
+                ++dir[(static_cast<uint64_t>(a) << 32) | b];
+            }
+        };
+        for (const auto& d : defs) { walk(d.loop); for (const auto& h : d.innerLoops) walk(h); }
+        int one = 0, over = 0, dre = 0;
+        for (const auto& [k, n] : und) { if (n == 1) ++one; else if (n > 2) ++over; }
+        for (const auto& [k, n] : dir) if (n > 1) ++dre;
+        std::fprintf(stderr, "[SEW] op=%d defs=%zu pts=%zu | oneSided=%d over2=%d dirReused=%d\n",
+                     (int)op, defs.size(), points.size(), one, over, dre);
+        int shown = 0;
+        for (const auto& [k, n] : und) {
+            if (n != 2 && shown < 10) {
+                const uint32_t a = (uint32_t)(k >> 32), b = (uint32_t)k;
+                std::fprintf(stderr, "   used %dx  (%.4f,%.4f,%.4f)-(%.4f,%.4f,%.4f)\n", n,
+                             points[a].x, points[a].y, points[a].z, points[b].x, points[b].y,
+                             points[b].z);
+                ++shown;
+            }
+        }
     }
 
     auto sewn = Body::fromFaces(points, defs);
