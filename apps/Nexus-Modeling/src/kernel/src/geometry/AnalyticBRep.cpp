@@ -3462,12 +3462,20 @@ Mesh Body::toMesh(uint32_t subdivisions) const
         if (fc.surface < m_surfaces.size()) nrm = m_surfaces[fc.surface].normal;
         if (fc.reversed) nrm = {-nrm.x, -nrm.y, -nrm.z};
 
-        std::vector<uint32_t> inner;
+        // EVERY inner ring, not just the first. This used to keep one and break, which is
+        // wrong for any face with two holes in it — a plate drilled twice, which is to say
+        // most real parts. The consequence is not a cosmetic one: a hole that never reaches
+        // the tessellation is not a hole as far as classifyPoint is concerned, because that
+        // is a parity ray cast against these triangles. MEASURED on a 4x4x1 plate drilled
+        // four times in sequence — the canonical chain — the second bore's own wall facets
+        // were reported OUTSIDE the plate they sit inside (3 of 50 faces), were dropped from
+        // the difference, left 8 boundary edges with one face instead of two, and the sew
+        // refused. The chain died at the second hole.
+        std::vector<std::vector<uint32_t>> inners;
         for (uint32_t il : fc.innerLoops) {
             if (il >= m_loops.size()) continue;
-            inner = buildRing(m_loops[il].first);
-            if (inner.size() >= 3) break;
-            inner.clear();
+            std::vector<uint32_t> r = buildRing(m_loops[il].first);
+            if (r.size() >= 3) inners.push_back(std::move(r));
         }
 
         // A CONVEX outer ring with no hole fans from its first vertex — the cheapest
@@ -3499,7 +3507,7 @@ Mesh Body::toMesh(uint32_t subdivisions) const
         {
             const bool planar = fc.surface < m_surfaces.size() &&
                                 m_surfaces[fc.surface].kind == SurfaceKind::Plane;
-            bool convex = inner.empty();
+            bool convex = inners.empty();
             if (convex && planar && ring.size() >= 3) {
                 // Sign of the turn at each corner, in the face plane; a convex ring turns the
                 // same way throughout. Collinear corners (zero) are ignored, not counted as
@@ -3572,26 +3580,69 @@ Mesh Body::toMesh(uint32_t subdivisions) const
         auto X = [&](uint32_t idx) { return dot(sub(pos[idx], org), u); };
         auto Y = [&](uint32_t idx) { return dot(sub(pos[idx], org), vv); };
 
-        // Bridge the rightmost inner vertex M to the rightmost outer vertex P
-        // (both to the right of the hole → the bridge crosses neither ring, for a
-        // convex-ish outer + convex hole).
-        size_t pOut = 0;
-        for (size_t k = 1; k < ring.size(); ++k)
-            if (X(ring[k]) > X(ring[pOut])) pOut = k;
-        size_t mIn = 0;
-        for (size_t k = 1; k < inner.size(); ++k)
-            if (X(inner[k]) > X(inner[mIn])) mIn = k;
+        // Bridge every hole into the outer ring, one at a time, so what reaches the
+        // ear-clipper is a single simple polygon.
+        //
+        // Each hole is joined by a two-way cut from its RIGHTMOST vertex M: cast a ray in
+        // +X from M, take the first edge of the polygon-so-far that it meets, and bridge to
+        // that edge's right-hand endpoint. The holes are merged right to left, so a hole
+        // bridging leftward may land on a hole already merged — which is correct, and is why
+        // the ray is cast against the growing polygon rather than against the outer ring.
+        //
+        // The bridge duplicates both endpoints, giving a degenerate channel of zero width
+        // that the ear-clipper walks around; the duplicated indices are the SAME position
+        // index, which is what lets its containment test exclude them by identity.
+        std::vector<uint32_t> poly = ring;  // no holes → ear-clip the outer ring as it stands
+        if (!inners.empty()) {
+            auto rightmostX = [&](const std::vector<uint32_t>& h) {
+                double m = X(h[0]);
+                for (const uint32_t i : h) m = std::max(m, X(i));
+                return m;
+            };
+            std::sort(inners.begin(), inners.end(),
+                      [&](const std::vector<uint32_t>& a, const std::vector<uint32_t>& b) {
+                          return rightmostX(a) > rightmostX(b);
+                      });
+            for (const std::vector<uint32_t>& hole : inners) {
+                size_t mIn = 0;
+                for (size_t k = 1; k < hole.size(); ++k)
+                    if (X(hole[k]) > X(hole[mIn])) mIn = k;
+                const double mx = X(hole[mIn]), my = Y(hole[mIn]);
 
-        std::vector<uint32_t> poly;
-        if (inner.empty()) {
-            poly = ring;  // concave, no hole → ear-clip the outer ring as it stands
-        } else {
-            poly.reserve(ring.size() + inner.size() + 2);
-            for (size_t k = 0; k <= pOut; ++k) poly.push_back(ring[k]);
-            for (size_t k = 0; k < inner.size(); ++k)
-                poly.push_back(inner[(mIn + k) % inner.size()]);
-            poly.push_back(inner[mIn]);
-            for (size_t k = pOut; k < ring.size(); ++k) poly.push_back(ring[k]);
+                size_t bestEdge = poly.size();
+                double bestX = 0.0;
+                for (size_t k = 0; k < poly.size(); ++k) {
+                    const uint32_t a = poly[k], b = poly[(k + 1) % poly.size()];
+                    const double ya = Y(a), yb = Y(b);
+                    if ((ya > my) == (yb > my)) continue;  // edge does not straddle the ray
+                    const double t = (my - ya) / (yb - ya);
+                    const double xi = X(a) + t * (X(b) - X(a));
+                    if (xi < mx) continue;  // behind M
+                    if (bestEdge == poly.size() || xi < bestX) {
+                        bestX = xi;
+                        bestEdge = k;
+                    }
+                }
+                // No edge to the right to bridge to — leave this hole out rather than splice
+                // a cut that crosses the boundary. The face is then drawn solid there, which
+                // is wrong but bounded; splicing blindly corrupts the whole polygon.
+                if (bestEdge == poly.size()) continue;
+
+                size_t pOut = bestEdge;
+                {
+                    const uint32_t a = poly[bestEdge], b = poly[(bestEdge + 1) % poly.size()];
+                    if (X(b) > X(a)) pOut = (bestEdge + 1) % poly.size();
+                }
+
+                std::vector<uint32_t> merged;
+                merged.reserve(poly.size() + hole.size() + 2);
+                for (size_t k = 0; k <= pOut; ++k) merged.push_back(poly[k]);
+                for (size_t k = 0; k < hole.size(); ++k)
+                    merged.push_back(hole[(mIn + k) % hole.size()]);
+                merged.push_back(hole[mIn]);
+                for (size_t k = pOut; k < poly.size(); ++k) merged.push_back(poly[k]);
+                poly = std::move(merged);
+            }
         }
 
         // Ear-clip the simple polygon (CCW). Duplicate bridge vertices share their

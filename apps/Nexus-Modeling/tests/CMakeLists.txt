@@ -110,6 +110,7 @@ add_executable(nexus_kernel_tests
     kernel/test_BRepFeatureStack.cpp
     kernel/test_BRepMergeCoplanar.cpp
     kernel/test_BRepMultiCrossingBite.cpp
+    kernel/test_BRepMultiHoleFace.cpp
     kernel/test_BRepSimplify.cpp
     kernel/test_BRepSerialize.cpp
     kernel/test_HardSurfaceWorkflow.cpp
