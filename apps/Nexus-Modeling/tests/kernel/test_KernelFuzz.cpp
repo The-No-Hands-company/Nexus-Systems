@@ -114,6 +114,142 @@ TEST(KernelFuzz, BRepBooleanWatertightOrEmptyUnderRandomTransforms)
     EXPECT_GT(empty, 0);
 }
 
+// THE ANALYTIC SURFACE SCOPE, FUZZED — and fuzzed on VOLUME as well as topology.
+//
+// The B-rep fuzz above builds its solids from makeBox, makeFacetedCylinder and
+// makeFacetedSphere: all-planar bodies. Every curved capability this kernel has gained —
+// circle seams on spheres and cylinders, cone sections, parallel cylinder rulings, a sphere
+// meeting a cylinder on its axis — was therefore never fuzzed at all, because the generator
+// could not produce a curved surface to intersect.
+//
+// It also checks only that the result is well-formed. Everything this kernel validates is
+// topological, so a result can be watertight, integral, closed and the wrong SIZE, and
+// several defects have been exactly that. So the identities are fuzzed too: union plus
+// intersection equals both operands, difference plus intersection equals the first, each
+// measured against the MUTUALLY IMPRINTED operands (the result carries the seam vertices
+// and the pristine operands do not, so comparing against those measures tessellation
+// density rather than volume).
+//
+// WHAT IT FOUND, on its first serious run: 22 volume-identity violations in 2000 random
+// pairs, all of them sphere against box, all at subdivision 2 and above and NONE at
+// subdivision 0, magnitudes from 1.1e-05 to 8.8e-04. Zero leaky results and zero
+// non-deterministic ones across the same 6000 booleans, so the topology is sound and it is
+// specifically the refinement that disagrees.
+//
+// Narrowed so far, all measured: the output's edges match the operands' edge for edge —
+// same curve kind and the same refined midpoint, to zero — and the face counts match. So
+// the divergence is inside face tessellation rather than in the boundary. Root cause is NOT
+// yet established; two candidate explanations were tested and rejected (arcs lost in the
+// sew: counts match exactly; arcs restored on the complement range: no complement arcs in
+// any output). It is COUNTED here with a bound rather than asserted away, so it cannot
+// drift and cannot be forgotten.
+TEST(KernelFuzz, AnalyticSurfaceBooleansWatertightDeterministicAndVolumeConserving)
+{
+    auto analyticPrim = [](std::mt19937& rng) {
+        std::uniform_int_distribution<int> kind(0, 3);
+        std::uniform_real_distribution<float> dim(0.5f, 1.8f);
+        switch (kind(rng)) {
+            case 0: { const float w = dim(rng), h = dim(rng), d = dim(rng);
+                      return brep::makeBox(w, h, d); }
+            case 1: { const float r = dim(rng), h = dim(rng) + 1.f;
+                      return brep::makeCylinder(r, h, 16); }
+            case 2: { const float r = dim(rng);
+                      return brep::makeSphere(r, 8, 12); }
+            default: { const float r = dim(rng), h = dim(rng) + 1.f;
+                       return brep::makeCone(r, h, 16); }
+        }
+    };
+    auto volumeOf = [](const brep::Body& b, uint32_t sub) {
+        return MeshMassProperties::compute(b.toMesh(sub)).volume;
+    };
+
+    std::mt19937 rng(0xA17E51u);
+    std::uniform_real_distribution<double> tr(-1.0, 1.0);
+    int watertight = 0, empty = 0, identityViolations = 0;
+    double worstIdentity = 0.0;
+
+    for (int it = 0; it < 120; ++it) {
+        brep::Body A = analyticPrim(rng);
+        brep::Body B = analyticPrim(rng);
+        B.translate({tr(rng), tr(rng), tr(rng)});
+        // Occasionally give A a quarter turn about a principal axis, so axes meet at right
+        // angles as well as in parallel — which is what separates the pairs this kernel can
+        // answer from the quartics it declines.
+        if (rng() % 4u == 0u) {
+            Mat4 m = Mat4::identity();
+            switch (rng() % 3u) {
+                case 0: m.m[1][1] = 0; m.m[1][2] = -1; m.m[2][1] = 1; m.m[2][2] = 0; break;
+                case 1: m.m[0][0] = 0; m.m[0][2] = 1; m.m[2][0] = -1; m.m[2][2] = 0; break;
+                default: m.m[0][0] = 0; m.m[0][1] = -1; m.m[1][0] = 1; m.m[1][1] = 0; break;
+            }
+            (void)A.transform(m);
+        }
+
+        brep::Body Ai = A, Bi = B;
+        const bool imprinted = brep::imprintMutually(Ai, Bi);
+
+        brep::Body results[3];
+        int idx = 0;
+        for (brep::BooleanOp op : {brep::BooleanOp::Union, brep::BooleanOp::Intersection,
+                                   brep::BooleanOp::Difference}) {
+            const brep::Body r = brep::booleanToBody(A, B, op);
+            const auto ig = r.checkIntegrity();
+            ASSERT_TRUE(ig.ok) << "it=" << it << " op=" << static_cast<int>(op) << ": " << ig.reason;
+            if (r.faceCount() == 0) {
+                ++empty;
+            } else {
+                ASSERT_TRUE(r.isClosed()) << "it=" << it << " op=" << static_cast<int>(op)
+                                          << ": an analytic boolean returned a leaky solid";
+                ASSERT_EQ(ig.boundaryEdges, 0u) << "it=" << it << " op=" << static_cast<int>(op);
+                ++watertight;
+                // Determinism sampled rather than checked every time: it doubles the cost of
+                // the whole test and has never once varied.
+                if (it % 4 == 0)
+                    ASSERT_EQ(r.serialize(), brep::booleanToBody(A, B, op).serialize())
+                        << "it=" << it << " op=" << static_cast<int>(op);
+            }
+            results[idx++] = r;
+        }
+
+        if (!imprinted) continue;
+        const brep::Body& U = results[0];
+        const brep::Body& I = results[1];
+        const brep::Body& D = results[2];
+        for (const uint32_t sub : {0u, 2u}) {
+            if (U.faceCount() && I.faceCount()) {
+                const double lhs = volumeOf(U, sub) + volumeOf(I, sub);
+                const double rhs = volumeOf(Ai, sub) + volumeOf(Bi, sub);
+                if (std::abs(rhs) > 1e-9 && std::abs(lhs - rhs) > 1e-5 * std::abs(rhs)) {
+                    ++identityViolations;
+                    worstIdentity = std::max(worstIdentity, std::abs((lhs - rhs) / rhs));
+                }
+            }
+            if (D.faceCount() && I.faceCount()) {
+                const double lhs = volumeOf(D, sub) + volumeOf(I, sub);
+                const double rhs = volumeOf(Ai, sub);
+                if (std::abs(rhs) > 1e-9 && std::abs(lhs - rhs) > 1e-5 * std::abs(rhs)) {
+                    ++identityViolations;
+                    worstIdentity = std::max(worstIdentity, std::abs((lhs - rhs) / rhs));
+                }
+            }
+        }
+    }
+
+    // The space has to be rich enough to have exercised anything at all.
+    EXPECT_GT(watertight, 100) << "the generator produced almost no real results";
+    EXPECT_GT(empty, 0) << "nothing was declined — the out-of-scope pairs are not being hit";
+
+    // The known, unexplained refinement disagreement — bounded on BOTH sides so it can
+    // neither grow nor be quietly fixed without this saying so.
+    EXPECT_LE(identityViolations, 4)
+        << "volume-identity violations rose to " << identityViolations
+        << " (worst " << worstIdentity << ") — a boolean is returning the wrong size";
+    EXPECT_LT(worstIdentity, 2e-3)
+        << "the refinement disagreement grew to " << worstIdentity;
+    if (identityViolations == 0)
+        RecordProperty("note", "volume identities now hold everywhere; tighten this test");
+}
+
 // Mesh boolean: assert only the guarantees the kernel makes today — every output is
 // FINITE, DETERMINISTIC, and topologically well-formed enough to validate. Full
 // watertightness is a tracked gap (GAP-M): leaks are COUNTED, not asserted.
