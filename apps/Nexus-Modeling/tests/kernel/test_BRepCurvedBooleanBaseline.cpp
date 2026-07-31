@@ -10,9 +10,10 @@
 //
 //   1. WatertightOrEmpty invariant (PERMANENT) — a curved boolean is never a
 //      leaky/corrupt body; it is either empty or a valid closed solid.
-//   2. Which curved pairs sew (CHARACTERIZATION). sphere/sphere does, and so does
-//      CONCENTRIC box/sphere; the OFFSET box/sphere and box/cylinder fixtures here
-//      still bail to empty and are expected to FLIP in turn; the messages say so.
+//   2. Which curved pairs sew (CHARACTERIZATION). sphere/sphere, box/sphere and
+//      box/cylinder all sew now. The one fixture still pinned empty is box/sphere at
+//      dx = 0.7 with r = 1.2, a configuration whose exit circle clears the face
+//      entirely; it is expected to FLIP in turn and the message says so.
 //   3. Genuinely out-of-scope surface pairs (cyl∩cyl, sphere∩cyl, cone∩*) stay
 //      Unsupported and bail to empty (PERMANENT — outside the Circle-seam v1).
 //   4. A high-facet curved pair does not blow up / hang — the imprint face-budget
@@ -94,11 +95,11 @@ TEST(CurvedBooleanBaseline, WatertightOrEmptyInvariantHolds)
     }
 }
 
-// (2) CHARACTERIZATION: which curved pairs sew today. sphere/sphere does, and so does
-// box/sphere when the two are CONCENTRIC — the fixture below is deliberately OFFSET
-// (dx = 0.7), which does not sew yet. The distinction matters: reading this entry as
-// "box/sphere is empty" is now wrong, and the centred case is asserted positively in
-// test_BRepArcComplementSelection.cpp. box/cylinder remains empty at any offset.
+// (2) CHARACTERIZATION: which curved pairs sew today. sphere/sphere, box/cylinder and
+// box/sphere all do; the single box/sphere fixture below (dx = 0.7, r = 1.2) is one of
+// the configurations that still bails. Reading this entry as "box/sphere is empty" is
+// wrong — the positive assertions live in test_BRepArcComplementSelection.cpp and
+// test_BRepMultiCrossingBite.cpp.
 TEST(CurvedBooleanBaseline, CurvedPairsCurrentlyBailToEmpty)
 {
     const Body box = makeBox(2.f, 2.f, 2.f);
@@ -110,8 +111,11 @@ TEST(CurvedBooleanBaseline, CurvedPairsCurrentlyBailToEmpty)
     EXPECT_EQ(booleanToBody(box, sph, BooleanOp::Union).faceCount(), 0u)
         << "an OFFSET box/sphere union is now non-empty — verify it is watertight and "
            "conserves volume, then move it beside the centred case";
-    EXPECT_EQ(booleanToBody(box, cyl, BooleanOp::Union).faceCount(), 0u)
-        << "curved box/cylinder union is now non-empty — update this baseline";
+    // box/cylinder has flipped too: the offset cylinder's exit face is crossed by its
+    // seam more than twice, and cutting it there is what this fixture was waiting on.
+    const Body bcU = booleanToBody(box, cyl, BooleanOp::Union);
+    EXPECT_GT(bcU.faceCount(), 0u) << "offset box/cylinder union regressed to empty";
+    EXPECT_TRUE(bcU.isClosed());
 
     // sphere/sphere HAS flipped: once a Circle seam could be imprinted onto a spherical
     // face and the seam closed into a ring, this pair sews. Kept here as the positive

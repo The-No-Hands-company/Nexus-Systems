@@ -1806,6 +1806,141 @@ uint32_t Body::imprintCurve(uint32_t faceId, const Curve& curve, Tolerance tol,
             (void)subdivideArcAt(ce);  // match the other operand's discretization
             return newFace;
         }
+        // The circle crosses the boundary MORE THAN TWICE. Everything above handles a
+        // single bite, and anything else used to be refused — which quietly left the face
+        // STRADDLING the other solid, the one state the imprint exists to eliminate. The
+        // face is then classified whole, from one sample point, and every part of it that
+        // belongs on the other side of the circle is lost with it.
+        //
+        // It is not an exotic configuration. A sphere pushed off-centre through a box cuts
+        // the face it exits in a circle LARGER than the face's inradius but smaller than
+        // its half-diagonal, so the circle leaves and re-enters through all four edges:
+        // eight crossings, four arcs inside the face (one per corner) alternating with four
+        // outside. Measured on box(2³) against sphere(r1.2) offset 0.5, the +X face came
+        // out as a single 16-vertex face spanning the whole plane, classified Inside from
+        // its centre and dropped entire — 24 boundary edges left with one face instead of
+        // two, and all three operators empty. Concentric works only because there the
+        // circle is smaller than the face and takes the fully-interior path instead.
+        //
+        // Every cut is made HERE rather than one per call, because a face that has been cut
+        // once carries the arc on its boundary and the already-segmented guard above — which
+        // is right to stop a face being bitten along its own rim — would refuse the rest.
+        if (cc.size() > 2 && (cc.size() % 2) == 0) {
+            // Where a crossing sits in 3D, which is what orders the crossings around the
+            // circle. A fraction is along the boundary EDGE; the ordering has to be along
+            // the CURVE, and the two are unrelated once more than one edge is involved.
+            auto crossPoint = [&](const CCross& c) -> Vec3 {
+                if (c.isVertex) return m_verts[c.vertex].point;
+                const Edge& ed = m_edges[c.edge];
+                const uint32_t ecu = ed.curve;
+                if (ecu < m_curves.size() && m_curves[ecu].kind == CurveKind::Circle)
+                    return m_curves[ecu].eval(ed.t0 + c.frac * (ed.t1 - ed.t0));
+                const Vec3 a = m_verts[ed.v0].point, b = m_verts[ed.v1].point;
+                return add(a, scale(sub(b, a), c.frac));
+            };
+
+            const size_t n = cc.size();
+            std::vector<double> prm(n);
+            for (size_t i = 0; i < n; ++i) prm[i] = paramOnCurve(curve, crossPoint(cc[i]));
+            std::vector<size_t> order(n);
+            for (size_t i = 0; i < n; ++i) order[i] = i;
+            std::sort(order.begin(), order.end(),
+                      [&](size_t a, size_t b) { return prm[a] < prm[b]; });
+
+            // Consecutive crossings around the circle bound an arc that is wholly inside
+            // the face or wholly outside it, alternating. The inside ones are the cuts.
+            std::vector<std::pair<size_t, size_t>> bites;
+            for (size_t i = 0; i < n; ++i) {
+                const size_t ia = order[i], ib = order[(i + 1) % n];
+                const double pa = prm[ia];
+                const double pb = (prm[ib] > pa) ? prm[ib] : prm[ib] + kTwoPi;
+                if (!insideFace(curve.eval((pa + pb) * 0.5), poly)) continue;
+                // Both ends on ONE edge is the same-edge lens, which needs the midpoint
+                // split the dedicated path above performs. Left to it rather than
+                // half-handled here.
+                if (!cc[ia].isVertex && !cc[ib].isVertex && cc[ia].edge == cc[ib].edge) continue;
+                bites.emplace_back(ia, ib);
+            }
+            if (bites.empty()) return kInvalid;
+
+            // Resolve every crossing to a vertex BEFORE any face is cut. Several crossings
+            // routinely land on the SAME boundary edge — the eight-crossing case above puts
+            // two on each side of the square — and a fraction goes stale the moment that
+            // edge is split. So each is captured as an absolute parameter on the edge's own
+            // curve, and the edge is split from its FAR end inward, which leaves every
+            // remaining (lower) parameter inside the half that keeps the edge's id.
+            std::vector<uint32_t> vid(n, kInvalid);
+            std::vector<double> tAbs(n, 0.0);
+            for (size_t i = 0; i < n; ++i) {
+                if (cc[i].isVertex || cc[i].edge >= m_edges.size()) continue;
+                const Edge& ed = m_edges[cc[i].edge];
+                tAbs[i] = ed.t0 + cc[i].frac * (ed.t1 - ed.t0);
+            }
+            std::vector<size_t> toSplit;
+            for (size_t i = 0; i < n; ++i)
+                if (!cc[i].isVertex) toSplit.push_back(i);
+            std::sort(toSplit.begin(), toSplit.end(), [&](size_t a, size_t b) {
+                if (cc[a].edge != cc[b].edge) return cc[a].edge < cc[b].edge;
+                return cc[a].frac > cc[b].frac;  // far end of a shared edge first
+            });
+            for (const size_t i : toSplit) {
+                const uint32_t e = cc[i].edge;
+                if (e >= m_edges.size()) return kInvalid;
+                const double a0 = m_edges[e].t0, a1 = m_edges[e].t1;
+                if (!(std::abs(a1 - a0) > 0.0)) return kInvalid;
+                const double f = (tAbs[i] - a0) / (a1 - a0);
+                if (!(f > 0.0 && f < 1.0)) return kInvalid;
+                vid[i] = splitEdge(e, f, tol);
+                if (vid[i] == kInvalid) return kInvalid;
+            }
+            for (size_t i = 0; i < n; ++i)
+                if (cc[i].isVertex) vid[i] = cc[i].vertex;
+
+            // Does this face's outer loop carry both endpoints? After the first cut there
+            // are two faces and each later bite belongs to exactly one of them.
+            auto loopCarries = [&](uint32_t f, uint32_t va, uint32_t vb) {
+                if (f >= m_faces.size() || !m_faces[f].alive) return false;
+                const uint32_t l = m_faces[f].outerLoop;
+                if (l >= m_loops.size() || m_loops[l].first >= m_coedges.size()) return false;
+                bool ga = false, gb = false;
+                const uint32_t first = m_loops[l].first;
+                uint32_t w = first, guard = 0;
+                do {
+                    const uint32_t e = m_coedges[w].edge;
+                    if (e < m_edges.size()) {
+                        for (const uint32_t v : {m_edges[e].v0, m_edges[e].v1}) {
+                            if (v == va) ga = true;
+                            if (v == vb) gb = true;
+                        }
+                    }
+                    w = m_coedges[w].next;
+                    if (++guard > m_coedges.size() + 1u) break;
+                } while (w != first);
+                return ga && gb;
+            };
+
+            std::vector<uint32_t> pieces{faceId};
+            uint32_t produced = kInvalid;
+            for (const auto& [ia, ib] : bites) {
+                const uint32_t vA = vid[ia], vB = vid[ib];
+                if (vA == kInvalid || vB == kInvalid || vA == vB) continue;
+                uint32_t target = kInvalid;
+                for (const uint32_t f : pieces)
+                    if (loopCarries(f, vA, vB)) { target = f; break; }
+                if (target == kInvalid) continue;
+                const uint32_t ce = static_cast<uint32_t>(m_edges.size());
+                const uint32_t nf = cutFaceBetween(target, vA, vB, &curve);
+                if (nf == kInvalid) continue;
+                // The arc is chosen against the ORIGINAL boundary, which is the polygon the
+                // cut has to lie inside; the sub-faces are only its pieces.
+                keepArcInsideFace(ce);
+                (void)subdivideArcAt(ce);
+                pieces.push_back(nf);
+                produced = nf;
+            }
+            return produced;  // kInvalid if nothing could be cut — the caller treats that
+                              // as "untouched", which it is.
+        }
         if (!cc.empty()) return kInvalid;  // odd crossing count → deferred
 
         // Fully-interior circle → the face is SEGMENTED along it: the circle becomes an
