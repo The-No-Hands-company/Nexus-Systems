@@ -43,6 +43,7 @@ The exhaustive technical log lives beside this book in the audit memory and the 
   - 62. Where the points come from
   - 63. Asked the same question five thousand times
   - 64. Passing because nothing had succeeded
+  - 65. Which piece keeps the hole
 
 ---
 
@@ -1382,6 +1383,40 @@ So the fixture is now a pair whose analytic chain genuinely works, with the volu
 A last note on this arc as a whole, because it is the fourth time. A test can be green for a reason that has nothing to do with what it says. This one needed two independent failures to stay green, and the fix that broke it was an improvement to one of them. The lesson is not to distrust green suites in general — it is that **when a test starts failing after an unrelated improvement, the first hypothesis should be that the test was wrong, not that the improvement was.**
 
 Two thousand six hundred and forty-one tests ran; all passed, with five hardware skips.
+
+---
+
+---
+
+## 65. Which piece keeps the hole
+
+The previous chapter left a limitation visible instead of hidden: chaining a Boolean off a bored box declined. Drill a hole, then cut across it, and the analytic path returned an empty body — which is its watertight-or-empty contract behaving correctly, and no use at all to someone who wanted the part.
+
+Three hypotheses about why were wrong, and each was wrong in an instructive way.
+
+**Tangency.** The original fixture bored a radius-0.5 cylinder and then subtracted a bar of side 1.0, whose side planes are *exactly* tangent to that bore. Tangency is this book's standing example of a configuration whose true answer is not a manifold solid, so it declines by contract. It looked open and shut. But sweeping the bar's width showed every width failing, tangent or not, so tangency was a coincidence in the fixture rather than the cause.
+
+**Holed faces as such.** The bored box's caps carry inner loops, and the Boolean is known to have had trouble with those before. But cutting a holed cap with a small block works perfectly, so merely being holed was not it.
+
+**The bore at all.** A two-factor sweep settled that: the failure tracked "the cut reaches the top face" and did not track "the cut meets the bore" — those two factors were cleanly separable and only one mattered. And a plain box takes the identical slot without complaint.
+
+What ended the guessing was instrumenting the sew instead of the geometry. `fromFaces` **succeeded**, integrity was clean, and the body was merely not *closed* — with all twenty-two of its one-sided edges sitting at z = 1.0 on the bore's rim. That named the holed cap directly, and the rest fell out in one step.
+
+`cutFaceBetween` divides a face's outer loop into two rings and hands one to a new face. It never looked at the face's **inner** loops. So every hole stayed attached to whichever piece inherited the original face record — and which piece that is depends on which *segment of the ring* kept the old id, a bookkeeping detail with no relationship whatever to where the hole is.
+
+On the fixture, the top cap split into the strip y ∈ [0.6, 1.0] and the remainder y ∈ [−1, 0.6]. The bore's hole — a circle of radius 0.5 about the origin, comfortably inside the remainder — was left on the **strip**. The strip is inside the cut, so the Difference correctly dropped it, and it carried the bore's rim away with it. Twenty-four rim segments then had only their cylinder partners, the shell would not close, and the contract turned that into an empty result.
+
+> The hole was assigned by bookkeeping. It has to be assigned by geometry: a hole belongs to the piece that contains it, and that is a question you can simply ask.
+
+So each inner loop is now placed by testing its centroid against the two pieces' rings — planar faces through the direct in-plane test, curved ones through the parameter domain, which is what the rest of the file already does for containment.
+
+Unless the cut runs *through* the hole. That is not a re-assignment at all: it is a hole being divided into two boundary arcs and merged into the outer loops, and `cutFaceBetween` does not do that. It is **refused** rather than approximated, so the Boolean still returns cleanly empty there — the same outcome as before, now reached by decision instead of by producing an unclosed shell — and it is pinned as the remaining gap with instructions to promote the test when it is closed.
+
+**What was proven.** A slot across a bored box's top, clear of the bore: empty → 36 faces. A bar that *swallows* the bore: empty → 24 faces, and now agreeing to 10⁻⁶ with cutting the plain box directly, which is the identity that says removing the bore first cannot change the answer when the bar takes all of it. A notch across a drilled plate: sews, keeps its hole, and hits the exact expected volume. Bars narrower than the bore, and the exactly-tangent bar, still decline. Four of the five new tests fail on revert; the fifth pins the still-declining case and so passes either way, which is what a characterization should do.
+
+One piece of housekeeping came out of it. A block commented `// TEMPORARY DIAGNOSTIC` had been committed inside `booleanToBody`, calling `getenv` on every Boolean the kernel performs. It is the thing that cracked this chapter, which is the only reason it survived to be removed at the end of it rather than the start.
+
+Two thousand six hundred and forty-six tests ran; all passed, with five hardware skips.
 
 ---
 
