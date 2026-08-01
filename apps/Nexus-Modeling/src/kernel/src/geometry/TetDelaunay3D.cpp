@@ -1,10 +1,14 @@
 #include <nexus/geometry/TetDelaunay3D.h>
+#include <nexus/geometry/MeshConvexHull.h>
 #include <nexus/geometry/RobustPredicates.h>
+
+#include "DelaunaySuperTriangle.h"
 
 #include <algorithm>
 #include <array>
 #include <limits>
 #include <unordered_map>
+#include <utility>
 
 namespace nexus::geometry {
 
@@ -62,14 +66,36 @@ struct FaceKeyHash {
     }
 };
 
-} // namespace
+// Exact-ish convex hull volume: fan the hull's own triangles against the origin through the
+// orientation predicate, which differences the coordinates first (see the note on the 2D
+// area helper — the shoelace/triple-product form on raw coordinates loses most of its digits
+// on a sliver). Zero for a point set with no interior, which correctly has no
+// tetrahedralization to compare against.
+double convexHullVolume(const std::vector<Vec3>& points)
+{
+    const ConvexHull h = MeshConvexHull::build(points);
+    if (h.faces.empty()) return 0.0;
+    double six = 0.0;
+    for (const auto& f : h.faces) {
+        six += RobustPredicates::orient3D(h.vertices[f[0]], h.vertices[f[1]], h.vertices[f[2]],
+                                          Vec3{0.f, 0.f, 0.f});
+    }
+    return std::abs(six) / 6.0;
+}
 
-TetMesh TetDelaunay3D::compute(const std::vector<Vec3>& points,
-                                const TetDelaunayOptions& opts) noexcept
+double tetrahedraVolume(const TetMesh& m)
+{
+    double six = 0.0;
+    for (const auto& t : m.tetrahedra) {
+        six += std::abs(RobustPredicates::orient3D(m.vertices[t[0]], m.vertices[t[1]],
+                                                   m.vertices[t[2]], m.vertices[t[3]]));
+    }
+    return six / 6.0;
+}
+
+TetMesh computeAtScale(const std::vector<Vec3>& points, float scaleMultiplier)
 {
     TetMesh result;
-    if (points.size() < 4) return result;
-
     result.vertices = points;
 
     // Compute bounding box.
@@ -91,7 +117,7 @@ TetMesh TetDelaunay3D::compute(const std::vector<Vec3>& points,
     float cy = (bmin.y + bmax.y) * 0.5f;
     float cz = (bmin.z + bmax.z) * 0.5f;
 
-    float scale = std::max({dx, dy, dz}) * 6.f;
+    float scale = std::max({dx, dy, dz}) * scaleMultiplier;
     uint32_t sv0 = static_cast<uint32_t>(result.vertices.size());
     result.vertices.push_back({cx,           cy,           cz - scale});
     result.vertices.push_back({cx - scale,   cy + scale,   cz + scale});
@@ -101,8 +127,6 @@ TetMesh TetDelaunay3D::compute(const std::vector<Vec3>& points,
     const uint32_t sv2 = sv0 + 2;
     const uint32_t sv3 = sv0 + 3;
     const uint32_t nPoints = static_cast<uint32_t>(points.size());
-
-    (void)opts;  // the exact in-sphere predicate needs no epsilon slop
 
     // Start with the super-tetrahedron.
     std::vector<Tet> tets;
@@ -181,6 +205,37 @@ TetMesh TetDelaunay3D::compute(const std::vector<Vec3>& points,
     }
 
     return result;
+}
+
+} // namespace
+
+// A Delaunay tetrahedralization tiles the convex hull of its input exactly. Verify that, and
+// grow the super-tetrahedron until it holds — the 3D case of the sizing problem documented in
+// DelaunaySuperTriangle.h. A single fixed multiple of the bounding box cannot be right,
+// because what the super-tetrahedron has to escape is the largest CIRCUMSPHERE in the
+// triangulation, and that is driven by the input's thinnest tet rather than by its extent.
+TetMesh TetDelaunay3D::compute(const std::vector<Vec3>& points,
+                                const TetDelaunayOptions& opts) noexcept
+{
+    (void)opts;  // the exact in-sphere predicate needs no epsilon slop
+    if (points.size() < 4) return TetMesh{};
+
+    const double hullVolume = convexHullVolume(points);
+
+    TetMesh best;
+    double bestVolume = -1.0;
+    for (const float scale : detail::kSuperTetScales) {
+        TetMesh candidate = computeAtScale(points, scale);
+        const double volume = tetrahedraVolume(candidate);
+        if (volume > bestVolume) {
+            bestVolume = volume;
+            best = std::move(candidate);
+        }
+        // A coplanar/collinear input has no volume to cover, and returning nothing for it is
+        // correct — do not spend the rest of the schedule on it.
+        if (hullVolume <= 0.0 || detail::coversHull(bestVolume, hullVolume)) break;
+    }
+    return best;
 }
 
 } // namespace nexus::geometry

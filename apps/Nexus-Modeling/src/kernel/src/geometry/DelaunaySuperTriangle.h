@@ -31,6 +31,14 @@ namespace nexus::geometry::detail {
 // scale, so well-conditioned inputs cost exactly one build and are bit-for-bit unchanged.
 inline constexpr float kSuperTriangleScales[] = {20.f, 2e4f, 2e7f, 2e10f, 2e13f};
 
+// The same schedule for the 3D tetrahedralizer, which has the same failure for the same
+// reason — a sliver TET's circumSPHERE swallows the super-tetrahedron's vertices, those tets
+// are never emitted, and stripping the super-tetrahedron then deletes real volume. Measured
+// on 25 uniformly random points in a cube: at the historical fixed scale the tetrahedra
+// covered less than the convex hull in 50 of 60 point sets, by up to 1.8% of the volume.
+// First entry is that historical scale, so well-conditioned inputs are unchanged.
+inline constexpr float kSuperTetScales[] = {6.f, 2e4f, 2e7f, 2e10f, 2e13f};
+
 // Exact convex-hull area (monotone chain on the exact orientation predicate). Returns 0
 // for fewer than 3 distinct points or for an exactly-collinear set — both of which have
 // no triangulation, so a triangulator that returns nothing for them is correct.

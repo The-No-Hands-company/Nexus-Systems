@@ -1,17 +1,31 @@
 #include <gtest/gtest.h>
 
 #include <nexus/geometry/TetDelaunay3D.h>
+#include <nexus/geometry/MeshConvexHull.h>
+#include <nexus/geometry/RobustPredicates.h>
 
 #include <array>
 #include <cmath>
+#include <cstdint>
 #include <random>
+#include <utility>
 #include <vector>
 
 // TetDelaunay3D (incremental Bowyer-Watson 3D Delaunay tetrahedralization) shipped with no
-// test coverage at all. It turns out to be correct — these tests pin it to the defining
-// Delaunay properties so it stays that way: valid non-degenerate tets, every input vertex
-// used, the empty-circumsphere property (no vertex strictly inside any tet's circumsphere),
-// and — for inputs whose convex hull is a known shape — an exact tiling of that hull volume.
+// test coverage at all. These tests pin it to the defining Delaunay properties: valid
+// non-degenerate tets, every input vertex used, the empty-circumsphere property (no vertex
+// strictly inside any tet's circumsphere), and an exact tiling of the input's convex hull.
+//
+// CORRECTION: this comment used to say "it turns out to be correct". Its circumsphere
+// property was, and is; its HULL COVERAGE was not, and the fixed-shape fixtures below could
+// not see it. On 25 uniformly random points in a cube the tetrahedra covered less than the
+// convex hull in 50 of 60 point sets, by up to 1.8% of the volume — the super-tetrahedron
+// sizing problem already documented and solved for the 2D triangulators in
+// DelaunaySuperTriangle.h: a sliver tet's circumsphere swallows the super-tetrahedron's
+// vertices, so that tet is never emitted, and stripping the super-tetrahedron at the end
+// deletes real volume. The fixtures here are well conditioned enough that the historical
+// fixed scale happened to suffice for them. The randomized coverage test at the bottom is
+// the one that fails on the old code.
 
 namespace {
 
@@ -173,4 +187,69 @@ TEST(TetDelaunay3D, ComputeIsDeterministic) {
     ASSERT_EQ(a.tetrahedronCount(), b.tetrahedronCount());
     for (size_t i = 0; i < a.tetrahedra.size(); ++i)
         EXPECT_EQ(a.tetrahedra[i], b.tetrahedra[i]) << "tet " << i;
+}
+
+// The property the fixed-shape fixtures above could not see: a Delaunay tetrahedralization
+// tiles the convex hull of its input EXACTLY, for any input, not just for well-conditioned
+// ones. Both volumes are accumulated in double from the same float coordinates through the
+// orientation predicate, so a correct result matches to near machine precision.
+TEST(TetDelaunay3D, TilesTheConvexHullOfRandomInputExactly) {
+    auto hullVolume = [](const std::vector<Vec3>& pts) {
+        const ConvexHull h = MeshConvexHull::build(pts);
+        if (h.faces.empty()) return 0.0;
+        double six = 0.0;
+        for (const auto& f : h.faces)
+            six += RobustPredicates::orient3D(h.vertices[f[0]], h.vertices[f[1]],
+                                              h.vertices[f[2]], Vec3{0.f, 0.f, 0.f});
+        return std::abs(six) / 6.0;
+    };
+
+    std::mt19937 rng(555u);
+    std::uniform_real_distribution<float> u(-1.f, 1.f);
+    std::uniform_int_distribution<int> gi(-3, 3);
+
+    int checked = 0;
+    for (int it = 0; it < 12; ++it) {
+        std::vector<std::pair<const char*, std::vector<Vec3>>> families;
+        {   // uniform in a cube
+            std::vector<Vec3> p;
+            for (int i = 0; i < 25; ++i) p.push_back({u(rng), u(rng), u(rng)});
+            families.emplace_back("uniform", std::move(p));
+        }
+        {   // a 1e-4-thick slab — the sliver case the super-tetrahedron sizing exists for
+            std::vector<Vec3> p;
+            for (int i = 0; i < 22; ++i) p.push_back({u(rng), u(rng), u(rng) * 1e-4f});
+            families.emplace_back("near-planar", std::move(p));
+        }
+        {   // integer grid: exactly cospherical quadruples are common
+            std::vector<Vec3> p;
+            for (int i = 0; i < 25; ++i)
+                p.push_back({(float)gi(rng), (float)gi(rng), (float)gi(rng)});
+            families.emplace_back("grid", std::move(p));
+        }
+        {   // a tight cluster beside a few far points
+            std::vector<Vec3> p;
+            for (int i = 0; i < 18; ++i)
+                p.push_back({u(rng) * 1e-3f, u(rng) * 1e-3f, u(rng) * 1e-3f});
+            for (int i = 0; i < 4; ++i) p.push_back({u(rng), u(rng), u(rng)});
+            families.emplace_back("clustered", std::move(p));
+        }
+
+        for (const auto& [name, pts] : families) {
+            const TetMesh m = TetDelaunay3D::compute(pts);
+            const double hv = hullVolume(pts);
+            if (hv <= 1e-12) continue;  // degenerate input has no tetrahedralization
+            ASSERT_FALSE(m.empty()) << name << " it=" << it << ": no tetrahedra for a solid input";
+
+            double vol = 0.0;
+            for (const auto& t : m.tetrahedra)
+                vol += tetVolume(m.vertices[t[0]], m.vertices[t[1]],
+                                 m.vertices[t[2]], m.vertices[t[3]]);
+            ++checked;
+            EXPECT_NEAR(vol, hv, hv * 1e-6)
+                << name << " it=" << it << ": tetrahedra cover " << vol << " of a hull of " << hv
+                << " (" << 100.0 * (hv - vol) / hv << "% missing)";
+        }
+    }
+    EXPECT_GT(checked, 30) << "the sweep did not run";
 }
