@@ -153,22 +153,59 @@ TEST(BRepSplitHoledFace, ADrilledPlateCutClearOfItsHoleSews)
     EXPECT_NEAR(static_cast<double>(r.massProperties().volume), plateVol - notchVol, 1e-3);
 }
 
-// THE REMAINING GAP, pinned so it is visible: a cut running THROUGH a hole would divide that hole
-// into two boundary arcs, and cutFaceBetween declines instead. The Boolean then returns cleanly
-// empty, which is the watertight-or-empty contract, not a crash. If this starts sewing, the hole-
-// splitting case has been implemented and this characterization should become a real assertion.
-TEST(BRepSplitHoledFace, ACutThroughAHoleStillDeclinesCleanly)
+// A CUT WHOSE LINE RUNS THROUGH A HOLE. This was the characterization
+// `ACutThroughAHoleStillDeclinesCleanly` — it asserted the Boolean returned empty, because
+// `cutFaceBetween` can only split between two OUTER-loop vertices and a cut through a hole needs
+// that hole divided into two boundary arcs and merged into both results' outer rings.
+// `cutFaceThroughHole` does that now, so it is a real assertion.
+//
+// Two things had to change together. The cut operator itself, and the CROSSING SEARCH, which
+// only ever walked the outer loop — so it found no crossings on the hole and applied the cut as
+// though the hole were not there. And inside that search, the arc solver dismissed a line lying
+// IN an arc's plane as "parallel" and skipped it, which is the ordinary case for a hole in a
+// planar face: the cut line and the hole's arcs are coplanar by construction.
+TEST(BRepSplitHoledFace, ACutWhoseLineRunsThroughAHoleSews)
 {
     const Body bored = boredBox();
-    Body slot = makeBox(6.f, 0.8f, 0.8f);   // y in [-0.4, 0.4] runs straight through the bore
-    slot.translate({0., 0., 0.8});          // and out through the top
+    const double boredVol = static_cast<double>(bored.massProperties().volume);
 
-    const Body r = booleanToBody(bored, slot, BooleanOp::Difference);
-    EXPECT_EQ(r.faceCount(), 0u)
-        << "a cut through a hole now sews — implement/verify the hole-splitting case and promote "
-           "this into a real assertion";
-    // whatever happens, the contract holds: empty or watertight, never leaky
-    if (r.faceCount() > 0) EXPECT_TRUE(r.isClosed());
+    // A bar strictly INSIDE the bore removes only empty space, so the solid must not change —
+    // but its cut PLANES still run across the cap face and through the bore circle, which is
+    // exactly the configuration that used to defeat this. A square bar of half-width h has its
+    // corners at h*sqrt(2), so h < 0.5/sqrt(2) = 0.354 is strictly inside.
+    for (const double side : {0.4, 0.5, 0.6, 0.69}) {
+        Body bar = makeBox(static_cast<float>(side), static_cast<float>(side), 6.f);
+        const Body r = booleanToBody(bored, bar, BooleanOp::Difference);
+        ASSERT_TRUE(sound(r)) << "side=" << side << ": a cut through the bore did not sew";
+        // The volume is the oracle, and it must be EXACT: the operation removes nothing.
+        EXPECT_NEAR(static_cast<double>(r.massProperties().volume), boredVol, 1e-6)
+            << "side=" << side << ": a cut through empty space changed the solid";
+        // The bore is still OPEN — but it is no longer an inner LOOP, and that is the point of
+        // the operator rather than a defect: the hole has been merged into both pieces' outer
+        // boundaries, so the opening is bounded by arcs of the outer ring now. What must hold is
+        // the geometry, so it is asked geometrically.
+        EXPECT_EQ(r.classifyPoint(Vec3{0.0, 0.0, 0.0}), Body::PointContainment::Outside)
+            << "side=" << side << ": the bore's axis reads as material — the bore was closed up";
+        EXPECT_EQ(r.classifyPoint(Vec3{0.9, 0.9, 0.0}), Body::PointContainment::Inside)
+            << "side=" << side << ": the plate's own material reads as empty";
+    }
+}
+
+// The remaining decline, pinned. A bar whose cross-section CROSSES the bore's circle — corners
+// outside it, edges inside — is a genuine cut that should leave a rounded-cross hole, and it
+// still returns cleanly empty. If this starts sewing, promote it into the test above with a
+// volume oracle (box minus the union of circle and square).
+TEST(BRepSplitHoledFace, ACutCrossingTheBoreCircleStillDeclinesCleanly)
+{
+    const Body bored = boredBox();
+    for (const double side : {0.8, 0.9}) {   // h = 0.40, 0.45: corners outside, edges inside
+        Body bar = makeBox(static_cast<float>(side), static_cast<float>(side), 6.f);
+        const Body r = booleanToBody(bored, bar, BooleanOp::Difference);
+        EXPECT_EQ(r.faceCount(), 0u)
+            << "side=" << side << ": this now sews — promote it, with the volume oracle "
+               "8 - 2*area(circle union square)";
+        if (r.faceCount() > 0) EXPECT_TRUE(r.isClosed());   // the contract regardless
+    }
 }
 
 // THE SIZE OF THE REMAINING GAP, AND THE GUARANTEE THAT HOLDS ACROSS IT.
@@ -233,11 +270,12 @@ TEST(BRepSplitHoledFace, EveryOperationOnAHoledSolidIsWatertightOrCleanlyEmpty)
 
     EXPECT_GT(total, 100) << "the sweep did not run";
     EXPECT_EQ(watertight + cleanlyEmpty, total) << "a result was neither watertight nor empty";
-    // A floor, so the declining band cannot silently widen. Raise it when the inner-loop
-    // crossing case lands — that is the measure of that work.
-    EXPECT_GE(watertight, total / 3)
+    // A floor, so the declining band cannot silently widen. It was total/3 when a cut whose
+    // line crossed an inner loop could not be made at all; over the full 972-operation sweep
+    // that work took the rate from 50.1% to 75.1%, so the floor moves with it.
+    EXPECT_GE(watertight, (total * 2) / 3)
         << watertight << " of " << total << " operations on a holed solid produced a solid; "
-        << "the cut-crosses-an-inner-loop gap has widened";
+        << "the cut-crosses-an-inner-loop path has regressed";
 }
 
 }  // namespace nexus::geometry::brep::testing

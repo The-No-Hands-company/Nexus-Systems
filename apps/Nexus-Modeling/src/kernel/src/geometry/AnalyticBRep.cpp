@@ -1747,6 +1747,165 @@ uint32_t Body::cutFaceBetween(uint32_t faceId, uint32_t vA, uint32_t vB,
     return faceB;
 }
 
+// CUT A FACE ALONG A CURVE THAT CROSSES ONE OF ITS HOLES.
+//
+// `cutFaceBetween` splits a face between two OUTER-loop vertices, and it is the only cut the
+// imprint had. When the cut's line runs through a hole that is the wrong topology, and the
+// consequences were measured: the imprint sliced a bored box's cap into a 3x3 grid whose CENTRE
+// piece lay entirely inside the bore's hole — a face over empty space, its sample point at the
+// hole's centre — while the hole itself was left on a corner piece that could not contain it.
+// Half of all Boolean operations on a holed solid declined because of it.
+//
+// The right answer has the hole become part of BOTH results' outer boundaries. The cut is two
+// segments — from the outer ring to the hole, and from the hole back out — and the four crossing
+// points, taken in order ALONG THE CURVE, are outer, hole, hole, outer. Call them O1, H1, H2, O2.
+// Then, walking each ring in its own stored direction:
+//
+//     face A : outer O1->O2 , cut O2->H2 , hole H2->H1 , cut H1->O1
+//     face B : outer O2->O1 , cut O1->H1 , hole H1->H2 , cut H2->O2
+//
+// Both close, each of the two cut edges gets exactly two coedges, and every pre-existing coedge
+// is used exactly once. THE PAIRING NEEDS NO SIDE TEST: which hole arc belongs with which outer
+// arc is forced by the vertex sequence, because an inner loop is wound OPPOSITE to its outer
+// ring, so traversing it forward from H2 covers exactly the side that outer O1->O2 bounds.
+// Worked on a square cap with a central circular hole cut along x = 0: outer O1->O2 is the x <= 0
+// half and hole H2->H1 is the x <= 0 half of the circle, which is the pairing above.
+//
+// The hole's loop record is retired: its coedges have been redistributed into the two outer
+// loops, and it is no longer a hole of anything.
+uint32_t Body::cutFaceThroughHole(uint32_t faceId, uint32_t holeLoop, uint32_t vO1, uint32_t vH1,
+                                  uint32_t vH2, uint32_t vO2, const Curve& curve)
+{
+    if (faceId >= m_faces.size() || !m_faces[faceId].alive) return kInvalid;
+    if (holeLoop >= m_loops.size() || !m_loops[holeLoop].alive) return kInvalid;
+    // One hole only in this cut. A face with a second hole would need that one re-assigned to
+    // whichever piece contains it, and declining is honest rather than approximate.
+    if (m_faces[faceId].innerLoops.size() != 1u) return kInvalid;
+    if (m_faces[faceId].innerLoops[0] != holeLoop) return kInvalid;
+    const uint32_t loopA = m_faces[faceId].outerLoop;
+    if (loopA >= m_loops.size() || m_loops[loopA].first >= m_coedges.size()) return kInvalid;
+    if (vO1 == vO2 || vH1 == vH2) return kInvalid;
+
+    // Walk a ring into (coedges, start vertices).
+    auto walk = [&](uint32_t lid, std::vector<uint32_t>& ce, std::vector<uint32_t>& sv) {
+        ce.clear(); sv.clear();
+        uint32_t w = m_loops[lid].first, guard = 0;
+        do {
+            if (w >= m_coedges.size()) return false;
+            ce.push_back(w);
+            const Coedge& x = m_coedges[w];
+            if (x.edge >= m_edges.size()) return false;
+            sv.push_back(x.reversed ? m_edges[x.edge].v1 : m_edges[x.edge].v0);
+            w = x.next;
+            if (++guard > m_coedges.size() + 1) return false;
+        } while (w != m_loops[lid].first);
+        return true;
+    };
+    std::vector<uint32_t> oce, osv, hce, hsv;
+    if (!walk(loopA, oce, osv) || !walk(holeLoop, hce, hsv)) return kInvalid;
+
+    auto posOf = [](const std::vector<uint32_t>& sv, uint32_t v) -> int {
+        for (size_t i = 0; i < sv.size(); ++i) if (sv[i] == v) return static_cast<int>(i);
+        return -1;
+    };
+    const int pO1 = posOf(osv, vO1), pO2 = posOf(osv, vO2);
+    const int pH1 = posOf(hsv, vH1), pH2 = posOf(hsv, vH2);
+    if (pO1 < 0 || pO2 < 0 || pH1 < 0 || pH2 < 0) return kInvalid;
+
+    // Split a ring at two positions into the arc a->b and the arc b->a.
+    auto arcs = [](const std::vector<uint32_t>& ce, int a, int b,
+                   std::vector<uint32_t>& ab, std::vector<uint32_t>& ba) {
+        const int n = static_cast<int>(ce.size());
+        ab.clear(); ba.clear();
+        for (int i = a; i != b; i = (i + 1) % n) ab.push_back(ce[static_cast<size_t>(i)]);
+        for (int i = b; i != a; i = (i + 1) % n) ba.push_back(ce[static_cast<size_t>(i)]);
+    };
+    std::vector<uint32_t> outerA, outerB, holeArc1, holeArc2;
+    arcs(oce, pO1, pO2, outerA, outerB);
+    arcs(hce, pH1, pH2, holeArc1, holeArc2);
+    if (outerA.empty() || outerB.empty() || holeArc1.empty() || holeArc2.empty()) return kInvalid;
+
+    // The two cut segments, both on the imprint curve, with their own parameter ranges so each
+    // reproduces its own endpoints and checkGeometry holds.
+    const uint32_t curveId = static_cast<uint32_t>(m_curves.size());
+    m_curves.push_back(curve);
+    const uint32_t eS = static_cast<uint32_t>(m_edges.size());
+    {
+        Edge e;
+        e.curve = curveId; e.v0 = vO1; e.v1 = vH1;
+        e.t0 = paramOnCurve(curve, m_verts[vO1].point);
+        e.t1 = paramOnCurve(curve, m_verts[vH1].point);
+        m_edges.push_back(e);
+    }
+    const uint32_t eT = static_cast<uint32_t>(m_edges.size());
+    {
+        Edge e;
+        e.curve = curveId; e.v0 = vH2; e.v1 = vO2;
+        e.t0 = paramOnCurve(curve, m_verts[vH2].point);
+        e.t1 = paramOnCurve(curve, m_verts[vO2].point);
+        m_edges.push_back(e);
+    }
+
+    const uint32_t faceB = static_cast<uint32_t>(m_faces.size());
+    {
+        Face f;
+        f.surface = m_faces[faceId].surface;
+        f.reversed = m_faces[faceId].reversed;
+        f.shell = m_faces[faceId].shell;
+        m_faces.push_back(f);
+    }
+    const uint32_t loopB = static_cast<uint32_t>(m_loops.size());
+    { Loop l; l.face = faceB; l.outer = true; m_loops.push_back(l); }
+    m_faces[faceB].outerLoop = loopB;
+
+    // Four new coedges: each cut edge is used once by each face, in opposite senses.
+    const uint32_t cA_T = static_cast<uint32_t>(m_coedges.size());   // A: O2 -> H2 (eT backwards)
+    { Coedge x; x.edge = eT; x.reversed = true;  x.loop = loopA; m_coedges.push_back(x); }
+    const uint32_t cA_S = static_cast<uint32_t>(m_coedges.size());   // A: H1 -> O1 (eS backwards)
+    { Coedge x; x.edge = eS; x.reversed = true;  x.loop = loopA; m_coedges.push_back(x); }
+    const uint32_t cB_S = static_cast<uint32_t>(m_coedges.size());   // B: O1 -> H1 (eS forwards)
+    { Coedge x; x.edge = eS; x.reversed = false; x.loop = loopB; m_coedges.push_back(x); }
+    const uint32_t cB_T = static_cast<uint32_t>(m_coedges.size());   // B: H2 -> O2 (eT forwards)
+    { Coedge x; x.edge = eT; x.reversed = false; x.loop = loopB; m_coedges.push_back(x); }
+    m_coedges[cA_S].partner = cB_S; m_coedges[cB_S].partner = cA_S;
+    m_coedges[cA_T].partner = cB_T; m_coedges[cB_T].partner = cA_T;
+
+    // Re-home the coedges that move to face B, and the hole arcs that join each outer ring.
+    for (const uint32_t c : outerB)   m_coedges[c].loop = loopB;
+    for (const uint32_t c : holeArc1) m_coedges[c].loop = loopB;
+    for (const uint32_t c : holeArc2) m_coedges[c].loop = loopA;
+
+    auto chain = [&](const std::vector<uint32_t>& ring, uint32_t lid) {
+        for (size_t i = 0; i < ring.size(); ++i) {
+            const uint32_t a = ring[i], b = ring[(i + 1) % ring.size()];
+            m_coedges[a].next = b;
+            m_coedges[b].prev = a;
+        }
+        m_loops[lid].first = ring.front();
+    };
+    std::vector<uint32_t> ringA = outerA;
+    ringA.push_back(cA_T);
+    ringA.insert(ringA.end(), holeArc2.begin(), holeArc2.end());
+    ringA.push_back(cA_S);
+    std::vector<uint32_t> ringB = outerB;
+    ringB.push_back(cB_S);
+    ringB.insert(ringB.end(), holeArc1.begin(), holeArc1.end());
+    ringB.push_back(cB_T);
+    chain(ringA, loopA);
+    chain(ringB, loopB);
+
+    // The hole is gone: it is boundary now, on both faces.
+    m_faces[faceId].innerLoops.clear();
+    m_loops[holeLoop].alive = false;
+    m_loops[holeLoop].face = kInvalid;
+
+    const uint32_t sh = m_faces[faceId].shell;
+    if (sh < m_shells.size()) m_shells[sh].faces.push_back(faceB);
+    m_edges[eS].coedge = cB_S;
+    m_edges[eT].coedge = cB_T;
+    return faceB;
+}
+
 uint32_t Body::imprintCurve(uint32_t faceId, const Curve& curve, Tolerance tol,
                             const std::vector<Vec3>* ringPoints)
 {
@@ -2662,10 +2821,19 @@ uint32_t Body::imprintCurve(uint32_t faceId, const Curve& curve, Tolerance tol,
     // case is essential for repeated/mutual imprinting: a neighbouring face's
     // imprint drops a vertex on the shared edge exactly where a later cut line
     // meets this face, so that meeting point is a vertex, not an edge interior.
+    struct Cross { bool isVertex; uint32_t vertex; uint32_t edge; double frac; };
+
+    // The crossing search, over ANY ring of this face — the outer boundary or one of its holes.
+    // It used to run only over the outer loop, which is why a cut whose line passes through a
+    // hole was applied as though the hole were not there.
+    auto crossingsOn = [&](const std::vector<uint32_t>& rVerts,
+                           const std::vector<uint32_t>& rEdges) {
+    const std::vector<uint32_t>& bVerts = rVerts;
+    const std::vector<uint32_t>& bEdges = rEdges;
+    const size_t n = bVerts.size();
     std::vector<bool> vOnLine(n, false);
     for (size_t i = 0; i < n; ++i) vOnLine[i] = distToLine(m_verts[bVerts[i]].point) <= eps;
 
-    struct Cross { bool isVertex; uint32_t vertex; uint32_t edge; double frac; };
     std::vector<Cross> crossings;
     for (size_t i = 0; i < n; ++i) {
         if (vOnLine[i]) {
@@ -2697,9 +2865,50 @@ uint32_t Body::imprintCurve(uint32_t faceId, const Curve& curve, Tolerance tol,
             const Curve& arc = m_curves[cu];
             const Vec3 aAxis = normalize(arc.dir);
             const double denom = dot(curve.dir, aAxis);
-            if (std::abs(denom) <= 1e-12f) continue;  // line parallel to the arc's plane
+            Vec3 hit{0.0, 0.0, 0.0};
+            if (std::abs(denom) <= 1e-12f) {
+                // THE LINE LIES IN THE ARC'S PLANE. This used to be dismissed as "parallel to
+                // the arc's plane" and skipped — and it is the ORDINARY case for a HOLE in a
+                // planar face, where the cut line and the hole's arcs are coplanar by
+                // construction. Skipping it is why a cut through a hole found ZERO crossings on
+                // that hole and was applied as though the hole were not there. One bar width
+                // appeared to work only because its line happened to pass exactly through two of
+                // the hole's 24 vertices (cos t = 0.5 is a multiple of 15 degrees), which the
+                // whole-loop vertex scan catches without any solver at all.
+                //
+                // Coplanar line meets circle: |origin + t*dir - centre| = radius, a quadratic
+                // with TWO roots, and both are taken — one edge of a coarse hole can be crossed
+                // twice. The caller counts the crossings it gets.
+                if (std::abs(dot(sub(curve.origin, arc.origin), aAxis)) > eps) continue;
+                const Vec3 w = sub(curve.origin, arc.origin);
+                const double bq = dot(w, curve.dir);
+                const double cq = dot(w, w) - arc.radius * arc.radius;
+                const double disc = bq * bq - cq;
+                if (disc <= 0.0) continue;                 // misses, or grazes tangentially
+                const double sq = std::sqrt(disc);
+                const double ac0 = m_edges[e].t0, ac1 = m_edges[e].t1;
+                if (std::abs(ac1 - ac0) <= 1e-12f) continue;
+                constexpr double kTwoPiC = 6.283185307179586476925286766559;
+                const bool fwd = (m_edges[e].v0 == bVerts[i]);
+                const uint32_t nearV = fwd ? bVerts[i] : bVerts[(i + 1) % n];
+                const uint32_t farV = fwd ? bVerts[(i + 1) % n] : bVerts[i];
+                const double eLen = length(sub(m_verts[m_edges[e].v1].point,
+                                               m_verts[m_edges[e].v0].point));
+                for (const double tRoot : {-bq - sq, -bq + sq}) {
+                    const Vec3 q = add(curve.origin, scale(curve.dir, tRoot));
+                    double tp2 = paramOnCurve(arc, q);
+                    while (tp2 < std::min(ac0, ac1)) tp2 += kTwoPiC;
+                    while (tp2 > std::max(ac0, ac1)) tp2 -= kTwoPiC;
+                    const double s2 = (tp2 - ac0) / (ac1 - ac0);
+                    if (!(s2 > 0.f && s2 < 1.f)) continue;
+                    if (s2 * eLen <= eps)              crossings.push_back({true, nearV, kInvalid, 0.0});
+                    else if ((1.f - s2) * eLen <= eps) crossings.push_back({true, farV, kInvalid, 0.0});
+                    else                               crossings.push_back({false, kInvalid, e, s2});
+                }
+                continue;   // this edge is fully handled by the coplanar solver
+            }
             const double tHit = dot(sub(arc.origin, curve.origin), aAxis) / denom;
-            const Vec3 hit = add(curve.origin, scale(curve.dir, tHit));
+            hit = add(curve.origin, scale(curve.dir, tHit));
             if (std::abs(length(sub(hit, arc.origin)) - arc.radius) > eps) continue;  // misses
             const double at0 = m_edges[e].t0, at1 = m_edges[e].t1;
             if (std::abs(at1 - at0) <= 1e-12f) continue;
@@ -2753,6 +2962,60 @@ uint32_t Body::imprintCurve(uint32_t faceId, const Curve& curve, Tolerance tol,
             crossings.push_back({false, kInvalid, e, s});
         }
     }
+    return crossings;
+    };
+
+    std::vector<Cross> crossings = crossingsOn(bVerts, bEdges);
+
+    // ── A cut whose line ALSO crosses one of this face's holes ────────────────────────────
+    //
+    // Then the hole stops being a hole: it becomes part of both results' outer boundaries. See
+    // cutFaceThroughHole. Handled only for the single-hole case with a clean two-in/two-out
+    // pattern; anything else declines and the caller treats that as "no cut", exactly as before.
+    if (crossings.size() == 2 && m_faces[faceId].innerLoops.size() == 1u) {
+        const uint32_t hl = m_faces[faceId].innerLoops[0];
+        std::vector<uint32_t> hVerts, hEdges;
+        if (hl < m_loops.size() && m_loops[hl].alive && m_loops[hl].first < m_coedges.size()) {
+            uint32_t w = m_loops[hl].first, guard = 0;
+            bool ok = true;
+            do {
+                const Coedge& x = m_coedges[w];
+                if (x.edge >= m_edges.size()) { ok = false; break; }
+                hVerts.push_back(x.reversed ? m_edges[x.edge].v1 : m_edges[x.edge].v0);
+                hEdges.push_back(x.edge);
+                w = x.next;
+                if (++guard > m_coedges.size() + 1) { ok = false; break; }
+            } while (w != m_loops[hl].first);
+            if (ok && hVerts.size() >= 3) {
+                std::vector<Cross> hc = crossingsOn(hVerts, hEdges);
+                if (hc.size() == 2) {
+                    // Resolve all four to vertices, then order them ALONG THE CURVE. The
+                    // pattern must be outer, hole, hole, outer — anything else is a
+                    // configuration this cut does not describe.
+                    auto res = [&](const Cross& c) {
+                        return c.isVertex ? c.vertex : splitEdge(c.edge, c.frac, tol);
+                    };
+                    const uint32_t o0 = res(crossings[0]), o1 = res(crossings[1]);
+                    const uint32_t h0 = res(hc[0]), h1 = res(hc[1]);
+                    if (o0 != kInvalid && o1 != kInvalid && h0 != kInvalid && h1 != kInvalid
+                        && o0 != o1 && h0 != h1) {
+                        struct P { double t; uint32_t v; bool hole; };
+                        P ps[4] = {{paramOnCurve(curve, m_verts[o0].point), o0, false},
+                                   {paramOnCurve(curve, m_verts[o1].point), o1, false},
+                                   {paramOnCurve(curve, m_verts[h0].point), h0, true},
+                                   {paramOnCurve(curve, m_verts[h1].point), h1, true}};
+                        std::sort(ps, ps + 4, [](const P& a, const P& b) { return a.t < b.t; });
+                        if (!ps[0].hole && ps[1].hole && ps[2].hole && !ps[3].hole) {
+                            const uint32_t nf = cutFaceThroughHole(faceId, hl, ps[0].v, ps[1].v,
+                                                                   ps[2].v, ps[3].v, curve);
+                            if (nf != kInvalid) return nf;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     if (crossings.size() != 2) return kInvalid;  // need a clean entry + exit
 
     // Resolve each crossing to a vertex (splitting the edge where interior). The

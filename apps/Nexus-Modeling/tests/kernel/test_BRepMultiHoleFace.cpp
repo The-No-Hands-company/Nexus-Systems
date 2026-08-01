@@ -148,7 +148,8 @@ TEST(BRepMultiHoleFace, MixedOperationChainsStayValid)
     cur = booleanToBody(cur, drillAt(-1.2, 1.2), BooleanOp::Difference);
     ASSERT_TRUE(solid(cur));
 
-    const double holed = meshVolume(cur, 2);
+    const double holedAnalytic = static_cast<double>(cur.massProperties().volume);
+    const double holedTess = meshVolume(cur, 2);
     for (int i = 0; i < 2; ++i) {
         Body boss = makeBox(1.f, 1.f, 3.f);
         boss.translate({0.0, i ? 1.0 : -1.0, 0.0});
@@ -156,9 +157,17 @@ TEST(BRepMultiHoleFace, MixedOperationChainsStayValid)
         ASSERT_TRUE(solid(next)) << "union " << (i + 1) << " of the chain failed";
         cur = next;
     }
-    // each boss is 1x1x3 and one unit of it already lies inside the plate
-    EXPECT_NEAR(meshVolume(cur, 2) - holed, 4.0, 1e-6)
+    // Each boss is 1x1x3 and one unit of it already lies inside the plate, so the pair adds
+    // exactly 4. ORACLE CHANGED: this compared TESSELLATED volumes at 1e-6, which is not a
+    // difference two differently-segmented bodies can be held to. Once a cut through a hole
+    // started succeeding, the final body carried extra seam vertices, its BORES refined finer,
+    // and the tessellated difference moved to 3.99981 while the geometry stayed exact. The
+    // analytic volumes are what the arithmetic is about and they are exact; the tessellated
+    // difference is kept as a loose companion so a gross error there still fails.
+    EXPECT_NEAR(static_cast<double>(cur.massProperties().volume) - holedAnalytic, 4.0, 1e-5)
         << "two bosses should add exactly two units each";
+    EXPECT_NEAR(meshVolume(cur, 2) - holedTess, 4.0, 1e-2)
+        << "the tessellated volumes disagree by more than the chord error";
 }
 
 // A single hole must be unaffected — the one-hole path is what every previous test in this

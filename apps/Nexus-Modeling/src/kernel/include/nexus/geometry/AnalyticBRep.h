@@ -542,6 +542,14 @@ private:
     // A fingerprint of every field `toMesh` consumes. Complete by construction: it walks all
     // seven vectors that routine touches. Over-covering is safe (a needless cache miss);
     // under-covering is not, so fields are included whether or not toMesh reads them today.
+    // Cut a face along a curve that crosses one of its INNER loops, which turns that hole
+    // into part of both resulting faces' outer boundaries. The four crossing vertices are
+    // given in order along the curve: outer, hole, hole, outer. Returns the new face, or
+    // kInvalid if the configuration is not that. Defined in the .cpp.
+    [[nodiscard]] uint32_t cutFaceThroughHole(uint32_t faceId, uint32_t holeLoop,
+                                              uint32_t vO1, uint32_t vH1, uint32_t vH2,
+                                              uint32_t vO2, const Curve& curve);
+
     [[nodiscard]] uint64_t tessellationKey(uint32_t subdivisions) const noexcept;
     // The cached tessellation, rebuilt only when the fingerprint says the body changed.
     [[nodiscard]] const Mesh& classificationMesh(uint32_t subdivisions) const;
