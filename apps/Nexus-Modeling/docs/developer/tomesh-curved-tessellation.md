@@ -38,7 +38,10 @@
 >    4.18786 [4.18879], area 13.43916 (7% ABOVE) → 12.56496 [12.56637], non-manifold edges 368 →
 >    0, and the conservation gap now CLOSES with refinement (3.3e-04 → 1.5e-05). Re-anchoring it
 >    to the face fails three tests, which is the experiment for this paragraph.
->    Cost: ctest 64.6s → 120.4s. Interior samples on a doubly-curved surface are not free.
+>    Cost: ctest 64.6s → 120.4s at the time. §9's warning — "the number to watch is classifyPoint,
+>    which calls toMesh(6) on EVERY query" — was the right thing to watch and the answer was not
+>    to tessellate less but to stop recomputing: caching that tessellation, keyed on a fingerprint
+>    of the body, took ctest to **46.4s**, below the 148.6s the arc started at.
 >
 > §2 (boundary frozen, interior free), §3 (`buildRing` independence, hence per-face rollout),
 > §8's fallback ladder and §8.4's per-face coverage assertion, and §10's oracles all held up

@@ -41,6 +41,7 @@ The exhaustive technical log lives beside this book in the audit memory and the 
   - 60. The oracle was the broken one
   - 61. It refined the boundary and then ignored it
   - 62. Where the points come from
+  - 63. Asked the same question five thousand times
 
 ---
 
@@ -1318,6 +1319,34 @@ The two reverts are worth reporting separately, because they say different thing
 And the cost, which is real and has no clever version. `ctest` goes from 64.6 seconds to **120.4**. Interior samples on a doubly-curved surface are not free; the previous chapter's cylinders and cones were free because a developable patch needs none. It remains below the 148.6 seconds this arc began at, with all three curved primitives now converging on their exact volumes rather than on the wrong number.
 
 Two thousand six hundred and thirty-two tests ran; all passed, with five hardware skips.
+
+---
+
+---
+
+## 63. Asked the same question five thousand times
+
+The sphere's interior samples cost `ctest` sixty seconds, and the previous chapter said plainly that there was no clever version of that — interior points on a doubly-curved surface are not free. That was true about the samples and wrong about the sixty seconds, because the samples were not the expensive part. Being computed over and over was.
+
+`classifyPoint` answers by casting a parity ray at a tessellation of the shell, and it built that tessellation on every single call. `selectFace` walks A's faces asking B to classify a point, then walks B's faces asking A — so one Boolean between two solids of forty faces each tessellated one body forty times and the other forty times, for two shapes that did not change at any point during either loop. Eighty tessellations where two would do. Instrumented over a thirty-Boolean workload: three and a half thousand tessellations, of which sixty were of anything new.
+
+Caching it is obvious. What to key the cache on is not, and it is the only part of this that could do harm.
+
+The tempting answer is a dirty flag: a `bool` that every mutating method sets. It is cheap and it is wrong for this body, because `Body` has a great many ways to change — `vertexMut`, `faceMut`, `splitEdge`, `setEdgeArc`, `imprintCurve`, `transform`, and the Boolean's own wholesale rebuilds — and the failure mode of forgetting one is not a stale *performance* number. It is `classifyPoint` answering from a mesh of the body's previous shape: a wrong inside/outside, on the routine that every Boolean's face selection runs through, under a contract that promises watertight-or-empty. A flag can be wrong by omission, and omission is exactly what a long list of mutators produces.
+
+> So the key is computed from the data instead. A fingerprint of every field `toMesh` reads cannot go stale by forgetting something — the worst it can do is miss and rebuild.
+
+The fingerprint walks all seven vectors that routine touches and mixes in fields whether or not it reads them today, on the reasoning that over-covering costs a needless rebuild while under-covering costs a wrong answer, and those are not comparable prices. It is a small fraction of a tessellation: integer mixing over a few hundred entities against thousands of trigonometric evaluations, a constrained Delaunay, and the allocations that go with them.
+
+One further decision, which is about copying rather than correctness. A cached mesh is derived data, and `Body` values are copied constantly — the Boolean alone does it several times per operation. So the cache member's copy operations reset rather than copy: `Body b = a;` gets an empty cache and pays nothing for a tessellation it may never ask for.
+
+**What was proven.** The thirty-Boolean workload goes from 2222 ms to **312 ms**, a factor of 7.1, at a 98.3% hit rate. The kernel suite goes from 105.1 seconds to **31.2**, and `ctest` from 120.4 to **46.4** — which is not merely better than the previous chapter but better than the **148.6 seconds this whole tessellator arc began at**, with three curved primitives now converging on their exact volumes instead of settling on the wrong ones. The sphere lattice's cost is repaid several times over, on suites that were slower than baseline an hour ago: the fuzz battery 27.8 s → 4.5 s against a pre-arc 16.7, the mass-properties sweep 12.9 → 1.5 against 5.8.
+
+The six new tests are one question asked several ways — after the body changes, is the answer the answer for the *new* body? — each checked against a reference body built the same way, whose cache is necessarily empty. They were verified against both plausible ways to get this wrong: a constant key, so every lookup hits; and a key covering only entity *counts*, which is the under-hash someone would actually write, and which a moved vertex slips straight past. Each fails three of the six.
+
+A note on how this chapter nearly went wrong, because it is the third time in this stretch. The first per-suite measurements after adding the cache showed no improvement at all, and the conclusion drafted from them was that `classifyPoint` had not been the bottleneck. It was: `nexus_gfx_core` had been rebuilt and the *test binary* had not, so every one of those timings came from the previous build. The same hazard has now appeared as a link failure, a compile failure under `-Werror`, and a link that simply was not requested. **A measurement that does not confirm what it is measuring is not a measurement**, and the fix is mechanical — have the harness fail loudly when the build it depends on did not happen.
+
+Two thousand six hundred and thirty-eight tests ran; all passed, with five hardware skips.
 
 ---
 
