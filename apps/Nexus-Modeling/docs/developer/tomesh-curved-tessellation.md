@@ -1,5 +1,44 @@
 # Scope — `Body::toMesh` and the interior of a curved patch
 
+> ## STATUS, 2026-08-01 — LANDED FOR DEVELOPABLE SURFACES. Sphere still open.
+>
+> Implemented in `AnalyticBRep.cpp` (`triangulateCurvedFaceGrid`, `triangulateCurvedFaceStrips`)
+> and pinned by `tests/kernel/test_BRepCurvedTessellation.cpp`. Cylinder and cone now converge
+> on their exact volumes (6.17617 → 6.28263 and 2.06427 → 2.09421) with zero degenerate,
+> one-sided or over-used edges at every level, and a Boolean fragment tessellates identically to
+> the primitive it came from. `ctest` 148.6s → 64.6s, because `classifyPoint` now needs three
+> subdivisions where six were less accurate.
+>
+> **Three things in this document turned out to be wrong, and the corrections are the useful
+> part:**
+>
+> 1. **§4's premise is false.** Tier 1 proposed a constrained Delaunay in (u,v) because "Delaunay
+>    maximises the minimum angle, which is precisely *no long diagonals*". Delaunay minimises
+>    edge *length*, and a cylinder patch is narrow and tall in (u,v), so it connects the
+>    **angular** way — the one direction that costs anything on a cylinder. Measured: it made the
+>    area *worse* than the fan (18.7834 against 18.8893, exact 18.84956). The ruling is the long
+>    direction and the cheap one; the criterion has to be the surface's curvature, not distance.
+>    §4's *table* is right and its conclusion is right — connecting the same points in the ruled
+>    direction converges — but a Delaunay will not do it for you.
+> 2. **§6.2 mis-ordered the work.** "Interior sampling cannot be built until [the degenerate
+>    triangles are] resolved" was true, but they needed no separate increment: they are the fan's
+>    trailing triangles where the ring's first vertex lies on a straight refined edge, and they
+>    disappear with the fan. The §8.4 coverage rule is what replaced them, exactly as designed.
+> 3. **§5's interior points are not safe after all — not the way they are specified here.** They
+>    are invisible to neighbours, as §2 argues. But drawing their density "from the boundary" makes
+>    a fragment place them differently from the whole, and a tessellated identity like
+>    U+I == A+B holds *only* because a boundary-only triangulation's totals telescope across any
+>    decomposition. Bounded (and §9 is right that they must be) the fragment refines slower than
+>    the whole and the identity **drifts**: 4.2e-04 at subdivisions 2 rising to 4.1e-03 at 8.
+>    **The fix: derive the lattice from the SURFACE and the subdivision count, not from each
+>    face's boundary, so any two decompositions sample the same positions.** That is the
+>    remaining work, and it is what the sphere needs.
+>
+> §2 (boundary frozen, interior free), §3 (`buildRing` independence, hence per-face rollout),
+> §8's fallback ladder and §8.4's per-face coverage assertion, and §10's oracles all held up
+> exactly as written and are what made this landable.
+
+
 Status: **design, not implemented.** One attempt was made and reverted; what it taught is
 recorded in §6 because it constrains the design.
 

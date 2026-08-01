@@ -39,6 +39,7 @@ The exhaustive technical log lives beside this book in the audit memory and the 
   - 58. Three ways to move a curve that must not move
   - 59. The same mistake, one dimension up
   - 60. The oracle was the broken one
+  - 61. It refined the boundary and then ignored it
 
 ---
 
@@ -1250,6 +1251,48 @@ Two tests changed their oracle rather than their tolerance. `TheCentredUnionIsSt
 One methodological note, because it nearly cost a wrong conclusion. Checking whether the signed fan was load-bearing, I reverted it and measured no change — and very nearly wrote that it was unnecessary. The revert had left an unused variable behind, `-Werror` failed the build, and the measurement ran against the previous binary. This book already records the same hazard wearing a different face: a revert that removes a definition but leaves its declaration fails to *link* and silently runs the stale binary. A revert test that does not confirm its own build is not a test.
 
 Two thousand six hundred and twenty-three tests ran; all passed, with five hardware skips.
+
+---
+
+---
+
+## 61. It refined the boundary and then ignored it
+
+The tessellator has been on this book's list of known gaps for a dozen chapters, described each time as "under-refines the inside of a curved patch". Chapter 60 measured how badly: a cylinder's tessellated volume *converges* — to 6.1757, against an exact 2π = 6.28319. It converges to the wrong number, which is the most misleading way for something to be broken, because every single-level check passes and only a series shows it.
+
+The subdivision points were never the problem. They are placed on each edge's own curve, so both faces sharing an edge get the same points and the mesh stays crack-free — that part was right all along. What happened next was that each face was triangulated by **fanning its ring from the ring's first vertex**, and a fan connects points that are far apart *on the surface*. In 3D that chord cuts through the solid.
+
+That one decision produced three symptoms, and it is worth listing them together because they had been filed separately.
+
+The **volume and area stalled**, as above. A cross-section between two rim levels carried only the two points its side edges contributed, which is the resolution of the *unrefined* rim, however high the subdivision count went.
+
+There were **zero-area triangles, and the mesh's watertightness depended on them**. Where the ring's first vertex lay on a straight refined edge — a cylinder's generatrix — the fan's trailing triangles were three collinear points; at subdivisions 2, exactly (0.924, 0.383, z) for z = −1, −0.333, +0.333. A degenerate triangle has no defined orientation, so its winding was arbitrary. It was also the *only* coverage of those boundary sub-segments, which is why the obvious repair of deleting them opened forty-two one-sided edges. Chapter-scale note: this is the gate the scope document set two years of increments ago — *do not proceed until a cylinder tessellates watertight without any zero-area triangle* — and it is now cleared, not by defending the degenerate triangles but by removing the reason they existed.
+
+And there were **non-manifold edges**. The fan emitted the chord *across* a boundary edge it had already subdivided, because its apex sat next to that edge in the ring. On the same cylinder, edge (8,24) has length 2.000 — the entire generatrix — and appears four times. A sphere at subdivisions 16 had three hundred and sixty-eight such edges and a tessellated area seven percent *above* 4πr², which for a surface whose every vertex lies on the sphere can only mean it was covering itself twice.
+
+> Three defects, filed under three headings, all of them one line of code: the face was triangulated in 3D when the thing being approximated lives in (u,v).
+
+So a curved face is now triangulated in the surface's own parameter domain, where "short" means short along the surface. Two paths. The **grid** is the tensor product of the boundary's own parameter samples — each cell a planar quad lying exactly on the chordal surface — and a pole or an apex simply collapses one axis of it, which is the concentric cap a UV sphere wants and is what finally fixes the cone. The **strips** path handles a fragment whose opposite sides carry *different* samples, which an imprint produces routinely: along the ruling nothing needs resolving, so the patch is cut into columns at the angular samples. Exact, and linear in the ring rather than a Delaunay.
+
+Anything either path declines keeps the old fan, and that is safe for the reason the scope document identified as the design's most valuable property: `buildRing` derives a face's boundary without consulting how the face will be triangulated, so a new-path face and an old-path neighbour still meet exactly.
+
+**Two things were built, measured, and thrown away**, and they are the useful part of this chapter.
+
+The first was a constrained Delaunay over the ring alone — which is what the scope document proposed, on the reasoning that Delaunay maximises the minimum angle and therefore avoids long diagonals. It made the cylinder **worse**: area 18.7834 against the fan's own 18.8893, exact 18.84956. The reasoning was sound and the premise was wrong. Delaunay minimises edge *length*, and a cylinder patch is narrow and tall in (u,v) — so the shortest connections run the *angular* way, which is precisely the expensive direction. The direction that costs nothing on a cylinder is the ruling, and it is the long one. A criterion that is right in general can be exactly inverted by the geometry you hand it.
+
+The second was interior Steiner points, which the scope document reserved for doubly-curved patches. They work: the sphere goes from a 3.9587 plateau to 4.18757 against 4.18879, and its area stops exceeding the true one. They also cost something that turned out to be worth more than they were. A tessellated identity like U + I = A + B holds *only* because a boundary-only triangulation's totals telescope — every vertex lies on a shared boundary, so any two decompositions of the same solid agree. Interior points drawn from each face's own boundary give that up: a primitive band face and the fragment cut out of it place their interior nodes in different places. And they have to be bounded, because `classifyPoint` tessellates on *every* query and unbounded the fuzz battery went from seventeen seconds to over four minutes — after which the fragment stops refining while the whole carries on, and the identity **drifts** rather than converging: 4.2 × 10⁻⁴ at subdivisions 2 rising to 4.1 × 10⁻³ at 8.
+
+So the sphere is **not** fixed, and this book says so rather than leaving it to be found. The fix is designed rather than guessed: draw the interior lattice from the *surface* and the subdivision count instead of from each face's boundary, so that any two decompositions sample the same positions and decomposition-independence survives alongside convergence.
+
+One consequence went the other way and is worth having. `classifyPoint` now asks for **three** subdivisions where it used to ask for six, and that is an increase in accuracy, not a concession: on the old fan a cylinder's cross-section was pinned at an effective sagitta of 1.9 × 10⁻², where ruled subdivisions of three give 1.2 × 10⁻³. Sixteen times closer to the true surface, at a fraction of the work — and since that routine tessellates per query, the whole suite got faster. `ctest` goes from 148.6 seconds to **64.6**.
+
+**What was proven.** Cylinder 6.17617 → 6.28263 and cone 2.06427 → 2.09421, both converging monotonically from below on their exact volumes, with **zero** degenerate, one-sided or over-used edges at every subdivision level from 0 to 16 — where a cone at 16 previously had ninety zero-area triangles and a hundred and forty-four non-manifold edges. A Boolean fragment tessellates *identically* to the primitive it was cut from, to the digit. Reverting both paths fails seven tests; the grid alone four; the strips alone one.
+
+Three characterizations were retired, and each had asked to be in its own failure message. The one written a single chapter earlier, pinning that the tessellation *does not* converge. `BRepConeBaseArc`'s, whose message named the conical fan apex as the thing to re-read. And the chained-Boolean oracle, which had chosen tessellated volume over analytic because of a defect chapter 60 fixed — the analytic volumes of those chains now agree exactly where the tessellated ones differ by 3.3 × 10⁻³, so the identity is asserted where it is exact and the tessellation is kept as a loose companion.
+
+A fourth change was smaller and sharper. One test placed a point at exactly 11.25° on a cylinder — the midpoint of a facet, chosen because that is where a chordal hull is furthest inside the true surface. At three subdivisions the rim carries sixty-four points spaced 5.625° apart, and 11.25 is exactly one of them, so the point that was chosen for being maximally *off* the tessellation landed exactly *on* it and the assertion inverted. It is now 0.7071 of a facet, which is a vertex for no subdivision count at all. A fixture built on a midpoint is built on a knife edge, because midpoints are what refinement lands on.
+
+Two thousand six hundred and thirty tests ran; all passed, with five hardware skips.
 
 ---
 
