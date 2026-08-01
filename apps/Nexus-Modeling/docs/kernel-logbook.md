@@ -38,6 +38,7 @@ The exhaustive technical log lives beside this book in the audit memory and the 
   - 57. A sphere parametrised about an axis its grid did not use
   - 58. Three ways to move a curve that must not move
   - 59. The same mistake, one dimension up
+  - 60. The oracle was the broken one
 
 ---
 
@@ -1209,6 +1210,46 @@ The repair is to apply the solution that already existed one dimension down: the
 **What was proven.** Across four hundred point sets in five families — uniform, a slab a ten-thousandth thick, an integer grid, a tight cluster beside distant points, and points on a sphere — coverage failures go from fifty-in-sixty to **zero in four hundred**, worst gap 1.8 × 10⁻² to exactly zero, with the circumsphere property still holding everywhere.
 
 The file's own header comment said "it turns out to be correct." It was correct about the property that had been tested. That sentence has been corrected in place rather than deleted, because the interesting part is not that it was wrong but that it was written in good faith by someone reading green tests.
+
+---
+
+---
+
+## 60. The oracle was the broken one
+
+Chapter 55 repaired the sign of the curved-face integrator and left ninety-four bodies still disagreeing with their own tessellation, bounded on both sides so the number could neither grow nor be quietly fixed. Chapter 59's pass left a written diagnosis of what remained: that a face's boundary in (u,v) is not the straight polygon through its vertices, and that Boolean fragments are where that bites.
+
+That diagnosis was a third of the answer, and it was not the important third.
+
+The first thing to go was the measurement itself. A primitive cylinder reports an analytic volume of 6.283185, which is 2π exactly, and its tessellation at subdivision 8 reports 6.175687. Refining does not help: 6.170375, 6.174199, 6.175253, 6.175687 — it is converging, but not to 2π. It plateaus about 1.7% short, because `toMesh` under-refines the *interior* of a curved patch, which this book has had on its list of known gaps for some chapters now.
+
+So "the analytic volume disagrees with the body's own fine tessellation" was never a measurement of the integrator. It was the sum of two independent errors, one of which belongs to the reference. On a primitive — where the analytic answer is provably exact — that metric reports a 1.5 to 5.9% failure.
+
+> A residual you cannot drive to zero is worth suspecting of measuring two things. The number 94 was real; what it counted was not what its name said.
+
+Two oracles replace it, and neither one tessellates anything. An **imprint** only adds seams to a solid, so the solid is unchanged and its volume must be too. And for any two solids, **U + I = A + B**, with all four volumes taken analytically. Both are exactly satisfiable, both are cheap, and both speak only about the integrator.
+
+They immediately found something that was not on the list at all. Of the twelve imprint configurations, one moved: a cylinder bored by a coaxial second cylinder came back 1.75% lighter than the cylinder it was made from. And 9.259483 is not an arbitrary wrong number — it is that cylinder's *tessellated* volume. The body had not been integrated badly; it had not been integrated at all.
+
+The cause is a single line. `integratePlanarFace` refused any face with an inner loop — reasonable-looking, since a hole has to be subtracted — and the caller's response to that refusal is to throw away every exactly-integrated face on the body and re-integrate the whole thing from `toMesh(3)`. One bored cap was enough. Every identity violation involving a hole came from this.
+
+Green's theorem asks for no special case. The moments of a multiply-connected region are the same boundary line integrals summed over *every* loop, provided each is traversed with the material on the same side — and an inner loop is already stored wound opposite to its outer boundary, which is precisely that condition. The hole's edges are appended to the list and the existing assembly subtracts it by construction.
+
+That took the identity violations from ten to three, and the three survivors were all sphere-against-sphere: the family where the written diagnosis actually applied. Measuring it directly — each boundary edge's own curve midpoint against the straight (u,v) chord between its endpoints, normalised by the face's parameter extent — gives 10⁻¹⁶ on every primitive face and 0.10 to 0.16 on every spherical face of a Boolean. So the boundary is now followed along the edge curves instead of jumped across, and only for circular edges, since a straight edge on a cylinder or a cone is a generatrix that is already exactly constant in one parameter.
+
+Doing that alone made everything worse: three violations became fifteen.
+
+Which was the useful part of the day. The parameter polygon is integrated by fanning it from its first vertex, and a fan tiles a polygon only if the polygon is convex. Following a curved boundary is exactly what stops it being convex, and the fan was taking the *magnitude* of each parameter triangle's area, so the triangles that fall outside the polygon were being added instead of cancelled. Signed, the fan is exact for any simple polygon — the same telescoping the shoelace formula runs on.
+
+This is the change chapter 55 tried and reverted, and it is worth being precise about why it is not the same one. That attempt used the sign of the parameter area to carry the face's *facing*, which is wrong, and it broke the arc-bite cases that had been exact for chapters. The facing still comes from the ring's Newell normal, exactly as chapter 55 established. The sign here answers a different question — which parameter triangles lie inside the polygon — and the two are now separate quantities doing separate jobs.
+
+**What was proven.** Across thirty-five Boolean pairs and twelve imprint configurations: analytic identity violations **ten to zero**, worst 1.79 × 10⁻² to nothing; imprints that change their body's volume **three to zero**, worst 1.75 × 10⁻² to nothing. All three changes are load-bearing, failing three, one and two tests respectively when individually reverted.
+
+Two tests changed their oracle rather than their tolerance. `TheCentredUnionIsStillRight` began *failing* when the integrator became correct, because it compared against the tessellation at 1%: the centred union of a box and a sphere has a closed form — six spherical caps that do not reach the box's edges and so do not overlap, 8.854513 — against which the analytic answer is 0.037% and the tessellation 1.78%. The reference was forty-eight times less accurate than the thing it was judging. And `TheRemainingDisagreementIsBounded`, which asked in its own comment to be retired if the disagreement ever reached zero, is retired — replaced by the two tessellation-free oracles, plus a third test that pins the tessellator's bias on its own so the two defects can never be confused again.
+
+One methodological note, because it nearly cost a wrong conclusion. Checking whether the signed fan was load-bearing, I reverted it and measured no change — and very nearly wrote that it was unnecessary. The revert had left an unused variable behind, `-Werror` failed the build, and the measurement ran against the previous binary. This book already records the same hazard wearing a different face: a revert that removes a definition but leaves its declaration fails to *link* and silently runs the stale binary. A revert test that does not confirm its own build is not a test.
+
+Two thousand six hundred and twenty-three tests ran; all passed, with five hardware skips.
 
 ---
 
