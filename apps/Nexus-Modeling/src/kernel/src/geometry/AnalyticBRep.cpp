@@ -3382,12 +3382,34 @@ bool integrateFaceParametric(const Surface& surf, const std::vector<Vec3>& pts,
         if (nlen2 > 1e-24 && d < 0.0) flip = -1.0;
     }
 
+    // THE FAN NEEDS THE SIGNED PARAMETER AREA, NOT ITS MAGNITUDE.
+    //
+    // The polygon is fanned from PU[0], which reproduces the region exactly only if the fan
+    // triangles tile it — true for a CONVEX parameter polygon, false otherwise, and a curved
+    // face's true boundary in (u,v) is under no obligation to be convex. With |area| the
+    // triangles that fall outside the polygon are added instead of cancelled, so the region
+    // is over-covered. Signed, the fan is exact for any simple polygon: that is the same
+    // telescoping the shoelace formula relies on.
+    //
+    // This is NOT the signed-area change chapter 55 tried and reverted. That one used the
+    // sign to carry the face's FACING, which is wrong — the facing comes from the ring's
+    // Newell normal, computed above as `flip`, and still does. The sign here is only about
+    // which parameter triangles are inside the polygon. The two are now separate, and
+    // `areaSign` normalises the traversal direction out so the measure stays positive.
+    double polyTwoA = 0.0;
+    for (int k = 1; k + 1 < m; ++k) {
+        polyTwoA += (PU[k] - PU[0]) * (PV[k + 1] - PV[0])
+                  - (PU[k + 1] - PU[0]) * (PV[k] - PV[0]);
+    }
+    const double areaSign = (polyTwoA < 0.0) ? -1.0 : 1.0;
+
     for (int k = 1; k + 1 < m; ++k) {
         const double q0u = PU[0], q0v = PV[0];
         const double q1u = PU[k], q1v = PV[k];
         const double q2u = PU[k + 1], q2v = PV[k + 1];
-        const double twoA = std::abs((q1u - q0u) * (q2v - q0v) - (q2u - q0u) * (q1v - q0v));
-        if (twoA < 1e-14) continue;
+        const double twoA = areaSign
+            * ((q1u - q0u) * (q2v - q0v) - (q2u - q0u) * (q1v - q0v));
+        if (std::abs(twoA) < 1e-14) continue;
         for (int i = 0; i < kGaussN; ++i) {
             for (int j = 0; j < kGaussN; ++j) {
                 const double a = 0.5 * (kGaussX[i] + 1.0);
@@ -3515,6 +3537,66 @@ bool assemblePlanarFace(const std::vector<PlanarEdge>& edges, const Vec3& O, con
     return true;
 }
 
+// A CURVED FACE'S BOUNDARY IN PARAMETER SPACE IS NOT A POLYGON THROUGH ITS VERTICES.
+//
+// integrateFaceParametric maps the face's vertices into (u,v) and integrates the straight-
+// edged polygon between them. That polygon is the face's true image only when its boundary
+// edges are parameter-aligned. Every edge of a PRIMITIVE is: a cylinder's rims are constant
+// v and its generatrices constant u, a sphere's latitude rings and meridians likewise once
+// its frame matches its grid. A Boolean seam is not. A plane cutting a sphere leaves a
+// circle that is neither a latitude nor a meridian, and in (u,v) it is a curve.
+//
+// MEASURED, by comparing each boundary edge's own curve midpoint against the straight (u,v)
+// chord between its endpoints, normalised by the face's parameter extent: every primitive
+// face 1e-16, and every spherical face of a box/sphere Boolean 0.10 to 0.16.
+//
+// So the boundary is sampled along the edge CURVES rather than jumped across. Only Circle
+// edges need it — a Line edge on a cylinder or a cone is a generatrix, exactly constant in
+// u, and subdividing it just inserts collinear points — which keeps this a no-op wherever
+// the old assumption already held, primitives included.
+// Segments per Circle boundary edge. The (u,v) polygon's error against the true pcurve falls
+// as 1/n^2, and 8 puts a Boolean seam's contribution below the identity tolerance while
+// costing nothing where the boundary was already straight in (u,v) — the added points are
+// collinear there, and a collinear point contributes a zero-area parameter triangle that the
+// quadrature loop already skips.
+constexpr int kCurvedBoundarySamples = 8;
+
+std::vector<Vec3> denseFaceBoundary(const Body& b, uint32_t faceId, int perCircleEdge)
+{
+    std::vector<Vec3> out;
+    const Face& face = b.face(faceId);
+    if (face.outerLoop == kInvalid || face.outerLoop >= b.loopCount()) return out;
+    const uint32_t first = b.loop(face.outerLoop).first;
+    if (first == kInvalid || first >= b.coedgeCount()) return out;
+
+    uint32_t cur = first;
+    for (int guard = 0; guard < 100000; ++guard) {
+        const Coedge& ce = b.coedge(cur);
+        if (ce.edge == kInvalid || ce.edge >= b.edgeCount()) return {};
+        const Edge& ed = b.edge(ce.edge);
+        const uint32_t vStart = ce.reversed ? ed.v1 : ed.v0;
+        if (vStart >= b.vertexCount()) return {};
+        out.push_back(b.vertex(vStart).point);
+
+        if (ed.curve != kInvalid && ed.curve < b.curveCount()) {
+            const Curve& cv = b.curve(ed.curve);
+            if (cv.kind == CurveKind::Circle && perCircleEdge > 1) {
+                const double a = ce.reversed ? ed.t1 : ed.t0;
+                const double z = ce.reversed ? ed.t0 : ed.t1;
+                for (int k = 1; k < perCircleEdge; ++k) {
+                    const double t = a + (z - a) * (static_cast<double>(k)
+                                                    / static_cast<double>(perCircleEdge));
+                    out.push_back(cv.eval(t));
+                }
+            }
+        }
+        cur = ce.next;
+        if (cur == first) break;
+        if (cur == kInvalid || cur >= b.coedgeCount()) return {};
+    }
+    return out;
+}
+
 }  // namespace
 
 bool Body::integratePlanarFace(uint32_t faceId, std::array<double, 10>& intg, double& area) const
@@ -3523,7 +3605,6 @@ bool Body::integratePlanarFace(uint32_t faceId, std::array<double, 10>& intg, do
     if (!face.alive || face.surface == kInvalid || face.surface >= m_surfaces.size()) return false;
     const Surface& surf = m_surfaces[face.surface];
     if (surf.kind != SurfaceKind::Plane) return false;
-    if (!face.innerLoops.empty()) return false;   // holes need the loop subtracted; tessellate
     if (face.outerLoop == kInvalid || face.outerLoop >= m_loops.size()) return false;
 
     // Outward frame: e1 in-plane, e2 = nOut x e1 so e1 x e2 = nOut.
@@ -3538,27 +3619,53 @@ bool Body::integratePlanarFace(uint32_t faceId, std::array<double, 10>& intg, do
                   nOut.x * e1.y - nOut.y * e1.x};
     const Vec3 O = surf.origin;
 
-    // Walk the outer loop's coedges into oriented curve segments (start -> end).
+    // Walk a loop's coedges into oriented curve segments (start -> end).
     std::vector<PlanarEdge> edges;
-    const uint32_t first = m_loops[face.outerLoop].first;
-    if (first == kInvalid || first >= m_coedges.size()) return false;
-    uint32_t cur = first;
-    for (int guard = 0; guard < 100000; ++guard) {
-        const Coedge& ce = m_coedges[cur];
-        if (ce.edge == kInvalid || ce.edge >= m_edges.size()) return false;
-        const Edge& ed = m_edges[ce.edge];
-        if (ed.curve == kInvalid || ed.curve >= m_curves.size()) return false;
-        const Curve& cu = m_curves[ed.curve];
-        if (cu.kind == CurveKind::Nurbs) return false;  // caller tessellates
-        // The edge's curve runs v0 -> v1 over [t0,t1]; a reversed coedge traverses it e1->e0.
-        PlanarEdge pe;
-        pe.curve = cu;
-        pe.c0 = ce.reversed ? ed.t1 : ed.t0;
-        pe.c1 = ce.reversed ? ed.t0 : ed.t1;
-        edges.push_back(pe);
-        cur = ce.next;
-        if (cur == first) break;
-        if (cur == kInvalid || cur >= m_coedges.size()) return false;
+    auto appendLoop = [&](uint32_t loopId) -> bool {
+        if (loopId == kInvalid || loopId >= m_loops.size()) return false;
+        if (!m_loops[loopId].alive) return false;
+        const uint32_t first = m_loops[loopId].first;
+        if (first == kInvalid || first >= m_coedges.size()) return false;
+        uint32_t cur = first;
+        for (int guard = 0; guard < 100000; ++guard) {
+            const Coedge& ce = m_coedges[cur];
+            if (ce.edge == kInvalid || ce.edge >= m_edges.size()) return false;
+            const Edge& ed = m_edges[ce.edge];
+            if (ed.curve == kInvalid || ed.curve >= m_curves.size()) return false;
+            const Curve& cu = m_curves[ed.curve];
+            if (cu.kind == CurveKind::Nurbs) return false;  // caller tessellates
+            // The edge's curve runs v0 -> v1 over [t0,t1]; a reversed coedge traverses it e1->e0.
+            PlanarEdge pe;
+            pe.curve = cu;
+            pe.c0 = ce.reversed ? ed.t1 : ed.t0;
+            pe.c1 = ce.reversed ? ed.t0 : ed.t1;
+            edges.push_back(pe);
+            cur = ce.next;
+            if (cur == first) return true;
+            if (cur == kInvalid || cur >= m_coedges.size()) return false;
+        }
+        return false;  // ran the guard out: a loop that does not close
+    };
+
+    if (!appendLoop(face.outerLoop)) return false;
+
+    // A HOLE IS NOT A REASON TO TESSELLATE THE WHOLE BODY.
+    //
+    // This used to bail on any face with inner loops, and the caller's response to that bail
+    // is to throw away every exactly-integrated face and re-integrate the entire body from
+    // toMesh(3) — which under-refines curved patches, so the fallback is not merely coarser,
+    // it converges to the wrong number (a cylinder's tessellated volume plateaus at 6.1757
+    // against an exact 2*pi = 6.28319). MEASURED: one bored cap was enough to move an
+    // imprinted cylinder's reported volume by 1.75%, and it accounted for every violation of
+    // the analytic identity U + I == A + B in a 35-pair sweep that involved a hole.
+    //
+    // Green's theorem needs no special case for it. The moments of a multiply-connected
+    // region are the sum of the same boundary line integrals over EVERY loop, provided each
+    // one is traversed with the material on the same side — and an inner loop is already
+    // stored wound opposite to its outer boundary, which is exactly that condition. So the
+    // hole's edges are appended and `assemblePlanarFace` subtracts it by construction.
+    for (const uint32_t innerLoop : face.innerLoops) {
+        if (!appendLoop(innerLoop)) return false;
     }
 
     return assemblePlanarFace(edges, O, e1, e2, nOut, intg, area);
@@ -3582,9 +3689,12 @@ float Body::surfaceArea() const
 
         bool exact = false;
         if (face.innerLoops.empty()) {
-            std::vector<Vec3> pts;
-            for (const uint32_t vid : faceVertices(fi))
-                if (vid < m_verts.size()) pts.push_back(m_verts[vid].point);
+            std::vector<Vec3> pts = denseFaceBoundary(*this, fi, kCurvedBoundarySamples);
+            if (pts.size() < 3) {
+                pts.clear();
+                for (const uint32_t vid : faceVertices(fi))
+                    if (vid < m_verts.size()) pts.push_back(m_verts[vid].point);
+            }
 
             double acc = 0.0;
             // |du x dv| is the area element; winding does not affect its magnitude.
@@ -3666,9 +3776,14 @@ nexus::geometry::MassProperties Body::massProperties(float density) const
         // parameter domain; see integrateFaceParametric. Planar and NURBS faces return
         // false and go to the tessellated residual below.
         if (face.innerLoops.empty()) {
-            std::vector<Vec3> pts;
-            for (const uint32_t vid : faceVertices(fi))
-                if (vid < m_verts.size()) pts.push_back(m_verts[vid].point);
+            // Sampled along the boundary's own curves, not jumped between its vertices —
+            // see denseFaceBoundary. Falls back to the bare vertices if the walk fails.
+            std::vector<Vec3> pts = denseFaceBoundary(*this, fi, kCurvedBoundarySamples);
+            if (pts.size() < 3) {
+                pts.clear();
+                for (const uint32_t vid : faceVertices(fi))
+                    if (vid < m_verts.size()) pts.push_back(m_verts[vid].point);
+            }
 
             std::array<double, 10> acc{0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
             const bool ok = integrateFaceParametric(

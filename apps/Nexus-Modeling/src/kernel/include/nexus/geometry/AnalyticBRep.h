@@ -483,6 +483,7 @@ public:
     [[nodiscard]] size_t shellCount()  const noexcept { return m_shells.size(); }
     [[nodiscard]] size_t solidCount()  const noexcept { return m_solids.size(); }
     [[nodiscard]] size_t surfaceCount() const noexcept { return m_surfaces.size(); }
+    [[nodiscard]] size_t curveCount()  const noexcept { return m_curves.size(); }
 
     [[nodiscard]] const Vertex&  vertex(uint32_t i) const { return m_verts[i]; }
     // Mutable vertex access (for editing ops; checkGeometry guards consistency
