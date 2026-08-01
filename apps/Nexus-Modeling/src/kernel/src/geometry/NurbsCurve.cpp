@@ -211,6 +211,10 @@ NurbsCurve NurbsCurve::insertKnot(float u, int32_t r) const {
     for (int32_t i = k; i >= 0 && std::abs(m_knots[i] - u) < kEpsilon; --i) ++s;
     s = std::min(s, p);
     if (s == p) return *this;
+    // A knot's multiplicity cannot exceed the degree, and the working buffers below are
+    // sized on that: with r > p - s the j-loop reaches a zero-length `nextRw` and then reads
+    // nextRw[0]. Clamp instead of writing past the end.
+    r = std::min(r, p - s);
 
     std::vector<float> newKnots;
     newKnots.reserve(static_cast<size_t>(m + r));
@@ -218,57 +222,68 @@ NurbsCurve NurbsCurve::insertKnot(float u, int32_t r) const {
     for (int32_t i = 0; i < r;  ++i) newKnots.push_back(u);
     for (int32_t i = k + 1; i < m; ++i) newKnots.push_back(m_knots[i]);
 
-    std::vector<Vec3> newPts(static_cast<size_t>(n + r));
-    for (int32_t i = 0; i <= k - p; ++i) newPts[i] = m_ctlPts[i];
-    for (int32_t i = k - s; i < n; ++i) newPts[i + r] = m_ctlPts[i];
+    // KNOT INSERTION IS DONE IN HOMOGENEOUS COORDINATES.
+    //
+    // A rational curve's control points and weights are not two independent things that can
+    // each be blended on their own. The curve is the projection of a polynomial curve in
+    // (w*x, w*y, w*z, w), so the affine combination has to happen THERE and be projected
+    // afterwards: P' = (a*w1*P1 + (1-a)*w0*P0) / w', with w' = a*w1 + (1-a)*w0. Blending P
+    // and w separately — which is what this used to do — gives the right new weight and the
+    // wrong new point. MEASURED on the standard rational quarter circle (weights
+    // 1, sqrt(2)/2, 1): inserting a knot at 0.5 pushed the curve 6.1e-02 off the unit
+    // circle, on a representation whose whole purpose is to be exactly circular.
+    //
+    // A polynomial curve has every weight 1, so w' is 1 and this reduces to the previous
+    // expression exactly — the non-rational path is unchanged.
+    const bool rational = isRational();
+    struct H { float x, y, z, w; };
+    auto homogeneous = [&](int32_t i) -> H {
+        const float w = rational ? m_weights[static_cast<size_t>(i)] : 1.f;
+        const Vec3& c = m_ctlPts[static_cast<size_t>(i)];
+        return H{c.x * w, c.y * w, c.z * w, w};
+    };
 
-    std::vector<Vec3> Rw;
-    for (int32_t i = 0; i <= p - s; ++i) Rw.push_back(m_ctlPts[k - p + i]);
+    std::vector<H> newH(static_cast<size_t>(n + r));
+    for (int32_t i = 0; i <= k - p; ++i) newH[static_cast<size_t>(i)] = homogeneous(i);
+    for (int32_t i = k - s; i < n; ++i) newH[static_cast<size_t>(i + r)] = homogeneous(i);
+
+    std::vector<H> Rw;
+    for (int32_t i = 0; i <= p - s; ++i) Rw.push_back(homogeneous(k - p + i));
 
     for (int32_t j = 1; j <= r; ++j) {
         int32_t L = k - p + j;
-        std::vector<Vec3> nextRw(static_cast<size_t>(p - s - j + 1));
+        std::vector<H> nextRw(static_cast<size_t>(p - s - j + 1));
         for (int32_t i = 0; i <= p - s - j; ++i) {
             float denom = m_knots[i + k + 1] - m_knots[L + i];
             float alpha = (std::abs(denom) > kEpsilon)
                               ? (u - m_knots[L + i]) / denom
                               : 0.f;
-            nextRw[i].x = alpha * Rw[i + 1].x + (1.f - alpha) * Rw[i].x;
-            nextRw[i].y = alpha * Rw[i + 1].y + (1.f - alpha) * Rw[i].y;
-            nextRw[i].z = alpha * Rw[i + 1].z + (1.f - alpha) * Rw[i].z;
+            const H& a = Rw[static_cast<size_t>(i)];
+            const H& b = Rw[static_cast<size_t>(i + 1)];
+            H& o = nextRw[static_cast<size_t>(i)];
+            o.x = alpha * b.x + (1.f - alpha) * a.x;
+            o.y = alpha * b.y + (1.f - alpha) * a.y;
+            o.z = alpha * b.z + (1.f - alpha) * a.z;
+            o.w = alpha * b.w + (1.f - alpha) * a.w;
         }
-        newPts[L] = nextRw[0];
-        if (j < r) newPts[k + r - j - s] = nextRw[p - s - j];
+        newH[static_cast<size_t>(L)] = nextRw[0];
+        if (j < r) newH[static_cast<size_t>(k + r - j - s)] = nextRw[static_cast<size_t>(p - s - j)];
         Rw = std::move(nextRw);
     }
-    for (int32_t i = 1; i <= p - s - r; ++i) newPts[k - p + r + i] = Rw[i];
+    for (int32_t i = 1; i <= p - s - r; ++i)
+        newH[static_cast<size_t>(k - p + r + i)] = Rw[static_cast<size_t>(i)];
 
-    bool rational = isRational();
-    NurbsCurve result(m_degree, std::move(newKnots), std::move(newPts));
-    if (rational) {
-        std::vector<float> newWeights(static_cast<size_t>(n + r));
-        for (int32_t i = 0; i <= k - p; ++i) newWeights[i] = m_weights[i];
-        for (int32_t i = k - s; i < n; ++i) newWeights[i + r] = m_weights[i];
-
-        std::vector<float> WRw;
-        for (int32_t i = 0; i <= p - s; ++i) WRw.push_back(m_weights[k - p + i]);
-        for (int32_t j = 1; j <= r; ++j) {
-            int32_t L = k - p + j;
-            std::vector<float> nextWRw(static_cast<size_t>(p - s - j + 1));
-            for (int32_t i = 0; i <= p - s - j; ++i) {
-                float denom = m_knots[i + k + 1] - m_knots[L + i];
-                float alpha = (std::abs(denom) > kEpsilon)
-                                  ? (u - m_knots[L + i]) / denom
-                                  : 0.f;
-                nextWRw[i] = alpha * WRw[i + 1] + (1.f - alpha) * WRw[i];
-            }
-            newWeights[L] = nextWRw[0];
-            if (j < r) newWeights[k + r - j - s] = nextWRw[p - s - j];
-            WRw = std::move(nextWRw);
-        }
-        for (int32_t i = 1; i <= p - s - r; ++i) newWeights[k - p + r + i] = WRw[i];
-        result.setWeights(std::move(newWeights));
+    std::vector<Vec3>  newPts(static_cast<size_t>(n + r));
+    std::vector<float> newWeights(rational ? static_cast<size_t>(n + r) : 0u);
+    for (size_t i = 0; i < newH.size(); ++i) {
+        const float w = newH[i].w;
+        const float inv = (std::abs(w) > kEpsilon) ? 1.f / w : 0.f;
+        newPts[i] = Vec3{newH[i].x * inv, newH[i].y * inv, newH[i].z * inv};
+        if (rational) newWeights[i] = w;
     }
+
+    NurbsCurve result(m_degree, std::move(newKnots), std::move(newPts));
+    if (rational) result.setWeights(std::move(newWeights));
     return result;
 }
 
