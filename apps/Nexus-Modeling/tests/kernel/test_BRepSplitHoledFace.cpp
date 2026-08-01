@@ -191,21 +191,69 @@ TEST(BRepSplitHoledFace, ACutWhoseLineRunsThroughAHoleSews)
     }
 }
 
-// The remaining decline, pinned. A bar whose cross-section CROSSES the bore's circle — corners
-// outside it, edges inside — is a genuine cut that should leave a rounded-cross hole, and it
-// still returns cleanly empty. If this starts sewing, promote it into the test above with a
-// volume oracle (box minus the union of circle and square).
-TEST(BRepSplitHoledFace, ACutCrossingTheBoreCircleStillDeclinesCleanly)
+// THE REMAINING GAP, AS A PREDICTIVE RULE RATHER THAN A LIST OF FIXTURES.
+//
+// Cutting the bored box with a square bar of half-width h divides each holed cap by the four
+// lines x = +-h, y = +-h. The interesting cell is the CENTRE one, [-h,h]^2, and what its
+// MATERIAL looks like — the cell minus the bore's disk — decides everything. Its corner sits at
+// h*sqrt(2), so:
+//
+//   h*sqrt(2) <= 0.5   the cell is inside the disk: NO material            -> sews
+//   0.5/sqrt(2) < h < 0.5   the cell's material is FOUR DISCONNECTED slivers -> declines
+//   h == 0.5           four slivers PINCHED at the four tangencies         -> declines
+//   h > 0.5            a square with a hole in it, connected               -> sews
+//
+// That rule was written down from the geometry and then checked: it predicts the outcome for
+// all fourteen widths below, INCLUDING both sharp transitions — 0.3535 sews and 0.3540 does not,
+// 0.50 does not and 0.51 does. A boundary that sharp, predicted in advance, is what makes this a
+// cause rather than a description.
+//
+// So the gap is not "corner regions assemble wrongly". It is: THE IMPRINT'S FACE-SPLITTING MODEL
+// CANNOT PRODUCE A FACE WHOSE MATERIAL IS DISCONNECTED, and this band requires exactly that.
+// Closing it needs the imprint to partition a face by all of its cut curves at once — a planar
+// arrangement — instead of one chord at a time, or to detect a disconnected result and emit one
+// face per component.
+//
+// When that lands this test starts failing, which is the intent. Promote the declining rows into
+// the sewing ones; the volume oracle for them is 8 - 2*area(circle union square).
+TEST(BRepSplitHoledFace, TheDeclineIsExactlyWhereTheCentreCellsMaterialIsDisconnected)
 {
     const Body bored = boredBox();
-    for (const double side : {0.8, 0.9}) {   // h = 0.40, 0.45: corners outside, edges inside
-        Body bar = makeBox(static_cast<float>(side), static_cast<float>(side), 6.f);
-        const Body r = booleanToBody(bored, bar, BooleanOp::Difference);
-        EXPECT_EQ(r.faceCount(), 0u)
-            << "side=" << side << ": this now sews — promote it, with the volume oracle "
-               "8 - 2*area(circle union square)";
-        if (r.faceCount() > 0) EXPECT_TRUE(r.isClosed());   // the contract regardless
+    const double boredVol = static_cast<double>(bored.massProperties().volume);
+    const double r = 0.5;
+
+    int checked = 0;
+    for (const double h : {0.30, 0.345, 0.350, 0.3535, 0.3540, 0.355, 0.36,
+                           0.40, 0.45, 0.49, 0.50, 0.51, 0.55, 0.60}) {
+        const double corner = h * std::sqrt(2.0);
+        const bool cellEmpty = corner <= r - 1e-9;          // centre cell inside the disk
+        const bool cellConnected = h > r + 1e-9;            // disk strictly inside the cell
+        const bool shouldSew = cellEmpty || cellConnected;
+
+        Body bar = makeBox(static_cast<float>(2 * h), static_cast<float>(2 * h), 6.f);
+        const Body res = booleanToBody(bored, bar, BooleanOp::Difference);
+        ++checked;
+
+        if (!shouldSew) {
+            EXPECT_EQ(res.faceCount(), 0u)
+                << "h=" << h << ": the centre cell's material is disconnected and this now sews — "
+                   "the planar-arrangement work has landed, so promote this row";
+            if (res.faceCount() > 0) EXPECT_TRUE(res.isClosed());   // the contract regardless
+            continue;
+        }
+
+        ASSERT_TRUE(sound(res)) << "h=" << h << " should sew and did not";
+        if (cellEmpty) {
+            // the bar is inside the bore: it removes nothing at all
+            EXPECT_NEAR(static_cast<double>(res.massProperties().volume), boredVol, 1e-6)
+                << "h=" << h << ": a cut through empty space changed the solid";
+        } else {
+            // the bar swallows the bore, so the answer is just the box minus the bar
+            EXPECT_NEAR(static_cast<double>(res.massProperties().volume), 8.0 - 8.0 * h * h, 1e-5)
+                << "h=" << h << ": the swallowed-bore result is not box minus bar";
+        }
     }
+    EXPECT_EQ(checked, 14);
 }
 
 // THE SIZE OF THE REMAINING GAP, AND THE GUARANTEE THAT HOLDS ACROSS IT.
