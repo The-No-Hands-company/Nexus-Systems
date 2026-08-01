@@ -1676,6 +1676,74 @@ uint32_t Body::cutFaceBetween(uint32_t faceId, uint32_t vA, uint32_t vB,
     const uint32_t sh = m_faces[faceId].shell;
     if (sh < m_shells.size()) m_shells[sh].faces.push_back(faceB);
     m_edges[edgeId].coedge = dA;
+
+    // AN INNER LOOP BELONGS TO THE PIECE THAT CONTAINS IT.
+    //
+    // Splitting a face used to leave every hole attached to whichever piece inherited the
+    // original face record — a choice about which SEGMENT of the ring kept the old id, which
+    // has nothing to do with where the hole actually is. MEASURED on box(2,2,2) bored by a
+    // cylinder and then slotted across its top: the top cap split into the strip y in
+    // [0.6, 1.0] and the remainder y in [-1, 0.6], and the BORE'S HOLE — a circle of radius
+    // 0.5 about the origin — was left on the STRIP. The strip is inside the cut, so the
+    // Difference correctly dropped it, and it took the bore's rim with it: the rim's 24
+    // segments were then offered by the cylinder alone, 24 one-sided edges, the sew came out
+    // open, and booleanToBody returned a clean empty body. "Drill a hole, then cut a slot
+    // across it" failed for that reason, on any solid with a hole in a face being split.
+    //
+    // Deciding it geometrically is the whole fix. A hole lies inside exactly one of the two
+    // pieces, unless the cut runs THROUGH it — and that case is not a re-assignment at all,
+    // it is a hole being divided into two boundary arcs, which this routine does not do. So it
+    // is REFUSED rather than approximated: the caller treats kInvalid as "no cut", which is
+    // the same outcome as before this change for that configuration, but now by decision.
+    if (!m_faces[faceId].innerLoops.empty()) {
+        auto ringOf = [&](uint32_t lid) {
+            std::vector<Vec3> r;
+            if (lid >= m_loops.size()) return r;
+            uint32_t w = m_loops[lid].first, g = 0;
+            do {
+                const Coedge& x = m_coedges[w];
+                const uint32_t v = x.reversed ? m_edges[x.edge].v1 : m_edges[x.edge].v0;
+                if (v < m_verts.size()) r.push_back(m_verts[v].point);
+                w = x.next;
+                if (++g > m_coedges.size() + 1) break;
+            } while (w != m_loops[lid].first);
+            return r;
+        };
+        const std::vector<Vec3> ringA = ringOf(loopId), ringB = ringOf(loopB);
+        const uint32_t sid = m_faces[faceId].surface;
+        const Surface* fsurf = (sid < m_surfaces.size()) ? &m_surfaces[sid] : nullptr;
+        if (fsurf == nullptr) return kInvalid;
+        Vec3 fn = fsurf->normal;
+        if (m_faces[faceId].reversed) fn = Vec3{-fn.x, -fn.y, -fn.z};
+        auto inside = [&](const Vec3& q, const std::vector<Vec3>& ring) {
+            if (ring.size() < 3) return false;
+            return (fsurf->kind == SurfaceKind::Plane)
+                       ? pointInPlanarPolygon(q, ring, fn)
+                       : pointInSurfacePatchUV(*fsurf, q, ring);
+        };
+
+        std::vector<uint32_t> keepA, moveB;
+        for (const uint32_t il : m_faces[faceId].innerLoops) {
+            const std::vector<Vec3> hole = ringOf(il);
+            if (hole.size() < 3) return kInvalid;
+            Vec3 c{0.0, 0.0, 0.0};
+            for (const Vec3& q : hole) c = c + q;
+            c = c * (1.0 / static_cast<double>(hole.size()));
+            const bool inA = inside(c, ringA), inB = inside(c, ringB);
+            if (inA == inB) return kInvalid;   // in both or neither: the cut is not clear of it
+            // and no vertex of the hole may fall in the OTHER piece, which is what a cut
+            // running through the hole looks like
+            const std::vector<Vec3>& other = inA ? ringB : ringA;
+            for (const Vec3& q : hole)
+                if (inside(q, other)) return kInvalid;
+            (inA ? keepA : moveB).push_back(il);
+        }
+        m_faces[faceId].innerLoops = std::move(keepA);
+        for (const uint32_t il : moveB) {
+            m_loops[il].face = faceB;
+            m_faces[faceB].innerLoops.push_back(il);
+        }
+    }
     return faceB;
 }
 
