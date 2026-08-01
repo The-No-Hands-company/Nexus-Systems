@@ -111,6 +111,7 @@ add_executable(nexus_kernel_tests
     kernel/test_BRepSphereOnCylinderAxis.cpp
     kernel/test_BRepConeBaseArc.cpp
     kernel/test_BRepConeSection.cpp
+    kernel/test_BRepChainedBoolean.cpp
     kernel/test_BRepChamfer.cpp
     kernel/test_BRepFillet.cpp
     kernel/test_BRepHollow.cpp

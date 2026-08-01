@@ -24,11 +24,60 @@ uint64_t weldedPairKey(uint32_t a, uint32_t b)
 
 // Outward normal of a (planar) face: the surface normal, flipped when the face
 // reverses it.
-Vec3 faceOutwardNormal(const Body& body, uint32_t f)
+// Outward normal of a face AT A POINT on it.
+//
+// `Surface::normal` is only a normal for a PLANE. On a cylinder and a cone it is the AXIS,
+// and on a sphere it is unused — the same confusion the tessellator carries a comment about
+// after it broke the centred cylinder-through-box Boolean. Reading it as a normal on a
+// curved face does not give a slightly wrong direction, it gives a PERPENDICULAR one.
+//
+// What that cost, measured: selectFace decides a coincident face pair by probing just
+// inside the face along -n. On a cylinder that probe slid ALONG THE AXIS instead of into
+// the material, stayed on the boundary, and answered "the interiors are not on the same
+// side" — so every coincident CURVED face was dropped. In (box u cyl) n cyl, 34 coincident
+// faces were discarded and 18 of the 50 needed faces reached the sew, which then had 64
+// boundary edges and could not close. The whole chained-Boolean family failed this way.
+Vec3 faceOutwardNormalAt(const Body& body, uint32_t f, const Vec3& p)
 {
     const Face& face = body.face(f);
     Vec3 n{0.f, 0.f, 1.f};
-    if (face.surface < body.surfaceCount()) n = body.surface(face.surface).normal;
+    if (face.surface < body.surfaceCount()) {
+        const Surface& s = body.surface(face.surface);
+        auto unit = [](const Vec3& v, const Vec3& fallback) {
+            const double L = std::sqrt(v.dot(v));
+            return L > 0.0 ? Vec3{v.x / L, v.y / L, v.z / L} : fallback;
+        };
+        switch (s.kind) {
+            case SurfaceKind::Plane:
+                n = s.normal;
+                break;
+            case SurfaceKind::Sphere:
+                n = unit(p - s.origin, s.normal);
+                break;
+            case SurfaceKind::Cylinder: {
+                const Vec3 ax = unit(s.normal, Vec3{0., 0., 1.});
+                const Vec3 w = p - s.origin;
+                n = unit(w - ax * w.dot(ax), s.normal);
+                break;
+            }
+            case SurfaceKind::Cone: {
+                // n is perpendicular to the ruling (ax + slope*rhat), pointing away from
+                // the axis and back toward the apex: (rhat - slope*ax)/sqrt(1+slope^2).
+                const Vec3 ax = unit(s.normal, Vec3{0., 0., 1.});
+                const Vec3 w = p - s.origin;
+                const Vec3 rad = w - ax * w.dot(ax);
+                const Vec3 rhat = unit(rad, s.normal);
+                const double sl = s.radius;
+                const double k = 1.0 / std::sqrt(1.0 + sl * sl);
+                n = Vec3{(rhat.x - sl * ax.x) * k, (rhat.y - sl * ax.y) * k,
+                         (rhat.z - sl * ax.z) * k};
+                break;
+            }
+            default:
+                n = s.normal;
+                break;
+        }
+    }
     return face.reversed ? Vec3{-n.x, -n.y, -n.z} : n;
 }
 
@@ -39,9 +88,6 @@ void emitFace(const Body& body, uint32_t f, bool reverse, std::vector<Vec3>& pos
 {
     const std::vector<uint32_t> vs = body.faceVertices(f);
     if (vs.size() < 3) return;
-    Vec3 outward = faceOutwardNormal(body, f);
-    if (reverse) outward = {-outward.x, -outward.y, -outward.z};
-
     const uint32_t base = static_cast<uint32_t>(positions.size());
     for (uint32_t v : vs) positions.push_back(body.vertex(v).point);
 
@@ -49,6 +95,15 @@ void emitFace(const Body& body, uint32_t f, bool reverse, std::vector<Vec3>& pos
         uint32_t a = base;
         uint32_t b = base + static_cast<uint32_t>(i);
         uint32_t c = base + static_cast<uint32_t>(i) + 1u;
+        // The normal is taken at THIS triangle's own centroid. Against a face-wide normal
+        // read off the surface record, a cylinder's radial triangle normal is
+        // perpendicular to the stored axis, so the winding test compared two orthogonal
+        // vectors and the sign was noise.
+        const Vec3 tc{(positions[a].x + positions[b].x + positions[c].x) / 3.0,
+                      (positions[a].y + positions[b].y + positions[c].y) / 3.0,
+                      (positions[a].z + positions[b].z + positions[c].z) / 3.0};
+        Vec3 outward = faceOutwardNormalAt(body, f, tc);
+        if (reverse) outward = {-outward.x, -outward.y, -outward.z};
         const Vec3 g = (positions[b] - positions[a]).cross(positions[c] - positions[a]);
         if (g.dot(outward) < 0.f) std::swap(b, c);  // keep winding outward
         nexus::geometry::Face tri;  // mesh face (not the brep::Face topology entity)
@@ -99,10 +154,29 @@ bool selectFace(const Body& body, uint32_t f, const Body& other, BooleanOp op, b
 
     if (!isA) return false;  // coincident pair is represented by the A-side face
     const Vec3 c = body.faceSamplePoint(f);  // on the material, not inside a hole
-    const Vec3 nA = faceOutwardNormal(body, f);
-    const double eps = std::max(tol.absolute * 100.f, 1e-3f);
-    const Vec3 pIn{c.x - eps * nA.x, c.y - eps * nA.y, c.z - eps * nA.z};  // just inside A
-    const bool same = (other.classifyPoint(pIn, tol) == PC::Inside);
+    const Vec3 nA = faceOutwardNormalAt(body, f, c);
+
+    // "Are the two interiors on the same side of this shared face?" was answered by
+    // probing a point just inside A and asking the other solid to classify it. That works
+    // on a plane and cannot work on a curved face, because classifyPoint answers from the
+    // TESSELLATION: the chordal hull of a 16-segment cylinder of radius 0.7 dips to 0.6866
+    // midway along a facet, so a probe 1e-3 inside the true surface is 1.3e-02 OUTSIDE the
+    // hull and comes back Outside. The probe was not slightly noisy, it was reliably wrong.
+    //
+    // The question is about ORIENTATION, so it is answered from the two faces' outward
+    // normals at the shared point — exact, and independent of how either body happens to
+    // be tessellated.
+    const uint32_t g = other.faceContainingPoint(c, tol);
+    bool same;
+    if (g != kInvalid) {
+        const Vec3 nB = faceOutwardNormalAt(other, g, c);
+        same = (nA.dot(nB) > 0.0);
+    } else {
+        // no coincident face found analytically — fall back to the probe
+        const double eps = std::max(tol.absolute * 100.f, 1e-3f);
+        const Vec3 pIn{c.x - eps * nA.x, c.y - eps * nA.y, c.z - eps * nA.z};
+        same = (other.classifyPoint(pIn, tol) == PC::Inside);
+    }
     switch (op) {
         case BooleanOp::Union:
         case BooleanOp::Intersection:

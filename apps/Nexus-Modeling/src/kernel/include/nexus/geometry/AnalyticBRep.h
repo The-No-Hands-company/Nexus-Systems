@@ -425,6 +425,13 @@ public:
     [[nodiscard]] PointContainment classifyFace(uint32_t faceId, const Body& other,
                                                 Tolerance tol = {}) const;
 
+    // Index of a face of THIS body that `p` lies on — on the face's analytic surface and
+    // inside its boundary, holes excluded — or kInvalid. Answered from the surfaces, never
+    // from their tessellation: a point on a curved surface is never on the chordal hull
+    // that approximates it, by as much as 1.3e-02 on a 16-segment cylinder of radius 0.7,
+    // so a tessellation-based test cannot see coincidence on anything but a plane.
+    [[nodiscard]] uint32_t faceContainingPoint(const Vec3& p, Tolerance tol = {}) const;
+
     // EXACT side of a point relative to a face's supporting plane, using the
     // Shewchuk adaptive-exact orient3D predicate (float fast path → exact
     // fallback) rather than a plain-float signed distance that can flip sign

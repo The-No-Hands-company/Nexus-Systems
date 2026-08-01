@@ -385,6 +385,153 @@ bool pointInSurfacePatchUV(const Surface& s, const Vec3& p, const std::vector<Ve
     return pointInPlanarPolygon({pu, pv, 0.0}, uv, {0.0, 0.0, 1.0});
 }
 
+// Signed distance from a point to an analytic surface, in double and including the CONE.
+// BRepSurfaceIntersect::surfaceDistance is float and returns 1e30 for a cone, so it cannot
+// answer the question below for the one surface that most needed it.
+double surfaceDistanceD(const Surface& s, const Vec3& p)
+{
+    switch (s.kind) {
+        case SurfaceKind::Plane:
+            return (p - s.origin).dot(normalize(s.normal));
+        case SurfaceKind::Sphere: {
+            const Vec3 d = p - s.origin;
+            return std::sqrt(d.dot(d)) - s.radius;
+        }
+        case SurfaceKind::Cylinder: {
+            const Vec3 ax = normalize(s.normal);
+            const Vec3 w = p - s.origin;
+            const Vec3 rad = w - ax * w.dot(ax);
+            return std::sqrt(rad.dot(rad)) - s.radius;
+        }
+        case SurfaceKind::Cone: {
+            // s.radius is the SLOPE and s.origin the apex; the cone's radius at axial
+            // distance t is slope*t, and nothing lies behind the apex.
+            const Vec3 ax = normalize(s.normal);
+            const Vec3 w = p - s.origin;
+            const double axial = w.dot(ax);
+            if (axial <= 0.0) return std::sqrt(w.dot(w));
+            const Vec3 rad = w - ax * axial;
+            return std::sqrt(rad.dot(rad)) - s.radius * axial;
+        }
+        default:
+            return 1e30;  // NURBS: not measured analytically here
+    }
+}
+
+// Outward normal of an analytic surface AT A POINT. `Surface::normal` is a normal only for
+// a PLANE; on a cylinder and a cone it is the AXIS.
+Vec3 surfaceNormalAtPoint(const Surface& s, const Vec3& p)
+{
+    auto unit = [](const Vec3& v, const Vec3& fb) {
+        const double L = std::sqrt(v.dot(v));
+        return L > 0.0 ? Vec3{v.x / L, v.y / L, v.z / L} : fb;
+    };
+    switch (s.kind) {
+        case SurfaceKind::Plane:
+            return unit(s.normal, Vec3{0., 0., 1.});
+        case SurfaceKind::Sphere:
+            return unit(p - s.origin, Vec3{0., 0., 1.});
+        case SurfaceKind::Cylinder: {
+            const Vec3 ax = unit(s.normal, Vec3{0., 0., 1.});
+            const Vec3 w = p - s.origin;
+            return unit(w - ax * w.dot(ax), ax);
+        }
+        case SurfaceKind::Cone: {
+            const Vec3 ax = unit(s.normal, Vec3{0., 0., 1.});
+            const Vec3 w = p - s.origin;
+            const Vec3 rhat = unit(w - ax * w.dot(ax), ax);
+            const double sl = s.radius, k = 1.0 / std::sqrt(1.0 + sl * sl);
+            return Vec3{(rhat.x - sl * ax.x) * k, (rhat.y - sl * ax.y) * k,
+                        (rhat.z - sl * ax.z) * k};
+        }
+        default:
+            return unit(s.normal, Vec3{0., 0., 1.});
+    }
+}
+
+// Point-in-patch for a curved face, decided in the TANGENT PLANE at the query point rather
+// than in the surface's own (u,v).
+//
+// pointInSurfacePatchUV is the right tool where the parametrisation is well behaved, but
+// every one of these parametrisations is SINGULAR somewhere — a sphere's is at +/-uAxis,
+// which `makeSphere` places on X while the grid's poles are on Z, so the singularity sits in
+// the middle of ordinary faces. Measured on box u sphere(1.2) against the sphere: 92 of the
+// union's 96 spherical faces were placed correctly and 4 were not, and all 4 had their
+// sample within a few degrees of +/-X.
+//
+// The tangent plane has no singularity. Projecting the ring into it around the query point
+// is exact for the question being asked — is this point inside this ring — for any patch
+// spanning less than a hemisphere, which every grid patch does.
+bool pointInPatchTangent(const Surface& s, const Vec3& p, const std::vector<Vec3>& poly)
+{
+    if (poly.size() < 3) return false;
+    const Vec3 n = surfaceNormalAtPoint(s, p);
+    const Vec3 seed = (std::abs(n.x) < 0.9) ? Vec3{1., 0., 0.} : Vec3{0., 1., 0.};
+    Vec3 u = n.cross(seed);
+    const double ul = std::sqrt(u.dot(u));
+    if (ul <= 0.0) return false;
+    u = Vec3{u.x / ul, u.y / ul, u.z / ul};
+    const Vec3 v = n.cross(u);
+    std::vector<Vec3> flat;
+    flat.reserve(poly.size());
+    for (const Vec3& q : poly) {
+        const Vec3 d = q - p;
+        flat.push_back({d.dot(u), d.dot(v), 0.0});
+    }
+    return pointInPlanarPolygon({0., 0., 0.}, flat, {0., 0., 1.});
+}
+
+// Does `p` lie ON face `f` of `b` — on its analytic surface AND inside its boundary,
+// holes excluded? Answered from the surfaces, never from their tessellation.
+bool pointOnBodyFace(const Body& b, uint32_t f, const Vec3& p, Tolerance tol)
+{
+    if (f >= b.faceCount() || !b.face(f).alive) return false;
+    if (b.face(f).surface >= b.surfaceCount()) return false;
+    const Surface& s = b.surface(b.face(f).surface);
+    if (s.kind == SurfaceKind::Nurbs) return false;
+
+    double mag = 1.0;  // scale the band to the face, not to the origin
+    const std::vector<uint32_t> outerIdx = b.faceVertices(f);
+    if (outerIdx.size() < 3) return false;
+    std::vector<Vec3> outer;
+    outer.reserve(outerIdx.size());
+    for (const uint32_t v : outerIdx) {
+        const Vec3 q = b.vertex(v).point;
+        outer.push_back(q);
+        mag = std::max(mag, std::sqrt(q.dot(q)));
+    }
+    if (std::abs(surfaceDistanceD(s, p)) > static_cast<double>(tol.at(static_cast<float>(mag))))
+        return false;
+
+    auto inRing = [&](const std::vector<Vec3>& r) {
+        if (r.size() < 3) return false;
+        if (s.kind == SurfaceKind::Plane) {
+            Vec3 n = s.normal;
+            if (b.face(f).reversed) n = Vec3{-n.x, -n.y, -n.z};
+            return pointInPlanarPolygon(p, r, n);
+        }
+        // BOTH tests, because they fail in different places and neither is sound alone.
+        // (u,v) is exact where the parametrisation is well behaved and degenerates at its
+        // singularity — +/-uAxis on a sphere, which makeSphere puts on X, in the middle of
+        // ordinary faces. The tangent plane has no singularity but folds on a patch
+        // spanning more than a hemisphere, which a cylinder's side face can do once an
+        // imprint has merged facets. Measured: (u,v) alone misplaces 4 of a sphere's 96
+        // faces and loses box u sphere entirely; the tangent plane alone loses two of the
+        // cylinder chains that (u,v) gets right. A point outside the ring is outside it in
+        // either frame, so accepting either is still a containment test.
+        return (s.kind == SurfaceKind::Sphere) ? pointInPatchTangent(s, p, r)
+                                               : pointInSurfacePatchUV(s, p, r);
+    };
+    if (!inRing(outer)) return false;
+    for (const std::vector<uint32_t>& holeIdx : b.faceInnerLoopVertices(f)) {
+        std::vector<Vec3> hole;
+        hole.reserve(holeIdx.size());
+        for (const uint32_t v : holeIdx) hole.push_back(b.vertex(v).point);
+        if (inRing(hole)) return false;  // the point is in an opening, not on material
+    }
+    return true;
+}
+
 uint64_t edgeKey(uint32_t a, uint32_t b)
 {
     const uint32_t lo = a < b ? a : b, hi = a < b ? b : a;
@@ -2921,7 +3068,36 @@ Body::PointContainment Body::classifyFace(uint32_t faceId, const Body& other, To
     // average is the hole's centre — the one point the face does not occupy — which
     // classified a box face whose material lies entirely outside a cylinder as being
     // inside it. Identical to the centroid for a face without holes.
-    return other.classifyPoint(faceSamplePoint(faceId), tol);
+    const Vec3 sample = faceSamplePoint(faceId);
+
+    // ON-BOUNDARY IS DECIDED ANALYTICALLY, BEFORE THE PARITY RAY.
+    //
+    // classifyPoint answers OnBoundary by measuring the distance to the TESSELLATED shell,
+    // and a point on a curved surface is never on its own tessellation: the chordal hull
+    // falls inside the true surface by the sagitta. At subdivision 6 that is still ~2.7e-04
+    // on a 16-segment cylinder of radius 0.7 — four orders above the tolerance the test
+    // compares against — so a face lying EXACTLY on another body's cylinder was reported
+    // Outside it, every time.
+    //
+    // It never showed up in a single Boolean, because two primitives do not share a
+    // surface. It shows up the moment a Boolean's RESULT is used as an operand, which is
+    // ordinary modelling: the result carries the operand's own faces, so the second
+    // operation is full of exactly-coincident curved faces.
+    //
+    // MEASURED with an oracle whose answer is known outright — B is contained in A u B, so
+    // (A u B) n B must be B and can never be empty. Over 400 random pairs it was empty in
+    // 88 of 151 chains; every all-planar case was right and every case with a curved
+    // operand was wrong, which is the signature of this and not of the Boolean.
+    if (other.faceContainingPoint(sample, tol) != kInvalid) return PointContainment::OnBoundary;
+
+    return other.classifyPoint(sample, tol);
+}
+
+uint32_t Body::faceContainingPoint(const Vec3& p, Tolerance tol) const
+{
+    for (uint32_t f = 0; f < static_cast<uint32_t>(m_faces.size()); ++f)
+        if (pointOnBodyFace(*this, f, p, tol)) return f;
+    return kInvalid;
 }
 
 int Body::facePlaneSide(uint32_t faceId, const Vec3& p, Tolerance tol) const
