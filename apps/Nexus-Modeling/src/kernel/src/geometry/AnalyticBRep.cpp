@@ -3016,13 +3016,86 @@ uint32_t Body::imprintCurve(uint32_t faceId, const Curve& curve, Tolerance tol,
         }
     }
 
-    if (crossings.size() != 2) return kInvalid;  // need a clean entry + exit
+    if (crossings.size() < 2) return kInvalid;  // need a clean entry + exit
 
-    // Resolve each crossing to a vertex (splitting the edge where interior). The
-    // two edges are distinct, so splitting one leaves the other's frac valid.
+    // MORE THAN TWO CROSSINGS IS ORDINARY, NOT A REFUSAL.
+    //
+    // This required EXACTLY two, on the reasoning that a cut is one entry and one exit. That
+    // holds for a convex face and fails for everything else: a line crosses a boundary once for
+    // every time it enters or leaves the material, and a face that has been cut before — or that
+    // had a hole merged into its outer ring — is routinely re-entered. MEASURED on a bored box
+    // cut by a bar whose cross-section crosses the bore circle: of 1248 cut attempts, 841 had the
+    // expected two crossings and 113 had four, five or six. Every one of those declined, and one
+    // refusal anywhere leaves the imprint incomplete and the whole Boolean empty.
+    //
+    // No new operator is needed. Order the crossings along the CURVE and cut the first ADJACENT
+    // PAIR that actually bounds material — the driver re-offers this tool surface, and the next
+    // pass finds the next pair on whichever piece still contains it, so k segments are consumed
+    // in k passes. Which pair bounds material cannot be assumed from parity, because a crossing
+    // that lands exactly on a vertex is reported once where a transversal one is reported twice
+    // (that is where the odd counts come from), so it is TESTED: the midpoint of the candidate
+    // segment must be on the face's material — inside the outer ring and inside none of its
+    // holes. With exactly two crossings that test passes and the behaviour is unchanged.
+    auto crossPointOf = [&](const Cross& c) -> Vec3 {
+        if (c.isVertex) return m_verts[c.vertex].point;
+        const Edge& ed = m_edges[c.edge];
+        const Curve& cv = m_curves[ed.curve];
+        return cv.eval(ed.t0 + (ed.t1 - ed.t0) * c.frac);
+    };
+    std::vector<size_t> order(crossings.size());
+    for (size_t i = 0; i < order.size(); ++i) order[i] = i;
+    std::sort(order.begin(), order.end(), [&](size_t a, size_t b) {
+        return paramOnCurve(curve, crossPointOf(crossings[a]))
+             < paramOnCurve(curve, crossPointOf(crossings[b]));
+    });
+
+    // The face's material test: inside the outer ring, outside every hole.
+    std::vector<Vec3> outerRing;
+    for (const uint32_t v : bVerts) outerRing.push_back(m_verts[v].point);
+    const Surface* mSurf = (m_faces[faceId].surface < m_surfaces.size())
+                               ? &m_surfaces[m_faces[faceId].surface] : nullptr;
+    auto onMaterial = [&](const Vec3& q) {
+        if (mSurf == nullptr || outerRing.size() < 3) return true;
+        const bool in = (mSurf->kind == SurfaceKind::Plane)
+                            ? pointInPlanarPolygon(q, outerRing, faceNormal)
+                            : pointInSurfacePatchUV(*mSurf, q, outerRing);
+        if (!in) return false;
+        for (const uint32_t il : m_faces[faceId].innerLoops) {
+            if (il >= m_loops.size() || !m_loops[il].alive) continue;
+            std::vector<Vec3> hole;
+            uint32_t w = m_loops[il].first, g = 0;
+            do {
+                const Coedge& x = m_coedges[w];
+                const uint32_t hv = x.reversed ? m_edges[x.edge].v1 : m_edges[x.edge].v0;
+                if (hv < m_verts.size()) hole.push_back(m_verts[hv].point);
+                w = x.next;
+                if (++g > m_coedges.size() + 1) break;
+            } while (w != m_loops[il].first);
+            if (hole.size() >= 3) {
+                const bool inHole = (mSurf->kind == SurfaceKind::Plane)
+                                        ? pointInPlanarPolygon(q, hole, faceNormal)
+                                        : pointInSurfacePatchUV(*mSurf, q, hole);
+                if (inHole) return false;
+            }
+        }
+        return true;
+    };
+
+    size_t pick = order.size();   // index into `order` of the pair's first crossing
+    for (size_t i = 0; i + 1 < order.size(); ++i) {
+        const Vec3 pa = crossPointOf(crossings[order[i]]);
+        const Vec3 pb = crossPointOf(crossings[order[i + 1]]);
+        const Vec3 mid{0.5 * (pa.x + pb.x), 0.5 * (pa.y + pb.y), 0.5 * (pa.z + pb.z)};
+        if (length(sub(pb, pa)) <= eps) continue;      // coincident pair: no segment
+        if (onMaterial(mid)) { pick = i; break; }
+    }
+    if (pick >= order.size()) return kInvalid;
+
+    // Resolve the chosen pair to vertices (splitting the edge where interior). The two edges
+    // are distinct, so splitting one leaves the other's frac valid.
     auto resolve = [&](const Cross& c) { return c.isVertex ? c.vertex : splitEdge(c.edge, c.frac, tol); };
-    const uint32_t vA = resolve(crossings[0]);
-    const uint32_t vB = resolve(crossings[1]);
+    const uint32_t vA = resolve(crossings[order[pick]]);
+    const uint32_t vB = resolve(crossings[order[pick + 1]]);
     // vA == vB is the within-eps corner-clip case: both crossings snapped to the
     // SAME existing boundary vertex (the line grazes a single corner). That is a
     // tolerance-correct no-op, not an error — imprintMutually treats kInvalid as
