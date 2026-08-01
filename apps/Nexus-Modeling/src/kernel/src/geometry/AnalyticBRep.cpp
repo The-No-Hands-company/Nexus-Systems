@@ -5,6 +5,7 @@
 #include <array>
 
 #include <nexus/geometry/BRepSurfaceIntersect.h>
+#include <nexus/geometry/ConstrainedDelaunay2D.h>
 #include <nexus/geometry/RobustPredicates.h>
 
 #include <algorithm>
@@ -12,6 +13,7 @@
 #include <limits>
 #include <cstdint>
 #include <cstring>
+#include <map>
 #include <unordered_map>
 
 namespace nexus::geometry::brep {
@@ -3010,7 +3012,16 @@ Body::PointContainment Body::classifyPoint(const Vec3& p, Tolerance tol) const
 {
     // Tessellate the shell to a watertight, crack-free triangle set. subdivisions
     // are placed per shared edge, so curved faces are approximated coherently.
-    Mesh mesh = toMesh(6);
+    //
+    // THREE, NOT SIX, AND THAT IS AN INCREASE IN ACCURACY. This used to ask for six, on a
+    // tessellator that fanned every curved face from one ring vertex — which meant a
+    // cylinder's cross-section carried the resolution of its UNREFINED rim however high the
+    // count went, an effective sagitta of r(1-cos(pi/16)) = 1.9e-02. Now that a curved patch
+    // is ruled or gridded, subdivisions=3 puts 64 points around that same rim: sagitta
+    // 1.2e-03, sixteen times closer to the true surface than the old six ever was. And this
+    // runs on EVERY query, so the difference is worth taking: over the fuzz, mass-properties
+    // and sphere-on-rod suites, six costs 106s against 59s for three.
+    Mesh mesh = toMesh(3);
     (void)mesh.topology().triangulate();
     const auto& pos = mesh.attributes().positions();
     const auto& topo = mesh.topology();
@@ -3554,6 +3565,459 @@ bool assemblePlanarFace(const std::vector<PlanarEdge>& edges, const Vec3& O, con
 // edges need it — a Line edge on a cylinder or a cone is a generatrix, exactly constant in
 // u, and subdividing it just inserts collinear points — which keeps this a no-op wherever
 // the old assumption already held, primitives included.
+// TRIANGULATE A CURVED FACE IN ITS OWN (u,v) DOMAIN, NOT BY FANNING ITS RING IN 3D.
+//
+// `toMesh` fanned every face from the first vertex of its ring. On a flat face that is exact.
+// On a curved one it is the whole of the under-refinement defect, and it produces three
+// distinct symptoms that all trace to the same cause — a fan connects ring points that are
+// far apart ON THE SURFACE, and in 3D that chord cuts through the solid:
+//
+//   1. AREA AND VOLUME STALL. Measured, cylinder(1,2,16): the tessellated volume converges to
+//      6.1757 as subdivisions rise, against an exact 2*pi = 6.28319. It CONVERGES — to the
+//      wrong number — because every level repeats the same mistake. The rim refines correctly;
+//      the interior connection does not.
+//   2. ZERO-AREA TRIANGLES, AND WATERTIGHTNESS DEPENDED ON THEM. When the ring's first vertex
+//      lies on a straight refined boundary edge (a cylinder's generatrix), the fan's trailing
+//      triangles are three collinear points. Measured at subdivisions 2 they are exactly
+//      that: (0.924, 0.383, z) for z = -1, -0.333, 0.333. A zero-area triangle has no defined
+//      orientation, so its winding was arbitrary — and it was also the ONLY coverage of those
+//      boundary sub-segments, which is why simply dropping them opened 42 one-sided edges.
+//   3. NON-MANIFOLD EDGES. The fan emits the CHORD across a boundary edge that is already
+//      subdivided, because the apex sits next to that edge in the ring. Measured on the same
+//      cylinder: edge (8,24) has length 2.000 — the full un-refined generatrix — used FOUR
+//      times, and the rim chords likewise. Those edges should not exist in the mesh at all.
+//
+// So the face is triangulated in the surface's own parameter domain, where "short" means
+// short along the surface, with every boundary segment passed to `ConstrainedDelaunay2D` as a
+// constraint. Delaunay maximises the minimum angle, which is exactly "no long diagonals"; the
+// constraints are what forbid touching the boundary. For a DEVELOPABLE surface this alone is
+// convergent with no interior samples, because connecting the same rim points in the ruled
+// direction is the right answer.
+//
+// WATERTIGHTNESS IS PRESERVED BY CONSTRUCTION, and that is the whole reason this is safe to do
+// per face: `buildRing` derives a face's boundary from its coedges and each edge's own curve
+// WITHOUT consulting how the face will be triangulated. A face triangulated here and its
+// neighbour triangulated by the old fan still meet exactly, because neither touched the
+// boundary. Every failure below therefore falls back to the existing path, never to a partial
+// result — and the last check is the one that matters: the triangulation must use each
+// boundary segment EXACTLY ONCE. That is the crack condition stated locally, which turns a
+// whole-body symptom into a per-face decision.
+//
+// A pole or apex vertex is DECLINED rather than handled: there the parametrisation collapses
+// and the (u,v) polygon is not a planar problem at all. Those faces keep the fan.
+bool triangulateCurvedFaceStrips(const Surface& surf, const Face& fc,
+                                 const std::vector<uint32_t>& ring,
+                                 const std::vector<double>& U, const std::vector<double>& V,
+                                 int poleIdx,
+                                 const std::vector<Vec3>& posD,
+                                 std::vector<std::array<uint32_t, 3>>& out);
+
+// The grid path. Takes the ring already mapped into (u,v) and may APPEND interior vertices.
+bool triangulateCurvedFaceGrid(const Surface& surf, const Face& fc,
+                               const std::vector<uint32_t>& ring,
+                               const std::vector<double>& U, const std::vector<double>& V,
+                               int poleIdx,
+                               std::vector<nexus::render::Vec3>& posOut,
+                               std::vector<Vec3>& posDOut,
+                               std::vector<std::array<uint32_t, 3>>& out)
+{
+    out.clear();
+    const int n = static_cast<int>(ring.size());
+    // ── THE PATCH'S OWN PARAMETER GRID ──────────────────────────────────────────────────
+    //
+    // A boundary-only triangulation cannot represent this patch, and Delaunay in (u,v) is the
+    // wrong criterion for it. MEASURED, cylinder(1,2,16) at subdivisions 16: a constrained
+    // Delaunay over the ring alone gives a total area of 18.7834 against an exact 18.84956,
+    // and it makes the volume WORSE than the fan it replaced (6.1434 against 6.1757). The
+    // reason is geometric, not numerical: the patch is 0.39 wide and 2.0 tall in (u,v), so the
+    // shortest connections are HORIZONTAL, while the direction that costs nothing on a
+    // cylinder is the VERTICAL one — the ruling, along which the surface is flat. Delaunay
+    // minimises edge length and therefore picks exactly the wrong direction, after which every
+    // horizontal cross-section carries only the two points its side edges contribute, i.e. the
+    // resolution of the UNREFINED rim.
+    //
+    // The boundary already tells us the right grid. A subdivided rim contributes its u values;
+    // a subdivided generatrix contributes its v values. Their tensor product is the patch's
+    // natural mesh: for a developable surface each cell is a planar quad lying exactly on the
+    // chordal surface, so the area is exact for the given rim resolution, and for a sphere the
+    // interior nodes are the samples a doubly-curved patch genuinely needs. Both come out of
+    // the same construction.
+    //
+    // Interior nodes are safe by the same argument that makes this whole path safe: they are
+    // strictly inside the face, so no neighbour can see them. Only the boundary is shared, and
+    // the boundary nodes ARE the ring's own vertices, reused by index.
+    // The degenerate vertex contributes only its VALID parameter to the extents; a sphere's
+    // pole collapses the v (longitude) line and a cone's apex the u (angle) line, so the
+    // meaningless one must not widen the rectangle.
+    const bool poleSweepsV = surf.kind == SurfaceKind::Sphere;   // pole: u exact, v collapsed
+    double uLo = 1e300, uHi = -1e300, vLo = 1e300, vHi = -1e300;
+    for (int i = 0; i < n; ++i) {
+        const size_t k = static_cast<size_t>(i);
+        const bool isPole = (i == poleIdx);
+        if (!isPole || poleSweepsV) { uLo = std::min(uLo, U[k]); uHi = std::max(uHi, U[k]); }
+        if (!isPole || !poleSweepsV) { vLo = std::min(vLo, V[k]); vHi = std::max(vHi, V[k]); }
+    }
+    const double uSpan = uHi - uLo, vSpan = vHi - vLo;
+    if (uSpan <= 0.0 || vSpan <= 0.0) return false;
+    const double uTol = uSpan * 1e-6, vTol = vSpan * 1e-6;
+
+    // Every ring point must lie on the rectangle's boundary, or this is not a grid patch.
+    for (int i = 0; i < n; ++i) {
+        if (i == poleIdx) continue;
+        const double u = U[static_cast<size_t>(i)], v = V[static_cast<size_t>(i)];
+        const bool onU = std::abs(u - uLo) <= uTol || std::abs(u - uHi) <= uTol;
+        const bool onV = std::abs(v - vLo) <= vTol || std::abs(v - vHi) <= vTol;
+        if (!onU && !onV) return false;
+    }
+
+    auto axis = [&](bool wantU) {
+        std::vector<double> vals;
+        for (int i = 0; i < n; ++i) {
+            if (i == poleIdx && (wantU ? !poleSweepsV : poleSweepsV)) continue;  // meaningless
+            vals.push_back(wantU ? U[static_cast<size_t>(i)] : V[static_cast<size_t>(i)]);
+        }
+        const double tol = wantU ? uTol : vTol;
+        std::sort(vals.begin(), vals.end());
+        std::vector<double> out;
+        for (const double x : vals)
+            if (out.empty() || x - out.back() > tol) out.push_back(x);
+        return out;
+    };
+    std::vector<double> us = axis(true);
+    std::vector<double> vs = axis(false);
+    const size_t nu = us.size(), nv = vs.size();
+    if (nu < 2 || nv < 2) return false;
+    // The ring must be exactly the grid's boundary: one node per boundary position. Where an
+    // axis collapses, that whole line is one vertex instead of a row of them.
+    const size_t collapsed = (poleIdx < 0) ? 0u : (poleSweepsV ? nv - 1u : nu - 1u);
+    if (static_cast<size_t>(n) != 2 * (nu - 1) + 2 * (nv - 1) - collapsed) return false;
+
+    auto findAxis = [](const std::vector<double>& a, double x, double tol) -> long {
+        for (size_t k = 0; k < a.size(); ++k) if (std::abs(a[k] - x) <= tol) return static_cast<long>(k);
+        return -1;
+    };
+    // grid node -> mesh vertex index; boundary nodes come from the ring, interior are new
+    std::vector<uint32_t> node(nu * nv, UINT32_MAX);
+    for (int i = 0; i < n; ++i) {
+        if (i == poleIdx) continue;
+        const long ui = findAxis(us, U[static_cast<size_t>(i)], uTol);
+        const long vi = findAxis(vs, V[static_cast<size_t>(i)], vTol);
+        if (ui < 0 || vi < 0) return false;
+        uint32_t& slot = node[static_cast<size_t>(vi) * nu + static_cast<size_t>(ui)];
+        if (slot != UINT32_MAX) return false;                 // two ring points on one node
+        slot = ring[static_cast<size_t>(i)];
+    }
+    // The collapsed line is the SAME vertex at every node along it.
+    if (poleIdx >= 0) {
+        const uint32_t pv = ring[static_cast<size_t>(poleIdx)];
+        if (poleSweepsV) {
+            const long ui = findAxis(us, U[static_cast<size_t>(poleIdx)], uTol);
+            if (ui != 0 && ui != static_cast<long>(nu) - 1) return false;  // not on an edge
+            for (size_t j = 0; j < nv; ++j) {
+                uint32_t& slot = node[j * nu + static_cast<size_t>(ui)];
+                if (slot != UINT32_MAX) return false;
+                slot = pv;
+            }
+        } else {
+            const long vi = findAxis(vs, V[static_cast<size_t>(poleIdx)], vTol);
+            if (vi != 0 && vi != static_cast<long>(nv) - 1) return false;
+            for (size_t i2 = 0; i2 < nu; ++i2) {
+                uint32_t& slot = node[static_cast<size_t>(vi) * nu + i2];
+                if (slot != UINT32_MAX) return false;
+                slot = pv;
+            }
+        }
+    }
+    // every boundary node filled, every interior node still empty
+    for (size_t j = 0; j < nv; ++j)
+        for (size_t i = 0; i < nu; ++i) {
+            const bool boundary = (i == 0 || i == nu - 1 || j == 0 || j == nv - 1);
+            if (boundary != (node[j * nu + i] != UINT32_MAX)) return false;
+        }
+
+    for (size_t j = 1; j + 1 < nv; ++j)
+        for (size_t i = 1; i + 1 < nu; ++i) {
+            Patch pt;
+            if (!analyticPatch(surf, us[i], vs[j], pt)) return false;
+            node[j * nu + i] = static_cast<uint32_t>(posOut.size());
+            const Vec3 gp{pt.p.x, pt.p.y, pt.p.z};
+            posOut.push_back(gp.toFloat());
+            posDOut.push_back(gp);
+        }
+
+    // Orientation: from the ring, per triangle, as below.
+    Vec3 gNewell{0.0, 0.0, 0.0};
+    for (int i = 0; i < n; ++i) {
+        const Vec3& a = posDOut[ring[static_cast<size_t>(i)]];
+        const Vec3& b = posDOut[ring[static_cast<size_t>((i + 1) % n)]];
+        gNewell.x += a.y * b.z - a.z * b.y;
+        gNewell.y += a.z * b.x - a.x * b.z;
+        gNewell.z += a.x * b.y - a.y * b.x;
+    }
+    const Vec3 gMid = surf.normalAt(0.5 * (uLo + uHi), 0.5 * (vLo + vHi));
+    double gSense = (gNewell.dot(gMid) < 0.0) ? -1.0 : 1.0;
+    if (gNewell.dot(gNewell) <= 0.0) gSense = fc.reversed ? -1.0 : 1.0;
+
+    auto emit = [&](uint32_t a, uint32_t b, uint32_t c, double tu, double tv) {
+        if (a == b || b == c || c == a) return;   // a cell against the collapsed line
+        const Vec3 nT = surf.normalAt(tu, tv) * gSense;
+        const Vec3 g = (posDOut[b] - posDOut[a]).cross(posDOut[c] - posDOut[a]);
+        if (g.dot(nT) < 0.0) out.push_back({a, c, b});
+        else                 out.push_back({a, b, c});
+    };
+    for (size_t j = 0; j + 1 < nv; ++j)
+        for (size_t i = 0; i + 1 < nu; ++i) {
+            const uint32_t p00 = node[j * nu + i],       p10 = node[j * nu + i + 1];
+            const uint32_t p01 = node[(j + 1) * nu + i], p11 = node[(j + 1) * nu + i + 1];
+            const double cu = 0.5 * (us[i] + us[i + 1]), cv = 0.5 * (vs[j] + vs[j + 1]);
+            emit(p00, p10, p11, cu, cv);
+            emit(p00, p11, p01, cu, cv);
+        }
+    return true;
+}
+// RULED STRIPS: the exact answer for a developable patch, at O(ring) instead of a Delaunay.
+//
+// The grid needs the patch's opposite sides to carry the same parameter samples. A Boolean
+// fragment usually breaks that in the RULING direction — an imprint splits one generatrix into
+// more edges than the other — and for a cylinder or a cone that mismatch does not matter at
+// all, because nothing along the ruling needs resolving. What matters is the ANGULAR samples,
+// and those come from the two edges that cross the ruling.
+//
+// So the patch is cut into columns at the angular samples, each spanning the whole ruling
+// extent. Every column is a planar quad lying exactly on the chordal surface; the two outermost
+// ones additionally carry their side edge's extra points, which are collinear along a ruling and
+// so cost nothing. This is what the constrained Delaunay was being asked to discover, and it is
+// both exact and linear — which matters because classifyPoint tessellates on EVERY query.
+bool triangulateCurvedFaceStrips(const Surface& surf, const Face& fc,
+                                 const std::vector<uint32_t>& ring,
+                                 const std::vector<double>& U, const std::vector<double>& V,
+                                 int poleIdx,
+                                 const std::vector<Vec3>& posD,
+                                 std::vector<std::array<uint32_t, 3>>& out)
+{
+    out.clear();
+    if (surf.kind == SurfaceKind::Sphere) return false;   // curved both ways: needs the lattice
+    if (poleIdx >= 0) return false;                       // the grid path owns the apex
+    const int n = static_cast<int>(ring.size());
+    if (n < 4) return false;
+
+    double uLo = U[0], uHi = U[0], vLo = V[0], vHi = V[0];
+    for (int i = 0; i < n; ++i) {
+        uLo = std::min(uLo, U[static_cast<size_t>(i)]); uHi = std::max(uHi, U[static_cast<size_t>(i)]);
+        vLo = std::min(vLo, V[static_cast<size_t>(i)]); vHi = std::max(vHi, V[static_cast<size_t>(i)]);
+    }
+    const double uSpan = uHi - uLo, vSpan = vHi - vLo;
+    if (uSpan <= 0.0 || vSpan <= 0.0) return false;
+    const double uTol = uSpan * 1e-6, vTol = vSpan * 1e-6;
+
+    enum SideId { SBottom, STop, SLeft, SRight };
+    std::vector<int> side(static_cast<size_t>(n));
+    for (int i = 0; i < n; ++i) {
+        const double u = U[static_cast<size_t>(i)], v = V[static_cast<size_t>(i)];
+        if (std::abs(v - vLo) <= vTol)      side[static_cast<size_t>(i)] = SBottom;
+        else if (std::abs(v - vHi) <= vTol) side[static_cast<size_t>(i)] = STop;
+        else if (std::abs(u - uLo) <= uTol) side[static_cast<size_t>(i)] = SLeft;
+        else if (std::abs(u - uHi) <= uTol) side[static_cast<size_t>(i)] = SRight;
+        else return false;                                 // not on the rectangle
+    }
+
+    auto collect = [&](int want, bool byU) {
+        std::vector<std::pair<double, uint32_t>> a;
+        for (int i = 0; i < n; ++i)
+            if (side[static_cast<size_t>(i)] == want)
+                a.push_back({byU ? U[static_cast<size_t>(i)] : V[static_cast<size_t>(i)],
+                             ring[static_cast<size_t>(i)]});
+        std::sort(a.begin(), a.end(), [](const auto& x, const auto& y) { return x.first < y.first; });
+        return a;
+    };
+    const auto bot = collect(SBottom, true), top = collect(STop, true);
+    const auto lft = collect(SLeft, false), rgt = collect(SRight, false);
+
+    // The angular samples must agree between the two crossing edges, or there is no consistent
+    // set of columns and this path declines.
+    if (bot.size() < 2 || bot.size() != top.size()) return false;
+    for (size_t k = 0; k < bot.size(); ++k)
+        if (std::abs(bot[k].first - top[k].first) > uTol) return false;
+    if (std::abs(bot.front().first - uLo) > uTol || std::abs(bot.back().first - uHi) > uTol) return false;
+    for (size_t k = 1; k < bot.size(); ++k)
+        if (bot[k].first - bot[k - 1].first <= uTol) return false;   // duplicated sample
+
+    Vec3 newell{0.0, 0.0, 0.0};
+    for (int i = 0; i < n; ++i) {
+        const Vec3& a = posD[ring[static_cast<size_t>(i)]];
+        const Vec3& b = posD[ring[static_cast<size_t>((i + 1) % n)]];
+        newell.x += a.y * b.z - a.z * b.y;
+        newell.y += a.z * b.x - a.x * b.z;
+        newell.z += a.x * b.y - a.y * b.x;
+    }
+    const Vec3 nMid = surf.normalAt(0.5 * (uLo + uHi), 0.5 * (vLo + vHi));
+    double sense = (newell.dot(nMid) < 0.0) ? -1.0 : 1.0;
+    if (newell.dot(newell) <= 0.0) sense = fc.reversed ? -1.0 : 1.0;
+    auto emit = [&](uint32_t a, uint32_t b, uint32_t c, double tu2, double tv2) {
+        if (a == b || b == c || c == a) return;
+        const Vec3 nT = surf.normalAt(tu2, tv2) * sense;
+        const Vec3 g = (posD[b] - posD[a]).cross(posD[c] - posD[a]);
+        if (g.dot(nT) < 0.0) out.push_back({a, c, b});
+        else                 out.push_back({a, b, c});
+    };
+
+    const size_t nc = bot.size() - 1;
+    for (size_t j = 0; j < nc; ++j) {
+        const uint32_t bl = bot[j].second, br = bot[j + 1].second;
+        const uint32_t tl = top[j].second, tr = top[j + 1].second;
+        const double cu = 0.5 * (bot[j].first + bot[j + 1].first), cv = 0.5 * (vLo + vHi);
+        const bool firstCol = (j == 0), lastCol = (j + 1 == nc);
+        if (firstCol && !lft.empty()) {
+            uint32_t prev = bl;
+            for (const auto& lv : lft) { emit(br, prev, lv.second, cu, cv); prev = lv.second; }
+            emit(br, prev, tl, cu, cv);
+            emit(br, tl, tr, cu, cv);
+        } else if (lastCol && !rgt.empty()) {
+            uint32_t prev = br;
+            for (const auto& rv : rgt) { emit(bl, rv.second, prev, cu, cv); prev = rv.second; }
+            emit(bl, tr, prev, cu, cv);
+            emit(bl, tl, tr, cu, cv);
+        } else {
+            emit(bl, br, tr, cu, cv);
+            emit(bl, tr, tl, cu, cv);
+        }
+    }
+    if (out.empty()) return false;
+
+    {
+        std::map<std::pair<uint32_t, uint32_t>, int> used;
+        for (const auto& t : out)
+            for (int k = 0; k < 3; ++k) {
+                uint32_t a = t[static_cast<size_t>(k)], b = t[static_cast<size_t>((k + 1) % 3)];
+                if (a > b) std::swap(a, b);
+                ++used[{a, b}];
+            }
+        for (const auto& e : used) if (e.second > 2) { out.clear(); return false; }
+        for (int i = 0; i < n; ++i) {
+            uint32_t a = ring[static_cast<size_t>(i)], b = ring[static_cast<size_t>((i + 1) % n)];
+            if (a > b) std::swap(a, b);
+            const auto it = used.find({a, b});
+            if (it == used.end() || it->second != 1) { out.clear(); return false; }
+        }
+    }
+    return true;
+}
+
+bool triangulateCurvedFaceUV(const Surface& surf, const Face& fc,
+                             const std::vector<uint32_t>& ring,
+                             std::vector<nexus::render::Vec3>& posOut,
+                             std::vector<Vec3>& posDOut,
+                             std::vector<std::array<uint32_t, 3>>& out)
+{
+    out.clear();
+    // DEVELOPABLE SURFACES ONLY, and the reason is a convergence argument rather than effort.
+    //
+    // A sphere is curved both ways, so no connection of boundary-only points represents its
+    // interior and it genuinely needs interior samples. Giving them to it fixes the primitive
+    // (measured: volume 3.9587 plateau -> 4.18757 converging on 4.18879, area 13.4392 -> 12.5645
+    // against 12.56637) — and BREAKS a property the kernel relies on. A tessellated
+    // conservation identity like U+I == A+B holds only if the whole and its fragments refine
+    // CONSISTENTLY, and interior points drawn from each face's OWN boundary samples do not: a
+    // primitive band face and the Boolean fragment cut out of it land their interior nodes in
+    // different places. Bounded (it must be bounded — unbounded, the fuzz battery went from 17s
+    // to over four minutes, because classifyPoint tessellates on every query) the fragment stops
+    // refining while the primitive continues, and the identity DRIFTS instead of converging:
+    // 4.2e-04 at subdivisions 2 rising to 4.1e-03 at 8.
+    //
+    // Cylinder and cone have no such problem. Along the ruling the surface is flat, so the grid
+    // and the strips are BOTH exact for a given angular resolution, and a fragment therefore
+    // agrees with the primitive it was cut from — measured exactly, to the digit, on a union
+    // whose result IS the cylinder. That is what makes this safe to ship for them and not yet
+    // for the sphere.
+    //
+    // THE SPHERE'S FIX IS DESIGNED, NOT GUESSED, and is the named next step: draw the interior
+    // lattice from the SURFACE and the subdivision count rather than from each face's boundary,
+    // so any two decompositions sample the same positions. Decomposition-independence and
+    // convergence then hold together, which is what this attempt could not deliver.
+    if (surf.kind != SurfaceKind::Cylinder && surf.kind != SurfaceKind::Cone) return false;
+    if (!fc.innerLoops.empty()) return false;          // holes: not this path
+    const int n = static_cast<int>(ring.size());
+    if (n < 3) return false;
+    for (int i = 0; i < n; ++i)
+        for (int j = i + 1; j < n; ++j)
+            if (ring[static_cast<size_t>(i)] == ring[static_cast<size_t>(j)]) return false;
+
+    const double kPi = 3.141592653589793, kTwoPi = 6.283185307179586;
+    std::vector<double> U(static_cast<size_t>(n)), V(static_cast<size_t>(n));
+    const double scale = std::max(1.0, std::abs(static_cast<double>(surf.radius)));
+    int poleIdx = -1;   // the one ring vertex where the parametrisation collapses, if any
+    for (int i = 0; i < n; ++i) {
+        bool deg = false;
+        double uu = 0.0, vv = 0.0;
+        const Vec3& p = posDOut[ring[static_cast<size_t>(i)]];
+        if (!analyticInverse(surf, p, uu, vv, deg)) return false;
+        if (deg) {
+            // A POLE OR APEX COLLAPSES ONE PARAMETER AXIS, it does not defeat the grid.
+            // At a sphere's pole u (latitude) is still exact and only v (longitude) is
+            // meaningless; at a cone's apex it is the other way round. So the vertex is kept
+            // and the grid fills that whole line with it — which is precisely the concentric
+            // pole cap a UV sphere wants. More than one such vertex on a ring is not a patch
+            // this construction describes, and is declined.
+            if (poleIdx >= 0) return false;
+            poleIdx = i;
+            U[static_cast<size_t>(i)] = uu;
+            V[static_cast<size_t>(i)] = vv;
+            continue;
+        }
+        Patch probe;
+        if (!analyticPatch(surf, uu, vv, probe)) return false;
+        const double ex = probe.p.x - p.x, ey = probe.p.y - p.y, ez = probe.p.z - p.z;
+        if (std::sqrt(ex * ex + ey * ey + ez * ez) > 1e-4 * scale) return false;  // not on it
+        U[static_cast<size_t>(i)] = uu;
+        V[static_cast<size_t>(i)] = vv;
+    }
+
+    // Unwrap the periodic parameter along the ring so a patch straddling +/-pi is a
+    // non-wrapping polygon. Sphere sweeps v (longitude); cylinder and cone sweep u (angle).
+    const bool vPeriodic = surf.kind == SurfaceKind::Sphere;
+    {
+        std::vector<double>& per = vPeriodic ? V : U;
+        int first = -1;
+        for (int i = 0; i < n; ++i) if (i != poleIdx) { first = i; break; }
+        if (first < 0) return false;
+        double prev = per[static_cast<size_t>(first)];
+        for (int step = 1; step < n; ++step) {
+            const int i = (first + step) % n;
+            if (i == poleIdx) continue;   // its swept parameter means nothing
+            double& a = per[static_cast<size_t>(i)];
+            while (a - prev > kPi) a -= kTwoPi;
+            while (a - prev <= -kPi) a += kTwoPi;
+            prev = a;
+        }
+        // a ring that has wound right around is not a patch this path can hold
+        double lo = per[static_cast<size_t>(first)], hi = lo;
+        for (int i = 0; i < n; ++i) {
+            if (i == poleIdx) continue;
+            lo = std::min(lo, per[static_cast<size_t>(i)]);
+            hi = std::max(hi, per[static_cast<size_t>(i)]);
+        }
+        if (hi - lo >= kTwoPi - 1e-9) return false;
+    }
+
+    // Two paths, both EXACT for the surface they claim, and both declining rather than
+    // approximating. Anything they decline keeps the existing fan untouched.
+    //
+    // WHAT IS DELIBERATELY NOT HERE, because it was built and measured and is worse than the
+    // gap it closes: a constrained Delaunay with interior Steiner points, for a doubly-curved
+    // FRAGMENT whose opposite sides carry different samples. It has to be bounded — unbounded,
+    // the fuzz battery went from 17s to over four minutes, because classifyPoint tessellates on
+    // every query — and once bounded it stops refining while a primitive keeps going, so the
+    // tessellated conservation identity U+I == A+B drifts INSTEAD of converging (measured:
+    // 4.2e-04 at subdivisions 2 rising to 4.1e-03 at 8). A boundary-only triangulation has the
+    // property that makes those identities hold at all: every vertex lies on a shared boundary,
+    // so the totals telescope across any decomposition. Interior points buy accuracy and give
+    // that up, and for a fragment the trade came out negative. The grid keeps it because its
+    // interior nodes are determined by the boundary's own samples, and the strips need none.
+    if (triangulateCurvedFaceGrid(surf, fc, ring, U, V, poleIdx, posOut, posDOut, out)) return true;
+    return triangulateCurvedFaceStrips(surf, fc, ring, U, V, poleIdx, posDOut, out);
+}
+
+
 // Segments per Circle boundary edge. The (u,v) polygon's error against the true pcurve falls
 // as 1/n^2, and 8 puts a Boolean seam's contribution below the identity tolerance while
 // costing nothing where the boundary was already straight in (u,v) — the added points are
@@ -3988,7 +4452,9 @@ Mesh Body::toMesh(uint32_t subdivisions) const
             }
         }
     }
-    mesh.attributes().setPositions(pos);
+    // Positions are published AFTER the face loop: a curved face may add INTERIOR grid
+    // points of its own (see triangulateCurvedFaceUV), and those are strictly inside the
+    // face, so they are invisible to every neighbour and cannot open a crack.
 
     // Output-vertex indices around a loop, with per-edge subdivision points
     // inserted in traversal order (crack-free with the neighbouring face).
@@ -4338,6 +4804,25 @@ Mesh Body::toMesh(uint32_t subdivisions) const
             if (r.size() >= 3) inners.push_back(std::move(r));
         }
 
+        // A CURVED face is triangulated in its own (u,v) domain — see
+        // triangulateCurvedFaceUV for what fanning one in 3D costs, and for the per-face
+        // checks that make this safe to attempt. Any decline falls through to the fan below,
+        // and the two still meet exactly along their shared boundary, because neither path
+        // touches it. The triangles come back already oriented from the analytic normal, so
+        // they are added directly rather than through emitTri, whose reference `nrm` is the
+        // surface AXIS on a cylinder or cone and cannot orient a curved patch.
+        if (fc.surface < m_surfaces.size()) {
+            std::vector<std::array<uint32_t, 3>> uvTris;
+            if (triangulateCurvedFaceUV(m_surfaces[fc.surface], fc, ring, pos, posD, uvTris)) {
+                for (const std::array<uint32_t, 3>& t : uvTris) {
+                    nexus::geometry::Face f;  // the mesh Face, not brep::Face
+                    f.indices = {t[0], t[1], t[2]};
+                    mesh.topology().addFace(std::move(f));
+                }
+                continue;
+            }
+        }
+
         // A loop can walk out along a chain and back — a zero-width SLIT — when a seam is
         // imprinted twice and the second cut retraces the first. The two sides are distinct
         // vertices at the same place (measured 2.2e-16, 1.1e-16 and exactly 0.0 apart), and
@@ -4423,6 +4908,7 @@ Mesh Body::toMesh(uint32_t subdivisions) const
             for (const std::vector<uint32_t>& piece : ringPieces)
                 triangulateLoop(piece, inners, nrm, fc);
     }
+    mesh.attributes().setPositions(pos);
     return mesh;
 }
 

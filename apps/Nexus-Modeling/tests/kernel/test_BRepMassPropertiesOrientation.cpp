@@ -245,23 +245,30 @@ TEST(BRepMassPropertiesOrientation, AnalyticVolumesSatisfyUnionPlusIntersection)
     EXPECT_GT(pairs, 15) << "the sweep did not run";
 }
 
-// The tessellator's bias, pinned SEPARATELY so it is never again mistaken for the
-// integrator's. A curved primitive's analytic volume is exact; its tessellation is not, and
-// refining does not close the gap. If this ever starts converging, toMesh has been repaired
-// and this characterization should become a convergence assertion.
-TEST(BRepMassPropertiesOrientation, TessellationDoesNotConvergeToTheExactCurvedVolume)
+// RETIRED AND REPLACED, exactly as it asked to be. This was
+// `TessellationDoesNotConvergeToTheExactCurvedVolume`, pinning that a cylinder's tessellated
+// volume stayed more than 1% short however far it was refined, with the note "if this ever
+// starts converging, toMesh has been repaired and this characterization should become a
+// convergence assertion". toMesh has been repaired: a developable patch is now ruled rather
+// than fanned from one ring vertex, so refining actually refines.
+TEST(BRepMassPropertiesOrientation, TessellationNowConvergesToTheExactCurvedVolume)
 {
     const double kPi = 3.14159265358979323846;
     const Body cyl = makeCylinder(1.f, 2.f, 16);
     const double exact = kPi * 2.0;
     EXPECT_NEAR(cyl.massProperties().volume, exact, exact * 1e-5) << "the analytic value";
 
-    const double t2 = tessVolume(cyl, 2), t8 = tessVolume(cyl, 8);
-    EXPECT_LT(t2, exact);
-    EXPECT_LT(t8, exact);
-    // refining moves it, but nowhere near the truth: still more than 1% short at sub 8
-    EXPECT_GT(exact - t8, exact * 0.01)
-        << "toMesh now converges on curved patches — retire this characterization";
+    // a chordal tessellation of a convex solid is inscribed, so it approaches from below
+    double prev = 0.0;
+    for (const uint32_t s : {1u, 2u, 4u, 8u}) {
+        const double t = tessVolume(cyl, s);
+        EXPECT_LT(t, exact) << "sub=" << s << " exceeds the exact volume";
+        EXPECT_GT(t, prev) << "refinement did not improve at sub=" << s;
+        prev = t;
+    }
+    // and it gets genuinely close, where it used to plateau 1.7% short
+    EXPECT_LT(exact - tessVolume(cyl, 8), exact * 1e-3)
+        << "still more than 0.1% short at subdivisions 8";
 }
 
 }  // namespace nexus::geometry::brep::testing

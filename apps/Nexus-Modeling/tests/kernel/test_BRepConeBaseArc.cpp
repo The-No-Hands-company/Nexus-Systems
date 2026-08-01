@@ -202,13 +202,21 @@ TEST(BRepConeBaseArc, TheTessellatedConeConvergesInSegmentsNotSubdivisions)
         EXPECT_LT(v / smooth, 1.0005)
             << "n=" << c.n << ": the tessellation now exceeds the solid it approximates";
     }
-    // and refining the arc alone does NOT rescue a coarse cone — the point of the test
+    // CONTRACT CHANGED, exactly where this test said to look. It used to assert
+    // `coarse6 / smooth < 0.95` — that refining the arcs does NOT rescue a coarse cone —
+    // with the note "subdivision now resolves a coarse cone, the fan apex on a conical face
+    // must have changed, so re-read this test's reasoning". It has changed: a conical face is
+    // no longer fanned from a base point, it is RULED, so a subdivided arc actually carries its
+    // refinement into the surface. Measured at n=8: 0.900 of the true cone at subdivisions 0,
+    // then 0.989, 0.996, 0.998 — where it used to stall around 0.937.
     const double coarse0 = MeshMassProperties::compute(makeCone(1.f, 2.f, 8).toMesh(0)).volume;
     const double coarse6 = MeshMassProperties::compute(makeCone(1.f, 2.f, 8).toMesh(6)).volume;
-    EXPECT_LT(coarse6 / smooth, 0.95)
-        << "subdivision now resolves a coarse cone — the fan apex on a conical face must "
-           "have changed, so re-read this test's reasoning";
-    EXPECT_GT(coarse6, coarse0) << "subdivision should still help somewhat";
+    EXPECT_GT(coarse6, coarse0) << "subdivision should help";
+    EXPECT_GT(coarse6 / smooth, 0.99)
+        << "subdivision no longer resolves a coarse cone — a conical face has stopped being "
+           "ruled, so re-read triangulateCurvedFaceStrips";
+    EXPECT_LT(coarse6 / smooth, 1.0005)
+        << "the tessellation exceeds the solid it approximates";
 }
 
 }  // namespace nexus::geometry::brep::testing
