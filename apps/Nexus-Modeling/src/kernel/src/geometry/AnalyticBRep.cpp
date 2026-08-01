@@ -9,6 +9,7 @@
 #include <nexus/geometry/RobustPredicates.h>
 
 #include <algorithm>
+#include <bit>
 #include <cmath>
 #include <limits>
 #include <cstdint>
@@ -3008,6 +3009,96 @@ Vec3 Body::surfacePoint(uint32_t surfaceId, float u, float v) const
     return s.eval(u, v);
 }
 
+// A 64-bit fingerprint of every field `toMesh` consumes, so the classification cache cannot
+// serve a stale mesh. It walks all seven vectors that routine touches — verts, edges, curves,
+// coedges, loops, faces, surfaces — and includes fields whether or not toMesh reads them today,
+// because over-covering costs a needless rebuild while under-covering costs a wrong answer.
+//
+// Chosen over a dirty flag on purpose. Body has many mutation paths (vertexMut, faceMut,
+// splitEdge, setEdgeArc, imprintCurve, transform, the Boolean's own rebuilds) and a single
+// missed bump would hand the classifier a mesh of the body's PREVIOUS shape — a wrong
+// inside/outside answer, which is exactly the kind of silent corruption the watertight-or-empty
+// contract rests on not happening. A key computed from the data cannot go stale by omission.
+uint64_t Body::tessellationKey(uint32_t subdivisions) const noexcept
+{
+    // splitmix64's finaliser: cheap, and it avalanches, so a one-bit change anywhere moves the
+    // whole key rather than a corner of it.
+    auto mix = [](uint64_t h, uint64_t v) noexcept {
+        h ^= v + 0x9E3779B97F4A7C15ull + (h << 6) + (h >> 2);
+        h ^= h >> 30; h *= 0xBF58476D1CE4E5B9ull;
+        h ^= h >> 27; h *= 0x94D049BB133111EBull;
+        return h ^ (h >> 31);
+    };
+    auto mixD = [&](uint64_t h, double d) noexcept {
+        return mix(h, std::bit_cast<std::uint64_t>(d));
+    };
+    auto mixV = [&](uint64_t h, const Vec3& v) noexcept {
+        return mixD(mixD(mixD(h, v.x), v.y), v.z);
+    };
+
+    uint64_t h = mix(0xC0FFEEull, subdivisions);
+    h = mix(h, m_verts.size());
+    h = mix(h, m_edges.size());
+    h = mix(h, m_curves.size());
+    h = mix(h, m_coedges.size());
+    h = mix(h, m_loops.size());
+    h = mix(h, m_faces.size());
+    h = mix(h, m_surfaces.size());
+
+    for (const Vertex& v : m_verts) h = mix(mixV(h, v.point), v.alive ? 1u : 0u);
+    for (const Edge& e : m_edges) {
+        h = mix(h, e.curve); h = mix(h, e.v0); h = mix(h, e.v1);
+        h = mixD(h, e.t0);   h = mixD(h, e.t1);
+        h = mix(h, e.alive ? 1u : 0u);
+    }
+    for (const Curve& c : m_curves) {
+        h = mix(h, static_cast<uint64_t>(c.kind));
+        h = mixV(mixV(mixV(h, c.origin), c.dir), c.ref);
+        h = mixD(h, c.radius);
+        h = mix(h, c.nurbs);
+    }
+    for (const Coedge& ce : m_coedges) {
+        h = mix(h, ce.edge); h = mix(h, ce.reversed ? 1u : 0u);
+        h = mix(h, ce.loop); h = mix(h, ce.next); h = mix(h, ce.prev);
+        h = mix(h, ce.alive ? 1u : 0u);
+    }
+    for (const Loop& l : m_loops) {
+        h = mix(h, l.face); h = mix(h, l.first);
+        h = mix(h, l.outer ? 1u : 0u); h = mix(h, l.alive ? 1u : 0u);
+    }
+    for (const Face& f : m_faces) {
+        h = mix(h, f.surface); h = mix(h, f.reversed ? 1u : 0u);
+        h = mix(h, f.outerLoop); h = mix(h, f.innerLoops.size());
+        for (const uint32_t il : f.innerLoops) h = mix(h, il);
+        h = mix(h, f.alive ? 1u : 0u);
+    }
+    for (const Surface& sf : m_surfaces) {
+        h = mix(h, static_cast<uint64_t>(sf.kind));
+        h = mixV(mixV(mixV(h, sf.origin), sf.normal), sf.uAxis);
+        h = mixD(h, sf.radius);
+        h = mix(h, sf.nurbs);
+    }
+    return h;
+}
+
+// The tessellation classifyPoint casts its ray at, rebuilt only when the fingerprint changes.
+// Single-entry per Body, which is what the access pattern wants: `selectFace` asks one body to
+// classify once per face of the other, so the run of queries against a given body is long.
+const Mesh& Body::classificationMesh(uint32_t subdivisions) const
+{
+    const uint64_t key = tessellationKey(subdivisions);
+    if (m_classifyCache.valid && m_classifyCache.key == key
+        && m_classifyCache.subdivisions == subdivisions) {
+        return m_classifyCache.mesh;
+    }
+    m_classifyCache.mesh = toMesh(subdivisions);
+    (void)m_classifyCache.mesh.topology().triangulate();
+    m_classifyCache.key = key;
+    m_classifyCache.subdivisions = subdivisions;
+    m_classifyCache.valid = true;
+    return m_classifyCache.mesh;
+}
+
 Body::PointContainment Body::classifyPoint(const Vec3& p, Tolerance tol) const
 {
     // Tessellate the shell to a watertight, crack-free triangle set. subdivisions
@@ -3018,11 +3109,12 @@ Body::PointContainment Body::classifyPoint(const Vec3& p, Tolerance tol) const
     // cylinder's cross-section carried the resolution of its UNREFINED rim however high the
     // count went, an effective sagitta of r(1-cos(pi/16)) = 1.9e-02. Now that a curved patch
     // is ruled or gridded, subdivisions=3 puts 64 points around that same rim: sagitta
-    // 1.2e-03, sixteen times closer to the true surface than the old six ever was. And this
-    // runs on EVERY query, so the difference is worth taking: over the fuzz, mass-properties
-    // and sphere-on-rod suites, six costs 106s against 59s for three.
-    Mesh mesh = toMesh(3);
-    (void)mesh.topology().triangulate();
+    // 1.2e-03, sixteen times closer to the true surface than the old six ever was.
+    //
+    // And it is CACHED, keyed on a fingerprint of the body — see classificationMesh. This
+    // routine is called once per face of the other solid, so rebuilding here made a single
+    // Boolean pay for O(F^2) tessellations.
+    const Mesh& mesh = classificationMesh(3);
     const auto& pos = mesh.attributes().positions();
     const auto& topo = mesh.topology();
     const size_t triCount = topo.faceCount();

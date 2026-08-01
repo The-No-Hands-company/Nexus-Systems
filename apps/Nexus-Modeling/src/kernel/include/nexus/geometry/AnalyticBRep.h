@@ -508,6 +508,44 @@ private:
     [[nodiscard]] bool integratePlanarFace(uint32_t faceId, std::array<double, 10>& intg,
                                            double& area) const;
 
+    // ── classifyPoint's tessellation cache ───────────────────────────────────────────
+    //
+    // `classifyPoint` answers by casting a parity ray at a tessellation of the shell, and it
+    // used to build that tessellation on EVERY query. `selectFace` loops over A's faces asking
+    // B to classify, then over B's faces asking A — so each body was re-tessellated once per
+    // face of the other, which is O(F^2) tessellations for one Boolean.
+    //
+    // The cache is keyed on a fingerprint of everything `toMesh` reads (see
+    // `tessellationKey`), NOT on a dirty flag set by mutators. That is deliberate: a missed
+    // invalidation would hand a stale mesh to the classifier and silently corrupt a Boolean,
+    // and there are too many mutation paths to be confident of catching them all. A key
+    // computed from the data cannot go stale by omission — the worst it can do is miss.
+    //
+    // COPYING A BODY DOES NOT COPY ITS CACHE. The tessellation is derived data; copying it
+    // would make every `Body b = a;` pay for a mesh it may never need, and Bodies are copied
+    // constantly. Hence the hand-written copy operations below, which reset instead.
+    struct ClassifyCache {
+        ClassifyCache() = default;
+        ClassifyCache(const ClassifyCache&) noexcept {}
+        ClassifyCache& operator=(const ClassifyCache&) noexcept { clear(); return *this; }
+        ClassifyCache(ClassifyCache&&) noexcept = default;
+        ClassifyCache& operator=(ClassifyCache&&) noexcept = default;
+        ~ClassifyCache() = default;
+        void clear() noexcept { valid = false; }
+        bool     valid = false;
+        uint64_t key = 0;
+        uint32_t subdivisions = 0;
+        Mesh     mesh;
+    };
+    mutable ClassifyCache m_classifyCache;
+
+    // A fingerprint of every field `toMesh` consumes. Complete by construction: it walks all
+    // seven vectors that routine touches. Over-covering is safe (a needless cache miss);
+    // under-covering is not, so fields are included whether or not toMesh reads them today.
+    [[nodiscard]] uint64_t tessellationKey(uint32_t subdivisions) const noexcept;
+    // The cached tessellation, rebuilt only when the fingerprint says the body changed.
+    [[nodiscard]] const Mesh& classificationMesh(uint32_t subdivisions) const;
+
     std::vector<Vertex>  m_verts;
     std::vector<Edge>    m_edges;
     std::vector<Coedge>  m_coedges;
