@@ -3269,7 +3269,9 @@ bool analyticInverse(const Surface& s, const Vec3& p, double& u, double& v, bool
 // by walking the loop so a wedge crossing the +/-pi seam is contiguous. Each parameter-
 // space triangle is integrated by mapping the unit square onto it (Duffy).
 template <class Sample>
-bool integrateFaceParametric(const Surface& surf, const std::vector<Vec3>& pts, bool reversed,
+// `reversed` used to be a parameter; the orientation is now read off the face's own ring
+// below, which subsumes it and cannot be fooled by a rebuilt surface record.
+bool integrateFaceParametric(const Surface& surf, const std::vector<Vec3>& pts,
                              Sample&& sample)
 {
     if (surf.kind != SurfaceKind::Cylinder && surf.kind != SurfaceKind::Cone
@@ -3334,6 +3336,52 @@ bool integrateFaceParametric(const Surface& surf, const std::vector<Vec3>& pts, 
     }
 
     const int m = static_cast<int>(PU.size());
+
+    // ORIENTATION IS TAKEN FROM THE FACE, NOT ASSUMED OF THE PARAMETRISATION.
+    //
+    // The patch normal below is du x dv, and this used to be handed to the caller flipped
+    // only by `face.reversed` — i.e. on the assumption that du x dv points OUT of the solid
+    // whenever the face is not reversed. That holds for a primitive as built and is not a
+    // property the kernel maintains: `fromFaces` rebuilds a result's surface records after
+    // a Boolean, and nothing there preserves which way the parametrisation runs.
+    //
+    // MEASURED on box(2) u sphere(1.2) offset 0.5 in x: all 112 spherical patches carried
+    // face.reversed == false and 3D rings wound OUTWARD, and every one of them integrated
+    // with an inward normal — the body reported 1.0845 against its own tessellation's
+    // 9.8516, the sphere's whole contribution subtracted rather than added. The CENTRED
+    // union was right, which is the kind of near-miss that keeps a sign error alive.
+    //
+    // So the direction is read off the face's own boundary, which is the topological truth:
+    // a face's ring is wound counter-clockwise seen from outside, so its Newell normal
+    // points out. Compare that with du x dv once, at the parameter centroid, and flip if
+    // they disagree. This subsumes `reversed` — a reversed face has a reversed ring — and
+    // it cannot be fooled by a rebuilt surface record.
+    double flip = 1.0;
+    {
+        Dvec newell{0.0, 0.0, 0.0};
+        for (int k = 0; k < n; ++k) {
+            const Vec3& a = pts[k];
+            const Vec3& b = pts[(k + 1) % n];
+            newell.x += a.y * b.z - a.z * b.y;
+            newell.y += a.z * b.x - a.x * b.z;
+            newell.z += a.x * b.y - a.y * b.x;
+        }
+        double cu = 0.0, cv = 0.0;
+        for (int k = 0; k < m; ++k) { cu += PU[k]; cv += PV[k]; }
+        cu /= static_cast<double>(m);
+        cv /= static_cast<double>(m);
+        Patch mid;
+        if (!analyticPatch(surf, cu, cv, mid)) return false;
+        const Dvec cross{mid.du.y * mid.dv.z - mid.du.z * mid.dv.y,
+                         mid.du.z * mid.dv.x - mid.du.x * mid.dv.z,
+                         mid.du.x * mid.dv.y - mid.du.y * mid.dv.x};
+        const double d = newell.x * cross.x + newell.y * cross.y + newell.z * cross.z;
+        // A ring whose Newell normal is degenerate (a patch closing on a pole, say) says
+        // nothing; fall back to the previous assumption rather than guess.
+        const double nlen2 = newell.x * newell.x + newell.y * newell.y + newell.z * newell.z;
+        if (nlen2 > 1e-24 && d < 0.0) flip = -1.0;
+    }
+
     for (int k = 1; k + 1 < m; ++k) {
         const double q0u = PU[0], q0v = PV[0];
         const double q1u = PU[k], q1v = PV[k];
@@ -3352,7 +3400,7 @@ bool integrateFaceParametric(const Surface& surf, const std::vector<Vec3>& pts, 
                 Dvec nrm{pt.du.y * pt.dv.z - pt.du.z * pt.dv.y,
                          pt.du.z * pt.dv.x - pt.du.x * pt.dv.z,
                          pt.du.x * pt.dv.y - pt.du.y * pt.dv.x};
-                if (reversed) nrm = {-nrm.x, -nrm.y, -nrm.z};
+                if (flip < 0.0) nrm = {-nrm.x, -nrm.y, -nrm.z};
                 // 0.25 maps [-1,1]^2 -> [0,1]^2; twoA*a is the parameter-triangle Jacobian.
                 const double w = 0.25 * kGaussW[i] * kGaussW[j] * twoA * a;
                 sample(pt.p, nrm, w);
@@ -3541,7 +3589,7 @@ float Body::surfaceArea() const
             double acc = 0.0;
             // |du x dv| is the area element; winding does not affect its magnitude.
             const bool ok = integrateFaceParametric(
-                surf, pts, false, [&](const Dvec&, const Dvec& nrm, double w) {
+                surf, pts, [&](const Dvec&, const Dvec& nrm, double w) {
                     acc += w * std::sqrt(nrm.x * nrm.x + nrm.y * nrm.y + nrm.z * nrm.z);
                 });
             if (ok) { area += acc; exact = true; }
@@ -3624,7 +3672,7 @@ nexus::geometry::MassProperties Body::massProperties(float density) const
 
             std::array<double, 10> acc{0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
             const bool ok = integrateFaceParametric(
-                surf, pts, face.reversed, [&](const Dvec& q, const Dvec& nrm, double w) {
+                surf, pts, [&](const Dvec& q, const Dvec& nrm, double w) {
                     const double x = q.x, y = q.y, z = q.z;
                     acc[0] += w * x * nrm.x;
                     acc[1] += w * 0.5 * x * x * nrm.x;

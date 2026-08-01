@@ -197,10 +197,10 @@ TEST(BRepChainedBoolean, FaceContainingPointFindsCurvedFacesAndRespectsTheirBoun
 }
 
 // CHARACTERIZATION of what is still not right, bounded so it is neither forgotten nor
-// mistaken for the above. A sphere OFFSET from the box still returns empty on the chain,
-// where the centred one now works. Its union also reports an analytic volume of 1.08
-// against a tessellated 9.84, so that union is suspect before the chain even begins — which
-// is the next thing to look at rather than something this change was going to reach.
+// mistaken for the above: a sphere OFFSET from the box still returns empty on the chain,
+// where the centred one works. The other half of this — that the union reported an analytic
+// volume of 1.08 against a tessellated 9.84 — turned out to be a separate defect in the
+// parametric integrator and is fixed; the assertion below now checks that it stays fixed.
 TEST(BRepChainedBoolean, AnOffsetSphereChainIsStillEmptyAndIsRecordedAsSuch)
 {
     const Body A = makeBox(2.f, 2.f, 2.f);
@@ -214,12 +214,16 @@ TEST(BRepChainedBoolean, AnOffsetSphereChainIsStillEmptyAndIsRecordedAsSuch)
         << "the offset-sphere chain now sews — good; retire this test and fold the case into "
            "UnionThenIntersectWithTheSameOperandReturnsThatOperand";
 
-    // the union's own analytic volume disagrees with its tessellation, which is the lead
+    // This test also used to bound the union's analytic volume, which came back at 1.08
+    // against a tessellated 9.85. That half WAS the lead and has since been fixed: the
+    // parametric integrator was assuming du x dv points out of the solid, which a rebuilt
+    // surface record does not guarantee (see BRepMassPropertiesOrientation). The two now
+    // agree, and the assertion is kept the right way round rather than deleted.
     const double analytic = U.massProperties().volume;
     const double tess = vol(U);
-    EXPECT_LT(analytic, 0.5 * tess)
-        << "the union's analytic volume (" << analytic << ") now agrees with its tessellation ("
-        << tess << ") — the mass-properties defect is fixed, so retire this bound";
+    EXPECT_NEAR(analytic, tess, 0.05 * tess)
+        << "the union's analytic volume (" << analytic << ") and its tessellation (" << tess
+        << ") disagree again";
 }
 
 }  // namespace nexus::geometry::brep::testing
