@@ -44,6 +44,7 @@ The exhaustive technical log lives beside this book in the audit memory and the 
   - 63. Asked the same question five thousand times
   - 64. Passing because nothing had succeeded
   - 65. Which piece keeps the hole
+  - 66. The hole becomes the boundary
 
 ---
 
@@ -1417,6 +1418,45 @@ Unless the cut runs *through* the hole. That is not a re-assignment at all: it i
 One piece of housekeeping came out of it. A block commented `// TEMPORARY DIAGNOSTIC` had been committed inside `booleanToBody`, calling `getenv` on every Boolean the kernel performs. It is the thing that cracked this chapter, which is the only reason it survived to be removed at the end of it rather than the start.
 
 Two thousand six hundred and forty-six tests ran; all passed, with five hardware skips.
+
+---
+
+---
+
+## 66. The hole becomes the boundary
+
+The previous chapter measured the gap rather than closing it: half of every Boolean operation on a solid with a hole in it declined, and all of those traced to one thing — a cut whose line runs through a hole. `cutFaceBetween` splits a face between two vertices of its *outer* loop, and that was the only cut the imprint had.
+
+The right topology is that the hole stops being a hole. It is divided into two arcs and each becomes part of one result's outer boundary. Taking the four crossings in order along the cut curve — outer, hole, hole, outer, call them O1, H1, H2, O2 — and walking each ring in its own stored direction:
+
+    face A : outer O1→O2 , cut O2→H2 , hole H2→H1 , cut H1→O1
+    face B : outer O2→O1 , cut O1→H1 , hole H1→H2 , cut H2→O2
+
+Both rings close, each of the two cut edges gets exactly two coedges, and every pre-existing coedge is used exactly once.
+
+> The arc pairing needs no geometric test. Which hole arc belongs with which outer arc is *forced* by the vertex sequence, because an inner loop is wound opposite to its outer ring — so traversing it forward from H2 covers precisely the side that outer O1→O2 bounds.
+
+That is the kind of thing worth checking on paper before writing it, so I did: a square cap with a central circular hole, cut along x = 0. Outer O1→O2 comes out as the x ≤ 0 half of the square and hole H2→H1 as the x ≤ 0 half of the circle. The pairing falls out of the winding.
+
+Two things had to change together, and the second was the real blocker.
+
+The first is obvious in hindsight: the crossing search only ever walked the **outer** loop. It found no crossings on a hole at all, which is why the cut was applied as though the hole were not there.
+
+Fixing that alone took the sweep from 50.1% to 58.8%, and left a result that made no sense. One bar width worked; the widths either side of it did not. That is not how a geometric predicate usually fails.
+
+It worked because its cut line happened to pass exactly through two of the hole's twenty-four vertices — cos t = 0.5 is a multiple of fifteen degrees — and the whole-loop vertex scan catches that with no solver involved at all. Every other width needed the arc solver, and the arc solver was refusing: it computes where a line meets an arc's *plane*, and dismisses `dot(dir, axis) ≈ 0` as "parallel to the arc's plane".
+
+Which is the ordinary case here. A hole in a planar face has its arcs *in* that plane, and so does the cut line — coplanar by construction, always, not as an edge case. The comment was describing a configuration the code would never meet on a hole while skipping the only one it would. Coplanar line against circle is a quadratic; both roots are taken, because a single edge of a coarse hole can be crossed twice. That took it to **75.1%**.
+
+**What was proven,** and the choice of oracle is the point. A bar strictly inside the bore removes only empty space, so the analytic volume must not change — and it does not: 6.429204 for every width tried, exactly the bored box's. Meanwhile its cut *planes* still run through the bore circle, which is exactly the configuration that used to fail. So it is simultaneously the easiest answer to check and the hardest case to compute, which makes it the sharpest test available. Over the 972-operation sweep: 730 watertight against 487 before, 242 cleanly empty, and still **zero leaky**.
+
+Two oracles changed, both for the same reason — a body now carries extra seam vertices, so its arcs tessellate finer. A multi-hole chain test compared *tessellated* volumes at 10⁻⁶ and drifted to 3.99981; its **analytic** delta is 4.000000954, and its tessellated total converges toward the analytic value across subdivisions, so it now asserts the exact identity with the tessellated one kept loose. This book has now switched that same oracle three times, always in the same direction and always for the same reason.
+
+And one of them was my own, written an hour earlier in this same chapter's work: I asserted that after the cut the bore is still an inner *loop*. It is not, and it should not be — merging the hole into the outer boundary is the entire point of the operator. The test now asks the question geometrically instead, that a point down the bore's axis still reads Outside. An assertion about representation where the requirement is about geometry is a trap I set for myself and walked into within the hour.
+
+Still declining, and pinned: a bar whose cross-section *crosses* the bore circle — corners outside it, edges inside — which should leave a rounded-cross hole. The contract test's floor rises from a third to two thirds to hold the gain.
+
+Two thousand six hundred and forty-eight tests ran; all passed, with five hardware skips.
 
 ---
 
