@@ -169,8 +169,12 @@ TEST(BRepMassProperties, SphereVolumeAndMomentAreExactRegardlessOfTessellation)
     const double r = 1.0, Vround = 4.0 / 3.0 * PI * r * r * r;
     const double Iround = 0.4 * Vround * r * r;  // 2/5 m r^2 about any axis
 
-    for (const uint32_t lat : {4u, 8u, 16u}) {
-        for (const uint32_t lon : {6u, 12u}) {
+    // ODD counts are included deliberately. This loop used to run only even lat and even
+    // lon >= 6, which is exactly the set the old X-axis parametrisation frame happened to
+    // get right; every odd count was wrong (lat=5,lon=4 reported 1.80 against 4.19, and
+    // lat=5,lon=3 reported 0.00) and no assertion here could see it.
+    for (const uint32_t lat : {3u, 4u, 5u, 7u, 8u, 9u, 16u}) {
+        for (const uint32_t lon : {3u, 4u, 5u, 6u, 11u, 12u}) {
             const MassProperties p = makeSphere(1.f, lat, lon).massProperties(1.f);
             EXPECT_NEAR(p.volume, Vround, Vround * 1e-5)
                 << "sphere volume not exact at " << lat << "x" << lon;
@@ -185,22 +189,28 @@ TEST(BRepMassProperties, SphereVolumeAndMomentAreExactRegardlessOfTessellation)
     }
 }
 
-// ODD longitude counts put a face across the +/-pi seam, where the round patch and its
-// tessellated neighbours would not close. The body then falls back to tessellation as a
-// whole, which must stay CORRECT and converge with resolution rather than return the
-// non-convergent garbage the gap produced. This guards that the all-or-nothing fallback
-// actually fires.
-TEST(BRepMassProperties, OddLongitudeSphereFallsBackToConvergentTessellation)
+// CONTRACT CHANGE, stated rather than suppressed. This test used to be called
+// `OddLongitudeSphereFallsBackToConvergentTessellation` and asserted that an odd longitude
+// count is NOT integrated exactly — that a face straddling the +/-pi seam makes the body
+// give up and tessellate, so a fine sphere is merely closer than a coarse one.
+//
+// That was faithful to a sphere that was built wrong. The parametrisation degenerates at
+// +/-uAxis, and `makeSphere` set uAxis = X while building its rings about Z, so the two
+// singular points sat on the geometric EQUATOR, inside a band face rather than at a vertex.
+// With uAxis = Z the parameters are the grid, and an odd longitude count is exact like any
+// other. The seam itself was never the problem: the loop unwrap has always handled a face
+// that straddles +/-pi.
+TEST(BRepMassProperties, OddLongitudeSphereIsExactToo)
 {
     const double PI = 3.14159265358979323846;
     const double Vround = 4.0 / 3.0 * PI;
 
-    const double coarse = std::abs(makeSphere(1.f, 8, 5).massProperties(1.f).volume - Vround);
-    const double fine   = std::abs(makeSphere(1.f, 48, 45).massProperties(1.f).volume - Vround);
-    EXPECT_LT(fine, coarse) << "odd-longitude sphere did not converge with tessellation";
-    EXPECT_LT(fine, Vround * 0.02) << "fine odd sphere still more than 2% off";
-    // Never wildly wrong (the un-guarded gap gave ~50% error at coarse counts).
-    EXPECT_LT(coarse, Vround * 0.5) << "coarse odd sphere is grossly wrong — the guard did not fire";
+    for (const uint32_t lon : {3u, 5u, 7u, 45u})
+        EXPECT_NEAR(makeSphere(1.f, 8, lon).massProperties(1.f).volume, Vround, Vround * 1e-5)
+            << "odd-longitude sphere lon=" << lon << " is not exact";
+    // and it does not need refinement to get there — coarse is as exact as fine
+    EXPECT_NEAR(makeSphere(1.f, 8, 5).massProperties(1.f).volume,
+                makeSphere(1.f, 48, 45).massProperties(1.f).volume, Vround * 1e-5);
 }
 
 // Density scales the inertia and nothing else.

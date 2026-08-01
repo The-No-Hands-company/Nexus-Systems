@@ -5236,13 +5236,26 @@ Body makeSphere(float radius, uint32_t latSegments, uint32_t lonSegments)
         }
     }
 
+    // THE PARAMETRISATION'S POLE AXIS IS uAxis, AND IT MUST BE THE GRID'S POLE AXIS.
+    //
+    // analyticPatch evaluates a sphere as p = r*(sin(u)*uAxis + cos(u)*cos(v)*vAxis +
+    // cos(u)*sin(v)*normal), so u is latitude ABOUT uAxis and the parametrisation degenerates
+    // at +/-uAxis. This frame used to be uAxis = X with the rings built about Z, which put
+    // both singular points (+/-r, 0, 0) on the geometric EQUATOR — in the middle of two band
+    // faces rather than at a vertex. A face whose interior contains the singularity folds
+    // over it in (u,v), and every face's edges stop being parameter-aligned.
+    //
+    // With uAxis = Z (and vAxis = cross(normal, uAxis) = X, normal = Y) the parameters ARE
+    // the grid: u is the ring latitude and v the longitude, so each band face is an exact
+    // rectangle in (u,v) and each pole fan degenerates at a real vertex, where the pole
+    // expansion in integrateFaceParametric already handles it.
     auto sphereFace = [radius](std::vector<uint32_t> loop) {
         Body::FaceDef fd;
         fd.loop = std::move(loop);
         fd.surface.kind = SurfaceKind::Sphere;
         fd.surface.origin = {0., 0., 0.};
-        fd.surface.normal = {0., 0., 1.};
-        fd.surface.uAxis = {1., 0., 0.};
+        fd.surface.normal = {0., 1., 0.};
+        fd.surface.uAxis = {0., 0., 1.};
         fd.surface.radius = radius;
         return fd;
     };
