@@ -125,15 +125,28 @@ TEST(AppAnalyticBooleanWiring, PlacedPrimitiveCarriesABodyThatMatchesItsMesh)
 
 // The operation runs analytically and its result is STILL a solid, so the next operation
 // can consume it directly. That is the property the whole B-rep path exists for.
+//
+// FIXTURE CHANGED, and the reason matters more than the change. This used to bore a cylinder
+// through the box and then subtract a bar — and the analytic chain DECLINES on that pair, in
+// this build and in every build before it. The test passed anyway, because the mesh fallback
+// ALSO failed, so `BooleanMode` never reached its `body.reset()` and the node kept the body from
+// the PREVIOUS operation. `has_value()` was true because nothing had succeeded, which is the
+// opposite of what the assertion claims to check. It surfaced when a tessellation fix made the
+// mesh path succeed: the app then correctly cleared the stale body, and the test failed for
+// finally doing the right thing.
+//
+// So the fixture is now a pair whose analytic chain genuinely works, and the volumes are asserted
+// against closed-form arithmetic at both steps rather than left implicit: a 1x1 bar through a
+// 2x2x2 box removes 2, and a 1x1 crossbar through the result removes 2 more less the 1x1x1 they
+// share, so 8 -> 6 -> 5 exactly. The declining case is kept below as its own characterization.
 TEST(AppAnalyticBooleanWiring, BooleanOfTwoBodiesStaysAnalyticAndChains)
 {
     cad::CadDocument doc;
     AppContext ctx;
     ctx.document = &doc;
 
-    geometry::brep::Body cutter = geometry::brep::makeCylinder(0.5f, 4.f, 24);
     const auto a = addSolid(doc, geometry::brep::makeBox(2.f, 2.f, 2.f), true);
-    const auto b = addSolid(doc, std::move(cutter), true);
+    const auto b = addSolid(doc, geometry::brep::makeBox(1.f, 1.f, 4.f), true);
     ASSERT_NE(a, parametric::kInvalidFeatureId);
     ASSERT_NE(b, parametric::kInvalidFeatureId);
 
@@ -151,21 +164,71 @@ TEST(AppAnalyticBooleanWiring, BooleanOfTwoBodiesStaysAnalyticAndChains)
     ASSERT_TRUE(nodeA->mesh.has_value());
     EXPECT_GT(nodeA->mesh->attributes().vertexCount(), 0u) << "nothing to draw";
 
-    // a bore through a 2x2x2 box removes pi*r^2*h over the box's height
-    const double expected = 8.0 - 3.14159265358979 * 0.25 * 2.0;
-    EXPECT_NEAR(meshVolume(*nodeA->mesh), expected, 0.05)
-        << "the drilled box does not have the volume the geometry dictates";
+    // a 1x1 bar through a 2x2x2 box removes exactly 2
+    EXPECT_NEAR(meshVolume(*nodeA->mesh), 6.0, 1e-4)
+        << "the slotted box does not have the volume the geometry dictates";
 
-    // and the result feeds the NEXT operation as a solid
-    const auto c = addSolid(doc, geometry::brep::makeBox(1.f, 1.f, 6.f), true);
+    // and the result feeds the NEXT operation as a solid — the whole point
+    const auto c = addSolid(doc, geometry::brep::makeBox(1.f, 4.f, 1.f), true);
     ASSERT_NE(c, parametric::kInvalidFeatureId);
     BooleanMode second;
     ASSERT_TRUE(second.executeAction("boolean.difference", ctx));
     runBoolean(second, ctx, a, c);
     auto* chained = doc.history().node(a);
     ASSERT_NE(chained, nullptr);
-    EXPECT_TRUE(chained->body.has_value()) << "the chain dropped to the mesh path";
-    if (chained->body) EXPECT_TRUE(chained->body->isClosed());
+    ASSERT_TRUE(chained->body.has_value()) << "the chain dropped to the mesh path";
+    EXPECT_TRUE(chained->body->isClosed());
+    EXPECT_TRUE(chained->body->checkIntegrity().ok);
+    EXPECT_TRUE(chained->body->checkGeometry().ok);
+    // the crossbar removes 2 more, less the 1x1x1 the two bars share
+    EXPECT_NEAR(static_cast<double>(chained->body->massProperties().volume), 5.0, 1e-4);
+    ASSERT_TRUE(chained->mesh.has_value());
+    EXPECT_NEAR(meshVolume(*chained->mesh), 5.0, 1e-4);
+}
+
+// The case the fixture above used to use, kept because it is a real limitation and it should be
+// visible rather than hidden inside a test that appeared to pass.
+//
+// Chaining off a CYLINDER-BORED box declines analytically — `booleanToBody` returns a clean empty
+// body, which is its watertight-or-empty contract working as designed, not a crash. The app then
+// falls back to the mesh path, and because that path cannot update an analytic body it must DROP
+// the one it has: leaving it attached would hand a later operation a body that no longer matches
+// what is on screen. That is the same contract `FallingBackToTheMeshPathClearsTheStaleBody`
+// asserts directly.
+//
+// If the analytic chain ever learns this configuration, this test fails and should be promoted
+// into the one above.
+TEST(AppAnalyticBooleanWiring, ChainingOffABoredBoxStillDeclinesAndDropsTheStaleBody)
+{
+    cad::CadDocument doc;
+    AppContext ctx;
+    ctx.document = &doc;
+
+    const auto a = addSolid(doc, geometry::brep::makeBox(2.f, 2.f, 2.f), true);
+    const auto b = addSolid(doc, geometry::brep::makeCylinder(0.5f, 4.f, 24), true);
+    BooleanMode mode;
+    ASSERT_TRUE(mode.executeAction("boolean.difference", ctx));
+    runBoolean(mode, ctx, a, b);
+
+    auto* bored = doc.history().node(a);
+    ASSERT_NE(bored, nullptr);
+    ASSERT_TRUE(bored->body.has_value()) << "the bore itself must stay analytic";
+    // a bore through a 2x2x2 box removes pi*r^2*h over the box's height
+    const double expected = 8.0 - 3.14159265358979 * 0.25 * 2.0;
+    EXPECT_NEAR(meshVolume(*bored->mesh), expected, 0.05);
+
+    const auto c = addSolid(doc, geometry::brep::makeBox(1.f, 1.f, 6.f), true);
+    BooleanMode second;
+    ASSERT_TRUE(second.executeAction("boolean.difference", ctx));
+    runBoolean(second, ctx, a, c);
+    auto* chained = doc.history().node(a);
+    ASSERT_NE(chained, nullptr);
+    EXPECT_FALSE(chained->body.has_value())
+        << "the analytic chain now handles a bored box — promote this into "
+           "BooleanOfTwoBodiesStaysAnalyticAndChains";
+    // the operation still HAPPENED, on the mesh path, which is what the user asked for
+    ASSERT_TRUE(chained->mesh.has_value());
+    EXPECT_GT(chained->mesh->attributes().vertexCount(), 0u);
 }
 
 // An operand with no analytic form — a torus, an import, a sculpt — must still work, on

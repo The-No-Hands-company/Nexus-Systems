@@ -318,4 +318,61 @@ TEST(BRepCurvedTessellation, TheTessellatedConservationGapShrinksWithRefinement)
     EXPECT_LT(fine, 1e-4) << "the gap is not closing: " << fine;
 }
 
+// PLANAR faces had the same two artefacts, for the same reason, and they were the last of it.
+// A flat polygon is reproduced exactly by ANY triangulation, so the fan was never wrong about a
+// box's volume or area — 8 and 24, at every level, before and after. It was wrong about the MESH:
+// zero-area triangles where the ring's first vertex lies on a straight refined edge, and the
+// CHORD across a boundary edge already subdivided, used four times instead of twice. Measured
+// before the fix: a box at subdivisions 8 had 96 degenerate triangles and 24 over-used edges; the
+// union of two boxes had 552 and 72, and 8 degenerate ones at subdivisions 0.
+//
+// Unlike the curved case this needs no interior points — a plane has no curvature to resolve — so
+// the totals still telescope and every conservation identity is byte-identical to before.
+TEST(BRepCurvedTessellation, PlanarFacesTessellateCleanlyAtEveryLevel)
+{
+    struct Case { Body b; const char* what; };
+    std::vector<Case> cases;
+    cases.push_back({makeBox(2.f, 2.f, 2.f), "box"});
+    {   // holed planar faces: a bore leaves a circular hole in the top and bottom caps
+        Body plate = makeBox(4.f, 4.f, 1.f);
+        cases.push_back({booleanToBody(plate, makeCylinder(0.6f, 4.f, 16), BooleanOp::Difference),
+                         "drilled plate (holed planar faces)"});
+    }
+    {   // planar seams: the worst case before the fix
+        Body bar = makeBox(1.f, 1.f, 3.f);
+        bar.translate({0.6, 0., 0.});
+        cases.push_back({booleanToBody(makeBox(2.f, 2.f, 2.f), bar, BooleanOp::Union),
+                         "box u box (planar seams)"});
+    }
+    {   // an arc bite leaves a CONCAVE planar face, which the fan double-covered
+        Body cyl = makeCylinder(0.7f, 4.f, 16);
+        cyl.translate({0.8, 0., 0.});
+        cases.push_back({booleanToBody(makeBox(2.f, 2.f, 2.f), cyl, BooleanOp::Union),
+                         "box u cyl offset (arc bite)"});
+    }
+
+    for (const Case& c : cases) {
+        ASSERT_GT(c.b.faceCount(), 0u) << c.what << ": fixture did not build";
+        for (const uint32_t s : {0u, 1u, 2u, 4u, 8u}) {
+            const MeshHealth h = health(c.b.toMesh(s));
+            EXPECT_EQ(h.degenerate, 0) << c.what << " sub=" << s << ": zero-area triangles";
+            EXPECT_EQ(h.overUsed, 0) << c.what << " sub=" << s << ": " << h.overUsed
+                                     << " edges used more than twice — non-manifold";
+            if (c.b.isClosed())
+                EXPECT_EQ(h.oneSided, 0) << c.what << " sub=" << s << ": the mesh is not closed";
+        }
+    }
+}
+
+// And a planar face's volume and area must be EXACT at every level, before and after — which is
+// the reason this was a mesh defect and not an accuracy one.
+TEST(BRepCurvedTessellation, APlanarSolidIsExactAtEveryLevel)
+{
+    const Body box = makeBox(2.f, 2.f, 2.f);
+    for (const uint32_t s : {0u, 1u, 2u, 4u, 8u, 16u}) {
+        EXPECT_NEAR(tessVolume(box, s), 8.0, 1e-9) << "sub=" << s;
+        EXPECT_NEAR(unsignedArea(box.toMesh(s)), 24.0, 1e-6) << "sub=" << s;
+    }
+}
+
 }  // namespace nexus::geometry::brep::testing

@@ -4317,6 +4317,153 @@ bool triangulateCurvedFaceUV(const Surface& surf, const Face& fc,
 }
 
 
+// A PLANAR face, triangulated properly instead of fanned.
+//
+// A flat polygon is reproduced exactly by ANY triangulation of it, so the fan was never wrong
+// about a planar face's area or volume — a box has always tessellated to exactly 8 and 24. What
+// it was wrong about is the MESH. Once the boundary is subdivided the fan produces the same two
+// artefacts it produced on curved faces, for the same reasons:
+//
+//   * ZERO-AREA TRIANGLES, where the ring's first vertex lies on a straight refined edge and the
+//     fan's leading and trailing triangles are three collinear points. Measured on box(2,2,2):
+//     12 at subdivisions 1, 96 at 8. On the union of two boxes, 8 of them at subdivisions 0.
+//   * NON-MANIFOLD EDGES, where the fan emits the CHORD across a boundary edge it has already
+//     subdivided, so that edge is used four times instead of twice. 3 on a box at subdivisions 1,
+//     24 at 8.
+//
+// Neither shows up in a volume, an area, or any topological invariant the kernel checks, which is
+// why they survived. They matter anyway: `classifyPoint` casts its parity ray at this mesh, and a
+// zero-area triangle has no defined orientation while a four-times-used edge is not a manifold
+// boundary at all.
+//
+// So the ring is triangulated in the face's own plane by the constrained Delaunay, with every
+// loop segment — outer AND holes — passed as a constraint. Projecting onto an orthonormal in-plane
+// frame is an ISOMETRY, so this is the same 2D problem the geometry already is, with no distortion
+// to trade against. And unlike the curved case there are NO interior points: a plane needs none,
+// so the totals still telescope across decompositions and every conservation identity is
+// untouched.
+//
+// Anything it declines — a self-touching ring, a degenerate projection, a Delaunay that could not
+// hold its constraints — falls through to the existing fan and ear-clipper, which is what the
+// pinch-splitting path above relies on.
+bool triangulatePlanarLoopCDT(const Surface& surf, const Vec3& nrm,
+                             const std::vector<uint32_t>& ring,
+                             const std::vector<std::vector<uint32_t>>& inners,
+                             const std::vector<Vec3>& posD,
+                             std::vector<std::array<uint32_t, 3>>& out)
+{
+    out.clear();
+    if (surf.kind != SurfaceKind::Plane) return false;
+    if (ring.size() < 3) return false;
+
+    // Orthonormal in-plane frame. e1 from the surface's own u direction so the projection is
+    // reproducible for a given face, e2 = nrm x e1 so (e1,e2) is right-handed about the outward
+    // normal and a CCW ring projects to a CCW polygon.
+    Vec3 e1 = surf.uAxis;
+    double l = std::sqrt(e1.dot(e1));
+    if (l < 1e-12) return false;
+    e1 = e1 * (1.0 / l);
+    // re-orthogonalise against nrm, which may not be exactly perpendicular to uAxis after a
+    // rebuild, and bail if uAxis is (nearly) parallel to the normal
+    Vec3 nn = nrm;
+    const double nl = std::sqrt(nn.dot(nn));
+    if (nl < 1e-12) return false;
+    nn = nn * (1.0 / nl);
+    e1 = e1 - nn * e1.dot(nn);
+    l = std::sqrt(e1.dot(e1));
+    if (l < 1e-6) return false;
+    e1 = e1 * (1.0 / l);
+    const Vec3 e2 = nn.cross(e1);
+
+    // All loops, outer first, as one point list with per-loop index ranges.
+    std::vector<uint32_t> vids;
+    std::vector<std::pair<size_t, size_t>> loops;   // [begin,end) into vids
+    loops.emplace_back(0u, ring.size());
+    vids.insert(vids.end(), ring.begin(), ring.end());
+    for (const std::vector<uint32_t>& h : inners) {
+        if (h.size() < 3) return false;
+        loops.emplace_back(vids.size(), vids.size() + h.size());
+        vids.insert(vids.end(), h.begin(), h.end());
+    }
+    const size_t n = vids.size();
+    if (n < 3 || n > 4096) return false;
+
+    const Vec3& O = posD[vids[0]];
+    std::vector<Vec2> pts(n);
+    for (size_t i = 0; i < n; ++i) {
+        const Vec3 d = posD[vids[i]] - O;
+        // must actually lie in the plane, or this projection is not the face
+        if (std::abs(d.dot(nn)) > 1e-4 * std::max(1.0, std::sqrt(d.dot(d)))) return false;
+        pts[i] = Vec2{static_cast<float>(d.dot(e1)), static_cast<float>(d.dot(e2))};
+    }
+    // A repeated position is a pinch or a slit; the loop-splitting path above handles those.
+    for (size_t i = 0; i < n; ++i)
+        for (size_t j = i + 1; j < n; ++j)
+            if (pts[i].u == pts[j].u && pts[i].v == pts[j].v) return false;
+
+    std::vector<ConstraintEdge> cons;
+    cons.reserve(n);
+    for (const auto& lp : loops)
+        for (size_t i = lp.first; i < lp.second; ++i) {
+            const size_t nx = (i + 1 == lp.second) ? lp.first : i + 1;
+            cons.push_back(ConstraintEdge{static_cast<uint32_t>(i), static_cast<uint32_t>(nx)});
+        }
+
+    const CDTResult cdt = ConstrainedDelaunay2D::triangulate(pts, cons);
+    if (!cdt.ok || cdt.triangles.empty()) return false;
+    if (cdt.vertices.size() != pts.size()) return false;   // it moved the boundary: decline
+
+    auto insideLoop = [&](size_t lo, size_t hi, double x, double y) {
+        bool in = false;
+        for (size_t i = lo, j = hi - 1; i < hi; j = i++) {
+            const double xi = pts[i].u, yi = pts[i].v, xj = pts[j].u, yj = pts[j].v;
+            if (((yi > y) != (yj > y)) && (x < (xj - xi) * (y - yi) / (yj - yi) + xi)) in = !in;
+        }
+        return in;
+    };
+    // A CDT fills the convex hull, so keep only what is inside the outer ring and outside
+    // every hole.
+    std::vector<std::array<uint32_t, 3>> kept;
+    for (const auto& t : cdt.triangles) {
+        const double cx = (static_cast<double>(pts[t[0]].u) + pts[t[1]].u + pts[t[2]].u) / 3.0;
+        const double cy = (static_cast<double>(pts[t[0]].v) + pts[t[1]].v + pts[t[2]].v) / 3.0;
+        if (!insideLoop(loops[0].first, loops[0].second, cx, cy)) continue;
+        bool inHole = false;
+        for (size_t k = 1; k < loops.size() && !inHole; ++k)
+            inHole = insideLoop(loops[k].first, loops[k].second, cx, cy);
+        if (!inHole) kept.push_back(t);
+    }
+    if (kept.empty()) return false;
+
+    // The crack condition, per face: every loop segment used exactly once, nothing over-used.
+    {
+        std::map<std::pair<uint32_t, uint32_t>, int> used;
+        for (const auto& t : kept)
+            for (int k = 0; k < 3; ++k) {
+                uint32_t a = t[static_cast<size_t>(k)], b = t[static_cast<size_t>((k + 1) % 3)];
+                if (a > b) std::swap(a, b);
+                ++used[{a, b}];
+            }
+        for (const auto& e : used) if (e.second > 2) return false;
+        for (const ConstraintEdge& c : cons) {
+            uint32_t a = c.a, b = c.b;
+            if (a > b) std::swap(a, b);
+            const auto it = used.find({a, b});
+            if (it == used.end() || it->second != 1) return false;
+        }
+    }
+
+    out.reserve(kept.size());
+    for (const auto& t : kept) {
+        const uint32_t ia = vids[t[0]], ib = vids[t[1]], ic = vids[t[2]];
+        if (ia == ib || ib == ic || ic == ia) return false;
+        const Vec3 g = (posD[ib] - posD[ia]).cross(posD[ic] - posD[ia]);
+        if (g.dot(nn) < 0.0) out.push_back({ia, ic, ib});
+        else                 out.push_back({ia, ib, ic});
+    }
+    return true;
+}
+
 // Segments per Circle boundary edge. The (u,v) polygon's error against the true pcurve falls
 // as 1/n^2, and 8 puts a Boolean seam's contribution below the identity tolerance while
 // costing nothing where the boundary was already straight in (u,v) — the added points are
@@ -4789,6 +4936,20 @@ Mesh Body::toMesh(uint32_t subdivisions) const
     auto triangulateLoop = [&](const std::vector<uint32_t>& ring2,
                                std::vector<std::vector<uint32_t>> inners,  // sorted below
                                const Vec3& nrm, const Face& fc) {
+        // A PLANAR face is triangulated in its own plane first — see triangulatePlanarLoopCDT
+        // for what fanning one costs once its boundary is subdivided. A decline falls through
+        // to the fan and ear-clipper below, unchanged.
+        if (fc.surface < m_surfaces.size()) {
+            std::vector<std::array<uint32_t, 3>> flat;
+            if (triangulatePlanarLoopCDT(m_surfaces[fc.surface], nrm, ring2, inners, posD, flat)) {
+                for (const std::array<uint32_t, 3>& t : flat) {
+                    nexus::geometry::Face f;  // the mesh Face, not brep::Face
+                    f.indices = {t[0], t[1], t[2]};
+                    mesh.topology().addFace(std::move(f));
+                }
+                return;
+            }
+        }
         // A CONVEX outer ring with no hole fans from its first vertex — the cheapest
         // correct triangulation, and the one every face used to get.
         //
