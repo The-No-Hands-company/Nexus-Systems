@@ -25,20 +25,28 @@
 //      inscribed surface can only mean it was covering itself twice.
 //
 // A curved face is now triangulated in the surface's own (u,v) domain, where "short" means short
-// along the surface. Two paths, both exact for what they claim, both declining rather than
-// approximating — and anything they decline keeps the old fan, which is safe because
-// `buildRing` derives a face's boundary from its coedges without consulting how the face will be
-// triangulated, so a new-path face and an old-path neighbour still meet exactly.
+// along the surface. Three paths, each declining rather than approximating — and anything all
+// three decline keeps the old fan, which is safe because `buildRing` derives a face's boundary
+// from its coedges without consulting how the face will be triangulated, so a new-path face and
+// an old-path neighbour still meet exactly.
 //
-// WHAT IS NOT FIXED, and is named rather than implied: the SPHERE. It is curved both ways, so it
-// genuinely needs interior samples, and interior samples drawn from each face's own boundary
-// break a property the kernel depends on — a tessellated identity like U+I == A+B holds only
-// because a boundary-only triangulation's totals telescope across any decomposition. Bounded
-// (and it must be bounded: classifyPoint tessellates on every query) the fragment stops refining
-// while the primitive continues, and the identity drifts rather than converging. Measured, that
-// attempt took the identity from 4.2e-04 at subdivisions 2 to 4.1e-03 at 8. The designed fix is
-// to draw the lattice from the SURFACE and the subdivision count instead of from each face's
-// boundary, so any two decompositions sample the same positions.
+//   * GRID — the tensor product of the boundary's own parameter samples. A pole or apex collapses
+//     one axis rather than defeating it.
+//   * STRIPS — for a DEVELOPABLE patch whose opposite sides carry different samples. Along the
+//     ruling nothing needs resolving, so columns at the angular samples are exact, and O(ring).
+//   * LATTICE — for the doubly-curved case, which genuinely needs interior samples.
+//
+// THE LATTICE'S POSITIONS COME FROM THE SURFACE, NOT THE FACE, and that is the whole of why it
+// is safe. An earlier attempt drew them from each face's own boundary values; it fixed the sphere
+// and broke something worth more. A tessellated identity like U+I == A+B holds because a
+// boundary-only triangulation's totals TELESCOPE across any decomposition, and boundary-derived
+// interior points give that up — a primitive band face and the fragment cut out of it place their
+// nodes differently. Bounded (it must be bounded: classifyPoint tessellates on every query) the
+// fragment then refines slower than the whole and the identity DRIFTS: 4.2e-04 at subdivisions 2
+// rising to 4.1e-03 at 8. Anchored to the surface instead, every face offers the SAME interior
+// points for a given piece of the sphere, so both converge and the gap CLOSES: 3.3e-04 down to
+// 1.5e-05 over the same range. That reversal is what
+// `TheTessellatedConservationGapShrinksWithRefinement` exists to hold.
 
 #include <nexus/geometry/AnalyticBRep.h>
 #include <nexus/geometry/BRepBoolean.h>
@@ -246,21 +254,68 @@ TEST(BRepCurvedTessellation, IsDeterministic)
     }
 }
 
-// The sphere is NOT fixed, and that is recorded here rather than left for someone to discover.
-// If this starts failing because a sphere converges, the designed surface-lattice fix has landed
-// and this characterization should become a convergence assertion like the cylinder's above.
-TEST(BRepCurvedTessellation, ASphereStillUnderRefinesAndIsRecordedAsSuch)
+// RETIRED AND REPLACED, as its own message asked. This was
+// `ASphereStillUnderRefinesAndIsRecordedAsSuch`, pinning that a sphere stayed more than 1% short
+// however far it was refined and that its area EXCEEDED the true one — the double-coverage
+// signature of the fan. The surface-anchored lattice has landed, so both are now convergence
+// assertions.
+TEST(BRepCurvedTessellation, ASphereConvergesToItsTrueVolume)
 {
     const Body s = makeSphere(1.f, 8, 12);
     const double exact = 4.0 / 3.0 * kPi;
-    // it improves with refinement, but plateaus well short
-    EXPECT_GT(tessVolume(s, 8), tessVolume(s, 1));
-    EXPECT_GT(exact - tessVolume(s, 16), exact * 0.01)
-        << "a sphere now tessellates to within 1% — the surface-parameter lattice must have "
-           "landed, so retire this characterization and assert convergence instead";
-    // and its area still exceeds the true one, which is the double-coverage signature
-    EXPECT_GT(unsignedArea(s.toMesh(8)), 4.0 * kPi)
-        << "the sphere's tessellation no longer over-covers — retire this characterization";
+
+    double prev = 0.0;
+    for (const uint32_t sub : {0u, 1u, 2u, 4u, 8u, 16u}) {
+        const double v = tessVolume(s, sub);
+        EXPECT_LT(v, exact) << "sub=" << sub << ": an inscribed tessellation cannot exceed the solid";
+        EXPECT_GT(v, prev) << "sub=" << sub << ": refinement did not improve the volume";
+        prev = v;
+    }
+    // it used to plateau 5.5% short
+    EXPECT_LT(exact - tessVolume(s, 16), exact * 1e-3)
+        << "still more than 0.1% short at subdivisions 16";
+}
+
+// Area is what exposed the fan's self-coverage on a sphere: 7% ABOVE 4*pi*r^2, which an
+// inscribed surface cannot be.
+TEST(BRepCurvedTessellation, ASphereNeverCoversItselfTwice)
+{
+    const Body s = makeSphere(1.f, 8, 12);
+    const double exact = 4.0 * kPi;
+    for (const uint32_t sub : {0u, 1u, 2u, 4u, 8u, 16u}) {
+        const double a = unsignedArea(s.toMesh(sub));
+        EXPECT_LT(a, exact * (1.0 + 1e-9))
+            << "sub=" << sub << ": tessellated area " << a << " exceeds " << exact;
+    }
+    EXPECT_LT(exact - unsignedArea(s.toMesh(16)), exact * 1e-3);
+}
+
+// THE PROPERTY THE LATTICE EXISTS FOR, and the one the reverted boundary-derived attempt could
+// not deliver: the tessellated conservation identity must SHRINK with refinement rather than
+// drift. Interior points make a whole and its fragments differ where their boundaries differ, so
+// the identity is no longer exact at a given level — but because every face offers the SAME
+// lattice positions for a given piece of the surface, both converge, and the gap closes.
+// Measured on box(2) u sphere(1.2): 3.3e-04 at subdivisions 1 down to 1.5e-05 at 8, where the
+// boundary-derived lattice went the other way, 4.2e-04 UP to 4.1e-03.
+TEST(BRepCurvedTessellation, TheTessellatedConservationGapShrinksWithRefinement)
+{
+    const Body box = makeBox(2.f, 2.f, 2.f);
+    const Body sph = makeSphere(1.2f, 8, 12);
+    const Body U = booleanToBody(box, sph, BooleanOp::Union);
+    const Body I = booleanToBody(box, sph, BooleanOp::Intersection);
+    ASSERT_GT(U.faceCount(), 0u);
+    ASSERT_GT(I.faceCount(), 0u);
+
+    auto gap = [&](uint32_t sub) {
+        const double lhs = tessVolume(U, sub) + tessVolume(I, sub);
+        const double rhs = tessVolume(box, sub) + tessVolume(sph, sub);
+        return std::abs(lhs - rhs) / rhs;
+    };
+    const double coarse = gap(1), fine = gap(8);
+    EXPECT_LT(fine, coarse)
+        << "the conservation gap grew with refinement (" << coarse << " -> " << fine
+        << ") — the interior lattice is no longer decomposition-independent";
+    EXPECT_LT(fine, 1e-4) << "the gap is not closing: " << fine;
 }
 
 }  // namespace nexus::geometry::brep::testing

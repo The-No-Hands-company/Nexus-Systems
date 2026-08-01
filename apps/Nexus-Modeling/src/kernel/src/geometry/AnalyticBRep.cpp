@@ -3903,8 +3903,209 @@ bool triangulateCurvedFaceStrips(const Surface& surf, const Face& fc,
     return true;
 }
 
+// THE INTERIOR LATTICE COMES FROM THE SURFACE, NOT FROM THE FACE. That is the whole design.
+//
+// A sphere is curved both ways, so no connection of boundary-only points represents its
+// interior — unlike a cylinder, where the ruling is flat and the strips above are exact. It
+// genuinely needs interior samples, and an earlier attempt to give it them was built, measured
+// and reverted because of WHERE they came from: each face's own boundary values. A primitive
+// band face and the Boolean fragment cut out of it then place their interior nodes in different
+// places, and that breaks a property the kernel leans on everywhere — a tessellated identity
+// like U+I == A+B holds only because a boundary-only triangulation's totals TELESCOPE across
+// any decomposition. Bounded (and it has to be bounded: classifyPoint tessellates on every
+// query) the fragment stopped refining while the whole carried on, so the identity DRIFTED
+// instead of converging: 4.2e-04 at subdivisions 2 rising to 4.1e-03 at 8.
+//
+// Anchoring the lattice to the SURFACE fixes exactly that. The candidate positions are integer
+// multiples of a step derived from the surface's parameter range and the subdivision count and
+// nothing else, so every face that covers a given piece of the sphere offers the SAME interior
+// points there, whichever decomposition it belongs to. The tessellations of a whole and of its
+// fragments then differ only where their boundaries differ, and both converge — which is what
+// makes the identity shrink with refinement instead of stalling.
+//
+// The step halves as the subdivision count rises, and at subdivisions 0 there is no lattice at
+// all, so the unrefined tessellation every existing fixture is calibrated against is untouched.
+struct SurfaceLattice { double hu = 0.0, hv = 0.0; };
+
+[[nodiscard]] SurfaceLattice sphereLattice(uint32_t subdivisions) noexcept
+{
+    if (subdivisions == 0u) return {};
+    // Eight steps across a quarter turn at subdivisions 1, halving thereafter. Chosen so that a
+    // sphere built with the common latitude count lands its own boundary samples ON the lattice
+    // rather than beside it, which keeps the primitive's grid exactly the tensor product it was.
+    const double kPi = 3.141592653589793;
+    const double h = kPi / (8.0 * static_cast<double>(subdivisions + 1u));
+    return {h, h};
+}
+
+// A curved face with interior Steiner points, triangulated by the constrained Delaunay so the
+// boundary is held exactly while the interior is free. Used for the doubly-curved case only;
+// developable patches are ruled above, which is both exact and far cheaper.
+bool triangulateCurvedFaceLattice(const Surface& surf, const Face& fc,
+                                  const std::vector<uint32_t>& ring,
+                                  const std::vector<double>& U, const std::vector<double>& V,
+                                  int poleIdx, uint32_t subdivisions,
+                                  std::vector<nexus::render::Vec3>& posOut,
+                                  std::vector<Vec3>& posDOut,
+                                  std::vector<std::array<uint32_t, 3>>& out)
+{
+    out.clear();
+    if (surf.kind != SurfaceKind::Sphere) return false;
+    if (poleIdx >= 0) return false;            // the grid above owns a collapsed axis
+    const SurfaceLattice lat = sphereLattice(subdivisions);
+    if (lat.hu <= 0.0 || lat.hv <= 0.0) return false;
+
+    const int n = static_cast<int>(ring.size());
+    if (n < 3) return false;
+    const double r = std::max(1e-12, std::abs(static_cast<double>(surf.radius)));
+
+    // (u,v) as lengths, so the exact predicates are asked a well-conditioned question.
+    std::vector<Vec2> pts(static_cast<size_t>(n));
+    for (int i = 0; i < n; ++i)
+        pts[static_cast<size_t>(i)] = Vec2{static_cast<float>(V[static_cast<size_t>(i)] * r),
+                                           static_cast<float>(U[static_cast<size_t>(i)] * r)};
+    for (int i = 0; i < n; ++i)
+        for (int j = i + 1; j < n; ++j)
+            if (pts[static_cast<size_t>(i)].u == pts[static_cast<size_t>(j)].u
+                && pts[static_cast<size_t>(i)].v == pts[static_cast<size_t>(j)].v) return false;
+
+    double uLo = U[0], uHi = U[0], vLo = V[0], vHi = V[0];
+    for (int i = 0; i < n; ++i) {
+        uLo = std::min(uLo, U[static_cast<size_t>(i)]); uHi = std::max(uHi, U[static_cast<size_t>(i)]);
+        vLo = std::min(vLo, V[static_cast<size_t>(i)]); vHi = std::max(vHi, V[static_cast<size_t>(i)]);
+    }
+
+    auto insideRing = [&](double x, double y) {
+        bool in = false;
+        for (int i = 0, j = n - 1; i < n; j = i++) {
+            const double xi = pts[static_cast<size_t>(i)].u, yi = pts[static_cast<size_t>(i)].v;
+            const double xj = pts[static_cast<size_t>(j)].u, yj = pts[static_cast<size_t>(j)].v;
+            if (((yi > y) != (yj > y)) && (x < (xj - xi) * (y - yi) / (yj - yi) + xi)) in = !in;
+        }
+        return in;
+    };
+    // Distance in the (u,v)-as-length domain below which a candidate is too close to the
+    // boundary to be a safe Steiner point — it would make a sliver, or land on a constraint.
+    const double nearBoundary = 0.25 * std::min(lat.hu, lat.hv) * r;
+    auto tooCloseToRing = [&](double x, double y) {
+        for (int i = 0; i < n; ++i) {
+            const double xi = pts[static_cast<size_t>(i)].u, yi = pts[static_cast<size_t>(i)].v;
+            const double xj = pts[static_cast<size_t>((i + 1) % n)].u;
+            const double yj = pts[static_cast<size_t>((i + 1) % n)].v;
+            const double ex = xj - xi, ey = yj - yi;
+            const double len2 = ex * ex + ey * ey;
+            double t = (len2 > 0.0) ? ((x - xi) * ex + (y - yi) * ey) / len2 : 0.0;
+            t = std::clamp(t, 0.0, 1.0);
+            const double dx = x - (xi + t * ex), dy = y - (yi + t * ey);
+            if (std::sqrt(dx * dx + dy * dy) < nearBoundary) return true;
+        }
+        return false;
+    };
+
+    // The lattice, anchored at parameter zero so it is the same set for every decomposition.
+    std::vector<std::array<double, 2>> uvExtra;
+    {
+        const long i0 = static_cast<long>(std::floor(uLo / lat.hu)) - 1;
+        const long i1 = static_cast<long>(std::ceil(uHi / lat.hu)) + 1;
+        const long j0 = static_cast<long>(std::floor(vLo / lat.hv)) - 1;
+        const long j1 = static_cast<long>(std::ceil(vHi / lat.hv)) + 1;
+        if ((i1 - i0) > 4096 || (j1 - j0) > 4096) return false;   // pathological extent
+        for (long i = i0; i <= i1; ++i)
+            for (long j = j0; j <= j1; ++j) {
+                const double uu = static_cast<double>(i) * lat.hu;
+                const double vv = static_cast<double>(j) * lat.hv;
+                if (uu <= -1.5707963267948966 || uu >= 1.5707963267948966) continue;  // poles
+                const double x = vv * r, y = uu * r;
+                if (!insideRing(x, y) || tooCloseToRing(x, y)) continue;
+                uvExtra.push_back({uu, vv});
+                pts.push_back(Vec2{static_cast<float>(x), static_cast<float>(y)});
+            }
+    }
+    if (uvExtra.empty()) return false;   // nothing to add: let the grid/fan handle it
+
+    std::vector<ConstraintEdge> cons;
+    cons.reserve(static_cast<size_t>(n));
+    for (int i = 0; i < n; ++i)
+        cons.push_back(ConstraintEdge{static_cast<uint32_t>(i),
+                                      static_cast<uint32_t>((i + 1) % n)});
+
+    const CDTResult cdt = ConstrainedDelaunay2D::triangulate(pts, cons);
+    if (!cdt.ok || cdt.triangles.empty()) return false;
+    if (cdt.vertices.size() != pts.size()) return false;   // it moved the boundary: decline
+
+    std::vector<std::array<uint32_t, 3>> kept;
+    for (const auto& t : cdt.triangles) {
+        const double cx = (static_cast<double>(pts[t[0]].u) + pts[t[1]].u + pts[t[2]].u) / 3.0;
+        const double cy = (static_cast<double>(pts[t[0]].v) + pts[t[1]].v + pts[t[2]].v) / 3.0;
+        if (insideRing(cx, cy)) kept.push_back(t);
+    }
+    if (kept.empty()) return false;
+
+    // The crack condition, checked per face as on every path here.
+    {
+        std::map<std::pair<uint32_t, uint32_t>, int> used;
+        for (const auto& t : kept)
+            for (int k = 0; k < 3; ++k) {
+                uint32_t a = t[static_cast<size_t>(k)], b = t[static_cast<size_t>((k + 1) % 3)];
+                if (a > b) std::swap(a, b);
+                ++used[{a, b}];
+            }
+        for (const auto& e : used) if (e.second > 2) return false;
+        for (int i = 0; i < n; ++i) {
+            uint32_t a = static_cast<uint32_t>(i), b = static_cast<uint32_t>((i + 1) % n);
+            if (a > b) std::swap(a, b);
+            const auto it = used.find({a, b});
+            if (it == used.end() || it->second != 1) return false;
+        }
+    }
+
+    Vec3 newell{0.0, 0.0, 0.0};
+    for (int i = 0; i < n; ++i) {
+        const Vec3& a = posDOut[ring[static_cast<size_t>(i)]];
+        const Vec3& b = posDOut[ring[static_cast<size_t>((i + 1) % n)]];
+        newell.x += a.y * b.z - a.z * b.y;
+        newell.y += a.z * b.x - a.x * b.z;
+        newell.z += a.x * b.y - a.y * b.x;
+    }
+    const Vec3 nMid = surf.normalAt(0.5 * (uLo + uHi), 0.5 * (vLo + vHi));
+    double sense = (newell.dot(nMid) < 0.0) ? -1.0 : 1.0;
+    if (newell.dot(newell) <= 0.0) sense = fc.reversed ? -1.0 : 1.0;
+
+    std::vector<uint32_t> vmap(pts.size());
+    std::vector<double> allU(pts.size()), allV(pts.size());
+    for (int i = 0; i < n; ++i) {
+        vmap[static_cast<size_t>(i)] = ring[static_cast<size_t>(i)];
+        allU[static_cast<size_t>(i)] = U[static_cast<size_t>(i)];
+        allV[static_cast<size_t>(i)] = V[static_cast<size_t>(i)];
+    }
+    for (size_t k = 0; k < uvExtra.size(); ++k) {
+        const size_t i = static_cast<size_t>(n) + k;
+        Patch pt;
+        if (!analyticPatch(surf, uvExtra[k][0], uvExtra[k][1], pt)) return false;
+        const Vec3 gp{pt.p.x, pt.p.y, pt.p.z};
+        vmap[i] = static_cast<uint32_t>(posOut.size());
+        posOut.push_back(gp.toFloat());
+        posDOut.push_back(gp);
+        allU[i] = uvExtra[k][0];
+        allV[i] = uvExtra[k][1];
+    }
+
+    out.reserve(kept.size());
+    for (const auto& t : kept) {
+        const double tu = (allU[t[0]] + allU[t[1]] + allU[t[2]]) / 3.0;
+        const double tv = (allV[t[0]] + allV[t[1]] + allV[t[2]]) / 3.0;
+        const Vec3 nT = surf.normalAt(tu, tv) * sense;
+        const uint32_t ia = vmap[t[0]], ib = vmap[t[1]], ic = vmap[t[2]];
+        if (ia == ib || ib == ic || ic == ia) continue;
+        const Vec3 g = (posDOut[ib] - posDOut[ia]).cross(posDOut[ic] - posDOut[ia]);
+        if (g.dot(nT) < 0.0) out.push_back({ia, ic, ib});
+        else                 out.push_back({ia, ib, ic});
+    }
+    return !out.empty();
+}
+
 bool triangulateCurvedFaceUV(const Surface& surf, const Face& fc,
-                             const std::vector<uint32_t>& ring,
+                             const std::vector<uint32_t>& ring, uint32_t subdivisions,
                              std::vector<nexus::render::Vec3>& posOut,
                              std::vector<Vec3>& posDOut,
                              std::vector<std::array<uint32_t, 3>>& out)
@@ -3934,7 +4135,8 @@ bool triangulateCurvedFaceUV(const Surface& surf, const Face& fc,
     // lattice from the SURFACE and the subdivision count rather than from each face's boundary,
     // so any two decompositions sample the same positions. Decomposition-independence and
     // convergence then hold together, which is what this attempt could not deliver.
-    if (surf.kind != SurfaceKind::Cylinder && surf.kind != SurfaceKind::Cone) return false;
+    if (surf.kind != SurfaceKind::Cylinder && surf.kind != SurfaceKind::Cone
+        && surf.kind != SurfaceKind::Sphere) return false;
     if (!fc.innerLoops.empty()) return false;          // holes: not this path
     const int n = static_cast<int>(ring.size());
     if (n < 3) return false;
@@ -4013,6 +4215,11 @@ bool triangulateCurvedFaceUV(const Surface& surf, const Face& fc,
     // so the totals telescope across any decomposition. Interior points buy accuracy and give
     // that up, and for a fragment the trade came out negative. The grid keeps it because its
     // interior nodes are determined by the boundary's own samples, and the strips need none.
+    // A sphere is offered the surface-anchored lattice FIRST: its grid is exact only where a
+    // patch's opposite sides match, and the lattice is what carries the doubly-curved interior.
+    if (surf.kind == SurfaceKind::Sphere
+        && triangulateCurvedFaceLattice(surf, fc, ring, U, V, poleIdx, subdivisions,
+                                        posOut, posDOut, out)) return true;
     if (triangulateCurvedFaceGrid(surf, fc, ring, U, V, poleIdx, posOut, posDOut, out)) return true;
     return triangulateCurvedFaceStrips(surf, fc, ring, U, V, poleIdx, posDOut, out);
 }
@@ -4813,7 +5020,8 @@ Mesh Body::toMesh(uint32_t subdivisions) const
         // surface AXIS on a cylinder or cone and cannot orient a curved patch.
         if (fc.surface < m_surfaces.size()) {
             std::vector<std::array<uint32_t, 3>> uvTris;
-            if (triangulateCurvedFaceUV(m_surfaces[fc.surface], fc, ring, pos, posD, uvTris)) {
+            if (triangulateCurvedFaceUV(m_surfaces[fc.surface], fc, ring, subdivisions,
+                                        pos, posD, uvTris)) {
                 for (const std::array<uint32_t, 3>& t : uvTris) {
                     nexus::geometry::Face f;  // the mesh Face, not brep::Face
                     f.indices = {t[0], t[1], t[2]};
