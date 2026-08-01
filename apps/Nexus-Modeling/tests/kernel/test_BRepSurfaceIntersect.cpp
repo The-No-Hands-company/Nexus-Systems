@@ -16,6 +16,8 @@ namespace {
 Surface plane(Vec3 o, Vec3 n) { Surface s; s.kind = SurfaceKind::Plane; s.origin = o; s.normal = n; return s; }
 Surface sphere(Vec3 c, float r) { Surface s; s.kind = SurfaceKind::Sphere; s.origin = c; s.radius = r; return s; }
 Surface cylinder(Vec3 o, Vec3 ax, float r) { Surface s; s.kind = SurfaceKind::Cylinder; s.origin = o; s.normal = ax; s.radius = r; return s; }
+// A cone stores origin = APEX, normal = axis (apex -> base), radius = SLOPE.
+Surface cone(Vec3 apex, Vec3 ax, float slope) { Surface s; s.kind = SurfaceKind::Cone; s.origin = apex; s.normal = ax; s.radius = slope; return s; }
 
 // Max distance of the intersection curve (sampled) to both surfaces.
 float curveOnBoth(const SurfaceIntersection& r, const Surface& a, const Surface& b)
@@ -161,6 +163,150 @@ TEST(BRepSurfaceIntersect, ShallowAnglePlanesStillIntersect)
 
     // Deterministic.
     EXPECT_EQ(intersectSurfaces(a, b).curve.dir.z, r.curve.dir.z);
+}
+
+// ── The cone pairs ───────────────────────────────────────────────────────────
+//
+// Until these landed, EVERY pair involving a cone except plane∩cone fell through
+// intersectSurfaces' dispatch to Unsupported — and imprintOneWay treats Unsupported
+// exactly as it treats None, so the boolean's imprint did no work, reported success,
+// and the watertight-or-empty invariant turned the result into a clean-looking empty
+// body. Measured: cone(r=1,h=2) unioned with a coaxial rod returned EMPTY, and so did
+// the difference. The general (skew) case is still a quartic and still says Unsupported,
+// which is the honest answer rather than a silent one.
+
+TEST(BRepSurfaceIntersect, ConeCylinderCoaxialIsTheRingWhereTheNappeReachesTheRadius)
+{
+    // Apex at the origin, opening along +z with slope 0.5: radius 0.5*t at height t.
+    // A coaxial cylinder of radius 0.3 is met where 0.5*t == 0.3, i.e. t == 0.6.
+    const Surface a = cone({0, 0, 0}, {0, 0, 1}, 0.5f);
+    const Surface b = cylinder({0, 0, -5}, {0, 0, 1}, 0.3f);
+    const auto r = intersectSurfaces(a, b);
+    ASSERT_EQ(r.kind, SurfaceIntersectionKind::Circle);
+    EXPECT_NEAR(r.curve.origin.z, 0.6f, 1e-5f);
+    EXPECT_NEAR(r.curve.radius, 0.3f, 1e-5f);
+    EXPECT_LT(curveOnBoth(r, a, b), 1e-4f);
+    EXPECT_LT(curveOnBoth(r, b, a), 1e-4f);  // argument order must not matter
+    EXPECT_EQ(intersectSurfaces(b, a).kind, SurfaceIntersectionKind::Circle);
+}
+
+TEST(BRepSurfaceIntersect, ConeCylinderOffAxisIsUnsupportedNotNone)
+{
+    // A parallel but offset axis makes the section a quartic. The distinction being
+    // asserted is the whole point: reporting None here would tell the imprint the
+    // surfaces do not meet, which is false, and the boolean would silently drop a seam.
+    const Surface a = cone({0, 0, 0}, {0, 0, 1}, 0.5f);
+    const Surface b = cylinder({0.4f, 0, -5}, {0, 0, 1}, 0.3f);
+    EXPECT_EQ(intersectSurfaces(a, b).kind, SurfaceIntersectionKind::Unsupported);
+    // Skew, likewise.
+    const Surface c = cylinder({0, 0, 1}, {1, 0, 0}, 0.3f);
+    EXPECT_EQ(intersectSurfaces(a, c).kind, SurfaceIntersectionKind::Unsupported);
+}
+
+TEST(BRepSurfaceIntersect, ConeSphereOnAxisGivesTwoRingsAndBothLieOnBothSurfaces)
+{
+    // Slope 1 (45°), apex at the origin along +z. A sphere centred ON the axis at
+    // distance d only reaches the nappe when its radius beats the perpendicular
+    // distance d/√2 — so R = 2.5 at d = 3 cuts it twice and R = 0.5 would not touch
+    // it at all. Substituting radius = t: 2t² − 6t + (9 − 6.25) = 0 → t = (3 ∓ √3.5)/2.
+    const Surface a = cone({0, 0, 0}, {0, 0, 1}, 1.0f);
+    const Surface b = sphere({0, 0, 3}, 2.5f);
+    const auto r = intersectSurfaces(a, b);
+    ASSERT_EQ(r.kind, SurfaceIntersectionKind::TwoCircles);
+    const float t0 = (3.f - std::sqrt(3.5f)) * 0.5f, t1 = (3.f + std::sqrt(3.5f)) * 0.5f;
+    EXPECT_NEAR(r.curve.origin.z, t0, 1e-5f);
+    EXPECT_NEAR(r.curve2.origin.z, t1, 1e-5f);
+    // Ring radius is slope*t, and slope is 1 here.
+    EXPECT_NEAR(r.curve.radius, t0, 1e-5f);
+    EXPECT_NEAR(r.curve2.radius, t1, 1e-5f);
+    EXPECT_LT(curveOnBoth(r, a, b), 1e-4f);
+    SurfaceIntersection second = r;
+    second.curve = r.curve2;
+    EXPECT_LT(curveOnBoth(second, a, b), 1e-4f);
+}
+
+TEST(BRepSurfaceIntersect, ConeSphereSwallowingTheApexGivesOneRingNotTwo)
+{
+    // The second root is behind the apex, which is not on the nappe. Returning it would
+    // imprint a phantom ring on the mirror cone the Surface convention does not include.
+    const Surface a = cone({0, 0, 0}, {0, 0, 1}, 1.0f);
+    const Surface b = sphere({0, 0, 0.2f}, 1.0f);  // contains the apex
+    const auto r = intersectSurfaces(a, b);
+    ASSERT_EQ(r.kind, SurfaceIntersectionKind::Circle);
+    EXPECT_GT(r.curve.origin.z, 0.f);
+    EXPECT_LT(curveOnBoth(r, a, b), 1e-4f);
+}
+
+TEST(BRepSurfaceIntersect, ConeSphereTooFarAwayIsNone)
+{
+    const Surface a = cone({0, 0, 0}, {0, 0, 1}, 0.2f);
+    // Far off to the side of the narrow nappe, still centred on the axis line but
+    // behind the apex, so nothing on the nappe reaches it.
+    EXPECT_EQ(intersectSurfaces(a, sphere({0, 0, -3}, 0.5f)).kind, SurfaceIntersectionKind::None);
+    // Off the axis is a quartic, not "no intersection".
+    EXPECT_EQ(intersectSurfaces(a, sphere({3, 0, 4}, 0.5f)).kind,
+              SurfaceIntersectionKind::Unsupported);
+
+    // A sphere sitting on the axis INSIDE a wide nappe touches nothing. Slope 1 puts the
+    // surface d/√2 away from the axis point at depth d, so R = 0.5 at d = 2 falls well
+    // short — being centred on the axis is not the same as reaching the cone.
+    const Surface wide = cone({0, 0, 0}, {0, 0, 1}, 1.0f);
+    EXPECT_EQ(intersectSurfaces(wide, sphere({0, 0, 2}, 0.5f)).kind,
+              SurfaceIntersectionKind::None);
+    // Just over the threshold it does reach — the boundary is R√2 = d.
+    EXPECT_NE(intersectSurfaces(wide, sphere({0, 0, 2}, 1.45f)).kind,
+              SurfaceIntersectionKind::None);
+}
+
+TEST(BRepSurfaceIntersect, ConeConeApexToApexMeetsWhereTheirRadiiAgree)
+{
+    // Opposed nappes on one axis, slope 1 each, apexes at z = 0 and z = 4. Their radii
+    // agree midway, at z = 2, where both are 2.
+    const Surface a = cone({0, 0, 0}, {0, 0, 1}, 1.0f);
+    const Surface b = cone({0, 0, 4}, {0, 0, -1}, 1.0f);
+    const auto r = intersectSurfaces(a, b);
+    ASSERT_EQ(r.kind, SurfaceIntersectionKind::Circle);
+    EXPECT_NEAR(r.curve.origin.z, 2.f, 1e-5f);
+    EXPECT_NEAR(r.curve.radius, 2.f, 1e-5f);
+    EXPECT_LT(curveOnBoth(r, a, b), 1e-4f);
+}
+
+TEST(BRepSurfaceIntersect, ConeConeNestedSameDirectionMeetsOnceAndParallelNappesNever)
+{
+    // Same direction, different slopes: the steeper one catches the shallower one up.
+    // Apexes at 0 and 1, slopes 1 and 2 → 1*t == 2*(t−1) → t = 2, radius 2.
+    const Surface a = cone({0, 0, 0}, {0, 0, 1}, 1.0f);
+    const Surface b = cone({0, 0, 1}, {0, 0, 1}, 2.0f);
+    const auto r = intersectSurfaces(a, b);
+    ASSERT_EQ(r.kind, SurfaceIntersectionKind::Circle);
+    EXPECT_NEAR(r.curve.origin.z, 2.f, 1e-5f);
+    EXPECT_NEAR(r.curve.radius, 2.f, 1e-5f);
+    EXPECT_LT(curveOnBoth(r, a, b), 1e-4f);
+
+    // Equal slopes, same direction, offset apexes: nested nappes that never meet.
+    const Surface c = cone({0, 0, 1}, {0, 0, 1}, 1.0f);
+    EXPECT_EQ(intersectSurfaces(a, c).kind, SurfaceIntersectionKind::None);
+
+    // A shared apex with equal slope IS the same surface, not an intersection curve —
+    // reported Unsupported, as cylinder∩cylinder reports its coincident case.
+    EXPECT_EQ(intersectSurfaces(a, cone({0, 0, 0}, {0, 0, 1}, 1.0f)).kind,
+              SurfaceIntersectionKind::Unsupported);
+    // A shared apex with DIFFERENT slopes touches only at that apex.
+    const auto pt = intersectSurfaces(a, cone({0, 0, 0}, {0, 0, 1}, 2.0f));
+    EXPECT_EQ(pt.kind, SurfaceIntersectionKind::Point);
+    EXPECT_NEAR(pt.point.z, 0.f, 1e-6f);
+}
+
+TEST(BRepSurfaceIntersect, SurfaceDistanceMeasuresTheConeInsteadOfReturning1e30)
+{
+    // Every assertion above rests on surfaceDistance, which answered 1e30 for a cone
+    // until the cone pairs landed — so a cone seam could not be verified by the one
+    // helper whose job is verifying seams. A test that could not fail is not a test.
+    const Surface a = cone({0, 0, 0}, {0, 0, 1}, 0.5f);
+    EXPECT_NEAR(surfaceDistance(a, {0.5f, 0.f, 1.f}), 0.f, 1e-6f);   // exactly on the nappe
+    EXPECT_GT(surfaceDistance(a, {1.0f, 0.f, 1.f}), 0.f);            // outside
+    EXPECT_LT(surfaceDistance(a, {0.1f, 0.f, 1.f}), 0.f);            // inside
+    EXPECT_NEAR(surfaceDistance(a, {0.f, 0.f, -2.f}), 2.f, 1e-6f);   // behind the apex
 }
 
 }  // namespace nexus::geometry::brep::testing

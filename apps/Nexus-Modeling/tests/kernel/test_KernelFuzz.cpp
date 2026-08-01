@@ -254,6 +254,172 @@ TEST(KernelFuzz, AnalyticSurfaceBooleansWatertightDeterministicAndVolumeConservi
 // Mesh boolean: assert only the guarantees the kernel makes today — every output is
 // FINITE, DETERMINISTIC, and topologically well-formed enough to validate. Full
 // watertightness is a tracked gap (GAP-M): leaks are COUNTED, not asserted.
+// EVERY GENERATOR IN THIS FILE PRODUCES A PRIMITIVE, so until now the fuzzer had never seen a
+// body with a HOLE in it — and that is where this kernel's recent defects have lived. A hole in
+// a face arises the moment a Boolean result is fed back as an operand, which is the ordinary way
+// anyone models: drill, then cut, then boss. Four separate defects in that territory were found
+// by hand rather than by this harness, and each one it would have caught immediately:
+//
+//   * a face split gave its holes to whichever piece inherited the old face record, not to the
+//     piece that contains them;
+//   * a cut whose line crossed a hole was applied as though the hole were not there;
+//   * the arc-crossing solver skipped a line lying IN an arc's plane, which is the ordinary case
+//     for a hole in a planar face;
+//   * a cut line was required to cross a boundary exactly twice, which is false of any face that
+//     has been cut before.
+//
+// So the chain itself is fuzzed here: a random Boolean result becomes an operand for the next
+// one, to whatever depth still yields a solid. The assertion is the kernel's strongest —
+// watertight or cleanly empty, never leaky — plus determinism, which a chain is a good test of
+// because every step's input is the previous step's output.
+//
+// The decline rate is RECORDED rather than asserted tightly: a chain reaching a configuration the
+// Boolean does not yet describe returns empty by contract, and that is not a failure. The floor
+// exists so the chain cannot quietly stop producing solids altogether.
+TEST(KernelFuzz, ChainedBooleansStayWatertightOrEmptyAndDeterministic)
+{
+    auto prim = [](std::mt19937& rng) {
+        std::uniform_int_distribution<int> kind(0, 3);
+        std::uniform_real_distribution<float> dim(0.5f, 1.8f);
+        switch (kind(rng)) {
+            case 0: { const float w = dim(rng), h = dim(rng), d = dim(rng);
+                      return brep::makeBox(w, h, d); }
+            case 1: { const float r = dim(rng) * 0.6f, h = dim(rng) + 2.f;
+                      return brep::makeCylinder(r, h, 16); }
+            case 2: { const float r = dim(rng);
+                      return brep::makeSphere(r, 8, 12); }
+            default: { const float r = dim(rng), h = dim(rng) + 1.f;
+                       return brep::makeCone(r, h, 16); }
+        }
+    };
+    auto sound = [](const brep::Body& b) {
+        return b.faceCount() > 0 && b.isClosed() && b.checkIntegrity().ok && b.checkGeometry().ok;
+    };
+    auto holedFaces = [](const brep::Body& b) {
+        int n = 0;
+        for (uint32_t f = 0; f < static_cast<uint32_t>(b.faceCount()); ++f)
+            if (b.face(f).alive && !b.face(f).innerLoops.empty()) ++n;
+        return n;
+    };
+
+    // A HOLE NEEDS A DRILL, AND RANDOM PLACEMENT ALMOST NEVER DRILLS. The first version of this
+    // test placed a random primitive at a random offset and asserted, as a guard on its own
+    // reach, that some chain eventually produced a face with a hole. It never did — not once in
+    // 60 chains. A hole appears only when a tool passes CLEANLY THROUGH a face without reaching
+    // its edges, and a uniformly-placed primitive of comparable size to the body does that
+    // essentially never. The guard was right and the generator was blind, which is the same
+    // lesson this file learned when it turned out never to have emitted a curved surface.
+    //
+    // So drilling is generated deliberately: a slender tool, longer than the body and narrow
+    // against it, aimed near the middle of its bounding box. That is not stacking the deck — it
+    // is the difference between a generator that CAN reach the territory and one that cannot.
+    auto boundsOf = [](const brep::Body& b, Vec3d& lo, Vec3d& hi) {
+        lo = Vec3d{1e30, 1e30, 1e30};
+        hi = Vec3d{-1e30, -1e30, -1e30};
+        for (uint32_t v = 0; v < static_cast<uint32_t>(b.vertexCount()); ++v) {
+            if (!b.vertex(v).alive) continue;
+            const Vec3d& p = b.vertex(v).point;
+            lo = Vec3d{std::min(lo.x, p.x), std::min(lo.y, p.y), std::min(lo.z, p.z)};
+            hi = Vec3d{std::max(hi.x, p.x), std::max(hi.y, p.y), std::max(hi.z, p.z)};
+        }
+    };
+
+    std::mt19937 rng(0x5EED11u);
+    std::uniform_real_distribution<double> tr(-1.2, 1.2);
+    int chains = 0, steps = 0, solids = 0, empties = 0, sawHole = 0, drills = 0;
+    int coaxialDrills = 0;
+
+    for (int it = 0; it < 60; ++it) {
+        brep::Body cur = prim(rng);
+        ASSERT_TRUE(sound(cur)) << "it=" << it << ": the seed primitive is not a solid";
+        ++chains;
+
+        for (int depth = 0; depth < 3; ++depth) {
+            brep::Body tool;
+            const bool drill = (rng() % 2u == 0u);
+            if (drill) {
+                // slender and long, aimed near the middle of the body: this is what bores a hole
+                Vec3d lo{}, hi{};
+                boundsOf(cur, lo, hi);
+                const double sx = hi.x - lo.x, sy = hi.y - lo.y, sz = hi.z - lo.z;
+                const double span = std::max(sx, std::max(sy, sz));
+                if (!(span > 1e-6)) break;
+                std::uniform_real_distribution<double> frac(0.10, 0.30), jit(-0.15, 0.15);
+                const double rad = frac(rng) * span;
+                tool = (rng() % 2u == 0u)
+                           ? brep::makeCylinder(static_cast<float>(rad),
+                                                static_cast<float>(span * 3.0), 16)
+                           : brep::makeBox(static_cast<float>(rad * 2.0),
+                                           static_cast<float>(rad * 2.0),
+                                           static_cast<float>(span * 3.0));
+                const Vec3d c{0.5 * (lo.x + hi.x), 0.5 * (lo.y + hi.y), 0.5 * (lo.z + hi.z)};
+                // Some drills are placed EXACTLY on the axis. Jittering every one of them
+                // — which is what this generator did at first — puts the tool off-axis
+                // with probability 1, and the axially-aligned configurations are precisely
+                // the ones with a closed-form seam (a cone or a sphere met by a coaxial
+                // bore). The cone∩cylinder, cone∩sphere and cone∩cone pairs were missing
+                // from intersectSurfaces entirely, and this test could not see it: adding
+                // them moved the fully-jittered corpus by exactly zero steps while a
+                // coaxial probe went from 23.9% empty to 0%. A generator that always
+                // perturbs cannot reach the aligned case.
+                const bool coaxial = (rng() % 4u == 0u);
+                const double jx = coaxial ? 0.0 : jit(rng) * span;
+                const double jy = coaxial ? 0.0 : jit(rng) * span;
+                tool.translate({c.x + jx, c.y + jy, c.z});
+                ++drills;
+                if (coaxial) ++coaxialDrills;
+            } else {
+                tool = prim(rng);
+                tool.translate({tr(rng), tr(rng), tr(rng)});
+            }
+            const brep::BooleanOp op = (rng() % 3u == 0u)   ? brep::BooleanOp::Union
+                                     : (rng() % 2u == 0u)   ? brep::BooleanOp::Intersection
+                                                            : brep::BooleanOp::Difference;
+            const brep::Body r = brep::booleanToBody(cur, tool, op);
+            ++steps;
+
+            // THE contract, at every step of every chain.
+            const auto ig = r.checkIntegrity();
+            ASSERT_TRUE(ig.ok) << "it=" << it << " depth=" << depth << ": " << ig.reason;
+            if (r.faceCount() == 0u) { ++empties; break; }   // declined: the chain ends here
+            ASSERT_TRUE(r.isClosed())
+                << "it=" << it << " depth=" << depth << ": non-empty but not closed";
+            ASSERT_TRUE(r.checkGeometry().ok)
+                << "it=" << it << " depth=" << depth << ": " << r.checkGeometry().reason;
+            ++solids;
+            if (holedFaces(r) > 0) ++sawHole;
+
+            // Determinism: the same two operands must give the same answer, every time.
+            const brep::Body again = brep::booleanToBody(cur, tool, op);
+            ASSERT_EQ(again.faceCount(), r.faceCount())
+                << "it=" << it << " depth=" << depth << ": not deterministic";
+            ASSERT_EQ(again.vertexCount(), r.vertexCount()) << "it=" << it << " depth=" << depth;
+            for (uint32_t v = 0; v < static_cast<uint32_t>(r.vertexCount()); ++v) {
+                ASSERT_EQ(again.vertex(v).point.x, r.vertex(v).point.x) << "v=" << v;
+                ASSERT_EQ(again.vertex(v).point.y, r.vertex(v).point.y) << "v=" << v;
+                ASSERT_EQ(again.vertex(v).point.z, r.vertex(v).point.z) << "v=" << v;
+            }
+            cur = r;
+        }
+    }
+
+    EXPECT_EQ(chains, 60);
+    EXPECT_GT(steps, 60) << "the sweep did not run";
+    // Recorded, not tightly asserted — a chain that reaches a configuration the Boolean does not
+    // describe returns empty by contract. The floor is here so chains cannot stop producing
+    // solids altogether without anyone noticing.
+    EXPECT_GT(solids, steps / 4)
+        << solids << " solids from " << steps << " chained steps (" << empties
+        << " declined) — chaining has regressed";
+    EXPECT_GT(drills, 0) << "the generator never attempted a drill";
+    EXPECT_GT(coaxialDrills, 0)
+        << "every drill was jittered off the axis, so the closed-form seams (cone or sphere "
+           "met by a coaxial bore) are never exercised — check the generator";
+    EXPECT_GT(sawHole, 0)
+        << "no chain ever produced a face with a hole, so this test is not reaching the "
+           "territory it exists for — check the generator";
+}
+
 TEST(KernelFuzz, MeshBooleanFiniteAndDeterministicUnderRandom)
 {
     std::mt19937 rng(0xBADF00Du);

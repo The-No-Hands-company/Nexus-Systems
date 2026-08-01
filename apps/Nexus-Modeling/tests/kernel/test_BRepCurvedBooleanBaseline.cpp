@@ -13,8 +13,12 @@
 //   2. All three curved pairs — box/sphere, box/cylinder, sphere/sphere — SEW. This
 //      entry began life pinning them as empty; every fixture has flipped, so it now
 //      guards against regression instead.
-//   3. Genuinely out-of-scope surface pairs (cyl∩cyl, sphere∩cyl, cone∩*) stay
-//      Unsupported and bail to empty (PERMANENT — outside the Circle-seam v1).
+//   3. Genuinely out-of-scope surface pairs stay Unsupported and bail to empty
+//      (never leaky). The membership of that set has SHRUNK as the pairwise table
+//      filled in — sphere∩cyl and then the three cone pairs each moved in for their
+//      axially-symmetric case — so what is permanent is the CONTRACT, not the list.
+//      The line every curved pair now falls on: axially symmetric ⇒ a real circle;
+//      anything else ⇒ a quartic, still declined, and declined out loud.
 //   4. A high-facet curved pair does not blow up / hang — the imprint face-budget
 //      cap bounds it and the call returns, honoring watertight-or-empty.
 
@@ -149,17 +153,30 @@ TEST(CurvedBooleanBaseline, OutOfScopeSurfacePairsStayUnsupported)
     const Surface cone = coneSurface({0.f, 0.f, 0.f}, {0.f, 0.f, 1.f}, 0.5f);
 
     using SIK = SurfaceIntersectionKind;
-    // Genuinely out of scope: each of these is a quartic space curve, not a Line or Circle.
-    EXPECT_EQ(intersectSurfaces(cyl, cyl2).kind, SIK::Unsupported);   // crossing axes
-    EXPECT_EQ(intersectSurfaces(cone, sph).kind, SIK::Unsupported);   // cone∩sphere
-    EXPECT_EQ(intersectSurfaces(cone, cone).kind, SIK::Unsupported);  // cone∩cone
+    // Genuinely out of scope: a quartic space curve, not a Line or Circle.
+    EXPECT_EQ(intersectSurfaces(cyl, cyl2).kind, SIK::Unsupported);  // crossing axes
+    // Two coincident cones are the SAME surface, which has no intersection CURVE.
+    EXPECT_EQ(intersectSurfaces(cone, cone).kind, SIK::Unsupported);
 
-    // sphere∩cylinder has moved PARTLY in scope, and the boundary is where the symmetry
-    // is: a sphere centred ON the axis meets the cylinder in two rings, and one centred
-    // anywhere else meets it in a quartic that is still declined.
+    // Every curved pair here follows one boundary: the section is a genuine circle
+    // exactly when the configuration is axially symmetric, and a quartic otherwise.
+    // The cone pairs used to be declined on BOTH sides of that line, which is why a
+    // cone unioned with a coaxial rod came back empty.
     EXPECT_EQ(intersectSurfaces(sph, cyl).kind, SIK::TwoCircles) << "centre on the axis";
     const Surface offAxis = sphereSurface({0.4f, 0.f, 0.f}, 1.2f);
     EXPECT_EQ(intersectSurfaces(offAxis, cyl).kind, SIK::Unsupported) << "centre off the axis";
+
+    // cone∩sphere: `sph` is centred at the origin, which is this cone's APEX and so on
+    // its axis — the sphere cuts the nappe in one ring (the second root is behind the
+    // apex and is not on the surface). Moved off the axis it is a quartic again.
+    EXPECT_EQ(intersectSurfaces(cone, sph).kind, SIK::Circle) << "centre on the axis";
+    EXPECT_EQ(intersectSurfaces(cone, sphereSurface({0.4f, 0.f, 0.5f}, 1.2f)).kind,
+              SIK::Unsupported)
+        << "centre off the axis";
+
+    // cone∩cylinder: coaxial is the ring where the nappe reaches the bore's radius.
+    EXPECT_EQ(intersectSurfaces(cone, cyl).kind, SIK::Circle) << "coaxial";
+    EXPECT_EQ(intersectSurfaces(cone, cyl2).kind, SIK::Unsupported) << "crossing axes";
 }
 
 // (3b) PERMANENT: solids whose overlap would need an unsupported seam bail to
@@ -190,6 +207,88 @@ TEST(CurvedBooleanBaseline, NoBlowUpOnHighFacetCurvedInputs)
     const Body sph = sphereAt(1.6f, 16, 24, {0.5f, 0.f, 0.f});  // ~360 curved faces
     const Body r = booleanToBody(box, sph, BooleanOp::Union);
     EXPECT_TRUE(watertightOrEmpty(r));
+}
+
+
+// A closed seam is not the same as a CORRECT seam: booleanToBody's watertight-or-empty
+// contract says nothing about where the ring landed. These check the resulting solid's
+// volume against an integral worked out by hand, which shares no code with the kernel.
+//
+// cone(baseR=1, h=2) has its apex at z=+1 and its base at z=−1, so its radius at height
+// z is (1−z)/2 and its volume is πr²h/3. A coaxial rod of radius 0.3 meets the nappe
+// where (1−z)/2 = 0.3, i.e. z = 0.4 — the ring the cone∩cylinder pair returns.
+TEST(CurvedBooleanBaseline, ConeMinusCoaxialRodHasTheHandIntegratedVolume)
+{
+    const Body r = booleanToBody(makeCone(1.f, 2.f, 16), makeCylinder(0.3f, 6.f, 16),
+                                 BooleanOp::Difference);
+    ASSERT_GT(r.faceCount(), 0u) << "cone − coaxial rod returned EMPTY";
+    EXPECT_TRUE(r.isClosed());
+    EXPECT_TRUE(r.checkIntegrity().ok);
+    EXPECT_TRUE(r.checkGeometry().ok);
+
+    // π∫₋₁^0.4 ((1−z)²/4 − 0.09) dz, substituting u = 1−z:
+    // π[u³/12 − 0.09u] from 0.6 to 2 = π(0.486667 + 0.036) = π·0.5226667.
+    const double expected = 3.14159265358979324 * 0.5226666666666667;
+    EXPECT_NEAR(r.massProperties().volume, expected, expected * 1e-5);
+}
+
+TEST(CurvedBooleanBaseline, ConePlusCoaxialRodHasTheHandIntegratedVolume)
+{
+    const Body r = booleanToBody(makeCone(1.f, 2.f, 16), makeCylinder(0.3f, 6.f, 16),
+                                 BooleanOp::Union);
+    ASSERT_GT(r.faceCount(), 0u) << "cone ∪ coaxial rod returned EMPTY";
+    EXPECT_TRUE(r.isClosed());
+    EXPECT_TRUE(r.checkGeometry().ok);
+
+    // cone + rod − (rod ∩ cone). Below z = 0.4 the nappe is wider than the rod, so the
+    // rod's disc is wholly inside it; above z = 0.4 the cone is the narrower of the two.
+    const double PI = 3.14159265358979324;
+    const double expected = PI * 2.0 / 3.0        // cone: πr²h/3
+                            + PI * 0.09 * 6.0     // rod
+                            - PI * 0.144;         // overlap: 0.09·1.4 + ∫₀.₄¹((1−z)/2)²dz
+    EXPECT_NEAR(r.massProperties().volume, expected, expected * 1e-5);
+}
+
+TEST(CurvedBooleanBaseline, TwoCoaxialConesOfDifferentSlopeUnionAcrossTheirCrossingRing)
+{
+    // The slopes have to DIFFER for this to exercise cone∩cone at all: two nappes of the
+    // same slope on one axis are parallel and never meet, so an earlier version of this
+    // test — identical cones, one lifted — passed just as well with the cone pairs removed
+    // from the dispatch. It was measuring plane∩cone and nothing else.
+    //
+    // a: apex z=+1, base z=−1, radius (1−z)/2  (slope 0.5)
+    // b: apex z=+0.5, base z=−1.5, radius 0.75·(0.5−z)  (slope 0.75)
+    // They agree at z = −0.5, both 0.75 — the ring cone∩cone returns.
+    Body b = makeCone(1.5f, 2.f, 16);
+    b.translate({0.0, 0.0, -0.5});
+    const Body r = booleanToBody(makeCone(1.f, 2.f, 16), b, BooleanOp::Union);
+    ASSERT_GT(r.faceCount(), 0u) << "cone ∪ steeper coaxial cone returned EMPTY";
+    EXPECT_TRUE(r.isClosed());
+    EXPECT_TRUE(r.checkGeometry().ok);
+
+    // π∫max(rA,rB)² dz, split at the crossing: a is wider above z=−0.5 and b below it.
+    // 0.0104167 + 0.2708333 + 0.4453125 + 0.8671875 = 1.59375, and the same number comes
+    // out of A + B − A∩B = 0.666667 + 1.5 − 0.5729167.
+    const double PI = 3.14159265358979324;
+    const double expected = PI * 1.59375;
+    EXPECT_NEAR(r.massProperties().volume, expected, expected * 1e-5);
+}
+
+TEST(CurvedBooleanBaseline, ConeMinusOnAxisSphereHasTheHandIntegratedVolume)
+{
+    Body s = makeSphere(0.5f, 8, 12);
+    s.translate({0.0, 0.0, 0.6});
+    const Body r = booleanToBody(makeCone(1.f, 2.f, 16), s, BooleanOp::Difference);
+    ASSERT_GT(r.faceCount(), 0u) << "cone − on-axis sphere returned EMPTY";
+    EXPECT_TRUE(r.isClosed());
+    EXPECT_TRUE(r.checkGeometry().ok);
+
+    // The removed volume is π∫ min(coneR, sphereR)² dz over z ∈ [0.1, 1]. The two radii
+    // cross where 1.25z² − 1.7z + 0.36 = 0, i.e. z = 0.26237; the sphere is narrower
+    // below it and the cone above. Evaluating both halves gives 0.0452011·π.
+    const double PI = 3.14159265358979324;
+    const double expected = PI * 2.0 / 3.0 - PI * 0.0452011;
+    EXPECT_NEAR(r.massProperties().volume, expected, expected * 1e-4);
 }
 
 }  // namespace nexus::geometry::brep::testing

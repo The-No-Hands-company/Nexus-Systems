@@ -134,12 +134,19 @@ TEST(BRepConeSection, ObliqueAndAxisParallelPlanesStayUnsupported)
     // parallel to the axis but missing the apex: a hyperbola
     EXPECT_EQ(intersectSurfaces(planeAt({1., 0., 0.}, {1., 0., 0.}), cone).kind,
               SurfaceIntersectionKind::Unsupported);
-    // still out of scope: cone against anything curved
+    // Cone against a curved surface is no longer out of scope wholesale — the boundary is
+    // axial symmetry, the same one the plane cases above follow. This sphere is centred ON
+    // the axis, so it cuts the nappe in two honest rings; nudged off the axis, the section
+    // becomes a quartic and is declined again.
     Surface sph;
     sph.kind = SurfaceKind::Sphere;
     sph.origin = {0., 0., 2.};
     sph.radius = 1.0;
-    EXPECT_EQ(intersectSurfaces(cone, sph).kind, SurfaceIntersectionKind::Unsupported);
+    EXPECT_EQ(intersectSurfaces(cone, sph).kind, SurfaceIntersectionKind::TwoCircles);
+    Surface offAxis = sph;
+    offAxis.origin = {0.3, 0., 2.};
+    EXPECT_EQ(intersectSurfaces(cone, offAxis).kind, SurfaceIntersectionKind::Unsupported);
+    // Two coincident cones are one surface, so there is no intersection CURVE to report.
     EXPECT_EQ(intersectSurfaces(cone, cone).kind, SurfaceIntersectionKind::Unsupported);
 }
 

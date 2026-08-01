@@ -377,6 +377,172 @@ SurfaceIntersection sphereSphere(const Surface& a, const Surface& b, Tolerance t
     r.curve = circleCurve(center, u, std::sqrt(cr2));
     return r;
 }
+
+// ── The cone pairs ───────────────────────────────────────────────────────────
+//
+// The cone was the one quadric missing from the pairwise table: every pair
+// involving it except plane∩cone fell through the dispatch to Unsupported, and
+// imprintOneWay treats Unsupported exactly like None — so the imprint did no
+// work and still reported success, and booleanToBody's watertight-or-empty
+// invariant then turned that into a clean-looking empty result. Measured before
+// this landed: cone(r=1,h=2) ∪ a coaxial rod returned EMPTY at every offset
+// tested, and so did the difference; a chained fuzz run put the cone-involving
+// share of the empties in the thousands of steps.
+//
+// A cone's Surface stores origin = APEX, normal = axis (apex → base), radius =
+// SLOPE (= tan of the half-angle), and its axial parameter t is distance from
+// the apex, so the ring radius at t is slope*t and only t > 0 is on the nappe.
+// These three handle the AXIALLY ALIGNED configurations, whose section is a
+// genuine circle. Everything else is a quartic and still says Unsupported —
+// truthfully, which is what the general SSI will replace.
+
+// cone ∩ cylinder, cylinder axis collinear with the cone's and through the apex:
+// the nappe reaches the cylinder's radius at exactly one axial distance.
+SurfaceIntersection coneCylinder(const Surface& cone, const Surface& cyl, Tolerance tol)
+{
+    SurfaceIntersection r;
+    if (!exactlyCollinear(cone.normal, cyl.normal)) {
+        r.kind = SurfaceIntersectionKind::Unsupported;  // skew/parallel: a quartic
+        return r;
+    }
+    const Vec3 ax = normalize(cone.normal);
+    // The cylinder's axis must pass through the apex. Parallel-but-offset axes are
+    // still a quartic, so the radial offset is a hard gate, not a tolerance nudge.
+    const Vec3 delta = sub(cone.origin, cyl.origin);
+    if (length(sub(delta, scale(ax, dot(delta, ax)))) > tol.absolute) {
+        r.kind = SurfaceIntersectionKind::Unsupported;
+        return r;
+    }
+    const double slope = cone.radius;
+    if (!(slope > 0.0)) {
+        r.kind = SurfaceIntersectionKind::Unsupported;  // zero slope: a ray, not a surface
+        return r;
+    }
+    if (!(cyl.radius > 0.0)) {
+        // The cylinder has collapsed onto its own axis, which meets the nappe only
+        // where the nappe has zero radius — the apex.
+        r.kind = SurfaceIntersectionKind::Point;
+        r.point = cone.origin;
+        return r;
+    }
+    const double t = cyl.radius / slope;  // slope*t == cyl.radius; t > 0 always
+    r.kind = SurfaceIntersectionKind::Circle;
+    r.curve = circleCurve(add(cone.origin, scale(ax, t)), ax, cyl.radius);
+    return r;
+}
+
+// cone ∩ sphere, sphere centred ON the cone's axis. Substituting the nappe's
+// radius slope*t into |p − centre|² = R² gives (1+slope²)t² − 2·d·t + d² − R² = 0
+// for d the apex→centre axial distance: a quadratic, so at most two rings.
+SurfaceIntersection coneSphere(const Surface& cone, const Surface& sphere, Tolerance tol)
+{
+    SurfaceIntersection r;
+    const double slope = cone.radius;
+    if (!(slope > 0.0)) {
+        r.kind = SurfaceIntersectionKind::Unsupported;
+        return r;
+    }
+    const Vec3 ax = normalize(cone.normal);
+    const Vec3 delta = sub(sphere.origin, cone.origin);
+    const double d = dot(delta, ax);
+    if (length(sub(delta, scale(ax, d))) > tol.absolute) {
+        r.kind = SurfaceIntersectionKind::Unsupported;  // off-axis: a quartic
+        return r;
+    }
+    const double k = 1.0 + slope * slope;
+    const double R = sphere.radius;
+    // disc = d² − k(d² − R²), expanded so the R² term does not cancel catastrophically.
+    const double disc = R * R * k - slope * slope * d * d;
+    const double eps = tol.absolute * tol.absolute;
+    if (disc < -eps) {
+        r.kind = SurfaceIntersectionKind::None;
+        return r;
+    }
+    auto ring = [&](double t) { return circleCurve(add(cone.origin, scale(ax, t)), ax, slope * t); };
+    if (disc <= eps) {
+        // Inscribed: the two rings have merged into one tangency circle. Reported as a
+        // single Circle, like the sphere∩cylinder and cylinder∩cylinder merged cases,
+        // so a caller cannot imprint the same seam twice.
+        const double t = d / k;
+        if (t <= tol.absolute) { r.kind = SurfaceIntersectionKind::None; return r; }
+        r.kind = SurfaceIntersectionKind::Circle;
+        r.curve = ring(t);
+        return r;
+    }
+    const double sq = std::sqrt(disc);
+    const double t0 = (d - sq) / k, t1 = (d + sq) / k;  // t0 < t1
+    // Only t > 0 is on the nappe. A sphere swallowing the apex leaves exactly one ring,
+    // which is why the roots are filtered rather than assumed to come in pairs.
+    const bool keep0 = t0 > tol.absolute, keep1 = t1 > tol.absolute;
+    if (keep0 && keep1) {
+        r.kind = SurfaceIntersectionKind::TwoCircles;
+        r.curve = ring(t0);
+        r.curve2 = ring(t1);
+        return r;
+    }
+    if (keep1) {
+        r.kind = SurfaceIntersectionKind::Circle;
+        r.curve = ring(t1);
+        return r;
+    }
+    r.kind = SurfaceIntersectionKind::None;
+    return r;
+}
+
+// cone ∩ cone, apexes on one shared axis. Two nappes of different slope agree on
+// radius at a single axial station (or nowhere, when the slopes are equal).
+SurfaceIntersection coneCone(const Surface& a, const Surface& b, Tolerance tol)
+{
+    SurfaceIntersection r;
+    const double sa = a.radius, sb = b.radius;
+    if (!(sa > 0.0) || !(sb > 0.0) || !exactlyCollinear(a.normal, b.normal)) {
+        r.kind = SurfaceIntersectionKind::Unsupported;
+        return r;
+    }
+    const Vec3 ax = normalize(a.normal);
+    const Vec3 delta = sub(b.origin, a.origin);
+    const double tb = dot(delta, ax);  // b's apex, in a's axial coordinate
+    if (length(sub(delta, scale(ax, tb))) > tol.absolute) {
+        r.kind = SurfaceIntersectionKind::Unsupported;  // parallel but offset: a quartic
+        return r;
+    }
+    // Collinear axes may still point opposite ways — apex-to-apex cones are a
+    // perfectly ordinary configuration, and b's own axial parameter runs the other way.
+    const double sgn = dot(normalize(b.normal), ax) >= 0.0 ? 1.0 : -1.0;
+
+    if (std::abs(tb) <= tol.absolute) {
+        // Shared apex: same-slope cones facing the same way are the SAME surface (reported
+        // Unsupported, as cylinder∩cylinder reports its coincident case); otherwise the
+        // only common point is the apex itself.
+        if (sgn > 0.0 && tol.nearlyEqual(sa, sb)) {
+            r.kind = SurfaceIntersectionKind::Unsupported;
+            return r;
+        }
+        r.kind = SurfaceIntersectionKind::Point;
+        r.point = a.origin;
+        return r;
+    }
+
+    // sa*t == sb*(sgn*(t - tb)) — the two nappes' radii, in a's axial coordinate.
+    double t = 0.0;
+    if (sgn > 0.0) {
+        if (tol.nearlyEqual(sa, sb)) {
+            r.kind = SurfaceIntersectionKind::None;  // nested parallel nappes never meet
+            return r;
+        }
+        t = sb * tb / (sb - sa);
+    } else {
+        t = sb * tb / (sa + sb);  // sa + sb > 0, so this always solves
+    }
+    // The station has to land on BOTH nappes, not on either one's phantom mirror.
+    if (t <= tol.absolute || sgn * (t - tb) <= tol.absolute) {
+        r.kind = SurfaceIntersectionKind::None;
+        return r;
+    }
+    r.kind = SurfaceIntersectionKind::Circle;
+    r.curve = circleCurve(add(a.origin, scale(ax, t)), ax, sa * t);
+    return r;
+}
 }  // namespace
 
 float surfaceDistance(const Surface& s, const Vec3& p)
@@ -391,6 +557,17 @@ float surfaceDistance(const Surface& s, const Vec3& p)
             const Vec3 w = sub(p, s.origin);
             const Vec3 radial = sub(w, scale(ax, dot(w, ax)));
             return length(radial) - s.radius;
+        }
+        case SurfaceKind::Cone: {
+            // Mirrors AnalyticBRep's internal surfaceDistanceD. Returning 1e30 here — as
+            // this did until the cone pairs landed — made every cone seam unverifiable by
+            // the one helper whose stated job is verifying seams lie on both surfaces.
+            // s.radius is the SLOPE and s.origin the apex; nothing lies behind the apex.
+            const Vec3 ax = normalize(s.normal);
+            const Vec3 w = sub(p, s.origin);
+            const double axial = dot(w, ax);
+            if (axial <= 0.0) return static_cast<float>(length(w));
+            return static_cast<float>(length(sub(w, scale(ax, axial))) - s.radius * axial);
         }
         default:
             return 1e30f;  // NURBS: not measured analytically here
@@ -411,6 +588,11 @@ SurfaceIntersection intersectSurfaces(const Surface& a, const Surface& b, Tolera
     if (a.kind == K::Cylinder && b.kind == K::Sphere) return sphereCylinder(b, a, tol);
     if (a.kind == K::Plane && b.kind == K::Cone) return planeCone(a, b, tol);
     if (a.kind == K::Cone && b.kind == K::Plane) return planeCone(b, a, tol);
+    if (a.kind == K::Cone && b.kind == K::Cylinder) return coneCylinder(a, b, tol);
+    if (a.kind == K::Cylinder && b.kind == K::Cone) return coneCylinder(b, a, tol);
+    if (a.kind == K::Cone && b.kind == K::Sphere) return coneSphere(a, b, tol);
+    if (a.kind == K::Sphere && b.kind == K::Cone) return coneSphere(b, a, tol);
+    if (a.kind == K::Cone && b.kind == K::Cone) return coneCone(a, b, tol);
     SurfaceIntersection r;
     r.kind = SurfaceIntersectionKind::Unsupported;
     return r;
