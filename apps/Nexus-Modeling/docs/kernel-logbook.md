@@ -42,6 +42,7 @@ The exhaustive technical log lives beside this book in the audit memory and the 
   - 61. It refined the boundary and then ignored it
   - 62. Where the points come from
   - 63. Asked the same question five thousand times
+  - 64. Passing because nothing had succeeded
 
 ---
 
@@ -1347,6 +1348,40 @@ The six new tests are one question asked several ways — after the body changes
 A note on how this chapter nearly went wrong, because it is the third time in this stretch. The first per-suite measurements after adding the cache showed no improvement at all, and the conclusion drafted from them was that `classifyPoint` had not been the bottleneck. It was: `nexus_gfx_core` had been rebuilt and the *test binary* had not, so every one of those timings came from the previous build. The same hazard has now appeared as a link failure, a compile failure under `-Werror`, and a link that simply was not requested. **A measurement that does not confirm what it is measuring is not a measurement**, and the fix is mechanical — have the harness fail loudly when the build it depends on did not happen.
 
 Two thousand six hundred and thirty-eight tests ran; all passed, with five hardware skips.
+
+---
+
+---
+
+## 64. Passing because nothing had succeeded
+
+The planar faces were the last of it, and they were the easy half of this chapter. A flat polygon is reproduced exactly by any triangulation of it, so the fan was never wrong about a planar face's volume or area — a box has tessellated to exactly 8 and 24 throughout this book, before and after. What it was wrong about is the mesh: the same zero-area triangles where the ring's first vertex lies on a straight refined edge, and the same chord flung across a boundary edge that was already subdivided, used four times instead of twice. A box at sixteen subdivisions carried a hundred and ninety-two of the first and forty-eight of the second; the union of two boxes, five hundred and fifty-two and seventy-two.
+
+None of that shows in a volume, an area, or any topological invariant the kernel checks, which is how it lasted. It matters anyway, because `classifyPoint` casts its parity ray at this mesh: a zero-area triangle has no defined orientation and a four-times-used edge is not a manifold boundary.
+
+The repair is the same shape as the curved one and simpler. The ring is triangulated in the face's own plane by the constrained Delaunay, every loop segment — outer and holes alike — passed as a constraint. Projecting onto an orthonormal in-plane frame is an isometry, so this is the same two-dimensional problem the geometry already was. And unlike the sphere there are **no interior points**: a plane has no curvature to resolve, so the totals still telescope and every conservation number came out byte-identical to before. Across box, drilled plate, seamed union and arc-bitten face, degenerate triangles and non-manifold edges went to zero at every level.
+
+The interesting half is what it broke.
+
+An app-layer test called `BooleanOfTwoBodiesStaysAnalyticAndChains` began failing. Its subject is the property this whole B-rep path exists for: an operation's result is still a solid, so the next operation can consume it. Its fixture bored a cylinder through a box and then subtracted a bar, and its final assertion was that the chained result still carried an analytic body.
+
+The analytic chain declines on that pair. It declines in this build and it declined in every build before it — I instrumented both to be sure, and the second Boolean returns a clean empty body either way, which is its watertight-or-empty contract working exactly as designed. So how had the assertion been passing?
+
+Because the *mesh* fallback failed too. `BooleanMode` tries the analytic path, and on an empty result falls back to cutting triangles; only if that succeeds does it reach `body.reset()` — which it must, because a mesh operation cannot update an analytic body and leaving a stale one attached would hand the next operation a solid that no longer matches what is on screen. Both paths failing meant the reset never ran, the node kept the body from the *previous* operation, and `has_value()` returned true.
+
+> The assertion was reading true because nothing had succeeded. It was not testing that the chain stays analytic; it was testing that two consecutive failures leave the previous answer lying around.
+
+This chapter's fix made the mesh path work. The app then correctly dropped the stale body — the very contract its sibling test `FallingBackToTheMeshPathClearsTheStaleBody` asserts directly — and the test failed for finally doing the right thing.
+
+It took a while to see, and the wrong turns are worth recording because each was a reasonable guess. My first reproduction called the two Booleans directly and found the chain empty in *both* builds, which looked like the change being innocent. Then the operands: I assumed the fixture's cylinder had sixteen segments and it has twenty-four. Then the tolerance, which turned out to be the default. Only instrumenting `BooleanMode` itself — printing what it decided, rather than what I believed it must have decided — produced the one line that explained everything: `mesh fallback valid=0` in one build and `valid=1` in the other.
+
+So the fixture is now a pair whose analytic chain genuinely works, with the volumes asserted against closed-form arithmetic at both steps rather than left implicit: a one-by-one bar through a two-by-two-by-two box removes exactly 2, and a crossbar removes 2 more less the unit cube they share — 8 to 6 to 5, exact at both. And the declining case is kept as its own characterization, `ChainingOffABoredBoxStillDeclinesAndDropsTheStaleBody`, which asserts that the analytic path declines, that the operation still happens on the mesh path because that is what the user asked for, and that the stale body is dropped. It carries an instruction to promote itself into the test above if the analytic chain ever learns the configuration.
+
+**What was proven.** Planar degenerate triangles and non-manifold edges: zero, on every fixture, at every subdivision level from 0 to 16. Box volume and area still exactly 8 and 24. Conservation numbers unchanged to the digit. `ctest` 2641 tests in **44.0 seconds**. Both new tests fail on revert, and so does the new characterization — without the fix the mesh path still fails, so the stale body is still not dropped.
+
+A last note on this arc as a whole, because it is the fourth time. A test can be green for a reason that has nothing to do with what it says. This one needed two independent failures to stay green, and the fix that broke it was an improvement to one of them. The lesson is not to distrust green suites in general — it is that **when a test starts failing after an unrelated improvement, the first hypothesis should be that the test was wrong, not that the improvement was.**
+
+Two thousand six hundred and forty-one tests ran; all passed, with five hardware skips.
 
 ---
 
