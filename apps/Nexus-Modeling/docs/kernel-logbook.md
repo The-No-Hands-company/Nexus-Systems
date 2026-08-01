@@ -40,6 +40,7 @@ The exhaustive technical log lives beside this book in the audit memory and the 
   - 59. The same mistake, one dimension up
   - 60. The oracle was the broken one
   - 61. It refined the boundary and then ignored it
+  - 62. Where the points come from
 
 ---
 
@@ -1293,6 +1294,30 @@ Three characterizations were retired, and each had asked to be in its own failur
 A fourth change was smaller and sharper. One test placed a point at exactly 11.25° on a cylinder — the midpoint of a facet, chosen because that is where a chordal hull is furthest inside the true surface. At three subdivisions the rim carries sixty-four points spaced 5.625° apart, and 11.25 is exactly one of them, so the point that was chosen for being maximally *off* the tessellation landed exactly *on* it and the assertion inverted. It is now 0.7071 of a facet, which is a vertex for no subdivision count at all. A fixture built on a midpoint is built on a knife edge, because midpoints are what refinement lands on.
 
 Two thousand six hundred and thirty tests ran; all passed, with five hardware skips.
+
+---
+
+---
+
+## 62. Where the points come from
+
+The previous chapter fixed the tessellator for cylinders and cones and stopped at the sphere, having built the obvious fix and thrown it away. The sphere is curved both ways: there is no ruling along which it is flat, so no arrangement of boundary-only points describes its interior and it genuinely needs samples inside. Adding them worked — volume from a 3.9587 plateau to 4.18757 against an exact 4.18879 — and it broke something that turned out to be worth more.
+
+What it broke is a property so quiet that it took a failing test to notice it existed. A tessellated identity like U + I = A + B holds not because the tessellator is accurate — it isn't — but because a boundary-only triangulation's totals **telescope**. Every vertex lies on a boundary that is shared, so two different decompositions of the same solid produce different triangles that sum to the same volume. The identity was surviving on that, not on quality.
+
+Interior points give it up, because they are the vertices that are *not* shared. And the way they were chosen made it worse: their positions came from each face's own boundary values, so a primitive band face and the Boolean fragment cut out of it placed them differently. Add that the lattice has to be bounded — `classifyPoint` tessellates on *every* query, and unbounded the fuzz battery went from seventeen seconds to over four minutes — and the fragment stops refining while the whole carries on. The identity does not merely become approximate. It **drifts**: 4.2 × 10⁻⁴ at subdivisions 2, rising to 4.1 × 10⁻³ at 8. Refining made it worse, which is the signature of a bound rather than an error.
+
+> The samples were right and their provenance was wrong. A face is the wrong thing to ask, because a face is exactly what differs between one decomposition and another. The surface is the same for all of them.
+
+So the candidate positions are integer multiples of a step derived from the surface's parameter range and the subdivision count, anchored at parameter zero, and depending on nothing else. Every face covering a given piece of the sphere now offers the *same* interior points there, whichever body it belongs to. A whole and its fragments differ only where their boundaries genuinely differ, and both converge — so the gap between them closes instead of freezing. Two details matter: the step halves as the subdivision count rises, which is what makes it converge; and at subdivisions 0 there is no lattice at all, so every fixture calibrated against the unrefined tessellation is left exactly as it was.
+
+**What was proven.** sphere(1, 8, 12), against an exact volume of 4.18879 and area 4πr² = 12.56637: volume from a 3.95870 plateau to **4.18786**, converging monotonically from below; area from **13.43916 — seven percent above the true value, which an inscribed surface cannot be — to 12.56496**, now properly below it; and the non-manifold edge count from 368 at subdivisions 16 to **zero**, at every level. On box ∪ sphere the conservation gap now **closes** with refinement, 3.3 × 10⁻⁴ down to 1.5 × 10⁻⁵ across the same range where the boundary-derived lattice climbed.
+
+The two reverts are worth reporting separately, because they say different things. Disabling the lattice fails only the conservation test — the grid path alone already fixes the *primitive* sphere, so the lattice is precisely and only what fixes **fragments**. Re-anchoring the same lattice to the face instead of the surface fails three: sphere convergence, sphere area, and conservation. The claim of this chapter is that provenance is the thing that matters, and that second revert is the experiment for it rather than an argument about it.
+
+And the cost, which is real and has no clever version. `ctest` goes from 64.6 seconds to **120.4**. Interior samples on a doubly-curved surface are not free; the previous chapter's cylinders and cones were free because a developable patch needs none. It remains below the 148.6 seconds this arc began at, with all three curved primitives now converging on their exact volumes rather than on the wrong number.
+
+Two thousand six hundred and thirty-two tests ran; all passed, with five hardware skips.
 
 ---
 

@@ -1,6 +1,6 @@
 # Scope — `Body::toMesh` and the interior of a curved patch
 
-> ## STATUS, 2026-08-01 — LANDED FOR DEVELOPABLE SURFACES. Sphere still open.
+> ## STATUS, 2026-08-01 — LANDED. Cylinder, cone AND sphere all converge.
 >
 > Implemented in `AnalyticBRep.cpp` (`triangulateCurvedFaceGrid`, `triangulateCurvedFaceStrips`)
 > and pinned by `tests/kernel/test_BRepCurvedTessellation.cpp`. Cylinder and cone now converge
@@ -24,15 +24,21 @@
 >    triangles are] resolved" was true, but they needed no separate increment: they are the fan's
 >    trailing triangles where the ring's first vertex lies on a straight refined edge, and they
 >    disappear with the fan. The §8.4 coverage rule is what replaced them, exactly as designed.
-> 3. **§5's interior points are not safe after all — not the way they are specified here.** They
->    are invisible to neighbours, as §2 argues. But drawing their density "from the boundary" makes
->    a fragment place them differently from the whole, and a tessellated identity like
->    U+I == A+B holds *only* because a boundary-only triangulation's totals telescope across any
->    decomposition. Bounded (and §9 is right that they must be) the fragment refines slower than
->    the whole and the identity **drifts**: 4.2e-04 at subdivisions 2 rising to 4.1e-03 at 8.
->    **The fix: derive the lattice from the SURFACE and the subdivision count, not from each
->    face's boundary, so any two decompositions sample the same positions.** That is the
->    remaining work, and it is what the sphere needs.
+> 3. **§5's interior points are right, and its density rule is wrong.** They are invisible to
+>    neighbours, as §2 argues, and the sphere does need them. But §5 says to "derive from the
+>    boundary rather than from `subdivisions` directly" — and that is the one thing that must not
+>    happen. A tessellated identity like U+I == A+B holds *only* because a boundary-only
+>    triangulation's totals telescope across any decomposition; interior points give that up, and
+>    boundary-derived ones make a fragment place them differently from the whole. Bounded (and §9
+>    is right that they must be) the fragment refines slower and the identity **drifts**: 4.2e-04
+>    at subdivisions 2 rising to 4.1e-03 at 8.
+>    **Anchor them to the SURFACE and the subdivision count instead**, at integer multiples of a
+>    step depending on nothing else, so every face offers the same positions for a given piece of
+>    the surface. Landed as `triangulateCurvedFaceLattice`: sphere volume 3.95870 plateau →
+>    4.18786 [4.18879], area 13.43916 (7% ABOVE) → 12.56496 [12.56637], non-manifold edges 368 →
+>    0, and the conservation gap now CLOSES with refinement (3.3e-04 → 1.5e-05). Re-anchoring it
+>    to the face fails three tests, which is the experiment for this paragraph.
+>    Cost: ctest 64.6s → 120.4s. Interior samples on a doubly-curved surface are not free.
 >
 > §2 (boundary frozen, interior free), §3 (`buildRing` independence, hence per-face rollout),
 > §8's fallback ladder and §8.4's per-face coverage assertion, and §10's oracles all held up
