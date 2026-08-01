@@ -32,6 +32,12 @@ The exhaustive technical log lives beside this book in the audit memory and the 
   - 16. The dead edge and the double-free
   - 17. A tolerance that scales
   - 18. Nothing sacred, nothing NaN
+  - *(chapters 19–55 continue Part IV: the long campaign on the curved Boolean)*
+- **Part V — Going back to the beginning**
+  - 56. A hull that was none of the things a hull is
+  - 57. A sphere parametrised about an axis its grid did not use
+  - 58. Three ways to move a curve that must not move
+  - 59. The same mistake, one dimension up
 
 ---
 
@@ -1097,4 +1103,115 @@ Two thousand five hundred and ninety-eight tests ran; two thousand five hundred 
 
 ---
 
-*This edition ends here, but the logbook does not. The curved Boolean works now, centred or offset, exact on the analytic volume; the ground it stands on has been checked, which it had not been; and the representation underneath is double from storage through parameters, primitives and the file format, verified by measurement at four orders of scale rather than by reading its own type declarations. Three habits earned their place in this stretch. Measure the subject against an oracle that does not share its weaknesses, or the agreement means nothing. When a change alters how a face is bounded, measure its area, because every other invariant this kernel owns will happily certify a face that is geometrically wrong. And a precision claim must be tested at more than one scale, because the signature of a lost digit is a relative error that holds steady while the absolute one grows. A fourth habit was not earned so much as re-learned, twice in four chapters: an explanation reasoned out from structure, however well it fits, is not a finding until it has been measured — and the accusation lands on innocent code as easily as guilty. A tenth is the one that keeps costing the most: an assumption that holds for everything the kernel BUILDS is not a property the kernel MAINTAINS, and the difference only shows once something rebuilds the data — ask the topology instead, which cannot drift. A ninth is about oracles rather than code: an invariant that a NULL result satisfies is a safety property, not a correctness one, and a generator that only ever performs one operation cannot see what the second one does. Ask a question whose answer is known outright. An eighth is the cheapest of them all: when a body states the same thing in more than one place — its surfaces, its edges, its integrated mass — ask whether they agree, because the one that disagrees is the one nobody has looked at. A seventh came from a guard that was nearly shipped: when a fix costs something, the claim that what it costs was broken anyway is a measurement, not a reading of the code — taken here, it said the opposite, and five working configurations were saved by asking. A sixth is the newest and the least comfortable: a decision made by comparing coordinates for exact equality is not a decision at all when the construction guarantees those coordinates are equal — the last bit answers, and the last bit is noise. A fifth arrived with the sphere and is the sharpest of them: when a change alters the *connectivity* of something, no invariant over the whole body will report on it. A closed shell, clean validators, the right Euler number and vertices exact to the last bit all held while the seam they were supposed to describe lay in six disconnected pieces. Count the thing itself. What remains is named: exact tangencies, whose true results are not manifold solids and which therefore return cleanly empty by contract rather than by omission; surface pairs still outside the analytic scope altogether — cylinders whose axes are skew or crossing, a sphere against an off-axis cylinder, a cone against anything curved, each of them a quartic and each declined rather than approximated; a tessellator that under-refines the inside of a curved patch, now known to be held there by degenerate triangles that turn out to be load-bearing; and a chained Boolean that still fails as the left operand. The tolerance band is no longer on that list — it is doing the job it exists for, and tightening it would be a decision about what counts as coincident rather than a repair. Beyond those, one decision rather than a defect — an attribute layer — which gets more expensive with everything built on top of it.*
+# Part V — Going back to the beginning
+
+Every chapter up to here followed a thread forward: a defect, its cause, the next defect it uncovered. This part does the opposite. Before opening the next thread, I went back to the bottom of the stack and asked of each foundational routine the one question the suite had never asked it — not *does it run*, and not *does it return roughly the right number of things*, but **does it satisfy the property that defines it**.
+
+The answer, four times, was no. And the reason is the same every time, so it belongs here rather than in any one chapter: **every one of these routines was covered by tests that counted its output instead of checking it.** At least eight vertices. At least six faces. The control-point count went up by one. The endpoints did not move. Each of those assertions is true of the correct answer, and each is equally true of an answer that is nonsense. A test that counts cannot fail for the right reason, and four of them had been passing for a long time over code that was broken from the day it was written.
+
+---
+
+## 56. A hull that was none of the things a hull is
+
+The convex hull is not an advanced routine. It is the sort of thing a kernel has because everything else wants one, and it had eight tests, all green.
+
+The input with the most obvious right answer is the eight corners of a cube. Its hull is the cube: eight vertices, twelve triangles, every face on the boundary. What came back had four faces wound outward and eight wound inward, eleven of its twenty-five directed edges had no reverse — so the surface was not closed — and one of its faces ran from (1,−1,−1) to (−1,−1,1) to (1,1,1), a diagonal straight through the middle of the solid.
+
+Widening to fifteen hundred random inputs across five families — points on a ball, points filling a cube, a slab a millionth of a unit thick, a tight cluster beside one distant point, and points on an integer grid — **not one hull came back closed**, and in every family some input point finished up *outside* the hull that was supposed to contain it, by more than the model's own diameter.
+
+The tests said: at least eight vertices, at least six faces. Both true. Both true of the diagonal, too.
+
+There were two defects and neither was numerical.
+
+The first is the horizon. When a new point sees part of the hull, that part is deleted and the boundary of the deleted region — the horizon — is re-joined to the new point. The winding of each new face has to come from the *directed* boundary edge it replaces; that is the only place the orientation is recorded. This implementation collected the horizon as a set of **undirected** edges, endpoints sorted low-index-first. Every new face was therefore wound according to which of its two endpoint indices happened to be the smaller number.
+
+The second is what was done about that. Each new normal was flipped to face away from `pts[seed[0]]` — a point that is *on* the hull, being one of the four that started it. A hull under construction has no reliable interior point, and the sign of a plane test against a point lying in the boundary is arbitrary.
+
+> A face's orientation is not a quantity to be recovered after the fact. It is information that exists at exactly one moment — when the face is created from the edge of the face it replaces — and either it is carried across then or it is gone.
+
+It is now an incremental hull built on the exact predicates the kernel has had all along and was not using here: visibility is the sign of `orient3D` and there is no epsilon anywhere in it, the horizon keeps its direction so each new face inherits the winding of the face it replaces, exact duplicates are removed first, and the closed-surface invariant is checked before anything is returned at all.
+
+**What was proven.** All five families, three hundred inputs each: every hull closed, every hull convex, every input point inside it. Worst excursion on the integer grid — the family where exactly-coplanar quadruples are everywhere and a relative epsilon has no right answer — 1.5 × 10⁻¹⁶. The cube gives eight vertices and twelve triangles, and every one lies in one of its six planes. The tests now assert what a hull *is*; seven of the thirteen fail against the old code.
+
+---
+
+## 57. A sphere parametrised about an axis its grid did not use
+
+The analytic mass-properties path exists so that a sphere reports 4πr³/3 rather than the volume of the polyhedron drawn over it. It does that by integrating each curved face over its parameter domain. Chapter 55 had just repaired the sign of that integration and left ninety-four bodies still disagreeing, so the integrator was already the suspect.
+
+Asking it the simplest possible question — a unit sphere's volume, at every combination of latitude and longitude counts rather than the handful the tests used — produced a table that is hard to misread:
+
+| | lon = 3 | lon = 4 | lon = 12 |
+|---|---|---|---|
+| **lat even** | 43.75% wrong | exact | exact |
+| **lat odd** | **100% wrong (zero)** | 52–68% wrong | 0.9–32% wrong |
+
+A sphere's faces all carry the true `Sphere` surface, so the answer should be exact at *every* segment count. Instead it was exact on a diagonal stripe of the table, and the suite had sampled only inside that stripe: every assertion used an even latitude with an even longitude of six or more.
+
+The bottom-left corner is the one to look at. `makeSphere(1, 5, 3)` returns a closed, valid, fifteen-face solid whose analytic volume is **exactly zero** — and a zero volume becomes a default-constructed `MassProperties`, which is to say zero mass and a zero inertia tensor, handed to whatever asked. A rigid-body solver would take it without complaint.
+
+The cause is one line and it is upstream of everything. `analyticPatch` evaluates a sphere as
+
+    p = r·( sin(u)·uAxis + cos(u)·cos(v)·vAxis + cos(u)·sin(v)·normal )
+
+so **u is a latitude measured about `uAxis`**, and the parametrisation is singular at the two points ±`uAxis`, where cos(u) is zero and v means nothing at all. `makeSphere` built its rings about **Z** and then declared `uAxis = X`. The two singular points were therefore at (±r, 0, 0) — sitting on the geometric *equator*, in the middle of a band face rather than at a vertex.
+
+From there, nothing about a face's parameter polygon is trustworthy. The integrator maps a face's vertices into (u,v) and integrates the straight-edged polygon between them, which is the face's true image only when the face's edges are parameter-aligned; with the frame crossed they never are, and a face containing a singularity folds over it.
+
+**Why the totals often came out right anyway** is the part worth keeping. The sum over faces telescopes. If the wrong polygons happen to *tile* the parameter domain — which even latitudes with even longitudes do — every individual face can be wrong and the total still lands on the exact answer. Three of the four faces in one band were reporting 0.6558 and the fourth −1.1458, and they added up correctly.
+
+Setting `uAxis = Z` makes the parameters *be* the grid: u is the ring latitude, v the longitude, each band face is an exact rectangle in (u,v), and each pole fan degenerates at a real vertex, where the pole expansion already knew what to do.
+
+**What was proven.** All twenty-seven latitude/longitude combinations exact, odd counts included. Per-face, not merely in total: for a band face the closed form is r³·∫cos³u du·∫cos²v dv = 0.58926 × 0.78540 = 0.462800, and the integrator now reports 0.462800306 for every one of the eight. On a 261-body Boolean corpus, analytic-versus-tessellated disagreements fall from 53 to 35 and the worst from 1.645 to 0.238; conservation violations from 17 to 11.
+
+A contract changed and is recorded rather than quietly dropped. A test named `OddLongitudeSphereFallsBackToConvergentTessellation` asserted that odd longitudes are *not* integrated exactly. It was faithful to a sphere that was built wrong. The seam it blamed was never the problem — the loop unwrap has always handled a face straddling ±π.
+
+> The new test pins the cause rather than the symptom: a surface's parametrisation may only be singular where the face grid is singular, which is to say at a vertex. That is the invariant. The volume being right is a consequence.
+
+---
+
+## 58. Three ways to move a curve that must not move
+
+Knot refinement changes how a curve is written down and must never change the curve. That is the entire contract, it is trivially checkable by sampling, and nothing checked it. The tests counted control points and compared endpoints — and a clamped knot vector holds its endpoints still no matter what the interior is doing.
+
+Underneath, in public API:
+
+**`bezierDecomposition` crashed.** It held a reference to the curve's knot vector and then reassigned the curve inside the loop, so every subsequent read of that vector was a use-after-free. An ordinary degree-two curve with one interior knot segfaults. Underneath the crash it was also inserting knots at the *midpoint* between existing ones instead of raising the multiplicity of the knots already there, so it decomposed nothing.
+
+**`degreeElevate` did not elevate.** It inserted a knot at the middle of the domain, and knot insertion cannot change a degree. `degreeElevate(curve, 3)` on a quadratic returned a quadratic, carrying a spurious knot for its trouble.
+
+**`insertKnot` moved rational curves.** This is the interesting one. A rational curve is the projection of a polynomial curve living in homogeneous coordinates (w·x, w·y, w·z, w), and the affine combination has to be taken *there* and projected afterwards. This implementation blended the control points in Cartesian coordinates and the weights separately alongside them. The new weight comes out right; the new point does not.
+
+The oracle for that is standing right there in the subject: a quarter circle is exactly representable as a rational quadratic, and being exactly circular is the whole reason the representation exists. Inserting a knot at the middle of it pushed the curve **6.1 × 10⁻²** off the unit circle.
+
+A polynomial curve has every weight equal to one, so the wrong formula reduces to the right one and the non-rational path was fine. There was no rational test.
+
+All three are now the standard algorithms — decomposition by raising each distinct interior knot to full multiplicity, elevation by decompose/elevate/recompose with the Bézier identity, both in homogeneous coordinates — and one further hazard found while tracing them is closed: asking `insertKnot` for more repetitions than the degree allows walked its working buffer off the end.
+
+**What was proven.** Across a sweep of degrees and knot layouts, and sampled through the interior rather than at the ends, none of the three operations moves the curve by more than 3 × 10⁻⁷. The quarter circle stays circular to 1.3 × 10⁻⁷ under knot insertion, and stays circular through elevation to degrees three, four and five. Nine new tests; they fail on revert, and the decomposition one takes the process down with it.
+
+One thing is stated rather than implied: the elevated knot vector is exact but not minimal. Restoring minimal multiplicity is knot *removal*, a different algorithm with its own tolerance decisions, and it changes the representation rather than the curve.
+
+---
+
+## 59. The same mistake, one dimension up
+
+The 2D triangulators carry a header explaining, at length, why a Bowyer-Watson super-triangle cannot be sized at a fixed multiple of the bounding box: a sliver's circumcircle can reach out to a radius of a million on an input spanning one, swallow the super-vertices, and cause that triangle never to be emitted — after which stripping the super-triangle deletes real area. Their answer is to build at a scale, verify the result covers the convex hull, and grow the scale until it does.
+
+The 3D tetrahedralizer sized its super-tetrahedron at `extent × 6` and checked nothing.
+
+It is the same failure with a circumsphere, and it is not rare. On twenty-five uniformly random points in a cube, the tetrahedra covered less than the convex hull in **fifty of sixty** point sets, by up to 1.8% of the volume. The empty-circumsphere property held perfectly throughout, which is exactly why this survived: that is the property everybody thinks of as *the* Delaunay property, the existing fixtures tested it, and it was never the thing that was broken.
+
+The fixtures also tested hull coverage — on a tetrahedron, a cube, and a cube with interior points. All well-conditioned enough that a scale of six happens to suffice.
+
+The repair is to apply the solution that already existed one dimension down: the same escalating schedule, the same coverage check, with volume in place of area and both sides accumulated through the orientation predicate so they are computed the same accurate way.
+
+**What was proven.** Across four hundred point sets in five families — uniform, a slab a ten-thousandth thick, an integer grid, a tight cluster beside distant points, and points on a sphere — coverage failures go from fifty-in-sixty to **zero in four hundred**, worst gap 1.8 × 10⁻² to exactly zero, with the circumsphere property still holding everywhere.
+
+The file's own header comment said "it turns out to be correct." It was correct about the property that had been tested. That sentence has been corrected in place rather than deleted, because the interesting part is not that it was wrong but that it was written in good faith by someone reading green tests.
+
+---
+
+---
+
+*This edition ends here, but the logbook does not. An eleventh habit is the one Part V was written to record, and it is the cheapest of all of them to act on: a test that COUNTS its subject's output cannot fail for the right reason. At least eight vertices, at least six faces, one more control point, the endpoints did not move — every one of those is true of the correct answer and equally true of nonsense, and four foundational routines sat behind assertions of exactly that shape while being wrong from the day they were written. Ask instead for the property that DEFINES the thing: a hull is closed and contains its input, a tetrahedralization fills its hull, a refined curve is the same curve. The curved Boolean works now, centred or offset, exact on the analytic volume; the ground it stands on has been checked, which it had not been; and the representation underneath is double from storage through parameters, primitives and the file format, verified by measurement at four orders of scale rather than by reading its own type declarations. Three habits earned their place in this stretch. Measure the subject against an oracle that does not share its weaknesses, or the agreement means nothing. When a change alters how a face is bounded, measure its area, because every other invariant this kernel owns will happily certify a face that is geometrically wrong. And a precision claim must be tested at more than one scale, because the signature of a lost digit is a relative error that holds steady while the absolute one grows. A fourth habit was not earned so much as re-learned, twice in four chapters: an explanation reasoned out from structure, however well it fits, is not a finding until it has been measured — and the accusation lands on innocent code as easily as guilty. A tenth is the one that keeps costing the most: an assumption that holds for everything the kernel BUILDS is not a property the kernel MAINTAINS, and the difference only shows once something rebuilds the data — ask the topology instead, which cannot drift. A ninth is about oracles rather than code: an invariant that a NULL result satisfies is a safety property, not a correctness one, and a generator that only ever performs one operation cannot see what the second one does. Ask a question whose answer is known outright. An eighth is the cheapest of them all: when a body states the same thing in more than one place — its surfaces, its edges, its integrated mass — ask whether they agree, because the one that disagrees is the one nobody has looked at. A seventh came from a guard that was nearly shipped: when a fix costs something, the claim that what it costs was broken anyway is a measurement, not a reading of the code — taken here, it said the opposite, and five working configurations were saved by asking. A sixth is the newest and the least comfortable: a decision made by comparing coordinates for exact equality is not a decision at all when the construction guarantees those coordinates are equal — the last bit answers, and the last bit is noise. A fifth arrived with the sphere and is the sharpest of them: when a change alters the *connectivity* of something, no invariant over the whole body will report on it. A closed shell, clean validators, the right Euler number and vertices exact to the last bit all held while the seam they were supposed to describe lay in six disconnected pieces. Count the thing itself. What remains is named: exact tangencies, whose true results are not manifold solids and which therefore return cleanly empty by contract rather than by omission; surface pairs still outside the analytic scope altogether — cylinders whose axes are skew or crossing, a sphere against an off-axis cylinder, a cone against anything curved, each of them a quartic and each declined rather than approximated; a tessellator that under-refines the inside of a curved patch, now known to be held there by degenerate triangles that turn out to be load-bearing; and a chained Boolean that still fails as the left operand. The tolerance band is no longer on that list — it is doing the job it exists for, and tightening it would be a decision about what counts as coincident rather than a repair. Beyond those, one decision rather than a defect — an attribute layer — which gets more expensive with everything built on top of it.*
