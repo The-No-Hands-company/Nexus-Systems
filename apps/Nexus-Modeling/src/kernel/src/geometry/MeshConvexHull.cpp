@@ -1,48 +1,22 @@
 #include <nexus/geometry/MeshConvexHull.h>
 
+#include <nexus/geometry/RobustPredicates.h>
+#include <nexus/geometry/Tolerance.h>
+
 #include <algorithm>
+#include <array>
 #include <bit>
-#include <cmath>
+#include <cstddef>
 #include <cstdint>
-#include <limits>
-#include <map>
-#include <set>
 #include <unordered_map>
-#include <unordered_set>
+#include <utility>
+#include <vector>
 
 namespace nexus::geometry {
 
 using Vec3 = nexus::render::Vec3;
 
 namespace {
-
-constexpr float kCoplanarRelativeEpsilon = 1e-6f;
-
-struct HullFace {
-    uint32_t a, b, c;
-    Vec3 normal;
-    float offset;
-    bool removed = false;
-};
-
-Vec3 computeNormal(Vec3 p0, Vec3 p1, Vec3 p2) {
-    Vec3 e1 = p1 - p0;
-    Vec3 e2 = p2 - p0;
-    Vec3 c = e1.cross(e2);
-    float lenSq = c.x * c.x + c.y * c.y + c.z * c.z;
-    if (lenSq < 1e-24f) return {0.f, 0.f, 0.f};
-    float inv = 1.f / std::sqrt(lenSq);
-    return {c.x * inv, c.y * inv, c.z * inv};
-}
-
-float distanceToPlane(const Vec3& normal, float d, const Vec3& p) {
-    return normal.dot(p) - d;
-}
-
-std::pair<uint64_t, uint64_t> makeEdge(uint32_t u, uint32_t v) {
-    if (u < v) return {static_cast<uint64_t>(u), static_cast<uint64_t>(v)};
-    return {static_cast<uint64_t>(v), static_cast<uint64_t>(u)};
-}
 
 // Use bit_cast to avoid -ffast-math silently optimising NaN checks away.
 [[nodiscard]] bool isFiniteVec3(const Vec3& v) noexcept {
@@ -54,157 +28,187 @@ std::pair<uint64_t, uint64_t> makeEdge(uint32_t u, uint32_t v) {
            (bz & 0x7F800000u) != 0x7F800000u;
 }
 
+// A face of the hull in progress, wound counter-clockwise as seen from OUTSIDE, so that
+// (b-a) x (c-a) is the outward normal. Every operation below preserves that winding; it is
+// never re-derived from a "flip towards the centre" guess, because a growing hull has no
+// point that is reliably interior.
+struct HullFace {
+    uint32_t a = 0, b = 0, c = 0;
+    bool removed = false;
+};
+
+[[nodiscard]] constexpr uint64_t edgeKey(uint32_t u, uint32_t v) noexcept {
+    return (static_cast<uint64_t>(u) << 32) | static_cast<uint64_t>(v);
+}
+
+// Exact collinearity: three points are collinear iff all three axis-plane projections have
+// zero signed area. orient2D is exact, so this is a decision and not an estimate.
+[[nodiscard]] bool collinear(const Vec3d& p, const Vec3d& q, const Vec3d& r) noexcept {
+    return RobustPredicates::orient2D({p.x, p.y}, {q.x, q.y}, {r.x, r.y}) == 0.0 &&
+           RobustPredicates::orient2D({p.y, p.z}, {q.y, q.z}, {r.y, r.z}) == 0.0 &&
+           RobustPredicates::orient2D({p.z, p.x}, {q.z, q.x}, {r.z, r.x}) == 0.0;
+}
+
 } // namespace
 
 ConvexHull MeshConvexHull::build(const std::vector<Vec3>& points) {
     ConvexHull result;
 
-    // Filter out NaN/Inf points first.
-    std::vector<Vec3> cleanPoints;
-    cleanPoints.reserve(points.size());
-    for (const auto& p : points) {
-        if (isFiniteVec3(p)) cleanPoints.push_back(p);
-    }
-    if (cleanPoints.size() < 4) return result;
-
-    const size_t n = cleanPoints.size();
-    const auto& pts = cleanPoints;
-
-    size_t extremes[6] = {};
-    float minVals[3] = {std::numeric_limits<float>::max(),
-                        std::numeric_limits<float>::max(),
-                        std::numeric_limits<float>::max()};
-    float maxVals[3] = {std::numeric_limits<float>::lowest(),
-                        std::numeric_limits<float>::lowest(),
-                        std::numeric_limits<float>::lowest()};
-    for (size_t i = 0; i < n; ++i) {
-        const Vec3& p = pts[i];
-        if (p.x < minVals[0]) { minVals[0] = p.x; extremes[0] = i; }
-        if (p.x > maxVals[0]) { maxVals[0] = p.x; extremes[1] = i; }
-        if (p.y < minVals[1]) { minVals[1] = p.y; extremes[2] = i; }
-        if (p.y > maxVals[1]) { maxVals[1] = p.y; extremes[3] = i; }
-        if (p.z < minVals[2]) { minVals[2] = p.z; extremes[4] = i; }
-        if (p.z > maxVals[2]) { maxVals[2] = p.z; extremes[5] = i; }
-    }
-
-    // Compute mesh extents to scale the coplanarity/visibility epsilon.
-    const float extX = maxVals[0] - minVals[0];
-    const float extY = maxVals[1] - minVals[1];
-    const float extZ = maxVals[2] - minVals[2];
-    const float meshExtent = std::max({extX, extY, extZ});
-    const float kVisibilityEpsilon = (meshExtent > 0.f)
-        ? kCoplanarRelativeEpsilon * meshExtent
-        : 1e-6f;
-
-    std::vector<uint32_t> hullVerts;
-    std::unordered_set<uint32_t> usedIdx;
-    for (size_t i = 0; i < 6; ++i) {
-        if (usedIdx.insert(static_cast<uint32_t>(extremes[i])).second) {
-            hullVerts.push_back(static_cast<uint32_t>(extremes[i]));
+    // Drop non-finite points, then drop exact duplicates: a repeated point is visible from
+    // nowhere and would only add degenerate work. Insertion order of the survivors is kept
+    // so the output is reproducible for a given input (the determinism contract).
+    std::vector<Vec3> pts;
+    pts.reserve(points.size());
+    {
+        std::unordered_map<uint64_t, std::vector<uint32_t>> seen;
+        for (const auto& p : points) {
+            if (!isFiniteVec3(p)) continue;
+            const uint64_t h = (static_cast<uint64_t>(std::bit_cast<std::uint32_t>(p.x)) * 0x9E3779B97F4A7C15ull) ^
+                               (static_cast<uint64_t>(std::bit_cast<std::uint32_t>(p.y)) * 0xC2B2AE3D27D4EB4Full) ^
+                               (static_cast<uint64_t>(std::bit_cast<std::uint32_t>(p.z)) * 0x165667B19E3779F9ull);
+            auto& bucket = seen[h];
+            bool dup = false;
+            for (uint32_t idx : bucket) {
+                if (pts[idx].x == p.x && pts[idx].y == p.y && pts[idx].z == p.z) { dup = true; break; }
+            }
+            if (dup) continue;
+            bucket.push_back(static_cast<uint32_t>(pts.size()));
+            pts.push_back(p);
         }
     }
+    if (pts.size() < 4) return result;
 
-    if (hullVerts.size() < 4) {
-        for (size_t i = 0; i < n && hullVerts.size() < 4; ++i)
-            if (usedIdx.insert(static_cast<uint32_t>(i)).second)
-                hullVerts.push_back(static_cast<uint32_t>(i));
+    const uint32_t n = static_cast<uint32_t>(pts.size());
+    std::vector<Vec3d> q(n);
+    for (uint32_t i = 0; i < n; ++i) q[i] = Vec3d{pts[i]};
+
+    // ── Seed tetrahedron ──────────────────────────────────────────────────────────────
+    // The lexicographic extremes are hull vertices for certain, and picking them by a total
+    // order (rather than by a per-axis scan that can tie) keeps the seed deterministic.
+    auto lexLess = [&](uint32_t i, uint32_t j) {
+        if (q[i].x != q[j].x) return q[i].x < q[j].x;
+        if (q[i].y != q[j].y) return q[i].y < q[j].y;
+        return q[i].z < q[j].z;
+    };
+    uint32_t s0 = 0, s1 = 0;
+    for (uint32_t i = 1; i < n; ++i) {
+        if (lexLess(i, s0)) s0 = i;
+        if (lexLess(s1, i)) s1 = i;
     }
 
-    auto isCoplanar = [&](uint32_t i0, uint32_t i1, uint32_t i2, uint32_t i3) {
-        Vec3 n = computeNormal(pts[i0], pts[i1], pts[i2]);
-        return std::fabs(n.dot(pts[i3] - pts[i0])) < kVisibilityEpsilon;
-    };
+    uint32_t s2 = UINT32_MAX;
+    for (uint32_t i = 0; i < n; ++i) {
+        if (i == s0 || i == s1) continue;
+        if (!collinear(q[s0], q[s1], q[i])) { s2 = i; break; }
+    }
+    if (s2 == UINT32_MAX) return result; // every point on one line
 
-    uint32_t seed[4] = {};
-    bool found = false;
-    for (size_t a = 0; a + 3 < hullVerts.size() && !found; ++a)
-        for (size_t b = a + 1; b + 2 < hullVerts.size() && !found; ++b)
-            for (size_t c = b + 1; c + 1 < hullVerts.size() && !found; ++c)
-                for (size_t d = c + 1; d < hullVerts.size() && !found; ++d) {
-                    if (!isCoplanar(hullVerts[a], hullVerts[b], hullVerts[c], hullVerts[d])) {
-                        seed[0] = hullVerts[a]; seed[1] = hullVerts[b];
-                        seed[2] = hullVerts[c]; seed[3] = hullVerts[d];
-                        found = true;
-                    }
-                }
-
-    if (!found) return result;
+    uint32_t s3 = UINT32_MAX;
+    for (uint32_t i = 0; i < n; ++i) {
+        if (i == s0 || i == s1 || i == s2) continue;
+        if (RobustPredicates::orient3D(q[s0], q[s1], q[s2], q[i]) != 0.0) { s3 = i; break; }
+    }
+    if (s3 == UINT32_MAX) return result; // every point on one plane
 
     std::vector<HullFace> faces;
-    auto addFace = [&](uint32_t v0, uint32_t v1, uint32_t v2) {
-        Vec3 n = computeNormal(pts[v0], pts[v1], pts[v2]);
-        float d = n.dot(pts[v0]);
-        Vec3 center = pts[seed[0]] + pts[seed[1]] + pts[seed[2]] + pts[seed[3]];
-        center = center * 0.25f;
-        if (n.dot(center - pts[v0]) > 0.f) {
-            n = n * -1.f;
-            d = n.dot(pts[v0]);
+    std::unordered_map<uint64_t, uint32_t> edgeFace; // directed edge -> face index
+
+    bool consistent = true;
+    auto linkFace = [&](uint32_t fi) {
+        const HullFace& f = faces[fi];
+        const uint32_t v[3] = {f.a, f.b, f.c};
+        for (int e = 0; e < 3; ++e) {
+            if (!edgeFace.emplace(edgeKey(v[e], v[(e + 1) % 3]), fi).second) consistent = false;
         }
-        faces.push_back({v0, v1, v2, n, d, false});
+    };
+    auto unlinkFace = [&](uint32_t fi) {
+        const HullFace& f = faces[fi];
+        const uint32_t v[3] = {f.a, f.b, f.c};
+        for (int e = 0; e < 3; ++e) edgeFace.erase(edgeKey(v[e], v[(e + 1) % 3]));
+    };
+    // Add (x,y,z) wound so its outward normal points AWAY from the opposite vertex `w`.
+    auto addOriented = [&](uint32_t x, uint32_t y, uint32_t z, uint32_t w) {
+        if (RobustPredicates::orient3D(q[x], q[y], q[z], q[w]) < 0.0) std::swap(y, z);
+        faces.push_back(HullFace{x, y, z, false});
+        linkFace(static_cast<uint32_t>(faces.size() - 1));
     };
 
-    addFace(seed[0], seed[1], seed[2]);
-    addFace(seed[0], seed[2], seed[3]);
-    addFace(seed[0], seed[3], seed[1]);
-    addFace(seed[1], seed[3], seed[2]);
+    addOriented(s0, s1, s2, s3);
+    addOriented(s0, s1, s3, s2);
+    addOriented(s0, s2, s3, s1);
+    addOriented(s1, s2, s3, s0);
+    if (!consistent) return result;
 
-    std::vector<uint32_t> remaining;
-    for (size_t i = 0; i < n; ++i) {
-        if (i == seed[0] || i == seed[1] || i == seed[2] || i == seed[3]) continue;
-        remaining.push_back(static_cast<uint32_t>(i));
+    // ── Incremental insertion ─────────────────────────────────────────────────────────
+    std::vector<uint8_t> visible;
+    std::vector<uint32_t> visibleList;
+    std::vector<std::pair<uint32_t, uint32_t>> horizon;
+
+    for (uint32_t p = 0; p < n; ++p) {
+        if (p == s0 || p == s1 || p == s2 || p == s3) continue;
+
+        // A face sees p iff p is strictly on the far side of its outward normal. This is an
+        // exact sign, so a point that is inside or exactly ON the hull is seen by nothing and
+        // is correctly skipped; no visibility epsilon is involved anywhere.
+        visible.assign(faces.size(), 0);
+        visibleList.clear();
+        for (uint32_t fi = 0; fi < faces.size(); ++fi) {
+            if (faces[fi].removed) continue;
+            const HullFace& f = faces[fi];
+            if (RobustPredicates::orient3D(q[f.a], q[f.b], q[f.c], q[p]) < 0.0) {
+                visible[fi] = 1;
+                visibleList.push_back(fi);
+            }
+        }
+        if (visibleList.empty()) continue; // p is inside the hull, or on its boundary
+
+        // The horizon is the set of DIRECTED edges whose face is visible and whose twin's is
+        // not. Keeping the direction is what carries the winding onto the new faces: a new
+        // face reuses the horizon edge as-is, so it is wound exactly as the face it replaces.
+        horizon.clear();
+        for (uint32_t fi : visibleList) {
+            const HullFace& f = faces[fi];
+            const uint32_t v[3] = {f.a, f.b, f.c};
+            for (int e = 0; e < 3; ++e) {
+                const uint32_t u = v[e], w = v[(e + 1) % 3];
+                auto it = edgeFace.find(edgeKey(w, u)); // the twin, traversed the other way
+                if (it == edgeFace.end()) { consistent = false; break; }
+                if (!visible[it->second]) horizon.emplace_back(u, w);
+            }
+            if (!consistent) break;
+        }
+        if (!consistent || horizon.empty()) return {};
+
+        for (uint32_t fi : visibleList) { unlinkFace(fi); faces[fi].removed = true; }
+
+        for (const auto& [u, w] : horizon) {
+            faces.push_back(HullFace{u, w, p, false});
+            linkFace(static_cast<uint32_t>(faces.size() - 1));
+        }
+        // A hull that has stopped being a closed orientable surface cannot be repaired by
+        // continuing; report nothing rather than something that only looks like a hull.
+        if (!consistent) return {};
     }
 
-    for (uint32_t pIdx : remaining) {
-        const Vec3& P = pts[pIdx];
-
-        std::vector<size_t> visibleFaces;
-        for (size_t fi = 0; fi < faces.size(); ++fi) {
-            if (faces[fi].removed) continue;
-            float dist = distanceToPlane(faces[fi].normal, faces[fi].offset, P);
-            if (dist > kVisibilityEpsilon) visibleFaces.push_back(fi);
-        }
-
-        if (visibleFaces.empty()) continue;
-
-        std::set<std::pair<uint64_t, uint64_t>> horizon;
-        for (size_t fi : visibleFaces) {
-            faces[fi].removed = true;
-            uint32_t verts[3] = {faces[fi].a, faces[fi].b, faces[fi].c};
-            for (int e = 0; e < 3; ++e) {
-                auto edge = makeEdge(verts[e], verts[(e + 1) % 3]);
-                if (horizon.count(edge)) {
-                    horizon.erase(edge);
-                } else {
-                    horizon.insert(edge);
-                }
-            }
-        }
-
-        for (auto& edge : horizon) {
-            uint32_t e0 = static_cast<uint32_t>(edge.first);
-            uint32_t e1 = static_cast<uint32_t>(edge.second);
-            Vec3 n = computeNormal(pts[e0], pts[e1], P);
-            Vec3 hullCenter = pts[seed[0]];
-            if (n.dot(hullCenter - pts[e0]) > 0.f) {
-                n = n * -1.f;
-            }
-            float d = n.dot(pts[e0]);
-            faces.push_back({e0, e1, pIdx, n, d, false});
-        }
+    // Every directed edge must have its twin, or the surface is not closed.
+    for (const auto& [key, fi] : edgeFace) {
+        if (faces[fi].removed) continue;
+        const uint32_t u = static_cast<uint32_t>(key >> 32);
+        const uint32_t w = static_cast<uint32_t>(key & 0xFFFFFFFFull);
+        if (!edgeFace.count(edgeKey(w, u))) return {};
     }
 
     std::unordered_map<uint32_t, uint32_t> vMap;
-    std::vector<uint32_t> revMap;
     for (const auto& f : faces) {
         if (f.removed) continue;
-        for (uint32_t vi : {f.a, f.b, f.c}) {
-            if (vMap.find(vi) == vMap.end()) {
-                vMap[vi] = static_cast<uint32_t>(result.vertices.size());
-                revMap.push_back(vi);
-                result.vertices.push_back(pts[vi]);
-            }
+        std::array<uint32_t, 3> tri{};
+        const uint32_t v[3] = {f.a, f.b, f.c};
+        for (int k = 0; k < 3; ++k) {
+            auto [it, inserted] = vMap.emplace(v[k], static_cast<uint32_t>(result.vertices.size()));
+            if (inserted) result.vertices.push_back(pts[v[k]]);
+            tri[static_cast<size_t>(k)] = it->second;
         }
-        result.faces.push_back(std::array<uint32_t, 3>{vMap[f.a], vMap[f.b], vMap[f.c]});
+        result.faces.push_back(tri);
     }
 
     return result;
