@@ -1561,6 +1561,50 @@ And the closing note is the one that keeps recurring in this Part, arriving this
 
 A quarter of the fuzzer's drills are now placed exactly on the axis, with a guard that fails if that ever stops happening. Two thousand six hundred and sixty-one tests ran; all passed.
 
+## 69. Asking the empty body why
+
+The previous chapter fixed three absent rows in the surface-intersection table. This one is about the reason those rows could be absent for the entire life of the file with nothing anywhere complaining, which is the more expensive defect and the one that generalises.
+
+`booleanToBody` guarantees watertight-or-empty. That makes a failure and a genuinely empty result the same **value** — and until now they were also the same **event**. `intersectSurfaces` answers `Unsupported` for a pair whose intersection it cannot express; `imprintOneWay` handled `Unsupported` in the same `switch` arm as `None`, under the comment *nothing to imprint*; and the enclosing call then returned `true`. So an imprint could do no work on two interpenetrating solids, report success, hand the sew a body whose faces still straddled an uncut seam, and let the invariant convert all of that into a clean empty result. Every layer honoured its contract. The answer was still wrong, and nothing recorded that a *capability* had been missing rather than a *volume*.
+
+The rest of the kernel already knew better. Animation deserialization, scene-asset loading, mesh import and export, shader compilation — every one of them carries a diagnostic enum and a `fail()` that names the reason. The boolean was the single place that swallowed it.
+
+```cpp
+enum class BooleanDiagnostic : uint8_t {
+    Ok, EmptyResult, UnexpressibleSeam, ImprintBudget, SewFailed
+};
+```
+
+Both new parameters are defaulted, so nothing had to change at any call site, and the Body that comes back is bit-identical with and without one — asserted rather than assumed, because a diagnostic that perturbed the thing it describes would be a cure worse than the disease.
+
+**What it measured.** The 48% empty rate the chained fuzzer reported in the previous chapter was a single number covering four unrelated situations. Split apart, over 3,592 chained steps:
+
+| | | |
+|---|---|---|
+| `Ok` | 53.0% | |
+| `UnexpressibleSeam` | **35.2%** | a missing capability |
+| `SewFailed` | 6.9% | the planar-arrangement gap of chapter 67 |
+| `EmptyResult` | 4.9% | correct answers |
+| `ImprintBudget` | 0.0% | |
+
+The absent curved surface-surface intersection is **roughly five times** the arrangement gap. Those two had been recorded in the opposite order of importance — the arrangement gap was the one with a name, a predictive rule and a whole chapter behind it, and it accounts for a quarter of what the quartics do.
+
+> A gap you have described carefully feels bigger than one you have only noticed. The measurement does not care which one you spent a chapter on.
+
+**Checking the attribution before believing it.** A diagnostic that answered `UnexpressibleSeam` whenever anything went wrong would be worse than silence, because it would be *believed*, and it would inflate the very number now being used to set priorities. So the sharpest test in the new file is a negative one: the arrangement fixture — a bored plate cut by a square bar at the half-widths chapter 67 predicted would fail — involves nothing but planes and cylinders, and plane∩plane and plane∩cylinder are both fully supported. It reports `SewFailed`. Disjoint operands report `EmptyResult`. Known quartics report `UnexpressibleSeam`. And `Ok` holds if and only if a solid actually came back, asserted across 240 configurations and again at every step of every chain.
+
+**What was removed before landing, and why.** The `Unsupported` arm first carried a stricter test: only call it a declined seam if the target face's boundary vertices actually fall on *both sides* of the tool's surface, so that merely being near something you cannot intersect would not count. It is the more obviously correct rule, and it survived exactly as long as it took to ask what it changed.
+
+It reclassified **2 steps out of 3,592**. Reverting it left every fixture in the new file passing. Two attempts to build a case that distinguished it both failed — including one designed for the purpose, a sphere and a non-touching off-axis rod positioned so their bounding boxes overlap, which reported `EmptyResult` correctly with the test and without it. The AABB broad-phase, which a pair must already survive to reach that arm at all, was doing the discrimination.
+
+> Fifteen lines that no test can hold accountable are not worth the 0.06% they buy. The honest comment is the one that names the broad-phase as the real discriminator, rather than implying the rule I wrote is what makes the attribution sound.
+
+Two habits from this Part were paid straight back during the same increment. The revert harness refused to measure a stale binary: stripping the reporting orphaned a parameter, `-Werror` failed the build, and the guard restored the file instead of running the previous binary and reporting a fix as unnecessary. And a load-bearing check that came back green was the thing that exposed the straddle rule as decoration in the first place — the tests were not wrong to pass, they were right that there was nothing there to catch.
+
+The fuzzer now tallies by reason, with a **ceiling** rather than a floor on `UnexpressibleSeam` so the gap can only shrink, plus a guard that fires if the corpus ever stops producing quartics at all. Closing the gap is now something the suite can watch happen.
+
+Two thousand six hundred and sixty-eight tests ran; all passed.
+
 ---
 
 ---
