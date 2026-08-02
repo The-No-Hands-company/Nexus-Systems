@@ -1684,6 +1684,44 @@ One of those tests failed first for the right reason and the wrong cause, which 
 
 Two thousand six hundred and eighty-one tests ran; all passed.
 
+## 72. Searching for the shape of a lie
+
+The previous chapter found a broken routine behind `EXPECT_GE(size(), 0u)` by accident — it turned up while checking whether something else was a duplicate. An accident is not a method. So this chapter searches for that exact shape on purpose, across the whole suite.
+
+The pattern is an assertion that no possible outcome can violate: an unsigned quantity compared against zero. There were five, and they sorted into three kinds.
+
+**One was a real defect, and a total one.** `TrimBoolean` — boolean operations on trimmed 2D regions — returned an enclosed area of **exactly zero** for every non-empty result it had ever produced.
+
+The cause is that `extractBoundary` was not a boundary tracer. It scanned the mask row by row and pushed the first and last cell of each horizontal *run* into a structure called a loop. On the union of two 2×2 squares that produces the four entirely correct corners, in the order bottom-left, bottom-right, top-**left**, top-right: a self-intersecting bowtie, whose shoelace integral is zero. Interior rows contribute nothing at all, because their runs are one cell long and get skipped, which is why exactly four points came back for a shape that needed four.
+
+Two further consequences follow from the same design. It returned a *single* loop, so a union of two disjoint regions had no way to be expressed — both squares' scanline spans were merged into one ring. And the hole extractor flood-filled each interior component only to hand it to the same broken tracer and then `std::reverse` the result, which is not a winding of anything.
+
+> Every assertion guarding this was `!result.empty()` or `outerLoops.size() >= 1`. Both are satisfied by a bag of four points in the wrong order. One test ended with a comment and no assertion at all.
+
+The replacement is the standard construction and it is short: emit every cell side that separates filled from empty as a **directed** edge, wound so the material lies to its left. Every lattice corner then has equal in- and out-degree, so the edges link head-to-tail into closed loops without being told to — outer boundaries counter-clockwise, holes clockwise, which is how they are now told apart. The separate hole pass disappears entirely; holes fall out of the same walk with the opposite sign. Collinear runs are merged so a rectangle returns four points rather than a five-hundred-step staircase.
+
+| | before | after | exact |
+|---|---|---|---|
+| A ∪ A | 0.0000 | 0.9977 | 1 |
+| 2×2 ∪ 2×2 offset 1 | 0.0000 | 5.9859 | 6 |
+| 2×2 ∩ 2×2 offset 1 | 0.0000 | 1.9867 | 2 |
+| disjoint union | 1 loop | **2 loops**, 7.9468 | 8 |
+| 4×4 less a centred 2×2 | 0.0000 | 11.9718, outer CCW + inner CW | 12 |
+
+**Two were weak tests over correct code**, and that distinction is worth stating plainly, because "the test cannot fail" does not imply "the code is wrong". `FeatureLineExtractor` turns out to be exactly right: a 2×2×2 box yields feature lines totalling **24.0000** with every point on a cube edge, at every threshold below ninety degrees, and nothing at ninety-one. It was guarded by `size() > 0`, and its sphere case was named *HasFeatures* while asserting `size() >= 0` — a name claiming the opposite of what the line checked. `BooleanOperation`'s normal preservation is also correct: sixteen unit normals with the flag on, none with it off, behind an `EXPECT_GE(vertexCount(), 0)` placed *inside* an `if (vertexCount() > 0)`.
+
+**And two were both** — vacuous assertions where a sharp one was available for free. A capsule is a closed surface, so its boundary-edge count is not "at least zero", it is **exactly zero**; an open plane reports four. Pinning only the capsule would still pass for a counter stuck at zero, so both are pinned. The allocator's `BudgetIsNonNegative`, on an unsigned value, became the relationship that is actually knowable: nothing allocated yet, and allocated never exceeding a budget once one is set.
+
+No occurrence of the pattern remains in the suite.
+
+**What was proven.** Eight of eleven new `TrimBoolean` tests fail against the previous implementation. Areas, loop counts and windings are now the assertions, with a tolerance proportional to the raster resolution — the old behaviour was not wrong by a percent, it was wrong by all of it.
+
+The habit this leaves is narrower and more useful than "write better tests":
+
+> A test cannot fail for the right reason unless some possible output would violate it. That property is *searchable*. Comparing an unsigned count against zero is one grammatical form of it, and grepping for that one form across a suite of two and a half thousand tests took a minute and found a routine that had never once returned a valid answer.
+
+Two thousand six hundred and eighty-four tests ran; all passed.
+
 ---
 
 ---
