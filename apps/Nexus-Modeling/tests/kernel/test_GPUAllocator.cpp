@@ -17,10 +17,17 @@ protected:
     }
 };
 
-TEST_F(GPUAllocatorTest, BudgetIsNonNegative)
+// budgetBytes() is unsigned, so the old `EXPECT_GE(budgetBytes(), 0u)` — under the name
+// BudgetIsNonNegative — was true of every possible value and could not fail. What is
+// actually knowable here is the relationship between the two counters.
+TEST_F(GPUAllocatorTest, BudgetAndAllocatedAreConsistentBeforeAnyAllocation)
 {
     auto& alloc = ctx->allocator();
-    EXPECT_GE(alloc.budgetBytes(), 0u);
+    EXPECT_EQ(alloc.allocatedBytes(), 0u) << "nothing has been allocated yet";
+    if (alloc.budgetBytes() > 0u) {
+        EXPECT_LE(alloc.allocatedBytes(), alloc.budgetBytes())
+            << "allocated must never exceed the budget";
+    }
 }
 
 TEST_F(GPUAllocatorTest, AllocatedZeroInitially)

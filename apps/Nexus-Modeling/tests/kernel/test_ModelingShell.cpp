@@ -58,8 +58,19 @@ TEST(ModelingShell, SessionReportReflectsWorkflowState)
     const ModelingShellSessionReport report = shell.sessionReport();
     EXPECT_TRUE(report.success);
     EXPECT_FALSE(report.workflowSteps.empty());
-    EXPECT_GE(report.overlay.boundaryEdgeCount, 0u);
+    // A capsule is a CLOSED surface, so it has exactly zero boundary edges. The previous
+    // assertion was >= 0 on an unsigned count, which every possible value satisfies —
+    // including the wrong ones.
+    EXPECT_EQ(report.overlay.boundaryEdgeCount, 0u)
+        << "a closed starter primitive must report no boundary edges";
     EXPECT_FALSE(report.message.empty());
+
+    // The contrast is what gives the number meaning: an OPEN starter primitive must
+    // report boundary edges. A counter that is always zero would pass the check above.
+    ModelingShell open;
+    open.startStarterModel(StarterPrimitive::Plane, 1.0f);
+    EXPECT_GT(open.sessionReport().overlay.boundaryEdgeCount, 0u)
+        << "an open plane must report boundary edges";
 }
 
 TEST(ModelingShell, RefreshDiagnosticsHonorsModeFiltering)

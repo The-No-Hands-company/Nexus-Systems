@@ -239,11 +239,27 @@ TEST(BooleanOperation, PreservesNormalsWhenOptionEnabled)
     auto report = BooleanOperation::compute(boxA, boxB, BooleanOperationType::Difference, opts, result);
 
     EXPECT_TRUE(report.valid);
-    // Result should have normals if preserve option is true
-    if (result.attributes().vertexCount() > 0) {
-        // Note: normals are optional, but we expect them if preserve flag is set
-        EXPECT_GE(result.attributes().vertexCount(), 0);
+
+    // The old assertion here was EXPECT_GE(vertexCount(), 0) — unsigned, so always true —
+    // inside an `if (vertexCount() > 0)` that had already established it. It could not
+    // distinguish preserved normals from no normals at all, which is the entire subject of
+    // the test. Measured: the option does work, so say what it does.
+    ASSERT_GT(result.attributes().vertexCount(), 0u);
+    const auto& normals = result.attributes().normals();
+    EXPECT_EQ(normals.size(), static_cast<size_t>(result.attributes().vertexCount()))
+        << "preserveNormals asked for a normal per vertex";
+    for (const auto& n : normals) {
+        const float len = std::sqrt(n.x * n.x + n.y * n.y + n.z * n.z);
+        EXPECT_NEAR(len, 1.f, 1e-4f) << "a preserved normal is not unit length";
     }
+
+    // And with the option off, none are produced — otherwise "preserve" means nothing.
+    BooleanOperationOptions without;
+    without.preserveNormals = false;
+    Mesh plain;
+    (void)BooleanOperation::compute(boxA, boxB, BooleanOperationType::Difference, without, plain);
+    EXPECT_TRUE(plain.attributes().normals().empty())
+        << "normals appeared without preserveNormals, so the flag is not what decides it";
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

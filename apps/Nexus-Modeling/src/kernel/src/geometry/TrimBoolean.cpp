@@ -97,122 +97,122 @@ static void rasterizeToGrid(const BooleanRegion& region,
     }
 }
 
-static BooleanLoop extractBoundary(const std::vector<uint8_t>& mask,
+// ── Boundary extraction ──────────────────────────────────────────────────────
+//
+// The mask is a grid of filled/empty CELLS, and the boundary of the filled set is the
+// collection of cell sides that separate a filled cell from an empty one. Emitting each
+// such side as a DIRECTED edge, oriented so the filled cell lies to its left, makes every
+// lattice corner have equal in- and out-degree, so the edges link head-to-tail into closed
+// loops — outer boundaries counter-clockwise, holes clockwise, which is how they are told
+// apart afterwards. No separate flood fill is needed to find holes: they fall out of the
+// same walk with the opposite winding.
+//
+// WHAT THIS REPLACES, and why it matters: the previous extractBoundary() scanned the mask
+// row by row and pushed the first and last cell of each horizontal RUN into a "loop". That
+// is a bag of scanline span endpoints in raster order — not ordered around anything, and
+// not closed. Measured on the union of two 2x2 squares, it returned the four correct
+// corners in the order bottom-left, bottom-right, top-LEFT, top-right: a self-intersecting
+// bowtie whose enclosed area is exactly zero. Every non-empty result this function ever
+// produced had zero area, and the tests could not see it because they asserted
+// `!result.empty()` and `outerLoops.size() >= 1`. It also returned a SINGLE loop, so a
+// union of two disjoint regions had no way to be expressed at all.
+struct GridLoops {
+    std::vector<BooleanLoop> outer;
+    std::vector<BooleanLoop> inner;
+};
+
+static GridLoops traceMaskBoundaries(const std::vector<uint8_t>& mask,
                                      int32_t res,
                                      const Aabb& bounds) {
-    BooleanLoop boundary;
+    GridLoops out;
+    const int32_t cw = res + 1;  // corner lattice is one wider than the cell grid
+    const size_t cornerCount = static_cast<size_t>(cw) * static_cast<size_t>(cw);
 
-    Vec3 extent = bounds.extents();
-    Vec3 center = bounds.center();
-
-    auto gridToWorld = [&](int32_t i, int32_t j) -> Vec3 {
-        float u = (static_cast<float>(i) / static_cast<float>(res - 1) - 0.5f) * 2.0f;
-        float v = (static_cast<float>(j) / static_cast<float>(res - 1) - 0.5f) * 2.0f;
-        return Vec3{center.x + u * extent.x,
-                     center.y + v * extent.y,
-                     0.f};
+    auto filled = [&](int32_t i, int32_t j) -> bool {
+        if (i < 0 || i >= res || j < 0 || j >= res) return false;
+        return mask[static_cast<size_t>(j) * static_cast<size_t>(res) + static_cast<size_t>(i)] != 0;
     };
+    auto cornerId = [&](int32_t ci, int32_t cj) -> int32_t { return cj * cw + ci; };
 
-    auto isBorder = [&](int32_t i, int32_t j) -> bool {
-        if (!mask[static_cast<size_t>(j * res + i)]) return false;
-        if (i <= 0 || i >= res - 1 || j <= 0 || j >= res - 1) return true;
-        return !mask[static_cast<size_t>(j * res + i + 1)] ||
-               !mask[static_cast<size_t>(j * res + i - 1)] ||
-               !mask[static_cast<size_t>((j + 1) * res + i)] ||
-               !mask[static_cast<size_t>((j - 1) * res + i)];
-    };
-
-    for (int32_t j = 0; j < res; ++j) {
-        int32_t edgeStart = -1;
-        for (int32_t i = 0; i < res; ++i) {
-            if (isBorder(i, j)) {
-                if (edgeStart < 0) edgeStart = i;
-            } else {
-                if (edgeStart >= 0 && (i - edgeStart) > 1) {
-                    boundary.points.push_back(gridToWorld(edgeStart, j));
-                    boundary.points.push_back(gridToWorld(i - 1, j));
-                }
-                edgeStart = -1;
-            }
-        }
-    }
-
-    if (boundary.points.empty()) {
-        for (int32_t j = 0; j < res; ++j) {
-            for (int32_t i = 0; i < res; ++i) {
-                if (isBorder(i, j)) {
-                    boundary.points.push_back(gridToWorld(i, j));
-                    break;
-                }
-            }
-            if (!boundary.points.empty()) break;
-        }
-    }
-
-    return boundary;
-}
-
-static std::vector<BooleanLoop> extractInnerLoops(const std::vector<uint8_t>& mask,
-                                                    int32_t res,
-                                                    const Aabb& bounds) {
-    std::vector<BooleanLoop> innerLoops;
-
-    const size_t pixelCount = static_cast<size_t>(res * res);
-    std::vector<uint8_t> visited(pixelCount, 0);
-
-    const int32_t di[] = {1, -1, 0, 0};
-    const int32_t dj[] = {0, 0, -1, 1};
-
+    // Directed sides of every filled cell whose neighbour is empty, wound so the material
+    // is on the left.
+    std::vector<std::vector<int32_t>> outgoing(cornerCount);
     for (int32_t j = 0; j < res; ++j) {
         for (int32_t i = 0; i < res; ++i) {
-            size_t idx = static_cast<size_t>(j * res + i);
-            if (mask[idx] != 0 || visited[idx]) continue;
-
-            std::vector<size_t> component;
-            std::vector<size_t> stack;
-            stack.push_back(idx);
-            visited[idx] = 1;
-            bool touchesBorder = false;
-
-            while (!stack.empty()) {
-                size_t cur = stack.back();
-                stack.pop_back();
-                component.push_back(cur);
-
-                int32_t ci = static_cast<int32_t>(cur % static_cast<size_t>(res));
-                int32_t cj = static_cast<int32_t>(cur / static_cast<size_t>(res));
-
-                if (ci <= 0 || ci >= res - 1 || cj <= 0 || cj >= res - 1) {
-                    touchesBorder = true;
-                }
-
-                for (int d = 0; d < 4; ++d) {
-                    int32_t ni = ci + di[d];
-                    int32_t nj = cj + dj[d];
-                    if (ni < 0 || ni >= res || nj < 0 || nj >= res) continue;
-                    size_t nidx = static_cast<size_t>(nj * res + ni);
-                    if (mask[nidx] != 0 || visited[nidx]) continue;
-                    visited[nidx] = 1;
-                    stack.push_back(nidx);
-                }
-            }
-
-            if (touchesBorder) continue;
-
-            std::vector<uint8_t> holeMask(pixelCount, 0);
-            for (size_t k : component) {
-                holeMask[k] = 1;
-            }
-
-            BooleanLoop holeBoundary = extractBoundary(holeMask, res, bounds);
-            if (!holeBoundary.empty()) {
-                std::reverse(holeBoundary.points.begin(), holeBoundary.points.end());
-                innerLoops.push_back(std::move(holeBoundary));
-            }
+            if (!filled(i, j)) continue;
+            if (!filled(i, j - 1)) outgoing[static_cast<size_t>(cornerId(i, j))].push_back(cornerId(i + 1, j));
+            if (!filled(i + 1, j)) outgoing[static_cast<size_t>(cornerId(i + 1, j))].push_back(cornerId(i + 1, j + 1));
+            if (!filled(i, j + 1)) outgoing[static_cast<size_t>(cornerId(i + 1, j + 1))].push_back(cornerId(i, j + 1));
+            if (!filled(i - 1, j)) outgoing[static_cast<size_t>(cornerId(i, j + 1))].push_back(cornerId(i, j));
         }
     }
 
-    return innerLoops;
+    const Vec3 extent = bounds.extents();
+    const Vec3 center = bounds.center();
+    // A corner sits half a cell off the sample lattice, which is where the boundary
+    // between a filled and an empty sample actually lies.
+    auto cornerToWorld = [&](int32_t ci, int32_t cj) -> Vec3 {
+        const float su = static_cast<float>(ci) - 0.5f;
+        const float sv = static_cast<float>(cj) - 0.5f;
+        const float u = (su / static_cast<float>(res - 1) - 0.5f) * 2.0f;
+        const float v = (sv / static_cast<float>(res - 1) - 0.5f) * 2.0f;
+        return Vec3{center.x + u * extent.x, center.y + v * extent.y, 0.f};
+    };
+
+    std::vector<size_t> used(cornerCount, 0);
+    for (int32_t startCorner = 0; startCorner < static_cast<int32_t>(cornerCount); ++startCorner) {
+        while (used[static_cast<size_t>(startCorner)] < outgoing[static_cast<size_t>(startCorner)].size()) {
+            std::vector<int32_t> ring;
+            int32_t cur = startCorner;
+            // Follow unused outgoing edges until the walk returns to where it began. Every
+            // corner has as many outgoing as incoming edges, so this always closes.
+            while (true) {
+                const size_t c = static_cast<size_t>(cur);
+                if (used[c] >= outgoing[c].size()) break;  // defensive; should not happen
+                const int32_t next = outgoing[c][used[c]];
+                ++used[c];
+                ring.push_back(cur);
+                cur = next;
+                if (cur == startCorner) break;
+            }
+            if (ring.size() < 4) continue;
+
+            // Corners to world, dropping the middle of every collinear run so an
+            // axis-aligned rectangle comes back as four points rather than thousands.
+            std::vector<Vec3> pts;
+            pts.reserve(ring.size());
+            for (int32_t id : ring) pts.push_back(cornerToWorld(id % cw, id / cw));
+
+            std::vector<Vec3> simplified;
+            simplified.reserve(pts.size());
+            const size_t n = pts.size();
+            for (size_t k = 0; k < n; ++k) {
+                const Vec3& prev = pts[(k + n - 1) % n];
+                const Vec3& here = pts[k];
+                const Vec3& next = pts[(k + 1) % n];
+                const float ax = here.x - prev.x, ay = here.y - prev.y;
+                const float bx = next.x - here.x, by = next.y - here.y;
+                if (std::abs(ax * by - ay * bx) > 1e-12f) simplified.push_back(here);
+            }
+            if (simplified.size() < 3) continue;
+
+            double twiceArea = 0.0;
+            for (size_t k = 0; k < simplified.size(); ++k) {
+                const Vec3& p = simplified[k];
+                const Vec3& q = simplified[(k + 1) % simplified.size()];
+                twiceArea += static_cast<double>(p.x) * q.y - static_cast<double>(q.x) * p.y;
+            }
+
+            BooleanLoop loop;
+            loop.closed = true;
+            loop.points = std::move(simplified);
+            // Counter-clockwise encloses material; clockwise is a hole.
+            if (twiceArea >= 0.0) out.outer.push_back(std::move(loop));
+            else out.inner.push_back(std::move(loop));
+        }
+    }
+
+    return out;
 }
 
 BooleanRegion TrimBoolean::compute(
@@ -261,12 +261,11 @@ BooleanRegion TrimBoolean::compute(
         resultMask[k] = inResult ? 1 : 0;
     }
 
-    BooleanLoop outer = extractBoundary(resultMask, res, combined);
-    if (!outer.empty()) {
-        result.outerLoops.push_back(std::move(outer));
-    }
-
-    result.innerLoops = extractInnerLoops(resultMask, res, combined);
+    // One walk yields every loop, so a result with several disjoint components gets
+    // several outer loops — the previous code could only ever return one.
+    GridLoops loops = traceMaskBoundaries(resultMask, res, combined);
+    result.outerLoops = std::move(loops.outer);
+    result.innerLoops = std::move(loops.inner);
 
     return result;
 }
