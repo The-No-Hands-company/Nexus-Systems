@@ -1605,6 +1605,42 @@ The fuzzer now tallies by reason, with a **ceiling** rather than a floor on `Une
 
 Two thousand six hundred and sixty-eight tests ran; all passed.
 
+## 70. Marching a curve that has no formula
+
+The measurement at the end of the last chapter said the missing curved intersection was 35.2% of all chained boolean outcomes and about five times the next-largest gap. This chapter builds it — or rather, builds the geometric core of it, verified alone, the way `intersectSurfaces` was built before anything depended on it.
+
+The problem is stated exactly by what the analytic table cannot say. Two planes meet in a line, a plane cuts a sphere in a circle, a cone and a coaxial cylinder meet in a ring: all of those are *algebra*, and all of them require the configuration to be axially symmetric. Move the cylinder off the sphere's centre and the section becomes a quartic space curve. There is no line, circle or conic to return, because the answer is not one. The only honest output is samples.
+
+So: seed by Newton-projecting points onto both surfaces at once, then march along the tangent, which is `∇a × ∇b` because the curve lies in both tangent planes. The projection is the part worth stating carefully — it is two equations in three unknowns, and the undetermined direction is the curve's own tangent, so the step is taken in the plane the two gradients span. With both gradients normalised the 2×2 system is just
+
+```
+δ = α·∇a + β·∇b,   α = (−dₐ + d_b·c)/(1−c²),   β = (−d_b + dₐ·c)/(1−c²),   c = ∇a·∇b
+```
+
+which is the minimum-norm Newton step and needs no matrix.
+
+**The oracles came first, and they are the reason to believe any of it.** A numerical tracer can always be talked into agreeing with itself. Two things it cannot argue with: every circle the analytic intersector already computes — by a completely different route, algebra rather than iteration — and the Steinmetz identity, which is older than the file. Two equal-radius cylinders crossing at a right angle satisfy `x²+y²=1` and `y²+z²=1`; subtract and `x² = z²`, so the intersection is *exactly* the two plane curves `x = ±z`. Nothing in the tracer knows this. It reproduces the circles to 1e-4 and the planes to 1e-5.
+
+Then three defects, all of them the same defect wearing different clothes — producing confident nonsense rather than declining.
+
+**The singular point.** Those two Steinmetz ellipses cross each other, at `(0, ±1, 0)`. At a crossing the intersection curve has no tangent: two branches pass through one point. The march sailed straight through, wandered from one ellipse onto the other, back again, and never closed — twenty thousand points per branch, and it reported success.
+
+The obvious guard is a threshold on `|∇a × ∇b|`, which is the sine of the angle between the surfaces and goes to zero at the crossing. It does not work, and *why* it does not work is the interesting part. Approaching the singularity, the sag check re-projects each chord's midpoint — and Newton, ill-conditioned there, drops it onto the *other* branch. The measured sag explodes, the step halves, and halves again. Two smooth ellipses with no high curvature anywhere were being sampled at 968 to 3676 points on arcs that need about fifty. The trace was not resolving curvature; it was disintegrating, and shrinking the step is exactly what disintegration looks like from the inside.
+
+> The guard that works is **tangent continuity**. Sag control already keeps the turn per step small, so consecutive tangents on one branch are nearly parallel. A jump of more than sixty degrees is not a bend — it is a different curve.
+
+160,004 points became 231, and the answer became four arcs meeting at two singular points. Which is not a workaround: it is the correct topology, and it is also precisely what an imprint needs, since arcs are edges and singular points are vertices.
+
+**A tangency is a point, not a curve.** Where two surfaces touch rather than cross, Newton still finds points satisfying both equations, and the march still emits a few before the tangent gives out. Two tangent spheres produced a three-point "branch" and `ok = true`. The fix rejects a branch on its extent, and the cut is placed on measured ground rather than a guessed constant: tangency debris spans 1.9e-04 and 7.2e-04 of the region's diagonal, while the smallest *legitimate* curve tried — the circle of two spheres overlapping by one hundredth — spans 2.7e-02. A factor of thirty-seven, with the threshold in the middle and a test pinning each side, because the failure that matters is not keeping debris but silently dropping a small real circle.
+
+**And a performance bug that was a bookkeeping bug.** Rejected branches were not recorded, so nothing knew that ground had been covered, and every lattice seed near a tangency re-traced the same three points: 886 ms on one fixture, 2 ms once the rejects were remembered too.
+
+Running out of budget now sets `ok = false`. A trace that exhausted itself has produced a polyline that is not the curve, and the entire subject of the last three chapters is what it costs to say otherwise.
+
+**What is deliberately not done.** None of this is wired into the imprint. The tracer returns polylines; the B-rep stores analytic `Curve`s; joining those is a representation question — what a quartic edge *is* in this kernel — and it deserves its own increment rather than being smuggled in behind a numerical method that only just stopped lying about tangencies. The ceiling the fuzzer now holds over `UnexpressibleSeam` is what will say whether the joining worked.
+
+Two thousand six hundred and seventy-seven tests ran; all passed.
+
 ---
 
 ---
