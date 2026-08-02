@@ -1641,6 +1641,49 @@ Running out of budget now sets `ok = false`. A trace that exhausted itself has p
 
 Two thousand six hundred and seventy-seven tests ran; all passed.
 
+## 71. The assertion that could not fail
+
+Part V opened by asking of each foundational routine the question the suite had never asked it. Four answers came back wrong. This chapter is a fifth, found by accident: while checking whether the new B-rep tracer duplicated something that already existed, the search turned up `SurfaceSurfaceIntersect` — a NURBS surface intersector, written months earlier, with a test suite whose load-bearing line was
+
+```cpp
+EXPECT_GE(branches.size(), 0u);
+```
+
+`size()` is unsigned. That assertion is true of every possible outcome, including no outcome at all. It sat inside a test named `PerpendicularPlanesIntersectionRunsWithoutError`, and the name is the confession: two perpendicular planes meet in a line whose equation is known outright, and nothing anywhere checked where the answer went.
+
+It went badly. Measured against that line — z = 0 against y = 1.5, meeting in the segment (x, 1.5, 0) for x in [0,3] — the routine returned **thirty-two curves and 3,186 points** for one straight segment. It covered 0.119 of it. One curve was a hundred and one points all at x = 0.000, having never moved; two others ran backwards.
+
+Six defects, and it is worth listing them separately because they fail in different ways.
+
+**The step size was dimensionally wrong.** The parameter increment divided both components by `|dA/du|² · |dA/dv|²` — the *product* of two squared lengths. That is only correct if the parameterisation happens to be unit-speed, which is exactly what a hand-made test plane is. On the 3×3 fixture `|dA/du| = 3`, so every step came out nine times too short: predicted 0.111 of the line in a hundred steps, measured 0.119. The replacement is the 2×2 Gram solve for `du·dA/du + dv·dA/dv = h·dir`, which is additionally right for a *non-orthogonal* parameterisation, where a per-axis projection never is.
+
+**It marched one direction only**, so a seed in the middle of an open curve returned half of it — and since `nA × nB` has an arbitrary sign that can flip between evaluations, some curves simply reversed. Both fixed together: march both ways from the seed, and require the tangent to stay continuous.
+
+**There was no closure test** — every curve ran to its budget, which is why all thirty-two had exactly a hundred and one points. **And no seed deduplication**, which is why there were thirty-two: one curve per seed, every seed on the same line.
+
+**Seed acceptance was a fixed absolute distance.** `d2 < 0.01·(1−|cos|) + 0.001` is 0.105 model units, regardless of the grid, the surfaces, or their size. The flat fixtures pass it because the sampling grid lands exactly on the intersection. A curved surface does not oblige: for z = x² cut by z = 1, the distance at a sample is |x²−1|, and of sixteen grid columns the nearest to the crossing sits at 0.129. No seed qualified.
+
+> A real, two-branch intersection was reported as no intersection at all — and the test suite was satisfied, because "no branches" also satisfies `size() >= 0`.
+
+The fix is to be generous and then check: accept a candidate within one grid *cell*, refine it, and keep it only if the refined point genuinely lies on both surfaces. Generosity is safe exactly when the answer is verified.
+
+**And the Newton residual was the wrong vector.** This one took the longest and taught the most. The refinement measured `pa − b.evaluate(ub, vb)` — the full difference between the point on A and the *re-evaluated* projected point on B. But `(ub, vb)` comes from a closest-point projection accurate to its own tolerance, so that re-evaluated point sits a little way from the true foot, and that error lies *in* B's surface. Feeding the whole difference to Newton makes it chase a tangential residual that says nothing about being off the surface.
+
+Three suspects were measured and cleared first — the projection (accurate to 2.4e-07), the NURBS derivatives (exact against closed form), and Newton's own convergence (forty iterations gave a *worse* answer than ten, which is the tell). Only then was the decision itself instrumented, and it was immediate:
+
+```
+step0  resid 2.25e-05 -> 2.98e-07   x-1 = +0.000e+00
+step1  resid 2.25e-05 -> 4.46e-04   x-1 = -4.458e-05
+```
+
+A sample sitting *exactly* on the curve, reporting a residual of 2.25e-05, moved to 4.5e-05 away from it. The refinement was manufacturing the error it existed to remove — which is precisely why more iterations made things worse. Taking only the component along B's normal took the curved case from 2.70e-04 to **1.19e-07**, one ULP at unit scale.
+
+**What was proven.** On the known-line oracle: thirty-two curves, 3,186 points and 4% of the line became one curve, sixty points, and all of it. On the curved oracle, z = x² cut by z = 1: no answer at all became both branches, at x = ±1, each spanning the full patch, to 1.19e-07. The tests now assert branch count, the equation each branch lies on, how far it runs, scale-invariance at a thousand times the size, and bitwise determinism — and five of the seven fail against the previous implementation.
+
+One of those tests failed first for the right reason and the wrong cause, which is worth keeping. The scale test asserted that the same configuration at 1000× gives the same relative answer, and it failed — but the fault was the fixture, not the code: mapping x → kx while leaving z = x² gives z → k²x², which is a differently-proportioned surface, not the same one seen larger. A scale test built on a shape that does not actually scale is asking a different question and blaming the answer.
+
+Two thousand six hundred and eighty-one tests ran; all passed.
+
 ---
 
 ---
