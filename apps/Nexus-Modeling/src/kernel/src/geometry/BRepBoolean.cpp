@@ -226,13 +226,27 @@ Mesh booleanToMesh(const Body& a, const Body& b, BooleanOp op, Tolerance tol)
     return mesh;
 }
 
-Body booleanToBody(const Body& a, const Body& b, BooleanOp op, Tolerance tol)
+Body booleanToBody(const Body& a, const Body& b, BooleanOp op, Tolerance tol,
+                   BooleanDiagnostic* diagnostic)
 {
+    auto report = [&](BooleanDiagnostic d) {
+        if (diagnostic != nullptr) *diagnostic = d;
+    };
+    report(BooleanDiagnostic::Ok);
+
     Body A = a;
     Body B = b;
     // Degenerate/near-tangent config → the imprint budget is blown → return a clean
     // empty Body (watertight-or-empty; never a hang on a pathological tangency).
-    if (!imprintMutually(A, B, tol)) return Body{};
+    bool declinedSeam = false;
+    if (!imprintMutually(A, B, tol, &declinedSeam)) {
+        // A declined seam takes precedence over the budget: an imprint that could not
+        // express a seam and THEN ran out of budget was defeated by the missing
+        // capability, and reporting the budget would send the reader to the wrong place.
+        report(declinedSeam ? BooleanDiagnostic::UnexpressibleSeam
+                            : BooleanDiagnostic::ImprintBudget);
+        return Body{};
+    }
 
     const double weldEps = tol.absolute > 0.f ? tol.absolute * 10.f : 1e-4f;
     std::vector<Vec3> points;
@@ -389,6 +403,15 @@ Body booleanToBody(const Body& a, const Body& b, BooleanOp op, Tolerance tol)
         defs = std::move(unique);
     }
 
+    // No face survived selection: the operands are disjoint and this is an intersection,
+    // or the op removes everything. Nothing failed — there is genuinely nothing. This has
+    // to be answered before the sew, because fromFaces cannot distinguish "sewing nothing"
+    // from "failing to sew something".
+    if (defs.empty()) {
+        report(BooleanDiagnostic::EmptyResult);
+        return Body{};
+    }
+
     auto sewn = Body::fromFaces(points, defs);
     // Invariant: booleanToBody returns a WATERTIGHT solid or a clean empty Body —
     // never a corrupt or leaky one. fromFaces already rejects non-manifold sews
@@ -396,7 +419,18 @@ Body booleanToBody(const Body& a, const Body& b, BooleanOp op, Tolerance tol)
     // validator OR is not closed (a near-degenerate sew that dropped/duplicated a
     // face leaves an OPEN shell — checkIntegrity permits boundary edges, so the
     // watertightness must be checked separately) in favour of a clean empty Body.
-    if (!sewn.has_value() || !sewn->checkIntegrity().ok || !sewn->isClosed()) return Body{};
+    if (!sewn.has_value() || !sewn->checkIntegrity().ok || !sewn->isClosed()) {
+        // Same precedence as above, and this is the branch that matters most: an uncut
+        // seam is exactly what leaves faces straddling, so the sew opening AFTER a decline
+        // is the missing capability arriving at its consequence, not a separate fault.
+        report(declinedSeam ? BooleanDiagnostic::UnexpressibleSeam
+                            : BooleanDiagnostic::SewFailed);
+        return Body{};
+    }
+    if (sewn->faceCount() == 0u) {
+        report(BooleanDiagnostic::EmptyResult);
+        return Body{};
+    }
 
     // Restore the analytic arcs the chord-only sew flattened. setEdgeArc re-derives
     // the param range from the edge's own endpoints and REFUSES an edge whose

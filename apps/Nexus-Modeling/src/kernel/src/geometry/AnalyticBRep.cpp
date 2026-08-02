@@ -7442,7 +7442,7 @@ bool boxesOverlap(const FaceBox& a, const FaceBox& b)
            b.lo.y <= a.hi.y && a.lo.z <= b.hi.z && b.lo.z <= a.hi.z;
 }
 
-bool imprintOneWay(Body& target, const Body& tool, Tolerance tol)
+bool imprintOneWay(Body& target, const Body& tool, Tolerance tol, bool* declinedSeam)
 {
     // Snapshot each tool face's surface + AABB once (tool is not modified here).
     // The AABB is the broad-phase key: a tool face can only cut a target face if
@@ -7546,8 +7546,28 @@ bool imprintOneWay(Body& target, const Body& tool, Tolerance tol)
                         break;
                     case SurfaceIntersectionKind::None:
                     case SurfaceIntersectionKind::Point:
-                    case SurfaceIntersectionKind::Unsupported:
                         break;  // nothing to imprint (tangency is a measure-zero touch)
+                    case SurfaceIntersectionKind::Unsupported:
+                        // "I cannot express this" is NOT "there is nothing here", and the
+                        // two shared the arm above until a missing cone row proved what
+                        // that costs. There is still nothing to imprint — but say so.
+                        //
+                        // Reaching here already means this face pair survived the AABB
+                        // broad-phase, i.e. the two faces are close enough to plausibly
+                        // meet, so the flag reads "a seam may have gone uncut here" and a
+                        // clear flag reads "no pair was even a candidate". The broad-phase
+                        // is what makes that attribution sound: measured over 3592 chained
+                        // steps it is why the arrangement-gap fixtures — all planes and
+                        // cylinders — report SewFailed rather than blaming the intersector.
+                        //
+                        // A stricter test was tried here and removed: requiring the target
+                        // face to actually STRADDLE the tool surface (boundary vertices on
+                        // both sides) reclassified 2 steps out of 3592, and no fixture
+                        // could be built that distinguished it from the broad-phase alone.
+                        // Fifteen lines no test can hold accountable are worth less than
+                        // the 0.06% they buy.
+                        if (declinedSeam != nullptr) *declinedSeam = true;
+                        break;
                 }
                 if (cut) {
                     changed = true;  // f was split; move on to the next face
@@ -7560,8 +7580,9 @@ bool imprintOneWay(Body& target, const Body& tool, Tolerance tol)
 }
 }  // namespace
 
-bool imprintMutually(Body& a, Body& b, Tolerance tol)
+bool imprintMutually(Body& a, Body& b, Tolerance tol, bool* declinedSeam)
 {
+    if (declinedSeam != nullptr) *declinedSeam = false;
     // Two rounds, not one. A hole-ring seam must be discretized to match the OTHER
     // operand's vertices on the same circle, which on the first pass may not exist yet:
     // a cylinder's latitude ring is created by imprinting the box onto it, so a box
@@ -7570,8 +7591,8 @@ bool imprintMutually(Body& a, Body& b, Tolerance tol)
     // the extra round converges rather than accumulating.
     bool ok = true;
     for (int round = 0; round < 2; ++round) {
-        ok = imprintOneWay(a, b, tol) && ok;
-        ok = imprintOneWay(b, a, tol) && ok;
+        ok = imprintOneWay(a, b, tol, declinedSeam) && ok;
+        ok = imprintOneWay(b, a, tol, declinedSeam) && ok;
     }
     return ok;  // false ⇒ a degenerate/near-tangent config blew the imprint budget
 }

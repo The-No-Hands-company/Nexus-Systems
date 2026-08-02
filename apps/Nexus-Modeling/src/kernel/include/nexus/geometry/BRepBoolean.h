@@ -27,6 +27,28 @@ enum class BooleanOp : uint8_t {
     Difference,    // A − B — keep A outside B + B inside A (B faces reversed)
 };
 
+// WHY an empty Body came back. The watertight-or-empty invariant means a failure and a
+// genuinely empty result are the same VALUE, and for a long time they were also the same
+// event: intersectSurfaces answers Unsupported for a surface pair whose intersection it
+// cannot express, imprintOneWay handled Unsupported in the same switch arm as None
+// ("nothing to imprint"), and the imprint then reported SUCCESS having done no work. The
+// sew found faces still straddling an uncut seam, the invariant returned a clean empty
+// body, and nothing anywhere recorded that a capability had been missing rather than a
+// volume. That is how three absent cone rows in the intersection table stayed invisible.
+//
+// Every other subsystem in this kernel already reports this kind of thing — animation and
+// asset deserialization, mesh import/export and shader compilation all carry a diagnostic
+// enum. The boolean was the one place that swallowed it.
+enum class BooleanDiagnostic : uint8_t {
+    Ok,                 // a watertight solid was produced
+    EmptyResult,        // legitimately nothing: disjoint operands, or the op removes it all
+    UnexpressibleSeam,  // two faces meet on a curve the analytic SSI cannot represent —
+                        // a quartic (skew cylinders, an off-axis sphere or cone). The
+                        // result is empty because of a MISSING CAPABILITY, not the geometry.
+    ImprintBudget,      // a degenerate/near-tangent config blew the imprint's work budget
+    SewFailed,          // the imprint completed but the kept faces did not close
+};
+
 // Regularised boolean of two solids, emitted as a welded triangle Mesh. Copies
 // the inputs, mutually imprints them, selects the faces kept by `op` (via
 // per-face classification against the other solid), tessellates them with
@@ -44,8 +66,12 @@ enum class BooleanOp : uint8_t {
 // first-class solid whose checkIntegrity/checkGeometry are clean and that can
 // feed another boolean. Returns an empty Body if the kept faces do not sew into
 // a valid solid. Deterministic. Targets solids with no coincident faces.
+//
+// `diagnostic`, when non-null, receives WHY — see BooleanDiagnostic. The Body returned is
+// identical either way; this only makes the reason for an empty one legible instead of
+// leaving "I cannot" and "there is nothing" indistinguishable.
 [[nodiscard]] Body booleanToBody(const Body& a, const Body& b, BooleanOp op,
-                                 Tolerance tol = {});
+                                 Tolerance tol = {}, BooleanDiagnostic* diagnostic = nullptr);
 
 // Flat (45°) chamfer of one axis-aligned edge of a box, as a boolean difference
 // with a triangular cutting prism (a right-triangle profile of legs = setback,

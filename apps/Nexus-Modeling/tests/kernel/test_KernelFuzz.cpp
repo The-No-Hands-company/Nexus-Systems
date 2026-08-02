@@ -328,6 +328,7 @@ TEST(KernelFuzz, ChainedBooleansStayWatertightOrEmptyAndDeterministic)
     std::uniform_real_distribution<double> tr(-1.2, 1.2);
     int chains = 0, steps = 0, solids = 0, empties = 0, sawHole = 0, drills = 0;
     int coaxialDrills = 0;
+    size_t byReason[5] = {0, 0, 0, 0, 0};
 
     for (int it = 0; it < 60; ++it) {
         brep::Body cur = prim(rng);
@@ -375,12 +376,18 @@ TEST(KernelFuzz, ChainedBooleansStayWatertightOrEmptyAndDeterministic)
             const brep::BooleanOp op = (rng() % 3u == 0u)   ? brep::BooleanOp::Union
                                      : (rng() % 2u == 0u)   ? brep::BooleanOp::Intersection
                                                             : brep::BooleanOp::Difference;
-            const brep::Body r = brep::booleanToBody(cur, tool, op);
+            brep::BooleanDiagnostic diag = brep::BooleanDiagnostic::Ok;
+            const brep::Body r = brep::booleanToBody(cur, tool, op, Tolerance{}, &diag);
             ++steps;
+            ++byReason[static_cast<size_t>(diag)];
 
             // THE contract, at every step of every chain.
             const auto ig = r.checkIntegrity();
             ASSERT_TRUE(ig.ok) << "it=" << it << " depth=" << depth << ": " << ig.reason;
+            // The diagnostic must never contradict the value it describes.
+            ASSERT_EQ(diag == brep::BooleanDiagnostic::Ok, r.faceCount() > 0u)
+                << "it=" << it << " depth=" << depth
+                << " diagnostic=" << static_cast<int>(diag) << " faces=" << r.faceCount();
             if (r.faceCount() == 0u) { ++empties; break; }   // declined: the chain ends here
             ASSERT_TRUE(r.isClosed())
                 << "it=" << it << " depth=" << depth << ": non-empty but not closed";
@@ -418,6 +425,23 @@ TEST(KernelFuzz, ChainedBooleansStayWatertightOrEmptyAndDeterministic)
     EXPECT_GT(sawHole, 0)
         << "no chain ever produced a face with a hole, so this test is not reaching the "
            "territory it exists for — check the generator";
+
+    // WHAT the declines are made of. Until booleanToBody could say, every empty looked
+    // alike and the corpus could only report "48% empty" — a number that mixes a missing
+    // capability with a correct answer. Measured over ~3600 offline steps: 53.0% Ok,
+    // 35.2% UnexpressibleSeam, 6.9% SewFailed, 4.9% EmptyResult, 0% ImprintBudget. So the
+    // absent curved SSI is roughly FIVE TIMES the arrangement gap, which is the opposite
+    // of the priority the two had been recorded in.
+    const size_t unexpressible = byReason[static_cast<size_t>(brep::BooleanDiagnostic::UnexpressibleSeam)];
+    const size_t sewFailed = byReason[static_cast<size_t>(brep::BooleanDiagnostic::SewFailed)];
+    EXPECT_GT(unexpressible, 0u)
+        << "no chain hit a quartic seam — the generator has stopped producing skew/off-axis "
+           "curved pairs, and the SSI gap is no longer being measured";
+    // A CEILING, not a floor: this is the size of a known gap, and it must only shrink.
+    // Marching-SSI work should drive it toward zero and then tighten this bound.
+    EXPECT_LT(unexpressible, static_cast<size_t>(steps) / 2u)
+        << unexpressible << " of " << steps << " steps declined for an inexpressible seam "
+        << "(" << sewFailed << " sew failures) — the curved-surface gap has WIDENED";
 }
 
 TEST(KernelFuzz, MeshBooleanFiniteAndDeterministicUnderRandom)

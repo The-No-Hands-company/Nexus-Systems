@@ -713,7 +713,13 @@ private:
 // op. Both bodies are modified in place; checkIntegrity / checkGeometry stay
 // clean. Handles planar (Line-imprint) faces; curved-face imprint is a
 // follow-up. Deterministic.
-[[nodiscard]] bool imprintMutually(Body& a, Body& b, Tolerance tol = {});
+// `declinedSeam`, when non-null, is set true if the imprint met a face pair whose surfaces
+// genuinely cross but whose intersection intersectSurfaces cannot express (Unsupported).
+// The return value stays what it was — whether the imprint ran to completion — because an
+// imprint that declines a seam still terminates normally; it just did not do the work it
+// was asked for, which used to be indistinguishable from there being no work to do.
+[[nodiscard]] bool imprintMutually(Body& a, Body& b, Tolerance tol = {},
+                                   bool* declinedSeam = nullptr);
 
 // EXACT segment-vs-triangle intersection test built on the Shewchuk adaptive
 // orient3D predicate — an exact building block for the boolean's ray-parity /
