@@ -95,6 +95,7 @@ add_executable(nexus_kernel_tests
     kernel/test_BRepArcBiteSeam.cpp
     kernel/test_BRepArcComplementSelection.cpp
     kernel/test_BRepBooleanDiagnostic.cpp
+    kernel/test_BRepCutFacePolyline.cpp
     kernel/test_BRepCurvedBooleanBaseline.cpp
     kernel/test_BRepCurvedTessellation.cpp
     kernel/test_BRepCurvedBooleanSew.cpp

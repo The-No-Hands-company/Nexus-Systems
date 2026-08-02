@@ -1560,8 +1560,15 @@ uint32_t Body::splitFace(uint32_t faceId, uint32_t vA, uint32_t vB)
     return cutFaceBetween(faceId, vA, vB, nullptr);
 }
 
+uint32_t Body::cutFaceAlongPolyline(uint32_t faceId, uint32_t vA, uint32_t vB,
+                                    const std::vector<Vec3>& interior)
+{
+    return cutFaceBetween(faceId, vA, vB, nullptr, &interior);
+}
+
 uint32_t Body::cutFaceBetween(uint32_t faceId, uint32_t vA, uint32_t vB,
-                              const Curve* explicitCurve)
+                              const Curve* explicitCurve,
+                              const std::vector<Vec3>* interior)
 {
     if (faceId >= m_faces.size() || vA == vB) return kInvalid;
     const uint32_t loopId = m_faces[faceId].outerLoop;
@@ -1601,34 +1608,56 @@ uint32_t Body::cutFaceBetween(uint32_t faceId, uint32_t vA, uint32_t vB,
     for (int i = posB; i < n; ++i) segB.push_back(ce[static_cast<size_t>(i)]);
     for (int i = 0; i < posA; ++i) segB.push_back(ce[static_cast<size_t>(i)]);
 
-    // New cut edge (vStart -> vEnd). splitFace builds a straight Line chord;
-    // imprintCurve supplies the intersection curve itself, its param range set to
-    // reproduce the two endpoints so checkGeometry holds.
-    const uint32_t curveId = static_cast<uint32_t>(m_curves.size());
-    // DOUBLE: these are curve parameters. Narrowing them here re-rounded every arc an
-    // imprint builds back to float, which is where the seam ring's float pi came from.
-    double et0 = 0.0, et1 = 0.0;
-    if (explicitCurve != nullptr) {
-        m_curves.push_back(*explicitCurve);
-        et0 = paramOnCurve(*explicitCurve, m_verts[vStart].point);
-        et1 = paramOnCurve(*explicitCurve, m_verts[vEnd].point);
-    } else {
-        const Vec3 d = sub(m_verts[vEnd].point, m_verts[vStart].point);
-        Curve cu;
-        cu.kind = CurveKind::Line;
-        cu.origin = m_verts[vStart].point;
-        cu.dir = normalize(d);
-        m_curves.push_back(cu);
-        et1 = length(d);
+    // The cut is a CHAIN of edges from vStart to vEnd. With no interior points it is the
+    // single edge it has always been; with them it is a polyline, which is what a
+    // numerically-traced intersection produces — a quartic seam has no closed form to put
+    // in one Curve, so it arrives as samples. Either way the Euler bookkeeping is the
+    // same shape and stays neutral: N interior vertices, N+1 edges, one new face, so
+    // ΔV − ΔE + ΔF = N − (N+1) + 1 = 0.
+    //
+    // An explicit curve describes ONE edge, so the two are mutually exclusive.
+    if (explicitCurve != nullptr && interior != nullptr && !interior->empty()) return kInvalid;
+
+    std::vector<uint32_t> chainV;
+    chainV.push_back(vStart);
+    if (interior != nullptr) {
+        for (const Vec3& p : *interior) {
+            chainV.push_back(static_cast<uint32_t>(m_verts.size()));
+            Vertex nv;
+            nv.point = p;
+            m_verts.push_back(nv);
+        }
     }
-    const uint32_t edgeId = static_cast<uint32_t>(m_edges.size());
-    {
+    chainV.push_back(vEnd);
+
+    std::vector<uint32_t> chainE;
+    chainE.reserve(chainV.size() - 1);
+    for (size_t k = 0; k + 1 < chainV.size(); ++k) {
+        const uint32_t va = chainV[k], vb = chainV[k + 1];
+        const uint32_t curveId = static_cast<uint32_t>(m_curves.size());
+        // DOUBLE: these are curve parameters. Narrowing them re-rounds every arc an
+        // imprint builds back to float, which is where a seam ring's float pi came from.
+        double et0 = 0.0, et1 = 0.0;
+        if (explicitCurve != nullptr) {
+            m_curves.push_back(*explicitCurve);
+            et0 = paramOnCurve(*explicitCurve, m_verts[va].point);
+            et1 = paramOnCurve(*explicitCurve, m_verts[vb].point);
+        } else {
+            const Vec3 d = sub(m_verts[vb].point, m_verts[va].point);
+            Curve cu;
+            cu.kind = CurveKind::Line;
+            cu.origin = m_verts[va].point;
+            cu.dir = normalize(d);
+            m_curves.push_back(cu);
+            et1 = length(d);
+        }
         Edge e;
         e.curve = curveId;
-        e.v0 = vStart;
-        e.v1 = vEnd;
+        e.v0 = va;
+        e.v1 = vb;
         e.t0 = et0;
         e.t1 = et1;
+        chainE.push_back(static_cast<uint32_t>(m_edges.size()));
         m_edges.push_back(e);
     }
 
@@ -1650,32 +1679,63 @@ uint32_t Body::cutFaceBetween(uint32_t faceId, uint32_t vA, uint32_t vB,
     }
     m_faces[faceB].outerLoop = loopB;
 
-    // Diagonal coedges: dA closes loop A (vEnd->vStart, reversed on the new
-    // edge), dB closes loop B (vStart->vEnd, forward). They are partners.
-    const uint32_t dA = static_cast<uint32_t>(m_coedges.size());
-    { Coedge x; x.edge = edgeId; x.reversed = true;  x.loop = loopId; m_coedges.push_back(x); }
-    const uint32_t dB = static_cast<uint32_t>(m_coedges.size());
-    { Coedge x; x.edge = edgeId; x.reversed = false; x.loop = loopB;  m_coedges.push_back(x); }
-    m_coedges[dA].partner = dB;
-    m_coedges[dB].partner = dA;
+    // Cut coedges. Loop A closes with the chain traversed BACKWARDS (vEnd -> vStart), loop
+    // B with it forwards (vStart -> vEnd); the two traversals of each edge are partners.
+    // With a single edge this is exactly the old dA/dB pair.
+    std::vector<uint32_t> cutA;  // loop-A order
+    cutA.reserve(chainE.size());
+    for (size_t k = chainE.size(); k-- > 0;) {
+        Coedge x;
+        x.edge = chainE[k];
+        x.reversed = true;
+        x.loop = loopId;
+        cutA.push_back(static_cast<uint32_t>(m_coedges.size()));
+        m_coedges.push_back(x);
+    }
+    std::vector<uint32_t> cutB;  // loop-B order
+    cutB.reserve(chainE.size());
+    for (size_t k = 0; k < chainE.size(); ++k) {
+        Coedge x;
+        x.edge = chainE[k];
+        x.reversed = false;
+        x.loop = loopB;
+        cutB.push_back(static_cast<uint32_t>(m_coedges.size()));
+        m_coedges.push_back(x);
+    }
+    for (size_t i = 0; i < cutA.size(); ++i) {
+        const size_t k = chainE.size() - 1 - i;  // cutA[i] traverses chainE[k]
+        m_coedges[cutA[i]].partner = cutB[k];
+        m_coedges[cutB[k]].partner = cutA[i];
+    }
+    for (size_t k = 0; k < chainE.size(); ++k) m_edges[chainE[k]].coedge = cutB[k];
+    // Every interior vertex needs a coedge that starts there, or the validator finds a
+    // live vertex referencing nothing.
+    for (size_t k = 1; k + 1 < chainV.size(); ++k) m_verts[chainV[k]].coedge = cutB[k];
 
     for (uint32_t cb : segB) m_coedges[cb].loop = loopB;
 
-    // Wire loop A: segA (in existing order) then dA back to the front.
+    // Wire loop A: segA (in existing order) then the reversed cut chain back to the front.
     const uint32_t aFirst = segA.front(), aLast = segA.back();
-    m_coedges[aLast].next = dA; m_coedges[dA].prev = aLast;
-    m_coedges[dA].next = aFirst; m_coedges[aFirst].prev = dA;
+    m_coedges[aLast].next = cutA.front(); m_coedges[cutA.front()].prev = aLast;
+    for (size_t i = 0; i + 1 < cutA.size(); ++i) {
+        m_coedges[cutA[i]].next = cutA[i + 1];
+        m_coedges[cutA[i + 1]].prev = cutA[i];
+    }
+    m_coedges[cutA.back()].next = aFirst; m_coedges[aFirst].prev = cutA.back();
     m_loops[loopId].first = aFirst;
 
-    // Wire loop B: segB then dB back to the front.
+    // Wire loop B: segB then the forward cut chain back to the front.
     const uint32_t bFirst = segB.front(), bLast = segB.back();
-    m_coedges[bLast].next = dB; m_coedges[dB].prev = bLast;
-    m_coedges[dB].next = bFirst; m_coedges[bFirst].prev = dB;
+    m_coedges[bLast].next = cutB.front(); m_coedges[cutB.front()].prev = bLast;
+    for (size_t i = 0; i + 1 < cutB.size(); ++i) {
+        m_coedges[cutB[i]].next = cutB[i + 1];
+        m_coedges[cutB[i + 1]].prev = cutB[i];
+    }
+    m_coedges[cutB.back()].next = bFirst; m_coedges[bFirst].prev = cutB.back();
     m_loops[loopB].first = bFirst;
 
     const uint32_t sh = m_faces[faceId].shell;
     if (sh < m_shells.size()) m_shells[sh].faces.push_back(faceB);
-    m_edges[edgeId].coedge = dA;
 
     // AN INNER LOOP BELONGS TO THE PIECE THAT CONTAINS IT.
     //
