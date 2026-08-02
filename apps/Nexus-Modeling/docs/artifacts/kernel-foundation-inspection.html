@@ -1,0 +1,953 @@
+<title>Nexus Modeling — Kernel Foundation Inspection</title>
+
+<style>
+  :root {
+    --paper:      #FBFBF8;
+    --paper-2:    #F2F3EF;
+    --ink:        #16191F;
+    --graphite:   #5A6270;
+    --rule:       #DCDED7;
+    --rule-hard:  #B9BDB4;
+    --accent:     #0E6F79;
+    --accent-dim: #E2EEEF;
+    --critical:   #A81E26;
+    --high:       #9A5B00;
+    --medium:     #3F5A86;
+    --kiss:       #4A6340;
+    --crit-bg:    #F8E9E9;
+    --high-bg:    #F8F0DF;
+    --med-bg:     #E9EDF5;
+    --kiss-bg:    #EAF0E6;
+
+    --f-sans: ui-sans-serif, -apple-system, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+    --f-mono: ui-monospace, "SF Mono", "Cascadia Mono", "Cascadia Code", Consolas, "Liberation Mono", monospace;
+
+    --measure: 68ch;
+    --rail: 8.5rem;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --paper:      #13161A;
+      --paper-2:    #1B1F25;
+      --ink:        #E7E9E4;
+      --graphite:   #98A0AC;
+      --rule:       #2C3239;
+      --rule-hard:  #414952;
+      --accent:     #3FB4BD;
+      --accent-dim: #173235;
+      --critical:   #F0868C;
+      --high:       #DFA945;
+      --medium:     #93AEDA;
+      --kiss:       #9BBE8A;
+      --crit-bg:    #2E1B1D;
+      --high-bg:    #2C2415;
+      --med-bg:     #1A2130;
+      --kiss-bg:    #1D2618;
+    }
+  }
+  :root[data-theme="dark"] {
+    --paper:      #13161A;
+    --paper-2:    #1B1F25;
+    --ink:        #E7E9E4;
+    --graphite:   #98A0AC;
+    --rule:       #2C3239;
+    --rule-hard:  #414952;
+    --accent:     #3FB4BD;
+    --accent-dim: #173235;
+    --critical:   #F0868C;
+    --high:       #DFA945;
+    --medium:     #93AEDA;
+    --kiss:       #9BBE8A;
+    --crit-bg:    #2E1B1D;
+    --high-bg:    #2C2415;
+    --med-bg:     #1A2130;
+    --kiss-bg:    #1D2618;
+  }
+  :root[data-theme="light"] {
+    --paper:      #FBFBF8;
+    --paper-2:    #F2F3EF;
+    --ink:        #16191F;
+    --graphite:   #5A6270;
+    --rule:       #DCDED7;
+    --rule-hard:  #B9BDB4;
+    --accent:     #0E6F79;
+    --accent-dim: #E2EEEF;
+    --critical:   #A81E26;
+    --high:       #9A5B00;
+    --medium:     #3F5A86;
+    --kiss:       #4A6340;
+    --crit-bg:    #F8E9E9;
+    --high-bg:    #F8F0DF;
+    --med-bg:     #E9EDF5;
+    --kiss-bg:    #EAF0E6;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--f-sans);
+    font-size: 16px;
+    line-height: 1.62;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .sheet {
+    max-width: 66rem;
+    margin: 0 auto;
+    padding: 3.5rem 1.75rem 6rem;
+  }
+
+  /* ── masthead ─────────────────────────────────────────── */
+  .masthead { border-bottom: 2px solid var(--ink); padding-bottom: 1.5rem; }
+  .stamp {
+    font-family: var(--f-mono);
+    font-size: .7rem;
+    letter-spacing: .16em;
+    text-transform: uppercase;
+    color: var(--accent);
+    display: flex;
+    flex-wrap: wrap;
+    gap: .35rem 1.25rem;
+    margin-bottom: 1.4rem;
+  }
+  .stamp span { white-space: nowrap; }
+  h1 {
+    font-size: clamp(2.1rem, 5.5vw, 3.4rem);
+    line-height: 1.02;
+    letter-spacing: -0.032em;
+    font-weight: 800;
+    margin: 0 0 .8rem;
+    text-wrap: balance;
+  }
+  h1 em {
+    font-style: normal;
+    font-weight: 300;
+    color: var(--graphite);
+    letter-spacing: -0.02em;
+  }
+  .standfirst {
+    max-width: var(--measure);
+    font-size: 1.075rem;
+    color: var(--graphite);
+    margin: 0;
+  }
+  .standfirst strong { color: var(--ink); font-weight: 600; }
+
+  /* ── scoreboard ───────────────────────────────────────── */
+  .board {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr));
+    gap: 1px;
+    background: var(--rule);
+    border: 1px solid var(--rule);
+    margin: 2.5rem 0 3rem;
+  }
+  .cell { background: var(--paper); padding: 1rem 1.1rem 1.05rem; }
+  .cell .n {
+    font-family: var(--f-mono);
+    font-size: 1.85rem;
+    font-weight: 600;
+    letter-spacing: -0.03em;
+    font-variant-numeric: tabular-nums;
+    display: block;
+    line-height: 1.1;
+  }
+  .cell .k {
+    font-family: var(--f-mono);
+    font-size: .66rem;
+    letter-spacing: .13em;
+    text-transform: uppercase;
+    color: var(--graphite);
+    display: block;
+    margin-top: .3rem;
+  }
+  .cell.crit .n { color: var(--critical); }
+  .cell.high .n { color: var(--high); }
+  .cell.med  .n { color: var(--medium); }
+  .cell.kiss .n { color: var(--kiss); }
+  .cell.ok   .n { color: var(--accent); }
+
+  /* ── sections ─────────────────────────────────────────── */
+  section { margin-top: 3.5rem; }
+  .sec-head {
+    display: flex;
+    align-items: baseline;
+    gap: .9rem;
+    border-bottom: 1px solid var(--rule-hard);
+    padding-bottom: .55rem;
+    margin-bottom: 1.9rem;
+  }
+  .sec-head .num {
+    font-family: var(--f-mono);
+    font-size: .78rem;
+    font-weight: 600;
+    letter-spacing: .1em;
+    color: var(--accent);
+    flex: none;
+  }
+  .sec-head h2 {
+    font-size: 1.32rem;
+    font-weight: 700;
+    letter-spacing: -0.018em;
+    margin: 0;
+    text-wrap: balance;
+  }
+  p { max-width: var(--measure); }
+  p, ul, ol { margin: 0 0 1rem; }
+  ul, ol { padding-left: 1.15rem; max-width: var(--measure); }
+  li { margin-bottom: .4rem; }
+  a { color: var(--accent); text-decoration-thickness: 1px; text-underline-offset: 2px; }
+  a:focus-visible, summary:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+  code {
+    font-family: var(--f-mono);
+    font-size: .875em;
+    background: var(--paper-2);
+    padding: .1em .34em;
+    border-radius: 2px;
+    overflow-wrap: break-word;
+  }
+  strong { font-weight: 650; }
+
+  /* ── findings ─────────────────────────────────────────── */
+  .finding {
+    display: grid;
+    grid-template-columns: var(--rail) minmax(0, 1fr);
+    gap: 0 1.6rem;
+    padding: 1.6rem 0;
+    border-top: 1px solid var(--rule);
+  }
+  .finding:first-of-type { border-top: none; padding-top: .2rem; }
+  .rail { display: flex; flex-direction: column; gap: .5rem; align-items: flex-start; }
+  .fid {
+    font-family: var(--f-mono);
+    font-size: 1.4rem;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    color: var(--rule-hard);
+    line-height: 1;
+  }
+  .chip {
+    font-family: var(--f-mono);
+    font-size: .625rem;
+    font-weight: 600;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    padding: .22rem .5rem;
+    border-radius: 2px;
+    white-space: nowrap;
+  }
+  .chip.crit { background: var(--crit-bg); color: var(--critical); }
+  .chip.high { background: var(--high-bg); color: var(--high); }
+  .chip.med  { background: var(--med-bg);  color: var(--medium); }
+  .chip.kiss { background: var(--kiss-bg); color: var(--kiss); }
+  .fbody h3 {
+    font-size: 1.06rem;
+    font-weight: 700;
+    letter-spacing: -0.012em;
+    margin: 0 0 .55rem;
+    text-wrap: balance;
+  }
+  .fbody > p:last-child { margin-bottom: 0; }
+
+  /* measured / claimed pairs */
+  .mc {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 1px;
+    background: var(--rule);
+    border: 1px solid var(--rule);
+    margin: 1rem 0 1.1rem;
+    max-width: var(--measure);
+  }
+  @media (min-width: 40rem) { .mc { grid-template-columns: 1fr 1fr; } }
+  .mc > div { background: var(--paper-2); padding: .7rem .85rem; }
+  .mc .lab {
+    font-family: var(--f-mono);
+    font-size: .62rem;
+    letter-spacing: .13em;
+    text-transform: uppercase;
+    color: var(--graphite);
+    display: block;
+    margin-bottom: .25rem;
+  }
+  .mc .val { font-size: .93rem; }
+  .mc .val.bad { color: var(--critical); font-weight: 600; }
+
+  /* evidence block */
+  .evidence {
+    border-left: 2px solid var(--accent);
+    background: var(--accent-dim);
+    padding: .85rem 1rem;
+    margin: 1rem 0 1.1rem;
+    max-width: var(--measure);
+    font-size: .9rem;
+  }
+  .evidence .lab {
+    font-family: var(--f-mono);
+    font-size: .62rem;
+    letter-spacing: .13em;
+    text-transform: uppercase;
+    color: var(--accent);
+    display: block;
+    margin-bottom: .35rem;
+  }
+  .evidence p { margin: 0; max-width: none; }
+  .evidence p + p { margin-top: .5rem; }
+
+  /* tables */
+  .scroll { overflow-x: auto; margin: 1.1rem 0 1.25rem; }
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    min-width: 30rem;
+    font-size: .88rem;
+  }
+  th, td {
+    text-align: left;
+    padding: .5rem .7rem;
+    border-bottom: 1px solid var(--rule);
+    vertical-align: top;
+  }
+  th {
+    font-family: var(--f-mono);
+    font-size: .64rem;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    color: var(--graphite);
+    border-bottom: 1px solid var(--rule-hard);
+    font-weight: 600;
+    white-space: nowrap;
+  }
+  td.num, th.num {
+    font-family: var(--f-mono);
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+    white-space: nowrap;
+  }
+  td.bad { color: var(--critical); font-weight: 600; }
+  td.good { color: var(--accent); font-weight: 600; }
+  tbody tr:last-child td { border-bottom: none; }
+
+  pre {
+    font-family: var(--f-mono);
+    font-size: .8rem;
+    line-height: 1.55;
+    background: var(--paper-2);
+    border: 1px solid var(--rule);
+    padding: .8rem .9rem;
+    overflow-x: auto;
+    margin: 1rem 0 1.15rem;
+    max-width: var(--measure);
+  }
+  pre code { background: none; padding: 0; font-size: inherit; }
+
+  .verdict {
+    border: 1px solid var(--rule-hard);
+    border-left: 3px solid var(--ink);
+    padding: 1.1rem 1.25rem;
+    margin: 1.5rem 0;
+    max-width: var(--measure);
+    background: var(--paper-2);
+  }
+  .verdict .lab {
+    font-family: var(--f-mono);
+    font-size: .64rem;
+    letter-spacing: .13em;
+    text-transform: uppercase;
+    color: var(--graphite);
+    display: block;
+    margin-bottom: .4rem;
+  }
+  .verdict p:last-child { margin-bottom: 0; }
+
+  footer {
+    margin-top: 4rem;
+    padding-top: 1.2rem;
+    border-top: 2px solid var(--ink);
+    font-family: var(--f-mono);
+    font-size: .72rem;
+    letter-spacing: .05em;
+    color: var(--graphite);
+  }
+  footer p { max-width: none; }
+
+  @media (max-width: 34rem) {
+    .finding { grid-template-columns: minmax(0, 1fr); gap: .75rem; }
+    .rail { flex-direction: row; align-items: center; gap: .65rem; }
+    .fid { font-size: 1.1rem; }
+  }
+</style>
+
+<div class="sheet">
+
+<header class="masthead">
+  <div class="stamp">
+    <span>Foundation inspection</span>
+    <span>Nexus Modeling kernel</span>
+    <span>72,339 LOC / 2,466 tests</span>
+    <span>2026-07-30</span>
+    <span>F6 revised 2026-08-02</span>
+  </div>
+  <h1>The bedrock is sound.<br><em>The build flags were not.</em></h1>
+  <p class="standfirst">
+    A first-principles review of every foundation layer against Parasolid, ACIS, OCCT, Blender,
+    Houdini and Maya — asking only what is measurably true. The kernel's breadth is real and its
+    geometry testing is genuinely thorough. The audit found that <strong>one compiler flag
+    silently un-did the exact-arithmetic bedrock everything else is built on</strong> — since
+    <strong>fixed and guarded</strong> — and four architectural decisions that will cap how far
+    this can go before they are revisited.
+  </p>
+</header>
+
+<div class="board">
+  <div class="cell ok"><span class="n">1</span><span class="k">Critical — fixed</span></div>
+  <div class="cell high"><span class="n">4</span><span class="k">Structural</span></div>
+  <div class="cell med"><span class="n">6</span><span class="k">Depth gaps</span></div>
+  <div class="cell kiss"><span class="n">4</span><span class="k">Simplify</span></div>
+  <div class="cell ok"><span class="n">121<span style="font-size:.6em">/121</span></span><span class="k">Geometry files tested</span></div>
+</div>
+
+<p style="max-width:var(--measure);color:var(--graphite);font-size:.95rem;">
+  Every claim below was measured on the working tree, not read off the source. Where a
+  documented claim and a measurement disagreed, the measurement is reported and the document is
+  listed in §5.
+</p>
+
+<!-- ══════════════ 1 ══════════════ -->
+<section>
+  <div class="sec-head"><span class="num">§1</span><h2>The one that had to be fixed first — now fixed</h2></div>
+
+  <div class="finding">
+    <div class="rail"><span class="fid">F1</span><span class="chip crit">Critical</span></div>
+    <div class="fbody">
+      <h3><code>-ffast-math</code> silently de-exacts the exact predicates</h3>
+      <div class="evidence" style="border-left-color:var(--accent)">
+        <span class="lab">Resolved — commit <code>74bce163</code></span>
+        <p>
+          <code>-ffast-math</code> dropped, <code>-march=native</code> replaced with a probed
+          <code>-march=x86-64-v2</code> baseline, <code>-ffp-contract=off</code> added. The
+          exactness battery now carries an <code>__int128</code> reference past 2<sup>53</sup>
+          plus the recorded failing quadruple, and re-adding the flag fails it while all eight
+          pre-existing batteries still pass — which is the proof they were structurally blind
+          to it. The two dead <code>std::isfinite</code> guards were switched to their files'
+          own bit-inspecting helper and pinned. Cost: <code>ctest</code> 34.4s → 34.8s.
+          The finding is left in full below, because the way it hid is the reusable part.
+        </p>
+      </div>
+      <p>
+        The kernel builds with <code>-O2 -march=native -ffast-math</code>. Under
+        <code>-ffast-math</code>, GCC is licensed to reassociate floating-point arithmetic — and
+        Shewchuk's error-free transformations exist <em>only</em> as unreassociatable expressions.
+        <code>twoSum</code>'s error term is algebraically zero; a reassociating compiler folds it
+        to literal zero. Which is exactly what happens:
+      </p>
+      <pre><code>g++ -O2                          twoSum lo = 8.67e-19   ERROR TERM SURVIVES
+g++ -O2 -ffast-math -march=native  twoSum lo = 0          *** FOLDED TO ZERO ***
+g++ -O3 -ffast-math -march=native  twoSum lo = 0          *** FOLDED TO ZERO ***</code></pre>
+      <p>
+        With every error term zero, the expansion arithmetic degenerates to plain <code>double</code>.
+        So the question is whether that still gets signs right. It does not. Running the
+        <em>shipping</em> <code>RobustPredicates::orient3D</code> against an exact
+        <code>__int128</code> reference on integer-valued float coordinates:
+      </p>
+      <div class="scroll">
+        <table>
+          <thead><tr><th>Build of <code>RobustPredicates.cpp</code></th><th class="num">Cases</th><th class="num">Exactly degenerate</th><th class="num">Wrong signs</th></tr></thead>
+          <tbody>
+            <tr><td>Project's real flags</td><td class="num">5,675</td><td class="num">9</td><td class="num bad">6</td></tr>
+            <tr><td>Identical, minus <code>-ffast-math</code></td><td class="num">400,000</td><td class="num">537</td><td class="num good">0</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>
+        The failure mode is the worst available: for points that are <strong>exactly coplanar</strong>
+        the predicate returns a confident non-zero sign (measured <code>-512</code>,
+        <code>+128</code>, <code>-1024</code>, <code>+2048</code>). It never returns zero, so the
+        Simulation-of-Simplicity tie-break — the entire degeneracy strategy, and the thing
+        <code>pointPlaneSideSoS</code> and <code>segmentCrossesTriangleSoS</code> are built on —
+        never fires. Two thirds of exactly-degenerate configurations were decided by a coin flip.
+      </p>
+      <div class="evidence">
+        <span class="lab">Why the 1.2M-case exactness test passes anyway</span>
+        <p>
+          The test bounds coordinates so its own reference stays computable in
+          <code>int64</code> — <code>orient3D</code> coords ≤ 2<sup>15</sup>, determinant ≤
+          2<sup>51</sup>. That ceiling is <em>below</em> double's 53-bit mantissa, so plain double
+          is also exact there. The bound chosen to make the reference exact is the same bound that
+          makes the subject's inexactness invisible. Raising coordinates to 2<sup>21</sup> — still
+          well inside float — pushes intermediates past 2<sup>63</sup> and the failures appear
+          immediately.
+        </p>
+        <p>
+          This is the <em>second</em> time this bedrock has been certified by reading rather than
+          measuring at the boundary. The first time (inc69) the algorithm was wrong. This time the
+          algorithm is right and the build destroys it.
+        </p>
+      </div>
+      <p>
+        Two further consequences of the same flag, both live: <code>std::isfinite</code> returns
+        <strong>true for NaN and Inf</strong> under these flags, so the non-finite guards at
+        <code>render/Camera.cpp:113</code> and <code>sim/FluidSolver.cpp:215</code> are dead code
+        — NaN passes straight into the view matrix. (The geometry module is immune: its own
+        <code>geometry::isFinite</code> inspects the IEEE exponent bits.) And
+        <code>-march=native</code> bakes host CPU features into the binary, so FMA contraction
+        differs per machine — which contradicts the kernel's stated cross-machine determinism
+        invariant and makes the release binary non-portable.
+      </p>
+      <div class="mc">
+        <div><span class="lab">Fix</span><span class="val">Drop <code>-ffast-math</code>; replace <code>-march=native</code> with a baseline ISA. Add <code>-ffp-contract=off</code> for the predicate translation unit.</span></div>
+        <div><span class="lab">Verified</span><span class="val">400,000 cases / 537 exact degeneracies / 0 wrong signs with the flag removed. Ready to apply.</span></div>
+      </div>
+      <p>
+        Then widen the exactness test to a coordinate range where double <em>cannot</em> be exact
+        (<code>__int128</code> reference), so this can never be re-certified by a test that cannot
+        see the failure.
+      </p>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════ 2 ══════════════ -->
+<section>
+  <div class="sec-head"><span class="num">§2</span><h2>Four structural decisions that cap the ceiling</h2></div>
+  <p>
+    None of these is a bug. Each is a design choice that is correct for where the kernel is and
+    wrong for where it is going, and each gets more expensive to change with every feature layered
+    on top. They are the ones to decide deliberately now.
+  </p>
+
+  <div class="finding">
+    <div class="rail"><span class="fid">F2</span><span class="chip high">Structural</span></div>
+    <div class="fbody">
+      <h3>No attribute system — every extra datum needs its own side-car</h3>
+      <p>
+        <code>MeshAttributes</code> has six fixed slots: positions, normals, tangents, one UV set,
+        joint indices, joint weights. There is no named-attribute facility anywhere in the public
+        API — no domains, no interpolation rules, no custom channels. That single decision is
+        upstream of a long list of missing capabilities: multiple UV maps, vertex colour layers,
+        per-face material indices, sharp/seam/bevel-weight flags, vertex groups, face maps, and any
+        user- or node-authored data.
+      </p>
+      <p>
+        The symptom is already visible. Subdivision creases live in a <code>CreaseEdgeSet</code> —
+        a side-car <code>unordered_map</code> keyed by vertex-index <em>pairs</em>, passed in as an
+        option. It is not stored on the mesh, so it cannot be serialized with it, cannot be
+        painted, and does not survive any topology edit that renumbers vertices. That is what
+        happens to every attribute in a fixed-slot design: it becomes someone's parallel array with
+        its own lifetime bug.
+      </p>
+      <div class="mc">
+        <div><span class="lab">Industry standard</span><span class="val">Blender <code>CustomData</code> / attributes; Houdini point-prim-vertex-detail attributes; USD primvars. Typed, named, per-domain, with declared interpolation.</span></div>
+        <div><span class="lab">Why it is the #1 architectural gap</span><span class="val">Geometry nodes, modifiers, shading and interchange all read this layer. It cannot be retrofitted cheaply once 120 ops hardcode the six slots.</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="finding">
+    <div class="rail"><span class="fid">F3</span><span class="chip high">Structural</span></div>
+    <div class="fbody">
+      <h3>The kernel is entirely single-threaded</h3>
+      <p>
+        Zero <code>std::thread</code>, zero <code>std::async</code>, no <code>std::execution</code>
+        policies, no OpenMP, no job system or thread pool — across all 72,339 lines. Two documented
+        claims of parallelism do not exist in the code: <code>MeshBVH</code>'s "parallel build" is
+        serial, and the "parallel solver <code>parallelSolve</code>" is not in the tree at all
+        (the word refers to the geometric <em>parallel constraint</em>).
+      </p>
+      <p>
+        Every competitor parallelises the things this kernel does serially: BVH construction,
+        subdivision, boolean classification, remeshing, sculpt brush application over BVH nodes,
+        modifier-stack evaluation, and dependency-graph evaluation. On a 16-core workstation the
+        kernel currently leaves roughly 94% of the machine idle. "Better, stronger, faster" is not
+        reachable from a single thread.
+      </p>
+      <div class="evidence">
+        <span class="lab">Sequencing note</span>
+        <p>
+          This is deliberately <em>second</em>, not first. Parallelising code whose predicates are
+          non-exact multiplies non-determinism; and a task system introduced before the attribute
+          layer will need reworking when data ownership changes. Fix F1, decide F2, then build one
+          task system and convert the measured hot spots — not fifty ad-hoc threads.
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <div class="finding">
+    <div class="rail"><span class="fid">F4</span><span class="chip high">Structural</span></div>
+    <div class="fbody">
+      <h3>Single-precision coordinates cap achievable accuracy at ~1e-6 relative</h3>
+      <p>
+        <code>Vec3</code> is three <code>float</code>s, and every mesh, B-rep vertex, surface and
+        curve stores float. The <code>Tolerance</code> model is well built <em>for</em> float —
+        <code>kDefaultRelative = 1e-6</code> is about 8 ULP at unit scale, which is the right
+        choice — but it also states the ceiling: roughly six usable decimal digits of geometry.
+        A part 1 km across resolves to about 0.06 mm and no finer, and cannot carry a 1 µm feature
+        at all.
+      </p>
+      <div class="mc">
+        <div><span class="lab">Industry standard</span><span class="val">Parasolid, ACIS, OCCT and Rhino are <code>double</code> throughout (~1e-15 relative). Blender stores mesh coordinates as float but computes booleans in double/exact.</span></div>
+        <div><span class="lab">Consequence if unchanged</span><span class="val">Fine for DCC-scale polygon work. Not enough for the CAD half of the north star — the B-rep exists to compete with Plasticity and Rhino, and those users model at ratios float cannot hold.</span></div>
+      </div>
+      <p>
+        Note the interaction with F1: the exact predicates were deliberately written to be exact
+        for arbitrary <code>double</code> input, so the predicate layer is already ready for this
+        migration. The cost is in the 121 geometry sources and the serialized formats, and it only
+        grows.
+      </p>
+    </div>
+  </div>
+
+  <div class="finding">
+    <div class="rail"><span class="fid">F5</span><span class="chip high">Structural</span></div>
+    <div class="fbody">
+      <h3>The half-edge core is manifold-only; DCC editing lives in non-manifold states</h3>
+      <p>
+        <code>HalfEdgeMesh</code> enforces manifoldness and rejects non-manifold input — correct
+        and valuable for the Euler operators and the watertight guarantees built on them. But
+        polygon modelling passes through non-manifold configurations constantly: wire edges,
+        isolated vertices, three faces on one edge mid-operation, a bowtie the user is about to
+        fix. Blender's BMesh is explicitly non-manifold-tolerant precisely so an artist can be
+        halfway through a bad edit without the kernel refusing to represent it.
+      </p>
+      <p>
+        The right answer is probably not to weaken the manifold core — it is what makes the B-rep
+        provable. It is to be explicit that there are two topology tiers (a tolerant editing tier
+        and a validated solid tier) with a defined promotion path, rather than leaving the tolerant
+        tier absent and the editing ops routed around a structure that will not hold their
+        intermediate states.
+      </p>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════ 3 ══════════════ -->
+<section>
+  <div class="sec-head"><span class="num">§3</span><h2>Where the breadth is thinner than the header list suggests</h2></div>
+  <p>
+    122 geometry headers is genuine breadth, and 121 of 121 geometry sources are referenced by
+    tests — that discipline is real and rare. These are the places where a capability exists as an
+    entry point but not yet at industry depth. Listed so the map matches the territory.
+  </p>
+
+  <div class="finding">
+    <div class="rail"><span class="fid">F6</span><span class="chip med">Depth</span></div>
+    <div class="fbody">
+      <h3>The B-rep boolean knows four surface pairs</h3>
+      <div class="evidence" style="border-left-color:var(--accent)">
+        <span class="lab">Substantially addressed &mdash; 2026-08-02</span>
+        <p>
+          The pairwise table is now <strong>eleven pairs, not four</strong>:
+          plane&cap;{plane, sphere, cylinder, cone}, sphere&cap;sphere,
+          <strong>cylinder&cap;cylinder</strong> (the two-pipes case called out below),
+          sphere&cap;cylinder, and the three cone pairs
+          cone&cap;{cylinder, sphere, cone} added in commit <code>8c4a9832</code>.
+        </p>
+        <p>
+          The cone's absence was worse than a missing feature. <code>imprintOneWay</code>
+          handled <code>Unsupported</code> in the same <code>switch</code> arm as
+          <code>None</code> &mdash; &ldquo;nothing to imprint&rdquo; &mdash; and then reported
+          success, so the imprint did no work on interpenetrating solids and the
+          watertight-or-empty invariant turned that into a clean-looking empty body. A cone
+          unioned with a coaxial rod returned EMPTY at every offset tried, and nothing anywhere
+          recorded a problem. <code>booleanToBody</code> now carries a
+          <code>BooleanDiagnostic</code> (<code>bb6408f4</code>) so an empty result says whether
+          it is a correct answer, a missing capability, or a failed sew.
+        </p>
+        <p>
+          That diagnostic then <strong>re-ordered this section's priorities</strong>. Measured over
+          3,592 chained boolean steps: 53.0% Ok, <strong>35.2% declined for an inexpressible
+          seam</strong>, 6.9% sew failures, 4.9% legitimately empty. The absent curved intersection
+          was about five times the next-largest gap &mdash; the opposite of how the two had been
+          ranked.
+        </p>
+        <p>
+          A numerical tracer for the remaining quartics landed in <code>a6191fe0</code>
+          (<code>BRepSurfaceTrace.cpp</code>): Newton projection onto both surfaces, marching along
+          &nabla;a&times;&nabla;b with adaptive sag control, tangent-continuity detection at
+          singular points, and rejection of tangency debris &mdash; verified against the closed
+          forms it must reproduce and against the Steinmetz identity, bitwise deterministic,
+          sub-millisecond. It is <strong>not yet wired into the imprint</strong>: it yields
+          polylines and the B-rep stores analytic curves, and joining them is a representation
+          question still open.
+        </p>
+        <p>
+          Unchanged below: fillet depth, and the absence of STEP/IGES.
+        </p>
+      </div>
+      <p>
+        <code>intersectSurfaces</code> handles plane∩plane, plane∩sphere, plane∩cylinder and
+        sphere∩sphere. Everything else returns <code>Unsupported</code>, which means the analytic
+        boolean cannot cut <strong>cylinder∩cylinder</strong> (two pipes — arguably the most common
+        real CAD intersection), any cone, any torus, or any NURBS face. A general
+        <code>SurfaceSurfaceIntersect</code> exists but is 247 lines of marching that returns loose
+        <code>Vec3</code> polylines with no topology, no <code>(u,v)</code> traces, and no
+        singularity or branch handling — and it is not wired into the boolean at all.
+      </p>
+      <p>
+        Related: the fillet family is <code>MeshFillet</code> 186 lines, <code>FaceFillet</code>
+        209, <code>SurfaceBlending</code> 161. Real B-rep blending — rolling-ball surfaces, G1/G2
+        continuity, variable radius, vertex blends with setback, blend-blend intersections — is one
+        of the largest modules in any commercial kernel. And there is no STEP or IGES I/O, so the
+        B-rep cannot exchange with the CAD world it is built to compete in.
+      </p>
+    </div>
+  </div>
+
+  <div class="finding">
+    <div class="rail"><span class="fid">F7</span><span class="chip med">Depth</span></div>
+    <div class="fbody">
+      <h3>Voxel and SDF are dense grids</h3>
+      <p>
+        <code>MeshVoxelize</code> and <code>MeshSignedDistanceField</code> both key off
+        <code>std::array&lt;uint32_t,3&gt; resolution</code> with a flat <code>z*w*h + y*w + x</code>
+        index — dense allocation, default 32³. At 512³ that is 134M cells; at 1024³ it is
+        multi-gigabyte for a surface that occupies a few percent of the volume. Sculpt-scale SDF
+        work is not reachable this way. The industry answer is a sparse hierarchy (OpenVDB, which
+        is what Blender's voxel remesh and all of Houdini's volume work use).
+      </p>
+    </div>
+  </div>
+
+  <div class="finding">
+    <div class="rail"><span class="fid">F8</span><span class="chip med">Depth</span></div>
+    <div class="fbody">
+      <h3>Sculpt has no multiresolution and no dynamic topology</h3>
+      <p>
+        <code>SculptSession</code> has strokes, a per-vertex mask and brushes — a correct
+        foundation. What is missing is what makes sculpting usable: multiresolution levels (sculpt
+        at 10M+ vertices, edit at 10k), dynamic topology (local remesh during the stroke), sculpt
+        layers, and a paint-BVH for partial redraw. Without these, the brush works and the workflow
+        does not scale past a low-poly cage.
+      </p>
+    </div>
+  </div>
+
+  <div class="finding">
+    <div class="rail"><span class="fid">F9</span><span class="chip med">Depth</span></div>
+    <div class="fbody">
+      <h3>Instancing bakes geometry; the scene graph has no instances or LOD</h3>
+      <p>
+        <code>MeshInstancer::scatter</code> returns a single merged <code>Mesh</code>. Scattering
+        10,000 trees allocates 10,000 copies of the tree. There is no per-instance transform path,
+        no GPU instanced draw, and no LOD in <code>SceneGraph</code> (frustum culling is there).
+        Every competitor represents instances by reference — Blender dupli/geometry-nodes
+        instances, Houdini packed primitives, USD point instancers — because scene scale is
+        otherwise bounded by RAM.
+      </p>
+    </div>
+  </div>
+
+  <div class="finding">
+    <div class="rail"><span class="fid">F10</span><span class="chip med">Depth</span></div>
+    <div class="fbody">
+      <h3>Interchange and the render path are skeletons with correct bones</h3>
+      <p>
+        <strong>I/O:</strong> OBJ, PLY, STL and glTF 2.0 import/export is solid ground; USD is
+        ASCII-mesh <em>export only</em>, not composition, layers, references or instancing. No FBX
+        (still ubiquitous in game and film pipelines), no Alembic, no STEP/IGES.
+      </p>
+      <p>
+        <strong>Renderer:</strong> the architecture is real — deferred scheduler, GBuffer,
+        <code>RenderGraphValidator</code> checking per-pass layout transitions, frame capture,
+        reversed-Z. The shading is not: four shader files totalling 128 lines, and
+        <code>composite.frag</code> computes correct GGX/Smith/Fresnel against
+        <strong>two hardcoded light directions and a constant <code>viewDir = (0,0,1)</code></strong>,
+        reads no shadow map, and has no IBL, tonemap or anti-aliasing. That is a viewport preview,
+        not a renderer — entirely defensible under foundation-first, but it should be named as such
+        on the roadmap.
+      </p>
+      <p>
+        <strong>Also thin:</strong> UV has LSCM (the right algorithm) but no seams, islands or
+        packing — so unwrap produces coordinates no texture pipeline can use yet. Subdivision has
+        fractional creases but no boundary-interpolation rules, no face-varying UV interpolation
+        (textures will swim under subdivision), and no limit-surface evaluation.
+      </p>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════ 4 ══════════════ -->
+<section>
+  <div class="sec-head"><span class="num">§4</span><h2>Keep it simple — where the code is doing too much</h2></div>
+
+  <div class="finding">
+    <div class="rail"><span class="fid">K1</span><span class="chip kiss">Simplify</span></div>
+    <div class="fbody">
+      <h3>7,906 lines of hand-written string glue in <code>automation/</code></h3>
+      <p>
+        The largest non-geometry module in the kernel is a command registry: ~326 string-keyed
+        lambdas over kernel APIs, at roughly 24 lines each, split across
+        <code>AutomationScript.cpp</code> (4,026), <code>AutomationScriptCommands.cpp</code>
+        (3,052) and <code>AutomationScriptUtilities.cpp</code> (828). It is 11% of the kernel, it
+        is stringly-typed so nothing links a command to the API it calls at compile time, and
+        3,880 of those lines are the only substantial code in the tree with no test reference.
+      </p>
+      <p>
+        The real cost is not the lines — it is that <em>every future API change has to be
+        hand-mirrored here</em>. That is precisely the kind of tax that makes a 30-year project
+        slow. Blender, Maya and Houdini all embed a scripting language rather than hand-write
+        bindings. Either embed one (Python/Lua) or generate the bindings; keep the batch-harness
+        semantics, which are worth having.
+      </p>
+    </div>
+  </div>
+
+  <div class="finding">
+    <div class="rail"><span class="fid">K2</span><span class="chip kiss">Simplify</span></div>
+    <div class="fbody">
+      <h3>Header sprawl and pure-façade files</h3>
+      <p>
+        122 public geometry headers include a long tail of one-operation files —
+        <code>NurbsCurveArcLength</code>, <code>NurbsCurveClosestPoint</code>,
+        <code>NurbsCurveFit</code>, <code>NurbsCurveOffset</code>, <code>NurbsCurveSplit</code>,
+        <code>NurbsSurfaceArea</code>, and so on. Each one is a separate public header, a separate
+        manifest entry in the API-freeze fixture, and a separate include for every consumer.
+        Grouping these into <code>NurbsCurveOps</code> / <code>NurbsSurfaceOps</code> loses nothing
+        and shrinks the frozen surface substantially.
+      </p>
+      <p>
+        Some are pure façades. <code>MeshBoolean</code> (68 lines) exists only to translate its own
+        <code>BooleanOp</code> enum into <code>BooleanOperationType</code> and call
+        <code>BooleanOperation</code> — two public headers and two parallel enums for one
+        operation. Similar near-duplicate pairs worth collapsing or clearly differentiating:
+        <code>MeshSimplify</code> (92) over <code>MeshDecimator</code> (529),
+        <code>MeshVertexMerge</code> (117) beside <code>MeshVertexWeld</code> (227),
+        <code>MeshTopologyAnalysis</code> (79) beside <code>MeshTopologyValidation</code> (211).
+      </p>
+    </div>
+  </div>
+
+  <div class="finding">
+    <div class="rail"><span class="fid">K3</span><span class="chip kiss">Simplify</span></div>
+    <div class="fbody">
+      <h3>Two names that promise more than the code does</h3>
+      <p>
+        <code>QuadRemesh</code> raycasts a planar <code>resU × resV</code> grid from the bounding
+        box onto the surface through a BVH. That is a shrink-wrapped heightfield: it will produce
+        nonsense for any closed solid or organic shape, and it shares nothing but a name with what
+        the industry means by quad remeshing (QuadriFlow / Instant Meshes — curvature-aligned field
+        guided quadrangulation, which Blender ships). Rename it <code>GridProjectRemesh</code> and
+        the honest capability map improves at zero cost.
+      </p>
+      <p>
+        <code>ModifierStack</code>'s architecture is right — never mutates the base, caches,
+        re-evaluates on demand. But the <code>Modifier</code> struct is one flat record where
+        "only the fields relevant to <code>type</code> are used". That is a fine trade at seven
+        modifier types and a maintenance problem at thirty; it is worth converting to a variant
+        before the stack grows, not after.
+      </p>
+    </div>
+  </div>
+
+  <div class="finding">
+    <div class="rail"><span class="fid">K4</span><span class="chip kiss">Simplify</span></div>
+    <div class="fbody">
+      <h3>And one place the complexity is <em>earned</em> — leave it alone</h3>
+      <p>
+        The obvious KISS target in this kernel is <code>RobustPredicates</code>: several hundred
+        lines of Knuth/Dekker error-free transformations and expansion arithmetic, to answer "which
+        side of this plane". It is tempting, especially since F1 shows the machinery currently
+        computes nothing the plain double path would not.
+      </p>
+      <p>
+        Do not simplify it. This is the standard construction — Shewchuk's, as used by CGAL,
+        Triangle and OCCT — the comments correctly note that the intermediate adaptive stages were
+        deliberately omitted to reduce what can be subtly wrong, and it is already written to stay
+        exact if coordinates move to <code>double</code> (F4). The complexity is load-bearing;
+        the build flag is the defect. Simple means "no more parts than the job requires", and
+        exactness is the job.
+      </p>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════ 5 ══════════════ -->
+<section>
+  <div class="sec-head"><span class="num">§5</span><h2>Documentation that no longer matches the code</h2></div>
+  <p>
+    <code>CLAUDE.md</code> is the first thing every contributor and agent reads, which makes a
+    wrong line there more expensive than a wrong line of code. Six were wrong at the time of the
+    audit, and the first two were actively dangerous — they instructed new code to use a guard
+    that does not work. <strong>All six have since been corrected</strong>, along with
+    <code>HANDOFF-CHARTER.md</code> and three parity documents; the table is kept as the record
+    of what drifted and how far.
+  </p>
+  <div class="scroll">
+    <table>
+      <thead><tr><th>Documented</th><th>Measured</th></tr></thead>
+      <tbody>
+        <tr><td><code>-ffast-math</code> is DISABLED (and <code>-march=native</code>)</td><td class="bad">Both enabled — <code>src/kernel/CMakeLists.txt:214–215</code></td></tr>
+        <tr><td><code>std::isfinite</code> / <code>std::isnan</code> are reliable</td><td class="bad">Both return true for NaN and Inf under these flags</td></tr>
+        <tr><td>MeshBVH: parallel build</td><td class="bad">Serial; no threading anywhere in the kernel</td></tr>
+        <tr><td>CAD: parallel solver (<code>parallelSolve</code>)</td><td class="bad">No such symbol in the tree</td></tr>
+        <tr><td>Test count: 2026</td><td>2,466 in the gtest binary, 2,468 via ctest</td></tr>
+        <tr><td>One pre-existing API-freeze failure allowed</td><td>Passes clean; the allowance is stale</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>
+    Worth noting the counter-example, because it is the pattern to keep:
+    <code>Tolerance.h</code>'s own header comment says <code>-ffast-math</code> <em>is</em>
+    enabled and therefore inspects IEEE exponent bits directly. That file describes reality and is
+    correct because of it. The geometry module is hardened against NaN today only because it
+    trusted the flag it actually had.
+  </p>
+</section>
+
+<!-- ══════════════ 6 ══════════════ -->
+<section>
+  <div class="sec-head"><span class="num">§6</span><h2>What to do, in order</h2></div>
+  <div class="scroll">
+    <table>
+      <thead><tr><th class="num">#</th><th>Action</th><th>Why this position</th><th>Size</th></tr></thead>
+      <tbody>
+        <tr><td class="num">1 ✓</td><td>Drop <code>-ffast-math</code>; baseline ISA instead of <code>-march=native</code>; <code>-ffp-contract=off</code> on predicates</td><td>Everything else in the kernel is built on predicate exactness. Verified: 0 wrong signs in 400k cases.</td><td class="num">hours</td></tr>
+        <tr><td class="num">2 ✓</td><td>Widen the exactness battery past 2<sup>53</sup> with an <code>__int128</code> reference; re-audit the two dead <code>std::isfinite</code> guards</td><td>So fix 1 cannot silently regress, and so the test can see what it claims to.</td><td class="num">hours</td></tr>
+        <tr><td class="num">3 ✓</td><td>Correct the six lines in <code>CLAUDE.md</code></td><td>It is the instruction set every future contributor follows.</td><td class="num">minutes</td></tr>
+        <tr><td class="num">4</td><td><strong>Decide</strong> the attribute system (F2) and the float→double question (F4)</td><td>Both get monotonically more expensive per feature added. Deciding is cheap; deferring is not.</td><td class="num">design</td></tr>
+        <tr><td class="num">5</td><td>One task system; convert measured hot spots only</td><td>After 1–2 so parallelism cannot multiply non-determinism.</td><td class="num">weeks</td></tr>
+        <tr><td class="num">6 ◑</td><td>Finish the curved-boolean arc: <s>offset-cylinder arc-bite seam</s>, then circle-onto-sphere</td><td>The offset cylinder now sews, exact on the analytic volume. Sphere imprint still owed.</td><td class="num">increments</td></tr>
+        <tr><td class="num">7</td><td>Cylinder∩cylinder analytic SSI, then general SSI wired into the boolean</td><td>Without it the CAD half cannot do ordinary CAD.</td><td class="num">weeks</td></tr>
+        <tr><td class="num">8</td><td>KISS pass: group NURBS headers, delete façades, rename <code>QuadRemesh</code>, plan the automation layer's replacement</td><td>Cheap, and it lowers the tax on every later change.</td><td class="num">days</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="verdict">
+    <span class="lab">Overall</span>
+    <p>
+      The foundation is stronger than most projects at this stage in the places that are hardest to
+      retrofit: a typed B-rep with two independent validators, watertight-or-empty as an enforced
+      invariant, a real tolerance model, a seeded fuzz harness, and 121 of 121 geometry sources
+      under test. That discipline — measure it, prove the test is load-bearing, write down the
+      negative results — is the actual asset here, and it is what found F1.
+    </p>
+    <p>
+      What it is not yet is <em>fast</em> (single-threaded), <em>extensible</em> (no attribute
+      layer), or <em>precise enough for CAD</em> (float coordinates). Those three plus the manifold
+      question are the whole ceiling; everything else on this page is depth that can be added
+      incrementally on a sound base — and the base <em>is</em> sound now that the predicates
+      compute what they claim to. The next decision is not a bug at all: it is whether to commit
+      to an attribute layer and to double precision, both of which get monotonically more
+      expensive with every feature added on top.
+    </p>
+  </div>
+</section>
+
+<footer>
+  <p>
+    Nexus Modeling kernel foundation inspection · audited 2026-07-30 at commit <code>14882a22</code>
+    (72,339 LOC kernel / 2,466 tests) · updated at <code>fe2d4db2</code> (2,490 tests green,
+    5 hardware skips) · every figure on this page was measured on the working tree
+  </p>
+</footer>
+
+</div>

@@ -311,15 +311,30 @@ Log each increment as a **Logbook passage**, not a flat timeline:
 
 ## 11. Artifacts, memory, tooling
 
-**Artifacts (all owned by Eric):**
-- 📖 Kernel Logbook (current): `.../artifact/3dadb64a-fba6-4b97-9c31-1f359a418e8f`
-- Modeling parity dashboard (~50% shipped; kept live):
-  `.../artifact/5f636e76-5d79-4fa3-8b9e-85ebd819790d`
-- Roadmap/reference "nexus-roadmap" (STALE, compiled 2026-07-09; says kernel "1921
-  tests" — now 2279; editor "broken" — since partly fixed; predates the foundation
-  campaign): `.../artifact/bb7ac986-266e-448e-98b7-d7fa7bb33bf9`. Eric wants this and
-  the parity dashboard KEPT TRACKED/updated. NOTE: refreshing this roadmap is the
-  *app-UX* vision layer — it is NOT the 30-year vision of §0.
+**Artifacts (all owned by Eric). EVERY ONE NOW HAS A LOCAL SOURCE IN THE REPO** —
+they drifted for weeks precisely because they were hand-built pages with nothing on
+disk to edit, so "update the artifact" meant "re-fetch and hand-patch". Refresh a page
+by editing its source and re-publishing to the SAME url (pass `url=` if this
+conversation did not publish it, or a new URL is minted).
+
+| Artifact | URL | Local source |
+|---|---|---|
+| 📖 Kernel Logbook | `.../artifact/3dadb64a-…` | **generated** — `docs/kernel-logbook.artifact.html` from `docs/kernel-logbook.md` via `tools/render_logbook.py` |
+| 📐 Parity dashboard | `.../artifact/5f636e76-…` | `docs/artifacts/modeling-parity-index.html` |
+| 🔬 Foundation inspection | `.../artifact/64aff1d1-…` | `docs/artifacts/kernel-foundation-inspection.html` |
+| 🧭 nexus-roadmap | `.../artifact/bb7ac986-…` | `docs/artifacts/nexus-roadmap.html` |
+
+- The **Logbook is the only generated one** and cannot go stale silently:
+  `render_logbook.py` writes both builds every run and `--check` fails if either is
+  behind `kernel-logbook.md`. The other three are hand-maintained HTML.
+- **nexus-roadmap** — status re-measured 2026-08-02 (was compiled 2026-07-09 and badly
+  stale). Corrected: kernel 1921 → **2677 tests**; editor shell is no longer "broken",
+  `EditorUI.cpp`/`AppMode.cpp` **compile as kernel-target sources** — the gate moved to
+  *wiring*, since the top-level `CMakeLists.txt` adds only `src/kernel` and `tests`, so
+  `runtime/` and `tools/modeler/` never build and **no `nexus_modeling` binary exists**;
+  hover pre-highlight ○ → ◐ (`Viewport::updateHover` is implemented).
+  Eric wants this and the parity dashboard KEPT TRACKED/updated. NOTE: refreshing this
+  roadmap is the *app-UX* vision layer — it is NOT the 30-year vision of §0.
 
 **Memory** (`~/.claude/projects/.../memory/`, indexed by `MEMORY.md`): kernel layout,
 DCC domain-expert expectations, parity reference, the foundation gap audit + plan

@@ -1,11 +1,4 @@
-<!DOCTYPE html>
-<html lang="en" data-theme="light">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>The Nexus Geometry Kernel — A Logbook</title>
-<meta name="description" content="The narrative record of building the Nexus geometry kernel.">
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%93%96%3C/text%3E%3C/svg%3E">
 <style>:root{
   --paper:#F4F2EC; --card:#FBFAF5; --ink:#1A1D21; --ink-soft:#3C4046; --grey:#6E6A62;
   --rule:#D8D3C7; --rule-soft:#E7E2D6;
@@ -13,10 +6,22 @@
   --serif:"Iowan Old Style","Palatino Linotype","Book Antiqua",Palatino,Georgia,"Times New Roman",serif;
   --mono:ui-monospace,"SF Mono","Cascadia Code",Menlo,Consolas,monospace;
 }
+@media (prefers-color-scheme: dark){:root{
+  --paper:#16181C; --card:#1C1F24; --ink:#E9E4D8; --ink-soft:#C6C1B4; --grey:#928C7E;
+  --rule:#2C2F35; --rule-soft:#23262B;
+  --prussian:#8FB2D6; --brass:#D8AE57; --code-bg:#23262B;
+}}
 :root[data-theme="dark"]{
   --paper:#16181C; --card:#1C1F24; --ink:#E9E4D8; --ink-soft:#C6C1B4; --grey:#928C7E;
   --rule:#2C2F35; --rule-soft:#23262B;
   --prussian:#8FB2D6; --brass:#D8AE57; --code-bg:#23262B;
+}
+:root[data-theme="light"]{
+  --paper:#F4F2EC; --card:#FBFAF5; --ink:#1A1D21; --ink-soft:#3C4046; --grey:#6E6A62;
+  --rule:#D8D3C7; --rule-soft:#E7E2D6;
+  --prussian:#2B4C6F; --brass:#9C7A2E; --code-bg:#E7E2D6;
+  --serif:"Iowan Old Style","Palatino Linotype","Book Antiqua",Palatino,Georgia,"Times New Roman",serif;
+  --mono:ui-monospace,"SF Mono","Cascadia Code",Menlo,Consolas,monospace;
 }
 *{box-sizing:border-box}
 html{scroll-behavior:smooth}
@@ -121,10 +126,7 @@ blockquote p{margin:0;font-size:1.26rem;line-height:1.42;font-style:italic;
 @media (prefers-reduced-motion:reduce){#progress{transition:none}}
 @media print{#theme,#progress,nav.toc{display:none}body{background:#fff;color:#000}}
 </style>
-</head>
-<body>
 <div id="progress"></div>
-<button id="theme" aria-label="Toggle light and dark">&#9790;</button>
 <div class="wrap">
 <header class="book">
   <div class="mark">&#128214;</div>
@@ -1453,21 +1455,8 @@ blockquote p{margin:0;font-size:1.26rem;line-height:1.42;font-style:italic;
 </div>
 <script>
 (function(){
-  var KEY='nexus-logbook-theme';
-  var root=document.documentElement;
-  var saved=null; try{saved=localStorage.getItem(KEY);}catch(e){}
-  if(!saved){saved=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';}
-  root.setAttribute('data-theme',saved);
-  var btn=document.getElementById('theme');
-  function paint(){btn.textContent=root.getAttribute('data-theme')==='dark'?'\u2600':'\u263D';}
-  paint();
-  btn.addEventListener('click',function(){
-    var next=root.getAttribute('data-theme')==='dark'?'light':'dark';
-    root.setAttribute('data-theme',next);
-    try{localStorage.setItem(KEY,next);}catch(e){}
-    paint();
-  });
   var bar=document.getElementById('progress');
+  if(!bar) return;
   function scroll(){
     var h=document.documentElement.scrollHeight-window.innerHeight;
     bar.style.width=(h>0?(window.scrollY/h)*100:0)+'%';
@@ -1476,5 +1465,3 @@ blockquote p{margin:0;font-size:1.26rem;line-height:1.42;font-style:italic;
   window.addEventListener('resize',scroll);
 })();
 </script>
-</body>
-</html>

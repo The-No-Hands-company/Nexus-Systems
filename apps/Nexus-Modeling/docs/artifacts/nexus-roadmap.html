@@ -1,0 +1,434 @@
+<title>nexus-roadmap</title>
+<style>
+  :root{
+    --mono: ui-monospace,"SF Mono","JetBrains Mono","Cascadia Code",Menlo,Consolas,monospace;
+    --sans: system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+
+    /* light tokens (default) */
+    --bg:#eceff4; --surface:#ffffff; --surface2:#e4e9f0; --border:#d2dae4;
+    --ink:#161a21; --muted:#586274; --faint:#8a93a2;
+    --accent:#e2600d; --accent-soft:rgba(226,96,13,.10); --accent-line:rgba(226,96,13,.30);
+    --wire:#0f887a;
+    --good:#2f8f57; --warn:#b0771b; --bad:#c1483f; --planned:#8a93a2;
+    --shadow:0 1px 2px rgba(20,30,50,.06), 0 8px 24px rgba(20,30,50,.06);
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --bg:#14161b; --surface:#1b1e26; --surface2:#232733; --border:#2e3441;
+      --ink:#e7e9ef; --muted:#98a1b2; --faint:#727c8e;
+      --accent:#ff7a2f; --accent-soft:rgba(255,122,47,.13); --accent-line:rgba(255,122,47,.34);
+      --wire:#3cccbb;
+      --good:#5bb87a; --warn:#e0a53f; --bad:#e0685f; --planned:#7f8aa0;
+      --shadow:0 1px 2px rgba(0,0,0,.3), 0 10px 30px rgba(0,0,0,.35);
+    }
+  }
+  :root[data-theme="light"]{
+    --bg:#eceff4; --surface:#ffffff; --surface2:#e4e9f0; --border:#d2dae4;
+    --ink:#161a21; --muted:#586274; --faint:#8a93a2;
+    --accent:#e2600d; --accent-soft:rgba(226,96,13,.10); --accent-line:rgba(226,96,13,.30);
+    --wire:#0f887a; --good:#2f8f57; --warn:#b0771b; --bad:#c1483f; --planned:#8a93a2;
+    --shadow:0 1px 2px rgba(20,30,50,.06), 0 8px 24px rgba(20,30,50,.06);
+  }
+  :root[data-theme="dark"]{
+    --bg:#14161b; --surface:#1b1e26; --surface2:#232733; --border:#2e3441;
+    --ink:#e7e9ef; --muted:#98a1b2; --faint:#727c8e;
+    --accent:#ff7a2f; --accent-soft:rgba(255,122,47,.13); --accent-line:rgba(255,122,47,.34);
+    --wire:#3cccbb; --good:#5bb87a; --warn:#e0a53f; --bad:#e0685f; --planned:#7f8aa0;
+    --shadow:0 1px 2px rgba(0,0,0,.3), 0 10px 30px rgba(0,0,0,.35);
+  }
+
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);
+    line-height:1.6;-webkit-font-smoothing:antialiased;font-size:16px}
+  .wrap{max-width:1080px;margin:0 auto;padding:0 24px}
+  section{padding:56px 0;border-top:1px solid var(--border)}
+  section:first-of-type{border-top:none}
+
+  h1,h2,h3{margin:0;text-wrap:balance;letter-spacing:-.015em;font-weight:680;line-height:1.15}
+  h1{font-size:clamp(2rem,5vw,3.1rem)}
+  h2{font-size:clamp(1.5rem,3vw,2rem)}
+  h3{font-size:1.12rem;letter-spacing:-.01em}
+  p{margin:0 0 1em;max-width:68ch}
+  a{color:var(--accent);text-decoration:none;border-bottom:1px solid var(--accent-line)}
+  a:hover{border-bottom-color:var(--accent)}
+  strong{font-weight:660;color:var(--ink)}
+  code{font-family:var(--mono);font-size:.85em;background:var(--surface2);
+    padding:.1em .4em;border-radius:4px;border:1px solid var(--border)}
+
+  .eyebrow{font-family:var(--mono);font-size:.72rem;letter-spacing:.18em;
+    text-transform:uppercase;color:var(--accent);font-weight:600;margin:0 0 14px;display:block}
+  .lede{font-size:1.16rem;color:var(--muted);max-width:64ch;line-height:1.55}
+
+  /* hero */
+  .hero{padding:72px 0 60px}
+  .hero .kicker{font-family:var(--mono);font-size:.72rem;letter-spacing:.2em;text-transform:uppercase;
+    color:var(--muted);display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-bottom:26px}
+  .hero .kicker .dot{width:6px;height:6px;border-radius:50%;background:var(--accent)}
+  .hero h1{margin-bottom:20px}
+  .hero .accent-word{color:var(--accent)}
+  .meta{display:flex;gap:28px;flex-wrap:wrap;margin-top:30px;font-family:var(--mono);
+    font-size:.75rem;color:var(--faint);letter-spacing:.03em}
+  .meta b{color:var(--muted);font-weight:600}
+
+  /* status board */
+  .board{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:12px;margin-top:8px}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:10px;
+    padding:16px 16px 15px;box-shadow:var(--shadow);display:flex;flex-direction:column;gap:6px}
+  .card .lbl{font-family:var(--mono);font-size:.68rem;letter-spacing:.1em;text-transform:uppercase;color:var(--faint)}
+  .card .val{font-weight:640;font-size:.98rem;display:flex;align-items:center;gap:8px}
+  .card .note{font-size:.82rem;color:var(--muted);line-height:1.45}
+  .card.gate{border-color:var(--accent-line);background:linear-gradient(180deg,var(--accent-soft),transparent 60%)}
+
+  .chip{font-family:var(--mono);font-size:.66rem;letter-spacing:.06em;text-transform:uppercase;
+    font-weight:600;padding:3px 8px;border-radius:999px;border:1px solid;white-space:nowrap;display:inline-flex;align-items:center;gap:5px}
+  .chip::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor;flex:0 0 auto}
+  .c-good{color:var(--good);border-color:color-mix(in srgb,var(--good) 45%,transparent);background:color-mix(in srgb,var(--good) 10%,transparent)}
+  .c-warn{color:var(--warn);border-color:color-mix(in srgb,var(--warn) 45%,transparent);background:color-mix(in srgb,var(--warn) 10%,transparent)}
+  .c-bad{color:var(--bad);border-color:color-mix(in srgb,var(--bad) 48%,transparent);background:color-mix(in srgb,var(--bad) 10%,transparent)}
+  .c-plan{color:var(--planned);border-color:color-mix(in srgb,var(--planned) 45%,transparent);background:color-mix(in srgb,var(--planned) 9%,transparent)}
+  .c-wire{color:var(--wire);border-color:color-mix(in srgb,var(--wire) 45%,transparent);background:color-mix(in srgb,var(--wire) 10%,transparent)}
+
+  /* matrix */
+  .scroll{overflow-x:auto;border:1px solid var(--border);border-radius:12px;box-shadow:var(--shadow);margin-top:8px}
+  table{border-collapse:collapse;width:100%;min-width:820px;font-size:.86rem;background:var(--surface)}
+  th,td{text-align:left;padding:11px 14px;border-bottom:1px solid var(--border);vertical-align:top}
+  thead th{position:sticky;top:0;background:var(--surface2);font-family:var(--mono);font-size:.68rem;
+    letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:600;z-index:2}
+  tbody th{font-weight:620;color:var(--ink);position:sticky;left:0;background:var(--surface);
+    min-width:150px;border-right:1px solid var(--border);z-index:1}
+  thead th:first-child{left:0;z-index:3}
+  tbody tr:hover td,tbody tr:hover th{background:var(--surface2)}
+  td .mk{font-weight:700;margin-right:5px}
+  .mk.y{color:var(--good)} .mk.p{color:var(--warn)} .mk.n{color:var(--bad)}
+  .nexus-col{background:var(--accent-soft)}
+
+  /* pillars prose */
+  .pillars{display:grid;gap:18px;margin-top:10px}
+  .pillar{background:var(--surface);border:1px solid var(--border);border-left:3px solid var(--accent);
+    border-radius:10px;padding:20px 22px;box-shadow:var(--shadow)}
+  .pillar h3{margin-bottom:8px;display:flex;align-items:center;gap:10px}
+  .pillar h3 .n{font-family:var(--mono);font-size:.8rem;color:var(--accent);font-weight:700}
+  .pillar p{margin-bottom:.5em;color:var(--muted);font-size:.95rem}
+  .pillar p:last-child{margin-bottom:0}
+  .pillar .std{color:var(--ink)}
+
+  /* standard vs differentiator */
+  .split{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:8px}
+  .col{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:22px 22px 8px;box-shadow:var(--shadow)}
+  .col.win{border-color:var(--accent-line)}
+  .col h3{margin-bottom:4px}
+  .col .sub{font-family:var(--mono);font-size:.7rem;letter-spacing:.08em;text-transform:uppercase;color:var(--faint);margin-bottom:14px;display:block}
+  .col ul{list-style:none;margin:0;padding:0}
+  .col li{padding:10px 0;border-top:1px solid var(--border);font-size:.92rem;color:var(--muted)}
+  .col li:first-child{border-top:none}
+  .col li b{color:var(--ink);font-weight:620}
+
+  /* roadmap */
+  .phases{display:flex;flex-direction:column;gap:14px;margin-top:8px}
+  .phase{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:22px 24px;
+    box-shadow:var(--shadow);position:relative;display:grid;grid-template-columns:auto 1fr;gap:22px}
+  .phase .num{font-family:var(--mono);font-size:1.5rem;font-weight:700;color:var(--accent);
+    line-height:1;padding-top:2px;min-width:2.2ch}
+  .phase.done .num{color:var(--good)}
+  .phase .head{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:10px}
+  .phase h3{font-size:1.16rem}
+  .phase .body p{font-size:.94rem;color:var(--muted);margin-bottom:.7em}
+  .phase .meta-row{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px;font-size:.82rem}
+  .tag{font-family:var(--mono);font-size:.68rem;letter-spacing:.04em;color:var(--muted);
+    background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:4px 9px}
+  .tag b{color:var(--ink);font-weight:600}
+  .dep{color:var(--warn)}
+
+  footer{padding:44px 0 60px;color:var(--faint);font-size:.82rem}
+  footer .eyebrow{color:var(--muted)}
+  footer a{color:var(--muted)}
+  footer ul{columns:2;column-gap:32px;padding-left:1.1em;margin:12px 0 0}
+  footer li{margin-bottom:6px;break-inside:avoid}
+
+  @media (max-width:720px){
+    .split{grid-template-columns:1fr}
+    .phase{grid-template-columns:1fr;gap:10px}
+    .phase .num{font-size:1.2rem}
+    footer ul{columns:1}
+    section{padding:44px 0}
+  }
+  @media (prefers-reduced-motion:no-preference){
+    .reveal{opacity:0;transform:translateY(10px);animation:rise .6s cubic-bezier(.2,.7,.3,1) forwards}
+    @keyframes rise{to{opacity:1;transform:none}}
+  }
+  :focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:3px}
+</style>
+
+<div class="wrap">
+
+  <header class="hero reveal">
+    <div class="kicker"><span class="dot"></span>Nexus Modeling · Reference &amp; Roadmap<span class="dot"></span>Toward industry standard</div>
+    <h1>Perfecting the modeler, <span class="accent-word">pixel by pixel</span></h1>
+    <p class="lede">A working map from where Nexus Modeling stands today to the bar set by Blender, Maya, 3ds&nbsp;Max, Modo, Houdini and Plasticity — and a decision about where the differentiation actually lives. Match the interaction grammar users already know; win on the learning curve and the seams between tools.</p>
+    <div class="meta">
+      <span><b>Scope</b> · the modeler, before the suite</span>
+      <span><b>Principle</b> · standard on the core, distinctive on UX</span>
+      <span><b>Compiled</b> · 2026-07-09</span>
+      <span><b>Status re-measured</b> · 2026-08-02</span>
+    </div>
+  </header>
+
+  <section class="reveal">
+    <span class="eyebrow">01 · Where Nexus stands today</span>
+    <h2>The kernel is strong. The shell is the gate.</h2>
+    <p class="lede" style="margin-bottom:26px">Grounded in the current tree — not aspiration. The geometry kernel and the headless visual loop are healthy; almost everything a user would <em>touch</em> lives in the editor layer, which compiles but is not yet wired into an executable.</p>
+    <div class="board">
+      <div class="card"><span class="lbl">Geometry kernel</span><span class="val"><span class="chip c-good">Solid</span></span><span class="note">2677 tests green (was 1921). Booleans, bevel, remesh, half-edge, subdivision — plus a long exact-arithmetic and analytic B-rep campaign since this page was compiled.</span></div>
+      <div class="card"><span class="lbl">Visual dev-loop · nxrender</span><span class="val"><span class="chip c-good">Working</span></span><span class="note">Headless render-to-PNG. Trustworthy images the AI can see &amp; diagnose.</span></div>
+      <div class="card"><span class="lbl">Viewport shading</span><span class="val"><span class="chip c-good">To standard</span></span><span class="note">Flat / angle auto-smooth / real wireframe. Reversed-Z &amp; two-sided fixed.</span></div>
+      <div class="card"><span class="lbl">Modes · 15 coded</span><span class="val"><span class="chip c-warn">No UI</span></span><span class="note">Select, Vertex/Edge/Face edit, Boolean, Extrude, Fillet… no switcher.</span></div>
+      <div class="card"><span class="lbl">Selection highlight</span><span class="val"><span class="chip c-warn">Partial</span></span><span class="note">Hover pre-highlight exists (<code>Viewport::updateHover</code> + <code>HoverState</code>). Still a wireframe outline, not a post-process silhouette.</span></div>
+      <div class="card gate"><span class="lbl">Editor shell</span><span class="val"><span class="chip c-warn">Compiles · not launchable</span></span><span class="note">Re-measured 2026-08-02: <code>EditorUI.cpp</code> and <code>AppMode.cpp</code> <b>do build</b> — they are sources of the kernel target and the suite is green. The gate has moved: the top-level <code>CMakeLists.txt</code> configures only <code>src/kernel</code> and <code>tests</code>, so <code>runtime/</code> and <code>tools/modeler/</code> are never built and <b>no binary is produced</b>.</span></div>
+      <div class="card"><span class="lbl">ImGui</span><span class="val"><span class="chip c-warn">v1.91.6</span></span><span class="note">Master tag — no docking branch. No dockable panels yet.</span></div>
+      <div class="card"><span class="lbl">Console</span><span class="val"><span class="chip c-plan">Absent</span></span><span class="note">No dedicated module found; if F2 toggles one it's inline &amp; needs promoting.</span></div>
+    </div>
+  </section>
+
+  <section class="reveal">
+    <span class="eyebrow">02 · The four pillars of a modeler</span>
+    <h2>What "industry standard" decomposes into</h2>
+    <p class="lede" style="margin-bottom:24px">Every DCC differs in flavor, but the modeling experience rests on the same four pillars. Nexus must be fluent in all four before the suite ambitions matter.</p>
+
+    <div class="pillars">
+      <div class="pillar">
+        <h3><span class="n">A</span> Selection &amp; highlight</h3>
+        <p class="std">The single most-used interaction. The standard is: a <strong>hover pre-highlight</strong> (the element under the cursor lights up <em>before</em> you click — Maya calls it preselection highlight), a distinct <strong>selected</strong> color, and a brighter <strong>active</strong> element (Blender: orange selected, near-white active; the active element is the reference for many ops).</p>
+        <p>The "pixel-perfect" part is the outline itself: production apps draw a <strong>post-process silhouette</strong> off an object/ID buffer — the <strong>Jump Flood Algorithm</strong> turns the mask into a distance field for crisp, adjustable-width outlines — not a wireframe. Add box / lasso / circle select, X-ray select-through, and soft-selection <strong>falloffs</strong> (Modo, Maya) for organic work.</p>
+      </div>
+      <div class="pillar">
+        <h3><span class="n">B</span> Modes &amp; component editing</h3>
+        <p class="std">The Object ↔ Edit split is the backbone. In edit mode you select <strong>components</strong>: Blender exposes vertex / edge / face; 3ds Max's Editable Poly adds <strong>border</strong> and <strong>element</strong> (5 levels); Maya switches component masks via marking menus.</p>
+        <p>Two philosophies to borrow deliberately: 3ds Max's <strong>modifier stack</strong> (non-destructive, re-orderable history) and Houdini's <strong>node graph</strong> (fully procedural, groups = saved selections). Nexus already has a parametric feature history and a constraint graph — the raw material for a modern, non-destructive stack is present.</p>
+      </div>
+      <div class="pillar">
+        <h3><span class="n">C</span> Viewport visuals</h3>
+        <p class="std">Adaptive <strong>grid &amp; axes</strong> with distance fade, transform <strong>gizmos</strong> (screen-constant size, axis-colored, with plane and screen-space handles), and <strong>shading modes</strong>: wireframe, solid, material/matcap, rendered. Overlays for normals, statistics, and origins.</p>
+        <p>Nexus is closest to standard here — the rasterizer now shades and outlines correctly, and <code>nxrender</code> lets this be tuned to the pixel without the app even running.</p>
+      </div>
+      <div class="pillar">
+        <h3><span class="n">D</span> Application shell &amp; UX</h3>
+        <p class="std">Dockable, saveable panel layouts (ImGui's docking branch); mode/workspace <strong>tabs</strong>; a real <strong>console/log</strong>; and fast command access — Blender's pie menus, Maya's marking menus, Max's quad menus, or a modern <strong>command palette</strong>.</p>
+        <p>This is the layer Nexus deliberately <em>rethinks</em>. Plasticity is the proof point: it took Blender's grammar and wrapped it in context-sensitive pop-up widgets that first-timers grasp immediately — "CAD for artists."</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="reveal">
+    <span class="eyebrow">03 · The competitive field</span>
+    <h2>How the majors handle it</h2>
+    <p class="lede" style="margin-bottom:8px">A capability matrix, not a scoreboard — the point is to see the <em>conventions</em> that users arrive already knowing, and where Nexus sits today. <span style="color:var(--muted)"><span class="mk y">●</span> strong · <span class="mk p">◐</span> partial / different model · <span class="mk n">○</span> absent</span></p>
+    <div class="scroll">
+      <table>
+        <thead>
+          <tr>
+            <th>Capability</th>
+            <th>Blender</th>
+            <th>Maya</th>
+            <th>3ds Max</th>
+            <th>Modo</th>
+            <th>Plasticity</th>
+            <th class="nexus-col">Nexus · now</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <th>Hover pre-highlight</th>
+            <td><span class="mk y">●</span> on</td>
+            <td><span class="mk y">●</span> preselection</td>
+            <td><span class="mk y">●</span> on</td>
+            <td><span class="mk y">●</span> on</td>
+            <td><span class="mk y">●</span> on</td>
+            <td class="nexus-col"><span class="mk p">◐</span> Viewport::updateHover</td>
+          </tr>
+          <tr>
+            <th>Selected vs active</th>
+            <td><span class="mk y">●</span> orange / white</td>
+            <td><span class="mk y">●</span> green / white</td>
+            <td><span class="mk y">●</span> white / red</td>
+            <td><span class="mk y">●</span> yes</td>
+            <td><span class="mk y">●</span> yes</td>
+            <td class="nexus-col"><span class="mk n">○</span> single color</td>
+          </tr>
+          <tr>
+            <th>Component levels</th>
+            <td><span class="mk y">●</span> vert/edge/face</td>
+            <td><span class="mk y">●</span> +UV, multi</td>
+            <td><span class="mk y">●</span> +border/element</td>
+            <td><span class="mk y">●</span> vert/edge/poly</td>
+            <td><span class="mk p">◐</span> solids-first</td>
+            <td class="nexus-col"><span class="mk p">◐</span> coded, no UI</td>
+          </tr>
+          <tr>
+            <th>Silhouette outline</th>
+            <td><span class="mk y">●</span> post-process</td>
+            <td><span class="mk y">●</span> yes</td>
+            <td><span class="mk y">●</span> yes</td>
+            <td><span class="mk y">●</span> yes</td>
+            <td><span class="mk y">●</span> yes</td>
+            <td class="nexus-col"><span class="mk n">○</span> wireframe stub</td>
+          </tr>
+          <tr>
+            <th>Soft-select / falloff</th>
+            <td><span class="mk y">●</span> prop. edit</td>
+            <td><span class="mk y">●</span> soft select</td>
+            <td><span class="mk y">●</span> soft sel</td>
+            <td><span class="mk y">●</span> falloffs (best)</td>
+            <td><span class="mk p">◐</span> n/a NURBS</td>
+            <td class="nexus-col"><span class="mk n">○</span> —</td>
+          </tr>
+          <tr>
+            <th>Non-destructive stack</th>
+            <td><span class="mk y">●</span> modifiers</td>
+            <td><span class="mk y">●</span> history</td>
+            <td><span class="mk y">●</span> modifier stack</td>
+            <td><span class="mk y">●</span> mesh ops</td>
+            <td><span class="mk y">●</span> history</td>
+            <td class="nexus-col"><span class="mk p">◐</span> feature history exists</td>
+          </tr>
+          <tr>
+            <th>Transform gizmos</th>
+            <td><span class="mk y">●</span> yes</td>
+            <td><span class="mk y">●</span> yes</td>
+            <td><span class="mk y">●</span> yes</td>
+            <td><span class="mk y">●</span> action centers</td>
+            <td><span class="mk y">●</span> yes</td>
+            <td class="nexus-col"><span class="mk p">◐</span> TransformGizmo coded</td>
+          </tr>
+          <tr>
+            <th>Dockable panels</th>
+            <td><span class="mk y">●</span> areas</td>
+            <td><span class="mk y">●</span> yes</td>
+            <td><span class="mk y">●</span> yes</td>
+            <td><span class="mk y">●</span> yes</td>
+            <td><span class="mk y">●</span> yes</td>
+            <td class="nexus-col"><span class="mk n">○</span> no docking</td>
+          </tr>
+          <tr>
+            <th>Fast command access</th>
+            <td><span class="mk y">●</span> pie + F3 search</td>
+            <td><span class="mk y">●</span> marking menus</td>
+            <td><span class="mk y">●</span> quad menus</td>
+            <td><span class="mk y">●</span> pie menus</td>
+            <td><span class="mk y">●</span> context widgets</td>
+            <td class="nexus-col"><span class="mk n">○</span> —</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="reveal">
+    <span class="eyebrow">04 · The strategic split</span>
+    <h2>What to match, and where to win</h2>
+    <p class="lede" style="margin-bottom:22px">The trap is reinventing the interaction grammar — muscle memory that took users years to build. Spend the originality where it compounds: the onboarding curve and the seams between tools.</p>
+    <div class="split">
+      <div class="col">
+        <h3>Match the standard</h3>
+        <span class="sub">Table stakes · don't be clever here</span>
+        <ul>
+          <li><b>Selection model</b> — hover-highlight, selected/active distinction, component levels, box/lasso/circle, X-ray.</li>
+          <li><b>Gizmos &amp; snapping</b> — axis-colored move/rotate/scale, grid/vertex/edge snapping, numeric entry.</li>
+          <li><b>Shading modes</b> — wire / solid / material / rendered, with matcap studio lighting.</li>
+          <li><b>Undo/redo &amp; a non-destructive history</b> users can trust and re-order.</li>
+          <li><b>A keymap</b> that respects the reflexes of Blender/Max refugees.</li>
+        </ul>
+      </div>
+      <div class="col win">
+        <h3>Win on these</h3>
+        <span class="sub">Nexus's edge · where originality pays</span>
+        <ul>
+          <li><b>Zero-tutorial onboarding</b> — context-sensitive widgets &amp; a discoverable command palette instead of a wall of memorized hotkeys.</li>
+          <li><b>One coherent suite</b> — model → sculpt → paint → engine share selection, history, and UI grammar. No re-learning per tool.</li>
+          <li><b>Modern docking &amp; workspaces</b> from day one, not bolted on.</li>
+          <li><b>The AI visual loop</b> — the engine can <em>see</em> its own output and self-correct; a genuinely novel development &amp; assist capability.</li>
+          <li><b>Consistency as a feature</b> — one mental model across the whole creative pipeline.</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section class="reveal">
+    <span class="eyebrow">05 · The roadmap</span>
+    <h2>A dependency-ordered path</h2>
+    <p class="lede" style="margin-bottom:24px">These phases are a real sequence, not a menu — each is gated on the one before it. The recent kernel &amp; rasterizer work already de-risks the rendering inside Phases&nbsp;1–2.</p>
+
+    <div class="phases">
+      <div class="phase done">
+        <div class="num">✓</div>
+        <div class="body">
+          <div class="head"><h3>Foundation</h3><span class="chip c-good">Done</span></div>
+          <p>Kernel green (2677 tests, re-measured 2026-08-02). Headless <code>nxrender</code> visual loop. Rasterizer to standard: true flat shading, angle-based auto-smooth (hard cubes + smooth spheres, no topology change), real-edge wireframe, plus the reversed-Z and two-sided fixes those exposed. Editor split into an <code>app/</code> layer so kernel work never blocks on the UI.</p>
+          <div class="meta-row"><span class="tag"><b>Verified</b> by eye via nxrender</span><span class="tag"><b>Unblocks</b> everything below</span></div>
+        </div>
+      </div>
+
+      <div class="phase">
+        <div class="num">0</div>
+        <div class="body">
+          <div class="head"><h3>Make the app runnable again</h3><span class="chip c-warn">The gate · re-scoped</span></div>
+          <p><b>Re-measured 2026-08-02 — this phase is smaller than it was written.</b> The broken-file problem is gone: <code>EditorUI.cpp</code>, <code>AppMode.cpp</code> and the rest of <code>app/</code> compile as sources of the kernel target, and the whole suite is green. What remains is <em>wiring</em>: the top-level <code>CMakeLists.txt</code> configures only <code>src/kernel</code> and <code>tests</code>, so <code>runtime/main.cpp</code> and <code>tools/modeler/</code> are never built and there is no <code>nexus_modeling</code> binary to launch. Nothing a user touches can be seen until that target exists and its GLFW/GLU dependencies are configured.</p>
+          <div class="meta-row"><span class="tag"><b>Verify</b> · app launches, tests stay green</span><span class="dep tag"><b>Blocks</b> · Phases 3–4 entirely</span></div>
+        </div>
+      </div>
+
+      <div class="phase">
+        <div class="num">1</div>
+        <div class="body">
+          <div class="head"><h3>Selection &amp; highlight to standard</h3><span class="chip c-warn">Partly headless</span></div>
+          <p>An object/ID pick buffer; hover pre-highlight (<code>Viewport::updateHover</code> already exists and can be surfaced); a real selected-vs-active distinction; component modes (vertex / edge / face) wired to the existing edit modes; and a <strong>Jump-Flood silhouette outline</strong> replacing the wireframe stub. The outline and component display can be prototyped and tuned in <code>nxrender</code> before the app is even up.</p>
+          <div class="meta-row"><span class="tag"><b>Verify</b> · nxrender first, then in-app</span><span class="dep tag"><b>Needs</b> · Phase 0 for in-app pick</span></div>
+        </div>
+      </div>
+
+      <div class="phase">
+        <div class="num">2</div>
+        <div class="body">
+          <div class="head"><h3>Viewport visuals</h3><span class="chip c-wire">Prototypable now</span></div>
+          <p>Adaptive grid &amp; axes with fade, transform gizmos (screen-constant, axis-colored, plane/screen handles), shading-mode switching (wire/solid/matcap/rendered), and overlays (normals, stats, origins). Nexus is closest to standard here; much can advance headlessly.</p>
+          <div class="meta-row"><span class="tag"><b>Verify</b> · nxrender + in-app</span><span class="tag"><b>Leans on</b> · Foundation rasterizer</span></div>
+        </div>
+      </div>
+
+      <div class="phase">
+        <div class="num">3</div>
+        <div class="body">
+          <div class="head"><h3>The mode system, surfaced</h3><span class="chip c-plan">Planned</span></div>
+          <p>Give the 15 already-coded modes a face: an Object ↔ Edit toggle, a component-level bar (vert/edge/face/border/element), and a mode switcher that exposes Boolean / Extrude / Fillet / Revolve as first-class. Header and status bar reflecting current mode and selection counts.</p>
+          <div class="meta-row"><span class="tag"><b>Verify</b> · in-app</span><span class="dep tag"><b>Needs</b> · Phase 0</span></div>
+        </div>
+      </div>
+
+      <div class="phase">
+        <div class="num">4</div>
+        <div class="body">
+          <div class="head"><h3>App shell &amp; UX — the differentiator</h3><span class="chip c-plan">Planned</span></div>
+          <p>Migrate ImGui <code>v1.91.6 → docking</code> branch; dockable, saveable layouts; a proper console/log panel and a command palette (the anti-tutorial); a browsable keymap; and the context-sensitive, first-timer-friendly widgets that are Nexus's reason to exist. This is where "an alternative to all of them" gets earned.</p>
+          <div class="meta-row"><span class="tag"><b>Verify</b> · in-app, real users</span><span class="dep tag"><b>Needs</b> · Phases 0–3</span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <div class="wrap" style="padding:0">
+      <span class="eyebrow">Sources</span>
+      <p style="max-width:70ch;color:var(--muted)">Cross-DCC conventions verified against primary documentation and reference material, July 2026. Nexus status re-measured against the working tree on 2026-08-02; the kernel's own engineering record lives in the <a href="https://claude.ai/code/artifact/3dadb64a-fba6-4b97-9c31-1f359a418e8f">Logbook</a> and the capability tables in the <a href="https://claude.ai/code/artifact/5f636e76-5d79-4fa3-8b9e-85ebd819790d">Parity Index</a>.</p>
+      <ul>
+        <li><a href="https://docs.blender.org/manual/en/latest/scene_layout/object/selecting.html">Blender Manual — Selecting Objects</a></li>
+        <li><a href="https://www.versluis.com/2026/04/how-to-change-the-outline-colour-for-selected-and-active-objects-in-blender/">Blender selection &amp; active outline colors</a></li>
+        <li><a href="https://help.autodesk.com/cloudhelp/2022/ENU/Maya-Basics/files/GUID-B6AB4EA9-47AC-402A-A8A8-47F62ADA72B1.htm">Maya — Highlight components before selecting (preselection)</a></li>
+        <li><a href="https://help.autodesk.com/cloudhelp/2026/ENU/3DSMax-Modeling/files/GUID-D05DF785-F905-453E-BF64-DB4D59A9F200.htm">3ds Max — Editable Poly sub-object levels</a></li>
+        <li><a href="https://learn.foundry.com/modo/content/help/pages/modeling/select-falloff.html">Modo — Selection falloffs</a></li>
+        <li><a href="https://modosdk.foundry.com/modo/14.1/content/help/pages/modeling/action_centers.html">Modo — Action centers</a></li>
+        <li><a href="https://www.plasticity.xyz/product">Plasticity — Product tour (CAD for artists)</a></li>
+        <li><a href="https://bgolus.medium.com/the-quest-for-very-wide-outlines-ba82ed442cd9">Ben Golus — Jump-flood silhouette outlines</a></li>
+      </ul>
+    </div>
+  </footer>
+
+</div>
