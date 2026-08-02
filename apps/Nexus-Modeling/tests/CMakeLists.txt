@@ -59,6 +59,7 @@ add_executable(nexus_kernel_tests
     kernel/test_ManifoldEnforcement.cpp
     kernel/test_AnalyticBRep.cpp
     kernel/test_BRepSurfaceIntersect.cpp
+    kernel/test_BRepSurfaceTrace.cpp
     kernel/test_BRepImprint.cpp
     kernel/test_BRepImprintCircle.cpp
     kernel/test_BRepInnerLoop.cpp

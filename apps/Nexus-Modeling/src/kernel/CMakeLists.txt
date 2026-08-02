@@ -38,6 +38,7 @@ add_library(nexus_gfx_core STATIC
     src/geometry/BlendNetwork.cpp
     src/geometry/AnalyticBRep.cpp
     src/geometry/BRepSurfaceIntersect.cpp
+    src/geometry/BRepSurfaceTrace.cpp
     src/geometry/BRepBoolean.cpp
     src/geometry/BRepFeatureStack.cpp
     src/geometry/BRepBody.cpp
