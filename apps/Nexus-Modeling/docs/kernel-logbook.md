@@ -1722,6 +1722,37 @@ The habit this leaves is narrower and more useful than "write better tests":
 
 Two thousand six hundred and eighty-four tests ran; all passed.
 
+## 73. A cut that can bend
+
+Two chapters ago the tracer learned to follow a quartic. It returns a polyline, because a quartic has no closed form to put in a `Curve`. The imprint, meanwhile, cuts a face with exactly one edge carrying a Line or a Circle. Between those two facts sits the whole 35.2% — the share of chained boolean steps that decline with `UnexpressibleSeam`, still the largest measured gap by a factor of five.
+
+This chapter builds the piece in the middle, and it turned out to be smaller than the gap it serves.
+
+The insight is that a polyline cut is not a new kind of operation. `cutFaceBetween` already partitions a face's loop at two vertices, creates the second face, moves half the coedges to it, and closes each side with a new coedge. All of that is independent of how many edges the cut is made of. Only the middle changes: instead of one edge and the pair `dA`/`dB`, build **N+1 edges** through the interior samples, and close loop A with the chain traversed backwards while loop B traverses it forwards.
+
+The bookkeeping stays neutral, which is the reassuring part:
+
+```
+ΔV = N        (one vertex per interior sample)
+ΔE = N + 1    (one more edge than gaps)
+ΔF = 1
+ΔV − ΔE + ΔF = N − (N+1) + 1 = 0
+```
+
+So the Euler characteristic of the solid is untouched for any N, exactly as it is for the single-edge cut — which is now simply the case N = 0. That last point is worth dwelling on as a matter of method: rather than write a second routine beside the first, the existing one was generalised so that its old behaviour is a special case of the new. The whole suite then exercises the new code path on every `splitFace` and every Line or Circle imprint it already performs, and it did: two thousand six hundred and eighty-two tests, unchanged, before a single new test was written.
+
+**What it is, said plainly.** The chain is straight between consecutive samples. The seam is therefore only as faithful as the trace's sag budget, and a quartic cut this way is an approximation in a kernel that is otherwise careful to be exact. That is a real limitation and it should not be dressed up. But the property that decides whether a boolean *works* is not the fidelity of the seam — it is that both operands are cut along **the same** seam. Two bodies given the identical sample list share their boundary exactly, edge for edge, and a shared boundary is what lets the sew close. Fidelity is a separate number, and it has a dial on it.
+
+**What was proven.** The tests assert what defines a cut rather than that it ran. Euler neutrality at N = 0, 1, 2 and 5. Both validators clean and the shell still closed. Volume and surface area unchanged to 1e-9 — an imprint segments a boundary and must not alter the solid, however wiggly the path it takes across it. Every interior sample present as a vertex, so the chain cannot quietly straighten back into a chord. Each of the two pieces walking the whole chain exactly once. And adjacent or unknown vertices refused without leaving a mark on the body.
+
+Truncating the chain to its first edge fails three of the six.
+
+> The operator is deliberately not wired into the imprint. That is the third time in this Part the geometric core has been built and verified alone before anything depended on it — `intersectSurfaces`, then the tracer, now the cut — and the reason is the same each time: a routine that arrives already trusted is one fewer suspect when the thing built on top of it misbehaves.
+
+What remains for the wiring is genuinely the wiring: recognising an `Unsupported` pair, calling the tracer, finding where its polyline crosses each face's boundary, splitting the boundary edges there, and handing the interior samples to this cut. The fuzzer's ceiling on `UnexpressibleSeam` is already in place to say whether it worked.
+
+Two thousand six hundred and ninety tests ran; all passed.
+
 ---
 
 ---
