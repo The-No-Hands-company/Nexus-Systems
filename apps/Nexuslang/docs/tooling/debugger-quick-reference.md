@@ -90,6 +90,7 @@ lldb ./program
 ## Debug Information Generated
 
 The NexusLang compiler generates:
+
 - Source file locations (file, line, column)
 - Function debug info (name, parameters, return type)
 - Variable debug info (name, type, scope)
@@ -99,6 +100,7 @@ The NexusLang compiler generates:
 ## Features
 
  **Supported:**
+
 - Set breakpoints at source lines
 - Step through code (next, step)
 - Inspect variables
@@ -107,6 +109,7 @@ The NexusLang compiler generates:
 - GDB and LLDB support
 
  **Future:**
+
 - Watch expressions
 - Conditional breakpoints
 - Variable formatting

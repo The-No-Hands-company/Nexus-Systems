@@ -34,6 +34,7 @@ code examples/debug_test.nlpl
 ### Step 4: Use Debug Controls
 
 **Toolbar buttons** (or keyboard):
+
 - **Continue** (F5) - Resume until next breakpoint
 - **Step Over** (F10) - Execute current line
 - **Step Into** (F11) - Enter function call
@@ -44,6 +45,7 @@ code examples/debug_test.nlpl
 ### Step 5: Inspect Variables
 
 **Variables Panel** (left sidebar):
+
 - **Locals** - Variables in current function
 - **Globals** - Module-level variables
 - Expand objects to see properties
@@ -51,12 +53,14 @@ code examples/debug_test.nlpl
 **Hover** over variables in code to see values
 
 **Debug Console** (bottom panel):
+
 - Type variable names: `x`, `numbers[0]`
 - Evaluate expressions: `x + y`, `len(numbers)`
 
 ### Step 6: View Call Stack
 
 **Call Stack Panel** (left sidebar):
+
 - Shows function call hierarchy
 - Click frames to switch context
 - See where execution is paused
@@ -77,7 +81,7 @@ python -m nexuslang.debugger.debugger examples/debug_test.nlpl --break 22 --brea
 
 ### Commands When Paused
 
-```
+```text
 c, continue    - Continue execution
 s, step        - Step into
 n, next        - Step over  
@@ -93,7 +97,7 @@ q              - Quit
 
 ### Example Session
 
-```
+```bash
 $ python -m nexuslang.debugger.debugger examples/debug_test.nlpl --break 22
 
 Debugging: examples/debug_test.nlpl
@@ -177,6 +181,7 @@ tail -f /tmp/nlpl-dap.log
 **Cause:** File path mismatch or breakpoint on non-executable line
 
 **Fix:**
+
 - Ensure file is saved
 - Check breakpoint is on code line (not blank/comment)
 - Try restarting debugger
@@ -186,6 +191,7 @@ tail -f /tmp/nlpl-dap.log
 **Cause:** Python not found or DAP server missing
 
 **Fix:**
+
 ```bash
 # Check Python path
 which python3
@@ -202,6 +208,7 @@ ls src/nexuslang/debugger/dap_server.py
 **Cause:** Not properly paused or scope issue
 
 **Fix:**
+
 - Verify execution is paused (yellow highlight on line)
 - Try Debug Console instead: type variable name
 - Check Call Stack shows current frame
@@ -211,6 +218,7 @@ ls src/nexuslang/debugger/dap_server.py
 **Cause:** Variable out of scope or misspelled
 
 **Fix:**
+
 - Check Variables panel for actual variable names
 - Try inspecting from different stack frame
 - Ensure execution passed variable declaration

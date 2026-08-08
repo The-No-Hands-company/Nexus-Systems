@@ -1,6 +1,6 @@
 # NexusLang Concurrency: Syntax Design for All Levels
 
-**Date:** January 2, 2026 
+**Date:** January 2, 2026
 **Status:** Design Specification
 
 ---
@@ -18,6 +18,7 @@ NLPL provides **five levels of concurrency abstractions**, allowing developers t
 ### Syntax
 
 #### Thread Creation via FFI
+
 ```nexuslang
 # Direct system calls
 extern function pthread_create with 
@@ -50,6 +51,7 @@ call pthread_join with thread_id, null
 ```
 
 #### Atomic Operations
+
 ```nexuslang
 # Direct atomic instructions via inline assembly
 function atomic_increment with ptr as Pointer to Integer
@@ -70,6 +72,7 @@ end
 ```
 
 #### Spin Locks
+
 ```nexuslang
 # Manual spinlock implementation
 struct SpinLock
@@ -90,6 +93,7 @@ end
 ```
 
 **Use Cases:**
+
 - OS kernel synchronization
 - Real-time systems
 - Device drivers
@@ -104,6 +108,7 @@ end
 ### Syntax
 
 #### Thread Objects
+
 ```nexuslang
 # Import threading module
 import from stdlib/threading
@@ -121,6 +126,7 @@ end
 ```
 
 #### Mutexes and Condition Variables
+
 ```nexuslang
 import from stdlib/sync
 
@@ -171,6 +177,7 @@ end
 ```
 
 #### Thread Pools
+
 ```nexuslang
 import from stdlib/threading
 
@@ -190,6 +197,7 @@ pool.shutdown
 ```
 
 **Use Cases:**
+
 - High-performance servers
 - Parallel algorithms
 - Embedded systems with multiple cores
@@ -204,6 +212,7 @@ pool.shutdown
 ### Syntax
 
 #### Concurrent Blocks
+
 ```nexuslang
 # Explicit parallel execution
 concurrent
@@ -218,6 +227,7 @@ print text result1, result2, result3
 ```
 
 #### Async Functions (Optional)
+
 ```nexuslang
 # For developers who prefer async/await style
 async function fetch_user_data with user_id as Integer returns eventually UserData
@@ -235,6 +245,7 @@ set data to await future
 ```
 
 #### Parallel Loops
+
 ```nexuslang
 # Process items in parallel automatically
 parallel for each image in images
@@ -249,6 +260,7 @@ parallel_for_each with process_batch and batches
 ```
 
 #### Futures and Promises
+
 ```nexuslang
 import from stdlib/async
 
@@ -268,6 +280,7 @@ set value to future.get # Blocks until ready
 ```
 
 **Use Cases:**
+
 - Desktop applications
 - CLI tools with parallel processing
 - Game engines
@@ -282,6 +295,7 @@ set value to future.get # Blocks until ready
 ### Syntax
 
 #### Spawning Goroutines
+
 ```nexuslang
 # Spawn lightweight concurrent task
 spawn
@@ -304,6 +318,7 @@ end
 ```
 
 #### Channels
+
 ```nexuslang
 # Create typed channels
 set jobs to create channel of WorkItem
@@ -335,6 +350,7 @@ end
 ```
 
 #### Select Statement
+
 ```nexuslang
 # Wait on multiple channels
 select
@@ -353,6 +369,7 @@ end
 ```
 
 #### Worker Pools with Channels
+
 ```nexuslang
 # Create worker pool pattern
 set jobs to create channel of Job with capacity 100
@@ -382,6 +399,7 @@ end
 ```
 
 #### Context and Cancellation
+
 ```nexuslang
 # Create cancellable context
 set ctx to create context with timeout 30 seconds
@@ -404,6 +422,7 @@ ctx.cancel
 ```
 
 **Use Cases:**
+
 - Web servers
 - Microservices
 - Real-time systems
@@ -419,6 +438,7 @@ ctx.cancel
 ### Syntax
 
 #### Implicit Parallel Processing
+
 ```nexuslang
 # Compiler automatically parallelizes
 process these files in parallel
@@ -435,6 +455,7 @@ show "All done!"
 ```
 
 #### Natural Concurrent Operations
+
 ```nexuslang
 # Multiple operations happen concurrently automatically
 fetch user data from database
@@ -450,6 +471,7 @@ end
 ```
 
 #### Natural Async I/O
+
 ```nexuslang
 # All I/O is automatically async
 ask the API for user information
@@ -466,6 +488,7 @@ end
 ```
 
 **Use Cases:**
+
 - Scripts
 - Prototypes
 - Teaching/learning
@@ -491,7 +514,7 @@ end
 
 ### Decision Tree
 
-```
+```text
 Need hardware-level control? (kernel, drivers)
  YES Level 1: Manual Threading
  NO
@@ -517,23 +540,27 @@ Scripting or prototyping?
 ## Implementation Roadmap
 
 ### Phase 1: Foundations (Q1 2026)
+
 - Level 2: Basic threading via FFI
 - Mutex and lock primitives
 - Thread pool implementation
 
 ### Phase 2: Goroutines (Q2 2026)
+
 - M:N scheduler implementation
 - Channel types and operations
 - Spawn keyword and syntax
 - Select statement
 
 ### Phase 3: Advanced Features (Q3 2026)
+
 - Level 3: Structured concurrency
 - Async/await (optional)
 - Context and cancellation
 - Work-stealing scheduler
 
 ### Phase 4: Optimization (Q4 2026)
+
 - Level 1: Inline assembly for atomics
 - Zero-copy channel operations
 - Compiler-based parallelization
@@ -546,6 +573,7 @@ Scripting or prototyping?
 ### Web Server (All Levels)
 
 #### Level 1: Manual
+
 ```nexuslang
 extern function socket from library "c"
 extern function bind from library "c"
@@ -570,6 +598,7 @@ end
 ```
 
 #### Level 2: Explicit
+
 ```nexuslang
 import from stdlib/net
 import from stdlib/threading
@@ -586,6 +615,7 @@ end
 ```
 
 #### Level 3: Structured
+
 ```nexuslang
 import from stdlib/http
 
@@ -603,6 +633,7 @@ end
 ```
 
 #### Level 4: Goroutines
+
 ```nexuslang
 import from stdlib/http
 
@@ -621,6 +652,7 @@ end
 ```
 
 #### Level 5: Natural
+
 ```nexuslang
 create a web server on port 8080
 
@@ -680,4 +712,4 @@ process files in parallel
 
 ---
 
-**NLPL Concurrency: The right abstraction for every task.** 
+**NLPL Concurrency: The right abstraction for every task.**

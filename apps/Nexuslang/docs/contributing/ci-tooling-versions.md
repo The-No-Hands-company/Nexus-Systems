@@ -86,4 +86,3 @@ When updating a tool version:
 - [markdownlint-cli releases](https://github.com/igorshubovych/markdownlint-cli/releases)
 - [actionlint releases](https://github.com/rhysd/actionlint/releases)
 - [GitHub Actions versions](https://github.com/actions/)
-

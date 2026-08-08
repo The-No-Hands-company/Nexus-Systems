@@ -1,6 +1,6 @@
-# nlpllint - NexusLang Static Analyzer 
+# nlpllint - NexusLang Static Analyzer
 
-**Status:** **WORKING** - v0.1.0 Alpha 
+**Status:** **WORKING** - v0.1.0 Alpha
 **Date:** January 2, 2026
 
 ---
@@ -36,7 +36,7 @@
 
 ### Options
 
-```
+```text
 nlpllint [options] <file or directory>
 
 Options:
@@ -97,14 +97,14 @@ Example JSON:
 
 ```json
 {
-	"nlpllint": {
-		"mode": "strict",
-		"errors_only": false,
-		"analyzer": {
-			"style": true,
-			"dead_code": true
-		}
-	}
+ "nlpllint": {
+  "mode": "strict",
+  "errors_only": false,
+  "analyzer": {
+   "style": true,
+   "dead_code": true
+  }
+ }
 }
 ```
 
@@ -114,7 +114,7 @@ Example JSON:
 
 ### 1. Memory Safety (M001-M008)
 
-** IMPLEMENTED AND WORKING**
+**IMPLEMENTED AND WORKING**
 
 | Code | Issue | Severity |
 |------|-------|----------|
@@ -138,7 +138,8 @@ end
 ```
 
 **Output:**
-```
+
+```text
 ERROR: M006 at program.nlpl:4:5
  Use-after-free: dereferencing freed pointer 'buffer'
 
@@ -152,7 +153,7 @@ ERROR: M006 at program.nlpl:4:5
 
 ### 2. Null Safety (N001-N005)
 
-** IMPLEMENTED**
+**IMPLEMENTED**
 
 | Code | Issue | Severity |
 |------|-------|----------|
@@ -173,7 +174,7 @@ set value to dereference ptr # ERROR: N004 - Null dereference!
 
 ### 3. Resource Leaks (R001-R006)
 
-** IMPLEMENTED**
+**IMPLEMENTED**
 
 | Code | Issue | Severity |
 |------|-------|----------|
@@ -185,6 +186,7 @@ set value to dereference ptr # ERROR: N004 - Null dereference!
 | R006 | Resource leak on return | WARNING |
 
 **Tracked Resources:**
+
 - Files (`open` `close`)
 - Memory (`alloc` `dealloc`)
 - Locks (`lock` `unlock`)
@@ -204,7 +206,7 @@ end # WARNING: R005 - File 'file' not closed!
 
 ### 4. Initialization (I001)
 
-** IMPLEMENTED**
+**IMPLEMENTED**
 
 | Code | Issue | Severity |
 |------|-------|----------|
@@ -221,25 +223,25 @@ print number y # ERROR: I001 - 'y' used before initialization!
 
 ### 5. Type Safety (T001-T010)
 
-** STUB** - Full implementation TODO
+**STUB** - Full implementation TODO
 
 ---
 
 ### 6. Dead Code (D001-D005)
 
-** STUB** - Full implementation TODO
+**STUB** - Full implementation TODO
 
 ---
 
 ### 7. Style (S001-S020)
 
-** STUB** - Full implementation TODO
+**STUB** - Full implementation TODO
 
 ---
 
 ## Architecture
 
-```
+```text
 nlpllint
  
  StaticAnalyzer 
@@ -268,7 +270,7 @@ nlpllint
 
 ### Text Output (Default)
 
-```
+```text
 Analysis Summary for program.nlpl
 ============================================================
  Errors: 3
@@ -364,50 +366,50 @@ See `test_programs/static_analysis/test_bugs.nlpl` for example buggy code.
 ### Completed (Week 1, Day 1)
 
 - [x] Report system (`report.py`)
- - Issue class with severity, category, location
- - AnalysisReport with filtering, statistics
- - Colored terminal output
- - Source code display with caret pointers
+- Issue class with severity, category, location
+- AnalysisReport with filtering, statistics
+- Colored terminal output
+- Source code display with caret pointers
 
 - [x] Analyzer core (`analyzer.py`)
- - StaticAnalyzer class
- - Configurable checker system
- - Default/strict/minimal presets
- - File and directory analysis
+- StaticAnalyzer class
+- Configurable checker system
+- Default/strict/minimal presets
+- File and directory analysis
 
 - [x] Base checker infrastructure (`checks/base.py`)
- - Abstract BaseChecker interface
- - AST walking utilities
- - Source line retrieval
+- Abstract BaseChecker interface
+- AST walking utilities
+- Source line retrieval
 
 - [x] Memory safety checker (`checks/memory_safety.py`)
- - 8 error codes (M001-M008)
- - Allocation/deallocation tracking
- - Use-after-free detection
- - Double-free detection
- - Memory leak detection
+- 8 error codes (M001-M008)
+- Allocation/deallocation tracking
+- Use-after-free detection
+- Double-free detection
+- Memory leak detection
 
 - [x] Null safety checker (`checks/null_safety.py`)
- - 5 error codes (N001-N005)
- - Nullability tracking
- - Null dereference warnings
- - Uninitialized variable detection
+- 5 error codes (N001-N005)
+- Nullability tracking
+- Null dereference warnings
+- Uninitialized variable detection
 
 - [x] Resource leak checker (`checks/resource_leak.py`)
- - 6 error codes (R001-R006)
- - File/memory/lock/connection tracking
- - Leak detection at scope end
- - Leak detection on return
+- 6 error codes (R001-R006)
+- File/memory/lock/connection tracking
+- Leak detection at scope end
+- Leak detection on return
 
 - [x] Initialization checker (`checks/initialization.py`)
- - 1 error code (I001)
- - Use-before-assignment detection
+- 1 error code (I001)
+- Use-before-assignment detection
 
 - [x] CLI tool (`cli/nlpllint.py`)
- - Full command-line interface
- - Multiple output formats
- - Configuration options
- - Executable wrapper
+- Full command-line interface
+- Multiple output formats
+- Configuration options
+- Executable wrapper
 
 **Total:** ~2,000 lines of production-ready code
 
@@ -534,19 +536,19 @@ class MyChecker(BaseChecker):
 
 ## FAQ
 
-**Q: Does nlpllint slow down compilation?** 
+**Q: Does nlpllint slow down compilation?**
 A: No! Analysis is <10ms per file, much faster than compilation itself.
 
-**Q: Can I disable specific checks?** 
+**Q: Can I disable specific checks?**
 A: Yes, use `nlpllint.toml`/JSON config or choose analyzer presets (default/strict/minimal).
 
-**Q: Will it work on existing code?** 
+**Q: Will it work on existing code?**
 A: Yes! Tested on 312 existing test programs.
 
-**Q: Does it replace runtime checks?** 
+**Q: Does it replace runtime checks?**
 A: No, it complements them. Static analysis catches many bugs early, but runtime checks (sanitizers, debug mode) catch the rest.
 
-**Q: Can I use it in CI/CD?** 
+**Q: Can I use it in CI/CD?**
 A: Yes! Use `--json` output and check exit code (0 = no errors).
 
 ---
@@ -554,6 +556,7 @@ A: Yes! Use `--json` output and check exit code (0 = no errors).
 ## Roadmap
 
 ### v0.1.0 (Current) - Alpha
+
 - Core infrastructure
 - Memory safety
 - Null safety
@@ -562,6 +565,7 @@ A: Yes! Use `--json` output and check exit code (0 = no errors).
 - CLI tool
 
 ### v0.2.0 (Week 2) - Beta
+
 - [ ] Type safety (full)
 - [ ] Dead code detection (full)
 - [ ] Style checking (full)
@@ -570,6 +574,7 @@ A: Yes! Use `--json` output and check exit code (0 = no errors).
 - [ ] Comprehensive tests
 
 ### v0.3.0 (Month 1) - RC
+
 - [x] LSP integration
 - [ ] IDE plugins
 - [x] Build system integration
@@ -577,6 +582,7 @@ A: Yes! Use `--json` output and check exit code (0 = no errors).
 - [ ] Documentation website
 
 ### v1.0.0 (Q1 2026) - Production
+
 - [ ] Proven on large codebases
 - [ ] <5% false positives
 - [ ] Full auto-fix support
@@ -589,7 +595,7 @@ A: Yes! Use `--json` output and check exit code (0 = no errors).
 
 ### Files Created
 
-```
+```text
 src/nexuslang/tooling/analyzer/
  __init__.py # Package exports
  analyzer.py # Main analyzer (200 lines)
@@ -621,12 +627,14 @@ test_programs/static_analysis/
 ## Acknowledgments
 
 **Inspired by:**
+
 - Rust's borrow checker (memory safety)
 - Clang static analyzer (comprehensive checks)
 - Pylint (Python linting)
 - Go's simplicity (easy tooling)
 
 **Built for:**
+
 - Developers tired of hunting memory bugs
 - Teams wanting faster development cycles
 - Anyone who values their time
@@ -647,4 +655,4 @@ Part of the NexusLang project.
 
 ---
 
-**nlpllint: Catch bugs before they catch you!** 
+**nlpllint: Catch bugs before they catch you!**

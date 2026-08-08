@@ -98,7 +98,7 @@ jobs:
   # Only runs on schedule or workflow_dispatch (not on every push).
   # ------------------------------------------------------------------
   fuzz-lexer:
-    name: Fuzz lexer (${{ env.FUZZ_TIMEOUT }}s)
+    name: Fuzz lexer
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
@@ -139,7 +139,7 @@ jobs:
           retention-days: 30
 
   fuzz-parser:
-    name: Fuzz parser (${{ env.FUZZ_TIMEOUT }}s)
+    name: Fuzz parser
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
@@ -180,7 +180,7 @@ jobs:
           retention-days: 30
 
   fuzz-interpreter:
-    name: Fuzz interpreter (${{ env.FUZZ_TIMEOUT }}s)
+    name: Fuzz interpreter
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
@@ -221,7 +221,7 @@ jobs:
           retention-days: 30
 
   fuzz-typechecker:
-    name: Fuzz typechecker (${{ env.FUZZ_TIMEOUT }}s)
+    name: Fuzz typechecker
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
@@ -262,7 +262,7 @@ jobs:
           retention-days: 30
 
   fuzz-ffi:
-    name: Fuzz FFI marshal (${{ env.FUZZ_TIMEOUT }}s)
+    name: Fuzz FFI marshal
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
@@ -320,21 +320,25 @@ jobs:
 
       - name: Report crashes
         run: |
-          echo "## Fuzzing Run Summary" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
           TOTAL=$(find crashes/ -maxdepth 1 -type f 2>/dev/null | wc -l)
-          echo "Total crash files found: **${TOTAL}**" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          if [ "$TOTAL" -gt 0 ]; then
-            echo "### Crash files" >> $GITHUB_STEP_SUMMARY
-            find crashes/ -maxdepth 1 -type f | while read f; do
-              echo "- \`$(basename $f)\` ($(wc -c < $f) bytes)" >> $GITHUB_STEP_SUMMARY
-            done
-            echo "" >> $GITHUB_STEP_SUMMARY
-            echo "Download the artifacts above to reproduce crashes locally:" >> $GITHUB_STEP_SUMMARY
-            echo '```' >> $GITHUB_STEP_SUMMARY
-            echo "python fuzzing/fuzz_<target>.py <crash-file>" >> $GITHUB_STEP_SUMMARY
-            echo '```' >> $GITHUB_STEP_SUMMARY
-          else
-            echo "No crashes found in this run." >> $GITHUB_STEP_SUMMARY
-          fi
+          {
+            echo "## Fuzzing Run Summary"
+            echo ""
+            echo "Total crash files found: **${TOTAL}**"
+            echo ""
+            if [ "$TOTAL" -gt 0 ]; then
+              echo "### Crash files"
+              # -r so a backslash in a crash filename is not eaten, and every
+              # expansion quoted so names with spaces stay one argument.
+              find crashes/ -maxdepth 1 -type f | while read -r f; do
+                echo "- \`$(basename "$f")\` ($(wc -c < "$f") bytes)"
+              done
+              echo ""
+              echo "Download the artifacts above to reproduce crashes locally:"
+              echo '```'
+              echo "python fuzzing/fuzz_<target>.py <crash-file>"
+              echo '```'
+            else
+              echo "No crashes found in this run."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"

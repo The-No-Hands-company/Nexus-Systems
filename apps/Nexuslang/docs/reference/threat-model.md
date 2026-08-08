@@ -46,7 +46,7 @@ Key components for this analysis:
 
 ## 2. Trust Boundaries
 
-```
+```text
 +-------------------------------------------------------------+
 |  (Untrusted) NexusLang Source Program                            |
 |    - provided by developer, end user, or network download   |
@@ -117,6 +117,7 @@ can narrow the allowed syscall surface when running untrusted programs.
 ### T-A1: Malicious NexusLang Script
 
 A `.nlpl` file constructed to:
+
 - Exfiltrate files or credentials
 - Spawn persistent processes
 - Load unauthorized C libraries
@@ -134,6 +135,7 @@ attacked.  The code initially appears safe but performs malicious actions at run
 ### T-A3: User-Controlled Input at Runtime
 
 An attacker who provides crafted user input intended to:
+
 - Cause path traversal in file operations
 - Inject shell commands into subprocess calls
 - Corrupt SQL queries
@@ -312,6 +314,7 @@ logging left enabled in production.
 ### 7.1 Interpreter Interpreted in CPython
 
 The NexusLang interpreter runs inside CPython, which means:
+
 - CPython memory management bugs can undermine memory safety guarantees.
 - CPython's GIL does not protect against C extension race conditions.
 - Python's dynamic import system can be abused if `IMPORT` permission is
@@ -348,6 +351,7 @@ that scenario.
 Stack canaries and ASLR reduce exploit reliability but do not provide
 absolute protection against memory-safety bugs in C extensions.  Full
 mitigation requires:
+
 - Running on a kernel with ASLR enabled (`randomize_va_space=2`).
 - Using compiler-hardened builds of C extensions (PIE, stack protector, RELRO).
 

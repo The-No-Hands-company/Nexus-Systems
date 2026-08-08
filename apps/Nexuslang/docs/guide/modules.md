@@ -1,6 +1,7 @@
 # NexusLang Module System Design
 
 ## Overview
+
 The NexusLang module system provides a way to organize code into reusable components that can be imported and used across different files. This system enables better code organization, encapsulation, and reuse.
 
 ## Module Definition
@@ -10,28 +11,32 @@ A module in NexusLang is simply a file containing NexusLang code. Each file auto
 ## Import Syntax
 
 ### Basic Import
-```
+
+```text
 Import module_name.
 ```
 
 This imports all public definitions from the specified module into the current namespace.
 
 ### Selective Import
-```
+
+```text
 Import function_name, another_function from module_name.
 ```
 
 This imports only the specified definitions from the module.
 
 ### Aliased Import
-```
+
+```text
 Import module_name as alias_name.
 ```
 
 This imports the module under a different name to avoid naming conflicts.
 
 ### Relative Imports
-```
+
+```nxl
 Import ./relative_module.  # Import from the same directory
 Import ../parent_module.   # Import from the parent directory
 ```
@@ -40,7 +45,7 @@ Import ../parent_module.   # Import from the parent directory
 
 By default, all top-level definitions (variables, functions, classes) in a module are public and can be imported by other modules. To make a definition private (only accessible within the module), use the `private` keyword:
 
-```
+```text
 Define private function internal_helper that takes nothing
     # This function cannot be imported by other modules
 End function.
@@ -64,7 +69,7 @@ The module system will detect and handle circular imports gracefully. If module 
 
 When a module is imported, its definitions are placed in a namespace corresponding to the module name. This prevents naming conflicts between different modules.
 
-```
+```nxl
 Import math.
 
 Create result and set it to math.square_root(16).
@@ -72,7 +77,7 @@ Create result and set it to math.square_root(16).
 
 When using selective imports, the imported definitions are added directly to the current namespace:
 
-```
+```nxl
 Import square_root from math.
 
 Create result and set it to square_root(16).
@@ -91,7 +96,8 @@ Create result and set it to square_root(16).
 ## Example Usage
 
 ### math_utils.nlpl
-```
+
+```nxl
 Define function add that takes a as Integer, b as Integer and returns Integer
     Return a + b.
 End function.
@@ -106,7 +112,8 @@ End function.
 ```
 
 ### main.nlpl
-```
+
+```nxl
 Import add, multiply from math_utils.
 
 Create result1 and set it to add(5, 10).
@@ -117,7 +124,8 @@ Print("Result 2: " + result2).
 ```
 
 ### alternative_import.nlpl
-```
+
+```nxl
 Import math_utils.
 
 Create result1 and set it to math_utils.add(5, 10).
@@ -125,4 +133,4 @@ Create result2 and set it to math_utils.multiply(3, 4).
 
 Print("Result 1: " + result1).
 Print("Result 2: " + result2).
-``` 
+```

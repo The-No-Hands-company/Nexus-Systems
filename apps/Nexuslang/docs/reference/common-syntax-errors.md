@@ -3,6 +3,7 @@
 This document lists common syntax errors encountered when writing NexusLang code and how to fix them.
 
 ## Table of Contents
+
 1. [String Concatenation with Parentheses](#string-concatenation-with-parentheses)
 2. [Reserved Keywords as Identifiers](#reserved-keywords-as-identifiers)
 3. [Raise Statement Syntax](#raise-statement-syntax)
@@ -14,15 +15,18 @@ This document lists common syntax errors encountered when writing NexusLang code
 ## String Concatenation with Parentheses
 
 ### Problem
+
 Cannot use nested parentheses when calling `to_string` in string concatenation expressions.
 
 ### Incorrect
+
 ```nexuslang
 set num to 42
 print text "The number is: " plus (num to_string)  # SYNTAX ERROR
 ```
 
 ### Correct
+
 ```nexuslang
 set num to 42
 set num_str to num to_string
@@ -30,9 +34,11 @@ print text "The number is: " plus num_str  # Works!
 ```
 
 ### Explanation
+
 NLPL's parser currently doesn't support nested parentheses in certain expression contexts. Always extract intermediate values to variables before using them in string concatenation.
 
 ### More Examples
+
 ```nexuslang
 # Incorrect
 print text "Result: " plus (calculate_value with x to_string)
@@ -48,9 +54,11 @@ print text "Result: " plus result_str
 ## Reserved Keywords as Identifiers
 
 ### Problem
+
 Certain words are reserved tokens in NexusLang and cannot be used as variable names, parameter names, or function names.
 
 ### Known Reserved Keywords
+
 - `callback` (TokenType.CALLBACK)
 - `error` (TokenType.ERROR - can be used in catch blocks but not as general identifier)
 - `message` (TokenType.MESSAGE - restricted in certain contexts)
@@ -62,6 +70,7 @@ Certain words are reserved tokens in NexusLang and cannot be used as variable na
 - `if`, `else`, `while`, `for`, `return`, etc.
 
 ### Incorrect
+
 ```nexuslang
 function process with callback as Function
   # ...
@@ -69,6 +78,7 @@ end
 ```
 
 ### Correct
+
 ```nexuslang
 function process with handler as Function
   # ...
@@ -81,6 +91,7 @@ end
 ```
 
 ### Finding Reserved Keywords
+
 If you encounter an error like "Expected X, got TokenType.IDENTIFIER", the identifier you used might be a reserved keyword. Try using a different name.
 
 ---
@@ -88,15 +99,18 @@ If you encounter an error like "Expected X, got TokenType.IDENTIFIER", the ident
 ## Raise Statement Syntax
 
 ### Problem
+
 The raise statement requires specific syntax with the `with message` clause.
 
 ### Incorrect
+
 ```nexuslang
 raise error "Something went wrong"  # SYNTAX ERROR
 raise "Something went wrong"        # SYNTAX ERROR
 ```
 
 ### Correct
+
 ```nexuslang
 # Raise with message
 raise error with message "Something went wrong"
@@ -113,6 +127,7 @@ raise error
 ```
 
 ### Complete Example
+
 ```nexuslang
 function validate_age with age as Integer returns Boolean
   if age is less than 0
@@ -138,9 +153,11 @@ end
 ## Try-Catch Syntax
 
 ### Problem
+
 Try-catch blocks have specific syntax requirements for exception handling.
 
 ### Basic Syntax
+
 ```nexuslang
 try
   # Code that might fail
@@ -152,6 +169,7 @@ end
 ```
 
 ### Nested Try-Catch
+
 ⚠️ **Note:** Nested try-catch blocks may not be fully supported in the current version.
 
 ```nexuslang
@@ -188,6 +206,7 @@ end
 ```
 
 ### Exception Properties
+
 ```nexuslang
 # Catch with message variable
 try
@@ -210,9 +229,11 @@ end
 ## Pattern Matching Syntax
 
 ### Current Status
+
 Pattern matching is partially implemented in NexusLang. The `match` statement has parser support but may have limitations.
 
 ### Basic Match (Parser Support)
+
 ```nexuslang
 function describe_number with n as Integer returns String
   match n with
@@ -229,6 +250,7 @@ end
 ```
 
 ### Workaround: Use If-Else Chains
+
 For reliable pattern matching, use if-else chains:
 
 ```nexuslang
@@ -250,25 +272,32 @@ end
 ## Additional Tips
 
 ### 1. Use `--debug` Flag
+
 Run with `--debug` to see detailed tokenization and AST information:
+
 ```bash
 python -m nexuslang.main myfile.nlpl --debug
 ```
 
 ### 2. Use `--no-type-check` Flag
+
 If type checking is causing issues, disable it:
+
 ```bash
 python -m nexuslang.main myfile.nlpl --no-type-check
 ```
 
 ### 3. Check Error Messages Carefully
+
 NLPL error messages include:
+
 - Line and column numbers
 - Source code context with caret pointer (^)
 - Expected vs actual token types
 - Suggestions for common mistakes
 
 ### 4. Extract Complex Expressions
+
 When in doubt, break complex expressions into multiple statements:
 
 ```nexuslang
@@ -284,7 +313,9 @@ print text "Result: " plus result_str
 ```
 
 ### 5. Consistent Naming
+
 Follow consistent naming conventions to avoid confusion with reserved keywords:
+
 - Use `snake_case` for variables and functions: `user_data`, `process_input`
 - Use `PascalCase` for classes: `UserAccount`, `DataProcessor`
 - Avoid single-letter names except for loop counters (`i`, `j`, `k`)

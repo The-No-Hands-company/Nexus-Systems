@@ -176,6 +176,7 @@ Declares runtime dependencies.
 #### Dependency Types
 
 **1. Registry Dependency** (from package registry):
+
 ```toml
 [dependencies]
 nexuslang-graphics = "1.0"
@@ -183,6 +184,7 @@ nexuslang-math = "0.5.2"
 ```
 
 **2. Git Dependency**:
+
 ```toml
 [dependencies]
 nexuslang-utils = { git = "https://github.com/user/nexuslang-utils", branch = "main" }
@@ -191,6 +193,7 @@ nexuslang-experimental = { git = "https://github.com/user/nexuslang-experimental
 ```
 
 **3. Path Dependency** (local filesystem):
+
 ```toml
 [dependencies]
 nexuslang-local = { path = "../nexuslang-local" }
@@ -198,6 +201,7 @@ my-lib = { path = "./libs/my-lib" }
 ```
 
 **4. Dependency with Features**:
+
 ```toml
 [dependencies]
 nexuslang-graphics = { version = "1.0", features = ["opengl", "vulkan"] }
@@ -205,6 +209,7 @@ nexuslang-network = { version = "0.8", default-features = false, features = ["tl
 ```
 
 **5. Optional Dependency**:
+
 ```toml
 [dependencies]
 nexuslang-compression = { version = "0.5", optional = true }
@@ -227,6 +232,7 @@ compression = ["nexuslang-compression"]  # Enable with --features compression
 **Default**: Caret (`^`) is implied if no operator specified.
 
 **Examples**:
+
 ```toml
 [dependencies]
 exact-version = "=1.2.3"         # Exact
@@ -282,6 +288,7 @@ required-features = ["cli"]   # Features needed to build
 ```
 
 **Multiple Binaries**:
+
 ```toml
 [[bin]]
 name = "server"
@@ -355,6 +362,7 @@ Build profiles for different scenarios.
 | `strip` | Bool/String | Strip symbols | `false` | `true` or `"symbols"` |
 
 **Custom Profiles**:
+
 ```toml
 [profile.profiling]
 inherits = "release"
@@ -386,6 +394,7 @@ graphics = ["nexuslang-graphics/opengl", "nexuslang-graphics/vulkan"]
 ```
 
 **Usage**:
+
 ```bash
 nlpl build --features simd,experimental
 nlpl build --no-default-features --features alloc
@@ -459,6 +468,7 @@ nexuslang-common = "1.0"
 ```
 
 **Workspace Members** inherit `[workspace.dependencies]`:
+
 ```toml
 # In crates/core/nexuslang.toml
 [dependencies]
@@ -582,7 +592,8 @@ config-dir = "config"
 ## Error Messages
 
 ### Invalid Name
-```
+
+```text
 Error: Invalid package name `My Project`
   |
   | name = "My Project"
@@ -593,7 +604,8 @@ Error: Invalid package name `My Project`
 ```
 
 ### Missing Version
-```
+
+```text
 Error: Missing required field `version` in [package] section
   |
 1 | [package]
@@ -603,7 +615,8 @@ Error: Missing required field `version` in [package] section
 ```
 
 ### Invalid Version Constraint
-```
+
+```text
 Error: Invalid version constraint `>1.0`
   |
   | nexuslang-graphics = ">1.0"
@@ -620,6 +633,7 @@ Error: Invalid version constraint `>1.0`
 ### From Cargo.toml
 
 Most fields compatible. Changes:
+
 - `crate-type = ["rlib"]` → `crate-type = ["lib"]`
 - `[package.metadata.docs.rs]` → `[package.metadata.docs]`
 
@@ -637,6 +651,7 @@ Most fields compatible. Changes:
 ```
 
 Becomes:
+
 ```toml
 # nexuslang.toml
 [package]
@@ -652,12 +667,14 @@ nexuslang-lodash = "^4.17"
 ## Future Enhancements
 
 **Version 1.1** (planned):
+
 - Patch dependencies: `[patch.crates-io]`
 - Replace dependencies: `[replace]`
 - Dependency aliases: `tokio = { package = "tokio-async" }`
 - Workspace inheritance: `{ workspace = true, optional = true }`
 
 **Version 2.0** (future):
+
 - Build profiles inheritance chain
 - Conditional features: `[features.cfg(unix)]`
 - Dynamic dependencies (runtime loading)
@@ -666,10 +683,10 @@ nexuslang-lodash = "^4.17"
 
 ## References
 
-- **Semantic Versioning**: https://semver.org/
-- **TOML Specification**: https://toml.io/en/
-- **SPDX License List**: https://spdx.org/licenses/
-- **Cargo Manifest**: https://doc.rust-lang.org/cargo/reference/manifest.html (inspiration)
+- **Semantic Versioning**: <https://semver.org/>
+- **TOML Specification**: <https://toml.io/en/>
+- **SPDX License List**: <https://spdx.org/licenses/>
+- **Cargo Manifest**: <https://doc.rust-lang.org/cargo/reference/manifest.html> (inspiration)
 
 ---
 

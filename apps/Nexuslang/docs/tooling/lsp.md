@@ -11,6 +11,7 @@ The NexusLang Language Server provides IDE-level features for NexusLang developm
 Find all usages of a symbol (function, class, variable, method) across your entire workspace.
 
 **Supported Symbols**:
+
 - Functions (definitions and calls)
 - Classes (definitions, instantiations, type annotations)
 - Variables (assignments and references)
@@ -19,6 +20,7 @@ Find all usages of a symbol (function, class, variable, method) across your enti
 **LSP Method**: `textDocument/references`
 
 **Example**:
+
 ```nexuslang
 function calculate that takes x as Integer returns Integer
  return x times 2
@@ -32,6 +34,7 @@ set another to calculate with 10 # Will find both these calls
 Jump to the definition of any symbol, even across files.
 
 **Features**:
+
 - Cross-file navigation
 - Import resolution
 - Method definitions within classes
@@ -41,6 +44,7 @@ Jump to the definition of any symbol, even across files.
 **LSP Method**: `textDocument/definition`
 
 **Example**:
+
 ```nexuslang
 # file: helpers.nlpl
 function process_data that takes values as List returns Float
@@ -58,6 +62,7 @@ set result to helpers.process_data with [1, 2, 3]
 Rich documentation displayed on hover with parameter details, types, and examples.
 
 **Documentation Includes**:
+
 - Function signatures with parameter names and types
 - Return types
 - Standard library function documentation
@@ -68,21 +73,25 @@ Rich documentation displayed on hover with parameter details, types, and example
 **LSP Method**: `textDocument/hover`
 
 **Example Hover Output**:
+
 ```markdown
 **calculate** - Function
 
 ```nexuslang
 function calculate that takes x as Integer, y as Float returns Float
-```
+```text
 
 **Parameters**:
+
 - `x`: Integer
 - `y`: Float
 
 **Returns**: Float
+
 ```
 
 **Standard Library Hover**:
+
 ```nexuslang
 set result to sqrt with 16
 # Hover shows: "sqrt - Square root function"
@@ -95,12 +104,15 @@ set result to sqrt with 16
 Context-aware intelligent code completion.
 
 **Completion Types**:
+
 1. **Keywords**: NexusLang language keywords (function, class, set, if, for, etc.)
 2. **Context-aware suggestions**:
- - After `set X to`: Suggests values (true, false, null, create, new)
- - After `as`: Suggests types (Integer, Float, String, List, etc.)
- - After `import` or `from`: Suggests stdlib modules
- - After `returns`: Suggests return types
+
+- After `set X to`: Suggests values (true, false, null, create, new)
+- After `as`: Suggests types (Integer, Float, String, List, etc.)
+- After `import` or `from`: Suggests stdlib modules
+- After `returns`: Suggests return types
+
 3. **Variables in scope**: All variables defined in current file
 4. **Functions in scope**: All functions defined in current file
 5. **Classes in scope**: All classes defined in current file
@@ -110,6 +122,7 @@ Context-aware intelligent code completion.
 **LSP Method**: `textDocument/completion`
 
 **Example**:
+
 ```nexuslang
 set counter to 0
 set result to coun # Auto-complete suggests "counter"
@@ -117,11 +130,13 @@ set result to coun # Auto-complete suggests "counter"
 ```
 
 **Module Completion**:
+
 ```nexuslang
 import # Shows: math, string, io, system, collections, network
 ```
 
 **Type Completion**:
+
 ```nexuslang
 set value as # Shows: Integer, Float, String, Boolean, List, etc.
 ```
@@ -131,6 +146,7 @@ set value as # Shows: Integer, Float, String, Boolean, List, etc.
 Fast workspace-wide symbol search with fuzzy matching and relevance scoring.
 
 **Features**:
+
 - Fuzzy matching (e.g., "hf" matches "helper_function")
 - Symbol type filtering (functions, classes, variables, methods)
 - Relevance scoring (exact matches ranked higher)
@@ -139,6 +155,7 @@ Fast workspace-wide symbol search with fuzzy matching and relevance scoring.
 **LSP Method**: `workspace/symbol`
 
 **Example Fuzzy Matches**:
+
 - Query: `"ca"` Matches: `calculate`, `calculate_average`, `calibrate`
 - Query: `"hf"` Matches: `helper_function`
 - Query: `"proc"` Matches: `process_data`, `DataProcessor`
@@ -174,6 +191,7 @@ Real-time syntax and semantic error detection.
 1. **Install NLPL Language Support extension**.
 
 2. **Manual Setup** (`.vscode/settings.json`):
+
 ```json
 {
  "nexuslang.languageServer.enabled": true,
@@ -183,6 +201,7 @@ Real-time syntax and semantic error detection.
 ```
 
 3. **Launch Configuration** (`.vscode/launch.json`):
+
 ```json
 {
  "type": "nlpl",
@@ -233,6 +252,7 @@ lspconfig.nlpl.setup{}
 ### Sublime Text (with LSP package)
 
 **Settings** (`LSP.sublime-settings`):
+
 ```json
 {
  "clients": {
@@ -283,7 +303,7 @@ tail -f /tmp/nexuslang-lsp.log
 
 ### LSP Protocol Flow
 
-```
+```text
 Editor LSP Server NexusLang Parser
  | | |
  |-- initialize ------------>| |
@@ -340,11 +360,13 @@ pytest tests/test_lsp_enhancements.py -v
 ```
 
 **Test Coverage**:
+
 - 20 comprehensive tests
 - All major features tested
 - 100% pass rate
 
 **Test Categories**:
+
 1. References (3 tests): Functions, variables, classes
 2. Definitions (3 tests): Functions, methods, variables
 3. Hover (3 tests): Stdlib, functions with parameters, variables
@@ -356,6 +378,7 @@ pytest tests/test_lsp_enhancements.py -v
 ### Multi-File Project
 
 **File: `utils.nlpl`**
+
 ```nexuslang
 function helper that takes value as Integer returns Integer
  return value times 2
@@ -371,6 +394,7 @@ class DataProcessor
 ```
 
 **File: `main.nlpl`**
+
 ```nexuslang
 import utils
 
@@ -398,11 +422,13 @@ set processor to new utils.DataProcessor
 ### LSP Server Not Starting
 
 **Check**:
+
 - Python path is correct
 - `src/nexuslang/lsp/server.py` exists
 - No syntax errors in LSP code
 
 **Debug**:
+
 ```bash
 PYTHONPATH=src python -m nexuslang.lsp --stdio
 # Should start and wait for stdin input
@@ -411,11 +437,13 @@ PYTHONPATH=src python -m nexuslang.lsp --stdio
 ### Features Not Working
 
 **Check editor LSP client logs**:
+
 - VSCode: Output panel "Language Server Protocol"
 - Neovim: `:LspInfo`, `:LspLog`
 - Emacs: `*lsp-log*` buffer
 
 **Check server logs**:
+
 ```bash
 tail -f /tmp/nexuslang-lsp.log
 ```
@@ -423,6 +451,7 @@ tail -f /tmp/nexuslang-lsp.log
 ### Completions Not Showing
 
 **Verify**:
+
 - File is saved (some editors don't send unsaved content)
 - Cursor position is correct
 - LSP client is configured for NexusLang file type
@@ -458,12 +487,13 @@ The LSP is implemented in pure Python and follows LSP specification 3.17.
 
 ## Status
 
-**Version**: 0.1.0 
-**Status**: Production Ready 
-**Test Coverage**: 20/20 tests passing 
+**Version**: 0.1.0
+**Status**: Production Ready
+**Test Coverage**: 20/20 tests passing
 **Completion**: All core features implemented
 
 **Features Summary**:
+
 - Find All References
 - Go-to-Definition (cross-file)
 - Hover Documentation (enhanced)

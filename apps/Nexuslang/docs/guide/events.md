@@ -7,7 +7,8 @@ Events in NexusLang are things that happen during your game that you want to res
 ## Basic Event Structure
 
 ### Simple Events
-```
+
+```nxl
 When space key is pressed:
     Make player jump
 
@@ -16,7 +17,8 @@ When left mouse button clicked:
 ```
 
 ### Compound Events
-```
+
+```nxl
 When player health is below 20 and not healing:
     Show warning message
     Start health regeneration
@@ -25,7 +27,8 @@ When player health is below 20 and not healing:
 ## Types of Events
 
 ### 1. Input Events
-```
+
+```nxl
 When any key is pressed:
     Show pressed key
 
@@ -37,7 +40,8 @@ When controller button A pressed:
 ```
 
 ### 2. Collision Events
-```
+
+```nxl
 When player touches enemy:
     Take damage
     Play hit sound
@@ -48,7 +52,8 @@ When projectile hits wall:
 ```
 
 ### 3. State Change Events
-```
+
+```nxl
 When score reaches 100:
     Unlock achievement
     Show celebration
@@ -61,7 +66,8 @@ When health becomes 0:
 ## Custom Triggers
 
 ### Creating Triggers
-```
+
+```nxl
 Create trigger "Boss Defeated":
     When activated:
         Play victory music
@@ -70,7 +76,8 @@ Create trigger "Boss Defeated":
 ```
 
 ### Using Triggers
-```
+
+```nxl
 When boss health reaches 0:
     Activate trigger "Boss Defeated"
     
@@ -81,7 +88,8 @@ When player reaches checkpoint:
 ## Event Conditions
 
 ### State Checks
-```
+
+```nxl
 When player jumps:
     If has double jump power:
         Allow second jump
@@ -90,7 +98,8 @@ When player jumps:
 ```
 
 ### Multiple Conditions
-```
+
+```nxl
 When enemy spots player:
     If player is hiding:
         Ignore player
@@ -103,7 +112,8 @@ When enemy spots player:
 ## Event Communication
 
 ### Broadcasting Events
-```
+
+```nxl
 Create event "Level Complete":
     Broadcast to all objects:
         Stop current actions
@@ -114,7 +124,8 @@ When last enemy defeated:
 ```
 
 ### Listening for Events
-```
+
+```nxl
 Listen for "Level Complete":
     When received:
         Update score
@@ -125,12 +136,14 @@ Listen for "Level Complete":
 ## Best Practices
 
 ### 1. Event Organization
+
 - Group related events together
 - Use clear, descriptive event names
 - Keep event handlers focused
 
 ### 2. Performance
-```
+
+```nxl
 # Good: Specific event
 When player enters trigger zone:
     Activate cutscene
@@ -143,7 +156,8 @@ Every frame:
 ```
 
 ### 3. Event Handling
-```
+
+```nxl
 When important event happens:
     Try:
         Handle the event

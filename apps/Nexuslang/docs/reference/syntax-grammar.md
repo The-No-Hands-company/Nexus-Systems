@@ -19,7 +19,7 @@ Statements in NexusLang follow natural English sentence structure with a few con
 
 #### Basic Statement Pattern
 
-```
+```text
 [Action Verb] [Subject/Object] [Preposition] [Value/Target] [Modifiers].
 ```
 
@@ -33,7 +33,7 @@ Examples:
 
 The language supports multiple ways to express the same operation:
 
-```
+```nxl
 Set x to 10.
 Let x be 10.
 Make x equal to 10.
@@ -46,7 +46,7 @@ All of these statements compile to the same operation.
 
 Programs are organized into logical sections without requiring explicit boilerplate:
 
-```
+```text
 Start the program.
     [Main program code]
 End the program.
@@ -60,13 +60,13 @@ The `Start the program` and `End the program` statements are optional. If omitte
 
 Variables are implicitly declared upon first use:
 
-```
+```text
 Set counter to 0.
 ```
 
 Explicit type declaration is optional but available:
 
-```
+```nxl
 Create an integer called counter with value 0.
 Create a string called name with value "John".
 ```
@@ -75,7 +75,7 @@ Create a string called name with value "John".
 
 The language uses type inference to determine variable types:
 
-```
+```nxl
 Set x to 10.          // Inferred as integer
 Set y to 10.5.        // Inferred as float/double
 Set name to "John".   // Inferred as string
@@ -85,7 +85,7 @@ Set name to "John".   // Inferred as string
 
 The language is strongly typed but provides flexible conversion when unambiguous:
 
-```
+```nxl
 Set x to 5.
 Set y to "10".
 Set z to x + y.       // y is converted to integer, z becomes 15
@@ -97,7 +97,7 @@ Set z to x + y.       // y is converted to integer, z becomes 15
 
 Conditionals use natural language constructs:
 
-```
+```nxl
 If x is greater than 10, then
     Display "x is large".
 Otherwise if x is greater than 5, then
@@ -109,7 +109,7 @@ End if.
 
 Alternative forms:
 
-```
+```nxl
 When x exceeds 10, do
     Display "x is large".
 End when.
@@ -123,7 +123,7 @@ End unless.
 
 Loops use natural language with clear scope:
 
-```
+```nxl
 For each number i from 1 to 10, do
     Display i.
 End for.
@@ -183,7 +183,7 @@ Notes:
 
 Functions are defined using natural language:
 
-```
+```nxl
 Define a function called add that takes a and b.
     Return a plus b.
 End function.
@@ -191,7 +191,7 @@ End function.
 
 Functions can specify return types:
 
-```
+```nxl
 Define a function called calculateArea that takes length and width and returns a number.
     Return length times width.
 End function.
@@ -199,7 +199,7 @@ End function.
 
 Calling functions:
 
-```
+```text
 Set result to add(5, 10).
 Calculate the area using length 5 and width 10.  // Alternative syntax for calculateArea(5, 10)
 ```
@@ -208,7 +208,7 @@ Calculate the area using length 5 and width 10.  // Alternative syntax for calcu
 
 #### Class Definition
 
-```
+```nxl
 Create a class called Person.
     Add a property called name.
     Add a property called age with default value 0.
@@ -247,7 +247,7 @@ Notes:
 
 #### Object Creation and Usage
 
-```
+```nxl
 Create a Person called john with name "John" and age 30.
 Tell john to introduce.
 Set john's age to 31.
@@ -259,14 +259,14 @@ The language supports both automatic memory management and manual control:
 
 #### Automatic Memory Management
 
-```
+```nxl
 Create a list of integers called numbers.
 Add 1, 2, and 3 to numbers.
 ```
 
 #### Manual Memory Management
 
-```
+```text
 Allocate memory for an integer called x.
 Set the value at x to 10.
 Free the memory used by x.
@@ -274,7 +274,7 @@ Free the memory used by x.
 
 #### Pointers and References
 
-```
+```nxl
 Create a pointer to integer called ptr.
 Point ptr to x.
 Set the value at ptr to 20.
@@ -287,7 +287,7 @@ Set xRef to 30.  // This changes x's value
 
 Error handling uses structured try/catch blocks with optional exception bindings and typed raises:
 
-```
+```nxl
 try
     read config_file
 catch err with message, code as ConfigError
@@ -310,7 +310,7 @@ raiseStmt      ::= ("raise" | "throw") [IDENTIFIER ["with" IDENTIFIER expression
 
 ### 9. Modules and Namespaces
 
-```
+```nxl
 Import the math module.
 Use the graphics namespace.
 
@@ -405,7 +405,7 @@ Notes:
 
 Comments use natural language markers:
 
-```
+```nxl
 // This is a single-line comment
 
 /* This is a 
@@ -421,7 +421,7 @@ End function.
 
 ### Bit Manipulation
 
-```
+```text
 Perform bitwise AND on x and y, store in result.
 Shift x left by 2 bits.
 Set the third bit of flags to 1.
@@ -429,7 +429,7 @@ Set the third bit of flags to 1.
 
 ### Memory Operations
 
-```
+```text
 Copy 10 bytes from source to destination.
 Set memory at address 0x1000 to zero for 100 bytes.
 Get the address of variable x.
@@ -437,7 +437,7 @@ Get the address of variable x.
 
 ### Inline Assembly
 
-```
+```text
 Execute assembly {
     mov eax, 1
     mov ebx, 0
@@ -606,13 +606,14 @@ Notes:
 
 ## Compiler Directives
 
-```
+```text
 Tell the compiler to optimize for speed.
 Tell the compiler to include the file "helpers.h".
 Tell the compiler to use the C calling convention for this function.
 ```
 
 ## Type System
+
 ## Ownership / Borrow / Lifetime
 
 NexusLang implements a borrow-checker-enforced ownership model that prevents
@@ -628,7 +629,8 @@ set y to move x          # x is now invalid; y owns the value
 ```
 
 Grammar:
-```
+
+```text
 moveExpression : MOVE IDENTIFIER ;
 ```
 
@@ -644,7 +646,8 @@ set rw to borrow mutable x       # mutable borrow
 ```
 
 Grammar:
-```
+
+```text
 borrowExpression : BORROW MUTABLE? IDENTIFIER lifetimeAnnotation? ;
 ```
 
@@ -658,7 +661,8 @@ set r to borrow x with lifetime a
 ```
 
 Grammar:
-```
+
+```text
 lifetimeAnnotation : WITH LIFETIME IDENTIFIER ;
 ```
 
@@ -673,7 +677,8 @@ drop borrow mutable x
 ```
 
 Grammar:
-```
+
+```text
 dropBorrowStatement : DROP BORROW MUTABLE? IDENTIFIER ;
 ```
 
@@ -688,7 +693,8 @@ set ap to arc String : "hello"   # Arc<String>
 ```
 
 Grammar:
-```
+
+```text
 rcCreation  : RC  typeAnnotation ':' expression | RC  expression ;
 arcCreation : ARC typeAnnotation ':' expression | ARC expression ;
 ```
@@ -705,7 +711,8 @@ set q to upgrade w       # q is None if p was dropped
 ```
 
 Grammar:
-```
+
+```text
 downgradeExpression : DOWNGRADE expression ;
 upgradeExpression   : UPGRADE   expression ;
 ```
@@ -718,7 +725,7 @@ Notes:
 3. `drop borrow` is a statement; all other ownership forms are expressions usable
     inside variable declarations and function arguments.
 
-## Type System
+## Type System Grammar
 
 The NexusLang type system includes:
 
@@ -739,7 +746,7 @@ When the language encounters potentially ambiguous constructs, it uses these str
 
 For example:
 
-```
+```nxl
 Set result to a + b * c.  // Uses standard operator precedence
 
 Set result to (a + b) * c.  // Explicit grouping

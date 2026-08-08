@@ -13,6 +13,7 @@ This document shows how the **same functionality** can be implemented at differe
 ## Example 1: HTTP Web Server
 
 ### Requirements
+
 - Listen on port 8080
 - Handle GET requests to `/hello`
 - Return "Hello, World!"
@@ -22,7 +23,7 @@ This document shows how the **same functionality** can be implemented at differe
 
 ### Level 5: Natural Language
 
-**Lines of Code:** ~10 
+**Lines of Code:** ~10
 **Capable of:** Prototyping, scripts, rapid development
 
 ```nexuslang
@@ -42,11 +43,13 @@ tell me when it's running
 ```
 
 **Pros:**
+
 - Extremely readable
 - No technical knowledge needed
 - Perfect for prototypes
 
 **Cons:**
+
 - Limited control
 - Ambiguity possible
 - Not for performance tuning
@@ -55,7 +58,7 @@ tell me when it's running
 
 ### Level 4: Goroutines (High-Level)
 
-**Lines of Code:** ~20 
+**Lines of Code:** ~20
 **Capable of:** Production web services, APIs, microservices
 
 ```nexuslang
@@ -91,12 +94,14 @@ start_server
 ```
 
 **Pros:**
+
 - 10,000+ concurrent connections easily
 - Automatic goroutine management
 - Clean, readable code
 - Production-ready
 
 **Cons:**
+
 - Less control over scheduling
 - Some abstraction overhead
 
@@ -104,7 +109,7 @@ start_server
 
 ### Level 3: Application Programming
 
-**Lines of Code:** ~40 
+**Lines of Code:** ~40
 **Capable of:** Desktop apps, custom servers, applications with specific requirements
 
 ```nexuslang
@@ -160,12 +165,14 @@ server.start
 ```
 
 **Pros:**
+
 - Explicit thread control
 - Custom error handling
 - Fine-tune performance
 - Structured code
 
 **Cons:**
+
 - More verbose
 - Manual thread pool management
 - More complex than Level 4
@@ -174,7 +181,7 @@ server.start
 
 ### Level 2: Systems Programming
 
-**Lines of Code:** ~80 
+**Lines of Code:** ~80
 **Capable of:** High-performance servers, embedded systems, performance-critical applications
 
 ```nexuslang
@@ -268,12 +275,14 @@ start_server with 8080
 ```
 
 **Pros:**
+
 - Maximum performance
 - Full control over syscalls
 - Minimal overhead
 - Portable to embedded systems
 
 **Cons:**
+
 - Very verbose
 - Manual memory management
 - Error-prone
@@ -283,7 +292,7 @@ start_server with 8080
 
 ### Level 1: Assembly-Level
 
-**Lines of Code:** ~150+ 
+**Lines of Code:** ~150+
 **Capable of:** Bare metal programming, OS components, extreme optimization
 
 ```nexuslang
@@ -421,12 +430,14 @@ start_server with 8080
 ```
 
 **Pros:**
+
 - Absolute maximum control
 - Zero runtime overhead
 - Direct syscalls
 - Well-suited to system programming
 
 **Cons:**
+
 - Extremely verbose
 - Architecture-specific
 - Very error-prone
@@ -437,6 +448,7 @@ start_server with 8080
 ## Example 2: Image Processing Pipeline
 
 ### Requirements
+
 - Load 1000 images from directory
 - Resize each to 800x600
 - Apply blur filter
@@ -845,6 +857,7 @@ end
 ```
 
 **This Level 1 code:**
+
 - Boots on bare metal (no OS)
 - Sets up CPU protection features
 - Handles interrupts
@@ -874,31 +887,36 @@ end
 
 ## When to Use Each Level
 
-### Use Level 5 When:
+### Use Level 5 When
+
 - Rapid prototyping
 - Teaching beginners
 - Scripts and automation
 - Non-technical users
 
-### Use Level 4 When:
+### Use Level 4 When
+
 - Web servers and APIs
 - Microservices
 - Concurrent I/O
 - Production applications
 
-### Use Level 3 When:
+### Use Level 3 When
+
 - Desktop applications
 - Games
 - Command-line tools
 - Libraries
 
-### Use Level 2 When:
+### Use Level 2 When
+
 - High-performance code
 - Embedded systems
 - Device drivers
 - System utilities
 
-### Use Level 1 When:
+### Use Level 1 When
+
 - Operating systems
 - Bootloaders
 - Bare metal code
@@ -1003,4 +1021,4 @@ end
 
 ---
 
-**NLPL: One language, infinite possibilities.** 
+**NLPL: One language, infinite possibilities.**

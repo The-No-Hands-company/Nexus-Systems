@@ -59,11 +59,13 @@ NLPL provides a complete, production-ready Language Server Protocol implementati
 **Usage:** Place cursor on a symbol and trigger "Go to Definition"
 
 **Implementation:**
+
 - Uses workspace index for instant cross-file lookup
 - Falls back to AST-based analysis for current file
 - Resolves imports and module references
 
 **Example:**
+
 ```nexuslang
 # file: utils.nlpl
 function calculate_sum with numbers as List of Integer returns Integer
@@ -90,12 +92,14 @@ end
 **Usage:** Search for symbols across entire workspace (Ctrl+T in VS Code)
 
 **Implementation:**
+
 - Fuzzy matching against workspace index
 - Kind filtering (functions, classes, methods, etc.)
 - Returns ranked results by relevance
 
 **Example:**
-```
+
+```text
 Query: "calc"
 Results:
   - calculate_sum (function) in utils.nlpl
@@ -114,12 +118,14 @@ Results:
 **Usage:** View hierarchical structure in outline/breadcrumbs view
 
 **Implementation:**
+
 - Extracts symbols from workspace index
 - Builds hierarchical tree (classes contain methods)
 - LSP DocumentSymbol format with ranges
 
 **Example Structure:**
-```
+
+```text
 MyClass (class)
   ├─ init (method)
   ├─ process (method)
@@ -131,6 +137,7 @@ Point (struct)
 ```
 
 **Features:**
+
 - Shows symbol kind icons
 - Displays signatures/details
 - Click to navigate
@@ -144,17 +151,20 @@ Point (struct)
 **Usage:** Right-click on function → "Show Call Hierarchy"
 
 **Implementation:**
+
 - `prepareCallHierarchy` - Identifies callable symbols
 - `incomingCalls` - Finds all callers (text-based with function boundary detection)
 - `outgoingCalls` - Finds all callees (regex pattern matching)
 
 **Algorithm:**
+
 1. Parse file to detect function boundaries (`function X` to `end`)
 2. Build function range map (start line → end line)
 3. Search for function calls within each range
 4. Deduplicate and return caller/callee information
 
 **Example:**
+
 ```nexuslang
 function helper returns Integer
     return 42
@@ -170,6 +180,7 @@ end
 ```
 
 **Query:** Call hierarchy for `helper`
+
 - **Incoming:** caller1, caller2
 - **Outgoing:** (none)
 
@@ -184,12 +195,14 @@ end
 **Usage:** Type and get suggestions automatically
 
 **Implementation:**
+
 - Keyword completion (function, class, if, for, etc.)
 - Symbol completion from workspace index
 - Member completion (object.method)
 - Type-aware suggestions
 
 **Example:**
+
 ```nexuslang
 set calculator to new Calculator()
 calculator.  # Triggers completion: add, subtract, multiply, divide
@@ -204,11 +217,13 @@ calculator.  # Triggers completion: add, subtract, multiply, divide
 **Usage:** Hover over symbol to see documentation
 
 **Implementation:**
+
 - Extracts docstrings from AST
 - Shows function signatures
 - Displays type information
 
 **Example:**
+
 ```nexuslang
 function calculate_average with numbers as List of Float returns Float
     # Hover shows: calculate_average(numbers: List<Float>) -> Float
@@ -224,11 +239,13 @@ end
 **Usage:** Automatic error detection while typing
 
 **Implementation:**
+
 - Parses on file change
 - Reports syntax errors with line/column
 - Provides contextual error messages
 
 **Example:**
+
 ```nexuslang
 function test
     set x to "unclosed string
@@ -245,6 +262,7 @@ end
 **Usage:** Right-click → "Find All References"
 
 **Implementation:**
+
 - Searches workspace index for symbol usage
 - Returns all locations with context
 
@@ -257,6 +275,7 @@ end
 **Usage:** Right-click → "Rename Symbol"
 
 **Implementation:**
+
 - Validates rename (checks conflicts)
 - Updates all references workspace-wide
 - Returns WorkspaceEdit with changes
@@ -270,11 +289,13 @@ end
 **Usage:** Lightbulb icon appears for fixable issues
 
 **Implementation:**
+
 - Detects fixable errors
 - Suggests quick fixes
 - Applies edits automatically
 
 **Example:**
+
 ```nexuslang
 set x to "unclosed string
 # Quick fix: Add closing quote
@@ -289,6 +310,7 @@ set x to "unclosed string
 **Usage:** Shows parameter hints while typing function calls
 
 **Implementation:**
+
 - Parses function signature from index
 - Shows parameter types and names
 - Highlights current parameter
@@ -302,6 +324,7 @@ set x to "unclosed string
 **Usage:** Format document (Shift+Alt+F in VS Code)
 
 **Implementation:**
+
 - Consistent indentation (4 spaces)
 - Keyword casing normalization
 - Line spacing rules
@@ -315,6 +338,7 @@ set x to "unclosed string
 **Usage:** Enhanced syntax highlighting
 
 **Implementation:**
+
 - Token classification (keyword, variable, function, etc.)
 - Enables theme-aware coloring
 - Incremental updates
@@ -328,6 +352,7 @@ set x to "unclosed string
 **Usage:** Inline reference/run-style annotations above supported symbols
 
 **Implementation:**
+
 - Server-side code lens generation and resolve support
 - Workspace-aware symbol counting hooks
 
@@ -340,6 +365,7 @@ set x to "unclosed string
 **Usage:** Inline parameter/type guidance where supported by the client
 
 **Implementation:**
+
 - Request handler exposed through the main LSP server
 - Client-driven rendering via standard LSP inlay hint support
 
@@ -378,7 +404,7 @@ set x to "unclosed string
 
 ### Test Coverage
 
-```
+```text
 test_workspace_index.py:       15 tests ✅
 test_cross_file_navigation.py:  4 tests ✅
 test_lsp_document_features.py:  5 tests ✅
@@ -481,13 +507,15 @@ lspconfig.nlpl.setup{}
 Logs written to `/tmp/nlpl-lsp.log`
 
 **Log Levels:**
+
 - DEBUG - Detailed trace information
 - INFO - General server events
 - WARNING - Recoverable issues
 - ERROR - Failures with stack traces
 
 **Example Log:**
-```
+
+```text
 2026-02-16 14:30:00 - nlpl-lsp - INFO - Starting workspace indexing...
 2026-02-16 14:30:00 - nlpl-lsp - INFO - Workspace indexed: 41 files, 718 symbols
 2026-02-16 14:30:01 - nlpl-lsp - DEBUG - Re-indexed file: main.nlpl
@@ -496,16 +524,19 @@ Logs written to `/tmp/nlpl-lsp.log`
 ### Troubleshooting
 
 **Issue:** LSP not starting
+
 - Check Python path in configuration
 - Verify `PYTHONPATH=src python -m nexuslang.lsp --stdio` starts cleanly
 - Check logs for errors
 
 **Issue:** Symbols not found
+
 - Wait for background indexing to complete
 - Check file is in workspace folder
 - Verify file has `.nlpl` extension
 
 **Issue:** Slow performance
+
 - Check workspace size (>1000 files?)
 - Enable `nexuslang.trace.server` or inspect `/tmp/nlpl-lsp.log` for detailed diagnostics
 - Consider excluding large directories

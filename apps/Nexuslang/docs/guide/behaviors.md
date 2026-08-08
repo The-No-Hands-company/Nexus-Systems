@@ -5,7 +5,8 @@
 Behaviors in NexusLang are reusable sets of actions that define how objects act and react in your game.
 
 ### Basic Behavior Structure
-```
+
+```nxl
 Create behavior "Walk":
     When right arrow pressed:
         Move right by 5 pixels
@@ -18,7 +19,8 @@ Create behavior "Walk":
 ## Types of Behaviors
 
 ### 1. Movement Behaviors
-```
+
+```nxl
 Create behavior "Platform Movement":
     When right arrow is pressed:
         Face right
@@ -31,7 +33,8 @@ Create behavior "Platform Movement":
 ```
 
 ### 2. Combat Behaviors
-```
+
+```nxl
 Create behavior "Enemy Combat":
     When player is within attack range:
         Face player
@@ -41,7 +44,8 @@ Create behavior "Enemy Combat":
 ```
 
 ### 3. AI Behaviors
-```
+
+```text
 Create behavior "Guard Patrol":
     Loop forever:
         Move to point A
@@ -57,7 +61,8 @@ Create behavior "Guard Patrol":
 ## Applying Behaviors
 
 ### Adding to Objects
-```
+
+```nxl
 Create player:
     Add behavior "Platform Movement"
     Add behavior "Combat"
@@ -68,7 +73,8 @@ Create enemy:
 ```
 
 ### Customizing Behaviors
-```
+
+```nxl
 Create behavior "Bounce":
     Set bounce height to 5
     Set bounce speed to 2
@@ -85,7 +91,8 @@ Add Bounce to coin:
 ## Behavior Communication
 
 ### Events and Messages
-```
+
+```nxl
 Create behavior "Health System":
     When damaged:
         Reduce health
@@ -101,7 +108,8 @@ Create behavior "Game Manager":
 ```
 
 ### State Management
-```
+
+```nxl
 Create behavior "Power Up":
     When collected:
         Remember collection time
@@ -117,12 +125,14 @@ Create behavior "Power Up":
 ## Best Practices
 
 ### 1. Modular Design
+
 - Keep behaviors focused on single responsibilities
 - Make behaviors reusable
 - Allow for customization
 
 ### 2. Performance Considerations
-```
+
+```nxl
 Create behavior "Enemy AI":
     Every 0.5 seconds:  # Not every frame
         Check for player
@@ -133,7 +143,8 @@ Create behavior "Enemy AI":
 ```
 
 ### 3. Behavior Combinations
-```
+
+```text
 Create behavior "Complete Character":
     Combine:
         Movement behavior

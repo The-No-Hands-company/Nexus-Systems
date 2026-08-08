@@ -48,12 +48,14 @@ Press Enter on empty line to execute.
 ## Quick Examples
 
 ### Variables
+
 ```nexuslang
 >>> set x to 42
 >>> set name to "NexusLang"
 ```
 
 ### Functions
+
 ```nexuslang
 >>> function add with a as Integer, b as Integer returns Integer
 ... return a plus b
@@ -63,6 +65,7 @@ Press Enter on empty line to execute.
 ```
 
 ### Loops
+
 ```nexuslang
 >>> for each num in [1, 2, 3]
 ... print text num
@@ -70,6 +73,7 @@ Press Enter on empty line to execute.
 ```
 
 ### Structs
+
 ```nexuslang
 >>> struct Point
 ... x as Integer

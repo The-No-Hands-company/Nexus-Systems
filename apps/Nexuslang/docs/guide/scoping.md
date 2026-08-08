@@ -5,7 +5,8 @@
 In NexusLang, blocks are groups of related commands that are indented together. They define the structure and flow of your program.
 
 ### Basic Block Structure
-```
+
+```nxl
 Create a game object:
     Set position to center
     Set size to 100 pixels
@@ -15,8 +16,10 @@ Create a game object:
 ## Types of Blocks
 
 ### 1. Object Definition Blocks
+
 Used when creating or configuring objects:
-```
+
+```nxl
 Create a player:
     Use image "player.png"
     Set starting health to 100
@@ -27,8 +30,10 @@ Create a player:
 ```
 
 ### 2. Event Blocks
+
 Triggered when specific conditions are met:
-```
+
+```nxl
 When space key is pressed:
     Make player jump
     Play jump sound
@@ -36,8 +41,10 @@ When space key is pressed:
 ```
 
 ### 3. Loop Blocks
+
 Execute commands repeatedly:
-```
+
+```text
 Every frame:
     Update player position
     Check for collisions
@@ -47,8 +54,10 @@ Every frame:
 ## Scope Rules
 
 ### 1. Object Scope
+
 Objects are accessible within their creation block and any nested blocks:
-```
+
+```nxl
 Create a game scene:
     Create a player:
         Set speed to 5
@@ -57,8 +66,10 @@ Create a game scene:
 ```
 
 ### 2. Variable Scope
+
 Variables are accessible within their block and nested blocks:
-```
+
+```nxl
 Create score counter with value 0
 
 When coin collected:
@@ -67,8 +78,10 @@ When coin collected:
 ```
 
 ### 3. Behavior Scope
+
 Behaviors can access their parent object's properties:
-```
+
+```text
 Create enemy behavior "Patrol":
     Move right for 2 seconds
     Move left for 2 seconds
@@ -78,8 +91,10 @@ Create enemy behavior "Patrol":
 ## Nesting Rules
 
 ### 1. Indentation
+
 Each nested level uses 4 spaces or 1 tab:
-```
+
+```nxl
 Create menu screen:
     Add start button:
         When clicked:
@@ -88,8 +103,10 @@ Create menu screen:
 ```
 
 ### 2. Multiple Levels
+
 Blocks can be nested multiple levels deep:
-```
+
+```nxl
 Create game manager:
     When game starts:
         Create player:
@@ -102,12 +119,14 @@ Create game manager:
 ## Best Practices
 
 ### 1. Maintain Clear Structure
+
 - Use consistent indentation
 - Keep related commands together
 - Don't nest too deeply (maximum 3-4 levels recommended)
 
 ### 2. Logical Grouping
-```
+
+```nxl
 Create player:
     # Physical properties
     Set size to 64 pixels
@@ -121,6 +140,7 @@ Create player:
 ```
 
 ### 3. Scope Management
+
 - Keep objects in appropriate scope
 - Don't create unnecessary nested blocks
 - Use clear names for different scopes
@@ -128,7 +148,8 @@ Create player:
 ## Common Patterns
 
 ### 1. State Management
-```
+
+```nxl
 Create game states:
     State "Menu":
         Show menu items
@@ -142,7 +163,8 @@ Create game states:
 ```
 
 ### 2. Component Organization
-```
+
+```nxl
 Create player:
     # Visual components
     Add sprite renderer:

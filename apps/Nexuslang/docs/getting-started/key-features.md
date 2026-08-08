@@ -3,6 +3,7 @@
 ## Language features
 
 ### Natural syntax
+
 ```nlpl
 set x to 10
 if x is greater than 5
@@ -11,9 +12,11 @@ end
 ```
 
 ### Full OOP
+
 Classes, inheritance, interfaces, traits, abstract classes, mixins.
 
 ### Generics with HKT
+
 ```nlpl
 class Container with T :: *
     set value as T
@@ -25,6 +28,7 @@ end
 ```
 
 ### Pattern matching
+
 ```nlpl
 match shape
     case Circle with radius
@@ -37,24 +41,29 @@ end
 ```
 
 ### FFI (Foreign Function Interface)
+
 Call any C library directly:
+
 ```nlpl
 extern function printf with format as CString, value as Integer
 set _ to printf("Value: %d\n", 42)
 ```
 
 ### Inline assembly
+
 ```nlpl
 inline asm "nop" : : :
 ```
 
 ### Smart pointers
+
 ```nlpl
 set ptr to Rc(create MyStruct)
 set clone to ptr.clone()
 ```
 
 ### Error handling
+
 ```nlpl
 try
     set result to parse_json(raw_input)
@@ -64,12 +73,14 @@ end
 ```
 
 ### Closures and lambdas
+
 ```nlpl
 set double to function with x returns x times 2
 set results to map(numbers, double)
 ```
 
 ### Async/await
+
 ```nlpl
 async function fetch_data with url as String returns String
     set response to await http_get(url)

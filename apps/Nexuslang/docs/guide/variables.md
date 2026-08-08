@@ -5,14 +5,16 @@
 Variables in NexusLang are created and used in a natural way, without traditional programming declarations.
 
 ### Creating Variables
-```
+
+```nxl
 Create score counter with value 0
 Create player health set to 100
 Create game speed with value 1.5
 ```
 
 ### Using Variables
-```
+
+```text
 Add 10 to score counter
 Reduce player health by 25
 Multiply game speed by 2
@@ -21,21 +23,24 @@ Multiply game speed by 2
 ### Variable Types
 
 #### Numbers
-```
+
+```nxl
 Create player speed set to 5
 Create gravity strength set to 9.81
 Create enemy count set to 3
 ```
 
 #### Text
-```
+
+```nxl
 Create player name set to "Hero"
 Create game title as "My Adventure"
 Create message saying "Game Over"
 ```
 
 #### True/False Values
-```
+
+```nxl
 Create can jump set to yes
 Create is game over set to no
 Create player is moving initially false
@@ -44,7 +49,8 @@ Create player is moving initially false
 ## Objects in NexusLang
 
 ### Creating Game Objects
-```
+
+```nxl
 Create a player:
     Set position to screen center
     Set size to 64 pixels
@@ -57,7 +63,8 @@ Create an enemy called "Boss":
 ```
 
 ### Object Properties
-```
+
+```nxl
 Create a button:
     # Visual properties
     Set color to blue
@@ -70,7 +77,8 @@ Create a button:
 ```
 
 ### Object Collections
-```
+
+```nxl
 Create three enemies:
     Set health to 50 each
     Set speed to 3 each
@@ -83,7 +91,8 @@ Create coin collection:
 ## Working with Properties
 
 ### Reading Properties
-```
+
+```nxl
 When player health is below 20:
     Show warning message
 
@@ -92,7 +101,8 @@ If enemy distance to player is less than 100:
 ```
 
 ### Modifying Properties
-```
+
+```nxl
 When player collects powerup:
     Double player speed
     Make player glow
@@ -102,7 +112,8 @@ When player collects powerup:
 ## Object Relationships
 
 ### Parent-Child Relationships
-```
+
+```nxl
 Create a weapon for player:
     Attach to player right hand
     Move with player
@@ -111,7 +122,8 @@ Create a weapon for player:
 ```
 
 ### Object References
-```
+
+```nxl
 Create enemy AI:
     Remember closest player
     When closest player is nearby:
@@ -121,12 +133,14 @@ Create enemy AI:
 ## Best Practices
 
 ### 1. Clear Naming
+
 - Use descriptive names
 - Be specific about purpose
 - Use natural language conventions
 
 ### 2. Organization
-```
+
+```nxl
 Create game manager:
     # Game state variables
     Create score counter with value 0
@@ -138,7 +152,8 @@ Create game manager:
 ```
 
 ### 3. Scope Management
-```
+
+```nxl
 Create level:
     # Level-specific variables
     Create enemy count set to 0

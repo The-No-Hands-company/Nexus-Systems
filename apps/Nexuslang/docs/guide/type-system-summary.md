@@ -54,7 +54,7 @@ We have successfully implemented a static type system for the NexusLang language
 
 ## Example Usage
 
-```
+```nxl
 # Variable declarations with type annotations
 Create count as Integer and set it to 10.
 Create name as String and set it to "NexusLang".

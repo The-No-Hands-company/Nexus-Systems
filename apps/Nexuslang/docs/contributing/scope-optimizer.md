@@ -64,12 +64,14 @@ if hasattr(interpreter, '_scope_cache'):
 ## When to Use
 
  **Use scope optimization when**:
+
 - Running long-running programs
 - Processing variable-heavy code
 - Working with deeply nested scopes
 - Performance is critical
 
  **Don't use when**:
+
 - Debugging interpreter issues
 - Testing new features
 - You suspect scope-related bugs
@@ -91,6 +93,7 @@ python dev_tools/test_scope_optimizer.py
 ```
 
 This validates:
+
 - Correctness (results match standard interpreter)
 - Performance (measures actual speedup)
 - Enable/disable cycle works correctly
@@ -100,6 +103,7 @@ This validates:
 If you encounter issues with scope optimization:
 
 1. **Disable it immediately**:
+
  ```python
  disable_scope_optimization(interpreter)
  ```
@@ -119,6 +123,7 @@ The `ScopeCache` class maintains a flat dictionary of all visible variables:
 - **On variable set**: Update cache immediately
 
 **Trade-offs**:
+
 - Extra memory: One dictionary storing all visible variables
 - Cache invalidation overhead: Must rebuild when scopes change
 - Net benefit: Positive for variable-heavy programs
@@ -147,14 +152,15 @@ value = self._scope_cache.get_variable(name)
 
 From `dev_tools/test_scope_optimizer.py`:
 
-```
+```text
 Standard: 0.0506s (50 runs)
 Optimized: 0.0493s (50 runs)
 Speedup: 1.03x
 ```
 
 Cache statistics from test run:
-```
+
+```text
 Cache hits: 6
 Cache misses: 0
 Hit rate: 100.0%

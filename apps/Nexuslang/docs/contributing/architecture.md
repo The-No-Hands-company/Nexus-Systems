@@ -8,7 +8,7 @@ The NexusLang compiler architecture is designed to translate natural language pr
 
 The NexusLang compiler follows a multi-stage pipeline architecture with specialized components for handling natural language processing:
 
-```
+```text
 [Source Code] [Lexer] [Parser] [Semantic Analyzer] [NLP Resolver] 
 [Intermediate Code Generator] [Optimizer] [Code Generator] [Machine Code]
 ```
@@ -21,14 +21,16 @@ Each component is designed to handle specific aspects of the translation process
 
 The lexer breaks the natural language source code into tokens, but with special considerations for natural language:
 
-#### Features:
+#### Features
+
 - **Flexible tokenization**: Recognizes various forms of the same command (e.g., "Set x to 5", "Let x be 5")
 - **Context-aware scanning**: Considers surrounding tokens to determine token boundaries
 - **Punctuation handling**: Properly handles sentence-ending punctuation as statement terminators
 - **Comment extraction**: Identifies and preserves comments for documentation
 - **Synonym recognition**: Maps synonymous terms to canonical tokens
 
-#### Implementation Strategy:
+#### Implementation Strategy
+
 - Use a combination of rule-based tokenization and machine learning models trained on the NexusLang grammar
 - Maintain a dictionary of synonyms and equivalent phrases
 - Implement lookahead and lookbehind capabilities to handle context-dependent tokenization
@@ -37,17 +39,19 @@ The lexer breaks the natural language source code into tokens, but with special 
 
 The parser constructs an Abstract Syntax Tree (AST) from the token stream, with enhanced capabilities for handling natural language variations:
 
-#### Features:
+#### Features
+
 - **Flexible grammar rules**: Accommodates multiple ways to express the same operation
 - **Intent recognition**: Identifies the programmer's intent despite syntactic variations
 - **Error recovery**: Provides meaningful error messages for syntax errors in natural language
 - **Ambiguity detection**: Identifies potentially ambiguous constructs for resolution
 
-#### Implementation Strategy:
+#### Implementation Strategy
+
 - Implement a hybrid parsing approach combining:
- - **Top-down parsing** for high-level program structure
- - **Bottom-up parsing** for expressions and statements
- - **Chart parsing** techniques from natural language processing
+- **Top-down parsing** for high-level program structure
+- **Bottom-up parsing** for expressions and statements
+- **Chart parsing** techniques from natural language processing
 - Use a probabilistic context-free grammar (PCFG) to handle ambiguities
 - Implement a feedback mechanism to request clarification for highly ambiguous constructs
 
@@ -55,14 +59,16 @@ The parser constructs an Abstract Syntax Tree (AST) from the token stream, with 
 
 The semantic analyzer verifies the semantic correctness of the program and builds a symbol table:
 
-#### Features:
+#### Features
+
 - **Type inference**: Determines types from context when not explicitly specified
 - **Type checking**: Ensures type compatibility in operations
 - **Symbol resolution**: Resolves variable, function, and class references
 - **Scope analysis**: Manages nested scopes and visibility rules
 - **Semantic error detection**: Identifies logical errors in the program
 
-#### Implementation Strategy:
+#### Implementation Strategy
+
 - Implement a robust type system supporting both static and dynamic typing
 - Use unification-based type inference algorithms
 - Build a hierarchical symbol table with support for namespaces and modules
@@ -72,13 +78,15 @@ The semantic analyzer verifies the semantic correctness of the program and build
 
 This is a specialized component unique to NexusLang that resolves natural language ambiguities:
 
-#### Features:
+#### Features
+
 - **Contextual disambiguation**: Uses program context to resolve ambiguous constructs
 - **Intent classification**: Classifies programmer intent using NLP techniques
 - **Reference resolution**: Resolves pronouns and implicit references (e.g., "it", "this value")
 - **Phrase normalization**: Converts varied natural language phrases to canonical forms
 
-#### Implementation Strategy:
+#### Implementation Strategy
+
 - Implement a machine learning model trained on NexusLang code examples
 - Use transformer-based models for contextual understanding
 - Maintain a knowledge base of programming patterns and idioms
@@ -88,13 +96,15 @@ This is a specialized component unique to NexusLang that resolves natural langua
 
 Translates the semantically analyzed and resolved AST into an intermediate representation (IR):
 
-#### Features:
+#### Features
+
 - **Language-agnostic IR**: Generates LLVM IR or a custom IR designed for NexusLang
 - **High-level optimizations**: Performs language-specific optimizations
 - **Memory management integration**: Inserts appropriate memory management operations
 - **Exception handling**: Implements the exception handling mechanism
 
-#### Implementation Strategy:
+#### Implementation Strategy
+
 - Leverage existing IR frameworks like LLVM
 - Implement a visitor pattern to traverse the AST and generate IR
 - Create specialized IR generators for natural language constructs
@@ -104,23 +114,26 @@ Translates the semantically analyzed and resolved AST into an intermediate repre
 
 Performs various optimizations on the intermediate code:
 
-#### Features:
+#### Features
+
 - **Traditional optimizations**: Constant folding, dead code elimination, loop optimization ✅
 - **Natural language-specific optimizations**: Optimizing verbose natural language constructs
 - **Memory optimization**: Conditional coroutine generation (23% IR reduction) ✅
 - **Parallelization**: Identifying parallelizable operations (planned)
 
-#### Implementation Strategy:
+#### Implementation Strategy
+
 - Implement multiple optimization passes with increasing aggressiveness ✅
 - Leverage existing optimizer frameworks like LLVM's optimization passes ✅
 - Develop custom optimization passes for natural language constructs (in progress)
 - Implement profile-guided optimization for frequently used natural language patterns (planned)
 
-#### Current Implementation (v1.2):
+#### Current Implementation (v1.2)
 
 **Module**: `src/nexuslang/compiler/llvm_optimizer.py` (370 lines)
 
 **Optimization Levels**: 5 levels implemented via subprocess calls to LLVM `opt` tool
+
 - **-O0**: No optimization (debug builds)
 - **-O1**: Basic optimization (mem2reg, simple DCE)
 - **-O2**: Standard optimization (default, production-ready) ⭐ RECOMMENDED
@@ -128,6 +141,7 @@ Performs various optimizations on the intermediate code:
 - **-Os**: Size optimization (minimize binary size)
 
 **Key Optimizations Applied**:
+
 1. **Memory-to-Register Promotion**: Converts stack allocations to SSA form
 2. **Dead Code Elimination**: Removes unused variables and unreachable code
 3. **Common Subexpression Elimination**: Eliminates redundant computations
@@ -137,16 +151,19 @@ Performs various optimizations on the intermediate code:
 7. **Constant Propagation**: Compile-time evaluation of constants
 
 **Conditional Code Generation** (Major Optimization):
+
 - **Coroutine Infrastructure**: Generated only when async/await is used
 - **Impact**: 23% smaller IR, 4-6% performance improvement for synchronous code
 - **Implementation**: `has_async_functions` flag in `llvm_ir_generator.py`
 
 **Performance Results**:
+
 - **Fibonacci(1000)**: 0.934ms NexusLang vs 0.518ms C (1.80x slower) ✅ Within 3x target
 - **Matrix(200x200)**: 1.191ms NexusLang vs 0.473ms C (2.52x slower) ✅ Within 3x target
 - **IR Quality**: Clean SSA form with PHI nodes, perfect function attributes
 
 **CLI Integration**:
+
 ```bash
 python dev_tools/nlplc_llvm.py program.nlpl -O2 -o program     # Standard optimization
 python dev_tools/nlplc_llvm.py program.nlpl --ir-opt            # View optimized IR
@@ -158,13 +175,15 @@ See `docs/reference/optimization-guide.md` for comprehensive optimization docume
 
 Translates the optimized IR into machine code or target language code:
 
-#### Features:
+#### Features
+
 - **Multiple targets**: Generate code for various architectures (x86, ARM, etc.)
 - **Platform-specific optimizations**: Optimize for specific hardware features
 - **Inline assembly integration**: Support for the inline assembly syntax in NexusLang
 - **Debugging information**: Generate debugging information for developer tools
 
-#### Implementation Strategy:
+#### Implementation Strategy
+
 - Leverage existing code generation frameworks like LLVM
 - Implement custom code generators for specialized natural language constructs
 - Ensure efficient implementation of memory management operations
@@ -235,17 +254,19 @@ The final phase will focus on:
 **Problem**: Natural language is inherently ambiguous.
 
 **Solution**:
+
 - Implement a multi-strategy disambiguation system:
- - Syntactic constraints to limit ambiguity
- - Type-based disambiguation
- - Contextual analysis using machine learning
- - Interactive disambiguation for highly ambiguous constructs
+- Syntactic constraints to limit ambiguity
+- Type-based disambiguation
+- Contextual analysis using machine learning
+- Interactive disambiguation for highly ambiguous constructs
 
 ### Challenge 2: Performance Overhead
 
 **Problem**: Natural language constructs may introduce performance overhead.
 
 **Solution**:
+
 - Aggressive compile-time evaluation and optimization
 - Specialized runtime libraries optimized for common patterns
 - Optional performance annotations for critical code
@@ -256,6 +277,7 @@ The final phase will focus on:
 **Problem**: Debugging natural language code may be more complex than traditional code.
 
 **Solution**:
+
 - Generate clear mapping between natural language and generated code
 - Provide natural language explanations of runtime errors
 - Implement specialized debugging tools for natural language code
@@ -266,6 +288,7 @@ The final phase will focus on:
 **Problem**: Natural language may become unwieldy for large codebases.
 
 **Solution**:
+
 - Support for modular code organization
 - Tools for navigating and understanding large natural language codebases
 - Refactoring tools specialized for natural language code

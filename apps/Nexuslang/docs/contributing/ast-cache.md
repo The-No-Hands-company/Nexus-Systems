@@ -46,7 +46,8 @@ cache.print_stats()
 ```
 
 Output:
-```
+
+```text
 AST Cache Statistics:
   Hits: 8
   Misses: 10

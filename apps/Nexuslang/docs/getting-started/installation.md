@@ -57,6 +57,7 @@ See `editors/neovim/` for configuration.
 ### Any LSP-capable editor
 
 Point your editor at:
-```
+
+```text
 PYTHONPATH=/path/to/NexusLang/src python -m nexuslang.lsp --stdio
 ```

@@ -121,7 +121,8 @@ switch operation
 ```
 
 **Output:**
-```
+
+```text
 Addition: 
 15
 ```
@@ -163,7 +164,8 @@ switch category
 ```
 
 **Output:**
-```
+
+```text
 Category 1
   Subcategory 1-2
 ```
@@ -210,6 +212,7 @@ switch value
 ```
 
 **Supported constant operations:**
+
 - Unary: `-x`, `+x`
 - Binary: `+`, `-`, `*`, `/`, `%`
 - Literals: integers, booleans
@@ -251,6 +254,7 @@ function get_day_name with day_number as Integer returns String
 1. **Use switch for multiple comparisons**: When testing one value against 3+ possibilities, prefer switch over if-else chains
 
 2. **Provide default case**: Always include a `default` case for robust error handling:
+
    ```nexuslang
    switch user_input
        case 1
@@ -262,6 +266,7 @@ function get_day_name with day_number as Integer returns String
    ```
 
 3. **Keep cases simple**: Put complex logic in functions, keep case bodies concise:
+
    ```nexuslang
    switch command
        case 1
@@ -277,6 +282,7 @@ function get_day_name with day_number as Integer returns String
 NLPL also has a `match` expression for pattern matching (more advanced):
 
 **Switch (value comparison):**
+
 ```nexuslang
 switch value
     case 1
@@ -284,6 +290,7 @@ switch value
 ```
 
 **Match (pattern matching):**
+
 ```nexuslang
 match result with
     case Ok value
@@ -363,6 +370,7 @@ function handle_menu_choice with choice as Integer
 ## Limitations
 
 1. **No ranges**: Switch doesn't support range matching. Use if-else for ranges:
+
    ```nexuslang
    # Can't do: case 1 to 10
    if score is greater than or equal to 90
@@ -384,6 +392,7 @@ function handle_menu_choice with choice as Integer
 ## Testing
 
 Comprehensive test suite in `test_programs/compiler/test_switch_statement.nlpl`:
+
 - Integer switch with multiple cases
 - Switch with default only
 - Switch with operations in cases
@@ -392,6 +401,7 @@ Comprehensive test suite in `test_programs/compiler/test_switch_statement.nlpl`:
 - Negative value switching
 
 Run tests:
+
 ```bash
 ./nlplc test_programs/compiler/test_switch_statement.nlpl --run
 ```

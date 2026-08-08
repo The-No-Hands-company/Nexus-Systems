@@ -10,18 +10,21 @@
 Structs and unions provide C-style memory layout control for system programming, FFI interoperability, and performance-critical code.
 
 **Structs** (structures):
+
 - Group related data fields together
 - Each field has its own memory location
 - Size = sum of field sizes (plus padding/alignment)
 - Similar to classes but focused on data layout
 
 **Unions:**
+
 - Multiple fields share the same memory location
 - Size = size of largest field
 - Only one field is active at a time
 - Useful for type punning, memory optimization, variant types
 
 NLPL's struct/union features:
+
 - C-compatible memory layout
 - Packed structs (no padding)
 - Custom alignment control
@@ -43,6 +46,7 @@ end
 ```
 
 **Components:**
+
 - `struct` keyword
 - Struct name (PascalCase convention)
 - Field declarations (`name as Type`)
@@ -165,6 +169,7 @@ end
 ```
 
 **Memory layout rules:**
+
 - Fields laid out in declaration order
 - Alignment requirements (e.g., 8-byte integers on 8-byte boundaries)
 - Padding inserted to maintain alignment
@@ -186,6 +191,7 @@ end
 ```
 
 **Packed struct behavior:**
+
 - `packed` keyword before `struct`
 - No padding between fields
 - Fields can be misaligned
@@ -193,6 +199,7 @@ end
 - Slower access on some architectures
 
 **When to use packed structs:**
+
 - ✅ Network protocols (exact byte layout)
 - ✅ File formats (binary data)
 - ✅ Hardware registers (specific memory mapping)
@@ -210,6 +217,7 @@ end
 ```
 
 **Alignment use cases:**
+
 - SIMD operations (SSE/AVX require 16/32-byte alignment)
 - Cache line optimization (64-byte alignment)
 - Hardware requirements (DMA, memory-mapped I/O)
@@ -229,6 +237,7 @@ end
 ```
 
 **Key properties:**
+
 - All fields share the same memory location
 - Size = size of largest field
 - Writing to one field overwrites others
@@ -333,6 +342,7 @@ end
 ### When to Use Structs
 
 **Structs are well-suited to:**
+
 - ✅ Plain data containers (POD types)
 - ✅ C FFI interoperability
 - ✅ Exact memory layout requirements
@@ -341,6 +351,7 @@ end
 - ✅ Hardware interfacing
 
 **Example:**
+
 ```nexuslang
 struct PacketHeader
   magic as Integer      # 4 bytes
@@ -354,6 +365,7 @@ end
 ### When to Use Classes
 
 **Classes are well-suited to:**
+
 - ✅ Complex behavior and logic
 - ✅ Inheritance hierarchies
 - ✅ Encapsulation and data hiding
@@ -361,6 +373,7 @@ end
 - ✅ Application logic
 
 **Example:**
+
 ```nexuslang
 class NetworkConnection
   private socket as Integer
@@ -417,6 +430,7 @@ call move_point with (address of p), 5, 5
 ### Struct Layout Compatibility
 
 **NLPL struct:**
+
 ```nexuslang
 struct CCompatible
   a as Integer  # int (4 bytes on most platforms)
@@ -426,6 +440,7 @@ end
 ```
 
 **Equivalent C struct:**
+
 ```c
 struct CCompatible {
     int a;
@@ -435,6 +450,7 @@ struct CCompatible {
 ```
 
 **Important:** Ensure field types match C types exactly!
+
 - NexusLang `Integer` = C `int` (32-bit) or `long` (64-bit) - check platform!
 - NexusLang `Float` = C `float` (32-bit) or `double` (64-bit)
 - NexusLang `Boolean` = C `bool` or `int`
@@ -458,6 +474,7 @@ end
 ```
 
 **Workaround using bitwise operations:**
+
 ```nexuslang
 struct PermissionFlags
   flags as Integer  # Pack multiple booleans into bits
@@ -835,6 +852,7 @@ end
 ```
 
 **Guidelines:**
+
 - Use stack allocation for temporary, small structs
 - Use heap allocation for large structs, dynamic lifetime
 - Be careful with heap-allocated structs (memory leaks!)
@@ -884,6 +902,7 @@ end
 ### Issue: Field Not Found
 
 **Problem:**
+
 ```nexuslang
 struct Point
   x as Integer
@@ -899,6 +918,7 @@ set p.z to 30  # ERROR: Field 'z' not found
 ### Issue: Type Mismatch
 
 **Problem:**
+
 ```nexuslang
 struct Data
   value as Integer
@@ -913,6 +933,7 @@ set d.value to "hello"  # ERROR: Expected Integer, got String
 ### Issue: Accessing Union Field
 
 **Problem:**
+
 ```nexuslang
 union Data
   int_value as Integer
@@ -929,6 +950,7 @@ print text d.float_value  # Garbage! float_value was never set
 ### Issue: Struct Alignment Mismatch (FFI)
 
 **Problem:**
+
 ```nexuslang
 # NexusLang struct (unpacked, has padding)
 struct Data
@@ -945,6 +967,7 @@ end
 ```
 
 **Solution:** Use `packed struct` to match C layout:
+
 ```nexuslang
 packed struct Data
   a as Boolean
@@ -976,12 +999,14 @@ Structs and unions in NexusLang provide:
 ✅ **Flexibility** - Methods, nesting, pointers  
 
 **Use structs when:**
+
 - You need predictable memory layout
 - Interfacing with C libraries
 - Building network/file protocols
 - System programming and hardware access
 
 **Use unions when:**
+
 - You need to save memory (only one field active)
 - Type punning (bit-level manipulation)
 - Building variant types (with tag field)

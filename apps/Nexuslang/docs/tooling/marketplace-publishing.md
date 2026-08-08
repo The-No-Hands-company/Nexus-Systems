@@ -20,7 +20,7 @@ This guide walks through publishing the NexusLang extension to the Visual Studio
 
 ### 1.1 Sign Up
 
-1. Go to: https://dev.azure.com
+1. Go to: <https://dev.azure.com>
 2. Sign in with Microsoft account (or create one)
 3. Click "Create new organization"
 4. Choose organization name (e.g., `nlpl-dev`)
@@ -29,7 +29,7 @@ This guide walks through publishing the NexusLang extension to the Visual Studio
 
 ### 1.2 Verify Organization
 
-```
+```text
 Organization URL: https://dev.azure.com/your-org-name
 ```
 
@@ -39,7 +39,7 @@ Organization URL: https://dev.azure.com/your-org-name
 
 ### 2.1 Generate PAT
 
-1. Go to: https://dev.azure.com/your-org-name
+1. Go to: <https://dev.azure.com/your-org-name>
 2. Click on **User Settings** (gear icon, top right)
 3. Select **Personal Access Tokens**
 4. Click **+ New Token**
@@ -50,11 +50,13 @@ Organization URL: https://dev.azure.com/your-org-name
 
 **Organization**: Select your organization
 
-**Expiration**: 
+**Expiration**:
+
 - Custom defined
 - Set to 1 year or longer
 
 **Scopes**: Select **Custom defined**, then:
+
 - ✅ **Marketplace** → **Acquire** (required)
 - ✅ **Marketplace** → **Publish** (required)
 - ✅ **Marketplace** → **Manage** (optional but recommended)
@@ -63,7 +65,7 @@ Organization URL: https://dev.azure.com/your-org-name
 
 **CRITICAL**: Copy the token immediately - it won't be shown again!
 
-```
+```text
 Save to secure location:
 - Password manager
 - Environment variable
@@ -76,34 +78,39 @@ Save to secure location:
 
 ### 3.1 Access Publisher Management
 
-1. Go to: https://marketplace.visualstudio.com/manage
+1. Go to: <https://marketplace.visualstudio.com/manage>
 2. Sign in with same Microsoft account
 3. Click **Create publisher**
 
 ### 3.2 Publisher Details
 
 **Publisher ID**: `nlpl-team` (or similar)
+
 - Must be lowercase, alphanumeric, hyphens allowed
 - Cannot be changed later
 - Will be visible in extension ID: `nlpl-team.nlpl-language-support`
 
 **Publisher Name**: `NLPL Team` (or `The No-hands Company`)
+
 - Display name (can be changed)
 - Appears on marketplace listing
 
 **Description**: (optional)
-```
+
+```text
 NLPL language development tools and IDE support
 ```
 
 **Logo**: (optional)
+
 - 128x128 PNG recommended
 - Appears on marketplace
 
 ### 3.3 Verify Publisher Created
 
 You should see your publisher at:
-```
+
+```text
 https://marketplace.visualstudio.com/publishers/your-publisher-id
 ```
 
@@ -180,7 +187,8 @@ npx vsce login your-publisher-id
 ```
 
 **Expected output:**
-```
+
+```text
 Personal Access Token for publisher 'your-publisher-id': ****
 The Personal Access Token verification succeeded for the publisher 'your-publisher-id'.
 ```
@@ -198,7 +206,8 @@ npx vsce publish major  # 0.1.0 → 1.0.0
 ```
 
 **Expected output:**
-```
+
+```text
 Publishing nlpl-team.nlpl-language-support@0.1.0...
 Successfully published nlpl-team.nlpl-language-support@0.1.0!
 Your extension will live at https://marketplace.visualstudio.com/items?itemName=nlpl-team.nlpl-language-support
@@ -229,9 +238,10 @@ Update `README.md` with marketplace installation:
 ### From Marketplace
 ```sh
 code --install-extension nlpl-team.nlpl-language-support
-```
+```text
 
 Or search "NexusLang" in VS Code Extensions view.
+
 ```
 
 ### 6.2 Tag Release
@@ -243,7 +253,7 @@ git push origin v1.2.1
 
 ### 6.3 Create GitHub Release
 
-1. Go to: https://github.com/Zajfan/NexusLang/releases/new
+1. Go to: <https://github.com/Zajfan/NexusLang/releases/new>
 2. Tag: `v1.2.1`
 3. Title: `v1.2.1 - Marketplace Release`
 4. Description: Link to marketplace
@@ -273,6 +283,7 @@ git push origin v1.2.1
 ### Warning: "Missing icon"
 
 **Solution**: Add icon to package.json or use `--no-git-tag` flag:
+
 ```bash
 npx vsce publish --no-git-tag
 ```
@@ -361,6 +372,7 @@ Maintain `CHANGELOG.md`:
 ### 3. Keywords
 
 Use relevant keywords in package.json:
+
 - "nlpl"
 - "natural language programming"
 - "language server"
@@ -370,6 +382,7 @@ Use relevant keywords in package.json:
 ### 4. Categories
 
 Choose appropriate categories:
+
 - Programming Languages (primary)
 - Linters
 - Formatters
@@ -378,6 +391,7 @@ Choose appropriate categories:
 ### 5. Icon
 
 Add professional icon (128x128 PNG):
+
 - Represents NexusLang brand
 - Clear at small sizes
 - Looks good on light/dark backgrounds
@@ -393,7 +407,7 @@ After publishing, track:
 - **Ratings**: User ratings (1-5 stars)
 - **Reviews**: User feedback
 
-Access at: https://marketplace.visualstudio.com/manage/publishers/your-publisher-id
+Access at: <https://marketplace.visualstudio.com/manage/publishers/your-publisher-id>
 
 ---
 
@@ -402,7 +416,7 @@ Access at: https://marketplace.visualstudio.com/manage/publishers/your-publisher
 If `vsce publish` fails, manually upload:
 
 1. Package: `npx vsce package`
-2. Go to: https://marketplace.visualstudio.com/manage
+2. Go to: <https://marketplace.visualstudio.com/manage>
 3. Click **New extension**
 4. Upload `.vsix` file
 5. Fill in metadata
@@ -415,6 +429,7 @@ If `vsce publish` fails, manually upload:
 **Package Ready**: ✅ `nlpl-language-support-0.1.0.vsix`
 
 **Pending**:
+
 - [ ] Create Azure DevOps organization
 - [ ] Generate PAT
 - [ ] Create marketplace publisher
@@ -452,16 +467,17 @@ If `vsce publish` fails, manually upload:
 
 ## References
 
-- **vsce Documentation**: https://code.visualstudio.com/api/working-with-extensions/publishing-extension
-- **Marketplace**: https://marketplace.visualstudio.com
-- **Azure DevOps**: https://dev.azure.com
-- **Extension Guidelines**: https://code.visualstudio.com/api/references/extension-guidelines
+- **vsce Documentation**: <https://code.visualstudio.com/api/working-with-extensions/publishing-extension>
+- **Marketplace**: <https://marketplace.visualstudio.com>
+- **Azure DevOps**: <https://dev.azure.com>
+- **Extension Guidelines**: <https://code.visualstudio.com/api/references/extension-guidelines>
 
 ---
 
 ## Support
 
 For publishing issues:
-- VS Code Extension API: https://code.visualstudio.com/api
-- GitHub Discussions: https://github.com/microsoft/vscode-discussions
+
+- VS Code Extension API: <https://code.visualstudio.com/api>
+- GitHub Discussions: <https://github.com/microsoft/vscode-discussions>
 - Stack Overflow: Tag `vscode-extensions`

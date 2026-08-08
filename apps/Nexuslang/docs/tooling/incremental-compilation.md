@@ -47,6 +47,7 @@ Maintains a bidirectional dependency graph:
 ```
 
 This enables:
+
 - Forward lookup: "What does this file depend on?"
 - Reverse lookup: "What files depend on this?"
 - Transitive resolution: "What are ALL dependencies (direct + indirect)?"
@@ -108,7 +109,8 @@ nlpl build --verbose
 ```
 
 Output:
-```
+
+```text
 Building calculator [profile: dev, features: none]
     Rebuild reason: Source file calculator.nlpl changed
   Compiling binary calculator...
@@ -185,6 +187,7 @@ def is_file_hash_changed(self, file_path):
 - **Dependency changed**: Recompile all transitively dependent files
 
 Example:
+
 - Project: 100 files, 10 with dependencies on `utils.nlpl`
 - Change: Modify `utils.nlpl`
 - Result: Recompile 11 files (1 changed + 10 dependents), skip 89
@@ -254,6 +257,7 @@ class BuildTool:
 ### Test Structure
 
 `test_programs/build_system/`:
+
 - `calculator.nlpl` - Main program
 - `math_utils.nlpl` - Dependency module
 - `nexuslang.toml` - Build manifest
@@ -311,16 +315,19 @@ nlpl build --verbose
 ### Planned Enhancements
 
 **Short Term**:
+
 - [ ] Recursive dependency scanning (transitive imports)
 - [ ] Stdlib module dependency tracking
 - [ ] Better module path resolution (use module loader)
 
 **Medium Term**:
+
 - [ ] Parallel compilation of independent files
 - [ ] Incremental linking (only relink if needed)
 - [ ] Cache compression (for large projects)
 
 **Long Term**:
+
 - [ ] Distributed build cache (shared across machines)
 - [ ] Content-addressable storage
 - [ ] Build artifact deduplication
@@ -332,6 +339,7 @@ nlpl build --verbose
 **Symptom**: Build behaves unexpectedly or crashes
 
 **Fix**:
+
 ```bash
 nlpl clean  # Removes corrupted cache
 nlpl build  # Fresh build
@@ -342,16 +350,19 @@ nlpl build  # Fresh build
 **Symptom**: Files rebuild when they shouldn't
 
 **Debug**:
+
 ```bash
 nlpl build --verbose  # See rebuild reason
 ```
 
 **Common Causes**:
+
 - Clock skew on file system
 - File touched by editor but not changed
 - Cache not saved from previous build
 
 **Workaround**:
+
 ```bash
 # Verify cache exists
 ls -la build/.cache/build_cache.json
@@ -365,10 +376,12 @@ stat source_file.nlpl
 **Symptom**: Files not rebuilding when they should
 
 **Causes**:
+
 - Cache out of sync with reality
 - Imported module not tracked properly
 
 **Fix**:
+
 ```bash
 nlpl clean && nlpl build
 ```
@@ -378,12 +391,14 @@ nlpl clean && nlpl build
 ### Why JSON Instead of Binary Format?
 
 **Pros of JSON**:
+
 - Human-readable for debugging
 - Easy to inspect with standard tools (`cat`, `jq`)
 - Simple serialization/deserialization
 - Forward-compatible (can add fields)
 
 **Cons**:
+
 - Slower than binary formats
 - Larger file size
 
@@ -392,6 +407,7 @@ nlpl clean && nlpl build
 ### Why SHA-256 for Content Hashing?
 
 **Alternatives Considered**:
+
 - **MD5**: Faster but deprecated (collision attacks)
 - **xxHash**: Very fast but not cryptographic
 - **SHA-256**: Industry standard, good balance
@@ -401,6 +417,7 @@ nlpl clean && nlpl build
 ### Why Store Full Paths in Cache?
 
 **Alternatives**:
+
 - Relative paths (shorter but ambiguous)
 - File IDs (compact but opaque)
 
@@ -415,12 +432,14 @@ nlpl clean && nlpl build
 ## See Also
 
 **Similar Systems**:
+
 - Cargo (Rust): `.fingerprint` files
 - Make: Modification time-based builds
 - Ninja: Fast incremental builds
 - Bazel: Content-addressable cache
 
 **Key Differences**:
+
 - NexusLang tracks full dependency graph (not just makefile-style rules)
 - Profile and feature awareness (rebuild on config changes)
 - Natural language syntax (clear build reasons in English)

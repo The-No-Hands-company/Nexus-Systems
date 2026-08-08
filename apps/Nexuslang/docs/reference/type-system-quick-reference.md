@@ -3,6 +3,7 @@
 ## Type Annotations
 
 ### Variable Declarations
+
 ```nexuslang
 set x to 42 # Inferred as Integer
 set y as Float to 3.14 # Explicit type annotation
@@ -10,6 +11,7 @@ set name as String to "Alice" # Explicit String type
 ```
 
 ### Function Signatures
+
 ```nexuslang
 # Function with typed parameters and return type
 function add with a as Integer, b as Integer returns Integer
@@ -23,6 +25,7 @@ end
 ```
 
 ### Class Properties
+
 ```nexuslang
 class Person
  name as String
@@ -38,6 +41,7 @@ end
 ## Type Inference
 
 ### Automatic Inference
+
 ```nexuslang
 # Literals
 set count to 0 # Integer
@@ -56,6 +60,7 @@ set result to 5 times 2.5 # Integer (5) * Float (2.5) = Float
 ```
 
 ### Bidirectional Inference
+
 ```nexuslang
 # Lambda parameter types inferred from context
 function map with items as List of Integer, fn as Function returns List of Integer
@@ -71,6 +76,7 @@ set doubled to map([1, 2, 3], lambda x => x times 2)
 ```
 
 ### Expected Type Context
+
 ```nexuslang
 # Empty collection with expected type
 function create_numbers returns List of Integer
@@ -89,6 +95,7 @@ end
 ## Generic Types
 
 ### Generic Functions
+
 ```nexuslang
 # Generic function with type parameter T
 function identity<T> with value as T returns T
@@ -101,6 +108,7 @@ set y to identity("hello") # T = String
 ```
 
 ### Multiple Type Parameters
+
 ```nexuslang
 # Generic function with T and R
 function map<T, R> with items as List<T>, fn as Function returns List<R>
@@ -117,6 +125,7 @@ set strings to map([1, 2, 3], lambda x => "Number " plus x as String)
 ```
 
 ### Generic Collections
+
 ```nexuslang
 # List with element type
 set numbers to empty List of Integer
@@ -130,6 +139,7 @@ set scores["Bob"] to 87
 ```
 
 ### Generic Constraints
+
 ```nexuslang
 # Generic function with constraint
 function max<T: Comparable> with a as T, b as T returns T
@@ -147,6 +157,7 @@ set max_str to max("apple", "banana") # T = String (Comparable)
 ## User-Defined Types
 
 ### Basic Class
+
 ```nexuslang
 class Point
  x as Integer
@@ -164,6 +175,7 @@ set distance to p.distance_from_origin()
 ```
 
 ### Inheritance
+
 ```nexuslang
 class Animal
  name as String
@@ -191,6 +203,7 @@ dog.bark()
 ```
 
 ### Polymorphism
+
 ```nexuslang
 # Function accepting supertype
 function greet_animal with animal as Animal returns String
@@ -208,6 +221,7 @@ set greeting2 to greet_animal(cat)
 ## Type Compatibility
 
 ### Numeric Widening
+
 ```nexuslang
 # Integer automatically widens to Float
 set int_val to 10 # Integer
@@ -223,6 +237,7 @@ set doubled to process(5) # Integer 5 widens to Float
 ```
 
 ### String Concatenation
+
 ```nexuslang
 # String + Any (with conversion)
 set name to "Alice"
@@ -231,6 +246,7 @@ set message to name plus " is " plus age as String plus " years old"
 ```
 
 ### List Compatibility
+
 ```nexuslang
 # Mixed numeric types unify to Float
 set mixed to [1, 2.5, 3] # List<Float> (Integer widens to Float)
@@ -249,6 +265,7 @@ set sum to sum_integers(nums) # List<Integer> matches parameter type
 ```
 
 ### Subtype Compatibility
+
 ```nexuslang
 # Subtype can be used where supertype is expected
 class Vehicle
@@ -270,6 +287,7 @@ show_speed(car) # Car compatible with Vehicle (subtype)
 ## Common Patterns
 
 ### Optional Types (Nullable)
+
 ```nexuslang
 # Function that may return null
 function find_user with id as Integer returns String
@@ -282,6 +300,7 @@ end
 ```
 
 ### Union Types
+
 ```nexuslang
 # Function with multiple return types
 function get_value with flag as Boolean returns Integer
@@ -295,6 +314,7 @@ end
 ```
 
 ### Lambda Types
+
 ```nexuslang
 # Lambda with inferred types
 set doubler to lambda x => x times 2
@@ -313,6 +333,7 @@ set result to apply(10, lambda x => x plus 5)
 ```
 
 ### Generic Collections
+
 ```nexuslang
 # Creating typed collections
 set int_list to empty List of Integer
@@ -326,6 +347,7 @@ set str_dict["key"] to 42 # OK: String key, Integer value
 ## Type System Commands
 
 ### Enable Type Checking
+
 ```bash
 # Run with type checking enabled
 python src/main.py program.nlpl --type-check
@@ -335,6 +357,7 @@ python src/main.py program.nlpl --no-type-check
 ```
 
 ### Debug Type Inference
+
 ```bash
 # Show inferred types (debug mode)
 python src/main.py program.nlpl --debug --type-check

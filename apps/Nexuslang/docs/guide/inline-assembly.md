@@ -16,6 +16,7 @@ Inline assembly allows you to embed raw assembly instructions directly in NexusL
 - **Low-level operations:** Atomic instructions, SIMD, CPU features
 
 NLPL's inline assembly features:
+
 - x86_64 assembly syntax (Intel/AT&T styles supported)
 - Register allocation and constraints
 - Input/output operands
@@ -39,6 +40,7 @@ asm "
 ```
 
 **Components:**
+
 - `asm` keyword starts the assembly block
 - String literal contains assembly code
 - Instructions use x86_64 assembly syntax
@@ -60,6 +62,7 @@ set x to get_value
 ```
 
 **Key points:**
+
 - Assembly block can return values via registers
 - Return value in `rax` register (following x86_64 calling convention)
 - Function return type must match assembly output
@@ -71,6 +74,7 @@ set x to get_value
 ### x86_64 Register Set
 
 **General Purpose Registers (64-bit):**
+
 - `rax`, `rbx`, `rcx`, `rdx` - Accumulator, base, counter, data
 - `rsi`, `rdi` - Source/destination index (common for string ops)
 - `rbp`, `rsp` - Base pointer, stack pointer
@@ -81,10 +85,12 @@ set x to get_value
 **8-bit versions:** `al`, `bl`, `cl`, `dl`, `sil`, `dil`, `bpl`, `spl`, `r8b`-`r15b`
 
 **Special Registers:**
+
 - `rip` - Instruction pointer
 - `rflags` - CPU flags (carry, zero, sign, overflow, etc.)
 
 **SIMD Registers:**
+
 - `xmm0` - `xmm15` - 128-bit SSE registers
 - `ymm0` - `ymm15` - 256-bit AVX registers
 - `zmm0` - `zmm31` - 512-bit AVX-512 registers (if available)
@@ -92,6 +98,7 @@ set x to get_value
 ### Calling Convention (System V AMD64 ABI)
 
 **Function Arguments (integer/pointer):**
+
 1. `rdi` - First argument
 2. `rsi` - Second argument
 3. `rdx` - Third argument
@@ -101,20 +108,24 @@ set x to get_value
 7. Stack - Additional arguments
 
 **Function Arguments (floating-point):**
+
 1. `xmm0` - First float/double
 2. `xmm1` - Second float/double
 3. `xmm2`-`xmm7` - Additional FP arguments
 
 **Return Values:**
+
 - `rax` - Integer/pointer return value
 - `xmm0` - Floating-point return value
 - `rdx:rax` - 128-bit return (e.g., divmod)
 
 **Preserved Registers (callee-saved):**
+
 - `rbx`, `rbp`, `r12`, `r13`, `r14`, `r15`
 - Must be saved/restored if modified
 
 **Scratch Registers (caller-saved):**
+
 - `rax`, `rcx`, `rdx`, `rsi`, `rdi`, `r8`, `r9`, `r10`, `r11`
 - Can be freely modified
 
@@ -135,6 +146,7 @@ end
 ```
 
 **Common instructions:**
+
 - `mov dest, src` - Move data
 - `movq` - Move quadword (64-bit)
 - `movl` - Move longword (32-bit)
@@ -166,6 +178,7 @@ end
 ```
 
 **Arithmetic instructions:**
+
 - `add dest, src` - Addition
 - `sub dest, src` - Subtraction
 - `imul dest, src` - Signed multiplication
@@ -213,6 +226,7 @@ end
 ```
 
 **Bitwise instructions:**
+
 - `and dest, src` - Bitwise AND
 - `or dest, src` - Bitwise OR
 - `xor dest, src` - Bitwise XOR
@@ -251,6 +265,7 @@ end
 ```
 
 **Control flow instructions:**
+
 - `jmp label` - Unconditional jump
 - `je/jz label` - Jump if equal/zero
 - `jne/jnz label` - Jump if not equal/not zero
@@ -281,6 +296,7 @@ end
 ```
 
 **Comparison instructions:**
+
 - `cmp dest, src` - Compare (sets flags)
 - `test dest, src` - Bitwise AND (sets flags, doesn't modify operands)
 
@@ -307,6 +323,7 @@ end
 ```
 
 **Memory addressing modes:**
+
 - `[reg]` - Direct addressing (read from register as address)
 - `[reg + offset]` - Displacement addressing
 - `[base + index * scale]` - Scaled index addressing
@@ -332,6 +349,7 @@ end
 ```
 
 **Stack instructions:**
+
 - `push src` - Push value onto stack (decrements rsp)
 - `pop dest` - Pop value from stack (increments rsp)
 - `call` - Push return address and jump
@@ -370,6 +388,7 @@ end
 ```
 
 **SIMD instructions:**
+
 - `movaps` - Move aligned packed single-precision
 - `movups` - Move unaligned packed single-precision
 - `addps` - Add packed single-precision (4 floats at once)
@@ -399,6 +418,7 @@ end
 ```
 
 **AVX features:**
+
 - 256-bit operations (ymm registers)
 - Non-destructive 3-operand syntax
 - Prefix: `v` (e.g., `vaddps` instead of `addps`)
@@ -431,6 +451,7 @@ end
 ```
 
 **Atomic instructions:**
+
 - `lock` prefix - Makes instruction atomic
 - `xadd` - Exchange and add
 - `cmpxchg` - Compare and exchange
@@ -467,6 +488,7 @@ end
 ```
 
 **CPUID instruction:**
+
 - Query CPU capabilities and features
 - Function number in `eax`
 - Results in `eax`, `ebx`, `ecx`, `edx`
@@ -497,6 +519,7 @@ end
 ```
 
 **System call convention (Linux x86_64):**
+
 - Syscall number in `rax`
 - Arguments in `rdi`, `rsi`, `rdx`, `r10`, `r8`, `r9`
 - `syscall` instruction invokes kernel
@@ -525,6 +548,7 @@ set result to compute with 5, 10
 ```
 
 **Automatic mapping:**
+
 - Integer/pointer parameters → `rdi`, `rsi`, `rdx`, `rcx`, `r8`, `r9`
 - Floating-point parameters → `xmm0`-`xmm7`
 - Return values → `rax` (int/pointer) or `xmm0` (float)
@@ -630,6 +654,7 @@ end
 ```
 
 **Stack alignment:**
+
 - Must be 16-byte aligned before `call` instruction
 - `push`/`pop` affect alignment (8 bytes each)
 - Use `sub rsp, N` where N is multiple of 16
@@ -731,6 +756,7 @@ end
 ### When to Use Inline Assembly
 
 **Good use cases:**
+
 - ✅ Atomic operations for thread safety
 - ✅ SIMD vectorization for data processing
 - ✅ System calls (if FFI unavailable)
@@ -739,6 +765,7 @@ end
 - ✅ Critical inner loops (after profiling!)
 
 **Bad use cases:**
+
 - ❌ Simple arithmetic (compiler optimizes better)
 - ❌ Standard library operations
 - ❌ Premature optimization
@@ -747,6 +774,7 @@ end
 ### Optimization Tips
 
 1. **Use SIMD for parallel data:**
+
 ```nexuslang
 # Process 4 floats at once instead of 1
 function add_arrays_simd with a as Pointer, b as Pointer, len as Integer
@@ -770,6 +798,7 @@ end
 ```
 
 2. **Reduce memory accesses:**
+
 ```nexuslang
 # Good: Keep values in registers
 function sum_array with arr as Pointer, len as Integer returns Integer
@@ -789,6 +818,7 @@ end
 ```
 
 3. **Use lea for arithmetic:**
+
 ```nexuslang
 function multiply_by_five with x as Integer returns Integer
   asm "
@@ -799,6 +829,7 @@ end
 ```
 
 4. **Minimize branches:**
+
 ```nexuslang
 # Good: Branchless absolute value
 function abs_branchless with x as Integer returns Integer
@@ -951,12 +982,14 @@ Inline assembly in NexusLang provides:
 ✅ **System programming** - OS kernel, driver, bootloader development  
 
 **Use inline assembly when:**
+
 - You need maximum performance in critical sections
 - You're writing OS/system code
 - You need hardware-specific features
 - You understand the trade-offs (portability, safety, maintenance)
 
 **Avoid inline assembly when:**
+
 - NexusLang or standard library provides the functionality
 - You haven't profiled to identify bottlenecks
 - You need cross-platform code

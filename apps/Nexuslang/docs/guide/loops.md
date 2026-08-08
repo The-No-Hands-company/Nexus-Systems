@@ -1,17 +1,20 @@
 # Repeat While Loop Feature
 
 ## Overview
+
 NLPL now supports `repeat while` loops, providing a natural language alternative to traditional `while` loops.
 
 ## Syntax
 
 ### Basic Syntax
+
 ```nexuslang
 repeat while <condition>
     # loop body
 ```
 
 ### With Break and Continue
+
 ```nexuslang
 repeat while <condition>
     if <break_condition>
@@ -22,6 +25,7 @@ repeat while <condition>
 ```
 
 ### Nested Loops
+
 ```nexuslang
 repeat while <outer_condition>
     repeat while <inner_condition>
@@ -32,6 +36,7 @@ repeat while <outer_condition>
 ## Examples
 
 ### Basic Counter Loop
+
 ```nexuslang
 set counter to 0
 repeat while counter is less than 5
@@ -41,7 +46,8 @@ repeat while counter is less than 5
 ```
 
 Output:
-```
+
+```text
 Counter:
 0
 Counter:
@@ -55,6 +61,7 @@ Counter:
 ```
 
 ### Loop with Break
+
 ```nexuslang
 set i to 0
 repeat while i is less than 100
@@ -67,6 +74,7 @@ repeat while i is less than 100
 Output: 0, 1, 2, 3, 4
 
 ### Loop with Continue
+
 ```nexuslang
 set i to 0
 repeat while i is less than 10
@@ -80,6 +88,7 @@ repeat while i is less than 10
 Output: Odd: 1, 3, 5, 7, 9
 
 ### Complex Conditions
+
 ```nexuslang
 set x to 1
 set y to 20
@@ -108,26 +117,31 @@ The `repeat while` syntax is more natural for users coming from plain English, w
 ## Implementation Details
 
 ### Parser
+
 - Added `RepeatWhileLoop` AST node class
 - Parser checks for `repeat while` keyword sequence
 - Supports both indentation-based and `end`/`end repeat` keyword-based syntax
 
 ### Interpreter
+
 - Added `execute_repeat_while_loop()` method
 - Uses direct condition evaluation (Python's truthiness)
 - Supports `break` and `continue` statements
 - Maintains scope correctly (no new scope created for loop body)
 
 ### Type Checker
+
 - Added `check_repeat_while_loop()` method
 - Validates condition type (any type accepted, follows Python truthiness)
 - Type checks loop body statements
 
 ## Test Files
+
 - `test_programs/unit/basic/test_repeat_while.nlpl` - Basic tests
 - `test_programs/unit/basic/test_repeat_while_advanced.nlpl` - Advanced tests with break/continue
 
 ## Future Enhancements
+
 - Optional `else` clause (execute if loop completes without break)
 - Loop labels for breaking/continuing specific nested loops
 - Performance optimizations for compiled mode

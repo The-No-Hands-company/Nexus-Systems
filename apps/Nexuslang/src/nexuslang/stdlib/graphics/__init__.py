@@ -4,6 +4,7 @@ Provides window management, shader compilation, VAO/VBO, and texture loading
 """
 
 import ctypes
+import sys
 from typing import List, Tuple, Optional
 
 try:
@@ -15,8 +16,20 @@ try:
 except ImportError:
     np = None
     GLFW_AVAILABLE = False
-    print("Warning: GLFW or PyOpenGL not installed. Graphics module functionality limited.")
-    print("Install with: pip install glfw PyOpenGL numpy")
+    # stderr, not stdout. This runs at import time, so on a machine without GLFW
+    # it prepended two lines to the output of *every* NexusLang program that
+    # reaches this module — corrupting anything piped, redirected or compared.
+    # It is what made the showcase snapshot test fail on CI while passing
+    # locally: this machine has GLFW installed, the runners do not.
+    #
+    # Attempting to actually use the graphics module without GLFW still raises
+    # RuntimeError("GLFW not available") at the point of use, so nothing is
+    # silenced by moving this off stdout — the real guard is unchanged.
+    print(
+        "Warning: GLFW or PyOpenGL not installed. Graphics module functionality limited.",
+        file=sys.stderr,
+    )
+    print("Install with: pip install glfw PyOpenGL numpy", file=sys.stderr)
     # Stub out GL constants used as default argument values in class definitions
     # so that the module can be imported even without PyOpenGL installed.
     GL_STATIC_DRAW = 0x88B4

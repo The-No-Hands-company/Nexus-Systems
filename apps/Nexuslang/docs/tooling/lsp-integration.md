@@ -37,12 +37,14 @@ python src/main.py --version  # Verify installation
 ### Step 2: Install the VS Code Extension
 
 **Option A: From Marketplace**
-```
+
+```text
 Search "NLPL Language Support" in VS Code Extensions
 Click "Install"
 ```
 
 **Option B: Build and install from this repository**
+
 ```bash
 cd vscode-extension
 npm install
@@ -67,7 +69,7 @@ Create `.vscode/settings.json` in your NexusLang project:
 }
 ```
 
-### Step 4: Start Coding!
+### Step 4: Start Coding
 
 Open any `.nlpl` file and start coding. You'll immediately see:
 
@@ -92,7 +94,8 @@ set message to "unclosed string
 ```
 
 **Result**: Red squiggle under the string with message:
-```
+
+```text
 Syntax error: Unterminated string at line 1, column 14
 ```
 
@@ -105,7 +108,8 @@ end
 ```
 
 **Result**: Red squiggle under `return` with message:
-```
+
+```text
 Type error: Return value of type 'Integer' is not compatible with expected return type 'String'
 ```
 
@@ -118,7 +122,8 @@ print text x to_string
 ```
 
 **Result**: Yellow squiggle under `unused_var` with message:
-```
+
+```text
 Unused variable 'unused_var'
 ```
 
@@ -132,13 +137,13 @@ Unused variable 'unused_var'
 
 Type `fun` and press `Ctrl+Space`:
 
-```
+```text
 function  - Define a function
 ```
 
 Type `cla` and get:
 
-```
+```text
 class  - Define a class
 ```
 
@@ -151,7 +156,8 @@ set x as Int|  # Cursor here
 ```
 
 Suggestions:
-```
+
+```text
 Integer
 IntRange
 ```
@@ -166,7 +172,8 @@ set result to sq|  # Cursor here
 ```
 
 Suggestions:
-```
+
+```text
 sqrt         - Square root
 square_root  - Square root (alias)
 ```
@@ -180,7 +187,8 @@ set value to |  # Cursor here
 ```
 
 Suggestions:
-```
+
+```text
 true     - Boolean true
 false    - Boolean false
 null     - Null value
@@ -199,6 +207,7 @@ new      - Create object instance
 **Remove Unused Variables**
 
 Code:
+
 ```nexuslang
 set unused_var to 42
 set x to 10
@@ -207,7 +216,8 @@ set x to 10
 Action: Click lightbulb or press `Ctrl+.` on `unused_var`
 
 Quick fix:
-```
+
+```text
  Remove unused variable 'unused_var'
 ```
 
@@ -216,6 +226,7 @@ Result: Line deleted automatically
 **Fix Unclosed Strings**
 
 Code:
+
 ```nexuslang
 set message to "hello world
 ```
@@ -223,11 +234,13 @@ set message to "hello world
 Action: Click lightbulb or press `Ctrl+.`
 
 Quick fix:
-```
+
+```text
  Add closing quote
 ```
 
 Result:
+
 ```nexuslang
 set message to "hello world"
 ```
@@ -235,6 +248,7 @@ set message to "hello world"
 **Extract to Function** (Refactoring)
 
 Code:
+
 ```nexuslang
 set x to 10
 set y to 20
@@ -247,7 +261,8 @@ print text product to_string
 Action: Select lines, press `Ctrl+.`
 
 Quick fix:
-```
+
+```text
  Extract to function
 ```
 
@@ -308,7 +323,7 @@ print text message  # Ctrl+Click on 'message'
 
 Hover over `function`:
 
-```
+```nxl
 Define a function
 
 Syntax:
@@ -321,7 +336,7 @@ end
 
 Hover over `sqrt`:
 
-```
+```text
 **sqrt** - Square root
 
 **From**: math
@@ -346,7 +361,8 @@ set msg to greet with "Alice"  # Hover over 'greet'
 ```
 
 Shows:
-```
+
+```text
 **greet** - Function
 
 function greet with name as String returns String
@@ -363,13 +379,15 @@ function greet with name as String returns String
 #### Example: Standard Library Function
 
 Type:
+
 ```nexuslang
 import math
 set root to sqrt with |  # Cursor here
 ```
 
 Signature help popup appears:
-```
+
+```text
 sqrt with number as Float returns Float
           ^^^^^^
 Parameter: number - The number to calculate square root of
@@ -386,7 +404,8 @@ set result to calculate with 10, |  # Cursor here after comma
 ```
 
 Signature help shows:
-```
+
+```text
 function calculate with x as Integer, y as Integer returns Integer
                                       ^
 Parameter: y as Integer - Second parameter
@@ -397,9 +416,10 @@ Parameter: y as Integer - Second parameter
 #### Trigger Characters
 
 Signature help triggers automatically on:
+
 - `(` - Opening parenthesis
 - `,` - Comma (next parameter)
-- ` ` - Space after `with`
+- `` - Space after `with`
 
 Manual trigger: `Ctrl+Shift+Space`
 
@@ -414,6 +434,7 @@ Manual trigger: `Ctrl+Shift+Space`
 #### Example: Rename Function
 
 **Before**:
+
 ```nexuslang
 function calculate with x as Integer, y as Integer returns Integer
   return x plus y
@@ -427,6 +448,7 @@ print text result to_string
 **Action**: Place cursor on `calculate`, press `F2`, type `compute`
 
 **After**:
+
 ```nexuslang
 function compute with x as Integer, y as Integer returns Integer
   return x plus y
@@ -442,6 +464,7 @@ print text result to_string
 #### Example: Rename Variable
 
 **Before**:
+
 ```nexuslang
 set counter to 0
 set total to 100
@@ -457,6 +480,7 @@ print text counter to_string
 **Action**: Place cursor on `counter` (any occurrence), press `F2`, type `index`
 
 **After**:
+
 ```nexuslang
 set index to 0
 set total to 100
@@ -474,6 +498,7 @@ print text index to_string
 #### Example: Rename Class
 
 **Before**:
+
 ```nexuslang
 class Person
   name as String
@@ -487,6 +512,7 @@ set bob to new Person
 **Action**: Place cursor on `Person`, press `F2`, type `Human`
 
 **After**:
+
 ```nexuslang
 class Human
   name as String
@@ -502,6 +528,7 @@ set bob to new Human
 #### Example: Rename Method
 
 **Before**:
+
 ```nexuslang
 class Calculator
   function calculate with x as Integer, y as Integer returns Integer
@@ -516,6 +543,7 @@ set result to calc dot calculate with 5, 10
 **Action**: Place cursor on `calculate` method, press `F2`, type `compute`
 
 **After**:
+
 ```nexuslang
 class Calculator
   function compute with x as Integer, y as Integer returns Integer
@@ -534,11 +562,13 @@ set result to calc dot compute with 5, 10
 The rename feature protects against invalid renames:
 
 **Blocked Renames**:
+
 - Keywords (e.g., can't rename to `function`, `if`, `class`)
 - Invalid identifiers (e.g., `123abc`, `my-func`, `my func`)
 - Symbols that don't exist
 
 **Example - Attempting Invalid Rename**:
+
 ```nexuslang
 set message to "Hello"
 ```
@@ -546,14 +576,16 @@ set message to "Hello"
 Try to rename `message` to `function`:
 
 **Result**: Error message:
-```
+
+```text
 Cannot rename to 'function': Reserved keyword
 ```
 
 Try to rename to `my-var`:
 
 **Result**: Error message:
-```
+
+```text
 Cannot rename to 'my-var': Invalid identifier (use underscores, not hyphens)
 ```
 
@@ -575,6 +607,7 @@ Before performing a rename, the LSP checks if the symbol is renameable:
 #### Rename Scope
 
 The rename operation searches:
+
 - All open files in workspace
 - All `.nlpl` files in project directory
 - Respects scope boundaries (doesn't rename unrelated symbols with same name)
@@ -582,6 +615,7 @@ The rename operation searches:
 **Multi-file example**:
 
 `utils.nlpl`:
+
 ```nexuslang
 function calculate with x as Integer, y as Integer returns Integer
   return x plus y
@@ -589,6 +623,7 @@ end
 ```
 
 `main.nlpl`:
+
 ```nexuslang
 import utils from "utils.nxl"
 
@@ -598,6 +633,7 @@ set result to calculate with 10, 20  # References utils.calculate
 **Action**: Rename `calculate` in `utils.nlpl`
 
 **Result**: Both files updated:
+
 - `utils.nlpl`: Function definition renamed
 - `main.nlpl`: Function call renamed
 
@@ -616,6 +652,7 @@ set result to calculate with 10, 20  # References utils.calculate
 #### Multi-File Import Checking
 
 File: `main.nlpl`
+
 ```nexuslang
 import math                        #  OK (stdlib)
 import utils from "utils.nxl"     #  OK (file exists)
@@ -623,7 +660,8 @@ import nonexistent from "fake.nxl"  #  ERROR
 ```
 
 **Result**: Error diagnostic on line 3:
-```
+
+```text
 Cannot find module 'fake.nxl'
 ```
 
@@ -631,7 +669,7 @@ Cannot find module 'fake.nxl'
 
 Press `Ctrl+T` and type symbol name to search across all files:
 
-```
+```text
 Search: calculate
 
 Results:
@@ -649,6 +687,7 @@ Results:
 **Installation**: See [Quick Start](#quick-start-vs-code) above
 
 **Keyboard Shortcuts**:
+
 - `Ctrl+Space` - Trigger completion
 - `Ctrl+Shift+Space` - Trigger signature help
 - `F12` or `Ctrl+Click` - Go to definition
@@ -658,6 +697,7 @@ Results:
 - `Ctrl+T` - Go to symbol in workspace
 
 **Settings**:
+
 ```json
 {
   "nexuslang.languageServer.enabled": true,
@@ -723,6 +763,7 @@ vim.api.nvim_create_autocmd("FileType", {
 ```
 
 **Keybindings** (in above config):
+
 - `gd` - Go to definition
 - `K` - Show hover documentation
 - `<leader>ca` - Code actions
@@ -761,6 +802,7 @@ vim.api.nvim_create_autocmd("FileType", {
 ```
 
 **Keybindings** (default lsp-mode):
+
 - `M-.` - Go to definition
 - `M-?` - Find references
 - `C-c l a` - Code actions
@@ -824,20 +866,26 @@ contexts:
 **Solutions**:
 
 1. **Check Python version**:
+
    ```bash
    python3 --version  # Must be 3.8+
    ```
 
 2. **Verify NexusLang installation**:
+
    ```bash
    cd /path/to/NLPL
-  PYTHONPATH=src python3 -m nexuslang.main --version
+
+   PYTHONPATH=src python3 -m nexuslang.main --version
+
    ```
 
 3. **Check LSP server directly**:
+
    ```bash
-  PYTHONPATH=src python3 -m nexuslang.lsp --stdio
+   PYTHONPATH=src python3 -m nexuslang.lsp --stdio
    ```
+
    Should start without errors
 
 4. **Check logs** (VS Code):
@@ -862,6 +910,7 @@ contexts:
    - Typing 2+ characters
 
 3. **Verify completion is enabled** (VS Code settings):
+
    ```json
    {
      "nexuslang.languageServer.enabled": true,
@@ -884,6 +933,7 @@ contexts:
 1. **Force re-check**: Save file (`Ctrl+S`)
 
 2. **Check diagnostic settings** (VS Code):
+
    ```json
    {
      "nexuslang.languageServer.linting.enabled": true,
@@ -955,6 +1005,7 @@ Workspace-wide analysis (imports, symbols) scales linearly with file count:
 ### Memory Usage
 
 Typical memory usage:
+
 - **Small projects** (< 20 files): ~50 MB
 - **Medium projects** (20-100 files): ~100 MB
 - **Large projects** (> 100 files): ~200 MB
@@ -994,6 +1045,7 @@ Enable multi-file diagnostics in settings:
 ```
 
 Checks:
+
 - All imports resolve correctly
 - No circular dependencies
 - Consistent type usage across files
@@ -1003,6 +1055,7 @@ Checks:
 Semantic token coloring is available through standard LSP semantic tokens and is enabled automatically when your editor/theme supports semantic highlighting.
 
 Highlights:
+
 - Functions (blue)
 - Classes (green)
 - Variables (default)
@@ -1016,6 +1069,7 @@ Highlights:
 ### Manual Test
 
 1. Create `test.nlpl`:
+
    ```nexuslang
    set x to "unclosed string
    set unused to 42
@@ -1044,7 +1098,8 @@ python dev_tools/test_lsp_server.py
 ```
 
 **Expected output**:
-```
+
+```text
 ======================================================================
  NexusLang LSP Server - Comprehensive Test Suite
 ======================================================================
@@ -1099,6 +1154,7 @@ in editor integrations.
 ### Q: How do I disable specific diagnostics?
 
 **A**: Configure in settings (VS Code):
+
 ```json
 {
   "nexuslang.languageServer.linting.enabled": true,
@@ -1110,6 +1166,7 @@ in editor integrations.
 ### Q: Can LSP auto-fix all errors?
 
 **A**: Not all errors have quick fixes. Currently supported:
+
 - Unclosed strings
 - Unused variables
 - Selected type and diagnostic-driven fixes
@@ -1136,7 +1193,7 @@ in editor integrations.
 - **[LSP README](../../src/nexuslang/lsp/README.md)** - Technical implementation details
 - **[NLPL Documentation](../README.md)** - Complete language documentation
 - **[LSP Specification](https://microsoft.github.io/language-server-protocol/)** - Official protocol spec
-- **[Test Results](#verified-features-status)** - All features verified working (Feb 2026)
+- **Test Results** - All features verified working (Feb 2026)
 
 ---
 

@@ -35,8 +35,11 @@ jobs:
           npm install -g markdownlint-cli@0.39.0
           markdownlint README.md docs/**/*.md
 
+      # Docker Hub, not ghcr. ghcr.io/rhysd/actionlint:1.6.27 answers "denied" to
+      # an anonymous pull — verified both on the runner and locally — so this step
+      # failed at image pull and actionlint had never once run on this repo.
       - name: Actionlint
-        uses: docker://ghcr.io/rhysd/actionlint:1.6.27
+        uses: docker://rhysd/actionlint:1.6.27
         with:
           args: "-color"
 
@@ -216,9 +219,11 @@ jobs:
       - name: Write step summary
         if: always()
         run: |
-          echo "## Test Inventory" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          python scripts/check_test_inventory.py >> $GITHUB_STEP_SUMMARY 2>&1 || true
+          {
+            echo "## Test Inventory"
+            echo ""
+            python scripts/check_test_inventory.py 2>&1 || true
+          } >> "$GITHUB_STEP_SUMMARY"
 
   warning-gate:
     name: Warning gate (deprecations)
@@ -338,7 +343,8 @@ jobs:
       - name: Write step summary
         if: always()
         run: |
-          echo "## Coverage Report" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          python scripts/check_coverage_thresholds.py --json coverage-3.11.json \
-            --no-fail >> $GITHUB_STEP_SUMMARY || true
+          {
+            echo "## Coverage Report"
+            echo ""
+            python scripts/check_coverage_thresholds.py --json coverage-3.11.json --no-fail || true
+          } >> "$GITHUB_STEP_SUMMARY"

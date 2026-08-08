@@ -148,12 +148,15 @@ echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"capabilities":{}}
 ### Common Issues
 
 **Issue**: `nlpl-lsp: command not found`
+
 - **Solution**: Ensure the script is in your PATH or use the full path
 
 **Issue**: LSP not starting in editor
+
 - **Solution**: Check editor LSP logs and verify `nlpl-lsp` runs from terminal
 
 **Issue**: No completions/diagnostics
+
 - **Solution**: Ensure NexusLang syntax is valid, check LSP logs for errors
 
 ## Requirements
@@ -164,7 +167,8 @@ echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"capabilities":{}}
 ## Support
 
 For issues or questions:
-- GitHub Issues: https://github.com/Zajfan/NexusLang/issues
+
+- GitHub Issues: <https://github.com/Zajfan/NexusLang/issues>
 - Documentation: See `docs/` directory in the project
 
 ## License

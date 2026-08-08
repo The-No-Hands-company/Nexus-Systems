@@ -8,7 +8,7 @@ NLPL programs receive consistent, catchable errors with rich context.
 
 ## Error Hierarchy
 
-```
+```text
 NLPLStdlibError                 -- base class for all stdlib errors
     NLPLValueError              -- invalid argument value
     NLPLIOError                 -- file/stream I/O failure

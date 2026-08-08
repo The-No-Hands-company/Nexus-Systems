@@ -3,7 +3,8 @@
 ## Database Interactions
 
 ### Connecting and Querying
-```
+
+```nxl
 Create database connection:
     Use MySQL
     Connect to "localhost:3306"
@@ -14,4 +15,4 @@ When user submits form:
         Select from users
         Where email matches input
         Return first result
-``` 
+```

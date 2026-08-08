@@ -7,7 +7,8 @@ Game objects are the basic building blocks in NexusLang. They represent anything
 ## Creating Objects
 
 ### Basic Objects
-```
+
+```nxl
 Create a sprite called "player":
     Set position to center
     Set size to 64 pixels
@@ -20,7 +21,8 @@ Create a text label:
 ```
 
 ### Complex Objects
-```
+
+```nxl
 Create an enemy:
     # Visual setup
     Use model "enemy.fbx"
@@ -38,7 +40,8 @@ Create an enemy:
 ## Object Properties
 
 ### Common Properties
-```
+
+```nxl
 Create game object:
     # Transform properties
     Set position to (100, 200)
@@ -57,7 +60,8 @@ Create game object:
 ```
 
 ### Custom Properties
-```
+
+```nxl
 Create player character:
     # Game-specific properties
     Set health to 100
@@ -69,7 +73,8 @@ Create player character:
 ## Object Hierarchy
 
 ### Parent-Child Relationships
-```
+
+```nxl
 Create character:
     Add weapon as child:
         Attach to right hand
@@ -81,7 +86,8 @@ Create character:
 ```
 
 ### Groups and Collections
-```
+
+```nxl
 Create enemy group:
     Add 5 enemies:
         Space evenly
@@ -94,7 +100,8 @@ Create enemy group:
 ## Object Interactions
 
 ### Collision Detection
-```
+
+```nxl
 Create player hitbox:
     Set size to player size
     When collides with enemy:
@@ -103,7 +110,8 @@ Create player hitbox:
 ```
 
 ### Object Communication
-```
+
+```nxl
 Create power up:
     When collected by player:
         Tell player "power up"
@@ -114,7 +122,8 @@ Create power up:
 ## Object Lifecycle
 
 ### Creation and Destruction
-```
+
+```nxl
 When game starts:
     Create initial objects
     
@@ -125,7 +134,8 @@ When object health reaches 0:
 ```
 
 ### Object Pooling
-```
+
+```nxl
 Create bullet pool:
     Prepare 20 bullets
     When bullet needed:
@@ -137,12 +147,14 @@ Create bullet pool:
 ## Best Practices
 
 ### 1. Organization
+
 - Group related objects
 - Use clear naming conventions
 - Keep object hierarchies simple
 
 ### 2. Performance
-```
+
+```nxl
 # Good: Object pooling for frequent creation/destruction
 Create particle system:
     Use pooling for particles
@@ -155,7 +167,8 @@ Every frame:
 ```
 
 ### 3. Maintainability
-```
+
+```nxl
 Create enemy template:
     Define common properties
     Define basic behaviors

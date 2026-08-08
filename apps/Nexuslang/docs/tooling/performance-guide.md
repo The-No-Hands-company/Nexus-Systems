@@ -25,7 +25,7 @@ python -m nexuslang.main --profile my_program.nlpl
 
 This will display a comprehensive report at the end:
 
-```
+```text
 ======================================================================
 Profiling Report
 ======================================================================
@@ -52,11 +52,13 @@ Memory:
 ### Export Options
 
 **JSON Export** (for analysis tools):
+
 ```bash
 python -m nexuslang.main --profile --profile-output results.json my_program.nlpl
 ```
 
 **Flamegraph Export** (for visualization):
+
 ```bash
 python -m nexuslang.main --profile --profile-flamegraph profile.folded my_program.nlpl
 
@@ -69,16 +71,19 @@ git clone https://github.com/brendangregg/FlameGraph
 ### Interpreting Results
 
 **Hot Functions**: Functions called frequently or taking significant time
+
 - Focus optimization efforts here
 - Consider algorithmic improvements
 - Candidates for JIT compilation
 
 **Hot Lines**: Individual lines executed many times
+
 - Often loops or inner loop bodies
 - Check for redundant computation
 - Consider loop unrolling or vectorization
 
 **Memory Usage**:
+
 - High allocation count → potential GC pressure
 - Large peak memory → may need streaming or chunking
 - Growing current memory → possible memory leak
@@ -103,11 +108,13 @@ jit = enable_jit(interpreter, hot_threshold=100)
 ### JIT Configuration
 
 **Hot Threshold**: Number of calls before compiling
+
 ```python
 jit = enable_jit(interpreter, hot_threshold=50)  # More aggressive
 ```
 
 **Optimization Level**: LLVM optimization level (0-3)
+
 ```python
 jit = enable_jit(interpreter, optimization_level=3)  # Maximum
 ```
@@ -121,7 +128,8 @@ jit.print_stats()
 ```
 
 Output:
-```
+
+```text
 ======================================================================
 JIT Compilation Statistics
 ======================================================================
@@ -156,12 +164,14 @@ Top 3 JIT Compiled Functions:
 ### When to Use JIT
 
 **Good candidates**:
+
 - Recursive functions (factorial, fibonacci, etc.)
 - Tight loops with many iterations
 - Mathematical computations
 - Functions called 100+ times in a single run
 
 **Not suitable**:
+
 - I/O-bound functions
 - Functions called once or twice
 - Very large functions (compilation overhead)
@@ -175,6 +185,7 @@ pip install llvmlite
 ```
 
 The JIT will automatically use LLVM when available, providing:
+
 - True native code compilation
 - Better optimization (inlining, vectorization, etc.)
 - 10-100x speedup for numeric code
@@ -198,6 +209,7 @@ NLPL includes multiple optimization passes:
 ### Optimization Levels
 
 **O0** - No optimization (default for interpreter)
+
 ```python
 from nexuslang.optimizer import OptimizationLevel, create_optimization_pipeline
 
@@ -205,24 +217,28 @@ pipeline = create_optimization_pipeline(OptimizationLevel.O0)
 ```
 
 **O1** - Basic optimizations (constant folding, DCE)
+
 ```python
 pipeline = create_optimization_pipeline(OptimizationLevel.O1)
 optimized_ast = pipeline.run(ast)
 ```
 
 **O2** - Moderate optimizations (O1 + strength reduction, loop unrolling, inlining)
+
 ```python
 pipeline = create_optimization_pipeline(OptimizationLevel.O2)
 optimized_ast = pipeline.run(ast)
 ```
 
 **O3** - Aggressive optimizations (O2 + CSE, tail call optimization)
+
 ```python
 pipeline = create_optimization_pipeline(OptimizationLevel.O3)
 optimized_ast = pipeline.run(ast)
 ```
 
 **Os** - Optimize for code size
+
 ```python
 pipeline = create_optimization_pipeline(OptimizationLevel.Os)
 optimized_ast = pipeline.run(ast)
@@ -257,11 +273,13 @@ result = interpreter.interpret(optimized_ast)
 ### Optimization Examples
 
 **Before - Constant Folding**:
+
 ```nexuslang
 set x to 5 times 10 plus 3 times 2
 ```
 
 **After**:
+
 ```nexuslang
 set x to 56  # Computed at compile time
 ```
@@ -269,12 +287,14 @@ set x to 56  # Computed at compile time
 ---
 
 **Before - Strength Reduction**:
+
 ```nexuslang
 set area to width times 2
 set power to base to the power of 2
 ```
 
 **After**:
+
 ```nexuslang
 set area to width plus width  # Addition cheaper than multiplication
 set power to base times base   # Multiplication cheaper than exponentiation
@@ -283,6 +303,7 @@ set power to base times base   # Multiplication cheaper than exponentiation
 ---
 
 **Before - Loop Unrolling**:
+
 ```nexuslang
 repeat 4 times
     print text "Hello"
@@ -290,6 +311,7 @@ end
 ```
 
 **After**:
+
 ```nexuslang
 print text "Hello"
 print text "Hello"
@@ -300,6 +322,7 @@ print text "Hello"
 ---
 
 **Before - Dead Code Elimination**:
+
 ```nexuslang
 if true
     print text "Always executed"
@@ -309,6 +332,7 @@ end
 ```
 
 **After**:
+
 ```nexuslang
 print text "Always executed"
 ```
@@ -355,6 +379,7 @@ Focus on the top 3-5 hot functions/lines.
 ### 2. Algorithmic Optimization
 
 Best results come from algorithm improvements:
+
 - O(n²) → O(n log n) worth more than any compiler optimization
 - Cache-friendly data structures
 - Reduce memory allocations in loops
@@ -378,6 +403,7 @@ end
 ### 5. Avoid Premature Optimization
 
 Order of optimization effort:
+
 1. Profile to find bottlenecks
 2. Improve algorithms
 3. Add type annotations
@@ -398,7 +424,8 @@ pipeline.print_stats()
 ```
 
 Output:
-```
+
+```text
 Running optimization pass: ConstantFolding
 Running optimization pass: StrengthReduction
 Running optimization pass: LoopUnrolling
@@ -453,6 +480,7 @@ pipeline.add_pass(DeadCodeEliminationPass(aggressive=False))
 ### GitHub Actions
 
 See `.github/workflows/ci.yml` for full CI/CD pipeline that includes:
+
 - Static analysis with `nexuslang-analyze`
 - Code formatting with `nexuslang-format`
 - Performance benchmarks
@@ -479,6 +507,7 @@ fi
 **Error**: `[JIT] Compilation failed for function_name`
 
 **Solutions**:
+
 1. Check function uses supported features
 2. Verify no external dependencies
 3. Try reducing `hot_threshold` to test sooner
@@ -489,6 +518,7 @@ fi
 **Symptom**: Different output after optimization
 
 **Debug**:
+
 1. Disable optimizations: use `-O0`
 2. Enable verbose: `pipeline.verbose = True`
 3. Compare ASTs before/after each pass
@@ -500,6 +530,7 @@ fi
 **Actual**: < 5x speedup
 
 **Possible causes**:
+
 1. I/O-bound code (profiler will show)
 2. Insufficient optimization level (use `-O3`)
 3. Dynamic features preventing optimization
@@ -517,6 +548,7 @@ NLPL performance optimization toolkit:
 - **Compiler**: Full AOT compilation → `nlplc -O3`
 
 **Typical workflow**:
+
 1. Write code (interpreter)
 2. Profile to find hotspots
 3. Enable JIT for hot functions
@@ -524,6 +556,7 @@ NLPL performance optimization toolkit:
 5. Achieve 10-300x speedup
 
 For more details:
+
 - `docs/tooling/tooling-guide.md` - Profiler, analyzer, formatter
 - `docs/contributing/compiler-guide.md` - Compilation and benchmarks
 - `docs/reference/optimization-guide.md` - Optimization architecture and tuning

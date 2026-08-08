@@ -25,6 +25,7 @@ Based on benchmarks with typical NexusLang files (50-70 lines):
 | LSP diagnostics | 3.3ms avg | 0.34ms avg | **9.6x** |
 
 **Key Findings:**
+
 - Average cache speedup: **7.6x**
 - Time saved per cache hit: **2.6ms**
 - Memory usage: **0.02-0.07MB per file**
@@ -101,7 +102,8 @@ print(f"Evictions: {stats['evictions']}")
 ```
 
 Example output:
-```
+
+```text
 AST Cache Statistics:
   Hits: 8
   Misses: 10
@@ -114,6 +116,7 @@ AST Cache Statistics:
 ### Memory Estimation
 
 The cache estimates memory usage based on AST node count:
+
 - **Average**: ~200 bytes per AST node
 - **Typical file**: 0.02-0.10MB for 50-100 lines
 - **Large file**: 0.4-0.8MB for 1000+ lines
@@ -129,6 +132,7 @@ When limits are exceeded, the cache evicts entries using LRU (Least Recently Use
 ### Integration with LSP
 
 The LSP server automatically uses the cache for:
+
 - **textDocument/publishDiagnostics**: Syntax checking on every edit
 - **textDocument/completion**: Context-aware completions
 - **textDocument/definition**: Jump to definition
@@ -183,7 +187,8 @@ python dev_tools/profile_parser.py
 ```
 
 Output:
-```
+
+```text
 File: examples/01_basic_concepts.nlpl
 ========================================
 Size: 71 lines, 1,783 characters
@@ -208,7 +213,8 @@ python dev_tools/benchmark_lsp_cache.py
 ```
 
 Output:
-```
+
+```text
 LSP PERFORMANCE BENCHMARK - MULTIPLE FILES
 ======================================================================
 
@@ -227,6 +233,7 @@ python dev_tools/test_ast_cache.py
 ```
 
 Validates:
+
 - Cache hit/miss logic
 - Hash-based invalidation
 - LRU eviction
@@ -253,7 +260,7 @@ Validates:
 
 ### Cache Architecture
 
-```
+```text
 ┌─────────────────────────────────────────────────────────────┐
 │                    CachedParser                              │
 │  ┌────────────────────────────────────────────────────┐    │
@@ -304,6 +311,7 @@ if cached_hash != current_hash:
 ```
 
 **Benefits**:
+
 - Detects any source code change (even single character)
 - Independent of file modification times
 - Works with in-memory strings (no file system dependency)
@@ -339,11 +347,13 @@ def _count_nodes(node) -> int:
 **Symptom**: Hit rate < 20% in LSP
 
 **Causes**:
+
 - Files changing frequently (expected during active editing)
 - Cache limits too small (check memory/entries limits)
 - External file modifications not tracked
 
 **Solutions**:
+
 1. Increase `max_entries` and `max_memory_mb`
 2. Check if files are being modified externally
 3. Monitor evictions - if high, increase limits
@@ -353,11 +363,13 @@ def _count_nodes(node) -> int:
 **Symptom**: Cache using excessive memory
 
 **Causes**:
+
 - Limits set too high
 - Large files cached
 - Memory estimation inaccurate
 
 **Solutions**:
+
 1. Reduce `max_memory_mb` limit
 2. Check file sizes with `cache.print_stats()`
 3. Clear cache periodically with `cache.clear()`
@@ -367,11 +379,13 @@ def _count_nodes(node) -> int:
 **Symptom**: No speedup observed
 
 **Causes**:
+
 - Not using `CachedParser` or `parse_with_cache()`
 - File path inconsistencies (relative vs absolute)
 - Debug mode overhead
 
 **Solutions**:
+
 1. Ensure using cached parser APIs
 2. Use absolute paths consistently
 3. Disable debug mode in production
@@ -389,6 +403,7 @@ def _count_nodes(node) -> int:
 ### Contributing
 
 Performance improvements welcome! See:
+
 - `src/nexuslang/parser/ast_cache.py` - Cache implementation
 - `src/nexuslang/parser/cached_parser.py` - Parser wrapper
 - `dev_tools/profile_parser.py` - Profiling tool

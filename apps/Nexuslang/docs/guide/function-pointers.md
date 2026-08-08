@@ -6,7 +6,8 @@ Function pointers in NexusLang allow you to store references to functions and pa
 
 ## Current Implementation Status
 
-** Implemented:**
+**Implemented:**
+
 - `address of function_name` - Get function address as pointer
 - `call (value at func_ptr) with args` - Indirect function calls through pointers
 - Storing function pointers in variables
@@ -15,7 +16,8 @@ Function pointers in NexusLang allow you to store references to functions and pa
 - Proper LLVM IR generation with function type casting
 - Support for functions with 0, 1, or multiple parameters
 
-** Planned:**
+**Planned:**
+
 - Function pointers as function parameters
 - Arrays of function pointers
 - Function pointer type declarations
@@ -59,7 +61,8 @@ print number result
 ```
 
 **Output:**
-```
+
+```text
 5 + 3 = 
 8
 ```
@@ -120,7 +123,8 @@ print text "Pointer reassigned to multiply_numbers"
 ```
 
 **Output:**
-```
+
+```text
 Initial pointer set to add_numbers
 Pointer reassigned to multiply_numbers
 ```
@@ -132,6 +136,7 @@ Pointer reassigned to multiply_numbers
 Function pointers are compiled to generic `i8*` (byte pointers) in LLVM IR:
 
 **NLPL Code:**
+
 ```nexuslang
 function add_numbers that takes a as Integer and b as Integer returns Integer
  return a plus b
@@ -140,6 +145,7 @@ set func_ptr to address of add_numbers
 ```
 
 **Generated LLVM IR:**
+
 ```llvm
 define i64 @add_numbers(i64 %a, i64 %b) {
  ; ... function body
@@ -164,6 +170,7 @@ entry:
 ### Name Mangling
 
 Function names are mangled according to the same rules as function definitions:
+
 - Global functions: `@function_name`
 - Module functions: `@module_name_function_name`
 - Main function: `@nxl_main`
@@ -282,19 +289,23 @@ set func_ptr to address of add_numbers
 ## Current Limitations
 
 1. **No Function Pointer Types**: Cannot declare explicit function pointer types
- - All function pointers are generic `i8*`
- - Type-safe function pointers planned for future
- - Return types assumed to be i64 for indirect calls
+
+- All function pointers are generic `i8*`
+- Type-safe function pointers planned for future
+- Return types assumed to be i64 for indirect calls
 
 2. **No Function Pointers as Parameters**: Cannot pass function pointers to functions yet
- - Requires function parameter type annotations to support pointer types
+
+- Requires function parameter type annotations to support pointer types
 
 3. **No Arrays of Function Pointers**: Cannot create arrays holding function pointers
- - Requires proper array type inference for pointer types
+
+- Requires proper array type inference for pointer types
 
 4. **Variable Scope Limitations**: Variables declared inside if/else blocks have scope issues
- - Variables should be hoisted to entry block for proper SSA form
- - Current workaround: declare variables before conditional blocks
+
+- Variables should be hoisted to entry block for proper SSA form
+- Current workaround: declare variables before conditional blocks
 
 ## Future Enhancements
 
@@ -336,6 +347,7 @@ set method_ptr to address of calc.add # Method pointer
 ## Testing
 
 Comprehensive test suite in `test_programs/compiler/test_function_pointers.nlpl`:
+
 - Basic function pointer address-of
 - Multiple function pointers
 - Single parameter functions
@@ -343,6 +355,7 @@ Comprehensive test suite in `test_programs/compiler/test_function_pointers.nlpl`
 - Function pointer reassignment
 
 Indirect call test suite in `test_programs/compiler/test_indirect_calls.nlpl`:
+
 - Basic indirect call (add: 5 + 3 = 8)
 - Multiplication through pointer (7 * 6 = 42)
 - Single parameter indirect call (9^2 = 81)
@@ -351,12 +364,13 @@ Indirect call test suite in `test_programs/compiler/test_indirect_calls.nlpl`:
 - Pointer reassignment and reuse (add/multiply with same pointer variable)
 
 Run tests:
+
 ```bash
 ./nlplc test_programs/compiler/test_function_pointers.nlpl --run
 ./nlplc test_programs/compiler/test_indirect_calls.nlpl --run
 ```
 
-All 11 tests passing 
+All 11 tests passing
 
 ## Implementation Notes
 
@@ -364,11 +378,12 @@ All 11 tests passing
 
 1. **Parser**: `address of function_name` `AddressOfExpression(Identifier("function_name"))`
 2. **Type Inference**: `AddressOfExpression` `i8*`
-3. **Code Generation**: 
- - Look up function in `self.functions`
- - Apply name mangling
- - Generate `bitcast FunctionType* @function_name to i8*`
- - Return temporary register holding the pointer
+3. **Code Generation**:
+
+- Look up function in `self.functions`
+- Apply name mangling
+- Generate `bitcast FunctionType* @function_name to i8*`
+- Return temporary register holding the pointer
 
 ### Key Code Locations
 

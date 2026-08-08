@@ -8,6 +8,7 @@
 ## Executive Summary
 
 NLPL currently has **4 separate VS Code extension-related directories**, which creates:
+
 - **Duplication**: Multiple copies of similar code
 - **Confusion**: Unclear which version is "active" or "canonical"
 - **Maintenance burden**: Changes must be made in multiple places
@@ -26,7 +27,8 @@ NLPL currently has **4 separate VS Code extension-related directories**, which c
 **Purpose**: **Main development directory** for VS Code extension
 
 **Contents**:
-```
+
+```text
 vscode-extension/
 ├── src/
 │   ├── extension.ts (94 lines) - Main extension with LSP + Debug support
@@ -45,6 +47,7 @@ vscode-extension/
 ```
 
 **Key Features**:
+
 - **LSP client**: Connects to NexusLang language server (autocomplete, diagnostics, go-to-definition)
 - **Debug adapter**: Full DAP implementation (breakpoints, stepping, variable inspection)
 - **Syntax highlighting**: TextMate grammar for `.nlpl` files
@@ -54,6 +57,7 @@ vscode-extension/
 **Status**: ✅ **ACTIVE DEVELOPMENT** - This is the canonical version
 
 **Package Details**:
+
 - Name: `nlpl-language-support`
 - Version: `0.1.0`
 - Publisher: `nlpl`
@@ -61,6 +65,7 @@ vscode-extension/
 - Repository: `https://github.com/Zajfan/NLPL`
 
 **Capabilities**:
+
 - Language server integration (completion, diagnostics, navigation)
 - Debug adapter protocol (breakpoints, stepping, watch)
 - Syntax highlighting and bracket matching
@@ -75,7 +80,8 @@ vscode-extension/
 **Purpose**: **Older/experimental version** of extension (workspace-local)
 
 **Contents**:
-```
+
+```text
 .vscode/nlpl-extension/
 ├── src/
 │   └── extension.ts (1596 bytes - smaller, simpler)
@@ -89,6 +95,7 @@ vscode-extension/
 ```
 
 **Key Differences from `/vscode-extension/`**:
+
 - ❌ **No debug adapter** - Only LSP client
 - ❌ **Simpler configuration** - Fewer settings
 - ❌ **No compiled VSIX** - Not packaged
@@ -109,7 +116,8 @@ vscode-extension/
 **Purpose**: **Installed extension** for this specific workspace
 
 **Contents**:
-```
+
+```text
 .vscode/extensions/nlpl/
 ├── extension.js (66 lines - simplest version)
 ├── syntaxes/
@@ -124,6 +132,7 @@ vscode-extension/
 ```
 
 **Key Differences**:
+
 - ✅ **Pre-compiled JavaScript** (no TypeScript source)
 - ✅ **Production package** - Has README, CHANGELOG, icon
 - ❌ **Simplest LSP client** (66 lines vs 107 lines)
@@ -147,7 +156,8 @@ vscode-extension/
 **Purpose**: **Workspace-specific VS Code settings** (not an extension)
 
 **Contents**:
-```
+
+```text
 .vscode/
 ├── settings.json - Workspace settings
 ├── extensions.json - Recommended extensions
@@ -182,7 +192,7 @@ vscode-extension/
 
 ## Why This Happened (Historical Context)
 
-### Evolution Timeline:
+### Evolution Timeline
 
 1. **Phase 1: Initial Extension** (Early development)
    - Created `/.vscode/nlpl-extension/` as workspace-local extension
@@ -212,11 +222,13 @@ vscode-extension/
 ### 1. Duplication and Inconsistency
 
 **Issue**: Three separate codebases doing similar things
+
 - Changes to LSP client require updates in 3 places
 - Bug fixes must be replicated across versions
 - No clear "source of truth"
 
 **Example**: Adding a new language server setting requires:
+
 1. Update `/vscode-extension/src/extension.ts`
 2. Update `/vscode-extension/package.json`
 3. Rebuild and reinstall to `/.vscode/extensions/nlpl/`
@@ -227,6 +239,7 @@ vscode-extension/
 **Issue**: Installed extension (`/.vscode/extensions/nlpl/`) is **outdated**
 
 **Evidence**:
+
 - Installed version: 66 lines, no debug support
 - Latest version: 107 lines, full debug adapter (8252 lines)
 - Users get old features until they manually reinstall
@@ -238,6 +251,7 @@ vscode-extension/
 **Issue**: Testing and validation multiplied by 3
 
 **Example**: When fixing LSP bugs:
+
 - Which version has the bug?
 - Fix in source (`/vscode-extension/src/`)
 - Compile to `out/`
@@ -250,6 +264,7 @@ vscode-extension/
 **Issue**: New contributors don't know which directory to edit
 
 **Questions we can't answer clearly**:
+
 - "Where is the extension source code?" (3 answers!)
 - "Which package.json is canonical?" (3 options)
 - "Where do I add a new feature?" (Depends on which version)
@@ -259,6 +274,7 @@ vscode-extension/
 **Issue**: Checking in compiled files and node_modules in multiple places
 
 **Evidence**:
+
 - `vscode-extension/out/` - Compiled JS (should be gitignored)
 - `vscode-extension/node_modules/` - 4096 bytes (should be gitignored)
 - `/.vscode/extensions/nlpl/node_modules/` - Runtime deps
@@ -272,7 +288,7 @@ vscode-extension/
 
 ### Goal: **Single Source of Truth** in `/vscode-extension/`
 
-### Action Plan:
+### Action Plan
 
 #### Phase 1: Consolidate Source (1 hour)
 
@@ -288,7 +304,8 @@ vscode-extension/
    - Review `extension.js` for any missing features
 
 3. **Update `.gitignore`**:
-   ```
+
+   ```text
    # VS Code extension build artifacts
    vscode-extension/out/
    vscode-extension/node_modules/
@@ -316,6 +333,7 @@ vscode-extension/
 #### Phase 3: Reinstall Latest (15 minutes)
 
 7. **Build Fresh VSIX** from `/vscode-extension/`:
+
    ```bash
    cd vscode-extension
    npm install
@@ -324,6 +342,7 @@ vscode-extension/
    ```
 
 8. **Install Workspace-Local** (for development):
+
    ```bash
    code --install-extension nlpl-language-support-0.1.0.vsix --workspace-folder /path/to/NLPL
    ```
@@ -344,8 +363,9 @@ vscode-extension/
 
 11. **Update Project Documentation**:
     - `VSCODE_EXTENSION_GUIDE.md`: Installation and development
-   - `docs/tooling/`: Extension architecture and usage
-    - Remove references to old directories
+
+- `docs/tooling/`: Extension architecture and usage
+  - Remove references to old directories
 
 12. **Create Migration Guide** (for other contributors):
     - Document directory consolidation
@@ -388,6 +408,7 @@ cp ../.vscode/extensions/nlpl/CHANGELOG.md . 2>/dev/null || echo "No CHANGELOG t
 ### Step 3: Update `.gitignore`
 
 Add to root `.gitignore`:
+
 ```gitignore
 # VS Code Extension Build Artifacts
 vscode-extension/out/
@@ -491,7 +512,7 @@ git push origin main
 
 ## Future Directory Structure (After Consolidation)
 
-```
+```text
 NexusLang/
 ├── vscode-extension/              # SINGLE EXTENSION SOURCE
 │   ├── src/
@@ -519,6 +540,7 @@ NexusLang/
 ```
 
 **Key Changes**:
+
 - ✅ **Single extension directory**: `vscode-extension/`
 - ❌ **No duplicate directories**: Removed `.vscode/nlpl-extension/` and `.vscode/extensions/`
 - ✅ **Standard workspace**: `.vscode/` contains only settings
@@ -529,21 +551,25 @@ NexusLang/
 ## Benefits of Consolidation
 
 ### 1. Clarity
+
 - **One source of truth**: All development in `/vscode-extension/`
 - **Clear workflow**: Edit TypeScript → Compile → Package → Install
 - **No confusion**: Contributors know exactly where to work
 
 ### 2. Maintainability
+
 - **Single codebase**: Bug fixes only need one update
 - **Automated testing**: CI can build and test one extension
 - **Version control**: Only track source, not compiled output
 
 ### 3. Quality
+
 - **Latest features**: Users always get most recent code
 - **Consistent behavior**: No version skew between installations
 - **Easier debugging**: One extension to troubleshoot
 
 ### 4. Repository Hygiene
+
 - **Smaller repo**: No duplicate binaries or node_modules
 - **Clean history**: No merge conflicts on generated files
 - **Better diffs**: Only source code changes tracked
@@ -555,24 +581,28 @@ NexusLang/
 Use this checklist when performing consolidation:
 
 ### Pre-Migration
+
 - [ ] Backup all extension directories (`tar -czf ...`)
 - [ ] Document current installation state (which version is active?)
 - [ ] Test current extension (verify LSP + debug work)
 - [ ] Commit any uncommitted changes
 
 ### Consolidation
+
 - [ ] Add missing files to `/vscode-extension/` (icon, README, CHANGELOG)
 - [ ] Update `.gitignore` to exclude build artifacts
 - [ ] Review and merge any unique code from old versions
 - [ ] Update package.json metadata (icon field, description, etc.)
 
 ### Cleanup
+
 - [ ] Delete `/.vscode/nlpl-extension/` directory
 - [ ] Delete `/.vscode/extensions/nlpl/` directory
 - [ ] Verify `.vscode/` only contains settings and extensions.json
 - [ ] Run `git status` to confirm cleanups staged
 
 ### Rebuild
+
 - [ ] `cd vscode-extension && rm -rf out/ node_modules/`
 - [ ] `npm install` (fresh dependency install)
 - [ ] `npm run compile` (verify TypeScript compiles)
@@ -580,12 +610,14 @@ Use this checklist when performing consolidation:
 - [ ] Verify VSIX created: `ls -lh *.vsix`
 
 ### Reinstall
+
 - [ ] Uninstall old extension from VS Code
 - [ ] Install new VSIX: `code --install-extension ...`
 - [ ] Reload VS Code window
 - [ ] Verify extension shows in Extensions panel
 
 ### Testing
+
 - [ ] Open `.nlpl` file, check syntax highlighting
 - [ ] Test autocomplete (type `function`, see suggestions)
 - [ ] Test hover (hover over keyword, see docs)
@@ -594,12 +626,14 @@ Use this checklist when performing consolidation:
 - [ ] Check settings (Settings → Extensions → NLPL)
 
 ### Documentation
+
 - [ ] Update extension README with installation instructions
 - [ ] Update project docs with new directory structure
 - [ ] Remove references to old directories in guides
 - [ ] Create "Extension Development" guide if missing
 
 ### Commit
+
 - [ ] Stage all changes: `git add -A`
 - [ ] Commit with descriptive message (see template above)
 - [ ] Push to GitHub: `git push origin main`
@@ -610,6 +644,7 @@ Use this checklist when performing consolidation:
 ## Recommended Next Steps
 
 ### Immediate (This Session)
+
 1. **Backup current state** (5 minutes)
 2. **Delete old directories** (10 minutes)
 3. **Update .gitignore** (5 minutes)
@@ -618,6 +653,7 @@ Use this checklist when performing consolidation:
 **Total**: ~25 minutes
 
 ### Short-term (Next Session)
+
 5. **Enhance main extension** (1 hour)
    - Add icon, README, CHANGELOG
    - Improve package.json metadata
@@ -628,6 +664,7 @@ Use this checklist when performing consolidation:
 **Total**: ~2.5 hours
 
 ### Long-term (Next Week)
+
 8. **Publish to VS Code Marketplace** (2-4 hours)
    - Create publisher account
    - Prepare marketplace assets (screenshots, description)
@@ -641,12 +678,14 @@ Use this checklist when performing consolidation:
 If consolidation is too disruptive right now, alternative approach:
 
 ### Minimal Changes
+
 1. **Clarify purpose** of each directory in documentation
 2. **Mark canonical version**: Add README to each directory explaining its role
 3. **Sync features**: Ensure installed version matches latest development
 
 ### Documentation Structure
-```
+
+```text
 vscode-extension/README.md:
 "PRIMARY DEVELOPMENT VERSION - Edit this one"
 
@@ -658,6 +697,7 @@ vscode-extension/README.md:
 ```
 
 ### Why This Is Not Recommended
+
 - Still maintains duplication
 - Doesn't solve version skew
 - Adds documentation burden
@@ -700,7 +740,8 @@ Before consolidating, answer these questions:
 
 **Recommended Action**: **Consolidate to `/vscode-extension/` as single source of truth**
 
-**Timeline**: 
+**Timeline**:
+
 - Immediate cleanup: ~25 minutes
 - Full consolidation: ~4 hours
 - Benefits: Permanent improvement to codebase maintainability
@@ -716,6 +757,7 @@ Before consolidating, answer these questions:
 ### Extension Entry Point Comparison
 
 **`/vscode-extension/src/extension.ts`** (Current, most complete):
+
 ```typescript
 export function activate(context: vscode.ExtensionContext) {
     console.log('NLPL extension is now active');
@@ -732,6 +774,7 @@ export function activate(context: vscode.ExtensionContext) {
 ```
 
 **`/.vscode/nlpl-extension/src/extension.ts`** (Legacy, simpler):
+
 ```typescript
 function activate(context) {
     console.log('NLPL Language Extension activating...');
@@ -745,6 +788,7 @@ function activate(context) {
 ```
 
 **`/.vscode/extensions/nlpl/extension.js`** (Installed, oldest):
+
 ```javascript
 function activate(context) {
     console.log('NLPL Language Extension activating...');

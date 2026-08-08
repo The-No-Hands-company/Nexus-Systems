@@ -30,7 +30,7 @@ Unlike other languages that force you into a single abstraction level:
 
 NLPL operates at **five distinct abstraction levels**, each optimized for different programming tasks:
 
-```
+```text
 
  Level 5: Natural Language (English-like, almost no syntax) 
  • "fetch user data and display it" 
@@ -70,6 +70,7 @@ NLPL operates at **five distinct abstraction levels**, each optimized for differ
 **When to use:** Bootloaders, OS kernels, device drivers, hardware initialization
 
 ### Features
+
 - Inline assembly blocks
 - Direct register access
 - Hardware I/O ports
@@ -80,6 +81,7 @@ NLPL operates at **five distinct abstraction levels**, each optimized for differ
 ### Syntax Examples
 
 #### Inline Assembly
+
 ```nlpl
 # Direct x86-64 assembly for kernel initialization
 function initialize_idt
@@ -101,6 +103,7 @@ end
 ```
 
 #### Register Allocation (Future)
+
 ```nlpl
 # Explicit register usage
 function fast_multiply with a as Integer, b as Integer returns Integer
@@ -114,6 +117,7 @@ end
 ```
 
 #### Memory-Mapped Hardware
+
 ```nlpl
 # Direct framebuffer access
 set framebuffer to 0xB8000 as Pointer to Array of Word
@@ -131,6 +135,7 @@ end
 **When to use:** Operating systems, embedded systems, high-performance libraries
 
 ### Features
+
 - Explicit memory management
 - Zero-cost abstractions
 - Precise struct layouts
@@ -141,6 +146,7 @@ end
 ### Syntax Examples
 
 #### Memory Management
+
 ```nlpl
 # Manual allocation with precise control
 struct PageTable with packed layout
@@ -166,6 +172,7 @@ end
 ```
 
 #### Struct with Precise Layout
+
 ```nlpl
 # Control exact memory layout for hardware structures
 struct USBDescriptor with packed layout and alignment 4
@@ -182,6 +189,7 @@ static assert sizeof USBDescriptor equals 10
 ```
 
 #### FFI to C Libraries
+
 ```nlpl
 # Call C libraries directly
 extern function pthread_create with 
@@ -209,6 +217,7 @@ end
 **When to use:** Desktop applications, games, command-line tools, libraries
 
 ### Features
+
 - Object-oriented programming
 - Generics with monomorphization
 - Pattern matching
@@ -220,6 +229,7 @@ end
 ### Syntax Examples
 
 #### Object-Oriented Design
+
 ```nlpl
 # Full OOP with inheritance and polymorphism
 class Shape
@@ -258,6 +268,7 @@ end
 ```
 
 #### Generics
+
 ```nlpl
 # Generic data structures
 class BinaryTree<T> where T is Comparable
@@ -299,6 +310,7 @@ set string_tree to new BinaryTree of String
 ```
 
 #### Pattern Matching
+
 ```nlpl
 # Advanced pattern matching with guards
 function parse_http_response with status_code as Integer returns String
@@ -326,6 +338,7 @@ end
 **When to use:** Web servers, microservices, concurrent applications, rapid development
 
 ### Features
+
 - Goroutines (lightweight concurrency)
 - Automatic parallelization
 - Garbage collection (opt-in)
@@ -336,6 +349,7 @@ end
 ### Syntax Examples
 
 #### Goroutines (Concurrent Tasks)
+
 ```nlpl
 # Spawn lightweight concurrent tasks
 function handle_web_server with port as Integer
@@ -365,6 +379,7 @@ end
 ```
 
 #### Channels for Communication
+
 ```nlpl
 # Type-safe message passing between goroutines
 set jobs to create channel of WorkItem with capacity 100
@@ -395,6 +410,7 @@ end
 ```
 
 #### Automatic Parallelization
+
 ```nlpl
 # Compiler detects parallelizable loops
 concurrent for each image in images
@@ -412,6 +428,7 @@ end
 **When to use:** Scripts, prototypes, teaching, non-programmers, rapid iteration
 
 ### Features
+
 - Almost pure English
 - Minimal syntax
 - Automatic type inference
@@ -422,6 +439,7 @@ end
 ### Syntax Examples
 
 #### Natural Language Scripts
+
 ```nlpl
 # Read like instructions, not code
 ask the user for their name
@@ -453,6 +471,7 @@ end
 ```
 
 #### Natural Data Processing
+
 ```nlpl
 # Load and process data naturally
 load the sales data from "sales.csv"
@@ -465,6 +484,7 @@ export to "top_products.xlsx"
 ```
 
 #### Natural API Interaction
+
 ```nlpl
 # Web scraping and API calls
 connect to "https://api.example.com"
@@ -662,6 +682,7 @@ log the results
 ## Learning Curve by Level
 
 ### Beginners Start at Level 5
+
 ```nlpl
 # Day 1: Natural language
 ask user for their name
@@ -679,6 +700,7 @@ end
 ```
 
 ### Intermediate Developers Use Level 3-4
+
 ```nlpl
 # Object-oriented design
 class Player
@@ -692,6 +714,7 @@ end
 ```
 
 ### Advanced Developers Use Level 1-2
+
 ```nlpl
 # Direct hardware control
 inline assembly
@@ -706,6 +729,7 @@ free buffer
 ```
 
 ### Experts Mix All Levels
+
 ```nlpl
 # Choose the right level for each part
 # Low-level for performance
@@ -730,18 +754,18 @@ free buffer
 
 ### Problem with Current Languages
 
-**C/C++:** Great for systems, terrible for high-level 
-**Python:** Great for high-level, terrible for systems 
-**Go:** Good for high-level, limited for systems 
+**C/C++:** Great for systems, terrible for high-level
+**Python:** Great for high-level, terrible for systems
+**Go:** Good for high-level, limited for systems
 **Rust:** Good for systems, learning curve too steep
 
 **Result:** Multi-language projects, FFI overhead, context switching
 
 ### NexusLang Solution
 
-**One Language:** Write everything from bootloader to web UI 
-**One Codebase:** No FFI between components 
-**One Compiler:** Consistent optimization across all levels 
+**One Language:** Write everything from bootloader to web UI
+**One Codebase:** No FFI between components
+**One Compiler:** Consistent optimization across all levels
 **One Toolchain:** Same debugger, LSP, build system for everything
 
 ---
@@ -755,4 +779,4 @@ free buffer
 
 ---
 
-**NLPL: The first language that truly goes from hardware to humans.** 
+**NLPL: The first language that truly goes from hardware to humans.**

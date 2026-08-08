@@ -112,8 +112,7 @@ The parser encountered a token it didn't expect at this location.
 - Look for missing or extra words around the error location
 - Compare with examples in the documentation
 
-**Documentation:** https://nlpl.dev/docs/syntax
-
+**Documentation:** <https://nlpl.dev/docs/syntax>
 
 ### E002: Missing 'end' keyword  {#e002}
 
@@ -134,8 +133,7 @@ A block (function, class, if, while, for) was not closed with 'end'.
 - Check indentation to see which block is unclosed
 - Use a code editor with bracket matching
 
-**Documentation:** https://nlpl.dev/docs/syntax/blocks
-
+**Documentation:** <https://nlpl.dev/docs/syntax/blocks>
 
 ### E003: Invalid function definition  {#e003}
 
@@ -156,8 +154,7 @@ Function definition syntax is incorrect.
 - Or: function name called with no parameters returns Type
 - Check parameter syntax: 'name as Type'
 
-**Documentation:** https://nlpl.dev/docs/functions
-
+**Documentation:** <https://nlpl.dev/docs/functions>
 
 ### E004: Invalid class definition  {#e004}
 
@@ -178,8 +175,7 @@ Class definition syntax is incorrect.
 - Properties: property name as Type
 - Methods: method name with params returns Type ... end
 
-**Documentation:** https://nlpl.dev/docs/classes
-
+**Documentation:** <https://nlpl.dev/docs/classes>
 
 ### E005: Invalid expression  {#e005}
 
@@ -200,8 +196,7 @@ The expression syntax is not valid.
 - Ensure parentheses and brackets are balanced
 - Verify operator precedence
 
-**Documentation:** https://nlpl.dev/docs/expressions
-
+**Documentation:** <https://nlpl.dev/docs/expressions>
 
 ---
 
@@ -226,8 +221,7 @@ Attempted to use a variable that hasn't been defined.
 - Check spelling of variable name
 - Ensure variable is in scope (not inside closed block)
 
-**Documentation:** https://nlpl.dev/docs/variables
-
+**Documentation:** <https://nlpl.dev/docs/variables>
 
 ### E101: Undefined function  {#e101}
 
@@ -248,8 +242,7 @@ Attempted to call a function that doesn't exist.
 - Import function from module if needed
 - Check function name spelling
 
-**Documentation:** https://nlpl.dev/docs/functions
-
+**Documentation:** <https://nlpl.dev/docs/functions>
 
 ### E102: Undefined class  {#e102}
 
@@ -270,8 +263,7 @@ Attempted to use a class that doesn't exist.
 - Import class from module if needed
 - Check class name spelling (classes should be PascalCase)
 
-**Documentation:** https://nlpl.dev/docs/classes
-
+**Documentation:** <https://nlpl.dev/docs/classes>
 
 ### E103: Undefined attribute  {#e103}
 
@@ -292,8 +284,7 @@ Attempted to access an attribute that doesn't exist on this object.
 - Verify the object has this attribute
 - Define the property/method in the class
 
-**Documentation:** https://nlpl.dev/docs/classes
-
+**Documentation:** <https://nlpl.dev/docs/classes>
 
 ### E150: Unused variable  {#e150}
 
@@ -313,8 +304,7 @@ Variable was declared but never used.
 - Remove the unused variable declaration
 - Use the variable in an expression or print statement
 
-**Documentation:** https://nlpl.dev/docs/variables
-
+**Documentation:** <https://nlpl.dev/docs/variables>
 
 ---
 
@@ -339,8 +329,7 @@ Operation attempted on incompatible types.
 - Check function parameter types
 - Use type-compatible operations
 
-**Documentation:** https://nlpl.dev/docs/types
-
+**Documentation:** <https://nlpl.dev/docs/types>
 
 ### E201: Invalid operation for type  {#e201}
 
@@ -361,8 +350,7 @@ This operation cannot be performed on this type.
 - Use appropriate type conversion
 - Use correct operators for the type
 
-**Documentation:** https://nlpl.dev/docs/types/operations
-
+**Documentation:** <https://nlpl.dev/docs/types/operations>
 
 ### E202: Wrong number of arguments  {#e202}
 
@@ -383,8 +371,7 @@ Function called with incorrect number of arguments.
 - Provide all required arguments
 - Remove extra arguments
 
-**Documentation:** https://nlpl.dev/docs/functions/calls
-
+**Documentation:** <https://nlpl.dev/docs/functions/calls>
 
 ### E203: Invalid generic type arguments  {#e203}
 
@@ -405,8 +392,7 @@ Generic type arguments are invalid.
 - Verify type constraints are met
 - Use valid concrete types for generics
 
-**Documentation:** https://nlpl.dev/docs/generics
-
+**Documentation:** <https://nlpl.dev/docs/generics>
 
 ### E204: Type annotation error  {#e204}
 
@@ -427,8 +413,7 @@ Type annotation is invalid or inconsistent.
 - Ensure annotations are consistent
 - Use correct type annotation syntax
 
-**Documentation:** https://nlpl.dev/docs/types/annotations
-
+**Documentation:** <https://nlpl.dev/docs/types/annotations>
 
 ### E205: Data schema type mismatch  {#e205}
 
@@ -449,8 +434,7 @@ Structured data does not match the expected field or record types.
 - Normalize field types during import/transformation
 - Update schema or conversion logic to match actual data
 
-**Documentation:** https://nlpl.dev/docs/data-processing
-
+**Documentation:** <https://nlpl.dev/docs/data-processing>
 
 ### E206: Numeric domain error  {#e206}
 
@@ -471,8 +455,7 @@ A numeric operation used a value outside the valid mathematical domain.
 - Clamp or transform invalid input values
 - Use domain-safe formulas or conditional handling
 
-**Documentation:** https://nlpl.dev/docs/scientific
-
+**Documentation:** <https://nlpl.dev/docs/scientific>
 
 ---
 
@@ -497,8 +480,7 @@ Attempted to divide by zero.
 - Add conditional: if divisor is not 0
 - Initialize variables properly
 
-**Documentation:** https://nlpl.dev/docs/arithmetic
-
+**Documentation:** <https://nlpl.dev/docs/arithmetic>
 
 ### E301: Index out of range  {#e301}
 
@@ -519,8 +501,7 @@ Attempted to access list/array element at invalid index.
 - Use: if index < length of list
 - Remember lists are 0-indexed
 
-**Documentation:** https://nlpl.dev/docs/collections/lists
-
+**Documentation:** <https://nlpl.dev/docs/collections/lists>
 
 ### E302: Key not found in dictionary  {#e302}
 
@@ -541,8 +522,7 @@ Attempted to access dictionary key that doesn't exist.
 - Add key before accessing it
 - Use get with default: dictionary.get(key, default)
 
-**Documentation:** https://nlpl.dev/docs/collections/dictionaries
-
+**Documentation:** <https://nlpl.dev/docs/collections/dictionaries>
 
 ### E303: Null pointer dereference  {#e303}
 
@@ -563,8 +543,7 @@ Attempted to dereference a null pointer.
 - Initialize pointers properly
 - Don't access freed memory
 
-**Documentation:** https://nlpl.dev/docs/pointers
-
+**Documentation:** <https://nlpl.dev/docs/pointers>
 
 ### E304: Object has no attribute  {#e304}
 
@@ -585,8 +564,7 @@ Attempted to access an attribute that doesn't exist on the object.
 - Verify the attribute is defined in the class
 - Use hasattr() to check if attribute exists
 
-**Documentation:** https://nlpl.dev/docs/objects/attributes
-
+**Documentation:** <https://nlpl.dev/docs/objects/attributes>
 
 ### E305: Function call error  {#e305}
 
@@ -607,8 +585,7 @@ Error occurred while calling a function.
 - Verify argument types match function definition
 - Ensure the object is actually a function
 
-**Documentation:** https://nlpl.dev/docs/functions
-
+**Documentation:** <https://nlpl.dev/docs/functions>
 
 ### E306: Invalid cast  {#e306}
 
@@ -629,8 +606,7 @@ Type conversion/cast failed.
 - Validate value before conversion
 - Use try-catch for risky conversions
 
-**Documentation:** https://nlpl.dev/docs/types/conversion
-
+**Documentation:** <https://nlpl.dev/docs/types/conversion>
 
 ### E307: Memory allocation failed  {#e307}
 
@@ -651,8 +627,7 @@ Failed to allocate memory.
 - Reduce allocation size
 - Free unused memory first
 
-**Documentation:** https://nlpl.dev/docs/memory
-
+**Documentation:** <https://nlpl.dev/docs/memory>
 
 ### E308: Invalid memory operation  {#e308}
 
@@ -673,8 +648,7 @@ Memory operation is invalid (accessing freed memory, invalid pointer, etc.).
 - Don't use memory after freeing
 - Validate pointer operations
 
-**Documentation:** https://nlpl.dev/docs/memory/safety
-
+**Documentation:** <https://nlpl.dev/docs/memory/safety>
 
 ### E309: General runtime error  {#e309}
 
@@ -695,8 +669,7 @@ An operation failed during execution without a more specific runtime category.
 - Enable debug mode for additional context
 - Add explicit validation before this operation
 
-**Documentation:** https://nlpl.dev/docs/runtime
-
+**Documentation:** <https://nlpl.dev/docs/runtime>
 
 ---
 
@@ -721,8 +694,7 @@ Attempted to import a module that doesn't exist.
 - Verify module file exists
 - Check import path is correct
 
-**Documentation:** https://nlpl.dev/docs/modules
-
+**Documentation:** <https://nlpl.dev/docs/modules>
 
 ### E401: Circular import  {#e401}
 
@@ -743,8 +715,7 @@ Modules import each other creating a circular dependency.
 - Move import inside function if possible
 - Extract shared code to separate module
 
-**Documentation:** https://nlpl.dev/docs/modules/circular
-
+**Documentation:** <https://nlpl.dev/docs/modules/circular>
 
 ### E402: Import name not found  {#e402}
 
@@ -765,8 +736,7 @@ The name being imported doesn't exist in the module.
 - Verify spelling of imported name
 - Check module documentation for available names
 
-**Documentation:** https://nlpl.dev/docs/modules/imports
-
+**Documentation:** <https://nlpl.dev/docs/modules/imports>
 
 ### E410: Network request failed  {#e410}
 
@@ -787,8 +757,7 @@ A network call failed before receiving a usable response.
 - Retry with timeout/backoff strategy
 - Handle transient failures with fallback logic
 
-**Documentation:** https://nlpl.dev/docs/network
-
+**Documentation:** <https://nlpl.dev/docs/network>
 
 ### E411: Invalid HTTP response  {#e411}
 
@@ -809,8 +778,7 @@ An HTTP response was received but could not be processed as expected.
 - Check content type and response schema
 - Add defensive parsing with clear fallbacks
 
-**Documentation:** https://nlpl.dev/docs/web-services
-
+**Documentation:** <https://nlpl.dev/docs/web-services>
 
 ### E412: Database connection failed  {#e412}
 
@@ -831,8 +799,7 @@ Could not establish or maintain a database connection.
 - Check database server health and network access
 - Tune connection pool limits and retry policy
 
-**Documentation:** https://nlpl.dev/docs/business-applications
-
+**Documentation:** <https://nlpl.dev/docs/business-applications>
 
 ### E413: Transaction conflict  {#e413}
 
@@ -853,7 +820,7 @@ Concurrent operations produced a transaction conflict.
 - Reduce transaction scope and duration
 - Use appropriate isolation/locking strategy
 
-**Documentation:** https://nlpl.dev/docs/business-applications
+**Documentation:** <https://nlpl.dev/docs/business-applications>
 
 ---
 

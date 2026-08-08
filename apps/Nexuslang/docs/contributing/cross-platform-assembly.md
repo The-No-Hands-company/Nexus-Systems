@@ -3,6 +3,7 @@
 ## Overview
 
 NLPL supports inline assembly across multiple architectures:
+
 - **x86_64** (Intel/AMD 64-bit) - Fully tested ✅
 - **x86** (Intel/AMD 32-bit) - Implemented, untested ⚠️
 - **AArch64** (ARM 64-bit) - Implemented, requires hardware ⚠️
@@ -28,6 +29,7 @@ python dev_tools/nlplc program.nlpl  # Compiles for aarch64
 ```
 
 The compiler uses `platform.machine()` to detect:
+
 - `x86_64`, `AMD64` → x86_64 target
 - `i386`, `i686` → x86 target
 - `aarch64`, `arm64` → AArch64 target
@@ -40,6 +42,7 @@ The compiler uses `platform.machine()` to detect:
 ### General Purpose Registers
 
 **AArch64 (64-bit ARM)**:
+
 - `x0-x30`: 64-bit general purpose registers
 - `w0-w30`: 32-bit views of x0-x30 (lower 32 bits)
 - `xzr`/`wzr`: Zero register (reads as 0, writes discarded)
@@ -48,6 +51,7 @@ The compiler uses `platform.machine()` to detect:
 - `pc`: Program counter (not directly accessible)
 
 **Register Usage Convention**:
+
 - `x0-x7`: Function arguments and return values
 - `x8`: Indirect result location
 - `x9-x15`: Temporary registers (caller-saved)
@@ -104,6 +108,7 @@ The compiler uses `platform.machine()` to detect:
 ### Example 1: Addition (Cross-Platform)
 
 **x86_64**:
+
 ```nlpl
 set a to 10
 set b to 20
@@ -121,6 +126,7 @@ end
 ```
 
 **AArch64**:
+
 ```nlpl
 set a to 10
 set b to 20
@@ -139,6 +145,7 @@ end
 ### Example 2: Conditional Logic
 
 **x86_64**:
+
 ```nlpl
 set x to 10
 set y to 5
@@ -158,6 +165,7 @@ end
 ```
 
 **AArch64**:
+
 ```nlpl
 set x to 10
 set y to 5
@@ -177,6 +185,7 @@ end
 ### Example 3: Bitwise Operations
 
 **x86_64**:
+
 ```nlpl
 set val to 15
 set mask to 10
@@ -194,6 +203,7 @@ end
 ```
 
 **AArch64**:
+
 ```nlpl
 set val to 15
 set mask to 10
@@ -251,6 +261,7 @@ end
 ### Raspberry Pi (AArch64)
 
 1. **Install NexusLang on Raspberry Pi**:
+
 ```bash
 # Raspberry Pi OS (64-bit required)
 git clone https://github.com/yourusername/NLPL.git
@@ -259,6 +270,7 @@ pip3 install -r requirements.txt
 ```
 
 2. **Run ARM tests**:
+
 ```bash
 # Basic operations
 python3 dev_tools/nlplc test_programs/unit/assembly/test_asm_arm_basic.nlpl
@@ -274,7 +286,8 @@ python3 dev_tools/nlplc test_programs/unit/assembly/test_asm_arm_neon.nlpl
 ```
 
 3. **Expected output**:
-```
+
+```text
 === ARM/AArch64 Inline Assembly Tests ===
 
 Test 1: Basic ADD operation
@@ -290,6 +303,7 @@ Result: 35 (expected: 35)
 ### Apple Silicon Mac (M1/M2/M3)
 
 1. **Install NLPL**:
+
 ```bash
 # macOS with Homebrew
 brew install python3
@@ -301,6 +315,7 @@ pip3 install -r requirements.txt
 2. **Run tests** (same as Raspberry Pi above)
 
 3. **Rosetta 2 Note**: Ensure you're running native ARM, not x86_64 emulation:
+
 ```bash
 arch  # Should show "arm64"
 ```
@@ -320,6 +335,7 @@ arch  # Should show "arm64"
 ### 1. Register Size Mismatches
 
 **Wrong** (mixing 32-bit and 64-bit):
+
 ```nlpl
 asm
     code
@@ -328,6 +344,7 @@ end
 ```
 
 **Correct**:
+
 ```nlpl
 asm
     code
@@ -340,6 +357,7 @@ end
 ### 2. Calling Convention Violations
 
 **Wrong** (clobbering callee-saved registers without saving):
+
 ```nlpl
 asm
     code
@@ -349,6 +367,7 @@ end
 ```
 
 **Correct** (use temporary registers):
+
 ```nlpl
 asm
     code
@@ -413,6 +432,7 @@ python dev_tools/nlplc --debug test_asm_arm_basic.nlpl
 ### ARM-Specific Optimizations
 
 1. **Use conditional execution**:
+
 ```nlpl
 # Instead of branch
 asm code "cmp x0, x1" "cset x2, gt" end
@@ -422,12 +442,14 @@ asm code "cmp x0, x1" "bgt .label" ".label: mov x2, 1" end
 ```
 
 2. **Leverage load/store multiple**:
+
 ```nlpl
 # Efficient multi-register load
 asm code "ldp x0, x1, [x2]" end  # Load pair
 ```
 
 3. **Use NEON for vectorization**:
+
 ```nlpl
 # 4x speedup for float operations
 asm code "fadd v0.4s, v1.4s, v2.4s" end
@@ -445,6 +467,7 @@ If you encounter ARM-related issues, please report with:
    - OS: `uname -a`
 
 2. **NLPL version**:
+
    ```bash
    git rev-parse HEAD
    ```
@@ -455,6 +478,7 @@ If you encounter ARM-related issues, please report with:
    - Compilation errors (if any)
 
 4. **Architecture detection**:
+
    ```bash
    python3 -c "import platform; print(platform.machine())"
    ```

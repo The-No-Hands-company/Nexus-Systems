@@ -7,7 +7,8 @@ In NexusLang, time management is crucial for smooth gameplay and consistent beha
 ## Frame-Based Updates
 
 ### Every Frame
-```
+
+```text
 Every frame:
     Move player based on input
     Update animations
@@ -15,7 +16,8 @@ Every frame:
 ```
 
 ### Fixed Updates
-```
+
+```text
 Every physics frame:
     Update physics simulation
     Apply forces
@@ -25,7 +27,8 @@ Every physics frame:
 ## Time-Based Actions
 
 ### Delays and Timers
-```
+
+```nxl
 When player takes damage:
     Make player invincible
     Wait for 2 seconds
@@ -41,7 +44,8 @@ Create countdown timer:
 ```
 
 ### Scheduled Events
-```
+
+```nxl
 Schedule "Spawn Enemy":
     Every 5 seconds:
         Create new enemy
@@ -52,7 +56,8 @@ Schedule "Spawn Enemy":
 ## Time Management
 
 ### Game Speed Control
-```
+
+```nxl
 Create time manager:
     Set game speed to 1
     
@@ -63,7 +68,8 @@ Create time manager:
 ```
 
 ### Pausing
-```
+
+```nxl
 When pause button pressed:
     Pause game time
     Show pause menu
@@ -77,7 +83,8 @@ When resume selected:
 ## Frame Rate Management
 
 ### Setting Frame Rate
-```
+
+```nxl
 Set target frame rate to 60
 Enable vsync
 
@@ -86,7 +93,8 @@ If running on mobile:
 ```
 
 ### Frame Rate Independence
-```
+
+```nxl
 Create movement system:
     Every frame:
         Move objects based on:
@@ -97,7 +105,8 @@ Create movement system:
 ## Animation Timing
 
 ### Animation Control
-```
+
+```text
 Create animation controller:
     Play "walk" animation:
         At 30 frames per second
@@ -109,7 +118,8 @@ Create animation controller:
 ```
 
 ### Time-Based Effects
-```
+
+```text
 Create particle effect:
     Emit 10 particles per second
     Each particle lives for 2 seconds
@@ -119,7 +129,8 @@ Create particle effect:
 ## Best Practices
 
 ### 1. Performance Optimization
-```
+
+```nxl
 # Good: Time-based updates
 Every 0.5 seconds:
     Update AI pathfinding
@@ -132,7 +143,8 @@ Every frame:
 ```
 
 ### 2. Consistent Timing
-```
+
+```nxl
 Create movement:
     Set base speed to 5 units
     Every frame:
@@ -143,7 +155,8 @@ Create movement:
 ```
 
 ### 3. Time Scale Effects
-```
+
+```nxl
 Create bullet time effect:
     Slow game time to 0.2
     Keep player at normal speed

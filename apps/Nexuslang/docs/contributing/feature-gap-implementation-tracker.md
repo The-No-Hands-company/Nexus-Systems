@@ -284,7 +284,7 @@ Purpose: Convert every matrix row with ⚠️ or ❌ into concrete implementatio
   - Files: `src/nexuslang/typesystem/typechecker.py`
   - Tests: `tests/unit/type_system/test_parallel_for_typechecker.py`
 - [x] Replace sequential fallback with true parallel lowering (work partitioning + join).
-  - Completed 2026-05-04: 
+  - Completed 2026-05-04:
     1. Filtered-generator parallel lowering: emit compiled prefilter pass that scans source array via generator predicate, collects matching elements compactly, then dispatches parallel on filtered array.
     2. Arithmetic-mapped generator fast path: detect single-step transforms (`x+C`, `x-C`, `x*C`) in non-identity generators, store transform op/arg in frame fields 5-6, apply via `nxl_generator_apply_transform` helper in next().
     3. Frame layout extended from 5-field (40 bytes) to 7-field (56 bytes) to accommodate transform metadata.

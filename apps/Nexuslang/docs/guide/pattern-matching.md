@@ -19,6 +19,7 @@ Pattern matching is a powerful feature that allows you to match values against p
 - Nested patterns
 
 Pattern matching makes code more readable and safer by:
+
 - Eliminating complex if/else chains
 - Ensuring all cases are handled
 - Capturing values directly in the pattern
@@ -39,6 +40,7 @@ end
 ```
 
 The `match` expression:
+
 1. Evaluates the input expression
 2. Tests each pattern in order
 3. Executes the first matching case
@@ -70,6 +72,7 @@ set result to describe_number with 1
 ```
 
 **Supported literal types:**
+
 - Integers: `0`, `42`, `-5`
 - Floats: `3.14`, `-0.5`
 - Strings: `"hello"`, `""`
@@ -92,6 +95,7 @@ set result to process_value with 42
 ```
 
 **Key points:**
+
 - Variable patterns always match
 - The variable is bound to the matched value
 - Use meaningful variable names for clarity
@@ -114,6 +118,7 @@ set weekend to is_weekend with "Monday"
 ```
 
 **When to use `_`:**
+
 - You need a catch-all but don't care about the value
 - More explicit than `else` for remaining cases
 - Common in list/tuple destructuring
@@ -138,6 +143,7 @@ set result to sum_first_two with [10, 20, 30]
 ```
 
 **List pattern syntax:**
+
 - `[]` - Empty list
 - `[x]` - Single element (binds to `x`)
 - `[x, y]` - Exactly two elements
@@ -164,6 +170,7 @@ set desc to describe_point with point
 ```
 
 **Tuple pattern features:**
+
 - Fixed size matching
 - Can mix literals and variables
 - Nested tuples supported
@@ -188,11 +195,13 @@ set category to categorize_age with 25
 ```
 
 **Guard syntax:**
+
 ```nexuslang
 case <pattern> if <condition> then <expression>
 ```
 
 **Guard features:**
+
 - Arbitrary boolean expressions
 - Can reference pattern-bound variables
 - Evaluated after pattern matches
@@ -309,6 +318,7 @@ end
 ```
 
 **Advantages:**
+
 - Can bind variables
 - Supports guards
 - Destructures complex data
@@ -331,11 +341,13 @@ end
 ```
 
 **When to use switch:**
+
 - Simple literal matching only
 - Compatibility with older code
 - When you need fallthrough behavior
 
 **Use pattern matching when:**
+
 - You need variable binding
 - You want to destructure data
 - You need guards/conditions
@@ -548,6 +560,7 @@ end
 ```
 
 **Type checking features:**
+
 - Pattern variables inherit type from matched expression
 - Return type must match across all cases
 - Guards must be boolean expressions
@@ -560,6 +573,7 @@ end
 ### Pattern Matching Performance
 
 Pattern matching is efficient:
+
 - Patterns are tested in order (O(n) for n patterns)
 - Guard evaluation is lazy (only checked if pattern matches)
 - No overhead compared to equivalent if/else chains
@@ -567,6 +581,7 @@ Pattern matching is efficient:
 ### Optimization Tips
 
 1. **Put common cases first:**
+
 ```nexuslang
 # Good: Most common case first
 match request_type with
@@ -577,6 +592,7 @@ end
 ```
 
 2. **Use literals before guards:**
+
 ```nexuslang
 # Good: Literal match is faster
 match status with
@@ -587,6 +603,7 @@ end
 ```
 
 3. **Avoid redundant patterns:**
+
 ```nexuslang
 # Bad: Last case is redundant
 match x with
@@ -624,6 +641,7 @@ end
 ```
 
 **Differences:**
+
 - NexusLang uses `with...case...then...end` instead of braces
 - NexusLang uses natural language comparisons (`is less than` vs `<`)
 - Both support guards, destructuring, and variable binding
@@ -700,6 +718,7 @@ end
 ### From Switch to Match
 
 **Old code (switch):**
+
 ```nexuslang
 switch status
   case "idle"
@@ -712,6 +731,7 @@ end
 ```
 
 **New code (match):**
+
 ```nexuslang
 match status with
   case "idle" then handle_idle
@@ -723,6 +743,7 @@ end
 ### From If/Else to Match
 
 **Old code (if/else):**
+
 ```nexuslang
 if score is greater than or equal to 90
   set grade to "A"
@@ -736,6 +757,7 @@ end
 ```
 
 **New code (match):**
+
 ```nexuslang
 set grade to match score with
   case s if s is greater than or equal to 90 then "A"
@@ -752,6 +774,7 @@ end
 ### Pattern Never Matches
 
 **Problem:**
+
 ```nexuslang
 match x with
   case _ then "always matches"
@@ -764,6 +787,7 @@ end
 ### Guard Always False
 
 **Problem:**
+
 ```nexuslang
 match x with
   case n if n is greater than 100 and n is less than 0 then "impossible"
@@ -775,6 +799,7 @@ end
 ### Type Mismatch
 
 **Problem:**
+
 ```nexuslang
 function process with x as Integer returns String
   match x with
@@ -788,6 +813,7 @@ end
 ### Missing Else/Catch-all
 
 **Problem:**
+
 ```nexuslang
 match x with
   case 0 then "zero"
@@ -797,6 +823,7 @@ end
 ```
 
 **Solution:** Add `else` or catch-all pattern:
+
 ```nexuslang
 match x with
   case 0 then "zero"

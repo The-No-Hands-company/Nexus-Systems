@@ -158,7 +158,7 @@ pytest tests/ -v
 
 ## Project Structure
 
-```
+```text
 NexusLang/
  src/nexuslang/ # Main source code
  parser/ # Lexer, parser, AST
@@ -180,6 +180,7 @@ NexusLang/
 ### ImportError: No module named 'nlpl'
 
 **Solution:** Make sure you've installed the package in editable mode:
+
 ```bash
 pip install -e .
 ```
@@ -187,6 +188,7 @@ pip install -e .
 ### Tests fail with import errors
 
 **Solution:** Activate the virtual environment first:
+
 ```bash
 source venv/bin/activate # Linux/Mac
 venv\Scripts\activate # Windows
@@ -195,6 +197,7 @@ venv\Scripts\activate # Windows
 ### "Permission denied" when running nlpl
 
 **Solution:** Use the module form instead:
+
 ```bash
 python -m nexuslang.main path/to/file.nlpl
 ```

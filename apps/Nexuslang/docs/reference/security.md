@@ -57,7 +57,7 @@ Production deployments should grant only the minimum set needed.
 
 ### Layers of Protection
 
-```
+```text
 NLPL source program
      |
      | (1) Permission checks (deny-by-default)
@@ -322,11 +322,13 @@ is irreversible).
 SECCOMP_MODE_FILTER)`.
 
 **Requirements:**
+
 - Linux >= 3.5
 - x86-64 architecture (default safe syscall list is x86-64)
 - `PR_SET_NO_NEW_PRIVS` is set automatically before the filter
 
 **Warnings:**
+
 - Seccomp filters are permanent and inherited by child processes.
 - Use only in disposable forked processes.
 - The default safe list is tuned for CPython 3.x; extend `allowed_syscalls`
@@ -504,37 +506,44 @@ if not check_rate_limit(client_ip, max_calls=100, window_seconds=60):
 Use this checklist before deploying a NexusLang program in production:
 
 ### Permissions
+
 - [ ] Only grant permissions actually needed (`--allow-read`, not `--allow-all`)
 - [ ] Scope permissions to specific paths/hosts where possible
 - [ ] Never use `--allow-all` in production
 
 ### Input Handling
+
 - [ ] Validate all external input before use (`validate_path`, `validate_email`, etc.)
 - [ ] Sanitize output inserted into HTML (`escape_html`)
 - [ ] Sanitize SQL identifiers (`sanitize_sql_identifier`)
 - [ ] Reject or escape shell arguments; prefer `safe_execute` over subprocess
 
 ### Taint Analysis
+
 - [ ] Mark user input, network data, FFI returns, and env var reads as tainted
 - [ ] Check tainted values before they reach sinks (shell, file write, SQL)
 - [ ] Run with `ViolationPolicy.RAISE` in CI/testing, `WARN` or `LOG` in production
 
 ### Sandboxing
+
 - [ ] Run untrusted code in a `Sandbox` with `STRICT_POLICY` or tighter
 - [ ] Enable `ResourceLimits` to cap CPU and memory for untrusted workloads
 - [ ] Enable `SeccompFilter` in forked child processes for maximum isolation (Linux)
 
 ### Runtime Protections
+
 - [ ] Enable `StackCanary` when loading C extensions via FFI
 - [ ] Enable `BoundsChecker` during testing; optionally in production for safety
 - [ ] Confirm ASLR is enabled on production hosts (`randomize_va_space=2`)
 
 ### Filesystem
+
 - [ ] Validate all file paths with `validate_path` before opening
 - [ ] Sanitize user-supplied filenames with `get_safe_filename`
 - [ ] Constrain file operations to an allowed directory list
 
 ### Dependencies
+
 - [ ] Audit all FFI libraries for known CVEs
 - [ ] Pin FFI library versions
 - [ ] Do not expose raw FFI handles to untrusted NexusLang code

@@ -5,7 +5,8 @@
 NLPL provides comprehensive networking capabilities for both client and server applications.
 
 ### Creating Network Connections
-```
+
+```nxl
 Create TCP connection to "server.example.com":
     Use port 8080
     Enable encryption
@@ -19,4 +20,4 @@ Create HTTP server:
         Parse request body
         Process data
         Send response
-``` 
+```

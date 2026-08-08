@@ -22,7 +22,7 @@ NLPL was designed with the following goals in mind:
 
 NLPL uses English words as keywords. The following are reserved keywords in the language:
 
-```
+```text
 Create, Define, Function, Class, If, Otherwise, While, Repeat, For, Each, In,
 Allocate, Free, Memory, Run, These, Tasks, At, Same, Time, Try, To, But, Fails,
 And, Or, Not, With, Called, That, Takes, Returns, Has, Property, Method, End
@@ -39,7 +39,8 @@ Identifiers in NexusLang follow standard programming language conventions:
 - Cannot be a keyword
 
 Examples of valid identifiers:
-```
+
+```text
 counter
 firstName
 data_processor
@@ -53,7 +54,8 @@ NLPL supports the following types of literals:
 #### 3.3.1 Number Literals
 
 Integer and floating-point numbers:
-```
+
+```text
 42
 3.14
 -10
@@ -62,7 +64,8 @@ Integer and floating-point numbers:
 #### 3.3.2 String Literals
 
 Text enclosed in double quotes:
-```
+
+```text
 "Hello, world!"
 "NLPL is an English-like language"
 ```
@@ -70,7 +73,8 @@ Text enclosed in double quotes:
 #### 3.3.3 Boolean Literals
 
 Truth values:
-```
+
+```text
 true
 false
 ```
@@ -85,12 +89,13 @@ An NexusLang program consists of a sequence of statements. Each statement typica
 
 Variables are declared using the `Create` keyword, followed by the type and identifier:
 
-```
+```nxl
 Create an integer called counter and set it to 0.
 Create a string called message.
 ```
 
 Equivalent C++ code:
+
 ```cpp
 int counter = 0;
 std::string message;
@@ -100,7 +105,7 @@ std::string message;
 
 Functions are defined using the `Define` keyword:
 
-```
+```nxl
 Define a function called add that takes integer a and integer b and returns integer.
     Create an integer called result and set it to a plus b.
     Return result.
@@ -108,6 +113,7 @@ End
 ```
 
 Equivalent C++ code:
+
 ```cpp
 int add(int a, int b) {
     int result = a + b;
@@ -121,7 +127,7 @@ int add(int a, int b) {
 
 If statements use natural language conditions:
 
-```
+```nxl
 If counter is greater than 10 then
     Print "Counter is large".
 Otherwise
@@ -130,6 +136,7 @@ End
 ```
 
 Equivalent C++ code:
+
 ```cpp
 if (counter > 10) {
     std::cout << "Counter is large" << std::endl;
@@ -142,7 +149,7 @@ if (counter > 10) {
 
 While loops:
 
-```
+```nxl
 While counter is less than 10
     Print counter.
     Set counter to counter plus 1.
@@ -151,13 +158,14 @@ End
 
 For-each loops:
 
-```
+```nxl
 Repeat for each item in items
     Print item.
 End
 ```
 
 Equivalent C++ code:
+
 ```cpp
 while (counter < 10) {
     std::cout << counter << std::endl;
@@ -173,12 +181,13 @@ for (auto& item : items) {
 
 NLPL provides explicit memory management similar to C++:
 
-```
+```text
 Allocate a new integer in memory with value 42 and name it ptr.
 Free the memory at ptr.
 ```
 
 Equivalent C++ code:
+
 ```cpp
 int* ptr = new int(42);
 delete ptr;
@@ -188,7 +197,7 @@ delete ptr;
 
 Classes are defined with properties and methods:
 
-```
+```nxl
 Define a class called Calculator.
     It has a float property called result.
     
@@ -204,6 +213,7 @@ Print calc.result.
 ```
 
 Equivalent C++ code:
+
 ```cpp
 class Calculator {
 public:
@@ -224,7 +234,7 @@ std::cout << calc.result << std::endl;
 
 NLPL provides built-in concurrency:
 
-```
+```nxl
 Run these tasks at the same time:
     Call process_data with dataset1.
     Call process_data with dataset2.
@@ -232,6 +242,7 @@ End
 ```
 
 Equivalent C++ code (using std::thread):
+
 ```cpp
 std::thread t1([&]() { process_data(dataset1); });
 std::thread t2([&]() { process_data(dataset2); });
@@ -243,7 +254,7 @@ t2.join();
 
 NLPL uses try-catch blocks with natural language:
 
-```
+```nxl
 Try to
     Call divide with 10, 0.
 But if it fails
@@ -252,6 +263,7 @@ End
 ```
 
 Equivalent C++ code:
+
 ```cpp
 try {
     divide(10, 0);
@@ -264,7 +276,7 @@ try {
 
 The complete BNF grammar for NexusLang can be found in the `src/parser/bnf_grammar.txt` file. Here's a simplified overview:
 
-```
+```text
 <program> ::= <statement-list>
 <statement> ::= <variable-declaration> | <function-definition> | ...
 <variable-declaration> ::= "Create" ["a" | "an"] <type> "called" <identifier> ["and" "set" "it" "to" <expression>]
@@ -275,7 +287,7 @@ The complete BNF grammar for NexusLang can be found in the `src/parser/bnf_gramm
 
 ### 6.1 Simple Calculator
 
-```
+```text
 # Simple Calculator Program in NexusLang
 
 # Define the main calculator class
@@ -334,7 +346,7 @@ Print calc.result
 
 ### 6.2 Concurrent Processing
 
-```
+```nxl
 # Concurrent Processing Example in NexusLang
 
 Define a class called DataProcessor
@@ -391,4 +403,4 @@ Potential future enhancements to NexusLang include:
 
 ## 9. Conclusion
 
-NLPL demonstrates that it's possible to create a programming language with natural English syntax while maintaining the power and expressiveness of traditional languages. By bridging the gap between human language and computer code, NexusLang aims to make programming more accessible to a wider audience. 
+NLPL demonstrates that it's possible to create a programming language with natural English syntax while maintaining the power and expressiveness of traditional languages. By bridging the gap between human language and computer code, NexusLang aims to make programming more accessible to a wider audience.

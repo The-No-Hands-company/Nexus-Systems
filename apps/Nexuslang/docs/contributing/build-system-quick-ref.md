@@ -18,7 +18,8 @@ cd my_project
 ```
 
 This creates:
-```
+
+```text
 my_project/
  src/
  main.nxl # Main source file
@@ -136,6 +137,7 @@ nlplbuild init [NAME]
 ```
 
 **Examples:**
+
 ```bash
 nlplbuild init my_app
 nlplbuild init my_lib --version 1.0.0 --license Apache-2.0
@@ -155,6 +157,7 @@ nlplbuild build [TARGET]
 ```
 
 **Examples:**
+
 ```bash
 nlplbuild build # Build all targets
 nlplbuild build main # Build specific target
@@ -177,6 +180,7 @@ nlplbuild run [TARGET] [PROGRAM_ARGS...]
 ```
 
 **Examples:**
+
 ```bash
 nlplbuild run # Run default target
 nlplbuild run main # Run specific target
@@ -194,6 +198,7 @@ nlplbuild clean
 ```
 
 **Examples:**
+
 ```bash
 nlplbuild clean
 ```
@@ -203,6 +208,7 @@ nlplbuild clean
 ### Development Profile (default)
 
 Optimized for fast compilation and debugging:
+
 - Optimization: O0 (none)
 - Debug info: enabled
 - Use with: `--profile dev` or default
@@ -210,11 +216,13 @@ Optimized for fast compilation and debugging:
 ### Release Profile
 
 Optimized for production deployment:
+
 - Optimization: O3 (maximum)
-- Debug info: disabled 
+- Debug info: disabled
 - Use with: `--profile release`
 
 **Example:**
+
 ```bash
 nlplbuild build --profile release
 ```
@@ -227,6 +235,7 @@ nlplbuild build --profile release
 - **O3** - Maximum optimization (best performance)
 
 **Example:**
+
 ```bash
 nlplbuild build -O3
 ```
@@ -234,17 +243,20 @@ nlplbuild build -O3
 ## Incremental Compilation
 
 The build system automatically tracks:
+
 - Source file changes (SHA-256 hashing)
 - Modification times
 - Dependency changes
 
 Only changed files are recompiled. To force full rebuild:
+
 ```bash
 nlplbuild clean
 nlplbuild build
 ```
 
 Or disable incremental compilation:
+
 ```bash
 nlplbuild build --no-incremental
 ```
@@ -252,13 +264,15 @@ nlplbuild build --no-incremental
 ## Target Types
 
 ### Executable
+
 ```toml
 [target.my_app]
 source = "src/main.nxl"
 type = "executable"
 ```
 
-### Library 
+### Library
+
 ```toml
 [target.my_lib]
 source = "src/lib.nxl"
@@ -266,6 +280,7 @@ type = "library"
 ```
 
 ### Module (LLVM IR only)
+
 ```toml
 [target.my_module]
 source = "src/module.nxl"
@@ -282,6 +297,7 @@ type = "module"
 - **Any:** `"*"` - Any version
 
 **Examples:**
+
 ```toml
 [dependencies]
 exact_dep = "1.2.3"

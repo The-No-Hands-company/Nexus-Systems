@@ -245,6 +245,7 @@ set task_priority to Priority.High
 Enums are compiled to integer constants at compile time. Each enum member becomes a global read-only constant:
 
 **NLPL Code:**
+
 ```nexuslang
 enum Status
     Active = 1
@@ -252,6 +253,7 @@ enum Status
 ```
 
 **Generated LLVM IR:**
+
 ```llvm
 @Status.Active = private unnamed_addr constant i64 1, align 8
 @Status.Inactive = private unnamed_addr constant i64 0, align 8
@@ -260,6 +262,7 @@ enum Status
 ### Member Access
 
 When you write `Status.Active`, the compiler:
+
 1. Checks if `Status` is a defined enum
 2. Looks up `Active` in that enum's members
 3. Returns the integer value directly
@@ -290,6 +293,7 @@ enum Example
 ### Type
 
 Enums are represented as 64-bit signed integers (`i64` in LLVM IR). This allows:
+
 - Values from -9,223,372,036,854,775,808 to 9,223,372,036,854,775,807
 - Negative enum values
 - Large explicit values
@@ -411,6 +415,7 @@ function handle_error with code as Integer
 ## Limitations
 
 1. **Integer values only**: Enum values must be integers (no strings, floats, etc.)
+
    ```nexuslang
    # Not supported
    enum Message
@@ -419,6 +424,7 @@ function handle_error with code as Integer
    ```
 
 2. **No method definitions**: Enums are simple constants, not full types
+
    ```nexuslang
    # Not supported
    enum Color
@@ -428,6 +434,7 @@ function handle_error with code as Integer
    ```
 
 3. **No automatic string conversion**: Converting enum to string requires manual mapping
+
    ```nexuslang
    # Need to manually map values to strings
    ```
@@ -494,6 +501,7 @@ enum Color
 ## Testing
 
 Comprehensive test suite in `test_programs/compiler/test_enum_types.nlpl`:
+
 - Basic auto-numbered enums
 - Enums with explicit values
 - Enums in switch statements
@@ -503,6 +511,7 @@ Comprehensive test suite in `test_programs/compiler/test_enum_types.nlpl`:
 - Enums with gaps in values
 
 Run tests:
+
 ```bash
 ./nlplc test_programs/compiler/test_enum_types.nlpl --run
 ```

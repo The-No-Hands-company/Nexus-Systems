@@ -3,6 +3,7 @@
 ## Syntax Options
 
 ### Option 1: Natural language style
+
 ```nexuslang
 inline assembly
     "mov rax, rbx"
@@ -12,6 +13,7 @@ end
 ```
 
 ### Option 2: Block with metadata
+
 ```nexuslang
 asm
     code "mov rax, rbx"
@@ -23,11 +25,13 @@ end
 ```
 
 ### Option 3: Single-line (GCC-style)
+
 ```nexuslang
 asm "mov %1, %0" with outputs "=r"(result) and inputs "r"(value)
 ```
 
 ### Option 4: Multi-line with template
+
 ```nexuslang
 assembly """
     mov rax, {input1}
@@ -41,6 +45,7 @@ assembly """
 This provides the most flexibility and safety while remaining readable.
 
 ## Token Requirements
+
 - ASM or ASSEMBLY keyword
 - CODE keyword for assembly instructions
 - OUTPUTS, INPUTS, CLOBBERS keywords
@@ -48,6 +53,7 @@ This provides the most flexibility and safety while remaining readable.
 - Support for constraint strings ("=r", "r", "m", etc.)
 
 ## AST Node Structure
+
 ```python
 class InlineAssemblyStatement:
     instructions: List[str]  # Assembly instructions
@@ -58,6 +64,7 @@ class InlineAssemblyStatement:
 ```
 
 ## Safety Considerations
+
 1. Inline assembly cannot be executed by interpreter (compile-only feature)
 2. Must validate that outputs/inputs match assembly template
 3. Warn about clobbered registers

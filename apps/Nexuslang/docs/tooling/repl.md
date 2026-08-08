@@ -36,21 +36,25 @@ The REPL provides special commands prefixed with `:` for controlling the environ
 ### Starting the REPL
 
 **Method 1: Via main module (no file argument)**
+
 ```bash
 python -m nexuslang.main
 ```
 
 **Method 2: Explicit REPL flag**
+
 ```bash
 python -m nexuslang.main --repl
 ```
 
 **Method 3: Convenience script**
+
 ```bash
 python nxl_repl.py
 ```
 
 **Method 4: After running a file**
+
 ```bash
 python -m nexuslang.main examples/01_basic_concepts.nlpl --repl
 ```
@@ -69,7 +73,7 @@ python -m nexuslang.main [--debug] [--no-type-check] [--repl]
 
 ### Example 1: Basic Variable Assignment
 
-```
+```text
 >>> set x to 42
 => 42
 >>> set name to "NexusLang"
@@ -89,7 +93,7 @@ Variables:
 
 The REPL automatically detects incomplete statements and switches to multi-line mode:
 
-```
+```text
 >>> function greet with name as String returns String
 ... return "Hello, " plus name
 ... end
@@ -102,7 +106,7 @@ The REPL automatically detects incomplete statements and switches to multi-line 
 
 ### Example 3: Complex Control Flow
 
-```
+```text
 >>> function factorial with n as Integer returns Integer
 ... if n is less than or equal to 1
 ... return 1
@@ -116,7 +120,7 @@ The REPL automatically detects incomplete statements and switches to multi-line 
 
 ### Example 4: Working with Collections
 
-```
+```text
 >>> set numbers to [1, 2, 3, 4, 5]
 => [1, 2, 3, 4, 5]
 >>> set total to 0
@@ -132,7 +136,7 @@ The REPL automatically detects incomplete statements and switches to multi-line 
 
 ### Example 5: Struct Definitions
 
-```
+```text
 >>> struct Point
 ... x as Integer
 ... y as Integer
@@ -153,7 +157,7 @@ Variables:
 
 ### Example 6: Error Recovery
 
-```
+```text
 >>> set x to "invalid" plus 42
 Error: Type error: Cannot add string and integer
 >>> set y to 100
@@ -199,7 +203,7 @@ To complete multi-line input, press Enter on an empty line or type `end`.
 
 Enable debug mode to see the internal compilation process:
 
-```
+```text
 >>> :debug
 Debug mode: enabled
 >>> set x to 42
@@ -220,7 +224,7 @@ Debug mode: enabled
 
 Toggle type checking on/off:
 
-```
+```text
 >>> :type-check
 Type checking: disabled
 >>> set x to "string"
@@ -237,7 +241,7 @@ Type checking: enabled
 
 After running code, use `:vars` to see what variables are defined:
 
-```
+```text
 >>> :vars
 
 Variables:
@@ -249,7 +253,7 @@ Variables:
 
 ### 2. Use :funcs to See Available Functions
 
-```
+```text
 >>> :funcs
 
 Functions:
@@ -260,7 +264,7 @@ Functions:
 
 ### 3. Reset When Things Get Messy
 
-```
+```text
 >>> :reset
 Resetting interpreter...
 Interpreter reset complete
@@ -272,7 +276,7 @@ This clears all variables and functions, giving you a clean slate.
 
 You can paste multi-line code directly into the REPL:
 
-```
+```text
 >>> function fibonacci with n as Integer returns Integer
 ... if n is less than or equal to 1
 ... return n
@@ -285,7 +289,7 @@ You can paste multi-line code directly into the REPL:
 
 Press Up Arrow to recall previous commands instead of retyping:
 
-```
+```text
 >>> set x to 10
 >>> print text x
 <UP> <UP> # Recalls "set x to 10"
@@ -296,7 +300,7 @@ Press Up Arrow to recall previous commands instead of retyping:
 
 Enable debug mode to understand how NexusLang parses your code:
 
-```
+```text
 >>> :debug
 Debug mode: enabled
 >>> set x to 42
@@ -321,7 +325,8 @@ This is great for learning NexusLang syntax and troubleshooting issues.
 The REPL saves your command history to `~/.nxl_history`. This file persists across sessions, so you can access previous commands even after restarting the REPL.
 
 To view history:
-```
+
+```text
 >>> :history
 
 History:
@@ -378,7 +383,7 @@ chmod 644 ~/.nxl_history # If needed
 
 Enable debug mode for detailed error information:
 
-```
+```text
 >>> :debug
 Debug mode: enabled
 ```
@@ -412,7 +417,7 @@ Debug mode: enabled
 
 Begin with basic commands to get comfortable:
 
-```
+```text
 >>> set x to 42
 >>> print text x
 ```
@@ -421,7 +426,7 @@ Begin with basic commands to get comfortable:
 
 After defining variables, check `:vars` to confirm:
 
-```
+```text
 >>> set user_name to "Alice"
 >>> :vars # Verify it's set correctly
 ```
@@ -430,7 +435,7 @@ After defining variables, check `:vars` to confirm:
 
 Define functions in the REPL before adding them to files:
 
-```
+```text
 >>> function calculate_tax with amount as Float returns Float
 ... return amount times 0.08
 ... end
@@ -442,7 +447,7 @@ Define functions in the REPL before adding them to files:
 
 When debugging complex logic, enable debug mode:
 
-```
+```text
 >>> :debug
 >>> # Your complex code here
 ```
@@ -490,6 +495,6 @@ The NexusLang REPL is part of the NexusLang project and follows the same license
 
 ---
 
-**Version**: 0.1.0 
-**Last Updated**: 2024 
+**Version**: 0.1.0
+**Last Updated**: 2024
 **Maintainer**: NexusLang Development Team

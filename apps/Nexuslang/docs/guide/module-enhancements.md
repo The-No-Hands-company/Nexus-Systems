@@ -1,17 +1,20 @@
 # NexusLang Module System Enhancements
 
 ## Overview
+
 We have enhanced the NexusLang module system with improved relative import support and organized the standard library into a modular structure. These enhancements make the language more maintainable, scalable, and user-friendly.
 
 ## Enhancements Implemented
 
 ### 1. Enhanced Relative Imports
+
 - **Improved Path Resolution**: Better handling of relative paths with `./` and `../` prefixes
 - **Normalized Module Names**: Consistent handling of module names with or without file extensions
 - **Module Path Mapping**: Tracking of module file paths for better error reporting and debugging
 - **Circular Import Detection**: Robust detection and handling of circular dependencies
 
 ### 2. Standard Library Organization
+
 - **Modular Structure**: Organized the standard library into separate modules:
   - `math`: Mathematical functions and constants
   - `string`: String manipulation functions
@@ -24,6 +27,7 @@ We have enhanced the NexusLang module system with improved relative import suppo
 - **Comprehensive Documentation**: Detailed docstrings for all module functions
 
 ### 3. Module Loading Improvements
+
 - **Module Caching**: Efficient caching of loaded modules to avoid redundant loading
 - **Module Initialization**: Proper initialization of modules when first imported
 - **Error Handling**: Better error messages for import-related issues
@@ -32,7 +36,9 @@ We have enhanced the NexusLang module system with improved relative import suppo
 ## Standard Library Modules
 
 ### Math Module
+
 The math module provides mathematical functions and constants:
+
 - **Constants**: `PI`, `E`
 - **Arithmetic**: `absolute`, `square_root`, `power`, `floor`, `ceiling`, `round`
 - **Trigonometry**: `sine`, `cosine`, `tangent`, `arcsine`, `arccosine`, `arctangent`
@@ -40,7 +46,9 @@ The math module provides mathematical functions and constants:
 - **Statistics**: `maximum`, `minimum`, `sum`, `average`
 
 ### String Module
+
 The string module provides string manipulation functions:
+
 - **Basic Operations**: `length`, `concatenate`, `substring`
 - **Case Conversion**: `uppercase`, `lowercase`, `capitalize`
 - **Searching**: `contains`, `starts_with`, `ends_with`, `find`
@@ -48,7 +56,9 @@ The string module provides string manipulation functions:
 - **Regular Expressions**: `match`, `replace_regex`
 
 ### IO Module
+
 The IO module provides input/output functions:
+
 - **File Operations**: `read_file`, `write_file`, `append_file`, `file_exists`, `delete_file`
 - **Directory Operations**: `list_directory`, `create_directory`, `directory_exists`, `delete_directory`
 - **Path Operations**: `join_path`, `get_basename`, `get_dirname`, `get_extension`
@@ -57,7 +67,7 @@ The IO module provides input/output functions:
 
 ## Example Usage
 
-```
+```nxl
 # Import modules
 Import math.
 Import string.
@@ -88,4 +98,5 @@ Print("File content: " + content).
 5. **Built-in Module Documentation**: Provide runtime access to module documentation
 
 ## Conclusion
-The enhanced module system and organized standard library significantly improve the NexusLang language's usability and maintainability. These features make it easier for developers to organize their code, reuse functionality, and build larger applications. The modular approach also makes the language more extensible, allowing for future growth of the standard library and third-party modules. 
+
+The enhanced module system and organized standard library significantly improve the NexusLang language's usability and maintainability. These features make it easier for developers to organize their code, reuse functionality, and build larger applications. The modular approach also makes the language more extensible, allowing for future growth of the standard library and third-party modules.

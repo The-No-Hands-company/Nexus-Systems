@@ -9,17 +9,19 @@ Successfully implemented three critical TODOs in the NexusLang build system (`sr
 ### Files Modified
 
 1. **`src/nexuslang/tooling/builder.py`** (325 lines, +197 additions)
- - Implemented dependency path resolution
- - Added multi-file module compilation and linking
- - Implemented intelligent main entry point detection
- - Added comprehensive helper methods
+
+- Implemented dependency path resolution
+- Added multi-file module compilation and linking
+- Implemented intelligent main entry point detection
+- Added comprehensive helper methods
 
 ### Files Created
 
 1. **`dev_tools/test_build_system.py`** (339 lines)
- - Comprehensive test suite with 6 test cases
- - Tests all new functionality
- - All tests passing 
+
+- Comprehensive test suite with 6 test cases
+- Tests all new functionality
+- All tests passing
 
 ## Implemented Features
 
@@ -31,14 +33,15 @@ Successfully implemented three critical TODOs in the NexusLang build system (`sr
 
 - Processes both local and version-based dependencies
 - For local dependencies (with `path` specified):
- - Adds `{dependency_path}/build/lib` to search paths
+- Adds `{dependency_path}/build/lib` to search paths
 - For version-based dependencies:
- - Checks standard installation locations:
- - `~/.nexuslang/lib/{dep_name}`
- - `/usr/local/lib/nexuslang/{dep_name}`
- - `/usr/lib/nexuslang/{dep_name}`
+- Checks standard installation locations:
+- `~/.nexuslang/lib/{dep_name}`
+- `/usr/local/lib/nexuslang/{dep_name}`
+- `/usr/lib/nexuslang/{dep_name}`
 
 **Code**:
+
 ```python
 # Add dependency paths to library search paths
 for dep_name, dep_spec in self.config.dependencies.items():
@@ -66,33 +69,38 @@ for dep_name, dep_spec in self.config.dependencies.items():
 
 **Solution**: Implemented comprehensive multi-file compilation strategy:
 
-#### Key Components:
+#### Key Components
 
 1. **Main Entry Point Detection** (`_detect_main_entry_point()`)
- - Strategy 1: Look for `main.nxl`
- - Strategy 2: Look for file matching package name
- - Strategy 3: Look for file containing `main()` function
- - Strategy 4: Default to first file
+
+- Strategy 1: Look for `main.nxl`
+- Strategy 2: Look for file matching package name
+- Strategy 3: Look for file containing `main()` function
+- Strategy 4: Default to first file
 
 2. **Module Grouping** (`_group_into_modules()`)
- - Groups files by directory structure
- - Maps directory paths to module names (e.g., `utils/` `utils`)
- - Enables proper module-based organization
+
+- Groups files by directory structure
+- Maps directory paths to module names (e.g., `utils/` `utils`)
+- Enables proper module-based organization
 
 3. **Smart Compilation**:
- - **Single-file projects**: Compile and link directly to executable
- - **Multi-file projects**: 
- - Compile each file to intermediate C/C++ source
- - Collect all intermediate files
- - Link them together into final executable
+
+- **Single-file projects**: Compile and link directly to executable
+- **Multi-file projects**:
+- Compile each file to intermediate C/C++ source
+- Collect all intermediate files
+- Link them together into final executable
 
 4. **Multi-File Linking** (`_link_multi_file_project()`)
- - Links multiple C/C++ source files
- - Adds library search paths from dependencies
- - Applies optimization flags
- - Creates single executable from multiple sources
+
+- Links multiple C/C++ source files
+- Adds library search paths from dependencies
+- Applies optimization flags
+- Creates single executable from multiple sources
 
 **Code Flow**:
+
 ```python
 # Detect main entry point and module structure
 main_file = self._detect_main_entry_point(sources)
@@ -122,26 +130,31 @@ if len(compiled_objects) > 1:
 
 **Solution**: Implemented `_find_executable()` with 4-strategy approach:
 
-#### Detection Strategies:
+#### Detection Strategies
 
 1. **Package Name Match**
- - Look for file matching `{package_name}` (no extension)
- - Check if executable permission is set
+
+- Look for file matching `{package_name}` (no extension)
+- Check if executable permission is set
 
 2. **'main' Executable**
- - Fallback to looking for file named `main`
- - Common convention for entry points
+
+- Fallback to looking for file named `main`
+- Common convention for entry points
 
 3. **Any Executable File**
- - Scan for files with execute permission
- - Skip directories, object files (`.o`), and source files (`.c`, `.cpp`, `.h`, `.nxl`, etc.)
+
+- Scan for files with execute permission
+- Skip directories, object files (`.o`), and source files (`.c`, `.cpp`, `.h`, `.nxl`, etc.)
 
 4. **Newest Non-Source File**
- - Find most recently modified file
- - Exclude source and intermediate files
- - Useful when executable name is unknown
+
+- Find most recently modified file
+- Exclude source and intermediate files
+- Useful when executable name is unknown
 
 **Code**:
+
 ```python
 def _find_executable(self, out_dir: str) -> Optional[str]:
  # Strategy 1: Package name
@@ -174,22 +187,26 @@ def _find_executable(self, out_dir: str) -> Optional[str]:
 ## New Helper Methods
 
 ### `_detect_main_entry_point(sources: List[str]) -> Optional[str]`
+
 Intelligently detects the main entry point file from a list of sources using multiple strategies.
 
 ### `_group_into_modules(sources: List[str]) -> Dict[str, List[str]]`
+
 Groups source files into modules based on directory structure for better organization.
 
 ### `_link_multi_file_project(object_files: List[str], output_executable: str) -> bool`
+
 Links multiple compiled C/C++ files into a single executable with proper library paths and optimization.
 
 ### `_find_executable(out_dir: str) -> Optional[str]`
+
 Finds the executable in the output directory using multiple detection strategies.
 
 ## Testing Results
 
 All 6 comprehensive tests pass:
 
-```
+```text
 Test 1: Main Entry Point Detection 
 Test 2: Detection by Package Name 
 Test 3: Detection by main() Function 
@@ -228,7 +245,7 @@ nlpl run # Runs build/hello
 
 ### Example 2: Multi-File Project
 
-```
+```text
 project/
  nexuslang.toml
  src/
@@ -269,6 +286,7 @@ otherlib = "1.2.3" # Version-based dependency
 ```
 
 Build system automatically:
+
 - Adds `../mylib/build/lib` to library search paths
 - Searches for `otherlib` in standard locations
 - Links with found libraries
@@ -276,21 +294,25 @@ Build system automatically:
 ## Benefits
 
 ### 1. **Proper Dependency Management**
+
 - Libraries are now correctly linked
 - Both local and system-wide dependencies supported
 - Standard installation paths checked automatically
 
 ### 2. **Multi-File Project Support**
+
 - Can now build complex projects with multiple source files
 - Proper module organization by directory structure
 - Intelligent linking of all components
 
 ### 3. **Robust Executable Detection**
+
 - Multiple fallback strategies ensure executable is found
 - Works with various naming conventions
 - Handles complex build directory structures
 
 ### 4. **Better Developer Experience**
+
 - Automatic main entry point detection
 - No manual configuration needed for most projects
 - Clear error messages when executable not found
@@ -299,7 +321,7 @@ Build system automatically:
 
 ### Compilation Flow
 
-```
+```text
 Source Files Main Detection Module Grouping
  
  Compile Each File
@@ -310,7 +332,7 @@ Source Files Main Detection Module Grouping
 
 ### Dependency Resolution Flow
 
-```
+```text
 Dependencies Local (path)? Yes Add {path}/build/lib
  No Check Standard Paths:
  - ~/.nexuslang/lib/{name}
@@ -320,7 +342,7 @@ Dependencies Local (path)? Yes Add {path}/build/lib
 
 ### Executable Detection Flow
 
-```
+```text
 Find Executable Package Name? Found Return
  Not Found
  Main Name? Found Return
@@ -337,29 +359,34 @@ Find Executable Package Name? Found Return
 Potential improvements for future versions:
 
 1. **Incremental Compilation**
- - Only recompile changed files
- - Track dependencies between modules
- - Cache compilation results
+
+- Only recompile changed files
+- Track dependencies between modules
+- Cache compilation results
 
 2. **Parallel Compilation**
- - Compile independent modules in parallel
- - Utilize multiple CPU cores
- - Significantly faster build times
+
+- Compile independent modules in parallel
+- Utilize multiple CPU cores
+- Significantly faster build times
 
 3. **Advanced Dependency Management**
- - Package registry support
- - Semantic versioning resolution
- - Dependency conflict detection
+
+- Package registry support
+- Semantic versioning resolution
+- Dependency conflict detection
 
 4. **Build Caching**
- - Cache compiled artifacts
- - Share cache across projects
- - Remote cache support
+
+- Cache compiled artifacts
+- Share cache across projects
+- Remote cache support
 
 5. **Cross-Compilation Support**
- - Target different architectures
- - Platform-specific builds
- - Cross-platform testing
+
+- Target different architectures
+- Platform-specific builds
+- Cross-platform testing
 
 ## Conclusion
 

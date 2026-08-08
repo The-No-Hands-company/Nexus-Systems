@@ -57,7 +57,7 @@ Based on integration tests, NexusLang compiled code shows:
 
 ## Compilation Pipeline
 
-```
+```text
 NLPL Source → Lexer → Parser → AST → LLVM IR → Object Code → Executable
                                       ↓
                               Optimization Passes
@@ -82,6 +82,7 @@ python test_integration.py -v       # Verbose mode
 ```
 
 This tests:
+
 - Interpreter vs compiled execution
 - Result correctness
 - Performance benchmarks
@@ -89,13 +90,15 @@ This tests:
 
 ## When to Use Interpreter vs Compiler
 
-### Use Interpreter When:
+### Use Interpreter When
+
 - Rapid prototyping and development
 - Interactive debugging (REPL)
 - Testing small code snippets
 - Dynamic code generation
 
-### Use Compiler When:
+### Use Compiler When
+
 - Production deployments
 - Performance-critical code
 - Recursive algorithms
@@ -158,16 +161,19 @@ The compiler supports all NexusLang language features:
 If compilation fails:
 
 1. Check syntax with interpreter first:
+
    ```bash
    python -m nexuslang.main myprogram.nlpl
    ```
 
 2. Use verbose mode to see where it fails:
+
    ```bash
    ./nlplc myprogram.nlpl --verbose
    ```
 
 3. Check LLVM IR for issues:
+
    ```bash
    ./nlplc myprogram.nlpl --emit-llvm
    cat myprogram.ll  # Inspect generated IR
@@ -178,11 +184,13 @@ If compilation fails:
 If the compiled executable crashes:
 
 1. Compile with debug info:
+
    ```bash
    ./nlplc myprogram.nlpl --debug
    ```
 
 2. Run with debugger:
+
    ```bash
    gdb ./myprogram
    run
@@ -194,17 +202,20 @@ If the compiled executable crashes:
 If compiled code is slower than expected:
 
 1. Enable optimizations:
+
    ```bash
    ./nlplc myprogram.nlpl -O3
    ```
 
 2. Profile with perf:
+
    ```bash
    perf record ./myprogram
    perf report
    ```
 
 3. Check LLVM IR for inefficiencies:
+
    ```bash
    ./nlplc myprogram.nlpl --emit-llvm -O3
    # Look for missed optimizations
@@ -219,16 +230,19 @@ If compiled code is slower than expected:
 ### Installing Dependencies
 
 **Ubuntu/Debian:**
+
 ```bash
 sudo apt install clang llvm python3
 ```
 
 **Fedora:**
+
 ```bash
 sudo dnf install clang llvm python3
 ```
 
 **macOS:**
+
 ```bash
 brew install llvm python3
 ```
@@ -251,6 +265,7 @@ print text result
 ```
 
 **Compile and run:**
+
 ```bash
 ./nlplc fib.nlpl -O2 --run
 # Runs ~300x faster than interpreter!
@@ -292,7 +307,7 @@ print text dist
 
 ## Project Structure with Compiler
 
-```
+```text
 myproject/
 ├── nexuslang.toml     # Project configuration
 ├── src/

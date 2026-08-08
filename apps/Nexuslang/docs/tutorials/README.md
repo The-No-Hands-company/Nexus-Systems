@@ -7,6 +7,7 @@ in order or jump to the level that suits you.
 ## Learning Paths
 
 ### Beginner Track (~4 hours total)
+
 For programmers new to NexusLang, or new to programming altogether.
 
 | # | Tutorial | Time |
@@ -18,6 +19,7 @@ For programmers new to NexusLang, or new to programming altogether.
 | 5 | [Modules and Imports](beginner/05-modules-and-imports.md) | 30 min |
 
 ### Intermediate Track (~5 hours total)
+
 For programmers comfortable with NexusLang basics who want deeper capability.
 
 | # | Tutorial | Time |
@@ -29,6 +31,7 @@ For programmers comfortable with NexusLang basics who want deeper capability.
 | 5 | [Building Projects with nlpl build](intermediate/05-building-projects.md) | 30 min |
 
 ### Advanced Track (~5.5 hours total)
+
 For experienced NexusLang programmers exploring systems-level and performance-critical work.
 
 | # | Tutorial | Time |

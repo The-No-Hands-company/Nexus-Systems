@@ -6,7 +6,7 @@
 
 ## Decision Flowchart
 
-```
+```text
 
  What are you building? 
 
@@ -37,13 +37,15 @@ Systems OOP
 
 ## Level Selector
 
-### Level 1: Assembly 
-**When:** Writing bootloader, interrupt handlers, hardware init 
-**Keywords:** `inline assembly`, register names, hardware addresses 
-**Syntax:** Assembly instructions in readable blocks 
+### Level 1: Assembly
+
+**When:** Writing bootloader, interrupt handlers, hardware init
+**Keywords:** `inline assembly`, register names, hardware addresses
+**Syntax:** Assembly instructions in readable blocks
 **Status:** Q3 2026
 
 **Example:**
+
 ```nexuslang
 inline assembly
  mov rax, 0x3F8
@@ -53,13 +55,15 @@ end
 
 ---
 
-### Level 2: Systems 
-**When:** Drivers, embedded, high-perf servers, system utils 
-**Keywords:** `allocate`, `free`, `sizeof`, `Pointer`, FFI 
-**Syntax:** Explicit memory + FFI 
+### Level 2: Systems
+
+**When:** Drivers, embedded, high-perf servers, system utils
+**Keywords:** `allocate`, `free`, `sizeof`, `Pointer`, FFI
+**Syntax:** Explicit memory + FFI
 **Status:** Working
 
 **Example:**
+
 ```nexuslang
 set buffer to allocate with 4096
 extern function pthread_create from library "pthread"
@@ -67,13 +71,15 @@ extern function pthread_create from library "pthread"
 
 ---
 
-### Level 3: Application 
-**When:** Desktop apps, games, CLI tools, libraries 
-**Keywords:** `class`, `function`, `Generic<T>`, `match` 
-**Syntax:** OOP + generics + patterns 
+### Level 3: Application
+
+**When:** Desktop apps, games, CLI tools, libraries
+**Keywords:** `class`, `function`, `Generic<T>`, `match`
+**Syntax:** OOP + generics + patterns
 **Status:** 100% Complete
 
 **Example:**
+
 ```nexuslang
 class BinaryTree<T> where T is Comparable
  function insert with value as T
@@ -81,13 +87,15 @@ class BinaryTree<T> where T is Comparable
 
 ---
 
-### Level 4: Goroutines 
-**When:** Web servers, APIs, microservices, concurrent I/O 
-**Keywords:** `spawn`, `channel`, `send`, `receive` 
-**Syntax:** Lightweight concurrency 
+### Level 4: Goroutines
+
+**When:** Web servers, APIs, microservices, concurrent I/O
+**Keywords:** `spawn`, `channel`, `send`, `receive`
+**Syntax:** Lightweight concurrency
 **Status:** Q1-Q2 2026
 
 **Example:**
+
 ```nexuslang
 spawn
  set data to fetch_data with url
@@ -97,13 +105,15 @@ end
 
 ---
 
-### Level 5: Natural 
-**When:** Scripts, prototypes, teaching, non-programmers 
-**Keywords:** Natural English phrases 
-**Syntax:** Almost pure English 
+### Level 5: Natural
+
+**When:** Scripts, prototypes, teaching, non-programmers
+**Keywords:** Natural English phrases
+**Syntax:** Almost pure English
 **Status:** 2027+
 
 **Example:**
+
 ```nexuslang
 ask the user for their name
 process all files in parallel
@@ -114,18 +124,21 @@ process all files in parallel
 ## Syntax Cheat Sheet
 
 ### Variables
+
 ```nexuslang
 L2-3: set x to 42
 L4-5: set x to 42 (same)
 ```
 
 ### Functions
+
 ```nexuslang
 L2-3: function calculate with x as Integer returns Float
 L4-5: function calculate with x as Integer returns Float
 ```
 
 ### Concurrency
+
 ```nexuslang
 L1: pthread_create (manual)
 L2: create thread with lambda: work
@@ -135,6 +148,7 @@ L5: process files in parallel
 ```
 
 ### Memory
+
 ```nexuslang
 L1: inline assembly (mov, etc)
 L2: set ptr to allocate with 1024
@@ -144,6 +158,7 @@ L5: automatic
 ```
 
 ### Loops
+
 ```nexuslang
 All levels:
 for each item in collection
@@ -182,23 +197,26 @@ end
 | L2 | ~80 | 15 min | 2 hours |
 | L1 | ~150+ | 30 min | 4+ hours |
 
-**Performance:** All compile to same native code! 
+**Performance:** All compile to same native code!
 
 ---
 
 ## Migration Path
 
 ### Python Developer NexusLang
+
 1. Start L4 (goroutines like asyncio)
 2. Learn L3 (add types, OOP)
 3. Use L2 for performance hotspots
 
 ### C++ Developer NexusLang
+
 1. Start L2 (familiar pointers/memory)
 2. Learn L3 (modern generics)
 3. Adopt L4 for concurrency
 
 ### Go Developer NexusLang
+
 1. Start L4 (identical goroutines!)
 2. Drop to L2 for systems work
 3. Use L1 for kernel development
@@ -208,6 +226,7 @@ end
 ## Common Patterns
 
 ### Pattern: Performance-Critical Loop
+
 ```nexuslang
 # Use L2 for inner loop
 function process_images
@@ -221,6 +240,7 @@ end
 ```
 
 ### Pattern: Concurrent Server
+
 ```nexuslang
 # Use L4 for concurrency
 function start_server
@@ -234,6 +254,7 @@ end
 ```
 
 ### Pattern: Mixed-Level Game
+
 ```nexuslang
 # L1: GPU commands
 function write_gpu with data as Pointer
@@ -272,16 +293,18 @@ All levels use same tools:
 
 ## Performance Reality Check
 
-**Myth:** "Higher levels are slower" 
+**Myth:** "Higher levels are slower"
 **Reality:** All levels compile to same LLVM IR same native code
 
 **Actual overhead:**
+
 - L1 L2: ~0% (both compile to raw syscalls)
 - L2 L3: ~0% (zero-cost abstractions)
 - L3 L4: ~1% (goroutine scheduler)
 - L4 L5: ~0% (syntax sugar only)
 
 **Benchmark:** Fibonacci(40)
+
 - L1: 1.00x baseline
 - L2: 1.00x (identical)
 - L3: 1.00x (identical)
@@ -303,12 +326,14 @@ All levels use same tools:
 ## Quick Start Guide
 
 ### New Project
+
 ```bash
 nlplbuild init my_project
 cd my_project
 ```
 
 ### Choose Starting Level
+
 ```nexuslang
 # Desktop app? Start L3
 class Application
@@ -323,6 +348,7 @@ extern function ioctl from library "c"
 ```
 
 ### Optimize Later
+
 ```nexuslang
 # Identify bottleneck with profiler
 # Then drop to lower level just for that function
@@ -339,4 +365,4 @@ extern function ioctl from library "c"
 
 ---
 
-**NLPL: Use the right tool for each job - in one language.** 
+**NLPL: Use the right tool for each job - in one language.**

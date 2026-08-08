@@ -9,6 +9,7 @@
 ## Overview
 
 This guide describes how to:
+
 1. Install and configure the NexusLang LSP extension in VS Code
 2. Test all 13 implemented LSP features
 3. Validate performance and user experience
@@ -19,12 +20,14 @@ This guide describes how to:
 ## Prerequisites
 
 **Required:**
+
 - VS Code 1.75.0 or later
 - Node.js 16+ and npm (for extension build)
 - Python 3.10+ (for LSP server)
 - NexusLang workspace (examples/ or test_programs/)
 
 **Optional:**
+
 - VS Code Extension Test Runner
 - Chrome DevTools (for extension debugging)
 
@@ -35,21 +38,25 @@ This guide describes how to:
 ### Method 1: Local Extension Development (Recommended)
 
 1. **Navigate to extension directory:**
+
    ```bash
    cd vscode-extension/
    ```
 
 2. **Install dependencies (if not already done):**
+
    ```bash
    npm install
    ```
 
 3. **Compile TypeScript:**
+
    ```bash
    npm run compile
    ```
 
 4. **Open extension in VS Code:**
+
    ```bash
    code vscode-extension/
    ```
@@ -61,18 +68,21 @@ This guide describes how to:
 ### Method 2: Install Extension Globally
 
 1. **Package extension:**
+
    ```bash
    cd vscode-extension/
    npm run package
    ```
 
 2. **Install .vsix file:**
+
    ```bash
    code --install-extension nlpl-language-support-0.1.0.vsix
    ```
 
 3. **Reload VS Code:**
-   ```
+
+   ```text
    Ctrl+Shift+P → "Developer: Reload Window"
    ```
 
@@ -102,7 +112,8 @@ Open VS Code settings (Ctrl+,) and search for "NexusLang":
 1. **Open Output panel:** View → Output (Ctrl+Shift+U)
 2. **Select channel:** "NLPL Language Server" from dropdown
 3. **Check for startup message:**
-   ```
+
+   ```text
    Starting NexusLang Language Server...
    Workspace root: /path/to/NLPL
    Indexing workspace...
@@ -118,6 +129,7 @@ Open VS Code settings (Ctrl+,) and search for "NexusLang":
 ### Test Workspace Setup
 
 **Use these test files:**
+
 - `examples/01_basic_concepts.nlpl` - Variables, functions
 - `examples/08_classes_and_methods.nlpl` - Classes, methods
 - `examples/12_module_system.nlpl` - Imports
@@ -327,7 +339,7 @@ Open VS Code settings (Ctrl+,) and search for "NexusLang":
    - **Expected:** Shows all methods of `Person` class
 
 3. **Import suggestions:**
-   - Type `import ` + **Ctrl+Space**
+   - Type `import` + **Ctrl+Space**
    - **Expected:** Shows available modules
 
 **Performance:** Suggestions <100ms
@@ -457,21 +469,25 @@ Open VS Code settings (Ctrl+,) and search for "NexusLang":
 ### How to Measure
 
 **Method 1: VS Code Performance Profiler**
+
 1. Open Command Palette (Ctrl+Shift+P)
 2. Run "Developer: Show Running Extensions"
 3. Look for "NLPL Language Support"
 4. Check activation time and memory usage
 
 **Method 2: LSP Trace Logs**
+
 1. Set `"nexuslang.trace.server": "verbose"`
 2. Open Output panel → "NLPL LSP Trace"
 3. Observe request/response times:
-   ```
+
+   ```json
    [Trace - 14:23:45] Sending request 'textDocument/definition'
    [Trace - 14:23:45] Received response 'textDocument/definition' - 45ms
    ```
 
 **Method 3: Chrome DevTools**
+
 1. Help → Toggle Developer Tools
 2. Profile tab → Record CPU Profile
 3. Perform LSP action
@@ -486,15 +502,19 @@ Open VS Code settings (Ctrl+,) and search for "NexusLang":
 **Symptoms:** No autocomplete, no go-to-definition, "NLPL Language Server" output empty
 
 **Debug steps:**
+
 1. Check Python path:
+
    ```bash
    python3 --version
    ```
 
 2. Test LSP server manually:
+
    ```bash
    python3 -m nexuslang.lsp --stdio
    ```
+
    Type `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}` + Enter
    Expected: JSON response with server capabilities
 
@@ -511,19 +531,25 @@ Open VS Code settings (Ctrl+,) and search for "NexusLang":
 **Symptoms:** Features take >1s to respond
 
 **Debug steps:**
+
 1. Check workspace size:
+
    ```bash
    find . -name "*.nxl" | wc -l
    ```
+
    If >100 files, indexing may be slow
 
 2. Enable trace logging:
+
    ```json
    "nexuslang.trace.server": "verbose"
    ```
+
    Check for repeated re-indexing
 
 3. Profile LSP server:
+
    ```bash
    python3 dev_tools/profile_lsp.py .
    ```
@@ -533,10 +559,12 @@ Open VS Code settings (Ctrl+,) and search for "NexusLang":
 **Symptoms:** Specific feature (e.g., go-to-definition) doesn't work
 
 **Debug steps:**
+
 1. Check LSP capabilities response:
    - Look in "NLPL LSP Trace" output
    - Find `initialize` response
    - Verify capability is advertised:
+
      ```json
      {
        "capabilities": {
@@ -587,9 +615,11 @@ Open VS Code settings (Ctrl+,) and search for "NexusLang":
 **Performance:** All features <200ms (target met)
 
 **Issues:**
+
 - Code actions: Only extract method available, need more quick fixes
 
 **Recommendations:**
+
 - Add more code action providers
 - Consider caching for large workspaces
 
@@ -610,6 +640,7 @@ Open VS Code settings (Ctrl+,) and search for "NexusLang":
 ### Adding New LSP Features
 
 1. **Implement in server.py:**
+
    ```python
    def _handle_new_feature(self, msg_id: int, params: Dict) -> Dict:
        # Implementation
@@ -617,6 +648,7 @@ Open VS Code settings (Ctrl+,) and search for "NexusLang":
    ```
 
 2. **Advertise capability:**
+
    ```python
    "capabilities": {
        "newFeatureProvider": True
@@ -629,16 +661,18 @@ Open VS Code settings (Ctrl+,) and search for "NexusLang":
 
 1. **Modify `src/extension.ts`** (if needed)
 2. **Recompile:**
+
    ```bash
    npm run compile
    ```
+
 3. **Reload Extension Development Host:** Ctrl+R in extension window
 
 ---
 
 ## Resources
 
-- **VS Code LSP Guide:** https://code.visualstudio.com/api/language-extensions/language-server-extension-guide
-- **LSP Specification:** https://microsoft.github.io/language-server-protocol/
+- **VS Code LSP Guide:** <https://code.visualstudio.com/api/language-extensions/language-server-extension-guide>
+- **LSP Specification:** <https://microsoft.github.io/language-server-protocol/>
 - **NexusLang LSP Features:** `docs/tooling/lsp-features.md`
 - **LSP Guide:** `docs/tooling/lsp.md`

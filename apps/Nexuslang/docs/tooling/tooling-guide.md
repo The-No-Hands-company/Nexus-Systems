@@ -28,12 +28,14 @@ The static analyzer performs multi-pass analysis to detect potential issues befo
 ### What It Detects
 
 **Errors** (Critical issues that will likely cause runtime failures):
+
 - Undefined variables
 - Calls to undefined functions
 - Return statements outside functions
 - Parse errors
 
 **Warnings** (Suspicious code that might indicate bugs):
+
 - Unused variables
 - Variable shadowing
 - Constant conditions in if/while statements
@@ -42,12 +44,13 @@ The static analyzer performs multi-pass analysis to detect potential issues befo
 - Comparisons between literals
 
 **Info** (Style and optimization suggestions):
+
 - Empty classes
 - Variables initialized to null
 
 ### Example Output
 
-```
+```text
 Found 25 issues:
   Errors: 8
   Warnings: 17
@@ -107,6 +110,7 @@ The formatter enforces consistent code style while preserving program semantics.
 ### Example
 
 **Before:**
+
 ```nexuslang
 set x to    5
 set   y   to   10
@@ -124,6 +128,7 @@ set   list   to  [  1 ,  2,3  ,   4]
 ```
 
 **After:**
+
 ```nexuslang
 set x to 5
 set y to 10
@@ -209,23 +214,26 @@ profiler.print_report()
 ### Features
 
 **Function Profiling**:
+
 - Call count
 - Total time and self time (excluding child calls)
 - Min/max/average execution time
 - Caller/callee relationships
 
 **Line Profiling**:
+
 - Execution count per line
 - Identify hot lines
 
 **Memory Tracking**:
+
 - Total allocations and deallocations
 - Current memory usage
 - Peak memory usage
 
 ### Example Output
 
-```
+```text
 === Profiling Report ===
 Total time: 5.234s
 Functions profiled: 12
@@ -251,16 +259,19 @@ Memory:
 ### Export Formats
 
 **Text Report**:
+
 ```python
 profiler.print_report()  # Print to stdout
 ```
 
 **JSON Export**:
+
 ```python
 profiler.export_json("profile_results.json")
 ```
 
 JSON format:
+
 ```json
 {
   "total_time": 5.234,
@@ -288,11 +299,13 @@ JSON format:
 ```
 
 **Flamegraph Export**:
+
 ```python
 profiler.export_flamegraph("profile.folded")
 ```
 
 Then visualize with flamegraph tools:
+
 ```bash
 # Install flamegraph (https://github.com/brendangregg/FlameGraph)
 git clone https://github.com/brendangregg/FlameGraph
@@ -448,34 +461,41 @@ Make executable: `chmod +x .git/hooks/pre-commit`
 ### Analyzer Issues
 
 **"Parse error" on valid code**:
+
 - Check for syntax extensions not yet supported
 - Report bug with minimal reproduction case
 
 **Too many false positives**:
+
 - Some stdlib functions may not be recognized as builtins
 - Update `is_builtin()` in analyzer.py
 
 **Missing line numbers** (shows 0 or None):
+
 - Known limitation: some AST nodes lack line_number attributes
 - Doesn't affect correctness of analysis
 
 ### Formatter Issues
 
 **Formatter changes behavior**:
+
 - File a bug report immediately - formatter should preserve semantics
 - Include before/after code
 
 **Line too long after formatting**:
+
 - Manually break line or adjust max_line_length config
 - Consider refactoring complex expressions
 
 ### Profiler Issues
 
 **High memory overhead**:
+
 - Line profiling can be expensive for hot loops
 - Disable line profiling, use function profiling only
 
 **Inaccurate timing**:
+
 - Python's profiling overhead affects small functions
 - Focus on relative differences, not absolute times
 - For micro-benchmarks, use compiled mode instead

@@ -1,14 +1,17 @@
 # NexusLang Nested Struct Support
 
 ## Overview
+
 NLPL now supports **nested struct member access and assignment**, allowing you to work with complex hierarchical data structures naturally.
 
 ## Feature Status
+
  **IMPLEMENTED** (December 2024)
 
 ## Syntax
 
 ### Nested Member Access (Read)
+
 ```nexuslang
 struct Point
  x as Integer
@@ -27,6 +30,7 @@ print number rect.top_left.x # Prints: 10
 ```
 
 ### Nested Member Assignment (Write)
+
 ```nexuslang
 # Single-level assignment
 set point to new Point
@@ -45,6 +49,7 @@ set rect.bottom_right.y to 600
 ### Compiler Architecture
 
 #### 1. Member Access Pointer Generation
+
 The compiler uses `_generate_member_access_pointer()` to navigate nested struct hierarchies:
 
 ```python
@@ -55,11 +60,13 @@ The compiler uses `_generate_member_access_pointer()` to navigate nested struct 
 ```
 
 **Key Method**: `_generate_member_access_pointer(expr, indent) -> str`
+
 - Recursively handles nested MemberAccess nodes
 - Returns pointer to the field (not the loaded value)
 - Supports both struct and class types
 
 #### 2. Type Inference
+
 `_infer_member_access_type(expr) -> str` determines the LLVM type at each level:
 
 ```python
@@ -68,21 +75,26 @@ The compiler uses `_generate_member_access_pointer()` to navigate nested struct 
 ```
 
 #### 3. Enhanced Member Access
+
 `_generate_member_access()` now detects nested access:
 
 **Before Enhancement** (single-level only):
+
 - `rect.x` Worked
 - `rect.top_left.x` Failed (returned 0)
 
 **After Enhancement** (multi-level):
+
 - `rect.x` Works
 - `rect.top_left.x` Works
 - `rect.top_left.inner.value` Works (any depth)
 
 #### 4. Enhanced Member Assignment
+
 `_generate_member_assignment()` handles nested writes:
 
 **Nested Assignment Flow**:
+
 1. Detect that target.object_expr is a MemberAccess (not just Identifier)
 2. Call `_generate_member_access_pointer()` to get parent struct pointer
 3. Infer the type of the parent field
@@ -117,6 +129,7 @@ For reading `rect.top_left.x`:
 ```
 
 ## Supported Nesting Depth
+
 **Unlimited** - The implementation is fully recursive and can handle arbitrarily deep nesting:
 
 ```nexuslang
@@ -142,6 +155,7 @@ print number d.c.b.a.value # Prints: 42
 ### Test File: `test_programs/compiler/test_struct_advanced.nlpl`
 
 **Test Coverage**:
+
 1. **Nested Structs** - Rectangle with Point fields
 2. **Struct Pointers** - Address-of and dereferencing
 3. **Mixed Types** - Integer + Float in same struct
@@ -151,13 +165,15 @@ print number d.c.b.a.value # Prints: 42
 7. **Nested Reading** - `print number rect.top_left.y`
 
 **Debug Test**: `test_programs/compiler/test_nested_struct_debug.nlpl`
+
 - Minimal test case for isolating nested struct behavior
 - Validates that `rect.top_left.x = 10` stores and retrieves correctly
 
 ### Test Results
-All tests **PASSING** 
 
-```
+All tests **PASSING**
+
+```text
 Test 1: Nested Structs
 Top-left: 10, 20
 Bottom-right: 100, 200
@@ -172,7 +188,9 @@ Test 3: Mixed Types
 ## Current Limitations
 
 ### 1. Function Parameters
+
  **Not Yet Supported**: Passing structs as function parameters
+
 ```nexuslang
 function print_point with p as Point returns Integer
  # Currently causes parser error
@@ -180,8 +198,10 @@ function print_point with p as Point returns Integer
 
 **Workaround**: Pass individual fields or use global variables
 
-### 2. Function Return Types 
+### 2. Function Return Types
+
  **Not Yet Supported**: Returning struct instances from functions
+
 ```nexuslang
 function create_origin returns Point
  # Currently limited to primitive return types
@@ -190,7 +210,9 @@ function create_origin returns Point
 **Workaround**: Use out parameters or global variables
 
 ### 3. Struct Arrays
+
  **Partial Support**: Can create struct instances but not array indexing combined with member access
+
 ```nexuslang
 set points to list new Point, new Point # Syntax error
 set arr_elem to points[0] # Works
@@ -199,12 +221,15 @@ set points[0].x to 10 # Not yet supported (requires chained indexing)
 ```
 
 ### 4. Struct Initialization
+
  **Not Yet Supported**: Constructor arguments or initializer lists
+
 ```nexuslang
 set p to new Point(10, 20) # Not supported
 ```
 
 **Current Approach**: Zero-initialization, then member assignment
+
 ```nexuslang
 set p to new Point
 set p.x to 10
@@ -214,18 +239,21 @@ set p.y to 20
 ## Implementation Files Modified
 
 1. **`src/nexuslang/compiler/backends/llvm_ir_generator.py`**:
- - Added `_generate_member_access_pointer()` (line ~3838)
- - Added `_infer_member_access_type()` (line ~3910)
- - Enhanced `_generate_member_access()` (line ~3692)
- - Enhanced `_generate_member_assignment()` (line ~2444)
+
+- Added `_generate_member_access_pointer()` (line ~3838)
+- Added `_infer_member_access_type()` (line ~3910)
+- Enhanced `_generate_member_access()` (line ~3692)
+- Enhanced `_generate_member_assignment()` (line ~2444)
 
 2. **Test Files**:
- - `test_programs/compiler/test_struct_advanced.nlpl` (6 tests)
- - `test_programs/compiler/test_nested_struct_debug.nlpl` (minimal case)
+
+- `test_programs/compiler/test_struct_advanced.nlpl` (6 tests)
+- `test_programs/compiler/test_nested_struct_debug.nlpl` (minimal case)
 
 ## Future Enhancements
 
 ### Planned Features
+
 1. **Struct Function Parameters** - Pass structs to functions
 2. **Struct Return Values** - Return struct instances
 3. **Struct Constructors** - `new Point(x, y)`
@@ -235,6 +263,7 @@ set p.y to 20
 7. **Struct Copying** - Deep copy operations
 
 ### Performance Optimizations
+
 - **Pass by Reference**: Implement efficient parameter passing
 - **Return Value Optimization**: Avoid unnecessary copies
 - **Structure Padding**: Align fields for optimal memory access
@@ -242,6 +271,7 @@ set p.y to 20
 ## Examples
 
 ### Simple Nested Struct
+
 ```nexuslang
 struct Inner
  value as Integer
@@ -257,6 +287,7 @@ print number obj.inner.value # 100
 ```
 
 ### Complex Hierarchy
+
 ```nexuslang
 struct Position
  x as Integer
@@ -286,6 +317,7 @@ print number player.vel.dx # 5
 ```
 
 ### Struct Pointers
+
 ```nexuslang
 struct Node
  value as Integer
@@ -303,7 +335,9 @@ print number node2.value # 42
 ## Technical Notes
 
 ### Memory Layout
+
 Structs are allocated on the stack using LLVM's `alloca`:
+
 ```llvm
 %obj = alloca %StructName, align 8
 ```
@@ -311,13 +345,17 @@ Structs are allocated on the stack using LLVM's `alloca`:
 Fields are zero-initialized upon creation.
 
 ### Type Safety
+
 The compiler enforces type checking:
+
 - Field types must match assignment values
 - Automatic type conversion for compatible types (i64 double)
 - Pointer types are strictly checked
 
 ### Recursive Implementation
+
 The nested access implementation is fully recursive, allowing:
+
 - Unlimited nesting depth
 - Mixed struct and class types
 - Combination with pointers and other complex types
@@ -325,6 +363,7 @@ The nested access implementation is fully recursive, allowing:
 ## Comparison with Other Languages
 
 ### C
+
 ```c
 struct Point { int x, y; };
 struct Rect { struct Point tl, br; };
@@ -334,6 +373,7 @@ r.tl.x = 10; // Similar syntax
 ```
 
 ### C++
+
 ```cpp
 struct Point { int x, y; };
 struct Rect { Point tl, br; };
@@ -343,6 +383,7 @@ r.tl.x = 10; // Identical syntax
 ```
 
 ### NexusLang
+
 ```nexuslang
 struct Point
  x as Integer
@@ -360,5 +401,6 @@ set r.tl.x to 10 # Natural English-like syntax
 **Key Difference**: NexusLang uses natural language keywords (`set`, `to`, `as`) while maintaining the familiar dot notation for member access.
 
 ## Version History
+
 - **December 2024**: Initial implementation with full nested access support
 - Future: Planned enhancements for function parameters, return values, and constructors

@@ -1,0 +1,39 @@
+# markdownlint configuration
+#
+# The lint job could never run — its container image was unpullable — so no
+# markdown rule has ever been enforced here and a backlog of 1119 findings
+# accumulated across 93 files. `--fix` cleared the structural ones (blank lines
+# around headings, lists and fences, list indentation). What follows is a
+# deliberate decision about the rest, rule by rule, rather than a blanket
+# disable to force the gate green.
+
+default: true
+
+# Line length. 660 findings. An 80-column limit does not survive contact with
+# tables, URLs, or pasted compiler output, and reflowing prose across 93 files
+# would produce a diff nobody can review for a rule with no reader-facing
+# benefit. Off rather than widened: any fixed column is arbitrary here.
+MD013: false
+
+# Ordered-list numbering style. 77 findings, purely cosmetic — `1.` repeated and
+# `1. 2. 3.` render identically. `one_or_ordered` did not help: these lists are
+# interrupted by sub-bullets, so markdownlint sees several short lists and infers
+# the wrong style for each. Not worth restructuring 77 lists over numbering.
+MD029: false
+
+# Duplicate headings. 56 findings, nearly all legitimate: reference docs repeat
+# "Usage", "Example" and "Parameters" under different parents. Restrict the rule
+# to siblings, which still catches genuine duplicates within one section.
+MD024:
+  siblings_only: true
+
+# Emphasis used instead of a heading. 26 findings. Frequently intentional here
+# for inline callouts that should not enter the table of contents.
+MD036: false
+
+# MD040 (fenced code blocks should declare a language) is deliberately LEFT ON,
+# even though it is currently the largest remaining source of failures. It is the
+# one rule in this set with real effect: without a language, syntax highlighting
+# and `nxl` snippet extraction both degrade. Turning it off to reach green would
+# discard the only finding worth acting on. See docs/contributing/markdown-lint.md
+# for the burn-down.

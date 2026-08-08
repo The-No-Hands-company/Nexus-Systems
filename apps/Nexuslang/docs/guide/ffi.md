@@ -16,6 +16,7 @@ The Foreign Function Interface (FFI) allows NexusLang programs to call functions
 - **Interoperability:** Bridge between NexusLang and other languages
 
 NLPL's FFI features:
+
 - C function declarations with `extern` keyword
 - Automatic type conversion (NLPL ↔ C types)
 - Variadic function support (printf, etc.)
@@ -46,6 +47,7 @@ extern function free with ptr as Pointer
 ```
 
 **Syntax:**
+
 - `extern` keyword marks function as external
 - `function` followed by C function name
 - Parameter types must match C function signature
@@ -176,13 +178,14 @@ end
 
 ---
 
-## Variadic Functions NEW!
+## Variadic Functions NEW
 
 **Added February 2, 2026!** NexusLang now supports calling variadic C functions.
 
 ### What are Variadic Functions?
 
 Variadic functions accept a variable number of arguments:
+
 - `printf(format, ...)` - Formatted output
 - `fprintf(stream, format, ...)` - File output
 - `sprintf(buffer, format, ...)` - String formatting
@@ -239,6 +242,7 @@ Common printf/scanf format specifiers:
 | `%%` | - | Literal % character |
 
 **Width and precision:**
+
 ```nexuslang
 call printf with "%10d\n", 42        # Right-aligned, width 10
 call printf with "%-10d\n", 42       # Left-aligned, width 10
@@ -262,6 +266,7 @@ call printf with "%s\n", 42  # CRASH! Expected string, got integer
 ```
 
 **Best practices:**
+
 1. Always match format specifiers to argument types
 2. Count arguments carefully
 3. Test with small inputs first
@@ -445,6 +450,7 @@ set value to dereference ptr  # Safe
 ### Best Practices
 
 1. **Always check allocation results:**
+
 ```nexuslang
 set ptr to malloc with size
 if ptr equals 0
@@ -453,6 +459,7 @@ end
 ```
 
 2. **Use RAII pattern:**
+
 ```nexuslang
 function with_buffer with size as Integer, callback as Function
   set buffer to malloc with size
@@ -465,6 +472,7 @@ end
 ```
 
 3. **Prefer NexusLang types over raw C:**
+
 ```nexuslang
 # Instead of C strings (char*)
 set name to "Alice"  # NexusLang String (automatic memory management)
@@ -474,6 +482,7 @@ set numbers to [1, 2, 3, 4, 5]  # NexusLang List (automatic)
 ```
 
 4. **Wrap C functions in NexusLang:**
+
 ```nexuslang
 function safe_read_file with path as String returns String
   extern function fopen with path as String, mode as String returns Pointer
@@ -657,6 +666,7 @@ end
 ```
 
 **External tools:**
+
 - `valgrind` - Memory error detection
 - `gdb` - Debugger for native code
 - `strace` - System call tracing (Linux)
@@ -801,8 +811,8 @@ end
 - **Inline Assembly:** [inline_assembly.md](inline_assembly.md)
 - **Memory Management:** [memory.md](memory.md)
 - **Pointers:** [pointers.md](pointers.md)
-- **C Standard Library:** https://en.cppreference.com/w/c
-- **POSIX API:** https://pubs.opengroup.org/onlinepubs/9699919799/
+- **C Standard Library:** <https://en.cppreference.com/w/c>
+- **POSIX API:** <https://pubs.opengroup.org/onlinepubs/9699919799/>
 
 ---
 
@@ -818,12 +828,14 @@ NLPL's FFI provides:
 ✅ **Memory management** - malloc/free integration  
 
 **Use FFI when:**
+
 - You need to use existing C libraries
 - You're interfacing with OS APIs
 - You need maximum performance
 - You're doing system programming
 
 **Avoid FFI when:**
+
 - NexusLang stdlib provides the functionality
 - You don't need raw performance
 - You want memory safety guarantees

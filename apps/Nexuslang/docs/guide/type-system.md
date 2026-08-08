@@ -8,13 +8,13 @@ The NexusLang type system provides static type checking to catch type errors at 
 
 ### Variable Declarations
 
-```
+```text
 Set <variable_name> as <type> to <expression>.
 ```
 
 Example:
 
-```
+```nxl
 Set count as Integer to 10.
 Set name as String to "John".
 Set is_valid as Boolean to true.
@@ -22,7 +22,7 @@ Set is_valid as Boolean to true.
 
 ### Function Definitions
 
-```
+```text
 Define function <function_name>(<param1> as <type1>, <param2> as <type2>, ...) returns <return_type> as
     // Function body
 End function.
@@ -30,7 +30,7 @@ End function.
 
 Example:
 
-```
+```nxl
 Define function add(a as Integer, b as Integer) returns Integer as
     Return a + b.
 End function.
@@ -38,7 +38,7 @@ End function.
 
 ### Optional Parameters with Default Values
 
-```
+```nxl
 Define function greet(name as String, greeting as String = "Hello") returns String as
     Return greeting + ", " + name + "!".
 End function.
@@ -56,21 +56,21 @@ End function.
 
 ### Lists
 
-```
+```nxl
 Set numbers as List<Integer> to [1, 2, 3, 4, 5].
 Set names as List<String> to ["Alice", "Bob", "Charlie"].
 ```
 
 ### Dictionaries
 
-```
+```nxl
 Set person as Dictionary<String, String> to {"name": "John", "email": "john@example.com"}.
 Set counts as Dictionary<String, Integer> to {"apples": 5, "oranges": 10}.
 ```
 
 ### Custom Types (Classes)
 
-```
+```nxl
 Define class Person as
     Property name as String.
     Property age as Integer.
@@ -87,7 +87,7 @@ The type system supports type inference, allowing developers to omit explicit ty
 
 Example:
 
-```
+```nxl
 Set count to 10.  // Inferred as Integer
 Set name to "John".  // Inferred as String
 Set is_valid to true.  // Inferred as Boolean

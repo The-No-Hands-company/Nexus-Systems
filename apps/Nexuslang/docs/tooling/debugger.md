@@ -26,16 +26,19 @@ The NexusLang Debugger provides interactive source-level debugging for NexusLang
 ### Basic Usage
 
 **Start debugger with file:**
+
 ```bash
 python -m nexuslang.main program.nlpl --debugger
 ```
 
 **Set breakpoints from command line:**
+
 ```bash
 python -m nexuslang.main program.nlpl --debugger --break 10 --break 25
 ```
 
 **Or use standalone debugger:**
+
 ```bash
 python nxl_debug.py program.nlpl --break 10
 ```
@@ -44,7 +47,7 @@ python nxl_debug.py program.nlpl --break 10
 
 When execution pauses at a breakpoint, you enter the debug REPL:
 
-```
+```text
 ============================================================
 Paused at test.nlpl:10 (breakpoint)
 ============================================================
@@ -107,6 +110,7 @@ Current function: calculate_sum
 ### Example 1: Basic Debugging
 
 **Program** (`test_debug.nlpl`):
+
 ```nexuslang
 function factorial with n as Integer returns Integer
  if n is less than or equal to 1
@@ -122,6 +126,7 @@ print text "Result: " plus value
 ```
 
 **Debug session:**
+
 ```bash
 $ python -m nexuslang.main test_debug.nlpl --debugger --break 2
 
@@ -165,7 +170,7 @@ This breakpoint only triggers when variable `x` is greater than 100.
 
 ### Example 3: Variable Modification
 
-```
+```text
 (nlpl-dbg) vars
 Variables:
  x = 42
@@ -185,7 +190,7 @@ x = 999
 
 ### Example 4: Call Stack Analysis
 
-```
+```text
 (nlpl-dbg) stack
 Call Stack:
  #0: helper at program.nlpl:25
@@ -348,19 +353,22 @@ repl.interpreter.debugger = debugger
 The debugger hooks into the interpreter at key points:
 
 1. **`execute()`**: Called for each AST node execution
- - Checks breakpoints
- - Handles step modes
- - Tracks line numbers
+
+- Checks breakpoints
+- Handles step modes
+- Tracks line numbers
 
 2. **`execute_function_call()`**: Function entry/exit
- - Pushes call frames
- - Pops frames on return
- - Tracks call depth
+
+- Pushes call frames
+- Pops frames on return
+- Tracks call depth
 
 3. **`interpret()`**: Exception handling
- - Catches exceptions
- - Provides inspection
- - Auto-pause on errors
+
+- Catches exceptions
+- Provides inspection
+- Auto-pause on errors
 
 ### Hook Methods
 
@@ -377,6 +385,7 @@ debugger.trace_exception(exception) # Exception occurred
 ### 1. Set Strategic Breakpoints
 
 Set breakpoints at:
+
 - Function entry points
 - Loop iterations
 - Conditional branches
@@ -385,6 +394,7 @@ Set breakpoints at:
 ### 2. Use Conditional Breakpoints
 
 Instead of breaking every iteration:
+
 ```python
 # Bad: Break every loop iteration
 debugger.add_breakpoint("prog.nxl", 15)
@@ -406,6 +416,7 @@ Use `vars` to see all variables, `p <var>` to inspect specific ones.
 ### 5. Monitor Call Stack
 
 Use `stack` to understand:
+
 - How you got to current location
 - What functions are active
 - Context of execution
@@ -417,6 +428,7 @@ Use `stack` to understand:
 **Issue**: Breakpoint set but never triggers
 
 **Solutions**:
+
 1. Verify line number (1-indexed)
 2. Check file path matches
 3. Ensure breakpoint is enabled
@@ -427,6 +439,7 @@ Use `stack` to understand:
 **Issue**: Source code doesn't display at breakpoints
 
 **Solutions**:
+
 1. Verify file exists at specified path
 2. Check file permissions
 3. Use absolute paths for reliability
@@ -436,6 +449,7 @@ Use `stack` to understand:
 **Issue**: Variable not found during inspection
 
 **Solutions**:
+
 1. Check variable scope (may be in parent scope)
 2. Verify variable name spelling
 3. Use `vars` to see all available variables
@@ -445,6 +459,7 @@ Use `stack` to understand:
 **Issue**: Debugger terminates without completing
 
 **Solutions**:
+
 1. Check for unhandled exceptions
 2. Verify program logic doesn't call `exit()`
 3. Use `--debug` flag for detailed errors
@@ -527,6 +542,6 @@ The NexusLang Debugger is part of the NexusLang project.
 
 ---
 
-**Version**: 0.1.0 
-**Last Updated**: January 6, 2026 
+**Version**: 0.1.0
+**Last Updated**: January 6, 2026
 **Maintainer**: NexusLang Development Team

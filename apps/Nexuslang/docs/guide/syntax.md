@@ -1,6 +1,5 @@
 # NexusLang Syntax Reference
 
-
 ---
 
 ## Overview
@@ -8,6 +7,7 @@
 NLPL (NexusLang) uses English-like syntax that reads like prose while maintaining programming precision. This guide covers all major syntax features.
 
 **Design Principles:**
+
 - Natural language keywords (`set`, `to`, `with`, `called`, `function`)
 - Explicit statement boundaries (`end` keyword)
 - Type annotations optional but encouraged
@@ -63,6 +63,7 @@ set z to x plus y
 - Cannot be keywords (`set`, `function`, `class`, etc.)
 
 **Conventions:**
+
 - Variables: `snake_case` (e.g., `user_name`, `total_count`)
 - Constants: `UPPER_CASE` (e.g., `MAX_SIZE`, `PI`)
 - Classes: `PascalCase` (e.g., `UserAccount`, `FileSystem`)
