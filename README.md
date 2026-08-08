@@ -113,9 +113,9 @@ Generates a complete Nexus app with Phantom binding, Cloud heartbeat, API contra
 
 | Test | Result | Command |
 |------|--------|---------|
-| Contract validation | 71/71 pass | `./contract-test.sh` |
-| Smoke test | 64/72 pass | `./smoke-test.sh` |
-| Capstone demo | 5/5 DIDs | `./capstone.sh` |
+| Contract validation | 71/71 pass | `./scripts/test/contract-test.sh` |
+| Smoke test | 64/72 pass | `./scripts/test/smoke-test.sh` |
+| Capstone demo | 5/5 DIDs | `./scripts/demo/capstone.sh` |
 | Phantom SDK | 10/10 tests | `cd packages/phantom-sdk/wasm && cargo test` |
 | Discovery | 6/6 tests | `cd packages/nexus-discovery && bun test` |
 

@@ -16,10 +16,10 @@ cd Nexus-Systems
 docker compose up -d
 
 # 4. Verify it works
-./capstone.sh
+./scripts/demo/capstone.sh
 
 # 5. See what's running
-./run-all.sh --status
+./scripts/run-all.sh --status
 ```
 
 ## What You Get
@@ -47,16 +47,16 @@ docker compose up -d
 
 ```bash
 # Contract validation — 71/71 apps pass
-./contract-test.sh
+./scripts/test/contract-test.sh
 
 # One-command ecosystem proof
-./demo.sh
+./scripts/demo/demo.sh
 
 # Full capstone: Cloud + Phantom + Discovery + Pipeline
-./capstone.sh
+./scripts/demo/capstone.sh
 
 # Smoke test — health checks on all 72 apps
-./smoke-test.sh
+./scripts/test/smoke-test.sh
 ```
 
 ## Architecture
@@ -111,9 +111,9 @@ Generates a complete Nexus app with Phantom binding, Cloud heartbeat, API contra
 
 | Test | Result | Command |
 |------|--------|---------|
-| Contract validation | 71/71 pass | `./contract-test.sh` |
-| Smoke test | 64/72 pass | `./smoke-test.sh` |
-| Capstone demo | 5/5 DIDs | `./capstone.sh` |
+| Contract validation | 71/71 pass | `./scripts/test/contract-test.sh` |
+| Smoke test | 64/72 pass | `./scripts/test/smoke-test.sh` |
+| Capstone demo | 5/5 DIDs | `./scripts/demo/capstone.sh` |
 | Phantom SDK | 10/10 tests | `cd packages/phantom-sdk/wasm && cargo test` |
 | Discovery | 6/6 tests | `cd packages/nexus-discovery && bun test` |
 
