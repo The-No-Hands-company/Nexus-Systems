@@ -438,11 +438,15 @@ class GDBScriptGenerator:
         cmds = [f'echo [FFI] Entering {function_name}\\n']
         if log_args:
             cmds.append('info args')
+        # Joined outside the f-string: a backslash inside an f-string expression
+        # is only legal from Python 3.12 (PEP 701), and this project's CI matrix
+        # still builds on 3.10 and 3.11, where it is a SyntaxError at import.
+        joined_cmds = '\n  '.join(cmds)
         if condition:
             entry_bp = (
                 f"break {function_name}\n"
                 f"commands\n"
-                f"  {'\\n  '.join(cmds)}\n"
+                f"  {joined_cmds}\n"
                 f"  continue\n"
                 f"end\n"
                 f"condition $bpnum {condition}"
@@ -451,7 +455,7 @@ class GDBScriptGenerator:
             entry_bp = (
                 f"break {function_name}\n"
                 f"commands\n"
-                f"  {'\\n  '.join(cmds)}\n"
+                f"  {joined_cmds}\n"
                 f"  continue\n"
                 f"end"
             )

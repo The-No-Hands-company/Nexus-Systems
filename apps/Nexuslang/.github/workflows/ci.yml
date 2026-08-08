@@ -183,7 +183,10 @@ jobs:
 
   test-inventory:
     name: Test inventory gate (suite may not shrink)
-    needs: [lint]
+    # Deliberately depends on nothing. This started as `needs: [lint]`, and the
+    # first real run showed why that was wrong: lint died pulling its actionlint
+    # container, so the gate reported "skipped" and the suite could have shrunk
+    # freely. A guard that an unrelated job's flake can switch off is not a guard.
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
