@@ -30,7 +30,7 @@ class TypeRegistry:
         if child_name not in self.inheritance_graph:
             self.inheritance_graph[child_name] = []
         
-        if parent_name not in self.types:
+        if parent_name not in self.types and parent_name not in self.interfaces:
             raise ValueError(f"Parent class not defined: {parent_name}")
             
         if parent_name not in self.inheritance_graph[child_name]:
@@ -172,11 +172,16 @@ class TypeRegistry:
                                 properties: Dict[str, Type] = None,
                                 methods: Dict[str, FunctionType] = None) -> GenericType:
         """Create and register a generic class type."""
-        # Create generic parameters
-        generic_params = [GenericParameter(param) for param in type_parameters]
+        # Create generic parameters using the canonical string-based form
+        # expected by GenericType.
+        generic_params = list(type_parameters)
         
+        # Wrap the class shape as the generic base type so the current
+        # GenericType constructor can preserve properties and methods.
+        base_type = ClassType(name, properties or {}, methods or {})
+
         # Create generic type
-        generic_type = GenericType(name, generic_params)
+        generic_type = GenericType(name, generic_params, base_type)
         self.register_type(generic_type)
         
         return generic_type

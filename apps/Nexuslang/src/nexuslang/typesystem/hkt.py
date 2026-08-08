@@ -301,7 +301,7 @@ class TypeApplication:
         )
 
     def __hash__(self) -> int:
-        return hash(("app", id(self.constructor), id(self.argument)))
+        return hash(("app", self.constructor, self.argument))
 
     def __repr__(self) -> str:
         return f"{self.constructor}<{self.argument}>"

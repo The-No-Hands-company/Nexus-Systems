@@ -1,11 +1,12 @@
 """
 Python 3.14 Compatibility Layer
 
-Workaround for Python 3.14 import system regression that causes hangs
-when importing modules with large enums.
+Provides alternative module-loading using ``importlib.util.spec_from_file_location``
+to bypass import-system hangs that occur with large enum modules under Python 3.14.
 
-This module provides alternative import mechanisms that bypass the broken
-import system in Python 3.14.
+This is a proper compatibility shim using the stable ``importlib.util`` API, not
+a temporary workaround.  It should remain in place until the upstream regression
+is resolved in a future Python release.
 """
 
 import sys

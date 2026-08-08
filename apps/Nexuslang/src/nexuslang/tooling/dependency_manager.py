@@ -291,8 +291,8 @@ def list_dependencies(project_root: Path) -> None:
         try:
             lf = LockFile.load(lock_path)
             locked = lf.packages
-        except Exception:
-            pass
+        except (OSError, ValueError, KeyError):
+            pass  # Lock file missing or malformed; resolve from scratch
 
     sections = [
         ("dependencies", "Runtime"),

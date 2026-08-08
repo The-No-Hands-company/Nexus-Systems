@@ -395,6 +395,14 @@ class NexusLangLanguageServer:
         
         self.documents[uri] = text
         logger.info(f"Opened document: {uri}")
+
+        # Index opened file from in-memory content so navigation reflects unsaved edits.
+        if self.workspace_index and uri.endswith('.nxl'):
+            try:
+                self.workspace_index.index_document_content(uri, text)
+                logger.debug(f"Indexed opened file from buffer: {uri}")
+            except _RECOVERABLE_LSP_EXCEPTIONS as e:
+                logger.error(f"Error indexing opened file {uri}: {e}", exc_info=True)
         
         # Send diagnostics (syntax + type errors merged with dead-code warnings)
         diagnostics = self.diagnostics_provider.get_diagnostics(uri, text)
@@ -422,10 +430,10 @@ class NexusLangLanguageServer:
             # Re-index this file for workspace index
             if self.workspace_index and uri.endswith('.nxl'):
                 try:
-                    self.workspace_index.index_file(uri)
-                    logger.debug(f"Re-indexed file: {uri}")
+                    self.workspace_index.index_document_content(uri, changes[0]['text'])
+                    logger.debug(f"Re-indexed changed file from buffer: {uri}")
                 except _RECOVERABLE_LSP_EXCEPTIONS as e:
-                    logger.error(f"Error re-indexing file {uri}: {e}")
+                    logger.error(f"Error re-indexing file {uri}: {e}", exc_info=True)
             
             # Send diagnostics (syntax + dead-code warnings)
             diagnostics = self.diagnostics_provider.get_diagnostics(uri, changes[0]['text'])

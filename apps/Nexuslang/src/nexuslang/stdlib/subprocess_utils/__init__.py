@@ -8,6 +8,14 @@ from typing import Optional, List, Dict
 from ...runtime.runtime import Runtime
 
 
+_RECOVERABLE_SUBPROCESS_INVOCATION_EXCEPTIONS = (
+    OSError,
+    ValueError,
+    TypeError,
+    subprocess.SubprocessError,
+)
+
+
 class ProcessResult:
     """Result of subprocess execution."""
     def __init__(self, returncode: int, stdout: str, stderr: str):
@@ -35,7 +43,7 @@ def run_command(command: str, shell: bool = True, timeout: Optional[int] = None,
         return ProcessResult(result.returncode, result.stdout, result.stderr)
     except subprocess.TimeoutExpired:
         return ProcessResult(-1, "", f"Command timed out after {timeout}s")
-    except Exception as e:
+    except _RECOVERABLE_SUBPROCESS_INVOCATION_EXCEPTIONS as e:
         return ProcessResult(-1, "", str(e))
 
 
@@ -57,7 +65,7 @@ def run_command_list(args: List[str], timeout: Optional[int] = None,
         return ProcessResult(result.returncode, result.stdout, result.stderr)
     except subprocess.TimeoutExpired:
         return ProcessResult(-1, "", f"Command timed out after {timeout}s")
-    except Exception as e:
+    except _RECOVERABLE_SUBPROCESS_INVOCATION_EXCEPTIONS as e:
         return ProcessResult(-1, "", str(e))
 
 

@@ -21,9 +21,12 @@ Tier 2 – Native machine-code JIT (NativeFunctionJIT).
     lists) or when LLVM tools are absent.
 """
 
+import logging
 import time
 from typing import Dict, Optional, Any, Callable, Type
 from dataclasses import dataclass, field
+
+_logger = logging.getLogger(__name__)
 
 from .hot_function_detector import HotFunctionDetector
 from .code_gen import NLPLCodeGenerator, JITGuardFailed, CodeGenError
@@ -156,7 +159,7 @@ class JITCompiler:
         if not self.enabled:
             return False
         
-        print(f"[JIT] Compiling hot function: {function_name}")
+        _logger.debug("Compiling hot function: %s", function_name)
         compile_start = time.time()
         
         try:
@@ -183,11 +186,11 @@ class JITCompiler:
             self.stats.functions_compiled += 1
             self.stats.total_compile_time += compile_time
             
-            print(f"[JIT] Compiled {function_name} in {compile_time*1000:.2f}ms")
+            _logger.debug("Compiled %s in %.2fms", function_name, compile_time * 1000)
             return True
-            
+
         except Exception as e:
-            print(f"[JIT] Compilation failed for {function_name}: {e}")
+            _logger.warning("Compilation failed for %s: %s", function_name, e, exc_info=True)
             self.stats.compilation_failures += 1
             return False
     
@@ -234,7 +237,11 @@ class JITCompiler:
                 if native is not None:
                     return native
             except Exception:
-                pass  # Fall through to Python-bytecode JIT
+                _logger.debug(
+                    "Native JIT raised unexpectedly for %s; falling through to bytecode tier",
+                    function_name,
+                    exc_info=True,
+                )
 
         # Tier-1 / Tier-2 fallback: Python-bytecode JIT via NLPLCodeGenerator.
         gen = NLPLCodeGenerator()
@@ -247,7 +254,12 @@ class JITCompiler:
                 type_hints=type_hints or {},
                 opt_level=codegen_level,
             )
-        except (CodeGenError, Exception):
+        except Exception:
+            _logger.debug(
+                "Bytecode JIT code-gen failed for %s; returning None (caller falls back to interpreter)",
+                function_name,
+                exc_info=True,
+            )
             return None
 
     def _compile_with_llvm(self, function_def) -> Callable:
@@ -271,13 +283,22 @@ class JITCompiler:
                 if native is not None:
                     return native
             except Exception:
-                pass  # Fall through to Python bytecode tier
+                _logger.debug(
+                    "Native JIT raised unexpectedly for %s; falling through to bytecode tier",
+                    func_name,
+                    exc_info=True,
+                )
 
         # Tier-1: Python bytecode JIT
         gen = NLPLCodeGenerator()
         try:
             return gen.compile_function(function_def, self.interpreter, opt_level=1)
-        except (CodeGenError, Exception):
+        except Exception:
+            _logger.debug(
+                "Bytecode JIT code-gen failed for %s; falling back to interpreter wrapper",
+                func_name,
+                exc_info=True,
+            )
             return self._create_optimized_interpreter_function(function_def)
     
     def _create_optimized_interpreter_function(self, function_def) -> Callable:

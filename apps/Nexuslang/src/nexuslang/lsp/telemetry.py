@@ -26,6 +26,7 @@ from __future__ import annotations
 import json
 import os
 import threading
+import logging
 from collections import Counter
 from datetime import date
 from pathlib import Path
@@ -34,8 +35,30 @@ from typing import Dict, List, Optional, Counter
 _TELEMETRY_DIR = Path.home() / ".nxl" / "telemetry"
 _COUNTS_FILE = _TELEMETRY_DIR / "diagnostic_counts.json"
 
+
+logger = logging.getLogger(__name__)
+
+
+_RECOVERABLE_TELEMETRY_EXCEPTIONS = (
+    OSError,
+    UnicodeError,
+    json.JSONDecodeError,
+    TypeError,
+    ValueError,
+)
+
 # Module-level lock so concurrent LSP threads don't corrupt the file.
 _lock = threading.Lock()
+
+
+def _empty_telemetry_data() -> dict:
+    """Return the canonical empty telemetry payload."""
+    return {
+        "counts": {},
+        "sessions": 0,
+        "first_seen": str(date.today()),
+        "last_updated": "",
+    }
 
 
 class DiagnosticTelemetry:
@@ -60,10 +83,9 @@ class DiagnosticTelemetry:
             return
         try:
             _persist_counts(Counter(codes))
-        except (IOError, OSError, json.JSONDecodeError) as e:
+        except _RECOVERABLE_TELEMETRY_EXCEPTIONS as e:
             # Telemetry persistence failed; log but don't propagate (don't block caller)
-            import logging
-            logging.warning(f"Failed to persist telemetry counts: {e}")
+            logger.warning(f"Failed to persist telemetry counts: {e}")
 
 
 # ---------------------------------------------------------------------------
@@ -73,17 +95,28 @@ class DiagnosticTelemetry:
 def _load_data() -> dict:
     """Load existing telemetry JSON (or return an empty skeleton)."""
     if not _COUNTS_FILE.exists():
-        return {"counts": {}, "sessions": 0, "first_seen": str(date.today()), "last_updated": ""}
+        return _empty_telemetry_data()
     try:
         return json.loads(_COUNTS_FILE.read_text(encoding="utf-8"))
-    except (json.JSONDecodeError, FileNotFoundError, IOError) as e:
+    except json.JSONDecodeError as e:
+        # Explicitly purge corrupt telemetry so future writes start from clean state.
+        logger.warning(
+            f"Telemetry file {_COUNTS_FILE} is corrupt: {e}. Removing corrupt file."
+        )
+        try:
+            _COUNTS_FILE.unlink()
+        except (OSError, PermissionError) as cleanup_error:
+            logger.warning(
+                f"Failed to remove corrupt telemetry file {_COUNTS_FILE}: {cleanup_error}."
+            )
+        return _empty_telemetry_data()
+    except _RECOVERABLE_TELEMETRY_EXCEPTIONS as e:
         # Telemetry file corrupted or inaccessible; log and return empty skeleton
-        import logging
-        logging.warning(
+        logger.warning(
             f"Failed to load telemetry data from {_COUNTS_FILE}: {e}. "
             f"Using empty telemetry skeleton; previous data may be lost."
         )
-        return {"counts": {}, "sessions": 0, "first_seen": str(date.today()), "last_updated": ""}
+        return _empty_telemetry_data()
 
 
 def _persist_counts(new_counts: Counter) -> None:

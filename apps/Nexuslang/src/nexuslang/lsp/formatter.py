@@ -178,7 +178,7 @@ class NexusLangFormatter:
         """
         modifier_types = {
             TokenType.PUBLIC, TokenType.PRIVATE, TokenType.PROTECTED,
-            TokenType.ASYNC, TokenType.INLINE,
+            TokenType.ASYNC,
         }
         for tok in toks:
             if tok.type not in modifier_types:

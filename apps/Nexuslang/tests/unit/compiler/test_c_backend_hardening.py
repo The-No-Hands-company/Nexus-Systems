@@ -303,3 +303,17 @@ def test_c_foreach_over_generator_identifier_source_missing_metadata_fails():
     error_msg = str(exc_info.value)
     assert "without known array size" in error_msg
     assert "unknown_array_length" in error_msg or "unknown_array_len" in error_msg
+
+
+def test_c_backend_unsupported_statement_fails_fast():
+    generator = CCodeGenerator(target="c")
+
+    with pytest.raises(RuntimeError, match="cannot lower .* object"):
+        generator._generate_statement(object())
+
+
+def test_c_backend_unsupported_expression_fails_fast():
+    generator = CCodeGenerator(target="c")
+
+    with pytest.raises(RuntimeError, match="cannot lower expression object"):
+        generator._generate_expression(object())

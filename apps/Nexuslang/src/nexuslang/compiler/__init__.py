@@ -18,10 +18,23 @@ Supported Targets:
 Philosophy: No compromises - NexusLang compiles to true native code, not bytecode.
 """
 
+import subprocess
 from typing import Any, Dict, List, Optional, Set, Tuple
 from abc import ABC, abstractmethod
 from nexuslang.parser.ast import *
 from nexuslang.optimizer import OptimizationLevel, OptimizationPipeline, create_optimization_pipeline
+
+
+_RECOVERABLE_COMPILER_FILE_EXCEPTIONS = (
+    OSError,
+    UnicodeError,
+)
+
+_RECOVERABLE_COMPILER_SUBPROCESS_EXCEPTIONS = (
+    OSError,
+    ValueError,
+    subprocess.SubprocessError,
+)
 
 
 class CompilationTarget:
@@ -227,43 +240,38 @@ class Compiler:
         generator_class = self.generators[normalized_target]
         generator = generator_class(normalized_target)
         
-        # Generate code
+        code = generator.generate(optimized_ast)
+
         try:
-            code = generator.generate(optimized_ast)
-            
             # Ensure output directory exists
             import os
             output_dir = os.path.dirname(output_file)
             if output_dir and not os.path.exists(output_dir):
                 os.makedirs(output_dir, exist_ok=True)
-            
+
             # Write to output file
             with open(output_file, 'w') as f:
                 f.write(code)
-            
+
             print(f" Compilation successful: {output_file}")
-            
+
             # Generate C header if requested and target is C/CPP
             if self.options.generate_header and normalized_target in [CompilationTarget.C, CompilationTarget.CPP]:
                 from .codegen.header_generator import CHeaderGenerator
                 header_gen = CHeaderGenerator()
                 # Use same base name but .h extension
-                import os
                 base_name = os.path.splitext(output_file)[0]
                 header_file = f"{base_name}.h"
                 module_name = os.path.basename(base_name)
-                
+
                 header_code = header_gen.generate(ast, module_name)
                 with open(header_file, 'w') as f:
                     f.write(header_code)
                 print(f" Header generation successful: {header_file}")
-            
+
             return True, generator.required_libraries
-            
-        except Exception as e:
+        except _RECOVERABLE_COMPILER_FILE_EXCEPTIONS as e:
             print(f" Compilation failed: {e}")
-            import traceback
-            traceback.print_exc()
             return False, set()
     
     def compile_and_link(self, ast: Program, target: str, output_file: str) -> bool:
@@ -299,7 +307,6 @@ class Compiler:
     
     def _link_with_system_compiler(self, source_file: str, output_file: str, target: str, libraries: Set[str] = None) -> bool:
         """Link using system C/C++ compiler."""
-        import subprocess
         import shutil
         
         # Choose compiler
@@ -354,22 +361,20 @@ class Compiler:
         try:
             print(f"Linking with {compiler}...")
             result = subprocess.run(cmd, capture_output=True, text=True)
-            
+
             if result.returncode == 0:
                 print(f" Linking successful: {output_file}")
                 return True
-            else:
-                print(f" Linking failed:")
-                print(result.stderr)
-                return False
-                
-        except Exception as e:
+
+            print(f" Linking failed:")
+            print(result.stderr)
+            return False
+        except _RECOVERABLE_COMPILER_SUBPROCESS_EXCEPTIONS as e:
             print(f" Linking error: {e}")
             return False
     
     def _assemble_and_link(self, asm_file: str, output_file: str) -> bool:
         """Assemble and link assembly code."""
-        import subprocess
         import shutil
         
         # Check for assembler (nasm for x86-64)
@@ -386,7 +391,7 @@ class Compiler:
             if result.returncode != 0:
                 print(f" Assembly failed: {result.stderr}")
                 return False
-        except Exception as e:
+        except _RECOVERABLE_COMPILER_SUBPROCESS_EXCEPTIONS as e:
             print(f" Assembly error: {e}")
             return False
         
@@ -398,11 +403,10 @@ class Compiler:
             if result.returncode != 0:
                 print(f" Linking failed: {result.stderr}")
                 return False
-            
+
             print(f" Assembly and linking successful: {output_file}")
             return True
-            
-        except Exception as e:
+        except _RECOVERABLE_COMPILER_SUBPROCESS_EXCEPTIONS as e:
             print(f" Linking error: {e}")
             return False
 

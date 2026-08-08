@@ -3,6 +3,7 @@ Interpreter for NexusLang.
 Executes AST nodes and manages program state.
 """
 
+import logging
 import os
 import copy
 import queue
@@ -33,6 +34,7 @@ from nexuslang.parser.ast import (
     MatchExpression, MatchCase,
     LiteralPattern, IdentifierPattern, WildcardPattern,
     OptionPattern, ResultPattern, VariantPattern,
+    TuplePattern, ListPattern,
     # Smart pointer / ownership AST nodes
     RcCreation, DowngradeExpression, UpgradeExpression,
     MoveExpression, BorrowExpression, DropBorrowStatement,
@@ -55,6 +57,7 @@ from nexuslang.runtime.structures import (
     StructureInstance
 )
 from nexuslang.typesystem.generics_system import TypeParameterInfo, TypeConstraint, GenericTypeInference
+_logger = logging.getLogger(__name__)
 
 
 
@@ -733,7 +736,7 @@ class Interpreter:
             try:
                 from ..stdlib.smart_pointers import RcValue, ArcValue, WeakValue
                 _sp_types = (RcValue, ArcValue, WeakValue)
-            except Exception:
+            except ImportError:
                 _sp_types = ()
 
             for val in reversed(list(scope.values())):
@@ -1659,6 +1662,53 @@ class Interpreter:
             # For now, just fail to match
             return (False, {})
         
+        # Tuple pattern: case (x, y) or case (a, b, c)
+        elif isinstance(pattern, TuplePattern):
+            # Value must be a tuple or list of matching length
+            if not isinstance(value, (tuple, list)):
+                return (False, {})
+
+            if len(pattern.patterns) != len(value):
+                return (False, {})
+
+            combined_bindings: dict = {}
+            for sub_pattern, sub_value in zip(pattern.patterns, value):
+                sub_matched, sub_bindings = self._match_pattern(sub_pattern, sub_value)
+                if not sub_matched:
+                    return (False, {})
+                combined_bindings.update(sub_bindings)
+
+            return (True, combined_bindings)
+
+        # List pattern: case [first, second] or case [head, ...rest]
+        elif isinstance(pattern, ListPattern):
+            if not isinstance(value, (list, tuple)):
+                return (False, {})
+
+            n_patterns = len(pattern.patterns)
+            n_value = len(value)
+
+            if pattern.rest_binding is not None:
+                # With a rest binding: value must have at least n_patterns elements
+                if n_value < n_patterns:
+                    return (False, {})
+            else:
+                # Without a rest binding: lengths must match exactly
+                if n_value != n_patterns:
+                    return (False, {})
+
+            combined_bindings: dict = {}
+            for i, sub_pattern in enumerate(pattern.patterns):
+                sub_matched, sub_bindings = self._match_pattern(sub_pattern, value[i])
+                if not sub_matched:
+                    return (False, {})
+                combined_bindings.update(sub_bindings)
+
+            if pattern.rest_binding is not None:
+                combined_bindings[pattern.rest_binding] = list(value[n_patterns:])
+
+            return (True, combined_bindings)
+
         # Unknown pattern type
         else:
             raise NxlRuntimeError(
@@ -2899,7 +2949,7 @@ class Interpreter:
                     passed = len(actual) > 0 and actual[0] == expected
                 else:
                     passed = False
-            except Exception:
+            except TypeError:
                 passed = False
         elif matcher == "end_with":
             try:
@@ -2909,7 +2959,7 @@ class Interpreter:
                     passed = len(actual) > 0 and actual[-1] == expected
                 else:
                     passed = False
-            except Exception:
+            except TypeError:
                 passed = False
         else:
             raise RuntimeError(f"Unknown comparison matcher: {matcher!r}")
@@ -2920,10 +2970,12 @@ class Interpreter:
             qual = "not " if negated else ""
             if matcher == "have_length":
                 actual_len = len(actual) if hasattr(actual, "__len__") else None
-                _fail(
-                    f"Expected value {qual}to have length {expected!r}"
-                    + (f", but it has length {actual_len!r}" if actual_len is not None else "")
-                )
+                if negated:
+                    _fail(f"Expected {actual!r} not to have length {expected!r}, but it does")
+                elif actual_len is None:
+                    _fail(f"Expected {actual!r} to have length {expected!r}, but it has no length")
+                else:
+                    _fail(f"Expected {actual!r} to have length {expected!r}, but it has length {actual_len}")
             elif matcher in ("equal",):
                 if negated:
                     _fail(f"Expected {actual!r} not to equal {expected!r}")
@@ -4372,8 +4424,15 @@ class Interpreter:
                 self.enter_scope()
                     
                 try:
-                    # Bind instance to 'self'
+                    # Snapshot property values so we can detect which ones the
+                    # method body modifies via *direct* scope assignment (e.g.
+                    # `set count to count plus 1`) vs via `set me.count to …`
+                    # (which already writes through to obj.properties directly).
+                    initial_props = dict(obj.properties)
+
+                    # Bind instance to 'self' and 'me' (both are valid aliases)
                     self.set_variable("self", obj)
+                    self.set_variable("me", obj)
 
                     # Bind instance properties to scope (implicit self)
                     for key, value in obj.properties.items():
@@ -4401,15 +4460,19 @@ class Interpreter:
                             if isinstance(statement, ReturnStatement):
                                 break
                         
-                    # Update instance properties from scope
-                    for key in obj.properties.keys():
+                    # Write back only properties whose *scope variable* was changed
+                    # relative to the initial value.  This prevents the implicit
+                    # copy-back from overwriting property updates that the method
+                    # body performed via `set me.<prop> to …` (member assignment),
+                    # which already updated obj.properties in-place.
+                    for key in list(initial_props.keys()):
                         try:
-                            obj.set_property(key, self.get_variable(key))
+                            scope_value = self.get_variable(key)
+                            if scope_value != initial_props[key]:
+                                obj.set_property(key, scope_value)
                         except NameError:
-                            # Property variable not found in scope; keep original value
                             pass
                         except (AttributeError, TypeError) as e:
-                            # Property assignment failed; log and continue
                             import logging
                             logging.warning(
                                 f"Failed to update property {key} on {type(obj).__name__}: {e}"
@@ -4651,8 +4714,8 @@ class Interpreter:
                 for key in obj.properties.keys():
                     try:
                         obj.set_property(key, self.get_variable(key))
-                    except Exception:
-                        pass
+                    except (AttributeError, KeyError, NxlRuntimeError):
+                        pass  # Variable may not be in scope if method did not touch it
 
                 return result
             finally:
@@ -4698,8 +4761,8 @@ class Interpreter:
                     if not key.startswith("__"):
                         try:
                             obj[key] = self.get_variable(key)
-                        except Exception:
-                            pass
+                        except (KeyError, NxlRuntimeError):
+                            pass  # Variable may not be in scope if method did not touch it
 
                 return result
             finally:
@@ -4907,8 +4970,8 @@ class Interpreter:
                 try:
                     msg_val = self.execute(node.message_expr)
                     message = f"Compile-time assertion failed: {msg_val}"
-                except Exception:
-                    pass
+                except (NxlRuntimeError, AttributeError, TypeError):
+                    pass  # Best-effort: if message eval fails, use the default message
             raise NxlRuntimeError(
                 message,
                 line=node.line_number,

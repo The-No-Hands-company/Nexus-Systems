@@ -87,6 +87,17 @@ class TestPickleFile:
         with pytest.raises((FileNotFoundError, OSError)):
             pickle_load_file(str(tmp_path / "nonexistent.pkl"))
 
+    def test_dump_file_internal_runtime_error_propagates(self, tmp_path, monkeypatch):
+        import nexuslang.stdlib.serialization as serialization_mod
+
+        def broken_abspath(path):
+            raise RuntimeError("internal serialization invariant failure")
+
+        monkeypatch.setattr(serialization_mod.os.path, "abspath", broken_abspath)
+
+        with pytest.raises(RuntimeError, match="internal serialization invariant failure"):
+            pickle_dump_file(_SIMPLE_DICT, str(tmp_path / "broken.pkl"))
+
 
 # ===========================================================================
 # MessagePack

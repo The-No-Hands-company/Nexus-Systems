@@ -52,6 +52,28 @@ MAX_SEARCH_RESULTS: int = 50
 
 _TOOLING_DIR = Path(__file__).parent
 
+_RECOVERABLE_REGISTRY_CONFIG_EXCEPTIONS = (
+    OSError,
+    ImportError,
+    ValueError,
+    TypeError,
+    KeyError,
+)
+
+_RECOVERABLE_REGISTRY_CACHE_EXCEPTIONS = (
+    OSError,
+    json.JSONDecodeError,
+    ValueError,
+    TypeError,
+    KeyError,
+)
+
+_RECOVERABLE_REGISTRY_DOWNLOAD_EXCEPTIONS = (
+    OSError,
+    ValueError,
+    TypeError,
+)
+
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -95,15 +117,18 @@ class RegistryConfig:
         config = cls._from_global()
 
         manifest_path = project_root / "nexuslang.toml"
+        project_section: Dict[str, Any] = {}
         if manifest_path.exists():
             try:
                 project_section = _read_toml_section(manifest_path, "registry")
-                if "url" in project_section:
-                    config.url = project_section["url"].rstrip("/")
-                if "token" in project_section:
-                    config.token = project_section["token"]
-            except Exception:
-                pass  # Silently fall back to existing config
+            except _RECOVERABLE_REGISTRY_CONFIG_EXCEPTIONS:
+                # Fall back to global/default config when project registry config is invalid.
+                project_section = {}
+
+        if "url" in project_section:
+            config.url = project_section["url"].rstrip("/")
+        if "token" in project_section:
+            config.token = project_section["token"]
 
         # Allow environment variable override
         env_token = os.environ.get("NLPL_REGISTRY_TOKEN")
@@ -121,15 +146,17 @@ class RegistryConfig:
         """Load registry config from ``~/.nlpl/config.toml``."""
         config = cls()
         global_config_path = Path.home() / ".nxl" / "config.toml"
+        section: Dict[str, Any] = {}
         if global_config_path.exists():
             try:
                 section = _read_toml_section(global_config_path, "registry")
-                if "url" in section:
-                    config.url = section["url"].rstrip("/")
-                if "token" in section:
-                    config.token = section["token"]
-            except Exception:
-                pass
+            except _RECOVERABLE_REGISTRY_CONFIG_EXCEPTIONS:
+                section = {}
+
+        if "url" in section:
+            config.url = section["url"].rstrip("/")
+        if "token" in section:
+            config.token = section["token"]
         return config
 
 
@@ -549,16 +576,22 @@ class RegistryClient:
 
         # Fast path: cached and valid
         if not force and extracted_dir.is_dir() and archive_path.is_file() and meta_path.is_file():
+            cache_valid = False
             try:
                 meta = json.loads(meta_path.read_text(encoding="utf-8"))
                 cached_checksum = meta.get("checksum", "")
                 if cached_checksum:
                     _verify_checksum(archive_path, cached_checksum)
-                    if not quiet:
-                        print(f"  Using cached {name}@{version}")
-                    return extracted_dir
+                    cache_valid = True
+                else:
+                    cache_valid = True
             except ValueError:
-                pass  # Checksum mismatch — fall through to re-download
+                cache_valid = False
+
+            if cache_valid:
+                if not quiet:
+                    print(f"  Using cached {name}@{version}")
+                return extracted_dir
 
         if not quiet:
             print(f"  Downloading {name}@{version} ...")
@@ -613,14 +646,23 @@ class RegistryClient:
             # Atomically replace archive
             tmp_path.replace(archive_path)
 
-        except Exception:
+        except _RECOVERABLE_REGISTRY_DOWNLOAD_EXCEPTIONS as exc:
+            cleanup_errors: List[str] = []
             if tmp_fd != -1:
                 try:
                     os.close(tmp_fd)
-                except OSError:
-                    pass
+                except OSError as close_exc:
+                    cleanup_errors.append(f"fd close failed: {close_exc}")
             if tmp_path.exists():
-                tmp_path.unlink(missing_ok=True)
+                try:
+                    tmp_path.unlink(missing_ok=True)
+                except OSError as unlink_exc:
+                    cleanup_errors.append(f"temp-file cleanup failed: {unlink_exc}")
+            if cleanup_errors:
+                raise RegistryError(
+                    f"Download failed for '{name}@{version}' and cleanup failed: "
+                    + "; ".join(cleanup_errors)
+                ) from exc
             raise
 
         # Extract archive
@@ -866,8 +908,9 @@ class RegistryClient:
                     raw = self._index_cache_path.read_bytes()
                     data = json.loads(raw)
                     return [SearchResult.from_dict(r) for r in data]
-                except Exception:
-                    pass  # Cache corrupt — fall through to fetch
+                except _RECOVERABLE_REGISTRY_CACHE_EXCEPTIONS:
+                    # Remove corrupt cache and fetch a fresh index from network.
+                    self._index_cache_path.unlink(missing_ok=True)
 
         url = f"{self.config.url}/api/v1/index"
         try:

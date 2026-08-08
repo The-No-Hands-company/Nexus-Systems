@@ -28,6 +28,12 @@ except ImportError:
     HAS_ZSTD = False
 
 
+_RECOVERABLE_COMPRESSION_EXCEPTIONS = (OSError, EOFError, zlib.error)
+_RECOVERABLE_LZMA_EXCEPTIONS = (OSError, EOFError, lzma.LZMAError)
+_RECOVERABLE_ZIP_EXCEPTIONS = (OSError, zipfile.BadZipFile, zipfile.LargeZipFile)
+_RECOVERABLE_TAR_EXCEPTIONS = (OSError, tarfile.TarError)
+
+
 # GZIP compression
 def gzip_compress(data: str, encoding: str = 'utf-8') -> bytes:
     """Compress string with gzip."""
@@ -58,7 +64,7 @@ def gzip_decompress_file(input_path: str, output_path: str) -> bool:
             with open(output_path, 'wb') as f_out:
                 f_out.write(f_in.read())
         return True
-    except Exception as e:
+    except _RECOVERABLE_COMPRESSION_EXCEPTIONS as e:
         print(f"Decompression failed: {e}")
         return False
 
@@ -104,7 +110,7 @@ def bz2_decompress_file(input_path: str, output_path: str) -> bool:
             with open(output_path, 'wb') as f_out:
                 f_out.write(f_in.read())
         return True
-    except Exception as e:
+    except _RECOVERABLE_COMPRESSION_EXCEPTIONS as e:
         print(f"Decompression failed: {e}")
         return False
 
@@ -137,7 +143,7 @@ def lzma_decompress_file(input_path: str, output_path: str) -> bool:
             with open(output_path, 'wb') as f_out:
                 f_out.write(f_in.read())
         return True
-    except Exception as e:
+    except _RECOVERABLE_LZMA_EXCEPTIONS as e:
         print(f"LZMA decompression failed: {e}")
         return False
 
@@ -181,7 +187,7 @@ def lz4_decompress_file(input_path: str, output_path: str) -> bool:
             with open(output_path, 'wb') as f_out:
                 f_out.write(f_in.read())
         return True
-    except Exception as e:
+    except _RECOVERABLE_COMPRESSION_EXCEPTIONS as e:
         print(f"LZ4 decompression failed: {e}")
         return False
 
@@ -229,7 +235,7 @@ def zstd_decompress_file(input_path: str, output_path: str) -> bool:
             with open(output_path, 'wb') as f_out:
                 dctx.copy_stream(f_in, f_out)
         return True
-    except Exception as e:
+    except _RECOVERABLE_COMPRESSION_EXCEPTIONS as e:
         print(f"Zstd decompression failed: {e}")
         return False
 
@@ -242,7 +248,7 @@ def zip_create(archive_path: str, files: List[str]) -> bool:
             for filepath in files:
                 zf.write(filepath, Path(filepath).name)
         return True
-    except Exception as e:
+    except _RECOVERABLE_ZIP_EXCEPTIONS as e:
         print(f"Zip creation failed: {e}")
         return False
 
@@ -253,7 +259,7 @@ def zip_extract(archive_path: str, extract_to: str = '.') -> bool:
         with zipfile.ZipFile(archive_path, 'r') as zf:
             zf.extractall(extract_to)
         return True
-    except Exception as e:
+    except _RECOVERABLE_ZIP_EXCEPTIONS as e:
         print(f"Zip extraction failed: {e}")
         return False
 
@@ -263,7 +269,7 @@ def zip_list(archive_path: str) -> List[str]:
     try:
         with zipfile.ZipFile(archive_path, 'r') as zf:
             return zf.namelist()
-    except Exception as e:
+    except _RECOVERABLE_ZIP_EXCEPTIONS as e:
         print(f"Zip listing failed: {e}")
         return []
 
@@ -274,7 +280,7 @@ def zip_add(archive_path: str, filepath: str) -> bool:
         with zipfile.ZipFile(archive_path, 'a', zipfile.ZIP_DEFLATED) as zf:
             zf.write(filepath, Path(filepath).name)
         return True
-    except Exception as e:
+    except _RECOVERABLE_ZIP_EXCEPTIONS as e:
         print(f"Zip add failed: {e}")
         return False
 
@@ -298,7 +304,7 @@ def tar_create(archive_path: str, files: List[str], compression: Optional[str] =
             for filepath in files:
                 tf.add(filepath, Path(filepath).name)
         return True
-    except Exception as e:
+    except _RECOVERABLE_TAR_EXCEPTIONS as e:
         print(f"Tar creation failed: {e}")
         return False
 
@@ -309,7 +315,7 @@ def tar_extract(archive_path: str, extract_to: str = '.') -> bool:
         with tarfile.open(archive_path, 'r:*') as tf:
             tf.extractall(extract_to)
         return True
-    except Exception as e:
+    except _RECOVERABLE_TAR_EXCEPTIONS as e:
         print(f"Tar extraction failed: {e}")
         return False
 
@@ -319,7 +325,7 @@ def tar_list(archive_path: str) -> List[str]:
     try:
         with tarfile.open(archive_path, 'r:*') as tf:
             return tf.getnames()
-    except Exception as e:
+    except _RECOVERABLE_TAR_EXCEPTIONS as e:
         print(f"Tar listing failed: {e}")
         return []
 
@@ -330,7 +336,7 @@ def tar_add(archive_path: str, filepath: str) -> bool:
         with tarfile.open(archive_path, 'a') as tf:
             tf.add(filepath, Path(filepath).name)
         return True
-    except Exception as e:
+    except _RECOVERABLE_TAR_EXCEPTIONS as e:
         print(f"Tar add failed: {e}")
         return False
 

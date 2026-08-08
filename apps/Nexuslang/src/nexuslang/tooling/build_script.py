@@ -119,8 +119,8 @@ class BuildScriptCache:
                 data = json.load(f)
             if data.get("version") == self.VERSION:
                 self._data = data
-        except Exception:
-            self._data = {}
+        except (ValueError, OSError):
+            self._data = {}  # JSON decode error or file read error; treat as empty cache
 
     # ------------------------------------------------------------------
     # Public API
@@ -300,7 +300,7 @@ def run_build_script(
     try:
         import nexuslang.main as _nxl_entry
         nxl_src_path = str(Path(_nxl_entry.__file__).parent.parent)
-    except Exception:
+    except (ImportError, AttributeError, OSError):
         nxl_src_path = os.path.join(manifest_dir, "src")
 
     # ------------------------------------------------------------------

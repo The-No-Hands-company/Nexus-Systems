@@ -105,6 +105,25 @@ class TestGzipFile:
         gz = gzip_compress_file(str(src))
         assert os.path.getsize(gz) < os.path.getsize(str(src))
 
+    def test_decompress_missing_file_returns_false(self, tmp_path):
+        out = tmp_path / "missing-output.txt"
+        assert gzip_decompress_file(str(tmp_path / "does-not-exist.gz"), str(out)) is False
+
+    def test_decompress_internal_runtime_error_propagates(self, tmp_path, monkeypatch):
+        src = tmp_path / "source.txt"
+        src.write_text(_TEST_TEXT)
+        gz = gzip_compress_file(str(src))
+
+        import nexuslang.stdlib.compression as compression_mod
+
+        def broken_gzip_open(*args, **kwargs):
+            raise RuntimeError("unexpected gzip runtime failure")
+
+        monkeypatch.setattr(compression_mod.gzip, "open", broken_gzip_open)
+
+        with pytest.raises(RuntimeError, match="unexpected gzip runtime failure"):
+            gzip_decompress_file(gz, str(tmp_path / "out.txt"))
+
 
 # ===========================================================================
 # zlib (bytes API)

@@ -115,10 +115,27 @@ class ReferencesProvider:
             # Fallback: regex search across all open documents
             references = self._fallback_find_references(text, position, uri, include_declaration)
 
+        self._add_open_document_references(references, text, position)
         # Extend with cross-file results from workspace files not currently open
         self._add_workspace_references(references, text, position)
         self._add_override_family_method_definitions(references, text, position, uri)
         return self._dedupe_references(references)
+
+    def _add_open_document_references(
+        self,
+        references: List[Dict],
+        text: str,
+        position: 'Position'
+    ) -> None:
+        """Append references from open documents to complete cross-file results."""
+        symbol = self._get_symbol_at_position(text, position)
+        if not symbol:
+            return
+
+        symbol_type = self._get_symbol_type(text, position, symbol)
+        for doc_uri, doc_text in self.server.documents.items():
+            doc_refs = self._find_in_document(doc_text, symbol, symbol_type, doc_uri)
+            references.extend(doc_refs)
 
     def _add_workspace_references(
         self,

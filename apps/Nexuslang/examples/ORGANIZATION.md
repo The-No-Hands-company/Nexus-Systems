@@ -35,6 +35,9 @@ Functional Programming
 - Lambda functions
 - Higher-order functions
 - Functional patterns
+
+- **03_functional_programming_patterns.nxl** - Functional patterns
+	- Mirrors the top-level numbered example: `18_functional_programming_patterns.nlpl`
 - Immutability patterns
 
 ### 06_concurrency/

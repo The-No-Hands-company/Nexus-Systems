@@ -1091,3 +1091,48 @@ class TestBuildSystemTargetNormalization:
 
         assert errors == []
         assert mock_run.call_args[0][0][0] == "/usr/bin/g++"
+
+
+class TestBuildSystemExceptionHardening:
+    def test_compile_one_handles_recoverable_parse_error(self, tmp_path):
+        src_dir = tmp_path / "src"
+        src_dir.mkdir(parents=True, exist_ok=True)
+        source = src_dir / "main.nxl"
+        source.write_text("set x to 1\n")
+
+        bs = _make_build_system(tmp_path, target="c", lto=False)
+        prof = ProfileConfig(name="dev", optimization=0, lto=False)
+
+        with patch("nexuslang.tooling.builder.Parser.parse", side_effect=RuntimeError("bad ast")):
+            src_path, ok, errors = bs._compile_one(
+                str(source),
+                str(tmp_path / "build"),
+                prof,
+                [],
+                False,
+                False,
+            )
+
+        assert src_path == str(source)
+        assert ok is False
+        assert any("bad ast" in err for err in errors)
+
+    def test_compile_one_propagates_keyboard_interrupt(self, tmp_path):
+        src_dir = tmp_path / "src"
+        src_dir.mkdir(parents=True, exist_ok=True)
+        source = src_dir / "main.nxl"
+        source.write_text("set x to 1\n")
+
+        bs = _make_build_system(tmp_path, target="c", lto=False)
+        prof = ProfileConfig(name="dev", optimization=0, lto=False)
+
+        with patch("nexuslang.tooling.builder.Parser.parse", side_effect=KeyboardInterrupt()):
+            with pytest.raises(KeyboardInterrupt):
+                bs._compile_one(
+                    str(source),
+                    str(tmp_path / "build"),
+                    prof,
+                    [],
+                    False,
+                    False,
+                )

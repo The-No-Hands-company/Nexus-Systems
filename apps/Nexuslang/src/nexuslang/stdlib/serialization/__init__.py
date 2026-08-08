@@ -49,6 +49,14 @@ except ImportError:
     HAS_CBOR = False
 
 
+_RECOVERABLE_SERIALIZATION_DUMP_EXCEPTIONS = (
+    OSError,
+    TypeError,
+    ValueError,
+    pickle.PickleError,
+)
+
+
 def pickle_dumps(obj: Any) -> bytes:
     """Serialize object to bytes using pickle.
     
@@ -90,7 +98,7 @@ def pickle_dump_file(obj: Any, filepath: str) -> bool:
         with open(filepath, 'wb') as f:
             pickle.dump(obj, f)
         return True
-    except Exception:
+    except _RECOVERABLE_SERIALIZATION_DUMP_EXCEPTIONS:
         return False
 
 
@@ -157,7 +165,7 @@ def msgpack_dump_file(obj: Any, filepath: str) -> bool:
         with open(filepath, 'wb') as f:
             msgpack.pack(obj, f, use_bin_type=True)
         return True
-    except Exception:
+    except _RECOVERABLE_SERIALIZATION_DUMP_EXCEPTIONS:
         return False
 
 
@@ -227,7 +235,7 @@ def yaml_dump_file(obj: Any, filepath: str) -> bool:
         with open(filepath, 'w') as f:
             yaml.dump(obj, f, default_flow_style=False)
         return True
-    except Exception:
+    except _RECOVERABLE_SERIALIZATION_DUMP_EXCEPTIONS:
         return False
 
 
@@ -297,7 +305,7 @@ def toml_dump_file(obj: dict, filepath: str) -> bool:
         with open(filepath, 'w') as f:
             toml.dump(obj, f)
         return True
-    except Exception:
+    except _RECOVERABLE_SERIALIZATION_DUMP_EXCEPTIONS:
         return False
 
 
@@ -366,7 +374,7 @@ def protobuf_dump_file(obj: dict, filepath: str) -> bool:
         with open(filepath, 'wb') as f:
             f.write(protobuf_dumps(obj))
         return True
-    except Exception:
+    except _RECOVERABLE_SERIALIZATION_DUMP_EXCEPTIONS:
         return False
 
 

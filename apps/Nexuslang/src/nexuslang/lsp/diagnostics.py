@@ -63,6 +63,7 @@ class DiagnosticsProvider:
         fixes: Optional[List[str]] = None,
         doc_link: Optional[str] = None,
         related_information: Optional[List[Dict]] = None,
+        extra_data: Optional[Dict] = None,
     ) -> Dict:
         """Build normalized LSP diagnostic payload with NexusLang error metadata."""
         resolved_code = error_code or (get_error_code_for_type(error_type_key) if error_type_key else None)
@@ -100,6 +101,8 @@ class DiagnosticsProvider:
             "explainHint": f"nxl --explain {resolved_code}" if resolved_code else None,
             "docLink": resolved_doc_link,
         }
+        if isinstance(extra_data, dict):
+            payload_data.update(extra_data)
         # Remove empty keys
         payload_data = {k: v for k, v in payload_data.items() if v not in (None, [], "")}
         if payload_data:
@@ -132,6 +135,28 @@ class DiagnosticsProvider:
         if not msg:
             msg = "Ownership/lifetime rule violation"
         return f"Ownership error: {msg}"
+
+    def _extract_ownership_kind(self, error: str) -> str:
+        """Extract ownership pass kind for diagnostics payload metadata."""
+        raw = (error or "").lower()
+        if "[ownership.borrow]" in raw:
+            return "borrow"
+        if "[ownership.lifetime" in raw:
+            return "lifetime"
+        return "ownership"
+
+    def _extract_ownership_operation(self, error: str) -> Optional[str]:
+        """Extract operation hint (move/borrow/drop) from ownership diagnostics."""
+        raw = (error or "").lower()
+        if "move" in raw:
+            return "move"
+        if "drop borrow" in raw:
+            return "drop_borrow"
+        if "borrow mutable" in raw:
+            return "borrow_mutable"
+        if "borrow" in raw:
+            return "borrow"
+        return None
 
     def _build_borrow_related_information(self, uri: str, text: str, var_name: Optional[str], primary_line: Optional[int]) -> List[Dict]:
         """Collect related ranges for ownership diagnostics around a variable.
@@ -572,6 +597,16 @@ class DiagnosticsProvider:
                     var_name = self._extract_ownership_var_name(error)
                     related_information = self._build_borrow_related_information(uri, text, var_name, line)
                     diagnostic_message = self._shape_ownership_message(error)
+                    ownership_data = {
+                        "ownership": {
+                            "kind": self._extract_ownership_kind(error),
+                            "variable": var_name,
+                            "line": line,
+                            "operation": self._extract_ownership_operation(error),
+                        }
+                    }
+                else:
+                    ownership_data = None
 
                 if is_ownership_error or is_contract_error or is_asm_error or is_ffi_error:
                     error_code = "E201"
@@ -610,6 +645,7 @@ class DiagnosticsProvider:
                         category=category,
                         fixes=selected_fixes,
                         related_information=related_information,
+                        extra_data=ownership_data,
                     )
                 )
         

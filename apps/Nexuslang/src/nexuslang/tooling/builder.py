@@ -19,6 +19,30 @@ from ..parser.lexer import Lexer
 from ..parser.parser import Parser
 
 
+_RECOVERABLE_BUILD_CACHE_EXCEPTIONS = (
+    OSError,
+    json.JSONDecodeError,
+    KeyError,
+    TypeError,
+    ValueError,
+)
+
+_RECOVERABLE_BUILD_EXECUTION_EXCEPTIONS = (
+    OSError,
+    UnicodeError,
+    ValueError,
+    TypeError,
+    RuntimeError,
+)
+
+_RECOVERABLE_BUILD_TEST_EXCEPTIONS = (
+    OSError,
+    ValueError,
+    TypeError,
+    RuntimeError,
+)
+
+
 # ---------------------------------------------------------------------------
 # Build cache (file-level incremental compilation)
 # ---------------------------------------------------------------------------
@@ -51,7 +75,7 @@ class _BuildCache:
                 return
             for e in data.get("entries", []):
                 self._entries[e["path"]] = _CacheEntry(**e)
-        except Exception:
+        except _RECOVERABLE_BUILD_CACHE_EXCEPTIONS:
             self._entries = {}
 
     def save(self) -> None:
@@ -97,7 +121,7 @@ class _BuildCache:
                 content_hash=self._file_hash(source_path),
             )
         except OSError:
-            pass
+            return
 
     def clear(self) -> None:
         self._entries = {}
@@ -308,7 +332,7 @@ class BuildSystem:
                 )
 
             return proc.returncode
-        except Exception as exc:
+        except _RECOVERABLE_BUILD_EXECUTION_EXCEPTIONS as exc:
             print(f"  error running executable: {exc}")
             return 1
 
@@ -410,7 +434,7 @@ class BuildSystem:
                     t0 = _time.perf_counter()
                     try:
                         ok = future.result()
-                    except Exception:
+                    except _RECOVERABLE_BUILD_TEST_EXCEPTIONS:
                         ok = False
                     dur = _time.perf_counter() - t0
                     results.append((tf.stem, ok, dur))
@@ -557,7 +581,7 @@ class BuildSystem:
                 errors.append(f"Compiler reported failure for {source_path}")
             return source_path, ok, errors
 
-        except Exception as exc:
+        except _RECOVERABLE_BUILD_EXECUTION_EXCEPTIONS as exc:
             return source_path, False, [f"{source_path}: {exc}"]
 
     def _compile_files(

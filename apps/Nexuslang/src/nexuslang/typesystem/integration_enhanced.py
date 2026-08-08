@@ -118,14 +118,27 @@ class IntegratedTypeSystem:
         
         # Build generic context if function has type parameters
         generic_context = None
-        if func_def.type_parameters:
+        type_parameters = getattr(func_def, 'type_parameters', None) or []
+        type_constraints = getattr(func_def, 'type_constraints', None)
+        if type_parameters:
             generic_context = self._create_generic_context(
                 func_def.name,
-                func_def.type_parameters,
-                func_def.type_constraints
+                type_parameters,
+                type_constraints
             )
-        
-        return self.inference_engine.infer_function_signature(func_def, env, generic_context)
+
+        param_types: List[Type] = []
+        for param in func_def.parameters:
+            if param.type_annotation:
+                param_type = get_type_by_name(param.type_annotation)
+                if generic_context:
+                    param_type = generic_context.get_substituted_type(param_type, {})
+            else:
+                param_type = ANY_TYPE
+            param_types.append(param_type)
+
+        return_type = self.inference_engine.infer_function_return_type(func_def, env)
+        return FunctionType(param_types, return_type)
     
     def infer_lambda_type(
         self,

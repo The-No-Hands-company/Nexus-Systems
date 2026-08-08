@@ -62,12 +62,15 @@ from __future__ import annotations
 
 import ctypes
 import hashlib
+import logging
 import os
 import shutil
 import subprocess
 import tempfile
 import threading
 from typing import Any, Callable, Dict, Optional, Set
+
+_logger = logging.getLogger(__name__)
 
 __all__ = ["NativeFunctionJIT", "NativeCompileError"]
 
@@ -225,6 +228,11 @@ class NativeFunctionJIT:
             except NativeCompileError:
                 return None
             except Exception:
+                _logger.warning(
+                    "NativeFunctionJIT: unexpected exception compiling '%s'; returning None",
+                    func_name,
+                    exc_info=True,
+                )
                 return None
 
     # ------------------------------------------------------------------
@@ -353,6 +361,11 @@ class NativeFunctionJIT:
         try:
             gen.generate(program)
         except Exception:
+            _logger.debug(
+                "NativeFunctionJIT: LLVMIRGenerator.generate failed for '%s'",
+                func_name,
+                exc_info=True,
+            )
             return None
 
         ir_lines = gen.ir_lines
@@ -442,7 +455,11 @@ class NativeFunctionJIT:
             for stmt in body:
                 walk(stmt)
         except Exception:
-            pass
+            _logger.debug(
+                "NativeFunctionJIT: callee-name walk raised for '%s'",
+                func_def,
+                exc_info=True,
+            )
 
         return names
 
@@ -456,8 +473,12 @@ class NativeFunctionJIT:
                 registry = getattr(self._interpreter, attr, None)
                 if registry and isinstance(registry, dict) and name in registry:
                     return registry[name]
-        except Exception:
-            pass
+        except (AttributeError, KeyError, TypeError):
+            _logger.debug(
+                "NativeFunctionJIT: lookup of '%s' raised",
+                name,
+                exc_info=True,
+            )
         return None
 
     # ------------------------------------------------------------------

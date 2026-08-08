@@ -29,11 +29,14 @@ wraps it and adds the tier-promotion/deoptimization bookkeeping.
 
 from __future__ import annotations
 
+import logging
 import threading
 import time
 from dataclasses import dataclass, field
 from enum import Enum, auto
 from typing import Any, Callable, Dict, List, Optional, Tuple
+
+_logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -126,6 +129,10 @@ class TieredCompiler:
             )
             self._jit.attach_to_interpreter(interpreter)
         except Exception:
+            _logger.warning(
+                "TieredCompiler: JIT initialization failed; tiered tracking active without JIT",
+                exc_info=True,
+            )
             self._jit = None  # JIT unavailable; tiered tracking still works
 
         # Replace interpreter's on_call hook
@@ -148,7 +155,10 @@ class TieredCompiler:
             try:
                 self._jit.detach_from_interpreter()
             except Exception:
-                pass
+                _logger.debug(
+                    "TieredCompiler: detach raised unexpectedly",
+                    exc_info=True,
+                )
             self._jit = None
 
     # ------------------------------------------------------------------
@@ -194,7 +204,11 @@ class TieredCompiler:
             state.baseline_compiled_at = state.call_count
             self._tier1_compilations += 1
         except Exception:
-            pass  # Compilation failed; stay in interpreter
+            _logger.debug(
+                "TieredCompiler: baseline compilation failed for %s; staying at interpreter tier",
+                state.name,
+                exc_info=True,
+            )  # Compilation failed; stay in interpreter
 
     def _compile_optimized(self, state: FunctionTierState) -> None:
         """Promote function to Tier-2 (optimizing JIT with type feedback)."""
@@ -222,7 +236,11 @@ class TieredCompiler:
             state.optimized_compiled_at = state.call_count
             self._tier2_compilations += 1
         except Exception:
-            pass  # Compilation failed; stay at Tier-1
+            _logger.debug(
+                "TieredCompiler: optimizing compilation failed for %s; staying at baseline tier",
+                state.name,
+                exc_info=True,
+            )  # Compilation failed; stay at Tier-1
 
     # ------------------------------------------------------------------
     # Deoptimization
@@ -277,6 +295,11 @@ class TieredCompiler:
             scope = getattr(self._interpreter, "global_scope", None) or {}
             return scope.get(func_name)
         except Exception:
+            _logger.debug(
+                "TieredCompiler: could not retrieve function def for %s",
+                func_name,
+                exc_info=True,
+            )
             return None
 
     # ------------------------------------------------------------------

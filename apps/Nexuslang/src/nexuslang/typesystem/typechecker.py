@@ -255,6 +255,7 @@ class TypeChecker:
     
     def check_program(self, program: Program) -> List[str]:
         """Check the types in a program and return any errors."""
+        self._require_program_node(program)
         self.errors = []
         self.warnings = []
         self.ownership_errors = []
@@ -327,9 +328,120 @@ class TypeChecker:
         if isinstance(annotation, ReturnTypeWithLifetime):
             return annotation.base_type
         return annotation
+
+    def _require_program_node(self, program: Any) -> None:
+        """Validate program input shape for type-checking entrypoints."""
+        if program is None or not hasattr(program, 'statements'):
+            raise TypeError("program must be a Program-like node with statements")
+        if not isinstance(program.statements, list):
+            raise TypeError("program.statements must be a list")
+
+    def _require_statement_env(self, statement: Any, env: Any, method_name: str) -> None:
+        """Validate statement+environment inputs for internal dispatch helpers."""
+        if statement is None:
+            raise TypeError(f"{method_name}: statement must not be None")
+        if not isinstance(env, TypeEnvironment):
+            raise TypeError(f"{method_name}: env must be a TypeEnvironment")
+
+    def _require_list_attribute(self, statement: Any, attr_name: str, method_name: str) -> None:
+        """Validate that a statement attribute exists and is a list."""
+        if not hasattr(statement, attr_name):
+            raise TypeError(f"{method_name}: statement must define '{attr_name}'")
+        value = getattr(statement, attr_name)
+        if not isinstance(value, list):
+            raise TypeError(f"{method_name}: statement.{attr_name} must be a list")
+
+    def _require_attribute(self, statement: Any, attr_name: str, method_name: str) -> None:
+        """Validate that a statement attribute exists."""
+        if not hasattr(statement, attr_name):
+            raise TypeError(f"{method_name}: statement must define '{attr_name}'")
+
+    def _require_string_attribute(self, statement: Any, attr_name: str, method_name: str) -> None:
+        """Validate that a statement attribute exists and is a non-empty string."""
+        self._require_attribute(statement, attr_name, method_name)
+        value = getattr(statement, attr_name)
+        if not isinstance(value, str) or not value.strip():
+            raise TypeError(f"{method_name}: statement.{attr_name} must be a non-empty string")
+
+    def _require_block_like_attribute(self, statement: Any, attr_name: str, method_name: str) -> None:
+        """Validate that a statement attribute is a Block-like node with a statements list."""
+        self._require_attribute(statement, attr_name, method_name)
+        block = getattr(statement, attr_name)
+        if block is None or not hasattr(block, 'statements'):
+            raise TypeError(f"{method_name}: statement.{attr_name} must be a Block-like node with statements")
+        if not isinstance(block.statements, list):
+            raise TypeError(f"{method_name}: statement.{attr_name}.statements must be a list")
+
+    def _require_inline_assembly_shape(self, statement: Any) -> None:
+        """Validate inline assembly operand shapes before semantic checks."""
+        self._require_list_attribute(statement, 'inputs', "_check_inline_assembly_statement")
+        self._require_list_attribute(statement, 'outputs', "_check_inline_assembly_statement")
+        self._require_list_attribute(statement, 'clobbers', "_check_inline_assembly_statement")
+
+        for entry in statement.inputs:
+            if not isinstance(entry, tuple) or len(entry) != 2:
+                raise TypeError(
+                    "_check_inline_assembly_statement: each input must be a (constraint, expression) tuple"
+                )
+
+        for entry in statement.outputs:
+            if not isinstance(entry, tuple) or len(entry) != 2:
+                raise TypeError(
+                    "_check_inline_assembly_statement: each output must be a (constraint, target) tuple"
+                )
+
+    def _require_match_expression_shape(self, statement: Any) -> None:
+        """Validate match expression case structure before type checking."""
+        if not hasattr(statement, 'expression'):
+            raise TypeError("_check_match_expression_statement: statement must define 'expression'")
+        self._require_list_attribute(statement, 'cases', "_check_match_expression_statement")
+
+        for case in statement.cases:
+            if not hasattr(case, 'pattern'):
+                raise TypeError("_check_match_expression_statement: each case must define 'pattern'")
+            if not hasattr(case, 'body'):
+                raise TypeError("_check_match_expression_statement: each case must define 'body'")
+            if not isinstance(case.body, list):
+                raise TypeError("_check_match_expression_statement: each case.body must be a list")
+
+    def _require_try_catch_body_shape(self, node: Any, attr_name: str, method_name: str) -> None:
+        """Validate TryCatch body shape as list of statements or Block-like node."""
+        self._require_attribute(node, attr_name, method_name)
+        body = getattr(node, attr_name)
+        if body is None:
+            return
+        if isinstance(body, list):
+            return
+        if hasattr(body, 'statements'):
+            if not isinstance(body.statements, list):
+                raise TypeError(f"{method_name}: statement.{attr_name}.statements must be a list")
+            return
+        raise TypeError(
+            f"{method_name}: statement.{attr_name} must be a list of statements or a Block-like node"
+        )
+
+    def _require_function_call_shape(self, call: Any) -> None:
+        """Validate FunctionCall node shape before type-check dispatch."""
+        if call is None:
+            raise TypeError("check_function_call: call must not be None")
+        if not hasattr(call, 'name'):
+            raise TypeError("check_function_call: call must define 'name'")
+        if not isinstance(call.name, str) or not call.name.strip():
+            raise TypeError("check_function_call: call.name must be a non-empty string")
+        if not hasattr(call, 'arguments'):
+            raise TypeError("check_function_call: call must define 'arguments'")
+        if not isinstance(call.arguments, list):
+            raise TypeError("check_function_call: call.arguments must be a list")
+        if not hasattr(call, 'named_arguments'):
+            raise TypeError("check_function_call: call must define 'named_arguments'")
+        if call.named_arguments is None:
+            return
+        if not isinstance(call.named_arguments, dict):
+            raise TypeError("check_function_call: call.named_arguments must be a dict")
     
     def check_statement(self, statement: Any, env: TypeEnvironment) -> Type:
         """Check the type of a statement."""
+        self._require_statement_env(statement, env, "check_statement")
         # Standard AST nodes with dedicated check methods
         if isinstance(statement, VariableDeclaration):
             return self.check_variable_declaration(statement, env)
@@ -435,6 +547,7 @@ class TypeChecker:
 
     def _check_import_statement(self, statement: Any, env: TypeEnvironment) -> Tuple[bool, Any]:
         """Handle import-related statement nodes. Returns (handled, type)."""
+        self._require_statement_env(statement, env, "_check_import_statement")
         cls = statement.__class__.__name__
         if cls == 'ImportStatement':
             if hasattr(statement, 'module_name'):
@@ -457,6 +570,7 @@ class TypeChecker:
 
     def _check_data_structure_statement(self, statement: Any, env: TypeEnvironment) -> Tuple[bool, Any]:
         """Handle struct/union/object/memory statement nodes. Returns (handled, type)."""
+        self._require_statement_env(statement, env, "_check_data_structure_statement")
         cls = statement.__class__.__name__
         if cls == 'SendStatement':
             self._check_send_statement(statement, env)
@@ -500,6 +614,7 @@ class TypeChecker:
 
     def _check_collection_expression(self, statement: Any, env: TypeEnvironment) -> Tuple[bool, Any]:
         """Handle collection literal and comprehension nodes. Returns (handled, type)."""
+        self._require_statement_env(statement, env, "_check_collection_expression")
         cls = statement.__class__.__name__
         if cls == 'ChannelCreation':
             return True, ChannelType(ANY_TYPE)
@@ -529,13 +644,15 @@ class TypeChecker:
 
     def _check_send_statement(self, statement: Any, env: TypeEnvironment) -> None:
         """Type check sending a value to a channel."""
+        self._require_statement_env(statement, env, "_check_send_statement")
+        self._require_attribute(statement, 'value', "_check_send_statement")
+        self._require_attribute(statement, 'channel', "_check_send_statement")
+
         value_type = ANY_TYPE
         channel_type: Type = ANY_TYPE
 
-        if hasattr(statement, 'value'):
-            value_type = self.check_expression(statement.value, env)
-        if hasattr(statement, 'channel'):
-            channel_type = self.check_expression(statement.channel, env)
+        value_type = self.check_expression(statement.value, env)
+        channel_type = self.check_expression(statement.channel, env)
 
         if isinstance(channel_type, AnyType):
             return
@@ -563,8 +680,8 @@ class TypeChecker:
 
     def _check_receive_expression(self, statement: Any, env: TypeEnvironment) -> Type:
         """Type check receiving a value from a channel."""
-        if not hasattr(statement, 'channel'):
-            return ANY_TYPE
+        self._require_statement_env(statement, env, "_check_receive_expression")
+        self._require_attribute(statement, 'channel', "_check_receive_expression")
 
         channel_type = self.check_expression(statement.channel, env)
 
@@ -582,8 +699,8 @@ class TypeChecker:
 
     def _check_close_statement(self, statement: Any, env: TypeEnvironment) -> None:
         """Type check closing a channel."""
-        if not hasattr(statement, 'channel'):
-            return
+        self._require_statement_env(statement, env, "_check_close_statement")
+        self._require_attribute(statement, 'channel', "_check_close_statement")
 
         channel_type = self.check_expression(statement.channel, env)
 
@@ -598,6 +715,10 @@ class TypeChecker:
 
     def _refine_channel_identifier_type(self, channel_expr: Any, payload_type: Type, env: TypeEnvironment) -> None:
         """Refine an identifier channel from Channel[Any] to Channel[payload_type]."""
+        if not isinstance(env, TypeEnvironment):
+            raise TypeError("_refine_channel_identifier_type: env must be a TypeEnvironment")
+        if payload_type is None or not hasattr(payload_type, 'is_compatible_with'):
+            raise TypeError("_refine_channel_identifier_type: payload_type must be a valid NexusLang type")
         if not isinstance(channel_expr, Identifier):
             return
 
@@ -618,8 +739,10 @@ class TypeChecker:
 
     def _check_ffi_statement(self, statement: Any, env: TypeEnvironment) -> Tuple[bool, Any]:
         """Handle FFI extern declaration nodes. Returns (handled, type)."""
+        self._require_statement_env(statement, env, "_check_ffi_statement")
         cls = statement.__class__.__name__
         if cls == 'ExternFunctionDeclaration':
+            self._require_list_attribute(statement, 'parameters', "_check_ffi_statement")
             self._validate_extern_function_abi(statement)
             if hasattr(statement, 'name'):
                 param_types = []
@@ -756,8 +879,10 @@ class TypeChecker:
 
     def _check_inline_assembly_statement(self, statement: Any, env: TypeEnvironment) -> Tuple[bool, Any]:
         """Handle inline assembly nodes. Returns (handled, type)."""
+        self._require_statement_env(statement, env, "_check_inline_assembly_statement")
         if statement.__class__.__name__ != 'InlineAssembly':
             return False, None
+        self._require_inline_assembly_shape(statement)
         line = getattr(statement, 'line_number', '?')
 
         if hasattr(statement, 'inputs'):
@@ -837,8 +962,10 @@ class TypeChecker:
 
     def _check_match_expression_statement(self, statement: Any, env: TypeEnvironment) -> Tuple[bool, Any]:
         """Handle match/case expression nodes. Returns (handled, type)."""
+        self._require_statement_env(statement, env, "_check_match_expression_statement")
         if statement.__class__.__name__ != 'MatchExpression':
             return False, None
+        self._require_match_expression_shape(statement)
         match_expr_type = self.check_expression(statement.expression, env)
         result_types = []
         for case in statement.cases:
@@ -894,38 +1021,50 @@ class TypeChecker:
 
     def _check_ownership_statement(self, statement: Any, env: TypeEnvironment) -> Tuple[bool, Any]:
         """Handle ownership/smart-pointer nodes. Returns (handled, type)."""
+        self._require_statement_env(statement, env, "_check_ownership_statement")
         cls = statement.__class__.__name__
         if cls == 'RcCreation':
-            if hasattr(statement, 'value') and statement.value is not None:
+            self._require_attribute(statement, 'value', "_check_ownership_statement")
+            if statement.value is not None:
                 self.check_statement(statement.value, env)
             return True, ANY_TYPE
         if cls == 'DowngradeExpression':
-            if hasattr(statement, 'rc_expr') and statement.rc_expr is not None:
+            self._require_attribute(statement, 'rc_expr', "_check_ownership_statement")
+            if statement.rc_expr is not None:
                 self.check_statement(statement.rc_expr, env)
             return True, ANY_TYPE
         if cls == 'UpgradeExpression':
-            if hasattr(statement, 'weak_expr') and statement.weak_expr is not None:
+            self._require_attribute(statement, 'weak_expr', "_check_ownership_statement")
+            if statement.weak_expr is not None:
                 self.check_statement(statement.weak_expr, env)
             return True, ANY_TYPE
         if cls == 'MoveExpression':
+            self._require_attribute(statement, 'var_name', "_check_ownership_statement")
             var_name = getattr(statement, 'var_name', None)
             if var_name is not None:
                 try:
                     return True, env.get_variable_type(var_name)
-                except NameError:
+                except TypeCheckError:
                     # Variable not found in environment
                     pass
             return True, ANY_TYPE
         if cls in ('BorrowExpression', 'BorrowExpressionWithLifetime'):
+            self._require_attribute(statement, 'var_name', "_check_ownership_statement")
             var_name = getattr(statement, 'var_name', None)
             if var_name is not None:
                 try:
                     return True, env.get_variable_type(var_name)
-                except NameError:
+                except TypeCheckError:
                     # Variable not found in environment
                     pass
             return True, ANY_TYPE
-        if cls in ('DropBorrowStatement', 'LifetimeAnnotation', 'MovedValue'):
+        if cls == 'DropBorrowStatement':
+            self._require_attribute(statement, 'var_name', "_check_ownership_statement")
+            return True, ANY_TYPE
+        if cls == 'LifetimeAnnotation':
+            self._require_string_attribute(statement, 'label', "_check_ownership_statement")
+            return True, ANY_TYPE
+        if cls == 'MovedValue':
             return True, ANY_TYPE
         return False, None
     
@@ -1152,6 +1291,13 @@ class TypeChecker:
 
     def check_async_function_definition(self, definition: Any, env: TypeEnvironment) -> Type:
         """Check an async function and register an awaitable return signature."""
+        self._require_statement_env(definition, env, "check_async_function_definition")
+        self._require_string_attribute(definition, 'name', "check_async_function_definition")
+        self._require_list_attribute(definition, 'parameters', "check_async_function_definition")
+        self._require_list_attribute(definition, 'body', "check_async_function_definition")
+        if hasattr(definition, 'type_parameters') and not isinstance(definition.type_parameters, list):
+            raise TypeError("check_async_function_definition: statement.type_parameters must be a list")
+
         sync_like_definition = FunctionDefinition(
             name=definition.name,
             parameters=getattr(definition, 'parameters', []),
@@ -1254,6 +1400,11 @@ class TypeChecker:
 
     def check_parallel_for_loop(self, loop: ParallelForLoop, env: TypeEnvironment) -> Type:
         """Check a parallel for-each loop."""
+        self._require_statement_env(loop, env, "check_parallel_for_loop")
+        self._require_string_attribute(loop, 'var_name', "check_parallel_for_loop")
+        self._require_attribute(loop, 'iterable', "check_parallel_for_loop")
+        self._require_list_attribute(loop, 'body', "check_parallel_for_loop")
+
         iterable_type = self.check_statement(loop.iterable, env)
 
         loop_env = TypeEnvironment(env)
@@ -1821,6 +1972,9 @@ class TypeChecker:
     
     def check_concurrent_block(self, block: ConcurrentBlock, env: TypeEnvironment) -> Type:
         """Check a concurrent block of statements."""
+        self._require_statement_env(block, env, "check_concurrent_block")
+        self._require_list_attribute(block, 'statements', "check_concurrent_block")
+
         block_env = TypeEnvironment(env)
         result_types = []
         
@@ -1832,6 +1986,10 @@ class TypeChecker:
     
     def check_try_catch_block(self, block: TryCatchBlock, env: TypeEnvironment) -> Type:
         """Check a try-catch block."""
+        self._require_statement_env(block, env, "check_try_catch_block")
+        self._require_block_like_attribute(block, 'try_block', "check_try_catch_block")
+        self._require_block_like_attribute(block, 'catch_block', "check_try_catch_block")
+
         try_env = TypeEnvironment(env)
         try_type = self.check_block(block.try_block, try_env)
 
@@ -1850,6 +2008,13 @@ class TypeChecker:
     
     def check_try_catch(self, node: TryCatch, env: TypeEnvironment) -> Type:
         """Check a TryCatch node (alternative try-catch AST form)."""
+        self._require_statement_env(node, env, "check_try_catch")
+        self._require_try_catch_body_shape(node, 'try_block', "check_try_catch")
+        self._require_try_catch_body_shape(node, 'catch_block', "check_try_catch")
+        if getattr(node, 'exception_var', None) is not None:
+            if not isinstance(node.exception_var, str) or not node.exception_var.strip():
+                raise TypeError("check_try_catch: statement.exception_var must be a non-empty string when provided")
+
         def check_body(body, local_env):
             if body is None:
                 return ANY_TYPE
@@ -2014,6 +2179,9 @@ class TypeChecker:
 
     def check_function_call(self, call: FunctionCall, env: TypeEnvironment) -> Type:
         """Check a function call with bidirectional type inference."""
+        self._require_statement_env(call, env, "check_function_call")
+        self._require_function_call_shape(call)
+
         # Handle module.function calls (function name contains a dot)
         if isinstance(call.name, str) and '.' in call.name:
             # Module member access - type check arguments but return ANY_TYPE
@@ -2476,6 +2644,9 @@ class TypeChecker:
 
     def check_yield_expression(self, yield_expr, env: TypeEnvironment) -> Type:
         """Check a yield expression with function-context compatibility checks."""
+        self._require_statement_env(yield_expr, env, "check_yield_expression")
+        self._require_attribute(yield_expr, 'value', "check_yield_expression")
+
         yielded_type = NULL_TYPE
         if getattr(yield_expr, 'value', None) is not None:
             yielded_type = self.check_statement(yield_expr.value, env)
@@ -2501,13 +2672,14 @@ class TypeChecker:
 
     def check_await_expression(self, await_expr: Any, env: TypeEnvironment) -> Type:
         """Check an await expression and return the unwrapped task payload type."""
+        self._require_statement_env(await_expr, env, "check_await_expression")
+
         operand = getattr(await_expr, 'expression', None)
         if operand is None:
             operand = getattr(await_expr, 'expr', None)
 
         if operand is None:
-            self.errors.append("Type error: await expression is missing an awaitable operand")
-            return ANY_TYPE
+            raise TypeError("check_await_expression: statement must define 'expression' or 'expr'")
 
         awaited_type = self.check_statement(operand, env)
 
@@ -2866,10 +3038,22 @@ class TypeChecker:
         
         class_type = self.type_registry[class_name]
         trait_methods = self.trait_methods[trait_name]
+        trait_type = self.type_registry.get(trait_name)
         
         for method_name in trait_methods:
             if method_name not in class_type.methods:
                 raise TypeError(f"Class {class_name} does not implement trait method {method_name} from trait {trait_name}")
+
+            # When the trait definition is available in the registry, validate
+            # signature compatibility for required methods as well.
+            if trait_type is not None and hasattr(trait_type, 'methods'):
+                required_method_type = trait_type.methods.get(method_name)
+                class_method_type = class_type.methods.get(method_name)
+                if required_method_type is not None and class_method_type is not None:
+                    if not self.types_compatible(class_method_type, required_method_type):
+                        raise TypeError(
+                            f"Trait method {method_name} in class {class_name} is not compatible with trait {trait_name}"
+                        )
 
     def get_trait_conformance_diagnostics(self, class_name: str, trait_name: str) -> Dict[str, Any]:
         """Generate detailed conformance diagnostics for trait/interface implementation.

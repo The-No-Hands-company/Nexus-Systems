@@ -163,6 +163,17 @@ class LifetimeChecker:
         for stmt in (stmts or []):
             self._check_node(stmt)
 
+    def _statement_list(self, body) -> list:
+        """Normalize list-like or Block-like bodies into a statement list."""
+        if body is None:
+            return []
+        if isinstance(body, list):
+            return body
+        statements = getattr(body, 'statements', None)
+        if isinstance(statements, list):
+            return statements
+        return []
+
     def _check_node(self, node) -> None:
         if node is None:
             return
@@ -334,11 +345,17 @@ class LifetimeChecker:
                 self._check_node(case.guard)
             self._check_statements(case.body)
 
-    def _check_TryCatchStatement(self, node) -> None:
-        self._check_statements(getattr(node, 'try_block', None) or [])
-        self._check_statements(getattr(node, 'catch_block', None) or [])
+    def _check_TryCatch(self, node) -> None:
+        self._check_statements(self._statement_list(getattr(node, 'try_block', None)))
+        self._check_statements(self._statement_list(getattr(node, 'catch_block', None)))
         if getattr(node, 'finally_block', None):
-            self._check_statements(node.finally_block)
+            self._check_statements(self._statement_list(node.finally_block))
+
+    def _check_TryCatchBlock(self, node) -> None:
+        self._check_TryCatch(node)
+
+    def _check_TryCatchStatement(self, node) -> None:
+        self._check_TryCatch(node)
 
     def _check_ClassDefinition(self, node) -> None:
         for stmt in (node.methods or []):

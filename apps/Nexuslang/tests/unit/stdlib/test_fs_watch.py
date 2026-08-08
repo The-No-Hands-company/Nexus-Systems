@@ -15,6 +15,7 @@ import tempfile
 import time
 import threading
 import uuid
+import errno
 import pytest
 
 # ------------------------------------------------------------------
@@ -66,6 +67,17 @@ def _wait_for_events(watcher_id: str, min_count: int = 1, timeout: float = 1.5) 
     return fs_watch_poll(watcher_id)
 
 
+def _start_or_skip(path: str, recursive: bool = False) -> str:
+    """Start watcher or skip test on kernel inotify resource exhaustion."""
+    try:
+        return fs_watch_start(path, recursive=recursive)
+    except OSError as exc:
+        msg = str(exc).lower()
+        if exc.errno in (errno.ENOSPC, errno.EMFILE) or "inotify watch limit reached" in msg:
+            pytest.skip(f"Inotify capacity exhausted on host: {exc}")
+        raise
+
+
 # ------------------------------------------------------------------
 # Fixture: temp directory with a running watcher
 # ------------------------------------------------------------------
@@ -74,11 +86,19 @@ def _wait_for_events(watcher_id: str, min_count: int = 1, timeout: float = 1.5) 
 def watched_dir():
     """Creates a temp dir, starts a watcher, yields (tmpdir, watcher_id), stops on teardown."""
     with tempfile.TemporaryDirectory() as tmpdir:
-        wid = fs_watch_start(tmpdir)
+        wid = _start_or_skip(tmpdir)
         yield tmpdir, wid
         # Stop if still active
         if fs_watch_is_active(wid):
             fs_watch_stop(wid)
+
+
+@pytest.fixture(autouse=True)
+def _watcher_registry_hygiene():
+    """Keep fs_watch global registry clean across tests in this module."""
+    fs_watch_stop_all()
+    yield
+    fs_watch_stop_all()
 
 
 # ------------------------------------------------------------------
@@ -88,7 +108,7 @@ def watched_dir():
 class TestFsWatchStart:
     def test_returns_non_empty_string(self):
         with tempfile.TemporaryDirectory() as d:
-            wid = fs_watch_start(d)
+            wid = _start_or_skip(d)
             try:
                 assert isinstance(wid, str)
                 assert len(wid) > 0
@@ -97,7 +117,7 @@ class TestFsWatchStart:
 
     def test_watcher_id_is_unique(self):
         with tempfile.TemporaryDirectory() as d:
-            ids = [fs_watch_start(d) for _ in range(5)]
+            ids = [_start_or_skip(d) for _ in range(5)]
             try:
                 assert len(set(ids)) == 5
             finally:
@@ -118,7 +138,7 @@ class TestFsWatchStart:
 
     def test_resolves_to_absolute_path(self):
         with tempfile.TemporaryDirectory() as d:
-            wid = fs_watch_start(d)
+            wid = _start_or_skip(d)
             try:
                 assert os.path.isabs(fs_watch_path(wid))
             finally:
@@ -126,7 +146,7 @@ class TestFsWatchStart:
 
     def test_is_active_immediately_after_start(self):
         with tempfile.TemporaryDirectory() as d:
-            wid = fs_watch_start(d)
+            wid = _start_or_skip(d)
             try:
                 assert fs_watch_is_active(wid) is True
             finally:
@@ -152,7 +172,7 @@ class TestFsWatchStart:
         with tempfile.TemporaryDirectory() as d:
             subdir = os.path.join(d, "sub")
             os.makedirs(subdir)
-            wid = fs_watch_start(d, recursive=True)
+            wid = _start_or_skip(d, recursive=True)
             try:
                 _make_file(subdir, "deep.txt")
                 events = _wait_for_events(wid, min_count=1)
@@ -163,8 +183,8 @@ class TestFsWatchStart:
 
     def test_multiple_watchers_on_same_dir(self):
         with tempfile.TemporaryDirectory() as d:
-            wid1 = fs_watch_start(d)
-            wid2 = fs_watch_start(d)
+            wid1 = _start_or_skip(d)
+            wid2 = _start_or_skip(d)
             try:
                 assert wid1 != wid2
                 assert fs_watch_is_active(wid1)
@@ -181,7 +201,7 @@ class TestFsWatchStart:
 class TestFsWatchStop:
     def test_returns_true_on_success(self):
         with tempfile.TemporaryDirectory() as d:
-            wid = fs_watch_start(d)
+            wid = _start_or_skip(d)
             result = fs_watch_stop(wid)
             assert result is True
 
@@ -191,19 +211,19 @@ class TestFsWatchStop:
 
     def test_is_inactive_after_stop(self):
         with tempfile.TemporaryDirectory() as d:
-            wid = fs_watch_start(d)
+            wid = _start_or_skip(d)
             fs_watch_stop(wid)
             assert fs_watch_is_active(wid) is False
 
     def test_double_stop_returns_false(self):
         with tempfile.TemporaryDirectory() as d:
-            wid = fs_watch_start(d)
+            wid = _start_or_skip(d)
             assert fs_watch_stop(wid) is True
             assert fs_watch_stop(wid) is False
 
     def test_stop_removes_from_list(self):
         with tempfile.TemporaryDirectory() as d:
-            wid = fs_watch_start(d)
+            wid = _start_or_skip(d)
             assert any(w["id"] == wid for w in fs_watch_list())
             fs_watch_stop(wid)
             assert not any(w["id"] == wid for w in fs_watch_list())
@@ -216,8 +236,8 @@ class TestFsWatchStop:
 class TestFsWatchStopAll:
     def test_returns_count_of_stopped_watchers(self):
         with tempfile.TemporaryDirectory() as d1, tempfile.TemporaryDirectory() as d2:
-            wid1 = fs_watch_start(d1)
-            wid2 = fs_watch_start(d2)
+            wid1 = _start_or_skip(d1)
+            wid2 = _start_or_skip(d2)
             count = fs_watch_stop_all()
             assert count >= 2  # at least those two
             assert not fs_watch_is_active(wid1)
@@ -231,7 +251,7 @@ class TestFsWatchStopAll:
 
     def test_list_empty_after_stop_all(self):
         with tempfile.TemporaryDirectory() as d:
-            fs_watch_start(d)
+            _start_or_skip(d)
         fs_watch_stop_all()
         assert fs_watch_list() == []
 
@@ -350,7 +370,7 @@ class TestFsWatchList:
 
     def test_entry_has_required_keys(self):
         with tempfile.TemporaryDirectory() as d:
-            wid = fs_watch_start(d)
+            wid = _start_or_skip(d)
             try:
                 entries = fs_watch_list()
                 matching = [e for e in entries if e["id"] == wid]
@@ -365,7 +385,7 @@ class TestFsWatchList:
 
     def test_entry_shows_correct_path(self):
         with tempfile.TemporaryDirectory() as d:
-            wid = fs_watch_start(d)
+            wid = _start_or_skip(d)
             try:
                 entry = next(e for e in fs_watch_list() if e["id"] == wid)
                 assert entry["path"] == os.path.abspath(d)
@@ -374,7 +394,7 @@ class TestFsWatchList:
 
     def test_entry_active_is_true_while_running(self):
         with tempfile.TemporaryDirectory() as d:
-            wid = fs_watch_start(d)
+            wid = _start_or_skip(d)
             try:
                 entry = next(e for e in fs_watch_list() if e["id"] == wid)
                 assert entry["active"] is True
@@ -383,8 +403,8 @@ class TestFsWatchList:
 
     def test_entry_recursive_reflects_arg(self):
         with tempfile.TemporaryDirectory() as d:
-            wid_f = fs_watch_start(d, recursive=False)
-            wid_t = fs_watch_start(d, recursive=True)
+            wid_f = _start_or_skip(d, recursive=False)
+            wid_t = _start_or_skip(d, recursive=True)
             try:
                 entries = {e["id"]: e for e in fs_watch_list()}
                 assert entries[wid_f]["recursive"] is False
@@ -409,7 +429,7 @@ class TestFsWatchList:
 class TestFsWatchIsActive:
     def test_true_for_running_watcher(self):
         with tempfile.TemporaryDirectory() as d:
-            wid = fs_watch_start(d)
+            wid = _start_or_skip(d)
             try:
                 assert fs_watch_is_active(wid) is True
             finally:
@@ -417,7 +437,7 @@ class TestFsWatchIsActive:
 
     def test_false_after_stop(self):
         with tempfile.TemporaryDirectory() as d:
-            wid = fs_watch_start(d)
+            wid = _start_or_skip(d)
             fs_watch_stop(wid)
             assert fs_watch_is_active(wid) is False
 
@@ -426,7 +446,7 @@ class TestFsWatchIsActive:
 
     def test_type_is_bool(self):
         with tempfile.TemporaryDirectory() as d:
-            wid = fs_watch_start(d)
+            wid = _start_or_skip(d)
             try:
                 assert isinstance(fs_watch_is_active(wid), bool)
             finally:
@@ -440,7 +460,7 @@ class TestFsWatchIsActive:
 class TestFsWatchPath:
     def test_returns_correct_path(self):
         with tempfile.TemporaryDirectory() as d:
-            wid = fs_watch_start(d)
+            wid = _start_or_skip(d)
             try:
                 assert fs_watch_path(wid) == os.path.abspath(d)
             finally:
@@ -452,7 +472,7 @@ class TestFsWatchPath:
 
     def test_returns_absolute_path(self):
         with tempfile.TemporaryDirectory() as d:
-            wid = fs_watch_start(d)
+            wid = _start_or_skip(d)
             try:
                 assert os.path.isabs(fs_watch_path(wid))
             finally:
@@ -460,7 +480,7 @@ class TestFsWatchPath:
 
     def test_type_is_str(self):
         with tempfile.TemporaryDirectory() as d:
-            wid = fs_watch_start(d)
+            wid = _start_or_skip(d)
             try:
                 assert isinstance(fs_watch_path(wid), str)
             finally:
@@ -474,7 +494,7 @@ class TestFsWatchPath:
 class TestFsWatchClear:
     def test_returns_zero_when_no_events(self):
         with tempfile.TemporaryDirectory() as d:
-            wid = fs_watch_start(d)
+            wid = _start_or_skip(d)
             try:
                 count = fs_watch_clear(wid)
                 assert count == 0
@@ -503,7 +523,7 @@ class TestFsWatchClear:
 
     def test_type_is_int(self):
         with tempfile.TemporaryDirectory() as d:
-            wid = fs_watch_start(d)
+            wid = _start_or_skip(d)
             try:
                 assert isinstance(fs_watch_clear(wid), int)
             finally:
@@ -519,11 +539,19 @@ class TestFsWatchThreadSafety:
         """Multiple threads can start and stop watchers without deadlock."""
         results = []
         errors = []
+        resource_exhausted = []
 
         def worker(idx):
             try:
                 with tempfile.TemporaryDirectory() as d:
-                    wid = fs_watch_start(d)
+                    try:
+                        wid = fs_watch_start(d)
+                    except OSError as exc:
+                        msg = str(exc).lower()
+                        if exc.errno in (errno.ENOSPC, errno.EMFILE) or "inotify watch limit reached" in msg:
+                            resource_exhausted.append(exc)
+                            return
+                        raise
                     time.sleep(0.05)
                     fs_watch_stop(wid)
                     results.append(idx)
@@ -536,6 +564,8 @@ class TestFsWatchThreadSafety:
         for t in threads:
             t.join(timeout=5)
 
+        if resource_exhausted:
+            pytest.skip(f"Inotify capacity exhausted on host: {resource_exhausted[0]}")
         assert not errors, f"Thread errors: {errors}"
         assert len(results) == 6
 
@@ -543,7 +573,7 @@ class TestFsWatchThreadSafety:
         """Polling while stopping should not raise exceptions."""
         errors = []
         with tempfile.TemporaryDirectory() as d:
-            wid = fs_watch_start(d)
+            wid = _start_or_skip(d)
 
             def poller():
                 for _ in range(20):

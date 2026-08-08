@@ -248,6 +248,34 @@ class TestTypeApplication:
         assert substituted.constructor == G
         assert substituted.argument == A
 
+    def test_type_application_hash_matches_structural_equality(self):
+        fa1 = TypeApplication(
+            TypeConstructorParam("F", STAR_TO_STAR),
+            TypeConstructorParam("A", STAR),
+        )
+        fa2 = TypeApplication(
+            TypeConstructorParam("F", STAR_TO_STAR),
+            TypeConstructorParam("A", STAR),
+        )
+
+        assert fa1 == fa2
+        assert hash(fa1) == hash(fa2)
+
+    def test_type_application_is_compatible_with_any(self):
+        from nexuslang.typesystem.types import ANY_TYPE
+
+        fa = TypeApplication(TypeConstructorParam("F", STAR_TO_STAR), TypeConstructorParam("A", STAR))
+
+        assert fa.is_compatible_with(ANY_TYPE)
+
+    def test_type_application_common_supertype_preserves_constructor(self):
+        fa_int = TypeApplication(TypeConstructorParam("F", STAR_TO_STAR), TypeConstructorParam("A", STAR))
+        fa_other = TypeApplication(TypeConstructorParam("F", STAR_TO_STAR), TypeConstructorParam("A", STAR))
+
+        common = fa_int.get_common_supertype(fa_other)
+
+        assert common == fa_int
+
 
 # ===========================================================================
 # HigherKindedType

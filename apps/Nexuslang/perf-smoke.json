@@ -1,0 +1,9 @@
+{
+  "threshold_ms": 1500.0,
+  "tolerance": 0.15,
+  "baseline": {},
+  "results": {
+    "/run/media/zajferx/Data/dev/The-No-hands-Company/projects/Nexus-Systems/apps/Nexuslang/examples/build_test_hello.nxl": 169.04,
+    "/run/media/zajferx/Data/dev/The-No-hands-Company/projects/Nexus-Systems/apps/Nexuslang/examples/25_inline_assembly.nxl": 107.37
+  }
+}

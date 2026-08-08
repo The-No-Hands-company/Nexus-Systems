@@ -237,6 +237,36 @@ class TestTypeAliasRegistryExpansion:
         result = reg.expand_recursive(INTEGER_TYPE)
         assert result is INTEGER_TYPE
 
+    def test_expand_recursive_expands_nested_composite_types(self):
+        reg = TypeAliasRegistry()
+        int_alias = TypeAliasType("IntAlias", [], INTEGER_TYPE)
+        string_alias = TypeAliasType("StringAlias", [], STRING_TYPE)
+        reg.register_many([int_alias, string_alias])
+
+        nested = FunctionType(
+            [
+                ListType(int_alias),
+                DictionaryType(string_alias, UnionType([int_alias, BOOLEAN_TYPE])),
+            ],
+            UnionType([string_alias, int_alias]),
+        )
+
+        result = reg.expand_recursive(nested)
+
+        assert isinstance(result, FunctionType)
+        assert result.param_types[0].element_type is INTEGER_TYPE
+        assert result.param_types[1].key_type is STRING_TYPE
+        assert result.param_types[1].value_type.types[0] is INTEGER_TYPE
+        assert result.return_type.types == [STRING_TYPE, INTEGER_TYPE]
+
+    def test_register_many_overwrite_replaces_existing_alias(self):
+        reg = TypeAliasRegistry()
+        reg.register(TypeAliasType("Alias", [], INTEGER_TYPE))
+
+        reg.register_many([TypeAliasType("Alias", [], STRING_TYPE)], overwrite=True)
+
+        assert reg.get("Alias").target_type is STRING_TYPE
+
 
 # ===========================================================================
 # Global alias registry helpers

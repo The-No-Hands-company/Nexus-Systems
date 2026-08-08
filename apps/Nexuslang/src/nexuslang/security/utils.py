@@ -185,7 +185,7 @@ def safe_execute(program: str, args: List[str],
         subprocess.TimeoutExpired: If execution times out
     """
     # Validate program name doesn't contain shell metacharacters
-    shell_metacharacters = ['&', '|', ';', '$', '`', '(', ')', '<', '>', '\\n', '\\r']
+    shell_metacharacters = ['&', '|', ';', '$', '`', '(', ')', '<', '>', '\n', '\r']
     for char in shell_metacharacters:
         if char in program:
             raise CommandInjectionError(
@@ -378,16 +378,25 @@ def is_safe_regex(pattern: str, max_length: int = 1000) -> bool:
         return False
     
     # Check for dangerous patterns that can cause ReDoS
+    # Check for dangerous patterns that can cause ReDoS.
+    # These are patterns on the user-supplied *pattern string* itself.
     dangerous_patterns = [
-        r'\(\?.*\)\+',  # Nested quantifiers
-        r'\(\.\*\)\+',  # Greedy quantifiers with wildcards
-        r'\(.*\)\{.*,\}',  # Complex repetition
+        # Nested quantifiers: (X+)+ or (X*)+ or (X+)* or (X*)* etc.
+        r'\([^)]*[+*][^)]*\)[+*{]',
+        # Alternation inside repeated group: (X|Y)+
+        r'\([^)]*\|[^)]*\)[+*{]',
+        # Complex repetition with {N,}: (...)+ followed later by {N,}
+        r'\(.*\)\{[0-9]*,',
+        # Escaped dot-star repeated: (.*)+ or (.*)*
+        r'\(\.\*\)[+*]',
+        # Legacy exact patterns retained for known bad forms
+        r'\(\?.*\)\+',
     ]
-    
+
     for danger in dangerous_patterns:
         if re.search(danger, pattern):
             return False
-    
+
     return True
 
 

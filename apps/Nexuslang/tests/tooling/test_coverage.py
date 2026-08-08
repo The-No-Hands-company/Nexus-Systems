@@ -17,6 +17,7 @@ import tempfile
 import textwrap
 from pathlib import Path
 from typing import Set
+from unittest.mock import patch
 
 import pytest
 
@@ -26,6 +27,7 @@ from nexuslang.tooling.coverage import (
     CoverageCollector,
     CoverageReport,
     FileCoverage,
+    run_with_coverage,
     _find_executable_lines,
     _pct_class,
 )
@@ -794,3 +796,33 @@ class TestCoverageReportMultiFile:
             source_lines=["# a\n", "# b\n", "\n"],
         )
         assert fc.pct == pytest.approx(100.0)
+
+
+class TestRunWithCoverageHardening:
+    def test_run_with_coverage_handles_recoverable_runtime_error(self, tmp_path, capsys):
+        src_path = tmp_path / "prog.nxl"
+        src_path.write_text("set x to 1\n", encoding="utf-8")
+
+        with patch("nexuslang.main.run_program", side_effect=RuntimeError("boom")):
+            report = run_with_coverage(
+                str(src_path),
+                output_dir=str(tmp_path / "coverage"),
+                report_json=False,
+                report_html=False,
+            )
+
+        assert isinstance(report, CoverageReport)
+        assert "partial" in capsys.readouterr().out
+
+    def test_run_with_coverage_propagates_keyboard_interrupt(self, tmp_path):
+        src_path = tmp_path / "prog.nxl"
+        src_path.write_text("set x to 1\n", encoding="utf-8")
+
+        with patch("nexuslang.main.run_program", side_effect=KeyboardInterrupt()):
+            with pytest.raises(KeyboardInterrupt):
+                run_with_coverage(
+                    str(src_path),
+                    output_dir=str(tmp_path / "coverage"),
+                    report_json=False,
+                    report_html=False,
+                )

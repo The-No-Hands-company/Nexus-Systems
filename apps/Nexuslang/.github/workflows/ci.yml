@@ -181,6 +181,32 @@ jobs:
           path: lsp-smoke.json
           retention-days: 14
 
+  warning-gate:
+    name: Warning gate (deprecations)
+    needs: [lint]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest
+
+      - name: Run critical suites with deprecation warnings as errors
+        run: |
+          pytest -q tests/unit/stdlib tests/tooling tests/unit/compiler/test_stdlib_native.py \
+            --maxfail=1 \
+            -W error::DeprecationWarning
+
   perf-smoke:
     name: Perf smoke (py3.11)
     needs: [tests, lint]

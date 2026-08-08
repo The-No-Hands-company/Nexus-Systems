@@ -811,7 +811,7 @@ class TypeInferenceEngine:
         if isinstance(annotation, str):
             try:
                 return get_type_by_name(annotation)
-            except Exception:
+            except (KeyError, ValueError, TypeError, LookupError):
                 return None
         return None
 

@@ -277,8 +277,8 @@ def resolve_path_dependency(
         try:
             dep_data = _load_toml(dep_manifest)
             version = dep_data.get("package", {}).get("version", version)
-        except Exception:
-            pass  # Fall back to declared version
+        except (ValueError, KeyError, OSError):
+            pass  # Fall back to declared version if manifest is unreadable or malformed
 
     checksum = compute_directory_checksum(dep_path)
     return LockedPackage(

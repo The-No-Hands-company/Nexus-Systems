@@ -17,6 +17,12 @@ from dataclasses import dataclass, field
 from enum import Enum, auto
 
 
+_RECOVERABLE_HEADER_PARSE_EXCEPTIONS = (
+    OSError,
+    UnicodeError,
+)
+
+
 class CType(Enum):
     """C type categories for classification."""
     FUNDAMENTAL = auto()  # int, char, float, etc.
@@ -352,25 +358,24 @@ class CHeaderParser:
         try:
             with open(header_path, 'r', encoding='utf-8', errors='ignore') as f:
                 content = f.read()
-            
-            # Mark as parsed
-            self.parsed_headers.add(header_path)
-            
-            # Preprocess: remove comments
-            content = self._remove_comments(content)
-            
-            # Extract declarations
-            self._extract_functions(content, header_path)
-            self._extract_structs(content, header_path)
-            self._extract_enums(content, header_path)
-            self._extract_typedefs(content, header_path)
-            self._extract_macros(content)
-            
-            return True
-            
-        except Exception as e:
+        except _RECOVERABLE_HEADER_PARSE_EXCEPTIONS as e:
             print(f"Error parsing header {header_path}: {e}")
             return False
+
+        # Mark as parsed
+        self.parsed_headers.add(header_path)
+
+        # Preprocess: remove comments
+        content = self._remove_comments(content)
+
+        # Extract declarations
+        self._extract_functions(content, header_path)
+        self._extract_structs(content, header_path)
+        self._extract_enums(content, header_path)
+        self._extract_typedefs(content, header_path)
+        self._extract_macros(content)
+
+        return True
     
     def _remove_comments(self, content: str) -> str:
         """Remove C-style comments (// and /* */)."""

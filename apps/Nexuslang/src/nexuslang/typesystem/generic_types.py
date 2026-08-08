@@ -42,7 +42,10 @@ class GenericTypeRegistry:
             )
         
         # Create type substitution map
-        substitutions = dict(zip(generic_type.type_parameters, type_args))
+        substitutions = {
+            param_name if isinstance(param_name, str) else param_name[0]: type_arg
+            for param_name, type_arg in zip(generic_type.type_parameters, type_args)
+        }
         
         # Create new type instance by substituting type parameters
         instance = self._substitute_types(generic_type.base_type, substitutions)

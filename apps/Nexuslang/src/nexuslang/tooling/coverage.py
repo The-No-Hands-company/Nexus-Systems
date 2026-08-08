@@ -30,6 +30,17 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, List, Optional, Set, Tuple
 
+from ..errors import NxlError
+
+
+_RECOVERABLE_COVERAGE_EXECUTION_EXCEPTIONS = (
+    NxlError,
+    OSError,
+    ValueError,
+    TypeError,
+    RuntimeError,
+)
+
 
 # ---------------------------------------------------------------------------
 # Data model
@@ -356,10 +367,12 @@ def run_with_coverage(
         return result
 
     collector.start()
+    execution_failed = False
     try:
         run_program(source, source_path, coverage_collector=collector)
-    except Exception:
-        pass
+    except _RECOVERABLE_COVERAGE_EXECUTION_EXCEPTIONS:
+        # Build reports even when the executed program fails with a recoverable runtime error.
+        execution_failed = True
     finally:
         collector.stop()
 
@@ -370,6 +383,9 @@ def run_with_coverage(
         report.write_json(os.path.join(output_dir, "coverage.json"))
     if report_html:
         report.write_html(output_dir)
+
+    if execution_failed:
+        print("Program execution ended with recoverable runtime errors; coverage report is partial.")
 
     print(report.summary())
     return report

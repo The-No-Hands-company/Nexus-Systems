@@ -130,8 +130,8 @@ class DefinitionProvider:
                                 )
                             )
 
-                    # Return first matching symbol (could enhance to handle multiple)
-                    sym = symbols[0]
+                    # Choose best symbol deterministically (local/import-aware first).
+                    sym = self._select_best_symbol(symbols, text, uri)
                     from ..lsp.server import Location, Range, Position
                     return Location(
                         uri=sym.file_uri,
@@ -458,7 +458,7 @@ class DefinitionProvider:
         cur = os.path.abspath(current_dir)
         workspace_root = None
         if getattr(self.server, 'workspace_index', None):
-            workspace_root = os.path.abspath(getattr(self.server.workspace_index, 'root_path', '') or '')
+            workspace_root = os.path.abspath(getattr(self.server.workspace_index, 'workspace_root', '') or '')
 
         while True:
             if cur not in bases:
@@ -474,6 +474,61 @@ class DefinitionProvider:
             bases.append(workspace_root)
 
         return bases
+
+    def _select_best_symbol(self, symbols, text: str, current_uri: str):
+        """Pick the best symbol candidate using local and import-aware ranking."""
+        if not symbols:
+            return None
+
+        same_file = [s for s in symbols if s.file_uri == current_uri]
+        if same_file:
+            return same_file[0]
+
+        imported_modules = set(self._get_imported_module_names(text))
+        if imported_modules:
+            for sym in symbols:
+                candidate_path = self._uri_to_path(sym.file_uri)
+                for module_name in imported_modules:
+                    for module_path in self._find_module_paths(module_name, os.path.dirname(self._uri_to_path(current_uri))):
+                        if os.path.abspath(candidate_path) == os.path.abspath(module_path):
+                            return sym
+
+        return symbols[0]
+
+    def _get_imported_module_names(self, text: str) -> List[str]:
+        """Extract imported module names from import and from-import statements."""
+        modules: List[str] = []
+        for line in text.split('\n'):
+            import_match = re.search(r'^\s*import\s+(.+)$', line, re.IGNORECASE)
+            if import_match:
+                for part in import_match.group(1).split(','):
+                    item = part.strip()
+                    if not item:
+                        continue
+                    alias_match = re.match(r'^([\w\.]+)\s+as\s+(\w+)$', item, re.IGNORECASE)
+                    if alias_match:
+                        modules.append(alias_match.group(1))
+                    else:
+                        modules.append(item)
+
+            from_match = re.search(r'^\s*from\s+([\w\.]+)\s+import\s+(.+)$', line, re.IGNORECASE)
+            if from_match:
+                modules.append(from_match.group(1))
+
+        # Preserve insertion order while removing duplicates.
+        seen = set()
+        unique = []
+        for name in modules:
+            if name not in seen:
+                unique.append(name)
+                seen.add(name)
+        return unique
+
+    def _uri_to_path(self, file_uri: str) -> str:
+        """Convert file URI to file path."""
+        if file_uri.startswith('file://'):
+            return file_uri[7:]
+        return file_uri
 
     def _find_module_paths(self, module_name: str, current_dir: str) -> List[str]:
         """Resolve dotted module names to candidate .nxl paths and __init__.nxl files."""

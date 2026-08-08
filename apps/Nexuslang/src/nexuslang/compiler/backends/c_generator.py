@@ -88,7 +88,7 @@ class CCodeGenerator(CodeGenerator):
         self.extern_types = {}
         self.parallel_body_counter = 0
         self.parallel_body_definitions = []
-        
+
         # Add default required includes
         self.includes.add("<stdio.h>")
         self.includes.add("<stdlib.h>")
@@ -98,7 +98,18 @@ class CCodeGenerator(CodeGenerator):
         
         self.top_level_statements = [
             stmt for stmt in ast.statements
-            if not isinstance(stmt, (FunctionDefinition, AsyncFunctionDefinition, ClassDefinition, ExternFunctionDeclaration, ExternVariableDeclaration, MacroDefinition))
+            if not isinstance(
+                stmt,
+                (
+                    FunctionDefinition,
+                    AsyncFunctionDefinition,
+                    ClassDefinition,
+                    ExternFunctionDeclaration,
+                    ExternVariableDeclaration,
+                    ExternTypeDeclaration,
+                    MacroDefinition,
+                ),
+            )
         ]
 
         has_user_main = any(isinstance(stmt, FunctionDefinition) and stmt.name == "main" for stmt in ast.statements)
@@ -166,9 +177,8 @@ class CCodeGenerator(CodeGenerator):
             self.indent()
         
             # Generate top-level statements
-            for stmt in ast.statements:
-                if not isinstance(stmt, (FunctionDefinition, ClassDefinition)):
-                    self._generate_statement(stmt)
+            for stmt in self.top_level_statements:
+                self._generate_statement(stmt)
             
             self.emit("return 0;")
             self.dedent()
@@ -231,6 +241,16 @@ class CCodeGenerator(CodeGenerator):
         self.output_buffer = header_lines + self.output_buffer
         
         return self.get_output()
+
+    def _raise_unsupported_codegen_node(self, node: Any, context: str, cause: Optional[BaseException] = None) -> None:
+        """Raise a deterministic code generation failure for unsupported AST nodes."""
+        node_type = type(node).__name__
+        line = getattr(node, 'line', '?')
+        message = f"C code generation cannot lower {context} {node_type} at line {line}"
+        if cause is not None:
+            message = f"{message}: {cause}"
+            raise RuntimeError(message) from cause
+        raise RuntimeError(message)
 
     def _collect_generic_function_templates(self, ast: Program) -> None:
         """Record generic function templates declared in the program."""
@@ -898,6 +918,9 @@ class CCodeGenerator(CodeGenerator):
             # Interfaces are compile-time metadata only, no runtime code needed
             # Interface compliance is checked at compile-time
             pass
+        elif isinstance(node, ExternTypeDeclaration):
+            # Extern types are compile-time FFI metadata only.
+            pass
         elif isinstance(node, ExternFunctionDeclaration):
             self._generate_extern_function(node)
         elif isinstance(node, ReturnStatement):
@@ -970,6 +993,18 @@ class CCodeGenerator(CodeGenerator):
             self._collect_macro_definition(node)
         elif isinstance(node, MacroExpansion):
             self._generate_macro_expansion(node)
+        elif isinstance(node, TestBlock):
+            self._generate_test_block(node)
+        elif isinstance(node, DescribeBlock):
+            self._generate_describe_block(node)
+        elif isinstance(node, ItBlock):
+            self._generate_it_block(node)
+        elif isinstance(node, ParameterizedTestBlock):
+            self._generate_parameterized_test_block(node)
+        elif isinstance(node, BeforeEachBlock):
+            self._generate_before_each_block(node)
+        elif isinstance(node, AfterEachBlock):
+            self._generate_after_each_block(node)
         elif isinstance(node, MemberAssignment):
             # Member assignment: object.field = value
             target_expr = self._generate_expression(node.target)
@@ -1000,18 +1035,84 @@ class CCodeGenerator(CodeGenerator):
         elif isinstance(node, UnsafeBlock):
             self._generate_unsafe_block(node)
         else:
-            # Try to handle as expression
             try:
                 expr = self._generate_expression(node)
                 self.emit(f"{expr};")
             except (AttributeError, TypeError, ValueError, NotImplementedError) as e:
-                # Expression generation failed; emit comment and log error
-                import logging
-                logging.error(
-                    f"C code generation failed for statement {type(node).__name__} at line {getattr(node, 'line', '?')}: {e}. "
-                    f"Generated code will contain placeholder comment."
-                )
-                self.emit(f"/* Unhandled statement: {type(node).__name__} (error: {e.__class__.__name__}) */")
+                self._raise_unsupported_codegen_node(node, "statement", e)
+
+    def _generate_test_block(self, node: TestBlock) -> None:
+        """Lower a named test block by emitting its body inline with trace comments."""
+        self.emit(f"/* test: {node.name} */")
+        for stmt in getattr(node, 'body', []) or []:
+            self._generate_statement(stmt)
+        self.emit("/* end test */")
+
+    def _generate_describe_block(self, node: DescribeBlock) -> None:
+        """Lower a describe suite block by emitting nested items inline."""
+        self.emit(f"/* describe: {node.name} */")
+        for stmt in getattr(node, 'body', []) or []:
+            self._generate_statement(stmt)
+        self.emit("/* end describe */")
+
+    def _generate_it_block(self, node: ItBlock) -> None:
+        """Lower an it block by emitting nested statements inline."""
+        self.emit(f"/* it: {node.name} */")
+        for stmt in getattr(node, 'body', []) or []:
+            self._generate_statement(stmt)
+        self.emit("/* end it */")
+
+    def _generate_before_each_block(self, node: BeforeEachBlock) -> None:
+        """Lower a before_each block inline so fixture setup remains visible in generated output."""
+        self.emit("/* before each */")
+        for stmt in getattr(node, 'body', []) or []:
+            self._generate_statement(stmt)
+        self.emit("/* end before each */")
+
+    def _generate_after_each_block(self, node: AfterEachBlock) -> None:
+        """Lower an after_each block inline so fixture teardown remains visible in generated output."""
+        self.emit("/* after each */")
+        for stmt in getattr(node, 'body', []) or []:
+            self._generate_statement(stmt)
+        self.emit("/* end after each */")
+
+    def _generate_parameterized_test_block(self, node: ParameterizedTestBlock) -> None:
+        """Lower a parameterized test by emitting one scoped body per case."""
+        self.emit(f"/* parameterized test: {node.name} */")
+        params = list(getattr(node, 'params', []) or [])
+        cases = list(getattr(node, 'cases', []) or [])
+        if not cases:
+            self.emit("{")
+            self.indent()
+            for stmt in getattr(node, 'body', []) or []:
+                self._generate_statement(stmt)
+            self.dedent()
+            self.emit("}")
+            self.emit("/* end parameterized test */")
+            return
+
+        for case_index, case in enumerate(cases):
+            case_label = ", ".join(str(expr) for expr in case) if case else "no arguments"
+            self.emit(f"/* case {case_index + 1}: {case_label} */")
+            self.emit("{")
+            self.indent()
+            saved_symbol_table = dict(self.symbol_table)
+            saved_aliases = dict(self.symbol_aliases)
+            try:
+                for param_index, param_name in enumerate(params):
+                    case_expr = case[param_index] if param_index < len(case) else Literal("integer", 0)
+                    param_type = self._infer_type(case_expr)
+                    value_expr = self._generate_expression(case_expr)
+                    self.emit(f"{param_type} {param_name} = {value_expr};")
+                    self.symbol_table[param_name] = param_type
+                for stmt in getattr(node, 'body', []) or []:
+                    self._generate_statement(stmt)
+            finally:
+                self.symbol_table = saved_symbol_table
+                self.symbol_aliases = saved_aliases
+            self.dedent()
+            self.emit("}")
+        self.emit("/* end parameterized test */")
     
     def _generate_variable_declaration(self, node: VariableDeclaration) -> None:
         """Generate variable declaration or assignment."""
@@ -1024,6 +1125,11 @@ class CCodeGenerator(CodeGenerator):
             return
         
         emitted_name = self._resolve_symbol_name(node.name)
+        existing_binding = node.name in self.symbol_table
+        if isinstance(node.value, GeneratorExpression):
+            self._generate_generator_variable_binding(node, emitted_name, existing_binding)
+            return
+
         async_payload_type = self._infer_async_payload_type_from_expression(node.value)
         if isinstance(node.name, str):
             self.moved_variables.discard(node.name)
@@ -1056,52 +1162,86 @@ class CCodeGenerator(CodeGenerator):
                     self.async_task_payload_types[node.name] = async_payload_type
                 else:
                     self.async_task_payload_types.pop(node.name, None)
-        else:
-            # New variable - generate declaration with type
-            value_expr = self._generate_expression(node.value)
-            var_type = self._infer_type(node.value)
-            
-            # Track array size for bounds checking
+            return
+
+        # New variable - generate declaration with type
+        value_expr = self._generate_expression(node.value)
+        var_type = self._infer_type(node.value)
+
+        # Track array size for bounds checking
+        if isinstance(node.value, ListExpression) and node.value.elements:
+            self.array_sizes[node.name] = len(node.value.elements)
+
+        # Store in symbol table
+        self.symbol_table[node.name] = var_type
+
+        # Handle array type declarations specially
+        if "[]" in var_type:
+            # Array type: extract base type and array dimensions
+            # e.g., "int[][]" -> base="int", dims="[][]"
+            base_type = var_type
+            dims = ""
+            while base_type.endswith("[]"):
+                dims += "[]"
+                base_type = base_type[:-2]
+
+            # For 2D arrays, we need to specify inner dimension sizes in C
+            # e.g., int matrix[3][3] for a 3x3 matrix
             if isinstance(node.value, ListExpression) and node.value.elements:
-                self.array_sizes[node.name] = len(node.value.elements)
-            
-            # Store in symbol table
-            self.symbol_table[node.name] = var_type
-            
-            # Handle array type declarations specially
-            if "[]" in var_type:
-                # Array type: extract base type and array dimensions
-                # e.g., "int[][]" → base="int", dims="[][]"
-                base_type = var_type
-                dims = ""
-                while base_type.endswith("[]"):
-                    dims += "[]"
-                    base_type = base_type[:-2]
-                
-                # For 2D arrays, we need to specify inner dimension sizes in C
-                # e.g., int matrix[3][3] for a 3x3 matrix
-                if isinstance(node.value, ListExpression) and node.value.elements:
-                    if isinstance(node.value.elements[0], ListExpression):
-                        # 2D array - determine inner dimension size
-                        inner_size = len(node.value.elements[0].elements)
-                        outer_size = len(node.value.elements)
-                        self.array_sizes[node.name] = outer_size
-                        self.emit(f"{base_type} {emitted_name}[{outer_size}][{inner_size}] = {value_expr};")
-                    else:
-                        # 1D array
-                        self.array_sizes[node.name] = len(node.value.elements)
-                        self.emit(f"{base_type} {emitted_name}{dims} = {value_expr};")
+                if isinstance(node.value.elements[0], ListExpression):
+                    # 2D array - determine inner dimension size
+                    inner_size = len(node.value.elements[0].elements)
+                    outer_size = len(node.value.elements)
+                    self.array_sizes[node.name] = outer_size
+                    self.emit(f"{base_type} {emitted_name}[{outer_size}][{inner_size}] = {value_expr};")
                 else:
+                    # 1D array
+                    self.array_sizes[node.name] = len(node.value.elements)
                     self.emit(f"{base_type} {emitted_name}{dims} = {value_expr};")
             else:
-                # Regular type
-                self.emit(f"{var_type} {emitted_name} = {value_expr};")
+                self.emit(f"{base_type} {emitted_name}{dims} = {value_expr};")
+        else:
+            # Regular type
+            self.emit(f"{var_type} {emitted_name} = {value_expr};")
 
-            if isinstance(node.name, str):
-                if async_payload_type is not None:
-                    self.async_task_payload_types[node.name] = async_payload_type
-                else:
-                    self.async_task_payload_types.pop(node.name, None)
+        if isinstance(node.name, str):
+            if async_payload_type is not None:
+                self.async_task_payload_types[node.name] = async_payload_type
+            else:
+                self.async_task_payload_types.pop(node.name, None)
+
+    def _generate_generator_variable_binding(
+        self,
+        node: VariableDeclaration,
+        emitted_name: str,
+        existing_binding: bool,
+    ) -> None:
+        """Lower variable binding for generator expressions to materialized arrays."""
+        if not isinstance(node.name, str):
+            raise RuntimeError("C backend generator bindings require identifier variable names")
+
+        out_arr, out_count, out_elem_type, _ = self._materialize_generator_expression(node.value, node)
+        var_type = f"{out_elem_type}*"
+        self.symbol_table[node.name] = var_type
+
+        if existing_binding or node.name in self.symbol_aliases or (
+            self.inside_top_level_init and node.name in self.global_variables
+        ):
+            self.emit(f"{emitted_name} = {out_arr};")
+        else:
+            self.emit(f"{var_type} {emitted_name} = {out_arr};")
+
+        length_name = f"{node.name}_length"
+        if length_name in self.symbol_table:
+            length_alias = self._resolve_symbol_name(length_name)
+            self.emit(f"{length_alias} = {out_count};")
+        else:
+            self.symbol_table[length_name] = "int"
+            self.emit(f"int {length_name} = {out_count};")
+
+        # Materialized generator output count is runtime-dependent.
+        if node.name in self.array_sizes:
+            del self.array_sizes[node.name]
     
     def _infer_parameter_type(self, param_name: str, body: List[Any], return_type: Any = None) -> str:
         """
@@ -1458,6 +1598,14 @@ class CCodeGenerator(CodeGenerator):
         if isinstance(expr, (MoveExpression, BorrowExpression, BorrowExpressionWithLifetime)):
             return self.symbol_table.get(getattr(expr, 'var_name', ''), "void*")
 
+        if isinstance(expr, GeneratorExpression):
+            elem_type = self._infer_type(getattr(expr, 'expr', None))
+            if elem_type.endswith("[]"):
+                elem_type = elem_type[:-2]
+            if elem_type in ("void", "void*"):
+                elem_type = "int"
+            return f"{elem_type}*"
+
         if isinstance(expr, YieldExpression):
             return self._infer_type(expr.value) if getattr(expr, "value", None) is not None else "intptr_t"
 
@@ -1745,7 +1893,29 @@ class CCodeGenerator(CodeGenerator):
         expression, store into a temporary array, then iterate the materialized
         values.
         """
-        gen = node.iterable
+        self.emit("/* For each loop over generator expression (materialized) */")
+        out_arr, out_count, out_elem_type, uses_heap = self._materialize_generator_expression(node.iterable, node)
+
+        self.emit(f"for (int _i = 0; _i < {out_count}; _i++) {{")
+        self.indent()
+        self.emit(f"{out_elem_type} {iterator} = {out_arr}[_i];")
+
+        if node.body:
+            for stmt in node.body:
+                self._generate_statement(stmt)
+
+        self.emit(f"{continue_label}: ;")
+        self.dedent()
+        self.emit("}")
+
+        if uses_heap:
+            self.emit(f"if ({out_arr} != NULL) free({out_arr});")
+
+    def _materialize_generator_expression(self, gen: GeneratorExpression, context: Any) -> Tuple[str, str, str, bool]:
+        """Materialize generator expression output into a values array.
+
+        Returns tuple ``(values_array, values_count, element_type, uses_heap)``.
+        """
         target_node = getattr(gen, 'target', None)
         if not isinstance(target_node, Identifier):
             raise RuntimeError("C backend generator lowering requires identifier target")
@@ -1753,7 +1923,6 @@ class CCodeGenerator(CodeGenerator):
         target_name = target_node.name
         source = getattr(gen, 'iterable', None)
 
-        # Resolve source iterable as a concrete array + bounded upper length.
         source_index_expr = None
         src_bound_expr = None
         src_bound_var = None
@@ -1762,7 +1931,7 @@ class CCodeGenerator(CodeGenerator):
         if isinstance(source, ListExpression):
             src_size = len(source.elements)
             src_elem_type = self._infer_type(source.elements[0]) if source.elements else "int"
-            src_arr = f"__nxl_gen_src_{id(node)}"
+            src_arr = f"__nxl_gen_src_{id(context)}"
             element_exprs = [self._generate_expression(elem) for elem in source.elements]
             self.emit(f"{src_elem_type} {src_arr}[] = {{{', '.join(element_exprs)}}};")
             source_index_expr = f"{src_arr}[__nxl_gi]"
@@ -1787,8 +1956,6 @@ class CCodeGenerator(CodeGenerator):
                 )
 
             if source.name not in self.array_sizes:
-                # Metadata-sized sources are potentially non-local pointers; cast to
-                # inferred element pointer type before indexed reads.
                 source_index_expr = f"(({src_elem_type}*){src_arr})[__nxl_gi]"
                 dynamic_bound = True
             else:
@@ -1802,15 +1969,16 @@ class CCodeGenerator(CodeGenerator):
         out_elem_type = self._infer_type(getattr(gen, 'expr', None))
         if out_elem_type.endswith("[]"):
             out_elem_type = out_elem_type[:-2]
-        if out_elem_type == "void*":
+        if out_elem_type.endswith("*"):
+            out_elem_type = out_elem_type[:-1]
+        if out_elem_type in ("void", "void*"):
             out_elem_type = "int"
 
-        out_arr = f"__nxl_gen_values_{id(node)}"
-        out_count = f"__nxl_gen_count_{id(node)}"
+        out_arr = f"__nxl_gen_values_{id(context)}"
+        out_count = f"__nxl_gen_count_{id(context)}"
 
-        self.emit(f"/* For each loop over generator expression (materialized) */")
         if dynamic_bound:
-            src_bound_var = f"__nxl_gen_src_bound_{id(node)}"
+            src_bound_var = f"__nxl_gen_src_bound_{id(context)}"
             self.emit(f"int {src_bound_var} = ({src_bound_expr});")
             self.emit(f"if ({src_bound_var} < 0) {src_bound_var} = 0;")
             self.emit(f"{out_elem_type}* {out_arr} = NULL;")
@@ -1848,21 +2016,7 @@ class CCodeGenerator(CodeGenerator):
 
         self.dedent()
         self.emit("}")
-
-        self.emit(f"for (int _i = 0; _i < {out_count}; _i++) {{")
-        self.indent()
-        self.emit(f"{out_elem_type} {iterator} = {out_arr}[_i];")
-
-        if node.body:
-            for stmt in node.body:
-                self._generate_statement(stmt)
-
-        self.emit(f"{continue_label}: ;")
-        self.dedent()
-        self.emit("}")
-
-        if dynamic_bound:
-            self.emit(f"if ({out_arr} != NULL) free({out_arr});")
+        return out_arr, out_count, out_elem_type, dynamic_bound
 
     def _push_loop_control_context(self, loop_name: str, continue_label: str, break_label: str) -> None:
         """Track loop control labels for labeled break/continue lowering."""
@@ -3066,9 +3220,13 @@ class CCodeGenerator(CodeGenerator):
             if node.value is None:
                 return "0"
             return self._generate_expression(node.value)
+
+        elif isinstance(node, GeneratorExpression):
+            out_arr, _, _, _ = self._materialize_generator_expression(node, node)
+            return out_arr
         
         else:
-            return f"/* Unhandled expression: {type(node).__name__} */"
+            self._raise_unsupported_codegen_node(node, "expression")
     
     def _generate_literal(self, node: Literal) -> str:
         """Generate literal value."""
@@ -3274,7 +3432,7 @@ class CCodeGenerator(CodeGenerator):
                     return bool(left_val) and bool(right_val)
                 if op_type == TokenType.OR or op in ('or', '||'):
                     return bool(left_val) or bool(right_val)
-            except Exception:
+            except (TypeError, ValueError, OverflowError, ZeroDivisionError):
                 return None
         return None
     

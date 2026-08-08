@@ -5,9 +5,12 @@ Tests for cross-file navigation using workspace indexing.
 import os
 import tempfile
 import pytest
+from types import SimpleNamespace
 
 from nexuslang.lsp.workspace_index import WorkspaceIndex
 from nexuslang.lsp.server import NLPLLanguageServer
+from nexuslang.lsp.definitions import DefinitionProvider
+from nexuslang.lsp.references import ReferencesProvider
 
 
 class TestCrossFileNavigation:
@@ -205,6 +208,127 @@ set global_var to 42
             assert stats['structs'] >= 1
             assert stats['variables'] >= 1
             assert stats['total_symbols'] >= 5
+
+    def test_workspace_index_supports_in_memory_buffer_updates(self):
+        """Unsaved buffer text should update symbol index via in-memory indexing."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            test_file = os.path.join(tmpdir, "buffered_module.nxl")
+            with open(test_file, 'w') as f:
+                f.write("""
+function old_name returns Integer
+    return 1
+end
+""")
+
+            index = WorkspaceIndex(tmpdir)
+            file_uri = index._path_to_uri(test_file)
+            index.index_file(file_uri, test_file)
+            assert len(index.get_symbol("old_name")) == 1
+
+            unsaved_buffer = """
+function new_name returns Integer
+    return 2
+end
+"""
+            index.index_document_content(file_uri, unsaved_buffer)
+
+            assert len(index.get_symbol("old_name")) == 0
+            new_symbols = index.get_symbol("new_name")
+            assert len(new_symbols) == 1
+            assert new_symbols[0].file_uri == file_uri
+
+    def test_definition_prefers_imported_module_symbol_when_names_collide(self):
+        """Definition lookup should resolve to imported module on duplicate symbol names."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            service_dir = os.path.join(tmpdir, "services")
+            os.makedirs(service_dir, exist_ok=True)
+
+            local_path = os.path.join(tmpdir, "local_math.nxl")
+            with open(local_path, 'w') as f:
+                f.write("""
+function calculate returns Integer
+    return 1
+end
+""")
+
+            imported_path = os.path.join(service_dir, "math_ops.nxl")
+            with open(imported_path, 'w') as f:
+                f.write("""
+function calculate returns Integer
+    return 99
+end
+""")
+
+            consumer_text = """
+import services.math_ops
+
+function run returns Integer
+    set value to calculate with
+    return value
+end
+"""
+            consumer_path = os.path.join(tmpdir, "consumer.nxl")
+            with open(consumer_path, 'w') as f:
+                f.write(consumer_text)
+
+            server = NLPLLanguageServer()
+            server.workspace_index = WorkspaceIndex(tmpdir)
+            server.workspace_index.scan_workspace()
+
+            provider = DefinitionProvider(server)
+            line_idx = 4
+            col_idx = consumer_text.split('\n')[line_idx].index('calculate') + 1
+            location = provider.get_definition(
+                text=consumer_text,
+                position=SimpleNamespace(line=line_idx, character=col_idx),
+                uri=server.workspace_index._path_to_uri(consumer_path),
+            )
+
+            assert location is not None
+            assert location.uri == server.workspace_index._path_to_uri(imported_path)
+
+    def test_references_include_other_open_documents(self):
+        """References should include matches from open docs even when AST path is active."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            module_path = os.path.join(tmpdir, "module_a.nxl")
+            with open(module_path, 'w') as f:
+                f.write("""
+function greet returns String
+    return "hello"
+end
+""")
+
+            consumer_path = os.path.join(tmpdir, "module_b.nxl")
+            with open(consumer_path, 'w') as f:
+                f.write("""
+import module_a
+
+function run returns String
+    return greet with
+end
+""")
+
+            server = NLPLLanguageServer()
+            server.workspace_index = WorkspaceIndex(tmpdir)
+            server.workspace_index.scan_workspace()
+
+            module_uri = server.workspace_index._path_to_uri(module_path)
+            consumer_uri = server.workspace_index._path_to_uri(consumer_path)
+            module_text = open(module_path, 'r', encoding='utf-8').read()
+            consumer_text = open(consumer_path, 'r', encoding='utf-8').read()
+            server.documents[module_uri] = module_text
+            server.documents[consumer_uri] = consumer_text
+
+            provider = ReferencesProvider(server)
+            refs = provider.find_references(
+                text=module_text,
+                position=SimpleNamespace(line=1, character=10),
+                uri=module_uri,
+                include_declaration=True,
+            )
+
+            assert any(ref['uri'] == module_uri for ref in refs)
+            assert any(ref['uri'] == consumer_uri for ref in refs)
 
 
 if __name__ == '__main__':

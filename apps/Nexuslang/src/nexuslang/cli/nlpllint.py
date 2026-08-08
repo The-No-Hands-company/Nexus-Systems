@@ -123,7 +123,7 @@ def _load_config(path: str) -> Dict[str, Any]:
         # Try TOML first, then JSON for extension-less config files.
         try:
             data = tomllib.loads(raw.decode('utf-8'))
-        except Exception:
+        except ValueError:
             data = json.loads(raw.decode('utf-8'))
 
     if not isinstance(data, dict):

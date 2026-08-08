@@ -38,7 +38,7 @@ def profile_compiler(source_file: str):
     # Profile LLVM IR generation
     print("Profiling LLVM IR generation...")
     profiler.enable()
-    generator = LLVMIRGenerator(module_name="test")
+    generator = LLVMIRGenerator()
     ir_code = generator.generate(ast)
     profiler.disable()
     

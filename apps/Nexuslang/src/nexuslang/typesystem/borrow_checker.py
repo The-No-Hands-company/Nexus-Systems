@@ -187,6 +187,17 @@ class BorrowChecker:
     def _line(self, node) -> Optional[int]:
         return getattr(node, 'line_number', None) or getattr(node, 'line', None)
 
+    def _statement_list(self, body) -> list:
+        """Normalize list-like or Block-like bodies into a statement list."""
+        if body is None:
+            return []
+        if isinstance(body, list):
+            return body
+        statements = getattr(body, 'statements', None)
+        if isinstance(statements, list):
+            return statements
+        return []
+
     # ------------------------------------------------------------------
     # Statement dispatch
     # ------------------------------------------------------------------
@@ -260,6 +271,16 @@ class BorrowChecker:
 
     def _check_AsyncFunctionDefinition(self, node) -> None:
         self._check_FunctionDefinition(node)
+
+    def _check_MethodDefinition(self, node: _ast.MethodDefinition) -> None:
+        prev_fn = self._current_function
+        self._current_function = node.name
+        self._scope.push()
+        for param in (node.parameters or []):
+            self._scope.define(param.name, VarBorrowState())
+        self._check_statements(node.body)
+        self._scope.pop()
+        self._current_function = prev_fn
 
     def _check_IfStatement(self, node: _ast.IfStatement) -> None:
         # Check condition expression.
@@ -514,16 +535,16 @@ class BorrowChecker:
             self._scope.restore(pre)
             self._scope.merge_moved_from(case_snap)
 
-    def _check_TryCatchStatement(self, node) -> None:
+    def _check_TryCatch(self, node) -> None:
         pre = self._scope.snapshot()
         self._scope.push()
-        self._check_statements(getattr(node, 'try_block', None) or [])
+        self._check_statements(self._statement_list(getattr(node, 'try_block', None)))
         self._scope.pop()
         try_snap = self._scope.snapshot()
 
         self._scope.restore(pre)
         self._scope.push()
-        self._check_statements(getattr(node, 'catch_block', None) or [])
+        self._check_statements(self._statement_list(getattr(node, 'catch_block', None)))
         self._scope.pop()
         catch_snap = self._scope.snapshot()
 
@@ -531,7 +552,13 @@ class BorrowChecker:
         self._scope.merge_moved_from(try_snap)
 
         if getattr(node, 'finally_block', None):
-            self._check_statements(node.finally_block)
+            self._check_statements(self._statement_list(node.finally_block))
+
+    def _check_TryCatchBlock(self, node) -> None:
+        self._check_TryCatch(node)
+
+    def _check_TryCatchStatement(self, node) -> None:
+        self._check_TryCatch(node)
 
     # Aliases for common AST names
     _check_ExpressionStatement = _check_generic

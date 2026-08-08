@@ -36,6 +36,17 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+from ..errors import NxlError
+
+
+_RECOVERABLE_PROFILER_EXECUTION_EXCEPTIONS = (
+    NxlError,
+    OSError,
+    ValueError,
+    TypeError,
+    RuntimeError,
+)
+
 
 # ==========================================================================
 # CPU Profiler
@@ -464,10 +475,11 @@ def run_with_profiling(
     profiler = Profiler(cpu=cpu, memory=memory)
     source = Path(source_path).read_text(encoding="utf-8")
     profiler.start()
+    execution_failed = False
     try:
         run_program(source, source_path, profiler=profiler)
-    except Exception:
-        pass
+    except _RECOVERABLE_PROFILER_EXECUTION_EXCEPTIONS:
+        execution_failed = True
     finally:
         profiler.stop()
 
@@ -475,6 +487,8 @@ def run_with_profiling(
     profiler.write_json(os.path.join(output_dir, "profile.json"))
     profiler.write_html(output_dir)
     profiler.print_report()
+    if execution_failed:
+        print("Program execution ended with recoverable runtime errors; profiling data is partial.")
     return profiler
 
 

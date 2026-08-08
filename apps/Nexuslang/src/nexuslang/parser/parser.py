@@ -2242,8 +2242,23 @@ class Parser:
             class_name = self.current_token.lexeme
             self.advance()
 
-            # Check for generic type parameters: class Container<T> or class Functor<F :: * -> *>
-            generic_parameters, class_type_param_kinds = self._parse_class_generic_parameters()
+            # Natural-language generic syntax: class Box of T  or  class Map of K, V
+            if self.current_token and self.current_token.type == TokenType.OF:
+                self.advance()  # consume 'of'
+                generic_parameters = []
+                class_type_param_kinds = {}
+                while self.current_token and (
+                    self.current_token.type == TokenType.IDENTIFIER or
+                    self._can_be_identifier(self.current_token)
+                ):
+                    generic_parameters.append(self.current_token.lexeme)
+                    self.advance()
+                    if not (self.current_token and self.current_token.type == TokenType.COMMA):
+                        break
+                    self.advance()  # consume comma between type params
+            else:
+                # Check for generic type parameters: class Container<T> or class Functor<F :: * -> *>
+                generic_parameters, class_type_param_kinds = self._parse_class_generic_parameters()
 
             # Check for inheritance and interface implementation
             parent_classes, implemented_interfaces = self._parse_class_inheritance_and_interfaces()
@@ -3643,6 +3658,8 @@ class Parser:
             if self.current_token.lexeme.lower() == 'by':
                 self.advance()  # consume 'by'
                 step = self.expression()
+                if step is None:
+                    self.error("Expected step expression after 'by' in range loop")
         
         # Consume INDENT if present (for block-based syntax)
         if self.current_token and self.current_token.type == TokenType.INDENT:
@@ -3720,7 +3737,10 @@ class Parser:
         
         # Parse expression carefully - stop at 'with'
         # Use a limited expression parser that stops at 'with'
-        if self.current_token.type == TokenType.IDENTIFIER:
+        if self.current_token and (
+            self.current_token.type == TokenType.IDENTIFIER or
+            self._can_be_identifier(self.current_token)
+        ):
             # Check if next token is 'with' - if so, just parse identifier
             var_name = self.current_token.lexeme
             self.advance()
@@ -4040,7 +4060,7 @@ class Parser:
         
         # Optional guard clause - supports both 'if' and 'when' keywords
         guard = None
-        if self.match(TokenType.IF) or self.match(TokenType.WHEN):
+        if self.match(TokenType.IF) or self.match(TokenType.WHEN) or self.match(TokenType.WHERE):
             guard = self.expression()
         
         # Compact inline case: case pattern as value
@@ -4188,14 +4208,14 @@ class Parser:
         
         # Variant pattern: Ok value, Error message, Some x
         # or simple identifier pattern: value
-        if self.current_token.type == TokenType.IDENTIFIER:
+        if self.current_token.type == TokenType.IDENTIFIER or self._can_be_identifier(self.current_token):
             first_name = self.current_token.lexeme
             self.advance()
             
             # Support dotted variant names (e.g. Result.Ok)
             while self.current_token.type == TokenType.DOT:
                 self.advance() # Eat '.'
-                if self.current_token.type == TokenType.IDENTIFIER:
+                if self.current_token.type == TokenType.IDENTIFIER or self._can_be_identifier(self.current_token):
                     first_name += "." + self.current_token.lexeme
                     self.advance()
                 else:
@@ -4595,6 +4615,8 @@ class Parser:
         2. try <try_block> catch <exception_var> <catch_block> end
         """
         line_number = self.current_token.line
+        dedent_seen = False
+        exception_type = None
         
         # Eat 'try'
         self.eat(TokenType.TRY)
@@ -4624,11 +4646,32 @@ class Parser:
             # Optional comma after "fails"
             if self.current_token and self.current_token.type == TokenType.COMMA:
                 self.advance()
+
+            # Consume optional NEWLINE/INDENT before the catch body.
+            if self.current_token and self.current_token.type == TokenType.NEWLINE:
+                self.advance()
+            if self.current_token and self.current_token.type == TokenType.INDENT:
+                self.advance()
                 
             # Parse catch block
             catch_block = []
             exception_var = None
             exception_properties = []
+
+            while (
+                self.current_token and
+                self.current_token.type != TokenType.EOF and
+                self.current_token.type != TokenType.DEDENT and
+                self.current_token.type != TokenType.END and
+                self.current_token.type != TokenType.END_TRY
+            ):
+                statement = self.statement()
+                if statement:
+                    catch_block.append(statement)
+
+            if self.current_token and self.current_token.type == TokenType.DEDENT:
+                self.advance()
+                dedent_seen = True
             
         else:
             # Syntax 2: try <try_block> catch <exception_var> <catch_block> end
@@ -4710,7 +4753,6 @@ class Parser:
                     catch_block.append(statement)
         
             # Consume DEDENT if present (after catch block) - this ends the try/catch
-            dedent_seen = False
             if self.current_token and self.current_token.type == TokenType.DEDENT:
                 self.advance()
                 dedent_seen = True
@@ -5830,11 +5872,19 @@ class Parser:
                     if self.current_token.type in (
                         TokenType.WITH, TokenType.LEFT_PAREN, TokenType.DOT, TokenType.LEFT_BRACKET,
                         TokenType.PLUS, TokenType.MINUS, TokenType.TIMES, TokenType.DIVIDED_BY,
-                        TokenType.EQUAL_TO, TokenType.NOT_EQUAL_TO, TokenType.LESS_THAN, TokenType.GREATER_THAN,
                         TokenType.AND, TokenType.OR, TokenType.NEWLINE, TokenType.DEDENT, TokenType.COMMA,
                         TokenType.RIGHT_PAREN, TokenType.RIGHT_BRACKET,
                         TokenType.END, TokenType.RETURN, TokenType.IF, TokenType.WHILE, TokenType.FOR,
                         TokenType.EOF,
+                    ):
+                        break
+
+                    # Comparison-operator keywords (e.g. 'equals' -> EQUAL_TO) are only
+                    # hard stops for *subsequent* tokens in a multi-word member name.
+                    # On the first token they are valid method names: p.equals(x), p.not_equal(y).
+                    if not _first_member_token and self.current_token.type in (
+                        TokenType.EQUAL_TO, TokenType.NOT_EQUAL_TO,
+                        TokenType.LESS_THAN, TokenType.GREATER_THAN,
                     ):
                         break
 
@@ -5955,6 +6005,8 @@ class Parser:
             # Statement-level keywords that are also common variable/function names
             TokenType.LABEL,   # 'label' is a keyword for labeled loops but common as a variable
             TokenType.REPEAT,  # 'repeat' starts repeat-loops but common as a variable/function
+            # Range prototype hardening: allow direct range(...) call expressions.
+            TokenType.RANGE,
         }
         return token.type in contextual_keywords
         

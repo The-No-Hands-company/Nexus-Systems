@@ -83,6 +83,12 @@ statement
     | importStatement
     | exportStatement
     | testBlock
+    | parameterizedTestBlock
+    | describeBlock
+    | itBlock
+    | beforeEachBlock
+    | afterEachBlock
+    | expectStatement
     | macroDefinition
     | macroExpansion
     | comptimeStatement
@@ -302,8 +308,8 @@ operatorSymbol
     | '%'
     | '**'
     | '^'
-    | EQUALS
-    | NOT EQUALS
+    | EQUAL_TO
+    | NOT_EQUAL_TO
     | '<'
     | '>'
     | '<='
@@ -648,6 +654,9 @@ freeStatement
 //       xor rdi, rdi
 //       syscall
 //   end
+//
+// Canonical token path is ASM.
+// Accepted lexical aliases: "asm", "assembly", "inline assembly".
 // --------------------------------------------------------------------------
 
 inlineAssembly
@@ -753,14 +762,84 @@ exportStatement
 // Test blocks (built-in test runner)
 //
 //   test "addition works"
-//       assert 1 plus 1 equals 2
+//       expect 1 plus 1 to equal 2
+//   end
+//
+//   describe "Calculator"
+//       before each do
+//           set setup_flag to 1
+//       end
+//       it "adds values" do
+//           expect result to equal 3
+//       end
+//       after each do
+//           set teardown_flag to 0
+//       end
+//   end
+//
+//   test "parameterized" with cases using (x, y)
+//       case (1, 2)
+//       case (3, 4)
+//   do
+//       expect x to equal y
 //   end
 // --------------------------------------------------------------------------
 
 testBlock
     : TEST STRING_LITERAL
+        (DO)?
         statement*
       END
+    ;
+
+parameterizedTestBlock
+    // Parser-aligned contextual form: `with cases [using (...)] case (...) ... do ... end`.
+    : TEST STRING_LITERAL WITH IDENTIFIER
+        (IDENTIFIER LPAREN IDENTIFIER (COMMA IDENTIFIER)* RPAREN)?
+        (CASE (LPAREN expression (COMMA expression)* RPAREN | expression))*
+        (DO)?
+        statement*
+      END
+    ;
+
+describeBlock
+    : DESCRIBE STRING_LITERAL
+        (DO)?
+        statement*
+      END
+    ;
+
+itBlock
+    : IT STRING_LITERAL
+        (DO)?
+        statement*
+      END
+    ;
+
+beforeEachBlock
+    : BEFORE_EACH
+        (DO)?
+        statement*
+      END
+    ;
+
+afterEachBlock
+    : AFTER_EACH
+        (DO)?
+        statement*
+      END
+    ;
+
+expectStatement
+    : EXPECT expression TO (NOT)? expectMatcher
+    ;
+
+expectMatcher
+    : EQUAL_TO expression
+    | CONTAINS expression
+    | LENGTH expression
+    | IDENTIFIER (IDENTIFIER)* expression?
+    | RAISE (ERROR)?
     ;
 
 macroDefinition
@@ -827,8 +906,8 @@ equality
     ;
 
 equalityOp
-    : EQUALS
-    | NOT EQUALS
+    : EQUAL_TO
+    | NOT_EQUAL_TO
     | IS NOT
     | IS
     ;
@@ -1104,6 +1183,10 @@ literal
 // Lexer rules — keywords (alphabetical within category)
 // ==========================================================================
 
+// Policy note:
+// Domain-specific data/network/database verbs are intentionally stdlib-level
+// APIs, not grammar-level keywords.
+
 // Declaration
 ABSTRACT   : 'abstract' ;
 ADDRESS    : 'address' ;
@@ -1113,6 +1196,7 @@ APPEND     : 'append' ;
 ARRAY      : 'array' ;
 AS         : 'as' ;
 ASSERT     : 'assert' ;
+ASM        : 'asm' | 'assembly' | 'inline assembly' ;
 ASYNC      : 'async' ;
 AWAIT      : 'await' ;
 BITWISE_AND: 'bitwise' WS 'and' ;
@@ -1151,7 +1235,8 @@ END        : 'end' ;
 END_KW     : 'end' ;     // alias kept for compatibility with older tooling
 ENSURE     : 'ensure' ;
 ENUM       : 'enum' ;
-EQUALS     : 'equals' ;
+EQUAL_TO   : 'equals' | 'equal to' ;
+NOT_EQUAL_TO : 'not equal to' ;
 EVAL       : 'eval' ;
 EXTERN     : 'extern' ;
 EXPORT     : 'export' ;
@@ -1209,6 +1294,8 @@ RECEIVE    : 'receive' ;
 REPEAT     : 'repeat' ;
 REQUIRE    : 'require' ;
 REQUIRES   : 'requires' ;
+RANGE      : 'range' ; // Reserved for future expression-range syntax.
+RANGE_INCLUSIVE : '..=' ; // Reserved for future expression-range operators.
 RETURN     : 'return' ;
 RETURNS    : 'returns' ;
 RIGHT      : 'right' ;
@@ -1222,6 +1309,11 @@ STRUCT     : 'struct' ;
 STDCALL    : 'stdcall' ;
 SWITCH     : 'switch' ;
 TEST       : 'test' ;
+DESCRIBE   : 'describe' ;
+IT         : 'it' ;
+EXPECT     : 'expect' ;
+BEFORE_EACH: 'before each' ;
+AFTER_EACH : 'after each' ;
 TEXT       : 'text' ;
 THE        : 'the' ;
 THAN       : 'than' ;

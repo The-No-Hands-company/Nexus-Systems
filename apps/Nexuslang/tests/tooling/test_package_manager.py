@@ -174,6 +174,15 @@ token = "secret-token"
         cfg.cache_dir.mkdir(parents=True, exist_ok=True)
         assert cfg.cache_dir.exists()
 
+    def test_from_project_propagates_keyboard_interrupt(self, tmp_path):
+        _make_nxl_project(tmp_path)
+        with patch(
+            "nexuslang.tooling.registry._read_toml_section",
+            side_effect=KeyboardInterrupt(),
+        ):
+            with pytest.raises(KeyboardInterrupt):
+                RegistryConfig.from_project(tmp_path)
+
 
 # ---------------------------------------------------------------------------
 # Registry: resolve_version
@@ -408,6 +417,36 @@ class TestRegistryClientGetPackageInfo:
         ):
             with pytest.raises(PackageNotFoundError, match="not found in registry"):
                 client.get_package_info("ghost-pkg")
+
+
+class TestRegistryClientListAll:
+    def test_list_all_purges_corrupt_cache_and_refetches(self, tmp_path):
+        client = _make_client(tmp_path)
+        client._index_cache_path.write_text("{broken-json", encoding="utf-8")
+
+        payload = json.dumps([
+            {
+                "name": "mylib",
+                "version": "1.0.0",
+                "description": "A library",
+                "downloads": 12,
+            }
+        ]).encode("utf-8")
+
+        with patch("nexuslang.tooling.registry._make_request", return_value=payload):
+            results = client.list_all(use_cache=True)
+
+        assert len(results) == 1
+        assert results[0].name == "mylib"
+        assert json.loads(client._index_cache_path.read_text(encoding="utf-8"))[0]["name"] == "mylib"
+
+    def test_list_all_propagates_keyboard_interrupt_from_cache_read(self, tmp_path):
+        client = _make_client(tmp_path)
+        client._index_cache_path.write_text("[]", encoding="utf-8")
+
+        with patch("pathlib.Path.read_bytes", side_effect=KeyboardInterrupt()):
+            with pytest.raises(KeyboardInterrupt):
+                client.list_all(use_cache=True)
 
 
 class TestRegistryClientDownload:

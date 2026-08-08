@@ -7,9 +7,23 @@ Provides symbol search functionality using AST-based analysis.
 
 from typing import List, Dict, Optional
 import re
+import logging
 from ..parser.lexer import Lexer
 from ..parser.parser import Parser
 from ..analysis import ASTSymbolExtractor, SymbolTable, SymbolKind
+from ..errors import NxlError
+
+
+logger = logging.getLogger(__name__)
+
+
+_RECOVERABLE_LSP_EXCEPTIONS = (
+    NxlError,
+    AttributeError,
+    TypeError,
+    ValueError,
+    KeyError,
+)
 
 
 class SymbolProvider:
@@ -50,10 +64,9 @@ class SymbolProvider:
             
             self.symbol_tables[uri] = symbol_table
             return symbol_table
-        except (AttributeError, TypeError, ValueError, KeyError) as e:
+        except _RECOVERABLE_LSP_EXCEPTIONS as e:
             # Symbol extraction failed; log and return stale cache
-            import logging
-            logging.warning(
+            logger.warning(
                 f"Symbol extraction failed for {uri}: {e}. Returning stale symbol table from cache."
             )
             return self.symbol_tables.get(uri, None)

@@ -75,6 +75,21 @@ PACKAGE_MANIFEST_NAME = "nexuslang.toml"
 LOCK_FILE_NAME = "nexuslang.lock"
 
 
+_RECOVERABLE_WORKSPACE_EXCEPTIONS = (
+    FileNotFoundError,
+    PermissionError,
+    IsADirectoryError,
+    NotADirectoryError,
+    OSError,
+    RuntimeError,
+    ValueError,
+    TypeError,
+    KeyError,
+    ImportError,
+    json.JSONDecodeError,
+)
+
+
 @dataclass
 class WorkspaceManifest:
     """Parsed contents of ``nlpl-workspace.toml``.
@@ -447,7 +462,7 @@ class WorkspaceResolver:
             member = self.members[name]
             try:
                 member_lock = generate_lockfile(member.root)
-            except Exception as exc:
+            except _RECOVERABLE_WORKSPACE_EXCEPTIONS as exc:
                 raise WorkspaceError(
                     f"Failed to generate lockfile for member '{name}': {exc}"
                 ) from exc
@@ -548,7 +563,7 @@ class WorkspaceBuilder:
                     features=feature_list,
                     jobs=jobs,
                 )
-            except Exception as exc:
+            except _RECOVERABLE_WORKSPACE_EXCEPTIONS as exc:
                 print(f"error: [{name}] build failed: {exc}")
                 ok = False
 
@@ -625,7 +640,7 @@ class WorkspaceBuilder:
                     features=feature_list,
                     jobs=jobs,
                 )
-            except Exception as exc:
+            except _RECOVERABLE_WORKSPACE_EXCEPTIONS as exc:
                 print(f"error: [{n}] build failed: {exc}")
                 ok = False
 
@@ -649,7 +664,7 @@ class WorkspaceBuilder:
             try:
                 bs = self._build_system_for(member)
                 bs.clean()
-            except Exception as exc:
+            except _RECOVERABLE_WORKSPACE_EXCEPTIONS as exc:
                 print(f"  Warning: [{name}] clean failed: {exc}")
 
     def test_all(
@@ -685,7 +700,7 @@ class WorkspaceBuilder:
                     release=release,
                     features=feature_list,
                 )
-            except Exception as exc:
+            except _RECOVERABLE_WORKSPACE_EXCEPTIONS as exc:
                 print(f"error: [{name}] test setup failed: {exc}")
                 code = 1
 

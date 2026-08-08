@@ -30,9 +30,12 @@ Object-oriented and type-system depth topics:
 ### Functional Programming (16-18)
 Functional programming paradigms and patterns:
 
+- Day 18 hardening status: [docs/_internal/status-reports/STATUS.md](docs/_internal/status-reports/STATUS.md)
+
 - **16_functional_programming.nlpl** - Functional programming concepts
 - **17_lambda_and_higher_order_functions.nlpl** - Lambdas and HOFs
 - **18_functional_programming_patterns.nlpl** - Functional patterns
+	- Folder-layout mirror: `05_functional/03_functional_programming_patterns.nxl`
 
 ### Concurrency & Parallelism (19-21)
 Concurrent and event-driven programming:

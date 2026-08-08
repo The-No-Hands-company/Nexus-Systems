@@ -21,6 +21,13 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Tuple
 
 
+_RECOVERABLE_LINKER_INVOCATION_EXCEPTIONS = (
+    OSError,
+    ValueError,
+    subprocess.SubprocessError,
+)
+
+
 # ---------------------------------------------------------------------------
 # Data structures
 # ---------------------------------------------------------------------------
@@ -321,7 +328,7 @@ def invoke_linker(
             success=False, returncode=127, stdout="",
             stderr=f"linker: binary not found: {e}"
         )
-    except Exception as e:
+    except _RECOVERABLE_LINKER_INVOCATION_EXCEPTIONS as e:
         return LinkerInvocationResult(
             success=False, returncode=1, stdout="",
             stderr=f"linker: unexpected error: {e}"

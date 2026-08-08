@@ -10,6 +10,7 @@ import sys
 import select
 import signal
 import tempfile
+import errno
 import pytest
 
 # Ensure the project source tree is on the path
@@ -42,6 +43,26 @@ from nexuslang.stdlib.platform_linux import (
 
 IS_LINUX = sys.platform in ('linux', 'linux2')
 pytestmark = pytest.mark.skipif(not IS_LINUX, reason="Linux-only tests")
+
+
+def _inotify_create_or_skip(nonblock: bool = False) -> int:
+    """Create an inotify instance or skip test if host limits are exhausted."""
+    try:
+        return inotify_create(nonblock=nonblock)
+    except OSError as exc:
+        if exc.errno in (errno.ENOSPC, errno.EMFILE):
+            pytest.skip(f"Inotify capacity exhausted on host: {exc}")
+        raise
+
+
+def _inotify_add_watch_or_skip(fd: int, path: str, events='all') -> int:
+    """Add inotify watch or skip test when capacity limits are hit."""
+    try:
+        return inotify_add_watch(fd, path, events)
+    except OSError as exc:
+        if exc.errno in (errno.ENOSPC, errno.EMFILE):
+            pytest.skip(f"Inotify watch capacity exhausted on host: {exc}")
+        raise
 
 
 # ===========================================================================
@@ -375,7 +396,7 @@ class TestInotifyConstants:
 
 class TestInotifyCreate:
     def test_returns_int(self):
-        fd = inotify_create()
+        fd = _inotify_create_or_skip()
         try:
             assert isinstance(fd, int)
             assert fd >= 0
@@ -383,7 +404,7 @@ class TestInotifyCreate:
             inotify_close(fd)
 
     def test_fd_is_readable_with_select(self):
-        fd = inotify_create()
+        fd = _inotify_create_or_skip()
         try:
             r, _, _ = select.select([fd], [], [], 0)
             assert r == []   # no events yet
@@ -393,16 +414,16 @@ class TestInotifyCreate:
 
 class TestInotifyAddWatch:
     def test_returns_positive_int(self, tmp_path):
-        fd = inotify_create()
+        fd = _inotify_create_or_skip()
         try:
-            wd = inotify_add_watch(fd, str(tmp_path), 'all')
+            wd = _inotify_add_watch_or_skip(fd, str(tmp_path), 'all')
             assert isinstance(wd, int)
             assert wd >= 0
         finally:
             inotify_close(fd)
 
     def test_nonexistent_path_raises_oserror(self):
-        fd = inotify_create()
+        fd = _inotify_create_or_skip()
         try:
             with pytest.raises(OSError):
                 inotify_add_watch(fd, '/nonexistent_path_nxl_test_xyz')
@@ -410,9 +431,9 @@ class TestInotifyAddWatch:
             inotify_close(fd)
 
     def test_add_watch_with_mask_int(self, tmp_path):
-        fd = inotify_create()
+        fd = _inotify_create_or_skip()
         try:
-            wd = inotify_add_watch(fd, str(tmp_path), IN_CREATE | IN_DELETE)
+            wd = _inotify_add_watch_or_skip(fd, str(tmp_path), IN_CREATE | IN_DELETE)
             assert isinstance(wd, int)
             assert wd >= 0
         finally:
@@ -421,8 +442,8 @@ class TestInotifyAddWatch:
 
 class TestInotifyReadEvents:
     def test_create_event_is_detected(self, tmp_path):
-        fd = inotify_create()
-        wd = inotify_add_watch(fd, str(tmp_path), 'create')
+        fd = _inotify_create_or_skip()
+        wd = _inotify_add_watch_or_skip(fd, str(tmp_path), 'create')
         try:
             # Create a file in the watched directory
             new_file = tmp_path / 'test_newfile.txt'
@@ -435,8 +456,8 @@ class TestInotifyReadEvents:
             inotify_close(fd)
 
     def test_event_dict_has_required_keys(self, tmp_path):
-        fd = inotify_create()
-        wd = inotify_add_watch(fd, str(tmp_path), 'create')
+        fd = _inotify_create_or_skip()
+        wd = _inotify_add_watch_or_skip(fd, str(tmp_path), 'create')
         try:
             (tmp_path / 'k.txt').write_text('x')
             events = inotify_read_events(fd, timeout=2.0)
@@ -448,8 +469,8 @@ class TestInotifyReadEvents:
             inotify_close(fd)
 
     def test_timeout_returns_empty_list(self, tmp_path):
-        fd = inotify_create()
-        wd = inotify_add_watch(fd, str(tmp_path), 'create')
+        fd = _inotify_create_or_skip()
+        wd = _inotify_add_watch_or_skip(fd, str(tmp_path), 'create')
         try:
             events = inotify_read_events(fd, timeout=0.0)
             assert isinstance(events, list)
@@ -457,8 +478,8 @@ class TestInotifyReadEvents:
             inotify_close(fd)
 
     def test_event_names_contain_in_create(self, tmp_path):
-        fd = inotify_create()
-        wd = inotify_add_watch(fd, str(tmp_path), 'create')
+        fd = _inotify_create_or_skip()
+        wd = _inotify_add_watch_or_skip(fd, str(tmp_path), 'create')
         try:
             (tmp_path / 'ev_test.txt').write_text('data')
             events = inotify_read_events(fd, timeout=2.0)
@@ -470,8 +491,8 @@ class TestInotifyReadEvents:
 
 class TestInotifyRemoveWatch:
     def test_remove_valid_watch(self, tmp_path):
-        fd = inotify_create()
-        wd = inotify_add_watch(fd, str(tmp_path), 'all')
+        fd = _inotify_create_or_skip()
+        wd = _inotify_add_watch_or_skip(fd, str(tmp_path), 'all')
         try:
             result = inotify_remove_watch(fd, wd)
             assert result is None
@@ -481,7 +502,7 @@ class TestInotifyRemoveWatch:
 
 class TestInotifyClose:
     def test_close_is_idempotent(self, tmp_path):
-        fd = inotify_create()
+        fd = _inotify_create_or_skip()
         inotify_close(fd)
         inotify_close(fd)   # second close should not raise
 

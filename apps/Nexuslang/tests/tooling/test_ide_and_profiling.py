@@ -22,6 +22,7 @@ import tempfile
 import time
 import types
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
@@ -38,6 +39,7 @@ from nexuslang.tooling.profiler import (
     CPUProfiler,
     MemoryProfiler,
     Profiler,
+    run_with_profiling,
 )
 from nexuslang.stdlib.benchmark import (
     BenchmarkRun,
@@ -445,6 +447,36 @@ class TestProfilerFacade:
         prof.write_html(str(tmp_path))
         html_files = list(tmp_path.rglob("*.html"))
         assert len(html_files) >= 1
+
+
+class TestRunWithProfilingHardening:
+    def test_run_with_profiling_handles_recoverable_runtime_error(self, tmp_path, capsys):
+        src_path = tmp_path / "prog.nxl"
+        src_path.write_text("set x to 1\n", encoding="utf-8")
+
+        with patch("nexuslang.main.run_program", side_effect=RuntimeError("boom")):
+            profiler = run_with_profiling(
+                str(src_path),
+                output_dir=str(tmp_path / "profile"),
+                cpu=True,
+                memory=True,
+            )
+
+        assert isinstance(profiler, Profiler)
+        assert "partial" in capsys.readouterr().out
+
+    def test_run_with_profiling_propagates_keyboard_interrupt(self, tmp_path):
+        src_path = tmp_path / "prog.nxl"
+        src_path.write_text("set x to 1\n", encoding="utf-8")
+
+        with patch("nexuslang.main.run_program", side_effect=KeyboardInterrupt()):
+            with pytest.raises(KeyboardInterrupt):
+                run_with_profiling(
+                    str(src_path),
+                    output_dir=str(tmp_path / "profile"),
+                    cpu=True,
+                    memory=True,
+                )
 
 
 # ===========================================================================

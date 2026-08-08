@@ -62,6 +62,7 @@ import os
 import queue
 import threading
 import uuid
+import atexit
 from typing import Any, Dict, List, Optional
 
 try:
@@ -163,8 +164,20 @@ def fs_watch_start(path: str, recursive: bool = False) -> str:
 
     handler = _QueueHandler(entry.event_queue)
     observer = Observer()
-    observer.schedule(handler, abs_path, recursive=bool(recursive))
-    observer.start()
+    try:
+        observer.schedule(handler, abs_path, recursive=bool(recursive))
+        observer.start()
+    except Exception:
+        # Ensure partially-started observers never leak kernel watch resources.
+        try:
+            observer.stop()
+        except Exception:
+            pass
+        try:
+            observer.join(timeout=1.0)
+        except Exception:
+            pass
+        raise
     entry.observer = observer
 
     with _WATCHERS_LOCK:
@@ -183,10 +196,17 @@ def fs_watch_stop(watcher_id: str) -> bool:
 
     try:
         if entry.observer is not None:
+            # Unschedule first so recursive emitters release inotify watches promptly.
+            try:
+                entry.observer.unschedule_all()
+            except Exception:
+                pass
             entry.observer.stop()
-            entry.observer.join(timeout=2.0)
+            entry.observer.join(timeout=5.0)
     except Exception:
         pass
+    finally:
+        entry.observer = None
     return True
 
 
@@ -200,6 +220,15 @@ def fs_watch_stop_all() -> int:
         if fs_watch_stop(watcher_id):
             count += 1
     return count
+
+
+@atexit.register
+def _cleanup_watchers_at_exit() -> None:
+    """Best-effort watcher cleanup for interpreter shutdown paths."""
+    try:
+        fs_watch_stop_all()
+    except Exception:
+        pass
 
 
 def fs_watch_poll(watcher_id: str) -> List[Dict[str, Any]]:

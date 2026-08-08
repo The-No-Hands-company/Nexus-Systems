@@ -69,3 +69,34 @@ set n to borrow x
     fixes = diagnostics[0].get("data", {}).get("fixes", [])
     assert fixes, "Expected ownership quick-fix guidance"
     assert any("borrow" in fix.lower() or "move" in fix.lower() for fix in fixes)
+
+
+def test_ownership_diagnostic_includes_structured_context_payload():
+    code = """
+set x to 10
+set b to borrow x
+set y to move x
+"""
+
+    diagnostics = _ownership_diags(code)
+    assert diagnostics, "Expected ownership diagnostic for move while borrowed"
+
+    ownership = diagnostics[0].get("data", {}).get("ownership", {})
+    assert ownership.get("variable") == "x"
+    assert ownership.get("kind") in {"borrow", "lifetime", "ownership"}
+    assert isinstance(ownership.get("line"), int)
+    assert ownership.get("operation") in {"move", "borrow", "borrow_mutable", "drop_borrow", None}
+
+
+def test_ownership_diagnostic_sets_borrow_mutable_operation_when_present():
+    code = """
+set x to 0
+set m to borrow mutable x
+set n to borrow x
+"""
+
+    diagnostics = _ownership_diags(code)
+    assert diagnostics, "Expected ownership diagnostic for mutable/immutable borrow conflict"
+
+    operations = {d.get("data", {}).get("ownership", {}).get("operation") for d in diagnostics}
+    assert operations.intersection({"borrow_mutable", "borrow"})

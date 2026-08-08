@@ -7,13 +7,18 @@ Tests that the NexusLang LSP server starts correctly and handles basic LSP initi
 """
 
 import json
+import os
+import select
 import subprocess
 import sys
 import time
 from pathlib import Path
 
-# Add NexusLang to path
-sys.path.insert(0, str(Path(__file__).parent.parent / 'src'))
+# Ensure imports resolve from this repository only.
+REPO_ROOT = Path(__file__).resolve().parents[2]
+SRC_ROOT = REPO_ROOT / 'src'
+if str(SRC_ROOT) not in sys.path:
+    sys.path.insert(0, str(SRC_ROOT))
 
 
 def send_message(process, message):
@@ -26,24 +31,49 @@ def send_message(process, message):
     print(f"SENT: {message.get('method', message.get('result', 'response'))}")
 
 
-def read_message(process):
-    """Read a JSON-RPC message from the LSP server."""
-    # Read headers
-    headers = {}
-    while True:
-        line = process.stdout.readline().decode('utf-8')
-        if line == '\r\n':
+def read_message(process, timeout_seconds=10.0, expected_id=None):
+    """Read a JSON-RPC message from the LSP server.
+
+    If ``expected_id`` is provided, notifications and other responses are skipped
+    until a matching response arrives or timeout expires.
+    """
+    deadline = time.time() + timeout_seconds
+
+    while time.time() < deadline:
+        remaining = max(0.0, deadline - time.time())
+        ready, _, _ = select.select([process.stdout], [], [], remaining)
+        if not ready:
             break
-        if ':' in line:
-            key, value = line.split(':', 1)
-            headers[key.strip()] = value.strip()
-    
-    # Read content
-    content_length = int(headers.get('Content-Length', 0))
-    content = process.stdout.read(content_length).decode('utf-8')
-    message = json.loads(content)
-    print(f"RECEIVED: {message.get('method', message.get('result', 'response'))}")
-    return message
+
+        # Read headers
+        headers = {}
+        while True:
+            line = process.stdout.readline().decode('utf-8')
+            if line in ('\r\n', '\n', ''):
+                break
+            if ':' in line:
+                key, value = line.split(':', 1)
+                headers[key.strip()] = value.strip()
+
+        content_length = int(headers.get('Content-Length', '0') or '0')
+        if content_length <= 0:
+            continue
+
+        # Read content
+        content = process.stdout.read(content_length).decode('utf-8')
+        if not content:
+            continue
+
+        message = json.loads(content)
+        print(f"RECEIVED: {message.get('method', message.get('result', 'response'))}")
+
+        if expected_id is not None and message.get('id') != expected_id:
+            # Ignore notifications/other responses until we receive the one requested.
+            continue
+
+        return message
+
+    raise TimeoutError(f"Timed out waiting for LSP message (expected_id={expected_id})")
 
 
 def test_lsp_startup():
@@ -59,7 +89,11 @@ def test_lsp_startup():
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
-        cwd=Path(__file__).parent.parent
+        cwd=REPO_ROOT,
+        env={
+            **os.environ,
+            'PYTHONPATH': str(SRC_ROOT),
+        },
     )
     
     time.sleep(0.5)  # Give server time to start
@@ -101,7 +135,7 @@ def test_lsp_startup():
     # Read initialize response
     print("\n3. Waiting for initialize response...")
     try:
-        response = read_message(process)
+        response = read_message(process, timeout_seconds=10.0, expected_id=1)
         
         if response.get('id') != 1:
             import pytest; pytest.fail(f"Wrong LSP response ID: {response.get('id')}")
@@ -145,7 +179,7 @@ def test_lsp_startup():
     send_message(process, shutdown_request)
     
     try:
-        response = read_message(process)
+        response = read_message(process, timeout_seconds=10.0, expected_id=2)
         if response.get('id') == 2 and 'result' in response:
             print("✅ Server acknowledged shutdown")
         else:

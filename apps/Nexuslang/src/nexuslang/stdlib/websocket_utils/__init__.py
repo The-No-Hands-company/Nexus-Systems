@@ -11,15 +11,36 @@ Provides:
 import asyncio
 from typing import Any, Callable, Optional
 import json
+import logging
 
 # Optional websockets library
 try:
     import websockets
-    from websockets.server import serve
-    from websockets.client import connect
+    from websockets.exceptions import WebSocketException
+    from websockets.protocol import State
     HAS_WEBSOCKETS = True
 except ImportError:
+    websockets = None
+    WebSocketException = None
+    State = None
     HAS_WEBSOCKETS = False
+
+
+logger = logging.getLogger(__name__)
+
+if HAS_WEBSOCKETS:
+    _RECOVERABLE_WEBSOCKET_OPERATION_EXCEPTIONS = (
+        OSError,
+        RuntimeError,
+        asyncio.TimeoutError,
+        WebSocketException,
+    )
+else:
+    _RECOVERABLE_WEBSOCKET_OPERATION_EXCEPTIONS = (
+        OSError,
+        RuntimeError,
+        asyncio.TimeoutError,
+    )
 
 # Global storage for WebSocket connections
 _ws_connections = {}
@@ -28,9 +49,19 @@ _ws_servers = {}
 _server_counter = 0
 
 
+def _get_event_loop() -> asyncio.AbstractEventLoop:
+    """Return the current event loop, creating one when necessary."""
+    try:
+        return asyncio.get_event_loop()
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        return loop
+
+
 async def _ws_client_connect(uri: str) -> Any:
     """Internal async function to connect to WebSocket server."""
-    return await connect(uri)
+    return await websockets.connect(uri)
 
 
 def ws_connect(uri: str) -> int:
@@ -47,12 +78,7 @@ def ws_connect(uri: str) -> int:
     
     global _ws_counter
     
-    # Create event loop if needed
-    try:
-        loop = asyncio.get_event_loop()
-    except RuntimeError:
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
+    loop = _get_event_loop()
     
     # Connect to WebSocket
     ws = loop.run_until_complete(_ws_client_connect(uri))
@@ -84,14 +110,15 @@ def ws_send(conn_id: int, message: str) -> bool:
     """
     if conn_id not in _ws_connections:
         raise ValueError(f"WebSocket connection {conn_id} not found")
-    
+
+    ws = _ws_connections[conn_id]['ws']
+    loop = _ws_connections[conn_id]['loop']
+
     try:
-        ws = _ws_connections[conn_id]['ws']
-        loop = _ws_connections[conn_id]['loop']
-        
         loop.run_until_complete(_ws_send(ws, message))
         return True
-    except Exception:
+    except _RECOVERABLE_WEBSOCKET_OPERATION_EXCEPTIONS as exc:
+        logger.warning("WebSocket send failed for connection %s: %s", conn_id, exc)
         return False
 
 
@@ -162,15 +189,16 @@ def ws_close(conn_id: int) -> bool:
     """
     if conn_id not in _ws_connections:
         return False
-    
+
+    ws = _ws_connections[conn_id]['ws']
+    loop = _ws_connections[conn_id]['loop']
+
     try:
-        ws = _ws_connections[conn_id]['ws']
-        loop = _ws_connections[conn_id]['loop']
-        
         loop.run_until_complete(_ws_close(ws))
         del _ws_connections[conn_id]
         return True
-    except Exception:
+    except _RECOVERABLE_WEBSOCKET_OPERATION_EXCEPTIONS as exc:
+        logger.warning("WebSocket close failed for connection %s: %s", conn_id, exc)
         return False
 
 
@@ -185,12 +213,28 @@ def ws_is_open(conn_id: int) -> bool:
     """
     if conn_id not in _ws_connections:
         return False
-    
+
     ws = _ws_connections[conn_id]['ws']
-    return ws.open
+    state = getattr(ws, 'state', None)
+    if state is not None:
+        if State is not None and state == State.OPEN:
+            return True
+        if State is not None and state in (State.CONNECTING, State.CLOSING, State.CLOSED):
+            return False
+        return str(state).upper().endswith('OPEN') or state == 1
+
+    open_attr = getattr(ws, 'open', None)
+    if isinstance(open_attr, bool):
+        return open_attr
+
+    closed_attr = getattr(ws, 'closed', None)
+    if isinstance(closed_attr, bool):
+        return not closed_attr
+
+    raise AttributeError("WebSocket object does not expose a supported open/closed state")
 
 
-async def _ws_server_handler(websocket, path, callback):
+async def _ws_server_handler(websocket, callback):
     """Internal async handler for WebSocket server."""
     async for message in websocket:
         # Call the callback with the message
@@ -201,7 +245,10 @@ async def _ws_server_handler(websocket, path, callback):
 
 async def _ws_start_server(host: str, port: int, callback: Callable) -> Any:
     """Internal async function to start WebSocket server."""
-    return await serve(lambda ws, path: _ws_server_handler(ws, path, callback), host, port)
+    async def _handler(websocket):
+        await _ws_server_handler(websocket, callback)
+
+    return await websockets.serve(_handler, host, port)
 
 
 def ws_start_server(host: str = "localhost", port: int = 8765, callback: Callable = None) -> int:
@@ -220,12 +267,7 @@ def ws_start_server(host: str = "localhost", port: int = 8765, callback: Callabl
     
     global _server_counter
     
-    # Create event loop if needed
-    try:
-        loop = asyncio.get_event_loop()
-    except RuntimeError:
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
+    loop = _get_event_loop()
     
     # Default callback that echoes messages
     if callback is None:
@@ -257,13 +299,15 @@ def ws_stop_server(server_id: int) -> bool:
     """
     if server_id not in _ws_servers:
         return False
-    
+
+    server = _ws_servers[server_id]['server']
+
     try:
-        server = _ws_servers[server_id]['server']
         server.close()
         del _ws_servers[server_id]
         return True
-    except Exception:
+    except _RECOVERABLE_WEBSOCKET_OPERATION_EXCEPTIONS as exc:
+        logger.warning("WebSocket server stop failed for server %s: %s", server_id, exc)
         return False
 
 
@@ -295,7 +339,14 @@ def register_websocket_functions(runtime):
         
         runtime.register_function("ws_connect", ws_not_available)
         runtime.register_function("ws_send", ws_not_available)
+        runtime.register_function("ws_send_json", ws_not_available)
         runtime.register_function("ws_receive", ws_not_available)
+        runtime.register_function("ws_receive_json", ws_not_available)
+        runtime.register_function("ws_close", ws_not_available)
+        runtime.register_function("ws_is_open", ws_not_available)
+        runtime.register_function("ws_start_server", ws_not_available)
+        runtime.register_function("ws_stop_server", ws_not_available)
+        runtime.register_function("ws_server_info", ws_not_available)
         return
     
     # Client functions

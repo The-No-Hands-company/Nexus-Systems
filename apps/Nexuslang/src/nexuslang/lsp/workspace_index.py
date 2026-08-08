@@ -189,50 +189,53 @@ class WorkspaceIndex:
             file_path = self._uri_to_path(file_uri)
         
         logger.debug(f"Indexing file: {file_uri}")
-        
-        # Clear old symbols from this file
-        self._clear_file_symbols(file_uri)
-        
+
         try:
-            # Read file content
             with open(file_path, 'r', encoding='utf-8') as f:
                 content = f.read()
-            
-            # Parse to AST
+        except _RECOVERABLE_LSP_EXCEPTIONS as e:
+            logger.error(f"Failed to read {file_uri}: {e}", exc_info=True)
+            return []
+
+        return self.index_document_content(file_uri=file_uri, content=content)
+
+    def index_document_content(self, file_uri: str, content: str) -> List[SymbolInfo]:
+        """
+        Index symbols from in-memory document content.
+
+        This is used by LSP didOpen/didChange handlers so cross-file navigation
+        reflects unsaved editor buffers, not only on-disk files.
+        """
+        self._clear_file_symbols(file_uri)
+
+        try:
             lexer = Lexer(content)
             tokens = lexer.tokenize()
             parser = Parser(tokens)
             ast = parser.parse()
-            
-            # Extract symbols
+
             symbols = self._extract_symbols_from_ast(ast, file_uri)
-            
-            # Store symbols
+
             for symbol in symbols:
-                # Add to global symbol table (by name)
                 if symbol.name not in self.symbols:
                     self.symbols[symbol.name] = []
                 self.symbols[symbol.name].append(symbol)
-                
-                # Add to per-file table
+
                 if file_uri not in self.files:
                     self.files[file_uri] = []
                 self.files[file_uri].append(symbol)
 
-            # Post-process: resolve column=0 placeholders to real columns
             source_lines = content.split('\n')
             for symbol in symbols:
                 if symbol.column == 0:
                     symbol.column = self._find_symbol_column(source_lines, symbol.line, symbol.name)
-            
-            # Mark as indexed
+
             self.indexed_files.add(file_uri)
-            
-            logger.debug(f"Indexed {len(symbols)} symbols from {file_uri}")
+            logger.debug(f"Indexed {len(symbols)} symbols from in-memory content: {file_uri}")
             return symbols
-            
+
         except _RECOVERABLE_LSP_EXCEPTIONS as e:
-            logger.error(f"Failed to index {file_uri}: {e}", exc_info=True)
+            logger.error(f"Failed to index in-memory content for {file_uri}: {e}", exc_info=True)
             return []
     
     def _extract_function_symbol(self, stmt: FunctionDefinition, file_uri: str, scope: Optional[str]) -> List[SymbolInfo]:
