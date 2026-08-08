@@ -54,7 +54,19 @@ start_service() {
 }
 
 cmd_start() {
-    : "${NEXUS_CLOUD_API_KEY:?must be set — export it or source your secrets file before deploying}"
+    # Cloud's key normally lives in apps/Nexus-Cloud/.env, which bun auto-loads
+    # and which is gitignored. Adopt it when nothing is exported, so there is one
+    # source of truth and the check below tests the value Cloud will really use
+    # rather than a second copy of it. The stop is hard because an empty key
+    # makes Cloud's requiresApiKey() false, disabling auth on every mutating
+    # endpoint instead of failing closed.
+    if [ -z "${NEXUS_CLOUD_API_KEY:-}" ] && [ -f "$ROOT/apps/Nexus-Cloud/.env" ]; then
+        NEXUS_CLOUD_API_KEY="$(sed -n 's/^NEXUS_CLOUD_API_KEY=//p' "$ROOT/apps/Nexus-Cloud/.env" \
+            | head -1 | tr -d '\r' | sed -e 's/^"//' -e 's/"$//' -e "s/^'//" -e "s/'\$//")"
+        export NEXUS_CLOUD_API_KEY
+        [ -n "$NEXUS_CLOUD_API_KEY" ] && log "Adopted NEXUS_CLOUD_API_KEY from apps/Nexus-Cloud/.env"
+    fi
+    : "${NEXUS_CLOUD_API_KEY:?not exported and not found in apps/Nexus-Cloud/.env — an empty key disables Cloud auth entirely}"
 
     log "Starting Nexus Systems on $DOMAIN..."
 

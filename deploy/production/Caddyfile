@@ -1,23 +1,55 @@
 # Nexus Systems — Production Caddyfile
 # Terminates TLS, forwards to Bun proxy on port 8080 (which routes subdomains to backends)
-
 {
-    email admin@tnhc.dev
+	email admin@tnhc.dev
+
+	# Caddy asks Cloud before issuing a certificate for a name it does not
+	# already hold one for. Cloud answers 200 only when the name is an active,
+	# guardian-approved route under its NEXUS_CLOUD_DOMAIN, and 403 otherwise —
+	# so a flood of bogus SNI values cannot burn the Let's Encrypt rate limit
+	# for the zone. The endpoint is a GET and Cloud only authenticates
+	# POST/PATCH/DELETE, so no credential is needed here (Caddy cannot send
+	# one). Keep this on loopback: it must not be reachable from outside.
+	on_demand_tls {
+		ask http://127.0.0.1:8787/api/v1/routes/tls-ask
+	}
 }
 
+# Shared by both site blocks so their proxy, header and log behaviour cannot
+# drift apart. Host is forwarded verbatim because the Bun proxy resolves the
+# upstream from it.
+(nexus_common) {
+	reverse_proxy localhost:8080 {
+		header_up Host {host}
+		header_up X-Forwarded-Proto https
+	}
+
+	header {
+		Strict-Transport-Security "max-age=63072000; includeSubDomains; preload"
+		-Server
+	}
+
+	log {
+		output file /var/log/caddy/tnhc.log
+		format json
+	}
+}
+
+# Apex plus the two statically-mapped hosts. These keep normal certificates
+# issued at startup: the Bun proxy serves them from its own fallback rather than
+# Cloud's routing table, so tls-ask would not vouch for them — and it rejects
+# the apex outright, since it only allows names *under* the cloud domain.
 tnhc.dev, cloud.tnhc.dev, chat.tnhc.dev {
-    reverse_proxy localhost:8080 {
-        header_up Host {host}
-        header_up X-Forwarded-Proto https
-    }
+	import nexus_common
+}
 
-    header {
-        Strict-Transport-Security "max-age=63072000; includeSubDomains; preload"
-        -Server
-    }
+# Every other subdomain. No certificate exists at startup; one is obtained on
+# the first TLS handshake, gated by the ask endpoint above. This is what lets a
+# newly registered app be reachable over HTTPS without editing this file.
+*.tnhc.dev {
+	tls {
+		on_demand
+	}
 
-    log {
-        output file /var/log/caddy/tnhc.log
-        format json
-    }
+	import nexus_common
 }
