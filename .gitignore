@@ -2,6 +2,8 @@
 *
 !/.gitignore
 !/.gitmodules
+!/.githooks/
+!/.githooks/**
 !/README.md
 !/docker-compose.yml
 !/apps/
@@ -61,3 +63,7 @@ Backups/
 **/test-results/
 **/.DS_Store
 **/Thumbs.db
+
+# Editor/agent scratch and backup files
+*.bak
+**/.claude/scheduled_tasks.lock

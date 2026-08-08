@@ -25,3 +25,6 @@
 [submodule "apps/Phantom"]
 	path = apps/Phantom
 	url = git@github.com:Zajfan/Phantom.git
+[submodule "dhts/GameDevelopmentToolset"]
+	path = dhts/GameDevelopmentToolset
+	url = https://github.com/Zajfan/GameDevelopmentToolset.git

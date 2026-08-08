@@ -3,11 +3,10 @@ import { createTeamChatServer } from "../src/server";
 
 describe("nexus-team-chat", () => {
   let base = "";
-  let handle: ReturnType<typeof createTeamChatServer>;
+  let handle: Awaited<ReturnType<typeof createTeamChatServer>>;
 
   beforeAll(async () => {
-    handle = createTeamChatServer();
-    await new Promise((r) => setTimeout(r, 300));
+    handle = await createTeamChatServer();
     base = `http://127.0.0.1:${handle.server.port}`;
   });
   afterAll(() => handle.close());
