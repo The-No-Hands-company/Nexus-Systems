@@ -4,6 +4,7 @@
 !/.gitmodules
 !/.githooks/
 !/.githooks/**
+!/.secrets.baseline
 !/README.md
 !/docker-compose.yml
 !/apps/
