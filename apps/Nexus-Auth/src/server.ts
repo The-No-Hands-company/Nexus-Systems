@@ -32,10 +32,71 @@ import type { LoginResult, Permission } from "./types";
 import { NexusClient, createConfig } from "../../../packages/nexus-sdk/src/index";
 
 function jsonResponse(payload: unknown, init?: ResponseInit): Response {
-  return new Response(JSON.stringify(payload, null, 2), {
-    ...init,
-    headers: { "content-type": "application/json; charset=utf-8" },
-  });
+  // Merge, do not replace. This previously spread `init` and then overwrote
+  // `headers` wholesale, so any caller passing headers had them silently
+  // dropped — which made Set-Cookie impossible.
+  const headers = new Headers(init?.headers);
+  headers.set("content-type", "application/json; charset=utf-8");
+  return new Response(JSON.stringify(payload, null, 2), { ...init, headers });
+}
+
+/**
+ * Single sign-on across the ecosystem.
+ *
+ * Every Nexus app lives on a subdomain of one parent domain, so a session
+ * cookie scoped to that parent is sent by the browser to all of them: sign in
+ * once at the apex and deploy.tnhc.dev, chat.tnhc.dev and the rest see the same
+ * session with no second login. That is the entire reason the subdomain layout
+ * matters — separate domains could not share a cookie at all.
+ *
+ * NEXUS_AUTH_COOKIE_DOMAIN carries the leading dot (".tnhc.dev"). Left unset,
+ * no Domain attribute is emitted and the cookie stays host-only, which is the
+ * correct default for a plain localhost dev box.
+ */
+const SESSION_COOKIE = "nexus_session";
+
+function cookieDomain(): string | null {
+  const raw = process.env.NEXUS_AUTH_COOKIE_DOMAIN?.trim();
+  return raw ? raw : null;
+}
+
+function readCookie(request: Request, name: string): string | null {
+  const header = request.headers.get("cookie");
+  if (!header) return null;
+  for (const part of header.split(";")) {
+    const eq = part.indexOf("=");
+    if (eq === -1) continue;
+    if (part.slice(0, eq).trim() === name) {
+      return decodeURIComponent(part.slice(eq + 1).trim());
+    }
+  }
+  return null;
+}
+
+function sessionCookie(token: string, maxAgeSeconds: number): string {
+  const domain = cookieDomain();
+  const parts = [
+    `${SESSION_COOKIE}=${encodeURIComponent(token)}`,
+    "Path=/",
+    "HttpOnly",
+    // Lax, not Strict: a redirect back from the apex login page is a top-level
+    // navigation, and Strict would withhold the cookie on that first hop.
+    "SameSite=Lax",
+    `Max-Age=${maxAgeSeconds}`,
+  ];
+  if (domain) parts.push(`Domain=${domain}`);
+  // Secure would make the cookie invisible over plain http, which is how the
+  // local ecosystem runs. Enabled whenever a cookie domain is configured, since
+  // that only happens for a real deployment behind TLS.
+  if (domain) parts.push("Secure");
+  return parts.join("; ");
+}
+
+function clearedSessionCookie(): string {
+  const domain = cookieDomain();
+  const parts = [`${SESSION_COOKIE}=`, "Path=/", "HttpOnly", "SameSite=Lax", "Max-Age=0"];
+  if (domain) parts.push(`Domain=${domain}`, "Secure");
+  return parts.join("; ");
 }
 
 async function parseBody(request: Request): Promise<Record<string, unknown>> {
@@ -51,6 +112,12 @@ function extractToken(request: Request): string | null {
   const auth = request.headers.get("authorization") || "";
   const bearer = auth.match(/^Bearer\s+(.+)$/i);
   if (bearer) return bearer[1];
+
+  // Browsers cannot attach an Authorization header to an ordinary navigation,
+  // so the shared session cookie is what makes cross-subdomain SSO work at all.
+  // Checked after Bearer so an explicit header still wins for API clients.
+  const cookie = readCookie(request, SESSION_COOKIE);
+  if (cookie) return cookie;
 
   const url = new URL(request.url);
   return url.searchParams.get("token");
@@ -141,7 +208,7 @@ const server = Bun.serve({
       if (request.method === "POST" && path === "/api/v1/auth/login") {
         const body = await parseBody(request);
         const username = typeof body.username === "string" ? body.username.trim() : "";
-        const password = typeof body.password === "string" ? body.password : "";
+        const password = typeof body.password === "string" ? body.password : "";  // pragma: allowlist secret
 
         if (!username || !password) {
           return jsonResponse({ error: "username and password are required" }, { status: 400 });
@@ -158,12 +225,21 @@ const server = Bun.serve({
           userAgent: request.headers.get("user-agent") || "unknown",
         });
 
-        return jsonResponse({
-          success: true,
-          token: session.token,
-          user,
-          sessionId: session.id,
-        } as LoginResult);
+        // Body keeps the token for API clients; the cookie is what gives a
+        // browser single sign-on across every app on the parent domain.
+        const maxAge = Math.max(
+          60,
+          Math.floor((new Date(session.expiresAt).getTime() - Date.now()) / 1000),
+        );
+        return jsonResponse(
+          {
+            success: true,
+            token: session.token,
+            user,
+            sessionId: session.id,
+          } as LoginResult,
+          { headers: { "set-cookie": sessionCookie(session.token, maxAge) } },
+        );
       }
 
       // ── Logout ──
@@ -174,7 +250,12 @@ const server = Bun.serve({
           revokeSession(auth.session.id);
         }
 
-        return jsonResponse({ success: true });
+        // Revoking server-side is what actually ends the session; clearing the
+        // cookie stops the browser replaying a dead token to every subdomain.
+        return jsonResponse(
+          { success: true },
+          { headers: { "set-cookie": clearedSessionCookie() } },
+        );
       }
 
       // ── Me ──
@@ -203,7 +284,7 @@ const server = Bun.serve({
         const body = await parseBody(request);
         const username = typeof body.username === "string" ? body.username.trim() : "";
         const email = typeof body.email === "string" ? body.email.trim() : "";
-        const password = typeof body.password === "string" ? body.password : "";
+        const password = typeof body.password === "string" ? body.password : "";  // pragma: allowlist secret
 
         if (!username || !email || !password) {
           return jsonResponse({ error: "username, email, and password are required" }, { status: 400 });
@@ -262,8 +343,8 @@ const server = Bun.serve({
         }
         const [, userId] = changePwMatch;
         const body = await parseBody(request);
-        const currentPassword = typeof body.currentPassword === "string" ? body.currentPassword : "";
-        const newPassword = typeof body.newPassword === "string" ? body.newPassword : "";
+        const currentPassword = typeof body.currentPassword === "string" ? body.currentPassword : "";  // pragma: allowlist secret
+        const newPassword = typeof body.newPassword === "string" ? body.newPassword : "";  // pragma: allowlist secret
 
         if (!currentPassword || !newPassword) {
           return jsonResponse({ error: "currentPassword and newPassword are required" }, { status: 400 });
