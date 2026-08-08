@@ -1,0 +1,21 @@
+name: CI smoke
+
+# Deliberately minimal. Its only job is to answer "can this repository schedule
+# and run a GitHub-hosted job at all?" — separating an Actions/runner problem
+# from a problem in a specific workflow. Every other workflow here either fails
+# at startup with zero jobs or sits queued, so this is the control.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  smoke:
+    name: Runner reachable
+    runs-on: ubuntu-latest
+    steps:
+      - name: Report runner
+        run: |
+          echo "runner online: $(uname -srm)"
+          echo "python: $(python3 --version)"
