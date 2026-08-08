@@ -181,6 +181,42 @@ jobs:
           path: lsp-smoke.json
           retention-days: 14
 
+  test-inventory:
+    name: Test inventory gate (suite may not shrink)
+    needs: [lint]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest pytest-cov pytest-timeout pytest-rerunfailures
+
+      # Deleting tests is allowed, but only as a visible decision: a genuine
+      # removal regenerates tests/inventory-baseline.json in the same commit, so
+      # the numbers land in the diff. Without this, stripping the tests that fail
+      # leaves a green build and coverage gates see nothing, because coverage is
+      # measured over whatever tests remain.
+      - name: Check the suite has not shrunk
+        run: |
+          python scripts/check_test_inventory.py
+
+      - name: Write step summary
+        if: always()
+        run: |
+          echo "## Test Inventory" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          python scripts/check_test_inventory.py >> $GITHUB_STEP_SUMMARY 2>&1 || true
+
   warning-gate:
     name: Warning gate (deprecations)
     needs: [lint]

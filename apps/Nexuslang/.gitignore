@@ -125,6 +125,11 @@ vscode-extension/.vscode/
 # Source package named 'build' (must be tracked; negates the build/ rule above)
 !src/nexuslang/build/
 !src/nexuslang/build/**
+# ...but that negation is broad enough to re-admit compiled bytecode, which is
+# how src/nexuslang/build/__pycache__/*.pyc came to be tracked despite the
+# __pycache__/ rule at the top of this file. Re-ignore it here, after the
+# negation, since the last matching rule wins.
+src/nexuslang/build/**/__pycache__/
 
 # stdlib native build outputs
 src/nexuslang/stdlib_native/_cmake_build/
