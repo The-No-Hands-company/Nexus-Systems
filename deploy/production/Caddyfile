@@ -2,10 +2,10 @@
 # Terminates TLS, forwards to Bun proxy on port 8080 (which routes subdomains to backends)
 
 {
-    email admin@nexussystems.vexr.dev
+    email admin@tnhc.dev
 }
 
-nexussystems.vexr.dev, cloud.nexussystems.vexr.dev, chat.nexussystems.vexr.dev {
+tnhc.dev, cloud.tnhc.dev, chat.tnhc.dev {
     reverse_proxy localhost:8080 {
         header_up Host {host}
         header_up X-Forwarded-Proto https
@@ -17,7 +17,7 @@ nexussystems.vexr.dev, cloud.nexussystems.vexr.dev, chat.nexussystems.vexr.dev {
     }
 
     log {
-        output file /var/log/caddy/nexussystems.log
+        output file /var/log/caddy/tnhc.log
         format json
     }
 }

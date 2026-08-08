@@ -1,124 +1,241 @@
-// Nexus Systems — Production Reverse Proxy
-// Routes subdomains to backend apps. Handles CORS and WebSocket upgrades.
-//
-// Routes:
-//   nexussystems.vexr.dev/       → status page
-//   cloud.nexussystems.vexr.dev  → Nexus-Cloud (port 8787)
-//   chat.nexussystems.vexr.dev   → Nexus Team Chat (port 3109)
+// Nexus Systems — Production Reverse Proxy with Dynamic Routing
+// Fetches routing configuration from Nexus-Cloud's /api/v1/routes endpoint
+// and uses it to route subdomains to appropriate services.
+// Falls back to static configuration if Nexus-Cloud is unavailable.
 
+import { parse } from "node:path";
+
+// Configuration
 const PORT = Number(process.env.PROXY_PORT || "80");
-const CLOUD_UPSTREAM = process.env.CLOUD_UPSTREAM || "http://127.0.0.1:8787";
-const CHAT_UPSTREAM = process.env.CHAT_UPSTREAM || "http://127.0.0.1:3109";
 const DOMAIN = process.env.DOMAIN || "nexussystems.vexr.dev";
+const CLOUD_URL = process.env.CLOUD_URL || `http://127.0.0.1:8787`; // Nexus-Cloud URL
+const POLL_INTERVAL_MS = Number(process.env.POLL_INTERVAL_MS || "30000"); // 30 seconds
+const FALLBACK_ENABLED = process.env.FALLBACK_ENABLED !== "false"; // true by default
+const CACHE_TTL_MS = Number(process.env.CACHE_TTL_MS || "60000"); // 1 minute
 
-// Simple wildcard matching: host ends with domain
-function routeHost(host: string): keyof typeof routes {
-  if (!host) return "main";
-  if (host.startsWith("cloud.")) return "cloud";
-  if (host.startsWith("chat.")) return "chat";
-  return "main";
+// Route structure matching Nexus-Cloud's /api/v1/routes response
+interface NexusCloudRoute {
+  domain: string;
+  upstream: string;
+  // We don't need the other fields for routing
 }
 
-const routes = {
-  main: "http://127.0.0.1:9000", // built-in status page below
-  cloud: CLOUD_UPSTREAM,
-  chat: CHAT_UPSTREAM,
-};
+// Route cache: { timestamp: number, routes: Record<string, string> }
+let routeCache = { timestamp: 0, routes: {} };
 
-async function handleRequest(req: Request): Promise<Response> {
-  const url = new URL(req.url);
-  const host = url.hostname;
-  const target = routes[routeHost(host)];
+// Fallback static configuration (used when Nexus-Cloud is unavailable)
+const FALLBACK_CLOUD_UPSTREAM = process.env.CLOUD_UPSTREAM || "http://127.0.0.1:8787";
+const FALLBACK_CHAT_UPSTREAM = process.env.CHAT_UPSTREAM || "http://127.0.0.1:3109";
 
-  // CORS preflight
-  if (req.method === "OPTIONS") {
-    return new Response(null, {
-      status: 204,
+// Fetch latest routing configuration from Nexus-Cloud
+async function fetchRouteConfig(): Promise<NexusCloudRoute[] | null> {
+  try {
+    const url = `${CLOUD_URL.replace(/\/+$/, "")}/api/v1/routes`;
+    const response = await fetch(url, {
       headers: {
-        "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, PATCH, OPTIONS",
-        "Access-Control-Allow-Headers": "Content-Type, Authorization, X-API-Key",
+        Accept: "application/json",
+        // Add auth if needed
+        ...(process.env.NEXUS_CLOUD_API_KEY 
+          ? { "X-Api-Key": process.env.NEXUS_CLOUD_API_KEY } 
+          : {}),
       },
     });
-  }
-
-  // Status page for root domain
-  if (routeHost(host) === "main") {
-    return statusPage();
-  }
-
-  // Proxy to upstream
-  try {
-    const upstream = new URL(req.url);
-    upstream.hostname = new URL(target).hostname;
-    upstream.port = new URL(target).port;
-
-    const proxied = new Request(upstream.toString(), {
-      method: req.method,
-      headers: req.headers,
-      body: req.method !== "GET" && req.method !== "HEAD" ? await req.arrayBuffer() : undefined,
-    });
-
-    const resp = await fetch(proxied);
-    const headers = new Headers(resp.headers);
-    headers.set("Access-Control-Allow-Origin", "*");
-    return new Response(resp.body, { status: resp.status, headers });
+    
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    }
+    
+    const data = await response.json();
+    return data.routes ?? [];
   } catch (err) {
-    return new Response(`Upstream unreachable: ${target}`, { status: 502 });
+    console.warn(`[proxy] Failed to fetch route config: ${err}`);
+    return null;
   }
 }
 
-function statusPage(): Response {
-  return new Response(
-    `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Nexus Systems</title>
-  <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: system-ui, -apple-system, sans-serif; background: #0a0a1a; color: #e0e0f0; min-height: 100vh; display: flex; align-items: center; justify-content: center; }
-    .card { background: #12122a; border: 1px solid #2a2a4a; border-radius: 12px; padding: 48px; max-width: 520px; width: 100%; text-align: center; }
-    h1 { font-size: 2rem; margin-bottom: 8px; color: #7c5cfc; }
-    .tagline { color: #888; margin-bottom: 32px; }
-    .services { display: grid; gap: 12px; }
-    .service { background: #16163a; border: 1px solid #2a2a5a; border-radius: 8px; padding: 16px; text-align: left; display: flex; justify-content: space-between; align-items: center; }
-    .service .name { font-weight: 600; }
-    .service .url { font-size: 0.85rem; color: #7c5cfc; }
-    .status { width: 10px; height: 10px; border-radius: 50%; background: #22c55e; }
-    .footer { margin-top: 32px; font-size: 0.8rem; color: #555; }
-    a { color: #7c5cfc; text-decoration: none; }
-  </style>
-</head>
-<body>
-  <div class="card">
-    <h1>Nexus Systems</h1>
-    <p class="tagline">Sovereign, self-hosted ecosystem</p>
-    <div class="services">
-      <a href="https://cloud.${DOMAIN}" class="service">
-        <span class="name">Nexus Cloud</span>
-        <span class="url">cloud.${DOMAIN}</span>
-        <span class="status"></span>
-      </a>
-      <a href="https://chat.${DOMAIN}" class="service">
-        <span class="name">Nexus Team Chat</span>
-        <span class="url">chat.${DOMAIN}</span>
-        <span class="status"></span>
-      </a>
-    </div>
-    <p class="footer">nexussystems.vexr.dev — Free. Open source. Privacy-first.</p>
-  </div>
-</body>
-</html>`,
-    { status: 200, headers: { "Content-Type": "text/html" } }
-  );
+// Convert Nexus-Cloud routes to a simple host->upstream map
+function buildRouteMap(routes: NexusCloudRoute[]): Record<string, string> {
+  const map: Record<string, string> = {};
+  
+  for (const route of routes) {
+    if (route.domain && route.upstream) {
+      // Normalize the domain for comparison
+      const domain = route.domain.toLowerCase().replace(/^www\./, "");
+      map[domain] = `http://${route.upstream}`; // Ensure http:// prefix
+    }
+  }
+  
+  return map;
 }
 
+// Get current routes (from cache or fresh fetch)
+async function getRoutes(): Promise<Record<string, string>> {
+  const now = Date.now();
+  
+  // Return cached if still fresh
+  if (now - routeCache.timestamp < CACHE_TTL_MS && Object.keys(routeCache.routes).length > 0) {
+    return routeCache.routes;
+  }
+  
+  // Try to fetch fresh config
+  const freshRoutes = await fetchRouteConfig();
+  if (freshRoutes !== null) {
+    const routeMap = buildRouteMap(freshRoutes);
+    routeCache = { timestamp: now, routes: routeMap };
+    console.log(`[proxy] Updated route cache with ${Object.keys(routeMap).length} routes`);
+    return routeMap;
+  }
+  
+  // If fetch failed and we have cached data, use it (even if stale)
+  if (Object.keys(routeCache.routes).length > 0) {
+    console.log(`[proxy] Using stale cache (${Object.keys(routeCache.routes).length} routes)`);
+    return routeCache.routes;
+  }
+  
+  // No cache and no fetch - return empty (will use fallback in handler)
+  return {};
+}
+
+// Simple wildcard matching: host ends with domain
+function matchesDomain(host: string): boolean {
+  if (!host || !DOMAIN) return false;
+  const normalizedHost = host.toLowerCase().replace(/^www\./, "");
+  return normalizedHost.endsWith(`.${DOMAIN}`) || normalizedHost === DOMAIN;
+}
+
+// Extract subdomain from host (e.g., "cloud.example.com" -> "cloud")
+function getSubdomain(host: string): string {
+  if (!host || !DOMAIN) return "";
+  const normalizedHost = host.toLowerCase().replace(/^www\./, "");
+  if (normalizedHost === DOMAIN) return "";
+  return normalizedHost.substring(0, (`.${DOMAIN}`.length) * -1);
+}
+
+// Normalize upstream URL
+function normalizeUpstream(upstream: string): string {
+  if (!upstream) return "http://127.0.0.1:80"; // fallback to localhost
+  
+  // Ensure it has a protocol
+  if (!/^https?:\/\//i.test(upstream)) {
+    return `http://${upstream}`;
+  }
+  
+  return upstream;
+}
+
+async function handleRequest(req: Request): Promise<Response> {
+  try {
+    const url = new URL(req.url);
+    const host = url.hostname.toLowerCase();
+    
+    // Handle CORS preflight
+    if (req.method === "OPTIONS") {
+      return new Response(null, {
+        status: 204,
+        headers: {
+          "Access-Control-Allow-Origin": "*",
+          "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, PATCH, OPTIONS",
+          "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Api-Key",
+        },
+      });
+    }
+
+    // Check if this host matches our domain
+    if (!matchesDomain(host)) {
+      // Not our domain - return 404
+      return new Response(`Host ${host} not served by this proxy`, { status: 404 });
+    }
+
+    // Get current routing configuration
+    const routes = await getRoutes();
+    
+    // Find matching route
+    let upstreamUrl: string | null = null;
+    
+    // Try exact match first (including www)
+    const normalizedHost = host.replace(/^www\./, "");
+    if (routes[normalizedHost]) {
+      upstreamUrl = normalizeUpstream(routes[normalizedHost]);
+    } 
+    // Try without www prefix if not found
+    else if (host.startsWith("www.") && routes[host.substring(4)]) {
+      upstreamUrl = normalizeUpstream(routes[host.substring(4)]);
+    }
+    
+    // If still not found, try to match by subdomain for wildcard-like behavior
+    if (!upstreamUrl) {
+      const subdomain = getSubdomain(host);
+      if (subdomain && routes[subdomain]) {
+        upstreamUrl = normalizeUpstream(routes[subdomain]);
+      }
+    }
+    
+    // Apply fallback logic if enabled and no route found
+    if (!upstreamUrl && FALLBACK_ENABLED) {
+      if (host === `cloud.${DOMAIN}` || host === `www.cloud.${DOMAIN}`) {
+        upstreamUrl = FALLBACK_CLOUD_UPSTREAM;
+      } else if (host === `chat.${DOMAIN}` || host === `www.chat.${DOMAIN}`) {
+        upstreamUrl = FALLBACK_CHAT_UPSTREAM;
+      }
+      // Add more fallbacks as needed
+    }
+    
+    // If we still don't have an upstream, return 404
+    if (!upstreamUrl) {
+      return new Response(`No route configured for host: ${host}`, { status: 404 });
+    }
+
+    // Proxy to upstream
+    try {
+      const upstream = new URL(req.url);
+      const upstreamObj = new URL(upstreamUrl);
+      upstream.hostname = upstreamObj.hostname;
+      upstream.port = upstreamObj.port;
+
+      const proxied = new Request(upstream.toString(), {
+        method: req.method,
+        headers: req.headers,
+        body: req.method !== "GET" && req.method !== "HEAD" ? await req.arrayBuffer() : undefined,
+      });
+
+      const resp = await fetch(proxied);
+      const headers = new Headers(resp.headers);
+      headers.set("Access-Control-Allow-Origin", "*");
+      // Remove hop-by-hop headers that shouldn't be forwarded
+      headers.delete("connection");
+      headers.delete("keep-alive");
+      headers.delete("proxy-authenticate");
+      headers.delete("proxy-authorization");
+      headers.delete("te");
+      headers.delete("trailer");
+      headers.delete("transfer-encoding");
+      headers.delete("upgrade");
+      
+      return new Response(resp.body, { status: resp.status, headers });
+    } catch (err) {
+      console.error(`[proxy] Proxy error for ${upstreamUrl}:`, err);
+      return new Response(`Bad Gateway: Unable to reach upstream`, { status: 502 });
+    }
+  } catch (err) {
+    console.error(`[proxy] Request handling error:`, err);
+    return new Response(`Internal Server Error`, { status: 500 });
+  }
+}
+
+// Startup logging
 console.log(`[proxy] Starting on port ${PORT}`);
 console.log(`[proxy] Domain: ${DOMAIN}`);
-console.log(`[proxy] Cloud → ${CLOUD_UPSTREAM}`);
-console.log(`[proxy] Chat  → ${CHAT_UPSTREAM}`);
+console.log(`[proxy] Fetching routing config from: ${CLOUD_URL}/api/v1/routes`);
+console.log(`[proxy] Poll interval: ${POLL_INTERVAL_MS}ms`);
+console.log(`[proxy] Fallback enabled: ${FALLBACK_ENABLED}`);
+console.log(`[proxy] Cache TTL: ${CACHE_TTL_MS}ms`);
+
+// Initialize cache on startup
+getRoutes().then(() => {
+  console.log(`[proxy] Initial route cache loaded`);
+}).catch(err => {
+  console.warn(`[proxy] Failed to load initial route cache: ${err}`);
+});
 
 const server = Bun.serve({ port: PORT, fetch: handleRequest });
 console.log(`[proxy] Listening on ${server.hostname}:${server.port}`);
