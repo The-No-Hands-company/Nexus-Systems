@@ -3,11 +3,9 @@
 // and uses it to route subdomains to appropriate services.
 // Falls back to static configuration if Nexus-Cloud is unavailable.
 
-import { parse } from "node:path";
-
 // Configuration
 const PORT = Number(process.env.PROXY_PORT || "80");
-const DOMAIN = process.env.DOMAIN || "nexussystems.vexr.dev";
+const DOMAIN = process.env.DOMAIN || "tnhc.dev";
 const CLOUD_URL = process.env.CLOUD_URL || `http://127.0.0.1:8787`; // Nexus-Cloud URL
 const POLL_INTERVAL_MS = Number(process.env.POLL_INTERVAL_MS || "30000"); // 30 seconds
 const FALLBACK_ENABLED = process.env.FALLBACK_ENABLED !== "false"; // true by default
@@ -20,8 +18,11 @@ interface NexusCloudRoute {
   // We don't need the other fields for routing
 }
 
-// Route cache: { timestamp: number, routes: Record<string, string> }
-let routeCache = { timestamp: 0, routes: {} };
+// Route cache: host (full domain, lowercased) -> upstream URL
+let routeCache: { timestamp: number; routes: Record<string, string> } = {
+  timestamp: 0,
+  routes: {},
+};
 
 // Fallback static configuration (used when Nexus-Cloud is unavailable)
 const FALLBACK_CLOUD_UPSTREAM = process.env.CLOUD_UPSTREAM || "http://127.0.0.1:8787";
@@ -59,12 +60,16 @@ function buildRouteMap(routes: NexusCloudRoute[]): Record<string, string> {
   
   for (const route of routes) {
     if (route.domain && route.upstream) {
-      // Normalize the domain for comparison
+      // Cloud returns `domain` as a full hostname ("cloud.tnhc.dev") and
+      // `upstream` as a full URL, protocol included. normalizeUpstream only
+      // adds a scheme when one is genuinely missing — prefixing
+      // unconditionally yields "http://http://host:port", whose URL hostname
+      // parses as "http".
       const domain = route.domain.toLowerCase().replace(/^www\./, "");
-      map[domain] = `http://${route.upstream}`; // Ensure http:// prefix
+      map[domain] = normalizeUpstream(route.upstream);
     }
   }
-  
+
   return map;
 }
 
@@ -101,14 +106,6 @@ function matchesDomain(host: string): boolean {
   if (!host || !DOMAIN) return false;
   const normalizedHost = host.toLowerCase().replace(/^www\./, "");
   return normalizedHost.endsWith(`.${DOMAIN}`) || normalizedHost === DOMAIN;
-}
-
-// Extract subdomain from host (e.g., "cloud.example.com" -> "cloud")
-function getSubdomain(host: string): string {
-  if (!host || !DOMAIN) return "";
-  const normalizedHost = host.toLowerCase().replace(/^www\./, "");
-  if (normalizedHost === DOMAIN) return "";
-  return normalizedHost.substring(0, (`.${DOMAIN}`.length) * -1);
 }
 
 // Normalize upstream URL
@@ -152,24 +149,14 @@ async function handleRequest(req: Request): Promise<Response> {
     // Find matching route
     let upstreamUrl: string | null = null;
     
-    // Try exact match first (including www)
+    // Cloud keys its routing table by full hostname, and buildRouteMap
+    // lowercases and strips a leading "www." from both sides, so a single
+    // exact lookup covers every route Cloud can hand us.
     const normalizedHost = host.replace(/^www\./, "");
     if (routes[normalizedHost]) {
-      upstreamUrl = normalizeUpstream(routes[normalizedHost]);
-    } 
-    // Try without www prefix if not found
-    else if (host.startsWith("www.") && routes[host.substring(4)]) {
-      upstreamUrl = normalizeUpstream(routes[host.substring(4)]);
+      upstreamUrl = routes[normalizedHost];
     }
-    
-    // If still not found, try to match by subdomain for wildcard-like behavior
-    if (!upstreamUrl) {
-      const subdomain = getSubdomain(host);
-      if (subdomain && routes[subdomain]) {
-        upstreamUrl = normalizeUpstream(routes[subdomain]);
-      }
-    }
-    
+
     // Apply fallback logic if enabled and no route found
     if (!upstreamUrl && FALLBACK_ENABLED) {
       if (host === `cloud.${DOMAIN}` || host === `www.cloud.${DOMAIN}`) {
@@ -236,6 +223,20 @@ getRoutes().then(() => {
 }).catch(err => {
   console.warn(`[proxy] Failed to load initial route cache: ${err}`);
 });
+
+// Refresh in the background so requests never pay the fetch latency and a
+// newly registered subdomain starts resolving without waiting for a request to
+// trip the TTL. A failed poll leaves the previous cache in place; getRoutes()
+// still treats CACHE_TTL_MS as a synchronous backstop. Set POLL_INTERVAL_MS=0
+// to rely on that lazy path alone.
+if (POLL_INTERVAL_MS > 0) {
+  setInterval(async () => {
+    const fresh = await fetchRouteConfig();
+    if (fresh !== null) {
+      routeCache = { timestamp: Date.now(), routes: buildRouteMap(fresh) };
+    }
+  }, POLL_INTERVAL_MS);
+}
 
 const server = Bun.serve({ port: PORT, fetch: handleRequest });
 console.log(`[proxy] Listening on ${server.hostname}:${server.port}`);

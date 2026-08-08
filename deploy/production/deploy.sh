@@ -65,8 +65,22 @@ cmd_start() {
     sleep 5
 
     # 2. Nexus Cloud
+    #
+    # NEXUS_CLOUD_DOMAIN must track $DOMAIN. It is the base Cloud mints public
+    # subdomains under, the zone /api/v1/routes is keyed by, and the only suffix
+    # /api/v1/routes/tls-ask will authorise a certificate for. Left unset it
+    # defaults to "nexus.local", so Cloud would publish *.nexus.local routes
+    # that the proxy — serving $DOMAIN — rejects as foreign hosts.
+    #
+    # CF_* and SERVER_PUBLIC_IP are optional: with a Zone:DNS:Edit token Cloud
+    # creates the DNS records for new subdomains itself. Passed through only
+    # when present in the environment.
     start_service "cloud" "$ROOT/apps/Nexus-Cloud" 8787 \
         NEXUS_CLOUD_API_KEY="$NEXUS_CLOUD_API_KEY" \
+        NEXUS_CLOUD_DOMAIN="$DOMAIN" \
+        CF_API_TOKEN="${CF_API_TOKEN:-}" \
+        CF_ZONE_ID="${CF_ZONE_ID:-}" \
+        SERVER_PUBLIC_IP="${SERVER_PUBLIC_IP:-}" \
         PORT=8787 CORS_ORIGIN="*" NEXUS_CLOUD_URL=http://localhost:8787 \
         NEXUS_STORAGE_S3_ENDPOINT=http://localhost:9000 \
         NEXUS_STORAGE_S3_ACCESS_KEY=minioadmin \
