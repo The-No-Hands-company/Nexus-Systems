@@ -694,6 +694,9 @@ def resolve_enforcement_profile(policy: dict[str, Any], cli_policy_mode: str | N
     resolved = {
         "mode": mode,
         "failOnCritical": bool(report.get("failOnCritical", defaults["failOnCritical"])),
+        # Opt-in across every mode: informational advisories are reported but do
+        # not fail a build by default, in any policy mode, including strict.
+        "failOnInformational": bool(report.get("failOnInformational", False)),
         "failOnOutdated": bool(report.get("failOnOutdated", defaults["failOnOutdated"])),
         "failOnMajorLag": bool(report.get("failOnMajorLag", defaults["failOnMajorLag"])),
         "majorLagThreshold": int(report.get("majorLagThreshold", defaults["majorLagThreshold"])),
@@ -989,6 +992,47 @@ def apply_upgrades(
     return changes, patch_files
 
 
+_OSV_DETAIL_CACHE: dict[str, str | None] = {}
+
+
+def osv_informational_kind(vuln_id: str | None) -> str | None:
+    """Return the RustSec `informational` kind for an advisory, or None if it is a
+    real vulnerability.
+
+    /v1/querybatch returns only ids, so the distinction is not available there and
+    has to be fetched per advisory. It matters because RustSec files things like
+    "this crate is unmaintained" through the same channel as memory-safety bugs:
+    RUSTSEC-2025-0141 (bincode) carries severity None and
+    `informational: "unmaintained"`, and treating it as critical makes a security
+    gate fire for something no version bump can ever clear. `cargo audit` draws
+    the same line — informational advisories are warnings unless you opt in.
+
+    Fails open (returns None, i.e. "treat as a real vulnerability") so a network
+    error can never silently downgrade a genuine finding.
+    """
+    if not vuln_id:
+        return None
+    if vuln_id in _OSV_DETAIL_CACHE:
+        return _OSV_DETAIL_CACHE[vuln_id]
+
+    kind: str | None = None
+    try:
+        detail = http_json(f"https://api.osv.dev/v1/vulns/{vuln_id}")
+        if isinstance(detail, dict):
+            for affected in detail.get("affected", []) or []:
+                if not isinstance(affected, dict):
+                    continue
+                value = (affected.get("database_specific") or {}).get("informational")
+                if value:
+                    kind = str(value)
+                    break
+    except Exception:
+        kind = None
+
+    _OSV_DETAIL_CACHE[vuln_id] = kind
+    return kind
+
+
 def batch_osv_queries(records: list[DepRecord]) -> list[dict[str, Any]]:
     # Only exact versions can be checked reliably
     queries: list[dict[str, Any]] = []
@@ -1038,13 +1082,20 @@ def batch_osv_queries(records: list[DepRecord]) -> list[dict[str, Any]]:
         for vuln in vulns:
             if not isinstance(vuln, dict):
                 continue
+            vuln_id = vuln.get("id")
+            informational = osv_informational_kind(vuln_id)
             vuln_items.append(
                 {
-                    "id": vuln.get("id"),
+                    "id": vuln_id,
                     "summary": vuln.get("summary"),
                     "details": vuln.get("details"),
+                    # None for a real vulnerability; otherwise the RustSec kind
+                    # ("unmaintained", "unsound", "notice"...).
+                    "informational": informational,
                 }
             )
+
+        blocking = [v for v in vuln_items if not v["informational"]]
 
         findings.append(
             {
@@ -1053,6 +1104,7 @@ def batch_osv_queries(records: list[DepRecord]) -> list[dict[str, Any]]:
                 "version": version,
                 "sourceFile": rec.source_file,
                 "count": len(vuln_items),
+                "blockingCount": len(blocking),
                 "vulnerabilities": vuln_items,
             }
         )
@@ -1445,10 +1497,40 @@ def main() -> int:
             )
 
     # --- fail-on-critical: exit 1 when security advisories exist and flag is set ---
+    # Informational RustSec advisories ("unmaintained", "unsound", "notice") are
+    # reported but do not fail the build unless failOnInformational is set. They
+    # are not vulnerabilities and often cannot be cleared at all: bincode's
+    # unmaintained notice applies to every 1.x release, so gating on it means a
+    # permanently red build that no upgrade can fix — which teaches people to
+    # ignore the gate. Real advisories still fail exactly as before.
     fail_on_critical = bool(enforcement.get("failOnCritical", False))
-    if fail_on_critical and advisories:
+    fail_on_informational = bool(enforcement.get("failOnInformational", False))
+    blocking_advisories = [a for a in advisories if a.get("blockingCount", a.get("count", 0))]
+    informational_only = [a for a in advisories if not a.get("blockingCount", a.get("count", 0))]
+
+    if informational_only:
+        kinds = sorted({
+            v.get("informational")
+            for a in informational_only
+            for v in a.get("vulnerabilities", [])
+            if v.get("informational")
+        })
         print(
-            f"[stack-control] FAIL: {len(advisories)} security advisory match(es) — failOnCritical=true",
+            f"[stack-control] NOTE: {len(informational_only)} informational advisory match(es)"
+            f" ({', '.join(kinds) or 'informational'}) — not treated as vulnerabilities"
+        )
+
+    if fail_on_informational and informational_only:
+        print(
+            f"[stack-control] FAIL: {len(informational_only)} informational advisory match(es)"
+            " — failOnInformational=true",
+            file=sys.stderr,
+        )
+        return 1
+
+    if fail_on_critical and blocking_advisories:
+        print(
+            f"[stack-control] FAIL: {len(blocking_advisories)} security advisory match(es) — failOnCritical=true",
             file=sys.stderr,
         )
         return 1

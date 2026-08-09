@@ -5,12 +5,15 @@ edition = "2024"
 description = "Comprehensive security suite with threat detection, confidential computing, and digital provenance"
 
 [dependencies]
-tokio = { version = "1", features = ["full"] }
+# >= 1.44.2 clears RUSTSEC-2025-0023 and the GHSA set; a bare "1" allowed a
+# vulnerable resolve. Still ^1, so patch updates flow normally.
+tokio = { version = "1.44.2", features = ["full"] }
 axum = "0.8"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tracing = "0.1"
-tracing-subscriber = "0.3"
+# >= 0.3.20 clears RUSTSEC-2025-0055 / GHSA-xwfj-jgwm-7wp5.
+tracing-subscriber = "0.3.20"
 
 [dev-dependencies]
 tower = "0.5"

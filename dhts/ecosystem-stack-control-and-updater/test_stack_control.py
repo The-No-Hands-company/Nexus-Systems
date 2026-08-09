@@ -150,3 +150,85 @@ def test_build_markdown():
     assert "# Ecosystem Stack Control Report" in md
     assert "ES2026" in md
     assert "package.json files: 3" in md
+
+
+# ── Informational advisories must not fail the build ─────────────────────────
+#
+# RustSec files "this crate is unmaintained" through the same channel as
+# memory-safety bugs. bincode's RUSTSEC-2025-0141 carries severity None and
+# informational="unmaintained", and it matches every 1.x release, so gating on
+# it produces a permanently red build that no upgrade can clear.
+#
+# These drive the real functions with a stubbed transport — asserting against a
+# locally recomputed value would pass no matter what the scanner did.
+
+import stack_control as _sc
+
+
+@pytest.fixture(autouse=True)
+def _clear_osv_cache():
+    _sc._OSV_DETAIL_CACHE.clear()
+    yield
+    _sc._OSV_DETAIL_CACHE.clear()
+
+
+def _stub_osv(monkeypatch, *, batch_ids: list[str], informational: dict[str, str]):
+    """Stub http_json for both the querybatch call and the per-advisory lookups."""
+    def fake(url, method="GET", body=None):
+        if url.endswith("/querybatch"):
+            return {"results": [{"vulns": [{"id": i} for i in batch_ids]}]}
+        vuln_id = url.rsplit("/", 1)[-1]
+        kind = informational.get(vuln_id)
+        return {"affected": [{"database_specific": ({"informational": kind} if kind else {})}]}
+    monkeypatch.setattr(_sc, "http_json", fake)
+
+
+def _run(monkeypatch, batch_ids, informational):
+    _stub_osv(monkeypatch, batch_ids=batch_ids, informational=informational)
+    rec = DepRecord(ecosystem="cargo", name="example", spec="1.0.0", source_file="Cargo.toml")
+    findings = _sc.batch_osv_queries([rec])
+    assert len(findings) == 1
+    return findings[0]
+
+
+def test_informational_only_finding_does_not_block(monkeypatch):
+    f = _run(monkeypatch, ["RUSTSEC-X"], {"RUSTSEC-X": "unmaintained"})
+    assert f["count"] == 1
+    assert f["blockingCount"] == 0
+    assert f["vulnerabilities"][0]["informational"] == "unmaintained"
+
+
+def test_real_vulnerability_blocks(monkeypatch):
+    f = _run(monkeypatch, ["GHSA-real"], {})
+    assert f["blockingCount"] == 1
+    assert f["vulnerabilities"][0]["informational"] is None
+
+
+def test_mixed_finding_blocks_on_the_real_one(monkeypatch):
+    f = _run(monkeypatch, ["A", "B", "C"], {"A": "unmaintained", "C": "unsound"})
+    assert f["count"] == 3
+    assert f["blockingCount"] == 1
+
+
+def test_classifier_fails_open_when_the_lookup_errors(monkeypatch):
+    """A network failure must not silently downgrade a genuine advisory."""
+    def boom(url, method="GET", body=None):
+        if url.endswith("/querybatch"):
+            return {"results": [{"vulns": [{"id": "GHSA-real"}]}]}
+        raise RuntimeError("network down")
+    monkeypatch.setattr(_sc, "http_json", boom)
+    rec = DepRecord(ecosystem="cargo", name="example", spec="1.0.0", source_file="Cargo.toml")
+    f = _sc.batch_osv_queries([rec])[0]
+    assert f["blockingCount"] == 1
+
+
+def test_enforcement_profile_exposes_fail_on_informational_and_defaults_off():
+    from stack_control import resolve_enforcement_profile
+
+    for mode in ("strict", "balanced", "conservative"):
+        resolved = resolve_enforcement_profile({"report": {"policyMode": mode}}, None)
+        assert resolved["failOnInformational"] is False, mode
+        assert resolved["failOnCritical"] is True, mode
+
+    opted_in = resolve_enforcement_profile({"report": {"failOnInformational": True}}, None)
+    assert opted_in["failOnInformational"] is True

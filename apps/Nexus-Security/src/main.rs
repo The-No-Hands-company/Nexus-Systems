@@ -49,7 +49,7 @@ async fn api_status() -> Json<StatusResponse> {
 
 #[tokio::main]
 async fn main() {
-    tracing_subscriber::init();
+    tracing_subscriber::fmt::init();
 
     let app = Router::new()
         .route("/health", get(health))
