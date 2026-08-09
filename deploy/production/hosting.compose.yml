@@ -1,0 +1,47 @@
+# Deployment overlay for apps/Nexus-Hosting on this node.
+#
+# Used as:
+#   docker compose --project-directory apps/Nexus-Hosting \
+#     -f apps/Nexus-Hosting/docker-compose.yml \
+#     -f deploy/production/hosting.compose.yml up -d
+#
+# Passing -f explicitly is load-bearing. Compose auto-loads
+# docker-compose.override.yml when you do not, and Hosting's override adds Caddy
+# bound to 80/443 for Let's Encrypt — which this node does not want: Cloudflare
+# terminates TLS at the edge and nothing here should hold 80/443. Naming the
+# files keeps that override out.
+#
+# Lives in the monorepo rather than in the submodule so Nexus-Hosting stays a
+# clean upstream checkout.
+
+services:
+  # Hosting brings its own redis and minio. Both published to 0.0.0.0 on ports
+  # the node's own infrastructure already holds — 6379, 9000 and 9001 — so
+  # starting it as shipped would either fail to bind or, worse, shadow the
+  # ecosystem's instances. Nothing outside this compose network needs to reach
+  # them: Hosting's app and proxy talk to them over the internal network by
+  # service name. Dropping the published ports resolves the collision and
+  # removes the exposure at the same time.
+  redis:
+    ports: !reset []
+
+  minio:
+    ports: !reset []
+
+  # The API. 8788 is free on this node (8787 is Nexus-Cloud), but bind it to
+  # loopback — the tunnel serves the proxy below, not this.
+  app:
+    ports: !override
+      - "127.0.0.1:8788:8080"
+
+  # The site-serving Rust proxy, and what hosting.tnhc.dev will point at.
+  #
+  # Bound to 0.0.0.0 rather than 127.0.0.1 on purpose: cloudflared runs in a
+  # bridge-network container, so "localhost" there is the container, not this
+  # host. It reaches the node over the LAN address, which loopback would refuse.
+  # Same reason the ecosystem proxy on 8080 is bound wide. 9091 is metrics and
+  # stays local.
+  proxy:
+    ports: !override
+      - "8090:8090"
+      - "127.0.0.1:9091:9091"
