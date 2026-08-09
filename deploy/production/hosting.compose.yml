@@ -25,8 +25,17 @@ services:
   redis:
     ports: !reset []
 
+  # Object storage. Published because presigned upload URLs are handed to
+  # browsers and CLIs, which must reach it directly — CLAUDE.md is explicit that
+  # the API server never proxies file bytes, so there is no alternative path.
+  #
+  # 9010, not 9000: the ecosystem's own MinIO already holds 9000 on loopback, and
+  # binding 0.0.0.0:9000 here would collide with it. Bound wide so cloudflared,
+  # which runs in a bridge container, can reach it — the console on 9001 stays
+  # unpublished, since nothing external needs it.
   minio:
-    ports: !reset []
+    ports: !override
+      - "9010:9000"
 
   # The control panel — the Hosting UI and its API. This is what hosting.tnhc.dev
   # resolves to, so it has to be reachable from the cloudflared container, which
