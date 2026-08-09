@@ -97,16 +97,22 @@ jobs:
           bun-version: latest
       - name: Install Cloud deps
         run: cd apps/Nexus-Cloud && npm install --prefer-offline 2>/dev/null || npm install
+      # if/then rather than `[ test ] && cmd`: steps run under `bash -e`, and a
+      # `&&` chain whose guard is false on the final iteration makes the loop —
+      # and so the whole step — exit non-zero even though nothing went wrong.
       - name: Symlink node_modules for apps
         run: |
           for app in $(ls apps/ | grep -E '^Nexus-[A-Z]'); do
-            [ -f "apps/$app/package.json" ] && [ ! -d "apps/$app/node_modules" ] && \
-              ln -sfn "$PWD/apps/Nexus-Cloud/node_modules" "apps/$app/node_modules" 2>/dev/null
+            if [ -f "apps/$app/package.json" ] && [ ! -e "apps/$app/node_modules" ]; then
+              ln -sfn "$PWD/apps/Nexus-Cloud/node_modules" "apps/$app/node_modules"
+            fi
           done
       - name: Fix data directories
         run: |
           for app in apps/*/; do
-            [ ! -e "$app/data" ] && ln -sfn ../../data "$app/data" 2>/dev/null
+            if [ ! -e "$app/data" ]; then
+              ln -sfn ../../data "${app%/}/data"
+            fi
           done
       - name: Run contract validation
         run: chmod +x scripts/test/contract-test.sh && ./scripts/test/contract-test.sh
@@ -129,12 +135,17 @@ jobs:
           bun-version: latest
       - name: Install Cloud deps
         run: cd apps/Nexus-Cloud && npm install --prefer-offline 2>/dev/null || npm install
+      # See the contracts job: `[ test ] && cmd` in a loop makes the step exit
+      # non-zero whenever the guard is false on the final iteration.
       - name: Symlink node_modules + fix data
         run: |
           for app in $(ls apps/ | grep -E '^Nexus-[A-Z]'); do
-            [ -f "apps/$app/package.json" ] && [ ! -d "apps/$app/node_modules" ] && \
-              ln -sfn "$PWD/apps/Nexus-Cloud/node_modules" "apps/$app/node_modules" 2>/dev/null
-            [ ! -e "apps/$app/data" ] && ln -sfn ../../data "apps/$app/data" 2>/dev/null
+            if [ -f "apps/$app/package.json" ] && [ ! -e "apps/$app/node_modules" ]; then
+              ln -sfn "$PWD/apps/Nexus-Cloud/node_modules" "apps/$app/node_modules"
+            fi
+            if [ ! -e "apps/$app/data" ]; then
+              ln -sfn ../../data "apps/$app/data"
+            fi
           done
       - name: Run smoke test
         run: chmod +x scripts/test/smoke-test.sh && ./scripts/test/smoke-test.sh
