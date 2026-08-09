@@ -105,6 +105,16 @@ cmd_start() {
     # https://auth.$DOMAIN would make the proxy answer auth.$DOMAIN by fetching
     # auth.$DOMAIN — back out through Cloudflare, into the tunnel, into itself.
     # The browser-facing host is NEXUS_AUTH_PUBLIC_URL, exported above.
+    #
+    # NEXUS_AUTH_FOUNDER_PASSWORD / _OPERATOR_PASSWORD are deliberately NOT passed
+    # here. start_service cd's into the app directory first and bun auto-loads
+    # apps/Nexus-Auth/.env from there, so they arrive without ever appearing in
+    # argv — anything passed through `env` below is visible to any local user in
+    # `ps`. Without them the seed falls back to the "nexus-founder-2026" literal
+    # in users.ts, which is published source, on a host reachable from the
+    # internet. Note the seed only creates accounts that do not exist; setting
+    # these does nothing to an existing store, which has to be rotated through
+    # POST /api/v1/auth/users/:id/password.
     start_service "auth" "$ROOT/apps/Nexus-Auth" 4310 \
         PORT=4310 \
         NEXUS_AUTH_BASE_URL="http://127.0.0.1:4310" \
