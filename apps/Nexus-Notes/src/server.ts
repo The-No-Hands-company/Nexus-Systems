@@ -8,7 +8,7 @@ export async function createServer() { const port = Number(process.env.PORT || "
   const discovery = new NexusDiscovery({ cloudUrl: process.env.NEXUS_CLOUD_URL || "http://localhost:8787", apiKey: process.env.NEXUS_CLOUD_API_KEY || undefined, ttlMs: 30000 });
 ;
   const server = Bun.serve({ port, async fetch(request) { const url = new URL(request.url); const path = url.pathname || "";
-    if (request.method === "GET" && path === "/health") { return json({ service: "nexus-notes", status: "ok", version: "v1", uptimeSeconds: Math.floor((Date.now() - startedAt) / 1000), timestamp: new Date().toISOString() }, 200); }
+    if (request.method === "GET" && path === "/health") { return json({ service: "nexus-notes", status: "ok", version: "v1", uptimeSeconds: Math.floor((Date.now() - startedAt) / 1000), timestamp: new Date().toISOString(), phantom: phantom.status() }, 200); }
     if (request.method === "GET" && path === "/api/v1/status") { return json({ service: "nexus-notes", status: "ready", capabilities: ["notes","notebooks","knowledge-base"], cloudIntegration: { enabled: (process.env["NEXUS_NOTES_ENABLE_CLOUD_INTEGRATION"] || "true") !== "false", cloudUrl: process.env.NEXUS_CLOUD_URL || "http://localhost:8787" }, phantom: phantom.status() }, 200); }
     if (request.method === "GET" && path === "/api/v1/notes") { const nb = url.searchParams.get("notebook") || undefined; return json(engine.listNotes(nb), 200); }
     if (request.method === "POST" && path === "/api/v1/notes") { const b = await request.json().catch(() => ({})) as any; if (!b.title) return json({ error: "title required" }, 400); return json(engine.addNote(b.title, b.content || "", b.notebook || "General", b.tags || ""), 201); }

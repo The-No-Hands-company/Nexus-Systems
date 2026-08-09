@@ -3,7 +3,9 @@
 # Tests that every app's Systems API payload is valid against Nexus-Cloud schema
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "$0")" && pwd)"
+# scripts/test/ is two levels below the repo root; this resolved to
+# scripts/test/apps before the reorg moved this file out of the root.
+ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 APPS="$ROOT/apps"
 RESULTS="/tmp/contract-test-results.txt"
 >"$RESULTS"
@@ -33,7 +35,7 @@ from pathlib import Path
 
 apps_dir = Path('/run/media/zajferx/Data/dev/The-No-hands-Company/projects/Nexus-Systems/apps')
 cloud_url = 'http://localhost:8787'
-api_key = 'change-me'
+api_key = 'change-me'  # pragma: allowlist secret — literal placeholder for the local test Cloud
 
 total = 0
 passed = 0

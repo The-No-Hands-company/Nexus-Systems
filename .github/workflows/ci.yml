@@ -82,6 +82,16 @@ jobs:
     needs: [bun-apps]
     steps:
       - uses: actions/checkout@v4
+      # apps/Nexus-Cloud is a submodule and actions/checkout does not fetch
+      # submodules by default, so the directory arrives empty and every step
+      # below that reaches into it fails. Fetched on its own rather than with
+      # `submodules: true`, which would also clone dhts/GameDevelopmentToolset —
+      # a 408 MB repo this job has no use for.
+      - name: Check out Nexus-Cloud (submodule, not fetched by default)
+        uses: actions/checkout@v4
+        with:
+          repository: The-No-Hands-company/Nexus-Cloud
+          path: apps/Nexus-Cloud
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
@@ -107,6 +117,13 @@ jobs:
     needs: [bun-apps]
     steps:
       - uses: actions/checkout@v4
+      # Same reason as the contracts job above: submodules are not fetched by
+      # default, and this job runs Nexus-Cloud.
+      - name: Check out Nexus-Cloud (submodule, not fetched by default)
+        uses: actions/checkout@v4
+        with:
+          repository: The-No-Hands-company/Nexus-Cloud
+          path: apps/Nexus-Cloud
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest

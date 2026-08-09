@@ -26,6 +26,19 @@
 !/dhts/
 !/dhts/**
 
+# Every app reaches its database through a symlink chain that ends here:
+# apps/<App>/data -> ../data -> ../data == this directory. The symlinks are
+# tracked but the target was not, so a fresh checkout materialised the chain
+# with nothing at the end of it and every `new Database("data/…")` failed with
+# SQLITE_CANTOPEN — which is why all seven bun-apps CI jobs failed while passing
+# locally, where this directory happens to exist.
+#
+# The directory is whitelisted, its contents are not: these are app databases and
+# runtime state, which do not belong in a public repo.
+!/data/
+/data/*
+!/data/.gitkeep
+
 # Local-only paths explicitly excluded from public repo
 Nexus-Systems.code-workspace
 Nexus_Systems_Ecosystem_Blueprint.md

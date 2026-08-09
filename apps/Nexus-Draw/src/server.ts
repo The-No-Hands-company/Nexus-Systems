@@ -21,7 +21,7 @@ export async function createServer() {
     port,
     async fetch(req) {
       const url = new URL(req.url); const p = url.pathname || "";
-      if (req.method === "GET" && p === "/health") return json({ service: "nexus-draw", status: "ok", version: "v1", uptimeSeconds: Math.floor((Date.now() - startedAt) / 1000) });
+      if (req.method === "GET" && p === "/health") return json({ service: "nexus-draw", status: "ok", version: "v1", uptimeSeconds: Math.floor((Date.now() - startedAt) / 1000), phantom: phantom.status() });
       if (req.method === "GET" && p === "/api/v1/status") return json({ service: "nexus-draw", status: "ready", capabilities: ["whiteboard", "diagramming", "collaboration"], cloudIntegration: { enabled: (process.env["NEXUS_DRAW_ENABLE_CLOUD_INTEGRATION"] || "true") !== "false", cloudUrl: process.env.NEXUS_CLOUD_URL || "http://localhost:8787" }, phantom: phantom.status() }, 200);
       if (req.method === "GET" && p === "/api/v1/draw/boards") return json(engine.listBoards());
 if (req.method === "POST" && p === "/api/v1/draw/boards") { const b = await req.json().catch(()=>({})) as any; if (!b.name) return json({ error: "name required" }, 400); return json(engine.createBoard(b.name), 201); }

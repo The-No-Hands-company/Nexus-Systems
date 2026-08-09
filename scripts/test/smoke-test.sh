@@ -2,7 +2,9 @@
 # Nexus Systems Smoke Test — start Cloud + all apps, verify health
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "$0")" && pwd)"
+# scripts/test/ is two levels below the repo root; this resolved to
+# scripts/test/apps before the reorg moved this file out of the root.
+ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 APPS="$ROOT/apps"
 RESULTS="/tmp/nexus-smoke-results.txt"
 > "$RESULTS"
@@ -66,7 +68,7 @@ for app_dir in "$APPS"/*/; do
   export PORT="$port"
   export "$env_key=true"
   export NEXUS_CLOUD_URL="http://localhost:8787"
-  export NEXUS_CLOUD_API_KEY="change-me"
+  export NEXUS_CLOUD_API_KEY="change-me"  # pragma: allowlist secret — literal placeholder for the local test Cloud
   
   cd "$app_dir"
   bun run src/index.ts > "/tmp/${name}-smoke.log" 2>&1 &
