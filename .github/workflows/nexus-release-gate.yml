@@ -24,6 +24,34 @@ jobs:
           repository: The-No-Hands-company/Nit
           path: dhts/ecosystem-internal-testsuit
 
+      # `nit run` executes the real test suite of each repo in its manifest, and
+      # eight of the twelve are submodules — empty in a default checkout, so
+      # every command ran against a missing directory. Listed individually rather
+      # than `submodules: true` so dhts/GameDevelopmentToolset (408 MB, unused
+      # here) stays out of it. All are public, so the default token suffices.
+      #
+      # Absent on purpose: apps/Nexus. Its manifest entry is blockedBy
+      # "rust-toolchain", which makes runRepo() return before touching the path,
+      # so cloning it would only cost time. Nexusclaw, Nexus-Forge and
+      # dhts/ecosystem-porter are plain directories already in the checkout.
+      - name: Check out the submodules nit tests
+        uses: actions/checkout@v4
+        with: { repository: The-No-Hands-company/Nexus-AI, path: apps/Nexus-AI }
+      - uses: actions/checkout@v4
+        with: { repository: The-No-Hands-company/Nexus-Cloud, path: apps/Nexus-Cloud }
+      - uses: actions/checkout@v4
+        with: { repository: The-No-Hands-company/Nexus-Computer, path: apps/Nexus-Computer }
+      - uses: actions/checkout@v4
+        with: { repository: The-No-Hands-company/Nexus-Deploy, path: apps/Nexus-Deploy }
+      - uses: actions/checkout@v4
+        with: { repository: The-No-Hands-company/Nexus-Hosting, path: apps/Nexus-Hosting }
+      - uses: actions/checkout@v4
+        with: { repository: The-No-Hands-company/Nexus-Network, path: apps/Nexus-Network }
+      - uses: actions/checkout@v4
+        with: { repository: The-No-Hands-company/Nexus-Vault, path: apps/Nexus-Vault }
+      - uses: actions/checkout@v4
+        with: { repository: Zajfan/Phantom, path: apps/Phantom }
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -38,6 +66,24 @@ jobs:
         uses: oven-sh/setup-bun@v2
         with:
           bun-version: '1.1.18'
+
+      # Phantom's manifest entry is blockedBy "none", so unlike apps/Nexus it
+      # really does run `cargo test --workspace` and needs a toolchain. Cached,
+      # because compiling a Rust workspace cold is the slowest thing in this job
+      # and the gate allows each workflow 900s.
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: apps/Phantom
+
+      # Nexus-Hosting's command is `pnpm --dir artifacts/api-server test`, and
+      # nit's installDeps shells out to pnpm for any repo with a pnpm lockfile.
+      # Neither works if pnpm is not on PATH.
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
 
       - name: Install release dependencies
         run: |
