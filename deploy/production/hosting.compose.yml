@@ -28,13 +28,18 @@ services:
   minio:
     ports: !reset []
 
-  # The API. 8788 is free on this node (8787 is Nexus-Cloud), but bind it to
-  # loopback — the tunnel serves the proxy below, not this.
+  # The control panel — the Hosting UI and its API. This is what hosting.tnhc.dev
+  # resolves to, so it has to be reachable from the cloudflared container, which
+  # runs on a bridge network where localhost is the container rather than this
+  # host. Bound wide for that reason, exactly like the ecosystem proxy on 8080.
+  # 8788 is free here; 8787 is Nexus-Cloud.
   app:
     ports: !override
-      - "127.0.0.1:8788:8080"
+      - "8788:8080"
 
-  # The site-serving Rust proxy, and what hosting.tnhc.dev will point at.
+  # The site-serving Rust proxy. NOT hosting.tnhc.dev — this answers by Host
+  # header for domains of sites people deploy, and returns nothing for anything
+  # it does not recognise. It gets its own hostnames once sites exist.
   #
   # Bound to 0.0.0.0 rather than 127.0.0.1 on purpose: cloudflared runs in a
   # bridge-network container, so "localhost" there is the container, not this
