@@ -18,7 +18,10 @@ import sys
 import os
 import argparse
 import json
-import tomllib
+try:  # Python 3.11+
+    import tomllib
+except ModuleNotFoundError:  # 3.10 — CI builds this matrix leg
+    import tomli as tomllib  # type: ignore[no-redef]
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 

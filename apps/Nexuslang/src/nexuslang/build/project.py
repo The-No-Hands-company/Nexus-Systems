@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
-import tomllib
+try:  # Python 3.11+
+    import tomllib
+except ModuleNotFoundError:  # 3.10 — CI builds this matrix leg
+    import tomli as tomllib  # type: ignore[no-redef]
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional

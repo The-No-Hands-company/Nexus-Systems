@@ -323,10 +323,27 @@ class ResourceLimits:
             )
 
         # CPU time (RLIMIT_CPU)
+        #
+        # RLIMIT_CPU counts CPU consumed since the process started, but
+        # max_cpu_seconds means "this sandboxed work may use N seconds". In a
+        # short-lived process those coincide; in a long-running host they do not,
+        # and setting the raw value caps the process below what it has *already*
+        # used, so the kernel delivers SIGXCPU immediately.
+        #
+        # That is not hypothetical: entering a sandbox from the test suite killed
+        # the whole pytest run at ~85% with exit 152 on CI, while passing locally
+        # purely because this machine reached that test having burned fewer CPU
+        # seconds. Budget from current usage so the policy means what it says.
         if hasattr(_resource_module, 'RLIMIT_CPU') and self._policy.max_cpu_seconds:
+            already_used = 0.0
+            try:
+                usage = _resource_module.getrusage(_resource_module.RUSAGE_SELF)
+                already_used = usage.ru_utime + usage.ru_stime
+            except (ValueError, OSError):
+                pass
             _apply(
                 _resource_module.RLIMIT_CPU,
-                self._policy.max_cpu_seconds,
+                already_used + self._policy.max_cpu_seconds,
                 "RLIMIT_CPU (CPU seconds)",
             )
 
