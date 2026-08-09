@@ -12,6 +12,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # The gate's `nit` workflow runs `bun run src/cli.ts` inside
+      # dhts/ecosystem-internal-testsuit, which is a submodule (upstream: Nit).
+      # actions/checkout does not fetch submodules, so that directory arrives
+      # empty and the step fails with no such file. Fetched on its own rather
+      # than with `submodules: true`, which would also clone the 408 MB
+      # dhts/GameDevelopmentToolset that nothing here uses.
+      - name: Check out Nit (submodule, not fetched by default)
+        uses: actions/checkout@v4
+        with:
+          repository: The-No-Hands-company/Nit
+          path: dhts/ecosystem-internal-testsuit
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
