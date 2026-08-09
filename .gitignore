@@ -48,6 +48,14 @@ Backups/
 # NEXUS_AUTH_FOUNDER_PASSWORD / _OPERATOR_PASSWORD in apps/Nexus-Auth/.env.
 apps/Nexus-Auth/data/auth-users.json
 
+# Runtime state that regenerates, and churns the tree on every request.
+# Guardian's policy, six rules, rate limits and alerts are all seeded from
+# src/rules.ts, src/rate-limiter.ts and src/alerts.ts — the persisted policy is
+# byte-identical to defaultPolicy in src/state.ts, so nothing configured is lost.
+# Tunnel's file is routes and reachability only: no certificates, no key material.
+apps/Nexus-Guardian/data/guardian-state.json
+apps/Nexus-Tunnel/data/tunnel-state.json
+
 **/__pycache__/
 **/*.py[cod]
 **/*.so
