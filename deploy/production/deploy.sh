@@ -150,8 +150,18 @@ cmd_start() {
         bun run src/index.ts
 
     # 4. Nexus Team Chat
+    #
+    # NEXUS_TEAM_CHAT_BASE_URL must be set here even though it looks redundant.
+    # It is what Chat registers with Cloud as its upstream, and leaving it unset
+    # does not fall back to the port below — bun auto-loads
+    # apps/Nexus-Team-Chat/.env from the app directory, and that file still
+    # carries https://chat.nexussystems.vexr.dev from the previous domain. Chat
+    # therefore published a dead public hostname as its own upstream, and the
+    # proxy hung trying to resolve it. Same failure as NEXUS_AUTH_BASE_URL: an
+    # upstream is an address this machine can reach, never a public URL.
     start_service "chat" "$ROOT/apps/Nexus-Team-Chat" 3109 \
         NEXUS_CLOUD_URL=http://localhost:8787 PORT=3109 \
+        NEXUS_TEAM_CHAT_BASE_URL=http://127.0.0.1:3109 \
         bun run src/index.ts
 
     # 5. Proxy (8080 for Cloudflare Tunnel)
