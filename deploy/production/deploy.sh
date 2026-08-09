@@ -143,8 +143,6 @@ cmd_start() {
         SERVER_PUBLIC_IP="${SERVER_PUBLIC_IP:-}" \
         PORT=8787 CORS_ORIGIN="*" NEXUS_CLOUD_URL=http://localhost:8787 \
         NEXUS_STORAGE_S3_ENDPOINT=http://localhost:9000 \
-        NEXUS_STORAGE_S3_ACCESS_KEY=minioadmin \
-        NEXUS_STORAGE_S3_SECRET_KEY=minioadmin \
         NEXUS_STORAGE_S3_REGION=us-east-1 \
         NEXUS_STORAGE_S3_BUCKET_PREFIX=nexus \
         bun run src/index.ts
