@@ -1,0 +1,61 @@
+[Unit]
+# Brings the Nexus Systems app stack up at boot.
+#
+# The infrastructure containers and cloudflared already survive a reboot on their
+# own `restart: unless-stopped` policy. The four apps did not, and that asymmetry
+# is the whole failure mode: after a power cut the tunnel comes back, accepts
+# traffic for auth./cloud./chat.tnhc.dev, forwards it to 192.168.0.179:8080 and
+# finds nothing listening. The site stays down until someone runs deploy.sh by
+# hand, with every health check green from the edge's point of view.
+Description=Nexus Systems production stack (auth, cloud, chat, proxy)
+Documentation=https://github.com/The-No-Hands-company/Nexus-Systems
+
+# docker.service, not just network: deploy.sh runs `docker-compose up -d` for
+# Postgres/Redis/MinIO before starting anything, and Cloud will not come up
+# healthy without them. network-online rather than network so the LAN address
+# the tunnel targets is actually assigned.
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+# This repo lives on /run/media/zajferx/Data, which is NOT in /etc/fstab — it is
+# mounted on demand by udisks2, i.e. at login rather than at boot. Without an
+# fstab entry this unit therefore cannot deliver unattended recovery: at boot the
+# path does not exist, and the stack only comes up once someone logs in and the
+# retry below succeeds. Declaring the dependency makes systemd wait for the mount
+# instead of failing instantly, and documents the real precondition.
+#
+# For true unattended recovery after a power cut, give the volume an fstab entry
+# (with nofail) so it mounts at boot; this line then does the rest.
+RequiresMountsFor=/run/media/zajferx/Data
+
+[Service]
+# deploy.sh backgrounds each app itself with nohup and tracks PIDs under
+# /tmp/nexus-production/pids, so there is no single process for systemd to
+# follow. oneshot + RemainAfterExit models that honestly: the unit is "active"
+# once the start script has finished, and `stop` runs the matching teardown.
+Type=oneshot
+RemainAfterExit=yes
+
+User=zajferx
+Group=zajferx
+WorkingDirectory=/run/media/zajferx/Data/dev/The-No-hands-Company/projects/Nexus-Systems
+
+# systemd gives a near-empty PATH. bun lives under the user's home and
+# docker-compose in /usr/bin; without both, start_service fails at the first app
+# and the compose step never runs.
+Environment=PATH=/home/zajferx/.bun/bin:/usr/local/bin:/usr/bin:/bin
+Environment=HOME=/home/zajferx
+
+ExecStart=/run/media/zajferx/Data/dev/The-No-hands-Company/projects/Nexus-Systems/deploy/production/deploy.sh bg
+ExecStop=/run/media/zajferx/Data/dev/The-No-hands-Company/projects/Nexus-Systems/deploy/production/deploy.sh stop
+
+# The repo lives on an NTFS mount that udisks mounts on demand. If the unit
+# starts before the mount is ready the script is simply absent, so fail loudly
+# and retry rather than leaving the stack silently down.
+Restart=on-failure
+RestartSec=30s
+TimeoutStartSec=300
+
+[Install]
+WantedBy=multi-user.target
