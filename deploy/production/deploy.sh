@@ -131,15 +131,22 @@ cmd_start() {
     # defaults to "nexus.local", so Cloud would publish *.nexus.local routes
     # that the proxy — serving $DOMAIN — rejects as foreign hosts.
     #
-    # CF_* and SERVER_PUBLIC_IP are optional: with a Zone:DNS:Edit token Cloud
-    # creates the DNS records for new subdomains itself. Passed through only
-    # when present in the environment.
+    # CF_API_TOKEN / CF_ZONE_ID normally come from apps/Nexus-Cloud/.env, which
+    # bun auto-loads (start_service cd's into the app dir); they are passed here
+    # only if also exported. With a Zone:DNS:Edit token, Cloud publishes DNS for
+    # custom domains itself — as proxied CNAMEs to the tunnel, NOT A records: this
+    # node has no routable public IP. NEXUS_TUNNEL_ID is the tunnel every hostname
+    # is CNAMEd to; it is this node's "Nexus Systems" tunnel and is not secret (it
+    # is visible in every cfargotunnel DNS record). tnhc.dev subdomains need no
+    # per-name record — the *.tnhc.dev wildcard already covers them — so this only
+    # matters for out-of-wildcard custom domains.
     start_service "cloud" "$ROOT/apps/Nexus-Cloud" 8787 \
         NEXUS_CLOUD_API_KEY="$NEXUS_CLOUD_API_KEY" \
         NEXUS_CLOUD_DOMAIN="$DOMAIN" \
         NEXUS_AUTH_URL=http://localhost:4310 \
         CF_API_TOKEN="${CF_API_TOKEN:-}" \
         CF_ZONE_ID="${CF_ZONE_ID:-}" \
+        NEXUS_TUNNEL_ID="${NEXUS_TUNNEL_ID:-a3fc7587-49de-4792-b532-882775db6457}" \
         SERVER_PUBLIC_IP="${SERVER_PUBLIC_IP:-}" \
         PORT=8787 CORS_ORIGIN="*" NEXUS_CLOUD_URL=http://localhost:8787 \
         NEXUS_STORAGE_S3_ENDPOINT=http://localhost:9000 \
