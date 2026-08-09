@@ -1,9 +1,11 @@
-import { createHmac, randomUUID } from "node:crypto";
+import { createSign, createVerify, randomUUID, timingSafeEqual } from "node:crypto";
+import { privateKey, publicKey, signingAlgorithm, signingKid } from "./keys";
 import type { ServiceTokenPayload, ValidateTokenResult } from "./types";
 
 type Header = {
-  alg: "HS256";
+  alg: "RS256";
   typ: "JWT";
+  kid: string;
 };
 
 const encoder = new TextEncoder();
@@ -16,12 +18,27 @@ function base64UrlDecode(value: string): string {
   return Buffer.from(value, "base64url").toString("utf8");
 }
 
-function signingSecret(): string {
-  return process.env.NEXUS_AUTH_TOKEN_SECRET || "nexus-auth-dev-secret";
+/*
+ * RS256, not HMAC. The old scheme signed with NEXUS_AUTH_TOKEN_SECRET and the
+ * JWKS endpoint published that same secret, so any unauthenticated caller could
+ * fetch it and mint tokens. Under an asymmetric scheme the private key never
+ * leaves this process and JWKS carries only the public half — verifiers can
+ * check a token without gaining the ability to issue one, which is what lets an
+ * app be self-hosted without being trusted.
+ */
+function sign(value: string): string {
+  return createSign("RSA-SHA256").update(value).end().sign(privateKey, "base64url");
 }
 
-function sign(value: string): string {
-  return createHmac("sha256", signingSecret()).update(value).digest("base64url");
+function verify(value: string, signature: string): boolean {
+  try {
+    return createVerify("RSA-SHA256")
+      .update(value)
+      .end()
+      .verify(publicKey, Buffer.from(signature, "base64url"));
+  } catch {
+    return false;
+  }
 }
 
 export function issueServiceToken(input: {
@@ -44,7 +61,7 @@ export function issueServiceToken(input: {
     jti: randomUUID(),
   };
 
-  const header: Header = { alg: "HS256", typ: "JWT" };
+  const header: Header = { alg: signingAlgorithm as "RS256", typ: "JWT", kid: signingKid };
   const encodedHeader = base64UrlEncode(JSON.stringify(header));
   const encodedPayload = base64UrlEncode(JSON.stringify(payload));
   const signingInput = `${encodedHeader}.${encodedPayload}`;
@@ -64,9 +81,21 @@ export function validateServiceToken(token: string, expectedAudience?: string): 
 
   const [encodedHeader, encodedPayload, providedSignature] = parts;
   const signingInput = `${encodedHeader}.${encodedPayload}`;
-  const expectedSignature = sign(signingInput);
 
-  if (providedSignature !== expectedSignature) {
+  // Reject the algorithm outright rather than trusting the header. Accepting
+  // whatever `alg` a token declares is the classic JWT confusion attack — an
+  // attacker downgrades to "none", or to HMAC using the public key as the
+  // shared secret.
+  try {
+    const header = JSON.parse(base64UrlDecode(encodedHeader)) as Partial<Header>;
+    if (header.alg !== "RS256") {
+      return { valid: false, reason: "invalid-signature" };
+    }
+  } catch {
+    return { valid: false, reason: "invalid-token-format" };
+  }
+
+  if (!verify(signingInput, providedSignature)) {
     return { valid: false, reason: "invalid-signature" };
   }
 

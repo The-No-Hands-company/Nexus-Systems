@@ -27,6 +27,7 @@ import {
   revokeSession,
   revokeAllUserSessions,
 } from "./sessions";
+import { publicJwk } from "./keys";
 import { issueServiceToken, validateServiceToken } from "./token";
 import type { LoginResult, Permission } from "./types";
 import { NexusClient, createConfig } from "../../../packages/nexus-sdk/src/index";
@@ -455,16 +456,12 @@ const server = Bun.serve({
       }
 
       // ── OAuth JWKS ──
+      // Public key only. This endpoint is unauthenticated by design, which is
+      // precisely why it must never carry signing material: it previously
+      // published NEXUS_AUTH_TOKEN_SECRET as an `oct` key's `k`, so anyone who
+      // could reach it could mint tokens for the entire ecosystem.
       if (request.method === "GET" && path === "/api/v1/auth/oauth/jwks") {
-        return jsonResponse({
-          keys: [{
-            kty: "oct",
-            kid: "nexus-auth-hs256",
-            alg: "HS256",
-            use: "sig",
-            k: Buffer.from(process.env.NEXUS_AUTH_TOKEN_SECRET || "nexus-auth-dev-secret").toString("base64url"),
-          }],
-        });
+        return jsonResponse({ keys: [publicJwk()] });
       }
 
       // ── OAuth Userinfo ──
