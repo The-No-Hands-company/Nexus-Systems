@@ -28,6 +28,7 @@ import {
   revokeAllUserSessions,
 } from "./sessions";
 import { publicJwk } from "./keys";
+import { renderLoginPage, safeRedirect } from "./login-page";
 import { issueServiceToken, validateServiceToken } from "./token";
 import type { LoginResult, Permission } from "./types";
 import { NexusClient, createConfig } from "../../../packages/nexus-sdk/src/index";
@@ -61,6 +62,26 @@ function cookieDomain(): string | null {
   return raw ? raw : null;
 }
 
+/**
+ * Whether to mark the session cookie Secure.
+ *
+ * Defaults to on whenever a cookie domain is configured, since that only happens
+ * for a real deployment behind TLS. Separately overridable because the two are
+ * not actually the same question: testing cross-subdomain sign-on locally needs
+ * a cookie domain over plain http, and a browser silently refuses to store a
+ * Secure cookie on an insecure origin — the login would appear to succeed and
+ * the user would arrive still signed out.
+ *
+ * Only set NEXUS_AUTH_COOKIE_SECURE=false for local testing. Over the public
+ * internet it lets the session travel in clear text.
+ */
+function cookieSecure(): boolean {
+  const raw = process.env.NEXUS_AUTH_COOKIE_SECURE?.trim().toLowerCase();
+  if (raw === "false") return false;
+  if (raw === "true") return true;
+  return cookieDomain() !== null;
+}
+
 function readCookie(request: Request, name: string): string | null {
   const header = request.headers.get("cookie");
   if (!header) return null;
@@ -86,17 +107,17 @@ function sessionCookie(token: string, maxAgeSeconds: number): string {
     `Max-Age=${maxAgeSeconds}`,
   ];
   if (domain) parts.push(`Domain=${domain}`);
-  // Secure would make the cookie invisible over plain http, which is how the
-  // local ecosystem runs. Enabled whenever a cookie domain is configured, since
-  // that only happens for a real deployment behind TLS.
-  if (domain) parts.push("Secure");
+  if (cookieSecure()) parts.push("Secure");
   return parts.join("; ");
 }
 
 function clearedSessionCookie(): string {
   const domain = cookieDomain();
+  // Must mirror the attributes the cookie was set with, or the browser treats
+  // it as a different cookie and the old one survives the logout.
   const parts = [`${SESSION_COOKIE}=`, "Path=/", "HttpOnly", "SameSite=Lax", "Max-Age=0"];
-  if (domain) parts.push(`Domain=${domain}`, "Secure");
+  if (domain) parts.push(`Domain=${domain}`);
+  if (cookieSecure()) parts.push("Secure");
   return parts.join("; ");
 }
 
@@ -203,6 +224,56 @@ const server = Bun.serve({
 
       if (request.method === "GET" && path === "/api/v1/auth/contracts/registration") {
         return jsonResponse({ status: "ok", payload: buildSystemsApiRegistrationPayload(baseUrl) });
+      }
+
+      // ── Apex sign-in page ──
+      // The one place a human types a password. Apps that get an unauthenticated
+      // browser navigation send it here with ?redirect=<where they were going>.
+      if (request.method === "GET" && path === "/login") {
+        const target = safeRedirect(url.searchParams.get("redirect"), cookieDomain());
+        // Already signed in: honour the round trip immediately rather than
+        // asking for a password that is not needed.
+        if (auth && target) {
+          return new Response(null, { status: 303, headers: { location: target } });
+        }
+        return new Response(renderLoginPage({ redirect: target }), {
+          status: 200,
+          headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" },
+        });
+      }
+
+      if (request.method === "POST" && path === "/login") {
+        const form = await request.formData().catch(() => null);
+        const username = String(form?.get("username") ?? "").trim();
+        const password = String(form?.get("password") ?? "");  // pragma: allowlist secret
+        const target = safeRedirect(String(form?.get("redirect") ?? "") || null, cookieDomain());
+
+        const user = username && password ? authenticateUser(username, password) : null;
+        if (!user) {
+          return new Response(
+            renderLoginPage({ redirect: target, error: "Incorrect username or password." }),
+            { status: 401, headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" } },
+          );
+        }
+
+        const session = createSession({
+          userId: user.id,
+          ipAddress: getClientIp(request),
+          userAgent: request.headers.get("user-agent") || "unknown",
+        });
+        const maxAge = Math.max(
+          60,
+          Math.floor((new Date(session.expiresAt).getTime() - Date.now()) / 1000),
+        );
+        // 303 so the browser follows with GET rather than re-POSTing.
+        return new Response(null, {
+          status: 303,
+          headers: {
+            location: target ?? "/login",
+            "set-cookie": sessionCookie(session.token, maxAge),
+            "cache-control": "no-store",
+          },
+        });
       }
 
       // ── Login ──
