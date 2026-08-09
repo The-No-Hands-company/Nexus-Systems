@@ -241,6 +241,15 @@ def build_graph(blocks: list[MetadataBlock]) -> dict:
     }
 
 
+def edge_index_of(edge_id: str) -> int:
+    """Numeric part of a synthetic "edge:N" id, or -1 when it is not one.
+
+    Exists because these ids sort lexicographically in the wrong order past nine.
+    """
+    _, _, suffix = edge_id.partition(":")
+    return int(suffix) if suffix.isdigit() else -1
+
+
 def validate_graph(graph: dict) -> list[str]:
     errors: list[str] = []
     required_top = ["schemaVersion", "generatedAt", "nodeCount", "edgeCount", "nodes", "edges"]
@@ -326,7 +335,8 @@ def validate_graph(graph: dict) -> list[str]:
                 seen_sources.add(src)
 
     edge_ids: set[str] = set()
-    previous_edge_id = ""
+    previous_edge_index = -1
+    previous_edge_key: tuple[str, str, str] | None = None
     for idx, edge in enumerate(edges):
         if not isinstance(edge, dict):
             errors.append(f"edges[{idx}] must be an object")
@@ -345,11 +355,26 @@ def validate_graph(graph: dict) -> list[str]:
             if edge_id in edge_ids:
                 errors.append(f"duplicate edge id '{edge_id}'")
             edge_ids.add(edge_id)
-            if edge_id < previous_edge_id:
-                errors.append("edges must be sorted by id for deterministic output")
-            previous_edge_id = edge_id
+            # Edge ids are synthetic and sequential ("edge:1", "edge:2", …), so
+            # comparing them as strings claimed the output was non-deterministic
+            # the moment there were more than nine edges: "edge:10" < "edge:9".
+            # The build already sorts the (source, target, relation) tuples and
+            # numbers them in that order, so *that* ordering is the determinism
+            # guarantee worth checking — and checking it catches real drift,
+            # which the lexicographic test never could.
+            if edge_index_of(edge_id) < previous_edge_index:
+                errors.append("edges must be numbered in ascending order for deterministic output")
+            previous_edge_index = edge_index_of(edge_id)
         else:
             errors.append(f"edges[{idx}].id must be a string")
+
+        edge_key = (source, target, relation)
+        if all(isinstance(part, str) for part in edge_key):
+            if previous_edge_key is not None and edge_key < previous_edge_key:
+                errors.append(
+                    "edges must be sorted by (source, target, relation) for deterministic output"
+                )
+            previous_edge_key = edge_key
 
         if relation not in REL_TYPES:
             errors.append(f"edges[{idx}].relation must be one of {sorted(REL_TYPES)}")
