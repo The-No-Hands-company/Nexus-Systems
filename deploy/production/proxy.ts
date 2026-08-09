@@ -32,6 +32,15 @@ const FALLBACK_CHAT_UPSTREAM = process.env.CHAT_UPSTREAM || "http://127.0.0.1:31
 // has to resolve or single sign-on has nowhere to happen.
 const FALLBACK_AUTH_UPSTREAM = process.env.AUTH_UPSTREAM || "http://127.0.0.1:4310";
 
+// The default backend for the *.<DOMAIN> wildcard. Any on-domain host that is
+// neither a registered app route nor one of the static app fallbacks above is
+// treated as a deployed Nexus-Hosting site and handed to Hosting's site-proxy,
+// which dispatches by host and serves its own 404 for a name it does not know.
+// This is what makes every deployed site reachable through the single wildcard
+// while apps keep precedence. Set to "" to restore the old behaviour of 404ing
+// unmatched hosts (e.g. a node with no Hosting site-proxy running).
+const HOSTING_SITE_UPSTREAM = process.env.HOSTING_SITE_UPSTREAM ?? "http://127.0.0.1:8090";
+
 // Fetch latest routing configuration from Nexus-Cloud
 async function fetchRouteConfig(): Promise<NexusCloudRoute[] | null> {
   try {
@@ -190,6 +199,16 @@ async function handleRequest(req: Request): Promise<Response> {
       }
     }
     
+    // Default backend for the wildcard: any remaining on-domain host is treated
+    // as a deployed Nexus-Hosting site. We are past the matchesDomain() gate, so
+    // host ends with .<DOMAIN>; every app route and the static app fallbacks have
+    // already had their turn, so this cannot shadow them. Hosting's site-proxy
+    // dispatches on x-forwarded-host (set in the proxy block below) and serves
+    // its own 404 for a name it does not know, so forwarding here is safe.
+    if (!upstreamUrl && HOSTING_SITE_UPSTREAM) {
+      upstreamUrl = HOSTING_SITE_UPSTREAM;
+    }
+
     // If we still don't have an upstream, return 404
     if (!upstreamUrl) {
       return new Response(`No route configured for host: ${host}`, { status: 404 });

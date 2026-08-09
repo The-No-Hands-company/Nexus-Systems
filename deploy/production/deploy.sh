@@ -163,9 +163,17 @@ cmd_start() {
         bun run src/index.ts
 
     # 5. Proxy (8080 for Cloudflare Tunnel)
+    #
+    # HOSTING_SITE_UPSTREAM is the default backend for the *.$DOMAIN wildcard:
+    # any on-domain host that is not a registered app route nor one of the static
+    # app fallbacks is handed to Nexus-Hosting's site-proxy (8090), which serves
+    # the deployed site or its own 404. This is what makes deployed sites reachable
+    # through the tunnel's wildcard entry while apps keep precedence. Set it empty
+    # to 404 unmatched hosts instead (a node not running the Hosting site-proxy).
     start_service "proxy" "$ROOT/deploy/production" 8080 \
         PROXY_PORT=8080 DOMAIN="$DOMAIN" CLOUD_URL=http://localhost:8787 \
         NEXUS_CLOUD_API_KEY="$NEXUS_CLOUD_API_KEY" \
+        HOSTING_SITE_UPSTREAM="${HOSTING_SITE_UPSTREAM:-http://127.0.0.1:8090}" \
         bun run proxy.ts
 
     # 6. Verify
