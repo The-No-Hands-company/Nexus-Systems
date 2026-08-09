@@ -195,9 +195,29 @@ cmd_status() {
     done
 }
 
+usage() {
+    cat <<USAGE
+Usage: $(basename "$0") [command]
+
+  (no command)      start in the foreground, Ctrl+C to stop
+  bg, --bg          start in the background and return
+  stop, --stop      stop all services and the infrastructure containers
+  status, --status  report what is running
+
+Environment: DOMAIN (default tnhc.dev), NEXUS_AUTH_PUBLIC_URL, NEXUS_CLOUD_API_KEY
+USAGE
+}
+
+# Unrecognised arguments must not fall through to cmd_start. They used to: only
+# the ---prefixed spellings were matched, so `deploy.sh status` — the spelling
+# anyone tries first — deployed production and then sat in the foreground loop
+# below, and any typo did the same. An unknown argument now fails without
+# touching anything, and the bare words are accepted alongside the flags.
 case "${1:-}" in
-    --bg) cmd_start; echo "Services started. Logs: $LOG_DIR/*.log" ;;
-    --stop) cmd_stop ;;
-    --status) cmd_status ;;
-    *) cmd_start; echo "Press Ctrl+C to stop"; while true; do sleep 1; done ;;
+    "")             cmd_start; echo "Press Ctrl+C to stop"; while true; do sleep 1; done ;;
+    bg|--bg)        cmd_start; echo "Services started. Logs: $LOG_DIR/*.log" ;;
+    stop|--stop)    cmd_stop ;;
+    status|--status) cmd_status ;;
+    -h|--help|help) usage ;;
+    *)              echo "Unknown command: $1" >&2; usage >&2; exit 2 ;;
 esac
