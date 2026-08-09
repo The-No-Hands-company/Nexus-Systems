@@ -69,7 +69,10 @@ jobs:
 
       - name: Run tests with coverage
         run: |
-          pytest tests/ -q --maxfail=1 --disable-warnings \
+          # -m "not performance": those tests assert absolute millisecond
+          # budgets, which a shared runner cannot honour — they belong to the
+          # perf-smoke job, which compares against a recorded baseline instead.
+          pytest tests/ -q --maxfail=1 --disable-warnings -m "not performance" \
             --cov=src/nlpl \
             --cov-config=.coveragerc \
             --cov-report=xml:coverage-${{ matrix.python-version }}.xml \

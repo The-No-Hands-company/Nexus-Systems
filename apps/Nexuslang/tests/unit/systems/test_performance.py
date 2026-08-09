@@ -27,6 +27,17 @@ from nexuslang.stdlib import register_stdlib
 from nexuslang.parser.lexer import Lexer
 from nexuslang.parser.parser import Parser
 
+# Every assertion in this file is an absolute wall-clock budget, which is a
+# property of the machine as much as of the code. On a shared CI runner these
+# fail for reasons that have nothing to do with a regression — 100 function calls
+# measured 147ms against a 100ms budget on a GitHub runner while passing locally.
+#
+# They stay valuable, so they are marked rather than deleted or loosened: the
+# perf-smoke job runs them against a recorded baseline, where a slowdown is
+# judged relative to previous runs on comparable hardware instead of an absolute
+# figure that only holds on a fast desktop.
+pytestmark = pytest.mark.performance
+
 
 # ---------------------------------------------------------------------------
 # Helpers
