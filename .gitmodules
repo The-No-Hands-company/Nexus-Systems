@@ -28,3 +28,6 @@
 [submodule "dhts/GameDevelopmentToolset"]
 	path = dhts/GameDevelopmentToolset
 	url = https://github.com/Zajfan/GameDevelopmentToolset.git
+[submodule "dhts/ecosystem-internal-testsuit"]
+	path = dhts/ecosystem-internal-testsuit
+	url = git@github.com:The-No-Hands-company/Nit.git
