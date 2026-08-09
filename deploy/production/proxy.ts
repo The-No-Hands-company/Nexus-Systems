@@ -27,9 +27,9 @@ let routeCache: { timestamp: number; routes: Record<string, string> } = {
 // Fallback static configuration (used when Nexus-Cloud is unavailable)
 const FALLBACK_CLOUD_UPSTREAM = process.env.CLOUD_UPSTREAM || "http://127.0.0.1:8787";
 const FALLBACK_CHAT_UPSTREAM = process.env.CHAT_UPSTREAM || "http://127.0.0.1:3109";
-// The apex is the sign-in page. Every app redirects an unauthenticated browser
-// to https://<DOMAIN>/login?redirect=..., so the bare domain has to resolve to
-// Nexus-Auth or single sign-on has nowhere to happen. Before this it 404'd.
+// auth.<DOMAIN> is the sign-in host. Every app redirects an unauthenticated
+// browser to https://auth.<DOMAIN>/login?redirect=..., so this is the one that
+// has to resolve or single sign-on has nowhere to happen.
 const FALLBACK_AUTH_UPSTREAM = process.env.AUTH_UPSTREAM || "http://127.0.0.1:4310";
 
 // Fetch latest routing configuration from Nexus-Cloud
@@ -143,6 +143,17 @@ async function handleRequest(req: Request): Promise<Response> {
 
     // Check if this host matches our domain
     if (!matchesDomain(host)) {
+      // Liveness for the deployer, which polls http://localhost:8080/health.
+      // Deliberately gated on the host *not* being ours: cloud.<DOMAIN>/health
+      // and friends must keep reaching their upstreams, so this can only answer
+      // a direct request to the proxy's own address, which otherwise 404s.
+      if (url.pathname === "/health") {
+        return Response.json({
+          status: "ok",
+          domain: DOMAIN,
+          routes: Object.keys(routeCache.routes).length,
+        });
+      }
       // Not our domain - return 404
       return new Response(`Host ${host} not served by this proxy`, { status: 404 });
     }
@@ -170,7 +181,11 @@ async function handleRequest(req: Request): Promise<Response> {
       } else if (host === `auth.${DOMAIN}` || host === `www.auth.${DOMAIN}`) {
         upstreamUrl = FALLBACK_AUTH_UPSTREAM;
       } else if (host === DOMAIN || host === `www.${DOMAIN}`) {
-        // The apex itself: the ecosystem's front door and login page.
+        // Local convenience only. In production the apex belongs to the
+        // marketing site on Cloudflare Pages and never reaches this proxy, so
+        // nothing may depend on the apex resolving here — that assumption is
+        // exactly what left sign-in served by the marketing SPA. Kept so a
+        // local run without Pages in front still has something at the root.
         upstreamUrl = FALLBACK_AUTH_UPSTREAM;
       }
     }

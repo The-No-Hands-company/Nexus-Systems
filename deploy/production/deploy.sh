@@ -10,6 +10,17 @@ PID_DIR="$LOG_DIR/pids"
 mkdir -p "$LOG_DIR" "$PID_DIR"
 
 export DOMAIN="${DOMAIN:-tnhc.dev}"
+# Where a browser is sent to sign in. Exported under the name the apps actually
+# read, so every service started here inherits it — start_service adds to the
+# environment rather than replacing it, and apps fall back to NEXUS_AUTH_URL
+# (an internal address, useless to a browser) when it is unset.
+#
+# Deliberately auth.$DOMAIN and not the apex: the apex is the marketing site on
+# Cloudflare Pages, which never reaches this tunnel. https://$DOMAIN/login
+# returns the marketing SPA, so apps pointed at the apex sent people to a page
+# with no login form on it — and that was invisible to local testing, where
+# curl -H "Host: $DOMAIN" against the proxy renders the real thing.
+export NEXUS_AUTH_PUBLIC_URL="${NEXUS_AUTH_PUBLIC_URL:-https://auth.$DOMAIN}"
 export CLOUD_PORT=8787
 export CHAT_PORT=3109
 export PROXY_PORT=8080
@@ -86,9 +97,17 @@ cmd_start() {
     # session cookie to the parent domain so one login reaches every subdomain —
     # without it the cookie is host-only and users are asked to sign in again on
     # each app, which is the whole problem this replaced.
+    #
+    # NEXUS_AUTH_BASE_URL is the address Cloud should route to, not the address a
+    # browser visits — it is the only thing Auth uses it for, and it becomes
+    # `upstream` in Cloud's routing table. A public https:// value here is a trap:
+    # the proxy takes the hostname from `upstream`, so publishing
+    # https://auth.$DOMAIN would make the proxy answer auth.$DOMAIN by fetching
+    # auth.$DOMAIN — back out through Cloudflare, into the tunnel, into itself.
+    # The browser-facing host is NEXUS_AUTH_PUBLIC_URL, exported above.
     start_service "auth" "$ROOT/apps/Nexus-Auth" 4310 \
         PORT=4310 \
-        NEXUS_AUTH_BASE_URL="https://$DOMAIN" \
+        NEXUS_AUTH_BASE_URL="http://127.0.0.1:4310" \
         NEXUS_AUTH_COOKIE_DOMAIN=".$DOMAIN" \
         NEXUS_CLOUD_URL=http://localhost:8787 \
         NEXUS_CLOUD_API_KEY="$NEXUS_CLOUD_API_KEY" \
