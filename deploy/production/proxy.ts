@@ -27,6 +27,10 @@ let routeCache: { timestamp: number; routes: Record<string, string> } = {
 // Fallback static configuration (used when Nexus-Cloud is unavailable)
 const FALLBACK_CLOUD_UPSTREAM = process.env.CLOUD_UPSTREAM || "http://127.0.0.1:8787";
 const FALLBACK_CHAT_UPSTREAM = process.env.CHAT_UPSTREAM || "http://127.0.0.1:3109";
+// The apex is the sign-in page. Every app redirects an unauthenticated browser
+// to https://<DOMAIN>/login?redirect=..., so the bare domain has to resolve to
+// Nexus-Auth or single sign-on has nowhere to happen. Before this it 404'd.
+const FALLBACK_AUTH_UPSTREAM = process.env.AUTH_UPSTREAM || "http://127.0.0.1:4310";
 
 // Fetch latest routing configuration from Nexus-Cloud
 async function fetchRouteConfig(): Promise<NexusCloudRoute[] | null> {
@@ -163,8 +167,12 @@ async function handleRequest(req: Request): Promise<Response> {
         upstreamUrl = FALLBACK_CLOUD_UPSTREAM;
       } else if (host === `chat.${DOMAIN}` || host === `www.chat.${DOMAIN}`) {
         upstreamUrl = FALLBACK_CHAT_UPSTREAM;
+      } else if (host === `auth.${DOMAIN}` || host === `www.auth.${DOMAIN}`) {
+        upstreamUrl = FALLBACK_AUTH_UPSTREAM;
+      } else if (host === DOMAIN || host === `www.${DOMAIN}`) {
+        // The apex itself: the ecosystem's front door and login page.
+        upstreamUrl = FALLBACK_AUTH_UPSTREAM;
       }
-      // Add more fallbacks as needed
     }
     
     // If we still don't have an upstream, return 404
@@ -179,13 +187,36 @@ async function handleRequest(req: Request): Promise<Response> {
       upstream.hostname = upstreamObj.hostname;
       upstream.port = upstreamObj.port;
 
+      // The body is re-read into a buffer here, so the inbound framing headers
+      // no longer describe it. Forwarding the original content-length (and the
+      // original host) alongside a freshly built body left upstreams reading a
+      // truncated or empty payload — a form POST arrived with no fields, so the
+      // handler behaved as though nothing had been submitted. Drop them and let
+      // the runtime recompute.
+      const forwardHeaders = new Headers(req.headers);
+      forwardHeaders.delete("content-length");
+      forwardHeaders.delete("host");
+      forwardHeaders.delete("connection");
+      forwardHeaders.delete("transfer-encoding");
+      // Tell the upstream who it is actually answering as, which anything
+      // generating absolute URLs or scoping a cookie needs.
+      forwardHeaders.set("x-forwarded-host", host);
+      forwardHeaders.set("x-forwarded-proto", url.protocol.replace(":", ""));
+
       const proxied = new Request(upstream.toString(), {
         method: req.method,
-        headers: req.headers,
+        headers: forwardHeaders,
         body: req.method !== "GET" && req.method !== "HEAD" ? await req.arrayBuffer() : undefined,
       });
 
-      const resp = await fetch(proxied);
+      // redirect: "manual" is essential. fetch defaults to following redirects,
+      // which means the proxy would chase a 3xx itself and hand the client the
+      // final page instead of the redirect. That breaks anything that redirects:
+      // the sign-in POST returns 303 with Set-Cookie, and following it here
+      // swallowed both — the browser never received the session cookie and never
+      // navigated, so a correct login looked like a failed one. A reverse proxy
+      // must relay redirects, not resolve them.
+      const resp = await fetch(proxied, { redirect: "manual" });
       const headers = new Headers(resp.headers);
       headers.set("Access-Control-Allow-Origin", "*");
       // Remove hop-by-hop headers that shouldn't be forwarded

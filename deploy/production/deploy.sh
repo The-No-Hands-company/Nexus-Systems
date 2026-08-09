@@ -76,7 +76,25 @@ cmd_start() {
     docker-compose up -d
     sleep 5
 
-    # 2. Nexus Cloud
+    # 2. Nexus Auth — the ecosystem's identity service.
+    #
+    # Started before Cloud, which delegates to it: Cloud, Deploy and Vault all
+    # verify sessions here and none of them holds accounts any more, so nobody
+    # can sign in to anything if this is down.
+    #
+    # NEXUS_AUTH_COOKIE_DOMAIN must carry the leading dot. It is what scopes the
+    # session cookie to the parent domain so one login reaches every subdomain —
+    # without it the cookie is host-only and users are asked to sign in again on
+    # each app, which is the whole problem this replaced.
+    start_service "auth" "$ROOT/apps/Nexus-Auth" 4310 \
+        PORT=4310 \
+        NEXUS_AUTH_BASE_URL="https://$DOMAIN" \
+        NEXUS_AUTH_COOKIE_DOMAIN=".$DOMAIN" \
+        NEXUS_CLOUD_URL=http://localhost:8787 \
+        NEXUS_CLOUD_API_KEY="$NEXUS_CLOUD_API_KEY" \
+        bun run src/index.ts
+
+    # 3. Nexus Cloud
     #
     # NEXUS_CLOUD_DOMAIN must track $DOMAIN. It is the base Cloud mints public
     # subdomains under, the zone /api/v1/routes is keyed by, and the only suffix
@@ -90,6 +108,7 @@ cmd_start() {
     start_service "cloud" "$ROOT/apps/Nexus-Cloud" 8787 \
         NEXUS_CLOUD_API_KEY="$NEXUS_CLOUD_API_KEY" \
         NEXUS_CLOUD_DOMAIN="$DOMAIN" \
+        NEXUS_AUTH_URL=http://localhost:4310 \
         CF_API_TOKEN="${CF_API_TOKEN:-}" \
         CF_ZONE_ID="${CF_ZONE_ID:-}" \
         SERVER_PUBLIC_IP="${SERVER_PUBLIC_IP:-}" \
@@ -101,25 +120,25 @@ cmd_start() {
         NEXUS_STORAGE_S3_BUCKET_PREFIX=nexus \
         bun run src/index.ts
 
-    # 3. Nexus Team Chat
+    # 4. Nexus Team Chat
     start_service "chat" "$ROOT/apps/Nexus-Team-Chat" 3109 \
         NEXUS_CLOUD_URL=http://localhost:8787 PORT=3109 \
         bun run src/index.ts
 
-    # 4. Proxy (8080 for Cloudflare Tunnel)
+    # 5. Proxy (8080 for Cloudflare Tunnel)
     start_service "proxy" "$ROOT/deploy/production" 8080 \
         PROXY_PORT=8080 DOMAIN="$DOMAIN" CLOUD_URL=http://localhost:8787 \
         NEXUS_CLOUD_API_KEY="$NEXUS_CLOUD_API_KEY" \
         bun run proxy.ts
 
-    # 5. Verify
+    # 6. Verify
     sleep 3
     cmd_status
 }
 
 cmd_stop() {
     log "Stopping all Nexus services..."
-    for svc in cloud chat proxy; do
+    for svc in auth cloud chat proxy; do
         if [ -f "$PID_DIR/$svc.pid" ]; then
             kill "$(cat "$PID_DIR/$svc.pid")" 2>/dev/null && log "  Stopped $svc" || true
             rm -f "$PID_DIR/$svc.pid"
@@ -132,7 +151,7 @@ cmd_stop() {
 
 cmd_status() {
     echo "Service Status:"
-    for svc in cloud chat proxy; do
+    for svc in auth cloud chat proxy; do
         if [ -f "$PID_DIR/$svc.pid" ]; then
             if kill -0 "$(cat "$PID_DIR/$svc.pid")" 2>/dev/null; then
                 echo -e "  ${G}● $svc${R} (running, PID: $(cat $PID_DIR/$svc.pid))"
@@ -148,7 +167,7 @@ cmd_status() {
     # Check HTTP endpoints
     echo ""
     echo "HTTP Health Checks:"
-    for endpoint in "http://localhost:8787/health" "http://localhost:3109/health" "http://localhost:8080/health"; do
+    for endpoint in "http://localhost:4310/health" "http://localhost:8787/health" "http://localhost:3109/health" "http://localhost:8080/health"; do
         if curl -s -m 2 "$endpoint" | grep -q "ok"; then
             echo -e "  ${G}●${R} $endpoint"
         else
