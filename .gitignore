@@ -42,6 +42,12 @@ Backups/
 **/*.pfx
 **/*.secret
 **/secrets/
+
+# Nexus-Auth's user store — password hashes, and this repo is public. Accounts
+# are runtime state, not source: a fresh deploy seeds founder/operator from
+# NEXUS_AUTH_FOUNDER_PASSWORD / _OPERATOR_PASSWORD in apps/Nexus-Auth/.env.
+apps/Nexus-Auth/data/auth-users.json
+
 **/__pycache__/
 **/*.py[cod]
 **/*.so
