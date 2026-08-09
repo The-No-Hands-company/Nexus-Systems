@@ -61,6 +61,10 @@ Backups/
 # NEXUS_AUTH_FOUNDER_PASSWORD / _OPERATOR_PASSWORD in apps/Nexus-Auth/.env.
 apps/Nexus-Auth/data/auth-users.json
 
+# Registered OIDC clients — holds client secrets, and this repo is public.
+# Runtime state: a deploy registers its own clients.
+apps/Nexus-Auth/data/oidc-clients.json
+
 # Runtime state that regenerates, and churns the tree on every request.
 # Guardian's policy, six rules, rate limits and alerts are all seeded from
 # src/rules.ts, src/rate-limiter.ts and src/alerts.ts — the persisted policy is

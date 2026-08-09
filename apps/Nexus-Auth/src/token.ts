@@ -41,6 +41,22 @@ function verify(value: string, signature: string): boolean {
   }
 }
 
+/**
+ * Sign an arbitrary claim set as a compact JWS, RS256, with the same key and
+ * `kid` the JWKS endpoint publishes.
+ *
+ * Extracted from issueServiceToken so ID tokens are signed by exactly the same
+ * path — a second, parallel signing routine is how the two drift and one ends up
+ * missing a `kid` or using a different algorithm than JWKS advertises.
+ */
+export function signJwt(payload: Record<string, unknown>): string {
+  const header: Header = { alg: signingAlgorithm as "RS256", typ: "JWT", kid: signingKid };
+  const encodedHeader = base64UrlEncode(JSON.stringify(header));
+  const encodedPayload = base64UrlEncode(JSON.stringify(payload));
+  const signingInput = `${encodedHeader}.${encodedPayload}`;
+  return `${signingInput}.${sign(signingInput)}`;
+}
+
 export function issueServiceToken(input: {
   serviceId: string;
   audience?: string;
@@ -61,14 +77,8 @@ export function issueServiceToken(input: {
     jti: randomUUID(),
   };
 
-  const header: Header = { alg: signingAlgorithm as "RS256", typ: "JWT", kid: signingKid };
-  const encodedHeader = base64UrlEncode(JSON.stringify(header));
-  const encodedPayload = base64UrlEncode(JSON.stringify(payload));
-  const signingInput = `${encodedHeader}.${encodedPayload}`;
-  const signature = sign(signingInput);
-
   return {
-    token: `${signingInput}.${signature}`,
+    token: signJwt(payload as unknown as Record<string, unknown>),
     payload,
   };
 }

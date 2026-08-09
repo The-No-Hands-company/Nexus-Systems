@@ -29,6 +29,15 @@ import {
 } from "./sessions";
 import { publicJwk } from "./keys";
 import { renderLoginPage, safeRedirect } from "./login-page";
+import {
+  createAuthorizationCode,
+  discoveryDocument,
+  getClient,
+  issueIdToken,
+  redeemAuthorizationCode,
+  redirectUriAllowed,
+  verifyClientSecret,
+} from "./oidc";
 import { issueServiceToken, validateServiceToken } from "./token";
 import type { LoginResult, Permission } from "./types";
 import { NexusClient, createConfig } from "../../../packages/nexus-sdk/src/index";
@@ -224,6 +233,146 @@ const server = Bun.serve({
 
       if (request.method === "GET" && path === "/api/v1/auth/contracts/registration") {
         return jsonResponse({ status: "ok", payload: buildSystemsApiRegistrationPayload(baseUrl) });
+      }
+
+      // ── OpenID Connect discovery ──
+      // Public and unauthenticated by design: this is the document every OIDC
+      // client fetches first, before it has any credential. Nexus-Hosting's
+      // openid-client calls discovery() against ISSUER_URL and got a 404 here,
+      // which is what made ecosystem sign-in impossible for it.
+      if (request.method === "GET" && path === "/.well-known/openid-configuration") {
+        return jsonResponse(discoveryDocument(), { headers: { "cache-control": "public, max-age=300" } });
+      }
+
+      // ── OAuth authorize ──
+      if (request.method === "GET" && path === "/api/v1/auth/oauth/authorize") {
+        const clientId = url.searchParams.get("client_id") || "";
+        const redirectUri = url.searchParams.get("redirect_uri") || "";
+        const responseType = url.searchParams.get("response_type") || "";
+        const scope = url.searchParams.get("scope") || "openid";
+        const state = url.searchParams.get("state");
+        const nonce = url.searchParams.get("nonce") || undefined;
+        const codeChallenge = url.searchParams.get("code_challenge") || "";
+        const codeChallengeMethod = url.searchParams.get("code_challenge_method") || "";
+
+        const client = getClient(clientId);
+        // An unregistered client or an unregistered redirect_uri must NOT be
+        // redirected to — that is precisely the open redirect this endpoint
+        // would otherwise become. Errors are shown here instead.
+        if (!client) {
+          return jsonResponse({ error: "invalid_client" }, { status: 400 });
+        }
+        if (!redirectUri || !redirectUriAllowed(client, redirectUri)) {
+          return jsonResponse({ error: "invalid_request", error_description: "redirect_uri is not registered for this client" }, { status: 400 });
+        }
+
+        // Past this point the redirect_uri is trusted, so protocol errors go
+        // back to the client as the spec requires.
+        const bounce = (error: string, description?: string) => {
+          const target = new URL(redirectUri);
+          target.searchParams.set("error", error);
+          if (description) target.searchParams.set("error_description", description);
+          if (state) target.searchParams.set("state", state);
+          return new Response(null, { status: 303, headers: { location: target.toString() } });
+        };
+
+        if (responseType !== "code") return bounce("unsupported_response_type");
+        if (!codeChallenge) return bounce("invalid_request", "PKCE is required");
+        if (codeChallengeMethod !== "S256") return bounce("invalid_request", "code_challenge_method must be S256");
+
+        // Not signed in: reuse the ordinary login page and come straight back
+        // here afterwards, so there is still exactly one place a password is
+        // typed. url.href is same-origin, so safeRedirect accepts it.
+        if (!auth) {
+          const login = new URL("/login", url.origin);
+          login.searchParams.set("redirect", url.href);
+          return new Response(null, { status: 303, headers: { location: login.toString() } });
+        }
+
+        const code = createAuthorizationCode({
+          clientId,
+          redirectUri,
+          userId: auth.userId,
+          scope,
+          ...(nonce ? { nonce } : {}),
+          codeChallenge,
+        });
+
+        const target = new URL(redirectUri);
+        target.searchParams.set("code", code);
+        if (state) target.searchParams.set("state", state);
+        return new Response(null, { status: 303, headers: { location: target.toString() } });
+      }
+
+      // ── OAuth token ──
+      if (request.method === "POST" && path === "/api/v1/auth/oauth/token") {
+        const form = await request.formData().catch(() => null);
+        const get = (k: string) => String(form?.get(k) ?? "");
+
+        // client_secret_basic as well as _post: openid-client defaults to Basic
+        // for confidential clients, and rejecting it would look like a bad secret.
+        let clientId = get("client_id");
+        let clientSecret = get("client_secret") || undefined;  // pragma: allowlist secret
+        const authz = request.headers.get("authorization") || "";
+        const basic = authz.match(/^Basic\s+(.+)$/i);
+        if (basic) {
+          const [u, p] = Buffer.from(basic[1], "base64").toString("utf8").split(":");
+          if (u) clientId = decodeURIComponent(u);
+          if (p) clientSecret = decodeURIComponent(p);
+        }
+
+        if (get("grant_type") !== "authorization_code") {
+          return jsonResponse({ error: "unsupported_grant_type" }, { status: 400 });
+        }
+
+        const client = getClient(clientId);
+        if (!client || !verifyClientSecret(client, clientSecret)) {
+          return jsonResponse({ error: "invalid_client" }, { status: 401 });
+        }
+
+        const redeemed = redeemAuthorizationCode({
+          code: get("code"),
+          clientId,
+          redirectUri: get("redirect_uri"),
+          codeVerifier: get("code_verifier"),
+        });
+        if (!redeemed.ok) {
+          return jsonResponse({ error: redeemed.error }, { status: 400 });
+        }
+
+        const user = getUser(redeemed.record.userId);
+        if (!user) return jsonResponse({ error: "invalid_grant" }, { status: 400 });
+
+        // The access token is a real session rather than a second token type, so
+        // /userinfo and every existing check validate it unchanged — and it can
+        // be revoked through the same machinery as any other session.
+        const session = createSession({
+          userId: user.id,
+          ipAddress: getClientIp(request),
+          userAgent: request.headers.get("user-agent") || "oidc-client",
+        });
+
+        const idToken = issueIdToken({
+          userId: user.id,
+          clientId,
+          ...(redeemed.record.nonce ? { nonce: redeemed.record.nonce } : {}),
+          extraClaims: {
+            preferred_username: user.username,
+            email: user.email,
+            role: user.role,
+          },
+        });
+
+        return jsonResponse(
+          {
+            access_token: session.token,
+            token_type: "Bearer",
+            expires_in: 86400,
+            id_token: idToken,
+            scope: redeemed.record.scope,
+          },
+          { headers: { "cache-control": "no-store", pragma: "no-cache" } },
+        );
       }
 
       // ── Apex sign-in page ──
