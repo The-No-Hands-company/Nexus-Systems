@@ -36,8 +36,8 @@ export async function createServer() {
           status: "ok",
           version: "v1",
           uptimeSeconds: Math.floor((Date.now() - startedAt) / 1000),
-        },
-          phantom: phantom.status() };
+          phantom: phantom.status(),
+        });
 
       if (req.method === "GET" && p === "/api/v1/status")
         return json(

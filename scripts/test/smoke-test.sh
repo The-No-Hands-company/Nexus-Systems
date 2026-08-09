@@ -97,7 +97,9 @@ for name in "${!APP_PORTS[@]}"; do
   if nc -z localhost "$port" 2>/dev/null; then
     health_ok=false
     for retry in $(seq 1 5); do
-      if curl -s -m 2 "http://localhost:$port/health" | grep -qE '("status":"ok"|"ok":true)'; then
+      # Tolerate whitespace: several apps pretty-print their health JSON, so
+      # `"status": "ok"` never matched a pattern written as `"status":"ok"`.
+      if curl -s -m 2 "http://localhost:$port/health" | grep -qE '"(status"[[:space:]]*:[[:space:]]*"ok|ok"[[:space:]]*:[[:space:]]*true)'; then
         health_ok=true; break
       fi
       sleep 1

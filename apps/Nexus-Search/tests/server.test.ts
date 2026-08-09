@@ -3,10 +3,10 @@ import { createSearchServer } from "../src/server";
 
 describe("nexus-search v2", () => {
   let base = "";
-  let handle: ReturnType<typeof createSearchServer>;
+  let handle: Awaited<ReturnType<typeof createSearchServer>>;
 
   beforeAll(async () => {
-    handle = createSearchServer();
+    handle = await createSearchServer();
     await new Promise((r) => setTimeout(r, 200));
     base = `http://127.0.0.1:${handle.server.port}`;
   });

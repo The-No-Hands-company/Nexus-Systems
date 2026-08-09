@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { PhantomApp } from "../../../packages/phantom-sdk/src/integration";
 import { NexusDiscovery } from "../../../packages/nexus-discovery/src/index";
 import { AccountingEngine } from "./accounting-engine";
-import { startNexusAccountingHeartbeat } from "./cloud";
+import { startHeartbeat } from "./cloud";
 
 function json(p: unknown, s = 200): Response {
   return new Response(JSON.stringify(p), { status: s, headers: { "content-type": "application/json; charset=utf-8", "x-request-id": randomUUID() } });
@@ -46,6 +46,6 @@ export async function createServer() {
   });
 
   console.log(`[nexus-accounting] Listening on port ${server.port}`);
-  const stop = startNexusAccountingHeartbeat(baseUrl);
+  const stop = startHeartbeat(baseUrl);
   return { server, close: () => { stop(); engine.close(); phantom.stop(); server.stop(); } };
 }

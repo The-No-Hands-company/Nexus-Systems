@@ -10,7 +10,10 @@ function json(payload: unknown, status: number, h?: Record<string, string>): Res
   return new Response(JSON.stringify(payload), { status, headers: { "content-type": "application/json; charset=utf-8", "x-request-id": randomUUID(), ...h } });
 }
 
-export function createSearchServer() {
+// async because phantom.start() is awaited below. The Phantom rollout added that
+// await without converting the function, so this file has not parsed since —
+// the app could not start at all.
+export async function createSearchServer() {
   const port = Number(process.env.PORT || "3034");
   const baseUrl = process.env.NEXUS_SEARCH_BASE_URL || `http://localhost:${port}`;
   const startedAt = Date.now();
