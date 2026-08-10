@@ -56,6 +56,7 @@ export function isOnHandle(el: ElementData, p: Point, tol: number): string | nul
 
 export function topmostHit(elements: ElementData[], p: Point, tol: number): ElementData | null {
   return [...elements].reverse().find((el) => {
+    if (el.data.locked || el.data.hidden) return false;
     const b = elementBounds(el);
     return p.x >= b.x - tol && p.x <= b.x + b.width + tol && p.y >= b.y - tol && p.y <= b.y + b.height + tol;
   }) ?? null;
