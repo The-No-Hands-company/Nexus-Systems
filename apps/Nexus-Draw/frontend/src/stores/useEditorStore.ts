@@ -30,6 +30,7 @@ interface EditorStore {
 
   selectedElementIds: Set<string>;
   selectElement: (id: string, multi?: boolean) => void;
+  setSelection: (ids: string[]) => void;
   deselectAll: () => void;
 
   activeTool: string;
@@ -53,6 +54,14 @@ interface EditorStore {
   updateElement: (id: string, patch: Partial<ElementData>) => void;
   removeElement: (id: string) => void;
   reorderElements: (ids: string[]) => void;
+
+  /**
+   * Replaces `elements` WITHOUT pushing history. For live in-progress drags
+   * (move/resize/rotate) that update elements on every mousemove — history is
+   * captured once via `pushHistory()` at the start of the drag instead, so the
+   * whole drag collapses into a single undo step rather than one per frame.
+   */
+  setElementsLive: (elements: ElementData[]) => void;
 }
 
 export const useEditorStore = create<EditorStore>((set, get) => ({
@@ -76,6 +85,8 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
     if (next.has(id)) next.delete(id); else next.add(id);
     return { selectedElementIds: next };
   }),
+
+  setSelection: (ids) => set({ selectedElementIds: new Set(ids) }),
 
   deselectAll: () => set({ selectedElementIds: new Set() }),
 
@@ -136,4 +147,6 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
       return { elements: ids.map((id, i) => ({ ...map.get(id)!, order: i })) };
     });
   },
+
+  setElementsLive: (elements) => set({ elements }),
 }));
