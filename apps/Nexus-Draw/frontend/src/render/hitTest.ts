@@ -1,10 +1,8 @@
 import type { ElementData } from "../stores/model";
-import { type Bounds, type Point, distToSegment, elementBounds } from "./geometry";
+import { BOX_TYPES, type Bounds, type Point, distToSegment, elementBounds } from "./geometry";
 
 export { elementBounds };
 export type { Bounds, Point };
-
-const BOX_TYPES = new Set(["rectangle", "ellipse", "sticky", "image", "text"]);
 
 const ROTATE_HANDLE_OFFSET = 24;
 

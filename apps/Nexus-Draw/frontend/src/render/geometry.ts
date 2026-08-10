@@ -12,7 +12,7 @@ export interface Point {
   y: number;
 }
 
-const BOX_TYPES = new Set(["rectangle", "ellipse", "sticky", "image", "text"]);
+export const BOX_TYPES = new Set(["rectangle", "ellipse", "sticky", "image", "text"]);
 
 /** Squared distance from point p to segment (a,b). Avoids a sqrt for comparisons. */
 export function distToSegmentSq(p: Point, a: Point, b: Point): number {
