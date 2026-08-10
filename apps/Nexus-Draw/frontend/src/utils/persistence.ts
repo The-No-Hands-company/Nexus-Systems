@@ -1,5 +1,7 @@
 import type { BoardData } from "../stores/useEditorStore";
 import type { ElementData } from "../stores/model";
+import type { ServerBoard } from "./api";
+import { serverBoardToBoardData } from "./api";
 
 const KEY = "nexus-draw:doc:v1";
 const ACTIVE_KEY = "nexus-draw:active-board";
@@ -10,7 +12,16 @@ export type PersistedDoc = {
   savedAt: number;
 };
 
-export function loadDoc(): PersistedDoc | null {
+export function loadDoc(): PersistedDoc | null;
+export function loadDoc(serverBoard: ServerBoard): PersistedDoc;
+export function loadDoc(serverBoard?: ServerBoard): PersistedDoc | null {
+  if (serverBoard) {
+    return {
+      board: serverBoardToBoardData(serverBoard),
+      elements: serverBoard.elements,
+      savedAt: Date.now(),
+    };
+  }
   try {
     const raw = localStorage.getItem(KEY);
     if (!raw) return null;

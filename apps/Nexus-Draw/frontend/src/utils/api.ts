@@ -18,6 +18,11 @@ async function request(path: string, init?: RequestInit): Promise<Response> {
   });
 }
 
+async function checkResponse(r: Response): Promise<Response> {
+  if (!r.ok) throw new Error(`request failed: ${r.status}`);
+  return r;
+}
+
 export function boardToServerBoard(b: BoardState, elements: ElementData[]): ServerBoard {
   return {
     id: b.id, name: b.name, description: b.description ?? "",
@@ -36,7 +41,7 @@ export function serverBoardToBoardData(sb: ServerBoard): BoardState {
 }
 
 export async function listBoards(): Promise<ServerBoard[]> {
-  const r = await request("/api/v1/draw/boards");
+  const r = await checkResponse(await request("/api/v1/draw/boards"));
   return (await r.json()) as ServerBoard[];
 }
 
@@ -53,16 +58,16 @@ export async function getBoard(id: string): Promise<ServerBoard> {
 }
 
 export async function saveBoard(id: string, board: BoardState, elements: ElementData[]): Promise<void> {
-  await request(`/api/v1/draw/boards/${id}/elements`, { method: "PUT", body: JSON.stringify({ elements }) });
+  await checkResponse(await request(`/api/v1/draw/boards/${id}/elements`, { method: "PUT", body: JSON.stringify({ elements }) }));
   const meta = boardToServerBoard(board, elements);
-  await request(`/api/v1/draw/boards/${id}`, {
+  await checkResponse(await request(`/api/v1/draw/boards/${id}`, {
     method: "PATCH",
     body: JSON.stringify({ name: meta.name, description: meta.description, width: meta.width, height: meta.height, background: meta.background, isPublic: meta.isPublic, defaultStyleMode: meta.defaultStyleMode, gridSnap: meta.gridSnap }),
-  });
+  }));
 }
 
 export async function deleteBoard(id: string): Promise<void> {
-  await request(`/api/v1/draw/boards/${id}`, { method: "DELETE" });
+  await checkResponse(await request(`/api/v1/draw/boards/${id}`, { method: "DELETE" }));
 }
 
 export async function serverAvailable(): Promise<boolean> {
