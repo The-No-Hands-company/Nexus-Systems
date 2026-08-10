@@ -5,6 +5,10 @@ import { resolveStyleMode } from "../../stores/model";
 import { renderElement } from "../../render/renderElement";
 import { elementBounds, resizeHandles } from "../../render/geometry";
 import { beginTool, updateTool, endTool, getPreview, isDrawing, type ToolName } from "../../tools/toolController";
+import {
+  isOnHandle, topmostHit, beginMove, beginResize, beginRotate, beginMarquee,
+  updateSel, endSel, cancelSel, getSelPreview, isSelecting, bringForward, sendBackward,
+} from "../../tools/selection";
 
 const GRID_SIZE = 40;
 
@@ -18,6 +22,7 @@ export default function Canvas() {
   const panning = useRef(false);
   const lastMouse = useRef({ x: 0, y: 0 });
   const spacePanning = useRef(false);
+  const clipboard = useRef<any[]>([]);
 
   const pan = useEditorStore((s) => s.pan);
   const zoom = useEditorStore((s) => s.zoom);
@@ -29,7 +34,6 @@ export default function Canvas() {
   const deselectAll = useEditorStore((s) => s.deselectAll);
   const setActiveTool = useEditorStore((s) => s.setActiveTool);
   const selectedElementIds = useEditorStore((s) => s.selectedElementIds);
-  const addElement = useEditorStore((s) => s.addElement);
 
   const screenToWorld = useCallback((cx: number, cy: number) => {
     return { x: cx / zoom - pan.x, y: cy / zoom - pan.y };
@@ -75,7 +79,26 @@ export default function Canvas() {
 
     const preview = getPreview();
     if (preview) renderElement(ctx, rc, preview, resolveStyleMode(preview, board?.defaultStyleMode ?? "clean"));
-    void useEditorStore.getState();
+
+    const selPreview = getSelPreview();
+    if (selPreview) {
+      ctx.save();
+      ctx.globalAlpha = 0.6;
+      if (selPreview.type === "marquee") {
+        ctx.strokeStyle = "#3b82f6";
+        ctx.setLineDash([6 / zoom, 4 / zoom]);
+        ctx.lineWidth = 1.5 / zoom;
+        ctx.strokeRect(selPreview.rect.x, selPreview.rect.y, selPreview.rect.width, selPreview.rect.height);
+        ctx.fillStyle = "rgba(59,130,246,0.08)";
+        ctx.fillRect(selPreview.rect.x, selPreview.rect.y, selPreview.rect.width, selPreview.rect.height);
+      } else if (selPreview.type === "box") {
+        const els = selPreview.els ?? (selPreview.el ? [selPreview.el] : []);
+        for (const pEl of els) {
+          renderElement(ctx, rc, pEl, resolveStyleMode(pEl, board?.defaultStyleMode ?? "clean"));
+        }
+      }
+      ctx.restore();
+    }
 
     for (const id of selectedElementIds) {
       const el = elements.find((e) => e.id === id);
@@ -91,7 +114,7 @@ export default function Canvas() {
         ctx.fill();
       }
     }
-  }, [elements, selectedElementIds, pan, zoom, addElement, setActiveTool]);
+  }, [elements, selectedElementIds, pan, zoom]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -135,14 +158,26 @@ export default function Canvas() {
     }
 
     if (activeTool === "select") {
-      const hit = [...elements].reverse().find((el) => {
-        const b = elementBounds(el);
-        return world.x >= b.x && world.x <= b.x + b.width && world.y >= b.y && world.y <= b.y + b.height;
-      });
+      const sel = [...elements].filter((el) => selectedElementIds.has(el.id));
+      if (sel.length > 0) {
+        const top = [...sel].sort((a, b) => b.order - a.order)[0];
+        const handle = isOnHandle(top, world, 6 / zoom);
+        if (handle) {
+          if (handle === "rotate") beginRotate(top, world);
+          else beginResize(top, handle, world);
+          drawScene();
+          return;
+        }
+      }
+      const hit = topmostHit(elements, world, 4 / zoom);
       if (hit) {
-        selectElement(hit.id, e.metaKey || e.ctrlKey);
+        if (!selectedElementIds.has(hit.id)) selectElement(hit.id, e.shiftKey || e.metaKey || e.ctrlKey);
+        beginMove(elements.filter((el) => selectedElementIds.has(el.id) || el.id === hit.id), world);
+        drawScene();
       } else {
-        deselectAll();
+        if (!e.shiftKey) deselectAll();
+        beginMarquee(world);
+        drawScene();
       }
       return;
     }
@@ -152,7 +187,7 @@ export default function Canvas() {
       updateTool(world);
       drawScene();
     }
-  }, [activeTool, screenToWorld, elements, selectElement, deselectAll, drawScene]);
+  }, [activeTool, screenToWorld, elements, selectedElementIds, selectElement, deselectAll, drawScene]);
 
   const handlePointerMove = useCallback((e: React.PointerEvent) => {
     if (panning.current) {
@@ -162,28 +197,86 @@ export default function Canvas() {
       lastMouse.current = { x: e.clientX, y: e.clientY };
       return;
     }
-    if (isDrawing()) {
-      const rect = canvasRef.current!.getBoundingClientRect();
-      const world = screenToWorld(e.clientX - rect.left, e.clientY - rect.top);
+    const rect = canvasRef.current!.getBoundingClientRect();
+    const world = screenToWorld(e.clientX - rect.left, e.clientY - rect.top);
+    if (isSelecting()) {
+      updateSel(world);
+      drawScene();
+    } else if (isDrawing()) {
       updateTool(world);
       drawScene();
     }
   }, [pan, zoom, setPan, screenToWorld, drawScene]);
 
   const handlePointerUp = useCallback((e: React.PointerEvent) => {
-    if (panning.current) {
-      panning.current = false;
+    if (panning.current) { panning.current = false; return; }
+    if (isSelecting()) {
+      const res = endSel(elements);
+      const store = useEditorStore.getState();
+      if (res.updates.length > 0) {
+        res.updates.forEach((u) => {
+          store.updateElement(u.id, u.data ? { data: u.data } : { transform: u.transform! });
+        });
+      } else if (res.marqueeSelect.length > 0) {
+        res.marqueeSelect.forEach((id) => selectElement(id, true));
+      }
+      drawScene();
       return;
     }
     if (isDrawing()) {
       endTool();
       drawScene();
     }
-  }, [drawScene]);
+  }, [drawScene, elements, selectElement]);
+
+  const doDelete = useCallback(() => {
+    const store = useEditorStore.getState();
+    [...store.selectedElementIds].forEach((id) => store.removeElement(id));
+  }, []);
+
+  const doDuplicate = useCallback(() => {
+    const store = useEditorStore.getState();
+    const selected = store.elements.filter((el) => store.selectedElementIds.has(el.id));
+    if (selected.length === 0) return;
+    const copies = selected.map((el) => ({
+      ...JSON.parse(JSON.stringify(el)),
+      id: crypto.randomUUID(),
+      data: { ...el.data, x: (el.data.x ?? 0) + 24, y: (el.data.y ?? 0) + 24 },
+    }));
+    copies.forEach((c) => store.addElement(c));
+    store.deselectAll();
+    copies.forEach((c) => selectElement(c.id, true));
+  }, [selectElement]);
+
+  const doCopy = useCallback(() => {
+    const store = useEditorStore.getState();
+    clipboard.current = store.elements.filter((el) => store.selectedElementIds.has(el.id)).map((el) => JSON.parse(JSON.stringify(el)));
+  }, []);
+
+  const doPaste = useCallback(() => {
+    const store = useEditorStore.getState();
+    if (clipboard.current.length === 0) return;
+    const copies = clipboard.current.map((el) => ({
+      ...JSON.parse(JSON.stringify(el)),
+      id: crypto.randomUUID(),
+      data: { ...el.data, x: (el.data.x ?? 0) + 24, y: (el.data.y ?? 0) + 24 },
+    }));
+    copies.forEach((c) => store.addElement(c));
+    store.deselectAll();
+    copies.forEach((c) => selectElement(c.id, true));
+  }, [selectElement]);
 
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
     const target = e.target as HTMLElement;
     if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA")) return;
+
+    if ((e.metaKey || e.ctrlKey) && e.key === "c") { e.preventDefault(); doCopy(); return; }
+    if ((e.metaKey || e.ctrlKey) && e.key === "v") { e.preventDefault(); doPaste(); return; }
+    if ((e.metaKey || e.ctrlKey) && e.key === "d") { e.preventDefault(); doDuplicate(); return; }
+    if ((e.key === "Delete" || e.key === "Backspace")) { e.preventDefault(); doDelete(); return; }
+    if (e.key === "]") { useEditorStore.getState().reorderElements(bringForward(useEditorStore.getState().elements, useEditorStore.getState().selectedElementIds)); return; }
+    if (e.key === "[") { useEditorStore.getState().reorderElements(sendBackward(useEditorStore.getState().elements, useEditorStore.getState().selectedElementIds)); return; }
+
     if (e.key === " " && !e.repeat) { setActiveTool("hand"); spacePanning.current = true; e.preventDefault(); }
     if (e.key === "v") { setActiveTool("select"); }
     if (e.key === "p") { setActiveTool("pen"); }
@@ -196,7 +289,7 @@ export default function Canvas() {
     if (e.key === "u" && (e.metaKey || e.ctrlKey) && !e.shiftKey) { e.preventDefault(); useEditorStore.getState().undo(); }
     if (e.key === "z" && (e.metaKey || e.ctrlKey) && e.shiftKey) { e.preventDefault(); useEditorStore.getState().redo(); }
     if ((e.metaKey || e.ctrlKey) && e.key === "0") { setZoom(1); setPan({ x: 0, y: 0 }); }
-  }, [setActiveTool, setZoom, setPan]);
+  }, [setActiveTool, setZoom, setPan, doCopy, doPaste, doDuplicate, doDelete]);
 
   const handleKeyUp = useCallback((e: KeyboardEvent) => {
     if (e.key === " " && activeTool === "hand" && spacePanning.current) {
@@ -210,6 +303,10 @@ export default function Canvas() {
     window.addEventListener("keyup", handleKeyUp);
     return () => { window.removeEventListener("keydown", handleKeyDown); window.removeEventListener("keyup", handleKeyUp); };
   }, [handleKeyDown, handleKeyUp]);
+
+  useEffect(() => {
+    return () => cancelSel();
+  }, []);
 
   const textEditingId = useEditorStore((s) => s.textEditingId);
   const editingEl = textEditingId ? elements.find((e) => e.id === textEditingId) : null;
@@ -258,25 +355,20 @@ function TextEditorOverlay(props: {
 
   useEffect(() => {
     const ta = ref.current;
-    if (ta) {
-      ta.focus();
-      ta.select();
-    }
+    if (ta) { ta.focus(); ta.select(); }
   }, []);
 
-  const commit = (keep: boolean) => {
+  const commit = () => {
     if (committed.current) return;
     committed.current = true;
     const store = useEditorStore.getState();
-    const elId = props.elId;
     if (value.trim().length > 0) {
-      const el = store.elements.find((e) => e.id === elId);
-      if (el) store.updateElement(elId, { data: { ...el.data, text: value } });
+      const el = store.elements.find((e) => e.id === props.elId);
+      if (el) store.updateElement(props.elId, { data: { ...el.data, text: value } });
     } else {
-      store.removeElement(elId);
+      store.removeElement(props.elId);
     }
     store.setTextEditingId(null);
-    void keep;
   };
 
   return (
@@ -284,21 +376,20 @@ function TextEditorOverlay(props: {
       ref={ref}
       value={value}
       onChange={(e) => setValue(e.target.value)}
-      onBlur={() => commit(false)}
+      onBlur={() => commit()}
       onKeyDown={(e) => {
-        if (e.key === "Escape") { e.preventDefault(); setValue(""); commit(false); }
-        if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); commit(false); }
+        if (e.key === "Escape") { e.preventDefault(); setValue(""); commit(); }
+        if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); commit(); }
       }}
-      className="absolute outline-none bg-transparent text-zinc-100 resize-none overflow-hidden"
+      className="absolute outline-none bg-zinc-800/40 rounded px-1 py-0.5 text-zinc-100 resize-none overflow-hidden"
       style={{
         left: props.x,
         top: props.y,
-        width: Math.max(160 * props.zoom, 60),
+        width: 220 * props.zoom,
         minHeight: props.fontSize * props.zoom,
         fontSize: props.fontSize * props.zoom,
         fontFamily: props.fontFamily,
         lineHeight: 1.3,
-        transformOrigin: "0 0",
         whiteSpace: "pre-wrap",
         caretColor: "#3b82f6",
       }}
