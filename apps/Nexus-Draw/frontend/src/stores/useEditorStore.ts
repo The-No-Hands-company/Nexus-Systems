@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import type { ElementData, ElementStyle, StyleMode } from "./model";
 
+export type { ElementData } from "./model";
 export interface Vec2 { x: number; y: number }
 
 export interface BoardData {
@@ -26,9 +27,11 @@ interface EditorStore {
   elements: ElementData[];
   setBoard: (b: BoardData) => void;
   updateBoard: (patch: Partial<Omit<BoardData, "elements">>) => void;
+  getDefaultStyleMode: () => StyleMode;
 
   selectedElementIds: Set<string>;
   selectElement: (id: string, multi?: boolean) => void;
+  setSelection: (ids: string[]) => void;
   deselectAll: () => void;
 
   activeTool: string;
@@ -53,6 +56,14 @@ interface EditorStore {
   removeElement: (id: string) => void;
   reorderElements: (ids: string[]) => void;
 
+  /**
+   * Replaces `elements` WITHOUT pushing history. For live in-progress drags
+   * (move/resize/rotate) that update elements on every mousemove — history is
+   * captured once via `pushHistory()` at the start of the drag instead, so the
+   * whole drag collapses into a single undo step rather than one per frame.
+   */
+  setElementsLive: (elements: ElementData[]) => void;
+
   textEditingId: string | null;
   setTextEditingId: (id: string | null) => void;
 }
@@ -73,11 +84,15 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
 
   updateBoard: (patch) => set((s) => (s.board ? { board: { ...s.board, ...patch } } : {})),
 
+  getDefaultStyleMode: () => get().board?.defaultStyleMode ?? "clean",
+
   selectElement: (id, multi = false) => set((s) => {
     const next = multi ? new Set(s.selectedElementIds) : new Set<string>();
     if (next.has(id)) next.delete(id); else next.add(id);
     return { selectedElementIds: next };
   }),
+
+  setSelection: (ids) => set({ selectedElementIds: new Set(ids) }),
 
   deselectAll: () => set({ selectedElementIds: new Set() }),
 
@@ -141,6 +156,8 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
       return { elements: ids.map((id, i) => ({ ...map.get(id)!, order: i })) };
     });
   },
+
+  setElementsLive: (elements) => set({ elements }),
 
   textEditingId: null,
   setTextEditingId: (id) => set({ textEditingId: id }),

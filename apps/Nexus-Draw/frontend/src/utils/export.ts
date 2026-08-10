@@ -127,8 +127,11 @@ function svgElement(el: ElementData, mode: StyleMode): string {
       break;
     }
     case "freehand": {
-      const pts = (el.data.points as { x: number; y: number }[]).map((p) => `${p.x},${p.y}`).join(" ");
-      if (pts) body.push(`<polyline points="${pts}" ${stroke} fill="none"${opacity} stroke-linejoin="round"/>`);
+      // Points are number[][] ([x, y, pressure]) — the shape toolController,
+      // renderElement and hitTest all use. `stroke` already carries fill="none"
+      // and the linecap/linejoin, so don't repeat them here.
+      const pts = (el.data.points as number[][]).map(([x, y]) => `${x},${y}`).join(" ");
+      if (pts) body.push(`<polyline points="${pts}" ${stroke}${opacity}/>`);
       break;
     }
     case "text": {

@@ -1,5 +1,6 @@
 import { useEditorStore } from "../stores/useEditorStore";
 import { downloadPNG, downloadSVG } from "../utils/export";
+import HelpOverlay from "./HelpOverlay";
 
 export default function TopBar() {
   const board = useEditorStore((s) => s.board);
@@ -41,6 +42,7 @@ export default function TopBar() {
         <button onClick={() => { setZoom(1); setPan({ x: 0, y: 0 }); }} className="hover:text-zinc-200 ml-1">
           Fit
         </button>
+        <HelpOverlay />
       </div>
     </div>
   );

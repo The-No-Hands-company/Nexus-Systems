@@ -1,101 +1,286 @@
-import type { ElementData } from "../stores/model";
-import { makeElement } from "../stores/model";
+import { makeElement, type ElementData, type ElementStyle, type StyleMode } from "../stores/model";
 import { useEditorStore } from "../stores/useEditorStore";
-import { hitElement } from "../render/hitTest";
+import { hitElement, type Point } from "../render/hitTest";
 
-export interface Vec2 { x: number; y: number }
+/** World-space grid the editor snaps to when `board.gridSnap` is on. */
+export const GRID_SIZE = 40;
 
-export type ToolName = "rectangle" | "ellipse" | "line" | "arrow" | "sticky" | "pen" | "text" | "eraser";
+/** Below this drag distance (world px), a shape-drag is treated as a click. */
+const DRAG_THRESHOLD = 2;
+const DEFAULT_STICKY_WIDTH = 200;
+const DEFAULT_STICKY_HEIGHT = 150;
+const DEFAULT_ERASER_TOLERANCE = 8;
 
-interface ToolState {
-  tool: ToolName | "";
-  active: boolean;
-  start: Vec2;
-  current: Vec2;
-  points: Vec2[];
-  draft: ElementData | null;
+export type DragShapeTool = "rectangle" | "ellipse" | "line" | "arrow" | "sticky";
+const DRAG_SHAPE_TOOLS: ReadonlySet<string> = new Set<DragShapeTool>([
+  "rectangle",
+  "ellipse",
+  "line",
+  "arrow",
+  "sticky",
+]);
+
+export function isDragShapeTool(tool: string): tool is DragShapeTool {
+  return DRAG_SHAPE_TOOLS.has(tool);
 }
 
-const state: ToolState = { tool: "", active: false, start: { x: 0, y: 0 }, current: { x: 0, y: 0 }, points: [], draft: null };
-const GRID = 10;
-
-function snapPoint(p: Vec2): Vec2 {
-  const snap = useEditorStore.getState().board?.gridSnap ?? false;
-  if (!snap) return p;
-  return { x: Math.round(p.x / GRID) * GRID, y: Math.round(p.y / GRID) * GRID };
+function randomSeed(): number {
+  return Math.floor(Math.random() * 2 ** 31);
 }
 
-export function beginTool(tool: ToolName, worldPt: Vec2): void {
-  const store = useEditorStore.getState();
-  const p = snapPoint(worldPt);
+/** Snaps a world point to the grid when `enabled`; passes it through unchanged otherwise. */
+export function snapToGrid(pt: Point, gridSize: number, enabled: boolean): Point {
+  if (!enabled) return pt;
+  return {
+    x: Math.round(pt.x / gridSize) * gridSize,
+    y: Math.round(pt.y / gridSize) * gridSize,
+  };
+}
 
-  if (tool === "eraser") {
-    const hit = [...store.elements].reverse().find((el) => hitElement(el, worldPt, 6));
+/** Element `data` for a drag-created box/line/arrow/sticky, from its two drag corners. */
+export function dragShapeData(
+  tool: DragShapeTool,
+  x1: number,
+  y1: number,
+  x2: number,
+  y2: number
+): Record<string, any> {
+  if (tool === "line" || tool === "arrow") {
+    return { x1, y1, x2, y2 };
+  }
+  const data: Record<string, any> = {
+    x: Math.min(x1, x2),
+    y: Math.min(y1, y2),
+    width: Math.abs(x2 - x1),
+    height: Math.abs(y2 - y1),
+  };
+  if (tool === "sticky") data.text = "";
+  return data;
+}
+
+/** Element `data` for a default-size sticky placed by a click (no drag). */
+export function defaultStickyData(x: number, y: number): Record<string, any> {
+  return { x, y, width: DEFAULT_STICKY_WIDTH, height: DEFAULT_STICKY_HEIGHT, text: "" };
+}
+
+/** Element `data` for a freehand stroke from accumulated `[x, y, pressure]` samples. */
+export function freehandData(points: number[][]): Record<string, any> {
+  return { points };
+}
+
+/** Element `data` for a text element placed at a point. */
+export function textData(x: number, y: number, text: string): Record<string, any> {
+  return { x, y, text };
+}
+
+// Fallback average glyph width, as a fraction of font size, used only when no real
+// 2D context is available to measure with (e.g. jsdom in tests — it doesn't implement
+// canvas rendering without the optional `canvas` npm package). Real browsers always
+// take the accurate ctx.measureText path below.
+const FALLBACK_CHAR_WIDTH_RATIO = 0.6;
+const LINE_HEIGHT_RATIO = 1.2;
+
+let measureCtx: CanvasRenderingContext2D | null | undefined;
+
+function getMeasureContext(): CanvasRenderingContext2D | null {
+  if (measureCtx !== undefined) return measureCtx;
+  try {
+    measureCtx = document.createElement("canvas").getContext("2d");
+  } catch {
+    measureCtx = null;
+  }
+  return measureCtx;
+}
+
+/**
+ * Approximate rendered size of `text` at `fontSize`/`fontFamily`, used to give a
+ * text element a real (non-zero) hit box. Uses an offscreen canvas's
+ * `measureText` when available; falls back to a character-count heuristic
+ * otherwise so the result is never 0×0.
+ */
+export function measureTextSize(
+  text: string,
+  fontSize: number,
+  fontFamily: string
+): { width: number; height: number } {
+  const lines = text.split("\n");
+  const ctx = getMeasureContext();
+
+  let width: number;
+  if (ctx) {
+    ctx.font = `${fontSize}px ${fontFamily}`;
+    width = Math.max(...lines.map((line) => ctx.measureText(line).width));
+  } else {
+    width = Math.max(...lines.map((line) => line.length * fontSize * FALLBACK_CHAR_WIDTH_RATIO));
+  }
+
+  return {
+    width: Math.max(1, width),
+    height: Math.max(1, fontSize * lines.length * LINE_HEIGHT_RATIO),
+  };
+}
+
+export interface DraftShape {
+  kind: "shape";
+  tool: DragShapeTool;
+  startX: number;
+  startY: number;
+  endX: number;
+  endY: number;
+  seed: number;
+}
+
+export interface DraftFreehand {
+  kind: "freehand";
+  points: number[][];
+  seed: number;
+}
+
+export type Draft = DraftShape | DraftFreehand | null;
+
+const DRAFT_STYLE_BASE: Omit<ElementStyle, "styleMode"> = {
+  stroke: "#60a5fa",
+  fill: "none",
+  strokeWidth: 2,
+  strokeStyle: "solid",
+  opacity: 0.85,
+  radius: 8,
+  fontFamily: "ui-sans-serif, system-ui",
+  fontSize: 20,
+  textAlign: "left",
+};
+
+const IDENTITY_TRANSFORM = { a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 };
+
+/** Renders the in-progress draft as an (uncommitted) ElementData, for live preview. */
+export function draftToElement(draft: NonNullable<Draft>, boardDefault: StyleMode): ElementData {
+  const style: ElementStyle = { ...DRAFT_STYLE_BASE, styleMode: boardDefault };
+  const data =
+    draft.kind === "freehand"
+      ? freehandData(draft.points)
+      : dragShapeData(draft.tool, draft.startX, draft.startY, draft.endX, draft.endY);
+
+  return {
+    id: "__draft__",
+    elementType: draft.kind === "freehand" ? "freehand" : draft.tool,
+    data,
+    style,
+    transform: IDENTITY_TRANSFORM,
+    order: Number.MAX_SAFE_INTEGER,
+    seed: draft.seed,
+  };
+}
+
+/**
+ * Owns the in-progress draft for drag/freehand/eraser tools and commits finished
+ * elements to the store. `beginTool`/`updateTool`/`endTool` are pointer-glue —
+ * called from Canvas's onPointerDown/Move/Up — and are safe to call for any tool,
+ * including ones (select, hand, text) this controller doesn't drive; they no-op.
+ * The `text` tool is handled by Canvas directly (it needs a DOM textarea overlay)
+ * but commits through `commitText` below so element construction stays in one place.
+ */
+export class ToolController {
+  private draftShape: DraftShape | null = null;
+  private draftFreehand: DraftFreehand | null = null;
+  private erasing = false;
+
+  /** The current in-progress draft, for the caller to render as a live preview. */
+  get draft(): Draft {
+    return this.draftShape ?? this.draftFreehand ?? null;
+  }
+
+  beginTool(tool: string, pt: Point, gridSnap: boolean, eraserTolerance = DEFAULT_ERASER_TOLERANCE): void {
+    const p = snapToGrid(pt, GRID_SIZE, gridSnap);
+
+    if (isDragShapeTool(tool)) {
+      this.draftShape = { kind: "shape", tool, startX: p.x, startY: p.y, endX: p.x, endY: p.y, seed: randomSeed() };
+      return;
+    }
+    if (tool === "pen") {
+      this.draftFreehand = { kind: "freehand", points: [[p.x, p.y, 0.5]], seed: randomSeed() };
+      return;
+    }
+    if (tool === "eraser") {
+      this.erasing = true;
+      this.eraseAt(pt, eraserTolerance);
+    }
+  }
+
+  updateTool(pt: Point, gridSnap: boolean, eraserTolerance = DEFAULT_ERASER_TOLERANCE): void {
+    if (this.draftShape) {
+      const p = snapToGrid(pt, GRID_SIZE, gridSnap);
+      this.draftShape = { ...this.draftShape, endX: p.x, endY: p.y };
+      return;
+    }
+    if (this.draftFreehand) {
+      // Freehand strokes stay unsnapped point-by-point — snapping every sample would
+      // make the stroke blocky and defeat the point of a "freehand" tool.
+      this.draftFreehand.points.push([pt.x, pt.y, 0.5]);
+      return;
+    }
+    if (this.erasing) {
+      this.eraseAt(pt, eraserTolerance);
+    }
+  }
+
+  endTool(): void {
+    this.erasing = false;
+
+    if (this.draftShape) {
+      const draft = this.draftShape;
+      this.draftShape = null;
+      const dx = draft.endX - draft.startX;
+      const dy = draft.endY - draft.startY;
+      if (Math.abs(dx) < DRAG_THRESHOLD && Math.abs(dy) < DRAG_THRESHOLD) {
+        if (draft.tool === "sticky") {
+          this.commit(makeElement("sticky", defaultStickyData(draft.startX, draft.startY)));
+        }
+        return;
+      }
+      this.commit(
+        makeElement(draft.tool, dragShapeData(draft.tool, draft.startX, draft.startY, draft.endX, draft.endY))
+      );
+      return;
+    }
+
+    if (this.draftFreehand) {
+      const draft = this.draftFreehand;
+      this.draftFreehand = null;
+      if (draft.points.length < 2) return;
+      this.commit(makeElement("freehand", freehandData(draft.points)));
+    }
+  }
+
+  /** Cancels any in-progress draft without committing (e.g. Escape, tool switch). */
+  cancel(): void {
+    this.draftShape = null;
+    this.draftFreehand = null;
+    this.erasing = false;
+  }
+
+  /** Removes the topmost element under `pt` (world space), within `tol`. Used by the eraser tool. */
+  eraseAt(pt: Point, tol: number): void {
+    const store = useEditorStore.getState();
+    const hit = [...store.elements].reverse().find((el) => hitElement(el, pt, tol));
     if (hit) store.removeElement(hit.id);
-    return;
   }
 
-  if (tool === "text") {
-    const el = makeElement("text", { x: p.x, y: p.y, text: "" });
+  /** Commits a text element typed into the overlay; a left-empty textarea cancels instead. */
+  commitText(x: number, y: number, text: string): void {
+    if (text.length === 0) return;
+    const el = makeElement("text", textData(x, y, text));
+    // elementBounds/hitElement treat "text" as a box type, defaulting missing
+    // width/height to 0 — without a measured size the eraser (and any future
+    // marquee-select) could never hit the element except at its origin pixel.
+    const { width, height } = measureTextSize(text, el.style.fontSize, el.style.fontFamily);
+    el.data.width = width;
+    el.data.height = height;
+    this.commit(el);
+  }
+
+  private commit(el: ElementData): void {
+    const store = useEditorStore.getState();
+    el.order = store.elements.length;
     store.addElement(el);
-    store.setTextEditingId(el.id);
-    return;
   }
-
-  state.tool = tool;
-  state.active = true;
-  state.start = p;
-  state.current = p;
-  state.points = [p];
-  state.draft = null;
-}
-
-export function updateTool(worldPt: Vec2): void {
-  if (!state.active) return;
-  const p = snapPoint(worldPt);
-  state.current = p;
-
-  switch (state.tool) {
-    case "rectangle":
-    case "ellipse":
-    case "sticky": {
-      const x = Math.min(state.start.x, p.x);
-      const y = Math.min(state.start.y, p.y);
-      state.draft = makeElement(state.tool, { x, y, width: Math.abs(p.x - state.start.x), height: Math.abs(p.y - state.start.y) });
-      break;
-    }
-    case "line":
-    case "arrow":
-      state.draft = makeElement(state.tool, { x1: state.start.x, y1: state.start.y, x2: p.x, y2: p.y });
-      break;
-    case "pen": {
-      state.points.push(p);
-      state.draft = makeElement("freehand", { points: state.points.map((pt) => ({ x: pt.x, y: pt.y })) });
-      break;
-    }
-    default:
-      break;
-  }
-}
-
-export function endTool(): void {
-  if (!state.active) return;
-  const store = useEditorStore.getState();
-  if (state.draft) store.addElement(state.draft);
-  reset();
-}
-
-export function reset(): void {
-  state.tool = "";
-  state.active = false;
-  state.points = [];
-  state.draft = null;
-}
-
-export function getPreview(): ElementData | null {
-  return state.draft;
-}
-
-export function isDrawing(): boolean {
-  return state.active;
 }

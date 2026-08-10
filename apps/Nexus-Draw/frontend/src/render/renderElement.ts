@@ -1,178 +1,301 @@
-import rough from "roughjs";
+import type { RoughCanvas } from "roughjs/bin/canvas";
+import type { Options } from "roughjs/bin/core";
 import { getStroke } from "perfect-freehand";
-import type { ElementData, StyleMode } from "../stores/model";
+import type { ElementData, ElementStyle, StyleMode } from "../stores/model";
 import { arrowHead } from "./geometry";
 
-export type RoughCanvasSvg = ReturnType<typeof rough.canvas>;
+const ROUGHNESS = 1.6;
+const STICKY_FALLBACK_FILL = "#fef08a";
+const IMAGE_PLACEHOLDER_FILL = "rgba(148,163,184,0.15)";
+const IMAGE_PLACEHOLDER_STROKE = "#64748b";
 
-const imageCache = new Map<string, HTMLImageElement>();
-
-function loadImage(src: string): HTMLImageElement | null {
-  const cached = imageCache.get(src);
-  if (cached) return cached;
-  const img = new Image();
-  img.src = src;
-  imageCache.set(src, img);
-  return img;
-}
-
-function sketchOpts(el: ElementData) {
-  const s = el.style;
+/** Build roughjs Options for an element, allowing per-shape overrides (e.g. no fill on lines). */
+function roughOptions(el: ElementData, overrides: Partial<Options> = {}): Options {
+  const { style, seed } = el;
   return {
-    seed: el.seed,
-    roughness: 1.3,
-    bowing: 1,
-    stroke: s.stroke,
-    strokeWidth: s.strokeWidth,
-    fill: s.fill === "none" ? undefined : s.fill,
-    fillStyle: "hachure" as const,
+    seed,
+    roughness: ROUGHNESS,
+    stroke: style.stroke,
+    strokeWidth: style.strokeWidth,
+    fill: style.fill && style.fill !== "none" ? style.fill : undefined,
+    fillStyle: "hachure",
+    ...overrides,
   };
 }
 
-function drawDashed(ctx: CanvasRenderingContext2D, style: { strokeStyle: string; strokeWidth: number }) {
-  if (style.strokeStyle === "dashed") ctx.setLineDash([6, 6]);
-  else if (style.strokeStyle === "dotted") ctx.setLineDash([1.5, 4]);
-  else ctx.setLineDash([]);
+/** Apply strokeWidth/strokeStyle/dash pattern to ctx for native (clean-mode) drawing. */
+function applyStrokeStyle(ctx: CanvasRenderingContext2D, style: ElementStyle): void {
+  ctx.lineWidth = style.strokeWidth;
+  ctx.strokeStyle = style.stroke;
+  if (style.strokeStyle === "dashed") {
+    ctx.setLineDash([style.strokeWidth * 3, style.strokeWidth * 2]);
+  } else if (style.strokeStyle === "dotted") {
+    ctx.setLineDash([style.strokeWidth, style.strokeWidth * 2]);
+  } else {
+    ctx.setLineDash([]);
+  }
 }
 
-export function renderElement(ctx: CanvasRenderingContext2D, rc: RoughCanvasSvg, el: ElementData, mode: StyleMode): void {
-  if (el.data.hidden) return;
-  const s = el.style;
-  ctx.save();
-  ctx.globalAlpha = s.opacity;
+function renderBox(
+  ctx: CanvasRenderingContext2D,
+  rc: RoughCanvas,
+  el: ElementData,
+  mode: StyleMode
+): void {
+  const d = el.data as { x?: number; y?: number; width?: number; height?: number };
+  const x = d.x ?? 0;
+  const y = d.y ?? 0;
+  const width = d.width ?? 0;
+  const height = d.height ?? 0;
+  const style = el.style;
+  const isSticky = el.elementType === "sticky";
+  const fill = style.fill && style.fill !== "none" ? style.fill : isSticky ? STICKY_FALLBACK_FILL : "none";
 
-  const b = el.transform;
-  if (b.a !== 1 || b.b !== 0 || b.c !== 0 || b.d !== 1 || b.e !== 0 || b.f !== 0) {
-    ctx.transform(b.a, b.b, b.c, b.d, b.e, b.f);
+  if (mode === "sketch") {
+    rc.rectangle(x, y, width, height, roughOptions(el, { fill: fill === "none" ? undefined : fill }));
+    return;
   }
 
+  ctx.save();
+  applyStrokeStyle(ctx, style);
+  ctx.beginPath();
+  const radius = isSticky ? 0 : Math.max(0, Math.min(style.radius, width / 2, height / 2));
+  if (radius > 0) {
+    ctx.roundRect(x, y, width, height, radius);
+  } else {
+    ctx.rect(x, y, width, height);
+  }
+  if (fill !== "none") {
+    ctx.fillStyle = fill;
+    ctx.fill();
+  }
+  ctx.stroke();
+  ctx.restore();
+}
+
+function renderEllipse(
+  ctx: CanvasRenderingContext2D,
+  rc: RoughCanvas,
+  el: ElementData,
+  mode: StyleMode
+): void {
+  const d = el.data as { x?: number; y?: number; width?: number; height?: number };
+  const x = d.x ?? 0;
+  const y = d.y ?? 0;
+  const width = d.width ?? 0;
+  const height = d.height ?? 0;
+  const cx = x + width / 2;
+  const cy = y + height / 2;
+  const style = el.style;
+
+  if (mode === "sketch") {
+    rc.ellipse(cx, cy, width, height, roughOptions(el));
+    return;
+  }
+
+  ctx.save();
+  applyStrokeStyle(ctx, style);
+  ctx.beginPath();
+  ctx.ellipse(cx, cy, Math.abs(width) / 2, Math.abs(height) / 2, 0, 0, Math.PI * 2);
+  if (style.fill !== "none") {
+    ctx.fillStyle = style.fill;
+    ctx.fill();
+  }
+  ctx.stroke();
+  ctx.restore();
+}
+
+function renderLine(
+  ctx: CanvasRenderingContext2D,
+  rc: RoughCanvas,
+  el: ElementData,
+  mode: StyleMode
+): void {
+  const d = el.data as { x1?: number; y1?: number; x2?: number; y2?: number };
+  const x1 = d.x1 ?? 0;
+  const y1 = d.y1 ?? 0;
+  const x2 = d.x2 ?? 0;
+  const y2 = d.y2 ?? 0;
+  const style = el.style;
+
+  if (mode === "sketch") {
+    rc.line(x1, y1, x2, y2, roughOptions(el, { fill: undefined }));
+    return;
+  }
+
+  ctx.save();
+  applyStrokeStyle(ctx, style);
+  ctx.beginPath();
+  ctx.moveTo(x1, y1);
+  ctx.lineTo(x2, y2);
+  ctx.stroke();
+  ctx.restore();
+}
+
+function renderArrow(
+  ctx: CanvasRenderingContext2D,
+  rc: RoughCanvas,
+  el: ElementData,
+  mode: StyleMode
+): void {
+  const d = el.data as { x1?: number; y1?: number; x2?: number; y2?: number };
+  const x1 = d.x1 ?? 0;
+  const y1 = d.y1 ?? 0;
+  const x2 = d.x2 ?? 0;
+  const y2 = d.y2 ?? 0;
+  const style = el.style;
+  const headSize = Math.max(12, style.strokeWidth * 5);
+  const { p1, p2 } = arrowHead(x1, y1, x2, y2, headSize);
+
+  if (mode === "sketch") {
+    const opts = roughOptions(el, { fill: undefined });
+    rc.line(x1, y1, x2, y2, opts);
+    rc.polygon(
+      [
+        [x2, y2],
+        p1,
+        p2,
+      ],
+      { ...opts, fill: style.stroke, fillStyle: "solid" }
+    );
+    return;
+  }
+
+  ctx.save();
+  applyStrokeStyle(ctx, style);
+  ctx.beginPath();
+  ctx.moveTo(x1, y1);
+  ctx.lineTo(x2, y2);
+  ctx.stroke();
+
+  ctx.setLineDash([]);
+  ctx.beginPath();
+  ctx.moveTo(x2, y2);
+  ctx.lineTo(p1[0], p1[1]);
+  ctx.lineTo(p2[0], p2[1]);
+  ctx.closePath();
+  ctx.fillStyle = style.stroke;
+  ctx.fill();
+  ctx.restore();
+}
+
+function renderFreehand(ctx: CanvasRenderingContext2D, el: ElementData): void {
+  const d = el.data as { points?: number[][] };
+  const points = d.points ?? [];
+  if (points.length === 0) return;
+  const style = el.style;
+
+  const outline = getStroke(points, {
+    size: Math.max(style.strokeWidth * 4, 4),
+    thinning: 0.6,
+    smoothing: 0.5,
+    streamline: 0.5,
+  });
+  if (outline.length === 0) return;
+
+  const path = new Path2D();
+  path.moveTo(outline[0][0], outline[0][1]);
+  for (let i = 1; i < outline.length; i++) {
+    path.lineTo(outline[i][0], outline[i][1]);
+  }
+  path.closePath();
+
+  ctx.save();
+  ctx.fillStyle = style.stroke;
+  ctx.fill(path);
+  ctx.restore();
+}
+
+function renderTextBlock(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  x: number,
+  y: number,
+  style: ElementStyle
+): void {
+  if (!text) return;
+  ctx.save();
+  ctx.font = `${style.fontSize}px ${style.fontFamily}`;
+  ctx.fillStyle = style.stroke;
+  ctx.textAlign = style.textAlign;
+  ctx.textBaseline = "top";
+  const lineHeight = style.fontSize * 1.25;
+  const lines = text.split("\n");
+  for (let i = 0; i < lines.length; i++) {
+    ctx.fillText(lines[i], x, y + i * lineHeight);
+  }
+  ctx.restore();
+}
+
+function renderText(ctx: CanvasRenderingContext2D, el: ElementData): void {
+  const d = el.data as { x?: number; y?: number; text?: string };
+  renderTextBlock(ctx, d.text ?? "", d.x ?? 0, d.y ?? 0, el.style);
+}
+
+function renderStickyText(ctx: CanvasRenderingContext2D, el: ElementData): void {
+  const d = el.data as { x?: number; y?: number; width?: number; text?: string };
+  const padding = 12;
+  const x = (d.x ?? 0) + padding;
+  const y = (d.y ?? 0) + padding;
+  renderTextBlock(ctx, d.text ?? "", x, y, { ...el.style, stroke: "#1c1917", textAlign: "left" });
+}
+
+function renderImagePlaceholder(ctx: CanvasRenderingContext2D, el: ElementData): void {
+  const d = el.data as { x?: number; y?: number; width?: number; height?: number };
+  const x = d.x ?? 0;
+  const y = d.y ?? 0;
+  const width = d.width ?? 0;
+  const height = d.height ?? 0;
+  ctx.save();
+  ctx.fillStyle = IMAGE_PLACEHOLDER_FILL;
+  ctx.fillRect(x, y, width, height);
+  ctx.strokeStyle = IMAGE_PLACEHOLDER_STROKE;
+  ctx.lineWidth = 1;
+  ctx.setLineDash([6, 4]);
+  ctx.strokeRect(x, y, width, height);
+  ctx.restore();
+}
+
+/**
+ * Render a single element into a DPR/pan/zoom-transformed 2D context.
+ * `mode` selects clean (native ctx paths) vs sketch (roughjs) rendering;
+ * freehand and text render identically in both modes.
+ */
+export function renderElement(
+  ctx: CanvasRenderingContext2D,
+  rc: RoughCanvas,
+  el: ElementData,
+  mode: StyleMode
+): void {
+  ctx.save();
+  ctx.globalAlpha = el.style.opacity;
+
   switch (el.elementType) {
-    case "rectangle": {
-      const { x, y, width, height } = el.data as { x: number; y: number; width: number; height: number };
-      if (mode === "sketch") {
-        rc.rectangle(x, y, width, height, sketchOpts(el));
-      } else {
-        ctx.strokeStyle = s.stroke;
-        ctx.lineWidth = s.strokeWidth;
-        drawDashed(ctx, s);
-        if (s.fill && s.fill !== "none") {
-          ctx.fillStyle = s.fill;
-          ctx.beginPath();
-          ctx.roundRect(x, y, width, height, s.radius);
-          ctx.fill();
-        }
-        ctx.beginPath();
-        ctx.roundRect(x, y, width, height, s.radius);
-        ctx.stroke();
-      }
+    case "rectangle":
+    case "sticky":
+      renderBox(ctx, rc, el, mode);
+      if (el.elementType === "sticky") renderStickyText(ctx, el);
       break;
-    }
-    case "ellipse": {
-      const { x, y, width, height } = el.data as { x: number; y: number; width: number; height: number };
-      if (mode === "sketch") {
-        rc.ellipse(x + width / 2, y + height / 2, width, height, sketchOpts(el));
-      } else {
-        ctx.strokeStyle = s.stroke;
-        ctx.lineWidth = s.strokeWidth;
-        drawDashed(ctx, s);
-        if (s.fill && s.fill !== "none") {
-          ctx.fillStyle = s.fill;
-          ctx.beginPath();
-          ctx.ellipse(x + width / 2, y + height / 2, width / 2, height / 2, 0, 0, Math.PI * 2);
-          ctx.fill();
-        }
-        ctx.beginPath();
-        ctx.ellipse(x + width / 2, y + height / 2, width / 2, height / 2, 0, 0, Math.PI * 2);
-        ctx.stroke();
-      }
+    case "ellipse":
+      renderEllipse(ctx, rc, el, mode);
       break;
-    }
     case "line":
-    case "arrow": {
-      const { x1, y1, x2, y2 } = el.data as { x1: number; y1: number; x2: number; y2: number };
-      if (mode === "sketch") {
-        rc.line(x1, y1, x2, y2, sketchOpts(el));
-      } else {
-        ctx.strokeStyle = s.stroke;
-        ctx.lineWidth = s.strokeWidth;
-        drawDashed(ctx, s);
-        ctx.beginPath();
-        ctx.moveTo(x1, y1);
-        ctx.lineTo(x2, y2);
-        ctx.stroke();
-      }
-      if (el.elementType === "arrow") {
-        const { p1, p2 } = arrowHead(x1, y1, x2, y2, 12 + el.style.strokeWidth * 2);
-        ctx.fillStyle = s.stroke;
-        ctx.strokeStyle = s.stroke;
-        ctx.beginPath();
-        ctx.moveTo(x2, y2);
-        ctx.lineTo(p1[0], p1[1]);
-        ctx.lineTo(p2[0], p2[1]);
-        ctx.closePath();
-        if (mode === "sketch") ctx.stroke(); else ctx.fill();
-      }
+      renderLine(ctx, rc, el, mode);
       break;
-    }
-    case "freehand": {
-      const pts = (el.data.points as { x: number; y: number; pressure?: number }[]).map((p) => [p.x, p.y, p.pressure ?? 0.5]);
-      const outline = getStroke(pts, {
-        size: s.strokeWidth * 3,
-        thinning: 0.6,
-        smoothing: 0.5,
-        streamline: 0.5,
-        simulatePressure: false,
-      });
-      const path = new Path2D();
-      if (outline.length > 0) {
-        path.moveTo(outline[0][0], outline[0][1]);
-        for (const [x, y] of outline) path.lineTo(x, y);
-        path.closePath();
-        ctx.fillStyle = s.stroke;
-        ctx.fill(path);
-      }
+    case "arrow":
+      renderArrow(ctx, rc, el, mode);
       break;
-    }
-    case "text": {
-      const { x, y, text } = el.data as { x: number; y: number; text?: string };
-      ctx.fillStyle = s.stroke;
-      ctx.font = `${s.fontSize}px ${s.fontFamily}`;
-      ctx.textAlign = s.textAlign;
-      ctx.textBaseline = "top";
-      ctx.fillText(text ?? "Text", x, y);
+    case "freehand":
+      renderFreehand(ctx, el);
       break;
-    }
-    case "sticky": {
-      const { x, y, width, height, text } = el.data as { x: number; y: number; width: number; height: number; text?: string };
-      if (mode === "sketch") {
-        rc.rectangle(x, y, width, height, { ...sketchOpts(el), fill: "#fde047", fillStyle: "solid", stroke: "#ca8a04", roughness: 1.2 });
-      } else {
-        ctx.fillStyle = "#fde047";
-        ctx.strokeStyle = "#ca8a04";
-        ctx.lineWidth = s.strokeWidth;
-        ctx.beginPath();
-        ctx.roundRect(x, y, width, height, 4);
-        ctx.fill();
-        ctx.stroke();
-      }
-      ctx.fillStyle = "#713f12";
-      ctx.font = `${s.fontSize}px ${s.fontFamily}`;
-      ctx.textAlign = "left";
-      ctx.textBaseline = "top";
-      ctx.fillText(text ?? "", x + 8, y + 8, width - 16);
+    case "text":
+      renderText(ctx, el);
       break;
-    }
-    case "image": {
-      const { x, y, width, height, src } = el.data as { x: number; y: number; width: number; height: number; src?: string };
-      const img = src ? loadImage(src) : null;
-      if (img) {
-        ctx.drawImage(img, x, y, width, height);
-        ctx.strokeStyle = s.stroke;
-        ctx.lineWidth = s.strokeWidth;
-        ctx.strokeRect(x, y, width, height);
-      }
+    case "image":
+      renderImagePlaceholder(ctx, el);
       break;
-    }
+    default:
+      break;
   }
 
   ctx.restore();

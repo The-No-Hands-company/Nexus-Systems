@@ -1,4 +1,4 @@
-import { describe, test, expect, beforeEach } from "bun:test";
+import { describe, test, expect, beforeEach } from "vitest";
 import { loadDoc, saveDoc, clearDoc, makeDefaultBoard } from "./persistence";
 import { makeElement } from "../stores/model";
 

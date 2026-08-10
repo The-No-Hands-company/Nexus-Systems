@@ -1,4 +1,4 @@
-import { describe, test, expect } from "bun:test";
+import { describe, test, expect } from "vitest";
 import { buildSvgDataUrl } from "./export";
 import { makeElement } from "../stores/model";
 import type { BoardData } from "../stores/useEditorStore";
@@ -43,6 +43,18 @@ describe("buildSvgDataUrl", () => {
     hidden.data.hidden = true;
     const svg = decodeURIComponent(buildSvgDataUrl(board, [visible, hidden]).split(",")[1]);
     expect((svg.match(/<rect\s+x=/g) ?? []).length).toBe(1);
+  });
+
+  test("exports freehand points in the canonical [x,y,pressure] shape", () => {
+    // The kernel stores freehand points as number[][] ([x, y, pressure]) —
+    // toolController.freehandData, renderElement and hitTest all agree on that.
+    // The exporter must read the same shape; reading {x,y} silently yields
+    // points="undefined,undefined" and the stroke vanishes from the SVG.
+    const stroke = makeElement("freehand", { points: [[10, 20, 0.5], [30, 40, 0.5]] });
+    const svg = decodeURIComponent(buildSvgDataUrl(board, [stroke]).split(",")[1]);
+    expect(svg).toContain('<polyline');
+    expect(svg).toContain('points="10,20 30,40"');
+    expect(svg).not.toContain("undefined");
   });
 
   test("sorts by order", () => {
