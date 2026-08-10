@@ -8,6 +8,8 @@ import {
   applyTransform,
   invertTransformPoint,
   cloneElementOffset,
+  elementWorldBounds,
+  elementInMarquee,
 } from "./selection";
 
 describe("translateElement", () => {
@@ -177,5 +179,49 @@ describe("cloneElementOffset", () => {
     cloneElementOffset(el);
     expect(el.id).toBe(originalId);
     expect(el.data).toMatchObject({ x: 0, y: 0 });
+  });
+});
+
+describe("elementWorldBounds", () => {
+  it("equals the local bounds for an unrotated element", () => {
+    const el = makeElement("rectangle", { x: 10, y: 10, width: 20, height: 30 });
+    expect(elementWorldBounds(el)).toEqual({ x: 10, y: 10, width: 20, height: 30 });
+  });
+
+  it("swaps width/height for a 90°-rotated element (rotated AABB, not local bounds)", () => {
+    // 40x20 rect, center (20,10). Rotated 90°, its on-screen footprint is a
+    // 20x40 box centered on the same point.
+    const el = makeElement("rectangle", { x: 0, y: 0, width: 40, height: 20 });
+    const rotated = rotateElementTransform(el, Math.PI / 2);
+    const wb = elementWorldBounds(rotated);
+    expect(wb.x).toBeCloseTo(10, 8);
+    expect(wb.y).toBeCloseTo(-10, 8);
+    expect(wb.width).toBeCloseTo(20, 8);
+    expect(wb.height).toBeCloseTo(40, 8);
+  });
+});
+
+describe("elementInMarquee", () => {
+  it("matches hitInMarquee's containment semantics for an unrotated element", () => {
+    const el = makeElement("rectangle", { x: 10, y: 10, width: 20, height: 20 });
+    expect(elementInMarquee(el, { x: 0, y: 0, width: 100, height: 100 })).toBe(true);
+    expect(elementInMarquee(el, { x: 200, y: 200, width: 10, height: 10 })).toBe(false);
+  });
+
+  it("does NOT false-include a rotated element whose local bounds fit but whose rendered footprint doesn't", () => {
+    // Same 40x20-rotated-90° element as above: local bounds are still the
+    // pre-rotation 40x20 box, but the rendered footprint is a 20x40 box that
+    // pokes out above/below a marquee sized to the local box.
+    const el = makeElement("rectangle", { x: 0, y: 0, width: 40, height: 20 });
+    const rotated = rotateElementTransform(el, Math.PI / 2);
+    const marqueeSizedToLocalBounds = { x: 0, y: 0, width: 40, height: 20 };
+    expect(elementInMarquee(rotated, marqueeSizedToLocalBounds)).toBe(false);
+  });
+
+  it("DOES include a rotated element once the marquee actually covers its rendered footprint", () => {
+    const el = makeElement("rectangle", { x: 0, y: 0, width: 40, height: 20 });
+    const rotated = rotateElementTransform(el, Math.PI / 2);
+    const marqueeCoveringFootprint = { x: 0, y: -20, width: 40, height: 60 };
+    expect(elementInMarquee(rotated, marqueeCoveringFootprint)).toBe(true);
   });
 });

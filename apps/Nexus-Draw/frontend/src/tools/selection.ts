@@ -1,5 +1,5 @@
 import type { ElementData } from "../stores/model";
-import { BOX_TYPES, elementBounds, type Point } from "../render/geometry";
+import { BOX_TYPES, elementBounds, type Bounds, type Point } from "../render/geometry";
 import { resizeHandles } from "../render/hitTest";
 
 export type Transform = ElementData["transform"];
@@ -180,4 +180,43 @@ export function resizeElement(el: ElementData, handleId: string, dx: number, dy:
 export function cloneElementOffset(el: ElementData, dx = 16, dy = 16): ElementData {
   const moved = translateElement(el, dx, dy);
   return { ...moved, id: crypto.randomUUID(), seed: Math.floor(Math.random() * 2 ** 31) };
+}
+
+/**
+ * The element's axis-aligned bounding box in WORLD space — el's local bounds'
+ * 4 corners, each mapped through el.transform, then re-boxed. For an unrotated
+ * element this equals `elementBounds(el)`; for a rotated one it's the actual
+ * on-screen footprint, which is what marquee selection needs to test against
+ * (elementBounds/hitInMarquee alone operate in local, pre-rotation space).
+ */
+export function elementWorldBounds(el: ElementData): Bounds {
+  const b = elementBounds(el);
+  const corners = [
+    { x: b.x, y: b.y },
+    { x: b.x + b.width, y: b.y },
+    { x: b.x + b.width, y: b.y + b.height },
+    { x: b.x, y: b.y + b.height },
+  ].map((p) => applyTransform(el.transform, p));
+  const xs = corners.map((p) => p.x);
+  const ys = corners.map((p) => p.y);
+  const minX = Math.min(...xs);
+  const minY = Math.min(...ys);
+  const maxX = Math.max(...xs);
+  const maxY = Math.max(...ys);
+  return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
+}
+
+/**
+ * True if el's WORLD-space footprint is fully contained within rect (the
+ * marquee selection box) — the rotation-aware counterpart to hitTest.ts's
+ * `hitInMarquee`, which tests el's local (pre-rotation) bounds instead.
+ */
+export function elementInMarquee(el: ElementData, rect: Bounds): boolean {
+  const b = elementWorldBounds(el);
+  return (
+    b.x >= rect.x &&
+    b.y >= rect.y &&
+    b.x + b.width <= rect.x + rect.width &&
+    b.y + b.height <= rect.y + rect.height
+  );
 }

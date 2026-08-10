@@ -4,7 +4,7 @@ import type { RoughCanvas } from "roughjs/bin/canvas";
 import { useEditorStore, type Vec2 } from "../../stores/useEditorStore";
 import { resolveStyleMode, type ElementData } from "../../stores/model";
 import { renderElement } from "../../render/renderElement";
-import { hitElement, hitInMarquee, elementBounds, resizeHandles, type Bounds, type Point } from "../../render/hitTest";
+import { hitElement, elementBounds, resizeHandles, type Bounds, type Point } from "../../render/hitTest";
 import { ToolController, draftToElement, snapToGrid, GRID_SIZE } from "../../tools/toolController";
 import {
   translateElement,
@@ -13,6 +13,7 @@ import {
   currentRotation,
   invertTransformPoint,
   cloneElementOffset,
+  elementInMarquee,
 } from "../../tools/selection";
 
 const GRID_COLOR = "rgba(255,255,255,0.06)";
@@ -41,6 +42,23 @@ interface DragState {
   rotateCenter?: Point;
   rotateStartAngle?: number;
   rotateInitialAngle?: number;
+  /**
+   * Whether `pushHistory()` has been called yet for this drag. Pushed lazily on
+   * the first mousemove that actually produces a change — not at mousedown — so
+   * a plain click-to-select (or grabbing a handle without moving, or grabbing a
+   * resize handle on a shape resize doesn't support, e.g. freehand) never eats
+   * an undo slot.
+   */
+  historyPushed?: boolean;
+  /** marquee: selection to union the marquee's hits into at mouseup, when the drag started with shift held. */
+  marqueeUnionIds?: Set<string>;
+}
+
+/** Pushes history once per drag, on first actual mutation — not at mousedown. */
+function ensureHistoryPushed(drag: DragState): void {
+  if (drag.historyPushed) return;
+  useEditorStore.getState().pushHistory();
+  drag.historyPushed = true;
 }
 
 /** Z-order helpers — reorder via the store's `reorderElements` so it's one undo step. */
@@ -353,7 +371,11 @@ export default function Canvas() {
           const handle = resizeHandles(bounds).find((h) => Math.hypot(h.x - local.x, h.y - local.y) <= handleTol);
           if (!handle) continue;
 
-          store.pushHistory();
+          // No pushHistory() here — grabbing a handle isn't itself a mutation.
+          // The drag lazily pushes history on its first real change (see
+          // ensureHistoryPushed), so a click-then-release-without-moving (or
+          // grabbing a resize handle on a shape resize doesn't support, e.g.
+          // freehand) never eats an undo slot.
           if (handle.id === "rotate") {
             const cx = bounds.x + bounds.width / 2;
             const cy = bounds.y + bounds.height / 2;
@@ -386,7 +408,8 @@ export default function Canvas() {
             selectElement(hit.id, false);
           }
           const fresh = useEditorStore.getState();
-          fresh.pushHistory();
+          // No pushHistory() here either — a click that doesn't drag shouldn't
+          // consume an undo slot; see ensureHistoryPushed.
           dragRef.current = {
             mode: "move",
             startWorld: world,
@@ -397,8 +420,16 @@ export default function Canvas() {
         }
 
         // 3. Empty canvas: deselect (unless shift-adding to a marquee) and start one.
+        // When shift is held, remember the pre-drag selection so mouseup can union
+        // the marquee's hits into it instead of replacing the selection outright.
+        const preDragSelection = shift ? new Set(store.selectedElementIds) : undefined;
         if (!shift) deselectAll();
-        dragRef.current = { mode: "marquee", startWorld: world, snapshot: store.elements };
+        dragRef.current = {
+          mode: "marquee",
+          startWorld: world,
+          snapshot: store.elements,
+          marqueeUnionIds: preDragSelection,
+        };
         marqueeRef.current = { x: world.x, y: world.y, width: 0, height: 0 };
         return;
       }
@@ -439,6 +470,8 @@ export default function Canvas() {
         const dy = world.y - drag.startWorld.y;
 
         if (drag.mode === "move" && drag.moveIds) {
+          if (dx === 0 && dy === 0) return; // no movement yet — nothing to commit
+          ensureHistoryPushed(drag);
           const moveIds = drag.moveIds;
           const next = drag.snapshot.map((el) => (moveIds.has(el.id) ? translateElement(el, dx, dy) : el));
           useEditorStore.getState().setElementsLive(next);
@@ -446,8 +479,17 @@ export default function Canvas() {
         }
 
         if (drag.mode === "resize" && drag.targetId && drag.handleId) {
+          if (dx === 0 && dy === 0) return;
           const { targetId, handleId } = drag;
-          const next = drag.snapshot.map((el) => (el.id === targetId ? resizeElement(el, handleId, dx, dy) : el));
+          const original = drag.snapshot.find((el) => el.id === targetId);
+          if (!original) return;
+          const resizedTarget = resizeElement(original, handleId, dx, dy);
+          // resizeElement returns the same reference for shapes it doesn't support
+          // resizing (e.g. freehand) — that's a true no-op, not just "no movement
+          // yet", so skip both the history push and the store update.
+          if (resizedTarget === original) return;
+          ensureHistoryPushed(drag);
+          const next = drag.snapshot.map((el) => (el.id === targetId ? resizedTarget : el));
           useEditorStore.getState().setElementsLive(next);
           return;
         }
@@ -461,7 +503,11 @@ export default function Canvas() {
             const local = invertTransformPoint(original.transform, world);
             const angleNow = Math.atan2(local.y - drag.rotateCenter.y, local.x - drag.rotateCenter.x);
             const delta = angleNow - (drag.rotateStartAngle ?? 0);
+            // Pure radial mouse movement (toward/away from center) changes dx/dy
+            // but not the angle — that's not a rotation yet, so don't commit it.
+            if (delta === 0) return;
             const targetAngle = (drag.rotateInitialAngle ?? 0) + delta;
+            ensureHistoryPushed(drag);
             const targetId = drag.targetId;
             const next = drag.snapshot.map((el) => (el.id === targetId ? rotateElementTransform(el, targetAngle) : el));
             useEditorStore.getState().setElementsLive(next);
@@ -488,8 +534,13 @@ export default function Canvas() {
         const rect = marqueeRef.current;
         if (rect && (rect.width > 2 || rect.height > 2)) {
           const store = useEditorStore.getState();
-          const ids = store.elements.filter((el) => hitInMarquee(el, rect)).map((el) => el.id);
-          store.setSelection(ids);
+          // World-space AABB test (elementInMarquee), not the local-space
+          // hitInMarquee — a rotated element's rendered footprint differs from
+          // its local bounds, so the local test would miss/false-include it.
+          const hitIds = store.elements.filter((el) => elementInMarquee(el, rect)).map((el) => el.id);
+          // Shift-drag unions into the pre-drag selection instead of replacing it.
+          const finalIds = drag.marqueeUnionIds ? new Set([...drag.marqueeUnionIds, ...hitIds]) : new Set(hitIds);
+          store.setSelection([...finalIds]);
         }
         marqueeRef.current = null;
       }
