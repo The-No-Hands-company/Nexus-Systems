@@ -25,8 +25,10 @@ export async function createServer() {
       if (req.method === "GET" && p === "/api/v1/status") return json({ service: "nexus-draw", status: "ready", capabilities: ["whiteboard", "diagramming", "collaboration"], cloudIntegration: { enabled: (process.env["NEXUS_DRAW_ENABLE_CLOUD_INTEGRATION"] || "true") !== "false", cloudUrl: process.env.NEXUS_CLOUD_URL || "http://localhost:8787" }, phantom: phantom.status() }, 200);
       if (req.method === "GET" && p === "/api/v1/draw/boards") return json(engine.listBoards());
 if (req.method === "POST" && p === "/api/v1/draw/boards") { const b = await req.json().catch(()=>({})) as any; if (!b.name) return json({ error: "name required" }, 400); return json(engine.createBoard(b.name), 201); }
+const meta = p.match(/^\/api\/v1\/draw\/boards\/([^/]+)$/); if (req.method === "PATCH" && meta) { const b = await req.json().catch(()=>({})) as any; const patch: Record<string, unknown> = {}; for (const key of ["name", "description", "width", "height", "background", "isPublic", "defaultStyleMode", "gridSnap"] as const) { if (b[key] !== undefined) patch[key] = b[key]; } return engine.updateBoardMeta(meta[1]!, patch) ? json({ updated: true }) : json({ error: "not found" }, 404); }
 const dm = p.match(/^\/api\/v1\/draw\/boards\/([^/]+)$/); if (req.method === "GET" && dm) { const brd = engine.getBoard(dm[1]!); return brd ? json(brd) : json({ error: "not found" }, 404); }
 if (req.method === "PUT" && dm && p.endsWith("/elements")) { const b = await req.json().catch(()=>({})) as any; engine.updateElements(dm[1]!, Array.isArray(b.elements) ? b.elements : []); return json({ updated: true }); }
+if (req.method === "DELETE" && dm) { return engine.deleteBoard(dm[1]!) ? json({ deleted: true }) : json({ error: "not found" }, 404); }
       return json({ error: "not found" }, 404);
     },
   });
