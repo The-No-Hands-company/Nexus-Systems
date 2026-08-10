@@ -1,42 +1,21 @@
 import { useEffect, useRef, useCallback } from "react";
+import rough from "roughjs";
 import { useEditorStore } from "../../stores/useEditorStore";
 import { makeElement } from "../../stores/model";
-
-const VS_SRC = `#version 300 es
-in vec2 a_pos;
-uniform vec2 u_resolution;
-uniform vec2 u_pan;
-uniform float u_zoom;
-void main() {
-  vec2 pos = (a_pos + u_pan) * u_zoom;
-  vec2 clip = pos / u_resolution * 2.0 - 1.0;
-  gl_Position = vec4(clip, 0.0, 1.0);
-}`;
-
-const FS_SRC = `#version 300 es
-precision highp float;
-uniform vec4 u_color;
-out vec4 fragColor;
-void main() { fragColor = u_color; }`;
+import { resolveStyleMode } from "../../stores/model";
+import { renderElement } from "../../render/renderElement";
+import { elementBounds, resizeHandles } from "../../render/geometry";
+import { hitElement } from "../../render/hitTest";
 
 const GRID_SIZE = 40;
 
-function hexToRgba(hex: string, alpha: number = 1): [number, number, number, number] {
-  const h = hex.replace("#", "");
-  const r = parseInt(h.substring(0, 2), 16) / 255;
-  const g = parseInt(h.substring(2, 4), 16) / 255;
-  const b = parseInt(h.substring(4, 6), 16) / 255;
-  return [r, g, b, alpha];
-}
-
 export default function Canvas() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const glRef = useRef<WebGL2RenderingContext | null>(null);
-  const programRef = useRef<WebGLProgram | null>(null);
-  const vaoRef = useRef<WebGLVertexArrayObject | null>(null);
+  const rcRef = useRef<ReturnType<typeof rough.canvas> | null>(null);
   const dragging = useRef(false);
   const lastMouse = useRef({ x: 0, y: 0 });
   const drawStart = useRef({ x: 0, y: 0 });
+  const spacePanning = useRef(false);
 
   const pan = useEditorStore((s) => s.pan);
   const zoom = useEditorStore((s) => s.zoom);
@@ -54,146 +33,79 @@ export default function Canvas() {
     return { x: cx / zoom - pan.x, y: cy / zoom - pan.y };
   }, [pan, zoom]);
 
-  const drawElements = useCallback(() => {
-    const gl = glRef.current;
-    const prog = programRef.current;
-    if (!gl || !prog) return;
+  const drawScene = useCallback(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    const rc = rcRef.current;
+    if (!rc) return;
+    const dpr = window.devicePixelRatio || 1;
 
-    gl.useProgram(prog);
-    const uColor = gl.getUniformLocation(prog, "u_color");
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.fillStyle = "#1a1a2e";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    for (const el of elements) {
-      const data = el.data as Record<string, any>;
-      const style = el.style as Record<string, any>;
-      const opacity = (style.opacity as number) ?? 1;
-      const fill = (style.fill as string) ?? "#3b82f6";
-      const stroke = (style.stroke as string) ?? "#000000";
-      const strokeWidth = (style.strokeWidth as number) ?? 2;
-      const x = (data.x as number) ?? 0;
-      const y = (data.y as number) ?? 0;
-      const w = (data.width as number) ?? 100;
-      const h = (data.height as number) ?? 100;
-      const isSelected = selectedElementIds.has(el.id);
+    ctx.setTransform(dpr * zoom, 0, 0, dpr * zoom, pan.x * dpr * zoom, pan.y * dpr * zoom);
 
-      const drawRect = (rx: number, ry: number, rw: number, rh: number, color: [number, number, number, number]) => {
-        const verts = new Float32Array([
-          rx, ry, rx + rw, ry, rx, ry + rh,
-          rx + rw, ry, rx + rw, ry + rh, rx, ry + rh,
-        ]);
-        const buf = gl.createBuffer();
-        gl.bindBuffer(gl.ARRAY_BUFFER, buf);
-        gl.bufferData(gl.ARRAY_BUFFER, verts, gl.STATIC_DRAW);
-        const aPos = gl.getAttribLocation(prog, "a_pos");
-        gl.enableVertexAttribArray(aPos);
-        gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0);
-        gl.uniform4f(uColor, color[0], color[1], color[2], color[3]);
-        gl.drawArrays(gl.TRIANGLES, 0, 6);
-        gl.deleteBuffer(buf);
-      };
+    ctx.strokeStyle = "rgba(255,255,255,0.06)";
+    ctx.lineWidth = 1 / zoom;
+    const vw = canvas.width / dpr / zoom;
+    const vh = canvas.height / dpr / zoom;
+    ctx.beginPath();
+    for (let x = ((-pan.x % GRID_SIZE) + GRID_SIZE) % GRID_SIZE; x < vw; x += GRID_SIZE) {
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x, vh);
+    }
+    for (let y = ((-pan.y % GRID_SIZE) + GRID_SIZE) % GRID_SIZE; y < vh; y += GRID_SIZE) {
+      ctx.moveTo(0, y);
+      ctx.lineTo(vw, y);
+    }
+    ctx.stroke();
 
-      const drawEllipse = (cx: number, cy: number, rx: number, ry: number, color: [number, number, number, number]) => {
-        const segments = 32;
-        const verts = new Float32Array((segments + 2) * 2);
-        verts[0] = cx; verts[1] = cy;
-        for (let i = 0; i <= segments; i++) {
-          const angle = (i / segments) * Math.PI * 2;
-          verts[(i + 1) * 2] = cx + Math.cos(angle) * rx;
-          verts[(i + 1) * 2 + 1] = cy + Math.sin(angle) * ry;
-        }
-        const buf = gl.createBuffer();
-        gl.bindBuffer(gl.ARRAY_BUFFER, buf);
-        gl.bufferData(gl.ARRAY_BUFFER, verts, gl.STATIC_DRAW);
-        const aPos = gl.getAttribLocation(prog, "a_pos");
-        gl.enableVertexAttribArray(aPos);
-        gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0);
-        gl.uniform4f(uColor, color[0], color[1], color[2], color[3]);
-        gl.drawArrays(gl.TRIANGLE_FAN, 0, segments + 2);
-        gl.deleteBuffer(buf);
-      };
+    const sorted = [...elements].sort((a, b) => a.order - b.order);
+    const board = useEditorStore.getState().board;
+    for (const el of sorted) renderElement(ctx, rc, el, resolveStyleMode(el, board?.defaultStyleMode ?? "clean"));
 
-      const elType = el.elementType as string;
-      if (elType === "rectangle" || elType === "shape") {
-        drawRect(x, y, w, h, hexToRgba(fill, opacity));
-        drawRect(x, y, w, strokeWidth, hexToRgba(stroke, opacity));
-        drawRect(x, y + h - strokeWidth, w, strokeWidth, hexToRgba(stroke, opacity));
-        drawRect(x, y, strokeWidth, h, hexToRgba(stroke, opacity));
-        drawRect(x + w - strokeWidth, y, strokeWidth, h, hexToRgba(stroke, opacity));
-        if (isSelected) {
-          drawRect(x - 2, y - 2, w + 4, 2, [0.3, 0.6, 1, 1]);
-          drawRect(x - 2, y + h, w + 4, 2, [0.3, 0.6, 1, 1]);
-          drawRect(x - 2, y - 2, 2, h + 4, [0.3, 0.6, 1, 1]);
-          drawRect(x + w, y - 2, 2, h + 4, [0.3, 0.6, 1, 1]);
-        }
-      } else if (elType === "ellipse") {
-        drawEllipse(x + w / 2, y + h / 2, w / 2, h / 2, hexToRgba(fill, opacity));
-        if (isSelected) {
-          drawRect(x - 2, y - 2, w + 4, 2, [0.3, 0.6, 1, 1]);
-          drawRect(x - 2, y + h, w + 4, 2, [0.3, 0.6, 1, 1]);
-          drawRect(x - 2, y - 2, 2, h + 4, [0.3, 0.6, 1, 1]);
-          drawRect(x + w, y - 2, 2, h + 4, [0.3, 0.6, 1, 1]);
-        }
-      } else if (el.elementType === "sticky") {
-        drawRect(x, y, w, h, hexToRgba("#ffd700", opacity));
-        drawRect(x, y, w, h, hexToRgba("#d4a800", opacity));
+    for (const id of selectedElementIds) {
+      const el = elements.find((e) => e.id === id);
+      if (!el) continue;
+      const b = elementBounds(el);
+      ctx.strokeStyle = "#3b82f6";
+      ctx.lineWidth = 2 / zoom;
+      ctx.strokeRect(b.x, b.y, b.width, b.height);
+      ctx.fillStyle = "#3b82f6";
+      for (const h of resizeHandles(b)) {
+        ctx.beginPath();
+        ctx.arc(h.x, h.y, 4 / zoom, 0, Math.PI * 2);
+        ctx.fill();
       }
     }
-  }, [elements, selectedElementIds]);
-
-  const drawGrid = useCallback(() => {
-    const gl = glRef.current;
-    if (!gl) return;
-    gl.clear(gl.COLOR_BUFFER_BIT);
-    drawElements();
-  }, [drawElements]);
+  }, [elements, selectedElementIds, pan, zoom]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const gl = canvas.getContext("webgl2", { alpha: true, antialias: true });
-    if (!gl) return;
-    glRef.current = gl;
+    rcRef.current = rough.canvas(canvas);
 
-    const vs = gl.createShader(gl.VERTEX_SHADER)!;
-    gl.shaderSource(vs, VS_SRC);
-    gl.compileShader(vs);
-    const fs = gl.createShader(gl.FRAGMENT_SHADER)!;
-    gl.shaderSource(fs, FS_SRC);
-    gl.compileShader(fs);
-    const prog = gl.createProgram()!;
-    gl.attachShader(prog, vs);
-    gl.attachShader(prog, fs);
-    gl.linkProgram(prog);
-    programRef.current = prog;
-
-    const vao = gl.createVertexArray();
-    gl.bindVertexArray(vao);
-    vaoRef.current = vao;
-
-    gl.enable(gl.BLEND);
-    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = canvas.clientWidth * dpr;
+    canvas.height = canvas.clientHeight * dpr;
 
     const resize = () => {
-      canvas.width = canvas.clientWidth * devicePixelRatio;
-      canvas.height = canvas.clientHeight * devicePixelRatio;
-      gl.viewport(0, 0, canvas.width, canvas.height);
-      gl.useProgram(prog);
-      gl.uniform2f(gl.getUniformLocation(prog, "u_resolution"), canvas.width, canvas.height);
-      drawGrid();
+      const d = window.devicePixelRatio || 1;
+      canvas.width = canvas.clientWidth * d;
+      canvas.height = canvas.clientHeight * d;
+      drawScene();
     };
     resize();
     window.addEventListener("resize", resize);
-    return () => { window.removeEventListener("resize", resize); gl.deleteProgram(prog); };
-  }, [drawGrid]);
+    return () => window.removeEventListener("resize", resize);
+  }, [drawScene]);
 
   useEffect(() => {
-    const gl = glRef.current;
-    const prog = programRef.current;
-    if (!gl || !prog) return;
-    gl.useProgram(prog);
-    gl.uniform2f(gl.getUniformLocation(prog, "u_pan"), pan.x, pan.y);
-    gl.uniform1f(gl.getUniformLocation(prog, "u_zoom"), zoom);
-    drawGrid();
-  }, [pan, zoom, elements, selectedElementIds, drawGrid]);
+    drawScene();
+  }, [drawScene]);
 
   const handleWheel = useCallback((e: React.WheelEvent) => {
     e.preventDefault();
@@ -219,14 +131,7 @@ export default function Canvas() {
         drawStart.current = { x: world.x, y: world.y };
         lastMouse.current = { x: world.x, y: world.y };
       } else if (activeTool === "select") {
-        const hit = [...elements].reverse().find((el) => {
-          const d = el.data as Record<string, any>;
-          const ex = (d.x as number) ?? 0;
-          const ey = (d.y as number) ?? 0;
-          const ew = (d.width as number) ?? 100;
-          const eh = (d.height as number) ?? 100;
-          return world.x >= ex && world.x <= ex + ew && world.y >= ey && world.y <= ey + eh;
-        });
+        const hit = [...elements].reverse().find((el) => hitElement(el, world, 4));
         if (hit) {
           selectElement(hit.id, e.metaKey || e.ctrlKey);
         } else {
@@ -253,25 +158,7 @@ export default function Canvas() {
     const world = screenToWorld(mx, my);
 
     if (["rectangle", "ellipse", "line", "arrow"].includes(activeTool)) {
-      const sx = drawStart.current.x;
-      const sy = drawStart.current.y;
-      const ex = world.x;
-      const ey = world.y;
-      const x = Math.min(sx, ex);
-      const y = Math.min(sy, ey);
-      const w = Math.abs(ex - sx);
-      const h = Math.abs(ey - sy);
-
-      const id = "__preview__";
-      const existing = elements.filter((el) => el.id !== id);
-      const preview = {
-        id,
-        elementType: (activeTool === "rectangle" ? "rectangle" : activeTool === "ellipse" ? "ellipse" : "line") as any,
-        data: { x, y, width: w || 1, height: h || 1 },
-        style: { fill: "#3b82f6", stroke: "#1d4ed8", strokeWidth: 2, opacity: 1 },
-        transform: { a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 },
-        order: existing.length,
-      };
+      lastMouse.current = { x: world.x, y: world.y };
     }
   }, [activeTool, pan, zoom, setPan, screenToWorld, elements]);
 
@@ -295,17 +182,17 @@ export default function Canvas() {
       const h = Math.abs(ey - sy);
 
       if (w > 2 || h > 2) {
-        addElement(makeElement(
-          (activeTool === "rectangle" ? "rectangle" : activeTool === "ellipse" ? "ellipse" : "arrow"),
-          { x, y, width: w, height: h },
-          { fill: "#3b82f6", stroke: "#1d4ed8", strokeWidth: 2, opacity: 1 },
-        ));
+        const type = activeTool as "rectangle" | "ellipse" | "line" | "arrow";
+        const data = type === "line" || type === "arrow"
+          ? { x1: sx, y1: sy, x2: ex, y2: ey }
+          : { x, y, width: w, height: h };
+        addElement(makeElement(type, data));
       }
     }
   }, [activeTool, screenToWorld, addElement, elements]);
 
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
-    if (e.key === " " && !e.repeat) { setActiveTool("hand"); e.preventDefault(); }
+    if (e.key === " " && !e.repeat) { setActiveTool("hand"); spacePanning.current = true; e.preventDefault(); }
     if (e.key === "v") { setActiveTool("select"); }
     if (e.key === "p") { setActiveTool("pen"); }
     if (e.key === "r") { setActiveTool("rectangle"); }
@@ -322,6 +209,7 @@ export default function Canvas() {
   const handleKeyUp = useCallback((e: KeyboardEvent) => {
     if (e.key === " " && activeTool === "hand") {
       setActiveTool("select");
+      spacePanning.current = false;
     }
   }, [activeTool, setActiveTool]);
 
