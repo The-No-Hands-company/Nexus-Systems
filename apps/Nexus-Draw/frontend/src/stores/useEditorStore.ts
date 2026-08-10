@@ -25,6 +25,7 @@ interface EditorStore {
   boardId: string | null;
   elements: ElementData[];
   setBoard: (b: BoardData) => void;
+  updateBoard: (patch: Partial<Omit<BoardData, "elements">>) => void;
 
   selectedElementIds: Set<string>;
   selectElement: (id: string, multi?: boolean) => void;
@@ -69,6 +70,8 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
   redoStack: [],
 
   setBoard: (b) => set({ board: b, boardId: b.id, elements: b.elements, selectedElementIds: new Set(), undoStack: [], redoStack: [] }),
+
+  updateBoard: (patch) => set((s) => (s.board ? { board: { ...s.board, ...patch } } : {})),
 
   selectElement: (id, multi = false) => set((s) => {
     const next = multi ? new Set(s.selectedElementIds) : new Set<string>();
