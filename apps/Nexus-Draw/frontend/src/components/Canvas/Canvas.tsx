@@ -1,68 +1,16 @@
-import { useEffect, useRef, useCallback } from "react";
+import { useEffect, useRef, useCallback, useState } from "react";
 import rough from "roughjs";
 import type { RoughCanvas } from "roughjs/bin/canvas";
 import { useEditorStore, type Vec2 } from "../../stores/useEditorStore";
-import { makeElement, resolveStyleMode, type ElementData, type ElementStyle, type StyleMode } from "../../stores/model";
+import { resolveStyleMode, type ElementData } from "../../stores/model";
 import { renderElement } from "../../render/renderElement";
 import { hitElement, elementBounds, resizeHandles } from "../../render/hitTest";
+import { ToolController, draftToElement, snapToGrid, GRID_SIZE } from "../../tools/toolController";
 
-const GRID_SIZE = 40;
 const GRID_COLOR = "rgba(255,255,255,0.06)";
 const SELECTION_COLOR = "#3b82f6";
 const HANDLE_SCREEN_SIZE = 8;
 const SELECT_TOLERANCE_PX = 6;
-
-type ShapeTool = "rectangle" | "ellipse" | "line" | "arrow";
-const SHAPE_TOOLS: ReadonlySet<string> = new Set<ShapeTool>(["rectangle", "ellipse", "line", "arrow"]);
-
-function isShapeTool(tool: string): tool is ShapeTool {
-  return SHAPE_TOOLS.has(tool);
-}
-
-interface DraftShape {
-  tool: ShapeTool;
-  startX: number;
-  startY: number;
-  endX: number;
-  endY: number;
-  seed: number;
-}
-
-function shapeData(tool: ShapeTool, x1: number, y1: number, x2: number, y2: number): Record<string, number> {
-  if (tool === "line" || tool === "arrow") {
-    return { x1, y1, x2, y2 };
-  }
-  return {
-    x: Math.min(x1, x2),
-    y: Math.min(y1, y2),
-    width: Math.abs(x2 - x1),
-    height: Math.abs(y2 - y1),
-  };
-}
-
-function draftToElement(draft: DraftShape, boardDefault: StyleMode): ElementData {
-  const style: ElementStyle = {
-    stroke: "#60a5fa",
-    fill: "none",
-    strokeWidth: 2,
-    strokeStyle: "solid",
-    opacity: 0.85,
-    radius: 8,
-    fontFamily: "ui-sans-serif, system-ui",
-    fontSize: 20,
-    textAlign: "left",
-    styleMode: boardDefault,
-  };
-  return {
-    id: "__draft__",
-    elementType: draft.tool,
-    data: shapeData(draft.tool, draft.startX, draft.startY, draft.endX, draft.endY),
-    style,
-    transform: { a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 },
-    order: Number.MAX_SAFE_INTEGER,
-    seed: draft.seed,
-  };
-}
 
 /** Draws the world-space grid visible within the current pan/zoom window. */
 function drawGrid(ctx: CanvasRenderingContext2D, pan: Vec2, zoom: number, cssWidth: number, cssHeight: number): void {
@@ -133,7 +81,8 @@ export default function Canvas() {
   const rafRef = useRef<number>(0);
   const panDragging = useRef(false);
   const lastMouse = useRef({ x: 0, y: 0 });
-  const draftRef = useRef<DraftShape | null>(null);
+  const controllerRef = useRef(new ToolController());
+  const [textDraft, setTextDraft] = useState<{ worldX: number; worldY: number; value: string } | null>(null);
 
   const pan = useEditorStore((s) => s.pan);
   const zoom = useEditorStore((s) => s.zoom);
@@ -141,10 +90,10 @@ export default function Canvas() {
   const setZoom = useEditorStore((s) => s.setZoom);
   const elements = useEditorStore((s) => s.elements);
   const activeTool = useEditorStore((s) => s.activeTool);
+  const board = useEditorStore((s) => s.board);
   const selectElement = useEditorStore((s) => s.selectElement);
   const deselectAll = useEditorStore((s) => s.deselectAll);
   const setActiveTool = useEditorStore((s) => s.setActiveTool);
-  const addElement = useEditorStore((s) => s.addElement);
 
   const screenToWorld = useCallback(
     (cx: number, cy: number) => ({ x: cx / zoom - pan.x, y: cy / zoom - pan.y }),
@@ -192,7 +141,7 @@ export default function Canvas() {
           renderElement(ctx2, rc, el, resolveStyleMode(el, boardDefault));
         }
 
-        const draft = draftRef.current;
+        const draft = controllerRef.current.draft;
         if (draft) {
           const draftEl = draftToElement(draft, boardDefault);
           renderElement(ctx2, rc, draftEl, resolveStyleMode(draftEl, boardDefault));
@@ -235,15 +184,11 @@ export default function Canvas() {
 
       if (e.button !== 0) return;
 
-      if (isShapeTool(activeTool)) {
-        draftRef.current = {
-          tool: activeTool,
-          startX: world.x,
-          startY: world.y,
-          endX: world.x,
-          endY: world.y,
-          seed: Math.floor(Math.random() * 2 ** 31),
-        };
+      const gridSnap = board?.gridSnap ?? false;
+
+      if (activeTool === "text") {
+        const p = snapToGrid(world, GRID_SIZE, gridSnap);
+        setTextDraft({ worldX: p.x, worldY: p.y, value: "" });
         return;
       }
 
@@ -255,9 +200,12 @@ export default function Canvas() {
         } else {
           deselectAll();
         }
+        return;
       }
+
+      controllerRef.current.beginTool(activeTool, world, gridSnap, SELECT_TOLERANCE_PX / zoom);
     },
-    [activeTool, screenToWorld, elements, zoom, selectElement, deselectAll]
+    [activeTool, screenToWorld, elements, zoom, selectElement, deselectAll, board]
   );
 
   const handleMouseMove = useCallback(
@@ -270,15 +218,13 @@ export default function Canvas() {
         return;
       }
 
-      const draft = draftRef.current;
-      if (!draft) return;
       const canvas = canvasRef.current;
       if (!canvas) return;
       const rect = canvas.getBoundingClientRect();
       const world = screenToWorld(e.clientX - rect.left, e.clientY - rect.top);
-      draftRef.current = { ...draft, endX: world.x, endY: world.y };
+      controllerRef.current.updateTool(world, board?.gridSnap ?? false, SELECT_TOLERANCE_PX / zoom);
     },
-    [pan, zoom, setPan, screenToWorld]
+    [pan, zoom, setPan, screenToWorld, board]
   );
 
   const handleMouseUp = useCallback(() => {
@@ -286,23 +232,27 @@ export default function Canvas() {
       panDragging.current = false;
       return;
     }
+    controllerRef.current.endTool();
+  }, []);
 
-    const draft = draftRef.current;
-    draftRef.current = null;
-    if (!draft) return;
-
-    const dx = draft.endX - draft.startX;
-    const dy = draft.endY - draft.startY;
-    if (Math.abs(dx) < 2 && Math.abs(dy) < 2) return;
-
-    const data = shapeData(draft.tool, draft.startX, draft.startY, draft.endX, draft.endY);
-    const newEl = makeElement(draft.tool, data);
-    newEl.order = useEditorStore.getState().elements.length;
-    addElement(newEl);
-  }, [addElement]);
+  const commitTextDraft = useCallback(() => {
+    if (textDraft && textDraft.value.length > 0) {
+      controllerRef.current.commitText(textDraft.worldX, textDraft.worldY, textDraft.value);
+    }
+    setTextDraft(null);
+  }, [textDraft]);
 
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (target && (target.tagName === "TEXTAREA" || target.tagName === "INPUT")) {
+        if (e.key === "Escape") setTextDraft(null);
+        return;
+      }
+      if (e.key === "Escape") {
+        controllerRef.current.cancel();
+        return;
+      }
       if (e.key === " " && !e.repeat) {
         setActiveTool("hand");
         e.preventDefault();
@@ -350,15 +300,40 @@ export default function Canvas() {
   }, [handleKeyDown, handleKeyUp]);
 
   return (
-    <canvas
-      ref={canvasRef}
-      className={`w-full h-full ${activeTool === "hand" ? "cursor-grab" : "cursor-crosshair"}`}
-      style={{ background: "#1a1a2e" }}
-      onWheel={handleWheel}
-      onMouseDown={handleMouseDown}
-      onMouseMove={handleMouseMove}
-      onMouseUp={handleMouseUp}
-      onMouseLeave={handleMouseUp}
-    />
+    <>
+      <canvas
+        ref={canvasRef}
+        className={`w-full h-full ${activeTool === "hand" ? "cursor-grab" : "cursor-crosshair"}`}
+        style={{ background: "#1a1a2e" }}
+        onWheel={handleWheel}
+        onMouseDown={handleMouseDown}
+        onMouseMove={handleMouseMove}
+        onMouseUp={handleMouseUp}
+        onMouseLeave={handleMouseUp}
+      />
+      {textDraft && (
+        <textarea
+          autoFocus
+          value={textDraft.value}
+          onChange={(e) => setTextDraft({ ...textDraft, value: e.target.value })}
+          onBlur={commitTextDraft}
+          onKeyDown={(e) => {
+            if (e.key === "Escape") {
+              e.preventDefault();
+              commitTextDraft();
+            }
+          }}
+          style={{
+            position: "absolute",
+            left: (textDraft.worldX + pan.x) * zoom,
+            top: (textDraft.worldY + pan.y) * zoom,
+            minWidth: 120,
+            minHeight: 28,
+            fontSize: 20 * zoom,
+          }}
+          className="bg-transparent border border-blue-400 text-zinc-100 font-sans outline-none p-1 resize"
+        />
+      )}
+    </>
   );
 }
