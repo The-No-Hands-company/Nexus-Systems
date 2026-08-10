@@ -35,6 +35,46 @@ export function saveDoc(board: BoardData, elements: ElementData[]) {
   }
 }
 
+/**
+ * The board to boot the editor from. `setBoard` seeds `store.elements` from
+ * `board.elements`, but nothing keeps `board.elements` in sync while editing —
+ * the live elements are persisted separately as `doc.elements`. Booting
+ * straight off `doc.board` therefore restores an empty canvas and throws the
+ * drawing away, so the two are re-joined here.
+ */
+export function bootBoard(doc: PersistedDoc | null): BoardData {
+  if (!doc) return makeDefaultBoard();
+  return { ...doc.board, elements: doc.elements };
+}
+
+/** Autosave delay. Long enough to coalesce a drag's per-frame updates, short
+ *  enough that a reload right after a change keeps it. */
+const SAVE_DEBOUNCE_MS = 400;
+let saveTimer: ReturnType<typeof setTimeout> | null = null;
+
+/**
+ * Debounced `saveDoc`. The store notifies on every change, including the
+ * per-frame `setElementsLive` updates a move/resize/rotate drag emits — writing
+ * synchronously there would deep-clone and stringify the whole document on
+ * every mousemove.
+ */
+export function saveDocDebounced(board: BoardData, elements: ElementData[]) {
+  if (saveTimer) clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => {
+    saveTimer = null;
+    saveDoc(board, elements);
+  }, SAVE_DEBOUNCE_MS);
+}
+
+/** Flushes a pending debounced save immediately (used on page hide/unload). */
+export function flushSave(board: BoardData, elements: ElementData[]) {
+  if (saveTimer) {
+    clearTimeout(saveTimer);
+    saveTimer = null;
+  }
+  saveDoc(board, elements);
+}
+
 export function clearDoc() {
   try {
     localStorage.removeItem(KEY);

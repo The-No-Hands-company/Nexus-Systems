@@ -5,7 +5,7 @@ import Canvas from "./components/Canvas/Canvas";
 import LayerPanel from "./components/LayerPanel";
 import PropertiesPanel from "./components/PropertiesPanel";
 import { useEditorStore } from "./stores/useEditorStore";
-import { loadDoc, saveDoc, makeDefaultBoard } from "./utils/persistence";
+import { loadDoc, bootBoard, saveDocDebounced, flushSave } from "./utils/persistence";
 
 export default function App() {
   const [showPanels, setShowPanels] = useState(true);
@@ -15,21 +15,28 @@ export default function App() {
   useEffect(() => {
     const store = useEditorStore.getState();
     if (store.board) return;
-    const doc = loadDoc();
-    if (doc) {
-      store.setBoard(doc.board);
-    } else {
-      store.setBoard(makeDefaultBoard());
-    }
+    store.setBoard(bootBoard(loadDoc()));
   }, []);
 
   useEffect(() => {
-    const save = () => {
+    const unsubscribe = useEditorStore.subscribe(() => {
       const st = useEditorStore.getState();
       if (!st.board) return;
-      saveDoc(st.board, st.elements);
+      saveDocDebounced(st.board, st.elements);
+    });
+    // A debounced write can still be pending when the tab goes away, which is
+    // exactly when the last edits matter most — flush on hide as well.
+    const onHide = () => {
+      const st = useEditorStore.getState();
+      if (st.board) flushSave(st.board, st.elements);
     };
-    return useEditorStore.subscribe(save);
+    window.addEventListener("pagehide", onHide);
+    document.addEventListener("visibilitychange", onHide);
+    return () => {
+      unsubscribe();
+      window.removeEventListener("pagehide", onHide);
+      document.removeEventListener("visibilitychange", onHide);
+    };
   }, []);
 
   return (
