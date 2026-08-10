@@ -92,10 +92,11 @@ Add to `custom_domains`: `cf_hostname_id` (text, nullable), `cf_ssl_status`
 (text, nullable), `last_checked_at`. Migration via Drizzle (never `db push`).
 
 ## 5. Non-goals / cleanup
-- **Retire `acme.ts` on this node.** Its Let's-Encrypt HTTP-01 path assumes a
-  public-IP origin on port 80, impossible behind the tunnel. Gate it off by config
-  (keep the code for self-host deployments that do have a public IP). Cloudflare
-  issues/renews the cert now.
+- **Keep `acme.ts`, gated off (decided).** Its Let's-Encrypt HTTP-01 path assumes
+  a public-IP origin on port 80, impossible behind the tunnel. Disable it by
+  default (`ACME_ENABLED` off); the code is **kept, not deleted** — it is the TLS
+  path for future self-host deployments that do have a public IP. On this node
+  Cloudflare issues/renews the cert.
 - No apex-specific handling beyond what CF for SaaS + the user's registrar
   (CNAME flattening) already provide; documented, not coded.
 - Org-owned domain auto-DNS (`nohands.company`) is **out** — dropped for cost.
@@ -112,8 +113,10 @@ Add to `custom_domains`: `cf_hostname_id` (text, nullable), `cf_ssl_status`
   Cloudflare's responsibility, not our code.
 - **Token scope:** needs the `SSL:Edit` addition (4a.3) before 4b can pass live
   tests — a you-side action.
-- **Cost past 100:** decision deferred to build time — absorb, or pass ~$1.20/yr
-  to the domain-owning user (they already pay for the domain).
+- **Cost past 100 (decided): the platform absorbs it.** Custom domains beyond the
+  free 100 cost ~$1.20/yr each and are **never passed to users** — users pay
+  nothing, ever. This is a deliberate cost the operator carries to keep the
+  "free cloud for everyone" promise whole.
 
 ## 7. Build order (summary; detailed plan separate)
 1. Operator setup (you) + `SSL:Edit` on the token.
