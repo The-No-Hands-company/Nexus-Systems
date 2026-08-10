@@ -7,8 +7,12 @@ import {
   textData,
   draftToElement,
   isDragShapeTool,
+  measureTextSize,
+  ToolController,
   GRID_SIZE,
 } from "./toolController";
+import { useEditorStore } from "../stores/useEditorStore";
+import { hitElement } from "../render/hitTest";
 
 describe("isDragShapeTool", () => {
   it("accepts rectangle/ellipse/line/arrow/sticky", () => {
@@ -73,6 +77,54 @@ describe("freehandData", () => {
 describe("textData", () => {
   it("carries position and text through", () => {
     expect(textData(10, 20, "hello")).toEqual({ x: 10, y: 20, text: "hello" });
+  });
+});
+
+describe("measureTextSize", () => {
+  it("returns a non-zero box for a short line", () => {
+    const { width, height } = measureTextSize("hello", 20, "sans-serif");
+    expect(width).toBeGreaterThan(0);
+    expect(height).toBeGreaterThan(0);
+  });
+  it("grows width with more characters", () => {
+    const short = measureTextSize("hi", 20, "sans-serif");
+    const long = measureTextSize("hi there, this is a much longer line of text", 20, "sans-serif");
+    expect(long.width).toBeGreaterThan(short.width);
+  });
+  it("grows height with more lines", () => {
+    const oneLine = measureTextSize("hello", 20, "sans-serif");
+    const twoLines = measureTextSize("hello\nworld", 20, "sans-serif");
+    expect(twoLines.height).toBeGreaterThan(oneLine.height);
+  });
+});
+
+describe("ToolController.commitText", () => {
+  it("commits a text element with a measured, non-zero hit box that hitElement can hit in its middle", () => {
+    useEditorStore.setState({ elements: [], selectedElementIds: new Set(), undoStack: [], redoStack: [] });
+    const controller = new ToolController();
+
+    controller.commitText(100, 100, "hello world");
+
+    const elements = useEditorStore.getState().elements;
+    expect(elements).toHaveLength(1);
+    const el = elements[0];
+    expect(el.elementType).toBe("text");
+    expect(el.data.width).toBeGreaterThan(0);
+    expect(el.data.height).toBeGreaterThan(0);
+
+    // A point at the middle of the measured box — not just the (x,y) origin — must hit,
+    // which is the eraser's actual repro case (click the middle of rendered text).
+    const mid = { x: el.data.x + el.data.width / 2, y: el.data.y + el.data.height / 2 };
+    expect(hitElement(el, mid, 0)).toBe(true);
+  });
+
+  it("does not commit when the text is left empty", () => {
+    useEditorStore.setState({ elements: [], selectedElementIds: new Set(), undoStack: [], redoStack: [] });
+    const controller = new ToolController();
+
+    controller.commitText(0, 0, "");
+
+    expect(useEditorStore.getState().elements).toHaveLength(0);
   });
 });
 

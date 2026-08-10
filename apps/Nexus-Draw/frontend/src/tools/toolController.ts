@@ -73,6 +73,53 @@ export function textData(x: number, y: number, text: string): Record<string, any
   return { x, y, text };
 }
 
+// Fallback average glyph width, as a fraction of font size, used only when no real
+// 2D context is available to measure with (e.g. jsdom in tests — it doesn't implement
+// canvas rendering without the optional `canvas` npm package). Real browsers always
+// take the accurate ctx.measureText path below.
+const FALLBACK_CHAR_WIDTH_RATIO = 0.6;
+const LINE_HEIGHT_RATIO = 1.2;
+
+let measureCtx: CanvasRenderingContext2D | null | undefined;
+
+function getMeasureContext(): CanvasRenderingContext2D | null {
+  if (measureCtx !== undefined) return measureCtx;
+  try {
+    measureCtx = document.createElement("canvas").getContext("2d");
+  } catch {
+    measureCtx = null;
+  }
+  return measureCtx;
+}
+
+/**
+ * Approximate rendered size of `text` at `fontSize`/`fontFamily`, used to give a
+ * text element a real (non-zero) hit box. Uses an offscreen canvas's
+ * `measureText` when available; falls back to a character-count heuristic
+ * otherwise so the result is never 0×0.
+ */
+export function measureTextSize(
+  text: string,
+  fontSize: number,
+  fontFamily: string
+): { width: number; height: number } {
+  const lines = text.split("\n");
+  const ctx = getMeasureContext();
+
+  let width: number;
+  if (ctx) {
+    ctx.font = `${fontSize}px ${fontFamily}`;
+    width = Math.max(...lines.map((line) => ctx.measureText(line).width));
+  } else {
+    width = Math.max(...lines.map((line) => line.length * fontSize * FALLBACK_CHAR_WIDTH_RATIO));
+  }
+
+  return {
+    width: Math.max(1, width),
+    height: Math.max(1, fontSize * lines.length * LINE_HEIGHT_RATIO),
+  };
+}
+
 export interface DraftShape {
   kind: "shape";
   tool: DragShapeTool;
@@ -221,7 +268,14 @@ export class ToolController {
   /** Commits a text element typed into the overlay; a left-empty textarea cancels instead. */
   commitText(x: number, y: number, text: string): void {
     if (text.length === 0) return;
-    this.commit(makeElement("text", textData(x, y, text)));
+    const el = makeElement("text", textData(x, y, text));
+    // elementBounds/hitElement treat "text" as a box type, defaulting missing
+    // width/height to 0 — without a measured size the eraser (and any future
+    // marquee-select) could never hit the element except at its origin pixel.
+    const { width, height } = measureTextSize(text, el.style.fontSize, el.style.fontFamily);
+    el.data.width = width;
+    el.data.height = height;
+    this.commit(el);
   }
 
   private commit(el: ElementData): void {
