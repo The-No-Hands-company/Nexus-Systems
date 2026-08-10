@@ -2,6 +2,7 @@ import type { BoardData } from "../stores/useEditorStore";
 import type { ElementData } from "../stores/model";
 
 const KEY = "nexus-draw:doc:v1";
+const ACTIVE_KEY = "nexus-draw:active-board";
 
 export type PersistedDoc = {
   board: BoardData;
@@ -97,3 +98,6 @@ export function makeDefaultBoard(name = "Untitled Board"): BoardData {
     elements: [],
   };
 }
+
+export function saveLastBoardId(id: string) { try { localStorage.setItem(ACTIVE_KEY, id); } catch { /* ignore */ } }
+export function loadLastBoardId(): string | null { try { return localStorage.getItem(ACTIVE_KEY); } catch { return null; } }
