@@ -367,6 +367,9 @@ export default function Canvas() {
         // so a rotated element's (also-rotated) handles are grabbable where drawn.
         for (const el of store.elements) {
           if (!store.selectedElementIds.has(el.id)) continue;
+          // An element can be selected first and locked/hidden afterwards from
+          // the layer panel; its handles must stop responding immediately.
+          if (el.data.locked || el.data.hidden) continue;
           const local = invertTransformPoint(el.transform, world);
           const bounds = elementBounds(el);
           const handle = resizeHandles(bounds).find((h) => Math.hypot(h.x - local.x, h.y - local.y) <= handleTol);
