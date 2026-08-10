@@ -4,13 +4,34 @@ import TopBar from "./components/TopBar";
 import Canvas from "./components/Canvas/Canvas";
 import LayerPanel from "./components/LayerPanel";
 import PropertiesPanel from "./components/PropertiesPanel";
+import BoardPanel from "./components/BoardPanel";
 import { useEditorStore } from "./stores/useEditorStore";
-import { loadDoc, bootBoard, saveDocDebounced, flushSave } from "./utils/persistence";
+import { loadDoc, bootBoard, saveDocDebounced, flushSave, saveLastBoardId, loadLastBoardId } from "./utils/persistence";
+import * as api from "./utils/api";
 
 export default function App() {
   const [showPanels, setShowPanels] = useState(true);
   const sidebar = useEditorStore((s) => s.sidebar);
   const setSidebar = useEditorStore((s) => s.setSidebar);
+
+  const switchBoard = async (id: string) => {
+    try {
+      const sb = await api.getBoard(id);
+      const store = useEditorStore.getState();
+      store.setBoard(api.serverBoardToBoardData(sb));
+      store.setPan({ x: 0, y: 0 });
+      store.setZoom(1);
+      saveLastBoardId(id);
+    } catch {
+      // server board vanished — refresh panel
+    }
+  };
+
+  const newBoard = async (name: string) => {
+    const b = await api.createBoard(name);
+    useEditorStore.getState().setBoard(api.serverBoardToBoardData(b));
+    saveLastBoardId(b.id);
+  };
 
   useEffect(() => {
     const store = useEditorStore.getState();
@@ -19,13 +40,48 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    const checkServer = async () => {
+      const store = useEditorStore.getState();
+      if (store.board) return;
+      const available = await api.serverAvailable();
+      if (!available) return;
+      const lastId = loadLastBoardId();
+      if (lastId) {
+        try {
+          const sb = await api.getBoard(lastId);
+          store.setBoard(api.serverBoardToBoardData(sb));
+          store.setPan({ x: 0, y: 0 });
+          store.setZoom(1);
+          saveLastBoardId(lastId);
+          return;
+        } catch {
+          // fall through
+        }
+      }
+      const boards = await api.listBoards();
+      if (boards.length > 0) {
+        const sb = boards[0];
+        store.setBoard(api.serverBoardToBoardData(sb));
+        store.setPan({ x: 0, y: 0 });
+        store.setZoom(1);
+        saveLastBoardId(sb.id);
+        return;
+      }
+      const b = await api.createBoard("Untitled Board");
+      store.setBoard(api.serverBoardToBoardData(b));
+      store.setPan({ x: 0, y: 0 });
+      store.setZoom(1);
+      saveLastBoardId(b.id);
+    };
+    void checkServer();
+  }, []);
+
+  useEffect(() => {
     const unsubscribe = useEditorStore.subscribe(() => {
       const st = useEditorStore.getState();
       if (!st.board) return;
       saveDocDebounced(st.board, st.elements);
     });
-    // A debounced write can still be pending when the tab goes away, which is
-    // exactly when the last edits matter most — flush on hide as well.
     const onHide = () => {
       const st = useEditorStore.getState();
       if (st.board) flushSave(st.board, st.elements);
@@ -59,6 +115,11 @@ export default function App() {
                 <PropertiesPanel />
               </div>
             )}
+            {sidebar === "boards" && (
+              <div className="w-64 border-l border-zinc-800 bg-zinc-900">
+                <BoardPanel onSwitch={switchBoard} onNew={newBoard} />
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -75,6 +136,12 @@ export default function App() {
             className={`hover:text-zinc-300 ${sidebar === "properties" ? "text-blue-400" : ""}`}
           >
             Properties
+          </button>
+          <button
+            onClick={() => setSidebar(sidebar === "boards" ? null : "boards")}
+            className={`hover:text-zinc-300 ${sidebar === "boards" ? "text-blue-400" : ""}`}
+          >
+            Boards
           </button>
           <button onClick={() => setShowPanels(!showPanels)} className="hover:text-zinc-300">
             {showPanels ? "Hide" : "Show"}

@@ -1,5 +1,6 @@
 import { useEditorStore } from "../stores/useEditorStore";
 import { downloadPNG, downloadSVG } from "../utils/export";
+import * as api from "../utils/api";
 import HelpOverlay from "./HelpOverlay";
 
 export default function TopBar() {
@@ -21,6 +22,12 @@ export default function TopBar() {
     else downloadSVG(b, els);
   };
 
+  const save = async () => {
+    const st = useEditorStore.getState();
+    if (!st.board) return;
+    await api.saveBoard(st.board.id, st.board, st.elements);
+  };
+
   return (
     <div className="flex items-center justify-between h-10 px-4 bg-zinc-900 border-b border-zinc-800 shrink-0">
       <div className="flex items-center gap-3">
@@ -32,6 +39,8 @@ export default function TopBar() {
       <div className="flex items-center gap-2 text-xs text-zinc-500">
         <button onClick={undo} disabled={!board || undoStack.length === 0} className="hover:text-zinc-200 disabled:opacity-30">↩</button>
         <button onClick={redo} disabled={!board || redoStack.length === 0} className="hover:text-zinc-200 disabled:opacity-30">↪</button>
+        <span className="text-zinc-700">|</span>
+        <button onClick={save} disabled={!board} className="hover:text-zinc-200 disabled:opacity-30">Save</button>
         <span className="text-zinc-700">|</span>
         <button onClick={() => doExport("png")} disabled={!board} className="hover:text-zinc-200 disabled:opacity-30">⇩ PNG</button>
         <button onClick={() => doExport("svg")} disabled={!board} className="hover:text-zinc-200 disabled:opacity-30">⇩ SVG</button>

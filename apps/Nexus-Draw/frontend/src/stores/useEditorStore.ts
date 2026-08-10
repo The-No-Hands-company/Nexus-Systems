@@ -42,8 +42,8 @@ interface EditorStore {
   setPan: (p: Vec2) => void;
   setZoom: (z: number) => void;
 
-  sidebar: "layers" | "properties" | null;
-  setSidebar: (s: "layers" | "properties" | null) => void;
+  sidebar: "layers" | "properties" | "boards" | null;
+  setSidebar: (s: "layers" | "properties" | "boards" | null) => void;
 
   undoStack: HistoryEntry[];
   redoStack: HistoryEntry[];
