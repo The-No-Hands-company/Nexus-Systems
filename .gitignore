@@ -99,3 +99,4 @@ apps/Nexus-Tunnel/data/tunnel-state.json
 # Editor/agent scratch and backup files
 *.bak
 **/.claude/scheduled_tasks.lock
+deploy/production/nexus-chat.env

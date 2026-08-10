@@ -1,0 +1,95 @@
+# chat.tnhc.dev — nexus-chat (apps/Nexus) front door for this node.
+#
+# nexus-chat is three processes on three ports (REST API, WebSocket gateway,
+# voice signalling) plus a separate static SPA. The ecosystem proxy maps one
+# hostname to exactly one upstream and cannot split by path, so something has to
+# join them into a single origin — the SPA's production build calls /api and
+# /gateway same-origin, with no dev-server proxy behind it. That is this file.
+#
+# Derived from apps/Nexus/Caddyfile, with three deliberate differences:
+#   * Plain HTTP on a high port. Cloudflare terminates TLS at the edge and the
+#     tunnel reaches us over the LAN address, so nothing here may hold 80/443 —
+#     the same reason deploy/production/hosting.compose.yml drops Caddy.
+#   * Upstream ports are 818x, not 808x. 8080 is the ecosystem proxy and 8090 is
+#     the Hosting site-proxy; nexus-chat's defaults would collide with both.
+#   * No auto-TLS block and no HSTS: this server never faces the internet
+#     directly, and Cloudflare sets transport security at the edge.
+#
+# Run:  caddy run --config deploy/production/nexus-chat.Caddyfile
+# Then point chat.tnhc.dev at http://127.0.0.1:8095 in the Cloud route table.
+
+{
+	admin off
+	auto_https off
+}
+
+:8095 {
+	handle /api/* {
+		reverse_proxy 127.0.0.1:8180
+	}
+
+	handle /gateway {
+		reverse_proxy 127.0.0.1:8181 {
+			header_up Connection {>Connection}
+			header_up Upgrade {>Upgrade}
+			transport http {
+				dial_timeout 5s
+				response_header_timeout 0
+			}
+		}
+	}
+
+	handle /voice/ws {
+		reverse_proxy 127.0.0.1:8182 {
+			header_up Connection {>Connection}
+			header_up Upgrade {>Upgrade}
+			transport http {
+				dial_timeout 5s
+				response_header_timeout 0
+			}
+		}
+	}
+
+	# Federation and Matrix bridge surfaces live on the API.
+	handle /_nexus/* {
+		reverse_proxy 127.0.0.1:8180
+	}
+	handle /.well-known/nexus/* {
+		reverse_proxy 127.0.0.1:8180
+	}
+	handle /.well-known/matrix/* {
+		reverse_proxy 127.0.0.1:8180
+	}
+	handle /_matrix/* {
+		reverse_proxy 127.0.0.1:8180
+	}
+
+	# Prometheus metrics must not be reachable from the edge.
+	handle /metrics {
+		respond 403
+	}
+
+	# The nexus-web SPA.
+	handle {
+		root * {$NEXUS_WEB_ROOT:/run/media/zajferx/Data/dev/The-No-hands-Company/projects/Nexus-Systems/apps/Nexus/packages/nexus-web/dist}
+		try_files {path} {path}/ /index.html
+		file_server
+		@hashed path_regexp hashed \.[0-9a-zA-Z_-]{8,}\.(js|css|woff2?)$
+		header @hashed Cache-Control "public, max-age=31536000, immutable"
+		header /index.html Cache-Control "no-cache, no-store, must-revalidate"
+	}
+
+	header {
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=()"
+		-Server
+	}
+
+	log {
+		output stdout
+		format console
+		level INFO
+	}
+}
