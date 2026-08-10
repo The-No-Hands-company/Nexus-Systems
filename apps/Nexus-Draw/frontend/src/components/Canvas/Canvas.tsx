@@ -1,5 +1,6 @@
 import { useEffect, useRef, useCallback } from "react";
 import { useEditorStore } from "../../stores/useEditorStore";
+import { makeElement } from "../../stores/model";
 
 const VS_SRC = `#version 300 es
 in vec2 a_pos;
@@ -294,14 +295,11 @@ export default function Canvas() {
       const h = Math.abs(ey - sy);
 
       if (w > 2 || h > 2) {
-        addElement({
-          id: crypto.randomUUID(),
-          elementType: (activeTool === "rectangle" ? "rectangle" : activeTool === "ellipse" ? "ellipse" : "arrow") as any,
-          data: { x, y, width: w, height: h },
-          style: { fill: "#3b82f6", stroke: "#1d4ed8", strokeWidth: 2, opacity: 1 },
-          transform: { a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 },
-          order: elements.length,
-        });
+        addElement(makeElement(
+          (activeTool === "rectangle" ? "rectangle" : activeTool === "ellipse" ? "ellipse" : "arrow"),
+          { x, y, width: w, height: h },
+          { fill: "#3b82f6", stroke: "#1d4ed8", strokeWidth: 2, opacity: 1 },
+        ));
       }
     }
   }, [activeTool, screenToWorld, addElement, elements]);

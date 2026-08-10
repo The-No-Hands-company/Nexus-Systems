@@ -1,15 +1,7 @@
 import { create } from "zustand";
+import type { ElementData, ElementStyle, StyleMode } from "./model";
 
 export interface Vec2 { x: number; y: number }
-
-export interface ElementData {
-  id: string;
-  elementType: "shape" | "path" | "text" | "image" | "arrow" | "sticky";
-  data: Record<string, unknown>;
-  style: Record<string, unknown>;
-  transform: { a: number; b: number; c: number; d: number; e: number; f: number };
-  order: number;
-}
 
 export interface BoardData {
   id: string;
@@ -19,6 +11,8 @@ export interface BoardData {
   height: number;
   background: string;
   isPublic: boolean;
+  defaultStyleMode: StyleMode;
+  gridSnap: boolean;
   elements: ElementData[];
 }
 
@@ -54,7 +48,7 @@ interface EditorStore {
   redo: () => void;
 
   addElement: (el: ElementData) => void;
-  updateElement: (id: string, patch: Partial<ElementData>) => void;
+  updateElement: (id: string, patch: Partial<Omit<ElementData, "style">> & { style?: Partial<ElementStyle> }) => void;
   removeElement: (id: string) => void;
   reorderElements: (ids: string[]) => void;
 }
@@ -119,7 +113,7 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
   updateElement: (id, patch) => {
     get().pushHistory();
     set((s) => ({
-      elements: s.elements.map((el) => (el.id === id ? { ...el, ...patch } : el)),
+      elements: s.elements.map((el) => (el.id === id ? { ...el, ...patch, style: { ...el.style, ...patch.style } } : el)),
     }));
   },
 
