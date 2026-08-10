@@ -589,11 +589,12 @@ export default function Canvas() {
         if (e.key === "h") setActiveTool("hand");
         if (e.key === "p") setActiveTool("pen");
         if (e.key === "r") setActiveTool("rectangle");
-        if (e.key === "e") setActiveTool("ellipse");
+        if (e.key === "o") setActiveTool("ellipse");
         if (e.key === "l") setActiveTool("line");
         if (e.key === "a") setActiveTool("arrow");
         if (e.key === "t") setActiveTool("text");
         if (e.key === "s") setActiveTool("sticky");
+        if (e.key === "e") setActiveTool("eraser");
       }
 
       // Undo/redo: Ctrl+Z undo, Ctrl+Shift+Z or Ctrl+Y redo (Ctrl+U kept as a

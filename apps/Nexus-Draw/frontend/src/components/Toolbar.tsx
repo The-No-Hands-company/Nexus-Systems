@@ -1,18 +1,24 @@
 import { useEditorStore } from "../stores/useEditorStore";
 
-const tools = [
+// Keys follow the whiteboard convention (Excalidraw/tldraw): O is the ellipse,
+// E is the eraser. Both previously claimed "E", and the canvas bound "e" to
+// ellipse, so the eraser's advertised shortcut silently did nothing.
+//
+// "fill" and "zoom" are deliberately absent: neither was ever a real tool —
+// there is no fill implementation, and zoom is driven by the top bar and
+// Ctrl +/-/0. Listing them as selectable tools advertised behaviour the editor
+// does not have.
+export const tools = [
   { id: "select", label: "Select", key: "V", icon: "⇱" },
   { id: "hand", label: "Hand", key: "H", icon: "✋" },
   { id: "pen", label: "Pen", key: "P", icon: "✎" },
   { id: "rectangle", label: "Rectangle", key: "R", icon: "▭" },
-  { id: "ellipse", label: "Ellipse", key: "E", icon: "○" },
+  { id: "ellipse", label: "Ellipse", key: "O", icon: "○" },
   { id: "line", label: "Line", key: "L", icon: "╱" },
   { id: "arrow", label: "Arrow", key: "A", icon: "→" },
   { id: "text", label: "Text", key: "T", icon: "T" },
   { id: "sticky", label: "Sticky", key: "S", icon: "☐" },
-  { id: "fill", label: "Fill", key: "G", icon: "⬛" },
   { id: "eraser", label: "Eraser", key: "E", icon: "⌫" },
-  { id: "zoom", label: "Zoom", key: "Z", icon: "🔍" },
 ];
 
 export default function Toolbar() {
