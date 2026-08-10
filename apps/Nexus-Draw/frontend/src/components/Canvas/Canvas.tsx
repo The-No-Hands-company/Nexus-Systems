@@ -1,20 +1,22 @@
-import { useEffect, useRef, useCallback } from "react";
+import { useEffect, useRef, useCallback, useState } from "react";
 import rough from "roughjs";
 import { useEditorStore } from "../../stores/useEditorStore";
-import { makeElement } from "../../stores/model";
 import { resolveStyleMode } from "../../stores/model";
 import { renderElement } from "../../render/renderElement";
 import { elementBounds, resizeHandles } from "../../render/geometry";
-import { hitElement } from "../../render/hitTest";
+import { beginTool, updateTool, endTool, getPreview, isDrawing, type ToolName } from "../../tools/toolController";
 
 const GRID_SIZE = 40;
+
+function isDrawnTool(tool: string): tool is ToolName {
+  return ["rectangle", "ellipse", "line", "arrow", "sticky", "pen", "text", "eraser"].includes(tool);
+}
 
 export default function Canvas() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rcRef = useRef<ReturnType<typeof rough.canvas> | null>(null);
-  const dragging = useRef(false);
+  const panning = useRef(false);
   const lastMouse = useRef({ x: 0, y: 0 });
-  const drawStart = useRef({ x: 0, y: 0 });
   const spacePanning = useRef(false);
 
   const pan = useEditorStore((s) => s.pan);
@@ -26,11 +28,15 @@ export default function Canvas() {
   const selectElement = useEditorStore((s) => s.selectElement);
   const deselectAll = useEditorStore((s) => s.deselectAll);
   const setActiveTool = useEditorStore((s) => s.setActiveTool);
-  const addElement = useEditorStore((s) => s.addElement);
   const selectedElementIds = useEditorStore((s) => s.selectedElementIds);
+  const addElement = useEditorStore((s) => s.addElement);
 
   const screenToWorld = useCallback((cx: number, cy: number) => {
     return { x: cx / zoom - pan.x, y: cy / zoom - pan.y };
+  }, [pan, zoom]);
+
+  const worldToScreen = useCallback((wx: number, wy: number) => {
+    return { x: (wx + pan.x) * zoom, y: (wy + pan.y) * zoom };
   }, [pan, zoom]);
 
   const drawScene = useCallback(() => {
@@ -63,9 +69,13 @@ export default function Canvas() {
     }
     ctx.stroke();
 
-    const sorted = [...elements].sort((a, b) => a.order - b.order);
     const board = useEditorStore.getState().board;
+    const sorted = [...elements].sort((a, b) => a.order - b.order);
     for (const el of sorted) renderElement(ctx, rc, el, resolveStyleMode(el, board?.defaultStyleMode ?? "clean"));
+
+    const preview = getPreview();
+    if (preview) renderElement(ctx, rc, preview, resolveStyleMode(preview, board?.defaultStyleMode ?? "clean"));
+    void useEditorStore.getState();
 
     for (const id of selectedElementIds) {
       const el = elements.find((e) => e.id === id);
@@ -81,21 +91,17 @@ export default function Canvas() {
         ctx.fill();
       }
     }
-  }, [elements, selectedElementIds, pan, zoom]);
+  }, [elements, selectedElementIds, pan, zoom, addElement, setActiveTool]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     rcRef.current = rough.canvas(canvas);
 
-    const dpr = window.devicePixelRatio || 1;
-    canvas.width = canvas.clientWidth * dpr;
-    canvas.height = canvas.clientHeight * dpr;
-
     const resize = () => {
-      const d = window.devicePixelRatio || 1;
-      canvas.width = canvas.clientWidth * d;
-      canvas.height = canvas.clientHeight * d;
+      const dpr = window.devicePixelRatio || 1;
+      canvas.width = canvas.clientWidth * dpr;
+      canvas.height = canvas.clientHeight * dpr;
       drawScene();
     };
     resize();
@@ -109,89 +115,75 @@ export default function Canvas() {
 
   const handleWheel = useCallback((e: React.WheelEvent) => {
     e.preventDefault();
-    const delta = -e.deltaY * 0.001;
-    setZoom(zoom * (1 + delta));
+    const zoomed = Math.max(0.1, Math.min(10, zoom * (1 - e.deltaY * 0.001)));
+    setZoom(zoomed);
   }, [zoom, setZoom]);
 
-  const handleMouseDown = useCallback((e: React.MouseEvent) => {
+  const handlePointerDown = useCallback((e: React.PointerEvent) => {
+    if (e.button !== 0) {
+      panning.current = true;
+      lastMouse.current = { x: e.clientX, y: e.clientY };
+      return;
+    }
     const rect = canvasRef.current!.getBoundingClientRect();
-    const mx = e.clientX - rect.left;
-    const my = e.clientY - rect.top;
-    const world = screenToWorld(mx, my);
+    const world = screenToWorld(e.clientX - rect.left, e.clientY - rect.top);
 
-    if (e.button === 1 || (e.button === 0 && activeTool === "hand")) {
-      dragging.current = true;
+    if (activeTool === "hand") {
+      panning.current = true;
       lastMouse.current = { x: e.clientX, y: e.clientY };
       return;
     }
 
-    if (e.button === 0) {
-      if (["rectangle", "ellipse", "line", "arrow"].includes(activeTool)) {
-        dragging.current = true;
-        drawStart.current = { x: world.x, y: world.y };
-        lastMouse.current = { x: world.x, y: world.y };
-      } else if (activeTool === "select") {
-        const hit = [...elements].reverse().find((el) => hitElement(el, world, 4));
-        if (hit) {
-          selectElement(hit.id, e.metaKey || e.ctrlKey);
-        } else {
-          deselectAll();
-        }
+    if (activeTool === "select") {
+      const hit = [...elements].reverse().find((el) => {
+        const b = elementBounds(el);
+        return world.x >= b.x && world.x <= b.x + b.width && world.y >= b.y && world.y <= b.y + b.height;
+      });
+      if (hit) {
+        selectElement(hit.id, e.metaKey || e.ctrlKey);
+      } else {
+        deselectAll();
       }
+      return;
     }
-  }, [activeTool, screenToWorld, elements, selectElement, deselectAll]);
 
-  const handleMouseMove = useCallback((e: React.MouseEvent) => {
-    if (!dragging.current) return;
+    if (isDrawnTool(activeTool)) {
+      beginTool(activeTool, world);
+      updateTool(world);
+      drawScene();
+    }
+  }, [activeTool, screenToWorld, elements, selectElement, deselectAll, drawScene]);
 
-    if (activeTool === "hand") {
+  const handlePointerMove = useCallback((e: React.PointerEvent) => {
+    if (panning.current) {
       const dx = e.clientX - lastMouse.current.x;
       const dy = e.clientY - lastMouse.current.y;
       setPan({ x: pan.x + dx / zoom, y: pan.y + dy / zoom });
       lastMouse.current = { x: e.clientX, y: e.clientY };
       return;
     }
-
-    const rect = canvasRef.current!.getBoundingClientRect();
-    const mx = e.clientX - rect.left;
-    const my = e.clientY - rect.top;
-    const world = screenToWorld(mx, my);
-
-    if (["rectangle", "ellipse", "line", "arrow"].includes(activeTool)) {
-      lastMouse.current = { x: world.x, y: world.y };
-    }
-  }, [activeTool, pan, zoom, setPan, screenToWorld, elements]);
-
-  const handleMouseUp = useCallback((e: React.MouseEvent) => {
-    if (!dragging.current) return;
-    dragging.current = false;
-
-    if (["rectangle", "ellipse", "line", "arrow"].includes(activeTool)) {
+    if (isDrawing()) {
       const rect = canvasRef.current!.getBoundingClientRect();
-      const mx = e.clientX - rect.left;
-      const my = e.clientY - rect.top;
-      const world = screenToWorld(mx, my);
-
-      const sx = drawStart.current.x;
-      const sy = drawStart.current.y;
-      const ex = world.x;
-      const ey = world.y;
-      const x = Math.min(sx, ex);
-      const y = Math.min(sy, ey);
-      const w = Math.abs(ex - sx);
-      const h = Math.abs(ey - sy);
-
-      if (w > 2 || h > 2) {
-        const type = activeTool as "rectangle" | "ellipse" | "line" | "arrow";
-        const data = type === "line" || type === "arrow"
-          ? { x1: sx, y1: sy, x2: ex, y2: ey }
-          : { x, y, width: w, height: h };
-        addElement(makeElement(type, data));
-      }
+      const world = screenToWorld(e.clientX - rect.left, e.clientY - rect.top);
+      updateTool(world);
+      drawScene();
     }
-  }, [activeTool, screenToWorld, addElement, elements]);
+  }, [pan, zoom, setPan, screenToWorld, drawScene]);
+
+  const handlePointerUp = useCallback((e: React.PointerEvent) => {
+    if (panning.current) {
+      panning.current = false;
+      return;
+    }
+    if (isDrawing()) {
+      endTool();
+      drawScene();
+    }
+  }, [drawScene]);
 
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
+    const target = e.target as HTMLElement;
+    if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA")) return;
     if (e.key === " " && !e.repeat) { setActiveTool("hand"); spacePanning.current = true; e.preventDefault(); }
     if (e.key === "v") { setActiveTool("select"); }
     if (e.key === "p") { setActiveTool("pen"); }
@@ -207,9 +199,9 @@ export default function Canvas() {
   }, [setActiveTool, setZoom, setPan]);
 
   const handleKeyUp = useCallback((e: KeyboardEvent) => {
-    if (e.key === " " && activeTool === "hand") {
-      setActiveTool("select");
+    if (e.key === " " && activeTool === "hand" && spacePanning.current) {
       spacePanning.current = false;
+      setActiveTool("select");
     }
   }, [activeTool, setActiveTool]);
 
@@ -219,16 +211,97 @@ export default function Canvas() {
     return () => { window.removeEventListener("keydown", handleKeyDown); window.removeEventListener("keyup", handleKeyUp); };
   }, [handleKeyDown, handleKeyUp]);
 
+  const textEditingId = useEditorStore((s) => s.textEditingId);
+  const editingEl = textEditingId ? elements.find((e) => e.id === textEditingId) : null;
+  const editorOrigin = editingEl ? worldToScreen(editingEl.data.x ?? 0, editingEl.data.y ?? 0) : null;
+
   return (
-    <canvas
-      ref={canvasRef}
-      className="w-full h-full cursor-crosshair"
-      style={{ background: "#1a1a2e" }}
-      onWheel={handleWheel}
-      onMouseDown={handleMouseDown}
-      onMouseMove={handleMouseMove}
-      onMouseUp={handleMouseUp}
-      onMouseLeave={handleMouseUp}
+    <div className="relative w-full h-full">
+      <canvas
+        ref={canvasRef}
+        className="w-full h-full cursor-crosshair block"
+        style={{ background: "#1a1a2e" }}
+        onWheel={handleWheel}
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerUp}
+        onPointerLeave={handlePointerUp}
+        onPointerCancel={handlePointerUp}
+      />
+      {editingEl && editorOrigin && (
+        <TextEditorOverlay
+          elId={editingEl.id}
+          x={editorOrigin.x}
+          y={editorOrigin.y}
+          zoom={zoom}
+          fontSize={editingEl.style.fontSize}
+          fontFamily={editingEl.style.fontFamily}
+          initial={editingEl.data.text as string}
+        />
+      )}
+    </div>
+  );
+}
+
+function TextEditorOverlay(props: {
+  elId: string;
+  x: number;
+  y: number;
+  zoom: number;
+  fontSize: number;
+  fontFamily: string;
+  initial: string;
+}) {
+  const [value, setValue] = useState(props.initial ?? "");
+  const ref = useRef<HTMLTextAreaElement>(null);
+  const committed = useRef(false);
+
+  useEffect(() => {
+    const ta = ref.current;
+    if (ta) {
+      ta.focus();
+      ta.select();
+    }
+  }, []);
+
+  const commit = (keep: boolean) => {
+    if (committed.current) return;
+    committed.current = true;
+    const store = useEditorStore.getState();
+    const elId = props.elId;
+    if (value.trim().length > 0) {
+      const el = store.elements.find((e) => e.id === elId);
+      if (el) store.updateElement(elId, { data: { ...el.data, text: value } });
+    } else {
+      store.removeElement(elId);
+    }
+    store.setTextEditingId(null);
+    void keep;
+  };
+
+  return (
+    <textarea
+      ref={ref}
+      value={value}
+      onChange={(e) => setValue(e.target.value)}
+      onBlur={() => commit(false)}
+      onKeyDown={(e) => {
+        if (e.key === "Escape") { e.preventDefault(); setValue(""); commit(false); }
+        if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); commit(false); }
+      }}
+      className="absolute outline-none bg-transparent text-zinc-100 resize-none overflow-hidden"
+      style={{
+        left: props.x,
+        top: props.y,
+        width: Math.max(160 * props.zoom, 60),
+        minHeight: props.fontSize * props.zoom,
+        fontSize: props.fontSize * props.zoom,
+        fontFamily: props.fontFamily,
+        lineHeight: 1.3,
+        transformOrigin: "0 0",
+        whiteSpace: "pre-wrap",
+        caretColor: "#3b82f6",
+      }}
     />
   );
 }

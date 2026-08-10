@@ -51,6 +51,9 @@ interface EditorStore {
   updateElement: (id: string, patch: Partial<Omit<ElementData, "style">> & { style?: Partial<ElementStyle> }) => void;
   removeElement: (id: string) => void;
   reorderElements: (ids: string[]) => void;
+
+  textEditingId: string | null;
+  setTextEditingId: (id: string | null) => void;
 }
 
 export const useEditorStore = create<EditorStore>((set, get) => ({
@@ -132,4 +135,7 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
       return { elements: ids.map((id, i) => ({ ...map.get(id)!, order: i })) };
     });
   },
+
+  textEditingId: null,
+  setTextEditingId: (id) => set({ textEditingId: id }),
 }));
