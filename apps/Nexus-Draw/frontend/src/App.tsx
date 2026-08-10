@@ -1,15 +1,36 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Toolbar from "./components/Toolbar";
 import TopBar from "./components/TopBar";
 import Canvas from "./components/Canvas/Canvas";
 import LayerPanel from "./components/LayerPanel";
 import PropertiesPanel from "./components/PropertiesPanel";
 import { useEditorStore } from "./stores/useEditorStore";
+import { loadDoc, saveDoc, makeDefaultBoard } from "./utils/persistence";
 
 export default function App() {
   const [showPanels, setShowPanels] = useState(true);
   const sidebar = useEditorStore((s) => s.sidebar);
   const setSidebar = useEditorStore((s) => s.setSidebar);
+
+  useEffect(() => {
+    const store = useEditorStore.getState();
+    if (store.board) return;
+    const doc = loadDoc();
+    if (doc) {
+      store.setBoard(doc.board);
+    } else {
+      store.setBoard(makeDefaultBoard());
+    }
+  }, []);
+
+  useEffect(() => {
+    const save = () => {
+      const st = useEditorStore.getState();
+      if (!st.board) return;
+      saveDoc(st.board, st.elements);
+    };
+    return useEditorStore.subscribe(save);
+  }, []);
 
   return (
     <div className="h-screen flex flex-col">

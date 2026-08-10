@@ -113,7 +113,10 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
 
   addElement: (el) => {
     get().pushHistory();
-    set((s) => ({ elements: [...s.elements, el] }));
+    set((s) => {
+      const maxOrder = s.elements.reduce((m, e) => Math.max(m, e.order), -1);
+      return { elements: [...s.elements, { ...el, order: maxOrder + 1 }] };
+    });
   },
 
   updateElement: (id, patch) => {
