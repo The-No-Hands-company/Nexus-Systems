@@ -298,9 +298,10 @@ export default function Canvas() {
           id: crypto.randomUUID(),
           elementType: (activeTool === "rectangle" ? "rectangle" : activeTool === "ellipse" ? "ellipse" : "arrow") as any,
           data: { x, y, width: w, height: h },
-          style: { fill: "#3b82f6", stroke: "#1d4ed8", strokeWidth: 2, opacity: 1 },
+          style: { fill: "#3b82f6", stroke: "#1d4ed8", strokeWidth: 2, opacity: 1 } as any,
           transform: { a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 },
           order: elements.length,
+          seed: Math.floor(Math.random() * 2 ** 31),
         });
       }
     }

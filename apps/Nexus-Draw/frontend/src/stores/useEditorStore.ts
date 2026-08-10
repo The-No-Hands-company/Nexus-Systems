@@ -1,15 +1,8 @@
 import { create } from "zustand";
+import type { ElementData, StyleMode } from "./model";
 
+export type { ElementData } from "./model";
 export interface Vec2 { x: number; y: number }
-
-export interface ElementData {
-  id: string;
-  elementType: "shape" | "path" | "text" | "image" | "arrow" | "sticky";
-  data: Record<string, unknown>;
-  style: Record<string, unknown>;
-  transform: { a: number; b: number; c: number; d: number; e: number; f: number };
-  order: number;
-}
 
 export interface BoardData {
   id: string;
@@ -20,6 +13,8 @@ export interface BoardData {
   background: string;
   isPublic: boolean;
   elements: ElementData[];
+  defaultStyleMode: StyleMode;
+  gridSnap: boolean;
 }
 
 interface HistoryEntry {
@@ -31,6 +26,7 @@ interface EditorStore {
   boardId: string | null;
   elements: ElementData[];
   setBoard: (b: BoardData) => void;
+  getDefaultStyleMode: () => StyleMode;
 
   selectedElementIds: Set<string>;
   selectElement: (id: string, multi?: boolean) => void;
@@ -72,6 +68,8 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
   redoStack: [],
 
   setBoard: (b) => set({ board: b, boardId: b.id, elements: b.elements, selectedElementIds: new Set(), undoStack: [], redoStack: [] }),
+
+  getDefaultStyleMode: () => get().board?.defaultStyleMode ?? "clean",
 
   selectElement: (id, multi = false) => set((s) => {
     const next = multi ? new Set(s.selectedElementIds) : new Set<string>();

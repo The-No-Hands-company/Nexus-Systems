@@ -26,10 +26,10 @@ export default function LayerPanel() {
               ${selectedElementIds.has(el.id) ? "bg-blue-600/20 text-blue-300" : "hover:bg-zinc-800 text-zinc-300"}`}
           >
             <button
-              onClick={(e) => { e.stopPropagation(); updateElement(el.id, { style: { ...el.style, visible: !(el.style as any).visible } }); }}
+              onClick={(e) => { e.stopPropagation(); updateElement(el.id, { data: { ...el.data, visible: !(el.data as any).visible } }); }}
               className="w-4 text-center text-xs"
             >
-              {(el.style as any).visible === false ? "—" : "👁"}
+              {(el.data as any).visible === false ? "—" : "👁"}
             </button>
             <span className="flex-1 truncate">{el.elementType}</span>
             <span className="text-[10px] text-zinc-600 uppercase">{el.elementType}</span>

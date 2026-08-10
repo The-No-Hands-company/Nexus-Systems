@@ -17,7 +17,7 @@ export default function PropertiesPanel() {
   if (!el) return null;
 
   const data = el.data as Record<string, any>;
-  const style = el.style as Record<string, any>;
+  const style = el.style;
   const t = el.transform;
 
   return (
