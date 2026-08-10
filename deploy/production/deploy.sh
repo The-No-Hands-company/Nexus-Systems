@@ -169,6 +169,40 @@ cmd_start() {
         NEXUS_TEAM_CHAT_BASE_URL=http://127.0.0.1:3109 \
         bun run src/index.ts
 
+    # 4b. nexus-chat (apps/Nexus) — what chat.$DOMAIN now serves.
+    #
+    # Three ports rather than one: REST 8180, WebSocket gateway 8181, voice
+    # 8182. Not nexus-chat's 808x defaults, which would collide with the proxy
+    # on 8080 and Hosting's site-proxy on 8090. Caddy below joins all three plus
+    # the built SPA into the single origin the proxy can route to, because the
+    # SPA's production build calls /api and /gateway same-origin and the proxy
+    # maps a hostname to exactly one upstream.
+    #
+    # Secrets live in deploy/production/nexus-chat.env (gitignored; see
+    # nexus-chat.env.example). Skipped rather than fatal when absent, so a node
+    # that has not been given the credentials still starts everything else.
+    if [ -f "$ROOT/deploy/production/nexus-chat.env" ]; then
+        if [ ! -x "$ROOT/apps/Nexus/target/debug/nexus" ]; then
+            warn "nexus-chat binary missing — build it with: (cd apps/Nexus && cargo build --bin nexus)"
+        else
+            set -a; . "$ROOT/deploy/production/nexus-chat.env"; set +a
+            start_service "nexus-chat" "$ROOT/apps/Nexus" 8180 \
+                ./target/debug/nexus serve --port 8180 --gateway-port 8181 --voice-port 8182
+
+            # Front door: SPA + /api + /gateway + /voice/ws on one origin.
+            # Plain HTTP on 8095 — Cloudflare terminates TLS at the edge and
+            # nothing here may hold 80/443.
+            if command -v caddy >/dev/null 2>&1; then
+                start_service "nexus-chat-web" "$ROOT" 8095 \
+                    caddy run --config "$ROOT/deploy/production/nexus-chat.Caddyfile" --adapter caddyfile
+            else
+                warn "caddy not installed — chat.$DOMAIN has no front door"
+            fi
+        fi
+    else
+        warn "deploy/production/nexus-chat.env absent — skipping nexus-chat"
+    fi
+
     # 5. Proxy (8080 for Cloudflare Tunnel)
     #
     # HOSTING_SITE_UPSTREAM is the default backend for the *.$DOMAIN wildcard:
@@ -190,7 +224,7 @@ cmd_start() {
 
 cmd_stop() {
     log "Stopping all Nexus services..."
-    for svc in auth cloud chat proxy; do
+    for svc in auth cloud chat nexus-chat nexus-chat-web proxy; do
         if [ -f "$PID_DIR/$svc.pid" ]; then
             kill "$(cat "$PID_DIR/$svc.pid")" 2>/dev/null && log "  Stopped $svc" || true
             rm -f "$PID_DIR/$svc.pid"
@@ -203,7 +237,7 @@ cmd_stop() {
 
 cmd_status() {
     echo "Service Status:"
-    for svc in auth cloud chat proxy; do
+    for svc in auth cloud chat nexus-chat nexus-chat-web proxy; do
         if [ -f "$PID_DIR/$svc.pid" ]; then
             if kill -0 "$(cat "$PID_DIR/$svc.pid")" 2>/dev/null; then
                 echo -e "  ${G}● $svc${R} (running, PID: $(cat $PID_DIR/$svc.pid))"
@@ -219,7 +253,10 @@ cmd_status() {
     # Check HTTP endpoints
     echo ""
     echo "HTTP Health Checks:"
-    for endpoint in "http://localhost:4310/health" "http://localhost:8787/health" "http://localhost:3109/health" "http://localhost:8080/health"; do
+    # nexus-chat answers /api/v1/health, not /health, and is probed through its
+    # Caddy front door on 8095 — that is the origin chat.$DOMAIN actually
+    # reaches, so a healthy API behind a dead front door still reads as down.
+    for endpoint in "http://localhost:4310/health" "http://localhost:8787/health" "http://localhost:3109/health" "http://localhost:8095/api/v1/health" "http://localhost:8080/health"; do
         if curl -s -m 2 "$endpoint" | grep -q "ok"; then
             echo -e "  ${G}●${R} $endpoint"
         else
