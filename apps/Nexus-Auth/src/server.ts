@@ -180,11 +180,541 @@ function getClientIp(request: Request): string {
     "127.0.0.1";
 }
 
+// Read once at module scope so handleRequest can be a plain top-level
+// function rather than a closure over createAuthServer's locals.
+const AUTH_PORT = Number(process.env.PORT || "4310");
+const AUTH_BASE_URL = process.env.NEXUS_AUTH_BASE_URL || `http://localhost:${AUTH_PORT}`;
+const CLOUD_INTEGRATION_ENABLED =
+  (process.env.NEXUS_AUTH_ENABLE_CLOUD_INTEGRATION || "true").trim().toLowerCase() !== "false";
+
+/**
+ * The whole HTTP surface. Lifted out of Bun.serve's `fetch` so tests can
+ * drive routes directly with a Request instead of binding a port.
+ */
+export async function handleRequest(request: Request): Promise<Response> {
+    const url = new URL(request.url);
+    const path = url.pathname;
+    const auth = requireAuth(request);
+
+    if (request.method === "GET" && path === "/health") {
+      return jsonResponse({ status: "ok", service: "nexus-auth", timestamp: new Date().toISOString() });
+    }
+
+    if (request.method === "GET" && path === "/api/v1/auth/readiness") {
+      return jsonResponse({
+        status: "ready",
+        contracts: {
+          login: "/api/v1/auth/login",
+          logout: "/api/v1/auth/logout",
+          users: "/api/v1/auth/users",
+          me: "/api/v1/auth/me",
+          tokens: "/api/v1/auth/tokens",
+          apiKeys: "/api/v1/auth/api-keys",
+          sessions: "/api/v1/auth/sessions",
+          oauthAuthorize: "/api/v1/auth/oauth/authorize",
+          oauthToken: "/api/v1/auth/oauth/token",
+          oauthJwks: "/api/v1/auth/oauth/jwks",
+          oauthUserinfo: "/api/v1/auth/oauth/userinfo",
+        },
+        userCount: listUsers().length,
+        cloudIntegration: { enabled: CLOUD_INTEGRATION_ENABLED },
+      });
+    }
+
+    if (request.method === "GET" && path === "/api/v1/auth/contracts/registration") {
+      return jsonResponse({ status: "ok", payload: buildSystemsApiRegistrationPayload(AUTH_BASE_URL) });
+    }
+
+    // ── OpenID Connect discovery ──
+    // Public and unauthenticated by design: this is the document every OIDC
+    // client fetches first, before it has any credential. Nexus-Hosting's
+    // openid-client calls discovery() against ISSUER_URL and got a 404 here,
+    // which is what made ecosystem sign-in impossible for it.
+    if (request.method === "GET" && path === "/.well-known/openid-configuration") {
+      return jsonResponse(discoveryDocument(), { headers: { "cache-control": "public, max-age=300" } });
+    }
+
+    // ── OAuth authorize ──
+    if (request.method === "GET" && path === "/api/v1/auth/oauth/authorize") {
+      const clientId = url.searchParams.get("client_id") || "";
+      const redirectUri = url.searchParams.get("redirect_uri") || "";
+      const responseType = url.searchParams.get("response_type") || "";
+      const scope = url.searchParams.get("scope") || "openid";
+      const state = url.searchParams.get("state");
+      const nonce = url.searchParams.get("nonce") || undefined;
+      const codeChallenge = url.searchParams.get("code_challenge") || "";
+      const codeChallengeMethod = url.searchParams.get("code_challenge_method") || "";
+
+      const client = getClient(clientId);
+      // An unregistered client or an unregistered redirect_uri must NOT be
+      // redirected to — that is precisely the open redirect this endpoint
+      // would otherwise become. Errors are shown here instead.
+      if (!client) {
+        return jsonResponse({ error: "invalid_client" }, { status: 400 });
+      }
+      if (!redirectUri || !redirectUriAllowed(client, redirectUri)) {
+        return jsonResponse({ error: "invalid_request", error_description: "redirect_uri is not registered for this client" }, { status: 400 });
+      }
+
+      // Past this point the redirect_uri is trusted, so protocol errors go
+      // back to the client as the spec requires.
+      const bounce = (error: string, description?: string) => {
+        const target = new URL(redirectUri);
+        target.searchParams.set("error", error);
+        if (description) target.searchParams.set("error_description", description);
+        if (state) target.searchParams.set("state", state);
+        return new Response(null, { status: 303, headers: { location: target.toString() } });
+      };
+
+      if (responseType !== "code") return bounce("unsupported_response_type");
+      if (!codeChallenge) return bounce("invalid_request", "PKCE is required");
+      if (codeChallengeMethod !== "S256") return bounce("invalid_request", "code_challenge_method must be S256");
+
+      // Not signed in: reuse the ordinary login page and come straight back
+      // here afterwards, so there is still exactly one place a password is
+      // typed. url.href is same-origin, so safeRedirect accepts it.
+      if (!auth) {
+        const login = new URL("/login", url.origin);
+        login.searchParams.set("redirect", url.href);
+        return new Response(null, { status: 303, headers: { location: login.toString() } });
+      }
+
+      const code = createAuthorizationCode({
+        clientId,
+        redirectUri,
+        userId: auth.userId,
+        scope,
+        ...(nonce ? { nonce } : {}),
+        codeChallenge,
+      });
+
+      const target = new URL(redirectUri);
+      target.searchParams.set("code", code);
+      if (state) target.searchParams.set("state", state);
+      return new Response(null, { status: 303, headers: { location: target.toString() } });
+    }
+
+    // ── OAuth token ──
+    if (request.method === "POST" && path === "/api/v1/auth/oauth/token") {
+      const form = await request.formData().catch(() => null);
+      const get = (k: string) => String(form?.get(k) ?? "");
+
+      // client_secret_basic as well as _post: openid-client defaults to Basic
+      // for confidential clients, and rejecting it would look like a bad secret.
+      let clientId = get("client_id");
+      let clientSecret = get("client_secret") || undefined;  // pragma: allowlist secret
+      const authz = request.headers.get("authorization") || "";
+      const basic = authz.match(/^Basic\s+(.+)$/i);
+      if (basic) {
+        const [u, p] = Buffer.from(basic[1], "base64").toString("utf8").split(":");
+        if (u) clientId = decodeURIComponent(u);
+        if (p) clientSecret = decodeURIComponent(p);
+      }
+
+      if (get("grant_type") !== "authorization_code") {
+        return jsonResponse({ error: "unsupported_grant_type" }, { status: 400 });
+      }
+
+      const client = getClient(clientId);
+      if (!client || !verifyClientSecret(client, clientSecret)) {
+        return jsonResponse({ error: "invalid_client" }, { status: 401 });
+      }
+
+      const redeemed = redeemAuthorizationCode({
+        code: get("code"),
+        clientId,
+        redirectUri: get("redirect_uri"),
+        codeVerifier: get("code_verifier"),
+      });
+      if (!redeemed.ok) {
+        return jsonResponse({ error: redeemed.error }, { status: 400 });
+      }
+
+      const user = getUser(redeemed.record.userId);
+      if (!user) return jsonResponse({ error: "invalid_grant" }, { status: 400 });
+
+      // The access token is a real session rather than a second token type, so
+      // /userinfo and every existing check validate it unchanged — and it can
+      // be revoked through the same machinery as any other session.
+      const session = createSession({
+        userId: user.id,
+        ipAddress: getClientIp(request),
+        userAgent: request.headers.get("user-agent") || "oidc-client",
+      });
+
+      const idToken = issueIdToken({
+        userId: user.id,
+        clientId,
+        ...(redeemed.record.nonce ? { nonce: redeemed.record.nonce } : {}),
+        extraClaims: {
+          preferred_username: user.username,
+          email: user.email,
+          role: user.role,
+        },
+      });
+
+      return jsonResponse(
+        {
+          access_token: session.token,
+          token_type: "Bearer",
+          expires_in: 86400,
+          id_token: idToken,
+          scope: redeemed.record.scope,
+        },
+        { headers: { "cache-control": "no-store", pragma: "no-cache" } },
+      );
+    }
+
+    // ── Apex sign-in page ──
+    // The one place a human types a password. Apps that get an unauthenticated
+    // browser navigation send it here with ?redirect=<where they were going>.
+    if (request.method === "GET" && path === "/login") {
+      const target = safeRedirect(url.searchParams.get("redirect"), cookieDomain());
+      // Already signed in: honour the round trip immediately rather than
+      // asking for a password that is not needed.
+      if (auth && target) {
+        return new Response(null, { status: 303, headers: { location: target } });
+      }
+      return new Response(renderLoginPage({ redirect: target }), {
+        status: 200,
+        headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" },
+      });
+    }
+
+    if (request.method === "POST" && path === "/login") {
+      const form = await request.formData().catch(() => null);
+      const username = String(form?.get("username") ?? "").trim();
+      const password = String(form?.get("password") ?? "");  // pragma: allowlist secret
+      const target = safeRedirect(String(form?.get("redirect") ?? "") || null, cookieDomain());
+
+      const user = username && password ? authenticateUser(username, password) : null;
+      if (!user) {
+        return new Response(
+          renderLoginPage({ redirect: target, error: "Incorrect username or password." }),
+          { status: 401, headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" } },
+        );
+      }
+
+      const session = createSession({
+        userId: user.id,
+        ipAddress: getClientIp(request),
+        userAgent: request.headers.get("user-agent") || "unknown",
+      });
+      const maxAge = Math.max(
+        60,
+        Math.floor((new Date(session.expiresAt).getTime() - Date.now()) / 1000),
+      );
+      // 303 so the browser follows with GET rather than re-POSTing.
+      return new Response(null, {
+        status: 303,
+        headers: {
+          location: target ?? "/login",
+          "set-cookie": sessionCookie(session.token, maxAge),
+          "cache-control": "no-store",
+        },
+      });
+    }
+
+    // ── Login ──
+    if (request.method === "POST" && path === "/api/v1/auth/login") {
+      const body = await parseBody(request);
+      const username = typeof body.username === "string" ? body.username.trim() : "";
+      const password = typeof body.password === "string" ? body.password : "";  // pragma: allowlist secret
+
+      if (!username || !password) {
+        return jsonResponse({ error: "username and password are required" }, { status: 400 });
+      }
+
+      const user = authenticateUser(username, password);
+      if (!user) {
+        return jsonResponse({ success: false, reason: "invalid credentials" } as LoginResult, { status: 401 });
+      }
+
+      const session = createSession({
+        userId: user.id,
+        ipAddress: getClientIp(request),
+        userAgent: request.headers.get("user-agent") || "unknown",
+      });
+
+      // Body keeps the token for API clients; the cookie is what gives a
+      // browser single sign-on across every app on the parent domain.
+      const maxAge = Math.max(
+        60,
+        Math.floor((new Date(session.expiresAt).getTime() - Date.now()) / 1000),
+      );
+      return jsonResponse(
+        {
+          success: true,
+          token: session.token,
+          user,
+          sessionId: session.id,
+        } as LoginResult,
+        { headers: { "set-cookie": sessionCookie(session.token, maxAge) } },
+      );
+    }
+
+    // ── Logout ──
+    if (request.method === "POST" && path === "/api/v1/auth/logout") {
+      if (!auth) return jsonResponse({ error: "unauthorized" }, { status: 401 });
+
+      if (auth.session) {
+        revokeSession(auth.session.id);
+      }
+
+      // Revoking server-side is what actually ends the session; clearing the
+      // cookie stops the browser replaying a dead token to every subdomain.
+      return jsonResponse(
+        { success: true },
+        { headers: { "set-cookie": clearedSessionCookie() } },
+      );
+    }
+
+    // ── Me ──
+    if (request.method === "GET" && path === "/api/v1/auth/me") {
+      if (!auth) return jsonResponse({ error: "unauthorized" }, { status: 401 });
+
+      const user = getUser(auth.userId);
+      if (!user) return jsonResponse({ error: "user not found" }, { status: 404 });
+
+      return jsonResponse({ user });
+    }
+
+    // ── Users CRUD ──
+    if (request.method === "GET" && path === "/api/v1/auth/users") {
+      if (!auth || !requirePermission(auth.userId, "users:read")) {
+        return jsonResponse({ error: "forbidden" }, { status: 403 });
+      }
+      return jsonResponse({ users: listUsers() });
+    }
+
+    if (request.method === "POST" && path === "/api/v1/auth/users") {
+      if (!auth || !requirePermission(auth.userId, "users:create")) {
+        return jsonResponse({ error: "forbidden" }, { status: 403 });
+      }
+
+      const body = await parseBody(request);
+      const username = typeof body.username === "string" ? body.username.trim() : "";
+      const email = typeof body.email === "string" ? body.email.trim() : "";
+      const password = typeof body.password === "string" ? body.password : "";  // pragma: allowlist secret
+
+      if (!username || !email || !password) {
+        return jsonResponse({ error: "username, email, and password are required" }, { status: 400 });
+      }
+
+      try {
+        const user = createUser({ username, email, password, role: "user" });
+        return jsonResponse({ user }, { status: 201 });
+      } catch (err) {
+        return jsonResponse({ error: (err as Error).message }, { status: 409 });
+      }
+    }
+
+    const userByIdMatch = path.match(/^\/api\/v1\/auth\/users\/([^/]+)$/);
+    if (request.method === "GET" && userByIdMatch) {
+      if (!auth || !requirePermission(auth.userId, "users:read")) {
+        return jsonResponse({ error: "forbidden" }, { status: 403 });
+      }
+      const [, userId] = userByIdMatch;
+      const user = getUser(userId);
+      if (!user) return jsonResponse({ error: "not found" }, { status: 404 });
+      return jsonResponse({ user });
+    }
+
+    if (request.method === "PATCH" && userByIdMatch) {
+      if (!auth || !requirePermission(auth.userId, "users:update")) {
+        return jsonResponse({ error: "forbidden" }, { status: 403 });
+      }
+      const [, userId] = userByIdMatch;
+      const body = await parseBody(request);
+      const updated = updateUser(userId, {
+        email: typeof body.email === "string" ? body.email : undefined,
+        role: typeof body.role === "string" ? body.role as any : undefined,
+        status: typeof body.status === "string" ? (body.status as AccountStatus) : undefined,
+      });
+      if (!updated) return jsonResponse({ error: "not found" }, { status: 404 });
+      return jsonResponse({ user: updated });
+    }
+
+    if (request.method === "DELETE" && userByIdMatch) {
+      if (!auth || !requirePermission(auth.userId, "users:delete")) {
+        return jsonResponse({ error: "forbidden" }, { status: 403 });
+      }
+      const [, userId] = userByIdMatch;
+      revokeAllUserSessions(userId);
+      const deleted = deleteUser(userId);
+      if (!deleted) return jsonResponse({ error: "not found" }, { status: 404 });
+      return jsonResponse({ deleted: true });
+    }
+
+    // ── Change password ──
+    const changePwMatch = path.match(/^\/api\/v1\/auth\/users\/([^/]+)\/password$/);
+    if (request.method === "POST" && changePwMatch) {
+      if (!auth || !requirePermission(auth.userId, "users:update")) {
+        return jsonResponse({ error: "forbidden" }, { status: 403 });
+      }
+      const [, userId] = changePwMatch;
+      const body = await parseBody(request);
+      const currentPassword = typeof body.currentPassword === "string" ? body.currentPassword : "";  // pragma: allowlist secret
+      const newPassword = typeof body.newPassword === "string" ? body.newPassword : "";  // pragma: allowlist secret
+
+      if (!currentPassword || !newPassword) {
+        return jsonResponse({ error: "currentPassword and newPassword are required" }, { status: 400 });
+      }
+
+      const success = changePassword(userId, currentPassword, newPassword);
+      if (!success) return jsonResponse({ error: "password change failed" }, { status: 400 });
+      return jsonResponse({ success: true });
+    }
+
+    // ── Service Tokens ──
+    if (request.method === "POST" && path === "/api/v1/auth/tokens/issue") {
+      if (!auth || !requirePermission(auth.userId, "tokens:issue")) {
+        return jsonResponse({ error: "forbidden" }, { status: 403 });
+      }
+
+      const body = await parseBody(request);
+      const serviceId = typeof body.serviceId === "string" ? body.serviceId.trim() : "";
+      if (!serviceId) {
+        return jsonResponse({ error: "serviceId is required" }, { status: 400 });
+      }
+
+      const issued = issueServiceToken({
+        serviceId,
+        audience: typeof body.audience === "string" ? body.audience : undefined,
+        scopes: Array.isArray(body.scopes) ? body.scopes.filter((s): s is string => typeof s === "string") : undefined,
+        expiresInSeconds: typeof body.expiresInSeconds === "number" ? body.expiresInSeconds : undefined,
+      });
+
+      return jsonResponse({ status: "ok", token: issued.token, payload: issued.payload });
+    }
+
+    if (request.method === "POST" && path === "/api/v1/auth/tokens/validate") {
+      const body = await parseBody(request);
+      const token = typeof body.token === "string" ? body.token.trim() : "";
+      if (!token) return jsonResponse({ error: "token is required" }, { status: 400 });
+
+      const result = validateServiceToken(token, typeof body.expectedAudience === "string" ? body.expectedAudience : undefined);
+      if (!result.valid) return jsonResponse({ valid: false, reason: result.reason }, { status: 401 });
+      return jsonResponse(result);
+    }
+
+    // ── API Keys ──
+    if (request.method === "GET" && path === "/api/v1/auth/api-keys") {
+      if (!auth) return jsonResponse({ error: "unauthorized" }, { status: 401 });
+
+      const isAdmin = requirePermission(auth.userId, "apikeys:read");
+      const keys = isAdmin ? listApiKeys() : listApiKeys(auth.userId);
+      return jsonResponse({ apiKeys: keys.map(({ keyHash, ...safe }) => safe) });
+    }
+
+    if (request.method === "POST" && path === "/api/v1/auth/api-keys") {
+      if (!auth || !requirePermission(auth.userId, "apikeys:create")) {
+        return jsonResponse({ error: "forbidden" }, { status: 403 });
+      }
+
+      const body = await parseBody(request);
+      const name = typeof body.name === "string" ? body.name.trim() : "";
+      if (!name) return jsonResponse({ error: "name is required" }, { status: 400 });
+
+      const result = createApiKey({
+        userId: auth.userId,
+        name,
+        scopes: Array.isArray(body.scopes) ? body.scopes.filter((s): s is string => typeof s === "string") : undefined,
+        expiresInDays: typeof body.expiresInDays === "number" ? body.expiresInDays : undefined,
+      });
+
+      const { keyHash, ...safeKey } = result.apiKey;
+      return jsonResponse({ apiKey: safeKey, rawKey: result.rawKey }, { status: 201 });
+    }
+
+    const revokeKeyMatch = path.match(/^\/api\/v1\/auth\/api-keys\/([^/]+)\/revoke$/);
+    if (request.method === "POST" && revokeKeyMatch) {
+      if (!auth || !requirePermission(auth.userId, "apikeys:revoke")) {
+        return jsonResponse({ error: "forbidden" }, { status: 403 });
+      }
+      const [, keyId] = revokeKeyMatch;
+      const revoked = revokeApiKey(keyId);
+      if (!revoked) return jsonResponse({ error: "api key not found or already revoked" }, { status: 404 });
+      return jsonResponse({ revoked: true });
+    }
+
+    // ── Sessions ──
+    if (request.method === "GET" && path === "/api/v1/auth/sessions") {
+      if (!auth) return jsonResponse({ error: "unauthorized" }, { status: 401 });
+
+      const isAdmin = requirePermission(auth.userId, "sessions:read");
+      const sessions = isAdmin ? listSessions() : listSessions(auth.userId);
+      return jsonResponse({ sessions });
+    }
+
+    const revokeSessionMatch = path.match(/^\/api\/v1\/auth\/sessions\/([^/]+)\/revoke$/);
+    if (request.method === "POST" && revokeSessionMatch) {
+      if (!auth || !requirePermission(auth.userId, "sessions:revoke")) {
+        return jsonResponse({ error: "forbidden" }, { status: 403 });
+      }
+      const [, sessionId] = revokeSessionMatch;
+      const revoked = revokeSession(sessionId);
+      if (!revoked) return jsonResponse({ error: "session not found" }, { status: 404 });
+      return jsonResponse({ revoked: true });
+    }
+
+    // ── Auth check (for other services) ──
+    if (request.method === "GET" && path === "/api/v1/auth/check") {
+      if (!auth) return jsonResponse({ authorized: false }, { status: 401 });
+      const user = getUser(auth.userId);
+      return jsonResponse({ authorized: true, userId: auth.userId, user });
+    }
+
+    // ── OAuth JWKS ──
+    // Public key only. This endpoint is unauthenticated by design, which is
+    // precisely why it must never carry signing material: it previously
+    // published NEXUS_AUTH_TOKEN_SECRET as an `oct` key's `k`, so anyone who
+    // could reach it could mint tokens for the entire ecosystem.
+    if (request.method === "GET" && path === "/api/v1/auth/oauth/jwks") {
+      return jsonResponse({ keys: [publicJwk()] });
+    }
+
+    // ── OAuth Userinfo ──
+    if (request.method === "GET" && path === "/api/v1/auth/oauth/userinfo") {
+      if (!auth) {
+        return jsonResponse({ error: "invalid_token" }, { status: 401, headers: { "www-authenticate": "Bearer" } });
+      }
+      const user = getUser(auth.userId);
+      if (!user) return jsonResponse({ error: "user not found" }, { status: 404 });
+      return jsonResponse({ sub: user.id, username: user.username, email: user.email, role: user.role });
+    }
+
+    // ── Guardian trust check ──
+    if (request.method === "GET" && path === "/api/v1/auth/trust") {
+      const token = extractToken(request);
+      if (!token) return jsonResponse({ trusted: false, reason: "no token" }, { status: 401 });
+
+      const session = validateSession(token);
+      if (session) {
+        const user = getUser(session.userId);
+        return jsonResponse({ trusted: true, type: "session", userId: session.userId, user });
+      }
+
+      const apiKey = validateApiKey(token);
+      if (apiKey) {
+        return jsonResponse({ trusted: true, type: "apikey", userId: apiKey.userId, scopes: apiKey.scopes });
+      }
+
+      const jwtResult = validateServiceToken(token);
+      if (jwtResult.valid) {
+        return jsonResponse({ trusted: true, type: "jwt", sub: jwtResult.payload.sub });
+      }
+
+      return jsonResponse({ trusted: false, reason: jwtResult.valid === false ? jwtResult.reason : "invalid" }, { status: 401 });
+    }
+
+    return jsonResponse({ error: "not found" }, { status: 404 });
+}
+
 export function createAuthServer() {
-  const port = Number(process.env.PORT || "4310");
-  const baseUrl = process.env.NEXUS_AUTH_BASE_URL || `http://localhost:${port}`;
-  const cloudIntegrationEnabled =
-    (process.env.NEXUS_AUTH_ENABLE_CLOUD_INTEGRATION || "true").trim().toLowerCase() !== "false";
+  // Same values handleRequest uses — read once at module scope above.
+  const port = AUTH_PORT;
+  const baseUrl = AUTH_BASE_URL;
 
   seedDefaultUsers();
 
@@ -201,525 +731,7 @@ const stopNexusHeartbeat = nexusClient.startCloudHeartbeat();
 const stopNexusMonitor = nexusClient.startMonitorHeartbeat();
 const server = Bun.serve({
     port,
-    fetch: async (request) => {
-      const url = new URL(request.url);
-      const path = url.pathname;
-      const auth = requireAuth(request);
-
-      if (request.method === "GET" && path === "/health") {
-        return jsonResponse({ status: "ok", service: "nexus-auth", timestamp: new Date().toISOString() });
-      }
-
-      if (request.method === "GET" && path === "/api/v1/auth/readiness") {
-        return jsonResponse({
-          status: "ready",
-          contracts: {
-            login: "/api/v1/auth/login",
-            logout: "/api/v1/auth/logout",
-            users: "/api/v1/auth/users",
-            me: "/api/v1/auth/me",
-            tokens: "/api/v1/auth/tokens",
-            apiKeys: "/api/v1/auth/api-keys",
-            sessions: "/api/v1/auth/sessions",
-            oauthAuthorize: "/api/v1/auth/oauth/authorize",
-            oauthToken: "/api/v1/auth/oauth/token",
-            oauthJwks: "/api/v1/auth/oauth/jwks",
-            oauthUserinfo: "/api/v1/auth/oauth/userinfo",
-          },
-          userCount: listUsers().length,
-          cloudIntegration: { enabled: cloudIntegrationEnabled },
-        });
-      }
-
-      if (request.method === "GET" && path === "/api/v1/auth/contracts/registration") {
-        return jsonResponse({ status: "ok", payload: buildSystemsApiRegistrationPayload(baseUrl) });
-      }
-
-      // ── OpenID Connect discovery ──
-      // Public and unauthenticated by design: this is the document every OIDC
-      // client fetches first, before it has any credential. Nexus-Hosting's
-      // openid-client calls discovery() against ISSUER_URL and got a 404 here,
-      // which is what made ecosystem sign-in impossible for it.
-      if (request.method === "GET" && path === "/.well-known/openid-configuration") {
-        return jsonResponse(discoveryDocument(), { headers: { "cache-control": "public, max-age=300" } });
-      }
-
-      // ── OAuth authorize ──
-      if (request.method === "GET" && path === "/api/v1/auth/oauth/authorize") {
-        const clientId = url.searchParams.get("client_id") || "";
-        const redirectUri = url.searchParams.get("redirect_uri") || "";
-        const responseType = url.searchParams.get("response_type") || "";
-        const scope = url.searchParams.get("scope") || "openid";
-        const state = url.searchParams.get("state");
-        const nonce = url.searchParams.get("nonce") || undefined;
-        const codeChallenge = url.searchParams.get("code_challenge") || "";
-        const codeChallengeMethod = url.searchParams.get("code_challenge_method") || "";
-
-        const client = getClient(clientId);
-        // An unregistered client or an unregistered redirect_uri must NOT be
-        // redirected to — that is precisely the open redirect this endpoint
-        // would otherwise become. Errors are shown here instead.
-        if (!client) {
-          return jsonResponse({ error: "invalid_client" }, { status: 400 });
-        }
-        if (!redirectUri || !redirectUriAllowed(client, redirectUri)) {
-          return jsonResponse({ error: "invalid_request", error_description: "redirect_uri is not registered for this client" }, { status: 400 });
-        }
-
-        // Past this point the redirect_uri is trusted, so protocol errors go
-        // back to the client as the spec requires.
-        const bounce = (error: string, description?: string) => {
-          const target = new URL(redirectUri);
-          target.searchParams.set("error", error);
-          if (description) target.searchParams.set("error_description", description);
-          if (state) target.searchParams.set("state", state);
-          return new Response(null, { status: 303, headers: { location: target.toString() } });
-        };
-
-        if (responseType !== "code") return bounce("unsupported_response_type");
-        if (!codeChallenge) return bounce("invalid_request", "PKCE is required");
-        if (codeChallengeMethod !== "S256") return bounce("invalid_request", "code_challenge_method must be S256");
-
-        // Not signed in: reuse the ordinary login page and come straight back
-        // here afterwards, so there is still exactly one place a password is
-        // typed. url.href is same-origin, so safeRedirect accepts it.
-        if (!auth) {
-          const login = new URL("/login", url.origin);
-          login.searchParams.set("redirect", url.href);
-          return new Response(null, { status: 303, headers: { location: login.toString() } });
-        }
-
-        const code = createAuthorizationCode({
-          clientId,
-          redirectUri,
-          userId: auth.userId,
-          scope,
-          ...(nonce ? { nonce } : {}),
-          codeChallenge,
-        });
-
-        const target = new URL(redirectUri);
-        target.searchParams.set("code", code);
-        if (state) target.searchParams.set("state", state);
-        return new Response(null, { status: 303, headers: { location: target.toString() } });
-      }
-
-      // ── OAuth token ──
-      if (request.method === "POST" && path === "/api/v1/auth/oauth/token") {
-        const form = await request.formData().catch(() => null);
-        const get = (k: string) => String(form?.get(k) ?? "");
-
-        // client_secret_basic as well as _post: openid-client defaults to Basic
-        // for confidential clients, and rejecting it would look like a bad secret.
-        let clientId = get("client_id");
-        let clientSecret = get("client_secret") || undefined;  // pragma: allowlist secret
-        const authz = request.headers.get("authorization") || "";
-        const basic = authz.match(/^Basic\s+(.+)$/i);
-        if (basic) {
-          const [u, p] = Buffer.from(basic[1], "base64").toString("utf8").split(":");
-          if (u) clientId = decodeURIComponent(u);
-          if (p) clientSecret = decodeURIComponent(p);
-        }
-
-        if (get("grant_type") !== "authorization_code") {
-          return jsonResponse({ error: "unsupported_grant_type" }, { status: 400 });
-        }
-
-        const client = getClient(clientId);
-        if (!client || !verifyClientSecret(client, clientSecret)) {
-          return jsonResponse({ error: "invalid_client" }, { status: 401 });
-        }
-
-        const redeemed = redeemAuthorizationCode({
-          code: get("code"),
-          clientId,
-          redirectUri: get("redirect_uri"),
-          codeVerifier: get("code_verifier"),
-        });
-        if (!redeemed.ok) {
-          return jsonResponse({ error: redeemed.error }, { status: 400 });
-        }
-
-        const user = getUser(redeemed.record.userId);
-        if (!user) return jsonResponse({ error: "invalid_grant" }, { status: 400 });
-
-        // The access token is a real session rather than a second token type, so
-        // /userinfo and every existing check validate it unchanged — and it can
-        // be revoked through the same machinery as any other session.
-        const session = createSession({
-          userId: user.id,
-          ipAddress: getClientIp(request),
-          userAgent: request.headers.get("user-agent") || "oidc-client",
-        });
-
-        const idToken = issueIdToken({
-          userId: user.id,
-          clientId,
-          ...(redeemed.record.nonce ? { nonce: redeemed.record.nonce } : {}),
-          extraClaims: {
-            preferred_username: user.username,
-            email: user.email,
-            role: user.role,
-          },
-        });
-
-        return jsonResponse(
-          {
-            access_token: session.token,
-            token_type: "Bearer",
-            expires_in: 86400,
-            id_token: idToken,
-            scope: redeemed.record.scope,
-          },
-          { headers: { "cache-control": "no-store", pragma: "no-cache" } },
-        );
-      }
-
-      // ── Apex sign-in page ──
-      // The one place a human types a password. Apps that get an unauthenticated
-      // browser navigation send it here with ?redirect=<where they were going>.
-      if (request.method === "GET" && path === "/login") {
-        const target = safeRedirect(url.searchParams.get("redirect"), cookieDomain());
-        // Already signed in: honour the round trip immediately rather than
-        // asking for a password that is not needed.
-        if (auth && target) {
-          return new Response(null, { status: 303, headers: { location: target } });
-        }
-        return new Response(renderLoginPage({ redirect: target }), {
-          status: 200,
-          headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" },
-        });
-      }
-
-      if (request.method === "POST" && path === "/login") {
-        const form = await request.formData().catch(() => null);
-        const username = String(form?.get("username") ?? "").trim();
-        const password = String(form?.get("password") ?? "");  // pragma: allowlist secret
-        const target = safeRedirect(String(form?.get("redirect") ?? "") || null, cookieDomain());
-
-        const user = username && password ? authenticateUser(username, password) : null;
-        if (!user) {
-          return new Response(
-            renderLoginPage({ redirect: target, error: "Incorrect username or password." }),
-            { status: 401, headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" } },
-          );
-        }
-
-        const session = createSession({
-          userId: user.id,
-          ipAddress: getClientIp(request),
-          userAgent: request.headers.get("user-agent") || "unknown",
-        });
-        const maxAge = Math.max(
-          60,
-          Math.floor((new Date(session.expiresAt).getTime() - Date.now()) / 1000),
-        );
-        // 303 so the browser follows with GET rather than re-POSTing.
-        return new Response(null, {
-          status: 303,
-          headers: {
-            location: target ?? "/login",
-            "set-cookie": sessionCookie(session.token, maxAge),
-            "cache-control": "no-store",
-          },
-        });
-      }
-
-      // ── Login ──
-      if (request.method === "POST" && path === "/api/v1/auth/login") {
-        const body = await parseBody(request);
-        const username = typeof body.username === "string" ? body.username.trim() : "";
-        const password = typeof body.password === "string" ? body.password : "";  // pragma: allowlist secret
-
-        if (!username || !password) {
-          return jsonResponse({ error: "username and password are required" }, { status: 400 });
-        }
-
-        const user = authenticateUser(username, password);
-        if (!user) {
-          return jsonResponse({ success: false, reason: "invalid credentials" } as LoginResult, { status: 401 });
-        }
-
-        const session = createSession({
-          userId: user.id,
-          ipAddress: getClientIp(request),
-          userAgent: request.headers.get("user-agent") || "unknown",
-        });
-
-        // Body keeps the token for API clients; the cookie is what gives a
-        // browser single sign-on across every app on the parent domain.
-        const maxAge = Math.max(
-          60,
-          Math.floor((new Date(session.expiresAt).getTime() - Date.now()) / 1000),
-        );
-        return jsonResponse(
-          {
-            success: true,
-            token: session.token,
-            user,
-            sessionId: session.id,
-          } as LoginResult,
-          { headers: { "set-cookie": sessionCookie(session.token, maxAge) } },
-        );
-      }
-
-      // ── Logout ──
-      if (request.method === "POST" && path === "/api/v1/auth/logout") {
-        if (!auth) return jsonResponse({ error: "unauthorized" }, { status: 401 });
-
-        if (auth.session) {
-          revokeSession(auth.session.id);
-        }
-
-        // Revoking server-side is what actually ends the session; clearing the
-        // cookie stops the browser replaying a dead token to every subdomain.
-        return jsonResponse(
-          { success: true },
-          { headers: { "set-cookie": clearedSessionCookie() } },
-        );
-      }
-
-      // ── Me ──
-      if (request.method === "GET" && path === "/api/v1/auth/me") {
-        if (!auth) return jsonResponse({ error: "unauthorized" }, { status: 401 });
-
-        const user = getUser(auth.userId);
-        if (!user) return jsonResponse({ error: "user not found" }, { status: 404 });
-
-        return jsonResponse({ user });
-      }
-
-      // ── Users CRUD ──
-      if (request.method === "GET" && path === "/api/v1/auth/users") {
-        if (!auth || !requirePermission(auth.userId, "users:read")) {
-          return jsonResponse({ error: "forbidden" }, { status: 403 });
-        }
-        return jsonResponse({ users: listUsers() });
-      }
-
-      if (request.method === "POST" && path === "/api/v1/auth/users") {
-        if (!auth || !requirePermission(auth.userId, "users:create")) {
-          return jsonResponse({ error: "forbidden" }, { status: 403 });
-        }
-
-        const body = await parseBody(request);
-        const username = typeof body.username === "string" ? body.username.trim() : "";
-        const email = typeof body.email === "string" ? body.email.trim() : "";
-        const password = typeof body.password === "string" ? body.password : "";  // pragma: allowlist secret
-
-        if (!username || !email || !password) {
-          return jsonResponse({ error: "username, email, and password are required" }, { status: 400 });
-        }
-
-        try {
-          const user = createUser({ username, email, password, role: "user" });
-          return jsonResponse({ user }, { status: 201 });
-        } catch (err) {
-          return jsonResponse({ error: (err as Error).message }, { status: 409 });
-        }
-      }
-
-      const userByIdMatch = path.match(/^\/api\/v1\/auth\/users\/([^/]+)$/);
-      if (request.method === "GET" && userByIdMatch) {
-        if (!auth || !requirePermission(auth.userId, "users:read")) {
-          return jsonResponse({ error: "forbidden" }, { status: 403 });
-        }
-        const [, userId] = userByIdMatch;
-        const user = getUser(userId);
-        if (!user) return jsonResponse({ error: "not found" }, { status: 404 });
-        return jsonResponse({ user });
-      }
-
-      if (request.method === "PATCH" && userByIdMatch) {
-        if (!auth || !requirePermission(auth.userId, "users:update")) {
-          return jsonResponse({ error: "forbidden" }, { status: 403 });
-        }
-        const [, userId] = userByIdMatch;
-        const body = await parseBody(request);
-        const updated = updateUser(userId, {
-          email: typeof body.email === "string" ? body.email : undefined,
-          role: typeof body.role === "string" ? body.role as any : undefined,
-          status: typeof body.status === "string" ? (body.status as AccountStatus) : undefined,
-        });
-        if (!updated) return jsonResponse({ error: "not found" }, { status: 404 });
-        return jsonResponse({ user: updated });
-      }
-
-      if (request.method === "DELETE" && userByIdMatch) {
-        if (!auth || !requirePermission(auth.userId, "users:delete")) {
-          return jsonResponse({ error: "forbidden" }, { status: 403 });
-        }
-        const [, userId] = userByIdMatch;
-        revokeAllUserSessions(userId);
-        const deleted = deleteUser(userId);
-        if (!deleted) return jsonResponse({ error: "not found" }, { status: 404 });
-        return jsonResponse({ deleted: true });
-      }
-
-      // ── Change password ──
-      const changePwMatch = path.match(/^\/api\/v1\/auth\/users\/([^/]+)\/password$/);
-      if (request.method === "POST" && changePwMatch) {
-        if (!auth || !requirePermission(auth.userId, "users:update")) {
-          return jsonResponse({ error: "forbidden" }, { status: 403 });
-        }
-        const [, userId] = changePwMatch;
-        const body = await parseBody(request);
-        const currentPassword = typeof body.currentPassword === "string" ? body.currentPassword : "";  // pragma: allowlist secret
-        const newPassword = typeof body.newPassword === "string" ? body.newPassword : "";  // pragma: allowlist secret
-
-        if (!currentPassword || !newPassword) {
-          return jsonResponse({ error: "currentPassword and newPassword are required" }, { status: 400 });
-        }
-
-        const success = changePassword(userId, currentPassword, newPassword);
-        if (!success) return jsonResponse({ error: "password change failed" }, { status: 400 });
-        return jsonResponse({ success: true });
-      }
-
-      // ── Service Tokens ──
-      if (request.method === "POST" && path === "/api/v1/auth/tokens/issue") {
-        if (!auth || !requirePermission(auth.userId, "tokens:issue")) {
-          return jsonResponse({ error: "forbidden" }, { status: 403 });
-        }
-
-        const body = await parseBody(request);
-        const serviceId = typeof body.serviceId === "string" ? body.serviceId.trim() : "";
-        if (!serviceId) {
-          return jsonResponse({ error: "serviceId is required" }, { status: 400 });
-        }
-
-        const issued = issueServiceToken({
-          serviceId,
-          audience: typeof body.audience === "string" ? body.audience : undefined,
-          scopes: Array.isArray(body.scopes) ? body.scopes.filter((s): s is string => typeof s === "string") : undefined,
-          expiresInSeconds: typeof body.expiresInSeconds === "number" ? body.expiresInSeconds : undefined,
-        });
-
-        return jsonResponse({ status: "ok", token: issued.token, payload: issued.payload });
-      }
-
-      if (request.method === "POST" && path === "/api/v1/auth/tokens/validate") {
-        const body = await parseBody(request);
-        const token = typeof body.token === "string" ? body.token.trim() : "";
-        if (!token) return jsonResponse({ error: "token is required" }, { status: 400 });
-
-        const result = validateServiceToken(token, typeof body.expectedAudience === "string" ? body.expectedAudience : undefined);
-        if (!result.valid) return jsonResponse({ valid: false, reason: result.reason }, { status: 401 });
-        return jsonResponse(result);
-      }
-
-      // ── API Keys ──
-      if (request.method === "GET" && path === "/api/v1/auth/api-keys") {
-        if (!auth) return jsonResponse({ error: "unauthorized" }, { status: 401 });
-
-        const isAdmin = requirePermission(auth.userId, "apikeys:read");
-        const keys = isAdmin ? listApiKeys() : listApiKeys(auth.userId);
-        return jsonResponse({ apiKeys: keys.map(({ keyHash, ...safe }) => safe) });
-      }
-
-      if (request.method === "POST" && path === "/api/v1/auth/api-keys") {
-        if (!auth || !requirePermission(auth.userId, "apikeys:create")) {
-          return jsonResponse({ error: "forbidden" }, { status: 403 });
-        }
-
-        const body = await parseBody(request);
-        const name = typeof body.name === "string" ? body.name.trim() : "";
-        if (!name) return jsonResponse({ error: "name is required" }, { status: 400 });
-
-        const result = createApiKey({
-          userId: auth.userId,
-          name,
-          scopes: Array.isArray(body.scopes) ? body.scopes.filter((s): s is string => typeof s === "string") : undefined,
-          expiresInDays: typeof body.expiresInDays === "number" ? body.expiresInDays : undefined,
-        });
-
-        const { keyHash, ...safeKey } = result.apiKey;
-        return jsonResponse({ apiKey: safeKey, rawKey: result.rawKey }, { status: 201 });
-      }
-
-      const revokeKeyMatch = path.match(/^\/api\/v1\/auth\/api-keys\/([^/]+)\/revoke$/);
-      if (request.method === "POST" && revokeKeyMatch) {
-        if (!auth || !requirePermission(auth.userId, "apikeys:revoke")) {
-          return jsonResponse({ error: "forbidden" }, { status: 403 });
-        }
-        const [, keyId] = revokeKeyMatch;
-        const revoked = revokeApiKey(keyId);
-        if (!revoked) return jsonResponse({ error: "api key not found or already revoked" }, { status: 404 });
-        return jsonResponse({ revoked: true });
-      }
-
-      // ── Sessions ──
-      if (request.method === "GET" && path === "/api/v1/auth/sessions") {
-        if (!auth) return jsonResponse({ error: "unauthorized" }, { status: 401 });
-
-        const isAdmin = requirePermission(auth.userId, "sessions:read");
-        const sessions = isAdmin ? listSessions() : listSessions(auth.userId);
-        return jsonResponse({ sessions });
-      }
-
-      const revokeSessionMatch = path.match(/^\/api\/v1\/auth\/sessions\/([^/]+)\/revoke$/);
-      if (request.method === "POST" && revokeSessionMatch) {
-        if (!auth || !requirePermission(auth.userId, "sessions:revoke")) {
-          return jsonResponse({ error: "forbidden" }, { status: 403 });
-        }
-        const [, sessionId] = revokeSessionMatch;
-        const revoked = revokeSession(sessionId);
-        if (!revoked) return jsonResponse({ error: "session not found" }, { status: 404 });
-        return jsonResponse({ revoked: true });
-      }
-
-      // ── Auth check (for other services) ──
-      if (request.method === "GET" && path === "/api/v1/auth/check") {
-        if (!auth) return jsonResponse({ authorized: false }, { status: 401 });
-        const user = getUser(auth.userId);
-        return jsonResponse({ authorized: true, userId: auth.userId, user });
-      }
-
-      // ── OAuth JWKS ──
-      // Public key only. This endpoint is unauthenticated by design, which is
-      // precisely why it must never carry signing material: it previously
-      // published NEXUS_AUTH_TOKEN_SECRET as an `oct` key's `k`, so anyone who
-      // could reach it could mint tokens for the entire ecosystem.
-      if (request.method === "GET" && path === "/api/v1/auth/oauth/jwks") {
-        return jsonResponse({ keys: [publicJwk()] });
-      }
-
-      // ── OAuth Userinfo ──
-      if (request.method === "GET" && path === "/api/v1/auth/oauth/userinfo") {
-        if (!auth) {
-          return jsonResponse({ error: "invalid_token" }, { status: 401, headers: { "www-authenticate": "Bearer" } });
-        }
-        const user = getUser(auth.userId);
-        if (!user) return jsonResponse({ error: "user not found" }, { status: 404 });
-        return jsonResponse({ sub: user.id, username: user.username, email: user.email, role: user.role });
-      }
-
-      // ── Guardian trust check ──
-      if (request.method === "GET" && path === "/api/v1/auth/trust") {
-        const token = extractToken(request);
-        if (!token) return jsonResponse({ trusted: false, reason: "no token" }, { status: 401 });
-
-        const session = validateSession(token);
-        if (session) {
-          const user = getUser(session.userId);
-          return jsonResponse({ trusted: true, type: "session", userId: session.userId, user });
-        }
-
-        const apiKey = validateApiKey(token);
-        if (apiKey) {
-          return jsonResponse({ trusted: true, type: "apikey", userId: apiKey.userId, scopes: apiKey.scopes });
-        }
-
-        const jwtResult = validateServiceToken(token);
-        if (jwtResult.valid) {
-          return jsonResponse({ trusted: true, type: "jwt", sub: jwtResult.payload.sub });
-        }
-
-        return jsonResponse({ trusted: false, reason: jwtResult.valid === false ? jwtResult.reason : "invalid" }, { status: 401 });
-      }
-
-      return jsonResponse({ error: "not found" }, { status: 404 });
-    },
+    fetch: handleRequest,
   });
 
   console.log(`[nexus-auth] Listening on port ${server.port}`);
