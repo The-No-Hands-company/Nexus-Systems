@@ -8,22 +8,22 @@ import type { DrawEngine } from "./draw-engine";
 const messageSync = 0;
 const messageAwareness = 1;
 
-interface Room { 
-  doc: Y.Doc; 
-  conns: Set<WebSocket>; 
-  awareness: any 
+interface Room {
+  doc: Y.Doc;
+  conns: Set<WebSocket>;
+  awareness: any;
 }
 
 export class CollabServer {
   private rooms = new Map<string, Room>();
   private saveTimers = new Map<string, ReturnType<typeof setTimeout>>();
-  
+
   constructor(private engine: DrawEngine) {}
 
   private room(boardId: string): Room {
     let r = this.rooms.get(boardId);
     if (r) return r;
-    
+
     const doc = new Y.Doc();
     const board = this.engine.getBoard(boardId);
     if (board && Array.isArray(board.elements)) {
@@ -60,18 +60,14 @@ export class CollabServer {
     const room = this.room(boardId);
     room.conns.add(ws);
     ws.data = { boardId };
-    
-    // Send sync step 1 (server's state vector) so client can compute diff
+    this.sendSyncState(ws, room);
+  }
+
+  private sendSyncState(ws: any, room: Room): void {
     const encoder = encoding.createEncoder();
     encoding.writeVarUint(encoder, messageSync);
     syncProtocol.writeSyncStep1(encoder, room.doc);
     this.send(ws, encoding.toUint8Array(encoder));
-    
-    // Send current awareness
-    const awEnc = encoding.createEncoder();
-    encoding.writeVarUint(awEnc, messageAwareness);
-    encoding.writeVarUint8Array(awEnc, awarenessProtocol.encodeAwarenessUpdate(room.awareness, [...room.awareness.getStates().keys()]));
-    this.send(ws, encoding.toUint8Array(awEnc));
   }
 
   message(ws: any, data: Uint8Array): void {
@@ -80,10 +76,12 @@ export class CollabServer {
     const room = this.room(boardId);
     const decoder = decoding.createDecoder(data);
     const type = decoding.readVarUint(decoder);
-    
     if (type === messageSync) {
       const encoder = encoding.createEncoder();
       encoding.writeVarUint(encoder, messageSync);
+      // decoder is already positioned right after the outer messageSync tag,
+      // so readSyncMessage reads the sync sub-type next (matching how
+      // writeSyncStep1/writeUpdate frame their payloads).
       syncProtocol.readSyncMessage(decoder, encoder, room.doc, ws);
       const out = encoding.toUint8Array(encoder);
       if (encoding.length(encoder) > 1) this.send(ws, out);
@@ -110,20 +108,20 @@ export class CollabServer {
     }
   }
 
-  private send(ws: any, data: Uint8Array): void { 
-    if (ws.readyState === 1) ws.send(data); 
+  private send(ws: any, data: Uint8Array): void {
+    if (ws.readyState === 1) ws.send(data);
   }
-  
+
   private broadcastExcept(room: Room, except: any): void {
     const update = Y.encodeStateAsUpdate(room.doc);
     const encoder = encoding.createEncoder();
     encoding.writeVarUint(encoder, messageSync);
-    encoding.writeVarUint(encoder, 3); // messageYjsUpdate
+    encoding.writeVarUint(encoder, syncProtocol.messageYjsUpdate);
     encoding.writeVarUint8Array(encoder, update);
     const framed = encoding.toUint8Array(encoder);
     for (const c of room.conns) if (c !== except) this.send(c, framed);
   }
-  
+
   private broadcastAwareness(room: Room, except: any): void {
     const encoder = encoding.createEncoder();
     encoding.writeVarUint(encoder, messageAwareness);

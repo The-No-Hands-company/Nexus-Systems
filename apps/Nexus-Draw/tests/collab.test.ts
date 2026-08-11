@@ -49,7 +49,7 @@ describe("collab websocket", () => {
     const sendUpdate = (ws: WebSocket, update: Uint8Array) => {
       const encoder = encoding.createEncoder();
       encoding.writeVarUint(encoder, 0); // messageSync
-      encoding.writeVarUint(encoder, 3); // messageYjsUpdate
+      encoding.writeVarUint(encoder, 2); // messageYjsUpdate (y-protocols sync.js)
       encoding.writeVarUint8Array(encoder, update);
       ws.send(encoding.toUint8Array(encoder));
     };

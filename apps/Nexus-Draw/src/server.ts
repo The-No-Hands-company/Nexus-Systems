@@ -23,6 +23,16 @@ export async function createServer() {
     port,
     async fetch(req) {
       const url = new URL(req.url); const p = url.pathname || "";
+      
+      // Handle WebSocket upgrade for collab
+      const wsMatch = p.match(/^\/api\/v1\/draw\/ws\/([^/]+)$/);
+      if (wsMatch && req.method === "GET" && req.headers.get("upgrade") === "websocket") {
+        if (collab.upgrade(req, server, wsMatch[1]!)) {
+          return undefined; // upgraded
+        }
+        return new Response("Upgrade failed", { status: 400 });
+      }
+      
       if (req.method === "GET" && p === "/health") return json({ service: "nexus-draw", status: "ok", version: "v1", uptimeSeconds: Math.floor((Date.now() - startedAt) / 1000), phantom: phantom.status() });
       if (req.method === "GET" && p === "/api/v1/status") return json({ service: "nexus-draw", status: "ready", capabilities: ["whiteboard", "diagramming", "collaboration"], cloudIntegration: { enabled: (process.env["NEXUS_DRAW_ENABLE_CLOUD_INTEGRATION"] || "true") !== "false", cloudUrl: process.env.NEXUS_CLOUD_URL || "http://localhost:8787" }, phantom: phantom.status() }, 200);
       if (req.method === "GET" && p === "/api/v1/draw/boards") return json(engine.listBoards());
@@ -50,17 +60,15 @@ export async function createServer() {
     },
     websocket: {
       open(ws) { collab.open(ws, (ws.data as any).boardId); },
-      message(ws, data) { collab.message(ws, data); },
+      // yjs speaks binary only. Bun delivers binary frames as Buffer (a
+      // Uint8Array subclass, so it passes straight through) and text frames as
+      // string — drop those rather than feeding one to the sync decoder.
+      message(ws, data) { if (typeof data !== "string") collab.message(ws, data); },
       close(ws) { collab.close(ws); },
     },
   });
 
   console.log(`[nexus-draw] Listening on port ${server.port}`);
-  // Start heartbeat in background - don't block server startup
   const stopHeartbeat = startHeartbeat(baseUrl);
   return { server, close: () => { stopHeartbeat(); phantom.stop(); server.stop(); } };
-}
-
-function json(p: unknown, s = 200): Response {
-  return new Response(JSON.stringify(p), { status: s, headers: { "content-type": "application/json; charset=utf-8", "x-request-id": randomUUID() } });
 }
