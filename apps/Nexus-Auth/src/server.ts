@@ -46,7 +46,8 @@ import {
   redirectUriAllowed,
   verifyClientSecret,
 } from "./oidc";
-import { issueServiceToken, validateServiceToken } from "./token";
+import { issueServiceToken, validateServiceToken, signJwt } from "./token";
+import { buildIdentityClaims, IDENTITY_TOKEN_TTL_SECONDS } from "./identity";
 import type { AccountStatus, LoginResult, Permission } from "./types";
 import { NexusClient, createConfig } from "../../../packages/nexus-sdk/src/index";
 
@@ -424,6 +425,34 @@ export async function handleRequest(request: Request): Promise<Response> {
     }
 
     // ── Login ──
+    // ── Session -> short-lived, audience-scoped identity token ──
+    //
+    // The proxy calls this with the caller's session cookie and the host the
+    // request is bound for. Apps verify the result against the JWKS this
+    // service already publishes, so they learn who the user is without
+    // calling back here.
+    if (request.method === "POST" && path === "/api/v1/auth/identity-token") {
+      if (!auth) return jsonResponse({ error: "unauthenticated" }, { status: 401 });
+
+      const body = await parseBody(request);
+      const audience = typeof body.audience === "string" ? body.audience.trim() : "";
+      if (!audience) {
+        return jsonResponse({ error: "audience is required" }, { status: 400 });
+      }
+
+      const identityUser = getUser(auth.userId);
+      // A session can outlive the account's right to use it — suspension takes
+      // effect here rather than only at next login.
+      if (!identityUser || identityUser.status !== "active") {
+        return jsonResponse({ error: "forbidden" }, { status: 403 });
+      }
+
+      return jsonResponse({
+        token: signJwt(buildIdentityClaims(identityUser, audience) as unknown as Record<string, unknown>),
+        expiresIn: IDENTITY_TOKEN_TTL_SECONDS,
+      });
+    }
+
     // ── Public: request access ──
     if (request.method === "POST" && path === "/api/v1/auth/access-requests") {
       const body = await parseBody(request);

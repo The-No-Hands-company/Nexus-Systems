@@ -44,3 +44,70 @@ describe("identity claims", () => {
     expect(c.passwordHash).toBeUndefined();
   });
 });
+
+import { handleRequest } from "../src/server";
+import { validateServiceToken } from "../src/token";
+
+const BASE = "http://auth.test";
+
+async function sessionToken(username: string): Promise<string> {
+  users.createUser({ username, email: `${username}@x.dev`, password: PASSWORD });
+  const res = await handleRequest(new Request(`${BASE}/api/v1/auth/login`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ username, password: PASSWORD }),
+  }));
+  return (await res.json() as { token: string }).token;
+}
+
+function mint(audience: unknown, headers: Record<string, string> = {}) {
+  return handleRequest(new Request(`${BASE}/api/v1/auth/identity-token`, {
+    method: "POST",
+    headers: { "content-type": "application/json", ...headers },
+    body: JSON.stringify({ audience }),
+  }));
+}
+
+describe("identity-token endpoint", () => {
+  it("refuses an unauthenticated caller", async () => {
+    users.clearUsers();
+    expect((await mint("chat.tnhc.dev")).status).toBe(401);
+  });
+
+  it("mints a token a JWKS consumer can verify, scoped to the audience", async () => {
+    users.clearUsers();
+    const session = await sessionToken("erin");
+    const res = await mint("chat.tnhc.dev", { authorization: `Bearer ${session}` });
+    expect(res.status).toBe(200);
+
+    const { token } = await res.json() as { token: string };
+    const ok = validateServiceToken(token, "chat.tnhc.dev");
+    expect(ok.valid).toBe(true);
+    if (ok.valid) expect(ok.payload.sub).toBe(users.findUserByUsername("erin")!.id);
+  });
+
+  it("rejects the token against a different audience", async () => {
+    users.clearUsers();
+    const session = await sessionToken("finn");
+    const { token } = await (await mint("chat.tnhc.dev", {
+      authorization: `Bearer ${session}`,
+    })).json() as { token: string };
+
+    // This is the replay case: a token minted for chat must not satisfy draw.
+    expect(validateServiceToken(token, "draw.tnhc.dev").valid).toBe(false);
+  });
+
+  it("requires an audience", async () => {
+    users.clearUsers();
+    const session = await sessionToken("gus");
+    expect((await mint("", { authorization: `Bearer ${session}` })).status).toBe(400);
+    expect((await mint(42, { authorization: `Bearer ${session}` })).status).toBe(400);
+  });
+
+  it("refuses a suspended account", async () => {
+    users.clearUsers();
+    const session = await sessionToken("hal");
+    users.setUserStatus(users.findUserByUsername("hal")!.id, "suspended");
+    expect((await mint("chat.tnhc.dev", { authorization: `Bearer ${session}` })).status).toBe(403);
+  });
+});
