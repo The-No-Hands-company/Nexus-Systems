@@ -12,6 +12,14 @@ describe("makeElement", () => {
   });
 });
 
+describe("makeElement — connector", () => {
+  it("creates a connector element type", () => {
+    const el = makeElement("connector", { startId: "a", endId: "b", routing: "elbow" });
+    expect(el.elementType).toBe("connector");
+    expect(el.data).toMatchObject({ startId: "a", endId: "b", routing: "elbow" });
+  });
+});
+
 describe("resolveStyleMode", () => {
   it("uses the element override when set", () => {
     const el = makeElement("rectangle", {}, { styleMode: "sketch" });

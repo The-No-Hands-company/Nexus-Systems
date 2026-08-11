@@ -1,5 +1,5 @@
 export type StyleMode = "clean" | "sketch";
-export type ElementType = "rectangle"|"ellipse"|"line"|"arrow"|"freehand"|"text"|"sticky"|"image";
+export type ElementType = "rectangle"|"ellipse"|"line"|"arrow"|"freehand"|"text"|"sticky"|"image"|"connector";
 export interface ElementStyle {
   stroke:string; fill:string; strokeWidth:number;
   strokeStyle:"solid"|"dashed"|"dotted"; opacity:number; radius:number;
