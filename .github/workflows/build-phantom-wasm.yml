@@ -36,6 +36,8 @@ jobs:
 
       - name: Build Phantom WASM
         working-directory: packages/phantom-sdk/wasm
+        env:
+          RUSTFLAGS: "--cfg=wasm_js"
         run: |
           rustup target add wasm32-unknown-unknown || true
           wasm-pack build --release --target bundler
