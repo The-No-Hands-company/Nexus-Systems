@@ -70,6 +70,18 @@ export async function deleteBoard(id: string): Promise<void> {
   await checkResponse(await request(`/api/v1/draw/boards/${id}`, { method: "DELETE" }));
 }
 
+export interface AiElement {
+  id: string; elementType: string; data: Record<string, any>;
+  style: Record<string, any>; transform: { a: number; b: number; c: number; d: number; e: number; f: number };
+  order: number; seed: number;
+}
+
+export async function generateDiagram(prompt: string, boardId?: string): Promise<{ elements: AiElement[]; board_id?: string }> {
+  const r = await request("/api/v1/draw/ai/generate", { method: "POST", body: JSON.stringify({ prompt, board_id: boardId }) });
+  if (!r.ok) throw new Error(`generate failed: ${r.status}`);
+  return (await r.json()) as { elements: AiElement[]; board_id?: string };
+}
+
 export async function serverAvailable(): Promise<boolean> {
   try {
     const ctrl = new AbortController();

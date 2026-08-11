@@ -6,6 +6,7 @@ const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit): Pr
   if (init?.method !== undefined && init?.method !== "GET") {
     if (url.endsWith("missing")) return new Response(JSON.stringify({ error: "not found" }), { status: 404 });
     if (url === "/api/v1/draw/boards") return new Response(JSON.stringify({ id: "b1", name: "Test", description: "", width: 1920, height: 1080, background: "#fff", isPublic: false, defaultStyleMode: "clean", gridSnap: true, elements: [], collaborators: [], createdAt: "", updatedAt: "" }), { status: 200 });
+    if (url === "/api/v1/draw/ai/generate") return new Response(JSON.stringify({ elements: [{ id: "g1", elementType: "rectangle", data: {}, style: {}, transform: { a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 }, order: 0, seed: 1 }], board_id: "b1" }), { status: 200 });
     return new Response(JSON.stringify({ updated: true }), { status: 200 });
   }
   if (url.endsWith("/health")) return new Response(JSON.stringify({ status: "ok" }), { status: 200 });
@@ -15,7 +16,7 @@ const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit): Pr
 globalThis.fetch = fetchMock as unknown as typeof fetch;
 
 import {
-  listBoards, createBoard, getBoard, saveBoard, deleteBoard,
+  listBoards, createBoard, getBoard, saveBoard, deleteBoard, generateDiagram,
   serverAvailable, boardToServerBoard, serverBoardToBoardData,
 } from "./api";
 import type { BoardData } from "../stores/useEditorStore";
@@ -46,6 +47,13 @@ describe("api", () => {
   it("deleteBoard DELETEs", async () => {
     await deleteBoard("b1");
     expect(fetchMock).toHaveBeenCalledWith("/api/v1/draw/boards/b1", expect.objectContaining({ method: "DELETE" }));
+  });
+
+  it("generateDiagram POSTs the prompt and returns elements", async () => {
+    const res = await generateDiagram("login flow", "b1");
+    expect(fetchMock).toHaveBeenCalledWith("/api/v1/draw/ai/generate", expect.objectContaining({ method: "POST" }));
+    expect(res.elements.length).toBe(1);
+    expect(res.board_id).toBe("b1");
   });
 
   it("serverAvailable resolves true on /health 200", async () => {

@@ -67,7 +67,7 @@ describe("ai routes", () => {
     const base = `http://localhost:${server.port}`;
     const r = await fetch(`${base}/api/v1/draw/ai/generate`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ prompt: "login flow" }) });
     expect(r.status).toBe(200);
-    const body = await r.json();
+    const body = (await r.json()) as { elements: { id: string }[] };
     expect(Array.isArray(body.elements)).toBe(true);
     expect(body.elements.length).toBeGreaterThanOrEqual(3);
     close();
@@ -88,7 +88,7 @@ describe("ai routes", () => {
     const { server, close } = await createServer();
     const r = await fetch(`http://localhost:${server.port}/api/v1/draw/ai/generate`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({}) });
     expect(r.status).toBe(400);
-    const body = await r.json();
+    const body = (await r.json()) as { error: string };
     expect(body.error).toBe("prompt is required");
     close();
   });
