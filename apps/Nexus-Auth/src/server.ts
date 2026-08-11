@@ -49,6 +49,7 @@ import {
 import { issueServiceToken, validateServiceToken } from "./token";
 import type { AccountStatus, LoginResult, Permission } from "./types";
 import { NexusClient, createConfig } from "../../../packages/nexus-sdk/src/index";
+import { verifyDidSignature } from "../../../packages/phantom-utils/src/verify";
 
 function jsonResponse(payload: unknown, init?: ResponseInit): Response {
   // Merge, do not replace. This previously spread `init` and then overwrote
@@ -631,6 +632,43 @@ export async function handleRequest(request: Request): Promise<Response> {
       if (!user) return jsonResponse({ error: "user not found" }, { status: 404 });
 
       return jsonResponse({ user });
+    }
+
+    // ── Link DID (proof-of-possession) ──
+    if (request.method === "POST" && path === "/api/v1/account/link-did") {
+      if (!auth) return jsonResponse({ error: "unauthorized" }, { status: 401 });
+      const body = await parseBody(request);
+      const did = typeof body.did === "string" ? body.did.trim() : "";
+      const signature = typeof body.signature === "string" ? body.signature : "";
+      const nonce = typeof body.nonce === "string" ? body.nonce : "";
+      if (!did || !signature || !nonce) return jsonResponse({ error: "did, signature and nonce required" }, { status: 400 });
+
+      // Verify the proof-of-possession signature
+      const verified = await verifyDidSignature(did, nonce, signature).catch(() => false);
+      if (!verified) return jsonResponse({ error: "invalid_signature" }, { status: 400 });
+
+      // Call DID Mapper service to create mapping
+      const base = process.env.DID_MAPPER_URL || process.env.DID_MAPPER_BASE || "http://localhost:4001";
+      const key = process.env.DID_MAPPER_KEY || process.env.X_API_KEY || process.env.DID_MAPPER_API_KEY || "";
+      try {
+        const mapRes = await fetch(`${base.replace(/\/+$/, '')}/v1/dids`, {
+          method: "POST",
+          headers: { "content-type": "application/json", "x-api-key": key },
+          body: JSON.stringify({ did, user_id: auth.userId }),
+        });
+        if (!mapRes.ok) {
+          const text = await mapRes.text().catch(() => "");
+          return jsonResponse({ error: "did_mapper_error", details: text }, { status: 502 });
+        }
+      } catch (err) {
+        return jsonResponse({ error: "did_mapper_unreachable" }, { status: 502 });
+      }
+
+      // Update local user
+      const updated = updateUser(auth.userId, { phantom_did: did });
+      if (!updated) return jsonResponse({ error: "user_not_found" }, { status: 404 });
+
+      return jsonResponse({ ok: true });
     }
 
     // ── Users CRUD ──
