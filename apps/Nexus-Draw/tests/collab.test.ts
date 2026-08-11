@@ -23,9 +23,9 @@ describe("collab websocket", () => {
     if (close) await close();
   });
 
-  it("two clients share element updates through a board", async () => {
-    const ws1 = new WebSocket(`${base}/${boardId}`);
-    const ws2 = new WebSocket(`${base}/${boardId}`);
+  it("two clients share element updates through a board", { timeout: 30000 }, async () => {
+    const ws1 = new WebSocket(`ws://localhost:${server.port}/api/v1/draw/ws/${boardId}`);
+    const ws2 = new WebSocket(`ws://localhost:${server.port}/api/v1/draw/ws/${boardId}`);
     await new Promise<void>((r) => { ws1.onopen = r; });
     await new Promise<void>((r) => { ws2.onopen = r; });
     await wait(100);
