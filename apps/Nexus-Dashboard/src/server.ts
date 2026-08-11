@@ -1,74 +1,109 @@
-import { randomUUID } from "node:crypto";
-import { startHeartbeat } from "./cloud";
-import { PhantomApp } from "../../../packages/phantom-sdk/src/integration";
-import { NexusDiscovery } from "../../../packages/nexus-discovery/src/index";
-import { DashboardEngine } from "./dashboard-engine";
+import { join } from "node:path";
+import { toAppEntries } from "./apps";
 
-function json(p: unknown, s = 200): Response {
-  return new Response(JSON.stringify(p), {
-    status: s,
-    headers: { "content-type": "application/json; charset=utf-8", "x-request-id": randomUUID() },
+/**
+ * The ecosystem front door — app.<domain>.
+ *
+ * Serves the dashboard SPA and reverse-proxies the auth API onto the same
+ * origin. Same-origin is the whole point: the session cookie is scoped to the
+ * parent domain, but a credentialed cross-origin XHR from app.<domain> to
+ * auth.<domain> still needs CORS with explicit origins and Allow-Credentials,
+ * which is easy to get subtly wrong and fails in ways that look like a login
+ * bug. Proxying sidesteps it.
+ *
+ * This host is deliberately PUBLIC — it carries request-access and claim,
+ * which people who are not signed in must be able to reach. Gating it would
+ * deadlock exactly as gating the auth host would.
+ */
+
+const PORT = Number(process.env.PORT || "3132");
+const DOMAIN = process.env.DOMAIN || "tnhc.dev";
+const AUTH_HOST = process.env.NEXUS_AUTH_HOST || `auth.${DOMAIN}`;
+const AUTH_INTERNAL_URL = process.env.NEXUS_AUTH_INTERNAL_URL || "http://127.0.0.1:4310";
+const CLOUD_URL = process.env.NEXUS_CLOUD_URL || "http://127.0.0.1:8787";
+const CLOUD_API_KEY = process.env.NEXUS_CLOUD_API_KEY || "";
+const WEB_ROOT = process.env.NEXUS_DASHBOARD_WEB_ROOT || join(import.meta.dir, "..", "frontend", "dist");
+
+/**
+ * The only prefix that is proxied. Anything broader would turn this public
+ * host into an open relay into the private network.
+ */
+const AUTH_PREFIX = "/api/v1/auth/";
+
+async function fetchApps(): Promise<Response> {
+  try {
+    const res = await fetch(`${CLOUD_URL.replace(/\/+$/, "")}/api/v1/tools`, {
+      headers: CLOUD_API_KEY ? { "X-Api-Key": CLOUD_API_KEY } : {},
+      signal: AbortSignal.timeout(3000),
+    });
+    if (!res.ok) return Response.json({ apps: [] });
+    return Response.json({ apps: toAppEntries(await res.json(), AUTH_HOST) });
+  } catch {
+    // Cloud being down must degrade to an empty grid, not a broken dashboard —
+    // the account pages still work and the user can still sign in.
+    return Response.json({ apps: [] });
+  }
+}
+
+async function proxyToAuth(req: Request, path: string): Promise<Response> {
+  const incoming = new URL(req.url);
+  const upstream = new URL(AUTH_INTERNAL_URL);
+  upstream.pathname = path;
+  upstream.search = incoming.search;
+
+  const headers = new Headers(req.headers);
+  // The body is re-read into a buffer below, so the inbound framing headers no
+  // longer describe it; host must go too or Auth sees the wrong vhost.
+  headers.delete("host");
+  headers.delete("content-length");
+  headers.delete("connection");
+
+  const res = await fetch(upstream, {
+    method: req.method,
+    headers,
+    body: req.method === "GET" || req.method === "HEAD" ? undefined : await req.arrayBuffer(),
+    redirect: "manual",
+  });
+
+  // Pass the response through verbatim. Set-Cookie especially: dropping it
+  // would make login appear to succeed while leaving the user signed out.
+  return new Response(res.body, { status: res.status, headers: res.headers });
+}
+
+export async function handleRequest(req: Request): Promise<Response> {
+  const url = new URL(req.url);
+  const path = url.pathname;
+
+  if (req.method === "GET" && path === "/health") {
+    return Response.json({ service: "nexus-dashboard", status: "ok" });
+  }
+
+  if (req.method === "GET" && path === "/api/apps") return fetchApps();
+
+  if (path.startsWith(AUTH_PREFIX)) return proxyToAuth(req, path);
+
+  // Anything else under /api is not ours and must not fall through to the SPA.
+  // Returning the HTML shell for a mistyped API call is how a caller ends up
+  // parsing "<!doctype html>" as JSON.
+  if (path.startsWith("/api/")) {
+    return Response.json({ error: "not_found" }, { status: 404 });
+  }
+
+  // A real asset if we have one, otherwise the SPA shell so client-side routes
+  // survive a hard reload.
+  if (path !== "/") {
+    const asset = Bun.file(join(WEB_ROOT, path));
+    if (await asset.exists()) return new Response(asset);
+  }
+  return new Response(Bun.file(join(WEB_ROOT, "index.html")), {
+    headers: { "content-type": "text/html; charset=utf-8" },
   });
 }
 
-export async function createServer() {
-  const port = Number(process.env.PORT || "3132");
-  const baseUrl = process.env.NEXUS_NEXUS_DASHBOARD_BASE_URL || `http://localhost:${port}`;
-  const startedAt = Date.now();
-  const engine = new DashboardEngine("data/nexus-dashboard.sqlite")
-  const phantom = new PhantomApp("nexus-dashboard");
-  const phantomId = await phantom.start();
-  const discovery = new NexusDiscovery({ cloudUrl: process.env.NEXUS_CLOUD_URL || "http://localhost:8787", apiKey: process.env.NEXUS_CLOUD_API_KEY || undefined, ttlMs: 30000 });
-;
-
-  const server = Bun.serve({
-    port,
-    async fetch(req) {
-      const url = new URL(req.url);
-      const p = url.pathname || "";
-
-      if (req.method === "GET" && p === "/health")
-        return json({
-          service: "nexus-dashboard",
-          status: "ok",
-          version: "v1",
-          uptimeSeconds: Math.floor((Date.now() - startedAt) / 1000),
-        });
-
-      if (req.method === "GET" && p === "/api/v1/status")
-        return json(
-          {
-            service: "nexus-dashboard",
-            status: "ready",
-            capabilities: ["monitoring-dashboard", "observability", "metrics"],
-            cloudIntegration: {
-              enabled: (process.env["NEXUS_DASHBOARD_ENABLE_CLOUD_INTEGRATION"] || "true") !== "false",
-              cloudUrl: process.env.NEXUS_CLOUD_URL || "http://localhost:8787",
-            },
-          },
-          200
-        );
-
-      if (req.method === "GET" && p === "/api/v1/items")
-        return json(engine.list());
-
-      if (req.method === "POST" && p === "/api/v1/items") {
-        const b = await req.json().catch(() => ({})) as any;
-        if (!b.name) return json({ error: "name required" }, 400);
-        return json(engine.create(b.name, b.widgets, b.panels, b.data), 201);
-      }
-
-      const im = p.match(/^\/api\/v1\/items\/([^/]+)$/);
-      if (req.method === "GET" && im) {
-        const item = engine.get(im[1]!);
-        return item ? json(item) : json({ error: "not found" }, 404);
-      }
-
-      return json({ error: "not found" }, 404);
-    },
-  });
-
+export function startServer() {
+  const server = Bun.serve({ port: PORT, fetch: handleRequest });
   console.log(`[nexus-dashboard] Listening on port ${server.port}`);
-  const stopHeartbeat = startHeartbeat(baseUrl);
-  return { server, close: () => { stopHeartbeat(); phantom.stop(); server.stop(); } };
+  return server;
 }
+
+if (import.meta.main) startServer();
