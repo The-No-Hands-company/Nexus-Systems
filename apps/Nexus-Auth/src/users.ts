@@ -111,6 +111,64 @@ export function createUser(input: {
   return sanitizeUser(user);
 }
 
+/** 16 random bytes as 32 hex chars — 128 bits, far beyond guessing. */
+function generateCode(): string {
+  return randomBytes(16).toString("hex");
+}
+
+/**
+ * Public self-service access request. Creates a `pending` account and returns a
+ * one-time claim code that is shown to the requester immediately and never
+ * stored in plaintext or transmitted again.
+ *
+ * The code is handed over now rather than at approval time because there is no
+ * outbound email to deliver it with later: the user polls, and this code is
+ * what proves the returning visitor is the person who made the request. Without
+ * it, anyone who guessed an approved email address could seize the account.
+ *
+ * passwordHash is deliberately empty. The account cannot authenticate in any
+ * case — authenticateUser requires status 'active' — and claimAccount sets a
+ * real hash before the account ever reaches that state.
+ */
+export function createAccessRequest(input: {
+  username: string;
+  email: string;
+  note?: string;
+}): { user: SafeUser; claimCode: string } {
+  const username = input.username.trim().toLowerCase();
+  const email = input.email.trim().toLowerCase();
+
+  if (findUserByUsername(username)) throw new Error(`Username '${username}' already exists`);
+  if (findUserByEmail(email)) throw new Error(`Email '${email}' already exists`);
+
+  const claimCode = generateCode();
+  const now = new Date().toISOString();
+  const user: User = {
+    id: generateUserId(),
+    username,
+    email,
+    role: "user",
+    passwordHash: "",
+    claimCodeHash: hashToken(claimCode),
+    totpEnabled: false,
+    status: "pending",
+    createdAt: now,
+    updatedAt: now,
+  };
+  if (input.note) user.note = input.note.trim().slice(0, 500);
+
+  users.set(user.id, user);
+  persistUsers();
+  return { user: sanitizeUser(user), claimCode };
+}
+
+/** Accounts in a given lifecycle state — the operator's approval queue. */
+export function listByStatus(status: AccountStatus): SafeUser[] {
+  return Array.from(users.values())
+    .filter((u) => u.status === status)
+    .map(sanitizeUser);
+}
+
 export function authenticateUser(username: string, password: string): SafeUser | null {
   const user = findUserByUsername(username);
   // Only a fully claimed, unsuspended account may authenticate. pending and
