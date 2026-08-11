@@ -13,6 +13,7 @@ export default function App() {
   const [showPanels, setShowPanels] = useState(true);
   const sidebar = useEditorStore((s) => s.sidebar);
   const setSidebar = useEditorStore((s) => s.setSidebar);
+  const boardId = useEditorStore((s) => s.boardId);
 
   const switchBoard = async (id: string) => {
     try {
@@ -22,58 +23,63 @@ export default function App() {
       store.setPan({ x: 0, y: 0 });
       store.setZoom(1);
       saveLastBoardId(id);
-    } catch {
-      // server board vanished — refresh panel
+    } catch (err) {
+      console.error("Failed to switch board:", err);
     }
   };
 
   const newBoard = async (name: string) => {
-    const b = await api.createBoard(name);
-    useEditorStore.getState().setBoard(api.serverBoardToBoardData(b));
-    saveLastBoardId(b.id);
+    try {
+      const b = await api.createBoard(name);
+      useEditorStore.getState().setBoard(api.serverBoardToBoardData(b));
+      saveLastBoardId(b.id);
+    } catch (err) {
+      console.error("Failed to create board:", err);
+    }
   };
 
   useEffect(() => {
-    const store = useEditorStore.getState();
-    if (store.board) return;
-    store.setBoard(bootBoard(loadDoc()));
-  }, []);
-
-  useEffect(() => {
-    const checkServer = async () => {
+    const boot = async () => {
       const store = useEditorStore.getState();
       if (store.board) return;
-      const available = await api.serverAvailable();
-      if (!available) return;
-      const lastId = loadLastBoardId();
-      if (lastId) {
-        try {
-          const sb = await api.getBoard(lastId);
+      store.setBoard(bootBoard(loadDoc()));
+
+      try {
+        const available = await api.serverAvailable();
+        if (!available) return;
+
+        const lastId = loadLastBoardId();
+        if (lastId) {
+          try {
+            const sb = await api.getBoard(lastId);
+            store.setBoard(api.serverBoardToBoardData(sb));
+            store.setPan({ x: 0, y: 0 });
+            store.setZoom(1);
+            saveLastBoardId(lastId);
+            return;
+          } catch {
+            // fall through
+          }
+        }
+        const boards = await api.listBoards();
+        if (boards.length > 0) {
+          const sb = boards[0];
           store.setBoard(api.serverBoardToBoardData(sb));
           store.setPan({ x: 0, y: 0 });
           store.setZoom(1);
-          saveLastBoardId(lastId);
+          saveLastBoardId(sb.id);
           return;
-        } catch {
-          // fall through
         }
-      }
-      const boards = await api.listBoards();
-      if (boards.length > 0) {
-        const sb = boards[0];
-        store.setBoard(api.serverBoardToBoardData(sb));
+        const b = await api.createBoard("Untitled Board");
+        store.setBoard(api.serverBoardToBoardData(b));
         store.setPan({ x: 0, y: 0 });
         store.setZoom(1);
-        saveLastBoardId(sb.id);
-        return;
+        saveLastBoardId(b.id);
+      } catch (err) {
+        console.error("Server boot failed, keeping localStorage board:", err);
       }
-      const b = await api.createBoard("Untitled Board");
-      store.setBoard(api.serverBoardToBoardData(b));
-      store.setPan({ x: 0, y: 0 });
-      store.setZoom(1);
-      saveLastBoardId(b.id);
     };
-    void checkServer();
+    void boot();
   }, []);
 
   useEffect(() => {
@@ -117,7 +123,7 @@ export default function App() {
             )}
             {sidebar === "boards" && (
               <div className="w-64 border-l border-zinc-800 bg-zinc-900">
-                <BoardPanel onSwitch={switchBoard} onNew={newBoard} />
+                <BoardPanel key={boardId} onSwitch={switchBoard} onNew={newBoard} />
               </div>
             )}
           </div>

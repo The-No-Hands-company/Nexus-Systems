@@ -13,7 +13,6 @@ export default function BoardPanel({ onSwitch, onNew }: { onSwitch: (id: string)
   const create = async () => {
     if (!name.trim()) return;
     const boardName = name.trim();
-    await api.createBoard(boardName);
     setName("");
     onNew(boardName);
     void refresh();
