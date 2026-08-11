@@ -1,20 +1,26 @@
-import { describe, it, expect, beforeEach } from "bun:test";
+import { describe, it, expect, beforeEach, afterEach } from "bun:test";
 import { createServer } from "../src/server";
 
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 describe("collab websocket", () => {
   let server: any;
+  let close: any;
   let base: string;
   let boardId: string;
 
   beforeEach(async () => {
-    const { server: s, close } = await createServer();
+    const { server: s, close: c } = await createServer();
     server = s;
+    close = c;
     base = `ws://localhost:${server.port}/api/v1/draw/ws`;
     const resp = await fetch(`http://localhost:${server.port}/api/v1/draw/boards`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name: "Collab Test" }) });
     const board = await resp.json();
     boardId = board.id;
+  });
+
+  afterEach(async () => {
+    if (close) await close();
   });
 
   it("two clients share element updates through a board", async () => {
