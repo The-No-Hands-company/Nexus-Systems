@@ -37,9 +37,12 @@ jobs:
           RUSTFLAGS: "--cfg=wasm_js"
         run: |
           rustup target add wasm32-wasip1 || true
+          rustup component add rust-src --toolchain nightly || true
           sudo apt-get update -y && sudo apt-get install -y clang wasi-sdk build-essential libc6-dev || true
-          export CC=$(which clang) || true
-          cargo build --release --target wasm32-wasip1
+          export WASI_SDK_PATH=/usr/lib/wasi-sdk || true
+          export CC=${WASI_SDK_PATH}/bin/clang || export CC=$(which clang) || true
+          export CARGO_TARGET_WASM32_WASIP1_LINKER=${CC} || true
+          cargo +nightly build -Z build-std=std --release --target wasm32-wasip1
           mkdir -p pkg
           cp target/wasm32-wasip1/release/phantom_wasm.wasm pkg/ || true
 
