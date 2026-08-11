@@ -1,13 +1,5 @@
 import { describe, it, expect, beforeEach } from "bun:test";
-import { mkdtempSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-
-process.env.NEXUS_AUTH_USER_STORE_PATH = join(
-  mkdtempSync(join(tmpdir(), "nexus-auth-claim-")),
-  "users.json",
-);
-const users = await import("../src/users");
+import * as users from "../src/users";
 
 const PASSWORD = "correct-horse-battery-staple";  // pragma: allowlist secret
 

@@ -1,15 +1,5 @@
 import { describe, it, expect, beforeEach } from "bun:test";
-import { mkdtempSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-
-// Must be set BEFORE importing users.ts — the module resolves its store path
-// and hydrates at import time. A static `import` would be hoisted above this.
-process.env.NEXUS_AUTH_USER_STORE_PATH = join(
-  mkdtempSync(join(tmpdir(), "nexus-auth-status-")),
-  "users.json",
-);
-const users = await import("../src/users");
+import * as users from "../src/users";
 
 describe("account status", () => {
   beforeEach(() => users.clearUsers());
