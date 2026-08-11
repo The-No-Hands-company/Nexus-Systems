@@ -162,6 +162,50 @@ export function createAccessRequest(input: {
   return { user: sanitizeUser(user), claimCode };
 }
 
+/** Shortest password accepted. Long enough to matter, short enough to type. */
+export const MIN_PASSWORD_LENGTH = 12;
+
+/**
+ * Redeems a claim code, sets the password and activates the account.
+ *
+ * An unknown email and a wrong code both return `invalid_code` on purpose: a
+ * distinct "no such account" would let an attacker enumerate which addresses
+ * have been approved.
+ */
+export function claimAccount(input: {
+  email: string;
+  claimCode: string;
+  password: string;
+}): { ok: true; user: SafeUser } | { ok: false; reason: string } {
+  const user = findUserByEmail(input.email);
+
+  // Same answer for "no such user", "already claimed" and "wrong code".
+  if (!user || !user.claimCodeHash) return { ok: false, reason: "invalid_code" };
+
+  const supplied = hashToken(input.claimCode);
+  let matches = false;
+  try {
+    matches = timingSafeEqual(Buffer.from(supplied), Buffer.from(user.claimCodeHash));
+  } catch {
+    matches = false;
+  }
+  if (!matches) return { ok: false, reason: "invalid_code" };
+
+  // Code was right, so the caller is the requester — now it is safe to be
+  // specific about why this cannot proceed.
+  if (user.status !== "approved") return { ok: false, reason: "not_approved" };
+  if (input.password.length < MIN_PASSWORD_LENGTH) return { ok: false, reason: "weak_password" };
+
+  user.passwordHash = hashPassword(input.password);
+  delete user.claimCodeHash;
+  user.status = "active";
+  user.updatedAt = new Date().toISOString();
+
+  users.set(user.id, user);
+  persistUsers();
+  return { ok: true, user: sanitizeUser(user) };
+}
+
 /** Accounts in a given lifecycle state — the operator's approval queue. */
 export function listByStatus(status: AccountStatus): SafeUser[] {
   return Array.from(users.values())
