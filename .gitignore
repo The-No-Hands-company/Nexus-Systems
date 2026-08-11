@@ -60,6 +60,8 @@ Backups/
 # are runtime state, not source: a fresh deploy seeds founder/operator from
 # NEXUS_AUTH_FOUNDER_PASSWORD / _OPERATOR_PASSWORD in apps/Nexus-Auth/.env.
 apps/Nexus-Auth/data/auth-users.json
+apps/Nexus-Auth/data/auth-recovery.json
+apps/Nexus-Auth/data/auth-invites.json
 
 # Registered OIDC clients — holds client secrets, and this repo is public.
 # Runtime state: a deploy registers its own clients.
