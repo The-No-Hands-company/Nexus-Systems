@@ -49,8 +49,19 @@ start_service() {
 
     log "Starting $name on :$port"
     cd "$dir"
-    # Use env to set environment variables properly
-    nohup env "$@" > "$LOG_DIR/$name.log" 2>&1 &
+    # setsid, not just nohup. nohup only makes the process ignore SIGHUP — it
+    # leaves it in the launching shell's session, so when that session is torn
+    # down (an ssh disconnect, a terminal closing, an agent's shell exiting)
+    # the whole group goes with it. auth, cloud and chat all died together
+    # twice this way, and the symptom is a 502 at the edge because the tunnel
+    # is fine and the origin is simply gone.
+    #
+    # setsid makes each service its own session leader, so it outlives whatever
+    # started it. Job control is off in a non-interactive script, so the child
+    # is not already a process-group leader and setsid execs in place rather
+    # than forking — which keeps $! pointing at the real process.
+    # `env` is retained so the caller's KEY=value arguments still apply.
+    setsid nohup env "$@" > "$LOG_DIR/$name.log" 2>&1 &
     local pid=$!
     echo $pid > "$PID_DIR/$name.pid"
     sleep 2
