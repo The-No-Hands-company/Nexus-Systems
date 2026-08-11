@@ -38,6 +38,9 @@ jobs:
           RUSTFLAGS: "--cfg=wasm_js"
         run: |
           rustup target add wasm32-unknown-unknown || true
+          sudo apt-get update -y && sudo apt-get install -y clang llvm-dev libssl-dev libclang-dev build-essential wasi-sdk || true
+          export CC=clang
+          export CFLAGS="-O2"
           cargo build --release --target wasm32-unknown-unknown
           cargo install wasm-bindgen-cli --version 0.2.84 || true
           wasm-bindgen target/wasm32-unknown-unknown/release/phantom_wasm.wasm --out-dir pkg --target bundler
