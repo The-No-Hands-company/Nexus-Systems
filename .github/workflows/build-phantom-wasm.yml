@@ -10,6 +10,8 @@ jobs:
   build-wasm:
     name: Build Phantom WASM (wasm-pack)
     runs-on: ubuntu-latest
+    env:
+      RUSTFLAGS: "--cfg=wasm_js"
 
     steps:
       - name: Checkout

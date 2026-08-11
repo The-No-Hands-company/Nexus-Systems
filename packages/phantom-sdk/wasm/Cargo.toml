@@ -16,4 +16,4 @@ blake3 = "1"
 pqcrypto-kyber = "0.7"
 pqcrypto-dilithium = "0.5"
 pqcrypto-traits = "0.3"
-getrandom = { version = "0.2", features = ["js"] }
+getrandom = { version = "0.3", features = ["js"] }
