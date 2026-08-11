@@ -5,6 +5,7 @@ import Canvas from "./components/Canvas/Canvas";
 import LayerPanel from "./components/LayerPanel";
 import PropertiesPanel from "./components/PropertiesPanel";
 import BoardPanel from "./components/BoardPanel";
+import AIPanel from "./components/AIPanel";
 import { useEditorStore } from "./stores/useEditorStore";
 import { loadDoc, bootBoard, saveDocDebounced, flushSave, saveLastBoardId, loadLastBoardId } from "./utils/persistence";
 import * as api from "./utils/api";
@@ -159,6 +160,11 @@ export default function App() {
                 <BoardPanel key={boardId} onSwitch={switchBoard} onNew={newBoard} />
               </div>
             )}
+            {sidebar === "ai" && boardId && (
+              <div className="w-72 border-l border-zinc-800 bg-zinc-900">
+                <AIPanel boardId={boardId} />
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -181,6 +187,12 @@ export default function App() {
             className={`hover:text-zinc-300 ${sidebar === "boards" ? "text-blue-400" : ""}`}
           >
             Boards
+          </button>
+          <button
+            onClick={() => setSidebar(sidebar === "ai" ? null : "ai")}
+            className={`hover:text-zinc-300 ${sidebar === "ai" ? "text-blue-400" : ""}`}
+          >
+            AI
           </button>
           <button onClick={() => setShowPanels(!showPanels)} className="hover:text-zinc-300">
             {showPanels ? "Hide" : "Show"}
