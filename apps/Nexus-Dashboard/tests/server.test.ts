@@ -98,9 +98,19 @@ describe("dashboard server", () => {
     expect(res.headers.get("content-type") ?? "").toContain("application/json");
   });
 
-  it("serves the SPA shell for a client route", async () => {
+  it("serves HTML for a client route so deep links survive a reload", async () => {
+    // 200 with the built shell, or 503 with a build instruction when
+    // frontend/dist is absent — dist is a gitignored build artifact, so a
+    // fresh clone legitimately has neither.
     const res = await handleRequest(new Request("http://app.test/claim"));
-    expect(res.status).toBe(200);
+    expect([200, 503]).toContain(res.status);
     expect(res.headers.get("content-type") ?? "").toContain("text/html");
+  });
+
+  it("explains itself when the SPA has not been built", async () => {
+    const res = await handleRequest(new Request("http://app.test/definitely-not-an-asset-xyz"));
+    if (res.status === 503) {
+      expect(await res.text()).toContain("npm run build");
+    }
   });
 });

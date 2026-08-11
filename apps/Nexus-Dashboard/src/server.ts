@@ -95,9 +95,22 @@ export async function handleRequest(req: Request): Promise<Response> {
     const asset = Bun.file(join(WEB_ROOT, path));
     if (await asset.exists()) return new Response(asset);
   }
-  return new Response(Bun.file(join(WEB_ROOT, "index.html")), {
-    headers: { "content-type": "text/html; charset=utf-8" },
-  });
+
+  const shell = Bun.file(join(WEB_ROOT, "index.html"));
+  if (await shell.exists()) {
+    return new Response(shell, { headers: { "content-type": "text/html; charset=utf-8" } });
+  }
+
+  // The SPA has not been built. `frontend/dist` is a build artifact and is
+  // gitignored, so a fresh clone or a deploy that skipped `npm run build`
+  // lands here. Say so plainly — the alternative is an unexplained blank page
+  // or a stack trace, and the fix is one command.
+  return new Response(
+    "<!doctype html><meta charset=\"utf-8\"><title>Nexus Dashboard</title>" +
+      "<p>The dashboard UI has not been built. Run <code>npm install &amp;&amp; npm run build</code> " +
+      "in <code>apps/Nexus-Dashboard/frontend</code>.</p>",
+    { status: 503, headers: { "content-type": "text/html; charset=utf-8" } },
+  );
 }
 
 export function startServer() {
