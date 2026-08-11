@@ -38,9 +38,110 @@ export function distToSegment(p: Point, a: Point, b: Point): number {
   return Math.sqrt(distToSegmentSq(p, a, b));
 }
 
+/** Center of a bounds box. */
+export function boundsCenter(b: Bounds): Point {
+  return { x: b.x + b.width / 2, y: b.y + b.height / 2 };
+}
+
+/**
+ * The point on the AABB boundary of `b` where a ray from its center toward
+ * `target` exits. Used to anchor a connector to the edge of a glued shape.
+ * Degenerates to the center when target coincides with it.
+ */
+export function shapeEdgePoint(b: Bounds, target: Point): Point {
+  const cx = b.x + b.width / 2;
+  const cy = b.y + b.height / 2;
+  const dx = target.x - cx;
+  const dy = target.y - cy;
+  if (dx === 0 && dy === 0) return { x: cx, y: cy };
+  const halfW = b.width / 2;
+  const halfH = b.height / 2;
+  let t = Infinity;
+  if (dx !== 0) t = Math.min(t, Math.abs(halfW / dx));
+  if (dy !== 0) t = Math.min(t, Math.abs(halfH / dy));
+  return { x: cx + dx * t, y: cy + dy * t };
+}
+
+/**
+ * Orthogonal (elbow) route between two points: a 3-segment S via the midpoint
+ * of the dominant axis. Returns [a, mid1, mid2, b]; axis-aligned inputs pass
+ * straight through as [a, b]. Draw.io-lite — no obstacle avoidance.
+ */
+export function orthogonalBetween(a: Point, b: Point): Point[] {
+  if (a.x === b.x || a.y === b.y) return [a, b];
+  if (Math.abs(b.x - a.x) >= Math.abs(b.y - a.y)) {
+    const midX = (a.x + b.x) / 2;
+    return [a, { x: midX, y: a.y }, { x: midX, y: b.y }, b];
+  }
+  const midY = (a.y + b.y) / 2;
+  return [a, { x: a.x, y: midY }, { x: b.x, y: midY }, b];
+}
+
+export interface ConnectorData {
+  startId?: string;
+  endId?: string;
+  startPoint?: Point;
+  endPoint?: Point;
+  waypoints?: Point[];
+  routing: "elbow" | "straight";
+}
+
+function dedupePoints(pts: Point[]): Point[] {
+  return pts.filter((p, i) => i === 0 || p.x !== pts[i - 1].x || p.y !== pts[i - 1].y);
+}
+
+/**
+ * The connector's full polyline in world space, computed fresh from the live
+ * element list so glued connectors follow moved/resized/rotated shapes (and
+ * collab peer edits) automatically. Glued endpoints anchor to the shape edge
+ * nearest the other endpoint; free connectors route between stored points.
+ * Missing glued ids fall back to stored points (or origin) so rendering never
+ * throws on stale refs.
+ */
+export function routeConnector(el: ElementData, elements: ElementData[]): Point[] {
+  const d = el.data as ConnectorData;
+  const startShape = d.startId ? elements.find((e) => e.id === d.startId) : undefined;
+  const endShape = d.endId ? elements.find((e) => e.id === d.endId) : undefined;
+
+  const endTarget: Point = endShape
+    ? boundsCenter(elementBounds(endShape))
+    : d.endPoint ?? { x: 0, y: 0 };
+  const startTarget: Point = startShape
+    ? boundsCenter(elementBounds(startShape))
+    : d.startPoint ?? { x: 0, y: 0 };
+
+  const start: Point = startShape
+    ? shapeEdgePoint(elementBounds(startShape), endTarget)
+    : d.startPoint ?? { x: 0, y: 0 };
+  const end: Point = endShape
+    ? shapeEdgePoint(elementBounds(endShape), startTarget)
+    : d.endPoint ?? start;
+
+  const anchors = [start, ...(d.waypoints ?? []), end];
+
+  if (d.routing === "straight") {
+    return dedupePoints(anchors);
+  }
+  const pts: Point[] = [anchors[0]];
+  for (let i = 0; i < anchors.length - 1; i++) {
+    pts.push(...orthogonalBetween(anchors[i], anchors[i + 1]).slice(1));
+  }
+  return dedupePoints(pts);
+}
+
 /** Bounding box of an element, in element-local (untransformed) coordinates. */
-export function elementBounds(el: ElementData): Bounds {
+export function elementBounds(el: ElementData, elements?: ElementData[]): Bounds {
   const d = el.data as Record<string, any>;
+
+  if (el.elementType === "connector") {
+    const pts = routeConnector(el, elements ?? []);
+    if (pts.length === 0) return { x: 0, y: 0, width: 0, height: 0 };
+    const xs = pts.map((p) => p.x);
+    const ys = pts.map((p) => p.y);
+    const minX = Math.min(...xs);
+    const minY = Math.min(...ys);
+    return { x: minX, y: minY, width: Math.max(...xs) - minX, height: Math.max(...ys) - minY };
+  }
 
   if (BOX_TYPES.has(el.elementType)) {
     return {
