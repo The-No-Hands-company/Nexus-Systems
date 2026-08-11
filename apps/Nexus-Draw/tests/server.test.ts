@@ -60,3 +60,36 @@ describe("board routes", () => {
     close();
   });
 });
+
+describe("ai routes", () => {
+  it("POST /api/v1/draw/ai/generate synthesizes elements", async () => {
+    const { server, close } = await createServer();
+    const base = `http://localhost:${server.port}`;
+    const r = await fetch(`${base}/api/v1/draw/ai/generate`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ prompt: "login flow" }) });
+    expect(r.status).toBe(200);
+    const body = await r.json();
+    expect(Array.isArray(body.elements)).toBe(true);
+    expect(body.elements.length).toBeGreaterThanOrEqual(3);
+    close();
+  });
+
+  it("POST /api/v1/draw/ai/generate with board_id appends to the board", async () => {
+    const { server, close } = await createServer();
+    const base = `http://localhost:${server.port}`;
+    const board = await (await fetch(`${base}/api/v1/draw/boards`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name: "AI Board" }) })).json() as any;
+    const before = await (await fetch(`${base}/api/v1/draw/boards/${board.id}`)).json() as any;
+    await fetch(`${base}/api/v1/draw/ai/generate`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ prompt: "plan", board_id: board.id }) });
+    const got = await (await fetch(`${base}/api/v1/draw/boards/${board.id}`)).json() as any;
+    expect(got.elements.length).toBeGreaterThanOrEqual(before.elements.length + 3);
+    close();
+  });
+
+  it("POST /api/v1/draw/ai/generate rejects a missing prompt", async () => {
+    const { server, close } = await createServer();
+    const r = await fetch(`http://localhost:${server.port}/api/v1/draw/ai/generate`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({}) });
+    expect(r.status).toBe(400);
+    const body = await r.json();
+    expect(body.error).toBe("prompt is required");
+    close();
+  });
+});
