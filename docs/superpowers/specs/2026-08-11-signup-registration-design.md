@@ -53,6 +53,14 @@ Token & Claims
 - ID token (OIDC) includes claim `phantom_did` when present.
 - Access tokens remain opaque or JWT per existing Nexus-Auth behavior; introspection endpoint returns `phantom_did` if needed.
 
+DID Mapper API (sketch):
+- GET /v1/dids/:did -> { did, user_id, linked_at }
+- GET /v1/users/:user_id/did -> { did }
+- POST /v1/dids  (auth: service/api-key) -> create mapping { did, user_id }
+- DELETE /v1/dids/:did  (admin only) -> remove mapping
+
+Auth: service-to-service calls use mTLS or API keys; write operations require Nexus-Auth credentials. Rate-limit read endpoints for public consumption and cache results in apps.
+
 Linking existing DID
 
 - Provide UI in Nexus-Auth account settings: user proves DID ownership by signing a nonce/challenge with their DID key and POSTing proof to Nexus-Auth.
@@ -61,7 +69,7 @@ Linking existing DID
 Error handling & retries
 
 - DID Mapper transient failures: Nexus-Auth uses retry (exponential backoff) and a local write-ahead log to reconcile mappings if mapping write fails after account creation.
-- Duplicate DID mapping: enforce uniqueness on did_mappings.deduplicate by rejecting conflicting links and providing admin/manual merge tooling.
+- Duplicate DID mapping: enforce a uniqueness constraint on did_mappings.did. On conflict, reject the link and return a clear user-facing error with guidance; provide admin/manual merge tooling for account merges and conflict resolution.
 
 Security considerations
 
