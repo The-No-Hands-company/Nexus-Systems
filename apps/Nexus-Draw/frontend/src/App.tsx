@@ -8,12 +8,14 @@ import BoardPanel from "./components/BoardPanel";
 import { useEditorStore } from "./stores/useEditorStore";
 import { loadDoc, bootBoard, saveDocDebounced, flushSave, saveLastBoardId, loadLastBoardId } from "./utils/persistence";
 import * as api from "./utils/api";
+import { connectCollab, type CollabBinding } from "./collab/collab";
 
 export default function App() {
   const [showPanels, setShowPanels] = useState(true);
   const sidebar = useEditorStore((s) => s.sidebar);
   const setSidebar = useEditorStore((s) => s.setSidebar);
   const boardId = useEditorStore((s) => s.boardId);
+  const collabBoardId = useEditorStore((s) => s.board?.id);
 
   const switchBoard = async (id: string) => {
     try {
@@ -100,6 +102,37 @@ export default function App() {
       document.removeEventListener("visibilitychange", onHide);
     };
   }, []);
+
+  // Live collaboration: bind the current board's yjs room to the store once a
+  // server board is loaded. Local store edits flow into the Y.Doc via
+  // setElements; remote edits land back in the store via setElementsLive.
+  useEffect(() => {
+    const activeId = collabBoardId;
+    if (!activeId) return;
+    let disposed = false;
+    let binding: CollabBinding | null = null;
+    const unsubscribe = useEditorStore.subscribe(() => {
+      if (binding) binding.setElements(useEditorStore.getState().elements);
+    });
+    connectCollab(activeId, undefined, (els) => {
+      const st = useEditorStore.getState();
+      st.setElementsLive(els);
+      st.setCollabActive(true);
+    }).then((b) => {
+      if (disposed) {
+        b.destroy();
+        return;
+      }
+      binding = b;
+      b.setElements(useEditorStore.getState().elements);
+    });
+    return () => {
+      disposed = true;
+      unsubscribe();
+      binding?.destroy();
+      useEditorStore.getState().setCollabActive(false);
+    };
+  }, [collabBoardId]);
 
   return (
     <div className="h-screen flex flex-col">

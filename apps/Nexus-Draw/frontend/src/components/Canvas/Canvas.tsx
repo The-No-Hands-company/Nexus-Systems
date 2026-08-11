@@ -247,6 +247,7 @@ export default function Canvas() {
   const setZoom = useEditorStore((s) => s.setZoom);
   const activeTool = useEditorStore((s) => s.activeTool);
   const board = useEditorStore((s) => s.board);
+  const collabActive = useEditorStore((s) => s.collabActive);
   const selectElement = useEditorStore((s) => s.selectElement);
   const deselectAll = useEditorStore((s) => s.deselectAll);
   const setActiveTool = useEditorStore((s) => s.setActiveTool);
@@ -685,6 +686,10 @@ export default function Canvas() {
 
   return (
     <>
+      <div className="absolute top-2 right-2 z-10 flex items-center gap-1.5 px-2 py-1 rounded-md text-[11px] font-medium bg-zinc-900/80 text-zinc-300 border border-zinc-700 pointer-events-none">
+        <span className={`h-2 w-2 rounded-full ${collabActive ? "bg-emerald-400" : "bg-zinc-500"}`} />
+        {collabActive ? "Live" : "Offline"}
+      </div>
       <canvas
         ref={canvasRef}
         className={`w-full h-full ${activeTool === "hand" ? "cursor-grab" : "cursor-crosshair"}`}

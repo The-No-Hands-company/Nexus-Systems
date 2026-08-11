@@ -66,6 +66,9 @@ interface EditorStore {
 
   textEditingId: string | null;
   setTextEditingId: (id: string | null) => void;
+
+  collabActive: boolean;
+  setCollabActive: (active: boolean) => void;
 }
 
 export const useEditorStore = create<EditorStore>((set, get) => ({
@@ -161,4 +164,7 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
 
   textEditingId: null,
   setTextEditingId: (id) => set({ textEditingId: id }),
+
+  collabActive: false,
+  setCollabActive: (active) => set({ collabActive: active }),
 }));
