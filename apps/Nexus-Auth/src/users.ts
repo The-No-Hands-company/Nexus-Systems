@@ -262,6 +262,7 @@ export function updateUser(userId: string, patch: {
   email?: string;
   role?: IdentityRole;
   status?: AccountStatus;
+  phantom_did?: string | null;
 }): SafeUser | undefined {
   const user = users.get(userId);
   if (!user) return undefined;
@@ -269,6 +270,7 @@ export function updateUser(userId: string, patch: {
   if (patch.email !== undefined) user.email = patch.email.trim().toLowerCase();
   if (patch.role !== undefined) user.role = patch.role;
   if (patch.status !== undefined) user.status = patch.status;
+  if (patch.phantom_did !== undefined) user.phantom_did = patch.phantom_did ?? undefined;
   user.updatedAt = new Date().toISOString();
 
   users.set(user.id, user);
