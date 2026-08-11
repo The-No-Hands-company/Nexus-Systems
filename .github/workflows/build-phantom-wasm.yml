@@ -25,10 +25,10 @@ jobs:
             ~/.cargo/git
           key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
 
-      - name: Install Rust toolchain
+      - name: Install Rust toolchain (nightly)
         uses: actions-rs/toolchain@v1
         with:
-          toolchain: stable
+          toolchain: nightly
           profile: minimal
 
       - name: Build Phantom WASM (wasip1 target)
