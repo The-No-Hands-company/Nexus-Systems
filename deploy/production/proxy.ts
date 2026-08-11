@@ -15,11 +15,24 @@ const CACHE_TTL_MS = Number(process.env.CACHE_TTL_MS || "60000"); // 1 minute
 interface NexusCloudRoute {
   domain: string;
   upstream: string;
-  // We don't need the other fields for routing
+  /**
+   * Whether this host requires a signed-in user. Absent means public.
+   *
+   * Defaulting to public is deliberate: a route Cloud has not been taught
+   * about must keep behaving exactly as it does today. Gating is opt-in, so a
+   * missing or misspelled field can never lock an app's users out.
+   */
+  requiresAuth?: boolean;
 }
 
-// Route cache: host (full domain, lowercased) -> upstream URL
-let routeCache: { timestamp: number; routes: Record<string, string> } = {
+/** Where a host resolves to, and whether reaching it needs a session. */
+export interface RouteTarget {
+  upstream: string;
+  requiresAuth: boolean;
+}
+
+// Route cache: host (full domain, lowercased) -> target
+let routeCache: { timestamp: number; routes: Record<string, RouteTarget> } = {
   timestamp: 0,
   routes: {},
 };
@@ -68,9 +81,9 @@ async function fetchRouteConfig(): Promise<NexusCloudRoute[] | null> {
 }
 
 // Convert Nexus-Cloud routes to a simple host->upstream map
-function buildRouteMap(routes: NexusCloudRoute[]): Record<string, string> {
-  const map: Record<string, string> = {};
-  
+export function buildRouteMap(routes: NexusCloudRoute[]): Record<string, RouteTarget> {
+  const map: Record<string, RouteTarget> = {};
+
   for (const route of routes) {
     if (route.domain && route.upstream) {
       // Cloud returns `domain` as a full hostname ("cloud.tnhc.dev") and
@@ -79,15 +92,25 @@ function buildRouteMap(routes: NexusCloudRoute[]): Record<string, string> {
       // unconditionally yields "http://http://host:port", whose URL hostname
       // parses as "http".
       const domain = route.domain.toLowerCase().replace(/^www\./, "");
-      map[domain] = normalizeUpstream(route.upstream);
+      map[domain] = {
+        upstream: normalizeUpstream(route.upstream),
+        // Strict equality, not truthiness: only a real boolean true gates a
+        // host, so a stray string or a typo cannot silently lock people out.
+        requiresAuth: route.requiresAuth === true,
+      };
     }
   }
 
   return map;
 }
 
+/** Seeds the route cache directly. Tests only — there is no live Cloud there. */
+export function __setRoutesForTest(routes: Record<string, RouteTarget>): void {
+  routeCache = { timestamp: Date.now(), routes };
+}
+
 // Get current routes (from cache or fresh fetch)
-async function getRoutes(): Promise<Record<string, string>> {
+async function getRoutes(): Promise<Record<string, RouteTarget>> {
   const now = Date.now();
   
   // Return cached if still fresh
@@ -172,13 +195,19 @@ export async function handleRequest(req: Request): Promise<Response> {
     
     // Find matching route
     let upstreamUrl: string | null = null;
-    
+    // Only a route Cloud explicitly marked can gate. Every fallback below
+    // leaves this false, so a host the route table does not know about stays
+    // reachable exactly as it is today.
+    let requiresAuth = false;
+
     // Cloud keys its routing table by full hostname, and buildRouteMap
     // lowercases and strips a leading "www." from both sides, so a single
     // exact lookup covers every route Cloud can hand us.
     const normalizedHost = host.replace(/^www\./, "");
-    if (routes[normalizedHost]) {
-      upstreamUrl = routes[normalizedHost];
+    const matched = routes[normalizedHost];
+    if (matched) {
+      upstreamUrl = matched.upstream;
+      requiresAuth = matched.requiresAuth;
     }
 
     // Apply fallback logic if enabled and no route found
