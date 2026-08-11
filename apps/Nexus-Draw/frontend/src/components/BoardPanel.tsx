@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import * as api from "../utils/api";
 import type { ServerBoard } from "../utils/api";
 
-export default function BoardPanel({ onSwitch, onNew }: { onSwitch: (id: string) => void; onNew: (name: string) => void }) {
+export default function BoardPanel({ onSwitch, onNew }: { onSwitch: (id: string) => void; onNew: (name: string) => Promise<void> }) {
   const [boards, setBoards] = useState<ServerBoard[]>([]);
   const [name, setName] = useState("");
   const [loading, setLoading] = useState(true);
@@ -14,7 +14,7 @@ export default function BoardPanel({ onSwitch, onNew }: { onSwitch: (id: string)
     if (!name.trim()) return;
     const boardName = name.trim();
     setName("");
-    onNew(boardName);
+    await onNew(boardName);
     void refresh();
   };
 
