@@ -3,6 +3,8 @@
 // and uses it to route subdomains to appropriate services.
 // Falls back to static configuration if Nexus-Cloud is unavailable.
 
+import { gate } from "./gate";
+
 // Configuration
 const PORT = Number(process.env.PROXY_PORT || "80");
 const DOMAIN = process.env.DOMAIN || "tnhc.dev";
@@ -243,6 +245,11 @@ export async function handleRequest(req: Request): Promise<Response> {
       return new Response(`No route configured for host: ${host}`, { status: 404 });
     }
 
+    // Login gate. Runs before anything is forwarded, so an app can never see a
+    // request from someone the ecosystem has not authenticated.
+    const decision = await gate(req, { upstream: upstreamUrl, requiresAuth });
+    if (!decision.allow) return decision.response;
+
     // Proxy to upstream
     try {
       const upstream = new URL(req.url);
@@ -260,6 +267,15 @@ export async function handleRequest(req: Request): Promise<Response> {
       forwardHeaders.delete("content-length");
       forwardHeaders.delete("host");
       forwardHeaders.delete("connection");
+
+      // Identity is something only this proxy may assert. Strip any inbound
+      // value first — without that, a client could set the header itself and
+      // claim to be anyone on every public route — then attach the one the
+      // gate minted, if it minted one.
+      forwardHeaders.delete("x-nexus-identity");
+      if (decision.identityToken) {
+        forwardHeaders.set("x-nexus-identity", decision.identityToken);
+      }
       forwardHeaders.delete("transfer-encoding");
       // Tell the upstream who it is actually answering as, which anything
       // generating absolute URLs or scoping a cookie needs.
