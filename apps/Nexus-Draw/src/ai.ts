@@ -1,5 +1,3 @@
-import { randomUUID } from "node:crypto";
-
 export interface AiElement {
   id: string; elementType: string; data: Record<string, any>;
   style: Record<string, any>; transform: { a: number; b: number; c: number; d: number; e: number; f: number };
@@ -32,24 +30,25 @@ export function synthesizeDiagram(prompt: string, opts: { width?: number; height
     const label = labels[i % labels.length] ?? "node";
     const y = 120 + i * (boxH + gapY);
     els.push({
-      id: randomUUID(), elementType: "rectangle",
+      id: `ai-${seedBase.toString(16)}-${els.length}`, elementType: "rectangle",
       data: { x: left, y, width: boxW, height: boxH },
       style: { ...BASE_STYLE, stroke: i % 2 === 0 ? "#60a5fa" : "#34d399", fill: "rgba(96,165,250,0.08)" },
       transform: { a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 },
       order: 0, seed: nextSeed(),
     });
     els.push({
-      id: randomUUID(), elementType: "text",
+      id: `ai-${seedBase.toString(16)}-${els.length}`, elementType: "text",
       data: { x: left + 12, y: y + boxH / 2 - 12, width: boxW - 24, height: 30, text: label.toUpperCase() },
       style: { ...BASE_STYLE, fontSize: 14, stroke: "#e4e4e7" },
       transform: { a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 },
       order: 0, seed: nextSeed(),
     });
+    // Arrow linking the previous box's bottom to the current box's top.
     if (i > 0) {
-      const py = 110 + i * (boxH + gapY);
+      const fromY = 120 + (i - 1) * (boxH + gapY) + boxH;
       els.push({
-        id: randomUUID(), elementType: "arrow",
-        data: { x1: W / 2, y1: py, x2: W / 2, y2: py + boxH + 20 },
+        id: `ai-${seedBase.toString(16)}-${els.length}`, elementType: "arrow",
+        data: { x1: W / 2, y1: fromY, x2: W / 2, y2: y },
         style: { ...BASE_STYLE, stroke: "#f472b6" },
         transform: { a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 },
         order: 0, seed: nextSeed(),
@@ -57,4 +56,9 @@ export function synthesizeDiagram(prompt: string, opts: { width?: number; height
     }
   }
   return els.map((e, i) => ({ ...e, order: i }));
+}
+
+/** Identity passthrough used by the AI route before persisting/appending. */
+export function aiElementsToServerElements(els: AiElement[]): unknown[] {
+  return els;
 }
