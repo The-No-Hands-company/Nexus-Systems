@@ -39,7 +39,7 @@ import {
   verifyClientSecret,
 } from "./oidc";
 import { issueServiceToken, validateServiceToken } from "./token";
-import type { LoginResult, Permission } from "./types";
+import type { AccountStatus, LoginResult, Permission } from "./types";
 import { NexusClient, createConfig } from "../../../packages/nexus-sdk/src/index";
 
 function jsonResponse(payload: unknown, init?: ResponseInit): Response {
@@ -539,7 +539,7 @@ const server = Bun.serve({
         const updated = updateUser(userId, {
           email: typeof body.email === "string" ? body.email : undefined,
           role: typeof body.role === "string" ? body.role as any : undefined,
-          disabled: typeof body.disabled === "boolean" ? body.disabled : undefined,
+          status: typeof body.status === "string" ? (body.status as AccountStatus) : undefined,
         });
         if (!updated) return jsonResponse({ error: "not found" }, { status: 404 });
         return jsonResponse({ user: updated });
@@ -730,6 +730,6 @@ const server = Bun.serve({
     server,
     port,
     baseUrl,
-    stop: () => { stopHeartbeat(); phantom.stop(); server.stop(); },
+    stop: () => { stopHeartbeat(); server.stop(); },
   };
 }
