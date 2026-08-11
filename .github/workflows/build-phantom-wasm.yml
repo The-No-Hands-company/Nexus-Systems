@@ -1,0 +1,52 @@
+name: Build Phantom WASM
+
+on:
+  workflow_dispatch: {}
+  push:
+    paths:
+      - 'packages/phantom-sdk/**'
+
+jobs:
+  build-wasm:
+    name: Build Phantom WASM (wasm-pack)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Install Rust toolchain and target
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          profile: minimal
+          target: wasm32-unknown-unknown
+
+      - name: Install wasm-pack
+        run: |
+          cargo install wasm-pack --version 0.11.0 || true
+
+      - name: Build Phantom WASM
+        working-directory: packages/phantom-sdk/wasm
+        run: |
+          rustup target add wasm32-unknown-unknown || true
+          wasm-pack build --release --target bundler
+
+      - name: Upload WASM package artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: phantom-sdk-wasm
+          path: packages/phantom-sdk/wasm/pkg
+
+      - name: Publish to workspace (optional)
+        if: false
+        run: |
+          echo "Publishing artifacts to registry is disabled in this workflow by default."
