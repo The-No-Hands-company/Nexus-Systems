@@ -1,0 +1,14 @@
+{
+  "name": "nexus-proxy",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "bun run proxy.ts",
+    "check": "bunx tsc --noEmit",
+    "test": "bun test tests/"
+  },
+  "devDependencies": {
+    "bun-types": "^1.3.11",
+    "typescript": "^5.8.3"
+  }
+}
