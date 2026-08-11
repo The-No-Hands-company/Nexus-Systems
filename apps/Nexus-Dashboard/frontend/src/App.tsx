@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import Home from "./pages/Home";
 import RequestAccess from "./pages/RequestAccess";
 import Claim from "./pages/Claim";
+import Account from "./pages/Account";
 
 /**
  * Plain paths, and the dashboard server serves index.html for any unmatched
@@ -17,6 +18,7 @@ export default function App() {
         <Route path="/" element={<Home />} />
         <Route path="/request" element={<RequestAccess />} />
         <Route path="/claim" element={<Claim />} />
+        <Route path="/account" element={<Account />} />
         <Route path="*" element={<Home />} />
       </Routes>
     </BrowserRouter>

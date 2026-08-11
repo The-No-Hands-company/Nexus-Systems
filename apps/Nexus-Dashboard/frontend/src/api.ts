@@ -78,3 +78,41 @@ export async function listApps(): Promise<AppEntry[]> {
   const { apps } = await request<{ apps: AppEntry[] }>("/api/apps");
   return apps;
 }
+
+export type Session = {
+  id: string;
+  ipAddress: string;
+  userAgent: string;
+  createdAt: string;
+};
+
+export function listSessions() {
+  return request<{ sessions: Session[] }>("/api/v1/auth/sessions").then((r) => r.sessions);
+}
+
+export function revokeSession(id: string) {
+  return request<{ success: boolean }>(`/api/v1/auth/sessions/${encodeURIComponent(id)}/revoke`, {
+    method: "POST",
+  });
+}
+
+export function remainingRecoveryCodes() {
+  return request<{ remaining: number }>("/api/v1/auth/recovery-codes").then((r) => r.remaining);
+}
+
+export function regenerateRecoveryCodes() {
+  return request<{ recoveryCodes: string[] }>("/api/v1/auth/recovery-codes/regenerate", {
+    method: "POST",
+  }).then((r) => r.recoveryCodes);
+}
+
+/**
+ * Always posts to the caller's own id. Self-service is authorised by the
+ * current password, not by an admin permission.
+ */
+export function changePassword(userId: string, currentPassword: string, newPassword: string) {
+  return request<{ success: boolean }>(
+    `/api/v1/auth/users/${encodeURIComponent(userId)}/password`,
+    { method: "POST", body: JSON.stringify({ currentPassword, newPassword }) },
+  );
+}
