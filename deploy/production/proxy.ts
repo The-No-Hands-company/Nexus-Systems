@@ -133,7 +133,7 @@ function normalizeUpstream(upstream: string): string {
   return upstream;
 }
 
-async function handleRequest(req: Request): Promise<Response> {
+export async function handleRequest(req: Request): Promise<Response> {
   try {
     const url = new URL(req.url);
     const host = url.hostname.toLowerCase();
@@ -294,14 +294,35 @@ getRoutes().then(() => {
 // trip the TTL. A failed poll leaves the previous cache in place; getRoutes()
 // still treats CACHE_TTL_MS as a synchronous backstop. Set POLL_INTERVAL_MS=0
 // to rely on that lazy path alone.
-if (POLL_INTERVAL_MS > 0) {
-  setInterval(async () => {
-    const fresh = await fetchRouteConfig();
-    if (fresh !== null) {
-      routeCache = { timestamp: Date.now(), routes: buildRouteMap(fresh) };
-    }
-  }, POLL_INTERVAL_MS);
+/**
+ * Starts the background route poller and begins listening.
+ *
+ * Both used to run at module scope, which made this file impossible to import:
+ * doing so bound PORT — 8080 in production — and fought the running proxy for
+ * it, while also starting a timer that polled Cloud forever. Everything with a
+ * side effect now lives here, called only from the entrypoint below, so tests
+ * and other callers can import handleRequest and the route helpers freely.
+ */
+export function startProxy() {
+  // Refresh routes ahead of demand so a request rarely has to wait on Cloud to
+  // trip the TTL. A failed poll leaves the previous cache in place; getRoutes()
+  // still treats CACHE_TTL_MS as a synchronous backstop. Set POLL_INTERVAL_MS=0
+  // to rely on that lazy path alone.
+  if (POLL_INTERVAL_MS > 0) {
+    setInterval(async () => {
+      const fresh = await fetchRouteConfig();
+      if (fresh !== null) {
+        routeCache = { timestamp: Date.now(), routes: buildRouteMap(fresh) };
+      }
+    }, POLL_INTERVAL_MS);
+  }
+
+  const server = Bun.serve({ port: PORT, fetch: handleRequest });
+  console.log(`[proxy] Listening on ${server.hostname}:${server.port}`);
+  return server;
 }
 
-const server = Bun.serve({ port: PORT, fetch: handleRequest });
-console.log(`[proxy] Listening on ${server.hostname}:${server.port}`);
+// Only when executed directly (`bun run proxy.ts`), never on import.
+if (import.meta.main) {
+  startProxy();
+}
