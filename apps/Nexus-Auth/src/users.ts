@@ -2,6 +2,8 @@ import { createHash, randomBytes, scryptSync, timingSafeEqual } from "node:crypt
 import type { User, IdentityRole, Permission, AccountStatus } from "./types";
 import { mkdirSync, readFileSync, writeFileSync, renameSync, rmSync, dirname, resolve, join, fileURLToPath } from "./types";
 
+import { issueRecoveryCodes } from "./recovery";
+
 export type SafeUser = Omit<User, "passwordHash" | "totpSecret" | "claimCodeHash">;
 
 const users = new Map<string, User>();
@@ -176,7 +178,7 @@ export function claimAccount(input: {
   email: string;
   claimCode: string;
   password: string;
-}): { ok: true; user: SafeUser } | { ok: false; reason: string } {
+}): { ok: true; user: SafeUser; recoveryCodes: string[] } | { ok: false; reason: string } {
   const user = findUserByEmail(input.email);
 
   // Same answer for "no such user", "already claimed" and "wrong code".
@@ -203,7 +205,10 @@ export function claimAccount(input: {
 
   users.set(user.id, user);
   persistUsers();
-  return { ok: true, user: sanitizeUser(user) };
+
+  // Issued here, shown once by the caller, never retrievable again.
+  const recoveryCodes = issueRecoveryCodes(user.id);
+  return { ok: true, user: sanitizeUser(user), recoveryCodes };
 }
 
 /** Accounts in a given lifecycle state — the operator's approval queue. */
