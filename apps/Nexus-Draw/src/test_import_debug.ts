@@ -1,0 +1,14 @@
+console.log("1. Starting imports...");
+import { PhantomApp } from "../../../packages/phantom-sdk/src/integration";
+console.log("2. PhantomApp imported");
+import { NexusDiscovery } from "../../../packages/nexus-discovery/src/index";
+console.log("3. NexusDiscovery imported");
+import { randomUUID } from "node:crypto";
+console.log("4. randomUUID imported");
+import { CollabServer } from "./collab";
+console.log("5. CollabServer imported");
+import { DrawEngine } from "./draw-engine";
+console.log("6. DrawEngine imported");
+import { startHeartbeat } from "./cloud";
+console.log("7. cloud imported");
+console.log("All imports successful!");
