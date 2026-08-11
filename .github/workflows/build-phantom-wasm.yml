@@ -25,12 +25,11 @@ jobs:
             ~/.cargo/git
           key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
 
-      - name: Install Rust toolchain and target
+      - name: Install Rust toolchain
         uses: actions-rs/toolchain@v1
         with:
           toolchain: stable
           profile: minimal
-          target: wasm32-wasip1
 
       - name: Build Phantom WASM (wasip1 target)
         working-directory: packages/phantom-sdk/wasm
