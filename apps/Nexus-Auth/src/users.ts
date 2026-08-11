@@ -320,13 +320,13 @@ export function userHasPermission(userId: string, permission: Permission): boole
 
   const rolePermissions: Record<IdentityRole, Permission[]> = {
     founder: [
-      "auth:admin", "auth:read", "users:create", "users:read", "users:update", "users:delete",
+      "auth:admin", "auth:read", "users:create", "users:read", "users:update", "users:delete", "users:approve",
       "tokens:issue", "tokens:revoke", "tokens:validate",
       "apikeys:create", "apikeys:revoke", "apikeys:read",
       "sessions:read", "sessions:revoke", "system:health", "system:config",
     ],
     admin: [
-      "auth:read", "users:create", "users:read", "users:update", "users:delete",
+      "auth:read", "users:create", "users:read", "users:update", "users:delete", "users:approve",
       "tokens:issue", "tokens:revoke", "tokens:validate",
       "apikeys:create", "apikeys:revoke", "apikeys:read",
       "sessions:read", "sessions:revoke", "system:health", "system:config",

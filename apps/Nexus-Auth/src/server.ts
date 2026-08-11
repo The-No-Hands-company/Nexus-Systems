@@ -12,7 +12,15 @@ import {
   userHasPermission,
   seedDefaultUsers,
   sanitizeUser,
+  findUserByEmail,
+  createAccessRequest,
+  claimAccount,
+  listByStatus,
+  setUserStatus,
 } from "./users";
+import { consumeRecoveryCode, countRemainingRecoveryCodes } from "./recovery";
+import { createInvite, redeemInvite } from "./invites";
+import { checkRateLimit, recordFailure, clearFailures } from "./ratelimit";
 import {
   createApiKey,
   validateApiKey,
@@ -416,6 +424,152 @@ export async function handleRequest(request: Request): Promise<Response> {
     }
 
     // ── Login ──
+    // ── Public: request access ──
+    if (request.method === "POST" && path === "/api/v1/auth/access-requests") {
+      const body = await parseBody(request);
+      const username = typeof body.username === "string" ? body.username.trim() : "";
+      const email = typeof body.email === "string" ? body.email.trim() : "";
+      const note = typeof body.note === "string" ? body.note : undefined;
+
+      if (!username || !email) {
+        return jsonResponse({ error: "username and email are required" }, { status: 400 });
+      }
+      try {
+        const result = createAccessRequest({ username, email, note });
+        // claimCode is returned exactly once, here. It is never stored in
+        // plaintext and there is no way to retrieve it again.
+        return jsonResponse(result, { status: 201 });
+      } catch (err) {
+        return jsonResponse({ error: (err as Error).message }, { status: 409 });
+      }
+    }
+
+    // ── Public: claim an approved account ──
+    if (request.method === "POST" && path === "/api/v1/auth/claim") {
+      const ip = getClientIp(request);
+      const limit = checkRateLimit("claim", ip);
+      if (!limit.allowed) {
+        return jsonResponse({ error: "too_many_attempts" }, {
+          status: 429,
+          headers: { "retry-after": String(Math.ceil(limit.retryAfterMs / 1000)) },
+        });
+      }
+
+      const body = await parseBody(request);
+      const result = claimAccount({
+        email: typeof body.email === "string" ? body.email : "",
+        claimCode: typeof body.claimCode === "string" ? body.claimCode : "",
+        password: typeof body.password === "string" ? body.password : "",  // pragma: allowlist secret
+      });
+
+      if (!result.ok) {
+        recordFailure("claim", ip);
+        return jsonResponse({ error: result.reason }, { status: 400 });
+      }
+      clearFailures("claim", ip);
+      return jsonResponse({ user: result.user, recoveryCodes: result.recoveryCodes });
+    }
+
+    // ── Public: log in with a recovery code ──
+    if (request.method === "POST" && path === "/api/v1/auth/recover") {
+      const ip = getClientIp(request);
+      const limit = checkRateLimit("recover", ip);
+      if (!limit.allowed) {
+        return jsonResponse({ error: "too_many_attempts" }, {
+          status: 429,
+          headers: { "retry-after": String(Math.ceil(limit.retryAfterMs / 1000)) },
+        });
+      }
+
+      const body = await parseBody(request);
+      const email = typeof body.email === "string" ? body.email : "";
+      const code = typeof body.code === "string" ? body.code : "";
+      const user = findUserByEmail(email);
+
+      if (!user || user.status !== "active" || !consumeRecoveryCode(user.id, code)) {
+        recordFailure("recover", ip);
+        return jsonResponse({ error: "invalid_code" }, { status: 400 });
+      }
+      clearFailures("recover", ip);
+
+      const session = createSession({
+        userId: user.id,
+        ipAddress: ip,
+        userAgent: request.headers.get("user-agent") || "",
+      });
+      return jsonResponse({
+        user: sanitizeUser(user),
+        token: session.token,
+        remainingRecoveryCodes: countRemainingRecoveryCodes(user.id),
+      });
+    }
+
+    // ── Public: redeem an invite ──
+    if (request.method === "POST" && path === "/api/v1/auth/invites/redeem") {
+      const ip = getClientIp(request);
+      const limit = checkRateLimit("invite", ip);
+      if (!limit.allowed) {
+        return jsonResponse({ error: "too_many_attempts" }, {
+          status: 429,
+          headers: { "retry-after": String(Math.ceil(limit.retryAfterMs / 1000)) },
+        });
+      }
+
+      const body = await parseBody(request);
+      const result = redeemInvite({
+        code: typeof body.code === "string" ? body.code : "",
+        username: typeof body.username === "string" ? body.username : "",
+        email: typeof body.email === "string" ? body.email : "",
+        password: typeof body.password === "string" ? body.password : "",  // pragma: allowlist secret
+      });
+
+      if (!result.ok) {
+        recordFailure("invite", ip);
+        return jsonResponse({ error: result.reason }, { status: 400 });
+      }
+      clearFailures("invite", ip);
+      return jsonResponse({ user: result.user, recoveryCodes: result.recoveryCodes }, { status: 201 });
+    }
+
+    // ── Operator: the approval queue ──
+    if (request.method === "GET" && path === "/api/v1/auth/access-requests") {
+      if (!auth || !requirePermission(auth.userId, "users:approve")) {
+        return jsonResponse({ error: "forbidden" }, { status: 403 });
+      }
+      return jsonResponse({ requests: listByStatus("pending") });
+    }
+
+    // ── Operator: approve / reject ──
+    const decision = path.match(/^\/api\/v1\/auth\/access-requests\/([^/]+)\/(approve|reject)$/);
+    if (request.method === "POST" && decision) {
+      if (!auth || !requirePermission(auth.userId, "users:approve")) {
+        return jsonResponse({ error: "forbidden" }, { status: 403 });
+      }
+      const [, targetId, action] = decision;
+      const target = getUser(targetId!);
+      if (!target) return jsonResponse({ error: "not_found" }, { status: 404 });
+      if (target.status !== "pending") {
+        return jsonResponse({ error: "not_pending" }, { status: 409 });
+      }
+
+      const updated = setUserStatus(
+        targetId!,
+        action === "approve" ? "approved" : "rejected",
+        auth.userId,
+      );
+      return jsonResponse({ user: updated });
+    }
+
+    // ── Operator: mint an invite ──
+    if (request.method === "POST" && path === "/api/v1/auth/invites") {
+      if (!auth || !requirePermission(auth.userId, "users:create")) {
+        return jsonResponse({ error: "forbidden" }, { status: 403 });
+      }
+      const body = await parseBody(request);
+      const days = typeof body.expiresInDays === "number" ? body.expiresInDays : undefined;
+      return jsonResponse(createInvite(auth.userId, days), { status: 201 });
+    }
+
     if (request.method === "POST" && path === "/api/v1/auth/login") {
       const body = await parseBody(request);
       const username = typeof body.username === "string" ? body.username.trim() : "";

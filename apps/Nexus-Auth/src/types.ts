@@ -11,6 +11,7 @@ export type Permission =
   | "users:read"
   | "users:update"
   | "users:delete"
+  | "users:approve"
   | "tokens:issue"
   | "tokens:revoke"
   | "tokens:validate"
