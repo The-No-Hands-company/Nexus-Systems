@@ -1,6 +1,8 @@
 import { createHash, randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
-import type { User, IdentityRole, Permission } from "./types";
+import type { User, IdentityRole, Permission, AccountStatus } from "./types";
 import { mkdirSync, readFileSync, writeFileSync, renameSync, rmSync, dirname, resolve, join, fileURLToPath } from "./types";
+
+export type SafeUser = Omit<User, "passwordHash" | "totpSecret" | "claimCodeHash">;
 
 const users = new Map<string, User>();
 let userCounter = 0;
@@ -67,6 +69,11 @@ function hydrateUsers(): void {
     users.clear();
     for (const user of Array.isArray(parsed.users) ? parsed.users : []) {
       if (user && typeof user.id === "string" && typeof user.username === "string") {
+        // Records written before the status machine existed carry `disabled`
+        // instead. Map them so an existing deployment does not lock everyone out.
+        if (typeof (user as { status?: string }).status !== "string") {
+          user.status = (user as unknown as { disabled?: boolean }).disabled ? "suspended" : "active";
+        }
         users.set(user.id, user);
       }
     }
@@ -81,7 +88,7 @@ export function createUser(input: {
   email: string;
   password: string;
   role?: IdentityRole;
-}): Omit<User, "passwordHash" | "totpSecret"> {
+}): SafeUser {
   if (findUserByUsername(input.username)) {
     throw new Error(`Username '${input.username}' already exists`);
   }
@@ -94,7 +101,7 @@ export function createUser(input: {
     role: input.role || "user",
     passwordHash: hashPassword(input.password),
     totpEnabled: false,
-    disabled: false,
+    status: "active",
     createdAt: now,
     updatedAt: now,
   };
@@ -104,9 +111,11 @@ export function createUser(input: {
   return sanitizeUser(user);
 }
 
-export function authenticateUser(username: string, password: string): Omit<User, "passwordHash" | "totpSecret"> | null {
+export function authenticateUser(username: string, password: string): SafeUser | null {
   const user = findUserByUsername(username);
-  if (!user || user.disabled) return null;
+  // Only a fully claimed, unsuspended account may authenticate. pending and
+  // approved accounts have no usable password yet.
+  if (!user || user.status !== "active") return null;
 
   if (!verifyPassword(password, user.passwordHash)) return null;
 
@@ -133,26 +142,46 @@ export function findUserByEmail(email: string): User | undefined {
   return undefined;
 }
 
-export function getUser(userId: string): Omit<User, "passwordHash" | "totpSecret"> | undefined {
+export function getUser(userId: string): SafeUser | undefined {
   const user = users.get(userId);
   return user ? sanitizeUser(user) : undefined;
 }
 
-export function listUsers(): Omit<User, "passwordHash" | "totpSecret">[] {
+export function listUsers(): SafeUser[] {
   return Array.from(users.values()).map(sanitizeUser);
 }
 
 export function updateUser(userId: string, patch: {
   email?: string;
   role?: IdentityRole;
-  disabled?: boolean;
-}): Omit<User, "passwordHash" | "totpSecret"> | undefined {
+  status?: AccountStatus;
+}): SafeUser | undefined {
   const user = users.get(userId);
   if (!user) return undefined;
 
   if (patch.email !== undefined) user.email = patch.email.trim().toLowerCase();
   if (patch.role !== undefined) user.role = patch.role;
-  if (patch.disabled !== undefined) user.disabled = patch.disabled;
+  if (patch.status !== undefined) user.status = patch.status;
+  user.updatedAt = new Date().toISOString();
+
+  users.set(user.id, user);
+  persistUsers();
+  return sanitizeUser(user);
+}
+
+/**
+ * Moves an account to a new lifecycle state. `actorId` is recorded only for the
+ * approval transition, which is the one an operator is accountable for.
+ */
+export function setUserStatus(userId: string, status: AccountStatus, actorId?: string): SafeUser | undefined {
+  const user = users.get(userId);
+  if (!user) return undefined;
+
+  user.status = status;
+  if (status === "approved") {
+    user.approvedAt = new Date().toISOString();
+    if (actorId) user.approvedBy = actorId;
+  }
   user.updatedAt = new Date().toISOString();
 
   users.set(user.id, user);
@@ -180,7 +209,7 @@ export function deleteUser(userId: string): boolean {
 
 export function userHasPermission(userId: string, permission: Permission): boolean {
   const user = users.get(userId);
-  if (!user || user.disabled) return false;
+  if (!user || user.status !== "active") return false;
 
   const rolePermissions: Record<IdentityRole, Permission[]> = {
     founder: [
@@ -206,13 +235,13 @@ export function userHasPermission(userId: string, permission: Permission): boole
   return (rolePermissions[user.role] || []).includes(permission);
 }
 
-export function sanitizeUser(user: User): Omit<User, "passwordHash" | "totpSecret"> {
-  const { passwordHash, totpSecret, ...safe } = user;
+export function sanitizeUser(user: User): SafeUser {
+  const { passwordHash, totpSecret, claimCodeHash, ...safe } = user;
   return safe;
 }
 
-export function seedDefaultUsers(adminUsername?: string, operatorUsername?: string): Omit<User, "passwordHash" | "totpSecret">[] {
-  const results: Omit<User, "passwordHash" | "totpSecret">[] = [];
+export function seedDefaultUsers(adminUsername?: string, operatorUsername?: string): SafeUser[] {
+  const results: SafeUser[] = [];
   const admin = adminUsername?.trim().toLowerCase() || "founder";
   const operator = operatorUsername?.trim().toLowerCase() || "operator";
 

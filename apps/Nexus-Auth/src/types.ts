@@ -22,6 +22,19 @@ export type Permission =
   | "system:health"
   | "system:config";
 
+/**
+ * Account lifecycle. Replaces the old `disabled` boolean, which could not
+ * express "approved but not yet claimed" — the state an invited user sits in
+ * between the operator saying yes and the user setting a password.
+ *
+ *   pending   — access requested, awaiting operator decision
+ *   approved  — operator said yes; claim code not yet redeemed
+ *   active    — password set, can log in
+ *   suspended — operator revoked access; recoverable
+ *   rejected  — operator said no; terminal
+ */
+export type AccountStatus = "pending" | "approved" | "active" | "suspended" | "rejected";
+
 export interface User {
   id: string;
   username: string;
@@ -30,7 +43,13 @@ export interface User {
   passwordHash: string;
   totpSecret?: string;
   totpEnabled: boolean;
-  disabled: boolean;
+  status: AccountStatus;
+  /** sha256 of the one-time claim code. Cleared once redeemed. */
+  claimCodeHash?: string;
+  /** Free-text reason supplied with an access request. Operator-facing only. */
+  note?: string;
+  approvedAt?: string;
+  approvedBy?: string;
   createdAt: string;
   updatedAt: string;
   lastLoginAt?: string;
