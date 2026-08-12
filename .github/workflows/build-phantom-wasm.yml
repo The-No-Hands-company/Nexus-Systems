@@ -12,6 +12,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       RUSTFLAGS: "--cfg=wasm_js"
+      WASI_SDK_URL: "https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-20/wasi-sdk-20.0-x86_64-linux.tar.gz"
 
     steps:
       - name: Checkout
