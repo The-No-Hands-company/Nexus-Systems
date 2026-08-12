@@ -290,6 +290,28 @@ disabled-but-present login is a second way in and a second thing to get wrong.
 
 ---
 
+#### Task 4 outcome — WebSocket transport gap, 2026-08-12
+
+Task 4's own work is verified: hitting the gateway (8181) and voice (8182)
+directly returns 401 without an identity header and 101 with one, so both
+WebSocket servers now authenticate from the proxy's header at the HTTP upgrade.
+
+But a WebSocket cannot currently reach them through the public hostname, and
+this **predates this task** — it is not caused by the SSO cutover:
+
+| Hop | Behaviour | Cause |
+|-----|-----------|-------|
+| `proxy.ts` :8080 | cannot upgrade at all | forwards with `fetch()`, which cannot perform a WebSocket handshake, and strips `upgrade` from the response (commit `fd973538`, the tnhc.dev move) |
+| Caddy :8095 `/gateway` | 400, with **or without** an identity header | the upgrade never reaches :8181; auth is not involved |
+
+So realtime on chat.tnhc.dev was already broken before today; gating it did not
+break it. Fixing it means teaching the ecosystem proxy to proxy WebSockets
+(`Bun.serve` upgrade + a socket pump, not `fetch`) and repairing Caddy's
+`/gateway` handle. That is its own piece of work with its own verification, and
+it is a *transport* problem, not an authentication one.
+
+---
+
 ### Task 5: Rotate the JWT secret
 
 `apps/Nexus/.env` carries a 47-character `NEXUS__AUTH__JWT_SECRET` that predates
