@@ -1,5 +1,14 @@
 import { describe, it, expect, beforeEach } from "bun:test";
-import { isRedirectAllowed, loginRedirect, gate, publicUrl, AUTH_HOST, __resetGateForTest } from "../gate";
+import {
+  isRedirectAllowed,
+  loginRedirect,
+  gate,
+  publicUrl,
+  AUTH_HOST,
+  STALE_MS,
+  FRESH_MS,
+  __resetGateForTest,
+} from "../gate";
 
 const PUBLIC = { upstream: "http://127.0.0.1:9", requiresAuth: false };
 const GATED = { upstream: "http://127.0.0.1:9", requiresAuth: true };
@@ -108,5 +117,50 @@ describe("publicUrl", () => {
     // The scheme was never the protection — the host is, and it must survive.
     const req = new Request("http://evil.example.com/steal");
     expect(isRedirectAllowed(publicUrl(req), "tnhc.dev")).toBe(false);
+  });
+});
+
+describe("gate hardening (task 6 review)", () => {
+  beforeEach(() => __resetGateForTest());
+
+  // Found by review, confirmed live: this returned 500 from the proxy.
+  // decodeURIComponent throws on a malformed escape, readCookie did not catch
+  // it, and gate() is called outside the proxy's try — so one header crashed
+  // the path every gated request takes.
+  it("treats an undecodable session cookie as no session, not a crash", async () => {
+    const req = new Request("http://chat.tnhc.dev/", {
+      headers: { cookie: "nexus_session=%zz" },
+    });
+
+    const decision = await gate(req, { upstream: "http://127.0.0.1:9", requiresAuth: true });
+
+    expect(decision.allow).toBe(false);
+    if (!decision.allow) expect(decision.response.status).toBe(302);
+  });
+
+  it("survives a cookie header that is not key=value at all", async () => {
+    const req = new Request("http://chat.tnhc.dev/", { headers: { cookie: "garbage" } });
+
+    const decision = await gate(req, { upstream: "http://127.0.0.1:9", requiresAuth: true });
+
+    expect(decision.allow).toBe(false);
+  });
+
+  it("still lets an ungated route through with a broken cookie", async () => {
+    const req = new Request("http://draw.tnhc.dev/", {
+      headers: { cookie: "nexus_session=%zz" },
+    });
+
+    const decision = await gate(req, { upstream: "http://127.0.0.1:9", requiresAuth: false });
+
+    expect(decision.allow).toBe(true);
+  });
+
+  it("never serves a cached token past the lifetime Auth minted it for", () => {
+    // Auth's IDENTITY_TOKEN_TTL_SECONDS is 120. A stale window longer than
+    // that hands out tokens the app is guaranteed to reject as expired, which
+    // is worse than a clean redirect.
+    expect(STALE_MS).toBeLessThan(120_000);
+    expect(STALE_MS).toBeGreaterThan(FRESH_MS);
   });
 });

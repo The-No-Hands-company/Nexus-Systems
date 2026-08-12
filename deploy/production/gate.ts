@@ -28,12 +28,37 @@ const AUTH_INTERNAL_URL = process.env.NEXUS_AUTH_INTERNAL_URL || "http://127.0.0
 const SESSION_COOKIE = "nexus_session";
 
 /** Normal freshness. Beyond this an entry is revalidated against Auth. */
-const FRESH_MS = 60_000;
-/** How long a stale entry may still be served while Auth is unreachable. */
-const STALE_MS = 15 * 60_000;
+export const FRESH_MS = 60_000;
+/**
+ * How long a stale entry may still be served while Auth is unreachable.
+ *
+ * Bounded by the identity token's own lifetime, not by how long we would
+ * *like* to ride out an outage. Auth mints these for 120 seconds
+ * (IDENTITY_TOKEN_TTL_SECONDS), so a cached token is worthless the moment it
+ * expires — the app verifies `exp` and returns 401. This was 15 minutes, which
+ * meant all but the first two of them handed out tokens guaranteed to be
+ * rejected downstream.
+ *
+ * Surviving a longer Auth outage is possible, but it needs a longer token TTL,
+ * which is a different trade: a longer-lived token is a longer-lived thing to
+ * steal.
+ */
+export const STALE_MS = 100_000;
 
 type CacheEntry = { token: string; fetchedAt: number };
 const identityCache = new Map<string, CacheEntry>();
+
+/**
+ * Entries are only ever written for sessions Auth accepted, so this cannot be
+ * grown by an attacker — but it was never pruned either, so every (session,
+ * host) pair a real user ever visited stayed for the life of the process.
+ * Sweeping on write keeps it proportional to who is actually online.
+ */
+function sweepExpired(now: number): void {
+  for (const [k, v] of identityCache) {
+    if (now - v.fetchedAt >= STALE_MS) identityCache.delete(k);
+  }
+}
 
 export function __resetGateForTest(): void {
   identityCache.clear();
@@ -45,7 +70,18 @@ function readCookie(req: Request, name: string): string | null {
   for (const part of header.split(";")) {
     const eq = part.indexOf("=");
     if (eq === -1) continue;
-    if (part.slice(0, eq).trim() === name) return decodeURIComponent(part.slice(eq + 1).trim());
+    if (part.slice(0, eq).trim() !== name) continue;
+    const raw = part.slice(eq + 1).trim();
+    try {
+      return decodeURIComponent(raw);
+    } catch {
+      // decodeURIComponent throws on malformed escapes like "%zz". Unhandled,
+      // that turned any request carrying a broken cookie into a 500 from the
+      // proxy — a crash anyone could trigger with one header, on the one code
+      // path every gated request goes through. A cookie we cannot decode is
+      // simply not a session.
+      return null;
+    }
   }
   return null;
 }
@@ -131,7 +167,9 @@ export async function resolveIdentity(cookie: string | null, audience: string): 
       return null;
     }
     const { token } = await res.json() as { token: string };
-    identityCache.set(key, { token, fetchedAt: Date.now() });
+    const now = Date.now();
+    sweepExpired(now);
+    identityCache.set(key, { token, fetchedAt: now });
     return token;
   } catch {
     // Auth unreachable — distinct from Auth saying no. Keep an existing

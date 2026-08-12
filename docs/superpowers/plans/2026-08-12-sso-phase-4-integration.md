@@ -129,7 +129,9 @@ Still wide, deliberately:
 | 8788 | Hosting app | published by container |
 | 9010 | MinIO | published by container; browsers/CLIs fetch bytes directly |
 
-**Open finding, blocks Task 6.** The tunnel's ingress does not send everything
+**Open finding — blocks gating the *rest* of the ecosystem, not Task 6.**
+(Corrected 2026-08-12: Task 6 gates chat only, which this does not affect.)
+The tunnel's ingress does not send everything
 through the proxy. Current rules:
 
 ```
@@ -365,6 +367,55 @@ poll. Know this before switching, not after.
 
 - [ ] **Step 6: Commit** whatever code the review changed, and record in the
 logbook that the gate is live.
+
+---
+
+#### Task 6 outcome — the gate is live, 2026-08-12
+
+`chat.tnhc.dev` is gated. Signed out it 302s to `auth.tnhc.dev` carrying the
+address you asked for; signed in it serves. Every other host is untouched:
+`app`, `draw`, `cloud`, `hosting` 200, `auth` 404 at `/` as it always has.
+
+**Rollback**, known before it was needed rather than after:
+
+```bash
+K=$(sed -n 's/^NEXUS_CLOUD_API_KEY=//p' apps/Nexus-Cloud/.env | head -1 | tr -d '\r"')
+curl -s -X PATCH -H "X-API-Key: $K" -H 'content-type: application/json' \
+  -d '{"requiresAuth":false}' http://127.0.0.1:8787/api/v1/tools/nexus-chat
+```
+
+The proxy picks it up within its 60s poll. No restart, no deploy.
+
+**The whole path, walked with a real new account** (created, then removed):
+request access → refused a login while pending → operator saw it and approved →
+a weak password was refused at claim → claimed → signed in → opened Chat, which
+recognised them and provisioned their row automatically. That is the entire
+thesis of this project working for someone who had no Chat account at all.
+
+**Three defects the review found**, all in `gate.ts`, all fixed with tests:
+
+1. **A malformed cookie 500'd every gated route.** `decodeURIComponent` throws
+   on an escape like `%zz`, `readCookie` did not catch it, and `gate()` runs
+   outside the proxy's try — so one header crashed the path every gated request
+   takes. Confirmed live before the fix, confirmed 302 after.
+2. **The stale-cache window outlived the tokens it cached.** `STALE_MS` was 15
+   minutes against a 120-second token, so all but the first two minutes handed
+   out tokens the app is guaranteed to reject. Now 100s, under the TTL.
+3. **The identity cache was never pruned.** Not attacker-growable — entries are
+   only written for sessions Auth accepted — but every (session, host) pair a
+   real user visited stayed for the life of the process. Swept on write.
+
+**What held up:** a forged `X-Nexus-Identity` is refused twice over — the gate
+strips any inbound value before forwarding, and the app rejects the signature
+independently. Verified both ways. The `AUTH_HOST` allowlist is structural, so
+no route row can lock everyone out of signing in. Every Nexus port refuses from
+this host's own LAN address; only the four documented exceptions listen wide.
+
+**Known limitation, worth knowing before gating anything else:** only hosts with
+a Cloud *route* can be gated. The wildcard and static-app fallbacks in
+`proxy.ts` hardcode `requiresAuth = false`, so `draw.tnhc.dev` — served through
+the Hosting fallback — has nowhere to carry the flag. Gating it means giving it
+a real route first.
 
 ---
 
