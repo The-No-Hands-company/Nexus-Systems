@@ -1,4 +1,5 @@
 import { startServer } from "./server";
+import { startCloudHeartbeat } from "./cloud";
 
 /**
  * Entrypoint. Kept separate from server.ts so the server stays importable by
@@ -9,8 +10,16 @@ import { startServer } from "./server";
  */
 const server = startServer();
 
+// Cloud marks a tool offline when it stops hearing from it, and Guardian
+// refuses to expose an offline tool — so without this, app.<domain> never
+// routes no matter how healthy the process actually is.
+const stopHeartbeat = startCloudHeartbeat(
+  process.env.NEXUS_DASHBOARD_UPSTREAM_URL || `http://127.0.0.1:${server.port}`,
+);
+
 for (const signal of ["SIGTERM", "SIGINT"] as const) {
   process.on(signal, () => {
+    stopHeartbeat();
     server.stop(true);
     process.exit(0);
   });

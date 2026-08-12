@@ -45,7 +45,15 @@ start_service() {
     local port=$3
     shift 3
 
-    check_port $port || return 1
+    # An already-bound port means the service is already up, which is a
+    # success for our purposes, not a failure. Returning non-zero here aborted
+    # the whole script under `set -e`, so a single running service stopped
+    # every later one from starting — `deploy.sh bg` could not fill in the
+    # gaps after a partial outage, which is precisely when it is needed.
+    if ! check_port $port; then
+        log "$name already running on :$port — leaving it alone"
+        return 0
+    fi
 
     log "Starting $name on :$port"
     cd "$dir"
