@@ -30,6 +30,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { signJwt } from "./token";
+import { getUser } from "./users";
 
 export type OidcClient = {
   clientId: string;
@@ -166,6 +167,12 @@ export function issueIdToken(input: {
   extraClaims?: Record<string, unknown>;
 }): string {
   const now = Math.floor(Date.now() / 1000);
+  const user = getUser(input.userId);
+  const extra: Record<string, unknown> = { ...(input.extraClaims ?? {}) };
+  if (user && (user as any).phantom_did) {
+    extra.phantom_did = (user as any).phantom_did;
+  }
+
   return signJwt({
     iss: issuer(),
     sub: input.userId,
@@ -174,7 +181,7 @@ export function issueIdToken(input: {
     exp: now + ID_TOKEN_TTL_SECONDS,
     jti: randomUUID(),
     ...(input.nonce ? { nonce: input.nonce } : {}),
-    ...(input.extraClaims ?? {}),
+    ...extra,
   });
 }
 

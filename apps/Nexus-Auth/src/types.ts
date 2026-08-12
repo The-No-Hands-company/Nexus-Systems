@@ -54,6 +54,8 @@ export interface User {
   createdAt: string;
   updatedAt: string;
   lastLoginAt?: string;
+  /** Optional Phantom DID associated with the user */
+  phantom_did?: string | null;
 }
 
 export interface ApiKey {

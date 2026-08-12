@@ -90,6 +90,7 @@ export function createUser(input: {
   email: string;
   password: string;
   role?: IdentityRole;
+  phantom_did?: string | null;
 }): SafeUser {
   if (findUserByUsername(input.username)) {
     throw new Error(`Username '${input.username}' already exists`);
@@ -106,6 +107,7 @@ export function createUser(input: {
     status: "active",
     createdAt: now,
     updatedAt: now,
+    phantom_did: input.phantom_did ?? undefined,
   };
 
   users.set(user.id, user);
