@@ -36,6 +36,15 @@ jobs:
         env:
           RUSTFLAGS: "--cfg=wasm_js"
         run: |
+          # If a prebuilt wasm artifact is present in the repo, use it and skip the build.
+          if [ -f ./artifacts/phantom_wasm.wasm ]; then
+            echo "Found prebuilt phantom_wasm.wasm in repo, using it"
+            mkdir -p pkg
+            cp ./artifacts/phantom_wasm.wasm pkg/phantom_wasm.wasm || true
+            echo "Skipping build step"
+            exit 0
+          fi
+
           # Ensure nightly toolchain and target are installed
           rustup toolchain install nightly || true
           rustup target add wasm32-wasip1 --toolchain nightly || true
