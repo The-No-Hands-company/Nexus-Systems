@@ -116,3 +116,38 @@ export function changePassword(userId: string, currentPassword: string, newPassw
     { method: "POST", body: JSON.stringify({ currentPassword, newPassword }) },
   );
 }
+
+export type AccessRequest = {
+  id: string;
+  username: string;
+  email: string;
+  status: string;
+  note?: string;
+  createdAt: string;
+};
+
+/** Roles that may approve access requests — mirrors users:approve server-side. */
+export const ADMIN_ROLES = ["founder", "admin"];
+
+export function isAdmin(user: Me | null): boolean {
+  return !!user && ADMIN_ROLES.includes(user.role);
+}
+
+export function listAccessRequests() {
+  return request<{ requests: AccessRequest[] }>("/api/v1/auth/access-requests")
+    .then((r) => r.requests);
+}
+
+export function decideAccessRequest(id: string, decision: "approve" | "reject") {
+  return request<{ user: unknown }>(
+    `/api/v1/auth/access-requests/${encodeURIComponent(id)}/${decision}`,
+    { method: "POST", body: JSON.stringify({}) },
+  );
+}
+
+export function createInvite(expiresInDays?: number) {
+  return request<{ id: string; code: string; expiresAt: string }>("/api/v1/auth/invites", {
+    method: "POST",
+    body: JSON.stringify(expiresInDays === undefined ? {} : { expiresInDays }),
+  });
+}

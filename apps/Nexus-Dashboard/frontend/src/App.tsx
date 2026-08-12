@@ -3,6 +3,7 @@ import Home from "./pages/Home";
 import RequestAccess from "./pages/RequestAccess";
 import Claim from "./pages/Claim";
 import Account from "./pages/Account";
+import Admin from "./pages/Admin";
 
 /**
  * Plain paths, and the dashboard server serves index.html for any unmatched
@@ -19,6 +20,7 @@ export default function App() {
         <Route path="/request" element={<RequestAccess />} />
         <Route path="/claim" element={<Claim />} />
         <Route path="/account" element={<Account />} />
+        <Route path="/admin" element={<Admin />} />
         <Route path="*" element={<Home />} />
       </Routes>
     </BrowserRouter>
