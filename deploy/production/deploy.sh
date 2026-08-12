@@ -183,8 +183,11 @@ cmd_start() {
     # therefore published a dead public hostname as its own upstream, and the
     # proxy hung trying to resolve it. Same failure as NEXUS_AUTH_BASE_URL: an
     # upstream is an address this machine can reach, never a public URL.
+    # PHANTOM_REQUIRE_REAL: verified against the native library, so this one is
+    # allowed to insist rather than fall back to counterfeit crypto.
     start_service "chat" "$ROOT/apps/Nexus-Team-Chat" 3109 \
         NEXUS_CLOUD_URL=http://localhost:8787 PORT=3109 \
+        PHANTOM_REQUIRE_REAL=1 \
         NEXUS_TEAM_CHAT_BASE_URL=http://127.0.0.1:3109 \
         bun run src/index.ts
 
@@ -278,10 +281,13 @@ cmd_start() {
         warn "Phantom native library failed to build — services requiring real crypto will refuse to start"
     fi
 
-    # PHANTOM_REQUIRE_REAL: refuse to start on mock cryptography. Draw is the
-    # first service verified against the native library, so it is the first one
-    # allowed to insist. Do not add this to a service until its crypto has been
-    # confirmed working — it fails closed, which is the point.
+    # PHANTOM_REQUIRE_REAL: refuse to start on mock cryptography. Verified
+    # against the native library. Do not add this to a service until its crypto
+    # has been confirmed working — it fails closed, which is the point.
+    #
+    # Only services that actually call the Phantom SDK carry this. Setting it on
+    # auth, cloud or the dashboard would do nothing: they never construct an
+    # SDK, so there is no fallback for the flag to refuse.
     start_service "draw" "$ROOT/apps/Nexus-Draw" 3075 \
         PORT=3075 \
         PHANTOM_REQUIRE_REAL=1 \

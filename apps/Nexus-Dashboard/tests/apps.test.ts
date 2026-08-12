@@ -61,3 +61,28 @@ describe("app grid entries", () => {
     expect(toAppEntries({ tools: [null, 42] }, AUTH)).toEqual([]);
   });
 });
+
+describe("the dashboard does not list itself", () => {
+  const payload = {
+    tools: [
+      { id: "nexus-dashboard", name: "Nexus Dashboard", publicUrl: "https://app.tnhc.dev", health: "healthy" },
+      { id: "nexus-draw", name: "Nexus-Draw", publicUrl: "https://draw.tnhc.dev", health: "healthy" },
+      { id: "nexus-auth", name: "Nexus Auth", publicUrl: "https://auth.tnhc.dev", health: "healthy" },
+    ],
+  };
+
+  it("omits its own tile — a button to where you already are", () => {
+    const entries = toAppEntries(payload, "auth.tnhc.dev", "app.tnhc.dev");
+    expect(entries.map((e) => e.id)).toEqual(["nexus-draw"]);
+  });
+
+  it("still omits the identity service", () => {
+    const entries = toAppEntries(payload, "auth.tnhc.dev", "app.tnhc.dev");
+    expect(entries.some((e) => e.url.includes("auth."))).toBe(false);
+  });
+
+  it("without a self host, nothing is dropped but auth", () => {
+    const entries = toAppEntries(payload, "auth.tnhc.dev");
+    expect(entries.map((e) => e.id)).toEqual(["nexus-dashboard", "nexus-draw"]);
+  });
+});

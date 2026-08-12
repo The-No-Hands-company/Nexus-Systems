@@ -38,7 +38,11 @@ function str(v: unknown): string {
  * separate service that can be mid-restart or mid-deploy, and that must cost
  * the user their app list, not the whole dashboard.
  */
-export function toAppEntries(payload: unknown, authHost: string): AppEntry[] {
+export function toAppEntries(
+  payload: unknown,
+  authHost: string,
+  selfHost?: string,
+): AppEntry[] {
   const tools = (payload as { tools?: unknown } | null)?.tools;
   if (!Array.isArray(tools)) return [];
 
@@ -49,7 +53,11 @@ export function toAppEntries(payload: unknown, authHost: string): AppEntry[] {
     const url = str(raw.publicUrl);
     const id = str(raw.id);
     if (!url || !id) continue;
+    // The identity service is not an app you open, and neither is this page:
+    // a tile linking to the dashboard, shown on the dashboard, is a button
+    // that goes where you already are.
     if (url.includes(authHost)) continue;
+    if (selfHost && url.includes(selfHost)) continue;
 
     entries.push({
       id,

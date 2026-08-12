@@ -19,6 +19,8 @@ import { toAppEntries } from "./apps";
 const PORT = Number(process.env.PORT || "3132");
 const DOMAIN = process.env.DOMAIN || "tnhc.dev";
 const AUTH_HOST = process.env.NEXUS_AUTH_HOST || `auth.${DOMAIN}`;
+/** This app's own public host, so it does not list itself in its own grid. */
+const SELF_HOST = process.env.NEXUS_DASHBOARD_HOST || `app.${DOMAIN}`;
 const AUTH_INTERNAL_URL = process.env.NEXUS_AUTH_INTERNAL_URL || "http://127.0.0.1:4310";
 const CLOUD_URL = process.env.NEXUS_CLOUD_URL || "http://127.0.0.1:8787";
 const CLOUD_API_KEY = process.env.NEXUS_CLOUD_API_KEY || "";
@@ -37,7 +39,7 @@ async function fetchApps(): Promise<Response> {
       signal: AbortSignal.timeout(3000),
     });
     if (!res.ok) return Response.json({ apps: [] });
-    return Response.json({ apps: toAppEntries(await res.json(), AUTH_HOST) });
+    return Response.json({ apps: toAppEntries(await res.json(), AUTH_HOST, SELF_HOST) });
   } catch {
     // Cloud being down must degrade to an empty grid, not a broken dashboard —
     // the account pages still work and the user can still sign in.

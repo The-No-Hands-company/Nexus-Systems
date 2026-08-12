@@ -96,7 +96,23 @@
 		file_server
 		@hashed path_regexp hashed \.[0-9a-zA-Z_-]{8,}\.(js|css|woff2?)$
 		header @hashed Cache-Control "public, max-age=31536000, immutable"
-		header /index.html Cache-Control "no-cache, no-store, must-revalidate"
+
+		# Everything that is not a content-hashed asset must not be cached —
+		# which in practice means the HTML shell, however it was asked for.
+		#
+		# This was `header /index.html`, which matches the literal request path.
+		# Browsers ask for "/", and SPA routes ask for "/rooms/x"; try_files
+		# rewrites both to index.html internally, but the matcher had already
+		# seen the original path and did not fire. So the shell went out with no
+		# Cache-Control at all, browsers cached it heuristically from
+		# Last-Modified, and kept serving an old shell pointing at an old
+		# content-hashed bundle — which is immutable-cached forever. The result
+		# is a deployed fix that users never receive, with no way to tell from
+		# the server that anything is wrong.
+		@shell {
+			not path_regexp hashed \.[0-9a-zA-Z_-]{8,}\.(js|css|woff2?)$
+		}
+		header @shell Cache-Control "no-cache, no-store, must-revalidate"
 	}
 
 	header {
