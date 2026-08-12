@@ -64,6 +64,37 @@ export function __resetGateForTest(): void {
   identityCache.clear();
 }
 
+/**
+ * Every value sent under `name`, not just the first.
+ *
+ * A browser will happily hold two cookies with the same name at different
+ * scopes — one host-only on chat.tnhc.dev, one on .tnhc.dev — and sends both,
+ * most-specific first, with no way for the server to tell them apart. Taking
+ * only the first meant a single stale host-scoped cookie shadowed the good
+ * ecosystem session permanently: the gate would refuse, redirect the app's own
+ * fetch to the sign-in host, and the page's CSP would block the redirect, so
+ * the user saw "not signed in" on a host they were signed in to, with no way
+ * to clear it short of wiping cookies by hand.
+ */
+export function readCookies(req: Request, name: string): string[] {
+  const header = req.headers.get("cookie");
+  if (!header) return [];
+  const out: string[] = [];
+  for (const part of header.split(";")) {
+    const eq = part.indexOf("=");
+    if (eq === -1) continue;
+    if (part.slice(0, eq).trim() !== name) continue;
+    const raw = part.slice(eq + 1).trim();
+    try {
+      const value = decodeURIComponent(raw);
+      if (value) out.push(value);
+    } catch {
+      // Undecodable is simply not a session; keep looking at the others.
+    }
+  }
+  return out;
+}
+
 function readCookie(req: Request, name: string): string | null {
   const header = req.headers.get("cookie");
   if (!header) return null;
@@ -194,7 +225,12 @@ export async function gate(
   // Public routes pay nothing: no cookie read, no call to Auth, no token.
   if (!target.requiresAuth) return { allow: true, identityToken: null };
 
-  const identityToken = await resolveIdentity(readCookie(req, SESSION_COOKIE), host);
+  // Try every candidate: one stale cookie must not shadow a valid one.
+  let identityToken: string | null = null;
+  for (const candidate of readCookies(req, SESSION_COOKIE)) {
+    identityToken = await resolveIdentity(candidate, host);
+    if (identityToken) break;
+  }
   if (!identityToken) return { allow: false, response: loginRedirect(publicUrl(req)) };
 
   return { allow: true, identityToken };

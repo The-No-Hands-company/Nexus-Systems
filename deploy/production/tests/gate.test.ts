@@ -4,6 +4,7 @@ import {
   loginRedirect,
   gate,
   publicUrl,
+  readCookies,
   AUTH_HOST,
   STALE_MS,
   FRESH_MS,
@@ -162,5 +163,31 @@ describe("gate hardening (task 6 review)", () => {
     // is worse than a clean redirect.
     expect(STALE_MS).toBeLessThan(120_000);
     expect(STALE_MS).toBeGreaterThan(FRESH_MS);
+  });
+});
+
+describe("duplicate session cookies", () => {
+  beforeEach(() => __resetGateForTest());
+
+  // Browsers hold same-named cookies at different scopes and send them all,
+  // most-specific first. Reading only the first let one stale host-scoped
+  // cookie permanently shadow a valid ecosystem session.
+  it("reads every value sent under the session name", () => {
+    const req = new Request("http://chat.tnhc.dev/", {
+      headers: { cookie: "nexus_session=stale; other=x; nexus_session=good" },
+    });
+    expect(readCookies(req, "nexus_session")).toEqual(["stale", "good"]);
+  });
+
+  it("skips an undecodable value instead of giving up on the rest", () => {
+    const req = new Request("http://chat.tnhc.dev/", {
+      headers: { cookie: "nexus_session=%zz; nexus_session=good" },
+    });
+    expect(readCookies(req, "nexus_session")).toEqual(["good"]);
+  });
+
+  it("returns nothing when the name is absent", () => {
+    const req = new Request("http://chat.tnhc.dev/", { headers: { cookie: "other=x" } });
+    expect(readCookies(req, "nexus_session")).toEqual([]);
   });
 });
