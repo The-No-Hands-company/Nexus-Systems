@@ -67,7 +67,19 @@ export function translateElement(el: ElementData, dx: number, dy: number): Eleme
   const d = el.data as Record<string, any>;
   let moved: ElementData;
 
-  if (el.elementType === "line" || el.elementType === "arrow") {
+  if (el.elementType === "connector") {
+    const c = el.data as any;
+    if (c.startId || c.endId) return el; // glued connectors follow their shapes
+    return {
+      ...el,
+      data: {
+        ...c,
+        startPoint: c.startPoint ? { x: c.startPoint.x + dx, y: c.startPoint.y + dy } : undefined,
+        endPoint: c.endPoint ? { x: c.endPoint.x + dx, y: c.endPoint.y + dy } : undefined,
+        waypoints: (c.waypoints ?? []).map((w: Point) => ({ x: w.x + dx, y: w.y + dy })),
+      },
+    };
+  } else if (el.elementType === "line" || el.elementType === "arrow") {
     moved = {
       ...el,
       data: { ...d, x1: (d.x1 ?? 0) + dx, y1: (d.y1 ?? 0) + dy, x2: (d.x2 ?? 0) + dx, y2: (d.y2 ?? 0) + dy },
@@ -189,8 +201,8 @@ export function cloneElementOffset(el: ElementData, dx = 16, dy = 16): ElementDa
  * on-screen footprint, which is what marquee selection needs to test against
  * (elementBounds/hitInMarquee alone operate in local, pre-rotation space).
  */
-export function elementWorldBounds(el: ElementData): Bounds {
-  const b = elementBounds(el);
+export function elementWorldBounds(el: ElementData, elements?: ElementData[]): Bounds {
+  const b = elementBounds(el, elements);
   const corners = [
     { x: b.x, y: b.y },
     { x: b.x + b.width, y: b.y },
@@ -211,8 +223,8 @@ export function elementWorldBounds(el: ElementData): Bounds {
  * marquee selection box) — the rotation-aware counterpart to hitTest.ts's
  * `hitInMarquee`, which tests el's local (pre-rotation) bounds instead.
  */
-export function elementInMarquee(el: ElementData, rect: Bounds): boolean {
-  const b = elementWorldBounds(el);
+export function elementInMarquee(el: ElementData, rect: Bounds, elements?: ElementData[]): boolean {
+  const b = elementWorldBounds(el, elements);
   return (
     b.x >= rect.x &&
     b.y >= rect.y &&

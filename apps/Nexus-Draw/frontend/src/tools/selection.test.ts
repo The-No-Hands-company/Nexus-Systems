@@ -225,3 +225,40 @@ describe("elementInMarquee", () => {
     expect(elementInMarquee(rotated, marqueeCoveringFootprint)).toBe(true);
   });
 });
+
+describe("translateElement — connector", () => {
+  it("shifts a free connector's points", () => {
+    const el = makeElement("connector", {
+      startPoint: { x: 0, y: 0 },
+      endPoint: { x: 100, y: 0 },
+      waypoints: [{ x: 50, y: 40 }],
+      routing: "elbow",
+    });
+    const moved = translateElement(el, 10, 5);
+    expect(moved.data.startPoint).toEqual({ x: 10, y: 5 });
+    expect(moved.data.endPoint).toEqual({ x: 110, y: 5 });
+    expect(moved.data.waypoints).toEqual([{ x: 60, y: 45 }]);
+  });
+  it("does not shift a glued connector (it follows its shapes)", () => {
+    const el = makeElement("connector", { startId: "a", endId: "b", routing: "elbow" });
+    expect(translateElement(el, 10, 5)).toBe(el);
+  });
+});
+
+describe("resizeElement — connector", () => {
+  it("returns the element unchanged (no resize handles)", () => {
+    const el = makeElement("connector", { startPoint: { x: 0, y: 0 }, endPoint: { x: 100, y: 0 }, routing: "elbow" });
+    expect(resizeElement(el, "se", 50, 50)).toBe(el);
+  });
+});
+
+describe("elementWorldBounds — connector", () => {
+  it("uses the routed path from the element list", () => {
+    const a = makeElement("rectangle", { x: 0, y: 0, width: 100, height: 50 });
+    const b = makeElement("rectangle", { x: 300, y: 0, width: 100, height: 50 });
+    const el = makeElement("connector", { startId: a.id, endId: b.id, routing: "straight" });
+    const wb = elementWorldBounds(el, [a, b]);
+    expect(wb.x).toBeCloseTo(100, 8);
+    expect(wb.y).toBeCloseTo(25, 8);
+  });
+});
