@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from "bun:test";
-import { isRedirectAllowed, loginRedirect, gate, AUTH_HOST, __resetGateForTest } from "../gate";
+import { isRedirectAllowed, loginRedirect, gate, publicUrl, AUTH_HOST, __resetGateForTest } from "../gate";
 
 const PUBLIC = { upstream: "http://127.0.0.1:9", requiresAuth: false };
 const GATED = { upstream: "http://127.0.0.1:9", requiresAuth: true };
@@ -81,5 +81,32 @@ describe("the gate", () => {
     const r = await gate(req("https://draw.tnhc.dev/", { cookie: "nexus_session=x" }), PUBLIC);
     expect(r.allow).toBe(true);
     if (r.allow) expect(r.identityToken).toBeNull();
+  });
+});
+
+describe("publicUrl", () => {
+  // Regression: this was found end-to-end, not by a unit test. The gate built
+  // its return address from req.url, which behind the tunnel is always http://,
+  // so isRedirectAllowed rejected it and every gated login landed on the apex
+  // marketing page instead of the page the user asked for.
+  it("rewrites the tunnel's http hop to the public https address", () => {
+    const req = new Request("http://echo.tnhc.dev/rooms/1?x=2");
+    expect(publicUrl(req)).toBe("https://echo.tnhc.dev/rooms/1?x=2");
+  });
+
+  it("drops a port the origin only sees because of the tunnel", () => {
+    const req = new Request("http://echo.tnhc.dev:8080/probe");
+    expect(publicUrl(req)).toBe("https://echo.tnhc.dev/probe");
+  });
+
+  it("produces an address the redirect allowlist accepts", () => {
+    const req = new Request("http://chat.tnhc.dev/deep/link");
+    expect(isRedirectAllowed(publicUrl(req), "tnhc.dev")).toBe(true);
+  });
+
+  it("still refuses an off-domain host after the rewrite", () => {
+    // The scheme was never the protection — the host is, and it must survive.
+    const req = new Request("http://evil.example.com/steal");
+    expect(isRedirectAllowed(publicUrl(req), "tnhc.dev")).toBe(false);
   });
 });

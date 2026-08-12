@@ -71,6 +71,28 @@ export function isRedirectAllowed(target: string, domain = DOMAIN): boolean {
   return host === d || host.endsWith(`.${d}`);
 }
 
+/**
+ * The address the browser actually asked for, as the browser would write it.
+ *
+ * `req.url` here is always `http://` — Cloudflare terminates TLS at the edge
+ * and the tunnel hands this proxy plain HTTP — so passing it straight to
+ * `isRedirectAllowed`, which requires https, made *every* gated login discard
+ * the return address and bounce to the apex. The path was being thrown away at
+ * exactly the moment it mattered.
+ *
+ * Rebuilding with https is safe because the scheme was never the security
+ * property: the host is, and it is still checked. Nothing reachable through
+ * this proxy is served over plain HTTP publicly.
+ */
+export function publicUrl(req: Request): string {
+  const url = new URL(req.url);
+  url.protocol = "https:";
+  // Strip a port the origin only sees because of the tunnel hop; the public
+  // address has none, and leaving :8080 on would fail the host check.
+  url.port = "";
+  return url.toString();
+}
+
 /** 302 to the login page, carrying a validated return address. */
 export function loginRedirect(originalUrl: string): Response {
   const safeReturn = isRedirectAllowed(originalUrl) ? originalUrl : `https://${DOMAIN}/`;
@@ -135,7 +157,7 @@ export async function gate(
   if (!target.requiresAuth) return { allow: true, identityToken: null };
 
   const identityToken = await resolveIdentity(readCookie(req, SESSION_COOKIE), host);
-  if (!identityToken) return { allow: false, response: loginRedirect(req.url) };
+  if (!identityToken) return { allow: false, response: loginRedirect(publicUrl(req)) };
 
   return { allow: true, identityToken };
 }
