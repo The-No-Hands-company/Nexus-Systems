@@ -194,6 +194,39 @@ export function isWebSocketUpgrade(req: Request): boolean {
     .some((part) => part.trim() === "upgrade");
 }
 
+/**
+ * Strip headers that must not survive a proxy hop.
+ *
+ * Hop-by-hop headers describe the previous connection, not the response, and
+ * forwarding them misdescribes ours.
+ *
+ * `content-encoding` matters most and is the least obvious. Bun's fetch()
+ * honours Content-Encoding transparently and hands back plain bytes, so by the
+ * time we see the body it is already decoded — but the header still says gzip.
+ * Passing it on tells the client to gunzip something that is not gzipped, and
+ * it fails with ERR_CONTENT_DECODING_FAILED ("Decoding failed").
+ *
+ * This only ever broke real browsers. curl sends no Accept-Encoding unless
+ * asked, so upstream returned plain bytes with no header and every check from
+ * the command line passed; browsers always advertise gzip, so for them every
+ * proxied response through this path was corrupt. An app could answer 200 to
+ * everything measurable here and still be unusable in a browser.
+ *
+ * `content-length` goes for the same reason: it describes the encoded length.
+ */
+export function sanitizeResponseHeaders(headers: Headers): void {
+  headers.delete("connection");
+  headers.delete("keep-alive");
+  headers.delete("proxy-authenticate");
+  headers.delete("proxy-authorization");
+  headers.delete("te");
+  headers.delete("trailer");
+  headers.delete("transfer-encoding");
+  headers.delete("upgrade");
+  headers.delete("content-encoding");
+  headers.delete("content-length");
+}
+
 export async function handleRequest(
   req: Request,
   server?: { upgrade: (req: Request, opts: { data: WsProxyData }) => boolean },
@@ -362,16 +395,8 @@ export async function handleRequest(
       const resp = await fetch(proxied, { redirect: "manual" });
       const headers = new Headers(resp.headers);
       headers.set("Access-Control-Allow-Origin", "*");
-      // Remove hop-by-hop headers that shouldn't be forwarded
-      headers.delete("connection");
-      headers.delete("keep-alive");
-      headers.delete("proxy-authenticate");
-      headers.delete("proxy-authorization");
-      headers.delete("te");
-      headers.delete("trailer");
-      headers.delete("transfer-encoding");
-      headers.delete("upgrade");
-      
+      sanitizeResponseHeaders(headers);
+
       return new Response(resp.body, { status: resp.status, headers });
     } catch (err) {
       console.error(`[proxy] Proxy error for ${upstreamUrl}:`, err);

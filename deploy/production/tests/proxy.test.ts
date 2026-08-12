@@ -126,3 +126,23 @@ describe("isWebSocketUpgrade", () => {
     ).toBe(false);
   });
 });
+
+describe("response encoding hygiene", () => {
+  // A browser sends Accept-Encoding on every request; curl sends none unless
+  // asked. So the upstream compressed for browsers and not for our tests, and
+  // the mismatch below was invisible from the command line while breaking every
+  // real page load.
+  it("does not forward Content-Encoding, because the body is already decoded", async () => {
+    const { sanitizeResponseHeaders } = await import("../proxy");
+    const headers = new Headers({
+      "content-encoding": "gzip",
+      "content-length": "123",
+      "content-type": "application/json",
+    });
+    sanitizeResponseHeaders(headers);
+    expect(headers.get("content-encoding")).toBeNull();
+    expect(headers.get("content-length")).toBeNull();
+    // Everything else must survive: this is hygiene, not a purge.
+    expect(headers.get("content-type")).toBe("application/json");
+  });
+});
