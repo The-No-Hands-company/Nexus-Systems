@@ -1,5 +1,5 @@
 import type { ElementData } from "../stores/model";
-import { BOX_TYPES, type Bounds, type Point, distToSegment, elementBounds } from "./geometry";
+import { BOX_TYPES, type Bounds, type Point, distToSegment, elementBounds, routeConnector } from "./geometry";
 
 export { elementBounds };
 export type { Bounds, Point };
@@ -16,13 +16,23 @@ function pointInBoxWithTol(p: Point, b: Bounds, tol: number): boolean {
 }
 
 /** True if point p hits element el, within tolerance tol (in element-local coords). */
-export function hitElement(el: ElementData, p: Point, tol: number): boolean {
+export function hitElement(el: ElementData, p: Point, tol: number, elements?: ElementData[]): boolean {
   const d = el.data as Record<string, any>;
   // Locked and hidden elements are not pickable: a click falls through to
   // whatever sits underneath them. Without this, locking only stops the
   // properties panel, not dragging, and hidden elements stay grabbable.
   if (d.locked || d.hidden) return false;
   const strokeWidth = el.style?.strokeWidth ?? 0;
+
+  if (el.elementType === "connector") {
+    const pts = routeConnector(el, elements ?? []);
+    if (pts.length < 2) return false;
+    let min = Infinity;
+    for (let i = 0; i < pts.length - 1; i++) {
+      min = Math.min(min, distToSegment(p, pts[i], pts[i + 1]));
+    }
+    return min <= tol + strokeWidth;
+  }
 
   if (BOX_TYPES.has(el.elementType)) {
     return pointInBoxWithTol(p, elementBounds(el), tol);
