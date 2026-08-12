@@ -32,6 +32,16 @@ jobs:
           toolchain: nightly
           profile: minimal
 
+      - name: Ensure nightly is default and wasm target installed
+        run: |
+          echo "Ensuring rustup nightly is default and wasm32-wasi target is installed"
+          rustup toolchain install nightly --allow-downgrade || true
+          rustup default nightly || true
+          rustup target add wasm32-wasi --toolchain nightly || true
+          rustup component add rust-src --toolchain nightly || true
+          echo "Installed targets for nightly:"
+          rustup target list --toolchain nightly --installed || true
+
       - name: Build Phantom WASM (wasi target)
         working-directory: packages/phantom-sdk/wasm
         env:
