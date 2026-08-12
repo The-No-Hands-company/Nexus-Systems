@@ -51,6 +51,9 @@ jobs:
           fi
           echo "Using WASI_SDK_PATH=$WASI_SDK_PATH"
 
+          # Expose WASI_SDK_DIR for native C build scripts (pqcrypto-internals)
+          export WASI_SDK_DIR="$WASI_SDK_PATH"
+
           # Set cross-linker and tools for the target
           export CC="$WASI_SDK_PATH/bin/clang"
           export AR="$WASI_SDK_PATH/bin/llvm-ar"
