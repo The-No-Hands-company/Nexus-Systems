@@ -77,6 +77,29 @@ function jsonResponse(payload: unknown, init?: ResponseInit): Response {
  */
 const SESSION_COOKIE = "nexus_session";
 
+/**
+ * Where to send someone who signs in without saying where they were going.
+ *
+ * Someone visiting the sign-in page directly has no return address, and the
+ * previous answer was `/login` — which set their cookie and then rendered the
+ * empty form again. They *were* signed in; it just looked exactly like a
+ * silent failure, with no error and a blank password box.
+ *
+ * The dashboard is the right answer: it is the front door and it lists
+ * everything the account can now reach.
+ */
+function defaultPostLogin(): string {
+  const configured = process.env.NEXUS_POST_LOGIN_URL?.trim();
+  if (configured) return configured;
+  const domain = cookieDomain()?.replace(/^\./, "");
+  return domain ? `https://app.${domain}/` : "/";
+}
+
+/** Exposed for tests: the destination a return-address-less sign-in uses. */
+export function defaultPostLoginForTest(): string {
+  return defaultPostLogin();
+}
+
 function cookieDomain(): string | null {
   const raw = process.env.NEXUS_AUTH_COOKIE_DOMAIN?.trim();
   return raw ? raw : null;
@@ -391,9 +414,14 @@ export async function handleRequest(request: Request): Promise<Response> {
         cookieDomain(),
       );
       // Already signed in: honour the round trip immediately rather than
-      // asking for a password that is not needed.
-      if (auth && target) {
-        return new Response(null, { status: 303, headers: { location: target } });
+      // asking for a password that is not needed. With no return address the
+      // destination is the dashboard — showing a signed-in person a login form
+      // is how this looked broken.
+      if (auth) {
+        return new Response(null, {
+          status: 303,
+          headers: { location: target ?? defaultPostLogin() },
+        });
       }
       return new Response(renderLoginPage({ redirect: target }), {
         status: 200,
@@ -428,7 +456,7 @@ export async function handleRequest(request: Request): Promise<Response> {
       return new Response(null, {
         status: 303,
         headers: {
-          location: target ?? "/login",
+          location: target ?? defaultPostLogin(),
           "set-cookie": sessionCookie(session.token, maxAge),
           "cache-control": "no-store",
         },

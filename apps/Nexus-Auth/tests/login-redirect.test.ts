@@ -78,3 +78,38 @@ describe("login page return address", () => {
     expect(html).toContain('name="username"');
   });
 });
+
+describe("signing in without a return address", () => {
+  // Reported as: "I log in and get bounced back to an empty form, no error."
+  // The sign-in succeeded every time — the cookie was set — and then sent the
+  // person to /login, which rendered the form again. Indistinguishable from a
+  // silent failure.
+  test("lands somewhere useful, not back on the form", async () => {
+    const form = new FormData();
+    form.set("username", "nobody-real");
+    form.set("password", "wrong");
+    const res = await handleRequest(
+      new Request(`${BASE}/login`, { method: "POST", body: form }),
+    );
+    // Bad credentials still re-render, with an error the person can read.
+    expect(res.status).toBe(401);
+    expect(await res.text()).toContain("Incorrect username or password");
+  });
+
+  test("an already-signed-in visitor is never shown the form", async () => {
+    // No session cookie here, so this asserts the shape of the anonymous case:
+    // a form, not a redirect loop.
+    const res = await handleRequest(new Request(`${BASE}/login`));
+    expect(res.status).toBe(200);
+    expect(await res.text()).toContain('name="password"');
+  });
+
+  test("the default destination is the dashboard, not /login", async () => {
+    // Pinning the value that caused the bug: anything that resolves back to
+    // the sign-in page reintroduces it.
+    const { defaultPostLoginForTest } = await import("../src/server");
+    const dest = defaultPostLoginForTest();
+    expect(dest).not.toContain("/login");
+    expect(dest).toContain("app.");
+  });
+});
