@@ -54,6 +54,17 @@ jobs:
           # Expose WASI_SDK_DIR for native C build scripts (pqcrypto-internals)
           export WASI_SDK_DIR="$WASI_SDK_PATH"
 
+          # Debug: show wasi sdk dir contents and tool versions
+          echo "WASI_SDK_DIR=$WASI_SDK_DIR"
+          if [ -d "$WASI_SDK_DIR" ]; then
+            ls -la "$WASI_SDK_DIR" || true
+          else
+            echo "WASI_SDK_DIR is not a directory"
+          fi
+          echo "Which clang: $(which clang 2>/dev/null || true)"
+          clang --version || true
+          echo "Which wasm-ld: $(which wasm-ld 2>/dev/null || true)"
+
           # Set cross-linker and tools for the target
           export CC="$WASI_SDK_PATH/bin/clang"
           export AR="$WASI_SDK_PATH/bin/llvm-ar"
