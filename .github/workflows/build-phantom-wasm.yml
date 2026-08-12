@@ -109,8 +109,23 @@ jobs:
             echo "Downloaded and set WASI_SDK_DIR=$WASI_SDK_DIR"
           fi
 
-          # Build with nightly and build-std (pulls in std for target)
-          cargo +nightly build -Z build-std=std --release --target wasm32-wasip1
+          # Diagnostic: print cargo metadata and tree, clean target, and run verbose build
+          echo "--- Rust and cargo versions ---"
+          rustc --version || true
+          cargo --version || true
+          echo "--- Cargo metadata ---"
+          cargo metadata --format-version 1 --no-deps || true
+          echo "--- Cargo tree (no-dev) ---"
+          cargo tree --no-dev || true
+          echo "--- Disk usage of target dir before clean ---"
+          du -sh target || true
+          echo "Cleaning target dir"
+          rm -rf target || true
+          echo "--- Disk usage after clean ---"
+          du -sh . || true
+
+          # Build with nightly and build-std (pulls in std for target) in verbose mode
+          cargo +nightly build -Z build-std=std --release --target wasm32-wasip1 -v
 
           # Package the produced wasm
           mkdir -p pkg
