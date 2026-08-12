@@ -982,6 +982,11 @@ const stopNexusHeartbeat = nexusClient.startCloudHeartbeat();
 const stopNexusMonitor = nexusClient.startMonitorHeartbeat();
 const server = Bun.serve({
     port,
+    // Loopback unless told otherwise. Bun.serve binds every interface by
+    // default, which put the identity service — sessions, tokens, user
+    // administration — directly on the LAN, reachable without passing the
+    // proxy's login gate. Only the proxy should be able to reach this.
+    hostname: process.env.NEXUS_BIND_HOST || "127.0.0.1",
     fetch: handleRequest,
   });
 

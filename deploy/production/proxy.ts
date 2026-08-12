@@ -362,7 +362,16 @@ export function startProxy() {
     }, POLL_INTERVAL_MS);
   }
 
-  const server = Bun.serve({ port: PORT, fetch: handleRequest });
+  // The one service that binds every interface on purpose. cloudflared runs in
+  // a bridge-network container and reaches this over the host's LAN address, so
+  // loopback would cut the tunnel off entirely. Every service behind here binds
+  // 127.0.0.1 instead, which is what makes this the single way in — and so the
+  // single place the login gate has to live.
+  const server = Bun.serve({
+    port: PORT,
+    hostname: process.env.NEXUS_PROXY_BIND_HOST || "0.0.0.0",
+    fetch: handleRequest,
+  });
   console.log(`[proxy] Listening on ${server.hostname}:${server.port}`);
   return server;
 }

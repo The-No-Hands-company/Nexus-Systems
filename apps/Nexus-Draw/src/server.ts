@@ -21,6 +21,9 @@ export async function createServer() {
 
   const server = Bun.serve({
     port,
+    // Loopback unless told otherwise — Bun.serve binds every interface by
+    // default, and the proxy is the only intended client.
+    hostname: process.env.NEXUS_BIND_HOST || "127.0.0.1",
     async fetch(req) {
       const url = new URL(req.url); const p = url.pathname || "";
       

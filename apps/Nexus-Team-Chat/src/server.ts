@@ -77,6 +77,9 @@ const stopNexusHeartbeat = nexusClient.startCloudHeartbeat();
 const stopNexusMonitor = nexusClient.startMonitorHeartbeat();
 const server = Bun.serve({
     port,
+    // Loopback unless told otherwise — Bun.serve binds every interface by
+    // default, and the proxy is the only intended client.
+    hostname: process.env.NEXUS_BIND_HOST || "127.0.0.1",
     websocket: {
       open(ws) {
         const sessionId = crypto.randomUUID?.() || Math.random().toString(36).slice(2);

@@ -24,6 +24,19 @@
 }
 
 :8095 {
+	# Bind loopback only. A bare :8095 listens on every interface, which put
+	# Chat's whole front door on the LAN — reachable without passing the
+	# proxy's login gate, which defeats the point of having one. The ecosystem
+	# proxy runs natively on this host, so loopback is all it needs.
+	#
+	# This must be the `bind` directive and NOT a `127.0.0.1:8095` site
+	# address: in Caddy a site address is also a host matcher, so that form
+	# only serves requests whose Host header is literally "127.0.0.1" and
+	# answers everything else — including every real request, which arrives
+	# as Host: chat.tnhc.dev — with 400. `bind` sets the interface and leaves
+	# host matching alone.
+	bind 127.0.0.1
+
 	handle /api/* {
 		reverse_proxy 127.0.0.1:8180
 	}

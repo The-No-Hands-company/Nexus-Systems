@@ -114,7 +114,13 @@ export async function handleRequest(req: Request): Promise<Response> {
 }
 
 export function startServer() {
-  const server = Bun.serve({ port: PORT, fetch: handleRequest });
+  // Loopback unless told otherwise — Bun.serve binds every interface by
+  // default, and the proxy is the only intended client.
+  const server = Bun.serve({
+    port: PORT,
+    hostname: process.env.NEXUS_BIND_HOST || "127.0.0.1",
+    fetch: handleRequest,
+  });
   console.log(`[nexus-dashboard] Listening on port ${server.port}`);
   return server;
 }

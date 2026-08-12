@@ -106,6 +106,50 @@ rather than silently listening everywhere."
 
 ---
 
+#### Task 1 outcome — bind audit, 2026-08-12
+
+nexus-chat was not alone. Every Bun service bound all interfaces too, because
+`Bun.serve` defaults to that when `hostname` is omitted — so 4310 (auth), 8787
+(cloud), 3132 (dashboard), 3075 (draw), 3109 (team-chat) and Caddy's 8095 front
+door were all reachable from the LAN without passing the gate. All six now bind
+`127.0.0.1`, overridable with `NEXUS_BIND_HOST`. Verified from the host's own
+LAN address: every one refuses, and only 8080 answers.
+
+Caddy needs the `bind 127.0.0.1` directive, **not** a `127.0.0.1:8095` site
+address. In Caddy a site address is also a host matcher, so that form serves
+only requests whose Host is literally `127.0.0.1` and answers real traffic
+(`Host: chat.tnhc.dev`) with 400. This was caught in verification, not review.
+
+Still wide, deliberately:
+
+| Port | What | Why |
+|------|------|-----|
+| 8080 | ecosystem proxy | cloudflared is on a bridge network and reaches it by LAN address. This is the intended single way in. |
+| 8090 | Hosting site-proxy | published by container; serves hosted-site bytes |
+| 8788 | Hosting app | published by container |
+| 9010 | MinIO | published by container; browsers/CLIs fetch bytes directly |
+
+**Open finding, blocks Task 6.** The tunnel's ingress does not send everything
+through the proxy. Current rules:
+
+```
+cloud|chat|auth|*.tnhc.dev  ->  192.168.0.179:8080   (proxy — gated)
+hosting.tnhc.dev            ->  192.168.0.179:8788   (bypasses the proxy)
+storage.tnhc.dev            ->  192.168.0.179:9010   (bypasses the proxy)
+```
+
+So `hosting.tnhc.dev` and `storage.tnhc.dev` reach their origins **from the
+public internet** without ever traversing the gate. Flipping `requiresAuth:
+true` in Task 6 would leave Hosting's control plane — site deploys, tokens —
+ungated while everything else was locked. Binding those two to loopback is not
+the fix on its own; the ingress rules have to move to 8080 first, and the proxy
+needs routes for both hostnames. Storage additionally needs a decision: it
+serves public site assets, so gating it as-is would break every hosted site.
+
+Resolve in Task 6, before the flip.
+
+---
+
 ### Task 2: JWKS client and identity verification
 
 **Files:**
