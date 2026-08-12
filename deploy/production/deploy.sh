@@ -204,9 +204,17 @@ cmd_start() {
         if [ ! -x "$ROOT/apps/Nexus/target/debug/nexus" ]; then
             warn "nexus-chat binary missing — build it with: (cd apps/Nexus && cargo build --bin nexus)"
         else
-            set -a; . "$ROOT/deploy/production/nexus-chat.env"; set +a
-            start_service "nexus-chat" "$ROOT/apps/Nexus" 8180 \
-                ./target/debug/nexus serve --port 8180 --gateway-port 8181 --voice-port 8182
+            # Sourced inside a subshell so it cannot leak. `set -a` exports
+            # every variable in that file into this shell, and every service
+            # started afterwards inherits them — nexus-chat.env sets
+            # PUBLIC_URL=https://chat.tnhc.dev and NEXUS__SERVER__NAME, which
+            # is how the dashboard ended up announcing itself to Cloud as
+            # chat.tnhc.dev and appearing in its own app grid pointing at Chat.
+            (
+                set -a; . "$ROOT/deploy/production/nexus-chat.env"; set +a
+                start_service "nexus-chat" "$ROOT/apps/Nexus" 8180 \
+                    ./target/debug/nexus serve --port 8180 --gateway-port 8181 --voice-port 8182
+            )
 
             # Front door: SPA + /api + /gateway + /voice/ws on one origin.
             # Plain HTTP on 8095 — Cloudflare terminates TLS at the edge and
@@ -250,6 +258,20 @@ cmd_start() {
             bun run src/index.ts
     fi
 
+    # 4e. Nexus-Draw backend — the board/collab API behind draw.$DOMAIN.
+    #
+    # The SPA at draw.$DOMAIN is a static site served by Hosting and works
+    # standalone against localStorage, which is why nobody noticed this was
+    # down. Two things need it running: the server-backed board API the
+    # frontend now calls, and the Cloud heartbeat — without a heartbeat Cloud
+    # marks the tool offline and the dashboard grid renders Draw as
+    # "Unavailable" while the site is plainly working.
+    start_service "draw" "$ROOT/apps/Nexus-Draw" 3075 \
+        PORT=3075 \
+        NEXUS_CLOUD_URL=http://localhost:8787 \
+        NEXUS_CLOUD_API_KEY="$NEXUS_CLOUD_API_KEY" \
+        bun run src/index.ts
+
     # 5. Proxy (8080 for Cloudflare Tunnel)
     #
     # HOSTING_SITE_UPSTREAM is the default backend for the *.$DOMAIN wildcard:
@@ -271,7 +293,7 @@ cmd_start() {
 
 cmd_stop() {
     log "Stopping all Nexus services..."
-    for svc in auth cloud chat nexus-chat nexus-chat-web dashboard proxy; do
+    for svc in auth cloud chat nexus-chat nexus-chat-web dashboard draw proxy; do
         if [ -f "$PID_DIR/$svc.pid" ]; then
             kill "$(cat "$PID_DIR/$svc.pid")" 2>/dev/null && log "  Stopped $svc" || true
             rm -f "$PID_DIR/$svc.pid"
@@ -284,7 +306,7 @@ cmd_stop() {
 
 cmd_status() {
     echo "Service Status:"
-    for svc in auth cloud chat nexus-chat nexus-chat-web dashboard proxy; do
+    for svc in auth cloud chat nexus-chat nexus-chat-web dashboard draw proxy; do
         if [ -f "$PID_DIR/$svc.pid" ]; then
             if kill -0 "$(cat "$PID_DIR/$svc.pid")" 2>/dev/null; then
                 echo -e "  ${G}● $svc${R} (running, PID: $(cat $PID_DIR/$svc.pid))"
@@ -303,7 +325,7 @@ cmd_status() {
     # nexus-chat answers /api/v1/health, not /health, and is probed through its
     # Caddy front door on 8095 — that is the origin chat.$DOMAIN actually
     # reaches, so a healthy API behind a dead front door still reads as down.
-    for endpoint in "http://localhost:4310/health" "http://localhost:8787/health" "http://localhost:3109/health" "http://localhost:8095/api/v1/health" "http://localhost:3132/health" "http://localhost:8080/health"; do
+    for endpoint in "http://localhost:4310/health" "http://localhost:8787/health" "http://localhost:3109/health" "http://localhost:8095/api/v1/health" "http://localhost:3132/health" "http://localhost:3075/health" "http://localhost:8080/health"; do
         if curl -s -m 2 "$endpoint" | grep -q "ok"; then
             echo -e "  ${G}●${R} $endpoint"
         else

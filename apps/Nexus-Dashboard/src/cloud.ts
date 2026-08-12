@@ -45,7 +45,12 @@ export function startCloudHeartbeat(upstreamUrl: string): () => void {
           name: "Nexus Dashboard",
           description: "Ecosystem front door — sign in, your apps, your account",
           upstreamUrl,
-          publicUrl: process.env.PUBLIC_URL || `https://app.${process.env.DOMAIN || "tnhc.dev"}`,
+          // Deliberately NOT PUBLIC_URL: that name is generic enough that a
+          // sibling service's env file set it to chat.tnhc.dev and this app
+          // announced itself under Chat's hostname. Own the variable name.
+          publicUrl:
+            process.env.NEXUS_DASHBOARD_PUBLIC_URL ||
+            `https://app.${process.env.DOMAIN || "tnhc.dev"}`,
           capabilities: ["dashboard", "account", "admin"],
           health: "healthy",
         }),
