@@ -158,7 +158,46 @@ function normalizeUpstream(upstream: string): string {
   return upstream;
 }
 
-export async function handleRequest(req: Request): Promise<Response> {
+/** What a pending WebSocket upgrade needs to reach its upstream. */
+export interface WsProxyData {
+  upstreamUrl: string;
+  identityToken: string | null;
+  /** The address the browser asked for, so the upstream gets the same path. */
+  requestUrl?: string;
+}
+
+/**
+ * Browser socket -> upstream socket, for connections currently open.
+ *
+ * A WeakMap keyed by the server-side socket: when Bun drops the connection the
+ * entry goes with it, so a long-running proxy cannot accumulate dead links.
+ */
+const wsLinks = new WeakMap<
+  object,
+  { upstream: WebSocket; pending: (string | Uint8Array)[]; isOpen: () => boolean }
+>();
+
+/**
+ * Whether this request is asking to become a WebSocket.
+ *
+ * Both headers matter and both are case-insensitive in ways that bite:
+ * `Connection` is a comma-separated list and may read "keep-alive, Upgrade",
+ * so an equality check misses real browsers.
+ */
+export function isWebSocketUpgrade(req: Request): boolean {
+  const upgrade = req.headers.get("upgrade");
+  if (!upgrade || upgrade.toLowerCase() !== "websocket") return false;
+  const connection = req.headers.get("connection") ?? "";
+  return connection
+    .toLowerCase()
+    .split(",")
+    .some((part) => part.trim() === "upgrade");
+}
+
+export async function handleRequest(
+  req: Request,
+  server?: { upgrade: (req: Request, opts: { data: WsProxyData }) => boolean },
+): Promise<Response> {
   try {
     const url = new URL(req.url);
     const host = url.hostname.toLowerCase();
@@ -249,6 +288,31 @@ export async function handleRequest(req: Request): Promise<Response> {
     // request from someone the ecosystem has not authenticated.
     const decision = await gate(req, { upstream: upstreamUrl, requiresAuth });
     if (!decision.allow) return decision.response;
+
+    // WebSockets cannot go through fetch(): it has no way to perform the
+    // upgrade handshake, so every realtime connection to an app behind this
+    // proxy simply failed. Hand these to Bun's own upgrade instead, and pump
+    // frames between the two sockets. The gate has already run, so a gated
+    // host still requires a session — and the identity token it minted rides
+    // along to the upstream, which is the only way the app can tell who is on
+    // the other end of a socket.
+    if (isWebSocketUpgrade(req)) {
+      if (!server) {
+        return new Response("WebSocket upgrade unavailable", { status: 500 });
+      }
+      const ok = server.upgrade(req, {
+        data: {
+          upstreamUrl,
+          identityToken: decision.identityToken,
+          requestUrl: req.url,
+        },
+      });
+      // Bun answers the handshake itself when upgrade() succeeds; returning a
+      // Response here would fight it.
+      return ok
+        ? (undefined as unknown as Response)
+        : new Response("Expected a WebSocket upgrade", { status: 400 });
+    }
 
     // Proxy to upstream
     try {
@@ -367,10 +431,84 @@ export function startProxy() {
   // loopback would cut the tunnel off entirely. Every service behind here binds
   // 127.0.0.1 instead, which is what makes this the single way in — and so the
   // single place the login gate has to live.
-  const server = Bun.serve({
+  const server = Bun.serve<WsProxyData>({
     port: PORT,
     hostname: process.env.NEXUS_PROXY_BIND_HOST || "0.0.0.0",
-    fetch: handleRequest,
+    fetch: (req, srv) => handleRequest(req, srv),
+
+    // ── WebSocket relay ────────────────────────────────────────────────────
+    // One socket in from the browser, one socket out to the app, and frames
+    // copied between them. Nothing here inspects payloads: this is a pipe, and
+    // the app on the far end is what decides meaning.
+    websocket: {
+      // Realtime chat frames are small; this bounds a client that decides to
+      // send something enormous.
+      maxPayloadLength: 16 * 1024 * 1024,
+      idleTimeout: 300,
+
+      open(ws) {
+        const { upstreamUrl, identityToken } = ws.data;
+        const target = new URL(upstreamUrl);
+        const asked = new URL(ws.data.requestUrl ?? "http://localhost/");
+        target.protocol = target.protocol === "https:" ? "wss:" : "ws:";
+        target.pathname = asked.pathname;
+        target.search = asked.search;
+
+        // Frames can arrive from the browser before the upstream finishes
+        // connecting. Dropping them would silently lose whatever the client
+        // said first — for this gateway that is the Identify message, so the
+        // session would hang forever waiting for a READY that never comes.
+        const pending: (string | Uint8Array)[] = [];
+        let upstreamOpen = false;
+
+        const headers: Record<string, string> = {};
+        if (identityToken) headers["x-nexus-identity"] = identityToken;
+
+        const upstream = new WebSocket(target.toString(), { headers } as never);
+        upstream.binaryType = "arraybuffer";
+
+        upstream.onopen = () => {
+          upstreamOpen = true;
+          for (const frame of pending.splice(0)) upstream.send(frame);
+        };
+        upstream.onmessage = (event: MessageEvent) => {
+          ws.send(
+            typeof event.data === "string"
+              ? event.data
+              : new Uint8Array(event.data as ArrayBuffer),
+          );
+        };
+        // 1011 rather than a normal close: the client did nothing wrong, and a
+        // clean 1000 would tell it not to retry.
+        upstream.onclose = (event: CloseEvent) => {
+          try {
+            ws.close(event.code >= 1000 && event.code <= 4999 ? event.code : 1011, event.reason);
+          } catch { /* already gone */ }
+        };
+        upstream.onerror = () => {
+          try { ws.close(1011, "upstream error"); } catch { /* already gone */ }
+        };
+
+        wsLinks.set(ws, { upstream, pending, isOpen: () => upstreamOpen });
+      },
+
+      message(ws, message) {
+        const link = wsLinks.get(ws);
+        if (!link) return;
+        const frame = typeof message === "string" ? message : new Uint8Array(message);
+        if (link.isOpen()) link.upstream.send(frame);
+        else link.pending.push(frame);
+      },
+
+      close(ws, code, reason) {
+        const link = wsLinks.get(ws);
+        wsLinks.delete(ws);
+        if (!link) return;
+        try {
+          link.upstream.close(code >= 1000 && code <= 4999 ? code : 1000, reason);
+        } catch { /* already gone */ }
+      },
+    },
   });
   console.log(`[proxy] Listening on ${server.hostname}:${server.port}`);
   return server;

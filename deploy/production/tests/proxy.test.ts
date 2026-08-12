@@ -76,3 +76,53 @@ describe("identity header is proxy-controlled", () => {
     }
   });
 });
+
+describe("isWebSocketUpgrade", () => {
+  // Dynamic import, like every other test here: importing the proxy at module
+  // scope used to bind port 8080 and fight the running server.
+  const load = async () => (await import("../proxy")).isWebSocketUpgrade;
+  const req = (headers: Record<string, string>) =>
+    new Request("http://chat.tnhc.dev/gateway", { headers });
+
+  it("recognises a plain upgrade request", async () => {
+    const isWebSocketUpgrade = await load();
+    expect(isWebSocketUpgrade(req({ upgrade: "websocket", connection: "Upgrade" }))).toBe(true);
+  });
+
+  it("recognises what browsers actually send", async () => {
+    // Chrome and Firefox send a comma-separated list here. An equality check
+    // against "upgrade" misses every real browser while passing a hand-rolled
+    // curl, which is the worst way for this to be wrong.
+    const isWebSocketUpgrade = await load();
+    expect(
+      isWebSocketUpgrade(req({ upgrade: "websocket", connection: "keep-alive, Upgrade" })),
+    ).toBe(true);
+  });
+
+  it("is case-insensitive in both headers", async () => {
+    const isWebSocketUpgrade = await load();
+    expect(isWebSocketUpgrade(req({ upgrade: "WebSocket", connection: "UPGRADE" }))).toBe(true);
+  });
+
+  it("ignores an ordinary request", async () => {
+    const isWebSocketUpgrade = await load();
+    expect(isWebSocketUpgrade(req({}))).toBe(false);
+  });
+
+  it("ignores a non-websocket upgrade", async () => {
+    const isWebSocketUpgrade = await load();
+    expect(isWebSocketUpgrade(req({ upgrade: "h2c", connection: "Upgrade" }))).toBe(false);
+  });
+
+  it("requires Connection, not just Upgrade", async () => {
+    const isWebSocketUpgrade = await load();
+    expect(isWebSocketUpgrade(req({ upgrade: "websocket" }))).toBe(false);
+  });
+
+  it("does not match a Connection value that merely contains the word", async () => {
+    const isWebSocketUpgrade = await load();
+    expect(
+      isWebSocketUpgrade(req({ upgrade: "websocket", connection: "no-upgrade-here" })),
+    ).toBe(false);
+  });
+});

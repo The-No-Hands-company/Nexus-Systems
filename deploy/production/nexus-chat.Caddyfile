@@ -42,20 +42,27 @@
 	}
 
 	handle /gateway {
+		# No manual Connection/Upgrade header_up lines. Caddy v2 detects a
+		# WebSocket upgrade and handles the hop-by-hop headers itself; setting
+		# them by hand is a v1 idiom that fights that logic, and the result was
+		# the backend receiving no Connection: Upgrade at all and answering
+		# "Connection header did not include 'upgrade'" — a 400 that looked like
+		# an auth failure but happened before auth was ever consulted.
 		reverse_proxy 127.0.0.1:8181 {
-			header_up Connection {>Connection}
-			header_up Upgrade {>Upgrade}
 			transport http {
 				dial_timeout 5s
+				# A WebSocket sends nothing until there is something to say, so
+				# the response header timeout must stay off or idle sockets die.
 				response_header_timeout 0
 			}
 		}
 	}
 
 	handle /voice/ws {
+		# Same as /gateway above. Note the voice server routes this at /voice,
+		# not /voice/ws, so the path is rewritten before proxying.
+		rewrite * /voice
 		reverse_proxy 127.0.0.1:8182 {
-			header_up Connection {>Connection}
-			header_up Upgrade {>Upgrade}
 			transport http {
 				dial_timeout 5s
 				response_header_timeout 0
