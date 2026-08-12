@@ -34,10 +34,10 @@ jobs:
 
       - name: Ensure nightly is default and wasm target installed
         run: |
-          echo "Ensuring rustup nightly is default and wasm32-wasi target is installed"
+          echo "Ensuring rustup nightly is default and wasm32-wasip1 target is installed"
           rustup toolchain install nightly --allow-downgrade || true
           rustup default nightly || true
-          rustup target add wasm32-wasi --toolchain nightly || true
+          rustup target add wasm32-wasip1 --toolchain nightly || true
           rustup component add rust-src --toolchain nightly || true
           echo "Installed targets for nightly:"
           rustup target list --toolchain nightly --installed || true
@@ -58,7 +58,7 @@ jobs:
 
           # Ensure nightly toolchain and target are installed
           rustup toolchain install nightly || true
-          rustup target add wasm32-wasi --toolchain nightly || true
+          rustup target add wasm32-wasip1 --toolchain nightly || true
           rustup component add rust-src --toolchain nightly || true
 
           # Install wasi sdk and build tools
@@ -94,7 +94,7 @@ jobs:
           # Set cross-linker and tools for the target
           export CC="$WASI_SDK_PATH/bin/clang"
           export AR="$WASI_SDK_PATH/bin/llvm-ar"
-          export CARGO_TARGET_WASM32_WASI_LINKER="$CC"
+          export CARGO_TARGET_WASM32_WASIP1_LINKER="$CC"
 
           # Fallback: download and extract wasi-sdk tarball if WASI_SDK_DIR is not valid
           if [ ! -d "$WASI_SDK_DIR" ] || [ ! -x "$WASI_SDK_DIR/bin/clang" ]; then
@@ -117,7 +117,7 @@ jobs:
             export PATH="$WASI_SDK_DIR/bin:$PATH"
             export CC="$WASI_SDK_DIR/bin/clang"
             export AR="$WASI_SDK_DIR/bin/llvm-ar"
-            export CARGO_TARGET_WASM32_WASI_LINKER="$CC"
+            export CARGO_TARGET_WASM32_WASIP1_LINKER="$CC"
             echo "Downloaded and set WASI_SDK_DIR=$WASI_SDK_DIR"
           fi
 
@@ -137,11 +137,11 @@ jobs:
           du -sh . || true
 
           # Build with nightly and build-std (pulls in std for target) in verbose mode
-          cargo +nightly build -Z build-std=std --release --target wasm32-wasi -v
+          cargo +nightly build -Z build-std=std --release --target wasm32-wasip1 -v
 
           # Package the produced wasm
           mkdir -p pkg
-          cp target/wasm32-wasi/release/phantom_wasm.wasm pkg/ || true
+          cp target/wasm32-wasip1/release/phantom_wasm.wasm pkg/ || true
 
       - name: Upload WASM package artifact
         uses: actions/upload-artifact@v4
