@@ -89,20 +89,22 @@ jobs:
           # Fallback: download and extract wasi-sdk tarball if WASI_SDK_DIR is not valid
           if [ ! -d "$WASI_SDK_DIR" ] || [ ! -x "$WASI_SDK_DIR/bin/clang" ]; then
             echo "WASI_SDK_DIR missing or clang not executable; attempting to download wasi-sdk tarball"
-            : "Set WASI_SDK_URL in workflow env to override default"
-            WASI_SDK_URL="${{ env.WASI_SDK_URL || 'https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-20/wasi-sdk-20.0.tar.gz' }}"
+            # Use env WASI_SDK_URL if set, otherwise fallback to official release
+            WASI_SDK_URL="${WASI_SDK_URL:-https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-20/wasi-sdk-20.0-linux.tar.gz}"
             echo "Downloading wasi-sdk from $WASI_SDK_URL"
             curl -fsSL "$WASI_SDK_URL" -o /tmp/wasi-sdk.tar.gz || { echo "Failed to download wasi-sdk from $WASI_SDK_URL"; exit 1; }
             sudo mkdir -p /opt
             sudo tar -xzf /tmp/wasi-sdk.tar.gz -C /opt --strip-components=1 || { echo "Failed to extract wasi-sdk"; exit 1; }
 
             # Download and extract wasi sysroot (required for C standard headers)
-            WASI_SYSROOT_URL="https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-20/wasi-sysroot-20.0.tar.gz"
+            WASI_SYSROOT_URL="${WASI_SYSROOT_URL:-https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-20/wasi-sysroot-20.0.tar.gz}"
             echo "Downloading wasi-sysroot from $WASI_SYSROOT_URL"
             curl -fsSL "$WASI_SYSROOT_URL" -o /tmp/wasi-sysroot.tar.gz || { echo "Failed to download wasi-sysroot from $WASI_SYSROOT_URL"; exit 1; }
             sudo tar -xzf /tmp/wasi-sysroot.tar.gz -C /opt --strip-components=1 || { echo "Failed to extract wasi-sysroot"; exit 1; }
 
+            # Point WASI_SDK_DIR to extracted SDK and add bin to PATH
             export WASI_SDK_DIR=/opt
+            export PATH="$WASI_SDK_DIR/bin:$PATH"
             export CC="$WASI_SDK_DIR/bin/clang"
             export AR="$WASI_SDK_DIR/bin/llvm-ar"
             export CARGO_TARGET_WASM32_WASI_LINKER="$CC"
@@ -115,8 +117,8 @@ jobs:
           cargo --version || true
           echo "--- Cargo metadata ---"
           cargo metadata --format-version 1 --no-deps || true
-          echo "--- Cargo tree (no-dev) ---"
-          cargo tree --no-dev || true
+          echo "--- Cargo tree ---"
+          cargo tree || true
           echo "--- Disk usage of target dir before clean ---"
           du -sh target || true
           echo "Cleaning target dir"
