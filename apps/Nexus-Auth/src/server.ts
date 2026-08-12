@@ -17,8 +17,9 @@ import {
   claimAccount,
   listByStatus,
   setUserStatus,
+  MIN_PASSWORD_LENGTH,
 } from "./users";
-import { consumeRecoveryCode, countRemainingRecoveryCodes } from "./recovery";
+import { consumeRecoveryCode, countRemainingRecoveryCodes, issueRecoveryCodes } from "./recovery";
 import { createInvite, redeemInvite } from "./invites";
 import { checkRateLimit, recordFailure, clearFailures } from "./ratelimit";
 import {
@@ -50,6 +51,7 @@ import { issueServiceToken, validateServiceToken, signJwt } from "./token";
 import { buildIdentityClaims, IDENTITY_TOKEN_TTL_SECONDS } from "./identity";
 import type { AccountStatus, LoginResult, Permission } from "./types";
 import { NexusClient, createConfig } from "../../../packages/nexus-sdk/src/index";
+import { verifyDidSignature } from "../../../packages/phantom-utils/src/verify";
 
 function jsonResponse(payload: unknown, init?: ResponseInit): Response {
   // Merge, do not replace. This previously spread `init` and then overwrote
@@ -662,6 +664,43 @@ export async function handleRequest(request: Request): Promise<Response> {
       return jsonResponse({ user });
     }
 
+    // ── Link DID (proof-of-possession) ──
+    if (request.method === "POST" && path === "/api/v1/account/link-did") {
+      if (!auth) return jsonResponse({ error: "unauthorized" }, { status: 401 });
+      const body = await parseBody(request);
+      const did = typeof body.did === "string" ? body.did.trim() : "";
+      const signature = typeof body.signature === "string" ? body.signature : "";
+      const nonce = typeof body.nonce === "string" ? body.nonce : "";
+      if (!did || !signature || !nonce) return jsonResponse({ error: "did, signature and nonce required" }, { status: 400 });
+
+      // Verify the proof-of-possession signature
+      const verified = await verifyDidSignature(did, nonce, signature).catch(() => false);
+      if (!verified) return jsonResponse({ error: "invalid_signature" }, { status: 400 });
+
+      // Call DID Mapper service to create mapping
+      const base = process.env.DID_MAPPER_URL || process.env.DID_MAPPER_BASE || "http://localhost:4001";
+      const key = process.env.DID_MAPPER_KEY || process.env.X_API_KEY || process.env.DID_MAPPER_API_KEY || "";
+      try {
+        const mapRes = await fetch(`${base.replace(/\/+$/, '')}/v1/dids`, {
+          method: "POST",
+          headers: { "content-type": "application/json", "x-api-key": key },
+          body: JSON.stringify({ did, user_id: auth.userId }),
+        });
+        if (!mapRes.ok) {
+          const text = await mapRes.text().catch(() => "");
+          return jsonResponse({ error: "did_mapper_error", details: text }, { status: 502 });
+        }
+      } catch (err) {
+        return jsonResponse({ error: "did_mapper_unreachable" }, { status: 502 });
+      }
+
+      // Update local user
+      const updated = updateUser(auth.userId, { phantom_did: did });
+      if (!updated) return jsonResponse({ error: "user_not_found" }, { status: 404 });
+
+      return jsonResponse({ ok: true });
+    }
+
     // ── Users CRUD ──
     if (request.method === "GET" && path === "/api/v1/auth/users") {
       if (!auth || !requirePermission(auth.userId, "users:read")) {
@@ -732,10 +771,17 @@ export async function handleRequest(request: Request): Promise<Response> {
     // ── Change password ──
     const changePwMatch = path.match(/^\/api\/v1\/auth\/users\/([^/]+)\/password$/);
     if (request.method === "POST" && changePwMatch) {
-      if (!auth || !requirePermission(auth.userId, "users:update")) {
+      const [, userId] = changePwMatch;
+      // Changing your own password is self-service and must not require an
+      // admin permission — this previously demanded users:update, which only
+      // founder and admin hold, so ordinary users could not change their own
+      // password while an admin could change anyone's. The current password is
+      // still required either way, which is what actually authorises it.
+      const isSelf = auth?.userId === userId;
+      if (!auth || (!isSelf && !requirePermission(auth.userId, "users:update"))) {
         return jsonResponse({ error: "forbidden" }, { status: 403 });
       }
-      const [, userId] = changePwMatch;
+
       const body = await parseBody(request);
       const currentPassword = typeof body.currentPassword === "string" ? body.currentPassword : "";  // pragma: allowlist secret
       const newPassword = typeof body.newPassword === "string" ? body.newPassword : "";  // pragma: allowlist secret
@@ -743,10 +789,32 @@ export async function handleRequest(request: Request): Promise<Response> {
       if (!currentPassword || !newPassword) {
         return jsonResponse({ error: "currentPassword and newPassword are required" }, { status: 400 });
       }
+      // Enforced here as well as at claim time. Without it the 12-character
+      // rule is trivially bypassed: claim with a strong password, then change
+      // it to one character.
+      if (newPassword.length < MIN_PASSWORD_LENGTH) {
+        return jsonResponse({ error: "weak_password" }, { status: 400 });
+      }
 
       const success = changePassword(userId, currentPassword, newPassword);
       if (!success) return jsonResponse({ error: "password change failed" }, { status: 400 });
       return jsonResponse({ success: true });
+    }
+
+    // ── Recovery codes: how many are left, and issue a fresh set ──
+    //
+    // Always scoped to the caller's own account. There is no way to read or
+    // regenerate someone else's — recovery codes are the one credential that
+    // bypasses the password, so an admin path here would be a backdoor.
+    if (request.method === "GET" && path === "/api/v1/auth/recovery-codes") {
+      if (!auth) return jsonResponse({ error: "unauthenticated" }, { status: 401 });
+      return jsonResponse({ remaining: countRemainingRecoveryCodes(auth.userId) });
+    }
+
+    if (request.method === "POST" && path === "/api/v1/auth/recovery-codes/regenerate") {
+      if (!auth) return jsonResponse({ error: "unauthenticated" }, { status: 401 });
+      // Replaces the previous set wholesale, so a leaked old code stops working.
+      return jsonResponse({ recoveryCodes: issueRecoveryCodes(auth.userId) });
     }
 
     // ── Service Tokens ──

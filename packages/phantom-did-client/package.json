@@ -1,0 +1,15 @@
+{
+  "name": "@nexus/phantom-did-client",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "./src/index.ts",
+  "description": "Simple phantom DID HTTP client for mapping DIDs to user IDs",
+  "scripts": {
+    "check": "bunx tsc --noEmit",
+    "test": "bun test"
+  },
+  "devDependencies": {
+    "bun-types": "^1.3.11",
+    "typescript": "^5.8"
+  }
+}

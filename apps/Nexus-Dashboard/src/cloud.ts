@@ -1,4 +1,4 @@
-import { buildSystemsApiRegistrationPayload } from "./contracts";
+const TOOL_ID = "nexus-dashboard";
 
 function cloudBaseUrl(): string {
   return (process.env.NEXUS_CLOUD_URL || "http://localhost:8787").trim().replace(/\/$/, "");
@@ -12,45 +12,55 @@ function cloudHeaders(): Record<string, string> {
   };
 }
 
-function hbMs(): number {
-  return Math.max(5000, Number(process.env["NEXUS_DASHBOARD_CLOUD_HEARTBEAT_INTERVAL_MS"] || "30000"));
+function intervalMs(): number {
+  return Math.max(5000, Number(process.env.NEXUS_DASHBOARD_HEARTBEAT_INTERVAL_MS || "30000"));
 }
 
 function enabled(): boolean {
-  return (process.env["NEXUS_DASHBOARD_ENABLE_CLOUD_INTEGRATION"] || "true").trim().toLowerCase() !== "false";
+  return (process.env.NEXUS_DASHBOARD_ENABLE_CLOUD_INTEGRATION || "true").trim().toLowerCase() !== "false";
 }
 
-export async function registerWithCloud(baseUrl: string): Promise<void> {
-  const r = await fetch(`${cloudBaseUrl()}/api/v1/tools`, {
-    method: "POST",
-    headers: cloudHeaders(),
-    body: JSON.stringify(buildSystemsApiRegistrationPayload(baseUrl)),
-  });
-  if (!r.ok) throw new Error(`Nexus-Dashboard registration failed: ${r.status}`);
-}
-
-export async function heartbeatWithCloud(baseUrl: string): Promise<void> {
-  const r = await fetch(`${cloudBaseUrl()}/api/v1/tools/${encodeURIComponent("nexus-dashboard")}/heartbeat`, {
-    method: "POST",
-    headers: cloudHeaders(),
-    body: JSON.stringify({ health: "healthy", upstreamUrl: baseUrl }),
-  });
-  if (!r.ok) throw new Error(`Nexus-Dashboard heartbeat failed: ${r.status}`);
-}
-
-export function startHeartbeat(baseUrl: string): () => void {
+/**
+ * Tell Cloud this app exists and is alive.
+ *
+ * Not optional bookkeeping: Cloud marks a tool `offline` when it stops
+ * hearing from it, and Guardian refuses to expose an offline tool — so a
+ * dashboard that never heartbeats can register an address for app.<domain>
+ * and have it sit at `requested` forever, never routing. That is exactly what
+ * happened when this file did not exist.
+ *
+ * Best-effort throughout: Cloud being down must not stop the dashboard from
+ * serving, since the account pages work without it.
+ */
+export function startCloudHeartbeat(upstreamUrl: string): () => void {
   if (!enabled()) return () => {};
 
-  registerWithCloud(baseUrl).catch((e) => {
-    console.warn(`[nexus-dashboard] Cloud registration failed: ${(e as Error).message}`);
-  });
+  const announce = async () => {
+    try {
+      await fetch(`${cloudBaseUrl()}/api/v1/tools`, {
+        method: "POST",
+        headers: cloudHeaders(),
+        body: JSON.stringify({
+          id: TOOL_ID,
+          name: "Nexus Dashboard",
+          description: "Ecosystem front door — sign in, your apps, your account",
+          upstreamUrl,
+          publicUrl: process.env.PUBLIC_URL || `https://app.${process.env.DOMAIN || "tnhc.dev"}`,
+          capabilities: ["dashboard", "account", "admin"],
+          health: "healthy",
+        }),
+      });
+      await fetch(`${cloudBaseUrl()}/api/v1/tools/${encodeURIComponent(TOOL_ID)}/heartbeat`, {
+        method: "POST",
+        headers: cloudHeaders(),
+        body: JSON.stringify({ health: "healthy", upstreamUrl }),
+      });
+    } catch {
+      // Unreachable Cloud is survivable; the next tick tries again.
+    }
+  };
 
-  const timer = setInterval(() => {
-    heartbeatWithCloud(baseUrl).catch((e) => {
-      console.warn(`[nexus-dashboard] Cloud heartbeat failed: ${(e as Error).message}`);
-    });
-  }, hbMs());
-
-  if (typeof timer.unref === "function") timer.unref();
+  void announce();
+  const timer = setInterval(() => void announce(), intervalMs());
   return () => clearInterval(timer);
 }
