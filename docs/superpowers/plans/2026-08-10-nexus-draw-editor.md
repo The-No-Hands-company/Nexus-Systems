@@ -38,7 +38,7 @@
   - `function resolveStyleMode(el:ElementData, boardDefault:StyleMode): StyleMode`
   - store gains `board.defaultStyleMode`, `board.gridSnap`.
 
-- [ ] **Step 1: Add deps and test script**
+- [x] **Step 1: Add deps and test script**
 
 ```bash
 cd apps/Nexus-Draw/frontend
@@ -47,14 +47,14 @@ npm i -D vitest jsdom @testing-library/react
 ```
 Add to `package.json` scripts: `"test": "vitest run"`.
 
-- [ ] **Step 2: Create `vitest.config.ts`**
+- [x] **Step 2: Create `vitest.config.ts`**
 
 ```ts
 import { defineConfig } from "vitest/config";
 export default defineConfig({ test: { environment: "jsdom", globals: true } });
 ```
 
-- [ ] **Step 3: Write the failing model test**
+- [x] **Step 3: Write the failing model test**
 
 ```ts
 // src/stores/model.test.ts
@@ -85,9 +85,9 @@ describe("resolveStyleMode", () => {
 });
 ```
 
-- [ ] **Step 4: Run to verify it fails** — `npx vitest run src/stores/model.test.ts` → FAIL (module missing).
+- [x] **Step 4: Run to verify it fails** — `npx vitest run src/stores/model.test.ts` → FAIL (module missing).
 
-- [ ] **Step 5: Implement `src/stores/model.ts`**
+- [x] **Step 5: Implement `src/stores/model.ts`**
 
 ```ts
 export type StyleMode = "clean" | "sketch";
@@ -118,11 +118,11 @@ export function resolveStyleMode(el:ElementData, boardDefault:StyleMode):StyleMo
 }
 ```
 
-- [ ] **Step 6: Wire the store to `model.ts`** — replace the local `ElementData`/`Vec2` interfaces in `useEditorStore.ts` with imports from `./model`; add `defaultStyleMode:StyleMode` and `gridSnap:boolean` to `BoardData`; add a `defaultStyleMode` selector default of `"clean"`.
+- [x] **Step 6: Wire the store to `model.ts`** — replace the local `ElementData`/`Vec2` interfaces in `useEditorStore.ts` with imports from `./model`; add `defaultStyleMode:StyleMode` and `gridSnap:boolean` to `BoardData`; add a `defaultStyleMode` selector default of `"clean"`.
 
-- [ ] **Step 7: Run tests + typecheck** — `npx vitest run && bun run check` → PASS / no TS errors.
+- [x] **Step 7: Run tests + typecheck** — `npx vitest run && bun run check` → PASS / no TS errors.
 
-- [ ] **Step 8: Commit** — `git add -A && git commit -m "feat(draw): element/style model, per-element styleMode, vitest setup"`
+- [x] **Step 8: Commit** — `git add -A && git commit -m "feat(draw): element/style model, per-element styleMode, vitest setup"`
 
 ---
 
@@ -139,7 +139,7 @@ export function resolveStyleMode(el:ElementData, boardDefault:StyleMode):StyleMo
   - `function resizeHandles(b:{x,y,width,height}): {id:string;x:number;y:number}[]` (8 handles + rotate)
   - `function arrowHead(x1,y1,x2,y2,size): {p1:[number,number];p2:[number,number]}`
 
-- [ ] **Step 1: Write failing tests**
+- [x] **Step 1: Write failing tests**
 
 ```ts
 // src/render/hitTest.test.ts
@@ -168,12 +168,12 @@ describe("hitInMarquee", () => {
 });
 ```
 
-- [ ] **Step 2: Run → FAIL.** `npx vitest run src/render/hitTest.test.ts`
+- [x] **Step 2: Run → FAIL.** `npx vitest run src/render/hitTest.test.ts`
 
-- [ ] **Step 3: Implement `geometry.ts` then `hitTest.ts`.** `elementBounds` switches on `elementType` (rect/ellipse/sticky/text/image from `data.x/y/width/height`; line/arrow from min/max of endpoints; freehand from point extents). `hitElement`: for filled/box types point-in-rect with `tol`; for line/arrow distance-to-segment ≤ `tol+strokeWidth`; for freehand min distance to any segment. `hitInMarquee`: bounds fully contained. `resizeHandles`: 8 box handles + one rotate handle above top-center. `arrowHead`: two points from the end angle.
+- [x] **Step 3: Implement `geometry.ts` then `hitTest.ts`.** `elementBounds` switches on `elementType` (rect/ellipse/sticky/text/image from `data.x/y/width/height`; line/arrow from min/max of endpoints; freehand from point extents). `hitElement`: for filled/box types point-in-rect with `tol`; for line/arrow distance-to-segment ≤ `tol+strokeWidth`; for freehand min distance to any segment. `hitInMarquee`: bounds fully contained. `resizeHandles`: 8 box handles + one rotate handle above top-center. `arrowHead`: two points from the end angle.
 
-- [ ] **Step 4: Run → PASS.**
-- [ ] **Step 5: Commit** — `git commit -m "feat(draw): pure geometry + hit-testing"`
+- [x] **Step 4: Run → PASS.**
+- [x] **Step 5: Commit** — `git commit -m "feat(draw): pure geometry + hit-testing"`
 
 ---
 
@@ -187,13 +187,13 @@ describe("hitInMarquee", () => {
   - `function renderElement(ctx:CanvasRenderingContext2D, rc:RoughCanvas, el:ElementData, mode:StyleMode): void`
   - `Canvas.tsx` draws all elements each frame into a DPR-scaled 2D context with pan/zoom applied, plus grid and selection overlay.
 
-- [ ] **Step 1: Implement `renderElement.ts`** — one function; `mode==="sketch"` uses `rc.rectangle/ellipse/line/linearPath` with `{ seed: el.seed, roughness, stroke, fill, strokeWidth, fillStyle:"hachure" }`; `mode==="clean"` uses native `ctx` paths (`roundRect`, `ellipse`, `moveTo/lineTo`, dashed via `setLineDash`). `freehand` always uses `perfect-freehand`'s `getStroke(points)` → fill a `Path2D`. `text` uses `ctx.fillText` with the style font. `arrow` = line + `arrowHead` triangle. Apply `opacity` via `ctx.globalAlpha`.
+- [x] **Step 1: Implement `renderElement.ts`** — one function; `mode==="sketch"` uses `rc.rectangle/ellipse/line/linearPath` with `{ seed: el.seed, roughness, stroke, fill, strokeWidth, fillStyle:"hachure" }`; `mode==="clean"` uses native `ctx` paths (`roundRect`, `ellipse`, `moveTo/lineTo`, dashed via `setLineDash`). `freehand` always uses `perfect-freehand`'s `getStroke(points)` → fill a `Path2D`. `text` uses `ctx.fillText` with the style font. `arrow` = line + `arrowHead` triangle. Apply `opacity` via `ctx.globalAlpha`.
 
-- [ ] **Step 2: Rewrite `Canvas.tsx`** — replace all WebGL with a 2D context: on resize set canvas to `clientWidth*dpr`; each animation frame `ctx.setTransform(dpr*zoom,0,0,dpr*zoom, pan.x*dpr*zoom, pan.y*dpr*zoom)`, draw grid, then `elements` sorted by `order` via `renderElement`, then a selection overlay (bounds + `resizeHandles`) for `selectedElementIds`. Keep wheel-zoom and space/hand pan. Create one `RoughCanvas` from the canvas.
+- [x] **Step 2: Rewrite `Canvas.tsx`** — replace all WebGL with a 2D context: on resize set canvas to `clientWidth*dpr`; each animation frame `ctx.setTransform(dpr*zoom,0,0,dpr*zoom, pan.x*dpr*zoom, pan.y*dpr*zoom)`, draw grid, then `elements` sorted by `order` via `renderElement`, then a selection overlay (bounds + `resizeHandles`) for `selectedElementIds`. Keep wheel-zoom and space/hand pan. Create one `RoughCanvas` from the canvas.
 
-- [ ] **Step 3: Verify visually** — `bun run dev`, add a couple elements from the console store (`useEditorStore.getState().addElement(makeElement("rectangle",{x:40,y:40,width:120,height:80},{styleMode:"sketch"}))`) and confirm a sketchy rect and a clean rect both render, pan/zoom work. Run `bun run check`.
+- [x] **Step 3: Verify visually** — `bun run dev`, add a couple elements from the console store (`useEditorStore.getState().addElement(makeElement("rectangle",{x:40,y:40,width:120,height:80},{styleMode:"sketch"}))`) and confirm a sketchy rect and a clean rect both render, pan/zoom work. Run `bun run check`.
 
-- [ ] **Step 4: Commit** — `git commit -m "feat(draw): Canvas 2D renderer with clean + sketch + freehand"`
+- [x] **Step 4: Commit** — `git commit -m "feat(draw): Canvas 2D renderer with clean + sketch + freehand"`
 
 ---
 
@@ -205,10 +205,10 @@ describe("hitInMarquee", () => {
 - Consumes: store, `makeElement` (T1).
 - Produces: `function beginTool(tool, worldPt) / updateTool(worldPt) / endTool()` that create/extend the in-progress element and commit it via `addElement`.
 
-- [ ] **Step 1** Implement drag-to-create for `rectangle`, `ellipse`, `line`, `arrow`, `sticky` (drag box); click-to-place + inline `<textarea>` overlay for `text`; `pen` accumulates `perfect-freehand` points on pointer-move; `eraser` removes elements under the cursor via `hitElement`. Snap to grid when `board.gridSnap`.
-- [ ] **Step 2** Wire `Canvas.tsx` `onPointerDown/Move/Up` to call the controller when `activeTool !== "select" && !== "hand"`.
-- [ ] **Step 3** Verify visually: each tool creates its shape; text editing commits on blur/Esc.
-- [ ] **Step 4** Commit — `git commit -m "feat(draw): tool controller creates every shape type"`
+- [x] **Step 1** Implement drag-to-create for `rectangle`, `ellipse`, `line`, `arrow`, `sticky` (drag box); click-to-place + inline `<textarea>` overlay for `text`; `pen` accumulates `perfect-freehand` points on pointer-move; `eraser` removes elements under the cursor via `hitElement`. Snap to grid when `board.gridSnap`.
+- [x] **Step 2** Wire `Canvas.tsx` `onPointerDown/Move/Up` to call the controller when `activeTool !== "select" && !== "hand"`.
+- [x] **Step 3** Verify visually: each tool creates its shape; text editing commits on blur/Esc.
+- [x] **Step 4** Commit — `git commit -m "feat(draw): tool controller creates every shape type"`
 
 ---
 
@@ -216,10 +216,10 @@ describe("hitInMarquee", () => {
 
 **Files:** Modify `Canvas.tsx`, add `src/tools/selection.ts`.
 
-- [ ] **Step 1** Implement: click select (hit-test topmost), shift multi-select, marquee select (`hitInMarquee`), move (drag selected), resize via the 8 handles (update `data`), rotate via the rotate handle (update `transform`), delete (Del), copy/paste/duplicate (Ctrl+C/V/D, offset paste), z-order via `reorderElements`.
-- [ ] **Step 2** Add a keyboard handler (mount-level) for the shortcuts in the spec.
-- [ ] **Step 3** Verify visually: select, move, resize, rotate, delete, duplicate all work; undo/redo (Ctrl+Z/Y) reverts them.
-- [ ] **Step 4** Commit — `git commit -m "feat(draw): select, move, resize, rotate, clipboard, shortcuts"`
+- [x] **Step 1** Implement: click select (hit-test topmost), shift multi-select, marquee select (`hitInMarquee`), move (drag selected), resize via the 8 handles (update `data`), rotate via the rotate handle (update `transform`), delete (Del), copy/paste/duplicate (Ctrl+C/V/D, offset paste), z-order via `reorderElements`.
+- [x] **Step 2** Add a keyboard handler (mount-level) for the shortcuts in the spec.
+- [x] **Step 3** Verify visually: select, move, resize, rotate, delete, duplicate all work; undo/redo (Ctrl+Z/Y) reverts them.
+- [x] **Step 4** Commit — `git commit -m "feat(draw): select, move, resize, rotate, clipboard, shortcuts"`
 
 ---
 
@@ -227,9 +227,9 @@ describe("hitInMarquee", () => {
 
 **Files:** Rewrite `src/components/PropertiesPanel.tsx`.
 
-- [ ] **Step 1** Bind controls to the selected element(s): stroke + fill color inputs, strokeWidth slider, strokeStyle segmented (solid/dashed/dotted), opacity slider, corner radius (rect), font family/size/align (text/sticky), and a **clean/sketch toggle** that sets `style.styleMode`. Each change calls `updateElement(id, { style: {...} })` for every selected id. Empty selection → show the board `defaultStyleMode` + grid-snap toggle.
-- [ ] **Step 2** Verify visually: changing any control updates the canvas; multi-select applies to all.
-- [ ] **Step 3** Commit — `git commit -m "feat(draw): properties panel edits full style incl. per-element sketch toggle"`
+- [x] **Step 1** Bind controls to the selected element(s): stroke + fill color inputs, strokeWidth slider, strokeStyle segmented (solid/dashed/dotted), opacity slider, corner radius (rect), font family/size/align (text/sticky), and a **clean/sketch toggle** that sets `style.styleMode`. Each change calls `updateElement(id, { style: {...} })` for every selected id. Empty selection → show the board `defaultStyleMode` + grid-snap toggle.
+- [x] **Step 2** Verify visually: changing any control updates the canvas; multi-select applies to all.
+- [x] **Step 3** Commit — `git commit -m "feat(draw): properties panel edits full style incl. per-element sketch toggle"`
 
 ---
 
@@ -237,9 +237,9 @@ describe("hitInMarquee", () => {
 
 **Files:** Rewrite `src/components/LayerPanel.tsx`.
 
-- [ ] **Step 1** List elements by `order` (top first) with type icon + name; click selects; up/down buttons reorder via `reorderElements`; hide (`style.opacity`→0 stored as `hidden` flag on `data`), lock (skip in hit-test), rename (`data.name`), delete.
-- [ ] **Step 2** Make `hitElement`/selection skip `data.locked` and `data.hidden` elements.
-- [ ] **Step 3** Verify visually. Commit — `git commit -m "feat(draw): layer panel reorder/hide/lock/rename/delete"`
+- [x] **Step 1** List elements by `order` (top first) with type icon + name; click selects; up/down buttons reorder via `reorderElements`; hide (`style.opacity`→0 stored as `hidden` flag on `data`), lock (skip in hit-test), rename (`data.name`), delete.
+- [x] **Step 2** Make `hitElement`/selection skip `data.locked` and `data.hidden` elements.
+- [x] **Step 3** Verify visually. Commit — `git commit -m "feat(draw): layer panel reorder/hide/lock/rename/delete"`
 
 ---
 
@@ -249,7 +249,7 @@ describe("hitInMarquee", () => {
 
 **Interfaces:** `renderElementSvg(el, mode): string` (SVG fragment); `exportPng(elements, opts): Blob`; `exportSvg(elements): string`.
 
-- [ ] **Step 1: Failing test for SVG emit**
+- [x] **Step 1: Failing test for SVG emit**
 
 ```ts
 // src/render/renderElementSvg.test.ts
@@ -265,10 +265,10 @@ it("emits an SVG rect for a clean rectangle", () => {
 });
 ```
 
-- [ ] **Step 2: Run → FAIL.**
-- [ ] **Step 3: Implement** `renderElementSvg` (clean = literal SVG elements; sketch = `roughjs`'s SVG generator `rough.svg().rectangle(...)` → serialize the node). `exportSvg` wraps all fragments in an `<svg>` sized to the union bounds. `exportPng` draws to an offscreen canvas at 2× and returns `toBlob`. `TopBar` buttons trigger a download.
-- [ ] **Step 4: Run tests → PASS**; verify visually a board exports to a valid PNG + SVG.
-- [ ] **Step 5: Commit** — `git commit -m "feat(draw): PNG + SVG export"`
+- [x] **Step 2: Run → FAIL.**
+- [x] **Step 3: Implement** `renderElementSvg` (clean = literal SVG elements; sketch = `roughjs`'s SVG generator `rough.svg().rectangle(...)` → serialize the node). `exportSvg` wraps all fragments in an `<svg>` sized to the union bounds. `exportPng` draws to an offscreen canvas at 2× and returns `toBlob`. `TopBar` buttons trigger a download.
+- [x] **Step 4: Run tests → PASS**; verify visually a board exports to a valid PNG + SVG.
+- [x] **Step 5: Commit** — `git commit -m "feat(draw): PNG + SVG export"`
 
 ---
 
@@ -278,7 +278,7 @@ it("emits an SVG rect for a clean rectangle", () => {
 
 **Interfaces:** `serializeBoard(board, elements): string`; `deserializeBoard(json): {board,elements}`; `saveLocal()/loadLocal()`.
 
-- [ ] **Step 1: Failing round-trip test**
+- [x] **Step 1: Failing round-trip test**
 
 ```ts
 // src/persistence/localStore.test.ts
@@ -296,10 +296,10 @@ it("round-trips a board with elements", () => {
 });
 ```
 
-- [ ] **Step 2: Run → FAIL.**
-- [ ] **Step 3: Implement** serialize/deserialize (JSON with a `version` field), `saveLocal` (debounced write to `localStorage["nexus-draw:board"]`), `loadLocal`. Subscribe the store to autosave on element changes; load on mount; add New / Import(.json) / Export(.json) in `TopBar`.
-- [ ] **Step 4: Run tests → PASS**; verify visually: reload keeps the board.
-- [ ] **Step 5: Commit** — `git commit -m "feat(draw): localStorage autosave + board import/export"`
+- [x] **Step 2: Run → FAIL.**
+- [x] **Step 3: Implement** serialize/deserialize (JSON with a `version` field), `saveLocal` (debounced write to `localStorage["nexus-draw:board"]`), `loadLocal`. Subscribe the store to autosave on element changes; load on mount; add New / Import(.json) / Export(.json) in `TopBar`.
+- [x] **Step 4: Run tests → PASS**; verify visually: reload keeps the board.
+- [x] **Step 5: Commit** — `git commit -m "feat(draw): localStorage autosave + board import/export"`
 
 ---
 
@@ -307,9 +307,9 @@ it("round-trips a board with elements", () => {
 
 **Files:** Modify `Toolbar.tsx`, add `src/components/ShortcutsOverlay.tsx`, tidy `App.tsx`.
 
-- [ ] **Step 1** Remove the fake `fill`/`zoom` tool buttons; use `lucide-react` icons instead of unicode; add a style-mode quick toggle + grid-snap toggle in the top bar; add `?` shortcuts overlay. Empty-canvas hint text.
-- [ ] **Step 2** `bun run check` + full `npx vitest run` green.
-- [ ] **Step 3** Commit — `git commit -m "feat(draw): toolbar polish, icons, shortcuts overlay"`
+- [x] **Step 1** Remove the fake `fill`/`zoom` tool buttons; use `lucide-react` icons instead of unicode; add a style-mode quick toggle + grid-snap toggle in the top bar; add `?` shortcuts overlay. Empty-canvas hint text.
+- [x] **Step 2** `bun run check` + full `npx vitest run` green.
+- [x] **Step 3** Commit — `git commit -m "feat(draw): toolbar polish, icons, shortcuts overlay"`
 
 ---
 
@@ -317,9 +317,9 @@ it("round-trips a board with elements", () => {
 
 **Files:** none (deploy).
 
-- [ ] **Step 1** `cd apps/Nexus-Draw/frontend && bun run build` → clean `dist/`.
-- [ ] **Step 2** Deploy the new `dist/` to the existing `draw.tnhc.dev` site (id 5) via the Hosting API — for each file in `dist`: `POST /sites/5/files/upload-url` → PUT → `POST /sites/5/files`; then `POST /sites/5/deploy` (reuse the `fh_` token minted earlier, or mint a fresh one per the site-deploy-flow memory). Set correct content types (text/html, text/javascript, text/css, plus any fonts/images).
-- [ ] **Step 3** Verify at the edge: `curl -sI https://draw.tnhc.dev/` → 200; load in a browser (or screenshot) and confirm shapes/pen/text/export all work. Commit the built `dist` if the repo tracks it (it does): `git commit -m "chore(draw): rebuild and deploy editor to draw.tnhc.dev"`.
+- [x] **Step 1** `cd apps/Nexus-Draw/frontend && bun run build` → clean `dist/`.
+- [x] **Step 2** Deploy the new `dist/` to the existing `draw.tnhc.dev` site (id 5) via the Hosting API — for each file in `dist`: `POST /sites/5/files/upload-url` → PUT → `POST /sites/5/files`; then `POST /sites/5/deploy` (reuse the `fh_` token minted earlier, or mint a fresh one per the site-deploy-flow memory). Set correct content types (text/html, text/javascript, text/css, plus any fonts/images).
+- [x] **Step 3** Verify at the edge: `curl -sI https://draw.tnhc.dev/` → 200; load in a browser (or screenshot) and confirm shapes/pen/text/export all work. Commit the built `dist` if the repo tracks it (it does): `git commit -m "chore(draw): rebuild and deploy editor to draw.tnhc.dev"`.
 
 ---
 

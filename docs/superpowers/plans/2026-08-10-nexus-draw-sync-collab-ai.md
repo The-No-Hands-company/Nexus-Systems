@@ -39,7 +39,7 @@
   - `deleteBoard(id): boolean`
   - `updateElements(id, elements): void` (unchanged; updates `updated_at`)
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```ts
 // apps/Nexus-Draw/tests/draw-engine.test.ts
@@ -83,9 +83,9 @@ describe("DrawEngine board metadata", () => {
 });
 ```
 
-- [ ] **Step 2: Run to verify it fails** — `cd apps/Nexus-Draw && bun test tests/draw-engine.test.ts` → FAIL (missing methods/columns).
+- [x] **Step 2: Run to verify it fails** — `cd apps/Nexus-Draw && bun test tests/draw-engine.test.ts` → FAIL (missing methods/columns).
 
-- [ ] **Step 3: Implement `draw-engine.ts`**
+- [x] **Step 3: Implement `draw-engine.ts`**
 
 Keep the existing table; run an idempotent migration that adds metadata columns if missing, then expose the new methods:
 
@@ -176,9 +176,9 @@ export class DrawEngine {
 }
 ```
 
-- [ ] **Step 4: Run to verify it passes** — `cd apps/Nexus-Draw && bun test tests/draw-engine.test.ts` → 5 tests PASS.
+- [x] **Step 4: Run to verify it passes** — `cd apps/Nexus-Draw && bun test tests/draw-engine.test.ts` → 5 tests PASS.
 
-- [ ] **Step 5: Commit** — `git add apps/Nexus-Draw/src/draw-engine.ts apps/Nexus-Draw/tests/draw-engine.test.ts && git commit -m "feat(draw): SQLite board metadata columns, meta PATCH, delete"`
+- [x] **Step 5: Commit** — `git add apps/Nexus-Draw/src/draw-engine.ts apps/Nexus-Draw/tests/draw-engine.test.ts && git commit -m "feat(draw): SQLite board metadata columns, meta PATCH, delete"`
 
 ---
 
@@ -195,7 +195,7 @@ export class DrawEngine {
   - `DELETE /api/v1/draw/boards/:id` → 200 `{ deleted: true }`, 404 `{ error: "not found" }`.
   - `GET /api/v1/draw/boards/:id` now returns ALL board fields (metadata + elements + collaborators), not just a `{...r, elements, collaborators}` strip — unchanged URL.
 
-- [ ] **Step 1: Write the failing route tests**
+- [x] **Step 1: Write the failing route tests**
 
 ```ts
 // apps/Nexus-Draw/tests/server.test.ts — append
@@ -233,9 +233,9 @@ describe("board routes", () => {
 });
 ```
 
-- [ ] **Step 2: Run to verify it fails** — `cd apps/Nexus-Draw && bun test tests/server.test.ts` → FAIL (route 404s).
+- [x] **Step 2: Run to verify it fails** — `cd apps/Nexus-Draw && bun test tests/server.test.ts` → FAIL (route 404s).
 
-- [ ] **Step 3: Implement routes in `createServer`** — add after the existing `GET/POST /api/v1/draw/boards` lines:
+- [x] **Step 3: Implement routes in `createServer`** — add after the existing `GET/POST /api/v1/draw/boards` lines:
 
 ```ts
 // PATCH /api/v1/draw/boards/:id — update board metadata
@@ -257,9 +257,9 @@ if (req.method === "DELETE" && dm) {
 
 Note: `dm` is the existing `p.match(/^\/api\/v1\/draw\/boards\/([^/]+)$/)` binding — reuse it rather than re-declaring; adjust so the DELETE branch comes after the existing `if (req.method === "GET" && dm)` and the PUT `/elements` branch (order matters only against those exact matchers, which are disjoint).
 
-- [ ] **Step 4: Run to verify it passes** — `cd apps/Nexus-Draw && bun test tests/server.test.ts` → PASS. Also `bun run check` → clean.
+- [x] **Step 4: Run to verify it passes** — `cd apps/Nexus-Draw && bun test tests/server.test.ts` → PASS. Also `bun run check` → clean.
 
-- [ ] **Step 5: Commit** — `git add apps/Nexus-Draw/src/server.ts apps/Nexus-Draw/tests/server.test.ts && git commit -m "feat(draw): PATCH/DELETE board routes"`
+- [x] **Step 5: Commit** — `git add apps/Nexus-Draw/src/server.ts apps/Nexus-Draw/tests/server.test.ts && git commit -m "feat(draw): PATCH/DELETE board routes"`
 
 ---
 
@@ -283,7 +283,7 @@ Note: `dm` is the existing `p.match(/^\/api\/v1\/draw\/boards\/([^/]+)$/)` bindi
   - `serverBoardToBoardData(sb:ServerBoard): BoardData`
   - persistence gains `lastBoardKey()`/`saveLastBoardId(id)` (`localStorage["nexus-draw:active-board"]`) and `loadDoc(server?: ServerBoard)` overload — when given a server board, boot off it instead of localStorage.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```ts
 // apps/Nexus-Draw/frontend/src/utils/api.test.ts
@@ -356,9 +356,9 @@ describe("api", () => {
 });
 ```
 
-- [ ] **Step 2: Run to verify it fails** — `cd apps/Nexus-Draw/frontend && bun test src/utils/api.test.ts` → FAIL (module missing).
+- [x] **Step 2: Run to verify it fails** — `cd apps/Nexus-Draw/frontend && bun test src/utils/api.test.ts` → FAIL (module missing).
 
-- [ ] **Step 3: Implement `frontend/src/utils/api.ts`**
+- [x] **Step 3: Implement `frontend/src/utils/api.ts`**
 
 ```ts
 import type { StyleMode } from "../stores/model";
@@ -440,7 +440,7 @@ export async function serverAvailable(): Promise<boolean> {
 }
 ```
 
-- [ ] **Step 4: Extend `persistence.ts`** — add last-board tracking (do not remove existing functions):
+- [x] **Step 4: Extend `persistence.ts`** — add last-board tracking (do not remove existing functions):
 
 ```ts
 const ACTIVE_KEY = "nexus-draw:active-board";
@@ -450,9 +450,9 @@ export function loadLastBoardId(): string | null { try { return localStorage.get
 
 Also export the `PersistedDoc` shape already present and keep `bootBoard`/`saveDoc`/`flushSave`/`clearDoc` unchanged.
 
-- [ ] **Step 5: Run to verify it passes** — `cd apps/Nexus-Draw/frontend && bun test src/utils/api.test.ts && bun run check` → PASS / clean.
+- [x] **Step 5: Run to verify it passes** — `cd apps/Nexus-Draw/frontend && bun test src/utils/api.test.ts && bun run check` → PASS / clean.
 
-- [ ] **Step 6: Commit** — `git add apps/Nexus-Draw/frontend/src/utils/api.ts apps/Nexus-Draw/frontend/src/utils/api.test.ts apps/Nexus-Draw/frontend/src/utils/persistence.ts && git commit -m "feat(draw): frontend server API client + active-board tracking"`
+- [x] **Step 6: Commit** — `git add apps/Nexus-Draw/frontend/src/utils/api.ts apps/Nexus-Draw/frontend/src/utils/api.test.ts apps/Nexus-Draw/frontend/src/utils/persistence.ts && git commit -m "feat(draw): frontend server API client + active-board tracking"`
 
 ---
 
@@ -470,7 +470,7 @@ Also export the `PersistedDoc` shape already present and keep `bootBoard`/`saveD
   - In `App.tsx`: bottom bar gains a third toggle `setSidebar("boards")`; sidebar `"boards"` renders `<BoardPanel/>` in `w-64`; a "Save" button appears in TopBar enabled when a board is loaded; `serverAvailable()` is checked at boot once.
   - Boot flow: on mount, call `serverAvailable()`; if true → prefer `getBoard(loadLastBoardId())` if present else `listBoards()[0]` if any else `createBoard("Untitled Board")`; fallback = current localStorage `bootBoard(loadDoc())`. After any server board is set, `saveLastBoardId(board.id)`.
 
-- [ ] **Step 1: Write the failing component test**
+- [x] **Step 1: Write the failing component test**
 
 ```tsx
 // apps/Nexus-Draw/frontend/src/components/BoardPanel.test.tsx
@@ -518,9 +518,9 @@ describe("BoardPanel", () => {
 });
 ```
 
-- [ ] **Step 2: Run to verify it fails** — `cd apps/Nexus-Draw/frontend && bun test src/components/BoardPanel.test.tsx` → FAIL (module missing).
+- [x] **Step 2: Run to verify it fails** — `cd apps/Nexus-Draw/frontend && bun test src/components/BoardPanel.test.tsx` → FAIL (module missing).
 
-- [ ] **Step 3: Implement `BoardPanel.tsx`**
+- [x] **Step 3: Implement `BoardPanel.tsx`**
 
 ```tsx
 import { useEffect, useState } from "react";
@@ -569,7 +569,7 @@ export default function BoardPanel({ onSwitch, onNew }: { onSwitch: (id: string)
 }
 ```
 
-- [ ] **Step 4: Wire into `App.tsx`** — extend the `sidebar` union to `"layers" | "properties" | "boards"` in the store (`useEditorStore.ts` setSidebar type + initial), add a "Boards" button in the bottom bar alongside "Elements"/"Properties", and render `<BoardPanel/>` when `sidebar === "boards"`. Add handlers:
+- [x] **Step 4: Wire into `App.tsx`** — extend the `sidebar` union to `"layers" | "properties" | "boards"` in the store (`useEditorStore.ts` setSidebar type + initial), add a "Boards" button in the bottom bar alongside "Elements"/"Properties", and render `<BoardPanel/>` when `sidebar === "boards"`. Add handlers:
 
 ```tsx
 const switchBoard = async (id: string) => {
@@ -601,9 +601,9 @@ const save = async () => {
 
 Boot effect in `App.tsx`: after the existing localStorage boot, run `serverAvailable()`; if reachable, prefer last board id, then first server board, else create one; always `saveLastBoardId` after choosing.
 
-- [ ] **Step 5: Run to verify** — `cd apps/Nexus-Draw/frontend && bun test src/components/BoardPanel.test.tsx && bun run check` → PASS / clean.
+- [x] **Step 5: Run to verify** — `cd apps/Nexus-Draw/frontend && bun test src/components/BoardPanel.test.tsx && bun run check` → PASS / clean.
 
-- [ ] **Step 6: Commit** — `git add apps/Nexus-Draw/frontend/src && git commit -m "feat(draw): board panel, board switching, server boot flow"`
+- [x] **Step 6: Commit** — `git add apps/Nexus-Draw/frontend/src && git commit -m "feat(draw): board panel, board switching, server boot flow"`
 
 ---
 
@@ -624,7 +624,7 @@ Boot effect in `App.tsx`: after the existing localStorage boot, run `serverAvail
   - Storage layout: `doc.getMap<ElementData>("elements")` keyed by id + `doc.getArray<string>("order")`.
 - Behavior: `writeElements` reconciles the map + order from `elements` in one `doc.transact()`, only setting/deleting diffs (so unrelated remote changes never get clobbered by an echo). `yToElements` returns elements in `order` sequence (falling back to insertion order for ids missing from `order`).
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```ts
 // apps/Nexus-Draw/frontend/src/collab/yElements.test.ts
@@ -671,9 +671,9 @@ describe("yElements", () => {
 });
 ```
 
-- [ ] **Step 2: Run to verify it fails** — `cd apps/Nexus-Draw/frontend && bun test src/collab/yElements.test.ts` → FAIL (module missing).
+- [x] **Step 2: Run to verify it fails** — `cd apps/Nexus-Draw/frontend && bun test src/collab/yElements.test.ts` → FAIL (module missing).
 
-- [ ] **Step 3: Implement `yElements.ts`**
+- [x] **Step 3: Implement `yElements.ts`**
 
 ```ts
 import * as Y from "yjs";
@@ -738,9 +738,9 @@ export function elementsEqual(a: ElementData[], b: ElementData[]): boolean {
 }
 ```
 
-- [ ] **Step 4: Run to verify it passes** — `cd apps/Nexus-Draw/frontend && bun test src/collab/yElements.test.ts` → PASS.
+- [x] **Step 4: Run to verify it passes** — `cd apps/Nexus-Draw/frontend && bun test src/collab/yElements.test.ts` → PASS.
 
-- [ ] **Step 5: Commit** — `git add apps/Nexus-Draw/frontend/src/collab && git commit -m "feat(draw): yjs reconcile helpers for collaborative elements"`
+- [x] **Step 5: Commit** — `git add apps/Nexus-Draw/frontend/src/collab && git commit -m "feat(draw): yjs reconcile helpers for collaborative elements"`
 
 ---
 
@@ -758,13 +758,13 @@ export function elementsEqual(a: ElementData[], b: ElementData[]): boolean {
   - Room = `Map<boardId, { doc: Y.Doc; conns: Set<any> }>`; docs seeded from `engine.getBoard(boardId).elements` on first connect; on every Y update, debounced (~300ms) `engine.updateElements(boardId, yToElementsLike(doc))`.
   - Protocol: on open send `sync step 1`; on `messageSync` run `syncProtocol.readSyncMessage(decoder, encoder, doc, conn)` and send the reply; on `messageAwareness` apply + broadcast to other conns.
 
-- [ ] **Step 1: Add deps**
+- [x] **Step 1: Add deps**
 
 ```bash
 cd apps/Nexus-Draw && bun add yjs y-protocols lib0
 ```
 
-- [ ] **Step 2: Write the integration test (real WebSockets, two clients)**
+- [x] **Step 2: Write the integration test (real WebSockets, two clients)**
 
 ```ts
 // apps/Nexus-Draw/tests/collab.test.ts
@@ -837,7 +837,7 @@ describe("collab websocket", () => {
 
   Because hand-rolling the protocol bytes inline is error-prone, implement the raw message builder in the test via the same `lib0`/`y-protocols` primitives the server uses: encode with `encoding.createEncoder()`, `writeVarUint(encoder, 0 /*sync*/)`, `y-protocols/sync.writeSyncStep1(encoder, clientDoc)` and on `message` parse with `decoding.createDecoder` + `syncProtocol.readSyncMessage`. Assert BOTH clients receive the element (each client applies the incoming step 2 and its `map`/`getArray` observes the change).
 
-- [ ] **Step 3: Implement `collab.ts`**
+- [x] **Step 3: Implement `collab.ts`**
 
 ```ts
 import * as Y from "yjs";
@@ -961,7 +961,7 @@ function broadcastAwareness(room: Room, except: any): void {
 }
 ```
 
-- [ ] **Step 4: Wire into `server.ts`** — add a `collab = new CollabServer(engine)` and, in `Bun.serve`, add a `websocket` handler plus an upgrade route:
+- [x] **Step 4: Wire into `server.ts`** — add a `collab = new CollabServer(engine)` and, in `Bun.serve`, add a `websocket` handler plus an upgrade route:
 
 ```ts
 const wsMatch = p.match(/^\/api\/v1\/draw\/ws\/([^/]+)$/);
@@ -979,9 +979,9 @@ websocket: {
 },
 ```
 
-- [ ] **Step 5: Run tests** — `cd apps/Nexus-Draw && bun test tests/collab.test.ts` → PASS (integration proves element lands in SQLite and both sockets stay live). Then full `bun test` + `bun run check`.
+- [x] **Step 5: Run tests** — `cd apps/Nexus-Draw && bun test tests/collab.test.ts` → PASS (integration proves element lands in SQLite and both sockets stay live). Then full `bun test` + `bun run check`.
 
-- [ ] **Step 6: Commit** — `git add apps/Nexus-Draw/src/collab.ts apps/Nexus-Draw/tests/collab.test.ts apps/Nexus-Draw/src/server.ts apps/Nexus-Draw/package.json && git commit -m "feat(draw): y-websocket collab server with SQLite persistence"`
+- [x] **Step 6: Commit** — `git add apps/Nexus-Draw/src/collab.ts apps/Nexus-Draw/tests/collab.test.ts apps/Nexus-Draw/src/server.ts apps/Nexus-Draw/package.json && git commit -m "feat(draw): y-websocket collab server with SQLite persistence"`
 
 ---
 
@@ -1001,7 +1001,7 @@ websocket: {
   - `App.tsx`: after a server board is loaded, `connectCollab(board.id)`; on store `elements` change call `binding.setElements(elements)` (only while connected and not suppressed); on `onChange` apply `setElementsLive`. Disconnect on unmount/board switch. `collabActive` gates the pill.
   - `Canvas.tsx`: render a small "● Live" / "○ Offline" pill (top-right) fed by `collabActive`.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```ts
 // apps/Nexus-Draw/frontend/src/collab/collab.test.ts
@@ -1018,9 +1018,9 @@ describe("collab binding", () => {
 });
 ```
 
-- [ ] **Step 2: Run to verify it fails** — `cd apps/Nexus-Draw/frontend && bun test src/collab/collab.test.ts` → FAIL (module missing).
+- [x] **Step 2: Run to verify it fails** — `cd apps/Nexus-Draw/frontend && bun test src/collab/collab.test.ts` → FAIL (module missing).
 
-- [ ] **Step 3: Implement `collab.ts`**
+- [x] **Step 3: Implement `collab.ts`**
 
 ```ts
 import * as Y from "yjs";
@@ -1093,7 +1093,7 @@ export function collabRoundTrip(initial: ElementData[]): Promise<ElementData[][]
 }
 ```
 
-- [ ] **Step 4: Refine the binding so `onChange` is actually bound** — the `collabRoundTrip` helper above needs to be replaced by an `applyRemoteUpdate(binding, fromDoc)` used by tests that drives the binding's observers (a plain `Y.applyUpdate` into the provider's doc triggers the map/order observers). Adjust the test to construct a `CollabBinding` around two local docs:
+- [x] **Step 4: Refine the binding so `onChange` is actually bound** — the `collabRoundTrip` helper above needs to be replaced by an `applyRemoteUpdate(binding, fromDoc)` used by tests that drives the binding's observers (a plain `Y.applyUpdate` into the provider's doc triggers the map/order observers). Adjust the test to construct a `CollabBinding` around two local docs:
 
 ```ts
 it("propagates local writes to a second doc's observer", async () => {
@@ -1109,11 +1109,11 @@ it("propagates local writes to a second doc's observer", async () => {
 });
 ```
 
-- [ ] **Step 5: Wire into App + store + Canvas** — add `collabActive`/`setCollabActive` to the store; a `useEffect` keyed on `board?.id` that calls `connectCollab`, subscribes store changes → `binding.setElements`, and `onChange` → `setElementsLive` + `setCollabActive(true)`. Cleanup destroys the binding. Render the pill in Canvas top-right using `collabActive`.
+- [x] **Step 5: Wire into App + store + Canvas** — add `collabActive`/`setCollabActive` to the store; a `useEffect` keyed on `board?.id` that calls `connectCollab`, subscribes store changes → `binding.setElements`, and `onChange` → `setElementsLive` + `setCollabActive(true)`. Cleanup destroys the binding. Render the pill in Canvas top-right using `collabActive`.
 
-- [ ] **Step 6: Run** — `cd apps/Nexus-Draw/frontend && bun test src/collab/collab.test.ts && bun run check` → PASS / clean.
+- [x] **Step 6: Run** — `cd apps/Nexus-Draw/frontend && bun test src/collab/collab.test.ts && bun run check` → PASS / clean.
 
-- [ ] **Step 7: Commit** — `git add apps/Nexus-Draw/frontend/src/collab apps/Nexus-Draw/frontend/src/App.tsx apps/Nexus-Draw/frontend/src/components/Canvas/Canvas.tsx apps/Nexus-Draw/frontend/src/stores/useEditorStore.ts && git commit -m "feat(draw): collaborative binding + live presence pill"`
+- [x] **Step 7: Commit** — `git add apps/Nexus-Draw/frontend/src/collab apps/Nexus-Draw/frontend/src/App.tsx apps/Nexus-Draw/frontend/src/components/Canvas/Canvas.tsx apps/Nexus-Draw/frontend/src/stores/useEditorStore.ts && git commit -m "feat(draw): collaborative binding + live presence pill"`
 
 ---
 
@@ -1132,7 +1132,7 @@ it("propagates local writes to a second doc's observer", async () => {
   - Heuristic layout: split prompt into tokens; place N nodes (boxes) in a vertical flow with arrows between them, labels = keyword substrings; first token → start node; always yields ≥2 nodes + ≥1 arrow so a board is visibly populated. Deterministic (seeded by prompt length) so tests are stable.
   - `function aiElementsToServerElements(els: AiElement[]): unknown[]`  (identity passthrough used by the route).
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```ts
 // apps/Nexus-Draw/tests/ai.test.ts
@@ -1162,9 +1162,9 @@ describe("synthesizeDiagram", () => {
 });
 ```
 
-- [ ] **Step 2: Run to verify it fails** — `cd apps/Nexus-Draw && bun test tests/ai.test.ts` → FAIL (module missing).
+- [x] **Step 2: Run to verify it fails** — `cd apps/Nexus-Draw && bun test tests/ai.test.ts` → FAIL (module missing).
 
-- [ ] **Step 3: Implement `ai.ts`**
+- [x] **Step 3: Implement `ai.ts`**
 
 ```ts
 import { randomUUID } from "node:crypto";
@@ -1231,9 +1231,9 @@ export function synthesizeDiagram(prompt: string, opts: { width?: number; height
 
 ⚠️ NOTE: the push order above appends two box+text elements per node, then the arrow for nodes with `i > 0` — since arrows reference `py = 110 + i * (boxH + gapY)` (one row *above* node `i`), the arrow for node `i` should link node `i-1`'s box to node `i`'s box: emit the arrow *after* pushing node `i`'s box+text using `y2 = y` of the current node's box top minus a gap. The exact arrow geometry is not asserted by the tests (only ≥2 nodes, ≥1 arrow, determinism, ids/order), so implement it correctly rather than literally: push arrow between consecutive node tops. The essential contract is: `order` is the plain array index — set it in a final `.map((e, i) => ({ ...e, order: i }))` and nothing else.
 
-- [ ] **Step 4: Run to verify it passes** — `cd apps/Nexus-Draw && bun test tests/ai.test.ts` → PASS. Fix the `order` mapping to simply be the index (`els.map((e, i) => ({ ...e, order: i }))`) — the previous line is leftover confusion, just set `order: i`.
+- [x] **Step 4: Run to verify it passes** — `cd apps/Nexus-Draw && bun test tests/ai.test.ts` → PASS. Fix the `order` mapping to simply be the index (`els.map((e, i) => ({ ...e, order: i }))`) — the previous line is leftover confusion, just set `order: i`.
 
-- [ ] **Step 5: Commit** — `git add apps/Nexus-Draw/src/ai.ts apps/Nexus-Draw/tests/ai.test.ts && git commit -m "feat(draw): deterministic diagram synthesizer"`
+- [x] **Step 5: Commit** — `git add apps/Nexus-Draw/src/ai.ts apps/Nexus-Draw/tests/ai.test.ts && git commit -m "feat(draw): deterministic diagram synthesizer"`
 
 ---
 
@@ -1252,7 +1252,7 @@ export function synthesizeDiagram(prompt: string, opts: { width?: number; height
   - Frontend: `async generateDiagram(prompt: string, boardId?: string): Promise<{ elements: AiElement[]; board_id?: string }>` (POST).
   - Frontend helper `applyGenerated(boardId?): Promise<void>` — sets a "Generate" button flow: call generate, then `getBoard`, `setBoard(serverBoardToBoardData)`, select the new ids, `saveLastBoardId`, return count.
 
-- [ ] **Step 1: Append failing route test**
+- [x] **Step 1: Append failing route test**
 
 ```ts
 // apps/Nexus-Draw/tests/server.test.ts — append
@@ -1278,9 +1278,9 @@ it("POST /api/v1/draw/ai/generate with board_id appends to the board", async () 
 });
 ```
 
-- [ ] **Step 2: Run to verify it fails** — `cd apps/Nexus-Draw && bun test tests/server.test.ts` → FAIL (route 404s).
+- [x] **Step 2: Run to verify it fails** — `cd apps/Nexus-Draw && bun test tests/server.test.ts` → FAIL (route 404s).
 
-- [ ] **Step 3: Implement the route** — in `createServer`, before the `dm` board matcher block (order: route it before generic `/boards/:id` PATCH/DELETE since paths differ anyway):
+- [x] **Step 3: Implement the route** — in `createServer`, before the `dm` board matcher block (order: route it before generic `/boards/:id` PATCH/DELETE since paths differ anyway):
 
 ```ts
 if (req.method === "POST" && p === "/api/v1/draw/ai/generate") {
@@ -1295,7 +1295,7 @@ if (req.method === "POST" && p === "/api/v1/draw/ai/generate") {
 }
 ```
 
-- [ ] **Step 4: Add frontend API helpers** — in `api.ts`:
+- [x] **Step 4: Add frontend API helpers** — in `api.ts`:
 
 ```ts
 export async function generateDiagram(prompt: string, boardId?: string): Promise<{ elements: unknown[]; board_id?: string }> {
@@ -1305,9 +1305,9 @@ export async function generateDiagram(prompt: string, boardId?: string): Promise
 }
 ```
 
-- [ ] **Step 5: Run to verify it passes** — `cd apps/Nexus-Draw && bun test`; `cd apps/Nexus-Draw/frontend && bun test src/utils/api.test.ts && bun run check` → all PASS / clean.
+- [x] **Step 5: Run to verify it passes** — `cd apps/Nexus-Draw && bun test`; `cd apps/Nexus-Draw/frontend && bun test src/utils/api.test.ts && bun run check` → all PASS / clean.
 
-- [ ] **Step 6: Commit** — `git add apps/Nexus-Draw/src/server.ts apps/Nexus-Draw/frontend/src/utils/api.ts apps/Nexus-Draw/tests/server.test.ts && git commit -m "feat(draw): AI diagram generation endpoint"`
+- [x] **Step 6: Commit** — `git add apps/Nexus-Draw/src/server.ts apps/Nexus-Draw/frontend/src/utils/api.ts apps/Nexus-Draw/tests/server.test.ts && git commit -m "feat(draw): AI diagram generation endpoint"`
 
 ---
 
@@ -1324,7 +1324,7 @@ export async function generateDiagram(prompt: string, boardId?: string): Promise
   - Flow: `generateDiagram(prompt, board.id)` → `getBoard(board.id)` → `setBoard(serverBoardToBoardData(sb))` → `setSelection(newIds)` → `saveLastBoardId`.
   - Non-destructive: generated elements append to the existing board (server route already appends); `setBoard` replaces store state with the server's (post-generate) copy so `board.elements` stays consistent for the panel.
 
-- [ ] **Step 1: Write the failing component test**
+- [x] **Step 1: Write the failing component test**
 
 ```tsx
 // apps/Nexus-Draw/frontend/src/components/AIPanel.test.tsx
@@ -1366,9 +1366,9 @@ describe("AIPanel", () => {
 });
 ```
 
-- [ ] **Step 2: Run to verify it fails** — `cd apps/Nexus-Draw/frontend && bun test src/components/AIPanel.test.tsx` → FAIL (module missing).
+- [x] **Step 2: Run to verify it fails** — `cd apps/Nexus-Draw/frontend && bun test src/components/AIPanel.test.tsx` → FAIL (module missing).
 
-- [ ] **Step 3: Implement `AIPanel.tsx`**
+- [x] **Step 3: Implement `AIPanel.tsx`**
 
 ```tsx
 import { useState } from "react";
@@ -1427,20 +1427,20 @@ export default function AIPanel({ boardId }: { boardId: string }) {
 }
 ```
 
-- [ ] **Step 4: Wire into App** — render `AIPanel` when `sidebar === "ai"` (extend the sidebar union + toggles as in A4); add an "AI" entry button in the bottom bar. Where `board` is null render nothing.
+- [x] **Step 4: Wire into App** — render `AIPanel` when `sidebar === "ai"` (extend the sidebar union + toggles as in A4); add an "AI" entry button in the bottom bar. Where `board` is null render nothing.
 
-- [ ] **Step 5: Run to verify it passes** — `cd apps/Nexus-Draw/frontend && bun test src/components/AIPanel.test.tsx && bun run check` → PASS / clean.
+- [x] **Step 5: Run to verify it passes** — `cd apps/Nexus-Draw/frontend && bun test src/components/AIPanel.test.tsx && bun run check` → PASS / clean.
 
-- [ ] **Step 6: Commit** — `git add apps/Nexus-Draw/frontend/src && git commit -m "feat(draw): AI generation panel with apply-to-canvas"`
+- [x] **Step 6: Commit** — `git add apps/Nexus-Draw/frontend/src && git commit -m "feat(draw): AI generation panel with apply-to-canvas"`
 
 ---
 
 ## Final verification
 
-- [ ] **Step 1** — `cd apps/Nexus-Draw && bun test && bun run check` → all green.
-- [ ] **Step 2** — `cd apps/Nexus-Draw/frontend && bun test && bun run check` → all green.
-- [ ] **Step 3** — `docker compose up -d` (Postgres/Redis/MinIO for the optional FastAPI AI path) and `cd apps/Nexus-Draw/backend && uvicorn app.main:app --port 3081` → health OK (backend untouched but still starts). Run `bun run dev` on the server and `cd frontend && bun run dev` → open two browser tabs on the same board and confirm live edits propagate; generate a diagram → elements appear on canvas.
-- [ ] **Step 4** — `git status` clean of stray files; commit any remaining formatting fixes: `git commit -m "chore(draw): post-integration cleanup"`.
+- [x] **Step 1** — `cd apps/Nexus-Draw && bun test && bun run check` → all green.
+- [x] **Step 2** — `cd apps/Nexus-Draw/frontend && bun test && bun run check` → all green.
+- [x] **Step 3** — `docker compose up -d` (Postgres/Redis/MinIO for the optional FastAPI AI path) and `cd apps/Nexus-Draw/backend && uvicorn app.main:app --port 3081` → health OK (backend untouched but still starts). Run `bun run dev` on the server and `cd frontend && bun run dev` → open two browser tabs on the same board and confirm live edits propagate; generate a diagram → elements appear on canvas.
+- [x] **Step 4** — `git status` clean of stray files; commit any remaining formatting fixes: `git commit -m "chore(draw): post-integration cleanup"`.
 
 ---
 

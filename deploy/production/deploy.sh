@@ -214,6 +214,34 @@ cmd_start() {
         warn "deploy/production/nexus-chat.env absent — skipping nexus-chat"
     fi
 
+    # 4d. Nexus-Dashboard — app.$DOMAIN, the ecosystem front door.
+    #
+    # PUBLIC, deliberately: it carries request-access and claim, which people
+    # who are not signed in must be able to reach. The apps behind it are
+    # gated; this is the door to them. Gating this host would deadlock exactly
+    # as gating auth.$DOMAIN would.
+    #
+    # It also reverse-proxies /api/v1/auth/* to Auth so the browser never makes
+    # a credentialed cross-origin call — hence NEXUS_AUTH_INTERNAL_URL being an
+    # address this machine can reach and never a public URL, the same trap
+    # NEXUS_AUTH_BASE_URL documents above.
+    #
+    # Skipped with a warning rather than fatally when the UI has not been
+    # built, so a checkout that has not run `npm run build` still brings up
+    # everything else.
+    if [ ! -f "$ROOT/apps/Nexus-Dashboard/frontend/dist/index.html" ]; then
+        warn "dashboard UI not built — run: (cd apps/Nexus-Dashboard/frontend && npm install && npm run build)"
+    elif [ ! -d "$ROOT/apps/Nexus-Dashboard/src" ]; then
+        warn "apps/Nexus-Dashboard/src missing — skipping dashboard"
+    else
+        start_service "dashboard" "$ROOT/apps/Nexus-Dashboard" 3132 \
+            PORT=3132 DOMAIN="$DOMAIN" \
+            NEXUS_AUTH_INTERNAL_URL=http://127.0.0.1:4310 \
+            NEXUS_CLOUD_URL=http://localhost:8787 \
+            NEXUS_CLOUD_API_KEY="$NEXUS_CLOUD_API_KEY" \
+            bun run src/index.ts
+    fi
+
     # 5. Proxy (8080 for Cloudflare Tunnel)
     #
     # HOSTING_SITE_UPSTREAM is the default backend for the *.$DOMAIN wildcard:
@@ -235,7 +263,7 @@ cmd_start() {
 
 cmd_stop() {
     log "Stopping all Nexus services..."
-    for svc in auth cloud chat nexus-chat nexus-chat-web proxy; do
+    for svc in auth cloud chat nexus-chat nexus-chat-web dashboard proxy; do
         if [ -f "$PID_DIR/$svc.pid" ]; then
             kill "$(cat "$PID_DIR/$svc.pid")" 2>/dev/null && log "  Stopped $svc" || true
             rm -f "$PID_DIR/$svc.pid"
@@ -248,7 +276,7 @@ cmd_stop() {
 
 cmd_status() {
     echo "Service Status:"
-    for svc in auth cloud chat nexus-chat nexus-chat-web proxy; do
+    for svc in auth cloud chat nexus-chat nexus-chat-web dashboard proxy; do
         if [ -f "$PID_DIR/$svc.pid" ]; then
             if kill -0 "$(cat "$PID_DIR/$svc.pid")" 2>/dev/null; then
                 echo -e "  ${G}● $svc${R} (running, PID: $(cat $PID_DIR/$svc.pid))"
@@ -267,7 +295,7 @@ cmd_status() {
     # nexus-chat answers /api/v1/health, not /health, and is probed through its
     # Caddy front door on 8095 — that is the origin chat.$DOMAIN actually
     # reaches, so a healthy API behind a dead front door still reads as down.
-    for endpoint in "http://localhost:4310/health" "http://localhost:8787/health" "http://localhost:3109/health" "http://localhost:8095/api/v1/health" "http://localhost:8080/health"; do
+    for endpoint in "http://localhost:4310/health" "http://localhost:8787/health" "http://localhost:3109/health" "http://localhost:8095/api/v1/health" "http://localhost:3132/health" "http://localhost:8080/health"; do
         if curl -s -m 2 "$endpoint" | grep -q "ok"; then
             echo -e "  ${G}●${R} $endpoint"
         else
