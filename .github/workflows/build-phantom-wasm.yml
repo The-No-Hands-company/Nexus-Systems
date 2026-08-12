@@ -36,13 +36,30 @@ jobs:
         env:
           RUSTFLAGS: "--cfg=wasm_js"
         run: |
-          rustup target add wasm32-wasip1 || true
+          # Ensure nightly toolchain and target are installed
+          rustup toolchain install nightly || true
+          rustup target add wasm32-wasip1 --toolchain nightly || true
           rustup component add rust-src --toolchain nightly || true
-          sudo apt-get update -y && sudo apt-get install -y clang wasi-sdk build-essential libc6-dev || true
-          export WASI_SDK_PATH=/usr/lib/wasi-sdk || true
-          export CC=${WASI_SDK_PATH}/bin/clang || export CC=$(which clang) || true
-          export CARGO_TARGET_WASM32_WASIP1_LINKER=${CC} || true
+
+          # Install wasi sdk and build tools
+          sudo apt-get update -y && sudo apt-get install -y clang wasi-sdk build-essential libc6-dev pkg-config || true
+
+          # Detect wasi-sdk path
+          WASI_SDK_PATH=$(ls -d /usr/lib/wasi-sdk* /usr/share/wasi-sdk* /opt/wasi-sdk* 2>/dev/null | head -n1 || true)
+          if [ -z "$WASI_SDK_PATH" ]; then
+            WASI_SDK_PATH=/usr/lib/wasi-sdk
+          fi
+          echo "Using WASI_SDK_PATH=$WASI_SDK_PATH"
+
+          # Set cross-linker and tools for the target
+          export CC="$WASI_SDK_PATH/bin/clang"
+          export AR="$WASI_SDK_PATH/bin/llvm-ar"
+          export CARGO_TARGET_WASM32_WASIP1_LINKER="$CC"
+
+          # Build with nightly and build-std (pulls in std for target)
           cargo +nightly build -Z build-std=std --release --target wasm32-wasip1
+
+          # Package the produced wasm
           mkdir -p pkg
           cp target/wasm32-wasip1/release/phantom_wasm.wasm pkg/ || true
 
