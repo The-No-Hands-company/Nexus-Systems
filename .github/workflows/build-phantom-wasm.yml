@@ -42,7 +42,13 @@ jobs:
           rustup component add rust-src --toolchain nightly || true
 
           # Install wasi sdk and build tools
-          sudo apt-get update -y && sudo apt-get install -y clang wasi-sdk build-essential libc6-dev pkg-config || true
+          sudo apt-get update -y
+          sudo apt-get install -y clang wasi-sdk build-essential libc6-dev pkg-config
+          echo "dpkg -l wasi-sdk (if present):" || true
+          dpkg -l | grep wasi-sdk || true
+          echo "Listing possible wasi sdk install locations:"
+          ls -la /usr/lib | grep wasi || true
+          ls -la /usr/share | grep wasi || true
 
           # Detect wasi-sdk path
           WASI_SDK_PATH=$(ls -d /usr/lib/wasi-sdk* /usr/share/wasi-sdk* /opt/wasi-sdk* 2>/dev/null | head -n1 || true)
