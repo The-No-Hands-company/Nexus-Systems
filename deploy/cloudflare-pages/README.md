@@ -1,7 +1,9 @@
 # The apex front door (tnhc.dev)
 
-`tnhc.dev` is a static marketing site on **Cloudflare Pages**. It is not in this
-repository and it never reaches this machine's tunnel — that is deliberate: it
+`tnhc.dev` is a static marketing site on **Cloudflare Pages**, built from
+**`github.com/The-No-Hands-company/tnhc.dev`** (Create React App under
+`frontend/`). It is not in this repository and it never reaches this machine's
+tunnel — that is deliberate: it
 stays up when the node is down, which is the one thing a power cut cannot take
 away from you.
 
@@ -19,15 +21,30 @@ hosts:
 So the apex's job is to *point at* those, and this directory holds the two
 pieces that do it.
 
+## Status: applied
+
+Both pieces are **live in the site repo** as of commit `dccb28c` — the header
+carries Sign In and a Request Access link to the real flow, and
+`frontend/public/_redirects` is committed. The files here are the reference
+copies; edit the site repo, not these.
+
 ## 1. `_redirects`
 
 Gives the apex the URLs people type and guess — `/login`, `/signup`,
 `/register`, `/claim` — and forwards each to the real page.
 
-Copy it into the **root of the Pages project's published output**, beside
-`index.html`. For Create React App that is `build/_redirects`; for Vite it is
-`public/_redirects` (Vite copies `public/` verbatim). A copy left in the source
-root is ignored, and ignored silently — after deploying, confirm with:
+It belongs in the **source** directory the build copies verbatim, which for both
+CRA and Vite is `public/_redirects`. Do not put it in `build/` — that is
+generated output and is not committed, so the next build would drop it. What
+matters is that it ends up beside `index.html` in the *published* output; verify
+that after building:
+
+```bash
+ls frontend/build/_redirects
+```
+
+A misplaced `_redirects` is ignored, and ignored silently — so after deploying,
+confirm at the edge too:
 
 ```bash
 curl -s -o /dev/null -w '%{http_code} %{redirect_url}\n' https://tnhc.dev/login
