@@ -32,6 +32,14 @@ export interface PhantomSDK {
   release(handle: number): void;
   phantomHash(data: Uint8Array): Promise<string>;  // returns hex hash
   version(): string;
+  /**
+   * True when this is the stand-in, not real cryptography.
+   *
+   * Exposed because callers were given no way to tell. A security substrate
+   * that cannot be asked whether it is actually running is one that will be
+   * assumed to be running.
+   */
+  isMock: boolean;
 }
 
 // ── WASM-based implementation ─────────────────────────────────────
@@ -61,18 +69,26 @@ function hexDecode(hex: string): Uint8Array {
   return bytes;
 }
 
+/**
+ * Load the compiled WASM module, if one has been built.
+ *
+ * This used to throw unconditionally with build instructions, which meant the
+ * real path was unreachable even after building. It now actually tries.
+ */
 async function loadWasm(): Promise<WasmExports> {
-  // In production, load from the compiled WASM binary
-  // For now, throw with instructions
-  throw new Error(
-    "Phantom WASM module not built yet. Run: cd packages/phantom-sdk/wasm && wasm-pack build --target bundler"
-  );
+  // The specifier is assembled rather than written as a literal so the
+  // type-checker does not try to resolve a path that only exists after
+  // `wasm-pack build`. Consumers must still compile when it has not been run.
+  const spec = ["..", "wasm", "pkg", "phantom_wasm.js"].join("/");
+  const pkg = await import(/* @vite-ignore */ spec);
+  return pkg as unknown as WasmExports;
 }
 
 // ── Pure JS mock (for testing without WASM) ────────────────────────
 
 function createMockSDK(): PhantomSDK {
   let nextHandle = 1;
+
   const identities = new Map<number, { did: string; publicKey: string; signingPublicKey: string }>();
   // Store real signatures so sign→verify works deterministically
   const signatures = new Map<string, string>(); // key: `${handle}:${msgLength}`, value: hex sig
@@ -109,7 +125,8 @@ function createMockSDK(): PhantomSDK {
 
     async encapsulate(handle) {
       if (!identities.has(handle)) throw new Error("Identity not found");
-      return { ciphertext: "aa".repeat(768), sharedSecret: "bb".repeat(32) };
+      // Repeated bytes, not a key — this is the mock.
+      return { ciphertext: "aa".repeat(768), sharedSecret: "bb".repeat(32) }; // pragma: allowlist secret
     },
 
     async decapsulate(handle, _ciphertext) {
@@ -132,6 +149,8 @@ function createMockSDK(): PhantomSDK {
     version() {
       return "phantom-sdk-mock/0.1.0";
     },
+
+    isMock: true,
   };
 }
 
@@ -141,10 +160,51 @@ export async function createPhantomSDK(): Promise<PhantomSDK> {
   try {
     const wasm = await loadWasm();
     return createWasmSDK(wasm);
-  } catch {
-    // Fall back to mock when WASM is not yet built
+  } catch (err) {
+    // The fallback used to be silent. A bare catch that swaps counterfeit
+    // cryptography in for real cryptography, while every caller reports
+    // success, is worse than having no integration at all: absence is visible,
+    // and this was not.
+    const reason = err instanceof Error ? err.message : String(err);
+
+    if (requireReal()) {
+      throw new Error(
+        `Phantom: refusing to start with mock cryptography (PHANTOM_REQUIRE_REAL is set). ` +
+          `The WASM module could not be loaded: ${reason}`,
+      );
+    }
+
+    console.error(
+      "\n" +
+        "  ┌──────────────────────────────────────────────────────────────┐\n" +
+        "  │  PHANTOM IS NOT PROVIDING ANY CRYPTOGRAPHY                   │\n" +
+        "  ├──────────────────────────────────────────────────────────────┤\n" +
+        "  │  The WASM module could not be loaded, so a stand-in is in    │\n" +
+        "  │  use. It returns fabricated keys and signatures that verify  │\n" +
+        "  │  against nothing. DIDs are prefixed did:phantom:mock:.       │\n" +
+        "  │                                                              │\n" +
+        "  │  Build it:  cd packages/phantom-sdk/wasm                     │\n" +
+        "  │             wasm-pack build --target bundler                 │\n" +
+        "  │  Enforce:   PHANTOM_REQUIRE_REAL=1 to refuse to start        │\n" +
+        "  └──────────────────────────────────────────────────────────────┘\n" +
+        `  reason: ${reason}\n`,
+    );
     return createMockSDK();
   }
+}
+
+/**
+ * Whether a caller has demanded real cryptography or nothing.
+ *
+ * Off by default, deliberately: 82 services call this at boot, and turning it
+ * on before the module builds would take the ecosystem down rather than secure
+ * it. Turn it on per-service as each is verified, and globally once the build
+ * is part of deployment.
+ */
+function requireReal(): boolean {
+  const v = (globalThis as { process?: { env?: Record<string, string | undefined> } })
+    .process?.env?.PHANTOM_REQUIRE_REAL;
+  return v === "1" || v === "true";
 }
 
 function createWasmSDK(wasm: WasmExports): PhantomSDK {
@@ -203,6 +263,8 @@ function createWasmSDK(wasm: WasmExports): PhantomSDK {
     version() {
       return wasm.version();
     },
+
+    isMock: false,
   };
 }
 

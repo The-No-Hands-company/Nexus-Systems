@@ -1,5 +1,5 @@
 import { describe, it, expect, afterAll } from "bun:test";
-import { createMockSDK, hexEncode, hexDecode, type PhantomSDK } from "../src/index";
+import { createMockSDK, createPhantomSDK, hexEncode, hexDecode, type PhantomSDK } from "../src/index";
 
 describe("phantom-sdk (mock)", () => {
   let sdk: PhantomSDK;
@@ -52,5 +52,49 @@ describe("phantom-sdk (mock)", () => {
     const h = handle;
     sdk.release(h);
     expect(sdk.getDID(h)).resolves.toBe("");
+  });
+});
+
+describe("phantom honesty", () => {
+  // The SDK silently substituted a mock for real cryptography and every caller
+  // reported success. These pin the properties that make that impossible to
+  // repeat: it must be askable, and it must be refusable.
+
+  it("admits when it is not real cryptography", async () => {
+    const sdk = await createPhantomSDK();
+    expect(typeof sdk.isMock).toBe("boolean");
+  });
+
+  it("a mock identity is recognisable as one from its DID alone", async () => {
+    const sdk = await createPhantomSDK();
+    const id = await sdk.generateIdentity("honesty-check");
+    if (sdk.isMock) {
+      expect(id.did).toContain("mock");
+    } else {
+      expect(id.did).not.toContain("mock");
+    }
+  });
+
+  it("refuses to start on mock crypto when PHANTOM_REQUIRE_REAL is set", async () => {
+    const prev = process.env.PHANTOM_REQUIRE_REAL;
+    process.env.PHANTOM_REQUIRE_REAL = "1";
+    try {
+      // Only meaningful while the WASM module is unbuilt; once it builds this
+      // resolves for real, which is the outcome we want either way.
+      let threw = false;
+      let sdk: Awaited<ReturnType<typeof createPhantomSDK>> | null = null;
+      try {
+        sdk = await createPhantomSDK();
+      } catch (e) {
+        threw = true;
+        expect(String(e)).toContain("mock cryptography");
+      }
+      if (!threw) {
+        expect(sdk?.isMock).toBe(false);
+      }
+    } finally {
+      if (prev === undefined) delete process.env.PHANTOM_REQUIRE_REAL;
+      else process.env.PHANTOM_REQUIRE_REAL = prev;
+    }
   });
 });

@@ -67,19 +67,31 @@ export class PhantomApp {
     }
 
     this.started = true;
-    console.log(`[${this.appName}] Phantom identity: ${this.identity.did}`);
+    if (this.sdk?.isMock) {
+      console.warn(
+        `[${this.appName}] Phantom identity ${this.identity.did} is NOT cryptographically real — ` +
+          `the WASM module is not built, so signatures verify against nothing.`,
+      );
+    } else {
+      console.log(`[${this.appName}] Phantom identity: ${this.identity.did}`);
+    }
     return this.identity;
   }
 
   /** Get the app's status block for /api/v1/status or /health responses. */
   status() {
     if (!this.identity) return { bound: false };
+    // This used to report "Kyber-1024, Dilithium-5, Blake3" whether or not any
+    // of it was running — a health endpoint asserting post-quantum protection
+    // that did not exist. It now describes what is actually loaded.
+    const mock = this.sdk?.isMock !== false;
     return {
       bound: true,
       did: this.identity.did,
       protocol: "phantom-v1",
-      algorithms: "Kyber-1024, Dilithium-5, Blake3",
-      sdkVersion: this.sdk?.version() ?? "mock",
+      algorithms: mock ? "none (mock)" : "Kyber-1024, Dilithium-5, Blake3",
+      cryptography: mock ? "mock" : "real",
+      sdkVersion: this.sdk?.version() ?? "unknown",
     };
   }
 

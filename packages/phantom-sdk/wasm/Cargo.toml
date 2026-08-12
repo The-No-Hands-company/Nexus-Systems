@@ -16,4 +16,9 @@ blake3 = "1"
 pqcrypto-kyber = "0.7"
 pqcrypto-dilithium = "0.5"
 pqcrypto-traits = "0.3"
-getrandom = "0.3"
+# The `wasm_js` feature plus the matching --cfg (see .cargo/config.toml) is what
+# gives getrandom a source of entropy inside a browser. Without it getrandom 0.3
+# compiles no backend at all and fails deep in its own internals — which is why
+# this module had never been built, and why every consumer silently fell back to
+# a mock that returned counterfeit keys.
+getrandom = { version = "0.3", features = ["wasm_js"] }
