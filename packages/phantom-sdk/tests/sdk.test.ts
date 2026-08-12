@@ -98,3 +98,66 @@ describe("phantom honesty", () => {
     }
   });
 });
+
+describe("native crypto (bun:ffi)", () => {
+  // Skips cleanly when the library has not been built, so the suite stays
+  // green on a fresh clone — but when it IS built these are the tests that
+  // prove the crypto is real rather than plausible-looking.
+  it("uses the native library when it is present", async () => {
+    const { nativeLibraryExists } = await import("../src/native");
+    if (!nativeLibraryExists()) return;
+
+    const sdk = await createPhantomSDK();
+    expect(sdk.isMock).toBe(false);
+    expect(sdk.version()).toContain("native");
+    expect(typeof sdk.version()).toBe("string"); // not a String object
+  });
+
+  it("produces real Kyber-1024 and Dilithium-5 key sizes", async () => {
+    const { nativeLibraryExists } = await import("../src/native");
+    if (!nativeLibraryExists()) return;
+
+    const sdk = await createPhantomSDK();
+    const id = await sdk.generateIdentity("size-check");
+    try {
+      expect(id.publicKey.length / 2).toBe(1568);        // Kyber-1024
+      expect(id.signingPublicKey.length / 2).toBe(2592); // Dilithium-5
+      expect(id.did).not.toContain("mock");
+    } finally {
+      sdk.release(id.handle);
+    }
+  });
+
+  it("verifies its own signatures and rejects tampering", async () => {
+    const { nativeLibraryExists } = await import("../src/native");
+    if (!nativeLibraryExists()) return;
+
+    const sdk = await createPhantomSDK();
+    const id = await sdk.generateIdentity("sign-check");
+    try {
+      const msg = new TextEncoder().encode("payload");
+      const sig = await sdk.sign(id.handle, msg);
+      expect(await sdk.verify(id.handle, msg, sig)).toBe(true);
+      expect(await sdk.verify(id.handle, new TextEncoder().encode("payl0ad"), sig)).toBe(false);
+    } finally {
+      sdk.release(id.handle);
+    }
+  });
+
+  it("recovers the encapsulated secret", async () => {
+    const { nativeLibraryExists } = await import("../src/native");
+    if (!nativeLibraryExists()) return;
+
+    const sdk = await createPhantomSDK();
+    const id = await sdk.generateIdentity("kem-check");
+    try {
+      const { ciphertext, sharedSecret } = await sdk.encapsulate(id.handle);
+      // A strict equality check, deliberately: this failed while the crypto was
+      // perfectly correct, because CString returns a String object.
+      expect(await sdk.decapsulate(id.handle, ciphertext)).toBe(sharedSecret);
+      expect(sharedSecret.length / 2).toBe(32);
+    } finally {
+      sdk.release(id.handle);
+    }
+  });
+});

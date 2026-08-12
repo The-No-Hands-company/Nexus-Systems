@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::sync::Mutex;
+#[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;
 use pqcrypto_traits::kem::{Ciphertext as _, PublicKey as KemPk, SecretKey as KemSk, SharedSecret as _};
 use pqcrypto_traits::sign::{PublicKey as SignPk, SecretKey as SignSk, DetachedSignature};
@@ -93,10 +94,13 @@ impl IdentityStore {
     }
 }
 
+// ── Shared handle store ────────────────────────────────────────────
+
 // ── WASM bindings (thin wrapper) ───────────────────────────────────
 
 static STORE: std::sync::LazyLock<IdentityStore> = std::sync::LazyLock::new(|| IdentityStore::new());
 
+#[cfg(target_arch = "wasm32")]
 fn wasm_json(val: serde_json::Value) -> Result<JsValue, JsValue> {
     #[cfg(target_arch = "wasm32")]
     { serde_wasm_bindgen::to_value(&val).map_err(|e| JsValue::from_str(&e.to_string())) }
@@ -104,6 +108,7 @@ fn wasm_json(val: serde_json::Value) -> Result<JsValue, JsValue> {
     { Ok(JsValue::from_str(&val.to_string())) }
 }
 
+#[cfg(target_arch = "wasm32")]
 #[wasm_bindgen]
 pub fn generate_identity(name: &str) -> Result<JsValue, JsValue> {
     let handle = STORE.generate(name);
@@ -114,6 +119,7 @@ pub fn generate_identity(name: &str) -> Result<JsValue, JsValue> {
     }))
 }
 
+#[cfg(target_arch = "wasm32")]
 #[wasm_bindgen]
 pub fn sign(handle: u64, message_hex: &str) -> Result<JsValue, JsValue> {
     let msg = hex::decode(message_hex).map_err(|e| JsValue::from_str(&e.to_string()))?;
@@ -121,6 +127,7 @@ pub fn sign(handle: u64, message_hex: &str) -> Result<JsValue, JsValue> {
     wasm_json(serde_json::json!({ "signature": hex::encode(sig) }))
 }
 
+#[cfg(target_arch = "wasm32")]
 #[wasm_bindgen]
 pub fn verify(handle: u64, message_hex: &str, signature_hex: &str) -> Result<JsValue, JsValue> {
     let msg = hex::decode(message_hex).map_err(|e| JsValue::from_str(&e.to_string()))?;
@@ -129,12 +136,14 @@ pub fn verify(handle: u64, message_hex: &str, signature_hex: &str) -> Result<JsV
     wasm_json(serde_json::json!({ "valid": valid }))
 }
 
+#[cfg(target_arch = "wasm32")]
 #[wasm_bindgen]
 pub fn encapsulate(handle: u64) -> Result<JsValue, JsValue> {
     let (ct, ss) = STORE.encapsulate(handle).ok_or_else(|| JsValue::from_str("encapsulate failed"))?;
     wasm_json(serde_json::json!({ "ciphertext": hex::encode(ct), "sharedSecret": hex::encode(ss) }))
 }
 
+#[cfg(target_arch = "wasm32")]
 #[wasm_bindgen]
 pub fn decapsulate(handle: u64, ciphertext_hex: &str) -> Result<JsValue, JsValue> {
     let ct = hex::decode(ciphertext_hex).map_err(|e| JsValue::from_str(&e.to_string()))?;
@@ -142,15 +151,18 @@ pub fn decapsulate(handle: u64, ciphertext_hex: &str) -> Result<JsValue, JsValue
     wasm_json(serde_json::json!({ "sharedSecret": hex::encode(ss) }))
 }
 
+#[cfg(target_arch = "wasm32")]
 #[wasm_bindgen]
 pub fn get_did(handle: u64) -> Result<JsValue, JsValue> {
     let (did, _, _) = STORE.get_public_info(handle).ok_or_else(|| JsValue::from_str("not found"))?;
     wasm_json(serde_json::json!({ "did": did }))
 }
 
+#[cfg(target_arch = "wasm32")]
 #[wasm_bindgen]
 pub fn release(handle: u64) { STORE.release(handle); }
 
+#[cfg(target_arch = "wasm32")]
 #[wasm_bindgen]
 pub fn phantom_hash(data_hex: &str) -> Result<JsValue, JsValue> {
     let data = hex::decode(data_hex).map_err(|e| JsValue::from_str(&e.to_string()))?;
@@ -158,6 +170,7 @@ pub fn phantom_hash(data_hex: &str) -> Result<JsValue, JsValue> {
     wasm_json(serde_json::json!({ "hash": hex::encode(h.as_bytes()) }))
 }
 
+#[cfg(target_arch = "wasm32")]
 #[wasm_bindgen]
 pub fn version() -> String { "phantom-sdk-wasm/0.1.0".to_string() }
 
@@ -201,5 +214,181 @@ mod tests {
         assert!(!store.verify(b, b"msg", &sig_a).unwrap());
         store.release(a);
         store.release(b);
+    }
+}
+
+// ── C ABI (native builds) ──────────────────────────────────────────
+//
+// The same IdentityStore above, reachable from Bun through bun:ffi. This
+// exists because every consumer of the Phantom SDK is a server-side Bun
+// process, not a browser: a browser-targeted WASM bundle was never what they
+// needed, and pqcrypto's C sources cannot compile for wasm32-unknown-unknown
+// anyway, which has no libc. Natively they compile without complaint.
+//
+// Everything crosses the boundary as hex in NUL-terminated C strings. Binary
+// buffers would be faster, but they would also mean length parameters, manual
+// lifetime rules on both sides, and a much easier way to be wrong; the JS API
+// already speaks hex, and identity operations are rare.
+//
+// Every returned string is heap-allocated here and must be handed back to
+// phantom_free_string. Anything else leaks.
+#[cfg(not(target_arch = "wasm32"))]
+mod ffi {
+    use super::STORE;
+    use std::ffi::{CStr, CString};
+    use std::os::raw::c_char;
+
+    /// Move a Rust string across the boundary. Caller owns it afterwards.
+    fn out(s: String) -> *mut c_char {
+        match CString::new(s) {
+            Ok(c) => c.into_raw(),
+            Err(_) => std::ptr::null_mut(),
+        }
+    }
+
+    /// Borrow a C string as &str, or None if it is null or not UTF-8.
+    unsafe fn input<'a>(p: *const c_char) -> Option<&'a str> {
+        if p.is_null() {
+            return None;
+        }
+        CStr::from_ptr(p).to_str().ok()
+    }
+
+    #[no_mangle]
+    pub extern "C" fn phantom_free_string(p: *mut c_char) {
+        if p.is_null() {
+            return;
+        }
+        unsafe { drop(CString::from_raw(p)) };
+    }
+
+    /// Returns a handle, or 0 on failure. Handles start at 1.
+    #[no_mangle]
+    pub unsafe extern "C" fn phantom_generate_identity(name: *const c_char) -> u64 {
+        match input(name) {
+            Some(n) => STORE.generate(n),
+            None => 0,
+        }
+    }
+
+    /// `{"did":…,"publicKey":…,"signingPublicKey":…}`, or null for an unknown handle.
+    #[no_mangle]
+    pub extern "C" fn phantom_identity_info(handle: u64) -> *mut c_char {
+        match STORE.get_public_info(handle) {
+            Some((did, kem_pk, sig_pk)) => out(
+                serde_json::json!({
+                    "did": did,
+                    "publicKey": hex::encode(kem_pk),
+                    "signingPublicKey": hex::encode(sig_pk),
+                })
+                .to_string(),
+            ),
+            None => std::ptr::null_mut(),
+        }
+    }
+
+    #[no_mangle]
+    pub unsafe extern "C" fn phantom_sign(handle: u64, message_hex: *const c_char) -> *mut c_char {
+        let Some(msg) = input(message_hex).and_then(|h| hex::decode(h).ok()) else {
+            return std::ptr::null_mut();
+        };
+        match STORE.sign(handle, &msg) {
+            Some(sig) => out(hex::encode(sig)),
+            None => std::ptr::null_mut(),
+        }
+    }
+
+    /// 1 verified, 0 rejected, -1 could not be evaluated. Three outcomes, not
+    /// two: "unknown handle" must not be indistinguishable from "bad signature".
+    #[no_mangle]
+    pub unsafe extern "C" fn phantom_verify(
+        handle: u64,
+        message_hex: *const c_char,
+        signature_hex: *const c_char,
+    ) -> i32 {
+        let (Some(msg), Some(sig)) = (
+            input(message_hex).and_then(|h| hex::decode(h).ok()),
+            input(signature_hex).and_then(|h| hex::decode(h).ok()),
+        ) else {
+            return -1;
+        };
+        match STORE.verify(handle, &msg, &sig) {
+            Some(true) => 1,
+            Some(false) => 0,
+            None => -1,
+        }
+    }
+
+    /// `{"ciphertext":…,"sharedSecret":…}`, hex.
+    #[no_mangle]
+    pub extern "C" fn phantom_encapsulate(handle: u64) -> *mut c_char {
+        match STORE.encapsulate(handle) {
+            Some((ct, ss)) => out(
+                serde_json::json!({
+                    "ciphertext": hex::encode(ct),
+                    "sharedSecret": hex::encode(ss),
+                })
+                .to_string(),
+            ),
+            None => std::ptr::null_mut(),
+        }
+    }
+
+    #[no_mangle]
+    pub unsafe extern "C" fn phantom_decapsulate(
+        handle: u64,
+        ciphertext_hex: *const c_char,
+    ) -> *mut c_char {
+        let Some(ct) = input(ciphertext_hex).and_then(|h| hex::decode(h).ok()) else {
+            return std::ptr::null_mut();
+        };
+        match STORE.decapsulate(handle, &ct) {
+            Some(ss) => out(hex::encode(ss)),
+            None => std::ptr::null_mut(),
+        }
+    }
+
+    #[no_mangle]
+    pub unsafe extern "C" fn phantom_hash(data_hex: *const c_char) -> *mut c_char {
+        let Some(data) = input(data_hex).and_then(|h| hex::decode(h).ok()) else {
+            return std::ptr::null_mut();
+        };
+        out(hex::encode(blake3::hash(&data).as_bytes()))
+    }
+
+    #[no_mangle]
+    pub extern "C" fn phantom_release(handle: u64) {
+        STORE.release(handle);
+    }
+
+    #[no_mangle]
+    pub extern "C" fn phantom_version() -> *mut c_char {
+        out(format!("phantom-native/{}", env!("CARGO_PKG_VERSION")))
+    }
+}
+
+#[cfg(all(test, not(target_arch = "wasm32")))]
+mod store_tests {
+    use super::IdentityStore;
+
+    #[test]
+    fn kem_round_trip_recovers_the_same_secret() {
+        // Guards the direction of the tuple as much as the maths: kyber's
+        // encapsulate returns (shared_secret, ciphertext), and swapping them
+        // still type-checks because both are Vec<u8>.
+        let store = IdentityStore::new();
+        let h = store.generate("kem-round-trip");
+        let (ciphertext, shared) = store.encapsulate(h).expect("encapsulate");
+        let recovered = store.decapsulate(h, &ciphertext).expect("decapsulate");
+        assert_eq!(recovered, shared, "decapsulate must recover the encapsulated secret");
+    }
+
+    #[test]
+    fn signatures_verify_and_tampering_does_not() {
+        let store = IdentityStore::new();
+        let h = store.generate("sig");
+        let sig = store.sign(h, b"hello").expect("sign");
+        assert_eq!(store.verify(h, b"hello", &sig), Some(true));
+        assert_eq!(store.verify(h, b"hell0", &sig), Some(false));
     }
 }

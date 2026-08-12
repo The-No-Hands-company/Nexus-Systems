@@ -156,7 +156,19 @@ function createMockSDK(): PhantomSDK {
 
 // ── Factory ────────────────────────────────────────────────────────
 
+let lastNativeError: string | null = null;
+
 export async function createPhantomSDK(): Promise<PhantomSDK> {
+  // Native first. Every consumer of this SDK is a server-side Bun process, so
+  // this is the path that actually runs; WASM is for a browser that does not
+  // exist yet.
+  try {
+    const { createNativeSDK } = await import("./native");
+    return await createNativeSDK();
+  } catch (nativeErr) {
+    lastNativeError = nativeErr instanceof Error ? nativeErr.message : String(nativeErr);
+  }
+
   try {
     const wasm = await loadWasm();
     return createWasmSDK(wasm);
@@ -165,7 +177,10 @@ export async function createPhantomSDK(): Promise<PhantomSDK> {
     // cryptography in for real cryptography, while every caller reports
     // success, is worse than having no integration at all: absence is visible,
     // and this was not.
-    const reason = err instanceof Error ? err.message : String(err);
+    const wasmReason = err instanceof Error ? err.message : String(err);
+    const reason = lastNativeError
+      ? `native: ${lastNativeError}; wasm: ${wasmReason}`
+      : wasmReason;
 
     if (requireReal()) {
       throw new Error(
@@ -184,7 +199,7 @@ export async function createPhantomSDK(): Promise<PhantomSDK> {
         "  │  against nothing. DIDs are prefixed did:phantom:mock:.       │\n" +
         "  │                                                              │\n" +
         "  │  Build it:  cd packages/phantom-sdk/wasm                     │\n" +
-        "  │             wasm-pack build --target bundler                 │\n" +
+        "  │             cargo build --release                            │\n" +
         "  │  Enforce:   PHANTOM_REQUIRE_REAL=1 to refuse to start        │\n" +
         "  └──────────────────────────────────────────────────────────────┘\n" +
         `  reason: ${reason}\n`,

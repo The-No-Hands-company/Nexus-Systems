@@ -266,8 +266,25 @@ cmd_start() {
     # frontend now calls, and the Cloud heartbeat — without a heartbeat Cloud
     # marks the tool offline and the dashboard grid renders Draw as
     # "Unavailable" while the site is plainly working.
+    # Phantom's native library, which Draw now requires. The build artifact is
+    # gitignored, so a fresh checkout has none — and since Draw fails closed on
+    # mock cryptography, skipping this would leave it refusing to start with a
+    # message about crypto rather than about a missing build. Cheap when
+    # already built: cargo no-ops.
+    if [ ! -f "$ROOT/packages/phantom-sdk/wasm/target/release/libphantom_wasm.so" ]; then
+        log "Building Phantom native library (first run)..."
+    fi
+    if ! (cd "$ROOT/packages/phantom-sdk/wasm" && cargo build --release >/dev/null 2>&1); then
+        warn "Phantom native library failed to build — services requiring real crypto will refuse to start"
+    fi
+
+    # PHANTOM_REQUIRE_REAL: refuse to start on mock cryptography. Draw is the
+    # first service verified against the native library, so it is the first one
+    # allowed to insist. Do not add this to a service until its crypto has been
+    # confirmed working — it fails closed, which is the point.
     start_service "draw" "$ROOT/apps/Nexus-Draw" 3075 \
         PORT=3075 \
+        PHANTOM_REQUIRE_REAL=1 \
         NEXUS_CLOUD_URL=http://localhost:8787 \
         NEXUS_CLOUD_API_KEY="$NEXUS_CLOUD_API_KEY" \
         bun run src/index.ts
