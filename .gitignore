@@ -102,3 +102,4 @@ apps/Nexus-Tunnel/data/tunnel-state.json
 *.bak
 **/.claude/scheduled_tasks.lock
 deploy/production/nexus-chat.env
+apps/Nexus-Auth/.migration_review.db

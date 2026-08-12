@@ -50,12 +50,31 @@ export function connectCollab(
   baseUrl?: string,
   onChange?: (els: ElementData[]) => void,
 ): Promise<CollabBinding> {
+  const wsProto = typeof location !== "undefined" && location.protocol === "https:" ? "wss:" : "ws:";
   const url =
     baseUrl ??
     (typeof location !== "undefined"
-      ? `ws://${location.host}/api/v1/draw/ws`
+      ? `${wsProto}//${location.host}/api/v1/draw/ws`
       : "ws://127.0.0.1:3075/api/v1/draw/ws");
-  const provider = new WebsocketProvider(url, boardId, new Y.Doc());
+  // Constructing the provider (and thus the underlying WebSocket) can throw —
+  // e.g. mixed-content: an insecure `ws://` socket on an HTTPS page. Never let
+  // that take down the editor; resolve with an inert binding instead.
+  let provider: WebsocketProvider;
+  try {
+    provider = new WebsocketProvider(url, boardId, new Y.Doc());
+  } catch {
+    provider = new WebsocketProvider(url, boardId, new Y.Doc(), {
+      WebSocketPolyfill: class Noop {
+        url = url;
+        readyState = 3;
+        send() {}
+        close() {}
+        addEventListener() {}
+        removeEventListener() {}
+      } as unknown as typeof WebSocket,
+    });
+    return Promise.resolve(new CollabBinding(provider, onChange ?? (() => {})));
+  }
   return new Promise((resolve) => {
     const finish = () => resolve(new CollabBinding(provider, onChange ?? (() => {})));
     provider.on("sync", (isSynced: boolean) => {
