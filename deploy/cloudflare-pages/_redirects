@@ -1,0 +1,38 @@
+# Front-door redirects for the tnhc.dev marketing site (Cloudflare Pages).
+#
+# Copy this file to the ROOT OF THE PUBLISHED OUTPUT of the Pages project —
+# next to index.html, so for a Create React App build that is `build/_redirects`
+# and for Vite it is `public/_redirects`. Cloudflare reads it at deploy time; a
+# file left in the source root is ignored and fails silently.
+#
+# Why this exists: the apex is a static site on Pages and never reaches the
+# tunnel, so it cannot serve a login form or talk to Auth. Everything that
+# needs a server lives on the product hosts. These rules give the apex the URLs
+# people actually type and guess, and forward each to the real page.
+#
+# 302, not 301. A permanent redirect is cached by browsers essentially forever,
+# and these targets will move again — the apex may eventually serve the
+# dashboard directly. A wrong 301 is very hard to take back.
+#
+# Format: <from>  <to>  <status>
+
+# Signing in. The return address sends people back to their app grid rather
+# than dropping them on the marketing page they just left.
+/login      https://auth.tnhc.dev/login?redirect_uri=https%3A%2F%2Fapp.tnhc.dev  302
+/signin     https://auth.tnhc.dev/login?redirect_uri=https%3A%2F%2Fapp.tnhc.dev  302
+/sign-in    https://auth.tnhc.dev/login?redirect_uri=https%3A%2F%2Fapp.tnhc.dev  302
+
+# Getting an account. Access is invite-only: this is a request, an operator
+# approves it, and the person then claims with the code they were given.
+/signup          https://app.tnhc.dev/request  302
+/sign-up         https://app.tnhc.dev/request  302
+/register        https://app.tnhc.dev/request  302
+/request         https://app.tnhc.dev/request  302
+/request-access  https://app.tnhc.dev/request  302
+
+# Finishing an approved request.
+/claim  https://app.tnhc.dev/claim  302
+
+# The signed-in home, for anyone who types the obvious thing.
+/app        https://app.tnhc.dev/  302
+/dashboard  https://app.tnhc.dev/  302

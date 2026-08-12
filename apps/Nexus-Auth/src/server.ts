@@ -380,7 +380,16 @@ export async function handleRequest(request: Request): Promise<Response> {
     // The one place a human types a password. Apps that get an unauthenticated
     // browser navigation send it here with ?redirect=<where they were going>.
     if (request.method === "GET" && path === "/login") {
-      const target = safeRedirect(url.searchParams.get("redirect"), cookieDomain());
+      // Accept both spellings. Every caller in the ecosystem sends
+      // `redirect_uri` — the proxy's login gate and the dashboard's sign-in
+      // button both do — while this page only ever read `redirect`, so the
+      // return address was silently dropped and everyone landed back on
+      // /login after signing in instead of where they were going. Reading
+      // both fixes every existing link without touching any of them.
+      const target = safeRedirect(
+        url.searchParams.get("redirect_uri") ?? url.searchParams.get("redirect"),
+        cookieDomain(),
+      );
       // Already signed in: honour the round trip immediately rather than
       // asking for a password that is not needed.
       if (auth && target) {
