@@ -1,0 +1,38 @@
+{
+  "_note": "Tunnel ingress as it was before hosting.tnhc.dev moved behind the proxy, 2026-08-13. Restore with PUT to accounts/<acct>/cfd_tunnel/<tunnel>/configurations.",
+  "ingress": [
+    {
+      "service": "http://192.168.0.179:8080",
+      "hostname": "cloud.tnhc.dev",
+      "originRequest": {}
+    },
+    {
+      "service": "http://192.168.0.179:8080",
+      "hostname": "chat.tnhc.dev",
+      "originRequest": {}
+    },
+    {
+      "service": "http://192.168.0.179:8080",
+      "hostname": "auth.tnhc.dev",
+      "originRequest": {}
+    },
+    {
+      "service": "http://192.168.0.179:8788",
+      "hostname": "hosting.tnhc.dev",
+      "originRequest": {}
+    },
+    {
+      "service": "http://192.168.0.179:9010",
+      "hostname": "storage.tnhc.dev",
+      "originRequest": {}
+    },
+    {
+      "service": "http://192.168.0.179:8080",
+      "hostname": "*.tnhc.dev",
+      "originRequest": {}
+    },
+    {
+      "service": "http_status:404"
+    }
+  ]
+}

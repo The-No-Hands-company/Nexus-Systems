@@ -419,6 +419,36 @@ a real route first.
 
 ---
 
+#### Follow-up outcome — bypass closed, draw gated, 2026-08-13
+
+**`hosting.tnhc.dev` no longer bypasses the proxy.** Its tunnel ingress moved
+from `192.168.0.179:8788` to the proxy, and Cloud now carries a route for it.
+Its tool record had `upstreamUrl: http://localhost:8080` — the proxy itself, a
+loop — which is why it had never been routable; corrected to `:8788`. It does
+not heartbeat, so the value stays put.
+
+**It is routed but deliberately not gated.** The gate reads only the session
+cookie, and Hosting's deploy flow authenticates with `fh_` API tokens. Gating
+it today would 302 every CLI deploy. Gating it is now one PATCH away, but doing
+it *first* requires the gate to accept API tokens as well as sessions — a real
+feature, not a flag flip.
+
+**`storage.tnhc.dev` stays direct, on purpose.** It serves published site bytes
+to browsers and CLIs, which is exactly the "published output, not a tool" case
+that the launch decision says is not gated. Routing it through the proxy would
+add a hop and buy nothing until there is a policy that wants to see it.
+
+**`draw.tnhc.dev` is gated.** It needed a real Cloud route, and the route had to
+point at Hosting's site-proxy (`:8090`) — the SPA is published Hosting output;
+the `nexus-draw` backend on `:3075` 404s at `/` and would have broken the site.
+A separate `nexus-draw-site` tool owns that route so the backend's own
+registration cannot overwrite the upstream. Verified: 302 signed out, 200 and
+the real SPA signed in.
+
+Gated hosts now: `chat.tnhc.dev`, `draw.tnhc.dev`.
+
+---
+
 ## Definition of done
 
 - nexus-chat listens only on loopback; `ss -ltn` shows no `0.0.0.0:818x`.
