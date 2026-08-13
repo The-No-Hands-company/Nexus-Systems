@@ -139,7 +139,7 @@ export default function App() {
 
   return (
     <div className="h-screen flex flex-col">
-      {!embedded && <TopBar />}
+      <TopBar embedded={embedded} />
       <div className="flex flex-1 overflow-hidden">
         <Toolbar />
         <div className="flex-1 relative">

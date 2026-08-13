@@ -3,7 +3,7 @@ import { downloadPNG, downloadSVG } from "../utils/export";
 import * as api from "../utils/api";
 import HelpOverlay from "./HelpOverlay";
 
-export default function TopBar() {
+export default function TopBar({ embedded = false }: { embedded?: boolean }) {
   const board = useEditorStore((s) => s.board);
   const elements = useEditorStore((s) => s.elements);
   const zoom = useEditorStore((s) => s.zoom);
@@ -29,13 +29,15 @@ export default function TopBar() {
   };
 
   return (
-    <div className="flex items-center justify-between h-10 px-4 bg-zinc-900 border-b border-zinc-800 shrink-0">
-      <div className="flex items-center gap-3">
-        <span className="font-semibold text-sm text-zinc-200">Nexus-Draw</span>
-        {board && (
-          <span className="text-sm text-zinc-400">{board.name}</span>
-        )}
-      </div>
+    <div className={`flex items-center ${embedded ? "justify-end" : "justify-between"} h-10 px-4 bg-zinc-900 border-b border-zinc-800 shrink-0`}>
+      {!embedded && (
+        <div className="flex items-center gap-3">
+          <span className="font-semibold text-sm text-zinc-200">Nexus-Draw</span>
+          {board && (
+            <span className="text-sm text-zinc-400">{board.name}</span>
+          )}
+        </div>
+      )}
       <div className="flex items-center gap-2 text-xs text-zinc-500">
         <button onClick={undo} disabled={!board || undoStack.length === 0} className="hover:text-zinc-200 disabled:opacity-30">↩</button>
         <button onClick={redo} disabled={!board || redoStack.length === 0} className="hover:text-zinc-200 disabled:opacity-30">↪</button>
