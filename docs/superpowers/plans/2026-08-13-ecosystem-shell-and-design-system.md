@@ -20,9 +20,10 @@
 - **Shell lives at `app.tnhc.dev`** (Nexus-Dashboard). Do not move it to the apex.
 - **`?embed=1` is the only embed signal.** No postMessage handshake in this plan.
 - **Every embeddable host must end with** `frame-ancestors 'self' https://app.tnhc.dev` **and no `X-Frame-Options`.**
-- Existing suites must stay green: Dashboard backend `bun run test` (17), Dashboard frontend `npx vitest run` (21), proxy+gate `bun test` (35).
+- Existing suites must stay green: Dashboard backend `bun run test` (17), Dashboard frontend `npx vitest run` (**36** — the plan first said 21, which was already stale when written), proxy+gate `bun test` (35).
 - **`@testing-library/jest-dom` is not installed** in the Dashboard frontend. Use plain assertions — `expect(x).toBeTruthy()`, `.getAttribute()`, `.textContent` — not `toBeInTheDocument()`, which will fail. Available: `@testing-library/react` ^16.1.0, `react-router-dom` ^7.14.0, `vitest` ^2.1.8.
 - **`isEmbedded` is duplicated in Tasks 9 and 10 on purpose.** `apps/Nexus` is a separate git repository and cannot import from the parent repo's `packages/`. This is a repo-boundary constraint, not an oversight — adjudicated before execution.
+- **Stage explicitly — never `git add -A`.** A controller commit using it swept Task 3's deliverable into a commit labelled as a docs change, so the implementation is not where its message says it is. Name the paths you intend to commit.
 - Commit after each task. Never commit a generated file that its generator did not produce.
 
 ---
