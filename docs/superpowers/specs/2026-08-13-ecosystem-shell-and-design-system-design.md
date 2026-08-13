@@ -128,10 +128,17 @@ One generator, two outputs, so they cannot drift:
 | Output | Consumer | Why |
 |---|---|---|
 | `nexus-tokens.css` | any app, any language | CSS custom properties on `:root`, linked with one tag. The universal floor — works for Cloud's hand-written HTML and any future Rust or Python frontend. |
-| `nexus-tailwind-preset.js` | the React apps | the same tokens as a Tailwind theme, so `bg-canvas` and `text-primary` resolve to token values. The Dashboard, Chat's web client and Deploy's console are all Vite + React + Tailwind with no shared config today; each adopts it by adding one line. |
+| `nexus-theme.css` | the React apps | the same tokens as a Tailwind v4 `@theme` block, so `bg-canvas` and `text-primary` become real utilities. Adopted with one `@import`. |
 
 Both are generated. Hand-editing either is the bug, and the drift test below
 exists to catch it.
+
+**A correction found while planning:** an earlier draft of this spec proposed a
+`tailwind.config.js` preset. All three React apps — the Dashboard, Chat's web
+client and Deploy's console — run **Tailwind v4** (`^4.1.0`, `^4.2.2`,
+`^4.0.13`) with `@import "tailwindcss"` and *no config file at all*. v4 moved
+theming out of JavaScript and into CSS `@theme` blocks, so a JS preset would
+have been ignored. The second output is therefore CSS too.
 
 Home: a new `packages/nexus-design`, beside the existing `packages/*`.
 
