@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "build": "bun run src/generate.ts",
+    "vendor": "bun run build && bun run scripts/vendor.ts",
     "test": "bun test tests/"
   }
 }
