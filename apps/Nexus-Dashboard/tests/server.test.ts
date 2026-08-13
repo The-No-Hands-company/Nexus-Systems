@@ -113,4 +113,13 @@ describe("dashboard server", () => {
       expect(await res.text()).toContain("npm run build");
     }
   });
+
+  it("refuses to be framed by anyone, including its own apps", async () => {
+    // The shell is the authenticated front door. Unlike the apps it frames,
+    // nothing frames the shell, so it must permit nobody — not even itself
+    // via 'self' plus an app origin, and never https://app.tnhc.dev, which
+    // would be nonsensical here since that IS this host.
+    const res = await handleRequest(new Request("http://app.test/"));
+    expect(res.headers.get("content-security-policy")).toBe("frame-ancestors 'self'");
+  });
 });

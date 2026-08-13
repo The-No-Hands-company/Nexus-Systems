@@ -100,7 +100,15 @@ export async function handleRequest(req: Request): Promise<Response> {
 
   const shell = Bun.file(join(WEB_ROOT, "index.html"));
   if (await shell.exists()) {
-    return new Response(shell, { headers: { "content-type": "text/html; charset=utf-8" } });
+    return new Response(shell, {
+      headers: {
+        "content-type": "text/html; charset=utf-8",
+        // The shell is the authenticated front door — launcher, account, admin.
+        // Unlike the apps it frames, nothing frames the shell, so it permits
+        // nobody: 'self' only, never the apps' origins.
+        "content-security-policy": "frame-ancestors 'self'",
+      },
+    });
   }
 
   // The SPA has not been built. `frontend/dist` is a build artifact and is
