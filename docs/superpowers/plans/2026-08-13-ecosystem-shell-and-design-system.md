@@ -457,7 +457,8 @@ Layout only. No data, no iframe yet — a reviewer can reject the layout without
 - Test: `apps/Nexus-Dashboard/frontend/src/shell/Shell.test.tsx`
 
 **Interfaces:**
-- Produces: `<Shell sidebar={ReactNode} children={ReactNode} />` rendering landmarks `banner`, `navigation`, `main`.
+- Produces: `<Shell sidebar={ReactNode} children={ReactNode} />` rendering landmarks `banner`, `complementary` (the sidebar region, with an accessible name) and `main`.
+- The sidebar region is `<aside>` — a sidebar is a `complementary` landmark. The `navigation` landmark comes from the Launcher's own `<nav>` in Task 5, nested inside. Putting `role="navigation"` on the aside would produce two nested navigation landmarks, which is worse than none.
 
 - [ ] **Step 1: Write the failing test**
 
