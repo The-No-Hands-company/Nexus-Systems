@@ -20,6 +20,7 @@
 - **Every embeddable host must end with** `frame-ancestors 'self' https://app.tnhc.dev` **and no `X-Frame-Options`.**
 - Existing suites must stay green: Dashboard backend `bun run test` (17), Dashboard frontend `npx vitest run` (21), proxy+gate `bun test` (35).
 - **`@testing-library/jest-dom` is not installed** in the Dashboard frontend. Use plain assertions — `expect(x).toBeTruthy()`, `.getAttribute()`, `.textContent` — not `toBeInTheDocument()`, which will fail. Available: `@testing-library/react` ^16.1.0, `react-router-dom` ^7.14.0, `vitest` ^2.1.8.
+- **`isEmbedded` is duplicated in Tasks 9 and 10 on purpose.** `apps/Nexus` is a separate git repository and cannot import from the parent repo's `packages/`. This is a repo-boundary constraint, not an oversight — adjudicated before execution.
 - Commit after each task. Never commit a generated file that its generator did not produce.
 
 ---
@@ -1212,10 +1213,10 @@ Expected: FAIL — cannot find `./embed`.
 /**
  * Whether this app is being rendered inside the ecosystem shell.
  *
- * Duplicated rather than shared: a shared package would make every app depend
- * on the shell's release cycle to answer a question about its own URL, and the
- * dual-mode principle says an app must run standalone. Four lines is a cheaper
- * price than that coupling.
+ * Duplicated rather than shared, and not by preference: apps/Nexus is a
+ * separate git repository (a submodule), so it cannot import from the parent
+ * repo's packages/ at all. Sharing four lines would mean publishing a package
+ * across a repo boundary. The duplication is forced by the repo layout.
  */
 export function isEmbedded(search: string = window.location.search): boolean {
   return new URLSearchParams(search).get("embed") === "1";
@@ -1245,10 +1246,9 @@ git commit -m "feat(chat): honour the shell's embed flag
 Suppresses Chat's server rail and header when embedded; the channel sidebar
 stays, because that is Chat's content rather than its chrome.
 
-isEmbedded is duplicated from Draw rather than shared. A shared package would
-make every app depend on the shell's release cycle to answer a question about
-its own URL, and the dual-mode principle says an app must run standalone. Four
-lines is cheaper than that coupling."
+isEmbedded is duplicated from Draw, and not by preference: apps/Nexus is a
+separate git repository, so it cannot import from the parent repo's packages/.
+Sharing four lines would mean publishing a package across a repo boundary."
 ```
 
 ---
