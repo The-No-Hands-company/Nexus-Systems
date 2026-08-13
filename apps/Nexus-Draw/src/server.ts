@@ -11,9 +11,11 @@ function json(p: unknown, s = 200): Response {
     headers: {
       "content-type": "application/json; charset=utf-8",
       "x-request-id": randomUUID(),
-      // Draw sent no framing headers at all, so any site on the internet could frame
-      // it — a clickjacking exposure. Naming the shell explicitly closes that while
-      // enabling the embed.
+      // This server serves JSON only (board/collab API) — it never returns a
+      // document, so frame-ancestors has nothing to do here. It's set anyway
+      // for harmlessness and in case that ever changes. The public Draw SPA
+      // is a static site served by Nexus-Hosting's proxy; that is where the
+      // real clickjacking protection for draw.tnhc.dev lives.
       "content-security-policy": "frame-ancestors 'self' https://app.tnhc.dev",
     },
   });
