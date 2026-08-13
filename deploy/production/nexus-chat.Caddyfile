@@ -117,7 +117,12 @@
 
 	header {
 		X-Content-Type-Options "nosniff"
-		X-Frame-Options "DENY"
+		# X-Frame-Options is obsoleted by CSP frame-ancestors below. Keeping
+		# both meant this said DENY while the CSP allowed embedding — two
+		# directives disagreeing, with X-Frame-Options winning and framing
+		# impossible for anyone, including the ecosystem shell. One correct
+		# directive, naming the shell explicitly, replaces both.
+		Content-Security-Policy "frame-ancestors 'self' https://app.tnhc.dev"
 		Referrer-Policy "strict-origin-when-cross-origin"
 		Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=()"
 		-Server

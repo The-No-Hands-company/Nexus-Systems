@@ -6,7 +6,17 @@ import { DrawEngine } from "./draw-engine";
 import { CollabServer } from "./collab";
 
 function json(p: unknown, s = 200): Response {
-  return new Response(JSON.stringify(p), { status: s, headers: { "content-type": "application/json; charset=utf-8", "x-request-id": randomUUID() } });
+  return new Response(JSON.stringify(p), {
+    status: s,
+    headers: {
+      "content-type": "application/json; charset=utf-8",
+      "x-request-id": randomUUID(),
+      // Draw sent no framing headers at all, so any site on the internet could frame
+      // it — a clickjacking exposure. Naming the shell explicitly closes that while
+      // enabling the embed.
+      "content-security-policy": "frame-ancestors 'self' https://app.tnhc.dev",
+    },
+  });
 }
 
 export async function createServer() {
