@@ -417,14 +417,16 @@ In `apps/Nexus-Dashboard/frontend/package.json`, change the `build` script so a 
 "build": "cd ../../../packages/nexus-design && bun run build && cd - && tsc -b && vite build"
 ```
 
-- [ ] **Step 3: Build and confirm a token reached the output**
+- [ ] **Step 3: Build and confirm the ecosystem's values won**
 
 ```bash
 cd apps/Nexus-Dashboard/frontend && npm run build
-grep -c '27c9a5' dist/assets/*.css
+grep -oE '\-\-spacing-4:[^;]*|\-\-text-sm:[^;]*' dist/assets/*.css | sort -u
 ```
 
-Expected: at least `1`. The accent colour is in the compiled stylesheet, which means the theme was read.
+Expected: `--spacing-4:16px` and `--text-sm:14px` — the ecosystem's values. Tailwind's own defaults are `1rem` and `0.875rem`, so seeing `16px` proves the theme was read and beat the defaults.
+
+**Do not grep for the accent colour `27c9a5`.** Tailwind v4 emits a theme variable only when some utility uses it, and nothing in the Dashboard uses an accent utility yet — the accent arrives with the shell in Task 4. Grepping for it returns zero on a perfectly working integration, which reads as total failure. Pick a token the app already uses: it does use `p-4` and `text-sm`.
 
 - [ ] **Step 4: Confirm the existing suite still passes**
 
