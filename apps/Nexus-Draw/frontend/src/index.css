@@ -1,1 +1,22 @@
 @import "tailwindcss";
+/* Draw needs the raw --nexus-color-* custom properties (defined here, in
+   nexus-tokens.css) to alias into the zinc scale below. nexus-theme.css only
+   defines Tailwind's un-prefixed @theme names (e.g. --color-bg-canvas), which
+   would leave the var() references below pointing at nothing. */
+@import "../../../../packages/nexus-design/dist/nexus-tokens.css";
+
+/* Draw styles entirely with Tailwind's zinc scale and has no variables of its
+   own. Rather than rewrite ~90 utility usages across every component, point
+   the scale itself at the ecosystem tokens: `bg-zinc-800` keeps working and
+   starts rendering in the ecosystem's palette. The mapping runs dark-to-light
+   the way Tailwind's scale does, so contrast relationships survive. */
+@theme {
+  --color-zinc-900: var(--nexus-color-bg-canvas);
+  --color-zinc-800: var(--nexus-color-bg-surface);
+  --color-zinc-700: var(--nexus-color-bg-elevated);
+  --color-zinc-600: var(--nexus-color-border-strong);
+  --color-zinc-500: var(--nexus-color-text-muted);
+  --color-zinc-400: var(--nexus-color-text-secondary);
+  --color-zinc-300: var(--nexus-color-text-secondary);
+  --color-zinc-200: var(--nexus-color-text-primary);
+}

@@ -4,8 +4,8 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "tsc && vite build",
+    "dev": "cd ../../../packages/nexus-design && bun run build && cd - && vite",
+    "build": "cd ../../../packages/nexus-design && bun run build && cd - && tsc && vite build",
     "preview": "vite preview",
     "check": "tsc --noEmit",
     "test": "vitest run"
