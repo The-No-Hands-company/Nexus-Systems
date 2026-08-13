@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { BrowserRouter, Routes, Route, useParams } from "react-router-dom";
 import Home from "./pages/Home";
 import RequestAccess from "./pages/RequestAccess";
@@ -10,12 +10,45 @@ import Shell from "./shell/Shell";
 import Launcher from "./shell/Launcher";
 import AppFrame from "./shell/AppFrame";
 
+/**
+ * The app list has three states, not two: while it is loading, "not found"
+ * would be a lie about an app that may well exist, and a failed fetch must
+ * not be silently reported as the same thing — the user needs a different
+ * action (retry) than they would for a genuinely unknown app id.
+ */
+type AppsState =
+  | { status: "loading" }
+  | { status: "ready"; apps: AppEntry[] }
+  | { status: "failed" };
+
 /** Renders a single ecosystem app inside the shell's chrome, keyed off the URL. */
-function ShellRoute({ apps }: { apps: AppEntry[] }) {
+function ShellRoute({ state, onRetry }: { state: AppsState; onRetry: () => void }) {
   const { appId = "" } = useParams();
+  const apps = state.status === "ready" ? state.apps : [];
+
   return (
     <Shell sidebar={<Launcher apps={apps} activeId={appId} />}>
-      <AppFrame apps={apps} appId={appId} />
+      {state.status === "loading" && (
+        <div className="flex h-full items-center justify-center p-8 text-text-muted">
+          Loading…
+        </div>
+      )}
+      {state.status === "failed" && (
+        <div className="flex h-full flex-col items-center justify-center gap-3 p-8 text-center">
+          <p className="text-text-primary">Could not load your apps.</p>
+          <p className="text-sm text-text-muted">
+            This is not the same as the app being missing — try again.
+          </p>
+          <button
+            type="button"
+            onClick={onRetry}
+            className="rounded border border-border-subtle px-4 py-2 text-sm hover:bg-bg-elevated"
+          >
+            Retry
+          </button>
+        </div>
+      )}
+      {state.status === "ready" && <AppFrame apps={state.apps} appId={appId} />}
     </Shell>
   );
 }
@@ -31,11 +64,18 @@ function ShellRoute({ apps }: { apps: AppEntry[] }) {
  * into, gets the launcher and frame.
  */
 export default function App() {
-  const [apps, setApps] = useState<AppEntry[]>([]);
+  const [appsState, setAppsState] = useState<AppsState>({ status: "loading" });
+
+  const loadApps = useCallback(() => {
+    setAppsState({ status: "loading" });
+    void listApps()
+      .then((apps) => setAppsState({ status: "ready", apps }))
+      .catch(() => setAppsState({ status: "failed" }));
+  }, []);
 
   useEffect(() => {
-    void listApps().then(setApps).catch(() => setApps([]));
-  }, []);
+    loadApps();
+  }, [loadApps]);
 
   return (
     <BrowserRouter>
@@ -45,7 +85,7 @@ export default function App() {
         <Route path="/claim" element={<Claim />} />
         <Route path="/account" element={<Account />} />
         <Route path="/admin" element={<Admin />} />
-        <Route path="/a/:appId" element={<ShellRoute apps={apps} />} />
+        <Route path="/a/:appId" element={<ShellRoute state={appsState} onRetry={loadApps} />} />
         <Route path="*" element={<Home />} />
       </Routes>
     </BrowserRouter>
