@@ -18,6 +18,17 @@ Core value addendum: universal accessibility
 - Cross-browser compatibility and responsive behavior are non-negotiable quality requirements for production readiness.
 - Local development must preserve this principle by testing interfaces and workflows in multiple environments, not just one primary machine/browser.
 
+Command line is a first-class surface
+
+- The ecosystem must be fully operable from a terminal, not only from a browser. The CLI ranks alongside web, desktop, and mobile as a supported platform — not below them.
+- Two reasons make this structural rather than a preference. The ecosystem is self-hosted: an operator administering a node is already on that machine over SSH, and requiring a browser to manage the thing they are logged into is backwards. And the CLI is the only surface that scripts, cron jobs, and CI can drive, which any node run by someone other than us will need.
+- Advanced users are the third reason, and the weakest one. Design for the operator and the script first; the preference follows for free.
+- Shape: **one binary that is an API client**, resolving its command surface from the Cloud registry — the same source the shell launcher reads. The ecosystem is polyglot (C++, Rust, Python, TypeScript), so nothing that requires products to compile into a single host binary can work, exactly as with shell embedding.
+- A product becomes CLI-addressable the way it becomes shell-addressable: by exposing an API and a small command manifest. Dual-mode is preserved — the CLI is a third client of the control plane, never a parallel implementation of it.
+- Prerequisite: non-browser credentials. Session cookies and short-lived identity tokens are browser- and proxy-shaped; the CLI needs scoped, revocable personal access tokens (or a device-code flow) issued by Nexus Auth. Until that exists, every CLI integration reinvents a token by hand.
+- At several hundred products, per-product command surfaces must be generated from the registry or a manifest, and namespace collisions need a rule before the first collision occurs.
+- `nh` (Nexus Hosting's CLI: login, deploy, rollback, sites, domains, env, logs, tokens) is the working precedent for the shape, including its `--node` flag for federation.
+
 Metadata pattern used by graph extraction
 
 Use this exact lightweight pattern in docs to make relationships machine-readable:
