@@ -10,8 +10,10 @@ import { useEditorStore } from "./stores/useEditorStore";
 import { loadDoc, bootBoard, saveDocDebounced, flushSave, saveLastBoardId, loadLastBoardId } from "./utils/persistence";
 import * as api from "./utils/api";
 import { connectCollab, type CollabBinding } from "./collab/collab";
+import { isEmbedded } from "./embed";
 
 export default function App() {
+  const embedded = isEmbedded();
   const [showPanels, setShowPanels] = useState(true);
   const sidebar = useEditorStore((s) => s.sidebar);
   const setSidebar = useEditorStore((s) => s.setSidebar);
@@ -137,7 +139,7 @@ export default function App() {
 
   return (
     <div className="h-screen flex flex-col">
-      <TopBar />
+      {!embedded && <TopBar />}
       <div className="flex flex-1 overflow-hidden">
         <Toolbar />
         <div className="flex-1 relative">
