@@ -86,3 +86,22 @@ describe("the dashboard does not list itself", () => {
     expect(entries.map((e) => e.id)).toEqual(["nexus-dashboard", "nexus-draw"]);
   });
 });
+
+describe("one tile per destination", () => {
+  it("collapses two tools that publish the same address", () => {
+    // A published site and the backend behind it are two registry records for
+    // one thing. The grid showed both, which reads as the app existing twice.
+    const entries = toAppEntries(
+      {
+        tools: [
+          { id: "nexus-draw", name: "Nexus-Draw", publicUrl: "https://draw.tnhc.dev", health: "healthy" },
+          { id: "nexus-draw-site", name: "Nexus-Draw (site)", publicUrl: "https://draw.tnhc.dev", health: "healthy" },
+        ],
+      },
+      "auth.tnhc.dev",
+      "app.tnhc.dev",
+    );
+    expect(entries).toHaveLength(1);
+    expect(entries[0]?.id).toBe("nexus-draw");
+  });
+});

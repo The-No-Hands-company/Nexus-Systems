@@ -58,6 +58,11 @@ export function toAppEntries(
     // that goes where you already are.
     if (url.includes(authHost)) continue;
     if (selfHost && url.includes(selfHost)) continue;
+    // One tile per destination. Several tools can legitimately share a public
+    // address — a published site and the backend behind it are two records
+    // pointing at one host — and the person looking at the grid does not care
+    // which internal record won, only that the app appears once.
+    if (entries.some((e) => e.url === url)) continue;
 
     entries.push({
       id,
