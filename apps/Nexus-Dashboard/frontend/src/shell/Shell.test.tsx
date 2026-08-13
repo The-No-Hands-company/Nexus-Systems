@@ -17,9 +17,11 @@ describe("Shell", () => {
     expect(screen.getByRole("banner").textContent).not.toContain("the app");
   });
 
-  it("renders whatever sidebar it is given", () => {
+  it("renders whatever sidebar it is given, scoped to the sidebar region", () => {
     render(<Shell sidebar={<div>launcher here</div>}>x</Shell>);
-    expect(screen.getByText("launcher here")).toBeTruthy();
+    const sidebar = screen.getByRole("complementary", { name: "Applications" });
+    expect(sidebar.textContent).toContain("launcher here");
+    expect(screen.getByRole("main").textContent).not.toContain("launcher here");
   });
 
   it("shows the wordmark in the header", () => {

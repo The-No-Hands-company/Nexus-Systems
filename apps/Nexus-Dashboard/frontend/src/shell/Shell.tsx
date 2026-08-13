@@ -27,7 +27,10 @@ export default function Shell({
       </header>
 
       <div className="flex min-h-0 flex-1">
-        <aside className="w-60 shrink-0 overflow-y-auto border-r border-border-subtle">
+        <aside
+          aria-label="Applications"
+          className="w-60 shrink-0 overflow-y-auto border-r border-border-subtle"
+        >
           {sidebar}
         </aside>
 
