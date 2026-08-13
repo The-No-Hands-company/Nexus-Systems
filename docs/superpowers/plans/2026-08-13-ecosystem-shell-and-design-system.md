@@ -15,6 +15,8 @@
 - **Tailwind is v4 everywhere** (`^4.1.0` Dashboard, `^4.2.2` nexus-web, `^4.0.13` Deploy). There are no `tailwind.config.*` files and none may be added — v4 themes are CSS `@theme` blocks.
 - **Both CSS outputs are generated** from `tokens/nexus.tokens.json`. Hand-editing a generated file is a defect; the drift test exists to catch it.
 - **Token values are transcribed verbatim** from the schema in `docs/noname.md`. Do not invent, round, or "improve" a colour.
+- **Numeric tokens carry units on output.** The schema stores bare numbers (`"space": { "4": 16 }`). CSS needs `16px`, and `padding: var(--nexus-space-4)` with a unitless `16` is invalid and silently discarded. Units by group: `space`, `radius` and `typography.size` are `px`; `motion.duration` is `ms`; `typography.weight`, `typography.lineHeight` and `zIndex` stay unitless, because those are genuinely unitless in CSS.
+- **The Tailwind output must use v4's theme namespaces**, or the tokens become inert custom properties instead of utilities. v4 derives utility names from the namespace: `--color-*` yields `bg-*`/`text-*`, `--spacing-*` yields `p-*`/`m-*`, `--text-*` yields `text-*` sizes, `--font-weight-*`, `--leading-*`, `--radius-*`, `--shadow-*`, `--ease-*`. A token emitted as `--space-4` or `--zIndex-base` produces no utility at all — `p-4` keeps Tailwind's default and the design system is bypassed without anyone noticing.
 - **Shell lives at `app.tnhc.dev`** (Nexus-Dashboard). Do not move it to the apex.
 - **`?embed=1` is the only embed signal.** No postMessage handshake in this plan.
 - **Every embeddable host must end with** `frame-ancestors 'self' https://app.tnhc.dev` **and no `X-Frame-Options`.**
