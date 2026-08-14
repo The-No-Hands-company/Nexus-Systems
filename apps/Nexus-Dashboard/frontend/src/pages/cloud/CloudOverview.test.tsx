@@ -10,14 +10,31 @@ function jsonResponse(body: unknown, status = 200) {
   });
 }
 
+/**
+ * The real shape of Cloud's /api/v1/status, transcribed from the live
+ * response. The earlier fixture used `tools.total` / `users.total` /
+ * `peers.total`, which the endpoint has never returned — so the tests passed
+ * against a shape that does not exist while the page showed zeros in
+ * production. A fixture that agrees with the code but not the server proves
+ * nothing.
+ */
 const STATUS_BODY = {
-  tools: { total: 9, healthy: 7, degraded: 1, offline: 1 },
-  users: { total: 42 },
-  peers: { total: 3 },
-  node: { id: "node-x" },
+  toolCount: 9,
+  healthyToolCount: 7,
+  exposedToolCount: 4,
+  trust: { peers: { total: 3 } },
 };
 
-const IDENTITY_BODY = { address: "ns:acme.federation-test-node", shortId: "AC-1234", did: "did:key:z6Mk..." };
+/**
+ * `exampleAddress`, not `address` — and it is an illustration of the naming
+ * scheme, not an address this node holds.
+ */
+const IDENTITY_BODY = {
+  exampleAddress: "@alice:AC-1234",
+  namingScheme: "@user:shortId",
+  shortId: "AC-1234",
+  did: "did:key:z6Mk...",
+};
 
 const TRUST_BODY = {
   trust: {
@@ -75,15 +92,15 @@ describe("CloudOverview", () => {
     stubFetch();
     render(<MemoryRouter><CloudOverview /></MemoryRouter>);
 
-    // Identity: comes from federation/identity, not the status payload's
-    // node.*. It appears both as the node title and the NS Address field.
-    await waitFor(() => expect(screen.getAllByText(IDENTITY_BODY.address).length).toBeGreaterThan(0));
+    // Identity comes from federation/identity. The status payload has no
+    // node.* block to fall back to — it never did.
+    await waitFor(() => expect(screen.getAllByText(IDENTITY_BODY.exampleAddress).length).toBeGreaterThan(0));
     expect(screen.getByText(IDENTITY_BODY.did)).toBeTruthy();
 
     // Stats row reflects the status payload, not hardcoded numbers.
     expect(screen.getByText("7")).toBeTruthy(); // healthy tools
     expect(screen.getByText("9 registered")).toBeTruthy();
-    expect(screen.getByText("42")).toBeTruthy(); // users
+    expect(screen.getByText("4")).toBeTruthy(); // exposed tools
 
     // Trust lifecycle pills.
     expect(screen.getByText(/3 trusted/)).toBeTruthy();
@@ -107,7 +124,7 @@ describe("CloudOverview", () => {
 
     await waitFor(() => expect(screen.getByRole("alert")).toBeTruthy());
     expect(screen.getByText(/unavailable/i)).toBeTruthy();
-    expect(screen.queryByText(IDENTITY_BODY.address)).toBeNull();
+    expect(screen.queryByText(IDENTITY_BODY.exampleAddress)).toBeNull();
   });
 
   it("still renders the dashboard when only the optional trust card fails", async () => {
@@ -118,7 +135,7 @@ describe("CloudOverview", () => {
     });
     render(<MemoryRouter><CloudOverview /></MemoryRouter>);
 
-    await waitFor(() => expect(screen.getAllByText(IDENTITY_BODY.address).length).toBeGreaterThan(0));
+    await waitFor(() => expect(screen.getAllByText(IDENTITY_BODY.exampleAddress).length).toBeGreaterThan(0));
     expect(screen.queryByText(/trust lifecycle/i)).toBeNull();
   });
 });

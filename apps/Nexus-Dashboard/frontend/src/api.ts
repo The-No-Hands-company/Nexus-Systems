@@ -163,11 +163,34 @@ export function createInvite(expiresInDays?: number) {
  * degrade-to-"unavailable" case, not let it throw into a blank screen — Cloud
  * is expected to be down sometimes.
  */
+/**
+ * The real shape of Cloud's `/api/v1/status`.
+ *
+ * status.html read `status.tools.total`, `status.users.total`,
+ * `status.peers.total` and `status.node.*`. None of those have ever existed on
+ * this response — the counters are flat and differently named — so the old
+ * console rendered zeros for all of them while Cloud was reporting 86 tools.
+ * Transcribed from the live response rather than from the code that consumed
+ * it.
+ *
+ * There is no user count here, and there should not be: accounts belong to
+ * Nexus-Auth now (Cloud's own POST /api/v1/users answers 410 saying so).
+ */
 export type CloudStatus = {
-  tools?: { total?: number; healthy?: number; degraded?: number; offline?: number };
-  users?: { total?: number };
-  peers?: { total?: number; known?: number };
-  node?: { id?: string; shortId?: string; did?: string };
+  version?: string;
+  mode?: string;
+  toolCount?: number;
+  exposedToolCount?: number;
+  healthyToolCount?: number;
+  publicUrlCount?: number;
+  addressCount?: number;
+  activeExposureCount?: number;
+  domainCount?: number;
+  verifiedDomainCount?: number;
+  integrationStatus?: string;
+  failedIntegrationCount?: number;
+  /** Peer/node counts live under trust, not at the top level. */
+  trust?: { nodes?: CloudTrustCounts; peers?: CloudTrustCounts };
 };
 
 export type CloudTrustCounts = {
@@ -182,7 +205,22 @@ export type CloudTrustCounts = {
 
 export type CloudTrust = { nodes: CloudTrustCounts; peers: CloudTrustCounts; updatedAt?: string };
 
-export type CloudIdentity = { address?: string; shortId?: string; did?: string; publicKey?: string };
+/**
+ * `exampleAddress` is deliberately not renamed to `address`.
+ *
+ * It is `@alice:<shortId>` — an illustration of this node's naming scheme, not
+ * an address belonging to anyone. status.html displayed it under an "Address"
+ * label, which reads as "this node is @alice". Keeping the upstream name means
+ * the view cannot casually mislabel it again.
+ */
+export type CloudIdentity = {
+  did?: string;
+  shortId?: string;
+  publicKey?: string;
+  namingScheme?: string;
+  exampleAddress?: string;
+  addressNote?: string;
+};
 
 export type CloudAuditEvent = {
   subjectId?: string;

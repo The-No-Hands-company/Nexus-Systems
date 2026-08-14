@@ -115,11 +115,15 @@ export default function CloudOverview() {
   }
 
   const { status, identity, trust, audit, tools } = state;
-  const toolsState = status.tools ?? {};
-  const usersState = status.users ?? {};
-  const peersState = status.peers ?? {};
-  const node = status.node ?? {};
   const byId = new Map(tools.map((t) => [t.id, t]));
+
+  // Flat counters, and peers under `trust`. status.html read status.tools.total
+  // / status.users.total / status.peers.total, none of which this response has
+  // ever carried, so it displayed 0 everywhere while Cloud reported 86 tools.
+  const toolTotal = status.toolCount ?? 0;
+  const toolHealthy = status.healthyToolCount ?? 0;
+  const toolExposed = status.exposedToolCount ?? 0;
+  const peerTotal = status.trust?.peers?.total ?? 0;
 
   return (
     <section className="mx-auto max-w-5xl space-y-6 p-8">
@@ -131,41 +135,45 @@ export default function CloudOverview() {
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <div className="rounded-lg border border-zinc-800 bg-zinc-900 p-4">
-          <div className="text-2xl font-semibold text-zinc-100">
-            {toolsState.healthy ?? toolsState.total ?? 0}
-          </div>
+          <div className="text-2xl font-semibold text-zinc-100">{toolHealthy}</div>
           <div className="text-sm text-zinc-400">Healthy tools</div>
-          <div className="mt-1 text-xs text-zinc-500">{toolsState.total ?? 0} registered</div>
+          <div className="mt-1 text-xs text-zinc-500">{toolTotal} registered</div>
+        </div>
+        {/* Was "Users". Cloud has no user count and should not — accounts moved
+            to Nexus-Auth. Exposed tools is the number this control plane
+            actually owns and the one an operator acts on. */}
+        <div className="rounded-lg border border-zinc-800 bg-zinc-900 p-4">
+          <div className="text-2xl font-semibold text-zinc-100">{toolExposed}</div>
+          <div className="text-sm text-zinc-400">Exposed</div>
+          <div className="mt-1 text-xs text-zinc-500">reachable publicly</div>
         </div>
         <div className="rounded-lg border border-zinc-800 bg-zinc-900 p-4">
-          <div className="text-2xl font-semibold text-zinc-100">{usersState.total ?? 0}</div>
-          <div className="text-sm text-zinc-400">Users</div>
-          <div className="mt-1 text-xs text-zinc-500">on this node</div>
-        </div>
-        <div className="rounded-lg border border-zinc-800 bg-zinc-900 p-4">
-          <div className="text-2xl font-semibold text-zinc-100">{peersState.total ?? peersState.known ?? 0}</div>
+          <div className="text-2xl font-semibold text-zinc-100">{peerTotal}</div>
           <div className="text-sm text-zinc-400">Peers</div>
           <div className="mt-1 text-xs text-zinc-500">federation nodes</div>
         </div>
       </div>
 
       <div className="rounded-lg border border-zinc-800 bg-zinc-900 p-4">
-        <div className="font-medium text-zinc-100">{identity.address || node.id || "Nexus Node"}</div>
-        <div className="text-sm text-zinc-500">{identity.shortId || node.shortId || ""}</div>
+        <div className="font-medium text-zinc-100">Nexus Node</div>
+        <div className="text-sm text-zinc-500">{identity.shortId || ""}</div>
         <dl className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
           <div>
             <dt className="text-xs uppercase tracking-wide text-zinc-500">DID</dt>
-            <dd className="mt-1 break-all font-mono text-sm text-zinc-300">
-              {identity.did || node.did || "—"}
-            </dd>
+            <dd className="mt-1 break-all font-mono text-sm text-zinc-300">{identity.did || "—"}</dd>
           </div>
           <div>
             <dt className="text-xs uppercase tracking-wide text-zinc-500">Short ID</dt>
-            <dd className="mt-1 font-mono text-sm text-zinc-300">{identity.shortId || node.shortId || "—"}</dd>
+            <dd className="mt-1 font-mono text-sm text-zinc-300">{identity.shortId || "—"}</dd>
           </div>
+          {/* `exampleAddress` is @alice:<shortId> — an illustration of the
+              naming scheme, not an address anyone holds. status.html labelled
+              it "NS Address", which reads as "this node is @alice". */}
           <div>
-            <dt className="text-xs uppercase tracking-wide text-zinc-500">NS Address</dt>
-            <dd className="mt-1 break-all font-mono text-sm text-zinc-300">{identity.address || "—"}</dd>
+            <dt className="text-xs uppercase tracking-wide text-zinc-500">Address format</dt>
+            <dd className="mt-1 break-all font-mono text-sm text-zinc-300">
+              {identity.exampleAddress || identity.namingScheme || "—"}
+            </dd>
           </div>
         </dl>
       </div>
