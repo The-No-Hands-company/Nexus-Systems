@@ -7,6 +7,11 @@ import type { AppEntry } from "../api";
  * An offline app renders as text rather than a link, for the same reason the
  * grid does it: inviting a click that goes nowhere is worse than showing the
  * app is down.
+ *
+ * An app entry with a relative url (e.g. Cloud's "/cloud") is a shell-native
+ * view, not a site to frame — see apps.ts toAppEntries. It links straight
+ * there instead of through `/a/:id`, which would mount it in AppFrame's
+ * iframe as if it were an external app.
  */
 export default function Launcher({
   apps,
@@ -22,7 +27,7 @@ export default function Launcher({
           <li key={app.id}>
             {app.health === "healthy" ? (
               <Link
-                to={`/a/${app.id}`}
+                to={app.url.startsWith("/") ? app.url : `/a/${app.id}`}
                 aria-current={app.id === activeId ? "page" : undefined}
                 className="block rounded-md px-3 py-2 text-sm hover:bg-bg-elevated aria-[current=page]:bg-bg-elevated"
               >

@@ -42,6 +42,7 @@ export function toAppEntries(
   payload: unknown,
   authHost: string,
   selfHost?: string,
+  cloudHost?: string,
 ): AppEntry[] {
   const tools = (payload as { tools?: unknown } | null)?.tools;
   if (!Array.isArray(tools)) return [];
@@ -64,11 +65,18 @@ export function toAppEntries(
     // which internal record won, only that the app appears once.
     if (entries.some((e) => e.url === url)) continue;
 
+    // Cloud's console is a shell-native view now (/cloud, /cloud/tools, ...),
+    // not a site the shell frames. A relative path here — rather than
+    // https://cloud.<domain> — is how the Launcher and the home grid know to
+    // route in-app instead of opening/framing an external host. See
+    // docs/superpowers/specs/2026-08-14-cloud-console-as-shell-views-design.md.
+    const isCloud = !!cloudHost && url.includes(cloudHost);
+
     entries.push({
       id,
       name: str(raw.name) || id,
       description: str(raw.description),
-      url,
+      url: isCloud ? "/cloud" : url,
       // Anything that is not explicitly healthy is treated as offline, so a
       // missing or unexpected value fails safe: the tile renders unlinked
       // rather than inviting a click that goes nowhere.

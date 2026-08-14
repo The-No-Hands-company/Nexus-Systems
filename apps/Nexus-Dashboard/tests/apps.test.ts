@@ -87,6 +87,31 @@ describe("the dashboard does not list itself", () => {
   });
 });
 
+describe("Cloud's tile links into the shell, not out to its own host", () => {
+  const payload = {
+    tools: [
+      { id: "nexus-cloud", name: "Nexus Cloud", description: "Control panel",
+        publicUrl: "https://cloud.tnhc.dev", health: "healthy" },
+      { id: "nexus-draw", name: "Nexus-Draw", publicUrl: "https://draw.tnhc.dev", health: "healthy" },
+    ],
+  };
+
+  it("rewrites Cloud's url to the shell-native /cloud route", () => {
+    const entries = toAppEntries(payload, AUTH, "app.tnhc.dev", "cloud.tnhc.dev");
+    expect(entries.find((e) => e.id === "nexus-cloud")?.url).toBe("/cloud");
+  });
+
+  it("leaves every other app's url untouched", () => {
+    const entries = toAppEntries(payload, AUTH, "app.tnhc.dev", "cloud.tnhc.dev");
+    expect(entries.find((e) => e.id === "nexus-draw")?.url).toBe("https://draw.tnhc.dev");
+  });
+
+  it("without a cloud host, nothing is rewritten", () => {
+    const entries = toAppEntries(payload, AUTH, "app.tnhc.dev");
+    expect(entries.find((e) => e.id === "nexus-cloud")?.url).toBe("https://cloud.tnhc.dev");
+  });
+});
+
 describe("one tile per destination", () => {
   it("collapses two tools that publish the same address", () => {
     // A published site and the backend behind it are two registry records for

@@ -27,6 +27,17 @@ describe("Launcher", () => {
     expect(screen.queryByRole("link", { name: /Chat/ })).toBeNull();
   });
 
+  it("links an internal app (relative url) straight to its shell route, not through /a/", () => {
+    // Cloud's tile arrives with url "/cloud" (see apps.ts toAppEntries): a
+    // shell-native view, not a site to frame.
+    const withCloud = [
+      ...apps,
+      { id: "nexus-cloud", name: "Cloud", description: "", url: "/cloud", health: "healthy" as const },
+    ];
+    render(<MemoryRouter><Launcher apps={withCloud} /></MemoryRouter>);
+    expect(screen.getByRole("link", { name: /Cloud/ }).getAttribute("href")).toBe("/cloud");
+  });
+
   it("marks the active app for assistive tech, not just visually", () => {
     render(<MemoryRouter><Launcher apps={apps} activeId="nexus-draw" /></MemoryRouter>);
     expect(screen.getByRole("link", { name: /Draw/ }).getAttribute("aria-current")).toBe("page");
