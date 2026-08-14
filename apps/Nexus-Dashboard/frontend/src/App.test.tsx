@@ -7,6 +7,14 @@ vi.mock("./api", async () => ({
     { id: "nexus-draw", name: "Draw", description: "", url: "https://draw.tnhc.dev", health: "healthy" },
   ]),
   me: vi.fn(async () => ({ username: "founder", role: "founder" })),
+  // /cloud and /cloud/tools have their own dedicated, data-asserting tests in
+  // pages/cloud/*.test.tsx. Here they only need to resolve so the routing
+  // tests below aren't exercising real network calls.
+  cloudStatus: vi.fn(async () => ({ tools: { total: 1, healthy: 1 }, users: { total: 1 }, peers: { total: 0 } })),
+  cloudIdentity: vi.fn(async () => ({ address: "ns:test", shortId: "T-1", did: "did:key:test" })),
+  cloudTrust: vi.fn(async () => null),
+  cloudAudit: vi.fn(async () => []),
+  cloudTools: vi.fn(async () => []),
 }));
 
 import App from "./App";
@@ -70,7 +78,7 @@ describe("shell-native views", () => {
     vi.mocked(listApps).mockClear();
   });
 
-  for (const path of ["/account", "/admin"]) {
+  for (const path of ["/account", "/admin", "/cloud", "/cloud/tools"]) {
     it(`wraps ${path} in the shell, launcher and all`, async () => {
       window.history.pushState({}, "", path);
       render(<App />);

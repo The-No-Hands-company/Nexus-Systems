@@ -151,3 +151,82 @@ export function createInvite(expiresInDays?: number) {
     body: JSON.stringify(expiresInDays === undefined ? {} : { expiresInDays }),
   });
 }
+
+/**
+ * Cloud's operator console, reached through the dashboard server's read-only
+ * proxy (see server.ts CLOUD_ALLOWLIST) rather than called directly — the
+ * browser is never given Cloud's API key.
+ *
+ * Cloud being down surfaces here as an ApiError with reason
+ * "cloud_unavailable" (the proxy's 503 passthrough) or "network" (the proxy
+ * itself unreachable). Every page that calls these must treat that as a
+ * degrade-to-"unavailable" case, not let it throw into a blank screen — Cloud
+ * is expected to be down sometimes.
+ */
+export type CloudStatus = {
+  tools?: { total?: number; healthy?: number; degraded?: number; offline?: number };
+  users?: { total?: number };
+  peers?: { total?: number; known?: number };
+  node?: { id?: string; shortId?: string; did?: string };
+};
+
+export type CloudTrustCounts = {
+  total?: number;
+  trusted?: number;
+  verified?: number;
+  pending?: number;
+  quarantined?: number;
+  revoked?: number;
+  expired?: number;
+};
+
+export type CloudTrust = { nodes: CloudTrustCounts; peers: CloudTrustCounts; updatedAt?: string };
+
+export type CloudIdentity = { address?: string; shortId?: string; did?: string; publicKey?: string };
+
+export type CloudAuditEvent = {
+  subjectId?: string;
+  timestamp?: string;
+  metadata?: {
+    action?: string;
+    actor?: string;
+    previousState?: string;
+    nextState?: string;
+    reason?: string;
+  };
+};
+
+export type CloudTool = {
+  id?: string;
+  name: string;
+  capabilities?: string[];
+  health?: string;
+  status?: string;
+  publicUrl?: string;
+  upstreamUrl?: string;
+  lastHeartbeatAt?: string;
+  registeredAt?: string;
+};
+
+export function cloudStatus() {
+  return request<CloudStatus>("/api/cloud/status");
+}
+
+/** status.html's `?compact=trust` query, forwarded verbatim by the proxy. */
+export function cloudTrust() {
+  return request<{ trust?: CloudTrust }>("/api/cloud/status?compact=trust").then((r) => r.trust ?? null);
+}
+
+export function cloudIdentity() {
+  return request<CloudIdentity>("/api/cloud/federation/identity");
+}
+
+export function cloudAudit() {
+  return request<{ events?: CloudAuditEvent[] }>(
+    "/api/cloud/audit?eventType=node-trust-action&kind=audit&limit=10",
+  ).then((r) => r.events ?? []);
+}
+
+export function cloudTools() {
+  return request<{ tools?: CloudTool[] }>("/api/cloud/tools").then((r) => r.tools ?? []);
+}
