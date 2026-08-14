@@ -45,19 +45,23 @@ describe("identity header is proxy-controlled", () => {
   it("strips a client-supplied x-nexus-identity before forwarding", async () => {
     const { handleRequest, __setRoutesForTest } = await import("../proxy");
 
-    // A real upstream that reports back exactly what headers it received.
+    // Capture the request at the proxy's fetch boundary. A real Bun.serve
+    // listener makes this unit test depend on permission to bind local ports,
+    // which sandboxed production checks deliberately do not have.
     let seen: string | null = "UNSET";
-    const upstream = Bun.serve({
-      port: 0,
-      fetch(req) {
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = Object.assign(
+      async (input: Parameters<typeof fetch>[0]) => {
+        const req = input instanceof Request ? input : new Request(input);
         seen = req.headers.get("x-nexus-identity");
         return new Response("ok");
       },
-    });
+      { preconnect: realFetch.preconnect },
+    );
 
     try {
       __setRoutesForTest({
-        "echo.tnhc.dev": { upstream: `http://127.0.0.1:${upstream.port}`, requiresAuth: false },
+        "echo.tnhc.dev": { upstream: "http://upstream.invalid", requiresAuth: false },
       });
 
       // The attack: a client asserts an identity the proxy never minted. On a
@@ -72,7 +76,7 @@ describe("identity header is proxy-controlled", () => {
       expect(res.status).toBe(200);
       expect(seen).toBeNull();
     } finally {
-      upstream.stop(true);
+      globalThis.fetch = realFetch;
     }
   });
 });

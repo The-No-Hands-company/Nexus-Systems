@@ -85,6 +85,7 @@ export async function createNativeSDK(): Promise<PhantomSDK> {
   });
 
   const s = lib.symbols;
+  type NativePointer = ReturnType<typeof ptr>;
 
   /** NUL-terminate for the C side. */
   const cstr = (v: string): Uint8Array => new TextEncoder().encode(v + "\0");
@@ -95,20 +96,20 @@ export async function createNativeSDK(): Promise<PhantomSDK> {
    * Every string the library returns is heap-allocated over there; not handing
    * it back leaks, and every path out of here does.
    */
-  const takeString = (p: number | bigint | null): string | null => {
-    if (p === null || p === 0 || p === 0n) return null;
+  const takeString = (p: NativePointer | null): string | null => {
+    if (p === null || p === 0) return null;
     try {
       // String(...) matters: `new CString()` yields a String *object*, not a
       // primitive. It prints identically and serialises identically, so it
       // looks right everywhere except `===`, where an object never equals a
       // string — which made a perfectly good KEM round-trip appear to fail.
-      return String(new CString(p as number));
+      return String(new CString(p));
     } finally {
       s.phantom_free_string(p as never);
     }
   };
 
-  const takeJson = <T>(p: number | bigint | null): T | null => {
+  const takeJson = <T>(p: NativePointer | null): T | null => {
     const raw = takeString(p);
     return raw === null ? null : (JSON.parse(raw) as T);
   };
