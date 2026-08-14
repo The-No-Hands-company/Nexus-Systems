@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { BrowserRouter, Routes, Route, useParams } from "react-router-dom";
 import Home from "./pages/Home";
 import RequestAccess from "./pages/RequestAccess";
@@ -54,14 +54,35 @@ function ShellRoute({ state, onRetry }: { state: AppsState; onRetry: () => void 
 }
 
 /**
+ * A shell-native view: the ecosystem's chrome around a page this app owns,
+ * rather than around a framed app.
+ *
+ * Unlike ShellRoute, the content does not depend on the app list — account
+ * settings must render whether or not the launcher could be populated. A
+ * failed fetch degrades the sidebar to empty and nothing else. Treating it as
+ * fatal here would make an unrelated network failure look like a broken
+ * account page.
+ */
+function ShellView({ state, children }: { state: AppsState; children: ReactNode }) {
+  const apps = state.status === "ready" ? state.apps : [];
+  return <Shell sidebar={<Launcher apps={apps} />}>{children}</Shell>;
+}
+
+/**
  * Plain paths, and the dashboard server serves index.html for any unmatched
  * path, so a hard reload on /claim works rather than 404ing.
  *
- * Home decides between the app grid and the signed-out landing; account and
- * admin surfaces land in the next tasks. /request and /claim are public pages
- * for people with no session and no apps yet, so they deliberately stay
- * outside the shell — only /a/:appId, which requires an actual app to launch
- * into, gets the launcher and frame.
+ * Three groups, deliberately:
+ *
+ * - `/request` and `/claim` are public pages for people with no session and no
+ *   apps yet. Chrome that advertises a launcher they cannot use would be a
+ *   lie, so they stay bare.
+ * - `/` stays bare too, but for a different reason: signed in it renders the
+ *   launcher grid, and the shell's sidebar is also a launcher. Wrapping it
+ *   would put the same four apps on screen twice. The grid is the home
+ *   surface; the shell appears when you enter something.
+ * - `/account` and `/admin` are signed-in surfaces this app owns, and they get
+ *   the shell so they stop reading as separate websites.
  */
 export default function App() {
   const [appsState, setAppsState] = useState<AppsState>({ status: "loading" });
@@ -83,8 +104,22 @@ export default function App() {
         <Route path="/" element={<Home />} />
         <Route path="/request" element={<RequestAccess />} />
         <Route path="/claim" element={<Claim />} />
-        <Route path="/account" element={<Account />} />
-        <Route path="/admin" element={<Admin />} />
+        <Route
+          path="/account"
+          element={
+            <ShellView state={appsState}>
+              <Account />
+            </ShellView>
+          }
+        />
+        <Route
+          path="/admin"
+          element={
+            <ShellView state={appsState}>
+              <Admin />
+            </ShellView>
+          }
+        />
         <Route path="/a/:appId" element={<ShellRoute state={appsState} onRetry={loadApps} />} />
         <Route path="*" element={<Home />} />
       </Routes>

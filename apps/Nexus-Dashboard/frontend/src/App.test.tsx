@@ -64,3 +64,45 @@ describe("shell routing", () => {
     expect(screen.queryByText("App not found.")).toBeNull();
   });
 });
+
+describe("shell-native views", () => {
+  beforeEach(() => {
+    vi.mocked(listApps).mockClear();
+  });
+
+  for (const path of ["/account", "/admin"]) {
+    it(`wraps ${path} in the shell, launcher and all`, async () => {
+      window.history.pushState({}, "", path);
+      render(<App />);
+
+      await waitFor(() => expect(screen.getByRole("banner")).toBeTruthy());
+      expect(screen.getByRole("complementary", { name: "Applications" })).toBeTruthy();
+      // Populated, not merely present: these pages sit beside the app list
+      // rather than replacing it.
+      await waitFor(() => expect(screen.getByRole("link", { name: /Draw/ })).toBeTruthy());
+    });
+  }
+
+  it("still renders the account page when the app list fails", async () => {
+    // The distinction that matters. For /a/:appId a failed list means the app
+    // cannot be shown; here it only means an empty sidebar. Treating it as
+    // fatal would turn an unrelated network blip into a broken account page.
+    vi.mocked(listApps).mockRejectedValueOnce(new Error("network"));
+    window.history.pushState({}, "", "/account");
+
+    render(<App />);
+
+    await waitFor(() => expect(screen.getByRole("banner")).toBeTruthy());
+    // The frame's error state belongs to app-mounting, not to this page.
+    expect(screen.queryByText("Could not load your apps.")).toBeNull();
+  });
+
+  it("leaves the signed-in home free of shell chrome, so the launcher is not doubled", async () => {
+    // / renders the launcher grid; the shell's sidebar is also a launcher.
+    // Wrapping it would list the same apps twice on one screen.
+    window.history.pushState({}, "", "/");
+    render(<App />);
+
+    await waitFor(() => expect(screen.queryByRole("banner")).toBeNull());
+  });
+});
