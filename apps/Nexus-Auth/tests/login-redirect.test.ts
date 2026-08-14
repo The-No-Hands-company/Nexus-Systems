@@ -2,6 +2,7 @@ import { beforeAll, describe, expect, test } from "bun:test";
 import { handleRequest } from "../src/server";
 
 const BASE = "http://auth.tnhc.dev";
+const PUBLIC_BASE = "https://auth.tnhc.dev";
 
 beforeAll(() => {
   // safeRedirect refuses every absolute address unless a cookie domain is
@@ -76,6 +77,30 @@ describe("login page return address", () => {
     const html = await loginPage("");
 
     expect(html).toContain('name="username"');
+  });
+});
+
+describe("OIDC authorization login bounce", () => {
+  test("uses Auth's public origin when the proxy calls it through loopback", async () => {
+    process.env.NEXUS_AUTH_PUBLIC_URL = PUBLIC_BASE;
+    const authorize = new URL("http://127.0.0.1:4310/api/v1/auth/oauth/authorize");
+    authorize.searchParams.set("client_id", "nexus-hosting");
+    authorize.searchParams.set("redirect_uri", "https://hosting.tnhc.dev/api/callback");
+    authorize.searchParams.set("response_type", "code");
+    authorize.searchParams.set("scope", "openid");
+    authorize.searchParams.set("code_challenge", "test-pkce-challenge");
+    authorize.searchParams.set("code_challenge_method", "S256");
+
+    const res = await handleRequest(new Request(authorize));
+
+    expect(res.status).toBe(303);
+    const location = new URL(res.headers.get("location") || "");
+    expect(location.origin).toBe(PUBLIC_BASE);
+    expect(location.pathname).toBe("/login");
+    const returnTo = new URL(location.searchParams.get("redirect") || "");
+    expect(returnTo.origin).toBe(PUBLIC_BASE);
+    expect(returnTo.pathname).toBe(authorize.pathname);
+    expect(returnTo.search).toBe(authorize.search);
   });
 });
 

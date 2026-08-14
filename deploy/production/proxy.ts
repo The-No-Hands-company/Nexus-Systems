@@ -377,7 +377,17 @@ export async function handleRequest(
       // Tell the upstream who it is actually answering as, which anything
       // generating absolute URLs or scoping a cookie needs.
       forwardHeaders.set("x-forwarded-host", host);
-      forwardHeaders.set("x-forwarded-proto", url.protocol.replace(":", ""));
+      // The scheme the *client* used, not this hop's. `url.protocol` is always
+      // "http:" here — the proxy listens in plaintext behind the tunnel — so
+      // forwarding it told every upstream it was answering over HTTP. Anything
+      // building an absolute URL from that emits an http:// one: Hosting's OIDC
+      // redirect_uri came out as http://hosting.tnhc.dev/api/callback and Auth
+      // rejected the authorization request with 400, making sign-in impossible.
+      //
+      // Same reasoning as publicUrl() in gate.ts: nothing reachable through
+      // this proxy is served over plain HTTP publicly, so https is the truthful
+      // answer for every request that arrives here.
+      forwardHeaders.set("x-forwarded-proto", "https");
 
       const proxied = new Request(upstream.toString(), {
         method: req.method,

@@ -42,6 +42,7 @@ import {
   createAuthorizationCode,
   discoveryDocument,
   getClient,
+  issuer,
   issueIdToken,
   redeemAuthorizationCode,
   redirectUriAllowed,
@@ -306,10 +307,13 @@ export async function handleRequest(request: Request): Promise<Response> {
 
       // Not signed in: reuse the ordinary login page and come straight back
       // here afterwards, so there is still exactly one place a password is
-      // typed. url.href is same-origin, so safeRedirect accepts it.
+      // typed. The Request URL names the loopback upstream when this arrives
+      // through the production proxy; rebuild both browser-facing URLs from
+      // the configured issuer so neither sends the browser to 127.0.0.1.
       if (!auth) {
-        const login = new URL("/login", url.origin);
-        login.searchParams.set("redirect", url.href);
+        const login = new URL("/login", issuer());
+        const returnToAuthorize = new URL(`${url.pathname}${url.search}`, issuer());
+        login.searchParams.set("redirect", returnToAuthorize.toString());
         return new Response(null, { status: 303, headers: { location: login.toString() } });
       }
 
