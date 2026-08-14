@@ -1,5 +1,6 @@
 import { join } from "node:path";
 import { toAppEntries } from "./apps";
+import { cloudBaseUrl, cloudHeaders } from "./cloud";
 
 /**
  * The ecosystem front door — app.<domain>.
@@ -31,6 +32,90 @@ const WEB_ROOT = process.env.NEXUS_DASHBOARD_WEB_ROOT || join(import.meta.dir, "
  * host into an open relay into the private network.
  */
 const AUTH_PREFIX = "/api/v1/auth/";
+
+/**
+ * The browser never talks to Cloud. It calls this Dashboard route, which
+ * forwards to Cloud with the operator's X-Api-Key attached (see cloud.ts).
+ * Handing that key to the browser instead is exactly what this proxy exists
+ * to avoid, so the mapping below is a fixed allow-list, not a passthrough:
+ * only these Cloud paths are reachable, and every one of them is read-only.
+ * Anything not in this table 404s, and no other method than GET is served.
+ */
+const CLOUD_PREFIX = "/api/cloud/";
+const CLOUD_ALLOWLIST: Record<string, { upstream: string; adminOnly?: boolean }> = {
+  // Overview (view-dashboard): status.html's loadDashboard() calls these.
+  status: { upstream: "/api/v1/status" },
+  tools: { upstream: "/api/v1/tools" },
+  audit: { upstream: "/api/v1/audit" },
+  // Tools/API views (view-tools, view-api).
+  endpoints: { upstream: "/api/v1/endpoints" },
+  // Users view. Admin-only: this is the one Cloud path that lists every
+  // account, and hiding the tab client-side is not a control.
+  users: { upstream: "/api/v1/users", adminOnly: true },
+  // Federation + identity views.
+  "federation/peers": { upstream: "/v1/federation/peers" },
+  "federation/identity": { upstream: "/v1/federation/identity" },
+};
+
+/** Mirrors frontend/src/api.ts ADMIN_ROLES — keep the two in sync. */
+const ADMIN_ROLES = ["founder", "admin"];
+
+/**
+ * Who is making this request, per Auth's own session cookie check — the same
+ * mechanism the account/admin surfaces rely on (frontend/src/api.ts `me()`,
+ * proxied through AUTH_PREFIX). Cloud has no notion of a Nexus session, so
+ * the Dashboard server has to ask Auth on the caller's behalf rather than
+ * trusting anything the browser claims about itself.
+ */
+async function callerRole(req: Request): Promise<string | null> {
+  try {
+    const res = await fetch(`${AUTH_INTERNAL_URL.replace(/\/+$/, "")}/api/v1/auth/me`, {
+      headers: { cookie: req.headers.get("cookie") ?? "" },
+      signal: AbortSignal.timeout(3000),
+    });
+    if (!res.ok) return null;
+    const body = (await res.json().catch(() => null)) as { user?: { role?: unknown } } | null;
+    const role = body?.user?.role;
+    return typeof role === "string" ? role : null;
+  } catch {
+    // Auth unreachable is a "no" for an admin-only resource, not a crash.
+    return null;
+  }
+}
+
+async function proxyToCloud(req: Request, name: string, search: string): Promise<Response> {
+  const entry = CLOUD_ALLOWLIST[name];
+  // Off the allow-list. This must never fall through to a generic forward.
+  if (!entry) return Response.json({ error: "not_found" }, { status: 404 });
+
+  if (entry.adminOnly) {
+    const role = await callerRole(req);
+    if (!role || !ADMIN_ROLES.includes(role)) {
+      return Response.json({ error: "forbidden" }, { status: 403 });
+    }
+  }
+
+  try {
+    const res = await fetch(`${cloudBaseUrl()}${entry.upstream}${search}`, {
+      headers: cloudHeaders(),
+      signal: AbortSignal.timeout(5000),
+    });
+    const body = await res.text();
+    // Only the content-type rides along. Copying every upstream header would
+    // risk carrying something Cloud-specific (and is more than the ported
+    // views need); it never includes the outbound X-Api-Key, which is a
+    // request header we set, not one Cloud echoes back.
+    return new Response(body, {
+      status: res.status,
+      headers: { "content-type": res.headers.get("content-type") ?? "application/json" },
+    });
+  } catch {
+    // Cloud must be assumed to be down sometimes. The account pages keep
+    // working without it (see fetchApps below); this proxy degrades the same
+    // way instead of throwing a 500 that would take a shell page down with it.
+    return Response.json({ error: "cloud_unavailable" }, { status: 503 });
+  }
+}
 
 async function fetchApps(): Promise<Response> {
   try {
@@ -81,6 +166,13 @@ export async function handleRequest(req: Request): Promise<Response> {
   }
 
   if (req.method === "GET" && path === "/api/apps") return fetchApps();
+
+  // GET-only, and only for names on CLOUD_ALLOWLIST — anything else (a
+  // mutating method, or a name not in the table) falls through to the
+  // catch-all 404 below rather than reaching proxyToCloud at all.
+  if (req.method === "GET" && path.startsWith(CLOUD_PREFIX)) {
+    return proxyToCloud(req, path.slice(CLOUD_PREFIX.length), url.search);
+  }
 
   if (path.startsWith(AUTH_PREFIX)) return proxyToAuth(req, path);
 

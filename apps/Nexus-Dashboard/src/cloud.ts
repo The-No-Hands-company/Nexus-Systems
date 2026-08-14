@@ -1,10 +1,13 @@
 const TOOL_ID = "nexus-dashboard";
 
-function cloudBaseUrl(): string {
+/** Exported so callers (e.g. the /api/cloud/* proxy in server.ts) resolve
+ * Cloud's base URL and auth header the same way the heartbeat does, instead
+ * of re-deriving them and risking the two drifting apart. */
+export function cloudBaseUrl(): string {
   return (process.env.NEXUS_CLOUD_URL || "http://localhost:8787").trim().replace(/\/$/, "");
 }
 
-function cloudHeaders(): Record<string, string> {
+export function cloudHeaders(): Record<string, string> {
   return {
     "content-type": "application/json",
     accept: "application/json",
