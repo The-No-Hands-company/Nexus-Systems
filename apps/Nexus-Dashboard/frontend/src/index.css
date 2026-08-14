@@ -1,2 +1,34 @@
 @import "tailwindcss";
-@import "../../../../packages/nexus-design/dist/nexus-theme.css";
+/* The shell needs the raw --nexus-color-* custom properties (defined here, in
+   nexus-tokens.css) to alias into the scales below. nexus-theme.css only
+   defines Tailwind's un-prefixed @theme names (e.g. --color-bg-canvas), which
+   would leave the var() references below pointing at nothing — and, because
+   nothing references those names, Tailwind tree-shakes the whole block and the
+   shell silently renders in stock zinc. That is exactly what happened: the
+   shell shipped importing nexus-theme.css and painting #18181b. */
+@import "../../../../packages/nexus-design/dist/nexus-tokens.css";
+
+/* The shell styles with Tailwind's zinc scale, like Draw. Point the scale
+   itself at the ecosystem tokens rather than rewriting every utility usage:
+   `bg-zinc-800` keeps working and starts rendering in the ecosystem's palette.
+   The mapping runs dark-to-light the way Tailwind's scale does, so contrast
+   relationships survive. */
+@theme {
+  --color-zinc-900: var(--nexus-color-bg-canvas);
+  --color-zinc-800: var(--nexus-color-bg-surface);
+  --color-zinc-700: var(--nexus-color-bg-elevated);
+  --color-zinc-600: var(--nexus-color-border-strong);
+  --color-zinc-500: var(--nexus-color-text-muted);
+  --color-zinc-400: var(--nexus-color-text-secondary);
+  --color-zinc-300: var(--nexus-color-text-secondary);
+  --color-zinc-200: var(--nexus-color-text-primary);
+  --color-zinc-100: var(--nexus-color-text-primary);
+
+  /* Amber is the shell's notice/callout colour — bordered panels on the claim
+     and request screens — not its brand accent. It maps to the warning state
+     token, which keeps both the meaning and the amber hue. */
+  --color-amber-500: var(--nexus-color-state-warning);
+  --color-amber-400: var(--nexus-color-state-warning);
+  --color-amber-300: var(--nexus-color-state-warning);
+  --color-amber-200: var(--nexus-color-state-warning);
+}
