@@ -49,8 +49,16 @@ const CLOUD_ALLOWLIST: Record<string, { upstream: string; adminOnly?: boolean }>
   audit: { upstream: "/api/v1/audit" },
   // Tools/API views (view-tools, view-api).
   endpoints: { upstream: "/api/v1/endpoints" },
-  // Users view. Admin-only: this is the one Cloud path that lists every
-  // account, and hiding the tab client-side is not a control.
+  // Admin-only: the one Cloud path that lists every account, and hiding a tab
+  // client-side is not a control.
+  //
+  // No view calls this. Cloud has delegated accounts to Nexus-Auth — its own
+  // POST /api/v1/users answers 410 saying so — and its GET requires a Cloud
+  // session that SSO no longer issues, so it returns 401 even to the
+  // operator's key. The entry stays because it is the enforcement point a real
+  // users view will need when one is built against Auth, and because it is the
+  // only adminOnly route, so deleting it would take the tests covering that
+  // mechanism with it.
   users: { upstream: "/api/v1/users", adminOnly: true },
   // Federation + identity views.
   "federation/peers": { upstream: "/v1/federation/peers" },

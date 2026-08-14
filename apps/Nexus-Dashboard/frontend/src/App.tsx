@@ -7,7 +7,6 @@ import Account from "./pages/Account";
 import Admin from "./pages/Admin";
 import CloudOverview from "./pages/cloud/CloudOverview";
 import CloudTools from "./pages/cloud/CloudTools";
-import CloudUsers from "./pages/cloud/CloudUsers";
 import CloudFederation from "./pages/cloud/CloudFederation";
 import CloudIdentity from "./pages/cloud/CloudIdentity";
 import CloudApi from "./pages/cloud/CloudApi";
@@ -89,12 +88,16 @@ function ShellView({ state, children }: { state: AppsState; children: ReactNode 
  *   surface; the shell appears when you enter something.
  * - `/account` and `/admin` are signed-in surfaces this app owns, and they get
  *   the shell so they stop reading as separate websites. `/cloud`,
- *   `/cloud/tools`, `/cloud/users`, `/cloud/federation`, `/cloud/identity`
- *   and `/cloud/api` join them: Cloud's operator console, ported in as
- *   shell-native views (see docs/superpowers/specs/2026-08-14-cloud-console-
- *   as-shell-views-design.md) rather than a separate site Cloud serves.
- *   `/cloud/users` additionally enforces admin-only server-side, at the
- *   dashboard proxy — never client-side here.
+ *   `/cloud/tools`, `/cloud/federation`, `/cloud/identity` and `/cloud/api`
+ *   join them: Cloud's operator console, ported in as shell-native views (see
+ *   docs/superpowers/specs/2026-08-14-cloud-console-as-shell-views-design.md)
+ *   rather than a separate site Cloud serves.
+ *
+ * Cloud's users view is deliberately absent. Cloud has delegated accounts to
+ * Nexus-Auth — its own POST /api/v1/users answers 410 saying so — and its GET
+ * requires a Cloud session that SSO no longer issues, so the endpoint returns
+ * 401 even to the operator's API key. Porting it would have shipped a view
+ * that can never load. A real user list belongs to Auth and is its own work.
  */
 export default function App() {
   const [appsState, setAppsState] = useState<AppsState>({ status: "loading" });
@@ -145,14 +148,6 @@ export default function App() {
           element={
             <ShellView state={appsState}>
               <CloudTools />
-            </ShellView>
-          }
-        />
-        <Route
-          path="/cloud/users"
-          element={
-            <ShellView state={appsState}>
-              <CloudUsers />
             </ShellView>
           }
         />

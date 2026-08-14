@@ -6,18 +6,30 @@ import CloudNav from "./CloudNav";
 type State = { kind: "loading" } | { kind: "unavailable" } | { kind: "ready"; peers: CloudPeer[] };
 
 /**
- * Renders `trustLevel`, falling back to `trust` — status.html's
- * `esc(p.trustLevel || p.trust)` coerced whatever it got with `String(...)`,
- * so a peer without `trustLevel` (every real one right now — see the
- * `CloudPeer` doc comment in api.ts) showed literally "[object Object]"
- * rather than crashing. React does not coerce object children the way
- * innerHTML did; it throws. This reproduces the same on-screen text without
- * that crash.
+ * Renders `trustLevel`, falling back to `trust`.
+ *
+ * status.html did `esc(p.trustLevel || p.trust)`, which coerced an object
+ * `trust` to the literal text "[object Object]". Faithfulness to the original
+ * stops short of reproducing that: it tells the operator nothing and reads as
+ * a broken page. React would throw on an object child anyway, so some handling
+ * is required — this picks the field a trust object actually carries, and
+ * falls back to the em-dash used for "nothing to show" everywhere else.
  */
 function trustDisplay(peer: CloudPeer): string {
   if (typeof peer.trustLevel === "string" && peer.trustLevel) return peer.trustLevel;
-  if (peer.trust === undefined || peer.trust === null) return "—";
-  return typeof peer.trust === "string" ? peer.trust : String(peer.trust);
+  const trust: unknown = peer.trust;
+  if (trust === undefined || trust === null) return "—";
+  if (typeof trust === "string") return trust;
+  if (typeof trust === "number" || typeof trust === "boolean") return String(trust);
+  if (typeof trust === "object") {
+    const t = trust as Record<string, unknown>;
+    for (const key of ["level", "trustLevel", "status", "score"]) {
+      const v = t[key];
+      if (typeof v === "string" && v) return v;
+      if (typeof v === "number") return String(v);
+    }
+  }
+  return "—";
 }
 
 /**

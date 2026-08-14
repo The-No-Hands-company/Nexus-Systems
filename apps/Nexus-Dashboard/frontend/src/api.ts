@@ -237,18 +237,6 @@ export function cloudTools() {
  * from a 403, which the page must render as an explained state, not swallow
  * into the generic "unavailable" case the other cloud views use.
  */
-export type CloudUser = {
-  id?: string;
-  username?: string;
-  address?: string;
-  nodeId?: string;
-  registeredAt?: string;
-};
-
-export function cloudUsers() {
-  return request<{ users?: CloudUser[] }>("/api/cloud/users").then((r) => r.users ?? []);
-}
-
 /** `view-federation` in status.html (loadFederationView). */
 export type CloudPeer = {
   domain?: string;

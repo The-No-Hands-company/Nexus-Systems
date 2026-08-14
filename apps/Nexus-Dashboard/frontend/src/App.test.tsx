@@ -15,7 +15,6 @@ vi.mock("./api", async () => ({
   cloudTrust: vi.fn(async () => null),
   cloudAudit: vi.fn(async () => []),
   cloudTools: vi.fn(async () => []),
-  cloudUsers: vi.fn(async () => []),
   cloudFederationPeers: vi.fn(async () => []),
   cloudEndpoints: vi.fn(async () => []),
 }));
@@ -83,7 +82,7 @@ describe("shell-native views", () => {
 
   for (const path of [
     "/account", "/admin", "/cloud", "/cloud/tools",
-    "/cloud/users", "/cloud/federation", "/cloud/identity", "/cloud/api",
+    "/cloud/federation", "/cloud/identity", "/cloud/api",
   ]) {
     it(`wraps ${path} in the shell, launcher and all`, async () => {
       window.history.pushState({}, "", path);
