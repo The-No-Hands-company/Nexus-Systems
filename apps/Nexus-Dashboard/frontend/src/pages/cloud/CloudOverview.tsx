@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
 import {
   cloudStatus, cloudTrust, cloudIdentity, cloudAudit, cloudTools,
   type CloudStatus, type CloudTrust, type CloudIdentity, type CloudAuditEvent, type CloudTool,
 } from "../../api";
 import { timeAgo, healthDotClass, healthTextClass } from "./format";
+import CloudNav from "./CloudNav";
 
 /** status.html's hardcoded INTERNAL array in renderInternalServicesCard. */
 const INTERNAL_SERVICES = [
@@ -103,7 +103,8 @@ export default function CloudOverview() {
 
   if (state.kind === "unavailable") {
     return (
-      <section className="mx-auto max-w-5xl p-8">
+      <section className="mx-auto max-w-5xl space-y-6 p-8">
+        <CloudNav />
         <h1 className="text-2xl font-semibold">Cloud</h1>
         <p role="alert" className="mt-4 text-red-400">
           Cloud is unavailable right now. The rest of the ecosystem still works — try this page
@@ -122,14 +123,10 @@ export default function CloudOverview() {
 
   return (
     <section className="mx-auto max-w-5xl space-y-6 p-8">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold">Cloud</h1>
-          <p className="mt-2 text-zinc-400">This node's control plane — identity, trust and services.</p>
-        </div>
-        <Link to="/cloud/tools" className="rounded border border-zinc-700 px-3 py-1.5 text-sm hover:bg-zinc-800">
-          Tools
-        </Link>
+      <CloudNav />
+      <div>
+        <h1 className="text-2xl font-semibold">Cloud</h1>
+        <p className="mt-2 text-zinc-400">This node's control plane — identity, trust and services.</p>
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">

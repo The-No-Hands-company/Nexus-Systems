@@ -7,6 +7,10 @@ import Account from "./pages/Account";
 import Admin from "./pages/Admin";
 import CloudOverview from "./pages/cloud/CloudOverview";
 import CloudTools from "./pages/cloud/CloudTools";
+import CloudUsers from "./pages/cloud/CloudUsers";
+import CloudFederation from "./pages/cloud/CloudFederation";
+import CloudIdentity from "./pages/cloud/CloudIdentity";
+import CloudApi from "./pages/cloud/CloudApi";
 import { listApps, type AppEntry } from "./api";
 import Shell from "./shell/Shell";
 import Launcher from "./shell/Launcher";
@@ -84,10 +88,13 @@ function ShellView({ state, children }: { state: AppsState; children: ReactNode 
  *   would put the same four apps on screen twice. The grid is the home
  *   surface; the shell appears when you enter something.
  * - `/account` and `/admin` are signed-in surfaces this app owns, and they get
- *   the shell so they stop reading as separate websites. `/cloud` and
- *   `/cloud/tools` join them: Cloud's operator console, ported in as
+ *   the shell so they stop reading as separate websites. `/cloud`,
+ *   `/cloud/tools`, `/cloud/users`, `/cloud/federation`, `/cloud/identity`
+ *   and `/cloud/api` join them: Cloud's operator console, ported in as
  *   shell-native views (see docs/superpowers/specs/2026-08-14-cloud-console-
  *   as-shell-views-design.md) rather than a separate site Cloud serves.
+ *   `/cloud/users` additionally enforces admin-only server-side, at the
+ *   dashboard proxy — never client-side here.
  */
 export default function App() {
   const [appsState, setAppsState] = useState<AppsState>({ status: "loading" });
@@ -138,6 +145,38 @@ export default function App() {
           element={
             <ShellView state={appsState}>
               <CloudTools />
+            </ShellView>
+          }
+        />
+        <Route
+          path="/cloud/users"
+          element={
+            <ShellView state={appsState}>
+              <CloudUsers />
+            </ShellView>
+          }
+        />
+        <Route
+          path="/cloud/federation"
+          element={
+            <ShellView state={appsState}>
+              <CloudFederation />
+            </ShellView>
+          }
+        />
+        <Route
+          path="/cloud/identity"
+          element={
+            <ShellView state={appsState}>
+              <CloudIdentity />
+            </ShellView>
+          }
+        />
+        <Route
+          path="/cloud/api"
+          element={
+            <ShellView state={appsState}>
+              <CloudApi />
             </ShellView>
           }
         />

@@ -230,3 +230,48 @@ export function cloudAudit() {
 export function cloudTools() {
   return request<{ tools?: CloudTool[] }>("/api/cloud/tools").then((r) => r.tools ?? []);
 }
+
+/**
+ * `view-users` in status.html (loadUsersView). Admin-only server-side (see
+ * server.ts CLOUD_ALLOWLIST) — a non-admin caller gets ApiError("forbidden")
+ * from a 403, which the page must render as an explained state, not swallow
+ * into the generic "unavailable" case the other cloud views use.
+ */
+export type CloudUser = {
+  id?: string;
+  username?: string;
+  address?: string;
+  nodeId?: string;
+  registeredAt?: string;
+};
+
+export function cloudUsers() {
+  return request<{ users?: CloudUser[] }>("/api/cloud/users").then((r) => r.users ?? []);
+}
+
+/** `view-federation` in status.html (loadFederationView). */
+export type CloudPeer = {
+  domain?: string;
+  url?: string;
+  trustLevel?: string;
+  // Cloud's real FederationPeer carries `trust` as an object (a signed trust
+  // record), not the display string status.html's loadFederationView assumed
+  // — a pre-existing drift. Typed `unknown` so callers must coerce it to text
+  // before rendering rather than handing an object straight to React.
+  trust?: unknown;
+  lastSeen?: string;
+  address?: string;
+  nodeAddress?: string;
+};
+
+export function cloudFederationPeers() {
+  return request<{ peers?: CloudPeer[] }>("/api/cloud/federation/peers").then((r) => r.peers ?? []);
+}
+
+/** `view-api` in status.html (loadApiView). */
+export type CloudEndpoint = { method: string; path: string; description?: string };
+
+export function cloudEndpoints() {
+  return request<{ routes?: CloudEndpoint[]; endpoints?: CloudEndpoint[] }>("/api/cloud/endpoints")
+    .then((r) => r.routes ?? r.endpoints ?? []);
+}

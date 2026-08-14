@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
 import { cloudTools, type CloudTool } from "../../api";
 import { timeAgo, healthDotClass } from "./format";
+import CloudNav from "./CloudNav";
 
 type State = { kind: "loading" } | { kind: "unavailable" } | { kind: "ready"; tools: CloudTool[] };
 
@@ -23,14 +23,10 @@ export default function CloudTools() {
 
   return (
     <section className="mx-auto max-w-5xl space-y-6 p-8">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold">Cloud tools</h1>
-          <p className="mt-2 text-zinc-400">Every tool registered with this node.</p>
-        </div>
-        <Link to="/cloud" className="rounded border border-zinc-700 px-3 py-1.5 text-sm hover:bg-zinc-800">
-          Overview
-        </Link>
+      <CloudNav />
+      <div>
+        <h1 className="text-2xl font-semibold">Cloud tools</h1>
+        <p className="mt-2 text-zinc-400">Every tool registered with this node.</p>
       </div>
 
       {state.kind === "loading" && <p className="text-zinc-500">Loading…</p>}

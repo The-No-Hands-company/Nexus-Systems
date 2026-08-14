@@ -1,0 +1,71 @@
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import { render, screen, waitFor } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
+import CloudFederation from "./CloudFederation";
+
+function jsonResponse(body: unknown, status = 200) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { "content-type": "application/json" },
+  });
+}
+
+const PEERS_BODY = {
+  peers: [
+    { domain: "peer-a.example.com", trustLevel: "trusted", lastSeen: new Date().toISOString(), address: "ns:a.node-y" },
+    // A real FederationPeer as Cloud actually returns it: no trustLevel, an
+    // object for `trust`, and neither lastSeen nor address/nodeAddress —
+    // exactly the drift documented in CloudFederation.tsx.
+    { domain: "peer-b.example.com", trust: { identity: "did:nexus:b", issuer: "peer-b" } },
+  ],
+};
+
+function stubFetch(overrides: Record<string, () => Response> = {}) {
+  const spy = vi.fn(async (url: RequestInfo | URL) => {
+    const u = String(url);
+    if (overrides[u]) return overrides[u]!();
+    if (u.startsWith("/api/cloud/federation/peers")) return jsonResponse(PEERS_BODY);
+    throw new Error(`unexpected fetch: ${u}`);
+  });
+  vi.stubGlobal("fetch", spy);
+  return spy;
+}
+
+beforeEach(() => {
+  vi.restoreAllMocks();
+});
+
+describe("CloudFederation", () => {
+  it("renders the peers the proxy returns", async () => {
+    stubFetch();
+    render(<MemoryRouter><CloudFederation /></MemoryRouter>);
+
+    await waitFor(() => expect(screen.getByText("peer-a.example.com")).toBeTruthy());
+    expect(screen.getByText("trusted")).toBeTruthy();
+    expect(screen.getByText("ns:a.node-y")).toBeTruthy();
+  });
+
+  it("does not crash when a peer's trust field is the real object shape, not a display string", async () => {
+    stubFetch();
+    render(<MemoryRouter><CloudFederation /></MemoryRouter>);
+
+    await waitFor(() => expect(screen.getByText("peer-b.example.com")).toBeTruthy());
+  });
+
+  it("names the bootstrap hint when there are no peers, matching status.html's empty state", async () => {
+    stubFetch({ "/api/cloud/federation/peers": () => jsonResponse({ peers: [] }) });
+    render(<MemoryRouter><CloudFederation /></MemoryRouter>);
+
+    await waitFor(() => expect(screen.getByText(/no federation peers discovered/i)).toBeTruthy());
+    expect(screen.getByText(/BOOTSTRAP_PEERS/)).toBeTruthy();
+  });
+
+  it("shows Cloud as unavailable, not a blank page, when the proxy returns 503", async () => {
+    stubFetch({ "/api/cloud/federation/peers": () => jsonResponse({ error: "cloud_unavailable" }, 503) });
+    render(<MemoryRouter><CloudFederation /></MemoryRouter>);
+
+    await waitFor(() => expect(screen.getByRole("alert")).toBeTruthy());
+    expect(screen.getByText(/unavailable/i)).toBeTruthy();
+    expect(screen.queryByText(/no federation peers discovered/i)).toBeNull();
+  });
+});
