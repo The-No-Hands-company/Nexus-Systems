@@ -84,7 +84,13 @@ async function callerRole(req: Request): Promise<string | null> {
 }
 
 async function proxyToCloud(req: Request, name: string, search: string): Promise<Response> {
-  const entry = CLOUD_ALLOWLIST[name];
+  // Object.hasOwn, not a bare lookup. `name` comes from the URL, and every
+  // object inherits truthy `constructor`, `__proto__` and `toString`, so
+  // `CLOUD_ALLOWLIST["constructor"]` passes an `if (!entry)` guard, skips the
+  // adminOnly check (undefined), and forwards to `undefined` — an
+  // attacker-chosen request to the control plane with the operator key
+  // attached. Own-property only.
+  const entry = Object.hasOwn(CLOUD_ALLOWLIST, name) ? CLOUD_ALLOWLIST[name] : undefined;
   // Off the allow-list. This must never fall through to a generic forward.
   if (!entry) return Response.json({ error: "not_found" }, { status: 404 });
 

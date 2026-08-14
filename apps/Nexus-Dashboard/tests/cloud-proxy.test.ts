@@ -76,6 +76,18 @@ describe("the /api/cloud proxy", () => {
     expect(cloudSawHeaders).toBeNull();
   });
 
+  for (const name of ["constructor", "__proto__", "toString", "valueOf"]) {
+    it(`refuses the inherited property "${name}" — no forwarding at all`, async () => {
+      // A bare `CLOUD_ALLOWLIST[name]` lookup finds these on Object.prototype
+      // and returns something truthy, which sails past an `if (!entry)` guard,
+      // skips adminOnly (undefined), and forwards to `undefined` — a
+      // URL-controlled request to the control plane carrying the operator key.
+      const res = await handleRequest(new Request(`http://app.test/api/cloud/${name}`));
+      expect(res.status).toBe(404);
+      expect(cloudSawHeaders).toBeNull();
+    });
+  }
+
   it("never proxies a mutating method, even to an allow-listed name", async () => {
     const res = await handleRequest(new Request("http://app.test/api/cloud/audit", { method: "POST" }));
     expect(res.status).toBe(404);
