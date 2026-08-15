@@ -9,6 +9,9 @@ LOG_DIR="/tmp/nexus-production"
 PID_DIR="$LOG_DIR/pids"
 mkdir -p "$LOG_DIR" "$PID_DIR"
 
+# shellcheck source=processes.sh
+source "$(cd "$(dirname "$0")" && pwd)/processes.sh"
+
 export DOMAIN="${DOMAIN:-tnhc.dev}"
 # Where a browser is sent to sign in. Exported under the name the apps actually
 # read, so every service started here inherits it — start_service adds to the
@@ -30,29 +33,61 @@ G="\033[32m" Y="\033[33m" R="\033[0m"
 log()  { echo -e "${G}[nexus]${R} $*"; }
 warn() { echo -e "${Y}[nexus]${R} $*"; }
 
-check_port() {
-    local port=$1
-    if ss -ltn | grep -q ":$port "; then
-        warn "Port $port already in use"
-        return 1
-    fi
-    return 0
+service_identity() {
+    local name=$1
+
+    case "$name" in
+        auth)           SERVICE_DIR="$ROOT/apps/Nexus-Auth"; SERVICE_EXEC_PATTERN="bun run src/index.ts" ;;
+        cloud)          SERVICE_DIR="$ROOT/apps/Nexus-Cloud"; SERVICE_EXEC_PATTERN="bun run src/index.ts" ;;
+        chat)           SERVICE_DIR="$ROOT/apps/Nexus-Team-Chat"; SERVICE_EXEC_PATTERN="bun run src/index.ts" ;;
+        nexus-chat)     SERVICE_DIR="$ROOT/apps/Nexus"; SERVICE_EXEC_PATTERN="./target/debug/nexus serve --port 8180" ;;
+        nexus-chat-web) SERVICE_DIR="$ROOT"; SERVICE_EXEC_PATTERN="caddy run --config $ROOT/deploy/production/nexus-chat.Caddyfile" ;;
+        dashboard)      SERVICE_DIR="$ROOT/apps/Nexus-Dashboard"; SERVICE_EXEC_PATTERN="bun run src/index.ts" ;;
+        draw)           SERVICE_DIR="$ROOT/apps/Nexus-Draw"; SERVICE_EXEC_PATTERN="bun run src/index.ts" ;;
+        proxy)          SERVICE_DIR="$ROOT/deploy/production"; SERVICE_EXEC_PATTERN="bun run proxy.ts" ;;
+        *)              warn "No ownership identity configured for $name"; return 1 ;;
+    esac
+}
+
+service_port() {
+    case "$1" in
+        auth) printf '%s\n' 4310 ;;
+        cloud) printf '%s\n' 8787 ;;
+        chat) printf '%s\n' 3109 ;;
+        nexus-chat) printf '%s\n' 8180 ;;
+        nexus-chat-web) printf '%s\n' 8095 ;;
+        dashboard) printf '%s\n' 3132 ;;
+        draw) printf '%s\n' 3075 ;;
+        proxy) printf '%s\n' 8080 ;;
+        *) return 1 ;;
+    esac
 }
 
 start_service() {
     local name=$1
     local dir=$2
     local port=$3
+    local pid
     shift 3
 
-    # An already-bound port means the service is already up, which is a
-    # success for our purposes, not a failure. Returning non-zero here aborted
-    # the whole script under `set -e`, so a single running service stopped
-    # every later one from starting — `deploy.sh bg` could not fill in the
-    # gaps after a partial outage, which is precisely when it is needed.
-    if ! check_port $port; then
-        log "$name already running on :$port — leaving it alone"
+    if ! service_identity "$name"; then
+        return 1
+    fi
+    if [ "$dir" != "$SERVICE_DIR" ]; then
+        warn "$name directory does not match its ownership identity"
+        return 1
+    fi
+
+    # A bound port is only an already-running service when all independent
+    # ownership signals agree. Never adopt an unrelated listener just because
+    # it happens to use the expected port.
+    if pid="$(reconcile_pid "$name" "$port" "$dir" "$SERVICE_EXEC_PATTERN" 2>/dev/null)"; then
+        log "$name already managed on :$port (PID: $pid)"
         return 0
+    fi
+    if port_has_listener "$port"; then
+        warn "$name has an occupied but unverifiable port :$port — refusing to start"
+        return 1
     fi
 
     log "Starting $name on :$port"
@@ -70,15 +105,14 @@ start_service() {
     # than forking — which keeps $! pointing at the real process.
     # `env` is retained so the caller's KEY=value arguments still apply.
     setsid nohup env "$@" > "$LOG_DIR/$name.log" 2>&1 &
-    local pid=$!
-    echo $pid > "$PID_DIR/$name.pid"
+    local launched_pid=$!
     sleep 2
 
-    if kill -0 $pid 2>/dev/null; then
-        log "$name started (PID: $pid)"
+    if pid="$(reconcile_pid "$name" "$port" "$dir" "$SERVICE_EXEC_PATTERN" 2>/dev/null)"; then
+        log "$name started and managed (PID: $pid)"
         return 0
     else
-        warn "$name failed to start - check $LOG_DIR/$name.log"
+        warn "$name did not become safely managed (launcher PID: $launched_pid) - check $LOG_DIR/$name.log"
         return 1
     fi
 }
@@ -317,9 +351,19 @@ cmd_start() {
 cmd_stop() {
     log "Stopping all Nexus services..."
     for svc in auth cloud chat nexus-chat nexus-chat-web dashboard draw proxy; do
-        if [ -f "$PID_DIR/$svc.pid" ]; then
-            kill "$(cat "$PID_DIR/$svc.pid")" 2>/dev/null && log "  Stopped $svc" || true
-            rm -f "$PID_DIR/$svc.pid"
+        if ! service_identity "$svc"; then
+            continue
+        fi
+        local pid
+        if pid="$(validated_pid "$svc" "$(service_port "$svc")" "$SERVICE_DIR" "$SERVICE_EXEC_PATTERN" 2>/dev/null)"; then
+            if kill "$pid" 2>/dev/null; then
+                rm -f "$PID_DIR/$svc.pid"
+                log "  Stopped $svc"
+            else
+                warn "  Could not stop managed $svc (PID: $pid)"
+            fi
+        elif port_has_listener "$(service_port "$svc")"; then
+            warn "  Left $svc untouched: :$(service_port "$svc") is occupied by an unverified process"
         fi
     done
     cd "$ROOT"
@@ -330,15 +374,15 @@ cmd_stop() {
 cmd_status() {
     echo "Service Status:"
     for svc in auth cloud chat nexus-chat nexus-chat-web dashboard draw proxy; do
-        if [ -f "$PID_DIR/$svc.pid" ]; then
-            if kill -0 "$(cat "$PID_DIR/$svc.pid")" 2>/dev/null; then
-                echo -e "  ${G}● $svc${R} (running, PID: $(cat $PID_DIR/$svc.pid))"
-            else
-                echo -e "  ${R}✗ $svc${R} (dead)"
-                rm -f "$PID_DIR/$svc.pid"
-            fi
+        service_identity "$svc" || continue
+        local pid port
+        port="$(service_port "$svc")"
+        if pid="$(validated_pid "$svc" "$port" "$SERVICE_DIR" "$SERVICE_EXEC_PATTERN" 2>/dev/null)"; then
+            echo -e "  ${G}● $svc${R} (managed, PID: $pid)"
+        elif port_has_listener "$port"; then
+            echo -e "  ${Y}! $svc${R} (conflict on :$port)"
         else
-            echo -e "  ${R}? $svc${R} (not started)"
+            echo -e "  ${R}? $svc${R} (not running)"
         fi
     done
 
