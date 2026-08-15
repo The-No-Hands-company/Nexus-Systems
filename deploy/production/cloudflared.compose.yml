@@ -1,0 +1,11 @@
+services:
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: cloudflared
+    restart: unless-stopped
+    command: ["tunnel", "--no-autoupdate", "run", "--token-file", "/run/secrets/tunnel-token"]
+    volumes:
+      - type: bind
+        source: ${CLOUDFLARED_TOKEN_FILE:-/tmp/nexus-production/secrets/cloudflared.token}
+        target: /run/secrets/tunnel-token
+        read_only: true
