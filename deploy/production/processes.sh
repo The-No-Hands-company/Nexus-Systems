@@ -5,8 +5,8 @@
 # directory and command line all agree on the same process.
 
 SS_BIN="${SS_BIN:-ss}"
-PS_BIN="${PS_BIN:-ps}"
 READLINK_BIN="${READLINK_BIN:-readlink}"
+PROC_ROOT="${PROC_ROOT:-/proc}"
 
 process_error() {
     printf '%s\n' "$*" >&2
@@ -71,6 +71,21 @@ port_has_listener() {
     [ -n "$listeners" ]
 }
 
+listener_state() {
+    local port=$1
+    local result
+
+    if port_has_listener "$port"; then
+        printf '%s\n' occupied
+        return 0
+    fi
+    result=$?
+    case "$result" in
+        1) printf '%s\n' absent ;;
+        *) printf '%s\n' unverifiable ;;
+    esac
+}
+
 pid_matches_service() {
     local pid=$1
     local port=$2
@@ -105,7 +120,7 @@ pid_matches_service() {
         process_error "PID $pid has an unexpected working directory"
         return 1
     fi
-    if ! cmdline="$("$PS_BIN" -p "$pid" -o args= 2>/dev/null)"; then
+    if ! cmdline="$(tr '\0' ' ' < "$PROC_ROOT/$pid/cmdline" 2>/dev/null)"; then
         process_error "could not inspect command line for PID $pid"
         return 1
     fi

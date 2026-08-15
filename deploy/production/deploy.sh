@@ -4,13 +4,13 @@
 
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
-LOG_DIR="/tmp/nexus-production"
-PID_DIR="$LOG_DIR/pids"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+LOG_DIR="${NEXUS_PRODUCTION_LOG_DIR:-/tmp/nexus-production}"
+PID_DIR="${NEXUS_PRODUCTION_PID_DIR:-$LOG_DIR/pids}"
 mkdir -p "$LOG_DIR" "$PID_DIR"
 
 # shellcheck source=processes.sh
-source "$(cd "$(dirname "$0")" && pwd)/processes.sh"
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/processes.sh"
 
 export DOMAIN="${DOMAIN:-tnhc.dev}"
 # Where a browser is sent to sign in. Exported under the name the apps actually
@@ -67,7 +67,7 @@ start_service() {
     local name=$1
     local dir=$2
     local port=$3
-    local pid
+    local pid state
     shift 3
 
     if ! service_identity "$name"; then
@@ -85,10 +85,22 @@ start_service() {
         log "$name already managed on :$port (PID: $pid)"
         return 0
     fi
-    if port_has_listener "$port"; then
-        warn "$name has an occupied but unverifiable port :$port — refusing to start"
-        return 1
-    fi
+    state="$(listener_state "$port" 2>/dev/null)"
+    case "$state" in
+        absent) ;;
+        occupied)
+            warn "$name has an occupied but unverifiable port :$port — refusing to start"
+            return 1
+            ;;
+        unverifiable)
+            warn "$name cannot inspect :$port safely — refusing to start"
+            return 1
+            ;;
+        *)
+            warn "$name cannot determine the state of :$port safely — refusing to start"
+            return 1
+            ;;
+    esac
 
     log "Starting $name on :$port"
     cd "$dir"
@@ -362,8 +374,13 @@ cmd_stop() {
             else
                 warn "  Could not stop managed $svc (PID: $pid)"
             fi
-        elif port_has_listener "$(service_port "$svc")"; then
-            warn "  Left $svc untouched: :$(service_port "$svc") is occupied by an unverified process"
+        else
+            local state
+            state="$(listener_state "$(service_port "$svc")" 2>/dev/null)"
+            case "$state" in
+                occupied) warn "  Left $svc untouched: :$(service_port "$svc") is occupied by an unverified process" ;;
+                unverifiable) warn "  Left $svc untouched: cannot inspect :$(service_port "$svc") safely" ;;
+            esac
         fi
     done
     cd "$ROOT"
@@ -371,7 +388,7 @@ cmd_stop() {
     log "All stopped"
 }
 
-cmd_status() {
+cmd_service_status() {
     echo "Service Status:"
     for svc in auth cloud chat nexus-chat nexus-chat-web dashboard draw proxy; do
         service_identity "$svc" || continue
@@ -379,12 +396,21 @@ cmd_status() {
         port="$(service_port "$svc")"
         if pid="$(validated_pid "$svc" "$port" "$SERVICE_DIR" "$SERVICE_EXEC_PATTERN" 2>/dev/null)"; then
             echo -e "  ${G}● $svc${R} (managed, PID: $pid)"
-        elif port_has_listener "$port"; then
-            echo -e "  ${Y}! $svc${R} (conflict on :$port)"
         else
-            echo -e "  ${R}? $svc${R} (not running)"
+            local state
+            state="$(listener_state "$port" 2>/dev/null)"
+            case "$state" in
+                occupied) echo -e "  ${Y}! $svc${R} (conflict on :$port)" ;;
+                unverifiable) echo -e "  ${Y}! $svc${R} (unverifiable listener state on :$port)" ;;
+                absent) echo -e "  ${R}? $svc${R} (not running)" ;;
+                *) echo -e "  ${Y}! $svc${R} (unverifiable listener state on :$port)" ;;
+            esac
         fi
     done
+}
+
+cmd_status() {
+    cmd_service_status
 
     # Check HTTP endpoints
     echo ""
@@ -419,11 +445,17 @@ USAGE
 # anyone tries first — deployed production and then sat in the foreground loop
 # below, and any typo did the same. An unknown argument now fails without
 # touching anything, and the bare words are accepted alongside the flags.
-case "${1:-}" in
-    "")             cmd_start; echo "Press Ctrl+C to stop"; while true; do sleep 1; done ;;
-    bg|--bg)        cmd_start; echo "Services started. Logs: $LOG_DIR/*.log" ;;
-    stop|--stop)    cmd_stop ;;
-    status|--status) cmd_status ;;
-    -h|--help|help) usage ;;
-    *)              echo "Unknown command: $1" >&2; usage >&2; exit 2 ;;
-esac
+main() {
+    case "${1:-}" in
+        "")             cmd_start; echo "Press Ctrl+C to stop"; while true; do sleep 1; done ;;
+        bg|--bg)        cmd_start; echo "Services started. Logs: $LOG_DIR/*.log" ;;
+        stop|--stop)    cmd_stop ;;
+        status|--status) cmd_status ;;
+        -h|--help|help) usage ;;
+        *)              echo "Unknown command: $1" >&2; usage >&2; return 2 ;;
+    esac
+}
+
+if [ "${BASH_SOURCE[0]}" = "$0" ]; then
+    main "$@"
+fi
