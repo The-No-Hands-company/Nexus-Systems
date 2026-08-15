@@ -47,6 +47,25 @@ assert_text_contains() {
     [[ "$text" == *"$needle"* ]] || fail "$message"
 }
 
+assert_file_order() {
+    local file=$1
+    local first=$2
+    local second=$3
+    local message=$4
+    local first_line second_line
+
+    first_line="$(grep -nF -- "$first" "$file" | head -1 | cut -d: -f1 || true)"
+    second_line="$(grep -nF -- "$second" "$file" | head -1 | cut -d: -f1 || true)"
+    [ -n "$first_line" ] && [ -n "$second_line" ] && [ "$first_line" -lt "$second_line" ] || fail "$message"
+}
+
+count_matches() {
+    local file=$1
+    local needle=$2
+    [ -f "$file" ] || { printf '0'; return; }
+    grep -Fc -- "$needle" "$file" || true
+}
+
 env_value() {
     local file=$1
     local key=$2
@@ -77,18 +96,58 @@ write_fake_commands() {
 #!/usr/bin/env bash
 set -euo pipefail
 umask 077
+[ "${CF_API_TOKEN+x}" != x ] || { printf 'install inherited CF_API_TOKEN\n' >&2; exit 97; }
 {
     printf 'install'
     printf ' %q' "$@"
     printf '\n'
 } >> "$FAKE_RECORD_DIR/install.argv"
-exec /usr/bin/install "$@"
+
+if [ -n "${FAKE_INSTALL_FAIL_ON:-}" ] && [[ " $* " == *"$FAKE_INSTALL_FAIL_ON"* ]]; then
+    marker="$FAKE_RECORD_DIR/install-fail-once"
+    if [ ! -e "$marker" ]; then
+        : > "$marker"
+        printf 'simulated install failure\n' >&2
+        exit 1
+    fi
+fi
+
+/usr/bin/install "$@"
+
+destination=${*: -1}
+case "$destination" in
+    *.rotation.install)
+        counter_file="$FAKE_RECORD_DIR/env-replacement.count"
+        count=0
+        [ ! -f "$counter_file" ] || read -r count < "$counter_file"
+        count=$((count + 1))
+        printf '%s\n' "$count" > "$counter_file"
+        if [ "${FAKE_INSTALL_FAIL_ENV_REPLACE_NUMBER:-}" = "$count" ]; then
+            printf 'simulated environment replacement failure %s\n' "$count" >&2
+            exit 1
+        fi
+        if [ "${FAKE_INSTALL_SIGNAL_ENV_REPLACE_NUMBER:-}" = "$count" ]; then
+            kill -s "${FAKE_INSTALL_SIGNAL:-TERM}" "$PPID"
+        fi
+        ;;
+esac
+
+if [ -n "${FAKE_INSTALL_BLOCK_ON:-}" ] && [[ " $* " == *"$FAKE_INSTALL_BLOCK_ON"* ]]; then
+    : > "$FAKE_INSTALL_BLOCK_READY_FILE"
+    for ((attempt = 1; attempt <= 100; attempt++)); do
+        [ ! -e "$FAKE_INSTALL_BLOCK_RELEASE_FILE" ] || exit 0
+        sleep 0.05
+    done
+    printf 'timed out waiting to release fake install\n' >&2
+    exit 2
+fi
 FAKE_INSTALL
 
     cat > "$fake_bin/openssl" <<'FAKE_OPENSSL'
 #!/usr/bin/env bash
 set -euo pipefail
 umask 077
+[ "${CF_API_TOKEN+x}" != x ] || { printf 'openssl inherited CF_API_TOKEN\n' >&2; exit 97; }
 {
     printf 'openssl'
     printf ' %q' "$@"
@@ -96,16 +155,20 @@ umask 077
 } >> "$FAKE_RECORD_DIR/openssl.argv"
 
 case " $* " in
-    *' -hex '*) /bin/cat "$FAKE_OPENSSL_HEX_FILE" ;;
-    *' -base64 '*) /bin/cat "$FAKE_OPENSSL_BASE64_FILE" ;;
+    *' -hex '*) input=$FAKE_OPENSSL_HEX_FILE ;;
+    *' -base64 '*) input=$FAKE_OPENSSL_BASE64_FILE ;;
     *) printf 'unsupported fake openssl invocation\n' >&2; exit 2 ;;
 esac
+[ -f "$input" ] || { printf 'fake openssl input is missing\n' >&2; exit 2; }
+[ "$(stat -c '%a' "$input")" = 600 ] || { printf 'fake openssl input is not private\n' >&2; exit 2; }
+/bin/cat "$input"
 FAKE_OPENSSL
 
     cat > "$fake_bin/curl" <<'FAKE_CURL'
 #!/usr/bin/env bash
 set -euo pipefail
 umask 077
+[ "${CF_API_TOKEN+x}" != x ] || { printf 'curl inherited CF_API_TOKEN\n' >&2; exit 97; }
 {
     printf 'curl'
     printf ' %q' "$@"
@@ -115,6 +178,8 @@ umask 077
 method=GET
 output=
 url=
+config=
+data_file=
 while [ "$#" -gt 0 ]; do
     case "$1" in
         --request|-X)
@@ -125,10 +190,18 @@ while [ "$#" -gt 0 ]; do
             output=$2
             shift 2
             ;;
-        --config|-K|--header|-H|--data-binary)
+        --config|-K)
+            config=$2
             shift 2
             ;;
-        --silent|--show-error|--fail-with-body)
+        --header|-H)
+            shift 2
+            ;;
+        --data-binary)
+            data_file=$2
+            shift 2
+            ;;
+        --silent|--show-error|--fail|--fail-with-body)
             shift
             ;;
         http://*|https://*)
@@ -143,24 +216,65 @@ done
 
 [ -n "$output" ] || { printf 'fake curl requires --output\n' >&2; exit 2; }
 [ -n "$url" ] || { printf 'fake curl requires a URL\n' >&2; exit 2; }
+printf 'curl %s %s\n' "$method" "$url" >> "$FAKE_RECORD_DIR/events"
+[ -f "$output" ] || { printf 'fake curl output was not pre-created\n' >&2; exit 2; }
+[ "$(stat -c '%a' "$output")" = 600 ] || { printf 'fake curl output is not private\n' >&2; exit 2; }
+
+case "$url" in
+    "$FAKE_CF_API_BASE"/*)
+        [ -n "$config" ] || { printf 'Cloudflare request has no curl config\n' >&2; exit 2; }
+        [ -f "$config" ] || { printf 'curl config is missing\n' >&2; exit 2; }
+        [ "$(stat -c '%a' "$config")" = 600 ] || { printf 'curl config is not private\n' >&2; exit 2; }
+        cmp -s "$FAKE_EXPECTED_CURL_CONFIG_FILE" "$config" || { printf 'curl config has wrong authentication\n' >&2; exit 2; }
+        ;;
+    *)
+        [ -z "$config" ] || { printf 'public request unexpectedly used auth config\n' >&2; exit 2; }
+        ;;
+esac
+
+if [ -n "$data_file" ]; then
+    case "$data_file" in
+        @*) data_file=${data_file#@} ;;
+        *) printf 'curl data must come from a file\n' >&2; exit 2 ;;
+    esac
+    [ -f "$data_file" ] || { printf 'curl data file is missing\n' >&2; exit 2; }
+    [ "$(stat -c '%a' "$data_file")" = 600 ] || { printf 'curl data file is not private\n' >&2; exit 2; }
+    sha256sum "$data_file" >> "$FAKE_RECORD_DIR/curl-data.sha256"
+fi
 
 if [ -n "${FAKE_CURL_FAIL_ON:-}" ] && [[ "$method $url" == *"$FAKE_CURL_FAIL_ON"* ]]; then
-    printf 'simulated curl failure\n' >&2
-    exit 22
+    marker="$FAKE_RECORD_DIR/curl-fail-once"
+    if [ ! -e "$marker" ]; then
+        : > "$marker"
+        printf 'simulated curl failure\n' >&2
+        exit 22
+    fi
 fi
 
 case "$method $url" in
     "GET "*'/zones/'*)
         printf '{"success":true,"result":{"account":{"id":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}}}\n' > "$output"
         ;;
-    "PATCH "*'/cfd_tunnel/'*)
-        printf '{"success":true,"result":{"id":"11111111-2222-3333-4444-555555555555"}}\n' > "$output"
+    "GET "*'/connections')
+        counter_file="$FAKE_RECORD_DIR/connection-get.count"
+        count=0
+        [ ! -f "$counter_file" ] || read -r count < "$counter_file"
+        count=$((count + 1))
+        printf '%s\n' "$count" > "$counter_file"
+        if [ "$count" -eq 1 ]; then
+            /bin/cat "$FAKE_OLD_CONNECTIONS_RESPONSE_FILE" > "$output"
+        else
+            /bin/cat "$FAKE_NEW_CONNECTIONS_RESPONSE_FILE" > "$output"
+        fi
         ;;
     "GET "*'/token')
         /bin/cat "$FAKE_TUNNEL_TOKEN_RESPONSE_FILE" > "$output"
         ;;
-    "DELETE "*'/connections')
+    "DELETE "*'/connections?client_id='*)
         printf '{"success":true,"result":{}}\n' > "$output"
+        ;;
+    "GET "https://cloud.example.test/health)
+        printf 'ok\n' > "$output"
         ;;
     *)
         printf 'unexpected fake curl request: %s %s\n' "$method" "$url" >&2
@@ -173,11 +287,13 @@ FAKE_CURL
 #!/usr/bin/env bash
 set -euo pipefail
 umask 077
+[ "${CF_API_TOKEN+x}" != x ] || { printf 'docker inherited CF_API_TOKEN\n' >&2; exit 97; }
 {
     printf 'docker'
     printf ' %q' "$@"
     printf '\n'
 } >> "$FAKE_RECORD_DIR/docker.argv"
+printf 'docker %s\n' "$*" >> "$FAKE_RECORD_DIR/events"
 
 env_hash() {
     local file=$1
@@ -194,7 +310,23 @@ env_hash() {
 }
 
 if [ "${1:-}" = inspect ]; then
-    printf '%s\n' "${FAKE_MINIO_HEALTH:-healthy}"
+    case "${*: -1}" in
+        cloudflared) printf '%s\n' "${FAKE_TUNNEL_RUNNING:-true}" ;;
+        *)
+            if [ -n "${FAKE_MINIO_HEALTH_SEQUENCE_FILE:-}" ]; then
+                counter_file="$FAKE_RECORD_DIR/minio-inspect.count"
+                count=0
+                [ ! -f "$counter_file" ] || read -r count < "$counter_file"
+                count=$((count + 1))
+                printf '%s\n' "$count" > "$counter_file"
+                status="$(sed -n "${count}p" "$FAKE_MINIO_HEALTH_SEQUENCE_FILE")"
+                [ -n "$status" ] || status="$(tail -1 "$FAKE_MINIO_HEALTH_SEQUENCE_FILE")"
+                printf '%s\n' "$status"
+            else
+                printf '%s\n' "${FAKE_MINIO_HEALTH:-healthy}"
+            fi
+            ;;
+    esac
     exit 0
 fi
 
@@ -214,8 +346,12 @@ if [[ " $* " == *' up '* ]] && [[ " $* " == *' minio '* ]]; then
 fi
 
 if [ -n "${FAKE_DOCKER_FAIL_ON:-}" ] && [[ " $* " == *"$FAKE_DOCKER_FAIL_ON"* ]]; then
-    printf 'simulated docker failure\n' >&2
-    exit 1
+    marker="$FAKE_RECORD_DIR/docker-fail-once"
+    if [ ! -e "$marker" ]; then
+        : > "$marker"
+        printf 'simulated docker failure\n' >&2
+        exit 1
+    fi
 fi
 FAKE_DOCKER
 
@@ -233,8 +369,11 @@ setup_case() {
     OPENSSL_HEX_FILE="$CASE_DIR/openssl-hex.input"
     OPENSSL_BASE64_FILE="$CASE_DIR/openssl-base64.input"
     TUNNEL_TOKEN_RESPONSE_FILE="$CASE_DIR/tunnel-token-response.input"
+    EXPECTED_CURL_CONFIG_FILE="$CASE_DIR/cloudflare-curl-config.expected"
+    OLD_CONNECTIONS_RESPONSE_FILE="$CASE_DIR/old-connections-response.input"
+    NEW_CONNECTIONS_RESPONSE_FILE="$CASE_DIR/new-connections-response.input"
 
-    mkdir -p "$RECORD_DIR" "$RUNTIME_DIR"
+    mkdir -p "$RECORD_DIR" "$RUNTIME_DIR" "$(dirname "$TOKEN_FILE")"
     cat > "$ROOT_ENV" <<'ROOT_ENV'
 POSTGRES_PASSWORD=unrelated
 MINIO_ROOT_USER=OLD_MINIO_USER_SENTINEL
@@ -250,7 +389,14 @@ CLOUD_ENV
     printf '%s\n' NEW_MINIO_USER_SENTINEL > "$OPENSSL_HEX_FILE"
     printf '%s\n' NEW_TUNNEL_SECRET_SENTINEL > "$OPENSSL_BASE64_FILE"
     printf '{"success":true,"result":"NEW_TUNNEL_TOKEN_SENTINEL"}\n' > "$TUNNEL_TOKEN_RESPONSE_FILE"
-    chmod 600 "$ROOT_ENV" "$CLOUD_ENV" "$OPENSSL_HEX_FILE" "$OPENSSL_BASE64_FILE" "$TUNNEL_TOKEN_RESPONSE_FILE"
+    printf '%s\n' OLD_TUNNEL_TOKEN_SENTINEL > "$TOKEN_FILE"
+    printf 'header = "Authorization: Bearer CF_API_TOKEN_SENTINEL"\n' > "$EXPECTED_CURL_CONFIG_FILE"
+    printf '{"success":true,"result":[{"id":"aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee","conns":[{"client_id":"aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee","is_pending_reconnect":false}]}]}\n' > "$OLD_CONNECTIONS_RESPONSE_FILE"
+    printf '{"success":true,"result":[{"id":"aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee","conns":[{"client_id":"aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee","is_pending_reconnect":true}]},{"id":"ffffffff-1111-4222-8333-444444444444","conns":[{"client_id":"ffffffff-1111-4222-8333-444444444444","is_pending_reconnect":false}]}]}\n' > "$NEW_CONNECTIONS_RESPONSE_FILE"
+    chmod 600 \
+        "$ROOT_ENV" "$CLOUD_ENV" "$OPENSSL_HEX_FILE" "$OPENSSL_BASE64_FILE" \
+        "$TUNNEL_TOKEN_RESPONSE_FILE" "$TOKEN_FILE" "$EXPECTED_CURL_CONFIG_FILE" \
+        "$OLD_CONNECTIONS_RESPONSE_FILE" "$NEW_CONNECTIONS_RESPONSE_FILE"
     write_fake_commands "$CASE_DIR"
 }
 
@@ -260,22 +406,33 @@ run_phase() {
     local stderr_file=$3
     shift 3
 
-    env \
-        PATH="$CASE_DIR/fake-bin:$PATH" \
-        FAKE_RECORD_DIR="$RECORD_DIR" \
-        ROTATION_ROOT_ENV="$ROOT_ENV" \
-        ROTATION_CLOUD_ENV="$CLOUD_ENV" \
-        FAKE_OPENSSL_HEX_FILE="$OPENSSL_HEX_FILE" \
-        FAKE_OPENSSL_BASE64_FILE="$OPENSSL_BASE64_FILE" \
-        FAKE_TUNNEL_TOKEN_RESPONSE_FILE="$TUNNEL_TOKEN_RESPONSE_FILE" \
-        NEXUS_ROTATION_RUNTIME_DIR="$RUNTIME_DIR" \
-        NEXUS_ROTATION_ROOT_ENV="$ROOT_ENV" \
-        NEXUS_ROTATION_CLOUD_ENV="$CLOUD_ENV" \
-        NEXUS_ROTATION_TUNNEL_TOKEN_FILE="$TOKEN_FILE" \
-        NEXUS_ROTATION_MINIO_HEALTH_ATTEMPTS=1 \
-        NEXUS_ROTATION_MINIO_HEALTH_INTERVAL=0 \
-        "$@" \
-        bash "$SCRIPT" "$phase" > "$stdout_file" 2> "$stderr_file"
+    (
+        export PATH="$CASE_DIR/fake-bin:$PATH"
+        export FAKE_RECORD_DIR="$RECORD_DIR"
+        export ROTATION_ROOT_ENV="$ROOT_ENV"
+        export ROTATION_CLOUD_ENV="$CLOUD_ENV"
+        export FAKE_OPENSSL_HEX_FILE="$OPENSSL_HEX_FILE"
+        export FAKE_OPENSSL_BASE64_FILE="$OPENSSL_BASE64_FILE"
+        export FAKE_TUNNEL_TOKEN_RESPONSE_FILE="$TUNNEL_TOKEN_RESPONSE_FILE"
+        export FAKE_EXPECTED_CURL_CONFIG_FILE="$EXPECTED_CURL_CONFIG_FILE"
+        export FAKE_OLD_CONNECTIONS_RESPONSE_FILE="$OLD_CONNECTIONS_RESPONSE_FILE"
+        export FAKE_NEW_CONNECTIONS_RESPONSE_FILE="$NEW_CONNECTIONS_RESPONSE_FILE"
+        export FAKE_CF_API_BASE=https://api.cloudflare.com/client/v4
+        export NEXUS_ROTATION_RUNTIME_DIR="$RUNTIME_DIR"
+        export NEXUS_ROTATION_ROOT_ENV="$ROOT_ENV"
+        export NEXUS_ROTATION_CLOUD_ENV="$CLOUD_ENV"
+        export NEXUS_ROTATION_TUNNEL_TOKEN_FILE="$TOKEN_FILE"
+        export NEXUS_ROTATION_TUNNEL_VERIFY_URL=https://cloud.example.test/health
+        export NEXUS_ROTATION_TUNNEL_CONNECT_ATTEMPTS=1
+        export NEXUS_ROTATION_TUNNEL_CONNECT_INTERVAL=0
+        export NEXUS_ROTATION_MINIO_HEALTH_ATTEMPTS=1
+        export NEXUS_ROTATION_MINIO_HEALTH_INTERVAL=0
+        while [ "$#" -gt 0 ]; do
+            export "$1"
+            shift
+        done
+        bash "$SCRIPT" "$phase"
+    ) > "$stdout_file" 2> "$stderr_file"
 }
 
 assert_captures_are_secret_free() {
@@ -285,8 +442,10 @@ assert_captures_are_secret_free() {
 
     for secret in \
         CF_API_TOKEN_SENTINEL \
+        EXPORTED_CF_API_TOKEN_SENTINEL \
         NEW_TUNNEL_SECRET_SENTINEL \
         NEW_TUNNEL_TOKEN_SENTINEL \
+        OLD_TUNNEL_TOKEN_SENTINEL \
         NEW_MINIO_USER_SENTINEL \
         NEW_MINIO_PASSWORD_SENTINEL \
         OLD_MINIO_USER_SENTINEL \
@@ -298,7 +457,8 @@ assert_captures_are_secret_free() {
             "$RECORD_DIR/curl.argv" \
             "$RECORD_DIR/docker.argv" \
             "$RECORD_DIR/openssl.argv" \
-            "$RECORD_DIR/install.argv"
+            "$RECORD_DIR/install.argv" \
+            "$RECORD_DIR/events"
         do
             [ ! -f "$file" ] || assert_file_not_contains "$file" "$secret" "secret leaked to $(basename "$file")"
         done
@@ -310,8 +470,10 @@ assert_secret_files_are_private() {
 
     for secret in \
         CF_API_TOKEN_SENTINEL \
+        EXPORTED_CF_API_TOKEN_SENTINEL \
         NEW_TUNNEL_SECRET_SENTINEL \
         NEW_TUNNEL_TOKEN_SENTINEL \
+        OLD_TUNNEL_TOKEN_SENTINEL \
         NEW_MINIO_USER_SENTINEL \
         NEW_MINIO_PASSWORD_SENTINEL \
         OLD_MINIO_USER_SENTINEL \
@@ -323,29 +485,100 @@ assert_secret_files_are_private() {
     done
 }
 
-test_tunnel_rotation_uses_files_and_official_api_sequence() {
-    local out err curl_log docker_log
+test_tunnel_adopts_dashboard_token_after_verification() {
+    local out err curl_log docker_log events
     setup_case tunnel-success
     out="$CASE_DIR/stdout"
     err="$CASE_DIR/stderr"
+    printf 'header = "Authorization: Bearer EXPORTED_CF_API_TOKEN_SENTINEL"\n' > "$EXPECTED_CURL_CONFIG_FILE"
 
-    run_phase prepare "$out" "$err"
-    run_phase rotate-tunnel "$out" "$err"
+    run_phase prepare "$out" "$err" CF_API_TOKEN=EXPORTED_CF_API_TOKEN_SENTINEL
+    run_phase rotate-tunnel "$out" "$err" CF_API_TOKEN=EXPORTED_CF_API_TOKEN_SENTINEL
 
     curl_log="$RECORD_DIR/curl.argv"
     docker_log="$RECORD_DIR/docker.argv"
+    events="$RECORD_DIR/events"
     assert_file_contains "$curl_log" '/zones/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' 'zone lookup was not used to discover the account'
-    assert_file_contains "$curl_log" '--request PATCH' 'tunnel secret was not rotated with PATCH'
     assert_file_contains "$curl_log" '/accounts/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb/cfd_tunnel/11111111-2222-3333-4444-555555555555/token' 'replacement token was not fetched with GET'
+    assert_file_not_contains "$curl_log" '--request PATCH' 'dashboard-governed rotation still issued tunnel PATCH'
+    assert_file_contains "$curl_log" 'client_id=aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee' 'old connector cleanup was not scoped by client ID'
     assert_file_contains "$curl_log" '--request DELETE' 'old tunnel connections were not force-disconnected with DELETE'
-    assert_file_contains "$curl_log" '/connections' 'connection cleanup endpoint was not called'
+    assert_file_not_contains "$curl_log" '--data-binary' 'dashboard-governed tunnel adoption unexpectedly sent a request body'
     assert_file_contains "$docker_log" 'docker rm -f cloudflared' 'existing unmanaged cloudflared container was not removed by exact name'
     assert_file_contains "$docker_log" 'cloudflared.compose.yml' 'managed cloudflared Compose file was not used'
     assert_file_contains "$docker_log" '--force-recreate cloudflared' 'cloudflared was not force-recreated'
+    assert_file_order "$events" 'docker compose' 'curl GET https://cloud.example.test/health' 'public verification ran before connector replacement'
+    assert_file_order "$events" 'curl GET https://cloud.example.test/health' 'curl DELETE' 'old connections were deleted before public verification'
     assert_eq NEW_TUNNEL_TOKEN_SENTINEL "$(tr -d '\n' < "$TOKEN_FILE")" 'replacement token file has wrong content'
     assert_eq 600 "$(file_mode "$TOKEN_FILE")" 'replacement token file is not mode 0600'
+    [ ! -f "$RECORD_DIR/openssl.argv" ] || fail 'tunnel adoption unexpectedly generated a tunnel secret'
     assert_captures_are_secret_free "$out" "$err"
     assert_secret_files_are_private
+}
+
+test_tunnel_aborts_when_dashboard_token_is_unchanged() {
+    local out err status
+    setup_case tunnel-unchanged
+    out="$CASE_DIR/stdout"
+    err="$CASE_DIR/stderr"
+    printf '{"success":true,"result":"OLD_TUNNEL_TOKEN_SENTINEL"}\n' > "$TUNNEL_TOKEN_RESPONSE_FILE"
+
+    run_phase prepare "$out" "$err"
+    set +e
+    run_phase rotate-tunnel "$out" "$err"
+    status=$?
+    set -e
+
+    [ "$status" -ne 0 ] || fail 'unchanged dashboard token did not abort rotation'
+    assert_eq OLD_TUNNEL_TOKEN_SENTINEL "$(tr -d '\n' < "$TOKEN_FILE")" 'unchanged-token abort modified the token file'
+    [ ! -f "$RECORD_DIR/docker.argv" ] || fail 'unchanged-token abort replaced a connector'
+    [ ! -f "$RECORD_DIR/curl.argv" ] || assert_file_not_contains "$RECORD_DIR/curl.argv" '--request DELETE' 'unchanged-token abort deleted connections'
+    assert_captures_are_secret_free "$out" "$err"
+    assert_secret_files_are_private
+}
+
+test_tunnel_failure_recovers_with_new_token_without_connection_delete() {
+    local boundary failure_variable failure_value out err status docker_count rotation_dir
+
+    for boundary in token-get install container; do
+        setup_case "tunnel-recovery-$boundary"
+        out="$CASE_DIR/stdout"
+        err="$CASE_DIR/stderr"
+        failure_variable=
+        failure_value=
+        case "$boundary" in
+            token-get)
+                failure_variable=FAKE_INSTALL_FAIL_ON
+                failure_value=cloudflared.token.next
+                ;;
+            install)
+                failure_variable=FAKE_DOCKER_FAIL_ON
+                failure_value='--force-recreate cloudflared'
+                ;;
+            container)
+                failure_variable=FAKE_CURL_FAIL_ON
+                failure_value='GET https://cloud.example.test/health'
+                ;;
+        esac
+
+        run_phase prepare "$out" "$err"
+        set +e
+        run_phase rotate-tunnel "$out" "$err" "$failure_variable=$failure_value"
+        status=$?
+        set -e
+
+        [ "$status" -ne 0 ] || fail "$boundary failure unexpectedly completed tunnel rotation"
+        assert_eq NEW_TUNNEL_TOKEN_SENTINEL "$(tr -d '\n' < "$TOKEN_FILE")" "$boundary recovery did not preserve the new token"
+        docker_count="$(count_matches "$RECORD_DIR/docker.argv" '--force-recreate cloudflared')"
+        [ "$docker_count" -ge 1 ] || fail "$boundary recovery did not restore a connector"
+        [ "$(count_matches "$RECORD_DIR/curl.argv" '/connections')" -ge 2 ] || fail "$boundary recovery did not verify a replacement connector"
+        [ "$(count_matches "$RECORD_DIR/curl.argv" 'https://cloud.example.test/health')" -ge 1 ] || fail "$boundary recovery did not verify the public route"
+        assert_file_not_contains "$RECORD_DIR/curl.argv" '--request DELETE' "$boundary failure deleted old connections"
+        IFS= read -r rotation_dir < "$RUNTIME_DIR/rotation.current"
+        assert_eq OLD_TUNNEL_TOKEN_SENTINEL "$(tr -d '\n' < "$rotation_dir/cloudflared.token.rollback")" "$boundary recovery overwrote the prepared old-token backup"
+        assert_captures_are_secret_free "$out" "$err"
+        assert_secret_files_are_private
+    done
 }
 
 test_storage_rotation_commits_only_after_healthy_minio() {
@@ -409,6 +642,202 @@ test_storage_failure_restores_both_envs_and_recreates_old_minio() {
     assert_secret_files_are_private
 }
 
+assert_storage_files_match() {
+    local before_root=$1
+    local before_cloud=$2
+    local message=$3
+
+    cmp -s "$before_root" "$ROOT_ENV" || fail "$message: root environment was not restored byte-for-byte"
+    cmp -s "$before_cloud" "$CLOUD_ENV" || fail "$message: Cloud environment was not restored byte-for-byte"
+}
+
+assert_last_minio_snapshot_uses_old_pair() {
+    local message=$1
+    local snapshot
+
+    snapshot="$(tail -1 "$RECORD_DIR/minio-snapshots")"
+    assert_text_contains "$snapshot" "root_user=$(printf '%s' OLD_MINIO_USER_SENTINEL | sha256sum | awk '{print $1}')" "$message: MinIO user is not the old value"
+    assert_text_contains "$snapshot" "root_password=$(printf '%s' OLD_MINIO_PASSWORD_SENTINEL | sha256sum | awk '{print $1}')" "$message: MinIO password is not the old value"
+    assert_text_contains "$snapshot" "cloud_access=$(printf '%s' OLD_MINIO_USER_SENTINEL | sha256sum | awk '{print $1}')" "$message: Cloud access key is not the old value"
+    assert_text_contains "$snapshot" "cloud_secret=$(printf '%s' OLD_MINIO_PASSWORD_SENTINEL | sha256sum | awk '{print $1}')" "$message: Cloud secret key is not the old value"
+}
+
+test_each_storage_replacement_failure_restores_the_pair() {
+    local replacement out err before_root before_cloud status
+
+    for replacement in 1 2 3 4; do
+        setup_case "storage-replacement-failure-$replacement"
+        out="$CASE_DIR/stdout"
+        err="$CASE_DIR/stderr"
+        before_root="$CASE_DIR/root.env.before"
+        before_cloud="$CASE_DIR/cloud.env.before"
+        /usr/bin/install -m 600 "$ROOT_ENV" "$before_root"
+        /usr/bin/install -m 600 "$CLOUD_ENV" "$before_cloud"
+        run_phase prepare "$out" "$err"
+        printf '%s\n' NEW_MINIO_PASSWORD_SENTINEL > "$OPENSSL_BASE64_FILE"
+
+        set +e
+        run_phase rotate-storage "$out" "$err" \
+            "FAKE_INSTALL_FAIL_ENV_REPLACE_NUMBER=$replacement"
+        status=$?
+        set -e
+
+        [ "$status" -ne 0 ] || fail "storage replacement $replacement failure unexpectedly succeeded"
+        assert_storage_files_match "$before_root" "$before_cloud" "storage replacement $replacement failure"
+        assert_last_minio_snapshot_uses_old_pair "storage replacement $replacement rollback"
+        assert_file_contains "$RECORD_DIR/docker.argv" '--force-recreate minio' "storage replacement $replacement rollback did not recreate MinIO"
+        assert_captures_are_secret_free "$out" "$err"
+        assert_secret_files_are_private
+    done
+}
+
+test_storage_docker_failure_restores_the_pair() {
+    local out err before_root before_cloud status
+    setup_case storage-docker-failure
+    out="$CASE_DIR/stdout"
+    err="$CASE_DIR/stderr"
+    before_root="$CASE_DIR/root.env.before"
+    before_cloud="$CASE_DIR/cloud.env.before"
+    /usr/bin/install -m 600 "$ROOT_ENV" "$before_root"
+    /usr/bin/install -m 600 "$CLOUD_ENV" "$before_cloud"
+    run_phase prepare "$out" "$err"
+    printf '%s\n' NEW_MINIO_PASSWORD_SENTINEL > "$OPENSSL_BASE64_FILE"
+
+    set +e
+    run_phase rotate-storage "$out" "$err" FAKE_DOCKER_FAIL_ON=--force-recreate\ minio
+    status=$?
+    set -e
+
+    [ "$status" -ne 0 ] || fail 'MinIO recreation failure unexpectedly succeeded'
+    assert_storage_files_match "$before_root" "$before_cloud" 'MinIO recreation failure'
+    assert_eq 2 "$(count_matches "$RECORD_DIR/docker.argv" '--force-recreate minio')" 'MinIO recreation failure did not exercise rollback recreation'
+    assert_last_minio_snapshot_uses_old_pair 'MinIO recreation failure rollback'
+    assert_captures_are_secret_free "$out" "$err"
+    assert_secret_files_are_private
+}
+
+test_storage_signals_restore_the_pair() {
+    local signal replacement out err before_root before_cloud status
+
+    for signal in INT TERM; do
+        case "$signal" in
+            INT) replacement=2 ;;
+            TERM) replacement=4 ;;
+        esac
+        setup_case "storage-signal-${signal,,}"
+        out="$CASE_DIR/stdout"
+        err="$CASE_DIR/stderr"
+        before_root="$CASE_DIR/root.env.before"
+        before_cloud="$CASE_DIR/cloud.env.before"
+        /usr/bin/install -m 600 "$ROOT_ENV" "$before_root"
+        /usr/bin/install -m 600 "$CLOUD_ENV" "$before_cloud"
+        run_phase prepare "$out" "$err"
+        printf '%s\n' NEW_MINIO_PASSWORD_SENTINEL > "$OPENSSL_BASE64_FILE"
+
+        set +e
+        run_phase rotate-storage "$out" "$err" \
+            "FAKE_INSTALL_SIGNAL_ENV_REPLACE_NUMBER=$replacement" \
+            "FAKE_INSTALL_SIGNAL=$signal"
+        status=$?
+        set -e
+
+        [ "$status" -ne 0 ] || fail "$signal during storage replacement unexpectedly succeeded"
+        assert_storage_files_match "$before_root" "$before_cloud" "$signal during storage replacement"
+        assert_last_minio_snapshot_uses_old_pair "$signal storage rollback"
+        assert_captures_are_secret_free "$out" "$err"
+        assert_secret_files_are_private
+    done
+}
+
+test_storage_rollback_waits_for_restored_minio_health() {
+    local out err before_root before_cloud status sequence
+    setup_case storage-rollback-health
+    out="$CASE_DIR/stdout"
+    err="$CASE_DIR/stderr"
+    before_root="$CASE_DIR/root.env.before"
+    before_cloud="$CASE_DIR/cloud.env.before"
+    sequence="$CASE_DIR/minio-health.sequence"
+    /usr/bin/install -m 600 "$ROOT_ENV" "$before_root"
+    /usr/bin/install -m 600 "$CLOUD_ENV" "$before_cloud"
+    printf 'unhealthy\nhealthy\n' > "$sequence"
+    chmod 600 "$sequence"
+    run_phase prepare "$out" "$err"
+    printf '%s\n' NEW_MINIO_PASSWORD_SENTINEL > "$OPENSSL_BASE64_FILE"
+
+    set +e
+    run_phase rotate-storage "$out" "$err" \
+        "FAKE_MINIO_HEALTH_SEQUENCE_FILE=$sequence"
+    status=$?
+    set -e
+
+    [ "$status" -ne 0 ] || fail 'failed new MinIO health unexpectedly succeeded'
+    assert_storage_files_match "$before_root" "$before_cloud" 'restored MinIO health wait'
+    assert_eq 2 "$(tr -d '\n' < "$RECORD_DIR/minio-inspect.count")" 'rollback did not wait for restored MinIO health'
+    assert_file_contains "$err" 'paired storage rollback completed' 'rollback claimed no successful restored-health checkpoint'
+    assert_last_minio_snapshot_uses_old_pair 'restored-health rollback'
+}
+
+test_storage_rollback_health_failure_requires_attention() {
+    local out err status sequence
+    setup_case storage-rollback-health-failure
+    out="$CASE_DIR/stdout"
+    err="$CASE_DIR/stderr"
+    sequence="$CASE_DIR/minio-health.sequence"
+    printf 'unhealthy\nunhealthy\n' > "$sequence"
+    chmod 600 "$sequence"
+    run_phase prepare "$out" "$err"
+    printf '%s\n' NEW_MINIO_PASSWORD_SENTINEL > "$OPENSSL_BASE64_FILE"
+
+    set +e
+    run_phase rotate-storage "$out" "$err" \
+        "FAKE_MINIO_HEALTH_SEQUENCE_FILE=$sequence"
+    status=$?
+    set -e
+
+    [ "$status" -ne 0 ] || fail 'failed rollback health unexpectedly succeeded'
+    assert_file_contains "$err" 'requires immediate operator attention' 'failed restored-health checkpoint did not demand operator attention'
+    assert_file_not_contains "$err" 'paired storage rollback completed' 'failed restored-health checkpoint was claimed complete'
+}
+
+test_single_operator_lock_serializes_fixed_rotation_state() {
+    local first_out first_err second_out second_err ready release first_pid first_status second_status attempt
+    setup_case operator-lock
+    first_out="$CASE_DIR/first.stdout"
+    first_err="$CASE_DIR/first.stderr"
+    second_out="$CASE_DIR/second.stdout"
+    second_err="$CASE_DIR/second.stderr"
+    ready="$CASE_DIR/install-block.ready"
+    release="$CASE_DIR/install-block.release"
+
+    run_phase prepare "$first_out" "$first_err" \
+        FAKE_INSTALL_BLOCK_ON=root.env.rollback \
+        "FAKE_INSTALL_BLOCK_READY_FILE=$ready" \
+        "FAKE_INSTALL_BLOCK_RELEASE_FILE=$release" &
+    first_pid=$!
+    for ((attempt = 1; attempt <= 100; attempt++)); do
+        [ ! -e "$ready" ] || break
+        sleep 0.05
+    done
+    [ -e "$ready" ] || {
+        wait "$first_pid" || true
+        fail 'first operator did not reach the lock-held boundary'
+    }
+
+    set +e
+    run_phase prepare "$second_out" "$second_err"
+    second_status=$?
+    set -e
+    : > "$release"
+    set +e
+    wait "$first_pid"
+    first_status=$?
+    set -e
+
+    [ "$first_status" -eq 0 ] || fail 'lock-holding operator did not complete prepare'
+    [ "$second_status" -ne 0 ] || fail 'second operator entered fixed rotation state concurrently'
+    assert_file_contains "$second_err" 'another rotation operator is active' 'lock rejection was not explicit'
+}
+
 test_cleanup_removes_only_active_rotation_state() {
     local out err rotation_dir status
     setup_case cleanup
@@ -439,12 +868,28 @@ run_test() {
     printf 'ok %d - %s\n' "$passes" "$name"
 }
 
-run_test 'tunnel rotation uses protected files and Cloudflare PATCH/GET/DELETE semantics' \
-    test_tunnel_rotation_uses_files_and_official_api_sequence
+run_test 'tunnel adopts a changed dashboard token and deletes old connections only after verification' \
+    test_tunnel_adopts_dashboard_token_after_verification
+run_test 'tunnel aborts before connector replacement when the dashboard token is unchanged' \
+    test_tunnel_aborts_when_dashboard_token_is_unchanged
+run_test 'tunnel failures recover with the new token and leave old connections untouched' \
+    test_tunnel_failure_recovers_with_new_token_without_connection_delete
 run_test 'storage rotation commits matching credentials only after MinIO is healthy' \
     test_storage_rotation_commits_only_after_healthy_minio
 run_test 'pre-health storage failure restores both environments and recreates old MinIO' \
     test_storage_failure_restores_both_envs_and_recreates_old_minio
+run_test 'each of the four paired storage replacements rolls back on failure' \
+    test_each_storage_replacement_failure_restores_the_pair
+run_test 'Docker failure after all storage replacements restores the old pair' \
+    test_storage_docker_failure_restores_the_pair
+run_test 'INT and TERM during paired storage replacements restore both files' \
+    test_storage_signals_restore_the_pair
+run_test 'storage rollback waits for restored MinIO health before completion' \
+    test_storage_rollback_waits_for_restored_minio_health
+run_test 'failed restored MinIO health is never claimed as completed rollback' \
+    test_storage_rollback_health_failure_requires_attention
+run_test 'single-operator lock serializes fixed rotation state' \
+    test_single_operator_lock_serializes_fixed_rotation_state
 run_test 'cleanup removes only the active protected rollback state' \
     test_cleanup_removes_only_active_rotation_state
 
