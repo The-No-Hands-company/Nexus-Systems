@@ -300,6 +300,7 @@ env_hash() {
     local key=$2
     local line value
 
+    [ -f "$file" ] || { printf 'absent'; return; }
     value=
     while IFS= read -r line || [ -n "$line" ]; do
         case "$line" in
@@ -310,6 +311,10 @@ env_hash() {
 }
 
 if [ "${1:-}" = inspect ]; then
+    if [[ " $* " == *'.Config.Cmd'* ]]; then
+        printf '%s\n' "${FAKE_TUNNEL_CMD_JSON:-[\"tunnel\",\"--no-autoupdate\",\"run\",\"--token\",\"OLD_TUNNEL_TOKEN_SENTINEL\"]}"
+        exit 0
+    fi
     case "${*: -1}" in
         cloudflared) printf '%s\n' "${FAKE_TUNNEL_RUNNING:-true}" ;;
         *)
@@ -336,12 +341,14 @@ if [[ " $* " == *' up '* ]] && [[ " $* " == *' minio '* ]]; then
     [ ! -f "$counter_file" ] || read -r count < "$counter_file"
     count=$((count + 1))
     printf '%s\n' "$count" > "$counter_file"
-    printf 'minio-up %s root_user=%s root_password=%s cloud_access=%s cloud_secret=%s\n' \
+    printf 'minio-up %s root_user=%s root_password=%s cloud_access=%s cloud_secret=%s chat_access=%s chat_secret=%s\n' \
         "$count" \
         "$(env_hash "$ROTATION_ROOT_ENV" MINIO_ROOT_USER)" \
         "$(env_hash "$ROTATION_ROOT_ENV" MINIO_ROOT_PASSWORD)" \
         "$(env_hash "$ROTATION_CLOUD_ENV" NEXUS_STORAGE_S3_ACCESS_KEY)" \
         "$(env_hash "$ROTATION_CLOUD_ENV" NEXUS_STORAGE_S3_SECRET_KEY)" \
+        "$(env_hash "$ROTATION_CHAT_ENV" NEXUS__STORAGE__ACCESS_KEY)" \
+        "$(env_hash "$ROTATION_CHAT_ENV" NEXUS__STORAGE__SECRET_KEY)" \
         >> "$FAKE_RECORD_DIR/minio-snapshots"
 fi
 
@@ -365,6 +372,7 @@ setup_case() {
     RUNTIME_DIR="$CASE_DIR/runtime"
     ROOT_ENV="$CASE_DIR/root.env"
     CLOUD_ENV="$CASE_DIR/cloud.env"
+    CHAT_ENV="$CASE_DIR/nexus-chat.env"
     TOKEN_FILE="$RUNTIME_DIR/secrets/cloudflared.token"
     OPENSSL_HEX_FILE="$CASE_DIR/openssl-hex.input"
     OPENSSL_BASE64_FILE="$CASE_DIR/openssl-base64.input"
@@ -386,6 +394,13 @@ NEXUS_TUNNEL_ID=11111111-2222-3333-4444-555555555555
 NEXUS_STORAGE_S3_ACCESS_KEY=OLD_MINIO_USER_SENTINEL
 NEXUS_STORAGE_S3_SECRET_KEY=OLD_MINIO_PASSWORD_SENTINEL
 CLOUD_ENV
+    cat > "$CHAT_ENV" <<'CHAT_ENV'
+NEXUS__STORAGE__ENDPOINT=http://127.0.0.1:9000
+NEXUS__STORAGE__ACCESS_KEY=OLD_MINIO_USER_SENTINEL
+NEXUS__STORAGE__SECRET_KEY=OLD_MINIO_PASSWORD_SENTINEL
+NEXUS__STORAGE__BUCKET=nexus-chat-uploads
+CHAT_UNRELATED=before-prepare
+CHAT_ENV
     printf '%s\n' NEW_MINIO_USER_SENTINEL > "$OPENSSL_HEX_FILE"
     printf '%s\n' NEW_TUNNEL_SECRET_SENTINEL > "$OPENSSL_BASE64_FILE"
     printf '{"success":true,"result":"NEW_TUNNEL_TOKEN_SENTINEL"}\n' > "$TUNNEL_TOKEN_RESPONSE_FILE"
@@ -394,7 +409,7 @@ CLOUD_ENV
     printf '{"success":true,"result":[{"id":"aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee","conns":[{"client_id":"aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee","is_pending_reconnect":false}]}]}\n' > "$OLD_CONNECTIONS_RESPONSE_FILE"
     printf '{"success":true,"result":[{"id":"aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee","conns":[{"client_id":"aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee","is_pending_reconnect":true}]},{"id":"ffffffff-1111-4222-8333-444444444444","conns":[{"client_id":"ffffffff-1111-4222-8333-444444444444","is_pending_reconnect":false}]}]}\n' > "$NEW_CONNECTIONS_RESPONSE_FILE"
     chmod 600 \
-        "$ROOT_ENV" "$CLOUD_ENV" "$OPENSSL_HEX_FILE" "$OPENSSL_BASE64_FILE" \
+        "$ROOT_ENV" "$CLOUD_ENV" "$CHAT_ENV" "$OPENSSL_HEX_FILE" "$OPENSSL_BASE64_FILE" \
         "$TUNNEL_TOKEN_RESPONSE_FILE" "$TOKEN_FILE" "$EXPECTED_CURL_CONFIG_FILE" \
         "$OLD_CONNECTIONS_RESPONSE_FILE" "$NEW_CONNECTIONS_RESPONSE_FILE"
     write_fake_commands "$CASE_DIR"
@@ -411,6 +426,7 @@ run_phase() {
         export FAKE_RECORD_DIR="$RECORD_DIR"
         export ROTATION_ROOT_ENV="$ROOT_ENV"
         export ROTATION_CLOUD_ENV="$CLOUD_ENV"
+        export ROTATION_CHAT_ENV="$CHAT_ENV"
         export FAKE_OPENSSL_HEX_FILE="$OPENSSL_HEX_FILE"
         export FAKE_OPENSSL_BASE64_FILE="$OPENSSL_BASE64_FILE"
         export FAKE_TUNNEL_TOKEN_RESPONSE_FILE="$TUNNEL_TOKEN_RESPONSE_FILE"
@@ -421,6 +437,7 @@ run_phase() {
         export NEXUS_ROTATION_RUNTIME_DIR="$RUNTIME_DIR"
         export NEXUS_ROTATION_ROOT_ENV="$ROOT_ENV"
         export NEXUS_ROTATION_CLOUD_ENV="$CLOUD_ENV"
+        export NEXUS_ROTATION_CHAT_ENV="$CHAT_ENV"
         export NEXUS_ROTATION_TUNNEL_TOKEN_FILE="$TOKEN_FILE"
         export NEXUS_ROTATION_TUNNEL_VERIFY_URL=https://cloud.example.test/health
         export NEXUS_ROTATION_TUNNEL_CONNECT_ATTEMPTS=1
@@ -486,7 +503,7 @@ assert_secret_files_are_private() {
 }
 
 test_tunnel_adopts_dashboard_token_after_verification() {
-    local out err curl_log docker_log events
+    local out err curl_log docker_log events rotation_dir installed_hash
     setup_case tunnel-success
     out="$CASE_DIR/stdout"
     err="$CASE_DIR/stderr"
@@ -504,14 +521,42 @@ test_tunnel_adopts_dashboard_token_after_verification() {
     assert_file_contains "$curl_log" 'client_id=aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee' 'old connector cleanup was not scoped by client ID'
     assert_file_contains "$curl_log" '--request DELETE' 'old tunnel connections were not force-disconnected with DELETE'
     assert_file_not_contains "$curl_log" '--data-binary' 'dashboard-governed tunnel adoption unexpectedly sent a request body'
+    assert_file_contains "$curl_log" '--connect-timeout' 'tunnel control-plane requests have no connection deadline'
+    assert_file_contains "$curl_log" '--max-time' 'tunnel control-plane requests have no total deadline'
     assert_file_contains "$docker_log" 'docker rm -f cloudflared' 'existing unmanaged cloudflared container was not removed by exact name'
     assert_file_contains "$docker_log" 'cloudflared.compose.yml' 'managed cloudflared Compose file was not used'
     assert_file_contains "$docker_log" '--force-recreate cloudflared' 'cloudflared was not force-recreated'
     assert_file_order "$events" 'docker compose' 'curl GET https://cloud.example.test/health' 'public verification ran before connector replacement'
     assert_file_order "$events" 'curl GET https://cloud.example.test/health' 'curl DELETE' 'old connections were deleted before public verification'
+    [ "$(count_matches "$curl_log" '/token')" -ge 2 ] || fail 'tunnel adoption did not re-fetch the dashboard token for its hash post-condition'
     assert_eq NEW_TUNNEL_TOKEN_SENTINEL "$(tr -d '\n' < "$TOKEN_FILE")" 'replacement token file has wrong content'
     assert_eq 600 "$(file_mode "$TOKEN_FILE")" 'replacement token file is not mode 0600'
+    IFS= read -r rotation_dir < "$RUNTIME_DIR/rotation.current"
+    installed_hash="$(printf %s NEW_TUNNEL_TOKEN_SENTINEL | sha256sum | awk '{print $1}')"
+    assert_eq "$installed_hash" "$(tr -d '\n' < "$rotation_dir/cloudflared.token.adopted.sha256")" 'adopted tunnel-token hash post-condition was not persisted'
+    [ -f "$rotation_dir/tunnel.checkpoint" ] || fail 'tunnel checkpoint was not written after token hash verification'
     [ ! -f "$RECORD_DIR/openssl.argv" ] || fail 'tunnel adoption unexpectedly generated a tunnel secret'
+    assert_captures_are_secret_free "$out" "$err"
+    assert_secret_files_are_private
+}
+
+test_prepare_bootstraps_current_token_from_protected_container_argv() {
+    local out err rotation_dir expected_hash
+    setup_case tunnel-bootstrap
+    out="$CASE_DIR/stdout"
+    err="$CASE_DIR/stderr"
+    rm -f -- "$TOKEN_FILE"
+
+    run_phase prepare "$out" "$err" \
+        'FAKE_TUNNEL_CMD_JSON=["tunnel","--no-autoupdate","run","--token","OLD_TUNNEL_TOKEN_SENTINEL"]'
+
+    assert_eq OLD_TUNNEL_TOKEN_SENTINEL "$(tr -d '\n' < "$TOKEN_FILE")" 'prepare did not adopt the current argv token into the protected token file'
+    assert_eq 600 "$(file_mode "$TOKEN_FILE")" 'bootstrapped token file is not mode 0600'
+    IFS= read -r rotation_dir < "$RUNTIME_DIR/rotation.current"
+    assert_eq OLD_TUNNEL_TOKEN_SENTINEL "$(tr -d '\n' < "$rotation_dir/cloudflared.token.rollback")" 'prepare did not preserve the bootstrapped current token'
+    expected_hash="$(printf %s OLD_TUNNEL_TOKEN_SENTINEL | sha256sum | awk '{print $1}')"
+    assert_eq "$expected_hash" "$(tr -d '\n' < "$rotation_dir/cloudflared.token.rollback.sha256")" 'prepare recorded the wrong current-token hash'
+    assert_file_contains "$out" 'Cloudflare dashboard' 'prepare did not give the operator an explicit dashboard-rotation instruction'
     assert_captures_are_secret_free "$out" "$err"
     assert_secret_files_are_private
 }
@@ -582,7 +627,7 @@ test_tunnel_failure_recovers_with_new_token_without_connection_delete() {
 }
 
 test_storage_rotation_commits_only_after_healthy_minio() {
-    local out err root_user root_password cloud_access cloud_secret snapshot_count
+    local out err root_user root_password cloud_access cloud_secret chat_access chat_secret snapshot_count
     setup_case storage-success
     out="$CASE_DIR/stdout"
     err="$CASE_DIR/stderr"
@@ -596,27 +641,121 @@ test_storage_rotation_commits_only_after_healthy_minio() {
     root_password="$(env_value "$ROOT_ENV" MINIO_ROOT_PASSWORD)"
     cloud_access="$(env_value "$CLOUD_ENV" NEXUS_STORAGE_S3_ACCESS_KEY)"
     cloud_secret="$(env_value "$CLOUD_ENV" NEXUS_STORAGE_S3_SECRET_KEY)"
+    chat_access="$(env_value "$CHAT_ENV" NEXUS__STORAGE__ACCESS_KEY)"
+    chat_secret="$(env_value "$CHAT_ENV" NEXUS__STORAGE__SECRET_KEY)"
     assert_eq NEW_MINIO_USER_SENTINEL "$root_user" 'root MinIO user was not replaced'
     assert_eq NEW_MINIO_PASSWORD_SENTINEL "$root_password" 'root MinIO password was not replaced'
     assert_eq "$root_user" "$cloud_access" 'Cloud access key does not match MinIO root user'
     assert_eq "$root_password" "$cloud_secret" 'Cloud secret key does not match MinIO root password'
+    assert_eq "$root_user" "$chat_access" 'Nexus Chat access key does not match MinIO root user'
+    assert_eq "$root_password" "$chat_secret" 'Nexus Chat secret key does not match MinIO root password'
     snapshot_count="$(wc -l < "$RECORD_DIR/minio-snapshots" | tr -d ' ')"
     assert_eq 1 "$snapshot_count" 'successful storage rotation unexpectedly recreated MinIO more than once'
     assert_captures_are_secret_free "$out" "$err"
     assert_secret_files_are_private
 }
 
+test_storage_rotation_remains_valid_when_nexus_chat_is_not_deployed() {
+    local out err rotation_dir
+    setup_case storage-without-chat
+    out="$CASE_DIR/stdout"
+    err="$CASE_DIR/stderr"
+    rm -f -- "$CHAT_ENV"
+
+    run_phase prepare "$out" "$err"
+    printf '%s\n' NEW_MINIO_PASSWORD_SENTINEL > "$OPENSSL_BASE64_FILE"
+    run_phase rotate-storage "$out" "$err" FAKE_MINIO_HEALTH=healthy
+
+    IFS= read -r rotation_dir < "$RUNTIME_DIR/rotation.current"
+    [ ! -e "$rotation_dir/chat.env.rollback" ] || \
+        fail 'prepare invented a Nexus Chat rollback source for an absent deployment'
+    assert_eq NEW_MINIO_USER_SENTINEL "$(env_value "$ROOT_ENV" MINIO_ROOT_USER)" \
+        'rotation without Nexus Chat did not update MinIO'
+    assert_eq NEW_MINIO_USER_SENTINEL \
+        "$(env_value "$CLOUD_ENV" NEXUS_STORAGE_S3_ACCESS_KEY)" \
+        'rotation without Nexus Chat did not update Cloud'
+}
+
+test_storage_checkpoint_can_be_explicitly_rolled_back_after_cloud_probe_failure() {
+    local out err before_root before_cloud before_chat rotation_dir
+    setup_case storage-explicit-rollback
+    out="$CASE_DIR/stdout"
+    err="$CASE_DIR/stderr"
+    before_root="$CASE_DIR/root.env.before"
+    before_cloud="$CASE_DIR/cloud.env.before"
+    before_chat="$CASE_DIR/nexus-chat.env.before"
+    /usr/bin/install -m 600 "$ROOT_ENV" "$before_root"
+    /usr/bin/install -m 600 "$CLOUD_ENV" "$before_cloud"
+    /usr/bin/install -m 600 "$CHAT_ENV" "$before_chat"
+
+    run_phase prepare "$out" "$err"
+    printf '%s\n' NEW_MINIO_PASSWORD_SENTINEL > "$OPENSSL_BASE64_FILE"
+    run_phase rotate-storage "$out" "$err" FAKE_MINIO_HEALTH=healthy
+    printf 'CHAT_LATE_EDIT=preserved\n' >> "$CHAT_ENV"
+    IFS= read -r rotation_dir < "$RUNTIME_DIR/rotation.current"
+    [ -f "$rotation_dir/storage.checkpoint" ] || fail 'successful storage phase did not create its checkpoint'
+
+    run_phase rollback-storage "$out" "$err" FAKE_MINIO_HEALTH=healthy
+
+    assert_storage_files_match "$before_root" "$before_cloud" 'explicit post-checkpoint rollback'
+    assert_eq preserved "$(env_value "$CHAT_ENV" CHAT_LATE_EDIT)" \
+        'explicit rollback discarded an unrelated Nexus Chat environment edit'
+    assert_eq OLD_MINIO_USER_SENTINEL "$(env_value "$CHAT_ENV" NEXUS__STORAGE__ACCESS_KEY)" \
+        'explicit rollback did not restore Nexus Chat access key'
+    assert_eq OLD_MINIO_PASSWORD_SENTINEL "$(env_value "$CHAT_ENV" NEXUS__STORAGE__SECRET_KEY)" \
+        'explicit rollback did not restore Nexus Chat secret key'
+    assert_eq 2 "$(count_matches "$RECORD_DIR/docker.argv" '--force-recreate minio')" 'explicit rollback did not recreate MinIO with the old credential pair'
+    assert_last_minio_snapshot_uses_old_pair 'explicit post-checkpoint rollback'
+    [ ! -e "$rotation_dir/storage.checkpoint" ] || fail 'explicit rollback left the invalid storage checkpoint armed'
+    assert_captures_are_secret_free "$out" "$err"
+    assert_secret_files_are_private
+}
+
+test_storage_rollback_refuses_to_discard_a_concurrent_credential_edit() {
+    local out err rotation_dir status
+    setup_case storage-concurrent-credential
+    out="$CASE_DIR/stdout"
+    err="$CASE_DIR/stderr"
+
+    run_phase prepare "$out" "$err"
+    printf '%s\n' NEW_MINIO_PASSWORD_SENTINEL > "$OPENSSL_BASE64_FILE"
+    run_phase rotate-storage "$out" "$err" FAKE_MINIO_HEALTH=healthy
+    IFS= read -r rotation_dir < "$RUNTIME_DIR/rotation.current"
+    # This simulates an authorized credential edit after the checkpoint. The
+    # rollback must fail closed rather than restore an older whole-file copy.
+    sed -i 's/^NEXUS_STORAGE_S3_SECRET_KEY=.*/NEXUS_STORAGE_S3_SECRET_KEY=CONCURRENT_SECRET_SENTINEL/' "$CLOUD_ENV"
+
+    set +e
+    run_phase rollback-storage "$out" "$err" FAKE_MINIO_HEALTH=healthy
+    status=$?
+    set -e
+
+    [ "$status" -ne 0 ] || fail 'rollback discarded a concurrent credential edit'
+    assert_eq CONCURRENT_SECRET_SENTINEL \
+        "$(env_value "$CLOUD_ENV" NEXUS_STORAGE_S3_SECRET_KEY)" \
+        'rollback overwrote the concurrent credential value'
+    [ -f "$rotation_dir/storage.checkpoint" ] || \
+        fail 'failed conditional rollback removed the storage checkpoint'
+    assert_file_contains "$err" 'changed outside this rotation' \
+        'conditional rollback failure did not explain the concurrent edit'
+}
+
 test_storage_failure_restores_both_envs_and_recreates_old_minio() {
-    local out err before_root before_cloud status snapshot_count first_snapshot second_snapshot first_credentials second_credentials
+    local out err before_root before_cloud before_chat status snapshot_count first_snapshot second_snapshot first_credentials second_credentials
     setup_case storage-rollback
     out="$CASE_DIR/stdout"
     err="$CASE_DIR/stderr"
     before_root="$CASE_DIR/root.env.before"
     before_cloud="$CASE_DIR/cloud.env.before"
+    before_chat="$CASE_DIR/nexus-chat.env.before"
     /usr/bin/install -m 600 "$ROOT_ENV" "$before_root"
     /usr/bin/install -m 600 "$CLOUD_ENV" "$before_cloud"
+    /usr/bin/install -m 600 "$CHAT_ENV" "$before_chat"
 
     run_phase prepare "$out" "$err"
+    printf 'ROOT_UNRELATED=after-prepare\n' >> "$ROOT_ENV"
+    printf 'CLOUD_UNRELATED=after-prepare\n' >> "$CLOUD_ENV"
+    printf 'CHAT_LATE_EDIT=preserved\n' >> "$CHAT_ENV"
     printf '%s\n' NEW_MINIO_PASSWORD_SENTINEL > "$OPENSSL_BASE64_FILE"
     set +e
     run_phase rotate-storage "$out" "$err" \
@@ -625,8 +764,16 @@ test_storage_failure_restores_both_envs_and_recreates_old_minio() {
     set -e
 
     [ "$status" -ne 0 ] || fail 'unhealthy MinIO did not fail the storage phase'
-    cmp -s "$before_root" "$ROOT_ENV" || fail 'root environment was not restored byte-for-byte'
-    cmp -s "$before_cloud" "$CLOUD_ENV" || fail 'Cloud environment was not restored byte-for-byte'
+    assert_eq after-prepare "$(env_value "$ROOT_ENV" ROOT_UNRELATED)" \
+        'pre-health rollback discarded an unrelated root environment edit'
+    assert_eq after-prepare "$(env_value "$CLOUD_ENV" CLOUD_UNRELATED)" \
+        'pre-health rollback discarded an unrelated Cloud environment edit'
+    assert_eq preserved "$(env_value "$CHAT_ENV" CHAT_LATE_EDIT)" \
+        'pre-health rollback discarded an unrelated Nexus Chat environment edit'
+    assert_eq OLD_MINIO_USER_SENTINEL "$(env_value "$CHAT_ENV" NEXUS__STORAGE__ACCESS_KEY)" \
+        'pre-health rollback did not restore Nexus Chat access key'
+    assert_eq OLD_MINIO_PASSWORD_SENTINEL "$(env_value "$CHAT_ENV" NEXUS__STORAGE__SECRET_KEY)" \
+        'pre-health rollback did not restore Nexus Chat secret key'
     snapshot_count="$(wc -l < "$RECORD_DIR/minio-snapshots" | tr -d ' ')"
     assert_eq 2 "$snapshot_count" 'rollback did not recreate MinIO after restoring old credentials'
     first_snapshot="$(sed -n '1p' "$RECORD_DIR/minio-snapshots")"
@@ -660,19 +807,23 @@ assert_last_minio_snapshot_uses_old_pair() {
     assert_text_contains "$snapshot" "root_password=$(printf '%s' OLD_MINIO_PASSWORD_SENTINEL | sha256sum | awk '{print $1}')" "$message: MinIO password is not the old value"
     assert_text_contains "$snapshot" "cloud_access=$(printf '%s' OLD_MINIO_USER_SENTINEL | sha256sum | awk '{print $1}')" "$message: Cloud access key is not the old value"
     assert_text_contains "$snapshot" "cloud_secret=$(printf '%s' OLD_MINIO_PASSWORD_SENTINEL | sha256sum | awk '{print $1}')" "$message: Cloud secret key is not the old value"
+    assert_text_contains "$snapshot" "chat_access=$(printf '%s' OLD_MINIO_USER_SENTINEL | sha256sum | awk '{print $1}')" "$message: Nexus Chat access key is not the old value"
+    assert_text_contains "$snapshot" "chat_secret=$(printf '%s' OLD_MINIO_PASSWORD_SENTINEL | sha256sum | awk '{print $1}')" "$message: Nexus Chat secret key is not the old value"
 }
 
 test_each_storage_replacement_failure_restores_the_pair() {
-    local replacement out err before_root before_cloud status
+    local replacement out err before_root before_cloud before_chat status
 
-    for replacement in 1 2 3 4; do
+    for replacement in 1 2 3 4 5 6; do
         setup_case "storage-replacement-failure-$replacement"
         out="$CASE_DIR/stdout"
         err="$CASE_DIR/stderr"
         before_root="$CASE_DIR/root.env.before"
         before_cloud="$CASE_DIR/cloud.env.before"
+        before_chat="$CASE_DIR/nexus-chat.env.before"
         /usr/bin/install -m 600 "$ROOT_ENV" "$before_root"
         /usr/bin/install -m 600 "$CLOUD_ENV" "$before_cloud"
+        /usr/bin/install -m 600 "$CHAT_ENV" "$before_chat"
         run_phase prepare "$out" "$err"
         printf '%s\n' NEW_MINIO_PASSWORD_SENTINEL > "$OPENSSL_BASE64_FILE"
 
@@ -684,6 +835,7 @@ test_each_storage_replacement_failure_restores_the_pair() {
 
         [ "$status" -ne 0 ] || fail "storage replacement $replacement failure unexpectedly succeeded"
         assert_storage_files_match "$before_root" "$before_cloud" "storage replacement $replacement failure"
+        cmp -s "$before_chat" "$CHAT_ENV" || fail "storage replacement $replacement failure: Nexus Chat environment was not restored"
         assert_last_minio_snapshot_uses_old_pair "storage replacement $replacement rollback"
         assert_file_contains "$RECORD_DIR/docker.argv" '--force-recreate minio' "storage replacement $replacement rollback did not recreate MinIO"
         assert_captures_are_secret_free "$out" "$err"
@@ -847,6 +999,8 @@ test_cleanup_removes_only_active_rotation_state() {
     run_phase prepare "$out" "$err"
     IFS= read -r rotation_dir < "$RUNTIME_DIR/rotation.current"
     [ -d "$rotation_dir" ] || fail 'prepare did not create active rollback state'
+    /usr/bin/install -m 600 /dev/null "$rotation_dir/tunnel.checkpoint"
+    /usr/bin/install -m 600 /dev/null "$rotation_dir/storage.checkpoint"
     set +e
     run_phase cleanup "$out" "$err"
     status=$?
@@ -860,6 +1014,31 @@ test_cleanup_removes_only_active_rotation_state() {
     [ -f "$CLOUD_ENV" ] || fail 'cleanup removed the Cloud environment fixture'
 }
 
+test_cleanup_requires_both_completed_rotation_checkpoints() {
+    local missing out err rotation_dir status
+
+    for missing in tunnel storage; do
+        setup_case "cleanup-missing-$missing"
+        out="$CASE_DIR/stdout"
+        err="$CASE_DIR/stderr"
+        run_phase prepare "$out" "$err"
+        IFS= read -r rotation_dir < "$RUNTIME_DIR/rotation.current"
+        case "$missing" in
+            tunnel) /usr/bin/install -m 600 /dev/null "$rotation_dir/storage.checkpoint" ;;
+            storage) /usr/bin/install -m 600 /dev/null "$rotation_dir/tunnel.checkpoint" ;;
+        esac
+
+        set +e
+        run_phase cleanup "$out" "$err"
+        status=$?
+        set -e
+
+        [ "$status" -ne 0 ] || fail "cleanup accepted a missing $missing checkpoint"
+        [ -d "$rotation_dir" ] || fail "cleanup removed rollback state without the $missing checkpoint"
+        [ -f "$RUNTIME_DIR/rotation.current" ] || fail "cleanup removed active state without the $missing checkpoint"
+    done
+}
+
 run_test() {
     local name=$1
     shift
@@ -870,19 +1049,27 @@ run_test() {
 
 run_test 'tunnel adopts a changed dashboard token and deletes old connections only after verification' \
     test_tunnel_adopts_dashboard_token_after_verification
+run_test 'prepare bootstraps the current argv token without exposing it' \
+    test_prepare_bootstraps_current_token_from_protected_container_argv
 run_test 'tunnel aborts before connector replacement when the dashboard token is unchanged' \
     test_tunnel_aborts_when_dashboard_token_is_unchanged
 run_test 'tunnel failures recover with the new token and leave old connections untouched' \
     test_tunnel_failure_recovers_with_new_token_without_connection_delete
 run_test 'storage rotation commits matching credentials only after MinIO is healthy' \
     test_storage_rotation_commits_only_after_healthy_minio
-run_test 'pre-health storage failure restores both environments and recreates old MinIO' \
+run_test 'storage rotation conditionally skips Nexus Chat when it is not deployed' \
+    test_storage_rotation_remains_valid_when_nexus_chat_is_not_deployed
+run_test 'storage checkpoint remains explicitly rollback-capable after a Cloud probe failure' \
+    test_storage_checkpoint_can_be_explicitly_rolled_back_after_cloud_probe_failure
+run_test 'storage rollback preserves a concurrent credential edit and fails closed' \
+    test_storage_rollback_refuses_to_discard_a_concurrent_credential_edit
+run_test 'pre-health storage failure restores the atomic credential set and recreates old MinIO' \
     test_storage_failure_restores_both_envs_and_recreates_old_minio
-run_test 'each of the four paired storage replacements rolls back on failure' \
+run_test 'each of the six atomic storage replacements rolls back on failure' \
     test_each_storage_replacement_failure_restores_the_pair
 run_test 'Docker failure after all storage replacements restores the old pair' \
     test_storage_docker_failure_restores_the_pair
-run_test 'INT and TERM during paired storage replacements restore both files' \
+run_test 'INT and TERM during atomic storage replacements restore all credential keys' \
     test_storage_signals_restore_the_pair
 run_test 'storage rollback waits for restored MinIO health before completion' \
     test_storage_rollback_waits_for_restored_minio_health
@@ -892,5 +1079,7 @@ run_test 'single-operator lock serializes fixed rotation state' \
     test_single_operator_lock_serializes_fixed_rotation_state
 run_test 'cleanup removes only the active protected rollback state' \
     test_cleanup_removes_only_active_rotation_state
+run_test 'cleanup requires both tunnel and storage checkpoints' \
+    test_cleanup_requires_both_completed_rotation_checkpoints
 
 printf 'PASS: %d rotation tests\n' "$passes"

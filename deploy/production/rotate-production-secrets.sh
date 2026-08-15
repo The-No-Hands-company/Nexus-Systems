@@ -17,6 +17,7 @@ RUNTIME_DIR="${NEXUS_ROTATION_RUNTIME_DIR:-/tmp/nexus-production}"
 SECRETS_DIR="$RUNTIME_DIR/secrets"
 ROOT_ENV="${NEXUS_ROTATION_ROOT_ENV:-$ROOT/.env}"
 CLOUD_ENV="${NEXUS_ROTATION_CLOUD_ENV:-$ROOT/apps/Nexus-Cloud/.env}"
+CHAT_ENV="${NEXUS_ROTATION_CHAT_ENV:-$ROOT/deploy/production/nexus-chat.env}"
 TUNNEL_TOKEN_FILE="${NEXUS_ROTATION_TUNNEL_TOKEN_FILE:-$SECRETS_DIR/cloudflared.token}"
 ACTIVE_STATE="$RUNTIME_DIR/rotation.current"
 ROTATION_LOCK_FILE="${NEXUS_ROTATION_LOCK_FILE:-$RUNTIME_DIR/rotation.lock}"
@@ -29,6 +30,8 @@ MINIO_HEALTH_INTERVAL="${NEXUS_ROTATION_MINIO_HEALTH_INTERVAL:-2}"
 TUNNEL_VERIFY_URL="${NEXUS_ROTATION_TUNNEL_VERIFY_URL:-}"
 TUNNEL_CONNECT_ATTEMPTS="${NEXUS_ROTATION_TUNNEL_CONNECT_ATTEMPTS:-30}"
 TUNNEL_CONNECT_INTERVAL="${NEXUS_ROTATION_TUNNEL_CONNECT_INTERVAL:-2}"
+HTTP_CONNECT_TIMEOUT="${NEXUS_ROTATION_HTTP_CONNECT_TIMEOUT:-5}"
+HTTP_TOTAL_TIMEOUT="${NEXUS_ROTATION_HTTP_TOTAL_TIMEOUT:-20}"
 
 ROTATION_DIR=
 STORAGE_PENDING=0
@@ -58,13 +61,18 @@ usage() {
 Usage: rotate-production-secrets.sh PHASE
 
 Phases:
-  prepare         Back up both environment files in protected rotation state.
+  prepare         Back up root, Cloud, deployed Chat, and the current tunnel
+                  token in protected state. If needed, bootstrap the token from
+                  the running connector's protected argv inspection.
   rotate-tunnel   Adopt the token produced by an operator's completed dashboard
                   rotation, verify its connector, then disconnect old clients.
-  rotate-storage  Replace paired MinIO/Cloud credentials, recreate MinIO, and
-                  roll both files back if MinIO misses the health checkpoint.
+  rotate-storage  Replace the atomic MinIO/Cloud/deployed-Chat credential set,
+                  recreate MinIO, and restore keys if health is missed.
+  rollback-storage
+                  Restore only the prepared credential keys after a consumer
+                  restart or authenticated S3 failure, preserving other edits.
   cleanup         Remove the active protected rollback directory after the
-                  operator has completed all invalidation and health checks.
+                  tunnel and storage checkpoints are both complete.
 EOF
 }
 
@@ -146,6 +154,16 @@ required_env_value_into() {
     printf -v "$target" '%s' "$value"
 }
 
+require_env_value_present() {
+    local file=$1
+    local key=$2
+    local label=$3
+    local value=
+
+    read_env_value_into value "$file" "$key" || true
+    [ -n "$value" ] || die "$label must contain a non-empty $key before rotation"
+}
+
 write_cloudflare_auth_config() {
     local token=$1
     local output=$2
@@ -170,6 +188,8 @@ cf_request() {
         --silent
         --show-error
         --fail-with-body
+        --connect-timeout "$HTTP_CONNECT_TIMEOUT"
+        --max-time "$HTTP_TOTAL_TIMEOUT"
         --config "$auth_config"
         --request "$method"
         --output "$output"
@@ -186,7 +206,10 @@ public_request() {
     local output=$2
 
     install -m 600 /dev/null "$output"
-    curl --silent --show-error --fail --output "$output" "$url"
+    curl --silent --show-error --fail \
+        --connect-timeout "$HTTP_CONNECT_TIMEOUT" \
+        --max-time "$HTTP_TOTAL_TIMEOUT" \
+        --output "$output" "$url"
 }
 
 install_tunnel_token() {
@@ -298,22 +321,66 @@ wait_for_minio_health() {
     return 1
 }
 
-restore_env_file() {
-    local backup=$1
-    local destination=$2
-    local installed="$(dirname "$destination")/.$(basename "$destination").rollback.install"
+restore_rotated_env_value() {
+    local current_file=$1
+    local backup_file=$2
+    local key=$3
+    local expected_new_file=$4
+    local label=$5
+    local current_value old_value expected_new_value old_value_file
 
-    install -m 600 "$backup" "$installed"
-    mv -f -- "$installed" "$destination"
+    read_env_value_into current_value "$current_file" "$key" || {
+        warn "$label no longer contains $key; refusing to overwrite a concurrent credential edit"
+        return 1
+    }
+    read_env_value_into old_value "$backup_file" "$key" || {
+        warn "prepared $label rollback does not contain $key"
+        return 1
+    }
+    expected_new_value=
+    IFS= read -r expected_new_value < "$expected_new_file" || true
+    [ -n "$expected_new_value" ] || {
+        warn "generated replacement for $label $key is unavailable"
+        return 1
+    }
+    if [ "$current_value" = "$old_value" ]; then
+        return 0
+    fi
+    if [ "$current_value" != "$expected_new_value" ]; then
+        warn "$label $key changed outside this rotation; refusing to discard the concurrent value"
+        return 1
+    fi
+
+    old_value_file="$ROTATION_DIR/${label}.${key}.rollback-value"
+    printf '%s\n' "$old_value" > "$old_value_file"
+    chmod 600 "$old_value_file"
+    replace_env_value_from_file "$current_file" "$key" "$old_value_file"
 }
 
 rollback_storage() {
     local failed=0
+    local new_user="$ROTATION_DIR/minio-root-user.new"
+    local new_password="$ROTATION_DIR/minio-root-password.new"
 
-    restore_env_file "$ROTATION_DIR/root.env.rollback" "$ROOT_ENV" || failed=1
-    restore_env_file "$ROTATION_DIR/cloud.env.rollback" "$CLOUD_ENV" || failed=1
+    restore_rotated_env_value "$ROOT_ENV" "$ROTATION_DIR/root.env.rollback" \
+        MINIO_ROOT_USER "$new_user" root-env || failed=1
+    restore_rotated_env_value "$ROOT_ENV" "$ROTATION_DIR/root.env.rollback" \
+        MINIO_ROOT_PASSWORD "$new_password" root-env || failed=1
+    restore_rotated_env_value "$CLOUD_ENV" "$ROTATION_DIR/cloud.env.rollback" \
+        NEXUS_STORAGE_S3_ACCESS_KEY "$new_user" cloud-env || failed=1
+    restore_rotated_env_value "$CLOUD_ENV" "$ROTATION_DIR/cloud.env.rollback" \
+        NEXUS_STORAGE_S3_SECRET_KEY "$new_password" cloud-env || failed=1
+    if [ -f "$ROTATION_DIR/chat.env.rollback" ] && [ ! -f "$CHAT_ENV" ]; then
+        warn "Nexus Chat environment disappeared after prepare; paired rollback requires operator attention"
+        failed=1
+    elif [ -f "$ROTATION_DIR/chat.env.rollback" ]; then
+        restore_rotated_env_value "$CHAT_ENV" "$ROTATION_DIR/chat.env.rollback" \
+            NEXUS__STORAGE__ACCESS_KEY "$new_user" chat-env || failed=1
+        restore_rotated_env_value "$CHAT_ENV" "$ROTATION_DIR/chat.env.rollback" \
+            NEXUS__STORAGE__SECRET_KEY "$new_password" chat-env || failed=1
+    fi
     if [ "$failed" -ne 0 ]; then
-        warn "paired environment rollback could not be completed"
+        warn "atomic credential-key rollback could not be completed"
         return 1
     fi
     recreate_minio || {
@@ -338,7 +405,7 @@ on_exit() {
     set +e
     if [ "$STORAGE_PENDING" -eq 1 ]; then
         pending_at_exit=1
-        warn "storage rotation stopped before health; restoring both environment files"
+        warn "storage rotation stopped before health; restoring the atomic credential-key set"
         rollback_storage
         recovery_status=$?
         if [ "$recovery_status" -eq 0 ]; then
@@ -374,11 +441,11 @@ trap 'on_signal HUP 129' HUP
 
 phase_prepare() {
     local rotation_dir state_source token_hash current_token normalized_token
+    local argv_snapshot bootstrap_token
 
     ensure_runtime_dirs
     require_file "$ROOT_ENV" "root environment file"
     require_file "$CLOUD_ENV" "Nexus Cloud environment file"
-    require_file "$TUNNEL_TOKEN_FILE" "current tunnel token file"
     if [ -e "$ACTIVE_STATE" ]; then
         die "an active rotation already exists; verify it and run cleanup first"
     fi
@@ -388,6 +455,39 @@ phase_prepare() {
     ROTATION_DIR=$rotation_dir
     install -m 600 "$ROOT_ENV" "$ROTATION_DIR/root.env.rollback"
     install -m 600 "$CLOUD_ENV" "$ROTATION_DIR/cloud.env.rollback"
+    if [ -f "$CHAT_ENV" ]; then
+        install -m 600 "$CHAT_ENV" "$ROTATION_DIR/chat.env.rollback"
+    fi
+    if [ ! -f "$TUNNEL_TOKEN_FILE" ]; then
+        argv_snapshot="$ROTATION_DIR/cloudflared.argv.json"
+        bootstrap_token="$ROTATION_DIR/cloudflared.token.bootstrap"
+        install -m 600 /dev/null "$argv_snapshot"
+        docker inspect --format '{{json .Config.Cmd}}' cloudflared > "$argv_snapshot" || \
+            die "current tunnel token file is missing and cloudflared argv could not be inspected"
+        install -m 600 /dev/null "$bootstrap_token"
+        jq -jer '
+            if type != "array" then error("cloudflared argv is not an array") else . end
+            | [
+                range(0; length) as $index
+                | if .[$index] == "--token" then .[$index + 1]
+                  elif ((.[$index] | type) == "string" and (.[$index] | startswith("--token=")))
+                  then (.[$index] | sub("^--token="; ""))
+                  else empty
+                  end
+              ] as $tokens
+            | if (($tokens | length) == 1
+                  and ($tokens[0] | type) == "string"
+                  and ($tokens[0] | length) > 0)
+              then $tokens[0]
+              else error("cloudflared argv must contain exactly one non-empty token")
+              end
+        ' "$argv_snapshot" > "$bootstrap_token" || \
+            die "current tunnel token could not be isolated from protected cloudflared argv"
+        chmod 600 "$bootstrap_token"
+        install_tunnel_token "$bootstrap_token"
+        rm -f -- "$argv_snapshot" "$bootstrap_token"
+    fi
+    require_file "$TUNNEL_TOKEN_FILE" "current tunnel token file"
     install -m 600 "$TUNNEL_TOKEN_FILE" "$ROTATION_DIR/cloudflared.token.rollback"
     current_token=
     IFS= read -r current_token < "$ROTATION_DIR/cloudflared.token.rollback" || true
@@ -404,6 +504,7 @@ phase_prepare() {
     printf '%s\n' "$ROTATION_DIR" > "$state_source"
     install -m 600 "$state_source" "$ACTIVE_STATE"
     log "Prepared protected rollback state in $ROTATION_DIR"
+    log "Next: rotate the tunnel token explicitly in the Cloudflare dashboard, then run rotate-tunnel"
 }
 
 snapshot_old_connection_ids() {
@@ -451,6 +552,7 @@ phase_rotate_tunnel() {
     local api_token zone_id tunnel_id auth_config zone_response account_id
     local connections_response old_connection_ids token_response staged_token
     local old_hash new_hash public_response client_id delete_index
+    local post_token_response post_token post_hash installed_hash
 
     load_rotation_dir
     require_file "$CLOUD_ENV" "Nexus Cloud environment file"
@@ -497,6 +599,18 @@ phase_rotate_tunnel() {
     public_response="$ROTATION_DIR/tunnel-public-verification.response"
     public_request "$TUNNEL_VERIFY_URL" "$public_response"
 
+    post_token_response="$ROTATION_DIR/tunnel-token-post-verification.json"
+    post_token="$ROTATION_DIR/cloudflared.token.post-verification"
+    cf_request GET "$CF_API_BASE/accounts/$account_id/cfd_tunnel/$tunnel_id/token" "$post_token_response"
+    jq -jer '.result | select(type == "string" and length > 0)' "$post_token_response" > "$post_token"
+    chmod 600 "$post_token"
+    post_hash="$(sha256sum "$post_token" | awk '{print $1}')"
+    installed_hash="$(sha256sum "$TUNNEL_TOKEN_FILE" | awk '{print $1}')"
+    [ "$post_hash" = "$new_hash" ] && [ "$installed_hash" = "$new_hash" ] && [ "$new_hash" != "$old_hash" ] || \
+        die "adopted tunnel token failed the dashboard GET and installed-file hash post-condition"
+    printf '%s\n' "$installed_hash" > "$ROTATION_DIR/cloudflared.token.adopted.sha256"
+    chmod 600 "$ROTATION_DIR/cloudflared.token.adopted.sha256"
+
     # The new token and connector are now verified. Recovery is no longer
     # needed, and only the client IDs observed before replacement are removed.
     TUNNEL_RECOVERY_PENDING=0
@@ -520,6 +634,19 @@ phase_rotate_storage() {
     require_file "$ROTATION_DIR/cloud.env.rollback" "Cloud environment rollback"
     require_file "$ROOT_ENV" "root environment file"
     require_file "$CLOUD_ENV" "Nexus Cloud environment file"
+    if [ -f "$ROTATION_DIR/chat.env.rollback" ]; then
+        require_file "$CHAT_ENV" "Nexus Chat environment file"
+    elif [ -e "$CHAT_ENV" ]; then
+        die "Nexus Chat environment appeared after prepare; restart prepare so it joins the atomic credential set"
+    fi
+    require_env_value_present "$ROOT_ENV" MINIO_ROOT_USER "root environment"
+    require_env_value_present "$ROOT_ENV" MINIO_ROOT_PASSWORD "root environment"
+    require_env_value_present "$CLOUD_ENV" NEXUS_STORAGE_S3_ACCESS_KEY "Nexus Cloud environment"
+    require_env_value_present "$CLOUD_ENV" NEXUS_STORAGE_S3_SECRET_KEY "Nexus Cloud environment"
+    if [ -f "$ROTATION_DIR/chat.env.rollback" ]; then
+        require_env_value_present "$CHAT_ENV" NEXUS__STORAGE__ACCESS_KEY "Nexus Chat environment"
+        require_env_value_present "$CHAT_ENV" NEXUS__STORAGE__SECRET_KEY "Nexus Chat environment"
+    fi
 
     new_user="$ROTATION_DIR/minio-root-user.new"
     new_password="$ROTATION_DIR/minio-root-password.new"
@@ -532,6 +659,10 @@ phase_rotate_storage() {
     replace_env_value_from_file "$ROOT_ENV" MINIO_ROOT_PASSWORD "$new_password"
     replace_env_value_from_file "$CLOUD_ENV" NEXUS_STORAGE_S3_ACCESS_KEY "$new_user"
     replace_env_value_from_file "$CLOUD_ENV" NEXUS_STORAGE_S3_SECRET_KEY "$new_password"
+    if [ -f "$ROTATION_DIR/chat.env.rollback" ]; then
+        replace_env_value_from_file "$CHAT_ENV" NEXUS__STORAGE__ACCESS_KEY "$new_user"
+        replace_env_value_from_file "$CHAT_ENV" NEXUS__STORAGE__SECRET_KEY "$new_password"
+    fi
     recreate_minio
     wait_for_minio_health
     STORAGE_PENDING=0
@@ -539,10 +670,25 @@ phase_rotate_storage() {
     log "Storage rotation reached the paired MinIO health checkpoint"
 }
 
+phase_rollback_storage() {
+    load_rotation_dir
+    require_file "$ROTATION_DIR/root.env.rollback" "root environment rollback"
+    require_file "$ROTATION_DIR/cloud.env.rollback" "Cloud environment rollback"
+    require_file "$ROTATION_DIR/storage.checkpoint" "completed storage checkpoint"
+
+    STORAGE_PENDING=1
+    rollback_storage
+    STORAGE_PENDING=0
+    rm -f -- "$ROTATION_DIR/storage.checkpoint"
+    log "Restored the prepared storage credential pair and removed the storage checkpoint"
+}
+
 phase_cleanup() {
     local doomed
 
     load_rotation_dir
+    require_file "$ROTATION_DIR/tunnel.checkpoint" "completed tunnel checkpoint"
+    require_file "$ROTATION_DIR/storage.checkpoint" "completed storage checkpoint"
     doomed=$ROTATION_DIR
     case "$doomed" in
         "$RUNTIME_DIR"/rotation.??????) ;;
@@ -557,6 +703,7 @@ case "${1:-}" in
     prepare) acquire_rotation_lock; phase_prepare ;;
     rotate-tunnel) acquire_rotation_lock; phase_rotate_tunnel ;;
     rotate-storage) acquire_rotation_lock; phase_rotate_storage ;;
+    rollback-storage) acquire_rotation_lock; phase_rollback_storage ;;
     cleanup) acquire_rotation_lock; phase_cleanup ;;
     -h|--help) usage ;;
     *) usage >&2; exit 2 ;;

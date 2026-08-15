@@ -78,8 +78,9 @@ listener_state() {
     if port_has_listener "$port"; then
         printf '%s\n' occupied
         return 0
+    else
+        result=$?
     fi
-    result=$?
     case "$result" in
         1) printf '%s\n' absent ;;
         *) printf '%s\n' unverifiable ;;
@@ -91,7 +92,7 @@ pid_matches_service() {
     local port=$2
     local expected_dir=$3
     local exec_pattern=$4
-    local listening_pid cwd cmdline
+    local listening_pid
 
     case "$pid" in
         ''|*[!0-9]*) process_error "invalid PID: $pid"; return 1 ;;
@@ -108,11 +109,27 @@ pid_matches_service() {
         process_error "PID $pid does not own :$port"
         return 1
     fi
+    pid_process_identity_matches "$pid" "$expected_dir" "$exec_pattern"
+}
+
+pid_process_identity_matches() {
+    local pid=$1
+    local expected_dir=$2
+    local exec_pattern=$3
+    local cwd cmdline
+
+    case "$pid" in
+        ''|*[!0-9]*) process_error "invalid PID: $pid"; return 1 ;;
+    esac
+    if [ -z "$expected_dir" ] || [ -z "$exec_pattern" ]; then
+        process_error "service ownership check requires a directory and executable pattern"
+        return 1
+    fi
     if ! kill -0 "$pid" 2>/dev/null; then
         process_error "PID $pid is not live"
         return 1
     fi
-    if ! cwd="$("$READLINK_BIN" -f "/proc/$pid/cwd" 2>/dev/null)"; then
+    if ! cwd="$("$READLINK_BIN" -f "$PROC_ROOT/$pid/cwd" 2>/dev/null)"; then
         process_error "could not resolve working directory for PID $pid"
         return 1
     fi

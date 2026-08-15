@@ -24,17 +24,24 @@
 
 - `apps/Nexus/crates/nexus-db/src/repository/reactions.rs`: portable UUID SQL for every reaction operation.
 - `apps/Nexus/crates/nexus-db/tests/reactions_postgres.rs`: ignored scratch-Postgres regression covering the complete reaction lifecycle.
+- `apps/Nexus/crates/nexus-api/src/routes/messages.rs`: target-bound bulk reaction-delete authorization and cross-channel regressions.
 - `apps/Nexus-Cloud/src/startup-summary.ts`: pure secret-free startup summary formatter.
 - `apps/Nexus-Cloud/src/startup-summary.test.ts`: sentinel-secret non-disclosure regression.
 - `apps/Nexus-Cloud/src/index.ts`: logs only the safe summary.
+- `apps/Nexus-Cloud/src/storage/index.ts`: local shared pools resolve current protected credentials and do not persist new raw keys.
+- `apps/Nexus-Cloud/src/storage/index.test.ts`: stale legacy-pool credential regression.
+- `apps/Nexus-Cloud/src/storage/s3.ts`: abort-signal support for bounded authenticated probes.
 - `deploy/production/nexus-chat.Caddyfile`: production request-log header filtering.
 - `apps/Nexus/Caddyfile`: app-owned equivalent header filtering.
 - `deploy/production/tests/caddy-logging.test.ts`: structural regression for sensitive-header deletion.
 - `deploy/production/processes.sh`: listener ownership and conservative PID reconciliation helpers.
-- `deploy/production/tests/processes.test.sh`: fake-process/unit tests for reconciliation rules.
-- `deploy/production/deploy.sh`: consumes reconciliation helpers in start, status, and stop.
+- `deploy/production/tests/processes.test.sh`: fake-process/unit tests for reconciliation, restart, log, and HTTP-health rules.
+- `deploy/production/deploy.sh`: consumes reconciliation helpers in start, status, stop, safe Cloud/Chat/Caddy restart, and checkpoint-gated log cleanup.
+- `deploy/production/start-cloud.sh`: protected Cloud environment loader with no secret-bearing launcher arguments.
 - `deploy/production/cloudflared.compose.yml`: managed tunnel container using a mounted token file, never a token argument.
 - `deploy/production/rotate-production-secrets.sh`: non-echoing, checkpointed Cloudflare/MinIO rotation and rollback orchestration.
+- `deploy/production/storage-probe.ts`: secret-free authenticated disposable S3 write/read/delete probe.
+- `deploy/production/tests/storage-probe.test.ts`: probe lifecycle, cleanup, and bucket-scope regressions.
 - `.gitignore`: narrow runtime secret and rollback paths.
 
 ---
@@ -44,14 +51,19 @@
 **Files:**
 - Modify: `apps/Nexus/crates/nexus-db/src/repository/reactions.rs`
 - Create: `apps/Nexus/crates/nexus-db/tests/reactions_postgres.rs`
+- Modify: `apps/Nexus/crates/nexus-api/src/routes/messages.rs`
 
 **Interfaces:**
 - Consumes: `NEXUS_TEST_DATABASE_URL`, which must name a scratch PostgreSQL database and follows `identity_provisioning.rs` safeguards.
-- Produces: unchanged public repository function signatures; SQL parameters remain strings accepted by `sqlx::AnyPool`.
+- Produces: unchanged public repository function signatures; PostgreSQL casts UUID bound parameters while keeping indexed columns unchanged, SQLite remains valid, and both bulk route authorizations bind to the resolved target channel/server.
 
 - [ ] **Step 1: Write the ignored PostgreSQL lifecycle regression**
 
-Create a scratch-database test that installs Any drivers, opens `NEXUS_TEST_DATABASE_URL`, creates isolated users/messages/reactions fixtures in a transaction, and asserts:
+Create a scratch-database test that installs Any drivers, opens `NEXUS_TEST_DATABASE_URL`, creates isolated users/messages/reactions fixtures, and covers add/duplicate/count/reactors/remove plus batch counts, batch user lookups, emoji moderation delete, and all-reactions moderation delete. Use UUID-tagged fixtures and guaranteed cleanup; refuse a URL whose database name lacks `test` or `scratch`.
+
+Add API tests in which an owner-authorized URL channel and the target message's actual channel are different. Assert both bulk DELETE handlers return not-found and leave all target reactions unchanged.
+
+The single-operation lifecycle includes:
 
 ```rust
 assert!(reactions::add_reaction(&pool, message_id, user_id, "👍").await?);
@@ -62,8 +74,6 @@ assert_eq!(reactions::get_reactors(&pool, message_id, "👍", 10).await?, vec![u
 assert!(reactions::remove_reaction(&pool, message_id, user_id, "👍").await?);
 assert!(!reactions::has_user_reacted(&pool, message_id, user_id, "👍").await?);
 ```
-
-Use UUID-tagged fixture names and transaction rollback; refuse a URL whose database name lacks `test` or `scratch`.
 
 - [ ] **Step 2: Run the regression and capture the UUID/text failure**
 
@@ -77,17 +87,19 @@ Expected: FAIL on add with PostgreSQL reporting a UUID column versus text expres
 
 - [ ] **Step 3: Make all reaction SQL portable**
 
-For insertion, select the already typed primary keys instead of assigning text parameters directly:
+Detect the `AnyPool` backend. PostgreSQL leaves indexed UUID columns unchanged and casts each bound UUID value:
 
 ```sql
 INSERT INTO reactions (message_id, user_id, emoji, created_at)
-SELECT m.id, u.id, $3, CURRENT_TIMESTAMP
-FROM messages m CROSS JOIN users u
-WHERE CAST(m.id AS TEXT) = $1 AND CAST(u.id AS TEXT) = $2
+VALUES ($1::uuid, $2::uuid, $3, CURRENT_TIMESTAMP)
 ON CONFLICT (message_id, user_id, emoji) DO NOTHING
+
+DELETE FROM reactions WHERE message_id = $1::uuid AND user_id = $2::uuid
 ```
 
-For predicates, replace every UUID comparison with `CAST(message_id AS TEXT) = $n` and `CAST(user_id AS TEXT) = $n`. In dynamic `IN` queries use `CAST(message_id AS TEXT) IN (...)`. In tuple-returning batch queries select `CAST(message_id AS TEXT) AS message_id` and `CAST(user_id AS TEXT) AS user_id` so AnyPool continues decoding strings.
+SQLite emits `$1`, `$2`, and so on without casts. Dynamic PostgreSQL `IN` lists use `$n::uuid` for every value and never cast `message_id` or `user_id`, preserving index use. Tuple outputs may select `CAST(message_id AS TEXT) AS message_id` and `CAST(user_id AS TEXT) AS user_id` so `AnyPool` continues decoding strings.
+
+For each bulk DELETE route, resolve the target message joined to its actual channel/server. Reject when the URL channel differs from the resolved channel, then authorize the resolved target server/channel before calling the repository delete.
 
 - [ ] **Step 4: Run PostgreSQL and SQLite gates**
 
@@ -103,7 +115,7 @@ Expected: all pass; the scratch database contains no committed fixture rows.
 - [ ] **Step 5: Commit the Nexus submodule change and update the parent gitlink**
 
 ```bash
-git -C apps/Nexus add crates/nexus-db/src/repository/reactions.rs crates/nexus-db/tests/reactions_postgres.rs
+git -C apps/Nexus add crates/nexus-api/src/routes/messages.rs crates/nexus-db/src/repository/reactions.rs crates/nexus-db/tests/reactions_postgres.rs
 git -C apps/Nexus commit -m "fix(db): make reaction UUID queries portable"
 git add apps/Nexus
 git commit -m "fix(chat): repair reaction persistence"
@@ -216,6 +228,12 @@ test_rejects_foreign_listener
 test_replaces_stale_pid_file
 test_rejects_multiple_listener_pids
 test_validated_pid_rejects_pid_that_no_longer_owns_port
+test_stop_refuses_a_mismatched_pid_without_signalling_it
+test_start_appends_to_existing_service_log
+test_http_health_requires_curl_fail_and_semantic_success
+test_caddy_restart_validates_config_before_stopping
+test_cloud_restart_refuses_a_mismatched_managed_pid
+test_sensitive_log_reset_requires_both_rotation_checkpoints
 ```
 
 Each test uses a temporary `PID_DIR`; it never reads or writes `/tmp/nexus-production/pids`.
@@ -232,7 +250,9 @@ Expected: FAIL because the helper file does not exist.
 
 Resolve listeners with `ss -H -ltnp "sport = :$port"`, require exactly one PID, require `kill -0`, require `/proc/$pid/cwd` to equal the expected directory, and require `/proc/$pid/cmdline` to contain the exact executable pattern. Write PID files atomically with `umask 077`, a temporary sibling, and `mv`.
 
-In `start_service`, call `reconcile_pid` before starting; return success only after safe adoption. Treat an occupied but unverifiable port as a hard conflict. In `status`, show `managed`, `conflict`, or `not running`. In `stop`, kill only `validated_pid` output and otherwise leave the process untouched.
+In `start_service`, call `reconcile_pid` before starting, then use a bounded reconciliation loop for the launched process. If it misses the checkpoint, revalidate that exact PID's cwd/command before stopping it; `stop` may safely adopt an exact late listener before signalling it. Treat an occupied but unverifiable port as a hard conflict and append to the existing log until explicit post-invalidation cleanup. In `status`, show `managed`, `conflict`, or `not running`; HTTP checks use `curl --fail` and accept only exact plain `ok`/`healthy` or semantic JSON success. In `stop`, kill only validated or exactly reconciled output and otherwise leave the process untouched.
+
+Expose `restart cloud`, `restart nexus-chat`, and `restart nexus-chat-web`. Cloud uses `start-cloud.sh` to clear inherited credential aliases and source the protected Cloud file after `setsid`/`nohup`, so secrets never appear as `KEY=value` launcher arguments. Require the protected Cloud/Chat configuration before stopping either backend and validate the Caddyfile before stopping Caddy. Expose `cleanup-log` only for Cloud/Caddy, require both durable rotation checkpoints, stop only the validated PID, atomically replace only the exact log with a mode-`0600` empty file, and start only that service.
 
 - [ ] **Step 4: Run unit and production-script syntax gates**
 
@@ -257,16 +277,18 @@ git commit -m "fix(deploy): reconcile service PID ownership"
 **Files:**
 - Create: `deploy/production/cloudflared.compose.yml`
 - Create: `deploy/production/rotate-production-secrets.sh`
+- Create: `deploy/production/storage-probe.ts`
 - Modify: `.gitignore`
 - Test: `deploy/production/tests/rotation.test.sh`
+- Test: `deploy/production/tests/storage-probe.test.ts`
 
 **Interfaces:**
-- Consumes: protected `CF_API_TOKEN`, discovered Cloudflare account ID, existing tunnel ID, root `.env`, and `apps/Nexus-Cloud/.env`.
+- Consumes: protected `CF_API_TOKEN`, operator-completed Cloudflare dashboard rotation, required `NEXUS_ROTATION_TUNNEL_VERIFY_URL`, discovered Cloudflare account ID, existing tunnel ID, root `.env`, and `apps/Nexus-Cloud/.env`.
 - Produces: `/tmp/nexus-production/secrets/cloudflared.token` mode `0600`; a managed `cloudflared` container whose argv contains only `--token-file /run/secrets/tunnel-token`.
 
 - [ ] **Step 1: Write command-capture rotation tests**
 
-Override `curl`, `docker`, `openssl`, and `install` with recorders. Assert secrets occur only in protected input files/stdin, never command arguments or captured stdout. Assert failure before the MinIO health checkpoint restores both environment files and recreates MinIO with matching old credentials.
+Override `curl`, `docker`, `openssl`, and `install` with recorders. Assert secrets occur only in protected input files/stdin, never command arguments or captured stdout. Cover protected bootstrap from the current connector argv when no token file exists, changed-token GET/adoption/re-fetch/hash verification, failure recovery, explicit storage rollback after its MinIO checkpoint, the optional deployed-Chat pair, preservation/refusal of concurrent environment edits, and cleanup refusal until both checkpoints exist. Assert failure before the MinIO health checkpoint restores the atomic credential-key set and recreates MinIO with matching old credentials.
 
 - [ ] **Step 2: Run tests red**
 
@@ -283,12 +305,13 @@ command: ["tunnel", "--no-autoupdate", "run", "--token-file", "/run/secrets/tunn
 restart: unless-stopped
 ```
 
-The script uses `set -euo pipefail`, `umask 077`, `mktemp -d /tmp/nexus-production/rotation.XXXXXX`, restores on `ERR` until each explicit checkpoint, and edits environment files without echoing values. It derives the Cloudflare account ID from the authenticated zone response, rotates the tunnel secret with `PATCH /accounts/{account}/cfd_tunnel/{tunnel}` using a new 32-byte base64 secret, fetches the replacement token with the documented token endpoint, and force-disconnects previous connections after the new token file is ready. References: Cloudflare's official tunnel-token and tunnel-update API documentation.
+The script uses `set -euo pipefail`, `umask 077`, bounded Cloudflare/public requests, `mktemp -d /tmp/nexus-production/rotation.XXXXXX`, restores on `ERR` until each explicit checkpoint, and edits environment files without echoing values. `prepare` can inspect the exact running connector command into a protected file, extract the one current token into the protected token file, hash it, and remove the argv snapshot without printing it. The operator—not the script—rotates the tunnel credential in the Cloudflare dashboard. `rotate-tunnel` derives the account ID from the authenticated zone response, requires `NEXUS_ROTATION_TUNNEL_VERIFY_URL`, retrieves the dashboard-issued token with the documented GET endpoint, requires its hash to differ from the prepared token, adopts it, verifies the replacement connector and public route, re-fetches it, and requires the remote/staged/installed hashes to match before disconnecting old connections. Storage rotation conditionally includes the deployed Nexus Chat environment. `rollback-storage` remains callable after the MinIO health checkpoint and restores only the six affected credential keys when their current values match the prepared old or expected new values, preserving unrelated edits.
 
 - [ ] **Step 4: Run tests and static checks**
 
 ```bash
 bash deploy/production/tests/rotation.test.sh
+bun test deploy/production/tests/storage-probe.test.ts
 bash -n deploy/production/rotate-production-secrets.sh
 docker compose -f deploy/production/cloudflared.compose.yml config >/dev/null
 git diff --check
@@ -297,7 +320,7 @@ git diff --check
 - [ ] **Step 5: Commit and push all software changes**
 
 ```bash
-git add .gitignore deploy/production/cloudflared.compose.yml deploy/production/rotate-production-secrets.sh deploy/production/tests/rotation.test.sh
+git add .gitignore deploy/production/cloudflared.compose.yml deploy/production/rotate-production-secrets.sh deploy/production/storage-probe.ts deploy/production/tests/rotation.test.sh deploy/production/tests/storage-probe.test.ts
 git commit -m "fix(security): manage production credential rotation"
 git push origin main
 ```
@@ -315,23 +338,116 @@ git push origin main
 
 - [ ] **Step 1: Establish rollback and baseline without printing secrets**
 
-Run the rotation script's `prepare` phase. Record only file hashes, modes, service/container IDs, health status, and HTTP codes. Confirm rollback copies are mode `0600` in the temporary directory.
+Require and export `NEXUS_ROTATION_TUNNEL_VERIFY_URL` as the real public route used for post-adoption verification, then run the rotation script's `prepare` phase:
+
+```bash
+: "${NEXUS_ROTATION_TUNNEL_VERIFY_URL:?export the required public tunnel verification URL}"
+export NEXUS_ROTATION_TUNNEL_VERIFY_URL
+bash deploy/production/rotate-production-secrets.sh prepare
+```
+
+If the protected token file does not exist yet, `prepare` bootstraps the current token from a protected exact-container argv snapshot and deletes that snapshot without printing it. It also includes the deployed Nexus Chat environment when present. Record only file hashes, modes, service/container IDs, health status, and HTTP codes. Confirm every rollback copy is mode `0600` in the temporary directory.
 
 - [ ] **Step 2: Deploy containment first**
 
-Restart Nexus Cloud and Nexus Chat Caddy only. Send a disposable authenticated request, then scan fresh logs for fixed sentinel strings and sensitive header names. Stop if Cloud still logs storage fields or Caddy logs request headers.
+Record the current byte length of both logs, then use the validated per-service paths so the containment restart appends instead of truncating the compromised history:
+
+```bash
+bash deploy/production/deploy.sh restart cloud
+bash deploy/production/deploy.sh restart nexus-chat-web
+```
+
+Send a disposable authenticated request, then scan only bytes written after the recorded offsets for fixed sentinel strings and sensitive header names. Stop if Cloud still logs storage fields or Caddy logs request headers. Do not remove historical logs yet.
 
 - [ ] **Step 3: Rotate and recreate cloudflared**
 
-Run the script's `rotate-tunnel` phase. Confirm the replacement container is healthy, public routes return expected codes, its command contains `--token-file` but no token-shaped argument, and Cloudflare reports only replacement connections. Force-disconnect old connections as documented by Cloudflare.
+Pause here for the operator to rotate the existing tunnel token explicitly in the Cloudflare dashboard. The recovery script does not mutate the remote tunnel credential. After the dashboard reports rotation complete, retain the required verification URL in the environment and run:
 
-- [ ] **Step 4: Rotate MinIO and Cloud together**
+```bash
+: "${NEXUS_ROTATION_TUNNEL_VERIFY_URL:?export the required public tunnel verification URL}"
+bash deploy/production/rotate-production-secrets.sh rotate-tunnel
+```
 
-Run the `rotate-storage` phase. Recreate `nexus-systems-minio-1`, wait for Docker health, restart Cloud, and perform a disposable S3 write/read/delete probe under the configured bucket prefix. On failure, allow the scripted paired rollback; do not delete or recreate the volume.
+The phase retrieves the dashboard-issued token with GET, requires a changed hash, adopts it, verifies the replacement connector and public URL, re-fetches it, and requires the remote/staged/installed hashes to agree before deleting only the previously observed connections. Confirm the replacement container is healthy, public routes return expected codes, its command contains `--token-file` but no token-shaped argument, and Cloudflare reports only replacement connections.
+
+- [ ] **Step 4: Rotate MinIO and every deployed consumer together**
+
+Export `NEXUS_ROTATION_S3_PROBE_BUCKET` as an existing disposable-probe bucket under the configured prefix. `prepare` has conditionally included `deploy/production/nexus-chat.env` in the protected atomic set when that deployment exists. Run the following as one `set -euo pipefail` shell block so any Cloud/Chat restart, semantic health, deadline, or authenticated S3 write/read/delete failure automatically invokes post-checkpoint rollback and restarts each deployed consumer against the restored credentials:
+
+```bash
+set -euo pipefail
+: "${NEXUS_ROTATION_S3_PROBE_BUCKET:?export an existing probe bucket under the configured prefix}"
+export NEXUS_ROTATION_S3_PROBE_BUCKET
+bash deploy/production/rotate-production-secrets.sh rotate-storage
+
+probe_cloud_storage() (
+    unset NEXUS_STORAGE_S3_ACCESS_KEY NEXUS_STORAGE_S3_SECRET_KEY \
+        NEXUS__STORAGE__ACCESS_KEY NEXUS__STORAGE__SECRET_KEY
+    set -a
+    . apps/Nexus-Cloud/.env
+    set +a
+    export NEXUS_STORAGE_S3_ENDPOINT="${NEXUS_STORAGE_S3_ENDPOINT:-http://localhost:9000}"
+    export NEXUS_STORAGE_S3_REGION="${NEXUS_STORAGE_S3_REGION:-us-east-1}"
+    export NEXUS_STORAGE_S3_BUCKET_PREFIX="${NEXUS_STORAGE_S3_BUCKET_PREFIX:-nexus}"
+    timeout 30s bun run deploy/production/storage-probe.ts
+)
+
+verify_deployed_chat_storage() {
+    [ -f deploy/production/nexus-chat.env ] || return 0
+    bash deploy/production/deploy.sh restart nexus-chat \
+        && ( . deploy/production/deploy.sh; \
+            http_endpoint_healthy http://localhost:8180/api/v1/health ) \
+        && (
+            unset NEXUS_STORAGE_S3_ENDPOINT NEXUS_STORAGE_S3_ACCESS_KEY \
+                NEXUS_STORAGE_S3_SECRET_KEY NEXUS_ROTATION_S3_PROBE_BUCKET
+            set -a
+            . deploy/production/nexus-chat.env
+            set +a
+            export NEXUS_STORAGE_S3_ENDPOINT="$NEXUS__STORAGE__ENDPOINT"
+            export NEXUS_STORAGE_S3_ACCESS_KEY="$NEXUS__STORAGE__ACCESS_KEY"
+            export NEXUS_STORAGE_S3_SECRET_KEY="$NEXUS__STORAGE__SECRET_KEY"
+            export NEXUS_STORAGE_S3_REGION="${NEXUS__STORAGE__REGION:-us-east-1}"
+            export NEXUS_STORAGE_S3_BUCKET_PREFIX="${NEXUS_ROTATION_CHAT_S3_BUCKET_PREFIX:-nexus}"
+            export NEXUS_ROTATION_S3_PROBE_BUCKET="$NEXUS__STORAGE__BUCKET"
+            timeout 30s bun run deploy/production/storage-probe.ts
+        )
+}
+
+if bash deploy/production/deploy.sh restart cloud \
+    && ( . deploy/production/deploy.sh; http_endpoint_healthy http://localhost:8787/health ) \
+    && probe_cloud_storage \
+    && verify_deployed_chat_storage; then
+    : # checkpoint verified through Cloud, Chat when deployed, and bounded authenticated S3
+else
+    recovery_status=0
+    if bash deploy/production/rotate-production-secrets.sh rollback-storage; then
+        bash deploy/production/deploy.sh restart cloud || recovery_status=1
+        ( . deploy/production/deploy.sh; \
+            http_endpoint_healthy http://localhost:8787/health ) || recovery_status=1
+        if [ -f deploy/production/nexus-chat.env ]; then
+            bash deploy/production/deploy.sh restart nexus-chat || recovery_status=1
+        fi
+    else
+        recovery_status=1
+    fi
+    [ "$recovery_status" -eq 0 ] || \
+        printf 'storage rollback/recovery requires immediate operator attention\n' >&2
+    exit 1
+fi
+```
+
+Each probe has an internal abort deadline and a longer outer process deadline, emits only pass/fail, and attempts deletion even when the PUT response is lost. Chat uses its configured bucket. Cloud shared-pool provisioning resolves the current protected credentials instead of legacy persisted raw keys and is covered by the Cloud test gate. Do not delete or recreate the MinIO volume. Rollback changes only the six prepared credential keys, refuses to overwrite a concurrent credential edit, preserves unrelated lines, and removes the storage checkpoint; investigate and rerun before log or rotation cleanup.
 
 - [ ] **Step 5: Remove compromised historical logs**
 
-After old credentials are invalid, stop the two affected log writers briefly, remove only the identified Cloud and Nexus Chat Caddy runtime log files, recreate empty files if their launch method requires them, and restart. Do not touch database, object-storage, audit, or unrelated application logs.
+After both tunnel and storage checkpoints exist and old credentials are proven invalid, use the checkpoint-gated exact-log procedure:
+
+```bash
+bash deploy/production/deploy.sh cleanup-log cloud
+bash deploy/production/deploy.sh cleanup-log nexus-chat-web
+```
+
+Each command validates the replacement service configuration, stops only its validated PID, atomically installs an empty mode-`0600` exact log, and restarts only that service. Do not touch database, object-storage, audit, or unrelated application logs.
 
 - [ ] **Step 6: Reconcile PID ownership**
 
@@ -355,7 +471,7 @@ Using comparisons that emit only pass/fail, verify the old tunnel token cannot c
 
 - [ ] **Step 9: Destroy rollback material and report**
 
-Securely remove the rotation temporary directory only after every check passes. Report commit IDs, restart windows, HTTP status results, PID/listener matches, reaction/storage probe outcomes, invalidation results, and any remaining degradation. Never include credential material.
+Run `bash deploy/production/rotate-production-secrets.sh cleanup` only after every check passes; the command refuses unless both tunnel and storage checkpoint files exist. Report commit IDs, restart windows, HTTP status results, PID/listener matches, reaction/storage probe outcomes, invalidation results, and any remaining degradation. Never include credential material.
 
 ---
 

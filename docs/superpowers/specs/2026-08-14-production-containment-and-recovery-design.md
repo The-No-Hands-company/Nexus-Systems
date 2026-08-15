@@ -1,7 +1,7 @@
 # Production Containment and Recovery Design
 
 **Date:** 2026-08-14
-**Status:** Approved direction; implementation pending
+**Status:** Approved direction; software implementation staged, live execution pending
 
 ## Objective
 
@@ -32,6 +32,18 @@ Apply and test containment changes before generating replacement credentials:
 
 Historical logs containing the old object-storage secret or identity JWTs will be removed after the affected processes are restarted and the old credentials are invalid. Rotation makes captured credential values unusable before log cleanup occurs.
 
+Service starts append to their existing runtime logs. Containment restarts therefore
+preserve the compromised history until both credential-rotation checkpoints are
+complete; only the checkpoint-gated log-cleanup command may replace the two exact
+affected logs.
+
+Cloud starts through a protected-file wrapper: inherited API/storage credential
+names are cleared, the protected Cloud environment is sourced after the launcher
+chain, and no secret-bearing `KEY=value` is placed in process arguments. Startup
+uses bounded listener reconciliation and terminates only the exact launched
+process if it misses that checkpoint; a late exact listener can be safely adopted
+for recovery.
+
 ### 2. Repair Reactions
 
 Keep the repository's `sqlx::AnyPool` compatibility. Add a small database-dialect helper that produces UUID-compatible expressions for PostgreSQL while leaving SQLite behavior intact, then use it consistently across every reaction operation:
@@ -45,6 +57,19 @@ Keep the repository's `sqlx::AnyPool` compatibility. Add a small database-dialec
 - reactor listing.
 
 The regression test must execute add, duplicate add, read/count, user lookup, remove, and post-remove read against PostgreSQL. Existing SQLite tests remain part of the gate so the portability fix cannot regress local development.
+
+PostgreSQL predicates leave indexed UUID columns unchanged and cast bound values
+(`message_id = $n::uuid`, `user_id = $n::uuid`); SQLite uses the same numbered
+parameters without casts. Batch lists follow the same rule. Selected UUID values
+may still be cast to text for `AnyPool` decoding. PostgreSQL coverage includes
+batch counts, batch user lookups, and both moderation deletes.
+
+Both bulk reaction DELETE routes first resolve the target message, its actual
+channel, and its server. The URL channel must equal that actual channel before
+authorization is evaluated against the actual target server/channel. A caller
+who controls one channel cannot use its URL with a message ID from another
+channel; cross-channel regressions cover both bulk routes and prove no target
+reaction is removed.
 
 ### 3. Repair PID Bookkeeping
 
@@ -64,15 +89,20 @@ Shell-level tests will cover valid adoption, stale files, foreign listeners, mis
 The maintenance sequence is intentionally ordered:
 
 1. Land and locally verify containment, reaction, and PID changes.
-2. Restart Nexus Cloud and Nexus Chat's Caddy front door with containment enabled; verify sentinel credentials and identity headers no longer enter fresh logs.
-3. Generate a new Cloudflare tunnel token through the authenticated Cloudflare API for the existing tunnel. Write it directly to the protected runtime credential file without displaying it.
-4. Recreate only the `cloudflared` container. Confirm public routing recovers, the old tunnel token is invalid, and no token appears in process arguments or container metadata.
-5. Generate new strong MinIO root credentials. Update the root infrastructure environment and Nexus Cloud S3 environment atomically without displaying values.
-6. Recreate only MinIO, wait for its health check, then restart Nexus Cloud and verify authenticated bucket access. If MinIO cannot read existing buckets with the new root identity, immediately restore the previous protected environment values, recreate MinIO, and investigate without deleting storage data.
-7. Remove the old credential-bearing Cloud logs and JWT-bearing Caddy logs. Start new empty logs with the correct ownership where required.
+2. Prepare protected rollback state. If the current connector still carries its token in argv, inspect the exact container command into a mode-`0600` file, extract the token directly into the protected token file, hash it, and delete the argv snapshot without printing the token.
+3. Restart only Nexus Cloud and Nexus Chat's Caddy front door through their validated per-service restart paths; verify sentinel credentials and identity headers no longer enter fresh logs. Starts append, so historical compromised logs remain present at this point.
+4. The operator explicitly rotates the existing tunnel token in the Cloudflare dashboard. The script never mutates the remote tunnel credential. With `NEXUS_ROTATION_TUNNEL_VERIFY_URL` required, it fetches the dashboard-issued token with `GET`, proves its hash differs from the prepared token, adopts it from the protected file, recreates only `cloudflared`, verifies a replacement connector and the public URL, re-fetches the token, and proves the remote, staged, and installed hashes match before disconnecting old connections.
+5. Generate new strong MinIO root credentials. Update the root infrastructure environment, Nexus Cloud S3 environment, and the deployed Nexus Chat environment as one conditional atomic credential set without displaying values. Rollback restores only those credential keys, requires each current value to be either the expected replacement or prepared old value, and preserves unrelated concurrent environment edits.
+6. Recreate only MinIO and write the storage checkpoint after its health check. Then restart Nexus Cloud and deployed Nexus Chat and run bounded authenticated disposable S3 write/read/delete probes against both the operator probe bucket and Chat's configured bucket. If any restart, semantic health check, deadline, or S3 probe fails, invoke the explicit `rollback-storage` phase automatically; it remains usable after the MinIO checkpoint, restores the paired credential keys, recreates MinIO, removes the invalid storage checkpoint, and restarts both consumers against the restored pair. Do not delete storage data.
+7. After both tunnel and storage checkpoints exist and old credentials are proven invalid, run the checkpoint-gated cleanup for the exact Cloud and Nexus Chat Caddy logs. It validates the replacement service, stops only its validated PID, installs an empty mode-`0600` log, and restarts only that service.
 8. Reconcile all service PID files through the hardened deployer. Restart a service only when safe adoption is impossible.
 
 The tunnel and storage rotations are separate checkpoints. Failure of the second does not roll back a successful tunnel rotation.
+
+Cloud shared-pool records no longer persist local MinIO credentials. Existing
+legacy fields are ignored and scrubbed from in-memory snapshots; shared-volume
+provisioning resolves the current protected S3 credentials at operation time, so
+environment rotation also covers that path.
 
 ### 5. Verification
 
@@ -101,6 +131,7 @@ Production is not declared fully healthy until every required check passes. Any 
 - Roll back MinIO by restoring both MinIO and Cloud credential sources together.
 - A tunnel rollback uses a newly issued token, not re-exposure of a revoked token in process arguments.
 - Historical log deletion is irreversible but occurs only after credential invalidation; no application data is stored in those runtime logs.
+- Protected rotation cleanup refuses to run unless both the tunnel and storage checkpoint files exist.
 
 ## Deferred Hardening
 
