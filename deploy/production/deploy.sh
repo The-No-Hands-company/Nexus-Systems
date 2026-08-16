@@ -191,16 +191,35 @@ validate_cloud_environment() {
     }
 }
 
-adopt_cloud_api_key_for_dependents() {
-    NEXUS_CLOUD_API_KEY="$(sed -n 's/^NEXUS_CLOUD_API_KEY=//p' \
-        "${NEXUS_CLOUD_ENV_FILE:-$CLOUD_ENV_FILE}" \
-        | head -1 | tr -d '\r' \
-        | sed -e 's/^"//' -e 's/"$//' -e "s/^'//" -e "s/'\$//")"
-    [ -n "$NEXUS_CLOUD_API_KEY" ] || {
-        warn "protected Cloud API key is empty; refusing to start dependent services"
+adopt_cloud_registration_environment_for_dependents() {
+    local cloud_env_file="${NEXUS_CLOUD_ENV_FILE:-$CLOUD_ENV_FILE}"
+    local -a registration_values=()
+
+    validate_cloud_environment || return 1
+    # Source in an isolated shell so duplicate assignments, quoting, and
+    # expansions have exactly the same last-assignment semantics as Cloud's
+    # protected launcher. Only the two registration values cross the pipe.
+    mapfile -d '' -t registration_values < <(
+        (
+            unset NEXUS_CLOUD_API_KEY NEXUS_CLOUD_URL
+            set -a
+            # shellcheck source=/dev/null
+            . "$cloud_env_file"
+            set +a
+            [ -n "${NEXUS_CLOUD_API_KEY:-}" ] && [ -n "${NEXUS_CLOUD_URL:-}" ] || exit 1
+            printf '%s\0%s\0' "$NEXUS_CLOUD_API_KEY" "$NEXUS_CLOUD_URL"
+        ) 2>/dev/null
+    )
+    if [ "${#registration_values[@]}" -ne 2 ] \
+        || [ -z "${registration_values[0]}" ] \
+        || [ -z "${registration_values[1]}" ]; then
+        warn "protected Cloud registration URL/key are incomplete; refusing to start dependent services"
         return 1
-    }
+    fi
+    NEXUS_CLOUD_API_KEY=${registration_values[0]}
+    NEXUS_CLOUD_URL=${registration_values[1]}
     export NEXUS_CLOUD_API_KEY
+    export NEXUS_CLOUD_URL
 }
 
 validate_nexus_chat_caddy() {
@@ -235,6 +254,12 @@ start_cloud_service() {
 }
 
 validate_nexus_chat_environment() {
+    (
+        adopt_cloud_registration_environment_for_dependents
+    ) || {
+        warn "protected Cloud registration configuration is incomplete; refusing to restart nexus-chat"
+        return 1
+    }
     [ -f "$NEXUS_CHAT_ENV_FILE" ] || {
         warn "protected nexus-chat environment is missing; refusing to restart nexus-chat"
         return 1
@@ -264,11 +289,16 @@ start_nexus_chat_service() {
     validate_nexus_chat_environment || return 1
     (
         unset NEXUS__STORAGE__ENDPOINT NEXUS__STORAGE__ACCESS_KEY \
-            NEXUS__STORAGE__SECRET_KEY NEXUS__STORAGE__BUCKET
+            NEXUS__STORAGE__SECRET_KEY NEXUS__STORAGE__BUCKET \
+            NEXUS_CLOUD_API_KEY NEXUS_CLOUD_URL
         set -a
         # shellcheck source=/dev/null
         . "$NEXUS_CHAT_ENV_FILE"
         set +a
+        # The protected Cloud file is authoritative for registration. Load it
+        # after Chat so stale copies in either the shell or Chat file cannot
+        # override the URL/key used by Nexus's startup registration path.
+        adopt_cloud_registration_environment_for_dependents || return 1
         start_service "nexus-chat" "$ROOT/apps/Nexus" 8180 \
             ./target/debug/nexus serve --port 8180 --gateway-port 8181 --voice-port 8182
     )
@@ -300,11 +330,11 @@ start_named_service() {
 
 cmd_start() {
     # Cloud's protected file is authoritative. Validate all required Cloud and
-    # storage credentials, then adopt only the Cloud API key into this shell's
-    # inherited environment for dependent services. It is never passed as a
-    # KEY=value launcher argument.
+    # storage credentials, then adopt the Cloud registration URL/key into this
+    # shell's inherited environment for dependent services. The key is never
+    # passed as a KEY=value launcher argument.
     validate_cloud_environment || return 1
-    adopt_cloud_api_key_for_dependents || return 1
+    adopt_cloud_registration_environment_for_dependents || return 1
 
     log "Starting Nexus Systems on $DOMAIN..."
 

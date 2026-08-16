@@ -60,7 +60,7 @@ probe_cloud_storage() (
     export NEXUS_STORAGE_S3_ENDPOINT="${NEXUS_STORAGE_S3_ENDPOINT:-http://localhost:9000}"
     export NEXUS_STORAGE_S3_REGION="${NEXUS_STORAGE_S3_REGION:-us-east-1}"
     export NEXUS_STORAGE_S3_BUCKET_PREFIX="${NEXUS_STORAGE_S3_BUCKET_PREFIX:-nexus}"
-    timeout 30s bun run deploy/production/storage-probe.ts
+    timeout 300s bun run deploy/production/storage-probe.ts
 )
 
 verify_deployed_chat_storage() {
@@ -80,7 +80,7 @@ verify_deployed_chat_storage() {
             export NEXUS_STORAGE_S3_REGION="${NEXUS__STORAGE__REGION:-us-east-1}"
             export NEXUS_STORAGE_S3_BUCKET_PREFIX="${NEXUS_ROTATION_CHAT_S3_BUCKET_PREFIX:-nexus}"
             export NEXUS_ROTATION_S3_PROBE_BUCKET="$NEXUS__STORAGE__BUCKET"
-            timeout 30s bun run deploy/production/storage-probe.ts
+            timeout 300s bun run deploy/production/storage-probe.ts
         )
 }
 
@@ -107,7 +107,7 @@ else
 fi
 ```
 
-Each probe has internal abort and outer process deadlines, emits only pass/fail, and attempts cleanup even when a PUT response is lost. Chat uses its configured bucket. Shared Cloud pools resolve current protected credentials, not legacy persisted keys. Do not delete or recreate the volume. Rollback changes only the prepared credential keys, refuses to overwrite concurrent credential edits, preserves unrelated lines, and removes the checkpoint; investigate and rerun before cleanup.
+Each probe has separate bounded primary and cleanup deadlines. The 300-second outer guard exceeds the maximum 120-second primary plus 120-second cleanup contract, so it cannot preempt deletion after an ambiguous PUT. Probes emit only pass/fail. Chat uses its configured bucket. Shared Cloud pools resolve current protected credentials, not legacy persisted keys. Do not delete or recreate the volume. Rollback changes only the prepared credential keys, refuses to overwrite concurrent credential edits, preserves unrelated lines, and removes the checkpoint; investigate and rerun before cleanup.
 
 - [ ] **Step 5: Remove compromised historical logs**
 

@@ -338,9 +338,16 @@ CLOUD_ENV
 test_nexus_chat_restart_uses_the_validated_service_path() {
     (
         reset_fixtures
-        local chat_env chat_binary
+        local cloud_env chat_env chat_binary
+        cloud_env="$TEST_ROOT/nexus-chat.restart.cloud.env"
         chat_env="$TEST_ROOT/nexus-chat.restart.env"
         chat_binary="$TEST_ROOT/nexus-chat.binary"
+        cat > "$cloud_env" <<'CLOUD_ENV'
+NEXUS_CLOUD_API_KEY=FILE_CLOUD_KEY_SENTINEL
+NEXUS_CLOUD_URL=http://protected-cloud.example.test:8787
+NEXUS_STORAGE_S3_ACCESS_KEY=FILE_STORAGE_ACCESS_SENTINEL
+NEXUS_STORAGE_S3_SECRET_KEY=FILE_STORAGE_SECRET_SENTINEL
+CLOUD_ENV
         cat > "$chat_env" <<'CHAT_ENV'
 NEXUS__STORAGE__ENDPOINT=http://127.0.0.1:9000
 NEXUS__STORAGE__ACCESS_KEY=CHAT_ACCESS_SENTINEL
@@ -348,8 +355,9 @@ NEXUS__STORAGE__SECRET_KEY=CHAT_SECRET_SENTINEL
 NEXUS__STORAGE__BUCKET=nexus-chat-uploads
 CHAT_ENV
         printf '#!/usr/bin/env bash\nexit 0\n' > "$chat_binary"
-        chmod 600 "$chat_env"
+        chmod 600 "$cloud_env" "$chat_env"
         chmod 700 "$chat_binary"
+        export NEXUS_CLOUD_ENV_FILE="$cloud_env"
         export NEXUS_CHAT_ENV_FILE="$chat_env"
         export NEXUS_CHAT_BINARY_PATH="$chat_binary"
         export SS_OUTPUT="LISTEN 0 511 127.0.0.1:8180 0.0.0.0:* users:((\"nexus\",pid=$TEST_PID,fd=7))"
@@ -364,6 +372,102 @@ CHAT_ENV
         fi
         assert_contains "$TEST_PID" "$(<"$KILL_RECORD")" \
             'nexus-chat restart did not reach the validated per-service stop path'
+    )
+}
+
+test_nexus_chat_launch_adopts_protected_cloud_registration_environment() {
+    (
+        reset_fixtures
+        local cloud_env chat_env chat_binary capture
+        cloud_env="$TEST_ROOT/nexus-chat.cloud.env"
+        chat_env="$TEST_ROOT/nexus-chat.registration.env"
+        chat_binary="$TEST_ROOT/nexus-chat.registration.binary"
+        capture="$TEST_ROOT/nexus-chat.registration.environment"
+        cat > "$cloud_env" <<'CLOUD_ENV'
+NEXUS_CLOUD_API_KEY=STALE_FIRST_CLOUD_KEY_SENTINEL
+NEXUS_CLOUD_URL=http://stale-first-cloud.example.test:8787
+CLOUD_REGISTRATION_HOST=protected-cloud.example.test
+NEXUS_STORAGE_S3_ACCESS_KEY=FILE_STORAGE_ACCESS_SENTINEL
+NEXUS_STORAGE_S3_SECRET_KEY=FILE_STORAGE_SECRET_SENTINEL
+NEXUS_CLOUD_API_KEY=FILE_CLOUD_KEY_SENTINEL
+NEXUS_CLOUD_URL="http://${CLOUD_REGISTRATION_HOST}:8787"
+CLOUD_ENV
+        cat > "$chat_env" <<'CHAT_ENV'
+NEXUS__STORAGE__ENDPOINT=http://127.0.0.1:9000
+NEXUS__STORAGE__ACCESS_KEY=CHAT_ACCESS_SENTINEL
+NEXUS__STORAGE__SECRET_KEY=CHAT_SECRET_SENTINEL
+NEXUS__STORAGE__BUCKET=nexus-chat-uploads
+NEXUS_CLOUD_API_KEY=STALE_CHAT_CLOUD_KEY_SENTINEL
+NEXUS_CLOUD_URL=http://stale-chat-cloud.example.test:8787
+PUBLIC_URL=https://chat.example.test
+CHAT_ENV
+        printf '#!/usr/bin/env bash\nexit 0\n' > "$chat_binary"
+        chmod 600 "$cloud_env" "$chat_env"
+        chmod 700 "$chat_binary"
+        export NEXUS_CLOUD_ENV_FILE="$cloud_env"
+        export NEXUS_CHAT_ENV_FILE="$chat_env"
+        export NEXUS_CHAT_BINARY_PATH="$chat_binary"
+        export NEXUS_CLOUD_API_KEY=STALE_INHERITED_CLOUD_KEY_SENTINEL
+        export NEXUS_CLOUD_URL=http://stale-inherited-cloud.example.test:8787
+
+        start_service() {
+            {
+                printf 'NEXUS_CLOUD_API_KEY=%s\n' "${NEXUS_CLOUD_API_KEY-<unset>}"
+                printf 'NEXUS_CLOUD_URL=%s\n' "${NEXUS_CLOUD_URL-<unset>}"
+                printf 'argv='
+                printf '%q ' "$@"
+                printf '\n'
+            } > "$capture"
+        }
+
+        stop_service() {
+            :
+        }
+
+        main restart nexus-chat
+
+        assert_contains 'NEXUS_CLOUD_API_KEY=FILE_CLOUD_KEY_SENTINEL' "$(<"$capture")" \
+            'Nexus Chat launch did not retain the protected key used by Cloud registration' || return 1
+        assert_contains 'NEXUS_CLOUD_URL=http://protected-cloud.example.test:8787' "$(<"$capture")" \
+            'Nexus Chat launch did not retain the protected URL used by Cloud registration' || return 1
+        if grep -Fq -- 'FILE_CLOUD_KEY_SENTINEL' <(sed -n 's/^argv=//p' "$capture"); then
+            printf 'FAIL: Nexus Chat launch exposed the protected Cloud key in launcher argv\n' >&2
+            return 1
+        fi
+    )
+}
+
+test_nexus_chat_restart_requires_protected_cloud_url() {
+    (
+        reset_fixtures
+        local cloud_env chat_env chat_binary
+        cloud_env="$TEST_ROOT/nexus-chat.missing-url.cloud.env"
+        chat_env="$TEST_ROOT/nexus-chat.missing-url.env"
+        chat_binary="$TEST_ROOT/nexus-chat.missing-url.binary"
+        cat > "$cloud_env" <<'CLOUD_ENV'
+NEXUS_CLOUD_API_KEY=FILE_CLOUD_KEY_SENTINEL
+NEXUS_STORAGE_S3_ACCESS_KEY=FILE_STORAGE_ACCESS_SENTINEL
+NEXUS_STORAGE_S3_SECRET_KEY=FILE_STORAGE_SECRET_SENTINEL
+CLOUD_ENV
+        cat > "$chat_env" <<'CHAT_ENV'
+NEXUS__STORAGE__ENDPOINT=http://127.0.0.1:9000
+NEXUS__STORAGE__ACCESS_KEY=CHAT_ACCESS_SENTINEL
+NEXUS__STORAGE__SECRET_KEY=CHAT_SECRET_SENTINEL
+NEXUS__STORAGE__BUCKET=nexus-chat-uploads
+NEXUS_CLOUD_URL=http://stale-chat-cloud.example.test:8787
+CHAT_ENV
+        printf '#!/usr/bin/env bash\nexit 0\n' > "$chat_binary"
+        chmod 600 "$cloud_env" "$chat_env"
+        chmod 700 "$chat_binary"
+        export NEXUS_CLOUD_ENV_FILE="$cloud_env"
+        export NEXUS_CHAT_ENV_FILE="$chat_env"
+        export NEXUS_CHAT_BINARY_PATH="$chat_binary"
+        export NEXUS_CLOUD_URL=http://stale-inherited-cloud.example.test:8787
+
+        if preflight_service_start nexus-chat >/dev/null 2>&1; then
+            printf 'FAIL: Nexus Chat accepted a Cloud URL absent from the protected Cloud file\n' >&2
+            return 1
+        fi
     )
 }
 
@@ -566,6 +670,8 @@ run_test test_cloud_restart_refuses_a_mismatched_managed_pid
 run_test test_sensitive_log_reset_requires_both_rotation_checkpoints
 run_test test_cloud_launch_loads_protected_env_without_secret_argv_or_stale_inheritance
 run_test test_nexus_chat_restart_uses_the_validated_service_path
+run_test test_nexus_chat_launch_adopts_protected_cloud_registration_environment
+run_test test_nexus_chat_restart_requires_protected_cloud_url
 run_test test_start_reconciles_a_delayed_exact_listener
 run_test test_stop_recovers_an_exact_late_listener_without_a_pid_file
 

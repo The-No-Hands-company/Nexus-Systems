@@ -82,6 +82,20 @@ env_value() {
     return 1
 }
 
+env_effective_value() {
+    local file=$1
+    local key=$2
+    local line value= found=0
+
+    while IFS= read -r line || [ -n "$line" ]; do
+        case "$line" in
+            "$key="*) value=${line#*=}; found=1 ;;
+        esac
+    done < "$file"
+    [ "$found" -eq 1 ] || return 1
+    printf '%s' "$value"
+}
+
 file_mode() {
     stat -c '%a' "$1"
 }
@@ -362,7 +376,59 @@ if [ -n "${FAKE_DOCKER_FAIL_ON:-}" ] && [[ " $* " == *"$FAKE_DOCKER_FAIL_ON"* ]]
 fi
 FAKE_DOCKER
 
-    chmod 700 "$fake_bin/install" "$fake_bin/openssl" "$fake_bin/curl" "$fake_bin/docker"
+    cat > "$fake_bin/chmod" <<'FAKE_CHMOD'
+#!/usr/bin/env bash
+set -euo pipefail
+if [ -n "${FAKE_CHMOD_FAIL_ON:-}" ] && [[ " $* " == *"$FAKE_CHMOD_FAIL_ON"* ]]; then
+    printf 'simulated chmod failure\n' >&2
+    exit 1
+fi
+/bin/chmod "$@"
+FAKE_CHMOD
+
+    cat > "$fake_bin/mv" <<'FAKE_MV'
+#!/usr/bin/env bash
+set -euo pipefail
+joined=" $* "
+if [ -n "${FAKE_MV_FAIL_ALWAYS_MATCH:-}" ] \
+    && [[ "$joined" == *"$FAKE_MV_FAIL_ALWAYS_MATCH"* ]]; then
+    printf 'simulated persistent mv failure\n' >&2
+    exit 1
+fi
+if [ -n "${FAKE_MV_FAIL_ALWAYS_MATCH_2:-}" ] \
+    && [[ "$joined" == *"$FAKE_MV_FAIL_ALWAYS_MATCH_2"* ]]; then
+    printf 'simulated second persistent mv failure\n' >&2
+    exit 1
+fi
+if [ -n "${FAKE_MV_FAIL_ONCE_MATCH:-}" ] \
+    && [[ "$joined" == *"$FAKE_MV_FAIL_ONCE_MATCH"* ]]; then
+    marker="$FAKE_RECORD_DIR/mv-fail-once"
+    if [ ! -e "$marker" ]; then
+        : > "$marker"
+        printf 'simulated one-shot mv failure\n' >&2
+        exit 1
+    fi
+fi
+/usr/bin/mv "$@"
+FAKE_MV
+
+    cat > "$fake_bin/storage-env-writer" <<'FAKE_WRITER'
+#!/usr/bin/env bash
+set -euo pipefail
+: > "$FAKE_WRITER_READY_FILE"
+for ((attempt = 1; attempt <= 100; attempt++)); do
+    if [ -e "$FAKE_WRITER_RELEASE_FILE" ]; then
+        printf 'COOPERATIVE_LATE_EDIT=preserved\n' >> "$ROTATION_ROOT_ENV"
+        exit 0
+    fi
+    sleep 0.05
+done
+printf 'timed out waiting to release cooperative writer\n' >&2
+exit 2
+FAKE_WRITER
+
+    chmod 700 "$fake_bin/install" "$fake_bin/openssl" "$fake_bin/curl" "$fake_bin/docker" \
+        "$fake_bin/chmod" "$fake_bin/mv" "$fake_bin/storage-env-writer"
 }
 
 setup_case() {
@@ -712,7 +778,7 @@ test_storage_checkpoint_can_be_explicitly_rolled_back_after_cloud_probe_failure(
 }
 
 test_storage_rollback_refuses_to_discard_a_concurrent_credential_edit() {
-    local out err rotation_dir status
+    local out err rotation_dir status minio_recreates_before
     setup_case storage-concurrent-credential
     out="$CASE_DIR/stdout"
     err="$CASE_DIR/stderr"
@@ -722,8 +788,13 @@ test_storage_rollback_refuses_to_discard_a_concurrent_credential_edit() {
     run_phase rotate-storage "$out" "$err" FAKE_MINIO_HEALTH=healthy
     IFS= read -r rotation_dir < "$RUNTIME_DIR/rotation.current"
     # This simulates an authorized credential edit after the checkpoint. The
-    # rollback must fail closed rather than restore an older whole-file copy.
+    # rollback must validate the complete affected set before changing any
+    # file, rather than partially restoring earlier keys before this mismatch.
+    printf 'ROOT_LATE_EDIT=preserved\n' >> "$ROOT_ENV"
+    printf 'CLOUD_LATE_EDIT=preserved\n' >> "$CLOUD_ENV"
+    printf 'CHAT_LATE_EDIT=preserved\n' >> "$CHAT_ENV"
     sed -i 's/^NEXUS_STORAGE_S3_SECRET_KEY=.*/NEXUS_STORAGE_S3_SECRET_KEY=CONCURRENT_SECRET_SENTINEL/' "$CLOUD_ENV"
+    minio_recreates_before="$(count_matches "$RECORD_DIR/docker.argv" '--force-recreate minio')"
 
     set +e
     run_phase rollback-storage "$out" "$err" FAKE_MINIO_HEALTH=healthy
@@ -734,10 +805,258 @@ test_storage_rollback_refuses_to_discard_a_concurrent_credential_edit() {
     assert_eq CONCURRENT_SECRET_SENTINEL \
         "$(env_value "$CLOUD_ENV" NEXUS_STORAGE_S3_SECRET_KEY)" \
         'rollback overwrote the concurrent credential value'
+    assert_eq NEW_MINIO_USER_SENTINEL "$(env_value "$ROOT_ENV" MINIO_ROOT_USER)" \
+        'failed rollback partially restored the root access key'
+    assert_eq NEW_MINIO_PASSWORD_SENTINEL "$(env_value "$ROOT_ENV" MINIO_ROOT_PASSWORD)" \
+        'failed rollback partially restored the root secret key'
+    assert_eq NEW_MINIO_USER_SENTINEL \
+        "$(env_value "$CLOUD_ENV" NEXUS_STORAGE_S3_ACCESS_KEY)" \
+        'failed rollback partially restored the Cloud access key'
+    assert_eq NEW_MINIO_USER_SENTINEL \
+        "$(env_value "$CHAT_ENV" NEXUS__STORAGE__ACCESS_KEY)" \
+        'failed rollback partially restored the Nexus Chat access key'
+    assert_eq NEW_MINIO_PASSWORD_SENTINEL \
+        "$(env_value "$CHAT_ENV" NEXUS__STORAGE__SECRET_KEY)" \
+        'failed rollback partially restored the Nexus Chat secret key'
+    assert_eq preserved "$(env_value "$ROOT_ENV" ROOT_LATE_EDIT)" \
+        'failed rollback discarded an unrelated root environment edit'
+    assert_eq preserved "$(env_value "$CLOUD_ENV" CLOUD_LATE_EDIT)" \
+        'failed rollback discarded an unrelated Cloud environment edit'
+    assert_eq preserved "$(env_value "$CHAT_ENV" CHAT_LATE_EDIT)" \
+        'failed rollback discarded an unrelated Nexus Chat environment edit'
+    assert_eq "$minio_recreates_before" \
+        "$(count_matches "$RECORD_DIR/docker.argv" '--force-recreate minio')" \
+        'failed validation recreated MinIO without a complete rollback set'
     [ -f "$rotation_dir/storage.checkpoint" ] || \
         fail 'failed conditional rollback removed the storage checkpoint'
     assert_file_contains "$err" 'changed outside this rotation' \
         'conditional rollback failure did not explain the concurrent edit'
+}
+
+test_storage_rollback_rejects_divergent_duplicate_credentials() {
+    local out err rotation_dir status minio_recreates_before
+    setup_case storage-duplicate-credential
+    out="$CASE_DIR/stdout"
+    err="$CASE_DIR/stderr"
+
+    run_phase prepare "$out" "$err"
+    printf '%s\n' NEW_MINIO_PASSWORD_SENTINEL > "$OPENSSL_BASE64_FILE"
+    run_phase rotate-storage "$out" "$err" FAKE_MINIO_HEALTH=healthy
+    IFS= read -r rotation_dir < "$RUNTIME_DIR/rotation.current"
+    printf 'NEXUS_STORAGE_S3_SECRET_KEY=CONCURRENT_DUPLICATE_SENTINEL\n' >> "$CLOUD_ENV"
+    minio_recreates_before="$(count_matches "$RECORD_DIR/docker.argv" '--force-recreate minio')"
+
+    set +e
+    run_phase rollback-storage "$out" "$err" FAKE_MINIO_HEALTH=healthy
+    status=$?
+    set -e
+
+    [ "$status" -ne 0 ] || fail 'rollback accepted a divergent duplicate credential assignment'
+    assert_eq CONCURRENT_DUPLICATE_SENTINEL \
+        "$(env_effective_value "$CLOUD_ENV" NEXUS_STORAGE_S3_SECRET_KEY)" \
+        'rollback overwrote the effective duplicate credential'
+    assert_eq NEW_MINIO_USER_SENTINEL "$(env_value "$ROOT_ENV" MINIO_ROOT_USER)" \
+        'duplicate rejection partially restored the root access key'
+    assert_eq NEW_MINIO_PASSWORD_SENTINEL "$(env_value "$ROOT_ENV" MINIO_ROOT_PASSWORD)" \
+        'duplicate rejection partially restored the root secret key'
+    assert_eq NEW_MINIO_USER_SENTINEL "$(env_value "$CLOUD_ENV" NEXUS_STORAGE_S3_ACCESS_KEY)" \
+        'duplicate rejection partially restored the Cloud access key'
+    assert_eq NEW_MINIO_USER_SENTINEL "$(env_value "$CHAT_ENV" NEXUS__STORAGE__ACCESS_KEY)" \
+        'duplicate rejection partially restored the Chat access key'
+    assert_eq "$minio_recreates_before" \
+        "$(count_matches "$RECORD_DIR/docker.argv" '--force-recreate minio')" \
+        'duplicate rejection recreated MinIO without a complete rollback set'
+    [ -f "$rotation_dir/storage.checkpoint" ] || \
+        fail 'duplicate rejection removed the storage checkpoint'
+}
+
+test_storage_rollback_rejects_incomplete_staging() {
+    local out err rotation_dir status minio_recreates_before
+    setup_case storage-staging-failure
+    out="$CASE_DIR/stdout"
+    err="$CASE_DIR/stderr"
+
+    run_phase prepare "$out" "$err"
+    printf '%s\n' NEW_MINIO_PASSWORD_SENTINEL > "$OPENSSL_BASE64_FILE"
+    run_phase rotate-storage "$out" "$err" FAKE_MINIO_HEALTH=healthy
+    IFS= read -r rotation_dir < "$RUNTIME_DIR/rotation.current"
+    minio_recreates_before="$(count_matches "$RECORD_DIR/docker.argv" '--force-recreate minio')"
+
+    set +e
+    run_phase rollback-storage "$out" "$err" \
+        FAKE_MINIO_HEALTH=healthy FAKE_CHMOD_FAIL_ON=rollback-next
+    status=$?
+    set -e
+
+    [ "$status" -ne 0 ] || fail 'rollback committed after staged-file permission setup failed'
+    assert_eq NEW_MINIO_USER_SENTINEL "$(env_value "$ROOT_ENV" MINIO_ROOT_USER)" \
+        'staging failure partially restored the root access key'
+    assert_eq NEW_MINIO_PASSWORD_SENTINEL "$(env_value "$ROOT_ENV" MINIO_ROOT_PASSWORD)" \
+        'staging failure partially restored the root secret key'
+    assert_eq NEW_MINIO_USER_SENTINEL "$(env_value "$CLOUD_ENV" NEXUS_STORAGE_S3_ACCESS_KEY)" \
+        'staging failure partially restored the Cloud access key'
+    assert_eq NEW_MINIO_USER_SENTINEL "$(env_value "$CHAT_ENV" NEXUS__STORAGE__ACCESS_KEY)" \
+        'staging failure partially restored the Chat access key'
+    assert_eq "$minio_recreates_before" \
+        "$(count_matches "$RECORD_DIR/docker.argv" '--force-recreate minio')" \
+        'staging failure recreated MinIO without a complete rollback set'
+    [ -f "$rotation_dir/storage.checkpoint" ] || \
+        fail 'staging failure removed the storage checkpoint'
+}
+
+test_storage_rollback_respects_stable_environment_locks() {
+    local out err rotation_dir status minio_recreates_before writer_pid attempt
+    local writer_ready writer_release writer_out writer_err
+    setup_case storage-environment-lock
+    out="$CASE_DIR/stdout"
+    err="$CASE_DIR/stderr"
+
+    run_phase prepare "$out" "$err"
+    printf '%s\n' NEW_MINIO_PASSWORD_SENTINEL > "$OPENSSL_BASE64_FILE"
+    run_phase rotate-storage "$out" "$err" FAKE_MINIO_HEALTH=healthy
+    IFS= read -r rotation_dir < "$RUNTIME_DIR/rotation.current"
+    minio_recreates_before="$(count_matches "$RECORD_DIR/docker.argv" '--force-recreate minio')"
+    writer_ready="$CASE_DIR/writer.ready"
+    writer_release="$CASE_DIR/writer.release"
+    writer_out="$CASE_DIR/writer.stdout"
+    writer_err="$CASE_DIR/writer.stderr"
+    (
+        export PATH="$CASE_DIR/fake-bin:$PATH"
+        export ROTATION_ROOT_ENV="$ROOT_ENV"
+        export NEXUS_ROTATION_ROOT_ENV="$ROOT_ENV"
+        export NEXUS_ROTATION_CLOUD_ENV="$CLOUD_ENV"
+        export NEXUS_ROTATION_CHAT_ENV="$CHAT_ENV"
+        export NEXUS_ROTATION_STORAGE_LOCK_TIMEOUT=1
+        export FAKE_WRITER_READY_FILE="$writer_ready"
+        export FAKE_WRITER_RELEASE_FILE="$writer_release"
+        bash "$SCRIPT" with-storage-locks "$CASE_DIR/fake-bin/storage-env-writer"
+    ) > "$writer_out" 2> "$writer_err" &
+    writer_pid=$!
+    for ((attempt = 1; attempt <= 100; attempt++)); do
+        [ ! -e "$writer_ready" ] || break
+        sleep 0.02
+    done
+    [ -e "$writer_ready" ] || fail 'cooperative writer did not acquire the stable environment locks'
+
+    set +e
+    run_phase rollback-storage "$out" "$err" \
+        FAKE_MINIO_HEALTH=healthy NEXUS_ROTATION_STORAGE_LOCK_TIMEOUT=0
+    status=$?
+    set -e
+    : > "$writer_release"
+    wait "$writer_pid" || fail 'cooperative writer failed after lock release'
+
+    [ "$status" -ne 0 ] || fail 'rollback ignored a writer holding the stable environment lock'
+    assert_eq NEW_MINIO_USER_SENTINEL "$(env_value "$ROOT_ENV" MINIO_ROOT_USER)" \
+        'lock contention partially restored the root access key'
+    assert_eq NEW_MINIO_PASSWORD_SENTINEL "$(env_value "$ROOT_ENV" MINIO_ROOT_PASSWORD)" \
+        'lock contention partially restored the root secret key'
+    assert_eq NEW_MINIO_USER_SENTINEL "$(env_value "$CLOUD_ENV" NEXUS_STORAGE_S3_ACCESS_KEY)" \
+        'lock contention partially restored the Cloud access key'
+    assert_eq NEW_MINIO_USER_SENTINEL "$(env_value "$CHAT_ENV" NEXUS__STORAGE__ACCESS_KEY)" \
+        'lock contention partially restored the Chat access key'
+    assert_eq "$minio_recreates_before" \
+        "$(count_matches "$RECORD_DIR/docker.argv" '--force-recreate minio')" \
+        'lock contention recreated MinIO without a complete rollback set'
+    [ -f "$rotation_dir/storage.checkpoint" ] || \
+        fail 'lock contention removed the storage checkpoint'
+    assert_eq preserved "$(env_value "$ROOT_ENV" COOPERATIVE_LATE_EDIT)" \
+        'cooperative writer edit was not preserved after rollback contention'
+}
+
+test_storage_rotation_rejects_duplicate_credentials_before_mutation() {
+    local out err rotation_dir status
+    setup_case storage-duplicate-before-rotation
+    out="$CASE_DIR/stdout"
+    err="$CASE_DIR/stderr"
+    printf 'NEXUS_STORAGE_S3_SECRET_KEY=DIVERGENT_DUPLICATE_SENTINEL\n' >> "$CLOUD_ENV"
+
+    run_phase prepare "$out" "$err"
+    IFS= read -r rotation_dir < "$RUNTIME_DIR/rotation.current"
+    printf '%s\n' NEW_MINIO_PASSWORD_SENTINEL > "$OPENSSL_BASE64_FILE"
+    set +e
+    run_phase rotate-storage "$out" "$err" FAKE_MINIO_HEALTH=unhealthy
+    status=$?
+    set -e
+
+    [ "$status" -ne 0 ] || fail 'storage rotation accepted a duplicate protected credential'
+    assert_eq OLD_MINIO_USER_SENTINEL "$(env_value "$ROOT_ENV" MINIO_ROOT_USER)" \
+        'duplicate precondition failure changed the root access key'
+    assert_eq OLD_MINIO_PASSWORD_SENTINEL "$(env_value "$ROOT_ENV" MINIO_ROOT_PASSWORD)" \
+        'duplicate precondition failure changed the root secret key'
+    assert_eq OLD_MINIO_USER_SENTINEL "$(env_value "$CLOUD_ENV" NEXUS_STORAGE_S3_ACCESS_KEY)" \
+        'duplicate precondition failure changed the Cloud access key'
+    assert_eq DIVERGENT_DUPLICATE_SENTINEL \
+        "$(env_effective_value "$CLOUD_ENV" NEXUS_STORAGE_S3_SECRET_KEY)" \
+        'duplicate precondition failure discarded the effective duplicate value'
+    [ ! -f "$RECORD_DIR/minio-snapshots" ] || \
+        fail 'duplicate precondition failure recreated MinIO'
+    [ ! -f "$rotation_dir/storage.checkpoint" ] || \
+        fail 'duplicate precondition failure wrote a storage checkpoint'
+    assert_file_contains "$err" 'duplicate NEXUS_STORAGE_S3_SECRET_KEY assignments' \
+        'duplicate precondition failure did not identify the ambiguity'
+}
+
+test_storage_rollback_compensates_a_commit_failure() {
+    local out err rotation_dir status minio_recreates_before
+    setup_case storage-commit-compensation
+    out="$CASE_DIR/stdout"
+    err="$CASE_DIR/stderr"
+
+    run_phase prepare "$out" "$err"
+    printf '%s\n' NEW_MINIO_PASSWORD_SENTINEL > "$OPENSSL_BASE64_FILE"
+    run_phase rotate-storage "$out" "$err" FAKE_MINIO_HEALTH=healthy
+    IFS= read -r rotation_dir < "$RUNTIME_DIR/rotation.current"
+    minio_recreates_before="$(count_matches "$RECORD_DIR/docker.argv" '--force-recreate minio')"
+
+    set +e
+    run_phase rollback-storage "$out" "$err" \
+        FAKE_MINIO_HEALTH=healthy FAKE_MV_FAIL_ALWAYS_MATCH=.cloud.env.rollback-next.
+    status=$?
+    set -e
+
+    [ "$status" -ne 0 ] || fail 'rollback ignored a staged Cloud commit failure'
+    assert_eq NEW_MINIO_USER_SENTINEL "$(env_value "$ROOT_ENV" MINIO_ROOT_USER)" \
+        'Cloud commit failure left root access partially restored'
+    assert_eq NEW_MINIO_PASSWORD_SENTINEL "$(env_value "$ROOT_ENV" MINIO_ROOT_PASSWORD)" \
+        'Cloud commit failure left root secret partially restored'
+    assert_eq NEW_MINIO_USER_SENTINEL "$(env_value "$CLOUD_ENV" NEXUS_STORAGE_S3_ACCESS_KEY)" \
+        'Cloud commit failure changed the Cloud access key'
+    assert_eq NEW_MINIO_USER_SENTINEL "$(env_value "$CHAT_ENV" NEXUS__STORAGE__ACCESS_KEY)" \
+        'Cloud commit failure changed the Chat access key'
+    assert_eq "$minio_recreates_before" \
+        "$(count_matches "$RECORD_DIR/docker.argv" '--force-recreate minio')" \
+        'commit failure recreated MinIO without a complete rollback set'
+    [ -f "$rotation_dir/storage.checkpoint" ] || \
+        fail 'commit failure removed the storage checkpoint'
+}
+
+test_storage_rollback_preserves_artifacts_when_compensation_fails() {
+    local out err rotation_dir status snapshot_count
+    setup_case storage-compensation-failure
+    out="$CASE_DIR/stdout"
+    err="$CASE_DIR/stderr"
+
+    run_phase prepare "$out" "$err"
+    printf '%s\n' NEW_MINIO_PASSWORD_SENTINEL > "$OPENSSL_BASE64_FILE"
+    run_phase rotate-storage "$out" "$err" FAKE_MINIO_HEALTH=healthy
+    IFS= read -r rotation_dir < "$RUNTIME_DIR/rotation.current"
+
+    set +e
+    run_phase rollback-storage "$out" "$err" \
+        FAKE_MINIO_HEALTH=healthy \
+        FAKE_MV_FAIL_ALWAYS_MATCH=.cloud.env.rollback-next. \
+        FAKE_MV_FAIL_ALWAYS_MATCH_2=.root.env.rollback-source.
+    status=$?
+    set -e
+
+    [ "$status" -ne 0 ] || fail 'rollback reported success after compensation failed'
+    snapshot_count="$(find "$CASE_DIR" -maxdepth 1 -type f -name '.root.env.rollback-source.*' | wc -l | tr -d ' ')"
+    [ "$snapshot_count" -ge 1 ] || fail 'compensation failure discarded the protected root recovery snapshot'
+    assert_file_contains "$err" 'compensation failed' \
+        'compensation failure was not escalated for immediate operator attention'
+    [ -f "$rotation_dir/storage.checkpoint" ] || \
+        fail 'compensation failure removed the storage checkpoint'
 }
 
 test_storage_failure_restores_both_envs_and_recreates_old_minio() {
@@ -1063,6 +1382,18 @@ run_test 'storage checkpoint remains explicitly rollback-capable after a Cloud p
     test_storage_checkpoint_can_be_explicitly_rolled_back_after_cloud_probe_failure
 run_test 'storage rollback preserves a concurrent credential edit and fails closed' \
     test_storage_rollback_refuses_to_discard_a_concurrent_credential_edit
+run_test 'storage rollback rejects divergent duplicate credentials without partial mutation' \
+    test_storage_rollback_rejects_divergent_duplicate_credentials
+run_test 'storage rollback rejects incomplete staging without partial mutation' \
+    test_storage_rollback_rejects_incomplete_staging
+run_test 'storage rollback respects stable per-environment writer locks' \
+    test_storage_rollback_respects_stable_environment_locks
+run_test 'storage rotation rejects duplicate protected credentials before mutation' \
+    test_storage_rotation_rejects_duplicate_credentials_before_mutation
+run_test 'storage rollback compensates a staged commit failure' \
+    test_storage_rollback_compensates_a_commit_failure
+run_test 'storage rollback preserves protected artifacts when compensation fails' \
+    test_storage_rollback_preserves_artifacts_when_compensation_fails
 run_test 'pre-health storage failure restores the atomic credential set and recreates old MinIO' \
     test_storage_failure_restores_both_envs_and_recreates_old_minio
 run_test 'each of the six atomic storage replacements rolls back on failure' \

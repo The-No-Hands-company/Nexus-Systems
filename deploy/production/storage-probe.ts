@@ -105,10 +105,27 @@ export async function runStorageProbe(
     objectDeleted = true;
   } catch {
     if (cleanupNeeded && !objectDeleted) {
+      if (timeoutHandle !== undefined) {
+        clearTimeout(timeoutHandle);
+        timeoutHandle = undefined;
+      }
+      const cleanupAbortController = new AbortController();
+      let cleanupTimeoutHandle: ReturnType<typeof setTimeout> | undefined;
+      const cleanupDeadline = new Promise<never>((_, reject) => {
+        cleanupTimeoutHandle = setTimeout(() => {
+          cleanupAbortController.abort();
+          reject(new Error("storage probe cleanup deadline exceeded"));
+        }, timeoutMilliseconds);
+      });
       try {
-        await bounded(operations.deleteObject(config, bucket, key, abortController.signal));
+        await Promise.race([
+          operations.deleteObject(config, bucket, key, cleanupAbortController.signal),
+          cleanupDeadline,
+        ]);
       } catch {
         // The caller receives one generic failure and performs paired rollback.
+      } finally {
+        if (cleanupTimeoutHandle !== undefined) clearTimeout(cleanupTimeoutHandle);
       }
     }
     throw new Error("authenticated storage probe failed");

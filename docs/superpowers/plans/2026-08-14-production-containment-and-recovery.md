@@ -389,7 +389,7 @@ probe_cloud_storage() (
     export NEXUS_STORAGE_S3_ENDPOINT="${NEXUS_STORAGE_S3_ENDPOINT:-http://localhost:9000}"
     export NEXUS_STORAGE_S3_REGION="${NEXUS_STORAGE_S3_REGION:-us-east-1}"
     export NEXUS_STORAGE_S3_BUCKET_PREFIX="${NEXUS_STORAGE_S3_BUCKET_PREFIX:-nexus}"
-    timeout 30s bun run deploy/production/storage-probe.ts
+    timeout 300s bun run deploy/production/storage-probe.ts
 )
 
 verify_deployed_chat_storage() {
@@ -409,7 +409,7 @@ verify_deployed_chat_storage() {
             export NEXUS_STORAGE_S3_REGION="${NEXUS__STORAGE__REGION:-us-east-1}"
             export NEXUS_STORAGE_S3_BUCKET_PREFIX="${NEXUS_ROTATION_CHAT_S3_BUCKET_PREFIX:-nexus}"
             export NEXUS_ROTATION_S3_PROBE_BUCKET="$NEXUS__STORAGE__BUCKET"
-            timeout 30s bun run deploy/production/storage-probe.ts
+            timeout 300s bun run deploy/production/storage-probe.ts
         )
 }
 
@@ -436,7 +436,7 @@ else
 fi
 ```
 
-Each probe has an internal abort deadline and a longer outer process deadline, emits only pass/fail, and attempts deletion even when the PUT response is lost. Chat uses its configured bucket. Cloud shared-pool provisioning resolves the current protected credentials instead of legacy persisted raw keys and is covered by the Cloud test gate. Do not delete or recreate the MinIO volume. Rollback changes only the six prepared credential keys, refuses to overwrite a concurrent credential edit, preserves unrelated lines, and removes the storage checkpoint; investigate and rerun before log or rotation cleanup.
+Each probe has separate bounded primary and cleanup deadlines. The 300-second outer guard exceeds the maximum 120-second primary plus 120-second cleanup contract, so it cannot preempt deletion after an ambiguous PUT. Probes emit only pass/fail. Chat uses its configured bucket. Cloud shared-pool provisioning resolves the current protected credentials instead of legacy persisted raw keys and is covered by the Cloud test gate. Do not delete or recreate the MinIO volume. Rollback changes only the six prepared credential keys, refuses to overwrite a concurrent credential edit, preserves unrelated lines, and removes the storage checkpoint; investigate and rerun before log or rotation cleanup.
 
 - [ ] **Step 5: Remove compromised historical logs**
 

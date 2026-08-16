@@ -91,19 +91,32 @@ describe("authenticated storage recovery probe", () => {
     expect(calls).toEqual([]);
   });
 
-  test("fails within the configured deadline when an S3 operation hangs", async () => {
+  test("uses a fresh bounded cleanup deadline when a PUT times out", async () => {
     const calls: string[] = [];
+    let putSignal: AbortSignal | undefined;
+    let cleanupSignal: AbortSignal | undefined;
+    let cleanupStartedAborted: boolean | undefined;
     const operations: StorageProbeOperations = {
-      async putObject() {
+      async putObject(_config, _bucket, _key, _body, _contentType, signal) {
         calls.push("put");
+        putSignal = signal;
         return new Promise<Response>(() => {});
       },
       async getObject() {
         return new Response(null, { status: 200 });
       },
-      async deleteObject() {
+      async deleteObject(_config, _bucket, _key, signal) {
         calls.push("delete");
-        return new Response(null, { status: 204 });
+        cleanupSignal = signal;
+        cleanupStartedAborted = signal?.aborted;
+        if (signal?.aborted) throw new Error("cleanup received an already-aborted signal");
+        return new Promise<Response>((_resolve, reject) => {
+          signal?.addEventListener(
+            "abort",
+            () => reject(new Error("cleanup deadline exceeded")),
+            { once: true },
+          );
+        });
       },
     };
     const startedAt = performance.now();
@@ -114,5 +127,9 @@ describe("authenticated storage recovery probe", () => {
 
     expect(performance.now() - startedAt).toBeLessThan(500);
     expect(calls).toEqual(["put", "delete"]);
+    expect(cleanupStartedAborted).toBe(false);
+    expect(cleanupSignal).not.toBe(putSignal);
+    expect(putSignal?.aborted).toBe(true);
+    expect(cleanupSignal?.aborted).toBe(true);
   });
 });

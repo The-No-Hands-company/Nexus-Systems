@@ -32,6 +32,7 @@ TUNNEL_CONNECT_ATTEMPTS="${NEXUS_ROTATION_TUNNEL_CONNECT_ATTEMPTS:-30}"
 TUNNEL_CONNECT_INTERVAL="${NEXUS_ROTATION_TUNNEL_CONNECT_INTERVAL:-2}"
 HTTP_CONNECT_TIMEOUT="${NEXUS_ROTATION_HTTP_CONNECT_TIMEOUT:-5}"
 HTTP_TOTAL_TIMEOUT="${NEXUS_ROTATION_HTTP_TOTAL_TIMEOUT:-20}"
+STORAGE_LOCK_TIMEOUT="${NEXUS_ROTATION_STORAGE_LOCK_TIMEOUT:-10}"
 
 ROTATION_DIR=
 STORAGE_PENDING=0
@@ -42,6 +43,8 @@ TUNNEL_ID=
 TUNNEL_OLD_CONNECTION_IDS=
 EXIT_GUARD=0
 ROTATION_LOCK_FD=
+STORAGE_ENV_LOCKS_HELD=0
+STORAGE_ENV_LOCK_FDS=()
 
 log() {
     printf '[rotation] %s\n' "$*"
@@ -71,8 +74,14 @@ Phases:
   rollback-storage
                   Restore only the prepared credential keys after a consumer
                   restart or authenticated S3 failure, preserving other edits.
+  with-storage-locks COMMAND [ARG ...]
+                  Run a repository-owned/operator environment edit while
+                  holding the same stable root, Cloud, and Chat writer locks.
   cleanup         Remove the active protected rollback directory after the
                   tunnel and storage checkpoints are both complete.
+
+All repository-owned or operator edits to the storage credential environment
+files during an active rotation must use with-storage-locks.
 EOF
 }
 
@@ -93,6 +102,38 @@ acquire_rotation_lock() {
     exec {ROTATION_LOCK_FD}>"$ROTATION_LOCK_FILE"
     chmod 600 "$ROTATION_LOCK_FILE"
     flock -n "$ROTATION_LOCK_FD" || die "another rotation operator is active"
+}
+
+acquire_storage_environment_locks() {
+    local env_file lock_file lock_fd
+    local -a env_files=("$ROOT_ENV" "$CLOUD_ENV")
+
+    [ "$STORAGE_ENV_LOCKS_HELD" -eq 0 ] || return 0
+    if { [ -n "$ROTATION_DIR" ] && [ -f "$ROTATION_DIR/chat.env.rollback" ]; } \
+        || [ -e "$CHAT_ENV" ]; then
+        env_files+=("$CHAT_ENV")
+    fi
+    # These stable, adjacent lockfiles are the writer protocol for every
+    # repository-owned rotation of this credential set. Holding them across
+    # snapshot, comparison, rename, compensation, and MinIO health closes the
+    # compare/rename window without locking an inode that rename replaces.
+    for env_file in "${env_files[@]}"; do
+        lock_file="$env_file.nexus-storage.lock"
+        if ! exec {lock_fd}>"$lock_file"; then
+            warn "could not open the stable storage environment lock for $(basename "$env_file")"
+            return 1
+        fi
+        if ! chmod 600 "$lock_file"; then
+            warn "could not protect the stable storage environment lock for $(basename "$env_file")"
+            return 1
+        fi
+        if ! flock -w "$STORAGE_LOCK_TIMEOUT" "$lock_fd"; then
+            warn "timed out waiting for the stable storage environment lock for $(basename "$env_file")"
+            return 1
+        fi
+        STORAGE_ENV_LOCK_FDS+=("$lock_fd")
+    done
+    STORAGE_ENV_LOCKS_HELD=1
 }
 
 require_file() {
@@ -139,6 +180,33 @@ read_env_value_into() {
     return 1
 }
 
+read_unique_env_value_into() {
+    local target=$1
+    local file=$2
+    local key=$3
+    local line extracted= matches=0
+
+    while IFS= read -r line || [ -n "$line" ]; do
+        line=${line%$'\r'}
+        case "$line" in
+            "$key="*)
+                matches=$((matches + 1))
+                extracted=${line#*=}
+                if [[ "$extracted" == \"*\" ]] && [ "${#extracted}" -ge 2 ]; then
+                    extracted=${extracted:1:${#extracted}-2}
+                elif [[ "$extracted" == \'*\' ]] && [ "${#extracted}" -ge 2 ]; then
+                    extracted=${extracted:1:${#extracted}-2}
+                fi
+                ;;
+        esac
+    done < "$file"
+    [ "$matches" -eq 1 ] || {
+        [ "$matches" -eq 0 ] && return 1
+        return 2
+    }
+    printf -v "$target" '%s' "$extracted"
+}
+
 required_env_value_into() {
     local target=$1
     local exported_value=$2
@@ -162,6 +230,24 @@ require_env_value_present() {
 
     read_env_value_into value "$file" "$key" || true
     [ -n "$value" ] || die "$label must contain a non-empty $key before rotation"
+}
+
+require_unique_env_value_present() {
+    local file=$1
+    local key=$2
+    local label=$3
+    local value= status
+
+    if read_unique_env_value_into value "$file" "$key"; then
+        [ -n "$value" ] || die "$label must contain a non-empty $key before rotation"
+        return 0
+    else
+        status=$?
+    fi
+    if [ "$status" -eq 2 ]; then
+        die "$label contains duplicate $key assignments; refusing ambiguous rotation"
+    fi
+    die "$label must contain exactly one non-empty $key before rotation"
 }
 
 write_cloudflare_auth_config() {
@@ -321,68 +407,251 @@ wait_for_minio_health() {
     return 1
 }
 
-restore_rotated_env_value() {
-    local current_file=$1
-    local backup_file=$2
-    local key=$3
-    local expected_new_file=$4
+stage_rotated_env_file() {
+    local staged_target=$1
+    local snapshot_target=$2
+    local current_file=$3
+    local backup_file=$4
     local label=$5
-    local current_value old_value expected_new_value old_value_file
+    local env_dir env_base snapshot staged key expected_new_file
+    local current_value old_value expected_new_value line matched index read_status
+    local staged_value
+    local -a keys=()
+    local -a old_values=()
 
-    read_env_value_into current_value "$current_file" "$key" || {
-        warn "$label no longer contains $key; refusing to overwrite a concurrent credential edit"
+    shift 5
+    [ -f "$current_file" ] || {
+        warn "$label environment file is missing"
         return 1
     }
-    read_env_value_into old_value "$backup_file" "$key" || {
-        warn "prepared $label rollback does not contain $key"
+    [ -f "$backup_file" ] || {
+        warn "prepared $label rollback is missing"
         return 1
     }
-    expected_new_value=
-    IFS= read -r expected_new_value < "$expected_new_file" || true
-    [ -n "$expected_new_value" ] || {
-        warn "generated replacement for $label $key is unavailable"
+    [ "$#" -gt 0 ] && [ $(( $# % 2 )) -eq 0 ] || {
+        warn "$label rollback key set is invalid"
         return 1
     }
-    if [ "$current_value" = "$old_value" ]; then
+
+    env_dir="$(dirname "$current_file")"
+    env_base="$(basename "$current_file")"
+    if ! snapshot="$(mktemp "$env_dir/.${env_base}.rollback-source.XXXXXX")"; then
+        warn "$label could not create its protected rollback snapshot"
+        return 1
+    fi
+    if ! staged="$(mktemp "$env_dir/.${env_base}.rollback-next.XXXXXX")"; then
+        rm -f -- "$snapshot"
+        warn "$label could not create its protected staged rollback"
+        return 1
+    fi
+    if ! install -m 600 "$current_file" "$snapshot"; then
+        rm -f -- "$snapshot" "$staged"
+        warn "$label could not be snapshotted for rollback"
+        return 1
+    fi
+
+    while [ "$#" -gt 0 ]; do
+        key=$1
+        expected_new_file=$2
+        shift 2
+        current_value=
+        old_value=
+        expected_new_value=
+        if read_unique_env_value_into current_value "$snapshot" "$key"; then
+            :
+        else
+            read_status=$?
+            if [ "$read_status" -eq 2 ]; then
+                warn "$label contains duplicate $key assignments; refusing ambiguous rollback"
+            else
+                warn "$label no longer contains $key; refusing to overwrite a concurrent credential edit"
+            fi
+            rm -f -- "$snapshot" "$staged"
+            return 1
+        fi
+        if read_unique_env_value_into old_value "$backup_file" "$key"; then
+            :
+        else
+            read_status=$?
+            if [ "$read_status" -eq 2 ]; then
+                warn "prepared $label rollback contains duplicate $key assignments"
+            else
+                warn "prepared $label rollback does not contain $key"
+            fi
+            rm -f -- "$snapshot" "$staged"
+            return 1
+        fi
+        if [ ! -f "$expected_new_file" ]; then
+            warn "generated replacement for $label $key is unavailable"
+            rm -f -- "$snapshot" "$staged"
+            return 1
+        fi
+        IFS= read -r expected_new_value < "$expected_new_file" || true
+        [ -n "$expected_new_value" ] || {
+            warn "generated replacement for $label $key is unavailable"
+            rm -f -- "$snapshot" "$staged"
+            return 1
+        }
+        if [ "$current_value" != "$old_value" ] && [ "$current_value" != "$expected_new_value" ]; then
+            warn "$label $key changed outside this rotation; refusing to discard the concurrent value"
+            rm -f -- "$snapshot" "$staged"
+            return 1
+        fi
+        keys+=("$key")
+        old_values+=("$old_value")
+    done
+
+    if ! (
+        while IFS= read -r line || [ -n "$line" ]; do
+            matched=0
+            for ((index = 0; index < ${#keys[@]}; index++)); do
+                case "$line" in
+                    "${keys[$index]}="*)
+                        printf '%s=%s\n' "${keys[$index]}" "${old_values[$index]}" || exit 1
+                        matched=1
+                        break
+                        ;;
+                esac
+            done
+            if [ "$matched" -eq 0 ]; then
+                printf '%s\n' "$line" || exit 1
+            fi
+        done < "$snapshot"
+    ) > "$staged"; then
+        rm -f -- "$snapshot" "$staged"
+        warn "$label could not render its complete staged rollback"
+        return 1
+    fi
+    if ! chmod 600 "$staged"; then
+        rm -f -- "$snapshot" "$staged"
+        warn "$label could not protect its staged rollback"
+        return 1
+    fi
+    for ((index = 0; index < ${#keys[@]}; index++)); do
+        staged_value=
+        if ! read_unique_env_value_into staged_value "$staged" "${keys[$index]}" \
+            || [ "$staged_value" != "${old_values[$index]}" ]; then
+            rm -f -- "$snapshot" "$staged"
+            warn "$label staged rollback failed its complete credential post-condition"
+            return 1
+        fi
+    done
+    if ! printf -v "$staged_target" '%s' "$staged" \
+        || ! printf -v "$snapshot_target" '%s' "$snapshot"; then
+        rm -f -- "$snapshot" "$staged"
+        warn "$label could not retain its protected rollback artifact paths"
+        return 1
+    fi
+}
+
+remove_storage_rollback_artifacts() {
+    local path
+
+    for path in "$@"; do
+        [ -z "$path" ] || rm -f -- "$path"
+    done
+}
+
+restore_storage_rollback_snapshot() {
+    local snapshot=$1
+    local target=$2
+    local label=$3
+
+    if mv -f -- "$snapshot" "$target"; then
         return 0
     fi
-    if [ "$current_value" != "$expected_new_value" ]; then
-        warn "$label $key changed outside this rotation; refusing to discard the concurrent value"
-        return 1
-    fi
-
-    old_value_file="$ROTATION_DIR/${label}.${key}.rollback-value"
-    printf '%s\n' "$old_value" > "$old_value_file"
-    chmod 600 "$old_value_file"
-    replace_env_value_from_file "$current_file" "$key" "$old_value_file"
+    warn "rollback compensation failed for $label; protected recovery snapshot retained at $snapshot"
+    return 1
 }
 
 rollback_storage() {
-    local failed=0
     local new_user="$ROTATION_DIR/minio-root-user.new"
     local new_password="$ROTATION_DIR/minio-root-password.new"
+    local root_staged= root_snapshot= cloud_staged= cloud_snapshot=
+    local chat_staged= chat_snapshot= root_committed=0 cloud_committed=0
+    local compensation_failed=0
 
-    restore_rotated_env_value "$ROOT_ENV" "$ROTATION_DIR/root.env.rollback" \
-        MINIO_ROOT_USER "$new_user" root-env || failed=1
-    restore_rotated_env_value "$ROOT_ENV" "$ROTATION_DIR/root.env.rollback" \
-        MINIO_ROOT_PASSWORD "$new_password" root-env || failed=1
-    restore_rotated_env_value "$CLOUD_ENV" "$ROTATION_DIR/cloud.env.rollback" \
-        NEXUS_STORAGE_S3_ACCESS_KEY "$new_user" cloud-env || failed=1
-    restore_rotated_env_value "$CLOUD_ENV" "$ROTATION_DIR/cloud.env.rollback" \
-        NEXUS_STORAGE_S3_SECRET_KEY "$new_password" cloud-env || failed=1
     if [ -f "$ROTATION_DIR/chat.env.rollback" ] && [ ! -f "$CHAT_ENV" ]; then
         warn "Nexus Chat environment disappeared after prepare; paired rollback requires operator attention"
-        failed=1
-    elif [ -f "$ROTATION_DIR/chat.env.rollback" ]; then
-        restore_rotated_env_value "$CHAT_ENV" "$ROTATION_DIR/chat.env.rollback" \
-            NEXUS__STORAGE__ACCESS_KEY "$new_user" chat-env || failed=1
-        restore_rotated_env_value "$CHAT_ENV" "$ROTATION_DIR/chat.env.rollback" \
-            NEXUS__STORAGE__SECRET_KEY "$new_password" chat-env || failed=1
-    fi
-    if [ "$failed" -ne 0 ]; then
         warn "atomic credential-key rollback could not be completed"
         return 1
     fi
+
+    if ! stage_rotated_env_file root_staged root_snapshot \
+        "$ROOT_ENV" "$ROTATION_DIR/root.env.rollback" root-env \
+        MINIO_ROOT_USER "$new_user" \
+        MINIO_ROOT_PASSWORD "$new_password"; then
+        warn "atomic credential-key rollback could not be completed"
+        return 1
+    fi
+    if ! stage_rotated_env_file cloud_staged cloud_snapshot \
+        "$CLOUD_ENV" "$ROTATION_DIR/cloud.env.rollback" cloud-env \
+        NEXUS_STORAGE_S3_ACCESS_KEY "$new_user" \
+        NEXUS_STORAGE_S3_SECRET_KEY "$new_password"; then
+        remove_storage_rollback_artifacts "$root_staged" "$root_snapshot"
+        warn "atomic credential-key rollback could not be completed"
+        return 1
+    fi
+    if [ -f "$ROTATION_DIR/chat.env.rollback" ]; then
+        if ! stage_rotated_env_file chat_staged chat_snapshot \
+            "$CHAT_ENV" "$ROTATION_DIR/chat.env.rollback" chat-env \
+            NEXUS__STORAGE__ACCESS_KEY "$new_user" \
+            NEXUS__STORAGE__SECRET_KEY "$new_password"; then
+            remove_storage_rollback_artifacts \
+                "$root_staged" "$root_snapshot" "$cloud_staged" "$cloud_snapshot"
+            warn "atomic credential-key rollback could not be completed"
+            return 1
+        fi
+    fi
+
+    if ! cmp -s "$root_snapshot" "$ROOT_ENV" \
+        || ! cmp -s "$cloud_snapshot" "$CLOUD_ENV" \
+        || { [ -n "$chat_snapshot" ] && ! cmp -s "$chat_snapshot" "$CHAT_ENV"; }; then
+        remove_storage_rollback_artifacts \
+            "$root_staged" "$root_snapshot" "$cloud_staged" "$cloud_snapshot" \
+            "$chat_staged" "$chat_snapshot"
+        warn "an environment file changed while rollback was staged; refusing to discard the concurrent edit"
+        return 1
+    fi
+
+    if ! mv -f -- "$root_staged" "$ROOT_ENV"; then
+        remove_storage_rollback_artifacts \
+            "$root_staged" "$root_snapshot" "$cloud_staged" "$cloud_snapshot" \
+            "$chat_staged" "$chat_snapshot"
+        warn "atomic credential-key rollback could not install the root environment"
+        return 1
+    fi
+    root_committed=1
+    if ! mv -f -- "$cloud_staged" "$CLOUD_ENV"; then
+        if ! restore_storage_rollback_snapshot "$root_snapshot" "$ROOT_ENV" root-env; then
+            warn "rollback commit failed and compensation failed; all remaining protected artifacts were retained"
+            return 1
+        fi
+        remove_storage_rollback_artifacts \
+            "$cloud_staged" "$cloud_snapshot" "$chat_staged" "$chat_snapshot"
+        warn "atomic credential-key rollback could not install the Cloud environment"
+        return 1
+    fi
+    cloud_committed=1
+    if [ -n "$chat_staged" ] && ! mv -f -- "$chat_staged" "$CHAT_ENV"; then
+        if [ "$cloud_committed" -ne 0 ] \
+            && ! restore_storage_rollback_snapshot "$cloud_snapshot" "$CLOUD_ENV" cloud-env; then
+            compensation_failed=1
+        fi
+        if [ "$root_committed" -ne 0 ] \
+            && ! restore_storage_rollback_snapshot "$root_snapshot" "$ROOT_ENV" root-env; then
+            compensation_failed=1
+        fi
+        if [ "$compensation_failed" -ne 0 ]; then
+            warn "rollback commit failed and compensation failed; all remaining protected artifacts were retained"
+            return 1
+        fi
+        remove_storage_rollback_artifacts "$chat_staged" "$chat_snapshot"
+        warn "atomic credential-key rollback could not install the Nexus Chat environment"
+        return 1
+    fi
+    remove_storage_rollback_artifacts "$root_snapshot" "$cloud_snapshot" "$chat_snapshot"
+
     recreate_minio || {
         warn "environment files were restored but MinIO recreation failed"
         return 1
@@ -639,13 +908,26 @@ phase_rotate_storage() {
     elif [ -e "$CHAT_ENV" ]; then
         die "Nexus Chat environment appeared after prepare; restart prepare so it joins the atomic credential set"
     fi
-    require_env_value_present "$ROOT_ENV" MINIO_ROOT_USER "root environment"
-    require_env_value_present "$ROOT_ENV" MINIO_ROOT_PASSWORD "root environment"
-    require_env_value_present "$CLOUD_ENV" NEXUS_STORAGE_S3_ACCESS_KEY "Nexus Cloud environment"
-    require_env_value_present "$CLOUD_ENV" NEXUS_STORAGE_S3_SECRET_KEY "Nexus Cloud environment"
+    acquire_storage_environment_locks || die "storage credential files are being updated by another writer"
+    require_unique_env_value_present "$ROOT_ENV" MINIO_ROOT_USER "root environment"
+    require_unique_env_value_present "$ROOT_ENV" MINIO_ROOT_PASSWORD "root environment"
+    require_unique_env_value_present "$CLOUD_ENV" NEXUS_STORAGE_S3_ACCESS_KEY "Nexus Cloud environment"
+    require_unique_env_value_present "$CLOUD_ENV" NEXUS_STORAGE_S3_SECRET_KEY "Nexus Cloud environment"
+    require_unique_env_value_present "$ROTATION_DIR/root.env.rollback" MINIO_ROOT_USER \
+        "prepared root rollback"
+    require_unique_env_value_present "$ROTATION_DIR/root.env.rollback" MINIO_ROOT_PASSWORD \
+        "prepared root rollback"
+    require_unique_env_value_present "$ROTATION_DIR/cloud.env.rollback" NEXUS_STORAGE_S3_ACCESS_KEY \
+        "prepared Cloud rollback"
+    require_unique_env_value_present "$ROTATION_DIR/cloud.env.rollback" NEXUS_STORAGE_S3_SECRET_KEY \
+        "prepared Cloud rollback"
     if [ -f "$ROTATION_DIR/chat.env.rollback" ]; then
-        require_env_value_present "$CHAT_ENV" NEXUS__STORAGE__ACCESS_KEY "Nexus Chat environment"
-        require_env_value_present "$CHAT_ENV" NEXUS__STORAGE__SECRET_KEY "Nexus Chat environment"
+        require_unique_env_value_present "$CHAT_ENV" NEXUS__STORAGE__ACCESS_KEY "Nexus Chat environment"
+        require_unique_env_value_present "$CHAT_ENV" NEXUS__STORAGE__SECRET_KEY "Nexus Chat environment"
+        require_unique_env_value_present "$ROTATION_DIR/chat.env.rollback" NEXUS__STORAGE__ACCESS_KEY \
+            "prepared Nexus Chat rollback"
+        require_unique_env_value_present "$ROTATION_DIR/chat.env.rollback" NEXUS__STORAGE__SECRET_KEY \
+            "prepared Nexus Chat rollback"
     fi
 
     new_user="$ROTATION_DIR/minio-root-user.new"
@@ -675,6 +957,7 @@ phase_rollback_storage() {
     require_file "$ROTATION_DIR/root.env.rollback" "root environment rollback"
     require_file "$ROTATION_DIR/cloud.env.rollback" "Cloud environment rollback"
     require_file "$ROTATION_DIR/storage.checkpoint" "completed storage checkpoint"
+    acquire_storage_environment_locks || die "storage credential files are being updated by another writer"
 
     STORAGE_PENDING=1
     rollback_storage
@@ -699,11 +982,22 @@ phase_cleanup() {
     log "Removed protected rollback state"
 }
 
+phase_with_storage_locks() {
+    [ "$#" -gt 0 ] || die "with-storage-locks requires a command"
+    [ "${1:-}" != -- ] || shift
+    [ "$#" -gt 0 ] || die "with-storage-locks requires a command"
+    require_file "$ROOT_ENV" "root environment file"
+    require_file "$CLOUD_ENV" "Nexus Cloud environment file"
+    acquire_storage_environment_locks || die "storage credential files are being updated by another writer"
+    "$@"
+}
+
 case "${1:-}" in
     prepare) acquire_rotation_lock; phase_prepare ;;
     rotate-tunnel) acquire_rotation_lock; phase_rotate_tunnel ;;
     rotate-storage) acquire_rotation_lock; phase_rotate_storage ;;
     rollback-storage) acquire_rotation_lock; phase_rollback_storage ;;
+    with-storage-locks) shift; phase_with_storage_locks "$@" ;;
     cleanup) acquire_rotation_lock; phase_cleanup ;;
     -h|--help) usage ;;
     *) usage >&2; exit 2 ;;
