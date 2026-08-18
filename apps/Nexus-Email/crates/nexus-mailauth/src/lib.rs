@@ -9,16 +9,20 @@
 //! half is pure and testable without a resolver, so a logic bug cannot hide
 //! behind a network call.
 
+pub mod authenticate;
 pub mod canon;
 pub mod dmarc;
 pub mod dns;
 pub mod error;
 pub mod key;
+pub mod resolver;
 pub mod sign;
 pub mod spf;
 pub mod verify;
 
+pub use authenticate::{authenticate, Authentication, Verdict};
 pub use canon::Canon;
+pub use resolver::SystemDns;
 pub use dmarc::{aligned, organizational_domain, Alignment, DmarcRecord, DmarcResult, Policy};
 pub use dns::{DnsError, Lookup};
 pub use spf::{SpfResult, MAX_DNS_LOOKUPS};

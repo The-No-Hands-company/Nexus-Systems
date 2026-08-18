@@ -8,14 +8,25 @@ use crate::session::{Action, Limits, RelayPolicy, Role, Session};
 
 /// What the server does with a completed message.
 pub trait Sink: Send + Sync + 'static {
-    /// Accept a message. Returning an error produces a temporary failure, so
-    /// the sender retries rather than losing the mail.
-    fn deliver(
-        &self,
-        from: String,
-        recipients: Vec<String>,
-        data: Vec<u8>,
-    ) -> impl std::future::Future<Output = Result<(), String>> + Send;
+    /// Accept a message.
+    ///
+    /// `Ok(None)` delivered it. `Ok(Some(reply))` means the sink decided to
+    /// refuse — a DMARC p=reject failure, for instance — and supplied the SMTP
+    /// reply to send. `Err` is a temporary failure, so the sender retries
+    /// rather than losing the mail.
+    fn deliver(&self, message: Inbound<'_>)
+        -> impl std::future::Future<Output = Result<Option<String>, String>> + Send;
+}
+
+/// A message as it arrived, with everything the sink needs to judge it.
+#[derive(Debug, Clone)]
+pub struct Inbound<'a> {
+    pub from: &'a str,
+    pub recipients: &'a [String],
+    pub data: &'a [u8],
+    /// Needed for SPF: the policy is about which host was allowed to send.
+    pub client_ip: std::net::IpAddr,
+    pub helo: &'a str,
 }
 
 /// How long a connection may sit idle. RFC 5321 suggests five minutes; a
@@ -38,9 +49,11 @@ where
     pub async fn serve(self: Arc<Self>, listener: TcpListener) -> std::io::Result<()> {
         loop {
             let (stream, peer) = listener.accept().await?;
+            // The peer address is the SPF subject; without it inbound
+            // authentication cannot be done at all.
             let me = Arc::clone(&self);
             tokio::spawn(async move {
-                if let Err(e) = me.handle(stream).await {
+                if let Err(e) = me.handle(stream, peer.ip()).await {
                     // A failed connection is routine on a public port — a port
                     // scanner, a broken client, a dropped link. Logged at debug
                     // so real problems are not buried in noise.
@@ -50,7 +63,7 @@ where
         }
     }
 
-    async fn handle(&self, stream: TcpStream) -> std::io::Result<()> {
+    async fn handle(&self, stream: TcpStream, client_ip: std::net::IpAddr) -> std::io::Result<()> {
         let (read_half, mut write) = stream.into_split();
         let mut reader = BufReader::new(read_half);
         let mut session = Session::new(
@@ -95,13 +108,22 @@ where
                     write.write_all(r.as_bytes()).await?;
                     return Ok(());
                 }
-                Action::Deliver { from, recipients, data, reply } => {
+                Action::Deliver { from, recipients, data, helo, reply } => {
                     // The reply is sent only after the message is safely
                     // stored. Acknowledging first and then failing would tell
                     // the sender their mail was accepted while it was not,
                     // which is how mail is silently lost.
-                    match self.sink.deliver(from, recipients, data).await {
-                        Ok(()) => write.write_all(reply.as_bytes()).await?,
+                    let inbound = Inbound {
+                        from: &from,
+                        recipients: &recipients,
+                        data: &data,
+                        client_ip,
+                        helo: &helo,
+                    };
+                    match self.sink.deliver(inbound).await {
+                        Ok(None) => write.write_all(reply.as_bytes()).await?,
+                        // The sink refused on policy grounds and said how.
+                        Ok(Some(refusal)) => write.write_all(refusal.as_bytes()).await?,
                         Err(e) => {
                             tracing::warn!(error = %e, "smtp delivery failed");
                             write

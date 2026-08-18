@@ -161,6 +161,21 @@ impl Deliverer {
         Ok(())
     }
 
+    /// Accept a message that arrived over SMTP from the outside world.
+    ///
+    /// Separate from `accept_federated` because the provenance differs and is
+    /// recorded: this came from an anonymous stranger, while a federated
+    /// handover was vouched for by a peer we already trust. Later trust
+    /// decisions depend on being able to tell them apart.
+    pub async fn accept_smtp(
+        &self,
+        raw: &[u8],
+        from: &Address,
+        recipient: &Address,
+    ) -> Result<Uuid> {
+        self.accept_external(raw, from, recipient, Transport::Smtp).await
+    }
+
     /// Accept a message handed to us by a peer node.
     ///
     /// The mirror of federated sending. Recorded with `Transport::Federated`
@@ -171,6 +186,16 @@ impl Deliverer {
         raw: &[u8],
         from: &Address,
         recipient: &Address,
+    ) -> Result<Uuid> {
+        self.accept_external(raw, from, recipient, Transport::Federated).await
+    }
+
+    async fn accept_external(
+        &self,
+        raw: &[u8],
+        from: &Address,
+        recipient: &Address,
+        transport: Transport,
     ) -> Result<Uuid> {
         if !self.router.is_local_domain(&recipient.domain) {
             // Accepting mail for a domain we do not serve would make this node
@@ -206,7 +231,7 @@ impl Deliverer {
                 msg_id.as_deref(),
                 in_reply_to.as_deref(),
                 &references,
-                Transport::Federated,
+                transport,
                 None,
             )
             .await?;

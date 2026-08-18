@@ -518,6 +518,70 @@ impl MailStore {
         Ok(row.map(|(localpart, domain)| Address { localpart, domain }))
     }
 
+    /// A folder by name, created if it does not exist.
+    ///
+    /// Used for Junk, which is not one of the special-use folders every
+    /// mailbox is born with — quarantine is rare enough that creating it on
+    /// first use beats giving every mailbox a folder most will never see.
+    pub async fn folder_named_or_create(
+        &self,
+        mailbox_id: Uuid,
+        name: &str,
+        kind: FolderKind,
+    ) -> Result<Uuid> {
+        if let Some((id,)) = sqlx::query_as::<_, (Uuid,)>(
+            "SELECT id FROM folders WHERE mailbox_id = $1 AND name = $2",
+        )
+        .bind(mailbox_id)
+        .bind(name)
+        .fetch_optional(&self.pool)
+        .await?
+        {
+            return Ok(id);
+        }
+
+        let id = Uuid::now_v7();
+        sqlx::query(
+            "INSERT INTO folders (id, mailbox_id, name, kind) VALUES ($1, $2, $3, $4)
+             ON CONFLICT (mailbox_id, name) DO NOTHING",
+        )
+        .bind(id)
+        .bind(mailbox_id)
+        .bind(name)
+        .bind(kind.as_str())
+        .execute(&self.pool)
+        .await?;
+
+        // Re-read rather than trusting the insert: a concurrent delivery may
+        // have created it first, in which case our id was never used.
+        let (found,): (Uuid,) =
+            sqlx::query_as("SELECT id FROM folders WHERE mailbox_id = $1 AND name = $2")
+                .bind(mailbox_id)
+                .bind(name)
+                .fetch_one(&self.pool)
+                .await?;
+        Ok(found)
+    }
+
+    /// Move a message already in a mailbox to another of its folders.
+    pub async fn move_to_folder(
+        &self,
+        mailbox_id: Uuid,
+        message_id: Uuid,
+        folder_id: Uuid,
+    ) -> Result<()> {
+        sqlx::query(
+            "UPDATE mailbox_messages SET folder_id = $1
+             WHERE mailbox_id = $2 AND message_id = $3",
+        )
+        .bind(folder_id)
+        .bind(mailbox_id)
+        .bind(message_id)
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
+
     pub async fn mailbox_for_subject(&self, subject: &str) -> Result<Option<Uuid>> {
         let row: Option<(Uuid,)> =
             sqlx::query_as("SELECT id FROM mailboxes WHERE owner_subject = $1 LIMIT 1")

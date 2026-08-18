@@ -10,6 +10,7 @@ repository.workspace = true
 nexus-mailstore = { path = "../nexus-mailstore" }
 nexus-mailmsg = { path = "../nexus-mailmsg" }
 nexus-maildelivery = { path = "../nexus-maildelivery" }
+nexus-mailauth = { path = "../nexus-mailauth" }
 tokio = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }

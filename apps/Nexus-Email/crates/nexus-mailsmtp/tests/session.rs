@@ -200,7 +200,8 @@ fn a_complete_message_is_handed_over_for_delivery() {
     let r = say(&mut s, ".");
 
     match r {
-        Action::Deliver { from, recipients, data, reply } => {
+        Action::Deliver { from, recipients, data, helo, reply } => {
+            assert_eq!(helo, "client.test", "the HELO name must reach the sink for SPF");
             assert_eq!(from, "sender@example.test");
             assert_eq!(recipients, vec!["info@tnhc.dev"]);
             assert!(String::from_utf8_lossy(&data).contains("body line"));

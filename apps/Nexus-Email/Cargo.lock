@@ -1069,6 +1069,7 @@ dependencies = [
 name = "nexus-mailsmtp"
 version = "0.1.0"
 dependencies = [
+ "nexus-mailauth",
  "nexus-maildelivery",
  "nexus-mailmsg",
  "nexus-mailstore",

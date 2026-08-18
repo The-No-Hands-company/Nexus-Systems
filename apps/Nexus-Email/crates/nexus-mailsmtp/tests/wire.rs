@@ -4,7 +4,7 @@
 
 use std::sync::{Arc, Mutex};
 
-use nexus_mailsmtp::{Limits, RelayPolicy, Role, Sink, SmtpServer};
+use nexus_mailsmtp::{Inbound, Limits, RelayPolicy, Role, Sink, SmtpServer};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::{TcpListener, TcpStream};
 
@@ -23,17 +23,19 @@ struct Collector {
 }
 
 impl Sink for Collector {
-    async fn deliver(
-        &self,
-        from: String,
-        recipients: Vec<String>,
-        data: Vec<u8>,
-    ) -> Result<(), String> {
+    async fn deliver(&self, msg: Inbound<'_>) -> Result<Option<String>, String> {
         if self.fail {
             return Err("storage down".into());
         }
-        self.received.lock().unwrap().push((from, recipients, data));
-        Ok(())
+        // The client IP is what SPF is evaluated against, so a sink that never
+        // receives it could not authenticate anything.
+        assert!(!msg.client_ip.is_unspecified(), "the sink must be told who connected");
+        self.received.lock().unwrap().push((
+            msg.from.to_string(),
+            msg.recipients.to_vec(),
+            msg.data.to_vec(),
+        ));
+        Ok(None)
     }
 }
 

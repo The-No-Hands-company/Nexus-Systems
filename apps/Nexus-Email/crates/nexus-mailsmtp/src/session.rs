@@ -54,6 +54,9 @@ pub enum Action {
         from: String,
         recipients: Vec<String>,
         data: Vec<u8>,
+        /// What the client called itself. Passed through because SPF is
+        /// evaluated against it when the reverse path is empty.
+        helo: String,
         reply: String,
     },
     /// Nothing to say; keep reading (a line of message data).
@@ -82,6 +85,9 @@ pub struct Session<P: RelayPolicy> {
     authenticated: bool,
     errors: usize,
 
+    /// The name the client gave in EHLO/HELO. SPF needs it, and for a bounce
+    /// (null reverse path) it is the only identity there is to check.
+    helo: Option<String>,
     from: Option<String>,
     recipients: Vec<String>,
     data: Vec<u8>,
@@ -101,6 +107,7 @@ impl<P: RelayPolicy> Session<P> {
             // is an open relay.
             authenticated: false,
             errors: 0,
+            helo: None,
             from: None,
             recipients: Vec::new(),
             data: Vec::new(),
@@ -142,7 +149,8 @@ impl<P: RelayPolicy> Session<P> {
                 self.phase = Phase::Closed;
                 Action::ReplyAndClose(format!("221 2.0.0 {} closing\r\n", self.hostname))
             }
-            Command::Ehlo(_) | Command::Helo(_) => {
+            Command::Ehlo(name) | Command::Helo(name) => {
+                self.helo = Some(name);
                 self.reset_transaction();
                 self.phase = Phase::Ready;
                 // SIZE is advertised so a sender learns the cap before spending
@@ -251,10 +259,11 @@ impl<P: RelayPolicy> Session<P> {
             self.reset_transaction();
             self.phase = Phase::Ready;
 
+            let helo = self.helo.clone().unwrap_or_default();
             return if too_large {
                 Action::Reply(reply)
             } else {
-                Action::Deliver { from, recipients, data, reply }
+                Action::Deliver { from, recipients, data, helo, reply }
             };
         }
 

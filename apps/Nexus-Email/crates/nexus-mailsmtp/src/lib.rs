@@ -7,9 +7,11 @@
 //! within hours, and the reputational damage is not recoverable.
 
 pub mod command;
+pub mod inbound;
 pub mod server;
 pub mod session;
 
 pub use command::{parse, Command, MAX_COMMAND_LINE};
-pub use server::{Sink, SmtpServer};
+pub use inbound::{AuthenticatingSink, PolicyMode};
+pub use server::{Inbound, Sink, SmtpServer};
 pub use session::{Action, Limits, RelayPolicy, Role, Session};

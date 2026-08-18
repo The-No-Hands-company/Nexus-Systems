@@ -20,9 +20,8 @@ Build-order steps 1-6 of 7 are implemented:
    the relay policy. SPF/DKIM/DMARC verification is not written yet.
 6. **SMTP outbound** — MX resolution, the delivery client, and the worker that
    drains the queue.
-6b. **Mail authentication** — DKIM signing and verification, SPF evaluation,
-   and DMARC alignment and policy (`nexus-mailauth`). Not yet wired into the
-   inbound SMTP path: the crate decides, nothing calls it yet.
+6b. **Mail authentication** — DKIM, SPF and DMARC (`nexus-mailauth`), wired
+   into the inbound SMTP path via `AuthenticatingSink`.
 
 Step 7 (IMAP/JMAP) is not started.
 
@@ -52,6 +51,26 @@ path exists — the ISP lifting the filter, or a peer node with clean egress.
 - `crates/nexus-mailsmtp` — SMTP inbound: the session state machine and listener.
 - `crates/nexus-mailout` — SMTP outbound: MX resolution, client, delivery worker.
 - `crates/nexus-mailauth` — DKIM, SPF and DMARC.
+
+## Inbound policy: Observe before Enforce
+
+`AuthenticatingSink` takes a `PolicyMode`.
+
+- **`Observe`** evaluates SPF, DKIM and DMARC, writes the `Authentication-
+  Results` header, and delivers everything regardless. This is the correct
+  setting when bringing a server up: it produces evidence to check the
+  implementation against real mail *before* it is able to lose any.
+- **`Enforce`** honours the sending domain's own published policy — `p=reject`
+  is refused at SMTP time with a 550, `p=quarantine` is delivered to a Junk
+  folder.
+
+A rejection is a refusal during the SMTP conversation, not an accept-then-
+discard. A silent discard leaves the sender — sometimes a legitimate,
+misconfigured sender — believing the mail arrived.
+
+The `Authentication-Results` header is written even when everything passes. A
+later dispute about whether a message was authentic is unanswerable if the
+evidence was thrown away at delivery time.
 
 ## Two approximations recorded rather than hidden
 
