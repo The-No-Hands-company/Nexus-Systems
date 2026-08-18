@@ -338,6 +338,11 @@ cmd_start() {
     # an MX therefore needs both a route in and the capability; until then this
     # serves local and federated submission.
     #
+    # IMAP runs in the same process on 2143, so ordinary mail clients can use
+    # a Nexus mailbox. Credentials are verified against Auth, never stored here.
+    # It is plaintext on loopback: there is no TLS in this daemon, so exposing
+    # it beyond localhost needs a TLS terminator in front.
+    #
     # NEXUS_EMAIL_POLICY defaults to observe: SPF/DKIM/DMARC are evaluated and
     # recorded in Authentication-Results, but no mail is refused on their
     # account. Switch to enforce after reading those headers against real
@@ -351,6 +356,8 @@ cmd_start() {
         start_service "mailsmtpd" "$ROOT/apps/Nexus-Email" "${NEXUS_EMAIL_MX_PORT:-2525}" \
             NEXUS_EMAIL_MX_BIND="${NEXUS_EMAIL_MX_BIND:-127.0.0.1:2525}" \
             NEXUS_EMAIL_SUBMISSION_BIND="${NEXUS_EMAIL_SUBMISSION_BIND:-127.0.0.1:2587}" \
+            NEXUS_EMAIL_IMAP_BIND="${NEXUS_EMAIL_IMAP_BIND:-127.0.0.1:2143}" \
+            NEXUS_AUTH_INTERNAL_URL="${NEXUS_AUTH_INTERNAL_URL:-http://127.0.0.1:4310}" \
             NEXUS_EMAIL_DOMAIN="$DOMAIN" \
             NEXUS_EMAIL_HOSTNAME="mail.$DOMAIN" \
             NEXUS_EMAIL_POLICY="${NEXUS_EMAIL_POLICY:-observe}" \

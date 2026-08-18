@@ -1,0 +1,19 @@
+[package]
+name = "nexus-mailimap"
+description = "IMAP4rev1 for Nexus Email, so ordinary mail clients can connect"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+nexus-mailstore = { path = "../nexus-mailstore" }
+nexus-mailmsg = { path = "../nexus-mailmsg" }
+tokio = { workspace = true }
+uuid = { workspace = true }
+chrono = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true }

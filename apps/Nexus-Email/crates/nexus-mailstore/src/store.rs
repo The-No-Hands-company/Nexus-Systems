@@ -286,17 +286,133 @@ impl MailStore {
     /// only the membership row is new, which is why one message can sit in
     /// many mailboxes with independent read state.
     pub async fn deliver(&self, mailbox_id: Uuid, message_id: Uuid, folder_id: Uuid) -> Result<()> {
+        let mut tx = self.pool.begin().await?;
+
+        // Claim the next UID under a row lock. Two concurrent deliveries to one
+        // mailbox reading uid_next before either writes would hand out the same
+        // UID twice — and a duplicate UID makes every IMAP client show the
+        // wrong message, silently, from its cache.
+        let (uid,): (i64,) = sqlx::query_as(
+            "UPDATE mailboxes SET uid_next = uid_next + 1 WHERE id = $1 RETURNING uid_next - 1",
+        )
+        .bind(mailbox_id)
+        .fetch_one(&mut *tx)
+        .await?;
+
         sqlx::query(
-            "INSERT INTO mailbox_messages (mailbox_id, message_id, folder_id)
-             VALUES ($1, $2, $3)
+            "INSERT INTO mailbox_messages (mailbox_id, message_id, folder_id, uid)
+             VALUES ($1, $2, $3, $4)
              ON CONFLICT (mailbox_id, message_id) DO NOTHING",
         )
         .bind(mailbox_id)
         .bind(message_id)
         .bind(folder_id)
-        .execute(&self.pool)
+        .bind(uid)
+        .execute(&mut *tx)
         .await?;
+
+        // The UID is spent even if the insert was a no-op. Rolling it back
+        // would let a later message reuse it, and IMAP forbids reuse outright.
+        tx.commit().await?;
         Ok(())
+    }
+
+    /// What IMAP needs to open a folder.
+    pub async fn mailbox_state(&self, mailbox_id: Uuid) -> Result<(i64, i64)> {
+        let row: (i64, i64) =
+            sqlx::query_as("SELECT uid_validity, uid_next FROM mailboxes WHERE id = $1")
+                .bind(mailbox_id)
+                .fetch_one(&self.pool)
+                .await?;
+        Ok(row)
+    }
+
+    /// Messages in a folder, by UID, for IMAP.
+    pub async fn list_by_uid(
+        &self,
+        mailbox_id: Uuid,
+        folder_id: Uuid,
+    ) -> Result<Vec<ImapMessage>> {
+        let rows: Vec<ImapRow> =
+            sqlx::query_as(
+                "SELECT mm.uid, m.id, m.size_bytes, mm.seen, mm.answered, mm.flagged,
+                        mm.draft, mm.deleted, m.received_at
+                 FROM mailbox_messages mm
+                 JOIN messages m ON m.id = mm.message_id
+                 WHERE mm.mailbox_id = $1 AND mm.folder_id = $2
+                 ORDER BY mm.uid",
+            )
+            .bind(mailbox_id)
+            .bind(folder_id)
+            .fetch_all(&self.pool)
+            .await?;
+
+        Ok(rows
+            .into_iter()
+            .map(
+                |(uid, message_id, size, seen, answered, flagged, draft, deleted, received_at)| {
+                    ImapMessage {
+                        uid,
+                        message_id,
+                        size,
+                        received_at,
+                        flags: Flags {
+                            seen,
+                            answered,
+                            flagged,
+                            draft,
+                            deleted,
+                            keywords: Vec::new(),
+                        },
+                    }
+                },
+            )
+            .collect())
+    }
+
+    /// Set a system flag on a message by UID.
+    pub async fn set_flag_by_uid(
+        &self,
+        mailbox_id: Uuid,
+        uid: i64,
+        flag: &str,
+        value: bool,
+    ) -> Result<()> {
+        // The column name is chosen from a fixed set, never interpolated from
+        // client input — an IMAP STORE command carries arbitrary flag names.
+        let sql = match flag {
+            "seen" => "UPDATE mailbox_messages SET seen = $1 WHERE mailbox_id = $2 AND uid = $3",
+            "answered" => "UPDATE mailbox_messages SET answered = $1 WHERE mailbox_id = $2 AND uid = $3",
+            "flagged" => "UPDATE mailbox_messages SET flagged = $1 WHERE mailbox_id = $2 AND uid = $3",
+            "draft" => "UPDATE mailbox_messages SET draft = $1 WHERE mailbox_id = $2 AND uid = $3",
+            "deleted" => "UPDATE mailbox_messages SET deleted = $1 WHERE mailbox_id = $2 AND uid = $3",
+            _ => return Ok(()),
+        };
+        sqlx::query(sql)
+            .bind(value)
+            .bind(mailbox_id)
+            .bind(uid)
+            .execute(&self.pool)
+            .await?;
+        Ok(())
+    }
+
+    /// Raw bytes of a message identified by its UID in a mailbox.
+    pub async fn raw_by_uid(&self, mailbox_id: Uuid, uid: i64) -> Result<Vec<u8>> {
+        let row: Option<(Option<Vec<u8>>,)> = sqlx::query_as(
+            "SELECT m.body_inline FROM mailbox_messages mm
+             JOIN messages m ON m.id = mm.message_id
+             WHERE mm.mailbox_id = $1 AND mm.uid = $2",
+        )
+        .bind(mailbox_id)
+        .bind(uid)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        match row {
+            Some((Some(bytes),)) => Ok(bytes),
+            _ => Err(MailStoreError::NoSuchAddress(format!("uid {uid}"))),
+        }
     }
 
     pub async fn set_seen(&self, mailbox_id: Uuid, message_id: Uuid, seen: bool) -> Result<()> {
@@ -348,6 +464,20 @@ fn to_summary(row: SummaryRow) -> MessageSummary {
         has_attachments: false,
         snippet,
     }
+}
+
+/// One row of the IMAP listing query. Named because the tuple is unreadable
+/// inline and clippy is right to say so.
+type ImapRow = (i64, Uuid, i64, bool, bool, bool, bool, bool, chrono::DateTime<Utc>);
+
+/// A message as IMAP needs to see it.
+#[derive(Debug, Clone)]
+pub struct ImapMessage {
+    pub uid: i64,
+    pub message_id: Uuid,
+    pub size: i64,
+    pub received_at: chrono::DateTime<Utc>,
+    pub flags: Flags,
 }
 
 /// A message as the mail UI needs to list it.

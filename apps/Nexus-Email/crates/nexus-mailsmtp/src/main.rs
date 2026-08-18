@@ -10,6 +10,8 @@ use nexus_maildelivery::{Deliverer, Queue, Router};
 use nexus_mailauth::SystemDns;
 use nexus_mailsmtp::inbound::{AuthenticatingSink, PolicyMode};
 use nexus_mailsmtp::policy::MailboxPolicy;
+use nexus_mailimap::ImapServer;
+use nexus_mailsmtp::authenticator::AuthService;
 use nexus_mailsmtp::{Limits, Role, SmtpServer};
 use nexus_mailstore::MailStore;
 use sqlx::postgres::PgPoolOptions;
@@ -84,9 +86,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         sink,
     });
 
+    // IMAP, so ordinary mail clients can use this mailbox. Credentials are
+    // checked against Auth rather than against anything stored here.
+    let imap_bind = std::env::var("NEXUS_EMAIL_IMAP_BIND").unwrap_or_else(|_| "127.0.0.1:2143".into());
+    let auth_url = std::env::var("NEXUS_AUTH_INTERNAL_URL")
+        .unwrap_or_else(|_| "http://127.0.0.1:4310".into());
+    let imap = Arc::new(ImapServer {
+        hostname: hostname.clone(),
+        store: store.clone(),
+        auth: Arc::new(AuthService::new(auth_url)),
+    });
+    let imap_listener = TcpListener::bind(&imap_bind).await?;
+
     let mx_listener = TcpListener::bind(&mx_bind).await?;
     let sub_listener = TcpListener::bind(&submission_bind).await?;
-    tracing::info!(%mx_bind, %submission_bind, %hostname, ?mode, "nexus-mailsmtpd listening");
+    tracing::info!(%mx_bind, %submission_bind, %imap_bind, %hostname, ?mode, "nexus-mailsmtpd listening");
 
     if mode == PolicyMode::Observe {
         tracing::info!(
@@ -101,6 +115,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tokio::select! {
         r = mx.serve(mx_listener) => r?,
         r = submission.serve(sub_listener) => r?,
+        r = imap.serve(imap_listener) => r?,
     }
     Ok(())
 }

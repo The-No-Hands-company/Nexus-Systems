@@ -23,7 +23,8 @@ Build-order steps 1-6 of 7 are implemented:
 6b. **Mail authentication** — DKIM, SPF and DMARC (`nexus-mailauth`), wired
    into the inbound SMTP path via `AuthenticatingSink`.
 
-Step 7 (IMAP/JMAP) is not started.
+7. **IMAP4rev1** — `nexus-mailimap`, served by the same daemon on 2143, so
+   ordinary mail clients can use a Nexus mailbox.
 
 ## The egress reality, measured
 
@@ -51,6 +52,21 @@ path exists — the ISP lifting the filter, or a peer node with clean egress.
 - `crates/nexus-mailsmtp` — SMTP inbound: the session state machine and listener.
 - `crates/nexus-mailout` — SMTP outbound: MX resolution, client, delivery worker.
 - `crates/nexus-mailauth` — DKIM, SPF and DMARC.
+- `crates/nexus-mailimap` — IMAP4rev1: session state machine and server.
+
+## Connecting a mail client
+
+The daemon serves IMAP on `127.0.0.1:2143`, **plaintext**. There is no TLS in it,
+so it is bound to loopback and anything beyond that needs a TLS terminator in
+front. Credentials are your Nexus account, verified against Auth — the IMAP
+server stores no password of its own.
+
+UIDs are the part that has to be right. A UID is unique within a mailbox and
+never reused, even after deletion, and they ascend in arrival order; if either
+guarantee were ever broken the server would have to change UIDVALIDITY to tell
+clients their cache is worthless. Those invariants are enforced in the schema
+rather than in code, because breaking them does not fail loudly — it silently
+shows people the wrong mail.
 
 ## Running it
 
