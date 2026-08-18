@@ -7,14 +7,16 @@ Design: `docs/superpowers/specs/2026-08-15-nexus-email-design.md` (repo root).
 
 ## Status
 
-Build-order steps 1-2 of 7 are implemented:
+Build-order steps 1-3 of 7 are implemented:
 
 1. **Store and identity** — mailboxes, addresses, messages, threads, folders, flags.
 2. **Message format** — RFC 5322 parsing, MIME, transfer encodings, attachments,
    and generation.
+3. **Internal and federated delivery** — routing, local delivery, the outbound
+   queue with retry and bounce boundaries. A working mail product with no SMTP
+   anywhere in it.
 
-Steps 3-7 (internal/federated delivery, webmail, SMTP inbound, SMTP outbound,
-IMAP/JMAP) are not started.
+Steps 4-7 (webmail, SMTP inbound, SMTP outbound, IMAP/JMAP) are not started.
 
 ## Layout
 
@@ -24,6 +26,7 @@ IMAP/JMAP) are not started.
   because it faces bytes chosen by strangers; generation is strict because what
   we emit must survive strict receivers and later carry a DKIM signature over
   exactly those bytes.
+- `crates/nexus-maildelivery` — routing, delivery and the outbound queue.
 
 ## Two shapes worth knowing before changing anything
 

@@ -713,6 +713,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "nexus-maildelivery"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "nexus-mailmsg",
+ "nexus-mailstore",
+ "sqlx",
+ "thiserror",
+ "tokio",
+ "uuid",
+]
+
+[[package]]
 name = "nexus-mailmsg"
 version = "0.1.0"
 dependencies = [

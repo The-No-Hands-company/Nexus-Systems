@@ -1,0 +1,18 @@
+[package]
+name = "nexus-maildelivery"
+description = "Routing and delivery for Nexus Email: internal, federated, and queued"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+nexus-mailstore = { path = "../nexus-mailstore" }
+nexus-mailmsg = { path = "../nexus-mailmsg" }
+sqlx = { workspace = true }
+uuid = { workspace = true }
+chrono = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true }
