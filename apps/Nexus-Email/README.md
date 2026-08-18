@@ -7,7 +7,7 @@ Design: `docs/superpowers/specs/2026-08-15-nexus-email-design.md` (repo root).
 
 ## Status
 
-Build-order steps 1-4 of 7 are in progress:
+Build-order steps 1-5 of 7 are implemented:
 
 1. **Store and identity** — mailboxes, addresses, messages, threads, folders, flags.
 2. **Message format** — RFC 5322 parsing, MIME, transfer encodings, attachments,
@@ -15,9 +15,11 @@ Build-order steps 1-4 of 7 are in progress:
 3. **Internal and federated delivery** — routing, local delivery, the outbound
    queue with retry and bounce boundaries. A working mail product with no SMTP
    anywhere in it.
-4. **Webmail** — the HTTP API is done (`nexus-mailapi`); the shell views are next.
+4. **Webmail** — `nexus-mailapi` plus the shell views at `app.<domain>/mail`.
+5. **SMTP inbound** — the session state machine, the listener, anti-abuse and
+   the relay policy. SPF/DKIM/DMARC verification is not written yet.
 
-Steps 5-7 (SMTP inbound, SMTP outbound, IMAP/JMAP) are not started.
+Steps 6-7 (SMTP outbound, IMAP/JMAP) are not started.
 
 ## Layout
 
@@ -29,6 +31,20 @@ Steps 5-7 (SMTP inbound, SMTP outbound, IMAP/JMAP) are not started.
   exactly those bytes.
 - `crates/nexus-maildelivery` — routing, delivery and the outbound queue.
 - `crates/nexus-mailapi` — the HTTP API the webmail consumes.
+- `crates/nexus-mailsmtp` — SMTP: the session state machine and the listener.
+
+## Why the SMTP session has no sockets in it
+
+`session.rs` is a pure state machine over lines of text — no sockets, no
+database, no clock. Every rule deciding whether a stranger may send mail
+through this server is therefore testable exhaustively, which matters more here
+than anywhere else in the system: an open relay is found by the internet within
+hours and the reputational damage is not recoverable.
+
+The listener is deliberately thin, and there is one over-the-wire test that
+relaying is still refused through it — because a listener that bypassed the
+state machine would be an open relay no matter how well that machine is
+tested.
 
 ## A security control that looks like a config value
 

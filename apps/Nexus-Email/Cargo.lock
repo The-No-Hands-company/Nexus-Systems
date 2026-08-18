@@ -936,6 +936,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "nexus-mailsmtp"
+version = "0.1.0"
+dependencies = [
+ "nexus-maildelivery",
+ "nexus-mailmsg",
+ "nexus-mailstore",
+ "thiserror",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
 name = "nexus-mailstore"
 version = "0.1.0"
 dependencies = [
