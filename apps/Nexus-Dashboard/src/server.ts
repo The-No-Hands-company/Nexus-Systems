@@ -78,7 +78,7 @@ async function proxyToMail(req: Request, rest: string, search: string): Promise<
   if (!who) return Response.json({ error: "not_authenticated" }, { status: 401 });
 
   // Only the mail API's own surface, and only the methods it serves.
-  if (!/^(folders|messages|search)(\/|$)/.test(rest)) {
+  if (!/^(folders|messages|search|threads)(\/|$)/.test(rest)) {
     return Response.json({ error: "not_found" }, { status: 404 });
   }
   if (req.method !== "GET" && req.method !== "POST") {
@@ -96,10 +96,18 @@ async function proxyToMail(req: Request, rest: string, search: string): Promise<
       body: req.method === "POST" ? await req.text() : undefined,
       signal: AbortSignal.timeout(10000),
     });
-    return new Response(await res.text(), {
-      status: res.status,
-      headers: { "content-type": res.headers.get("content-type") ?? "application/json" },
-    });
+    // Attachments come back as bytes with headers that matter — the
+    // Content-Disposition that forces a download and the nosniff that stops
+    // the browser guessing a type. Passing the body through as text would
+    // corrupt binary files, and dropping those headers would let an HTML
+    // attachment render inline on this origin.
+    const passthrough = new Headers();
+    for (const h of ["content-type", "content-disposition", "x-content-type-options", "content-security-policy"]) {
+      const v = res.headers.get(h);
+      if (v) passthrough.set(h, v);
+    }
+    if (!passthrough.has("content-type")) passthrough.set("content-type", "application/json");
+    return new Response(res.body, { status: res.status, headers: passthrough });
   } catch {
     // Mail being down must not take the shell page with it.
     return Response.json({ error: "mail_unavailable" }, { status: 503 });

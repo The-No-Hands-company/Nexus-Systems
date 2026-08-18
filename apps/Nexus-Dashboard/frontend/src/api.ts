@@ -321,16 +321,28 @@ export type MailSummary = {
   snippet: string | null;
 };
 
-export type MailAttachment = { filename: string; mime_type: string; size: number };
+export type MailAttachment = {
+  /// Position in the MIME tree. Filenames are sender-chosen and not unique,
+  /// so they cannot be used to identify which attachment to fetch.
+  index: number;
+  filename: string;
+  mime_type: string;
+  size: number;
+};
 
 export type MailMessage = {
   id: string;
+  thread_id: string | null;
   subject: string | null;
   from: string;
   to: string | null;
   date: string | null;
   text: string;
+  /// Already sanitised server-side. Still rendered in a sandboxed frame — one
+  /// layer of defence against a stranger's markup is not enough.
   html: string | null;
+  /// Remote content was withheld, so the reader can be offered the choice.
+  blocked_remote: boolean;
   attachments: MailAttachment[];
 };
 
@@ -353,6 +365,16 @@ export function markMailSeen(id: string, seen: boolean) {
     method: "POST",
     body: JSON.stringify({ seen }),
   });
+}
+
+export function threadMessages(threadId: string) {
+  return request<MailSummary[]>(`/api/mail/threads/${encodeURIComponent(threadId)}/messages`);
+}
+
+/// The URL an attachment downloads from. Not fetched through `request`: the
+/// response is bytes, not JSON, and the browser handles the download itself.
+export function attachmentUrl(messageId: string, index: number) {
+  return `/api/mail/messages/${encodeURIComponent(messageId)}/attachments/${index}`;
 }
 
 export function searchMail(q: string) {

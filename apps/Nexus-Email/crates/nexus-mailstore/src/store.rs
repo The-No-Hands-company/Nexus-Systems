@@ -648,6 +648,32 @@ impl MailStore {
         Ok(row.map(|(localpart, domain)| Address { localpart, domain }))
     }
 
+    /// Every message of a thread that this mailbox holds.
+    ///
+    /// Scoped by membership like every other read: a thread can contain
+    /// messages delivered to several people, and only the ones in the caller's
+    /// own mailbox are theirs to see. Querying by thread_id alone would leak
+    /// the rest of the conversation.
+    pub async fn thread_messages(
+        &self,
+        mailbox_id: Uuid,
+        thread_id: Uuid,
+    ) -> Result<Vec<MessageSummary>> {
+        let rows: Vec<SummaryRow> = sqlx::query_as(
+            "SELECT m.id, m.thread_id, m.subject, m.from_address, m.received_at,
+                    mm.seen, mm.flagged, left(m.search_text, 200)
+             FROM mailbox_messages mm
+             JOIN messages m ON m.id = mm.message_id
+             WHERE mm.mailbox_id = $1 AND m.thread_id = $2 AND NOT mm.deleted
+             ORDER BY m.received_at",
+        )
+        .bind(mailbox_id)
+        .bind(thread_id)
+        .fetch_all(&self.pool)
+        .await?;
+        Ok(rows.into_iter().map(to_summary).collect())
+    }
+
     /// A folder by name, created if it does not exist.
     ///
     /// Used for Junk, which is not one of the special-use folders every

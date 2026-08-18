@@ -1,6 +1,10 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { markMailSeen, readMailMessage, type MailMessage } from "../../api";
+import {
+  attachmentUrl, markMailSeen, readMailMessage, threadMessages,
+  type MailMessage, type MailSummary,
+} from "../../api";
+import { mailDate, senderName } from "./format";
 
 type State =
   | { kind: "loading" }
@@ -11,6 +15,8 @@ type State =
 export default function MailRead() {
   const { messageId } = useParams<{ messageId: string }>();
   const [state, setState] = useState<State>({ kind: "loading" });
+  const [showHtml, setShowHtml] = useState(false);
+  const [siblings, setSiblings] = useState<MailSummary[]>([]);
 
   useEffect(() => {
     if (!messageId) return;
@@ -22,6 +28,16 @@ export default function MailRead() {
         const message = await readMailMessage(messageId);
         if (cancelled) return;
         setState({ kind: "ready", message });
+        setShowHtml(false);
+        // The rest of the conversation, best effort: failing to load it must
+        // not stop the message the reader actually opened from rendering.
+        if (message.thread_id) {
+          void threadMessages(message.thread_id)
+            .then((all) => { if (!cancelled) setSiblings(all.filter((m) => m.id !== message.id)); })
+            .catch(() => {});
+        } else {
+          setSiblings([]);
+        }
         // Marking read is best effort: failing to do so must not stop the
         // message being displayed, which is what the reader actually came for.
         void markMailSeen(messageId, true).catch(() => {});
@@ -74,21 +90,65 @@ export default function MailRead() {
         </dl>
       </header>
 
-      {/*
-        The plain-text part is rendered, never the HTML one. Injecting a
-        stranger's HTML into this page would hand them script execution on the
-        shell's own origin — the one place in the ecosystem where a session
-        cookie lives. Rendering HTML mail safely needs sandboxing and sanitising
-        that does not exist yet, and until it does, text is the honest option.
-      */}
-      <pre className="whitespace-pre-wrap break-words font-sans text-sm text-zinc-200">
-        {m.text}
-      </pre>
+      {m.html && (
+        <div className="flex items-center gap-3 text-xs">
+          <button
+            type="button"
+            onClick={() => setShowHtml((v) => !v)}
+            className="rounded border border-zinc-800 px-2 py-1 text-zinc-300 hover:bg-zinc-900"
+          >
+            {showHtml ? "Show plain text" : "Show formatted"}
+          </button>
+          {m.blocked_remote && showHtml && (
+            <span className="text-zinc-500">
+              Remote images were not loaded — opening them tells the sender you read this.
+            </span>
+          )}
+        </div>
+      )}
 
-      {m.html && !m.text.trim() && (
-        <p className="text-xs text-zinc-500">
-          This message has only an HTML body, which is not displayed yet.
-        </p>
+      {showHtml && m.html ? (
+        /*
+          The HTML is sanitised server-side and then rendered inside a sandboxed
+          frame with no script permission and its own CSP. Two layers on
+          purpose: sanitisers have been defeated before, and this page is the
+          one origin holding the session cookie, so a bypass here is account
+          takeover rather than a broken layout. srcdoc keeps it same-document
+          without giving it a URL of its own to navigate from.
+        */
+        <iframe
+          title="Message content"
+          sandbox=""
+          srcDoc={`<!doctype html><meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'">
+<style>body{font:14px/1.5 system-ui,sans-serif;color:#e6f2ee;background:transparent;margin:0}
+a{color:#27c9a5}blockquote{border-left:2px solid #333;margin:0;padding-left:12px;color:#9db4ad}</style>
+${m.html}`}
+          className="min-h-[24rem] w-full rounded border border-zinc-800 bg-zinc-950"
+        />
+      ) : (
+        <pre className="whitespace-pre-wrap break-words font-sans text-sm text-zinc-200">
+          {m.text}
+        </pre>
+      )}
+
+      {siblings.length > 0 && (
+        <div className="rounded-lg border border-zinc-800 p-4">
+          <h2 className="text-xs uppercase tracking-wide text-zinc-500">
+            Rest of this conversation
+          </h2>
+          <ul className="mt-2 space-y-1">
+            {siblings.map((s) => (
+              <li key={s.id} className="text-sm">
+                <Link to={`/mail/m/${s.id}`} className="text-zinc-300 hover:text-zinc-100">
+                  {senderName(s.from)}
+                  <span className="text-zinc-500"> — {s.subject || "(no subject)"}</span>
+                </Link>
+                <span className="ml-2 text-xs text-zinc-500">{mailDate(s.received_at)}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
       )}
 
       {m.attachments.length > 0 && (
@@ -96,8 +156,14 @@ export default function MailRead() {
           <h2 className="text-xs uppercase tracking-wide text-zinc-500">Attachments</h2>
           <ul className="mt-2 space-y-1">
             {m.attachments.map((a, i) => (
-              <li key={`${a.filename}-${i}`} className="text-sm text-zinc-300">
-                {a.filename}{" "}
+              <li key={`${a.filename}-${i}`} className="text-sm">
+                <a
+                  href={attachmentUrl(m.id, a.index)}
+                  download={a.filename}
+                  className="text-zinc-200 underline hover:text-white"
+                >
+                  {a.filename}
+                </a>{" "}
                 <span className="text-zinc-500">
                   ({a.mime_type}, {Math.max(1, Math.round(a.size / 1024))} KB)
                 </span>

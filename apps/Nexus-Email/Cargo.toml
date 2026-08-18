@@ -25,5 +25,6 @@ tracing = "0.1"
 hickory-resolver = "0.24"
 rsa = { version = "0.9", features = ["sha2"] }
 rand = "0.8"
+ammonia = "4"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 hex = "0.4"

@@ -4,6 +4,7 @@ import {
   listMailFolders, listMailMessages, searchMail,
   type MailFolder, type MailSummary,
 } from "../../api";
+import { groupIntoThreads } from "./threads";
 import { mailDate, senderName } from "./format";
 import MailNav from "./MailNav";
 
@@ -96,14 +97,17 @@ export default function MailList() {
         />
       </form>
 
+      {/* Grouped into conversations. A mailing list or a long reply chain
+          otherwise fills the list with the same subject repeated, which is
+          what made threading the first gap worth closing. */}
       {state.messages.length === 0 ? (
         <p className="py-12 text-center text-sm text-zinc-500">
           {query ? `Nothing matches “${query}”.` : "Nothing here yet."}
         </p>
       ) : (
         <ul className="divide-y divide-zinc-800 rounded-lg border border-zinc-800">
-          {state.messages.map((m) => (
-            <li key={m.id}>
+          {groupIntoThreads(state.messages).map(({ latest: m, count, anyUnread }) => (
+            <li key={m.thread_id || m.id}>
               <Link
                 to={`/mail/m/${m.id}`}
                 className="flex gap-3 px-4 py-3 hover:bg-zinc-900"
@@ -111,21 +115,29 @@ export default function MailList() {
                 {/* The unread marker is a dot rather than bold-everything, so a
                     full inbox does not read as a wall of emphasis. */}
                 <span
-                  aria-label={m.seen ? "Read" : "Unread"}
+                  aria-label={anyUnread ? "Unread" : "Read"}
                   className={`mt-2 h-2 w-2 shrink-0 rounded-full ${
-                    m.seen ? "bg-transparent" : "bg-zinc-100"
+                    anyUnread ? "bg-zinc-100" : "bg-transparent"
                   }`}
                 />
                 <span className="min-w-0 flex-1">
                   <span className="flex items-baseline gap-2">
-                    <span className={`truncate text-sm ${m.seen ? "text-zinc-400" : "text-zinc-100"}`}>
+                    <span className={`truncate text-sm ${anyUnread ? "text-zinc-100" : "text-zinc-400"}`}>
                       {senderName(m.from)}
                     </span>
+                    {count > 1 && (
+                      <span
+                        aria-label={`${count} messages in this conversation`}
+                        className="shrink-0 rounded bg-zinc-800 px-1.5 text-xs text-zinc-400"
+                      >
+                        {count}
+                      </span>
+                    )}
                     <span className="ml-auto shrink-0 text-xs text-zinc-500">
                       {mailDate(m.received_at)}
                     </span>
                   </span>
-                  <span className={`block truncate text-sm ${m.seen ? "text-zinc-500" : "text-zinc-200"}`}>
+                  <span className={`block truncate text-sm ${anyUnread ? "text-zinc-200" : "text-zinc-500"}`}>
                     {m.subject || "(no subject)"}
                   </span>
                   {m.snippet && (

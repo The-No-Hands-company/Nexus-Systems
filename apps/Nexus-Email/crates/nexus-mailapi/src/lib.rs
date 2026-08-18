@@ -11,6 +11,7 @@
 use std::sync::Arc;
 
 use axum::{
+    body::Body,
     extract::{Path, Query, State},
     http::{HeaderMap, StatusCode},
     response::{IntoResponse, Response},
@@ -22,6 +23,8 @@ use nexus_mailmsg::MessageBuilder;
 use nexus_mailstore::{Address, FolderKind, MailStore, MessageSummary};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
+
+pub mod html;
 
 pub struct AppState {
     pub store: MailStore,
@@ -116,6 +119,8 @@ pub fn router(state: SharedState) -> Router {
         .route("/api/v1/messages/:id/seen", post(mark_seen))
         .route("/api/v1/messages", post(send_message))
         .route("/api/v1/search", get(search))
+        .route("/api/v1/threads/:id/messages", get(thread_messages))
+        .route("/api/v1/messages/:id/attachments/:index", get(download_attachment))
         .with_state(state)
 }
 
@@ -163,17 +168,25 @@ async fn list_messages(
 #[derive(Serialize)]
 pub struct MessageDto {
     pub id: Uuid,
+    pub thread_id: Option<Uuid>,
     pub subject: Option<String>,
     pub from: String,
     pub to: Option<String>,
     pub date: Option<String>,
     pub text: String,
+    /// Already sanitised. The browser never sees the sender's original markup.
     pub html: Option<String>,
+    /// True when remote images or similar were stripped, so the UI can offer to
+    /// load them instead of silently showing a different message than was sent.
+    pub blocked_remote: bool,
     pub attachments: Vec<AttachmentDto>,
 }
 
 #[derive(Serialize)]
 pub struct AttachmentDto {
+    /// Position in the MIME tree, which is how it is fetched. Filenames are
+    /// chosen by the sender and are neither unique nor safe as identifiers.
+    pub index: usize,
     pub filename: String,
     pub mime_type: String,
     pub size: usize,
@@ -207,16 +220,22 @@ async fn read_message(
 
     let attachments = parts
         .iter()
-        .filter(|p| p.is_attachment())
-        .map(|p| AttachmentDto {
+        .enumerate()
+        .filter(|(_, p)| p.is_attachment())
+        .map(|(index, p)| AttachmentDto {
+            index,
             filename: p.filename().unwrap_or_else(|| "attachment".into()),
             mime_type: p.content_type.mime_type.clone(),
             size: p.body.len(),
         })
         .collect();
 
+    let raw_html = body_of("text/html");
+    let sanitised = raw_html.as_deref().map(|h| html::sanitise(h, false));
+
     Ok(Json(MessageDto {
         id: message_id,
+        thread_id: None,
         subject: parsed
             .headers
             .get("subject")
@@ -225,7 +244,8 @@ async fn read_message(
         to: parsed.headers.get("to").map(str::to_string),
         date: parsed.headers.get("date").map(str::to_string),
         text: body_of("text/plain").unwrap_or_else(|| root.text()),
-        html: body_of("text/html"),
+        blocked_remote: sanitised.as_ref().map(|s| s.blocked_remote).unwrap_or(false),
+        html: sanitised.map(|s| s.html),
         attachments,
     }))
 }
@@ -383,6 +403,74 @@ async fn search(
         .await
         .map_err(|e| server(&format!("search: {e}")))?;
     Ok(Json(hits.into_iter().map(Into::into).collect()))
+}
+
+async fn thread_messages(
+    State(state): State<SharedState>,
+    headers: HeaderMap,
+    Path(thread_id): Path<Uuid>,
+) -> Result<Json<Vec<SummaryDto>>, ApiError> {
+    let mailbox = mailbox_of(&state, &headers).await?;
+    let msgs = state
+        .store
+        .thread_messages(mailbox, thread_id)
+        .await
+        .map_err(|e| server(&format!("thread: {e}")))?;
+    Ok(Json(msgs.into_iter().map(Into::into).collect()))
+}
+
+/// Serve one attachment.
+///
+/// Always as a download, never inline. Attachment bytes are chosen entirely by
+/// the sender, and serving them inline on app.<domain> would let an HTML or SVG
+/// attachment execute script on the origin holding the session cookie. The
+/// Content-Type is deliberately not the sender's claimed one, `nosniff` stops
+/// the browser guessing a better one, and the CSP is a sandbox for anything
+/// that still finds a way to render.
+async fn download_attachment(
+    State(state): State<SharedState>,
+    headers: HeaderMap,
+    Path((message_id, index)): Path<(Uuid, usize)>,
+) -> Result<Response, ApiError> {
+    let mailbox = mailbox_of(&state, &headers).await?;
+    let raw = state
+        .store
+        .raw_message(mailbox, message_id)
+        .await
+        .map_err(|_| ApiError(StatusCode::NOT_FOUND, "no such message".into()))?;
+
+    let parsed = nexus_mailmsg::parse(&raw, nexus_mailmsg::Limits::default())
+        .map_err(|e| server(&format!("parse: {e}")))?;
+    let root = nexus_mailmsg::tree(&parsed);
+    let parts = root.walk();
+
+    let part = parts
+        .get(index)
+        .filter(|p| p.is_attachment())
+        .ok_or(ApiError(StatusCode::NOT_FOUND, "no such attachment".into()))?;
+
+    // The sender's filename is used for the download name only, with anything
+    // that could escape a directory or confuse a shell removed.
+    let name: String = part
+        .filename()
+        .unwrap_or_else(|| "attachment".into())
+        .chars()
+        .filter(|c| c.is_alphanumeric() || matches!(c, '.' | '-' | '_' | ' '))
+        .take(120)
+        .collect();
+    let name = if name.trim().is_empty() { "attachment".to_string() } else { name };
+
+    Ok((
+        StatusCode::OK,
+        [
+            ("content-type", "application/octet-stream".to_string()),
+            ("content-disposition", format!("attachment; filename=\"{name}\"")),
+            ("x-content-type-options", "nosniff".to_string()),
+            ("content-security-policy", "default-src 'none'; sandbox".to_string()),
+        ],
+        Body::from(part.body.clone()),
+    )
+        .into_response())
 }
 
 /// Folder kinds, exposed so the UI can label the special-use folders.
