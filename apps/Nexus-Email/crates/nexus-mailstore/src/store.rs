@@ -499,6 +499,25 @@ impl MailStore {
         }
     }
 
+    /// The address a mailbox sends as.
+    ///
+    /// Falls back to any address it owns when none is marked primary, because
+    /// a mailbox with addresses but no primary flag should still be able to
+    /// send — and the alternative is composing From out of an internal user id,
+    /// which is what this replaced.
+    pub async fn primary_address(&self, mailbox_id: Uuid) -> Result<Option<Address>> {
+        let row: Option<(String, String)> = sqlx::query_as(
+            "SELECT localpart, domain FROM addresses
+             WHERE mailbox_id = $1
+             ORDER BY is_primary DESC, created_at
+             LIMIT 1",
+        )
+        .bind(mailbox_id)
+        .fetch_optional(&self.pool)
+        .await?;
+        Ok(row.map(|(localpart, domain)| Address { localpart, domain }))
+    }
+
     pub async fn mailbox_for_subject(&self, subject: &str) -> Result<Option<Uuid>> {
         let row: Option<(Uuid,)> =
             sqlx::query_as("SELECT id FROM mailboxes WHERE owner_subject = $1 LIMIT 1")

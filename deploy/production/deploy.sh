@@ -98,6 +98,14 @@ cmd_start() {
     fi
     : "${NEXUS_CLOUD_API_KEY:?not exported and not found in apps/Nexus-Cloud/.env — an empty key disables Cloud auth entirely}"
 
+    # Same pattern for Email's database URL: the value lives beside the app so
+    # a credential is never written into this script or the repo.
+    if [ -z "${NEXUS_EMAIL_DATABASE_URL:-}" ] && [ -f "$ROOT/apps/Nexus-Email/.env" ]; then
+        NEXUS_EMAIL_DATABASE_URL="$(sed -n 's/^NEXUS_EMAIL_DATABASE_URL=//p' "$ROOT/apps/Nexus-Email/.env" \
+            | head -1 | tr -d '\r"')"
+        [ -n "$NEXUS_EMAIL_DATABASE_URL" ] && log "Adopted NEXUS_EMAIL_DATABASE_URL from apps/Nexus-Email/.env"
+    fi
+
     log "Starting Nexus Systems on $DOMAIN..."
 
     # 1. Infrastructure
@@ -295,6 +303,27 @@ cmd_start() {
         NEXUS_CLOUD_API_KEY="$NEXUS_CLOUD_API_KEY" \
         bun run src/index.ts
 
+    # 4f. Nexus-Email API — the mail store behind app.$DOMAIN/mail.
+    #
+    # Loopback only, and that is a security control rather than a default: this
+    # service trusts the X-Nexus-Subject header the dashboard sets after asking
+    # Auth who the caller is, so anything able to reach the port could claim to
+    # be anyone. It must never be given a public route.
+    if [ -x "$ROOT/apps/Nexus-Email/target/release/nexus-mailapi" ]; then
+        MAILAPI_BIN="$ROOT/apps/Nexus-Email/target/release/nexus-mailapi"
+    else
+        MAILAPI_BIN="$ROOT/apps/Nexus-Email/target/debug/nexus-mailapi"
+    fi
+    if [ -x "$MAILAPI_BIN" ]; then
+        start_service "mailapi" "$ROOT/apps/Nexus-Email" 3140 \
+            NEXUS_EMAIL_BIND=127.0.0.1:3140 \
+            NEXUS_EMAIL_DOMAIN="$DOMAIN" \
+            NEXUS_EMAIL_DATABASE_URL="$NEXUS_EMAIL_DATABASE_URL" \
+            "$MAILAPI_BIN"
+    else
+        log "mailapi binary not built - skipping (cargo build -p nexus-mailapi)"
+    fi
+
     # 5. Proxy (8080 for Cloudflare Tunnel)
     #
     # HOSTING_SITE_UPSTREAM is the default backend for the *.$DOMAIN wildcard:
@@ -316,7 +345,7 @@ cmd_start() {
 
 cmd_stop() {
     log "Stopping all Nexus services..."
-    for svc in auth cloud chat nexus-chat nexus-chat-web dashboard draw proxy; do
+    for svc in auth cloud chat nexus-chat nexus-chat-web dashboard draw mailapi proxy; do
         if [ -f "$PID_DIR/$svc.pid" ]; then
             kill "$(cat "$PID_DIR/$svc.pid")" 2>/dev/null && log "  Stopped $svc" || true
             rm -f "$PID_DIR/$svc.pid"
@@ -329,7 +358,7 @@ cmd_stop() {
 
 cmd_status() {
     echo "Service Status:"
-    for svc in auth cloud chat nexus-chat nexus-chat-web dashboard draw proxy; do
+    for svc in auth cloud chat nexus-chat nexus-chat-web dashboard draw mailapi proxy; do
         if [ -f "$PID_DIR/$svc.pid" ]; then
             if kill -0 "$(cat "$PID_DIR/$svc.pid")" 2>/dev/null; then
                 echo -e "  ${G}● $svc${R} (running, PID: $(cat $PID_DIR/$svc.pid))"

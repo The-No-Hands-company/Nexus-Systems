@@ -49,6 +49,62 @@ const AUTH_PREFIX = "/api/v1/auth/";
  * Anything not in this table 404s, and no other method than GET is served.
  */
 const CLOUD_PREFIX = "/api/cloud/";
+
+/**
+ * Mail lives behind its own service on loopback. Unlike the Cloud proxy, which
+ * attaches an operator key, this one attaches the *caller's identity*: the mail
+ * API trusts X-Nexus-Subject to decide whose mailbox to open.
+ *
+ * That means this proxy is the only thing standing between a signed-in user and
+ * everyone else's mail, so the subject is taken from Auth on every request and
+ * never from anything the browser sent. An inbound X-Nexus-Subject is stripped
+ * before forwarding — without that, any user could read any mailbox by setting
+ * one header.
+ */
+const MAIL_PREFIX = "/api/mail/";
+
+/**
+ * Read per call rather than captured at module load. A top-level const freezes
+ * whatever the environment held the first time this module was imported, which
+ * in a test run is decided by import order between files — the same trap
+ * documented in cloud-proxy.test.ts. A function has no such ordering.
+ */
+function mailUrl(): string {
+  return (process.env.NEXUS_EMAIL_URL || "http://127.0.0.1:3140").replace(/\/+$/, "");
+}
+
+async function proxyToMail(req: Request, rest: string, search: string): Promise<Response> {
+  const who = await callerIdentity(req);
+  if (!who) return Response.json({ error: "not_authenticated" }, { status: 401 });
+
+  // Only the mail API's own surface, and only the methods it serves.
+  if (!/^(folders|messages|search)(\/|$)/.test(rest)) {
+    return Response.json({ error: "not_found" }, { status: 404 });
+  }
+  if (req.method !== "GET" && req.method !== "POST") {
+    return Response.json({ error: "method_not_allowed" }, { status: 405 });
+  }
+
+  const headers = new Headers();
+  headers.set("content-type", req.headers.get("content-type") ?? "application/json");
+  headers.set("x-nexus-subject", who.subject);
+
+  try {
+    const res = await fetch(`${mailUrl()}/api/v1/${rest}${search}`, {
+      method: req.method,
+      headers,
+      body: req.method === "POST" ? await req.text() : undefined,
+      signal: AbortSignal.timeout(10000),
+    });
+    return new Response(await res.text(), {
+      status: res.status,
+      headers: { "content-type": res.headers.get("content-type") ?? "application/json" },
+    });
+  } catch {
+    // Mail being down must not take the shell page with it.
+    return Response.json({ error: "mail_unavailable" }, { status: 503 });
+  }
+}
 const CLOUD_ALLOWLIST: Record<string, { upstream: string; adminOnly?: boolean }> = {
   // Overview (view-dashboard): status.html's loadDashboard() calls these.
   status: { upstream: "/api/v1/status" },
@@ -82,6 +138,32 @@ const ADMIN_ROLES = ["founder", "admin"];
  * the Dashboard server has to ask Auth on the caller's behalf rather than
  * trusting anything the browser claims about itself.
  */
+/**
+ * Who Auth says this request is. Returns the ecosystem subject (the stable
+ * user id) alongside the role, because mail is per-user: the mail service needs
+ * to know *whose* mailbox to open, not merely that somebody is signed in.
+ */
+async function callerIdentity(
+  req: Request,
+): Promise<{ subject: string; role: string | null } | null> {
+  try {
+    const res = await fetch(`${AUTH_INTERNAL_URL.replace(/\/+$/, "")}/api/v1/auth/me`, {
+      headers: { cookie: req.headers.get("cookie") ?? "" },
+      signal: AbortSignal.timeout(3000),
+    });
+    if (!res.ok) return null;
+    const body = (await res.json().catch(() => null)) as
+      | { user?: { id?: unknown; role?: unknown } }
+      | null;
+    const id = body?.user?.id;
+    if (typeof id !== "string" || !id) return null;
+    const role = body?.user?.role;
+    return { subject: id, role: typeof role === "string" ? role : null };
+  } catch {
+    return null;
+  }
+}
+
 async function callerRole(req: Request): Promise<string | null> {
   try {
     const res = await fetch(`${AUTH_INTERNAL_URL.replace(/\/+$/, "")}/api/v1/auth/me`, {
@@ -191,6 +273,10 @@ export async function handleRequest(req: Request): Promise<Response> {
   // GET-only, and only for names on CLOUD_ALLOWLIST — anything else (a
   // mutating method, or a name not in the table) falls through to the
   // catch-all 404 below rather than reaching proxyToCloud at all.
+  if (path.startsWith(MAIL_PREFIX)) {
+    return proxyToMail(req, path.slice(MAIL_PREFIX.length), url.search);
+  }
+
   if (req.method === "GET" && path.startsWith(CLOUD_PREFIX)) {
     return proxyToCloud(req, path.slice(CLOUD_PREFIX.length), url.search);
   }

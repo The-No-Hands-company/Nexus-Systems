@@ -301,3 +301,73 @@ export function cloudEndpoints() {
   return request<{ routes?: CloudEndpoint[]; endpoints?: CloudEndpoint[] }>("/api/cloud/endpoints")
     .then((r) => r.routes ?? r.endpoints ?? []);
 }
+
+// ── Mail ────────────────────────────────────────────────────────────────────
+//
+// Everything goes through the dashboard's /api/mail proxy, which attaches the
+// caller's identity server-side. The browser never says whose mailbox it wants
+// and could not be trusted to.
+
+export type MailFolder = { id: string; name: string; kind: string };
+
+export type MailSummary = {
+  id: string;
+  thread_id: string;
+  subject: string | null;
+  from: string;
+  received_at: string;
+  seen: boolean;
+  flagged: boolean;
+  snippet: string | null;
+};
+
+export type MailAttachment = { filename: string; mime_type: string; size: number };
+
+export type MailMessage = {
+  id: string;
+  subject: string | null;
+  from: string;
+  to: string | null;
+  date: string | null;
+  text: string;
+  html: string | null;
+  attachments: MailAttachment[];
+};
+
+export type SendOutcome = { recipient: string; status: string; reason: string | null };
+
+export function listMailFolders() {
+  return request<MailFolder[]>("/api/mail/folders");
+}
+
+export function listMailMessages(folderId: string) {
+  return request<MailSummary[]>(`/api/mail/folders/${encodeURIComponent(folderId)}/messages`);
+}
+
+export function readMailMessage(id: string) {
+  return request<MailMessage>(`/api/mail/messages/${encodeURIComponent(id)}`);
+}
+
+export function markMailSeen(id: string, seen: boolean) {
+  return request<void>(`/api/mail/messages/${encodeURIComponent(id)}/seen`, {
+    method: "POST",
+    body: JSON.stringify({ seen }),
+  });
+}
+
+export function searchMail(q: string) {
+  return request<MailSummary[]>(`/api/mail/search?q=${encodeURIComponent(q)}`);
+}
+
+export function sendMail(body: {
+  to: string[];
+  cc?: string[];
+  subject: string;
+  text: string;
+  in_reply_to?: string;
+}) {
+  return request<{ outcomes: SendOutcome[] }>("/api/mail/messages", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}

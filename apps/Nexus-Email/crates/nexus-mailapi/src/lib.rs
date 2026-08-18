@@ -287,8 +287,25 @@ async fn send_message(
         return Err(bad("a message needs at least one recipient"));
     }
 
-    let from = Address::parse(&format!("{subj}@{}", state.primary_domain))
-        .map_err(|_| server("could not build the sender address"))?;
+    // The mailbox's own address, not the subject id. Composing From out of an
+    // internal user identifier produced senders like usr-msosh4ui-2@tnhc.dev,
+    // which is neither routable back to the sender nor something anyone would
+    // want in a recipient's inbox.
+    let from = match state
+        .store
+        .primary_address(mailbox)
+        .await
+        .map_err(|e| server(&format!("primary address: {e}")))?
+    {
+        Some(addr) => addr,
+        None => {
+            return Err(ApiError(
+                StatusCode::CONFLICT,
+                "this mailbox has no address to send from".into(),
+            ))
+        }
+    };
+    let _ = &subj;
 
     let mut recipients = Vec::new();
     for raw in req.to.iter().chain(req.cc.iter()) {

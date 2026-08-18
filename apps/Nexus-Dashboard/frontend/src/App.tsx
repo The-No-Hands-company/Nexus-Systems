@@ -5,6 +5,9 @@ import RequestAccess from "./pages/RequestAccess";
 import Claim from "./pages/Claim";
 import Account from "./pages/Account";
 import Admin from "./pages/Admin";
+import MailList from "./pages/mail/MailList";
+import MailRead from "./pages/mail/MailRead";
+import MailCompose from "./pages/mail/MailCompose";
 import CloudOverview from "./pages/cloud/CloudOverview";
 import CloudTools from "./pages/cloud/CloudTools";
 import CloudFederation from "./pages/cloud/CloudFederation";
@@ -174,6 +177,22 @@ export default function App() {
               <CloudApi />
             </ShellView>
           }
+        />
+        <Route
+          path="/mail"
+          element={<ShellView state={appsState}><MailList /></ShellView>}
+        />
+        <Route
+          path="/mail/f/:folderId"
+          element={<ShellView state={appsState}><MailList /></ShellView>}
+        />
+        <Route
+          path="/mail/m/:messageId"
+          element={<ShellView state={appsState}><MailRead /></ShellView>}
+        />
+        <Route
+          path="/mail/compose"
+          element={<ShellView state={appsState}><MailCompose /></ShellView>}
         />
         <Route path="/a/:appId" element={<ShellRoute state={appsState} onRetry={loadApps} />} />
         <Route path="*" element={<Home />} />
