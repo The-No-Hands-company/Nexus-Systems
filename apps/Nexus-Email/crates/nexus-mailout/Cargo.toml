@@ -1,0 +1,24 @@
+[package]
+name = "nexus-mailout"
+description = "Outbound SMTP delivery for Nexus Email: MX resolution, the client, and the delivery loop"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+nexus-mailstore = { path = "../nexus-mailstore" }
+nexus-maildelivery = { path = "../nexus-maildelivery" }
+nexus-mailmsg = { path = "../nexus-mailmsg" }
+sqlx = { workspace = true }
+tokio = { workspace = true }
+hickory-resolver = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+uuid = { workspace = true }
+chrono = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true }
+sqlx = { workspace = true }
+tracing-subscriber = { workspace = true }

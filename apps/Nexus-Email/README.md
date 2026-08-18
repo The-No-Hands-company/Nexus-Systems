@@ -7,7 +7,7 @@ Design: `docs/superpowers/specs/2026-08-15-nexus-email-design.md` (repo root).
 
 ## Status
 
-Build-order steps 1-5 of 7 are implemented:
+Build-order steps 1-6 of 7 are implemented:
 
 1. **Store and identity** — mailboxes, addresses, messages, threads, folders, flags.
 2. **Message format** — RFC 5322 parsing, MIME, transfer encodings, attachments,
@@ -18,8 +18,23 @@ Build-order steps 1-5 of 7 are implemented:
 4. **Webmail** — `nexus-mailapi` plus the shell views at `app.<domain>/mail`.
 5. **SMTP inbound** — the session state machine, the listener, anti-abuse and
    the relay policy. SPF/DKIM/DMARC verification is not written yet.
+6. **SMTP outbound** — MX resolution, the delivery client, and the worker that
+   drains the queue. DKIM *signing* is not written yet.
 
-Steps 6-7 (SMTP outbound, IMAP/JMAP) are not started.
+Step 7 (IMAP/JMAP) is not started.
+
+## The egress reality, measured
+
+Outbound TCP 25 is filtered on this connection, over both IPv4 and IPv6. The
+delivery worker was run against the real queue and behaved as designed: it
+resolved Gmail's MX records, tried them in preference order, timed out on each,
+and **deferred with a retry scheduled** rather than bouncing.
+
+That asymmetry is the most important rule in `nexus-mailout`: anything that is
+not an explicit permanent refusal is a deferral. Deferring undeliverable mail
+costs a few days of retries and one bounce; bouncing deliverable mail loses it,
+and the sender has no copy. So the queue holds that message until an egress
+path exists — the ISP lifting the filter, or a peer node with clean egress.
 
 ## Layout
 
@@ -31,7 +46,8 @@ Steps 6-7 (SMTP outbound, IMAP/JMAP) are not started.
   exactly those bytes.
 - `crates/nexus-maildelivery` — routing, delivery and the outbound queue.
 - `crates/nexus-mailapi` — the HTTP API the webmail consumes.
-- `crates/nexus-mailsmtp` — SMTP: the session state machine and the listener.
+- `crates/nexus-mailsmtp` — SMTP inbound: the session state machine and listener.
+- `crates/nexus-mailout` — SMTP outbound: MX resolution, client, delivery worker.
 
 ## Why the SMTP session has no sockets in it
 

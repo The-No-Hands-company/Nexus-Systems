@@ -22,5 +22,6 @@ encoding_rs = "0.8"
 axum = "0.7"
 tower-http = { version = "0.5", features = ["trace"] }
 tracing = "0.1"
+hickory-resolver = "0.24"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 hex = "0.4"
