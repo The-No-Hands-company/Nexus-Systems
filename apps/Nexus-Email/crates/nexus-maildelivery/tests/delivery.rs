@@ -211,3 +211,53 @@ async fn a_reply_lands_in_the_same_thread_as_the_message_it_answers() {
     assert_eq!(found, 2, "both the original and the reply must be stored");
     assert_eq!(threads, 1, "the reply must join its parent's thread");
 }
+
+#[tokio::test]
+async fn a_delivered_message_becomes_searchable_by_its_body() {
+    // Search has to reach the body, not just the subject — searching for a
+    // phrase you remember from a message is the whole point.
+    let (d, store, _, local) = harness().await;
+
+    let alice_mb = store.create_identity_mailbox(&format!("u{}", Uuid::now_v7().simple()), "Alice").await.unwrap();
+    let bob_mb = store.create_identity_mailbox(&format!("u{}", Uuid::now_v7().simple()), "Bob").await.unwrap();
+    let alice = Address::parse(&format!("alice@{local}")).unwrap();
+    let bob = Address::parse(&format!("bob@{local}")).unwrap();
+    store.add_address(alice_mb.id, &alice, true).await.unwrap();
+    store.add_address(bob_mb.id, &bob, true).await.unwrap();
+
+    let needle = format!("zarquon{}", Uuid::now_v7().simple());
+    let raw = msg(&alice.as_string(), &bob.as_string(), "Nothing distinctive", &format!("the word is {needle} ok"));
+    d.submit(&raw, &alice, &[bob], Some(alice_mb.id)).await.unwrap();
+
+    let hits = store.search(bob_mb.id, &needle, 10).await.unwrap();
+    assert_eq!(hits.len(), 1, "the body text should be searchable");
+
+    // And it must not leak across mailboxes: Alice holds only her Sent copy,
+    // which is the same message row — so scoping search by membership matters.
+    let sender_hits = store.search(alice_mb.id, &needle, 10).await.unwrap();
+    assert_eq!(sender_hits.len(), 1, "the sender's own copy is hers to find");
+}
+
+#[tokio::test]
+async fn search_does_not_return_another_mailboxs_mail() {
+    // The same message row is shared between mailboxes. Searching `messages`
+    // directly rather than through membership would leak across them.
+    let (d, store, _, local) = harness().await;
+
+    let alice_mb = store.create_identity_mailbox(&format!("u{}", Uuid::now_v7().simple()), "Alice").await.unwrap();
+    let bob_mb = store.create_identity_mailbox(&format!("u{}", Uuid::now_v7().simple()), "Bob").await.unwrap();
+    let outsider = store.create_identity_mailbox(&format!("u{}", Uuid::now_v7().simple()), "Outsider").await.unwrap();
+    let alice = Address::parse(&format!("alice@{local}")).unwrap();
+    let bob = Address::parse(&format!("bob@{local}")).unwrap();
+    store.add_address(alice_mb.id, &alice, true).await.unwrap();
+    store.add_address(bob_mb.id, &bob, true).await.unwrap();
+
+    let needle = format!("secret{}", Uuid::now_v7().simple());
+    let raw = msg(&alice.as_string(), &bob.as_string(), "private", &format!("contains {needle}"));
+    d.submit(&raw, &alice, &[bob], Some(alice_mb.id)).await.unwrap();
+
+    assert!(
+        store.search(outsider.id, &needle, 10).await.unwrap().is_empty(),
+        "a third party must not find mail they do not hold"
+    );
+}

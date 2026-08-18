@@ -7,7 +7,7 @@ Design: `docs/superpowers/specs/2026-08-15-nexus-email-design.md` (repo root).
 
 ## Status
 
-Build-order steps 1-3 of 7 are implemented:
+Build-order steps 1-4 of 7 are in progress:
 
 1. **Store and identity** — mailboxes, addresses, messages, threads, folders, flags.
 2. **Message format** — RFC 5322 parsing, MIME, transfer encodings, attachments,
@@ -15,8 +15,9 @@ Build-order steps 1-3 of 7 are implemented:
 3. **Internal and federated delivery** — routing, local delivery, the outbound
    queue with retry and bounce boundaries. A working mail product with no SMTP
    anywhere in it.
+4. **Webmail** — the HTTP API is done (`nexus-mailapi`); the shell views are next.
 
-Steps 4-7 (webmail, SMTP inbound, SMTP outbound, IMAP/JMAP) are not started.
+Steps 5-7 (SMTP inbound, SMTP outbound, IMAP/JMAP) are not started.
 
 ## Layout
 
@@ -27,6 +28,15 @@ Steps 4-7 (webmail, SMTP inbound, SMTP outbound, IMAP/JMAP) are not started.
   we emit must survive strict receivers and later carry a DKIM signature over
   exactly those bytes.
 - `crates/nexus-maildelivery` — routing, delivery and the outbound queue.
+- `crates/nexus-mailapi` — the HTTP API the webmail consumes.
+
+## A security control that looks like a config value
+
+`nexus-mailapi` binds loopback and trusts the `X-Nexus-Subject` header, which
+the Dashboard sets after asking Auth who the caller is. That is only sound
+because nothing off this machine can reach the port. Exposing it publicly would
+turn that header into a way for anyone to claim to be anyone, so the bind
+address is part of the security model, not a deployment preference.
 
 ## Two shapes worth knowing before changing anything
 

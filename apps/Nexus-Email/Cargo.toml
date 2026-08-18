@@ -19,4 +19,8 @@ thiserror = "2.0"
 sha2 = "0.10"
 base64 = "0.22"
 encoding_rs = "0.8"
+axum = "0.7"
+tower-http = { version = "0.5", features = ["trace"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 hex = "0.4"

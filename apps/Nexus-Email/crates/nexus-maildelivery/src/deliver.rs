@@ -1,4 +1,4 @@
-use nexus_mailmsg::{parse, Limits};
+use nexus_mailmsg::{parse, tree, Limits};
 use nexus_mailstore::{Address, FolderKind, MailStore, MailStoreError, Transport};
 use uuid::Uuid;
 
@@ -84,6 +84,10 @@ impl Deliverer {
             )
             .await?;
 
+        if let Some(text) = Self::searchable_text(raw) {
+            self.store.set_search_text(message_id, &text).await?;
+        }
+
         let mut outcomes = Vec::with_capacity(recipients.len());
         for rcpt in recipients {
             let outcome = match self.router.route(rcpt) {
@@ -110,6 +114,30 @@ impl Deliverer {
         }
 
         Ok(outcomes)
+    }
+
+    /// The displayable text of a message, for the search index.
+    ///
+    /// Prefers text/plain over text/html: the plain alternative is the same
+    /// content without markup, and indexing HTML means indexing tag names and
+    /// inline styles, which match everything and mean nothing.
+    fn searchable_text(raw: &[u8]) -> Option<String> {
+        let parsed = parse(raw, Limits::default()).ok()?;
+        let root = tree(&parsed);
+        let parts = root.walk();
+
+        let pick = |mime: &str| -> Option<String> {
+            parts
+                .iter()
+                .find(|p| p.content_type.mime_type == mime && !p.is_attachment())
+                .map(|p| p.text())
+        };
+
+        pick("text/plain").or_else(|| pick("text/html")).or_else(|| {
+            // A message with no recognised text part still has a subject and a
+            // sender indexed; returning None here simply adds nothing more.
+            (!root.body.is_empty()).then(|| root.text())
+        })
     }
 
     /// Deliver an already-stored message into a local mailbox's INBOX.
@@ -182,6 +210,10 @@ impl Deliverer {
                 None,
             )
             .await?;
+
+        if let Some(text) = Self::searchable_text(raw) {
+            self.store.set_search_text(message_id, &text).await?;
+        }
 
         self.deliver_local(message_id, recipient).await?;
         Ok(message_id)

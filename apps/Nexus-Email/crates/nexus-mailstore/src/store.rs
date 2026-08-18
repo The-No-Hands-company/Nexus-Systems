@@ -321,3 +321,190 @@ impl MailStore {
         Ok(row.0)
     }
 }
+
+/// One row of a summary query: the shape `list_folder` and `search` both
+/// select. Named because the tuple is identical in both and unreadable inline.
+type SummaryRow = (
+    Uuid,
+    Uuid,
+    Option<String>,
+    String,
+    chrono::DateTime<Utc>,
+    bool,
+    bool,
+    Option<String>,
+);
+
+fn to_summary(row: SummaryRow) -> MessageSummary {
+    let (id, thread_id, subject, from_address, received_at, seen, flagged, snippet) = row;
+    MessageSummary {
+        id,
+        thread_id,
+        subject,
+        from_address,
+        received_at,
+        seen,
+        flagged,
+        has_attachments: false,
+        snippet,
+    }
+}
+
+/// A message as the mail UI needs to list it.
+#[derive(Debug, Clone)]
+pub struct MessageSummary {
+    pub id: Uuid,
+    pub thread_id: Uuid,
+    pub subject: Option<String>,
+    pub from_address: String,
+    pub received_at: chrono::DateTime<Utc>,
+    pub seen: bool,
+    pub flagged: bool,
+    pub has_attachments: bool,
+    pub snippet: Option<String>,
+}
+
+impl MailStore {
+    /// Record the displayable text of a message for search.
+    ///
+    /// Called by the delivery path, which has already parsed the MIME tree.
+    /// The store deliberately does not parse messages itself — that would make
+    /// storage depend on the message-format crate and give two places an
+    /// opinion about what a message means.
+    pub async fn set_search_text(&self, message_id: Uuid, text: &str) -> Result<()> {
+        // Truncated: indexing an entire mail archive's worth of quoted replies
+        // makes the index enormous and the results worse, since every message
+        // in a thread then matches every term in it.
+        let clipped: String = text.chars().take(16_000).collect();
+        sqlx::query("UPDATE messages SET search_text = $1 WHERE id = $2")
+            .bind(clipped)
+            .bind(message_id)
+            .execute(&self.pool)
+            .await?;
+        Ok(())
+    }
+
+    pub async fn folders(&self, mailbox_id: Uuid) -> Result<Vec<Folder>> {
+        let rows: Vec<(Uuid, Uuid, String, String)> = sqlx::query_as(
+            "SELECT id, mailbox_id, name, kind FROM folders WHERE mailbox_id = $1 ORDER BY name",
+        )
+        .bind(mailbox_id)
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(rows
+            .into_iter()
+            .map(|(id, mailbox_id, name, kind)| Folder {
+                id,
+                mailbox_id,
+                name,
+                kind: match kind.as_str() {
+                    "inbox" => FolderKind::Inbox,
+                    "sent" => FolderKind::Sent,
+                    "drafts" => FolderKind::Drafts,
+                    "trash" => FolderKind::Trash,
+                    "archive" => FolderKind::Archive,
+                    _ => FolderKind::Custom,
+                },
+            })
+            .collect())
+    }
+
+    /// List a folder, newest first.
+    pub async fn list_folder(
+        &self,
+        mailbox_id: Uuid,
+        folder_id: Uuid,
+        limit: i64,
+        offset: i64,
+    ) -> Result<Vec<MessageSummary>> {
+        let rows: Vec<SummaryRow> =
+            sqlx::query_as(
+                "SELECT m.id, m.thread_id, m.subject, m.from_address, m.received_at,
+                        mm.seen, mm.flagged, left(m.search_text, 200)
+                 FROM mailbox_messages mm
+                 JOIN messages m ON m.id = mm.message_id
+                 WHERE mm.mailbox_id = $1 AND mm.folder_id = $2 AND NOT mm.deleted
+                 ORDER BY m.received_at DESC
+                 LIMIT $3 OFFSET $4",
+            )
+            .bind(mailbox_id)
+            .bind(folder_id)
+            .bind(limit.clamp(1, 200))
+            .bind(offset.max(0))
+            .fetch_all(&self.pool)
+            .await?;
+
+        Ok(rows.into_iter().map(to_summary).collect())
+    }
+
+    /// Search a mailbox.
+    ///
+    /// Scoped to one mailbox by joining membership, so a query can never
+    /// surface a message the caller does not hold — the same message row is
+    /// shared between mailboxes, and searching `messages` directly would leak
+    /// across them.
+    pub async fn search(
+        &self,
+        mailbox_id: Uuid,
+        query: &str,
+        limit: i64,
+    ) -> Result<Vec<MessageSummary>> {
+        let rows: Vec<SummaryRow> =
+            sqlx::query_as(
+                "SELECT m.id, m.thread_id, m.subject, m.from_address, m.received_at,
+                        mm.seen, mm.flagged, left(m.search_text, 200)
+                 FROM mailbox_messages mm
+                 JOIN messages m ON m.id = mm.message_id
+                 WHERE mm.mailbox_id = $1
+                   AND NOT mm.deleted
+                   AND m.search_vector @@ plainto_tsquery('simple', $2)
+                 ORDER BY ts_rank(m.search_vector, plainto_tsquery('simple', $2)) DESC,
+                          m.received_at DESC
+                 LIMIT $3",
+            )
+            .bind(mailbox_id)
+            .bind(query)
+            .bind(limit.clamp(1, 100))
+            .fetch_all(&self.pool)
+            .await?;
+
+        Ok(rows.into_iter().map(to_summary).collect())
+    }
+
+    /// The raw bytes of a stored message, for rendering or forwarding.
+    pub async fn raw_message(&self, mailbox_id: Uuid, message_id: Uuid) -> Result<Vec<u8>> {
+        // The membership join is the authorisation check: a message is only
+        // readable through a mailbox that actually holds it.
+        let row: Option<(Option<Vec<u8>>, Option<String>)> = sqlx::query_as(
+            "SELECT m.body_inline, m.body_object_key
+             FROM mailbox_messages mm
+             JOIN messages m ON m.id = mm.message_id
+             WHERE mm.mailbox_id = $1 AND mm.message_id = $2",
+        )
+        .bind(mailbox_id)
+        .bind(message_id)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        match row {
+            Some((Some(bytes), _)) => Ok(bytes),
+            // Object-storage bodies are fetched by the caller, which owns the
+            // storage client; the store deliberately does not open network
+            // connections.
+            Some((None, Some(key))) => Err(MailStoreError::NoSuchAddress(format!(
+                "message body is in object storage at {key}"
+            ))),
+            _ => Err(MailStoreError::NoSuchAddress(message_id.to_string())),
+        }
+    }
+
+    pub async fn mailbox_for_subject(&self, subject: &str) -> Result<Option<Uuid>> {
+        let row: Option<(Uuid,)> =
+            sqlx::query_as("SELECT id FROM mailboxes WHERE owner_subject = $1 LIMIT 1")
+                .bind(subject)
+                .fetch_optional(&self.pool)
+                .await?;
+        Ok(row.map(|r| r.0))
+    }
+}
