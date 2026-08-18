@@ -7,14 +7,23 @@ Design: `docs/superpowers/specs/2026-08-15-nexus-email-design.md` (repo root).
 
 ## Status
 
-Build-order step 1 of 7 — **the store and identity** — is implemented.
-Steps 2-7 (message format, internal/federated delivery, webmail, SMTP inbound,
-SMTP outbound, IMAP/JMAP) are not started.
+Build-order steps 1-2 of 7 are implemented:
+
+1. **Store and identity** — mailboxes, addresses, messages, threads, folders, flags.
+2. **Message format** — RFC 5322 parsing, MIME, transfer encodings, attachments,
+   and generation.
+
+Steps 3-7 (internal/federated delivery, webmail, SMTP inbound, SMTP outbound,
+IMAP/JMAP) are not started.
 
 ## Layout
 
 - `crates/nexus-mailstore` — mailboxes, addresses, messages, threads, folders,
   flags. No network code.
+- `crates/nexus-mailmsg` — RFC 5322 and MIME. Parsing is total and lenient
+  because it faces bytes chosen by strangers; generation is strict because what
+  we emit must survive strict receivers and later carry a DKIM signature over
+  exactly those bytes.
 
 ## Two shapes worth knowing before changing anything
 
