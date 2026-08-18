@@ -19,7 +19,9 @@ Build-order steps 1-6 of 7 are implemented:
 5. **SMTP inbound** — the session state machine, the listener, anti-abuse and
    the relay policy. SPF/DKIM/DMARC verification is not written yet.
 6. **SMTP outbound** — MX resolution, the delivery client, and the worker that
-   drains the queue. DKIM *signing* is not written yet.
+   drains the queue.
+6b. **DKIM** — canonicalization, signing and verification (`nexus-mailauth`).
+   SPF and DMARC are not written yet.
 
 Step 7 (IMAP/JMAP) is not started.
 
@@ -48,6 +50,22 @@ path exists — the ISP lifting the filter, or a peer node with clean egress.
 - `crates/nexus-mailapi` — the HTTP API the webmail consumes.
 - `crates/nexus-mailsmtp` — SMTP inbound: the session state machine and listener.
 - `crates/nexus-mailout` — SMTP outbound: MX resolution, client, delivery worker.
+- `crates/nexus-mailauth` — DKIM signing and verification.
+
+## DKIM keys
+
+Generate one with:
+
+```bash
+cargo run -p nexus-mailauth --example keygen -- <selector> <domain>
+```
+
+It writes the private key under `$HOME/.config/nexus-email/` and prints the TXT
+record to publish. **Not into the repository directory**: this project lives on
+an NTFS/fuseblk volume where `chmod` silently does nothing, so a key stored
+there has no permissions at all — and a DKIM private key is the authority to
+send as the domain. The generator checks the resulting mode and warns loudly if
+0600 did not take.
 
 ## Why the SMTP session has no sockets in it
 

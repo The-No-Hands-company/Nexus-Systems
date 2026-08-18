@@ -1010,6 +1010,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "nexus-mailauth"
+version = "0.1.0"
+dependencies = [
+ "base64",
+ "chrono",
+ "hickory-resolver",
+ "nexus-mailmsg",
+ "rand",
+ "rsa",
+ "sha2",
+ "thiserror 2.0.20",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
 name = "nexus-maildelivery"
 version = "0.1.0"
 dependencies = [
@@ -1360,6 +1376,7 @@ dependencies = [
  "pkcs1",
  "pkcs8",
  "rand_core",
+ "sha2",
  "signature",
  "spki",
  "subtle",
