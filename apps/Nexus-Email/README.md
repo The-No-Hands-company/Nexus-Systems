@@ -1,25 +1,48 @@
 # Nexus Email
 
-Status: Scaffold created
-Blueprint source: Nexus Systems Ecosystem Blueprint v1.2
+A sovereign mail system: `info@tnhc.dev` on a mail server we wrote, receiving
+from anyone and sending to anyone, with no third-party mail service in the path.
 
-## Purpose
+Design: `docs/superpowers/specs/2026-08-15-nexus-email-design.md` (repo root).
 
-TODO: Define product scope and MVP for Nexus Email.
+## Status
 
-## Dual Mode Target
+Build-order step 1 of 7 — **the store and identity** — is implemented.
+Steps 2-7 (message format, internal/federated delivery, webmail, SMTP inbound,
+SMTP outbound, IMAP/JMAP) are not started.
 
-- Standalone: docker compose based local runtime
-- Orchestrated: integrated with Nexus-Cloud via Nexus Systems API
+## Layout
 
-## Initial Scaffold Layout
+- `crates/nexus-mailstore` — mailboxes, addresses, messages, threads, folders,
+  flags. No network code.
 
-- src/: implementation code
-- docs/: design and architecture notes
-- tests/: automated tests
+## Two shapes worth knowing before changing anything
 
-## Next Steps
+**An address is a routing rule, not an account.** A mailbox belongs to an
+ecosystem identity that already exists in Auth, or to the node itself for role
+addresses like `info@`. Aliases are therefore ordinary rather than a special
+case, and no placeholder user has to exist to hold `postmaster@`.
 
-1. Define architecture and service boundaries.
-2. Add initial runtime entrypoint and health endpoint.
-3. Register with Nexus-Cloud Systems API contract.
+**A message is stored once.** Mailbox membership, folder placement and
+per-mailbox flags live in `mailbox_messages`, so delivering to five recipients
+writes one message row and five membership rows — with independent read state.
+
+## Running the tests
+
+The database tests assert that *PostgreSQL* enforces the schema's constraints,
+so they need a real one and there is no mock. Without the variable they panic
+rather than skip, because a silently skipped integration test reads as a
+passing one.
+
+```bash
+createdb nexus_email_test   # or: docker exec nexus-systems-postgres-1 createdb -U nexus nexus_email_test
+docker exec -i nexus-systems-postgres-1 psql -U nexus -d nexus_email_test \
+  < crates/nexus-mailstore/migrations/20260815000001_initial_schema.sql
+
+# Build the URL from the running container rather than pasting a password
+# anywhere: the repo must never contain a credential-shaped string.
+PGPW=$(docker exec nexus-systems-postgres-1 printenv POSTGRES_PASSWORD)
+export NEXUS_EMAIL_TEST_DATABASE_URL="postgres://nexus:${PGPW}@127.0.0.1:5432/nexus_email_test"
+
+cargo test -p nexus-mailstore
+```
