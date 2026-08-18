@@ -79,7 +79,27 @@ export default function MailRead() {
   const m = state.message;
   return (
     <section className="mx-auto max-w-3xl space-y-4 p-8">
-      <Link to="/mail" className="text-sm text-zinc-400 hover:text-zinc-200">← Mail</Link>
+      <div className="flex items-center gap-3">
+        <Link to="/mail" className="text-sm text-zinc-400 hover:text-zinc-200">← Mail</Link>
+        {/* Reply prefills through the URL: the quoted body is built here rather
+            than in the composer so the composer stays a plain form. */}
+        <Link
+          to={`/mail/compose?${new URLSearchParams({
+            to: m.from,
+            subject: m.subject?.toLowerCase().startsWith("re:")
+              ? m.subject
+              : `Re: ${m.subject ?? ""}`.trim(),
+            quote: `\n\nOn ${m.date ?? "an earlier date"}, ${m.from} wrote:\n${m.text
+              .split("\n")
+              .map((l) => `> ${l}`)
+              .join("\n")}`,
+            ...(m.id ? { inReplyTo: m.id } : {}),
+          }).toString()}`}
+          className="ml-auto rounded bg-zinc-100 px-3 py-1.5 text-sm font-medium text-zinc-900 hover:bg-white"
+        >
+          Reply
+        </Link>
+      </div>
 
       <header className="border-b border-zinc-800 pb-4">
         <h1 className="text-xl font-semibold text-zinc-100">{m.subject || "(no subject)"}</h1>

@@ -381,12 +381,22 @@ export function searchMail(q: string) {
   return request<MailSummary[]>(`/api/mail/search?q=${encodeURIComponent(q)}`);
 }
 
+export type OutgoingAttachment = {
+  filename: string;
+  mime_type: string;
+  /// Base64. JSON cannot carry raw bytes, so the composer encodes and the
+  /// server decodes; the size limit is applied to the decoded length.
+  data: string;
+};
+
 export function sendMail(body: {
   to: string[];
   cc?: string[];
   subject: string;
   text: string;
   in_reply_to?: string;
+  references?: string[];
+  attachments?: OutgoingAttachment[];
 }) {
   return request<{ outcomes: SendOutcome[] }>("/api/mail/messages", {
     method: "POST",

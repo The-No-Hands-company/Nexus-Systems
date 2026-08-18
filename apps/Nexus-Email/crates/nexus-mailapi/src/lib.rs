@@ -281,7 +281,28 @@ pub struct SendRequest {
     pub in_reply_to: Option<String>,
     #[serde(default)]
     pub references: Vec<String>,
+    #[serde(default)]
+    pub attachments: Vec<AttachmentUpload>,
 }
+
+/// An attachment as the composer sends it.
+///
+/// Base64 because the JSON body cannot carry raw bytes. That inflates the
+/// payload by a third, which is why the cap below is on the decoded size.
+#[derive(Deserialize)]
+pub struct AttachmentUpload {
+    pub filename: String,
+    pub mime_type: Option<String>,
+    /// Base64-encoded content.
+    pub data: String,
+}
+
+/// Total decoded attachment bytes a single message may carry.
+///
+/// Matches the SMTP daemon's message cap, so the composer refuses what the
+/// sending path would refuse anyway — accepting it here and failing later
+/// would lose a message the user spent time writing.
+const MAX_ATTACHMENT_BYTES: usize = 25 * 1024 * 1024;
 
 #[derive(Serialize)]
 pub struct SendResponse {
@@ -350,6 +371,31 @@ async fn send_message(
     }
     if !req.references.is_empty() {
         builder = builder.references(req.references.clone());
+    }
+
+    let mut total = 0usize;
+    for a in &req.attachments {
+        use base64::{engine::general_purpose::STANDARD, Engine};
+        let bytes = STANDARD
+            .decode(a.data.as_bytes())
+            .map_err(|_| bad(&format!("attachment {} is not valid base64", a.filename)))?;
+        total += bytes.len();
+        if total > MAX_ATTACHMENT_BYTES {
+            return Err(bad("attachments exceed the size limit for one message"));
+        }
+        // The filename goes into a header, so anything that could break the
+        // header structure is removed rather than escaped.
+        let filename: String = a
+            .filename
+            .chars()
+            .filter(|c| !matches!(c, '"' | '\r' | '\n' | '\\'))
+            .take(200)
+            .collect();
+        builder = builder.attach(nexus_mailmsg::Attachment {
+            filename: if filename.trim().is_empty() { "attachment".into() } else { filename },
+            mime_type: a.mime_type.clone().unwrap_or_else(|| "application/octet-stream".into()),
+            data: bytes,
+        });
     }
 
     let raw = builder.build();

@@ -1136,6 +1136,7 @@ version = "0.1.0"
 dependencies = [
  "ammonia",
  "axum",
+ "base64",
  "chrono",
  "nexus-maildelivery",
  "nexus-mailmsg",
