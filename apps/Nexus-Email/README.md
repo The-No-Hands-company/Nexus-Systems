@@ -52,6 +52,17 @@ path exists — the ISP lifting the filter, or a peer node with clean egress.
 - `crates/nexus-mailout` — SMTP outbound: MX resolution, client, delivery worker.
 - `crates/nexus-mailauth` — DKIM, SPF and DMARC.
 
+## Running it
+
+`nexus-mailsmtpd` runs two listeners: an MX port for anonymous strangers, and a
+submission port for our own users. `deploy.sh` starts it.
+
+**Both default to unprivileged loopback ports (2525 / 2587).** Binding 25 needs
+root or `CAP_NET_BIND_SERVICE`, and nothing can reach this node on 25 anyway —
+the ISP filters it and the Cloudflare tunnel does not carry SMTP. Publishing an
+MX needs both a route in and the capability; until then the daemon serves local
+and federated mail.
+
 ## Inbound policy: Observe before Enforce
 
 `AuthenticatingSink` takes a `PolicyMode`.

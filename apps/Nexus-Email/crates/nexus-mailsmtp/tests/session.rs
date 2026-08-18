@@ -6,7 +6,7 @@ use nexus_mailsmtp::{Action, Limits, RelayPolicy, Role, Session};
 /// Hosts one domain, like a real node would.
 struct Local;
 impl RelayPolicy for Local {
-    fn is_local(&self, address: &str) -> bool {
+    async fn is_local(&self, address: &str) -> bool {
         address.to_ascii_lowercase().ends_with("@tnhc.dev")
     }
 }
@@ -21,8 +21,8 @@ fn submission(authenticated: bool) -> Session<Local> {
     s
 }
 
-fn say(s: &mut Session<Local>, line: &str) -> Action {
-    s.line(line.as_bytes())
+async fn say(s: &mut Session<Local>, line: &str) -> Action {
+    s.line(line.as_bytes()).await
 }
 
 fn reply(a: &Action) -> String {
@@ -34,170 +34,169 @@ fn reply(a: &Action) -> String {
 }
 
 /// Drive a session to the point of accepting message data.
-fn open_transaction(s: &mut Session<Local>, from: &str, to: &str) -> Action {
-    say(s, "EHLO client.test");
-    say(s, &format!("MAIL FROM:<{from}>"));
-    let r = say(s, &format!("RCPT TO:<{to}>"));
-    r
+async fn open_transaction(s: &mut Session<Local>, from: &str, to: &str) -> Action {
+    say(s, "EHLO client.test").await;
+    say(s, &format!("MAIL FROM:<{from}>")).await;
+    say(s, &format!("RCPT TO:<{to}>")).await
 }
 
 // ── The open-relay guard ────────────────────────────────────────────────────
 
-#[test]
-fn an_anonymous_sender_cannot_relay_to_a_third_party() {
+#[tokio::test]
+async fn an_anonymous_sender_cannot_relay_to_a_third_party() {
     // THE test. An open relay is found by the internet within hours and the
     // reputational damage is not recoverable.
     let mut s = mx();
-    let r = open_transaction(&mut s, "spammer@evil.test", "victim@gmail.com");
+    let r = open_transaction(&mut s, "spammer@evil.test", "victim@gmail.com").await;
     assert!(reply(&r).starts_with("550"), "must refuse to relay, got {}", reply(&r));
 }
 
-#[test]
-fn an_anonymous_sender_may_deliver_to_a_mailbox_we_host() {
+#[tokio::test]
+async fn an_anonymous_sender_may_deliver_to_a_mailbox_we_host() {
     // The other half: refusing everything would make the MX useless.
     let mut s = mx();
-    let r = open_transaction(&mut s, "someone@example.test", "info@tnhc.dev");
+    let r = open_transaction(&mut s, "someone@example.test", "info@tnhc.dev").await;
     assert!(reply(&r).starts_with("250"), "should accept local mail, got {}", reply(&r));
 }
 
-#[test]
-fn an_unauthenticated_submission_session_cannot_send_anywhere() {
+#[tokio::test]
+async fn an_unauthenticated_submission_session_cannot_send_anywhere() {
     // Submission exists to send outward, so it is gated on authentication
     // rather than on the recipient — including to local addresses.
     let mut s = submission(false);
     for target in ["victim@gmail.com", "info@tnhc.dev"] {
         let mut s2 = submission(false);
-        let r = open_transaction(&mut s2, "a@tnhc.dev", target);
+        let r = open_transaction(&mut s2, "a@tnhc.dev", target).await;
         assert!(reply(&r).starts_with("550"), "unauthenticated must be refused for {target}");
     }
     let _ = &mut s;
 }
 
-#[test]
-fn an_authenticated_submission_session_may_send_outward() {
+#[tokio::test]
+async fn an_authenticated_submission_session_may_send_outward() {
     let mut s = submission(true);
-    let r = open_transaction(&mut s, "founder@tnhc.dev", "someone@gmail.com");
+    let r = open_transaction(&mut s, "founder@tnhc.dev", "someone@gmail.com").await;
     assert!(reply(&r).starts_with("250"), "authenticated should be allowed, got {}", reply(&r));
 }
 
-#[test]
-fn a_session_does_not_start_out_authenticated() {
+#[tokio::test]
+async fn a_session_does_not_start_out_authenticated() {
     // A bug that flips this default is an open relay, so it is asserted rather
     // than assumed.
     let mut s = Session::new("mail.tnhc.dev", Role::Submission, Local, Limits::default());
-    let r = open_transaction(&mut s, "a@tnhc.dev", "b@tnhc.dev");
+    let r = open_transaction(&mut s, "a@tnhc.dev", "b@tnhc.dev").await;
     assert!(reply(&r).starts_with("550"));
 }
 
-#[test]
-fn auth_is_not_offered_on_the_mx_port() {
+#[tokio::test]
+async fn auth_is_not_offered_on_the_mx_port() {
     // Accepting AUTH on port 25 invites credential stuffing against a service
     // with no reason to accept it.
     let mut s = mx();
-    say(&mut s, "EHLO client.test");
-    let r = say(&mut s, "AUTH LOGIN");
+    say(&mut s, "EHLO client.test").await;
+    let r = say(&mut s, "AUTH LOGIN").await;
     assert!(reply(&r).starts_with("503"), "got {}", reply(&r));
 }
 
 // ── Sequence rules ──────────────────────────────────────────────────────────
 
-#[test]
-fn commands_out_of_order_are_refused() {
+#[tokio::test]
+async fn commands_out_of_order_are_refused() {
     let mut s = mx();
-    assert!(reply(&say(&mut s, "MAIL FROM:<a@b.test>")).starts_with("503"));
+    assert!(reply(&say(&mut s, "MAIL FROM:<a@b.test>").await).starts_with("503"));
 
     let mut s = mx();
-    say(&mut s, "EHLO x");
-    assert!(reply(&say(&mut s, "RCPT TO:<info@tnhc.dev>")).starts_with("503"));
+    say(&mut s, "EHLO x").await;
+    assert!(reply(&say(&mut s, "RCPT TO:<info@tnhc.dev>").await).starts_with("503"));
 
     let mut s = mx();
-    say(&mut s, "EHLO x");
-    say(&mut s, "MAIL FROM:<a@b.test>");
-    assert!(reply(&say(&mut s, "DATA")).starts_with("503"));
+    say(&mut s, "EHLO x").await;
+    say(&mut s, "MAIL FROM:<a@b.test>").await;
+    assert!(reply(&say(&mut s, "DATA").await).starts_with("503"));
 }
 
-#[test]
-fn rset_abandons_the_transaction() {
+#[tokio::test]
+async fn rset_abandons_the_transaction() {
     let mut s = mx();
-    open_transaction(&mut s, "a@b.test", "info@tnhc.dev");
-    assert!(reply(&say(&mut s, "RSET")).starts_with("250"));
+    open_transaction(&mut s, "a@b.test", "info@tnhc.dev").await;
+    assert!(reply(&say(&mut s, "RSET").await).starts_with("250"));
     // The recipient is gone, so DATA has nothing to attach to.
-    assert!(reply(&say(&mut s, "DATA")).starts_with("503"));
+    assert!(reply(&say(&mut s, "DATA").await).starts_with("503"));
 }
 
-#[test]
-fn quit_closes_the_connection() {
+#[tokio::test]
+async fn quit_closes_the_connection() {
     let mut s = mx();
-    let r = say(&mut s, "QUIT");
+    let r = say(&mut s, "QUIT").await;
     assert!(matches!(r, Action::ReplyAndClose(_)));
     assert!(s.is_closed());
 }
 
 // ── Hostile input ───────────────────────────────────────────────────────────
 
-#[test]
-fn a_flood_of_bad_commands_ends_the_connection() {
+#[tokio::test]
+async fn a_flood_of_bad_commands_ends_the_connection() {
     // Otherwise a stranger holds a connection open indefinitely feeding junk.
     let mut s = Session::new(
         "mail.tnhc.dev", Role::Mx, Local,
         Limits { max_errors: 3, ..Default::default() },
     );
-    say(&mut s, "NONSENSE");
-    say(&mut s, "NONSENSE");
-    let r = say(&mut s, "NONSENSE");
+    say(&mut s, "NONSENSE").await;
+    say(&mut s, "NONSENSE").await;
+    let r = say(&mut s, "NONSENSE").await;
     assert!(matches!(r, Action::ReplyAndClose(_)));
     assert!(reply(&r).starts_with("421"));
 }
 
-#[test]
-fn an_overlong_command_line_is_refused_not_buffered() {
+#[tokio::test]
+async fn an_overlong_command_line_is_refused_not_buffered() {
     let mut s = mx();
-    let r = s.line(&vec![b'A'; 5000]);
+    let r = s.line(&vec![b'A'; 5000]).await;
     assert!(reply(&r).starts_with("500"));
 }
 
-#[test]
-fn invalid_utf8_in_a_command_does_not_panic() {
+#[tokio::test]
+async fn invalid_utf8_in_a_command_does_not_panic() {
     let mut s = mx();
-    let r = s.line(&[0xff, 0xfe, 0x00, 0x80]);
+    let r = s.line(&[0xff, 0xfe, 0x00, 0x80]).await;
     assert!(reply(&r).starts_with("500"));
 }
 
-#[test]
-fn vrfy_never_reveals_whether_an_address_exists() {
+#[tokio::test]
+async fn vrfy_never_reveals_whether_an_address_exists() {
     // Answering truthfully hands a stranger a list of who lives here.
     let mut s = mx();
-    say(&mut s, "EHLO x");
-    let real = reply(&say(&mut s, "VRFY info@tnhc.dev"));
-    let fake = reply(&say(&mut s, "VRFY nobody@tnhc.dev"));
+    say(&mut s, "EHLO x").await;
+    let real = reply(&say(&mut s, "VRFY info@tnhc.dev").await);
+    let fake = reply(&say(&mut s, "VRFY nobody@tnhc.dev").await);
     assert_eq!(real, fake, "the answer must not depend on whether the address exists");
     assert!(real.starts_with("252"));
 }
 
-#[test]
-fn too_many_recipients_is_refused() {
+#[tokio::test]
+async fn too_many_recipients_is_refused() {
     let mut s = Session::new(
         "mail.tnhc.dev", Role::Mx, Local,
         Limits { max_recipients: 2, ..Default::default() },
     );
-    say(&mut s, "EHLO x");
-    say(&mut s, "MAIL FROM:<a@b.test>");
-    say(&mut s, "RCPT TO:<one@tnhc.dev>");
-    say(&mut s, "RCPT TO:<two@tnhc.dev>");
-    assert!(reply(&say(&mut s, "RCPT TO:<three@tnhc.dev>")).starts_with("452"));
+    say(&mut s, "EHLO x").await;
+    say(&mut s, "MAIL FROM:<a@b.test>").await;
+    say(&mut s, "RCPT TO:<one@tnhc.dev>").await;
+    say(&mut s, "RCPT TO:<two@tnhc.dev>").await;
+    assert!(reply(&say(&mut s, "RCPT TO:<three@tnhc.dev>").await).starts_with("452"));
 }
 
 // ── DATA ────────────────────────────────────────────────────────────────────
 
-#[test]
-fn a_complete_message_is_handed_over_for_delivery() {
+#[tokio::test]
+async fn a_complete_message_is_handed_over_for_delivery() {
     let mut s = mx();
-    open_transaction(&mut s, "sender@example.test", "info@tnhc.dev");
-    say(&mut s, "DATA");
-    say(&mut s, "Subject: hello");
-    say(&mut s, "");
-    say(&mut s, "body line");
-    let r = say(&mut s, ".");
+    open_transaction(&mut s, "sender@example.test", "info@tnhc.dev").await;
+    say(&mut s, "DATA").await;
+    say(&mut s, "Subject: hello").await;
+    say(&mut s, "").await;
+    say(&mut s, "body line").await;
+    let r = say(&mut s, ".").await;
 
     match r {
         Action::Deliver { from, recipients, data, helo, reply } => {
@@ -211,15 +210,15 @@ fn a_complete_message_is_handed_over_for_delivery() {
     }
 }
 
-#[test]
-fn dot_stuffing_is_undone() {
+#[tokio::test]
+async fn dot_stuffing_is_undone() {
     // A body line of "..hidden" is really ".hidden". Getting this wrong
     // corrupts any message containing a line that starts with a dot.
     let mut s = mx();
-    open_transaction(&mut s, "a@b.test", "info@tnhc.dev");
-    say(&mut s, "DATA");
-    say(&mut s, "..hidden");
-    let r = say(&mut s, ".");
+    open_transaction(&mut s, "a@b.test", "info@tnhc.dev").await;
+    say(&mut s, "DATA").await;
+    say(&mut s, "..hidden").await;
+    let r = say(&mut s, ".").await;
     match r {
         Action::Deliver { data, .. } => {
             assert_eq!(String::from_utf8_lossy(&data), ".hidden\r\n");
@@ -228,38 +227,38 @@ fn dot_stuffing_is_undone() {
     }
 }
 
-#[test]
-fn an_oversized_message_is_refused_but_the_session_survives() {
+#[tokio::test]
+async fn an_oversized_message_is_refused_but_the_session_survives() {
     // Dropping the connection instead would leave the sender retrying forever
     // without ever learning why.
     let mut s = Session::new(
         "mail.tnhc.dev", Role::Mx, Local,
         Limits { max_message_bytes: 64, ..Default::default() },
     );
-    open_transaction(&mut s, "a@b.test", "info@tnhc.dev");
-    say(&mut s, "DATA");
+    open_transaction(&mut s, "a@b.test", "info@tnhc.dev").await;
+    say(&mut s, "DATA").await;
     for _ in 0..50 {
-        say(&mut s, "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+        say(&mut s, "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa").await;
     }
-    let r = say(&mut s, ".");
+    let r = say(&mut s, ".").await;
 
     assert!(matches!(r, Action::Reply(_)), "must not deliver an oversized message");
     assert!(reply(&r).starts_with("552"));
     assert!(!s.is_closed(), "the session should continue");
 
     // And the next transaction still works.
-    let r2 = open_transaction(&mut s, "a@b.test", "info@tnhc.dev");
+    let r2 = open_transaction(&mut s, "a@b.test", "info@tnhc.dev").await;
     assert!(reply(&r2).starts_with("250"));
 }
 
-#[test]
-fn the_advertised_size_matches_the_enforced_one() {
+#[tokio::test]
+async fn the_advertised_size_matches_the_enforced_one() {
     // A sender that trusts the advertised SIZE and is then refused has been
     // lied to, and will keep retrying a message that can never fit.
     let mut s = Session::new(
         "mail.tnhc.dev", Role::Mx, Local,
         Limits { max_message_bytes: 12345, ..Default::default() },
     );
-    let banner = reply(&say(&mut s, "EHLO x"));
+    let banner = reply(&say(&mut s, "EHLO x").await);
     assert!(banner.contains("SIZE 12345"), "got {banner}");
 }

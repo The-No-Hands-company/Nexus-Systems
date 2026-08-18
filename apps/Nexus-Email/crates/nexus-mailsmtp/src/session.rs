@@ -64,9 +64,14 @@ pub enum Action {
 }
 
 /// The decision about whether we will carry mail for a recipient.
-pub trait RelayPolicy {
-    /// True when this node hosts a mailbox for the address.
-    fn is_local(&self, address: &str) -> bool;
+///
+/// Async because the honest answer lives in the database. Accepting mail for a
+/// domain we host and then discovering the mailbox does not exist makes this
+/// server a backscatter source: it would generate a bounce to a return path
+/// the spammer forged, i.e. at a victim. Refusing at RCPT is the standard
+/// answer, and it needs a real lookup.
+pub trait RelayPolicy: Send + Sync {
+    fn is_local(&self, address: &str) -> impl std::future::Future<Output = bool> + Send;
 }
 
 /// One SMTP conversation.
@@ -130,7 +135,7 @@ impl<P: RelayPolicy> Session<P> {
     }
 
     /// Feed one line (without its CRLF) and get the action to take.
-    pub fn line(&mut self, raw: &[u8]) -> Action {
+    pub async fn line(&mut self, raw: &[u8]) -> Action {
         if self.phase == Phase::Data {
             return self.data_line(raw);
         }
@@ -184,7 +189,7 @@ impl<P: RelayPolicy> Session<P> {
                 }
             }
             Command::MailFrom(addr) => self.mail_from(addr),
-            Command::RcptTo(addr) => self.rcpt_to(addr),
+            Command::RcptTo(addr) => self.rcpt_to(addr).await,
             Command::Data => self.data_start(),
             Command::Unknown => self.fail("500 5.5.2 Syntax error"),
         }
@@ -205,7 +210,7 @@ impl<P: RelayPolicy> Session<P> {
         Action::Reply("250 2.1.0 Sender OK\r\n".into())
     }
 
-    fn rcpt_to(&mut self, addr: String) -> Action {
+    async fn rcpt_to(&mut self, addr: String) -> Action {
         if self.phase != Phase::Mail && self.phase != Phase::Rcpt {
             return self.fail("503 5.5.1 Send MAIL FROM first");
         }
@@ -221,7 +226,7 @@ impl<P: RelayPolicy> Session<P> {
         // Carrying mail to a third party for a stranger is what an open relay
         // is, and the internet finds one within hours.
         let permitted = match self.role {
-            Role::Mx => self.policy.is_local(&addr),
+            Role::Mx => self.policy.is_local(&addr).await,
             Role::Submission => self.authenticated,
         };
         if !permitted {

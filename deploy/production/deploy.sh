@@ -324,6 +324,42 @@ cmd_start() {
         log "mailapi binary not built - skipping (cargo build -p nexus-mailapi)"
     fi
 
+    # 4g. Nexus-Email SMTP daemon.
+    #
+    # Two listeners: an MX port for anonymous strangers, which may only deliver
+    # to mailboxes this node hosts, and a submission port for our own users,
+    # which requires authentication. The relay guard between them is what keeps
+    # this from becoming an open relay, and it is tested both as a state machine
+    # and over a real socket.
+    #
+    # Unprivileged ports by default. Binding 25 needs root or
+    # CAP_NET_BIND_SERVICE, and nothing can reach this node on 25 anyway — the
+    # ISP filters it and the Cloudflare tunnel does not carry SMTP. Publishing
+    # an MX therefore needs both a route in and the capability; until then this
+    # serves local and federated submission.
+    #
+    # NEXUS_EMAIL_POLICY defaults to observe: SPF/DKIM/DMARC are evaluated and
+    # recorded in Authentication-Results, but no mail is refused on their
+    # account. Switch to enforce after reading those headers against real
+    # traffic — not on the day it first runs.
+    if [ -x "$ROOT/apps/Nexus-Email/target/release/nexus-mailsmtpd" ]; then
+        SMTPD_BIN="$ROOT/apps/Nexus-Email/target/release/nexus-mailsmtpd"
+    else
+        SMTPD_BIN="$ROOT/apps/Nexus-Email/target/debug/nexus-mailsmtpd"
+    fi
+    if [ -x "$SMTPD_BIN" ]; then
+        start_service "mailsmtpd" "$ROOT/apps/Nexus-Email" "${NEXUS_EMAIL_MX_PORT:-2525}" \
+            NEXUS_EMAIL_MX_BIND="${NEXUS_EMAIL_MX_BIND:-127.0.0.1:2525}" \
+            NEXUS_EMAIL_SUBMISSION_BIND="${NEXUS_EMAIL_SUBMISSION_BIND:-127.0.0.1:2587}" \
+            NEXUS_EMAIL_DOMAIN="$DOMAIN" \
+            NEXUS_EMAIL_HOSTNAME="mail.$DOMAIN" \
+            NEXUS_EMAIL_POLICY="${NEXUS_EMAIL_POLICY:-observe}" \
+            NEXUS_EMAIL_DATABASE_URL="$NEXUS_EMAIL_DATABASE_URL" \
+            "$SMTPD_BIN"
+    else
+        log "mailsmtpd binary not built - skipping (cargo build -p nexus-mailsmtp)"
+    fi
+
     # 5. Proxy (8080 for Cloudflare Tunnel)
     #
     # HOSTING_SITE_UPSTREAM is the default backend for the *.$DOMAIN wildcard:
@@ -345,7 +381,7 @@ cmd_start() {
 
 cmd_stop() {
     log "Stopping all Nexus services..."
-    for svc in auth cloud chat nexus-chat nexus-chat-web dashboard draw mailapi proxy; do
+    for svc in auth cloud chat nexus-chat nexus-chat-web dashboard draw mailapi mailsmtpd proxy; do
         if [ -f "$PID_DIR/$svc.pid" ]; then
             kill "$(cat "$PID_DIR/$svc.pid")" 2>/dev/null && log "  Stopped $svc" || true
             rm -f "$PID_DIR/$svc.pid"
@@ -358,7 +394,7 @@ cmd_stop() {
 
 cmd_status() {
     echo "Service Status:"
-    for svc in auth cloud chat nexus-chat nexus-chat-web dashboard draw mailapi proxy; do
+    for svc in auth cloud chat nexus-chat nexus-chat-web dashboard draw mailapi mailsmtpd proxy; do
         if [ -f "$PID_DIR/$svc.pid" ]; then
             if kill -0 "$(cat "$PID_DIR/$svc.pid")" 2>/dev/null; then
                 echo -e "  ${G}● $svc${R} (running, PID: $(cat $PID_DIR/$svc.pid))"

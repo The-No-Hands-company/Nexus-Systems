@@ -11,7 +11,7 @@ use tokio::net::{TcpListener, TcpStream};
 #[derive(Clone)]
 struct Local;
 impl RelayPolicy for Local {
-    fn is_local(&self, address: &str) -> bool {
+    async fn is_local(&self, address: &str) -> bool {
         address.ends_with("@tnhc.dev")
     }
 }

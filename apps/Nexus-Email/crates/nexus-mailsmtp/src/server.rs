@@ -43,7 +43,7 @@ pub struct SmtpServer<P, S> {
 
 impl<P, S> SmtpServer<P, S>
 where
-    P: RelayPolicy + Clone + Send + Sync + 'static,
+    P: RelayPolicy + Clone + 'static,
     S: Sink,
 {
     pub async fn serve(self: Arc<Self>, listener: TcpListener) -> std::io::Result<()> {
@@ -101,7 +101,7 @@ where
                 line.pop();
             }
 
-            match session.line(&line) {
+            match session.line(&line).await {
                 Action::Continue => {}
                 Action::Reply(r) => write.write_all(r.as_bytes()).await?,
                 Action::ReplyAndClose(r) => {
