@@ -10,12 +10,18 @@
 //! behind a network call.
 
 pub mod canon;
+pub mod dmarc;
+pub mod dns;
 pub mod error;
 pub mod key;
 pub mod sign;
+pub mod spf;
 pub mod verify;
 
 pub use canon::Canon;
+pub use dmarc::{aligned, organizational_domain, Alignment, DmarcRecord, DmarcResult, Policy};
+pub use dns::{DnsError, Lookup};
+pub use spf::{SpfResult, MAX_DNS_LOOKUPS};
 pub use error::{DkimError, Result};
 pub use key::{generate, private_key_pem, public_key_record};
 pub use sign::{sign, signed_message, Signer_ as DkimSigner, DEFAULT_SIGNED_HEADERS};

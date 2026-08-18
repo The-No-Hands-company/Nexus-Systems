@@ -20,8 +20,9 @@ Build-order steps 1-6 of 7 are implemented:
    the relay policy. SPF/DKIM/DMARC verification is not written yet.
 6. **SMTP outbound** — MX resolution, the delivery client, and the worker that
    drains the queue.
-6b. **DKIM** — canonicalization, signing and verification (`nexus-mailauth`).
-   SPF and DMARC are not written yet.
+6b. **Mail authentication** — DKIM signing and verification, SPF evaluation,
+   and DMARC alignment and policy (`nexus-mailauth`). Not yet wired into the
+   inbound SMTP path: the crate decides, nothing calls it yet.
 
 Step 7 (IMAP/JMAP) is not started.
 
@@ -50,7 +51,19 @@ path exists — the ISP lifting the filter, or a peer node with clean egress.
 - `crates/nexus-mailapi` — the HTTP API the webmail consumes.
 - `crates/nexus-mailsmtp` — SMTP inbound: the session state machine and listener.
 - `crates/nexus-mailout` — SMTP outbound: MX resolution, client, delivery worker.
-- `crates/nexus-mailauth` — DKIM signing and verification.
+- `crates/nexus-mailauth` — DKIM, SPF and DMARC.
+
+## Two approximations recorded rather than hidden
+
+**The organizational domain is approximated.** Correct DMARC relaxed alignment
+needs the Public Suffix List, a downloaded and frequently-changing dataset.
+Naive "last two labels" would treat `a.co.uk` and `b.co.uk` as one
+organization — which under DMARC means accepting forged mail as aligned. A
+small set of common multi-label suffixes is handled explicitly and everything
+else falls back to two labels. Adopting a real PSL is its own piece of work.
+
+**SPF `ptr` is treated as no-match**, which is what RFC 7208 §5.5 recommends
+for a mechanism it deprecates as slow and unreliable.
 
 ## DKIM keys
 
