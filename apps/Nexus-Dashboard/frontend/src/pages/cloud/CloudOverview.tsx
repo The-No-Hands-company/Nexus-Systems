@@ -125,6 +125,18 @@ export default function CloudOverview() {
   const toolExposed = status.exposedToolCount ?? 0;
   const peerTotal = status.trust?.peers?.total ?? 0;
 
+  // "Healthy" means a tool sent a heartbeat, which most scaffolds do — they
+  // register and report healthy while serving nothing anyone can open. Leading
+  // with 36 healthy of 86 told an operator the node was largely working when
+  // only 7 tools had an address at all.
+  //
+  // Reachable is the number worth acting on: registered, healthy, and carrying
+  // a public URL. Heartbeating and registered stay visible underneath, so
+  // nothing is hidden — only re-ranked by what it actually means.
+  const toolReachable = tools.filter(
+    (t) => t.publicUrl && (t.health ?? "") === "healthy",
+  ).length;
+
   return (
     <section className="mx-auto max-w-5xl space-y-6 p-8">
       <CloudNav />
@@ -135,9 +147,11 @@ export default function CloudOverview() {
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <div className="rounded-lg border border-zinc-800 bg-zinc-900 p-4">
-          <div className="text-2xl font-semibold text-zinc-100">{toolHealthy}</div>
-          <div className="text-sm text-zinc-400">Healthy tools</div>
-          <div className="mt-1 text-xs text-zinc-500">{toolTotal} registered</div>
+          <div className="text-2xl font-semibold text-zinc-100">{toolReachable}</div>
+          <div className="text-sm text-zinc-400">Reachable tools</div>
+          <div className="mt-1 text-xs text-zinc-500">
+            {toolHealthy} heartbeating · {toolTotal} registered
+          </div>
         </div>
         {/* Was "Users". Cloud has no user count and should not — accounts moved
             to Nexus-Auth. Exposed tools is the number this control plane

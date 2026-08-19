@@ -63,6 +63,21 @@ const TOOLS_BODY = {
       capabilities: ["security"],
       lastHeartbeatAt: new Date().toISOString(),
     },
+    // Healthy and heartbeating, but with no address — the scaffold shape that
+    // made "healthy tools" a misleading headline. Must not count as reachable.
+    {
+      id: "nexus-recipes",
+      name: "Nexus Recipes",
+      health: "healthy",
+      lastHeartbeatAt: new Date().toISOString(),
+    },
+    {
+      id: "nexus-draw",
+      name: "Nexus Draw",
+      health: "healthy",
+      publicUrl: "https://draw.tnhc.dev",
+      lastHeartbeatAt: new Date().toISOString(),
+    },
   ],
 };
 
@@ -97,9 +112,14 @@ describe("CloudOverview", () => {
     await waitFor(() => expect(screen.getAllByText(IDENTITY_BODY.exampleAddress).length).toBeGreaterThan(0));
     expect(screen.getByText(IDENTITY_BODY.did)).toBeTruthy();
 
-    // Stats row reflects the status payload, not hardcoded numbers.
-    expect(screen.getByText("7")).toBeTruthy(); // healthy tools
-    expect(screen.getByText("9 registered")).toBeTruthy();
+    // Stats row reflects the payload, not hardcoded numbers. The headline is
+    // reachable — registered, healthy AND carrying a public URL — because a
+    // heartbeat from a scaffold that serves nothing is not a working service.
+    // Scoped to the card: a bare "1" also matches the trust pills.
+    const reachableCard = screen.getByText("Reachable tools").closest(".rounded-lg");
+    expect(reachableCard?.textContent).toContain("1"); // only nexus-draw has an address
+    expect(reachableCard?.textContent).toContain("7 heartbeating");
+    expect(reachableCard?.textContent).toContain("9 registered");
     expect(screen.getByText("4")).toBeTruthy(); // exposed tools
 
     // Trust lifecycle pills.
