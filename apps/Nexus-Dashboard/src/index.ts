@@ -1,5 +1,5 @@
-import { startServer } from "./server";
 import { startCloudHeartbeat } from "./cloud";
+import { startServer } from "./server";
 
 /**
  * Entrypoint. Kept separate from server.ts so the server stays importable by

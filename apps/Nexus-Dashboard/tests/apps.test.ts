@@ -1,18 +1,47 @@
-import { describe, it, expect } from "bun:test";
-import { toAppEntries, shellNativeEntries, mergeApps, pathForApp, type AppEntry } from "../src/apps";
+import { describe, expect, it } from "bun:test";
+import {
+  type AppEntry,
+  mergeApps,
+  pathForApp,
+  shellNativeEntries,
+  toAppEntries,
+} from "../src/apps";
 
 const AUTH = "auth.tnhc.dev";
 
 const TOOLS = {
   tools: [
-    { id: "nexus-cloud", name: "Nexus Cloud", description: "Control panel",
-      publicUrl: "https://cloud.tnhc.dev", health: "healthy", registrationStatus: "active" },
-    { id: "nexus-auth", name: "Nexus Auth", description: "Identity",
-      publicUrl: "https://auth.tnhc.dev", health: "healthy", registrationStatus: "active" },
-    { id: "nexus-chat", name: "Nexus Chat", description: "Chat",
-      publicUrl: "https://chat.tnhc.dev", health: "healthy", registrationStatus: "registered" },
-    { id: "nexus-video", name: "Nexus Video", description: "Video",
-      health: "offline", registrationStatus: "offline" },
+    {
+      id: "nexus-cloud",
+      name: "Nexus Cloud",
+      description: "Control panel",
+      publicUrl: "https://cloud.tnhc.dev",
+      health: "healthy",
+      registrationStatus: "active",
+    },
+    {
+      id: "nexus-auth",
+      name: "Nexus Auth",
+      description: "Identity",
+      publicUrl: "https://auth.tnhc.dev",
+      health: "healthy",
+      registrationStatus: "active",
+    },
+    {
+      id: "nexus-chat",
+      name: "Nexus Chat",
+      description: "Chat",
+      publicUrl: "https://chat.tnhc.dev",
+      health: "healthy",
+      registrationStatus: "registered",
+    },
+    {
+      id: "nexus-video",
+      name: "Nexus Video",
+      description: "Video",
+      health: "offline",
+      registrationStatus: "offline",
+    },
   ],
 };
 
@@ -31,26 +60,35 @@ describe("app grid entries", () => {
   });
 
   it("carries health through so a down app shows as down rather than a dead link", () => {
-    const entries = toAppEntries({
-      tools: [{ id: "x", name: "X", publicUrl: "https://x.tnhc.dev", health: "offline" }],
-    }, AUTH);
+    const entries = toAppEntries(
+      {
+        tools: [{ id: "x", name: "X", publicUrl: "https://x.tnhc.dev", health: "offline" }],
+      },
+      AUTH,
+    );
     expect(entries[0]!.health).toBe("offline");
   });
 
   it("sorts by name so the grid does not reshuffle between polls", () => {
-    const entries = toAppEntries({
-      tools: [
-        { id: "b", name: "Zeta", publicUrl: "https://z.tnhc.dev", health: "healthy" },
-        { id: "a", name: "Alpha", publicUrl: "https://a.tnhc.dev", health: "healthy" },
-      ],
-    }, AUTH);
+    const entries = toAppEntries(
+      {
+        tools: [
+          { id: "b", name: "Zeta", publicUrl: "https://z.tnhc.dev", health: "healthy" },
+          { id: "a", name: "Alpha", publicUrl: "https://a.tnhc.dev", health: "healthy" },
+        ],
+      },
+      AUTH,
+    );
     expect(entries.map((e) => e.name)).toEqual(["Alpha", "Zeta"]);
   });
 
   it("falls back to the id when a tool has no name", () => {
-    const entries = toAppEntries({
-      tools: [{ id: "nexus-thing", publicUrl: "https://t.tnhc.dev", health: "healthy" }],
-    }, AUTH);
+    const entries = toAppEntries(
+      {
+        tools: [{ id: "nexus-thing", publicUrl: "https://t.tnhc.dev", health: "healthy" }],
+      },
+      AUTH,
+    );
     expect(entries[0]!.name).toBe("nexus-thing");
   });
 
@@ -65,9 +103,24 @@ describe("app grid entries", () => {
 describe("the dashboard does not list itself", () => {
   const payload = {
     tools: [
-      { id: "nexus-dashboard", name: "Nexus Dashboard", publicUrl: "https://app.tnhc.dev", health: "healthy" },
-      { id: "nexus-draw", name: "Nexus-Draw", publicUrl: "https://draw.tnhc.dev", health: "healthy" },
-      { id: "nexus-auth", name: "Nexus Auth", publicUrl: "https://auth.tnhc.dev", health: "healthy" },
+      {
+        id: "nexus-dashboard",
+        name: "Nexus Dashboard",
+        publicUrl: "https://app.tnhc.dev",
+        health: "healthy",
+      },
+      {
+        id: "nexus-draw",
+        name: "Nexus-Draw",
+        publicUrl: "https://draw.tnhc.dev",
+        health: "healthy",
+      },
+      {
+        id: "nexus-auth",
+        name: "Nexus Auth",
+        publicUrl: "https://auth.tnhc.dev",
+        health: "healthy",
+      },
     ],
   };
 
@@ -90,9 +143,19 @@ describe("the dashboard does not list itself", () => {
 describe("Cloud's tile links into the shell, not out to its own host", () => {
   const payload = {
     tools: [
-      { id: "nexus-cloud", name: "Nexus Cloud", description: "Control panel",
-        publicUrl: "https://cloud.tnhc.dev", health: "healthy" },
-      { id: "nexus-draw", name: "Nexus-Draw", publicUrl: "https://draw.tnhc.dev", health: "healthy" },
+      {
+        id: "nexus-cloud",
+        name: "Nexus Cloud",
+        description: "Control panel",
+        publicUrl: "https://cloud.tnhc.dev",
+        health: "healthy",
+      },
+      {
+        id: "nexus-draw",
+        name: "Nexus-Draw",
+        publicUrl: "https://draw.tnhc.dev",
+        health: "healthy",
+      },
     ],
   };
 
@@ -119,8 +182,18 @@ describe("one tile per destination", () => {
     const entries = toAppEntries(
       {
         tools: [
-          { id: "nexus-draw", name: "Nexus-Draw", publicUrl: "https://draw.tnhc.dev", health: "healthy" },
-          { id: "nexus-draw-site", name: "Nexus-Draw (site)", publicUrl: "https://draw.tnhc.dev", health: "healthy" },
+          {
+            id: "nexus-draw",
+            name: "Nexus-Draw",
+            publicUrl: "https://draw.tnhc.dev",
+            health: "healthy",
+          },
+          {
+            id: "nexus-draw-site",
+            name: "Nexus-Draw (site)",
+            publicUrl: "https://draw.tnhc.dev",
+            health: "healthy",
+          },
         ],
       },
       "auth.tnhc.dev",
@@ -205,7 +278,14 @@ describe("flat app paths", () => {
 
   it("dedupes a registry app that lands on a shell-native path", () => {
     const registry: AppEntry[] = [
-      { id: "other-mail", name: "Other", description: "", url: "https://x.dev", path: "/mail", health: "healthy" },
+      {
+        id: "other-mail",
+        name: "Other",
+        description: "",
+        url: "https://x.dev",
+        path: "/mail",
+        health: "healthy",
+      },
     ];
     const merged = mergeApps(registry, shellNativeEntries({ mailHealthy: true }));
     expect(merged.filter((e) => e.path === "/mail")).toHaveLength(1);

@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from "bun:test";
+import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 
 process.env.NEXUS_AUTH_INTERNAL_URL = "http://127.0.0.1:4399";
 process.env.NEXUS_CLOUD_URL = "http://127.0.0.1:4398";
@@ -26,7 +26,12 @@ beforeEach(() => {
     fetch() {
       return Response.json({
         tools: [
-          { id: "nexus-chat", name: "Nexus Chat", publicUrl: "https://chat.tnhc.dev", health: "healthy" },
+          {
+            id: "nexus-chat",
+            name: "Nexus Chat",
+            publicUrl: "https://chat.tnhc.dev",
+            health: "healthy",
+          },
         ],
       });
     },
@@ -42,13 +47,13 @@ describe("dashboard server", () => {
   it("reports health", async () => {
     const res = await handleRequest(new Request("http://app.test/health"));
     expect(res.status).toBe(200);
-    expect((await res.json() as { status: string }).status).toBe("ok");
+    expect(((await res.json()) as { status: string }).status).toBe("ok");
   });
 
   it("serves the grid from Cloud", async () => {
     const res = await handleRequest(new Request("http://app.test/api/apps"));
     expect(res.status).toBe(200);
-    const { apps } = await res.json() as { apps: Array<{ id: string }> };
+    const { apps } = (await res.json()) as { apps: Array<{ id: string }> };
     // Mail is served by this app at /mail and has no public host, so it never
     // appears in Cloud's registry — the shell contributes it.
     expect(apps.map((a) => a.id).sort()).toEqual(["nexus-chat", "nexus-email"]);
@@ -61,30 +66,38 @@ describe("dashboard server", () => {
     expect(res.status).toBe(200);
     // Previously asserted an empty grid. Mail lives in this app, so a Cloud
     // outage is no reason to hide it.
-    const { apps } = await res.json() as { apps: Array<{ id: string }> };
+    const { apps } = (await res.json()) as { apps: Array<{ id: string }> };
     expect(apps.map((a) => a.id)).toEqual(["nexus-email"]);
   });
 
   it("proxies auth calls same-origin, preserving path and method", async () => {
-    const res = await handleRequest(new Request("http://app.test/api/v1/auth/access-requests", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ username: "x", email: "x@y.dev" }),
-    }));
-    const body = await res.json() as { seenPath: string; method: string };
+    const res = await handleRequest(
+      new Request("http://app.test/api/v1/auth/access-requests", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ username: "x", email: "x@y.dev" }),
+      }),
+    );
+    const body = (await res.json()) as { seenPath: string; method: string };
     expect(body.seenPath).toBe("/api/v1/auth/access-requests");
     expect(body.method).toBe("POST");
   });
 
   it("forwards the session cookie to Auth", async () => {
-    const res = await handleRequest(new Request("http://app.test/api/v1/auth/me", {
-      headers: { cookie: "nexus_session=zzz" },
-    }));
-    expect((await res.json() as { seenCookie: string }).seenCookie).toContain("nexus_session=zzz");
+    const res = await handleRequest(
+      new Request("http://app.test/api/v1/auth/me", {
+        headers: { cookie: "nexus_session=zzz" },
+      }),
+    );
+    expect(((await res.json()) as { seenCookie: string }).seenCookie).toContain(
+      "nexus_session=zzz",
+    );
   });
 
   it("passes Set-Cookie back so signing in actually creates a session", async () => {
-    const res = await handleRequest(new Request("http://app.test/api/v1/auth/login", { method: "POST" }));
+    const res = await handleRequest(
+      new Request("http://app.test/api/v1/auth/login", { method: "POST" }),
+    );
     expect(res.headers.get("set-cookie") ?? "").toContain("nexus_session=");
   });
 

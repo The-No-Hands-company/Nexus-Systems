@@ -27,9 +27,7 @@ export type AppEntry = {
  * `/a/<id>` route instead, because a registered app called "account" must not
  * be able to take over the account page.
  */
-const RESERVED = new Set([
-  "account", "admin", "request", "claim", "a", "api", "health", "",
-]);
+const RESERVED = new Set(["account", "admin", "request", "claim", "a", "api", "health", ""]);
 
 /** `nexus-chat` -> `/chat`, falling back to `/a/<id>` on a reserved collision. */
 export function pathForApp(id: string): string {

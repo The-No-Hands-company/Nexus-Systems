@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from "bun:test";
+import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 
 // A distinctive value so a test can grep for it in a response body/headers
 // and be confident that *would* have caught a leak, not just failed to look.
@@ -65,12 +65,14 @@ describe("the /api/cloud proxy", () => {
   it("forwards an allow-listed path to Cloud and returns its body", async () => {
     const res = await handleRequest(new Request("http://app.test/api/cloud/audit"));
     expect(res.status).toBe(200);
-    const body = await res.json() as { events: Array<{ id: string }> };
+    const body = (await res.json()) as { events: Array<{ id: string }> };
     expect(body.events[0]?.id).toBe("e1");
   });
 
   it("refuses a path that is not on the allow-list — no forwarding at all", async () => {
-    const res = await handleRequest(new Request("http://app.test/api/cloud/tools/nexus-chat/restart"));
+    const res = await handleRequest(
+      new Request("http://app.test/api/cloud/tools/nexus-chat/restart"),
+    );
     expect(res.status).toBe(404);
     // Not merely rejected — Cloud must never have seen this request.
     expect(cloudSawHeaders).toBeNull();
@@ -89,7 +91,9 @@ describe("the /api/cloud proxy", () => {
   }
 
   it("never proxies a mutating method, even to an allow-listed name", async () => {
-    const res = await handleRequest(new Request("http://app.test/api/cloud/audit", { method: "POST" }));
+    const res = await handleRequest(
+      new Request("http://app.test/api/cloud/audit", { method: "POST" }),
+    );
     expect(res.status).toBe(404);
     expect(cloudSawHeaders).toBeNull();
   });
@@ -129,7 +133,7 @@ describe("the /api/cloud proxy", () => {
       new Request("http://app.test/api/cloud/users", { headers: { cookie: "nexus_session=zzz" } }),
     );
     expect(res.status).toBe(200);
-    const body = await res.json() as { users: Array<{ id: string }> };
+    const body = (await res.json()) as { users: Array<{ id: string }> };
     expect(body.users[0]?.id).toBe("u1");
   });
 
@@ -148,7 +152,7 @@ describe("the /api/cloud proxy", () => {
   it("reaches a nested allow-listed name unchanged", async () => {
     const res = await handleRequest(new Request("http://app.test/api/cloud/federation/peers"));
     expect(res.status).toBe(200);
-    const body = await res.json() as { peers: Array<{ id: string }> };
+    const body = (await res.json()) as { peers: Array<{ id: string }> };
     expect(body.peers[0]?.id).toBe("p1");
   });
 
@@ -158,7 +162,7 @@ describe("the /api/cloud proxy", () => {
     const res = await handleRequest(new Request("http://app.test/api/cloud/audit"));
     expect(res.status).not.toBe(500);
     // The UI must be able to render this as JSON, not choke on a stack trace.
-    const body = await res.json() as { error: string };
+    const body = (await res.json()) as { error: string };
     expect(typeof body.error).toBe("string");
   });
 

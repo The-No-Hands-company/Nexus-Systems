@@ -20,7 +20,10 @@ function intervalMs(): number {
 }
 
 function enabled(): boolean {
-  return (process.env.NEXUS_DASHBOARD_ENABLE_CLOUD_INTEGRATION || "true").trim().toLowerCase() !== "false";
+  return (
+    (process.env.NEXUS_DASHBOARD_ENABLE_CLOUD_INTEGRATION || "true").trim().toLowerCase() !==
+    "false"
+  );
 }
 
 /**

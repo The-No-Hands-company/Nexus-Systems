@@ -16,7 +16,10 @@ export type AppEntry = {
   url: string;
   /** The in-shell route — /chat, /mail, /cloud. Names the app, not how it is
    *  delivered, so moving an app between framed and shell-native never changes
-   *  its URL. Mirrors the server's AppEntry in src/apps.ts. */
+   *  its URL. Mirrors the server's AppEntry in src/apps.ts.
+   *
+   *  Always present after listApps() normalises it, so components can rely on
+   *  it; see WireAppEntry for what the server may actually send. */
   path: string;
   health: "healthy" | "offline";
 };
@@ -79,9 +82,29 @@ export async function me(): Promise<Me | null> {
   }
 }
 
+/**
+ * Derives an app's in-shell path when the server did not send one.
+ *
+ * The static bundle and the server process are deployed independently — the
+ * server serves `dist/` from disk, so a rebuilt frontend goes live the moment
+ * the files change while the running process keeps its old code until it is
+ * restarted. During that window a frontend that hard-required `path` rendered
+ * every app link as undefined. Mirrors pathForApp in src/apps.ts.
+ */
+type WireAppEntry = Omit<AppEntry, "path"> & { path?: string };
+
+function pathFor(app: WireAppEntry): string {
+  if (app.path) return app.path;
+  if (app.url?.startsWith("/")) return app.url;
+  const slug = app.id.replace(/^nexus-/, "").toLowerCase();
+  return slug ? `/${slug}` : `/a/${app.id}`;
+}
+
 export async function listApps(): Promise<AppEntry[]> {
-  const { apps } = await request<{ apps: AppEntry[] }>("/api/apps");
-  return apps;
+  const { apps } = await request<{ apps: WireAppEntry[] }>("/api/apps");
+  // Normalise once, here, so no component has to care whether the server that
+  // answered is older than the bundle asking.
+  return apps.map((a) => ({ ...a, path: pathFor(a) }));
 }
 
 export type Session = {

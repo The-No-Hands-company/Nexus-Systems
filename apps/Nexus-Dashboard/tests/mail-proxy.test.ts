@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from "bun:test";
+import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 
 // Must match the other proxy tests: AUTH_INTERNAL_URL is captured into a
 // top-level const the first time src/server is imported in a `bun test` run,

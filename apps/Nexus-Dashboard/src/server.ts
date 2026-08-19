@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import { toAppEntries, shellNativeEntries, mergeApps } from "./apps";
+import { mergeApps, shellNativeEntries, toAppEntries } from "./apps";
 import { cloudBaseUrl, cloudHeaders } from "./cloud";
 
 /**
@@ -32,7 +32,8 @@ const CLOUD_HOST = process.env.NEXUS_CLOUD_HOST || `cloud.${DOMAIN}`;
 const AUTH_INTERNAL_URL = process.env.NEXUS_AUTH_INTERNAL_URL || "http://127.0.0.1:4310";
 const CLOUD_URL = process.env.NEXUS_CLOUD_URL || "http://127.0.0.1:8787";
 const CLOUD_API_KEY = process.env.NEXUS_CLOUD_API_KEY || "";
-const WEB_ROOT = process.env.NEXUS_DASHBOARD_WEB_ROOT || join(import.meta.dir, "..", "frontend", "dist");
+const WEB_ROOT =
+  process.env.NEXUS_DASHBOARD_WEB_ROOT || join(import.meta.dir, "..", "frontend", "dist");
 
 /**
  * The only prefix that is proxied. Anything broader would turn this public
@@ -102,7 +103,12 @@ async function proxyToMail(req: Request, rest: string, search: string): Promise<
     // corrupt binary files, and dropping those headers would let an HTML
     // attachment render inline on this origin.
     const passthrough = new Headers();
-    for (const h of ["content-type", "content-disposition", "x-content-type-options", "content-security-policy"]) {
+    for (const h of [
+      "content-type",
+      "content-disposition",
+      "x-content-type-options",
+      "content-security-policy",
+    ]) {
       const v = res.headers.get(h);
       if (v) passthrough.set(h, v);
     }
@@ -160,9 +166,9 @@ async function callerIdentity(
       signal: AbortSignal.timeout(3000),
     });
     if (!res.ok) return null;
-    const body = (await res.json().catch(() => null)) as
-      | { user?: { id?: unknown; role?: unknown } }
-      | null;
+    const body = (await res.json().catch(() => null)) as {
+      user?: { id?: unknown; role?: unknown };
+    } | null;
     const id = body?.user?.id;
     if (typeof id !== "string" || !id) return null;
     const role = body?.user?.role;
@@ -344,7 +350,7 @@ export async function handleRequest(req: Request): Promise<Response> {
   // lands here. Say so plainly — the alternative is an unexplained blank page
   // or a stack trace, and the fix is one command.
   return new Response(
-    "<!doctype html><meta charset=\"utf-8\"><title>Nexus Dashboard</title>" +
+    '<!doctype html><meta charset="utf-8"><title>Nexus Dashboard</title>' +
       "<p>The dashboard UI has not been built. Run <code>npm install &amp;&amp; npm run build</code> " +
       "in <code>apps/Nexus-Dashboard/frontend</code>.</p>",
     { status: 503, headers: { "content-type": "text/html; charset=utf-8" } },
