@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import { toAppEntries } from "./apps";
+import { toAppEntries, shellNativeEntries, mergeApps } from "./apps";
 import { cloudBaseUrl, cloudHeaders } from "./cloud";
 
 /**
@@ -228,18 +228,39 @@ async function proxyToCloud(req: Request, name: string, search: string): Promise
   }
 }
 
+/**
+ * Is the mail API answering?
+ *
+ * Any HTTP response proves the service is up and routing — the mail API has no
+ * /health route, so a 404 here is a live server saying "not that path", which
+ * is exactly the fact we need. Only a connection failure or timeout is offline.
+ */
+async function mailReachable(): Promise<boolean> {
+  try {
+    await fetch(`${mailUrl()}/`, { signal: AbortSignal.timeout(2000) });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 async function fetchApps(): Promise<Response> {
+  // Probed once and used on both paths: the shell's own views must not
+  // disappear just because Cloud is down.
+  const native = shellNativeEntries({ mailHealthy: await mailReachable() });
+
   try {
     const res = await fetch(`${CLOUD_URL.replace(/\/+$/, "")}/api/v1/tools`, {
       headers: CLOUD_API_KEY ? { "X-Api-Key": CLOUD_API_KEY } : {},
       signal: AbortSignal.timeout(3000),
     });
-    if (!res.ok) return Response.json({ apps: [] });
-    return Response.json({ apps: toAppEntries(await res.json(), AUTH_HOST, SELF_HOST, CLOUD_HOST) });
+    if (!res.ok) return Response.json({ apps: native });
+    const registry = toAppEntries(await res.json(), AUTH_HOST, SELF_HOST, CLOUD_HOST);
+    return Response.json({ apps: mergeApps(registry, native) });
   } catch {
-    // Cloud being down must degrade to an empty grid, not a broken dashboard —
-    // the account pages still work and the user can still sign in.
-    return Response.json({ apps: [] });
+    // Cloud being down must degrade to the shell's own views, not a broken
+    // dashboard — the account pages still work and the user can still sign in.
+    return Response.json({ apps: native });
   }
 }
 

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "bun:test";
-import { toAppEntries } from "../src/apps";
+import { toAppEntries, shellNativeEntries, mergeApps, type AppEntry } from "../src/apps";
 
 const AUTH = "auth.tnhc.dev";
 
@@ -128,5 +128,53 @@ describe("one tile per destination", () => {
     );
     expect(entries).toHaveLength(1);
     expect(entries[0]?.id).toBe("nexus-draw");
+  });
+});
+
+describe("shell-native views", () => {
+  it("offers mail as an in-shell route, not a framed app", () => {
+    const entries = shellNativeEntries({ mailHealthy: true });
+    expect(entries).toHaveLength(1);
+    const mail = entries[0]!;
+    expect(mail.id).toBe("nexus-email");
+    // A relative url is the signal Launcher and Grid use to route in-app. An
+    // absolute one would be framed, and framing app.<domain>/mail would put
+    // the shell inside itself.
+    expect(mail.url).toBe("/mail");
+    expect(mail.health).toBe("healthy");
+  });
+
+  it("marks mail offline when the mail API is unreachable", () => {
+    expect(shellNativeEntries({ mailHealthy: false })[0]!.health).toBe("offline");
+  });
+
+  it("adds mail to the registry grid without losing registry apps", () => {
+    const merged = mergeApps(toAppEntries(TOOLS, AUTH), shellNativeEntries({ mailHealthy: true }));
+    expect(merged.map((e) => e.id)).toContain("nexus-email");
+    expect(merged.map((e) => e.id)).toContain("nexus-chat");
+  });
+
+  it("keeps one tile per mailbox if Cloud also registers Nexus-Email", () => {
+    const registry: AppEntry[] = [
+      {
+        id: "nexus-email",
+        name: "Nexus Email",
+        description: "dup",
+        url: "https://mail.tnhc.dev",
+        health: "healthy",
+      },
+    ];
+    const merged = mergeApps(registry, shellNativeEntries({ mailHealthy: true }));
+    expect(merged.filter((e) => e.id === "nexus-email")).toHaveLength(1);
+    // The in-shell route is the one that works, so it is the one that survives.
+    expect(merged.find((e) => e.id === "nexus-email")!.url).toBe("/mail");
+  });
+
+  it("sorts the merged grid by name", () => {
+    const names = mergeApps(
+      toAppEntries(TOOLS, AUTH),
+      shellNativeEntries({ mailHealthy: true }),
+    ).map((e) => e.name);
+    expect(names).toEqual([...names].sort());
   });
 });

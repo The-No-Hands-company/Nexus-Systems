@@ -86,3 +86,44 @@ export function toAppEntries(
 
   return entries.sort((a, b) => a.name.localeCompare(b.name));
 }
+
+/**
+ * Views this shell serves itself, which therefore never appear in Cloud's
+ * registry no matter how healthy they are.
+ *
+ * Mail is the case that exposed the gap. Unlike Chat or Draw it has no public
+ * host of its own — the webmail UI is part of this app and talks to the mail
+ * API over a private proxy — so there is nothing for Cloud to register and
+ * nothing to frame. Registering a record pointing at `app.<domain>/mail` would
+ * be worse than the bug: toAppEntries drops `selfHost` on purpose, so the
+ * record would be discarded, and if it were not, the shell would frame itself.
+ *
+ * The grid is still data — it is data from two sources, the registry and the
+ * shell, rather than a hardcoded list of apps.
+ */
+export function shellNativeEntries(opts: { mailHealthy: boolean }): AppEntry[] {
+  return [
+    {
+      id: "nexus-email",
+      name: "Nexus Mail",
+      description: "Sovereign mail — read, compose and search your Nexus mailbox",
+      url: "/mail",
+      health: opts.mailHealthy ? "healthy" : "offline",
+    },
+  ];
+}
+
+/**
+ * Merges the shell's own views into the registry grid.
+ *
+ * A shell-native view wins over a registry record with the same id or the same
+ * destination: if Nexus-Email is ever registered with Cloud as well, the
+ * in-shell /mail route is the one that works, and two tiles for one mailbox
+ * would be a puzzle rather than a feature.
+ */
+export function mergeApps(registry: AppEntry[], native: AppEntry[]): AppEntry[] {
+  const kept = registry.filter(
+    (r) => !native.some((n) => n.id === r.id || n.url === r.url),
+  );
+  return [...native, ...kept].sort((a, b) => a.name.localeCompare(b.name));
+}

@@ -49,15 +49,20 @@ describe("dashboard server", () => {
     const res = await handleRequest(new Request("http://app.test/api/apps"));
     expect(res.status).toBe(200);
     const { apps } = await res.json() as { apps: Array<{ id: string }> };
-    expect(apps.map((a) => a.id)).toEqual(["nexus-chat"]);
+    // Mail is served by this app at /mail and has no public host, so it never
+    // appears in Cloud's registry — the shell contributes it.
+    expect(apps.map((a) => a.id).sort()).toEqual(["nexus-chat", "nexus-email"]);
   });
 
-  it("returns an empty grid rather than failing when Cloud is down", async () => {
+  it("degrades to the shell's own views rather than failing when Cloud is down", async () => {
     cloud?.stop(true);
     cloud = null;
     const res = await handleRequest(new Request("http://app.test/api/apps"));
     expect(res.status).toBe(200);
-    expect((await res.json() as { apps: unknown[] }).apps).toEqual([]);
+    // Previously asserted an empty grid. Mail lives in this app, so a Cloud
+    // outage is no reason to hide it.
+    const { apps } = await res.json() as { apps: Array<{ id: string }> };
+    expect(apps.map((a) => a.id)).toEqual(["nexus-email"]);
   });
 
   it("proxies auth calls same-origin, preserving path and method", async () => {
