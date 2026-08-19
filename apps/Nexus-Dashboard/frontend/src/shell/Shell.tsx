@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 /**
  * The frame every app renders inside.
  *
- * Regions are named for the doctrine in docs/noname.md: app-header,
+ * Regions are named for the doctrine in docs/nexus-ui-intelligence-doctrine.md: app-header,
  * app-sidebar, app-content. The utility rail is specified there too and
  * deliberately not built — an empty named region beats an invented purpose.
  *
@@ -34,8 +34,19 @@ export default function Shell({
           {sidebar}
         </aside>
 
-        {/* The app mounts here and nowhere else. */}
-        <main role="main" className="min-w-0 flex-1 overflow-hidden">
+        {/*
+          The app mounts here and nowhere else.
+
+          overflow-y-auto, not overflow-hidden. Hidden is right for a framed app
+          — the iframe is h-full and scrolls internally — but every shell-native
+          view (/cloud, /mail, /account, /admin) is an ordinary page, and hidden
+          silently clipped them at the fold with no way to reach the rest. The
+          Cloud console ended at "Nexus Edge offline" and looked complete.
+
+          The iframe still fills exactly h-full, so this adds no scrollbar to a
+          framed app; it only lets taller content scroll.
+        */}
+        <main role="main" className="min-w-0 flex-1 overflow-y-auto">
           {children}
         </main>
       </div>

@@ -24,6 +24,16 @@ describe("Shell", () => {
     expect(screen.getByRole("main").textContent).not.toContain("launcher here");
   });
 
+  it("lets tall content scroll instead of clipping it", () => {
+    // The content region was overflow-hidden, which is right for a framed app
+    // but silently cut every shell-native page off at the fold — the Cloud
+    // console ended mid-list and looked complete.
+    render(<Shell sidebar={null}><div>tall</div></Shell>);
+    const main = screen.getByRole("main");
+    expect(main.className).toContain("overflow-y-auto");
+    expect(main.className).not.toContain("overflow-hidden");
+  });
+
   it("shows the wordmark in the header", () => {
     render(<Shell sidebar={<div />}>x</Shell>);
     expect(screen.getByRole("banner").textContent).toContain("Nexus");
