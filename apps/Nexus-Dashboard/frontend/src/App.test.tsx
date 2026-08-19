@@ -4,7 +4,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 vi.mock("./api", async () => ({
   ...(await vi.importActual<typeof import("./api")>("./api")),
   listApps: vi.fn(async () => [
-    { id: "nexus-draw", name: "Draw", description: "", url: "https://draw.tnhc.dev", health: "healthy" },
+    { id: "nexus-draw", name: "Draw", description: "", url: "https://draw.tnhc.dev", path: "/draw", health: "healthy" },
   ]),
   me: vi.fn(async () => ({ username: "founder", role: "founder" })),
   // Every /cloud/* page has its own dedicated, data-asserting tests in
@@ -58,10 +58,19 @@ describe("shell routing", () => {
     expect(screen.queryByTitle("Draw")).toBeNull();
 
     resolveList([
-      { id: "nexus-draw", name: "Draw", description: "", url: "https://draw.tnhc.dev", health: "healthy" },
+      { id: "nexus-draw", name: "Draw", description: "", url: "https://draw.tnhc.dev", path: "/draw", health: "healthy" },
     ]);
 
     await waitFor(() => expect(screen.getByTitle("Draw")).toBeTruthy());
+  });
+
+  it("keeps old /a/:id links working by redirecting to the flat path", async () => {
+    // Someone's bookmark from before the URL scheme changed must not 404
+    // because we tidied the scheme.
+    window.history.pushState({}, "", "/a/nexus-draw");
+    render(<App />);
+    await waitFor(() => expect(screen.getByTitle("Draw")).toBeTruthy());
+    expect(window.location.pathname).toBe("/draw");
   });
 
   it("reports a load failure distinctly from an unknown app", async () => {

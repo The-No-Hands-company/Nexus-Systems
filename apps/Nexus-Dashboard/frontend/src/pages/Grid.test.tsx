@@ -1,12 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
 import Grid from "./Grid";
 
 const APPS = [
   { id: "nexus-chat", name: "Nexus Chat", description: "Real-time messaging",
-    url: "https://chat.tnhc.dev", health: "healthy" },
+    url: "https://chat.tnhc.dev", path: "/chat", health: "healthy" },
   { id: "nexus-draw", name: "Nexus Draw", description: "Whiteboard",
-    url: "https://draw.tnhc.dev", health: "offline" },
+    url: "https://draw.tnhc.dev", path: "/draw", health: "offline" },
 ];
 
 function jsonResponse(body: unknown, status = 200) {
@@ -21,19 +22,21 @@ beforeEach(() => {
 });
 
 describe("Grid", () => {
-  it("renders a tile per app, linking to its subdomain", async () => {
+  it("renders a tile per app, linking to its in-shell path", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => jsonResponse({ apps: APPS })));
 
-    render(<Grid />);
+    render(<MemoryRouter><Grid /></MemoryRouter>);
     await waitFor(() => expect(screen.getByText("Nexus Chat")).toBeTruthy());
+    // The tile links into the shell, never out to the app's own origin. The
+    // path names the app; framing is decided at the route.
     expect(screen.getByRole("link", { name: /nexus chat/i }).getAttribute("href"))
-      .toBe("https://chat.tnhc.dev");
+      .toBe("/chat");
   });
 
   it("marks a down app as unavailable rather than offering a dead link", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => jsonResponse({ apps: APPS })));
 
-    render(<Grid />);
+    render(<MemoryRouter><Grid /></MemoryRouter>);
     await waitFor(() => expect(screen.getByText("Nexus Draw")).toBeTruthy());
     expect(screen.getByText(/unavailable|offline/i)).toBeTruthy();
     // An offline app must not be a link at all — a click that goes nowhere is
@@ -44,7 +47,7 @@ describe("Grid", () => {
   it("says so when no apps are reachable instead of rendering an empty page", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => jsonResponse({ apps: [] })));
 
-    render(<Grid />);
+    render(<MemoryRouter><Grid /></MemoryRouter>);
     await waitFor(() => expect(screen.getByText(/no apps|nothing available/i)).toBeTruthy());
   });
 
@@ -53,7 +56,7 @@ describe("Grid", () => {
     // have no apps", the other means "we could not ask".
     vi.stubGlobal("fetch", vi.fn(async () => { throw new TypeError("offline"); }));
 
-    render(<Grid />);
+    render(<MemoryRouter><Grid /></MemoryRouter>);
     await waitFor(() => expect(screen.getByText(/could not load|try again|failed/i)).toBeTruthy());
   });
 
@@ -62,7 +65,7 @@ describe("Grid", () => {
       jsonResponse({ apps: APPS }));
     vi.stubGlobal("fetch", spy);
 
-    render(<Grid />);
+    render(<MemoryRouter><Grid /></MemoryRouter>);
     await waitFor(() => expect(spy).toHaveBeenCalled());
     expect(String(spy.mock.calls[0]![0])).toBe("/api/apps");
   });
@@ -70,7 +73,7 @@ describe("Grid", () => {
   it("shows each app's description so the grid is legible to a newcomer", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => jsonResponse({ apps: APPS })));
 
-    render(<Grid />);
+    render(<MemoryRouter><Grid /></MemoryRouter>);
     await waitFor(() => expect(screen.getByText("Real-time messaging")).toBeTruthy());
   });
 });

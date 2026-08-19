@@ -13,7 +13,7 @@ export type SystemsApiRegistrationPayload = {
 export function buildSystemsApiRegistrationPayload(baseUrl: string): SystemsApiRegistrationPayload {
   return {
     id: "nexus-draw",
-    name: "Nexus-Draw",
+    name: "Nexus Draw",
     description: "Real-time collaborative whiteboard and diagramming tool",
     mode: "orchestrated",
     exposed: false,

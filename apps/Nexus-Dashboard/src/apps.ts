@@ -9,9 +9,33 @@ export type AppEntry = {
   id: string;
   name: string;
   description: string;
+  /** Where the app actually lives: an absolute origin to frame, or the same
+   *  relative path as `path` when the shell renders it itself. */
   url: string;
+  /** The in-shell route this app is reached at — /chat, /mail, /cloud.
+   *
+   *  The path names the app, never how the shell delivers it. Whether Chat is
+   *  framed and Mail is rendered natively is an implementation detail that can
+   *  change; if the URL encoded it, moving Mail to its own origin would break
+   *  every link to it even though the app did not move. */
+  path: string;
   health: "healthy" | "offline";
 };
+
+/**
+ * Paths the shell owns. An app whose id would land on one of these keeps its
+ * `/a/<id>` route instead, because a registered app called "account" must not
+ * be able to take over the account page.
+ */
+const RESERVED = new Set([
+  "account", "admin", "request", "claim", "a", "api", "health", "",
+]);
+
+/** `nexus-chat` -> `/chat`, falling back to `/a/<id>` on a reserved collision. */
+export function pathForApp(id: string): string {
+  const slug = id.replace(/^nexus-/, "").toLowerCase();
+  return RESERVED.has(slug) ? `/a/${id}` : `/${slug}`;
+}
 
 type RawTool = {
   id?: unknown;
@@ -77,6 +101,7 @@ export function toAppEntries(
       name: str(raw.name) || id,
       description: str(raw.description),
       url: isCloud ? "/cloud" : url,
+      path: isCloud ? "/cloud" : pathForApp(id),
       // Anything that is not explicitly healthy is treated as offline, so a
       // missing or unexpected value fails safe: the tile renders unlinked
       // rather than inviting a click that goes nowhere.
@@ -108,6 +133,7 @@ export function shellNativeEntries(opts: { mailHealthy: boolean }): AppEntry[] {
       name: "Nexus Mail",
       description: "Sovereign mail — read, compose and search your Nexus mailbox",
       url: "/mail",
+      path: "/mail",
       health: opts.mailHealthy ? "healthy" : "offline",
     },
   ];
@@ -123,7 +149,7 @@ export function shellNativeEntries(opts: { mailHealthy: boolean }): AppEntry[] {
  */
 export function mergeApps(registry: AppEntry[], native: AppEntry[]): AppEntry[] {
   const kept = registry.filter(
-    (r) => !native.some((n) => n.id === r.id || n.url === r.url),
+    (r) => !native.some((n) => n.id === r.id || n.url === r.url || n.path === r.path),
   );
   return [...native, ...kept].sort((a, b) => a.name.localeCompare(b.name));
 }

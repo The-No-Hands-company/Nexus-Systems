@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
-import { BrowserRouter, Routes, Route, useParams } from "react-router-dom";
+import { BrowserRouter, Routes, Route, useParams, Navigate } from "react-router-dom";
 import Home from "./pages/Home";
 import RequestAccess from "./pages/RequestAccess";
 import Claim from "./pages/Claim";
@@ -29,10 +29,38 @@ type AppsState =
   | { status: "ready"; apps: AppEntry[] }
   | { status: "failed" };
 
-/** Renders a single ecosystem app inside the shell's chrome, keyed off the URL. */
+/**
+ * "We could not load your apps" — shared so every route that depends on the app
+ * list reports a failed load the same way. A route that quietly renders the
+ * home page instead tells the user nothing went wrong and offers no way back.
+ */
+function AppsUnavailable({ onRetry }: { onRetry: () => void }) {
+  return (
+    <div className="flex h-full flex-col items-center justify-center gap-3 p-8 text-center">
+      <p className="text-text-primary">Could not load your apps.</p>
+      <p className="text-sm text-text-muted">
+        This is not the same as the app being missing — try again.
+      </p>
+      <button
+        type="button"
+        onClick={onRetry}
+        className="rounded border border-border-subtle px-4 py-2 text-sm hover:bg-bg-elevated"
+      >
+        Retry
+      </button>
+    </div>
+  );
+}
+
+/**
+ * Renders a single framed app inside the shell's chrome, resolved from the flat
+ * path (/chat, /draw) rather than from an /a/:id segment.
+ */
 function ShellRoute({ state, onRetry }: { state: AppsState; onRetry: () => void }) {
-  const { appId = "" } = useParams();
+  const { slug = "" } = useParams();
   const apps = state.status === "ready" ? state.apps : [];
+  const match = apps.find((a) => a.path === `/${slug}`);
+  const appId = match?.id ?? "";
 
   return (
     <Shell sidebar={<Launcher apps={apps} activeId={appId} />}>
@@ -41,21 +69,7 @@ function ShellRoute({ state, onRetry }: { state: AppsState; onRetry: () => void 
           Loading…
         </div>
       )}
-      {state.status === "failed" && (
-        <div className="flex h-full flex-col items-center justify-center gap-3 p-8 text-center">
-          <p className="text-text-primary">Could not load your apps.</p>
-          <p className="text-sm text-text-muted">
-            This is not the same as the app being missing — try again.
-          </p>
-          <button
-            type="button"
-            onClick={onRetry}
-            className="rounded border border-border-subtle px-4 py-2 text-sm hover:bg-bg-elevated"
-          >
-            Retry
-          </button>
-        </div>
-      )}
+      {state.status === "failed" && <AppsUnavailable onRetry={onRetry} />}
       {state.status === "ready" && <AppFrame apps={state.apps} appId={appId} />}
     </Shell>
   );
@@ -102,6 +116,39 @@ function ShellView({ state, children }: { state: AppsState; children: ReactNode 
  * 401 even to the operator's API key. Porting it would have shipped a view
  * that can never load. A real user list belongs to Auth and is its own work.
  */
+/**
+ * Redirects a legacy /a/:appId link to that app's flat path.
+ *
+ * Waits for the app list rather than guessing the slug from the id: the
+ * mapping lives in one place (pathForApp) and an app that collided with a
+ * reserved word legitimately keeps its /a/<id> route, which a naive
+ * string-strip here would break.
+ */
+function LegacyAppRedirect({ state, onRetry }: { state: AppsState; onRetry: () => void }) {
+  const { appId = "" } = useParams();
+  if (state.status === "loading") {
+    return (
+      <Shell sidebar={<Launcher apps={[]} />}>
+        <div className="flex h-full items-center justify-center p-8 text-text-muted">Loading…</div>
+      </Shell>
+    );
+  }
+  // A failed list is not "this app does not exist" — say so, and offer a retry,
+  // exactly as the flat route does.
+  if (state.status === "failed") {
+    return (
+      <Shell sidebar={<Launcher apps={[]} />}>
+        <AppsUnavailable onRetry={onRetry} />
+      </Shell>
+    );
+  }
+  const match = state.apps.find((a) => a.id === appId);
+  if (!match || match.path === `/a/${appId}`) {
+    return <Home />;
+  }
+  return <Navigate to={match.path} replace />;
+}
+
 export default function App() {
   const [appsState, setAppsState] = useState<AppsState>({ status: "loading" });
 
@@ -194,7 +241,14 @@ export default function App() {
           path="/mail/compose"
           element={<ShellView state={appsState}><MailCompose /></ShellView>}
         />
-        <Route path="/a/:appId" element={<ShellRoute state={appsState} onRetry={loadApps} />} />
+        {/* The old /a/:appId links stay valid forever — they redirect to the
+            app's flat path rather than 404ing. Someone's bookmark from before
+            this change must not stop working because we tidied the scheme. */}
+        <Route path="/a/:appId" element={<LegacyAppRedirect state={appsState} onRetry={loadApps} />} />
+
+        {/* Flat app routes last: every static route above wins over this, so a
+            registered app can never shadow /account or /admin. */}
+        <Route path="/:slug" element={<ShellRoute state={appsState} onRetry={loadApps} />} />
         <Route path="*" element={<Home />} />
       </Routes>
     </BrowserRouter>

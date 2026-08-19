@@ -62,31 +62,18 @@ export default function Grid() {
         {state.apps.map((app) => (
           <li key={app.id}>
             {app.health === "healthy" ? (
-              // A relative url is a shell-native view this app serves itself
-              // (/mail, /cloud), so it routes client-side. Sending those
-              // through a plain <a> works but reloads the whole shell to reach
-              // a page it was already running.
-              app.url.startsWith("/") ? (
-                <Link
-                  to={app.url}
-                  className="block h-full rounded-lg border border-zinc-800 bg-zinc-900 p-4 transition-colors hover:border-blue-600"
-                >
-                  <div className="font-medium text-zinc-100">{app.name}</div>
-                  {app.description && (
-                    <div className="mt-1 text-sm text-zinc-400">{app.description}</div>
-                  )}
-                </Link>
-              ) : (
-                <a
-                  href={app.url}
-                  className="block h-full rounded-lg border border-zinc-800 bg-zinc-900 p-4 transition-colors hover:border-blue-600"
-                >
-                  <div className="font-medium text-zinc-100">{app.name}</div>
-                  {app.description && (
-                    <div className="mt-1 text-sm text-zinc-400">{app.description}</div>
-                  )}
-                </a>
-              )
+              // Every app is an in-shell route now, so all of them route
+              // client-side. A framed app is still framed — that happens at
+              // the route, not in this link.
+              <Link
+                to={app.path}
+                className="block h-full rounded-lg border border-zinc-800 bg-zinc-900 p-4 transition-colors hover:border-blue-600"
+              >
+                <div className="font-medium text-zinc-100">{app.name}</div>
+                {app.description && (
+                  <div className="mt-1 text-sm text-zinc-400">{app.description}</div>
+                )}
+              </Link>
             ) : (
               // Rendered as a plain element, not a link: offering a click that
               // goes nowhere is worse than a tile explaining why it cannot.

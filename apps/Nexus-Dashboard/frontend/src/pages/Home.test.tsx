@@ -22,7 +22,7 @@ function stubFetch(signedIn: boolean) {
     if (u === "/api/apps") {
       return jsonResponse({
         apps: [{ id: "nexus-chat", name: "Nexus Chat", description: "Chat",
-                 url: "https://chat.tnhc.dev", health: "healthy" }],
+                 url: "https://chat.tnhc.dev", path: "/chat", health: "healthy" }],
       });
     }
     throw new Error(`unexpected fetch: ${u}`);

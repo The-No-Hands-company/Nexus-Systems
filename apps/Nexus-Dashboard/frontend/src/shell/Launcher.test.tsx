@@ -5,8 +5,8 @@ import Launcher from "./Launcher";
 import { appById } from "./apps";
 
 const apps = [
-  { id: "nexus-draw", name: "Draw", description: "", url: "https://draw.tnhc.dev", health: "healthy" as const },
-  { id: "nexus-chat", name: "Chat", description: "", url: "https://chat.tnhc.dev", health: "offline" as const },
+  { id: "nexus-draw", name: "Draw", description: "", url: "https://draw.tnhc.dev", path: "/draw", health: "healthy" as const },
+  { id: "nexus-chat", name: "Chat", description: "", url: "https://chat.tnhc.dev", path: "/chat", health: "offline" as const },
 ];
 
 describe("Launcher", () => {
@@ -19,7 +19,8 @@ describe("Launcher", () => {
   it("links a healthy app into the shell, not out to its own host", () => {
     // The whole point of the shell: clicking an app must not navigate away.
     render(<MemoryRouter><Launcher apps={apps} /></MemoryRouter>);
-    expect(screen.getByRole("link", { name: /Draw/ }).getAttribute("href")).toBe("/a/nexus-draw");
+    // Flat path: the URL names the app, not how the shell delivers it.
+    expect(screen.getByRole("link", { name: /Draw/ }).getAttribute("href")).toBe("/draw");
   });
 
   it("does not link an offline app anywhere", () => {
@@ -32,7 +33,7 @@ describe("Launcher", () => {
     // shell-native view, not a site to frame.
     const withCloud = [
       ...apps,
-      { id: "nexus-cloud", name: "Cloud", description: "", url: "/cloud", health: "healthy" as const },
+      { id: "nexus-cloud", name: "Cloud", description: "", url: "/cloud", path: "/cloud", health: "healthy" as const },
     ];
     render(<MemoryRouter><Launcher apps={withCloud} /></MemoryRouter>);
     expect(screen.getByRole("link", { name: /Cloud/ }).getAttribute("href")).toBe("/cloud");

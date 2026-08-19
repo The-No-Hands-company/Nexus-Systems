@@ -1,5 +1,5 @@
 import { describe, it, expect } from "bun:test";
-import { toAppEntries, shellNativeEntries, mergeApps, type AppEntry } from "../src/apps";
+import { toAppEntries, shellNativeEntries, mergeApps, pathForApp, type AppEntry } from "../src/apps";
 
 const AUTH = "auth.tnhc.dev";
 
@@ -161,6 +161,7 @@ describe("shell-native views", () => {
         name: "Nexus Email",
         description: "dup",
         url: "https://mail.tnhc.dev",
+        path: "/email",
         health: "healthy",
       },
     ];
@@ -176,5 +177,37 @@ describe("shell-native views", () => {
       shellNativeEntries({ mailHealthy: true }),
     ).map((e) => e.name);
     expect(names).toEqual([...names].sort());
+  });
+});
+
+describe("flat app paths", () => {
+  it("names the app, not how it is delivered", () => {
+    expect(pathForApp("nexus-chat")).toBe("/chat");
+    expect(pathForApp("nexus-draw")).toBe("/draw");
+    expect(pathForApp("nexus-hosting")).toBe("/hosting");
+  });
+
+  it("refuses to let an app claim a path the shell owns", () => {
+    // A registered app called "account" must not take over the account page.
+    expect(pathForApp("nexus-account")).toBe("/a/nexus-account");
+    expect(pathForApp("nexus-admin")).toBe("/a/nexus-admin");
+  });
+
+  it("gives every registry entry a flat path", () => {
+    const entries = toAppEntries(TOOLS, AUTH);
+    expect(entries.find((e) => e.id === "nexus-chat")!.path).toBe("/chat");
+  });
+
+  it("keeps Cloud's console on its shell-native path", () => {
+    const entries = toAppEntries(TOOLS, AUTH, undefined, "cloud.tnhc.dev");
+    expect(entries.find((e) => e.id === "nexus-cloud")!.path).toBe("/cloud");
+  });
+
+  it("dedupes a registry app that lands on a shell-native path", () => {
+    const registry: AppEntry[] = [
+      { id: "other-mail", name: "Other", description: "", url: "https://x.dev", path: "/mail", health: "healthy" },
+    ];
+    const merged = mergeApps(registry, shellNativeEntries({ mailHealthy: true }));
+    expect(merged.filter((e) => e.path === "/mail")).toHaveLength(1);
   });
 });

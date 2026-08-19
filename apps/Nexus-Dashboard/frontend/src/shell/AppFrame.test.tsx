@@ -3,7 +3,7 @@ import { render, screen } from "@testing-library/react";
 import AppFrame, { embedUrl } from "./AppFrame";
 
 const apps = [
-  { id: "nexus-draw", name: "Draw", description: "", url: "https://draw.tnhc.dev", health: "healthy" as const },
+  { id: "nexus-draw", name: "Draw", description: "", url: "https://draw.tnhc.dev", path: "/draw", health: "healthy" as const },
 ];
 
 describe("embedUrl", () => {

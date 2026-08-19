@@ -12,7 +12,12 @@ export type AppEntry = {
   id: string;
   name: string;
   description: string;
+  /** Where the app lives: an absolute origin when the shell frames it. */
   url: string;
+  /** The in-shell route — /chat, /mail, /cloud. Names the app, not how it is
+   *  delivered, so moving an app between framed and shell-native never changes
+   *  its URL. Mirrors the server's AppEntry in src/apps.ts. */
+  path: string;
   health: "healthy" | "offline";
 };
 
