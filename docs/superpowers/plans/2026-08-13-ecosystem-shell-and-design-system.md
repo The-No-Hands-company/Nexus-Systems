@@ -14,7 +14,7 @@
 
 - **Tailwind is v4 everywhere** (`^4.1.0` Dashboard, `^4.2.2` nexus-web, `^4.0.13` Deploy). There are no `tailwind.config.*` files and none may be added — v4 themes are CSS `@theme` blocks.
 - **Both CSS outputs are generated** from `tokens/nexus.tokens.json`. Hand-editing a generated file is a defect; the drift test exists to catch it.
-- **Token values are transcribed verbatim** from the schema in `docs/noname.md`. Do not invent, round, or "improve" a colour.
+- **Token values are transcribed verbatim** from the schema in `docs/nexus-ui-intelligence-doctrine.md`. Do not invent, round, or "improve" a colour.
 - **Numeric tokens carry units on output.** The schema stores bare numbers (`"space": { "4": 16 }`). CSS needs `16px`, and `padding: var(--nexus-space-4)` with a unitless `16` is invalid and silently discarded. Units by group: `space`, `radius` and `typography.size` are `px`; `motion.duration` is `ms`; `typography.weight`, `typography.lineHeight` and `zIndex` stay unitless, because those are genuinely unitless in CSS.
 - **The Tailwind output must use v4's theme namespaces**, or the tokens become inert custom properties instead of utilities. v4 derives utility names from the namespace: `--color-*` yields `bg-*`/`text-*`, `--spacing-*` yields `p-*`/`m-*`, `--text-*` yields `text-*` sizes, `--font-weight-*`, `--leading-*`, `--radius-*`, `--shadow-*`, `--ease-*`. A token emitted as `--space-4` or `--zIndex-base` produces no utility at all — `p-4` keeps Tailwind's default and the design system is bypassed without anyone noticing.
 - **Shell lives at `app.tnhc.dev`** (Nexus-Dashboard). Do not move it to the apex.
@@ -223,7 +223,7 @@ how anything looks, and emitting them as custom properties would be noise."
 
 - [ ] **Step 1: Transcribe the token file**
 
-`packages/nexus-design/tokens/nexus.tokens.json` — copied verbatim from the schema in `docs/noname.md`, no changes:
+`packages/nexus-design/tokens/nexus.tokens.json` — copied verbatim from the schema in `docs/nexus-ui-intelligence-doctrine.md`, no changes:
 
 ```json
 {
@@ -376,7 +376,7 @@ git add packages/nexus-design
 git commit -m "feat(design): the token file and its generator
 
 tokens/nexus.tokens.json is transcribed verbatim from the schema in
-docs/noname.md — the palette, type scale, spacing, radii, shadows, motion and
+docs/nexus-ui-intelligence-doctrine.md — the palette, type scale, spacing, radii, shadows, motion and
 z-index that document specified and that nothing ever implemented.
 
 Two outputs, one source: plain custom properties for any app in any language,
@@ -512,7 +512,7 @@ import type { ReactNode } from "react";
 /**
  * The frame every app renders inside.
  *
- * Regions are named for the doctrine in docs/noname.md: app-header,
+ * Regions are named for the doctrine in docs/nexus-ui-intelligence-doctrine.md: app-header,
  * app-sidebar, app-content. The utility rail is specified there too and
  * deliberately not built — an empty named region beats an invented purpose.
  *
@@ -561,7 +561,7 @@ Expected: PASS, 4 tests.
 git add apps/Nexus-Dashboard/frontend/src/shell
 git commit -m "feat(shell): the three regions
 
-Header, sidebar and content, named for the doctrine in docs/noname.md. The
+Header, sidebar and content, named for the doctrine in docs/nexus-ui-intelligence-doctrine.md. The
 utility rail it also specifies is deliberately left unbuilt: an empty named
 region is more honest than an invented purpose.
 

@@ -20,7 +20,7 @@ design language means 85 more things to retrofit.
 Two of the questions that prompted this work turn out to be **already answered
 in the project's own documents, and simply never built**:
 
-- `docs/noname.md` states plainly: *"Nexus Cloud is the canonical host-shell
+- `docs/nexus-ui-intelligence-doctrine.md` states plainly: *"Nexus Cloud is the canonical host-shell
   reference."* It defines shell regions (`app-header`, `app-sidebar`,
   `app-content`, `app-utility-rail`), says tool content mounts only inside
   `app-content`, and specifies a canonical token file at
@@ -121,7 +121,7 @@ this project builds. What protects the hosts is the login gate, which exists.
 ### Token pipeline
 
 Source of truth: **`tokens/nexus.tokens.json`**, transcribing the schema
-already written in `docs/noname.md` — nothing invented.
+already written in `docs/nexus-ui-intelligence-doctrine.md` — nothing invented.
 
 One generator, two outputs, so they cannot drift:
 
