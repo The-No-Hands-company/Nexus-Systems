@@ -19,6 +19,9 @@ function jsonResponse(body: unknown, status = 200) {
  * nothing.
  */
 const STATUS_BODY = {
+  // `mode` is in the real payload; the fixture lacked it, which is how the
+  // trust panel rendered "mode: unknown" instead of naming the node's state.
+  mode: "standalone",
   toolCount: 9,
   healthyToolCount: 7,
   exposedToolCount: 4,
@@ -134,6 +137,24 @@ describe("CloudOverview", () => {
     // must show as online rather than "not registered".
     expect(screen.getByText("Nexus Guardian")).toBeTruthy();
     expect(screen.queryAllByText("not registered").length).toBe(2); // Edge, Tunnel absent
+  });
+
+  it("names this node in the trust panel rather than reporting no nodes at all", async () => {
+    stubFetch();
+    render(<MemoryRouter><CloudOverview /></MemoryRouter>);
+    await waitFor(() => expect(screen.getByText("Trust lifecycle")).toBeTruthy());
+
+    // The registry counts relationships with OTHER nodes, so it is empty on a
+    // standalone node. Labelling that "Nodes (0 total) — none" told an operator
+    // looking straight at a node that no nodes existed.
+    // Scoped: the shortId also appears in the identity section above.
+    const thisNode = screen.getByText("This node").closest("div");
+    expect(thisNode?.textContent).toContain(IDENTITY_BODY.shortId);
+    expect(thisNode?.textContent).toContain("standalone");
+    // Labelled as *other* nodes, so an empty registry reads as "none besides
+    // this one" rather than "no nodes exist".
+    expect(screen.getByText(/Other nodes \(5\)/)).toBeTruthy();
+    expect(screen.queryByText(/^Nodes \(5 total\)$/)).toBeNull();
   });
 
   it("shows Cloud as unavailable, not a blank page, when the proxy returns 503", async () => {

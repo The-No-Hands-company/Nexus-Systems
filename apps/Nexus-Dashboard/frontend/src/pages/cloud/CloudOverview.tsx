@@ -164,7 +164,9 @@ export default function CloudOverview() {
         <div className="rounded-lg border border-zinc-800 bg-zinc-900 p-4">
           <div className="text-2xl font-semibold text-zinc-100">{peerTotal}</div>
           <div className="text-sm text-zinc-400">Peers</div>
-          <div className="mt-1 text-xs text-zinc-500">federation nodes</div>
+          {/* "federation nodes" alongside 0 implied this node was not one.
+              Peers are the *other* nodes; this one is not its own peer. */}
+          <div className="mt-1 text-xs text-zinc-500">other nodes federated with</div>
         </div>
       </div>
 
@@ -198,16 +200,34 @@ export default function CloudOverview() {
             <h2 className="text-lg font-medium">Trust lifecycle</h2>
             <span className="text-xs text-zinc-500">updated {timeAgo(trust.updatedAt)}</span>
           </div>
+          {/*
+            This node, named. The registry counts trust *relationships with
+            other nodes*, so it is empty on a standalone node — which read as
+            "Nodes (0 total) — none" to an operator looking straight at a node
+            that plainly exists. Zero peers is the truth; "no nodes" was not.
+          */}
+          <div className="mt-3 flex flex-wrap items-baseline gap-x-3 gap-y-1 rounded border border-zinc-800 bg-zinc-950 px-3 py-2">
+            <span className="text-xs uppercase tracking-wide text-zinc-500">This node</span>
+            <span className="font-mono text-sm text-zinc-200">
+              {identity?.shortId ?? "—"}
+            </span>
+            <span className="text-xs text-zinc-500">
+              {status.mode === "standalone"
+                ? "standalone — not federating with any other node yet"
+                : `mode: ${status.mode ?? "unknown"}`}
+            </span>
+          </div>
+
           <div className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
               <div className="text-xs uppercase tracking-wide text-zinc-500">
-                Nodes ({trust.nodes.total ?? 0} total)
+                Other nodes ({trust.nodes.total ?? 0})
               </div>
               <div className="mt-2"><TrustPills counts={trust.nodes} /></div>
             </div>
             <div>
               <div className="text-xs uppercase tracking-wide text-zinc-500">
-                Peers ({trust.peers.total ?? 0} total)
+                Peers ({trust.peers.total ?? 0})
               </div>
               <div className="mt-2"><TrustPills counts={trust.peers} /></div>
             </div>
