@@ -43,14 +43,21 @@ That gives four honest states:
 |---|---|---|
 | **Live** | Deployed and reachable on `tnhc.dev` today | 6 |
 | **Beta** | Deployed, feature-incomplete, in active use | 1 |
-| **In development** | Substantive code beyond the scaffold; not yet deployed | 24 |
+| **In development** | Substantive code beyond the scaffold; not yet deployed | 25 |
 | **Scaffold** | The six-file `ghost` shape: registers with Systems-API, serves health, no domain logic | 75 |
 | **Stub** | Less than the scaffold — a directory with intent and little else | 7 |
 
-**113 apps total**: 112 `Nexus-*` directories plus `apps/Nexus`, the Rust chat
-runtime, which does not carry the prefix.
+**114 rows total**: 112 `Nexus-*` directories, plus `apps/Nexus` (the Rust chat
+runtime) and `apps/Phantom`, neither of which carries the prefix.
 
-The honest summary: **31 apps have real code in them; 82 are placeholders.**
+Phantom is listed even though it is not an app. It is a protocol security layer
+meant to be consumed by other services, and it was absent from this document
+entirely until 2026-08-20 — which is exactly the failure mode this register
+exists to prevent. A thing that is not written down does not get audited, and
+Phantom went a long time without one: its workspace did not compile, and its
+own STATUS.md said "Phase 2 COMPLETE". Nothing consumes it yet.
+
+The honest summary: **32 of the 114 have real code in them; 82 are placeholders.**
 This is not a failure — the scaffolds are a deliberate land-claim so that
 naming, routing and registration are settled before the work starts. But a
 scaffold is not a product, and this document will not call one a product.
@@ -155,6 +162,7 @@ Every app in the ecosystem, by category, with measured status.
 |---|---|---|
 | **Nexus-Security** | Security posture, policy, and hardening | Stub |
 | **Nexus-Guardian** | Runtime threat monitoring and abuse response | In development |
+| **Phantom** | Anonymous routing protocol: FHE-encrypted routing metadata, zk membership proofs, post-quantum keys. A protocol layer for other services to consume, not an app | In development |
 | **Nexus-Confidential** | Confidential workload handling | Scaffold |
 | **Nexus-Compliance** | Compliance frameworks and evidence collection | Stub |
 | **Nexus-Provenance** | Artifact provenance and supply-chain attestation | Scaffold |
@@ -423,6 +431,9 @@ omits one that does, is the failure this document was written to end.
 
 **Scan of 2026-08-19:** 112 `Nexus-*` directories, 75 scaffolds, 7 stubs, 30
 with code beyond the scaffold. 113 register rows including `apps/Nexus`.
+
+**2026-08-20:** `apps/Phantom` added — present on disk and in `.gitmodules`
+since long before this document, never registered. 114 rows.
 
 ---
 
