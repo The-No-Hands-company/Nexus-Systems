@@ -6,6 +6,7 @@
 !/.githooks/**
 !/.secrets.baseline
 !/README.md
+!/SECURITY.md
 !/docker-compose.yml
 !/apps/
 !/apps/**
