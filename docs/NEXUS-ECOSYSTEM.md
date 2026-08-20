@@ -118,7 +118,7 @@ Every app in the ecosystem, by category, with measured status.
 
 | App | Role | Status |
 |---|---|---|
-| **Nexus-Hosting** | Static-site and app hosting with presigned upload and deploy | **Live** |
+| **Nexus-Hosting** | Host a website here, or run the node yourself — domains, TLS, builds, forms | **Live** |
 | **Nexus-Deploy** | Deployment orchestration and release pipelines | In development |
 | **Nexus-Tunnel** | Sovereign public exposure; every public URL is provisioned here | In development |
 | **Nexus-Router** | Request routing and upstream selection | In development |
