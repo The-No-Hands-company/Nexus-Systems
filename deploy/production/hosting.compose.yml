@@ -45,6 +45,16 @@ services:
   app:
     ports: !override
       - "8788:8080"
+    environment:
+      # Who may frame this app: the ecosystem shell, which mounts it at
+      # app.tnhc.dev/hosting.
+      #
+      # Set explicitly rather than derived. The app's default builds
+      # app.${PUBLIC_DOMAIN}, and PUBLIC_DOMAIN here is hosting.tnhc.dev — the
+      # app's own hostname, not the bare domain — so the default produced
+      # app.hosting.tnhc.dev, which is nothing. The shell's origin is a
+      # deployment fact and belongs in the deployment file.
+      SHELL_ORIGINS: https://app.tnhc.dev
 
   # The site-serving Rust proxy. NOT hosting.tnhc.dev — this answers by Host
   # header for domains of sites people deploy, and returns nothing for anything
