@@ -1,7 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { me, type Me } from "../api";
 import Grid from "./Grid";
+import Shell from "../shell/Shell";
 
 const AUTH_LOGIN_URL =
   import.meta.env.VITE_AUTH_LOGIN_URL ?? "https://auth.tnhc.dev/login";
@@ -9,11 +10,21 @@ const AUTH_LOGIN_URL =
 /**
  * The root route decides what "home" means.
  *
- * Signed in, home is the app grid. Signed out, it is the way in — and this
- * host stays public precisely so a stranger can reach that. Gating it would
- * leave nowhere to request an account from.
+ * Signed in, home is the app grid, inside the same chrome as everywhere else.
+ * Signed out, it is the way in — and this host stays public precisely so a
+ * stranger can reach that. Gating it would leave nowhere to request an account
+ * from.
+ *
+ * The grid used to render bare, on the reasoning that the shell's sidebar is
+ * also a launcher and showing the apps twice was redundant. The cost of that
+ * was worse than the redundancy: the front door had no header and no sidebar,
+ * so it looked like a different, older application than everything behind it,
+ * and the product only appeared to start once you clicked into an app.
+ *
+ * They are not the same thing anyway. The sidebar is navigation — a compact
+ * list you use to move. The grid is a directory: names, descriptions, health.
  */
-export default function Home() {
+export default function Home({ sidebar }: { sidebar?: ReactNode }) {
   const [user, setUser] = useState<Me | null | undefined>(undefined);
 
   useEffect(() => {
@@ -26,7 +37,11 @@ export default function Home() {
     return <section className="mx-auto max-w-4xl p-8 text-zinc-500">Loading…</section>;
   }
 
-  if (user) return <Grid />;
+  // Chrome only when signed in. Wrapping the signed-out page would advertise a
+  // launcher to someone with no session and nothing to launch.
+  if (user) {
+    return sidebar ? <Shell sidebar={sidebar}>{<Grid />}</Shell> : <Grid />;
+  }
 
   return (
     <section className="mx-auto max-w-xl p-8">

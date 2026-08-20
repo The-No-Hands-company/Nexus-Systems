@@ -166,7 +166,15 @@ export default function App() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/" element={<Home />} />
+        {/* Home gets the sidebar so the grid renders inside the same chrome as
+            every other signed-in route. Home itself decides whether to use it:
+            signed out, it stays bare. */}
+        <Route
+          path="/"
+          element={
+            <Home sidebar={<Launcher apps={appsState.status === "ready" ? appsState.apps : []} />} />
+          }
+        />
         <Route path="/request" element={<RequestAccess />} />
         <Route path="/claim" element={<Claim />} />
         <Route
@@ -249,7 +257,12 @@ export default function App() {
         {/* Flat app routes last: every static route above wins over this, so a
             registered app can never shadow /account or /admin. */}
         <Route path="/:slug" element={<ShellRoute state={appsState} onRetry={loadApps} />} />
-        <Route path="*" element={<Home />} />
+        <Route
+          path="*"
+          element={
+            <Home sidebar={<Launcher apps={appsState.status === "ready" ? appsState.apps : []} />} />
+          }
+        />
       </Routes>
     </BrowserRouter>
   );

@@ -40,6 +40,34 @@ describe("Home", () => {
     await waitFor(() => expect(screen.getByText("Nexus Chat")).toBeTruthy());
   });
 
+  it("puts the signed-in grid inside the shell, not bare", async () => {
+    // The home page used to render with no header and no sidebar, so the front
+    // door looked like a different, older application than every route behind
+    // it — the product appeared to start only once you clicked into an app.
+    stubFetch(true);
+    render(
+      <MemoryRouter>
+        <Home sidebar={<nav aria-label="App launcher" />} />
+      </MemoryRouter>,
+    );
+    await waitFor(() => expect(screen.getByText("Nexus Chat")).toBeTruthy());
+    expect(screen.getByRole("banner")).toBeTruthy();
+    expect(screen.getByRole("navigation", { name: "App launcher" })).toBeTruthy();
+  });
+
+  it("leaves a signed-out visitor bare, even when given a sidebar", async () => {
+    // Chrome advertising a launcher to somebody with no session and nothing to
+    // launch is worse than no chrome at all.
+    stubFetch(false);
+    render(
+      <MemoryRouter>
+        <Home sidebar={<nav aria-label="App launcher" />} />
+      </MemoryRouter>,
+    );
+    await waitFor(() => expect(screen.queryByRole("banner")).toBeNull());
+    expect(screen.queryByRole("navigation", { name: "App launcher" })).toBeNull();
+  });
+
   it("shows the way in to a signed-out visitor", async () => {
     stubFetch(false);
     render(<MemoryRouter><Home /></MemoryRouter>);
