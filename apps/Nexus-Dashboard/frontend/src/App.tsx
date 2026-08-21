@@ -17,6 +17,7 @@ import { listApps, type AppEntry } from "./api";
 import Shell from "./shell/Shell";
 import Launcher from "./shell/Launcher";
 import AppFrame from "./shell/AppFrame";
+import ReportIssue from "./pages/ReportIssue";
 
 /**
  * The app list has three states, not two: while it is loading, "not found"

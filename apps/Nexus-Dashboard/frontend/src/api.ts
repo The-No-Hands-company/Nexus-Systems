@@ -431,3 +431,25 @@ export function sendMail(body: {
     body: JSON.stringify(body),
   });
 }
+
+/** A filed issue, as GitHub returned it. */
+export type FiledIssue = { number: number; url: string };
+
+/**
+ * File an issue from inside the dashboard.
+ *
+ * The reporter is identified server-side from the session — nothing about who
+ * is reporting travels in this body, so it cannot be spoofed by editing the
+ * request.
+ */
+export async function reportIssue(input: {
+  title: string;
+  body: string;
+  app?: string;
+  url?: string;
+}): Promise<FiledIssue> {
+  return request<FiledIssue>("/api/issues", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}

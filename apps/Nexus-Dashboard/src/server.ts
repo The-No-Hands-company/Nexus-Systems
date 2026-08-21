@@ -1,6 +1,7 @@
 import { join } from "node:path";
 import { mergeApps, shellNativeEntries, toAppEntries } from "./apps";
 import { cloudBaseUrl, cloudHeaders } from "./cloud";
+import { validateReport, fileIssue } from "./issues";
 
 /**
  * The ecosystem front door — app.<domain>.
@@ -308,6 +309,27 @@ export async function handleRequest(req: Request): Promise<Response> {
   // GET-only, and only for names on CLOUD_ALLOWLIST — anything else (a
   // mutating method, or a name not in the table) falls through to the
   // catch-all 404 below rather than reaching proxyToCloud at all.
+  // Issue reports. POST only, signed-in only, and the reporter's identity
+  // comes from Auth rather than the request body — see src/issues.ts.
+  if (path === "/api/issues") {
+    if (req.method !== "POST") {
+      return Response.json({ error: "method_not_allowed" }, { status: 405 });
+    }
+    const who = await callerIdentity(req);
+    if (!who) return Response.json({ error: "not_authenticated" }, { status: 401 });
+
+    const parsed = validateReport(await req.json().catch(() => null));
+    if ("error" in parsed) {
+      return Response.json({ error: parsed.error }, { status: 400 });
+    }
+
+    const result = await fileIssue(parsed.report, who.subject);
+    if (!result.ok) {
+      return Response.json({ error: result.error }, { status: result.status });
+    }
+    return Response.json({ number: result.number, url: result.url }, { status: 201 });
+  }
+
   if (path.startsWith(MAIL_PREFIX)) {
     return proxyToMail(req, path.slice(MAIL_PREFIX.length), url.search);
   }
