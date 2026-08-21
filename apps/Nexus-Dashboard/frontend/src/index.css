@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "@xterm/xterm/css/xterm.css";
 /* The shell needs the raw --nexus-color-* custom properties (defined here, in
    nexus-tokens.css) to alias into the scales below. nexus-theme.css only
    defines Tailwind's un-prefixed @theme names (e.g. --color-bg-canvas), which
@@ -31,4 +32,17 @@
   --color-amber-400: var(--nexus-color-state-warning);
   --color-amber-300: var(--nexus-color-state-warning);
   --color-amber-200: var(--nexus-color-state-warning);
+}
+
+/* xterm owns its renderer subtree. Keep the vendor geometry tied to the
+   shell-native terminal canvas so its global selectors cannot affect framed
+   apps or ordinary shell pages. */
+.terminal-canvas .xterm,
+.terminal-canvas .xterm-screen,
+.terminal-canvas .xterm-viewport {
+  height: 100%;
+}
+
+.terminal-canvas .xterm-viewport {
+  scrollbar-color: var(--nexus-color-border-strong) var(--nexus-color-bg-canvas);
 }

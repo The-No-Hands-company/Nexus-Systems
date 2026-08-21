@@ -18,6 +18,7 @@ import Shell from "./shell/Shell";
 import Launcher from "./shell/Launcher";
 import AppFrame from "./shell/AppFrame";
 import ReportIssue from "./pages/ReportIssue";
+import TerminalAccess, { type UserState } from "./pages/terminal/TerminalAccess";
 
 /**
  * The app list has three states, not two: while it is loading, "not found"
@@ -161,13 +162,14 @@ export default function App() {
    * shell must render for a signed-out visitor too, and an unreachable /me is
    * not a reason to show them a broken page.
    */
-  const [user, setUser] = useState<Me | null>(null);
+  const [userState, setUserState] = useState<UserState>({ status: "loading" });
+  const user = userState.status === "ready" ? userState.user : null;
 
   useEffect(() => {
     let cancelled = false;
     void me()
-      .then((u) => { if (!cancelled) setUser(u); })
-      .catch(() => { if (!cancelled) setUser(null); });
+      .then((u) => { if (!cancelled) setUserState({ status: "ready", user: u }); })
+      .catch(() => { if (!cancelled) setUserState({ status: "ready", user: null }); });
     return () => { cancelled = true; };
   }, []);
 
@@ -267,6 +269,14 @@ export default function App() {
         <Route
           path="/mail/compose"
           element={<ShellView state={appsState} user={user}><MailCompose /></ShellView>}
+        />
+        <Route
+          path="/terminal"
+          element={
+            <ShellView state={appsState} user={user}>
+              <TerminalAccess userState={userState} />
+            </ShellView>
+          }
         />
         {/* The old /a/:appId links stay valid forever — they redirect to the
             app's flat path rather than 404ing. Someone's bookmark from before

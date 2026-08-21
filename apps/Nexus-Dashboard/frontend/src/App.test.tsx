@@ -1,12 +1,20 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 
+vi.mock("@xterm/xterm", () => ({ Terminal: class {} }));
+vi.mock("@xterm/addon-fit", () => ({ FitAddon: class {} }));
+
 vi.mock("./api", async () => ({
   ...(await vi.importActual<typeof import("./api")>("./api")),
   listApps: vi.fn(async () => [
     { id: "nexus-draw", name: "Draw", description: "", url: "https://draw.tnhc.dev", path: "/draw", health: "healthy" },
   ]),
-  me: vi.fn(async () => ({ username: "founder", role: "founder" })),
+  me: vi.fn(async () => ({
+    id: "user-founder",
+    username: "founder",
+    email: "founder@example.test",
+    role: "founder",
+  })),
   // Every /cloud/* page has its own dedicated, data-asserting tests in
   // pages/cloud/*.test.tsx. Here they only need to resolve so the routing
   // tests below aren't exercising real network calls.
@@ -20,7 +28,7 @@ vi.mock("./api", async () => ({
 }));
 
 import App from "./App";
-import { listApps, type AppEntry } from "./api";
+import { listApps, me, type AppEntry } from "./api";
 
 describe("shell routing", () => {
   beforeEach(() => {
@@ -91,9 +99,17 @@ describe("shell-native views", () => {
 
   for (const path of [
     "/account", "/admin", "/cloud", "/cloud/tools",
-    "/cloud/federation", "/cloud/identity", "/cloud/api",
+    "/cloud/federation", "/cloud/identity", "/cloud/api", "/terminal",
   ]) {
     it(`wraps ${path} in the shell, launcher and all`, async () => {
+      if (path === "/terminal") {
+        vi.mocked(me).mockResolvedValueOnce({
+          id: "user-member",
+          username: "member",
+          email: "member@example.test",
+          role: "member",
+        });
+      }
       window.history.pushState({}, "", path);
       render(<App />);
 
@@ -102,6 +118,9 @@ describe("shell-native views", () => {
       // Populated, not merely present: these pages sit beside the app list
       // rather than replacing it.
       await waitFor(() => expect(screen.getByRole("link", { name: /Draw/ })).toBeTruthy());
+      if (path === "/terminal") {
+        expect(screen.getByText("Terminal access required")).toBeTruthy();
+      }
     });
   }
 
