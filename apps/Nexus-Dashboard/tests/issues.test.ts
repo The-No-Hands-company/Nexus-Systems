@@ -66,12 +66,36 @@ describe("renderBody", () => {
 });
 
 describe("fileIssue", () => {
+  /**
+   * Every test here stubs fetch, without exception.
+   *
+   * The first version passed `undefined` as the token to mean "not
+   * configured". That is not what it means: an omitted argument falls through
+   * to the default, which reads process.env.NEXUS_ISSUES_TOKEN — and bun
+   * auto-loads apps/Nexus-Dashboard/.env, so the moment a real token existed
+   * on this machine the suite started making live calls to GitHub. With a
+   * valid token it would have filed a real issue titled "t" on every run.
+   *
+   * An empty string is the honest way to say "no token", and stubbing fetch
+   * globally means a mistake like that cannot reach the network again.
+   */
+  const noNetwork = () =>
+    ((async () => {
+      throw new Error("test attempted a real network call");
+    }) as typeof fetch);
+
   it("reports unconfigured rather than failing obscurely", async () => {
-    const r = await fileIssue({ title: "t", body: "b" }, "user-1", undefined);
-    expect(r.ok).toBe(false);
-    if (!r.ok) {
-      expect(r.status).toBe(503);
-      expect(r.error).toContain("not configured");
+    const original = globalThis.fetch;
+    globalThis.fetch = noNetwork();
+    try {
+      const r = await fileIssue({ title: "t", body: "b" }, "user-1", "");
+      expect(r.ok).toBe(false);
+      if (!r.ok) {
+        expect(r.status).toBe(503);
+        expect(r.error).toContain("not configured");
+      }
+    } finally {
+      globalThis.fetch = original;
     }
   });
 

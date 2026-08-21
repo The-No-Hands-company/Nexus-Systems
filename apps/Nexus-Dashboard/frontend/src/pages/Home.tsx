@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
-import { me, type Me } from "../api";
+import { me, listApps, type Me, type AppEntry } from "../api";
 import Grid from "./Grid";
 import Shell from "../shell/Shell";
 
@@ -43,30 +43,150 @@ export default function Home({ sidebar }: { sidebar?: ReactNode }) {
     return sidebar ? <Shell sidebar={sidebar}>{<Grid />}</Shell> : <Grid />;
   }
 
+  return <SignedOut />;
+}
+
+/**
+ * The front door.
+ *
+ * This was a max-w-xl section pinned to the top-left of an otherwise empty
+ * black viewport: a heading, three buttons, one line of explanation, and about
+ * eighty-five percent dead space. It carried no header, no footer and no
+ * semantic landmarks at all — a screen reader found no header, no main and no
+ * nav — and it offered no route back to tnhc.dev, so arriving here from the
+ * marketing site was a one-way trip.
+ *
+ * It also asked a stranger to request an account without showing them a single
+ * thing they would get. The ecosystem's own registry is public at /api/apps, so
+ * there is no reason to describe the product in the abstract when it can list
+ * what is actually running, right now, with live health.
+ */
+function SignedOut() {
+  const [apps, setApps] = useState<AppEntry[] | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    // Best effort. The door must open even if the registry is unreachable —
+    // this is decoration around the sign-in, never a precondition for it.
+    void listApps()
+      .then((a) => { if (!cancelled) setApps(a); })
+      .catch(() => { if (!cancelled) setApps([]); });
+    return () => { cancelled = true; };
+  }, []);
+
+  const healthy = (apps ?? []).filter((a) => a.health === "healthy");
+
   return (
-    <section className="mx-auto max-w-xl p-8">
-      <h1 className="text-2xl font-semibold">Nexus</h1>
-      <p className="mt-2 text-zinc-400">One account for every app in the ecosystem.</p>
-
-      <div className="mt-6 flex flex-wrap gap-3">
+    <div className="flex min-h-screen flex-col bg-bg-canvas text-text-primary">
+      <header
+        role="banner"
+        className="flex h-14 shrink-0 items-center justify-between border-b border-border-subtle px-6"
+      >
+        <span className="font-semibold tracking-tight">Nexus</span>
+        {/*
+          The way back. Someone arriving from tnhc.dev previously had no route
+          home short of editing the URL, which is the specific complaint that
+          started this rewrite.
+        */}
         <a
-          href={`${AUTH_LOGIN_URL}?redirect_uri=${encodeURIComponent(window.location.origin)}`}
-          className="rounded bg-blue-600 px-4 py-2 font-medium"
+          href="https://tnhc.dev"
+          className="text-sm text-text-muted transition-colors hover:text-text-primary"
         >
-          Sign in
+          tnhc.dev
         </a>
-        <Link to="/request" className="rounded border border-zinc-700 px-4 py-2">
-          Request access
-        </Link>
-        <Link to="/claim" className="rounded border border-zinc-700 px-4 py-2">
-          Claim your account
-        </Link>
-      </div>
+      </header>
 
-      <p className="mt-6 text-sm text-zinc-500">
-        Access is invite-only for now. Request an account and you will be given a claim code to
-        save — there is no confirmation email.
-      </p>
-    </section>
+      <main role="main" className="flex flex-1 items-center justify-center px-6 py-16">
+        <div className="w-full max-w-3xl">
+          <h1 className="text-4xl font-semibold tracking-tight md:text-5xl">
+            One account for every app in the ecosystem.
+          </h1>
+          <p className="mt-5 max-w-2xl text-lg leading-relaxed text-text-muted">
+            Sign in once and every Nexus app knows who you are — mail, chat,
+            drawing, hosting, the cloud console. No separate passwords, no app
+            asking you to register again.
+          </p>
+
+          <div className="mt-9 flex flex-wrap gap-3">
+            <a
+              href={`${AUTH_LOGIN_URL}?redirect_uri=${encodeURIComponent(window.location.origin)}`}
+              className="rounded-md bg-accent px-6 py-3 font-medium text-void"
+            >
+              Sign in
+            </a>
+            <Link
+              to="/request"
+              className="rounded-md border border-border-subtle px-6 py-3 hover:bg-bg-elevated"
+            >
+              Request access
+            </Link>
+            <Link
+              to="/claim"
+              className="rounded-md border border-border-subtle px-6 py-3 hover:bg-bg-elevated"
+            >
+              Claim your account
+            </Link>
+          </div>
+
+          <p className="mt-5 max-w-2xl text-sm leading-relaxed text-text-muted">
+            Access is invite-only for now. Request an account and you will be
+            given a claim code to save — there is no confirmation email, by
+            design: this node cannot send mail off-network, so nothing here
+            depends on an inbox you would have to wait for.
+          </p>
+
+          {healthy.length > 0 && (
+            <section aria-label="Apps running now" className="mt-14">
+              <h2 className="font-mono text-[11px] uppercase tracking-[0.2em] text-text-muted">
+                Running right now
+              </h2>
+              <ul className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                {healthy.map((app) => (
+                  <li
+                    key={app.id}
+                    className="rounded-lg border border-border-subtle bg-bg-elevated/40 p-4"
+                  >
+                    <div className="flex items-center gap-2">
+                      <span
+                        aria-hidden="true"
+                        className="h-1.5 w-1.5 rounded-full bg-emerald-400"
+                      />
+                      <span className="text-sm font-medium">{app.name}</span>
+                    </div>
+                    <p className="mt-1.5 line-clamp-2 text-xs leading-relaxed text-text-muted">
+                      {app.description}
+                    </p>
+                  </li>
+                ))}
+              </ul>
+              <p className="mt-4 text-xs text-text-muted">
+                Live health, read from the registry when this page loaded — not a
+                list someone maintains by hand.
+              </p>
+            </section>
+          )}
+        </div>
+      </main>
+
+      <footer
+        role="contentinfo"
+        className="shrink-0 border-t border-border-subtle px-6 py-5"
+      >
+        <nav aria-label="Elsewhere" className="flex flex-wrap gap-x-6 gap-y-2 text-sm text-text-muted">
+          <a href="https://tnhc.dev" className="hover:text-text-primary">Home</a>
+          <a href="https://tnhc.dev/apps" className="hover:text-text-primary">All apps</a>
+          <a href="https://tnhc.dev/api" className="hover:text-text-primary">API</a>
+          <a href="https://tnhc.dev/changelog" className="hover:text-text-primary">Changelog</a>
+          <a
+            href="https://github.com/The-No-Hands-company/Nexus-Systems/issues"
+            target="_blank"
+            rel="noreferrer noopener"
+            className="hover:text-text-primary"
+          >
+            Report a problem
+          </a>
+        </nav>
+      </footer>
+    </div>
   );
 }

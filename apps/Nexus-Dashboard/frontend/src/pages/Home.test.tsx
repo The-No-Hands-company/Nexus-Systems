@@ -79,11 +79,25 @@ describe("Home", () => {
     expect(screen.getByRole("link", { name: /claim/i })).toBeTruthy();
   });
 
-  it("never shows the grid to a signed-out visitor", async () => {
+  it("never shows the launcher to a signed-out visitor", async () => {
     stubFetch(false);
     render(<MemoryRouter><Home /></MemoryRouter>);
     await waitFor(() => expect(screen.getByRole("link", { name: /sign in/i })).toBeTruthy());
-    expect(screen.queryByText("Nexus Chat")).toBeNull();
+
+    // The invariant is "no launcher", not "no app names".
+    //
+    // This asserted queryByText("Nexus Chat") was null, which conflated the
+    // two. App names are not secret: /api/apps serves them unauthenticated and
+    // tnhc.dev/apps publishes the whole directory. Hiding them on this one
+    // page protected nothing while leaving the front door unable to show a
+    // stranger what they would be signing in to.
+    //
+    // What must not appear is Grid's interactive affordance — a link into an
+    // app for someone with no session, which lands them on a login redirect
+    // and looks broken. The signed-out page may name apps; it may not offer to
+    // open them.
+    expect(screen.queryByRole("link", { name: /nexus chat/i })).toBeNull();
+    expect(screen.queryByRole("link", { name: /nexus mail/i })).toBeNull();
   });
 
   it("sends the user back here after signing in", async () => {

@@ -98,6 +98,24 @@ cmd_start() {
     fi
     : "${NEXUS_CLOUD_API_KEY:?not exported and not found in apps/Nexus-Cloud/.env — an empty key disables Cloud auth entirely}"
 
+    # The dashboard files issue reports to GitHub on a signed-in user's behalf,
+    # which needs a token with Issues: write on the Nexus-Systems repo. Same
+    # adoption pattern as Cloud's key, and for the same reason: passing an
+    # unset variable explicitly would set it to empty in the child and override
+    # the .env that bun would otherwise load, turning "configured" into
+    # "silently unconfigured".
+    #
+    # Not a hard stop. Without it /api/issues answers 503 explaining itself and
+    # everything else in the dashboard works, so a missing token is a degraded
+    # feature rather than a reason to refuse to boot.
+    if [ -z "${NEXUS_ISSUES_TOKEN:-}" ] && [ -f "$ROOT/apps/Nexus-Dashboard/.env" ]; then
+        NEXUS_ISSUES_TOKEN="$(sed -n 's/^NEXUS_ISSUES_TOKEN=//p' "$ROOT/apps/Nexus-Dashboard/.env" \
+            | head -1 | tr -d '\r' | sed -e 's/^"//' -e 's/"$//' -e "s/^'//" -e "s/'\$//")"
+        [ -n "$NEXUS_ISSUES_TOKEN" ] && log "Adopted NEXUS_ISSUES_TOKEN from apps/Nexus-Dashboard/.env"
+    fi
+    export NEXUS_ISSUES_TOKEN="${NEXUS_ISSUES_TOKEN:-}"
+    [ -z "$NEXUS_ISSUES_TOKEN" ] && log "NEXUS_ISSUES_TOKEN unset — in-app issue reporting will answer 503"
+
     # Same pattern for Email's database URL: the value lives beside the app so
     # a credential is never written into this script or the repo.
     if [ -z "${NEXUS_EMAIL_DATABASE_URL:-}" ] && [ -f "$ROOT/apps/Nexus-Email/.env" ]; then
@@ -266,6 +284,7 @@ cmd_start() {
             NEXUS_AUTH_INTERNAL_URL=http://127.0.0.1:4310 \
             NEXUS_CLOUD_URL=http://localhost:8787 \
             NEXUS_CLOUD_API_KEY="$NEXUS_CLOUD_API_KEY" \
+            NEXUS_ISSUES_TOKEN="$NEXUS_ISSUES_TOKEN" \
             bun run src/index.ts
     fi
 
