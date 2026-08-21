@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto"; import { startHeartbeat } from "./clou
 import { PhantomApp } from "../../../packages/phantom-sdk/src/integration";
 import { NexusDiscovery } from "../../../packages/nexus-discovery/src/index"; import { TerminalEngine } from "./terminal-engine";
 import { spawnShell, getSession, sessionCount, reapIdle, killAll } from "./pty";
-import { callerIdentity, terminalEnabled } from "./auth";
+import { callerIdentity, canUseTerminal, terminalEnabled } from "./auth";
 import { TerminalAudit } from "./audit";
 
 /**
@@ -34,7 +34,7 @@ export async function createServer() { const port = Number(process.env.PORT || "
   // ceiling eventually refuses new ones and nobody can see why.
   const reaper = setInterval(() => reapIdle(), 60_000);
 
-  const server = Bun.serve<ShellSocket>({ port,
+  const server = Bun.serve<ShellSocket>({ port, hostname: process.env.NEXUS_BIND_HOST || "127.0.0.1",
     websocket: {
       open(ws) {
         const d = ws.data;
@@ -85,6 +85,7 @@ export async function createServer() { const port = Number(process.env.PORT || "
       // header or query parameter the browser chose to send.
       const who = await callerIdentity(request);
       if (!who) return json({ error: "not_authenticated" }, 401);
+      if (!canUseTerminal(who)) return json({ error: "forbidden" }, 403);
 
       if (sessionCount() >= 8) return json({ error: "too_many_sessions" }, 503);
 
@@ -101,6 +102,7 @@ export async function createServer() { const port = Number(process.env.PORT || "
     if (request.method === "GET" && path === "/api/v1/terminal/audit") {
       const who = await callerIdentity(request);
       if (!who) return json({ error: "not_authenticated" }, 401);
+      if (!canUseTerminal(who)) return json({ error: "forbidden" }, 403);
       return json({ sessions: audit.recent() }, 200);
     }
 

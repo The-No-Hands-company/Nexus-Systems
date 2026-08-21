@@ -7,7 +7,8 @@ on the table. This document exists so the choice stays visible.
 
 ## What an attacker gets
 
-Whoever reaches this endpoint with a valid session can:
+Whoever reaches this endpoint with a valid Auth session whose role is exactly
+`founder` or `admin` can:
 
 - read `apps/Nexus-Cloud/.env`, `apps/Nexus-Dashboard/.env` and every other
   credential on the box — the Cloudflare token, the Cloud API key, the GitHub
@@ -24,14 +25,15 @@ chosen over a scoped command runner and a containerised shell.
 ## What actually stands between the internet and that shell
 
 1. **Invite-only accounts.** There is no self-service signup. An operator
-   approves each request and the applicant claims it with a code. This is the
-   real gate.
-2. **A valid Auth session.** The endpoint refuses anything else.
+   approves each request and the applicant claims it with a code.
+2. **Founder/admin authorization.** The endpoint accepts a valid Auth session
+   only when its role is exactly `founder` or `admin`; every other role is
+   forbidden.
 3. **Session ceiling and idle reaping.** At most 8 concurrent shells, each
    killed after 30 minutes, so an abandoned tab does not leave a live shell
    until reboot.
 4. **A full audit trail.** Every session start, every byte of input, and every
-   exit is recorded with the Auth subject that caused it.
+   exit is recorded with the Auth subject that caused it. Every input byte is audited; secrets typed interactively can be recorded in the audit database.
 
 Note what is *not* in that list: origin isolation. The shell endpoint is
 same-origin with the dashboard, so **one XSS anywhere on app.tnhc.dev is a
@@ -40,10 +42,8 @@ cookies does not help here.
 
 ## If this becomes uncomfortable
 
-Two changes, in increasing order of effort, neither requiring a rewrite:
+One change, requiring no rewrite:
 
-- **Restrict by role.** Gate on `founder`/`admin` rather than any signed-in
-  user. One condition in the WebSocket upgrade.
 - **Move it into a container.** Run the shell in a per-user container with no
   host mount, no docker socket, `--cap-drop ALL` and a memory cap. The
   `spawnShell` interface does not change; only what it spawns does.

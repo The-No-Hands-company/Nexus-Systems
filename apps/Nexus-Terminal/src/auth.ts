@@ -13,6 +13,12 @@ const AUTH_URL = () =>
 
 export type Caller = { subject: string; role: string | null };
 
+const TERMINAL_ROLES = new Set(["founder", "admin"]);
+
+export function canUseTerminal(caller: Caller | null): caller is Caller {
+  return !!caller?.role && TERMINAL_ROLES.has(caller.role);
+}
+
 export async function callerIdentity(req: Request): Promise<Caller | null> {
   const cookie = req.headers.get("cookie");
   // No cookie is not an error worth a round trip: it cannot be authenticated.

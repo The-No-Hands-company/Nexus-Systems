@@ -13,8 +13,30 @@ import { createServer } from "../src/server";
 describe("terminal attach guards", () => {
   let base = "";
   let handle: Awaited<ReturnType<typeof createServer>>;
+  let authServer: ReturnType<typeof Bun.serve>;
+  const originalAuthUrl = process.env.NEXUS_AUTH_INTERNAL_URL;
 
   beforeAll(async () => {
+    // This is a real HTTP boundary with a deliberately tiny Auth double: the
+    // terminal must use the role Auth gives it for the caller's own cookie.
+    authServer = Bun.serve({
+      hostname: "127.0.0.1",
+      port: 0,
+      fetch(request) {
+        const cookie = request.headers.get("cookie") ?? "";
+        const role = cookie.match(/(?:^|;\s*)role=([^;]*)/)?.[1];
+
+        if (role === "outage") return new Response(null, { status: 503 });
+        if (role === undefined || role === "missing-session") {
+          return new Response(null, { status: 401 });
+        }
+        if (!role) return Response.json({ user: { id: "user-without-role" } });
+
+        return Response.json({ user: { id: `user-${role}`, role } });
+      },
+    });
+    process.env.NEXUS_AUTH_INTERNAL_URL = `http://127.0.0.1:${authServer.port}`;
+
     // Explicitly off. The default must be safe, and asserting against it here
     // also proves the flag is actually read.
     delete process.env.NEXUS_TERMINAL_ENABLED;
@@ -23,7 +45,12 @@ describe("terminal attach guards", () => {
     base = `http://127.0.0.1:${handle.server.port}`;
   });
 
-  afterAll(() => handle.close());
+  afterAll(() => {
+    handle.close();
+    authServer.stop();
+    if (originalAuthUrl === undefined) delete process.env.NEXUS_AUTH_INTERNAL_URL;
+    else process.env.NEXUS_AUTH_INTERNAL_URL = originalAuthUrl;
+  });
 
   it("refuses to attach when the shell is not explicitly enabled", async () => {
     const res = await fetch(`${base}/api/v1/terminal/attach`);
@@ -72,5 +99,66 @@ describe("terminal attach guards", () => {
     // the thing it audits.
     const res = await fetch(`${base}/api/v1/terminal/audit`);
     expect(res.status).toBe(401);
+  });
+
+  it("allows founders and admins through attach authorization", async () => {
+    process.env.NEXUS_TERMINAL_ENABLED = "true";
+    try {
+      for (const role of ["founder", "admin"]) {
+        const res = await fetch(`${base}/api/v1/terminal/attach`, {
+          headers: { cookie: `role=${role}` },
+        });
+        // fetch cannot upgrade a WebSocket, so an authorised caller reaches
+        // the upgrade handler and receives its explicit HTTP fallback.
+        expect(res.status).toBe(400);
+        expect((await res.json() as { error: string }).error).toBe("upgrade_failed");
+      }
+    } finally {
+      delete process.env.NEXUS_TERMINAL_ENABLED;
+    }
+  });
+
+  it("rejects ordinary roles before terminal attach capacity or upgrade", async () => {
+    process.env.NEXUS_TERMINAL_ENABLED = "true";
+    try {
+      for (const role of ["member", "operator", ""]) {
+        const res = await fetch(`${base}/api/v1/terminal/attach`, {
+          headers: { cookie: `role=${role}` },
+        });
+        expect(res.status).toBe(403);
+        expect((await res.json() as { error: string }).error).toBe("forbidden");
+      }
+    } finally {
+      delete process.env.NEXUS_TERMINAL_ENABLED;
+    }
+  });
+
+  it("allows founders and admins to read audit records", async () => {
+    for (const role of ["founder", "admin"]) {
+      const res = await fetch(`${base}/api/v1/terminal/audit`, {
+        headers: { cookie: `role=${role}` },
+      });
+      expect(res.status).toBe(200);
+    }
+  });
+
+  it("rejects ordinary roles from the audit endpoint", async () => {
+    for (const role of ["member", "operator", ""]) {
+      const res = await fetch(`${base}/api/v1/terminal/audit`, {
+        headers: { cookie: `role=${role}` },
+      });
+      expect(res.status).toBe(403);
+      expect((await res.json() as { error: string }).error).toBe("forbidden");
+    }
+  });
+
+  it("fails closed when Auth has no session or is unavailable", async () => {
+    for (const role of ["missing-session", "outage"]) {
+      const res = await fetch(`${base}/api/v1/terminal/audit`, {
+        headers: { cookie: `role=${role}` },
+      });
+      expect(res.status).toBe(401);
+      expect((await res.json() as { error: string }).error).toBe("not_authenticated");
+    }
   });
 });
