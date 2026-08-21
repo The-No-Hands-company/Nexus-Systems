@@ -23,14 +23,25 @@ type FakeController = TerminalSessionController & {
   report(state: SessionState): void;
 };
 
-function createHarness() {
+function createHarness({
+  focusTerminalOnControllerFocus = false,
+}: {
+  focusTerminalOnControllerFocus?: boolean;
+} = {}) {
   const controllers: FakeController[] = [];
   const createSession = vi.fn((options: CreateTerminalSessionOptions): TerminalSessionController => {
+    let terminalFocusTarget: HTMLButtonElement | null = null;
     const controller: FakeController = {
       id: options.id,
       startedAt: 1_725_000_000_000 + controllers.length * 1_000,
-      mount: vi.fn(),
-      focus: vi.fn(),
+      mount: vi.fn((element: HTMLElement) => {
+        if (!focusTerminalOnControllerFocus) return;
+        terminalFocusTarget = document.createElement("button");
+        terminalFocusTarget.type = "button";
+        terminalFocusTarget.tabIndex = -1;
+        element.append(terminalFocusTarget);
+      }),
+      focus: vi.fn(() => terminalFocusTarget?.focus()),
       fit: vi.fn(),
       dispose: vi.fn(),
       report(state) {
@@ -55,8 +66,8 @@ describe("TerminalView", () => {
     );
 
     await waitFor(() => expect(screen.getAllByRole("tab")).toHaveLength(1));
-    expect(controllers.filter((controller) => controller.dispose.mock.calls.length === 0)).toHaveLength(1);
-    expect(controllers.every((controller) => controller.dispose.mock.calls.length <= 1)).toBe(true);
+    expect(createSession).toHaveBeenCalledTimes(1);
+    expect(controllers).toHaveLength(1);
   });
 
   it("creates independent tabs and keeps inactive terminal buffers mounted", async () => {
@@ -91,19 +102,23 @@ describe("TerminalView", () => {
   });
 
   it("selects and focuses tabs with horizontal keyboard navigation", async () => {
-    const { controllers, createSession } = createHarness();
+    const { controllers, createSession } = createHarness({
+      focusTerminalOnControllerFocus: true,
+    });
     render(<TerminalView user={founder} createSession={createSession} />);
     await waitFor(() => expect(controllers).toHaveLength(1));
     fireEvent.click(screen.getByRole("button", { name: "New terminal session" }));
     await waitFor(() => expect(controllers).toHaveLength(2));
     const second = screen.getByRole("tab", { name: "Terminal 2" });
     second.focus();
+    const terminalFocusCalls = controllers[0]?.focus.mock.calls.length;
 
     fireEvent.keyDown(second, { key: "ArrowLeft" });
 
     const first = screen.getByRole("tab", { name: "Terminal 1" });
     expect(first.getAttribute("aria-selected")).toBe("true");
     expect(document.activeElement).toBe(first);
+    expect(controllers[0]?.focus).toHaveBeenCalledTimes(terminalFocusCalls ?? 0);
   });
 
   it("closes only the selected tab", async () => {
@@ -197,6 +212,20 @@ describe("TerminalView", () => {
 
     expect(screen.queryByRole("dialog", { name: "Terminal session details" })).toBeNull();
     expect(document.activeElement).toBe(detailsButton);
+  });
+
+  it("closes details on Escape outside the drawer without stealing focus", async () => {
+    const { controllers, createSession } = createHarness();
+    render(<TerminalView user={founder} createSession={createSession} />);
+    await waitFor(() => expect(controllers).toHaveLength(1));
+    fireEvent.click(screen.getByRole("button", { name: "Details" }));
+    const tab = screen.getByRole("tab", { name: "Terminal 1" });
+    tab.focus();
+
+    fireEvent.keyDown(tab, { key: "Escape" });
+
+    expect(screen.queryByRole("dialog", { name: "Terminal session details" })).toBeNull();
+    expect(document.activeElement).toBe(tab);
   });
 
   it("disposes every controller exactly once across close and unmount", async () => {

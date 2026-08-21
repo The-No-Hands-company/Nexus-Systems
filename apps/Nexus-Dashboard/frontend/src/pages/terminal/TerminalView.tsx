@@ -49,10 +49,12 @@ function TerminalPanel({
   active,
   controller,
   label,
+  preserveTabFocus,
 }: {
   active: boolean;
   controller: TerminalSessionController;
   label: string;
+  preserveTabFocus: boolean;
 }) {
   const mountRef: RefObject<HTMLDivElement> = useRef(null);
 
@@ -63,8 +65,8 @@ function TerminalPanel({
   useEffect(() => {
     if (!active) return;
     controller.fit();
-    controller.focus();
-  }, [active, controller]);
+    if (!preserveTabFocus) controller.focus();
+  }, [active, controller, preserveTabFocus]);
 
   return (
     <section
@@ -97,9 +99,11 @@ export default function TerminalView({
   const [clock, setClock] = useState(() => now());
   const detailsButtonRef = useRef<HTMLButtonElement>(null);
   const detailsCloseRef = useRef<HTMLButtonElement>(null);
+  const detailsDrawerRef = useRef<HTMLElement>(null);
   const emptySessionButtonRef = useRef<HTMLButtonElement>(null);
   const restoreDetailsFocus = useRef(false);
   const focusAfterClose = useRef<string | "new-session" | null>(null);
+  const keyboardActivatedTab = useRef<string | null>(null);
 
   const updateState = useCallback((id: string, state: SessionState) => {
     setTabs((current) => current.map((tab) => (tab.id === id ? { ...tab, state } : tab)));
@@ -123,22 +127,12 @@ export default function TerminalView({
   }, [createSession, updateState]);
 
   useEffect(() => {
-    if (controllers.current.size !== 0) return;
-    const initial = newSession();
-
-    // React StrictMode deliberately replays effects. Remove the session owned
-    // by this setup during that replay so its disposed controller cannot remain
-    // as a blank tab when the next setup creates the real initial session.
-    return () => {
-      const controller = controllers.current.get(initial.id);
-      if (controller) {
-        controllers.current.delete(initial.id);
-        controller.dispose();
-      }
-      setTabs((current) => current.filter((tab) => tab.id !== initial.id));
-      setActiveId((selected) => (selected === initial.id ? null : selected));
-      if (controllers.current.size === 0) nextSessionNumber.current = initial.number;
-    };
+    // Deferring one turn lets StrictMode cancel its first setup during effect
+    // replay before any controller (and therefore any PTY) is constructed.
+    const timer = window.setTimeout(() => {
+      if (controllers.current.size === 0) newSession();
+    }, 0);
+    return () => window.clearTimeout(timer);
   }, [newSession]);
 
   useEffect(() => {
@@ -168,6 +162,19 @@ export default function TerminalView({
       restoreDetailsFocus.current = false;
       detailsButtonRef.current?.focus();
     }
+  }, [detailsOpen]);
+
+  useEffect(() => {
+    if (!detailsOpen) return;
+    const onEscape = (event: globalThis.KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      const focused = document.activeElement;
+      restoreDetailsFocus.current = !!focused && !!detailsDrawerRef.current?.contains(focused);
+      setDetailsOpen(false);
+    };
+    window.addEventListener("keydown", onEscape, true);
+    return () => window.removeEventListener("keydown", onEscape, true);
   }, [detailsOpen]);
 
   const closeSession = useCallback((id: string) => {
@@ -222,23 +229,19 @@ export default function TerminalView({
     event.preventDefault();
     const target = tabs[targetIndex];
     if (!target) return;
+    keyboardActivatedTab.current = target.id;
     setActiveId(target.id);
     document.getElementById(`tab-${target.id}`)?.focus();
   };
 
   const openDetails = () => {
-    restoreDetailsFocus.current = true;
+    restoreDetailsFocus.current = false;
     setDetailsOpen(true);
   };
 
-  const closeDetails = () => setDetailsOpen(false);
-
-  const handleDetailsKeyDown = (event: KeyboardEvent<HTMLElement>) => {
-    if (event.key === "Escape") {
-      event.preventDefault();
-      closeDetails();
-      return;
-    }
+  const closeDetails = () => {
+    restoreDetailsFocus.current = true;
+    setDetailsOpen(false);
   };
 
   return (
@@ -264,7 +267,10 @@ export default function TerminalView({
                   aria-selected={active}
                   aria-controls={`panel-${tab.id}`}
                   tabIndex={active ? 0 : -1}
-                  onClick={() => setActiveId(tab.id)}
+                  onClick={() => {
+                    keyboardActivatedTab.current = null;
+                    setActiveId(tab.id);
+                  }}
                   onKeyDown={(event) => selectTabFromKeyboard(event, index)}
                   className="h-full px-4 text-sm text-zinc-200 hover:bg-zinc-700"
                 >
@@ -323,6 +329,7 @@ export default function TerminalView({
               active={tab.id === activeId}
               controller={tab.controller}
               label={tab.label}
+              preserveTabFocus={keyboardActivatedTab.current === tab.id}
             />
           ))}
         </div>
@@ -341,9 +348,9 @@ export default function TerminalView({
 
       {detailsOpen && activeTab && (
         <aside
+          ref={detailsDrawerRef}
           role="dialog"
           aria-label="Terminal session details"
-          onKeyDown={handleDetailsKeyDown}
           className="absolute inset-y-0 right-0 z-10 flex w-full max-w-sm flex-col border-l border-zinc-700 bg-zinc-800 shadow-2xl"
         >
           <div className="flex h-12 shrink-0 items-center border-b border-zinc-700 px-4">
