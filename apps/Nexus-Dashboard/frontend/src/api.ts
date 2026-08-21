@@ -456,3 +456,39 @@ export async function reportIssue(input: {
     body: JSON.stringify(input),
   });
 }
+
+/** A system notification, as Hosting recorded it. */
+export type Notification = {
+  id: number;
+  event: string;
+  title: string;
+  body: string | null;
+  href: string | null;
+  readAt: string | null;
+  createdAt: string;
+};
+
+/**
+ * The signed-in user's notifications.
+ *
+ * Proxied through this origin to Nexus-Hosting, which owns the events. All
+ * three calls are scoped server-side to the caller's session — nothing here
+ * identifies a user, so nothing here can ask for somebody else's.
+ */
+export function listNotifications(unreadOnly = false) {
+  return request<{ notifications: Notification[] }>(
+    `/api/notifications${unreadOnly ? "?unread=true" : ""}`,
+  ).then((r) => r.notifications);
+}
+
+export function unreadNotificationCount() {
+  return request<{ unread: number }>("/api/notifications/unread-count").then((r) => r.unread);
+}
+
+export function markNotificationRead(id: number) {
+  return request<{ ok: true }>(`/api/notifications/${id}/read`, { method: "POST" });
+}
+
+export function markAllNotificationsRead() {
+  return request<{ marked: number }>("/api/notifications/read-all", { method: "POST" });
+}

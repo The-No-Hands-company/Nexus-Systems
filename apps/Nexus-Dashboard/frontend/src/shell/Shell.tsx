@@ -15,6 +15,7 @@ export default function Shell({
   sidebar,
   children,
   user,
+  utility,
 }: {
   sidebar: ReactNode;
   children: ReactNode;
@@ -26,6 +27,14 @@ export default function Shell({
    * above claims and which a fetch would quietly break.
    */
   user?: { username: string; email: string } | null;
+  /**
+   * The header's utility slot — currently the notification bell.
+   *
+   * A slot rather than the bell itself, because the bell fetches and this
+   * component deliberately does not. Passing it in keeps Shell renderable in
+   * a test without a server, which is the property the comment above claims.
+   */
+  utility?: ReactNode;
 }) {
   return (
     <div className="flex h-screen flex-col bg-zinc-900 text-zinc-100">
@@ -53,10 +62,12 @@ export default function Shell({
             knowing /account existed. ml-auto rather than justify-between, so
             the wordmark keeps its place when this is absent.
           */}
+          {utility && <div className="ml-auto">{utility}</div>}
+
           {user && (
             <Link
               to="/account"
-              className="ml-auto flex items-center gap-2 rounded-md px-2 py-1 text-sm text-zinc-500 hover:bg-zinc-800 hover:text-zinc-100"
+              className={`${utility ? "" : "ml-auto"} flex items-center gap-2 rounded-md px-2 py-1 text-sm text-zinc-500 hover:bg-zinc-800 hover:text-zinc-100`}
               title={user.email}
             >
               <span

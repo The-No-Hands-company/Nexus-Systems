@@ -15,6 +15,7 @@ import CloudIdentity from "./pages/cloud/CloudIdentity";
 import CloudApi from "./pages/cloud/CloudApi";
 import { listApps, me, type AppEntry, type Me } from "./api";
 import Shell from "./shell/Shell";
+import NotificationBell from "./shell/NotificationBell";
 import Launcher from "./shell/Launcher";
 import AppFrame from "./shell/AppFrame";
 import ReportIssue from "./pages/ReportIssue";
@@ -65,7 +66,7 @@ function ShellRoute({ state, onRetry, user }: { state: AppsState; onRetry: () =>
   const appId = match?.id ?? "";
 
   return (
-    <Shell sidebar={<Launcher apps={apps} activeId={appId} />} user={user}>
+    <Shell sidebar={<Launcher apps={apps} activeId={appId} />} user={user} utility={user ? <NotificationBell /> : null}>
       {state.status === "loading" && (
         <div className="flex h-full items-center justify-center p-8 text-zinc-500">
           Loading…
@@ -89,7 +90,11 @@ function ShellRoute({ state, onRetry, user }: { state: AppsState; onRetry: () =>
  */
 function ShellView({ state, children, user }: { state: AppsState; children: ReactNode; user: Me | null }) {
   const apps = state.status === "ready" ? state.apps : [];
-  return <Shell sidebar={<Launcher apps={apps} />} user={user}>{children}</Shell>;
+  return (
+    <Shell sidebar={<Launcher apps={apps} />} user={user} utility={user ? <NotificationBell /> : null}>
+      {children}
+    </Shell>
+  );
 }
 
 /**
