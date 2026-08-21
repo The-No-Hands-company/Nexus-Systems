@@ -82,7 +82,7 @@ describe("fileIssue", () => {
   const noNetwork = () =>
     ((async () => {
       throw new Error("test attempted a real network call");
-    }) as typeof fetch);
+    }) as unknown as typeof fetch);
 
   it("reports unconfigured rather than failing obscurely", async () => {
     const original = globalThis.fetch;
@@ -106,7 +106,7 @@ describe("fileIssue", () => {
     globalThis.fetch = (async () =>
       new Response(JSON.stringify({ message: "Bad credentials for repo secret/private" }), {
         status: 401,
-      })) as typeof fetch;
+      })) as unknown as typeof fetch;
     try {
       const r = await fileIssue({ title: "t", body: "b" }, "user-1", "tok");
       expect(r.ok).toBe(false);
@@ -125,7 +125,7 @@ describe("fileIssue", () => {
     globalThis.fetch = (async () =>
       new Response(JSON.stringify({ number: 42, html_url: "https://github.com/o/r/issues/42" }), {
         status: 201,
-      })) as typeof fetch;
+      })) as unknown as typeof fetch;
     try {
       const r = await fileIssue({ title: "t", body: "b" }, "user-1", "tok");
       expect(r.ok).toBe(true);
@@ -142,7 +142,7 @@ describe("fileIssue", () => {
     const original = globalThis.fetch;
     globalThis.fetch = (async () => {
       throw new Error("ECONNREFUSED");
-    }) as typeof fetch;
+    }) as unknown as typeof fetch;
     try {
       const r = await fileIssue({ title: "t", body: "b" }, "user-1", "tok");
       expect(r.ok).toBe(false);

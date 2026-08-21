@@ -57,7 +57,14 @@ export function validateReport(input: unknown): { report: IssueReport } | { erro
   const app = typeof r.app === "string" && r.app.trim() ? r.app.trim().slice(0, 60) : undefined;
   const url = typeof r.url === "string" && r.url.trim() ? r.url.trim().slice(0, 300) : undefined;
 
-  return { report: { title, body, app, url } };
+  return {
+    report: {
+      title,
+      body,
+      ...(app === undefined ? {} : { app }),
+      ...(url === undefined ? {} : { url }),
+    },
+  };
 }
 
 /**
