@@ -77,10 +77,10 @@ function SignedOut() {
   const healthy = (apps ?? []).filter((a) => a.health === "healthy");
 
   return (
-    <div className="flex min-h-screen flex-col bg-bg-canvas text-text-primary">
+    <div className="flex min-h-screen flex-col bg-zinc-900 text-zinc-100">
       <header
         role="banner"
-        className="flex h-14 shrink-0 items-center justify-between border-b border-border-subtle px-6"
+        className="flex h-14 shrink-0 items-center justify-between border-b border-zinc-700 px-6"
       >
         <span className="font-semibold tracking-tight">Nexus</span>
         {/*
@@ -90,7 +90,7 @@ function SignedOut() {
         */}
         <a
           href="https://tnhc.dev"
-          className="text-sm text-text-muted transition-colors hover:text-text-primary"
+          className="text-sm text-zinc-500 transition-colors hover:text-zinc-100"
         >
           tnhc.dev
         </a>
@@ -101,7 +101,7 @@ function SignedOut() {
           <h1 className="text-4xl font-semibold tracking-tight md:text-5xl">
             One account for every app in the ecosystem.
           </h1>
-          <p className="mt-5 max-w-2xl text-lg leading-relaxed text-text-muted">
+          <p className="mt-5 max-w-2xl text-lg leading-relaxed text-zinc-500">
             Sign in once and every Nexus app knows who you are — mail, chat,
             drawing, hosting, the cloud console. No separate passwords, no app
             asking you to register again.
@@ -110,25 +110,25 @@ function SignedOut() {
           <div className="mt-9 flex flex-wrap gap-3">
             <a
               href={`${AUTH_LOGIN_URL}?redirect_uri=${encodeURIComponent(window.location.origin)}`}
-              className="rounded-md bg-accent px-6 py-3 font-medium text-void"
+              className="rounded-md bg-blue-600 px-6 py-3 font-medium text-white"
             >
               Sign in
             </a>
             <Link
               to="/request"
-              className="rounded-md border border-border-subtle px-6 py-3 hover:bg-bg-elevated"
+              className="rounded-md border border-zinc-700 px-6 py-3 hover:bg-zinc-800"
             >
               Request access
             </Link>
             <Link
               to="/claim"
-              className="rounded-md border border-border-subtle px-6 py-3 hover:bg-bg-elevated"
+              className="rounded-md border border-zinc-700 px-6 py-3 hover:bg-zinc-800"
             >
               Claim your account
             </Link>
           </div>
 
-          <p className="mt-5 max-w-2xl text-sm leading-relaxed text-text-muted">
+          <p className="mt-5 max-w-2xl text-sm leading-relaxed text-zinc-500">
             Access is invite-only for now. Request an account and you will be
             given a claim code to save — there is no confirmation email, by
             design: this node cannot send mail off-network, so nothing here
@@ -137,14 +137,14 @@ function SignedOut() {
 
           {healthy.length > 0 && (
             <section aria-label="Apps running now" className="mt-14">
-              <h2 className="font-mono text-[11px] uppercase tracking-[0.2em] text-text-muted">
+              <h2 className="font-mono text-[11px] uppercase tracking-[0.2em] text-zinc-500">
                 Running right now
               </h2>
               <ul className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                 {healthy.map((app) => (
                   <li
                     key={app.id}
-                    className="rounded-lg border border-border-subtle bg-bg-elevated/40 p-4"
+                    className="rounded-lg border border-zinc-700 bg-zinc-800/40 p-4"
                   >
                     <div className="flex items-center gap-2">
                       <span
@@ -153,13 +153,13 @@ function SignedOut() {
                       />
                       <span className="text-sm font-medium">{app.name}</span>
                     </div>
-                    <p className="mt-1.5 line-clamp-2 text-xs leading-relaxed text-text-muted">
+                    <p className="mt-1.5 line-clamp-2 text-xs leading-relaxed text-zinc-500">
                       {app.description}
                     </p>
                   </li>
                 ))}
               </ul>
-              <p className="mt-4 text-xs text-text-muted">
+              <p className="mt-4 text-xs text-zinc-500">
                 Live health, read from the registry when this page loaded — not a
                 list someone maintains by hand.
               </p>
@@ -170,18 +170,18 @@ function SignedOut() {
 
       <footer
         role="contentinfo"
-        className="shrink-0 border-t border-border-subtle px-6 py-5"
+        className="shrink-0 border-t border-zinc-700 px-6 py-5"
       >
-        <nav aria-label="Elsewhere" className="flex flex-wrap gap-x-6 gap-y-2 text-sm text-text-muted">
-          <a href="https://tnhc.dev" className="hover:text-text-primary">Home</a>
-          <a href="https://tnhc.dev/apps" className="hover:text-text-primary">All apps</a>
-          <a href="https://tnhc.dev/api" className="hover:text-text-primary">API</a>
-          <a href="https://tnhc.dev/changelog" className="hover:text-text-primary">Changelog</a>
+        <nav aria-label="Elsewhere" className="flex flex-wrap gap-x-6 gap-y-2 text-sm text-zinc-500">
+          <a href="https://tnhc.dev" className="hover:text-zinc-100">Home</a>
+          <a href="https://tnhc.dev/apps" className="hover:text-zinc-100">All apps</a>
+          <a href="https://tnhc.dev/api" className="hover:text-zinc-100">API</a>
+          <a href="https://tnhc.dev/changelog" className="hover:text-zinc-100">Changelog</a>
           <a
             href="https://github.com/The-No-Hands-company/Nexus-Systems/issues"
             target="_blank"
             rel="noreferrer noopener"
-            className="hover:text-text-primary"
+            className="hover:text-zinc-100"
           >
             Report a problem
           </a>

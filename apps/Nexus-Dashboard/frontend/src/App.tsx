@@ -38,14 +38,14 @@ type AppsState =
 function AppsUnavailable({ onRetry }: { onRetry: () => void }) {
   return (
     <div className="flex h-full flex-col items-center justify-center gap-3 p-8 text-center">
-      <p className="text-text-primary">Could not load your apps.</p>
-      <p className="text-sm text-text-muted">
+      <p className="text-zinc-100">Could not load your apps.</p>
+      <p className="text-sm text-zinc-500">
         This is not the same as the app being missing — try again.
       </p>
       <button
         type="button"
         onClick={onRetry}
-        className="rounded border border-border-subtle px-4 py-2 text-sm hover:bg-bg-elevated"
+        className="rounded border border-zinc-700 px-4 py-2 text-sm hover:bg-zinc-800"
       >
         Retry
       </button>
@@ -66,7 +66,7 @@ function ShellRoute({ state, onRetry }: { state: AppsState; onRetry: () => void 
   return (
     <Shell sidebar={<Launcher apps={apps} activeId={appId} />}>
       {state.status === "loading" && (
-        <div className="flex h-full items-center justify-center p-8 text-text-muted">
+        <div className="flex h-full items-center justify-center p-8 text-zinc-500">
           Loading…
         </div>
       )}
@@ -130,7 +130,7 @@ function LegacyAppRedirect({ state, onRetry }: { state: AppsState; onRetry: () =
   if (state.status === "loading") {
     return (
       <Shell sidebar={<Launcher apps={[]} />}>
-        <div className="flex h-full items-center justify-center p-8 text-text-muted">Loading…</div>
+        <div className="flex h-full items-center justify-center p-8 text-zinc-500">Loading…</div>
       </Shell>
     );
   }

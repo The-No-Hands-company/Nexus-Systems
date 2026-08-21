@@ -32,8 +32,8 @@ export default function AppFrame({ apps, appId }: { apps: AppEntry[]; appId: str
   if (!app) {
     return (
       <div className="flex h-full flex-col items-center justify-center gap-2 p-8 text-center">
-        <p className="text-text-primary">App not found.</p>
-        <p className="text-sm text-text-muted">
+        <p className="text-zinc-100">App not found.</p>
+        <p className="text-sm text-zinc-500">
           No app is registered as <code>{appId}</code>.
         </p>
       </div>

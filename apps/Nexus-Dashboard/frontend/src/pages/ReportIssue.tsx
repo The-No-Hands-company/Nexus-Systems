@@ -59,8 +59,8 @@ export default function ReportIssue() {
   if (filed) {
     return (
       <div className="mx-auto max-w-2xl p-8">
-        <h1 className="text-2xl font-semibold text-text-primary">Thank you — that is filed.</h1>
-        <p className="mt-4 text-text-muted">
+        <h1 className="text-2xl font-semibold text-zinc-100">Thank you — that is filed.</h1>
+        <p className="mt-4 text-zinc-500">
           It is issue #{filed.number} on the public tracker. You can follow it
           there, or not — either way it has been received.
         </p>
@@ -69,14 +69,14 @@ export default function ReportIssue() {
             href={filed.url}
             target="_blank"
             rel="noreferrer noopener"
-            className="rounded border border-border px-4 py-2 text-sm text-text-primary hover:bg-surface"
+            className="rounded border border-zinc-700 px-4 py-2 text-sm text-zinc-100 hover:bg-zinc-800"
           >
             View issue #{filed.number}
           </a>
           <button
             type="button"
             onClick={() => setFiled(null)}
-            className="rounded border border-border px-4 py-2 text-sm text-text-muted hover:bg-surface"
+            className="rounded border border-zinc-700 px-4 py-2 text-sm text-zinc-500 hover:bg-zinc-800"
           >
             Report something else
           </button>
@@ -87,13 +87,13 @@ export default function ReportIssue() {
 
   return (
     <div className="mx-auto max-w-2xl p-8">
-      <h1 className="text-2xl font-semibold text-text-primary">Report a problem</h1>
-      <p className="mt-3 text-text-muted">
+      <h1 className="text-2xl font-semibold text-zinc-100">Report a problem</h1>
+      <p className="mt-3 text-zinc-500">
         Anything that looks wrong, broken, missing or merely strange. This goes
         straight to the public issue tracker — you do not need a GitHub account,
         and you do not need to be sure it is a real bug.
       </p>
-      <p className="mt-2 text-sm text-text-muted">
+      <p className="mt-2 text-sm text-zinc-500">
         Everything here is written by AI, which makes an outside pair of eyes
         worth more rather than less. A report that turns out to be nothing costs
         us a few minutes; a problem nobody mentions costs a great deal more.
@@ -101,7 +101,7 @@ export default function ReportIssue() {
 
       <form onSubmit={submit} className="mt-8 space-y-5">
         <div>
-          <label htmlFor="issue-title" className="block text-sm text-text-muted">
+          <label htmlFor="issue-title" className="block text-sm text-zinc-500">
             What happened?
           </label>
           <input
@@ -111,12 +111,12 @@ export default function ReportIssue() {
             maxLength={160}
             required
             placeholder="Deploy button does nothing on the sites page"
-            className="mt-2 w-full rounded border border-border bg-surface px-3 py-2 text-text-primary"
+            className="mt-2 w-full rounded border border-zinc-700 bg-zinc-800 px-3 py-2 text-zinc-100"
           />
         </div>
 
         <div>
-          <label htmlFor="issue-body" className="block text-sm text-text-muted">
+          <label htmlFor="issue-body" className="block text-sm text-zinc-500">
             Any detail you can give
           </label>
           <textarea
@@ -127,9 +127,9 @@ export default function ReportIssue() {
             required
             rows={9}
             placeholder="What you were doing, what you expected, what happened instead. Rough notes are fine."
-            className="mt-2 w-full rounded border border-border bg-surface px-3 py-2 font-mono text-sm text-text-primary"
+            className="mt-2 w-full rounded border border-zinc-700 bg-zinc-800 px-3 py-2 font-mono text-sm text-zinc-100"
           />
-          <p className="mt-1 text-xs text-text-muted">
+          <p className="mt-1 text-xs text-zinc-500">
             The page you are on is attached automatically. Your email address is
             not — the issue records an internal id, not your address.
           </p>
@@ -144,7 +144,7 @@ export default function ReportIssue() {
         <button
           type="submit"
           disabled={busy || !title.trim() || !body.trim()}
-          className="rounded bg-accent px-5 py-2 text-sm font-medium text-void disabled:opacity-50"
+          className="rounded bg-blue-600 px-5 py-2 text-sm font-medium text-white disabled:opacity-50"
         >
           {busy ? "Filing…" : "Send report"}
         </button>

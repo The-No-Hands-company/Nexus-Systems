@@ -19,10 +19,10 @@ export default function Shell({
   children: ReactNode;
 }) {
   return (
-    <div className="flex h-screen flex-col bg-bg-canvas text-text-primary">
+    <div className="flex h-screen flex-col bg-zinc-900 text-zinc-100">
       <header
         role="banner"
-        className="flex h-14 shrink-0 items-center gap-3 border-b border-border-subtle px-4"
+        className="flex h-14 shrink-0 items-center gap-3 border-b border-zinc-700 px-4"
       >
         <span className="font-semibold tracking-tight">Nexus</span>
       </header>
@@ -30,7 +30,7 @@ export default function Shell({
       <div className="flex min-h-0 flex-1">
         <aside
           aria-label="Applications"
-          className="w-60 shrink-0 overflow-y-auto border-r border-border-subtle"
+          className="w-60 shrink-0 overflow-y-auto border-r border-zinc-700"
         >
           {sidebar}
         </aside>

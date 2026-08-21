@@ -28,13 +28,13 @@ export default function Launcher({
               <Link
                 to={app.path}
                 aria-current={app.id === activeId ? "page" : undefined}
-                className="block rounded-md px-3 py-2 text-sm hover:bg-bg-elevated aria-[current=page]:bg-bg-elevated"
+                className="block rounded-md px-3 py-2 text-sm hover:bg-zinc-800 aria-[current=page]:bg-zinc-800"
               >
                 {app.name}
               </Link>
             ) : (
               <span
-                className="block cursor-default rounded-md px-3 py-2 text-sm text-text-muted"
+                className="block cursor-default rounded-md px-3 py-2 text-sm text-zinc-500"
                 title="This app is not running"
               >
                 {app.name}
