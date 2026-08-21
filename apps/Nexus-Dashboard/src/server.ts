@@ -72,6 +72,60 @@ const CLOUD_PREFIX = "/api/cloud/";
 const MAIL_PREFIX = "/api/mail/";
 
 /**
+ * Notifications live in Nexus-Hosting, which owns the events that produce them
+ * (deploys, site health, federation). The shell needs them for its bell, and
+ * the shell is a different origin.
+ *
+ * Proxied rather than fetched cross-origin from the browser. Hosting
+ * authenticates by session and the cookie is .tnhc.dev-scoped, so the cookie
+ * is forwarded and Hosting does its own authorisation — this proxy adds no
+ * identity of its own and can therefore not widen anyone's access. Calling
+ * hosting.tnhc.dev directly from the page would need CORS with credentials,
+ * which is exactly the per-origin boundary this ecosystem keeps on purpose.
+ *
+ * Read-only plus the two mark-read writes: an allow-list, not a passthrough.
+ */
+const NOTIFICATIONS_PREFIX = "/api/notifications";
+
+function hostingUrl(): string {
+  // Read per call, not captured at module load — the same import-order trap
+  // documented for mailUrl() above.
+  return (process.env.NEXUS_HOSTING_URL || "http://127.0.0.1:8788").replace(/\/+$/, "");
+}
+
+async function proxyToNotifications(req: Request, rest: string, search: string): Promise<Response> {
+  const who = await callerIdentity(req);
+  if (!who) return Response.json({ error: "not_authenticated" }, { status: 401 });
+
+  // Only the notification surface, and only the methods it serves.
+  if (!/^(|\/unread-count|\/read-all|\/\d+\/read)$/.test(rest)) {
+    return Response.json({ error: "not_found" }, { status: 404 });
+  }
+  if (req.method !== "GET" && req.method !== "POST") {
+    return Response.json({ error: "method_not_allowed" }, { status: 405 });
+  }
+
+  try {
+    const res = await fetch(`${hostingUrl()}/api/notifications${rest}${search}`, {
+      method: req.method,
+      headers: {
+        cookie: req.headers.get("cookie") ?? "",
+        "content-type": "application/json",
+      },
+      signal: AbortSignal.timeout(5000),
+    });
+    return new Response(res.body, {
+      status: res.status,
+      headers: { "content-type": res.headers.get("content-type") ?? "application/json" },
+    });
+  } catch {
+    // Hosting being down must not break the shell. The bell simply shows
+    // nothing rather than the page erroring.
+    return Response.json({ error: "upstream_unavailable" }, { status: 503 });
+  }
+}
+
+/**
  * Read per call rather than captured at module load. A top-level const freezes
  * whatever the environment held the first time this module was imported, which
  * in a test run is decided by import order between files — the same trap
@@ -316,6 +370,10 @@ export async function handleRequest(
       return Response.json({ error: result.error }, { status: result.status });
     }
     return Response.json({ number: result.number, url: result.url }, { status: 201 });
+  }
+
+  if (path === NOTIFICATIONS_PREFIX || path.startsWith(NOTIFICATIONS_PREFIX + "/")) {
+    return proxyToNotifications(req, path.slice(NOTIFICATIONS_PREFIX.length), url.search);
   }
 
   if (path.startsWith(MAIL_PREFIX)) {
