@@ -1,9 +1,9 @@
 /**
  * Who is asking.
  *
- * The terminal hands out a shell on this host, so "is this request
- * authenticated" is the only thing standing between the internet and the box
- * (see docs/TERMINAL-SECURITY.md). It is answered by asking Auth directly with
+ * The terminal hands out a shell on this host, so identity plus founder/admin
+ * role authorization stand between the internet and the box (see
+ * docs/TERMINAL-SECURITY.md). Both are answered by asking Auth directly with
  * the caller's own cookies — never by trusting a header, a query parameter, or
  * anything else the browser chose to send.
  */

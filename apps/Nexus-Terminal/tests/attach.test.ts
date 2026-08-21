@@ -14,7 +14,16 @@ describe("terminal attach guards", () => {
   let base = "";
   let handle: Awaited<ReturnType<typeof createServer>>;
   let authServer: ReturnType<typeof Bun.serve>;
-  const originalAuthUrl = process.env.NEXUS_AUTH_INTERNAL_URL;
+  const environmentKeys = [
+    "NEXUS_AUTH_INTERNAL_URL",
+    "NEXUS_BIND_HOST",
+    "NEXUS_TERMINAL_ENABLED",
+    "NEXUS_TERMINAL_ENABLE_CLOUD_INTEGRATION",
+    "PORT",
+  ] as const;
+  const originalEnvironment = new Map(
+    environmentKeys.map((key) => [key, process.env[key]] as const),
+  );
 
   beforeAll(async () => {
     // This is a real HTTP boundary with a deliberately tiny Auth double: the
@@ -40,6 +49,10 @@ describe("terminal attach guards", () => {
     // Explicitly off. The default must be safe, and asserting against it here
     // also proves the flag is actually read.
     delete process.env.NEXUS_TERMINAL_ENABLED;
+    delete process.env.NEXUS_BIND_HOST;
+    // Cloud is deliberately absent from this guard test. Disable registration
+    // so its expected connection warning cannot hide a guard failure.
+    process.env.NEXUS_TERMINAL_ENABLE_CLOUD_INTEGRATION = "false";
     process.env.PORT = "0";
     handle = await createServer();
     base = `http://127.0.0.1:${handle.server.port}`;
@@ -48,8 +61,14 @@ describe("terminal attach guards", () => {
   afterAll(() => {
     handle.close();
     authServer.stop();
-    if (originalAuthUrl === undefined) delete process.env.NEXUS_AUTH_INTERNAL_URL;
-    else process.env.NEXUS_AUTH_INTERNAL_URL = originalAuthUrl;
+    for (const [key, value] of originalEnvironment) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  });
+
+  it("binds to loopback when no host override is configured", () => {
+    expect(handle.server.hostname).toBe("127.0.0.1");
   });
 
   it("refuses to attach when the shell is not explicitly enabled", async () => {

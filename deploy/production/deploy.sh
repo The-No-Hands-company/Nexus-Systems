@@ -259,7 +259,24 @@ cmd_start() {
         warn "deploy/production/nexus-chat.env absent — skipping nexus-chat"
     fi
 
-    # 4d. Nexus-Dashboard — app.$DOMAIN, the ecosystem front door.
+    # 4d. Nexus-Terminal — the loopback-only shell service used by Dashboard.
+    #
+    # The browser never reaches this port directly. Dashboard authorizes the
+    # same founder/admin session, validates the browser Origin, and relays the
+    # socket to this fixed loopback upstream. The shell remains disabled unless
+    # an operator explicitly exports NEXUS_TERMINAL_ENABLED=true; deploying the
+    # service must not implicitly grant host-shell access.
+    start_service "terminal" "$ROOT/apps/Nexus-Terminal" 3110 \
+        PORT=3110 \
+        NEXUS_BIND_HOST=127.0.0.1 \
+        NEXUS_AUTH_INTERNAL_URL=http://127.0.0.1:4310 \
+        NEXUS_CLOUD_URL=http://127.0.0.1:8787 \
+        NEXUS_CLOUD_API_KEY="$NEXUS_CLOUD_API_KEY" \
+        NEXUS_NEXUS_TERMINAL_BASE_URL=http://127.0.0.1:3110 \
+        NEXUS_TERMINAL_ENABLED="${NEXUS_TERMINAL_ENABLED:-false}" \
+        bun run src/index.ts
+
+    # 4e. Nexus-Dashboard — app.$DOMAIN, the ecosystem front door.
     #
     # PUBLIC, deliberately: it carries request-access and claim, which people
     # who are not signed in must be able to reach. The apps behind it are
@@ -284,11 +301,12 @@ cmd_start() {
             NEXUS_AUTH_INTERNAL_URL=http://127.0.0.1:4310 \
             NEXUS_CLOUD_URL=http://localhost:8787 \
             NEXUS_CLOUD_API_KEY="$NEXUS_CLOUD_API_KEY" \
+            NEXUS_TERMINAL_URL=http://127.0.0.1:3110 \
             NEXUS_ISSUES_TOKEN="$NEXUS_ISSUES_TOKEN" \
             bun run src/index.ts
     fi
 
-    # 4e. Nexus-Draw backend — the board/collab API behind draw.$DOMAIN.
+    # 4f. Nexus-Draw backend — the board/collab API behind draw.$DOMAIN.
     #
     # The SPA at draw.$DOMAIN is a static site served by Hosting and works
     # standalone against localStorage, which is why nobody noticed this was
@@ -322,7 +340,7 @@ cmd_start() {
         NEXUS_CLOUD_API_KEY="$NEXUS_CLOUD_API_KEY" \
         bun run src/index.ts
 
-    # 4f. Nexus-Email API — the mail store behind app.$DOMAIN/mail.
+    # 4g. Nexus-Email API — the mail store behind app.$DOMAIN/mail.
     #
     # Loopback only, and that is a security control rather than a default: this
     # service trusts the X-Nexus-Subject header the dashboard sets after asking
@@ -343,7 +361,7 @@ cmd_start() {
         log "mailapi binary not built - skipping (cargo build -p nexus-mailapi)"
     fi
 
-    # 4g. Nexus-Email SMTP daemon.
+    # 4h. Nexus-Email SMTP daemon.
     #
     # Two listeners: an MX port for anonymous strangers, which may only deliver
     # to mailboxes this node hosts, and a submission port for our own users,
@@ -407,7 +425,7 @@ cmd_start() {
 
 cmd_stop() {
     log "Stopping all Nexus services..."
-    for svc in auth cloud chat nexus-chat nexus-chat-web dashboard draw mailapi mailsmtpd proxy; do
+    for svc in auth cloud chat nexus-chat nexus-chat-web terminal dashboard draw mailapi mailsmtpd proxy; do
         if [ -f "$PID_DIR/$svc.pid" ]; then
             kill "$(cat "$PID_DIR/$svc.pid")" 2>/dev/null && log "  Stopped $svc" || true
             rm -f "$PID_DIR/$svc.pid"
@@ -420,7 +438,7 @@ cmd_stop() {
 
 cmd_status() {
     echo "Service Status:"
-    for svc in auth cloud chat nexus-chat nexus-chat-web dashboard draw mailapi mailsmtpd proxy; do
+    for svc in auth cloud chat nexus-chat nexus-chat-web terminal dashboard draw mailapi mailsmtpd proxy; do
         if [ -f "$PID_DIR/$svc.pid" ]; then
             if kill -0 "$(cat "$PID_DIR/$svc.pid")" 2>/dev/null; then
                 echo -e "  ${G}● $svc${R} (running, PID: $(cat $PID_DIR/$svc.pid))"
@@ -439,7 +457,7 @@ cmd_status() {
     # nexus-chat answers /api/v1/health, not /health, and is probed through its
     # Caddy front door on 8095 — that is the origin chat.$DOMAIN actually
     # reaches, so a healthy API behind a dead front door still reads as down.
-    for endpoint in "http://localhost:4310/health" "http://localhost:8787/health" "http://localhost:3109/health" "http://localhost:8095/api/v1/health" "http://localhost:3132/health" "http://localhost:3075/health" "http://localhost:8080/health"; do
+    for endpoint in "http://localhost:4310/health" "http://localhost:8787/health" "http://localhost:3109/health" "http://localhost:8095/api/v1/health" "http://127.0.0.1:3110/health" "http://localhost:3132/health" "http://localhost:3075/health" "http://localhost:8080/health"; do
         if curl -s -m 2 "$endpoint" | grep -q "ok"; then
             echo -e "  ${G}●${R} $endpoint"
         else

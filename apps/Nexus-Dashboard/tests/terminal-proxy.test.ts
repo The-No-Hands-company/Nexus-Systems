@@ -1,4 +1,7 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "bun:test";
+import { mkdir, mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { handleRequest } from "../src/server";
 import {
   type TerminalSocketData,
@@ -8,11 +11,24 @@ import {
 
 type BunServer = ReturnType<typeof Bun.serve>;
 
-const AUTH_PORT = 4399;
-const TERMINAL_PORT = 4397;
+const ENVIRONMENT_KEYS = [
+  "NEXUS_AUTH_INTERNAL_URL",
+  "NEXUS_TERMINAL_URL",
+  "NEXUS_DASHBOARD_PUBLIC_URL",
+  "NEXUS_TERMINAL_CONNECT_TIMEOUT_MS",
+  "NEXUS_TERMINAL_ENABLED",
+  "NEXUS_TERMINAL_ENABLE_CLOUD_INTEGRATION",
+  "NEXUS_BIND_HOST",
+  "NEXUS_DATA_DIR",
+  "PORT",
+  "SHELL",
+] as const;
+const originalEnvironment = new Map(
+  ENVIRONMENT_KEYS.map((key) => [key, process.env[key]] as const),
+);
 
-let auth: BunServer;
-let dashboard: BunServer;
+let auth: BunServer | null = null;
+let dashboard: BunServer | null = null;
 let terminal: BunServer | null = null;
 let upstreamConnections = 0;
 let upstreamActive = 0;
@@ -26,6 +42,27 @@ let authRequests = 0;
 const delay = (milliseconds: number) =>
   new Promise<void>((resolve) => setTimeout(resolve, milliseconds));
 
+function dashboardPort(): number {
+  if (!dashboard) throw new Error("dashboard test server is not running");
+  const port = dashboard.port;
+  if (port === undefined) throw new Error("dashboard test server has no assigned port");
+  return port;
+}
+
+function terminalPort(): number {
+  if (!terminal) throw new Error("terminal test server is not running");
+  const port = terminal.port;
+  if (port === undefined) throw new Error("terminal test server has no assigned port");
+  return port;
+}
+
+function restoreEnvironment(): void {
+  for (const [key, value] of originalEnvironment) {
+    if (value === undefined) delete process.env[key];
+    else process.env[key] = value;
+  }
+}
+
 async function waitUntil(check: () => boolean, label: string): Promise<void> {
   const deadline = Date.now() + 2_000;
   while (!check()) {
@@ -34,13 +71,46 @@ async function waitUntil(check: () => boolean, label: string): Promise<void> {
   }
 }
 
+function transcript(messages: MessageEvent[]): string {
+  return messages
+    .map((message) => (typeof message.data === "string" ? message.data : ""))
+    .join("")
+    .replaceAll("\r", "");
+}
+
+function visibleTranscript(messages: MessageEvent[]): string {
+  return transcript(messages).replaceAll(/\x1b\[[0-?]*[ -/]*[@-~]/g, "");
+}
+
+async function waitForActiveShells(
+  terminalBaseUrl: string,
+  expected: number,
+  label: string,
+): Promise<void> {
+  const deadline = Date.now() + 5_000;
+  let observed: unknown = null;
+  while (Date.now() < deadline) {
+    try {
+      const health = (await (await fetch(`${terminalBaseUrl}/health`)).json()) as {
+        activeShells?: unknown;
+      };
+      observed = health.activeShells;
+      if (observed === expected) return;
+    } catch {
+      observed = "unreachable";
+    }
+    await delay(20);
+  }
+  throw new Error(`timed out waiting for ${label}; last activeShells=${String(observed)}`);
+}
+
 function request(role: string | null, path = "/api/terminal/attach?cols=120&rows=40"): Request {
   const headers = new Headers({
     connection: "Upgrade",
     upgrade: "websocket",
     "sec-websocket-key": "dGhlIHNhbXBsZSBub25jZQ==",
     "sec-websocket-version": "13",
-    origin: `http://127.0.0.1:${dashboard.port}`,
+    origin: `http://127.0.0.1:${dashboardPort()}`,
   });
   if (role !== null) headers.set("cookie", `role=${role}; nexus_session=secret-session`);
   return new Request(`http://app.test${path}`, { headers });
@@ -48,7 +118,7 @@ function request(role: string | null, path = "/api/terminal/attach?cols=120&rows
 
 function openClient(
   role: string | null,
-  origin: string | null = `http://127.0.0.1:${dashboard.port}`,
+  origin: string | null = `http://127.0.0.1:${dashboardPort()}`,
 ): {
   socket: WebSocket;
   messages: MessageEvent[];
@@ -59,7 +129,7 @@ function openClient(
   if (role !== null) headers.cookie = `role=${role}; nexus_session=secret-session`;
   if (origin !== null) headers.origin = origin;
   const socket = new WebSocket(
-    `ws://127.0.0.1:${dashboard.port}/api/terminal/attach?cols=120&rows=40`,
+    `ws://127.0.0.1:${dashboardPort()}/api/terminal/attach?cols=120&rows=40`,
     { headers },
   );
   socket.binaryType = "arraybuffer";
@@ -84,7 +154,7 @@ function openClient(
 function startTerminal(options: { handshakeDelay?: number } = {}): void {
   terminal = Bun.serve<undefined>({
     hostname: "127.0.0.1",
-    port: TERMINAL_PORT,
+    port: 0,
     websocket: {
       open(ws) {
         upstreamConnections++;
@@ -113,15 +183,13 @@ function startTerminal(options: { handshakeDelay?: number } = {}): void {
       return new Response("not found", { status: 404 });
     },
   });
+  process.env.NEXUS_TERMINAL_URL = `http://127.0.0.1:${terminal.port}`;
 }
 
 beforeAll(() => {
-  process.env.NEXUS_AUTH_INTERNAL_URL = `http://127.0.0.1:${AUTH_PORT}`;
-  process.env.NEXUS_TERMINAL_URL = `http://127.0.0.1:${TERMINAL_PORT}`;
-
   auth = Bun.serve({
     hostname: "127.0.0.1",
-    port: AUTH_PORT,
+    port: 0,
     fetch(req) {
       authRequests++;
       const role = req.headers.get("cookie")?.match(/(?:^|;\s*)role=([^;]+)/)?.[1];
@@ -130,6 +198,7 @@ beforeAll(() => {
       return Response.json({ user: { id: `user-${role}`, role } });
     },
   });
+  process.env.NEXUS_AUTH_INTERNAL_URL = `http://127.0.0.1:${auth.port}`;
 
   dashboard = Bun.serve<TerminalSocketData>({
     hostname: "127.0.0.1",
@@ -159,8 +228,9 @@ afterEach(() => {
 });
 
 afterAll(() => {
-  dashboard.stop(true);
-  auth.stop(true);
+  dashboard?.stop(true);
+  auth?.stop(true);
+  restoreEnvironment();
 });
 
 describe("terminal upgrade authorization", () => {
@@ -201,7 +271,7 @@ describe("terminal upgrade authorization", () => {
       expect(result.ok).toBe(true);
       if (result.ok) {
         expect(result.data.upstreamUrl).toBe(
-          `ws://127.0.0.1:${TERMINAL_PORT}/api/v1/terminal/attach?cols=120&rows=40`,
+          `ws://127.0.0.1:${terminalPort()}/api/v1/terminal/attach?cols=120&rows=40`,
         );
       }
     }
@@ -214,7 +284,7 @@ describe("terminal upgrade authorization", () => {
     expect(injected.ok).toBe(true);
     if (injected.ok) {
       expect(injected.data.upstreamUrl).toBe(
-        `ws://127.0.0.1:${TERMINAL_PORT}/api/v1/terminal/attach?cols=120&rows=40`,
+        `ws://127.0.0.1:${terminalPort()}/api/v1/terminal/attach?cols=120&rows=40`,
       );
     }
 
@@ -385,5 +455,84 @@ describe("terminal frame relay", () => {
 
     const close = await client.closed;
     expect(close.code).toBe(1011);
+  });
+
+  it("relays two isolated real shells and cleans both sessions after close", async () => {
+    terminal?.stop(true);
+    terminal = null;
+
+    const smokeRoot = await mkdtemp(join(tmpdir(), "nexus-terminal-relay-smoke."));
+    const smokeData = join(smokeRoot, "data");
+    await mkdir(smokeData);
+    const previousCwd = process.cwd();
+    let realTerminal: Awaited<
+      ReturnType<(typeof import("../../Nexus-Terminal/src/server"))["createServer"]>
+    > | null = null;
+    let first: ReturnType<typeof openClient> | null = null;
+    let second: ReturnType<typeof openClient> | null = null;
+
+    process.env.PORT = "0";
+    delete process.env.NEXUS_BIND_HOST;
+    process.env.NEXUS_DATA_DIR = smokeData;
+    process.env.NEXUS_TERMINAL_ENABLED = "true";
+    process.env.NEXUS_TERMINAL_ENABLE_CLOUD_INTEGRATION = "false";
+    process.env.SHELL = "/bin/sh";
+
+    try {
+      process.chdir(smokeRoot);
+      const { createServer } = await import("../../Nexus-Terminal/src/server");
+      realTerminal = await createServer();
+      process.chdir(previousCwd);
+
+      const terminalBaseUrl = `http://127.0.0.1:${realTerminal.server.port}`;
+      process.env.NEXUS_TERMINAL_URL = terminalBaseUrl;
+      const exactOrigin = `http://127.0.0.1:${dashboardPort()}`;
+
+      first = openClient("founder", exactOrigin);
+      second = openClient("founder", exactOrigin);
+      await Promise.all([first.opened, second.opened]);
+      await waitForActiveShells(terminalBaseUrl, 2, "both relayed shells to become active");
+      await waitUntil(
+        () => transcript(first?.messages ?? []).includes("$ "),
+        "first real shell prompt",
+      );
+      await waitUntil(
+        () => transcript(second?.messages ?? []).includes("$ "),
+        "second real shell prompt",
+      );
+
+      first.messages.length = 0;
+      second.messages.length = 0;
+      first.socket.send("printf 'nexus-terminal-smoke\\n'\r");
+      second.socket.send("printf 'nexus-terminal-isolated\\n'\r");
+
+      await waitUntil(
+        () => visibleTranscript(first?.messages ?? []).includes("\nnexus-terminal-smoke\n"),
+        "first real shell marker",
+      );
+      await waitUntil(
+        () => visibleTranscript(second?.messages ?? []).includes("\nnexus-terminal-isolated\n"),
+        "second real shell marker",
+      );
+
+      const firstOutput = visibleTranscript(first.messages);
+      const secondOutput = visibleTranscript(second.messages);
+      expect(firstOutput).toContain("\nnexus-terminal-smoke\n");
+      expect(firstOutput).not.toContain("nexus-terminal-isolated");
+      expect(secondOutput).toContain("\nnexus-terminal-isolated\n");
+      expect(secondOutput).not.toContain("nexus-terminal-smoke");
+
+      first.socket.close();
+      second.socket.close();
+      await Promise.all([first.closed, second.closed]);
+      await waitForActiveShells(terminalBaseUrl, 0, "closed relayed shells to be reaped");
+    } finally {
+      process.chdir(previousCwd);
+      for (const client of [first, second]) {
+        if (client && client.socket.readyState < WebSocket.CLOSING) client.socket.terminate();
+      }
+      realTerminal?.close();
+      await rm(smokeRoot, { recursive: true, force: true });
+    }
   });
 });

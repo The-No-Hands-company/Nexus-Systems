@@ -119,6 +119,56 @@ The registration spawns non-blocking in the background at startup. Default ports
 
 ---
 
+## Step 4 — Nexus-Terminal and Dashboard (optional)
+
+Start Nexus-Auth and Nexus-Cloud first. Then run Terminal from the workspace
+root in its own terminal:
+
+```bash
+cd apps/Nexus-Terminal
+PORT=3110 \
+NEXUS_BIND_HOST=127.0.0.1 \
+NEXUS_TERMINAL_ENABLED=true \
+NEXUS_AUTH_INTERNAL_URL=http://127.0.0.1:4310 \
+NEXUS_CLOUD_URL=http://127.0.0.1:8787 \
+NEXUS_CLOUD_API_KEY=localdev \
+NEXUS_NEXUS_TERMINAL_BASE_URL=http://127.0.0.1:3110 \
+bun run src/index.ts
+```
+
+`NEXUS_TERMINAL_ENABLED=true` grants a real shell as your local user. Leave it
+unset when you do not intend to test terminal access.
+
+Build the Dashboard frontend once:
+
+```bash
+cd apps/Nexus-Dashboard/frontend
+bun install
+bun run build
+```
+
+Then start Dashboard in another terminal:
+
+```bash
+cd apps/Nexus-Dashboard
+PORT=3132 \
+DOMAIN=localhost \
+NEXUS_DASHBOARD_PUBLIC_URL=http://127.0.0.1:3132 \
+NEXUS_AUTH_INTERNAL_URL=http://127.0.0.1:4310 \
+NEXUS_CLOUD_URL=http://127.0.0.1:8787 \
+NEXUS_CLOUD_API_KEY=localdev \
+NEXUS_TERMINAL_URL=http://127.0.0.1:3110 \
+bun run src/index.ts
+```
+
+Open `http://127.0.0.1:3132/terminal` with a Nexus-Auth session whose role is
+`founder` or `admin`. Multiple tabs create independent shells. Initial columns
+and rows are applied at attach time; later browser resizing is not yet sent to
+the host PTY. Terminal input is audited verbatim, so secrets typed at prompts
+can be recorded.
+
+---
+
 ## What to open in the browser
 
 | URL | What you see |
@@ -128,5 +178,7 @@ The registration spawns non-blocking in the background at startup. Default ports
 | `http://localhost:8787/api/v1/users` | User address registry (`@user:shortId`) |
 | `http://localhost:8787/v1/federation/announcement` | This Cloud node's gossip payload |
 | `http://localhost:8787/.well-known/nexus-cloud` | Discovery document |
+| `http://127.0.0.1:3110/health` | Terminal liveness, enable state, and active shell count |
+| `http://127.0.0.1:3132/terminal` | Dashboard terminal view for founders/admins |
 
 > The browser dashboard (`public/status.html`) is not yet wired to the API. The endpoints above are the live window into the system until the dashboard is built.
