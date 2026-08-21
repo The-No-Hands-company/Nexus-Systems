@@ -264,6 +264,26 @@ export async function handleRequest(
       return new Response(`Host ${host} not served by this proxy`, { status: 404 });
     }
 
+    // api.<DOMAIN> is an alias for the API directory on the marketing site.
+    //
+    // It resolves here rather than to Pages because *.tnhc.dev is a wildcard
+    // CNAME to the tunnel, and only the apex has its own record pointing at
+    // tnhc-dev.pages.dev. Without this branch the host falls through to the
+    // Hosting site-proxy and answers 404, which is what it did before.
+    //
+    // A redirect, not a proxy. The docs live at one canonical URL; proxying
+    // Pages content under a second hostname would duplicate the page, split
+    // its cache, and hide the real address from anyone who bookmarks it.
+    //
+    // 302, matching the reasoning in tnhc.dev/frontend/public/_redirects: a
+    // permanent redirect is cached by browsers effectively forever, and this
+    // one is meant to be replaceable — if api.<DOMAIN> is ever added as a
+    // Pages custom domain it will stop reaching this proxy at all, and a
+    // sticky 301 would keep sending people away from it.
+    if (host === `api.${DOMAIN}` || host === `www.api.${DOMAIN}`) {
+      return Response.redirect(`https://${DOMAIN}/api`, 302);
+    }
+
     // Get current routing configuration
     const routes = await getRoutes();
     
