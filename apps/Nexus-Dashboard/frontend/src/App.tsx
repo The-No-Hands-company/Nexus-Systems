@@ -13,7 +13,7 @@ import CloudTools from "./pages/cloud/CloudTools";
 import CloudFederation from "./pages/cloud/CloudFederation";
 import CloudIdentity from "./pages/cloud/CloudIdentity";
 import CloudApi from "./pages/cloud/CloudApi";
-import { listApps, type AppEntry } from "./api";
+import { listApps, me, type AppEntry, type Me } from "./api";
 import Shell from "./shell/Shell";
 import Launcher from "./shell/Launcher";
 import AppFrame from "./shell/AppFrame";
@@ -57,14 +57,14 @@ function AppsUnavailable({ onRetry }: { onRetry: () => void }) {
  * Renders a single framed app inside the shell's chrome, resolved from the flat
  * path (/chat, /draw) rather than from an /a/:id segment.
  */
-function ShellRoute({ state, onRetry }: { state: AppsState; onRetry: () => void }) {
+function ShellRoute({ state, onRetry, user }: { state: AppsState; onRetry: () => void; user: Me | null }) {
   const { slug = "" } = useParams();
   const apps = state.status === "ready" ? state.apps : [];
   const match = apps.find((a) => a.path === `/${slug}`);
   const appId = match?.id ?? "";
 
   return (
-    <Shell sidebar={<Launcher apps={apps} activeId={appId} />}>
+    <Shell sidebar={<Launcher apps={apps} activeId={appId} />} user={user}>
       {state.status === "loading" && (
         <div className="flex h-full items-center justify-center p-8 text-zinc-500">
           Loading…
@@ -86,9 +86,9 @@ function ShellRoute({ state, onRetry }: { state: AppsState; onRetry: () => void 
  * fatal here would make an unrelated network failure look like a broken
  * account page.
  */
-function ShellView({ state, children }: { state: AppsState; children: ReactNode }) {
+function ShellView({ state, children, user }: { state: AppsState; children: ReactNode; user: Me | null }) {
   const apps = state.status === "ready" ? state.apps : [];
-  return <Shell sidebar={<Launcher apps={apps} />}>{children}</Shell>;
+  return <Shell sidebar={<Launcher apps={apps} />} user={user}>{children}</Shell>;
 }
 
 /**
@@ -153,6 +153,24 @@ function LegacyAppRedirect({ state, onRetry }: { state: AppsState; onRetry: () =
 export default function App() {
   const [appsState, setAppsState] = useState<AppsState>({ status: "loading" });
 
+  /**
+   * Who is signed in, for the shell header.
+   *
+   * Fetched once here rather than in Shell, which is deliberately layout-only.
+   * A failure leaves this null and the header simply omits the identity — the
+   * shell must render for a signed-out visitor too, and an unreachable /me is
+   * not a reason to show them a broken page.
+   */
+  const [user, setUser] = useState<Me | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    void me()
+      .then((u) => { if (!cancelled) setUser(u); })
+      .catch(() => { if (!cancelled) setUser(null); });
+    return () => { cancelled = true; };
+  }, []);
+
   const loadApps = useCallback(() => {
     setAppsState({ status: "loading" });
     void listApps()
@@ -181,7 +199,7 @@ export default function App() {
         <Route
           path="/account"
           element={
-            <ShellView state={appsState}>
+            <ShellView state={appsState} user={user}>
               <Account />
             </ShellView>
           }
@@ -189,7 +207,7 @@ export default function App() {
         <Route
           path="/admin"
           element={
-            <ShellView state={appsState}>
+            <ShellView state={appsState} user={user}>
               <Admin />
             </ShellView>
           }
@@ -197,7 +215,7 @@ export default function App() {
         <Route
           path="/cloud"
           element={
-            <ShellView state={appsState}>
+            <ShellView state={appsState} user={user}>
               <CloudOverview />
             </ShellView>
           }
@@ -205,7 +223,7 @@ export default function App() {
         <Route
           path="/cloud/tools"
           element={
-            <ShellView state={appsState}>
+            <ShellView state={appsState} user={user}>
               <CloudTools />
             </ShellView>
           }
@@ -213,7 +231,7 @@ export default function App() {
         <Route
           path="/cloud/federation"
           element={
-            <ShellView state={appsState}>
+            <ShellView state={appsState} user={user}>
               <CloudFederation />
             </ShellView>
           }
@@ -221,7 +239,7 @@ export default function App() {
         <Route
           path="/cloud/identity"
           element={
-            <ShellView state={appsState}>
+            <ShellView state={appsState} user={user}>
               <CloudIdentity />
             </ShellView>
           }
@@ -229,26 +247,26 @@ export default function App() {
         <Route
           path="/cloud/api"
           element={
-            <ShellView state={appsState}>
+            <ShellView state={appsState} user={user}>
               <CloudApi />
             </ShellView>
           }
         />
         <Route
           path="/mail"
-          element={<ShellView state={appsState}><MailList /></ShellView>}
+          element={<ShellView state={appsState} user={user}><MailList /></ShellView>}
         />
         <Route
           path="/mail/f/:folderId"
-          element={<ShellView state={appsState}><MailList /></ShellView>}
+          element={<ShellView state={appsState} user={user}><MailList /></ShellView>}
         />
         <Route
           path="/mail/m/:messageId"
-          element={<ShellView state={appsState}><MailRead /></ShellView>}
+          element={<ShellView state={appsState} user={user}><MailRead /></ShellView>}
         />
         <Route
           path="/mail/compose"
-          element={<ShellView state={appsState}><MailCompose /></ShellView>}
+          element={<ShellView state={appsState} user={user}><MailCompose /></ShellView>}
         />
         {/* The old /a/:appId links stay valid forever — they redirect to the
             app's flat path rather than 404ing. Someone's bookmark from before
@@ -257,7 +275,7 @@ export default function App() {
 
         {/* Flat app routes last: every static route above wins over this, so a
             registered app can never shadow /account or /admin. */}
-        <Route path="/:slug" element={<ShellRoute state={appsState} onRetry={loadApps} />} />
+        <Route path="/:slug" element={<ShellRoute state={appsState} user={user} onRetry={loadApps} />} />
         <Route
           path="*"
           element={
