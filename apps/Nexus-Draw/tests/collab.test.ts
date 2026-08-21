@@ -4,6 +4,8 @@ import * as encoding from "lib0/encoding";
 import * as syncProtocol from "y-protocols/sync";
 import * as Y from "yjs";
 import { createServer } from "../src/server";
+import { tmpdir } from "node:os";
+import { randomUUID } from "node:crypto";
 
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -13,6 +15,12 @@ describe("collab websocket", () => {
   let boardId: string;
 
   beforeEach(async () => {
+    // Ephemeral port and a private database, for the same reasons as
+    // server.test.ts: the live nexus-draw service holds 3075 on this machine,
+    // and a hard-coded db path would have this suite writing to real boards.
+    process.env["PORT"] = "0";
+    process.env["NEXUS_DRAW_DB"] = `${tmpdir()}/nexus-draw-collab-${randomUUID()}.sqlite`;
+
     const { server: s, close: c } = await createServer();
     server = s;
     close = c;

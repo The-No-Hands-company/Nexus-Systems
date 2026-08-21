@@ -1,11 +1,23 @@
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { createServer } from "../src/server";
+import { tmpdir } from "node:os";
+import { randomUUID } from "node:crypto";
 
 describe("nexus-draw", () => {
   let base = "";
   let handle: Awaited<ReturnType<typeof createServer>>;
 
   beforeAll(async () => {
+    // Port 0 asks the OS for a free port. A fixed port cannot work here: the
+    // live nexus-draw service holds 3075 on the machine that also runs this
+    // suite, so every test calling createServer() failed with EADDRINUSE.
+    // The test already reads handle.server.port, so it was written expecting
+    // this.
+    process.env["PORT"] = "0";
+    // And its own database file. Without this the suite writes to the live
+    // board data — which the port failure was accidentally preventing.
+    process.env["NEXUS_DRAW_DB"] = `${tmpdir()}/nexus-draw-test-${randomUUID()}.sqlite`;
+
     handle = await createServer();
     await new Promise((r) => setTimeout(r, 200));
     base = `http://127.0.0.1:${handle.server.port}`;

@@ -25,7 +25,15 @@ export async function createServer() {
   const port = Number(process.env.PORT || "3075");
   const baseUrl = process.env.NEXUS_NEXUS_DRAW_BASE_URL || `http://localhost:${port}`;
   const startedAt = Date.now();
-  const engine = new DrawEngine("data/nexus-draw.sqlite");
+  // Database path is configurable so tests do not open the live one.
+  //
+  // This was hard-coded, which meant any test calling createServer() wrote to
+  // the same SQLite file the running service uses. That was invisible only
+  // because the tests could not get far enough to do it: they died binding
+  // port 3075, which the live service already holds. Two faults stacked, the
+  // outer one hiding the more damaging inner one.
+  const dbPath = process.env.NEXUS_DRAW_DB || "data/nexus-draw.sqlite";
+  const engine = new DrawEngine(dbPath);
   const phantom = new PhantomApp("nexus-draw");
   await phantom.start();
   const discovery = new NexusDiscovery({ cloudUrl: process.env.NEXUS_CLOUD_URL || "http://localhost:8787", apiKey: process.env.NEXUS_CLOUD_API_KEY || undefined, ttlMs: 30000 });
