@@ -1,7 +1,8 @@
 import { join } from "node:path";
 import { mergeApps, shellNativeEntries, toAppEntries } from "./apps";
+import { callerIdentity, isAdminRole } from "./auth";
 import { cloudBaseUrl, cloudHeaders } from "./cloud";
-import { validateReport, fileIssue } from "./issues";
+import { fileIssue, validateReport } from "./issues";
 
 /**
  * The ecosystem front door — app.<domain>.
@@ -75,6 +76,10 @@ function mailUrl(): string {
   return (process.env.NEXUS_EMAIL_URL || "http://127.0.0.1:3140").replace(/\/+$/, "");
 }
 
+function terminalUrl(): string {
+  return (process.env.NEXUS_TERMINAL_URL || "http://127.0.0.1:3110").replace(/\/+$/, "");
+}
+
 async function proxyToMail(req: Request, rest: string, search: string): Promise<Response> {
   const who = await callerIdentity(req);
   if (!who) return Response.json({ error: "not_authenticated" }, { status: 401 });
@@ -143,58 +148,6 @@ const CLOUD_ALLOWLIST: Record<string, { upstream: string; adminOnly?: boolean }>
   "federation/identity": { upstream: "/v1/federation/identity" },
 };
 
-/** Mirrors frontend/src/api.ts ADMIN_ROLES — keep the two in sync. */
-const ADMIN_ROLES = ["founder", "admin"];
-
-/**
- * Who is making this request, per Auth's own session cookie check — the same
- * mechanism the account/admin surfaces rely on (frontend/src/api.ts `me()`,
- * proxied through AUTH_PREFIX). Cloud has no notion of a Nexus session, so
- * the Dashboard server has to ask Auth on the caller's behalf rather than
- * trusting anything the browser claims about itself.
- */
-/**
- * Who Auth says this request is. Returns the ecosystem subject (the stable
- * user id) alongside the role, because mail is per-user: the mail service needs
- * to know *whose* mailbox to open, not merely that somebody is signed in.
- */
-async function callerIdentity(
-  req: Request,
-): Promise<{ subject: string; role: string | null } | null> {
-  try {
-    const res = await fetch(`${AUTH_INTERNAL_URL.replace(/\/+$/, "")}/api/v1/auth/me`, {
-      headers: { cookie: req.headers.get("cookie") ?? "" },
-      signal: AbortSignal.timeout(3000),
-    });
-    if (!res.ok) return null;
-    const body = (await res.json().catch(() => null)) as {
-      user?: { id?: unknown; role?: unknown };
-    } | null;
-    const id = body?.user?.id;
-    if (typeof id !== "string" || !id) return null;
-    const role = body?.user?.role;
-    return { subject: id, role: typeof role === "string" ? role : null };
-  } catch {
-    return null;
-  }
-}
-
-async function callerRole(req: Request): Promise<string | null> {
-  try {
-    const res = await fetch(`${AUTH_INTERNAL_URL.replace(/\/+$/, "")}/api/v1/auth/me`, {
-      headers: { cookie: req.headers.get("cookie") ?? "" },
-      signal: AbortSignal.timeout(3000),
-    });
-    if (!res.ok) return null;
-    const body = (await res.json().catch(() => null)) as { user?: { role?: unknown } } | null;
-    const role = body?.user?.role;
-    return typeof role === "string" ? role : null;
-  } catch {
-    // Auth unreachable is a "no" for an admin-only resource, not a crash.
-    return null;
-  }
-}
-
 async function proxyToCloud(req: Request, name: string, search: string): Promise<Response> {
   // Object.hasOwn, not a bare lookup. `name` comes from the URL, and every
   // object inherits truthy `constructor`, `__proto__` and `toString`, so
@@ -207,8 +160,8 @@ async function proxyToCloud(req: Request, name: string, search: string): Promise
   if (!entry) return Response.json({ error: "not_found" }, { status: 404 });
 
   if (entry.adminOnly) {
-    const role = await callerRole(req);
-    if (!role || !ADMIN_ROLES.includes(role)) {
+    const who = await callerIdentity(req);
+    if (!isAdminRole(who?.role ?? null)) {
       return Response.json({ error: "forbidden" }, { status: 403 });
     }
   }
@@ -251,10 +204,24 @@ async function mailReachable(): Promise<boolean> {
   }
 }
 
-async function fetchApps(): Promise<Response> {
+async function terminalReachable(): Promise<boolean> {
+  try {
+    return (await fetch(`${terminalUrl()}/health`, { signal: AbortSignal.timeout(2000) })).ok;
+  } catch {
+    return false;
+  }
+}
+
+async function fetchApps(req: Request): Promise<Response> {
+  const caller = await callerIdentity(req);
+  const includeTerminal = isAdminRole(caller?.role ?? null);
   // Probed once and used on both paths: the shell's own views must not
   // disappear just because Cloud is down.
-  const native = shellNativeEntries({ mailHealthy: await mailReachable() });
+  const native = shellNativeEntries({
+    mailHealthy: await mailReachable(),
+    terminalHealthy: includeTerminal ? await terminalReachable() : false,
+    includeTerminal,
+  });
 
   try {
     const res = await fetch(`${CLOUD_URL.replace(/\/+$/, "")}/api/v1/tools`, {
@@ -262,7 +229,9 @@ async function fetchApps(): Promise<Response> {
       signal: AbortSignal.timeout(3000),
     });
     if (!res.ok) return Response.json({ apps: native });
-    const registry = toAppEntries(await res.json(), AUTH_HOST, SELF_HOST, CLOUD_HOST);
+    const registry = toAppEntries(await res.json(), AUTH_HOST, SELF_HOST, CLOUD_HOST).filter(
+      (entry) => includeTerminal || entry.id !== "nexus-terminal",
+    );
     return Response.json({ apps: mergeApps(registry, native) });
   } catch {
     // Cloud being down must degrade to the shell's own views, not a broken
@@ -304,7 +273,7 @@ export async function handleRequest(req: Request): Promise<Response> {
     return Response.json({ service: "nexus-dashboard", status: "ok" });
   }
 
-  if (req.method === "GET" && path === "/api/apps") return fetchApps();
+  if (req.method === "GET" && path === "/api/apps") return fetchApps(req);
 
   // GET-only, and only for names on CLOUD_ALLOWLIST — anything else (a
   // mutating method, or a name not in the table) falls through to the

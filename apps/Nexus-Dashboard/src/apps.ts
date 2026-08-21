@@ -27,7 +27,17 @@ export type AppEntry = {
  * `/a/<id>` route instead, because a registered app called "account" must not
  * be able to take over the account page.
  */
-const RESERVED = new Set(["account", "admin", "request", "claim", "a", "api", "health", ""]);
+const RESERVED = new Set([
+  "account",
+  "admin",
+  "terminal",
+  "request",
+  "claim",
+  "a",
+  "api",
+  "health",
+  "",
+]);
 
 /** `nexus-chat` -> `/chat`, falling back to `/a/<id>` on a reserved collision. */
 export function pathForApp(id: string): string {
@@ -124,8 +134,12 @@ export function toAppEntries(
  * The grid is still data — it is data from two sources, the registry and the
  * shell, rather than a hardcoded list of apps.
  */
-export function shellNativeEntries(opts: { mailHealthy: boolean }): AppEntry[] {
-  return [
+export function shellNativeEntries(opts: {
+  mailHealthy: boolean;
+  terminalHealthy: boolean;
+  includeTerminal: boolean;
+}): AppEntry[] {
+  const entries: AppEntry[] = [
     {
       id: "nexus-email",
       name: "Nexus Mail",
@@ -135,6 +149,17 @@ export function shellNativeEntries(opts: { mailHealthy: boolean }): AppEntry[] {
       health: opts.mailHealthy ? "healthy" : "offline",
     },
   ];
+  if (opts.includeTerminal) {
+    entries.push({
+      id: "nexus-terminal",
+      name: "Nexus Terminal",
+      description: "Audited host shell for Nexus operators",
+      url: "/terminal",
+      path: "/terminal",
+      health: opts.terminalHealthy ? "healthy" : "offline",
+    });
+  }
+  return entries;
 }
 
 /**

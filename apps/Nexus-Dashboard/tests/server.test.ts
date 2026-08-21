@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 
 process.env.NEXUS_AUTH_INTERNAL_URL = "http://127.0.0.1:4399";
 process.env.NEXUS_CLOUD_URL = "http://127.0.0.1:4398";
+process.env.NEXUS_TERMINAL_URL = "http://127.0.0.1:4397";
 const { handleRequest } = await import("../src/server");
 
 // Inferred rather than annotated: bun-types' Server is generic and the
@@ -9,12 +10,25 @@ const { handleRequest } = await import("../src/server");
 type BunServer = ReturnType<typeof Bun.serve>;
 let auth: BunServer | null = null;
 let cloud: BunServer | null = null;
+let terminal: BunServer | null = null;
 
 beforeEach(() => {
   auth = Bun.serve({
     port: 4399,
     fetch(req) {
       const u = new URL(req.url);
+      if (u.pathname === "/api/v1/auth/me" && (req.headers.get("cookie") ?? "").includes("role=")) {
+        const cookie = req.headers.get("cookie") ?? "";
+        const role = cookie.includes("role=founder")
+          ? "founder"
+          : cookie.includes("role=admin")
+            ? "admin"
+            : cookie.includes("role=user")
+              ? "member"
+              : null;
+        if (!role) return Response.json({ error: "not_authenticated" }, { status: 401 });
+        return Response.json({ user: { id: `${role}-id`, role } });
+      }
       return Response.json(
         { seenPath: u.pathname, seenCookie: req.headers.get("cookie"), method: req.method },
         { headers: { "set-cookie": "nexus_session=abc; Path=/" } },
@@ -32,8 +46,20 @@ beforeEach(() => {
             publicUrl: "https://chat.tnhc.dev",
             health: "healthy",
           },
+          {
+            id: "nexus-terminal",
+            name: "Nexus Terminal",
+            publicUrl: "https://terminal.tnhc.dev",
+            health: "healthy",
+          },
         ],
       });
+    },
+  });
+  terminal = Bun.serve({
+    port: 4397,
+    fetch() {
+      return Response.json({ service: "nexus-terminal", status: "ok" });
     },
   });
 });
@@ -41,6 +67,7 @@ beforeEach(() => {
 afterEach(() => {
   auth?.stop(true);
   cloud?.stop(true);
+  terminal?.stop(true);
 });
 
 describe("dashboard server", () => {
@@ -50,13 +77,39 @@ describe("dashboard server", () => {
     expect(((await res.json()) as { status: string }).status).toBe("ok");
   });
 
-  it("serves the grid from Cloud", async () => {
-    const res = await handleRequest(new Request("http://app.test/api/apps"));
+  it("includes a healthy native terminal for a founder without externalizing Cloud's record", async () => {
+    const res = await handleRequest(
+      new Request("http://app.test/api/apps", { headers: { cookie: "role=founder" } }),
+    );
     expect(res.status).toBe(200);
-    const { apps } = (await res.json()) as { apps: Array<{ id: string }> };
+    const { apps } = (await res.json()) as {
+      apps: Array<{ id: string; url: string; health: string }>;
+    };
     // Mail is served by this app at /mail and has no public host, so it never
     // appears in Cloud's registry — the shell contributes it.
-    expect(apps.map((a) => a.id).sort()).toEqual(["nexus-chat", "nexus-email"]);
+    expect(apps.map((a) => a.id).sort()).toEqual(["nexus-chat", "nexus-email", "nexus-terminal"]);
+    expect(apps.find((app) => app.id === "nexus-terminal")).toMatchObject({
+      url: "/terminal",
+      health: "healthy",
+    });
+  });
+
+  it("does not reveal terminal to non-admin callers, even when Cloud registers it", async () => {
+    const res = await handleRequest(
+      new Request("http://app.test/api/apps", { headers: { cookie: "role=user" } }),
+    );
+    const { apps } = (await res.json()) as { apps: Array<{ id: string }> };
+    expect(apps.map((app) => app.id)).not.toContain("nexus-terminal");
+  });
+
+  it("keeps terminal visible but offline to admins when its health endpoint is down", async () => {
+    terminal?.stop(true);
+    terminal = null;
+    const res = await handleRequest(
+      new Request("http://app.test/api/apps", { headers: { cookie: "role=admin" } }),
+    );
+    const { apps } = (await res.json()) as { apps: Array<{ id: string; health: string }> };
+    expect(apps.find((app) => app.id === "nexus-terminal")).toMatchObject({ health: "offline" });
   });
 
   it("degrades to the shell's own views rather than failing when Cloud is down", async () => {

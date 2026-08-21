@@ -206,7 +206,11 @@ describe("one tile per destination", () => {
 
 describe("shell-native views", () => {
   it("offers mail as an in-shell route, not a framed app", () => {
-    const entries = shellNativeEntries({ mailHealthy: true });
+    const entries = shellNativeEntries({
+      mailHealthy: true,
+      terminalHealthy: true,
+      includeTerminal: false,
+    });
     expect(entries).toHaveLength(1);
     const mail = entries[0]!;
     expect(mail.id).toBe("nexus-email");
@@ -218,11 +222,45 @@ describe("shell-native views", () => {
   });
 
   it("marks mail offline when the mail API is unreachable", () => {
-    expect(shellNativeEntries({ mailHealthy: false })[0]!.health).toBe("offline");
+    expect(
+      shellNativeEntries({ mailHealthy: false, terminalHealthy: true, includeTerminal: false })[0]!
+        .health,
+    ).toBe("offline");
+  });
+
+  it("offers the audited host shell only to authorized operators", () => {
+    expect(
+      shellNativeEntries({
+        mailHealthy: true,
+        terminalHealthy: true,
+        includeTerminal: true,
+      }),
+    ).toContainEqual({
+      id: "nexus-terminal",
+      name: "Nexus Terminal",
+      description: "Audited host shell for Nexus operators",
+      url: "/terminal",
+      path: "/terminal",
+      health: "healthy",
+    });
+    expect(
+      shellNativeEntries({ mailHealthy: true, terminalHealthy: true, includeTerminal: false }),
+    ).not.toContainEqual(expect.objectContaining({ id: "nexus-terminal" }));
+  });
+
+  it("reports the native terminal as offline without externalizing it", () => {
+    expect(
+      shellNativeEntries({ mailHealthy: true, terminalHealthy: false, includeTerminal: true }),
+    ).toContainEqual(
+      expect.objectContaining({ id: "nexus-terminal", url: "/terminal", health: "offline" }),
+    );
   });
 
   it("adds mail to the registry grid without losing registry apps", () => {
-    const merged = mergeApps(toAppEntries(TOOLS, AUTH), shellNativeEntries({ mailHealthy: true }));
+    const merged = mergeApps(
+      toAppEntries(TOOLS, AUTH),
+      shellNativeEntries({ mailHealthy: true, terminalHealthy: true, includeTerminal: false }),
+    );
     expect(merged.map((e) => e.id)).toContain("nexus-email");
     expect(merged.map((e) => e.id)).toContain("nexus-chat");
   });
@@ -238,7 +276,10 @@ describe("shell-native views", () => {
         health: "healthy",
       },
     ];
-    const merged = mergeApps(registry, shellNativeEntries({ mailHealthy: true }));
+    const merged = mergeApps(
+      registry,
+      shellNativeEntries({ mailHealthy: true, terminalHealthy: true, includeTerminal: false }),
+    );
     expect(merged.filter((e) => e.id === "nexus-email")).toHaveLength(1);
     // The in-shell route is the one that works, so it is the one that survives.
     expect(merged.find((e) => e.id === "nexus-email")!.url).toBe("/mail");
@@ -247,7 +288,7 @@ describe("shell-native views", () => {
   it("sorts the merged grid by name", () => {
     const names = mergeApps(
       toAppEntries(TOOLS, AUTH),
-      shellNativeEntries({ mailHealthy: true }),
+      shellNativeEntries({ mailHealthy: true, terminalHealthy: true, includeTerminal: false }),
     ).map((e) => e.name);
     expect(names).toEqual([...names].sort());
   });
@@ -264,6 +305,7 @@ describe("flat app paths", () => {
     // A registered app called "account" must not take over the account page.
     expect(pathForApp("nexus-account")).toBe("/a/nexus-account");
     expect(pathForApp("nexus-admin")).toBe("/a/nexus-admin");
+    expect(pathForApp("nexus-terminal")).toBe("/a/nexus-terminal");
   });
 
   it("gives every registry entry a flat path", () => {
@@ -287,7 +329,31 @@ describe("flat app paths", () => {
         health: "healthy",
       },
     ];
-    const merged = mergeApps(registry, shellNativeEntries({ mailHealthy: true }));
+    const merged = mergeApps(
+      registry,
+      shellNativeEntries({ mailHealthy: true, terminalHealthy: true, includeTerminal: false }),
+    );
     expect(merged.filter((e) => e.path === "/mail")).toHaveLength(1);
+  });
+
+  it("keeps the native terminal instead of a Cloud terminal record", () => {
+    const registry: AppEntry[] = [
+      {
+        id: "nexus-terminal",
+        name: "Nexus Terminal",
+        description: "external",
+        url: "https://terminal.tnhc.dev",
+        path: "/a/nexus-terminal",
+        health: "healthy",
+      },
+    ];
+    const merged = mergeApps(
+      registry,
+      shellNativeEntries({ mailHealthy: true, terminalHealthy: true, includeTerminal: true }),
+    );
+    expect(merged).toHaveLength(2);
+    expect(merged.filter((entry) => entry.id === "nexus-terminal")).toEqual([
+      expect.objectContaining({ url: "/terminal", path: "/terminal" }),
+    ]);
   });
 });
