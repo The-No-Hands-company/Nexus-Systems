@@ -29,7 +29,7 @@ export default function CloudTools() {
         <p className="mt-2 text-zinc-400">Every tool registered with this node.</p>
       </div>
 
-      {state.kind === "loading" && <p className="text-zinc-500">Loading…</p>}
+      {state.kind === "loading" && <p role="status" className="text-zinc-500">Loading…</p>}
 
       {state.kind === "unavailable" && (
         <p role="alert" className="text-red-400">
@@ -47,12 +47,12 @@ export default function CloudTools() {
           <table className="w-full text-left text-sm">
             <thead>
               <tr className="border-b border-zinc-800 text-xs uppercase tracking-wide text-zinc-500">
-                <th className="px-4 py-3 font-medium">Name</th>
-                <th className="px-4 py-3 font-medium">Capabilities</th>
-                <th className="px-4 py-3 font-medium">Status</th>
-                <th className="px-4 py-3 font-medium">Address</th>
-                <th className="px-4 py-3 font-medium">Last seen</th>
-                <th className="px-4 py-3 font-medium" />
+                <th scope="col" className="px-4 py-3 font-medium">Name</th>
+                <th scope="col" className="px-4 py-3 font-medium">Capabilities</th>
+                <th scope="col" className="px-4 py-3 font-medium">Status</th>
+                <th scope="col" className="px-4 py-3 font-medium">Address</th>
+                <th scope="col" className="px-4 py-3 font-medium">Last seen</th>
+                <th scope="col" className="px-4 py-3 font-medium">Open</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-800">
@@ -88,12 +88,13 @@ export default function CloudTools() {
                     <td className="px-4 py-3">
                       {url && (
                         <a
+                          aria-label={`Open ${t.name}`}
                           href={url}
                           target="_blank"
                           rel="noreferrer"
-                          className="rounded border border-zinc-700 px-2 py-1 text-xs hover:bg-zinc-800"
+                          className="rounded border border-zinc-700 px-2 py-1 text-xs hover:bg-zinc-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-400"
                         >
-                          Open ↗
+                          Open <span aria-hidden="true">↗</span>
                         </a>
                       )}
                     </td>

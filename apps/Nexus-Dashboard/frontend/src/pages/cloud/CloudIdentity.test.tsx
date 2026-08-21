@@ -39,6 +39,13 @@ beforeEach(() => {
 });
 
 describe("CloudIdentity", () => {
+  it("announces loading while identity is pending", () => {
+    vi.stubGlobal("fetch", vi.fn(() => new Promise<Response>(() => undefined)));
+    render(<MemoryRouter><CloudIdentity /></MemoryRouter>);
+
+    expect(screen.getByRole("status").textContent).toMatch(/loading/i);
+  });
+
   it("renders the identity fields the proxy returns", async () => {
     stubFetch();
     render(<MemoryRouter><CloudIdentity /></MemoryRouter>);

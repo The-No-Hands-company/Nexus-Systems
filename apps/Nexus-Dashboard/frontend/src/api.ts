@@ -221,6 +221,9 @@ export type CloudStatus = {
   trust?: { nodes?: CloudTrustCounts; peers?: CloudTrustCounts };
 };
 
+/** The Systems API wraps the normalized status counters in `status`. */
+export type CloudStatusResponse = { status: CloudStatus };
+
 export type CloudTrustCounts = {
   total?: number;
   trusted?: number;
@@ -275,7 +278,7 @@ export type CloudTool = {
 };
 
 export function cloudStatus() {
-  return request<CloudStatus>("/api/cloud/status");
+  return request<CloudStatusResponse>("/api/cloud/status").then((r) => r.status);
 }
 
 /** status.html's `?compact=trust` query, forwarded verbatim by the proxy. */

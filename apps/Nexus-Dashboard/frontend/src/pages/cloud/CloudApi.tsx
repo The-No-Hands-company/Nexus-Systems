@@ -59,7 +59,7 @@ export default function CloudApi() {
         <p className="mt-2 text-zinc-400">Every route this node's Systems API exposes.</p>
       </div>
 
-      {state.kind === "loading" && <p className="text-zinc-500">Loading…</p>}
+      {state.kind === "loading" && <p role="status" className="text-zinc-500">Loading…</p>}
 
       {state.kind === "unavailable" && (
         <p role="alert" className="text-red-400">

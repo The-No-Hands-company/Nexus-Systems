@@ -36,6 +36,13 @@ beforeEach(() => {
 });
 
 describe("CloudFederation", () => {
+  it("announces loading while federation peers are pending", () => {
+    vi.stubGlobal("fetch", vi.fn(() => new Promise<Response>(() => undefined)));
+    render(<MemoryRouter><CloudFederation /></MemoryRouter>);
+
+    expect(screen.getByRole("status").textContent).toMatch(/loading/i);
+  });
+
   it("renders the peers the proxy returns", async () => {
     stubFetch();
     render(<MemoryRouter><CloudFederation /></MemoryRouter>);
@@ -43,6 +50,7 @@ describe("CloudFederation", () => {
     await waitFor(() => expect(screen.getByText("peer-a.example.com")).toBeTruthy());
     expect(screen.getByText("trusted")).toBeTruthy();
     expect(screen.getByText("ns:a.node-y")).toBeTruthy();
+    expect(screen.getByRole("columnheader", { name: "Domain" }).getAttribute("scope")).toBe("col");
   });
 
   it("does not crash when a peer's trust field is the real object shape, not a display string", async () => {

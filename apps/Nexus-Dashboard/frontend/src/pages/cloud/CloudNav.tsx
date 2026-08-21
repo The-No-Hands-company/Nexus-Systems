@@ -23,7 +23,7 @@ export default function CloudNav() {
           to={tab.to}
           end={"end" in tab ? tab.end : false}
           className={({ isActive }) =>
-            `rounded px-3 py-1.5 text-sm ${
+            `rounded px-3 py-1.5 text-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-400 ${
               isActive ? "bg-zinc-800 text-zinc-100" : "text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200"
             }`
           }

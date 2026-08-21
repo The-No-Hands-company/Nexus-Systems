@@ -21,11 +21,13 @@ function jsonResponse(body: unknown, status = 200) {
 const STATUS_BODY = {
   // `mode` is in the real payload; the fixture lacked it, which is how the
   // trust panel rendered "mode: unknown" instead of naming the node's state.
-  mode: "standalone",
-  toolCount: 9,
-  healthyToolCount: 7,
-  exposedToolCount: 4,
-  trust: { peers: { total: 3 } },
+  status: {
+    mode: "standalone",
+    toolCount: 9,
+    healthyToolCount: 7,
+    exposedToolCount: 4,
+    trust: { peers: { total: 3 } },
+  },
 };
 
 /**
@@ -106,6 +108,13 @@ beforeEach(() => {
 });
 
 describe("CloudOverview", () => {
+  it("announces loading while the load-bearing Cloud requests are pending", () => {
+    vi.stubGlobal("fetch", vi.fn(() => new Promise<Response>(() => undefined)));
+    render(<MemoryRouter><CloudOverview /></MemoryRouter>);
+
+    expect(screen.getByRole("status").textContent).toMatch(/loading/i);
+  });
+
   it("renders the real data returned by the proxy — node identity, stats, trust and audit", async () => {
     stubFetch();
     render(<MemoryRouter><CloudOverview /></MemoryRouter>);
@@ -124,6 +133,7 @@ describe("CloudOverview", () => {
     expect(reachableCard?.textContent).toContain("7 heartbeating");
     expect(reachableCard?.textContent).toContain("9 registered");
     expect(screen.getByText("4")).toBeTruthy(); // exposed tools
+    expect(screen.getByRole("navigation", { name: "Cloud console" })).toBeTruthy();
 
     // Trust lifecycle pills.
     expect(screen.getByText(/3 trusted/)).toBeTruthy();
@@ -137,6 +147,21 @@ describe("CloudOverview", () => {
     // must show as online rather than "not registered".
     expect(screen.getByText("Nexus Guardian")).toBeTruthy();
     expect(screen.queryAllByText("not registered").length).toBe(2); // Edge, Tunnel absent
+  });
+
+  it("uses the current status counters instead of legacy nested totals", async () => {
+    stubFetch({
+      "/api/cloud/status": () => jsonResponse({
+        status: {
+          mode: "standalone", toolCount: 86, healthyToolCount: 36,
+          exposedToolCount: 7, trust: { peers: { total: 0 }, nodes: { total: 0 } },
+        },
+      }),
+    });
+    render(<MemoryRouter><CloudOverview /></MemoryRouter>);
+
+    expect(await screen.findByText("86 registered")).toBeTruthy();
+    expect(screen.getByRole("navigation", { name: "Cloud console" })).toBeTruthy();
   });
 
   it("names this node in the trust panel rather than reporting no nodes at all", async () => {

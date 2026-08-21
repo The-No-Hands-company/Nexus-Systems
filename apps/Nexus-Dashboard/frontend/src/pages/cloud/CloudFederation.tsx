@@ -55,7 +55,7 @@ export default function CloudFederation() {
         <p className="mt-2 text-zinc-400">Peers this node has discovered.</p>
       </div>
 
-      {state.kind === "loading" && <p className="text-zinc-500">Loading…</p>}
+      {state.kind === "loading" && <p role="status" className="text-zinc-500">Loading…</p>}
 
       {state.kind === "unavailable" && (
         <p role="alert" className="text-red-400">
@@ -78,10 +78,10 @@ export default function CloudFederation() {
           <table className="w-full text-left text-sm">
             <thead>
               <tr className="border-b border-zinc-800 text-xs uppercase tracking-wide text-zinc-500">
-                <th className="px-4 py-3 font-medium">Domain</th>
-                <th className="px-4 py-3 font-medium">Trust</th>
-                <th className="px-4 py-3 font-medium">Last seen</th>
-                <th className="px-4 py-3 font-medium">Address</th>
+                <th scope="col" className="px-4 py-3 font-medium">Domain</th>
+                <th scope="col" className="px-4 py-3 font-medium">Trust</th>
+                <th scope="col" className="px-4 py-3 font-medium">Last seen</th>
+                <th scope="col" className="px-4 py-3 font-medium">Address</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-800">

@@ -34,6 +34,13 @@ beforeEach(() => {
 });
 
 describe("CloudApi", () => {
+  it("announces loading while endpoint discovery is pending", () => {
+    vi.stubGlobal("fetch", vi.fn(() => new Promise<Response>(() => undefined)));
+    render(<MemoryRouter><CloudApi /></MemoryRouter>);
+
+    expect(screen.getByRole("status").textContent).toMatch(/loading/i);
+  });
+
   it("renders the routes the proxy returns, grouped by path prefix", async () => {
     stubFetch();
     render(<MemoryRouter><CloudApi /></MemoryRouter>);

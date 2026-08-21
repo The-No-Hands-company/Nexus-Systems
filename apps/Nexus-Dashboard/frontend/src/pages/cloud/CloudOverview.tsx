@@ -98,7 +98,7 @@ export default function CloudOverview() {
   }, []);
 
   if (state.kind === "loading") {
-    return <section className="mx-auto max-w-5xl p-8 text-zinc-500">Loading…</section>;
+    return <section role="status" className="mx-auto max-w-5xl p-8 text-zinc-500">Loading…</section>;
   }
 
   if (state.kind === "unavailable") {
@@ -150,7 +150,8 @@ export default function CloudOverview() {
           <div className="text-2xl font-semibold text-zinc-100">{toolReachable}</div>
           <div className="text-sm text-zinc-400">Reachable tools</div>
           <div className="mt-1 text-xs text-zinc-500">
-            {toolHealthy} heartbeating · {toolTotal} registered
+            <span>{toolHealthy} heartbeating · </span>
+            <span>{toolTotal} registered</span>
           </div>
         </div>
         {/* Was "Users". Cloud has no user count and should not — accounts moved
@@ -318,12 +319,13 @@ export default function CloudOverview() {
                 </div>
                 {t && (t.publicUrl || t.upstreamUrl) && (
                   <a
+                    aria-label={`Open ${t.name}`}
                     href={t.publicUrl || t.upstreamUrl}
                     target="_blank"
                     rel="noreferrer"
-                    className="shrink-0 rounded border border-zinc-700 px-2 py-1 text-xs hover:bg-zinc-800"
+                    className="shrink-0 rounded border border-zinc-700 px-2 py-1 text-xs hover:bg-zinc-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-400"
                   >
-                    Open ↗
+                    Open <span aria-hidden="true">↗</span>
                   </a>
                 )}
               </li>

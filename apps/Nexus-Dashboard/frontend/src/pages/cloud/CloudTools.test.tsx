@@ -46,6 +46,13 @@ beforeEach(() => {
 });
 
 describe("CloudTools", () => {
+  it("announces loading while the tool registry is pending", () => {
+    vi.stubGlobal("fetch", vi.fn(() => new Promise<Response>(() => undefined)));
+    render(<MemoryRouter><CloudTools /></MemoryRouter>);
+
+    expect(screen.getByRole("status").textContent).toMatch(/loading/i);
+  });
+
   it("renders the tools the proxy returns, capabilities and health included", async () => {
     stubFetch();
     render(<MemoryRouter><CloudTools /></MemoryRouter>);
@@ -57,7 +64,8 @@ describe("CloudTools", () => {
     expect(screen.getByText("healthy")).toBeTruthy();
     expect(screen.getByText("degraded")).toBeTruthy();
     expect(screen.getByText("https://draw.tnhc.dev")).toBeTruthy();
-    expect(screen.getByRole("link", { name: /open/i })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Open Nexus Draw" })).toBeTruthy();
+    expect(screen.getByRole("columnheader", { name: "Name" }).getAttribute("scope")).toBe("col");
   });
 
   it("says no tools are registered rather than showing an empty table", async () => {
