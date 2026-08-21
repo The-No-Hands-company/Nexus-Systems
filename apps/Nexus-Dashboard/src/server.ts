@@ -3,6 +3,11 @@ import { mergeApps, shellNativeEntries, toAppEntries } from "./apps";
 import { callerIdentity, isAdminRole } from "./auth";
 import { cloudBaseUrl, cloudHeaders } from "./cloud";
 import { fileIssue, validateReport } from "./issues";
+import {
+  type TerminalSocketData,
+  authorizeTerminalUpgrade,
+  terminalWebSocketHandlers,
+} from "./terminal";
 
 /**
  * The ecosystem front door — app.<domain>.
@@ -265,9 +270,23 @@ async function proxyToAuth(req: Request, path: string): Promise<Response> {
   return new Response(res.body, { status: res.status, headers: res.headers });
 }
 
-export async function handleRequest(req: Request): Promise<Response> {
+type UpgradeServer = Pick<Bun.Server<TerminalSocketData>, "upgrade">;
+
+export function handleRequest(req: Request): Promise<Response>;
+export function handleRequest(req: Request, server: UpgradeServer): Promise<Response | undefined>;
+export async function handleRequest(
+  req: Request,
+  server?: UpgradeServer,
+): Promise<Response | undefined> {
   const url = new URL(req.url);
   const path = url.pathname;
+
+  if (path === "/api/terminal/attach") {
+    const decision = await authorizeTerminalUpgrade(req);
+    if (!decision.ok) return decision.response;
+    if (server?.upgrade(req, { data: decision.data })) return undefined;
+    return Response.json({ error: "upgrade_failed" }, { status: 400 });
+  }
 
   if (req.method === "GET" && path === "/health") {
     return Response.json({ service: "nexus-dashboard", status: "ok" });
@@ -351,10 +370,11 @@ export async function handleRequest(req: Request): Promise<Response> {
 export function startServer() {
   // Loopback unless told otherwise — Bun.serve binds every interface by
   // default, and the proxy is the only intended client.
-  const server = Bun.serve({
+  const server = Bun.serve<TerminalSocketData>({
     port: PORT,
     hostname: process.env.NEXUS_BIND_HOST || "127.0.0.1",
-    fetch: handleRequest,
+    websocket: terminalWebSocketHandlers,
+    fetch: (req, bunServer) => handleRequest(req, bunServer),
   });
   console.log(`[nexus-dashboard] Listening on port ${server.port}`);
   return server;
