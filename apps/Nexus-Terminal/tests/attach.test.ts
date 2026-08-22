@@ -1,5 +1,28 @@
 import { describe, it, expect, beforeAll, afterAll } from "bun:test";
+import { killAll, spawnShell } from "../src/pty";
 import { createServer } from "../src/server";
+
+function attachSocket(base: string, role: string): {
+  socket: WebSocket;
+  opened: Promise<void>;
+  closed: Promise<CloseEvent>;
+} {
+  const socket = new WebSocket(
+    `${base.replace(/^http/, "ws")}/api/v1/terminal/attach?cols=80&rows=24`,
+    { headers: { cookie: `role=${role}` } },
+  );
+  const opened = new Promise<void>((resolve, reject) => {
+    socket.addEventListener("open", () => resolve(), { once: true });
+    socket.addEventListener("error", () => reject(new Error("attach did not upgrade")), {
+      once: true,
+    });
+  });
+  void opened.catch(() => {});
+  const closed = new Promise<CloseEvent>((resolve) => {
+    socket.addEventListener("close", (event) => resolve(event), { once: true });
+  });
+  return { socket, opened, closed };
+}
 
 /**
  * The checks in front of the shell.
@@ -58,9 +81,9 @@ describe("terminal attach guards", () => {
     base = `http://127.0.0.1:${handle.server.port}`;
   });
 
-  afterAll(() => {
-    handle.close();
-    authServer.stop();
+  afterAll(async () => {
+    await handle.close();
+    await authServer.stop(true);
     for (const [key, value] of originalEnvironment) {
       if (value === undefined) delete process.env[key];
       else process.env[key] = value;
@@ -71,10 +94,55 @@ describe("terminal attach guards", () => {
     expect(handle.server.hostname).toBe("127.0.0.1");
   });
 
-  it("refuses to attach when the shell is not explicitly enabled", async () => {
+  it("does not disclose the disabled state before authentication", async () => {
     const res = await fetch(`${base}/api/v1/terminal/attach`);
+    expect(res.status).toBe(401);
+    expect((await res.json() as { error: string }).error).toBe("not_authenticated");
+  });
+
+  it("reports the disabled state to an authorized caller", async () => {
+    const res = await fetch(`${base}/api/v1/terminal/attach`, {
+      headers: { cookie: "role=founder" },
+    });
     expect(res.status).toBe(403);
     expect((await res.json() as { error: string }).error).toBe("terminal_disabled");
+  });
+
+  it("upgrades safe failures to fixed close codes without spawning a shell", async () => {
+    const disabled = attachSocket(base, "founder");
+    await disabled.opened;
+    const disabledClose = await disabled.closed;
+    expect(disabledClose.code).toBe(4004);
+    expect(disabledClose.reason).toBe("terminal disabled");
+
+    process.env.NEXUS_TERMINAL_ENABLED = "true";
+    try {
+      const refused = attachSocket(base, "member");
+      await refused.opened;
+      const refusedClose = await refused.closed;
+      expect(refusedClose.code).toBe(4003);
+      expect(refusedClose.reason).toBe("terminal refused");
+
+      const capacity = Array.from({ length: 8 }, (_, index) =>
+        spawnShell({
+          subject: `capacity-${index}`,
+          cols: 80,
+          rows: 24,
+          onData: () => {},
+          onExit: () => {},
+        }),
+      );
+      expect(capacity.every(Boolean)).toBe(true);
+
+      const limited = attachSocket(base, "founder");
+      await limited.opened;
+      const limitedClose = await limited.closed;
+      expect(limitedClose.code).toBe(1013);
+      expect(limitedClose.reason).toBe("session limit reached");
+    } finally {
+      Reflect.deleteProperty(process.env, "NEXUS_TERMINAL_ENABLED");
+      await killAll();
+    }
   });
 
   it("still serves health while the shell is disabled", async () => {

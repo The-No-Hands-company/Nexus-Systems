@@ -15,46 +15,69 @@ import { TerminalAudit } from "./audit";
  * `sessionId` is filled in by open() once the shell exists — it cannot be
  * known at upgrade time.
  */
+type TerminalFailureCode = 4003 | 4004 | 1013;
 type ShellSocket = {
+  kind: "attach";
   subject: string;
   cols: number;
   rows: number;
   remoteIp: string | null;
   sessionId?: string;
+} | {
+  kind: "reject";
+  code: TerminalFailureCode;
+};
+const TERMINAL_FAILURE_REASONS: Record<TerminalFailureCode, string> = {
+  4003: "terminal refused",
+  4004: "terminal disabled",
+  1013: "session limit reached",
 };
 function json(payload: unknown, status: number, headers?: Record<string, string>): Response { const body = JSON.stringify(payload); return new Response(body, { status, headers: { "content-type": "application/json; charset=utf-8", "x-request-id": randomUUID(), ...headers } }); }
-export async function createServer() { const port = Number(process.env.PORT || "3110"); const baseUrl = process.env.NEXUS_NEXUS_TERMINAL_BASE_URL || `http://localhost:${port}`; const startedAt = Date.now(); const engine = new TerminalEngine("data/terminal.sqlite")
+export async function createServer(options: { auditPath?: string } = {}) { const port = Number(process.env.PORT || "3110"); const baseUrl = process.env.NEXUS_NEXUS_TERMINAL_BASE_URL || `http://localhost:${port}`; const startedAt = Date.now(); const engine = new TerminalEngine("data/terminal.sqlite")
   const phantom = new PhantomApp("nexus-terminal");
   const phantomId = await phantom.start();
   const discovery = new NexusDiscovery({ cloudUrl: process.env.NEXUS_CLOUD_URL || "http://localhost:8787", apiKey: process.env.NEXUS_CLOUD_API_KEY || undefined, ttlMs: 30000 });
 ;
-  const audit = new TerminalAudit();
+  const audit = new TerminalAudit(options.auditPath);
 
   // Abandoned tabs leave live shells behind. Without reaping, the session
   // ceiling eventually refuses new ones and nobody can see why.
-  const reaper = setInterval(() => reapIdle(), 60_000);
+  const reaper = setInterval(() => { void reapIdle(); }, 60_000);
+  let shuttingDown = false;
 
   const server = Bun.serve<ShellSocket>({ port, hostname: process.env.NEXUS_BIND_HOST || "127.0.0.1",
     websocket: {
       open(ws) {
+        if (shuttingDown) {
+          ws.close(1012, "terminal shutting down");
+          return;
+        }
         const d = ws.data;
+        if (d.kind === "reject") {
+          ws.close(d.code, TERMINAL_FAILURE_REASONS[d.code]);
+          return;
+        }
         const session = spawnShell({
           subject: d.subject,
           cols: d.cols,
           rows: d.rows,
           onData: (chunk) => { try { ws.send(chunk); } catch { /* socket gone */ } },
-          onExit: (code) => {
-            const id = ws.data.sessionId;
-            if (id) audit.end(id, code);
-            try { ws.close(); } catch { /* already closed */ }
+          onExit: (id, code) => {
+            try { audit.end(id, code); }
+            finally { try { ws.close(); } catch { /* already closed */ } }
           },
         });
-        if (!session) { ws.close(1013, "too many sessions"); return; }
-        ws.data.sessionId = session.id;
-        audit.begin(session.id, d.subject, d.remoteIp);
+        if (!session) { ws.close(1013, TERMINAL_FAILURE_REASONS[1013]); return; }
+        d.sessionId = session.id;
+        try {
+          audit.begin(session.id, d.subject, d.remoteIp);
+        } catch {
+          void session.kill().catch(() => {});
+          ws.close(1011, "terminal audit unavailable");
+        }
       },
       message(ws, raw) {
-        const id = ws.data.sessionId;
+        const id = ws.data.kind === "attach" ? ws.data.sessionId : undefined;
         if (!id) return;
         const session = getSession(id);
         if (!session) return;
@@ -65,8 +88,8 @@ export async function createServer() { const port = Number(process.env.PORT || "
         session.write(text);
       },
       close(ws) {
-        const id = ws.data.sessionId;
-        if (id) getSession(id)?.kill();
+        const id = ws.data.kind === "attach" ? ws.data.sessionId : undefined;
+        if (id) void getSession(id)?.kill();
       },
     },
     async fetch(request, srv) { const url = new URL(request.url); const path = url.pathname || "";
@@ -77,23 +100,41 @@ export async function createServer() { const port = Number(process.env.PORT || "
     // docs/TERMINAL-SECURITY.md — the three checks below are the whole of what
     // stands between the internet and a shell here.
     if (path === "/api/v1/terminal/attach") {
-      // Off unless deliberately switched on: deploying the code is not the
-      // same act as deciding to hand out shells.
-      if (!terminalEnabled()) return json({ error: "terminal_disabled" }, 403);
-
+      if (shuttingDown) return json({ error: "shutting_down" }, 503);
       // Identity from Auth, asked with the caller's own cookies — never from a
       // header or query parameter the browser chose to send.
       const who = await callerIdentity(request);
       if (!who) return json({ error: "not_authenticated" }, 401);
-      if (!canUseTerminal(who)) return json({ error: "forbidden" }, 403);
+      if (shuttingDown) return json({ error: "shutting_down" }, 503);
+      if (!canUseTerminal(who)) {
+        if (srv.upgrade(request, { data: { kind: "reject", code: 4003 } })) {
+          return undefined as unknown as Response;
+        }
+        return json({ error: "forbidden" }, 403);
+      }
 
-      if (sessionCount() >= 8) return json({ error: "too_many_sessions" }, 503);
+      // Only an authenticated founder/admin learns operational state. A
+      // WebSocket receives a fixed close code; ordinary HTTP keeps the JSON
+      // status for diagnostics without exposing an upstream response body.
+      if (!terminalEnabled()) {
+        if (srv.upgrade(request, { data: { kind: "reject", code: 4004 } })) {
+          return undefined as unknown as Response;
+        }
+        return json({ error: "terminal_disabled" }, 403);
+      }
+
+      if (sessionCount() >= 8) {
+        if (srv.upgrade(request, { data: { kind: "reject", code: 1013 } })) {
+          return undefined as unknown as Response;
+        }
+        return json({ error: "too_many_sessions" }, 503);
+      }
 
       const cols = Number(url.searchParams.get("cols") || 80);
       const rows = Number(url.searchParams.get("rows") || 24);
       const remoteIp = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? null;
 
-      if (srv.upgrade(request, { data: { subject: who.subject, cols, rows, remoteIp } })) {
+      if (srv.upgrade(request, { data: { kind: "attach", subject: who.subject, cols, rows, remoteIp } })) {
         return undefined as unknown as Response;
       }
       return json({ error: "upgrade_failed" }, 400);
@@ -122,4 +163,28 @@ export async function createServer() { const port = Number(process.env.PORT || "
     return json({ error: "not found" }, 404); } });
   console.log(`[nexus-terminal] Listening on port ${server.port}`); const stopHeartbeat = startHeartbeat(baseUrl);
   if (!terminalEnabled()) console.log("[nexus-terminal] shell attach DISABLED (set NEXUS_TERMINAL_ENABLED=true)");
-  return { server, engine, close: () => { clearInterval(reaper); killAll(); stopHeartbeat(); phantom.stop(); server.stop(); } }; }
+  let closePromise: Promise<void> | null = null;
+  const close = (): Promise<void> => {
+    if (closePromise) return closePromise;
+    shuttingDown = true;
+    clearInterval(reaper);
+    // Bun's graceful-stop promise remains pending for an open WebSocket even
+    // after a later forced stop, so it must not be the shutdown completion
+    // signal. This call still stops new accepts while shells are finalized.
+    void server.stop(false).catch(() => {});
+    closePromise = (async () => {
+      try {
+        await killAll();
+        // The shell audit is complete at this point. Force-close any idle HTTP
+        // or WebSocket peer that kept Bun's graceful stop promise pending.
+        await server.stop(true);
+      } finally {
+        stopHeartbeat();
+        phantom.stop();
+        audit.close();
+        engine.db.close();
+      }
+    })();
+    return closePromise;
+  };
+  return { server, engine, close }; }

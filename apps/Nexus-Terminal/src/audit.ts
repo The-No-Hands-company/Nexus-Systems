@@ -50,8 +50,12 @@ export class TerminalAudit {
 
   end(id: string, exitCode: number): void {
     this.db
-      .query("UPDATE sessions SET ended_at = ?, exit_code = ? WHERE id = ?")
+      .query("UPDATE sessions SET ended_at = ?, exit_code = ? WHERE id = ? AND ended_at IS NULL")
       .run(new Date().toISOString(), exitCode, id);
+  }
+
+  close(): void {
+    this.db.close();
   }
 
   /** Sessions, newest first. For an operator reviewing activity. */

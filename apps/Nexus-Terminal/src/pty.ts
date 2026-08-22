@@ -32,8 +32,11 @@ export type PtySession = {
   subject: string;
   proc: ReturnType<typeof Bun.spawn>;
   startedAt: number;
+  lastActivityAt: number;
+  closing: boolean;
+  finished: Promise<number>;
   write(data: string): void;
-  kill(): void;
+  kill(): Promise<void>;
 };
 
 /** Hard ceiling on concurrent shells, so a loop cannot exhaust the host. */
@@ -65,7 +68,8 @@ export function spawnShell(opts: {
   cols: number;
   rows: number;
   onData: (chunk: string) => void;
-  onExit: (code: number) => void;
+  onExit: (id: string, code: number) => void | Promise<void>;
+  now?: () => number;
 }): PtySession | null {
   if (sessions.size >= MAX_SESSIONS) return null;
 
@@ -85,37 +89,68 @@ export function spawnShell(opts: {
     },
   });
 
-  const pump = async (stream: ReadableStream<Uint8Array> | null) => {
-    if (!stream) return;
-    const decoder = new TextDecoder();
-    for await (const chunk of stream) {
-      opts.onData(decoder.decode(chunk));
-    }
-  };
-  void pump(proc.stdout as ReadableStream<Uint8Array>);
-  void pump(proc.stderr as ReadableStream<Uint8Array>);
+  const now = opts.now ?? Date.now;
+  const startedAt = now();
+  let killPromise: Promise<void> | null = null;
 
   const session: PtySession = {
     id,
     subject: opts.subject,
     proc,
-    startedAt: Date.now(),
+    startedAt,
+    lastActivityAt: startedAt,
+    closing: false,
+    finished: Promise.resolve(0),
     write(data) {
-      proc.stdin?.write(data);
-      proc.stdin?.flush?.();
+      if (data.length > 0) session.lastActivityAt = now();
+      try {
+        proc.stdin?.write(data);
+        proc.stdin?.flush?.();
+      } catch {
+        // Process exit can race the final browser frame. The session's exit
+        // path closes the socket; a stale frame must not crash the service.
+      }
     },
     kill() {
+      if (killPromise) return killPromise;
+      session.closing = true;
+      try { proc.stdin?.end(); } catch { /* already gone */ }
       try { proc.kill(); } catch { /* already gone */ }
-      sessions.delete(id);
+
+      // A shell that ignores TERM must not make service shutdown hang forever.
+      const forceTimer = setTimeout(() => {
+        try { proc.kill(9); } catch { /* already gone */ }
+      }, 500);
+      forceTimer.unref?.();
+      killPromise = session.finished.then(() => undefined).finally(() => clearTimeout(forceTimer));
+      return killPromise;
     },
   };
 
-  void proc.exited.then((code) => {
-    sessions.delete(id);
-    opts.onExit(typeof code === "number" ? code : 0);
+  session.finished = proc.exited.then(async (code) => {
+    const exitCode = typeof code === "number" ? code : 0;
+    try {
+      await opts.onExit(id, exitCode);
+    } finally {
+      sessions.delete(id);
+    }
+    return exitCode;
   });
 
   sessions.set(id, session);
+
+  const pump = async (stream: ReadableStream<Uint8Array> | null) => {
+    if (!stream) return;
+    const decoder = new TextDecoder();
+    for await (const chunk of stream) {
+      const decoded = decoder.decode(chunk);
+      if (decoded.length > 0) session.lastActivityAt = now();
+      opts.onData(decoded);
+    }
+  };
+  void pump(proc.stdout as ReadableStream<Uint8Array>);
+  void pump(proc.stderr as ReadableStream<Uint8Array>);
+
   return session;
 }
 
@@ -126,18 +161,15 @@ export function spawnShell(opts: {
  * leaves a live shell on the host until reboot, and the MAX_SESSIONS ceiling
  * eventually refuses new ones for no visible reason.
  */
-export function reapIdle(now = Date.now()): number {
-  let reaped = 0;
-  for (const s of sessions.values()) {
-    if (now - s.startedAt > IDLE_TIMEOUT_MS) {
-      s.kill();
-      reaped++;
-    }
-  }
-  return reaped;
+export async function reapIdle(now = Date.now()): Promise<number> {
+  const idle = [...sessions.values()].filter(
+    (session) => !session.closing && now - session.lastActivityAt > IDLE_TIMEOUT_MS,
+  );
+  await Promise.all(idle.map((session) => session.kill()));
+  return idle.length;
 }
 
 /** Stop everything. Used on shutdown so no shell outlives the service. */
-export function killAll(): void {
-  for (const s of [...sessions.values()]) s.kill();
+export async function killAll(): Promise<void> {
+  await Promise.all([...sessions.values()].map((session) => session.kill()));
 }
