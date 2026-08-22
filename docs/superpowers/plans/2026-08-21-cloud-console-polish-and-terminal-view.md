@@ -67,7 +67,7 @@ For every view assert loading, ready, empty, and unavailable. Assert semantic ta
 
 - [ ] **Step 2: Verify the new tests fail**
 
-Run `cd apps/Nexus-Dashboard/frontend && bun test src/pages/cloud`.
+Run `cd apps/Nexus-Dashboard/frontend && bun run test -- src/pages/cloud`.
 
 Expected: new contract or semantic assertions fail while existing tests remain diagnostic.
 
@@ -85,7 +85,7 @@ Retain the existing Nexus tokens, `max-w-5xl`, and optional-card degradation.
 
 - [ ] **Step 4: Run Cloud gates**
 
-Run `cd apps/Nexus-Dashboard/frontend && bun test src/pages/cloud && bun run check`.
+Run `cd apps/Nexus-Dashboard/frontend && bun run test -- src/pages/cloud && bun run check`.
 
 Expected: both commands exit 0.
 
@@ -306,7 +306,7 @@ Assert initial dimension query, xterm input to only its socket, socket data to `
 
 - [ ] **Step 2: Verify missing controller**
 
-Run `cd apps/Nexus-Dashboard/frontend && bun test src/pages/terminal/session.test.ts`.
+Run `cd apps/Nexus-Dashboard/frontend && bun run test -- src/pages/terminal/session.test.ts`.
 
 - [ ] **Step 3: Implement controller**
 
@@ -323,7 +323,7 @@ Forward xterm `onData` only while connected and socket messages through `termina
 
 Preserve user-declared `@xterm/xterm@^5.5.0` and `@xterm/addon-fit@^0.10.0`. Run `bun install`, inspect lock changes, and do not stage the user-owned pnpm files.
 
-Run `cd apps/Nexus-Dashboard/frontend && bun test src/pages/terminal/session.test.ts && bun run check`.
+Run `cd apps/Nexus-Dashboard/frontend && bun run test -- src/pages/terminal/session.test.ts && bun run check`.
 
 - [ ] **Step 5: Commit**
 
@@ -360,7 +360,7 @@ Assert `+` creates a second controller, switching focuses without disposal, `×`
 
 - [ ] **Step 3: Verify missing UI**
 
-Run `cd apps/Nexus-Dashboard/frontend && bun test src/pages/terminal src/App.test.tsx`.
+Run `cd apps/Nexus-Dashboard/frontend && bun run test -- src/pages/terminal src/App.test.tsx`.
 
 - [ ] **Step 4: Implement access gate and route**
 
@@ -382,8 +382,8 @@ Store controllers in a ref-backed map. Render accessible `tablist`, `tab`, and `
 
 ```bash
 cd apps/Nexus-Dashboard/frontend
-bun test src/pages/terminal src/App.test.tsx
-bun test
+bun run test -- src/pages/terminal src/App.test.tsx
+bun run test
 bun run check
 bun run build
 cd ../../../
@@ -431,8 +431,8 @@ Start fake Auth, enabled Terminal, and Dashboard. Connect through Dashboard with
 
 ```bash
 cd apps/Nexus-Terminal && bun run check && bun test
-cd ../Nexus-Dashboard && bun run check && bun test
-cd frontend && bun test && bun run check && bun run build
+cd ../Nexus-Dashboard && bun run check && bun test tests/
+cd frontend && bun run test && bun run check && bun run build
 cd ../../../
 bun test deploy/production/tests/proxy.test.ts
 timeout 120s bash deploy/production/tests/processes.test.sh
@@ -458,8 +458,8 @@ git commit -m "feat(terminal): integrate shell view in production"
 ```bash
 cd apps/Nexus-Cloud && bun run check && bun test src
 cd ../Nexus-Terminal && bun run check && bun test
-cd ../Nexus-Dashboard && bun run check && bun test
-cd frontend && bun test && bun run check && bun run build
+cd ../Nexus-Dashboard && bun run check && bun test tests/
+cd frontend && bun run test && bun run check && bun run build
 cd ../../../
 bun test deploy/production/tests/proxy.test.ts
 timeout 120s bash deploy/production/tests/processes.test.sh
