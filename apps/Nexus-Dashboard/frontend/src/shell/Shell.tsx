@@ -36,12 +36,13 @@ export default function Shell({
    */
   utility?: ReactNode;
 }) {
-  return (
-    <div className="flex h-screen flex-col bg-zinc-900 text-zinc-100">
-      <header
-        role="banner"
-        className="flex h-14 shrink-0 items-center gap-3 border-b border-zinc-700 px-4"
-      >
+    return (
+      <div className="flex h-screen flex-col bg-[#030303] text-white">
+        <header
+          role="banner"
+          className="flex h-14 shrink-0 items-center gap-3 border-b border-white/10 px-4"
+        >
+
         {/*
             The wordmark is the way home.
 
@@ -49,9 +50,10 @@ export default function Shell({
             the grid except editing the URL. Making the mark itself the link is
             what every other product does, so it is what people try first.
           */}
-          <Link to="/" className="font-semibold tracking-tight hover:text-white" aria-label="Nexus home">
-            Nexus
-          </Link>
+            <Link to="/" className="font-semibold tracking-tight hover:text-[#ccff00]" aria-label="Nexus home">
+              Nexus
+            </Link>
+
 
           {/*
             Who you are, and the way to your account.
@@ -67,12 +69,14 @@ export default function Shell({
           {user && (
             <Link
               to="/account"
-              className={`${utility ? "" : "ml-auto"} flex items-center gap-2 rounded-md px-2 py-1 text-sm text-zinc-500 hover:bg-zinc-800 hover:text-zinc-100`}
+                className={`${utility ? "" : "ml-auto"} flex items-center gap-2 rounded-md px-2 py-1 text-sm text-white/60 hover:bg-white/5 hover:text-white`}
+
               title={user.email}
             >
               <span
                 aria-hidden="true"
-                className="flex h-6 w-6 items-center justify-center rounded-full bg-zinc-700 text-xs font-medium text-zinc-100"
+                                className="flex h-6 w-6 items-center justify-center rounded-full bg-white/10 text-xs font-medium text-white"
+
               >
                 {(user.username || user.email || "?").slice(0, 1).toUpperCase()}
               </span>
@@ -84,7 +88,8 @@ export default function Shell({
       <div className="flex min-h-0 flex-1">
         <aside
           aria-label="Applications"
-          className="w-60 shrink-0 overflow-y-auto border-r border-zinc-700"
+            className="w-60 shrink-0 overflow-y-auto border-r border-white/10"
+
         >
           {sidebar}
 
@@ -93,14 +98,15 @@ export default function Shell({
             the ecosystem, not one of its apps, and has to be reachable from
             wherever someone hits a problem.
           */}
-          <div className="mt-2 border-t border-zinc-700 p-2">
-            <Link
-              to="/report"
-              className="block rounded-md px-3 py-2 text-sm text-zinc-500 hover:bg-zinc-800 hover:text-zinc-100"
-            >
-              Report a problem
-            </Link>
-          </div>
+            <div className="mt-2 border-t border-white/10 p-2">
+              <Link
+                to="/report"
+                className="block rounded-md px-3 py-2 text-sm text-white/60 hover:bg-white/5 hover:text-white"
+              >
+                Report a problem
+              </Link>
+            </div>
+
         </aside>
 
         {/*

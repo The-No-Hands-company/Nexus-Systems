@@ -2,18 +2,19 @@
   "$schema": "https://nexus.systems/schemas/design-tokens.v1.json",
   "version": "1.0.0",
   "theme": { "name": "nexus-cloud-default", "mode": "dark" },
-  "color": {
-    "bg": { "canvas": "#090d0d", "surface": "#0f1616", "elevated": "#142020" },
-    "text": { "primary": "#e6f2ee", "secondary": "#9db4ad", "muted": "#7d948d", "inverse": "#0a0f0f" },
-    "accent": { "primary": "#27c9a5", "primaryHover": "#1fb592", "primaryActive": "#189f80" },
-    "state": { "success": "#2ac57d", "warning": "#e8b24a", "danger": "#e15d5d", "info": "#5ca8ff" },
-    "border": { "subtle": "rgba(230,242,238,0.12)", "strong": "rgba(230,242,238,0.28)" }
-  },
-  "typography": {
-    "fontFamily": {
-      "base": "IBM Plex Sans, Segoe UI, sans-serif",
-      "mono": "IBM Plex Mono, ui-monospace, monospace"
+    "color": {
+      "bg": { "canvas": "#030303", "surface": "#0a0a0a", "elevated": "#111111" },
+      "text": { "primary": "#ffffff", "secondary": "#a0a0a0", "muted": "#666666", "inverse": "#000000" },
+      "accent": { "primary": "#ccff00", "primaryHover": "#b8e600", "primaryActive": "#a3cc00" },
+      "state": { "success": "#2ac57d", "warning": "#e8b24a", "danger": "#e15d5d", "info": "#5ca8ff" },
+      "border": { "subtle": "rgba(255,255,255,0.1)", "strong": "rgba(255,255,255,0.2)" }
     },
+    "typography": {
+      "fontFamily": {
+        "base": "Satoshi, -apple-system, BlinkMacSystemFont, sans-serif",
+        "mono": "JetBrains Mono, ui-monospace, monospace"
+      },
+
     "size": { "xs": 12, "sm": 14, "md": 16, "lg": 20, "xl": 28 },
     "weight": { "regular": 400, "medium": 500, "semibold": 600, "bold": 700 },
     "lineHeight": { "tight": 1.2, "normal": 1.45, "relaxed": 1.7 }
