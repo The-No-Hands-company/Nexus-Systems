@@ -81,6 +81,111 @@ describe("identity header is proxy-controlled", () => {
   });
 });
 
+describe("Dashboard terminal WebSocket routing", () => {
+  const upgradeRequest = (url: string) =>
+    new Request(url, {
+      headers: {
+        connection: "Upgrade",
+        upgrade: "websocket",
+        origin: "https://app.tnhc.dev",
+        cookie: "nexus_session=browser-session; theme=dark",
+      },
+    });
+
+  it("pins the exact public attach path to Dashboard with its original credentials", async () => {
+    const { handleRequest, __setRoutesForTest } = await import("../proxy");
+    const previous = process.env.DASHBOARD_UPSTREAM;
+    process.env.DASHBOARD_UPSTREAM = "http://127.0.0.1:43132";
+    let data: import("../proxy").WsProxyData | null = null;
+
+    try {
+      __setRoutesForTest({
+        "app.tnhc.dev": { upstream: "http://client-selected.invalid", requiresAuth: false },
+      });
+      await handleRequest(upgradeRequest("http://app.tnhc.dev/api/terminal/attach?cols=91&rows=27"), {
+        upgrade(_request, options) {
+          data = options.data;
+          return true;
+        },
+      });
+
+      expect(data?.upstreamUrl).toBe("http://127.0.0.1:43132");
+      expect(data?.dashboardTerminalHeaders).toEqual({
+        cookie: "nexus_session=browser-session; theme=dark",
+        origin: "https://app.tnhc.dev",
+      });
+      expect(data?.requestUrl).toBe("http://app.tnhc.dev/api/terminal/attach?cols=91&rows=27");
+    } finally {
+      if (previous === undefined) Reflect.deleteProperty(process.env, "DASHBOARD_UPSTREAM");
+      else process.env.DASHBOARD_UPSTREAM = previous;
+    }
+  });
+
+  it("never carries browser credentials on sibling WebSocket routes or hosts", async () => {
+    const { handleRequest, __setRoutesForTest } = await import("../proxy");
+    __setRoutesForTest({
+      "app.tnhc.dev": { upstream: "http://127.0.0.1:43132", requiresAuth: false },
+      "chat.tnhc.dev": { upstream: "http://127.0.0.1:43133", requiresAuth: false },
+    });
+
+    for (const url of [
+      "http://app.tnhc.dev/api/terminal/attach/",
+      "http://app.tnhc.dev/gateway",
+      "http://www.app.tnhc.dev/api/terminal/attach",
+      "http://chat.tnhc.dev/api/terminal/attach",
+    ]) {
+      let data: import("../proxy").WsProxyData | null = null;
+      await handleRequest(upgradeRequest(url), {
+        upgrade(_request, options) {
+          data = options.data;
+          return true;
+        },
+      });
+
+      expect(data?.dashboardTerminalHeaders).toBeUndefined();
+    }
+  });
+
+  it("never synthesizes terminal credentials and rejects a non-loopback fixed upstream", async () => {
+    const { handleRequest, __setRoutesForTest } = await import("../proxy");
+    const previous = process.env.DASHBOARD_UPSTREAM;
+    __setRoutesForTest({
+      "app.tnhc.dev": { upstream: "http://client-selected.invalid", requiresAuth: false },
+    });
+
+    try {
+      process.env.DASHBOARD_UPSTREAM = "http://127.0.0.1:43132";
+      let missingData: import("../proxy").WsProxyData | null = null;
+      const missing = new Request("http://app.tnhc.dev/api/terminal/attach", {
+        headers: { connection: "Upgrade", upgrade: "websocket" },
+      });
+      await handleRequest(missing, {
+        upgrade(_request, options) {
+          missingData = options.data;
+          return true;
+        },
+      });
+      expect(missingData?.dashboardTerminalHeaders).toEqual({});
+
+      process.env.DASHBOARD_UPSTREAM = "https://credential-sink.example";
+      let upgraded = false;
+      const response = await handleRequest(upgradeRequest(
+        "http://app.tnhc.dev/api/terminal/attach",
+      ), {
+        upgrade() {
+          upgraded = true;
+          return true;
+        },
+      });
+      expect(response.status).toBe(503);
+      expect(upgraded).toBe(false);
+    } finally {
+      if (previous === undefined) Reflect.deleteProperty(process.env, "DASHBOARD_UPSTREAM");
+      else process.env.DASHBOARD_UPSTREAM = previous;
+    }
+  });
+});
+
 describe("isWebSocketUpgrade", () => {
   // Dynamic import, like every other test here: importing the proxy at module
   // scope used to bind port 8080 and fight the running server.

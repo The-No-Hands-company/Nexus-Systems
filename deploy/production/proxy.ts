@@ -46,6 +46,7 @@ const FALLBACK_CHAT_UPSTREAM = process.env.CHAT_UPSTREAM || "http://127.0.0.1:31
 // browser to https://auth.<DOMAIN>/login?redirect=..., so this is the one that
 // has to resolve or single sign-on has nowhere to happen.
 const FALLBACK_AUTH_UPSTREAM = process.env.AUTH_UPSTREAM || "http://127.0.0.1:4310";
+const DASHBOARD_TERMINAL_PATH = "/api/terminal/attach";
 
 // The default backend for the *.<DOMAIN> wildcard. Any on-domain host that is
 // neither a registered app route nor one of the static app fallbacks above is
@@ -164,6 +165,25 @@ export interface WsProxyData {
   identityToken: string | null;
   /** The address the browser asked for, so the upstream gets the same path. */
   requestUrl?: string;
+  /**
+   * Browser credentials for one tightly-scoped hop only. Presence means the
+   * request was the exact app.<DOMAIN> terminal attach route and upstreamUrl
+   * was replaced with the fixed Dashboard address.
+   */
+  dashboardTerminalHeaders?: { cookie?: string; origin?: string };
+}
+
+function dashboardUpstream(): string | null {
+  try {
+    const url = new URL(process.env.DASHBOARD_UPSTREAM || "http://127.0.0.1:3132");
+    if (url.username || url.password) return null;
+    if (url.protocol !== "http:" && url.protocol !== "https:") return null;
+    const hostname = url.hostname.toLowerCase();
+    if (!["127.0.0.1", "localhost", "[::1]", "::1"].includes(hostname)) return null;
+    return url.origin;
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -284,8 +304,23 @@ export async function handleRequest(
       return Response.redirect(`https://${DOMAIN}/api`, 302);
     }
 
-    // Get current routing configuration
-    const routes = await getRoutes();
+    const dashboardTerminalRequest =
+      isWebSocketUpgrade(req) &&
+      host === `app.${DOMAIN}` &&
+      url.pathname === DASHBOARD_TERMINAL_PATH;
+
+    // The one credential-bearing WebSocket route never trusts Cloud's dynamic
+    // route table. Cookie and Origin are useful only to Dashboard's own Auth
+    // and same-origin checks, so pin this exact host/path to its loopback
+    // address. Every sibling WebSocket follows the ordinary stripped path.
+    const fixedDashboard = dashboardTerminalRequest ? dashboardUpstream() : null;
+    if (dashboardTerminalRequest && !fixedDashboard) {
+      return new Response("Dashboard terminal upstream unavailable", { status: 503 });
+    }
+
+    // Get current routing configuration. The pinned Terminal hop does not
+    // depend on Cloud availability or on a mutable upstream entry.
+    const routes = dashboardTerminalRequest ? {} : await getRoutes();
     
     // Find matching route
     let upstreamUrl: string | null = null;
@@ -297,11 +332,15 @@ export async function handleRequest(
     // Cloud keys its routing table by full hostname, and buildRouteMap
     // lowercases and strips a leading "www." from both sides, so a single
     // exact lookup covers every route Cloud can hand us.
-    const normalizedHost = host.replace(/^www\./, "");
-    const matched = routes[normalizedHost];
-    if (matched) {
-      upstreamUrl = matched.upstream;
-      requiresAuth = matched.requiresAuth;
+    if (fixedDashboard) {
+      upstreamUrl = fixedDashboard;
+    } else {
+      const normalizedHost = host.replace(/^www\./, "");
+      const matched = routes[normalizedHost];
+      if (matched) {
+        upstreamUrl = matched.upstream;
+        requiresAuth = matched.requiresAuth;
+      }
     }
 
     // Apply fallback logic if enabled and no route found
@@ -353,13 +392,20 @@ export async function handleRequest(
       if (!server) {
         return new Response("WebSocket upgrade unavailable", { status: 500 });
       }
-      const ok = server.upgrade(req, {
-        data: {
-          upstreamUrl,
-          identityToken: decision.identityToken,
-          requestUrl: req.url,
-        },
-      });
+      const data: WsProxyData = {
+        upstreamUrl,
+        identityToken: decision.identityToken,
+        requestUrl: req.url,
+      };
+      if (dashboardTerminalRequest) {
+        const dashboardTerminalHeaders: NonNullable<WsProxyData["dashboardTerminalHeaders"]> = {};
+        const cookie = req.headers.get("cookie");
+        const origin = req.headers.get("origin");
+        if (cookie !== null) dashboardTerminalHeaders.cookie = cookie;
+        if (origin !== null) dashboardTerminalHeaders.origin = origin;
+        data.dashboardTerminalHeaders = dashboardTerminalHeaders;
+      }
+      const ok = server.upgrade(req, { data });
       // Bun answers the handshake itself when upgrade() succeeds; returning a
       // Response here would fight it.
       return ok
@@ -438,21 +484,6 @@ export async function handleRequest(
   }
 }
 
-// Startup logging
-console.log(`[proxy] Starting on port ${PORT}`);
-console.log(`[proxy] Domain: ${DOMAIN}`);
-console.log(`[proxy] Fetching routing config from: ${CLOUD_URL}/api/v1/routes`);
-console.log(`[proxy] Poll interval: ${POLL_INTERVAL_MS}ms`);
-console.log(`[proxy] Fallback enabled: ${FALLBACK_ENABLED}`);
-console.log(`[proxy] Cache TTL: ${CACHE_TTL_MS}ms`);
-
-// Initialize cache on startup
-getRoutes().then(() => {
-  console.log(`[proxy] Initial route cache loaded`);
-}).catch(err => {
-  console.warn(`[proxy] Failed to load initial route cache: ${err}`);
-});
-
 // Refresh in the background so requests never pay the fetch latency and a
 // newly registered subdomain starts resolving without waiting for a request to
 // trip the TTL. A failed poll leaves the previous cache in place; getRoutes()
@@ -468,17 +499,31 @@ getRoutes().then(() => {
  * and other callers can import handleRequest and the route helpers freely.
  */
 export function startProxy() {
+  console.log(`[proxy] Starting on port ${PORT}`);
+  console.log(`[proxy] Domain: ${DOMAIN}`);
+  console.log(`[proxy] Fetching routing config from: ${CLOUD_URL}/api/v1/routes`);
+  console.log(`[proxy] Poll interval: ${POLL_INTERVAL_MS}ms`);
+  console.log(`[proxy] Fallback enabled: ${FALLBACK_ENABLED}`);
+  console.log(`[proxy] Cache TTL: ${CACHE_TTL_MS}ms`);
+
+  void getRoutes().then(() => {
+    console.log(`[proxy] Initial route cache loaded`);
+  }).catch(err => {
+    console.warn(`[proxy] Failed to load initial route cache: ${err}`);
+  });
+
   // Refresh routes ahead of demand so a request rarely has to wait on Cloud to
   // trip the TTL. A failed poll leaves the previous cache in place; getRoutes()
   // still treats CACHE_TTL_MS as a synchronous backstop. Set POLL_INTERVAL_MS=0
   // to rely on that lazy path alone.
   if (POLL_INTERVAL_MS > 0) {
-    setInterval(async () => {
+    const poller = setInterval(async () => {
       const fresh = await fetchRouteConfig();
       if (fresh !== null) {
         routeCache = { timestamp: Date.now(), routes: buildRouteMap(fresh) };
       }
     }, POLL_INTERVAL_MS);
+    poller.unref?.();
   }
 
   // The one service that binds every interface on purpose. cloudflared runs in
@@ -502,7 +547,7 @@ export function startProxy() {
       idleTimeout: 300,
 
       open(ws) {
-        const { upstreamUrl, identityToken } = ws.data;
+        const { upstreamUrl, identityToken, dashboardTerminalHeaders } = ws.data;
         const target = new URL(upstreamUrl);
         const asked = new URL(ws.data.requestUrl ?? "http://localhost/");
         target.protocol = target.protocol === "https:" ? "wss:" : "ws:";
@@ -518,6 +563,12 @@ export function startProxy() {
 
         const headers: Record<string, string> = {};
         if (identityToken) headers["x-nexus-identity"] = identityToken;
+        if (dashboardTerminalHeaders?.cookie !== undefined) {
+          headers.cookie = dashboardTerminalHeaders.cookie;
+        }
+        if (dashboardTerminalHeaders?.origin !== undefined) {
+          headers.origin = dashboardTerminalHeaders.origin;
+        }
 
         const upstream = new WebSocket(target.toString(), { headers } as never);
         upstream.binaryType = "arraybuffer";

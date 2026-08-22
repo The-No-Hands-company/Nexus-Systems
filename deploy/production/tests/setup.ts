@@ -7,4 +7,5 @@
  */
 process.env.CLOUD_URL = "http://127.0.0.1:1";
 process.env.PROXY_PORT = "0";
+process.env.POLL_INTERVAL_MS = "0";
 process.env.NEXUS_AUTH_INTERNAL_URL = "http://127.0.0.1:1";

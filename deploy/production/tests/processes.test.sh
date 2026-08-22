@@ -97,6 +97,7 @@ run_start
 
 terminal_args="$(service_args terminal)"
 dashboard_args="$(service_args dashboard)"
+proxy_args="$(service_args proxy)"
 
 assert_service_order terminal dashboard
 assert_contains $'terminal\t' "$terminal_args" "production launch did not start Nexus-Terminal"
@@ -109,6 +110,7 @@ assert_contains $'\tNEXUS_CLOUD_API_KEY=task-7-test-cloud-key' "$terminal_args" 
 assert_contains $'\tNEXUS_NEXUS_TERMINAL_BASE_URL=http://127.0.0.1:3110' "$terminal_args" "Nexus-Terminal did not register its loopback base URL"
 assert_contains $'\tNEXUS_TERMINAL_ENABLED=false' "$terminal_args" "Nexus-Terminal was not explicitly disabled by default"
 assert_contains $'\tNEXUS_TERMINAL_URL=http://127.0.0.1:3110' "$dashboard_args" "Dashboard did not receive the loopback Terminal URL"
+assert_contains $'\tDASHBOARD_UPSTREAM=http://127.0.0.1:3132' "$proxy_args" "production proxy did not receive the fixed loopback Dashboard upstream"
 assert_contains 'http://127.0.0.1:3110/health' "$(<"$CURL_RECORD")" "production status did not health-check Nexus-Terminal"
 
 export NEXUS_TERMINAL_ENABLED=true

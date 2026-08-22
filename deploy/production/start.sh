@@ -60,7 +60,7 @@ done
 # ── Reverse Proxy (port 80) ──
 log "Starting reverse proxy on :$PROXY_PORT..."
 cd "$DEPLOY"
-PROXY_PORT="$PROXY_PORT" DOMAIN="$DOMAIN" \
+PROXY_PORT="$PROXY_PORT" DOMAIN="$DOMAIN" DASHBOARD_UPSTREAM=http://127.0.0.1:3132 \
 bun run proxy.ts > "$LOG_DIR/proxy.log" 2>&1 &
 PROXY_PID=$!
 sleep 1
