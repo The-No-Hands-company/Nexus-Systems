@@ -218,11 +218,16 @@ async function proxyToCloud(req: Request, name: string, search: string): Promise
   // Off the allow-list. This must never fall through to a generic forward.
   if (!entry) return Response.json({ error: "not_found" }, { status: 404 });
 
-  if (entry.adminOnly) {
-    const who = await callerIdentity(req);
-    if (!isAdminRole(who?.role ?? null)) {
-      return Response.json({ error: "forbidden" }, { status: 403 });
-    }
+  // Every Cloud response is fetched with the Dashboard's operator key. Auth
+  // therefore belongs in front of every allow-listed read, not only the one
+  // admin-only endpoint: otherwise an anonymous caller receives data Cloud
+  // would deliberately redact from an unauthenticated request.
+  const who = await callerIdentity(req);
+  if (!who) {
+    return Response.json({ error: "not_authenticated" }, { status: 401 });
+  }
+  if (entry.adminOnly && !isAdminRole(who.role)) {
+    return Response.json({ error: "forbidden" }, { status: 403 });
   }
 
   try {
@@ -337,7 +342,10 @@ export async function handleRequest(
 
   if (path === "/api/terminal/attach") {
     const decision = await authorizeTerminalUpgrade(req);
-    if (!decision.ok) return decision.response;
+    if (!decision.ok) {
+      if (decision.failure && server?.upgrade(req, { data: decision.failure })) return undefined;
+      return decision.response;
+    }
     if (server?.upgrade(req, { data: decision.data })) return undefined;
     return Response.json({ error: "upgrade_failed" }, { status: 400 });
   }

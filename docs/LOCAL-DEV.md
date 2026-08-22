@@ -181,4 +181,6 @@ can be recorded.
 | `http://127.0.0.1:3110/health` | Terminal liveness, enable state, and active shell count |
 | `http://127.0.0.1:3132/terminal` | Dashboard terminal view for founders/admins |
 
-> The browser dashboard (`public/status.html`) is not yet wired to the API. The endpoints above are the live window into the system until the dashboard is built.
+> The shell-native Dashboard at `http://127.0.0.1:3132` is the browser UI for
+> Cloud, Terminal, account, and app discovery. The direct Cloud endpoints above
+> remain useful for inspecting raw local responses.

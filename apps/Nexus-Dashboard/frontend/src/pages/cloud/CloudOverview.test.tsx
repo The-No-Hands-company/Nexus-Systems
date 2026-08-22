@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import CloudOverview from "./CloudOverview";
 
@@ -203,5 +203,29 @@ describe("CloudOverview", () => {
 
     await waitFor(() => expect(screen.getAllByText(IDENTITY_BODY.exampleAddress).length).toBeGreaterThan(0));
     expect(screen.queryByText(/trust lifecycle/i)).toBeNull();
+  });
+
+  it("marks only the internal-service card unavailable when the tools registry fails", async () => {
+    // Treating a failed optional request as [] reports a trustworthy-looking
+    // 0/3 and labels every service "not registered", which is false evidence.
+    stubFetch({
+      "/api/cloud/tools": () => jsonResponse({ error: "cloud_unavailable" }, 503),
+    });
+    render(<MemoryRouter><CloudOverview /></MemoryRouter>);
+
+    await waitFor(() => expect(screen.getByText("Internal cloud services")).toBeTruthy());
+    const card = screen.getByText("Internal cloud services").closest(".rounded-lg");
+    expect(card).not.toBeNull();
+    expect(within(card as HTMLElement).getByText(/registry unavailable/i)).toBeTruthy();
+    expect(within(card as HTMLElement).queryByText(/0\/3 online/i)).toBeNull();
+    expect(within(card as HTMLElement).queryByText(/not registered/i)).toBeNull();
+
+    const reachableCard = screen.getByText("Reachable tools").closest(".rounded-lg");
+    expect(reachableCard).not.toBeNull();
+    expect(within(reachableCard as HTMLElement).getByText("—")).toBeTruthy();
+    expect(within(reachableCard as HTMLElement).queryByText(/^0$/)).toBeNull();
+
+    // The optional-card failure must not replace the load-bearing overview.
+    expect(screen.getByText(IDENTITY_BODY.did)).toBeTruthy();
   });
 });

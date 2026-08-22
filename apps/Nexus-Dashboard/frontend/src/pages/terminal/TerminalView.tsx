@@ -376,7 +376,7 @@ export default function TerminalView({
             <dd>{elapsedLabel(activeTab.controller.startedAt, clock)}</dd>
           </dl>
           <p className="mx-4 rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm text-zinc-300">
-            Audited session. Commands and terminal input may be recorded in the operator audit trail.
+            Audited session. Every input byte is recorded in the operator audit trail. Secrets typed at prompts are captured.
           </p>
           <button
             type="button"

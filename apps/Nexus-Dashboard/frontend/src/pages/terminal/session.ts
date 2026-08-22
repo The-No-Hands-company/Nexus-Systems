@@ -47,7 +47,7 @@ export type CreateTerminalSessionOptions = {
   id: string;
   now?: () => number;
   onStateChange?: (state: SessionState) => void;
-  createTerminal?: () => TerminalLike;
+  createTerminal?: (options: { screenReaderMode: boolean }) => TerminalLike;
   createFitAddon?: (terminal: TerminalLike) => FitAddonLike;
   createSocket?: (url: string) => SocketLike;
 };
@@ -67,7 +67,8 @@ function stateForCloseCode(code: number): SessionState {
 }
 
 export function createTerminalSession(opts: CreateTerminalSessionOptions): TerminalSessionController {
-  const terminal = opts.createTerminal?.() ?? new Terminal();
+  const terminalOptions = { screenReaderMode: true } as const;
+  const terminal = opts.createTerminal?.(terminalOptions) ?? new Terminal(terminalOptions);
   const fitAddon = opts.createFitAddon?.(terminal) ?? new FitAddon();
   const startedAt = (opts.now ?? Date.now)();
   let socket: SocketLike | undefined;

@@ -34,7 +34,7 @@ type Ready = {
   identity: CloudIdentity;
   trust: CloudTrust | null;
   audit: CloudAuditEvent[];
-  tools: CloudTool[];
+  tools: CloudTool[] | null;
 };
 
 type State = { kind: "loading" } | { kind: "unavailable" } | Ready;
@@ -86,7 +86,7 @@ export default function CloudOverview() {
         const [trust, audit, tools] = await Promise.all([
           cloudTrust().catch(() => null),
           cloudAudit().catch(() => [] as CloudAuditEvent[]),
-          cloudTools().catch(() => [] as CloudTool[]),
+          cloudTools().catch(() => null),
         ]);
         if (cancelled) return;
         setState({ kind: "ready", status, identity, trust, audit, tools });
@@ -115,7 +115,7 @@ export default function CloudOverview() {
   }
 
   const { status, identity, trust, audit, tools } = state;
-  const byId = new Map(tools.map((t) => [t.id, t]));
+  const byId = new Map((tools ?? []).map((t) => [t.id, t]));
 
   // Flat counters, and peers under `trust`. status.html read status.tools.total
   // / status.users.total / status.peers.total, none of which this response has
@@ -133,9 +133,9 @@ export default function CloudOverview() {
   // Reachable is the number worth acting on: registered, healthy, and carrying
   // a public URL. Heartbeating and registered stay visible underneath, so
   // nothing is hidden — only re-ranked by what it actually means.
-  const toolReachable = tools.filter(
-    (t) => t.publicUrl && (t.health ?? "") === "healthy",
-  ).length;
+  const toolReachable = tools === null
+    ? null
+    : tools.filter((t) => t.publicUrl && (t.health ?? "") === "healthy").length;
 
   return (
     <section className="mx-auto max-w-5xl space-y-6 p-8">
@@ -147,7 +147,7 @@ export default function CloudOverview() {
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <div className="rounded-lg border border-zinc-800 bg-zinc-900 p-4">
-          <div className="text-2xl font-semibold text-zinc-100">{toolReachable}</div>
+          <div className="text-2xl font-semibold text-zinc-100">{toolReachable ?? "—"}</div>
           <div className="text-sm text-zinc-400">Reachable tools</div>
           <div className="mt-1 text-xs text-zinc-500">
             <span>{toolHealthy} heartbeating · </span>
@@ -276,14 +276,21 @@ export default function CloudOverview() {
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-medium">Internal cloud services</h2>
           <span className="text-xs text-zinc-500">
-            {INTERNAL_SERVICES.filter((s) => byId.has(s.id)).length}/{INTERNAL_SERVICES.length} online
+            {tools === null
+              ? "Registry unavailable"
+              : `${INTERNAL_SERVICES.filter((s) => byId.has(s.id)).length}/${INTERNAL_SERVICES.length} online`}
           </span>
         </div>
-        <ul className="mt-3 divide-y divide-zinc-800">
-          {INTERNAL_SERVICES.map((svc) => {
-            const t = byId.get(svc.id);
-            return (
-              <li key={svc.id} className="flex items-start gap-3 py-3">
+        {tools === null ? (
+          <p role="status" className="mt-3 text-sm text-zinc-400">
+            The service registry is unavailable. Other Cloud information remains current.
+          </p>
+        ) : (
+          <ul className="mt-3 divide-y divide-zinc-800">
+            {INTERNAL_SERVICES.map((svc) => {
+              const t = byId.get(svc.id);
+              return (
+                <li key={svc.id} className="flex items-start gap-3 py-3">
                 <div className="text-xl leading-none">{svc.icon}</div>
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
@@ -328,10 +335,11 @@ export default function CloudOverview() {
                     Open <span aria-hidden="true">↗</span>
                   </a>
                 )}
-              </li>
-            );
-          })}
-        </ul>
+                </li>
+              );
+            })}
+          </ul>
+        )}
       </div>
     </section>
   );

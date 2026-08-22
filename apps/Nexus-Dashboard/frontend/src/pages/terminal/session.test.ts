@@ -72,8 +72,8 @@ class FakeSocket {
     this.emit("message", new MessageEvent("message", { data }));
   }
 
-  closed(code: number): void {
-    this.emit("close", new CloseEvent("close", { code }));
+  closed(code: number, reason = ""): void {
+    this.emit("close", new CloseEvent("close", { code, reason }));
   }
 }
 
@@ -82,17 +82,18 @@ function createHarness() {
   const sockets: FakeSocket[] = [];
   const states: SessionState[] = [];
   const calls: string[] = [];
+  const createTerminal = vi.fn((_options?: { screenReaderMode: boolean }) => {
+    calls.push("terminal");
+    const terminal = new FakeTerminal();
+    terminals.push(terminal);
+    return terminal;
+  });
 
   const controller = createTerminalSession({
     id: "session-1",
     now: () => 1_725_000_000_000,
     onStateChange: (state) => states.push(state),
-    createTerminal: () => {
-      calls.push("terminal");
-      const terminal = new FakeTerminal();
-      terminals.push(terminal);
-      return terminal;
-    },
+    createTerminal,
     createFitAddon: (terminal) => {
       calls.push("fit-addon");
       return new FakeFitAddon(terminal as FakeTerminal);
@@ -105,10 +106,18 @@ function createHarness() {
     },
   });
 
-  return { calls, controller, sockets, states, terminals };
+  return { calls, controller, createTerminal, sockets, states, terminals };
 }
 
 describe("createTerminalSession", () => {
+  it("constructs xterm in screen-reader mode", () => {
+    // xterm defaults this option to false, so the semantic tab panel alone
+    // does not make terminal output available to assistive technology.
+    const { createTerminal } = createHarness();
+
+    expect(createTerminal).toHaveBeenCalledWith({ screenReaderMode: true });
+  });
+
   it("opens and fits before attaching its initial dimensions to the same-origin socket URL", () => {
     // Removing the first renderer fit would reconnect a new PTY at xterm's
     // default 80x24 size rather than the dimensions actually rendered.
@@ -174,6 +183,15 @@ describe("createTerminalSession", () => {
     sockets[0]?.closed(code);
 
     expect(states).toEqual(["connecting", state]);
+  });
+
+  it("never interprets an arbitrary close reason as a trusted failure state", () => {
+    const { controller, sockets, states } = createHarness();
+    controller.mount(document.createElement("div"));
+
+    sockets[0]?.closed(4999, "terminal disabled");
+
+    expect(states).toEqual(["connecting", "unavailable"]);
   });
 
   it("refits only the renderer and never emits a resize protocol frame", () => {

@@ -234,12 +234,21 @@ afterAll(() => {
 });
 
 describe("terminal upgrade authorization", () => {
-  it("refuses signed-out and member callers before Terminal is contacted", async () => {
-    for (const role of [null, "member"] as const) {
-      const client = openClient(role);
-      await client.closed;
-    }
+  it("refuses signed-out callers before Terminal is contacted", async () => {
+    const client = openClient(null);
+    await client.closed;
 
+    expect(upstreamConnections).toBe(0);
+    expect(upstreamPath).toBeNull();
+  });
+
+  it("gives a same-origin authenticated member a fixed refused close code", async () => {
+    const client = openClient("member");
+    await client.opened;
+    const close = await client.closed;
+
+    expect(close.code).toBe(4003);
+    expect(close.reason).toBe("terminal refused");
     expect(upstreamConnections).toBe(0);
     expect(upstreamPath).toBeNull();
   });
@@ -365,15 +374,36 @@ describe("terminal frame relay", () => {
     await client.closed;
   });
 
-  it("propagates upstream and browser closes to the paired socket", async () => {
+  it("does not expose unknown upstream close codes or reasons to the browser", async () => {
     const fromUpstream = openClient("founder");
     await fromUpstream.opened;
     await waitUntil(() => upstreamSocket !== null, "upstream socket");
     upstreamSocket?.close(4001, "pty exited");
     const browserClose = await fromUpstream.closed;
-    expect(browserClose.code).toBe(4001);
-    expect(browserClose.reason).toBe("pty exited");
+    expect(browserClose.code).toBe(1011);
+    expect(browserClose.reason).toBe("terminal upstream unavailable");
+  });
 
+  it("relays only the allowlisted terminal failure codes with fixed reasons", async () => {
+    for (const [code, expectedReason] of [
+      [4003, "terminal refused"],
+      [4004, "terminal disabled"],
+      [1013, "session limit reached"],
+    ] as const) {
+      upstreamSocket = null;
+      const client = openClient("founder");
+      await client.opened;
+      await waitUntil(() => upstreamSocket !== null, `upstream socket for ${code}`);
+      const socket = upstreamSocket as Bun.ServerWebSocket<undefined> | null;
+      socket?.close(code, "attacker-controlled upstream details");
+      const close = await client.closed;
+
+      expect(close.code).toBe(code);
+      expect(close.reason).toBe(expectedReason);
+    }
+  });
+
+  it("propagates browser close to the paired upstream", async () => {
     upstreamClose = null;
     upstreamSocket = null;
     const fromBrowser = openClient("founder");
@@ -457,7 +487,7 @@ describe("terminal frame relay", () => {
     expect(close.code).toBe(1011);
   });
 
-  it("relays two isolated real shells and cleans both sessions after close", async () => {
+  it("maps real failures, relays isolated shells, and cleans every session", async () => {
     terminal?.stop(true);
     terminal = null;
 
@@ -470,11 +500,12 @@ describe("terminal frame relay", () => {
     > | null = null;
     let first: ReturnType<typeof openClient> | null = null;
     let second: ReturnType<typeof openClient> | null = null;
+    const extraClients: ReturnType<typeof openClient>[] = [];
 
     process.env.PORT = "0";
     delete process.env.NEXUS_BIND_HOST;
     process.env.NEXUS_DATA_DIR = smokeData;
-    process.env.NEXUS_TERMINAL_ENABLED = "true";
+    process.env.NEXUS_TERMINAL_ENABLED = "false";
     process.env.NEXUS_TERMINAL_ENABLE_CLOUD_INTEGRATION = "false";
     process.env.SHELL = "/bin/sh";
 
@@ -488,10 +519,38 @@ describe("terminal frame relay", () => {
       process.env.NEXUS_TERMINAL_URL = terminalBaseUrl;
       const exactOrigin = `http://127.0.0.1:${dashboardPort()}`;
 
+      const disabled = openClient("founder", exactOrigin);
+      await disabled.opened;
+      const disabledClose = await disabled.closed;
+      expect(disabledClose.code).toBe(4004);
+      expect(disabledClose.reason).toBe("terminal disabled");
+
+      const refused = openClient("member", exactOrigin);
+      await refused.opened;
+      const refusedClose = await refused.closed;
+      expect(refusedClose.code).toBe(4003);
+      expect(refusedClose.reason).toBe("terminal refused");
+
+      process.env.NEXUS_TERMINAL_ENABLED = "true";
       first = openClient("founder", exactOrigin);
       second = openClient("founder", exactOrigin);
       await Promise.all([first.opened, second.opened]);
-      await waitForActiveShells(terminalBaseUrl, 2, "both relayed shells to become active");
+
+      for (let index = 0; index < 6; index += 1) {
+        extraClients.push(openClient("founder", exactOrigin));
+      }
+      await Promise.all(extraClients.map((client) => client.opened));
+      await waitForActiveShells(terminalBaseUrl, 8, "the real shell ceiling");
+
+      const limited = openClient("founder", exactOrigin);
+      await limited.opened;
+      const limitedClose = await limited.closed;
+      expect(limitedClose.code).toBe(1013);
+      expect(limitedClose.reason).toBe("session limit reached");
+
+      for (const client of extraClients) client.socket.close();
+      await Promise.all(extraClients.map((client) => client.closed));
+      await waitForActiveShells(terminalBaseUrl, 2, "capacity shells to close");
       await waitUntil(
         () => transcript(first?.messages ?? []).includes("$ "),
         "first real shell prompt",
@@ -528,10 +587,10 @@ describe("terminal frame relay", () => {
       await waitForActiveShells(terminalBaseUrl, 0, "closed relayed shells to be reaped");
     } finally {
       process.chdir(previousCwd);
-      for (const client of [first, second]) {
+      for (const client of [first, second, ...extraClients]) {
         if (client && client.socket.readyState < WebSocket.CLOSING) client.socket.terminate();
       }
-      realTerminal?.close();
+      await realTerminal?.close();
       await rm(smokeRoot, { recursive: true, force: true });
     }
   });

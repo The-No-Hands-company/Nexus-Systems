@@ -8,10 +8,19 @@ const COLS = { default: 80, min: 20, max: 500 } as const;
 const ROWS = { default: 24, min: 5, max: 200 } as const;
 const MAX_PENDING_BYTES = 1024 * 1024;
 
-export type TerminalSocketData = { upstreamUrl: string; cookie: string };
+type TerminalFailureCode = 4003 | 4004 | 1013;
+type TerminalRelayData = { kind: "relay"; upstreamUrl: string; cookie: string };
+type TerminalRejectData = { kind: "reject"; code: TerminalFailureCode };
+export type TerminalSocketData = TerminalRelayData | TerminalRejectData;
 export type UpgradeDecision =
-  | { ok: true; data: TerminalSocketData }
-  | { ok: false; response: Response };
+  | { ok: true; data: TerminalRelayData }
+  | { ok: false; response: Response; failure?: TerminalRejectData };
+
+const TERMINAL_FAILURE_REASONS: Record<TerminalFailureCode, string> = {
+  4003: "terminal refused",
+  4004: "terminal disabled",
+  1013: "session limit reached",
+};
 
 type RelayFrame = string | Uint8Array;
 type RelayPair = {
@@ -99,6 +108,14 @@ function relayCloseReason(reason: string): string {
   return new TextEncoder().encode(reason).byteLength <= 123 ? reason : "";
 }
 
+function safeUpstreamClose(code: number): { code: number; reason: string } {
+  if (code === 4003 || code === 4004 || code === 1013) {
+    return { code, reason: TERMINAL_FAILURE_REASONS[code] };
+  }
+  if (code === 1000 || code === 1001) return { code, reason: "" };
+  return { code: 1011, reason: "terminal upstream unavailable" };
+}
+
 function terminalConnectTimeoutMs(): number {
   const configured = Number(process.env.NEXUS_TERMINAL_CONNECT_TIMEOUT_MS || "5000");
   if (!Number.isFinite(configured)) return 5_000;
@@ -142,7 +159,11 @@ export async function authorizeTerminalUpgrade(req: Request): Promise<UpgradeDec
     return { ok: false, response: errorResponse("not_authenticated", 401) };
   }
   if (!isAdminRole(caller.role)) {
-    return { ok: false, response: errorResponse("forbidden", 403) };
+    return {
+      ok: false,
+      response: errorResponse("forbidden", 403),
+      failure: { kind: "reject", code: 4003 },
+    };
   }
 
   const cols = dimension(url, "cols", COLS);
@@ -155,7 +176,7 @@ export async function authorizeTerminalUpgrade(req: Request): Promise<UpgradeDec
   if (!fixedUpstream) {
     return { ok: false, response: errorResponse("terminal_unavailable", 503) };
   }
-  return { ok: true, data: { upstreamUrl: fixedUpstream, cookie } };
+  return { ok: true, data: { kind: "relay", upstreamUrl: fixedUpstream, cookie } };
 }
 
 function closePair(
@@ -172,11 +193,12 @@ function closePair(
   pair.queuedBytes = 0;
   relayPairs.delete(ws);
 
-  const relayCode = relayCloseCode(code);
-  const relayReason = relayCloseReason(reason);
+  const safeClose = source === "upstream"
+    ? safeUpstreamClose(code)
+    : { code: relayCloseCode(code), reason: relayCloseReason(reason) };
   try {
-    if (source === "browser") pair.upstream.close(relayCode, relayReason);
-    else ws.close(relayCode, relayReason);
+    if (source === "browser") pair.upstream.close(safeClose.code, safeClose.reason);
+    else ws.close(safeClose.code, safeClose.reason);
   } catch {
     // Reserved codes and close races must not leave the peer alive.
     if (source === "browser") pair.upstream.terminate();
@@ -205,12 +227,17 @@ function failPair(ws: Bun.ServerWebSocket<TerminalSocketData>, pair: RelayPair):
 
 export const terminalWebSocketHandlers: Bun.WebSocketHandler<TerminalSocketData> = {
   open(ws) {
+    const data = ws.data;
+    if (data.kind === "reject") {
+      ws.close(data.code, TERMINAL_FAILURE_REASONS[data.code]);
+      return;
+    }
     let upstream: WebSocket;
     try {
       // The session cookie is deliberately confined to the loopback
       // handshake headers. It never enters the URL, a frame, or a log.
-      upstream = new WebSocket(ws.data.upstreamUrl, {
-        headers: { cookie: ws.data.cookie },
+      upstream = new WebSocket(data.upstreamUrl, {
+        headers: { cookie: data.cookie },
       });
       upstream.binaryType = "arraybuffer";
     } catch {

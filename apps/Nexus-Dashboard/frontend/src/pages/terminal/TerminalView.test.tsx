@@ -187,6 +187,7 @@ describe("TerminalView", () => {
     expect(details.getAttribute("aria-modal")).toBeNull();
     expect(details.textContent).toContain("founder");
     expect(details.textContent).toContain("Connected");
+    expect(details.textContent).toContain("Secrets typed at prompts are captured");
     expect(screen.getByText("Audited")).toBeTruthy();
     expect(within(details).getByText("2s")).toBeTruthy();
 

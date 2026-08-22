@@ -63,7 +63,11 @@ afterEach(() => {
 
 describe("the /api/cloud proxy", () => {
   it("forwards an allow-listed path to Cloud and returns its body", async () => {
-    const res = await handleRequest(new Request("http://app.test/api/cloud/audit"));
+    const res = await handleRequest(
+      new Request("http://app.test/api/cloud/audit", {
+        headers: { cookie: "nexus_session=authenticated" },
+      }),
+    );
     expect(res.status).toBe(200);
     const body = (await res.json()) as { events: Array<{ id: string }> };
     expect(body.events[0]?.id).toBe("e1");
@@ -99,12 +103,20 @@ describe("the /api/cloud proxy", () => {
   });
 
   it("attaches the operator's key to the upstream request", async () => {
-    await handleRequest(new Request("http://app.test/api/cloud/audit"));
+    await handleRequest(
+      new Request("http://app.test/api/cloud/audit", {
+        headers: { cookie: "nexus_session=authenticated" },
+      }),
+    );
     expect(cloudSawHeaders?.get("x-api-key")).toBe(CLOUD_API_KEY);
   });
 
   it("never lets the operator's key reach the response the browser sees", async () => {
-    const res = await handleRequest(new Request("http://app.test/api/cloud/audit"));
+    const res = await handleRequest(
+      new Request("http://app.test/api/cloud/audit", {
+        headers: { cookie: "nexus_session=authenticated" },
+      }),
+    );
     const text = await res.text();
     expect(text).not.toContain(CLOUD_API_KEY);
     for (const [, value] of res.headers) {
@@ -124,7 +136,8 @@ describe("the /api/cloud proxy", () => {
   it("blocks a signed-out caller from the users endpoint", async () => {
     authRole = null; // Auth's /me answers 401
     const res = await handleRequest(new Request("http://app.test/api/cloud/users"));
-    expect(res.status).toBe(403);
+    expect(res.status).toBe(401);
+    expect(cloudSawHeaders).toBeNull();
   });
 
   it("lets a founder read the users endpoint", async () => {
@@ -139,18 +152,39 @@ describe("the /api/cloud proxy", () => {
 
   it("lets an admin read the users endpoint too", async () => {
     authRole = "admin";
-    const res = await handleRequest(new Request("http://app.test/api/cloud/users"));
+    const res = await handleRequest(
+      new Request("http://app.test/api/cloud/users", {
+        headers: { cookie: "nexus_session=authenticated" },
+      }),
+    );
     expect(res.status).toBe(200);
   });
 
-  it("does not gate a non-admin-only path behind a role check", async () => {
-    // Reading audit data needs no Auth round trip: only users is admin-only.
-    await handleRequest(new Request("http://app.test/api/cloud/audit"));
+  it("rejects a signed-out caller from every Cloud route before attaching the operator key", async () => {
+    authRole = null;
+    const res = await handleRequest(new Request("http://app.test/api/cloud/tools"));
+
+    expect(res.status).toBe(401);
+    expect((await res.json() as { error: string }).error).toBe("not_authenticated");
+    expect(cloudSawHeaders).toBeNull();
+  });
+
+  it("lets an authenticated non-admin read a non-admin Cloud route", async () => {
+    authRole = "user";
+    await handleRequest(
+      new Request("http://app.test/api/cloud/audit", {
+        headers: { cookie: "nexus_session=authenticated" },
+      }),
+    );
     expect(cloudSawHeaders).not.toBeNull();
   });
 
   it("reaches a nested allow-listed name unchanged", async () => {
-    const res = await handleRequest(new Request("http://app.test/api/cloud/federation/peers"));
+    const res = await handleRequest(
+      new Request("http://app.test/api/cloud/federation/peers", {
+        headers: { cookie: "nexus_session=authenticated" },
+      }),
+    );
     expect(res.status).toBe(200);
     const body = (await res.json()) as { peers: Array<{ id: string }> };
     expect(body.peers[0]?.id).toBe("p1");
@@ -159,7 +193,11 @@ describe("the /api/cloud proxy", () => {
   it("degrades instead of 500ing when Cloud is unreachable", async () => {
     cloud?.stop(true);
     cloud = null;
-    const res = await handleRequest(new Request("http://app.test/api/cloud/audit"));
+    const res = await handleRequest(
+      new Request("http://app.test/api/cloud/audit", {
+        headers: { cookie: "nexus_session=authenticated" },
+      }),
+    );
     expect(res.status).not.toBe(500);
     // The UI must be able to render this as JSON, not choke on a stack trace.
     const body = (await res.json()) as { error: string };
@@ -170,7 +208,11 @@ describe("the /api/cloud proxy", () => {
     authRole = "founder";
     cloud?.stop(true);
     cloud = null;
-    const res = await handleRequest(new Request("http://app.test/api/cloud/users"));
+    const res = await handleRequest(
+      new Request("http://app.test/api/cloud/users", {
+        headers: { cookie: "nexus_session=authenticated" },
+      }),
+    );
     expect(res.status).not.toBe(500);
   });
 });
