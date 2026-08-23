@@ -162,6 +162,7 @@ cmd_start() {
     # POST /api/v1/auth/users/:id/password.
     start_service "auth" "$ROOT/apps/Nexus-Auth" 4310 \
         PORT=4310 \
+        DATABASE_URL="${NEXUS_AUTH_AUDIT_DATABASE_URL:-}" \
         NEXUS_AUTH_BASE_URL="http://127.0.0.1:4310" \
         NEXUS_AUTH_COOKIE_DOMAIN=".$DOMAIN" \
         NEXUS_CLOUD_URL=http://localhost:8787 \
