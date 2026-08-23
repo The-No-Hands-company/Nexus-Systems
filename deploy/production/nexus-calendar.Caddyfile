@@ -1,0 +1,45 @@
+# calendar.tnhc.dev — nexus-calendar front door.
+#
+# Joins the calendar SPA (static) with the calendar API (port 3068) into a
+# single origin. Same pattern as nexus-draw.Caddyfile.
+
+{
+	admin off
+	auto_https off
+}
+
+:8092 {
+	bind 127.0.0.1
+
+	handle /api/v1/calendar/* {
+		reverse_proxy 127.0.0.1:3068
+	}
+	handle /health {
+		reverse_proxy 127.0.0.1:3068
+	}
+
+	handle {
+		root * {$NEXUS_CALENDAR_WEB_ROOT:/run/media/zajferx/Data/dev/The-No-hands-Company/projects/Nexus-Systems/apps/Nexus-Calendar/frontend/dist}
+		try_files {path} {path}/ /index.html
+		file_server
+		@hashed path_regexp hashed \.[0-9a-zA-Z_-]{8,}\.(js|css|woff2?)$
+		header @hashed Cache-Control "public, max-age=31536000, immutable"
+		@shell {
+			not path_regexp hashed \.[0-9a-zA-Z_-]{8,}\.(js|css|woff2?)$
+		}
+		header @shell Cache-Control "no-cache, no-store, must-revalidate"
+	}
+
+	header {
+		X-Content-Type-Options "nosniff"
+		Content-Security-Policy "frame-ancestors 'self' https://app.tnhc.dev"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		-Server
+	}
+
+	log {
+		output stdout
+		format console
+		level INFO
+	}
+}

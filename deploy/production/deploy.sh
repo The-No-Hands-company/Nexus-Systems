@@ -263,6 +263,28 @@ cmd_start() {
         warn "caddy not installed — draw.$DOMAIN has no front door"
     fi
 
+    # 4d-2. Nexus-Calendar — calendar.tnhc.dev
+    #
+    # Backend API on 3068 (SQLite events), Caddy front door on 8092 joining
+    # SPA + API into one origin. Same pattern as draw.
+    if [ -f "$ROOT/apps/Nexus-Calendar/package.json" ]; then
+        start_service "calendar" "$ROOT/apps/Nexus-Calendar" 3068 \
+            PORT=3068 \
+            NEXUS_BIND_HOST=127.0.0.1 \
+            NEXUS_NEXUS_CALENDAR_BASE_URL=http://127.0.0.1:8092 \
+            NEXUS_CLOUD_URL=http://localhost:8787 \
+            NEXUS_CLOUD_API_KEY="$NEXUS_CLOUD_API_KEY" \
+            bun run src/index.ts
+        if command -v caddy >/dev/null 2>&1; then
+            if [ -f "$ROOT/apps/Nexus-Calendar/frontend/dist/index.html" ]; then
+                start_service "nexus-calendar-web" "$ROOT" 8092 \
+                    caddy run --config "$ROOT/deploy/production/nexus-calendar.Caddyfile" --adapter caddyfile
+            else
+                warn "calendar UI not built — run: (cd apps/Nexus-Calendar/frontend && pnpm install && pnpm run build)"
+            fi
+        fi
+    fi
+
     # 4d. Nexus-Terminal — the loopback-only shell service used by Dashboard.
     #
     # The browser never reaches this port directly. Dashboard authorizes the
@@ -466,7 +488,7 @@ cmd_start() {
 
 cmd_stop() {
     log "Stopping all Nexus services..."
-    for svc in auth cloud api nexus-chat nexus-chat-web nexus-draw-web terminal dashboard draw mailapi mailsmtpd proxy; do
+    for svc in auth cloud api calendar nexus-chat nexus-chat-web nexus-draw-web terminal dashboard draw mailapi mailsmtpd proxy; do
         if [ -f "$PID_DIR/$svc.pid" ]; then
             kill "$(cat "$PID_DIR/$svc.pid")" 2>/dev/null && log "  Stopped $svc" || true
             rm -f "$PID_DIR/$svc.pid"
@@ -479,7 +501,7 @@ cmd_stop() {
 
 cmd_status() {
     echo "Service Status:"
-    for svc in auth cloud api nexus-chat nexus-chat-web nexus-draw-web terminal dashboard draw mailapi mailsmtpd proxy; do
+    for svc in auth cloud api calendar nexus-chat nexus-chat-web nexus-draw-web terminal dashboard draw mailapi mailsmtpd proxy; do
         if [ -f "$PID_DIR/$svc.pid" ]; then
             if kill -0 "$(cat "$PID_DIR/$svc.pid")" 2>/dev/null; then
                 echo -e "  ${G}● $svc${R} (running, PID: $(cat $PID_DIR/$svc.pid))"
@@ -500,7 +522,7 @@ cmd_status() {
     # reaches, so a healthy API behind a dead front door still reads as down.
     # nexus-draw-web is similar: the Draw API is on 3075, but the front door
     # on 8091 joins the SPA + API + WebSocket, so probe the front door.
-    for endpoint in "http://localhost:4310/health" "http://localhost:8787/health" "http://127.0.0.1:3150/api/health/live" "http://localhost:8095/api/v1/health" "http://localhost:8091/health" "http://127.0.0.1:3110/health" "http://localhost:3132/health" "http://localhost:3075/health" "http://localhost:8080/health"; do
+    for endpoint in "http://localhost:4310/health" "http://localhost:8787/health" "http://127.0.0.1:3150/api/health/live" "http://localhost:3068/health" "http://localhost:8092/health" "http://localhost:8095/api/v1/health" "http://localhost:8091/health" "http://127.0.0.1:3110/health" "http://localhost:3132/health" "http://localhost:3075/health" "http://localhost:8080/health"; do
         if curl -s -m 2 "$endpoint" | grep -q "ok"; then
             echo -e "  ${G}●${R} $endpoint"
         else

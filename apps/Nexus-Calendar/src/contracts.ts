@@ -7,6 +7,8 @@ export type SystemsApiRegistrationPayload = {
   health: "healthy" | "degraded" | "offline";
   upstreamUrl: string;
   capabilities: string[];
+  /** Calendar events are user data — always behind SSO. */
+  requiresAuth: boolean;
   metadata: Record<string, unknown>;
 };
 
@@ -14,12 +16,13 @@ export function buildSystemsApiRegistrationPayload(baseUrl: string): SystemsApiR
   return {
     id: "nexus-calendar",
     name: "Nexus-Calendar",
-    description: "Shared calendars with CalDAV, reminders, contacts, and federation",
+    description: "Shared calendars with events, reminders, and month/week views",
     mode: "orchestrated",
-    exposed: false,
+    exposed: true,
     health: "healthy",
     upstreamUrl: baseUrl,
-    capabilities: ["calendar","caldav","reminders"],
+    capabilities: ["calendar", "events", "scheduling"],
+    requiresAuth: true,
     metadata: {
       version: "v1",
       defaultPort: 3068,
