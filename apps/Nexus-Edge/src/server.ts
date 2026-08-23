@@ -378,5 +378,13 @@ const server = Bun.serve({
 
   const stopHeartbeat = startNexusEdgeCloudRegistrationHeartbeat(baseUrl);
 
-  return { server, stop: () => { stopHeartbeat(); phantom.stop(); server.stop(); } };
+  return {
+    server,
+    stop: () => {
+      stopHeartbeat();
+      stopNexusHeartbeat();
+      stopNexusMonitor();
+      server.stop();
+    },
+  };
 }

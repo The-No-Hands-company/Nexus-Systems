@@ -15,5 +15,5 @@ export const logger = pino(
           translateTime: "SYS:standard",
         },
       })
-    : undefined
+    : undefined,
 );

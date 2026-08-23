@@ -1,5 +1,5 @@
-import { IncomingMessage, ServerResponse } from "http";
-import { Config } from "../lib/config";
+import type { IncomingMessage, ServerResponse } from "node:http";
+import type { Config } from "../lib/config";
 import { logger } from "../lib/logger";
 
 interface RequestContext {
@@ -12,26 +12,26 @@ interface RequestContext {
  */
 export async function aiProviderRouter(
   req: IncomingMessage,
-  res: ServerResponse,
+  _res: ServerResponse,
   context: RequestContext,
-  config: Config
+  _config: Config,
 ): Promise<void> {
   try {
-    const url = req.url || "/";
+    const url = req.url ?? "/";
 
     // Only route AI provider requests
     if (!url.includes("/api/ai") && !url.includes("/api/chat")) {
       return; // Not an AI request
     }
 
-    const aiConfig = config.ai_providers;
+    const aiConfig = _config.ai_providers;
     if (!aiConfig) {
       return; // No AI provider config
     }
 
     // Extract task/pattern from request (simplified)
     // In production, parse request body to determine complexity
-    const taskPattern = extractTaskPattern(req.url);
+    const taskPattern = extractTaskPattern(req.url ?? "/");
     const selectedModel = selectModel(taskPattern, aiConfig);
 
     context.metadata.ai_provider = selectedModel;
@@ -42,7 +42,7 @@ export async function aiProviderRouter(
         task_pattern: taskPattern,
         selected_model: selectedModel,
       },
-      "AI provider router: selected model"
+      "AI provider router: selected model",
     );
 
     // Add model selection to headers for upstream
@@ -53,7 +53,7 @@ export async function aiProviderRouter(
         request_id: context.requestId,
         error: err instanceof Error ? err.message : String(err),
       },
-      "AI provider router error (continuing)"
+      "AI provider router error (continuing)",
     );
   }
 }

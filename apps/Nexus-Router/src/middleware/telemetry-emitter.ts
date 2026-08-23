@@ -1,5 +1,5 @@
-import { IncomingMessage, ServerResponse } from "http";
-import { Config } from "../lib/config";
+import type { IncomingMessage, ServerResponse } from "node:http";
+import type { Config } from "../lib/config";
 import { logger } from "../lib/logger";
 
 interface RequestContext {
@@ -12,31 +12,31 @@ interface RequestContext {
  * Telemetry Emitter: Send logs, metrics, and traces to observability pipeline
  */
 export async function telemetryEmitter(
-  req: IncomingMessage,
-  res: ServerResponse,
+  _req: IncomingMessage,
+  _res: ServerResponse,
   context: RequestContext,
   config: Config,
-  duration: number
+  duration: number,
 ): Promise<void> {
   try {
-    const telemetryConfig = config.telemetry;
-    if (!telemetryConfig) {
+    const _telemetryConfig = config.telemetry;
+    if (!_telemetryConfig) {
       return;
     }
 
     // Emit log
-    if (telemetryConfig.logs?.enabled) {
-      emitLog(req, res, context, duration, telemetryConfig);
+    if (_telemetryConfig.logs?.enabled) {
+      emitLog(_req, _res, context, duration, _telemetryConfig);
     }
 
     // Emit metrics
-    if (telemetryConfig.metrics?.enabled) {
-      emitMetrics(req, res, context, duration, telemetryConfig);
+    if (_telemetryConfig.metrics?.enabled) {
+      emitMetrics(_req, _res, context, duration, _telemetryConfig);
     }
 
     // Emit trace
-    if (telemetryConfig.tracing?.enabled) {
-      emitTrace(req, res, context, duration, telemetryConfig);
+    if (_telemetryConfig.tracing?.enabled) {
+      emitTrace(_req, _res, context, duration, _telemetryConfig);
     }
   } catch (err) {
     logger.warn(
@@ -44,24 +44,24 @@ export async function telemetryEmitter(
         request_id: context.requestId,
         error: err instanceof Error ? err.message : String(err),
       },
-      "Telemetry emitter error (continuing)"
+      "Telemetry emitter error (continuing)",
     );
   }
 }
 
 function emitLog(
-  req: IncomingMessage,
-  res: ServerResponse,
+  _req: IncomingMessage,
+  _res: ServerResponse,
   context: RequestContext,
   duration: number,
-  telemetryConfig: any
+  _telemetryConfig: any,
 ): void {
   const logEntry = {
     timestamp: new Date().toISOString(),
     request_id: context.requestId,
-    method: req.method,
-    url: req.url,
-    status_code: res.statusCode,
+    method: _req.method,
+    url: _req.url,
+    status_code: _res.statusCode,
     duration_ms: duration,
     ...context.metadata,
   };
@@ -69,17 +69,17 @@ function emitLog(
   logger.info(logEntry, "API request");
 
   // TODO: Send to ElasticSearch / Datadog / etc
-  if (telemetryConfig.logs?.elasticsearch?.url) {
-    // sendToElasticsearch(logEntry, telemetryConfig.logs.elasticsearch.url);
+  if (_telemetryConfig.logs?.elasticsearch?.url) {
+    // sendToElasticsearch(logEntry, _telemetryConfig.logs.elasticsearch.url);
   }
 }
 
 function emitMetrics(
-  req: IncomingMessage,
-  res: ServerResponse,
+  _req: IncomingMessage,
+  _res: ServerResponse,
   context: RequestContext,
   duration: number,
-  telemetryConfig: any
+  _telemetryConfig: any,
 ): void {
   // TODO: Emit Prometheus metrics
   // - nexus_router_requests_total
@@ -93,16 +93,16 @@ function emitMetrics(
       metric_type: "request_latency",
       duration_ms: duration,
     },
-    "Metric emitted"
+    "Metric emitted",
   );
 }
 
 function emitTrace(
-  req: IncomingMessage,
-  res: ServerResponse,
+  _req: IncomingMessage,
+  _res: ServerResponse,
   context: RequestContext,
   duration: number,
-  telemetryConfig: any
+  _telemetryConfig: any,
 ): void {
   // TODO: Send trace to Jaeger / OpenTelemetry collector
   const traceId = context.metadata.trace_id as string;
@@ -112,6 +112,6 @@ function emitTrace(
       trace_id: traceId,
       duration_ms: duration,
     },
-    "Trace emitted"
+    "Trace emitted",
   );
 }

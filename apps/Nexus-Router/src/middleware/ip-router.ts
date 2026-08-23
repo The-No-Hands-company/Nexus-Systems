@@ -1,5 +1,5 @@
-import { IncomingMessage, ServerResponse } from "http";
-import { Config } from "../lib/config";
+import type { IncomingMessage, ServerResponse } from "node:http";
+import type { Config } from "../lib/config";
 import { logger } from "../lib/logger";
 
 interface RequestContext {
@@ -14,9 +14,9 @@ interface RequestContext {
  */
 export async function ipRouter(
   req: IncomingMessage,
-  res: ServerResponse,
+  _res: ServerResponse,
   context: RequestContext,
-  config: Config
+  config: Config,
 ): Promise<void> {
   try {
     const { clientIp } = context;
@@ -34,7 +34,7 @@ export async function ipRouter(
 
     logger.debug(
       { request_id: context.requestId, client_ip: clientIp, region },
-      "IP router: determined region"
+      "IP router: determined region",
     );
 
     // If routing to a different cloud, add header for upstream
@@ -49,15 +49,12 @@ export async function ipRouter(
         request_id: context.requestId,
         error: err instanceof Error ? err.message : String(err),
       },
-      "IP router error (continuing)"
+      "IP router error (continuing)",
     );
   }
 }
 
-function determineRegion(
-  clientIp: string,
-  geoConfig: any
-): string {
+function determineRegion(clientIp: string, geoConfig: any): string {
   if (!geoConfig?.regions) {
     return geoConfig?.default_region || "us-east-1";
   }
@@ -79,7 +76,7 @@ function ipInCidr(ip: string, cidr: string): boolean {
   // Simplified: just check prefix for demo
   // In production, use proper CIDR library
   const [network, bits] = cidr.split("/");
-  const prefixLen = parseInt(bits, 10);
+  const prefixLen = Number.parseInt(bits, 10);
   const ipParts = ip.split(".").map(Number);
   const netParts = network.split(".").map(Number);
 

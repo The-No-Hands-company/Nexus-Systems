@@ -1,4 +1,4 @@
-import { readFileSync } from "fs";
+import { readFileSync } from "node:fs";
 import { parse as parseYaml } from "yaml";
 import { z } from "zod";
 import { logger } from "./logger";
@@ -8,7 +8,7 @@ const RouteSchema = z.object({
     z.object({
       name: z.string(),
       priority: z.number().optional(),
-    })
+    }),
   ),
   load_balance: z.string().optional().default("round_robin"),
   federation_aware: z.boolean().optional().default(false),
@@ -42,7 +42,7 @@ const ConfigSchema = z.object({
           z.object({
             cidrs: z.array(z.string()),
             cloud_url: z.string(),
-          })
+          }),
         )
         .optional(),
     })
@@ -99,7 +99,7 @@ const ConfigSchema = z.object({
             url: z.string(),
             region: z.string(),
             trust_level: z.string(),
-          })
+          }),
         )
         .optional(),
     })
@@ -121,7 +121,7 @@ export async function loadConfig(configPath: string): Promise<Config> {
         config_path: configPath,
         error: err instanceof Error ? err.message : String(err),
       },
-      "Failed to load config"
+      "Failed to load config",
     );
     throw err;
   }

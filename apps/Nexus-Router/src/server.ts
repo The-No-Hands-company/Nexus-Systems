@@ -1,11 +1,11 @@
-import { IncomingMessage, ServerResponse } from "http";
+import type { IncomingMessage, ServerResponse } from "node:http";
+import type { Config } from "./lib/config";
 import { logger } from "./lib/logger";
-import { Config } from "./lib/config";
-import { ipRouter } from "./middleware/ip-router";
-import { authGate } from "./middleware/auth-gate";
-import { requestEnricher } from "./middleware/request-enricher";
-import { apiRouter } from "./middleware/api-router";
 import { aiProviderRouter } from "./middleware/ai-provider-router";
+import { apiRouter } from "./middleware/api-router";
+import { authGate } from "./middleware/auth-gate";
+import { ipRouter } from "./middleware/ip-router";
+import { requestEnricher } from "./middleware/request-enricher";
 import { telemetryEmitter } from "./middleware/telemetry-emitter";
 
 interface RequestContext {
@@ -23,7 +23,7 @@ interface RequestContext {
 export async function startRouter(
   req: IncomingMessage,
   res: ServerResponse,
-  config: Config
+  config: Config,
 ): Promise<void> {
   const requestId = crypto.randomUUID();
   const startTime = Date.now();
@@ -51,7 +51,7 @@ export async function startRouter(
           status: "healthy",
           uptime_sec: Math.floor(process.uptime()),
           request_id: requestId,
-        })
+        }),
       );
       return;
     }
@@ -68,7 +68,7 @@ export async function startRouter(
             ?.map((r) => r.model)
             .filter((m, i, a) => a.indexOf(m) === i) || ["unknown"],
           telemetry_pipeline: "connected",
-        })
+        }),
       );
       return;
     }
@@ -103,7 +103,7 @@ export async function startRouter(
         error: err instanceof Error ? err.message : String(err),
         stack: err instanceof Error ? err.stack : undefined,
       },
-      "Router error"
+      "Router error",
     );
     res.writeHead(500, { "Content-Type": "application/json" });
     res.end(JSON.stringify({ error: "Internal server error", request_id: requestId }));

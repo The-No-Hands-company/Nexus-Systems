@@ -1,5 +1,5 @@
-import { IncomingMessage, ServerResponse } from "http";
-import { Config } from "../lib/config";
+import type { IncomingMessage, ServerResponse } from "node:http";
+import type { Config } from "../lib/config";
 import { logger } from "../lib/logger";
 
 interface RequestContext {
@@ -14,12 +14,11 @@ export async function requestEnricher(
   req: IncomingMessage,
   res: ServerResponse,
   context: RequestContext,
-  config: Config
+  _config: Config,
 ): Promise<void> {
   try {
     // Generate trace ID if not present
-    const traceId =
-      (req.headers["x-trace-id"] as string) || crypto.randomUUID();
+    const traceId = (req.headers["x-trace-id"] as string) || crypto.randomUUID();
     context.metadata.trace_id = traceId;
     req.headers["x-trace-id"] = traceId;
 
@@ -34,7 +33,7 @@ export async function requestEnricher(
 
     logger.debug(
       { request_id: context.requestId, trace_id: traceId },
-      "Request enriched with trace context"
+      "Request enriched with trace context",
     );
   } catch (err) {
     logger.warn(
@@ -42,7 +41,7 @@ export async function requestEnricher(
         request_id: context.requestId,
         error: err instanceof Error ? err.message : String(err),
       },
-      "Request enricher error (continuing)"
+      "Request enricher error (continuing)",
     );
   }
 }

@@ -1,10 +1,10 @@
-import { createServer } from "http";
-import { startRouter } from "./server";
-import { logger } from "./lib/logger";
-import { loadConfig } from "./lib/config";
+import { createServer } from "node:http";
 import { registerWithCloud } from "./lib/cloud";
+import { loadConfig } from "./lib/config";
+import { logger } from "./lib/logger";
+import { startRouter } from "./server";
 
-const PORT = parseInt(process.env.NEXUS_ROUTER_PORT || "9999", 10);
+const PORT = Number.parseInt(process.env.NEXUS_ROUTER_PORT || "9999", 10);
 const HOSTNAME = process.env.NEXUS_ROUTER_HOST || "0.0.0.0";
 
 async function main() {
@@ -30,18 +30,21 @@ async function main() {
       } catch (err) {
         logger.warn(
           { error: err instanceof Error ? err.message : String(err) },
-          "Failed to register with Nexus-Cloud (will retry)"
+          "Failed to register with Nexus-Cloud (will retry)",
         );
       }
 
       // Start heartbeat
-      setInterval(async () => {
-        try {
-          await registerWithCloud(config);
-        } catch {
-          // Silent fail, log in debug
-        }
-      }, (config.cloud?.heartbeat_interval_sec || 30) * 1000);
+      setInterval(
+        async () => {
+          try {
+            await registerWithCloud(config);
+          } catch {
+            // Silent fail, log in debug
+          }
+        },
+        (config.cloud?.heartbeat_interval_sec || 30) * 1000,
+      );
     });
 
     // Graceful shutdown
@@ -55,7 +58,7 @@ async function main() {
   } catch (err) {
     logger.error(
       { error: err instanceof Error ? err.message : String(err) },
-      "Fatal error during startup"
+      "Fatal error during startup",
     );
     process.exit(1);
   }

@@ -1,5 +1,5 @@
-import { IncomingMessage, ServerResponse } from "http";
-import { Config } from "../lib/config";
+import type { IncomingMessage, ServerResponse } from "node:http";
+import type { Config } from "../lib/config";
 import { logger } from "../lib/logger";
 
 interface RequestContext {
@@ -17,7 +17,7 @@ export async function authGate(
   req: IncomingMessage,
   res: ServerResponse,
   context: RequestContext,
-  config: Config
+  config: Config,
 ): Promise<void> {
   try {
     if (!config.auth?.phantom_enabled) {
@@ -28,7 +28,7 @@ export async function authGate(
     if (!authHeader) {
       logger.warn(
         { request_id: context.requestId, url: req.url },
-        "Auth gate: missing authorization header"
+        "Auth gate: missing authorization header",
       );
       res.writeHead(401, { "Content-Type": "application/json" });
       res.end(
@@ -36,7 +36,7 @@ export async function authGate(
           error: "Unauthorized",
           message: "Missing authorization header",
           request_id: context.requestId,
-        })
+        }),
       );
       return;
     }
@@ -67,7 +67,7 @@ export async function authGate(
       } catch (err) {
         logger.warn(
           { request_id: context.requestId, error: String(err) },
-          "Auth gate: failed to parse auth token"
+          "Auth gate: failed to parse auth token",
         );
         res.writeHead(401, { "Content-Type": "application/json" });
         res.end(JSON.stringify({ error: "Invalid token", request_id: context.requestId }));
@@ -76,10 +76,7 @@ export async function authGate(
     }
 
     if (!phantomDid) {
-      logger.warn(
-        { request_id: context.requestId },
-        "Auth gate: no valid phantom DID found"
-      );
+      logger.warn({ request_id: context.requestId }, "Auth gate: no valid phantom DID found");
       res.writeHead(403, { "Content-Type": "application/json" });
       res.end(JSON.stringify({ error: "Forbidden", request_id: context.requestId }));
       return;
@@ -95,7 +92,7 @@ export async function authGate(
 
     logger.debug(
       { request_id: context.requestId, phantom_did: phantomDid },
-      "Auth gate: validated Phantom DID"
+      "Auth gate: validated Phantom DID",
     );
   } catch (err) {
     logger.error(
@@ -103,7 +100,7 @@ export async function authGate(
         request_id: context.requestId,
         error: err instanceof Error ? err.message : String(err),
       },
-      "Auth gate error"
+      "Auth gate error",
     );
     res.writeHead(500, { "Content-Type": "application/json" });
     res.end(JSON.stringify({ error: "Internal error", request_id: context.requestId }));

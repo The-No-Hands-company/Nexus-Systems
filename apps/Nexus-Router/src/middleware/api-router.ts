@@ -1,5 +1,5 @@
-import { IncomingMessage, ServerResponse } from "http";
-import { Config } from "../lib/config";
+import type { IncomingMessage, ServerResponse } from "node:http";
+import type { Config } from "../lib/config";
 import { logger } from "../lib/logger";
 
 interface RequestContext {
@@ -14,7 +14,7 @@ export async function apiRouter(
   req: IncomingMessage,
   res: ServerResponse,
   context: RequestContext,
-  config: Config
+  config: Config,
 ): Promise<void> {
   try {
     const url = req.url || "/";
@@ -44,14 +44,14 @@ export async function apiRouter(
     if (upstreams.length === 0) {
       logger.warn(
         { request_id: context.requestId, route: matchedPath },
-        "No upstreams configured for route"
+        "No upstreams configured for route",
       );
       res.writeHead(503, { "Content-Type": "application/json" });
       res.end(
         JSON.stringify({
           error: "Service unavailable",
           request_id: context.requestId,
-        })
+        }),
       );
       return;
     }
@@ -66,7 +66,7 @@ export async function apiRouter(
         route: matchedPath,
         upstream: upstream.name,
       },
-      "API router: selected upstream"
+      "API router: selected upstream",
     );
 
     // TODO: Proxy request to upstream
@@ -82,7 +82,7 @@ export async function apiRouter(
         request_id: context.requestId,
         error: err instanceof Error ? err.message : String(err),
       },
-      "API router error"
+      "API router error",
     );
   }
 }
