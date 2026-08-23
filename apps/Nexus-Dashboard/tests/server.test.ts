@@ -79,7 +79,7 @@ describe("dashboard server", () => {
 
   it("includes a healthy native terminal for a founder without externalizing Cloud's record", async () => {
     const res = await handleRequest(
-      new Request("http://app.test/api/apps", { headers: { cookie: "role=founder" } }),
+      new Request("http://app.test/ipa/apps", { headers: { cookie: "role=founder" } }),
     );
     expect(res.status).toBe(200);
     const { apps } = (await res.json()) as {
@@ -96,7 +96,7 @@ describe("dashboard server", () => {
 
   it("does not reveal terminal to non-admin callers, even when Cloud registers it", async () => {
     const res = await handleRequest(
-      new Request("http://app.test/api/apps", { headers: { cookie: "role=user" } }),
+      new Request("http://app.test/ipa/apps", { headers: { cookie: "role=user" } }),
     );
     const { apps } = (await res.json()) as { apps: Array<{ id: string }> };
     expect(apps.map((app) => app.id)).not.toContain("nexus-terminal");
@@ -106,7 +106,7 @@ describe("dashboard server", () => {
     terminal?.stop(true);
     terminal = null;
     const res = await handleRequest(
-      new Request("http://app.test/api/apps", { headers: { cookie: "role=admin" } }),
+      new Request("http://app.test/ipa/apps", { headers: { cookie: "role=admin" } }),
     );
     const { apps } = (await res.json()) as { apps: Array<{ id: string; health: string }> };
     expect(apps.find((app) => app.id === "nexus-terminal")).toMatchObject({ health: "offline" });
@@ -115,7 +115,7 @@ describe("dashboard server", () => {
   it("degrades to the shell's own views rather than failing when Cloud is down", async () => {
     cloud?.stop(true);
     cloud = null;
-    const res = await handleRequest(new Request("http://app.test/api/apps"));
+    const res = await handleRequest(new Request("http://app.test/ipa/apps"));
     expect(res.status).toBe(200);
     // Previously asserted an empty grid. Mail lives in this app, so a Cloud
     // outage is no reason to hide it.
@@ -125,7 +125,7 @@ describe("dashboard server", () => {
 
   it("proxies auth calls same-origin, preserving path and method", async () => {
     const res = await handleRequest(
-      new Request("http://app.test/api/v1/auth/access-requests", {
+      new Request("http://app.test/ipa/v1/auth/access-requests", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ username: "x", email: "x@y.dev" }),
@@ -138,7 +138,7 @@ describe("dashboard server", () => {
 
   it("forwards the session cookie to Auth", async () => {
     const res = await handleRequest(
-      new Request("http://app.test/api/v1/auth/me", {
+      new Request("http://app.test/ipa/v1/auth/me", {
         headers: { cookie: "nexus_session=zzz" },
       }),
     );
@@ -149,7 +149,7 @@ describe("dashboard server", () => {
 
   it("passes Set-Cookie back so signing in actually creates a session", async () => {
     const res = await handleRequest(
-      new Request("http://app.test/api/v1/auth/login", { method: "POST" }),
+      new Request("http://app.test/ipa/v1/auth/login", { method: "POST" }),
     );
     expect(res.headers.get("set-cookie") ?? "").toContain("nexus_session=");
   });
@@ -157,14 +157,14 @@ describe("dashboard server", () => {
   it("never proxies anything outside /api/v1/auth", async () => {
     // An open proxy would let the dashboard be used to reach arbitrary
     // internal services from the public internet.
-    const res = await handleRequest(new Request("http://app.test/api/v1/admin/secrets"));
+    const res = await handleRequest(new Request("http://app.test/ipa/v1/admin/secrets"));
     expect(res.status).toBe(404);
   });
 
   it("404s an unknown /api path instead of falling through to the SPA", async () => {
     // Otherwise a typo'd API call silently returns HTML and the caller parses
     // "<!doctype html>" as JSON — the exact error the user reported seeing.
-    const res = await handleRequest(new Request("http://app.test/api/nope"));
+    const res = await handleRequest(new Request("http://app.test/ipa/nope"));
     expect(res.status).toBe(404);
     expect(res.headers.get("content-type") ?? "").toContain("application/json");
   });

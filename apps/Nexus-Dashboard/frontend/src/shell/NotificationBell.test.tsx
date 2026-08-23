@@ -8,6 +8,8 @@ import NotificationBell from "./NotificationBell";
  * let a real fetch through would be asserting on whatever the dev machine
  * happens to be running, which is how a suite goes green against nothing.
  */
+let fetchSpy: ReturnType<typeof vi.fn> | null = null;
+
 function stubFetch(handler: (url: string, init?: RequestInit) => unknown) {
   const spy = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = typeof input === "string" ? input : String(input);
@@ -18,7 +20,8 @@ function stubFetch(handler: (url: string, init?: RequestInit) => unknown) {
       headers: { "content-type": "application/json" },
     });
   });
-  vi.stubGlobal("fetch", spy);
+  fetchSpy = spy;
+  globalThis.fetch = spy as any;
   return spy;
 }
 
@@ -40,8 +43,16 @@ function renderBell() {
   );
 }
 
-beforeEach(() => vi.useRealTimers());
-afterEach(() => vi.unstubAllGlobals());
+beforeEach(() => {
+  vi.useRealTimers();
+});
+
+afterEach(() => {
+  if (fetchSpy) {
+    delete (globalThis as any).fetch;
+    fetchSpy = null;
+  }
+});
 
 describe("NotificationBell", () => {
   it("shows the unread count from the server", async () => {
@@ -73,7 +84,7 @@ describe("NotificationBell", () => {
     renderBell();
     await screen.findByText("1");
     // Opening is what costs a list fetch; rendering the header must not.
-    expect(spy.mock.calls.some(([u]) => String(u).endsWith("/api/notifications"))).toBe(false);
+    expect(spy.mock.calls.some(([u]) => String(u).endsWith("/ipa/notifications"))).toBe(false);
 
     fireEvent.click(screen.getByRole("button", { name: /unread/i }));
     expect(await screen.findByText("Deploy failed")).toBeTruthy();
@@ -94,7 +105,7 @@ describe("NotificationBell", () => {
     renderBell();
     fireEvent.click(await screen.findByRole("button", { name: /unread/i }));
     fireEvent.click(await screen.findByText("Deploy failed"));
-    await waitFor(() => expect(seen).toContain("POST /api/notifications/7/read"));
+    await waitFor(() => expect(seen).toContain("POST /ipa/notifications/7/read"));
   });
 
   it("marks all read", async () => {
@@ -115,7 +126,7 @@ describe("NotificationBell", () => {
     renderBell();
     fireEvent.click(await screen.findByRole("button", { name: /unread/i }));
     fireEvent.click(await screen.findByRole("button", { name: /mark all read/i }));
-    await waitFor(() => expect(seen).toContain("POST /api/notifications/read-all"));
+    await waitFor(() => expect(seen).toContain("POST /ipa/notifications/read-all"));
     expect(screen.queryByText("4")).toBeNull();
   });
 
@@ -123,10 +134,9 @@ describe("NotificationBell", () => {
     // Hosting being unreachable is not the user's problem to solve from the
     // header of an unrelated app. A red error in the chrome of every page
     // would be worse than no bell at all.
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () => new Response("upstream unavailable", { status: 503 })),
-    );
+    const spy = vi.fn(async () => new Response("upstream unavailable", { status: 503 }));
+    fetchSpy = spy;
+    globalThis.fetch = spy as any;
     const { container } = renderBell();
     await act(async () => { await Promise.resolve(); });
     await waitFor(() => expect(container.textContent).not.toContain("Could not"));
@@ -138,7 +148,7 @@ describe("NotificationBell", () => {
     renderBell();
     fireEvent.click(await screen.findByRole("button", { name: /unread/i }));
     expect(await screen.findByText("Deploy failed")).toBeTruthy();
-    fireEvent.keyDown(document, { key: "Escape" });
+    fireEvent.keyDown(globalThis.document, { key: "Escape" });
     await waitFor(() => expect(screen.queryByText("Deploy failed")).toBeNull());
   });
 

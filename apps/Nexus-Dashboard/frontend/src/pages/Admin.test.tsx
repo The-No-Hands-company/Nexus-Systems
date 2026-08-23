@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import Admin from "./Admin";
 
@@ -19,25 +19,40 @@ function jsonResponse(body: unknown, status = 200) {
   });
 }
 
+let fetchSpy: ReturnType<typeof vi.fn> | null = null;
+
 function stubFetch(who: typeof ADMIN | typeof PLAIN, overrides: Record<string, () => Response> = {}) {
   const spy = vi.fn(async (url: RequestInfo | URL, init?: RequestInit) => {
     const u = String(url);
     const key = `${init?.method ?? "GET"} ${u}`;
     if (overrides[key]) return overrides[key]!();
-    if (u === "/api/v1/auth/me") return jsonResponse({ user: who });
-    if (u === "/api/v1/auth/access-requests") return jsonResponse({ requests: REQUESTS });
+    if (u === "/ipa/v1/auth/me") return jsonResponse({ user: who });
+    if (u === "/ipa/v1/auth/access-requests") return jsonResponse({ requests: REQUESTS });
     if (u.endsWith("/approve") || u.endsWith("/reject")) return jsonResponse({ user: {} });
-    if (u === "/api/v1/auth/invites") {
+    if (u === "/ipa/v1/auth/invites") {
       return jsonResponse({ id: "inv-1", code: "c".repeat(32), expiresAt: "2026-09-10T00:00:00Z" }, 201);
     }
+    // Cloud dev tools endpoints
+    if (u === "/ipa/cloud/endpoints") return jsonResponse({ routes: [] });
+    if (u === "/ipa/cloud/federation/peers") return jsonResponse({ peers: [] });
+    if (u === "/ipa/cloud/federation/identity") return jsonResponse({ address: "ns:test", shortId: "T-1" });
+    if (u === "/ipa/cloud/tools") return jsonResponse({ tools: [] });
     throw new Error(`unexpected fetch: ${key}`);
   });
-  vi.stubGlobal("fetch", spy);
+  fetchSpy = spy;
+  globalThis.fetch = spy as any;
   return spy;
 }
 
 beforeEach(() => {
   vi.restoreAllMocks();
+});
+
+afterEach(() => {
+  if (fetchSpy) {
+    delete (globalThis as any).fetch;
+    fetchSpy = null;
+  }
 });
 
 describe("Admin", () => {
@@ -72,7 +87,7 @@ describe("Admin", () => {
     // Dropping it optimistically would tell the operator someone was approved
     // when they were not, and the person would never be able to claim.
     stubFetch(ADMIN, {
-      "POST /api/v1/auth/access-requests/usr-1/approve": () =>
+      "POST /ipa/v1/auth/access-requests/usr-1/approve": () =>
         jsonResponse({ error: "not_pending" }, 409),
     });
     render(<Admin />);

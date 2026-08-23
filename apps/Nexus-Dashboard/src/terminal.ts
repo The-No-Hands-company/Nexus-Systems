@@ -1,6 +1,6 @@
 import { callerIdentity, isAdminRole } from "./auth";
 
-const ATTACH_PATH = "/api/terminal/attach";
+const ATTACH_PATH = "/ipa/terminal/attach";
 const UPSTREAM_ATTACH_PATH = "/api/v1/terminal/attach";
 const DEFAULT_TERMINAL_URL = "http://127.0.0.1:3110";
 

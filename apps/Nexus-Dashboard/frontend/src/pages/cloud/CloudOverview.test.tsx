@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import CloudOverview from "./CloudOverview";
@@ -86,20 +86,23 @@ const TOOLS_BODY = {
   ],
 };
 
+let fetchSpy: ReturnType<typeof vi.fn> | null = null;
+
 function stubFetch(overrides: Record<string, () => Response> = {}) {
   const spy = vi.fn(async (url: RequestInfo | URL) => {
     const u = String(url);
     for (const [key, fn] of Object.entries(overrides)) {
       if (u.startsWith(key)) return fn();
     }
-    if (u.startsWith("/api/cloud/status?compact=trust")) return jsonResponse(TRUST_BODY);
-    if (u.startsWith("/api/cloud/status")) return jsonResponse(STATUS_BODY);
-    if (u.startsWith("/api/cloud/federation/identity")) return jsonResponse(IDENTITY_BODY);
-    if (u.startsWith("/api/cloud/audit")) return jsonResponse(AUDIT_BODY);
-    if (u.startsWith("/api/cloud/tools")) return jsonResponse(TOOLS_BODY);
+    if (u.startsWith("/ipa/cloud/status?compact=trust")) return jsonResponse(TRUST_BODY);
+    if (u.startsWith("/ipa/cloud/status")) return jsonResponse(STATUS_BODY);
+    if (u.startsWith("/ipa/cloud/federation/identity")) return jsonResponse(IDENTITY_BODY);
+    if (u.startsWith("/ipa/cloud/audit")) return jsonResponse(AUDIT_BODY);
+    if (u.startsWith("/ipa/cloud/tools")) return jsonResponse(TOOLS_BODY);
     throw new Error(`unexpected fetch: ${u}`);
   });
-  vi.stubGlobal("fetch", spy);
+  fetchSpy = spy;
+  globalThis.fetch = spy as any;
   return spy;
 }
 
@@ -107,9 +110,18 @@ beforeEach(() => {
   vi.restoreAllMocks();
 });
 
+afterEach(() => {
+  if (fetchSpy) {
+    delete (globalThis as any).fetch;
+    fetchSpy = null;
+  }
+});
+
 describe("CloudOverview", () => {
   it("announces loading while the load-bearing Cloud requests are pending", () => {
-    vi.stubGlobal("fetch", vi.fn(() => new Promise<Response>(() => undefined)));
+    const spy = vi.fn(() => new Promise<Response>(() => undefined));
+    fetchSpy = spy;
+    globalThis.fetch = spy as any;
     render(<MemoryRouter><CloudOverview /></MemoryRouter>);
 
     expect(screen.getByRole("status").textContent).toMatch(/loading/i);
@@ -151,7 +163,7 @@ describe("CloudOverview", () => {
 
   it("uses the current status counters instead of legacy nested totals", async () => {
     stubFetch({
-      "/api/cloud/status": () => jsonResponse({
+      "/ipa/cloud/status": () => jsonResponse({
         status: {
           mode: "standalone", toolCount: 86, healthyToolCount: 36,
           exposedToolCount: 7, trust: { peers: { total: 0 }, nodes: { total: 0 } },
@@ -185,7 +197,7 @@ describe("CloudOverview", () => {
   it("shows Cloud as unavailable, not a blank page, when the proxy returns 503", async () => {
     // This is the proxy's degrade path (see server.ts proxyToCloud) — Cloud
     // being down must not take the shell page down with it.
-    stubFetch({ "/api/cloud/status": () => jsonResponse({ error: "cloud_unavailable" }, 503) });
+    stubFetch({ "/ipa/cloud/status": () => jsonResponse({ error: "cloud_unavailable" }, 503) });
     render(<MemoryRouter><CloudOverview /></MemoryRouter>);
 
     await waitFor(() => expect(screen.getByRole("alert")).toBeTruthy());
@@ -197,7 +209,7 @@ describe("CloudOverview", () => {
     // Trust/audit/tools are best-effort in the original loadDashboard — only
     // status and identity are load-bearing.
     stubFetch({
-      "/api/cloud/status?compact=trust": () => jsonResponse({ error: "cloud_unavailable" }, 503),
+      "/ipa/cloud/status?compact=trust": () => jsonResponse({ error: "cloud_unavailable" }, 503),
     });
     render(<MemoryRouter><CloudOverview /></MemoryRouter>);
 
@@ -209,7 +221,7 @@ describe("CloudOverview", () => {
     // Treating a failed optional request as [] reports a trustworthy-looking
     // 0/3 and labels every service "not registered", which is false evidence.
     stubFetch({
-      "/api/cloud/tools": () => jsonResponse({ error: "cloud_unavailable" }, 503),
+      "/ipa/cloud/tools": () => jsonResponse({ error: "cloud_unavailable" }, 503),
     });
     render(<MemoryRouter><CloudOverview /></MemoryRouter>);
 

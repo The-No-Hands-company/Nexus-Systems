@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import MailList from "./MailList";
@@ -28,23 +28,33 @@ const MESSAGES = [
   },
 ];
 
+let fetchSpy: ReturnType<typeof vi.fn> | null = null;
+
 function stubFetch(overrides: Record<string, () => Response> = {}) {
   const spy = vi.fn(async (url: RequestInfo | URL) => {
     const u = String(url);
     for (const [key, fn] of Object.entries(overrides)) {
       if (u.startsWith(key)) return fn();
     }
-    if (u.startsWith("/api/mail/folders/")) return jsonResponse(MESSAGES);
-    if (u.startsWith("/api/mail/folders")) return jsonResponse(FOLDERS);
-    if (u.startsWith("/api/mail/search")) return jsonResponse([]);
+    if (u.startsWith("/ipa/mail/folders/")) return jsonResponse(MESSAGES);
+    if (u.startsWith("/ipa/mail/folders")) return jsonResponse(FOLDERS);
+    if (u.startsWith("/ipa/mail/search")) return jsonResponse([]);
     throw new Error(`unexpected fetch: ${u}`);
   });
-  vi.stubGlobal("fetch", spy);
+  fetchSpy = spy;
+  globalThis.fetch = spy as any;
   return spy;
 }
 
 beforeEach(() => {
   vi.restoreAllMocks();
+});
+
+afterEach(() => {
+  if (fetchSpy) {
+    delete (globalThis as any).fetch;
+    fetchSpy = null;
+  }
 });
 
 describe("MailList", () => {
@@ -64,14 +74,14 @@ describe("MailList", () => {
 
     await waitFor(() => expect(screen.getByText("Design review")).toBeTruthy());
     // Landing nowhere would show an empty page on a mailbox full of mail.
-    expect(spy.mock.calls.some(([u]) => String(u).includes("/api/mail/folders/f-inbox/messages"))).toBe(true);
+    expect(spy.mock.calls.some(([u]) => String(u).includes("/ipa/mail/folders/f-inbox/messages"))).toBe(true);
   });
 
   it("says an account has no mailbox rather than calling it a failure", async () => {
     // An ordinary state for a new account. Telling someone their mail is broken
     // when they simply have no address yet is worse than saying nothing.
     stubFetch({
-      "/api/mail/folders": () => jsonResponse({ error: "no mailbox for this account" }, 404),
+      "/ipa/mail/folders": () => jsonResponse({ error: "no mailbox for this account" }, 404),
     });
     render(<MemoryRouter><MailList /></MemoryRouter>);
 
@@ -83,7 +93,7 @@ describe("MailList", () => {
     // An empty list and a broken service look identical to a user unless the
     // page says which it is.
     stubFetch({
-      "/api/mail/folders": () => jsonResponse({ error: "mail_unavailable" }, 503),
+      "/ipa/mail/folders": () => jsonResponse({ error: "mail_unavailable" }, 503),
     });
     render(<MemoryRouter><MailList /></MemoryRouter>);
 

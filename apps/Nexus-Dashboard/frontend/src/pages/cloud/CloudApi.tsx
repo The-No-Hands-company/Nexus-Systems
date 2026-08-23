@@ -7,7 +7,7 @@ type State = { kind: "loading" } | { kind: "unavailable" } | { kind: "ready"; ro
 /**
  * status.html's loadApiView grouping, verbatim: the first three path
  * segments key the group unless the path starts with `v1`, in which case two
- * segments do. `/api/v1/tools` groups under `/api/v1/tools`;
+ * segments do. `/ipa/v1/tools` groups under `/ipa/v1/tools`;
  * `/v1/federation/peers` groups under `/v1/federation`.
  */
 function groupKey(path: string): string {

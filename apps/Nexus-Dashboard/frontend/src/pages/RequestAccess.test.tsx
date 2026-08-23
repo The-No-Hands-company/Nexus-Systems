@@ -68,7 +68,7 @@ describe("RequestAccess", () => {
     await waitFor(() => expect(spy).toHaveBeenCalled());
     // Relative, not https://auth.<domain>/... — the dashboard proxies it, and
     // a cross-origin call here would need credentialed CORS.
-    expect(String(spy.mock.calls[0]![0])).toBe("/api/v1/auth/access-requests");
+    expect(String(spy.mock.calls[0]![0])).toBe("/ipa/v1/auth/access-requests");
   });
 
   it("does not submit without a username and email", () => {

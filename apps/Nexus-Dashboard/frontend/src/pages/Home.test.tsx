@@ -14,12 +14,12 @@ function jsonResponse(body: unknown, status = 200) {
 function stubFetch(signedIn: boolean) {
   vi.stubGlobal("fetch", vi.fn(async (url: RequestInfo | URL) => {
     const u = String(url);
-    if (u === "/api/v1/auth/me") {
+    if (u === "/ipa/v1/auth/me") {
       return signedIn
         ? jsonResponse({ user: { id: "u1", username: "ada", email: "a@x.dev", role: "user" } })
         : jsonResponse({ error: "unauthenticated" }, 401);
     }
-    if (u === "/api/apps") {
+    if (u === "/ipa/apps") {
       return jsonResponse({
         apps: [{ id: "nexus-chat", name: "Nexus Chat", description: "Chat",
                  url: "https://chat.tnhc.dev", path: "/chat", health: "healthy" }],

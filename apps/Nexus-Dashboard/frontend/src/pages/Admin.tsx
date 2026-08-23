@@ -1,7 +1,18 @@
 import { useEffect, useState } from "react";
 import {
-  me, isAdmin, listAccessRequests, decideAccessRequest, createInvite,
-  type Me, type AccessRequest,
+  me,
+  isAdmin,
+  listAccessRequests,
+  decideAccessRequest,
+  createInvite,
+  cloudFederationPeers,
+  cloudEndpoints,
+  cloudIdentity,
+  cloudTools,
+  type Me,
+  type AccessRequest,
+  type CloudPeer,
+  type CloudEndpoint,
 } from "../api";
 
 /**
@@ -18,6 +29,14 @@ export default function Admin() {
   const [requests, setRequests] = useState<AccessRequest[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [invite, setInvite] = useState<{ code: string; expiresAt: string } | null>(null);
+  // Dev-tools state. Declared unconditionally: hooks must run in the same
+  // order every render, so none of these may sit below the early returns.
+  const [devNotes, setDevNotes] = useState("");
+  const [showDevTools, setShowDevTools] = useState(false);
+  const [endpoints, setEndpoints] = useState<CloudEndpoint[]>([]);
+  const [peers, setPeers] = useState<CloudPeer[]>([]);
+  const [identity, setIdentity] = useState<{ address?: string; shortId?: string } | null>(null);
+  const [tools, setTools] = useState<{ id: string; name: string; health?: string; publicUrl?: string }[]>([]);
 
   useEffect(() => {
     let cancelled = false;
@@ -36,13 +55,34 @@ export default function Admin() {
     return () => { cancelled = true; };
   }, []);
 
+  // Fetch cloud data only when dev tools are shown — but the effect itself is
+  // unconditional, which is what keeps hook order stable across renders.
+  useEffect(() => {
+    if (!showDevTools) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const [eps, p, id, t] = await Promise.all([
+          cloudEndpoints().catch(() => []),
+          cloudFederationPeers().catch(() => []),
+          cloudIdentity().catch(() => null),
+          cloudTools().catch(() => []),
+        ]);
+        if (!cancelled) {
+          setEndpoints(eps);
+          setPeers(p);
+          setIdentity(id);
+          setTools(t);
+        }
+      } catch {}
+    })();
+    return () => { cancelled = true; };
+  }, [showDevTools]);
+
   async function decide(id: string, decision: "approve" | "reject") {
     setError(null);
     try {
       await decideAccessRequest(id, decision);
-      // Only drop the row once the server has agreed. Removing it optimistically
-      // would tell the operator someone was approved when they were not, and
-      // that person could never claim their account.
       setRequests((list) => list.filter((r) => r.id !== id));
     } catch {
       setError(`Could not ${decision} that request. It may already have been decided.`);
@@ -62,7 +102,6 @@ export default function Admin() {
     return <section className="mx-auto max-w-3xl p-8 text-zinc-500">Loading…</section>;
   }
 
-  // Not an operator: render nothing at all rather than an empty admin shell.
   if (!isAdmin(user)) return null;
 
   return (
@@ -140,6 +179,119 @@ export default function Admin() {
           >
             Create invite
           </button>
+        )}
+      </div>
+
+      {/* Development Notes & Tools (Founder only, development phase) */}
+      <div className="rounded-lg border border-zinc-800 bg-zinc-900/30 p-6 space-y-6">
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-medium">Development Notes & Tools</h2>
+          <button
+            type="button"
+            onClick={() => setShowDevTools(!showDevTools)}
+            className="rounded border border-zinc-700 px-3 py-1 text-sm hover:bg-zinc-800"
+          >
+            {showDevTools ? "Hide" : "Show"} Tools
+          </button>
+        </div>
+
+        <div>
+          <label htmlFor="dev-notes" className="block text-sm text-zinc-400 mb-2">
+            Development Notes (Founder only, persisted locally)
+          </label>
+          <textarea
+            id="dev-notes"
+            value={devNotes}
+            onChange={(e) => setDevNotes(e.target.value)}
+            className="w-full min-h-[120px] rounded bg-zinc-800 border border-zinc-700 p-3 text-sm font-mono text-zinc-100 placeholder-zinc-500 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            placeholder="Add development notes here... e.g. remember to create dev helper tool for listing all exposed domains..."
+          />
+        </div>
+
+        {showDevTools && (
+          <div className="space-y-6 border-t border-zinc-800 pt-6">
+            <div>
+              <h3 className="font-medium mb-3">Cloud Identity</h3>
+              <div className="grid gap-2 text-sm font-mono text-zinc-300">
+                <div><span className="text-zinc-500">Address: </span>{identity?.address ?? "—"}</div>
+                <div><span className="text-zinc-500">Short ID: </span>{identity?.shortId ?? "—"}</div>
+              </div>
+            </div>
+
+            <div>
+              <h3 className="font-medium mb-3">Cloud Tools ({tools.length})</h3>
+              <div className="rounded-lg border border-zinc-800 bg-zinc-900/30 p-3 max-h-60 overflow-auto">
+                <table className="w-full text-sm font-mono">
+                  <thead>
+                    <tr className="text-zinc-500 border-b border-zinc-800">
+                      <th className="text-left pb-2">ID</th>
+                      <th className="text-left pb-2">Name</th>
+                      <th className="text-left pb-2">Health</th>
+                      <th className="text-left pb-2">Public URL</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {tools.map((t) => (
+                      <tr key={t.id} className="border-b border-zinc-800/50">
+                        <td className="pb-2 text-zinc-400">{t.id}</td>
+                        <td className="pb-2 text-zinc-200">{t.name}</td>
+                        <td className="pb-2">{t.health ?? "—"}</td>
+                        <td className="pb-2 text-zinc-500">{t.publicUrl ?? "—"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div>
+              <h3 className="font-medium mb-3">Cloud Endpoints ({endpoints.length})</h3>
+              <div className="rounded-lg border border-zinc-800 bg-zinc-900/30 p-3 max-h-60 overflow-auto">
+                <table className="w-full text-sm font-mono">
+                  <thead>
+                    <tr className="text-zinc-500 border-b border-zinc-800">
+                      <th className="text-left pb-2">Method</th>
+                      <th className="text-left pb-2">Path</th>
+                      <th className="text-left pb-2">Description</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {endpoints.map((e, i) => (
+                      <tr key={i} className="border-b border-zinc-800/50">
+                        <td className="pb-2 text-blue-400">{e.method}</td>
+                        <td className="pb-2 text-zinc-300">{e.path}</td>
+                        <td className="pb-2 text-zinc-500">{e.description ?? "—"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div>
+              <h3 className="font-medium mb-3">Federation Peers ({peers.length})</h3>
+              <div className="rounded-lg border border-zinc-800 bg-zinc-900/30 p-3 max-h-60 overflow-auto">
+                <table className="w-full text-sm font-mono">
+                  <thead>
+                    <tr className="text-zinc-500 border-b border-zinc-800">
+                      <th className="text-left pb-2">Domain</th>
+                      <th className="text-left pb-2">Trust</th>
+                      <th className="text-left pb-2">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {peers.map((p, i) => (
+                      <tr key={i} className="border-b border-zinc-800/50">
+                        <td className="pb-2 text-zinc-300">{p.domain ?? "—"}</td>
+                        <td className="pb-2">{String(p.trust ?? p.trustLevel ?? "—")}</td>
+                        <td className="pb-2 text-zinc-500">{p.trust ? "object" : "string"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
         )}
       </div>
     </section>

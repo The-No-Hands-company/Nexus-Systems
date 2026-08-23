@@ -104,7 +104,7 @@ async function waitForActiveShells(
   throw new Error(`timed out waiting for ${label}; last activeShells=${String(observed)}`);
 }
 
-function request(role: string | null, path = "/api/terminal/attach?cols=120&rows=40"): Request {
+function request(role: string | null, path = "/ipa/terminal/attach?cols=120&rows=40"): Request {
   const headers = new Headers({
     connection: "Upgrade",
     upgrade: "websocket",
@@ -129,7 +129,7 @@ function openClient(
   if (role !== null) headers.cookie = `role=${role}; nexus_session=secret-session`;
   if (origin !== null) headers.origin = origin;
   const socket = new WebSocket(
-    `ws://127.0.0.1:${dashboardPort()}/api/terminal/attach?cols=120&rows=40`,
+    `ws://127.0.0.1:${dashboardPort()}/ipa/terminal/attach?cols=120&rows=40`,
     { headers },
   );
   socket.binaryType = "arraybuffer";
@@ -288,7 +288,7 @@ describe("terminal upgrade authorization", () => {
 
   it("ignores a client-selected upstream and fails closed when Auth is unavailable", async () => {
     const injected = await authorizeTerminalUpgrade(
-      request("founder", "/api/terminal/attach?cols=120&rows=40&upstream=ws%3A%2F%2Fevil.example"),
+      request("founder", "/ipa/terminal/attach?cols=120&rows=40&upstream=ws%3A%2F%2Fevil.example"),
     );
     expect(injected.ok).toBe(true);
     if (injected.ok) {
@@ -304,12 +304,12 @@ describe("terminal upgrade authorization", () => {
 
   it("refuses every non-WebSocket request and every other path", async () => {
     const plain = await authorizeTerminalUpgrade(
-      new Request("http://app.test/api/terminal/attach", {
+      new Request("http://app.test/ipa/terminal/attach", {
         headers: { cookie: "role=founder; nexus_session=secret-session" },
       }),
     );
     const otherPath = await authorizeTerminalUpgrade(
-      request("founder", "/api/terminal/attach/extra?cols=120&rows=40"),
+      request("founder", "/ipa/terminal/attach/extra?cols=120&rows=40"),
     );
 
     expect(plain.ok).toBe(false);
@@ -318,7 +318,7 @@ describe("terminal upgrade authorization", () => {
 
   it("clamps dimensions to Nexus-Terminal bounds and rejects non-numbers", async () => {
     const clamped = await authorizeTerminalUpgrade(
-      request("founder", "/api/terminal/attach?cols=9000&rows=1"),
+      request("founder", "/ipa/terminal/attach?cols=9000&rows=1"),
     );
     expect(clamped.ok).toBe(true);
     if (clamped.ok) {
@@ -326,7 +326,7 @@ describe("terminal upgrade authorization", () => {
     }
 
     const invalid = await authorizeTerminalUpgrade(
-      request("founder", "/api/terminal/attach?cols=wide&rows=40"),
+      request("founder", "/ipa/terminal/attach?cols=wide&rows=40"),
     );
     expect(invalid.ok).toBe(false);
     if (!invalid.ok) expect(invalid.response.status).toBe(400);

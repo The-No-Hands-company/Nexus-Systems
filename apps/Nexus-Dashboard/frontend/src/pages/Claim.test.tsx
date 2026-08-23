@@ -94,6 +94,6 @@ describe("Claim", () => {
     fireEvent.click(screen.getByRole("button", { name: /claim/i }));
 
     await waitFor(() => expect(spy).toHaveBeenCalled());
-    expect(String(spy.mock.calls[0]![0])).toBe("/api/v1/auth/claim");
+    expect(String(spy.mock.calls[0]![0])).toBe("/ipa/v1/auth/claim");
   });
 });

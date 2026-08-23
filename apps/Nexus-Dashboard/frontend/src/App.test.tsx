@@ -4,8 +4,8 @@ import { render, screen, waitFor } from "@testing-library/react";
 vi.mock("@xterm/xterm", () => ({ Terminal: class {} }));
 vi.mock("@xterm/addon-fit", () => ({ FitAddon: class {} }));
 
-vi.mock("./api", async () => ({
-  ...(await vi.importActual<typeof import("./api")>("./api")),
+// Mock the api module with only the functions needed by these tests
+vi.mock("./api", () => ({
   listApps: vi.fn(async () => [
     { id: "nexus-draw", name: "Draw", description: "", url: "https://draw.tnhc.dev", path: "/draw", health: "healthy" },
   ]),
@@ -15,9 +15,6 @@ vi.mock("./api", async () => ({
     email: "founder@example.test",
     role: "founder",
   })),
-  // Every /cloud/* page has its own dedicated, data-asserting tests in
-  // pages/cloud/*.test.tsx. Here they only need to resolve so the routing
-  // tests below aren't exercising real network calls.
   cloudStatus: vi.fn(async () => ({ tools: { total: 1, healthy: 1 }, users: { total: 1 }, peers: { total: 0 } })),
   cloudIdentity: vi.fn(async () => ({ address: "ns:test", shortId: "T-1", did: "did:key:test" })),
   cloudTrust: vi.fn(async () => null),
@@ -25,6 +22,11 @@ vi.mock("./api", async () => ({
   cloudTools: vi.fn(async () => []),
   cloudFederationPeers: vi.fn(async () => []),
   cloudEndpoints: vi.fn(async () => []),
+  unreadNotificationCount: vi.fn(async () => 0),
+  isAdmin: vi.fn((user) => user?.role === "founder" || user?.role === "admin"),
+  ADMIN_ROLES: ["founder", "admin"],
+  listSessions: vi.fn(async () => []),
+  remainingRecoveryCodes: vi.fn(async () => 7),
 }));
 
 import App from "./App";

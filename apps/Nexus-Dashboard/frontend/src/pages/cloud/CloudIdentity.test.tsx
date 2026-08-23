@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import CloudIdentity from "./CloudIdentity";
@@ -23,14 +23,17 @@ const IDENTITY_BODY = {
   exampleAddress: "@alice:AC-1234",
 };
 
+let fetchSpy: ReturnType<typeof vi.fn> | null = null;
+
 function stubFetch(overrides: Record<string, () => Response> = {}) {
   const spy = vi.fn(async (url: RequestInfo | URL) => {
     const u = String(url);
     if (overrides[u]) return overrides[u]!();
-    if (u.startsWith("/api/cloud/federation/identity")) return jsonResponse(IDENTITY_BODY);
+    if (u.startsWith("/ipa/cloud/federation/identity")) return jsonResponse(IDENTITY_BODY);
     throw new Error(`unexpected fetch: ${u}`);
   });
-  vi.stubGlobal("fetch", spy);
+  fetchSpy = spy;
+  globalThis.fetch = spy as any;
   return spy;
 }
 
@@ -38,9 +41,18 @@ beforeEach(() => {
   vi.restoreAllMocks();
 });
 
+afterEach(() => {
+  if (fetchSpy) {
+    delete (globalThis as any).fetch;
+    fetchSpy = null;
+  }
+});
+
 describe("CloudIdentity", () => {
   it("announces loading while identity is pending", () => {
-    vi.stubGlobal("fetch", vi.fn(() => new Promise<Response>(() => undefined)));
+    const spy = vi.fn(() => new Promise<Response>(() => undefined));
+    fetchSpy = spy;
+    globalThis.fetch = spy as any;
     render(<MemoryRouter><CloudIdentity /></MemoryRouter>);
 
     expect(screen.getByRole("status").textContent).toMatch(/loading/i);
@@ -71,7 +83,7 @@ describe("CloudIdentity", () => {
 
   it("falls back to the naming scheme, then a dash, when the example is absent", async () => {
     stubFetch({
-      "/api/cloud/federation/identity": () =>
+      "/ipa/cloud/federation/identity": () =>
         jsonResponse({ shortId: "AC-1234", did: "did:key:z6Mk..." }),
     });
     render(<MemoryRouter><CloudIdentity /></MemoryRouter>);
@@ -81,7 +93,7 @@ describe("CloudIdentity", () => {
   });
 
   it("shows Cloud as unavailable, not a blank page, when the proxy returns 503", async () => {
-    stubFetch({ "/api/cloud/federation/identity": () => jsonResponse({ error: "cloud_unavailable" }, 503) });
+    stubFetch({ "/ipa/cloud/federation/identity": () => jsonResponse({ error: "cloud_unavailable" }, 503) });
     render(<MemoryRouter><CloudIdentity /></MemoryRouter>);
 
     await waitFor(() => expect(screen.getByRole("alert")).toBeTruthy());

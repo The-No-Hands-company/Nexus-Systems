@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import CloudFederation from "./CloudFederation";
@@ -20,14 +20,17 @@ const PEERS_BODY = {
   ],
 };
 
+let fetchSpy: ReturnType<typeof vi.fn> | null = null;
+
 function stubFetch(overrides: Record<string, () => Response> = {}) {
   const spy = vi.fn(async (url: RequestInfo | URL) => {
     const u = String(url);
     if (overrides[u]) return overrides[u]!();
-    if (u.startsWith("/api/cloud/federation/peers")) return jsonResponse(PEERS_BODY);
+    if (u.startsWith("/ipa/cloud/federation/peers")) return jsonResponse(PEERS_BODY);
     throw new Error(`unexpected fetch: ${u}`);
   });
-  vi.stubGlobal("fetch", spy);
+  fetchSpy = spy;
+  globalThis.fetch = spy as any;
   return spy;
 }
 
@@ -35,9 +38,18 @@ beforeEach(() => {
   vi.restoreAllMocks();
 });
 
+afterEach(() => {
+  if (fetchSpy) {
+    delete (globalThis as any).fetch;
+    fetchSpy = null;
+  }
+});
+
 describe("CloudFederation", () => {
   it("announces loading while federation peers are pending", () => {
-    vi.stubGlobal("fetch", vi.fn(() => new Promise<Response>(() => undefined)));
+    const spy = vi.fn(() => new Promise<Response>(() => undefined));
+    fetchSpy = spy;
+    globalThis.fetch = spy as any;
     render(<MemoryRouter><CloudFederation /></MemoryRouter>);
 
     expect(screen.getByRole("status").textContent).toMatch(/loading/i);
@@ -61,7 +73,7 @@ describe("CloudFederation", () => {
   });
 
   it("names the bootstrap hint when there are no peers, matching status.html's empty state", async () => {
-    stubFetch({ "/api/cloud/federation/peers": () => jsonResponse({ peers: [] }) });
+    stubFetch({ "/ipa/cloud/federation/peers": () => jsonResponse({ peers: [] }) });
     render(<MemoryRouter><CloudFederation /></MemoryRouter>);
 
     await waitFor(() => expect(screen.getByText(/no federation peers discovered/i)).toBeTruthy());
@@ -69,7 +81,7 @@ describe("CloudFederation", () => {
   });
 
   it("shows Cloud as unavailable, not a blank page, when the proxy returns 503", async () => {
-    stubFetch({ "/api/cloud/federation/peers": () => jsonResponse({ error: "cloud_unavailable" }, 503) });
+    stubFetch({ "/ipa/cloud/federation/peers": () => jsonResponse({ error: "cloud_unavailable" }, 503) });
     render(<MemoryRouter><CloudFederation /></MemoryRouter>);
 
     await waitFor(() => expect(screen.getByRole("alert")).toBeTruthy());

@@ -55,7 +55,7 @@ const call = (path: string, init?: RequestInit) =>
 describe("notifications proxy", () => {
   it("refuses an unauthenticated caller before touching Hosting", async () => {
     authed = false;
-    const res = await call("/api/notifications");
+    const res = await call("/ipa/notifications");
     expect(res.status).toBe(401);
     // The point: it did not forward. A proxy that asks upstream first leaks
     // the fact that a request happened even when it should have stopped.
@@ -63,7 +63,7 @@ describe("notifications proxy", () => {
   });
 
   it("forwards the caller's cookie so Hosting does its own authorisation", async () => {
-    const res = await call("/api/notifications");
+    const res = await call("/ipa/notifications");
     expect(res.status).toBe(200);
     expect(hostingSaw?.cookie).toBe("nexus_session=abc");
     expect(hostingSaw?.path).toBe("/api/notifications");
@@ -74,26 +74,26 @@ describe("notifications proxy", () => {
     // proxy it sets no x-nexus-subject — Hosting decides who the caller is
     // from the session, so a bug here cannot hand someone another user's
     // notifications.
-    await call("/api/notifications");
+    await call("/ipa/notifications");
     expect(hostingSaw).not.toBeNull();
   });
 
   it("serves the unread count and the mark-read writes", async () => {
-    expect((await call("/api/notifications/unread-count")).status).toBe(200);
-    expect((await call("/api/notifications/1/read", { method: "POST" })).status).toBe(200);
-    expect((await call("/api/notifications/read-all", { method: "POST" })).status).toBe(200);
+    expect((await call("/ipa/notifications/unread-count")).status).toBe(200);
+    expect((await call("/ipa/notifications/1/read", { method: "POST" })).status).toBe(200);
+    expect((await call("/ipa/notifications/read-all", { method: "POST" })).status).toBe(200);
   });
 
   it("is an allow-list, not a passthrough", async () => {
     // A path Hosting would happily answer must still be refused here: the
     // proxy exposes the notification surface and nothing else.
-    const res = await call("/api/notifications/../sites");
+    const res = await call("/ipa/notifications/../sites");
     expect(res.status).toBe(404);
     expect(hostingSaw).toBeNull();
   });
 
   it("refuses methods the surface does not serve", async () => {
-    const res = await call("/api/notifications/1/read", { method: "DELETE" });
+    const res = await call("/ipa/notifications/1/read", { method: "DELETE" });
     expect(res.status).toBe(405);
   });
 
@@ -101,7 +101,7 @@ describe("notifications proxy", () => {
     // The bell going quiet is acceptable; the shell throwing is not.
     hosting?.stop(true);
     hosting = null;
-    const res = await call("/api/notifications");
+    const res = await call("/ipa/notifications");
     expect(res.status).toBe(503);
   });
 });

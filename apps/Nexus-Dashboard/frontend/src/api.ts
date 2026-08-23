@@ -2,7 +2,7 @@
  * Same-origin calls to the dashboard server.
  *
  * Every path here is relative on purpose. The dashboard server proxies
- * /api/v1/auth/* to Nexus-Auth, so the browser never makes a cross-origin
+ * /ipa/v1/auth/* to Nexus-Auth, so the browser never makes a cross-origin
  * request and never needs credentialed CORS. Hardcoding https://auth.<domain>
  * here would work in dev and fail in a browser for reasons that look like a
  * login bug.
@@ -60,21 +60,21 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 export function requestAccess(input: { username: string; email: string; note?: string }) {
   return request<{ user: { id: string; status: string }; claimCode: string }>(
-    "/api/v1/auth/access-requests",
+    "/ipa/v1/auth/access-requests",
     { method: "POST", body: JSON.stringify(input) },
   );
 }
 
 export function claimAccount(input: { email: string; claimCode: string; password: string }) {
   return request<{ user: { id: string }; recoveryCodes: string[] }>(
-    "/api/v1/auth/claim",
+    "/ipa/v1/auth/claim",
     { method: "POST", body: JSON.stringify(input) },
   );
 }
 
 export async function me(): Promise<Me | null> {
   try {
-    const { user } = await request<{ user: Me }>("/api/v1/auth/me");
+    const { user } = await request<{ user: Me }>("/ipa/v1/auth/me");
     return user;
   } catch {
     // Not signed in is the common case here, not an error worth surfacing.
@@ -101,7 +101,7 @@ function pathFor(app: WireAppEntry): string {
 }
 
 export async function listApps(): Promise<AppEntry[]> {
-  const { apps } = await request<{ apps: WireAppEntry[] }>("/api/apps");
+  const { apps } = await request<{ apps: WireAppEntry[] }>("/ipa/apps");
   // Normalise once, here, so no component has to care whether the server that
   // answered is older than the bundle asking.
   return apps.map((a) => ({ ...a, path: pathFor(a) }));
@@ -115,21 +115,21 @@ export type Session = {
 };
 
 export function listSessions() {
-  return request<{ sessions: Session[] }>("/api/v1/auth/sessions").then((r) => r.sessions);
+  return request<{ sessions: Session[] }>("/ipa/v1/auth/sessions").then((r) => r.sessions);
 }
 
 export function revokeSession(id: string) {
-  return request<{ success: boolean }>(`/api/v1/auth/sessions/${encodeURIComponent(id)}/revoke`, {
+  return request<{ success: boolean }>(`/ipa/v1/auth/sessions/${encodeURIComponent(id)}/revoke`, {
     method: "POST",
   });
 }
 
 export function remainingRecoveryCodes() {
-  return request<{ remaining: number }>("/api/v1/auth/recovery-codes").then((r) => r.remaining);
+  return request<{ remaining: number }>("/ipa/v1/auth/recovery-codes").then((r) => r.remaining);
 }
 
 export function regenerateRecoveryCodes() {
-  return request<{ recoveryCodes: string[] }>("/api/v1/auth/recovery-codes/regenerate", {
+  return request<{ recoveryCodes: string[] }>("/ipa/v1/auth/recovery-codes/regenerate", {
     method: "POST",
   }).then((r) => r.recoveryCodes);
 }
@@ -140,7 +140,7 @@ export function regenerateRecoveryCodes() {
  */
 export function changePassword(userId: string, currentPassword: string, newPassword: string) {
   return request<{ success: boolean }>(
-    `/api/v1/auth/users/${encodeURIComponent(userId)}/password`,
+    `/ipa/v1/auth/users/${encodeURIComponent(userId)}/password`,
     { method: "POST", body: JSON.stringify({ currentPassword, newPassword }) },
   );
 }
@@ -162,19 +162,19 @@ export function isAdmin(user: Me | null): boolean {
 }
 
 export function listAccessRequests() {
-  return request<{ requests: AccessRequest[] }>("/api/v1/auth/access-requests")
+  return request<{ requests: AccessRequest[] }>("/ipa/v1/auth/access-requests")
     .then((r) => r.requests);
 }
 
 export function decideAccessRequest(id: string, decision: "approve" | "reject") {
   return request<{ user: unknown }>(
-    `/api/v1/auth/access-requests/${encodeURIComponent(id)}/${decision}`,
+    `/ipa/v1/auth/access-requests/${encodeURIComponent(id)}/${decision}`,
     { method: "POST", body: JSON.stringify({}) },
   );
 }
 
 export function createInvite(expiresInDays?: number) {
-  return request<{ id: string; code: string; expiresAt: string }>("/api/v1/auth/invites", {
+  return request<{ id: string; code: string; expiresAt: string }>("/ipa/v1/auth/invites", {
     method: "POST",
     body: JSON.stringify(expiresInDays === undefined ? {} : { expiresInDays }),
   });
@@ -192,7 +192,7 @@ export function createInvite(expiresInDays?: number) {
  * is expected to be down sometimes.
  */
 /**
- * The real shape of Cloud's `/api/v1/status`.
+ * The real shape of Cloud's `/ipa/v1/status`.
  *
  * status.html read `status.tools.total`, `status.users.total`,
  * `status.peers.total` and `status.node.*`. None of those have ever existed on
@@ -278,26 +278,26 @@ export type CloudTool = {
 };
 
 export function cloudStatus() {
-  return request<CloudStatusResponse>("/api/cloud/status").then((r) => r.status);
+  return request<CloudStatusResponse>("/ipa/cloud/status").then((r) => r.status);
 }
 
 /** status.html's `?compact=trust` query, forwarded verbatim by the proxy. */
 export function cloudTrust() {
-  return request<{ trust?: CloudTrust }>("/api/cloud/status?compact=trust").then((r) => r.trust ?? null);
+  return request<{ trust?: CloudTrust }>("/ipa/cloud/status?compact=trust").then((r) => r.trust ?? null);
 }
 
 export function cloudIdentity() {
-  return request<CloudIdentity>("/api/cloud/federation/identity");
+  return request<CloudIdentity>("/ipa/cloud/federation/identity");
 }
 
 export function cloudAudit() {
   return request<{ events?: CloudAuditEvent[] }>(
-    "/api/cloud/audit?eventType=node-trust-action&kind=audit&limit=10",
+    "/ipa/cloud/audit?eventType=node-trust-action&kind=audit&limit=10",
   ).then((r) => r.events ?? []);
 }
 
 export function cloudTools() {
-  return request<{ tools?: CloudTool[] }>("/api/cloud/tools").then((r) => r.tools ?? []);
+  return request<{ tools?: CloudTool[] }>("/ipa/cloud/tools").then((r) => r.tools ?? []);
 }
 
 /**
@@ -322,14 +322,14 @@ export type CloudPeer = {
 };
 
 export function cloudFederationPeers() {
-  return request<{ peers?: CloudPeer[] }>("/api/cloud/federation/peers").then((r) => r.peers ?? []);
+  return request<{ peers?: CloudPeer[] }>("/ipa/cloud/federation/peers").then((r) => r.peers ?? []);
 }
 
 /** `view-api` in status.html (loadApiView). */
 export type CloudEndpoint = { method: string; path: string; description?: string };
 
 export function cloudEndpoints() {
-  return request<{ routes?: CloudEndpoint[]; endpoints?: CloudEndpoint[] }>("/api/cloud/endpoints")
+  return request<{ routes?: CloudEndpoint[]; endpoints?: CloudEndpoint[] }>("/ipa/cloud/endpoints")
     .then((r) => r.routes ?? r.endpoints ?? []);
 }
 
@@ -380,36 +380,36 @@ export type MailMessage = {
 export type SendOutcome = { recipient: string; status: string; reason: string | null };
 
 export function listMailFolders() {
-  return request<MailFolder[]>("/api/mail/folders");
+  return request<MailFolder[]>("/ipa/mail/folders");
 }
 
 export function listMailMessages(folderId: string) {
-  return request<MailSummary[]>(`/api/mail/folders/${encodeURIComponent(folderId)}/messages`);
+  return request<MailSummary[]>(`/ipa/mail/folders/${encodeURIComponent(folderId)}/messages`);
 }
 
 export function readMailMessage(id: string) {
-  return request<MailMessage>(`/api/mail/messages/${encodeURIComponent(id)}`);
+  return request<MailMessage>(`/ipa/mail/messages/${encodeURIComponent(id)}`);
 }
 
 export function markMailSeen(id: string, seen: boolean) {
-  return request<void>(`/api/mail/messages/${encodeURIComponent(id)}/seen`, {
+  return request<void>(`/ipa/mail/messages/${encodeURIComponent(id)}/seen`, {
     method: "POST",
     body: JSON.stringify({ seen }),
   });
 }
 
 export function threadMessages(threadId: string) {
-  return request<MailSummary[]>(`/api/mail/threads/${encodeURIComponent(threadId)}/messages`);
+  return request<MailSummary[]>(`/ipa/mail/threads/${encodeURIComponent(threadId)}/messages`);
 }
 
 /// The URL an attachment downloads from. Not fetched through `request`: the
 /// response is bytes, not JSON, and the browser handles the download itself.
 export function attachmentUrl(messageId: string, index: number) {
-  return `/api/mail/messages/${encodeURIComponent(messageId)}/attachments/${index}`;
+  return `/ipa/mail/messages/${encodeURIComponent(messageId)}/attachments/${index}`;
 }
 
 export function searchMail(q: string) {
-  return request<MailSummary[]>(`/api/mail/search?q=${encodeURIComponent(q)}`);
+  return request<MailSummary[]>(`/ipa/mail/search?q=${encodeURIComponent(q)}`);
 }
 
 export type OutgoingAttachment = {
@@ -429,7 +429,7 @@ export function sendMail(body: {
   references?: string[];
   attachments?: OutgoingAttachment[];
 }) {
-  return request<{ outcomes: SendOutcome[] }>("/api/mail/messages", {
+  return request<{ outcomes: SendOutcome[] }>("/ipa/mail/messages", {
     method: "POST",
     body: JSON.stringify(body),
   });
@@ -451,7 +451,7 @@ export async function reportIssue(input: {
   app?: string;
   url?: string;
 }): Promise<FiledIssue> {
-  return request<FiledIssue>("/api/issues", {
+  return request<FiledIssue>("/ipa/issues", {
     method: "POST",
     body: JSON.stringify(input),
   });
@@ -477,18 +477,18 @@ export type Notification = {
  */
 export function listNotifications(unreadOnly = false) {
   return request<{ notifications: Notification[] }>(
-    `/api/notifications${unreadOnly ? "?unread=true" : ""}`,
+    `/ipa/notifications${unreadOnly ? "?unread=true" : ""}`,
   ).then((r) => r.notifications);
 }
 
 export function unreadNotificationCount() {
-  return request<{ unread: number }>("/api/notifications/unread-count").then((r) => r.unread);
+  return request<{ unread: number }>("/ipa/notifications/unread-count").then((r) => r.unread);
 }
 
 export function markNotificationRead(id: number) {
-  return request<{ ok: true }>(`/api/notifications/${id}/read`, { method: "POST" });
+  return request<{ ok: true }>(`/ipa/notifications/${id}/read`, { method: "POST" });
 }
 
 export function markAllNotificationsRead() {
-  return request<{ marked: number }>("/api/notifications/read-all", { method: "POST" });
+  return request<{ marked: number }>("/ipa/notifications/read-all", { method: "POST" });
 }

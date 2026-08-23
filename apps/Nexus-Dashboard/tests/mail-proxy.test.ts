@@ -50,13 +50,13 @@ afterEach(() => {
 describe("mail proxy", () => {
   it("refuses an unauthenticated caller before contacting mail at all", async () => {
     authUser = null;
-    const res = await handleRequest(new Request("http://app.test/api/mail/folders"));
+    const res = await handleRequest(new Request("http://app.test/ipa/mail/folders"));
     expect(res.status).toBe(401);
     expect(mailSaw).toBeNull();
   });
 
   it("forwards the caller's subject as told by Auth", async () => {
-    await handleRequest(new Request("http://app.test/api/mail/folders"));
+    await handleRequest(new Request("http://app.test/ipa/mail/folders"));
     expect(mailSaw?.get("x-nexus-subject")).toBe("usr-alice");
   });
 
@@ -65,7 +65,7 @@ describe("mail proxy", () => {
     // mailbox to open, so if a caller could set it, any signed-in user could
     // read anyone's mail by adding one header.
     await handleRequest(
-      new Request("http://app.test/api/mail/folders", {
+      new Request("http://app.test/ipa/mail/folders", {
         headers: { "x-nexus-subject": "usr-victim" },
       }),
     );
@@ -73,21 +73,21 @@ describe("mail proxy", () => {
   });
 
   it("refuses a path outside the mail API's surface", async () => {
-    const res = await handleRequest(new Request("http://app.test/api/mail/../admin"));
+    const res = await handleRequest(new Request("http://app.test/ipa/mail/../admin"));
     expect(res.status).toBe(404);
     expect(mailSaw).toBeNull();
   });
 
   it("refuses methods the mail API does not serve", async () => {
     const res = await handleRequest(
-      new Request("http://app.test/api/mail/messages/abc", { method: "DELETE" }),
+      new Request("http://app.test/ipa/mail/messages/abc", { method: "DELETE" }),
     );
     expect(res.status).toBe(405);
     expect(mailSaw).toBeNull();
   });
 
   it("passes the query string through for search", async () => {
-    await handleRequest(new Request("http://app.test/api/mail/search?q=invoice"));
+    await handleRequest(new Request("http://app.test/ipa/mail/search?q=invoice"));
     expect(mailPath).toBe("/api/v1/search?q=invoice");
   });
 
@@ -95,7 +95,7 @@ describe("mail proxy", () => {
     // A shell page must stay usable when one service behind it is not.
     mail?.stop(true);
     mail = null;
-    const res = await handleRequest(new Request("http://app.test/api/mail/folders"));
+    const res = await handleRequest(new Request("http://app.test/ipa/mail/folders"));
     expect(res.status).toBe(503);
     expect(await res.json()).toEqual({ error: "mail_unavailable" });
   });

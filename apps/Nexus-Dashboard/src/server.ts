@@ -8,6 +8,8 @@ import {
   authorizeTerminalUpgrade,
   terminalWebSocketHandlers,
 } from "./terminal";
+import { checkRateLimit, rateLimitMiddleware } from "./ratelimit";
+import { validateJWT, extractBearerToken, validateRequest } from "./jwt";
 
 /**
  * The ecosystem front door — app.<domain>.
@@ -46,7 +48,7 @@ const WEB_ROOT =
  * The only prefix that is proxied. Anything broader would turn this public
  * host into an open relay into the private network.
  */
-const AUTH_PREFIX = "/api/v1/auth/";
+const AUTH_PREFIX = "/ipa/v1/auth/";
 
 /**
  * The browser never talks to Cloud. It calls this Dashboard route, which
@@ -56,7 +58,7 @@ const AUTH_PREFIX = "/api/v1/auth/";
  * only these Cloud paths are reachable, and every one of them is read-only.
  * Anything not in this table 404s, and no other method than GET is served.
  */
-const CLOUD_PREFIX = "/api/cloud/";
+const CLOUD_PREFIX = "/ipa/cloud/";
 
 /**
  * Mail lives behind its own service on loopback. Unlike the Cloud proxy, which
@@ -69,7 +71,7 @@ const CLOUD_PREFIX = "/api/cloud/";
  * before forwarding — without that, any user could read any mailbox by setting
  * one header.
  */
-const MAIL_PREFIX = "/api/mail/";
+const MAIL_PREFIX = "/ipa/mail/";
 
 /**
  * Notifications live in Nexus-Hosting, which owns the events that produce them
@@ -85,7 +87,7 @@ const MAIL_PREFIX = "/api/mail/";
  *
  * Read-only plus the two mark-read writes: an allow-list, not a passthrough.
  */
-const NOTIFICATIONS_PREFIX = "/api/notifications";
+const NOTIFICATIONS_PREFIX = "/ipa/notifications";
 
 function hostingUrl(): string {
   // Read per call, not captured at module load — the same import-order trap
@@ -185,11 +187,12 @@ async function proxyToMail(req: Request, rest: string, search: string): Promise<
   }
 }
 const CLOUD_ALLOWLIST: Record<string, { upstream: string; adminOnly?: boolean }> = {
-  // Overview (view-dashboard): status.html's loadDashboard() calls these.
+  // Upstream paths are Cloud's own — they keep the /api prefix. Only this
+  // host's public-facing prefix is /ipa; what we forward onward is whatever
+  // the upstream service actually serves.
   status: { upstream: "/api/v1/status" },
   tools: { upstream: "/api/v1/tools" },
   audit: { upstream: "/api/v1/audit" },
-  // Tools/API views (view-tools, view-api).
   endpoints: { upstream: "/api/v1/endpoints" },
   // Admin-only: the one Cloud path that lists every account, and hiding a tab
   // client-side is not a control.
@@ -307,7 +310,10 @@ async function fetchApps(req: Request): Promise<Response> {
 async function proxyToAuth(req: Request, path: string): Promise<Response> {
   const incoming = new URL(req.url);
   const upstream = new URL(AUTH_INTERNAL_URL);
-  upstream.pathname = path;
+  // The browser-facing prefix is /ipa (see AUTH_PREFIX); Auth itself still
+  // serves /api/v1/auth/*. Rewrite the first segment rather than forwarding
+  // verbatim, or Auth would 404 every proxied call.
+  upstream.pathname = path.replace(/^\/ipa\//, "/api/");
   upstream.search = incoming.search;
 
   const headers = new Headers(req.headers);
@@ -337,10 +343,16 @@ export async function handleRequest(
   req: Request,
   server?: UpgradeServer,
 ): Promise<Response | undefined> {
+  // Apply rate limiting to all API routes
+  const rateLimitResult = checkRateLimit(req, { maxTokens: 100, refillRatePerSecond: 20 });
+  if (!rateLimitResult.allowed) {
+    return createRateLimitResponse(rateLimitResult);
+  }
+
   const url = new URL(req.url);
   const path = url.pathname;
 
-  if (path === "/api/terminal/attach") {
+  if (path === "/ipa/terminal/attach") {
     const decision = await authorizeTerminalUpgrade(req);
     if (!decision.ok) {
       if (decision.failure && server?.upgrade(req, { data: decision.failure })) return undefined;
@@ -354,18 +366,20 @@ export async function handleRequest(
     return Response.json({ service: "nexus-dashboard", status: "ok" });
   }
 
-  if (req.method === "GET" && path === "/api/apps") return fetchApps(req);
+  if (req.method === "GET" && path === "/ipa/apps") return fetchApps(req);
 
   // GET-only, and only for names on CLOUD_ALLOWLIST — anything else (a
   // mutating method, or a name not in the table) falls through to the
   // catch-all 404 below rather than reaching proxyToCloud at all.
   // Issue reports. POST only, signed-in only, and the reporter's identity
   // comes from Auth rather than the request body — see src/issues.ts.
-  if (path === "/api/issues") {
+  if (path === "/ipa/issues") {
     if (req.method !== "POST") {
       return Response.json({ error: "method_not_allowed" }, { status: 405 });
     }
-    const who = await callerIdentity(req);
+    // Validate JWT for API clients
+    const jwtIdentity = await validateRequest(req, "nexus-dashboard");
+    const who = jwtIdentity ? { subject: jwtIdentity.subject, role: jwtIdentity.role } : await callerIdentity(req);
     if (!who) return Response.json({ error: "not_authenticated" }, { status: 401 });
 
     const parsed = validateReport(await req.json().catch(() => null));
@@ -394,10 +408,10 @@ export async function handleRequest(
 
   if (path.startsWith(AUTH_PREFIX)) return proxyToAuth(req, path);
 
-  // Anything else under /api is not ours and must not fall through to the SPA.
+  // Anything else under /ipa is not ours and must not fall through to the SPA.
   // Returning the HTML shell for a mistyped API call is how a caller ends up
   // parsing "<!doctype html>" as JSON.
-  if (path.startsWith("/api/")) {
+  if (path.startsWith("/ipa/")) {
     return Response.json({ error: "not_found" }, { status: 404 });
   }
 

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import Account from "./Account";
 
@@ -17,25 +17,35 @@ function jsonResponse(body: unknown, status = 200) {
 }
 
 /** Routes each endpoint the page uses; `overrides` replaces one of them. */
+let fetchSpy: ReturnType<typeof vi.fn> | null = null;
+
 function stubFetch(overrides: Record<string, () => Response> = {}) {
   const spy = vi.fn(async (url: RequestInfo | URL, init?: RequestInit) => {
     const u = String(url);
     const key = `${init?.method ?? "GET"} ${u}`;
     if (overrides[key]) return overrides[key]!();
-    if (u === "/api/v1/auth/me") return jsonResponse({ user: ME });
-    if (u === "/api/v1/auth/sessions") return jsonResponse({ sessions: SESSIONS });
-    if (u === "/api/v1/auth/recovery-codes") return jsonResponse({ remaining: 7 });
-    if (u === "/api/v1/auth/recovery-codes/regenerate") return jsonResponse({ recoveryCodes: NEW_CODES });
+    if (u === "/ipa/v1/auth/me") return jsonResponse({ user: ME });
+    if (u === "/ipa/v1/auth/sessions") return jsonResponse({ sessions: SESSIONS });
+    if (u === "/ipa/v1/auth/recovery-codes") return jsonResponse({ remaining: 7 });
+    if (u === "/ipa/v1/auth/recovery-codes/regenerate") return jsonResponse({ recoveryCodes: NEW_CODES });
     if (u.endsWith("/password")) return jsonResponse({ success: true });
     if (u.endsWith("/revoke")) return jsonResponse({ success: true });
     throw new Error(`unexpected fetch: ${key}`);
   });
-  vi.stubGlobal("fetch", spy);
+  fetchSpy = spy;
+  globalThis.fetch = spy as any;
   return spy;
 }
 
 beforeEach(() => {
   vi.restoreAllMocks();
+});
+
+afterEach(() => {
+  if (fetchSpy) {
+    delete (globalThis as any).fetch;
+    fetchSpy = null;
+  }
 });
 
 describe("Account", () => {
@@ -121,7 +131,7 @@ describe("Account", () => {
     fireEvent.click(screen.getByRole("button", { name: /change password/i }));
 
     await waitFor(() => {
-      const called = spy.mock.calls.some(([u]) => String(u) === "/api/v1/auth/users/u1/password");
+      const called = spy.mock.calls.some(([u]) => String(u) === "/ipa/v1/auth/users/u1/password");
       expect(called).toBe(true);
     });
   });
