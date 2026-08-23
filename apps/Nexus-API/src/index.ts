@@ -178,24 +178,27 @@ ensureLocalNode()
     const nexusCloudApiKey = process.env["NEXUS_CLOUD_API_KEY"] ?? "";
     const publicUrl = process.env["PUBLIC_URL"] ?? `http://localhost:${port}`;
     if (nexusCloudUrl) {
+      // This is the Nexus-API app, not Hosting — registering under Hosting's
+      // identity made two processes fight over one tool's heartbeat and left
+      // the dashboard's actual "Nexus API" tile permanently offline.
       registerToolWithCloud(
         nexusCloudUrl,
         {
-          id: "nexus-hosting",
-          name: "Nexus Hosting",
-          description: "Decentralised static site hosting network",
+          id: "nexus-api",
+          name: "Nexus API",
+          description: "Unified API server — sites, deploys, federation, storage",
           upstreamUrl: publicUrl,
           mode: "standalone",
-          exposed: true,
+          exposed: false,
           health: "healthy",
-          capabilities: ["hosting", "static-sites", "federation", "ssl", "custom-domains"],
+          capabilities: ["api", "sites", "deployments", "federation", "storage"],
         },
         nexusCloudApiKey,
       ).catch(err =>
         logger.warn({ err: err.message }, "[cloud] Registration with Nexus Cloud failed — continuing")
       );
       setInterval(() => {
-        sendToolHeartbeat(nexusCloudUrl, "nexus-hosting", nexusCloudApiKey, publicUrl).catch(() => {});
+        sendToolHeartbeat(nexusCloudUrl, "nexus-api", nexusCloudApiKey, publicUrl).catch(() => {});
       }, 30_000);
 
       stopCloudRouteSync = startCloudRouteSync({

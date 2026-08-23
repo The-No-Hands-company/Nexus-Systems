@@ -343,6 +343,42 @@ cmd_start() {
         NEXUS_CLOUD_API_KEY="$NEXUS_CLOUD_API_KEY" \
         bun run src/index.ts
 
+    # 4f-2. Nexus-API — the unified API server (apps/Nexus-API).
+    #
+    # The full Express API (sites, deploys, federation, storage) that used to
+    # live inside Nexus-Hosting. Loopback only: it trusts session cookies the
+    # way mailapi trusts X-Nexus-Subject, and nothing outside this host has a
+    # reason to reach it directly. Registers with Cloud as nexus-api, which is
+    # what flips its dashboard tile from offline.
+    if [ -z "${DATABASE_URL:-}" ] && [ -f "$ROOT/.env" ]; then
+        DATABASE_URL="$(sed -n 's/^POSTGRES_PASSWORD=//p' "$ROOT/.env" | head -1 | tr -d '\r')"
+        export DATABASE_URL="postgres://nexus:${DATABASE_URL}@localhost:5432/nexus"
+    fi
+    if [ -x "$ROOT/apps/Nexus-API/node_modules/.bin/tsx" ]; then
+        # OIDC credentials live in apps/Nexus-API/.env (gitignored, 0600) —
+        # same pattern as nexus-chat.env. Sourced in a subshell so nothing
+        # leaks into later services.
+        API_ENV=""
+        [ -f "$ROOT/apps/Nexus-API/.env" ] && API_ENV="$ROOT/apps/Nexus-API/.env"
+        start_service "api" "$ROOT/apps/Nexus-API" 3150 \
+            PORT=3150 \
+            NEXUS_API_ENV_FILE="$API_ENV" \
+            NEXUS_BIND_HOST=127.0.0.1 \
+            DATABASE_URL="${DATABASE_URL:-postgres://127.0.0.1:1/nexus-unconfigured}" \
+            OBJECT_STORAGE_ENDPOINT=http://localhost:9000 \
+            OBJECT_STORAGE_BUCKET=nexus-hosting \
+            DEFAULT_OBJECT_STORAGE_BUCKET_ID=nexus-hosting \
+            MINIO_ROOT_USER="${MINIO_ROOT_USER:-nexus-storage}" \
+            MINIO_ROOT_PASSWORD="${MINIO_ROOT_PASSWORD:-}" \
+            REDIS_URL=redis://127.0.0.1:6379 \
+            NEXUS_CLOUD_URL=http://localhost:8787 \
+            NEXUS_CLOUD_API_KEY="$NEXUS_CLOUD_API_KEY" \
+            PUBLIC_URL=http://127.0.0.1:3150 \
+            bash -c 'if [ -n "$NEXUS_API_ENV_FILE" ]; then set -a; . "$NEXUS_API_ENV_FILE"; set +a; fi; exec ./node_modules/.bin/tsx src/index.ts' 
+    else
+        warn "nexus-api deps missing — run: (cd apps/Nexus-API && pnpm install)"
+    fi
+
     # 4g. Nexus-Email API — the mail store behind app.$DOMAIN/mail.
     #
     # Loopback only, and that is a security control rather than a default: this
@@ -429,7 +465,7 @@ cmd_start() {
 
 cmd_stop() {
     log "Stopping all Nexus services..."
-    for svc in auth cloud nexus-chat nexus-chat-web nexus-draw-web terminal dashboard draw mailapi mailsmtpd proxy; do
+    for svc in auth cloud api nexus-chat nexus-chat-web nexus-draw-web terminal dashboard draw mailapi mailsmtpd proxy; do
         if [ -f "$PID_DIR/$svc.pid" ]; then
             kill "$(cat "$PID_DIR/$svc.pid")" 2>/dev/null && log "  Stopped $svc" || true
             rm -f "$PID_DIR/$svc.pid"
@@ -442,7 +478,7 @@ cmd_stop() {
 
 cmd_status() {
     echo "Service Status:"
-    for svc in auth cloud nexus-chat nexus-chat-web nexus-draw-web terminal dashboard draw mailapi mailsmtpd proxy; do
+    for svc in auth cloud api nexus-chat nexus-chat-web nexus-draw-web terminal dashboard draw mailapi mailsmtpd proxy; do
         if [ -f "$PID_DIR/$svc.pid" ]; then
             if kill -0 "$(cat "$PID_DIR/$svc.pid")" 2>/dev/null; then
                 echo -e "  ${G}● $svc${R} (running, PID: $(cat $PID_DIR/$svc.pid))"
@@ -463,7 +499,7 @@ cmd_status() {
     # reaches, so a healthy API behind a dead front door still reads as down.
     # nexus-draw-web is similar: the Draw API is on 3075, but the front door
     # on 8091 joins the SPA + API + WebSocket, so probe the front door.
-    for endpoint in "http://localhost:4310/health" "http://localhost:8787/health" "http://localhost:8095/api/v1/health" "http://localhost:8091/health" "http://127.0.0.1:3110/health" "http://localhost:3132/health" "http://localhost:3075/health" "http://localhost:8080/health"; do
+    for endpoint in "http://localhost:4310/health" "http://localhost:8787/health" "http://127.0.0.1:3150/api/health/live" "http://localhost:8095/api/v1/health" "http://localhost:8091/health" "http://127.0.0.1:3110/health" "http://localhost:3132/health" "http://localhost:3075/health" "http://localhost:8080/health"; do
         if curl -s -m 2 "$endpoint" | grep -q "ok"; then
             echo -e "  ${G}●${R} $endpoint"
         else

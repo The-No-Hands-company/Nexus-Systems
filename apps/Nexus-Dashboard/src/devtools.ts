@@ -129,7 +129,9 @@ function unregisteredDirs(): DevTool[] {
   const skip = new Set(["GameDevelopmentToolset", "nexus-pay"]); // unrelated projects living in dhts for now
   const out: DevTool[] = [];
   for (const entry of readdirSync(DHTS_ROOT, { withFileTypes: true })) {
-    if (!entry.isDirectory() || known.has(entry.name) || skip.has(entry.name)) continue;
+    // Dot-dirs (.deepcode, .claude, .codex…) are tool settings folders, not
+    // helpers — same rule as git: hidden means infrastructure, ignore.
+    if (!entry.isDirectory() || entry.name.startsWith(".") || known.has(entry.name) || skip.has(entry.name)) continue;
     out.push({
       id: entry.name,
       dir: entry.name,
