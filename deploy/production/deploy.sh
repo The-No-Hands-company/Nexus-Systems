@@ -22,7 +22,7 @@ export DOMAIN="${DOMAIN:-tnhc.dev}"
 # curl -H "Host: $DOMAIN" against the proxy renders the real thing.
 export NEXUS_AUTH_PUBLIC_URL="${NEXUS_AUTH_PUBLIC_URL:-https://auth.$DOMAIN}"
 export CLOUD_PORT=8787
-export CHAT_PORT=3109
+# (removed) CHAT_PORT=3109 — Nexus-Team-Chat scaffold deleted; nexus-chat owns chat now.
 export PROXY_PORT=8080
 export CLOUD_URL="http://localhost:8787"
 
@@ -199,23 +199,9 @@ cmd_start() {
         NEXUS_STORAGE_S3_BUCKET_PREFIX=nexus \
         bun run src/index.ts
 
-    # 4. Nexus Team Chat
-    #
-    # NEXUS_TEAM_CHAT_BASE_URL must be set here even though it looks redundant.
-    # It is what Chat registers with Cloud as its upstream, and leaving it unset
-    # does not fall back to the port below — bun auto-loads
-    # apps/Nexus-Team-Chat/.env from the app directory, and that file still
-    # carries https://chat.nexussystems.vexr.dev from the previous domain. Chat
-    # therefore published a dead public hostname as its own upstream, and the
-    # proxy hung trying to resolve it. Same failure as NEXUS_AUTH_BASE_URL: an
-    # upstream is an address this machine can reach, never a public URL.
-    # PHANTOM_REQUIRE_REAL: verified against the native library, so this one is
-    # allowed to insist rather than fall back to counterfeit crypto.
-    start_service "chat" "$ROOT/apps/Nexus-Team-Chat" 3109 \
-        NEXUS_CLOUD_URL=http://localhost:8787 PORT=3109 \
-        PHANTOM_REQUIRE_REAL=1 \
-        NEXUS_TEAM_CHAT_BASE_URL=http://127.0.0.1:3109 \
-        bun run src/index.ts
+    # 4. (removed) apps/Nexus-Team-Chat — the Bun scaffold chat. The real
+    # chat is nexus-chat (apps/Nexus), started in 4b below. The scaffold can
+    # come back from git history if it is ever revived.
 
     # 4b. nexus-chat (apps/Nexus) — what chat.$DOMAIN now serves.
     #
@@ -443,7 +429,7 @@ cmd_start() {
 
 cmd_stop() {
     log "Stopping all Nexus services..."
-    for svc in auth cloud chat nexus-chat nexus-chat-web nexus-draw-web terminal dashboard draw mailapi mailsmtpd proxy; do
+    for svc in auth cloud nexus-chat nexus-chat-web nexus-draw-web terminal dashboard draw mailapi mailsmtpd proxy; do
         if [ -f "$PID_DIR/$svc.pid" ]; then
             kill "$(cat "$PID_DIR/$svc.pid")" 2>/dev/null && log "  Stopped $svc" || true
             rm -f "$PID_DIR/$svc.pid"
@@ -456,7 +442,7 @@ cmd_stop() {
 
 cmd_status() {
     echo "Service Status:"
-    for svc in auth cloud chat nexus-chat nexus-chat-web nexus-draw-web terminal dashboard draw mailapi mailsmtpd proxy; do
+    for svc in auth cloud nexus-chat nexus-chat-web nexus-draw-web terminal dashboard draw mailapi mailsmtpd proxy; do
         if [ -f "$PID_DIR/$svc.pid" ]; then
             if kill -0 "$(cat "$PID_DIR/$svc.pid")" 2>/dev/null; then
                 echo -e "  ${G}● $svc${R} (running, PID: $(cat $PID_DIR/$svc.pid))"
@@ -477,7 +463,7 @@ cmd_status() {
     # reaches, so a healthy API behind a dead front door still reads as down.
     # nexus-draw-web is similar: the Draw API is on 3075, but the front door
     # on 8091 joins the SPA + API + WebSocket, so probe the front door.
-    for endpoint in "http://localhost:4310/health" "http://localhost:8787/health" "http://localhost:3109/health" "http://localhost:8095/api/v1/health" "http://localhost:8091/health" "http://127.0.0.1:3110/health" "http://localhost:3132/health" "http://localhost:3075/health" "http://localhost:8080/health"; do
+    for endpoint in "http://localhost:4310/health" "http://localhost:8787/health" "http://localhost:8095/api/v1/health" "http://localhost:8091/health" "http://127.0.0.1:3110/health" "http://localhost:3132/health" "http://localhost:3075/health" "http://localhost:8080/health"; do
         if curl -s -m 2 "$endpoint" | grep -q "ok"; then
             echo -e "  ${G}●${R} $endpoint"
         else

@@ -41,7 +41,7 @@ let routeCache: { timestamp: number; routes: Record<string, RouteTarget> } = {
 
 // Fallback static configuration (used when Nexus-Cloud is unavailable)
 const FALLBACK_CLOUD_UPSTREAM = process.env.CLOUD_UPSTREAM || "http://127.0.0.1:8787";
-const FALLBACK_CHAT_UPSTREAM = process.env.CHAT_UPSTREAM || "http://127.0.0.1:3109";
+const FALLBACK_CHAT_UPSTREAM = process.env.CHAT_UPSTREAM || "http://127.0.0.1:8095";
 // auth.<DOMAIN> is the sign-in host. Every app redirects an unauthenticated
 // browser to https://auth.<DOMAIN>/login?redirect=..., so this is the one that
 // has to resolve or single sign-on has nowhere to happen.
