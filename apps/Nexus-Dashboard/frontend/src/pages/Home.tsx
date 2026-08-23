@@ -38,9 +38,11 @@ export default function Home({ sidebar }: { sidebar?: ReactNode }) {
   }
 
   // Chrome only when signed in. Wrapping the signed-out page would advertise a
-  // launcher to someone with no session and nothing to launch.
+  // launcher to someone with no session and nothing to launch. user goes too —
+  // without it the home header had no identity chip and no Operator link, so
+  // the founder landed here and /admin might as well not have existed.
   if (user) {
-    return sidebar ? <Shell sidebar={sidebar}>{<Grid />}</Shell> : <Grid />;
+    return sidebar ? <Shell sidebar={sidebar} user={user}>{<Grid />}</Shell> : <Grid />;
   }
 
   return <SignedOut />;

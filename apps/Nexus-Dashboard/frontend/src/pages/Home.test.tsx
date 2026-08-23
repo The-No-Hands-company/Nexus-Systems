@@ -11,12 +11,12 @@ function jsonResponse(body: unknown, status = 200) {
 }
 
 /** Routes /api/v1/auth/me and /api/apps independently. */
-function stubFetch(signedIn: boolean) {
+function stubFetch(signedIn: boolean, role = "user") {
   vi.stubGlobal("fetch", vi.fn(async (url: RequestInfo | URL) => {
     const u = String(url);
     if (u === "/ipa/v1/auth/me") {
       return signedIn
-        ? jsonResponse({ user: { id: "u1", username: "ada", email: "a@x.dev", role: "user" } })
+        ? jsonResponse({ user: { id: "u1", username: "ada", email: "a@x.dev", role } })
         : jsonResponse({ error: "unauthenticated" }, 401);
     }
     if (u === "/ipa/apps") {
@@ -53,6 +53,20 @@ describe("Home", () => {
     await waitFor(() => expect(screen.getByText("Nexus Chat")).toBeTruthy());
     expect(screen.getByRole("banner")).toBeTruthy();
     expect(screen.getByRole("navigation", { name: "App launcher" })).toBeTruthy();
+  });
+
+  it("shows the founder the Operator link right on home", async () => {
+    // /admin worked but nothing linked to it; the founder landed here and the
+    // header carried no way in. Home was also the one shell that dropped the
+    // user prop entirely, so there was no identity chip either.
+    stubFetch(true, "founder");
+    render(
+      <MemoryRouter>
+        <Home sidebar={<nav aria-label="App launcher" />} />
+      </MemoryRouter>,
+    );
+    await waitFor(() => expect(screen.getByRole("link", { name: "Operator" })).toBeTruthy());
+    expect(screen.getByRole("link", { name: "Operator" }).getAttribute("href")).toBe("/admin");
   });
 
   it("leaves a signed-out visitor bare, even when given a sidebar", async () => {

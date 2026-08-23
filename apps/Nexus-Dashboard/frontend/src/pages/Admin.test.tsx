@@ -139,11 +139,10 @@ describe("Admin", () => {
     await waitFor(() => expect(screen.getByText(/no pending|nothing waiting|queue is empty/i)).toBeTruthy());
   });
   it("lists dhts helpers with run buttons only where runnable", async () => {
+    // Open by default: hiding the tools behind a toggle is why they read
+    // as "missing" in practice.
     stubFetch(ADMIN);
     render(<Admin />);
-    // Wait out the identity fetch — the panel renders nothing until it lands.
-    await waitFor(() => expect(screen.getByRole("button", { name: /show tools/i })).toBeTruthy());
-    fireEvent.click(screen.getByRole("button", { name: /show tools/i }));
     expect(await screen.findByText("Ecosystem Graph")).toBeTruthy();
     expect(screen.getByText("Vision Board")).toBeTruthy();
     // Runnable tool exposes Run; the long-running one must not.

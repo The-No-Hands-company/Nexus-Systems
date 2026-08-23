@@ -37,7 +37,9 @@ export default function Admin() {
   // Dev-tools state. Declared unconditionally: hooks must run in the same
   // order every render, so none of these may sit below the early returns.
   const [devNotes, setDevNotes] = useState("");
-  const [showDevTools, setShowDevTools] = useState(false);
+  // Open by default: this whole panel exists for exactly these tools, and
+  // hiding them behind a toggle was how they went "missing" in practice.
+  const [showDevTools, setShowDevTools] = useState(true);
   const [endpoints, setEndpoints] = useState<CloudEndpoint[]>([]);
   const [peers, setPeers] = useState<CloudPeer[]>([]);
   const [identity, setIdentity] = useState<{ address?: string; shortId?: string } | null>(null);
