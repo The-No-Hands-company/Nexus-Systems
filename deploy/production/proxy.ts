@@ -247,10 +247,46 @@ export function sanitizeResponseHeaders(headers: Headers): void {
   headers.delete("content-length");
 }
 
-export async function handleRequest(
+/**
+ * Security headers stamped on every response that passes through this proxy.
+ *
+ * These belong here rather than in each upstream app because the proxy is the
+ * one place every public request passes through — stamping here means a new
+ * app cannot forget them, and a header fix lands without touching five
+ * services.
+ *
+ * HSTS: Cloudflare terminates TLS at the edge and sets its own HSTS there, but
+ * the origin should also declare it — defense in depth, and it covers anyone
+ * who bypasses Cloudflare (a misconfigured DNS record, an internal LAN client).
+ * max-age 1 year is the industry baseline; includeSubDomains covers every
+ * app.<domain>; preload signals willingness for the HSTS preload list.
+ *
+ * X-Content-Type-Options: nosniff stops browsers guessing a content type from
+ * bytes, which is how a JSON endpoint serving user-supplied text could become
+ * an XSS vector.
+ *
+ * Referrer-Policy: strict-origin-when-cross-origin leaks only the origin to
+ * cross-origin observers, nothing at all on downgrade — the default modern
+ * browsers claim but not what older ones do.
+ *
+ * Permissions-Policy: deny by default. No tnhc.dev service needs camera,
+ * microphone, geolocation or payment today; if one ever does, that service's
+ * own CSP can allow it explicitly.
+ */
+export function securityHeaders(headers: Headers): void {
+  headers.set("strict-transport-security", "max-age=31536000; includeSubDomains; preload");
+  headers.set("x-content-type-options", "nosniff");
+  headers.set("referrer-policy", "strict-origin-when-cross-origin");
+  headers.set(
+    "permissions-policy",
+    "camera=(), microphone=(), geolocation=(), payment=(), usb=(), interest-cohort=()",
+  );
+}
+
+async function handleRequestInner(
   req: Request,
   server?: { upgrade: (req: Request, opts: { data: WsProxyData }) => boolean },
-): Promise<Response> {
+): Promise<Response | undefined> {
   try {
     const url = new URL(req.url);
     const host = url.hostname.toLowerCase();
@@ -482,6 +518,25 @@ export async function handleRequest(
     console.error(`[proxy] Request handling error:`, err);
     return new Response(`Internal Server Error`, { status: 500 });
   }
+}
+
+
+/**
+ * Public entry point. Wraps the inner handler and stamps security headers on
+ * every Response that comes back — including early returns, error paths and
+ * the CORS preflight — so no code path can forget them.
+ *
+ * WebSocket upgrades return undefined (Bun answers the handshake itself), which
+ * passes through untouched.
+ */
+export async function handleRequest(
+  req: Request,
+  server?: { upgrade: (req: Request, opts: { data: WsProxyData }) => boolean },
+): Promise<Response> {
+  const res = await handleRequestInner(req, server);
+  if (!res) return res; // WebSocket upgrade — Bun owns the handshake
+  securityHeaders(res.headers);
+  return res;
 }
 
 // Refresh in the background so requests never pay the fetch latency and a

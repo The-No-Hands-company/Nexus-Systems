@@ -439,13 +439,28 @@ export async function handleRequest(request: Request): Promise<Response> {
       const password = String(form?.get("password") ?? "");  // pragma: allowlist secret
       const target = safeRedirect(String(form?.get("redirect") ?? "") || null, cookieDomain());
 
+      // Brute-force gate. The claim/recover/invite endpoints already had this;
+      // login was the one credential check that didn't, which made it the
+      // cheapest path to a password. Keyed on IP + username so an attacker
+      // can't lock out a victim by spraying from their own IP alone.
+      const ip = getClientIp(request);
+      const loginLimit = checkRateLimit("login", `${ip}:${username}`);
+      if (!loginLimit.allowed) {
+        return new Response(
+          renderLoginPage({ redirect: target, error: "Too many attempts. Try again later." }),
+          { status: 429, headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store", "retry-after": String(Math.ceil(loginLimit.retryAfterMs / 1000)) } },
+        );
+      }
+
       const user = username && password ? authenticateUser(username, password) : null;
       if (!user) {
+        recordFailure("login", `${ip}:${username}`);
         return new Response(
           renderLoginPage({ redirect: target, error: "Incorrect username or password." }),
           { status: 401, headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" } },
         );
       }
+      clearFailures("login", `${ip}:${username}`);
 
       const session = createSession({
         userId: user.id,
@@ -651,10 +666,23 @@ export async function handleRequest(request: Request): Promise<Response> {
         return jsonResponse({ error: "username and password are required" }, { status: 400 });
       }
 
+      // Same brute-force gate as the HTML login above — one bucket per
+      // (IP, username) so an attacker can't lock out their target remotely.
+      const apiIp = getClientIp(request);
+      const apiLimit = checkRateLimit("login", `${apiIp}:${username}`);
+      if (!apiLimit.allowed) {
+        return jsonResponse({ error: "too_many_attempts" }, {
+          status: 429,
+          headers: { "retry-after": String(Math.ceil(apiLimit.retryAfterMs / 1000)) },
+        });
+      }
+
       const user = authenticateUser(username, password);
       if (!user) {
+        recordFailure("login", `${apiIp}:${username}`);
         return jsonResponse({ success: false, reason: "invalid credentials" } as LoginResult, { status: 401 });
       }
+      clearFailures("login", `${apiIp}:${username}`);
 
       const session = createSession({
         userId: user.id,
