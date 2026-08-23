@@ -22,6 +22,7 @@ import {
 import { consumeRecoveryCode, countRemainingRecoveryCodes, issueRecoveryCodes } from "./recovery";
 import { createInvite, redeemInvite } from "./invites";
 import { checkRateLimit, recordFailure, clearFailures } from "./ratelimit";
+import { audit } from "./audit";
 import {
   createApiKey,
   validateApiKey,
@@ -429,7 +430,7 @@ export async function handleRequest(request: Request): Promise<Response> {
       }
       return new Response(renderLoginPage({ redirect: target }), {
         status: 200,
-        headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" },
+        headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store", "content-security-policy": "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'self'" },
       });
     }
 
@@ -448,7 +449,7 @@ export async function handleRequest(request: Request): Promise<Response> {
       if (!loginLimit.allowed) {
         return new Response(
           renderLoginPage({ redirect: target, error: "Too many attempts. Try again later." }),
-          { status: 429, headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store", "retry-after": String(Math.ceil(loginLimit.retryAfterMs / 1000)) } },
+          { status: 429, headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store", "retry-after": String(Math.ceil(loginLimit.retryAfterMs / 1000)), "content-security-policy": "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'self'" } },
         );
       }
 
@@ -644,6 +645,9 @@ export async function handleRequest(request: Request): Promise<Response> {
         action === "approve" ? "approved" : "rejected",
         auth.userId,
       );
+      // Rejection kills any existing sessions — a previously approved user
+      // who re-requested and was rejected must not keep working.
+      if (action === "reject") revokeAllUserSessions(targetId!);
       return jsonResponse({ user: updated });
     }
 
@@ -680,9 +684,11 @@ export async function handleRequest(request: Request): Promise<Response> {
       const user = authenticateUser(username, password);
       if (!user) {
         recordFailure("login", `${apiIp}:${username}`);
+        audit({ event: "login_failure", ip: apiIp, userAgent: request.headers.get("user-agent") ?? undefined });
         return jsonResponse({ success: false, reason: "invalid credentials" } as LoginResult, { status: 401 });
       }
       clearFailures("login", `${apiIp}:${username}`);
+      audit({ event: "login_success", userId: user.id, ip: apiIp, userAgent: request.headers.get("user-agent") ?? undefined });
 
       const session = createSession({
         userId: user.id,
@@ -713,6 +719,7 @@ export async function handleRequest(request: Request): Promise<Response> {
 
       if (auth.session) {
         revokeSession(auth.session.id);
+        audit({ event: "logout", userId: auth.userId });
       }
 
       // Revoking server-side is what actually ends the session; clearing the
@@ -816,6 +823,7 @@ export async function handleRequest(request: Request): Promise<Response> {
         return jsonResponse({ error: "forbidden" }, { status: 403 });
       }
       const [, userId] = userByIdMatch;
+      const before = getUser(userId);
       const body = await parseBody(request);
       const updated = updateUser(userId, {
         email: typeof body.email === "string" ? body.email : undefined,
@@ -823,6 +831,30 @@ export async function handleRequest(request: Request): Promise<Response> {
         status: typeof body.status === "string" ? (body.status as AccountStatus) : undefined,
       });
       if (!updated) return jsonResponse({ error: "not found" }, { status: 404 });
+
+      // Session rotation on privilege change. If role changed, every existing
+      // session is stale — it was minted with the old role baked in, and apps
+      // read the role from Auth per-request but the *session* is the proof of
+      // identity. Revoking forces re-login so the next session carries the
+      // new role. Same for suspension: a dead account must not keep working.
+      //
+      // This was the gap: promoting an attacker who already had a session gave
+      // them admin on their next request, and suspending a compromised account
+      // left its sessions alive until natural expiry.
+      const privilegeChanged =
+        (before && body.role !== undefined && before.role !== updated.role) ||
+        (before && body.status !== undefined && before.status !== updated.status &&
+         (body.status === "suspended" || body.status === "rejected"));
+      if (privilegeChanged) {
+        revokeAllUserSessions(userId);
+        audit({
+          event: body.role !== undefined ? "role_change" : "status_change",
+          userId,
+          actorId: auth?.userId,
+          detail: { before: before?.role ?? before?.status, after: updated.role ?? updated.status },
+        });
+      }
+
       return jsonResponse({ user: updated });
     }
 
@@ -867,6 +899,7 @@ export async function handleRequest(request: Request): Promise<Response> {
 
       const success = changePassword(userId, currentPassword, newPassword);
       if (!success) return jsonResponse({ error: "password change failed" }, { status: 400 });
+      audit({ event: "password_change", userId, actorId: auth?.userId });
       return jsonResponse({ success: true });
     }
 

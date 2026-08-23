@@ -454,7 +454,24 @@ export async function handleRequest(
         // The shell is the authenticated front door — launcher, account, admin.
         // Unlike the apps it frames, nothing frames the shell, so it permits
         // nobody: 'self' only, never the apps' origins.
-        "content-security-policy": "frame-ancestors 'self'",
+        // CSP: the SPA is fully self-hosted (one hashed JS, one hashed CSS, no
+        // inline scripts, all API calls same-origin). object-src 'none' and
+        // base-uri 'self' close the plugin-injection and base-tag-hijack
+        // vectors; form-action 'self' stops a compromised page from POSTing
+        // credentials to an attacker. style-src needs unsafe-inline because
+        // React writes style attributes directly.
+        "content-security-policy": [
+          "default-src 'self'",
+          "script-src 'self'",
+          "style-src 'self' 'unsafe-inline'",
+          "img-src 'self' data:",
+          "font-src 'self'",
+          "connect-src 'self'",
+          "object-src 'none'",
+          "frame-ancestors 'self'",
+          "base-uri 'self'",
+          "form-action 'self'",
+        ].join("; "),
       },
     });
   }

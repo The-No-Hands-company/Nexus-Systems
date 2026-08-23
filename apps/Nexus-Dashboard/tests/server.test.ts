@@ -191,6 +191,11 @@ describe("dashboard server", () => {
     // via 'self' plus an app origin, and never https://app.tnhc.dev, which
     // would be nonsensical here since that IS this host.
     const res = await handleRequest(new Request("http://app.test/"));
-    expect(res.headers.get("content-security-policy")).toBe("frame-ancestors 'self'");
+    expect(res.headers.get("content-security-policy")).toContain("frame-ancestors 'self'");
+    // Tightened from bare frame-ancestors: script-src 'self' blocks inline
+    // scripts, object-src 'none' closes plugin injection, base-uri 'self'
+    // stops base-tag hijack.
+    expect(res.headers.get("content-security-policy")).toContain("script-src 'self'");
+    expect(res.headers.get("content-security-policy")).toContain("object-src 'none'");
   });
 });
