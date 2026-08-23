@@ -1,6 +1,6 @@
+/// <reference types="bun" />
 import { randomUUID } from "node:crypto";
 import { startNexusApiHeartbeat } from "./cloud";
-import { NexusClient, createConfig } from "../../../packages/nexus-sdk/src/index";
 
 interface Route {
   path: string;
@@ -32,20 +32,9 @@ export function createApiServer() {
 
   const authToken = process.env.NEXUS_API_AUTH_TOKEN || "";
 
-  
-const nexusClient = new NexusClient(createConfig({
-  id: "nexus-api",
-  name: "Nexus API",
-  description: "Unified API gateway",
-  port: 3036,
-  capabilities: ["gateway","routing","proxy","auth-passthrough"],
-}));
-
-const stopNexusHeartbeat = nexusClient.startCloudHeartbeat();
-const stopNexusMonitor = nexusClient.startMonitorHeartbeat();
-const server = Bun.serve({
+  const server = Bun.serve({
     port,
-    async fetch(request) {
+    async fetch(request: Request) {
       const url = new URL(request.url);
       const path = url.pathname || "";
       const startTime = Date.now();
@@ -116,8 +105,5 @@ const server = Bun.serve({
   console.log(`[nexus-api] Listening on port ${server.port}`);
   const stopHeartbeat = startNexusApiHeartbeat(baseUrl);
 
-  return { server, close: () => {
-  stopNexusHeartbeat();
-  stopNexusMonitor();
-  nexusClient.stop(); stopHeartbeat(); phantom.stop(); server.stop(); } };
+  return { server, close: () => { stopHeartbeat(); server.stop(); } };
 }

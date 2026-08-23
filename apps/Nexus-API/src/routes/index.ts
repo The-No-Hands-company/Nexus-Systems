@@ -1,0 +1,80 @@
+import { Router, type IRouter } from "express";
+import healthRouter from "./health";
+import nodesRouter from "./nodes";
+import nodeEnrollmentRouter from "./nodeEnrollment";
+import notificationsRouter from "./notifications";
+import sitesRouter from "./sites";
+import statsRouter from "./stats";
+import authRouter from "./auth";
+import storageRouter from "./storage";
+import deployRouter from "./deploy";
+import federationRouter from "./federation";
+import capacityRouter from "./capacity";
+import analyticsRouter from "./analytics";
+import tokensRouter from "./tokens";
+import accessRouter from "./access";
+import domainsRouter from "./domains";
+import adminRouter from "./admin";
+import gossipRouter from "./gossip";
+import webhooksRouter from "./webhooks";
+import tlsRouter from "./tls";
+import federationBlocksRouter from "./federationBlocks";
+import redirectsRouter from "./redirects";
+import invitationsRouter from "./invitations";
+import formsRouter from "./forms";
+import buildsRouter from "./builds";
+import twoFactorRouter from "./twoFactor";
+import transferRouter from "./transfer";
+import envVarsRouter from "./envVars";
+import gitWebhookRouter from "./gitWebhook";
+import deploymentDiffRouter from "./deploymentDiff";
+import cloneRouter from "./clone";
+import nlplRouter from "./nlpl";
+import { router as abuseRouter } from "./abuse";
+import emailVerifyRouter from "./emailVerify";
+import cloudRouter from "./cloud";
+import dockerDeployRouter from "./dockerDeploy";
+
+const router: IRouter = Router();
+
+router.use(healthRouter);
+router.use(authRouter);
+router.use(storageRouter);
+router.use(deployRouter);
+router.use(dockerDeployRouter);
+router.use(federationRouter);
+router.use(gossipRouter);
+router.use(capacityRouter);
+// Before nodesRouter, and that ordering is load-bearing: nodes.ts defines
+// /nodes/:id, so a request for /nodes/enroll would otherwise match it with
+// id="enroll" and fail as a malformed node lookup rather than enrolling
+// anything.
+router.use(nodeEnrollmentRouter);
+router.use(notificationsRouter);
+router.use(nodesRouter);
+router.use(sitesRouter);
+router.use(statsRouter);
+router.use(analyticsRouter);
+router.use(tokensRouter);
+router.use(accessRouter);
+router.use(domainsRouter);
+router.use(adminRouter);
+router.use(webhooksRouter);
+router.use(tlsRouter);
+router.use(federationBlocksRouter);
+router.use(redirectsRouter);
+router.use(invitationsRouter);
+router.use(formsRouter);
+router.use(buildsRouter);
+router.use(twoFactorRouter);
+router.use(transferRouter);
+router.use(envVarsRouter);
+router.use(gitWebhookRouter);
+router.use(deploymentDiffRouter);
+router.use(cloneRouter);
+router.use(nlplRouter);
+router.use(cloudRouter);
+router.use("/abuse", abuseRouter);
+router.use(emailVerifyRouter);
+
+export default router;
