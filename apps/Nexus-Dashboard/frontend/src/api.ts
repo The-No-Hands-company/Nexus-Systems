@@ -333,6 +333,40 @@ export function cloudEndpoints() {
     .then((r) => r.routes ?? r.endpoints ?? []);
 }
 
+// ── Development helper tools (dhts/) ───────────────────────────────────────
+//
+// Founder-only, served by the dashboard server from its curated registry.
+// Run commands live server-side; the client can only name a tool.
+
+export type DevTool = {
+  id: string;
+  dir: string;
+  name: string;
+  description: string;
+  command: string;
+  runnable?: { cmd: string; args: string[] };
+};
+
+export type DevToolsResponse = { root: string; exists: boolean; tools: DevTool[] };
+
+export type DevToolRunResult = {
+  ok: boolean;
+  exitCode: number | null;
+  output: string;
+  error?: string;
+};
+
+export function listDevTools() {
+  return request<DevToolsResponse>("/ipa/dev/tools");
+}
+
+export function runDevTool(id: string) {
+  return request<DevToolRunResult>("/ipa/dev/tools/run", {
+    method: "POST",
+    body: JSON.stringify({ id }),
+  });
+}
+
 // ── Mail ────────────────────────────────────────────────────────────────────
 //
 // Everything goes through the dashboard's /api/mail proxy, which attaches the

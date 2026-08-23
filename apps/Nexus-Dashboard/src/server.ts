@@ -10,6 +10,7 @@ import {
 } from "./terminal";
 import { checkRateLimit, rateLimitMiddleware } from "./ratelimit";
 import { validateJWT, extractBearerToken, validateRequest } from "./jwt";
+import { listDevTools, runDevTool } from "./devtools";
 
 /**
  * The ecosystem front door — app.<domain>.
@@ -396,6 +397,29 @@ export async function handleRequest(
 
   if (path === NOTIFICATIONS_PREFIX || path.startsWith(NOTIFICATIONS_PREFIX + "/")) {
     return proxyToNotifications(req, path.slice(NOTIFICATIONS_PREFIX.length), url.search);
+  }
+
+  // Development helper tools (dhts/). Founder-only: these run commands on this
+  // host, so the admin-role check happens before anything else, including the
+  // list. Run ids resolve against a server-side whitelist; argv never comes
+  // from the request.
+  if (path.startsWith("/ipa/dev/tools")) {
+    const who = await callerIdentity(req);
+    if (!isAdminRole(who?.role ?? null)) {
+      return Response.json({ error: "forbidden" }, { status: who ? 403 : 401 });
+    }
+    if (req.method === "GET" && path === "/ipa/dev/tools") {
+      return Response.json(listDevTools());
+    }
+    if (req.method === "POST" && path === "/ipa/dev/tools/run") {
+      const body = (await req.json().catch(() => ({}))) as { id?: unknown };
+      if (typeof body.id !== "string") {
+        return Response.json({ error: "id_required" }, { status: 400 });
+      }
+      const result = await runDevTool(body.id);
+      return Response.json(result, { status: result.ok || result.exitCode !== null ? 200 : 400 });
+    }
+    return Response.json({ error: "not_found" }, { status: 404 });
   }
 
   if (path.startsWith(MAIL_PREFIX)) {

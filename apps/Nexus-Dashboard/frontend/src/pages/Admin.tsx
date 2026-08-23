@@ -9,10 +9,15 @@ import {
   cloudEndpoints,
   cloudIdentity,
   cloudTools,
+  listDevTools,
+  runDevTool,
   type Me,
   type AccessRequest,
   type CloudPeer,
   type CloudEndpoint,
+  type DevTool,
+  type DevToolsResponse,
+  type CloudTool,
 } from "../api";
 
 /**
@@ -36,7 +41,10 @@ export default function Admin() {
   const [endpoints, setEndpoints] = useState<CloudEndpoint[]>([]);
   const [peers, setPeers] = useState<CloudPeer[]>([]);
   const [identity, setIdentity] = useState<{ address?: string; shortId?: string } | null>(null);
-  const [tools, setTools] = useState<{ id: string; name: string; health?: string; publicUrl?: string }[]>([]);
+  const [tools, setTools] = useState<CloudTool[]>([]);
+  const [dhts, setDhts] = useState<DevToolsResponse | null>(null);
+  const [runningId, setRunningId] = useState<string | null>(null);
+  const [toolOutput, setToolOutput] = useState<Record<string, { ok: boolean; output: string }>>({});
 
   useEffect(() => {
     let cancelled = false;
@@ -62,17 +70,19 @@ export default function Admin() {
     let cancelled = false;
     void (async () => {
       try {
-        const [eps, p, id, t] = await Promise.all([
+        const [eps, p, id, t, d] = await Promise.all([
           cloudEndpoints().catch(() => []),
           cloudFederationPeers().catch(() => []),
           cloudIdentity().catch(() => null),
           cloudTools().catch(() => []),
+          listDevTools().catch(() => null),
         ]);
         if (!cancelled) {
           setEndpoints(eps);
           setPeers(p);
           setIdentity(id);
           setTools(t);
+          setDhts(d);
         }
       } catch {}
     })();
@@ -211,6 +221,58 @@ export default function Admin() {
         {showDevTools && (
           <div className="space-y-6 border-t border-zinc-800 pt-6">
             <div>
+              <h3 className="font-medium mb-1">Development Helper Tools (dhts/)</h3>
+              <p className="text-xs text-zinc-500 mb-3">
+                {dhts?.exists
+                  ? `${dhts.tools.length} tools from ${"dhts/"} — runnable entries execute on this host, founder-only.`
+                  : "dhts/ not found on the server."}
+              </p>
+              <div className="grid gap-3 sm:grid-cols-2">
+                {(dhts?.tools ?? []).map((tool: DevTool) => (
+                  <div key={tool.id} className="rounded-lg border border-zinc-800 bg-zinc-900/40 p-4 flex flex-col gap-2">
+                    <div className="flex items-start justify-between gap-2">
+                      <span className="font-medium text-sm text-zinc-100">{tool.name}</span>
+                      {tool.runnable && (
+                        <button
+                          type="button"
+                          disabled={runningId !== null}
+                          onClick={async () => {
+                            setRunningId(tool.id);
+                            try {
+                              const r = await runDevTool(tool.id);
+                              setToolOutput((prev) => ({ ...prev, [tool.id]: { ok: r.ok, output: r.output || r.error || `exit ${r.exitCode}` } }));
+                            } catch {
+                              setToolOutput((prev) => ({ ...prev, [tool.id]: { ok: false, output: "request failed" } }));
+                            } finally {
+                              setRunningId(null);
+                            }
+                          }}
+                          className="rounded bg-blue-600 px-2 py-0.5 text-xs font-medium disabled:opacity-50 shrink-0"
+                        >
+                          {runningId === tool.id ? "Running…" : "Run"}
+                        </button>
+                      )}
+                    </div>
+                    <p className="text-xs leading-relaxed text-zinc-400">{tool.description}</p>
+                    <code className="block break-all rounded bg-black/40 px-2 py-1 text-[11px] text-zinc-500">{tool.command}</code>
+                    {toolOutput[tool.id] && (
+                      <pre
+                        className={`mt-1 max-h-48 overflow-auto rounded bg-black/60 p-2 text-[11px] leading-snug ${
+                          toolOutput[tool.id]!.ok ? "text-emerald-300" : "text-red-300"
+                        }`}
+                      >
+                        {toolOutput[tool.id]!.output}
+                      </pre>
+                    )}
+                  </div>
+                ))}
+                {dhts?.exists && dhts.tools.length === 0 && (
+                  <p className="text-sm text-zinc-500">No tools registered and none discovered.</p>
+                )}
+              </div>
+            </div>
+
+            <div>
               <h3 className="font-medium mb-3">Cloud Identity</h3>
               <div className="grid gap-2 text-sm font-mono text-zinc-300">
                 <div><span className="text-zinc-500">Address: </span>{identity?.address ?? "—"}</div>
@@ -232,7 +294,7 @@ export default function Admin() {
                   </thead>
                   <tbody>
                     {tools.map((t) => (
-                      <tr key={t.id} className="border-b border-zinc-800/50">
+                      <tr key={t.id ?? t.name} className="border-b border-zinc-800/50">
                         <td className="pb-2 text-zinc-400">{t.id}</td>
                         <td className="pb-2 text-zinc-200">{t.name}</td>
                         <td className="pb-2">{t.health ?? "—"}</td>

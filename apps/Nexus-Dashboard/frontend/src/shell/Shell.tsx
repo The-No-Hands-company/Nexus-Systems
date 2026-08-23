@@ -26,7 +26,7 @@ export default function Shell({
    * and renderable in a test without a server — the property its own comment
    * above claims and which a fetch would quietly break.
    */
-  user?: { username: string; email: string } | null;
+  user?: { username: string; email: string; role?: string } | null;
   /**
    * The header's utility slot — currently the notification bell.
    *
@@ -65,6 +65,22 @@ export default function Shell({
             the wordmark keeps its place when this is absent.
           */}
           {utility && <div className="ml-auto">{utility}</div>}
+
+          {/*
+            The operator's way in. /admin existed and worked, but nothing
+            linked to it — the only way in was typing the URL blind, so the
+            approval queue and invites might as well not have existed. Lives
+            in the header rather than the sidebar: it is about the ecosystem,
+            not one of its apps.
+          */}
+          {user && (user.role === "founder" || user.role === "admin") && (
+            <Link
+              to="/admin"
+              className={`${utility ? "" : "ml-auto"} rounded-md px-2 py-1 text-sm text-white/60 hover:bg-white/5 hover:text-white`}
+            >
+              Operator
+            </Link>
+          )}
 
           {user && (
             <Link

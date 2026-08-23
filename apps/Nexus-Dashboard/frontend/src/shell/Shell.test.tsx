@@ -75,3 +75,25 @@ describe("Shell", () => {
     expect(screen.getByRole("link", { name: /report a problem/i }).getAttribute("href")).toBe("/report");
   });
 });
+
+describe("Shell operator link", () => {
+  it("offers founders the Operator panel", () => {
+    renderInRouter(
+      <Shell sidebar={<div />} user={{ username: "boss", email: "b@x.dev", role: "founder" }}>x</Shell>,
+    );
+    const link = screen.getByRole("link", { name: "Operator" });
+    expect(link.getAttribute("href")).toBe("/admin");
+  });
+
+  it("hides it from ordinary members", () => {
+    renderInRouter(
+      <Shell sidebar={<div />} user={{ username: "sam", email: "s@x.dev", role: "user" }}>x</Shell>,
+    );
+    expect(screen.queryByRole("link", { name: "Operator" })).toBeNull();
+  });
+
+  it("hides it from nobody (signed out)", () => {
+    renderInRouter(<Shell sidebar={<div />}>x</Shell>);
+    expect(screen.queryByRole("link", { name: "Operator" })).toBeNull();
+  });
+});

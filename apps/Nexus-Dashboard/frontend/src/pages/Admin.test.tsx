@@ -37,6 +37,19 @@ function stubFetch(who: typeof ADMIN | typeof PLAIN, overrides: Record<string, (
     if (u === "/ipa/cloud/federation/peers") return jsonResponse({ peers: [] });
     if (u === "/ipa/cloud/federation/identity") return jsonResponse({ address: "ns:test", shortId: "T-1" });
     if (u === "/ipa/cloud/tools") return jsonResponse({ tools: [] });
+    if (u === "/ipa/dev/tools") {
+      return jsonResponse({
+        root: "/repo/dhts",
+        exists: true,
+        tools: [
+          { id: "graph", dir: "ecosystem-graph", name: "Ecosystem Graph",
+            description: "Extracts the dependency graph.", command: "python3 extract_graph.py",
+            runnable: { cmd: "python3", args: ["extract_graph.py"] } },
+          { id: "vision-board", dir: "ecosystem-vision-board", name: "Vision Board",
+            description: "Long-running board server.", command: "python3 server.py" },
+        ],
+      });
+    }
     throw new Error(`unexpected fetch: ${key}`);
   });
   fetchSpy = spy;
@@ -120,9 +133,21 @@ describe("Admin", () => {
 
   it("says so when the queue is empty rather than looking broken", async () => {
     stubFetch(ADMIN, {
-      "GET /api/v1/auth/access-requests": () => jsonResponse({ requests: [] }),
+      "GET /ipa/v1/auth/access-requests": () => jsonResponse({ requests: [] }),
     });
     render(<Admin />);
     await waitFor(() => expect(screen.getByText(/no pending|nothing waiting|queue is empty/i)).toBeTruthy());
+  });
+  it("lists dhts helpers with run buttons only where runnable", async () => {
+    stubFetch(ADMIN);
+    render(<Admin />);
+    // Wait out the identity fetch — the panel renders nothing until it lands.
+    await waitFor(() => expect(screen.getByRole("button", { name: /show tools/i })).toBeTruthy());
+    fireEvent.click(screen.getByRole("button", { name: /show tools/i }));
+    expect(await screen.findByText("Ecosystem Graph")).toBeTruthy();
+    expect(screen.getByText("Vision Board")).toBeTruthy();
+    // Runnable tool exposes Run; the long-running one must not.
+    const runButtons = screen.getAllByRole("button", { name: /^run$/i });
+    expect(runButtons.length).toBe(1);
   });
 });
