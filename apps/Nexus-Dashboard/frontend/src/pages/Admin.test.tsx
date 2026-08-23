@@ -37,6 +37,15 @@ function stubFetch(who: typeof ADMIN | typeof PLAIN, overrides: Record<string, (
     if (u === "/ipa/cloud/federation/peers") return jsonResponse({ peers: [] });
     if (u === "/ipa/cloud/federation/identity") return jsonResponse({ address: "ns:test", shortId: "T-1" });
     if (u === "/ipa/cloud/tools") return jsonResponse({ tools: [] });
+    if (u === "/ipa/dev/services") return jsonResponse({ services: [
+      { name: "auth", description: "Identity provider", healthy: true, latencyMs: 3 },
+      { name: "cloud", description: "Control plane", healthy: true, latencyMs: 5 },
+      { name: "draw", description: "Draw API", healthy: false, detail: "ECONNREFUSED" },
+    ]});
+    if (u === "/ipa/v1/auth/users") return jsonResponse({ users: [
+      { id: "u1", username: "ada", email: "a@x.dev", role: "user", status: "active" },
+      { id: "u2", username: "boss", email: "b@x.dev", role: "founder", status: "active" },
+    ]});
     if (u === "/ipa/dev/tools") {
       return jsonResponse({
         root: "/repo/dhts",
@@ -148,5 +157,20 @@ describe("Admin", () => {
     // Runnable tool exposes Run; the long-running one must not.
     const runButtons = screen.getAllByRole("button", { name: /^run$/i });
     expect(runButtons.length).toBe(1);
+  });
+
+  it("shows service health with up and down indicators", async () => {
+    stubFetch(ADMIN);
+    render(<Admin />);
+    expect(await screen.findByText("ECONNREFUSED")).toBeTruthy();
+  });
+
+  it("lists users with role dropdowns for founder", async () => {
+    stubFetch(ADMIN);
+    render(<Admin />);
+    await waitFor(() => expect(screen.getByText("ada")).toBeTruthy());
+    expect(screen.getByText("boss")).toBeTruthy();
+    const selects = screen.getAllByRole("combobox");
+    expect(selects.length).toBe(2);
   });
 });

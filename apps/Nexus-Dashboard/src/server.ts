@@ -11,6 +11,7 @@ import {
 import { checkRateLimit, rateLimitMiddleware } from "./ratelimit";
 import { validateJWT, extractBearerToken, validateRequest } from "./jwt";
 import { listDevTools, runDevTool } from "./devtools";
+import { checkAllServices } from "./servicehealth";
 
 /**
  * The ecosystem front door — app.<domain>.
@@ -410,6 +411,9 @@ export async function handleRequest(
     }
     if (req.method === "GET" && path === "/ipa/dev/tools") {
       return Response.json(listDevTools());
+    }
+    if (req.method === "GET" && path === "/ipa/dev/services") {
+      return Response.json({ services: await checkAllServices() });
     }
     if (req.method === "POST" && path === "/ipa/dev/tools/run") {
       const body = (await req.json().catch(() => ({}))) as { id?: unknown };

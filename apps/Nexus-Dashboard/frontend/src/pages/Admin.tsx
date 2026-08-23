@@ -18,6 +18,13 @@ import {
   type DevTool,
   type DevToolsResponse,
   type CloudTool,
+  listServiceHealth,
+  listUsers,
+  updateUserRole,
+  suspendUser,
+  activateUser,
+  type ServiceStatus,
+  type ManagedUser,
 } from "../api";
 
 /**
@@ -47,6 +54,9 @@ export default function Admin() {
   const [dhts, setDhts] = useState<DevToolsResponse | null>(null);
   const [runningId, setRunningId] = useState<string | null>(null);
   const [toolOutput, setToolOutput] = useState<Record<string, { ok: boolean; output: string }>>({});
+  const [services, setServices] = useState<ServiceStatus[]>([]);
+  const [users, setUsers] = useState<ManagedUser[]>([]);
+  const [userError, setUserError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -72,12 +82,14 @@ export default function Admin() {
     let cancelled = false;
     void (async () => {
       try {
-        const [eps, p, id, t, d] = await Promise.all([
+        const [eps, p, id, t, d, sv, us] = await Promise.all([
           cloudEndpoints().catch(() => []),
           cloudFederationPeers().catch(() => []),
           cloudIdentity().catch(() => null),
           cloudTools().catch(() => []),
           listDevTools().catch(() => null),
+          listServiceHealth().catch(() => ({ services: [] })),
+          isAdmin(user ?? null) ? listUsers().catch(() => []) : Promise.resolve([]),
         ]);
         if (!cancelled) {
           setEndpoints(eps);
@@ -85,11 +97,13 @@ export default function Admin() {
           setIdentity(id);
           setTools(t);
           setDhts(d);
+          setServices(sv.services);
+          if (Array.isArray(us)) setUsers(us);
         }
       } catch {}
     })();
     return () => { cancelled = true; };
-  }, [showDevTools]);
+  }, [showDevTools, user]);
 
   async function decide(id: string, decision: "approve" | "reject") {
     setError(null);
@@ -272,6 +286,91 @@ export default function Admin() {
                   <p className="text-sm text-zinc-500">No tools registered and none discovered.</p>
                 )}
               </div>
+            </div>
+
+            <div>
+              <h3 className="font-medium mb-3">Service Health</h3>
+              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                {services.map((svc) => (
+                  <div key={svc.name} className="rounded-lg border border-zinc-800 bg-zinc-900/40 p-3 flex items-center gap-2">
+                    <span aria-hidden="true" className={`h-2 w-2 rounded-full shrink-0 ${svc.healthy ? "bg-emerald-400" : "bg-red-400"}`} />
+                    <div className="min-w-0">
+                      <div className="text-sm font-medium text-zinc-200 truncate">{svc.name}</div>
+                      <div className="text-xs text-zinc-500 truncate">
+                        {svc.healthy ? `${svc.latencyMs ?? "?"}ms` : svc.detail ?? "down"}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <h3 className="font-medium mb-3">Users ({users.length})</h3>
+              {userError && <p role="alert" className="text-sm text-red-400 mb-2">{userError}</p>}
+              <div className="rounded-lg border border-zinc-800 bg-zinc-900/30 p-3 max-h-72 overflow-auto">
+                <table className="w-full text-sm font-mono">
+                  <thead>
+                    <tr className="text-zinc-500 border-b border-zinc-800">
+                      <th className="text-left pb-2">Username</th>
+                      <th className="text-left pb-2">Role</th>
+                      <th className="text-left pb-2">Status</th>
+                      <th className="text-right pb-2">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {users.map((u) => (
+                      <tr key={u.id} className="border-b border-zinc-800/50">
+                        <td className="pb-2 pt-2">
+                          <span className="text-zinc-200">{u.username}</span>
+                          <span className="block text-xs text-zinc-500">{u.email}</span>
+                        </td>
+                        <td className="pb-2 pt-2">
+                          <select
+                            value={u.role}
+                            onChange={async (e) => {
+                              const role = e.target.value;
+                              try {
+                                await updateUserRole(u.id, role);
+                                setUsers((list) => list.map((x) => x.id === u.id ? { ...x, role } : x));
+                              } catch { setUserError("Could not update role."); }
+                            }}
+                            disabled={u.id === user?.id}
+                            className="rounded bg-zinc-800 border border-zinc-700 text-xs text-zinc-200 px-1 py-0.5"
+                          >
+                            {["user", "admin", "founder"].map((r) => (
+                              <option key={r} value={r}>{r}</option>
+                            ))}
+                          </select>
+                        </td>
+                        <td className="pb-2 pt-2">
+                          <span className={u.status === "active" ? "text-emerald-400" : "text-red-400"}>
+                            {u.status}
+                          </span>
+                        </td>
+                        <td className="pb-2 pt-2 text-right">
+                          {u.id !== user?.id && (
+                            <button
+                              type="button"
+                              onClick={async () => {
+                                try {
+                                  if (u.status === "active") await suspendUser(u.id);
+                                  else await activateUser(u.id);
+                                  setUsers((list) => list.map((x) => x.id === u.id ? { ...x, status: u.status === "active" ? "suspended" : "active" } : x));
+                                } catch { setUserError("Could not update status."); }
+                              }}
+                              className={`rounded px-2 py-0.5 text-xs ${u.status === "active" ? "bg-red-900/50 text-red-300 hover:bg-red-900" : "bg-green-900/50 text-green-300 hover:bg-green-900"}`}
+                            >
+                              {u.status === "active" ? "Suspend" : "Activate"}
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <p className="mt-1 text-xs text-zinc-600">Role changes revoke existing sessions automatically.</p>
             </div>
 
             <div>

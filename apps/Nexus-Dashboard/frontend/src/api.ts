@@ -367,6 +367,55 @@ export function runDevTool(id: string) {
   });
 }
 
+
+export type ServiceStatus = {
+  name: string;
+  description: string;
+  healthy: boolean;
+  latencyMs: number | null;
+  detail?: string;
+};
+
+export function listServiceHealth() {
+  return request<{ services: ServiceStatus[] }>("/ipa/dev/services");
+}
+
+// ── User management (founder-only) ─────────────────────────────────────────
+
+export type ManagedUser = {
+  id: string;
+  username: string;
+  email: string;
+  role: string;
+  status: string;
+  createdAt?: string;
+};
+
+export function listUsers() {
+  return request<{ users: ManagedUser[] }>("/ipa/v1/auth/users").then((r) => r.users ?? []);
+}
+
+export function updateUserRole(userId: string, role: string) {
+  return request<{ user: ManagedUser }>(`/ipa/v1/auth/users/${encodeURIComponent(userId)}`, {
+    method: "PATCH",
+    body: JSON.stringify({ role }),
+  });
+}
+
+export function suspendUser(userId: string) {
+  return request<{ user: ManagedUser }>(`/ipa/v1/auth/users/${encodeURIComponent(userId)}`, {
+    method: "PATCH",
+    body: JSON.stringify({ status: "suspended" }),
+  });
+}
+
+export function activateUser(userId: string) {
+  return request<{ user: ManagedUser }>(`/ipa/v1/auth/users/${encodeURIComponent(userId)}`, {
+    method: "PATCH",
+    body: JSON.stringify({ status: "active" }),
+  });
+}
+
 // ── Mail ────────────────────────────────────────────────────────────────────
 //
 // Everything goes through the dashboard's /api/mail proxy, which attaches the
