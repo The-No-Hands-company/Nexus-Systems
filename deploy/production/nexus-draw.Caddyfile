@@ -1,0 +1,70 @@
+# draw.tnhc.dev — nexus-draw front door for this node.
+#
+# nexus-draw is a backend API on port 3075 plus a static SPA. The ecosystem
+# proxy maps one hostname to exactly one upstream and cannot split by path, so
+# this Caddy instance joins them into a single origin — the SPA's production
+# build calls /api/v1/draw/* same-origin, with no dev-server proxy behind it.
+#
+# Derived from nexus-chat.Caddyfile.
+#
+# Run:  caddy run --config deploy/production/nexus-draw.Caddyfile
+# Then point draw.tnhc.dev at http://127.0.0.1:8091 in the Cloud route table.
+
+{
+	admin off
+	auto_https off
+}
+
+:8091 {
+	# Bind loopback only — the ecosystem proxy runs natively on this host,
+	# so loopback is all it needs.
+	bind 127.0.0.1
+
+	# WebSocket endpoint for yjs collaboration
+	handle /api/v1/draw/ws/* {
+		reverse_proxy 127.0.0.1:3075 {
+			transport http {
+				dial_timeout 5s
+				response_header_timeout 0
+			}
+		}
+	}
+
+	# REST API
+	handle /api/v1/draw/* {
+		reverse_proxy 127.0.0.1:3075
+	}
+
+	# Health check (for proxy liveness)
+	handle /health {
+		reverse_proxy 127.0.0.1:3075
+	}
+
+	# The nexus-draw SPA
+	handle {
+		root * {$NEXUS_DRAW_WEB_ROOT:/run/media/zajferx/Data/dev/The-No-hands-Company/projects/Nexus-Systems/apps/Nexus-Draw/frontend/dist}
+		try_files {path} {path}/ /index.html
+		file_server
+		@hashed path_regexp hashed \.[0-9a-zA-Z_-]{8,}\.(js|css|woff2?)$
+		header @hashed Cache-Control "public, max-age=31536000, immutable"
+
+		@shell {
+			not path_regexp hashed \.[0-9a-zA-Z_-]{8,}\.(js|css|woff2?)$
+		}
+		header @shell Cache-Control "no-cache, no-store, must-revalidate"
+	}
+
+	header {
+		X-Content-Type-Options "nosniff"
+		Content-Security-Policy "frame-ancestors 'self' https://app.tnhc.dev"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=()"
+		-Server
+	}
+
+	log {
+		output stdout
+		format console
+		level INFO
+	}
+}

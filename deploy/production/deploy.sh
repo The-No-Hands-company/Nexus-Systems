@@ -259,6 +259,23 @@ cmd_start() {
         warn "deploy/production/nexus-chat.env absent — skipping nexus-chat"
     fi
 
+    # 4d-1. Nexus-Draw front door (Caddy) — draw.tnhc.dev
+    #
+    # Joins the Draw SPA (static files) with the Draw backend API (port 3075)
+    # and WebSocket collaboration endpoint into a single origin for the proxy.
+    #
+    # Requires the Draw frontend to be built: apps/Nexus-Draw/frontend/dist
+    if command -v caddy >/dev/null 2>&1; then
+        if [ -f "$ROOT/apps/Nexus-Draw/frontend/dist/index.html" ]; then
+            start_service "nexus-draw-web" "$ROOT" 8091 \
+                caddy run --config "$ROOT/deploy/production/nexus-draw.Caddyfile" --adapter caddyfile
+        else
+            warn "draw UI not built — run: (cd apps/Nexus-Draw/frontend && npm install && npm run build)"
+        fi
+    else
+        warn "caddy not installed — draw.$DOMAIN has no front door"
+    fi
+
     # 4d. Nexus-Terminal — the loopback-only shell service used by Dashboard.
     #
     # The browser never reaches this port directly. Dashboard authorizes the
@@ -426,7 +443,7 @@ cmd_start() {
 
 cmd_stop() {
     log "Stopping all Nexus services..."
-    for svc in auth cloud chat nexus-chat nexus-chat-web terminal dashboard draw mailapi mailsmtpd proxy; do
+    for svc in auth cloud chat nexus-chat nexus-chat-web nexus-draw-web terminal dashboard draw mailapi mailsmtpd proxy; do
         if [ -f "$PID_DIR/$svc.pid" ]; then
             kill "$(cat "$PID_DIR/$svc.pid")" 2>/dev/null && log "  Stopped $svc" || true
             rm -f "$PID_DIR/$svc.pid"
@@ -439,7 +456,7 @@ cmd_stop() {
 
 cmd_status() {
     echo "Service Status:"
-    for svc in auth cloud chat nexus-chat nexus-chat-web terminal dashboard draw mailapi mailsmtpd proxy; do
+    for svc in auth cloud chat nexus-chat nexus-chat-web nexus-draw-web terminal dashboard draw mailapi mailsmtpd proxy; do
         if [ -f "$PID_DIR/$svc.pid" ]; then
             if kill -0 "$(cat "$PID_DIR/$svc.pid")" 2>/dev/null; then
                 echo -e "  ${G}● $svc${R} (running, PID: $(cat $PID_DIR/$svc.pid))"
@@ -458,7 +475,9 @@ cmd_status() {
     # nexus-chat answers /api/v1/health, not /health, and is probed through its
     # Caddy front door on 8095 — that is the origin chat.$DOMAIN actually
     # reaches, so a healthy API behind a dead front door still reads as down.
-    for endpoint in "http://localhost:4310/health" "http://localhost:8787/health" "http://localhost:3109/health" "http://localhost:8095/api/v1/health" "http://127.0.0.1:3110/health" "http://localhost:3132/health" "http://localhost:3075/health" "http://localhost:8080/health"; do
+    # nexus-draw-web is similar: the Draw API is on 3075, but the front door
+    # on 8091 joins the SPA + API + WebSocket, so probe the front door.
+    for endpoint in "http://localhost:4310/health" "http://localhost:8787/health" "http://localhost:3109/health" "http://localhost:8095/api/v1/health" "http://localhost:8091/health" "http://127.0.0.1:3110/health" "http://localhost:3132/health" "http://localhost:3075/health" "http://localhost:8080/health"; do
         if curl -s -m 2 "$endpoint" | grep -q "ok"; then
             echo -e "  ${G}●${R} $endpoint"
         else

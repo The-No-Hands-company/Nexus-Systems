@@ -222,6 +222,9 @@ export async function gate(
   // Structural allowlist — checked before policy, so no route row can gate it.
   if (host === AUTH_HOST) return { allow: true, identityToken: null };
 
+  // Health checks are always public, even on gated hosts.
+  if (url.pathname === "/health") return { allow: true, identityToken: null };
+
   // Public routes pay nothing: no cookie read, no call to Auth, no token.
   if (!target.requiresAuth) return { allow: true, identityToken: null };
 
