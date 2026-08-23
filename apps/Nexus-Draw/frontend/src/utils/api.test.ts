@@ -1,19 +1,23 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-// real fetch stub injected via globalThis
 const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
   const url = String(input);
-  if (init?.method !== undefined && init?.method !== "GET") {
+  const method = init?.method ?? "GET";
+  if (method !== "GET") {
     if (url.endsWith("missing")) return new Response(JSON.stringify({ error: "not found" }), { status: 404 });
-    if (url === "/api/v1/draw/boards") return new Response(JSON.stringify({ id: "b1", name: "Test", description: "", width: 1920, height: 1080, background: "#fff", isPublic: false, defaultStyleMode: "clean", gridSnap: true, elements: [], collaborators: [], createdAt: "", updatedAt: "" }), { status: 200 });
-    if (url === "/api/v1/draw/ai/generate") return new Response(JSON.stringify({ elements: [{ id: "g1", elementType: "rectangle", data: {}, style: {}, transform: { a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 }, order: 0, seed: 1 }], board_id: "b1" }), { status: 200 });
+    if (url === "/api/v1/draw/boards" && method === "POST") return new Response(JSON.stringify({ id: "b1", name: "Test", description: "", width: 1920, height: 1080, background: "#fff", isPublic: false, defaultStyleMode: "clean", gridSnap: true, elements: [], collaborators: [], createdAt: "", updatedAt: "" }), { status: 200 });
+    if (url === "/api/v1/draw/ai/generate" && method === "POST") return new Response(JSON.stringify({ elements: [{ id: "g1", elementType: "rectangle", data: {}, style: {}, transform: { a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 }, order: 0, seed: 1 }], board_id: "b1" }), { status: 200 });
+    if (url.match(/\/api\/v1\/draw\/boards\/[^/]+$/) && method === "DELETE") return new Response(JSON.stringify({ deleted: true }), { status: 200 });
+    if (url.match(/\/api\/v1\/draw\/boards\/[^/]+\/elements$/) && method === "PUT") return new Response(JSON.stringify({ saved: true }), { status: 200 });
+    if (url.match(/\/api\/v1\/draw\/boards\/[^/]+$/) && method === "PATCH") return new Response(JSON.stringify({ updated: true }), { status: 200 });
     return new Response(JSON.stringify({ updated: true }), { status: 200 });
   }
   if (url.endsWith("/health")) return new Response(JSON.stringify({ status: "ok" }), { status: 200 });
   if (url.includes("/boards/")) return new Response(JSON.stringify({ id: "b1", name: "Test", description: "", width: 1920, height: 1080, background: "#fff", isPublic: false, defaultStyleMode: "clean", gridSnap: true, elements: [], collaborators: [], createdAt: "", updatedAt: "" }), { status: 200 });
   return new Response(JSON.stringify([{ id: "b1", name: "Test", description: "", width: 1920, height: 1080, background: "#fff", isPublic: false, defaultStyleMode: "clean", gridSnap: true, elements: [], collaborators: [], createdAt: "", updatedAt: "" }]), { status: 200 });
 });
-globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+globalThis.fetch = fetchMock as any;
 
 import {
   listBoards, createBoard, getBoard, saveBoard, deleteBoard, generateDiagram,
@@ -21,9 +25,11 @@ import {
 } from "./api";
 import type { BoardData } from "../stores/useEditorStore";
 
-describe("api", () => {
-  beforeEach(() => fetchMock.mockClear());
+beforeEach(() => {
+  fetchMock.mockClear();
+});
 
+describe("api", () => {
   it("listBoards hits GET /api/v1/draw/boards", async () => {
     const boards = await listBoards();
     expect(fetchMock).toHaveBeenCalledWith("/api/v1/draw/boards", expect.objectContaining({ method: "GET" }));
