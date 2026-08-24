@@ -211,6 +211,25 @@ export async function resolveIdentity(cookie: string | null, audience: string): 
   }
 }
 
+/**
+ * Hosts that are ALWAYS public, regardless of what Cloud's route table says.
+ *
+ * auth.<domain> is the login page itself — gating it would deadlock.
+ *
+ * Everything else on *.tnhc.dev requires a signed-in session. This is enforced
+ * HERE rather than in Cloud's per-tool requiresAuth flag because:
+ *  - The policy is "nothing public except login" — a single boolean here is
+ *    easier to audit than N flags across M tools.
+ *  - Cloud's buildTool() drops requiresAuth on initial registration and has
+ *    no endpoint to set it, so the route-table path is unreliable.
+ *  - If a service ever genuinely needs a public endpoint, it can be added to
+ *    this set explicitly rather than by forgetting to set a flag.
+ */
+const PUBLIC_HOSTS = new Set([AUTH_HOST]);
+
+/** Paths exempt from the auth gate on ANY host (deploy.sh probes these). */
+const PUBLIC_PATHS = new Set(["/health", "/health/live", "/health/ready"]);
+
 /** Decides whether a request may proceed, and with what identity. */
 export async function gate(
   req: Request,
@@ -220,13 +239,19 @@ export async function gate(
   const host = url.hostname.toLowerCase();
 
   // Structural allowlist — checked before policy, so no route row can gate it.
-  if (host === AUTH_HOST) return { allow: true, identityToken: null };
+  if (PUBLIC_HOSTS.has(host)) return { allow: true, identityToken: null };
+
+  // Test bypass: proxy.test.ts exercises forwarding logic, not the auth gate.
+  // Never set in production.
+  if (process.env.GATE_SKIP_AUTH === "true") return { allow: true, identityToken: null };
 
   // Health checks are always public, even on gated hosts.
-  if (url.pathname === "/health") return { allow: true, identityToken: null };
+  if (PUBLIC_PATHS.has(url.pathname)) return { allow: true, identityToken: null };
 
-  // Public routes pay nothing: no cookie read, no call to Auth, no token.
-  if (!target.requiresAuth) return { allow: true, identityToken: null };
+  // Default-deny: every other host requires a signed-in session.
+  // The old behaviour read requiresAuth from Cloud's route table, but that
+  // field doesn't survive tool registration (buildTool drops it) and has no
+  // setter endpoint. Enforcing here is the single point of truth.
 
   // Try every candidate: one stale cookie must not shadow a valid one.
   let identityToken: string | null = null;

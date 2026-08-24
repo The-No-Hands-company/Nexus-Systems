@@ -1,4 +1,6 @@
-import { describe, it, expect } from "bun:test";
+import { describe, it, expect, beforeAll } from "bun:test";
+
+beforeAll(() => { process.env.GATE_SKIP_AUTH = "true"; });
 
 describe("proxy module", () => {
   it("can be imported without binding a port", async () => {
