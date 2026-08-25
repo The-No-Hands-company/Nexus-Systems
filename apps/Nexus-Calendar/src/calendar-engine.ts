@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { canonicalTimestamp } from "./validation";
 
 export type EventAccess = "owner" | "editor" | "viewer";
+export type EventPermission = "viewer" | "editor";
 
 export interface CalEvent {
   id: string;
@@ -33,6 +34,15 @@ export interface EventRange {
   to: string;
 }
 
+export interface EventShare {
+  eventId: string;
+  subject: string;
+  permission: EventPermission;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 type EventRow = {
   id: string;
   title: string;
@@ -44,6 +54,16 @@ type EventRow = {
   recurrence: string | null;
   created_at: string;
   owner_subject: string;
+  access?: EventAccess;
+};
+
+type EventShareRow = {
+  event_id: string;
+  grantee_subject: string;
+  permission: EventPermission;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
 };
 
 function rowToEvent(row: EventRow): CalEvent {
@@ -58,7 +78,18 @@ function rowToEvent(row: EventRow): CalEvent {
     recurrence: row.recurrence ?? undefined,
     createdAt: row.created_at,
     ownerSubject: row.owner_subject,
-    access: "owner",
+    access: row.access ?? "owner",
+  };
+}
+
+function rowToShare(row: EventShareRow): EventShare {
+  return {
+    eventId: row.event_id,
+    subject: row.grantee_subject,
+    permission: row.permission,
+    createdBy: row.created_by,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
   };
 }
 
@@ -88,11 +119,24 @@ function createOwnedEventsTable(db: Database, name = "events"): void {
   )`);
 }
 
+function createEventSharesTable(db: Database): void {
+  db.exec(`CREATE TABLE IF NOT EXISTS event_shares (
+    event_id TEXT NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+    grantee_subject TEXT NOT NULL,
+    permission TEXT NOT NULL CHECK (permission IN ('viewer', 'editor')),
+    created_by TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY (event_id, grantee_subject)
+  )`);
+}
+
 export class CalendarEngine {
   db: Database;
 
   constructor(path = ":memory:", options: { legacyOwnerSubject?: string } = {}) {
     this.db = new Database(path);
+    this.db.exec("PRAGMA foreign_keys = ON");
 
     try {
       this.migrate(options);
@@ -144,9 +188,23 @@ export class CalendarEngine {
     }
 
     if (currentVersion < 2) this.canonicalizeStoredTimestamps();
+    createEventSharesTable(this.db);
     this.db.exec("CREATE INDEX IF NOT EXISTS events_owner_start_end_idx ON events (owner_subject, start_time, end_time)");
+    this.db.exec("CREATE INDEX IF NOT EXISTS event_shares_grantee_event_idx ON event_shares (grantee_subject, event_id)");
     if (currentVersion < 2) this.db.exec("PRAGMA user_version = 2");
     this.db.exec("COMMIT");
+  }
+
+  private transaction<T>(operation: () => T): T {
+    this.db.exec("BEGIN IMMEDIATE");
+    try {
+      const result = operation();
+      this.db.exec("COMMIT");
+      return result;
+    } catch (error) {
+      this.db.exec("ROLLBACK");
+      throw error;
+    }
   }
 
   private canonicalizeStoredTimestamps(): void {
@@ -196,22 +254,39 @@ export class CalendarEngine {
   }
 
   getEvent(callerSubject: string, id: string): CalEvent | undefined {
-    const row = this.db.prepare("SELECT * FROM events WHERE id = ? AND owner_subject = ?").get(id, callerSubject) as EventRow | null;
+    const row = this.db.prepare(`SELECT events.*, CASE
+      WHEN events.owner_subject = ? THEN 'owner'
+      ELSE event_shares.permission
+    END AS access
+    FROM events
+    LEFT JOIN event_shares ON event_shares.event_id = events.id AND event_shares.grantee_subject = ?
+    WHERE events.id = ? AND (events.owner_subject = ? OR event_shares.grantee_subject IS NOT NULL)`)
+      .get(callerSubject, callerSubject, id, callerSubject) as EventRow | null;
     return row ? rowToEvent(row) : undefined;
   }
 
   listEvents(callerSubject: string, range: EventRange): CalEvent[] {
-    return (this.db.prepare(`SELECT * FROM events
-      WHERE owner_subject = ? AND start_time < ? AND end_time > ?
-      ORDER BY start_time`).all(callerSubject, range.to, range.from) as EventRow[]).map(rowToEvent);
+    return (this.db.prepare(`SELECT events.*, CASE
+      WHEN events.owner_subject = ? THEN 'owner'
+      ELSE event_shares.permission
+    END AS access
+    FROM events
+    LEFT JOIN event_shares ON event_shares.event_id = events.id AND event_shares.grantee_subject = ?
+    WHERE (events.owner_subject = ? OR event_shares.grantee_subject IS NOT NULL)
+      AND events.start_time < ? AND events.end_time > ?
+    ORDER BY events.start_time`).all(callerSubject, callerSubject, callerSubject, range.to, range.from) as EventRow[]).map(rowToEvent);
   }
 
   updateEvent(callerSubject: string, id: string, patch: Partial<EventCreate>): CalEvent | undefined {
     const existing = this.getEvent(callerSubject, id);
-    if (!existing) return undefined;
+    if (!existing || existing.access === "viewer") return undefined;
     const merged = { ...existing, ...patch };
     this.db.prepare(
-      "UPDATE events SET title=?, description=?, location=?, start_time=?, end_time=?, all_day=?, recurrence=? WHERE id=? AND owner_subject=?",
+      `UPDATE events SET title=?, description=?, location=?, start_time=?, end_time=?, all_day=?, recurrence=?
+      WHERE id=? AND (owner_subject=? OR EXISTS (
+        SELECT 1 FROM event_shares
+        WHERE event_shares.event_id = events.id AND event_shares.grantee_subject = ? AND event_shares.permission = 'editor'
+      ))`,
     ).run(
       merged.title,
       merged.description ?? null,
@@ -222,12 +297,50 @@ export class CalendarEngine {
       merged.recurrence ?? null,
       id,
       callerSubject,
+      callerSubject,
     );
     return this.getEvent(callerSubject, id);
   }
 
   deleteEvent(callerSubject: string, id: string): boolean {
     return this.db.prepare("DELETE FROM events WHERE id = ? AND owner_subject = ?").run(id, callerSubject).changes > 0;
+  }
+
+  listShares(owner: string, eventId: string): EventShare[] | undefined {
+    return this.transaction(() => {
+      const event = this.db.prepare("SELECT 1 FROM events WHERE id = ? AND owner_subject = ?").get(eventId, owner);
+      if (!event) return undefined;
+      return (this.db.prepare(`SELECT event_id, grantee_subject, permission, created_by, created_at, updated_at
+        FROM event_shares WHERE event_id = ? ORDER BY grantee_subject`).all(eventId) as EventShareRow[]).map(rowToShare);
+    });
+  }
+
+  upsertShare(owner: string, eventId: string, subject: string, permission: EventPermission): EventShare | undefined {
+    return this.transaction(() => {
+      const normalizedOwner = normalizedOwnerSubject(owner);
+      const grantee = normalizedOwnerSubject(subject);
+      if (!normalizedOwner || !grantee || normalizedOwner === grantee) return undefined;
+      const event = this.db.prepare("SELECT 1 FROM events WHERE id = ? AND owner_subject = ?").get(eventId, normalizedOwner);
+      if (!event) return undefined;
+      const now = new Date().toISOString();
+      this.db.prepare(`INSERT INTO event_shares (
+        event_id, grantee_subject, permission, created_by, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?)
+      ON CONFLICT(event_id, grantee_subject) DO UPDATE SET
+        permission = excluded.permission,
+        created_by = excluded.created_by,
+        updated_at = excluded.updated_at`).run(eventId, grantee, permission, normalizedOwner, now, now);
+      const row = this.db.prepare(`SELECT event_id, grantee_subject, permission, created_by, created_at, updated_at
+        FROM event_shares WHERE event_id = ? AND grantee_subject = ?`).get(eventId, grantee) as EventShareRow;
+      return rowToShare(row);
+    });
+  }
+
+  deleteShare(owner: string, eventId: string, subject: string): boolean {
+    return this.transaction(() => this.db.prepare(`DELETE FROM event_shares
+      WHERE event_id = ? AND grantee_subject = ? AND EXISTS (
+        SELECT 1 FROM events WHERE events.id = event_shares.event_id AND events.owner_subject = ?
+      )`).run(eventId, subject, owner).changes > 0);
   }
 
   close(): void {

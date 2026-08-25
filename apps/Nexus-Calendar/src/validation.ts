@@ -1,9 +1,10 @@
-import type { EventCreate, EventRange } from "./calendar-engine";
+import type { EventCreate, EventPermission, EventRange } from "./calendar-engine";
 
 export type EventPatch = Partial<EventCreate>;
 export type ValidationResult<T> = { ok: true; value: T } | { ok: false; error: string };
 
 const EVENT_FIELDS = new Set(["title", "description", "location", "startTime", "endTime", "allDay", "recurrence"]);
+const SHARE_FIELDS = new Set(["permission"]);
 const MAX_TITLE_LENGTH = 512;
 const MAX_TEXT_LENGTH = 10_000;
 const MAX_RANGE_MS = 366 * 24 * 60 * 60 * 1000;
@@ -118,6 +119,15 @@ export function parseEventPatch(value: unknown): ValidationResult<EventPatch> {
       ...(recurrence === undefined ? {} : { recurrence }),
     },
   };
+}
+
+export function parseEventShare(value: unknown): ValidationResult<EventPermission> {
+  const input = object(value);
+  if (!input) return invalid("event share must be an object");
+  const unknown = Object.keys(input).find((key) => !SHARE_FIELDS.has(key));
+  if (unknown) return invalid(`unknown field: ${unknown}`);
+  if (input.permission !== "viewer" && input.permission !== "editor") return invalid("permission must be viewer or editor");
+  return { ok: true, value: input.permission };
 }
 
 export function parseRange(url: URL): ValidationResult<EventRange> {

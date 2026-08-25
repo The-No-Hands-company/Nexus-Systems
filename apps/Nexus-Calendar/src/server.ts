@@ -1,7 +1,7 @@
 import { startHeartbeat } from "./cloud";
 import { CalendarEngine, type EventCreate } from "./calendar-engine";
 import { resolveCaller } from "./auth";
-import { isEventId, parseEventCreate, parseEventPatch, parseRange } from "./validation";
+import { isEventId, parseEventCreate, parseEventPatch, parseEventShare, parseRange } from "./validation";
 
 function json(p: unknown, s = 200): Response {
   return new Response(JSON.stringify(p), {
@@ -39,7 +39,8 @@ export async function createServer() {
       if (req.method === "GET" && p === "/api/v1/status")
         return json({ service: "nexus-calendar", status: "ready", capabilities: ["calendar", "events"] });
 
-      const isEventsRoute = p === "/api/v1/calendar/events" || /^\/api\/v1\/calendar\/events\/[^/]+$/.test(p);
+      const isEventsRoute = p === "/api/v1/calendar/events"
+        || /^\/api\/v1\/calendar\/events\/[^/]+(?:\/shares(?:\/[^/]+)?)?$/.test(p);
       const caller = isEventsRoute ? await resolveCaller(req) : null;
       if (isEventsRoute && !caller) return json({ error: "not authenticated" }, 401);
 
@@ -55,6 +56,41 @@ export async function createServer() {
         const input = parseEventCreate(await req.json().catch(() => null));
         if (!input.ok) return json({ error: input.error }, 400);
         return json(engine.createEvent(caller!.subject, input.value), 201);
+      }
+
+      // Manage explicit shares. Every engine method independently verifies ownership.
+      const shareMatch = p.match(/^\/api\/v1\/calendar\/events\/([^/]+)\/shares(?:\/([^/]+))?$/);
+      if (shareMatch) {
+        let id: string;
+        try {
+          id = decodeURIComponent(shareMatch[1]!);
+        } catch {
+          return json({ error: "invalid event id" }, 400);
+        }
+        if (!isEventId(id)) return json({ error: "invalid event id" }, 400);
+
+        if (req.method === "GET" && shareMatch[2] === undefined) {
+          const shares = engine.listShares(caller!.subject, id);
+          return shares ? json({ shares }) : json({ error: "not found" }, 404);
+        }
+
+        if ((req.method === "PUT" || req.method === "DELETE") && shareMatch[2] !== undefined) {
+          let subject: string;
+          try {
+            subject = decodeURIComponent(shareMatch[2]!).trim();
+          } catch {
+            return json({ error: "invalid share subject" }, 400);
+          }
+          if (!subject) return json({ error: "invalid share subject" }, 400);
+          if (engine.listShares(caller!.subject, id) === undefined) return json({ error: "not found" }, 404);
+          if (req.method === "DELETE") return json({ deleted: engine.deleteShare(caller!.subject, id, subject) });
+
+          const permission = parseEventShare(await req.json().catch(() => null));
+          if (!permission.ok) return json({ error: permission.error }, 400);
+          if (subject === caller!.subject) return json({ error: "cannot share an event with its owner" }, 400);
+          const share = engine.upsertShare(caller!.subject, id, subject, permission.value);
+          return share ? json(share) : json({ error: "not found" }, 404);
+        }
       }
 
       // Get / update / delete single event
