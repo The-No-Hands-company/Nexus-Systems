@@ -245,8 +245,17 @@ export async function gate(
   // Never set in production.
   if (process.env.GATE_SKIP_AUTH === "true") return { allow: true, identityToken: null };
 
-  // Health checks are always public, even on gated hosts.
+  // Health checks are always public.
   if (PUBLIC_PATHS.has(url.pathname)) return { allow: true, identityToken: null };
+
+  // Static assets and the SPA shell are always public. Hashed filenames carry
+  // no user data; blocking them prevents the SPA from loading at all. Auth is
+  // enforced on the API layer (/ipa/*), not the static file layer.
+  if (url.pathname.startsWith("/assets/") ||
+      url.pathname === "/index.html" ||
+      !url.pathname.includes(".") && !url.pathname.startsWith("/ipa/") && !url.pathname.startsWith("/api/")) {
+    return { allow: true, identityToken: null };
+  }
 
   // Default-deny: every other host requires a signed-in session.
   // The old behaviour read requiresAuth from Cloud's route table, but that

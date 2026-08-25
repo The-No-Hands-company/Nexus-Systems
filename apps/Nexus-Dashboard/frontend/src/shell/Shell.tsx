@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { useState } from "react";
 import { Link } from "react-router-dom";
 
 /**
@@ -36,6 +37,7 @@ export default function Shell({
    */
   utility?: ReactNode;
 }) {
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
     return (
       <div className="flex h-screen flex-col bg-[#030303] text-white">
         <header
@@ -51,6 +53,8 @@ export default function Shell({
             what every other product does, so it is what people try first.
           */}
             <Link to="/" className="font-semibold tracking-tight hover:text-[#ccff00]" aria-label="Nexus home">
+
+          <button type="button" onClick={() => setMobileNavOpen(!mobileNavOpen)} aria-label={mobileNavOpen ? "Close menu" : "Open menu"} className="md:hidden rounded p-1.5 text-zinc-400 hover:bg-white/10 hover:text-white"><svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">{mobileNavOpen ? <path d="M5 5l10 10M15 5L5 15"/> : <path d="M3 5h14M3 10h14M3 15h14"/>}</svg></button>
               Nexus
             </Link>
 
@@ -102,10 +106,17 @@ export default function Shell({
       </header>
 
       <div className="flex min-h-0 flex-1">
+        {mobileNavOpen && (
+          <div className="fixed inset-0 z-30 bg-black/60 md:hidden" onClick={() => setMobileNavOpen(false)} />
+        )}
         <aside
           aria-label="Applications"
-            className="w-60 shrink-0 overflow-y-auto border-r border-white/10"
-
+          className={
+            mobileNavOpen
+              ? "fixed inset-y-0 left-0 z-40 w-64 bg-[#0a0a0a] block overflow-y-auto border-r border-white/10"
+              : "hidden md:block w-60 shrink-0 overflow-y-auto border-r border-white/10"
+          }
+          onClick={(e) => { const t = e.target as HTMLElement; if (t.closest("a")) setMobileNavOpen(false); }}
         >
           {sidebar}
 

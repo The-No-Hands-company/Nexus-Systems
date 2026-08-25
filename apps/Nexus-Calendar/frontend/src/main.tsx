@@ -85,13 +85,18 @@ function App() {
     cells.push(
       <div key={d}
         onClick={() => { setSelectedDay(dateStr); setShowForm(false); }}
-        className={`min-h-[80px] p-1.5 cursor-pointer border-r border-b border-zinc-800/60 transition-colors
+        className={`min-h-[56px] sm:min-h-[80px] p-1 sm:p-1.5 cursor-pointer border-r border-b border-zinc-800/60 transition-colors
           ${isSel ? "bg-zinc-800" : "hover:bg-zinc-900/70"}
           ${isToday ? "ring-1 ring-inset ring-lime-500/50" : ""}`}
       >
         <span className={`text-xs font-medium ${isToday ? "text-lime-400" : "text-zinc-400"}`}>{d}</span>
         {evs.slice(0, 3).map((e) => (
-          <div key={e.id} className="mt-0.5 rounded px-1 py-0.5 text-[10px] leading-tight truncate bg-lime-500/15 text-lime-300">
+          <div key={e.id} className="sm:hidden mt-1 flex justify-center">
+            <span className="h-1 w-1 rounded-full bg-lime-400" />
+          </div>
+        ))}
+        {evs.slice(0, 3).map((e) => (
+          <div key={e.id+"_d"} className="hidden sm:block mt-0.5 rounded px-1 py-0.5 text-[10px] leading-tight truncate bg-lime-500/15 text-lime-300">
             {e.allDay ? e.title : `${e.startTime.slice(11,16)} ${e.title}`}
           </div>
         ))}
@@ -129,10 +134,10 @@ function App() {
 
       {/* Day detail sidebar */}
       {selectedDay && (
-        <aside className="w-72 shrink-0 border-l border-white/10 flex flex-col overflow-y-auto">
+        <aside className="fixed inset-0 z-40 bg-[#0a0a0a] md:relative md:w-72 md:shrink-0 md:border-l border-white/10 flex flex-col overflow-y-auto">
           <div className="p-4 border-b border-white/10 flex items-center justify-between">
             <h2 className="font-semibold">{new Date(selectedDay + "T00:00").toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" })}</h2>
-            <button onClick={() => { setSelectedDay(null); setShowForm(false); }} className="text-zinc-500 hover:text-white">✕</button>
+            <button onClick={() => { setSelectedDay(null); setShowForm(false); }} className="md:hidden text-zinc-500 hover:text-white">✕</button>
           </div>
           <div className="flex-1 p-4 space-y-3">
             {selEvents.length === 0 && !showForm && <p className="text-sm text-zinc-500">No events.</p>}
