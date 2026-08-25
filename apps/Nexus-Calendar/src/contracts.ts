@@ -21,6 +21,7 @@ export function buildSystemsApiRegistrationPayload(baseUrl: string): SystemsApiR
     exposed: true,
     health: "healthy",
     upstreamUrl: baseUrl,
+    publicUrl: "/calendar",
     capabilities: ["calendar", "events", "scheduling"],
     requiresAuth: true,
     metadata: {

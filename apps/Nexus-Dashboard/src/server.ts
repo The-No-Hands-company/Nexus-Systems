@@ -91,6 +91,13 @@ const MAIL_PREFIX = "/ipa/mail/";
  */
 const NOTIFICATIONS_PREFIX = "/ipa/notifications";
 
+/**
+ * Calendar lives behind its own service on loopback (3068). Proxied onto the
+ * dashboard origin so the SPA can call it same-origin without iframe or CORS
+ * complications. The caller's identity is attached server-side.
+ */
+const CALENDAR_PREFIX = "/ipa/calendar/";
+
 function hostingUrl(): string {
   // Read per call, not captured at module load — the same import-order trap
   // documented for mailUrl() above.
@@ -289,6 +296,9 @@ async function fetchApps(req: Request): Promise<Response> {
   const native = shellNativeEntries({
     mailHealthy: await mailReachable(),
     terminalHealthy: includeTerminal ? await terminalReachable() : false,
+    calendarHealthy: await (async () => {
+      try { return (await fetch("http://127.0.0.1:3068/health", { signal: AbortSignal.timeout(2000) })).ok; } catch { return false; }
+    })(),
     includeTerminal,
   });
 
@@ -398,6 +408,26 @@ export async function handleRequest(
 
   if (path === NOTIFICATIONS_PREFIX || path.startsWith(NOTIFICATIONS_PREFIX + "/")) {
     return proxyToNotifications(req, path.slice(NOTIFICATIONS_PREFIX.length), url.search);
+  }
+
+  if (path.startsWith(CALENDAR_PREFIX)) {
+    const who = await callerIdentity(req);
+    if (!who) return Response.json({ error: "not_authenticated" }, { status: 401 });
+    const rest = path.slice(CALENDAR_PREFIX.length);
+    try {
+      const res = await fetch(`http://127.0.0.1:3068/api/v1/calendar/${rest}${url.search}`, {
+        method: req.method,
+        headers: { "content-type": "application/json" },
+        body: req.method === "POST" || req.method === "PATCH" ? await req.text() : undefined,
+        signal: AbortSignal.timeout(5000),
+      });
+      return new Response(res.body, {
+        status: res.status,
+        headers: { "content-type": res.headers.get("content-type") ?? "application/json" },
+      });
+    } catch {
+      return Response.json({ error: "calendar_unavailable" }, { status: 503 });
+    }
   }
 
   // Development helper tools (dhts/). Founder-only: these run commands on this

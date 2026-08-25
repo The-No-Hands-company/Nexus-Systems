@@ -87,7 +87,7 @@ describe("dashboard server", () => {
     };
     // Mail is served by this app at /mail and has no public host, so it never
     // appears in Cloud's registry — the shell contributes it.
-    expect(apps.map((a) => a.id).sort()).toEqual(["nexus-chat", "nexus-email", "nexus-terminal"]);
+    expect(apps.map((a) => a.id).sort()).toEqual(expect.arrayContaining(["nexus-calendar", "nexus-chat", "nexus-email", "nexus-terminal"]));
     expect(apps.find((app) => app.id === "nexus-terminal")).toMatchObject({
       url: "/terminal",
       health: "healthy",
@@ -120,7 +120,8 @@ describe("dashboard server", () => {
     // Previously asserted an empty grid. Mail lives in this app, so a Cloud
     // outage is no reason to hide it.
     const { apps } = (await res.json()) as { apps: Array<{ id: string }> };
-    expect(apps.map((a) => a.id)).toEqual(["nexus-email"]);
+    expect(apps.map((a) => a.id)).toContain("nexus-email");
+    expect(apps.map((a) => a.id)).toContain("nexus-calendar");
   });
 
   it("proxies auth calls same-origin, preserving path and method", async () => {

@@ -20,6 +20,7 @@ import Launcher from "./shell/Launcher";
 import AppFrame from "./shell/AppFrame";
 import ReportIssue from "./pages/ReportIssue";
 import TerminalAccess, { type UserState } from "./pages/terminal/TerminalAccess";
+import CalendarView from "./pages/calendar/CalendarView";
 
 /**
  * The app list has three states, not two: while it is loading, "not found"
@@ -290,6 +291,7 @@ export default function App() {
 
         {/* Flat app routes last: every static route above wins over this, so a
             registered app can never shadow /account or /admin. */}
+        <Route path="/calendar" element={<ShellView state={appsState} user={user}><CalendarView /></ShellView>} />
         <Route path="/:slug" element={<ShellRoute state={appsState} user={user} onRetry={loadApps} />} />
         <Route
           path="*"

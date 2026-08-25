@@ -137,6 +137,7 @@ export function toAppEntries(
 export function shellNativeEntries(opts: {
   mailHealthy: boolean;
   terminalHealthy: boolean;
+  calendarHealthy: boolean;
   includeTerminal: boolean;
 }): AppEntry[] {
   const entries: AppEntry[] = [
@@ -147,6 +148,14 @@ export function shellNativeEntries(opts: {
       url: "/mail",
       path: "/mail",
       health: opts.mailHealthy ? "healthy" : "offline",
+    },
+    {
+      id: "nexus-calendar",
+      name: "Nexus Calendar",
+      description: "Month-view scheduling with events, locations and notes",
+      url: "/calendar",
+      path: "/calendar",
+      health: opts.calendarHealthy ? "healthy" : "offline",
     },
   ];
   if (opts.includeTerminal) {
