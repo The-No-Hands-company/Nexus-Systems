@@ -1,5 +1,7 @@
 import { startHeartbeat } from "./cloud";
-import { CalendarEngine } from "./calendar-engine";
+import { CalendarEngine, type EventCreate } from "./calendar-engine";
+
+const LEGACY_ROUTE_SUBJECT = "legacy-local-subject";
 
 function json(p: unknown, s = 200): Response {
   return new Response(JSON.stringify(p), {
@@ -18,7 +20,11 @@ export async function createServer() {
   const startedAt = Date.now();
   // Persistent SQLite — survives restarts, unlike :memory:
   const dbPath = process.env.NEXUS_CALENDAR_DB || "data/calendar.sqlite";
-  const engine = new CalendarEngine(dbPath);
+  const legacyOwnerSubject = process.env.NEXUS_CALENDAR_LEGACY_OWNER_SUBJECT;
+  const engine = new CalendarEngine(
+    dbPath,
+    legacyOwnerSubject === undefined ? {} : { legacyOwnerSubject },
+  );
 
   const server = Bun.serve({
     port,
@@ -37,7 +43,7 @@ export async function createServer() {
       if (req.method === "GET" && p === "/api/v1/calendar/events") {
         const from = url.searchParams.get("from") || new Date().toISOString().slice(0, 10);
         const to = url.searchParams.get("to") || new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10);
-        return json({ events: engine.listEvents(from, to) });
+        return json({ events: engine.listEvents(LEGACY_ROUTE_SUBJECT, { from, to }) });
       }
 
       // Create event
@@ -45,7 +51,7 @@ export async function createServer() {
         const b = await req.json().catch(() => ({})) as Record<string, unknown>;
         if (!b.title || !b.startTime || !b.endTime)
           return json({ error: "title, startTime, endTime required" }, 400);
-        return json(engine.createEvent({
+        return json(engine.createEvent(LEGACY_ROUTE_SUBJECT, {
           title: b.title as string,
           description: b.description as string | undefined,
           location: b.location as string | undefined,
@@ -66,7 +72,7 @@ export async function createServer() {
         }
         if (req.method === "PATCH") {
           const b = await req.json().catch(() => ({})) as Record<string, unknown>;
-          const updated = engine.updateEvent(id, b as Partial<typeof engine extends never ? never : ReturnType<CalendarEngine["getEvent"]> & Record<string, never>>);
+          const updated = engine.updateEvent(id, b as Partial<EventCreate>);
           return updated ? json(updated) : json({ error: "not found" }, 404);
         }
         if (req.method === "DELETE") {
@@ -80,5 +86,13 @@ export async function createServer() {
 
   console.log(`[nexus-calendar] Listening on port ${server.port}`);
   const stopHeartbeat = startHeartbeat(baseUrl);
-  return { server, close: () => { stopHeartbeat(); server.stop(); } };
+  return {
+    server,
+    engine,
+    close: () => {
+      stopHeartbeat();
+      engine.close();
+      server.stop();
+    },
+  };
 }

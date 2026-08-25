@@ -1,5 +1,12 @@
-import { describe, it, expect, beforeAll, afterAll } from "bun:test";
-import { createServer } from "../src/server";
+import { afterAll, beforeAll, describe, expect, it, mock, spyOn } from "bun:test";
+
+const shutdownOrder: string[] = [];
+const stopHeartbeat = mock(() => {
+  shutdownOrder.push("heartbeat");
+});
+const startHeartbeat = mock(() => stopHeartbeat);
+mock.module("../src/cloud", () => ({ startHeartbeat }));
+const { createServer } = await import("../src/server");
 
 describe("nexus-calendar", () => {
   let base = "";
@@ -69,5 +76,23 @@ describe("nexus-calendar", () => {
     expect(del.status).toBe(200);
     const get = await fetch(`${base}/api/v1/calendar/events/${ev.id}`);
     expect(get.status).toBe(404);
+  });
+
+  it("stops its heartbeat, SQLite engine, and Bun server in shutdown order", async () => {
+    const handle = await createServer();
+    const engineClose = spyOn(handle.engine, "close").mockImplementation(() => {
+      shutdownOrder.push("engine");
+    });
+    const serverStop = spyOn(handle.server, "stop").mockImplementation(() => {
+      shutdownOrder.push("server");
+    });
+
+    shutdownOrder.length = 0;
+    handle.close();
+
+    expect(stopHeartbeat).toHaveBeenCalled();
+    expect(engineClose).toHaveBeenCalled();
+    expect(serverStop).toHaveBeenCalled();
+    expect(shutdownOrder).toEqual(["heartbeat", "engine", "server"]);
   });
 });
