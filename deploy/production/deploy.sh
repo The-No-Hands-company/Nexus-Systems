@@ -116,6 +116,30 @@ cmd_start() {
     export NEXUS_ISSUES_TOKEN="${NEXUS_ISSUES_TOKEN:-}"
     [ -z "$NEXUS_ISSUES_TOKEN" ] && log "NEXUS_ISSUES_TOKEN unset — in-app issue reporting will answer 503"
 
+    # Dashboard proves its Calendar identity with a private, deployment-local
+    # secret. It is not a browser setting: Calendar only accepts the asserted
+    # subject when this secret accompanies the loopback hop. Keep one generated
+    # value in a gitignored 0600 file so independent deploy invocations do not
+    # silently sever the Dashboard-to-Calendar trust boundary.
+    local calendar_secret_file="$ROOT/deploy/production/nexus-calendar-dashboard.secret"
+    if [ -z "${NEXUS_CALENDAR_DASHBOARD_SECRET:-}" ]; then
+        if [ -f "$calendar_secret_file" ]; then
+            NEXUS_CALENDAR_DASHBOARD_SECRET="$(tr -d '\r\n' < "$calendar_secret_file")"
+            log "Loaded Calendar Dashboard hop secret"
+        else
+            umask 077
+            mkdir -p "$(dirname "$calendar_secret_file")"
+            NEXUS_CALENDAR_DASHBOARD_SECRET="$(openssl rand -hex 32)"
+            printf '%s\n' "$NEXUS_CALENDAR_DASHBOARD_SECRET" > "$calendar_secret_file"
+            log "Generated Calendar Dashboard hop secret"
+        fi
+    fi
+    if ! [[ "$NEXUS_CALENDAR_DASHBOARD_SECRET" =~ ^[A-Fa-f0-9]{64}$ ]]; then
+        echo "NEXUS_CALENDAR_DASHBOARD_SECRET must be a 32-byte hex secret" >&2
+        return 1
+    fi
+    export NEXUS_CALENDAR_DASHBOARD_SECRET
+
     # Same pattern for Email's database URL: the value lives beside the app so
     # a credential is never written into this script or the repo.
     if [ -z "${NEXUS_EMAIL_DATABASE_URL:-}" ] && [ -f "$ROOT/apps/Nexus-Email/.env" ]; then
@@ -271,6 +295,7 @@ cmd_start() {
         start_service "calendar" "$ROOT/apps/Nexus-Calendar" 3068 \
             PORT=3068 \
             NEXUS_BIND_HOST=127.0.0.1 \
+            NEXUS_CALENDAR_DASHBOARD_SECRET="$NEXUS_CALENDAR_DASHBOARD_SECRET" \
             NEXUS_NEXUS_CALENDAR_BASE_URL=http://127.0.0.1:8092 \
             NEXUS_CLOUD_URL=http://localhost:8787 \
             NEXUS_CLOUD_API_KEY="$NEXUS_CLOUD_API_KEY" \
@@ -328,6 +353,8 @@ cmd_start() {
             NEXUS_CLOUD_URL=http://localhost:8787 \
             NEXUS_CLOUD_API_KEY="$NEXUS_CLOUD_API_KEY" \
             NEXUS_TERMINAL_URL=http://127.0.0.1:3110 \
+            NEXUS_CALENDAR_DASHBOARD_SECRET="$NEXUS_CALENDAR_DASHBOARD_SECRET" \
+            NEXUS_CALENDAR_WEB_URL=http://127.0.0.1:8092 \
             NEXUS_ISSUES_TOKEN="$NEXUS_ISSUES_TOKEN" \
             bun run src/index.ts
     fi

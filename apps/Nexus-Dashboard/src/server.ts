@@ -12,6 +12,7 @@ import { checkRateLimit, rateLimitMiddleware } from "./ratelimit";
 import { validateJWT, extractBearerToken, validateRequest } from "./jwt";
 import { listDevTools, runDevTool } from "./devtools";
 import { checkAllServices } from "./servicehealth";
+import { proxyCalendarApi, proxyCalendarWeb } from "./calendar-proxy";
 
 /**
  * The ecosystem front door — app.<domain>.
@@ -90,6 +91,7 @@ const NOTIFICATIONS_PREFIX = "/ipa/notifications";
  * complications. The caller's identity is attached server-side.
  */
 const CALENDAR_PREFIX = "/ipa/calendar/";
+const CALENDAR_WEB_PREFIX = "/calendar";
 
 function hostingUrl(): string {
   // Read per call, not captured at module load — the same import-order trap
@@ -404,23 +406,7 @@ export async function handleRequest(
   }
 
   if (path.startsWith(CALENDAR_PREFIX)) {
-    const who = await callerIdentity(req);
-    if (!who) return Response.json({ error: "not_authenticated" }, { status: 401 });
-    const rest = path.slice(CALENDAR_PREFIX.length);
-    try {
-      const res = await fetch(`http://127.0.0.1:3068/api/v1/calendar/${rest}${url.search}`, {
-        method: req.method,
-        headers: { "content-type": "application/json" },
-        body: req.method === "POST" || req.method === "PATCH" ? await req.text() : undefined,
-        signal: AbortSignal.timeout(5000),
-      });
-      return new Response(res.body, {
-        status: res.status,
-        headers: { "content-type": res.headers.get("content-type") ?? "application/json" },
-      });
-    } catch {
-      return Response.json({ error: "calendar_unavailable" }, { status: 503 });
-    }
+    return proxyCalendarApi(req, path.slice(CALENDAR_PREFIX.length), url.search);
   }
 
   // Development helper tools (dhts/). Founder-only: these run commands on this
@@ -458,6 +444,13 @@ export async function handleRequest(
   }
 
   if (path.startsWith(AUTH_PREFIX)) return proxyToAuth(req, path);
+
+  // Calendar owns the document and its client routes; Dashboard only mounts
+  // the artifact at its canonical in-shell path. Keep this before Dashboard's
+  // SPA fallback so /calendar never resolves to the old shell-native view.
+  if (path === CALENDAR_WEB_PREFIX || path.startsWith(CALENDAR_WEB_PREFIX + "/")) {
+    return proxyCalendarWeb(req, path.slice(CALENDAR_WEB_PREFIX.length));
+  }
 
   // Anything else under /ipa is not ours and must not fall through to the SPA.
   // Returning the HTML shell for a mistyped API call is how a caller ends up
@@ -511,7 +504,26 @@ export async function handleRequest(
     '<!doctype html><meta charset="utf-8"><title>Nexus Dashboard</title>' +
       "<p>The dashboard UI has not been built. Run <code>npm install &amp;&amp; npm run build</code> " +
       "in <code>apps/Nexus-Dashboard/frontend</code>.</p>",
-    { status: 503, headers: { "content-type": "text/html; charset=utf-8" } },
+    {
+      status: 503,
+      headers: {
+        "content-type": "text/html; charset=utf-8",
+        // The build-instruction page is still served by the authenticated
+        // shell origin, so it keeps the same document boundary as the SPA.
+        "content-security-policy": [
+          "default-src 'self'",
+          "script-src 'self'",
+          "style-src 'self' 'unsafe-inline'",
+          "img-src 'self' data:",
+          "font-src 'self'",
+          "connect-src 'self'",
+          "object-src 'none'",
+          "frame-ancestors 'self'",
+          "base-uri 'self'",
+          "form-action 'self'",
+        ].join("; "),
+      },
+    },
   );
 }
 
