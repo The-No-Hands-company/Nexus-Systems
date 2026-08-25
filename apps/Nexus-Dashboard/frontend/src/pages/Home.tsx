@@ -1,8 +1,8 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { me, listApps, type Me, type AppEntry } from "../api";
-import Grid from "./Grid";
-import Shell from "../shell/Shell";
+import DashboardOverview from "./DashboardOverview";
+import "./dashboard-overview.css";
 
 const AUTH_LOGIN_URL =
   import.meta.env.VITE_AUTH_LOGIN_URL ?? "https://auth.tnhc.dev/login";
@@ -26,12 +26,18 @@ const AUTH_LOGIN_URL =
  */
 export default function Home({ sidebar }: { sidebar?: ReactNode }) {
   const [user, setUser] = useState<Me | null | undefined>(undefined);
+  const previewEnabled = (import.meta.env.DEV || import.meta.env.VITE_DASHBOARD_PREVIEW === "true")
+    && new URLSearchParams(window.location.search).has("dashboard-preview");
 
   useEffect(() => {
+    if (previewEnabled) {
+      setUser({ id: "preview", username: "Eric", email: "preview@tnhc.dev", role: "founder" });
+      return;
+    }
     let cancelled = false;
     void me().then((u) => { if (!cancelled) setUser(u); });
     return () => { cancelled = true; };
-  }, []);
+  }, [previewEnabled]);
 
   if (user === undefined) {
     return <section className="mx-auto max-w-4xl p-8 text-zinc-500">Loading…</section>;
@@ -41,11 +47,19 @@ export default function Home({ sidebar }: { sidebar?: ReactNode }) {
   // launcher to someone with no session and nothing to launch. user goes too —
   // without it the home header had no identity chip and no Operator link, so
   // the founder landed here and /admin might as well not have existed.
-  if (user) {
-    return sidebar ? <Shell sidebar={sidebar} user={user}>{<Grid />}</Shell> : <Grid />;
-  }
+  if (user) return <SignedIn user={user} launcher={sidebar} />;
 
   return <SignedOut />;
+}
+
+function SignedIn({ user, launcher }: { user: Me; launcher?: ReactNode }) {
+  const [apps, setApps] = useState<AppEntry[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    void listApps().then((items) => { if (!cancelled) setApps(items); }).catch(() => undefined);
+    return () => { cancelled = true; };
+  }, []);
+  return <DashboardOverview user={user} apps={apps} launcher={launcher} />;
 }
 
 /**
