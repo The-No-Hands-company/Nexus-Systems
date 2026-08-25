@@ -98,7 +98,7 @@ describe("CalendarEngine owned-event migration", () => {
     expect(() => new CalendarEngine(path)).toThrow("legacy_owner_required");
 
     const engine = new CalendarEngine(path, { legacyOwnerSubject: "usr-founder" });
-    expect(engine.getEvent("partially-deployed-unowned")).toMatchObject({
+    expect(engine.getEvent("usr-founder", "partially-deployed-unowned")).toMatchObject({
       ownerSubject: "usr-founder",
       access: "owner",
     });

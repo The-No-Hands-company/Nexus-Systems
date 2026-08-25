@@ -1,7 +1,7 @@
 import { startHeartbeat } from "./cloud";
 import { CalendarEngine, type EventCreate } from "./calendar-engine";
-
-const LEGACY_ROUTE_SUBJECT = "legacy-local-subject";
+import { resolveCaller } from "./auth";
+import { isEventId, parseEventCreate, parseEventPatch, parseRange } from "./validation";
 
 function json(p: unknown, s = 200): Response {
   return new Response(JSON.stringify(p), {
@@ -39,44 +39,59 @@ export async function createServer() {
       if (req.method === "GET" && p === "/api/v1/status")
         return json({ service: "nexus-calendar", status: "ready", capabilities: ["calendar", "events"] });
 
+      const isEventsRoute = p === "/api/v1/calendar/events" || /^\/api\/v1\/calendar\/events\/[^/]+$/.test(p);
+      const caller = isEventsRoute ? await resolveCaller(req) : null;
+      if (isEventsRoute && !caller) return json({ error: "not authenticated" }, 401);
+
       // List events by date range
       if (req.method === "GET" && p === "/api/v1/calendar/events") {
-        const from = url.searchParams.get("from") || new Date().toISOString().slice(0, 10);
-        const to = url.searchParams.get("to") || new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10);
-        return json({ events: engine.listEvents(LEGACY_ROUTE_SUBJECT, { from, to }) });
+        const range = parseRange(url);
+        if (!range.ok) return json({ error: range.error }, 400);
+        return json({ events: engine.listEvents(caller!.subject, range.value) });
       }
 
       // Create event
       if (req.method === "POST" && p === "/api/v1/calendar/events") {
-        const b = await req.json().catch(() => ({})) as Record<string, unknown>;
-        if (!b.title || !b.startTime || !b.endTime)
-          return json({ error: "title, startTime, endTime required" }, 400);
-        return json(engine.createEvent(LEGACY_ROUTE_SUBJECT, {
-          title: b.title as string,
-          description: b.description as string | undefined,
-          location: b.location as string | undefined,
-          startTime: b.startTime as string,
-          endTime: b.endTime as string,
-          allDay: b.allDay as boolean | undefined,
-          recurrence: b.recurrence as string | undefined,
-        }), 201);
+        const input = parseEventCreate(await req.json().catch(() => null));
+        if (!input.ok) return json({ error: input.error }, 400);
+        return json(engine.createEvent(caller!.subject, input.value), 201);
       }
 
       // Get / update / delete single event
       const evMatch = p.match(/^\/api\/v1\/calendar\/events\/([^/]+)$/);
       if (evMatch) {
-        const id = decodeURIComponent(evMatch[1]!);
+        let id: string;
+        try {
+          id = decodeURIComponent(evMatch[1]!);
+        } catch {
+          return json({ error: "invalid event id" }, 400);
+        }
+        if (!isEventId(id)) return json({ error: "invalid event id" }, 400);
         if (req.method === "GET") {
-          const ev = engine.getEvent(id);
+          const ev = engine.getEvent(caller!.subject, id);
           return ev ? json(ev) : json({ error: "not found" }, 404);
         }
         if (req.method === "PATCH") {
-          const b = await req.json().catch(() => ({})) as Record<string, unknown>;
-          const updated = engine.updateEvent(id, b as Partial<EventCreate>);
+          const patch = parseEventPatch(await req.json().catch(() => null));
+          if (!patch.ok) return json({ error: patch.error }, 400);
+          const existing = engine.getEvent(caller!.subject, id);
+          if (!existing) return json({ error: "not found" }, 404);
+          const validMergedEvent = parseEventCreate({
+            title: existing.title,
+            description: existing.description,
+            location: existing.location,
+            startTime: existing.startTime,
+            endTime: existing.endTime,
+            allDay: existing.allDay,
+            recurrence: existing.recurrence,
+            ...patch.value,
+          });
+          if (!validMergedEvent.ok) return json({ error: validMergedEvent.error }, 400);
+          const updated = engine.updateEvent(caller!.subject, id, patch.value as Partial<EventCreate>);
           return updated ? json(updated) : json({ error: "not found" }, 404);
         }
         if (req.method === "DELETE") {
-          return engine.deleteEvent(id) ? json({ deleted: true }) : json({ error: "not found" }, 404);
+          return engine.deleteEvent(caller!.subject, id) ? json({ deleted: true }) : json({ error: "not found" }, 404);
         }
       }
 

@@ -175,23 +175,23 @@ export class CalendarEngine {
     return event;
   }
 
-  getEvent(id: string): CalEvent | undefined {
-    const row = this.db.prepare("SELECT * FROM events WHERE id = ?").get(id) as EventRow | null;
+  getEvent(callerSubject: string, id: string): CalEvent | undefined {
+    const row = this.db.prepare("SELECT * FROM events WHERE id = ? AND owner_subject = ?").get(id, callerSubject) as EventRow | null;
     return row ? rowToEvent(row) : undefined;
   }
 
   listEvents(callerSubject: string, range: EventRange): CalEvent[] {
     return (this.db.prepare(`SELECT * FROM events
-      WHERE owner_subject = ? AND start_time >= ? AND end_time <= ?
-      ORDER BY start_time`).all(callerSubject, range.from, range.to) as EventRow[]).map(rowToEvent);
+      WHERE owner_subject = ? AND start_time < ? AND end_time > ?
+      ORDER BY start_time`).all(callerSubject, range.to, range.from) as EventRow[]).map(rowToEvent);
   }
 
-  updateEvent(id: string, patch: Partial<EventCreate>): CalEvent | undefined {
-    const existing = this.getEvent(id);
+  updateEvent(callerSubject: string, id: string, patch: Partial<EventCreate>): CalEvent | undefined {
+    const existing = this.getEvent(callerSubject, id);
     if (!existing) return undefined;
     const merged = { ...existing, ...patch };
     this.db.prepare(
-      "UPDATE events SET title=?, description=?, location=?, start_time=?, end_time=?, all_day=?, recurrence=? WHERE id=?",
+      "UPDATE events SET title=?, description=?, location=?, start_time=?, end_time=?, all_day=?, recurrence=? WHERE id=? AND owner_subject=?",
     ).run(
       merged.title,
       merged.description ?? null,
@@ -201,12 +201,13 @@ export class CalendarEngine {
       merged.allDay ? 1 : 0,
       merged.recurrence ?? null,
       id,
+      callerSubject,
     );
-    return this.getEvent(id);
+    return this.getEvent(callerSubject, id);
   }
 
-  deleteEvent(id: string): boolean {
-    return this.db.prepare("DELETE FROM events WHERE id = ?").run(id).changes > 0;
+  deleteEvent(callerSubject: string, id: string): boolean {
+    return this.db.prepare("DELETE FROM events WHERE id = ? AND owner_subject = ?").run(id, callerSubject).changes > 0;
   }
 
   close(): void {
