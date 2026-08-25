@@ -10,6 +10,22 @@ function req(host: string, path = "/", cookie?: string): Request {
 }
 
 describe("SSO gate", () => {
+  it("allows only an exact Calendar public-event GET without a session", async () => {
+    const token = "A".repeat(43);
+    const allow = await gate(req("calendar.tnhc.dev", `/api/v1/calendar/public/${token}`), { upstream: "x", requiresAuth: true });
+    expect(allow.allow).toBe(true);
+
+    const denied = await Promise.all([
+      gate(req("calendar.tnhc.dev", "/api/v1/calendar/events"), { upstream: "x", requiresAuth: true }),
+      gate(new Request(`https://calendar.tnhc.dev/api/v1/calendar/public/${token}`, { method: "POST" }), { upstream: "x", requiresAuth: true }),
+      gate(req("app.tnhc.dev", `/api/v1/calendar/public/${token}`), { upstream: "x", requiresAuth: true }),
+      gate(req("calendar.tnhc.dev", "/api/v1/calendar/public/"), { upstream: "x", requiresAuth: true }),
+      gate(req("calendar.tnhc.dev", `/api/v1/calendar/public/${token}%2Fextra`), { upstream: "x", requiresAuth: true }),
+      gate(req("calendar.tnhc.dev", `/api/v1/calendar/public/${token}?preview=true`), { upstream: "x", requiresAuth: true }),
+    ]);
+    expect(denied.every((decision) => !decision.allow)).toBe(true);
+  });
+
   it("allows auth.tnhc.dev unconditionally (login page must be public)", async () => {
     const d = await gate(req("auth.tnhc.dev"), { upstream: "x", requiresAuth: false });
     expect(d.allow).toBe(true);

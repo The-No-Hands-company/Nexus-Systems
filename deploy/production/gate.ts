@@ -230,6 +230,15 @@ const PUBLIC_HOSTS = new Set([AUTH_HOST]);
 /** Paths exempt from the auth gate on ANY host (deploy.sh probes these). */
 const PUBLIC_PATHS = new Set(["/health", "/health/live", "/health/ready"]);
 
+const PUBLIC_CALENDAR_EVENT = /^\/api\/v1\/calendar\/public\/[A-Za-z0-9_-]{43}$/;
+
+function isPublicCalendarEvent(req: Request, url: URL): boolean {
+  return req.method === "GET"
+    && url.hostname.toLowerCase() === `calendar.${DOMAIN}`
+    && url.search === ""
+    && PUBLIC_CALENDAR_EVENT.test(url.pathname);
+}
+
 /** Decides whether a request may proceed, and with what identity. */
 export async function gate(
   req: Request,
@@ -248,12 +257,14 @@ export async function gate(
   // Health checks are always public.
   if (PUBLIC_PATHS.has(url.pathname)) return { allow: true, identityToken: null };
 
-  // Static assets and the SPA shell are always public. Hashed filenames carry
-  // no user data; blocking them prevents the SPA from loading at all. Auth is
-  // enforced on the API layer (/ipa/*), not the static file layer.
+  // A bearer token permits exactly one read-only Calendar event. This remains
+  // structural so policy data cannot accidentally expose any other Calendar API.
+  if (isPublicCalendarEvent(req, url)) return { allow: true, identityToken: null };
+
+  // Static assets are always public. Hashed filenames carry no user data;
+  // blocking them prevents an authenticated app document from loading its UI.
   if (url.pathname.startsWith("/assets/") ||
-      url.pathname === "/index.html" ||
-      !url.pathname.includes(".") && !url.pathname.startsWith("/ipa/") && !url.pathname.startsWith("/api/")) {
+      url.pathname === "/index.html") {
     return { allow: true, identityToken: null };
   }
 

@@ -3,6 +3,8 @@ import { CalendarEngine, type EventCreate } from "./calendar-engine";
 import { resolveCaller } from "./auth";
 import { isEventId, parseEventCreate, parseEventPatch, parseEventShare, parseRange } from "./validation";
 
+const PUBLIC_TOKEN = /^[A-Za-z0-9_-]{43}$/;
+
 function json(p: unknown, s = 200): Response {
   return new Response(JSON.stringify(p), {
     status: s,
@@ -39,8 +41,17 @@ export async function createServer() {
       if (req.method === "GET" && p === "/api/v1/status")
         return json({ service: "nexus-calendar", status: "ready", capabilities: ["calendar", "events"] });
 
+      const publicMatch = p.match(/^\/api\/v1\/calendar\/public\/([^/]+)$/);
+      if (publicMatch) {
+        if (req.method !== "GET") return json({ error: "method not allowed" }, 405);
+        const token = publicMatch[1]!;
+        if (!PUBLIC_TOKEN.test(token)) return json({ error: "not found" }, 404);
+        const event = engine.getPublicEvent(token);
+        return event ? json(event) : json({ error: "not found" }, 404);
+      }
+
       const isEventsRoute = p === "/api/v1/calendar/events"
-        || /^\/api\/v1\/calendar\/events\/[^/]+(?:\/shares(?:\/[^/]+)?)?$/.test(p);
+        || /^\/api\/v1\/calendar\/events\/[^/]+(?:\/shares(?:\/[^/]+)?|\/public-share)?$/.test(p);
       const caller = isEventsRoute ? await resolveCaller(req) : null;
       if (isEventsRoute && !caller) return json({ error: "not authenticated" }, 401);
 
@@ -56,6 +67,27 @@ export async function createServer() {
         const input = parseEventCreate(await req.json().catch(() => null));
         if (!input.ok) return json({ error: input.error }, 400);
         return json(engine.createEvent(caller!.subject, input.value), 201);
+      }
+
+      const publicShareMatch = p.match(/^\/api\/v1\/calendar\/events\/([^/]+)\/public-share$/);
+      if (publicShareMatch) {
+        let id: string;
+        try {
+          id = decodeURIComponent(publicShareMatch[1]!);
+        } catch {
+          return json({ error: "invalid event id" }, 400);
+        }
+        if (!isEventId(id)) return json({ error: "invalid event id" }, 400);
+
+        if (req.method === "POST") {
+          const share = engine.createPublicShare(caller!.subject, id);
+          return share ? json(share, 201) : json({ error: "not found" }, 404);
+        }
+        if (req.method === "DELETE") {
+          const deleted = engine.revokePublicShare(caller!.subject, id);
+          return deleted === undefined ? json({ error: "not found" }, 404) : json({ deleted });
+        }
+        return json({ error: "method not allowed" }, 405);
       }
 
       // Manage explicit shares. Every engine method independently verifies ownership.

@@ -1,5 +1,5 @@
 import { Database } from "bun:sqlite";
-import { randomUUID } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { canonicalTimestamp } from "./validation";
 
 export type EventAccess = "owner" | "editor" | "viewer";
@@ -43,6 +43,20 @@ export interface EventShare {
   updatedAt: string;
 }
 
+export interface PublicEvent {
+  title: string;
+  startTime: string;
+  endTime: string;
+  allDay: boolean;
+  location: string | null;
+  description: string | null;
+}
+
+export interface PublicShare {
+  token: string;
+  publicPath: string;
+}
+
 type EventRow = {
   id: string;
   title: string;
@@ -65,6 +79,17 @@ type EventShareRow = {
   created_at: string;
   updated_at: string;
 };
+
+type PublicEventRow = {
+  title: string;
+  start_time: string;
+  end_time: string;
+  all_day: number;
+  location: string | null;
+  description: string | null;
+};
+
+const PUBLIC_TOKEN = /^[A-Za-z0-9_-]{43}$/;
 
 function rowToEvent(row: EventRow): CalEvent {
   return {
@@ -131,6 +156,18 @@ function createEventSharesTable(db: Database): void {
   )`);
 }
 
+function createPublicEventSharesTable(db: Database): void {
+  db.exec(`CREATE TABLE IF NOT EXISTS public_event_shares (
+    event_id TEXT PRIMARY KEY REFERENCES events(id) ON DELETE CASCADE,
+    token_digest TEXT NOT NULL UNIQUE,
+    created_at TEXT NOT NULL
+  )`);
+}
+
+function tokenDigest(token: string): string {
+  return createHash("sha256").update(token).digest("hex");
+}
+
 export class CalendarEngine {
   db: Database;
 
@@ -189,6 +226,7 @@ export class CalendarEngine {
 
     if (currentVersion < 2) this.canonicalizeStoredTimestamps();
     createEventSharesTable(this.db);
+    createPublicEventSharesTable(this.db);
     this.db.exec("CREATE INDEX IF NOT EXISTS events_owner_start_end_idx ON events (owner_subject, start_time, end_time)");
     this.db.exec("CREATE INDEX IF NOT EXISTS event_shares_grantee_event_idx ON event_shares (grantee_subject, event_id)");
     if (currentVersion < 2) this.db.exec("PRAGMA user_version = 2");
@@ -341,6 +379,47 @@ export class CalendarEngine {
       WHERE event_id = ? AND grantee_subject = ? AND EXISTS (
         SELECT 1 FROM events WHERE events.id = event_shares.event_id AND events.owner_subject = ?
       )`).run(eventId, subject, owner).changes > 0);
+  }
+
+  createPublicShare(owner: string, eventId: string): PublicShare | undefined {
+    return this.transaction(() => {
+      const normalizedOwner = normalizedOwnerSubject(owner);
+      if (!normalizedOwner) return undefined;
+      const event = this.db.prepare("SELECT 1 FROM events WHERE id = ? AND owner_subject = ?").get(eventId, normalizedOwner);
+      if (!event) return undefined;
+
+      const token = randomBytes(32).toString("base64url");
+      this.db.prepare(`INSERT INTO public_event_shares (event_id, token_digest, created_at)
+        VALUES (?, ?, ?)
+        ON CONFLICT(event_id) DO UPDATE SET token_digest = excluded.token_digest, created_at = excluded.created_at`)
+        .run(eventId, tokenDigest(token), new Date().toISOString());
+      return { token, publicPath: `/api/v1/calendar/public/${token}` };
+    });
+  }
+
+  revokePublicShare(owner: string, eventId: string): boolean | undefined {
+    return this.transaction(() => {
+      const normalizedOwner = normalizedOwnerSubject(owner);
+      if (!normalizedOwner) return undefined;
+      const event = this.db.prepare("SELECT 1 FROM events WHERE id = ? AND owner_subject = ?").get(eventId, normalizedOwner);
+      if (!event) return undefined;
+      return this.db.prepare("DELETE FROM public_event_shares WHERE event_id = ?").run(eventId).changes > 0;
+    });
+  }
+
+  getPublicEvent(token: string): PublicEvent | undefined {
+    if (!PUBLIC_TOKEN.test(token)) return undefined;
+    const row = this.db.prepare(`SELECT events.title, events.start_time, events.end_time, events.all_day, events.location, events.description
+      FROM events INNER JOIN public_event_shares ON public_event_shares.event_id = events.id
+      WHERE public_event_shares.token_digest = ?`).get(tokenDigest(token)) as PublicEventRow | null;
+    return row ? {
+      title: row.title,
+      startTime: row.start_time,
+      endTime: row.end_time,
+      allDay: row.all_day === 1,
+      location: row.location,
+      description: row.description,
+    } : undefined;
   }
 
   close(): void {
