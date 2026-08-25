@@ -7,7 +7,7 @@ const EVENT_FIELDS = new Set(["title", "description", "location", "startTime", "
 const MAX_TITLE_LENGTH = 512;
 const MAX_TEXT_LENGTH = 10_000;
 const MAX_RANGE_MS = 366 * 24 * 60 * 60 * 1000;
-const ISO_TIMESTAMP = /^\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,3})?)?(?:Z|[+-]\d{2}:\d{2})?)?$/;
+const ISO_TIMESTAMP = /^(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}):(\d{2})(?::(\d{2})(?:\.(\d{1,3}))?)?(Z|[+-]\d{2}:\d{2})?)?$/;
 
 function invalid<T>(error: string): ValidationResult<T> {
   return { ok: false, error };
@@ -17,9 +17,31 @@ function object(value: unknown): Record<string, unknown> | null {
   return value !== null && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null;
 }
 
-function canonicalTimestamp(value: unknown): string | null {
-  if (typeof value !== "string" || !ISO_TIMESTAMP.test(value)) return null;
-  const timestamp = Date.parse(value);
+export function canonicalTimestamp(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const match = ISO_TIMESTAMP.exec(value);
+  if (!match) return null;
+  const [, yearText, monthText, dayText, hourText, minuteText, secondText, millisecondText, zone] = match;
+  const year = Number(yearText);
+  const month = Number(monthText);
+  const day = Number(dayText);
+  const hour = Number(hourText ?? "0");
+  const minute = Number(minuteText ?? "0");
+  const second = Number(secondText ?? "0");
+  const millisecond = Number((millisecondText ?? "").padEnd(3, "0") || "0");
+  if (month < 1 || month > 12 || hour > 23 || minute > 59 || second > 59) return null;
+  const localInstant = new Date(Date.UTC(year, month - 1, day, hour, minute, second, millisecond));
+  if (
+    localInstant.getUTCFullYear() !== year ||
+    localInstant.getUTCMonth() !== month - 1 ||
+    localInstant.getUTCDate() !== day
+  ) return null;
+  if (zone && zone !== "Z") {
+    const offsetHour = Number(zone.slice(1, 3));
+    const offsetMinute = Number(zone.slice(4, 6));
+    if (offsetHour > 23 || offsetMinute > 59) return null;
+  }
+  const timestamp = zone ? Date.parse(value) : localInstant.getTime();
   return Number.isNaN(timestamp) ? null : new Date(timestamp).toISOString();
 }
 

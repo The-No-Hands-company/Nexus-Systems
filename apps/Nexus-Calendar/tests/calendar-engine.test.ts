@@ -72,6 +72,34 @@ function createNullableOwnerDatabase(path: string): void {
   db.close();
 }
 
+function createOwnedOffsetDatabase(path: string): void {
+  const db = new Database(path);
+  db.exec(`CREATE TABLE events (
+    id TEXT PRIMARY KEY,
+    title TEXT NOT NULL,
+    description TEXT,
+    location TEXT,
+    start_time TEXT NOT NULL,
+    end_time TEXT NOT NULL,
+    all_day INTEGER DEFAULT 0,
+    recurrence TEXT,
+    created_at TEXT DEFAULT (datetime('now')),
+    owner_subject TEXT NOT NULL
+  )`);
+  db.prepare(`INSERT INTO events (
+    id, title, start_time, end_time, created_at, owner_subject
+  ) VALUES (?, ?, ?, ?, ?, ?)`).run(
+    "offset-before-canonical-migration",
+    "Offset legacy event",
+    "2026-09-01T10:00:00-05:00",
+    "2026-09-01T11:00:00-05:00",
+    "2026-08-25T10:00:00.000Z",
+    "usr-alice",
+  );
+  db.exec("PRAGMA user_version = 1");
+  db.close();
+}
+
 const eventInput = {
   title: "Private planning",
   startTime: "2026-09-01T10:00:00.000Z",
@@ -84,6 +112,25 @@ const septemberRange = {
 };
 
 describe("CalendarEngine owned-event migration", () => {
+  it("canonicalizes owned pre-existing offset timestamps before overlap queries", async () => {
+    const path = await temporaryDatabasePath();
+    createOwnedOffsetDatabase(path);
+
+    const engine = new CalendarEngine(path);
+    const events = engine.listEvents("usr-alice", {
+      from: "2026-09-01T14:30:00.000Z",
+      to: "2026-09-01T15:30:00.000Z",
+    });
+
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({
+      startTime: "2026-09-01T15:00:00.000Z",
+      endTime: "2026-09-01T16:00:00.000Z",
+    });
+    expect(engine.db.query("PRAGMA user_version").get()).toMatchObject({ user_version: 2 });
+    engine.close();
+  });
+
   it("finds an offset event that overlaps a UTC query window", () => {
     const engine = new CalendarEngine();
     engine.createEvent("usr-alice", {
@@ -148,7 +195,7 @@ describe("CalendarEngine owned-event migration", () => {
       expect(engine.db.query("PRAGMA index_list(events)").all()).toContainEqual(
         expect.objectContaining({ name: "events_owner_start_end_idx" }),
       );
-      expect(engine.db.query("PRAGMA user_version").get()).toMatchObject({ user_version: 1 });
+      expect(engine.db.query("PRAGMA user_version").get()).toMatchObject({ user_version: 2 });
       engine.close();
     } finally {
       if (previous === undefined) delete process.env.NEXUS_CALENDAR_LEGACY_OWNER_SUBJECT;
@@ -166,7 +213,7 @@ describe("CalendarEngine owned-event migration", () => {
     expect(event).toMatchObject({ ownerSubject: "usr-alice", access: "owner" });
     expect(engine.listEvents("usr-alice", septemberRange)).toHaveLength(1);
     expect(engine.listEvents("usr-bob", septemberRange)).toHaveLength(0);
-    expect(engine.db.query("PRAGMA user_version").get()).toMatchObject({ user_version: 1 });
+    expect(engine.db.query("PRAGMA user_version").get()).toMatchObject({ user_version: 2 });
     engine.close();
   });
 

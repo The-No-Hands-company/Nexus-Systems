@@ -21,6 +21,7 @@ describe("Calendar request validation", () => {
   it("rejects malformed and non-increasing event times", () => {
     expect(parseEventCreate({ ...event, startTime: "not-a-date" })).toMatchObject({ ok: false });
     expect(parseEventCreate({ ...event, startTime: "09/01/2026" })).toMatchObject({ ok: false });
+    expect(parseEventCreate({ ...event, startTime: "2026-02-29T10:00:00.000Z" })).toMatchObject({ ok: false });
     expect(parseEventCreate({ ...event, endTime: event.startTime })).toMatchObject({ ok: false });
   });
 

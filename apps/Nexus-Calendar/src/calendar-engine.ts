@@ -1,5 +1,6 @@
 import { Database } from "bun:sqlite";
 import { randomUUID } from "node:crypto";
+import { canonicalTimestamp } from "./validation";
 
 export type EventAccess = "owner" | "editor" | "viewer";
 
@@ -67,7 +68,9 @@ function normalizedOwnerSubject(value: string | undefined): string | undefined {
 }
 
 function canonicalUtcTimestamp(value: string): string {
-  return new Date(value).toISOString();
+  const canonical = canonicalTimestamp(value);
+  if (!canonical) throw new Error("invalid_event_timestamp");
+  return canonical;
 }
 
 function createOwnedEventsTable(db: Database, name = "events"): void {
@@ -140,9 +143,22 @@ export class CalendarEngine {
       }
     }
 
+    if (currentVersion < 2) this.canonicalizeStoredTimestamps();
     this.db.exec("CREATE INDEX IF NOT EXISTS events_owner_start_end_idx ON events (owner_subject, start_time, end_time)");
-    if (currentVersion < 1) this.db.exec("PRAGMA user_version = 1");
+    if (currentVersion < 2) this.db.exec("PRAGMA user_version = 2");
     this.db.exec("COMMIT");
+  }
+
+  private canonicalizeStoredTimestamps(): void {
+    const rows = this.db.prepare("SELECT id, start_time, end_time FROM events").all() as {
+      id: string;
+      start_time: string;
+      end_time: string;
+    }[];
+    const update = this.db.prepare("UPDATE events SET start_time = ?, end_time = ? WHERE id = ?");
+    for (const row of rows) {
+      update.run(canonicalUtcTimestamp(row.start_time), canonicalUtcTimestamp(row.end_time), row.id);
+    }
   }
 
   createEvent(subject: string, input: EventCreate): CalEvent {

@@ -95,3 +95,29 @@ cd apps/Nexus-Calendar && bun test
 ```
 
 Validation now accepts only ISO-shaped timestamps and returns canonical `toISOString()` UTC values. The engine also canonicalizes create/update timestamps before SQLite persistence, so its lexical overlap SQL remains correct for internal callers as well as HTTP requests. Identity and ownership behavior are unchanged.
+
+## Fix round 2 — Existing-row normalization and real calendar dates
+
+Version-1 databases already have the owned schema, so the prior ownership migration correctly left their table shape intact but did not rewrite timestamp text. Those raw offset values still broke lexical overlap queries. Also, format validation alone allowed JavaScript to roll `2026-02-29` into March.
+
+RED:
+
+```text
+cd apps/Nexus-Calendar && bun test tests/calendar-engine.test.ts tests/validation.test.ts
+10 pass, 4 fail
+- version-1 owned offset row returned zero events for its overlapping UTC range
+- expected schema version 2, received 1
+- 2026-02-29T10:00:00.000Z was accepted and normalized to March 1
+```
+
+GREEN:
+
+```text
+cd apps/Nexus-Calendar && bun test tests/calendar-engine.test.ts tests/validation.test.ts tests/server.test.ts
+26 pass, 0 fail, 63 expectations
+
+cd apps/Nexus-Calendar && bun test
+34 pass, 0 fail, 72 expectations
+```
+
+The `user_version = 2` migration runs in the existing `BEGIN IMMEDIATE` transaction, rewrites every stored event start/end time through the same canonicalizer, and rolls back on an invalid stored timestamp. The canonicalizer now checks calendar component rollover before applying an offset. Identity and owner SQL predicates are unchanged.
