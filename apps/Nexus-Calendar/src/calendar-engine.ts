@@ -107,19 +107,29 @@ export class CalendarEngine {
     if (!eventsTable) {
       createOwnedEventsTable(this.db);
     } else {
-      const columns = this.db.query("PRAGMA table_info(events)").all() as { name: string }[];
-      const isOwnedSchema = columns.some((column) => column.name === "owner_subject");
+      const columns = this.db.query("PRAGMA table_info(events)").all() as {
+        name: string;
+        type: string;
+        notnull: number;
+      }[];
+      const ownershipColumn = columns.find((column) => column.name === "owner_subject");
+      const isOwnedSchema = ownershipColumn?.type.toUpperCase() === "TEXT" && ownershipColumn.notnull === 1;
 
       if (!isOwnedSchema) {
         const rowCount = (this.db.query("SELECT COUNT(*) AS count FROM events").get() as { count: number }).count;
+        const unownedRows = ownershipColumn
+          ? (this.db.query("SELECT COUNT(*) AS count FROM events WHERE owner_subject IS NULL").get() as { count: number }).count
+          : rowCount;
         const legacyOwner = normalizedOwnerSubject(options.legacyOwnerSubject);
-        if (rowCount > 0 && !legacyOwner) throw new Error("legacy_owner_required");
+        if (unownedRows > 0 && !legacyOwner) throw new Error("legacy_owner_required");
 
         createOwnedEventsTable(this.db, "events_owned_migration");
         if (rowCount > 0) {
           this.db.prepare(`INSERT INTO events_owned_migration (
             id, title, description, location, start_time, end_time, all_day, recurrence, created_at, owner_subject
-          ) SELECT id, title, description, location, start_time, end_time, all_day, recurrence, created_at, ? FROM events`).run(legacyOwner);
+          ) SELECT id, title, description, location, start_time, end_time, all_day, recurrence, created_at,
+            ${ownershipColumn ? "COALESCE(owner_subject, ?)" : "?"}
+          FROM events`).run(legacyOwner ?? null);
         }
         this.db.exec("DROP TABLE events");
         this.db.exec("ALTER TABLE events_owned_migration RENAME TO events");

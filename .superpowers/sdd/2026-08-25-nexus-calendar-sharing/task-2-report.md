@@ -34,6 +34,28 @@ cd apps/Nexus-Calendar && bun test
 
 `git diff --check` completed without whitespace errors.
 
+## Fix round 1 — nullable partial ownership schema
+
+The migration now treats `owner_subject` as current only when SQLite reports both `TEXT` affinity and `NOT NULL`. Any other shape is rebuilt transactionally. For a partial ownership schema, existing non-null owners are preserved and only `NULL` owners require the explicit `legacyOwnerSubject`; without it, startup fails with `legacy_owner_required` before any change.
+
+RED:
+
+```text
+cd apps/Nexus-Calendar && bun test tests/calendar-engine.test.ts
+4 pass, 1 fail
+- nullable owner_subject schema containing an unowned row: expected legacy_owner_required; constructor did not throw
+```
+
+GREEN:
+
+```text
+cd apps/Nexus-Calendar && bun test tests/calendar-engine.test.ts tests/server.test.ts
+11 pass, 0 fail, 29 expectations
+
+cd apps/Nexus-Calendar && bun test
+12 pass, 0 fail, 31 expectations
+```
+
 ## Files
 
 - `apps/Nexus-Calendar/src/calendar-engine.ts`

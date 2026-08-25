@@ -45,6 +45,33 @@ function createLegacyDatabase(path: string, titles: string[]): void {
   db.close();
 }
 
+function createNullableOwnerDatabase(path: string): void {
+  const db = new Database(path);
+  db.exec(`CREATE TABLE events (
+    id TEXT PRIMARY KEY,
+    title TEXT NOT NULL,
+    description TEXT,
+    location TEXT,
+    start_time TEXT NOT NULL,
+    end_time TEXT NOT NULL,
+    all_day INTEGER DEFAULT 0,
+    recurrence TEXT,
+    created_at TEXT DEFAULT (datetime('now')),
+    owner_subject TEXT
+  )`);
+  db.prepare(
+    "INSERT INTO events (id, title, start_time, end_time, created_at, owner_subject) VALUES (?, ?, ?, ?, ?, ?)",
+  ).run(
+    "partially-deployed-unowned",
+    "Unowned partial deployment",
+    "2026-09-01T10:00:00.000Z",
+    "2026-09-01T11:00:00.000Z",
+    "2026-08-25T10:00:00.000Z",
+    null,
+  );
+  db.close();
+}
+
 const eventInput = {
   title: "Private planning",
   startTime: "2026-09-01T10:00:00.000Z",
@@ -62,6 +89,23 @@ describe("CalendarEngine owned-event migration", () => {
     createLegacyDatabase(path, ["Unowned event"]);
 
     expect(() => new CalendarEngine(path)).toThrow("legacy_owner_required");
+  });
+
+  it("fails closed for a nullable owner_subject schema containing an unowned row", async () => {
+    const path = await temporaryDatabasePath();
+    createNullableOwnerDatabase(path);
+
+    expect(() => new CalendarEngine(path)).toThrow("legacy_owner_required");
+
+    const engine = new CalendarEngine(path, { legacyOwnerSubject: "usr-founder" });
+    expect(engine.getEvent("partially-deployed-unowned")).toMatchObject({
+      ownerSubject: "usr-founder",
+      access: "owner",
+    });
+    expect(engine.db.query("PRAGMA table_info(events)").all()).toContainEqual(
+      expect.objectContaining({ name: "owner_subject", type: "TEXT", notnull: 1 }),
+    );
+    engine.close();
   });
 
   it("backfills every legacy row from NEXUS_CALENDAR_LEGACY_OWNER_SUBJECT", async () => {
