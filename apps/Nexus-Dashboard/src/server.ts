@@ -33,13 +33,6 @@ const DOMAIN = process.env.DOMAIN || "tnhc.dev";
 const AUTH_HOST = process.env.NEXUS_AUTH_HOST || `auth.${DOMAIN}`;
 /** This app's own public host, so it does not list itself in its own grid. */
 const SELF_HOST = process.env.NEXUS_DASHBOARD_HOST || `app.${DOMAIN}`;
-/**
- * Cloud's public host — not where fetchApps() reads the registry from
- * (CLOUD_URL, below, is the internal address), but the host its own tile's
- * publicUrl carries. Matching on it is how toAppEntries() turns Cloud's tile
- * into an in-shell /cloud link instead of an external one; see apps.ts.
- */
-const CLOUD_HOST = process.env.NEXUS_CLOUD_HOST || `cloud.${DOMAIN}`;
 const AUTH_INTERNAL_URL = process.env.NEXUS_AUTH_INTERNAL_URL || "http://127.0.0.1:4310";
 const CLOUD_URL = process.env.NEXUS_CLOUD_URL || "http://127.0.0.1:8787";
 const CLOUD_API_KEY = process.env.NEXUS_CLOUD_API_KEY || "";
@@ -308,7 +301,7 @@ async function fetchApps(req: Request): Promise<Response> {
       signal: AbortSignal.timeout(3000),
     });
     if (!res.ok) return Response.json({ apps: native });
-    const registry = toAppEntries(await res.json(), AUTH_HOST, SELF_HOST, CLOUD_HOST).filter(
+    const registry = toAppEntries(await res.json(), AUTH_HOST, SELF_HOST).filter(
       (entry) => includeTerminal || entry.id !== "nexus-terminal",
     );
     return Response.json({ apps: mergeApps(registry, native) });

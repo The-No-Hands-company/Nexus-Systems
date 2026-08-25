@@ -7,8 +7,9 @@ export type SystemsApiRegistrationPayload = {
   health: "healthy" | "degraded" | "offline";
   upstreamUrl: string;
   capabilities: string[];
-  /** Calendar events are user data — always behind SSO. */
-  requiresAuth: boolean;
+  path: string;
+  publicUrl: string;
+  delivery: "proxied-app";
   metadata: Record<string, unknown>;
 };
 
@@ -21,9 +22,10 @@ export function buildSystemsApiRegistrationPayload(baseUrl: string): SystemsApiR
     exposed: true,
     health: "healthy",
     upstreamUrl: baseUrl,
-    publicUrl: "/calendar",
+    path: "/calendar",
+    publicUrl: "https://calendar.tnhc.dev",
+    delivery: "proxied-app",
     capabilities: ["calendar", "events", "scheduling"],
-    requiresAuth: true,
     metadata: {
       version: "v1",
       defaultPort: 3068,

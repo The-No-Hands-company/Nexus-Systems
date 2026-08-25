@@ -7,7 +7,7 @@ vi.mock("@xterm/addon-fit", () => ({ FitAddon: class {} }));
 // Mock the api module with only the functions needed by these tests
 vi.mock("./api", () => ({
   listApps: vi.fn(async () => [
-    { id: "nexus-draw", name: "Draw", description: "", url: "https://draw.tnhc.dev", path: "/draw", health: "healthy" },
+    { id: "nexus-draw", name: "Draw", description: "", publicUrl: "https://draw.tnhc.dev", path: "/draw", delivery: "framed", health: "healthy" },
   ]),
   me: vi.fn(async () => ({
     id: "user-founder",
@@ -68,7 +68,7 @@ describe("shell routing", () => {
     expect(screen.queryByTitle("Draw")).toBeNull();
 
     resolveList([
-      { id: "nexus-draw", name: "Draw", description: "", url: "https://draw.tnhc.dev", path: "/draw", health: "healthy" },
+      { id: "nexus-draw", name: "Draw", description: "", publicUrl: "https://draw.tnhc.dev", path: "/draw", delivery: "framed", health: "healthy" },
     ]);
 
     await waitFor(() => expect(screen.getByTitle("Draw")).toBeTruthy());

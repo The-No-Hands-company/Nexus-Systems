@@ -5,13 +5,12 @@
  * with Cloud, and a second node's apps appear with no code change here.
  */
 
+export type SystemsApiDelivery = "shell-native" | "proxied-app" | "framed" | "external";
+
 export type AppEntry = {
   id: string;
   name: string;
   description: string;
-  /** Where the app actually lives: an absolute origin to frame, or the same
-   *  relative path as `path` when the shell renders it itself. */
-  url: string;
   /** The in-shell route this app is reached at — /chat, /mail, /cloud.
    *
    *  The path names the app, never how the shell delivers it. Whether Chat is
@@ -19,6 +18,9 @@ export type AppEntry = {
    *  change; if the URL encoded it, moving Mail to its own origin would break
    *  every link to it even though the app did not move. */
   path: string;
+  /** Direct origin kept separate from the path the launcher opens. */
+  publicUrl?: string;
+  delivery: SystemsApiDelivery;
   health: "healthy" | "offline";
 };
 
@@ -50,11 +52,25 @@ type RawTool = {
   name?: unknown;
   description?: unknown;
   publicUrl?: unknown;
+  /** Compatibility field returned by Dashboard servers before delivery was explicit. */
+  url?: unknown;
+  path?: unknown;
+  delivery?: unknown;
   health?: unknown;
 };
 
 function str(v: unknown): string {
   return typeof v === "string" ? v : "";
+}
+
+function isSafeRelativePath(path: string): boolean {
+  return /^\/(?:[A-Za-z0-9._~-]+(?:\/[A-Za-z0-9._~-]+)*)?$/.test(path);
+}
+
+function deliveryFor(value: unknown): SystemsApiDelivery | undefined {
+  return value === "shell-native" || value === "proxied-app" || value === "framed" || value === "external"
+    ? value
+    : undefined;
 }
 
 /**
@@ -74,7 +90,6 @@ export function toAppEntries(
   payload: unknown,
   authHost: string,
   selfHost?: string,
-  cloudHost?: string,
 ): AppEntry[] {
   const tools = (payload as { tools?: unknown } | null)?.tools;
   if (!Array.isArray(tools)) return [];
@@ -83,33 +98,34 @@ export function toAppEntries(
   for (const raw of tools as RawTool[]) {
     if (!raw || typeof raw !== "object") continue;
 
-    const url = str(raw.publicUrl);
     const id = str(raw.id);
-    if (!url || !id) continue;
+    const publicUrl = str(raw.publicUrl) || str(raw.url);
+    const explicitDelivery = deliveryFor(raw.delivery);
+    if (!id || (!publicUrl && explicitDelivery !== "shell-native")) continue;
+    const rawPath = str(raw.path);
+    const path = isSafeRelativePath(rawPath) ? rawPath : pathForApp(id);
+    // Legacy server records overloaded `url`: an absolute URL was framed and
+    // a relative URL was rendered by the shell. New records are never guessed
+    // as proxied apps; that delivery requires an explicit operator contract.
+    const delivery = explicitDelivery ?? (publicUrl.startsWith("/") ? "shell-native" : "framed");
     // The identity service is not an app you open, and neither is this page:
     // a tile linking to the dashboard, shown on the dashboard, is a button
     // that goes where you already are.
-    if (url.includes(authHost)) continue;
-    if (selfHost && url.includes(selfHost)) continue;
+    if (publicUrl.includes(authHost)) continue;
+    if (selfHost && publicUrl.includes(selfHost)) continue;
     // One tile per destination. Several tools can legitimately share a public
     // address — a published site and the backend behind it are two records
     // pointing at one host — and the person looking at the grid does not care
     // which internal record won, only that the app appears once.
-    if (entries.some((e) => e.url === url)) continue;
-
-    // Cloud's console is a shell-native view now (/cloud, /cloud/tools, ...),
-    // not a site the shell frames. A relative path here — rather than
-    // https://cloud.<domain> — is how the Launcher and the home grid know to
-    // route in-app instead of opening/framing an external host. See
-    // docs/superpowers/specs/2026-08-14-cloud-console-as-shell-views-design.md.
-    const isCloud = !!cloudHost && url.includes(cloudHost);
+    if (entries.some((e) => e.path === path || (publicUrl && e.publicUrl === publicUrl))) continue;
 
     entries.push({
       id,
       name: str(raw.name) || id,
       description: str(raw.description),
-      url: isCloud ? "/cloud" : url,
-      path: isCloud ? "/cloud" : pathForApp(id),
+      path,
+      ...(publicUrl && !publicUrl.startsWith("/") ? { publicUrl } : {}),
+      delivery,
       // Anything that is not explicitly healthy is treated as offline, so a
       // missing or unexpected value fails safe: the tile renders unlinked
       // rather than inviting a click that goes nowhere.
@@ -145,16 +161,16 @@ export function shellNativeEntries(opts: {
       id: "nexus-email",
       name: "Nexus Mail",
       description: "Sovereign mail — read, compose and search your Nexus mailbox",
-      url: "/mail",
       path: "/mail",
+      delivery: "shell-native",
       health: opts.mailHealthy ? "healthy" : "offline",
     },
     {
       id: "nexus-calendar",
       name: "Nexus Calendar",
       description: "Month-view scheduling with events, locations and notes",
-      url: "/calendar",
       path: "/calendar",
+      delivery: "shell-native",
       health: opts.calendarHealthy ? "healthy" : "offline",
     },
   ];
@@ -163,8 +179,8 @@ export function shellNativeEntries(opts: {
       id: "nexus-terminal",
       name: "Nexus Terminal",
       description: "Audited host shell for Nexus operators",
-      url: "/terminal",
       path: "/terminal",
+      delivery: "shell-native",
       health: opts.terminalHealthy ? "healthy" : "offline",
     });
   }
@@ -181,7 +197,7 @@ export function shellNativeEntries(opts: {
  */
 export function mergeApps(registry: AppEntry[], native: AppEntry[]): AppEntry[] {
   const kept = registry.filter(
-    (r) => !native.some((n) => n.id === r.id || n.url === r.url || n.path === r.path),
+    (r) => !native.some((n) => n.id === r.id || n.path === r.path),
   );
   return [...native, ...kept].sort((a, b) => a.name.localeCompare(b.name));
 }

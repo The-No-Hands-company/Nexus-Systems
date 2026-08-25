@@ -5,8 +5,8 @@ import Launcher from "./Launcher";
 import { appById } from "./apps";
 
 const apps = [
-  { id: "nexus-draw", name: "Draw", description: "", url: "https://draw.tnhc.dev", path: "/draw", health: "healthy" as const },
-  { id: "nexus-chat", name: "Chat", description: "", url: "https://chat.tnhc.dev", path: "/chat", health: "offline" as const },
+  { id: "nexus-draw", name: "Draw", description: "", publicUrl: "https://draw.tnhc.dev", path: "/draw", delivery: "framed" as const, health: "healthy" as const },
+  { id: "nexus-chat", name: "Chat", description: "", publicUrl: "https://chat.tnhc.dev", path: "/chat", delivery: "framed" as const, health: "offline" as const },
 ];
 
 describe("Launcher", () => {
@@ -33,7 +33,7 @@ describe("Launcher", () => {
     // shell-native view, not a site to frame.
     const withCloud = [
       ...apps,
-      { id: "nexus-cloud", name: "Cloud", description: "", url: "/cloud", path: "/cloud", health: "healthy" as const },
+      { id: "nexus-cloud", name: "Cloud", description: "", path: "/cloud", delivery: "shell-native" as const, health: "healthy" as const },
     ];
     render(<MemoryRouter><Launcher apps={withCloud} /></MemoryRouter>);
     expect(screen.getByRole("link", { name: /Cloud/ }).getAttribute("href")).toBe("/cloud");

@@ -83,13 +83,14 @@ describe("dashboard server", () => {
     );
     expect(res.status).toBe(200);
     const { apps } = (await res.json()) as {
-      apps: Array<{ id: string; url: string; health: string }>;
+      apps: Array<{ id: string; path: string; delivery: string; health: string }>;
     };
     // Mail is served by this app at /mail and has no public host, so it never
     // appears in Cloud's registry — the shell contributes it.
     expect(apps.map((a) => a.id).sort()).toEqual(expect.arrayContaining(["nexus-calendar", "nexus-chat", "nexus-email", "nexus-terminal"]));
     expect(apps.find((app) => app.id === "nexus-terminal")).toMatchObject({
-      url: "/terminal",
+      path: "/terminal",
+      delivery: "shell-native",
       health: "healthy",
     });
   });
