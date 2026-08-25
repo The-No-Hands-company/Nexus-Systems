@@ -66,6 +66,10 @@ function normalizedOwnerSubject(value: string | undefined): string | undefined {
   return subject === "" || subject === undefined ? undefined : subject;
 }
 
+function canonicalUtcTimestamp(value: string): string {
+  return new Date(value).toISOString();
+}
+
 function createOwnedEventsTable(db: Database, name = "events"): void {
   db.exec(`CREATE TABLE ${name} (
     id TEXT PRIMARY KEY,
@@ -150,8 +154,8 @@ export class CalendarEngine {
       title: input.title,
       description: input.description || undefined,
       location: input.location || undefined,
-      startTime: input.startTime,
-      endTime: input.endTime,
+      startTime: canonicalUtcTimestamp(input.startTime),
+      endTime: canonicalUtcTimestamp(input.endTime),
       allDay: input.allDay || false,
       recurrence: input.recurrence || undefined,
       createdAt: new Date().toISOString(),
@@ -196,8 +200,8 @@ export class CalendarEngine {
       merged.title,
       merged.description ?? null,
       merged.location ?? null,
-      merged.startTime,
-      merged.endTime,
+      canonicalUtcTimestamp(merged.startTime),
+      canonicalUtcTimestamp(merged.endTime),
       merged.allDay ? 1 : 0,
       merged.recurrence ?? null,
       id,

@@ -84,6 +84,25 @@ const septemberRange = {
 };
 
 describe("CalendarEngine owned-event migration", () => {
+  it("finds an offset event that overlaps a UTC query window", () => {
+    const engine = new CalendarEngine();
+    engine.createEvent("usr-alice", {
+      title: "Offset planning",
+      startTime: "2026-09-01T10:00:00-05:00",
+      endTime: "2026-09-01T11:00:00-05:00",
+    });
+
+    const events = engine.listEvents("usr-alice", {
+      from: "2026-09-01T14:30:00.000Z",
+      to: "2026-09-01T15:30:00.000Z",
+    });
+
+    expect(events).toHaveLength(1);
+    expect(events[0]?.startTime).toBe("2026-09-01T15:00:00.000Z");
+    expect(events[0]?.endTime).toBe("2026-09-01T16:00:00.000Z");
+    engine.close();
+  });
+
   it("fails closed when a legacy database has rows but no configured owner", async () => {
     const path = await temporaryDatabasePath();
     createLegacyDatabase(path, ["Unowned event"]);

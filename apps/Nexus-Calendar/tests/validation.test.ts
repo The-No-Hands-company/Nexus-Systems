@@ -20,7 +20,23 @@ describe("Calendar request validation", () => {
 
   it("rejects malformed and non-increasing event times", () => {
     expect(parseEventCreate({ ...event, startTime: "not-a-date" })).toMatchObject({ ok: false });
+    expect(parseEventCreate({ ...event, startTime: "09/01/2026" })).toMatchObject({ ok: false });
     expect(parseEventCreate({ ...event, endTime: event.startTime })).toMatchObject({ ok: false });
+  });
+
+  it("normalizes accepted offset timestamps to UTC ISO strings", () => {
+    expect(parseEventCreate({
+      ...event,
+      startTime: "2026-09-01T10:00:00-05:00",
+      endTime: "2026-09-01T11:00:00-05:00",
+    })).toEqual({
+      ok: true,
+      value: {
+        ...event,
+        startTime: "2026-09-01T15:00:00.000Z",
+        endTime: "2026-09-01T16:00:00.000Z",
+      },
+    });
   });
 
   it("rejects an empty patch", () => {

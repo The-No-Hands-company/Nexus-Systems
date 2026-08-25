@@ -69,3 +69,29 @@ cd apps/Nexus-Calendar && bun test
 ## Concerns
 
 - `bun run check` cannot complete in this isolated worktree: initially `bun-types` was absent. The available cached `bun-types` 1.3.14 is incompatible with this Bun 1.3.12 project's type declarations and reports pre-existing `Request`/`Response` errors in `cloud.ts` and `server.ts`; no source or dependency manifest was changed to mask that environment issue.
+
+## Fix round 1 — Canonical timestamps for overlap queries
+
+SQLite compares the `TEXT` timestamp columns lexically. The original validation accepted any `Date.parse`-able string and retained its source spelling, so `2026-09-01T11:00:00-05:00` incorrectly sorted before a `2026-09-01T14:30:00.000Z` range boundary despite being 16:00 UTC.
+
+RED:
+
+```text
+cd apps/Nexus-Calendar && bun test tests/calendar-engine.test.ts tests/validation.test.ts
+10 pass, 3 fail
+- offset event overlapping 14:30Z–15:30Z returned zero events
+- 09/01/2026 was accepted
+- accepted offset timestamps were not normalized
+```
+
+GREEN:
+
+```text
+cd apps/Nexus-Calendar && bun test tests/calendar-engine.test.ts tests/validation.test.ts tests/server.test.ts
+25 pass, 0 fail, 59 expectations
+
+cd apps/Nexus-Calendar && bun test
+33 pass, 0 fail, 68 expectations
+```
+
+Validation now accepts only ISO-shaped timestamps and returns canonical `toISOString()` UTC values. The engine also canonicalizes create/update timestamps before SQLite persistence, so its lexical overlap SQL remains correct for internal callers as well as HTTP requests. Identity and ownership behavior are unchanged.

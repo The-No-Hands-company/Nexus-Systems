@@ -7,6 +7,7 @@ const EVENT_FIELDS = new Set(["title", "description", "location", "startTime", "
 const MAX_TITLE_LENGTH = 512;
 const MAX_TEXT_LENGTH = 10_000;
 const MAX_RANGE_MS = 366 * 24 * 60 * 60 * 1000;
+const ISO_TIMESTAMP = /^\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,3})?)?(?:Z|[+-]\d{2}:\d{2})?)?$/;
 
 function invalid<T>(error: string): ValidationResult<T> {
   return { ok: false, error };
@@ -16,8 +17,10 @@ function object(value: unknown): Record<string, unknown> | null {
   return value !== null && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null;
 }
 
-function validDate(value: unknown): value is string {
-  return typeof value === "string" && value.length > 0 && !Number.isNaN(Date.parse(value));
+function canonicalTimestamp(value: unknown): string | null {
+  if (typeof value !== "string" || !ISO_TIMESTAMP.test(value)) return null;
+  const timestamp = Date.parse(value);
+  return Number.isNaN(timestamp) ? null : new Date(timestamp).toISOString();
 }
 
 function validateKnownFields(value: Record<string, unknown>): string | null {
@@ -40,8 +43,10 @@ export function parseEventCreate(value: unknown): ValidationResult<EventCreate> 
   if (typeof input.title !== "string") return invalid("title is required");
   const title = input.title.trim();
   if (!title || title.length > MAX_TITLE_LENGTH) return invalid("title must be 1-512 characters");
-  if (!validDate(input.startTime) || !validDate(input.endTime)) return invalid("startTime and endTime must be valid timestamps");
-  if (Date.parse(input.endTime) <= Date.parse(input.startTime)) return invalid("endTime must be after startTime");
+  const startTime = canonicalTimestamp(input.startTime);
+  const endTime = canonicalTimestamp(input.endTime);
+  if (!startTime || !endTime) return invalid("startTime and endTime must be ISO timestamps");
+  if (Date.parse(endTime) <= Date.parse(startTime)) return invalid("endTime must be after startTime");
   if (input.allDay !== undefined && typeof input.allDay !== "boolean") return invalid("allDay must be boolean");
 
   const description = optionalText(input.description);
@@ -52,8 +57,8 @@ export function parseEventCreate(value: unknown): ValidationResult<EventCreate> 
     ok: true,
     value: {
       title,
-      startTime: input.startTime,
-      endTime: input.endTime,
+      startTime,
+      endTime,
       ...(description === undefined ? {} : { description }),
       ...(location === undefined ? {} : { location }),
       ...(input.allDay === undefined ? {} : { allDay: input.allDay }),
@@ -70,8 +75,10 @@ export function parseEventPatch(value: unknown): ValidationResult<EventPatch> {
   if (Object.keys(input).length === 0) return invalid("event patch must not be empty");
   const title = input.title === undefined ? undefined : typeof input.title === "string" ? input.title.trim() : null;
   if (title === null || (title !== undefined && (!title || title.length > MAX_TITLE_LENGTH))) return invalid("title must be 1-512 characters");
-  if (input.startTime !== undefined && !validDate(input.startTime)) return invalid("startTime must be a valid timestamp");
-  if (input.endTime !== undefined && !validDate(input.endTime)) return invalid("endTime must be a valid timestamp");
+  const startTime = input.startTime === undefined ? undefined : canonicalTimestamp(input.startTime);
+  const endTime = input.endTime === undefined ? undefined : canonicalTimestamp(input.endTime);
+  if (startTime === null) return invalid("startTime must be an ISO timestamp");
+  if (endTime === null) return invalid("endTime must be an ISO timestamp");
   if (input.allDay !== undefined && typeof input.allDay !== "boolean") return invalid("allDay must be boolean");
   const description = optionalText(input.description);
   const location = optionalText(input.location);
@@ -81,8 +88,8 @@ export function parseEventPatch(value: unknown): ValidationResult<EventPatch> {
     ok: true,
     value: {
       ...(title === undefined ? {} : { title }),
-      ...(input.startTime === undefined ? {} : { startTime: input.startTime }),
-      ...(input.endTime === undefined ? {} : { endTime: input.endTime }),
+      ...(startTime === undefined ? {} : { startTime }),
+      ...(endTime === undefined ? {} : { endTime }),
       ...(description === undefined ? {} : { description }),
       ...(location === undefined ? {} : { location }),
       ...(input.allDay === undefined ? {} : { allDay: input.allDay }),
@@ -94,12 +101,14 @@ export function parseEventPatch(value: unknown): ValidationResult<EventPatch> {
 export function parseRange(url: URL): ValidationResult<EventRange> {
   const from = url.searchParams.get("from");
   const to = url.searchParams.get("to");
-  if (!validDate(from) || !validDate(to)) return invalid("from and to must be valid timestamps");
-  const fromMs = Date.parse(from);
-  const toMs = Date.parse(to);
+  const normalizedFrom = canonicalTimestamp(from);
+  const normalizedTo = canonicalTimestamp(to);
+  if (!normalizedFrom || !normalizedTo) return invalid("from and to must be ISO timestamps");
+  const fromMs = Date.parse(normalizedFrom);
+  const toMs = Date.parse(normalizedTo);
   if (toMs <= fromMs) return invalid("to must be after from");
   if (toMs - fromMs > MAX_RANGE_MS) return invalid("date range is too large");
-  return { ok: true, value: { from: new Date(fromMs).toISOString(), to: new Date(toMs).toISOString() } };
+  return { ok: true, value: { from: normalizedFrom, to: normalizedTo } };
 }
 
 export function isEventId(value: string): boolean {
