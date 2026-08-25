@@ -28,10 +28,36 @@ jobs:
           bun-version: latest
       - name: Install deps (npm, more reliable in CI)
         run: cd apps/${{ matrix.app }} && npm install --prefer-offline 2>/dev/null || npm install
-      - name: Typecheck
-        run: cd apps/${{ matrix.app }} && npx tsc --noEmit
-      - name: Test
-        run: cd apps/${{ matrix.app }} && bun test
+      # An app with a frontend/ has a second, separate package there. Installing
+      # only the app root left its dependency tree missing, and a bare `bun test`
+      # walks into frontend/ regardless — which is how Nexus-Draw failed on every
+      # run for five days with `Cannot find module 'react/jsx-dev-runtime'`.
+      - name: Install frontend deps (when the app has a frontend)
+        run: |
+          if [ -d "apps/${{ matrix.app }}/frontend" ]; then
+            cd apps/${{ matrix.app }}/frontend
+            npm install --prefer-offline 2>/dev/null || npm install
+          fi
+      # Run the app's own gate rather than a second definition of it.
+      #
+      # This job used to hand-roll `npx tsc --noEmit && bun test`, which is a
+      # copy of what check.sh does — and the copy drifted. Draw's check.sh scopes
+      # the backend run to `bun test tests/` and drives the frontend through its
+      # own vitest config; the workflow's bare `bun test` did neither, so CI ran
+      # 99 tests and failed 7 while check.sh ran 133 and passed. One gate
+      # definition, living in the repo, invoked identically from both sides.
+      #
+      # `bash check.sh`, not `./check.sh`: these files are mode 100644 in git, so
+      # a fresh checkout cannot execute them directly.
+      - name: Gate
+        run: |
+          cd apps/${{ matrix.app }}
+          if [ -f check.sh ]; then
+            bash check.sh
+          else
+            npx tsc --noEmit
+            bun test
+          fi
         env:
           NEXUS_CLOUD_ENABLE_CLOUD_INTEGRATION: "false"
 
@@ -73,13 +99,41 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      # The shared design package emits the token stylesheets that frontends
+      # import (`@nexus/design/dist/nexus-tokens.css`). It is generated, not
+      # committed, so a clean checkout does not have it and `vite build` fails
+      # on a missing file. The app's own build script does this first; this job
+      # skipped it and only got away with that because the typecheck failed
+      # earlier and the build step never ran. Generation is dependency-free.
+      - name: Build design tokens
+        run: cd packages/nexus-design && bun run build
+      # The app root's node_modules, not just the frontend's: a frontend
+      # tsconfig that names `bun-types` in `compilerOptions.types` resolves it by
+      # walking up, and without this the typecheck dies on TS2688.
+      - name: Install deps (app root)
+        run: |
+          if [ -f "apps/${{ matrix.app }}/package.json" ]; then
+            cd apps/${{ matrix.app }}
+            npm install --prefer-offline 2>/dev/null || npm install
+          fi
       - name: Install + Build
         run: cd apps/${{ matrix.app }}/frontend && npm install && npx tsc --noEmit && npx vite build
 
   # ── API Contract Validation ──────────────────────────────────────
   contracts:
     runs-on: ubuntu-latest
-    needs: [bun-apps]
+    # Deliberately depends on nothing.
+    #
+    # This was `needs: [bun-apps]`, which meant a dependency error in one app's
+    # React frontend skipped the whole job. Between 21 and 25 August that is
+    # exactly what happened: 30 consecutive runs, and contract validation did
+    # not execute once. The jobs that test the system as a whole are the ones
+    # worth protecting from an unrelated app's failure, not the ones to sacrifice
+    # to it — and a skipped job reports as absence, not as failure, so nothing
+    # about a red run said the contracts had gone unchecked.
     steps:
       - uses: actions/checkout@v4
       # apps/Nexus-Cloud is a submodule and actions/checkout does not fetch
@@ -120,7 +174,8 @@ jobs:
   # ── Integration Smoke Test ───────────────────────────────────────
   smoke:
     runs-on: ubuntu-latest
-    needs: [bun-apps]
+    # Same reasoning as the contracts job above: this tests the system, not any
+    # single app, so it must not be skipped when one app's matrix entry fails.
     steps:
       - uses: actions/checkout@v4
       # Same reason as the contracts job above: submodules are not fetched by
