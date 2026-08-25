@@ -5,8 +5,9 @@
 
 ## Goal
 
-Make Nexus Calendar a reliable first-class web application in both the
-standalone `calendar.tnhc.dev` surface and the Dashboard `/calendar` surface.
+Make Nexus Calendar a reliable first-class web application with one frontend
+served through both the standalone `calendar.tnhc.dev` surface and the canonical
+shell path `/calendar`.
 Events are private to their owner by default, can be shared explicitly with
 Nexus users, and can be published through revocable public read-only links for
 people outside the Nexus network.
@@ -14,19 +15,23 @@ people outside the Nexus network.
 ## Scope
 
 This increment covers event ownership, internal event sharing, public event
-links, authorization, API validation, consistent Calendar UI behavior, error
-states, migration of existing data, and automated/runtime verification.
+links, authorization, API validation, the shell-integrated proxied-app delivery
+pattern, error states, migration of existing data, and automated/runtime
+verification.
 
 Named multi-event calendars, guest accounts, email invitations, CalDAV,
-recurrence expansion, reminders, and public calendar feeds are out of scope.
-The schema and service boundaries must not prevent named shared calendars from
-being added later.
+recurrence expansion, reminders, public calendar feeds, and migration of every
+existing framed Nexus application are out of scope. The schema and service
+boundaries must not prevent named shared calendars from being added later. The
+registry contract introduced here must support later app-by-app frame removal.
 
 ## Architecture
 
-Nexus Calendar remains the authority for events and sharing. Nexus Dashboard
-remains the same-origin authenticated gateway for its embedded Calendar view.
-The standalone front door continues to serve the Calendar SPA and proxy its API.
+Nexus Calendar remains the authority for events, sharing, and its web frontend.
+Nexus Dashboard remains the same-origin authenticated gateway for the canonical
+`/calendar` route, but it does not own or duplicate Calendar UI components. The
+standalone front door serves the same built Calendar application at
+`calendar.tnhc.dev`.
 
 Every authenticated Calendar request carries an identity asserted by a trusted
 front door. Browser-provided identity headers are always discarded. Dashboard
@@ -40,9 +45,41 @@ Public sharing uses a separate, narrow unauthenticated surface. A random bearer
 token resolves to one published event representation. The route cannot list or
 search events and exposes no authenticated API behavior.
 
-The two React surfaces will consume shared Calendar components and API logic
-instead of maintaining separate copies of the month view. Surface-specific code
-is limited to API base URL and page-shell composition.
+Calendar produces one frontend artifact. Dashboard serves or reverse-proxies
+that artifact beneath `/calendar`, including client-side fallback and assets,
+without an iframe. The Calendar build uses a base-path-safe asset strategy and
+runtime configuration for its API base, public base, and shell context. Direct
+subdomain access serves the identical artifact at `/`. Shell context adds the
+shared Nexus navigation package; standalone context uses the same application
+core with standalone chrome. No Calendar feature code lives in Dashboard.
+
+## Registry and Delivery Contract
+
+Application discovery separates navigation identity from deployment location:
+
+- `path` is the canonical in-shell route and is always relative;
+- `publicUrl` is the optional direct HTTPS origin for bookmarks, integrations,
+  and standalone access;
+- `delivery` is `shell-native`, `proxied-app`, `framed`, or `external`.
+
+`shell-native` is reserved for views genuinely owned by Dashboard, such as the
+account and control-plane console. `proxied-app` is the target for product apps:
+the app owns one frontend while Nexus exposes it through its shell path without
+an iframe. `framed` remains a temporary compatibility state for apps not yet
+migrated. `external` is reserved for destinations Nexus cannot integrate.
+
+Launcher navigation always uses `path`. Calendar registers:
+
+```text
+id=nexus-calendar
+path=/calendar
+publicUrl=https://calendar.tnhc.dev
+delivery=proxied-app
+```
+
+This change updates the shared registry types and Calendar entry. It may map
+existing applications onto explicit delivery values when required for type
+compatibility, but it does not migrate their rendering in this increment.
 
 ## Data Model and Migration
 
@@ -108,8 +145,9 @@ Sharing adds these owner-only endpoints:
 - `GET /api/v1/calendar/public/:token` returns the filtered public event without
   requiring an authenticated identity.
 
-The public web page is served at `/share/:token` and reads only the matching
-`/api/v1/calendar/public/:token` resource.
+The public web page is served at `/share/:token` on the direct Calendar origin
+and reads only the matching `/api/v1/calendar/public/:token` resource. The
+Dashboard origin does not need an unauthenticated public route.
 
 Mutation inputs use allow-listed fields. They reject unknown fields, malformed
 timestamps, an end at or before the start, invalid permission names, blank
@@ -138,9 +176,10 @@ remove grants, create a public link, copy it, and revoke it. The public page is 
 small read-only event view and contains no navigation into authenticated
 Calendar data.
 
-Both web surfaces use the same behavior and responsive layout. The Dashboard
-continues to render Calendar inside its shell; the standalone app renders the
-same core view full-screen.
+Both entry points use the same behavior and responsive layout from the same
+build artifact. Dashboard no longer imports a Calendar page component. The
+proxied application renders shared Nexus navigation when running under the shell
+path; the direct Calendar origin renders its standalone chrome.
 
 ## Error Handling and Operations
 
@@ -153,10 +192,11 @@ Dashboard health probe remains bounded. Proxy routes use method and path
 allow-lists, forward only necessary headers and bodies, and return stable error
 envelopes without leaking upstream details.
 
-Deployment builds the shared frontend artifacts before starting the front door,
-sets the legacy owner for migrations, keeps the private API on loopback, and
-exposes only the authenticated application routes plus the dedicated public
-share route.
+Deployment builds the single Calendar frontend artifact before starting either
+front door, sets the legacy owner for migrations, keeps the private API on
+loopback, and exposes only authenticated application routes plus the dedicated
+public share route. Cache rules distinguish immutable hashed assets from the
+uncached application shell at both base paths.
 
 ## Verification
 
@@ -177,11 +217,16 @@ Frontend tests cover:
 - loading, empty, offline, validation, and mutation-failure states;
 - input preservation on failed saves;
 - permission-aware controls;
-- internal sharing and public-link creation/revocation flows.
+- internal sharing and public-link creation/revocation flows;
+- identical Calendar behavior under `/` and `/calendar` base paths;
+- runtime API-base selection and shell/standalone chrome;
+- absence of an iframe and absence of duplicated Calendar feature code in
+  Dashboard.
 
-Integration verification includes Calendar and Dashboard type checks/tests,
-both production frontend builds, the per-app `check.sh` gates, and an
-authenticated browser smoke test. The smoke test creates a private event,
+Integration verification includes Calendar and Dashboard type checks/tests, the
+single production Calendar build, registry delivery tests, both front-door
+routes, the per-app `check.sh` gates, and an authenticated browser smoke test.
+The smoke test creates a private event,
 proves a second Nexus identity cannot see it, grants that identity access,
 creates and opens a public link without a Nexus session, revokes it, and proves
 the link no longer resolves.
@@ -189,6 +234,10 @@ the link no longer resolves.
 ## Success Criteria
 
 - Calendar is visible and usable from both intended web surfaces.
+- `/calendar` and `calendar.tnhc.dev` execute the same Calendar frontend without
+  an iframe or Dashboard-owned feature duplicate.
+- Discovery exposes distinct `path`, `publicUrl`, and `delivery` fields and the
+  launcher consistently navigates through `path`.
 - Personal events are isolated by default.
 - Explicit Nexus-user sharing enforces viewer/editor permissions.
 - External users can view only one deliberately published event through a
