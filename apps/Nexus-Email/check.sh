@@ -12,6 +12,8 @@ if [ -z "${NEXUS_EMAIL_TEST_DATABASE_URL:-}" ] && [ -f "../../.env" ]; then
     export NEXUS_EMAIL_TEST_DATABASE_URL="postgres://nexus:${POSTGRES_PASSWORD}@localhost:5432/nexus"
 fi
 
-echo -n "nexus-email... "
-cargo test --workspace 2>&1 | tail -5
+echo "nexus-email..."
+# Not truncated to the last five lines: cargo prints the failing test and its
+# panic above the summary, which is the only part worth having on a red run.
+cargo test --workspace
 echo "PASS"
