@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll } from "bun:test";
+import { describe, it, expect, beforeAll, beforeEach, afterEach } from "bun:test";
 
 beforeAll(() => { process.env.GATE_SKIP_AUTH = "true"; });
 
@@ -23,7 +23,7 @@ describe("route policy", () => {
   it("defaults to public when Cloud says nothing about auth", async () => {
     const { buildRouteMap } = await import("../proxy");
     const map = buildRouteMap([{ domain: "draw.tnhc.dev", upstream: "http://127.0.0.1:9" }] as never);
-    expect(map["draw.tnhc.dev"]).toEqual({ upstream: "http://127.0.0.1:9", requiresAuth: false });
+    expect(map["draw.tnhc.dev"]).toEqual({ upstream: "http://127.0.0.1:9", requiresAuth: false, kind: "app" });
   });
 
   it("honours requiresAuth when Cloud sets it", async () => {
@@ -63,7 +63,7 @@ describe("identity header is proxy-controlled", () => {
 
     try {
       __setRoutesForTest({
-        "echo.tnhc.dev": { upstream: "http://upstream.invalid", requiresAuth: false },
+        "echo.tnhc.dev": { upstream: "http://upstream.invalid", requiresAuth: false, kind: "app" },
       });
 
       // The attack: a client asserts an identity the proxy never minted. On a
@@ -102,7 +102,7 @@ describe("Dashboard terminal WebSocket routing", () => {
 
     try {
       __setRoutesForTest({
-        "app.tnhc.dev": { upstream: "http://client-selected.invalid", requiresAuth: false },
+        "app.tnhc.dev": { upstream: "http://client-selected.invalid", requiresAuth: false, kind: "app" },
       });
       await handleRequest(upgradeRequest("http://app.tnhc.dev/api/terminal/attach?cols=91&rows=27"), {
         upgrade(_request, options) {
@@ -126,8 +126,8 @@ describe("Dashboard terminal WebSocket routing", () => {
   it("never carries browser credentials on sibling WebSocket routes or hosts", async () => {
     const { handleRequest, __setRoutesForTest } = await import("../proxy");
     __setRoutesForTest({
-      "app.tnhc.dev": { upstream: "http://127.0.0.1:43132", requiresAuth: false },
-      "chat.tnhc.dev": { upstream: "http://127.0.0.1:43133", requiresAuth: false },
+      "app.tnhc.dev": { upstream: "http://127.0.0.1:43132", requiresAuth: false, kind: "app" },
+      "chat.tnhc.dev": { upstream: "http://127.0.0.1:43133", requiresAuth: false, kind: "app" },
     });
 
     for (const url of [
@@ -152,7 +152,7 @@ describe("Dashboard terminal WebSocket routing", () => {
     const { handleRequest, __setRoutesForTest } = await import("../proxy");
     const previous = process.env.DASHBOARD_UPSTREAM;
     __setRoutesForTest({
-      "app.tnhc.dev": { upstream: "http://client-selected.invalid", requiresAuth: false },
+      "app.tnhc.dev": { upstream: "http://client-selected.invalid", requiresAuth: false, kind: "app" },
     });
 
     try {
@@ -255,5 +255,57 @@ describe("response encoding hygiene", () => {
     expect(headers.get("content-length")).toBeNull();
     // Everything else must survive: this is hygiene, not a purge.
     expect(headers.get("content-type")).toBe("application/json");
+  });
+});
+
+describe("app / site classification", () => {
+  // These run with the gate ACTIVE. The rest of this file sets GATE_SKIP_AUTH
+  // in beforeAll to exercise forwarding; here the decision itself is the thing
+  // under test, so the variable is cleared and restored around each case.
+  let saved: string | undefined;
+  beforeEach(() => {
+    saved = process.env.GATE_SKIP_AUTH;
+    delete process.env.GATE_SKIP_AUTH;
+  });
+  afterEach(() => {
+    if (saved === undefined) Reflect.deleteProperty(process.env, "GATE_SKIP_AUTH");
+    else process.env.GATE_SKIP_AUTH = saved;
+  });
+
+  it("gates a host Cloud has a route for, whatever the path looks like", async () => {
+    const { handleRequest, __setRoutesForTest } = await import("../proxy");
+    __setRoutesForTest({
+      "calendar.tnhc.dev": { upstream: "http://127.0.0.1:9", requiresAuth: false, kind: "app" },
+    });
+
+    // Every one of these was served without a session under the old path-shape
+    // rule, because none of them contains a dot.
+    for (const path of ["/", "/v1/events", "/graphql", "/admin/export"]) {
+      const res = await handleRequest(new Request(`http://calendar.tnhc.dev${path}`));
+      expect(res.status).toBe(302);
+      expect(res.headers.get("location") ?? "").toContain("auth.tnhc.dev/login");
+    }
+  });
+
+  it("serves a wildcard host through Hosting without a session", async () => {
+    // No route row and not one of the static app fallbacks, so this is a
+    // user-deployed site: public, including the static files the old rule
+    // redirected to a login page because they contain a dot.
+    const { handleRequest, __setRoutesForTest } = await import("../proxy");
+    __setRoutesForTest({ "calendar.tnhc.dev": { upstream: "http://127.0.0.1:9", requiresAuth: false, kind: "app" } });
+
+    for (const path of ["/", "/style.css", "/app.js", "/favicon.ico"]) {
+      const res = await handleRequest(new Request(`http://someones-site.tnhc.dev${path}`));
+      // 502 is the upstream being absent in tests — what matters is that the
+      // gate let it through rather than answering 302 itself.
+      expect(res.status).not.toBe(302);
+    }
+  });
+
+  it("keeps the login host reachable so sign-in cannot deadlock", async () => {
+    const { handleRequest, __setRoutesForTest } = await import("../proxy");
+    __setRoutesForTest({});
+    const res = await handleRequest(new Request("http://auth.tnhc.dev/login"));
+    expect(res.status).not.toBe(302);
   });
 });

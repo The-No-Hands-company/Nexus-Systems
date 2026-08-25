@@ -165,7 +165,7 @@ describe("production Terminal public hop", () => {
       const { __setRoutesForTest, startProxy } = await import("../proxy");
       __setRoutesForTest({
         // A mutable route entry must not select the credential-bearing target.
-        "app.tnhc.dev": { upstream: "http://client-selected.invalid", requiresAuth: false },
+        "app.tnhc.dev": { upstream: "http://client-selected.invalid", requiresAuth: false, kind: "app" },
       });
       proxy = startProxy();
 
