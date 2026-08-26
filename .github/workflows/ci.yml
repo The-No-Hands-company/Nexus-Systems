@@ -61,6 +61,42 @@ jobs:
         env:
           NEXUS_CLOUD_ENABLE_CLOUD_INTEGRATION: "false"
 
+  # ── The identity contract, and the services that trust it ───────
+  #
+  # Added because the ecosystem had three separate answers to "who is asking"
+  # and no CI covering any of them. @nexus/identity is now the single
+  # implementation; Calendar and Dashboard import it. A break here is a break
+  # in every service that trusts it, so it runs before them and they run beside
+  # it — none of these were in CI at all before.
+  identity:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - dir: packages/nexus-identity
+          - dir: apps/Nexus-Calendar
+          - dir: apps/Nexus-Dashboard
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - name: Install deps (when the unit has any)
+        run: |
+          if [ -f "${{ matrix.dir }}/package.json" ]; then
+            cd "${{ matrix.dir }}"
+            npm install --prefer-offline 2>/dev/null || npm install
+          fi
+      - name: Install frontend deps (when present)
+        run: |
+          if [ -d "${{ matrix.dir }}/frontend" ]; then
+            cd "${{ matrix.dir }}/frontend"
+            npm install --prefer-offline 2>/dev/null || npm install
+          fi
+      - name: Gate
+        run: cd "${{ matrix.dir }}" && bash check.sh
+
   # ── Rust engines ─────────────────────────────────────────────────
   rust-engines:
     runs-on: ubuntu-latest

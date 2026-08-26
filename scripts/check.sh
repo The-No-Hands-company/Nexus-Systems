@@ -19,11 +19,17 @@ cd "$(dirname "$0")/.."
 # unbounded is a hang.
 TIMEOUT="${CHECK_TIMEOUT:-900}"
 
+# Shared packages are gated too. @nexus/identity in particular is the one
+# implementation of "who is asking" that Calendar and Dashboard both import, so
+# a break there is a break in every service that trusts it — leaving it out of
+# the sweep would mean the most load-bearing code in the repo had no gate.
 if [ "$#" -gt 0 ]; then
   APPS=()
-  for name in "$@"; do APPS+=("apps/$name/"); done
+  for name in "$@"; do
+    if [ -d "packages/$name" ]; then APPS+=("packages/$name/"); else APPS+=("apps/$name/"); fi
+  done
 else
-  APPS=(apps/Nexus-*/)
+  APPS=(packages/*/ apps/Nexus-*/)
 fi
 
 PASSED=(); FAILED=(); TIMEDOUT=(); SKIPPED=()

@@ -17,10 +17,17 @@ function mintToken(over: {
   sub?: string; aud?: string; exp?: number; alg?: string; kid?: string; tamper?: boolean;
 } = {}): string {
   const header = { alg: over.alg ?? "RS256", kid: over.kid ?? KID, typ: "JWT" };
+  // Mirrors buildIdentityClaims() in apps/Nexus-Auth/src/identity.ts. The
+  // issuer and typ matter: Auth signs service tokens with the same key, so
+  // those two claims are what separate a user from a machine.
   const payload = {
-    iss: "https://auth.tnhc.dev",
+    iss: "nexus-auth",
     sub: over.sub ?? "usr-alice",
     aud: over.aud ?? AUDIENCE,
+    email: "alice@tnhc.dev",
+    username: "alice",
+    role: "user",
+    typ: "identity",
     iat: Math.floor(Date.now() / 1000) - 10,
     exp: over.exp ?? Math.floor(Date.now() / 1000) + 120,
     jti: randomUUID(),
@@ -145,6 +152,25 @@ describe("the proxy identity token", () => {
 
   it("rejects a token signed by a key the JWKS does not publish", async () => {
     expect(await resolveCaller(req({ "x-nexus-identity": mintToken({ kid: "unknown-kid" }) }))).toBeNull();
+  });
+
+  it("rejects a service token aimed at this audience", async () => {
+    // issueServiceToken() in Auth signs with the same key and kid, takes both
+    // sub and aud from its caller, and sets no typ. Before the shared contract
+    // this verifier accepted one as the user its sub named.
+    const now = Math.floor(Date.now() / 1000);
+    const header = { alg: "RS256", kid: KID, typ: "JWT" };
+    const payload = {
+      iss: "nexus-auth", sub: "usr-victim", aud: AUDIENCE,
+      scopes: ["service:read"], role: "service", iat: now, exp: now + 3600, jti: randomUUID(),
+    };
+    const signingInput = `${b64url(JSON.stringify(header))}.${b64url(JSON.stringify(payload))}`;
+    const signer = createSign("RSA-SHA256");
+    signer.update(signingInput);
+    signer.end();
+    const serviceToken = `${signingInput}.${signer.sign(privateKey).toString("base64url")}`;
+
+    expect(await resolveCaller(req({ "x-nexus-identity": serviceToken }))).toBeNull();
   });
 
   it("rejects a structurally malformed token", async () => {
