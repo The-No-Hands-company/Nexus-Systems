@@ -166,8 +166,9 @@ export function renderContrastReport(findings: Finding[]): string {
 }
 
 const here = dirname(fileURLToPath(import.meta.url));
-const dist = join(here, "..", "dist");
-const tokensDir = join(here, "..", "tokens");
+const pkgRoot = join(here, "..");
+const dist = join(pkgRoot, "dist");
+const tokensDir = join(pkgRoot, "tokens");
 
 const THEME_IDS = ["void", "abyss", "petrol", "slate"] as const;
 const DENSITY_IDS = ["balanced", "compact"] as const;
@@ -202,8 +203,10 @@ for (const id of THEME_IDS) {
 }
 const failures = findings.filter((f) => !f.ok);
 
-mkdirSync(dist, { recursive: true });
-writeFileSync(join(dist, "contrast-report.md"), renderContrastReport(findings));
+// The report is tracked (package root), not gitignored dist/: three of the
+// four themes never render on a real screen, so this is the durable,
+// diffable record that they were verified, not just build exhaust.
+writeFileSync(join(pkgRoot, "contrast-report.md"), renderContrastReport(findings));
 
 if (failures.length > 0) {
   for (const f of failures) {
@@ -212,6 +215,7 @@ if (failures.length > 0) {
   throw new Error(`contrast gate failed: ${failures.length} pair(s) below AA`);
 }
 
+mkdirSync(dist, { recursive: true });
 writeFileSync(
   join(dist, "nexus-tokens.css"),
   renderScopedCss(base, themes, densities, { theme: "void", density: "balanced" }),
