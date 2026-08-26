@@ -18,7 +18,7 @@
     "@types/react-dom": "^18.3.7",
     "@vitejs/plugin-react": "^4.7.0",
     "tailwindcss": "^4.3.3",
-    "typescript": "catalog:",
+    "typescript": "^5.9.3",
     "vite": "^5.4.21"
   }
 }

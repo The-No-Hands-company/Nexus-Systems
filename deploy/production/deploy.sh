@@ -116,6 +116,43 @@ cmd_start() {
     export NEXUS_ISSUES_TOKEN="${NEXUS_ISSUES_TOKEN:-}"
     [ -z "$NEXUS_ISSUES_TOKEN" ] && log "NEXUS_ISSUES_TOKEN unset — in-app issue reporting will answer 503"
 
+    # Calendar's private hop secret.
+    #
+    # Calendar is loopback-only and has no session of its own: Dashboard tells
+    # it who is asking via x-nexus-subject. That header is a bare string, so
+    # Calendar only believes it when the request also carries this secret —
+    # which is why it must reach BOTH services and must never reach a browser
+    # or any frontend build.
+    #
+    # Generated once and persisted beside the app, same as every other
+    # credential here. 32 bytes of urandom, hex-encoded.
+    if [ -z "${NEXUS_CALENDAR_DASHBOARD_SECRET:-}" ] && [ -f "$ROOT/apps/Nexus-Calendar/.env" ]; then
+        NEXUS_CALENDAR_DASHBOARD_SECRET="$(sed -n 's/^NEXUS_CALENDAR_DASHBOARD_SECRET=//p' "$ROOT/apps/Nexus-Calendar/.env" \
+            | head -1 | tr -d '\r' | sed -e 's/^"//' -e 's/"$//' -e "s/^'//" -e "s/'\$//")"
+        [ -n "$NEXUS_CALENDAR_DASHBOARD_SECRET" ] && log "Adopted NEXUS_CALENDAR_DASHBOARD_SECRET from apps/Nexus-Calendar/.env"
+    fi
+    if [ -z "${NEXUS_CALENDAR_DASHBOARD_SECRET:-}" ]; then
+        NEXUS_CALENDAR_DASHBOARD_SECRET="$(head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')"
+        umask 077
+        printf 'NEXUS_CALENDAR_DASHBOARD_SECRET=%s\n' "$NEXUS_CALENDAR_DASHBOARD_SECRET" \
+            >> "$ROOT/apps/Nexus-Calendar/.env"
+        log "Generated NEXUS_CALENDAR_DASHBOARD_SECRET into apps/Nexus-Calendar/.env"
+    fi
+    export NEXUS_CALENDAR_DASHBOARD_SECRET
+
+    # The owner for events that predate ownership.
+    #
+    # Calendar refuses to start when it finds unowned rows and this is unset —
+    # deliberately. Those events have no recorded owner and none can be
+    # inferred, and the alternative to stopping is guessing, which means handing
+    # one person's calendar to another. Set it to the subject that should own
+    # them (an Auth user id, e.g. usr-xxxxxxxx-N) and the migration backfills
+    # once, after which it is never read again.
+    export NEXUS_CALENDAR_LEGACY_OWNER_SUBJECT="${NEXUS_CALENDAR_LEGACY_OWNER_SUBJECT:-}"
+    if [ -z "$NEXUS_CALENDAR_LEGACY_OWNER_SUBJECT" ]; then
+        warn "NEXUS_CALENDAR_LEGACY_OWNER_SUBJECT unset — calendar will refuse to start if any pre-ownership events remain"
+    fi
+
     # Same pattern for Email's database URL: the value lives beside the app so
     # a credential is never written into this script or the repo.
     if [ -z "${NEXUS_EMAIL_DATABASE_URL:-}" ] && [ -f "$ROOT/apps/Nexus-Email/.env" ]; then
@@ -271,7 +308,10 @@ cmd_start() {
         start_service "calendar" "$ROOT/apps/Nexus-Calendar" 3068 \
             PORT=3068 \
             NEXUS_BIND_HOST=127.0.0.1 \
-            NEXUS_NEXUS_CALENDAR_BASE_URL=http://127.0.0.1:8092 \
+            NEXUS_CALENDAR_BASE_URL=http://127.0.0.1:8092 \
+            NEXUS_CALENDAR_DASHBOARD_SECRET="$NEXUS_CALENDAR_DASHBOARD_SECRET" \
+            NEXUS_CALENDAR_LEGACY_OWNER_SUBJECT="$NEXUS_CALENDAR_LEGACY_OWNER_SUBJECT" \
+            NEXUS_AUTH_INTERNAL_URL=http://127.0.0.1:4310 \
             NEXUS_CLOUD_URL=http://localhost:8787 \
             NEXUS_CLOUD_API_KEY="$NEXUS_CLOUD_API_KEY" \
             bun run src/index.ts
@@ -328,6 +368,8 @@ cmd_start() {
             NEXUS_CLOUD_URL=http://localhost:8787 \
             NEXUS_CLOUD_API_KEY="$NEXUS_CLOUD_API_KEY" \
             NEXUS_TERMINAL_URL=http://127.0.0.1:3110 \
+            NEXUS_CALENDAR_URL=http://127.0.0.1:3068 \
+            NEXUS_CALENDAR_DASHBOARD_SECRET="$NEXUS_CALENDAR_DASHBOARD_SECRET" \
             NEXUS_ISSUES_TOKEN="$NEXUS_ISSUES_TOKEN" \
             bun run src/index.ts
     fi

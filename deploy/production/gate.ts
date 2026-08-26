@@ -95,28 +95,6 @@ export function readCookies(req: Request, name: string): string[] {
   return out;
 }
 
-function readCookie(req: Request, name: string): string | null {
-  const header = req.headers.get("cookie");
-  if (!header) return null;
-  for (const part of header.split(";")) {
-    const eq = part.indexOf("=");
-    if (eq === -1) continue;
-    if (part.slice(0, eq).trim() !== name) continue;
-    const raw = part.slice(eq + 1).trim();
-    try {
-      return decodeURIComponent(raw);
-    } catch {
-      // decodeURIComponent throws on malformed escapes like "%zz". Unhandled,
-      // that turned any request carrying a broken cookie into a 500 from the
-      // proxy — a crash anyone could trigger with one header, on the one code
-      // path every gated request goes through. A cookie we cannot decode is
-      // simply not a session.
-      return null;
-    }
-  }
-  return null;
-}
-
 /**
  * True only for https URLs on the configured domain.
  *
@@ -248,19 +226,48 @@ export async function gate(
   // Health checks are always public.
   if (PUBLIC_PATHS.has(url.pathname)) return { allow: true, identityToken: null };
 
-  // Static assets and the SPA shell are always public. Hashed filenames carry
-  // no user data; blocking them prevents the SPA from loading at all. Auth is
-  // enforced on the API layer (/ipa/*), not the static file layer.
-  if (url.pathname.startsWith("/assets/") ||
-      url.pathname === "/index.html" ||
-      !url.pathname.includes(".") && !url.pathname.startsWith("/ipa/") && !url.pathname.startsWith("/api/")) {
+  // A CORS preflight travels without credentials by specification — the browser
+  // strips cookies from it — so gating one can only ever fail. Redirecting it to
+  // the login page produces a 302 the browser reads as "preflight failed", and
+  // the real request is never sent, which is how a blanket gate silently breaks
+  // every cross-origin caller.
+  //
+  // Letting it through discloses nothing: the response carries the app's CORS
+  // policy and no user data, and the request it precedes is gated normally.
+  if (req.method === "OPTIONS") return { allow: true, identityToken: null };
+
+  // User-deployed sites are public, whole. See RouteTarget.kind in proxy.ts:
+  // only the wildcard fallback to Hosting's site-proxy produces "site", so a
+  // registered app can never reach this branch.
+  if (target.kind === "site") return { allow: true, identityToken: null };
+
+  // ── Everything below here is an application host: default deny. ──────────
+  //
+  // The previous rule tried to identify the SPA shell by the *shape* of the
+  // path — allow anything without a dot in it that is not under /api/ or
+  // /ipa/ — and got the answer wrong in both directions.
+  //
+  // Too open: every extensionless path on every host was public, so an app
+  // serving under /v1/, /graphql, /rest/ or /webhooks/ was unauthenticated with
+  // nothing in the commit history to say so. Verified against the live proxy:
+  // /admin/users/export and /internal/metrics both returned 200 with no cookie.
+  //
+  // Too closed: a dot meant "gated", so /style.css, /app.js and /favicon.ico
+  // were redirected to the login page on every host — including sites, whose
+  // homepages only rendered because they happened to be extensionless.
+  //
+  // A URL's shape is a guess about intent. This is a statement of it: on an app
+  // host exactly one thing is readable without a session, and it is named.
+  //
+  // /assets/ is Vite's hashed build output. It carries no user data, and
+  // keeping it readable means a signed-in page still renders its own CSS and JS
+  // during a brief Auth outage rather than redirecting mid-load. Nothing else
+  // is exempt: an unauthenticated request for the document itself is supposed
+  // to become a login redirect, and it now does, carrying the address the user
+  // asked for so they land there afterwards.
+  if (url.pathname.startsWith("/assets/")) {
     return { allow: true, identityToken: null };
   }
-
-  // Default-deny: every other host requires a signed-in session.
-  // The old behaviour read requiresAuth from Cloud's route table, but that
-  // field doesn't survive tool registration (buildTool drops it) and has no
-  // setter endpoint. Enforcing here is the single point of truth.
 
   // Try every candidate: one stale cookie must not shadow a valid one.
   let identityToken: string | null = null;

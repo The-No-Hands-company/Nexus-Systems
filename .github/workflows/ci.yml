@@ -28,12 +28,96 @@ jobs:
           bun-version: latest
       - name: Install deps (npm, more reliable in CI)
         run: cd apps/${{ matrix.app }} && npm install --prefer-offline 2>/dev/null || npm install
-      - name: Typecheck
-        run: cd apps/${{ matrix.app }} && npx tsc --noEmit
-      - name: Test
-        run: cd apps/${{ matrix.app }} && bun test
+      # An app with a frontend/ has a second, separate package there. Installing
+      # only the app root left its dependency tree missing, and a bare `bun test`
+      # walks into frontend/ regardless — which is how Nexus-Draw failed on every
+      # run for five days with `Cannot find module 'react/jsx-dev-runtime'`.
+      - name: Install frontend deps (when the app has a frontend)
+        run: |
+          if [ -d "apps/${{ matrix.app }}/frontend" ]; then
+            cd apps/${{ matrix.app }}/frontend
+            npm install --prefer-offline 2>/dev/null || npm install
+          fi
+      # Run the app's own gate rather than a second definition of it.
+      #
+      # This job used to hand-roll `npx tsc --noEmit && bun test`, which is a
+      # copy of what check.sh does — and the copy drifted. Draw's check.sh scopes
+      # the backend run to `bun test tests/` and drives the frontend through its
+      # own vitest config; the workflow's bare `bun test` did neither, so CI ran
+      # 99 tests and failed 7 while check.sh ran 133 and passed. One gate
+      # definition, living in the repo, invoked identically from both sides.
+      #
+      # `bash check.sh`, not `./check.sh`: these files are mode 100644 in git, so
+      # a fresh checkout cannot execute them directly.
+      - name: Gate
+        run: |
+          cd apps/${{ matrix.app }}
+          if [ -f check.sh ]; then
+            bash check.sh
+          else
+            npx tsc --noEmit
+            bun test
+          fi
         env:
           NEXUS_CLOUD_ENABLE_CLOUD_INTEGRATION: "false"
+
+  # ── The production edge, and the repository's own shape ─────────
+  #
+  # deploy/production is the reverse proxy and the SSO gate: every request to
+  # every host on the domain goes through it, and it had no CI at all. Two of
+  # its own tests were sitting red on main for days as a direct result. Coverage
+  # should follow blast radius, and nothing in this repository has more.
+  edge:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      # Structural only — no network, no submodule fetching. Catches a submodule
+      # declared in .gitmodules with no gitlink in the index, or the reverse:
+      # states that make the repository impossible for anyone else to clone
+      # correctly and that are invisible by hand.
+      - name: Verify repository structure
+        run: bash scripts/bootstrap.sh --verify
+      - name: Gate
+        run: cd deploy/production && bash check.sh
+
+  # ── The identity contract, and the services that trust it ───────
+  #
+  # Added because the ecosystem had three separate answers to "who is asking"
+  # and no CI covering any of them. @nexus/identity is now the single
+  # implementation; Calendar and Dashboard import it. A break here is a break
+  # in every service that trusts it, so it runs before them and they run beside
+  # it — none of these were in CI at all before.
+  identity:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - dir: packages/nexus-identity
+          - dir: apps/Nexus-Calendar
+          - dir: apps/Nexus-Dashboard
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - name: Install deps (when the unit has any)
+        run: |
+          if [ -f "${{ matrix.dir }}/package.json" ]; then
+            cd "${{ matrix.dir }}"
+            npm install --prefer-offline 2>/dev/null || npm install
+          fi
+      - name: Install frontend deps (when present)
+        run: |
+          if [ -d "${{ matrix.dir }}/frontend" ]; then
+            cd "${{ matrix.dir }}/frontend"
+            npm install --prefer-offline 2>/dev/null || npm install
+          fi
+      - name: Gate
+        run: cd "${{ matrix.dir }}" && bash check.sh
 
   # ── Rust engines ─────────────────────────────────────────────────
   rust-engines:
@@ -73,13 +157,41 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      # The shared design package emits the token stylesheets that frontends
+      # import (`@nexus/design/dist/nexus-tokens.css`). It is generated, not
+      # committed, so a clean checkout does not have it and `vite build` fails
+      # on a missing file. The app's own build script does this first; this job
+      # skipped it and only got away with that because the typecheck failed
+      # earlier and the build step never ran. Generation is dependency-free.
+      - name: Build design tokens
+        run: cd packages/nexus-design && bun run build
+      # The app root's node_modules, not just the frontend's: a frontend
+      # tsconfig that names `bun-types` in `compilerOptions.types` resolves it by
+      # walking up, and without this the typecheck dies on TS2688.
+      - name: Install deps (app root)
+        run: |
+          if [ -f "apps/${{ matrix.app }}/package.json" ]; then
+            cd apps/${{ matrix.app }}
+            npm install --prefer-offline 2>/dev/null || npm install
+          fi
       - name: Install + Build
         run: cd apps/${{ matrix.app }}/frontend && npm install && npx tsc --noEmit && npx vite build
 
   # ── API Contract Validation ──────────────────────────────────────
   contracts:
     runs-on: ubuntu-latest
-    needs: [bun-apps]
+    # Deliberately depends on nothing.
+    #
+    # This was `needs: [bun-apps]`, which meant a dependency error in one app's
+    # React frontend skipped the whole job. Between 21 and 25 August that is
+    # exactly what happened: 30 consecutive runs, and contract validation did
+    # not execute once. The jobs that test the system as a whole are the ones
+    # worth protecting from an unrelated app's failure, not the ones to sacrifice
+    # to it — and a skipped job reports as absence, not as failure, so nothing
+    # about a red run said the contracts had gone unchecked.
     steps:
       - uses: actions/checkout@v4
       # apps/Nexus-Cloud is a submodule and actions/checkout does not fetch
@@ -120,7 +232,8 @@ jobs:
   # ── Integration Smoke Test ───────────────────────────────────────
   smoke:
     runs-on: ubuntu-latest
-    needs: [bun-apps]
+    # Same reasoning as the contracts job above: this tests the system, not any
+    # single app, so it must not be skipped when one app's matrix entry fails.
     steps:
       - uses: actions/checkout@v4
       # Same reason as the contracts job above: submodules are not fetched by
@@ -135,6 +248,22 @@ jobs:
           bun-version: latest
       - name: Install Cloud deps
         run: cd apps/Nexus-Cloud && npm install --prefer-offline 2>/dev/null || npm install
+      # Apps that declare their own runtime dependencies get a real install,
+      # BEFORE the symlink below, which only fills in apps that have nothing.
+      #
+      # Pointing every app at Nexus-Cloud's node_modules works for the eighty-odd
+      # scaffolds because they have no dependencies to miss. It cannot work for
+      # one that does: Nexus-Draw died on `Cannot find package 'yjs'` every run,
+      # reported only as a closed port. Of the ninety-one apps this job starts,
+      # exactly three declare dependencies, so this is three installs and not
+      # ninety.
+      - name: Install deps for apps that have any
+        run: |
+          for app in Nexus-Draw Nexus-Auth; do
+            if [ -f "apps/$app/package.json" ]; then
+              ( cd "apps/$app" && { npm install --prefer-offline 2>/dev/null || npm install; } )
+            fi
+          done
       # See the contracts job: `[ test ] && cmd` in a loop makes the step exit
       # non-zero whenever the guard is false on the final iteration.
       - name: Symlink node_modules + fix data
