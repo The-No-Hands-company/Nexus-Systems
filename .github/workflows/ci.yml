@@ -248,6 +248,22 @@ jobs:
           bun-version: latest
       - name: Install Cloud deps
         run: cd apps/Nexus-Cloud && npm install --prefer-offline 2>/dev/null || npm install
+      # Apps that declare their own runtime dependencies get a real install,
+      # BEFORE the symlink below, which only fills in apps that have nothing.
+      #
+      # Pointing every app at Nexus-Cloud's node_modules works for the eighty-odd
+      # scaffolds because they have no dependencies to miss. It cannot work for
+      # one that does: Nexus-Draw died on `Cannot find package 'yjs'` every run,
+      # reported only as a closed port. Of the ninety-one apps this job starts,
+      # exactly three declare dependencies, so this is three installs and not
+      # ninety.
+      - name: Install deps for apps that have any
+        run: |
+          for app in Nexus-Draw Nexus-Auth; do
+            if [ -f "apps/$app/package.json" ]; then
+              ( cd "apps/$app" && { npm install --prefer-offline 2>/dev/null || npm install; } )
+            fi
+          done
       # See the contracts job: `[ test ] && cmd` in a loop makes the step exit
       # non-zero whenever the guard is false on the final iteration.
       - name: Symlink node_modules + fix data
