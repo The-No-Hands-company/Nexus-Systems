@@ -61,6 +61,28 @@ jobs:
         env:
           NEXUS_CLOUD_ENABLE_CLOUD_INTEGRATION: "false"
 
+  # ── The production edge, and the repository's own shape ─────────
+  #
+  # deploy/production is the reverse proxy and the SSO gate: every request to
+  # every host on the domain goes through it, and it had no CI at all. Two of
+  # its own tests were sitting red on main for days as a direct result. Coverage
+  # should follow blast radius, and nothing in this repository has more.
+  edge:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      # Structural only — no network, no submodule fetching. Catches a submodule
+      # declared in .gitmodules with no gitlink in the index, or the reverse:
+      # states that make the repository impossible for anyone else to clone
+      # correctly and that are invisible by hand.
+      - name: Verify repository structure
+        run: bash scripts/bootstrap.sh --verify
+      - name: Gate
+        run: cd deploy/production && bash check.sh
+
   # ── The identity contract, and the services that trust it ───────
   #
   # Added because the ecosystem had three separate answers to "who is asking"

@@ -117,6 +117,27 @@ describe("production Terminal public hop", () => {
         hostname: "127.0.0.1",
         port: 0,
         fetch(request) {
+          const path = new URL(request.url).pathname;
+
+          // The gate exchanges the session cookie for an audience-scoped
+          // identity token before it will forward anything to an app host, and
+          // it presents the cookie as a Bearer credential rather than as a
+          // Cookie header. Without this branch the exchange returned a body
+          // with no `token` in it, the gate treated that as "no session", and
+          // every request here became a 302 to the login page — so the socket
+          // never opened and this test failed for a reason that had nothing to
+          // do with the terminal hop it exists to cover.
+          if (path === "/api/v1/auth/identity-token") {
+            const bearer = request.headers.get("authorization") ?? "";
+            if (!bearer.includes("public-hop-session")) {
+              return Response.json({ error: "not_authenticated" }, { status: 401 });
+            }
+            // Any opaque string will do: the proxy forwards it verbatim and
+            // Dashboard falls back to the session cookie when it does not
+            // verify, which is the path this test is actually exercising.
+            return Response.json({ token: "public-hop-identity-token" });
+          }
+
           const cookie = request.headers.get("cookie") ?? "";
           authCookies.push(cookie);
           if (!cookie.includes("nexus_session=public-hop-session")) {

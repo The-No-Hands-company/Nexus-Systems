@@ -226,6 +226,16 @@ export async function gate(
   // Health checks are always public.
   if (PUBLIC_PATHS.has(url.pathname)) return { allow: true, identityToken: null };
 
+  // A CORS preflight travels without credentials by specification — the browser
+  // strips cookies from it — so gating one can only ever fail. Redirecting it to
+  // the login page produces a 302 the browser reads as "preflight failed", and
+  // the real request is never sent, which is how a blanket gate silently breaks
+  // every cross-origin caller.
+  //
+  // Letting it through discloses nothing: the response carries the app's CORS
+  // policy and no user data, and the request it precedes is gated normally.
+  if (req.method === "OPTIONS") return { allow: true, identityToken: null };
+
   // User-deployed sites are public, whole. See RouteTarget.kind in proxy.ts:
   // only the wildcard fallback to Hosting's site-proxy produces "site", so a
   // registered app can never reach this branch.

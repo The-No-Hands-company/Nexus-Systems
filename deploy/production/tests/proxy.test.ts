@@ -309,3 +309,106 @@ describe("app / site classification", () => {
     expect(res.status).not.toBe(302);
   });
 });
+
+describe("CORS belongs to the application", () => {
+  let saved: string | undefined;
+  beforeEach(() => {
+    saved = process.env.GATE_SKIP_AUTH;
+    delete process.env.GATE_SKIP_AUTH;
+  });
+  afterEach(() => {
+    if (saved === undefined) Reflect.deleteProperty(process.env, "GATE_SKIP_AUTH");
+    else process.env.GATE_SKIP_AUTH = saved;
+  });
+
+  /** An upstream that states its own, deliberately narrow, CORS policy. */
+  function upstreamWithPolicy() {
+    return Bun.serve({
+      port: 0,
+      hostname: "127.0.0.1",
+      fetch(req) {
+        if (req.method === "OPTIONS") {
+          return new Response(null, {
+            status: 204,
+            headers: {
+              "access-control-allow-origin": "https://app.tnhc.dev",
+              "access-control-allow-methods": "GET",
+              "access-control-allow-credentials": "true",
+            },
+          });
+        }
+        return new Response("body", {
+          headers: {
+            "content-type": "text/plain",
+            "access-control-allow-origin": "https://app.tnhc.dev",
+            "access-control-allow-credentials": "true",
+          },
+        });
+      },
+    });
+  }
+
+  it("relays the upstream's Allow-Origin instead of replacing it with a wildcard", async () => {
+    const { handleRequest, __setRoutesForTest } = await import("../proxy");
+    const upstream = upstreamWithPolicy();
+    try {
+      __setRoutesForTest({
+        "mysite.tnhc.dev": { upstream: `http://127.0.0.1:${upstream.port}`, requiresAuth: false, kind: "site" },
+      });
+      const res = await handleRequest(new Request("http://mysite.tnhc.dev/thing"));
+      // The whole point: "*" here would both discard the app's decision and,
+      // combined with its Allow-Credentials, be rejected outright by browsers.
+      expect(res.headers.get("access-control-allow-origin")).toBe("https://app.tnhc.dev");
+      expect(res.headers.get("access-control-allow-credentials")).toBe("true");
+    } finally {
+      upstream.stop(true);
+    }
+  });
+
+  it("lets the app answer its own preflight", async () => {
+    const { handleRequest, __setRoutesForTest } = await import("../proxy");
+    const upstream = upstreamWithPolicy();
+    try {
+      __setRoutesForTest({
+        "mysite.tnhc.dev": { upstream: `http://127.0.0.1:${upstream.port}`, requiresAuth: false, kind: "site" },
+      });
+      const res = await handleRequest(new Request("http://mysite.tnhc.dev/thing", { method: "OPTIONS" }));
+      expect(res.status).toBe(204);
+      expect(res.headers.get("access-control-allow-origin")).toBe("https://app.tnhc.dev");
+      expect(res.headers.get("access-control-allow-methods")).toBe("GET");
+    } finally {
+      upstream.stop(true);
+    }
+  });
+
+  it("does not redirect a preflight to the login page on a gated host", async () => {
+    // A preflight carries no cookie by specification, so gating it can only
+    // fail — and the browser reads the 302 as "preflight refused" and never
+    // sends the real request.
+    const { handleRequest, __setRoutesForTest } = await import("../proxy");
+    __setRoutesForTest({
+      "app.tnhc.dev": { upstream: "http://127.0.0.1:1", requiresAuth: true, kind: "app" },
+    });
+    const res = await handleRequest(new Request("http://app.tnhc.dev/ipa/whatever", { method: "OPTIONS" }));
+    expect(res.status).not.toBe(302);
+  });
+
+  it("still gates the real request that follows the preflight", async () => {
+    const { handleRequest, __setRoutesForTest } = await import("../proxy");
+    __setRoutesForTest({
+      "app.tnhc.dev": { upstream: "http://127.0.0.1:1", requiresAuth: true, kind: "app" },
+    });
+    const res = await handleRequest(new Request("http://app.tnhc.dev/ipa/whatever"));
+    expect(res.status).toBe(302);
+  });
+
+  it("keeps stamping the security headers it is responsible for", async () => {
+    // Dropping the CORS override must not drop these: they are this proxy's own
+    // to assert, precisely because every request passes through here.
+    const { handleRequest, __setRoutesForTest } = await import("../proxy");
+    __setRoutesForTest({});
+    const res = await handleRequest(new Request("http://nope.example.com/"));
+    expect(res.headers.get("strict-transport-security")).toContain("max-age=");
+    expect(res.headers.get("x-content-type-options")).toBe("nosniff");
+  });
+});
