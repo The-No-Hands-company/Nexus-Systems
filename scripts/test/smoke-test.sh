@@ -115,6 +115,20 @@ for name in "${!APP_PORTS[@]}"; do
     fi
   else
     echo "  ✗ $name :$port (not listening)"
+    # The reason is already written down — say it out loud.
+    #
+    # Each app's stdout goes to /tmp/$name-smoke.log and nothing ever printed
+    # it, so a startup crash was reported as the bare fact that a port was
+    # closed. In CI that log is discarded with the runner, which made a failure
+    # here impossible to act on without reproducing it by hand. The usual cause
+    # is a missing module: this script points every app's node_modules at
+    # Nexus-Cloud's, and an app with dependencies Cloud does not have cannot
+    # resolve its own imports.
+    if [ -s "/tmp/${name}-smoke.log" ]; then
+      sed -e 's/^/      | /' "/tmp/${name}-smoke.log" | tail -8
+    else
+      echo "      | (no output — /tmp/${name}-smoke.log is empty)"
+    fi
     ((FAIL++)) || true
     echo "$name:$port:FAIL_PORT" >> "$RESULTS"
   fi
