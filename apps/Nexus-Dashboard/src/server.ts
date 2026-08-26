@@ -10,6 +10,7 @@ import {
 } from "./terminal";
 import { checkRateLimit, rateLimitMiddleware } from "./ratelimit";
 import { validateJWT, extractBearerToken, validateRequest } from "./jwt";
+import { proxyCalendarApi } from "./calendar-proxy";
 import { listDevTools, runDevTool } from "./devtools";
 import { checkAllServices } from "./servicehealth";
 
@@ -411,23 +412,12 @@ export async function handleRequest(
   }
 
   if (path.startsWith(CALENDAR_PREFIX)) {
-    const who = await callerIdentity(req);
-    if (!who) return Response.json({ error: "not_authenticated" }, { status: 401 });
-    const rest = path.slice(CALENDAR_PREFIX.length);
-    try {
-      const res = await fetch(`http://127.0.0.1:3068/api/v1/calendar/${rest}${url.search}`, {
-        method: req.method,
-        headers: { "content-type": "application/json" },
-        body: req.method === "POST" || req.method === "PATCH" ? await req.text() : undefined,
-        signal: AbortSignal.timeout(5000),
-      });
-      return new Response(res.body, {
-        status: res.status,
-        headers: { "content-type": res.headers.get("content-type") ?? "application/json" },
-      });
-    } catch {
-      return Response.json({ error: "calendar_unavailable" }, { status: 503 });
-    }
+    // Authorization, path/method allow-listing and identity forwarding all live
+    // in calendar-proxy.ts. This handler used to authenticate the caller into a
+    // local `who` and then never use it — the request went upstream with only a
+    // content-type, so Calendar had no idea who was asking and every signed-in
+    // user read and wrote one shared calendar.
+    return proxyCalendarApi(req, path.slice(CALENDAR_PREFIX.length), url.search);
   }
 
   // Development helper tools (dhts/). Founder-only: these run commands on this
