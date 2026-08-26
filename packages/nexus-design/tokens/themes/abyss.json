@@ -1,0 +1,9 @@
+{
+  "color": {
+    "bg": { "canvas": "#04100E", "surface": "#08201C", "elevated": "#0C2B26", "raised": "#113630" },
+    "text": { "primary": "#F0FBF8", "secondary": "#9DB8B1", "muted": "#6E8A83", "inverse": "#04100E" },
+    "accent": { "primary": "#D4FF3D", "hover": "#C2F520", "active": "#AEE000" },
+    "state": { "success": "#4ADE80", "warning": "#F0BE5A", "danger": "#F07171", "info": "#7DD3FC" },
+    "border": { "subtle": "rgba(140,255,225,0.12)", "strong": "rgba(140,255,225,0.24)" }
+  }
+}
