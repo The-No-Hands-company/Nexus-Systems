@@ -2,7 +2,7 @@
 
 ## Status contract
 
-- **Commit:** pending `feat(dashboard): proxy calendar as a shell app`
+- **Commits:** `6d4842f5` (`feat(dashboard): proxy calendar as a shell app`), followed by `e68ba323` (`fix(dashboard): harden calendar web proxy`)
 - **Scope:** Dashboard Calendar proxy/server/tests and production deploy wiring only.
 - **Frontend:** untouched; the existing Dashboard Calendar React route remains a temporary compatibility route for Task 8 to remove.
 
@@ -12,6 +12,7 @@
 - Mounted Calendar's own web artifact at `/calendar` before Dashboard's SPA fallback. It rejects traversal (including double-encoded traversal) and API-shaped web paths, marks proxied responses with `X-Nexus-Shell-Context: proxied-app`, makes HTML non-cacheable, and gives hashed assets immutable caching.
 - Updated production startup to generate/load one gitignored 32-byte hex secret at `deploy/production/nexus-calendar-dashboard.secret`, validate it, and pass it only to Calendar and Dashboard. Dashboard also receives the loopback Calendar web URL.
 - Preserved Dashboard's complete CSP on its no-build 503 page; this fixes the existing server test's security invariant.
+- Hardened the web proxy against protocol-relative paths (which could otherwise select an attacker-controlled origin) and recognized Vite-style `name-<hash>.js` assets for immutable caching.
 
 ## Exact TDD evidence
 
@@ -65,6 +66,24 @@ git diff --check
 bash -n ../../deploy/production/deploy.sh
 cd ../../deploy/production && bash tests/processes.test.sh
 PASS: production starts loopback Nexus-Terminal before Dashboard with an explicit safe-default enable switch
+
+Follow-up regression cycle for the web-boundary hardening:
+
+### RED
+
+```text
+Expected immutable cache-control for /assets/index-Cx1abc234def.js, received null
+Expected protocol-relative /calendar//evil.example/private to return 404, received 503 after an unintended fetch target
+```
+
+### GREEN
+
+```text
+bun test tests/calendar-proxy.test.ts tests/server.test.ts
+21 pass
+0 fail
+77 expect() calls
+```
 ```
 
 ## Concern

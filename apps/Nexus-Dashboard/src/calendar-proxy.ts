@@ -3,7 +3,7 @@ import { callerIdentity } from "./auth";
 const API_TIMEOUT_MS = 5_000;
 const WEB_TIMEOUT_MS = 5_000;
 const UNAVAILABLE = { error: "calendar_unavailable" };
-const HASHED_ASSET = /\.[A-Za-z0-9_-]{8,}\.(?:js|css|woff2?)$/;
+const HASHED_ASSET = /[-_.][A-Za-z0-9_-]{8,}\.(?:js|css|woff2?)$/;
 const SEGMENT = "[A-Za-z0-9_-]+";
 const PUBLIC_TOKEN = "[A-Za-z0-9_-]{43}";
 
@@ -67,6 +67,9 @@ function safeResponseHeaders(upstream: Response): Headers {
 
 function isSafeWebPath(relativePath: string): boolean {
   if (relativePath !== "" && !relativePath.startsWith("/")) return false;
+  // A protocol-relative path would make `new URL(path, base)` select an
+  // attacker-controlled origin instead of the configured Calendar web host.
+  if (relativePath.startsWith("//")) return false;
   if (relativePath.includes("\\") || relativePath.includes("\0")) return false;
 
   for (const rawSegment of relativePath.split("/")) {

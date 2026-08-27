@@ -198,15 +198,20 @@ describe("Calendar web proxy", () => {
   });
 
   it("keeps immutable caching for hashed Calendar assets", async () => {
-    const res = await proxyCalendarWeb(
-      new Request("http://app.test/calendar/assets/app.abcdef123.js"),
+    for (const relativePath of [
       "/assets/app.abcdef123.js",
-    );
+      "/assets/index-Cx1abc234def.js",
+    ]) {
+      const res = await proxyCalendarWeb(
+        new Request(`http://app.test/calendar${relativePath}`),
+        relativePath,
+      );
 
-    expect(res.status).toBe(200);
-    expect(res.headers.get("content-type")).toContain("text/javascript");
-    expect(res.headers.get("cache-control")).toBe("public, max-age=31536000, immutable");
-    expect(res.headers.get("x-nexus-shell-context")).toBe("proxied-app");
+      expect(res.status).toBe(200);
+      expect(res.headers.get("content-type")).toContain("text/javascript");
+      expect(res.headers.get("cache-control")).toBe("public, max-age=31536000, immutable");
+      expect(res.headers.get("x-nexus-shell-context")).toBe("proxied-app");
+    }
   });
 
   it("rejects traversal and Calendar API paths instead of treating them as web routes", async () => {
@@ -222,10 +227,15 @@ describe("Calendar web proxy", () => {
       new Request("http://app.test/calendar/%252e%252e/private"),
       "/%252e%252e/private",
     );
+    const protocolRelative = await proxyCalendarWeb(
+      new Request("http://app.test/calendar//evil.example/private"),
+      "//evil.example/private",
+    );
 
     expect(traversal.status).toBe(404);
     expect(apiConfusion.status).toBe(404);
     expect(encodedTraversal.status).toBe(404);
+    expect(protocolRelative.status).toBe(404);
     expect(webRequests).toHaveLength(0);
   });
 });
