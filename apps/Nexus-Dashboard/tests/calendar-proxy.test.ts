@@ -52,7 +52,11 @@ beforeEach(() => {
         return new Response("export {}", { headers: { "content-type": "text/javascript" } });
       }
       return new Response("<!doctype html><main>Calendar</main>", {
-        headers: { "content-type": "text/html; charset=utf-8" },
+        headers: {
+          "content-type": "text/html; charset=utf-8",
+          "content-security-policy": "default-src 'self'; frame-ancestors 'self'",
+          "referrer-policy": "no-referrer",
+        },
       });
     }
     throw new Error(`Unexpected fetch target: ${url.origin}`);
@@ -188,6 +192,8 @@ describe("Calendar web proxy", () => {
       expect(await res.text()).toContain("Calendar");
       expect(res.headers.get("x-nexus-shell-context")).toBe("proxied-app");
       expect(res.headers.get("cache-control")).toBe("no-cache, no-store, must-revalidate");
+      expect(res.headers.get("content-security-policy")).toBe("default-src 'self'; frame-ancestors 'self'");
+      expect(res.headers.get("referrer-policy")).toBe("no-referrer");
     }
 
     expect(webRequests.map((request) => new URL(request.url).pathname)).toEqual([

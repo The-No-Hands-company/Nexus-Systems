@@ -66,6 +66,7 @@ git diff --check
 bash -n ../../deploy/production/deploy.sh
 cd ../../deploy/production && bash tests/processes.test.sh
 PASS: production starts loopback Nexus-Terminal before Dashboard with an explicit safe-default enable switch
+```
 
 Follow-up regression cycle for the web-boundary hardening:
 
@@ -84,7 +85,25 @@ bun test tests/calendar-proxy.test.ts tests/server.test.ts
 0 fail
 77 expect() calls
 ```
+
+P2 response-header retention cycle:
+
+### RED
+
+```text
+Expected Calendar Content-Security-Policy header, received null
 ```
+
+### GREEN
+
+```text
+bun test tests/calendar-proxy.test.ts tests/server.test.ts
+21 pass
+0 fail
+83 expect() calls
+```
+
+The proxy now preserves upstream `Content-Security-Policy` and `Referrer-Policy` alongside its existing safe response headers.
 
 ## Concern
 

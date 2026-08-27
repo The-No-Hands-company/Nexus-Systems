@@ -58,6 +58,8 @@ function safeResponseHeaders(upstream: Response): Headers {
     "last-modified",
     "content-disposition",
     "x-content-type-options",
+    "content-security-policy",
+    "referrer-policy",
   ] as const) {
     const value = upstream.headers.get(name);
     if (value) headers.set(name, value);
