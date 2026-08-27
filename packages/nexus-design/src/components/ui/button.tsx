@@ -1,43 +1,43 @@
-import React from 'react';
-import { clsx, type ClassValue } from 'clsx';
-import { twMerge } from 'tailwind-merge';
-
-function cn(...inputs: ClassValue[]) {
-  return twMerge(clsx(inputs));
-}
+import React from "react";
+import { cn } from "./cn";
 
 export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
-  variant?: 'primary' | 'secondary' | 'outline' | 'ghost';
-  size?: 'sm' | 'md' | 'lg';
+  variant?: "primary" | "secondary" | "outline" | "ghost";
+  size?: "sm" | "md" | "lg";
 }
 
+/**
+ * Colours come from Tailwind utilities that resolve to ecosystem tokens through
+ * each app's index.css alias. A hex literal here would pin the button to one
+ * theme and silently ignore the other three.
+ */
 export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
-  ({ className, variant = 'primary', size = 'md', ...props }, ref) => {
+  ({ className, variant = "primary", size = "md", ...props }, ref) => {
     const variants = {
-      primary: 'bg-[#ccff00] text-black hover:bg-[#b8e600] active:bg-[#a3cc00]',
-      secondary: 'bg-[#111111] text-white hover:bg-[#1a1a1a]',
-      outline: 'border border-white/20 text-white hover:bg-white/10',
-      ghost: 'text-white/70 hover:text-white hover:bg-white/5',
+      primary: "bg-accent text-accent-foreground hover:bg-accent-hover active:bg-accent-active",
+      secondary: "bg-zinc-700 text-zinc-100 hover:bg-zinc-600",
+      outline: "border border-zinc-600 text-zinc-100 hover:bg-zinc-800",
+      ghost: "text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800",
     };
-
     const sizes = {
-      sm: 'px-3 py-1.5 text-xs',
-      md: 'px-4 py-2 text-sm',
-      lg: 'px-6 py-3 text-base',
+      sm: "px-3 py-1.5 text-xs",
+      md: "px-4 py-2 text-sm",
+      lg: "px-6 py-3 text-base",
     };
-
     return (
       <button
         ref={ref}
         className={cn(
-          'inline-flex items-center justify-center rounded-md font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#ccff00] disabled:pointer-events-none disabled:opacity-50',
+          "inline-flex items-center justify-center rounded-md font-medium transition-colors",
+          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent",
+          "disabled:pointer-events-none disabled:opacity-50",
           variants[variant],
           sizes[size],
-          className
+          className,
         )}
         {...props}
       />
     );
-  }
+  },
 );
-Button.displayName = 'Button';
+Button.displayName = "Button";

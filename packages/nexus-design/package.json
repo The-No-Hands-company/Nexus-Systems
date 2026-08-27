@@ -3,9 +3,17 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "main": "src/index.ts",
   "scripts": {
     "build": "bun run src/generate.ts",
     "vendor": "bun run build && bun run scripts/vendor.ts",
     "test": "bun test tests/"
+  },
+  "dependencies": {
+    "clsx": "^2.1.1",
+    "tailwind-merge": "^2.5.4"
+  },
+  "peerDependencies": {
+    "react": ">=18"
   }
 }
