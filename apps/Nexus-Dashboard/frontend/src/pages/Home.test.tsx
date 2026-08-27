@@ -10,7 +10,12 @@ function jsonResponse(body: unknown, status = 200) {
   });
 }
 
-/** Routes /api/v1/auth/me and /api/apps independently. */
+/**
+ * Routes /api/v1/auth/me and /api/apps independently, and answers every other
+ * fetch (the widgets' calendar/mail/notifications calls) with a rejection —
+ * each widget owns its own catch, so this just exercises their error states
+ * rather than the happy path, without needing to stub four more endpoints.
+ */
 function stubFetch(signedIn: boolean, role = "user") {
   vi.stubGlobal("fetch", vi.fn(async (url: RequestInfo | URL) => {
     const u = String(url);
@@ -25,7 +30,10 @@ function stubFetch(signedIn: boolean, role = "user") {
                  url: "https://chat.tnhc.dev", path: "/chat", health: "healthy" }],
       });
     }
-    throw new Error(`unexpected fetch: ${u}`);
+    // Widgets (Today, Unread, Activity) fetch endpoints this test does not
+    // care about; each has its own catch, so a rejection here just puts that
+    // one widget in its error state instead of failing the render.
+    throw new Error(`not stubbed: ${u}`);
   }));
 }
 
@@ -34,25 +42,23 @@ beforeEach(() => {
 });
 
 describe("Home", () => {
-  it("shows the app grid to a signed-in user", async () => {
+  it("shows the dashboard to a signed-in user", async () => {
     stubFetch(true);
     render(<MemoryRouter><Home /></MemoryRouter>);
-    await waitFor(() => expect(screen.getByText("Nexus Chat")).toBeTruthy());
+    // The health strip and the Pinned widget both source from the same app
+    // list, so the app name legitimately appears more than once.
+    await waitFor(() => expect(screen.getAllByText("Nexus Chat").length).toBeGreaterThan(0));
+    expect(screen.getByRole("heading", { name: /pinned/i })).toBeTruthy();
   });
 
-  it("puts the signed-in grid inside the shell, not bare", async () => {
+  it("puts the signed-in dashboard inside the shell, not bare", async () => {
     // The home page used to render with no header and no sidebar, so the front
     // door looked like a different, older application than every route behind
     // it — the product appeared to start only once you clicked into an app.
     stubFetch(true);
-    render(
-      <MemoryRouter>
-        <Home sidebar={<nav aria-label="App launcher" />} />
-      </MemoryRouter>,
-    );
-    await waitFor(() => expect(screen.getByText("Nexus Chat")).toBeTruthy());
-    expect(screen.getByRole("banner")).toBeTruthy();
-    expect(screen.getByRole("navigation", { name: "App launcher" })).toBeTruthy();
+    render(<MemoryRouter><Home /></MemoryRouter>);
+    await waitFor(() => expect(screen.getByRole("banner")).toBeTruthy());
+    expect(screen.getByRole("navigation", { name: "Shell" })).toBeTruthy();
   });
 
   it("shows the founder the Operator link right on home", async () => {
@@ -60,26 +66,17 @@ describe("Home", () => {
     // header carried no way in. Home was also the one shell that dropped the
     // user prop entirely, so there was no identity chip either.
     stubFetch(true, "founder");
-    render(
-      <MemoryRouter>
-        <Home sidebar={<nav aria-label="App launcher" />} />
-      </MemoryRouter>,
-    );
+    render(<MemoryRouter><Home /></MemoryRouter>);
     await waitFor(() => expect(screen.getByRole("link", { name: "Operator" })).toBeTruthy());
     expect(screen.getByRole("link", { name: "Operator" }).getAttribute("href")).toBe("/admin");
   });
 
-  it("leaves a signed-out visitor bare, even when given a sidebar", async () => {
-    // Chrome advertising a launcher to somebody with no session and nothing to
-    // launch is worse than no chrome at all.
+  it("leaves a signed-out visitor bare", async () => {
+    // Chrome advertising an apps drawer to somebody with no session and
+    // nothing to launch is worse than no chrome at all.
     stubFetch(false);
-    render(
-      <MemoryRouter>
-        <Home sidebar={<nav aria-label="App launcher" />} />
-      </MemoryRouter>,
-    );
+    render(<MemoryRouter><Home /></MemoryRouter>);
     await waitFor(() => expect(screen.queryByRole("banner")).toBeNull());
-    expect(screen.queryByRole("navigation", { name: "App launcher" })).toBeNull();
   });
 
   it("shows the way in to a signed-out visitor", async () => {
@@ -106,9 +103,9 @@ describe("Home", () => {
     // page protected nothing while leaving the front door unable to show a
     // stranger what they would be signing in to.
     //
-    // What must not appear is Grid's interactive affordance — a link into an
-    // app for someone with no session, which lands them on a login redirect
-    // and looks broken. The signed-out page may name apps; it may not offer to
+    // What must not appear is an interactive affordance — a link into an app
+    // for someone with no session, which lands them on a login redirect and
+    // looks broken. The signed-out page may name apps; it may not offer to
     // open them.
     expect(screen.queryByRole("link", { name: /nexus chat/i })).toBeNull();
     expect(screen.queryByRole("link", { name: /nexus mail/i })).toBeNull();

@@ -1,8 +1,12 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { me, listApps, type Me, type AppEntry } from "../api";
-import Grid from "./Grid";
 import Shell from "../shell/Shell";
+import HealthStrip from "../shell/HealthStrip";
+import Today from "./widgets/Today";
+import Unread from "./widgets/Unread";
+import Activity from "./widgets/Activity";
+import Pinned from "./widgets/Pinned";
 
 const AUTH_LOGIN_URL =
   import.meta.env.VITE_AUTH_LOGIN_URL ?? "https://auth.tnhc.dev/login";
@@ -10,26 +14,38 @@ const AUTH_LOGIN_URL =
 /**
  * The root route decides what "home" means.
  *
- * Signed in, home is the app grid, inside the same chrome as everywhere else.
+ * Signed in, home is a dashboard, inside the same chrome as everywhere else.
  * Signed out, it is the way in — and this host stays public precisely so a
  * stranger can reach that. Gating it would leave nowhere to request an account
  * from.
  *
- * The grid used to render bare, on the reasoning that the shell's sidebar is
- * also a launcher and showing the apps twice was redundant. The cost of that
- * was worse than the redundancy: the front door had no header and no sidebar,
- * so it looked like a different, older application than everything behind it,
- * and the product only appeared to start once you clicked into an app.
- *
- * They are not the same thing anyway. The sidebar is navigation — a compact
- * list you use to move. The grid is a directory: names, descriptions, health.
+ * This used to render the full app grid — every registered app as a tile,
+ * more than half of them offline — while the shell's own sidebar listed them
+ * again. That doubled the same directory on one screen and buried the thing a
+ * person actually opens Home to see: what changed since they left. The grid
+ * still exists (Grid.tsx, reachable from the drawer's "see all" affordance)
+ * but it is no longer what "/" renders. Home is now a health strip plus four
+ * widgets — Today, Unread, Activity, Pinned — the way a dashboard for a
+ * running system should look, with the app directory itself moved into the
+ * drawer where it belongs.
  */
-export default function Home({ sidebar }: { sidebar?: ReactNode }) {
+export default function Home() {
   const [user, setUser] = useState<Me | null | undefined>(undefined);
+  const [apps, setApps] = useState<AppEntry[]>([]);
 
   useEffect(() => {
     let cancelled = false;
     void me().then((u) => { if (!cancelled) setUser(u); });
+    return () => { cancelled = true; };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    // Best effort, same as SignedOut below: the health strip degrading to
+    // empty is not a reason to keep the rest of the dashboard from rendering.
+    void listApps()
+      .then((a) => { if (!cancelled) setApps(a); })
+      .catch(() => { if (!cancelled) setApps([]); });
     return () => { cancelled = true; };
   }, []);
 
@@ -42,7 +58,19 @@ export default function Home({ sidebar }: { sidebar?: ReactNode }) {
   // without it the home header had no identity chip and no Operator link, so
   // the founder landed here and /admin might as well not have existed.
   if (user) {
-    return sidebar ? <Shell sidebar={sidebar} user={user}>{<Grid />}</Shell> : <Grid />;
+    return (
+      <Shell apps={apps} user={user}>
+        <div className="flex flex-col gap-4 p-4">
+          <HealthStrip apps={apps} />
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+            <div className="xl:row-span-2"><Today /></div>
+            <Unread />
+            <Activity />
+            <div className="md:col-span-2"><Pinned /></div>
+          </div>
+        </div>
+      </Shell>
+    );
   }
 
   return <SignedOut />;

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 
 vi.mock("@xterm/xterm", () => ({ Terminal: class {} }));
 vi.mock("@xterm/addon-fit", () => ({ FitAddon: class {} }));
@@ -103,7 +103,7 @@ describe("shell-native views", () => {
     "/account", "/admin", "/cloud", "/cloud/tools",
     "/cloud/federation", "/cloud/identity", "/cloud/api", "/terminal",
   ]) {
-    it(`wraps ${path} in the shell, launcher and all`, async () => {
+    it(`wraps ${path} in the shell, apps drawer and all`, async () => {
       if (path === "/terminal") {
         vi.mocked(me).mockResolvedValueOnce({
           id: "user-member",
@@ -116,9 +116,10 @@ describe("shell-native views", () => {
       render(<App />);
 
       await waitFor(() => expect(screen.getByRole("banner")).toBeTruthy());
-      expect(screen.getByRole("complementary", { name: "Applications" })).toBeTruthy();
-      // Populated, not merely present: these pages sit beside the app list
-      // rather than replacing it.
+      expect(screen.getByRole("navigation", { name: "Shell" })).toBeTruthy();
+      // Populated, not merely present: the drawer carries the app list these
+      // pages used to sit beside in a permanent sidebar.
+      fireEvent.click(screen.getByRole("button", { name: /apps/i }));
       await waitFor(() => expect(screen.getByRole("link", { name: /Draw/ })).toBeTruthy());
       if (path === "/terminal") {
         expect(screen.getByText("Terminal access required")).toBeTruthy();
@@ -140,12 +141,15 @@ describe("shell-native views", () => {
     expect(screen.queryByText("Could not load your apps.")).toBeNull();
   });
 
-  it("leaves the signed-in home free of shell chrome, so the launcher is not doubled", async () => {
-    // / renders the launcher grid; the shell's sidebar is also a launcher.
-    // Wrapping it would list the same apps twice on one screen.
+  it("wraps the signed-in home in the shell, same as every other signed-in route", async () => {
+    // / used to render bare on the theory that the shell's sidebar was also a
+    // launcher, so wrapping it would double the app list. The drawer replaced
+    // that sidebar, so the reason to keep Home bare is gone — and keeping it
+    // bare anyway was the actual bug: the front door had no header, so it
+    // looked like a different, older application than everything behind it.
     window.history.pushState({}, "", "/");
     render(<App />);
 
-    await waitFor(() => expect(screen.queryByRole("banner")).toBeNull());
+    await waitFor(() => expect(screen.getByRole("banner")).toBeTruthy());
   });
 });
