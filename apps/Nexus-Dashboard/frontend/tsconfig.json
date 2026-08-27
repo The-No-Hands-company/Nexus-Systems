@@ -19,16 +19,5 @@
   },
   "include": [
     "src"
-  ],
-  "exclude": [
-    // This test imports straight into @nexus/design/src by relative path
-    // (deliberate — see packages/nexus-design's own test split), which pulls
-    // that package's node_modules/react into tsc's resolution graph. That
-    // copy has no @types/react, so type-checking it here fails with TS7016
-    // for a dependency this project doesn't own. Vitest transforms this file
-    // with esbuild (no type-check gate) via the frontend's own vitest.config
-    // resolve alias, so it still runs and its 5 tests still pass — this
-    // exclude only keeps it out of `tsc -b` / `tsc --noEmit`.
-    "src/shell/__tests__"
   ]
 }
