@@ -37,6 +37,11 @@
   --color-accent-hover: var(--nexus-color-accent-hover);
   --color-accent-active: var(--nexus-color-accent-active);
   --color-accent-foreground: var(--nexus-color-text-inverse);
+
+  --color-state-success: var(--nexus-color-state-success);
+  --color-state-warning: var(--nexus-color-state-warning);
+  --color-state-danger: var(--nexus-color-state-danger);
+  --color-state-info: var(--nexus-color-state-info);
 }
 
 /* xterm owns its renderer subtree. Keep the vendor geometry tied to the

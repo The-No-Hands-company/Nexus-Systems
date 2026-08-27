@@ -30,3 +30,29 @@ describe("the component kit reads tokens only", () => {
     expect(defs.map((d) => d.file)).toEqual(["cn.ts"]);
   });
 });
+
+import { initials } from "../src/components/ui/avatar";
+
+describe("Avatar initials", () => {
+  test("takes the first letter of the first two words", () => {
+    expect(initials("Eric Hakansson")).toBe("EH");
+  });
+  test("falls back to the first two characters of a single word", () => {
+    expect(initials("nexus")).toBe("NE");
+  });
+  test("survives empty and whitespace input rather than rendering nothing", () => {
+    expect(initials("")).toBe("?");
+    expect(initials("   ")).toBe("?");
+  });
+});
+
+describe("kit barrel", () => {
+  test("every component file is re-exported from src/index.ts", async () => {
+    const barrel = readFileSync(join(UI, "..", "..", "index.ts"), "utf8");
+    for (const { file } of sources()) {
+      if (file === "cn.ts") continue;
+      const stem = file.replace(/\.tsx?$/, "");
+      expect(barrel).toContain(`./components/ui/${stem}`);
+    }
+  });
+});
