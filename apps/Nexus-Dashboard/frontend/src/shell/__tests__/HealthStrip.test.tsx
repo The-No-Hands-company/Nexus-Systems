@@ -37,4 +37,17 @@ describe("HealthStrip", () => {
     );
     expect(screen.getAllByTestId("health-pill").length).toBeLessThanOrEqual(8);
   });
+
+  it("includes status text so color-blind and screen-reader users can tell healthy from offline", () => {
+    render(
+      <MemoryRouter>
+        <HealthStrip apps={[app("svc-a", "healthy"), app("svc-b", "offline")]} />
+      </MemoryRouter>,
+    );
+    const pills = screen.getAllByTestId("health-pill");
+    const healthyPill = pills.find((p) => p.textContent?.includes("svc-a"));
+    const offlinePill = pills.find((p) => p.textContent?.includes("svc-b"));
+    expect(healthyPill?.textContent).toContain("healthy");
+    expect(offlinePill?.textContent).toContain("offline");
+  });
 });

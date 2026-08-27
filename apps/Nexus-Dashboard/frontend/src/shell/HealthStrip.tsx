@@ -17,6 +17,7 @@ export default function HealthStrip({ apps }: { apps: AppEntry[] }) {
       {ordered.slice(0, MAX).map((a) => (
         <Pill key={a.id} data-testid="health-pill" tone={a.health === "healthy" ? "success" : "danger"}>
           {a.name}
+          <span className="sr-only">{a.health === "healthy" ? "healthy" : "offline"}</span>
         </Pill>
       ))}
       <Link to="/admin" className="text-xs text-zinc-500 hover:text-zinc-300">
