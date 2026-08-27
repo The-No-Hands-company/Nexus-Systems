@@ -291,9 +291,6 @@ async function fetchApps(req: Request): Promise<Response> {
   const native = shellNativeEntries({
     mailHealthy: await mailReachable(),
     terminalHealthy: includeTerminal ? await terminalReachable() : false,
-    calendarHealthy: await (async () => {
-      try { return (await fetch("http://127.0.0.1:3068/health", { signal: AbortSignal.timeout(2000) })).ok; } catch { return false; }
-    })(),
     includeTerminal,
   });
 
@@ -448,7 +445,12 @@ export async function handleRequest(
   // Calendar owns the document and its client routes; Dashboard only mounts
   // the artifact at its canonical in-shell path. Keep this before Dashboard's
   // SPA fallback so /calendar never resolves to the old shell-native view.
-  if (path === CALENDAR_WEB_PREFIX || path.startsWith(CALENDAR_WEB_PREFIX + "/")) {
+  // Vite emits relative asset URLs so the trailing slash is the canonical
+  // document base. Preserve /calendar as a safe bookmark by redirecting it.
+  if (path === CALENDAR_WEB_PREFIX) {
+    return Response.redirect(new URL(`${CALENDAR_WEB_PREFIX}/`, req.url), 308);
+  }
+  if (path.startsWith(CALENDAR_WEB_PREFIX + "/")) {
     return proxyCalendarWeb(req, path.slice(CALENDAR_WEB_PREFIX.length));
   }
 

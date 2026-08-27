@@ -92,6 +92,16 @@ describe("shell routing", () => {
     // The two failure modes need different user action, so they must not share text.
     expect(screen.queryByText("App not found.")).toBeNull();
   });
+
+  it("does not retain a Dashboard-native Calendar view", async () => {
+    // /calendar is intercepted by Dashboard's server and served by the
+    // Calendar proxy before this SPA is reached. The client router therefore
+    // cannot own a Calendar component or an iframe fallback for it.
+    window.history.pushState({}, "", "/calendar");
+    render(<App />);
+    await waitFor(() => expect(screen.getByText("App not found.")).toBeTruthy());
+    expect(screen.queryByTitle(/Calendar/)).toBeNull();
+  });
 });
 
 describe("shell-native views", () => {

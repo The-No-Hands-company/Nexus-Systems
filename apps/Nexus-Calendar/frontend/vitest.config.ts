@@ -1,9 +1,8 @@
-import { defineConfig } from "vite";
-import react from "@vitejs/plugin-react";
+import { defineConfig } from "vitest/config";
 import { fileURLToPath } from "node:url";
 
 export default defineConfig({
-  plugins: [react()],
+  esbuild: { jsx: "automatic" },
   resolve: {
     alias: [
       { find: "react/jsx-dev-runtime", replacement: fileURLToPath(new URL("./node_modules/react/jsx-dev-runtime.js", import.meta.url)) },
@@ -11,11 +10,9 @@ export default defineConfig({
       { find: "react", replacement: fileURLToPath(new URL("./node_modules/react/index.js", import.meta.url)) },
     ],
   },
-  server: {
-    port: 5175,
-    // Same-origin in dev too, so the app never learns to make cross-origin
-    // auth calls that would not work in production.
-    proxy: { "/api": { target: "http://localhost:3132", changeOrigin: true } },
+  test: {
+    environment: "jsdom",
+    globals: true,
+    setupFiles: ["./vitest.setup.ts"],
   },
-  build: { target: "esnext" },
 });

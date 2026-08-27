@@ -289,14 +289,19 @@ describe("one tile per destination", () => {
 });
 
 describe("shell-native views", () => {
+  it("leaves Calendar delivery to the proxied Calendar application", () => {
+    expect(
+      shellNativeEntries({ mailHealthy: true, terminalHealthy: true, includeTerminal: false }),
+    ).not.toContainEqual(expect.objectContaining({ id: "nexus-calendar" }));
+  });
+
   it("offers mail as an in-shell route, not a framed app", () => {
     const entries = shellNativeEntries({
       mailHealthy: true,
       terminalHealthy: true,
-      calendarHealthy: true,
       includeTerminal: false,
     });
-    expect(entries).toHaveLength(2);
+    expect(entries).toHaveLength(1);
     const mail = entries[0]!;
     expect(mail.id).toBe("nexus-email");
     expect(mail.path).toBe("/mail");
@@ -306,7 +311,7 @@ describe("shell-native views", () => {
 
   it("marks mail offline when the mail API is unreachable", () => {
     expect(
-      shellNativeEntries({ mailHealthy: false, terminalHealthy: true, calendarHealthy: false, includeTerminal: false })[0]!
+      shellNativeEntries({ mailHealthy: false, terminalHealthy: true, includeTerminal: false })[0]!
         .health,
     ).toBe("offline");
   });
@@ -327,7 +332,7 @@ describe("shell-native views", () => {
       health: "healthy",
     });
     expect(
-      shellNativeEntries({ mailHealthy: true, terminalHealthy: true, calendarHealthy: true, includeTerminal: false }),
+      shellNativeEntries({ mailHealthy: true, terminalHealthy: true, includeTerminal: false }),
     ).not.toContainEqual(expect.objectContaining({ id: "nexus-terminal" }));
   });
 
@@ -342,7 +347,7 @@ describe("shell-native views", () => {
   it("adds mail to the registry grid without losing registry apps", () => {
     const merged = mergeApps(
       toAppEntries(TOOLS, AUTH),
-      shellNativeEntries({ mailHealthy: true, terminalHealthy: true, calendarHealthy: true, includeTerminal: false }),
+      shellNativeEntries({ mailHealthy: true, terminalHealthy: true, includeTerminal: false }),
     );
     expect(merged.map((e) => e.id)).toContain("nexus-email");
     expect(merged.map((e) => e.id)).toContain("nexus-chat");
@@ -362,7 +367,7 @@ describe("shell-native views", () => {
     ];
     const merged = mergeApps(
       registry,
-      shellNativeEntries({ mailHealthy: true, terminalHealthy: true, calendarHealthy: true, includeTerminal: false }),
+      shellNativeEntries({ mailHealthy: true, terminalHealthy: true, includeTerminal: false }),
     );
     expect(merged.filter((e) => e.id === "nexus-email")).toHaveLength(1);
     // The in-shell route is the one that works, so it is the one that survives.
@@ -375,7 +380,7 @@ describe("shell-native views", () => {
   it("sorts the merged grid by name", () => {
     const names = mergeApps(
       toAppEntries(TOOLS, AUTH),
-      shellNativeEntries({ mailHealthy: true, terminalHealthy: true, calendarHealthy: true, includeTerminal: false }),
+      shellNativeEntries({ mailHealthy: true, terminalHealthy: true, includeTerminal: false }),
     ).map((e) => e.name);
     expect(names).toEqual([...names].sort());
   });
@@ -419,7 +424,7 @@ describe("flat app paths", () => {
     ];
     const merged = mergeApps(
       registry,
-      shellNativeEntries({ mailHealthy: true, terminalHealthy: true, calendarHealthy: true, includeTerminal: false }),
+      shellNativeEntries({ mailHealthy: true, terminalHealthy: true, includeTerminal: false }),
     );
     expect(merged.filter((e) => e.path === "/mail")).toHaveLength(1);
   });
@@ -438,9 +443,9 @@ describe("flat app paths", () => {
     ];
     const merged = mergeApps(
       registry,
-      shellNativeEntries({ mailHealthy: true, terminalHealthy: true, calendarHealthy: true, includeTerminal: true }),
+      shellNativeEntries({ mailHealthy: true, terminalHealthy: true, includeTerminal: true }),
     );
-    expect(merged).toHaveLength(3);
+    expect(merged).toHaveLength(2);
     expect(merged.filter((entry) => entry.id === "nexus-terminal")).toEqual([
       expect.objectContaining({ path: "/terminal", delivery: "shell-native" }),
     ]);

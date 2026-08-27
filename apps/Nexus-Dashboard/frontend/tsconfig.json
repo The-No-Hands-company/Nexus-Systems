@@ -5,6 +5,11 @@
     "moduleResolution": "bundler",
     "strict": true,
     "jsx": "react-jsx",
+    "baseUrl": ".",
+    "paths": {
+      "react": ["node_modules/@types/react"],
+      "react/jsx-runtime": ["node_modules/@types/react/jsx-runtime"]
+    },
     "skipLibCheck": true,
     "noEmit": true,
     "lib": [

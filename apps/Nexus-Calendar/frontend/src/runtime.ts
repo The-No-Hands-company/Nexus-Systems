@@ -2,6 +2,8 @@ export type CalendarRuntime = {
   basePath: "/" | "/calendar";
   apiBase: "/api/v1/calendar" | "/ipa/calendar";
   publicBase: string;
+  /** Origin used for unauthenticated share links when Calendar is in Dashboard. */
+  publicOrigin?: string;
   shellContext: boolean;
   publicToken?: string;
 };
@@ -28,6 +30,7 @@ const shellDefaults: CalendarRuntime = {
   basePath: "/calendar",
   apiBase: "/ipa/calendar",
   publicBase: "/calendar/",
+  publicOrigin: "https://calendar.tnhc.dev",
   shellContext: true,
 };
 

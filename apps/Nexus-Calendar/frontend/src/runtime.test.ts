@@ -1,4 +1,4 @@
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it } from "vitest";
 import { assetUrl, resolveCalendarRuntime } from "./runtime";
 
 describe("resolveCalendarRuntime", () => {
@@ -26,6 +26,7 @@ describe("resolveCalendarRuntime", () => {
       basePath: "/calendar",
       apiBase: "/ipa/calendar",
       publicBase: "/calendar/",
+      publicOrigin: "https://calendar.tnhc.dev",
       shellContext: true,
     });
     expect(resolveCalendarRuntime("/calendar/month")).toMatchObject({
@@ -48,6 +49,7 @@ describe("resolveCalendarRuntime", () => {
       basePath: "/calendar",
       apiBase: "/ipa/calendar",
       publicBase: "/calendar/",
+      publicOrigin: "https://calendar.tnhc.dev",
       shellContext: true,
     });
   });
