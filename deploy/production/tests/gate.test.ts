@@ -10,10 +10,12 @@ function req(host: string, path = "/", cookie?: string): Request {
 }
 
 describe("SSO gate", () => {
-  it("allows only an exact Calendar public-event GET without a session", async () => {
+  it("allows only exact Calendar public-share reads without a session", async () => {
     const token = "A".repeat(43);
     const allow = await gate(req("calendar.tnhc.dev", `/api/v1/calendar/public/${token}`), { upstream: "x", requiresAuth: true });
     expect(allow.allow).toBe(true);
+    const share = await gate(req("calendar.tnhc.dev", `/share/${token}`), { upstream: "x", requiresAuth: true });
+    expect(share.allow).toBe(true);
 
     const denied = await Promise.all([
       gate(req("calendar.tnhc.dev", "/api/v1/calendar/events"), { upstream: "x", requiresAuth: true }),
@@ -22,6 +24,10 @@ describe("SSO gate", () => {
       gate(req("calendar.tnhc.dev", "/api/v1/calendar/public/"), { upstream: "x", requiresAuth: true }),
       gate(req("calendar.tnhc.dev", `/api/v1/calendar/public/${token}%2Fextra`), { upstream: "x", requiresAuth: true }),
       gate(req("calendar.tnhc.dev", `/api/v1/calendar/public/${token}?preview=true`), { upstream: "x", requiresAuth: true }),
+      gate(req("calendar.tnhc.dev", "/share/"), { upstream: "x", requiresAuth: true }),
+      gate(req("calendar.tnhc.dev", `/share/${token}/extra`), { upstream: "x", requiresAuth: true }),
+      gate(req("app.tnhc.dev", `/share/${token}`), { upstream: "x", requiresAuth: true }),
+      gate(req("calendar.tnhc.dev", `/share/${token}?preview=true`), { upstream: "x", requiresAuth: true }),
     ]);
     expect(denied.every((decision) => !decision.allow)).toBe(true);
   });

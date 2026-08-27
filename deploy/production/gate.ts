@@ -231,12 +231,20 @@ const PUBLIC_HOSTS = new Set([AUTH_HOST]);
 const PUBLIC_PATHS = new Set(["/health", "/health/live", "/health/ready"]);
 
 const PUBLIC_CALENDAR_EVENT = /^\/api\/v1\/calendar\/public\/[A-Za-z0-9_-]{43}$/;
+const PUBLIC_CALENDAR_SHARE = /^\/share\/[A-Za-z0-9_-]{43}$/;
 
 function isPublicCalendarEvent(req: Request, url: URL): boolean {
   return req.method === "GET"
     && url.hostname.toLowerCase() === `calendar.${DOMAIN}`
     && url.search === ""
     && PUBLIC_CALENDAR_EVENT.test(url.pathname);
+}
+
+function isPublicCalendarShare(req: Request, url: URL): boolean {
+  return req.method === "GET"
+    && url.hostname.toLowerCase() === `calendar.${DOMAIN}`
+    && url.search === ""
+    && PUBLIC_CALENDAR_SHARE.test(url.pathname);
 }
 
 /** Decides whether a request may proceed, and with what identity. */
@@ -257,9 +265,12 @@ export async function gate(
   // Health checks are always public.
   if (PUBLIC_PATHS.has(url.pathname)) return { allow: true, identityToken: null };
 
-  // A bearer token permits exactly one read-only Calendar event. This remains
-  // structural so policy data cannot accidentally expose any other Calendar API.
-  if (isPublicCalendarEvent(req, url)) return { allow: true, identityToken: null };
+  // A bearer token permits exactly one read-only Calendar event and its
+  // isolated direct-origin document. This remains structural so policy data
+  // cannot accidentally expose another Calendar path.
+  if (isPublicCalendarEvent(req, url) || isPublicCalendarShare(req, url)) {
+    return { allow: true, identityToken: null };
+  }
 
   // Static assets are always public. Hashed filenames carry no user data;
   // blocking them prevents an authenticated app document from loading its UI.
