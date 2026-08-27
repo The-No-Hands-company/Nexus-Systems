@@ -8,5 +8,8 @@ export default defineConfig({
     port: 5170,
     proxy: { "/api": { target: "http://localhost:3068", changeOrigin: true } },
   },
+  // The same artifact is served at the standalone root and under Dashboard's
+  // /calendar mount. Relative URLs remain within whichever document owns it.
+  base: "./",
   build: { outDir: "dist" },
 });

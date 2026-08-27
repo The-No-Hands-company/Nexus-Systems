@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { useState } from "react";
 import { Link } from "react-router-dom";
+import { AppHeader } from "../../../../../packages/nexus-app-shell/src";
 
 /**
  * The frame every app renders inside.
@@ -38,72 +39,59 @@ export default function Shell({
   utility?: ReactNode;
 }) {
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
-    return (
-      <div className="flex h-screen flex-col bg-[#030303] text-white">
-        <header
-          role="banner"
-          className="flex h-14 shrink-0 items-center gap-3 border-b border-white/10 px-4"
+  const userSlot = (
+    <>
+      {/*
+        The operator's way in. /admin existed and worked, but nothing linked
+        to it. Shell keeps this role decision; AppHeader only provides chrome.
+      */}
+      {user && (user.role === "founder" || user.role === "admin") && (
+        <Link
+          to="/admin"
+          className={`${utility ? "" : "ml-auto"} rounded-md px-2 py-1 text-sm text-white/60 hover:bg-white/5 hover:text-white`}
         >
+          Operator
+        </Link>
+      )}
 
-        {/*
-            The wordmark is the way home.
+      {user && (
+        <Link
+          to="/account"
+          className={`${utility ? "" : "ml-auto"} flex items-center gap-2 rounded-md px-2 py-1 text-sm text-white/60 hover:bg-white/5 hover:text-white`}
+          title={user.email}
+        >
+          <span
+            aria-hidden="true"
+            className="flex h-6 w-6 items-center justify-center rounded-full bg-white/10 text-xs font-medium text-white"
+          >
+            {(user.username || user.email || "?").slice(0, 1).toUpperCase()}
+          </span>
+          <span className="max-w-[14rem] truncate">{user.username || user.email}</span>
+        </Link>
+      )}
+    </>
+  );
 
-            It was a bare span, so once inside an app there was no route back to
-            the grid except editing the URL. Making the mark itself the link is
-            what every other product does, so it is what people try first.
-          */}
-            <Link to="/" className="font-semibold tracking-tight hover:text-[#ccff00]" aria-label="Nexus home">
-
-          <button type="button" onClick={() => setMobileNavOpen(!mobileNavOpen)} aria-label={mobileNavOpen ? "Close menu" : "Open menu"} className="md:hidden rounded p-1.5 text-zinc-400 hover:bg-white/10 hover:text-white"><svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">{mobileNavOpen ? <path d="M5 5l10 10M15 5L5 15"/> : <path d="M3 5h14M3 10h14M3 15h14"/>}</svg></button>
-              Nexus
-            </Link>
-
-
-          {/*
-            Who you are, and the way to your account.
-
-            The header carried the wordmark and nothing else, so a signed-in
-            user had no confirmation of which account they were using and no
-            route to their password, sessions or recovery codes without already
-            knowing /account existed. ml-auto rather than justify-between, so
-            the wordmark keeps its place when this is absent.
-          */}
-          {utility && <div className="ml-auto">{utility}</div>}
-
-          {/*
-            The operator's way in. /admin existed and worked, but nothing
-            linked to it — the only way in was typing the URL blind, so the
-            approval queue and invites might as well not have existed. Lives
-            in the header rather than the sidebar: it is about the ecosystem,
-            not one of its apps.
-          */}
-          {user && (user.role === "founder" || user.role === "admin") && (
-            <Link
-              to="/admin"
-              className={`${utility ? "" : "ml-auto"} rounded-md px-2 py-1 text-sm text-white/60 hover:bg-white/5 hover:text-white`}
-            >
-              Operator
-            </Link>
-          )}
-
-          {user && (
-            <Link
-              to="/account"
-                className={`${utility ? "" : "ml-auto"} flex items-center gap-2 rounded-md px-2 py-1 text-sm text-white/60 hover:bg-white/5 hover:text-white`}
-
-              title={user.email}
-            >
-              <span
-                aria-hidden="true"
-                                className="flex h-6 w-6 items-center justify-center rounded-full bg-white/10 text-xs font-medium text-white"
-
-              >
-                {(user.username || user.email || "?").slice(0, 1).toUpperCase()}
-              </span>
-              <span className="max-w-[14rem] truncate">{user.username || user.email}</span>
-            </Link>
-          )}
-      </header>
+  return (
+    <div className="flex h-screen flex-col bg-[#030303] text-white">
+      <AppHeader
+        homeHref="/"
+        appName="Dashboard"
+        leadingSlot={
+          <button
+            type="button"
+            onClick={() => setMobileNavOpen(!mobileNavOpen)}
+            aria-label={mobileNavOpen ? "Close menu" : "Open menu"}
+            className="md:hidden rounded p-1.5 text-zinc-400 hover:bg-white/10 hover:text-white"
+          >
+            <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+              {mobileNavOpen ? <path d="M5 5l10 10M15 5L5 15" /> : <path d="M3 5h14M3 10h14M3 15h14" />}
+            </svg>
+          </button>
+        }
+        utilitySlot={utility}
+        userSlot={user ? userSlot : undefined}
+      />
 
       <div className="flex min-h-0 flex-1">
         {mobileNavOpen && (
