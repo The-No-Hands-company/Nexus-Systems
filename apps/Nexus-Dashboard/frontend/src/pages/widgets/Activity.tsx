@@ -9,8 +9,13 @@ export default function Activity() {
     let cancelled = false;
     fetch("/ipa/notifications")
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
-      .then((body: { notifications: Notification[] }) => {
-        if (!cancelled) setState({ status: "ready", data: body.notifications });
+      .then((body: { notifications?: unknown }) => {
+        // A 200 that doesn't carry a `notifications` array is not "nothing
+        // recent" — it is an answer we could not understand. Throw so it
+        // reaches the same error state below instead of coercing to [] or
+        // reading `.length` off undefined during render.
+        if (!Array.isArray(body.notifications)) throw new Error("malformed_response");
+        if (!cancelled) setState({ status: "ready", data: body.notifications as Notification[] });
       })
       .catch(() => {
         if (!cancelled) setState({ status: "error", message: "Notifications unavailable" });
