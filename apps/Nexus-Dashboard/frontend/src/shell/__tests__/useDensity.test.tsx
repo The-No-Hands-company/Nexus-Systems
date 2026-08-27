@@ -30,3 +30,13 @@ describe("applyDensity", () => {
     expect(document.documentElement.getAttribute("data-nexus-density")).toBe("compact");
   });
 });
+
+describe("localStorage polyfill fidelity", () => {
+  it("round-trips empty strings correctly", () => {
+    // This test locks in faithful Storage semantics: setItem coerces to string,
+    // getItem returns the exact value back (not null for empty strings).
+    // Distinguishes real Storage from broken fakes.
+    localStorage.setItem("k", "");
+    expect(localStorage.getItem("k")).toBe("");
+  });
+});

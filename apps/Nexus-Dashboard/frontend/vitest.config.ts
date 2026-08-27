@@ -16,5 +16,10 @@ export default defineConfig({
       "react-dom": path.resolve(__dirname, "node_modules/react-dom"),
     },
   },
-  test: { environment: "jsdom", globals: true, setupFiles: ["./vitest.setup.ts"] },
+  test: {
+    environment: "jsdom",
+    environmentOptions: { jsdom: { url: "http://localhost" } },
+    globals: true,
+    setupFiles: ["./vitest.setup.ts"],
+  },
 });
