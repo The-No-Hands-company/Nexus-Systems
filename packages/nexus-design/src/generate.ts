@@ -20,13 +20,13 @@ function pathOf(name: string): string[] {
 /**
  * CSS unit for a numeric token, chosen by its top-level group.
  *
- * space/radius/typography.size are pixel scales; motion.duration is a time.
- * typography.weight, typography.lineHeight and zIndex are genuinely unitless
- * in CSS — appending a unit to those would break them.
+ * space/radius/control/widget/typography.size are pixel scales; motion.duration
+ * is a time. typography.weight, typography.lineHeight and zIndex are genuinely
+ * unitless in CSS — appending a unit to those would break them.
  */
 function unitFor(path: string[]): string {
   const [group, sub] = path;
-  if (group === "space" || group === "radius") return "px";
+  if (group === "space" || group === "radius" || group === "control" || group === "widget") return "px";
   if (group === "typography" && sub === "size") return "px";
   if (group === "motion" && sub === "duration") return "ms";
   return "";

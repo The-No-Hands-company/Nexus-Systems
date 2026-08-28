@@ -52,8 +52,9 @@ export default function Shell({
 }) {
   // Stamps data-nexus-density on the document element as a side effect, so the
   // density-scoped tokens in nexus-tokens.css apply everywhere, not just below
-  // this component.
-  useDensity();
+  // this component. The setter drives the toggle button below — before this,
+  // it was discarded and there was no way to actually change density.
+  const [density, setDensity] = useDensity();
 
   const [drawerOpen, setDrawerOpen] = useState(false);
 
@@ -96,7 +97,7 @@ export default function Shell({
         <button
           type="button"
           onClick={() => setDrawerOpen(true)}
-          className="ml-2 hidden items-center gap-2 rounded-md border border-zinc-700 px-3 py-1.5 text-sm text-zinc-400 hover:border-zinc-600 hover:text-zinc-200 sm:flex"
+          className="ml-2 hidden h-[var(--nexus-control-height)] items-center gap-2 rounded-md border border-zinc-700 px-3 text-sm text-zinc-400 hover:border-zinc-600 hover:text-zinc-200 sm:flex"
         >
           <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" aria-hidden="true">
             <circle cx="9" cy="9" r="6" />
@@ -104,6 +105,22 @@ export default function Shell({
           </svg>
           Search
           <Kbd>⌘K</Kbd>
+        </button>
+
+        {/*
+            The density toggle. Balanced/compact were defined as complete,
+            parallel token scales (see packages/nexus-design/tokens/density/)
+            but nothing let anyone actually switch — useDensity's setter was
+            fetched and discarded. This is the one control the spec asks for:
+            "a compact scale defined and toggleable in the shell."
+          */}
+        <button
+          type="button"
+          onClick={() => setDensity(density === "compact" ? "balanced" : "compact")}
+          aria-pressed={density === "compact"}
+          className="ml-2 hidden h-[var(--nexus-control-height)] items-center rounded-md border border-zinc-700 px-2 text-xs text-zinc-400 hover:border-zinc-600 hover:text-zinc-200 sm:flex"
+        >
+          Density: {density === "compact" ? "Compact" : "Balanced"}
         </button>
 
         {/*

@@ -35,4 +35,19 @@ describe("WidgetShell", () => {
     );
     expect(screen.getByText("2 events")).toBeTruthy();
   });
+
+  it("pads with the density-scoped widget-padding token, not a fixed p-4", () => {
+    // C1: before this, nothing in the shell referenced --nexus-widget-padding
+    // (or any density token), so data-nexus-density="compact" changed zero
+    // rendered pixels. The widget's own padding is the case the finding
+    // names explicitly.
+    const { container } = render(
+      <WidgetShell title="Today" state={{ status: "ready", data: [] as number[] }} empty="Nothing today">
+        {() => null}
+      </WidgetShell>,
+    );
+    const section = container.querySelector("section")!;
+    expect(section.className).toContain("p-[var(--nexus-widget-padding)]");
+    expect(section.className).not.toContain("p-4");
+  });
 });

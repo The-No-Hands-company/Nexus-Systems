@@ -23,7 +23,7 @@ export default function WidgetShell<T>({
   children: (data: T) => ReactNode;
 }) {
   return (
-    <section className="rounded-lg border border-zinc-600 bg-zinc-800 p-4">
+    <section className="rounded-lg border border-zinc-600 bg-zinc-800 p-[var(--nexus-widget-padding)]">
       <h2 className="mb-3 font-mono text-xs uppercase tracking-[0.18em] text-zinc-500">{title}</h2>
       {state.status === "loading" ? <Skeleton lines={3} /> : null}
       {state.status === "error" ? (

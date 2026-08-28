@@ -31,4 +31,29 @@ describe("Shell", () => {
     fireEvent.keyDown(document, { key: "k", metaKey: true });
     expect(screen.getByRole("dialog")).toBeTruthy();
   });
+
+  it("toggles density from a real control, not just useDensity's discarded setter", () => {
+    // Before this, Shell called useDensity() purely for its stamping side
+    // effect and threw the setter away — there was no way to actually
+    // change density, so data-nexus-density="compact" never happened.
+    mount();
+    expect(document.documentElement.getAttribute("data-nexus-density")).toBe("balanced");
+    fireEvent.click(screen.getByRole("button", { name: /density/i }));
+    expect(document.documentElement.getAttribute("data-nexus-density")).toBe("compact");
+    fireEvent.click(screen.getByRole("button", { name: /density/i }));
+    expect(document.documentElement.getAttribute("data-nexus-density")).toBe("balanced");
+  });
+
+  it("consumes the widget-padding and control-height tokens, not a fixed class", () => {
+    // C1's other half: the attribute changing is necessary but not
+    // sufficient — something has to actually read the density-scoped token.
+    // WidgetShell targets padding at var(--nexus-widget-padding) directly
+    // (16px balanced / 12px compact — see
+    // packages/nexus-design/tokens/density/*.json), not a fixed `p-4`, and
+    // the header's own controls target var(--nexus-control-height)
+    // (32px / 26px) the same way.
+    mount();
+    const densityButton = screen.getByRole("button", { name: /density/i });
+    expect(densityButton.className).toContain("h-[var(--nexus-control-height)]");
+  });
 });
