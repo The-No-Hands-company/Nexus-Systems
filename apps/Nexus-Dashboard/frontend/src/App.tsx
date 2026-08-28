@@ -13,6 +13,7 @@ import CloudTools from "./pages/cloud/CloudTools";
 import CloudFederation from "./pages/cloud/CloudFederation";
 import CloudIdentity from "./pages/cloud/CloudIdentity";
 import CloudApi from "./pages/cloud/CloudApi";
+import Grid from "./pages/Grid";
 import { listApps, me, type AppEntry, type Me } from "./api";
 import Shell from "./shell/Shell";
 import NotificationBell from "./shell/NotificationBell";
@@ -285,6 +286,14 @@ export default function App() {
             app's flat path rather than 404ing. Someone's bookmark from before
             this change must not stop working because we tidied the scheme. */}
         <Route path="/a/:appId" element={<LegacyAppRedirect state={appsState} onRetry={loadApps} />} />
+
+        {/* The apps drawer's "See all N apps" affordance (C3): the browse view
+            behind the command palette the spec calls for, reached as its own
+            route rather than a second mode bolted onto the overlay — Grid
+            already is a complete, independently loading/erroring page, and
+            duplicating that inside Overlay would mean two copies of the same
+            three states. */}
+        <Route path="/apps" element={<ShellView state={appsState} user={user}><Grid /></ShellView>} />
 
         {/* Flat app routes last: every static route above wins over this, so a
             registered app can never shadow /account or /admin. */}

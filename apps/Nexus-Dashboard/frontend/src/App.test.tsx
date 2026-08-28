@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor, fireEvent } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent, within } from "@testing-library/react";
 
 vi.mock("@xterm/xterm", () => ({ Terminal: class {} }));
 vi.mock("@xterm/addon-fit", () => ({ FitAddon: class {} }));
@@ -102,6 +102,10 @@ describe("shell-native views", () => {
   for (const path of [
     "/account", "/admin", "/cloud", "/cloud/tools",
     "/cloud/federation", "/cloud/identity", "/cloud/api", "/terminal",
+    // C3: Grid was built and tested but unrouted — this proves /apps
+    // actually reaches it inside the shell, the browse view behind the
+    // drawer's "See all N apps" affordance.
+    "/apps",
   ]) {
     it(`wraps ${path} in the shell, apps drawer and all`, async () => {
       if (path === "/terminal") {
@@ -118,9 +122,14 @@ describe("shell-native views", () => {
       await waitFor(() => expect(screen.getByRole("banner")).toBeTruthy());
       expect(screen.getByRole("navigation", { name: "Shell" })).toBeTruthy();
       // Populated, not merely present: the drawer carries the app list these
-      // pages used to sit beside in a permanent sidebar.
+      // pages used to sit beside in a permanent sidebar. Scoped to the dialog
+      // itself — /apps renders Grid behind it, which lists the same apps a
+      // second time in the page body, and an unscoped query would find both.
       fireEvent.click(screen.getByRole("button", { name: /apps/i }));
-      await waitFor(() => expect(screen.getByRole("link", { name: /Draw/ })).toBeTruthy());
+      await waitFor(() => {
+        const dialog = screen.getByRole("dialog");
+        expect(within(dialog).getByRole("link", { name: /Draw/ })).toBeTruthy();
+      });
       if (path === "/terminal") {
         expect(screen.getByText("Terminal access required")).toBeTruthy();
       }
