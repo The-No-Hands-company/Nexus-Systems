@@ -74,4 +74,36 @@ describe("Overlay", () => {
     expect(triggerFocusSpy).not.toHaveBeenCalled();
     expect(document.activeElement).toBe(insideButton);
   });
+
+  it("traps Tab at the last focusable element, wrapping to the first", () => {
+    render(
+      <Overlay open onClose={() => {}} label="Apps">
+        <button>first</button>
+        <button>second</button>
+        <button>last</button>
+      </Overlay>,
+    );
+    const last = screen.getByRole("button", { name: "last" });
+    const first = screen.getByRole("button", { name: "first" });
+    last.focus();
+    expect(document.activeElement).toBe(last);
+    fireEvent.keyDown(document, { key: "Tab" });
+    expect(document.activeElement).toBe(first);
+  });
+
+  it("traps Shift+Tab at the first focusable element, wrapping to the last", () => {
+    render(
+      <Overlay open onClose={() => {}} label="Apps">
+        <button>first</button>
+        <button>second</button>
+        <button>last</button>
+      </Overlay>,
+    );
+    const first = screen.getByRole("button", { name: "first" });
+    const last = screen.getByRole("button", { name: "last" });
+    first.focus();
+    expect(document.activeElement).toBe(first);
+    fireEvent.keyDown(document, { key: "Tab", shiftKey: true });
+    expect(document.activeElement).toBe(last);
+  });
 });

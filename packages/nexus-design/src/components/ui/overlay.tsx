@@ -39,14 +39,39 @@ export function Overlay({ open, onClose, label, children, className }: OverlayPr
     if (!open) return;
     restoreTo.current = document.activeElement as HTMLElement | null;
 
+    const FOCUSABLE =
+      'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") { e.stopPropagation(); onCloseRef.current(); }
+      if (e.key === "Escape") { e.stopPropagation(); onCloseRef.current(); return; }
+      // The trap: Tab and Shift+Tab wrap at the panel's own edges rather than
+      // walking out to whatever is behind the overlay. Queried fresh on every
+      // keypress rather than cached at open, since the drawer's own content
+      // (search results) changes what is focusable while it stays open.
+      if (e.key === "Tab") {
+        const focusable = Array.from(
+          panel.current?.querySelectorAll<HTMLElement>(FOCUSABLE) ?? [],
+        );
+        if (focusable.length === 0) return;
+        const first = focusable[0]!;
+        const last = focusable[focusable.length - 1]!;
+        const active = document.activeElement;
+        if (e.shiftKey) {
+          if (active === first || !panel.current?.contains(active)) {
+            e.preventDefault();
+            last.focus();
+          }
+        } else {
+          if (active === last || !panel.current?.contains(active)) {
+            e.preventDefault();
+            first.focus();
+          }
+        }
+      }
     };
     document.addEventListener("keydown", onKey);
 
-    const first = panel.current?.querySelector<HTMLElement>(
-      'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
-    );
+    const first = panel.current?.querySelector<HTMLElement>(FOCUSABLE);
     (first ?? panel.current)?.focus();
 
     return () => {
