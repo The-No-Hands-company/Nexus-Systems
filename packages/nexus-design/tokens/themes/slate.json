@@ -4,6 +4,6 @@
     "text": { "primary": "#F1F4FA", "secondary": "#A3AFC4", "muted": "#74809A", "inverse": "#080D16" },
     "accent": { "primary": "#C2F000", "hover": "#AFDA00", "active": "#9BC300" },
     "state": { "success": "#34D399", "warning": "#EBB454", "danger": "#EF6E6E", "info": "#60A5FA" },
-    "border": { "subtle": "rgba(160,190,255,0.12)", "strong": "rgba(160,190,255,0.24)" }
+    "border": { "subtle": "rgba(160,190,255,0.49)", "strong": "rgba(160,190,255,0.62)" }
   }
 }

@@ -42,6 +42,45 @@
   --color-state-warning: var(--nexus-color-state-warning);
   --color-state-danger: var(--nexus-color-state-danger);
   --color-state-info: var(--nexus-color-state-info);
+
+  /* card.tsx and input.tsx (packages/nexus-design) reference this directly —
+     it is not on the zinc scale because border.subtle and border.strong are
+     already both spoken for (zinc-600 above) and a hairline needs its own
+     name, not a repurposed shade. */
+  --color-border-subtle: var(--nexus-color-border-subtle);
+
+  /* Density. Same reasoning as the colour block above: importing
+     nexus-theme.css directly hits the same tree-shaking wall (nothing here
+     references its un-prefixed names, so Tailwind drops the whole block),
+     so the density-scoped spacing and type scale is hand-mapped too. Before
+     this, data-nexus-density was stamped on <html> and nothing ever
+     consumed it — switching density changed zero rendered pixels. Aliasing
+     the full 1-8 spacing scale and the six text sizes means every existing
+     p-*, gap-* and text-* utility in the app responds automatically, the
+     same way bg-zinc-800 already responds to a theme change with no
+     per-component edits. */
+  --spacing-1: var(--nexus-space-1);
+  --spacing-2: var(--nexus-space-2);
+  --spacing-3: var(--nexus-space-3);
+  --spacing-4: var(--nexus-space-4);
+  --spacing-5: var(--nexus-space-5);
+  --spacing-6: var(--nexus-space-6);
+  --spacing-7: var(--nexus-space-7);
+  --spacing-8: var(--nexus-space-8);
+
+  --text-xs: var(--nexus-typography-size-xs);
+  --text-sm: var(--nexus-typography-size-sm);
+  --text-base: var(--nexus-typography-size-base);
+  --text-lg: var(--nexus-typography-size-lg);
+  --text-xl: var(--nexus-typography-size-xl);
+  --text-2xl: var(--nexus-typography-size-2xl);
+}
+
+/* Body copy has no `text-*` utility applied anywhere by default, so it would
+   otherwise sit at the browser's 16px regardless of density. This is what
+   makes density visibly change layout even on plain, unstyled text. */
+body {
+  font-size: var(--nexus-typography-size-base);
 }
 
 /* xterm owns its renderer subtree. Keep the vendor geometry tied to the

@@ -74,30 +74,42 @@ export type Finding = {
   ok: boolean;
 };
 
-const BACKGROUNDS = ["bg.canvas", "bg.surface", "bg.elevated"];
+const BACKGROUNDS = ["bg.canvas", "bg.surface", "bg.elevated", "bg.raised"];
 
 /**
- * Body text must clear 4.5:1. Muted text, state colours and the accent are
- * treated as non-text UI at 3:1 — muted is for de-emphasised and disabled
- * copy, and the state colours appear as pills and dots rather than prose.
+ * One rule per colour that actually renders somewhere. `against` overrides
+ * the default surfaces a token is checked against — everything sits on the
+ * four backgrounds above except `text.inverse`, which never appears on them:
+ * it is the primary Button's own label colour, painted only on
+ * `accent.primary`, so that is the one pairing that matters.
+ *
+ * Body text must clear 4.5:1. Muted text, the accent, its hover/active
+ * states, the state colours and borders are treated as non-text UI at 3:1 —
+ * muted is for de-emphasised and disabled copy, the state colours appear as
+ * pills and dots rather than prose, and borders convey a boundary, not text.
  */
-const RULES: Array<{ token: string; required: number }> = [
+const RULES: Array<{ token: string; required: number; against?: string[] }> = [
   { token: "text.primary", required: 4.5 },
   { token: "text.secondary", required: 4.5 },
   { token: "text.muted", required: 3 },
+  { token: "text.inverse", required: 4.5, against: ["accent.primary"] },
   { token: "accent.primary", required: 3 },
+  { token: "accent.hover", required: 3 },
+  { token: "accent.active", required: 3 },
   { token: "state.success", required: 3 },
   { token: "state.warning", required: 3 },
   { token: "state.danger", required: 3 },
   { token: "state.info", required: 3 },
+  { token: "border.subtle", required: 3 },
+  { token: "border.strong", required: 3 },
 ];
 
 export function validateTheme(themeId: string, colors: Record<string, string>): Finding[] {
   const findings: Finding[] = [];
-  for (const { token, required } of RULES) {
+  for (const { token, required, against } of RULES) {
     const fg = colors[token];
     if (fg === undefined) throw new Error(`${themeId}: missing token ${token}`);
-    for (const bgToken of BACKGROUNDS) {
+    for (const bgToken of against ?? BACKGROUNDS) {
       const bg = colors[bgToken];
       if (bg === undefined) throw new Error(`${themeId}: missing token ${bgToken}`);
       const ratio = contrastRatio(fg, bg);

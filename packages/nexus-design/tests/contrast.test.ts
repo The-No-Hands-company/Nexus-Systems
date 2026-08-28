@@ -35,11 +35,12 @@ describe("contrastRatio", () => {
 
 describe("validateTheme", () => {
   const good = {
-    "bg.canvas": "#030303", "bg.surface": "#0A0A0A", "bg.elevated": "#111111",
-    "text.primary": "#FFFFFF", "text.secondary": "#A0A0A0", "text.muted": "#6E6E6E",
-    "accent.primary": "#CCFF00",
+    "bg.canvas": "#030303", "bg.surface": "#0A0A0A", "bg.elevated": "#111111", "bg.raised": "#171717",
+    "text.primary": "#FFFFFF", "text.secondary": "#A0A0A0", "text.muted": "#6E6E6E", "text.inverse": "#030303",
+    "accent.primary": "#CCFF00", "accent.hover": "#B8E600", "accent.active": "#A3CC00",
     "state.success": "#2AC57D", "state.warning": "#E8B24A",
     "state.danger": "#E15D5D", "state.info": "#5CA8FF",
+    "border.subtle": "rgba(255,255,255,0.36)", "border.strong": "rgba(255,255,255,0.44)",
   };
 
   test("passes a palette that meets AA", () => {
@@ -67,5 +68,28 @@ describe("validateTheme", () => {
     expect(one.required).toBe(4.5);
     expect(one.ratio).toBeGreaterThan(4.5);
     expect(one.themeId).toBe("void");
+  });
+
+  test("checks text.inverse against accent.primary, not the canvas backgrounds", () => {
+    // text.inverse is the primary Button's own label colour — it is never
+    // painted on bg.canvas/surface/elevated/raised, only on accent.primary,
+    // so that is the only pairing that should exist for it.
+    const findings = validateTheme("void", good).filter((f) => f.pair.startsWith("text.inverse "));
+    expect(findings.map((f) => f.pair)).toEqual(["text.inverse on accent.primary"]);
+  });
+
+  test("checks borders as non-text UI at 3:1, including against bg.raised", () => {
+    const findings = validateTheme("void", good);
+    const raisedPairs = findings.filter((f) => f.pair.endsWith("on bg.raised"));
+    expect(raisedPairs.length).toBeGreaterThan(0);
+    const subtle = findings.find((f) => f.pair === "border.subtle on bg.raised")!;
+    expect(subtle.required).toBe(3);
+    expect(subtle.ok).toBe(true);
+  });
+
+  test("rejects a border that does not meet 3:1", () => {
+    const bad = { ...good, "border.subtle": "rgba(255,255,255,0.05)" };
+    const failures = validateTheme("void", bad).filter((f) => !f.ok);
+    expect(failures.map((f) => f.pair)).toContain("border.subtle on bg.raised");
   });
 });
