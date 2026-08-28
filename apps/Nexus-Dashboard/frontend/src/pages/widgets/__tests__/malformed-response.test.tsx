@@ -45,7 +45,10 @@ describe("widgets survive a malformed 200 response", () => {
     ])));
 
     render(<MemoryRouter><Unread /></MemoryRouter>);
-    await waitFor(() => expect(screen.getByText("Hi")).toBeTruthy());
+    // Unread shows "count plus flagged" per the spec, not a per-message
+    // subject line for every unread message — this one is unflagged, so only
+    // the count is asserted.
+    await waitFor(() => expect(screen.getByText("1")).toBeTruthy());
   });
 
   it("Activity: an object missing `notifications` reaches the error state without throwing", async () => {

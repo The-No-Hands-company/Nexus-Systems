@@ -3,6 +3,8 @@ import { Link } from "react-router-dom";
 import { me, listApps, type Me, type AppEntry } from "../api";
 import Shell from "../shell/Shell";
 import HealthStrip from "../shell/HealthStrip";
+import NotificationBell from "../shell/NotificationBell";
+import { Pill } from "../../../../../packages/nexus-design/src/components/ui/pill";
 import Today from "./widgets/Today";
 import Unread from "./widgets/Unread";
 import Activity from "./widgets/Activity";
@@ -59,7 +61,7 @@ export default function Home() {
   // the founder landed here and /admin might as well not have existed.
   if (user) {
     return (
-      <Shell apps={apps} user={user}>
+      <Shell apps={apps} user={user} utility={<NotificationBell />}>
         <div className="flex flex-col gap-4 p-4">
           <HealthStrip apps={apps} />
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
@@ -140,7 +142,7 @@ function SignedOut() {
           <div className="mt-9 flex flex-wrap gap-3">
             <a
               href={`${AUTH_LOGIN_URL}?redirect_uri=${encodeURIComponent(window.location.origin)}`}
-              className="rounded-md bg-blue-600 px-6 py-3 font-medium text-white"
+              className="rounded-md bg-accent px-6 py-3 font-medium text-accent-foreground hover:bg-accent-hover active:bg-accent-active"
             >
               Sign in
             </a>
@@ -176,13 +178,7 @@ function SignedOut() {
                     key={app.id}
                     className="rounded-lg border border-zinc-700 bg-zinc-800/40 p-4"
                   >
-                    <div className="flex items-center gap-2">
-                      <span
-                        aria-hidden="true"
-                        className="h-1.5 w-1.5 rounded-full bg-emerald-400"
-                      />
-                      <span className="text-sm font-medium">{app.name}</span>
-                    </div>
+                    <Pill tone="success">{app.name}</Pill>
                     <p className="mt-1.5 line-clamp-2 text-xs leading-relaxed text-zinc-500">
                       {app.description}
                     </p>

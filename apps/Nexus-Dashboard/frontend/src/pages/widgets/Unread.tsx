@@ -1,7 +1,14 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
+import { Pill } from "../../../../../../packages/nexus-design/src/components/ui/pill";
 import type { MailSummary } from "../../api";
 import WidgetShell, { type WidgetState } from "./WidgetShell";
 
+/**
+ * "Count plus flagged" per the spec — not a full inbox list. The widget's job
+ * is a glance at how much is waiting and what needs attention, not a second
+ * copy of MailList.
+ */
 export default function Unread() {
   const [state, setState] = useState<WidgetState<MailSummary[]>>({ status: "loading" });
 
@@ -32,18 +39,39 @@ export default function Unread() {
 
   return (
     <WidgetShell title="Unread" state={state} empty="No unread mail">
-      {(messages) =>
-        messages.length === 0 ? null : (
-          <ul className="flex flex-col gap-1">
-            {messages.map((m) => (
-              <li key={m.id} className="flex gap-3 border-b border-zinc-700 py-1 text-sm last:border-0">
-                <span className="truncate text-zinc-200">{m.from}</span>
-                <span className="truncate text-zinc-500">{m.subject ?? "(no subject)"}</span>
-              </li>
-            ))}
-          </ul>
-        )
-      }
+      {(messages) => {
+        if (messages.length === 0) return null;
+        const flagged = messages.filter((m) => m.flagged);
+        return (
+          <div className="flex flex-col gap-3">
+            <Link
+              to="/mail"
+              className="flex items-baseline gap-2 text-2xl font-semibold text-zinc-100 hover:text-accent"
+            >
+              {messages.length}
+              <span className="text-sm font-normal text-zinc-500">unread</span>
+            </Link>
+            {flagged.length > 0 && (
+              <ul className="flex flex-col gap-1">
+                {flagged.map((m) => (
+                  <li
+                    key={m.id}
+                    className="flex items-center gap-2 border-b border-zinc-700 py-1 text-sm last:border-0"
+                  >
+                    <Pill tone="warning">flagged</Pill>
+                    <Link
+                      to={`/mail/m/${m.id}`}
+                      className="min-w-0 truncate text-zinc-200 hover:text-accent"
+                    >
+                      {m.subject ?? "(no subject)"}
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        );
+      }}
     </WidgetShell>
   );
 }

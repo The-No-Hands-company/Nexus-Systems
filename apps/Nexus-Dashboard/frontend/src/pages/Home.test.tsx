@@ -46,8 +46,10 @@ describe("Home", () => {
     stubFetch(true);
     render(<MemoryRouter><Home /></MemoryRouter>);
     // The health strip and the Pinned widget both source from the same app
-    // list, so the app name legitimately appears more than once.
-    await waitFor(() => expect(screen.getAllByText("Nexus Chat").length).toBeGreaterThan(0));
+    // list, so the app name legitimately appears at least twice — not just
+    // "at least once", which getAllByText already guarantees by throwing on
+    // zero matches and would make a `.length > 0` assertion tautological.
+    await waitFor(() => expect(screen.getAllByText("Nexus Chat").length).toBeGreaterThanOrEqual(2));
     expect(screen.getByRole("heading", { name: /pinned/i })).toBeTruthy();
   });
 
