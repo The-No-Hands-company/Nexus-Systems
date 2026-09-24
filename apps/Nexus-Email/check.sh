@@ -9,7 +9,7 @@ cd "$(dirname "$0")"
 
 if [ -z "${NEXUS_EMAIL_TEST_DATABASE_URL:-}" ] && [ -f "../../.env" ]; then
     POSTGRES_PASSWORD="$(sed -n 's/^POSTGRES_PASSWORD=//p' ../../.env | head -1 | tr -d '\r')"
-    export NEXUS_EMAIL_TEST_DATABASE_URL="postgres://nexus:${POSTGRES_PASSWORD}@localhost:5432/nexus"
+    export NEXUS_EMAIL_TEST_DATABASE_URL="postgres://nexus:${POSTGRES_PASSWORD}@localhost:5432/nexus_email_test"
 fi
 
 echo -n "nexus-email... "
