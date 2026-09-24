@@ -71,11 +71,20 @@ async fn a_malformed_key_or_url_is_refused_by_the_database() {
     let domain = unique_domain();
     let mut bad_key = peer(&domain, false);
     bad_key.public_key = "short".into();
-    assert!(dir.add(&bad_key).await.is_err());
+    assert_check_violation(dir.add(&bad_key).await);
 
     let mut bad_url = peer(&domain, false);
     bad_url.base_url = "mail.example".into();
-    assert!(dir.add(&bad_url).await.is_err());
+    assert_check_violation(dir.add(&bad_url).await);
+}
+
+/// Specifically a CHECK constraint: any other error (a missing table, a lost
+/// connection) would let this test pass without the schema refusing anything.
+fn assert_check_violation(r: sqlx::Result<()>) {
+    match r {
+        Err(sqlx::Error::Database(e)) => assert_eq!(e.code().as_deref(), Some("23514"), "{e}"),
+        other => panic!("expected a CHECK violation, got {other:?}"),
+    }
 }
 
 #[tokio::test]
