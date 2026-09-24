@@ -7,16 +7,15 @@ export type SystemsApiRegistrationPayload = {
   health: "healthy" | "degraded" | "offline";
   upstreamUrl: string;
   capabilities: string[];
-  /** Calendar events are user data — always behind SSO. */
-  requiresAuth: boolean;
   /**
-   * The canonical in-shell route. Declared here because the payload below was
-   * already sending it — an excess property on the returned object literal that
-   * the type did not mention, which nothing caught because this app's tsc was
-   * never actually runnable.
+   * No `requiresAuth`: whether an app sits behind the SSO gate is Cloud's
+   * operator-only switch, and Cloud ignores what an app says about itself.
+   * Calendar's events stay private because every read is owner-scoped.
    */
-  publicUrl: string;
+  /** The canonical in-shell route. */
   path: string;
+  /** The direct HTTPS origin for bookmarks and standalone access. */
+  publicUrl: string;
   delivery: "proxied-app";
   metadata: Record<string, unknown>;
 };
@@ -34,7 +33,6 @@ export function buildSystemsApiRegistrationPayload(baseUrl: string): SystemsApiR
     publicUrl: "https://calendar.tnhc.dev",
     delivery: "proxied-app",
     capabilities: ["calendar", "events", "scheduling"],
-    requiresAuth: true,
     metadata: {
       version: "v1",
       defaultPort: 3068,
