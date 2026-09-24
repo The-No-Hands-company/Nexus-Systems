@@ -17,4 +17,4 @@ pub use deliver::{Deliverer, Disposition, Outcome};
 pub use error::{DeliveryError, Result};
 pub use queue::{backoff_for, max_attempts, Queue, QueuedDelivery};
 pub use route::{Route, Router};
-pub use transport::{FederatedHandoff, FederatedTransport};
+pub use transport::{FederatedHandoff, FederatedTransport, HandoffOutcome};
