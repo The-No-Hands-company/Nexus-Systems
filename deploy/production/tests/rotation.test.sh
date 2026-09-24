@@ -96,6 +96,21 @@ env_effective_value() {
     printf '%s' "$value"
 }
 
+bash_effective_env_value() {
+    local file=$1
+    local key=$2
+
+    bash -c '
+        set -euo pipefail
+        unset "$2"
+        set -a
+        # shellcheck source=/dev/null
+        . "$1"
+        set +a
+        printf "%s" "${!2-}"
+    ' bash "$file" "$key"
+}
+
 file_mode() {
     stat -c '%a' "$1"
 }
@@ -777,6 +792,71 @@ test_storage_checkpoint_can_be_explicitly_rolled_back_after_cloud_probe_failure(
     assert_secret_files_are_private
 }
 
+test_prepare_rejects_incoherent_storage_pairs() {
+    local index out err status
+
+    for index in 0 1 2 3; do
+        setup_case "prepare-incoherent-storage-$index"
+        out="$CASE_DIR/stdout"
+        err="$CASE_DIR/stderr"
+        case "$index" in
+            0)
+                sed -i \
+                    's/^NEXUS_STORAGE_S3_ACCESS_KEY=.*/NEXUS_STORAGE_S3_ACCESS_KEY=DIVERGENT_ACCESS_SENTINEL/' \
+                    "$CLOUD_ENV"
+                ;;
+            1)
+                sed -i \
+                    's/^NEXUS_STORAGE_S3_SECRET_KEY=.*/NEXUS_STORAGE_S3_SECRET_KEY=DIVERGENT_SECRET_SENTINEL/' \
+                    "$CLOUD_ENV"
+                ;;
+            2)
+                sed -i \
+                    's/^NEXUS__STORAGE__ACCESS_KEY=.*/NEXUS__STORAGE__ACCESS_KEY=DIVERGENT_ACCESS_SENTINEL/' \
+                    "$CHAT_ENV"
+                ;;
+            3)
+                sed -i \
+                    's/^NEXUS__STORAGE__SECRET_KEY=.*/NEXUS__STORAGE__SECRET_KEY=DIVERGENT_SECRET_SENTINEL/' \
+                    "$CHAT_ENV"
+                ;;
+        esac
+
+        set +e
+        run_phase prepare "$out" "$err"
+        status=$?
+        set -e
+
+        [ "$status" -ne 0 ] || fail "prepare accepted incoherent storage credential case $index"
+        [ ! -e "$RUNTIME_DIR/rotation.current" ] || \
+            fail "prepare published incoherent rollback state for case $index"
+        assert_file_contains "$err" 'one coherent access/secret pair' \
+            "prepare did not explain incoherent storage credential case $index"
+    done
+}
+
+test_prepare_rejects_bash_append_duplicates() {
+    local out err status
+    setup_case prepare-bash-append-duplicates
+    out="$CASE_DIR/stdout"
+    err="$CASE_DIR/stderr"
+
+    printf '%s\n' "MINIO_ROOT_USER+='_SUFFIX'" >> "$ROOT_ENV"
+    printf '%s\n' "  export NEXUS_STORAGE_S3_ACCESS_KEY+='_SUFFIX'" >> "$CLOUD_ENV"
+    printf '%s\n' '    NEXUS__STORAGE__ACCESS_KEY+="_SUFFIX"' >> "$CHAT_ENV"
+
+    set +e
+    run_phase prepare "$out" "$err"
+    status=$?
+    set -e
+
+    [ "$status" -ne 0 ] || fail 'prepare accepted coherent-looking Bash += duplicates'
+    [ ! -e "$RUNTIME_DIR/rotation.current" ] || \
+        fail 'prepare published active state for Bash += duplicates'
+    assert_file_contains "$err" 'duplicate MINIO_ROOT_USER assignments' \
+        'prepare did not classify Bash += as a duplicate assignment'
+}
+
 test_storage_rollback_refuses_to_discard_a_concurrent_credential_edit() {
     local out err rotation_dir status minio_recreates_before
     setup_case storage-concurrent-credential
@@ -868,6 +948,109 @@ test_storage_rollback_rejects_divergent_duplicate_credentials() {
         'duplicate rejection recreated MinIO without a complete rollback set'
     [ -f "$rotation_dir/storage.checkpoint" ] || \
         fail 'duplicate rejection removed the storage checkpoint'
+}
+
+test_storage_rotation_accepts_bash_assignment_forms() {
+    local out err status cloud_secret_assignment chat_secret_assignment
+    setup_case storage-bash-assignment-forms
+    out="$CASE_DIR/stdout"
+    err="$CASE_DIR/stderr"
+    cloud_secret_assignment='  export NEXUS_STORAGE_S3_SECRET_KEY="OLD_MINIO_PASSWORD_SENTINEL"' # pragma: allowlist secret
+    chat_secret_assignment='    NEXUS__STORAGE__SECRET_KEY="OLD_MINIO_PASSWORD_SENTINEL"' # pragma: allowlist secret
+
+    sed -i \
+        -e '1iSTORAGE_USER_BASE=OLD_MINIO' \
+        -e '2iSTORAGE_PASSWORD_BASE=OLD_MINIO_PASSWORD' \
+        "$ROOT_ENV"
+    sed -i \
+        -e "s/^MINIO_ROOT_USER=.*/  export MINIO_ROOT_USER+='OLD_MINIO_USER_SENTINEL'/" \
+        -e 's/^MINIO_ROOT_PASSWORD=.*/    MINIO_ROOT_PASSWORD="${STORAGE_PASSWORD_BASE}_SENTINEL"/' \
+        "$ROOT_ENV"
+    sed -i \
+        -e "s/^NEXUS_STORAGE_S3_ACCESS_KEY=.*/    NEXUS_STORAGE_S3_ACCESS_KEY='OLD_MINIO_USER_SENTINEL'/" \
+        -e "s/^NEXUS_STORAGE_S3_SECRET_KEY=.*/$cloud_secret_assignment/" \
+        "$CLOUD_ENV"
+    sed -i \
+        -e "s/^NEXUS__STORAGE__ACCESS_KEY=.*/  export NEXUS__STORAGE__ACCESS_KEY='OLD_MINIO_USER_SENTINEL'/" \
+        -e "s/^NEXUS__STORAGE__SECRET_KEY=.*/$chat_secret_assignment/" \
+        "$CHAT_ENV"
+
+    run_phase prepare "$out" "$err"
+    printf '%s\n' NEW_MINIO_PASSWORD_SENTINEL > "$OPENSSL_BASE64_FILE"
+    set +e
+    run_phase rotate-storage "$out" "$err" FAKE_MINIO_HEALTH=healthy
+    status=$?
+    set -e
+
+    [ "$status" -eq 0 ] || fail 'storage rotation rejected valid indented/exported/quoted Bash assignments'
+    assert_eq NEW_MINIO_USER_SENTINEL \
+        "$(bash_effective_env_value "$ROOT_ENV" MINIO_ROOT_USER)" \
+        'root access key did not rotate under Bash assignment semantics'
+    assert_eq NEW_MINIO_PASSWORD_SENTINEL \
+        "$(bash_effective_env_value "$ROOT_ENV" MINIO_ROOT_PASSWORD)" \
+        'root secret key did not rotate under Bash assignment semantics'
+    assert_eq NEW_MINIO_USER_SENTINEL \
+        "$(bash_effective_env_value "$CLOUD_ENV" NEXUS_STORAGE_S3_ACCESS_KEY)" \
+        'Cloud access key did not rotate under Bash assignment semantics'
+    assert_eq NEW_MINIO_PASSWORD_SENTINEL \
+        "$(bash_effective_env_value "$CLOUD_ENV" NEXUS_STORAGE_S3_SECRET_KEY)" \
+        'Cloud secret key did not rotate under Bash assignment semantics'
+    assert_eq NEW_MINIO_USER_SENTINEL \
+        "$(bash_effective_env_value "$CHAT_ENV" NEXUS__STORAGE__ACCESS_KEY)" \
+        'Chat access key did not rotate under Bash assignment semantics'
+    assert_eq NEW_MINIO_PASSWORD_SENTINEL \
+        "$(bash_effective_env_value "$CHAT_ENV" NEXUS__STORAGE__SECRET_KEY)" \
+        'Chat secret key did not rotate under Bash assignment semantics'
+    assert_file_not_contains "$ROOT_ENV" OLD_MINIO_USER_SENTINEL \
+        'root renderer left the prior alternate assignment in place'
+    assert_file_not_contains "$ROOT_ENV" OLD_MINIO_PASSWORD_SENTINEL \
+        'root renderer left the prior expanded assignment in place'
+    assert_file_not_contains "$CLOUD_ENV" OLD_MINIO_USER_SENTINEL \
+        'Cloud renderer left the prior indented assignment in place'
+    assert_file_not_contains "$CLOUD_ENV" OLD_MINIO_PASSWORD_SENTINEL \
+        'Cloud renderer left the prior alternate assignment in place'
+    assert_file_not_contains "$CHAT_ENV" OLD_MINIO_USER_SENTINEL \
+        'Chat renderer left the prior alternate assignment in place'
+    assert_file_not_contains "$CHAT_ENV" OLD_MINIO_PASSWORD_SENTINEL \
+        'Chat renderer left the prior indented assignment in place'
+}
+
+test_storage_rollback_rejects_bash_form_duplicates() {
+    local assignment index out err rotation_dir status minio_recreates_before
+    local -a assignments=(
+        'export NEXUS_STORAGE_S3_SECRET_KEY=DIVERGENT_DUPLICATE_SENTINEL'
+        "    NEXUS_STORAGE_S3_SECRET_KEY='DIVERGENT_DUPLICATE_SENTINEL'" # pragma: allowlist secret
+        '  export NEXUS_STORAGE_S3_SECRET_KEY="DIVERGENT_DUPLICATE_SENTINEL"' # pragma: allowlist secret
+    )
+
+    for index in "${!assignments[@]}"; do
+        assignment=${assignments[$index]}
+        setup_case "storage-bash-duplicate-$index"
+        out="$CASE_DIR/stdout"
+        err="$CASE_DIR/stderr"
+
+        run_phase prepare "$out" "$err"
+        printf '%s\n' NEW_MINIO_PASSWORD_SENTINEL > "$OPENSSL_BASE64_FILE"
+        run_phase rotate-storage "$out" "$err" FAKE_MINIO_HEALTH=healthy
+        IFS= read -r rotation_dir < "$RUNTIME_DIR/rotation.current"
+        printf '%s\n' "$assignment" >> "$CLOUD_ENV"
+        minio_recreates_before="$(count_matches "$RECORD_DIR/docker.argv" '--force-recreate minio')"
+
+        set +e
+        run_phase rollback-storage "$out" "$err" FAKE_MINIO_HEALTH=healthy
+        status=$?
+        set -e
+
+        [ "$status" -ne 0 ] || fail "rollback accepted Bash-form duplicate assignment $index"
+        assert_eq DIVERGENT_DUPLICATE_SENTINEL \
+            "$(bash_effective_env_value "$CLOUD_ENV" NEXUS_STORAGE_S3_SECRET_KEY)" \
+            "rollback overwrote Bash-effective duplicate assignment $index"
+        assert_eq "$minio_recreates_before" \
+            "$(count_matches "$RECORD_DIR/docker.argv" '--force-recreate minio')" \
+            "Bash-form duplicate assignment $index recreated MinIO"
+        [ -f "$rotation_dir/storage.checkpoint" ] || \
+            fail "Bash-form duplicate assignment $index removed the storage checkpoint"
+    done
 }
 
 test_storage_rollback_rejects_incomplete_staging() {
@@ -964,37 +1147,94 @@ test_storage_rollback_respects_stable_environment_locks() {
         'cooperative writer edit was not preserved after rollback contention'
 }
 
-test_storage_rotation_rejects_duplicate_credentials_before_mutation() {
-    local out err rotation_dir status
+test_prepare_respects_stable_environment_locks() {
+    local out err prepare_pid prepare_status writer_status attempt
+    local prepare_ready prepare_release writer_ready writer_release writer_out writer_err
+    setup_case prepare-environment-lock
+    out="$CASE_DIR/stdout"
+    err="$CASE_DIR/stderr"
+    prepare_ready="$CASE_DIR/prepare.ready"
+    prepare_release="$CASE_DIR/prepare.release"
+    writer_ready="$CASE_DIR/writer.ready"
+    writer_release="$CASE_DIR/writer.release"
+    writer_out="$CASE_DIR/writer.stdout"
+    writer_err="$CASE_DIR/writer.stderr"
+    : > "$writer_release"
+
+    run_phase prepare "$out" "$err" \
+        FAKE_INSTALL_BLOCK_ON=root.env.rollback \
+        "FAKE_INSTALL_BLOCK_READY_FILE=$prepare_ready" \
+        "FAKE_INSTALL_BLOCK_RELEASE_FILE=$prepare_release" &
+    prepare_pid=$!
+    for ((attempt = 1; attempt <= 100; attempt++)); do
+        [ ! -e "$prepare_ready" ] || break
+        sleep 0.02
+    done
+    [ -e "$prepare_ready" ] || {
+        : > "$prepare_release"
+        wait "$prepare_pid" || true
+        fail 'prepare did not reach the environment snapshot boundary'
+    }
+
+    set +e
+    (
+        export PATH="$CASE_DIR/fake-bin:$PATH"
+        export ROTATION_ROOT_ENV="$ROOT_ENV"
+        export NEXUS_ROTATION_RUNTIME_DIR="$RUNTIME_DIR"
+        export NEXUS_ROTATION_ROOT_ENV="$ROOT_ENV"
+        export NEXUS_ROTATION_CLOUD_ENV="$CLOUD_ENV"
+        export NEXUS_ROTATION_CHAT_ENV="$CHAT_ENV"
+        export NEXUS_ROTATION_STORAGE_LOCK_TIMEOUT=0
+        export FAKE_WRITER_READY_FILE="$writer_ready"
+        export FAKE_WRITER_RELEASE_FILE="$writer_release"
+        bash "$SCRIPT" with-storage-locks "$CASE_DIR/fake-bin/storage-env-writer"
+    ) > "$writer_out" 2> "$writer_err"
+    writer_status=$?
+    set -e
+    : > "$prepare_release"
+    set +e
+    wait "$prepare_pid"
+    prepare_status=$?
+    set -e
+
+    [ "$prepare_status" -eq 0 ] || fail 'lock-holding prepare did not complete after release'
+    [ "$writer_status" -ne 0 ] || fail 'prepare allowed a cooperative writer during its environment snapshot'
+    [ ! -e "$writer_ready" ] || fail 'cooperative writer entered while prepare was snapshotting'
+    if env_value "$ROOT_ENV" COOPERATIVE_LATE_EDIT >/dev/null 2>&1; then
+        fail 'prepare allowed a cooperative environment edit during snapshot'
+    fi
+    assert_file_contains "$writer_err" 'storage credential files are being updated by another writer' \
+        'prepare lock contention was not explicit'
+}
+
+test_prepare_rejects_duplicate_credentials_before_state() {
+    local out err status
     setup_case storage-duplicate-before-rotation
     out="$CASE_DIR/stdout"
     err="$CASE_DIR/stderr"
     printf 'NEXUS_STORAGE_S3_SECRET_KEY=DIVERGENT_DUPLICATE_SENTINEL\n' >> "$CLOUD_ENV"
 
-    run_phase prepare "$out" "$err"
-    IFS= read -r rotation_dir < "$RUNTIME_DIR/rotation.current"
-    printf '%s\n' NEW_MINIO_PASSWORD_SENTINEL > "$OPENSSL_BASE64_FILE"
     set +e
-    run_phase rotate-storage "$out" "$err" FAKE_MINIO_HEALTH=unhealthy
+    run_phase prepare "$out" "$err"
     status=$?
     set -e
 
-    [ "$status" -ne 0 ] || fail 'storage rotation accepted a duplicate protected credential'
+    [ "$status" -ne 0 ] || fail 'prepare accepted a duplicate protected credential'
     assert_eq OLD_MINIO_USER_SENTINEL "$(env_value "$ROOT_ENV" MINIO_ROOT_USER)" \
-        'duplicate precondition failure changed the root access key'
+        'duplicate prepare failure changed the root access key'
     assert_eq OLD_MINIO_PASSWORD_SENTINEL "$(env_value "$ROOT_ENV" MINIO_ROOT_PASSWORD)" \
-        'duplicate precondition failure changed the root secret key'
+        'duplicate prepare failure changed the root secret key'
     assert_eq OLD_MINIO_USER_SENTINEL "$(env_value "$CLOUD_ENV" NEXUS_STORAGE_S3_ACCESS_KEY)" \
-        'duplicate precondition failure changed the Cloud access key'
+        'duplicate prepare failure changed the Cloud access key'
     assert_eq DIVERGENT_DUPLICATE_SENTINEL \
         "$(env_effective_value "$CLOUD_ENV" NEXUS_STORAGE_S3_SECRET_KEY)" \
-        'duplicate precondition failure discarded the effective duplicate value'
+        'duplicate prepare failure discarded the effective duplicate value'
     [ ! -f "$RECORD_DIR/minio-snapshots" ] || \
-        fail 'duplicate precondition failure recreated MinIO'
-    [ ! -f "$rotation_dir/storage.checkpoint" ] || \
-        fail 'duplicate precondition failure wrote a storage checkpoint'
+        fail 'duplicate prepare failure recreated MinIO'
+    [ ! -e "$RUNTIME_DIR/rotation.current" ] || \
+        fail 'duplicate prepare failure published active rollback state'
     assert_file_contains "$err" 'duplicate NEXUS_STORAGE_S3_SECRET_KEY assignments' \
-        'duplicate precondition failure did not identify the ambiguity'
+        'duplicate prepare failure did not identify the ambiguity'
 }
 
 test_storage_rollback_compensates_a_commit_failure() {
@@ -1378,18 +1618,28 @@ run_test 'storage rotation commits matching credentials only after MinIO is heal
     test_storage_rotation_commits_only_after_healthy_minio
 run_test 'storage rotation conditionally skips Nexus Chat when it is not deployed' \
     test_storage_rotation_remains_valid_when_nexus_chat_is_not_deployed
+run_test 'prepare rejects incoherent cross-file storage credential pairs' \
+    test_prepare_rejects_incoherent_storage_pairs
+run_test 'prepare rejects coherent-looking Bash append duplicates' \
+    test_prepare_rejects_bash_append_duplicates
 run_test 'storage checkpoint remains explicitly rollback-capable after a Cloud probe failure' \
     test_storage_checkpoint_can_be_explicitly_rolled_back_after_cloud_probe_failure
 run_test 'storage rollback preserves a concurrent credential edit and fails closed' \
     test_storage_rollback_refuses_to_discard_a_concurrent_credential_edit
 run_test 'storage rollback rejects divergent duplicate credentials without partial mutation' \
     test_storage_rollback_rejects_divergent_duplicate_credentials
+run_test 'storage rotation accepts Bash-effective indented, exported, quoted, expanded, and append assignments' \
+    test_storage_rotation_accepts_bash_assignment_forms
+run_test 'storage rollback rejects Bash-form duplicate credential assignments' \
+    test_storage_rollback_rejects_bash_form_duplicates
 run_test 'storage rollback rejects incomplete staging without partial mutation' \
     test_storage_rollback_rejects_incomplete_staging
 run_test 'storage rollback respects stable per-environment writer locks' \
     test_storage_rollback_respects_stable_environment_locks
-run_test 'storage rotation rejects duplicate protected credentials before mutation' \
-    test_storage_rotation_rejects_duplicate_credentials_before_mutation
+run_test 'prepare respects stable per-environment writer locks while snapshotting' \
+    test_prepare_respects_stable_environment_locks
+run_test 'prepare rejects duplicate protected credentials before publishing state' \
+    test_prepare_rejects_duplicate_credentials_before_state
 run_test 'storage rollback compensates a staged commit failure' \
     test_storage_rollback_compensates_a_commit_failure
 run_test 'storage rollback preserves protected artifacts when compensation fails' \

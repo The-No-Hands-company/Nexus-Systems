@@ -156,55 +156,59 @@ load_rotation_dir() {
     ROTATION_DIR=$candidate
 }
 
+env_assignment_matches_key() {
+    local line=$1
+    local key=$2
+    local pattern
+
+    pattern="^[[:blank:]]*(export[[:blank:]]+)?${key}(\\+)?="
+    [[ "$line" =~ $pattern ]]
+}
+
 read_env_value_into() {
     local target=$1
     local file=$2
     local key=$3
-    local line extracted
+    local evaluated marker=$'\034'
 
-    while IFS= read -r line || [ -n "$line" ]; do
-        line=${line%$'\r'}
-        case "$line" in
-            "$key="*)
-                extracted=${line#*=}
-                if [[ "$extracted" == \"*\" ]] && [ "${#extracted}" -ge 2 ]; then
-                    extracted=${extracted:1:${#extracted}-2}
-                elif [[ "$extracted" == \'*\' ]] && [ "${#extracted}" -ge 2 ]; then
-                    extracted=${extracted:1:${#extracted}-2}
-                fi
-                printf -v "$target" '%s' "$extracted"
-                return 0
-                ;;
-        esac
-    done < "$file"
-    return 1
+    if ! evaluated="$(
+        bash --noprofile --norc -c '
+            set -euo pipefail
+            nexus_env_file=$1
+            nexus_env_key=$2
+            unset "$nexus_env_key"
+            set -a
+            # shellcheck source=/dev/null
+            . "$nexus_env_file"
+            set +a
+            [ "${!nexus_env_key+x}" = x ] || exit 1
+            printf "%s\034" "${!nexus_env_key}"
+        ' bash "$file" "$key" 2>/dev/null
+    )"; then
+        return 1
+    fi
+    [[ "$evaluated" == *"$marker" ]] || return 1
+    evaluated=${evaluated%"$marker"}
+    printf -v "$target" '%s' "$evaluated"
 }
 
 read_unique_env_value_into() {
     local target=$1
     local file=$2
     local key=$3
-    local line extracted= matches=0
+    local line matches=0
 
     while IFS= read -r line || [ -n "$line" ]; do
         line=${line%$'\r'}
-        case "$line" in
-            "$key="*)
-                matches=$((matches + 1))
-                extracted=${line#*=}
-                if [[ "$extracted" == \"*\" ]] && [ "${#extracted}" -ge 2 ]; then
-                    extracted=${extracted:1:${#extracted}-2}
-                elif [[ "$extracted" == \'*\' ]] && [ "${#extracted}" -ge 2 ]; then
-                    extracted=${extracted:1:${#extracted}-2}
-                fi
-                ;;
-        esac
+        if env_assignment_matches_key "$line" "$key"; then
+            matches=$((matches + 1))
+        fi
     done < "$file"
     [ "$matches" -eq 1 ] || {
         [ "$matches" -eq 0 ] && return 1
         return 2
     }
-    printf -v "$target" '%s' "$extracted"
+    read_env_value_into "$target" "$file" "$key"
 }
 
 required_env_value_into() {
@@ -248,6 +252,39 @@ require_unique_env_value_present() {
         die "$label contains duplicate $key assignments; refusing ambiguous rotation"
     fi
     die "$label must contain exactly one non-empty $key before rotation"
+}
+
+require_coherent_storage_credentials() {
+    local root_file=$1
+    local cloud_file=$2
+    local chat_file=$3
+    local context=$4
+    local root_user= root_password= cloud_access= cloud_secret=
+    local chat_access= chat_secret=
+
+    require_unique_env_value_present "$root_file" MINIO_ROOT_USER "$context root environment"
+    require_unique_env_value_present "$root_file" MINIO_ROOT_PASSWORD "$context root environment"
+    require_unique_env_value_present \
+        "$cloud_file" NEXUS_STORAGE_S3_ACCESS_KEY "$context Nexus Cloud environment"
+    require_unique_env_value_present \
+        "$cloud_file" NEXUS_STORAGE_S3_SECRET_KEY "$context Nexus Cloud environment"
+    read_unique_env_value_into root_user "$root_file" MINIO_ROOT_USER
+    read_unique_env_value_into root_password "$root_file" MINIO_ROOT_PASSWORD
+    read_unique_env_value_into cloud_access "$cloud_file" NEXUS_STORAGE_S3_ACCESS_KEY
+    read_unique_env_value_into cloud_secret "$cloud_file" NEXUS_STORAGE_S3_SECRET_KEY
+
+    [ "$root_user" = "$cloud_access" ] && [ "$root_password" = "$cloud_secret" ] || \
+        die "$context must contain one coherent access/secret pair"
+    if [ -n "$chat_file" ]; then
+        require_unique_env_value_present \
+            "$chat_file" NEXUS__STORAGE__ACCESS_KEY "$context Nexus Chat environment"
+        require_unique_env_value_present \
+            "$chat_file" NEXUS__STORAGE__SECRET_KEY "$context Nexus Chat environment"
+        read_unique_env_value_into chat_access "$chat_file" NEXUS__STORAGE__ACCESS_KEY
+        read_unique_env_value_into chat_secret "$chat_file" NEXUS__STORAGE__SECRET_KEY
+        [ "$root_user" = "$chat_access" ] && [ "$root_password" = "$chat_secret" ] || \
+            die "$context must contain one coherent access/secret pair"
+    fi
 }
 
 write_cloudflare_auth_config() {
@@ -367,13 +404,12 @@ replace_env_value_from_file() {
     installed="$env_dir/.${env_base}.rotation.install"
     found=0
     while IFS= read -r line || [ -n "$line" ]; do
-        case "$line" in
-            "$key="*)
-                printf '%s=%s\n' "$key" "$replacement"
-                found=1
-                ;;
-            *) printf '%s\n' "$line" ;;
-        esac
+        if env_assignment_matches_key "$line" "$key"; then
+            printf '%s=%s\n' "$key" "$replacement"
+            found=1
+        else
+            printf '%s\n' "$line"
+        fi
     done < "$env_file" > "$staged"
     if [ "$found" -eq 0 ]; then
         printf '%s=%s\n' "$key" "$replacement" >> "$staged"
@@ -505,13 +541,11 @@ stage_rotated_env_file() {
         while IFS= read -r line || [ -n "$line" ]; do
             matched=0
             for ((index = 0; index < ${#keys[@]}; index++)); do
-                case "$line" in
-                    "${keys[$index]}="*)
-                        printf '%s=%s\n' "${keys[$index]}" "${old_values[$index]}" || exit 1
-                        matched=1
-                        break
-                        ;;
-                esac
+                if env_assignment_matches_key "$line" "${keys[$index]}"; then
+                    printf '%s=%s\n' "${keys[$index]}" "${old_values[$index]}" || exit 1
+                    matched=1
+                    break
+                fi
             done
             if [ "$matched" -eq 0 ]; then
                 printf '%s\n' "$line" || exit 1
@@ -710,14 +744,22 @@ trap 'on_signal HUP 129' HUP
 
 phase_prepare() {
     local rotation_dir state_source token_hash current_token normalized_token
-    local argv_snapshot bootstrap_token
+    local argv_snapshot bootstrap_token current_chat_env= prepared_chat_env=
 
     ensure_runtime_dirs
-    require_file "$ROOT_ENV" "root environment file"
-    require_file "$CLOUD_ENV" "Nexus Cloud environment file"
     if [ -e "$ACTIVE_STATE" ]; then
         die "an active rotation already exists; verify it and run cleanup first"
     fi
+    acquire_storage_environment_locks || \
+        die "storage credential files are being updated by another writer"
+    require_file "$ROOT_ENV" "root environment file"
+    require_file "$CLOUD_ENV" "Nexus Cloud environment file"
+    if [ -f "$CHAT_ENV" ]; then
+        current_chat_env=$CHAT_ENV
+    fi
+    require_coherent_storage_credentials \
+        "$ROOT_ENV" "$CLOUD_ENV" "$current_chat_env" \
+        "storage credential environment files"
 
     rotation_dir="$(mktemp -d "$RUNTIME_DIR/rotation.XXXXXX")"
     chmod 700 "$rotation_dir"
@@ -726,7 +768,13 @@ phase_prepare() {
     install -m 600 "$CLOUD_ENV" "$ROTATION_DIR/cloud.env.rollback"
     if [ -f "$CHAT_ENV" ]; then
         install -m 600 "$CHAT_ENV" "$ROTATION_DIR/chat.env.rollback"
+        prepared_chat_env="$ROTATION_DIR/chat.env.rollback"
     fi
+    require_coherent_storage_credentials \
+        "$ROTATION_DIR/root.env.rollback" \
+        "$ROTATION_DIR/cloud.env.rollback" \
+        "$prepared_chat_env" \
+        "prepared storage credential snapshots"
     if [ ! -f "$TUNNEL_TOKEN_FILE" ]; then
         argv_snapshot="$ROTATION_DIR/cloudflared.argv.json"
         bootstrap_token="$ROTATION_DIR/cloudflared.token.bootstrap"
