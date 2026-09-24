@@ -80,6 +80,9 @@ Nexus-Email is in beta: the SMTP daemon listens on `2525` (MX), `2587`
 (submission) and `2143` (IMAP), and webmail is a shell-native view at
 `app.tnhc.dev/mail`. Outbound delivery to the wider internet is blocked by an
 upstream port-25 filter — an infrastructure constraint, not a software gap.
+Federated egress (`nexus-mailfed`) lets a pinned peer node with working port 25
+deliver on this node's behalf, DKIM-signed as `tnhc.dev`; it needs such a peer
+to exist, and none does yet.
 
 All public traffic reaches these through Cloudflare Tunnel into the gate proxy
 on `:8080`. **Every public URL is provisioned through Nexus-Tunnel.** This is
@@ -195,7 +198,7 @@ Every app in the ecosystem, by category, with measured status.
 
 | App | Role | Status |
 |---|---|---|
-| **Nexus-Email** | Sovereign mail — SMTP, IMAP, DKIM/SPF/DMARC, webmail; no third party in the path | **Beta** |
+| **Nexus-Email** | Sovereign mail — SMTP, IMAP, DKIM/SPF/DMARC, webmail, federated egress; no third party in the path | **Beta** |
 | **Nexus-Team-Chat** | Team messaging and channels | Scaffold |
 | **Nexus-Meet** | Video meetings | Scaffold |
 | **Nexus-Broadcast** | One-to-many streaming and announcements | Scaffold |

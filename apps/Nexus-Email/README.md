@@ -26,6 +26,10 @@ Build-order steps 1-6 of 7 are implemented:
 7. **IMAP4rev1** — `nexus-mailimap`, served by the same daemon on 2143, so
    ordinary mail clients can use a Nexus mailbox.
 
+8. **Federated egress** — `nexus-mailfed`: signed node-to-node handoffs, pinned
+   peers, and relay through a peer whose port 25 works. Design:
+   `docs/superpowers/specs/2026-09-24-nexus-email-federated-egress.md`.
+
 ## The egress reality, measured
 
 Outbound TCP 25 is filtered on this connection, over both IPv4 and IPv6. The
@@ -53,6 +57,8 @@ path exists — the ISP lifting the filter, or a peer node with clean egress.
 - `crates/nexus-mailout` — SMTP outbound: MX resolution, client, delivery worker.
 - `crates/nexus-mailauth` — DKIM, SPF and DMARC.
 - `crates/nexus-mailimap` — IMAP4rev1: session state machine and server.
+- `crates/nexus-mailfed` — federation: node keys, signed handoffs, the ingest
+  listener, the HTTP transport, and `nexus-mailctl`.
 
 ## Connecting a mail client
 
@@ -71,13 +77,91 @@ shows people the wrong mail.
 ## Running it
 
 `nexus-mailsmtpd` runs two listeners: an MX port for anonymous strangers, and a
-submission port for our own users. `deploy.sh` starts it.
+submission port for our own users. `deploy.sh` starts it. The same process
+runs the delivery worker, which drains the outbound queue, and the federation
+listener on `127.0.0.1:2580`.
 
 **Both default to unprivileged loopback ports (2525 / 2587).** Binding 25 needs
 root or `CAP_NET_BIND_SERVICE`, and nothing can reach this node on 25 anyway —
 the ISP filters it and the Cloudflare tunnel does not carry SMTP. Publishing an
 MX needs both a route in and the capability; until then the daemon serves local
 and federated mail.
+
+## Administration: `nexus-mailctl`
+
+Mailboxes, addresses and peers are managed on the node, not over HTTP. Shell
+access already means operator, and an address-binding endpoint without a role
+check lets any signed-in user take `info@` for themselves. It reads the same
+`NEXUS_EMAIL_DATABASE_URL` and `NEXUS_EMAIL_DOMAIN` as the daemons.
+
+```bash
+cargo build --release -p nexus-mailfed
+M=target/release/nexus-mailctl
+$M mailbox create --node "Info"                 # prints the mailbox id
+$M mailbox create --identity <auth-subject> "Eric"
+$M address add <mailbox-id> info@tnhc.dev --primary
+$M key show                                      # this node's public key
+$M peer add <domain> <https://base-url> <public-key> [--may-relay]
+$M peer list
+$M peer remove <domain>
+```
+
+Only addresses in this node's domain can be bound. Restart `nexus-mailsmtpd`
+and `nexus-mailapi` after pinning a peer: routing loads the peer list at start.
+
+## Federated egress: sending without port 25
+
+This node cannot reach any MX. Another Nexus node whose port 25 *is* open can
+deliver for it: our worker DKIM-signs each message as `tnhc.dev`, hands it to
+that peer over a signed HTTPS request, and the peer relays it from its own
+address. Our software on both ends; no third-party mail service.
+
+**It needs a peer.** Until someone runs one with working egress and a clean IP,
+nothing changes for outside mail — it waits in the queue, deferred, exactly as
+before. The peer's IP reputation is what Gmail and Outlook judge; no code on
+either side changes that.
+
+To set it up, on **this node** (the origin):
+
+1. `nexus-mailctl key show`, and give the peer our domain, our federation URL,
+   and that key.
+2. `nexus-mailctl peer add <peer-domain> https://<peer-federation-host> <peer-key>`
+   — no `--may-relay`: we do not relay for them unless we choose to.
+3. Set `NEXUS_EMAIL_EGRESS=peer:<peer-domain>`.
+4. Generate a DKIM key (`cargo run -p nexus-mailauth --example keygen`),
+   publish its TXT record, and set `NEXUS_EMAIL_DKIM_KEY_PATH` and
+   `NEXUS_EMAIL_DKIM_SELECTOR`.
+5. Add the peer's sending IP to `tnhc.dev`'s SPF record.
+6. Restart `nexus-mailsmtpd`.
+
+On **the peer**: `nexus-mailctl peer add tnhc.dev https://<our-federation-host>
+<our-key> --may-relay`, and restart. `--may-relay` is the grant; without it the
+peer accepts our mail for its own users only.
+
+**Exposing the listener.** Peers reach `POST /federation/v1/mail` over HTTPS.
+The listener binds loopback (`NEXUS_EMAIL_FEDERATION_BIND`); publishing it means
+a proxy route to `127.0.0.1:2580` for the host set in
+`NEXUS_EMAIL_FEDERATION_HOST` (default `mail.<domain>`). That host is part of
+every signature, so it must be the one peers pinned. Never route it to
+`nexus-mailapi`, which trusts a caller-supplied identity header.
+
+What a peer can and cannot do is enforced by the receiver, not trusted from the
+sender: unpinned nodes, bad signatures, requests older than five minutes and
+replayed nonces are refused; a peer may only send as its own domain; outside
+recipients are relayed only under `--may-relay`; mail is never forwarded from
+one peer to another.
+
+| Setting | Default | Meaning |
+|---|---|---|
+| `NEXUS_EMAIL_EGRESS` | `direct` | `direct`, or `peer:<domain>`; anything else stops the daemon at start |
+| `NEXUS_EMAIL_FEDERATION_BIND` | `127.0.0.1:2580` | the federation listener |
+| `NEXUS_EMAIL_FEDERATION_HOST` | `mail.<domain>` | the host peers pin and sign for |
+| `NEXUS_EMAIL_NODE_KEY_PATH` | `~/.config/nexus-email/node.key` | this node's Ed25519 key; created once, never replaced |
+| `NEXUS_EMAIL_DKIM_KEY_PATH` / `_SELECTOR` | unset | both or neither |
+
+The node key lives under `$HOME` for the same reason as the DKIM key: this
+volume is NTFS, where file permissions cannot protect it. Losing it changes this
+node's identity for every peer that pinned it.
 
 ## Inbound policy: Observe before Enforce
 
@@ -167,8 +251,9 @@ passing one.
 
 ```bash
 createdb nexus_email_test   # or: docker exec nexus-systems-postgres-1 createdb -U nexus nexus_email_test
-docker exec -i nexus-systems-postgres-1 psql -U nexus -d nexus_email_test \
-  < crates/nexus-mailstore/migrations/20260815000001_initial_schema.sql
+for f in crates/nexus-mailstore/migrations/*.sql; do   # every migration, in order
+  docker exec -i nexus-systems-postgres-1 psql -v ON_ERROR_STOP=1 -U nexus -d nexus_email_test < "$f"
+done
 
 # Build the URL from the running container rather than pasting a password
 # anywhere: the repo must never contain a credential-shaped string.
@@ -177,3 +262,8 @@ export NEXUS_EMAIL_TEST_DATABASE_URL="postgres://nexus:${PGPW}@127.0.0.1:5432/ne
 
 cargo test -p nexus-mailstore
 ```
+
+`check.sh` builds the same URL for `nexus_email_test`. The two-node egress test
+(`nexus-mailfed/tests/two_nodes.rs`) also needs the role to be allowed to
+`CREATE DATABASE`: each node gets its own freshly migrated database, dropped
+afterwards.
