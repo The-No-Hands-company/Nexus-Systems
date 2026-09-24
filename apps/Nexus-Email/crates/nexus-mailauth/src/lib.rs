@@ -27,6 +27,6 @@ pub use dmarc::{aligned, organizational_domain, Alignment, DmarcRecord, DmarcRes
 pub use dns::{DnsError, Lookup};
 pub use spf::{SpfResult, MAX_DNS_LOOKUPS};
 pub use error::{DkimError, Result};
-pub use key::{generate, private_key_pem, public_key_record};
+pub use key::{generate, load_private_key_pem, private_key_pem, public_key_record};
 pub use sign::{sign, signed_message, Signer_ as DkimSigner, DEFAULT_SIGNED_HEADERS};
 pub use verify::{parse_signature, public_key_from_record, verify_with_key, key_record_name};

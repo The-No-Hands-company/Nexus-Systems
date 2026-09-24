@@ -25,14 +25,26 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let pool = PgPoolOptions::new().max_connections(8).connect(&database_url).await?;
     let store = MailStore::new(pool.clone());
-    let queue = Queue::new(pool);
+    let queue = Queue::new(pool.clone());
 
+    // Pinned peers route over the node channel, as in the MTA; a peer pinned
+    // after start is picked up on restart.
     let mut mail_router = MailRouter::new().with_local_domain(&domain);
-    for peer in std::env::var("NEXUS_EMAIL_PEER_DOMAINS").unwrap_or_default().split(',') {
-        let peer = peer.trim();
-        if !peer.is_empty() {
-            mail_router = mail_router.with_peer_domain(peer);
-        }
+    let pinned: Vec<String> = nexus_mailfed::PeerDirectory::new(pool.clone())
+        .list()
+        .await?
+        .into_iter()
+        .map(|p| p.domain)
+        .collect();
+    for peer in std::env::var("NEXUS_EMAIL_PEER_DOMAINS")
+        .unwrap_or_default()
+        .split(',')
+        .map(str::trim)
+        .filter(|p| !p.is_empty())
+        .map(str::to_string)
+        .chain(pinned)
+    {
+        mail_router = mail_router.with_peer_domain(&peer);
     }
 
     let state = Arc::new(AppState {

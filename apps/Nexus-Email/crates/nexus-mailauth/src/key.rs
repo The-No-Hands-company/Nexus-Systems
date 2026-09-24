@@ -1,5 +1,5 @@
 use base64::{engine::general_purpose::STANDARD, Engine};
-use rsa::pkcs8::{EncodePrivateKey, EncodePublicKey, LineEnding};
+use rsa::pkcs8::{DecodePrivateKey, EncodePrivateKey, EncodePublicKey, LineEnding};
 use rsa::{RsaPrivateKey, RsaPublicKey};
 
 use crate::error::{DkimError, Result};
@@ -18,6 +18,11 @@ pub fn private_key_pem(key: &RsaPrivateKey) -> Result<String> {
     key.to_pkcs8_pem(LineEnding::LF)
         .map(|p| p.to_string())
         .map_err(|e| DkimError::BadPublicKey(e.to_string()))
+}
+
+/// Load a key written by [`private_key_pem`] (PKCS#8).
+pub fn load_private_key_pem(pem: &str) -> Result<RsaPrivateKey> {
+    RsaPrivateKey::from_pkcs8_pem(pem).map_err(|e| DkimError::BadPublicKey(e.to_string()))
 }
 
 /// The DNS TXT record to publish at `<selector>._domainkey.<domain>`.

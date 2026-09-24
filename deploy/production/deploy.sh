@@ -442,6 +442,12 @@ cmd_start() {
     # It is plaintext on loopback: there is no TLS in this daemon, so exposing
     # it beyond localhost needs a TLS terminator in front.
     #
+    # The same process runs the delivery worker and the federation listener
+    # (2580, loopback): pinned peers hand mail over it, and with
+    # NEXUS_EMAIL_EGRESS=peer:<domain> outside mail leaves through that peer
+    # instead of this host's filtered port 25. Peers are pinned with
+    # nexus-mailctl; see apps/Nexus-Email/README.md.
+    #
     # NEXUS_EMAIL_POLICY defaults to observe: SPF/DKIM/DMARC are evaluated and
     # recorded in Authentication-Results, but no mail is refused on their
     # account. Switch to enforce after reading those headers against real
@@ -461,6 +467,12 @@ cmd_start() {
             NEXUS_EMAIL_HOSTNAME="mail.$DOMAIN" \
             NEXUS_EMAIL_POLICY="${NEXUS_EMAIL_POLICY:-observe}" \
             NEXUS_EMAIL_DATABASE_URL="$NEXUS_EMAIL_DATABASE_URL" \
+            NEXUS_EMAIL_FEDERATION_BIND="${NEXUS_EMAIL_FEDERATION_BIND:-127.0.0.1:2580}" \
+            NEXUS_EMAIL_FEDERATION_HOST="${NEXUS_EMAIL_FEDERATION_HOST:-mail.$DOMAIN}" \
+            NEXUS_EMAIL_NODE_KEY_PATH="${NEXUS_EMAIL_NODE_KEY_PATH:-}" \
+            NEXUS_EMAIL_EGRESS="${NEXUS_EMAIL_EGRESS:-direct}" \
+            NEXUS_EMAIL_DKIM_KEY_PATH="${NEXUS_EMAIL_DKIM_KEY_PATH:-}" \
+            NEXUS_EMAIL_DKIM_SELECTOR="${NEXUS_EMAIL_DKIM_SELECTOR:-}" \
             "$SMTPD_BIN"
     else
         log "mailsmtpd binary not built - skipping (cargo build -p nexus-mailsmtp)"

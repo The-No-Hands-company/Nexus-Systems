@@ -146,3 +146,11 @@ fn the_published_record_is_a_usable_dkim_txt_record() {
     // Long enough to be a real 2048-bit key rather than a truncated one.
     assert!(record.len() > 300, "record looked too short: {}", record.len());
 }
+
+#[test]
+fn a_key_written_as_pem_loads_back_and_still_signs() {
+    let pem = nexus_mailauth::private_key_pem(key()).unwrap();
+    let loaded = nexus_mailauth::load_private_key_pem(&pem).expect("load");
+    assert_eq!(&loaded, key());
+    assert!(nexus_mailauth::load_private_key_pem("-----BEGIN NONSENSE-----").is_err());
+}

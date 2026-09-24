@@ -18,6 +18,24 @@ pub enum Egress {
     Peer(String),
 }
 
+impl Egress {
+    /// Parse `NEXUS_EMAIL_EGRESS`: empty or `direct`, or `peer:<domain>`.
+    ///
+    /// Anything else is an error rather than a fallback to direct: a typo that
+    /// silently meant "direct" would leave every message waiting on a filtered
+    /// port while the operator believed a peer was delivering it.
+    pub fn parse(setting: &str) -> Result<Self, String> {
+        let s = setting.trim();
+        if s.is_empty() || s == "direct" {
+            return Ok(Egress::Direct);
+        }
+        match s.strip_prefix("peer:").map(str::trim) {
+            Some(domain) if !domain.is_empty() => Ok(Egress::Peer(domain.to_ascii_lowercase())),
+            _ => Err(format!("NEXUS_EMAIL_EGRESS must be `direct` or `peer:<domain>`, not {setting:?}")),
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct WorkerConfig {
     /// The name this node gives in EHLO. Should be a hostname that resolves

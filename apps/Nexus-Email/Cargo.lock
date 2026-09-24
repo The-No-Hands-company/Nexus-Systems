@@ -1231,6 +1231,7 @@ dependencies = [
  "base64",
  "chrono",
  "nexus-maildelivery",
+ "nexus-mailfed",
  "nexus-mailmsg",
  "nexus-mailstore",
  "serde",
@@ -1342,10 +1343,13 @@ dependencies = [
 name = "nexus-mailsmtp"
 version = "0.1.0"
 dependencies = [
+ "axum",
  "nexus-mailauth",
  "nexus-maildelivery",
+ "nexus-mailfed",
  "nexus-mailimap",
  "nexus-mailmsg",
+ "nexus-mailout",
  "nexus-mailstore",
  "reqwest",
  "serde_json",
