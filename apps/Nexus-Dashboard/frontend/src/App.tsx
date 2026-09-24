@@ -13,10 +13,10 @@ import CloudTools from "./pages/cloud/CloudTools";
 import CloudFederation from "./pages/cloud/CloudFederation";
 import CloudIdentity from "./pages/cloud/CloudIdentity";
 import CloudApi from "./pages/cloud/CloudApi";
+import Grid from "./pages/Grid";
 import { listApps, me, type AppEntry, type Me } from "./api";
 import Shell from "./shell/Shell";
 import NotificationBell from "./shell/NotificationBell";
-import Launcher from "./shell/Launcher";
 import AppFrame from "./shell/AppFrame";
 import ReportIssue from "./pages/ReportIssue";
 import TerminalAccess, { type UserState } from "./pages/terminal/TerminalAccess";
@@ -67,7 +67,7 @@ function ShellRoute({ state, onRetry, user }: { state: AppsState; onRetry: () =>
   const appId = match?.id ?? "";
 
   return (
-    <Shell sidebar={<Launcher apps={apps} activeId={appId} />} user={user} utility={user ? <NotificationBell /> : null}>
+    <Shell apps={apps} user={user} utility={user ? <NotificationBell /> : null}>
       {state.status === "loading" && (
         <div className="flex h-full items-center justify-center p-8 text-zinc-500">
           Loading…
@@ -84,15 +84,15 @@ function ShellRoute({ state, onRetry, user }: { state: AppsState; onRetry: () =>
  * rather than around a framed app.
  *
  * Unlike ShellRoute, the content does not depend on the app list — account
- * settings must render whether or not the launcher could be populated. A
- * failed fetch degrades the sidebar to empty and nothing else. Treating it as
+ * settings must render whether or not the apps drawer could be populated. A
+ * failed fetch degrades the drawer to empty and nothing else. Treating it as
  * fatal here would make an unrelated network failure look like a broken
  * account page.
  */
 function ShellView({ state, children, user }: { state: AppsState; children: ReactNode; user: Me | null }) {
   const apps = state.status === "ready" ? state.apps : [];
   return (
-    <Shell sidebar={<Launcher apps={apps} />} user={user} utility={user ? <NotificationBell /> : null}>
+    <Shell apps={apps} user={user} utility={user ? <NotificationBell /> : null}>
       {children}
     </Shell>
   );
@@ -105,12 +105,14 @@ function ShellView({ state, children, user }: { state: AppsState; children: Reac
  * Three groups, deliberately:
  *
  * - `/request` and `/claim` are public pages for people with no session and no
- *   apps yet. Chrome that advertises a launcher they cannot use would be a
+ *   apps yet. Chrome that advertises an apps drawer they cannot use would be a
  *   lie, so they stay bare.
- * - `/` stays bare too, but for a different reason: signed in it renders the
- *   launcher grid, and the shell's sidebar is also a launcher. Wrapping it
- *   would put the same four apps on screen twice. The grid is the home
- *   surface; the shell appears when you enter something.
+ * - `/` gets the shell too now: it renders Home, a dashboard (health strip
+ *   plus widgets) inside the same chrome as every other signed-in route. The
+ *   app directory itself lives in the drawer, not doubled on this page and
+ *   the rail both — that duplication (every app tile, more than half of them
+ *   offline, right next to a sidebar listing them again) is what this shell
+ *   exists to remove.
  * - `/account` and `/admin` are signed-in surfaces this app owns, and they get
  *   the shell so they stop reading as separate websites. `/cloud`,
  *   `/cloud/tools`, `/cloud/federation`, `/cloud/identity` and `/cloud/api`
@@ -136,7 +138,7 @@ function LegacyAppRedirect({ state, onRetry }: { state: AppsState; onRetry: () =
   const { appId = "" } = useParams();
   if (state.status === "loading") {
     return (
-      <Shell sidebar={<Launcher apps={[]} />}>
+      <Shell apps={[]}>
         <div className="flex h-full items-center justify-center p-8 text-zinc-500">Loading…</div>
       </Shell>
     );
@@ -145,7 +147,7 @@ function LegacyAppRedirect({ state, onRetry }: { state: AppsState; onRetry: () =
   // exactly as the flat route does.
   if (state.status === "failed") {
     return (
-      <Shell sidebar={<Launcher apps={[]} />}>
+      <Shell apps={[]}>
         <AppsUnavailable onRetry={onRetry} />
       </Shell>
     );
@@ -193,15 +195,11 @@ export default function App() {
   return (
     <BrowserRouter>
       <Routes>
-        {/* Home gets the sidebar so the grid renders inside the same chrome as
-            every other signed-in route. Home itself decides whether to use it:
-            signed out, it stays bare. */}
-        <Route
-          path="/"
-          element={
-            <Home sidebar={<Launcher apps={appsState.status === "ready" ? appsState.apps : []} />} />
-          }
-        />
+        {/* Home decides its own chrome: signed in, it wraps itself in Shell;
+            signed out, it stays bare. It fetches its own user and apps, so
+            this route needs no props — same pattern as every route below
+            that depends on appsState instead. */}
+        <Route path="/" element={<Home />} />
         <Route path="/request" element={<RequestAccess />} />
         <Route path="/claim" element={<Claim />} />
         <Route
@@ -289,16 +287,19 @@ export default function App() {
             this change must not stop working because we tidied the scheme. */}
         <Route path="/a/:appId" element={<LegacyAppRedirect state={appsState} onRetry={loadApps} />} />
 
+        {/* The apps drawer's "See all N apps" affordance (C3): the browse view
+            behind the command palette the spec calls for, reached as its own
+            route rather than a second mode bolted onto the overlay — Grid
+            already is a complete, independently loading/erroring page, and
+            duplicating that inside Overlay would mean two copies of the same
+            three states. */}
+        <Route path="/apps" element={<ShellView state={appsState} user={user}><Grid /></ShellView>} />
+
         {/* Flat app routes last: every static route above wins over this, so a
             registered app can never shadow /account or /admin. */}
         <Route path="/calendar" element={<ShellView state={appsState} user={user}><CalendarView /></ShellView>} />
         <Route path="/:slug" element={<ShellRoute state={appsState} user={user} onRetry={loadApps} />} />
-        <Route
-          path="*"
-          element={
-            <Home sidebar={<Launcher apps={appsState.status === "ready" ? appsState.apps : []} />} />
-          }
-        />
+        <Route path="*" element={<Home />} />
       </Routes>
     </BrowserRouter>
   );

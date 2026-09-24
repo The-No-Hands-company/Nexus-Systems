@@ -1,15 +1,10 @@
 import React from 'react';
-import { clsx, type ClassValue } from 'clsx';
-import { twMerge } from 'tailwind-merge';
-
-function cn(...inputs: ClassValue[]) {
-  return twMerge(clsx(inputs));
-}
+import { cn } from './cn';
 
 export const Card = ({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) => (
   <div
     className={cn(
-      'rounded-lg border border-white/10 bg-[#0a0a0a] text-white shadow-sm',
+      'rounded-lg border border-border-subtle bg-zinc-800 text-zinc-100 shadow-sm',
       className
     )}
     {...props}
@@ -25,7 +20,7 @@ export const CardTitle = ({ className, ...props }: React.HTMLAttributes<HTMLHead
 );
 
 export const CardDescription = ({ className, ...props }: React.HTMLAttributes<HTMLParagraphElement>) => (
-  <p className={cn('text-sm text-white/60', className)} {...props} />
+  <p className={cn('text-sm text-zinc-400', className)} {...props} />
 );
 
 export const CardContent = ({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) => (

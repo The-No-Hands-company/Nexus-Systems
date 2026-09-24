@@ -152,6 +152,7 @@ jobs:
           - Nexus-Photos
           - Nexus-Video
           - Nexus-GPU-Test
+          - Nexus-Dashboard
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -177,8 +178,47 @@ jobs:
             cd apps/${{ matrix.app }}
             npm install --prefer-offline 2>/dev/null || npm install
           fi
-      - name: Install + Build
-        run: cd apps/${{ matrix.app }}/frontend && npm install && npx tsc --noEmit && npx vite build
+      - name: Install + Check + Build
+        run: |
+          cd apps/${{ matrix.app }}/frontend
+          npm install
+          if [ "${{ matrix.app }}" = "Nexus-Dashboard" ]; then
+            npm run check
+            npm run test
+            npm run build
+          else
+            npx tsc --noEmit
+            npx vite build
+          fi
+
+  # ── Design tokens (packages/nexus-design) ─────────────────────────
+  #
+  # Previously not covered by any job — "Nexus-Design" above is
+  # apps/Nexus-Design, an unrelated app. Nothing enforced the contrast gate
+  # on push, so a theme value that failed AA could merge unnoticed. `bun run
+  # build` is what actually runs the gate (see src/generate.ts): it fails
+  # the whole step if any pair drops below its required ratio.
+  nexus-design:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      # tests/vendor.test.ts is excluded, not run and ignored: it checks that
+      # apps/Nexus and apps/Nexus-Cloud carry byte-identical vendored copies
+      # of the generated CSS, and both are git submodules actions/checkout
+      # does not fetch by default (same fact the contracts/smoke jobs below
+      # work around for Nexus-Cloud alone). Running it here without fetching
+      # both submodules would fail this job on every push for a reason
+      # unrelated to what it exists to catch, defeating the point of finally
+      # having it run at all.
+      - name: Test (excludes tests/vendor.test.ts — see comment above)
+        run: |
+          cd packages/nexus-design
+          bun test tests/contrast.test.ts tests/components.test.ts tests/flatten.test.ts tests/generate.test.ts tests/themes.test.ts
+      - name: Build (runs the contrast gate, regenerates dist/)
+        run: cd packages/nexus-design && bun run build
 
   # ── API Contract Validation ──────────────────────────────────────
   contracts:

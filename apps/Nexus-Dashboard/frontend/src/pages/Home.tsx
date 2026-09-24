@@ -1,8 +1,14 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { me, listApps, type Me, type AppEntry } from "../api";
-import DashboardOverview from "./DashboardOverview";
-import "./dashboard-overview.css";
+import Shell from "../shell/Shell";
+import HealthStrip from "../shell/HealthStrip";
+import NotificationBell from "../shell/NotificationBell";
+import { Pill } from "../../../../../packages/nexus-design/src/components/ui/pill";
+import Today from "./widgets/Today";
+import Unread from "./widgets/Unread";
+import Activity from "./widgets/Activity";
+import Pinned from "./widgets/Pinned";
 
 const AUTH_LOGIN_URL =
   import.meta.env.VITE_AUTH_LOGIN_URL ?? "https://auth.tnhc.dev/login";
@@ -10,34 +16,40 @@ const AUTH_LOGIN_URL =
 /**
  * The root route decides what "home" means.
  *
- * Signed in, home is the app grid, inside the same chrome as everywhere else.
+ * Signed in, home is a dashboard, inside the same chrome as everywhere else.
  * Signed out, it is the way in — and this host stays public precisely so a
  * stranger can reach that. Gating it would leave nowhere to request an account
  * from.
  *
- * The grid used to render bare, on the reasoning that the shell's sidebar is
- * also a launcher and showing the apps twice was redundant. The cost of that
- * was worse than the redundancy: the front door had no header and no sidebar,
- * so it looked like a different, older application than everything behind it,
- * and the product only appeared to start once you clicked into an app.
- *
- * They are not the same thing anyway. The sidebar is navigation — a compact
- * list you use to move. The grid is a directory: names, descriptions, health.
+ * This used to render the full app grid — every registered app as a tile,
+ * more than half of them offline — while the shell's own sidebar listed them
+ * again. That doubled the same directory on one screen and buried the thing a
+ * person actually opens Home to see: what changed since they left. The grid
+ * still exists (Grid.tsx, reachable from the drawer's "see all" affordance)
+ * but it is no longer what "/" renders. Home is now a health strip plus four
+ * widgets — Today, Unread, Activity, Pinned — the way a dashboard for a
+ * running system should look, with the app directory itself moved into the
+ * drawer where it belongs.
  */
-export default function Home({ sidebar }: { sidebar?: ReactNode }) {
+export default function Home() {
   const [user, setUser] = useState<Me | null | undefined>(undefined);
-  const previewEnabled = (import.meta.env.DEV || import.meta.env.VITE_DASHBOARD_PREVIEW === "true")
-    && new URLSearchParams(window.location.search).has("dashboard-preview");
+  const [apps, setApps] = useState<AppEntry[]>([]);
 
   useEffect(() => {
-    if (previewEnabled) {
-      setUser({ id: "preview", username: "Eric", email: "preview@tnhc.dev", role: "founder" });
-      return;
-    }
     let cancelled = false;
     void me().then((u) => { if (!cancelled) setUser(u); });
     return () => { cancelled = true; };
-  }, [previewEnabled]);
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    // Best effort, same as SignedOut below: the health strip degrading to
+    // empty is not a reason to keep the rest of the dashboard from rendering.
+    void listApps()
+      .then((a) => { if (!cancelled) setApps(a); })
+      .catch(() => { if (!cancelled) setApps([]); });
+    return () => { cancelled = true; };
+  }, []);
 
   if (user === undefined) {
     return <section className="mx-auto max-w-4xl p-8 text-zinc-500">Loading…</section>;
@@ -47,19 +59,23 @@ export default function Home({ sidebar }: { sidebar?: ReactNode }) {
   // launcher to someone with no session and nothing to launch. user goes too —
   // without it the home header had no identity chip and no Operator link, so
   // the founder landed here and /admin might as well not have existed.
-  if (user) return <SignedIn user={user} launcher={sidebar} />;
+  if (user) {
+    return (
+      <Shell apps={apps} user={user} utility={<NotificationBell />}>
+        <div className="flex flex-col gap-4 p-4">
+          <HealthStrip apps={apps} />
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+            <div className="xl:row-span-2"><Today /></div>
+            <Unread />
+            <Activity />
+            <div className="md:col-span-2"><Pinned /></div>
+          </div>
+        </div>
+      </Shell>
+    );
+  }
 
   return <SignedOut />;
-}
-
-function SignedIn({ user, launcher }: { user: Me; launcher?: ReactNode }) {
-  const [apps, setApps] = useState<AppEntry[]>([]);
-  useEffect(() => {
-    let cancelled = false;
-    void listApps().then((items) => { if (!cancelled) setApps(items); }).catch(() => undefined);
-    return () => { cancelled = true; };
-  }, []);
-  return <DashboardOverview user={user} apps={apps} launcher={launcher} />;
 }
 
 /**
@@ -126,7 +142,7 @@ function SignedOut() {
           <div className="mt-9 flex flex-wrap gap-3">
             <a
               href={`${AUTH_LOGIN_URL}?redirect_uri=${encodeURIComponent(window.location.origin)}`}
-              className="rounded-md bg-blue-600 px-6 py-3 font-medium text-white"
+              className="rounded-md bg-accent px-6 py-3 font-medium text-accent-foreground hover:bg-accent-hover active:bg-accent-active"
             >
               Sign in
             </a>
@@ -162,13 +178,7 @@ function SignedOut() {
                     key={app.id}
                     className="rounded-lg border border-zinc-700 bg-zinc-800/40 p-4"
                   >
-                    <div className="flex items-center gap-2">
-                      <span
-                        aria-hidden="true"
-                        className="h-1.5 w-1.5 rounded-full bg-emerald-400"
-                      />
-                      <span className="text-sm font-medium">{app.name}</span>
-                    </div>
+                    <Pill tone="success">{app.name}</Pill>
                     <p className="mt-1.5 line-clamp-2 text-xs leading-relaxed text-zinc-500">
                       {app.description}
                     </p>

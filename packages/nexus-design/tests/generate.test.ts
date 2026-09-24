@@ -1,9 +1,24 @@
 import { describe, expect, test } from "bun:test";
 import tokens from "../tokens/nexus.tokens.json";
+import voidTheme from "../tokens/themes/void.json";
+import balancedDensity from "../tokens/density/balanced.json";
 import { flattenTokens } from "../src/flatten";
-import { renderTokensCss, renderThemeCss } from "../src/generate";
+import { renderTokensCss, renderThemeCss, renderScopedCss } from "../src/generate";
 
 const pairs = flattenTokens(tokens as Record<string, unknown>);
+
+/**
+ * Base + the void theme + the balanced density — the same combination the
+ * build script feeds to renderThemeCss/renderTokensCss for its single-theme
+ * outputs. Colour, spacing and font-size tokens no longer live in the base
+ * file (Task 1 moved them out into themes/densities), so any test that wants
+ * to see one of those needs this merged list instead of `pairs` alone.
+ */
+const themedPairs = [
+  ...pairs,
+  ...flattenTokens(voidTheme as Record<string, unknown>),
+  ...flattenTokens(balancedDensity as Record<string, unknown>),
+];
 
 /**
  * Mirrors the documented unit/namespace rules independently of generate.ts,
@@ -74,7 +89,8 @@ describe("generated CSS", () => {
   });
 
   test("the accent colour survives the whole pipeline intact", () => {
-    expect(renderTokensCss(pairs)).toContain("--nexus-color-accent-primary: #27c9a5;");
+    // Colour now comes from a theme (void), not the base file.
+    expect(renderTokensCss(themedPairs)).toContain("--nexus-color-accent-primary: #CCFF00;");
   });
 
   test("both outputs say they are generated", () => {
@@ -83,7 +99,8 @@ describe("generated CSS", () => {
   });
 
   test("a spacing token emerges with a px unit, not a bare number", () => {
-    expect(renderTokensCss(pairs)).toContain("--nexus-space-4: 16px;");
+    // Spacing now comes from a density (balanced), not the base file.
+    expect(renderTokensCss(themedPairs)).toContain("--nexus-space-4: 16px;");
   });
 
   test("a weight token stays unitless", () => {
@@ -107,16 +124,20 @@ describe("generated CSS", () => {
   });
 
   test("space.4 lands under Tailwind's --spacing-* namespace in the theme output", () => {
-    expect(renderThemeCss(pairs)).toContain("--spacing-4: 16px;");
+    // Spacing now comes from a density (balanced), not the base file.
+    expect(renderThemeCss(themedPairs)).toContain("--spacing-4: 16px;");
   });
 
   test("typography.size.sm lands under Tailwind's --text-* namespace in the theme output", () => {
-    expect(renderThemeCss(pairs)).toContain("--text-sm: 14px;");
+    // Font sizes now come from a density (balanced), not the base file.
+    expect(renderThemeCss(themedPairs)).toContain("--text-sm: 13px;");
   });
 
   test("typography.fontFamily, weight and lineHeight land under their v4 namespaces", () => {
-    const css = renderThemeCss(pairs);
-    expect(css).toContain("--font-base: IBM Plex Sans, Segoe UI, sans-serif;");
+    // fontFamily/weight/lineHeight still live in the base file, but the
+    // assertion runs against themedPairs to match the pipeline's actual input.
+    const css = renderThemeCss(themedPairs);
+    expect(css).toContain("--font-base: Satoshi, -apple-system, BlinkMacSystemFont, sans-serif;");
     expect(css).toContain("--font-weight-regular: 400;");
     expect(css).toContain("--leading-tight: 1.2;");
   });
@@ -136,5 +157,40 @@ describe("generated CSS", () => {
     expect(css).toContain("--motion-duration-fast: 120ms;");
     expect(css).toContain("--zIndex-base: 1;");
     expect(css).toContain("not a utility");
+  });
+});
+
+describe("scoped css", () => {
+  const base = [{ name: "--nexus-radius-md", value: "10" }];
+  const themes = {
+    void: [{ name: "--nexus-color-bg-canvas", value: "#030303" }],
+    abyss: [{ name: "--nexus-color-bg-canvas", value: "#04100E" }],
+  };
+  const densities = {
+    balanced: [{ name: "--nexus-space-4", value: "16" }],
+    compact: [{ name: "--nexus-space-4", value: "12" }],
+  };
+  const css = renderScopedCss(base, themes, densities, { theme: "void", density: "balanced" });
+
+  test("the default theme is also written to bare :root", () => {
+    // A document with no data-nexus-theme must render Void, not nothing.
+    expect(css).toMatch(/:root,\s*\[data-nexus-theme="void"\]\s*\{[^}]*#030303/);
+  });
+
+  test("the default density is also written to bare :root", () => {
+    expect(css).toMatch(/:root,\s*\[data-nexus-density="balanced"\]\s*\{[^}]*16px/);
+  });
+
+  test("non-default themes are scoped only to their attribute", () => {
+    expect(css).toMatch(/\[data-nexus-theme="abyss"\]\s*\{[^}]*#04100E/);
+    expect(css).not.toMatch(/:root,\s*\[data-nexus-theme="abyss"\]/);
+  });
+
+  test("base tokens are emitted once, unscoped", () => {
+    expect(css.match(/--nexus-radius-md/g)).toHaveLength(1);
+  });
+
+  test("density values still receive their unit", () => {
+    expect(css).toContain("--nexus-space-4: 12px;");
   });
 });
