@@ -130,7 +130,12 @@
 
 	log {
 		output stdout
-		format console
+		format filter {
+			fields {
+				request>headers delete
+			}
+			wrap console
+		}
 		level INFO
 	}
 }

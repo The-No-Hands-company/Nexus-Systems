@@ -105,3 +105,9 @@ apps/Nexus-Tunnel/data/tunnel-state.json
 **/.claude/scheduled_tasks.lock
 deploy/production/nexus-chat.env
 apps/Nexus-Auth/.migration_review.db
+
+# Protected production rotation state if an operator overrides the default
+# /tmp/nexus-production runtime directory into this checkout.
+/deploy/production/cloudflared.token
+/deploy/production/rotation.current
+/deploy/production/rotation.*/

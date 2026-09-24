@@ -23,6 +23,14 @@ echo "nexus-edge-proxy..."
 # someone to rediscover. Putting the proxy and the gate under CI is worth more
 # than leaving all three uncovered until that one is fixed — but it is a real
 # gap and it should be closed.
-bun test tests/gate.test.ts tests/proxy.test.ts
+bun test tests/gate.test.ts tests/proxy.test.ts tests/calendar-routing.test.ts \
+    tests/caddy-logging.test.ts tests/storage-probe.test.ts
+
+# The launcher itself. deploy.sh decides which process owns each production
+# port, which credentials reach which service, and how secrets rotate; these
+# run entirely against temporary fixtures and never touch a live service.
+bash tests/processes.test.sh
+bash tests/rotation.test.sh
+bash tests/start-contract.test.sh
 
 echo "PASS"

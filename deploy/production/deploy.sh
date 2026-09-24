@@ -4,10 +4,19 @@
 
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
-LOG_DIR="/tmp/nexus-production"
-PID_DIR="$LOG_DIR/pids"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+LOG_DIR="${NEXUS_PRODUCTION_LOG_DIR:-/tmp/nexus-production}"
+PID_DIR="${NEXUS_PRODUCTION_PID_DIR:-$LOG_DIR/pids}"
+CURL_BIN="${CURL_BIN:-curl}"
+KILL_BIN="${KILL_BIN:-kill}"
+CADDY_BIN="${CADDY_BIN:-caddy}"
+CLOUD_ENV_FILE="${NEXUS_CLOUD_ENV_FILE:-$ROOT/apps/Nexus-Cloud/.env}"
+NEXUS_CHAT_ENV_FILE="${NEXUS_CHAT_ENV_FILE:-$ROOT/deploy/production/nexus-chat.env}"
+NEXUS_CHAT_BINARY_PATH="${NEXUS_CHAT_BINARY_PATH:-$ROOT/apps/Nexus/target/debug/nexus}"
 mkdir -p "$LOG_DIR" "$PID_DIR"
+
+# shellcheck source=processes.sh
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/processes.sh"
 
 export DOMAIN="${DOMAIN:-tnhc.dev}"
 # Where a browser is sent to sign in. Exported under the name the apps actually
@@ -30,30 +39,88 @@ G="\033[32m" Y="\033[33m" R="\033[0m"
 log()  { echo -e "${G}[nexus]${R} $*"; }
 warn() { echo -e "${Y}[nexus]${R} $*"; }
 
-check_port() {
-    local port=$1
-    if ss -ltn | grep -q ":$port "; then
-        warn "Port $port already in use"
-        return 1
-    fi
-    return 0
+service_identity() {
+    local name=$1
+
+    case "$name" in
+        auth)           SERVICE_DIR="$ROOT/apps/Nexus-Auth"; SERVICE_EXEC_PATTERN="bun run src/index.ts" ;;
+        cloud)          SERVICE_DIR="$ROOT/apps/Nexus-Cloud"; SERVICE_EXEC_PATTERN="bun run src/index.ts" ;;
+        chat)           SERVICE_DIR="$ROOT/apps/Nexus-Team-Chat"; SERVICE_EXEC_PATTERN="bun run src/index.ts" ;;
+        nexus-chat)     SERVICE_DIR="$ROOT/apps/Nexus"; SERVICE_EXEC_PATTERN="./target/debug/nexus serve --port 8180" ;;
+        nexus-chat-web) SERVICE_DIR="$ROOT"; SERVICE_EXEC_PATTERN="caddy run --config $ROOT/deploy/production/nexus-chat.Caddyfile" ;;
+        dashboard)      SERVICE_DIR="$ROOT/apps/Nexus-Dashboard"; SERVICE_EXEC_PATTERN="bun run src/index.ts" ;;
+        draw)           SERVICE_DIR="$ROOT/apps/Nexus-Draw"; SERVICE_EXEC_PATTERN="bun run src/index.ts" ;;
+        proxy)          SERVICE_DIR="$ROOT/deploy/production"; SERVICE_EXEC_PATTERN="bun run proxy.ts" ;;
+        api)            SERVICE_DIR="$ROOT/apps/Nexus-API"; SERVICE_EXEC_PATTERN="--import tsx src/index.ts" ;;
+        calendar)       SERVICE_DIR="$ROOT/apps/Nexus-Calendar"; SERVICE_EXEC_PATTERN="bun run src/index.ts" ;;
+        nexus-calendar-web) SERVICE_DIR="$ROOT"; SERVICE_EXEC_PATTERN="run --config $ROOT/deploy/production/nexus-calendar.Caddyfile" ;;
+        nexus-draw-web) SERVICE_DIR="$ROOT"; SERVICE_EXEC_PATTERN="run --config $ROOT/deploy/production/nexus-draw.Caddyfile" ;;
+        terminal)       SERVICE_DIR="$ROOT/apps/Nexus-Terminal"; SERVICE_EXEC_PATTERN="bun run src/index.ts" ;;
+        mailapi)        SERVICE_DIR="$ROOT/apps/Nexus-Email"; SERVICE_EXEC_PATTERN="/nexus-mailapi" ;;
+        mailsmtpd)      SERVICE_DIR="$ROOT/apps/Nexus-Email"; SERVICE_EXEC_PATTERN="/nexus-mailsmtpd" ;;
+        *)              warn "No ownership identity configured for $name"; return 1 ;;
+    esac
+}
+
+service_port() {
+    case "$1" in
+        auth) printf '%s\n' 4310 ;;
+        cloud) printf '%s\n' 8787 ;;
+        chat) printf '%s\n' 3109 ;;
+        nexus-chat) printf '%s\n' 8180 ;;
+        nexus-chat-web) printf '%s\n' 8095 ;;
+        dashboard) printf '%s\n' 3132 ;;
+        draw) printf '%s\n' 3075 ;;
+        proxy) printf '%s\n' 8080 ;;
+        api) printf '%s\n' 3150 ;;
+        calendar) printf '%s\n' 3068 ;;
+        nexus-calendar-web) printf '%s\n' 8092 ;;
+        nexus-draw-web) printf '%s\n' 8091 ;;
+        terminal) printf '%s\n' 3110 ;;
+        mailapi) printf '%s\n' 3140 ;;
+        mailsmtpd) printf '%s\n' "${NEXUS_EMAIL_MX_PORT:-2525}" ;;
+        *) return 1 ;;
+    esac
 }
 
 start_service() {
     local name=$1
     local dir=$2
     local port=$3
+    local pid state launched_pid attempt start_attempts start_interval cleanup_attempts cleanup_interval
     shift 3
 
-    # An already-bound port means the service is already up, which is a
-    # success for our purposes, not a failure. Returning non-zero here aborted
-    # the whole script under `set -e`, so a single running service stopped
-    # every later one from starting — `deploy.sh bg` could not fill in the
-    # gaps after a partial outage, which is precisely when it is needed.
-    if ! check_port $port; then
-        log "$name already running on :$port — leaving it alone"
+    if ! service_identity "$name"; then
+        return 1
+    fi
+    if [ "$dir" != "$SERVICE_DIR" ]; then
+        warn "$name directory does not match its ownership identity"
+        return 1
+    fi
+
+    # A bound port is only an already-running service when all independent
+    # ownership signals agree. Never adopt an unrelated listener just because
+    # it happens to use the expected port.
+    if pid="$(reconcile_pid "$name" "$port" "$dir" "$SERVICE_EXEC_PATTERN" 2>/dev/null)"; then
+        log "$name already managed on :$port (PID: $pid)"
         return 0
     fi
+    state="$(listener_state "$port" 2>/dev/null)"
+    case "$state" in
+        absent) ;;
+        occupied)
+            warn "$name has an occupied but unverifiable port :$port — refusing to start"
+            return 1
+            ;;
+        unverifiable)
+            warn "$name cannot inspect :$port safely — refusing to start"
+            return 1
+            ;;
+        *)
+            warn "$name cannot determine the state of :$port safely — refusing to start"
+            return 1
+            ;;
+    esac
 
     log "Starting $name on :$port"
     cd "$dir"
@@ -69,34 +136,219 @@ start_service() {
     # is not already a process-group leader and setsid execs in place rather
     # than forking — which keeps $! pointing at the real process.
     # `env` is retained so the caller's KEY=value arguments still apply.
-    setsid nohup env "$@" > "$LOG_DIR/$name.log" 2>&1 &
-    local pid=$!
-    echo $pid > "$PID_DIR/$name.pid"
-    sleep 2
+    # Append until the checkpoint-gated cleanup command explicitly replaces
+    # the affected log. A containment restart must not silently discard the
+    # historical evidence (or the credentials that still need invalidation).
+    setsid nohup env "$@" >> "$LOG_DIR/$name.log" 2>&1 &
+    launched_pid=$!
+    start_attempts="${NEXUS_PRODUCTION_START_ATTEMPTS:-20}"
+    start_interval="${NEXUS_PRODUCTION_START_INTERVAL:-0.25}"
+    for ((attempt = 1; attempt <= start_attempts; attempt++)); do
+        if pid="$(reconcile_pid "$name" "$port" "$dir" "$SERVICE_EXEC_PATTERN" 2>/dev/null)"; then
+            log "$name started and managed (PID: $pid)"
+            return 0
+        fi
+        if [ "$attempt" -lt "$start_attempts" ]; then
+            sleep "$start_interval"
+        fi
+    done
 
-    if kill -0 $pid 2>/dev/null; then
-        log "$name started (PID: $pid)"
-        return 0
-    else
-        warn "$name failed to start - check $LOG_DIR/$name.log"
+    # `$!` is not trusted merely because this script launched it. Revalidate
+    # cwd and command line before signalling a process that never reached the
+    # listener/PID checkpoint. This keeps late binds from blocking rollback.
+    if pid_process_identity_matches "$launched_pid" "$dir" "$SERVICE_EXEC_PATTERN" 2>/dev/null; then
+        if "$KILL_BIN" "$launched_pid" 2>/dev/null; then
+            cleanup_attempts="${NEXUS_PRODUCTION_LAUNCH_CLEANUP_ATTEMPTS:-20}"
+            cleanup_interval="${NEXUS_PRODUCTION_LAUNCH_CLEANUP_INTERVAL:-0.1}"
+            for ((attempt = 1; attempt <= cleanup_attempts; attempt++)); do
+                kill -0 "$launched_pid" 2>/dev/null || break
+                sleep "$cleanup_interval"
+            done
+            if kill -0 "$launched_pid" 2>/dev/null \
+                && pid_process_identity_matches "$launched_pid" "$dir" "$SERVICE_EXEC_PATTERN" 2>/dev/null; then
+                "$KILL_BIN" -KILL "$launched_pid" 2>/dev/null || true
+            fi
+            if kill -0 "$launched_pid" 2>/dev/null; then
+                warn "$name missed the listener checkpoint and its exact launcher PID is still live"
+            else
+                warn "$name missed the bounded listener checkpoint; stopped its exact launcher PID $launched_pid"
+            fi
+        else
+            warn "$name missed the bounded listener checkpoint and its exact launcher PID could not be stopped"
+        fi
+    fi
+    warn "$name did not become safely managed (launcher PID: $launched_pid) - check $LOG_DIR/$name.log"
+    return 1
+}
+
+validate_cloud_environment() {
+    local cloud_env_file="${NEXUS_CLOUD_ENV_FILE:-$CLOUD_ENV_FILE}"
+
+    [ -f "$cloud_env_file" ] || {
+        warn "protected Nexus Cloud environment is missing; refusing to start Cloud"
+        return 1
+    }
+    (
+        unset NEXUS_CLOUD_API_KEY CF_API_TOKEN \
+            NEXUS_STORAGE_S3_ACCESS_KEY NEXUS_STORAGE_S3_SECRET_KEY \
+            NEXUS__STORAGE__ACCESS_KEY NEXUS__STORAGE__SECRET_KEY
+        set -a
+        # shellcheck source=/dev/null
+        . "$cloud_env_file"
+        set +a
+        [ -n "${NEXUS_CLOUD_API_KEY:-}" ] \
+            && [ -n "${NEXUS_STORAGE_S3_ACCESS_KEY:-}" ] \
+            && [ -n "${NEXUS_STORAGE_S3_SECRET_KEY:-}" ]
+    ) || {
+        warn "protected Nexus Cloud API/storage credentials are incomplete; refusing to start Cloud"
+        return 1
+    }
+}
+
+adopt_cloud_registration_environment_for_dependents() {
+    local cloud_env_file="${NEXUS_CLOUD_ENV_FILE:-$CLOUD_ENV_FILE}"
+    local -a registration_values=()
+
+    validate_cloud_environment || return 1
+    # Source in an isolated shell so duplicate assignments, quoting, and
+    # expansions have exactly the same last-assignment semantics as Cloud's
+    # protected launcher. Only the two registration values cross the pipe.
+    mapfile -d '' -t registration_values < <(
+        (
+            unset NEXUS_CLOUD_API_KEY NEXUS_CLOUD_URL
+            set -a
+            # shellcheck source=/dev/null
+            . "$cloud_env_file"
+            set +a
+            [ -n "${NEXUS_CLOUD_API_KEY:-}" ] && [ -n "${NEXUS_CLOUD_URL:-}" ] || exit 1
+            printf '%s\0%s\0' "$NEXUS_CLOUD_API_KEY" "$NEXUS_CLOUD_URL"
+        ) 2>/dev/null
+    )
+    if [ "${#registration_values[@]}" -ne 2 ] \
+        || [ -z "${registration_values[0]}" ] \
+        || [ -z "${registration_values[1]}" ]; then
+        warn "protected Cloud registration URL/key are incomplete; refusing to start dependent services"
+        return 1
+    fi
+    NEXUS_CLOUD_API_KEY=${registration_values[0]}
+    NEXUS_CLOUD_URL=${registration_values[1]}
+    export NEXUS_CLOUD_API_KEY
+    export NEXUS_CLOUD_URL
+}
+
+validate_nexus_chat_caddy() {
+    if ! command -v "$CADDY_BIN" >/dev/null 2>&1; then
+        warn "caddy is not installed — chat.$DOMAIN has no front door"
+        return 1
+    fi
+    if ! "$CADDY_BIN" validate \
+        --config "$ROOT/deploy/production/nexus-chat.Caddyfile" \
+        --adapter caddyfile; then
+        warn "Nexus Chat Caddy configuration did not validate; leaving the current service untouched"
         return 1
     fi
 }
 
+start_cloud_service() {
+    validate_cloud_environment || return 1
+    start_service "cloud" "$ROOT/apps/Nexus-Cloud" 8787 \
+        -u NEXUS_CLOUD_API_KEY -u CF_API_TOKEN \
+        -u NEXUS_STORAGE_S3_ACCESS_KEY -u NEXUS_STORAGE_S3_SECRET_KEY \
+        -u NEXUS__STORAGE__ACCESS_KEY -u NEXUS__STORAGE__SECRET_KEY \
+        NEXUS_CLOUD_DOMAIN="$DOMAIN" \
+        NEXUS_AUTH_URL=http://localhost:4310 \
+        CF_ZONE_ID="${CF_ZONE_ID:-}" \
+        NEXUS_TUNNEL_ID="${NEXUS_TUNNEL_ID:-a3fc7587-49de-4792-b532-882775db6457}" \
+        SERVER_PUBLIC_IP="${SERVER_PUBLIC_IP:-}" \
+        PORT=8787 CORS_ORIGIN="*" NEXUS_CLOUD_URL=http://localhost:8787 \
+        NEXUS_STORAGE_S3_ENDPOINT=http://localhost:9000 \
+        NEXUS_STORAGE_S3_REGION=us-east-1 \
+        NEXUS_STORAGE_S3_BUCKET_PREFIX=nexus \
+        bash "$ROOT/deploy/production/start-cloud.sh"
+}
+
+validate_nexus_chat_environment() {
+    (
+        adopt_cloud_registration_environment_for_dependents
+    ) || {
+        warn "protected Cloud registration configuration is incomplete; refusing to restart nexus-chat"
+        return 1
+    }
+    [ -f "$NEXUS_CHAT_ENV_FILE" ] || {
+        warn "protected nexus-chat environment is missing; refusing to restart nexus-chat"
+        return 1
+    }
+    [ -x "$NEXUS_CHAT_BINARY_PATH" ] || {
+        warn "nexus-chat binary is missing; refusing to restart nexus-chat"
+        return 1
+    }
+    (
+        unset NEXUS__STORAGE__ENDPOINT NEXUS__STORAGE__ACCESS_KEY \
+            NEXUS__STORAGE__SECRET_KEY NEXUS__STORAGE__BUCKET
+        set -a
+        # shellcheck source=/dev/null
+        . "$NEXUS_CHAT_ENV_FILE"
+        set +a
+        [ -n "${NEXUS__STORAGE__ENDPOINT:-}" ] \
+            && [ -n "${NEXUS__STORAGE__ACCESS_KEY:-}" ] \
+            && [ -n "${NEXUS__STORAGE__SECRET_KEY:-}" ] \
+            && [ -n "${NEXUS__STORAGE__BUCKET:-}" ]
+    ) || {
+        warn "protected nexus-chat storage configuration is incomplete; refusing to restart nexus-chat"
+        return 1
+    }
+}
+
+start_nexus_chat_service() {
+    validate_nexus_chat_environment || return 1
+    (
+        unset NEXUS__STORAGE__ENDPOINT NEXUS__STORAGE__ACCESS_KEY \
+            NEXUS__STORAGE__SECRET_KEY NEXUS__STORAGE__BUCKET \
+            NEXUS_CLOUD_API_KEY NEXUS_CLOUD_URL
+        set -a
+        # shellcheck source=/dev/null
+        . "$NEXUS_CHAT_ENV_FILE"
+        set +a
+        # The protected Cloud file is authoritative for registration. Load it
+        # after Chat so stale copies in either the shell or Chat file cannot
+        # override the URL/key used by Nexus's startup registration path.
+        adopt_cloud_registration_environment_for_dependents || return 1
+        start_service "nexus-chat" "$ROOT/apps/Nexus" 8180 \
+            ./target/debug/nexus serve --port 8180 --gateway-port 8181 --voice-port 8182
+    )
+}
+
+start_nexus_chat_web_service() {
+    validate_nexus_chat_caddy || return 1
+    start_service "nexus-chat-web" "$ROOT" 8095 \
+        "$CADDY_BIN" run --config "$ROOT/deploy/production/nexus-chat.Caddyfile" --adapter caddyfile
+}
+
+preflight_service_start() {
+    case "$1" in
+        cloud) validate_cloud_environment ;;
+        nexus-chat) validate_nexus_chat_environment ;;
+        nexus-chat-web) validate_nexus_chat_caddy ;;
+        *) warn "Per-service recovery is limited to cloud, nexus-chat, and nexus-chat-web"; return 1 ;;
+    esac
+}
+
+start_named_service() {
+    case "$1" in
+        cloud) start_cloud_service ;;
+        nexus-chat) start_nexus_chat_service ;;
+        nexus-chat-web) start_nexus_chat_web_service ;;
+        *) warn "Per-service recovery is limited to cloud, nexus-chat, and nexus-chat-web"; return 1 ;;
+    esac
+}
+
 cmd_start() {
-    # Cloud's key normally lives in apps/Nexus-Cloud/.env, which bun auto-loads
-    # and which is gitignored. Adopt it when nothing is exported, so there is one
-    # source of truth and the check below tests the value Cloud will really use
-    # rather than a second copy of it. The stop is hard because an empty key
-    # makes Cloud's requiresApiKey() false, disabling auth on every mutating
-    # endpoint instead of failing closed.
-    if [ -z "${NEXUS_CLOUD_API_KEY:-}" ] && [ -f "$ROOT/apps/Nexus-Cloud/.env" ]; then
-        NEXUS_CLOUD_API_KEY="$(sed -n 's/^NEXUS_CLOUD_API_KEY=//p' "$ROOT/apps/Nexus-Cloud/.env" \
-            | head -1 | tr -d '\r' | sed -e 's/^"//' -e 's/"$//' -e "s/^'//" -e "s/'\$//")"
-        export NEXUS_CLOUD_API_KEY
-        [ -n "$NEXUS_CLOUD_API_KEY" ] && log "Adopted NEXUS_CLOUD_API_KEY from apps/Nexus-Cloud/.env"
-    fi
-    : "${NEXUS_CLOUD_API_KEY:?not exported and not found in apps/Nexus-Cloud/.env — an empty key disables Cloud auth entirely}"
+    # Cloud's protected file is authoritative. Validate all required Cloud and
+    # storage credentials, then adopt the Cloud registration URL/key into this
+    # shell's inherited environment for dependent services. The key is never
+    # passed as a KEY=value launcher argument.
+    validate_cloud_environment || return 1
+    adopt_cloud_registration_environment_for_dependents || return 1
 
     # The dashboard files issue reports to GitHub on a signed-in user's behalf,
     # which needs a token with Issues: write on the Nexus-Systems repo. Same
@@ -210,7 +462,6 @@ cmd_start() {
         NEXUS_AUTH_BASE_URL="http://127.0.0.1:4310" \
         NEXUS_AUTH_COOKIE_DOMAIN=".$DOMAIN" \
         NEXUS_CLOUD_URL=http://localhost:8787 \
-        NEXUS_CLOUD_API_KEY="$NEXUS_CLOUD_API_KEY" \
         bun run src/index.ts
 
     # 3. Nexus Cloud
@@ -221,28 +472,16 @@ cmd_start() {
     # defaults to "nexus.local", so Cloud would publish *.nexus.local routes
     # that the proxy — serving $DOMAIN — rejects as foreign hosts.
     #
-    # CF_API_TOKEN / CF_ZONE_ID normally come from apps/Nexus-Cloud/.env, which
-    # bun auto-loads (start_service cd's into the app dir); they are passed here
-    # only if also exported. With a Zone:DNS:Edit token, Cloud publishes DNS for
-    # custom domains itself — as proxied CNAMEs to the tunnel, NOT A records: this
+    # CF_API_TOKEN / CF_ZONE_ID come from the protected Cloud environment loaded
+    # by start-cloud.sh after the launcher chain. With a Zone:DNS:Edit token,
+    # Cloud publishes DNS for custom domains itself — as proxied CNAMEs to the
+    # tunnel, NOT A records: this
     # node has no routable public IP. NEXUS_TUNNEL_ID is the tunnel every hostname
     # is CNAMEd to; it is this node's "Nexus Systems" tunnel and is not secret (it
     # is visible in every cfargotunnel DNS record). tnhc.dev subdomains need no
     # per-name record — the *.tnhc.dev wildcard already covers them — so this only
     # matters for out-of-wildcard custom domains.
-    start_service "cloud" "$ROOT/apps/Nexus-Cloud" 8787 \
-        NEXUS_CLOUD_API_KEY="$NEXUS_CLOUD_API_KEY" \
-        NEXUS_CLOUD_DOMAIN="$DOMAIN" \
-        NEXUS_AUTH_URL=http://localhost:4310 \
-        CF_API_TOKEN="${CF_API_TOKEN:-}" \
-        CF_ZONE_ID="${CF_ZONE_ID:-}" \
-        NEXUS_TUNNEL_ID="${NEXUS_TUNNEL_ID:-a3fc7587-49de-4792-b532-882775db6457}" \
-        SERVER_PUBLIC_IP="${SERVER_PUBLIC_IP:-}" \
-        PORT=8787 CORS_ORIGIN="*" NEXUS_CLOUD_URL=http://localhost:8787 \
-        NEXUS_STORAGE_S3_ENDPOINT=http://localhost:9000 \
-        NEXUS_STORAGE_S3_REGION=us-east-1 \
-        NEXUS_STORAGE_S3_BUCKET_PREFIX=nexus \
-        bun run src/index.ts
+    start_cloud_service
 
     # 4. (removed) apps/Nexus-Team-Chat — the Bun scaffold chat. The real
     # chat is nexus-chat (apps/Nexus), started in 4b below. The scaffold can
@@ -270,21 +509,12 @@ cmd_start() {
             # PUBLIC_URL=https://chat.tnhc.dev and NEXUS__SERVER__NAME, which
             # is how the dashboard ended up announcing itself to Cloud as
             # chat.tnhc.dev and appearing in its own app grid pointing at Chat.
-            (
-                set -a; . "$ROOT/deploy/production/nexus-chat.env"; set +a
-                start_service "nexus-chat" "$ROOT/apps/Nexus" 8180 \
-                    ./target/debug/nexus serve --port 8180 --gateway-port 8181 --voice-port 8182
-            )
+            start_nexus_chat_service
 
             # Front door: SPA + /api + /gateway + /voice/ws on one origin.
             # Plain HTTP on 8095 — Cloudflare terminates TLS at the edge and
             # nothing here may hold 80/443.
-            if command -v caddy >/dev/null 2>&1; then
-                start_service "nexus-chat-web" "$ROOT" 8095 \
-                    caddy run --config "$ROOT/deploy/production/nexus-chat.Caddyfile" --adapter caddyfile
-            else
-                warn "caddy not installed — chat.$DOMAIN has no front door"
-            fi
+            start_nexus_chat_web_service || warn "Nexus Chat Caddy did not start"
         fi
     else
         warn "deploy/production/nexus-chat.env absent — skipping nexus-chat"
@@ -329,7 +559,6 @@ cmd_start() {
             NEXUS_CALENDAR_BASE_URL=http://127.0.0.1:8092
             NEXUS_AUTH_INTERNAL_URL=http://127.0.0.1:4310
             NEXUS_CLOUD_URL=http://localhost:8787
-            NEXUS_CLOUD_API_KEY="$NEXUS_CLOUD_API_KEY"
         )
         if [ -n "${NEXUS_CALENDAR_LEGACY_OWNER_SUBJECT:-}" ]; then
             calendar_env+=(NEXUS_CALENDAR_LEGACY_OWNER_SUBJECT="$NEXUS_CALENDAR_LEGACY_OWNER_SUBJECT")
@@ -360,7 +589,6 @@ cmd_start() {
         NEXUS_BIND_HOST=127.0.0.1 \
         NEXUS_AUTH_INTERNAL_URL=http://127.0.0.1:4310 \
         NEXUS_CLOUD_URL=http://127.0.0.1:8787 \
-        NEXUS_CLOUD_API_KEY="$NEXUS_CLOUD_API_KEY" \
         NEXUS_NEXUS_TERMINAL_BASE_URL=http://127.0.0.1:3110 \
         NEXUS_TERMINAL_ENABLED="${NEXUS_TERMINAL_ENABLED:-false}" \
         bun run src/index.ts
@@ -389,7 +617,6 @@ cmd_start() {
             PORT=3132 DOMAIN="$DOMAIN" \
             NEXUS_AUTH_INTERNAL_URL=http://127.0.0.1:4310 \
             NEXUS_CLOUD_URL=http://localhost:8787 \
-            NEXUS_CLOUD_API_KEY="$NEXUS_CLOUD_API_KEY" \
             NEXUS_TERMINAL_URL=http://127.0.0.1:3110 \
             NEXUS_CALENDAR_URL=http://127.0.0.1:3068 \
             NEXUS_CALENDAR_DASHBOARD_SECRET="$NEXUS_CALENDAR_DASHBOARD_SECRET" \
@@ -429,7 +656,6 @@ cmd_start() {
         PORT=3075 \
         PHANTOM_REQUIRE_REAL=1 \
         NEXUS_CLOUD_URL=http://localhost:8787 \
-        NEXUS_CLOUD_API_KEY="$NEXUS_CLOUD_API_KEY" \
         bun run src/index.ts
 
     # 4f-2. Nexus-API — the unified API server (apps/Nexus-API).
@@ -461,9 +687,8 @@ cmd_start() {
             MINIO_ROOT_PASSWORD="${MINIO_ROOT_PASSWORD:-}" \
             REDIS_URL=redis://127.0.0.1:6379 \
             NEXUS_CLOUD_URL=http://localhost:8787 \
-            NEXUS_CLOUD_API_KEY="$NEXUS_CLOUD_API_KEY" \
             PUBLIC_URL=http://127.0.0.1:3150 \
-            bash -c 'if [ -n "$NEXUS_API_ENV_FILE" ]; then set -a; . "$NEXUS_API_ENV_FILE"; set +a; fi; exec ./node_modules/.bin/tsx src/index.ts' 
+            bash -c 'if [ -n "$NEXUS_API_ENV_FILE" ]; then set -a; . "$NEXUS_API_ENV_FILE"; set +a; fi; exec node --import tsx src/index.ts' 
     else
         warn "nexus-api deps missing — run: (cd apps/Nexus-API && pnpm install)"
     fi
@@ -554,7 +779,6 @@ cmd_start() {
     # to 404 unmatched hosts instead (a node not running the Hosting site-proxy).
     start_service "proxy" "$ROOT/deploy/production" 8080 \
         PROXY_PORT=8080 DOMAIN="$DOMAIN" CLOUD_URL=http://localhost:8787 \
-        NEXUS_CLOUD_API_KEY="$NEXUS_CLOUD_API_KEY" \
         DASHBOARD_UPSTREAM=http://127.0.0.1:3132 \
         HOSTING_SITE_UPSTREAM="${HOSTING_SITE_UPSTREAM:-http://127.0.0.1:8090}" \
         bun run proxy.ts
@@ -564,33 +788,152 @@ cmd_start() {
     cmd_status
 }
 
-cmd_stop() {
-    log "Stopping all Nexus services..."
-    for svc in auth cloud api calendar nexus-chat nexus-chat-web nexus-draw-web terminal dashboard draw mailapi mailsmtpd proxy; do
-        if [ -f "$PID_DIR/$svc.pid" ]; then
-            kill "$(cat "$PID_DIR/$svc.pid")" 2>/dev/null && log "  Stopped $svc" || true
-            rm -f "$PID_DIR/$svc.pid"
+stop_service() {
+    local svc=$1
+    local pid port state attempt
+
+    service_identity "$svc" || return 1
+    port="$(service_port "$svc")"
+    if ! pid="$(validated_pid "$svc" "$port" "$SERVICE_DIR" "$SERVICE_EXEC_PATTERN" 2>/dev/null)"; then
+        # Recover an exact late-start listener even if its launcher missed the
+        # PID checkpoint. Foreign/mismatched listeners still fail reconciliation.
+        pid="$(reconcile_pid "$svc" "$port" "$SERVICE_DIR" "$SERVICE_EXEC_PATTERN" 2>/dev/null)" || pid=
+    fi
+    if [ -z "$pid" ]; then
+        state="$(listener_state "$port" 2>/dev/null)"
+        if [ "$state" = absent ] && [ ! -f "$PID_DIR/$svc.pid" ]; then
+            log "  $svc is already stopped"
+            return 0
         fi
+        case "$state" in
+            occupied) warn "  Left $svc untouched: :$port is occupied by an unverified or mismatched process" ;;
+            unverifiable) warn "  Left $svc untouched: cannot inspect :$port safely" ;;
+            absent) warn "  Left $svc untouched: its PID file does not match a listening service" ;;
+            *) warn "  Left $svc untouched: listener state is not safely known" ;;
+        esac
+        return 1
+    fi
+
+    if ! "$KILL_BIN" "$pid" 2>/dev/null; then
+        warn "  Could not stop managed $svc (PID: $pid)"
+        return 1
+    fi
+    for ((attempt = 1; attempt <= ${NEXUS_PRODUCTION_STOP_WAIT_ATTEMPTS:-20}; attempt++)); do
+        if ! kill -0 "$pid" 2>/dev/null; then
+            rm -f -- "$PID_DIR/$svc.pid"
+            log "  Stopped $svc"
+            return 0
+        fi
+        sleep "${NEXUS_PRODUCTION_STOP_WAIT_INTERVAL:-0.25}"
+    done
+    warn "  Managed $svc did not exit after the stop signal (PID: $pid); PID file preserved"
+    return 1
+}
+
+cmd_restart_service() {
+    local svc=${1:-}
+
+    preflight_service_start "$svc" || return 1
+    stop_service "$svc" || return 1
+    start_named_service "$svc"
+}
+
+completed_rotation_dir() {
+    local runtime_dir active_state candidate
+
+    runtime_dir="${NEXUS_ROTATION_RUNTIME_DIR:-/tmp/nexus-production}"
+    active_state="$runtime_dir/rotation.current"
+    [ -f "$active_state" ] || {
+        warn "Active credential-rotation state is missing; refusing sensitive-log cleanup"
+        return 1
+    }
+    IFS= read -r candidate < "$active_state" || true
+    case "$candidate" in
+        "$runtime_dir"/rotation.??????) ;;
+        *) warn "Active credential-rotation state is invalid; refusing sensitive-log cleanup"; return 1 ;;
+    esac
+    [ -d "$candidate" ] || {
+        warn "Active credential-rotation directory is missing; refusing sensitive-log cleanup"
+        return 1
+    }
+    [ -f "$candidate/tunnel.checkpoint" ] || {
+        warn "Tunnel checkpoint is incomplete; preserving sensitive historical logs"
+        return 1
+    }
+    [ -f "$candidate/storage.checkpoint" ] || {
+        warn "Storage checkpoint is incomplete; preserving sensitive historical logs"
+        return 1
+    }
+    printf '%s\n' "$candidate"
+}
+
+reset_sensitive_log_after_checkpoints() {
+    local svc=$1
+    local staged
+
+    case "$svc" in
+        cloud|nexus-chat-web) ;;
+        *) warn "Sensitive-log cleanup is limited to cloud and nexus-chat-web"; return 1 ;;
+    esac
+    completed_rotation_dir >/dev/null || return 1
+    staged="$(mktemp "$LOG_DIR/.${svc}.log.cleanup.XXXXXX")"
+    chmod 600 "$staged"
+    mv -f -- "$staged" "$LOG_DIR/$svc.log"
+}
+
+cmd_cleanup_sensitive_log() {
+    local svc=${1:-}
+
+    # All preconditions are checked while the existing writer and log remain
+    # untouched. Only after both credential checkpoints and the replacement
+    # service configuration are valid do we stop, replace the exact log, and
+    # restart that one service.
+    completed_rotation_dir >/dev/null || return 1
+    preflight_service_start "$svc" || return 1
+    stop_service "$svc" || return 1
+    if ! reset_sensitive_log_after_checkpoints "$svc"; then
+        warn "Rotation checkpoints changed during log cleanup; preserving the log and restarting $svc"
+        start_named_service "$svc" || true
+        return 1
+    fi
+    start_named_service "$svc"
+}
+
+cmd_stop() {
+    local svc
+
+    log "Stopping all Nexus services..."
+    for svc in auth cloud api calendar nexus-calendar-web nexus-chat nexus-chat-web nexus-draw-web terminal dashboard draw mailapi mailsmtpd proxy; do
+        stop_service "$svc" || true
     done
     cd "$ROOT"
     docker-compose down
     log "All stopped"
 }
 
-cmd_status() {
+cmd_service_status() {
     echo "Service Status:"
-    for svc in auth cloud api calendar nexus-chat nexus-chat-web nexus-draw-web terminal dashboard draw mailapi mailsmtpd proxy; do
-        if [ -f "$PID_DIR/$svc.pid" ]; then
-            if kill -0 "$(cat "$PID_DIR/$svc.pid")" 2>/dev/null; then
-                echo -e "  ${G}● $svc${R} (running, PID: $(cat $PID_DIR/$svc.pid))"
-            else
-                echo -e "  ${R}✗ $svc${R} (dead)"
-                rm -f "$PID_DIR/$svc.pid"
-            fi
+    for svc in auth cloud api calendar nexus-calendar-web nexus-chat nexus-chat-web nexus-draw-web terminal dashboard draw mailapi mailsmtpd proxy; do
+        service_identity "$svc" || continue
+        local pid port
+        port="$(service_port "$svc")"
+        if pid="$(validated_pid "$svc" "$port" "$SERVICE_DIR" "$SERVICE_EXEC_PATTERN" 2>/dev/null)"; then
+            echo -e "  ${G}● $svc${R} (managed, PID: $pid)"
         else
-            echo -e "  ${R}? $svc${R} (not started)"
+            local state
+            state="$(listener_state "$port" 2>/dev/null)"
+            case "$state" in
+                occupied) echo -e "  ${Y}! $svc${R} (conflict on :$port)" ;;
+                unverifiable) echo -e "  ${Y}! $svc${R} (unverifiable listener state on :$port)" ;;
+                absent) echo -e "  ${R}? $svc${R} (not running)" ;;
+                *) echo -e "  ${Y}! $svc${R} (unverifiable listener state on :$port)" ;;
+            esac
         fi
     done
+}
+
+cmd_status() {
+    cmd_service_status
 
     # Check HTTP endpoints
     echo ""
@@ -601,12 +944,32 @@ cmd_status() {
     # nexus-draw-web is similar: the Draw API is on 3075, but the front door
     # on 8091 joins the SPA + API + WebSocket, so probe the front door.
     for endpoint in "http://localhost:4310/health" "http://localhost:8787/health" "http://127.0.0.1:3150/api/health/live" "http://localhost:3068/health" "http://localhost:8092/health" "http://localhost:8095/api/v1/health" "http://localhost:8091/health" "http://127.0.0.1:3110/health" "http://localhost:3132/health" "http://localhost:3075/health" "http://localhost:8080/health"; do
-        if curl -s -m 2 "$endpoint" | grep -q "ok"; then
+        if http_endpoint_healthy "$endpoint"; then
             echo -e "  ${G}●${R} $endpoint"
         else
             echo -e "  ${R}✗${R} $endpoint"
         fi
     done
+}
+
+http_endpoint_healthy() {
+    local endpoint=$1
+    local body
+
+    if ! body="$("$CURL_BIN" --silent --show-error --fail --max-time 2 "$endpoint")"; then
+        return 1
+    fi
+    case "$body" in
+        ok|healthy) return 0 ;;
+    esac
+    printf '%s' "$body" | jq -e '
+        type == "object" and (
+            .ok == true
+            or .healthy == true
+            or .status == "ok"
+            or .status == "healthy"
+        )
+    ' >/dev/null 2>&1
 }
 
 usage() {
@@ -617,8 +980,12 @@ Usage: $(basename "$0") [command]
   bg, --bg          start in the background and return
   stop, --stop      stop all services and the infrastructure containers
   status, --status  report what is running
+  restart SERVICE   safely restart cloud, nexus-chat, or nexus-chat-web
+  cleanup-log SERVICE
+                    after both rotation checkpoints, stop one affected writer,
+                    replace its exact historical log, and safely restart it
 
-Environment: DOMAIN (default tnhc.dev), NEXUS_AUTH_PUBLIC_URL, NEXUS_CLOUD_API_KEY
+Environment: DOMAIN (default tnhc.dev), NEXUS_AUTH_PUBLIC_URL
 USAGE
 }
 
@@ -627,11 +994,19 @@ USAGE
 # anyone tries first — deployed production and then sat in the foreground loop
 # below, and any typo did the same. An unknown argument now fails without
 # touching anything, and the bare words are accepted alongside the flags.
-case "${1:-}" in
-    "")             cmd_start; echo "Press Ctrl+C to stop"; while true; do sleep 1; done ;;
-    bg|--bg)        cmd_start; echo "Services started. Logs: $LOG_DIR/*.log" ;;
-    stop|--stop)    cmd_stop ;;
-    status|--status) cmd_status ;;
-    -h|--help|help) usage ;;
-    *)              echo "Unknown command: $1" >&2; usage >&2; exit 2 ;;
-esac
+main() {
+    case "${1:-}" in
+        "")             cmd_start; echo "Press Ctrl+C to stop"; while true; do sleep 1; done ;;
+        bg|--bg)        cmd_start; echo "Services started. Logs: $LOG_DIR/*.log" ;;
+        stop|--stop)    cmd_stop ;;
+        status|--status) cmd_status ;;
+        restart)        [ "$#" -eq 2 ] || { usage >&2; return 2; }; cmd_restart_service "$2" ;;
+        cleanup-log)    [ "$#" -eq 2 ] || { usage >&2; return 2; }; cmd_cleanup_sensitive_log "$2" ;;
+        -h|--help|help) usage ;;
+        *)              echo "Unknown command: $1" >&2; usage >&2; return 2 ;;
+    esac
+}
+
+if [ "${BASH_SOURCE[0]}" = "$0" ]; then
+    main "$@"
+fi
