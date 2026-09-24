@@ -14,7 +14,16 @@ base64 = { workspace = true }
 rand = { workspace = true }
 thiserror = { workspace = true }
 sqlx = { workspace = true }
+nexus-mailstore = { path = "../nexus-mailstore" }
+nexus-maildelivery = { path = "../nexus-maildelivery" }
+axum = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tracing = { workspace = true }
 
 [dev-dependencies]
+nexus-mailmsg = { path = "../nexus-mailmsg" }
+tower = { version = "0.5", features = ["util"] }
+http-body-util = "0.1"
 tokio = { workspace = true }
 uuid = { workspace = true }
