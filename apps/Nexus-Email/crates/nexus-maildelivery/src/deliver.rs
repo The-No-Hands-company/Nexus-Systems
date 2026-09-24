@@ -190,6 +190,37 @@ impl Deliverer {
         self.accept_external(raw, from, recipient, Transport::Federated).await
     }
 
+    /// Accept a message a pinned peer asked us to deliver to the outside
+    /// world on its behalf — federated egress.
+    ///
+    /// Stored once, with `Transport::Federated` provenance, and queued for
+    /// SMTP per recipient. Whether the peer is *allowed* to relay is the
+    /// caller's decision (it knows the peer); this only refuses recipients
+    /// that are not outside at all, which must be delivered, never relayed.
+    pub async fn relay_for_peer(
+        &self,
+        raw: &[u8],
+        from: &Address,
+        recipients: &[Address],
+    ) -> Result<Uuid> {
+        for rcpt in recipients {
+            if self.router.route(rcpt) != Route::External {
+                return Err(DeliveryError::Permanent {
+                    recipient: rcpt.as_string(),
+                    reason: "not an outside address; deliver it, do not relay it".into(),
+                });
+            }
+        }
+
+        let message_id = self.store_incoming(raw, from, Transport::Federated).await?;
+        for rcpt in recipients {
+            self.queue
+                .enqueue(message_id, &from.as_string(), &rcpt.as_string(), &Route::External)
+                .await?;
+        }
+        Ok(message_id)
+    }
+
     async fn accept_external(
         &self,
         raw: &[u8],
@@ -206,6 +237,13 @@ impl Deliverer {
             });
         }
 
+        let message_id = self.store_incoming(raw, from, transport).await?;
+        self.deliver_local(message_id, recipient).await?;
+        Ok(message_id)
+    }
+
+    /// Parse, thread, store and index a message that arrived from elsewhere.
+    async fn store_incoming(&self, raw: &[u8], from: &Address, transport: Transport) -> Result<Uuid> {
         let parsed = parse(raw, Limits::default())?;
         let subject = parsed.headers.get("subject").map(str::to_string);
         let msg_id = parsed.headers.get("message-id").map(str::to_string);
@@ -240,7 +278,6 @@ impl Deliverer {
             self.store.set_search_text(message_id, &text).await?;
         }
 
-        self.deliver_local(message_id, recipient).await?;
         Ok(message_id)
     }
 }

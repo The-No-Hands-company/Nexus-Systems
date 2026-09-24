@@ -116,19 +116,26 @@ async fn one_bad_address_does_not_stop_the_others() {
 
 #[tokio::test]
 async fn a_federated_recipient_is_queued_not_delivered_locally() {
-    let (d, store, queue, local) = harness().await;
+    let (d, store, _, local) = harness().await;
 
     let alice_mb = store.create_identity_mailbox(&format!("u{}", Uuid::now_v7().simple()), "Alice").await.unwrap();
     let alice = Address::parse(&format!("alice@{local}")).unwrap();
     store.add_address(alice_mb.id, &alice, true).await.unwrap();
 
-    let before = queue.pending_count().await.unwrap();
-    let peer = Address::parse("bob@peer.example").unwrap();
+    // A recipient unique to this test: the queue is shared with every other
+    // test running in parallel, so a global pending count is not this test's.
+    let peer = Address::parse(&format!("bob-{}@peer.example", Uuid::now_v7().simple())).unwrap();
     let raw = msg(&alice.as_string(), &peer.as_string(), "Across nodes", "hi");
-    let outcomes = d.submit(&raw, &alice, &[peer], Some(alice_mb.id)).await.unwrap();
+    let outcomes = d.submit(&raw, &alice, &[peer.clone()], Some(alice_mb.id)).await.unwrap();
 
     assert_eq!(outcomes[0].disposition, Disposition::Queued);
-    assert_eq!(queue.pending_count().await.unwrap(), before + 1);
+    let (route, state): (String, String) =
+        sqlx::query_as("SELECT route, state FROM outbound_queue WHERE recipient = $1")
+            .bind(peer.as_string())
+            .fetch_one(store.pool())
+            .await
+            .unwrap();
+    assert_eq!((route.as_str(), state.as_str()), ("federated", "pending"));
 }
 
 #[tokio::test]
@@ -260,4 +267,53 @@ async fn search_does_not_return_another_mailboxs_mail() {
         store.search(outsider.id, &needle, 10).await.unwrap().is_empty(),
         "a third party must not find mail they do not hold"
     );
+}
+
+#[tokio::test]
+async fn a_relayed_message_is_stored_once_and_queued_for_each_outside_recipient() {
+    let (d, store, _, _) = harness().await;
+    let tag = Uuid::now_v7().simple().to_string();
+    let from = Address::parse("info@peer.example").unwrap();
+    let r1 = Address::parse(&format!("one-{tag}@outside.example")).unwrap();
+    let r2 = Address::parse(&format!("two-{tag}@elsewhere.example")).unwrap();
+    let raw = msg(&from.as_string(), &r1.as_string(), "Relay me", "via a peer");
+
+    let message_id = d.relay_for_peer(&raw, &from, &[r1.clone(), r2.clone()]).await.unwrap();
+
+    let rows: Vec<(Uuid, String, String, String)> = sqlx::query_as(
+        "SELECT message_id, recipient, destination, route FROM outbound_queue
+          WHERE recipient IN ($1, $2) ORDER BY recipient",
+    )
+    .bind(r1.as_string())
+    .bind(r2.as_string())
+    .fetch_all(store.pool())
+    .await
+    .unwrap();
+    assert_eq!(
+        rows,
+        vec![
+            (message_id, r1.as_string(), "outside.example".into(), "smtp".into()),
+            (message_id, r2.as_string(), "elsewhere.example".into(), "smtp".into()),
+        ]
+    );
+
+    let (transport,): (String,) = sqlx::query_as("SELECT transport::text FROM messages WHERE id = $1")
+        .bind(message_id)
+        .fetch_one(store.pool())
+        .await
+        .unwrap();
+    assert_eq!(transport, "federated", "provenance must record that a peer handed it over");
+}
+
+#[tokio::test]
+async fn relaying_refuses_recipients_this_node_or_a_peer_serves() {
+    // Those are delivered, not relayed; queueing them for SMTP would send our
+    // own users' mail out to the internet and back.
+    let (d, _, _, local) = harness().await;
+    let from = Address::parse("info@peer.example").unwrap();
+    for rcpt in [format!("someone@{local}"), "someone@peer.example".to_string()] {
+        let rcpt = Address::parse(&rcpt).unwrap();
+        let raw = msg(&from.as_string(), &rcpt.as_string(), "no", "no");
+        assert!(d.relay_for_peer(&raw, &from, &[rcpt]).await.is_err());
+    }
 }
