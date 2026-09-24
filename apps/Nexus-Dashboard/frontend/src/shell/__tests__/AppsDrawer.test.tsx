@@ -6,7 +6,7 @@ import AppsDrawer from "../AppsDrawer";
 import type { AppEntry } from "../../api";
 
 function app(id: string, name: string, health: AppEntry["health"]): AppEntry {
-  return { id, name, description: "", url: `https://${id}.tnhc.dev`, path: `/${id}`, health };
+  return { id, name, description: "", publicUrl: `https://${id}.tnhc.dev`, path: `/${id}`, delivery: "framed", health };
 }
 
 const APPS: AppEntry[] = [

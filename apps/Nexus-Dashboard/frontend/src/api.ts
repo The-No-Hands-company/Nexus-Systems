@@ -12,8 +12,6 @@ export type AppEntry = {
   id: string;
   name: string;
   description: string;
-  /** Where the app lives: an absolute origin when the shell frames it. */
-  url: string;
   /** The in-shell route — /chat, /mail, /cloud. Names the app, not how it is
    *  delivered, so moving an app between framed and shell-native never changes
    *  its URL. Mirrors the server's AppEntry in src/apps.ts.
@@ -21,6 +19,8 @@ export type AppEntry = {
    *  Always present after listApps() normalises it, so components can rely on
    *  it; see WireAppEntry for what the server may actually send. */
   path: string;
+  publicUrl?: string;
+  delivery: "shell-native" | "proxied-app" | "framed" | "external";
   health: "healthy" | "offline";
 };
 
@@ -91,7 +91,13 @@ export async function me(): Promise<Me | null> {
  * restarted. During that window a frontend that hard-required `path` rendered
  * every app link as undefined. Mirrors pathForApp in src/apps.ts.
  */
-type WireAppEntry = Omit<AppEntry, "path"> & { path?: string };
+type WireAppEntry = Omit<AppEntry, "path" | "publicUrl" | "delivery"> & {
+  path?: string;
+  publicUrl?: string;
+  /** Compatibility field from Dashboard servers that predate explicit delivery. */
+  url?: string;
+  delivery?: AppEntry["delivery"];
+};
 
 function pathFor(app: WireAppEntry): string {
   if (app.path) return app.path;
@@ -104,7 +110,12 @@ export async function listApps(): Promise<AppEntry[]> {
   const { apps } = await request<{ apps: WireAppEntry[] }>("/ipa/apps");
   // Normalise once, here, so no component has to care whether the server that
   // answered is older than the bundle asking.
-  return apps.map((a) => ({ ...a, path: pathFor(a) }));
+  return apps.map(({ url, ...a }) => {
+    const path = pathFor(a);
+    const publicUrl = a.publicUrl ?? (url?.startsWith("/") ? undefined : url);
+    const delivery = a.delivery ?? (url?.startsWith("/") ? "shell-native" : "framed");
+    return { ...a, path, ...(publicUrl ? { publicUrl } : {}), delivery };
+  });
 }
 
 export type Session = {

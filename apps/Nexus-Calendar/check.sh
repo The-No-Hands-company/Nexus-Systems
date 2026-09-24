@@ -7,4 +7,11 @@ echo "nexus-calendar..."
 # away every failure above it, so a red gate named no test and showed no
 # assertion. bun's own exit code is the gate; `set -e` acts on it.
 bun test
+bun run check
+(
+  cd frontend
+  bun run check
+  bun run test
+  bun run build
+)
 echo "PASS"

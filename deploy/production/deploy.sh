@@ -138,6 +138,13 @@ cmd_start() {
             >> "$ROOT/apps/Nexus-Calendar/.env"
         log "Generated NEXUS_CALENDAR_DASHBOARD_SECRET into apps/Nexus-Calendar/.env"
     fi
+    # Calendar trusts the subject only when this accompanies it, so a malformed
+    # value (a truncated .env line, a stray quote) must stop the deploy rather
+    # than start two services that silently cannot talk to each other.
+    if ! [[ "$NEXUS_CALENDAR_DASHBOARD_SECRET" =~ ^[A-Fa-f0-9]{64}$ ]]; then
+        echo "NEXUS_CALENDAR_DASHBOARD_SECRET must be a 32-byte hex secret" >&2
+        return 1
+    fi
     export NEXUS_CALENDAR_DASHBOARD_SECRET
 
     # The owner for events that predate ownership.
@@ -305,19 +312,35 @@ cmd_start() {
     # Backend API on 3068 (SQLite events), Caddy front door on 8092 joining
     # SPA + API into one origin. Same pattern as draw.
     if [ -f "$ROOT/apps/Nexus-Calendar/package.json" ]; then
+        # Calendar's SQLite location is explicit in the production process
+        # contract, rather than relying on the service working directory. A
+        # populated legacy database still requires an operator-provided owner;
+        # omit that variable entirely when it has not been configured so the
+        # service retains its fail-closed migration behavior.
+        local calendar_db="${NEXUS_CALENDAR_DB:-$ROOT/data/calendar.sqlite}"
+        local calendar_jwt_audience="${NEXUS_CALENDAR_JWT_AUDIENCE:-calendar.$DOMAIN}"
+        local calendar_web_root="${NEXUS_CALENDAR_WEB_ROOT:-$ROOT/apps/Nexus-Calendar/frontend/dist}"
+        local -a calendar_env=(
+            PORT=3068
+            NEXUS_BIND_HOST=127.0.0.1
+            NEXUS_CALENDAR_DB="$calendar_db"
+            NEXUS_CALENDAR_JWT_AUDIENCE="$calendar_jwt_audience"
+            NEXUS_CALENDAR_DASHBOARD_SECRET="$NEXUS_CALENDAR_DASHBOARD_SECRET"
+            NEXUS_CALENDAR_BASE_URL=http://127.0.0.1:8092
+            NEXUS_AUTH_INTERNAL_URL=http://127.0.0.1:4310
+            NEXUS_CLOUD_URL=http://localhost:8787
+            NEXUS_CLOUD_API_KEY="$NEXUS_CLOUD_API_KEY"
+        )
+        if [ -n "${NEXUS_CALENDAR_LEGACY_OWNER_SUBJECT:-}" ]; then
+            calendar_env+=(NEXUS_CALENDAR_LEGACY_OWNER_SUBJECT="$NEXUS_CALENDAR_LEGACY_OWNER_SUBJECT")
+        fi
         start_service "calendar" "$ROOT/apps/Nexus-Calendar" 3068 \
-            PORT=3068 \
-            NEXUS_BIND_HOST=127.0.0.1 \
-            NEXUS_CALENDAR_BASE_URL=http://127.0.0.1:8092 \
-            NEXUS_CALENDAR_DASHBOARD_SECRET="$NEXUS_CALENDAR_DASHBOARD_SECRET" \
-            NEXUS_CALENDAR_LEGACY_OWNER_SUBJECT="$NEXUS_CALENDAR_LEGACY_OWNER_SUBJECT" \
-            NEXUS_AUTH_INTERNAL_URL=http://127.0.0.1:4310 \
-            NEXUS_CLOUD_URL=http://localhost:8787 \
-            NEXUS_CLOUD_API_KEY="$NEXUS_CLOUD_API_KEY" \
+            "${calendar_env[@]}" \
             bun run src/index.ts
         if command -v caddy >/dev/null 2>&1; then
             if [ -f "$ROOT/apps/Nexus-Calendar/frontend/dist/index.html" ]; then
                 start_service "nexus-calendar-web" "$ROOT" 8092 \
+                    NEXUS_CALENDAR_WEB_ROOT="$calendar_web_root" \
                     caddy run --config "$ROOT/deploy/production/nexus-calendar.Caddyfile" --adapter caddyfile
             else
                 warn "calendar UI not built — run: (cd apps/Nexus-Calendar/frontend && pnpm install && pnpm run build)"
@@ -370,6 +393,7 @@ cmd_start() {
             NEXUS_TERMINAL_URL=http://127.0.0.1:3110 \
             NEXUS_CALENDAR_URL=http://127.0.0.1:3068 \
             NEXUS_CALENDAR_DASHBOARD_SECRET="$NEXUS_CALENDAR_DASHBOARD_SECRET" \
+            NEXUS_CALENDAR_WEB_URL=http://127.0.0.1:8092 \
             NEXUS_ISSUES_TOKEN="$NEXUS_ISSUES_TOKEN" \
             bun run src/index.ts
     fi

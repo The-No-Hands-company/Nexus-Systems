@@ -71,6 +71,12 @@ afterEach(() => {
 });
 
 describe("dashboard server", () => {
+  it("redirects the canonical Calendar mount to a trailing-slash asset base", async () => {
+    const res = await handleRequest(new Request("http://app.test/calendar"));
+    expect(res.status).toBe(308);
+    expect(res.headers.get("location")).toBe("http://app.test/calendar/");
+  });
+
   it("reports health", async () => {
     const res = await handleRequest(new Request("http://app.test/health"));
     expect(res.status).toBe(200);
@@ -83,13 +89,15 @@ describe("dashboard server", () => {
     );
     expect(res.status).toBe(200);
     const { apps } = (await res.json()) as {
-      apps: Array<{ id: string; url: string; health: string }>;
+      apps: Array<{ id: string; path: string; delivery: string; health: string }>;
     };
     // Mail is served by this app at /mail and has no public host, so it never
     // appears in Cloud's registry — the shell contributes it.
-    expect(apps.map((a) => a.id).sort()).toEqual(expect.arrayContaining(["nexus-calendar", "nexus-chat", "nexus-email", "nexus-terminal"]));
+    expect(apps.map((a) => a.id).sort()).toEqual(expect.arrayContaining(["nexus-chat", "nexus-email", "nexus-terminal"]));
+    expect(apps.map((a) => a.id)).not.toContain("nexus-calendar");
     expect(apps.find((app) => app.id === "nexus-terminal")).toMatchObject({
-      url: "/terminal",
+      path: "/terminal",
+      delivery: "shell-native",
       health: "healthy",
     });
   });
@@ -121,7 +129,7 @@ describe("dashboard server", () => {
     // outage is no reason to hide it.
     const { apps } = (await res.json()) as { apps: Array<{ id: string }> };
     expect(apps.map((a) => a.id)).toContain("nexus-email");
-    expect(apps.map((a) => a.id)).toContain("nexus-calendar");
+    expect(apps.map((a) => a.id)).not.toContain("nexus-calendar");
   });
 
   it("proxies auth calls same-origin, preserving path and method", async () => {

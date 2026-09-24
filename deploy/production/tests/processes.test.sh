@@ -18,8 +18,11 @@ trap cleanup EXIT
 mkdir -p \
     "$FIXTURE_ROOT/apps/Nexus-Dashboard/frontend/dist" \
     "$FIXTURE_ROOT/apps/Nexus-Dashboard/src" \
+    "$FIXTURE_ROOT/apps/Nexus-Calendar/frontend/dist" \
     "$FIXTURE_ROOT/packages/phantom-sdk/wasm/target/release"
 touch "$FIXTURE_ROOT/apps/Nexus-Dashboard/frontend/dist/index.html"
+touch "$FIXTURE_ROOT/apps/Nexus-Calendar/frontend/dist/index.html"
+touch "$FIXTURE_ROOT/apps/Nexus-Calendar/package.json"
 touch "$FIXTURE_ROOT/packages/phantom-sdk/wasm/target/release/libphantom_wasm.so"
 
 # deploy.sh is a command as well as a function library. Source the real function
@@ -37,6 +40,9 @@ source <(
 ROOT="$FIXTURE_ROOT"
 export NEXUS_CLOUD_API_KEY="task-7-test-cloud-key" # pragma: allowlist secret
 export NEXUS_ISSUES_TOKEN=""
+export NEXUS_CALENDAR_DB="/var/lib/nexus-calendar/calendar.sqlite"
+export NEXUS_CALENDAR_LEGACY_OWNER_SUBJECT="usr-founder"
+export NEXUS_CALENDAR_JWT_AUDIENCE="calendar.test.example"
 
 # Capture the behavior of cmd_start at its service-launch boundary. Everything
 # outside that boundary is inert and local to TEST_ROOT.
@@ -98,9 +104,18 @@ run_start
 terminal_args="$(service_args terminal)"
 dashboard_args="$(service_args dashboard)"
 proxy_args="$(service_args proxy)"
+calendar_args="$(service_args calendar)"
+calendar_web_args="$(service_args nexus-calendar-web)"
 
 assert_service_order terminal dashboard
 assert_contains $'terminal\t' "$terminal_args" "production launch did not start Nexus-Terminal"
+assert_contains $'calendar\t' "$calendar_args" "production launch did not start Nexus-Calendar"
+assert_contains $'nexus-calendar-web\t' "$calendar_web_args" "production launch did not start the Calendar web front door"
+assert_contains $'\tNEXUS_CALENDAR_DB=/var/lib/nexus-calendar/calendar.sqlite' "$calendar_args" "Nexus-Calendar did not receive its persistent database path"
+assert_contains $'\tNEXUS_CALENDAR_LEGACY_OWNER_SUBJECT=usr-founder' "$calendar_args" "Nexus-Calendar did not receive the explicit legacy owner" # pragma: allowlist secret
+assert_contains $'\tNEXUS_CALENDAR_JWT_AUDIENCE=calendar.test.example' "$calendar_args" "Nexus-Calendar did not receive its JWT audience"
+assert_contains $'\tNEXUS_CALENDAR_DASHBOARD_SECRET=' "$calendar_args" "Nexus-Calendar did not receive the Dashboard hop secret"
+assert_contains $'\tNEXUS_CALENDAR_WEB_ROOT=' "$calendar_web_args" "Calendar web front door did not receive the shared built artifact root"
 assert_contains $'\t3110\t' "$terminal_args" "Nexus-Terminal did not use port 3110"
 assert_contains $'\tPORT=3110' "$terminal_args" "Nexus-Terminal did not receive its port"
 assert_contains $'\tNEXUS_BIND_HOST=127.0.0.1' "$terminal_args" "Nexus-Terminal was not bound to loopback"

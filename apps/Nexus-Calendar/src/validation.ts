@@ -1,160 +1,156 @@
-/**
- * Allow-listed input parsing.
- *
- * Every mutation names the fields it accepts and refuses anything else, rather
- * than reading the ones it knows and ignoring the rest. Ignoring is safe right
- * up until some later code iterates the object, and "ownerSubject silently
- * dropped" is a far worse failure than "ownerSubject rejected with a 400".
- */
+import type { EventCreate, EventPermission, EventRange } from "./calendar-engine";
 
-import type { EventCreate, EventPatch, EventRange } from "./calendar-engine";
-
+export type EventPatch = Partial<EventCreate>;
 export type ValidationResult<T> = { ok: true; value: T } | { ok: false; error: string };
 
-const MAX_TITLE = 200;
-const MAX_DESCRIPTION = 5_000;
-const MAX_LOCATION = 300;
-const MAX_RECURRENCE = 200;
-
-/** The widest window one request may ask for. */
-export const MAX_RANGE_DAYS = 366;
-
+const EVENT_FIELDS = new Set(["title", "description", "location", "startTime", "endTime", "allDay", "recurrence"]);
+const SHARE_FIELDS = new Set(["permission"]);
+const MAX_TITLE_LENGTH = 512;
+const MAX_TEXT_LENGTH = 10_000;
 const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
+const MAX_RANGE_MS = 366 * 24 * 60 * 60 * 1000;
+const ISO_TIMESTAMP = /^(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}):(\d{2})(?::(\d{2})(?:\.(\d{1,3}))?)?(Z|[+-]\d{2}:\d{2})?)?$/;
 
-const CREATE_FIELDS = ["title", "description", "location", "startTime", "endTime", "allDay", "recurrence"] as const;
-type CreateField = (typeof CREATE_FIELDS)[number];
-
-function fail<T>(error: string): ValidationResult<T> {
+function invalid<T>(error: string): ValidationResult<T> {
   return { ok: false, error };
 }
 
-/**
- * True only for a string a Date can actually resolve.
- *
- * `new Date("2026-13-45T99:99")` is Invalid Date, which is the check; the
- * regex first keeps obviously non-ISO input from depending on engine-specific
- * lenient parsing.
- */
-function isTimestamp(value: unknown): value is string {
-  if (typeof value !== "string" || !value.trim()) return false;
-  if (!/^\d{4}-\d{2}-\d{2}([T ]\d{2}:\d{2}(:\d{2}(\.\d{1,3})?)?(Z|[+-]\d{2}:\d{2})?)?$/.test(value)) return false;
-  return !Number.isNaN(new Date(value).getTime());
+function object(value: unknown): Record<string, unknown> | null {
+  return value !== null && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null;
 }
 
-function bounded(value: unknown, max: number, field: string): ValidationResult<string | undefined> {
-  if (value === undefined || value === null) return { ok: true, value: undefined };
-  if (typeof value !== "string") return fail(`${field} must be a string`);
-  if (value.length > max) return fail(`${field} exceeds ${max} characters`);
-  return { ok: true, value };
+export function canonicalTimestamp(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const match = ISO_TIMESTAMP.exec(value);
+  if (!match) return null;
+  const [, yearText, monthText, dayText, hourText, minuteText, secondText, millisecondText, zone] = match;
+  const year = Number(yearText);
+  const month = Number(monthText);
+  const day = Number(dayText);
+  const hour = Number(hourText ?? "0");
+  const minute = Number(minuteText ?? "0");
+  const second = Number(secondText ?? "0");
+  const millisecond = Number((millisecondText ?? "").padEnd(3, "0") || "0");
+  if (month < 1 || month > 12 || hour > 23 || minute > 59 || second > 59) return null;
+  const localInstant = new Date(Date.UTC(year, month - 1, day, hour, minute, second, millisecond));
+  if (
+    localInstant.getUTCFullYear() !== year ||
+    localInstant.getUTCMonth() !== month - 1 ||
+    localInstant.getUTCDate() !== day
+  ) return null;
+  if (zone && zone !== "Z") {
+    const offsetHour = Number(zone.slice(1, 3));
+    const offsetMinute = Number(zone.slice(4, 6));
+    if (offsetHour > 23 || offsetMinute > 59) return null;
+  }
+  const timestamp = zone ? Date.parse(value) : localInstant.getTime();
+  return Number.isNaN(timestamp) ? null : new Date(timestamp).toISOString();
 }
 
-function rejectUnknown(input: Record<string, unknown>, allowed: readonly string[]): string | null {
-  const unknown = Object.keys(input).filter((k) => !allowed.includes(k));
-  return unknown.length ? `unknown field(s): ${unknown.join(", ")}` : null;
+function validateKnownFields(value: Record<string, unknown>): string | null {
+  const unknown = Object.keys(value).find((key) => !EVENT_FIELDS.has(key));
+  if (unknown) return `unknown field: ${unknown}`;
+  return null;
 }
 
-function asObject(value: unknown): Record<string, unknown> | null {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
-  return value as Record<string, unknown>;
-}
-
-/** Shared field parsing for create and patch; `require` drives which are mandatory. */
-function parseFields(
-  input: Record<string, unknown>,
-  require: boolean,
-): ValidationResult<Partial<EventCreate>> {
-  const out: Partial<EventCreate> = {};
-
-  if (require || "title" in input) {
-    const { title } = input;
-    if (typeof title !== "string" || !title.trim()) return fail("title must be a non-empty string");
-    if (title.length > MAX_TITLE) return fail(`title exceeds ${MAX_TITLE} characters`);
-    out.title = title.trim();
-  }
-
-  for (const [field, max] of [
-    ["description", MAX_DESCRIPTION],
-    ["location", MAX_LOCATION],
-    ["recurrence", MAX_RECURRENCE],
-  ] as const) {
-    if (!(field in input)) continue;
-    const r = bounded(input[field], max, field);
-    if (!r.ok) return fail(r.error);
-    out[field as "description" | "location" | "recurrence"] = r.value;
-  }
-
-  if ("allDay" in input) {
-    if (typeof input.allDay !== "boolean") return fail("allDay must be a boolean");
-    out.allDay = input.allDay;
-  }
-
-  for (const field of ["startTime", "endTime"] as const) {
-    if (!require && !(field in input)) continue;
-    if (!isTimestamp(input[field])) return fail(`${field} must be an ISO-8601 timestamp`);
-    out[field] = input[field] as string;
-  }
-
-  // Only comparable when both ends are known. A patch moving one end is
-  // re-checked against the stored event by the caller.
-  if (out.startTime !== undefined && out.endTime !== undefined) {
-    if (new Date(out.endTime).getTime() <= new Date(out.startTime).getTime()) {
-      return fail("endTime must be after startTime");
-    }
-  }
-
-  return { ok: true, value: out };
+function optionalText(value: unknown): string | undefined | null {
+  if (value === undefined) return undefined;
+  if (typeof value !== "string" || value.length > MAX_TEXT_LENGTH) return null;
+  return value;
 }
 
 export function parseEventCreate(value: unknown): ValidationResult<EventCreate> {
-  const input = asObject(value);
-  if (!input) return fail("body must be a JSON object");
+  const input = object(value);
+  if (!input) return invalid("event must be an object");
+  const fieldError = validateKnownFields(input);
+  if (fieldError) return invalid(fieldError);
+  if (typeof input.title !== "string") return invalid("title is required");
+  const title = input.title.trim();
+  if (!title || title.length > MAX_TITLE_LENGTH) return invalid("title must be 1-512 characters");
+  const startTime = canonicalTimestamp(input.startTime);
+  const endTime = canonicalTimestamp(input.endTime);
+  if (!startTime || !endTime) return invalid("startTime and endTime must be ISO timestamps");
+  if (Date.parse(endTime) <= Date.parse(startTime)) return invalid("endTime must be after startTime");
+  if (input.allDay !== undefined && typeof input.allDay !== "boolean") return invalid("allDay must be boolean");
 
-  const unknown = rejectUnknown(input, CREATE_FIELDS);
-  if (unknown) return fail(unknown);
-
-  const parsed = parseFields(input, true);
-  if (!parsed.ok) return fail(parsed.error);
-  return { ok: true, value: parsed.value as EventCreate };
+  const description = optionalText(input.description);
+  const location = optionalText(input.location);
+  const recurrence = optionalText(input.recurrence);
+  if (description === null || location === null || recurrence === null) return invalid("event text is invalid or too long");
+  return {
+    ok: true,
+    value: {
+      title,
+      startTime,
+      endTime,
+      ...(description === undefined ? {} : { description }),
+      ...(location === undefined ? {} : { location }),
+      ...(input.allDay === undefined ? {} : { allDay: input.allDay }),
+      ...(recurrence === undefined ? {} : { recurrence }),
+    },
+  };
 }
 
 export function parseEventPatch(value: unknown): ValidationResult<EventPatch> {
-  const input = asObject(value);
-  if (!input) return fail("body must be a JSON object");
-
-  const unknown = rejectUnknown(input, CREATE_FIELDS);
-  if (unknown) return fail(unknown);
-
-  const present = CREATE_FIELDS.filter((f: CreateField) => f in input);
-  if (present.length === 0) return fail("patch must change at least one field");
-
-  const parsed = parseFields(input, false);
-  if (!parsed.ok) return fail(parsed.error);
-  return { ok: true, value: parsed.value };
+  const input = object(value);
+  if (!input) return invalid("event patch must be an object");
+  const fieldError = validateKnownFields(input);
+  if (fieldError) return invalid(fieldError);
+  if (Object.keys(input).length === 0) return invalid("event patch must not be empty");
+  const title = input.title === undefined ? undefined : typeof input.title === "string" ? input.title.trim() : null;
+  if (title === null || (title !== undefined && (!title || title.length > MAX_TITLE_LENGTH))) return invalid("title must be 1-512 characters");
+  const startTime = input.startTime === undefined ? undefined : canonicalTimestamp(input.startTime);
+  const endTime = input.endTime === undefined ? undefined : canonicalTimestamp(input.endTime);
+  if (startTime === null) return invalid("startTime must be an ISO timestamp");
+  if (endTime === null) return invalid("endTime must be an ISO timestamp");
+  if (input.allDay !== undefined && typeof input.allDay !== "boolean") return invalid("allDay must be boolean");
+  const description = optionalText(input.description);
+  const location = optionalText(input.location);
+  const recurrence = optionalText(input.recurrence);
+  if (description === null || location === null || recurrence === null) return invalid("event text is invalid or too long");
+  return {
+    ok: true,
+    value: {
+      ...(title === undefined ? {} : { title }),
+      ...(startTime === undefined ? {} : { startTime }),
+      ...(endTime === undefined ? {} : { endTime }),
+      ...(description === undefined ? {} : { description }),
+      ...(location === undefined ? {} : { location }),
+      ...(input.allDay === undefined ? {} : { allDay: input.allDay }),
+      ...(recurrence === undefined ? {} : { recurrence }),
+    },
+  };
 }
 
-/**
- * Bounds the query window.
- *
- * An unbounded range is one request that asks for the entire calendar, so the
- * span is capped and both ends must parse. Defaults mirror what the month view
- * asks for when it says nothing.
- */
+export function parseEventShare(value: unknown): ValidationResult<EventPermission> {
+  const input = object(value);
+  if (!input) return invalid("event share must be an object");
+  const unknown = Object.keys(input).find((key) => !SHARE_FIELDS.has(key));
+  if (unknown) return invalid(`unknown field: ${unknown}`);
+  if (input.permission !== "viewer" && input.permission !== "editor") return invalid("permission must be viewer or editor");
+  return { ok: true, value: input.permission };
+}
+
 export function parseRange(url: URL): ValidationResult<EventRange> {
-  const today = new Date();
-  const defaultFrom = today.toISOString().slice(0, 10);
-  const defaultToDate = new Date(today);
-  defaultToDate.setUTCDate(defaultToDate.getUTCDate() + 30);
+  const from = url.searchParams.get("from");
+  const to = url.searchParams.get("to");
+  const normalizedFrom = canonicalTimestamp(from);
+  // A date-only `to` means the whole of that day, so the exclusive bound is the
+  // start of the next one. Taken literally it would drop every event on the
+  // last day of the window.
+  const toDateOnly = to !== null && DATE_ONLY.test(to);
+  const toInstant = toDateOnly ? canonicalTimestamp(to) : null;
+  const normalizedTo = toInstant
+    ? new Date(Date.parse(toInstant) + 86_400_000).toISOString()
+    : canonicalTimestamp(to);
+  if (!normalizedFrom || !normalizedTo) return invalid("from and to must be ISO timestamps");
+  const fromMs = Date.parse(normalizedFrom);
+  const toMs = Date.parse(normalizedTo);
+  if (toMs <= fromMs) return invalid("to must be after from");
+  if (toMs - fromMs > MAX_RANGE_MS) return invalid("date range is too large");
+  return { ok: true, value: { from: normalizedFrom, to: normalizedTo } };
+}
 
-  const from = url.searchParams.get("from") ?? defaultFrom;
-  const to = url.searchParams.get("to") ?? defaultToDate.toISOString().slice(0, 10);
-
-  if (!isTimestamp(from)) return fail("from must be an ISO-8601 date or timestamp");
-  if (!isTimestamp(to)) return fail("to must be an ISO-8601 date or timestamp");
-
-  const fromMs = new Date(DATE_ONLY.test(from) ? `${from}T00:00:00.000Z` : from).getTime();
-  const toMs = new Date(DATE_ONLY.test(to) ? `${to}T00:00:00.000Z` : to).getTime();
-  if (toMs < fromMs) return fail("to must not be before from");
-  if (toMs - fromMs > MAX_RANGE_DAYS * 86_400_000) return fail(`range exceeds ${MAX_RANGE_DAYS} days`);
-
-  return { ok: true, value: { from, to } };
+export function isEventId(value: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 }

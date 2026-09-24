@@ -46,13 +46,83 @@ const TOOLS = {
 };
 
 describe("app grid entries", () => {
+  it("keeps Calendar's shell path separate from its proxied delivery origin", () => {
+    const entries = toAppEntries(
+      {
+        tools: [
+          {
+            id: "nexus-calendar",
+            name: "Nexus Calendar",
+            description: "Shared calendars",
+            path: "/calendar",
+            publicUrl: "https://calendar.tnhc.dev",
+            delivery: "proxied-app",
+            health: "healthy",
+          },
+        ],
+      },
+      AUTH,
+    );
+
+    expect(entries[0]).toMatchObject({
+      path: "/calendar",
+      publicUrl: "https://calendar.tnhc.dev",
+      delivery: "proxied-app",
+    });
+  });
+
+  it("uses an explicit shell-native delivery for Cloud", () => {
+    const entries = toAppEntries(
+      {
+        tools: [
+          {
+            id: "nexus-cloud",
+            name: "Nexus Cloud",
+            description: "Control panel",
+            path: "/cloud",
+            publicUrl: "https://cloud.tnhc.dev",
+            delivery: "shell-native",
+            health: "healthy",
+          },
+        ],
+      },
+      AUTH,
+    );
+
+    expect(entries[0]).toMatchObject({ path: "/cloud", delivery: "shell-native" });
+  });
+
+  it("normalizes a legacy absolute URL to framed without changing its shell path", () => {
+    const entries = toAppEntries(
+      {
+        tools: [
+          {
+            id: "nexus-legacy",
+            name: "Legacy",
+            description: "Older Dashboard payload",
+            path: "/legacy",
+            url: "https://legacy.tnhc.dev",
+            health: "healthy",
+          },
+        ],
+      },
+      AUTH,
+    );
+
+    expect(entries[0]).toMatchObject({
+      path: "/legacy",
+      publicUrl: "https://legacy.tnhc.dev",
+      delivery: "framed",
+    });
+  });
+
   it("keeps only tools a user can actually open", () => {
     const entries = toAppEntries(TOOLS, AUTH);
     expect(entries.map((e) => e.id).sort()).toEqual(["nexus-chat", "nexus-cloud"]);
   });
 
   it("drops the auth host — it is the sign-in provider, not a destination", () => {
-    expect(toAppEntries(TOOLS, AUTH).some((e) => e.url.includes(AUTH))).toBe(false);
+    expect(toAppEntries(TOOLS, AUTH).some((e) => e.publicUrl?.includes(AUTH))).toBe(false);
   });
 
   it("drops the scaffolds that have no public URL", () => {
@@ -131,7 +201,7 @@ describe("the dashboard does not list itself", () => {
 
   it("still omits the identity service", () => {
     const entries = toAppEntries(payload, "auth.tnhc.dev", "app.tnhc.dev");
-    expect(entries.some((e) => e.url.includes("auth."))).toBe(false);
+    expect(entries.some((e) => e.publicUrl?.includes("auth."))).toBe(false);
   });
 
   it("without a self host, nothing is dropped but auth", () => {
@@ -140,7 +210,7 @@ describe("the dashboard does not list itself", () => {
   });
 });
 
-describe("Cloud's tile links into the shell, not out to its own host", () => {
+describe("explicit delivery", () => {
   const payload = {
     tools: [
       {
@@ -148,30 +218,44 @@ describe("Cloud's tile links into the shell, not out to its own host", () => {
         name: "Nexus Cloud",
         description: "Control panel",
         publicUrl: "https://cloud.tnhc.dev",
+        path: "/cloud",
+        delivery: "shell-native",
         health: "healthy",
       },
       {
         id: "nexus-draw",
         name: "Nexus-Draw",
         publicUrl: "https://draw.tnhc.dev",
+        path: "/draw",
+        delivery: "framed",
         health: "healthy",
       },
     ],
   };
 
-  it("rewrites Cloud's url to the shell-native /cloud route", () => {
-    const entries = toAppEntries(payload, AUTH, "app.tnhc.dev", "cloud.tnhc.dev");
-    expect(entries.find((e) => e.id === "nexus-cloud")?.url).toBe("/cloud");
-  });
-
-  it("leaves every other app's url untouched", () => {
-    const entries = toAppEntries(payload, AUTH, "app.tnhc.dev", "cloud.tnhc.dev");
-    expect(entries.find((e) => e.id === "nexus-draw")?.url).toBe("https://draw.tnhc.dev");
-  });
-
-  it("without a cloud host, nothing is rewritten", () => {
+  it("uses Cloud's explicit shell-native route", () => {
     const entries = toAppEntries(payload, AUTH, "app.tnhc.dev");
-    expect(entries.find((e) => e.id === "nexus-cloud")?.url).toBe("https://cloud.tnhc.dev");
+    expect(entries.find((e) => e.id === "nexus-cloud")).toMatchObject({
+      path: "/cloud",
+      delivery: "shell-native",
+    });
+  });
+
+  it("keeps a framed app origin separate from its shell path", () => {
+    const entries = toAppEntries(payload, AUTH, "app.tnhc.dev");
+    expect(entries.find((e) => e.id === "nexus-draw")).toMatchObject({
+      path: "/draw",
+      publicUrl: "https://draw.tnhc.dev",
+      delivery: "framed",
+    });
+  });
+
+  it("does not infer proxied delivery from a public origin", () => {
+    const entries = toAppEntries(
+      { tools: [{ id: "nexus-legacy", publicUrl: "https://legacy.tnhc.dev", health: "healthy" }] },
+      AUTH,
+    );
+    expect(entries[0]?.delivery).toBe("framed");
   });
 });
 
@@ -205,26 +289,29 @@ describe("one tile per destination", () => {
 });
 
 describe("shell-native views", () => {
+  it("leaves Calendar delivery to the proxied Calendar application", () => {
+    expect(
+      shellNativeEntries({ mailHealthy: true, terminalHealthy: true, includeTerminal: false }),
+    ).not.toContainEqual(expect.objectContaining({ id: "nexus-calendar" }));
+  });
+
   it("offers mail as an in-shell route, not a framed app", () => {
     const entries = shellNativeEntries({
       mailHealthy: true,
       terminalHealthy: true,
-      calendarHealthy: true,
       includeTerminal: false,
     });
-    expect(entries).toHaveLength(2);
+    expect(entries).toHaveLength(1);
     const mail = entries[0]!;
     expect(mail.id).toBe("nexus-email");
-    // A relative url is the signal Launcher and Grid use to route in-app. An
-    // absolute one would be framed, and framing app.<domain>/mail would put
-    // the shell inside itself.
-    expect(mail.url).toBe("/mail");
+    expect(mail.path).toBe("/mail");
+    expect(mail.delivery).toBe("shell-native");
     expect(mail.health).toBe("healthy");
   });
 
   it("marks mail offline when the mail API is unreachable", () => {
     expect(
-      shellNativeEntries({ mailHealthy: false, terminalHealthy: true, calendarHealthy: false, includeTerminal: false })[0]!
+      shellNativeEntries({ mailHealthy: false, terminalHealthy: true, includeTerminal: false })[0]!
         .health,
     ).toBe("offline");
   });
@@ -240,12 +327,12 @@ describe("shell-native views", () => {
       id: "nexus-terminal",
       name: "Nexus Terminal",
       description: "Audited host shell for Nexus operators",
-      url: "/terminal",
       path: "/terminal",
+      delivery: "shell-native",
       health: "healthy",
     });
     expect(
-      shellNativeEntries({ mailHealthy: true, terminalHealthy: true, calendarHealthy: true, includeTerminal: false }),
+      shellNativeEntries({ mailHealthy: true, terminalHealthy: true, includeTerminal: false }),
     ).not.toContainEqual(expect.objectContaining({ id: "nexus-terminal" }));
   });
 
@@ -253,14 +340,14 @@ describe("shell-native views", () => {
     expect(
       shellNativeEntries({ mailHealthy: true, terminalHealthy: false, includeTerminal: true }),
     ).toContainEqual(
-      expect.objectContaining({ id: "nexus-terminal", url: "/terminal", health: "offline" }),
+      expect.objectContaining({ id: "nexus-terminal", path: "/terminal", delivery: "shell-native", health: "offline" }),
     );
   });
 
   it("adds mail to the registry grid without losing registry apps", () => {
     const merged = mergeApps(
       toAppEntries(TOOLS, AUTH),
-      shellNativeEntries({ mailHealthy: true, terminalHealthy: true, calendarHealthy: true, includeTerminal: false }),
+      shellNativeEntries({ mailHealthy: true, terminalHealthy: true, includeTerminal: false }),
     );
     expect(merged.map((e) => e.id)).toContain("nexus-email");
     expect(merged.map((e) => e.id)).toContain("nexus-chat");
@@ -272,24 +359,28 @@ describe("shell-native views", () => {
         id: "nexus-email",
         name: "Nexus Email",
         description: "dup",
-        url: "https://mail.tnhc.dev",
+        publicUrl: "https://mail.tnhc.dev",
         path: "/email",
+        delivery: "framed",
         health: "healthy",
       },
     ];
     const merged = mergeApps(
       registry,
-      shellNativeEntries({ mailHealthy: true, terminalHealthy: true, calendarHealthy: true, includeTerminal: false }),
+      shellNativeEntries({ mailHealthy: true, terminalHealthy: true, includeTerminal: false }),
     );
     expect(merged.filter((e) => e.id === "nexus-email")).toHaveLength(1);
     // The in-shell route is the one that works, so it is the one that survives.
-    expect(merged.find((e) => e.id === "nexus-email")!.url).toBe("/mail");
+    expect(merged.find((e) => e.id === "nexus-email")).toMatchObject({
+      path: "/mail",
+      delivery: "shell-native",
+    });
   });
 
   it("sorts the merged grid by name", () => {
     const names = mergeApps(
       toAppEntries(TOOLS, AUTH),
-      shellNativeEntries({ mailHealthy: true, terminalHealthy: true, calendarHealthy: true, includeTerminal: false }),
+      shellNativeEntries({ mailHealthy: true, terminalHealthy: true, includeTerminal: false }),
     ).map((e) => e.name);
     expect(names).toEqual([...names].sort());
   });
@@ -315,7 +406,7 @@ describe("flat app paths", () => {
   });
 
   it("keeps Cloud's console on its shell-native path", () => {
-    const entries = toAppEntries(TOOLS, AUTH, undefined, "cloud.tnhc.dev");
+    const entries = toAppEntries(TOOLS, AUTH);
     expect(entries.find((e) => e.id === "nexus-cloud")!.path).toBe("/cloud");
   });
 
@@ -325,14 +416,15 @@ describe("flat app paths", () => {
         id: "other-mail",
         name: "Other",
         description: "",
-        url: "https://x.dev",
+        publicUrl: "https://x.dev",
         path: "/mail",
+        delivery: "framed",
         health: "healthy",
       },
     ];
     const merged = mergeApps(
       registry,
-      shellNativeEntries({ mailHealthy: true, terminalHealthy: true, calendarHealthy: true, includeTerminal: false }),
+      shellNativeEntries({ mailHealthy: true, terminalHealthy: true, includeTerminal: false }),
     );
     expect(merged.filter((e) => e.path === "/mail")).toHaveLength(1);
   });
@@ -343,18 +435,19 @@ describe("flat app paths", () => {
         id: "nexus-terminal",
         name: "Nexus Terminal",
         description: "external",
-        url: "https://terminal.tnhc.dev",
+        publicUrl: "https://terminal.tnhc.dev",
         path: "/a/nexus-terminal",
+        delivery: "framed",
         health: "healthy",
       },
     ];
     const merged = mergeApps(
       registry,
-      shellNativeEntries({ mailHealthy: true, terminalHealthy: true, calendarHealthy: true, includeTerminal: true }),
+      shellNativeEntries({ mailHealthy: true, terminalHealthy: true, includeTerminal: true }),
     );
-    expect(merged).toHaveLength(3);
+    expect(merged).toHaveLength(2);
     expect(merged.filter((entry) => entry.id === "nexus-terminal")).toEqual([
-      expect.objectContaining({ url: "/terminal", path: "/terminal" }),
+      expect.objectContaining({ path: "/terminal", delivery: "shell-native" }),
     ]);
   });
 });

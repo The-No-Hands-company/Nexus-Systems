@@ -10,9 +10,9 @@ import {
 } from "./terminal";
 import { checkRateLimit, rateLimitMiddleware } from "./ratelimit";
 import { validateJWT, extractBearerToken, validateRequest } from "./jwt";
-import { proxyCalendarApi } from "./calendar-proxy";
 import { listDevTools, runDevTool } from "./devtools";
 import { checkAllServices } from "./servicehealth";
+import { proxyCalendarApi, proxyCalendarWeb } from "./calendar-proxy";
 
 /**
  * The ecosystem front door — app.<domain>.
@@ -34,13 +34,6 @@ const DOMAIN = process.env.DOMAIN || "tnhc.dev";
 const AUTH_HOST = process.env.NEXUS_AUTH_HOST || `auth.${DOMAIN}`;
 /** This app's own public host, so it does not list itself in its own grid. */
 const SELF_HOST = process.env.NEXUS_DASHBOARD_HOST || `app.${DOMAIN}`;
-/**
- * Cloud's public host — not where fetchApps() reads the registry from
- * (CLOUD_URL, below, is the internal address), but the host its own tile's
- * publicUrl carries. Matching on it is how toAppEntries() turns Cloud's tile
- * into an in-shell /cloud link instead of an external one; see apps.ts.
- */
-const CLOUD_HOST = process.env.NEXUS_CLOUD_HOST || `cloud.${DOMAIN}`;
 const AUTH_INTERNAL_URL = process.env.NEXUS_AUTH_INTERNAL_URL || "http://127.0.0.1:4310";
 const CLOUD_URL = process.env.NEXUS_CLOUD_URL || "http://127.0.0.1:8787";
 const CLOUD_API_KEY = process.env.NEXUS_CLOUD_API_KEY || "";
@@ -98,6 +91,7 @@ const NOTIFICATIONS_PREFIX = "/ipa/notifications";
  * complications. The caller's identity is attached server-side.
  */
 const CALENDAR_PREFIX = "/ipa/calendar/";
+const CALENDAR_WEB_PREFIX = "/calendar";
 
 function hostingUrl(): string {
   // Read per call, not captured at module load — the same import-order trap
@@ -297,9 +291,6 @@ async function fetchApps(req: Request): Promise<Response> {
   const native = shellNativeEntries({
     mailHealthy: await mailReachable(),
     terminalHealthy: includeTerminal ? await terminalReachable() : false,
-    calendarHealthy: await (async () => {
-      try { return (await fetch("http://127.0.0.1:3068/health", { signal: AbortSignal.timeout(2000) })).ok; } catch { return false; }
-    })(),
     includeTerminal,
   });
 
@@ -309,7 +300,7 @@ async function fetchApps(req: Request): Promise<Response> {
       signal: AbortSignal.timeout(3000),
     });
     if (!res.ok) return Response.json({ apps: native });
-    const registry = toAppEntries(await res.json(), AUTH_HOST, SELF_HOST, CLOUD_HOST).filter(
+    const registry = toAppEntries(await res.json(), AUTH_HOST, SELF_HOST).filter(
       (entry) => includeTerminal || entry.id !== "nexus-terminal",
     );
     return Response.json({ apps: mergeApps(registry, native) });
@@ -456,6 +447,18 @@ export async function handleRequest(
 
   if (path.startsWith(AUTH_PREFIX)) return proxyToAuth(req, path);
 
+  // Calendar owns the document and its client routes; Dashboard only mounts
+  // the artifact at its canonical in-shell path. Keep this before Dashboard's
+  // SPA fallback so /calendar never resolves to the old shell-native view.
+  // Vite emits relative asset URLs so the trailing slash is the canonical
+  // document base. Preserve /calendar as a safe bookmark by redirecting it.
+  if (path === CALENDAR_WEB_PREFIX) {
+    return Response.redirect(new URL(`${CALENDAR_WEB_PREFIX}/`, req.url), 308);
+  }
+  if (path.startsWith(CALENDAR_WEB_PREFIX + "/")) {
+    return proxyCalendarWeb(req, path.slice(CALENDAR_WEB_PREFIX.length));
+  }
+
   // Anything else under /ipa is not ours and must not fall through to the SPA.
   // Returning the HTML shell for a mistyped API call is how a caller ends up
   // parsing "<!doctype html>" as JSON.
@@ -508,7 +511,26 @@ export async function handleRequest(
     '<!doctype html><meta charset="utf-8"><title>Nexus Dashboard</title>' +
       "<p>The dashboard UI has not been built. Run <code>npm install &amp;&amp; npm run build</code> " +
       "in <code>apps/Nexus-Dashboard/frontend</code>.</p>",
-    { status: 503, headers: { "content-type": "text/html; charset=utf-8" } },
+    {
+      status: 503,
+      headers: {
+        "content-type": "text/html; charset=utf-8",
+        // The build-instruction page is still served by the authenticated
+        // shell origin, so it keeps the same document boundary as the SPA.
+        "content-security-policy": [
+          "default-src 'self'",
+          "script-src 'self'",
+          "style-src 'self' 'unsafe-inline'",
+          "img-src 'self' data:",
+          "font-src 'self'",
+          "connect-src 'self'",
+          "object-src 'none'",
+          "frame-ancestors 'self'",
+          "base-uri 'self'",
+          "form-action 'self'",
+        ].join("; "),
+      },
+    },
   );
 }
 

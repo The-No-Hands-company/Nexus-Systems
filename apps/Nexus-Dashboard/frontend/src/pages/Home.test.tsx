@@ -27,7 +27,7 @@ function stubFetch(signedIn: boolean, role = "user") {
     if (u === "/ipa/apps") {
       return jsonResponse({
         apps: [{ id: "nexus-chat", name: "Nexus Chat", description: "Chat",
-                 url: "https://chat.tnhc.dev", path: "/chat", health: "healthy" }],
+                 publicUrl: "https://chat.tnhc.dev", path: "/chat", delivery: "framed", health: "healthy" }],
       });
     }
     // Widgets (Today, Unread, Activity) fetch endpoints this test does not

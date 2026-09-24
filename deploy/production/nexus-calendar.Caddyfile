@@ -11,6 +11,15 @@
 :8092 {
 	bind 127.0.0.1
 
+	# The edge gate permits this exact GET path without a Nexus session. Keep it
+	# separate from the authenticated API so the bearer-token exception remains
+	# easy to audit at both layers.
+	handle /api/v1/calendar/public/* {
+		reverse_proxy 127.0.0.1:3068
+	}
+
+	# Every other Calendar API request remains identity-bound at the ecosystem
+	# proxy and is served by the loopback backend only.
 	handle /api/v1/calendar/* {
 		reverse_proxy 127.0.0.1:3068
 	}
@@ -18,22 +27,38 @@
 		reverse_proxy 127.0.0.1:3068
 	}
 
-	handle {
-		root * {$NEXUS_CALENDAR_WEB_ROOT:/run/media/zajferx/Data/dev/The-No-hands-Company/projects/Nexus-Systems/apps/Nexus-Calendar/frontend/dist}
-		try_files {path} {path}/ /index.html
+	# Vite emits one hashed artifact set. Dashboard proxies these bytes below
+	# /calendar, while this origin serves the identical files at /assets.
+	handle /assets/* {
+		root * {$NEXUS_CALENDAR_WEB_ROOT:/opt/nexus-systems/apps/Nexus-Calendar/frontend/dist}
+		header Cache-Control "public, max-age=31536000, immutable"
 		file_server
-		@hashed path_regexp hashed \.[0-9a-zA-Z_-]{8,}\.(js|css|woff2?)$
-		header @hashed Cache-Control "public, max-age=31536000, immutable"
-		@shell {
-			not path_regexp hashed \.[0-9a-zA-Z_-]{8,}\.(js|css|woff2?)$
-		}
-		header @shell Cache-Control "no-cache, no-store, must-revalidate"
+	}
+
+	# A public share link has an intentionally isolated document response. The
+	# page reads its token only from the URL and never sends it as a Referer.
+	handle /share/* {
+		root * {$NEXUS_CALENDAR_WEB_ROOT:/opt/nexus-systems/apps/Nexus-Calendar/frontend/dist}
+		header Cache-Control "no-cache, no-store, must-revalidate"
+		header Referrer-Policy "no-referrer"
+		try_files {path} /index.html
+		file_server
+	}
+
+	# Direct-origin SPA fallback. Dashboard has its own narrow /calendar proxy;
+	# this rule therefore cannot reinterpret arbitrary Dashboard paths.
+	handle {
+		root * {$NEXUS_CALENDAR_WEB_ROOT:/opt/nexus-systems/apps/Nexus-Calendar/frontend/dist}
+		header Cache-Control "no-cache, no-store, must-revalidate"
+		try_files {path} /index.html
+		file_server
 	}
 
 	header {
 		X-Content-Type-Options "nosniff"
-		Content-Security-Policy "frame-ancestors 'self' https://app.tnhc.dev"
+		Content-Security-Policy "default-src 'self'; frame-ancestors 'self' https://app.tnhc.dev; base-uri 'self'; object-src 'none'"
 		Referrer-Policy "strict-origin-when-cross-origin"
+		Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=()"
 		-Server
 	}
 

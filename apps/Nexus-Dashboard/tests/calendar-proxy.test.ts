@@ -1,181 +1,250 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 
-// Must match the other proxy tests: AUTH_INTERNAL_URL is captured into a
-// top-level const the first time src/server is imported in a `bun test` run,
-// so every test file sharing that module graph must agree on the value.
-process.env.NEXUS_AUTH_INTERNAL_URL = "http://127.0.0.1:4399";
-process.env.NEXUS_CALENDAR_URL = "http://127.0.0.1:4396";
-process.env.NEXUS_CALENDAR_DASHBOARD_SECRET = "hop-secret-for-tests";  // pragma: allowlist secret
-const { handleRequest } = await import("../src/server");
+const originalEnvironment = new Map(
+  [
+    "NEXUS_AUTH_INTERNAL_URL",
+    "NEXUS_CALENDAR_API_URL",
+    "NEXUS_CALENDAR_WEB_URL",
+    "NEXUS_CALENDAR_DASHBOARD_SECRET",
+  ].map((key) => [key, process.env[key]] as const),
+);
+const { proxyCalendarApi, proxyCalendarWeb } = await import("../src/calendar-proxy");
 
-type BunServer = ReturnType<typeof Bun.serve>;
-let auth: BunServer | null = null;
-let calendar: BunServer | null = null;
-
-let authUser: string | null = "usr-alice";
-let calendarSaw: Headers | null = null;
-let calendarPath: string | null = null;
-let calendarMethod: string | null = null;
-let calendarBody: string | null = null;
-/** When true the calendar service is "down" and never answers. */
-let calendarDown = false;
+let apiRequests: Request[] = [];
+let webRequests: Request[] = [];
+let authenticated = true;
+let apiAvailable = true;
+const realFetch = globalThis.fetch;
 
 beforeEach(() => {
-  authUser = "usr-alice";
-  calendarSaw = null;
-  calendarPath = null;
-  calendarMethod = null;
-  calendarBody = null;
-  calendarDown = false;
-
-  auth = Bun.serve({
-    port: 4399,
-    fetch(req) {
-      const u = new URL(req.url);
-      if (u.pathname !== "/api/v1/auth/me") return new Response("nope", { status: 404 });
-      if (authUser === null) return Response.json({ error: "unauthenticated" }, { status: 401 });
-      return Response.json({ user: { id: authUser, username: "alice", role: "user" } });
-    },
-  });
-
-  calendar = Bun.serve({
-    port: 4396,
-    async fetch(req) {
-      if (calendarDown) return new Response("boom", { status: 500 });
-      calendarSaw = req.headers;
-      const u = new URL(req.url);
-      calendarPath = u.pathname + u.search;
-      calendarMethod = req.method;
-      calendarBody = req.method === "GET" || req.method === "DELETE" ? null : await req.text();
-      return Response.json({ ok: true, echoedFrom: u.pathname }, { status: 201 });
-    },
-  });
+  apiRequests = [];
+  webRequests = [];
+  authenticated = true;
+  apiAvailable = true;
+  process.env.NEXUS_AUTH_INTERNAL_URL = "http://auth.test";
+  process.env.NEXUS_CALENDAR_API_URL = "http://calendar-api.test";
+  process.env.NEXUS_CALENDAR_WEB_URL = "http://calendar-web.test";
+  process.env.NEXUS_CALENDAR_DASHBOARD_SECRET = "calendar-dashboard-test-secret"; // pragma: allowlist secret
+  globalThis.fetch = async (input, init) => {
+    const request = new Request(input instanceof Request ? input : input.toString(), init);
+    const url = new URL(request.url);
+    if (url.origin === "http://auth.test") {
+      return authenticated
+        ? Response.json({ user: { id: "usr-alice", role: "member" } })
+        : Response.json({ error: "not_authenticated" }, { status: 401 });
+    }
+    if (url.origin === "http://calendar-api.test") {
+      if (!apiAvailable) throw new Error("Calendar API unavailable");
+      apiRequests.push(request.clone());
+      return new Response(await request.text(), {
+        status: 207,
+        headers: {
+          "content-type": "application/json",
+          "cache-control": "private, max-age=60",
+          etag: '"calendar-etag"',
+          "set-cookie": "must-not-reach-browser=true",
+        },
+      });
+    }
+    if (url.origin === "http://calendar-web.test") {
+      webRequests.push(request.clone());
+      if (url.pathname.endsWith(".js")) {
+        return new Response("export {}", { headers: { "content-type": "text/javascript" } });
+      }
+      return new Response("<!doctype html><main>Calendar</main>", {
+        headers: {
+          "content-type": "text/html; charset=utf-8",
+          "content-security-policy": "default-src 'self'; frame-ancestors 'self'",
+          "referrer-policy": "no-referrer",
+        },
+      });
+    }
+    throw new Error(`Unexpected fetch target: ${url.origin}`);
+  };
 });
 
 afterEach(() => {
-  auth?.stop(true);
-  calendar?.stop(true);
+  globalThis.fetch = realFetch;
+  for (const [key, value] of originalEnvironment) {
+    if (value === undefined) delete process.env[key];
+    else process.env[key] = value;
+  }
 });
 
-const signedIn = { headers: { cookie: "nexus_session=whatever" } };
+describe("Calendar API proxy", () => {
+  it("authenticates before any Calendar API connection", async () => {
+    authenticated = false;
 
-describe("authentication comes before anything else", () => {
-  it("refuses an unauthenticated caller before contacting calendar at all", async () => {
-    authUser = null;
-    const res = await handleRequest(new Request("http://app.test/ipa/calendar/events"));
+    const res = await proxyCalendarApi(
+      new Request("http://app.test/ipa/calendar/events"),
+      "events",
+      "",
+    );
+
     expect(res.status).toBe(401);
-    expect(calendarSaw).toBeNull();
-  });
-});
-
-describe("identity is asserted by Dashboard, never relayed from the browser", () => {
-  it("attaches the Auth-derived subject and the private hop secret", async () => {
-    await handleRequest(new Request("http://app.test/ipa/calendar/events", signedIn));
-    expect(calendarSaw!.get("x-nexus-subject")).toBe("usr-alice");
-    expect(calendarSaw!.get("x-nexus-dashboard-secret")).toBe("hop-secret-for-tests");  // pragma: allowlist secret
+    expect(apiRequests).toHaveLength(0);
   });
 
-  it("strips a client-supplied subject rather than forwarding it", async () => {
-    await handleRequest(new Request("http://app.test/ipa/calendar/events", {
-      headers: { ...signedIn.headers, "x-nexus-subject": "usr-victim" },
-    }));
-    expect(calendarSaw!.get("x-nexus-subject")).toBe("usr-alice");
+  it("uses Auth identity and the private hop secret while preserving a request contract", async () => {
+    const res = await proxyCalendarApi(
+      new Request("http://app.test/ipa/calendar/events?from=2026-09-01&to=2026-09-30", {
+        method: "POST",
+        headers: {
+          accept: "application/json",
+          "content-type": "application/json",
+          "x-nexus-subject": "usr-victim",
+          "x-nexus-dashboard-secret": "browser-secret", // pragma: allowlist secret
+          "x-nexus-identity": "browser-identity",
+        },
+        body: '{"title":"Planning"}',
+      }),
+      "events",
+      "?from=2026-09-01&to=2026-09-30",
+    );
+
+    expect(res.status).toBe(207);
+    expect(await res.text()).toBe('{"title":"Planning"}');
+    expect(res.headers.get("content-type")).toContain("application/json");
+    // Forced, not relayed: someone's schedule must never be stored by a shared
+    // cache, whatever Calendar happened to send.
+    expect(res.headers.get("cache-control")).toBe("no-store");
+    expect(res.headers.get("referrer-policy")).toBe("no-referrer");
+    expect(res.headers.get("etag")).toBe('"calendar-etag"');
+    expect(res.headers.get("set-cookie")).toBeNull();
+    expect(apiRequests).toHaveLength(1);
+    const upstream = apiRequests[0]!;
+    expect(new URL(upstream.url).pathname).toBe("/api/v1/calendar/events");
+    expect(new URL(upstream.url).search).toBe("?from=2026-09-01&to=2026-09-30");
+    expect(upstream.method).toBe("POST");
+    expect(upstream.headers.get("accept")).toBe("application/json");
+    expect(upstream.headers.get("content-type")).toBe("application/json");
+    expect(upstream.headers.get("x-nexus-subject")).toBe("usr-alice");
+    expect(upstream.headers.get("x-nexus-dashboard-secret")).toBe("calendar-dashboard-test-secret");
+    expect(upstream.headers.get("x-nexus-identity")).toBeNull();
   });
 
-  it("strips a client-supplied hop secret rather than forwarding it", async () => {
-    await handleRequest(new Request("http://app.test/ipa/calendar/events", {
-      headers: { ...signedIn.headers, "x-nexus-dashboard-secret": "guessed" },  // pragma: allowlist secret
-    }));
-    expect(calendarSaw!.get("x-nexus-dashboard-secret")).toBe("hop-secret-for-tests");  // pragma: allowlist secret
+  it("forwards every supported mutation only to its matching Calendar resource", async () => {
+    const cases = [
+      ["GET", "events", ""],
+      ["POST", "events", '{"title":"New"}'],
+      ["PATCH", "events/event_123", '{"title":"Changed"}'],
+      ["PUT", "events/event_123/shares/usr-bob", '{"permission":"viewer"}'],
+      ["DELETE", "events/event_123", ""],
+    ] as const;
+
+    for (const [method, rest, body] of cases) {
+      const response = await proxyCalendarApi(
+        new Request(`http://app.test/ipa/calendar/${rest}`, {
+          method,
+          ...(body ? { headers: { "content-type": "application/json" }, body } : {}),
+        }),
+        rest,
+        "",
+      );
+      expect(response.status).toBe(207);
+    }
+
+    expect(apiRequests.map((request) => `${request.method} ${new URL(request.url).pathname}`)).toEqual([
+      "GET /api/v1/calendar/events",
+      "POST /api/v1/calendar/events",
+      "PATCH /api/v1/calendar/events/event_123",
+      "PUT /api/v1/calendar/events/event_123/shares/usr-bob",
+      "DELETE /api/v1/calendar/events/event_123",
+    ]);
   });
 
-  it("never forwards the browser's cookie to the calendar service", async () => {
-    await handleRequest(new Request("http://app.test/ipa/calendar/events", signedIn));
-    expect(calendarSaw!.get("cookie")).toBeNull();
-  });
-});
+  it("rejects paths and methods outside the Calendar API allow-list without upstream contact", async () => {
+    const secret = await proxyCalendarApi(
+      new Request("http://app.test/ipa/calendar/admin/secrets"),
+      "admin/secrets",
+      "",
+    );
+    const wrongMethod = await proxyCalendarApi(
+      new Request("http://app.test/ipa/calendar/events", { method: "PUT" }),
+      "events",
+      "",
+    );
 
-describe("only the calendar API surface is reachable", () => {
-  it.each([
-    "/ipa/calendar/events",
-    "/ipa/calendar/events/abc-123",
-  ])("forwards %s", async (path) => {
-    const res = await handleRequest(new Request(`http://app.test${path}`, signedIn));
-    expect(res.status).toBe(201);
-    expect(calendarPath).toBe(path.replace("/ipa/calendar/", "/api/v1/calendar/"));
-  });
-
-  it.each([
-    "/ipa/calendar/events/abc/extra",
-    "/ipa/calendar/admin",
-    "/ipa/calendar/health",
-    "/ipa/calendar/",
-    // Percent-encoded traversal: this one survives URL normalisation and does
-    // reach the handler, so the allow-list is what has to refuse it.
-    "/ipa/calendar/events/..%2f..%2fetc%2fpasswd",
-    "/ipa/calendar/%2e%2e%2fadmin",
-  ])("refuses %s without contacting calendar", async (path) => {
-    const res = await handleRequest(new Request(`http://app.test${path}`, signedIn));
-    expect(res.status).toBe(404);
-    expect(calendarSaw).toBeNull();
+    expect(secret.status).toBe(404);
+    expect(wrongMethod.status).toBe(405);
+    expect(apiRequests).toHaveLength(0);
   });
 
-  it("never reaches calendar with a dot-segment path", async () => {
-    // `new Request()` resolves `../..` before anything routes on it, so this
-    // never even matches the calendar prefix. Asserting the status here would
-    // be asserting the SPA fallback's behaviour; what matters is the upstream.
-    await handleRequest(new Request("http://app.test/ipa/calendar/../../etc/passwd", signedIn));
-    expect(calendarSaw).toBeNull();
-  });
+  it("returns a stable unavailable response when the private API is down", async () => {
+    apiAvailable = false;
 
-  it.each(["PUT", "HEAD", "OPTIONS"])("refuses the %s method", async (method) => {
-    const res = await handleRequest(new Request("http://app.test/ipa/calendar/events", {
-      method, ...signedIn,
-    }));
-    expect(res.status).toBe(405);
-    expect(calendarSaw).toBeNull();
-  });
+    const res = await proxyCalendarApi(
+      new Request("http://app.test/ipa/calendar/events"),
+      "events",
+      "",
+    );
 
-  it.each(["GET", "POST", "PATCH", "DELETE"])("allows the %s method", async (method) => {
-    const init: RequestInit = { method, ...signedIn };
-    if (method === "POST" || method === "PATCH") init.body = JSON.stringify({ title: "x" });
-    const res = await handleRequest(new Request("http://app.test/ipa/calendar/events", init));
-    expect(res.status).toBe(201);
-    expect(calendarMethod).toBe(method);
-  });
-});
-
-describe("the request survives the hop intact", () => {
-  it("carries the query string", async () => {
-    await handleRequest(new Request("http://app.test/ipa/calendar/events?from=2026-09-01&to=2026-09-30", signedIn));
-    expect(calendarPath).toBe("/api/v1/calendar/events?from=2026-09-01&to=2026-09-30");
-  });
-
-  it("carries the body", async () => {
-    await handleRequest(new Request("http://app.test/ipa/calendar/events", {
-      method: "POST", body: JSON.stringify({ title: "Standup" }), ...signedIn,
-    }));
-    expect(calendarBody).toBe(JSON.stringify({ title: "Standup" }));
-  });
-
-  it("relays the upstream status rather than flattening it", async () => {
-    const res = await handleRequest(new Request("http://app.test/ipa/calendar/events", signedIn));
-    expect(res.status).toBe(201);
-  });
-});
-
-describe("upstream failure is a stable envelope", () => {
-  it("answers 503 when calendar cannot be reached", async () => {
-    calendar?.stop(true);
-    calendar = null;
-    const res = await handleRequest(new Request("http://app.test/ipa/calendar/events", signedIn));
     expect(res.status).toBe(503);
     expect(await res.json()).toEqual({ error: "calendar_unavailable" });
   });
+});
 
-  it("does not leak upstream detail on a 5xx", async () => {
-    calendarDown = true;
-    const res = await handleRequest(new Request("http://app.test/ipa/calendar/events", signedIn));
-    expect(await res.text()).not.toContain("boom");
+describe("Calendar web proxy", () => {
+  it("serves the Calendar web artifact for the shell root and client routes without an iframe", async () => {
+    for (const relativePath of ["", "/", "/month/2026-09"] as const) {
+      const res = await proxyCalendarWeb(
+        new Request(`http://app.test/calendar${relativePath}`),
+        relativePath,
+      );
+      expect(res.status).toBe(200);
+      expect(await res.text()).toContain("Calendar");
+      expect(res.headers.get("x-nexus-shell-context")).toBe("proxied-app");
+      expect(res.headers.get("cache-control")).toBe("no-cache, no-store, must-revalidate");
+      expect(res.headers.get("content-security-policy")).toBe("default-src 'self'; frame-ancestors 'self'");
+      expect(res.headers.get("referrer-policy")).toBe("no-referrer");
+    }
+
+    expect(webRequests.map((request) => new URL(request.url).pathname)).toEqual([
+      "/",
+      "/",
+      "/month/2026-09",
+    ]);
+  });
+
+  it("keeps immutable caching for hashed Calendar assets", async () => {
+    for (const relativePath of [
+      "/assets/app.abcdef123.js",
+      "/assets/index-Cx1abc234def.js",
+    ]) {
+      const res = await proxyCalendarWeb(
+        new Request(`http://app.test/calendar${relativePath}`),
+        relativePath,
+      );
+
+      expect(res.status).toBe(200);
+      expect(res.headers.get("content-type")).toContain("text/javascript");
+      expect(res.headers.get("cache-control")).toBe("public, max-age=31536000, immutable");
+      expect(res.headers.get("x-nexus-shell-context")).toBe("proxied-app");
+    }
+  });
+
+  it("rejects traversal and Calendar API paths instead of treating them as web routes", async () => {
+    const traversal = await proxyCalendarWeb(
+      new Request("http://app.test/calendar/%2e%2e/private"),
+      "/%2e%2e/private",
+    );
+    const apiConfusion = await proxyCalendarWeb(
+      new Request("http://app.test/calendar/api/v1/calendar/events"),
+      "/api/v1/calendar/events",
+    );
+    const encodedTraversal = await proxyCalendarWeb(
+      new Request("http://app.test/calendar/%252e%252e/private"),
+      "/%252e%252e/private",
+    );
+    const protocolRelative = await proxyCalendarWeb(
+      new Request("http://app.test/calendar//evil.example/private"),
+      "//evil.example/private",
+    );
+
+    expect(traversal.status).toBe(404);
+    expect(apiConfusion.status).toBe(404);
+    expect(encodedTraversal.status).toBe(404);
+    expect(protocolRelative.status).toBe(404);
+    expect(webRequests).toHaveLength(0);
   });
 });

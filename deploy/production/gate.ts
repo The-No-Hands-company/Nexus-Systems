@@ -208,6 +208,23 @@ const PUBLIC_HOSTS = new Set([AUTH_HOST]);
 /** Paths exempt from the auth gate on ANY host (deploy.sh probes these). */
 const PUBLIC_PATHS = new Set(["/health", "/health/live", "/health/ready"]);
 
+const PUBLIC_CALENDAR_EVENT = /^\/api\/v1\/calendar\/public\/[A-Za-z0-9_-]{43}$/;
+const PUBLIC_CALENDAR_SHARE = /^\/share\/[A-Za-z0-9_-]{43}$/;
+
+function isPublicCalendarEvent(req: Request, url: URL): boolean {
+  return req.method === "GET"
+    && url.hostname.toLowerCase() === `calendar.${DOMAIN}`
+    && url.search === ""
+    && PUBLIC_CALENDAR_EVENT.test(url.pathname);
+}
+
+function isPublicCalendarShare(req: Request, url: URL): boolean {
+  return req.method === "GET"
+    && url.hostname.toLowerCase() === `calendar.${DOMAIN}`
+    && url.search === ""
+    && PUBLIC_CALENDAR_SHARE.test(url.pathname);
+}
+
 /** Decides whether a request may proceed, and with what identity. */
 export async function gate(
   req: Request,
@@ -240,6 +257,14 @@ export async function gate(
   // only the wildcard fallback to Hosting's site-proxy produces "site", so a
   // registered app can never reach this branch.
   if (target.kind === "site") return { allow: true, identityToken: null };
+
+  // A bearer token permits exactly one read-only Calendar event and its
+  // isolated direct-origin document: GET, calendar host only, no query, a
+  // 43-character token. Structural rather than policy data, so a registry
+  // change cannot accidentally widen it to another Calendar path.
+  if (isPublicCalendarEvent(req, url) || isPublicCalendarShare(req, url)) {
+    return { allow: true, identityToken: null };
+  }
 
   // ── Everything below here is an application host: default deny. ──────────
   //

@@ -1,21 +1,12 @@
 import { Database } from "bun:sqlite";
-import { randomUUID } from "node:crypto";
-
-/**
- * Schema version, tracked in `PRAGMA user_version`.
- *
- *  0 — the original schema: an `events` table with no owner. Every event was
- *      visible to, and editable by, everyone who could reach the service.
- *  1 — `owner_subject NOT NULL`. Events are private to their owner.
- */
-const SCHEMA_VERSION = 1;
+import { createHash, randomBytes, randomUUID } from "node:crypto";
+import { canonicalTimestamp } from "./validation";
 
 export type EventAccess = "owner" | "editor" | "viewer";
+export type EventPermission = "viewer" | "editor";
 
 export interface CalEvent {
   id: string;
-  /** The trusted subject this event belongs to. Immutable after creation. */
-  ownerSubject: string;
   title: string;
   description: string | undefined;
   location: string | undefined;
@@ -24,35 +15,50 @@ export interface CalEvent {
   allDay: boolean;
   recurrence: string | undefined;
   createdAt: string;
-  /**
-   * What the requesting caller may do with it. Only "owner" is reachable
-   * today; the field exists so viewer/editor sharing slots in without changing
-   * the shape callers already read.
-   */
+  ownerSubject: string;
   access: EventAccess;
 }
 
 export interface EventCreate {
   title: string;
-  description?: string | undefined;
-  location?: string | undefined;
+  description?: string;
+  location?: string;
   startTime: string;
   endTime: string;
-  allDay?: boolean | undefined;
-  recurrence?: string | undefined;
+  allDay?: boolean;
+  recurrence?: string;
 }
 
-export type EventPatch = Partial<EventCreate>;
-
-/** A half-open window: events overlapping [from, to) are in range. */
 export interface EventRange {
   from: string;
   to: string;
 }
 
-interface EventRow {
+export interface EventShare {
+  eventId: string;
+  subject: string;
+  permission: EventPermission;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PublicEvent {
+  title: string;
+  startTime: string;
+  endTime: string;
+  allDay: boolean;
+  location: string | null;
+  description: string | null;
+}
+
+export interface PublicShare {
+  token: string;
+  publicPath: string;
+}
+
+type EventRow = {
   id: string;
-  owner_subject: string;
   title: string;
   description: string | null;
   location: string | null;
@@ -61,12 +67,33 @@ interface EventRow {
   all_day: number;
   recurrence: string | null;
   created_at: string;
-}
+  owner_subject: string;
+  access?: EventAccess;
+};
 
-function rowToEvent(row: EventRow, access: EventAccess = "owner"): CalEvent {
+type EventShareRow = {
+  event_id: string;
+  grantee_subject: string;
+  permission: EventPermission;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+};
+
+type PublicEventRow = {
+  title: string;
+  start_time: string;
+  end_time: string;
+  all_day: number;
+  location: string | null;
+  description: string | null;
+};
+
+const PUBLIC_TOKEN = /^[A-Za-z0-9_-]{43}$/;
+
+function rowToEvent(row: EventRow): CalEvent {
   return {
     id: row.id,
-    ownerSubject: row.owner_subject,
     title: row.title,
     description: row.description ?? undefined,
     location: row.location ?? undefined,
@@ -75,223 +102,324 @@ function rowToEvent(row: EventRow, access: EventAccess = "owner"): CalEvent {
     allDay: row.all_day === 1,
     recurrence: row.recurrence ?? undefined,
     createdAt: row.created_at,
-    access,
+    ownerSubject: row.owner_subject,
+    access: row.access ?? "owner",
   };
 }
 
-const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
+function rowToShare(row: EventShareRow): EventShare {
+  return {
+    eventId: row.event_id,
+    subject: row.grantee_subject,
+    permission: row.permission,
+    createdBy: row.created_by,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
 
-/**
- * Turns a range into an explicit half-open pair of instants.
- *
- * A date-only bound means the whole of that day, which is what someone asking
- * for "1st to the 24th" means — so `to` becomes the start of the 25th, not the
- * start of the 24th. Getting this wrong is how the previous implementation
- * silently dropped every event on the last day of the window.
- */
-export function rangeBounds(range: EventRange): { start: string; endExclusive: string } {
-  const start = DATE_ONLY.test(range.from) ? `${range.from}T00:00:00.000Z` : range.from;
+function normalizedOwnerSubject(value: string | undefined): string | undefined {
+  const subject = value?.trim();
+  return subject === "" || subject === undefined ? undefined : subject;
+}
 
-  let endExclusive = range.to;
-  if (DATE_ONLY.test(range.to)) {
-    const next = new Date(`${range.to}T00:00:00.000Z`);
-    next.setUTCDate(next.getUTCDate() + 1);
-    endExclusive = next.toISOString();
-  }
-  return { start, endExclusive };
+function canonicalUtcTimestamp(value: string): string {
+  const canonical = canonicalTimestamp(value);
+  if (!canonical) throw new Error("invalid_event_timestamp");
+  return canonical;
+}
+
+function createOwnedEventsTable(db: Database, name = "events"): void {
+  db.exec(`CREATE TABLE ${name} (
+    id TEXT PRIMARY KEY,
+    title TEXT NOT NULL,
+    description TEXT,
+    location TEXT,
+    start_time TEXT NOT NULL,
+    end_time TEXT NOT NULL,
+    all_day INTEGER DEFAULT 0,
+    recurrence TEXT,
+    created_at TEXT DEFAULT (datetime('now')),
+    owner_subject TEXT NOT NULL
+  )`);
+}
+
+function createEventSharesTable(db: Database): void {
+  db.exec(`CREATE TABLE IF NOT EXISTS event_shares (
+    event_id TEXT NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+    grantee_subject TEXT NOT NULL,
+    permission TEXT NOT NULL CHECK (permission IN ('viewer', 'editor')),
+    created_by TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY (event_id, grantee_subject)
+  )`);
+}
+
+function createPublicEventSharesTable(db: Database): void {
+  db.exec(`CREATE TABLE IF NOT EXISTS public_event_shares (
+    event_id TEXT PRIMARY KEY REFERENCES events(id) ON DELETE CASCADE,
+    token_digest TEXT NOT NULL UNIQUE,
+    created_at TEXT NOT NULL
+  )`);
+}
+
+function tokenDigest(token: string): string {
+  return createHash("sha256").update(token).digest("hex");
 }
 
 export class CalendarEngine {
   db: Database;
 
-  /**
-   * @param path        SQLite file, or ":memory:".
-   * @param legacyOwnerSubject
-   *   Required only when migrating a version-0 database that already holds
-   *   events. Those rows have no recorded owner and none can be inferred, so
-   *   the constructor refuses to continue rather than guess — guessing wrong
-   *   hands one person's calendar to another. Never used for new rows.
-   */
   constructor(path = ":memory:", options: { legacyOwnerSubject?: string } = {}) {
     this.db = new Database(path);
-    this.migrate(options.legacyOwnerSubject);
+    this.db.exec("PRAGMA foreign_keys = ON");
+
+    try {
+      this.migrate(options);
+    } catch (error) {
+      if (this.db.inTransaction) this.db.exec("ROLLBACK");
+      this.db.close();
+      throw error;
+    }
   }
 
-  private migrate(legacyOwnerSubject?: string): void {
-    const current = (this.db.prepare("PRAGMA user_version").get() as { user_version: number }).user_version;
-    if (current >= SCHEMA_VERSION) return;
+  private migrate(options: { legacyOwnerSubject?: string }): void {
+    this.db.exec("BEGIN IMMEDIATE");
 
-    const legacyRows = this.countLegacyRows();
-    if (legacyRows > 0 && !legacyOwnerSubject) {
-      // Fail closed. The alternatives are all worse: a NULL owner matches
-      // nobody and loses the data, an empty-string owner matches whatever
-      // caller happens to send one, and picking "the first user" is a guess.
-      throw new Error(
-        `legacy_owner_required: ${legacyRows} event(s) predate ownership and have no recorded owner. ` +
-        `Set NEXUS_CALENDAR_LEGACY_OWNER_SUBJECT to the subject that should own them.`,
-      );
+    const currentVersion = (this.db.query("PRAGMA user_version").get() as { user_version: number }).user_version;
+    const eventsTable = this.db
+      .prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'events'")
+      .get();
+
+    if (!eventsTable) {
+      createOwnedEventsTable(this.db);
+    } else {
+      const columns = this.db.query("PRAGMA table_info(events)").all() as {
+        name: string;
+        type: string;
+        notnull: number;
+      }[];
+      const ownershipColumn = columns.find((column) => column.name === "owner_subject");
+      const isOwnedSchema = ownershipColumn?.type.toUpperCase() === "TEXT" && ownershipColumn.notnull === 1;
+
+      if (!isOwnedSchema) {
+        const rowCount = (this.db.query("SELECT COUNT(*) AS count FROM events").get() as { count: number }).count;
+        const unownedRows = ownershipColumn
+          ? (this.db.query("SELECT COUNT(*) AS count FROM events WHERE owner_subject IS NULL").get() as { count: number }).count
+          : rowCount;
+        const legacyOwner = normalizedOwnerSubject(options.legacyOwnerSubject);
+        if (unownedRows > 0 && !legacyOwner) throw new Error("legacy_owner_required");
+
+        createOwnedEventsTable(this.db, "events_owned_migration");
+        if (rowCount > 0) {
+          this.db.prepare(`INSERT INTO events_owned_migration (
+            id, title, description, location, start_time, end_time, all_day, recurrence, created_at, owner_subject
+          ) SELECT id, title, description, location, start_time, end_time, all_day, recurrence, created_at,
+            ${ownershipColumn ? "COALESCE(owner_subject, ?)" : "?"}
+          FROM events`).run(legacyOwner ?? null);
+        }
+        this.db.exec("DROP TABLE events");
+        this.db.exec("ALTER TABLE events_owned_migration RENAME TO events");
+      }
     }
 
-    // One transaction: either the table is rebuilt, backfilled and versioned,
-    // or the database is untouched. A half-migrated calendar has no owner
-    // column on some rows and is unrecoverable without a backup.
+    if (currentVersion < 2) this.canonicalizeStoredTimestamps();
+    createEventSharesTable(this.db);
+    createPublicEventSharesTable(this.db);
+    this.db.exec("CREATE INDEX IF NOT EXISTS events_owner_start_end_idx ON events (owner_subject, start_time, end_time)");
+    this.db.exec("CREATE INDEX IF NOT EXISTS event_shares_grantee_event_idx ON event_shares (grantee_subject, event_id)");
+    if (currentVersion < 2) this.db.exec("PRAGMA user_version = 2");
+    this.db.exec("COMMIT");
+  }
+
+  private transaction<T>(operation: () => T): T {
     this.db.exec("BEGIN IMMEDIATE");
     try {
-      this.db.exec(`CREATE TABLE IF NOT EXISTS events_v1 (
-        id TEXT PRIMARY KEY,
-        owner_subject TEXT NOT NULL,
-        title TEXT NOT NULL,
-        description TEXT,
-        location TEXT,
-        start_time TEXT NOT NULL,
-        end_time TEXT NOT NULL,
-        all_day INTEGER NOT NULL DEFAULT 0,
-        recurrence TEXT,
-        created_at TEXT NOT NULL DEFAULT (datetime('now'))
-      )`);
-
-      if (legacyRows > 0) {
-        this.db.prepare(
-          `INSERT INTO events_v1 (id, owner_subject, title, description, location, start_time, end_time, all_day, recurrence, created_at)
-           SELECT id, ?, title, description, location, start_time, end_time,
-                  COALESCE(all_day, 0), recurrence, COALESCE(created_at, datetime('now'))
-           FROM events`,
-        ).run(legacyOwnerSubject!);
-      }
-
-      if (this.tableExists("events")) this.db.exec("DROP TABLE events");
-      this.db.exec("ALTER TABLE events_v1 RENAME TO events");
-
-      // Every read is scoped by owner and bounded by time; this is that query.
-      this.db.exec(
-        "CREATE INDEX IF NOT EXISTS idx_events_owner_span ON events (owner_subject, start_time, end_time)",
-      );
-      this.db.exec(`PRAGMA user_version = ${SCHEMA_VERSION}`);
+      const result = operation();
       this.db.exec("COMMIT");
-    } catch (err) {
+      return result;
+    } catch (error) {
       this.db.exec("ROLLBACK");
-      throw err;
+      throw error;
     }
   }
 
-  private tableExists(name: string): boolean {
-    const row = this.db
-      .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?")
-      .get(name);
-    return row !== null && row !== undefined;
+  private canonicalizeStoredTimestamps(): void {
+    const rows = this.db.prepare("SELECT id, start_time, end_time FROM events").all() as {
+      id: string;
+      start_time: string;
+      end_time: string;
+    }[];
+    const update = this.db.prepare("UPDATE events SET start_time = ?, end_time = ? WHERE id = ?");
+    for (const row of rows) {
+      update.run(canonicalUtcTimestamp(row.start_time), canonicalUtcTimestamp(row.end_time), row.id);
+    }
   }
 
-  /** Rows in a pre-ownership `events` table. Zero for a fresh database. */
-  private countLegacyRows(): number {
-    if (!this.tableExists("events")) return 0;
-    const columns = this.db.prepare("PRAGMA table_info(events)").all() as { name: string }[];
-    // Already owned — an interrupted run, or a version pragma that was lost.
-    if (columns.some((c) => c.name === "owner_subject")) return 0;
-    const row = this.db.prepare("SELECT COUNT(*) AS n FROM events").get() as { n: number };
-    return row.n;
-  }
+  createEvent(subject: string, input: EventCreate): CalEvent {
+    const eventOwner = normalizedOwnerSubject(subject);
+    if (!eventOwner) throw new Error("owner_subject_required");
 
-  /**
-   * The owner comes from `ownerSubject`, which callers must take from a trusted
-   * identity — never from the request body. Anything owner-shaped inside
-   * `input` is ignored by construction: the INSERT below names its columns and
-   * reads only known fields.
-   */
-  createEvent(ownerSubject: string, input: EventCreate): CalEvent {
-    const ev: CalEvent = {
+    const event: CalEvent = {
       id: randomUUID(),
-      ownerSubject,
       title: input.title,
       description: input.description || undefined,
       location: input.location || undefined,
-      startTime: input.startTime,
-      endTime: input.endTime,
+      startTime: canonicalUtcTimestamp(input.startTime),
+      endTime: canonicalUtcTimestamp(input.endTime),
       allDay: input.allDay || false,
       recurrence: input.recurrence || undefined,
       createdAt: new Date().toISOString(),
+      ownerSubject: eventOwner,
       access: "owner",
     };
-    this.db.prepare(
-      `INSERT INTO events (id, owner_subject, title, description, location, start_time, end_time, all_day, recurrence, created_at)
-       VALUES (?,?,?,?,?,?,?,?,?,?)`,
-    ).run(
-      ev.id, ev.ownerSubject, ev.title, ev.description ?? null, ev.location ?? null,
-      ev.startTime, ev.endTime, ev.allDay ? 1 : 0, ev.recurrence ?? null, ev.createdAt,
+    this.db.prepare(`INSERT INTO events (
+      id, title, description, location, start_time, end_time, all_day, recurrence, created_at, owner_subject
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+      event.id,
+      event.title,
+      event.description ?? null,
+      event.location ?? null,
+      event.startTime,
+      event.endTime,
+      event.allDay ? 1 : 0,
+      event.recurrence ?? null,
+      event.createdAt,
+      event.ownerSubject,
     );
-    return ev;
+    return event;
   }
 
-  /**
-   * Undefined both when the event does not exist and when it belongs to
-   * somebody else — the caller turns that into a 404 either way, so the API
-   * cannot be used to probe which event ids are real.
-   */
   getEvent(callerSubject: string, id: string): CalEvent | undefined {
-    const row = this.db
-      .prepare("SELECT * FROM events WHERE id = ? AND owner_subject = ?")
-      .get(id, callerSubject) as EventRow | null;
+    const row = this.db.prepare(`SELECT events.*, CASE
+      WHEN events.owner_subject = ? THEN 'owner'
+      ELSE event_shares.permission
+    END AS access
+    FROM events
+    LEFT JOIN event_shares ON event_shares.event_id = events.id AND event_shares.grantee_subject = ?
+    WHERE events.id = ? AND (events.owner_subject = ? OR event_shares.grantee_subject IS NOT NULL)`)
+      .get(callerSubject, callerSubject, id, callerSubject) as EventRow | null;
     return row ? rowToEvent(row) : undefined;
   }
 
-  /**
-   * Overlap, not containment.
-   *
-   * An event is in range when it starts before the window ends and ends after
-   * the window begins. The previous query asked for events *inside* the window
-   * (`start >= from AND end <= to`), which dropped every multi-day event and
-   * everything on the final day.
-   *
-   * datetime() on both sides so a stored "2026-09-01T10:00" and a bound of
-   * "2026-09-01T00:00:00.000Z" compare as instants rather than as strings of
-   * different lengths, where the shorter one sorts first regardless of when it
-   * actually is.
-   */
   listEvents(callerSubject: string, range: EventRange): CalEvent[] {
-    const { start, endExclusive } = rangeBounds(range);
-    const rows = this.db.prepare(
-      `SELECT * FROM events
-        WHERE owner_subject = ?
-          AND datetime(start_time) < datetime(?)
-          AND datetime(end_time)   > datetime(?)
-        ORDER BY datetime(start_time), id`,
-    ).all(callerSubject, endExclusive, start) as EventRow[];
-    return rows.map((r) => rowToEvent(r));
+    return (this.db.prepare(`SELECT events.*, CASE
+      WHEN events.owner_subject = ? THEN 'owner'
+      ELSE event_shares.permission
+    END AS access
+    FROM events
+    LEFT JOIN event_shares ON event_shares.event_id = events.id AND event_shares.grantee_subject = ?
+    WHERE (events.owner_subject = ? OR event_shares.grantee_subject IS NOT NULL)
+      AND events.start_time < ? AND events.end_time > ?
+    ORDER BY events.start_time`).all(callerSubject, callerSubject, callerSubject, range.to, range.from) as EventRow[]).map(rowToEvent);
   }
 
-  /**
-   * Only the owner's own row is touched, and `owner_subject` is not in the SET
-   * list — an event cannot be handed to another account through a patch.
-   */
-  updateEvent(callerSubject: string, id: string, patch: EventPatch): CalEvent | undefined {
+  updateEvent(callerSubject: string, id: string, patch: Partial<EventCreate>): CalEvent | undefined {
     const existing = this.getEvent(callerSubject, id);
-    if (!existing) return undefined;
-
-    const merged = {
-      title: patch.title ?? existing.title,
-      description: patch.description ?? existing.description,
-      location: patch.location ?? existing.location,
-      startTime: patch.startTime ?? existing.startTime,
-      endTime: patch.endTime ?? existing.endTime,
-      allDay: patch.allDay ?? existing.allDay,
-      recurrence: patch.recurrence ?? existing.recurrence,
-    };
-
+    if (!existing || existing.access === "viewer") return undefined;
+    const merged = { ...existing, ...patch };
     this.db.prepare(
-      `UPDATE events
-          SET title=?, description=?, location=?, start_time=?, end_time=?, all_day=?, recurrence=?
-        WHERE id=? AND owner_subject=?`,
+      `UPDATE events SET title=?, description=?, location=?, start_time=?, end_time=?, all_day=?, recurrence=?
+      WHERE id=? AND (owner_subject=? OR EXISTS (
+        SELECT 1 FROM event_shares
+        WHERE event_shares.event_id = events.id AND event_shares.grantee_subject = ? AND event_shares.permission = 'editor'
+      ))`,
     ).run(
-      merged.title, merged.description ?? null, merged.location ?? null,
-      merged.startTime, merged.endTime, merged.allDay ? 1 : 0, merged.recurrence ?? null,
-      id, callerSubject,
+      merged.title,
+      merged.description ?? null,
+      merged.location ?? null,
+      canonicalUtcTimestamp(merged.startTime),
+      canonicalUtcTimestamp(merged.endTime),
+      merged.allDay ? 1 : 0,
+      merged.recurrence ?? null,
+      id,
+      callerSubject,
+      callerSubject,
     );
     return this.getEvent(callerSubject, id);
   }
 
   deleteEvent(callerSubject: string, id: string): boolean {
-    return this.db
-      .prepare("DELETE FROM events WHERE id = ? AND owner_subject = ?")
-      .run(id, callerSubject).changes > 0;
+    return this.db.prepare("DELETE FROM events WHERE id = ? AND owner_subject = ?").run(id, callerSubject).changes > 0;
+  }
+
+  listShares(owner: string, eventId: string): EventShare[] | undefined {
+    return this.transaction(() => {
+      const event = this.db.prepare("SELECT 1 FROM events WHERE id = ? AND owner_subject = ?").get(eventId, owner);
+      if (!event) return undefined;
+      return (this.db.prepare(`SELECT event_id, grantee_subject, permission, created_by, created_at, updated_at
+        FROM event_shares WHERE event_id = ? ORDER BY grantee_subject`).all(eventId) as EventShareRow[]).map(rowToShare);
+    });
+  }
+
+  upsertShare(owner: string, eventId: string, subject: string, permission: EventPermission): EventShare | undefined {
+    return this.transaction(() => {
+      const normalizedOwner = normalizedOwnerSubject(owner);
+      const grantee = normalizedOwnerSubject(subject);
+      if (!normalizedOwner || !grantee || normalizedOwner === grantee) return undefined;
+      const event = this.db.prepare("SELECT 1 FROM events WHERE id = ? AND owner_subject = ?").get(eventId, normalizedOwner);
+      if (!event) return undefined;
+      const now = new Date().toISOString();
+      this.db.prepare(`INSERT INTO event_shares (
+        event_id, grantee_subject, permission, created_by, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?)
+      ON CONFLICT(event_id, grantee_subject) DO UPDATE SET
+        permission = excluded.permission,
+        created_by = excluded.created_by,
+        updated_at = excluded.updated_at`).run(eventId, grantee, permission, normalizedOwner, now, now);
+      const row = this.db.prepare(`SELECT event_id, grantee_subject, permission, created_by, created_at, updated_at
+        FROM event_shares WHERE event_id = ? AND grantee_subject = ?`).get(eventId, grantee) as EventShareRow;
+      return rowToShare(row);
+    });
+  }
+
+  deleteShare(owner: string, eventId: string, subject: string): boolean {
+    return this.transaction(() => this.db.prepare(`DELETE FROM event_shares
+      WHERE event_id = ? AND grantee_subject = ? AND EXISTS (
+        SELECT 1 FROM events WHERE events.id = event_shares.event_id AND events.owner_subject = ?
+      )`).run(eventId, subject, owner).changes > 0);
+  }
+
+  createPublicShare(owner: string, eventId: string): PublicShare | undefined {
+    return this.transaction(() => {
+      const normalizedOwner = normalizedOwnerSubject(owner);
+      if (!normalizedOwner) return undefined;
+      const event = this.db.prepare("SELECT 1 FROM events WHERE id = ? AND owner_subject = ?").get(eventId, normalizedOwner);
+      if (!event) return undefined;
+
+      const token = randomBytes(32).toString("base64url");
+      this.db.prepare(`INSERT INTO public_event_shares (event_id, token_digest, created_at)
+        VALUES (?, ?, ?)
+        ON CONFLICT(event_id) DO UPDATE SET token_digest = excluded.token_digest, created_at = excluded.created_at`)
+        .run(eventId, tokenDigest(token), new Date().toISOString());
+      return { token, publicPath: `/api/v1/calendar/public/${token}` };
+    });
+  }
+
+  revokePublicShare(owner: string, eventId: string): boolean | undefined {
+    return this.transaction(() => {
+      const normalizedOwner = normalizedOwnerSubject(owner);
+      if (!normalizedOwner) return undefined;
+      const event = this.db.prepare("SELECT 1 FROM events WHERE id = ? AND owner_subject = ?").get(eventId, normalizedOwner);
+      if (!event) return undefined;
+      return this.db.prepare("DELETE FROM public_event_shares WHERE event_id = ?").run(eventId).changes > 0;
+    });
+  }
+
+  getPublicEvent(token: string): PublicEvent | undefined {
+    if (!PUBLIC_TOKEN.test(token)) return undefined;
+    const row = this.db.prepare(`SELECT events.title, events.start_time, events.end_time, events.all_day, events.location, events.description
+      FROM events INNER JOIN public_event_shares ON public_event_shares.event_id = events.id
+      WHERE public_event_shares.token_digest = ?`).get(tokenDigest(token)) as PublicEventRow | null;
+    return row ? {
+      title: row.title,
+      startTime: row.start_time,
+      endTime: row.end_time,
+      allDay: row.all_day === 1,
+      location: row.location,
+      description: row.description,
+    } : undefined;
   }
 
   close(): void {

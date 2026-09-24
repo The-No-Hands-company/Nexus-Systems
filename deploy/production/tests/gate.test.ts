@@ -42,6 +42,31 @@ beforeEach(() => {
   __resetGateForTest();
 });
 
+describe("public Calendar links", () => {
+  it("allows only exact Calendar public-share reads without a session", async () => {
+    const token = "A".repeat(43);
+    expect((await gate(req(`https://calendar.tnhc.dev/api/v1/calendar/public/${token}`), APP)).allow).toBe(true);
+    expect((await gate(req(`https://calendar.tnhc.dev/share/${token}`), APP)).allow).toBe(true);
+
+    const denied = await Promise.all([
+      gate(req("https://calendar.tnhc.dev/api/v1/calendar/events"), APP),
+      gate(new Request(`https://calendar.tnhc.dev/api/v1/calendar/public/${token}`, { method: "POST" }), APP),
+      gate(req(`https://app.tnhc.dev/api/v1/calendar/public/${token}`), APP),
+      gate(req("https://calendar.tnhc.dev/api/v1/calendar/public/"), APP),
+      gate(req(`https://calendar.tnhc.dev/api/v1/calendar/public/${token}%2Fextra`), APP),
+      gate(req(`https://calendar.tnhc.dev/api/v1/calendar/public/${token}?preview=true`), APP),
+      gate(req("https://calendar.tnhc.dev/share/"), APP),
+      gate(req(`https://calendar.tnhc.dev/share/${token}/extra`), APP),
+      gate(req(`https://app.tnhc.dev/share/${token}`), APP),
+      gate(req(`https://calendar.tnhc.dev/share/${token}?preview=true`), APP),
+      // The branch this came from also exempted /index.html; main exempts
+      // nothing on an app host but /assets/, and this pins that.
+      gate(req("https://calendar.tnhc.dev/index.html"), APP),
+    ]);
+    expect(denied.every((decision) => !decision.allow)).toBe(true);
+  });
+});
+
 describe("the test harness itself", () => {
   it("runs with the auth gate active", () => {
     expect(process.env.GATE_SKIP_AUTH).toBeUndefined();

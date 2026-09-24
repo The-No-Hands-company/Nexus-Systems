@@ -16,6 +16,8 @@ export type SystemsApiRegistrationPayload = {
    * never actually runnable.
    */
   publicUrl: string;
+  path: string;
+  delivery: "proxied-app";
   metadata: Record<string, unknown>;
 };
 
@@ -28,7 +30,9 @@ export function buildSystemsApiRegistrationPayload(baseUrl: string): SystemsApiR
     exposed: true,
     health: "healthy",
     upstreamUrl: baseUrl,
-    publicUrl: "/calendar",
+    path: "/calendar",
+    publicUrl: "https://calendar.tnhc.dev",
+    delivery: "proxied-app",
     capabilities: ["calendar", "events", "scheduling"],
     requiresAuth: true,
     metadata: {

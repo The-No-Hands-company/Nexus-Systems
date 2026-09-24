@@ -7,7 +7,7 @@ vi.mock("@xterm/addon-fit", () => ({ FitAddon: class {} }));
 // Mock the api module with only the functions needed by these tests
 vi.mock("./api", () => ({
   listApps: vi.fn(async () => [
-    { id: "nexus-draw", name: "Draw", description: "", url: "https://draw.tnhc.dev", path: "/draw", health: "healthy" },
+    { id: "nexus-draw", name: "Draw", description: "", publicUrl: "https://draw.tnhc.dev", path: "/draw", delivery: "framed", health: "healthy" },
   ]),
   me: vi.fn(async () => ({
     id: "user-founder",
@@ -68,7 +68,7 @@ describe("shell routing", () => {
     expect(screen.queryByTitle("Draw")).toBeNull();
 
     resolveList([
-      { id: "nexus-draw", name: "Draw", description: "", url: "https://draw.tnhc.dev", path: "/draw", health: "healthy" },
+      { id: "nexus-draw", name: "Draw", description: "", publicUrl: "https://draw.tnhc.dev", path: "/draw", delivery: "framed", health: "healthy" },
     ]);
 
     await waitFor(() => expect(screen.getByTitle("Draw")).toBeTruthy());
@@ -91,6 +91,16 @@ describe("shell routing", () => {
     await waitFor(() => expect(screen.getByText("Could not load your apps.")).toBeTruthy());
     // The two failure modes need different user action, so they must not share text.
     expect(screen.queryByText("App not found.")).toBeNull();
+  });
+
+  it("does not retain a Dashboard-native Calendar view", async () => {
+    // /calendar is intercepted by Dashboard's server and served by the
+    // Calendar proxy before this SPA is reached. The client router therefore
+    // cannot own a Calendar component or an iframe fallback for it.
+    window.history.pushState({}, "", "/calendar");
+    render(<App />);
+    await waitFor(() => expect(screen.getByText("App not found.")).toBeTruthy());
+    expect(screen.queryByTitle(/Calendar/)).toBeNull();
   });
 });
 

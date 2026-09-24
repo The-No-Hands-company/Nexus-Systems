@@ -2,7 +2,11 @@
 
 ## Purpose
 
-Personal calendars with events, reminders, and month/week views.
+Personal and explicitly shared calendars with revocable public read-only links.
+
+Calendar is a single proxied-app frontend: it is available at `/calendar` in
+the Dashboard shell and directly at `https://calendar.tnhc.dev`. Both origins
+serve the same frontend artifact; the Dashboard route is not an iframe.
 
 Events are **private to their owner**. There is no global calendar: every read
 and write is scoped to the subject the request arrives with, and an event
@@ -34,16 +38,21 @@ and `/api/v1/status` answers `401` without a trusted caller.
 |--------|------|---------|
 | GET | /health | Liveness. Public. |
 | GET | /api/v1/status | Service status and capabilities. Public. |
-| GET | /api/v1/calendar/events?from=&to= | The caller's events overlapping the window |
+| GET | /api/v1/calendar/events?from=&to= | Events the caller owns or was shared, overlapping the window |
 | POST | /api/v1/calendar/events | Create, owned by the caller |
-| GET | /api/v1/calendar/events/:id | One event, `404` if not the caller's |
-| PATCH | /api/v1/calendar/events/:id | Update, `404` if not the caller's |
-| DELETE | /api/v1/calendar/events/:id | Delete, `404` if not the caller's |
+| GET | /api/v1/calendar/events/:id | One event, `404` if the caller has no access |
+| PATCH | /api/v1/calendar/events/:id | Update (owner or editor), `404` otherwise |
+| DELETE | /api/v1/calendar/events/:id | Delete (owner only), `404` otherwise |
+| GET | /api/v1/calendar/events/:id/shares | Owner: list grants |
+| PUT / DELETE | /api/v1/calendar/events/:id/shares/:subject | Owner: grant or remove `viewer`/`editor` |
+| POST / DELETE | /api/v1/calendar/events/:id/public-share | Owner: create/replace or revoke the public link |
+| GET | /api/v1/calendar/public/:token | Read a public event link. Unauthenticated. |
+| GET | /share/:token | Public read-only event page (direct origin) |
 
 Ranges use **interval overlap**: an event is returned when it starts before the
 window ends and ends after the window begins. A multi-day event that began last
 month appears in this month, which containment (`start >= from AND end <= to`)
-would have dropped. A date-only bound means the whole of that day.
+would have dropped. A date-only `to` means the whole of that day.
 
 ## Configuration
 
@@ -77,8 +86,27 @@ Set NEXUS_CALENDAR_LEGACY_OWNER_SUBJECT to the subject that should own them.
 Set that variable to the Auth user id those events belong to (`usr-…`) and start
 the service once. The migration runs in a single transaction: the table is
 rebuilt with `owner_subject NOT NULL`, every existing row is backfilled to that
-subject, and `user_version` becomes 1. After that the variable is never read
+subject, and `user_version` becomes 1. Version 2 then canonicalizes stored timestamps
+and adds the sharing tables; both steps run on every older database. After that the variable is never read
 again and can be removed.
 
 Nothing is ever made globally visible as a migration shortcut, and no owner is
 guessed — a wrong guess hands one person's calendar to another.
+
+## Sharing and public links
+
+Owners may share an event with another Nexus subject as `viewer` or `editor`.
+Viewers can read; editors can update event details; only the owner can delete
+or change sharing. Public links are bearer capabilities: anyone with the URL
+can read the filtered event fields, so treat them like sensitive invitations.
+Creating a replacement link invalidates the previous token, and owners can
+revoke a link at any time. The public page and API never expose ownership,
+sharing metadata, or the internal event ID.
+
+## Local two-origin startup
+
+Run the backend on `127.0.0.1:3068`, build `frontend`, and serve
+`frontend/dist` through the production Caddyfile on `:8092`. For Dashboard
+testing, configure the Dashboard Calendar proxy to target
+`http://127.0.0.1:8092`; for direct testing, use `http://localhost:8092`.
+Set `NEXUS_CALENDAR_DASHBOARD_SECRET` consistently in Dashboard and Calendar.

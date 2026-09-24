@@ -37,6 +37,7 @@ Nexus-Systems/
 │
 ├── apps/                    # All 89 application directories
 │   ├── Nexus-Cloud/         # Control plane (Bun/TS, port 8787)
+│   ├── Nexus-Calendar/      # Calendar API + single React frontend (3068/8092)
 │   ├── Nexus-Systems-API/   # Cross-service contract definitions
 │   ├── Nexus-Graphic/       # Graphics app (Bun+React+Python+Rust)
 │   │   ├── src/             # Bun/TS server
@@ -102,6 +103,8 @@ apps/Nexus-<App>/
 | Range | Purpose |
 |---|---|
 | **8787** | Nexus-Cloud control plane |
+| **3068** | Nexus-Calendar loopback API |
+| **8092** | Nexus-Calendar direct-origin Caddy front door |
 | **3000–3099** | Core infrastructure apps (Hosting, Vault, Forge, Engine, Deploy, Monitor) |
 | **3100–3199** | Reserved (expansion) |
 | **3200–3299** | Network/security apps (Network, Tunnel, Edge, Files, Guardian, Auth) |
@@ -296,7 +299,7 @@ User=nexus
 WorkingDirectory=/opt/nexus-systems/apps/Nexus-Cloud
 Environment=NODE_ENV=production
 Environment=PORT=8787
-Environment=POSTGRES_URL=postgresql://nexus:nexus@localhost:5432/nexus
+Environment=POSTGRES_URL=postgresql://nexus:nexus@localhost:5432/nexus # pragma: allowlist secret
 Environment=REDIS_URL=redis://localhost:6379
 Environment=S3_ENDPOINT=http://localhost:9000
 ExecStart=/usr/bin/bun run src/index.ts
@@ -343,7 +346,7 @@ curl http://localhost:8787/api/v1/status
 NEXUS_CLOUD_URL=http://localhost:8787
 NEXUS_CLOUD_API_KEY=change-me
 CORS_ORIGIN=*
-POSTGRES_URL=postgresql://nexus:nexus@localhost:5432/nexus
+POSTGRES_URL=postgresql://nexus:nexus@localhost:5432/nexus # pragma: allowlist secret
 REDIS_URL=redis://localhost:6379
 S3_ENDPOINT=http://localhost:9000
 S3_ACCESS_KEY=minioadmin

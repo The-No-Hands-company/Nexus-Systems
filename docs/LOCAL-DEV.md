@@ -121,6 +121,17 @@ The registration spawns non-blocking in the background at startup. Default ports
 
 ## Step 4 — Nexus-Terminal and Dashboard (optional)
 
+### Calendar (optional)
+
+Calendar runs its API on loopback and serves one frontend artifact through its
+local Caddy front door. Build the frontend with `cd apps/Nexus-Calendar/frontend
+&& bun install && bun run build`, then run the API on port `3068` and Caddy on
+`:8092` using `deploy/production/nexus-calendar.Caddyfile`.
+Set `NEXUS_CALENDAR_WEB_ROOT` to `apps/Nexus-Calendar/frontend/dist` and use
+the same `NEXUS_CALENDAR_DASHBOARD_SECRET` in Calendar and Dashboard. Events are
+private by default; sharing is explicit (`viewer`/`editor`) and public links
+are read-only bearer URLs that can be revoked.
+
 Start Nexus-Auth and Nexus-Cloud first. Then run Terminal from the workspace
 root in its own terminal:
 

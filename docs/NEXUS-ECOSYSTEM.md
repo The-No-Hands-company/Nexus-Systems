@@ -217,7 +217,7 @@ Every app in the ecosystem, by category, with measured status.
 | **Nexus-Wiki** | Structured internal wiki | In development |
 | **Nexus-Tasks** | Task tracking | Scaffold |
 | **Nexus-Planner** | Project planning | Scaffold |
-| **Nexus-Calendar** | Calendaring | Scaffold |
+| **Nexus-Calendar** | Personal/shared calendaring and public read-only links; `/calendar` and calendar.tnhc.dev | **Active** |
 | **Nexus-Agenda** | Meeting agendas and minutes | Scaffold |
 | **Nexus-Schedule** | Scheduling and booking windows | Scaffold |
 | **Nexus-Journal** | Journalling and daily logs | Scaffold |

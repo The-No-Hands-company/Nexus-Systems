@@ -44,7 +44,7 @@ export default function AppFrame({ apps, appId }: { apps: AppEntry[]; appId: str
     <iframe
       key={app.id}
       title={app.name}
-      src={embedUrl(app.url)}
+      src={embedUrl(app.publicUrl ?? app.path)}
       className="h-full w-full border-0"
       allow="clipboard-read; clipboard-write; fullscreen"
     />
