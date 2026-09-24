@@ -20,4 +20,4 @@ pub mod worker;
 pub use client::{deliver, Attempt};
 pub use mx::{resolve, MailExchanger, MxError};
 pub use reply::{classify, code_of, is_final_line, Disposition};
-pub use worker::{DeliveryWorker, WorkerConfig};
+pub use worker::{DeliveryWorker, Egress, WorkerConfig};

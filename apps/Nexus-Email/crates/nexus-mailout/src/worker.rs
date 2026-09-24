@@ -1,11 +1,21 @@
+use std::sync::Arc;
 use std::time::Duration;
 
 use hickory_resolver::TokioAsyncResolver;
-use nexus_maildelivery::Queue;
+use nexus_maildelivery::{FederatedHandoff, FederatedTransport, HandoffOutcome, Queue, QueuedDelivery};
 use nexus_mailstore::MailStore;
 
 use crate::client::{deliver, Attempt};
 use crate::mx::{resolve, MxError};
+
+/// How mail for the outside world leaves this node.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Egress {
+    /// MX lookup and SMTP from here. Needs an unfiltered port 25.
+    Direct,
+    /// Hand it to this pinned peer, which delivers it from its own address.
+    Peer(String),
+}
 
 #[derive(Debug, Clone)]
 pub struct WorkerConfig {
@@ -17,6 +27,7 @@ pub struct WorkerConfig {
     /// How many deliveries to claim at once.
     pub batch: i64,
     pub port: u16,
+    pub egress: Egress,
 }
 
 impl Default for WorkerConfig {
@@ -26,6 +37,7 @@ impl Default for WorkerConfig {
             idle_poll: Duration::from_secs(20),
             batch: 10,
             port: 25,
+            egress: Egress::Direct,
         }
     }
 }
@@ -36,6 +48,7 @@ pub struct DeliveryWorker {
     queue: Queue,
     resolver: TokioAsyncResolver,
     config: WorkerConfig,
+    transport: Option<Arc<dyn FederatedTransport>>,
 }
 
 impl DeliveryWorker {
@@ -46,7 +59,14 @@ impl DeliveryWorker {
             resolver: TokioAsyncResolver::tokio_from_system_conf()
                 .unwrap_or_else(|_| TokioAsyncResolver::tokio(Default::default(), Default::default())),
             config,
+            transport: None,
         }
+    }
+
+    /// The node-to-node channel, for federated mail and for peer egress.
+    pub fn with_transport(mut self, transport: Arc<dyn FederatedTransport>) -> Self {
+        self.transport = Some(transport);
+        self
     }
 
     /// Run until cancelled.
@@ -71,52 +91,75 @@ impl DeliveryWorker {
             .await
             .map_err(|e| e.to_string())?;
         let count = due.len();
-
         for item in due {
-            // Only SMTP is delivered here. Federated handoffs go over the node
-            // channel and are another transport's job.
-            if item.route != "smtp" {
-                continue;
+            self.process(item).await;
+        }
+        Ok(count)
+    }
+
+    /// Deliver one claimed row by whichever path its route and the egress
+    /// setting call for, and record the outcome.
+    pub async fn process(&self, item: QueuedDelivery) {
+        let raw = match self.raw_for(item.message_id).await {
+            Ok(r) => r,
+            Err(e) => {
+                // The message is unreadable, which will not improve with
+                // time — but bouncing on a storage error would lose mail
+                // over a transient database problem, so it is deferred.
+                let _ = self
+                    .queue
+                    .mark_attempt_failed(item.id, false, &format!("message unreadable: {e}"))
+                    .await;
+                return;
             }
+        };
 
-            let raw = match self.raw_for(item.message_id).await {
-                Ok(r) => r,
-                Err(e) => {
-                    // The message is unreadable, which will not improve with
-                    // time — but bouncing on a storage error would lose mail
-                    // over a transient database problem, so it is deferred.
-                    let _ = self
-                        .queue
-                        .mark_attempt_failed(item.id, false, &format!("message unreadable: {e}"))
-                        .await;
-                    continue;
-                }
-            };
+        let outcome = match (item.route.as_str(), &self.config.egress) {
+            ("smtp", Egress::Direct) => {
+                self.attempt(&item.envelope_from, &item.recipient, &item.destination, &raw).await
+            }
+            ("smtp", Egress::Peer(peer)) => self.hand_off(peer, &item, &raw).await,
+            ("federated", _) => self.hand_off(&item.destination, &item, &raw).await,
+            (other, _) => Attempt::Deferred(format!("unknown route {other:?}")),
+        };
 
-            let outcome = self
-                .attempt(&item.envelope_from, &item.recipient, &item.destination, &raw)
-                .await;
-
-            match outcome {
-                Attempt::Delivered => {
-                    let _ = self.queue.mark_delivered(item.id).await;
+        match outcome {
+            Attempt::Delivered => {
+                let _ = self.queue.mark_delivered(item.id).await;
+            }
+            Attempt::Rejected(reason) => {
+                let dead = self.queue.mark_attempt_failed(item.id, true, &reason).await;
+                if matches!(dead, Ok(true)) {
+                    tracing::info!(recipient = %item.recipient, %reason, "permanent failure; bounce due");
                 }
-                Attempt::Rejected(reason) => {
-                    let dead = self.queue.mark_attempt_failed(item.id, true, &reason).await;
-                    if matches!(dead, Ok(true)) {
-                        tracing::info!(recipient = %item.recipient, %reason, "permanent failure; bounce due");
-                    }
-                }
-                Attempt::Deferred(reason) => {
-                    let dead = self.queue.mark_attempt_failed(item.id, false, &reason).await;
-                    if matches!(dead, Ok(true)) {
-                        tracing::info!(recipient = %item.recipient, %reason, "gave up after retries; bounce due");
-                    }
+            }
+            Attempt::Deferred(reason) => {
+                let dead = self.queue.mark_attempt_failed(item.id, false, &reason).await;
+                if matches!(dead, Ok(true)) {
+                    tracing::info!(recipient = %item.recipient, %reason, "gave up after retries; bounce due");
                 }
             }
         }
+    }
 
-        Ok(count)
+    /// Hand a message to a peer over the node channel.
+    async fn hand_off(&self, node: &str, item: &QueuedDelivery, raw: &[u8]) -> Attempt {
+        let Some(transport) = &self.transport else {
+            // Deferred, never dropped: the day the channel is configured, the
+            // mail that waited for it goes out.
+            return Attempt::Deferred("no federation transport configured on this node".into());
+        };
+        let handoff = FederatedHandoff {
+            node,
+            envelope_from: &item.envelope_from,
+            recipient: &item.recipient,
+            raw,
+        };
+        match transport.send(handoff).await {
+            HandoffOutcome::Delivered => Attempt::Delivered,
+            HandoffOutcome::Rejected(r) => Attempt::Rejected(r),
+            HandoffOutcome::Deferred(r) => Attempt::Deferred(r),
+        }
     }
 
     /// Try each mail exchanger in preference order until one takes the message.
