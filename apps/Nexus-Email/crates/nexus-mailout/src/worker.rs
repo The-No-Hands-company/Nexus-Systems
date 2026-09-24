@@ -2,6 +2,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use hickory_resolver::TokioAsyncResolver;
+use nexus_mailauth::{sign, signed_message, DkimSigner, DEFAULT_SIGNED_HEADERS};
 use nexus_maildelivery::{FederatedHandoff, FederatedTransport, HandoffOutcome, Queue, QueuedDelivery};
 use nexus_mailstore::MailStore;
 
@@ -49,6 +50,7 @@ pub struct DeliveryWorker {
     resolver: TokioAsyncResolver,
     config: WorkerConfig,
     transport: Option<Arc<dyn FederatedTransport>>,
+    dkim: Option<Arc<DkimSigner>>,
 }
 
 impl DeliveryWorker {
@@ -60,6 +62,7 @@ impl DeliveryWorker {
                 .unwrap_or_else(|_| TokioAsyncResolver::tokio(Default::default(), Default::default())),
             config,
             transport: None,
+            dkim: None,
         }
     }
 
@@ -97,6 +100,35 @@ impl DeliveryWorker {
         Ok(count)
     }
 
+    /// Sign mail from this domain on its way out, so a receiver — or a peer
+    /// relaying it — sees a signature aligned with the sender's domain.
+    pub fn with_dkim(mut self, signer: Arc<DkimSigner>) -> Self {
+        self.dkim = Some(signer);
+        self
+    }
+
+    /// The bytes that leave this node. The stored message is never rewritten:
+    /// the signature is added to the copy in flight.
+    ///
+    /// Only mail whose envelope-from is in the signing domain is signed; our
+    /// key vouching for another domain's mail would be a false claim. A signing
+    /// failure sends the message unsigned rather than holding it, because it
+    /// would fail the same way on every retry and end as a bounce.
+    fn outgoing(&self, envelope_from: &str, raw: Vec<u8>) -> Vec<u8> {
+        let Some(signer) = &self.dkim else { return raw };
+        let from_domain = envelope_from.rsplit_once('@').map(|(_, d)| d.to_ascii_lowercase());
+        if from_domain.as_deref() != Some(signer.domain.to_ascii_lowercase().as_str()) {
+            return raw;
+        }
+        match sign(signer, &raw, DEFAULT_SIGNED_HEADERS) {
+            Ok(header) => signed_message(&header, &raw),
+            Err(e) => {
+                tracing::warn!(error = %e, from = envelope_from, "DKIM signing failed; sending unsigned");
+                raw
+            }
+        }
+    }
+
     /// Deliver one claimed row by whichever path its route and the egress
     /// setting call for, and record the outcome.
     pub async fn process(&self, item: QueuedDelivery) {
@@ -113,6 +145,7 @@ impl DeliveryWorker {
                 return;
             }
         };
+        let raw = self.outgoing(&item.envelope_from, raw);
 
         let outcome = match (item.route.as_str(), &self.config.egress) {
             ("smtp", Egress::Direct) => {

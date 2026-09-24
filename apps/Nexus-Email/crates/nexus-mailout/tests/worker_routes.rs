@@ -9,6 +9,7 @@ use std::pin::Pin;
 use std::sync::{Arc, Mutex};
 
 use nexus_maildelivery::{FederatedHandoff, FederatedTransport, HandoffOutcome, Queue, QueuedDelivery, Route};
+use nexus_mailauth::{public_key_record, verify_with_key, Canon, DkimSigner};
 use nexus_mailout::{DeliveryWorker, Egress, WorkerConfig};
 use nexus_mailstore::{Address, MailStore, Transport};
 use sqlx::postgres::PgPoolOptions;
@@ -46,9 +47,24 @@ async fn setup() -> (MailStore, Queue) {
 
 /// Store a message, queue it for `rcpt` over `route`, and return the row.
 async fn queued(store: &MailStore, queue: &Queue, rcpt: &str, route: Route) -> (QueuedDelivery, Vec<u8>) {
-    let from = Address::parse("alice@origin.test").unwrap();
+    queued_from(store, queue, "alice@origin.test", rcpt, route).await
+}
+
+async fn queued_from(
+    store: &MailStore,
+    queue: &Queue,
+    from: &str,
+    rcpt: &str,
+    route: Route,
+) -> (QueuedDelivery, Vec<u8>) {
+    let from = Address::parse(from).unwrap();
     let thread = store.thread_for(None, &[], Some("w")).await.unwrap();
-    let raw = format!("Subject: w\r\nMessage-ID: <{}@t>\r\n\r\nbody\r\n", Uuid::now_v7().simple()).into_bytes();
+    let raw = format!(
+        "From: {}\r\nTo: {rcpt}\r\nSubject: w\r\nMessage-ID: <{}@t>\r\n\r\nbody\r\n",
+        from.as_string(),
+        Uuid::now_v7().simple()
+    )
+    .into_bytes();
     let id = store
         .store_message(&raw, thread, &from, Some("w"), None, None, &[], Transport::Internal, None)
         .await
@@ -156,4 +172,63 @@ async fn federated_mail_with_no_transport_configured_is_deferred_not_dropped() {
     worker.process(item).await;
 
     assert_eq!(state_of(&store, &rcpt).await, ("pending".to_string(), 1));
+}
+
+fn dkim_key() -> &'static rsa::RsaPrivateKey {
+    static KEY: std::sync::OnceLock<rsa::RsaPrivateKey> = std::sync::OnceLock::new();
+    KEY.get_or_init(|| nexus_mailauth::generate(2048).unwrap())
+}
+
+fn origin_signer() -> Arc<DkimSigner> {
+    Arc::new(DkimSigner {
+        domain: "origin.test".into(),
+        selector: "nexus".into(),
+        key: dkim_key().clone(),
+        header_canon: Canon::Relaxed,
+        body_canon: Canon::Relaxed,
+    })
+}
+
+#[tokio::test]
+async fn mail_from_the_signing_domain_leaves_dkim_signed_and_the_stored_copy_is_untouched() {
+    let (store, queue) = setup().await;
+    let rcpt = unique("peer.test");
+    let (item, raw) = queued(&store, &queue, &rcpt, Route::Federated { node: "peer.test".into() }).await;
+    let message_id = item.message_id;
+    let fake = FakeTransport::answering(HandoffOutcome::Delivered);
+    let worker = DeliveryWorker::new(store.clone(), queue, WorkerConfig::default())
+        .with_transport(fake.clone())
+        .with_dkim(origin_signer());
+
+    worker.process(item).await;
+
+    let sent = &fake.calls()[0].2;
+    assert!(sent.starts_with(b"DKIM-Signature:"), "{}", String::from_utf8_lossy(sent));
+    let record = public_key_record(dkim_key()).unwrap();
+    let sig = verify_with_key(sent, &record).expect("the peer must receive a verifiable signature");
+    assert_eq!(sig.domain, "origin.test");
+
+    let (stored,): (Option<Vec<u8>>,) = sqlx::query_as("SELECT body_inline FROM messages WHERE id = $1")
+        .bind(message_id)
+        .fetch_one(store.pool())
+        .await
+        .unwrap();
+    assert_eq!(stored.unwrap(), raw, "signing must not rewrite the stored message");
+}
+
+#[tokio::test]
+async fn mail_from_another_domain_is_not_signed_with_our_key() {
+    let (store, queue) = setup().await;
+    let rcpt = unique("peer.test");
+    let (item, raw) =
+        queued_from(&store, &queue, "bob@someone-else.test", &rcpt, Route::Federated { node: "peer.test".into() })
+            .await;
+    let fake = FakeTransport::answering(HandoffOutcome::Delivered);
+    let worker = DeliveryWorker::new(store.clone(), queue, WorkerConfig::default())
+        .with_transport(fake.clone())
+        .with_dkim(origin_signer());
+
+    worker.process(item).await;
+
+    assert_eq!(fake.calls()[0].2, raw);
 }

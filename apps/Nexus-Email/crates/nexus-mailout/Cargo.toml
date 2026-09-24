@@ -10,6 +10,7 @@ repository.workspace = true
 nexus-mailstore = { path = "../nexus-mailstore" }
 nexus-maildelivery = { path = "../nexus-maildelivery" }
 nexus-mailmsg = { path = "../nexus-mailmsg" }
+nexus-mailauth = { path = "../nexus-mailauth" }
 sqlx = { workspace = true }
 tokio = { workspace = true }
 hickory-resolver = { workspace = true }
@@ -19,6 +20,7 @@ uuid = { workspace = true }
 chrono = { workspace = true }
 
 [dev-dependencies]
+rsa = { workspace = true }
 tokio = { workspace = true }
 sqlx = { workspace = true }
 tracing-subscriber = { workspace = true }

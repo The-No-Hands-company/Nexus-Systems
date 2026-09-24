@@ -1325,9 +1325,11 @@ version = "0.1.0"
 dependencies = [
  "chrono",
  "hickory-resolver",
+ "nexus-mailauth",
  "nexus-maildelivery",
  "nexus-mailmsg",
  "nexus-mailstore",
+ "rsa",
  "sqlx",
  "thiserror 2.0.20",
  "tokio",
