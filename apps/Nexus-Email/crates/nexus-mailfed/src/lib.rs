@@ -1,5 +1,6 @@
 //! Federation for Nexus Email.
 
+pub mod admin;
 pub mod client;
 pub mod error;
 pub mod ingest;

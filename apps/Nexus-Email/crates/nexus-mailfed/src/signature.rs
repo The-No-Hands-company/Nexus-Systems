@@ -49,6 +49,21 @@ impl SignedRequest {
     }
 }
 
+/// Decode a pinned public key, refusing anything that is not a valid,
+/// non-weak Ed25519 point.
+pub fn verify_key(public_b64: &str) -> Result<VerifyingKey> {
+    let public: [u8; 32] = STANDARD
+        .decode(public_b64)
+        .map_err(|_| FedError::Malformed("public key"))?
+        .try_into()
+        .map_err(|_| FedError::Malformed("public key"))?;
+    let key = VerifyingKey::from_bytes(&public).map_err(|_| FedError::Malformed("public key"))?;
+    if key.is_weak() {
+        return Err(FedError::Malformed("public key"));
+    }
+    Ok(key)
+}
+
 pub fn sign(key: &NodeKey, req: &SignedRequest) -> String {
     STANDARD.encode(key.sign_bytes(req.canonical().as_bytes()).to_bytes())
 }
@@ -58,12 +73,7 @@ pub fn sign(key: &NodeKey, req: &SignedRequest) -> String {
 /// Strict verification: rejects the malleable and small-order encodings that
 /// plain Ed25519 verification tolerates.
 pub fn verify(public_b64: &str, req: &SignedRequest, sig_b64: &str) -> Result<()> {
-    let public: [u8; 32] = STANDARD
-        .decode(public_b64)
-        .map_err(|_| FedError::Malformed("public key"))?
-        .try_into()
-        .map_err(|_| FedError::Malformed("public key"))?;
-    let key = VerifyingKey::from_bytes(&public).map_err(|_| FedError::Malformed("public key"))?;
+    let key = verify_key(public_b64)?;
 
     let sig: [u8; 64] = STANDARD
         .decode(sig_b64)
