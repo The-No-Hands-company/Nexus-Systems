@@ -25,6 +25,8 @@ tokio = { workspace = true }
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 
 [dev-dependencies]
+nexus-mailout = { path = "../nexus-mailout" }
+nexus-mailauth = { path = "../nexus-mailauth" }
 nexus-mailmsg = { path = "../nexus-mailmsg" }
 tower = { version = "0.5", features = ["util"] }
 http-body-util = "0.1"

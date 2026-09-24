@@ -47,6 +47,10 @@ pub struct WorkerConfig {
     pub batch: i64,
     pub port: u16,
     pub egress: Egress,
+    /// Send every direct delivery to this host instead of the recipient
+    /// domain's MX. A diagnostic and test hook — it bypasses MX routing
+    /// entirely, so it is not for normal operation.
+    pub smtp_host_override: Option<String>,
 }
 
 impl Default for WorkerConfig {
@@ -57,6 +61,7 @@ impl Default for WorkerConfig {
             batch: 10,
             port: 25,
             egress: Egress::Direct,
+            smtp_host_override: None,
         }
     }
 }
@@ -215,7 +220,11 @@ impl DeliveryWorker {
 
     /// Try each mail exchanger in preference order until one takes the message.
     async fn attempt(&self, from: &str, recipient: &str, domain: &str, raw: &[u8]) -> Attempt {
-        let hosts = match resolve(&self.resolver, domain).await {
+        let resolved = match &self.config.smtp_host_override {
+            Some(host) => Ok(vec![crate::mx::MailExchanger { host: host.clone(), preference: 0 }]),
+            None => resolve(&self.resolver, domain).await,
+        };
+        let hosts = match resolved {
             Ok(h) => h,
             // A domain with no mail exchanger will not grow one; that is a real
             // bounce. A DNS failure is not.
