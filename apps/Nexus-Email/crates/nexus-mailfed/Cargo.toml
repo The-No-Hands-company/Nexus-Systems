@@ -1,0 +1,17 @@
+[package]
+name = "nexus-mailfed"
+description = "Federation for Nexus Email: node keys, signed handoffs between nodes, and relay rules"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+ed25519-dalek = "3.0"
+sha2 = { workspace = true }
+hex = { workspace = true }
+base64 = { workspace = true }
+rand = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
