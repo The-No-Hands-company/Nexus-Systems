@@ -174,3 +174,42 @@ async fn a_body_line_starting_with_a_dot_is_stuffed() {
     assert!(said.iter().any(|l| l == "..hidden line"), "dot line must be stuffed: {said:?}");
     assert!(said.iter().any(|l| l == "after"), "content after the dot line must survive");
 }
+
+/// The lines the server received between DATA and the terminating dot.
+fn data_lines(said: &[String]) -> Vec<String> {
+    let start = said.iter().position(|l| l.eq_ignore_ascii_case("DATA")).unwrap() + 1;
+    let end = start + said[start..].iter().position(|l| l == ".").unwrap();
+    said[start..end].to_vec()
+}
+
+#[tokio::test]
+async fn a_message_that_ends_in_crlf_gains_no_extra_blank_line() {
+    // The line terminator already present must not be read as the start of
+    // one more, empty, line: that appends a blank line to every message sent,
+    // and a relay would deliver bytes that differ from the origin's.
+    let (addr, seen) = scripted(vec![
+        "220 ready\r\n", "250 ok\r\n", "250 ok\r\n", "250 ok\r\n", "354 go\r\n", "250 ok\r\n",
+    ])
+    .await;
+    let (host, port) = split(&addr);
+
+    deliver(&host, port, "me", "a@b.test", "c@d.test", b"Subject: x\r\n\r\nlast\r\n").await;
+
+    let said = seen.lock().unwrap().clone();
+    assert_eq!(data_lines(&said), vec!["Subject: x", "", "last"]);
+}
+
+#[tokio::test]
+async fn a_message_without_a_final_crlf_is_terminated_properly() {
+    // RFC 5321 needs CRLF before the closing dot; the client supplies it.
+    let (addr, seen) = scripted(vec![
+        "220 ready\r\n", "250 ok\r\n", "250 ok\r\n", "250 ok\r\n", "354 go\r\n", "250 ok\r\n",
+    ])
+    .await;
+    let (host, port) = split(&addr);
+
+    deliver(&host, port, "me", "a@b.test", "c@d.test", b"Subject: x\r\n\r\nlast").await;
+
+    let said = seen.lock().unwrap().clone();
+    assert_eq!(data_lines(&said), vec!["Subject: x", "", "last"]);
+}

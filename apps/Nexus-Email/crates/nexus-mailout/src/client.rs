@@ -87,8 +87,14 @@ pub async fn deliver(
 
     // Dot-stuff: a body line starting with a dot must be doubled, or the
     // receiving server reads it as the end of the message and truncates.
+    //
+    // A final line terminator is dropped before splitting and put back by the
+    // loop; otherwise it reads as the start of one more, empty, line and every
+    // message gains a trailing blank line. A message without one gets it, as
+    // RFC 5321 requires CRLF before the closing dot.
     let mut payload = Vec::with_capacity(data.len() + 64);
-    for line in data.split(|b| *b == b'\n') {
+    let body = data.strip_suffix(b"\n").unwrap_or(data);
+    for line in body.split(|b| *b == b'\n') {
         let line = line.strip_suffix(b"\r").unwrap_or(line);
         if line.starts_with(b".") {
             payload.push(b'.');
