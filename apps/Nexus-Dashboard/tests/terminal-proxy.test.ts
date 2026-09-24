@@ -411,13 +411,22 @@ describe("terminal frame relay", () => {
     await waitUntil(() => upstreamSocket !== null, "second upstream socket");
     fromBrowser.socket.close(4002, "tab closed");
     await waitUntil(() => upstreamClose !== null, "upstream close");
-    // Bun 1.3.12 preserves the client close code in its server callback but
-    // currently supplies an empty reason. The relay forwards exactly what its
-    // server-side callback observes.
-    expect(upstreamClose as { code: number; reason: string } | null).toEqual({
-      code: 4002,
-      reason: "",
-    });
+
+    // The contract is that the relay forwards exactly what its server-side
+    // callback observes, and invents nothing.
+    //
+    // The code is the part that carries meaning, and it must survive intact.
+    // The reason is runtime-dependent: Bun 1.3.12 hands the server callback an
+    // empty reason even when the client supplied one, while the version CI
+    // resolves through `bun-version: latest` passes it through. Asserting
+    // `reason: ""` pinned the older runtime's quirk as though it were the
+    // behaviour under test, so the suite passed locally and failed on CI for a
+    // reason that had nothing to do with this code.
+    const close = upstreamClose as { code: number; reason: string } | null;
+    expect(close?.code).toBe(4002);
+    // Either the browser's reason or nothing — never a substitute of the
+    // relay's own devising, which is what would actually be a bug here.
+    expect(["", "tab closed"]).toContain(close?.reason);
   });
 
   it("does not leave an upstream socket when the browser closes during its handshake", async () => {

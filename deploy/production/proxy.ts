@@ -27,10 +27,30 @@ interface NexusCloudRoute {
   requiresAuth?: boolean;
 }
 
-/** Where a host resolves to, and whether reaching it needs a session. */
+/** Where a host resolves to, and what kind of thing lives there. */
 export interface RouteTarget {
   upstream: string;
+  /**
+   * Advisory only. Cloud still sends this and buildRouteMap still reads it, but
+   * the gate no longer decides anything with it — see the note on PUBLIC_HOSTS
+   * in gate.ts for why a per-tool flag could not be trusted as policy.
+   */
   requiresAuth: boolean;
+  /**
+   * What the upstream serves, which is what decides whether a session is
+   * required:
+   *
+   *  - "app"  — an ecosystem application. Gated: nothing but hashed build
+   *             output is readable without a session.
+   *  - "site" — a user-deployed static site behind Hosting's site-proxy.
+   *             Public, because that is the product. A static-site host whose
+   *             pages demand an ecosystem login is not a hosting service.
+   *
+   * Carried as an explicit field rather than inferred from the upstream URL so
+   * the policy is greppable and a route cannot become public by coincidence of
+   * addressing.
+   */
+  kind: "app" | "site";
 }
 
 // Route cache: host (full domain, lowercased) -> target
@@ -100,6 +120,9 @@ export function buildRouteMap(routes: NexusCloudRoute[]): Record<string, RouteTa
         // Strict equality, not truthiness: only a real boolean true gates a
         // host, so a stray string or a typo cannot silently lock people out.
         requiresAuth: route.requiresAuth === true,
+        // Anything Cloud has a route row for is a registered application. Sites
+        // never appear here — they are reached through the wildcard fallback.
+        kind: "app",
       };
     }
   }
@@ -291,17 +314,18 @@ async function handleRequestInner(
     const url = new URL(req.url);
     const host = url.hostname.toLowerCase();
     
-    // Handle CORS preflight
-    if (req.method === "OPTIONS") {
-      return new Response(null, {
-        status: 204,
-        headers: {
-          "Access-Control-Allow-Origin": "*",
-          "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, PATCH, OPTIONS",
-          "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Api-Key",
-        },
-      });
-    }
+    // No CORS preflight short-circuit here any more.
+    //
+    // This used to answer every OPTIONS with `Allow-Origin: *` plus a fixed
+    // method and header list, before routing and before the gate — so the
+    // proxy was announcing a policy on behalf of apps it had not consulted,
+    // and an app that wanted a narrower one had no way to express it. A
+    // preflight now travels to its upstream like any other request and the app
+    // answers for itself.
+    //
+    // The gate lets OPTIONS through unauthenticated (see gate.ts): a preflight
+    // is uncredentialed by specification and carries no user data either way,
+    // and the request it precedes is still gated normally.
 
     // Check if this host matches our domain
     if (!matchesDomain(host)) {
@@ -364,6 +388,11 @@ async function handleRequestInner(
     // leaves this false, so a host the route table does not know about stays
     // reachable exactly as it is today.
     let requiresAuth = false;
+    // What a matched route says it serves. Cloud only ever registers
+    // applications, so buildRouteMap always sets "app" — but the field is read
+    // rather than assumed, so the route table stays the thing that decides and
+    // the value cannot quietly become decorative.
+    let matchedKind: RouteTarget["kind"] | null = null;
 
     // Cloud keys its routing table by full hostname, and buildRouteMap
     // lowercases and strips a leading "www." from both sides, so a single
@@ -376,6 +405,7 @@ async function handleRequestInner(
       if (matched) {
         upstreamUrl = matched.upstream;
         requiresAuth = matched.requiresAuth;
+        matchedKind = matched.kind;
       }
     }
 
@@ -403,8 +433,24 @@ async function handleRequestInner(
     // already had their turn, so this cannot shadow them. Hosting's site-proxy
     // dispatches on x-forwarded-host (set in the proxy block below) and serves
     // its own 404 for a name it does not know, so forwarding here is safe.
+    //
+    // Reaching here is also what makes a host public: only the wildcard
+    // fallback produces kind "site". A name that matched an app route above, or
+    // one of the static app fallbacks, stays gated.
+    //
+    // KNOWN LIMITATION — this classification fails open while Cloud is
+    // unreachable. cloud/chat/auth/apex have static fallbacks above and are
+    // unaffected, but an app known only to Cloud's route table (app, calendar,
+    // draw) has no route to match when the table is empty, so it lands here and
+    // is treated as a site. Nothing is exposed today: Hosting's site-proxy
+    // dispatches by host and 404s a name it has never been given. It does mean
+    // the gate's answer depends on Cloud being up, which policy should not.
+    // Closing it needs a reserved-subdomain list that can never be a site —
+    // a naming decision, deliberately not invented here.
+    let kind: RouteTarget["kind"] = matchedKind ?? "app";
     if (!upstreamUrl && HOSTING_SITE_UPSTREAM) {
       upstreamUrl = HOSTING_SITE_UPSTREAM;
+      kind = "site";
     }
 
     // If we still don't have an upstream, return 404
@@ -414,7 +460,7 @@ async function handleRequestInner(
 
     // Login gate. Runs before anything is forwarded, so an app can never see a
     // request from someone the ecosystem has not authenticated.
-    const decision = await gate(req, { upstream: upstreamUrl, requiresAuth });
+    const decision = await gate(req, { upstream: upstreamUrl, requiresAuth, kind });
     if (!decision.allow) return decision.response;
 
     // WebSockets cannot go through fetch(): it has no way to perform the
@@ -506,7 +552,15 @@ async function handleRequestInner(
       // must relay redirects, not resolve them.
       const resp = await fetch(proxied, { redirect: "manual" });
       const headers = new Headers(resp.headers);
-      headers.set("Access-Control-Allow-Origin", "*");
+      // CORS is the application's decision, not this hop's.
+      //
+      // This used to `set` Access-Control-Allow-Origin to "*" on every response,
+      // which *replaced* whatever the upstream had decided. An app that
+      // deliberately restricted its origins had that restriction removed, and
+      // an app answering with Access-Control-Allow-Credentials: true ended up
+      // with the one header combination browsers refuse outright — so a
+      // credentialed cross-origin call failed for a reason that appeared to be
+      // in the app. A reverse proxy should relay a policy, not author one.
       sanitizeResponseHeaders(headers);
 
       return new Response(resp.body, { status: resp.status, headers });

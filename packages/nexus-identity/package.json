@@ -1,0 +1,11 @@
+{
+  "name": "@nexus/identity",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Verification of ecosystem identity tokens minted by Nexus-Auth",
+  "main": "src/index.ts",
+  "scripts": {
+    "test": "bun test tests/"
+  }
+}

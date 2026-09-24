@@ -9,6 +9,13 @@ export type SystemsApiRegistrationPayload = {
   capabilities: string[];
   /** Calendar events are user data — always behind SSO. */
   requiresAuth: boolean;
+  /**
+   * The canonical in-shell route. Declared here because the payload below was
+   * already sending it — an excess property on the returned object literal that
+   * the type did not mention, which nothing caught because this app's tsc was
+   * never actually runnable.
+   */
+  publicUrl: string;
   metadata: Record<string, unknown>;
 };
 
