@@ -8,6 +8,7 @@ import { Router } from "./router";
 import { openDatabase } from "./store/db";
 import { registerProjectRoutes } from "./routes/projects";
 import { registerWorkspaceRoutes } from "./routes/workspaces";
+import { registerStatusRoutes } from "./routes/statuses";
 
 export const API_PREFIX = "/api/v1/project";
 
@@ -19,7 +20,7 @@ export interface Context {
 }
 
 /** Each later task appends its register function here. */
-const ROUTE_MODULES: ((router: Router<Context>) => void)[] = [registerWorkspaceRoutes, registerProjectRoutes];
+const ROUTE_MODULES: ((router: Router<Context>) => void)[] = [registerWorkspaceRoutes, registerProjectRoutes, registerStatusRoutes];
 
 export async function createServer() {
   const port = Number(process.env.PORT || "3152");

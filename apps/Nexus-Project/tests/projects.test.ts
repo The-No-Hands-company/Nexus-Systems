@@ -22,16 +22,14 @@ describe("projects", () => {
       role: "member",
     });
     const statuses = await t.as("usr-viewer").call("GET", `/projects/${project.id}/statuses`);
-    // Statuses routes arrive in Task 10; until then this is a 404 and the next line is skipped.
-    if (statuses.status === 200) {
-      expect(statuses.body.statuses.map((s: { category: string }) => s.category)).toEqual([
-        "backlog",
-        "unstarted",
-        "started",
-        "completed",
-        "canceled",
-      ]);
-    }
+    expect(statuses.status).toBe(200);
+    expect(statuses.body.statuses.map((s: { category: string }) => s.category)).toEqual([
+      "backlog",
+      "unstarted",
+      "started",
+      "completed",
+      "canceled",
+    ]);
   });
 
   it("refuses viewers and strangers", async () => {
