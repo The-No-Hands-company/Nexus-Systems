@@ -37,6 +37,7 @@ bash check.sh                      # typecheck + every test file must run
 | `NEXUS_PROJECT_BASE_URL` | http://localhost:$PORT | Address registered with Cloud |
 | `NEXUS_CLOUD_URL` / `NEXUS_CLOUD_API_KEY` | http://localhost:8787 / (none) | Cloud registration |
 | `NEXUS_PROJECT_ENABLE_CLOUD_INTEGRATION` | true | Turn Cloud registration off |
+| `NEXUS_PROJECT_CLOUD_HEARTBEAT_INTERVAL_MS` | 30000 | Cloud heartbeat interval in ms (minimum 5000) |
 
 ## API
 
