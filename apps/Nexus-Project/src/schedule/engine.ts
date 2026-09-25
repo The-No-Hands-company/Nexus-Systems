@@ -111,7 +111,8 @@ export function schedule(input: ScheduleInput): ScheduleResult {
     }
     const recorded = task.startDate === null ? null : indexOf(task.startDate);
     const stored = input.mode === "manual" ? recorded : null;
-    let floor = stored ?? projectStart;
+    // Nothing starts before the project; in manual mode the stored start is a floor too.
+    let floor = stored === null ? projectStart : Math.max(projectStart, stored);
     if (task.constraintType === "start_no_earlier_than" && task.constraintDate !== null) {
       floor = Math.max(floor, indexOf(task.constraintDate));
     }

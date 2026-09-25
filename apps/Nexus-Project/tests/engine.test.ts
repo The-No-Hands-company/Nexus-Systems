@@ -183,6 +183,16 @@ describe("modes", () => {
     expect(get(r, "A").totalFloat).toBe(7);
   });
 
+  it("manual mode never schedules a stored start before the project start", () => {
+    const r = schedule(
+      input([task("A", 1, { durationDays: 2, startDate: "2026-08-31" })], [], {
+        mode: "manual",
+      }),
+    );
+    expect(get(r, "A").earlyStart).toBe("2026-09-07");
+    expect(get(r, "A").earlyFinish).toBe("2026-09-08");
+  });
+
   it("auto mode ignores stored dates and honours start-no-earlier-than", () => {
     const r = schedule(
       input(
