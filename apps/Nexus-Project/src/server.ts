@@ -10,6 +10,8 @@ import { registerProjectRoutes } from "./routes/projects";
 import { registerWorkspaceRoutes } from "./routes/workspaces";
 import { registerStatusRoutes } from "./routes/statuses";
 import { registerTaskRoutes } from "./routes/tasks";
+import { registerDependencyRoutes } from "./routes/dependencies";
+import { registerCalendarRoutes } from "./routes/calendars";
 
 export const API_PREFIX = "/api/v1/project";
 
@@ -26,6 +28,8 @@ const ROUTE_MODULES: ((router: Router<Context>) => void)[] = [
   registerProjectRoutes,
   registerStatusRoutes,
   registerTaskRoutes,
+  registerDependencyRoutes,
+  registerCalendarRoutes,
 ];
 
 export async function createServer() {
