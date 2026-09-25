@@ -317,3 +317,47 @@ describe("listing and moving", () => {
     expect(after).toMatchObject({ statusId: backlog, version: task.version + 1 });
   });
 });
+
+describe("assignees must be able to see the project", () => {
+  it("refuses an assignee a restricted project hides from them", async () => {
+    const owner = t.as("usr-owner");
+    const project = await createProject(owner, ws, { visibility: "restricted" });
+    await owner.call("PUT", `/projects/${project.id}/members/usr-member`);
+    const post = (assigneeSubject: string) =>
+      owner.call("POST", `/projects/${project.id}/tasks`, { title: "x", assigneeSubject });
+    const hidden = await post("usr-viewer");
+    expect(hidden.status).toBe(422);
+    expect(hidden.body.error).toBe("assignee_not_member");
+    expect((await post("usr-member")).status).toBe(201);
+    expect((await post("usr-admin")).status).toBe(201);
+
+    const task = (await post("usr-member")).body;
+    const patched = await owner.call(
+      "PATCH",
+      `/tasks/${task.id}`,
+      { assigneeSubject: "usr-viewer" },
+      { "if-match": String(task.version) },
+    );
+    expect(patched.status).toBe(422);
+    expect(patched.body.error).toBe("assignee_not_member");
+  });
+
+  it("unassigns a removed workspace member's tasks", async () => {
+    const team = await teamWithRoles(t, "Removal");
+    const project = await createProject(t.as("usr-owner"), team);
+    const task = (
+      await t
+        .as("usr-owner")
+        .call("POST", `/projects/${project.id}/tasks`, {
+          title: "x",
+          assigneeSubject: "usr-member",
+        })
+    ).body;
+    const removed = await t
+      .as("usr-owner")
+      .call("DELETE", `/workspaces/${team}/members/usr-member`);
+    expect(removed.status).toBe(200);
+    const after = (await t.as("usr-owner").call("GET", `/tasks/${task.id}`)).body;
+    expect(after).toMatchObject({ assigneeSubject: null, version: task.version + 1 });
+  });
+});

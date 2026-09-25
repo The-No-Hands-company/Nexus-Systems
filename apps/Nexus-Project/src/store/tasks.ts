@@ -1,6 +1,6 @@
 import type { Database } from "bun:sqlite";
 import { randomUUID } from "node:crypto";
-import { projectAccess, requireRole, taskAccess, workspaceRole } from "../access";
+import { canSeeProject, projectAccess, requireRole, taskAccess, workspaceRole } from "../access";
 import { badRequest, conflict, unprocessable } from "../http";
 import { rankAfter, rankBefore, rankBetween } from "../rank";
 import type { WorkingCalendar } from "../schedule/calendar";
@@ -233,11 +233,12 @@ function assertStatus(db: Database, projectId: string, statusId: string): void {
     throw badRequest("statusId must be a status of this project");
 }
 
+/** An assignee must be able to see the project: a workspace member, and listed if it is restricted. */
 function assertAssignee(db: Database, project: ProjectRow, subject: string): void {
-  if (!workspaceRole(db, project.workspace_id, subject)) {
+  if (!canSeeProject(db, project, subject, workspaceRole(db, project.workspace_id, subject))) {
     throw unprocessable(
       "assignee_not_member",
-      "tasks can only be assigned to members of the project's workspace",
+      "tasks can only be assigned to someone who can see the project",
     );
   }
 }

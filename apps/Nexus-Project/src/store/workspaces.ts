@@ -195,5 +195,10 @@ export function removeMember(db: Database, subject: string, id: string, target: 
     db.query(
       "DELETE FROM project_members WHERE subject = ? AND project_id IN (SELECT id FROM projects WHERE workspace_id = ?)",
     ).run(target, id);
+    // So does their work: a task is never assigned to someone who cannot see it.
+    db.query(
+      `UPDATE tasks SET assignee_subject = NULL, version = version + 1, updated_at = ?, updated_by = ?
+       WHERE assignee_subject = ? AND project_id IN (SELECT id FROM projects WHERE workspace_id = ?)`,
+    ).run(now(), subject, target, id);
   });
 }
