@@ -8,11 +8,14 @@ import { now, transaction } from "./db";
 import { hasChildren, hasLinks, statusInProject, taskKey } from "./queries";
 import type { ProjectRow, TaskRow } from "./rows";
 import {
+  type RescheduledTask,
+  type WithRescheduled,
   durationBetween,
   finishFor,
   firstWorkingDay,
   projectCalendar,
   reschedule,
+  rescheduledRows,
 } from "./scheduling";
 import { defaultStatusId } from "./statuses";
 
@@ -270,6 +273,33 @@ function assertParent(
   }
 }
 
+/**
+ * A task gaining its first child becomes a summary: its own duration and
+ * start constraint no longer mean anything (its dates and progress come from
+ * the roll-up), so they are cleared. Its deadline and other fields stay.
+ */
+function promoteToSummary(db: Database, parentId: string, subject: string): boolean {
+  if (hasChildren(db, parentId)) return false;
+  db.query(
+    `UPDATE tasks SET duration_days = NULL, constraint_type = 'asap', constraint_date = NULL,
+       version = version + 1, updated_at = ?, updated_by = ? WHERE id = ?`,
+  ).run(now(), subject, parentId);
+  return true;
+}
+
+/**
+ * A summary that lost its last child is a leaf again. Its stored dates were
+ * its children's roll-up, so it goes back to unscheduled until estimated.
+ */
+function demoteIfChildless(db: Database, taskId: string | null, subject: string): boolean {
+  if (taskId === null || hasChildren(db, taskId)) return false;
+  db.query(
+    `UPDATE tasks SET start_date = NULL, finish_date = NULL, version = version + 1,
+       updated_at = ?, updated_by = ? WHERE id = ?`,
+  ).run(now(), subject, taskId);
+  return true;
+}
+
 function assertVersion(task: TaskRow, expected: number, projectKey: string): void {
   if (task.version !== expected) {
     throw conflict("version_conflict", "this task was changed by someone else", {
@@ -321,7 +351,7 @@ export function createTask(
   subject: string,
   projectId: string,
   input: TaskCreate,
-): Task {
+): WithRescheduled<Task> {
   const { project, role } = projectAccess(db, projectId, subject);
   requireRole(role, "member");
   return transaction(db, () => {
@@ -345,6 +375,7 @@ export function createTask(
       .query("SELECT MAX(rank) AS last FROM tasks WHERE project_id = ?")
       .get(project.id) as { last: string | null };
 
+    const promoted = parentId !== null && promoteToSummary(db, parentId, subject);
     const id = randomUUID();
     const at = now();
     db.query(
@@ -376,8 +407,12 @@ export function createTask(
       subject,
       subject,
     );
-    reschedule(db, project.id, subject);
-    return toTask(taskRow(db, id), project.key);
+    const touched = reschedule(db, project.id, subject);
+    if (promoted) touched.push(parentId as string);
+    return {
+      ...toTask(taskRow(db, id), project.key),
+      rescheduled: rescheduledRows(db, touched, [id]),
+    };
   });
 }
 
@@ -387,7 +422,7 @@ export function updateTask(
   id: string,
   expected: number,
   patch: TaskFields,
-): Task {
+): WithRescheduled<Task> {
   const { project, role } = taskAccess(db, id, subject);
   requireRole(role, "member");
   return transaction(db, () => {
@@ -427,8 +462,11 @@ export function updateTask(
       subject,
       id,
     );
-    reschedule(db, project.id, subject);
-    return toTask(taskRow(db, id), project.key);
+    const touched = reschedule(db, project.id, subject);
+    return {
+      ...toTask(taskRow(db, id), project.key),
+      rescheduled: rescheduledRows(db, touched, [id]),
+    };
   });
 }
 
@@ -438,7 +476,7 @@ export function moveTask(
   id: string,
   expected: number,
   move: TaskMove,
-): Task {
+): WithRescheduled<Task> {
   const { project, role } = taskAccess(db, id, subject);
   requireRole(role, "member");
   return transaction(db, () => {
@@ -472,27 +510,32 @@ export function moveTask(
       rank = following === null ? rankAfter(after.rank) : rankBetween(after.rank, following);
     }
 
+    const parentId = move.parentId === undefined ? task.parent_id : move.parentId;
+    const reparented = parentId !== task.parent_id;
+    const promoted = reparented && parentId !== null && promoteToSummary(db, parentId, subject);
     db.query(
       "UPDATE tasks SET parent_id = ?, status_id = ?, rank = ?, version = version + 1, updated_at = ?, updated_by = ? WHERE id = ?",
-    ).run(
-      move.parentId === undefined ? task.parent_id : move.parentId,
-      move.statusId ?? task.status_id,
-      rank,
-      now(),
-      subject,
-      id,
-    );
-    reschedule(db, project.id, subject);
-    return toTask(taskRow(db, id), project.key);
+    ).run(parentId, move.statusId ?? task.status_id, rank, now(), subject, id);
+    const demoted = reparented && demoteIfChildless(db, task.parent_id, subject);
+    const touched = reschedule(db, project.id, subject);
+    if (promoted) touched.push(parentId as string);
+    if (demoted) touched.push(task.parent_id as string);
+    return {
+      ...toTask(taskRow(db, id), project.key),
+      rescheduled: rescheduledRows(db, touched, [id]),
+    };
   });
 }
 
-export function deleteTask(db: Database, subject: string, id: string): void {
-  const { project, role } = taskAccess(db, id, subject);
+export function deleteTask(db: Database, subject: string, id: string): RescheduledTask[] {
+  const { project, role, task } = taskAccess(db, id, subject);
   requireRole(role, "member");
-  transaction(db, () => {
+  return transaction(db, () => {
     // ON DELETE CASCADE removes the subtree and every link touching it.
     db.query("DELETE FROM tasks WHERE id = ?").run(id);
-    reschedule(db, project.id, subject);
+    const demoted = demoteIfChildless(db, task.parent_id, subject);
+    const touched = reschedule(db, project.id, subject);
+    if (demoted) touched.push(task.parent_id as string);
+    return rescheduledRows(db, touched, [id]);
   });
 }

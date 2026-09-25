@@ -7,7 +7,12 @@ import type { LinkType } from "../schedule/types";
 import { now, transaction } from "./db";
 import { hasChildren, taskKey } from "./queries";
 import type { DependencyRow, ProjectRow } from "./rows";
-import { reschedule } from "./scheduling";
+import {
+  type RescheduledTask,
+  type WithRescheduled,
+  reschedule,
+  rescheduledRows,
+} from "./scheduling";
 
 export const LINK_TYPES: readonly LinkType[] = ["FS", "SS", "FF", "SF"];
 
@@ -93,7 +98,7 @@ export function createDependency(
   subject: string,
   projectId: string,
   input: DependencyInput,
-): Dependency {
+): WithRescheduled<Dependency> {
   const { project, role } = projectAccess(db, projectId, subject);
   requireRole(role, "member");
   if (input.predecessorId === input.successorId)
@@ -155,10 +160,11 @@ export function createDependency(
       subject,
       subject,
     );
-    reschedule(db, project.id, subject);
-    return toDependency(
-      db.query("SELECT * FROM dependencies WHERE id = ?").get(id) as DependencyRow,
-    );
+    const touched = reschedule(db, project.id, subject);
+    return {
+      ...toDependency(db.query("SELECT * FROM dependencies WHERE id = ?").get(id) as DependencyRow),
+      rescheduled: rescheduledRows(db, touched),
+    };
   });
 }
 
@@ -167,25 +173,26 @@ export function updateDependency(
   subject: string,
   id: string,
   patch: DependencyPatch,
-): Dependency {
+): WithRescheduled<Dependency> {
   const { link, role } = linkAccess(db, id, subject);
   requireRole(role, "member");
   return transaction(db, () => {
     db.query(
       "UPDATE dependencies SET type = ?, lag_days = ?, updated_at = ?, updated_by = ? WHERE id = ?",
     ).run(patch.type ?? link.type, patch.lagDays ?? link.lag_days, now(), subject, id);
-    reschedule(db, link.project_id, subject);
-    return toDependency(
-      db.query("SELECT * FROM dependencies WHERE id = ?").get(id) as DependencyRow,
-    );
+    const touched = reschedule(db, link.project_id, subject);
+    return {
+      ...toDependency(db.query("SELECT * FROM dependencies WHERE id = ?").get(id) as DependencyRow),
+      rescheduled: rescheduledRows(db, touched),
+    };
   });
 }
 
-export function deleteDependency(db: Database, subject: string, id: string): void {
+export function deleteDependency(db: Database, subject: string, id: string): RescheduledTask[] {
   const { link, role } = linkAccess(db, id, subject);
   requireRole(role, "member");
-  transaction(db, () => {
+  return transaction(db, () => {
     db.query("DELETE FROM dependencies WHERE id = ?").run(id);
-    reschedule(db, link.project_id, subject);
+    return rescheduledRows(db, reschedule(db, link.project_id, subject));
   });
 }

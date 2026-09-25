@@ -37,7 +37,7 @@ export function registerDependencyRoutes(router: Router<Context>): void {
   });
 
   router.add("DELETE", "/dependencies/:id", ({ db, subject }, params) => {
-    dependencies.deleteDependency(db, subject, param(params, "id"));
-    return json({ deleted: true });
+    const rescheduled = dependencies.deleteDependency(db, subject, param(params, "id"));
+    return json({ deleted: true, rescheduled });
   });
 }

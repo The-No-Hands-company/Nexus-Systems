@@ -29,12 +29,12 @@ export function registerStatusRoutes(router: Router<Context>): void {
 
   router.add("DELETE", "/statuses/:id", ({ db, subject, url }, params) => {
     const target = url.searchParams.get("moveTasksTo");
-    statuses.deleteStatus(
+    const rescheduled = statuses.deleteStatus(
       db,
       subject,
       param(params, "id"),
       target === null ? null : idValue("moveTasksTo")(target),
     );
-    return json({ deleted: true });
+    return json({ deleted: true, rescheduled });
   });
 }

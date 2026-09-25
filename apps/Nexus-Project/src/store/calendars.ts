@@ -5,7 +5,14 @@ import { WorkingCalendar } from "../schedule/calendar";
 import type { CalendarException } from "../schedule/types";
 import { transaction } from "./db";
 import type { ProjectRow } from "./rows";
-import { loadCalendar, maskFromWeekdays, refreshDerivedFinishes, reschedule } from "./scheduling";
+import {
+  type WithRescheduled,
+  loadCalendar,
+  maskFromWeekdays,
+  refreshDerivedFinishes,
+  reschedule,
+  rescheduledRows,
+} from "./scheduling";
 
 export interface ProjectCalendar {
   workingWeekdays: number[];
@@ -26,7 +33,7 @@ export function setCalendar(
   subject: string,
   projectId: string,
   input: ProjectCalendar,
-): ProjectCalendar {
+): WithRescheduled<ProjectCalendar> {
   const { project, role } = projectAccess(db, projectId, subject);
   requireRole(role, "admin");
   try {
@@ -46,8 +53,10 @@ export function setCalendar(
     for (const exception of input.exceptions)
       insert.run(project.id, exception.date, exception.working ? 1 : 0);
     const updated = db.query("SELECT * FROM projects WHERE id = ?").get(project.id) as ProjectRow;
-    refreshDerivedFinishes(db, updated, subject);
-    reschedule(db, project.id, subject);
-    return snapshot(db, updated);
+    const touched = [
+      ...refreshDerivedFinishes(db, updated, subject),
+      ...reschedule(db, project.id, subject),
+    ];
+    return { ...snapshot(db, updated), rescheduled: rescheduledRows(db, touched) };
   });
 }

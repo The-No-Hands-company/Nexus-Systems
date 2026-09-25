@@ -168,11 +168,15 @@ describe("work breakdown structure", () => {
   it("turns a parent into a summary whose schedule fields are derived", async () => {
     const project = await createProject(member(), ws);
     const phase = await newTask(member(), project.id, { title: "Phase", durationDays: 5 });
-    await newTask(member(), project.id, { title: "Child", parentId: phase.id });
-    const res = await patch(phase.id, phase.version, { durationDays: 2 });
+    const child = await newTask(member(), project.id, { title: "Child", parentId: phase.id });
+    // Becoming a summary is a write to the parent: its version moved, and the
+    // child's response says so.
+    const promoted = child.rescheduled.find((row: { id: string }) => row.id === phase.id);
+    expect(promoted.version).toBeGreaterThan(phase.version);
+    const res = await patch(phase.id, promoted.version, { durationDays: 2 });
     expect(res.status).toBe(422);
     expect(res.body.error).toBe("summary_fields");
-    expect((await patch(phase.id, phase.version, { title: "Phase 1" })).status).toBe(200);
+    expect((await patch(phase.id, promoted.version, { title: "Phase 1" })).status).toBe(200);
   });
 
   it("refuses parents from elsewhere, milestones, and cycles", async () => {

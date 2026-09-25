@@ -95,46 +95,111 @@ export function computeSchedule(db: Database, project: ProjectRow): ScheduleResu
   return schedule(loadScheduleInput(db, project));
 }
 
+/** A task a write moved as a side effect, so an optimistic client can refresh its version. */
+export interface RescheduledTask {
+  id: string;
+  version: number;
+  startDate: string | null;
+  finishDate: string | null;
+  progress: number;
+}
+
+/** A write's own result plus the other tasks it moved. */
+export type WithRescheduled<T> = T & { rescheduled: RescheduledTask[] };
+
+/** The current schedule fields of `ids`, except `exclude` (the edited task itself). */
+export function rescheduledRows(
+  db: Database,
+  ids: Iterable<string>,
+  exclude: readonly string[] = [],
+): RescheduledTask[] {
+  const read = db.query(
+    "SELECT id, version, start_date, finish_date, progress FROM tasks WHERE id = ?",
+  );
+  const rows: RescheduledTask[] = [];
+  for (const id of new Set(ids)) {
+    if (exclude.includes(id)) continue;
+    const row = read.get(id) as {
+      id: string;
+      version: number;
+      start_date: string | null;
+      finish_date: string | null;
+      progress: number;
+    } | null;
+    if (!row) continue;
+    rows.push({
+      id: row.id,
+      version: row.version,
+      startDate: row.start_date,
+      finishDate: row.finish_date,
+      progress: row.progress,
+    });
+  }
+  return rows;
+}
+
 /**
- * Re-derives dates after a schedule-affecting write, inside the caller's
- * transaction. Auto mode: the engine owns leaf dates and writes them back.
- * Manual mode: nothing moves; violations are reported when the schedule is read.
+ * Re-derives stored dates after a schedule-affecting write, inside the
+ * caller's transaction, and returns the ids it changed. Both modes store each
+ * summary's roll-up (start, finish, progress). Auto mode also writes leaf
+ * dates, which the engine owns there; manual mode never moves a leaf.
+ * A row's version is bumped only when one of its values changed.
  */
-export function reschedule(db: Database, projectId: string, subject: string): void {
+export function reschedule(db: Database, projectId: string, subject: string): string[] {
   const project = db
     .query("SELECT * FROM projects WHERE id = ?")
     .get(projectId) as ProjectRow | null;
-  if (!project || project.schedule_mode !== "auto") return;
+  if (!project) return [];
   const result = computeSchedule(db, project);
   const current = new Map(
     (
       db
-        .query("SELECT id, start_date, finish_date FROM tasks WHERE project_id = ?")
+        .query("SELECT id, start_date, finish_date, progress FROM tasks WHERE project_id = ?")
         .all(projectId) as {
         id: string;
         start_date: string | null;
         finish_date: string | null;
+        progress: number;
       }[]
     ).map((row) => [row.id, row]),
   );
   const update = db.query(
-    "UPDATE tasks SET start_date = ?, finish_date = ?, version = version + 1, updated_at = ?, updated_by = ? WHERE id = ?",
+    "UPDATE tasks SET start_date = ?, finish_date = ?, progress = ?, version = version + 1, updated_at = ?, updated_by = ? WHERE id = ?",
   );
   const at = now();
-  for (const task of result.tasks) {
-    const row = current.get(task.id);
-    if (!row || (row.start_date === task.earlyStart && row.finish_date === task.earlyFinish))
-      continue;
-    update.run(task.earlyStart, task.earlyFinish, at, subject, task.id);
+  const changed: string[] = [];
+  const write = (id: string, start: string | null, finish: string | null, progress?: number) => {
+    const row = current.get(id);
+    if (!row) return;
+    const nextProgress = progress ?? row.progress;
+    if (row.start_date === start && row.finish_date === finish && row.progress === nextProgress)
+      return;
+    update.run(start, finish, nextProgress, at, subject, id);
+    changed.push(id);
+  };
+  if (project.schedule_mode === "auto") {
+    for (const task of result.tasks) write(task.id, task.earlyStart, task.earlyFinish);
   }
+  for (const summary of result.summaries)
+    write(summary.id, summary.start, summary.finish, summary.progress);
+  return changed;
 }
 
-/** After a calendar change a stored finish must follow the task's working-day duration. */
-export function refreshDerivedFinishes(db: Database, project: ProjectRow, subject: string): void {
+/**
+ * After a calendar change a stored leaf finish must follow the task's
+ * working-day duration. Summaries are left to the roll-up. Returns the ids it changed.
+ */
+export function refreshDerivedFinishes(
+  db: Database,
+  project: ProjectRow,
+  subject: string,
+): string[] {
   const calendar = projectCalendar(db, project);
   const rows = db
     .query(
-      "SELECT id, start_date, finish_date, duration_days FROM tasks WHERE project_id = ? AND start_date IS NOT NULL AND duration_days IS NOT NULL",
+      `SELECT id, start_date, finish_date, duration_days FROM tasks t
+       WHERE project_id = ? AND start_date IS NOT NULL AND duration_days IS NOT NULL
+         AND NOT EXISTS (SELECT 1 FROM tasks c WHERE c.parent_id = t.id)`,
     )
     .all(project.id) as {
     id: string;
@@ -146,10 +211,14 @@ export function refreshDerivedFinishes(db: Database, project: ProjectRow, subjec
     "UPDATE tasks SET start_date = ?, finish_date = ?, version = version + 1, updated_at = ?, updated_by = ? WHERE id = ?",
   );
   const at = now();
+  const changed: string[] = [];
   for (const row of rows) {
     const start = firstWorkingDay(calendar, row.start_date);
     const finish = finishFor(calendar, start, row.duration_days);
-    if (start !== row.start_date || finish !== row.finish_date)
+    if (start !== row.start_date || finish !== row.finish_date) {
       update.run(start, finish, at, subject, row.id);
+      changed.push(row.id);
+    }
   }
+  return changed;
 }

@@ -70,3 +70,26 @@ something you can see but may not change is `403`.
 
 Dates are `YYYY-MM-DD`; durations and lags are working days. A milestone is
 shown on the working day at whose start it occurs.
+
+### Side effects: `rescheduled`
+
+A write can change tasks other than the one you sent: auto mode moves
+successors, every summary stores its children's roll-up, a task gaining its
+first child becomes a summary, and a calendar change re-derives finishes. Each
+of those bumps the other task's `version`. So every schedule-affecting write
+returns a top-level `rescheduled` array alongside its own fields:
+
+```json
+{ "id": "…", "version": 4, "…": "…",
+  "rescheduled": [{ "id": "…", "version": 7, "startDate": "2026-09-14",
+                    "finishDate": "2026-09-16", "progress": 50 }] }
+```
+
+It lists every other task the write changed, with its new version, dates and
+progress (empty when nothing else moved); the edited task itself is not
+repeated. Routes: `POST /projects/:id/tasks`, `PATCH /tasks/:id`,
+`POST /tasks/:id/move`, `DELETE /tasks/:id` (`{ deleted: true, rescheduled }`),
+`POST /projects/:id/dependencies`, `PATCH` and `DELETE /dependencies/:id`,
+`PUT /projects/:id/calendar`, `PATCH /projects/:id`, `PATCH` and
+`DELETE /statuses/:id`. Update your copies from it and the next `If-Match`
+will not conflict.

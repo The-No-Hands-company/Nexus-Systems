@@ -11,6 +11,7 @@ import {
   firstWorkingDay,
   loadScheduleInput,
   maskFromWeekdays,
+  refreshDerivedFinishes,
   reschedule,
   weekdaysFromMask,
 } from "../src/store/scheduling";
@@ -164,5 +165,31 @@ describe("store to engine", () => {
     // The category change rescheduled (A's finish moved) and pinned B where it was.
     expect(dates(a).finish_date).toBe("2026-09-11");
     expect(dates(b).start_date).toBe("2026-09-10");
+  });
+
+  it("re-derives leaf finishes after a calendar change but leaves summaries to the roll-up", () => {
+    // A summary row that still carries leaf inputs (stored before summaries were cleared).
+    const phase = insertTask(1, { duration: 3, start: "2026-09-07" });
+    const leaf = insertTask(2, { duration: 3, start: "2026-09-07", parent: phase });
+    expect(refreshDerivedFinishes(db, project, OWNER)).toEqual([leaf]);
+    expect(dates(phase)).toEqual({ start_date: "2026-09-07", finish_date: null, version: 1 });
+    expect(dates(leaf)).toEqual({
+      start_date: "2026-09-07",
+      finish_date: "2026-09-09",
+      version: 2,
+    });
+  });
+
+  it("stores summary roll-ups in manual mode and reports what changed", () => {
+    const phase = insertTask(1, { duration: null });
+    const a = insertTask(2, { duration: 2, start: "2026-09-08", parent: phase });
+    expect(reschedule(db, project.id, OWNER)).toEqual([phase]);
+    expect(dates(phase)).toEqual({
+      start_date: "2026-09-08",
+      finish_date: "2026-09-09",
+      version: 2,
+    });
+    expect(dates(a).version).toBe(1);
+    expect(reschedule(db, project.id, OWNER)).toEqual([]);
   });
 });

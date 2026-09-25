@@ -4,7 +4,12 @@ import { type Role, projectAccess, requireRole } from "../access";
 import { badRequest, conflict, notFound, unprocessable } from "../http";
 import { now, transaction } from "./db";
 import type { ProjectRow, StatusCategory, StatusRow } from "./rows";
-import { reschedule } from "./scheduling";
+import {
+  type RescheduledTask,
+  type WithRescheduled,
+  reschedule,
+  rescheduledRows,
+} from "./scheduling";
 
 export const STATUS_CATEGORIES: readonly StatusCategory[] = [
   "backlog",
@@ -114,7 +119,7 @@ export function updateStatus(
   subject: string,
   statusId: string,
   patch: StatusPatch,
-): Status {
+): WithRescheduled<Status> {
   const { status, role } = statusAccess(db, statusId, subject);
   requireRole(role, "admin");
   return transaction(db, () => {
@@ -132,9 +137,14 @@ export function updateStatus(
       renumber(db, others);
     }
     // A category decides whether tasks are open, pinned as completed or left out.
-    if (patch.category !== undefined && patch.category !== status.category)
-      reschedule(db, status.project_id, subject);
-    return toStatus(db.query("SELECT * FROM statuses WHERE id = ?").get(status.id) as StatusRow);
+    const touched =
+      patch.category !== undefined && patch.category !== status.category
+        ? reschedule(db, status.project_id, subject)
+        : [];
+    return {
+      ...toStatus(db.query("SELECT * FROM statuses WHERE id = ?").get(status.id) as StatusRow),
+      rescheduled: rescheduledRows(db, touched),
+    };
   });
 }
 
@@ -143,10 +153,10 @@ export function deleteStatus(
   subject: string,
   statusId: string,
   moveTasksTo: string | null,
-): void {
+): RescheduledTask[] {
   const { status, role } = statusAccess(db, statusId, subject);
   requireRole(role, "admin");
-  transaction(db, () => {
+  return transaction(db, () => {
     const all = rows(db, status.project_id);
     if (all.length === 1) throw unprocessable("last_status", "a project needs at least one status");
     if (
@@ -160,18 +170,24 @@ export function deleteStatus(
         n: number;
       }
     ).n;
+    let touched: string[] = [];
     if (inUse > 0) {
       if (moveTasksTo === null)
         throw unprocessable("status_in_use", `${inUse} task(s) use this status; pass moveTasksTo`);
+      const moved = (
+        db.query("SELECT id FROM tasks WHERE status_id = ?").all(status.id) as { id: string }[]
+      ).map((row) => row.id);
       db.query(
         "UPDATE tasks SET status_id = ?, version = version + 1, updated_at = ?, updated_by = ? WHERE status_id = ?",
       ).run(moveTasksTo, now(), subject, status.id);
-      reschedule(db, status.project_id, subject);
+      // Every task that changed status has a new version, whether or not it moved in time.
+      touched = [...moved, ...reschedule(db, status.project_id, subject)];
     }
     db.query("DELETE FROM statuses WHERE id = ?").run(status.id);
     renumber(
       db,
       all.map((s) => s.id).filter((id) => id !== status.id),
     );
+    return rescheduledRows(db, touched);
   });
 }

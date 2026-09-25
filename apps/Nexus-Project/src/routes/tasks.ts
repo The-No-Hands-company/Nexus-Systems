@@ -123,7 +123,6 @@ export function registerTaskRoutes(router: Router<Context>): void {
   });
 
   router.add("DELETE", "/tasks/:id", ({ db, subject }, params) => {
-    tasks.deleteTask(db, subject, param(params, "id"));
-    return json({ deleted: true });
+    return json({ deleted: true, rescheduled: tasks.deleteTask(db, subject, param(params, "id")) });
   });
 }

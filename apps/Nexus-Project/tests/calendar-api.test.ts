@@ -25,13 +25,11 @@ describe("project calendar", () => {
   it("is changed by admins only and re-derives finish dates", async () => {
     const project = await createProject(t.as("usr-member"), ws);
     const task = (
-      await t
-        .as("usr-member")
-        .call("POST", `/projects/${project.id}/tasks`, {
-          title: "A",
-          startDate: "2026-09-07",
-          durationDays: 3,
-        })
+      await t.as("usr-member").call("POST", `/projects/${project.id}/tasks`, {
+        title: "A",
+        startDate: "2026-09-07",
+        durationDays: 3,
+      })
     ).body;
     expect(task.finishDate).toBe("2026-09-09");
     expect(
@@ -39,7 +37,19 @@ describe("project calendar", () => {
     ).toBe(403);
     const res = await t.as("usr-admin").call("PUT", `/projects/${project.id}/calendar`, HOLIDAY);
     expect(res.status).toBe(200);
-    expect(res.body).toEqual(HOLIDAY);
+    // The re-derived finish moved another task, so the response reports it.
+    expect(res.body).toEqual({
+      ...HOLIDAY,
+      rescheduled: [
+        {
+          id: task.id,
+          version: task.version + 1,
+          startDate: "2026-09-07",
+          finishDate: "2026-09-10",
+          progress: 0,
+        },
+      ],
+    });
     const after = (await t.as("usr-member").call("GET", `/tasks/${task.id}`)).body;
     expect(after).toMatchObject({
       finishDate: "2026-09-10",
@@ -54,12 +64,10 @@ describe("project calendar", () => {
       t.as("usr-member").call("POST", `/projects/${project.id}/tasks`, body);
     const a = (await post({ title: "A", durationDays: 3 })).body;
     const b = (await post({ title: "B", durationDays: 1 })).body;
-    await t
-      .as("usr-member")
-      .call("POST", `/projects/${project.id}/dependencies`, {
-        predecessorId: a.id,
-        successorId: b.id,
-      });
+    await t.as("usr-member").call("POST", `/projects/${project.id}/dependencies`, {
+      predecessorId: a.id,
+      successorId: b.id,
+    });
     expect((await t.as("usr-member").call("GET", `/tasks/${b.id}`)).body.startDate).toBe(
       "2026-09-10",
     );

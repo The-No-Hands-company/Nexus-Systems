@@ -10,7 +10,7 @@ import {
 import { conflict, notFound, unprocessable } from "../http";
 import { now, transaction } from "./db";
 import type { ProjectRow, Role, StatusCategory } from "./rows";
-import { reschedule } from "./scheduling";
+import { type WithRescheduled, reschedule, rescheduledRows } from "./scheduling";
 
 export interface Project {
   id: string;
@@ -159,7 +159,7 @@ export function updateProject(
   subject: string,
   id: string,
   patch: ProjectPatch,
-): Project {
+): WithRescheduled<Project> {
   const { project, role } = projectAccess(db, id, subject);
   requireRole(role, "admin");
   return transaction(db, () => {
@@ -177,9 +177,11 @@ export function updateProject(
       subject,
       id,
     );
-    if (patch.startDate !== undefined || patch.scheduleMode !== undefined)
-      reschedule(db, id, subject);
-    return toProject(projectRow(db, id), role);
+    const touched =
+      patch.startDate !== undefined || patch.scheduleMode !== undefined
+        ? reschedule(db, id, subject)
+        : [];
+    return { ...toProject(projectRow(db, id), role), rescheduled: rescheduledRows(db, touched) };
   });
 }
 
