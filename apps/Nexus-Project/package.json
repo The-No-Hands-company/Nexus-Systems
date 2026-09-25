@@ -1,0 +1,20 @@
+{
+  "name": "nexus-project",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Nexus project management: workspaces, WBS, dependencies and a critical-path scheduler",
+  "scripts": {
+    "dev": "bun run src/index.ts",
+    "start": "bun run src/index.ts",
+    "check": "tsc --noEmit",
+    "test": "bun test tests/",
+    "lint": "biome check src tests",
+    "gate": "bash check.sh"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "1.9.4",
+    "bun-types": "1.3.14",
+    "typescript": "5.9.3"
+  }
+}
