@@ -1,7 +1,7 @@
 import type { Database } from "bun:sqlite";
 import { randomUUID } from "node:crypto";
 import { type Role, projectAccess, requireRole } from "../access";
-import { conflict, notFound, unprocessable } from "../http";
+import { conflict, isNotFound, notFound, unprocessable } from "../http";
 import { findCycle } from "../schedule/graph";
 import type { LinkType } from "../schedule/types";
 import { now, transaction } from "./db";
@@ -57,8 +57,9 @@ function linkAccess(
   if (!link) throw notFound("dependency");
   try {
     return { link, ...projectAccess(db, link.project_id, subject) };
-  } catch {
-    throw notFound("dependency");
+  } catch (error) {
+    if (isNotFound(error)) throw notFound("dependency");
+    throw error;
   }
 }
 
@@ -72,8 +73,9 @@ function linkableTask(db: Database, project: ProjectRow, taskId: string, subject
   if (task.project_id !== project.id) {
     try {
       projectAccess(db, task.project_id, subject);
-    } catch {
-      throw notFound("task");
+    } catch (error) {
+      if (isNotFound(error)) throw notFound("task");
+      throw error;
     }
     throw unprocessable("cross_project_link", "dependencies must stay within one project");
   }

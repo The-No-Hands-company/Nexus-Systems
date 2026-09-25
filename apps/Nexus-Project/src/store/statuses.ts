@@ -1,7 +1,7 @@
 import type { Database } from "bun:sqlite";
 import { randomUUID } from "node:crypto";
 import { type Role, projectAccess, requireRole } from "../access";
-import { badRequest, conflict, notFound, unprocessable } from "../http";
+import { badRequest, conflict, isNotFound, notFound, unprocessable } from "../http";
 import { now, transaction } from "./db";
 import type { ProjectRow, StatusCategory, StatusRow } from "./rows";
 import {
@@ -58,8 +58,9 @@ function statusAccess(
   if (!status) throw notFound("status");
   try {
     return { status, ...projectAccess(db, status.project_id, subject) };
-  } catch {
-    throw notFound("status");
+  } catch (error) {
+    if (isNotFound(error)) throw notFound("status");
+    throw error;
   }
 }
 

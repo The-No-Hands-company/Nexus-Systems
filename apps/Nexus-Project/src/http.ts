@@ -28,6 +28,10 @@ export function errorResponse(error: HttpError): Response {
 }
 
 export const notFound = (what = "resource") => new HttpError(404, "not_found", `${what} not found`);
+/** True for the 404 an access helper throws; anything else is a real fault to rethrow. */
+export function isNotFound(error: unknown): boolean {
+  return error instanceof HttpError && error.status === 404;
+}
 export const forbidden = () => new HttpError(403, "forbidden", "your role does not allow this");
 export const badRequest = (message: string) => new HttpError(400, "invalid_request", message);
 export const unprocessable = (code: string, message: string, extra: Record<string, unknown> = {}) =>
