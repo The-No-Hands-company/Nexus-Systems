@@ -46,4 +46,13 @@ describe("nexus-project server", () => {
     const res = await t.as("usr-alice").call("GET", "/nothing-here");
     expect(res.status).toBe(404);
   });
+
+  it("refuses a body over 1 MiB and keeps serving", async () => {
+    const res = await t
+      .as("usr-alice")
+      .call("POST", "/workspaces", { name: "x".repeat(2 * 1024 * 1024) });
+    expect(res.status).toBe(413);
+    expect((await t.raw(null, "GET", "/health")).status).toBe(200);
+    expect((await t.as("usr-alice").call("GET", "/workspaces")).status).toBe(200);
+  });
 });

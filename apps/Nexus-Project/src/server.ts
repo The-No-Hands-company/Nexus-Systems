@@ -5,16 +5,24 @@ import { resolveCaller } from "./auth";
 import { startHeartbeat } from "./cloud";
 import { HttpError, errorResponse, json, notFound } from "./http";
 import { Router } from "./router";
-import { openDatabase } from "./store/db";
+import { registerCalendarRoutes } from "./routes/calendars";
+import { registerDependencyRoutes } from "./routes/dependencies";
 import { registerProjectRoutes } from "./routes/projects";
-import { registerWorkspaceRoutes } from "./routes/workspaces";
+import { registerScheduleRoutes } from "./routes/schedule";
 import { registerStatusRoutes } from "./routes/statuses";
 import { registerTaskRoutes } from "./routes/tasks";
-import { registerDependencyRoutes } from "./routes/dependencies";
-import { registerCalendarRoutes } from "./routes/calendars";
-import { registerScheduleRoutes } from "./routes/schedule";
+import { registerWorkspaceRoutes } from "./routes/workspaces";
+import { openDatabase } from "./store/db";
 
 export const API_PREFIX = "/api/v1/project";
+
+const MAX_BODY_BYTES = 1024 * 1024;
+
+/** Internal detail goes to the operator's log, never to the client. */
+function internalError(what: string, error: unknown): Response {
+  console.error(`[nexus-project] ${what} failed:`, error);
+  return json({ error: "internal", message: "internal error" }, 500);
+}
 
 export interface Context {
   req: Request;
@@ -47,6 +55,8 @@ export async function createServer() {
 
   const server = Bun.serve({
     port,
+    // Every legitimate body is small JSON; refuse anything larger before reading it.
+    maxRequestBodySize: MAX_BODY_BYTES,
     hostname: process.env.NEXUS_BIND_HOST || "127.0.0.1",
     async fetch(req) {
       const url = new URL(req.url);
@@ -70,15 +80,15 @@ export async function createServer() {
       if (path !== API_PREFIX && !path.startsWith(`${API_PREFIX}/`))
         return errorResponse(notFound());
 
-      // Identity before routing: an anonymous caller learns nothing, not even
-      // which paths exist.
-      const caller = await resolveCaller(req);
-      if (!caller)
-        return errorResponse(
-          new HttpError(401, "not_authenticated", "sign in to use Nexus Project"),
-        );
-
       try {
+        // Identity before routing: an anonymous caller learns nothing, not even
+        // which paths exist.
+        const caller = await resolveCaller(req);
+        if (!caller)
+          return errorResponse(
+            new HttpError(401, "not_authenticated", "sign in to use Nexus Project"),
+          );
+
         const match = router.match(req.method, path.slice(API_PREFIX.length));
         if (!match) throw notFound();
         if ("allowed" in match) {
@@ -93,10 +103,12 @@ export async function createServer() {
         return await match.handler({ req, url, db, subject: caller.subject }, match.params);
       } catch (error) {
         if (error instanceof HttpError) return errorResponse(error);
-        // Internal detail goes to the operator's log, never to the client.
-        console.error(`[nexus-project] ${req.method} ${path} failed:`, error);
-        return json({ error: "internal", message: "internal error" }, 500);
+        return internalError(`${req.method} ${path}`, error);
       }
+    },
+    // The backstop for anything thrown outside the handler above.
+    error(error) {
+      return internalError("request", error);
     },
   });
 
