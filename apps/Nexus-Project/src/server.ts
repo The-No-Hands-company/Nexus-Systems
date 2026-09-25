@@ -13,6 +13,7 @@ import { registerStatusRoutes } from "./routes/statuses";
 import { registerTaskRoutes } from "./routes/tasks";
 import { registerWorkspaceRoutes } from "./routes/workspaces";
 import { openDatabase } from "./store/db";
+import { ensurePersonalWorkspace } from "./store/workspaces";
 
 export const API_PREFIX = "/api/v1/project";
 
@@ -88,6 +89,9 @@ export async function createServer() {
           return errorResponse(
             new HttpError(401, "not_authenticated", "sign in to use Nexus Project"),
           );
+        // A solo user never sees setup: whatever they ask first, their personal
+        // workspace already exists.
+        ensurePersonalWorkspace(db, caller.subject);
 
         const match = router.match(req.method, path.slice(API_PREFIX.length));
         if (!match) throw notFound();

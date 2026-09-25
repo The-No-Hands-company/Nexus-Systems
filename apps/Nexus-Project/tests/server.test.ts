@@ -55,4 +55,14 @@ describe("nexus-project server", () => {
     expect((await t.raw(null, "GET", "/health")).status).toBe(200);
     expect((await t.as("usr-alice").call("GET", "/workspaces")).status).toBe(200);
   });
+
+  it("creates the caller's personal workspace on their first request of any kind", async () => {
+    const personal = () =>
+      t.handle.db
+        .query("SELECT kind FROM workspaces WHERE personal_subject = ?")
+        .get("usr-first-contact");
+    expect(personal()).toBeNull();
+    expect((await t.as("usr-first-contact").call("GET", "/me/tasks")).status).toBe(200);
+    expect(personal()).toEqual({ kind: "personal" });
+  });
 });

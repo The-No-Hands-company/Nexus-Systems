@@ -48,7 +48,7 @@ something you can see but may not change is `403`.
 
 | Method | Path | Notes |
 |---|---|---|
-| GET | /workspaces | Creates your personal workspace on first call |
+| GET | /workspaces | Your workspaces; the personal one exists from your first request of any kind |
 | POST | /workspaces | `{ name }` → team workspace, you are owner |
 | PATCH / DELETE | /workspaces/:id | Rename (admin) / delete (owner, team only) |
 | GET | /workspaces/:id/members | |
