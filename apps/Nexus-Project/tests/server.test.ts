@@ -32,4 +32,15 @@ describe("nexus-project server", () => {
     expect(res.status).toBe(404);
     expect(res.body).toEqual({ error: "not_found", message: "resource not found" });
   });
+
+  it("requires an identity for the API", async () => {
+    const res = await t.raw(null, "GET", "/api/v1/project/nothing-here");
+    expect(res.status).toBe(401);
+    expect(res.body).toEqual({ error: "not_authenticated", message: "sign in to use Nexus Project" });
+  });
+
+  it("returns 404 for an unknown API path once authenticated", async () => {
+    const res = await t.as("usr-alice").call("GET", "/nothing-here");
+    expect(res.status).toBe(404);
+  });
 });
