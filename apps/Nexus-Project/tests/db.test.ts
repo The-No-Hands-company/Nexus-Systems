@@ -68,4 +68,19 @@ describe("database", () => {
     expect(db.query("SELECT COUNT(*) AS n FROM workspaces").get()).toEqual({ n: 0 });
     db.close();
   });
+
+  it("refuses a database written by a newer version of the service", () => {
+    const dir = mkdtempSync(join(tmpdir(), "nexus-project-db-"));
+    try {
+      const path = join(dir, "project.sqlite");
+      const first = openDatabase(path);
+      first.exec("PRAGMA user_version = 99");
+      first.close();
+      expect(() => openDatabase(path)).toThrow(
+        /schema version 99 is newer than this code knows \(1\)/,
+      );
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
 });

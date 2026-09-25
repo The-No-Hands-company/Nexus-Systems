@@ -104,13 +104,24 @@ const MIGRATIONS: readonly string[] = [
 export function openDatabase(path: string): Database {
   const db = new Database(path, { create: true });
   db.exec("PRAGMA foreign_keys = ON");
+  try {
+    migrate(db);
+  } catch (error) {
+    db.close();
+    throw error;
+  }
   if (path !== ":memory:") db.exec("PRAGMA journal_mode = WAL");
-  migrate(db);
   return db;
 }
 
 function migrate(db: Database): void {
   const current = (db.query("PRAGMA user_version").get() as { user_version: number }).user_version;
+  // Running old code on a newer schema would write rows the newer code does not expect.
+  if (current > MIGRATIONS.length) {
+    throw new Error(
+      `database schema version ${current} is newer than this code knows (${MIGRATIONS.length}); upgrade nexus-project instead of opening it with an older build`,
+    );
+  }
   for (let version = current; version < MIGRATIONS.length; version++) {
     // One transaction per step: a half-applied schema is not recoverable.
     db.exec("BEGIN IMMEDIATE");
