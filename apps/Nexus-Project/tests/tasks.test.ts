@@ -267,6 +267,37 @@ describe("listing and moving", () => {
     expect((await move(b.id, { afterId: b.id })).body.error).toBe("invalid_after");
   });
 
+  it("keeps ranks short across many appends, moves to the top and moves to the end", async () => {
+    const project = await createProject(member(), ws);
+    const created = [];
+    for (let i = 0; i < 60; i++)
+      created.push(await newTask(member(), project.id, { title: `T${i}` }));
+    const longest = async () => {
+      const all = (await member().call("GET", `/projects/${project.id}/tasks`)).body.tasks;
+      return Math.max(...all.map((task: { rank: string }) => task.rank.length));
+    };
+    expect(await longest()).toBeLessThanOrEqual(4);
+    const move = async (id: string, body: Record<string, unknown>) => {
+      const current = (await member().call("GET", `/tasks/${id}`)).body;
+      const res = await member().call("POST", `/tasks/${id}/move`, body, {
+        "if-match": String(current.version),
+      });
+      expect(res.status).toBe(200);
+      return res.body;
+    };
+    // Repeatedly move the last task to the top, then the first task to the end.
+    for (let i = 0; i < 30; i++) {
+      const all = (await member().call("GET", `/projects/${project.id}/tasks`)).body.tasks;
+      await move(all[all.length - 1].id, { afterId: null });
+    }
+    for (let i = 0; i < 30; i++) {
+      const all = (await member().call("GET", `/projects/${project.id}/tasks`)).body.tasks;
+      await move(all[0].id, { afterId: all[all.length - 1].id });
+    }
+    expect(await longest()).toBeLessThanOrEqual(4);
+    expect(created.length).toBe(60);
+  });
+
   it("deleting a status in use needs somewhere to put its tasks", async () => {
     const project = await createProject(member(), ws);
     const statuses = (await member().call("GET", `/projects/${project.id}/statuses`)).body.statuses;

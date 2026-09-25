@@ -2,7 +2,7 @@ import type { Database } from "bun:sqlite";
 import { randomUUID } from "node:crypto";
 import { projectAccess, requireRole, taskAccess, workspaceRole } from "../access";
 import { badRequest, conflict, unprocessable } from "../http";
-import { rankBetween } from "../rank";
+import { rankAfter, rankBefore, rankBetween } from "../rank";
 import type { WorkingCalendar } from "../schedule/calendar";
 import { now, transaction } from "./db";
 import { hasChildren, hasLinks, statusInProject, taskKey } from "./queries";
@@ -357,7 +357,7 @@ export function createTask(
       project.id,
       number,
       parentId,
-      rankBetween(last, null),
+      last === null ? rankBetween(null, null) : rankAfter(last),
       input.title,
       input.description ?? "",
       statusId,
@@ -455,7 +455,7 @@ export function moveTask(
         .get(project.id, id) as {
         first: string | null;
       };
-      rank = rankBetween(null, first);
+      rank = first === null ? rankBetween(null, null) : rankBefore(first);
     } else if (move.afterId !== undefined) {
       const after = db
         .query("SELECT rank FROM tasks WHERE id = ? AND project_id = ? AND id <> ?")
@@ -469,7 +469,7 @@ export function moveTask(
           "SELECT MIN(rank) AS following FROM tasks WHERE project_id = ? AND rank > ? AND id <> ?",
         )
         .get(project.id, after.rank, id) as { following: string | null };
-      rank = rankBetween(after.rank, following);
+      rank = following === null ? rankAfter(after.rank) : rankBetween(after.rank, following);
     }
 
     db.query(
