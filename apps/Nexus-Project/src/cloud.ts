@@ -17,7 +17,9 @@ function heartbeatMs(): number {
 }
 
 function enabled(): boolean {
-  return (process.env.NEXUS_PROJECT_ENABLE_CLOUD_INTEGRATION || "true").trim().toLowerCase() !== "false";
+  return (
+    (process.env.NEXUS_PROJECT_ENABLE_CLOUD_INTEGRATION || "true").trim().toLowerCase() !== "false"
+  );
 }
 
 export async function registerWithCloud(baseUrl: string): Promise<void> {

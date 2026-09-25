@@ -39,7 +39,8 @@ export class WorkingCalendar {
   constructor(spec: CalendarSpec) {
     let mask = 0;
     for (const day of spec.workingWeekdays) {
-      if (!Number.isInteger(day) || day < 0 || day > 6) throw new RangeError(`weekday out of range: ${day}`);
+      if (!Number.isInteger(day) || day < 0 || day > 6)
+        throw new RangeError(`weekday out of range: ${day}`);
       mask |= 1 << day;
     }
     if (mask === 0) throw new RangeError("a calendar needs at least one working weekday");

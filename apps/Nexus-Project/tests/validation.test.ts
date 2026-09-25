@@ -1,6 +1,14 @@
 import { describe, expect, it } from "bun:test";
 import { HttpError } from "../src/http";
-import { dateValue, enumValue, intValue, nullable, object, requiredText, subjectValue } from "../src/validation";
+import {
+  dateValue,
+  enumValue,
+  intValue,
+  nullable,
+  object,
+  requiredText,
+  subjectValue,
+} from "../src/validation";
 
 function rejects(fn: () => unknown, message: string): void {
   try {

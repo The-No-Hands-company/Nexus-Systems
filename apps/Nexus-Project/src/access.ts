@@ -35,16 +35,25 @@ export interface ProjectAccess {
   role: Role;
 }
 
-export function canSeeProject(db: Database, project: ProjectRow, subject: string, role: Role | null): boolean {
+export function canSeeProject(
+  db: Database,
+  project: ProjectRow,
+  subject: string,
+  role: Role | null,
+): boolean {
   if (!role) return false;
   if (project.visibility === "workspace" || atLeast(role, "admin")) return true;
   return Boolean(
-    db.query("SELECT 1 FROM project_members WHERE project_id = ? AND subject = ?").get(project.id, subject),
+    db
+      .query("SELECT 1 FROM project_members WHERE project_id = ? AND subject = ?")
+      .get(project.id, subject),
   );
 }
 
 export function projectAccess(db: Database, projectId: string, subject: string): ProjectAccess {
-  const project = db.query("SELECT * FROM projects WHERE id = ?").get(projectId) as ProjectRow | null;
+  const project = db
+    .query("SELECT * FROM projects WHERE id = ?")
+    .get(projectId) as ProjectRow | null;
   if (!project) throw notFound("project");
   const role = workspaceRole(db, project.workspace_id, subject);
   if (!role || !canSeeProject(db, project, subject, role)) throw notFound("project");
@@ -58,7 +67,9 @@ export interface TaskAccess extends ProjectAccess {
 export function taskAccess(db: Database, taskId: string, subject: string): TaskAccess {
   const task = db.query("SELECT * FROM tasks WHERE id = ?").get(taskId) as TaskRow | null;
   if (!task) throw notFound("task");
-  const project = db.query("SELECT * FROM projects WHERE id = ?").get(task.project_id) as ProjectRow;
+  const project = db
+    .query("SELECT * FROM projects WHERE id = ?")
+    .get(task.project_id) as ProjectRow;
   const role = workspaceRole(db, project.workspace_id, subject);
   if (!role || !canSeeProject(db, project, subject, role)) throw notFound("task");
   return { project, role, task };

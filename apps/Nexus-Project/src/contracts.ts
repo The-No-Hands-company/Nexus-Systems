@@ -23,7 +23,8 @@ export function buildSystemsApiRegistrationPayload(baseUrl: string): SystemsApiR
   return {
     id: "nexus-project",
     name: "Nexus-Project",
-    description: "Project management for solo users and teams: boards, WBS, dependencies and a critical-path schedule",
+    description:
+      "Project management for solo users and teams: boards, WBS, dependencies and a critical-path schedule",
     mode: "orchestrated",
     exposed: true,
     health: "healthy",

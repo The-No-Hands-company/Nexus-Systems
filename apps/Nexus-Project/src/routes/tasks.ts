@@ -39,7 +39,8 @@ const CONSTRAINTS = ["asap", "start_no_earlier_than"] as const;
 /** The version the client last saw, from If-Match. Required on every task write. */
 export function expectedVersion(req: Request): number {
   const header = req.headers.get("if-match");
-  if (header === null) throw new HttpError(428, "version_required", "send If-Match with the task's version");
+  if (header === null)
+    throw new HttpError(428, "version_required", "send If-Match with the task's version");
   const match = /^"?(\d+)"?$/.exec(header.trim());
   if (!match) throw badRequest("If-Match must be the task's version number");
   return Number(match[1]);
@@ -81,7 +82,8 @@ export function registerTaskRoutes(router: Router<Context>): void {
     const status = url.searchParams.get("status");
     if (status !== null) filters.statusId = idValue("status")(status);
     const assignee = url.searchParams.get("assignee");
-    if (assignee !== null) filters.assignee = assignee === "none" ? null : subjectValue("assignee")(assignee);
+    if (assignee !== null)
+      filters.assignee = assignee === "none" ? null : subjectValue("assignee")(assignee);
     const parent = url.searchParams.get("parent");
     if (parent !== null) filters.parent = parent === "root" ? null : idValue("parent")(parent);
     return json({ tasks: tasks.listTasks(db, subject, param(params, "id"), filters) });
@@ -97,7 +99,9 @@ export function registerTaskRoutes(router: Router<Context>): void {
     return json(tasks.createTask(db, subject, param(params, "id"), input), 201);
   });
 
-  router.add("GET", "/tasks/:id", ({ db, subject }, params) => json(tasks.getTask(db, subject, param(params, "id"))));
+  router.add("GET", "/tasks/:id", ({ db, subject }, params) =>
+    json(tasks.getTask(db, subject, param(params, "id"))),
+  );
 
   router.add("PATCH", "/tasks/:id", async ({ db, subject, req }, params) => {
     const version = expectedVersion(req);

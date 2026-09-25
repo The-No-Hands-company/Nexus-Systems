@@ -18,7 +18,9 @@ export function registerWorkspaceRoutes(router: Router<Context>): void {
 
   router.add("PATCH", "/workspaces/:id", async ({ db, subject, req }, params) => {
     const body = object(await readJson(req), ["name"]);
-    return json(workspaces.renameWorkspace(db, subject, param(params, "id"), requiredText(body, "name", 200)));
+    return json(
+      workspaces.renameWorkspace(db, subject, param(params, "id"), requiredText(body, "name", 200)),
+    );
   });
 
   router.add("DELETE", "/workspaces/:id", ({ db, subject }, params) => {

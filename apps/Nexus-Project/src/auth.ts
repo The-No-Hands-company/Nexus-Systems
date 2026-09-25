@@ -52,7 +52,10 @@ export async function resolveCaller(req: Request): Promise<Caller | null> {
 
   const token = req.headers.get(IDENTITY_HEADER);
   if (token) {
-    const result = await verifyIdentityToken(token, { audience: expectedAudience(), jwksUrl: jwksUrl() });
+    const result = await verifyIdentityToken(token, {
+      audience: expectedAudience(),
+      jwksUrl: jwksUrl(),
+    });
     if (result.ok) return { subject: result.claims.sub };
     // Logged for the operator, never returned to whoever sent the token.
     console.warn(`[nexus-project] identity token refused: ${result.reason}`);

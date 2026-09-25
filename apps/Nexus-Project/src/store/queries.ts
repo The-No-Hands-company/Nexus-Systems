@@ -6,12 +6,16 @@ export function hasChildren(db: Database, taskId: string): boolean {
 
 export function hasLinks(db: Database, taskId: string): boolean {
   return Boolean(
-    db.query("SELECT 1 FROM dependencies WHERE predecessor_id = ? OR successor_id = ? LIMIT 1").get(taskId, taskId),
+    db
+      .query("SELECT 1 FROM dependencies WHERE predecessor_id = ? OR successor_id = ? LIMIT 1")
+      .get(taskId, taskId),
   );
 }
 
 export function statusInProject(db: Database, projectId: string, statusId: string): boolean {
-  return Boolean(db.query("SELECT 1 FROM statuses WHERE id = ? AND project_id = ?").get(statusId, projectId));
+  return Boolean(
+    db.query("SELECT 1 FROM statuses WHERE id = ? AND project_id = ?").get(statusId, projectId),
+  );
 }
 
 export function taskKey(projectKey: string, number: number): string {

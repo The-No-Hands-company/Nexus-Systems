@@ -13,13 +13,26 @@ afterAll(() => t.close());
 const member = () => t.as("usr-member");
 
 async function newTask(projectId: string, body: Record<string, unknown> = {}) {
-  const res = await member().call("POST", `/projects/${projectId}/tasks`, { title: "Task", durationDays: 1, ...body });
+  const res = await member().call("POST", `/projects/${projectId}/tasks`, {
+    title: "Task",
+    durationDays: 1,
+    ...body,
+  });
   expect(res.status).toBe(201);
   return res.body as { id: string; key: string };
 }
 
-async function linkTasks(projectId: string, predecessorId: string, successorId: string, extra: Record<string, unknown> = {}) {
-  return member().call("POST", `/projects/${projectId}/dependencies`, { predecessorId, successorId, ...extra });
+async function linkTasks(
+  projectId: string,
+  predecessorId: string,
+  successorId: string,
+  extra: Record<string, unknown> = {},
+) {
+  return member().call("POST", `/projects/${projectId}/dependencies`, {
+    predecessorId,
+    successorId,
+    ...extra,
+  });
 }
 
 async function startOf(taskId: string): Promise<string> {
@@ -33,10 +46,20 @@ describe("dependencies", () => {
     const b = await newTask(project.id);
     const res = await linkTasks(project.id, a.id, b.id);
     expect(res.status).toBe(201);
-    expect(res.body).toMatchObject({ predecessorId: a.id, successorId: b.id, type: "FS", lagDays: 0 });
+    expect(res.body).toMatchObject({
+      predecessorId: a.id,
+      successorId: b.id,
+      type: "FS",
+      lagDays: 0,
+    });
     const list = await t.as("usr-viewer").call("GET", `/projects/${project.id}/dependencies`);
     expect(list.body.dependencies).toHaveLength(1);
-    const viewerTry = await t.as("usr-viewer").call("POST", `/projects/${project.id}/dependencies`, { predecessorId: b.id, successorId: a.id });
+    const viewerTry = await t
+      .as("usr-viewer")
+      .call("POST", `/projects/${project.id}/dependencies`, {
+        predecessorId: b.id,
+        successorId: a.id,
+      });
     expect(viewerTry.status).toBe(403);
   });
 
@@ -60,7 +83,9 @@ describe("dependencies", () => {
     const hidden = await createProject(t.as("usr-admin"), ws, { visibility: "restricted" });
     const a = await newTask(project.id);
     const foreign = await newTask(other.id);
-    const secret = await t.as("usr-admin").call("POST", `/projects/${hidden.id}/tasks`, { title: "Secret" });
+    const secret = await t
+      .as("usr-admin")
+      .call("POST", `/projects/${hidden.id}/tasks`, { title: "Secret" });
     expect((await linkTasks(project.id, a.id, foreign.id)).body.error).toBe("cross_project_link");
     expect((await linkTasks(project.id, a.id, secret.body.id)).status).toBe(404);
   });
@@ -83,7 +108,10 @@ describe("dependencies", () => {
     const a = await newTask(project.id);
     const b = await newTask(project.id);
     await linkTasks(project.id, a.id, b.id);
-    const res = await member().call("POST", `/projects/${project.id}/tasks`, { title: "Child", parentId: a.id });
+    const res = await member().call("POST", `/projects/${project.id}/tasks`, {
+      title: "Child",
+      parentId: a.id,
+    });
     expect(res.body.error).toBe("summary_link");
   });
 
@@ -94,7 +122,9 @@ describe("dependencies", () => {
     expect(await startOf(b.id)).toBe("2026-09-07");
     const link = (await linkTasks(project.id, a.id, b.id)).body;
     expect(await startOf(b.id)).toBe("2026-09-10");
-    expect((await member().call("PATCH", `/dependencies/${link.id}`, { lagDays: 2 })).status).toBe(200);
+    expect((await member().call("PATCH", `/dependencies/${link.id}`, { lagDays: 2 })).status).toBe(
+      200,
+    );
     expect(await startOf(b.id)).toBe("2026-09-14");
     expect((await member().call("DELETE", `/dependencies/${link.id}`)).status).toBe(200);
     expect(await startOf(b.id)).toBe("2026-09-07");
@@ -106,7 +136,9 @@ describe("dependencies", () => {
     const b = await newTask(project.id);
     await linkTasks(project.id, a.id, b.id);
     await member().call("DELETE", `/tasks/${a.id}`);
-    expect((await member().call("GET", `/projects/${project.id}/dependencies`)).body.dependencies).toEqual([]);
+    expect(
+      (await member().call("GET", `/projects/${project.id}/dependencies`)).body.dependencies,
+    ).toEqual([]);
   });
 
   it("validates its input", async () => {
@@ -116,6 +148,9 @@ describe("dependencies", () => {
     expect((await linkTasks(project.id, a.id, b.id, { type: "XX" })).status).toBe(400);
     expect((await linkTasks(project.id, a.id, b.id, { lagDays: 99_999 })).status).toBe(400);
     expect((await linkTasks(project.id, a.id, b.id, { weight: 1 })).status).toBe(400);
-    expect((await member().call("POST", `/projects/${project.id}/dependencies`, { predecessorId: a.id })).status).toBe(400);
+    expect(
+      (await member().call("POST", `/projects/${project.id}/dependencies`, { predecessorId: a.id }))
+        .status,
+    ).toBe(400);
   });
 });

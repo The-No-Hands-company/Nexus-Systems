@@ -23,7 +23,9 @@ export function maskFromWeekdays(days: readonly number[]): number {
 }
 
 export function loadCalendar(db: Database, project: ProjectRow): CalendarSpec {
-  const rows = db.query("SELECT date, working FROM calendar_exceptions WHERE project_id = ? ORDER BY date").all(project.id) as {
+  const rows = db
+    .query("SELECT date, working FROM calendar_exceptions WHERE project_id = ? ORDER BY date")
+    .all(project.id) as {
     date: string;
     working: number;
   }[];
@@ -54,7 +56,9 @@ export function firstWorkingDay(calendar: WorkingCalendar, date: string): string
 
 export function loadScheduleInput(db: Database, project: ProjectRow): ScheduleInput {
   const tasks = db
-    .query("SELECT t.*, s.category FROM tasks t JOIN statuses s ON s.id = t.status_id WHERE t.project_id = ? ORDER BY t.number")
+    .query(
+      "SELECT t.*, s.category FROM tasks t JOIN statuses s ON s.id = t.status_id WHERE t.project_id = ? ORDER BY t.number",
+    )
     .all(project.id) as (TaskRow & { category: StatusCategory })[];
   const links = db
     .query("SELECT * FROM dependencies WHERE project_id = ? ORDER BY created_at, id")
@@ -97,15 +101,21 @@ export function computeSchedule(db: Database, project: ProjectRow): ScheduleResu
  * Manual mode: nothing moves; violations are reported when the schedule is read.
  */
 export function reschedule(db: Database, projectId: string, subject: string): void {
-  const project = db.query("SELECT * FROM projects WHERE id = ?").get(projectId) as ProjectRow | null;
+  const project = db
+    .query("SELECT * FROM projects WHERE id = ?")
+    .get(projectId) as ProjectRow | null;
   if (!project || project.schedule_mode !== "auto") return;
   const result = computeSchedule(db, project);
   const current = new Map(
-    (db.query("SELECT id, start_date, finish_date FROM tasks WHERE project_id = ?").all(projectId) as {
-      id: string;
-      start_date: string | null;
-      finish_date: string | null;
-    }[]).map((row) => [row.id, row]),
+    (
+      db
+        .query("SELECT id, start_date, finish_date FROM tasks WHERE project_id = ?")
+        .all(projectId) as {
+        id: string;
+        start_date: string | null;
+        finish_date: string | null;
+      }[]
+    ).map((row) => [row.id, row]),
   );
   const update = db.query(
     "UPDATE tasks SET start_date = ?, finish_date = ?, version = version + 1, updated_at = ?, updated_by = ? WHERE id = ?",
@@ -113,7 +123,8 @@ export function reschedule(db: Database, projectId: string, subject: string): vo
   const at = now();
   for (const task of result.tasks) {
     const row = current.get(task.id);
-    if (!row || (row.start_date === task.earlyStart && row.finish_date === task.earlyFinish)) continue;
+    if (!row || (row.start_date === task.earlyStart && row.finish_date === task.earlyFinish))
+      continue;
     update.run(task.earlyStart, task.earlyFinish, at, subject, task.id);
   }
 }
@@ -122,8 +133,15 @@ export function reschedule(db: Database, projectId: string, subject: string): vo
 export function refreshDerivedFinishes(db: Database, project: ProjectRow, subject: string): void {
   const calendar = projectCalendar(db, project);
   const rows = db
-    .query("SELECT id, start_date, finish_date, duration_days FROM tasks WHERE project_id = ? AND start_date IS NOT NULL AND duration_days IS NOT NULL")
-    .all(project.id) as { id: string; start_date: string; finish_date: string | null; duration_days: number }[];
+    .query(
+      "SELECT id, start_date, finish_date, duration_days FROM tasks WHERE project_id = ? AND start_date IS NOT NULL AND duration_days IS NOT NULL",
+    )
+    .all(project.id) as {
+    id: string;
+    start_date: string;
+    finish_date: string | null;
+    duration_days: number;
+  }[];
   const update = db.query(
     "UPDATE tasks SET start_date = ?, finish_date = ?, version = version + 1, updated_at = ?, updated_by = ? WHERE id = ?",
   );
@@ -131,6 +149,7 @@ export function refreshDerivedFinishes(db: Database, project: ProjectRow, subjec
   for (const row of rows) {
     const start = firstWorkingDay(calendar, row.start_date);
     const finish = finishFor(calendar, start, row.duration_days);
-    if (start !== row.start_date || finish !== row.finish_date) update.run(start, finish, at, subject, row.id);
+    if (start !== row.start_date || finish !== row.finish_date)
+      update.run(start, finish, at, subject, row.id);
   }
 }

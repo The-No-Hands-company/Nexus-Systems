@@ -53,7 +53,8 @@ export function dateValue(key: string): Parse<string> {
     } catch {
       throw badRequest(`${key} must be a real YYYY-MM-DD date`);
     }
-    if (value < "2000-01-01" || value > "2199-12-31") throw badRequest(`${key} must be between 2000 and 2199`);
+    if (value < "2000-01-01" || value > "2199-12-31")
+      throw badRequest(`${key} must be between 2000 and 2199`);
     return value;
   };
 }
@@ -87,7 +88,8 @@ const SUBJECT = /^[A-Za-z0-9._:@-]{1,200}$/;
 
 export function subjectValue(key: string): Parse<string> {
   return (value) => {
-    if (typeof value !== "string" || !SUBJECT.test(value)) throw badRequest(`${key} must be a Nexus subject`);
+    if (typeof value !== "string" || !SUBJECT.test(value))
+      throw badRequest(`${key} must be a Nexus subject`);
     return value;
   };
 }

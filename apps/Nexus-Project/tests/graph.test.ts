@@ -7,7 +7,8 @@ function hasCycleBruteForce(nodes: string[], edges: Edge[]): boolean {
   const index = new Map(nodes.map((n, i) => [n, i]));
   const n = nodes.length;
   const reach = Array.from({ length: n }, () => new Array<boolean>(n).fill(false));
-  for (const e of edges) (reach[index.get(e.from) as number] as boolean[])[index.get(e.to) as number] = true;
+  for (const e of edges)
+    (reach[index.get(e.from) as number] as boolean[])[index.get(e.to) as number] = true;
   for (let k = 0; k < n; k++)
     for (let i = 0; i < n; i++)
       for (let j = 0; j < n; j++)
@@ -29,11 +30,14 @@ function randomGraph(next: () => number): { nodes: string[]; edges: Edge[] } {
 
 describe("graph", () => {
   it("orders every edge's source before its target", () => {
-    const order = topologicalOrder(["a", "b", "c", "d"], [
-      { from: "c", to: "b" },
-      { from: "b", to: "a" },
-      { from: "d", to: "a" },
-    ]);
+    const order = topologicalOrder(
+      ["a", "b", "c", "d"],
+      [
+        { from: "c", to: "b" },
+        { from: "b", to: "a" },
+        { from: "d", to: "a" },
+      ],
+    );
     const at = (id: string) => order.indexOf(id);
     expect(order).toHaveLength(4);
     expect(at("c") < at("b") && at("b") < at("a") && at("d") < at("a")).toBe(true);

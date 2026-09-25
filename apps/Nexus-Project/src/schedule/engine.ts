@@ -149,7 +149,9 @@ export function schedule(input: ScheduleInput): ScheduleResult {
     }
   }
 
-  const ids = [...nodes.values()].sort((a, b) => a.task.number - b.task.number).map((n) => n.task.id);
+  const ids = [...nodes.values()]
+    .sort((a, b) => a.task.number - b.task.number)
+    .map((n) => n.task.id);
   const order = topologicalOrder(ids, edges);
   const node = (id: string) => nodes.get(id) as Node;
 
@@ -193,12 +195,14 @@ export function schedule(input: ScheduleInput): ScheduleResult {
     current.ls = lf - current.duration;
   }
 
-  const finishDate = (start: number, end: number) => (end > start ? dateAt(end - 1) : dateAt(start));
+  const finishDate = (start: number, end: number) =>
+    end > start ? dateAt(end - 1) : dateAt(start);
   const tasks: TaskSchedule[] = ids.map((id) => {
     const current = node(id);
     const totalFloat = current.ls - current.es;
     let freeFloat = (projectFinish as number) - current.ef;
-    if (current.deadlineCap !== null) freeFloat = Math.min(freeFloat, current.deadlineCap - current.ef);
+    if (current.deadlineCap !== null)
+      freeFloat = Math.min(freeFloat, current.deadlineCap - current.ef);
     for (const link of outgoing.get(id) ?? []) {
       freeFloat = Math.min(freeFloat, linkSlack(link, current, node(link.successorId)));
     }
@@ -216,11 +220,16 @@ export function schedule(input: ScheduleInput): ScheduleResult {
 
   const criticalPath = tasks
     .filter((t) => t.critical)
-    .sort((a, b) => node(a.id).es - node(b.id).es || node(a.id).task.number - node(b.id).task.number)
+    .sort(
+      (a, b) => node(a.id).es - node(b.id).es || node(a.id).task.number - node(b.id).task.number,
+    )
     .map((t) => t.id);
 
   return {
-    projectFinish: tasks.reduce<string | null>((max, t) => (max === null || t.earlyFinish > max ? t.earlyFinish : max), null),
+    projectFinish: tasks.reduce<string | null>(
+      (max, t) => (max === null || t.earlyFinish > max ? t.earlyFinish : max),
+      null,
+    ),
     tasks,
     summaries: rollUp(input.tasks, childrenOf, nodes, new Map(tasks.map((t) => [t.id, t]))),
     criticalPath,
@@ -246,8 +255,10 @@ function rollUp(
       for (const child of children) {
         if (child.state === "canceled" && !childrenOf.has(child.id)) continue;
         const part = aggregate(child);
-        if (part.start !== null && (result.start === null || part.start < result.start)) result.start = part.start;
-        if (part.finish !== null && (result.finish === null || part.finish > result.finish)) result.finish = part.finish;
+        if (part.start !== null && (result.start === null || part.start < result.start))
+          result.start = part.start;
+        if (part.finish !== null && (result.finish === null || part.finish > result.finish))
+          result.finish = part.finish;
         result.weight += part.weight;
         result.weighted += part.weighted;
         result.count += part.count;
@@ -276,8 +287,18 @@ function rollUp(
   for (const task of all) {
     if (!childrenOf.has(task.id)) continue;
     const total = aggregate(task);
-    const progress = total.weight > 0 ? total.weighted / total.weight : total.count > 0 ? total.sum / total.count : 0;
-    summaries.push({ id: task.id, start: total.start, finish: total.finish, progress: Math.round(progress) });
+    const progress =
+      total.weight > 0
+        ? total.weighted / total.weight
+        : total.count > 0
+          ? total.sum / total.count
+          : 0;
+    summaries.push({
+      id: task.id,
+      start: total.start,
+      finish: total.finish,
+      progress: Math.round(progress),
+    });
   }
   return summaries;
 }

@@ -14,15 +14,18 @@ function parseCalendar(value: unknown): calendars.ProjectCalendar {
     throw badRequest("workingWeekdays must list at least one day (0 = Sunday … 6 = Saturday)");
   }
   const workingWeekdays = body.workingWeekdays.map(WEEKDAY);
-  if (new Set(workingWeekdays).size !== workingWeekdays.length) throw badRequest("workingWeekdays must not repeat a day");
+  if (new Set(workingWeekdays).size !== workingWeekdays.length)
+    throw badRequest("workingWeekdays must not repeat a day");
   const rawExceptions = body.exceptions ?? [];
-  if (!Array.isArray(rawExceptions) || rawExceptions.length > 1000) throw badRequest("exceptions must be a list of at most 1000 dates");
+  if (!Array.isArray(rawExceptions) || rawExceptions.length > 1000)
+    throw badRequest("exceptions must be a list of at most 1000 dates");
   const exceptions = rawExceptions.map((raw) => {
     const entry = object(raw, ["date", "working"]);
     if (entry.working === undefined) throw badRequest("each exception needs date and working");
     return { date: DATE(entry.date), working: WORKING(entry.working) };
   });
-  if (new Set(exceptions.map((e) => e.date)).size !== exceptions.length) throw badRequest("exception dates must be unique");
+  if (new Set(exceptions.map((e) => e.date)).size !== exceptions.length)
+    throw badRequest("exception dates must be unique");
   return { workingWeekdays: [...workingWeekdays].sort((a, b) => a - b), exceptions };
 }
 
@@ -32,6 +35,8 @@ export function registerCalendarRoutes(router: Router<Context>): void {
   );
 
   router.add("PUT", "/projects/:id/calendar", async ({ db, subject, req }, params) =>
-    json(calendars.setCalendar(db, subject, param(params, "id"), parseCalendar(await readJson(req)))),
+    json(
+      calendars.setCalendar(db, subject, param(params, "id"), parseCalendar(await readJson(req))),
+    ),
   );
 }

@@ -12,6 +12,7 @@ import { registerStatusRoutes } from "./routes/statuses";
 import { registerTaskRoutes } from "./routes/tasks";
 import { registerDependencyRoutes } from "./routes/dependencies";
 import { registerCalendarRoutes } from "./routes/calendars";
+import { registerScheduleRoutes } from "./routes/schedule";
 
 export const API_PREFIX = "/api/v1/project";
 
@@ -30,6 +31,7 @@ const ROUTE_MODULES: ((router: Router<Context>) => void)[] = [
   registerTaskRoutes,
   registerDependencyRoutes,
   registerCalendarRoutes,
+  registerScheduleRoutes,
 ];
 
 export async function createServer() {
@@ -52,25 +54,41 @@ export async function createServer() {
 
       // Public: liveness and capabilities only. Neither reads project data.
       if (req.method === "GET" && path === "/health") {
-        return json({ service: "nexus-project", status: "ok", uptimeSeconds: Math.floor((Date.now() - startedAt) / 1000) });
+        return json({
+          service: "nexus-project",
+          status: "ok",
+          uptimeSeconds: Math.floor((Date.now() - startedAt) / 1000),
+        });
       }
       if (req.method === "GET" && path === "/api/v1/status") {
-        return json({ service: "nexus-project", status: "ready", capabilities: ["projects", "tasks", "scheduling"] });
+        return json({
+          service: "nexus-project",
+          status: "ready",
+          capabilities: ["projects", "tasks", "scheduling"],
+        });
       }
-      if (path !== API_PREFIX && !path.startsWith(`${API_PREFIX}/`)) return errorResponse(notFound());
+      if (path !== API_PREFIX && !path.startsWith(`${API_PREFIX}/`))
+        return errorResponse(notFound());
 
       // Identity before routing: an anonymous caller learns nothing, not even
       // which paths exist.
       const caller = await resolveCaller(req);
-      if (!caller) return errorResponse(new HttpError(401, "not_authenticated", "sign in to use Nexus Project"));
+      if (!caller)
+        return errorResponse(
+          new HttpError(401, "not_authenticated", "sign in to use Nexus Project"),
+        );
 
       try {
         const match = router.match(req.method, path.slice(API_PREFIX.length));
         if (!match) throw notFound();
         if ("allowed" in match) {
-          return json({ error: "method_not_allowed", message: `use ${match.allowed.join(", ")}` }, 405, {
-            allow: match.allowed.join(", "),
-          });
+          return json(
+            { error: "method_not_allowed", message: `use ${match.allowed.join(", ")}` },
+            405,
+            {
+              allow: match.allowed.join(", "),
+            },
+          );
         }
         return await match.handler({ req, url, db, subject: caller.subject }, match.params);
       } catch (error) {

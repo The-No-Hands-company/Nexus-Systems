@@ -22,17 +22,40 @@ let db: Database;
 let project: ProjectRow;
 
 function statusId(category: string): string {
-  return (db.query("SELECT id FROM statuses WHERE project_id = ? AND category = ?").get(project.id, category) as { id: string }).id;
+  return (
+    db
+      .query("SELECT id FROM statuses WHERE project_id = ? AND category = ?")
+      .get(project.id, category) as { id: string }
+  ).id;
 }
 
-function insertTask(number: number, fields: { duration?: number | null; start?: string | null; parent?: string | null; category?: string }): string {
+function insertTask(
+  number: number,
+  fields: {
+    duration?: number | null;
+    start?: string | null;
+    parent?: string | null;
+    category?: string;
+  },
+): string {
   const id = randomUUID();
   db.query(
     `INSERT INTO tasks (id, project_id, number, parent_id, rank, title, status_id, duration_days, start_date,
        created_at, updated_at, created_by, updated_by)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'x', 'x', ?, ?)`,
-  ).run(id, project.id, number, fields.parent ?? null, `r${number}`, `Task ${number}`, statusId(fields.category ?? "unstarted"),
-    fields.duration === undefined ? 1 : fields.duration, fields.start ?? null, OWNER, OWNER);
+  ).run(
+    id,
+    project.id,
+    number,
+    fields.parent ?? null,
+    `r${number}`,
+    `Task ${number}`,
+    statusId(fields.category ?? "unstarted"),
+    fields.duration === undefined ? 1 : fields.duration,
+    fields.start ?? null,
+    OWNER,
+    OWNER,
+  );
   return id;
 }
 
@@ -89,7 +112,11 @@ describe("store to engine", () => {
     insertTask(2, { parent, category: "completed", start: "2026-09-07" });
     insertTask(3, { category: "canceled" });
     const input = loadScheduleInput(db, project);
-    expect(input).toMatchObject({ projectStart: "2026-09-07", mode: "manual", calendar: { workingWeekdays: [1, 2, 3, 4, 5], exceptions: [] } });
+    expect(input).toMatchObject({
+      projectStart: "2026-09-07",
+      mode: "manual",
+      calendar: { workingWeekdays: [1, 2, 3, 4, 5], exceptions: [] },
+    });
     expect(input.tasks.map((t) => [t.key, t.state, t.parentId === parent])).toEqual([
       ["WEB-1", "open", false],
       ["WEB-2", "completed", true],

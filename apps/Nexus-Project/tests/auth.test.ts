@@ -14,7 +14,9 @@ afterEach(() => {
 describe("resolveCaller", () => {
   it("accepts Dashboard's subject when the deployment secret accompanies it", async () => {
     process.env.NEXUS_PROJECT_DASHBOARD_SECRET = SECRET;
-    const caller = await resolveCaller(request({ "x-nexus-subject": "usr-alice", "x-nexus-dashboard-secret": SECRET }));
+    const caller = await resolveCaller(
+      request({ "x-nexus-subject": "usr-alice", "x-nexus-dashboard-secret": SECRET }),
+    );
     expect(caller).toEqual({ subject: "usr-alice" });
   });
 
@@ -26,12 +28,20 @@ describe("resolveCaller", () => {
   it("refuses a wrong secret, including one of a different length", async () => {
     process.env.NEXUS_PROJECT_DASHBOARD_SECRET = SECRET;
     for (const wrong of ["auth-test-hop-secreX", "short", `${SECRET}-longer`]) {
-      expect(await resolveCaller(request({ "x-nexus-subject": "usr-alice", "x-nexus-dashboard-secret": wrong }))).toBeNull();
+      expect(
+        await resolveCaller(
+          request({ "x-nexus-subject": "usr-alice", "x-nexus-dashboard-secret": wrong }),
+        ),
+      ).toBeNull();
     }
   });
 
   it("refuses the hop entirely when no secret is configured", async () => {
-    expect(await resolveCaller(request({ "x-nexus-subject": "usr-alice", "x-nexus-dashboard-secret": "" }))).toBeNull();
+    expect(
+      await resolveCaller(
+        request({ "x-nexus-subject": "usr-alice", "x-nexus-dashboard-secret": "" }),
+      ),
+    ).toBeNull();
   });
 
   it("refuses the right secret without a subject", async () => {

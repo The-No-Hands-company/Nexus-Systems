@@ -15,7 +15,8 @@ export function registerDependencyRoutes(router: Router<Context>): void {
     const body = object(await readJson(req), ["predecessorId", "successorId", "type", "lagDays"]);
     const predecessorId = field(body, "predecessorId", idValue("predecessorId"));
     const successorId = field(body, "successorId", idValue("successorId"));
-    if (predecessorId === undefined || successorId === undefined) throw badRequest("predecessorId and successorId are required");
+    if (predecessorId === undefined || successorId === undefined)
+      throw badRequest("predecessorId and successorId are required");
     const input: dependencies.DependencyInput = {
       predecessorId,
       successorId,

@@ -14,7 +14,13 @@ function randomProject(seed: number, size: number, linkCount: number): ScheduleI
   if (weekdays.length === 0) weekdays.push(3);
   const tasks: ScheduleTask[] = Array.from({ length: size }, (_, i) => {
     const milestone = next() < 0.1;
-    return task(`t${i}`, i + 1, milestone ? { kind: "milestone", durationDays: null } : { durationDays: randomInt(next, 1, 8) });
+    return task(
+      `t${i}`,
+      i + 1,
+      milestone
+        ? { kind: "milestone", durationDays: null }
+        : { durationDays: randomInt(next, 1, 8) },
+    );
   });
   const links: ScheduleLink[] = [];
   const seen = new Set<string>();
@@ -33,26 +39,43 @@ function randomProject(seed: number, size: number, linkCount: number): ScheduleI
     });
   }
   const exceptions = Array.from({ length: randomInt(next, 0, 4) }, () => ({
-    date: new Date((toDay(MONDAY) + randomInt(next, 0, 60)) * 86_400_000).toISOString().slice(0, 10),
+    date: new Date((toDay(MONDAY) + randomInt(next, 0, 60)) * 86_400_000)
+      .toISOString()
+      .slice(0, 10),
     working: false,
   }));
-  return { projectStart: MONDAY, mode: "auto", calendar: { workingWeekdays: weekdays, exceptions }, tasks, links };
+  return {
+    projectStart: MONDAY,
+    mode: "auto",
+    calendar: { workingWeekdays: weekdays, exceptions },
+    tasks,
+    links,
+  };
 }
 
 function positions(input: ScheduleInput) {
   const calendar = new WorkingCalendar(input.calendar);
   const result = schedule(input);
-  const duration = new Map(input.tasks.map((t) => [t.id, t.kind === "milestone" ? 0 : (t.durationDays as number)]));
+  const duration = new Map(
+    input.tasks.map((t) => [t.id, t.kind === "milestone" ? 0 : (t.durationDays as number)]),
+  );
   const at = new Map(
     result.tasks.map((t) => {
       const es = calendar.indexOf(toDay(t.earlyStart));
-      return [t.id, { es, ef: es + (duration.get(t.id) as number), tf: t.totalFloat, critical: t.critical }];
+      return [
+        t.id,
+        { es, ef: es + (duration.get(t.id) as number), tf: t.totalFloat, critical: t.critical },
+      ];
     }),
   );
   return { result, at, start: calendar.indexOf(toDay(input.projectStart)) };
 }
 
-function required(link: ScheduleLink, pred: { es: number; ef: number }, successorDuration: number): number {
+function required(
+  link: ScheduleLink,
+  pred: { es: number; ef: number },
+  successorDuration: number,
+): number {
   const base = link.type === "FS" || link.type === "FF" ? pred.ef : pred.es;
   const shift = link.type === "FF" || link.type === "SF" ? successorDuration : 0;
   return base + link.lagDays - shift;

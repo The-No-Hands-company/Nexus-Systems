@@ -48,12 +48,17 @@ export async function startTestServer() {
       body: body === undefined ? null : JSON.stringify(body),
     });
     const text = await response.text();
-    return { status: response.status, body: text ? JSON.parse(text) : null, headers: response.headers };
+    return {
+      status: response.status,
+      body: text ? JSON.parse(text) : null,
+      headers: response.headers,
+    };
   }
 
   /** A client authenticated as `subject`; paths are relative to /api/v1/project. */
   const as = (subject: string): Client => ({
-    call: (method, path, body, headers) => send(subject, method, `/api/v1/project${path}`, body, headers),
+    call: (method, path, body, headers) =>
+      send(subject, method, `/api/v1/project${path}`, body, headers),
   });
 
   return { handle, base, as, raw: send, close: () => handle.close() };

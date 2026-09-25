@@ -1,4 +1,11 @@
-import type { LinkType, ScheduleInput, ScheduleLink, ScheduleResult, ScheduleTask, TaskSchedule } from "../../src/schedule/types";
+import type {
+  LinkType,
+  ScheduleInput,
+  ScheduleLink,
+  ScheduleResult,
+  ScheduleTask,
+  TaskSchedule,
+} from "../../src/schedule/types";
 
 export const WEEKDAYS = { workingWeekdays: [1, 2, 3, 4, 5], exceptions: [] };
 /** 2026-09-07 is a Monday. */
@@ -22,11 +29,21 @@ export function task(id: string, number: number, fields: Partial<ScheduleTask> =
   };
 }
 
-export function link(id: string, predecessorId: string, successorId: string, type: LinkType = "FS", lagDays = 0): ScheduleLink {
+export function link(
+  id: string,
+  predecessorId: string,
+  successorId: string,
+  type: LinkType = "FS",
+  lagDays = 0,
+): ScheduleLink {
   return { id, predecessorId, successorId, type, lagDays };
 }
 
-export function input(tasks: ScheduleTask[], links: ScheduleLink[] = [], overrides: Partial<ScheduleInput> = {}): ScheduleInput {
+export function input(
+  tasks: ScheduleTask[],
+  links: ScheduleLink[] = [],
+  overrides: Partial<ScheduleInput> = {},
+): ScheduleInput {
   return { projectStart: MONDAY, mode: "auto", calendar: WEEKDAYS, tasks, links, ...overrides };
 }
 

@@ -19,7 +19,14 @@ describe("day numbers", () => {
   });
 
   it("rejects strings that are not real dates", () => {
-    for (const bad of ["2026-02-30", "2026-13-01", "2026-9-7", "20260907", "", "2026-09-07T00:00"]) {
+    for (const bad of [
+      "2026-02-30",
+      "2026-13-01",
+      "2026-9-7",
+      "20260907",
+      "",
+      "2026-09-07T00:00",
+    ]) {
       expect(() => toDay(bad)).toThrow(RangeError);
     }
   });
@@ -66,7 +73,10 @@ describe("WorkingCalendar", () => {
   });
 
   it("ignores an exception that matches the weekday rule", () => {
-    const same = new WorkingCalendar({ workingWeekdays: [1, 2, 3, 4, 5], exceptions: [{ date: "2026-09-13", working: false }] });
+    const same = new WorkingCalendar({
+      workingWeekdays: [1, 2, 3, 4, 5],
+      exceptions: [{ date: "2026-09-13", working: false }],
+    });
     expect(same.indexOf(monday + 14)).toBe(cal.indexOf(monday + 14));
   });
 

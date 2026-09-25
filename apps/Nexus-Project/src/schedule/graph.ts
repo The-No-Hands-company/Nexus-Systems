@@ -14,7 +14,8 @@ function adjacency(nodes: readonly string[], edges: readonly Edge[]): Map<string
   for (const node of nodes) out.set(node, []);
   for (const edge of edges) {
     const targets = out.get(edge.from);
-    if (!targets || !out.has(edge.to)) throw new Error(`edge references unknown node: ${edge.from} -> ${edge.to}`);
+    if (!targets || !out.has(edge.to))
+      throw new Error(`edge references unknown node: ${edge.from} -> ${edge.to}`);
     targets.push(edge.to);
   }
   return out;
