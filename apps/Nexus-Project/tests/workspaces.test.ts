@@ -1,4 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
+import type { Workspace } from "../src/store/workspaces";
+import { must } from "./support/fixtures";
 import { startTestServer } from "./support/server";
 
 let t: Awaited<ReturnType<typeof startTestServer>>;
@@ -31,8 +33,8 @@ async function team(name = "Studio"): Promise<string> {
 
 describe("personal workspace", () => {
   it("is created once, on first use, with the caller as its only owner", async () => {
-    const first = await t.as("usr-solo").call("GET", "/workspaces");
-    const second = await t.as("usr-solo").call("GET", "/workspaces");
+    const first = await t.as("usr-solo").call<{ workspaces: Workspace[] }>("GET", "/workspaces");
+    const second = await t.as("usr-solo").call<{ workspaces: Workspace[] }>("GET", "/workspaces");
     expect(first.status).toBe(200);
     expect(first.body.workspaces).toEqual(second.body.workspaces);
     expect(first.body.workspaces).toHaveLength(1);
@@ -43,12 +45,16 @@ describe("personal workspace", () => {
     });
     const members = await t
       .as("usr-solo")
-      .call("GET", `/workspaces/${first.body.workspaces[0].id}/members`);
+      .call<{ members: { subject: string }[] }>(
+        "GET",
+        `/workspaces/${must(first.body.workspaces[0]).id}/members`,
+      );
     expect(members.body.members.map((m: { subject: string }) => m.subject)).toEqual(["usr-solo"]);
   });
 
   it("cannot gain members or be deleted", async () => {
-    const id = (await t.as("usr-solo").call("GET", "/workspaces")).body.workspaces[0].id;
+    const id = (await t.as("usr-solo").call<{ workspaces: Workspace[] }>("GET", "/workspaces")).body
+      .workspaces[0]?.id;
     const add = await t
       .as("usr-solo")
       .call("PUT", `/workspaces/${id}/members/usr-friend`, { role: "member" });
@@ -63,8 +69,9 @@ describe("personal workspace", () => {
 describe("team workspace", () => {
   it("lists the personal workspace first and the team with the caller's role", async () => {
     const id = await team("Alpha");
-    const list = (await member().call("GET", "/workspaces")).body.workspaces;
-    expect(list[0].kind).toBe("personal");
+    const list = (await member().call<{ workspaces: Workspace[] }>("GET", "/workspaces")).body
+      .workspaces;
+    expect(list[0]?.kind).toBe("personal");
     expect(list.find((w: { id: string }) => w.id === id)).toMatchObject({
       name: "Alpha",
       kind: "team",
@@ -74,7 +81,14 @@ describe("team workspace", () => {
 
   it("hides itself from non-members", async () => {
     const id = await team();
-    expect((await stranger().call("GET", `/workspaces/${id}/members`)).status).toBe(404);
+    expect(
+      (
+        await stranger().call<{ members: { subject: string }[] }>(
+          "GET",
+          `/workspaces/${id}/members`,
+        )
+      ).status,
+    ).toBe(404);
     expect((await stranger().call("PATCH", `/workspaces/${id}`, { name: "Mine" })).status).toBe(
       404,
     );
@@ -129,14 +143,20 @@ describe("team workspace", () => {
     expect((await viewer().call("DELETE", `/workspaces/${id}/members/usr-viewer`)).status).toBe(
       200,
     );
-    expect((await viewer().call("GET", `/workspaces/${id}/members`)).status).toBe(404);
+    expect(
+      (await viewer().call<{ members: { subject: string }[] }>("GET", `/workspaces/${id}/members`))
+        .status,
+    ).toBe(404);
   });
 
   it("can only be deleted by an owner", async () => {
     const id = await team();
     expect((await admin().call("DELETE", `/workspaces/${id}`)).status).toBe(403);
     expect((await owner().call("DELETE", `/workspaces/${id}`)).status).toBe(200);
-    expect((await owner().call("GET", `/workspaces/${id}/members`)).status).toBe(404);
+    expect(
+      (await owner().call<{ members: { subject: string }[] }>("GET", `/workspaces/${id}/members`))
+        .status,
+    ).toBe(404);
   });
 
   it("validates its input", async () => {

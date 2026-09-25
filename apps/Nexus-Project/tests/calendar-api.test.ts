@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
+import type { Task } from "../src/store/tasks";
 import { createProject, teamWithRoles } from "./support/fixtures";
 import { startTestServer } from "./support/server";
 
@@ -25,7 +26,7 @@ describe("project calendar", () => {
   it("is changed by admins only and re-derives finish dates", async () => {
     const project = await createProject(t.as("usr-member"), ws);
     const task = (
-      await t.as("usr-member").call("POST", `/projects/${project.id}/tasks`, {
+      await t.as("usr-member").call<Task>("POST", `/projects/${project.id}/tasks`, {
         title: "A",
         startDate: "2026-09-07",
         durationDays: 3,
@@ -50,7 +51,7 @@ describe("project calendar", () => {
         },
       ],
     });
-    const after = (await t.as("usr-member").call("GET", `/tasks/${task.id}`)).body;
+    const after = (await t.as("usr-member").call<Task>("GET", `/tasks/${task.id}`)).body;
     expect(after).toMatchObject({
       finishDate: "2026-09-10",
       durationDays: 3,
@@ -61,18 +62,18 @@ describe("project calendar", () => {
   it("reschedules an auto project", async () => {
     const project = await createProject(t.as("usr-member"), ws, { scheduleMode: "auto" });
     const post = (body: Record<string, unknown>) =>
-      t.as("usr-member").call("POST", `/projects/${project.id}/tasks`, body);
+      t.as("usr-member").call<Task>("POST", `/projects/${project.id}/tasks`, body);
     const a = (await post({ title: "A", durationDays: 3 })).body;
     const b = (await post({ title: "B", durationDays: 1 })).body;
     await t.as("usr-member").call("POST", `/projects/${project.id}/dependencies`, {
       predecessorId: a.id,
       successorId: b.id,
     });
-    expect((await t.as("usr-member").call("GET", `/tasks/${b.id}`)).body.startDate).toBe(
+    expect((await t.as("usr-member").call<Task>("GET", `/tasks/${b.id}`)).body.startDate).toBe(
       "2026-09-10",
     );
     await t.as("usr-admin").call("PUT", `/projects/${project.id}/calendar`, HOLIDAY);
-    expect((await t.as("usr-member").call("GET", `/tasks/${b.id}`)).body.startDate).toBe(
+    expect((await t.as("usr-member").call<Task>("GET", `/tasks/${b.id}`)).body.startDate).toBe(
       "2026-09-11",
     );
   });

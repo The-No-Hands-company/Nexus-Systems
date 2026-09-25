@@ -1,5 +1,11 @@
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
-import { createProject, teamWithRoles } from "./support/fixtures";
+import type { ScheduleResult } from "../src/schedule/types";
+import type { Dependency } from "../src/store/dependencies";
+import type { AssignedTask } from "../src/store/me";
+import type { RescheduledTask, WithRescheduled } from "../src/store/scheduling";
+import type { Status } from "../src/store/statuses";
+import type { Task } from "../src/store/tasks";
+import { createProject, must, teamWithRoles } from "./support/fixtures";
 import { startTestServer } from "./support/server";
 
 let t: Awaited<ReturnType<typeof startTestServer>>;
@@ -12,7 +18,11 @@ afterAll(() => t.close());
 
 const member = () => t.as("usr-member");
 const post = async (projectId: string, body: Record<string, unknown>) => {
-  const res = await member().call("POST", `/projects/${projectId}/tasks`, body);
+  const res = await member().call<WithRescheduled<Task>>(
+    "POST",
+    `/projects/${projectId}/tasks`,
+    body,
+  );
   expect(res.status).toBe(201);
   return res.body;
 };
@@ -35,19 +45,21 @@ describe("GET /projects/:id/schedule", () => {
     });
     const u = await post(project.id, { title: "Unestimated" });
     const ab = (
-      await member().call("POST", `/projects/${project.id}/dependencies`, {
+      await member().call<Dependency>("POST", `/projects/${project.id}/dependencies`, {
         predecessorId: a.id,
         successorId: b.id,
       })
     ).body;
     const bu = (
-      await member().call("POST", `/projects/${project.id}/dependencies`, {
+      await member().call<Dependency>("POST", `/projects/${project.id}/dependencies`, {
         predecessorId: b.id,
         successorId: u.id,
       })
     ).body;
 
-    const res = await t.as("usr-viewer").call("GET", `/projects/${project.id}/schedule`);
+    const res = await t
+      .as("usr-viewer")
+      .call<ScheduleResult>("GET", `/projects/${project.id}/schedule`);
     expect(res.status).toBe(200);
     expect(res.body.projectFinish).toBe("2026-09-11");
     expect(res.body.criticalPath).toEqual([a.id, b.id]);
@@ -61,13 +73,14 @@ describe("GET /projects/:id/schedule", () => {
       { code: "link_ignored", linkId: bu.id, taskId: u.id, reason: "unestimated" },
     ]);
     // Manual mode reports; it does not move the stored date.
-    expect((await member().call("GET", `/tasks/${b.id}`)).body.startDate).toBe("2026-09-08");
+    expect((await member().call<Task>("GET", `/tasks/${b.id}`)).body.startDate).toBe("2026-09-08");
   });
 
   it("is hidden from strangers", async () => {
     const project = await createProject(member(), ws);
     expect(
-      (await t.as("usr-stranger").call("GET", `/projects/${project.id}/schedule`)).status,
+      (await t.as("usr-stranger").call<ScheduleResult>("GET", `/projects/${project.id}/schedule`))
+        .status,
     ).toBe(404);
   });
 });
@@ -81,8 +94,10 @@ describe("GET /me/tasks", () => {
       key: "HID",
       visibility: "restricted",
     });
-    const statuses = (await member().call("GET", `/projects/${one.id}/statuses`)).body.statuses;
-    const done = statuses.find((s: { name: string }) => s.name === "Done").id;
+    const statuses = (
+      await member().call<{ statuses: Status[] }>("GET", `/projects/${one.id}/statuses`)
+    ).body.statuses;
+    const done = must(statuses.find((s: { name: string }) => s.name === "Done")).id;
 
     await post(one.id, { title: "Later", assigneeSubject: "usr-member", deadline: "2026-10-01" });
     await post(two.id, { title: "Sooner", assigneeSubject: "usr-member", deadline: "2026-09-15" });
@@ -96,7 +111,7 @@ describe("GET /me/tasks", () => {
       assigneeSubject: "usr-member",
     });
 
-    const res = await member().call("GET", "/me/tasks");
+    const res = await member().call<{ tasks: AssignedTask[] }>("GET", "/me/tasks");
     expect(res.status).toBe(200);
     expect(
       res.body.tasks.map((task: { title: string; projectKey: string }) => [
@@ -112,22 +127,22 @@ describe("GET /me/tasks", () => {
 });
 
 describe("summary tasks carry their roll-up", () => {
-  const get = async (id: string) => (await member().call("GET", `/tasks/${id}`)).body;
+  const get = async (id: string) => (await member().call<Task>("GET", `/tasks/${id}`)).body;
   const patchTask = async (id: string, body: Record<string, unknown>) => {
     const current = await get(id);
-    const res = await member().call("PATCH", `/tasks/${id}`, body, {
+    const res = await member().call<WithRescheduled<Task>>("PATCH", `/tasks/${id}`, body, {
       "if-match": String(current.version),
     });
     expect(res.status).toBe(200);
     return res.body;
   };
   const rollUp = async (projectId: string, id: string) =>
-    (await member().call("GET", `/projects/${projectId}/schedule`)).body.summaries.find(
-      (s: { id: string }) => s.id === id,
-    );
+    (
+      await member().call<ScheduleResult>("GET", `/projects/${projectId}/schedule`)
+    ).body.summaries.find((s: { id: string }) => s.id === id);
   const expectMatchesRollUp = async (projectId: string, id: string) => {
     const summary = await get(id);
-    const expected = await rollUp(projectId, id);
+    const expected = must(await rollUp(projectId, id));
     expect({
       start: summary.startDate,
       finish: summary.finishDate,
@@ -231,7 +246,7 @@ describe("a summary that loses its last child", () => {
       { "if-match": String(child.version) },
     );
     expect(res.status).toBe(200);
-    const leaf = (await member().call("GET", `/tasks/${phase.id}`)).body;
+    const leaf = (await member().call<Task>("GET", `/tasks/${phase.id}`)).body;
     expect(leaf).toMatchObject({ startDate: null, finishDate: null, durationDays: null });
     expect(res.body.rescheduled).toEqual([
       { id: phase.id, version: leaf.version, startDate: null, finishDate: null, progress: 0 },
@@ -244,7 +259,7 @@ describe("a summary that loses its last child", () => {
       durationDays: 1,
     });
     const removed = await member().call("DELETE", `/tasks/${again.id}`);
-    const emptied = (await member().call("GET", `/tasks/${phase.id}`)).body;
+    const emptied = (await member().call<Task>("GET", `/tasks/${phase.id}`)).body;
     expect(emptied).toMatchObject({ startDate: null, finishDate: null });
     expect(removed.body.rescheduled).toEqual([
       { id: phase.id, version: emptied.version, startDate: null, finishDate: null, progress: 0 },
@@ -257,23 +272,24 @@ describe("writes report the other tasks they moved", () => {
     const project = await createProject(member(), ws, { scheduleMode: "auto" });
     const a = await post(project.id, { title: "A", durationDays: 2 });
     const b = await post(project.id, { title: "B", durationDays: 1 });
-    const link = await member().call("POST", `/projects/${project.id}/dependencies`, {
-      predecessorId: a.id,
-      successorId: b.id,
-    });
+    const link = await member().call<WithRescheduled<Dependency>>(
+      "POST",
+      `/projects/${project.id}/dependencies`,
+      { predecessorId: a.id, successorId: b.id },
+    );
     expect(link.status).toBe(201);
-    const pushed = link.body.rescheduled.find((row: { id: string }) => row.id === b.id);
+    const pushed = link.body.rescheduled.find((row) => row.id === b.id);
     expect(pushed).toMatchObject({ startDate: "2026-09-09", finishDate: "2026-09-09" });
 
-    const current = (await member().call("GET", `/tasks/${a.id}`)).body;
-    const res = await member().call(
+    const current = (await member().call<Task>("GET", `/tasks/${a.id}`)).body;
+    const res = await member().call<WithRescheduled<Task>>(
       "PATCH",
       `/tasks/${a.id}`,
       { durationDays: 4 },
       { "if-match": String(current.version) },
     );
     expect(res.status).toBe(200);
-    const moved = (await member().call("GET", `/tasks/${b.id}`)).body;
+    const moved = (await member().call<Task>("GET", `/tasks/${b.id}`)).body;
     expect(res.body.rescheduled).toEqual([
       {
         id: b.id,
@@ -287,7 +303,7 @@ describe("writes report the other tasks they moved", () => {
       "PATCH",
       `/tasks/${b.id}`,
       { title: "B renamed" },
-      { "if-match": String(res.body.rescheduled[0].version) },
+      { "if-match": String(must(res.body.rescheduled[0]).version) },
     );
     expect(follow.status).toBe(200);
     expect(follow.body.rescheduled).toEqual([]);
@@ -309,7 +325,7 @@ describe("writes report the other tasks they moved", () => {
       { "if-match": String(child.version) },
     );
     expect(res.status).toBe(200);
-    const summary = (await member().call("GET", `/tasks/${phase.id}`)).body;
+    const summary = (await member().call<Task>("GET", `/tasks/${phase.id}`)).body;
     expect(res.body.rescheduled).toEqual([
       {
         id: phase.id,
@@ -326,7 +342,11 @@ describe("writes report the other tasks they moved", () => {
     const project = await createProject(admin, ws);
     const a = await post(project.id, { title: "A", durationDays: 1 });
     const b = await post(project.id, { title: "B", durationDays: 1 });
-    const created = await member().call("POST", `/projects/${project.id}/tasks`, { title: "C" });
+    const created = await member().call<WithRescheduled<Task>>(
+      "POST",
+      `/projects/${project.id}/tasks`,
+      { title: "C" },
+    );
     expect(created.body.rescheduled).toEqual([]);
     const link = await member().call("POST", `/projects/${project.id}/dependencies`, {
       predecessorId: a.id,
@@ -346,19 +366,26 @@ describe("writes report the other tasks they moved", () => {
     expect(
       (await admin.call("PATCH", `/projects/${project.id}`, { name: "Renamed" })).body.rescheduled,
     ).toEqual([]);
-    const statuses = (await admin.call("GET", `/projects/${project.id}/statuses`)).body.statuses;
-    const todo = statuses.find((s: { name: string }) => s.name === "Todo").id;
-    const backlog = statuses.find((s: { name: string }) => s.name === "Backlog").id;
+    const statuses = (
+      await admin.call<{ statuses: Status[] }>("GET", `/projects/${project.id}/statuses`)
+    ).body.statuses;
+    const todo = must(statuses.find((s: { name: string }) => s.name === "Todo")).id;
+    const backlog = must(statuses.find((s: { name: string }) => s.name === "Backlog")).id;
     expect(
       (await admin.call("PATCH", `/statuses/${todo}`, { name: "To do" })).body.rescheduled,
     ).toEqual([]);
     // Every task in the deleted status got a new status and a new version.
-    const removed = (await admin.call("DELETE", `/statuses/${todo}?moveTasksTo=${backlog}`)).body;
+    const removed = (
+      await admin.call<{ deleted: boolean; rescheduled: RescheduledTask[] }>(
+        "DELETE",
+        `/statuses/${todo}?moveTasksTo=${backlog}`,
+      )
+    ).body;
     expect(removed.deleted).toBe(true);
-    expect(removed.rescheduled.map((row: { id: string }) => row.id).sort()).toEqual(
+    expect(removed.rescheduled.map((row) => row.id).sort()).toEqual(
       [a.id, b.id, created.body.id].sort(),
     );
-    const current = (await member().call("GET", `/tasks/${a.id}`)).body;
+    const current = (await member().call<Task>("GET", `/tasks/${a.id}`)).body;
     expect(
       (
         await member().call(

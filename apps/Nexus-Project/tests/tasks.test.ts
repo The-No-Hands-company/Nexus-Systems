@@ -1,5 +1,8 @@
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
-import { createProject, teamWithRoles } from "./support/fixtures";
+import type { WithRescheduled } from "../src/store/scheduling";
+import type { Status } from "../src/store/statuses";
+import type { Task } from "../src/store/tasks";
+import { createProject, must, teamWithRoles } from "./support/fixtures";
 import { type Client, startTestServer } from "./support/server";
 
 let t: Awaited<ReturnType<typeof startTestServer>>;
@@ -13,17 +16,28 @@ afterAll(() => t.close());
 const member = () => t.as("usr-member");
 
 async function newTask(client: Client, projectId: string, body: Record<string, unknown> = {}) {
-  const res = await client.call("POST", `/projects/${projectId}/tasks`, { title: "Task", ...body });
+  const res = await client.call<WithRescheduled<Task>>("POST", `/projects/${projectId}/tasks`, {
+    title: "Task",
+    ...body,
+  });
   expect(res.status).toBe(201);
   return res.body;
 }
 
 async function patch(id: string, version: number, body: Record<string, unknown>) {
-  return member().call("PATCH", `/tasks/${id}`, body, { "if-match": String(version) });
+  // A refusal carries { error, message } and, on a version conflict, the current task.
+  return member().call<WithRescheduled<Task> & { error?: string; task?: Task }>(
+    "PATCH",
+    `/tasks/${id}`,
+    body,
+    {
+      "if-match": String(version),
+    },
+  );
 }
 
 async function titles(projectId: string, query = "") {
-  const res = await member().call("GET", `/projects/${projectId}/tasks${query}`);
+  const res = await member().call<{ tasks: Task[] }>("GET", `/projects/${projectId}/tasks${query}`);
   return res.body.tasks.map((task: { title: string }) => task.title);
 }
 
@@ -32,7 +46,9 @@ describe("creating tasks", () => {
     const project = await createProject(member(), ws, { key: "APP" });
     const first = await newTask(member(), project.id, { title: "First" });
     const second = await newTask(member(), project.id, { title: "Second" });
-    const statuses = (await member().call("GET", `/projects/${project.id}/statuses`)).body.statuses;
+    const statuses = (
+      await member().call<{ statuses: Status[] }>("GET", `/projects/${project.id}/statuses`)
+    ).body.statuses;
     expect(first).toMatchObject({
       key: "APP-1",
       number: 1,
@@ -42,7 +58,7 @@ describe("creating tasks", () => {
       createdBy: "usr-member",
     });
     expect(second.key).toBe("APP-2");
-    expect(first.statusId).toBe(statuses.find((s: { name: string }) => s.name === "Todo").id);
+    expect(first.statusId).toBe(must(statuses.find((s: { name: string }) => s.name === "Todo")).id);
     expect(second.rank > first.rank).toBe(true);
   });
 
@@ -52,9 +68,10 @@ describe("creating tasks", () => {
       (await t.as("usr-viewer").call("POST", `/projects/${project.id}/tasks`, { title: "x" }))
         .status,
     ).toBe(403);
-    expect((await t.as("usr-stranger").call("GET", `/projects/${project.id}/tasks`)).status).toBe(
-      404,
-    );
+    expect(
+      (await t.as("usr-stranger").call<{ tasks: Task[] }>("GET", `/projects/${project.id}/tasks`))
+        .status,
+    ).toBe(404);
   });
 
   it("validates its input", async () => {
@@ -65,8 +82,10 @@ describe("creating tasks", () => {
     expect((await post({ title: "x", color: "red" })).status).toBe(400);
     expect((await post({ title: "x", progress: 101 })).status).toBe(400);
     const other = await createProject(member(), ws);
-    const foreignStatus = (await member().call("GET", `/projects/${other.id}/statuses`)).body
-      .statuses[0].id;
+    const foreignStatus = must(
+      (await member().call<{ statuses: Status[] }>("GET", `/projects/${other.id}/statuses`)).body
+        .statuses[0],
+    ).id;
     expect((await post({ title: "x", statusId: foreignStatus })).status).toBe(400);
     const outsider = await post({ title: "x", assigneeSubject: "usr-stranger" });
     expect(outsider.status).toBe(422);
@@ -171,7 +190,7 @@ describe("work breakdown structure", () => {
     const child = await newTask(member(), project.id, { title: "Child", parentId: phase.id });
     // Becoming a summary is a write to the parent: its version moved, and the
     // child's response says so.
-    const promoted = child.rescheduled.find((row: { id: string }) => row.id === phase.id);
+    const promoted = must(child.rescheduled.find((row) => row.id === phase.id));
     expect(promoted.version).toBeGreaterThan(phase.version);
     const res = await patch(phase.id, promoted.version, { durationDays: 2 });
     expect(res.status).toBe(422);
@@ -195,7 +214,7 @@ describe("work breakdown structure", () => {
       title: "Grandchild",
       parentId: child.id,
     });
-    const current = (await member().call("GET", `/tasks/${parent.id}`)).body;
+    const current = (await member().call<Task>("GET", `/tasks/${parent.id}`)).body;
     const cycle = await member().call(
       "POST",
       `/tasks/${parent.id}/move`,
@@ -210,7 +229,7 @@ describe("work breakdown structure", () => {
     const parent = await newTask(member(), project.id, { title: "Parent" });
     const child = await newTask(member(), project.id, { title: "Child", parentId: parent.id });
     expect((await member().call("DELETE", `/tasks/${parent.id}`)).status).toBe(200);
-    expect((await member().call("GET", `/tasks/${child.id}`)).status).toBe(404);
+    expect((await member().call<Task>("GET", `/tasks/${child.id}`)).status).toBe(404);
   });
 });
 
@@ -232,8 +251,10 @@ describe("versions", () => {
 describe("listing and moving", () => {
   it("filters by status, assignee and parent", async () => {
     const project = await createProject(member(), ws);
-    const statuses = (await member().call("GET", `/projects/${project.id}/statuses`)).body.statuses;
-    const doing = statuses.find((s: { name: string }) => s.name === "In Progress").id;
+    const statuses = (
+      await member().call<{ statuses: Status[] }>("GET", `/projects/${project.id}/statuses`)
+    ).body.statuses;
+    const doing = must(statuses.find((s: { name: string }) => s.name === "In Progress")).id;
     const parent = await newTask(member(), project.id, { title: "Parent" });
     await newTask(member(), project.id, {
       title: "Mine",
@@ -254,7 +275,7 @@ describe("listing and moving", () => {
     const b = await newTask(member(), project.id, { title: "B" });
     const c = await newTask(member(), project.id, { title: "C" });
     const move = async (id: string, body: Record<string, unknown>) => {
-      const current = (await member().call("GET", `/tasks/${id}`)).body;
+      const current = (await member().call<Task>("GET", `/tasks/${id}`)).body;
       return member().call("POST", `/tasks/${id}/move`, body, {
         "if-match": String(current.version),
       });
@@ -264,8 +285,8 @@ describe("listing and moving", () => {
     await move(c.id, { afterId: a.id });
     expect(await titles(project.id)).toEqual(["A", "C", "B"]);
     const done = (
-      await member().call("GET", `/projects/${project.id}/statuses`)
-    ).body.statuses.find((s: { name: string }) => s.name === "Done").id;
+      await member().call<{ statuses: Status[] }>("GET", `/projects/${project.id}/statuses`)
+    ).body.statuses.find((s: { name: string }) => s.name === "Done")?.id as string;
     const moved = await move(b.id, { parentId: a.id, statusId: done });
     expect(moved.body).toMatchObject({ parentId: a.id, statusId: done });
     expect((await move(b.id, { afterId: b.id })).body.error).toBe("invalid_after");
@@ -277,12 +298,13 @@ describe("listing and moving", () => {
     for (let i = 0; i < 60; i++)
       created.push(await newTask(member(), project.id, { title: `T${i}` }));
     const longest = async () => {
-      const all = (await member().call("GET", `/projects/${project.id}/tasks`)).body.tasks;
+      const all = (await member().call<{ tasks: Task[] }>("GET", `/projects/${project.id}/tasks`))
+        .body.tasks;
       return Math.max(...all.map((task: { rank: string }) => task.rank.length));
     };
     expect(await longest()).toBeLessThanOrEqual(4);
     const move = async (id: string, body: Record<string, unknown>) => {
-      const current = (await member().call("GET", `/tasks/${id}`)).body;
+      const current = (await member().call<Task>("GET", `/tasks/${id}`)).body;
       const res = await member().call("POST", `/tasks/${id}/move`, body, {
         "if-match": String(current.version),
       });
@@ -291,12 +313,14 @@ describe("listing and moving", () => {
     };
     // Repeatedly move the last task to the top, then the first task to the end.
     for (let i = 0; i < 30; i++) {
-      const all = (await member().call("GET", `/projects/${project.id}/tasks`)).body.tasks;
-      await move(all[all.length - 1].id, { afterId: null });
+      const all = (await member().call<{ tasks: Task[] }>("GET", `/projects/${project.id}/tasks`))
+        .body.tasks;
+      await move(must(all[all.length - 1]).id, { afterId: null });
     }
     for (let i = 0; i < 30; i++) {
-      const all = (await member().call("GET", `/projects/${project.id}/tasks`)).body.tasks;
-      await move(all[0].id, { afterId: all[all.length - 1].id });
+      const all = (await member().call<{ tasks: Task[] }>("GET", `/projects/${project.id}/tasks`))
+        .body.tasks;
+      await move(must(all[0]).id, { afterId: must(all[all.length - 1]).id });
     }
     expect(await longest()).toBeLessThanOrEqual(4);
     expect(created.length).toBe(60);
@@ -304,16 +328,18 @@ describe("listing and moving", () => {
 
   it("deleting a status in use needs somewhere to put its tasks", async () => {
     const project = await createProject(member(), ws);
-    const statuses = (await member().call("GET", `/projects/${project.id}/statuses`)).body.statuses;
-    const todo = statuses.find((s: { name: string }) => s.name === "Todo").id;
-    const backlog = statuses.find((s: { name: string }) => s.name === "Backlog").id;
+    const statuses = (
+      await member().call<{ statuses: Status[] }>("GET", `/projects/${project.id}/statuses`)
+    ).body.statuses;
+    const todo = must(statuses.find((s: { name: string }) => s.name === "Todo")).id;
+    const backlog = must(statuses.find((s: { name: string }) => s.name === "Backlog")).id;
     const task = await newTask(member(), project.id);
     const refused = await t.as("usr-admin").call("DELETE", `/statuses/${todo}`);
     expect(refused.body.error).toBe("status_in_use");
     expect(
       (await t.as("usr-admin").call("DELETE", `/statuses/${todo}?moveTasksTo=${backlog}`)).status,
     ).toBe(200);
-    const after = (await member().call("GET", `/tasks/${task.id}`)).body;
+    const after = (await member().call<Task>("GET", `/tasks/${task.id}`)).body;
     expect(after).toMatchObject({ statusId: backlog, version: task.version + 1 });
   });
 });
@@ -346,18 +372,16 @@ describe("assignees must be able to see the project", () => {
     const team = await teamWithRoles(t, "Removal");
     const project = await createProject(t.as("usr-owner"), team);
     const task = (
-      await t
-        .as("usr-owner")
-        .call("POST", `/projects/${project.id}/tasks`, {
-          title: "x",
-          assigneeSubject: "usr-member",
-        })
+      await t.as("usr-owner").call<Task>("POST", `/projects/${project.id}/tasks`, {
+        title: "x",
+        assigneeSubject: "usr-member",
+      })
     ).body;
     const removed = await t
       .as("usr-owner")
       .call("DELETE", `/workspaces/${team}/members/usr-member`);
     expect(removed.status).toBe(200);
-    const after = (await t.as("usr-owner").call("GET", `/tasks/${task.id}`)).body;
+    const after = (await t.as("usr-owner").call<Task>("GET", `/tasks/${task.id}`)).body;
     expect(after).toMatchObject({ assigneeSubject: null, version: task.version + 1 });
   });
 });

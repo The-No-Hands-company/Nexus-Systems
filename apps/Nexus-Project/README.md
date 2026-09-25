@@ -23,7 +23,7 @@ frontend can run the same code for instant previews.
 ```bash
 npm install --no-audit --no-fund   # not bun install: it hangs in this monorepo
 bun run src/index.ts               # 127.0.0.1:3152
-bash check.sh                      # typecheck + every test file must run
+bash check.sh                      # typecheck + biome + every test file must run
 ```
 
 | Variable | Default | Purpose |

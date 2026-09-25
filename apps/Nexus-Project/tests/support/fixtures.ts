@@ -1,4 +1,5 @@
 import { expect } from "bun:test";
+import type { Project } from "../../src/store/projects";
 import type { Client, startTestServer } from "./server";
 
 type Server = Awaited<ReturnType<typeof startTestServer>>;
@@ -21,6 +22,12 @@ export async function teamWithRoles(t: Server, name = "Studio"): Promise<string>
   return id;
 }
 
+/** A value the test knows is present; a clear failure instead of a TypeError if not. */
+export function must<T>(value: T | null | undefined, what = "value"): T {
+  if (value === null || value === undefined) throw new Error(`expected ${what} to be present`);
+  return value;
+}
+
 let keyCounter = 0;
 
 /** Creates a project and returns its body. Keys are unique per call. */
@@ -30,7 +37,7 @@ export async function createProject(
   overrides: Record<string, unknown> = {},
 ) {
   keyCounter += 1;
-  const res = await client.call("POST", `/workspaces/${workspaceId}/projects`, {
+  const res = await client.call<Project>("POST", `/workspaces/${workspaceId}/projects`, {
     key: `P${keyCounter}`,
     name: `Project ${keyCounter}`,
     startDate: "2026-09-07",

@@ -141,7 +141,7 @@ export function listProjects(
   const role = workspaceAccess(db, workspaceId, subject);
   const rows = db
     .query(
-      `SELECT * FROM projects WHERE workspace_id = ? AND (? = 1 OR archived = 0) ORDER BY name COLLATE NOCASE, id`,
+      "SELECT * FROM projects WHERE workspace_id = ? AND (? = 1 OR archived = 0) ORDER BY name COLLATE NOCASE, id",
     )
     .all(workspaceId, includeArchived ? 1 : 0) as ProjectRow[];
   return rows

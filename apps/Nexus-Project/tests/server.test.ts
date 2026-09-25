@@ -1,4 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
+import type { AssignedTask } from "../src/store/me";
+import type { Workspace } from "../src/store/workspaces";
 import { startTestServer } from "./support/server";
 
 describe("nexus-project server", () => {
@@ -53,7 +55,9 @@ describe("nexus-project server", () => {
       .call("POST", "/workspaces", { name: "x".repeat(2 * 1024 * 1024) });
     expect(res.status).toBe(413);
     expect((await t.raw(null, "GET", "/health")).status).toBe(200);
-    expect((await t.as("usr-alice").call("GET", "/workspaces")).status).toBe(200);
+    expect(
+      (await t.as("usr-alice").call<{ workspaces: Workspace[] }>("GET", "/workspaces")).status,
+    ).toBe(200);
   });
 
   it("creates the caller's personal workspace on their first request of any kind", async () => {
@@ -62,7 +66,9 @@ describe("nexus-project server", () => {
         .query("SELECT kind FROM workspaces WHERE personal_subject = ?")
         .get("usr-first-contact");
     expect(personal()).toBeNull();
-    expect((await t.as("usr-first-contact").call("GET", "/me/tasks")).status).toBe(200);
+    expect(
+      (await t.as("usr-first-contact").call<{ tasks: AssignedTask[] }>("GET", "/me/tasks")).status,
+    ).toBe(200);
     expect(personal()).toEqual({ kind: "personal" });
   });
 });

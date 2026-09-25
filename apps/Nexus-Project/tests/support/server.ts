@@ -5,14 +5,17 @@ mock.module("../../src/cloud", () => ({ startHeartbeat: () => () => {} }));
 
 export const TEST_SECRET = "project-test-hop-secret"; // pragma: allowlist secret
 
-export interface ApiResponse<T = any> {
+/** A decoded JSON body before a test says what shape it expects. */
+export type Body = Record<string, unknown>;
+
+export interface ApiResponse<T = Body> {
   status: number;
   body: T;
   headers: Headers;
 }
 
 export interface Client {
-  call<T = any>(
+  call<T = Body>(
     method: string,
     path: string,
     body?: unknown,
@@ -29,13 +32,13 @@ export async function startTestServer() {
   const handle = await createServer();
   const base = `http://127.0.0.1:${handle.server.port}`;
 
-  async function send(
+  async function send<T = Body>(
     subject: string | null,
     method: string,
     path: string,
     body?: unknown,
     headers: Record<string, string> = {},
-  ): Promise<ApiResponse> {
+  ): Promise<ApiResponse<T>> {
     const all: Record<string, string> = { ...headers };
     if (subject !== null) {
       all["x-nexus-subject"] = subject;
@@ -50,15 +53,15 @@ export async function startTestServer() {
     const text = await response.text();
     return {
       status: response.status,
-      body: text ? JSON.parse(text) : null,
+      body: (text ? JSON.parse(text) : null) as T,
       headers: response.headers,
     };
   }
 
   /** A client authenticated as `subject`; paths are relative to /api/v1/project. */
   const as = (subject: string): Client => ({
-    call: (method, path, body, headers) =>
-      send(subject, method, `/api/v1/project${path}`, body, headers),
+    call: <T>(method: string, path: string, body?: unknown, headers?: Record<string, string>) =>
+      send<T>(subject, method, `/api/v1/project${path}`, body, headers),
   });
 
   return { handle, base, as, raw: send, close: () => handle.close() };

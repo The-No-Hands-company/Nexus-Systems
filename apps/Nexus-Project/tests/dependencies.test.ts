@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
+import type { Task } from "../src/store/tasks";
 import { createProject, teamWithRoles } from "./support/fixtures";
 import { startTestServer } from "./support/server";
 
@@ -35,8 +36,8 @@ async function linkTasks(
   });
 }
 
-async function startOf(taskId: string): Promise<string> {
-  return (await member().call("GET", `/tasks/${taskId}`)).body.startDate;
+async function startOf(taskId: string): Promise<string | null> {
+  return (await member().call<Task>("GET", `/tasks/${taskId}`)).body.startDate;
 }
 
 describe("dependencies", () => {
@@ -85,7 +86,7 @@ describe("dependencies", () => {
     const foreign = await newTask(other.id);
     const secret = await t
       .as("usr-admin")
-      .call("POST", `/projects/${hidden.id}/tasks`, { title: "Secret" });
+      .call<Task>("POST", `/projects/${hidden.id}/tasks`, { title: "Secret" });
     expect((await linkTasks(project.id, a.id, foreign.id)).body.error).toBe("cross_project_link");
     expect((await linkTasks(project.id, a.id, secret.body.id)).status).toBe(404);
   });

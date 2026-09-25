@@ -1,4 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
+import type { Project } from "../src/store/projects";
+import type { Status } from "../src/store/statuses";
+import type { Workspace } from "../src/store/workspaces";
 import { createProject, teamWithRoles } from "./support/fixtures";
 import { startTestServer } from "./support/server";
 
@@ -21,7 +24,9 @@ describe("projects", () => {
       archived: false,
       role: "member",
     });
-    const statuses = await t.as("usr-viewer").call("GET", `/projects/${project.id}/statuses`);
+    const statuses = await t
+      .as("usr-viewer")
+      .call<{ statuses: Status[] }>("GET", `/projects/${project.id}/statuses`);
     expect(statuses.status).toBe(200);
     expect(statuses.body.statuses.map((s: { category: string }) => s.category)).toEqual([
       "backlog",
@@ -47,13 +52,11 @@ describe("projects", () => {
     const ws = await teamWithRoles(t);
     const other = await teamWithRoles(t, "Other");
     await createProject(t.as("usr-owner"), ws, { key: "OPS" });
-    const dup = await t
-      .as("usr-owner")
-      .call("POST", `/workspaces/${ws}/projects`, {
-        key: "OPS",
-        name: "x",
-        startDate: "2026-09-07",
-      });
+    const dup = await t.as("usr-owner").call("POST", `/workspaces/${ws}/projects`, {
+      key: "OPS",
+      name: "x",
+      startDate: "2026-09-07",
+    });
     expect(dup.status).toBe(409);
     expect(dup.body.error).toBe("key_taken");
     await createProject(t.as("usr-owner"), other, { key: "OPS" });
@@ -74,7 +77,9 @@ describe("projects", () => {
     expect((await t.as("usr-member").call("GET", `/projects/${secret.id}`)).status).toBe(200);
     expect((await t.as("usr-admin").call("GET", `/projects/${secret.id}`)).status).toBe(200);
     expect((await t.as("usr-viewer").call("GET", `/projects/${secret.id}`)).status).toBe(404);
-    const listed = await t.as("usr-viewer").call("GET", `/workspaces/${ws}/projects`);
+    const listed = await t
+      .as("usr-viewer")
+      .call<{ projects: Project[] }>("GET", `/workspaces/${ws}/projects`);
     expect(listed.body.projects.some((p: { id: string }) => p.id === secret.id)).toBe(false);
 
     expect(
@@ -114,9 +119,13 @@ describe("projects", () => {
       startDate: "2026-10-01",
       archived: true,
     });
-    const active = await t.as("usr-member").call("GET", `/workspaces/${ws}/projects`);
+    const active = await t
+      .as("usr-member")
+      .call<{ projects: Project[] }>("GET", `/workspaces/${ws}/projects`);
     expect(active.body.projects.some((p: { id: string }) => p.id === project.id)).toBe(false);
-    const all = await t.as("usr-member").call("GET", `/workspaces/${ws}/projects?archived=true`);
+    const all = await t
+      .as("usr-member")
+      .call<{ projects: Project[] }>("GET", `/workspaces/${ws}/projects?archived=true`);
     expect(all.body.projects.some((p: { id: string }) => p.id === project.id)).toBe(true);
   });
 
@@ -131,7 +140,9 @@ describe("projects", () => {
         .status,
     ).toBe(403);
     // A workspace the caller is not in does not exist, as far as they can tell.
-    const elsewhere = (await t.as("usr-stranger").call("GET", "/workspaces")).body.workspaces[0].id;
+    const elsewhere = (
+      await t.as("usr-stranger").call<{ workspaces: Workspace[] }>("GET", "/workspaces")
+    ).body.workspaces[0]?.id;
     expect(
       (
         await t
@@ -160,9 +171,9 @@ describe("projects", () => {
     expect(moved.status).toBe(200);
     expect(moved.body.workspaceId).toBe(to);
     expect(
-      (await t.as("usr-viewer").call("GET", `/workspaces/${to}/projects`)).body.projects.map(
-        (p: { key: string }) => p.key,
-      ),
+      (
+        await t.as("usr-viewer").call<{ projects: Project[] }>("GET", `/workspaces/${to}/projects`)
+      ).body.projects.map((p: { key: string }) => p.key),
     ).toContain("SOLO");
   });
 
@@ -176,7 +187,9 @@ describe("projects", () => {
       .as("usr-owner")
       .call("POST", `/projects/${project.id}/move`, { workspaceId: to });
     expect(moved.status).toBe(200);
-    const members = await t.as("usr-owner").call("GET", `/projects/${project.id}/members`);
+    const members = await t
+      .as("usr-owner")
+      .call<{ members: { subject: string }[] }>("GET", `/projects/${project.id}/members`);
     expect(members.body.members.map((m: { subject: string }) => m.subject)).toEqual(["usr-owner"]);
   });
 

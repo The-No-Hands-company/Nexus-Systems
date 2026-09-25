@@ -4,6 +4,8 @@ set -euo pipefail
 cd "$(dirname "$0")"
 echo "nexus-project..."
 ./node_modules/.bin/tsc --noEmit
+# Lint and formatting, before the tests so a style error fails fast.
+./node_modules/.bin/biome check src tests
 # A green total only covers files that imported. Compare the number of test
 # files bun actually ran with the number on disk, so a file that fails to load
 # cannot hide behind a passing count.

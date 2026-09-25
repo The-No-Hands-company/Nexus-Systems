@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
+import type { Status } from "../src/store/statuses";
 import { createProject, teamWithRoles } from "./support/fixtures";
 import { startTestServer } from "./support/server";
 
@@ -11,8 +12,9 @@ beforeAll(async () => {
 afterAll(() => t.close());
 
 async function statuses(projectId: string) {
-  return (await t.as("usr-viewer").call("GET", `/projects/${projectId}/statuses`)).body
-    .statuses as {
+  return (
+    await t.as("usr-viewer").call<{ statuses: Status[] }>("GET", `/projects/${projectId}/statuses`)
+  ).body.statuses as {
     id: string;
     name: string;
     position: number;
