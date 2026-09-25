@@ -4,6 +4,7 @@ import { canSeeProject, projectAccess, requireRole, workspaceAccess, workspaceRo
 import { conflict, notFound, unprocessable } from "../http";
 import { now, transaction } from "./db";
 import type { ProjectRow, Role, StatusCategory } from "./rows";
+import { reschedule } from "./scheduling";
 
 export interface Project {
   id: string;
@@ -136,6 +137,7 @@ export function updateProject(db: Database, subject: string, id: string, patch: 
       subject,
       id,
     );
+    if (patch.startDate !== undefined || patch.scheduleMode !== undefined) reschedule(db, id, subject);
     return toProject(projectRow(db, id), role);
   });
 }

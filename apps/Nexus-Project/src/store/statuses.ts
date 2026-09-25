@@ -4,6 +4,7 @@ import { type Role, projectAccess, requireRole } from "../access";
 import { badRequest, conflict, notFound, unprocessable } from "../http";
 import { now, transaction } from "./db";
 import type { ProjectRow, StatusCategory, StatusRow } from "./rows";
+import { reschedule } from "./scheduling";
 
 export const STATUS_CATEGORIES: readonly StatusCategory[] = ["backlog", "unstarted", "started", "completed", "canceled"];
 
@@ -94,6 +95,8 @@ export function updateStatus(db: Database, subject: string, statusId: string, pa
       others.splice(patch.position, 0, status.id);
       renumber(db, others);
     }
+    // A category decides whether tasks are open, pinned as completed or left out.
+    if (patch.category !== undefined && patch.category !== status.category) reschedule(db, status.project_id, subject);
     return toStatus(db.query("SELECT * FROM statuses WHERE id = ?").get(status.id) as StatusRow);
   });
 }
@@ -116,6 +119,7 @@ export function deleteStatus(db: Database, subject: string, statusId: string, mo
         subject,
         status.id,
       );
+      reschedule(db, status.project_id, subject);
     }
     db.query("DELETE FROM statuses WHERE id = ?").run(status.id);
     renumber(db, all.map((s) => s.id).filter((id) => id !== status.id));
