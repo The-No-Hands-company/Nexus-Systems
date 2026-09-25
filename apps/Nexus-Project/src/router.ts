@@ -1,5 +1,5 @@
 export type Params = Record<string, string>;
-export type Handler<C> = (ctx: C, params: Params) => Response;
+export type Handler<C> = (ctx: C, params: Params) => Promise<Response> | Response;
 export type Match<C> = { handler: Handler<C>; params: Params } | { allowed: string[] } | null;
 
 interface Route<C> {

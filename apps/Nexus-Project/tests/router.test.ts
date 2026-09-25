@@ -11,7 +11,7 @@ describe("Router", () => {
     const match = router.match("GET", "/tasks/a%20b");
     expect(match && "handler" in match).toBe(true);
     if (!match || !("handler" in match)) return;
-    expect(await match.handler("ctx", match.params).text()).toBe("ctx:a b");
+    expect(await (await match.handler("ctx", match.params)).text()).toBe("ctx:a b");
   });
 
   it("reports the allowed methods when only the method is wrong", () => {
