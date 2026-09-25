@@ -13,6 +13,7 @@
  */
 import { timingSafeEqual } from "node:crypto";
 import { IDENTITY_HEADER, verifyIdentityToken } from "../../../packages/nexus-identity/src/index";
+import { isSubject } from "./validation";
 
 export interface Caller {
   subject: string;
@@ -45,8 +46,9 @@ export async function resolveCaller(req: Request): Promise<Caller | null> {
     const presented = req.headers.get("x-nexus-dashboard-secret");
     if (presented !== null && secretMatches(presented, configured)) {
       const subject = req.headers.get("x-nexus-subject")?.trim();
-      // The right secret with no subject is a Dashboard bug, not a caller.
-      return subject ? { subject } : null;
+      // The right secret with no subject, or with one no Nexus subject could
+      // have, is a Dashboard bug, not a caller.
+      return isSubject(subject) ? { subject } : null;
     }
   }
 

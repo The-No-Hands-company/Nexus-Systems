@@ -7,8 +7,17 @@ function request(headers: Record<string, string>): Request {
   return new Request("http://project.test/api/v1/project/workspaces", { headers });
 }
 
+// Restore every variable a test sets, so nothing leaks into later files.
+const ORIGINAL = {
+  NEXUS_PROJECT_DASHBOARD_SECRET: process.env.NEXUS_PROJECT_DASHBOARD_SECRET,
+  NEXUS_AUTH_INTERNAL_URL: process.env.NEXUS_AUTH_INTERNAL_URL,
+};
+
 afterEach(() => {
-  delete process.env.NEXUS_PROJECT_DASHBOARD_SECRET;
+  for (const [name, value] of Object.entries(ORIGINAL)) {
+    if (value === undefined) Reflect.deleteProperty(process.env, name);
+    else process.env[name] = value;
+  }
 });
 
 describe("resolveCaller", () => {
@@ -47,6 +56,22 @@ describe("resolveCaller", () => {
   it("refuses the right secret without a subject", async () => {
     process.env.NEXUS_PROJECT_DASHBOARD_SECRET = SECRET;
     expect(await resolveCaller(request({ "x-nexus-dashboard-secret": SECRET }))).toBeNull();
+  });
+
+  it("refuses a hop subject that is not a well-formed Nexus subject", async () => {
+    process.env.NEXUS_PROJECT_DASHBOARD_SECRET = SECRET;
+    for (const subject of ["usr alice", "usr-<script>", "x".repeat(201), "usr/../admin"]) {
+      expect(
+        await resolveCaller(
+          request({ "x-nexus-subject": subject, "x-nexus-dashboard-secret": SECRET }),
+        ),
+      ).toBeNull();
+    }
+    expect(
+      await resolveCaller(
+        request({ "x-nexus-subject": "usr-Alice.1:@_x", "x-nexus-dashboard-secret": SECRET }),
+      ),
+    ).toEqual({ subject: "usr-Alice.1:@_x" });
   });
 
   it("refuses an identity token that does not verify", async () => {

@@ -86,10 +86,14 @@ export function boolValue(key: string): Parse<boolean> {
 
 const SUBJECT = /^[A-Za-z0-9._:@-]{1,200}$/;
 
+/** The one shape a Nexus subject may take, wherever it comes from. */
+export function isSubject(value: unknown): value is string {
+  return typeof value === "string" && SUBJECT.test(value);
+}
+
 export function subjectValue(key: string): Parse<string> {
   return (value) => {
-    if (typeof value !== "string" || !SUBJECT.test(value))
-      throw badRequest(`${key} must be a Nexus subject`);
+    if (!isSubject(value)) throw badRequest(`${key} must be a Nexus subject`);
     return value;
   };
 }
