@@ -93,3 +93,29 @@ repeated. Routes: `POST /projects/:id/tasks`, `PATCH /tasks/:id`,
 `PUT /projects/:id/calendar`, `PATCH /projects/:id`, `PATCH` and
 `DELETE /statuses/:id`. Update your copies from it and the next `If-Match`
 will not conflict.
+
+## Behaviour notes
+
+Decisions a client or a reader of the schedule should know about:
+
+- **Project finish follows the milestone display rule.** A milestone is shown
+  on the working day at whose start it occurs, so a project that ends in a
+  milestone driven by a task finishing on Friday reports the following Monday
+  as `projectFinish`.
+- **Manual mode applies a later start-no-earlier-than silently.** If a task's
+  start-no-earlier-than date is later than its stored start, the schedule uses
+  the constraint date and reports no violation; violations are only for links.
+- **A summary's deadline is stored but not scheduled.** Summaries are
+  scheduled by their subtasks; the engine does not cap anything with a
+  summary's own deadline. Put deadlines on leaf tasks or milestones.
+- **Summaries store their roll-up; a task that gains its first subtask loses
+  its own duration and start-no-earlier-than.** A summary that loses its last
+  subtask becomes an unscheduled leaf (no dates) until it is estimated again.
+- **A calendar change re-derives stored dates in both modes.** Every leaf's
+  stored finish is recomputed from its working-day duration, and a stored
+  start that now falls on a non-working day moves to the next working day.
+- **`DELETE /tasks/:id` does not require `If-Match`.** Deletion is not
+  version-checked; it removes the subtree and every link touching it.
+- **Archived projects remain writable.** Archiving hides a project from the
+  default project list and from My tasks; it does not freeze it (a later
+  increment decides whether it should).
