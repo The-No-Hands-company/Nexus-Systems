@@ -6,6 +6,7 @@ import { startHeartbeat } from "./cloud";
 import { HttpError, errorResponse, json, notFound } from "./http";
 import { Router } from "./router";
 import { openDatabase } from "./store/db";
+import { registerWorkspaceRoutes } from "./routes/workspaces";
 
 export const API_PREFIX = "/api/v1/project";
 
@@ -17,7 +18,7 @@ export interface Context {
 }
 
 /** Each later task appends its register function here. */
-const ROUTE_MODULES: ((router: Router<Context>) => void)[] = [];
+const ROUTE_MODULES: ((router: Router<Context>) => void)[] = [registerWorkspaceRoutes];
 
 export async function createServer() {
   const port = Number(process.env.PORT || "3152");
