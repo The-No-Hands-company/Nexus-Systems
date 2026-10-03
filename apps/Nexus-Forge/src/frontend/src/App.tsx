@@ -3,9 +3,8 @@ import TopNav from "./components/TopNav";
 import RepoDetail from "./pages/RepoDetail";
 import RepoList from "./pages/RepoList";
 
-// Only pages backed by real API routes are routed. The ~150 "*Hub" pages in
-// pages/ rendered placeholder data from placeholder routes and are no
-// longer reachable.
+// Only pages backed by real API routes exist. The ~150 placeholder "*Hub"
+// pages were removed on 2026-10-03.
 export default function App() {
   return (
     <BrowserRouter>

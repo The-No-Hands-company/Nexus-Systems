@@ -17,7 +17,7 @@ client can check.
 | **Hardened git invocation** | Repository names from an allowlist; git runs in an environment built from nothing; `fsckObjects`, `denyNonFastForwards`, `denyDeletes` and the hooks path are set on the command line where a repository's own config cannot undo them. |
 
 Not built yet: SSH transport, pull requests, issues, web code browsing,
-federation, SVN/Mercurial/Pijul (the `vcs/` stubs return nothing).
+federation, other VCSes (SVN, Mercurial, Pijul).
 
 ## Quick start
 
@@ -77,10 +77,6 @@ src/backend/
 src/cli/forge.ts       log verify + admin
 tests/                 real git clients against a real server
 ```
-
-`src/backend/api/` and `src/frontend/src/pages/` still hold ~150 placeholder
-modules from the scaffold era. Nothing registers them; they are kept only until
-someone deletes them.
 
 ## Quality gate
 

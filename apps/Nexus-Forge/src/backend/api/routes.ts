@@ -10,7 +10,7 @@ import { RepositoryError, type RepositoryManager } from "../storage/repository";
  *
  * The ~150 placeholder route modules that used to be registered here
  * answered every request with canned success (including a commit-signature
- * "verify" that verified nothing). They are no longer reachable.
+ * "verify" that verified nothing). They were removed on 2026-10-03.
  */
 export interface ApiOptions {
   db: ForgeDB;

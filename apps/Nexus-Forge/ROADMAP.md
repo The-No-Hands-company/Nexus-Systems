@@ -50,7 +50,7 @@ This roadmap tracks what is already implemented in Nexus Forge and what is plann
 - `[ ]` Client-side policy verification on fetch (stop depending on the server to enforce)
 - `[ ]` Sign ref-log entries with a node key
 - `[ ]` Witness ref-log heads on federation peers
-- `[ ]` Delete the quarantined placeholder files
+- `[x]` Delete the quarantined placeholder files (2026-10-03)
 
 ## Sprint L (Federation + AI)
 
