@@ -2,6 +2,14 @@
 /**
  * forge — the Nexus Forge command line.
  *
+ *   forge verify <repo-url> [--trust-root <allowed_signers file>]
+ *       Enforce the push policy on this machine: mirror the repository and
+ *       replay every push in its ref log through the same check the
+ *       server's hook runs, so a server that skipped its own check is
+ *       caught. Pins the trust root and the verified head in
+ *       $XDG_CONFIG_HOME/nexus-forge/verified.json; the mirror lives in
+ *       $XDG_CACHE_HOME/nexus-forge/mirrors/. Uses $NEXUS_FORGE_TOKEN.
+ *
  *   forge log verify <repo-url>
  *       Check a repository's ref log: every hash link, the ref state it
  *       replays to against the refs the server actually serves, and that it
@@ -24,15 +32,28 @@ import { issueToken } from "../backend/auth/tokens";
 import { type Pin, extendsPin, verifyChain } from "../backend/reflog/chain";
 import { type AccessLevel, ForgeDB } from "../backend/storage/db";
 import { RepositoryError, RepositoryManager } from "../backend/storage/repository";
+import { verifyRepository } from "./verify";
 
 class UsageError extends Error {}
 
 async function main(argv: string[]): Promise<number> {
   const [group, command, ...rest] = argv;
+  if (group === "verify") {
+    const args = [command, ...rest].filter((a): a is string => a !== undefined);
+    const url = args.find((a, i) => !a.startsWith("--") && args[i - 1] !== "--trust-root");
+    if (!url) throw new UsageError("usage: forge verify <repo-url> [--trust-root <file>]");
+    const trustRootFile = flag(args, "--trust-root");
+    return verifyRepository(url, {
+      token: process.env.NEXUS_FORGE_TOKEN ?? "",
+      ...(trustRootFile ? { trustRootFile } : {}),
+      configHome: process.env.XDG_CONFIG_HOME || path.join(homedir(), ".config"),
+      cacheHome: process.env.XDG_CACHE_HOME || path.join(homedir(), ".cache"),
+    });
+  }
   if (group === "log" && command === "verify") return logVerify(rest);
   if (group === "admin") return admin(command, rest);
   throw new UsageError(
-    "usage: forge log verify <repo-url> | forge admin <user|token|repo|grant> ...",
+    "usage: forge verify <repo-url> | forge log verify <repo-url> | forge admin <user|token|repo|grant> ...",
   );
 }
 

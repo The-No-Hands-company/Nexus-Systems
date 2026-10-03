@@ -22,6 +22,12 @@ const ZERO_ID = /^0{40}(0{24})?$/;
 
 export interface RefLogEntry {
   seq: number;
+  /**
+   * seq of the first entry written by the same push. A push is checked as
+   * a whole against the state before it, so replaying the policy needs to
+   * know where each push starts and ends.
+   */
+  push: number;
   time: string;
   ref: string;
   old: string;
@@ -34,6 +40,7 @@ export interface RefLogEntry {
 export function entryHash(entry: Omit<RefLogEntry, "hash">): string {
   const canonical = JSON.stringify([
     entry.seq,
+    entry.push,
     entry.time,
     entry.ref,
     entry.old,
@@ -64,6 +71,11 @@ export function verifyChain(text: string): ChainResult {
     if (entry.seq !== index) {
       return { ok: false, error: `entry ${index}: sequence number is ${entry.seq}` };
     }
+    const startsPush = entry.push === index;
+    const continuesPush = index > 0 && entry.push === entries[index - 1]?.push;
+    if (!Number.isInteger(entry.push) || !(startsPush || continuesPush)) {
+      return { ok: false, error: `entry ${index}: push ${entry.push} is not contiguous` };
+    }
     if (entry.prev !== prev) {
       return { ok: false, error: `entry ${index}: does not follow the entry before it` };
     }
@@ -83,6 +95,17 @@ export function verifyChain(text: string): ChainResult {
     prev = entry.hash;
   }
   return { ok: true, entries, head: prev, refs };
+}
+
+/** Entries grouped into the pushes that wrote them, in order. */
+export function groupPushes(entries: RefLogEntry[]): RefLogEntry[][] {
+  const pushes: RefLogEntry[][] = [];
+  for (const entry of entries) {
+    const last = pushes.at(-1);
+    if (last && last[0]?.push === entry.push) last.push(entry);
+    else pushes.push([entry]);
+  }
+  return pushes;
 }
 
 export interface Pin {
@@ -117,10 +140,12 @@ export async function appendEntries(
     if (!chain.ok) throw new Error(`ref log is already broken (${chain.error}); not appending`);
     let prev = chain.head;
     let seq = chain.entries.length;
+    const push = seq;
     const lines: string[] = [];
     for (const update of updates) {
       const body = {
         seq,
+        push,
         time: now.toISOString(),
         ref: update.ref,
         old: update.oldId,

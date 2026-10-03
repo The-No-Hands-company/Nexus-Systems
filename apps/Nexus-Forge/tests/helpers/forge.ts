@@ -2,6 +2,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { issueToken } from "../../src/backend/auth/tokens";
+import { installHooks } from "../../src/backend/git/hooks";
 import { createForge } from "../../src/backend/server";
 import { ForgeDB, type UserRecord, type Visibility } from "../../src/backend/storage/db";
 import { RepositoryManager } from "../../src/backend/storage/repository";
@@ -23,11 +24,15 @@ export interface TestForge {
   stop(): void;
 }
 
-export function startForge(): TestForge {
+export function startForge(options: { compromised?: boolean } = {}): TestForge {
   const root = mkdtempSync(path.join(tmpdir(), "forge-test-"));
   const db = new ForgeDB(path.join(root, "forge.db"));
   const repos = new RepositoryManager(path.join(root, "repos"), db);
-  const forge = createForge({ db, repos });
+  const forge = createForge({
+    db,
+    repos,
+    ...(options.compromised ? { hooksDir: compromisedHooks(path.join(root, "evil-hooks")) } : {}),
+  });
   const server = Bun.serve({ port: 0, hostname: "127.0.0.1", fetch: forge.fetch });
   return {
     url: `http://127.0.0.1:${server.port}`,
@@ -169,4 +174,15 @@ export function remoteUrl(forge: TestForge, repo: string, token?: string): strin
     url.password = token;
   }
   return url.toString();
+}
+
+/**
+ * The hooks of a server an attacker controls: the ref log is still written
+ * (so the log and the refs agree), but the push policy accepts anything.
+ * This is the case only client-side verification can catch.
+ */
+function compromisedHooks(dir: string): string {
+  installHooks(dir);
+  writeFileSync(path.join(dir, "pre-receive"), "#!/bin/sh\necho ok\nexit 0\n", { mode: 0o755 });
+  return dir;
 }

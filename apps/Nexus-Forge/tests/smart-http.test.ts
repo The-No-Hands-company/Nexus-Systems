@@ -104,7 +104,6 @@ describe("bypass attempts", () => {
       "/secret.git/HEAD",
       "/secret.git/config",
       "/secret.git/objects/info/packs",
-      "/secret.git/nexus/trust-root",
       "/open.git/HEAD",
       "/open.git/config",
       "/open.git/info/refs",
@@ -112,6 +111,16 @@ describe("bypass attempts", () => {
       const response = await raw(p, {}, ownerToken);
       expect({ p, status: response.status }).toEqual({ p, status: 404 });
     }
+  });
+
+  it("serves the trust root only to callers who can read the repository", async () => {
+    expect((await raw("/secret.git/nexus/trust-root")).status).toBe(401);
+    expect((await raw("/secret.git/nexus/trust-root", {}, strangerToken)).status).toBe(404);
+    const owned = await raw("/secret.git/nexus/trust-root", {}, ownerToken);
+    expect(owned.status).toBe(200);
+    expect(await owned.text()).toBe(ownerKey.signerLine);
+    expect((await raw("/open.git/nexus/trust-root")).status).toBe(200);
+    expect((await raw("/open.git/nexus/trust-root?x=1")).status).toBe(404);
   });
 
   it("requires write for the receive-pack advertisement, not just for the POST", async () => {

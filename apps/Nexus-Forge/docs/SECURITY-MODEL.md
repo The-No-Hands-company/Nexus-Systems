@@ -49,10 +49,12 @@ unparseable policy or a crash in the check refuses the push.
 ## What the server did: the ref log
 
 Each accepted update is appended to `<repo>.git/nexus/ref-log.jsonl` as
-`{seq, time, ref, old, new, pusher, prev, hash}`, where `hash` is SHA-256 over
-the other fields and `prev` is the previous entry's hash.
+`{seq, push, time, ref, old, new, pusher, prev, hash}`, where `hash` is SHA-256
+over the other fields, `prev` is the previous entry's hash and `push` is the
+`seq` of the first entry the same push wrote (a push is judged as a whole, so
+replaying the policy needs its boundaries).
 
-`forge log verify <url>` checks that:
+`forge log verify <url>` is the quick check, needing no objects:
 
 - every link holds (an edited, dropped or reordered entry fails)
 - the log replays to exactly the refs the server serves (a ref moved outside a
@@ -61,16 +63,41 @@ the other fields and `prev` is the previous entry's hash.
   `$XDG_CONFIG_HOME/nexus-forge/pins.json` (a consistent rewrite of the whole
   chain fails *for a client that had pinned it*)
 
-## Limits of this slice
+## Enforcement on the client: `forge verify`
 
-- **The server still enforces the policy.** A compromised server can skip the
-  hook. Signatures on the commits survive that, but clients do not yet check
-  them on fetch. Next: a client-side `forge verify` that replays the same
-  policy over fetched history, so enforcement no longer depends on the server.
-- **The trust root lives on the server.** A compromised server could replace
-  it, and a repository with no `.nexus/allowed_signers` yet would then accept
-  whatever the replacement allows. Committing the policy file early limits
-  this; clients should also pin the trust root (or its hash) out of band.
+`forge verify <url> [--trust-root <file>]` stops depending on the server
+having run its hook. It keeps a mirror of the repository
+(`$XDG_CACHE_HOME/nexus-forge/mirrors/`) and:
+
+1. does everything `forge log verify` does, against the mirror's refs
+2. checks the served trust root against `--trust-root`, or against the one
+   this machine saw last time (`$XDG_CONFIG_HOME/nexus-forge/verified.json`)
+3. replays **every push in the log** through the same `checkUpdates()` the
+   server's pre-receive hook runs, with the state before each push
+   reconstructed from the log; pushes verified on an earlier run are skipped
+   (step 1's pin guarantees they are unchanged)
+
+So a server that skips its own check and lets an unsigned or wrongly signed
+commit in, while keeping the log consistent, is caught by any client that
+runs `forge verify`. The tests run exactly that: a forge whose pre-receive
+accepts everything.
+
+## Hooks fail closed
+
+git skips a hook that is not executable and accepts the push. The forge
+therefore generates its hooks at startup (mode 0755, in
+`<storage>/.forge-hooks`), runs each once before serving, refuses to start if
+they do not run, and re-checks before every push (503 if they stopped being
+executable). Checked-in hook scripts arrived as mode 100644 on a fresh
+checkout, which would have accepted every push unchecked.
+
+## Limits
+
+- **A client that never runs `forge verify` gets only the server's word.**
+  Plain `git clone` / `pull` do not check anything. Making verification the
+  default path (a git remote helper, or `forge clone`) is the next step.
+- **The first verify trusts the served trust root** unless `--trust-root` is
+  given (trust on first use). Pass the file out of band for the first run.
 - **A client that has never pinned a head cannot detect a consistent rewrite.**
   Closing that needs heads witnessed by someone other than the server, such as
   federation peers.

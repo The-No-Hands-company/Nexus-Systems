@@ -2,7 +2,7 @@ import path from "node:path";
 import { type Action, authorize } from "../auth/access";
 import { principalFromRequest } from "../auth/tokens";
 import type { ForgeDB, UserRecord } from "../storage/db";
-import { REF_LOG_FILE, type RepositoryManager } from "../storage/repository";
+import { REF_LOG_FILE, type RepositoryManager, TRUST_ROOT_FILE } from "../storage/repository";
 import { gitEnv } from "./env";
 import { hooksExecutable } from "./hooks";
 import { isValidRepoName } from "./names";
@@ -20,7 +20,7 @@ type Service = "git-upload-pack" | "git-receive-pack";
 
 type Endpoint =
   | { kind: "git"; service: Service; action: Action }
-  | { kind: "ref-log"; action: "read" };
+  | { kind: "meta"; file: string; contentType: string; action: "read" };
 
 const ACTION: Record<Service, Action> = {
   "git-upload-pack": "read",
@@ -42,6 +42,7 @@ const GIT_PATH = /^\/([^/]+)\.git\/(.+)$/;
  *   GET  /<repo>.git/info/refs?service=git-receive-pack  write
  *   POST /<repo>.git/git-receive-pack                    write
  *   GET  /<repo>.git/nexus/ref-log                       read
+ *   GET  /<repo>.git/nexus/trust-root                    read
  *
  * Everything else under `/<repo>.git/`, including the whole dumb protocol
  * (HEAD, objects/, config), is 404. Returns `null` for paths that are not
@@ -75,11 +76,11 @@ export async function handleSmartHttp(
     return notFound();
   }
 
-  if (endpoint.kind === "ref-log") {
-    const file = Bun.file(options.repos.metaPath(name, REF_LOG_FILE));
+  if (endpoint.kind === "meta") {
+    const file = Bun.file(options.repos.metaPath(name, endpoint.file));
     const body = (await file.exists()) ? await file.text() : "";
     return new Response(body, {
-      headers: { "content-type": "application/x-ndjson", "cache-control": "no-store" },
+      headers: { "content-type": endpoint.contentType, "cache-control": "no-store" },
     });
   }
 
@@ -114,7 +115,15 @@ function resolveEndpoint(
   query: URLSearchParams,
 ): Endpoint | Response {
   if (tail === "nexus/ref-log" && method === "GET" && query.size === 0) {
-    return { kind: "ref-log", action: "read" };
+    return {
+      kind: "meta",
+      file: REF_LOG_FILE,
+      contentType: "application/x-ndjson",
+      action: "read",
+    };
+  }
+  if (tail === "nexus/trust-root" && method === "GET" && query.size === 0) {
+    return { kind: "meta", file: TRUST_ROOT_FILE, contentType: "text/plain", action: "read" };
   }
   if (tail === "info/refs" && method === "GET") {
     const requested = query.getAll("service");

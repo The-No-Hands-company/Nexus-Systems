@@ -48,16 +48,40 @@ export function parseUpdates(input: string): RefUpdate[] {
     });
 }
 
-/** Errors for a push; an empty list means every update is allowed. */
+/**
+ * The repository state a push is judged against: what the refs were just
+ * before it. The server reads this from its live refs; a client replaying
+ * the ref log reconstructs it, so both run the exact same check.
+ */
+export interface PushContext {
+  defaultRef: string;
+  /** The default branch's commit before the push, if it existed. */
+  tip: string | null;
+  /** Commits already reachable before the push ("all": every ref in the repository). */
+  known: string[] | "all";
+  trustRoot: string | null;
+}
+
+/** Errors for a push on the server, judged against its live refs. */
 export async function checkPush(
   git: Git,
   updates: RefUpdate[],
   trustRoot: string | null,
 ): Promise<string[]> {
-  const errors: string[] = [];
-
   const defaultRef = (await git(["symbolic-ref", "HEAD"])).stdout.trim() || "refs/heads/main";
   const tip = await resolveCommit(git, defaultRef);
+  return checkUpdates(git, updates, { defaultRef, tip, known: "all", trustRoot });
+}
+
+/** Errors for a push; an empty list means every update is allowed. */
+export async function checkUpdates(
+  git: Git,
+  updates: RefUpdate[],
+  context: PushContext,
+): Promise<string[]> {
+  const errors: string[] = [];
+  const { defaultRef, tip, trustRoot } = context;
+  const exclude = context.known === "all" ? ["--all"] : context.known;
   let policy: string | null = trustRoot;
   let policySource = "trust root";
   if (tip) {
@@ -115,7 +139,11 @@ export async function checkPush(
         continue;
       }
 
-      const list = await git(["rev-list", newId, "--not", "--all"]);
+      const list = await git([
+        "rev-list",
+        newId,
+        ...(exclude.length > 0 ? ["--not", ...exclude] : []),
+      ]);
       if (list.code !== 0) {
         errors.push(`${ref}: could not list new commits`);
         continue;

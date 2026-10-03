@@ -47,7 +47,10 @@ This roadmap tracks what is already implemented in Nexus Forge and what is plann
 - `[x]` Quarantine the ~150 placeholder routes and pages (2026-10-03)
 - `[x]` Signed-push policy: in-repo `.nexus/allowed_signers` + trust root, enforced in pre-receive (2026-10-03)
 - `[x]` Hash-chained ref log + `forge log verify` with head pinning (2026-10-03)
-- `[ ]` Client-side policy verification on fetch (stop depending on the server to enforce)
+- `[x]` Client-side policy verification: `forge verify` replays every push (2026-10-03)
+- `[x]` Hooks generated + probed at startup; push refused if they cannot run (2026-10-03)
+- `[x]` Forge in the CI bun-apps matrix (2026-10-03)
+- `[ ]` Make verification the default fetch path (git remote helper or `forge clone`)
 - `[ ]` Sign ref-log entries with a node key
 - `[ ]` Witness ref-log heads on federation peers
 - `[x]` Delete the quarantined placeholder files (2026-10-03)

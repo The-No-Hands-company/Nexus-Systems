@@ -1,0 +1,4 @@
+[test]
+# The integration tests drive real git, ssh-keygen and a forge server;
+# a single test spawns dozens of processes. 5s (the default) flakes under load.
+timeout = 30000

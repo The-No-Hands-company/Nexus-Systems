@@ -7,6 +7,7 @@ import {
   appendEntries,
   entryHash,
   extendsPin,
+  groupPushes,
   verifyChain,
 } from "../src/backend/reflog/chain";
 
@@ -52,6 +53,32 @@ describe("ref log chain", () => {
       "refs/tags/v1": B,
     });
     expect(result.head).toBe(result.entries[3]?.hash ?? "");
+  });
+
+  it("groups entries into the pushes that wrote them", async () => {
+    const result = verifyChain((await sampleLog()).text);
+    if (!result.ok) throw new Error(result.error);
+    expect(groupPushes(result.entries).map((push) => push.map((e) => e.seq))).toEqual([
+      [0],
+      [1],
+      [2, 3],
+    ]);
+  });
+
+  it("rejects an entry that claims to belong to an earlier, finished push", async () => {
+    const entries = lines((await sampleLog()).text);
+    // Re-hash consistently, so only the push-contiguity rule can catch it.
+    const forged: RefLogEntry[] = [];
+    let prev = "0".repeat(64);
+    for (const entry of entries) {
+      const { hash: _drop, ...body } = { ...entry, prev, push: entry.seq === 3 ? 1 : entry.push };
+      const hash = entryHash(body);
+      forged.push({ ...body, hash });
+      prev = hash;
+    }
+    const result = verifyChain(serialise(forged));
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error).toContain("not contiguous");
   });
 
   it("detects an edited entry", async () => {
