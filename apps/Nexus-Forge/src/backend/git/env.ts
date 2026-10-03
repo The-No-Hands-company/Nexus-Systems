@@ -36,15 +36,31 @@ export interface GitResult {
   stderr: string;
 }
 
-/** Run git with a fixed argument vector; no shell is ever involved. */
-export async function runGit(
-  args: string[],
-  options: { cwd?: string; config?: Record<string, string>; stdin?: string } = {},
-): Promise<GitResult> {
-  const proc = Bun.spawn(["git", ...args], {
+export interface RunGitOptions {
+  cwd?: string;
+  config?: Record<string, string>;
+  /**
+   * Keep the caller's environment instead of building one from nothing.
+   * Only for git's own hooks, which must see the GIT_DIR and quarantine
+   * variables receive-pack set (and the clean environment the forge gave
+   * receive-pack). `config` is then passed as `-c` flags.
+   */
+  inheritEnv?: boolean;
+}
+
+/**
+ * The only way the forge runs git: a fixed argument vector, no shell, and
+ * an environment built from nothing unless `inheritEnv` says otherwise.
+ */
+export async function runGit(args: string[], options: RunGitOptions = {}): Promise<GitResult> {
+  const config = options.config ?? {};
+  const argv = options.inheritEnv
+    ? ["git", ...Object.entries(config).flatMap(([k, v]) => ["-c", `${k}=${v}`]), ...args]
+    : ["git", ...args];
+  const proc = Bun.spawn(argv, {
     ...(options.cwd ? { cwd: options.cwd } : {}),
-    env: gitEnv(options.config),
-    stdin: options.stdin !== undefined ? new TextEncoder().encode(options.stdin) : "ignore",
+    env: options.inheritEnv ? process.env : gitEnv(config),
+    stdin: "ignore",
     stdout: "pipe",
     stderr: "pipe",
   });

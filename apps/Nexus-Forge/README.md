@@ -13,8 +13,9 @@ client can check.
 | **One access check, default-deny** | `authorize()` in `src/backend/auth/access.ts` is the only place access is granted. Anonymous may read public repositories; everything else needs a grant (read < write < admin). Private repositories answer the same whether or not they exist. |
 | **Expiring tokens** | Opaque `nxf_…` tokens, stored as SHA-256, always expiring (default 8h, max 30 days). Sent as `Bearer` or as the HTTP Basic password, which is what git uses. |
 | **Signed-push policy** | Every commit a push introduces must be SSH-signed by a key in the policy in force: `.nexus/allowed_signers` at the default branch's tip *before* the push, or the repository's trust root. See [docs/SECURITY-MODEL.md](./docs/SECURITY-MODEL.md). |
-| **Client-side enforcement** | `forge verify <url>` mirrors the repository and replays every push in the ref log through the same policy check the server runs, so a server that skipped its own check is caught. Pins the trust root and the verified head. |
-| **Hash-chained ref log** | Every accepted ref update is appended to a chained log. `forge log verify <url>` checks the chain, compares it with the refs the server serves, and pins the head it saw. |
+| **Client-side enforcement** | `forge verify <url>` mirrors the repository and replays every push in the ref log through the same policy check the server runs, so a server that skipped its own check is caught. A first run needs the trust root's fingerprint from the owner. |
+| **Verified plain git** | `forge install-helper` adds `git-remote-nexus`: `git clone nexus::https://…` and every later fetch/pull verify first and refuse anything that fails. |
+| **Hash-chained ref log** | Every accepted ref update is appended to a chained log that `forge verify` checks, replays against the served refs, and pins. |
 | **Hardened git invocation** | Repository names from an allowlist; git runs in an environment built from nothing; `fsckObjects`, `denyNonFastForwards`, `denyDeletes` and the hooks path are set on the command line where a repository's own config cannot undo them. |
 
 Not built yet: SSH transport, pull requests, issues, web code browsing,
@@ -36,7 +37,11 @@ git -c http.extraHeader="Authorization: Bearer $NEXUS_FORGE_TOKEN" \
 git -C demo commit -S --allow-empty -m first              # gpg.format=ssh
 git -C demo -c http.extraHeader="Authorization: Bearer $NEXUS_FORGE_TOKEN" push origin main
 
-bun src/cli/forge.ts verify http://127.0.0.1:8094/demo.git --trust-root ~/.ssh/allowed_signers
+# Collaborators: verify with the fingerprint `admin repo create` printed,
+# or use plain git through the helper.
+bun src/cli/forge.ts verify http://127.0.0.1:8094/demo.git --trust-root sha256:...
+bun src/cli/forge.ts install-helper
+git clone -c nexus.trustRoot=sha256:... nexus::http://127.0.0.1:8094/demo.git
 ```
 
 Forge used 8090 until 2026-10-03; that is Nexus-Hosting's site-proxy port.
@@ -74,7 +79,7 @@ src/backend/
   reflog/              hash chain
   storage/             SQLite + repository lifecycle
   api/routes.ts        JSON API
-src/cli/                verify, log verify, admin
+src/cli/               verify, remote helper, admin
 tests/                 real git clients against a real server
 ```
 

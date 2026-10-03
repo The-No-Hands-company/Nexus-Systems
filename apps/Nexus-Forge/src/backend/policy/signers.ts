@@ -32,3 +32,21 @@ export function parseAllowedSigners(text: string): { count: number } | { error: 
   if (count === 0) return { error: "no signer entries" };
   return { count };
 }
+
+/** Signer lines without comments, blank lines or surrounding space, in file order. */
+export function normaliseSigners(text: string): string {
+  return text
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line !== "" && !line.startsWith("#"))
+    .join("\n");
+}
+
+/**
+ * A trust root's fingerprint, `sha256:<hex>` over its normalised signer
+ * lines. Short enough to read out or paste into a chat, which is how a
+ * client gets the trust root from somewhere other than the server.
+ */
+export function trustRootFingerprint(text: string): string {
+  return `sha256:${new Bun.CryptoHasher("sha256").update(normaliseSigners(text)).digest("hex")}`;
+}

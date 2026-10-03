@@ -17,7 +17,18 @@ export interface ForgeOptions {
    */
   hooksDir?: string;
   maxPushBytes?: number;
+  maxConcurrentGit?: number;
 }
+
+/**
+ * Sent on every response. The forge serves no HTML, so nothing it returns
+ * should ever be sniffed into a document, framed, or leak a referrer.
+ */
+const SECURITY_HEADERS: Record<string, string> = {
+  "x-content-type-options": "nosniff",
+  "content-security-policy": "default-src 'none'; frame-ancestors 'none'",
+  "referrer-policy": "no-referrer",
+};
 
 export function createForge(options: ForgeOptions) {
   const hooksDir =
@@ -28,6 +39,8 @@ export function createForge(options: ForgeOptions) {
     repos: options.repos,
     hooksDir,
     maxBodyBytes: options.maxPushBytes ?? 512 * 1024 * 1024,
+    maxConcurrentGit: options.maxConcurrentGit ?? 16,
+    running: { count: 0 },
   };
   const api = {
     db: options.db,
@@ -36,6 +49,14 @@ export function createForge(options: ForgeOptions) {
   };
 
   async function fetch(request: Request): Promise<Response> {
+    const response = await route(request);
+    for (const [name, value] of Object.entries(SECURITY_HEADERS)) {
+      response.headers.set(name, value);
+    }
+    return response;
+  }
+
+  async function route(request: Request): Promise<Response> {
     const url = new URL(request.url);
     if (url.pathname === "/health") {
       return json(200, {

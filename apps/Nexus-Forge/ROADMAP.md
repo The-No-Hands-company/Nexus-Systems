@@ -50,7 +50,10 @@ This roadmap tracks what is already implemented in Nexus Forge and what is plann
 - `[x]` Client-side policy verification: `forge verify` replays every push (2026-10-03)
 - `[x]` Hooks generated + probed at startup; push refused if they cannot run (2026-10-03)
 - `[x]` Forge in the CI bun-apps matrix (2026-10-03)
-- `[ ]` Make verification the default fetch path (git remote helper or `forge clone`)
+- `[x]` Verified plain git: `git-remote-nexus` (2026-10-03)
+- `[x]` Trust-on-first-use closed: fingerprints, first verify refuses without one (2026-10-03)
+- `[x]` Security pass: fixed policy ref, untrusted-log validation, streamed pushes, git process cap, response headers (2026-10-03)
+- `[ ]` SHA-256 object format end to end
 - `[ ]` Sign ref-log entries with a node key
 - `[ ]` Witness ref-log heads on federation peers
 - `[x]` Delete the quarantined placeholder files (2026-10-03)

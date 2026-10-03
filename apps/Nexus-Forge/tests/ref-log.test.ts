@@ -2,7 +2,8 @@ import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { type RefLogEntry, entryHash } from "../src/backend/reflog/chain";
+import { trustRootFingerprint } from "../src/backend/policy/signers";
+import type { RefLogEntry } from "../src/backend/reflog/chain";
 import { REF_LOG_FILE } from "../src/backend/storage/repository";
 import {
   GitClient,
@@ -98,19 +99,19 @@ describe("ref log on push", () => {
   });
 });
 
-describe("forge log verify", () => {
+describe("forge verify against the server's own log", () => {
+  // The client-side policy replay is in client-verify.test.ts; these are the
+  // log-integrity failures a client must report.
+  const verify = (url: string) =>
+    cli(["verify", url, "--trust-root", trustRootFingerprint(key.signerLine)], {
+      XDG_CACHE_HOME: mkdtempSync(path.join(tmpdir(), "forge-cache-")),
+    });
+
   it("passes for an untouched public repository, anonymously", async () => {
     const { plainUrl } = await repoWithPushes("public", 2);
-    const result = await cli(["log", "verify", plainUrl]);
+    const result = await verify(plainUrl);
     expect(result.out).toContain("ok");
     expect(result.code).toBe(0);
-  });
-
-  it("needs a token for a private repository's log", async () => {
-    const { plainUrl } = await repoWithPushes("private", 1);
-    expect((await cli(["log", "verify", plainUrl])).code).not.toBe(0);
-    const authed = await cli(["log", "verify", plainUrl], { NEXUS_FORGE_TOKEN: token });
-    expect(authed.code).toBe(0);
   });
 
   it("fails when an entry was edited on the server", async () => {
@@ -120,7 +121,7 @@ describe("forge log verify", () => {
       name,
       log.map((e) => (e.seq === 0 ? { ...e, pusher: "someone-else" } : e)),
     );
-    const result = await cli(["log", "verify", plainUrl]);
+    const result = await verify(plainUrl);
     expect(result.code).not.toBe(0);
     expect(result.out).toContain("entry 0");
   });
@@ -130,31 +131,9 @@ describe("forge log verify", () => {
     const first = (await git.ok(["rev-parse", "HEAD~1"], work)).trim();
     const bare = forge.repos.repoPath(name);
     Bun.spawnSync(["git", "--git-dir", bare, "update-ref", "refs/heads/main", first]);
-    const result = await cli(["log", "verify", plainUrl]);
+    const result = await verify(plainUrl);
     expect(result.code).not.toBe(0);
     expect(result.out).toContain("do not match");
-  });
-
-  it("catches a consistent rewrite of the whole chain only for a client that pinned the old head", async () => {
-    const { name, plainUrl } = await repoWithPushes("public", 2);
-    const config = mkdtempSync(path.join(tmpdir(), "forge-pin-"));
-    expect((await cli(["log", "verify", plainUrl], { XDG_CONFIG_HOME: config })).code).toBe(0);
-
-    let prev = "0".repeat(64);
-    const rewritten = readLog(name).map((entry) => {
-      const { hash: _drop, ...body } = { ...entry, prev, time: "2000-01-01T00:00:00.000Z" };
-      const hash = entryHash(body);
-      prev = hash;
-      return { ...body, hash };
-    });
-    writeLog(name, rewritten);
-
-    const pinned = await cli(["log", "verify", plainUrl], { XDG_CONFIG_HOME: config });
-    expect(pinned.code).not.toBe(0);
-    expect(pinned.out).toContain("rewritten");
-    // A client that never saw the old head cannot tell: that is the limit
-    // the next layer (heads witnessed by federation peers) exists to close.
-    expect((await cli(["log", "verify", plainUrl])).code).toBe(0);
   });
 });
 
@@ -173,6 +152,7 @@ describe("forge admin", () => {
       env,
     );
     expect(created.out).toContain("carols");
+    expect(created.out).toContain(trustRootFingerprint(key.signerLine));
     expect(created.code).toBe(0);
     expect((await cli(["admin", "grant", "carols", "dave", "read"], env)).code).toBe(0);
     const issued = await cli(["admin", "token", "dave", "--ttl-hours", "1"], env);

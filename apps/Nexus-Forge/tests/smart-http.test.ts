@@ -231,25 +231,101 @@ describe("JSON API", () => {
   });
 });
 
-describe("push size limit", () => {
-  it("refuses a request body over the limit, even without a Content-Length", async () => {
+describe("resource limits", () => {
+  async function limitedForge(options: { maxPushBytes?: number; maxConcurrentGit?: number }) {
     const { createForge } = await import("../src/backend/server");
-    const small = createForge({ db: forge.db, repos: forge.repos, maxPushBytes: 1024 });
-    const chunk = new Uint8Array(600);
-    const body = new ReadableStream<Uint8Array>({
-      start(controller) {
-        controller.enqueue(chunk);
-        controller.enqueue(chunk);
-        controller.close();
-      },
-    });
-    const response = await small.fetch(
-      new Request(`${forge.url}/secret.git/git-upload-pack`, {
-        method: "POST",
-        headers: { authorization: `Bearer ${ownerToken}` },
-        body,
-      }),
-    );
-    expect(response.status).toBe(413);
+    const limited = createForge({ db: forge.db, repos: forge.repos, ...options });
+    const server = Bun.serve({ port: 0, hostname: "127.0.0.1", fetch: limited.fetch });
+    return { limited, server, url: `http://127.0.0.1:${server.port}` };
+  }
+
+  it("refuses a declared body over the limit before reading it", async () => {
+    const { limited, server } = await limitedForge({ maxPushBytes: 1024 });
+    try {
+      const response = await limited.fetch(
+        new Request(`${forge.url}/secret.git/git-upload-pack`, {
+          method: "POST",
+          headers: { authorization: `Bearer ${ownerToken}`, "content-length": "4096" },
+          body: new Uint8Array(4096),
+        }),
+      );
+      expect(response.status).toBe(413);
+    } finally {
+      server.stop(true);
+    }
+  });
+
+  it("cuts off a streamed push at the limit, so it never lands", async () => {
+    const { server, url } = await limitedForge({ maxPushBytes: 16 * 1024 });
+    try {
+      const before = (
+        await owner.ok(["ls-remote", remoteUrl(forge, "secret", ownerToken), "main"])
+      ).split("\t")[0];
+      const noise = Array.from(crypto.getRandomValues(new Uint8Array(96 * 1024)), (b) =>
+        b.toString(16).padStart(2, "0"),
+      ).join("");
+      await owner.commit(ownerWork, "big.txt", noise, true);
+      const target = new URL(`${url}/secret.git`);
+      target.username = "x";
+      target.password = ownerToken;
+      // A small postBuffer makes git stream the pack (chunked, no
+      // Content-Length), so only the streaming cap can stop it.
+      const result = await owner.run(
+        ["-c", "http.postBuffer=4096", "push", target.toString(), "main"],
+        ownerWork,
+      );
+      expect(result.code).not.toBe(0);
+      expect(result.stderr).not.toContain("413");
+      const after = (
+        await owner.ok(["ls-remote", remoteUrl(forge, "secret", ownerToken), "main"])
+      ).split("\t")[0];
+      expect(after).toBe(before);
+      await owner.ok(["reset", "--quiet", "--hard", "HEAD~1"], ownerWork);
+    } finally {
+      server.stop(true);
+    }
+  });
+
+  it("caps concurrent git processes and frees the slot when each finishes", async () => {
+    const { limited, server } = await limitedForge({ maxConcurrentGit: 1 });
+    try {
+      const request = () =>
+        limited.fetch(new Request(`${forge.url}/open.git/info/refs?service=git-upload-pack`));
+      const burst = await Promise.all(Array.from({ length: 8 }, request));
+      const statuses = burst.map((r) => r.status);
+      await Promise.all(burst.map((r) => r.arrayBuffer()));
+      expect(statuses).toContain(503);
+      expect(statuses.every((s) => s === 200 || s === 503)).toBe(true);
+      // A slot is held until the git process exits, which is a moment after
+      // its output ends; each later request must get one within a second.
+      for (let i = 0; i < 5; i++) {
+        let status = 0;
+        for (let attempt = 0; attempt < 50 && status !== 200; attempt++) {
+          const response = await request();
+          await response.arrayBuffer();
+          status = response.status;
+          if (status !== 200) await Bun.sleep(20);
+        }
+        expect(status).toBe(200);
+      }
+    } finally {
+      server.stop(true);
+    }
+  });
+});
+
+describe("response headers", () => {
+  it("marks every response nosniff and unframeable", async () => {
+    for (const p of [
+      "/api/repos",
+      "/open.git/info/refs?service=git-upload-pack",
+      "/nope",
+      "/health",
+    ]) {
+      const response = await raw(p);
+      await response.arrayBuffer();
+      expect(response.headers.get("x-content-type-options")).toBe("nosniff");
+      expect(response.headers.get("content-security-policy")).toContain("frame-ancestors 'none'");
+    }
   });
 });

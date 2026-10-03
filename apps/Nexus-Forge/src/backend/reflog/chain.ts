@@ -18,6 +18,13 @@ import { open, readFile, rm, stat } from "node:fs/promises";
  * (federation peers), which is the next layer, not this one.
  */
 export const GENESIS = "0".repeat(64);
+const OBJECT_ID = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/;
+const HASH = /^[0-9a-f]{64}$/;
+// A ref name as git writes it: under refs/, no whitespace or control
+// characters, no "..", bounded. The log is untrusted input to a client, and
+// its ids and refs end up near git's argument list.
+const REF_NAME = /^refs\/[^\s~^:?*[\\]{1,1000}$/;
+const TIME = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
 const ZERO_ID = /^0{40}(0{24})?$/;
 
 export interface RefLogEntry {
@@ -68,6 +75,8 @@ export function verifyChain(text: string): ChainResult {
     } catch {
       return { ok: false, error: `entry ${index}: not valid JSON` };
     }
+    const shape = shapeError(entry);
+    if (shape) return { ok: false, error: `entry ${index}: ${shape}` };
     if (entry.seq !== index) {
       return { ok: false, error: `entry ${index}: sequence number is ${entry.seq}` };
     }
@@ -106,6 +115,41 @@ export function groupPushes(entries: RefLogEntry[]): RefLogEntry[][] {
     else pushes.push([entry]);
   }
   return pushes;
+}
+
+/** Why an entry is not a well-formed log entry, or null when it is. */
+function shapeError(entry: unknown): string | null {
+  if (typeof entry !== "object" || entry === null || Array.isArray(entry)) return "not an object";
+  const e = entry as Record<string, unknown>;
+  const keys = Object.keys(e).sort().join(",");
+  if (keys !== "hash,new,old,prev,push,pusher,ref,seq,time") return `unexpected fields ${keys}`;
+  if (!Number.isSafeInteger(e.seq) || !Number.isSafeInteger(e.push)) return "bad sequence";
+  if (
+    typeof e.ref !== "string" ||
+    !REF_NAME.test(e.ref) ||
+    e.ref.includes("..") ||
+    hasControlCharacter(e.ref)
+  ) {
+    return "malformed ref name";
+  }
+  if (typeof e.old !== "string" || !OBJECT_ID.test(e.old)) return "malformed old id";
+  if (typeof e.new !== "string" || !OBJECT_ID.test(e.new)) return "malformed new id";
+  if (e.old.length !== e.new.length) return "mixed object id lengths";
+  if (typeof e.pusher !== "string" || e.pusher.length > 256 || hasControlCharacter(e.pusher)) {
+    return "malformed pusher";
+  }
+  if (typeof e.time !== "string" || !TIME.test(e.time)) return "malformed time";
+  if (typeof e.prev !== "string" || !HASH.test(e.prev)) return "malformed prev hash";
+  if (typeof e.hash !== "string" || !HASH.test(e.hash)) return "malformed hash";
+  return null;
+}
+
+function hasControlCharacter(text: string): boolean {
+  for (let i = 0; i < text.length; i++) {
+    const code = text.charCodeAt(i);
+    if (code < 0x20 || code === 0x7f) return true;
+  }
+  return false;
 }
 
 export interface Pin {

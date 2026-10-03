@@ -3,6 +3,7 @@ import path from "node:path";
 import { runGit } from "../git/env";
 import { isValidRepoName, repoDirName } from "../git/names";
 import { parseAllowedSigners } from "../policy/signers";
+import { POLICY_REF } from "../policy/verify";
 import type { ForgeDB, RepositoryRecord, UserRecord, Visibility } from "./db";
 
 export interface RepositorySetup {
@@ -53,7 +54,13 @@ export class RepositoryManager {
     // `mkdir` without `recursive` fails if the directory exists, so two
     // concurrent creates cannot both initialise the same path.
     await fs.mkdir(repoPath);
-    const init = await runGit(["init", "--quiet", "--bare", "--initial-branch=main", repoPath]);
+    const init = await runGit([
+      "init",
+      "--quiet",
+      "--bare",
+      `--initial-branch=${POLICY_REF.replace("refs/heads/", "")}`,
+      repoPath,
+    ]);
     if (init.code !== 0) {
       await fs.rm(repoPath, { recursive: true, force: true });
       throw new Error(`git init failed: ${init.stderr}`);

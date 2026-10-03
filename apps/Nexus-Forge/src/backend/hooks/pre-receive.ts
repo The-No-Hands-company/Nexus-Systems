@@ -5,19 +5,12 @@
  */
 import { readFile } from "node:fs/promises";
 import path from "node:path";
+import { runGit } from "../git/env";
 import { type Git, checkPush, parseUpdates } from "../policy/verify";
 import { TRUST_ROOT_FILE } from "../storage/repository";
 
-const git: Git = async (args, config = {}) => {
-  const flags = Object.entries(config).flatMap(([key, value]) => ["-c", `${key}=${value}`]);
-  const proc = Bun.spawn(["git", ...flags, ...args], { stdout: "pipe", stderr: "pipe" });
-  const [stdout, stderr, code] = await Promise.all([
-    new Response(proc.stdout).text(),
-    new Response(proc.stderr).text(),
-    proc.exited,
-  ]);
-  return { code, stdout, stderr };
-};
+const git: Git = (args, config) =>
+  runGit(args, { inheritEnv: true, ...(config ? { config } : {}) });
 
 async function main(): Promise<number> {
   const meta = process.env.NEXUS_FORGE_META;

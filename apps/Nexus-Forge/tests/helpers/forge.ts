@@ -97,7 +97,11 @@ export class GitClient {
   readonly home: string;
   private readonly configPath: string;
 
-  constructor(base: string, name: string) {
+  constructor(
+    base: string,
+    name: string,
+    private readonly extraEnv: Record<string, string> = {},
+  ) {
     this.home = path.join(base, `client-${name}`);
     mkdirSync(this.home, { recursive: true });
     this.configPath = path.join(this.home, ".gitconfig");
@@ -129,6 +133,7 @@ export class GitClient {
         GIT_TERMINAL_PROMPT: "0",
         GIT_ASKPASS: "/bin/false",
         SSH_ASKPASS: "/bin/false",
+        ...this.extraEnv,
       },
       stdout: "pipe",
       stderr: "pipe",

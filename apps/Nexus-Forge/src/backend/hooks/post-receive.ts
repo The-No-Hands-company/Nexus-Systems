@@ -2,7 +2,7 @@
  * post-receive: appends the accepted ref updates to the repository's
  * hash-chained ref log. The refs have already moved when this runs, so a
  * failure here cannot undo the push; it leaves the log behind the refs,
- * which `forge log verify` reports as a mismatch rather than hiding.
+ * which `forge verify` reports as a mismatch rather than hiding.
  */
 import path from "node:path";
 import { parseUpdates } from "../policy/verify";

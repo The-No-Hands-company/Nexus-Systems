@@ -4,24 +4,30 @@ import path from "node:path";
 import { parseAllowedSigners } from "./signers";
 
 /**
- * The signed-push policy, run by the pre-receive hook.
+ * The signed-push policy. The server's pre-receive hook runs it on every
+ * push; `forge verify` runs the same function on the client over every push
+ * in the ref log.
  *
- * Policy in force for a push: `.nexus/allowed_signers` at the default
- * branch's tip as it stands before the push, or the repository's trust root
- * when that tip has no such file (or there is no tip yet). Every commit the
- * push introduces, on any ref, must carry an SSH signature from a key in it.
+ * Policy in force for a push: `.nexus/allowed_signers` at POLICY_REF as it
+ * stands before the push, or the repository's trust root when that commit
+ * has no such file (or POLICY_REF does not exist yet). Every commit the push
+ * introduces, on any ref, must carry an SSH signature from a key in it.
  *
- * Reading the policy from the pre-push tip, rather than from each commit's
- * parent, is what makes two attacks fail:
- *   - a commit cannot add its own signer: its own content is not in force yet
+ *   - a commit cannot add its own signer: its content is not in force yet
  *   - a revoked key stays revoked: branching from a commit made while it was
  *     trusted does not bring the old policy back
- * The cost is that a policy change must land in its own push before the new
- * key can sign anything.
+ *   - the policy ref is fixed, not read from HEAD: a server that repoints
+ *     HEAD at a branch carrying an unreviewed policy change gains nothing
+ *
+ * Cost: a policy change must land in its own push before its keys can sign.
  */
+export const POLICY_REF = "refs/heads/main";
 export const POLICY_PATH = ".nexus/allowed_signers";
-const ZERO = /^0{40}(0{24})?$/;
-const ALLOWED_REF = /^refs\/(heads|tags)\/[^\0]+$/;
+
+/** A full object id, SHA-1 or SHA-256. Nothing else reaches git as a revision. */
+export const OBJECT_ID = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/;
+const ZERO_ID = /^(?:0{40}|0{64})$/;
+const ALLOWED_REF = /^refs\/(?:heads|tags)\/./;
 
 export interface RefUpdate {
   oldId: string;
@@ -32,11 +38,7 @@ export interface RefUpdate {
 export type Git = (
   args: string[],
   config?: Record<string, string>,
-) => Promise<{
-  code: number;
-  stdout: string;
-  stderr: string;
-}>;
+) => Promise<{ code: number; stdout: string; stderr: string }>;
 
 export function parseUpdates(input: string): RefUpdate[] {
   return input
@@ -49,15 +51,13 @@ export function parseUpdates(input: string): RefUpdate[] {
 }
 
 /**
- * The repository state a push is judged against: what the refs were just
- * before it. The server reads this from its live refs; a client replaying
- * the ref log reconstructs it, so both run the exact same check.
+ * The state a push is judged against: the refs just before it. The server
+ * reads it from its live refs; a client replaying the ref log rebuilds it.
  */
 export interface PushContext {
-  defaultRef: string;
-  /** The default branch's commit before the push, if it existed. */
+  /** POLICY_REF's commit before the push, if it existed. */
   tip: string | null;
-  /** Commits already reachable before the push ("all": every ref in the repository). */
+  /** Commits reachable before the push ("all": every ref in the repository). */
   known: string[] | "all";
   trustRoot: string | null;
 }
@@ -68,111 +68,70 @@ export async function checkPush(
   updates: RefUpdate[],
   trustRoot: string | null,
 ): Promise<string[]> {
-  const defaultRef = (await git(["symbolic-ref", "HEAD"])).stdout.trim() || "refs/heads/main";
-  const tip = await resolveCommit(git, defaultRef);
-  return checkUpdates(git, updates, { defaultRef, tip, known: "all", trustRoot });
+  const tip = await git(["rev-parse", "--verify", "--quiet", `${POLICY_REF}^{commit}`]);
+  return checkUpdates(git, updates, {
+    tip: tip.code === 0 ? tip.stdout.trim() : null,
+    known: "all",
+    trustRoot,
+  });
 }
 
-/** Errors for a push; an empty list means every update is allowed. */
+/**
+ * Errors for a push; an empty list means every update is allowed. Stops at
+ * the first violation of each ref: one bad commit refuses the push, and a
+ * push of a million unsigned commits costs one git process, not a million.
+ */
 export async function checkUpdates(
   git: Git,
   updates: RefUpdate[],
   context: PushContext,
 ): Promise<string[]> {
-  const errors: string[] = [];
-  const { defaultRef, tip, trustRoot } = context;
-  const exclude = context.known === "all" ? ["--all"] : context.known;
-  let policy: string | null = trustRoot;
-  let policySource = "trust root";
-  if (tip) {
-    const file = await git(["cat-file", "blob", `${tip}:${POLICY_PATH}`]);
+  const known = context.known === "all" ? [] : context.known;
+  // Object ids may come from an untrusted ref log on the client; anything
+  // that is not a plain id must never reach git's argument list.
+  for (const id of [context.tip ?? "", ...known].filter(Boolean)) {
+    if (!OBJECT_ID.test(id)) return [`refusing malformed object id ${JSON.stringify(id)}`];
+  }
+
+  let policy = context.trustRoot;
+  let source = "trust root";
+  if (context.tip) {
+    const file = await git(["cat-file", "blob", `${context.tip}:${POLICY_PATH}`]);
     if (file.code === 0) {
       policy = file.stdout;
-      policySource = `${POLICY_PATH} at ${defaultRef} ${tip.slice(0, 12)}`;
+      source = `${POLICY_PATH} at ${POLICY_REF} ${context.tip.slice(0, 12)}`;
     }
   }
-  const parsed = parseAllowedSigners(policy ?? "");
-  if (policy === null || "error" in parsed) {
-    return [`no usable signer policy (${policySource}); every push is refused`];
+  if (policy === null || "error" in parseAllowedSigners(policy)) {
+    return [`no usable signer policy (${source}); every push is refused`];
   }
 
   const dir = await mkdtemp(path.join(tmpdir(), "forge-policy-"));
-  const signersFile = path.join(dir, "allowed_signers");
-  await writeFile(signersFile, policy);
-  const verifyConfig = {
+  const signers = path.join(dir, "allowed_signers");
+  await writeFile(signers, policy, { mode: 0o600 });
+  const verify = {
     "gpg.format": "ssh",
-    "gpg.ssh.allowedSignersFile": signersFile,
-    // A valid signature from a key matching no principal is "Good ...
-    // No principal matched." git 2.55 already exits 1 on it (checked by
-    // hand); this keeps an older or future git that reports it as an
-    // untrusted-but-good signature from turning it into a pass.
+    "gpg.ssh.allowedSignersFile": signers,
+    // A good signature from a key matching no principal must not pass. git
+    // 2.55 already reports it as not trusted; this pins that behaviour.
     "gpg.minTrustLevel": "fully",
-    // Only SSH signatures count; OpenPGP and X.509 ones never verify here.
+    // Only SSH signatures count; OpenPGP and X.509 ones never verify.
     "gpg.program": "/bin/false",
     "gpg.x509.program": "/bin/false",
   };
+  // Everything after --end-of-options is a revision, never an option. "Every
+  // ref" has to be said before it (--not --all --not leaves the walk
+  // positive again); explicit ids follow it as ^<id>.
+  const range = (newId: string) =>
+    context.known === "all"
+      ? ["--not", "--all", "--not", "--end-of-options", newId]
+      : ["--end-of-options", newId, ...known.map((id) => `^${id}`)];
 
+  const errors: string[] = [];
   try {
-    for (const update of updates) {
-      const { ref, newId } = update;
-      if (!ALLOWED_REF.test(ref)) {
-        errors.push(`${ref}: only refs/heads/* and refs/tags/* may be pushed`);
-        continue;
-      }
-      if (ZERO.test(newId)) {
-        errors.push(`${ref}: deleting refs is not allowed`);
-        continue;
-      }
-      const type = (await git(["cat-file", "-t", newId])).stdout.trim();
-      if (ref.startsWith("refs/heads/") && type !== "commit") {
-        errors.push(`${ref}: a branch must point at a commit, not a ${type || "missing object"}`);
-        continue;
-      }
-      if (type === "tag") {
-        const tag = await git(["verify-tag", newId], verifyConfig);
-        if (tag.code !== 0) {
-          errors.push(`${ref}: annotated tag is not signed by a key in the ${policySource}`);
-          continue;
-        }
-      } else if (type !== "commit") {
-        errors.push(`${ref}: a tag must point at a commit or an annotated tag`);
-        continue;
-      }
-
-      const list = await git([
-        "rev-list",
-        newId,
-        ...(exclude.length > 0 ? ["--not", ...exclude] : []),
-      ]);
-      if (list.code !== 0) {
-        errors.push(`${ref}: could not list new commits`);
-        continue;
-      }
-      for (const commit of list.stdout.split("\n").filter(Boolean)) {
-        const signed = await git(["cat-file", "commit", commit]);
-        if (!/^gpgsig /m.test(signed.stdout.split("\n\n")[0] ?? "")) {
-          errors.push(`${ref}: commit ${commit.slice(0, 12)} is not signed`);
-          continue;
-        }
-        const verified = await git(["verify-commit", commit], verifyConfig);
-        if (verified.code !== 0) {
-          errors.push(
-            `${ref}: commit ${commit.slice(0, 12)} is not signed by a key in the ${policySource}`,
-          );
-        }
-      }
-
-      if (ref === defaultRef) {
-        const next = await git(["cat-file", "blob", `${newId}:${POLICY_PATH}`]);
-        if (next.code === 0) {
-          const check = parseAllowedSigners(next.stdout);
-          if ("error" in check) {
-            errors.push(
-              `${ref}: ${POLICY_PATH} is invalid (${check.error}); it would lock the repository`,
-            );
-          }
-        }
-      }
+    for (const { ref, newId } of updates) {
+      const error = await checkUpdate(git, ref, newId, range, verify, source);
+      if (error) errors.push(`${ref}: ${error}`);
     }
   } finally {
     await rm(dir, { recursive: true, force: true });
@@ -180,7 +139,48 @@ export async function checkUpdates(
   return errors;
 }
 
-async function resolveCommit(git: Git, ref: string): Promise<string | null> {
-  const result = await git(["rev-parse", "--verify", "--quiet", `${ref}^{commit}`]);
-  return result.code === 0 ? result.stdout.trim() : null;
+async function checkUpdate(
+  git: Git,
+  ref: string,
+  newId: string,
+  range: (newId: string) => string[],
+  verify: Record<string, string>,
+  source: string,
+): Promise<string | null> {
+  if (!ALLOWED_REF.test(ref)) return "only refs/heads/* and refs/tags/* may be pushed";
+  if (ZERO_ID.test(newId)) return "deleting refs is not allowed";
+  if (!OBJECT_ID.test(newId)) return `malformed object id ${JSON.stringify(newId)}`;
+
+  const type = (await git(["cat-file", "-t", newId])).stdout.trim();
+  if (type === "tag") {
+    if (!ref.startsWith("refs/tags/")) return "a branch must point at a commit";
+    if ((await git(["verify-tag", newId], verify)).code !== 0) {
+      return `annotated tag is not signed by a key in the ${source}`;
+    }
+  } else if (type !== "commit") {
+    return `must point at a commit or a signed tag, not a ${type || "missing object"}`;
+  }
+
+  // %G? is "G" only for a good signature from a key in the signers file;
+  // N (none), B (bad), U (untrusted), X/Y/R (expired/revoked) all refuse.
+  const log = await git(["log", "--format=%H %G?", ...range(newId)], verify);
+  if (log.code !== 0) return "could not list the commits it introduces";
+  for (const line of log.stdout.split("\n").filter(Boolean)) {
+    const [commit = "", status] = line.split(" ");
+    if (status === "N") return `commit ${commit.slice(0, 12)} is not signed`;
+    if (status !== "G") {
+      return `commit ${commit.slice(0, 12)} is not signed by a key in the ${source}`;
+    }
+  }
+
+  if (ref === POLICY_REF) {
+    const next = await git(["cat-file", "blob", `${newId}:${POLICY_PATH}`]);
+    if (next.code === 0) {
+      const check = parseAllowedSigners(next.stdout);
+      if ("error" in check) {
+        return `${POLICY_PATH} is invalid (${check.error}); it would lock the repository`;
+      }
+    }
+  }
+  return null;
 }

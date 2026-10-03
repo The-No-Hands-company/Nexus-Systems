@@ -14,6 +14,10 @@ export interface SmartHttpOptions {
   hooksDir: string;
   /** Largest request body accepted (a push pack), in bytes. */
   maxBodyBytes: number;
+  /** Git processes allowed at once; past it requests get 503, not a queue. */
+  maxConcurrentGit: number;
+  /** Shared count of running git processes. */
+  running: { count: number };
 }
 
 type Service = "git-upload-pack" | "git-receive-pack";
@@ -91,10 +95,18 @@ export async function handleSmartHttp(
     return text(503, "push policy unavailable; push refused\n");
   }
 
-  let body: Uint8Array | null = null;
+  let body: ReadableStream<Uint8Array> | null = null;
   if (request.method === "POST") {
-    body = await readLimited(request, options.maxBodyBytes);
-    if (!body) return text(413, "request body too large\n");
+    const declared = Number(request.headers.get("content-length") ?? "0");
+    if (!(declared <= options.maxBodyBytes)) return text(413, "request body too large\n");
+    body = request.body ? capped(request.body, options.maxBodyBytes) : null;
+  }
+
+  if (options.running.count >= options.maxConcurrentGit) {
+    return new Response("server busy\n", {
+      status: 503,
+      headers: { "content-type": "text/plain", "retry-after": "5" },
+    });
   }
 
   return runHttpBackend({
@@ -145,7 +157,7 @@ async function runHttpBackend(args: {
   service: Service;
   canWrite: boolean;
   principal: UserRecord | null;
-  body: Uint8Array | null;
+  body: ReadableStream<Uint8Array> | null;
   options: SmartHttpOptions;
 }): Promise<Response> {
   const { request, name, tail, service, canWrite, principal, body, options } = args;
@@ -163,7 +175,8 @@ async function runHttpBackend(args: {
     NEXUS_FORGE_BUN: process.execPath,
     NEXUS_FORGE_META: options.repos.metaPath(name, ""),
   };
-  if (body) cgi.CONTENT_LENGTH = String(body.byteLength);
+  const length = request.headers.get("content-length");
+  if (length && /^\d+$/.test(length)) cgi.CONTENT_LENGTH = length;
   if (principal) cgi.REMOTE_USER = principal.username;
   const encoding = request.headers.get("content-encoding");
   if (encoding === "gzip") cgi.HTTP_CONTENT_ENCODING = "gzip";
@@ -180,11 +193,15 @@ async function runHttpBackend(args: {
     "receive.denyDeletes": "true",
   };
 
+  options.running.count++;
   const proc = Bun.spawn(["git", "http-backend"], {
     env: gitEnv(config, cgi),
     stdin: body ?? "ignore",
     stdout: "pipe",
     stderr: "pipe",
+  });
+  proc.exited.finally(() => {
+    options.running.count--;
   });
   new Response(proc.stderr).text().then((stderr) => {
     if (stderr.trim()) console.warn(`[forge] http-backend ${name}: ${stderr.trim()}`);
@@ -251,30 +268,22 @@ function concat(a: Uint8Array, b: Uint8Array): Uint8Array<ArrayBuffer> {
   return out;
 }
 
-async function readLimited(request: Request, max: number): Promise<Uint8Array | null> {
-  const declared = Number(request.headers.get("content-length") ?? "0");
-  if (declared > max) return null;
-  if (!request.body) return new Uint8Array(0);
-  const chunks: Uint8Array[] = [];
+/**
+ * The request body, streamed to git, erroring once it passes `max` bytes.
+ * git then sees a truncated pack and refuses it, so an oversized push never
+ * lands and is never held in memory.
+ */
+function capped(body: ReadableStream<Uint8Array>, max: number): ReadableStream<Uint8Array> {
   let total = 0;
-  const reader = request.body.getReader();
-  for (;;) {
-    const { value: chunk, done } = await reader.read();
-    if (done) break;
-    total += chunk.byteLength;
-    if (total > max) {
-      await reader.cancel();
-      return null;
-    }
-    chunks.push(chunk);
-  }
-  const out = new Uint8Array(total);
-  let offset = 0;
-  for (const chunk of chunks) {
-    out.set(chunk, offset);
-    offset += chunk.byteLength;
-  }
-  return out;
+  return body.pipeThrough(
+    new TransformStream<Uint8Array, Uint8Array>({
+      transform(chunk, controller) {
+        total += chunk.byteLength;
+        if (total > max) controller.error(new Error("request body too large"));
+        else controller.enqueue(chunk);
+      },
+    }),
+  );
 }
 
 function text(status: number, body: string): Response {

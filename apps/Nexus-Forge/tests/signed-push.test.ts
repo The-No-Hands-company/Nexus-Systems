@@ -159,6 +159,31 @@ describe("in-repository policy", () => {
     expect(result.code).not.toBe(0);
   });
 
+  it("reads the policy from main, not from wherever the server's HEAD points", async () => {
+    const { name, work, url } = await freshRepo();
+    await commitAs(work, alice, "a.txt", "a\n");
+    expect((await push(work, url)).code).toBe(0);
+    // An unreviewed policy change on a side branch, signed by a trusted key.
+    await git.ok(["checkout", "--quiet", "-b", "proposal"], work);
+    await setPolicy(work, alice, [alice, mallory]);
+    expect((await push(work, url, "proposal")).code).toBe(0);
+    // Someone with access to the server repoints HEAD at it.
+    Bun.spawnSync([
+      "git",
+      "--git-dir",
+      forge.repos.repoPath(name),
+      "symbolic-ref",
+      "HEAD",
+      "refs/heads/proposal",
+    ]);
+
+    await git.ok(["checkout", "--quiet", "main"], work);
+    await commitAs(work, mallory, "m.txt", "m\n");
+    const result = await push(work, url);
+    expect(result.code).not.toBe(0);
+    expect(result.stderr).toContain("not signed by a key in the trust root");
+  });
+
   it("refuses a policy file that does not parse, so a typo cannot lock the repository", async () => {
     const { work, url } = await freshRepo();
     await commitAs(work, alice, "a.txt", "a\n");
@@ -204,6 +229,23 @@ describe("ref rules", () => {
 });
 
 describe("fail closed", () => {
+  it("never passes a malformed object id to git", async () => {
+    const { checkUpdates } = await import("../src/backend/policy/verify");
+    const calls: string[][] = [];
+    const spy = async (args: string[]) => {
+      calls.push(args);
+      return { code: 0, stdout: "", stderr: "" };
+    };
+    const zero = "0".repeat(40);
+    const id = "a".repeat(40);
+    const update = (newId: string) => [{ oldId: zero, newId, ref: "refs/heads/main" }];
+    const context = { tip: null, known: [] as string[], trustRoot: alice.signerLine };
+    expect(await checkUpdates(spy, update("--output=/tmp/x"), context)).toHaveLength(1);
+    expect(await checkUpdates(spy, update(id), { ...context, known: ["--all"] })).toHaveLength(1);
+    expect(await checkUpdates(spy, update(id), { ...context, tip: "-p" })).toHaveLength(1);
+    expect(calls.flat().some((arg) => arg.startsWith("--output") || arg === "-p")).toBe(false);
+  });
+
   it("rejects every push when the trust root is missing", async () => {
     const { name, work, url } = await freshRepo();
     writeFileSync(forge.repos.metaPath(name, "trust-root"), "");

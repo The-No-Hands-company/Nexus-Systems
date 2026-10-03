@@ -103,6 +103,11 @@ export class ForgeDB {
   }
 
   addUser(username: string): UserRecord {
+    // Usernames reach git's environment (REMOTE_USER) and the ref log, so
+    // they come from an allowlist like repository names.
+    if (!/^[a-z0-9][a-z0-9_-]{0,38}$/.test(username)) {
+      throw new Error("username must match [a-z0-9][a-z0-9_-]{0,38}");
+    }
     return this.db
       .query("INSERT INTO users (username) VALUES (?) RETURNING id, username")
       .get(username) as UserRecord;

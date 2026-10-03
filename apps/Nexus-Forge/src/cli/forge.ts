@@ -2,20 +2,15 @@
 /**
  * forge — the Nexus Forge command line.
  *
- *   forge verify <repo-url> [--trust-root <allowed_signers file>]
- *       Enforce the push policy on this machine: mirror the repository and
- *       replay every push in its ref log through the same check the
- *       server's hook runs, so a server that skipped its own check is
- *       caught. Pins the trust root and the verified head in
- *       $XDG_CONFIG_HOME/nexus-forge/verified.json; the mirror lives in
- *       $XDG_CACHE_HOME/nexus-forge/mirrors/. Uses $NEXUS_FORGE_TOKEN.
+ *   forge verify <repo-url> [--trust-root <sha256:fingerprint | file>] [--trust-on-first-use]
+ *       Enforce the push policy on this machine (see verify.ts). A first
+ *       run needs the trust root's fingerprint from the repository owner.
+ *       Uses $NEXUS_FORGE_TOKEN for private repositories.
  *
- *   forge log verify <repo-url>
- *       Check a repository's ref log: every hash link, the ref state it
- *       replays to against the refs the server actually serves, and that it
- *       still contains the head this machine verified last time (pinned in
- *       $XDG_CONFIG_HOME/nexus-forge/pins.json). Uses $NEXUS_FORGE_TOKEN for
- *       private repositories.
+ *   forge install-helper [--dir <dir>]
+ *       Install git-remote-nexus (default ~/.local/bin), after which
+ *       `git clone nexus::<repo-url>` and every fetch or pull from that
+ *       remote run `forge verify` first and fail if it fails.
  *
  *   forge admin user add <name>
  *   forge admin token <user> [--ttl-hours N]
@@ -25,136 +20,49 @@
  *       ($FORGE_DB_PATH, $FORGE_STORAGE_PATH). Whoever can run these already
  *       holds the files, so the filesystem is the authority here.
  */
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
 import { issueToken } from "../backend/auth/tokens";
-import { type Pin, extendsPin, verifyChain } from "../backend/reflog/chain";
+import { trustRootFingerprint } from "../backend/policy/signers";
 import { type AccessLevel, ForgeDB } from "../backend/storage/db";
 import { RepositoryError, RepositoryManager } from "../backend/storage/repository";
-import { verifyRepository } from "./verify";
+import { installHelper } from "./remote-helper";
+import { clientOptions, verifyRepository } from "./verify";
 
 class UsageError extends Error {}
 
 async function main(argv: string[]): Promise<number> {
-  const [group, command, ...rest] = argv;
-  if (group === "verify") {
-    const args = [command, ...rest].filter((a): a is string => a !== undefined);
-    const url = args.find((a, i) => !a.startsWith("--") && args[i - 1] !== "--trust-root");
-    if (!url) throw new UsageError("usage: forge verify <repo-url> [--trust-root <file>]");
-    const trustRootFile = flag(args, "--trust-root");
-    return verifyRepository(url, {
-      token: process.env.NEXUS_FORGE_TOKEN ?? "",
-      ...(trustRootFile ? { trustRootFile } : {}),
-      configHome: process.env.XDG_CONFIG_HOME || path.join(homedir(), ".config"),
-      cacheHome: process.env.XDG_CACHE_HOME || path.join(homedir(), ".cache"),
-    });
+  const [command, ...args] = argv;
+  if (command === "verify") return verify(args);
+  if (command === "install-helper") {
+    const dir = flag(args, "--dir") ?? path.join(homedir(), ".local", "bin");
+    console.log(`installed ${installHelper(dir)}`);
+    return 0;
   }
-  if (group === "log" && command === "verify") return logVerify(rest);
-  if (group === "admin") return admin(command, rest);
-  throw new UsageError(
-    "usage: forge verify <repo-url> | forge log verify <repo-url> | forge admin <user|token|repo|grant> ...",
-  );
+  if (command === "admin") return admin(args[0], args.slice(1));
+  throw new UsageError("usage: forge verify <repo-url> | forge install-helper | forge admin ...");
 }
 
-async function logVerify(args: string[]): Promise<number> {
-  const [rawUrl] = args;
-  if (!rawUrl) throw new UsageError("usage: forge log verify <repo-url>");
-  const url = rawUrl.replace(/\/+$/, "");
-  const token = process.env.NEXUS_FORGE_TOKEN ?? "";
-  const headers: Record<string, string> = token ? { authorization: `Bearer ${token}` } : {};
-
-  const response = await fetch(`${url}/nexus/ref-log`, { headers });
-  if (!response.ok) {
-    console.error(`FAIL: could not fetch the ref log (HTTP ${response.status})`);
-    return 1;
+async function verify(args: string[]): Promise<number> {
+  const trustRoot = flag(args, "--trust-root");
+  const url = args.find((a, i) => !a.startsWith("--") && args[i - 1] !== "--trust-root");
+  if (!url) {
+    throw new UsageError("usage: forge verify <repo-url> [--trust-root <fingerprint|file>]");
   }
-  const chain = verifyChain(await response.text());
-  if (!chain.ok) {
-    console.error(`FAIL: ref log chain is broken: ${chain.error}`);
-    return 1;
-  }
-
-  const served = await lsRemote(url, token);
-  if (!served) {
-    console.error("FAIL: could not list the repository's refs");
-    return 1;
-  }
-  const mismatches = diffRefs(chain.refs, served);
-  if (mismatches.length > 0) {
-    console.error("FAIL: refs served do not match the refs the log replays to:");
-    for (const line of mismatches) console.error(`  ${line}`);
-    return 1;
-  }
-
-  const pinFile = path.join(
-    process.env.XDG_CONFIG_HOME || path.join(homedir(), ".config"),
-    "nexus-forge",
-    "pins.json",
-  );
-  const pins = await readPins(pinFile);
-  const pin = pins[url];
-  if (pin && !extendsPin(chain.entries, pin)) {
-    console.error(
-      `FAIL: history was rewritten: entry ${pin.seq} no longer has the hash ${pin.hash} verified earlier`,
-    );
-    return 1;
-  }
-  const last = chain.entries.at(-1);
-  if (last) {
-    pins[url] = { seq: last.seq, hash: last.hash };
-    await mkdir(path.dirname(pinFile), { recursive: true });
-    await writeFile(pinFile, `${JSON.stringify(pins, null, 2)}\n`);
-  }
-  console.log(`ok: ${chain.entries.length} entries, head ${chain.head}, ${served.size} refs match`);
-  return 0;
-}
-
-async function lsRemote(url: string, token: string): Promise<Map<string, string> | null> {
-  const env: Record<string, string> = {
-    PATH: process.env.PATH ?? "/usr/bin:/bin",
-    HOME: process.env.HOME ?? "/nonexistent",
-    GIT_TERMINAL_PROMPT: "0",
-    GIT_CONFIG_COUNT: "0",
-  };
-  if (token) {
-    // Through the environment rather than argv, so the token is not in `ps`.
-    env.GIT_CONFIG_COUNT = "1";
-    env.GIT_CONFIG_KEY_0 = "http.extraHeader";
-    env.GIT_CONFIG_VALUE_0 = `Authorization: Bearer ${token}`;
-  }
-  const proc = Bun.spawn(["git", "ls-remote", "--refs", url], {
-    env,
-    stdout: "pipe",
-    stderr: "pipe",
+  const result = await verifyRepository(url, {
+    ...clientOptions(),
+    ...(trustRoot ? { trustRoot } : {}),
+    trustOnFirstUse: args.includes("--trust-on-first-use"),
   });
-  const [out, code] = await Promise.all([new Response(proc.stdout).text(), proc.exited]);
-  if (code !== 0) return null;
-  const refs = new Map<string, string>();
-  for (const line of out.split("\n")) {
-    const [id, ref] = line.split("\t");
-    if (id && ref) refs.set(ref, id);
+  if (!result.ok) {
+    console.error(`FAIL: ${result.error}`);
+    return 1;
   }
-  return refs;
-}
-
-function diffRefs(logged: Map<string, string>, served: Map<string, string>): string[] {
-  const out: string[] = [];
-  for (const ref of new Set([...logged.keys(), ...served.keys()])) {
-    const a = logged.get(ref);
-    const b = served.get(ref);
-    if (a !== b) out.push(`${ref}: log says ${a ?? "absent"}, server has ${b ?? "absent"}`);
-  }
-  return out.sort();
-}
-
-async function readPins(file: string): Promise<Record<string, Pin>> {
-  try {
-    return JSON.parse(await readFile(file, "utf8")) as Record<string, Pin>;
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return {};
-    throw new Error(`pin file ${file} is unreadable; refusing to continue without it`);
-  }
+  console.log(
+    `ok: ${result.pushes} pushes verified (${result.checked} new), head ${result.head}, every commit signed under the policy in force`,
+  );
+  return 0;
 }
 
 async function admin(command: string | undefined, args: string[]): Promise<number> {
@@ -184,17 +92,20 @@ async function admin(command: string | undefined, args: string[]): Promise<numbe
     if (command === "repo" && args[0] === "create" && args[1]) {
       const trustRootFile = flag(args, "--trust-root");
       if (!trustRootFile) throw new UsageError("--trust-root <allowed_signers file> is required");
+      const trustRoot = await readFile(trustRootFile, "utf8");
       const description = flag(args, "--description");
       const repo = await repos.createRepository(
         {
           name: args[1],
           visibility: args.includes("--public") ? "public" : "private",
-          trustRoot: await readFile(trustRootFile, "utf8"),
+          trustRoot,
           ...(description ? { description } : {}),
         },
         user(flag(args, "--owner")),
       );
       console.log(`created ${repo.visibility} repository ${repo.name}`);
+      console.log("trust root fingerprint (give this to collaborators out of band):");
+      console.log(trustRootFingerprint(trustRoot));
       return 0;
     }
 

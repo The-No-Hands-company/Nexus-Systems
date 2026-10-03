@@ -29,8 +29,10 @@ unless:
    parseable.
 
 **Policy in force** = `.nexus/allowed_signers` (git's `allowedSignersFile`
-format) at the default branch's tip *as it was before the push*; if that file
-is absent, the repository's **trust root**, set when it was created.
+format) at `refs/heads/main` *as it was before the push*; if that file is
+absent, the repository's **trust root**, set when it was created. The policy
+ref is fixed: it is never read from `HEAD`, so repointing `HEAD` at a branch
+carrying an unreviewed policy change gains nothing.
 
 Reading the policy from the pre-push tip, not from each commit's parent:
 
@@ -54,33 +56,41 @@ over the other fields, `prev` is the previous entry's hash and `push` is the
 `seq` of the first entry the same push wrote (a push is judged as a whole, so
 replaying the policy needs its boundaries).
 
-`forge log verify <url>` is the quick check, needing no objects:
+## Enforcement on the client
 
-- every link holds (an edited, dropped or reordered entry fails)
-- the log replays to exactly the refs the server serves (a ref moved outside a
-  push fails, and so does a push whose log append failed)
-- the log still contains the head this client verified last time, pinned in
-  `$XDG_CONFIG_HOME/nexus-forge/pins.json` (a consistent rewrite of the whole
-  chain fails *for a client that had pinned it*)
+`forge verify <url> [--trust-root <sha256:fingerprint | file>]` does not
+depend on the server having run its hook. It treats everything the server
+sends as untrusted input, keeps a mirror of the repository
+(`$XDG_CACHE_HOME/nexus-forge/mirrors/`), and:
 
-## Enforcement on the client: `forge verify`
+1. checks the served trust root against the fingerprint the repository owner
+   gave out of band (`forge admin repo create` prints it), or the one pinned
+   on an earlier run (`$XDG_CONFIG_HOME/nexus-forge/verified.json`). **A
+   first run with neither refuses** and shows the served fingerprint to
+   compare; accepting it unchecked needs an explicit `--trust-on-first-use`
+2. checks the ref log: every entry well-formed (object ids are hex, ref names
+   plain, no extra fields, so nothing from the log can become a git option),
+   every link intact, and the head verified last time still present
+3. checks the log replays to exactly the refs the mirror fetched
+4. replays **every push in the log** through the same `checkUpdates()` the
+   server's hook runs, with the state before each push rebuilt from the log;
+   pushes verified on an earlier run are skipped (2 proves them unchanged)
 
-`forge verify <url> [--trust-root <file>]` stops depending on the server
-having run its hook. It keeps a mirror of the repository
-(`$XDG_CACHE_HOME/nexus-forge/mirrors/`) and:
+**Plain git, verified: `git-remote-nexus`.** After `forge install-helper`,
+`git clone -c nexus.trustRoot=sha256:… nexus::https://host/repo.git` and
+every later `git fetch` / `git pull` run all of the above first and abort
+if it fails. Objects are copied from the verified mirror, never straight
+from the server, so a clone only ever contains what was verified.
 
-1. does everything `forge log verify` does, against the mirror's refs
-2. checks the served trust root against `--trust-root`, or against the one
-   this machine saw last time (`$XDG_CONFIG_HOME/nexus-forge/verified.json`)
-3. replays **every push in the log** through the same `checkUpdates()` the
-   server's pre-receive hook runs, with the state before each push
-   reconstructed from the log; pushes verified on an earlier run are skipped
-   (step 1's pin guarantees they are unchanged)
+The client's git only speaks http(s) (no `ext::`, `file://` or ssh command
+transports), follows no redirects (one could hand the token to another
+host), fsck's every fetched object, and refuses URLs with credentials in
+them (they would be written to disk) and plain http to other machines.
 
-So a server that skips its own check and lets an unsigned or wrongly signed
-commit in, while keeping the log consistent, is caught by any client that
-runs `forge verify`. The tests run exactly that: a forge whose pre-receive
-accepts everything.
+The tests run a compromised forge (its pre-receive accepts everything, the
+log is still written): unsigned and wrongly signed commits, a multi-ref push
+that uses a key it just added, a swapped trust root and a rewritten log are
+all refused, and a `git pull` through the helper leaves the clone untouched.
 
 ## Hooks fail closed
 
@@ -91,17 +101,29 @@ they do not run, and re-checks before every push (503 if they stopped being
 executable). Checked-in hook scripts arrived as mode 100644 on a fresh
 checkout, which would have accepted every push unchecked.
 
+## Resource limits on the server
+
+- push bodies are streamed into git with a byte cap (512 MiB default): a
+  declared oversize body is refused before reading, a streamed one is cut
+  off and git refuses the truncated pack; nothing is buffered in memory
+- at most 16 git processes at once (configurable); past that, 503 with
+  `Retry-After` instead of an unbounded queue
+- the signature check is one git process per ref and stops at the first bad
+  commit, so a push of many unsigned commits costs one process
+- every response carries `nosniff`, `default-src 'none'; frame-ancestors
+  'none'` and `no-referrer` (the forge serves no HTML)
+- usernames and repository names come from allowlists: both reach git's
+  environment, paths or the ref log
+
 ## Limits
 
-- **A client that never runs `forge verify` gets only the server's word.**
-  Plain `git clone` / `pull` do not check anything. Making verification the
-  default path (a git remote helper, or `forge clone`) is the next step.
-- **The first verify trusts the served trust root** unless `--trust-root` is
-  given (trust on first use). Pass the file out of band for the first run.
+- **A clone made without `nexus::` is not verified.** Plain `https://`
+  remotes check nothing; `forge verify` can still be run on demand.
 - **A client that has never pinned a head cannot detect a consistent rewrite.**
   Closing that needs heads witnessed by someone other than the server, such as
   federation peers.
 - **No server signature on log entries yet.** The chain proves internal
   consistency, not who wrote it.
-- Pushes are buffered in memory (512 MiB cap). Fine for a single machine;
-  streaming is a later change.
+- **Commits are SHA-1 by default.** git's SHA-1 has collision detection, but
+  SHA-256 repositories (`--object-format=sha256`) are the stronger choice;
+  supporting them end to end is open.

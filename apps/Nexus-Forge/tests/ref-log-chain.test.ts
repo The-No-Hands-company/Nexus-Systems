@@ -81,6 +81,31 @@ describe("ref log chain", () => {
     if (!result.ok) expect(result.error).toContain("not contiguous");
   });
 
+  it("rejects hostile entries even when every hash is recomputed to match", async () => {
+    const base = lines((await sampleLog()).text);
+    const hostile: [string, (e: RefLogEntry) => RefLogEntry][] = [
+      ["option as new id", (e) => ({ ...e, new: "--output=/tmp/owned" })],
+      ["option as old id", (e) => ({ ...e, old: "--all" })],
+      ["short id", (e) => ({ ...e, new: "abc123" })],
+      ["ref with a space", (e) => ({ ...e, ref: "refs/heads/a b" })],
+      ["ref outside refs/", (e) => ({ ...e, ref: "HEAD" })],
+      ["ref with ..", (e) => ({ ...e, ref: "refs/heads/../../x" })],
+      ["control character in pusher", (e) => ({ ...e, pusher: "a\u001b[2Jb" })],
+      ["extra field", (e) => ({ ...e, extra: 1 }) as RefLogEntry],
+    ];
+    for (const [label, mutate] of hostile) {
+      let prev = "0".repeat(64);
+      const forged = base.slice(0, 1).map((entry) => {
+        const { hash: _drop, ...body } = { ...mutate(entry), prev };
+        const hash = entryHash(body as Omit<RefLogEntry, "hash">);
+        prev = hash;
+        return { ...body, hash } as RefLogEntry;
+      });
+      const result = verifyChain(serialise(forged));
+      expect({ label, ok: result.ok }).toEqual({ label, ok: false });
+    }
+  });
+
   it("detects an edited entry", async () => {
     const entries = lines((await sampleLog()).text);
     const edited = entries.map((e) => (e.seq === 1 ? { ...e, pusher: "mallory" } : e));

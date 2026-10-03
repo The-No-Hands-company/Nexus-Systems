@@ -2,7 +2,8 @@ import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { type RefLogEntry, entryHash } from "../src/backend/reflog/chain";
+import { trustRootFingerprint } from "../src/backend/policy/signers";
+import { type RefLogEntry, entryHash, verifyChain } from "../src/backend/reflog/chain";
 import { REF_LOG_FILE, TRUST_ROOT_FILE } from "../src/backend/storage/repository";
 import {
   GitClient,
@@ -17,7 +18,7 @@ import {
  * `forge verify`: the client re-runs the server's push policy over every
  * push in the ref log, against a mirror of the repository. The point is the
  * compromised server: one that still keeps the log but lets anything in.
- * `forge log verify` cannot see that (log and refs agree); this must.
+ * Log integrity alone cannot see that (log and refs agree); this must.
  */
 const CLI = path.join(import.meta.dir, "../src/cli/forge.ts");
 
@@ -54,14 +55,25 @@ function freshClient(): Client {
   };
 }
 
-async function verify(url: string, client: Client, extra: string[] = [], token?: string) {
-  const proc = Bun.spawn([process.execPath, CLI, "verify", url, ...extra], {
+/**
+ * Runs `forge verify`. `trust` defaults to alice's fingerprint (every test
+ * repository's trust root); null passes none, so the pinned one applies.
+ */
+async function verify(
+  url: string,
+  client: Client,
+  options: { trust?: string | null; token?: string; extra?: string[] } = {},
+) {
+  const trust =
+    options.trust === undefined ? trustRootFingerprint(alice.signerLine) : options.trust;
+  const args = [...(trust ? ["--trust-root", trust] : []), ...(options.extra ?? [])];
+  const proc = Bun.spawn([process.execPath, CLI, "verify", url, ...args], {
     env: {
       PATH: process.env.PATH ?? "/usr/bin:/bin",
       HOME: git.home,
       XDG_CONFIG_HOME: client.config,
       XDG_CACHE_HOME: client.cache,
-      ...(token ? { NEXUS_FORGE_TOKEN: token } : {}),
+      ...(options.token ? { NEXUS_FORGE_TOKEN: options.token } : {}),
     },
     stdout: "pipe",
     stderr: "pipe",
@@ -72,19 +84,6 @@ async function verify(url: string, client: Client, extra: string[] = [], token?:
     proc.exited,
   ]);
   return { code, out: out + err };
-}
-
-async function logVerify(url: string) {
-  const proc = Bun.spawn([process.execPath, CLI, "log", "verify", url], {
-    env: {
-      PATH: process.env.PATH ?? "/usr/bin:/bin",
-      HOME: git.home,
-      XDG_CONFIG_HOME: mkdtempSync(path.join(tmpdir(), "forge-cfg-")),
-    },
-    stdout: "pipe",
-    stderr: "pipe",
-  });
-  return proc.exited;
 }
 
 let counter = 0;
@@ -175,7 +174,7 @@ describe("an honest server", () => {
     await commit(repo.work, alice, "a.txt");
     await git.ok(["push", "--quiet", repo.pushUrl, "main"], repo.work);
     expect((await verify(repo.url, freshClient())).code).not.toBe(0);
-    expect((await verify(repo.url, freshClient(), [], repo.token)).code).toBe(0);
+    expect((await verify(repo.url, freshClient(), { token: repo.token })).code).toBe(0);
   });
 });
 
@@ -187,7 +186,9 @@ describe("a compromised server", () => {
     const unsigned = await commit(repo.work, null, "backdoor.txt");
     await git.ok(["push", "--quiet", repo.pushUrl, "main"], repo.work);
 
-    expect(await logVerify(repo.url)).toBe(0);
+    // The log is intact and matches the refs: log integrity alone cannot see this.
+    const served = await (await fetch(`${repo.url}/nexus/ref-log`)).text();
+    expect(verifyChain(served).ok).toBe(true);
     const result = await verify(repo.url, freshClient());
     expect(result.code).not.toBe(0);
     expect(result.out).toContain(unsigned.slice(0, 12));
@@ -240,7 +241,7 @@ describe("a compromised server", () => {
     expect((await verify(repo.url, client)).code).toBe(0);
 
     writeFileSync(evil.repos.metaPath(repo.name, TRUST_ROOT_FILE), mallory.signerLine);
-    const result = await verify(repo.url, client);
+    const result = await verify(repo.url, client, { trust: null });
     expect(result.code).not.toBe(0);
     expect(result.out).toContain("trust root changed");
   });
@@ -251,10 +252,38 @@ describe("a compromised server", () => {
     await git.ok(["push", "--quiet", repo.pushUrl, "main"], repo.work);
     const expected = path.join(git.home, `trust-${repo.name}`);
     writeFileSync(expected, `${mallory.signerLine}\n`);
-    const result = await verify(repo.url, freshClient(), ["--trust-root", expected]);
+    const result = await verify(repo.url, freshClient(), { trust: expected });
     expect(result.code).not.toBe(0);
     expect(result.out).toContain("trust root");
     writeFileSync(expected, alice.signerLine);
-    expect((await verify(repo.url, freshClient(), ["--trust-root", expected])).code).toBe(0);
+    expect((await verify(repo.url, freshClient(), { trust: expected })).code).toBe(0);
+  });
+});
+
+describe("trust on first use is opt-in", () => {
+  it("refuses a first verification without a trust root, and shows the fingerprint to compare", async () => {
+    const repo = await newRepo(honest);
+    await commit(repo.work, alice, "a.txt");
+    await git.ok(["push", "--quiet", repo.pushUrl, "main"], repo.work);
+    const client = freshClient();
+    const first = await verify(repo.url, client, { trust: null });
+    expect(first.code).not.toBe(0);
+    expect(first.out).toContain(trustRootFingerprint(alice.signerLine));
+    const tofu = await verify(repo.url, client, { trust: null, extra: ["--trust-on-first-use"] });
+    expect(tofu.code).toBe(0);
+    // Pinned now: later runs need nothing.
+    expect((await verify(repo.url, client, { trust: null })).code).toBe(0);
+  });
+});
+
+describe("URLs", () => {
+  it("refuses credentials in the URL and plain http to another machine", async () => {
+    const repo = await newRepo(honest);
+    const withCredentials = await verify(repo.pushUrl, freshClient());
+    expect(withCredentials.code).not.toBe(0);
+    expect(withCredentials.out).toContain("credentials");
+    const remote = await verify("http://forge.example.test/x.git", freshClient());
+    expect(remote.code).not.toBe(0);
+    expect(remote.out).toContain("https");
   });
 });
