@@ -1,5 +1,0 @@
-#!/bin/sh
-# Installed by the forge through core.hooksPath, never copied into a
-# repository. Anything missing means the push is refused, not let through.
-[ -n "$NEXUS_FORGE_BUN" ] || { echo "forge: hook environment missing; refusing push" >&2; exit 1; }
-exec "$NEXUS_FORGE_BUN" "$(dirname "$0")/pre-receive.ts"

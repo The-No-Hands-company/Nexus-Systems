@@ -196,7 +196,7 @@ describe("ref rules", () => {
     expect((await push(work, url)).code).toBe(0);
     await git.ok(["tag", "light"], work);
     expect((await push(work, url, "refs/tags/light")).code).toBe(0);
-    await git.ok(["tag", "--no-sign", "-a", "-m", "unsigned", "plain"], work);
+    await git.ok(["tag", "-a", "-m", "unsigned", "plain"], work);
     expect((await push(work, url, "refs/tags/plain")).code).not.toBe(0);
     await git.ok(["tag", "-s", "-m", "signed", "v1"], work);
     expect((await push(work, url, "refs/tags/v1")).code).toBe(0);

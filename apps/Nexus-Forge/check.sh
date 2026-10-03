@@ -3,6 +3,8 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 echo "nexus-forge..."
+# typecheck + lint, then the tests (real git and ssh-keygen against a real server).
+bun run check
 # Not piped through `tail -1`. That printed the run's summary line and threw
 # away every failure above it, so a red gate named no test and showed no
 # assertion. bun's own exit code is the gate; `set -e` acts on it.

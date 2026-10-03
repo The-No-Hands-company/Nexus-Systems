@@ -4,6 +4,7 @@ import { principalFromRequest } from "../auth/tokens";
 import type { ForgeDB, UserRecord } from "../storage/db";
 import { REF_LOG_FILE, type RepositoryManager } from "../storage/repository";
 import { gitEnv } from "./env";
+import { hooksExecutable } from "./hooks";
 import { isValidRepoName } from "./names";
 
 export interface SmartHttpOptions {
@@ -80,6 +81,13 @@ export async function handleSmartHttp(
     return new Response(body, {
       headers: { "content-type": "application/x-ndjson", "cache-control": "no-store" },
     });
+  }
+
+  // git skips a hook it cannot execute and carries on with the push, so a
+  // hook that stopped being runnable after startup must stop pushes here.
+  if (endpoint.service === "git-receive-pack" && !hooksExecutable(options.hooksDir)) {
+    console.error(`[forge] hooks in ${options.hooksDir} are not executable; refusing push`);
+    return text(503, "push policy unavailable; push refused\n");
   }
 
   let body: Uint8Array | null = null;

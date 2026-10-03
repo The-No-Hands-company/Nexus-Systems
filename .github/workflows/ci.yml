@@ -21,6 +21,7 @@ jobs:
           - Nexus-Video
           - Nexus-Notes
           - Nexus-Tasks
+          - Nexus-Forge
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
