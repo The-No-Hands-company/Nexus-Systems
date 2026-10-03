@@ -221,3 +221,26 @@ describe("JSON API", () => {
     expect(response.status).toBe(404);
   });
 });
+
+describe("push size limit", () => {
+  it("refuses a request body over the limit, even without a Content-Length", async () => {
+    const { createForge } = await import("../src/backend/server");
+    const small = createForge({ db: forge.db, repos: forge.repos, maxPushBytes: 1024 });
+    const chunk = new Uint8Array(600);
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(chunk);
+        controller.enqueue(chunk);
+        controller.close();
+      },
+    });
+    const response = await small.fetch(
+      new Request(`${forge.url}/secret.git/git-upload-pack`, {
+        method: "POST",
+        headers: { authorization: `Bearer ${ownerToken}` },
+        body,
+      }),
+    );
+    expect(response.status).toBe(413);
+  });
+});

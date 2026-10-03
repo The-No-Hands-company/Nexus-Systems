@@ -240,9 +240,15 @@ async function readLimited(request: Request, max: number): Promise<Uint8Array | 
   if (!request.body) return new Uint8Array(0);
   const chunks: Uint8Array[] = [];
   let total = 0;
-  for await (const chunk of request.body) {
+  const reader = request.body.getReader();
+  for (;;) {
+    const { value: chunk, done } = await reader.read();
+    if (done) break;
     total += chunk.byteLength;
-    if (total > max) return null;
+    if (total > max) {
+      await reader.cancel();
+      return null;
+    }
     chunks.push(chunk);
   }
   const out = new Uint8Array(total);
