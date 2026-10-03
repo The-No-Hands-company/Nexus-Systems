@@ -15,7 +15,7 @@ Current shape (main.ts line 17):
 ```json
 { "status": "ok", "timestamp": "2026-05-08T00:00:00.000Z" }
 ```
-Port: 8090
+Port: 8094 (was 8090 until 2026-10-03; 8090 is Nexus-Hosting's site-proxy)
 
 ### Cloud registration
 Endpoint: `POST {NEXUS_CLOUD_URL}/api/v1/tools`
@@ -25,7 +25,7 @@ Payload:
   "id": "nexus-forge",
   "name": "Nexus Forge",
   "description": "...",
-  "upstreamUrl": "http://host:8090",
+  "upstreamUrl": "http://host:8094",
   "mode": "standalone",
   "exposed": true,
   "health": "healthy",
@@ -45,7 +45,7 @@ Payload: `{ "health": "healthy", "upstreamUrl": "..." }`
 | /health `uptimeSeconds` field | `{ uptimeSeconds: 0 }` | absent (uses `timestamp`) | **delta** — either add `uptimeSeconds` or accept `timestamp` as equivalent |
 | Cloud registration path | `POST /api/v1/systems/register` | `POST /api/v1/tools` | **delta** — Nexus-Systems-API must expose a `/api/v1/tools` compat alias or Forge must adapt |
 | Heartbeat path | follow-up scoped in batch blockers | `POST /api/v1/tools/{id}/heartbeat` | **delta** — existing pattern is more complete than batch follow-up spec; batch services should adopt same path |
-| Port range | 30xx (batch services) | 8090 | **not a delta** — forge port is by design; no change required |
+| Port range | 30xx (batch services) | 8094 | **not a delta** — forge port is by design; no change required |
 
 ## Required Actions (this batch cycle only)
 

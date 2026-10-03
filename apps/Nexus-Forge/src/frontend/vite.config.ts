@@ -7,11 +7,11 @@ export default defineConfig({
     port: 5173,
     proxy: {
       "/api": {
-        target: "http://localhost:8090",
+        target: "http://localhost:8094",
         changeOrigin: true,
       },
       "/.well-known": {
-        target: "http://localhost:8090",
+        target: "http://localhost:8094",
         changeOrigin: true,
       },
     },

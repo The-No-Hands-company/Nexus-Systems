@@ -1,24 +1,22 @@
-FROM oven/bun:1.1.0 AS builder
+# The backend has no npm runtime dependencies (bun:sqlite is built in), and
+# it runs from source: the git hooks are .ts files that git executes from
+# src/backend/hooks/, which a bundled dist/ would not contain.
+FROM oven/bun:1.3.12
 WORKDIR /app
-COPY package.json bun.lockb ./
-RUN bun install --frozen-lockfile
-COPY tsconfig.json ./
-COPY src ./src
-RUN bun run build
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends git openssh-client \
+  && rm -rf /var/lib/apt/lists/*
+COPY src/backend ./src/backend
+COPY src/cli ./src/cli
 
-FROM oven/bun:1.1.0
-WORKDIR /app
-RUN apt-get update && apt-get install -y git git-lfs openssh-client && rm -rf /var/lib/apt/lists/*
-COPY package.json ./
-RUN bun install --frozen-lockfile --production
-COPY --from=builder /app/dist ./dist
-
-ENV FORGE_STORAGE_PATH=/data/forge-repos
-ENV FORGE_DB_PATH=/data/forge-meta.db
-ENV FORGE_PUBLIC_DOMAIN=localhost:8090
-ENV PORT=8090
+ENV FORGE_STORAGE_PATH=/data/repos
+ENV FORGE_DB_PATH=/data/forge.db
+# Inside the container the server must listen on all interfaces; publish the
+# port on the host's loopback only (see docker-compose.yml).
+ENV HOST=0.0.0.0
+ENV PORT=8094
 
 VOLUME ["/data"]
-EXPOSE 8090 8091
+EXPOSE 8094
 
-CMD ["bun", "dist/backend/main.js"]
+CMD ["bun", "src/backend/main.ts"]

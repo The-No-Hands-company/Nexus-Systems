@@ -22,7 +22,7 @@ federation, other VCSes (SVN, Mercurial, Pijul).
 ## Quick start
 
 ```bash
-bun run dev                       # http://127.0.0.1:8090 (HOST/PORT to change)
+bun run dev                       # http://127.0.0.1:8094 (HOST/PORT to change)
 
 # Admin operations work on the database and storage directly:
 bun src/cli/forge.ts admin user add alice
@@ -31,15 +31,14 @@ bun src/cli/forge.ts admin token alice --ttl-hours 8      # prints the token onc
 export NEXUS_FORGE_TOKEN=...                              # paste it here
 
 git -c http.extraHeader="Authorization: Bearer $NEXUS_FORGE_TOKEN" \
-    clone http://127.0.0.1:8090/demo.git
+    clone http://127.0.0.1:8094/demo.git
 git -C demo commit -S --allow-empty -m first              # gpg.format=ssh
 git -C demo -c http.extraHeader="Authorization: Bearer $NEXUS_FORGE_TOKEN" push origin main
 
-bun src/cli/forge.ts log verify http://127.0.0.1:8090/demo.git
+bun src/cli/forge.ts log verify http://127.0.0.1:8094/demo.git
 ```
 
-Port 8090 is also the default of Nexus-Hosting's site-proxy; on a machine that
-runs both, set `PORT`.
+Forge used 8090 until 2026-10-03; that is Nexus-Hosting's site-proxy port.
 
 ### Environment
 
@@ -47,7 +46,7 @@ runs both, set `PORT`.
 |---|---|---|
 | `FORGE_DB_PATH` | `./data/forge.db` | SQLite metadata (users, token hashes, repositories, grants) |
 | `FORGE_STORAGE_PATH` | `./data/repos` | Bare repositories; forge files live in `<repo>.git/nexus/` |
-| `HOST` / `PORT` | `127.0.0.1` / `8090` | Loopback by default; public traffic comes through the ecosystem proxy |
+| `HOST` / `PORT` | `127.0.0.1` / `8094` | Loopback by default; public traffic comes through the ecosystem proxy |
 | `NEXUS_FORGE_PUBLIC_URL` | request origin | Base for clone URLs in the API |
 | `NEXUS_CLOUD_URL` | unset | Optional Nexus Cloud registration + heartbeat |
 

@@ -34,7 +34,7 @@ Implemented and pinned 2026-05-08:
 | nexus-ide | 3035 | ide |
 | nexus-api | 3036 | gateway |
 | nexus-testing | 3037 | test-runner |
-| nexus-forge | 8090 | code-forge |
+| nexus-forge | 8094 | code-forge |
 
 ## Compatibility Notes
 

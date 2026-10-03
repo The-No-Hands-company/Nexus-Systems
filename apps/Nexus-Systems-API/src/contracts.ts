@@ -17,7 +17,7 @@ export const batchServiceRegistry = {
   "nexus-ide": { port: 3035, role: "ide" },
   "nexus-api": { port: 3036, role: "gateway" },
   "nexus-testing": { port: 3037, role: "test-runner" },
-  "nexus-forge": { port: 8090, role: "code-forge" },
+  "nexus-forge": { port: 8094, role: "code-forge" },
 } as const;
 
 export type BatchServiceId = keyof typeof batchServiceRegistry;

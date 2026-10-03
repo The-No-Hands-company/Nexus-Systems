@@ -11,7 +11,7 @@ mkdirSync(path.dirname(dbPath), { recursive: true });
 const db = new ForgeDB(dbPath);
 const repos = new RepositoryManager(storagePath, db);
 
-const port = Number.parseInt(env.PORT || "8090", 10);
+const port = Number.parseInt(env.PORT || "8094", 10);
 // Loopback by default: public traffic reaches apps through the ecosystem
 // proxy, never by binding every interface.
 const host = env.HOST || "127.0.0.1";
@@ -81,7 +81,7 @@ const forge = createForge({
   repos,
   ...(env.NEXUS_FORGE_PUBLIC_URL ? { publicUrl: env.NEXUS_FORGE_PUBLIC_URL } : {}),
 });
-Bun.serve({ port, hostname: host, fetch: forge.fetch });
+const server = Bun.serve({ port, hostname: host, fetch: forge.fetch });
 console.log(` Listening on http://${host}:${port}`);
 
 let cloudHeartbeatTimer: ReturnType<typeof setInterval> | null = null;
@@ -108,5 +108,16 @@ function stopCloudHeartbeat(): void {
   }
 }
 
-process.on("SIGINT", () => stopCloudHeartbeat());
-process.on("SIGTERM", () => stopCloudHeartbeat());
+// A signal handler replaces the default "exit", so it has to exit itself;
+// the earlier handlers only stopped the heartbeat and left the server
+// running through every SIGTERM. In-flight requests (a push) finish first.
+function shutdown(): void {
+  stopCloudHeartbeat();
+  server.stop().finally(() => {
+    db.close();
+    process.exit(0);
+  });
+}
+
+process.on("SIGINT", shutdown);
+process.on("SIGTERM", shutdown);

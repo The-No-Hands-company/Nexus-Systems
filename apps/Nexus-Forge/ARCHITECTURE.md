@@ -76,7 +76,7 @@ FORGE_STORAGE_PATH=/data/forge-repos/
   "name": "my-project",
   "description": "...",
   "vcs": "git",
-  "cloneUrl": "http://localhost:8090/my-project.git",
+  "cloneUrl": "http://localhost:8094/my-project.git",
   "sshUrl": "ssh://user@localhost:8091/my-project.git",
   "owner": { "id": 1, "name": "alice" },
   "createdAt": "2024-01-01T00:00:00Z"
@@ -219,7 +219,7 @@ docker-compose up
 ```
 
 Runs:
-- **Port 8090**: HTTP API + frontend
+- **Port 8094**: HTTP API + git smart HTTP
 - **Port 8091**: SSH server
 - **Volume /data**: All repos + SQLite DB
 
