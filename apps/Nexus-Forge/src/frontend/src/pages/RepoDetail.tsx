@@ -4,12 +4,12 @@ import { Link, useParams } from "react-router-dom";
 interface RepoDetailData {
   name?: string;
   description?: string;
-  vcs?: string;
+  visibility?: string;
   cloneUrl?: string;
 }
 
 interface ActivityItem {
-  id?: string;
+  id?: number;
   action?: string;
   created_at?: string;
 }
@@ -41,9 +41,9 @@ export default function RepoDetail() {
     <section>
       <Link to="/">← Back to repositories</Link>
       <h2>{repo.name ?? "Unnamed repository"}</h2>
-      <p>{repo.description ?? "Repository details are stubbed."}</p>
+      <p>{repo.description ?? "No description."}</p>
       <div className="repo-meta">
-        <p>VCS: {(repo.vcs as string) || "git"}</p>
+        <p>Visibility: {repo.visibility ?? "unknown"}</p>
         <p>Clone URL: {(repo.cloneUrl as string) || "N/A"}</p>
       </div>
       <div className="activity-panel">

@@ -1,27 +1,20 @@
-import { cors } from "@elysiajs/cors";
+import { mkdirSync } from "node:fs";
+import path from "node:path";
 import { env } from "bun";
-import { Elysia } from "elysia";
-import { registerFederationRoutes } from "./api/federation";
-import { registerRoutes } from "./api/routes";
+import { createForge } from "./server";
 import { ForgeDB } from "./storage/db";
 import { RepositoryManager } from "./storage/repository";
 
-const dbPath = env.FORGE_DB_PATH || "./data/forge-meta.db";
+const dbPath = env.FORGE_DB_PATH || "./data/forge.db";
 const storagePath = env.FORGE_STORAGE_PATH || "./data/repos";
+mkdirSync(path.dirname(dbPath), { recursive: true });
 const db = new ForgeDB(dbPath);
-const repoManager = new RepositoryManager(storagePath, db);
-
-const app = new Elysia().use(cors()).get("/health", () => ({
-  service: "nexus-forge",
-  status: "ok",
-  timestamp: new Date().toISOString(),
-}));
-
-registerRoutes(app, repoManager);
-registerFederationRoutes(app);
+const repos = new RepositoryManager(storagePath, db);
 
 const port = Number.parseInt(env.PORT || "8090", 10);
-const host = env.HOST || "0.0.0.0";
+// Loopback by default: public traffic reaches apps through the ecosystem
+// proxy, never by binding every interface.
+const host = env.HOST || "127.0.0.1";
 const cloudUrl = (env.NEXUS_CLOUD_URL || "").trim();
 const cloudApiKey = (env.NEXUS_CLOUD_API_KEY || "").trim();
 const cloudToolId = (env.NEXUS_FORGE_TOOL_ID || "nexus-forge").trim() || "nexus-forge";
@@ -54,18 +47,12 @@ async function registerForgeWithCloud(): Promise<void> {
     body: JSON.stringify({
       id: cloudToolId,
       name: cloudToolName,
-      description: "Federated code forge for repositories, issues, and collaboration",
+      description: "Git hosting with signed-push policy and a verifiable ref log",
       upstreamUrl: forgeUpstreamUrl(),
       mode: "standalone",
       exposed: true,
       health: "healthy",
-      capabilities: [
-        "repository-management",
-        "federation-discovery",
-        "pull-requests",
-        "issues",
-        "multi-vcs",
-      ],
+      capabilities: ["repository-management", "git-smart-http", "signed-push-policy", "ref-log"],
     }),
   });
   if (!response.ok) {
@@ -89,7 +76,12 @@ async function sendForgeHeartbeat(): Promise<void> {
 }
 
 console.log(`🔨 Nexus Forge launching on ${host}:${port}`);
-app.listen({ port, hostname: host });
+const forge = createForge({
+  db,
+  repos,
+  ...(env.NEXUS_FORGE_PUBLIC_URL ? { publicUrl: env.NEXUS_FORGE_PUBLIC_URL } : {}),
+});
+Bun.serve({ port, hostname: host, fetch: forge.fetch });
 console.log(` Listening on http://${host}:${port}`);
 
 let cloudHeartbeatTimer: ReturnType<typeof setInterval> | null = null;

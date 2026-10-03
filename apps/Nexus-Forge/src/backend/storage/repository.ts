@@ -1,78 +1,75 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import { VCSFactory } from "../vcs/vcs-interface";
-import type { ForgeDB, RepositoryRecord } from "./db";
+import { runGit } from "../git/env";
+import { isValidRepoName, repoDirName } from "../git/names";
+import { parseAllowedSigners } from "../policy/signers";
+import type { ForgeDB, RepositoryRecord, UserRecord, Visibility } from "./db";
 
 export interface RepositorySetup {
   name: string;
   description?: string;
-  vcs: "git" | "svn" | "hg" | "pijul";
+  visibility: Visibility;
+  /** allowed_signers text: the keys that may sign the first push. */
+  trustRoot: string;
 }
+
+/** Forge-owned files kept inside each bare repository, out of git's way. */
+export const META_DIR = "nexus";
+export const TRUST_ROOT_FILE = "trust-root";
+export const REF_LOG_FILE = "ref-log.jsonl";
+
+export class RepositoryError extends Error {}
 
 export class RepositoryManager {
   constructor(
-    private storagePath: string,
+    readonly storageRoot: string,
     private db: ForgeDB,
   ) {}
 
-  async createRepository(setup: RepositorySetup, ownerId?: number): Promise<void> {
-    const repoPath = path.join(this.storagePath, `${setup.name}.${this.getExtension(setup.vcs)}`);
-    await fs.mkdir(repoPath, { recursive: true });
+  /** Absolute path of a repository's bare directory, for a validated name only. */
+  repoPath(name: string): string {
+    return path.join(this.storageRoot, repoDirName(name));
+  }
 
-    const backend = VCSFactory.getBackend(setup.vcs);
-    await backend.init(repoPath, true);
+  metaPath(name: string, file: string): string {
+    return path.join(this.repoPath(name), META_DIR, file);
+  }
 
-    this.db.addRepository(setup.name, setup.vcs, setup.description, ownerId);
-    const record = this.db.getRepository(setup.name);
-    if (record) {
-      this.db.logActivity(
-        record.id,
-        "repository.created",
-        ownerId,
-        `Created repository ${setup.name}`,
-      );
+  async createRepository(setup: RepositorySetup, owner: UserRecord): Promise<RepositoryRecord> {
+    if (!isValidRepoName(setup.name)) {
+      throw new RepositoryError("name must match [a-z0-9][a-z0-9_-]{0,63}");
     }
-  }
+    if (setup.visibility !== "public" && setup.visibility !== "private") {
+      throw new RepositoryError('visibility must be "public" or "private"');
+    }
+    const signers = parseAllowedSigners(setup.trustRoot ?? "");
+    if ("error" in signers) throw new RepositoryError(`trustRoot: ${signers.error}`);
+    if (this.db.getRepository(setup.name)) {
+      throw new RepositoryError(`repository ${setup.name} already exists`);
+    }
 
-  async deleteRepository(name: string): Promise<void> {
-    const repo = this.db.getRepository(name);
-    if (!repo) return;
-    const repoPath = path.join(this.storagePath, `${name}.${this.getExtension(repo.vcs)}`);
-    await fs.rm(repoPath, { recursive: true, force: true });
-    // TODO: remove DB entry and permissions
-  }
+    const repoPath = this.repoPath(setup.name);
+    await fs.mkdir(this.storageRoot, { recursive: true });
+    // `mkdir` without `recursive` fails if the directory exists, so two
+    // concurrent creates cannot both initialise the same path.
+    await fs.mkdir(repoPath);
+    const init = await runGit(["init", "--quiet", "--bare", "--initial-branch=main", repoPath]);
+    if (init.code !== 0) {
+      await fs.rm(repoPath, { recursive: true, force: true });
+      throw new Error(`git init failed: ${init.stderr}`);
+    }
+    await fs.mkdir(path.join(repoPath, META_DIR));
+    await fs.writeFile(this.metaPath(setup.name, TRUST_ROOT_FILE), setup.trustRoot, {
+      mode: 0o644,
+    });
 
-  async getRepository(name: string) {
-    const repo = this.db.getRepository(name) as RepositoryRecord | undefined;
-    if (!repo) return null;
-    return {
-      name: repo.name,
-      vcs: repo.vcs,
-      description: repo.description,
-      cloneUrl: `http://localhost:8090/${repo.name}.${this.getExtension(repo.vcs)}`,
-      created_at: repo.created_at,
-    };
-  }
-
-  async listRepositories(limit = 50, skip = 0) {
-    const repos = this.db.listRepositories(limit, skip);
-    const total = repos.length;
-    return { repos, total };
-  }
-
-  async getActivity(name: string) {
-    const repo = this.db.getRepository(name);
-    if (!repo) return [];
-    return this.db.getActivity(repo.id, 50);
-  }
-
-  private getExtension(vcs: "git" | "svn" | "hg" | "pijul"): string {
-    const ext: Record<RepositorySetup["vcs"], string> = {
-      git: "git",
-      svn: "svn",
-      hg: "hg",
-      pijul: "pijul",
-    };
-    return ext[vcs];
+    const record = this.db.addRepository(
+      setup.name,
+      setup.visibility,
+      owner.id,
+      setup.description ?? null,
+    );
+    this.db.logActivity(record.id, "repository.created", owner.id, `created ${setup.name}`);
+    return record;
   }
 }

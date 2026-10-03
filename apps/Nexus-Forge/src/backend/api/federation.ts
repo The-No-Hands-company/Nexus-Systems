@@ -1,46 +1,15 @@
-export function registerFederationRoutes(app: ForgeRouteApp) {
-  app.get("/.well-known/nexus-cloud", () => ({
-    service: "nexus-forge",
-    version: "0.1.0",
-    endpoints: {
-      discovery: "/api/cloud/discovery",
-      register: "/api/cloud/register",
-      client: "/api/cloud/client",
-    },
-  }));
-
-  app.get("/api/cloud/discovery", async () => {
-    return {
-      peers: [],
-      message: "Federation discovery is stubbed. Add peer sync later.",
-    };
-  });
-
-  app.post("/api/cloud/register", async ({ body }) => {
-    const payload = body as { publicKey?: string; domain?: string; port?: number };
-    return {
-      ok: true,
-      registered: !!payload.domain,
-      nodeId: "forge-node-stub",
-    };
-  });
-
-  app.get("/api/cloud/client", async ({ query }) => {
-    return {
-      endpoint: "http://localhost:8090",
-      requestedRepo: query.repo || null,
-    };
-  });
-}
-
+/**
+ * The Nexus Cloud discovery manifest. It advertises only what this node
+ * actually serves; the peer discovery and registration endpoints it used to
+ * list were placeholders that reported success without doing anything.
+ */
 export const federationEndpoints = {
   wellKnown: () => ({
     service: "nexus-forge",
-    version: "0.1.0",
+    version: "0.2.0",
+    capabilities: ["git-smart-http", "signed-push-policy", "ref-log"],
     endpoints: {
-      discovery: "/api/cloud/discovery",
-      register: "/api/cloud/register",
-      client: "/api/cloud/client",
+      repositories: "/api/repos",
     },
   }),
 };

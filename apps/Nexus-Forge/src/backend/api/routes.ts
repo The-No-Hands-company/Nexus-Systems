@@ -1,354 +1,94 @@
-import type { RepositoryManager } from "../storage/repository";
-import { registerAdaptiveComplianceOrchestratorRoutes } from "./adaptive-compliance-orchestrator";
-import { registerAdminConsoleRoutes } from "./admin-console";
-import { registerAgentRoutes } from "./agents";
-import { registerAIRoutes } from "./ai";
-import { registerAiCapabilityInventoryRoutes } from "./ai-capability-inventory";
-import { registerAISafetyOpsRoutes } from "./ai-safety-ops";
-import { registerAnalyticsRoutes } from "./analytics";
-import { registerApiEvolutionControlTowerRoutes } from "./api-evolution-control-tower";
-import { registerApiManagementRoutes } from "./api-management";
-import { registerArchitectureDecisionHubRoutes } from "./architecture-decision-hub";
-import { registerArtifactTrustChainRoutes } from "./artifact-trust-chain";
-import { registerAuditIntelligenceRoutes } from "./audit-intelligence";
-import { authRoutes } from "./auth";
-import { registerAutomationRoutes } from "./automation";
-import { registerAutonomousBacklogTriageRoutes } from "./autonomous-backlog-triage";
-import { registerAutonomousReleaseGovernorRoutes } from "./autonomous-release-governor";
-import { registerBillingCoreRoutes } from "./billing-core";
-import { registerBranchProtectionPoliciesRoutes } from "./branch-protection-policies";
-import { registerBrandConsistencyGuardRoutes } from "./brand-consistency-guard";
-import { registerBudgetAllocationEngineRoutes } from "./budget-allocation-engine";
-import { registerCapabilityMaturityRadarRoutes } from "./capability-maturity-radar";
-import { registerCarbonAwareRuntimeRoutes } from "./carbon-aware-runtime";
-import { registerChangeManagementOfficeRoutes } from "./change-management-office";
-import { registerChatOpsRoutes } from "./chatops";
-import { registerCiCdFullDepthRoutes } from "./ci-cd-full-depth";
-import { registerCloudCostAnomalyLabRoutes } from "./cloud-cost-anomaly-lab";
-import { registerCodeOwnershipTrackerRoutes } from "./code-ownership-tracker";
-import { registerCollaborationRoutes } from "./collaboration";
-import { registerCommitSigningVaultRoutes } from "./commit-signing-vault";
-import { registerCommunicationRoutes } from "./communications";
-import { registerComplianceRoutes } from "./compliance";
-import { registerContentStudioRoutes } from "./content-studio";
-import { registerContractTestingExchangeRoutes } from "./contract-testing-exchange";
-import { registerCrossCloudOrchestrationRoutes } from "./cross-cloud-orchestration";
-import { registerCrossProductDependencyIntelligenceRoutes } from "./cross-product-dependency-intelligence";
-import { registerCrossTeamDependencyGraphRoutes } from "./cross-team-dependency-graph";
-import { registerCrossVcsRepositorySyncRoutes } from "./cross-vcs-repository-sync";
-import { registerCustomerDataPrivacyVaultRoutes } from "./customer-data-privacy-vault";
-import { registerCustomerJourneyOrchestrationRoutes } from "./customer-journey-orchestration";
-import { registerCustomerLifetimeVaultRoutes } from "./customer-lifetime-vault";
-import { registerCustomerSuccessRoutes } from "./customer-success";
-import { registerCustomerValueObservatoryRoutes } from "./customer-value-observatory";
-import { registerDataContractRegistryRoutes } from "./data-contract-registry";
-import { registerDataGovernanceFabricRoutes } from "./data-governance-fabric";
-import { registerDataLifecycleRoutes } from "./data-lifecycle";
-import { registerDemandForecastingGridRoutes } from "./demand-forecasting-grid";
-import { registerDependencyRemediationOpsRoutes } from "./dependency-remediation-ops";
-import { registerDesignAssetManagementRoutes } from "./design-asset-management";
-import { registerDeveloperCredentialGraphRoutes } from "./developer-credential-graph";
-import { registerDeveloperExperienceRoutes } from "./developer-experience";
-import { registerDeveloperJourneyIntelligenceRoutes } from "./developer-journey-intelligence";
-import { registerDigitalEthicsGovernanceRoutes } from "./digital-ethics-governance";
-import { registerDigitalTwinRoutes } from "./digital-twin";
-import { registerDisasterRecoveryRoutes } from "./disaster-recovery";
-import { registerDomainRoutes } from "./domains";
-import { registerEcosystemComplianceExchangeRoutes } from "./ecosystem-compliance-exchange";
-import { registerEdgeRoutes } from "./edge";
-import { registerEngineeringCognitionWorkspaceRoutes } from "./engineering-cognition-workspace";
-import { registerEnterpriseKnowledgeGraphRoutes } from "./enterprise-knowledge-graph";
-import { registerEnterpriseMigrationFactoryRoutes } from "./enterprise-migration-factory";
-import { registerEnterpriseSupportCommandRoutes } from "./enterprise-support-command";
-import { registerEventStreamRoutes } from "./event-stream";
-import { registerExecutiveCommandCenterRoutes } from "./executive-command-center";
-import { registerExperimentationPlatformRoutes } from "./experimentation-platform";
-import { registerFeatureGatingOrchestratorRoutes } from "./feature-gating-orchestrator";
-import { registerFederatedIdentityAssuranceRoutes } from "./federated-identity-assurance";
-import { registerFinOpsRoutes } from "./finops";
-import { registerFutureLabsRoutes } from "./future-labs";
-import { registerGlobalizationReadinessRoutes } from "./globalization-readiness";
-import { registerGovernanceRiskCouncilRoutes } from "./governance-risk-council";
-import { registerHybridWorkforceRouterRoutes } from "./hybrid-workforce-router";
-import { registerIdentityRoutes } from "./identity";
-import { registerIncidentRoutes } from "./incident";
-import { registerIncidentLearningSystemRoutes } from "./incident-learning-system";
-import { registerIncidentPreventionGraphRoutes } from "./incident-prevention-graph";
-import { registerInfrastructureOptimizationLabRoutes } from "./infrastructure-optimization-lab";
-import { registerInfrastructurePortfolioRoutes } from "./infrastructure-portfolio";
-import { registerIntegrationExchangeRoutes } from "./integration-exchange";
-import { registerInteropRoutes } from "./interop";
-import { registerInventoryStubEngineRoutes } from "./inventory-stub-engine";
-import { registerIssueManagementFullDepthRoutes } from "./issue-management-full-depth";
-import { registerKnowledgeRoutes } from "./knowledge";
-import { registerLearningCenterRoutes } from "./learning-center";
-import { registerLegalOpsRoutes } from "./legal-ops";
-import { registerLegislativeChangeRadarRoutes } from "./legislative-change-radar";
-import { registerLicenseComplianceTrackerRoutes } from "./license-compliance-tracker";
-import { registerLocalizationRoutes } from "./localization";
-import { registerMachineTranslationPlatformRoutes } from "./machine-translation-platform";
-import { registerMarketplaceRoutes } from "./marketplace";
-import { registerMergeStrategyEngineRoutes } from "./merge-strategy-engine";
-import { registerMLOpsRoutes } from "./mlops";
-import { registerMobileRoutes } from "./mobile";
-import { registerModelMarketplaceOpsRoutes } from "./model-marketplace-ops";
-import { registerMonetizationRoutes } from "./monetization";
-import { registerMultiCloudFailoverMeshRoutes } from "./multi-cloud-failover-mesh";
-import { registerMultiTenantDataIsolationRoutes } from "./multi-tenant-data-isolation";
-import { registerNotebookRoutes } from "./notebooks";
-import { registerNotificationOrchestrationRoutes } from "./notification-orchestration";
-import { registerObservabilityRoutes } from "./observability";
-import { registerOperationalNarrativeStudioRoutes } from "./operational-narrative-studio";
-import { registerOrgDesignStudioRoutes } from "./org-design-studio";
-import { registerPackageRegistryMatrixRoutes } from "./package-registry-matrix";
-import { registerPagesHostingRoutes } from "./pages-hosting";
-import { registerPartnerEcosystemRoutes } from "./partner-ecosystem";
-import { registerPerformanceTestingLabRoutes } from "./performance-testing-lab";
-import { permissionRoutes } from "./permissions";
-import { registerPlatformRoutes } from "./platform";
-import { registerPlatformEconomicsRoutes } from "./platform-economics";
-import { registerPlatformGoalCascadeRoutes } from "./platform-goal-cascade";
-import { registerPlatformTrustAutomationRoutes } from "./platform-trust-automation";
-import { registerPluginSandboxRoutes } from "./plugin-sandbox";
-import { registerPolicyAsCodeStudioRoutes } from "./policy-as-code-studio";
-import { registerPolicyConflictResolverRoutes } from "./policy-conflict-resolver";
-import { registerPolicySimulationRoutes } from "./policy-simulation";
-import { registerPortfolioSynergyEngineRoutes } from "./portfolio-synergy-engine";
-import { registerProcurementRoutes } from "./procurement";
-import { registerProductAnalyticsIntelligenceRoutes } from "./product-analytics-intelligence";
-import { registerProductExperimentLedgerRoutes } from "./product-experiment-ledger";
-import { registerProductTelemetryIntelRoutes } from "./product-telemetry-intel";
-import { registerProjectBoardsFullDepthRoutes } from "./project-boards-full-depth";
-import { registerQualityRoutes } from "./quality";
-import { registerQuantumResilienceLabRoutes } from "./quantum-resilience-lab";
-import { registerReleaseCadenceOptimizerRoutes } from "./release-cadence-optimizer";
-import { registerReleaseEngineeringRoutes } from "./release-engineering";
-import { registerReleaseReliabilityScorecardsRoutes } from "./release-reliability-scorecards";
-import { registerRepositoryMirrorFederationRoutes } from "./repository-mirror-federation";
-import { registerRequirementsManagementRoutes } from "./requirements-management";
-import { registerResearchLabOpsRoutes } from "./research-lab-ops";
-import { registerResilienceRoutes } from "./resilience";
-import { registerRoadmapDependencySimulatorRoutes } from "./roadmap-dependency-simulator";
-import { registerRuntimeGovernanceRoutes } from "./runtime-governance";
-import { registerSecretsVaultRoutes } from "./secrets-vault";
-import { registerSecurityChaosEngineeringRoutes } from "./security-chaos-engineering";
-import { registerSemanticSearchIndexRoutes } from "./semantic-search-index";
-import { registerServiceCatalogRoutes } from "./service-catalog";
-import { registerServiceLevelEconomicsRoutes } from "./service-level-economics";
-import { registerSnippetsGistsRoutes } from "./snippets-gists";
-import { registerSovereignCloudOpsRoutes } from "./sovereign-cloud-ops";
-import { registerStakeholderCommunicationIntelligenceRoutes } from "./stakeholder-communication-intelligence";
-import { registerStrategicCapacityCommandRoutes } from "./strategic-capacity-command";
-import { registerStrategyOKRRoutes } from "./strategy-okr";
-import { registerSupplyChainRoutes } from "./supply-chain";
-import { registerSupplyChainVisibilityRoutes } from "./supply-chain-visibility";
-import { registerSupplyContinuityPlannerRoutes } from "./supply-continuity-planner";
-import { registerSustainabilityCommandCenterRoutes } from "./sustainability-command-center";
-import { registerTechnicalDebtSkeeperRoutes } from "./technical-debt-keeper";
-import { registerTenancyRoutes } from "./tenancy";
-import { registerTestQualityManagementRoutes } from "./test-quality-management";
-import { registerTrustAnalyticsRoutes } from "./trust-analytics";
-import { registerTrustCenterRoutes } from "./trust-center";
-import { registerVCSAdvancedRoutes } from "./vcs-advanced";
-import { registerVendorRiskOrchestrationRoutes } from "./vendor-risk-orchestration";
-import { registerWorkflowMarketplaceRoutes } from "./workflow-marketplace";
-import { registerWorkflowRoutes } from "./workflows";
-import { registerWorkforceSkillMarketplaceRoutes } from "./workforce-skill-marketplace";
-import { registerWorkloadOrchestrationEngineRoutes } from "./workload-orchestration-engine";
-import { registerWorkspaceRoutes } from "./workspace";
+import { authorize } from "../auth/access";
+import { principalFromRequest } from "../auth/tokens";
+import type { ForgeDB, RepositoryRecord } from "../storage/db";
+import { RepositoryError, type RepositoryManager } from "../storage/repository";
 
-export function registerRoutes(app: ForgeRouteApp, repoManager: RepositoryManager) {
-  authRoutes(app);
-  permissionRoutes(app);
-  registerAIRoutes(app);
-  registerPlatformRoutes(app);
-  registerWorkflowRoutes(app);
-  registerDomainRoutes(app);
-  registerCollaborationRoutes(app);
-  registerKnowledgeRoutes(app);
-  registerAutomationRoutes(app);
-  registerDataLifecycleRoutes(app);
-  registerMarketplaceRoutes(app);
-  registerAgentRoutes(app);
-  registerFutureLabsRoutes(app);
-  registerMobileRoutes(app);
-  registerAnalyticsRoutes(app);
-  registerComplianceRoutes(app);
-  registerMonetizationRoutes(app);
-  registerVCSAdvancedRoutes(app);
-  registerIncidentRoutes(app);
-  registerInteropRoutes(app);
-  registerWorkspaceRoutes(app);
-  registerIdentityRoutes(app);
-  registerEdgeRoutes(app);
-  registerMLOpsRoutes(app);
-  registerQualityRoutes(app);
-  registerSupplyChainRoutes(app);
-  registerApiManagementRoutes(app);
-  registerChatOpsRoutes(app);
-  registerNotebookRoutes(app);
-  registerLocalizationRoutes(app);
-  registerResilienceRoutes(app);
-  registerEventStreamRoutes(app);
-  registerAdminConsoleRoutes(app);
-  registerServiceCatalogRoutes(app);
-  registerFinOpsRoutes(app);
-  registerPolicySimulationRoutes(app);
-  registerReleaseEngineeringRoutes(app);
-  registerTrustCenterRoutes(app);
-  registerCommunicationRoutes(app);
-  registerDeveloperExperienceRoutes(app);
-  registerLegalOpsRoutes(app);
-  registerSecretsVaultRoutes(app);
-  registerObservabilityRoutes(app);
-  registerProcurementRoutes(app);
-  registerCustomerSuccessRoutes(app);
-  registerLearningCenterRoutes(app);
-  registerTenancyRoutes(app);
-  registerBillingCoreRoutes(app);
-  registerContentStudioRoutes(app);
-  registerIntegrationExchangeRoutes(app);
-  registerRuntimeGovernanceRoutes(app);
-  registerAuditIntelligenceRoutes(app);
-  registerPluginSandboxRoutes(app);
-  registerDataGovernanceFabricRoutes(app);
-  registerStrategyOKRRoutes(app);
-  registerAISafetyOpsRoutes(app);
-  registerPartnerEcosystemRoutes(app);
-  registerDisasterRecoveryRoutes(app);
-  registerWorkflowMarketplaceRoutes(app);
-  registerDigitalTwinRoutes(app);
-  registerTrustAnalyticsRoutes(app);
-  registerResearchLabOpsRoutes(app);
-  registerExperimentationPlatformRoutes(app);
-  registerPlatformEconomicsRoutes(app);
-  registerChangeManagementOfficeRoutes(app);
-  registerExecutiveCommandCenterRoutes(app);
-  registerProductTelemetryIntelRoutes(app);
-  registerCustomerJourneyOrchestrationRoutes(app);
-  registerArchitectureDecisionHubRoutes(app);
-  registerModelMarketplaceOpsRoutes(app);
-  registerInfrastructurePortfolioRoutes(app);
-  registerGovernanceRiskCouncilRoutes(app);
-  registerReleaseReliabilityScorecardsRoutes(app);
-  registerEnterpriseMigrationFactoryRoutes(app);
-  registerAutonomousBacklogTriageRoutes(app);
-  registerCrossProductDependencyIntelligenceRoutes(app);
-  registerDemandForecastingGridRoutes(app);
-  registerPolicyAsCodeStudioRoutes(app);
-  registerEnterpriseSupportCommandRoutes(app);
-  registerDataContractRegistryRoutes(app);
-  registerCapabilityMaturityRadarRoutes(app);
-  registerPortfolioSynergyEngineRoutes(app);
-  registerSovereignCloudOpsRoutes(app);
-  registerIncidentLearningSystemRoutes(app);
-  registerContractTestingExchangeRoutes(app);
-  registerOrgDesignStudioRoutes(app);
-  registerPlatformTrustAutomationRoutes(app);
-  registerStrategicCapacityCommandRoutes(app);
-  registerEcosystemComplianceExchangeRoutes(app);
-  registerRoadmapDependencySimulatorRoutes(app);
-  registerEngineeringCognitionWorkspaceRoutes(app);
-  registerSustainabilityCommandCenterRoutes(app);
-  registerApiEvolutionControlTowerRoutes(app);
-  registerDeveloperJourneyIntelligenceRoutes(app);
-  registerArtifactTrustChainRoutes(app);
-  registerEnterpriseKnowledgeGraphRoutes(app);
-  registerQuantumResilienceLabRoutes(app);
-  registerVendorRiskOrchestrationRoutes(app);
-  registerServiceLevelEconomicsRoutes(app);
-  registerDeveloperCredentialGraphRoutes(app);
-  registerAutonomousReleaseGovernorRoutes(app);
-  registerAdaptiveComplianceOrchestratorRoutes(app);
-  registerIncidentPreventionGraphRoutes(app);
-  registerCloudCostAnomalyLabRoutes(app);
-  registerReleaseCadenceOptimizerRoutes(app);
-  registerWorkforceSkillMarketplaceRoutes(app);
-  registerCustomerValueObservatoryRoutes(app);
-  registerSecurityChaosEngineeringRoutes(app);
-  registerLegislativeChangeRadarRoutes(app);
-  registerFederatedIdentityAssuranceRoutes(app);
-  registerPlatformGoalCascadeRoutes(app);
-  registerDigitalEthicsGovernanceRoutes(app);
-  registerSupplyContinuityPlannerRoutes(app);
-  registerMultiCloudFailoverMeshRoutes(app);
-  registerProductExperimentLedgerRoutes(app);
-  registerStakeholderCommunicationIntelligenceRoutes(app);
-  registerCarbonAwareRuntimeRoutes(app);
-  registerPolicyConflictResolverRoutes(app);
-  registerGlobalizationReadinessRoutes(app);
-  registerDependencyRemediationOpsRoutes(app);
-  registerOperationalNarrativeStudioRoutes(app);
-  registerAiCapabilityInventoryRoutes(app);
-  registerSupplyChainVisibilityRoutes(app);
-  registerHybridWorkforceRouterRoutes(app);
-  registerCustomerLifetimeVaultRoutes(app);
-  registerTechnicalDebtSkeeperRoutes(app);
-  registerMultiTenantDataIsolationRoutes(app);
-  registerProductAnalyticsIntelligenceRoutes(app);
-  registerInfrastructureOptimizationLabRoutes(app);
-  registerLicenseComplianceTrackerRoutes(app);
-  registerCrossTeamDependencyGraphRoutes(app);
-  registerFeatureGatingOrchestratorRoutes(app);
-  registerCustomerDataPrivacyVaultRoutes(app);
-  registerWorkloadOrchestrationEngineRoutes(app);
-  registerBrandConsistencyGuardRoutes(app);
-  registerPerformanceTestingLabRoutes(app);
-  registerSemanticSearchIndexRoutes(app);
-  registerNotificationOrchestrationRoutes(app);
-  registerBudgetAllocationEngineRoutes(app);
-  registerCrossCloudOrchestrationRoutes(app);
-  registerMachineTranslationPlatformRoutes(app);
-  registerMergeStrategyEngineRoutes(app);
-  registerBranchProtectionPoliciesRoutes(app);
-  registerCommitSigningVaultRoutes(app);
-  registerCodeOwnershipTrackerRoutes(app);
-  registerCrossVcsRepositorySyncRoutes(app);
-  registerInventoryStubEngineRoutes(app);
-  registerCiCdFullDepthRoutes(app);
-  registerPackageRegistryMatrixRoutes(app);
-  registerRepositoryMirrorFederationRoutes(app);
-  registerSnippetsGistsRoutes(app);
-  registerPagesHostingRoutes(app);
-  registerIssueManagementFullDepthRoutes(app);
-  registerProjectBoardsFullDepthRoutes(app);
-  registerTestQualityManagementRoutes(app);
-  registerRequirementsManagementRoutes(app);
-  registerDesignAssetManagementRoutes(app);
+/**
+ * The JSON API. Every repository route resolves the caller, then asks
+ * `authorize`; a repository the caller cannot read answers exactly like one
+ * that does not exist.
+ *
+ * The ~150 placeholder route modules that used to be registered here
+ * answered every request with canned success (including a commit-signature
+ * "verify" that verified nothing). They are no longer reachable.
+ */
+export interface ApiOptions {
+  db: ForgeDB;
+  repos: RepositoryManager;
+  publicUrl?: string;
+}
 
-  app.get("/api/repos", async () => {
-    const data = await repoManager.listRepositories();
-    return { repos: data.repos, total: data.total };
-  });
+const REPO_PATH = /^\/api\/repos\/([^/]+)(\/activity)?$/;
 
-  app.post("/api/repos", async ({ body }) => {
-    const payload = body as {
-      name: string;
-      description?: string;
-      vcs: "git" | "svn" | "hg" | "pijul";
-    };
-    await repoManager.createRepository(payload);
-    return { ok: true, repo: payload.name };
-  });
+export async function handleApi(request: Request, options: ApiOptions): Promise<Response | null> {
+  const url = new URL(request.url);
+  if (!url.pathname.startsWith("/api/")) return null;
+  const { db, repos } = options;
+  const principal = principalFromRequest(db, request);
 
-  app.get("/api/repos/:name", async ({ params }) => {
-    const repo = await repoManager.getRepository(params.name as string);
-    if (!repo) return { error: "Repository not found", status: 404 };
-    return repo;
-  });
+  if (url.pathname === "/api/auth/status" && request.method === "GET") {
+    return json(200, { authenticated: principal !== null, user: principal });
+  }
 
-  app.get("/api/repos/:name/activity", async ({ params }) => {
-    const repo = await repoManager.getRepository(params.name as string);
-    if (!repo) return { error: "Repository not found", status: 404 };
-    return { repo: repo.name, activity: await repoManager.getActivity(repo.name) };
-  });
+  if (url.pathname === "/api/repos" && request.method === "GET") {
+    const list = db.listReadableRepositories(principal?.id ?? null).map(publicView);
+    return json(200, { repos: list, total: list.length });
+  }
 
-  app.get("/api/teams", async () => {
-    return { teams: [] };
-  });
+  if (url.pathname === "/api/repos" && request.method === "POST") {
+    if (!principal) return json(401, { error: "authentication required" });
+    let body: Record<string, unknown>;
+    try {
+      body = (await request.json()) as Record<string, unknown>;
+    } catch {
+      return json(400, { error: "body must be JSON" });
+    }
+    if (typeof body !== "object" || body === null)
+      return json(400, { error: "body must be an object" });
+    const name = body.name;
+    if (typeof name === "string" && db.getRepository(name)) {
+      return json(409, { error: `repository ${name} already exists` });
+    }
+    try {
+      const repo = await repos.createRepository(
+        {
+          name: String(name ?? ""),
+          visibility: (body.visibility ?? "private") as "public" | "private",
+          trustRoot: typeof body.trustRoot === "string" ? body.trustRoot : "",
+          ...(typeof body.description === "string" ? { description: body.description } : {}),
+        },
+        principal,
+      );
+      return json(201, { repo: publicView(repo) });
+    } catch (error) {
+      if (error instanceof RepositoryError) return json(400, { error: error.message });
+      throw error;
+    }
+  }
 
-  app.post("/api/teams", async ({ body }) => {
-    const payload = body as { name: string; description?: string };
-    return { ok: true, team: payload.name };
-  });
+  const match = REPO_PATH.exec(url.pathname);
+  if (match && request.method === "GET") {
+    const repo = db.getRepository(match[1] ?? "");
+    if (!repo || !authorize(db, principal, repo, "read")) {
+      return json(404, { error: "repository not found" });
+    }
+    if (match[2]) return json(200, { repo: repo.name, activity: db.getActivity(repo.id) });
+    const base = (options.publicUrl ?? url.origin).replace(/\/$/, "");
+    return json(200, { ...publicView(repo), cloneUrl: `${base}/${repo.name}.git` });
+  }
+
+  return json(404, { error: "not found" });
+}
+
+function publicView(repo: RepositoryRecord) {
+  return {
+    name: repo.name,
+    description: repo.description,
+    visibility: repo.visibility,
+    created_at: repo.created_at,
+  };
+}
+
+export function json(status: number, body: unknown): Response {
+  return Response.json(body, { status });
 }

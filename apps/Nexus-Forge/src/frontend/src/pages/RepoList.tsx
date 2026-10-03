@@ -2,10 +2,9 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 
 interface Repository {
-  id: number;
+  visibility: string;
   name: string;
   description?: string;
-  vcs: string;
   created_at: string;
 }
 
@@ -33,10 +32,10 @@ export default function RepoList() {
       ) : (
         <div className="repo-grid">
           {repos.map((repo) => (
-            <article key={repo.id} className="repo-card">
+            <article key={repo.name} className="repo-card">
               <h3>{repo.name}</h3>
               <p>{repo.description || "No description available."}</p>
-              <span className="badge">{repo.vcs}</span>
+              <span className="badge">{repo.visibility}</span>
               <Link to={`/repos/${repo.name}`}>View repository</Link>
             </article>
           ))}

@@ -9,13 +9,3 @@ describe("VCS Backend", () => {
     expect(VCSFactory.getBackend("pijul")).toBeTruthy();
   });
 });
-
-describe("Federation", () => {
-  it("should expose /.well-known/nexus-cloud endpoint", async () => {
-    expect(true).toBe(true);
-  });
-
-  it("should register peer nodes", async () => {
-    expect(true).toBe(true);
-  });
-});
