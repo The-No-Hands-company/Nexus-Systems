@@ -2,7 +2,7 @@ import path from "node:path";
 import { type Action, authorize } from "../auth/access";
 import { principalFromRequest } from "../auth/tokens";
 import type { ForgeDB, UserRecord } from "../storage/db";
-import type { RepositoryManager } from "../storage/repository";
+import { REF_LOG_FILE, type RepositoryManager } from "../storage/repository";
 import { gitEnv } from "./env";
 import { isValidRepoName } from "./names";
 
@@ -13,11 +13,13 @@ export interface SmartHttpOptions {
   hooksDir: string;
   /** Largest request body accepted (a push pack), in bytes. */
   maxBodyBytes: number;
-  /** Extra handlers for forge-owned paths under `/<name>.git/`, e.g. the ref log. */
-  extraReadRoutes?: Record<string, (repo: string) => Promise<Response>>;
 }
 
 type Service = "git-upload-pack" | "git-receive-pack";
+
+type Endpoint =
+  | { kind: "git"; service: Service; action: Action }
+  | { kind: "ref-log"; action: "read" };
 
 const ACTION: Record<Service, Action> = {
   "git-upload-pack": "read",
@@ -27,16 +29,18 @@ const ACTION: Record<Service, Action> = {
 const GIT_PATH = /^\/([^/]+)\.git\/(.+)$/;
 
 /**
- * Git's smart HTTP protocol, handed to `git http-backend`.
+ * Git's smart HTTP protocol, handed to `git http-backend`, plus the
+ * forge's ref log.
  *
  * The forge does not parse packfiles; git does. What the forge owns is the
  * decision of whether the request may reach git at all, so this is an
- * allowlist of exactly three endpoints, each mapped to the action it needs:
+ * allowlist of endpoints, each mapped to the action it needs:
  *
  *   GET  /<repo>.git/info/refs?service=git-upload-pack   read
  *   POST /<repo>.git/git-upload-pack                     read
  *   GET  /<repo>.git/info/refs?service=git-receive-pack  write
  *   POST /<repo>.git/git-receive-pack                    write
+ *   GET  /<repo>.git/nexus/ref-log                       read
  *
  * Everything else under `/<repo>.git/`, including the whole dumb protocol
  * (HEAD, objects/, config), is 404. Returns `null` for paths that are not
@@ -52,32 +56,12 @@ export async function handleSmartHttp(
   const [, name = "", tail = ""] = match;
   if (!isValidRepoName(name)) return notFound();
 
-  let service: Service;
-  let action: Action;
-  const extra = options.extraReadRoutes?.[tail];
-  if (extra && request.method === "GET" && url.search === "") {
-    action = "read";
-    service = "git-upload-pack";
-  } else if (tail === "info/refs" && request.method === "GET") {
-    const requested = url.searchParams.getAll("service");
-    if (requested.length > 1) return text(400, "exactly one service parameter is allowed\n");
-    const only = requested[0];
-    if (only !== "git-upload-pack" && only !== "git-receive-pack") return notFound();
-    service = only;
-    action = ACTION[service];
-  } else if (
-    (tail === "git-upload-pack" || tail === "git-receive-pack") &&
-    request.method === "POST"
-  ) {
-    service = tail;
-    action = ACTION[service];
-  } else {
-    return notFound();
-  }
+  const endpoint = resolveEndpoint(request.method, tail, url.searchParams);
+  if (endpoint instanceof Response) return endpoint;
 
   const principal = principalFromRequest(options.db, request);
   const repo = options.db.getRepository(name);
-  if (!repo || !authorize(options.db, principal, repo, action)) {
+  if (!repo || !authorize(options.db, principal, repo, endpoint.action)) {
     if (!principal) {
       return new Response("authentication required\n", {
         status: 401,
@@ -90,7 +74,13 @@ export async function handleSmartHttp(
     return notFound();
   }
 
-  if (extra) return extra(name);
+  if (endpoint.kind === "ref-log") {
+    const file = Bun.file(options.repos.metaPath(name, REF_LOG_FILE));
+    const body = (await file.exists()) ? await file.text() : "";
+    return new Response(body, {
+      headers: { "content-type": "application/x-ndjson", "cache-control": "no-store" },
+    });
+  }
 
   let body: Uint8Array | null = null;
   if (request.method === "POST") {
@@ -102,12 +92,33 @@ export async function handleSmartHttp(
     request,
     name,
     tail,
-    service,
-    canWrite: action === "write",
+    service: endpoint.service,
+    canWrite: endpoint.action === "write",
     principal,
     body,
     options,
   });
+}
+
+function resolveEndpoint(
+  method: string,
+  tail: string,
+  query: URLSearchParams,
+): Endpoint | Response {
+  if (tail === "nexus/ref-log" && method === "GET" && query.size === 0) {
+    return { kind: "ref-log", action: "read" };
+  }
+  if (tail === "info/refs" && method === "GET") {
+    const requested = query.getAll("service");
+    if (requested.length > 1) return text(400, "exactly one service parameter is allowed\n");
+    const only = requested[0];
+    if (only !== "git-upload-pack" && only !== "git-receive-pack") return notFound();
+    return { kind: "git", service: only, action: ACTION[only] };
+  }
+  if ((tail === "git-upload-pack" || tail === "git-receive-pack") && method === "POST") {
+    return { kind: "git", service: tail, action: ACTION[tail] };
+  }
+  return notFound();
 }
 
 async function runHttpBackend(args: {

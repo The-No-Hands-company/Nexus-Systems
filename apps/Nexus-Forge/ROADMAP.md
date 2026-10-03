@@ -1,6 +1,6 @@
 # Nexus Forge Roadmap
 
-Last updated: 2026-04-13
+Last updated: 2026-10-03
 
 This roadmap tracks what is already implemented in Nexus Forge and what is planned next.
 
@@ -30,18 +30,27 @@ This roadmap tracks what is already implemented in Nexus Forge and what is plann
 
 ## Sprint K (MVP Buildout)
 
-- `[ ]` Implement Git backend operations (init, history, diff, file read)
-- `[ ]` Implement repository create/list/get API routes on real storage + DB
-- `[ ]` Add auth baseline (JWT login, team membership checks)
-- `[ ]` Add permission model enforcement (read/write/admin)
-- `[ ]` Implement HTTP Git smart protocol flow
+- `[x]` Repository create/list/get API routes on real storage + DB (2026-10-03)
+- `[x]` Auth baseline: expiring hashed tokens instead of the JWT login that issued admin to anyone (2026-10-03)
+- `[x]` Permission enforcement (read/write/admin), one default-deny `authorize()` (2026-10-03)
+- `[x]` HTTP Git smart protocol via `git http-backend` (2026-10-03)
+- `[x]` Persist repository metadata (bun:sqlite, schema-versioned) (2026-10-03)
+- `[x]` Frontend repo list/detail wired to real responses (2026-10-03)
+- `[x]` Clone URL generation (HTTPS) (2026-10-03)
+- `[x]` Integration tests for create -> clone -> push -> log flow (2026-10-03)
+- `[ ]` Implement Git backend read operations (history, diff, file read) for the web UI
 - `[ ]` Implement SSH Git push/pull server on port `8091`
-- `[ ]` Persist repository metadata and activity logs end-to-end
-- `[ ]` Wire frontend repo list to real backend responses
-- `[ ]` Add repository detail page (branches, commits, files)
-- `[ ]` Add clone URL generation (HTTPS + SSH)
-- `[ ]` Add unit tests for backend VCS + DB modules
-- `[ ]` Add integration tests for create -> clone -> push -> log flow
+- `[ ]` Repository detail page (branches, commits, files)
+
+## Sprint K2 (Trust core) — see docs/SECURITY-MODEL.md
+
+- `[x]` Quarantine the ~150 placeholder routes and pages (2026-10-03)
+- `[x]` Signed-push policy: in-repo `.nexus/allowed_signers` + trust root, enforced in pre-receive (2026-10-03)
+- `[x]` Hash-chained ref log + `forge log verify` with head pinning (2026-10-03)
+- `[ ]` Client-side policy verification on fetch (stop depending on the server to enforce)
+- `[ ]` Sign ref-log entries with a node key
+- `[ ]` Witness ref-log heads on federation peers
+- `[ ]` Delete the quarantined placeholder files
 
 ## Sprint L (Federation + AI)
 

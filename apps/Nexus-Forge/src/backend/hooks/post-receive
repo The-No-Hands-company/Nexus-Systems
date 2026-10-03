@@ -1,0 +1,5 @@
+#!/bin/sh
+# Installed by the forge through core.hooksPath, never copied into a
+# repository.
+[ -n "$NEXUS_FORGE_BUN" ] || { echo "forge: hook environment missing; ref log NOT updated" >&2; exit 1; }
+exec "$NEXUS_FORGE_BUN" "$(dirname "$0")/post-receive.ts"
