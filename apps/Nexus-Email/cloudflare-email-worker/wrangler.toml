@@ -1,0 +1,9 @@
+name = "tnhc-nexus-email-inbound"
+main = "src/index.ts"
+compatibility_date = "2026-10-05"
+
+# Keep secrets out of this file. Set NEXUS_INGRESS_TOKEN with:
+#   npx wrangler secret put NEXUS_INGRESS_TOKEN
+[vars]
+NEXUS_INGRESS_URL = "https://email-ingress.tnhc.dev/internal/v1/cloudflare-email"
+ALLOWED_RECIPIENTS = "info@tnhc.dev,zajfan@tnhc.dev"

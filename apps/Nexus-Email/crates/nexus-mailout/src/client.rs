@@ -2,8 +2,11 @@ use std::time::Duration;
 
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::TcpStream;
+use tokio_rustls::rustls::pki_types::ServerName;
+use tokio_rustls::TlsConnector;
 
 use crate::reply::{classify, code_of, is_final_line, Disposition};
+use crate::worker::SmtpRelayConfig;
 
 /// The outcome of one delivery attempt to one host.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -113,6 +116,112 @@ pub async fn deliver(
     // The reply to QUIT is not worth waiting for: the message is already
     // accepted, and a server that hangs up rudely has still taken it.
     tracing::info!(%host, %recipient, "delivered: {}", accepted.trim());
+    Attempt::Delivered
+}
+
+/// Deliver through an authenticated implicit-TLS submission relay. Relay
+/// authentication and connection failures are always deferred: these describe
+/// operator/provider configuration, not a permanent refusal by the recipient.
+pub async fn deliver_authenticated(
+    relay: &SmtpRelayConfig,
+    ehlo_name: &str,
+    from: &str,
+    recipient: &str,
+    data: &[u8],
+) -> Attempt {
+    let tcp =
+        match tokio::time::timeout(STEP_TIMEOUT, TcpStream::connect((&*relay.host, relay.port)))
+            .await
+        {
+            Ok(Ok(stream)) => stream,
+            Ok(Err(e)) => return Attempt::Deferred(format!("connect to SMTP relay failed: {e}")),
+            Err(_) => return Attempt::Deferred("SMTP relay connection timed out".into()),
+        };
+
+    let roots = tokio_rustls::rustls::RootCertStore::from_iter(
+        webpki_roots::TLS_SERVER_ROOTS.iter().cloned(),
+    );
+    let tls_config = tokio_rustls::rustls::ClientConfig::builder()
+        .with_root_certificates(roots)
+        .with_no_client_auth();
+    let connector = TlsConnector::from(std::sync::Arc::new(tls_config));
+    let server_name = match ServerName::try_from(relay.host.clone()) {
+        Ok(name) => name,
+        Err(_) => return Attempt::Deferred("invalid SMTP relay hostname".into()),
+    };
+    let tls = match tokio::time::timeout(STEP_TIMEOUT, connector.connect(server_name, tcp)).await {
+        Ok(Ok(stream)) => stream,
+        Ok(Err(e)) => return Attempt::Deferred(format!("SMTP relay TLS failed: {e}")),
+        Err(_) => return Attempt::Deferred("SMTP relay TLS handshake timed out".into()),
+    };
+
+    let (read_half, mut write) = tokio::io::split(tls);
+    let mut reader = BufReader::new(read_half);
+    macro_rules! expect_ok {
+        ($label:expr) => {
+            match read_reply(&mut reader).await {
+                Ok((code, text)) if classify(code) == Disposition::Ok => text,
+                Ok((code, text)) => {
+                    return Attempt::Deferred(format!(
+                        "SMTP relay {label} returned {code}: {text}",
+                        label = $label
+                    ))
+                }
+                Err(e) => {
+                    return Attempt::Deferred(format!("SMTP relay {} reply failed: {e}", $label))
+                }
+            }
+        };
+    }
+    macro_rules! send_line {
+        ($line:expr) => {
+            if let Err(e) = write.write_all(format!("{}\r\n", $line).as_bytes()).await {
+                return Attempt::Deferred(format!("writing to SMTP relay failed: {e}"));
+            }
+        };
+    }
+
+    expect_ok!("greeting");
+    send_line!(format!("EHLO {ehlo_name}"));
+    expect_ok!("EHLO");
+
+    let auth = base64::Engine::encode(
+        &base64::engine::general_purpose::STANDARD,
+        format!("\0{}\0{}", relay.username, relay.password),
+    );
+    send_line!(format!("AUTH PLAIN {auth}"));
+    match read_reply(&mut reader).await {
+        Ok((235, _)) => {}
+        Ok((code, _)) => {
+            return Attempt::Deferred(format!("SMTP relay authentication returned {code}"))
+        }
+        Err(e) => return Attempt::Deferred(format!("SMTP relay authentication reply failed: {e}")),
+    }
+
+    send_line!(format!("MAIL FROM:<{from}>"));
+    expect_ok!("MAIL FROM");
+    send_line!(format!("RCPT TO:<{recipient}>"));
+    expect_ok!("RCPT TO");
+    send_line!("DATA");
+    expect_ok!("DATA");
+
+    let mut payload = Vec::with_capacity(data.len() + 64);
+    let body = data.strip_suffix(b"\n").unwrap_or(data);
+    for line in body.split(|b| *b == b'\n') {
+        let line = line.strip_suffix(b"\r").unwrap_or(line);
+        if line.starts_with(b".") {
+            payload.push(b'.');
+        }
+        payload.extend_from_slice(line);
+        payload.extend_from_slice(b"\r\n");
+    }
+    payload.extend_from_slice(b".\r\n");
+    if let Err(e) = write.write_all(&payload).await {
+        return Attempt::Deferred(format!("writing message to SMTP relay failed: {e}"));
+    }
+    expect_ok!("end of DATA");
+    send_line!("QUIT");
+    tracing::info!(host = %relay.host, %recipient, "delivered through authenticated SMTP relay");
     Attempt::Delivered
 }
 

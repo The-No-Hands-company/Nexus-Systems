@@ -11,7 +11,8 @@
 use std::sync::Arc;
 
 use axum::{
-    body::Body,
+    body::{Body, Bytes},
+    extract::DefaultBodyLimit,
     extract::{Path, Query, State},
     http::{HeaderMap, StatusCode},
     response::{IntoResponse, Response},
@@ -32,6 +33,10 @@ pub struct AppState {
     /// The domain this node issues addresses in, used to build a sender
     /// address for a user who has one.
     pub primary_domain: String,
+    /// Optional secret used only by the Cloudflare Email Worker ingress. The
+    /// ordinary web API remains loopback-only and continues to trust the
+    /// dashboard's X-Nexus-Subject header.
+    pub cloudflare_ingress_token: Option<String>,
 }
 
 pub type SharedState = Arc<AppState>;
@@ -112,6 +117,8 @@ impl From<MessageSummary> for SummaryDto {
 
 pub fn router(state: SharedState) -> Router {
     Router::new()
+        .route("/internal/v1/cloudflare-email", post(cloudflare_email))
+        .route_layer(DefaultBodyLimit::max(25 * 1024 * 1024))
         .route("/api/v1/health", get(|| async { Json(serde_json::json!({"ok": true})) }))
         .route("/api/v1/folders", get(list_folders))
         .route("/api/v1/folders/:id/messages", get(list_messages))
@@ -122,6 +129,107 @@ pub fn router(state: SharedState) -> Router {
         .route("/api/v1/threads/:id/messages", get(thread_messages))
         .route("/api/v1/messages/:id/attachments/:index", get(download_attachment))
         .with_state(state)
+}
+
+/// Cloudflare Email Routing invokes this endpoint through an Email Worker.
+/// A separate bearer secret is required because the normal API identity-header
+/// trust model is not valid for public requests. Cloudflare's worker binding is
+/// the only configured caller; recipient validation prevents the endpoint from
+/// becoming a general external-delivery relay.
+async fn cloudflare_email(
+    State(state): State<SharedState>,
+    headers: HeaderMap,
+    raw: Bytes,
+) -> Result<(StatusCode, Json<serde_json::Value>), ApiError> {
+    let Some(expected) = state.cloudflare_ingress_token.as_deref() else {
+        return Err(ApiError(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "inbound email is not configured".into(),
+        ));
+    };
+    let supplied = headers
+        .get(axum::http::header::AUTHORIZATION)
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.strip_prefix("Bearer "))
+        .unwrap_or("");
+    if !constant_time_token_eq(supplied.as_bytes(), expected.as_bytes()) {
+        return Err(ApiError(
+            StatusCode::UNAUTHORIZED,
+            "invalid ingress credential".into(),
+        ));
+    }
+    let from = headers
+        .get("x-nexus-envelope-from")
+        .and_then(|v| v.to_str().ok())
+        .ok_or_else(|| bad("missing envelope sender"))?;
+    let to = headers
+        .get("x-nexus-envelope-to")
+        .and_then(|v| v.to_str().ok())
+        .ok_or_else(|| bad("missing envelope recipient"))?;
+    let from = Address::parse(from).map_err(|_| bad("invalid envelope sender"))?;
+    let to = Address::parse(to).map_err(|_| bad("invalid envelope recipient"))?;
+    if !ingress_recipient_enabled(&to, &state.primary_domain) {
+        return Err(ApiError(
+            StatusCode::FORBIDDEN,
+            "recipient is not enabled for Cloudflare ingress".into(),
+        ));
+    }
+    if raw.is_empty() || raw.len() > 25 * 1024 * 1024 {
+        return Err(bad("message is empty or exceeds the 25 MiB limit"));
+    }
+    let id = state
+        .deliverer
+        .accept_smtp(&raw, &from, &to)
+        .await
+        .map_err(|e| server(&format!("Cloudflare inbound delivery: {e}")))?;
+    Ok((
+        StatusCode::ACCEPTED,
+        Json(serde_json::json!({"message_id": id})),
+    ))
+}
+
+fn constant_time_token_eq(a: &[u8], b: &[u8]) -> bool {
+    let mut diff = a.len() ^ b.len();
+    for i in 0..a.len().max(b.len()) {
+        diff |= usize::from(a.get(i).copied().unwrap_or(0) ^ b.get(i).copied().unwrap_or(0));
+    }
+    diff == 0
+}
+
+fn ingress_recipient_enabled(address: &Address, domain: &str) -> bool {
+    address.domain == domain.to_ascii_lowercase()
+        && matches!(address.localpart.as_str(), "info" | "zajfan")
+}
+
+#[cfg(test)]
+mod ingress_tests {
+    use super::{constant_time_token_eq, ingress_recipient_enabled, Address};
+
+    #[test]
+    fn ingress_token_comparison_accepts_only_the_exact_token() {
+        assert!(constant_time_token_eq(
+            b"cloudflare-secret",
+            b"cloudflare-secret"
+        ));
+        assert!(!constant_time_token_eq(
+            b"cloudflare-secret",
+            b"cloudflare-secreu"
+        ));
+        assert!(!constant_time_token_eq(b"short", b"cloudflare-secret"));
+        assert!(!constant_time_token_eq(b"", b"cloudflare-secret"));
+    }
+
+    #[test]
+    fn only_the_requested_local_mailboxes_are_enabled_by_the_worker_allowlist() {
+        for input in ["info@tnhc.dev", "zajfan@tnhc.dev"] {
+            let address = Address::parse(input).unwrap();
+            assert!(ingress_recipient_enabled(&address, "tnhc.dev"));
+        }
+        for input in ["random@tnhc.dev", "info@elsewhere.test"] {
+            let address = Address::parse(input).unwrap();
+            assert!(!ingress_recipient_enabled(&address, "tnhc.dev"));
+        }
+    }
 }
 
 async fn list_folders(

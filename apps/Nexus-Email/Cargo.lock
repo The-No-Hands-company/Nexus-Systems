@@ -1326,6 +1326,7 @@ dependencies = [
 name = "nexus-mailout"
 version = "0.1.0"
 dependencies = [
+ "base64",
  "chrono",
  "hickory-resolver",
  "nexus-mailauth",
@@ -1336,9 +1337,11 @@ dependencies = [
  "sqlx",
  "thiserror 2.0.20",
  "tokio",
+ "tokio-rustls",
  "tracing",
  "tracing-subscriber",
  "uuid",
+ "webpki-roots 1.0.9",
 ]
 
 [[package]]

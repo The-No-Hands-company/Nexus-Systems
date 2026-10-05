@@ -51,6 +51,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         store: store.clone(),
         deliverer: Deliverer::new(store, queue, mail_router),
         primary_domain: domain.clone(),
+        cloudflare_ingress_token: std::env::var("NEXUS_EMAIL_CLOUDFLARE_INGRESS_TOKEN")
+            .ok()
+            .map(|token| token.trim().to_string())
+            .filter(|token| !token.is_empty()),
     });
 
     let listener = tokio::net::TcpListener::bind(&bind).await?;

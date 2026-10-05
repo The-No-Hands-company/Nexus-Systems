@@ -153,7 +153,9 @@ one peer to another.
 
 | Setting | Default | Meaning |
 |---|---|---|
-| `NEXUS_EMAIL_EGRESS` | `direct` | `direct`, or `peer:<domain>`; anything else stops the daemon at start |
+| `NEXUS_EMAIL_EGRESS` | `direct` | `direct`, `resend`, or `peer:<domain>`; anything else stops the daemon at start |
+| `NEXUS_EMAIL_SMTP_HOST` / `_PORT` / `_USER` / `_PASS` | unset | Authenticated SMTP relay settings; password is required for `resend` |
+| `NEXUS_EMAIL_CLOUDFLARE_INGRESS_TOKEN` | unset | Shared bearer secret for the Cloudflare Email Worker endpoint |
 | `NEXUS_EMAIL_FEDERATION_BIND` | `127.0.0.1:2580` | the federation listener |
 | `NEXUS_EMAIL_FEDERATION_HOST` | `mail.<domain>` | the host peers pin and sign for |
 | `NEXUS_EMAIL_NODE_KEY_PATH` | `~/.config/nexus-email/node.key` | this node's Ed25519 key; created once, never replaced |
@@ -163,7 +165,62 @@ The node key lives under `$HOME` for the same reason as the DKIM key: this
 volume is NTFS, where file permissions cannot protect it. Losing it changes this
 node's identity for every peer that pinned it.
 
+### Resend SMTP egress
+
+When outbound TCP 25 is filtered, use Resend's implicit-TLS SMTP relay rather
+than direct MX delivery. Set these server-only environment variables and
+restart `nexus-mailsmtpd`:
+
+```sh
+NEXUS_EMAIL_EGRESS=resend
+NEXUS_EMAIL_SMTP_HOST=smtp.resend.com
+NEXUS_EMAIL_SMTP_PORT=465
+NEXUS_EMAIL_SMTP_USER=resend
+NEXUS_EMAIL_SMTP_PASS=<Resend API key>
+```
+
+The worker preserves the queued RFC 5322 message, adds DKIM when the configured
+signer matches the envelope sender domain, and defers queued messages if the
+TLS connection, authentication, or relay is unavailable. Never put the key in
+Android build settings, source control, or logs. The verified Resend domain
+must match the envelope sender domain.
+
 ## Inbound policy: Observe before Enforce
+
+### Cloudflare Email Routing bridge
+
+The optional Email Worker in `cloudflare-email-worker/` accepts only the
+configured `info@tnhc.dev` and `zajfan@tnhc.dev` recipients and sends the raw
+message to the separate authenticated ingress route on `nexus-mailapi`. It
+does not replace the root MX records: Cloudflare Email Routing stays the MX
+provider, and only those two address rules should be changed to target the
+Worker. The ingress route is disabled unless
+`NEXUS_EMAIL_CLOUDFLARE_INGRESS_TOKEN` is set.
+
+Before enabling the two Cloudflare rules:
+
+1. Generate a long random token on the server (for example,
+   `openssl rand -hex 32`) and set it as
+   `NEXUS_EMAIL_CLOUDFLARE_INGRESS_TOKEN` for `nexus-mailapi` and as the
+   `NEXUS_INGRESS_TOKEN` Worker secret. Never commit or paste that value.
+2. Publish `email-ingress.tnhc.dev` through the existing Cloudflare Tunnel to
+   `http://127.0.0.1:3140`. Keep the ordinary mail API identity-header routes
+   loopback-only; the ingress route has independent bearer authentication.
+3. From `cloudflare-email-worker/`, deploy with Wrangler, then create Email
+   Routing rules for exactly `info` and `zajfan`, each targeting
+   `tnhc-nexus-email-inbound`. Do not create a catch-all rule. Leave the three
+   root MX records in place.
+4. Send a test message to each address and verify it appears in the matching
+   Nexus mailbox before removing any existing forwarding destination.
+
+Cloudflare Worker failures are surfaced as Email Routing errors rather than
+being acknowledged as successfully stored. This is not a durable retry queue:
+monitor Cloudflare's Email Routing logs and keep a separate mailbox fallback
+available during rollout. The server must be reachable over HTTPS and running
+the updated `nexus-mailapi` before these rules are enabled. Inbound sender
+filtering happens at Cloudflare; the Worker carries the original envelope
+sender and raw MIME body.
+
 
 `AuthenticatingSink` takes a `PolicyMode`.
 

@@ -12,7 +12,7 @@ use nexus_mailauth::{load_private_key_pem, Canon, DkimSigner, SystemDns};
 use nexus_mailfed::client::HttpTransport;
 use nexus_mailfed::ingest::{self, IngestState};
 use nexus_mailfed::{NodeKey, PeerDirectory};
-use nexus_mailout::{DeliveryWorker, Egress, WorkerConfig};
+use nexus_mailout::{DeliveryWorker, Egress, SmtpRelayConfig, WorkerConfig};
 use nexus_mailsmtp::inbound::{AuthenticatingSink, PolicyMode};
 use nexus_mailsmtp::policy::MailboxPolicy;
 use nexus_mailimap::ImapServer;
@@ -62,6 +62,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Federation. Parsed before anything binds, so a bad setting stops the
     // daemon at start rather than surfacing as mail that never leaves.
     let egress = Egress::parse(&setting("NEXUS_EMAIL_EGRESS").unwrap_or_default())?;
+    let relay = if egress == Egress::Resend {
+        let password = setting("NEXUS_EMAIL_SMTP_PASS")
+            .ok_or("NEXUS_EMAIL_SMTP_PASS must be set when NEXUS_EMAIL_EGRESS=resend")?;
+        let port = setting("NEXUS_EMAIL_SMTP_PORT")
+            .unwrap_or_else(|| "465".into())
+            .parse::<u16>()?;
+        Some(SmtpRelayConfig {
+            host: setting("NEXUS_EMAIL_SMTP_HOST").unwrap_or_else(|| "smtp.resend.com".into()),
+            port,
+            username: setting("NEXUS_EMAIL_SMTP_USER").unwrap_or_else(|| "resend".into()),
+            password,
+        })
+    } else {
+        None
+    };
     let federation_bind = setting("NEXUS_EMAIL_FEDERATION_BIND").unwrap_or_else(|| "127.0.0.1:2580".into());
     // The host peers pin for us, which they sign for. Not the Host header:
     // the ecosystem proxy rewrites that.
@@ -163,7 +178,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut worker = DeliveryWorker::new(
         store.clone(),
         queue,
-        WorkerConfig { ehlo_name: hostname.clone(), egress: egress.clone(), ..WorkerConfig::default() },
+        WorkerConfig {
+            ehlo_name: hostname.clone(),
+            egress: egress.clone(),
+            relay,
+            ..WorkerConfig::default()
+        },
     )
     .with_transport(transport);
     if let Some(signer) = dkim.clone() {

@@ -16,10 +16,12 @@ pub enum Egress {
     Direct,
     /// Hand it to this pinned peer, which delivers it from its own address.
     Peer(String),
+    /// Authenticated implicit-TLS SMTP relay (for example Resend).
+    Resend,
 }
 
 impl Egress {
-    /// Parse `NEXUS_EMAIL_EGRESS`: empty or `direct`, or `peer:<domain>`.
+    /// Parse `NEXUS_EMAIL_EGRESS`: empty or `direct`, `resend`, or `peer:<domain>`.
     ///
     /// Anything else is an error rather than a fallback to direct: a typo that
     /// silently meant "direct" would leave every message waiting on a filtered
@@ -29,14 +31,17 @@ impl Egress {
         if s.is_empty() || s == "direct" {
             return Ok(Egress::Direct);
         }
+        if s == "resend" {
+            return Ok(Egress::Resend);
+        }
         match s.strip_prefix("peer:").map(str::trim) {
             Some(domain) if !domain.is_empty() => Ok(Egress::Peer(domain.to_ascii_lowercase())),
-            _ => Err(format!("NEXUS_EMAIL_EGRESS must be `direct` or `peer:<domain>`, not {setting:?}")),
+            _ => Err(format!("NEXUS_EMAIL_EGRESS must be `direct`, `resend`, or `peer:<domain>`, not {setting:?}")),
         }
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct WorkerConfig {
     /// The name this node gives in EHLO. Should be a hostname that resolves
     /// back here — receivers check, and a mismatch costs reputation.
@@ -51,6 +56,16 @@ pub struct WorkerConfig {
     /// domain's MX. A diagnostic and test hook — it bypasses MX routing
     /// entirely, so it is not for normal operation.
     pub smtp_host_override: Option<String>,
+    /// Authenticated submission relay. The password is never formatted or logged.
+    pub relay: Option<SmtpRelayConfig>,
+}
+
+#[derive(Clone)]
+pub struct SmtpRelayConfig {
+    pub host: String,
+    pub port: u16,
+    pub username: String,
+    pub password: String,
 }
 
 impl Default for WorkerConfig {
@@ -62,6 +77,7 @@ impl Default for WorkerConfig {
             port: 25,
             egress: Egress::Direct,
             smtp_host_override: None,
+            relay: None,
         }
     }
 }
@@ -174,8 +190,23 @@ impl DeliveryWorker {
             ("smtp", Egress::Direct) => {
                 self.attempt(&item.envelope_from, &item.recipient, &item.destination, &raw).await
             }
+            ("smtp", Egress::Resend) => match self.config.relay.as_ref() {
+                Some(relay) => {
+                    crate::client::deliver_authenticated(
+                        relay,
+                        &self.config.ehlo_name,
+                        &item.envelope_from,
+                        &item.recipient,
+                        &raw,
+                    )
+                    .await
+                }
+                None => Attempt::Deferred("Resend relay credentials are not configured".into()),
+            },
             ("smtp", Egress::Peer(peer)) => self.hand_off(peer, &item, &raw).await,
-            ("federated", _) => self.hand_off(&item.destination, &item, &raw).await,
+            ("federated", Egress::Resend | Egress::Direct | Egress::Peer(_)) => {
+                self.hand_off(&item.destination, &item, &raw).await
+            }
             (other, _) => Attempt::Deferred(format!("unknown route {other:?}")),
         };
 
@@ -263,4 +294,15 @@ async fn sqlx_fetch(
         .bind(message_id)
         .fetch_one(pool)
         .await
+}
+
+#[cfg(test)]
+mod egress_tests {
+    use super::Egress;
+
+    #[test]
+    fn resend_is_an_explicit_egress_mode() {
+        assert_eq!(Egress::parse("resend").unwrap(), Egress::Resend);
+        assert!(Egress::parse("resned").is_err());
+    }
 }
