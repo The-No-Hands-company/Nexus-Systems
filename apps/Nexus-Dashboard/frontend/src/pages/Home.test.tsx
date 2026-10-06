@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import Home from "./Home";
 
@@ -121,5 +121,13 @@ describe("Home", () => {
     const href = screen.getByRole("link", { name: /sign in/i }).getAttribute("href") ?? "";
     expect(href).toContain("/login");
     expect(href).toContain(`redirect_uri=${encodeURIComponent(window.location.origin)}`);
+  });
+
+  it("links the TNHC Charter from the footer", async () => {
+    stubFetch(false);
+    render(<MemoryRouter><Home /></MemoryRouter>);
+    const footer = await screen.findByRole("contentinfo");
+    const link = within(footer).getByRole("link", { name: "Charter" });
+    expect(link.getAttribute("href")).toBe("https://tnhc.dev/charter");
   });
 });

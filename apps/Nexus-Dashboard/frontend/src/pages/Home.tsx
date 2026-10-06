@@ -203,6 +203,7 @@ function SignedOut() {
           <a href="https://tnhc.dev/apps" className="hover:text-zinc-100">All apps</a>
           <a href="https://tnhc.dev/api" className="hover:text-zinc-100">API</a>
           <a href="https://tnhc.dev/changelog" className="hover:text-zinc-100">Changelog</a>
+          <a href="https://tnhc.dev/charter" className="hover:text-zinc-100">Charter</a>
           <a
             href="https://github.com/The-No-Hands-company/Nexus-Systems/issues"
             target="_blank"
