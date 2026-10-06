@@ -50,7 +50,7 @@ jobs:
       - uses: actions/checkout@v4
         with: { repository: The-No-Hands-company/Nexus-Vault, path: apps/Nexus-Vault }
       - uses: actions/checkout@v4
-        with: { repository: Zajfan/Phantom, path: apps/Phantom }
+        with: { repository: The-No-Hands-company/Phantom, path: apps/Phantom }
 
       - name: Set up Python
         uses: actions/setup-python@v5
