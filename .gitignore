@@ -7,6 +7,8 @@
 !/.secrets.baseline
 !/README.md
 !/SECURITY.md
+!/LICENSE
+!/LICENSING.md
 !/docker-compose.yml
 !/apps/
 !/apps/**
