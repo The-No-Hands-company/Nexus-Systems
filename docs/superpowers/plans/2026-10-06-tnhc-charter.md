@@ -258,7 +258,7 @@ cd "$(dirname "$0")/.."
 [ -f STATUS.md ] || { echo "FAIL: STATUS.md missing"; exit 1; }
 fail=0
 while IFS='|' read -r _ cap status proof _; do
-  status=$(echo "$status" | xargs); test=$(echo "$proof" | grep -oE '`[a-z_]+`' | head -1 | tr -d '`')
+  status=$(echo "$status" | xargs | sed -E 's/^(Done|Partial|Not done).*/\1/'); test=$(echo "$proof" | grep -oE '`[a-z_]+`' | head -1 | tr -d '`')
   case "$status" in Done|Partial|"Not done") ;; *) continue ;; esac
   [ -n "$test" ] || { echo "FAIL: no test cited for:$cap"; fail=1; continue; }
   loc=$(grep -rn --include=*.rs -E "fn $test\(" crates | head -1)
@@ -310,7 +310,7 @@ What the Phantom Protocol does today, and what it does not yet do. Each row name
 This page is published at https://tnhc.dev/phantom. Licensed MIT OR Apache-2.0, like the code.
 ```
 
-The "Partial" row's status cell must start with exactly `Partial` for the checker; make the check's status extraction take the first word: replace `status=$(echo "$status" | xargs)` with `status=$(echo "$status" | xargs | sed -E 's/^(Done|Partial|Not done).*/\1/')`.
+Each status cell starts with exactly `Done`, `Partial` or `Not done`; the checker reads that leading word.
 
 - [ ] **Step 6: Run the check**
 
@@ -388,7 +388,7 @@ Give these instructions, then wait for "done": Cloudflare dashboard → search (
       </div>
 ```
 
-and delete the now-unused `const currentYear = new Date().getFullYear();` frontmatter line. In the Resources list, change `https://github.com/Zajfan` label "GitHub (Personal)" to stay as is (it is still the founder's profile).
+and delete the now-unused `const currentYear = new Date().getFullYear();` frontmatter line. The Resources list keeps "GitHub (Personal)" unchanged.
 
 - [ ] **Step 4: Licences** (author check first)
 
