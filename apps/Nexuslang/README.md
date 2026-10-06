@@ -4,7 +4,7 @@
 
 [![CI](https://github.com/The-No-Hands-company/Nexuslang/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/The-No-Hands-company/Nexuslang/actions/workflows/ci.yml)
 [![Python](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
-[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 
 NexusLang (NLPL syntax) is designed to keep code readable while supporting low-level control, native compilation paths, and production tooling.
 
@@ -193,4 +193,4 @@ PYTHONPATH=src python -m pytest tests/
 
 ## License
 
-MIT. See [LICENSE](LICENSE).
+Apache-2.0. See [LICENSE](LICENSE).

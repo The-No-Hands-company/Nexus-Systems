@@ -249,7 +249,7 @@ The `apps/Nexus-Systems-API/` package defines cross-service contract types and c
 | **Nexus-Hosting** | apps/Nexus-Hosting | github.com:The-No-Hands-company/Nexus-Hosting.git | Initialized |
 | **Nexus-Network** | apps/Nexus-Network | github.com:The-No-Hands-company/Nexus-Network.git | **Not initialized** — must clone separately |
 | **Nexus-Vault** | apps/Nexus-Vault | github.com:The-No-Hands-company/Nexus-Vault.git | **Not initialized** — must clone separately |
-| **Phantom** | apps/Phantom | github.com:Zajfan/Phantom.git | **Not initialized** — must clone separately |
+| **Phantom** | apps/Phantom | github.com:The-No-Hands-company/Phantom.git | Initialized |
 
 ### To initialize uninitialized submodules:
 

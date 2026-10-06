@@ -22,7 +22,7 @@
     "nexus"
   ],
   "author": "The-No-Hands Company",
-  "license": "MIT",
+  "license": "AGPL-3.0-or-later",
   "dependencies": {
     "@babylonjs/core": "^6.40.0",
     "@babylonjs/inspector": "^6.40.0",
