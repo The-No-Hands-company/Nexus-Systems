@@ -22,7 +22,7 @@ File: dawg/dsp/dynamics/Gate.cpp
 Purpose: Professional noise gate with adjustable threshold and timing
 
 Created: 2025-08-14
-License: Private - All rights reserved
+License: AGPL-3.0-or-later
 */
 
 #include "dawg/dsp/dynamics/Gate.h"

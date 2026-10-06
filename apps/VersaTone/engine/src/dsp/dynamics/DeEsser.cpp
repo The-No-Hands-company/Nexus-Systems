@@ -22,7 +22,7 @@ File: dawg/dsp/dynamics/DeEsser.cpp
 Purpose: Frequency-selective compressor for sibilance control
 
 Created: 2025-08-14
-License: Private - All rights reserved
+License: AGPL-3.0-or-later
 */
 
 #include "dawg/dsp/dynamics/DeEsser.h"

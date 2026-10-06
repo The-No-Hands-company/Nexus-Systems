@@ -22,7 +22,7 @@ File: dawg/dsp/dynamics/TransientShaper.cpp
 Purpose: Transient enhancement and suppression processor
 
 Created: 2025-08-14
-License: Private - All rights reserved
+License: AGPL-3.0-or-later
 */
 
 #include "dawg/dsp/dynamics/TransientShaper.h"

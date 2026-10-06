@@ -22,7 +22,7 @@ File: dawg/dsp/distortion/TapeSaturation.h
 Purpose: Analog tape saturation modeling
 
 Created: 2025-08-14
-License: Private - All rights reserved
+License: AGPL-3.0-or-later
 */
 
 #pragma once

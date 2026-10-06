@@ -9,12 +9,9 @@ This repository is licensed per directory, following the [TNHC Charter](https://
 | `docs/` | CC BY 4.0 |
 | Submodules (`apps/Phantom`, …) | Their own repository's licence |
 
-Third-party code keeps its original licence. Files found at the time of licensing:
+`apps/VersaTone` is AGPL-3.0-or-later like the rest of the repository; no exception is needed.
+
+Third-party code keeps its original licence. Licence files found at the time of licensing:
 
 - `apps/Nexuslang/vscode-extension/LICENSE`
-- `apps/VersaTone/LICENSE`
-- `dhts/ecosystem-cpp-utility-toolkit/include/nexus/utility/license/license_header_validator.h`
-- `dhts/ecosystem-cpp-utility-toolkit/include/nexus/utility/license/license_validator.h`
 - `dhts/ecosystem-cpp-utility-toolkit/LICENSE`
-- `dhts/ecosystem-cpp-utility-toolkit/src/utility/license/license_header_validator.cpp`
-- `dhts/ecosystem-cpp-utility-toolkit/src/utility/license/license_validator.cpp`

@@ -29,7 +29,7 @@ File: dawg/dsp/{1}/{0}.h
 Purpose: {2}
 
 Created: {3}
-License: Private - All rights reserved
+License: AGPL-3.0-or-later
 */
 
 #pragma once
@@ -116,7 +116,7 @@ File: dawg/dsp/{1}/{0}.cpp
 Purpose: {2}
 
 Created: {3}
-License: Private - All rights reserved
+License: AGPL-3.0-or-later
 */
 
 #include "dawg/dsp/{1}/{0}.h"

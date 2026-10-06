@@ -170,7 +170,7 @@ We welcome contributions! Please see our [Contributing Guidelines](CONTRIBUTING.
 - **Documentation**: [docs/](docs/) and [USAGE.md](USAGE.md) for integration guide
 - **Issases**: [GitHub Issues](https://github.com/your-org/dawg-audio-suite/issues)
 - **Discussions**: [GitHub Discussions](https://github.com/your-org/dawg-audio-suite/discussions)
-- **Email**: support@no-hands-company.com
+- **Charter**: https://tnhc.dev/charter
 
 ---
 

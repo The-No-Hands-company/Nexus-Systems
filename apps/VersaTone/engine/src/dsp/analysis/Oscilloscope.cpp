@@ -22,7 +22,7 @@ File: dawg/dsp/analysis/Oscilloscope.cpp
 Purpose: Time-domain waveform visualization
 
 Created: 2025-08-14
-License: Private - All rights reserved
+License: AGPL-3.0-or-later
 */
 
 #include "dawg/dsp/analysis/Oscilloscope.h"

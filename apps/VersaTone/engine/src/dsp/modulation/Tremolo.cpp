@@ -22,7 +22,7 @@ File: dawg/dsp/modulation/Tremolo.cpp
 Purpose: Amplitude modulation with multiple waveforms
 
 Created: 2025-08-14
-License: Private - All rights reserved
+License: AGPL-3.0-or-later
 */
 
 #include "dawg/dsp/modulation/Tremolo.h"
