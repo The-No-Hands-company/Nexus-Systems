@@ -296,7 +296,7 @@ User=nexus
 WorkingDirectory=/opt/nexus-systems/apps/Nexus-Cloud
 Environment=NODE_ENV=production
 Environment=PORT=8787
-Environment=POSTGRES_URL=postgresql://nexus:nexus@localhost:5432/nexus  # pragma: allowlist secret
+Environment=POSTGRES_URL=postgresql://nexus:<password>@localhost:5432/nexus
 Environment=REDIS_URL=redis://localhost:6379
 Environment=S3_ENDPOINT=http://localhost:9000
 ExecStart=/usr/bin/bun run src/index.ts
@@ -343,7 +343,7 @@ curl http://localhost:8787/api/v1/status
 NEXUS_CLOUD_URL=http://localhost:8787
 NEXUS_CLOUD_API_KEY=change-me
 CORS_ORIGIN=*
-POSTGRES_URL=postgresql://nexus:nexus@localhost:5432/nexus  # pragma: allowlist secret
+POSTGRES_URL=postgresql://nexus:<password>@localhost:5432/nexus
 REDIS_URL=redis://localhost:6379
 S3_ENDPOINT=http://localhost:9000
 S3_ACCESS_KEY=minioadmin
