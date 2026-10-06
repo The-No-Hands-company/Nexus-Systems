@@ -207,6 +207,19 @@ export default function Shell({
               </svg>
               Report
             </Link>
+            <a
+              href="https://tnhc.dev/charter"
+              aria-label="TNHC Charter"
+              title="TNHC Charter"
+              className="flex flex-col items-center gap-1 rounded-md px-2 py-2 text-[10px] text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100"
+            >
+              <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M5 2h7l4 4v12H5z" />
+                <path d="M12 2v4h4" />
+                <path d="M8 10h5M8 13h5" />
+              </svg>
+              Charter
+            </a>
           </div>
         </nav>
 

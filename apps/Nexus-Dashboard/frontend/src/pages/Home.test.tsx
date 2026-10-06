@@ -123,7 +123,7 @@ describe("Home", () => {
     expect(href).toContain(`redirect_uri=${encodeURIComponent(window.location.origin)}`);
   });
 
-  it("links the TNHC Charter from the footer", async () => {
+  it("links the TNHC Charter from the signed-out footer", async () => {
     stubFetch(false);
     render(<MemoryRouter><Home /></MemoryRouter>);
     const footer = await screen.findByRole("contentinfo");

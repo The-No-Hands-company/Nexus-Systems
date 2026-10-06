@@ -98,4 +98,11 @@ describe("Shell operator link", () => {
     renderInRouter(<Shell apps={[]}>x</Shell>);
     expect(screen.queryByRole("link", { name: "Operator" })).toBeNull();
   });
+
+  it("links the TNHC Charter from the rail", () => {
+    renderInRouter(<Shell apps={[]}>x</Shell>);
+    const nav = screen.getByRole("navigation", { name: "Shell" });
+    const link = within(nav).getByRole("link", { name: "TNHC Charter" });
+    expect(link.getAttribute("href")).toBe("https://tnhc.dev/charter");
+  });
 });
