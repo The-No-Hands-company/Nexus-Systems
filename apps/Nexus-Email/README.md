@@ -168,8 +168,8 @@ node's identity for every peer that pinned it.
 ### Resend SMTP egress
 
 When outbound TCP 25 is filtered, use Resend's implicit-TLS SMTP relay rather
-than direct MX delivery. Set these server-only environment variables and
-restart `nexus-mailsmtpd`:
+than direct MX delivery. Put these in `apps/Nexus-Email/.env` (gitignored; `deploy.sh` exports them to
+`nexus-mailsmtpd` only, never through argv) and restart `nexus-mailsmtpd`:
 
 ```sh
 NEXUS_EMAIL_EGRESS=resend

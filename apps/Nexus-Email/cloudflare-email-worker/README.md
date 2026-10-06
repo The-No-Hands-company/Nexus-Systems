@@ -11,15 +11,20 @@ and `zajfan@tnhc.dev` to Nexus Email. It does not change DNS MX records.
    openssl rand -hex 32
    ```
 
-   Put the same value in the `nexus-mailapi` environment as
-   `NEXUS_EMAIL_CLOUDFLARE_INGRESS_TOKEN` and set it in this Worker with
+   Put the same value in `apps/Nexus-Email/.env` (gitignored) as
+   `NEXUS_EMAIL_CLOUDFLARE_INGRESS_TOKEN` (`deploy.sh` hands it to mailapi), and
+   set it in this Worker with
    `npx wrangler secret put NEXUS_INGRESS_TOKEN`. Do not put the value in this
    repository, `wrangler.toml`, or a message to support.
 
-2. Add an ingress hostname to the existing Cloudflare Tunnel:
-   `email-ingress.tnhc.dev` → `http://127.0.0.1:3140`. This hostname must route
-   to `nexus-mailapi`; `mail.tnhc.dev` is reserved for the federation listener
-   on port 2580. Keep the API bound to loopback.
+2. Nothing to add to the tunnel: `email-ingress.tnhc.dev` is covered by the
+   `*.tnhc.dev` wildcard, which enters the ecosystem proxy on :8080. The proxy
+   pins that host to exactly `POST /internal/v1/cloudflare-email` on
+   `127.0.0.1:3140`, skips the login gate (the bearer token is the credential)
+   and 404s every other path. Never point a tunnel hostname straight at :3140:
+   mailapi's other routes trust a caller-supplied `X-Nexus-Subject`, so a
+   direct route would let anyone read any mailbox. `mail.tnhc.dev` is reserved
+   for the federation listener on port 2580.
 
 3. Restart `nexus-mailapi`, then from this directory verify the Worker and deploy:
 

@@ -412,3 +412,85 @@ describe("CORS belongs to the application", () => {
     expect(res.headers.get("x-content-type-options")).toBe("nosniff");
   });
 });
+
+describe("Cloudflare email ingress", () => {
+  // Nexus-Email's API trusts X-Nexus-Subject on every other route, so this
+  // host must reach exactly one path on it and nothing else. The gate stays
+  // active here: the Worker has no session, its bearer token is checked by
+  // mailapi, and a login redirect would make Cloudflare bounce the mail.
+  let saved: string | undefined;
+  let upstream: ReturnType<typeof Bun.serve> | null = null;
+  let seen: { path: string; auth: string | null; from: string | null; body: string }[] = [];
+  beforeEach(() => {
+    saved = process.env.GATE_SKIP_AUTH;
+    delete process.env.GATE_SKIP_AUTH;
+    seen = [];
+    upstream = Bun.serve({
+      port: 0,
+      hostname: "127.0.0.1",
+      async fetch(req) {
+        seen.push({
+          path: new URL(req.url).pathname,
+          auth: req.headers.get("authorization"),
+          from: req.headers.get("x-nexus-envelope-from"),
+          body: await req.text(),
+        });
+        return Response.json({ message_id: 1 }, { status: 202 });
+      },
+    });
+    process.env.EMAIL_INGRESS_UPSTREAM = `http://127.0.0.1:${upstream.port}`;
+  });
+  afterEach(() => {
+    upstream?.stop(true);
+    Reflect.deleteProperty(process.env, "EMAIL_INGRESS_UPSTREAM");
+    if (saved === undefined) Reflect.deleteProperty(process.env, "GATE_SKIP_AUTH");
+    else process.env.GATE_SKIP_AUTH = saved;
+  });
+
+  const ingress = (path: string, method = "POST") =>
+    new Request(`http://email-ingress.tnhc.dev${path}`, {
+      method,
+      headers: {
+        authorization: "Bearer worker-secret",
+        "x-nexus-envelope-from": "someone@example.com",
+        "x-nexus-envelope-to": "info@tnhc.dev",
+      },
+      body: method === "GET" || method === "HEAD" ? undefined : "Subject: hi\r\n\r\nbody",
+    });
+
+  it("forwards the Worker's POST to mailapi with its credential, ungated", async () => {
+    const { handleRequest, __setRoutesForTest } = await import("../proxy");
+    __setRoutesForTest({
+      "email-ingress.tnhc.dev": { upstream: "http://client-selected.invalid", requiresAuth: true, kind: "app" },
+    });
+    const res = await handleRequest(ingress("/internal/v1/cloudflare-email"));
+    expect(res.status).toBe(202);
+    expect(seen).toEqual([
+      {
+        path: "/internal/v1/cloudflare-email",
+        auth: "Bearer worker-secret",
+        from: "someone@example.com",
+        body: "Subject: hi\r\n\r\nbody",
+      },
+    ]);
+  });
+
+  it("never forwards any other path or method on that host", async () => {
+    const { handleRequest, __setRoutesForTest } = await import("../proxy");
+    __setRoutesForTest({});
+    for (const path of ["/", "/api/v1/folders", "/internal/v1/cloudflare-email/", "/internal/v1/cloudflare-email/x"]) {
+      const res = await handleRequest(ingress(path));
+      expect(res.status).toBe(404);
+    }
+    const get = await handleRequest(ingress("/internal/v1/cloudflare-email", "GET"));
+    expect(get.status).toBe(405);
+    expect(seen).toEqual([]);
+  });
+
+  it("refuses a non-loopback upstream instead of sending mail elsewhere", async () => {
+    const { handleRequest } = await import("../proxy");
+    process.env.EMAIL_INGRESS_UPSTREAM = "https://mail-sink.example";
+    const res = await handleRequest(ingress("/internal/v1/cloudflare-email"));
+    expect(res.status).toBe(503);
+  });
+});

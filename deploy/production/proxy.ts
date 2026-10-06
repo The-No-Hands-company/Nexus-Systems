@@ -197,8 +197,22 @@ export interface WsProxyData {
 }
 
 function dashboardUpstream(): string | null {
+  return loopbackUpstream(process.env.DASHBOARD_UPSTREAM || "http://127.0.0.1:3132");
+}
+
+// Cloudflare Email Routing -> Email Worker -> this one path on Nexus-Email's
+// API. Every other mailapi route trusts a caller-supplied X-Nexus-Subject, so
+// the host is pinned to exactly this path and method, never taken from Cloud's
+// mutable route table, and never sent anywhere but loopback.
+const EMAIL_INGRESS_PATH = "/internal/v1/cloudflare-email";
+
+function emailIngressUpstream(): string | null {
+  return loopbackUpstream(process.env.EMAIL_INGRESS_UPSTREAM || "http://127.0.0.1:3140");
+}
+
+function loopbackUpstream(value: string): string | null {
   try {
-    const url = new URL(process.env.DASHBOARD_UPSTREAM || "http://127.0.0.1:3132");
+    const url = new URL(value);
     if (url.username || url.password) return null;
     if (url.protocol !== "http:" && url.protocol !== "https:") return null;
     const hostname = url.hostname.toLowerCase();
@@ -362,6 +376,34 @@ async function handleRequestInner(
     // sticky 301 would keep sending people away from it.
     if (host === `api.${DOMAIN}` || host === `www.api.${DOMAIN}`) {
       return Response.redirect(`https://${DOMAIN}/api`, 302);
+    }
+
+    // The Worker carries no session; mailapi checks its bearer token. It must
+    // not meet the login gate (Cloudflare would bounce the mail on a 302), so
+    // this host is answered entirely here.
+    if (host === `email-ingress.${DOMAIN}`) {
+      if (url.pathname !== EMAIL_INGRESS_PATH) {
+        return new Response("Not found", { status: 404 });
+      }
+      if (req.method !== "POST") {
+        return new Response("Method not allowed", { status: 405, headers: { allow: "POST" } });
+      }
+      const target = emailIngressUpstream();
+      if (!target) return new Response("Email ingress upstream unavailable", { status: 503 });
+      const forwardHeaders = new Headers();
+      for (const name of ["authorization", "content-type", "x-nexus-envelope-from", "x-nexus-envelope-to"]) {
+        const value = req.headers.get(name);
+        if (value !== null) forwardHeaders.set(name, value);
+      }
+      const resp = await fetch(`${target}${EMAIL_INGRESS_PATH}`, {
+        method: "POST",
+        headers: forwardHeaders,
+        body: await req.arrayBuffer(),
+        redirect: "manual",
+      });
+      const headers = new Headers(resp.headers);
+      sanitizeResponseHeaders(headers);
+      return new Response(resp.body, { status: resp.status, headers });
     }
 
     const dashboardTerminalRequest =

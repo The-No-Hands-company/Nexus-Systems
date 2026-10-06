@@ -420,6 +420,18 @@ cmd_start() {
         [ -n "$NEXUS_EMAIL_DATABASE_URL" ] && log "Adopted NEXUS_EMAIL_DATABASE_URL from apps/Nexus-Email/.env"
     fi
 
+    # Email's bridge secrets (Cloudflare ingress token, Resend SMTP relay) come
+    # from the same file. They are exported only around the one service that
+    # needs each, never passed as KEY=value arguments, so they stay out of argv
+    # (visible to every user via ps) and out of unrelated services' environment.
+    for key in NEXUS_EMAIL_CLOUDFLARE_INGRESS_TOKEN NEXUS_EMAIL_EGRESS NEXUS_EMAIL_SMTP_HOST \
+        NEXUS_EMAIL_SMTP_PORT NEXUS_EMAIL_SMTP_USER NEXUS_EMAIL_SMTP_PASS \
+        NEXUS_EMAIL_DKIM_KEY_PATH NEXUS_EMAIL_DKIM_SELECTOR; do
+        if [ -z "${!key:-}" ] && [ -f "$ROOT/apps/Nexus-Email/.env" ]; then
+            printf -v "$key" '%s' "$(sed -n "s/^$key=//p" "$ROOT/apps/Nexus-Email/.env" | head -1 | tr -d '\r"')"
+        fi
+    done
+
     log "Starting Nexus Systems on $DOMAIN..."
 
     # 1. Infrastructure
@@ -526,10 +538,10 @@ cmd_start() {
     # and WebSocket collaboration endpoint into a single origin for the proxy.
     #
     # Requires the Draw frontend to be built: apps/Nexus-Draw/frontend/dist
-    if command -v caddy >/dev/null 2>&1; then
+    if command -v "$CADDY_BIN" >/dev/null 2>&1; then
         if [ -f "$ROOT/apps/Nexus-Draw/frontend/dist/index.html" ]; then
             start_service "nexus-draw-web" "$ROOT" 8091 \
-                caddy run --config "$ROOT/deploy/production/nexus-draw.Caddyfile" --adapter caddyfile
+                "$CADDY_BIN" run --config "$ROOT/deploy/production/nexus-draw.Caddyfile" --adapter caddyfile
         else
             warn "draw UI not built — run: (cd apps/Nexus-Draw/frontend && npm install && npm run build)"
         fi
@@ -566,11 +578,11 @@ cmd_start() {
         start_service "calendar" "$ROOT/apps/Nexus-Calendar" 3068 \
             "${calendar_env[@]}" \
             bun run src/index.ts
-        if command -v caddy >/dev/null 2>&1; then
+        if command -v "$CADDY_BIN" >/dev/null 2>&1; then
             if [ -f "$ROOT/apps/Nexus-Calendar/frontend/dist/index.html" ]; then
                 start_service "nexus-calendar-web" "$ROOT" 8092 \
                     NEXUS_CALENDAR_WEB_ROOT="$calendar_web_root" \
-                    caddy run --config "$ROOT/deploy/production/nexus-calendar.Caddyfile" --adapter caddyfile
+                    "$CADDY_BIN" run --config "$ROOT/deploy/production/nexus-calendar.Caddyfile" --adapter caddyfile
             else
                 warn "calendar UI not built — run: (cd apps/Nexus-Calendar/frontend && pnpm install && pnpm run build)"
             fi
@@ -705,11 +717,16 @@ cmd_start() {
         MAILAPI_BIN="$ROOT/apps/Nexus-Email/target/debug/nexus-mailapi"
     fi
     if [ -x "$MAILAPI_BIN" ]; then
+        # The one public path on this service is the Cloudflare Email Worker
+        # ingress, which the proxy pins (email-ingress.$DOMAIN, POST only) and
+        # mailapi refuses unless the bearer token below is set and matches.
+        export NEXUS_EMAIL_CLOUDFLARE_INGRESS_TOKEN
         start_service "mailapi" "$ROOT/apps/Nexus-Email" 3140 \
             NEXUS_EMAIL_BIND=127.0.0.1:3140 \
             NEXUS_EMAIL_DOMAIN="$DOMAIN" \
             NEXUS_EMAIL_DATABASE_URL="$NEXUS_EMAIL_DATABASE_URL" \
             "$MAILAPI_BIN"
+        export -n NEXUS_EMAIL_CLOUDFLARE_INGRESS_TOKEN
     else
         log "mailapi binary not built - skipping (cargo build -p nexus-mailapi)"
     fi
@@ -749,6 +766,7 @@ cmd_start() {
         SMTPD_BIN="$ROOT/apps/Nexus-Email/target/debug/nexus-mailsmtpd"
     fi
     if [ -x "$SMTPD_BIN" ]; then
+        export NEXUS_EMAIL_SMTP_HOST NEXUS_EMAIL_SMTP_PORT NEXUS_EMAIL_SMTP_USER NEXUS_EMAIL_SMTP_PASS
         start_service "mailsmtpd" "$ROOT/apps/Nexus-Email" "${NEXUS_EMAIL_MX_PORT:-2525}" \
             NEXUS_EMAIL_MX_BIND="${NEXUS_EMAIL_MX_BIND:-127.0.0.1:2525}" \
             NEXUS_EMAIL_SUBMISSION_BIND="${NEXUS_EMAIL_SUBMISSION_BIND:-127.0.0.1:2587}" \
@@ -765,6 +783,7 @@ cmd_start() {
             NEXUS_EMAIL_DKIM_KEY_PATH="${NEXUS_EMAIL_DKIM_KEY_PATH:-}" \
             NEXUS_EMAIL_DKIM_SELECTOR="${NEXUS_EMAIL_DKIM_SELECTOR:-}" \
             "$SMTPD_BIN"
+        export -n NEXUS_EMAIL_SMTP_HOST NEXUS_EMAIL_SMTP_PORT NEXUS_EMAIL_SMTP_USER NEXUS_EMAIL_SMTP_PASS
     else
         log "mailsmtpd binary not built - skipping (cargo build -p nexus-mailsmtp)"
     fi
