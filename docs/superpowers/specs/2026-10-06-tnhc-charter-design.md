@@ -107,16 +107,26 @@ Plain-spoken, readable in about five minutes, in this order:
 | Nexus-Systems | Root `LICENSE` AGPL-3.0; Apache-2.0 `LICENSE` in each `packages/*`; `LICENSING.md`; manifest `license` fields |
 | tnhc.dev | `LICENSE` (AGPL-3.0 for code); Charter + Phantom pages; footer link |
 | tnhc-community (Android) | `LICENSE` AGPL-3.0; About-screen Charter link |
-| Zajfan/zajfan.dev | `LICENSE`; footer Charter link |
-| Zajfan/Phantom | `LICENSE` Apache-2.0; `STATUS.md` |
+| zajfan.dev | Transfer to the organisation; `LICENSE`; footer Charter link |
+| Phantom | Transfer to the organisation; `LICENSE` Apache-2.0; `STATUS.md` |
 | Zajfan Standard | Replace "INTERNAL — All rights reserved" with CC BY 4.0 |
 | Org docs (style guide, logo guide, brand guidelines, mission statement) | Remove `© All rights reserved` and `™`; point to the Charter |
 
+### Moving Phantom and zajfan.dev into the organisation
+
+`github.com/Zajfan` is the founder's sandbox. Phantom (a core part of TNHC) and
+zajfan.dev (live at zajfan.tnhc.dev) have graduated from it and move to
+`The-No-Hands-company` via GitHub's repository transfer, keeping their names
+(neither name is taken in the organisation). GitHub redirects the old URLs, but
+nothing may rely on the redirect:
+
+- `.gitmodules` in Nexus-Systems: `apps/Phantom` URL → `git@github.com:The-No-Hands-company/Phantom.git`, then `git submodule sync`.
+- References to `Zajfan/Phantom` / `Zajfan/zajfan.dev` in `docs/ARCHITECTURE.md` and `.github/workflows/nexus-release-gate.yml` updated.
+- Local clones' `origin` remotes updated.
+- Whatever deploys zajfan.tnhc.dev is checked to still pull from the right place after the move.
+
 ## Out of scope (recorded for later decisions)
 
-- **Personal-account repos.** Phantom and zajfan.dev live under the `Zajfan`
-  account, not the organisation. Whether to transfer them is a separate
-  decision; the Charter applies to them either way through their licences.
 - **The Zajfan Standard's home.** It has no repository of its own (its folder
   sits in a tree wired to Nexus-Systems). Resolved in the Engineering chapter.
 - Brand, design system, voice, engineering and rollout — later chapters.
