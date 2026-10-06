@@ -81,6 +81,8 @@ jobs:
       # correctly and that are invisible by hand.
       - name: Verify repository structure
         run: bash scripts/bootstrap.sh --verify
+      - name: Licences
+        run: bash scripts/check-licenses.sh
       - name: Gate
         run: cd deploy/production && bash check.sh
 

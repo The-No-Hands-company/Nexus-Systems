@@ -2,7 +2,9 @@
   "name": "nexus-cli",
   "version": "1.0.0",
   "type": "module",
-  "bin": { "nexus": "./nexus.ts" },
+  "bin": {
+    "nexus": "./nexus.ts"
+  },
   "scripts": {
     "check": "bunx tsc --noEmit",
     "dev": "bun run nexus.ts"
@@ -10,5 +12,6 @@
   "devDependencies": {
     "bun-types": "^1.3.11",
     "typescript": "^5.8.3"
-  }
+  },
+  "license": "Apache-2.0"
 }
