@@ -1,8 +1,30 @@
 import { useEffect, useState } from "react";
 import {
   me, listSessions, revokeSession, remainingRecoveryCodes, regenerateRecoveryCodes,
-  changePassword, ApiError, type Me, type Session,
+  changePassword, myActivity, ApiError, type Me, type Session, type ActivityEvent,
 } from "../api";
+
+const EVENT_LABELS: Record<string, string> = {
+  login_success: "Signed in",
+  login_failure: "Wrong password",
+  logout: "Signed out",
+  password_change: "Password changed",  // pragma: allowlist secret
+  session_revoked: "Device signed out",
+};
+
+function deviceLabel(deviceId: string): string {
+  return `Device ${deviceId.slice(4, 12)}`;
+}
+
+function relativeTime(iso: string): string {
+  const secs = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 1000));
+  if (secs < 60) return "just now";
+  const mins = Math.round(secs / 60);
+  if (mins < 60) return `${mins} min ago`;
+  const hrs = Math.round(mins / 60);
+  if (hrs < 24) return `${hrs} h ago`;
+  return `${Math.round(hrs / 24)} d ago`;
+}
 
 function explainPassword(reason: string): string {
   switch (reason) {
@@ -30,6 +52,7 @@ function explainPassword(reason: string): string {
 export default function Account() {
   const [user, setUser] = useState<Me | null>(null);
   const [sessions, setSessions] = useState<Session[]>([]);
+  const [activity, setActivity] = useState<ActivityEvent[]>([]);
   const [remaining, setRemaining] = useState<number | null>(null);
 
   const [current, setCurrent] = useState("");
@@ -43,15 +66,17 @@ export default function Account() {
   useEffect(() => {
     let cancelled = false;
     void (async () => {
-      const [u, s, r] = await Promise.all([
+      const [u, s, r, a] = await Promise.all([
         me(),
         listSessions().catch(() => [] as Session[]),
         remainingRecoveryCodes().catch(() => null),
+        myActivity().catch(() => [] as ActivityEvent[]),
       ]);
       if (cancelled) return;
       setUser(u);
       setSessions(s);
       setRemaining(r);
+      setActivity(a);
     })();
     return () => { cancelled = true; };
   }, []);
@@ -188,15 +213,43 @@ export default function Account() {
             {sessions.map((s) => (
               <li key={s.id} className="flex items-center justify-between p-3">
                 <div className="text-sm">
-                  <div className="text-zinc-200">{s.ipAddress}</div>
-                  <div className="text-zinc-500">{s.userAgent}</div>
+                  <div className="text-zinc-200">
+                    {deviceLabel(s.deviceId)}
+                    {s.current && <span className="ml-2 text-xs text-emerald-400">This device</span>}
+                  </div>
+                  <div className="text-zinc-500">{relativeTime(s.createdAt)}</div>
                 </div>
-                <button
-                  type="button" onClick={() => void revoke(s.id)}
-                  className="rounded border border-zinc-700 px-3 py-1 text-sm hover:bg-zinc-800"
-                >
-                  Revoke
-                </button>
+                {!s.current && (
+                  <button
+                    type="button" onClick={() => void revoke(s.id)}
+                    className="rounded border border-zinc-700 px-3 py-1 text-sm hover:bg-zinc-800"
+                  >
+                    Sign this device out
+                  </button>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+
+      <div>
+        <h2 className="text-lg font-medium">Your recent activity</h2>
+        {activity.length === 0 ? (
+          <p className="mt-2 text-sm text-zinc-400">Nothing in the last 30 days.</p>
+        ) : (
+          <ul className="mt-3 divide-y divide-zinc-800 rounded-lg border border-zinc-800">
+            {activity.map((e, i) => (
+              <li key={i} className="flex items-center justify-between p-3 text-sm">
+                <div>
+                  <span className="text-zinc-200">{EVENT_LABELS[e.event] ?? e.event}</span>
+                  {e.deviceId ? (
+                    <span className="ml-2 text-zinc-500">{deviceLabel(e.deviceId)}</span>
+                  ) : e.event === "login_failure" ? (
+                    <span className="ml-2 text-zinc-500">on an unknown device</span>
+                  ) : null}
+                </div>
+                <span className="text-zinc-500">{relativeTime(e.at)}</span>
               </li>
             ))}
           </ul>

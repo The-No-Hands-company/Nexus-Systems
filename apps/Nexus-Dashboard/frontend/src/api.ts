@@ -120,10 +120,17 @@ export async function listApps(): Promise<AppEntry[]> {
 
 export type Session = {
   id: string;
-  ipAddress: string;
-  userAgent: string;
+  deviceId: string;
   createdAt: string;
+  expiresAt: string;
+  current: boolean;
 };
+
+export type ActivityEvent = { event: string; deviceId: string | null; at: string };
+
+export function myActivity() {
+  return request<{ events: ActivityEvent[] }>("/ipa/v1/auth/activity").then((r) => r.events);
+}
 
 export function listSessions() {
   return request<{ sessions: Session[] }>("/ipa/v1/auth/sessions").then((r) => r.sessions);

@@ -4,9 +4,15 @@ import Account from "./Account";
 
 const ME = { id: "u1", username: "ada", email: "ada@x.dev", role: "user" };
 const SESSIONS = [
-  { id: "sess-1", ipAddress: "1.2.3.4", userAgent: "Firefox", createdAt: "2026-08-11T10:00:00Z" },
-  { id: "sess-2", ipAddress: "5.6.7.8", userAgent: "Chrome", createdAt: "2026-08-11T11:00:00Z" },
+  { id: "s1", deviceId: "dev_abcdefghxyz", createdAt: "2026-10-07T10:00:00Z", expiresAt: "2026-10-08T10:00:00Z", current: true },
+  { id: "s2", deviceId: "dev_zzzyyyyyqqq", createdAt: "2026-10-06T10:00:00Z", expiresAt: "2026-10-08T10:00:00Z", current: false },
 ];
+const ACTIVITY = {
+  events: [
+    { event: "login_success", deviceId: "dev_abcdefghxyz", at: "2026-10-07T10:00:00Z" },
+    { event: "login_failure", deviceId: null, at: "2026-10-07T09:00:00Z" },
+  ],
+};
 const NEW_CODES = Array.from({ length: 10 }, (_, i) => `n${i}`.repeat(16));
 
 function jsonResponse(body: unknown, status = 200) {
@@ -26,6 +32,7 @@ function stubFetch(overrides: Record<string, () => Response> = {}) {
     if (overrides[key]) return overrides[key]!();
     if (u === "/ipa/v1/auth/me") return jsonResponse({ user: ME });
     if (u === "/ipa/v1/auth/sessions") return jsonResponse({ sessions: SESSIONS });
+    if (u === "/ipa/v1/auth/activity") return jsonResponse(ACTIVITY);
     if (u === "/ipa/v1/auth/recovery-codes") return jsonResponse({ remaining: 7 });
     if (u === "/ipa/v1/auth/recovery-codes/regenerate") return jsonResponse({ recoveryCodes: NEW_CODES });
     if (u.endsWith("/password")) return jsonResponse({ success: true });
@@ -84,15 +91,26 @@ describe("Account", () => {
     expect(screen.getByText(/replace|invalidate|stop working|no longer/i)).toBeTruthy();
   });
 
-  it("lists active sessions and removes one when revoked", async () => {
+  it("shows recent activity and device sessions without any address", async () => {
+    stubFetch();
+    const { container } = render(<Account />);
+    await waitFor(() => expect(screen.getByRole("heading", { name: "Your recent activity" })).toBeTruthy());
+    await waitFor(() => expect(screen.getByText("Signed in")).toBeTruthy());
+    expect(screen.getByText("Wrong password")).toBeTruthy();
+    expect(screen.getAllByText(/Device abcdefgh/).length).toBeGreaterThan(0);
+    expect(container.textContent).not.toMatch(/\d+\.\d+\.\d+\.\d+/);
+    expect(container.textContent).not.toMatch(/null/);
+    expect(screen.getByText("This device")).toBeTruthy();
+    expect(screen.getAllByRole("button", { name: "Sign this device out" }).length).toBe(1);
+  });
+
+  it("signs another device out and removes its row", async () => {
     stubFetch();
     render(<Account />);
-    await waitFor(() => expect(screen.getByText(/1\.2\.3\.4/)).toBeTruthy());
-    expect(screen.getByText(/5\.6\.7\.8/)).toBeTruthy();
-
-    fireEvent.click(screen.getAllByRole("button", { name: /revoke/i })[0]!);
-    await waitFor(() => expect(screen.queryByText(/1\.2\.3\.4/)).toBeNull());
-    expect(screen.getByText(/5\.6\.7\.8/)).toBeTruthy();
+    await waitFor(() => expect(screen.getByRole("button", { name: "Sign this device out" })).toBeTruthy());
+    expect(screen.getByText("Device zzzyyyyy")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Sign this device out" }));
+    await waitFor(() => expect(screen.queryByText("Device zzzyyyyy")).toBeNull());
   });
 
   it("surfaces the server's reason when a password change is refused", async () => {

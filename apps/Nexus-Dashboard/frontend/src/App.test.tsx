@@ -26,6 +26,7 @@ vi.mock("./api", () => ({
   isAdmin: vi.fn((user) => user?.role === "founder" || user?.role === "admin"),
   ADMIN_ROLES: ["founder", "admin"],
   listSessions: vi.fn(async () => []),
+  myActivity: vi.fn(async () => []),
   remainingRecoveryCodes: vi.fn(async () => 7),
 }));
 
