@@ -67,6 +67,11 @@ const FALLBACK_CHAT_UPSTREAM = process.env.CHAT_UPSTREAM || "http://127.0.0.1:80
 // browser to https://auth.<DOMAIN>/login?redirect=..., so this is the one that
 // has to resolve or single sign-on has nowhere to happen.
 const FALLBACK_AUTH_UPSTREAM = process.env.AUTH_UPSTREAM || "http://127.0.0.1:4310";
+const AUTH_OWN_PATHS = /^\/(login$|health$|api\/v1\/(auth|account)(\/|$)|\.well-known\/openid-configuration$)/;
+// Read at request time so tests can point them elsewhere.
+function supabaseUpstream(): string { return process.env.SUPABASE_UPSTREAM || "http://172.17.0.1:8000"; }
+function storageUpstream(): string { return process.env.STORAGE_UPSTREAM || "http://127.0.0.1:9010"; }
+function authUpstream(): string { return process.env.AUTH_UPSTREAM_OVERRIDE || FALLBACK_AUTH_UPSTREAM; }
 const DASHBOARD_TERMINAL_PATH = "/api/terminal/attach";
 
 // The default backend for the *.<DOMAIN> wildcard. Any on-domain host that is
@@ -454,6 +459,25 @@ async function handleRequestInner(
       }
     }
 
+    // Former tunnel bypass routes: storage and the non-login auth.<DOMAIN> paths
+    // used to go straight to MinIO / the Supabase gateway. They now come through
+    // here so address stripping applies. They set the upstream and fall through
+    // to the shared forwarding block. Ungated: Supabase and presigned URLs
+    // authenticate themselves. Storage keeps its Host, since S3 signatures
+    // cover it.
+    let preserveHost = false;
+    let fixedKind: RouteTarget["kind"] | null = null;
+    if (!fixedDashboard && host === `storage.${DOMAIN}`) {
+      upstreamUrl = storageUpstream();
+      requiresAuth = false;
+      fixedKind = "site";
+      preserveHost = true;
+    } else if (!fixedDashboard && host === `auth.${DOMAIN}`) {
+      upstreamUrl = AUTH_OWN_PATHS.test(url.pathname) ? authUpstream() : supabaseUpstream();
+      requiresAuth = false;
+      fixedKind = "site";
+    }
+
     // Apply fallback logic if enabled and no route found
     if (!upstreamUrl && FALLBACK_ENABLED) {
       if (host === `cloud.${DOMAIN}` || host === `www.cloud.${DOMAIN}`) {
@@ -492,7 +516,7 @@ async function handleRequestInner(
     // the gate's answer depends on Cloud being up, which policy should not.
     // Closing it needs a reserved-subdomain list that can never be a site —
     // a naming decision, deliberately not invented here.
-    let kind: RouteTarget["kind"] = matchedKind ?? "app";
+    let kind: RouteTarget["kind"] = fixedKind ?? matchedKind ?? "app";
     if (!upstreamUrl && HOSTING_SITE_UPSTREAM) {
       upstreamUrl = HOSTING_SITE_UPSTREAM;
       kind = "site";
@@ -569,6 +593,7 @@ async function handleRequestInner(
       }
       forwardHeaders.delete("content-length");
       forwardHeaders.delete("host");
+      if (preserveHost) forwardHeaders.set("host", host);
       forwardHeaders.delete("connection");
 
       // Identity is something only this proxy may assert. Strip any inbound
@@ -582,7 +607,7 @@ async function handleRequestInner(
       forwardHeaders.delete("transfer-encoding");
       // Tell the upstream who it is actually answering as, which anything
       // generating absolute URLs or scoping a cookie needs.
-      forwardHeaders.set("x-forwarded-host", host);
+      if (!preserveHost) forwardHeaders.set("x-forwarded-host", host);
       // The scheme the *client* used, not this hop's. `url.protocol` is always
       // "http:" here — the proxy listens in plaintext behind the tunnel — so
       // forwarding it told every upstream it was answering over HTTP. Anything
@@ -623,11 +648,11 @@ async function handleRequestInner(
 
       return new Response(resp.body, { status: resp.status, headers });
     } catch (err) {
-      console.error(`[proxy] Proxy error for ${upstreamUrl}:`, err);
+      console.error(`[proxy] Proxy error for ${upstreamUrl}:`, err instanceof Error ? err.name : "error");
       return new Response(`Bad Gateway: Unable to reach upstream`, { status: 502 });
     }
   } catch (err) {
-    console.error(`[proxy] Request handling error:`, err);
+    console.error(`[proxy] Request handling error:`, err instanceof Error ? err.name : "error");
     return new Response(`Internal Server Error`, { status: 500 });
   }
 }

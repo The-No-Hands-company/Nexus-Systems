@@ -513,3 +513,33 @@ describe("address stripping at the front door", () => {
     } finally { up.stop(true); }
   });
 });
+
+describe("former bypass routes", () => {
+  const AUTH_LOGIN = /^\/(login$|health$|api\/v1\/(auth|account)(\/|$)|\.well-known\/openid-configuration$)/;
+  it("keeps the original Host for storage so presigned URLs still verify", async () => {
+    let host = ""; let path = "";
+    const up = Bun.serve({ port: 0, hostname: "127.0.0.1", fetch(req) { host = req.headers.get("host") ?? ""; path = new URL(req.url).pathname + new URL(req.url).search; return new Response("ok"); } });
+    process.env.STORAGE_UPSTREAM = `http://127.0.0.1:${up.port}`;
+    try {
+      const { handleRequest } = await import("../proxy");
+      const res = await handleRequest(new Request("http://storage.tnhc.dev/bucket/key?X-Amz-Signature=abc", { headers: { "cf-connecting-ip": "203.0.113.5" } }));
+      expect(res.status).toBe(200);
+      expect(host).toBe("storage.tnhc.dev");
+      expect(path).toBe("/bucket/key?X-Amz-Signature=abc");
+    } finally { up.stop(true); delete process.env.STORAGE_UPSTREAM; }
+  });
+  it("sends non-login auth.tnhc.dev paths to the Supabase gateway and login paths to Auth", async () => {
+    const hits: string[] = [];
+    const supa = Bun.serve({ port: 0, hostname: "127.0.0.1", fetch(req) { hits.push("supabase " + new URL(req.url).pathname); return new Response("ok"); } });
+    const auth = Bun.serve({ port: 0, hostname: "127.0.0.1", fetch(req) { hits.push("auth " + new URL(req.url).pathname); return new Response("ok"); } });
+    process.env.SUPABASE_UPSTREAM = `http://127.0.0.1:${supa.port}`;
+    process.env.AUTH_UPSTREAM_OVERRIDE = `http://127.0.0.1:${auth.port}`;
+    try {
+      const { handleRequest } = await import("../proxy");
+      await handleRequest(new Request("http://auth.tnhc.dev/auth/v1/token"));
+      await handleRequest(new Request("http://auth.tnhc.dev/login"));
+      expect(hits).toEqual(["supabase /auth/v1/token", "auth /login"]);
+      expect(AUTH_LOGIN.test("/login")).toBe(true);
+    } finally { supa.stop(true); auth.stop(true); delete process.env.SUPABASE_UPSTREAM; delete process.env.AUTH_UPSTREAM_OVERRIDE; }
+  });
+});
