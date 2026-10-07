@@ -157,3 +157,17 @@ Status: `auth` recreated and verified (`none`, healthy, `auth.tnhc.dev/auth/v1/h
 The other services run with the new config only after they are recreated; any container whose
 `docker inspect -f '{{.HostConfig.LogConfig.Type}}'` still says `json-file` has not been recreated yet.
 Revert a driver by removing its `logging:` block and recreating.
+
+## Hosting published ports restricted to loopback (2026-10-07)
+
+Public traffic enters only via the Cloudflare tunnel -> ecosystem proxy (192.168.0.179:8080, still all-interfaces). Live tunnel ingress was verified: every hostname -> `192.168.0.179:8080`, plus `http_status:404`. The proxy reaches Hosting on loopback.
+
+| Container | Before | After |
+|-----------|--------|-------|
+| nexus-hosting-app-1 | 0.0.0.0:8788 | 127.0.0.1:8788 |
+| nexus-hosting-proxy-1 | 0.0.0.0:8090, 0.0.0.0:9091 | 127.0.0.1:8090, 127.0.0.1:9091 |
+| nexus-hosting-minio-1 | 0.0.0.0:9010 | 127.0.0.1:9010 |
+| nexus-hosting-caddy-1 | 0.0.0.0:80, 443 tcp+udp | 127.0.0.1:80, 443 tcp+udp |
+
+Defined in `apps/Nexus-Hosting/docker-compose.yml`, `docker-compose.override.yml` and `deploy/production/hosting.compose.yml` (`!override` lists). Recreated with `--no-deps`, same file sets: app = base + hosting.compose.yml; minio/proxy/caddy = base + override. Revert: remove the `127.0.0.1:` prefixes and recreate.
+Note: `deploy/production/tunnel-ingress.backup.json` is a historical pre-2026-08-13 backup that points at 8788/9010; do NOT restore it without re-widening these ports.

@@ -35,7 +35,7 @@ services:
   # unpublished, since nothing external needs it.
   minio:
     ports: !override
-      - "9010:9000"
+      - "127.0.0.1:9010:9000"
 
   # The control panel — the Hosting UI and its API. This is what hosting.tnhc.dev
   # resolves to, so it has to be reachable from the cloudflared container, which
@@ -44,7 +44,7 @@ services:
   # 8788 is free here; 8787 is Nexus-Cloud.
   app:
     ports: !override
-      - "8788:8080"
+      - "127.0.0.1:8788:8080"
     environment:
       # Who may frame this app: the ecosystem shell, which mounts it at
       # app.tnhc.dev/hosting.
@@ -67,5 +67,5 @@ services:
   # stays local.
   proxy:
     ports: !override
-      - "8090:8090"
+      - "127.0.0.1:8090:8090"
       - "127.0.0.1:9091:9091"
