@@ -22,7 +22,7 @@ import {
 import { consumeRecoveryCode, countRemainingRecoveryCodes, issueRecoveryCodes } from "./recovery";
 import { createInvite, redeemInvite } from "./invites";
 import { checkRateLimit, recordFailure, clearFailures } from "./ratelimit";
-import { audit } from "./audit";
+import { audit, recentActivity } from "./audit";
 import {
   createApiKey,
   validateApiKey,
@@ -210,10 +210,10 @@ function requirePermission(userId: string, permission: Permission): boolean {
   return userHasPermission(userId, permission);
 }
 
-function getClientIp(request: Request): string {
-  return request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
-    request.headers.get("x-real-ip") ||
-    "127.0.0.1";
+// The front door strips every address header and forwards an opaque,
+// non-reversible tag instead. Auth never reads or stores a network address.
+function clientTag(request: Request): string {
+  return request.headers.get("x-nexus-client-tag") || "unknown";
 }
 
 // Read once at module scope so handleRequest can be a plain top-level
@@ -377,8 +377,6 @@ export async function handleRequest(request: Request): Promise<Response> {
       // be revoked through the same machinery as any other session.
       const session = createSession({
         userId: user.id,
-        ipAddress: getClientIp(request),
-        userAgent: request.headers.get("user-agent") || "oidc-client",
       });
 
       const idToken = issueIdToken({
@@ -444,8 +442,8 @@ export async function handleRequest(request: Request): Promise<Response> {
       // login was the one credential check that didn't, which made it the
       // cheapest path to a password. Keyed on IP + username so an attacker
       // can't lock out a victim by spraying from their own IP alone.
-      const ip = getClientIp(request);
-      const loginLimit = checkRateLimit("login", `${ip}:${username}`);
+      const tag = clientTag(request);
+      const loginLimit = checkRateLimit("login", `${tag}:${username}`);
       if (!loginLimit.allowed) {
         return new Response(
           renderLoginPage({ redirect: target, error: "Too many attempts. Try again later." }),
@@ -455,18 +453,16 @@ export async function handleRequest(request: Request): Promise<Response> {
 
       const user = username && password ? authenticateUser(username, password) : null;
       if (!user) {
-        recordFailure("login", `${ip}:${username}`);
+        recordFailure("login", `${tag}:${username}`);
         return new Response(
           renderLoginPage({ redirect: target, error: "Incorrect username or password." }),
           { status: 401, headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" } },
         );
       }
-      clearFailures("login", `${ip}:${username}`);
+      clearFailures("login", `${tag}:${username}`);
 
       const session = createSession({
         userId: user.id,
-        ipAddress: getClientIp(request),
-        userAgent: request.headers.get("user-agent") || "unknown",
       });
       const maxAge = Math.max(
         60,
@@ -534,8 +530,8 @@ export async function handleRequest(request: Request): Promise<Response> {
 
     // ── Public: claim an approved account ──
     if (request.method === "POST" && path === "/api/v1/auth/claim") {
-      const ip = getClientIp(request);
-      const limit = checkRateLimit("claim", ip);
+      const tag = clientTag(request);
+      const limit = checkRateLimit("claim", tag);
       if (!limit.allowed) {
         return jsonResponse({ error: "too_many_attempts" }, {
           status: 429,
@@ -551,17 +547,17 @@ export async function handleRequest(request: Request): Promise<Response> {
       });
 
       if (!result.ok) {
-        recordFailure("claim", ip);
+        recordFailure("claim", tag);
         return jsonResponse({ error: result.reason }, { status: 400 });
       }
-      clearFailures("claim", ip);
+      clearFailures("claim", tag);
       return jsonResponse({ user: result.user, recoveryCodes: result.recoveryCodes });
     }
 
     // ── Public: log in with a recovery code ──
     if (request.method === "POST" && path === "/api/v1/auth/recover") {
-      const ip = getClientIp(request);
-      const limit = checkRateLimit("recover", ip);
+      const tag = clientTag(request);
+      const limit = checkRateLimit("recover", tag);
       if (!limit.allowed) {
         return jsonResponse({ error: "too_many_attempts" }, {
           status: 429,
@@ -575,15 +571,13 @@ export async function handleRequest(request: Request): Promise<Response> {
       const user = findUserByEmail(email);
 
       if (!user || user.status !== "active" || !consumeRecoveryCode(user.id, code)) {
-        recordFailure("recover", ip);
+        recordFailure("recover", tag);
         return jsonResponse({ error: "invalid_code" }, { status: 400 });
       }
-      clearFailures("recover", ip);
+      clearFailures("recover", tag);
 
       const session = createSession({
         userId: user.id,
-        ipAddress: ip,
-        userAgent: request.headers.get("user-agent") || "",
       });
       return jsonResponse({
         user: sanitizeUser(user),
@@ -594,8 +588,8 @@ export async function handleRequest(request: Request): Promise<Response> {
 
     // ── Public: redeem an invite ──
     if (request.method === "POST" && path === "/api/v1/auth/invites/redeem") {
-      const ip = getClientIp(request);
-      const limit = checkRateLimit("invite", ip);
+      const tag = clientTag(request);
+      const limit = checkRateLimit("invite", tag);
       if (!limit.allowed) {
         return jsonResponse({ error: "too_many_attempts" }, {
           status: 429,
@@ -612,10 +606,10 @@ export async function handleRequest(request: Request): Promise<Response> {
       });
 
       if (!result.ok) {
-        recordFailure("invite", ip);
+        recordFailure("invite", tag);
         return jsonResponse({ error: result.reason }, { status: 400 });
       }
-      clearFailures("invite", ip);
+      clearFailures("invite", tag);
       return jsonResponse({ user: result.user, recoveryCodes: result.recoveryCodes }, { status: 201 });
     }
 
@@ -672,8 +666,8 @@ export async function handleRequest(request: Request): Promise<Response> {
 
       // Same brute-force gate as the HTML login above — one bucket per
       // (IP, username) so an attacker can't lock out their target remotely.
-      const apiIp = getClientIp(request);
-      const apiLimit = checkRateLimit("login", `${apiIp}:${username}`);
+      const apiTag = clientTag(request);
+      const apiLimit = checkRateLimit("login", `${apiTag}:${username}`);
       if (!apiLimit.allowed) {
         return jsonResponse({ error: "too_many_attempts" }, {
           status: 429,
@@ -683,18 +677,16 @@ export async function handleRequest(request: Request): Promise<Response> {
 
       const user = authenticateUser(username, password);
       if (!user) {
-        recordFailure("login", `${apiIp}:${username}`);
-        audit({ event: "login_failure", ip: apiIp, userAgent: request.headers.get("user-agent") ?? undefined });
+        recordFailure("login", `${apiTag}:${username}`);
+        audit({ event: "login_failure" });
         return jsonResponse({ success: false, reason: "invalid credentials" } as LoginResult, { status: 401 });
       }
-      clearFailures("login", `${apiIp}:${username}`);
-      audit({ event: "login_success", userId: user.id, ip: apiIp, userAgent: request.headers.get("user-agent") ?? undefined });
+      clearFailures("login", `${apiTag}:${username}`);
 
       const session = createSession({
         userId: user.id,
-        ipAddress: getClientIp(request),
-        userAgent: request.headers.get("user-agent") || "unknown",
       });
+      audit({ event: "login_success", userId: user.id, deviceId: session.deviceId });
 
       // Body keeps the token for API clients; the cookie is what gives a
       // browser single sign-on across every app on the parent domain.
@@ -719,7 +711,7 @@ export async function handleRequest(request: Request): Promise<Response> {
 
       if (auth.session) {
         revokeSession(auth.session.id);
-        audit({ event: "logout", userId: auth.userId });
+        audit({ event: "logout", userId: auth.userId, deviceId: auth.session.deviceId });
       }
 
       // Revoking server-side is what actually ends the session; clearing the
@@ -899,7 +891,7 @@ export async function handleRequest(request: Request): Promise<Response> {
 
       const success = changePassword(userId, currentPassword, newPassword);
       if (!success) return jsonResponse({ error: "password change failed" }, { status: 400 });
-      audit({ event: "password_change", userId, actorId: auth?.userId });
+      audit({ event: "password_change", userId, actorId: auth?.userId, deviceId: auth?.session?.deviceId });
       return jsonResponse({ success: true });
     }
 
@@ -997,7 +989,21 @@ export async function handleRequest(request: Request): Promise<Response> {
 
       const isAdmin = requirePermission(auth.userId, "sessions:read");
       const sessions = isAdmin ? listSessions() : listSessions(auth.userId);
-      return jsonResponse({ sessions });
+      return jsonResponse({
+        sessions: sessions.map((x) => ({
+          id: x.id,
+          deviceId: x.deviceId,
+          createdAt: x.createdAt,
+          expiresAt: x.expiresAt,
+          current: x.id === auth.session?.id,
+        })),
+      });
+    }
+
+    // ── Own recent activity (30 days, no addresses) ──
+    if (request.method === "GET" && path === "/api/v1/auth/activity") {
+      if (!auth) return jsonResponse({ error: "unauthorized" }, { status: 401 });
+      return jsonResponse({ events: await recentActivity(auth.userId) });
     }
 
     const revokeSessionMatch = path.match(/^\/api\/v1\/auth\/sessions\/([^/]+)\/revoke$/);

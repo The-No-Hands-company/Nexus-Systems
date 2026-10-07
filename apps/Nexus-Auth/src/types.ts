@@ -127,8 +127,7 @@ export interface Session {
   id: string;
   userId: string;
   token: string;
-  ipAddress: string;
-  userAgent: string;
+  deviceId: string;
   createdAt: string;
   expiresAt: string;
   revoked: boolean;

@@ -44,7 +44,7 @@ describe('POST /api/v1/account/link-did', () => {
     try {
       // Create a user and session
       const user = createUser({ username: 'linktester', email: 'link@test', password: 'pw' });
-      const session = createSession({ userId: user.id, ipAddress: '127.0.0.1', userAgent: 'bun-test' });
+      const session = createSession({ userId: user.id });
 
       // Make request to the handler
       const req = new Request('http://localhost/api/v1/account/link-did', {

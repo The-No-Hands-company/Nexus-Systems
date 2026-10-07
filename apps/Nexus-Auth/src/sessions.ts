@@ -1,5 +1,5 @@
 import type { Session } from "./types";
-import { randomUUID } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 
 const sessions = new Map<string, Session>();
 const tokenIndex = new Map<string, string>();
@@ -10,8 +10,6 @@ function generateSessionId(): string {
 
 export function createSession(input: {
   userId: string;
-  ipAddress: string;
-  userAgent: string;
   expiresInHours?: number;
 }): Session {
   const now = new Date().toISOString();
@@ -23,8 +21,7 @@ export function createSession(input: {
     id: generateSessionId(),
     userId: input.userId,
     token: `nxs_${randomUUID()}`,
-    ipAddress: input.ipAddress,
-    userAgent: input.userAgent,
+    deviceId: `dev_${randomBytes(16).toString("base64url")}`,
     createdAt: now,
     expiresAt,
     revoked: false,

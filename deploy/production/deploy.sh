@@ -420,6 +420,13 @@ cmd_start() {
         [ -n "$NEXUS_EMAIL_DATABASE_URL" ] && log "Adopted NEXUS_EMAIL_DATABASE_URL from apps/Nexus-Email/.env"
     fi
 
+    # Auth's audit-log database URL, same pattern: the value lives beside the app.
+    if [ -z "${NEXUS_AUTH_AUDIT_DATABASE_URL:-}" ] && [ -f "$ROOT/apps/Nexus-Auth/.env" ]; then
+        NEXUS_AUTH_AUDIT_DATABASE_URL="$(sed -n 's/^NEXUS_AUTH_AUDIT_DATABASE_URL=//p' "$ROOT/apps/Nexus-Auth/.env" \
+            | head -1 | tr -d '\r"')"
+        [ -n "$NEXUS_AUTH_AUDIT_DATABASE_URL" ] && log "Adopted NEXUS_AUTH_AUDIT_DATABASE_URL from apps/Nexus-Auth/.env"
+    fi
+
     # Email's bridge secrets (Cloudflare ingress token, Resend SMTP relay) come
     # from the same file. They are exported only around the one service that
     # needs each, never passed as KEY=value arguments, so they stay out of argv
@@ -468,13 +475,14 @@ cmd_start() {
     # internet. Note the seed only creates accounts that do not exist; setting
     # these does nothing to an existing store, which has to be rotated through
     # POST /api/v1/auth/users/:id/password.
+    export NEXUS_AUTH_AUDIT_DATABASE_URL
     start_service "auth" "$ROOT/apps/Nexus-Auth" 4310 \
         PORT=4310 \
-        DATABASE_URL="${NEXUS_AUTH_AUDIT_DATABASE_URL:-}" \
         NEXUS_AUTH_BASE_URL="http://127.0.0.1:4310" \
         NEXUS_AUTH_COOKIE_DOMAIN=".$DOMAIN" \
         NEXUS_CLOUD_URL=http://localhost:8787 \
         bun run src/index.ts
+    export -n NEXUS_AUTH_AUDIT_DATABASE_URL
 
     # 3. Nexus Cloud
     #
