@@ -3,7 +3,7 @@ import { checkRateLimit, createRateLimitResponse, resetRateLimits } from "../src
 
 function reqFromIp(ip: string): Request {
   return new Request("http://app.test/ipa/apps", {
-    headers: ip === "unknown" ? {} : { "x-forwarded-for": ip },
+    headers: ip === "unknown" ? {} : { "x-nexus-client-tag": ip },
   });
 }
 

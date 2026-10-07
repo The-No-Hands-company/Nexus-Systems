@@ -68,9 +68,10 @@ function normalizeHost(host: string): string {
   return host.trim().toLowerCase().replace(/:\d+$/, "");
 }
 
+// The proxy strips address headers and supplies an opaque client tag instead.
+// (Name kept for its callers; the value is a tag, not an address.)
 function getClientIp(request: Request): string {
-  return request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
-    request.headers.get("x-real-ip") || "127.0.0.1";
+  return request.headers.get("x-nexus-client-tag") || "unknown";
 }
 
 function buildUpstreamUrl(baseTargetUrl: string, path: string, search: string): string {

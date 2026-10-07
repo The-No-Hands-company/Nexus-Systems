@@ -40,10 +40,9 @@ function getBucket(key: string): Bucket {
 }
 
 function getClientKey(req: Request, prefix: string = "default"): string {
-  const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
-    req.headers.get("x-real-ip") ||
-    "unknown";
-  return `${prefix}:${ip}`;
+  // Keyed on the proxy's opaque client tag; the address never reaches us.
+  const tag = req.headers.get("x-nexus-client-tag") || "unknown";
+  return `${prefix}:${tag}`;
 }
 
 export interface RateLimitResult {

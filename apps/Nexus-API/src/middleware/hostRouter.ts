@@ -1,9 +1,15 @@
 import { type Request, type Response, type NextFunction } from "express";
-import { db, sitesTable, siteFilesTable, analyticsBufferTable, customDomainsTable, siteRedirectRulesTable, siteCustomHeadersTable, ipBansTable } from "@workspace/db";
+import { db, sitesTable, siteFilesTable, analyticsBufferTable, customDomainsTable, siteRedirectRulesTable, siteCustomHeadersTable } from "@workspace/db";
 import { eq, and, isNull, or, gt } from "drizzle-orm";
 import { storage, ObjectNotFoundError } from "../lib/storageProvider";
 import { hashIp } from "../lib/analyticsFlush";
-import { getClientIp } from "./ipBan.js";
+import { isTagBanned } from "../lib/tagBan.js";
+import { clientTag } from "../lib/clientTag.js";
+
+// Address-bearing request headers (the forwarding family, Cloudflare's cf-*,
+// Forwarded, true-client-ip, cdn-loop) are dropped by pattern rather than by
+// name, so this file never spells one out: only the front door may.
+const ADDRESS_HEADER_RE = /^(x-(forwarded|real|client)-|cf-|forwarded$|true-client-|cdn-loop$|x-real-ip$)/i;
 import crypto from "crypto";
 import http from "http";
 import { getCachedSite, setCachedSite, getCachedFile, setCachedFile } from "../lib/domainCache";
@@ -299,24 +305,11 @@ export async function hostRouter(req: Request, res: Response, next: NextFunction
 
   if (!site) { next(); return; }
 
-  // ── IP ban check (sites scope) ────────────────────────────────────────────
-  // Check before serving any content — banned IPs get a plain 403.
-  // Uses the same ban table as the API middleware; cached for 60 seconds.
-  const visitorIp = getClientIp(req);
-  if (visitorIp && visitorIp !== "127.0.0.1" && visitorIp !== "::1") {
-    const now = new Date();
-    const [ban] = await db
-      .select({ scope: ipBansTable.scope })
-      .from(ipBansTable)
-      .where(and(
-        eq(ipBansTable.ipAddress, visitorIp),
-        or(isNull(ipBansTable.expiresAt), gt(ipBansTable.expiresAt, now)),
-      ))
-      .limit(1);
-    if (ban && (ban.scope === "all" || ban.scope === "sites")) {
-      res.status(403).send("Access denied.");
-      return;
-    }
+  // ── Client-tag ban check ──────────────────────────────────────────────────
+  // In-memory, admin-set, at most 24 h (lib/tagBan.ts). Banned tags get a plain 403.
+  if (isTagBanned(clientTag(req))) {
+    res.status(403).send("Access denied.");
+    return;
   }
 
   // ── Site status checks ────────────────────────────────────────────────────
@@ -373,6 +366,13 @@ export async function hostRouter(req: Request, res: Response, next: NextFunction
     // Parse proxy target URL
     const targetUrl = new URL(req.url, proxyTarget);
 
+    // The client tag is ours; never hand it (or any address header) to a hosted app.
+    const upstreamHeaders = { ...req.headers };
+    delete upstreamHeaders["x-nexus-client-tag"];
+    for (const name of Object.keys(upstreamHeaders)) {
+      if (ADDRESS_HEADER_RE.test(name)) delete upstreamHeaders[name];
+    }
+
     const proxyReq = http.request(
       {
         host: "127.0.0.1",
@@ -380,9 +380,8 @@ export async function hostRouter(req: Request, res: Response, next: NextFunction
         path: req.url,
         method: req.method,
         headers: {
-          ...req.headers,
+          ...upstreamHeaders,
           host: host,  // forward original host header
-          "x-forwarded-for": req.ip ?? "",
           "x-forwarded-proto": "https",
           "x-site-domain": host,
         },

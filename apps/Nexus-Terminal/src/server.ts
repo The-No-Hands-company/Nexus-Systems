@@ -132,7 +132,7 @@ export async function createServer(options: { auditPath?: string } = {}) { const
 
       const cols = Number(url.searchParams.get("cols") || 80);
       const rows = Number(url.searchParams.get("rows") || 24);
-      const remoteIp = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? null;
+      const remoteIp = request.headers.get("x-nexus-client-tag") || "unknown"; // opaque tag, not an address
 
       if (srv.upgrade(request, { data: { kind: "attach", subject: who.subject, cols, rows, remoteIp } })) {
         return undefined as unknown as Response;

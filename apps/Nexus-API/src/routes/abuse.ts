@@ -1,5 +1,5 @@
 /**
- * Abuse reporting and IP ban management routes.
+ * Abuse reporting and client-tag ban management routes.
  *
  * Public:
  *   POST /api/abuse/report         — Submit an abuse report
@@ -9,22 +9,22 @@
  *   PATCH /api/abuse/reports/:id   — Update status, add review notes
  *   POST /api/abuse/reports/:id/takedown — Take site offline + resolve report
  *
- *   GET  /api/admin/ip-bans        — List bans
- *   POST /api/admin/ip-bans        — Create ban
- *   DELETE /api/admin/ip-bans/:id  — Remove ban
+ *   GET  /api/abuse/tag-bans        — List client-tag bans (in memory, <= 24 h)
+ *   POST /api/abuse/tag-bans        — Ban a client tag
+ *   DELETE /api/abuse/tag-bans/:tag — Lift a ban
  */
 
 import { Router, type IRouter, Request, Response } from "express";
 import { z } from "zod/v4";
 import { db } from "@workspace/db";
 import {
-  abuseReportsTable, ipBansTable, sitesTable,
+  abuseReportsTable, sitesTable,
   adminAuditLogTable,
 } from "@workspace/db";
-import { eq, desc, and, isNull, or, gt } from "drizzle-orm";
+import { eq, desc, and } from "drizzle-orm";
 import { asyncHandler, AppError } from "../lib/errors.js";
 import { requireAdmin } from "../middleware/requireAdmin.js";
-import { invalidateBanCache } from "../middleware/ipBan.js";
+import { banTag, unbanTag, listTagBans, MAX_BAN_MS } from "../lib/tagBan.js";
 import { rateLimiter } from "../middleware/rateLimiter.js";
 
 // Annotated for the same reason as the other route modules: the inferred
@@ -45,10 +45,6 @@ router.post("/report", rateLimiter, asyncHandler(async (req: Request, res: Respo
   const parsed = ReportBody.safeParse(req.body);
   if (!parsed.success) throw AppError.badRequest(parsed.error.message);
 
-  const ip = (req.headers["x-forwarded-for"] as string | undefined)?.split(",")[0].trim()
-    ?? req.socket?.remoteAddress
-    ?? null;
-
   // Resolve site
   const [site] = await db
     .select({ id: sitesTable.id })
@@ -61,7 +57,6 @@ router.post("/report", rateLimiter, asyncHandler(async (req: Request, res: Respo
   await db.insert(abuseReportsTable).values({
     siteId:        site.id,
     siteDomain:    parsed.data.siteDomain,
-    reporterIp:    ip,
     reporterEmail: parsed.data.reporterEmail ?? null,
     reason:        parsed.data.reason,
     description:   parsed.data.description ?? null,
@@ -167,70 +162,38 @@ router.post("/reports/:id/takedown", requireAdmin, asyncHandler(async (req: Requ
   res.json({ ok: true, message: `Site ${report.siteDomain} suspended.` });
 }));
 
-// ── Admin: IP bans ────────────────────────────────────────────────────────────
+// ── Admin: client-tag bans ────────────────────────────────────────────────────
+// In memory only, capped at 24 h (lib/tagBan.ts). Nothing here is persisted and
+// there is no address to ban: a tag is the proxy's opaque per-client token.
 
-router.get("/ip-bans", requireAdmin, asyncHandler(async (_req: Request, res: Response) => {
-  const bans = await db
-    .select()
-    .from(ipBansTable)
-    .orderBy(desc(ipBansTable.createdAt))
-    .limit(500);
-  res.json({ data: bans });
+router.get("/tag-bans", requireAdmin, asyncHandler(async (_req: Request, res: Response) => {
+  res.json({ data: listTagBans() });
 }));
 
 const BanBody = z.object({
-  ipAddress: z.string().min(7).max(45),
-  cidrRange: z.string().optional(),
-  reason:    z.string().max(500).optional(),
-  scope:     z.enum(["api","sites","all"]).default("all"),
-  expiresAt: z.string().datetime().optional(),
+  tag:        z.string().regex(/^[A-Za-z0-9_-]{22}$/, "Expected a 22-character client tag"),
+  reason:     z.string().max(500).optional(),
+  ttlMinutes: z.number().int().min(1).max(MAX_BAN_MS / 60_000).default(MAX_BAN_MS / 60_000),
 });
 
-router.post("/ip-bans", requireAdmin, asyncHandler(async (req: Request, res: Response) => {
+router.post("/tag-bans", requireAdmin, asyncHandler(async (req: Request, res: Response) => {
   const parsed = BanBody.safeParse(req.body);
   if (!parsed.success) throw AppError.badRequest(parsed.error.message);
 
-  const [ban] = await db.insert(ipBansTable).values({
-    ipAddress: parsed.data.ipAddress,
-    cidrRange: parsed.data.cidrRange ?? null,
-    reason:    parsed.data.reason ?? null,
-    scope:     parsed.data.scope,
-    bannedBy:  (req as any).user?.id,
-    expiresAt: parsed.data.expiresAt ? new Date(parsed.data.expiresAt) : null,
-  }).returning();
-
-  // If a CIDR range is specified, flush the full cache (any IP could be affected)
-  invalidateBanCache(parsed.data.cidrRange ? undefined : parsed.data.ipAddress);
+  const expiresAt = banTag(parsed.data.tag, parsed.data.ttlMinutes * 60_000, parsed.data.reason ?? null);
 
   await db.insert(adminAuditLogTable).values({
-    // admin_audit_log has actor_id / target_type / target_id / after. This
-    // wrote adminId, target and detail — none of which are columns. actor_id
-    // is notNull, so every one of these inserts would have failed at the
-    // database: abuse takedowns and IP bans were not being audited at all.
-    // The route is behind requireAdmin, so req.user is present.
     actorId:    (req as any).user.id as string,
-    action:     "ip_ban",
-    targetType: "ip",
-    targetId:   parsed.data.ipAddress,
-    after:      JSON.stringify({
-      ipAddress: parsed.data.ipAddress,
-      cidrRange: parsed.data.cidrRange ?? null,
-      reason: parsed.data.reason ?? "",
-    }),
+    action:     "tag_ban",
+    targetType: "client_tag",
+    targetId:   parsed.data.tag,
+    after:      JSON.stringify({ reason: parsed.data.reason ?? "", expiresAt: new Date(expiresAt).toISOString() }),
   }).catch(() => {});
 
-  res.status(201).json(ban);
+  res.status(201).json({ tag: parsed.data.tag, reason: parsed.data.reason ?? null, expiresAt: new Date(expiresAt).toISOString() });
 }));
 
-router.delete("/ip-bans/:id", requireAdmin, asyncHandler(async (req: Request, res: Response) => {
-  const id = parseInt(req.params.id as string, 10);
-  if (isNaN(id)) throw AppError.badRequest("Invalid ban ID");
-
-  const [deleted] = await db.delete(ipBansTable)
-    .where(eq(ipBansTable.id, id))
-    .returning();
-
-  if (!deleted) throw AppError.notFound("Ban not found");
-  invalidateBanCache(deleted.ipAddress);
+router.delete("/tag-bans/:tag", requireAdmin, asyncHandler(async (req: Request, res: Response) => {
+  if (!unbanTag(String(req.params.tag))) throw AppError.notFound("Ban not found");
   res.sendStatus(204);
 }));

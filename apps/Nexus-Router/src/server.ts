@@ -115,9 +115,8 @@ export async function startRouter(
 }
 
 function getClientIp(req: IncomingMessage): string {
-  const forwarded = req.headers["x-forwarded-for"];
-  if (typeof forwarded === "string") {
-    return forwarded.split(",")[0].trim();
-  }
-  return req.socket.remoteAddress || "unknown";
+  // The proxy strips address headers and supplies an opaque client tag instead.
+  // (Name kept for its callers; the value is a tag, not an address.)
+  const tag = req.headers["x-nexus-client-tag"];
+  return typeof tag === "string" && tag ? tag : "unknown";
 }

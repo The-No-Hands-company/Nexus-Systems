@@ -12,7 +12,7 @@ import { authMiddleware } from "./middlewares/authMiddleware";
 import { tokenAuthMiddleware } from "./middleware/tokenAuth";
 import { globalErrorHandler, notFoundHandler } from "./middleware/errorHandler";
 import { globalLimiter, speedLimiter } from "./middleware/rateLimiter";
-import { apiBanMiddleware } from "./middleware/ipBan";
+import { apiBanMiddleware } from "./middleware/tagBan";
 import { hostRouter } from "./middleware/hostRouter";
 import router from "./routes";
 import { metricsMiddleware, registry } from "./lib/metrics";
