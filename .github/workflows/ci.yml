@@ -83,6 +83,8 @@ jobs:
         run: bash scripts/bootstrap.sh --verify
       - name: Licences
         run: bash scripts/check-licenses.sh
+      - name: Privacy
+        run: bash scripts/check-privacy.sh
       - name: Gate
         run: cd deploy/production && bash check.sh
 
