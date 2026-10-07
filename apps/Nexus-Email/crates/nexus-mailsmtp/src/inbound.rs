@@ -38,8 +38,6 @@ impl<L: Lookup + 'static> Sink for AuthenticatingSink<L> {
         .await;
 
         tracing::info!(
-            ip = %msg.client_ip,
-            from = %msg.from,
             spf = ?auth.spf,
             dkim = auth.dkim_passed,
             dmarc = auth.dmarc_pass,

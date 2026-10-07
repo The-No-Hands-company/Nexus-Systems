@@ -232,3 +232,67 @@ async fn mail_from_another_domain_is_not_signed_with_our_key() {
 
     assert_eq!(fake.calls()[0].2, raw);
 }
+
+/// One global subscriber that writes into a per-thread buffer. A scoped
+/// subscriber per test is unreliable here: other tests in this binary log with
+/// none installed, which makes the call sites flap. Each test runs on its own
+/// single thread, so its buffer holds exactly what it logged.
+mod capture {
+    use std::cell::RefCell;
+    use std::sync::Once;
+
+    thread_local! { static BUF: RefCell<Vec<u8>> = const { RefCell::new(Vec::new()) }; }
+
+    #[derive(Clone, Copy)]
+    struct Sink;
+    impl std::io::Write for Sink {
+        fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+            BUF.with(|b| b.borrow_mut().extend_from_slice(buf));
+            Ok(buf.len())
+        }
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+    impl<'a> tracing_subscriber::fmt::MakeWriter<'a> for Sink {
+        type Writer = Sink;
+        fn make_writer(&'a self) -> Sink {
+            *self
+        }
+    }
+
+    /// Install the subscriber (once) and clear this thread's buffer.
+    pub fn start() {
+        static ONCE: Once = Once::new();
+        ONCE.call_once(|| {
+            let sub = tracing_subscriber::fmt().with_writer(Sink).with_max_level(tracing::Level::TRACE).finish();
+            tracing::subscriber::set_global_default(sub).unwrap();
+        });
+        BUF.with(|b| b.borrow_mut().clear());
+    }
+
+    /// Everything this thread has logged since `start`.
+    pub fn text() -> String {
+        BUF.with(|b| String::from_utf8(b.borrow().clone()).unwrap())
+    }
+}
+
+/// What an operator's log file would receive while the worker gives up on a
+/// delivery. The recipient and the remote's refusal text (which routinely echoes
+/// the address) must not be in it.
+#[tokio::test]
+async fn a_bounce_due_log_line_names_no_recipient_and_no_remote_text() {
+    let (store, queue) = setup().await;
+    let rcpt = unique("peer.test");
+    let (item, _) = queued(&store, &queue, &rcpt, Route::Federated { node: "peer.test".into() }).await;
+    let fake = FakeTransport::answering(HandoffOutcome::Rejected(format!("550 no such user {rcpt}")));
+    let worker = DeliveryWorker::new(store.clone(), queue, WorkerConfig::default()).with_transport(fake);
+
+    capture::start();
+    worker.process(item).await;
+
+    let log = capture::text();
+    assert!(log.contains("bounce due"), "the failure must still be logged: {log:?}");
+    assert!(!log.contains(&rcpt), "recipient leaked into the log: {log:?}");
+    assert!(!log.contains("peer.test"), "recipient domain leaked into the log: {log:?}");
+}

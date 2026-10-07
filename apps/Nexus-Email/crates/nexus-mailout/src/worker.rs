@@ -162,7 +162,7 @@ impl DeliveryWorker {
         match sign(signer, &raw, DEFAULT_SIGNED_HEADERS) {
             Ok(header) => signed_message(&header, &raw),
             Err(e) => {
-                tracing::warn!(error = %e, from = envelope_from, "DKIM signing failed; sending unsigned");
+                tracing::warn!(error = %e, "DKIM signing failed; sending unsigned");
                 raw
             }
         }
@@ -217,13 +217,13 @@ impl DeliveryWorker {
             Attempt::Rejected(reason) => {
                 let dead = self.queue.mark_attempt_failed(item.id, true, &reason).await;
                 if matches!(dead, Ok(true)) {
-                    tracing::info!(recipient = %item.recipient, %reason, "permanent failure; bounce due");
+                    tracing::info!(queue_id = %item.id, "permanent failure; bounce due");
                 }
             }
             Attempt::Deferred(reason) => {
                 let dead = self.queue.mark_attempt_failed(item.id, false, &reason).await;
                 if matches!(dead, Ok(true)) {
-                    tracing::info!(recipient = %item.recipient, %reason, "gave up after retries; bounce due");
+                    tracing::info!(queue_id = %item.id, "gave up after retries; bounce due");
                 }
             }
         }

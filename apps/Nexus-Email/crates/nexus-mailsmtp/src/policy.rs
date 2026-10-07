@@ -36,7 +36,7 @@ impl crate::session::RelayPolicy for MailboxPolicy {
             // rather than bounce.
             Err(nexus_mailstore::MailStoreError::NoSuchAddress(_)) => false,
             Err(e) => {
-                tracing::warn!(error = %e, %address, "mailbox lookup failed; refusing");
+                tracing::warn!(error = %e, "mailbox lookup failed; refusing");
                 false
             }
         }

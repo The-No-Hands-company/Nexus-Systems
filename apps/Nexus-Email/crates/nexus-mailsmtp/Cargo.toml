@@ -25,6 +25,7 @@ sqlx = { workspace = true }
 
 [dev-dependencies]
 tokio = { workspace = true }
+uuid = { workspace = true }
 
 [[bin]]
 name = "nexus-mailsmtpd"

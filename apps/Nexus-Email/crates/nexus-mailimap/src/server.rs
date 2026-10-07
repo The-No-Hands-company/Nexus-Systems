@@ -40,11 +40,11 @@ struct Open {
 impl<A: Authenticator> ImapServer<A> {
     pub async fn serve(self: Arc<Self>, listener: TcpListener) -> std::io::Result<()> {
         loop {
-            let (stream, peer) = listener.accept().await?;
+            let (stream, _peer) = listener.accept().await?;
             let me = Arc::clone(&self);
             tokio::spawn(async move {
                 if let Err(e) = me.handle(stream).await {
-                    tracing::debug!(%peer, error = %e, "imap connection ended");
+                    tracing::debug!(error = %e, "imap connection ended");
                 }
             });
         }

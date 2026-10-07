@@ -213,3 +213,76 @@ async fn a_message_without_a_final_crlf_is_terminated_properly() {
     let said = seen.lock().unwrap().clone();
     assert_eq!(data_lines(&said), vec!["Subject: x", "", "last"]);
 }
+
+// ── Logs carry no personal data ─────────────────────────────────────────────
+
+/// One global subscriber that writes into a per-thread buffer. A scoped
+/// subscriber per test is unreliable here: other tests in this binary log with
+/// none installed, which makes the call sites flap. Each test runs on its own
+/// single thread, so its buffer holds exactly what it logged.
+mod capture {
+    use std::cell::RefCell;
+    use std::sync::Once;
+
+    thread_local! { static BUF: RefCell<Vec<u8>> = const { RefCell::new(Vec::new()) }; }
+
+    #[derive(Clone, Copy)]
+    struct Sink;
+    impl std::io::Write for Sink {
+        fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+            BUF.with(|b| b.borrow_mut().extend_from_slice(buf));
+            Ok(buf.len())
+        }
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+    impl<'a> tracing_subscriber::fmt::MakeWriter<'a> for Sink {
+        type Writer = Sink;
+        fn make_writer(&'a self) -> Sink {
+            *self
+        }
+    }
+
+    /// Install the subscriber (once) and clear this thread's buffer.
+    pub fn start() {
+        static ONCE: Once = Once::new();
+        ONCE.call_once(|| {
+            let sub = tracing_subscriber::fmt().with_writer(Sink).with_max_level(tracing::Level::TRACE).finish();
+            tracing::subscriber::set_global_default(sub).unwrap();
+        });
+        BUF.with(|b| b.borrow_mut().clear());
+    }
+
+    /// Everything this thread has logged since `start`.
+    pub fn text() -> String {
+        BUF.with(|b| String::from_utf8(b.borrow().clone()).unwrap())
+    }
+}
+
+#[tokio::test]
+async fn the_delivery_log_never_names_the_recipient() {
+    capture::start();
+
+    // The remote's own reply is also kept out of the log: servers routinely
+    // echo the recipient back in their acceptance text.
+    let (addr, _) = scripted(vec![
+        "220 mx.example ready\r\n",
+        "250 hello\r\n",
+        "250 sender ok\r\n",
+        "250 recipient ok\r\n",
+        "354 go ahead\r\n",
+        "250 2.0.0 queued for someone@example.com\r\n",
+    ])
+    .await;
+    let (host, port) = split(&addr);
+
+    let out = deliver(&host, port, "mail.tnhc.dev", "a@tnhc.dev", "someone@example.com",
+                      b"Subject: hi\r\n\r\nbody\r\n").await;
+    assert_eq!(out, Attempt::Delivered);
+
+    let log = capture::text();
+    assert!(log.contains("delivered"), "the delivery must still be logged: {log:?}");
+    assert!(!log.contains("someone@example.com"), "recipient leaked into the log: {log:?}");
+    assert!(!log.contains("example.com"), "recipient domain leaked into the log: {log:?}");
+}

@@ -115,7 +115,9 @@ pub async fn deliver(
     say!("QUIT");
     // The reply to QUIT is not worth waiting for: the message is already
     // accepted, and a server that hangs up rudely has still taken it.
-    tracing::info!(%host, %recipient, "delivered: {}", accepted.trim());
+    // Neither the recipient nor the remote's reply text is logged: servers
+    // routinely echo the address back in their acceptance line.
+    tracing::info!(%host, code = ?code_of(accepted.trim()), "delivered");
     Attempt::Delivered
 }
 
@@ -221,7 +223,7 @@ pub async fn deliver_authenticated(
     }
     expect_ok!("end of DATA");
     send_line!("QUIT");
-    tracing::info!(host = %relay.host, %recipient, "delivered through authenticated SMTP relay");
+    tracing::info!(host = %relay.host, "delivered through authenticated SMTP relay");
     Attempt::Delivered
 }
 

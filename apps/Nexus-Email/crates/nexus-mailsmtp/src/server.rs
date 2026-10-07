@@ -57,7 +57,7 @@ where
                     // A failed connection is routine on a public port — a port
                     // scanner, a broken client, a dropped link. Logged at debug
                     // so real problems are not buried in noise.
-                    tracing::debug!(%peer, error = %e, "smtp connection ended");
+                    tracing::debug!(error = %e, "smtp connection ended");
                 }
             });
         }
