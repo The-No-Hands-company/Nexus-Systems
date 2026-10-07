@@ -29,10 +29,7 @@
 		-Server
 	}
 
-	log {
-		output file /var/log/caddy/tnhc.log
-		format json
-	}
+	# Access logging is intentionally off (privacy: zero retention); error logging stays on.
 }
 
 # Apex plus the two statically-mapped hosts. These keep normal certificates
