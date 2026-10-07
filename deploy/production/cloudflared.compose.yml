@@ -3,6 +3,8 @@ services:
     image: cloudflare/cloudflared:latest
     container_name: cloudflared
     restart: unless-stopped
+    logging:
+      driver: "none"
     command: ["tunnel", "--no-autoupdate", "run", "--token-file", "/run/secrets/tunnel-token"]
     volumes:
       - type: bind

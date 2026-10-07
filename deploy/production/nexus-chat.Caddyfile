@@ -128,14 +128,6 @@
 		-Server
 	}
 
-	log {
-		output stdout
-		format filter {
-			fields {
-				request>headers delete
-			}
-			wrap console
-		}
-		level INFO
-	}
+	# No access log: requests are not recorded (privacy: zero retention). Caddy's
+	# default error logging stays on.
 }

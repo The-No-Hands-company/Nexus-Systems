@@ -1,0 +1,10 @@
+[Unit]
+Description=Rotate Nexus native service logs every 12 hours
+
+[Timer]
+OnBootSec=1h
+OnUnitActiveSec=12h
+Persistent=true
+
+[Install]
+WantedBy=timers.target

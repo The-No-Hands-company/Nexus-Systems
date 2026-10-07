@@ -97,3 +97,40 @@ SELECT
   (SELECT count(*) FROM auth.sessions WHERE ip IS NOT NULL OR user_agent IS NOT NULL) AS sessions_with_client,
   (SELECT count(*) FROM auth.mfa_challenges WHERE ip_address <> '0.0.0.0') AS mfa_not_zero;
 ```
+
+## Task 10: logs (2026-10-07)
+
+**Native logs (24 h).** `deploy/production/log-rotate.sh` copy-truncates every
+`$LOG_DIR/*.log` (default `/tmp/nexus-production`) into `*.log.1`, overwriting the
+previous period. A user timer (`nexus-log-rotate.timer`: 1 h after boot, then every
+12 h, `Persistent=true`) runs it, installed to `~/.local/lib/nexus/` and
+`~/.config/systemd/user/` by `deploy.sh` `cmd_start` (and by hand on 2026-10-07).
+Check: `systemctl --user list-timers | grep nexus-log-rotate`.
+
+**Caddy.** The access `log {}` blocks are gone from `nexus-chat`, `nexus-draw` and
+`nexus-calendar` Caddyfiles. The already-running native Caddy processes keep the old
+config until their next restart (`deploy.sh bg` or `caddy reload`).
+`apps/Nexus/Caddyfile` (separate upstream app) still has its filtered access log.
+
+**Container log drivers.** Docker's `local` driver refuses `max-file: 1` unless
+compression is off, so every block is `driver: local`, `max-size: 5m`,
+`max-file: 1`, `compress: "false"`.
+
+| Container | Before | After |
+|---|---|---|
+| cloudflared | json-file | `none` (recreated) |
+| nexus-systems-redis-1, -minio-1 | json-file | local 5m/1 (recreated) |
+| nexus-systems-postgres-1 | json-file | **unchanged**: compose now says local 5m/1, applies at its next planned restart |
+| nexus-hosting-{app,proxy,caddy,db,redis,minio}-1 | json-file | local 5m/1 (recreated) |
+
+**cloudflared recreate command.** The running container was not created by
+`deploy/production/cloudflared.compose.yml` (token path `~/.config/nexus-systems/cloudflared.token`,
+mount option `:Z`, user 1000:1000, default bridge network; the compose file differs on all of these), so it was recreated with:
+
+```
+docker run -d --name cloudflared --restart unless-stopped --user 1000:1000 --network bridge --log-driver none \
+  -v /home/zajferx/.config/nexus-systems/cloudflared.token:/run/secrets/tunnel-token:ro,Z \
+  cloudflare/cloudflared:latest tunnel --no-autoupdate run --token-file /run/secrets/tunnel-token
+```
+
+Revert a driver by removing the `logging:` block and recreating the container.

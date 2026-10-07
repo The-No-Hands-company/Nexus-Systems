@@ -62,9 +62,6 @@
 		-Server
 	}
 
-	log {
-		output stdout
-		format console
-		level INFO
-	}
+	# No access log: requests are not recorded (privacy: zero retention). Caddy's
+	# default error logging stays on.
 }

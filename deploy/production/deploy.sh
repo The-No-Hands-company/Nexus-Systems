@@ -342,6 +342,23 @@ start_named_service() {
     esac
 }
 
+# Native service logs live at most 24 hours: a user timer rotates $LOG_DIR every
+# 12 hours (log-rotate.sh keeps the current file plus one previous period).
+# Never fatal - a missing user manager must not stop the stack from starting.
+install_log_rotation() {
+    [ "${NEXUS_SKIP_LOG_ROTATE_INSTALL:-0}" = "1" ] && return 0
+    local here lib unit_dir
+    here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    lib="$HOME/.local/lib/nexus"
+    unit_dir="$HOME/.config/systemd/user"
+    mkdir -p "$lib" "$unit_dir" \
+        && install -m 0755 "$here/log-rotate.sh" "$lib/log-rotate.sh" \
+        && install -m 0644 "$here/systemd/nexus-log-rotate.service" "$here/systemd/nexus-log-rotate.timer" "$unit_dir/" \
+        && systemctl --user daemon-reload \
+        && systemctl --user enable --now nexus-log-rotate.timer \
+        || warn "could not install the log-rotation timer (user systemd unavailable?) - native logs will not rotate"
+}
+
 cmd_start() {
     # Cloud's protected file is authoritative. Validate all required Cloud and
     # storage credentials, then adopt the Cloud registration URL/key into this
@@ -809,6 +826,8 @@ cmd_start() {
         DASHBOARD_UPSTREAM=http://127.0.0.1:3132 \
         HOSTING_SITE_UPSTREAM="${HOSTING_SITE_UPSTREAM:-http://127.0.0.1:8090}" \
         bun run proxy.ts
+
+    install_log_rotation
 
     # 6. Verify
     sleep 3

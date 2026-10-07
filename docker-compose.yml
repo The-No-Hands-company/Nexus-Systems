@@ -2,6 +2,12 @@ services:
   postgres:
     image: postgres:16-alpine
     restart: unless-stopped
+    logging:
+      driver: "local"
+      options:
+        max-size: "5m"
+        max-file: "1"
+        compress: "false"
     environment:
       POSTGRES_USER: nexus
       # Required with no default, like MINIO_ROOT_PASSWORD below. Note this is
@@ -23,6 +29,12 @@ services:
   redis:
     image: redis:7-alpine
     restart: unless-stopped
+    logging:
+      driver: "local"
+      options:
+        max-size: "5m"
+        max-file: "1"
+        compress: "false"
     command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru --save ""
     ports:
       - "127.0.0.1:6379:6379"
@@ -35,6 +47,12 @@ services:
   minio:
     image: minio/minio:RELEASE.2025-02-28T09-55-16Z
     restart: unless-stopped
+    logging:
+      driver: "local"
+      options:
+        max-size: "5m"
+        max-file: "1"
+        compress: "false"
     command: server /data --console-address ":9001"
     environment:
       # Required, with no default, so a missing .env fails the stack loudly

@@ -1,0 +1,6 @@
+[Unit]
+Description=Rotate Nexus native service logs (keep at most 24 hours)
+
+[Service]
+Type=oneshot
+ExecStart=%h/.local/lib/nexus/log-rotate.sh
