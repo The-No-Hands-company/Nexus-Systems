@@ -317,3 +317,18 @@ async fn relaying_refuses_recipients_this_node_or_a_peer_serves() {
         assert!(d.relay_for_peer(&raw, &from, &[rcpt]).await.is_err());
     }
 }
+
+#[tokio::test]
+async fn delivery_errors_display_without_the_recipient_but_keep_it_for_the_sender() {
+    let (d, _, _, _) = harness().await;
+    let foreign = Address::parse(&format!("someone{}@foreign.example", Uuid::now_v7().simple())).unwrap();
+    let from = Address::parse("a@origin.test").unwrap();
+    let err = d.accept_smtp(b"Subject: x\r\n\r\nb\r\n", &from, &foreign).await.unwrap_err();
+
+    // Display is what every `{e}` in a log line prints.
+    let shown = err.to_string();
+    assert!(!shown.contains(&foreign.localpart), "{shown}");
+    assert!(!shown.contains("foreign.example"), "{shown}");
+    // The explicit method still names the recipient, for replying to the sender.
+    assert!(err.detail_for_user().contains(&foreign.as_string()));
+}
