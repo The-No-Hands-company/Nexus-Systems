@@ -48,9 +48,52 @@ remote is this repo).
    `access_log:` block (was lines 26-33, logged remote address + user agent).
    `docker-compose.yml`: added to service `api-gw` (container `supabase-envoy`)
    `logging: { driver: "none" }` (lines 73-74). Recreated only that service:
-   `docker compose -f docker-compose.yml -f docker-compose.override.yml -f /tmp/tnhc-community-ext4-volumes.yml up -d --no-deps --force-recreate api-gw`
+   `docker compose -f docker-compose.yml -f docker-compose.override.yml -f /run/media/zajferx/Data/dev/The-No-hands-Company/projects/TNHC-Community-deployment/docker-compose.ext4-volumes.yml up -d --no-deps --force-recreate api-gw`
    (the config files the container was created with). Revert: re-add the block /
    remove the `logging` lines and recreate the same way.
 3. **Dev stack log collection stopped.** `docker update --restart=no` and
    `docker stop` on `supabase_analytics_tnhc-community-local` and
    `supabase_vector_tnhc-community-local`. Revert: `docker update --restart=unless-stopped <name>; docker start <name>`.
+
+### Supabase: durable recreate procedure and revert sources
+
+The running gateway was created with three compose files. The third was
+originally in `/tmp` (lost on reboot); it now lives, uncommitted, at
+`/run/media/zajferx/Data/dev/The-No-hands-Company/projects/TNHC-Community-deployment/docker-compose.ext4-volumes.yml` (a verbatim copy, no secrets):
+
+```yaml
+services:
+  db:
+    volumes:
+      - db-data:/var/lib/postgresql/data
+  storage:
+    volumes:
+      - storage-data:/var/lib/storage
+  imgproxy:
+    volumes:
+      - storage-data:/var/lib/storage
+volumes:
+  db-data:
+  storage-data:
+```
+
+Recreate from the deployment dir:
+`docker compose -f docker-compose.yml -f docker-compose.override.yml -f /run/media/zajferx/Data/dev/The-No-hands-Company/projects/TNHC-Community-deployment/docker-compose.ext4-volumes.yml up -d --no-deps --force-recreate api-gw`
+
+`/tmp/dc.bak` and `/tmp/lds.bak` (pre-edit copies) are temporary; the
+before/after text in this section is the revert source.
+
+### After a Supabase/GoTrue upgrade
+
+GoTrue migrations that ALTER/DROP these columns fail while the triggers depend
+on them, and a table rebuild drops the triggers silently. So: before upgrading,
+drop the 3 triggers (`tnhc_blank_audit_ip`, `tnhc_blank_session_client`,
+`tnhc_blank_mfa_ip`, commands in item 1 above); after upgrading, re-run
+`docs/privacy/supabase-zero-retention.sql`; then verify this returns 0,0,0:
+
+```sql
+SELECT
+  (SELECT count(*) FROM auth.audit_log_entries WHERE ip_address <> '') AS audit_nonblank,
+  (SELECT count(*) FROM auth.sessions WHERE ip IS NOT NULL OR user_agent IS NOT NULL) AS sessions_with_client,
+  (SELECT count(*) FROM auth.mfa_challenges WHERE ip_address <> '0.0.0.0') AS mfa_not_zero;
+```
