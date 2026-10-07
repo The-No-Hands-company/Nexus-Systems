@@ -1,0 +1,9 @@
+[Unit]
+Description=Run the Nexus privacy canary daily
+
+[Timer]
+OnCalendar=daily
+Persistent=true
+
+[Install]
+WantedBy=timers.target

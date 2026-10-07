@@ -357,6 +357,24 @@ install_log_rotation() {
         || warn "could not install the log-rotation timer (user systemd unavailable?) - native logs will not rotate"
 }
 
+# Daily privacy canary: a user timer sends marked requests through the proxy and
+# searches logs, containers, databases and stores for the marker. Never fatal.
+install_privacy_canary() {
+    [ "${NEXUS_SKIP_CANARY_INSTALL:-0}" = "1" ] && return 0
+    local here root lib unit_dir
+    here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    root="$(cd "$here/../.." && pwd)"
+    lib="$HOME/.local/lib/nexus"
+    unit_dir="$HOME/.config/systemd/user"
+    mkdir -p "$lib" "$unit_dir" \
+        && install -m 0755 "$root/scripts/privacy-canary.sh" "$lib/privacy-canary.sh" \
+        && sed "s|@ROOT@|$root|" "$here/systemd/nexus-privacy-canary.service" > "$unit_dir/nexus-privacy-canary.service" \
+        && install -m 0644 "$here/systemd/nexus-privacy-canary.timer" "$unit_dir/" \
+        && systemctl --user daemon-reload \
+        && systemctl --user enable --now nexus-privacy-canary.timer \
+        || warn "could not install the privacy canary timer (user systemd unavailable?)"
+}
+
 cmd_start() {
     # Cloud's protected file is authoritative. Validate all required Cloud and
     # storage credentials, then adopt the Cloud registration URL/key into this
@@ -793,6 +811,7 @@ cmd_start() {
         bun run proxy.ts
 
     install_log_rotation
+    install_privacy_canary
 
     # 6. Verify
     sleep 3

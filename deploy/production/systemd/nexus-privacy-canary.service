@@ -1,0 +1,7 @@
+[Unit]
+Description=Nexus privacy canary (send marked requests, search everywhere for the marker)
+
+[Service]
+Type=oneshot
+Environment=ROOT=@ROOT@
+ExecStart=%h/.local/lib/nexus/privacy-canary.sh
