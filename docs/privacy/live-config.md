@@ -111,6 +111,10 @@ Check: `systemctl --user list-timers | grep nexus-log-rotate`.
 `nexus-calendar` Caddyfiles. The already-running native Caddy processes keep the old
 config until their next restart (`deploy.sh bg` or `caddy reload`).
 `apps/Nexus/Caddyfile` (separate upstream app) still has its filtered access log.
+There is no root-owned system Caddy serving traffic: the Caddy process in play is
+`nexus-hosting-caddy-1`'s own (clean, local 5m/1 driver). Only orphan host files remain,
+`/etc/caddy/Caddyfile` and `/var/log/caddy/` (root-owned; removing them is the user's call).
+`deploy.sh` now defaults `CADDY_BIN` to `$HOME/.local/lib/nexus/bin/caddy` when executable, else `caddy`.
 
 **Container log drivers.** Docker's `local` driver refuses `max-file: 1` unless
 compression is off, so every block is `driver: local`, `max-size: 5m`,
@@ -120,7 +124,7 @@ compression is off, so every block is `driver: local`, `max-size: 5m`,
 |---|---|---|
 | cloudflared | json-file | `none` (recreated) |
 | nexus-systems-redis-1, -minio-1 | json-file | local 5m/1 (recreated) |
-| nexus-systems-postgres-1 | json-file | **unchanged**: compose now says local 5m/1, applies at its next planned restart |
+| nexus-systems-postgres-1 | json-file | local 5m/1 (recreated implicitly by `deploy.sh`'s compose up) |
 | nexus-hosting-{app,proxy,caddy,db,redis,minio}-1 | json-file | local 5m/1 (recreated) |
 
 **cloudflared recreate command.** The running container was not created by
@@ -134,3 +138,22 @@ docker run -d --name cloudflared --restart unless-stopped --user 1000:1000 --net
 ```
 
 Revert a driver by removing the `logging:` block and recreating the container.
+
+### Supabase container log drivers (2026-10-07)
+
+`TNHC-Community-deployment/docker-compose.yml` (uncommitted live config) now sets, per service:
+`auth` (supabase-auth) `logging: { driver: "none" }`; `studio`, `rest`, `realtime`, `storage`,
+`imgproxy`, `meta`, `functions`, `db`, `supavisor` `logging: { driver: local, options: { max-size: "5m", max-file: "1", compress: "false" } }`;
+`api-gw` was already `none`. Pre-edit copy of the file: none kept beyond git-less backup `/tmp/claude-1000/s/dc.before` (temporary).
+
+Recreate (the 3-file command above, per service, `auth` first, `db` last; `supabase-db` data is on
+the named volume `tnhc-community-production_db-data`, so recreating it is safe):
+
+```
+docker compose -f docker-compose.yml -f docker-compose.override.yml -f /run/media/zajferx/Data/dev/The-No-hands-Company/projects/TNHC-Community-deployment/docker-compose.ext4-volumes.yml up -d --no-deps --force-recreate <service>
+```
+
+Status: `auth` recreated and verified (`none`, healthy, `auth.tnhc.dev/auth/v1/health` 200).
+The other services run with the new config only after they are recreated; any container whose
+`docker inspect -f '{{.HostConfig.LogConfig.Type}}'` still says `json-file` has not been recreated yet.
+Revert a driver by removing its `logging:` block and recreating.

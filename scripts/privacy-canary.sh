@@ -77,7 +77,7 @@ probe() { # probe <curl args...>: counts any HTTP response
   [ "$code" != 000 ] && [ -n "$code" ] && answered=$((answered + 1))
   return 0
 }
-for host in auth.tnhc.dev app.tnhc.dev cloud.tnhc.dev chat.tnhc.dev hosting.tnhc.dev storage.tnhc.dev draw.tnhc.dev email-ingress.tnhc.dev; do
+for host in auth.tnhc.dev app.tnhc.dev cloud.tnhc.dev chat.tnhc.dev hosting.tnhc.dev storage.tnhc.dev draw.tnhc.dev email-ingress.tnhc.dev demo.tnhc.dev calendar.tnhc.dev; do
   probe -H "Host: $host" -H "CF-Connecting-IP: $ADDR" -H "X-Forwarded-For: $ADDR" \
     -H "User-Agent: $MARK" "$PROXY/?$MARK"
   probe -X POST -H "Host: $host" -H "CF-Connecting-IP: $ADDR" -H "X-Forwarded-For: $ADDR" \

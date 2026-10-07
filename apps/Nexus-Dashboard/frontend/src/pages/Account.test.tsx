@@ -115,7 +115,7 @@ describe("Account", () => {
 
   it("surfaces the server's reason when a password change is refused", async () => {
     stubFetch({
-      "POST /api/v1/auth/users/u1/password": () => jsonResponse({ error: "weak_password" }, 400),
+      "POST /ipa/v1/auth/users/u1/password": () => jsonResponse({ error: "weak_password" }, 400),
     });
     render(<Account />);
     await waitFor(() => expect(screen.getByLabelText(/current password/i)).toBeTruthy());
@@ -124,7 +124,7 @@ describe("Account", () => {
     fireEvent.change(screen.getByLabelText(/new password/i), { target: { value: "short" } });  // pragma: allowlist secret
     fireEvent.click(screen.getByRole("button", { name: /change password/i }));
 
-    await waitFor(() => expect(screen.getByText(/12/)).toBeTruthy());
+    await waitFor(() => expect(screen.getByText(/at least 12 characters\./)).toBeTruthy());
   });
 
   it("confirms a successful password change", async () => {

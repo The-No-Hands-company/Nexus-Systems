@@ -7,3 +7,8 @@ compatibility_date = "2026-10-05"
 [vars]
 NEXUS_INGRESS_URL = "https://email-ingress.tnhc.dev/internal/v1/cloudflare-email"
 ALLOWED_RECIPIENTS = "info@tnhc.dev,zajfan@tnhc.dev"
+
+# Privacy policy (zero retention): Workers observability (logs/traces) stays
+# OFF. Invocation logs can carry sender/recipient metadata. Do not enable.
+[observability]
+enabled = false

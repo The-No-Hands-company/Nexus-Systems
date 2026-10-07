@@ -9,7 +9,13 @@ LOG_DIR="${NEXUS_PRODUCTION_LOG_DIR:-/tmp/nexus-production}"
 PID_DIR="${NEXUS_PRODUCTION_PID_DIR:-$LOG_DIR/pids}"
 CURL_BIN="${CURL_BIN:-curl}"
 KILL_BIN="${KILL_BIN:-kill}"
-CADDY_BIN="${CADDY_BIN:-caddy}"
+if [ -z "${CADDY_BIN:-}" ]; then
+    if [ -x "$HOME/.local/lib/nexus/bin/caddy" ]; then
+        CADDY_BIN="$HOME/.local/lib/nexus/bin/caddy"
+    else
+        CADDY_BIN="caddy"
+    fi
+fi
 CLOUD_ENV_FILE="${NEXUS_CLOUD_ENV_FILE:-$ROOT/apps/Nexus-Cloud/.env}"
 NEXUS_CHAT_ENV_FILE="${NEXUS_CHAT_ENV_FILE:-$ROOT/deploy/production/nexus-chat.env}"
 NEXUS_CHAT_BINARY_PATH="${NEXUS_CHAT_BINARY_PATH:-$ROOT/apps/Nexus/target/debug/nexus}"
