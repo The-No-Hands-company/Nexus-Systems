@@ -13,17 +13,19 @@ It then searches every place data could land for the address or token:
 - a data-only dump of every production database (`nexus`, `nexus_chat`, `nexus_cloud`, `nexus_email` on the main Postgres, Hosting's `nexus`, Supabase's `postgres`), piped straight into grep and never written to disk
 - Auth's JSON stores and Terminal's audit SQLite
 
-A database dump that fails counts as a failure, since it cannot prove anything.
+The canary waits 70 seconds after the probes (`CANARY_SETTLE_SECONDS`) so asynchronous writers have flushed. Containers whose log driver is `none` store nothing and are skipped.
+
+A source that cannot be checked is a failure, never a silent skip: `error:proxy-unreachable`, `error:docker-unavailable`, `error:db-dump-failed:...`, `error:sqlite-dump-failed:...`, `error:log-unreadable:...`. Producers are read to the end (counting grep, not `grep -q`) so a match cannot be lost to SIGPIPE.
 
 ## Result
 
 The latest result is `/tmp/nexus-production/privacy-canary.json` (tmpfs):
 
 ```json
-{"at":"2026-10-07T16:00:00Z","address":"203.0.113.77","status":"pass","found":[]}
+{"at":"2026-10-07T16:00:00Z","address":"203.0.113.77","status":"pass","found":[],"sources":{"logs":28,"containers":34,"databases":6,"files":5,"probes_answered":17}}
 ```
 
-`status` is `pass` or `fail`; on `fail`, `found` names each location (for example `db:nexus-systems-postgres-1/nexus_chat`), and the script exits 1.
+`status` is `pass` or `fail`; on `fail`, `found` names each location (for example `db:nexus-systems-postgres-1/nexus_chat`), and the script exits 1. The service discards stdout; the printed summary has status and counts only, never the address.
 
 ## Schedule and tests
 
