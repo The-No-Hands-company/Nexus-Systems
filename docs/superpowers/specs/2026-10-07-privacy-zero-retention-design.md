@@ -57,7 +57,7 @@ For every request it:
 
 If header stripping throws, the request is refused (HTTP 500), never forwarded with the original headers. The proxy's own log prints no request line.
 
-Bypass routes are closed: the tunnel ingress for `auth.tnhc.dev` (catch-all to the Supabase gateway) and `storage.tnhc.dev` (MinIO) is pointed at the proxy, and the proxy gains fixed upstreams for both, with the same stripping. Presigned MinIO URLs keep working because the proxy forwards path, query and `Host`-equivalent unchanged apart from the stripped headers.
+Bypass routes are closed: the tunnel ingress for `auth.tnhc.dev` (catch-all to the Supabase gateway) and `storage.tnhc.dev` (MinIO) is pointed at the proxy, and the proxy gains fixed upstreams for both, with the same stripping. Presigned MinIO URLs are signed over the request's `Host`, which the proxy normally rewrites to the upstream: the storage route therefore forwards the original `Host` (`storage.tnhc.dev`) unchanged, together with path and query, and a test performs a real presigned upload and download through the proxy.
 
 This ships first, so no new addresses arrive while stored ones are cleaned.
 
@@ -85,8 +85,8 @@ Containers with a size-capped log are described publicly as "technical logs only
 ### 4. Proof and guard
 
 - **Static guard** `scripts/check-privacy.sh` (CI job `edge`, beside the licence check): fails if any file outside the proxy's stripping module reads the headers listed in §1, or if a migration adds an `ip`/`ip_address`/`ip_hash`/`user_agent` column.
-- **Live canary**, daily: sends a request through the public front door with `CF-Connecting-IP`-equivalent test traffic carrying a unique address from the documentation ranges (192.0.2.0/24, 198.51.100.0/24, 203.0.113.0/24), then searches every database, native log, container log and stored mail for that exact value. Any hit fails, naming the location. The latest result is published in Part 2.
-- **Tests:** proxy (headers stripped; tag stable within a day, changes after rotation; refuse on strip failure); Auth (no address stored; per-account back-off; 30-day purge; device sign-out); Hosting (counts only); Email (no client address in submitted mail headers); each migration (values gone, columns gone).
+- **Live canary**, daily: Cloudflare overwrites `CF-Connecting-IP` on public traffic, so the canary sends its requests to the proxy on loopback (`127.0.0.1:8080`) with `Host` set to each public hostname (auth, app, cloud, chat, hosting, storage, a hosted site) and `CF-Connecting-IP` set to a unique address from the documentation ranges (192.0.2.0/24, 198.51.100.0/24, 203.0.113.0/24) — exercising everything TNHC runs from the proxy inward — then searches every database, native log, container log and stored mail for that exact value. Any hit fails, naming the location. The latest result is published in Part 2.
+- **Tests:** proxy (headers stripped; storage route keeps the original `Host` and a presigned upload succeeds; tag stable within a day, changes after rotation; refuse on strip failure); Auth (no address stored; per-account back-off; 30-day purge; device sign-out); Hosting (counts only); Email (no client address in submitted mail headers); each migration (values gone, columns gone).
 
 ## Out of scope
 
