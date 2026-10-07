@@ -494,3 +494,22 @@ describe("Cloudflare email ingress", () => {
     expect(res.status).toBe(503);
   });
 });
+
+describe("address stripping at the front door", () => {
+  it("forwards a tag and no address header to the upstream", async () => {
+    const { handleRequest, __setRoutesForTest } = await import("../proxy");
+    let seen: Headers | null = null;
+    const up = Bun.serve({ port: 0, hostname: "127.0.0.1", fetch(req) { seen = req.headers; return new Response("ok"); } });
+    try {
+      __setRoutesForTest({ "cloud.tnhc.dev": { upstream: `http://127.0.0.1:${up.port}`, requiresAuth: false, kind: "app" } });
+      const res = await handleRequest(new Request("http://cloud.tnhc.dev/x", {
+        headers: { "cf-connecting-ip": "203.0.113.77", "x-forwarded-for": "203.0.113.77", "x-real-ip": "203.0.113.77", "cf-ipcountry": "SE" },
+      }));
+      expect(res.status).toBe(200);
+      const h = seen as unknown as Headers;
+      expect(h.get("x-nexus-client-tag")).toMatch(/^[A-Za-z0-9_-]{22}$/);
+      for (const n of ["cf-connecting-ip", "x-forwarded-for", "x-real-ip", "cf-ipcountry"]) expect(h.has(n)).toBe(false);
+      for (const [, v] of h) expect(v).not.toContain("203.0.113.77");
+    } finally { up.stop(true); }
+  });
+});

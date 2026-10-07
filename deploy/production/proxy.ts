@@ -4,6 +4,7 @@
 // Falls back to static configuration if Nexus-Cloud is unavailable.
 
 import { gate } from "./gate";
+import { stripAddressHeaders, tagFromRequestHeaders, CLIENT_TAG_HEADER } from "./client-tag";
 
 // Configuration
 const PORT = Number(process.env.PROXY_PORT || "80");
@@ -188,6 +189,8 @@ export interface WsProxyData {
   identityToken: string | null;
   /** The address the browser asked for, so the upstream gets the same path. */
   requestUrl?: string;
+  /** Forgetful per-visitor tag (never an address) for the upstream. */
+  clientTag: string;
   /**
    * Browser credentials for one tightly-scoped hop only. Presence means the
    * request was the exact app.<DOMAIN> terminal attach route and upstreamUrl
@@ -520,6 +523,7 @@ async function handleRequestInner(
         upstreamUrl,
         identityToken: decision.identityToken,
         requestUrl: req.url,
+        clientTag: tagFromRequestHeaders(req.headers),
       };
       if (dashboardTerminalRequest) {
         const dashboardTerminalHeaders: NonNullable<WsProxyData["dashboardTerminalHeaders"]> = {};
@@ -551,6 +555,18 @@ async function handleRequestInner(
       // handler behaved as though nothing had been submitted. Drop them and let
       // the runtime recompute.
       const forwardHeaders = new Headers(req.headers);
+      // Addresses stop here. Read the one Cloudflare sets, turn it into a
+      // forgetful tag, and delete every header that could carry an address
+      // or location before anything is forwarded.
+      let tag: string;
+      try {
+        tag = tagFromRequestHeaders(req.headers);
+        stripAddressHeaders(forwardHeaders);
+        forwardHeaders.delete(CLIENT_TAG_HEADER);
+        forwardHeaders.set(CLIENT_TAG_HEADER, tag);
+      } catch {
+        return new Response("Request refused", { status: 500 });
+      }
       forwardHeaders.delete("content-length");
       forwardHeaders.delete("host");
       forwardHeaders.delete("connection");
@@ -714,6 +730,7 @@ export function startProxy() {
 
         const headers: Record<string, string> = {};
         if (identityToken) headers["x-nexus-identity"] = identityToken;
+        headers[CLIENT_TAG_HEADER] = ws.data.clientTag;
         if (dashboardTerminalHeaders?.cookie !== undefined) {
           headers.cookie = dashboardTerminalHeaders.cookie;
         }
