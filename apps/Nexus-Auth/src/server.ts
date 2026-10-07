@@ -33,6 +33,7 @@ import {
 import {
   createSession,
   validateSession,
+  getSession,
   listSessions,
   revokeSession,
   revokeAllUserSessions,
@@ -208,6 +209,14 @@ function requireAuth(request: Request): { userId: string; session: ReturnType<ty
 
 function requirePermission(userId: string, permission: Permission): boolean {
   return userHasPermission(userId, permission);
+}
+
+// Attach a failed attempt to the account it targeted so the owner can see it.
+// No deviceId (the attacker has no session) and nothing about the caller.
+// Unknown username: nothing to attach it to, so no row.
+function auditLoginFailure(username: string): void {
+  const target = username ? findUserByUsername(username) : undefined;
+  if (target) audit({ event: "login_failure", userId: target.id });
 }
 
 // The front door strips every address header and forwards an opaque,
@@ -454,6 +463,7 @@ export async function handleRequest(request: Request): Promise<Response> {
       const user = username && password ? authenticateUser(username, password) : null;
       if (!user) {
         recordFailure("login", `${tag}:${username}`);
+        auditLoginFailure(username);
         return new Response(
           renderLoginPage({ redirect: target, error: "Incorrect username or password." }),
           { status: 401, headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" } },
@@ -678,7 +688,7 @@ export async function handleRequest(request: Request): Promise<Response> {
       const user = authenticateUser(username, password);
       if (!user) {
         recordFailure("login", `${apiTag}:${username}`);
-        audit({ event: "login_failure" });
+        auditLoginFailure(username);
         return jsonResponse({ success: false, reason: "invalid credentials" } as LoginResult, { status: 401 });
       }
       clearFailures("login", `${apiTag}:${username}`);
@@ -1008,10 +1018,14 @@ export async function handleRequest(request: Request): Promise<Response> {
 
     const revokeSessionMatch = path.match(/^\/api\/v1\/auth\/sessions\/([^/]+)\/revoke$/);
     if (request.method === "POST" && revokeSessionMatch) {
-      if (!auth || !requirePermission(auth.userId, "sessions:revoke")) {
+      if (!auth) return jsonResponse({ error: "forbidden" }, { status: 403 });
+      const [, sessionId] = revokeSessionMatch;
+      const target = getSession(sessionId);
+      if (!target) return jsonResponse({ error: "session not found" }, { status: 404 });
+      // Own device: always allowed. Someone else's: needs sessions:revoke.
+      if (target.userId !== auth.userId && !requirePermission(auth.userId, "sessions:revoke")) {
         return jsonResponse({ error: "forbidden" }, { status: 403 });
       }
-      const [, sessionId] = revokeSessionMatch;
       const revoked = revokeSession(sessionId);
       if (!revoked) return jsonResponse({ error: "session not found" }, { status: 404 });
       return jsonResponse({ revoked: true });

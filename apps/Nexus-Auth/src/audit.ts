@@ -117,5 +117,17 @@ export async function purgeOld(): Promise<void> {
   }
 }
 
+/** Test seam: inject in-memory flush/query so audit can be exercised without Postgres. */
+export function setAuditBackendForTests(b: {
+  flush: (entries: AuditEntry[]) => Promise<void>;
+  query: (sql: string, params: unknown[]) => Promise<any[]>;
+} | null): void {
+  initAttempted = b !== null;
+  flushFn = b?.flush ?? null;
+  queryFn = b?.query ?? null;
+}
+
 void purgeOld();
+// A lone event must reach the DB soon, not wait for nine more.
+setInterval(() => void drain(), 5000).unref();
 setInterval(() => void purgeOld(), 6 * 60 * 60 * 1000).unref();
