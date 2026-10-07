@@ -14,4 +14,40 @@ out=$(ROOT="$T/clean" bash "$G" 2>&1); s=$?
 [ $s = 0 ] && echo "$out" | grep -q PASS && ok "clean passes (DROP not flagged)" || no "clean: $s $out"
 out=$(ROOT="$T/dirty" PRIVACY_ALLOW_FILES="apps/Y/migrations/1.sql" bash "$G" 2>&1)
 echo "$out" | grep -q 'migrations/1.sql' && no "listed file not skipped" || ok "listed file skipped"
+
+# --- widened coverage -------------------------------------------------------
+expect_fail(){ # name, relpath, content
+  local d="$T/w_$1"; mkdir -p "$d/$(dirname "$2")"; printf '%s\n' "$3" > "$d/$2"
+  local o s; o=$(ROOT="$d" bash "$G" 2>&1); s=$?
+  [ $s = 1 ] && echo "$o" | grep -q "$2" && ok "flags $1" || no "flags $1: $s $o"
+}
+expect_pass(){
+  local d="$T/p_$1"; mkdir -p "$d/$(dirname "$2")"; printf '%s\n' "$3" > "$d/$2"
+  local o s; o=$(ROOT="$d" bash "$G" 2>&1); s=$?
+  [ $s = 0 ] && ok "allows $1" || no "allows $1: $s $o"
+}
+for h in cf-connecting-ip cf-connecting-ipv6 cf-pseudo-ipv4 x-forwarded-for x-real-ip true-client-ip cf-ipcountry cf-ray forwarded x-client-ip cf-visitor cf-ew-via cdn-loop; do
+  expect_fail "header $h dq" apps/A/src/a.ts "h.get(\"$h\")"
+  expect_fail "header $h sq" apps/A/src/a.ts "h.get('$h')"
+  expect_fail "header $h bt" apps/A/src/a.ts "h.get(\`$h\`)"
+done
+expect_pass "x-forwarded-host/proto" apps/A/src/a.ts 'h.get("x-forwarded-host"); h.get("x-forwarded-proto")'
+expect_fail "req.ip" apps/A/src/a.ts 'const i = req.ip;'
+expect_fail "request.ip" apps/A/src/a.ts 'const i = request.ip;'
+expect_fail "remoteAddress" apps/A/src/a.ts 'socket.remoteAddress'
+expect_fail "requestIP(" apps/A/src/a.ts 'server.requestIP(req)'
+expect_fail "ConnectInfo" apps/A/src/a.rs 'ConnectInfo<SocketAddr>'
+expect_fail "peer_addr" apps/A/src/a.rs 'stream.peer_addr()'
+expect_fail "X_FORWARDED_FOR" apps/A/src/a.py 'META["X_FORWARDED_FOR"]'
+expect_fail "XForwardedFor" apps/A/src/a.go 'XForwardedFor'
+expect_pass "req.ipv (word boundary)" apps/A/src/a.ts 'const i = req.ipv6Only;'
+for e in cjs jsx mts cts svelte vue sh; do expect_fail "ext $e" "apps/A/src/a.$e" 'h.get("x-real-ip")'; done
+expect_pass "tests dir skipped" apps/A/tests/a.ts 'h.get("x-real-ip")'
+expect_pass ".test. skipped" apps/A/src/a.test.ts 'h.get("x-real-ip")'
+expect_fail "src/build/ not skipped" apps/A/src/build/a.ts 'h.get("x-real-ip")'
+expect_fail "src/test/ not skipped" apps/A/src/test/a.ts 'h.get("x-real-ip")'
+expect_pass "node_modules skipped" apps/A/node_modules/x/a.js 'h.get("x-real-ip")'
+# retired dirs
+d="$T/retired"; mkdir -p "$d/apps/Nexus-API/src"; echo 'req.ip' > "$d/apps/Nexus-API/src/a.ts"
+out=$(ROOT="$d" bash "$G" 2>&1); [ $? = 0 ] && ok "RETIRED_DIRS skipped" || no "retired: $out"
 exit $rc

@@ -16,7 +16,6 @@ type ServiceCheck = {
 const SERVICES: ServiceCheck[] = [
   { name: "auth", url: "http://127.0.0.1:4310/health", description: "Identity provider" },
   { name: "cloud", url: "http://127.0.0.1:8787/health", description: "Control plane" },
-  { name: "api", url: "http://127.0.0.1:3150/api/health/live", description: "Unified API" },
   { name: "chat-gateway", url: "http://127.0.0.1:8180/api/v1/health", description: "nexus-chat REST" },
   { name: "terminal", url: "http://127.0.0.1:3110/health", description: "Shell service" },
   { name: "dashboard", url: "http://127.0.0.1:3132/health", description: "Ecosystem front door" },

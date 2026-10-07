@@ -21,7 +21,6 @@ export class TerminalAudit {
       CREATE TABLE IF NOT EXISTS sessions (
         id          TEXT PRIMARY KEY,
         subject     TEXT NOT NULL,
-        remote_ip   TEXT,
         started_at  TEXT NOT NULL,
         ended_at    TEXT,
         exit_code   INTEGER
@@ -34,12 +33,16 @@ export class TerminalAudit {
       );
       CREATE INDEX IF NOT EXISTS keystrokes_session_idx ON keystrokes (session_id, at);
     `);
+    // Zero-retention: sessions no longer record anything about the client.
+    // Older databases still carry the column; drop it (and what it held).
+    const cols = this.db.query("PRAGMA table_info(sessions)").all() as Array<{ name: string }>;
+    if (cols.some((c) => c.name === "remote_ip")) this.db.exec("ALTER TABLE sessions DROP COLUMN remote_ip");
   }
 
-  begin(id: string, subject: string, remoteIp: string | null): void {
+  begin(id: string, subject: string): void {
     this.db
-      .query("INSERT INTO sessions (id, subject, remote_ip, started_at) VALUES (?, ?, ?, ?)")
-      .run(id, subject, remoteIp, new Date().toISOString());
+      .query("INSERT INTO sessions (id, subject, started_at) VALUES (?, ?, ?)")
+      .run(id, subject, new Date().toISOString());
   }
 
   input(sessionId: string, data: string): void {

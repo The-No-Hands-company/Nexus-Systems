@@ -27,7 +27,7 @@ export async function startRouter(
 ): Promise<void> {
   const requestId = crypto.randomUUID();
   const startTime = Date.now();
-  const clientIp = getClientIp(req);
+  const clientIp = getClientKey(req);
 
   const context: RequestContext = {
     requestId,
@@ -114,7 +114,7 @@ export async function startRouter(
   }
 }
 
-function getClientIp(req: IncomingMessage): string {
+function getClientKey(req: IncomingMessage): string {
   // The proxy strips address headers and supplies an opaque client tag instead.
   // (Name kept for its callers; the value is a tag, not an address.)
   const tag = req.headers["x-nexus-client-tag"];

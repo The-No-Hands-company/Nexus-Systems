@@ -70,7 +70,7 @@ function normalizeHost(host: string): string {
 
 // The proxy strips address headers and supplies an opaque client tag instead.
 // (Name kept for its callers; the value is a tag, not an address.)
-function getClientIp(request: Request): string {
+function getClientKey(request: Request): string {
   return request.headers.get("x-nexus-client-tag") || "unknown";
 }
 
@@ -336,23 +336,23 @@ const server = Bun.serve({
         const route = getRoute(requestHost);
 
         if (!route) {
-          recordMetric({ host: requestHost, method: request.method, path, statusCode: 404, latencyMs: Date.now() - startTime, clientIp: getClientIp(request) });
+          recordMetric({ host: requestHost, method: request.method, path, statusCode: 404, latencyMs: Date.now() - startTime, clientIp: getClientKey(request) });
           return jsonResponse({ error: `No ingress route configured for host '${requestHost}'` }, { status: 404 });
         }
         if (!route.enabled) {
-          recordMetric({ host: requestHost, method: request.method, path, statusCode: 503, latencyMs: Date.now() - startTime, clientIp: getClientIp(request) });
+          recordMetric({ host: requestHost, method: request.method, path, statusCode: 503, latencyMs: Date.now() - startTime, clientIp: getClientKey(request) });
           return jsonResponse({ error: "Ingress route disabled" }, { status: 503 });
         }
         if (DENY_TRUST_STATES.has(route.trustState)) {
-          recordMetric({ host: requestHost, method: request.method, path, statusCode: 403, latencyMs: Date.now() - startTime, clientIp: getClientIp(request) });
+          recordMetric({ host: requestHost, method: request.method, path, statusCode: 403, latencyMs: Date.now() - startTime, clientIp: getClientKey(request) });
           return jsonResponse({ error: `Ingress denied due to trust state '${route.trustState}'` }, { status: 403 });
         }
         if (route.healthStatus === "unreachable") {
-          recordMetric({ host: requestHost, method: request.method, path, statusCode: 502, latencyMs: Date.now() - startTime, clientIp: getClientIp(request) });
+          recordMetric({ host: requestHost, method: request.method, path, statusCode: 502, latencyMs: Date.now() - startTime, clientIp: getClientKey(request) });
           return jsonResponse({ error: "Upstream unreachable" }, { status: 502 });
         }
 
-        const clientIp = getClientIp(request);
+        const clientIp = getClientKey(request);
         const rateLimit = checkAndRecordRateLimit(requestHost, clientIp);
         if (!rateLimit.allowed) {
           recordMetric({ host: requestHost, method: request.method, path, statusCode: 429, latencyMs: Date.now() - startTime, clientIp });

@@ -14,17 +14,32 @@ cd "$ROOT"
 ALLOW_FILES=()
 # shellcheck disable=SC2206
 ALLOW_FILES+=(${PRIVACY_ALLOW_FILES:-})
-HEADERS='cf-connecting-ip|x-forwarded-for|x-real-ip|true-client-ip|cf-ipcountry|x-client-ip'
-ALLOW='^(deploy/production/client-tag\.ts|deploy/production/tests/|scripts/check-privacy\.sh|scripts/tests/|docs/)'
+# Directories not started by deploy.sh. Not scanned.
+RETIRED_DIRS=(
+  # Not started by deploy.sh; retired 2026-10-07 by the founder's decision.
+  # Remove from this list if it is ever revived — it still reads req.ip.
+  apps/Nexus-API/
+)
+HEADERS='cf-connecting-ip|cf-connecting-ipv6|cf-pseudo-ipv4|x-forwarded-for|x-real-ip|true-client-ip|cf-ipcountry|cf-ray|forwarded|x-client-ip|cf-visitor|cf-ew-via|cdn-loop'
+# Direct address reads (case-sensitive).
+DIRECT='\b(req|request)\.ip\b|remoteAddress|requestIP\(|ConnectInfo|peer_addr|X_FORWARDED_FOR|XForwardedFor'
+# dhts/ecosystem-porter/src/ parses /proc/net/tcp for local port scanning; its
+# `remoteAddress` is a socket-table field, not a visitor (dev tool, serves nothing).
+ALLOW='^(dhts/ecosystem-porter/src/|deploy/production/client-tag\.ts|deploy/production/tests/|scripts/check-privacy\.sh|scripts/tests/|docs/)'
+Q="[\"'\`]"
 fail=0
 hits=$(git ls-files 2>/dev/null || find . -type f | sed 's#^\./##')
 if [ "${#ALLOW_FILES[@]}" -gt 0 ]; then
   hits=$(printf '%s\n' "$hits" | grep -vxF "$(printf '%s\n' "${ALLOW_FILES[@]}")" || true)
 fi
-code=$(printf '%s\n' "$hits" | grep -E '\.(ts|tsx|js|mjs|rs|py|go)$' | grep -vE "$ALLOW" | grep -vE '(^|/)(node_modules|target|dist|build|tests?|__tests__)/' | grep -vE '\.(test|spec)\.' || true)
+for d in "${RETIRED_DIRS[@]}"; do
+  hits=$(printf '%s\n' "$hits" | awk -v d="$d" 'index($0,d)!=1' || true)
+done
+code=$(printf '%s\n' "$hits" | grep -E '\.(ts|tsx|js|mjs|cjs|jsx|mts|cts|rs|py|go|svelte|vue|sh)$' | grep -vE "$ALLOW" | grep -vE '(^|/)(node_modules|target|dist)/' | grep -vE '(^|/)(tests|__tests__)/' | grep -vE '\.(test|spec)\.' || true)
 if [ -n "$code" ]; then
-  bad=$(printf '%s\n' "$code" | xargs -r grep -liE "[\"'](${HEADERS})[\"']" 2>/dev/null || true)
-  [ -n "$bad" ] && { echo "FAIL: address header read outside the front door:"; echo "$bad"; fail=1; }
+  bad=$( { printf '%s\n' "$code" | xargs -r grep -liE "${Q}(${HEADERS})${Q}" 2>/dev/null;
+           printf '%s\n' "$code" | xargs -r grep -lE "$DIRECT" 2>/dev/null; } | sort -u || true)
+  [ -n "$bad" ] && { echo "FAIL: address read outside the front door:"; echo "$bad"; fail=1; }
 fi
 sql=$(printf '%s\n' "$hits" | grep -E '\.sql$' | grep -vE "$ALLOW" || true)
 if [ -n "$sql" ]; then

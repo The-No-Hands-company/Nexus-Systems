@@ -21,7 +21,6 @@ type ShellSocket = {
   subject: string;
   cols: number;
   rows: number;
-  remoteIp: string | null;
   sessionId?: string;
 } | {
   kind: "reject";
@@ -70,7 +69,7 @@ export async function createServer(options: { auditPath?: string } = {}) { const
         if (!session) { ws.close(1013, TERMINAL_FAILURE_REASONS[1013]); return; }
         d.sessionId = session.id;
         try {
-          audit.begin(session.id, d.subject, d.remoteIp);
+          audit.begin(session.id, d.subject);
         } catch {
           void session.kill().catch(() => {});
           ws.close(1011, "terminal audit unavailable");
@@ -132,9 +131,8 @@ export async function createServer(options: { auditPath?: string } = {}) { const
 
       const cols = Number(url.searchParams.get("cols") || 80);
       const rows = Number(url.searchParams.get("rows") || 24);
-      const remoteIp = request.headers.get("x-nexus-client-tag") || "unknown"; // opaque tag, not an address
 
-      if (srv.upgrade(request, { data: { kind: "attach", subject: who.subject, cols, rows, remoteIp } })) {
+      if (srv.upgrade(request, { data: { kind: "attach", subject: who.subject, cols, rows } })) {
         return undefined as unknown as Response;
       }
       return json({ error: "upgrade_failed" }, 400);
