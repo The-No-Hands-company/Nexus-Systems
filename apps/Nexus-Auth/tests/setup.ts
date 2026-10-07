@@ -22,3 +22,8 @@ const dir = mkdtempSync(join(tmpdir(), "nexus-auth-tests-"));
 process.env.NEXUS_AUTH_USER_STORE_PATH = join(dir, "users.json");
 process.env.NEXUS_AUTH_RECOVERY_STORE_PATH = join(dir, "recovery.json");
 process.env.NEXUS_AUTH_INVITE_STORE_PATH = join(dir, "invites.json");
+
+// Tests must never write to a real audit database: bun auto-loads this app's
+// .env, which holds the production audit URL. Blank both so audit is a no-op.
+process.env.NEXUS_AUTH_AUDIT_DATABASE_URL = "";
+process.env.DATABASE_URL = "";
