@@ -30,34 +30,44 @@ let flushFn: ((entries: AuditEntry[]) => Promise<void>) | null = null;
 let queryFn: ((sql: string, params: unknown[]) => Promise<any[]>) | null = null;
 let initAttempted = false;
 
+let warned = false;
+function warnOnce(err: unknown): void {
+  if (warned) return;
+  warned = true;
+  // Technical line only: never the URL or any credential.
+  console.error(`[audit] database unavailable: ${(err as Error)?.name ?? "Error"}`);
+}
+
 async function init(): Promise<void> {
   if (initAttempted) return;
   initAttempted = true;
+  const url = process.env.NEXUS_AUTH_AUDIT_DATABASE_URL || process.env.DATABASE_URL;
+  if (!url) return; // no database configured (tests, dev): audit is a no-op.
   try {
-    const { Pool } = await import("pg");
-    const connectionString =
-      process.env.NEXUS_AUTH_AUDIT_DATABASE_URL ||
-      process.env.DATABASE_URL ||
-      "postgresql://127.0.0.1:1/nexus-audit-unreachable";
-    const pool = new Pool({ connectionString, max: 2, idleTimeoutMillis: 30_000 });
-    pool.on("error", () => {});
-    queryFn = async (sql, params) => (await pool.query(sql, params)).rows;
-    flushFn = async (entries) => {
-      const client = await pool.connect();
+    // Bun's built-in Postgres client: no extra dependency to go missing.
+    const { SQL } = await import("bun");
+    const sql = new SQL(url, { max: 2, idleTimeout: 30, connectionTimeout: 5 });
+    queryFn = async (text, params) => {
       try {
-        for (const e of entries) {
-          await client.query(
-            `INSERT INTO auth_audit_log (event, user_id, actor_id, device_id, detail)
-             VALUES ($1, $2, $3, $4, $5)`,
-            [e.event, e.userId ?? null, e.actorId ?? null, e.deviceId ?? null, JSON.stringify(e.detail ?? {})],
-          );
-        }
-      } finally {
-        client.release();
+        return Array.from(await sql.unsafe(text, params as any[]));
+      } catch (err) {
+        warnOnce(err);
+        throw err;
       }
     };
-  } catch {
-    // pg not available (test env) — audit is a no-op, which is correct there.
+    flushFn = async (entries) => {
+      try {
+        for (const e of entries) {
+          await sql`INSERT INTO auth_audit_log (event, user_id, actor_id, device_id, detail)
+                    VALUES (${e.event}, ${e.userId ?? null}, ${e.actorId ?? null}, ${e.deviceId ?? null}, ${JSON.stringify(e.detail ?? {})}::jsonb)`;
+        }
+      } catch (err) {
+        warnOnce(err);
+        throw err;
+      }
+    };
+  } catch (err) {
+    warnOnce(err);
   }
 }
 
