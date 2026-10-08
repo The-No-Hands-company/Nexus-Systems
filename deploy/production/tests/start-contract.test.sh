@@ -29,6 +29,11 @@ touch "$FIXTURE_ROOT/packages/phantom-sdk/wasm/target/release/libphantom_wasm.so
 # bodies while replacing only the top-level log directory and omitting command
 # dispatch, so this test cannot start or stop production services.
 export NEXUS_PRODUCTION_LOG_DIR="$TEST_ROOT/logs"
+# Never touch the operator's real user timers from a test.
+export NEXUS_SKIP_LOG_ROTATE_INSTALL=1 NEXUS_SKIP_CANARY_INSTALL=1
+# The Calendar front door starts only when a Caddy binary exists; CI has none.
+# start_service is recorded, not run, so any executable stands in for it.
+export CADDY_BIN=true
 # shellcheck source=/dev/null
 source <(
     sed \
