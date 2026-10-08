@@ -97,7 +97,7 @@ The Phantom paragraph, Availability, licences, money, AI and governance sections
 
 ### 4. Donations
 
-tnhc.dev: remove the "Support the build" section (`Support.jsx`) from the landing page and the donate button in `Waitlist.jsx`; add a plain "Donate" link to the shared footer (`SiteFooterLinks.jsx`) pointing at the existing PayPal URL. No other copy asks for money.
+tnhc.dev: remove the "Support the build" section (`Support.jsx`, rendered in `pages/Landing.jsx`), the donate button in `Waitlist.jsx`, and both PayPal asks on `pages/Apps.jsx` (the top `apps-donate-button` and the footer "Support the build — PayPal" link); add a plain "Donate" link to the shared footer (`SiteFooterLinks.jsx`) pointing at the existing PayPal URL (`https://www.paypal.me/tnhcns`). `Donate.jsx` and `Support.jsx` are deleted if nothing imports them afterwards. The dated blog post "Support the build — donations are live" (`data/posts.js`) stays as a historical record. No other copy asks for money.
 
 ### 5. Wiring
 
