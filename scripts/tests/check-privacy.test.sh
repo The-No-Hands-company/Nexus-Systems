@@ -50,4 +50,15 @@ expect_pass "node_modules skipped" apps/A/node_modules/x/a.js 'h.get("x-real-ip"
 # retired dirs
 d="$T/retired"; mkdir -p "$d/apps/Nexus-API/src"; echo 'req.ip' > "$d/apps/Nexus-API/src/a.ts"
 out=$(ROOT="$d" bash "$G" 2>&1); [ $? = 0 ] && ok "RETIRED_DIRS skipped" || no "retired: $out"
+mkdir -p "$d/deploy/production"; echo 'cd "$ROOT/apps/Nexus-AI"' > "$d/deploy/production/deploy.sh"
+out=$(ROOT="$d" bash "$G" 2>&1); [ $? = 1 ] && echo "$out" | grep -q 'apps/Nexus-AI/ is excluded' && ok "excluded dir started by deploy.sh fails" || no "deployed retired: $out"
+# submodules: the services live there, so their code is scanned, and an
+# unfetched one fails instead of scanning as empty
+g(){ git -c user.name=t -c user.email=t@t -c protocol.file.allow=always "$@" >/dev/null 2>&1; }
+sub="$T/subsrc"; mkdir -p "$sub/src"; echo 'h.get("x-real-ip")' > "$sub/src/a.ts"
+g -C "$sub" init -q; g -C "$sub" add .; g -C "$sub" commit -qm s
+sp="$T/super"; mkdir -p "$sp"; g -C "$sp" init -q; g -C "$sp" submodule add "$sub" apps/S; g -C "$sp" commit -qm s
+out=$(ROOT="$sp" bash "$G" 2>&1); [ $? = 1 ] && echo "$out" | grep -q 'apps/S/src/a.ts' && ok "flags code inside a submodule" || no "submodule code: $out"
+g -C "$sp" submodule deinit -f apps/S
+out=$(ROOT="$sp" bash "$G" 2>&1); [ $? = 1 ] && echo "$out" | grep -q 'submodule apps/S is not checked out' && ok "unfetched submodule fails" || no "unfetched submodule: $out"
 exit $rc

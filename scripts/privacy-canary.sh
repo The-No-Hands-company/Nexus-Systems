@@ -62,7 +62,7 @@ if [ "${1:-}" = "--self-test" ]; then
   scan_cmd cat "$d/does-not-exist"; hits=(); judge x "unreadable"
   [ "${hits[0]:-}" = "error:unreadable" ] || fail "unreadable source not an error"
   # dead proxy: the whole canary must fail with error:proxy-unreachable
-  CANARY_PROXY="http://127.0.0.1:1" CANARY_SETTLE_SECONDS=0 CANARY_OUT="$d/out.json" LOG_DIR="$d" bash "$me" >/dev/null 2>&1
+  CANARY_PROXY="http://127.0.0.1:1" CANARY_SETTLE_SECONDS=0 CANARY_RETRY_DELAY=0 CANARY_OUT="$d/out.json" LOG_DIR="$d" bash "$me" >/dev/null 2>&1
   rc=$?
   [ "$rc" = 1 ] || fail "dead proxy did not exit 1 (rc=$rc)"
   jq -e '.status=="fail" and (.found|index("error:proxy-unreachable"))' "$d/out.json" >/dev/null \
@@ -71,10 +71,16 @@ if [ "${1:-}" = "--self-test" ]; then
   exit 0
 fi
 
-probe() { # probe <curl args...>: counts any HTTP response
-  local code
-  code=$(curl -s -o /dev/null -m 10 -w '%{http_code}' "$@" 2>/dev/null) || code=000
-  [ "$code" != 000 ] && [ -n "$code" ] && answered=$((answered + 1))
+RETRY_DELAY="${CANARY_RETRY_DELAY:-3}"
+sent=0
+probe() { # probe <curl args...>: counts any HTTP response; up to 3 tries
+  local code try
+  sent=$((sent + 1))
+  for try in 1 2 3; do
+    code=$(curl -s -o /dev/null -m 10 -w '%{http_code}' "$@" 2>/dev/null) || code=000
+    if [ "$code" != 000 ] && [ -n "$code" ]; then answered=$((answered + 1)); return 0; fi
+    [ "$try" -lt 3 ] && sleep "$RETRY_DELAY"
+  done
   return 0
 }
 for host in auth.tnhc.dev app.tnhc.dev cloud.tnhc.dev chat.tnhc.dev hosting.tnhc.dev storage.tnhc.dev draw.tnhc.dev email-ingress.tnhc.dev demo.tnhc.dev calendar.tnhc.dev; do
@@ -88,7 +94,9 @@ done
 probe -X POST -H "Host: email-ingress.tnhc.dev" -H "CF-Connecting-IP: $ADDR" \
   -H "User-Agent: $MARK" -H 'Content-Type: application/json' --data '{}' \
   "$PROXY/internal/v1/cloudflare-email?$MARK"
-[ "$answered" -gt 0 ] || add_hit "error:proxy-unreachable"
+# A probe that never got an answer tested nothing: that is a failed check, not a pass.
+if [ "$answered" -eq 0 ]; then add_hit "error:proxy-unreachable"
+elif [ "$answered" -lt "$sent" ]; then add_hit "error:probes-unanswered:$((sent - answered))"; fi
 
 # Let async writers drain (Auth's 5 s buffer, Hosting's 60 s rollup).
 sleep "$SETTLE"
@@ -140,11 +148,11 @@ fi
 
 status=$([ ${#hits[@]} -eq 0 ] && echo pass || echo fail)
 mkdir -p "$(dirname "$OUT")"
-printf '{"at":"%s","address":"%s","status":"%s","found":%s,"sources":{"logs":%d,"containers":%d,"databases":%d,"files":%d,"probes_answered":%d}}\n' \
+printf '{"at":"%s","address":"%s","status":"%s","found":%s,"sources":{"logs":%d,"containers":%d,"databases":%d,"files":%d,"probes_answered":%d,"probes_sent":%d}}\n' \
   "$(date -u +%FT%TZ)" "$ADDR" "$status" \
   "$(printf '%s\n' "${hits[@]:-}" | jq -R . | jq -s 'map(select(length>0))')" \
-  "$n_logs" "$n_containers" "$n_dbs" "$n_files" "$answered" > "$OUT"
+  "$n_logs" "$n_containers" "$n_dbs" "$n_files" "$answered" "$sent" > "$OUT"
 # stdout: status, counts and locations only - never the address or token.
-echo "privacy-canary: $status logs=$n_logs containers=$n_containers databases=$n_dbs files=$n_files probes_answered=$answered"
+echo "privacy-canary: $status logs=$n_logs containers=$n_containers databases=$n_dbs files=$n_files probes_answered=$answered/$sent"
 [ ${#hits[@]} -gt 0 ] && printf 'found: %s\n' "${hits[@]}"
 [ "$status" = pass ]

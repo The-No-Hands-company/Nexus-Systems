@@ -83,6 +83,13 @@ jobs:
         run: bash scripts/bootstrap.sh --verify
       - name: Licences
         run: bash scripts/check-licenses.sh
+      # The privacy check scans the services' own code, which lives in
+      # submodules (all public). Fetched over https at their pinned commits;
+      # dhts/GameDevelopmentToolset (408 MB, dev-only) is skipped.
+      - name: Fetch service submodules for the privacy check
+        run: |
+          paths=$(git config -f .gitmodules --get-regexp '\.path$' | awk '{print $2}' | grep -vx dhts/GameDevelopmentToolset)
+          git -c url."https://github.com/".insteadOf="git@github.com:" submodule update --init --depth 1 $paths
       - name: Privacy
         run: bash scripts/check-privacy.sh
       - name: Gate

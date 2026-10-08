@@ -16,7 +16,7 @@ describe("privacyStatusBody", () => {
   it("publishes only the safe fields for a pass", async () => {
     const body = await privacyStatusBody(file(sample()), NOW);
     expect(body).toEqual({ status: "pass", checkedAt: "2026-10-08T00:01:00Z",
-      searched: { databases: 6, containers: 24, logs: 28, files: 5, probes: 21 }, findings: 0 });
+      searched: { databases: 6, containers: 24, logs: 28, files: 5, probes: 21 }, findings: 0, unchecked: 0 });
   });
   it("reports a failure with a count, never the locations or the address", async () => {
     const body = await privacyStatusBody(file(sample({ status: "fail", found: ["db:nexus_chat", "log:/tmp/x.log"] })), NOW);
@@ -37,6 +37,12 @@ describe("privacyStatusBody", () => {
   it("counts only real findings, not entries that say a place could not be checked", async () => {
     const body = await privacyStatusBody(file(sample({ status: "fail", found: ["error:docker unavailable", "db:x", "error:dump failed"] })), NOW);
     expect(body.findings).toBe(1);
+    expect(body.unchecked).toBe(2);
+  });
+  it("reports a check with unanswered probes as failed and unchecked, not as findings", async () => {
+    const body = await privacyStatusBody(file(sample({ status: "fail", found: ["error:probes-unanswered:4"] })), NOW);
+    expect(body).toMatchObject({ status: "fail", findings: 0, unchecked: 1 });
+    expect(JSON.stringify(body)).not.toContain("probes-unanswered");
   });
   it("treats an unknown status as stale rather than pass", async () => {
     expect(await privacyStatusBody(file(sample({ status: "weird" })), NOW)).toEqual({ status: "stale", findings: 0 });
