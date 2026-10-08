@@ -352,7 +352,7 @@ start_named_service() {
 install_log_rotation() {
     [ "${NEXUS_SKIP_LOG_ROTATE_INSTALL:-0}" = "1" ] && return 0
     local here lib unit_dir
-    here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    here="$ROOT/deploy/production"
     lib="$HOME/.local/lib/nexus"
     unit_dir="$HOME/.config/systemd/user"
     mkdir -p "$lib" "$unit_dir" \
@@ -368,8 +368,8 @@ install_log_rotation() {
 install_privacy_canary() {
     [ "${NEXUS_SKIP_CANARY_INSTALL:-0}" = "1" ] && return 0
     local here root lib unit_dir
-    here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-    root="$(cd "$here/../.." && pwd)"
+    here="$ROOT/deploy/production"
+    root="$ROOT"
     lib="$HOME/.local/lib/nexus"
     unit_dir="$HOME/.config/systemd/user"
     mkdir -p "$lib" "$unit_dir" \

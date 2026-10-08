@@ -228,10 +228,6 @@ export function authenticateUser(username: string, password: string): SafeUser |
 
   if (!verifyPassword(password, user.passwordHash)) return null;
 
-  user.lastLoginAt = new Date().toISOString();
-  users.set(user.id, user);
-  persistUsers();
-
   return sanitizeUser(user);
 }
 

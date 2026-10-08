@@ -53,7 +53,6 @@ export interface User {
   approvedBy?: string;
   createdAt: string;
   updatedAt: string;
-  lastLoginAt?: string;
   /** Phantom DID associated with a user (optional). */
   phantom_did?: string | null;
   /** DID metadata (optional). */

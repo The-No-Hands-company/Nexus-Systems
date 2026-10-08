@@ -97,7 +97,10 @@ sleep "$SETTLE"
 search_logs
 
 # 2. every running container's recent logs
-containers=$(docker ps --format '{{.Names}}' 2>/dev/null) || containers=""
+# Only TNHC's own containers (allow-list by compose project, plus the unlabelled
+# tunnel); other tenants on this host are not ours to count or search.
+containers=$(docker ps --format '{{.Label "com.docker.compose.project"}} {{.Names}}' 2>/dev/null \
+  | awk '$1=="nexus-systems"||$1=="nexus-hosting"||$1=="tnhc-community-production"{print $2} NF==1&&$1=="cloudflared"{print $1}') || containers=""
 if [ -z "$containers" ]; then add_hit "error:docker-unavailable"; else
   for c in $containers; do
     n_containers=$((n_containers + 1))

@@ -396,10 +396,13 @@ async function handleRequestInner(
       if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: { ...cors, "access-control-allow-methods": "GET, HEAD" } });
       if (req.method !== "GET" && req.method !== "HEAD") return new Response("Method not allowed", { status: 405, headers: { allow: "GET, HEAD" } });
       const body = JSON.stringify(await privacyStatusBody());
-      return new Response(req.method === "HEAD" ? null : body, {
-        status: 200,
-        headers: { ...cors, "content-type": "application/json", "cache-control": "public, max-age=300" },
-      });
+      const headers = {
+        ...cors,
+        "content-type": "application/json",
+        "cache-control": "public, max-age=300",
+        "content-length": String(Buffer.byteLength(body)),
+      };
+      return new Response(req.method === "HEAD" ? null : body, { status: 200, headers });
     }
     // The Worker carries no session; mailapi checks its bearer token. It must
     // not meet the login gate (Cloudflare would bounce the mail on a 302), so

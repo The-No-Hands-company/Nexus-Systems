@@ -25,13 +25,14 @@ export async function privacyStatusBody(
     return STALE;
   }
   const at = typeof raw?.at === "string" ? Date.parse(raw.at) : NaN;
-  if (!Number.isFinite(at) || now - at > STALE_AFTER_MS) return STALE;
+  if (!Number.isFinite(at) || at - now > 5 * 60 * 1000 || now - at > STALE_AFTER_MS) return STALE;
   if (raw.status !== "pass" && raw.status !== "fail") return STALE;
   const s = raw.sources ?? {};
   return {
     status: raw.status,
     checkedAt: new Date(at).toISOString().replace(".000Z", "Z"),
     searched: { databases: n(s.databases), containers: n(s.containers), logs: n(s.logs), files: n(s.files), probes: n(s.probes_answered) },
-    findings: Array.isArray(raw.found) ? raw.found.length : 0,
+    // Entries starting "error:" mean a place could not be checked, not that the marker was found.
+    findings: Array.isArray(raw.found) ? raw.found.filter((f: unknown) => !(typeof f === "string" && f.startsWith("error:"))).length : 0,
   };
 }

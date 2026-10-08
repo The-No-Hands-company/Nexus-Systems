@@ -30,6 +30,14 @@ describe("privacyStatusBody", () => {
     expect(await privacyStatusBody(file("{not json"), NOW)).toEqual({ status: "stale", findings: 0 });
     expect(await privacyStatusBody(file(sample({ at: "2026-10-06T23:59:00Z" })), NOW)).toEqual({ status: "stale", findings: 0 });
   });
+  it("treats a future-dated result as stale, but tolerates small clock skew", async () => {
+    expect(await privacyStatusBody(file(sample({ at: "2026-10-08T12:10:00Z" })), NOW)).toEqual({ status: "stale", findings: 0 });
+    expect((await privacyStatusBody(file(sample({ at: "2026-10-08T12:02:00Z" })), NOW)).status).toBe("pass");
+  });
+  it("counts only real findings, not entries that say a place could not be checked", async () => {
+    const body = await privacyStatusBody(file(sample({ status: "fail", found: ["error:docker unavailable", "db:x", "error:dump failed"] })), NOW);
+    expect(body.findings).toBe(1);
+  });
   it("treats an unknown status as stale rather than pass", async () => {
     expect(await privacyStatusBody(file(sample({ status: "weird" })), NOW)).toEqual({ status: "stale", findings: 0 });
   });
@@ -55,5 +63,23 @@ describe("status.tnhc.dev route", () => {
     expect((await handleRequest(new Request("http://status.tnhc.dev/"))).status).toBe(404);
     expect((await handleRequest(new Request("http://status.tnhc.dev/../etc/passwd"))).status).toBe(404);
     expect((await handleRequest(new Request("http://status.tnhc.dev/privacy.json", { method: "POST" }))).status).toBe(405);
+  });
+  it("HEAD reports the same content-length as GET, with no body", async () => {
+    process.env.PRIVACY_CANARY_RESULT = file(sample({ at: new Date().toISOString() }));
+    const { handleRequest } = await import("../proxy");
+    const get = await handleRequest(new Request("http://status.tnhc.dev/privacy.json"));
+    const len = (await get.text()).length;
+    const head = await handleRequest(new Request("http://status.tnhc.dev/privacy.json", { method: "HEAD" }));
+    expect(head.status).toBe(200);
+    expect(Number(head.headers.get("content-length"))).toBe(len);
+    expect((await head.text()).length).toBe(0);
+  });
+  it("answers OPTIONS with 204 and the CORS headers", async () => {
+    const { handleRequest } = await import("../proxy");
+    const res = await handleRequest(new Request("http://status.tnhc.dev/privacy.json", { method: "OPTIONS" }));
+    expect(res.status).toBe(204);
+    expect(res.headers.get("access-control-allow-origin")).toBe("https://tnhc.dev");
+    expect(res.headers.get("access-control-allow-methods")).toBe("GET, HEAD");
+    expect(res.headers.get("vary")).toBe("origin");
   });
 });
