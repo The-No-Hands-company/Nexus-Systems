@@ -4,6 +4,7 @@
 // Falls back to static configuration if Nexus-Cloud is unavailable.
 
 import { gate } from "./gate";
+import { privacyStatusBody } from "./privacy-status";
 import { stripAddressHeaders, tagFromRequestHeaders, CLIENT_TAG_HEADER } from "./client-tag";
 
 // Configuration
@@ -386,6 +387,20 @@ async function handleRequestInner(
       return Response.redirect(`https://${DOMAIN}/api`, 302);
     }
 
+    // The daily privacy check's verdict, published for anyone (tnhc.dev/privacy
+    // reads it). Answered here, ungated, from a fixed file — no request input
+    // reaches the filesystem.
+    if (host === `status.${DOMAIN}`) {
+      if (url.pathname !== "/privacy.json") return new Response("Not found", { status: 404 });
+      const cors = { "access-control-allow-origin": "https://tnhc.dev", vary: "origin" };
+      if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: { ...cors, "access-control-allow-methods": "GET, HEAD" } });
+      if (req.method !== "GET" && req.method !== "HEAD") return new Response("Method not allowed", { status: 405, headers: { allow: "GET, HEAD" } });
+      const body = JSON.stringify(await privacyStatusBody());
+      return new Response(req.method === "HEAD" ? null : body, {
+        status: 200,
+        headers: { ...cors, "content-type": "application/json", "cache-control": "public, max-age=300" },
+      });
+    }
     // The Worker carries no session; mailapi checks its bearer token. It must
     // not meet the login gate (Cloudflare would bounce the mail on a 302), so
     // this host is answered entirely here.
