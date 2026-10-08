@@ -17,6 +17,13 @@ ALLOW_FILES=(
   apps/Nexus/crates/nexus-db/migrations-lite/20260218000001_initial.sql          # dropped by migrations-lite/20261007000001_zero_retention.sql
   # Its only address headers are in a unit test proving they are ignored.
   apps/Nexus/crates/nexus-api/src/middleware.rs
+  # Deletes x-forwarded-for / x-real-ip before proxying to a site; never reads them.
+  apps/Nexus-Hosting/artifacts/api-server/src/middleware/hostRouter.ts
+  # Federation routing by country code only, never stored. TNHC's front door
+  # strips CF-IPCountry, so on our node it is always absent.
+  apps/Nexus-Hosting/crates/nexus-proxy/src/geo.rs
+  # `peer_addr` here is a CLI argument (a node to connect to), not a visitor.
+  apps/Phantom/crates/phantom-node/src/main.rs
 )
 # shellcheck disable=SC2206
 ALLOW_FILES+=(${PRIVACY_ALLOW_FILES:-})
@@ -29,6 +36,9 @@ RETIRED_DIRS=(
   # filter, request logs) and must switch to X-Nexus-Client-Tag before it is
   # ever deployed — the check below fails if deploy.sh starts it.
   apps/Nexus-AI/
+  # Not started by deploy.sh. Its audit log stores IP and user agent in a
+  # hash-chained table; that must change before it is ever deployed.
+  apps/Nexus-Vault/
 )
 HEADERS='cf-connecting-ip|cf-connecting-ipv6|cf-pseudo-ipv4|x-forwarded-for|x-real-ip|true-client-ip|cf-ipcountry|cf-ray|forwarded|x-client-ip|cf-visitor|cf-ew-via|cdn-loop'
 # Direct address reads (case-sensitive).
@@ -41,16 +51,23 @@ fail=0
 # The services TNHC runs live in submodules (Chat, Hosting, Cloud, ...). An
 # unfetched submodule scans as zero files and would pass hollow, so every one
 # except the dev-only game toolset must be checked out.
-while read -r _ sm _; do
-  [ "$sm" = dhts/GameDevelopmentToolset ] && continue
-  [ -n "$(ls -A "$sm" 2>/dev/null)" ] || { echo "FAIL: submodule $sm is not checked out, so it cannot be scanned"; fail=1; }
-done < <(git submodule status 2>/dev/null | sed 's/^[-+U ]//')
+subs=$(git config -f .gitmodules --get-regexp '\.path$' 2>/dev/null | awk '{print $2}' | grep -vx dhts/GameDevelopmentToolset || true)
+for sm in $subs; do
+  [ -e "$sm/.git" ] || { echo "FAIL: submodule $sm is not checked out, so it cannot be scanned"; fail=1; }
+done
 for d in "${RETIRED_DIRS[@]}"; do
   if grep -qF "${d%/}" deploy/production/deploy.sh 2>/dev/null; then
     echo "FAIL: $d is excluded from this check but deploy.sh starts it"; fail=1
   fi
 done
-hits=$(git ls-files --recurse-submodules 2>/dev/null || find . -type f | sed 's#^\./##')
+# Each submodule is listed on its own: `git ls-files --recurse-submodules`
+# silently skips submodules not marked active in .git/config.
+hits=$( { git ls-files 2>/dev/null || find . -type f | sed 's#^\./##'; } |
+  { if [ -n "$subs" ]; then grep -vxF "$subs"; else cat; fi; } )
+for sm in $subs; do
+  [ -e "$sm/.git" ] || continue
+  hits+=$'\n'$(git -C "$sm" ls-files 2>/dev/null | sed "s#^#$sm/#")
+done
 if [ "${#ALLOW_FILES[@]}" -gt 0 ]; then
   hits=$(printf '%s\n' "$hits" | grep -vxF "$(printf '%s\n' "${ALLOW_FILES[@]}")" || true)
 fi

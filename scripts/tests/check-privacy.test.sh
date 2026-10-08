@@ -59,6 +59,8 @@ sub="$T/subsrc"; mkdir -p "$sub/src"; echo 'h.get("x-real-ip")' > "$sub/src/a.ts
 g -C "$sub" init -q; g -C "$sub" add .; g -C "$sub" commit -qm s
 sp="$T/super"; mkdir -p "$sp"; g -C "$sp" init -q; g -C "$sp" submodule add "$sub" apps/S; g -C "$sp" commit -qm s
 out=$(ROOT="$sp" bash "$G" 2>&1); [ $? = 1 ] && echo "$out" | grep -q 'apps/S/src/a.ts' && ok "flags code inside a submodule" || no "submodule code: $out"
+git -C "$sp" config --remove-section submodule.apps/S 2>/dev/null
+out=$(ROOT="$sp" bash "$G" 2>&1); [ $? = 1 ] && echo "$out" | grep -q 'apps/S/src/a.ts' && ok "scans a submodule not marked active" || no "inactive submodule: $out"
 g -C "$sp" submodule deinit -f apps/S
 out=$(ROOT="$sp" bash "$G" 2>&1); [ $? = 1 ] && echo "$out" | grep -q 'submodule apps/S is not checked out' && ok "unfetched submodule fails" || no "unfetched submodule: $out"
 exit $rc
