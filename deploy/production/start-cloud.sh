@@ -28,4 +28,9 @@ set +a
 : "${NEXUS_STORAGE_S3_ACCESS_KEY:?protected Cloud storage access key is required}"
 : "${NEXUS_STORAGE_S3_SECRET_KEY:?protected Cloud storage secret key is required}"
 
+# Cloud heartbeats itself through the SDK. NEXUS_CLOUD_URL above is its public
+# address (for discovery); the heartbeat must stay on loopback, or it goes out
+# through the proxy and Cloud's own sign-in gate refuses it.
+export NEXUS_CLOUD_INTERNAL_URL="http://127.0.0.1:${PORT:-8787}"
+
 exec "$CLOUD_BINARY_PATH" run src/index.ts

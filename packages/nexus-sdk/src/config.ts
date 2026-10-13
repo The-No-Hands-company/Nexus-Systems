@@ -17,7 +17,11 @@ export function createConfig(options: {
     port: options.port,
     baseUrl,
     capabilities: options.capabilities,
-    cloudUrl: (process.env.NEXUS_CLOUD_URL || "http://localhost:8787").trim().replace(/\/$/, ""),
+    // Where registration and heartbeats go. NEXUS_CLOUD_URL is Cloud's public
+    // address (for discovery); sending heartbeats there routes them out and back
+    // through the proxy's sign-in gate, which refuses them. The internal
+    // address wins when set. See tests/config.test.ts.
+    cloudUrl: (process.env.NEXUS_CLOUD_INTERNAL_URL || process.env.NEXUS_CLOUD_URL || "http://localhost:8787").trim().replace(/\/+$/, ""),
     cloudApiKey: process.env.NEXUS_CLOUD_API_KEY,
     guardianUrl: process.env.NEXUS_GUARDIAN_URL || "http://localhost:4320",
     authUrl: process.env.NEXUS_AUTH_URL || "http://localhost:4310",

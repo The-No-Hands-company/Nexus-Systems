@@ -60,16 +60,34 @@ export class NexusClient {
 
   async heartbeatWithCloud(): Promise<boolean> {
     if (!this.config.enableCloudIntegration) return false;
+    let ok = false;
+    let reason = "";
     try {
       const r = await fetch(`${this.config.cloudUrl}/api/v1/tools/${encodeURIComponent(this.config.id)}/heartbeat`, {
         method: "POST",
         headers: jsonHeaders(this.config.cloudApiKey),
         body: JSON.stringify({ health: "healthy", upstreamUrl: this.config.baseUrl }),
       });
-      return r.ok;
-    } catch {
-      return false;
+      ok = r.ok;
+      reason = `HTTP ${r.status}`;
+    } catch (e) {
+      reason = (e as Error).message;
     }
+    this.reportHeartbeatChange(ok, reason);
+    return ok;
+  }
+
+  /** A failing heartbeat used to be silent: Cloud showed services offline for
+   *  weeks with nothing in any log. Say so once when it starts failing, and
+   *  once when it recovers, never on every beat. */
+  private heartbeatFailing = false;
+  private reportHeartbeatChange(ok: boolean, reason: string): void {
+    if (!ok && !this.heartbeatFailing) {
+      console.warn(`[${this.config.id}] Cloud heartbeat failing (${reason}) at ${this.config.cloudUrl}`);
+    } else if (ok && this.heartbeatFailing) {
+      console.warn(`[${this.config.id}] Cloud heartbeat recovered`);
+    }
+    this.heartbeatFailing = !ok;
   }
 
   startCloudHeartbeat(): () => void {

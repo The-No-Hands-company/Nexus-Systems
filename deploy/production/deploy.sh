@@ -262,6 +262,10 @@ adopt_cloud_registration_environment_for_dependents() {
     NEXUS_CLOUD_URL=${registration_values[1]}
     export NEXUS_CLOUD_API_KEY
     export NEXUS_CLOUD_URL
+    # NEXUS_CLOUD_URL is Cloud's public address. Services register and
+    # heartbeat over loopback; through the public address the proxy's sign-in
+    # gate refuses them (Cloud marked itself offline that way from 2026-09-29).
+    export NEXUS_CLOUD_INTERNAL_URL="http://127.0.0.1:8787"
 }
 
 validate_nexus_chat_caddy() {
