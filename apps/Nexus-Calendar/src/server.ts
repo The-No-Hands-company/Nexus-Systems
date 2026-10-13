@@ -24,6 +24,8 @@ function json(p: unknown, s = 200): Response {
 
 export async function createServer() {
   const port = Number(process.env.PORT || "3068");
+  const packageInfo = await Bun.file(new URL("../package.json", import.meta.url)).json() as { version?: unknown };
+  const version = typeof packageInfo.version === "string" ? packageInfo.version : "unknown";
   // NEXUS_NEXUS_CALENDAR_BASE_URL is the doubled-prefix name the scaffolding
   // generated and deploy.sh has been setting. Both are read so renaming it in
   // one place cannot silently fall back to localhost and deregister the service.
@@ -49,10 +51,10 @@ export async function createServer() {
       const p = url.pathname;
 
       if (req.method === "GET" && p === "/health")
-        return json({ service, ready: true, status: "ok", uptimeSeconds: Math.floor((Date.now() - startedAt) / 1000) });
+        return json({ service, ready: true, status: "ok", version, uptimeSeconds: Math.floor((Date.now() - startedAt) / 1000) });
 
       if (req.method === "GET" && p === "/api/v1/status")
-        return json({ service, ready: true, status: "ready", capabilities: ["calendar", "events"] });
+        return json({ service, ready: true, status: "ready", version, capabilities: ["calendar", "events"] });
 
       const publicMatch = p.match(/^\/api\/v1\/calendar\/public\/([^/]+)$/);
       if (publicMatch) {

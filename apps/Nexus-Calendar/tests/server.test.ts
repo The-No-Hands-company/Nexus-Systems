@@ -51,8 +51,9 @@ describe("nexus-calendar", () => {
       const origin = `http://127.0.0.1:${configured.server.port}`;
       const health = await (await fetch(`${origin}/health`)).json();
       const status = await (await fetch(`${origin}/api/v1/status`)).json();
-      expect(health).toMatchObject({ service: "calendar-proof", ready: true, status: "ok" });
-      expect(status).toMatchObject({ service: "calendar-proof", ready: true, status: "ready" });
+      const packageInfo = await Bun.file(new URL("../package.json", import.meta.url)).json() as { version: string };
+      expect(health).toMatchObject({ service: "calendar-proof", ready: true, status: "ok", version: packageInfo.version });
+      expect(status).toMatchObject({ service: "calendar-proof", ready: true, status: "ready", version: packageInfo.version });
     } finally {
       configured.close();
       delete process.env.NEXUS_CALENDAR_TOOL_ID;
