@@ -122,6 +122,22 @@ impl Queue {
         Ok(())
     }
 
+    /// Delete a finished message and, through the cascade, its queue rows and
+    /// recipient list. Refuses while any delivery of it is still pending or in
+    /// flight, so a message to several recipients is never removed under a
+    /// retry. Used for platform mail, which keeps nothing once it is done.
+    pub async fn purge_message(&self, message_id: Uuid) -> Result<bool> {
+        let deleted = sqlx::query(
+            "DELETE FROM messages m WHERE m.id = $1
+               AND NOT EXISTS (SELECT 1 FROM outbound_queue q
+                                WHERE q.message_id = m.id AND q.state IN ('pending', 'delivering'))",
+        )
+        .bind(message_id)
+        .execute(&self.pool)
+        .await?;
+        Ok(deleted.rows_affected() > 0)
+    }
+
     /// Record a failed attempt.
     ///
     /// Returns true when the delivery is now dead, which is the caller's cue to

@@ -66,6 +66,8 @@ async fn start(token: Option<&str>) -> Api {
         deliverer,
         primary_domain: local.clone(),
         cloudflare_ingress_token: token.map(str::to_string),
+        system_mail_token: None,
+        system_mail_budget: nexus_mailapi::system_mail::SystemMailBudget::new(50),
     });
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();

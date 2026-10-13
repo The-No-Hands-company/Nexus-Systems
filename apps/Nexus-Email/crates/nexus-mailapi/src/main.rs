@@ -55,6 +55,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             .ok()
             .map(|token| token.trim().to_string())
             .filter(|token| !token.is_empty()),
+        system_mail_token: std::env::var("NEXUS_EMAIL_SYSTEM_MAIL_TOKEN")
+            .ok()
+            .map(|token| token.trim().to_string())
+            .filter(|token| !token.is_empty()),
+        system_mail_budget: nexus_mailapi::system_mail::SystemMailBudget::new(
+            std::env::var("NEXUS_EMAIL_SYSTEM_MAIL_DAILY_LIMIT")
+                .ok()
+                .and_then(|v| v.trim().parse().ok())
+                .unwrap_or(50),
+        ),
     });
 
     let listener = tokio::net::TcpListener::bind(&bind).await?;

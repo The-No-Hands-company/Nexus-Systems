@@ -58,6 +58,9 @@ pub struct WorkerConfig {
     pub smtp_host_override: Option<String>,
     /// Authenticated submission relay. The password is never formatted or logged.
     pub relay: Option<SmtpRelayConfig>,
+    /// The platform's own sender (noreply@<domain>). Mail from it is deleted
+    /// once delivered or dead, so nothing about an invitation stays behind.
+    pub system_sender: Option<String>,
 }
 
 #[derive(Clone)]
@@ -78,6 +81,7 @@ impl Default for WorkerConfig {
             egress: Egress::Direct,
             smtp_host_override: None,
             relay: None,
+            system_sender: None,
         }
     }
 }
@@ -210,23 +214,35 @@ impl DeliveryWorker {
             (other, _) => Attempt::Deferred(format!("unknown route {other:?}")),
         };
 
-        match outcome {
-            Attempt::Delivered => {
-                let _ = self.queue.mark_delivered(item.id).await;
-            }
+        let finished = match outcome {
+            Attempt::Delivered => self.queue.mark_delivered(item.id).await.is_ok(),
             Attempt::Rejected(reason) => {
                 let dead = self.queue.mark_attempt_failed(item.id, true, &reason).await;
                 if matches!(dead, Ok(true)) {
                     tracing::info!(queue_id = %item.id, "permanent failure; bounce due");
                 }
+                matches!(dead, Ok(true))
             }
             Attempt::Deferred(reason) => {
                 let dead = self.queue.mark_attempt_failed(item.id, false, &reason).await;
                 if matches!(dead, Ok(true)) {
                     tracing::info!(queue_id = %item.id, "gave up after retries; bounce due");
                 }
+                matches!(dead, Ok(true))
+            }
+        };
+        if finished && self.is_system_mail(&item.envelope_from) {
+            if let Err(e) = self.queue.purge_message(item.message_id).await {
+                tracing::warn!(queue_id = %item.id, error = %e, "could not purge finished system mail");
             }
         }
+    }
+
+    fn is_system_mail(&self, envelope_from: &str) -> bool {
+        self.config
+            .system_sender
+            .as_deref()
+            .is_some_and(|sender| sender.eq_ignore_ascii_case(envelope_from))
     }
 
     /// Hand a message to a peer over the node channel.

@@ -296,3 +296,89 @@ async fn a_bounce_due_log_line_names_no_recipient_and_no_remote_text() {
     assert!(!log.contains(&rcpt), "recipient leaked into the log: {log:?}");
     assert!(!log.contains("peer.test"), "recipient domain leaked into the log: {log:?}");
 }
+
+// ── Platform mail leaves nothing behind ───────────────────────────────────
+// Invitations and approval notices are sent from the system sender. Once one
+// is finished (delivered, or dead), its stored copy and its queue row are
+// deleted: nothing about who was invited remains on this node.
+
+async fn message_exists(store: &MailStore, id: Uuid) -> bool {
+    let (n,): (i64,) = sqlx::query_as("SELECT count(*) FROM messages WHERE id = $1")
+        .bind(id)
+        .fetch_one(store.pool())
+        .await
+        .unwrap();
+    n > 0
+}
+
+fn purging_config(sender: &str) -> WorkerConfig {
+    WorkerConfig {
+        egress: Egress::Peer("egress.test".into()),
+        system_sender: Some(sender.to_string()),
+        ..WorkerConfig::default()
+    }
+}
+
+#[tokio::test]
+async fn test_process_when_system_mail_is_delivered_should_delete_message_and_queue_row() {
+    let (store, queue) = setup().await;
+    let sender = unique("system.test");
+    let rcpt = unique("gmail.example");
+    let (item, _) = queued_from(&store, &queue, &sender, &rcpt, Route::External).await;
+    let message_id = item.message_id;
+    let worker = DeliveryWorker::new(store.clone(), queue, purging_config(&sender))
+        .with_transport(FakeTransport::answering(HandoffOutcome::Delivered));
+
+    worker.process(item).await;
+
+    assert!(!message_exists(&store, message_id).await);
+    let (rows,): (i64,) = sqlx::query_as("SELECT count(*) FROM outbound_queue WHERE recipient = $1")
+        .bind(&rcpt).fetch_one(store.pool()).await.unwrap();
+    assert_eq!(rows, 0);
+}
+
+#[tokio::test]
+async fn test_process_when_system_mail_is_rejected_should_delete_it() {
+    let (store, queue) = setup().await;
+    let sender = unique("system.test");
+    let rcpt = unique("gmail.example");
+    let (item, _) = queued_from(&store, &queue, &sender, &rcpt, Route::External).await;
+    let message_id = item.message_id;
+    let worker = DeliveryWorker::new(store.clone(), queue, purging_config(&sender))
+        .with_transport(FakeTransport::answering(HandoffOutcome::Rejected("no such user".into())));
+
+    worker.process(item).await;
+
+    assert!(!message_exists(&store, message_id).await);
+}
+
+#[tokio::test]
+async fn test_process_when_system_mail_is_deferred_should_keep_it_for_the_retry() {
+    let (store, queue) = setup().await;
+    let sender = unique("system.test");
+    let rcpt = unique("gmail.example");
+    let (item, _) = queued_from(&store, &queue, &sender, &rcpt, Route::External).await;
+    let message_id = item.message_id;
+    let worker = DeliveryWorker::new(store.clone(), queue, purging_config(&sender))
+        .with_transport(FakeTransport::answering(HandoffOutcome::Deferred("peer down".into())));
+
+    worker.process(item).await;
+
+    assert!(message_exists(&store, message_id).await);
+    assert_eq!(state_of(&store, &rcpt).await, ("pending".to_string(), 1));
+}
+
+#[tokio::test]
+async fn test_process_when_ordinary_mail_is_delivered_should_keep_it() {
+    let (store, queue) = setup().await;
+    let rcpt = unique("gmail.example");
+    let (item, _) = queued(&store, &queue, &rcpt, Route::External).await;
+    let message_id = item.message_id;
+    let worker = DeliveryWorker::new(store.clone(), queue, purging_config(&unique("system.test")))
+        .with_transport(FakeTransport::answering(HandoffOutcome::Delivered));
+
+    worker.process(item).await;
+
+    assert!(message_exists(&store, message_id).await);
+    assert_eq!(state_of(&store, &rcpt).await.0, "delivered");
+}

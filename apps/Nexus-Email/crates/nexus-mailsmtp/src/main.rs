@@ -182,6 +182,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             ehlo_name: hostname.clone(),
             egress: egress.clone(),
             relay,
+            // Must match the sender in nexus-mailapi's system_mail: platform
+            // mail from it is deleted once finished.
+            system_sender: Some(format!("noreply@{}", domain.to_ascii_lowercase())),
             ..WorkerConfig::default()
         },
     )

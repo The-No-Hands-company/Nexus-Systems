@@ -26,6 +26,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 pub mod html;
+pub mod system_mail;
 
 pub struct AppState {
     pub store: MailStore,
@@ -37,6 +38,10 @@ pub struct AppState {
     /// ordinary web API remains loopback-only and continues to trust the
     /// dashboard's X-Nexus-Subject header.
     pub cloudflare_ingress_token: Option<String>,
+    /// Secret Nexus-Auth presents to send platform mail (invitations, approval
+    /// notices). None disables the endpoint. See system_mail.rs.
+    pub system_mail_token: Option<String>,
+    pub system_mail_budget: system_mail::SystemMailBudget,
 }
 
 pub type SharedState = Arc<AppState>;
@@ -119,6 +124,7 @@ pub fn router(state: SharedState) -> Router {
     Router::new()
         .route("/internal/v1/cloudflare-email", post(cloudflare_email))
         .route_layer(DefaultBodyLimit::max(25 * 1024 * 1024))
+        .route("/internal/v1/system-mail", post(send_system_mail))
         .route("/api/v1/health", get(|| async { Json(serde_json::json!({"ok": true})) }))
         .route("/api/v1/folders", get(list_folders))
         .route("/api/v1/folders/:id/messages", get(list_messages))
@@ -186,6 +192,69 @@ async fn cloudflare_email(
         StatusCode::ACCEPTED,
         Json(serde_json::json!({"message_id": id})),
     ))
+}
+
+/// The address platform mail is sent from. It has no mailbox: replies go
+/// nowhere, and nothing sent from it is kept once delivered (the delivery
+/// worker purges it).
+pub fn system_sender(primary_domain: &str) -> String {
+    format!("noreply@{}", primary_domain.to_ascii_lowercase())
+}
+
+/// Platform mail from Nexus-Auth: an invitation or an approval notice. Loopback
+/// only (this service binds 127.0.0.1 and the proxy never routes this path),
+/// and the caller must present the system-mail token. The body is read raw and
+/// parsed only after the token checks out, so an unauthenticated caller learns
+/// nothing about what the endpoint accepts.
+async fn send_system_mail(
+    State(state): State<SharedState>,
+    headers: HeaderMap,
+    body: Bytes,
+) -> Result<(StatusCode, Json<serde_json::Value>), ApiError> {
+    let Some(expected) = state.system_mail_token.as_deref() else {
+        return Err(ApiError(StatusCode::SERVICE_UNAVAILABLE, "system mail is not configured".into()));
+    };
+    let supplied = headers
+        .get(axum::http::header::AUTHORIZATION)
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.strip_prefix("Bearer "))
+        .unwrap_or("");
+    if !constant_time_token_eq(supplied.as_bytes(), expected.as_bytes()) {
+        return Err(ApiError(StatusCode::UNAUTHORIZED, "invalid system-mail credential".into()));
+    }
+    if body.len() > 4096 {
+        return Err(bad("request is too large"));
+    }
+    let request: system_mail::SystemMailRequest =
+        serde_json::from_slice(&body).map_err(|_| bad("request is not valid JSON in the expected shape"))?;
+    let mail = system_mail::parse_system_mail(&request, &state.primary_domain).map_err(|r| bad(r.message()))?;
+    if !state.system_mail_budget.try_spend(chrono::Utc::now().date_naive()) {
+        return Err(ApiError(StatusCode::TOO_MANY_REQUESTS, "daily system-mail limit reached".into()));
+    }
+
+    let from = Address::parse(&system_sender(&state.primary_domain))
+        .map_err(|e| server(&format!("system sender address: {e}")))?;
+    let composed = system_mail::compose_system_mail(&mail, &state.primary_domain);
+    let msg_id = format!("<{}@{}>", Uuid::now_v7().simple(), state.primary_domain);
+    let raw = MessageBuilder::new(from.as_string(), msg_id)
+        .to(&mail.to.to_string())
+        .subject(&composed.subject)
+        .text(&composed.text)
+        .build();
+    // No sender mailbox: nothing is filed in a Sent folder.
+    let outcomes = state
+        .deliverer
+        .submit(&raw, &from, std::slice::from_ref(&mail.to), None)
+        .await
+        .map_err(|e| server(&format!("system mail submit: {e}")))?;
+    match outcomes.into_iter().next().map(|o| o.disposition) {
+        Some(Disposition::Rejected(reason)) => Ok((
+            StatusCode::UNPROCESSABLE_ENTITY,
+            Json(serde_json::json!({ "status": "rejected", "reason": reason })),
+        )),
+        Some(_) => Ok((StatusCode::ACCEPTED, Json(serde_json::json!({ "status": "sent" })))),
+        None => Err(server("system mail produced no delivery outcome")),
+    }
 }
 
 fn constant_time_token_eq(a: &[u8], b: &[u8]) -> bool {
