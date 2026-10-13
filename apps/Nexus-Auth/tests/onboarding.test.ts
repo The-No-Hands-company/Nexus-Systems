@@ -191,3 +191,35 @@ describe("join, when redeeming an invite", () => {
     expect(res.status).toBe(303);
   });
 });
+
+describe("the welcome page's recovery codes", () => {
+  async function joinAndReadWelcome(): Promise<{ html: string; username: string }> {
+    const { code } = createInvite("usr-test-operator");
+    const username = unique("codes");
+    const res = await post("/join", { code, username, email: `${username}@example.com`, password: STRONG, confirm: STRONG });
+    return { html: await res.text(), username };
+  }
+
+  test("should list every code once, in order, never breaking inside a code", async () => {
+    const { html } = await joinAndReadWelcome();
+    const codes = [...html.matchAll(/<li data-recovery-code>([0-9a-f]{32})<\/li>/g)].map((m) => m[1]);
+    expect(codes).toHaveLength(10);
+    expect(new Set(codes).size).toBe(10);
+    expect(html).toContain('<ol class="codes"');
+    expect(html).toMatch(/\.codes li[^}]*white-space:\s*nowrap/);
+    expect(html).not.toMatch(/columns:\s*2/);
+  });
+
+  test("should offer the codes as a text file to download, with no script", async () => {
+    const { html, username } = await joinAndReadWelcome();
+    const codes = [...html.matchAll(/<li data-recovery-code>([0-9a-f]{32})<\/li>/g)].map((m) => m[1]!);
+    const link = html.match(/<a [^>]*download="nexus-recovery-codes-[a-z0-9]+\.txt"[^>]*>/)?.[0];
+    expect(link).toBeTruthy();
+    const href = link!.match(/href="([^"]+)"/)![1]!.replace(/&amp;/g, "&");
+    expect(href.startsWith("data:text/plain;charset=utf-8,")).toBe(true);
+    const text = decodeURIComponent(href.slice("data:text/plain;charset=utf-8,".length));
+    expect(text).toContain(username);
+    for (const code of codes) expect(text).toContain(code);
+    expect(html).not.toContain("<script");
+  });
+});

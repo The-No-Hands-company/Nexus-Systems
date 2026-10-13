@@ -58,7 +58,7 @@ function renderShell(title: string, body: string): string {
     background: #0b0d12; color: #e8eaf0;
   }
   .card {
-    width: min(92vw, 420px); padding: 32px; margin: 24px 0;
+    width: min(100% - 24px, 420px); padding: clamp(18px, 5vw, 32px); margin: 24px 0;
     background: #141821; border: 1px solid #232838; border-radius: 14px;
   }
   h1 { margin: 0 0 4px; font-size: 1.3rem; }
@@ -85,8 +85,19 @@ function renderShell(title: string, body: string): string {
     border: 1px solid #2b3145; font: 600 1rem ui-monospace, SFMono-Regular, Menlo, monospace;
     word-break: break-all; color: #ffd98a;
   }
-  ul.codes { list-style: none; padding: 0; columns: 2; }
-  ul.codes li { margin: 4px 0; font: .9rem ui-monospace, SFMono-Regular, Menlo, monospace; color: #ffd98a; }
+  /* One code per row: a 32-character code never fits two columns on a phone,
+     and a code broken across lines is one nobody can copy correctly. The font
+     shrinks a little on narrow screens instead. Tapping the block selects all. */
+  .codes {
+    margin: 12px 0; padding: 12px 12px 12px 2.6em; border-radius: 8px;
+    background: #0e1119; border: 1px solid #2b3145; color: #ffd98a;
+    font: clamp(.7rem, 3.4vw, .92rem)/1.7 ui-monospace, SFMono-Regular, Menlo, monospace;
+    overflow-x: auto; user-select: all; -webkit-user-select: all;
+  }
+  .codes li { white-space: nowrap; }
+  .codes li::marker { color: #6f778c; }
+  .button.secondary { background: transparent; border: 1px solid #4c7dff; color: #c9d6ff; }
+  .button.secondary:hover { background: #18203a; }
   .note { font-size: .82rem; color: #8b93a7; }
   .links { margin: 18px 0 0; font-size: .8rem; color: #8b93a7; }
   a { color: #8fb0ff; }
@@ -178,15 +189,34 @@ export function renderJoinPage(options: { code?: string; username?: string; emai
 
 /** Shown once, straight after an account is created. The person is already
  *  signed in; recovery codes are the only way back in without the password. */
+/** The codes as a plain-text file, built into a data: link so the download
+ *  needs no script (these pages run none) and no second request: the codes are
+ *  stored only as hashes, so nothing could serve them again later. */
+function buildRecoveryCodesDownload(username: string, recoveryCodes: string[]): string {
+  const text = [
+    `Nexus recovery codes for ${username}`,
+    `Created ${new Date().toISOString().slice(0, 10)} (UTC)`,
+    "",
+    "Each code signs you in once if you lose your password.",
+    "Keep this file somewhere safe and private, and delete it once the codes are stored elsewhere.",
+    "",
+    ...recoveryCodes.map((code, i) => `${String(i + 1).padStart(2, " ")}. ${code}`),
+    "",
+  ].join("\n");
+  return `data:text/plain;charset=utf-8,${encodeURIComponent(text)}`;
+}
+
 export function renderWelcomePage(options: { username: string; recoveryCodes: string[]; continueTo: string }): string {
   const codes = options.recoveryCodes
     .map((code) => `<li data-recovery-code>${escapeHtml(code)}</li>`)
     .join("");
+  const fileName = `nexus-recovery-codes-${options.username.toLowerCase().replace(/[^a-z0-9]/g, "")}.txt`;
   return renderShell("Welcome", `
     <h1>Welcome, ${escapeHtml(options.username)}</h1>
     <p class="sub">Your account is ready and you are signed in.</p>
     <p class="note">Save these recovery codes somewhere safe. Each one signs you in once if you lose your
       password. They are shown only now.</p>
-    <ul class="codes">${codes}</ul>
+    <ol class="codes" aria-label="Recovery codes">${codes}</ol>
+    <a class="button secondary" download="${escapeHtml(fileName)}" href="${escapeHtml(buildRecoveryCodesDownload(options.username, options.recoveryCodes))}">Download as a text file</a>
     <a class="button" href="${escapeHtml(options.continueTo)}">Continue to Nexus</a>`);
 }
