@@ -583,3 +583,44 @@ describe("referrer policy", () => {
     expect(policyAfter(null)).toBe("strict-origin-when-cross-origin");
   });
 });
+
+describe("user-deployed sites", () => {
+  // Sites on *.tnhc.dev share the parent domain with the ecosystem's session
+  // cookie (Domain=.tnhc.dev). A dynamic site runs its owner's code, so
+  // forwarding the visitor's Cookie would hand that owner every signed-in
+  // visitor's session; and a site setting a Domain cookie could plant one on
+  // every app (session fixation).
+  it("never sees the visitor's cookies or credentials, and cannot set parent-domain cookies", async () => {
+    let seen: Record<string, string | null> = {};
+    const site = Bun.serve({ port: 0, hostname: "127.0.0.1", fetch(req) {
+      seen = { cookie: req.headers.get("cookie"), authorization: req.headers.get("authorization") };
+      const headers = new Headers({ "content-type": "text/html" });
+      headers.append("set-cookie", "nexus_session=planted; Domain=.tnhc.dev; Path=/");
+      headers.append("set-cookie", "theme=dark; Path=/");
+      return new Response("<p>site</p>", { headers });
+    } });
+    process.env.HOSTING_SITE_UPSTREAM = `http://127.0.0.1:${site.port}`;
+    try {
+      const { handleRequest } = await import("../proxy");
+      const res = await handleRequest(new Request("http://someones-site.tnhc.dev/", {
+        headers: { cookie: "nexus_session=victim-session", authorization: "Bearer victim-token" },
+      }));
+      expect(res.status).toBe(200);
+      expect(seen.cookie).toBeNull();
+      expect(seen.authorization).toBeNull();
+      const cookies = res.headers.getSetCookie();
+      expect(cookies).toEqual(["theme=dark; Path=/"]);
+    } finally { site.stop(true); delete process.env.HOSTING_SITE_UPSTREAM; }
+  });
+
+  it("still forwards credentials to storage, which authenticates S3 requests itself", async () => {
+    let auth: string | null = null;
+    const up = Bun.serve({ port: 0, hostname: "127.0.0.1", fetch(req) { auth = req.headers.get("authorization"); return new Response("ok"); } });
+    process.env.STORAGE_UPSTREAM = `http://127.0.0.1:${up.port}`;
+    try {
+      const { handleRequest } = await import("../proxy");
+      await handleRequest(new Request("http://storage.tnhc.dev/bucket/key", { headers: { authorization: "AWS4-HMAC-SHA256 Credential=x" } }));
+      expect(auth).toBe("AWS4-HMAC-SHA256 Credential=x");
+    } finally { up.stop(true); delete process.env.STORAGE_UPSTREAM; }
+  });
+});

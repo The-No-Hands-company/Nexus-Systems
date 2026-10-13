@@ -85,7 +85,8 @@ const DASHBOARD_TERMINAL_PATH = "/api/terminal/attach";
 // This is what makes every deployed site reachable through the single wildcard
 // while apps keep precedence. Set to "" to restore the old behaviour of 404ing
 // unmatched hosts (e.g. a node with no Hosting site-proxy running).
-const HOSTING_SITE_UPSTREAM = process.env.HOSTING_SITE_UPSTREAM ?? "http://127.0.0.1:8090";
+// Read at request time so tests can point it elsewhere.
+function hostingSiteUpstream(): string { return process.env.HOSTING_SITE_UPSTREAM ?? "http://127.0.0.1:8090"; }
 
 // Fetch latest routing configuration from Nexus-Cloud
 async function fetchRouteConfig(): Promise<NexusCloudRoute[] | null> {
@@ -332,6 +333,32 @@ const STRICT_REFERRER_POLICIES = new Set([
   "strict-origin-when-cross-origin",
 ]);
 
+/**
+ * User-deployed sites share the parent domain with the ecosystem's session
+ * cookie (Domain=.<DOMAIN>, so SSO reaches every app), which means the browser
+ * sends that cookie to them too. A dynamic site runs its owner's code: had the
+ * Cookie header been forwarded, the owner would collect every signed-in
+ * visitor's session. The site gets no credentials at all.
+ */
+function isolateUserSiteRequest(headers: Headers): void {
+  headers.delete("cookie");
+  headers.delete("authorization");
+}
+
+/**
+ * A site may keep cookies on its own host, but not plant one on the parent
+ * domain, where it would reach every app (a forged session, say). Any
+ * Set-Cookie naming a Domain is dropped.
+ */
+function isolateUserSiteResponse(headers: Headers): void {
+  const cookies = headers.getSetCookie();
+  if (cookies.length === 0) return;
+  headers.delete("set-cookie");
+  for (const cookie of cookies) {
+    if (!/;\s*domain\s*=/i.test(cookie)) headers.append("set-cookie", cookie);
+  }
+}
+
 export function securityHeaders(headers: Headers): void {
   headers.set("strict-transport-security", "max-age=31536000; includeSubDomains; preload");
   headers.set("x-content-type-options", "nosniff");
@@ -550,9 +577,13 @@ async function handleRequestInner(
     // Closing it needs a reserved-subdomain list that can never be a site —
     // a naming decision, deliberately not invented here.
     let kind: RouteTarget["kind"] = fixedKind ?? matchedKind ?? "app";
-    if (!upstreamUrl && HOSTING_SITE_UPSTREAM) {
-      upstreamUrl = HOSTING_SITE_UPSTREAM;
+    // Content deployed by a user, as opposed to storage or Supabase, which are
+    // also ungated but authenticate requests themselves. See isolateUserSite*.
+    let isUserSite = false;
+    if (!upstreamUrl) {
+      upstreamUrl = hostingSiteUpstream();
       kind = "site";
+      isUserSite = true;
     }
 
     // If we still don't have an upstream, return 404
@@ -652,6 +683,7 @@ async function handleRequestInner(
       // this proxy is served over plain HTTP publicly, so https is the truthful
       // answer for every request that arrives here.
       forwardHeaders.set("x-forwarded-proto", "https");
+      if (isUserSite) isolateUserSiteRequest(forwardHeaders);
 
       const proxied = new Request(upstream.toString(), {
         method: req.method,
@@ -678,6 +710,7 @@ async function handleRequestInner(
       // credentialed cross-origin call failed for a reason that appeared to be
       // in the app. A reverse proxy should relay a policy, not author one.
       sanitizeResponseHeaders(headers);
+      if (isUserSite) isolateUserSiteResponse(headers);
 
       return new Response(resp.body, { status: resp.status, headers });
     } catch (err) {
