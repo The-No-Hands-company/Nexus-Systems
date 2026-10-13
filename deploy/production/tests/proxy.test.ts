@@ -542,4 +542,22 @@ describe("former bypass routes", () => {
       expect(AUTH_LOGIN.test("/login")).toBe(true);
     } finally { supa.stop(true); auth.stop(true); delete process.env.SUPABASE_UPSTREAM; delete process.env.AUTH_UPSTREAM_OVERRIDE; }
   });
+  it("sends the onboarding pages on auth.tnhc.dev to Auth, not the Supabase gateway", async () => {
+    // /request, /claim and /join are the ways in for someone without an
+    // account. Sent to Supabase they answered 401 "Missing username and
+    // password", which is a locked door to exactly the people they exist for.
+    const hits: string[] = [];
+    const supa = Bun.serve({ port: 0, hostname: "127.0.0.1", fetch(req) { hits.push("supabase " + new URL(req.url).pathname); return new Response("ok"); } });
+    const auth = Bun.serve({ port: 0, hostname: "127.0.0.1", fetch(req) { hits.push("auth " + new URL(req.url).pathname); return new Response("ok"); } });
+    process.env.SUPABASE_UPSTREAM = `http://127.0.0.1:${supa.port}`;
+    process.env.AUTH_UPSTREAM_OVERRIDE = `http://127.0.0.1:${auth.port}`;
+    try {
+      const { handleRequest } = await import("../proxy");
+      for (const path of ["/request", "/claim?email=a%40b.c", "/join?code=abc"]) {
+        await handleRequest(new Request(`http://auth.tnhc.dev${path}`));
+      }
+      await handleRequest(new Request("http://auth.tnhc.dev/requests"));
+      expect(hits).toEqual(["auth /request", "auth /claim", "auth /join", "supabase /requests"]);
+    } finally { supa.stop(true); auth.stop(true); delete process.env.SUPABASE_UPSTREAM; delete process.env.AUTH_UPSTREAM_OVERRIDE; }
+  });
 });

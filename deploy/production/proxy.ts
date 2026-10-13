@@ -68,7 +68,10 @@ const FALLBACK_CHAT_UPSTREAM = process.env.CHAT_UPSTREAM || "http://127.0.0.1:80
 // browser to https://auth.<DOMAIN>/login?redirect=..., so this is the one that
 // has to resolve or single sign-on has nowhere to happen.
 const FALLBACK_AUTH_UPSTREAM = process.env.AUTH_UPSTREAM || "http://127.0.0.1:4310";
-const AUTH_OWN_PATHS = /^\/(login$|health$|api\/v1\/(auth|account)(\/|$)|\.well-known\/openid-configuration$)/;
+// Paths Nexus-Auth serves itself; everything else on auth.<DOMAIN> belongs to
+// the Supabase gateway. /request, /claim and /join are the ways in for someone
+// without an account (apps/Nexus-Auth/src/onboarding-page.ts).
+const AUTH_OWN_PATHS = /^\/(login$|request$|claim$|join$|health$|api\/v1\/(auth|account)(\/|$)|\.well-known\/openid-configuration$)/;
 // Read at request time so tests can point them elsewhere.
 function supabaseUpstream(): string { return process.env.SUPABASE_UPSTREAM || "http://172.17.0.1:8000"; }
 function storageUpstream(): string { return process.env.STORAGE_UPSTREAM || "http://127.0.0.1:9010"; }
