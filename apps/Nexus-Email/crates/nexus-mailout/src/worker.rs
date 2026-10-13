@@ -61,6 +61,10 @@ pub struct WorkerConfig {
     /// The platform's own sender (noreply@<domain>). Mail from it is deleted
     /// once delivered or dead, so nothing about an invitation stays behind.
     pub system_sender: Option<String>,
+    /// How long the queue remembers a delivered message's recipient, and a
+    /// dead delivery's, before forgetting them.
+    pub delivered_retention: chrono::Duration,
+    pub failed_retention: chrono::Duration,
 }
 
 #[derive(Clone)]
@@ -82,6 +86,8 @@ impl Default for WorkerConfig {
             smtp_host_override: None,
             relay: None,
             system_sender: None,
+            delivered_retention: chrono::Duration::hours(1),
+            failed_retention: chrono::Duration::days(7),
         }
     }
 }
@@ -131,6 +137,13 @@ impl DeliveryWorker {
 
     /// One pass. Returns how many deliveries were attempted.
     pub async fn tick(&self) -> Result<usize, String> {
+        if let Err(e) = self
+            .queue
+            .purge_finished(self.config.delivered_retention, self.config.failed_retention)
+            .await
+        {
+            tracing::warn!(error = %e, "could not purge finished deliveries");
+        }
         let due = self
             .queue
             .claim_due(self.config.batch)

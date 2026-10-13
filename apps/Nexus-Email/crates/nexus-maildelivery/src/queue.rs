@@ -122,6 +122,28 @@ impl Queue {
         Ok(())
     }
 
+    /// Forget finished deliveries. A delivered row names its recipient and is
+    /// no use once the message has gone; a dead one is kept a while so the
+    /// failure can be explained (and bounced). The sender's own copy of the
+    /// message is untouched — only the queue's record of who it went to.
+    pub async fn purge_finished(
+        &self,
+        delivered_after: chrono::Duration,
+        failed_after: chrono::Duration,
+    ) -> Result<u64> {
+        let now = Utc::now();
+        let purged = sqlx::query(
+            "DELETE FROM outbound_queue
+              WHERE (state = 'delivered' AND completed_at < $1)
+                 OR (state = 'failed' AND completed_at < $2)",
+        )
+        .bind(now - delivered_after)
+        .bind(now - failed_after)
+        .execute(&self.pool)
+        .await?;
+        Ok(purged.rows_affected())
+    }
+
     /// Delete a finished message and, through the cascade, its queue rows and
     /// recipient list. Refuses while any delivery of it is still pending or in
     /// flight, so a message to several recipients is never removed under a

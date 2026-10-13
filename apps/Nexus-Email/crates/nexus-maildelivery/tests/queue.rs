@@ -183,3 +183,37 @@ async fn retries_run_out_and_the_delivery_dies() {
     }
     assert!(dead, "after {} attempts the delivery must be dead", max_attempts());
 }
+
+/// Finished deliveries are forgotten: a delivered row (which names its
+/// recipient) after an hour, a dead one after a week. Pending work is never
+/// touched. Before this, every recipient address was kept forever.
+#[tokio::test]
+async fn test_purge_finished_when_rows_are_old_enough_should_forget_them_and_keep_the_rest() {
+    let (store, queue) = harness().await;
+    let mut rows = Vec::new();
+    for label in ["delivered-old", "delivered-new", "failed-old", "failed-new", "pending"] {
+        let msg = a_message(&store).await;
+        let rcpt = format!("{label}-{}@peer.example", Uuid::now_v7().simple());
+        queue.enqueue(msg, "a@test.invalid", &rcpt, &Route::Federated { node: "peer.example".into() }).await.unwrap();
+        let (id, _) = queue_row(&store, &rcpt).await;
+        rows.push((label, id, rcpt));
+    }
+    let id_of = |label: &str| rows.iter().find(|r| r.0 == label).unwrap().1;
+    queue.mark_delivered(id_of("delivered-old")).await.unwrap();
+    queue.mark_delivered(id_of("delivered-new")).await.unwrap();
+    queue.mark_attempt_failed(id_of("failed-old"), true, "no such mailbox").await.unwrap();
+    queue.mark_attempt_failed(id_of("failed-new"), true, "no such mailbox").await.unwrap();
+    for (label, hours) in [("delivered-old", 2), ("failed-old", 24 * 8), ("failed-new", 24 * 3)] {
+        sqlx::query("UPDATE outbound_queue SET completed_at = now() - make_interval(hours => $1) WHERE id = $2")
+            .bind(hours).bind(id_of(label)).execute(store.pool()).await.unwrap();
+    }
+
+    queue.purge_finished(chrono::Duration::hours(1), chrono::Duration::days(7)).await.unwrap();
+
+    for (label, _, rcpt) in &rows {
+        let (n,): (i64,) = sqlx::query_as("SELECT count(*) FROM outbound_queue WHERE recipient = $1")
+            .bind(rcpt).fetch_one(store.pool()).await.unwrap();
+        let kept = !matches!(*label, "delivered-old" | "failed-old");
+        assert_eq!(n == 1, kept, "{label} should be {}", if kept { "kept" } else { "forgotten" });
+    }
+}
