@@ -125,6 +125,7 @@ export function renderLoginPage(options: {
     </form>
     ${destination}
     <p class="ways-in">New here? <a href="/request">Request access</a> · <a href="/join">Join with an invite</a> · <a href="/claim">Claim an approved account</a></p>
+    <p class="ways-in">Lost your password? <a href="/recover">Use a recovery code</a></p>
   </main>
 </body>
 </html>`;

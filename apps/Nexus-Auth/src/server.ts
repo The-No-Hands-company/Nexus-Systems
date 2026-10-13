@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import { buildSystemsApiRegistrationPayload } from "./contracts";
 import { startNexusAuthCloudRegistrationHeartbeat } from "./cloud";
 import {
@@ -18,6 +19,7 @@ import {
   listByStatus,
   setUserStatus,
   MIN_PASSWORD_LENGTH,
+  resetPassword,
 } from "./users";
 import { consumeRecoveryCode, countRemainingRecoveryCodes, issueRecoveryCodes } from "./recovery";
 import { createInvite, redeemInvite } from "./invites";
@@ -28,7 +30,10 @@ import {
   ONBOARDING_LIMITS,
   renderClaimPage,
   renderJoinPage,
+  renderRecoveredPage,
+  renderRecoverPage,
   renderRequestedPage,
+  renderResetPasswordPage,
   renderRequestPage,
   renderWelcomePage,
 } from "./onboarding-page";
@@ -256,7 +261,28 @@ function clientTag(request: Request): string {
 // app.tnhc.dev they sat behind the login they exist to get past. See
 // onboarding-page.ts.
 
-const ONBOARDING_PATHS = new Set(["/request", "/claim", "/join"]);
+const ONBOARDING_PATHS = new Set(["/request", "/claim", "/join", "/recover", "/recover/password"]);
+
+/**
+ * Between a verified recovery code and a new password. Random, single-use,
+ * 15 minutes, in memory only: a restart simply means using another code.
+ */
+const RESET_GRANT_TTL_MS = 15 * 60_000;
+const resetGrants = new Map<string, { userId: string; expiresAt: number }>();
+
+function issueResetGrant(userId: string): string {
+  const now = Date.now();
+  for (const [key, grant] of resetGrants) if (grant.expiresAt <= now) resetGrants.delete(key);
+  const grant = randomBytes(32).toString("hex");
+  resetGrants.set(grant, { userId, expiresAt: now + RESET_GRANT_TTL_MS });
+  return grant;
+}
+
+function findResetGrant(grant: string): { userId: string } | null {
+  const found = resetGrants.get(grant);
+  if (!found || found.expiresAt <= Date.now()) return null;
+  return found;
+}
 
 function renderOnboardingResponse(body: string, status: number, extra: Record<string, string> = {}): Response {
   return new Response(body, { status, headers: { ...ONBOARDING_HEADERS, ...extra } });
@@ -309,6 +335,11 @@ async function handleOnboarding(request: Request, path: string, signedIn: boolea
   }
   if (request.method === "GET") {
     if (path === "/request") return renderOnboardingResponse(renderRequestPage({}), 200);
+    if (path === "/recover") return renderOnboardingResponse(renderRecoverPage({}), 200);
+    // The reset step only follows a verified code; on its own it means nothing.
+    if (path === "/recover/password") {
+      return new Response(null, { status: 303, headers: { location: "/recover", "cache-control": "no-store" } });
+    }
     if (path === "/claim") {
       const email = (url.searchParams.get("email") ?? "").slice(0, ONBOARDING_LIMITS.email);
       return renderOnboardingResponse(renderClaimPage({ email, minPasswordLength: MIN_PASSWORD_LENGTH }), 200);
@@ -322,6 +353,55 @@ async function handleOnboarding(request: Request, path: string, signedIn: boolea
 
   const form = await request.formData().catch(() => null);
   const tag = clientTag(request);
+
+  if (path === "/recover") {
+    const email = parseFormField(form, "email");
+    const code = parseFormField(form, "code");
+    const limit = checkRateLimit("recover", tag);
+    if (!limit.allowed) {
+      return renderOnboardingResponse(renderRecoverPage({ email, error: describeRetry(limit.retryAfterMs) }), 429,
+        { "retry-after": String(Math.ceil(limit.retryAfterMs / 1000)) });
+    }
+    const user = email ? findUserByEmail(email) : undefined;
+    // One answer for an unknown email, an inactive account and a wrong code,
+    // so the page cannot be used to test which emails have accounts.
+    if (!user || user.status !== "active" || !code || !consumeRecoveryCode(user.id, code)) {
+      recordFailure("recover", tag);
+      return renderOnboardingResponse(renderRecoverPage({ email, error: "That email and recovery code do not match an account." }), 400);
+    }
+    clearFailures("recover", tag);
+    audit({ event: "recovery_code_used", userId: user.id });
+    return renderOnboardingResponse(
+      renderResetPasswordPage({ grant: issueResetGrant(user.id), minPasswordLength: MIN_PASSWORD_LENGTH }), 200);
+  }
+
+  if (path === "/recover/password") {
+    const grant = String(form?.get("grant") ?? "").slice(0, 128);
+    const password = parseFormField(form, "password", false);
+    const confirm = parseFormField(form, "confirm", false);
+    const found = findResetGrant(grant);
+    if (!found) {
+      return renderOnboardingResponse(
+        renderRecoverPage({ error: "That step has expired or was already used. Start again with another recovery code." }), 400);
+    }
+    const renderResetError = (error: string) => renderOnboardingResponse(
+      renderResetPasswordPage({ grant, minPasswordLength: MIN_PASSWORD_LENGTH, error }), 400);
+    if (password.length < MIN_PASSWORD_LENGTH) return renderResetError(WEAK_PASSWORD_MESSAGE);
+    if (password !== confirm) return renderResetError("The two passwords do not match.");
+    if (!resetPassword(found.userId, password)) return renderResetError("The password could not be changed. Try again.");
+
+    resetGrants.delete(grant);
+    // Whoever knew the old password may hold a session; recovery ends them all.
+    revokeAllUserSessions(found.userId);
+    audit({ event: "password_change", userId: found.userId, detail: { via: "recovery_code" } });
+    const session = createSession({ userId: found.userId });
+    const maxAge = Math.max(60, Math.floor((new Date(session.expiresAt).getTime() - Date.now()) / 1000));
+    return renderOnboardingResponse(
+      renderRecoveredPage({ remaining: countRemainingRecoveryCodes(found.userId), continueTo: defaultPostLogin() }),
+      200,
+      { "set-cookie": sessionCookie(session.token, maxAge) },
+    );
+  }
 
   if (path === "/request") {
     // Every request counts here, not only failures: there is no secret to

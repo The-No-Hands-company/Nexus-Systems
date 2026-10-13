@@ -187,6 +187,42 @@ export function renderJoinPage(options: { code?: string; username?: string; emai
     <p class="links">No invite? <a href="/request">Request access</a></p>${otherWaysIn}`);
 }
 
+export function renderRecoverPage(options: { email?: string; error?: string }): string {
+  return renderShell("Recover your account", `
+    <h1>Lost your password?</h1>
+    <p class="sub">Use one of the recovery codes you saved when you created your account. Each code works once.</p>
+    <form method="post" action="/recover">
+      <label for="email">Email</label>
+      <input id="email" name="email" type="email" autocomplete="email" maxlength="${ONBOARDING_LIMITS.email}" value="${escapeHtml(options.email ?? "")}" required autofocus />
+      <label for="code">Recovery code</label>
+      <input id="code" name="code" type="text" autocomplete="off" spellcheck="false" maxlength="${ONBOARDING_LIMITS.code}" required />
+      <button type="submit">Continue</button>
+      ${renderError(options.error)}
+    </form>
+    <p class="links">No codes left? Ask whoever runs this Nexus node to help you get back in.</p>${otherWaysIn}`);
+}
+
+export function renderResetPasswordPage(options: { grant: string; minPasswordLength: number; error?: string }): string {
+  return renderShell("Choose a new password", `
+    <h1>Choose a new password</h1>
+    <p class="sub">Your recovery code was accepted and has been used up. Set a new password to finish. This step expires in 15 minutes.</p>
+    <form method="post" action="/recover/password">
+      <input type="hidden" name="grant" value="${escapeHtml(options.grant)}" />
+      ${passwordFields(options.minPasswordLength)}
+      <button type="submit">Set password and sign in</button>
+      ${renderError(options.error)}
+    </form>`);
+}
+
+export function renderRecoveredPage(options: { remaining: number; continueTo: string }): string {
+  const left = `${options.remaining} recovery code${options.remaining === 1 ? "" : "s"} left`;
+  return renderShell("Password changed", `
+    <h1>You're back in</h1>
+    <p class="sub">Your password was changed and every other session was signed out.</p>
+    <p class="note">You have ${left}.${options.remaining <= 3 ? " Create a fresh set from your Account page soon." : ""}</p>
+    <a class="button" href="${escapeHtml(options.continueTo)}">Continue to Nexus</a>`);
+}
+
 /** Shown once, straight after an account is created. The person is already
  *  signed in; recovery codes are the only way back in without the password. */
 /** The codes as a plain-text file, built into a data: link so the download

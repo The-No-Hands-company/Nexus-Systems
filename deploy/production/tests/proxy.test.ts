@@ -587,12 +587,12 @@ describe("former bypass routes", () => {
     process.env.AUTH_UPSTREAM_OVERRIDE = `http://127.0.0.1:${auth.port}`;
     try {
       const { handleRequest } = await import("../proxy");
-      for (const path of ["/request", "/claim?email=a%40b.c", "/join?code=abc"]) {
+      for (const path of ["/request", "/claim?email=a%40b.c", "/join?code=abc", "/recover", "/recover/password"]) {
         await handleRequest(new Request(`http://auth.tnhc.dev${path}`));
       }
       // A near-miss is neither Auth's nor one of the allowed Supabase APIs.
       expect((await handleRequest(new Request("http://auth.tnhc.dev/requests"))).status).toBe(404);
-      expect(hits).toEqual(["auth /request", "auth /claim", "auth /join"]);
+      expect(hits).toEqual(["auth /request", "auth /claim", "auth /join", "auth /recover", "auth /recover/password"]);
     } finally { supa.stop(true); auth.stop(true); delete process.env.SUPABASE_UPSTREAM; delete process.env.AUTH_UPSTREAM_OVERRIDE; }
   });
 });

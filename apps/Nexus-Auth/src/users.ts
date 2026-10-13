@@ -308,6 +308,21 @@ export function changePassword(userId: string, currentPassword: string, newPassw
   return true;
 }
 
+/**
+ * Set a new password without the current one. Only for a caller that has
+ * already proved control of the account another way — the recovery flow,
+ * after a recovery code was verified and spent. Never expose it directly.
+ */
+export function resetPassword(userId: string, newPassword: string): boolean {
+  const user = users.get(userId);
+  if (!user || newPassword.length < MIN_PASSWORD_LENGTH) return false;
+  user.passwordHash = hashPassword(newPassword);
+  user.updatedAt = new Date().toISOString();
+  users.set(user.id, user);
+  persistUsers();
+  return true;
+}
+
 export function deleteUser(userId: string): boolean {
   const deleted = users.delete(userId);
   if (deleted) persistUsers();

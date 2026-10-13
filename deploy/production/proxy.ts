@@ -70,8 +70,9 @@ const FALLBACK_CHAT_UPSTREAM = process.env.CHAT_UPSTREAM || "http://127.0.0.1:80
 const FALLBACK_AUTH_UPSTREAM = process.env.AUTH_UPSTREAM || "http://127.0.0.1:4310";
 // Paths Nexus-Auth serves itself; everything else on auth.<DOMAIN> belongs to
 // the Supabase gateway. /request, /claim and /join are the ways in for someone
-// without an account (apps/Nexus-Auth/src/onboarding-page.ts).
-const AUTH_OWN_PATHS = /^\/(login$|request$|claim$|join$|health$|api\/v1\/(auth|account)(\/|$)|\.well-known\/openid-configuration$)/;
+// without an account, and /recover the way back in after a lost password
+// (apps/Nexus-Auth/src/onboarding-page.ts).
+const AUTH_OWN_PATHS = /^\/(login$|request$|claim$|join$|recover(\/password)?$|health$|api\/v1\/(auth|account)(\/|$)|\.well-known\/openid-configuration$)/;
 // The Supabase APIs the TNHC Community app uses (it installs Auth, Postgrest and
 // Functions; see TNHC-Community's CommunityRepository). Only these reach the
 // gateway: Studio's dashboard login, pg-meta, storage, realtime and analytics
