@@ -1,3 +1,4 @@
+import { calendarToolId } from "./contracts";
 import { startHeartbeat } from "./cloud";
 import { CalendarEngine, type EventCreate } from "./calendar-engine";
 import { resolveCaller } from "./auth";
@@ -31,6 +32,7 @@ export async function createServer() {
     process.env.NEXUS_NEXUS_CALENDAR_BASE_URL ||
     `http://localhost:${port}`;
   const startedAt = Date.now();
+  const service = calendarToolId();
   // Persistent SQLite — survives restarts, unlike :memory:
   const dbPath = process.env.NEXUS_CALENDAR_DB || "data/calendar.sqlite";
   const legacyOwnerSubject = process.env.NEXUS_CALENDAR_LEGACY_OWNER_SUBJECT;
@@ -47,10 +49,10 @@ export async function createServer() {
       const p = url.pathname;
 
       if (req.method === "GET" && p === "/health")
-        return json({ service: "nexus-calendar", status: "ok", uptimeSeconds: Math.floor((Date.now() - startedAt) / 1000) });
+        return json({ service, ready: true, status: "ok", uptimeSeconds: Math.floor((Date.now() - startedAt) / 1000) });
 
       if (req.method === "GET" && p === "/api/v1/status")
-        return json({ service: "nexus-calendar", status: "ready", capabilities: ["calendar", "events"] });
+        return json({ service, ready: true, status: "ready", capabilities: ["calendar", "events"] });
 
       const publicMatch = p.match(/^\/api\/v1\/calendar\/public\/([^/]+)$/);
       if (publicMatch) {

@@ -5,7 +5,8 @@ const stopHeartbeat = mock(() => {
   shutdownOrder.push("heartbeat");
 });
 const startHeartbeat = mock(() => stopHeartbeat);
-mock.module("../src/cloud", () => ({ startHeartbeat }));
+const cloud = await import("../src/cloud");
+mock.module("../src/cloud", () => ({ ...cloud, startHeartbeat }));
 const { createServer } = await import("../src/server");
 
 describe("nexus-calendar", () => {
@@ -41,6 +42,21 @@ describe("nexus-calendar", () => {
   it("GET /health returns 200", async () => {
     const r = await fetch(`${base}/health`);
     expect(r.status).toBe(200);
+  });
+
+  it("reports the same configured identity and readiness on both status endpoints", async () => {
+    process.env.NEXUS_CALENDAR_TOOL_ID = "calendar-proof";
+    const configured = await createServer();
+    try {
+      const origin = `http://127.0.0.1:${configured.server.port}`;
+      const health = await (await fetch(`${origin}/health`)).json();
+      const status = await (await fetch(`${origin}/api/v1/status`)).json();
+      expect(health).toMatchObject({ service: "calendar-proof", ready: true, status: "ok" });
+      expect(status).toMatchObject({ service: "calendar-proof", ready: true, status: "ready" });
+    } finally {
+      configured.close();
+      delete process.env.NEXUS_CALENDAR_TOOL_ID;
+    }
   });
 
   it("creates and lists events", async () => {

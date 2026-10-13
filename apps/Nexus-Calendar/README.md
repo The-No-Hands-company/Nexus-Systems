@@ -68,7 +68,20 @@ would have dropped. A date-only `to` means the whole of that day.
 | `NEXUS_CALENDAR_BASE_URL` | http://localhost:$PORT | Address advertised to Cloud |
 | `NEXUS_CLOUD_URL` | http://localhost:8787 | Cloud control plane |
 | `NEXUS_CLOUD_API_KEY` | (none) | Cloud API key |
-| `NEXUS_CALENDAR_ENABLE_CLOUD_INTEGRATION` | true | Enable/disable the cloud heartbeat |
+| `NEXUS_CALENDAR_TOOL_ID` | nexus-calendar | Cloud registration identity and status endpoint service identity |
+| `NEXUS_CALENDAR_PATH` | /calendar | Route advertised to Cloud |
+| `NEXUS_CALENDAR_PUBLIC_URL` | https://calendar.tnhc.dev | Public URL advertised to Cloud |
+| `NEXUS_CALENDAR_ENABLE_CLOUD_INTEGRATION` | true | Set to `false` to disable registration and heartbeats |
+| `NEXUS_CALENDAR_HEALTH_TIMEOUT_MS` | 2000 | Health probe timeout, capped at 10000 ms; invalid values use the default |
+
+Cloud health is observed before each registration and heartbeat by fetching
+`NEXUS_CALENDAR_BASE_URL/health`. Only a successful response with the configured
+`service`, `status: "ok"`, and `ready: true` reports `healthy`; HTTP errors,
+invalid payloads, connection failures, and timeouts report `degraded`.
+Both public status endpoints expose the same service identity and readiness.
+
+Backend checks run with `bun run check && bun test`. Frontend browser tests
+use their separate Vitest runner (`cd frontend && bun run test`).
 
 ## Migrating a pre-ownership database
 

@@ -1,0 +1,4 @@
+[test]
+# Browser tests under frontend/ use Vitest and its DOM setup.
+root = "./tests"
+preload = ["./tests/setup.ts"]

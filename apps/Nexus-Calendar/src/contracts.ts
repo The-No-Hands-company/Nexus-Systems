@@ -20,17 +20,26 @@ export type SystemsApiRegistrationPayload = {
   metadata: Record<string, unknown>;
 };
 
-export function buildSystemsApiRegistrationPayload(baseUrl: string): SystemsApiRegistrationPayload {
+export function calendarToolId(): string {
+  return process.env.NEXUS_CALENDAR_TOOL_ID?.trim() || "nexus-calendar";
+}
+
+// A registration builder has no health observation. Callers must supply one
+// before advertising a healthy upstream to Cloud.
+export function buildSystemsApiRegistrationPayload(
+  baseUrl: string,
+  health: SystemsApiRegistrationPayload["health"] = "degraded",
+): SystemsApiRegistrationPayload {
   return {
-    id: "nexus-calendar",
+    id: calendarToolId(),
     name: "Nexus-Calendar",
     description: "Shared calendars with events, reminders, and month/week views",
     mode: "orchestrated",
     exposed: true,
-    health: "healthy",
+    health,
     upstreamUrl: baseUrl,
-    path: "/calendar",
-    publicUrl: "https://calendar.tnhc.dev",
+    path: process.env.NEXUS_CALENDAR_PATH?.trim() || "/calendar",
+    publicUrl: process.env.NEXUS_CALENDAR_PUBLIC_URL?.trim() || "https://calendar.tnhc.dev",
     delivery: "proxied-app",
     capabilities: ["calendar", "events", "scheduling"],
     metadata: {
