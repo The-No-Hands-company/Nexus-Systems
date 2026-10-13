@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { BrowserRouter, Routes, Route, useParams, Navigate } from "react-router-dom";
 import Home from "./pages/Home";
-import RequestAccess from "./pages/RequestAccess";
-import Claim from "./pages/Claim";
+import { buildAuthPageUrl, type AuthPagePath } from "./authPages";
 import Account from "./pages/Account";
 import Admin from "./pages/Admin";
 import MailList from "./pages/mail/MailList";
@@ -199,8 +198,10 @@ export default function App() {
             this route needs no props — same pattern as every route below
             that depends on appsState instead. */}
         <Route path="/" element={<Home />} />
-        <Route path="/request" element={<RequestAccess />} />
-        <Route path="/claim" element={<Claim />} />
+        {/* Old addresses for the ways in, kept so existing links still land:
+            the pages themselves are served by Nexus-Auth. See authPages.ts. */}
+        <Route path="/request" element={<ForwardToAuthPage path="/request" />} />
+        <Route path="/claim" element={<ForwardToAuthPage path="/claim" />} />
         <Route
           path="/account"
           element={
@@ -301,4 +302,13 @@ export default function App() {
       </Routes>
     </BrowserRouter>
   );
+}
+
+/** Hand an old /request or /claim link to the page Nexus-Auth serves, query intact. */
+function ForwardToAuthPage({ path }: { path: AuthPagePath }) {
+  useEffect(() => {
+    const params = Object.fromEntries(new URLSearchParams(window.location.search));
+    window.location.replace(buildAuthPageUrl(path, params));
+  }, [path]);
+  return null;
 }

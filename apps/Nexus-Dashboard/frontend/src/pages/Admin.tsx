@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { buildAuthPageUrl } from "../authPages";
 import {
   me,
   isAdmin,
@@ -173,8 +174,8 @@ export default function Admin() {
           </ul>
         )}
         <p className="mt-2 text-xs text-zinc-600">
-          Approving does not notify anyone — there is no outbound email. The person returns to
-          /claim with the code they were given when they asked.
+          Approving does not notify anyone — there is no outbound email. The person returns to{" "}
+          <code>{buildAuthPageUrl("/claim")}</code> with the code they were given when they asked.
         </p>
       </div>
 
@@ -186,11 +187,16 @@ export default function Admin() {
 
         {invite ? (
           <div className="mt-3 rounded-lg border border-amber-500/40 bg-amber-500/5 p-4">
-            <div className="text-xs uppercase tracking-wide text-amber-400">Invite code</div>
-            <code className="mt-2 block break-all font-mono text-lg text-amber-200">{invite.code}</code>
+            <div className="text-xs uppercase tracking-wide text-amber-400">Invite link</div>
+            <code className="mt-2 block break-all font-mono text-sm text-amber-200">
+              {buildAuthPageUrl("/join", { code: invite.code })}
+            </code>
             <p className="mt-2 text-sm text-amber-200/80">
-              This is the only time the code is shown. Save it before you leave this page.
+              Send this link to the person you are inviting. It opens a page where they choose a
+              username and password. This is the only time it is shown — copy it before you leave.
             </p>
+            <div className="mt-3 text-xs uppercase tracking-wide text-amber-400">Code alone</div>
+            <code className="mt-1 block break-all font-mono text-amber-200">{invite.code}</code>
             <button
               type="button" onClick={() => setInvite(null)}
               className="mt-3 rounded border border-zinc-700 px-3 py-1 text-sm hover:bg-zinc-800"

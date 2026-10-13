@@ -58,20 +58,6 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return body as T;
 }
 
-export function requestAccess(input: { username: string; email: string; note?: string }) {
-  return request<{ user: { id: string; status: string }; claimCode: string }>(
-    "/ipa/v1/auth/access-requests",
-    { method: "POST", body: JSON.stringify(input) },
-  );
-}
-
-export function claimAccount(input: { email: string; claimCode: string; password: string }) {
-  return request<{ user: { id: string }; recoveryCodes: string[] }>(
-    "/ipa/v1/auth/claim",
-    { method: "POST", body: JSON.stringify(input) },
-  );
-}
-
 export async function me(): Promise<Me | null> {
   try {
     const { user } = await request<{ user: Me }>("/ipa/v1/auth/me");

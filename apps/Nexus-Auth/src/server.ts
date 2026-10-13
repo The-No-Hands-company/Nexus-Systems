@@ -22,6 +22,15 @@ import {
 import { consumeRecoveryCode, countRemainingRecoveryCodes, issueRecoveryCodes } from "./recovery";
 import { createInvite, redeemInvite } from "./invites";
 import { checkRateLimit, recordFailure, clearFailures } from "./ratelimit";
+import {
+  ONBOARDING_HEADERS,
+  ONBOARDING_LIMITS,
+  renderClaimPage,
+  renderJoinPage,
+  renderRequestedPage,
+  renderRequestPage,
+  renderWelcomePage,
+} from "./onboarding-page";
 import { audit, recentActivity } from "./audit";
 import {
   createApiKey,
@@ -225,6 +234,153 @@ function clientTag(request: Request): string {
   return request.headers.get("x-nexus-client-tag") || "unknown";
 }
 
+// ── Onboarding: the three ways in for someone without an account ──────────
+// Served here because this is the one host the proxy's gate keeps public; on
+// app.tnhc.dev they sat behind the login they exist to get past. See
+// onboarding-page.ts.
+
+const ONBOARDING_PATHS = new Set(["/request", "/claim", "/join"]);
+
+function renderOnboardingResponse(body: string, status: number, extra: Record<string, string> = {}): Response {
+  return new Response(body, { status, headers: { ...ONBOARDING_HEADERS, ...extra } });
+}
+
+/** One form field, trimmed (unless it is a password) and capped at its limit. */
+function parseFormField(form: FormData | null, name: keyof typeof ONBOARDING_LIMITS | "confirm", trim = true): string {
+  const raw = String(form?.get(name) ?? "");
+  const limit = name === "confirm" ? ONBOARDING_LIMITS.password : ONBOARDING_LIMITS[name];
+  const value = raw.slice(0, limit);
+  return trim ? value.trim() : value;
+}
+
+function describeRetry(retryAfterMs: number): string {
+  return `Too many attempts. Try again in ${Math.max(1, Math.ceil(retryAfterMs / 60_000))} minutes.`;
+}
+
+/** Sign the new account in, exactly as /login does, and show its recovery codes once. */
+function renderSignedInWelcome(user: { id: string; username: string }, recoveryCodes: string[], status: number): Response {
+  const session = createSession({ userId: user.id });
+  const maxAge = Math.max(60, Math.floor((new Date(session.expiresAt).getTime() - Date.now()) / 1000));
+  return renderOnboardingResponse(
+    renderWelcomePage({ username: user.username, recoveryCodes, continueTo: defaultPostLogin() }),
+    status,
+    { "set-cookie": sessionCookie(session.token, maxAge) },
+  );
+}
+
+const WEAK_PASSWORD_MESSAGE = `Passwords must be at least ${MIN_PASSWORD_LENGTH} characters.`;  // pragma: allowlist secret
+
+const CLAIM_ERRORS: Record<string, string> = {
+  invalid_code: "That email and claim code do not match an account waiting to be claimed.",
+  not_approved: "Your request has not been approved yet. Try again once an operator has approved it.",
+  weak_password: WEAK_PASSWORD_MESSAGE,
+};
+
+const JOIN_ERRORS: Record<string, string> = {
+  invalid_code: "That invite code is not valid or has already been used.",
+  expired: "That invite has expired. Ask whoever invited you for a new one.",
+  weak_password: WEAK_PASSWORD_MESSAGE,
+  username_taken: "That username is taken. Pick another.",
+  email_taken: "That email already has an account. Sign in instead.",
+};
+
+async function handleOnboarding(request: Request, path: string, signedIn: boolean): Promise<Response> {
+  const url = new URL(request.url);
+  // Someone with an account has nothing to do here.
+  if (request.method === "GET" && signedIn) {
+    return new Response(null, { status: 303, headers: { location: defaultPostLogin(), "cache-control": "no-store" } });
+  }
+  if (request.method === "GET") {
+    if (path === "/request") return renderOnboardingResponse(renderRequestPage({}), 200);
+    if (path === "/claim") {
+      const email = (url.searchParams.get("email") ?? "").slice(0, ONBOARDING_LIMITS.email);
+      return renderOnboardingResponse(renderClaimPage({ email, minPasswordLength: MIN_PASSWORD_LENGTH }), 200);
+    }
+    const code = (url.searchParams.get("code") ?? "").slice(0, ONBOARDING_LIMITS.code);
+    return renderOnboardingResponse(renderJoinPage({ code, minPasswordLength: MIN_PASSWORD_LENGTH }), 200);
+  }
+  if (request.method !== "POST") {
+    return renderOnboardingResponse("Method not allowed", 405, { allow: "GET, POST", "content-type": "text/plain; charset=utf-8" });
+  }
+
+  const form = await request.formData().catch(() => null);
+  const tag = clientTag(request);
+
+  if (path === "/request") {
+    // Every request counts here, not only failures: there is no secret to
+    // guess, but an open form that creates records is a spam target.
+    const limit = checkRateLimit("access-request", tag);
+    const username = parseFormField(form, "username");
+    const email = parseFormField(form, "email");
+    const note = parseFormField(form, "note");
+    if (!limit.allowed) {
+      return renderOnboardingResponse(renderRequestPage({ username, email, note, error: describeRetry(limit.retryAfterMs) }), 429,
+        { "retry-after": String(Math.ceil(limit.retryAfterMs / 1000)) });
+    }
+    if (!username || !email) {
+      return renderOnboardingResponse(renderRequestPage({ username, email, note, error: "Username and email are both required." }), 400);
+    }
+    recordFailure("access-request", tag);
+    try {
+      const result = createAccessRequest({ username, email, ...(note ? { note } : {}) });
+      return renderOnboardingResponse(renderRequestedPage({ email: result.user.email, claimCode: result.claimCode }), 201);
+    } catch {
+      // One message for both clashes: naming which one would let anyone test
+      // whether an email address has an account here.
+      return renderOnboardingResponse(renderRequestPage({ username, email, note, error: "That username or email is already in use." }), 409);
+    }
+  }
+
+  const password = parseFormField(form, "password", false);
+  const confirm = parseFormField(form, "confirm", false);
+
+  if (path === "/claim") {
+    const email = parseFormField(form, "email");
+    const claimCode = String(form?.get("claimCode") ?? "").trim().slice(0, ONBOARDING_LIMITS.code);
+    const renderClaimError = (error: string, status: number, extra: Record<string, string> = {}) =>
+      renderOnboardingResponse(renderClaimPage({ email, minPasswordLength: MIN_PASSWORD_LENGTH, error }), status, extra);
+
+    const limit = checkRateLimit("claim", tag);
+    if (!limit.allowed) {
+      return renderClaimError(describeRetry(limit.retryAfterMs), 429, { "retry-after": String(Math.ceil(limit.retryAfterMs / 1000)) });
+    }
+    if (password.length < MIN_PASSWORD_LENGTH) return renderClaimError(WEAK_PASSWORD_MESSAGE, 400);
+    if (password !== confirm) return renderClaimError("The two passwords do not match.", 400);
+
+    const result = claimAccount({ email, claimCode, password });
+    if (!result.ok) {
+      if (result.reason !== "weak_password") recordFailure("claim", tag);
+      return renderClaimError(CLAIM_ERRORS[result.reason] ?? "That claim could not be completed.", 400);
+    }
+    clearFailures("claim", tag);
+    return renderSignedInWelcome(result.user, result.recoveryCodes, 200);
+  }
+
+  // /join
+  const code = parseFormField(form, "code");
+  const username = parseFormField(form, "username");
+  const email = parseFormField(form, "email");
+  const renderJoinError = (error: string, status: number, extra: Record<string, string> = {}) =>
+    renderOnboardingResponse(renderJoinPage({ code, username, email, minPasswordLength: MIN_PASSWORD_LENGTH, error }), status, extra);
+
+  const limit = checkRateLimit("invite", tag);
+  if (!limit.allowed) {
+    return renderJoinError(describeRetry(limit.retryAfterMs), 429, { "retry-after": String(Math.ceil(limit.retryAfterMs / 1000)) });
+  }
+  if (!username || !email) return renderJoinError("Username and email are both required.", 400);
+  if (password.length < MIN_PASSWORD_LENGTH) return renderJoinError(WEAK_PASSWORD_MESSAGE, 400);
+  if (password !== confirm) return renderJoinError("The two passwords do not match.", 400);
+
+  const result = redeemInvite({ code, username, email, password });
+  if (!result.ok) {
+    // Only a bad code is a guess worth counting; a taken name is not.
+    if (result.reason === "invalid_code" || result.reason === "expired") recordFailure("invite", tag);
+    return renderJoinError(JOIN_ERRORS[result.reason] ?? "That invite could not be redeemed.", 400);
+  }
+  clearFailures("invite", tag);
+  return renderSignedInWelcome(result.user, result.recoveryCodes, 201);
+}
+
 // Read once at module scope so handleRequest can be a plain top-level
 // function rather than a closure over createAuthServer's locals.
 const AUTH_PORT = Number(process.env.PORT || "4310");
@@ -410,6 +566,8 @@ export async function handleRequest(request: Request): Promise<Response> {
         { headers: { "cache-control": "no-store", pragma: "no-cache" } },
       );
     }
+
+    if (ONBOARDING_PATHS.has(path)) return await handleOnboarding(request, path, Boolean(auth));
 
     // ── Apex sign-in page ──
     // The one place a human types a password. Apps that get an unauthenticated

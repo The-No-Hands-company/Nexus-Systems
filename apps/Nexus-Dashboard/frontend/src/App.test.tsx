@@ -46,12 +46,25 @@ describe("shell routing", () => {
     expect(screen.getByRole("banner")).toBeTruthy();
   });
 
-  it("leaves the public claim page free of shell chrome", async () => {
-    // Someone claiming an account has no session and no apps to launch;
-    // wrapping that page in a launcher would be nonsense.
-    window.history.pushState({}, "", "/claim");
-    render(<App />);
-    await waitFor(() => expect(screen.queryByRole("banner")).toBeNull());
+  it("forwards an old /claim link to the page Nexus-Auth serves, query intact", async () => {
+    // The ways in live on the identity host now; this host is behind the
+    // sign-in gate. Old links in people's inboxes must still land.
+    const original = window.location;
+    const replace = vi.fn();
+    window.history.pushState({}, "", "/claim?email=ada%40example.com");
+    Object.defineProperty(window, "location", {
+      configurable: true,
+      value: { ...original, pathname: "/claim", search: "?email=ada%40example.com", replace },
+    });
+    try {
+      render(<App />);
+      await waitFor(() =>
+        expect(replace).toHaveBeenCalledWith("https://auth.tnhc.dev/claim?email=ada%40example.com"),
+      );
+      expect(screen.queryByRole("banner")).toBeNull();
+    } finally {
+      Object.defineProperty(window, "location", { configurable: true, value: original });
+    }
   });
 
   it("does not report a valid app as not found while the list is still loading", async () => {

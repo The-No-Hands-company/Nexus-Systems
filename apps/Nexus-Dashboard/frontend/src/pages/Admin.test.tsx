@@ -128,6 +128,9 @@ describe("Admin", () => {
     fireEvent.click(screen.getByRole("button", { name: /create invite/i }));
     await waitFor(() => expect(screen.getByText("c".repeat(32))).toBeTruthy());
     expect(screen.getByText(/only time|save|shown once|cannot be shown again/i)).toBeTruthy();
+    // The operator is handed a link to send, pointing at the page Auth serves;
+    // a bare code left the invitee with nowhere to type it.
+    expect(screen.getByText(`https://auth.tnhc.dev/join?code=${"c".repeat(32)}`)).toBeTruthy();
   });
 
   it("renders nothing for a non-admin", async () => {

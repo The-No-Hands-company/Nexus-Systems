@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
 import { me, listApps, type Me, type AppEntry } from "../api";
 import Shell from "../shell/Shell";
 import HealthStrip from "../shell/HealthStrip";
@@ -8,6 +7,7 @@ import { Pill } from "../../../../../packages/nexus-design/src/components/ui/pil
 import Today from "./widgets/Today";
 import Unread from "./widgets/Unread";
 import Activity from "./widgets/Activity";
+import { buildAuthPageUrl } from "../authPages";
 import Pinned from "./widgets/Pinned";
 
 const AUTH_LOGIN_URL =
@@ -146,18 +146,18 @@ function SignedOut() {
             >
               Sign in
             </a>
-            <Link
-              to="/request"
+            <a
+              href={buildAuthPageUrl("/request")}
               className="rounded-md border border-zinc-700 px-6 py-3 hover:bg-zinc-800"
             >
               Request access
-            </Link>
-            <Link
-              to="/claim"
+            </a>
+            <a
+              href={buildAuthPageUrl("/claim")}
               className="rounded-md border border-zinc-700 px-6 py-3 hover:bg-zinc-800"
             >
               Claim your account
-            </Link>
+            </a>
           </div>
 
           <p className="mt-5 max-w-2xl text-sm leading-relaxed text-zinc-500">

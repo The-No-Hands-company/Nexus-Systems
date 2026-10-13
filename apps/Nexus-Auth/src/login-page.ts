@@ -106,6 +106,8 @@ export function renderLoginPage(options: {
   }
   .dest { margin: 16px 0 0; font-size: .76rem; color: #6f778c; word-break: break-all; }
   code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .ways-in { margin: 18px 0 0; font-size: .78rem; color: #8b93a7; }
+  .ways-in a { color: #8fb0ff; }
 </style>
 </head>
 <body>
@@ -122,6 +124,7 @@ export function renderLoginPage(options: {
       ${errorBlock}
     </form>
     ${destination}
+    <p class="ways-in">New here? <a href="/request">Request access</a> · <a href="/join">Join with an invite</a> · <a href="/claim">Claim an approved account</a></p>
   </main>
 </body>
 </html>`;
