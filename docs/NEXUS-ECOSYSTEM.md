@@ -120,7 +120,7 @@ Every app in the ecosystem, by category, with measured status.
 | **Nexus-Auth** | Identity provider; OIDC/SSO for every app in the ecosystem | **Live** |
 | **Nexus-Cloud** | Control plane — app registry, federation, operator console | **Live** |
 | **Nexus-Systems-API** | Service registration and discovery contract every app implements | Stub |
-| **Nexus-API** | Public API surface for the ecosystem | In development |
+| **Nexus-API** | Unified API server extracted from Nexus-Hosting (sites, deploys, federation, storage). Retired from production on 2026-10-07; the code is kept | In development |
 | **Nexus-Portal** | Public entry point and marketing surface | Scaffold |
 | **Nexus-Account** | End-user account and profile management | Scaffold |
 
