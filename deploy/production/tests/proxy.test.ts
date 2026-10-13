@@ -659,3 +659,40 @@ describe("user-deployed sites", () => {
     } finally { up.stop(true); delete process.env.STORAGE_UPSTREAM; }
   });
 });
+
+describe("public health checks", () => {
+  // /health is public on every host, and apps put whatever they like in it:
+  // Cloud returned a filesystem path and node identity, Draw a Phantom DID.
+  // The public answer is only whether the service is up; details stay on the
+  // loopback ports deploy.sh and the Dashboard read directly.
+  it("answers only ok or unavailable, never the app's own details", async () => {
+    let status = 200;
+    const app = Bun.serve({ port: 0, hostname: "127.0.0.1", fetch() {
+      return Response.json({ ok: true, platformState: { path: "/run/media/secret/state.json" }, nodeId: "did:nexus:abc" }, { status });
+    } });
+    try {
+      const { handleRequest, __setRoutesForTest } = await import("../proxy");
+      __setRoutesForTest({ "cloud.tnhc.dev": { upstream: `http://127.0.0.1:${app.port}`, requiresAuth: true, kind: "app" } });
+      for (const path of ["/health", "/health/live", "/health/ready"]) {
+        const res = await handleRequest(new Request(`http://cloud.tnhc.dev${path}`));
+        expect(res.status).toBe(200);
+        expect(await res.json()).toEqual({ status: "ok" });
+      }
+      status = 503;
+      const down = await handleRequest(new Request("http://cloud.tnhc.dev/health"));
+      expect(down.status).toBe(503);
+      expect(await down.json()).toEqual({ status: "unavailable" });
+    } finally { app.stop(true); }
+  });
+
+  it("leaves a user-deployed site's own /health page alone", async () => {
+    const site = Bun.serve({ port: 0, hostname: "127.0.0.1", fetch() { return new Response("<h1>my health blog</h1>", { headers: { "content-type": "text/html" } }); } });
+    process.env.HOSTING_SITE_UPSTREAM = `http://127.0.0.1:${site.port}`;
+    try {
+      const { handleRequest, __setRoutesForTest } = await import("../proxy");
+      __setRoutesForTest({});
+      const res = await handleRequest(new Request("http://someones-site.tnhc.dev/health"));
+      expect(await res.text()).toBe("<h1>my health blog</h1>");
+    } finally { site.stop(true); delete process.env.HOSTING_SITE_UPSTREAM; }
+  });
+});

@@ -340,6 +340,23 @@ const STRICT_REFERRER_POLICIES = new Set([
 ]);
 
 /**
+ * /health is public on every host (gate.ts), and each app decides what goes in
+ * it: Cloud returned a filesystem path and its node identity, Draw a Phantom
+ * DID. The public answer is only whether the service is up, as the major
+ * clouds do it; the detail stays on the loopback ports that deploy.sh and the
+ * Dashboard's health strip read directly (audit O-4).
+ */
+const PUBLIC_HEALTH_PATHS = new Set(["/health", "/health/live", "/health/ready"]);
+
+async function summarizePublicHealth(resp: Response): Promise<Response> {
+  await resp.body?.cancel();
+  return Response.json(
+    { status: resp.ok ? "ok" : "unavailable" },
+    { status: resp.ok ? 200 : 503, headers: { "cache-control": "no-store" } },
+  );
+}
+
+/**
  * User-deployed sites share the parent domain with the ecosystem's session
  * cookie (Domain=.<DOMAIN>, so SSO reaches every app), which means the browser
  * sends that cookie to them too. A dynamic site runs its owner's code: had the
@@ -707,6 +724,7 @@ async function handleRequestInner(
       // navigated, so a correct login looked like a failed one. A reverse proxy
       // must relay redirects, not resolve them.
       const resp = await fetch(proxied, { redirect: "manual" });
+      if (!isUserSite && PUBLIC_HEALTH_PATHS.has(url.pathname)) return summarizePublicHealth(resp);
       const headers = new Headers(resp.headers);
       // CORS is the application's decision, not this hop's.
       //
