@@ -316,16 +316,28 @@ export function sanitizeResponseHeaders(headers: Headers): void {
  *
  * Referrer-Policy: strict-origin-when-cross-origin leaks only the origin to
  * cross-origin observers, nothing at all on downgrade — the default modern
- * browsers claim but not what older ones do.
+ * browsers claim but not what older ones do. It is a floor, not a ceiling: an
+ * upstream that chose something at least as strict keeps it (Auth's onboarding
+ * pages carry claim and invite codes and send no-referrer). A list value is
+ * replaced outright, since browsers apply its last supported token.
  *
  * Permissions-Policy: deny by default. No tnhc.dev service needs camera,
  * microphone, geolocation or payment today; if one ever does, that service's
  * own CSP can allow it explicitly.
  */
+const STRICT_REFERRER_POLICIES = new Set([
+  "no-referrer",
+  "same-origin",
+  "strict-origin",
+  "strict-origin-when-cross-origin",
+]);
+
 export function securityHeaders(headers: Headers): void {
   headers.set("strict-transport-security", "max-age=31536000; includeSubDomains; preload");
   headers.set("x-content-type-options", "nosniff");
-  headers.set("referrer-policy", "strict-origin-when-cross-origin");
+  if (!STRICT_REFERRER_POLICIES.has((headers.get("referrer-policy") ?? "").trim().toLowerCase())) {
+    headers.set("referrer-policy", "strict-origin-when-cross-origin");
+  }
   headers.set(
     "permissions-policy",
     "camera=(), microphone=(), geolocation=(), payment=(), usb=(), interest-cohort=()",

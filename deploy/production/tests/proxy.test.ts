@@ -561,3 +561,25 @@ describe("former bypass routes", () => {
     } finally { supa.stop(true); auth.stop(true); delete process.env.SUPABASE_UPSTREAM; delete process.env.AUTH_UPSTREAM_OVERRIDE; }
   });
 });
+
+describe("referrer policy", () => {
+  // The proxy sets a floor, not a ceiling: an app that chose something stricter
+  // (Auth's onboarding pages carry claim and invite codes and send no-referrer)
+  // keeps it; anything weaker, or nothing, gets the default.
+  it("keeps an app's stricter policy, replaces a weaker one, and fills a missing one", async () => {
+    const { securityHeaders } = await import("../proxy");
+    const policyAfter = (upstream: string | null) => {
+      const headers = new Headers();
+      if (upstream !== null) headers.set("referrer-policy", upstream);
+      securityHeaders(headers);
+      return headers.get("referrer-policy");
+    };
+    expect(policyAfter("no-referrer")).toBe("no-referrer");
+    expect(policyAfter("same-origin")).toBe("same-origin");
+    expect(policyAfter("strict-origin")).toBe("strict-origin");
+    expect(policyAfter("unsafe-url")).toBe("strict-origin-when-cross-origin");
+    expect(policyAfter("no-referrer-when-downgrade")).toBe("strict-origin-when-cross-origin");
+    expect(policyAfter("origin, unsafe-url")).toBe("strict-origin-when-cross-origin");
+    expect(policyAfter(null)).toBe("strict-origin-when-cross-origin");
+  });
+});
