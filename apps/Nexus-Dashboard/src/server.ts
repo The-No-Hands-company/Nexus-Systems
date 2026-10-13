@@ -31,6 +31,28 @@ import { proxyCalendarApi, proxyCalendarWeb } from "./calendar-proxy";
 
 const PORT = Number(process.env.PORT || "3132");
 const DOMAIN = process.env.DOMAIN || "tnhc.dev";
+
+/**
+ * The shell's content security policy. The SPA is fully self-hosted (one
+ * hashed JS, one hashed CSS, no inline scripts, all API calls same-origin).
+ * frame-src names the ecosystem's subdomains because the shell mounts each app
+ * in an iframe at https://<app>.<DOMAIN>/?embed=1; without it frame-src falls
+ * back to default-src 'self' and every app frame is refused (a blank page).
+ * Each app still decides who may frame it, with its own frame-ancestors.
+ */
+const SHELL_CSP = [
+  "default-src 'self'",
+  "script-src 'self'",
+  "style-src 'self' 'unsafe-inline'",
+  "img-src 'self' data:",
+  "font-src 'self'",
+  "connect-src 'self'",
+  `frame-src 'self' https://*.${DOMAIN}`,
+  "object-src 'none'",
+  "frame-ancestors 'self'",
+  "base-uri 'self'",
+  "form-action 'self'",
+].join("; ");
 const AUTH_HOST = process.env.NEXUS_AUTH_HOST || `auth.${DOMAIN}`;
 /** This app's own public host, so it does not list itself in its own grid. */
 const SELF_HOST = process.env.NEXUS_DASHBOARD_HOST || `app.${DOMAIN}`;
@@ -487,18 +509,7 @@ export async function handleRequest(
         // vectors; form-action 'self' stops a compromised page from POSTing
         // credentials to an attacker. style-src needs unsafe-inline because
         // React writes style attributes directly.
-        "content-security-policy": [
-          "default-src 'self'",
-          "script-src 'self'",
-          "style-src 'self' 'unsafe-inline'",
-          "img-src 'self' data:",
-          "font-src 'self'",
-          "connect-src 'self'",
-          "object-src 'none'",
-          "frame-ancestors 'self'",
-          "base-uri 'self'",
-          "form-action 'self'",
-        ].join("; "),
+        "content-security-policy": SHELL_CSP,
       },
     });
   }
@@ -517,18 +528,7 @@ export async function handleRequest(
         "content-type": "text/html; charset=utf-8",
         // The build-instruction page is still served by the authenticated
         // shell origin, so it keeps the same document boundary as the SPA.
-        "content-security-policy": [
-          "default-src 'self'",
-          "script-src 'self'",
-          "style-src 'self' 'unsafe-inline'",
-          "img-src 'self' data:",
-          "font-src 'self'",
-          "connect-src 'self'",
-          "object-src 'none'",
-          "frame-ancestors 'self'",
-          "base-uri 'self'",
-          "form-action 'self'",
-        ].join("; "),
+        "content-security-policy": SHELL_CSP,
       },
     },
   );

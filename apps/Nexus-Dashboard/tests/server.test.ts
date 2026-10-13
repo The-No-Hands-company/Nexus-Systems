@@ -207,4 +207,17 @@ describe("dashboard server", () => {
     expect(res.headers.get("content-security-policy")).toContain("script-src 'self'");
     expect(res.headers.get("content-security-policy")).toContain("object-src 'none'");
   });
+
+  it("lets the shell frame the ecosystem's apps on their own subdomains", async () => {
+    // The shell mounts each app in an iframe at https://<app>.<domain>/?embed=1.
+    // With only default-src 'self', frame-src fell back to 'self' and the
+    // browser refused every app frame: a blank page for every app, from
+    // 2026-08-23 until this was caught.
+    const csp = (await handleRequest(new Request("http://app.test/"))).headers.get("content-security-policy") ?? "";
+    const frameSrc = csp.split(";").map((d) => d.trim()).find((d) => d.startsWith("frame-src ")) ?? "";
+    expect(frameSrc).toContain("'self'");
+    expect(frameSrc).toContain("https://*.tnhc.dev");
+    expect(frameSrc).not.toContain("http:");
+    expect(frameSrc).not.toMatch(/(^|\s)\*(\s|$)/);
+  });
 });
