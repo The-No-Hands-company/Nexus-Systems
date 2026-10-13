@@ -487,6 +487,20 @@ describe("Cloudflare email ingress", () => {
     expect(seen).toEqual([]);
   });
 
+  it("never lets the internet reach the system-mail endpoint", async () => {
+    // /internal/v1/system-mail sends platform mail (invitations) and trusts its
+    // caller's token. Only Nexus-Auth on loopback may reach it: not through the
+    // ingress host, and not through any other public host.
+    const { handleRequest, __setRoutesForTest } = await import("../proxy");
+    __setRoutesForTest({});
+    const viaIngress = await handleRequest(ingress("/internal/v1/system-mail"));
+    expect(viaIngress.status).toBe(404);
+    await handleRequest(new Request("http://someones-site.tnhc.dev/internal/v1/system-mail", {
+      method: "POST", headers: { authorization: "Bearer guess" }, body: "{}",
+    }));
+    expect(seen).toEqual([]);
+  });
+
   it("refuses a non-loopback upstream instead of sending mail elsewhere", async () => {
     const { handleRequest } = await import("../proxy");
     process.env.EMAIL_INGRESS_UPSTREAM = "https://mail-sink.example";

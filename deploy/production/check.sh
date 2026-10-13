@@ -32,5 +32,6 @@ bun test tests/gate.test.ts tests/proxy.test.ts tests/calendar-routing.test.ts \
 bash tests/processes.test.sh
 bash tests/rotation.test.sh
 bash tests/start-contract.test.sh
+bash tests/system-mail-token.test.sh
 
 echo "PASS"

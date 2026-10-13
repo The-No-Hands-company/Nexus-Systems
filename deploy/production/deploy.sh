@@ -87,6 +87,27 @@ service_port() {
     esac
 }
 
+# The shared secret Nexus-Auth presents to Nexus-Email's system-mail endpoint
+# (invitations, approval notices). Generated once, kept in Nexus-Email's .env
+# (owner-only), and never printed or passed on a command line. Exported only
+# around the two services that use it.
+ensure_system_mail_token() {
+    local env_file="$ROOT/apps/Nexus-Email/.env"
+    # A node without Nexus-Email sends no platform mail; Auth reports invites
+    # as "disabled" and hands out links instead.
+    [ -d "$ROOT/apps/Nexus-Email" ] || return 0
+    if [ -z "${NEXUS_EMAIL_SYSTEM_MAIL_TOKEN:-}" ] && [ -f "$env_file" ]; then
+        NEXUS_EMAIL_SYSTEM_MAIL_TOKEN="$(sed -n 's/^NEXUS_EMAIL_SYSTEM_MAIL_TOKEN=//p' "$env_file" | head -1 | tr -d '\r"')"
+    fi
+    if [ -z "${NEXUS_EMAIL_SYSTEM_MAIL_TOKEN:-}" ]; then
+        NEXUS_EMAIL_SYSTEM_MAIL_TOKEN="$(od -An -N32 -tx1 /dev/urandom | tr -d ' \n')"
+        touch "$env_file"
+        chmod 600 "$env_file"
+        printf 'NEXUS_EMAIL_SYSTEM_MAIL_TOKEN=%s\n' "$NEXUS_EMAIL_SYSTEM_MAIL_TOKEN" >> "$env_file"
+        log "Generated the system-mail token in apps/Nexus-Email/.env"
+    fi
+}
+
 start_service() {
     local name=$1
     local dir=$2
@@ -481,6 +502,8 @@ cmd_start() {
         fi
     done
 
+    ensure_system_mail_token
+
     log "Starting Nexus Systems on $DOMAIN..."
 
     # 1. Infrastructure
@@ -517,14 +540,14 @@ cmd_start() {
     # internet. Note the seed only creates accounts that do not exist; setting
     # these does nothing to an existing store, which has to be rotated through
     # POST /api/v1/auth/users/:id/password.
-    export NEXUS_AUTH_AUDIT_DATABASE_URL
+    export NEXUS_AUTH_AUDIT_DATABASE_URL NEXUS_EMAIL_SYSTEM_MAIL_TOKEN
     start_service "auth" "$ROOT/apps/Nexus-Auth" 4310 \
         PORT=4310 \
         NEXUS_AUTH_BASE_URL="http://127.0.0.1:4310" \
         NEXUS_AUTH_COOKIE_DOMAIN=".$DOMAIN" \
         NEXUS_CLOUD_URL=http://localhost:8787 \
         bun run src/index.ts
-    export -n NEXUS_AUTH_AUDIT_DATABASE_URL
+    export -n NEXUS_AUTH_AUDIT_DATABASE_URL NEXUS_EMAIL_SYSTEM_MAIL_TOKEN
 
     # 3. Nexus Cloud
     #
@@ -737,13 +760,15 @@ cmd_start() {
         # The one public path on this service is the Cloudflare Email Worker
         # ingress, which the proxy pins (email-ingress.$DOMAIN, POST only) and
         # mailapi refuses unless the bearer token below is set and matches.
-        export NEXUS_EMAIL_CLOUDFLARE_INGRESS_TOKEN
+        # The system-mail endpoint (invitations from Auth) is loopback only:
+        # the proxy never routes it, and it also requires this shared token.
+        export NEXUS_EMAIL_CLOUDFLARE_INGRESS_TOKEN NEXUS_EMAIL_SYSTEM_MAIL_TOKEN
         start_service "mailapi" "$ROOT/apps/Nexus-Email" 3140 \
             NEXUS_EMAIL_BIND=127.0.0.1:3140 \
             NEXUS_EMAIL_DOMAIN="$DOMAIN" \
             NEXUS_EMAIL_DATABASE_URL="$NEXUS_EMAIL_DATABASE_URL" \
             "$MAILAPI_BIN"
-        export -n NEXUS_EMAIL_CLOUDFLARE_INGRESS_TOKEN
+        export -n NEXUS_EMAIL_CLOUDFLARE_INGRESS_TOKEN NEXUS_EMAIL_SYSTEM_MAIL_TOKEN
     else
         log "mailapi binary not built - skipping (cargo build -p nexus-mailapi)"
     fi
