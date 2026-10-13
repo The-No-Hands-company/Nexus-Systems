@@ -33,5 +33,6 @@ bash tests/processes.test.sh
 bash tests/rotation.test.sh
 bash tests/start-contract.test.sh
 bash tests/system-mail-token.test.sh
+bash tests/privacy-canary-run.test.sh
 
 echo "PASS"

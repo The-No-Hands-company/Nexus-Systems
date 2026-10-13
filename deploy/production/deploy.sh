@@ -405,6 +405,16 @@ install_privacy_canary() {
         || warn "could not install the privacy canary timer (user systemd unavailable?)"
 }
 
+# Run the privacy canary once, right after a deploy, so status.tnhc.dev shows
+# the state this deploy produced rather than the last daily run, which may have
+# fallen inside an outage and still read "fail" (audit O-7). --no-block: the
+# deploy never waits on it.
+run_privacy_canary_now() {
+    [ "${NEXUS_SKIP_CANARY_INSTALL:-0}" = "1" ] && return 0
+    systemctl --user start --no-block nexus-privacy-canary.service \
+        || warn "could not start the privacy canary (user systemd unavailable?)"
+}
+
 cmd_start() {
     # Cloud's protected file is authoritative. Validate all required Cloud and
     # storage credentials, then adopt the Cloud registration URL/key into this
@@ -850,6 +860,7 @@ cmd_start() {
     # 6. Verify
     sleep 3
     cmd_status
+    run_privacy_canary_now
 }
 
 stop_service() {
