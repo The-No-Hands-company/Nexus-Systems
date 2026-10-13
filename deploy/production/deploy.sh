@@ -145,7 +145,10 @@ start_service() {
     # historical evidence (or the credentials that still need invalidation).
     setsid nohup env "$@" >> "$LOG_DIR/$name.log" 2>&1 &
     launched_pid=$!
-    start_attempts="${NEXUS_PRODUCTION_START_ATTEMPTS:-20}"
+    # 120 x 0.25s = 30s. Chat needs several seconds on a cold boot (Postgres,
+    # storage and the search index) and missed the old 5s window after a
+    # reboot, which halted the whole recovery.
+    start_attempts="${NEXUS_PRODUCTION_START_ATTEMPTS:-120}"
     start_interval="${NEXUS_PRODUCTION_START_INTERVAL:-0.25}"
     for ((attempt = 1; attempt <= start_attempts; attempt++)); do
         if pid="$(reconcile_pid "$name" "$port" "$dir" "$SERVICE_EXEC_PATTERN" 2>/dev/null)"; then
