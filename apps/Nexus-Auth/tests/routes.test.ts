@@ -46,6 +46,20 @@ describe("identity routes", () => {
     expect(body.claimCode).toMatch(/^[0-9a-f]{32}$/);
   });
 
+  it("answers a taken username and a taken email identically, naming neither", async () => {
+    // Otherwise this public endpoint tells anyone whether an address has an
+    // account here (reproduced against production in the 2026-10-13 audit).
+    await post("/api/v1/auth/access-requests", { username: "kai", email: "kai@x.dev" });
+    const emailClash = await post("/api/v1/auth/access-requests", { username: "other", email: "kai@x.dev" });
+    const nameClash = await post("/api/v1/auth/access-requests", { username: "kai", email: "fresh@x.dev" });
+    expect(emailClash.status).toBe(409);
+    expect(nameClash.status).toBe(409);
+    const emailBody = await emailClash.text();
+    expect(emailBody).toBe(await nameClash.text());
+    expect(emailBody).not.toContain("kai@x.dev");
+    expect(emailBody).not.toContain("kai");
+  });
+
   it("requires authorisation to list or approve requests", async () => {
     expect((await get("/api/v1/auth/access-requests")).status).toBe(403);
     expect((await post("/api/v1/auth/access-requests/usr-x/approve", {})).status).toBe(403);

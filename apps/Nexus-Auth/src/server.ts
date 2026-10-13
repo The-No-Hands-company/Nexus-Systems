@@ -708,8 +708,10 @@ export async function handleRequest(request: Request): Promise<Response> {
         // claimCode is returned exactly once, here. It is never stored in
         // plaintext and there is no way to retrieve it again.
         return jsonResponse(result, { status: 201 });
-      } catch (err) {
-        return jsonResponse({ error: (err as Error).message }, { status: 409 });
+      } catch {
+        // One answer for either clash. Naming which one would let anyone test
+        // whether an email address has an account here.
+        return jsonResponse({ error: "username_or_email_taken" }, { status: 409 });
       }
     }
 
