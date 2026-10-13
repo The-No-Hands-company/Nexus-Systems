@@ -11,7 +11,9 @@
  * session. Other services (Cloud, Mail, Calendar) are pointed at a closed port,
  * so those pages are checked in their unavailable state.
  *
- * Needs the Dashboard frontend built (apps/Nexus-Dashboard/frontend/dist).
+ * Needs the Dashboard frontend built (apps/Nexus-Dashboard/frontend/dist, or the
+ * folder in NEXUS_DASHBOARD_WEB_ROOT — build there first to check a change
+ * before it reaches the dist production serves).
  * Touches no production data and nothing outside its temporary directory.
  */
 
@@ -42,7 +44,8 @@ async function waitFor(url: string, label: string): Promise<void> {
 const shotsIndex = process.argv.indexOf("--shots");
 const shots = shotsIndex >= 0 ? process.argv[shotsIndex + 1] : undefined;
 
-if (!existsSync(join(root, "apps/Nexus-Dashboard/frontend/dist/index.html"))) {
+const webRoot = process.env.NEXUS_DASHBOARD_WEB_ROOT || join(root, "apps/Nexus-Dashboard/frontend/dist");
+if (!existsSync(join(webRoot, "index.html"))) {
   console.error("Build the Dashboard first: cd apps/Nexus-Dashboard/frontend && npm run build");
   process.exit(2);
 }
@@ -99,6 +102,7 @@ try {
       NEXUS_EMAIL_URL: closed, NEXUS_TERMINAL_URL: closed, NEXUS_HOSTING_URL: closed,
       NEXUS_CALENDAR_URL: closed, NEXUS_CALENDAR_WEB_URL: closed, NEXUS_CALENDAR_DASHBOARD_SECRET: "",
       NEXUS_ISSUES_TOKEN: "", NEXUS_DHTS_ROOT: join(root, "dhts"),
+      NEXUS_DASHBOARD_WEB_ROOT: webRoot,
     },
     stdout: "ignore",
     stderr: "ignore",

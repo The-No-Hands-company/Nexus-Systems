@@ -49,6 +49,22 @@ function explainPassword(reason: string): string {
  * another account from this page — administration lives behind the admin panel
  * and its own permission.
  */
+/** The codes as a plain-text file in a data: link: no blob URL to revoke, and
+ *  the same file the welcome page in Nexus-Auth offers. */
+function buildRecoveryCodesDownload(username: string, codes: string[]): string {
+  const text = [
+    `Nexus recovery codes for ${username}`,
+    `Created ${new Date().toISOString().slice(0, 10)} (UTC)`,
+    "",
+    "Each code signs you in once if you lose your password.",
+    "Keep this file somewhere safe and private, and delete it once the codes are stored elsewhere.",
+    "",
+    ...codes.map((code, i) => `${String(i + 1).padStart(2, " ")}. ${code}`),
+    "",
+  ].join("\n");
+  return `data:text/plain;charset=utf-8,${encodeURIComponent(text)}`;
+}
+
 export default function Account() {
   const [user, setUser] = useState<Me | null>(null);
   const [sessions, setSessions] = useState<Session[]>([]);
@@ -175,11 +191,23 @@ export default function Account() {
             <p className="font-medium text-amber-300">
               Save these now. This is the only time they are shown.
             </p>
-            <ul className="mt-3 grid grid-cols-1 gap-2 rounded-lg border border-zinc-800 bg-zinc-900 p-4 sm:grid-cols-2">
+            {/* One per row and never wrapped: a code split across lines is one
+                nobody can copy correctly. Tapping the list selects all of it. */}
+            <ol
+              aria-label="Recovery codes"
+              className="mt-3 list-decimal select-all overflow-x-auto rounded-lg border border-zinc-800 bg-zinc-900 py-3 pl-10 pr-4 marker:text-zinc-500"
+            >
               {newCodes.map((c) => (
-                <li key={c} className="break-all font-mono text-sm text-zinc-200">{c}</li>
+                <li key={c} className="whitespace-nowrap font-mono text-[clamp(0.7rem,3.4vw,0.875rem)] leading-7 text-zinc-200">{c}</li>
               ))}
-            </ul>
+            </ol>
+            <a
+              href={buildRecoveryCodesDownload(user?.username ?? "account", newCodes)}
+              download={`nexus-recovery-codes-${(user?.username ?? "account").toLowerCase().replace(/[^a-z0-9]/g, "")}.txt`}
+              className="mt-3 inline-block rounded border border-blue-500 px-4 py-2 text-sm text-blue-200 hover:bg-blue-950/40"
+            >
+              Download as a text file
+            </a>
             <label className="mt-3 flex items-center gap-2 text-sm">
               <input
                 type="checkbox" checked={savedCodes}

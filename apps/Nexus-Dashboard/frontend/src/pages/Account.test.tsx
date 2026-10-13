@@ -84,6 +84,27 @@ describe("Account", () => {
     expect(done.disabled).toBe(false);
   });
 
+  it("offers the new codes as a text file and never breaks a code across lines", async () => {
+    // A user asked for this: copy-paste into a notes app on a phone is too
+    // fiddly. The codes also used break-all, splitting them mid-code.
+    stubFetch();
+    render(<Account />);
+    await waitFor(() => expect(screen.getByRole("button", { name: /regenerate/i })).toBeTruthy());
+    fireEvent.click(screen.getByRole("button", { name: /regenerate/i }));
+    await waitFor(() => expect(screen.getByText(NEW_CODES[0]!)).toBeTruthy());
+
+    const link = screen.getByRole("link", { name: /download as a text file/i }) as HTMLAnchorElement;
+    expect(link.getAttribute("download")).toMatch(/^nexus-recovery-codes-.*\.txt$/);
+    const href = link.getAttribute("href") ?? "";
+    expect(href.startsWith("data:text/plain;charset=utf-8,")).toBe(true);
+    const text = decodeURIComponent(href.slice("data:text/plain;charset=utf-8,".length));
+    for (const code of NEW_CODES) expect(text).toContain(code);
+
+    const item = screen.getByText(NEW_CODES[0]!);
+    expect(item.className).not.toContain("break-all");
+    expect(item.className).toContain("whitespace-nowrap");
+  });
+
   it("warns that regenerating retires the previous codes", async () => {
     stubFetch();
     render(<Account />);
