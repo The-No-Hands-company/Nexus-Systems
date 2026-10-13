@@ -146,6 +146,30 @@ export function loginRedirect(originalUrl: string): Response {
 }
 
 /**
+ * Is this a person loading a page, rather than code asking for data?
+ * Browsers say so in Sec-Fetch-Mode; a client that sends no fetch metadata is
+ * treated as a page load only when it is a GET that asks for HTML.
+ */
+function isPageLoad(req: Request): boolean {
+  const mode = req.headers.get("sec-fetch-mode");
+  if (mode) return mode === "navigate";
+  return req.method === "GET" && (req.headers.get("accept") ?? "").includes("text/html");
+}
+
+/**
+ * Signed out. A page load goes to the sign-in page. Anything else (an app's
+ * fetch, a script, the CLI) cannot follow a redirect to an HTML form, so it
+ * gets a 401 that says where to sign in (audit O-8).
+ */
+export function signedOutResponse(req: Request): Response {
+  if (isPageLoad(req)) return loginRedirect(publicUrl(req));
+  return Response.json(
+    { error: "unauthenticated", signIn: `https://${AUTH_HOST}/login` },
+    { status: 401, headers: { "cache-control": "no-store" } },
+  );
+}
+
+/**
  * Exchanges a session cookie for an identity token scoped to `audience`.
  *
  * Cached per (cookie, audience) so a browsing session costs at most one call
@@ -300,7 +324,7 @@ export async function gate(
     identityToken = await resolveIdentity(candidate, host);
     if (identityToken) break;
   }
-  if (!identityToken) return { allow: false, response: loginRedirect(publicUrl(req)) };
+  if (!identityToken) return { allow: false, response: signedOutResponse(req) };
 
   return { allow: true, identityToken };
 }

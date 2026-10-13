@@ -26,8 +26,10 @@ const APP: RouteTarget = { upstream: "http://127.0.0.1:9", requiresAuth: true, k
  */
 const SITE: RouteTarget = { upstream: "http://127.0.0.1:9", requiresAuth: false, kind: "site" };
 
+/** A browser page load unless the test says otherwise: signed-out page loads
+ *  are redirected to sign in, while other requests get a 401. */
 function req(url: string, headers: Record<string, string> = {}) {
-  return new Request(url, { headers });
+  return new Request(url, { headers: { "sec-fetch-mode": "navigate", ...headers } });
 }
 
 /**
@@ -254,7 +256,7 @@ describe("publicUrl", () => {
   it("carries a deep link all the way into the login redirect", async () => {
     // The two halves together: a gated deep link over the tunnel's http hop
     // must still come back as an https return address the allowlist accepts.
-    const r = await gate(new Request("http://app.tnhc.dev:8080/cloud/tools?tab=2"), APP);
+    const r = await gate(req("http://app.tnhc.dev:8080/cloud/tools?tab=2"), APP);
     expect(r.allow).toBe(false);
     if (!r.allow) {
       const loc = r.response.headers.get("location")!;
@@ -322,5 +324,42 @@ describe("duplicate session cookies", () => {
   it("returns nothing when the name is absent", () => {
     const r = new Request("http://chat.tnhc.dev/", { headers: { cookie: "other=x" } });
     expect(readCookies(r, "nexus_session")).toEqual([]);
+  });
+});
+
+describe("signed-out requests", () => {
+  // A page load is sent to the sign-in page. Anything else (fetch from an app,
+  // a script, the CLI) cannot follow a redirect to an HTML form, so it gets a
+  // 401 it can act on (audit O-8).
+  const ask = (headers: Record<string, string>, method = "GET") =>
+    gate(new Request("https://cloud.tnhc.dev/api/v1/tools", { method, headers }), { upstream: "http://127.0.0.1:9", requiresAuth: true, kind: "app" });
+
+  it("a browser page load is redirected to sign in", async () => {
+    for (const headers of [{ "sec-fetch-mode": "navigate" }, { accept: "text/html,application/xhtml+xml" }]) {
+      const r = await ask(headers);
+      expect(r.allow).toBe(false);
+      if (!r.allow) {
+        expect(r.response.status).toBe(302);
+        expect(r.response.headers.get("location") ?? "").toContain("/login?redirect_uri=");
+      }
+    }
+  });
+
+  it("an API call, a fetch or a script gets 401 with where to sign in", async () => {
+    for (const [headers, method] of [
+      [{ "sec-fetch-mode": "cors", accept: "text/html" }, "GET"],
+      [{ accept: "application/json" }, "GET"],
+      [{}, "GET"],
+      [{ "content-type": "application/json" }, "POST"],
+    ] as Array<[Record<string, string>, string]>) {
+      const r = await ask(headers, method);
+      expect(r.allow).toBe(false);
+      if (!r.allow) {
+        expect(r.response.status).toBe(401);
+        const body = await r.response.json() as { error: string; signIn: string };
+        expect(body.error).toBe("unauthenticated");
+        expect(body.signIn).toContain("/login");
+      }
+    }
   });
 });

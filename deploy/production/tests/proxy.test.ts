@@ -281,7 +281,7 @@ describe("app / site classification", () => {
     // Every one of these was served without a session under the old path-shape
     // rule, because none of them contains a dot.
     for (const path of ["/", "/v1/events", "/graphql", "/admin/export"]) {
-      const res = await handleRequest(new Request(`http://calendar.tnhc.dev${path}`));
+      const res = await handleRequest(new Request(`http://calendar.tnhc.dev${path}`, { headers: { "sec-fetch-mode": "navigate" } }));
       expect(res.status).toBe(302);
       expect(res.headers.get("location") ?? "").toContain("auth.tnhc.dev/login");
     }
@@ -398,8 +398,9 @@ describe("CORS belongs to the application", () => {
     __setRoutesForTest({
       "app.tnhc.dev": { upstream: "http://127.0.0.1:1", requiresAuth: true, kind: "app" },
     });
-    const res = await handleRequest(new Request("http://app.tnhc.dev/ipa/whatever"));
-    expect(res.status).toBe(302);
+    const res = await handleRequest(new Request("http://app.tnhc.dev/ipa/whatever", { headers: { "sec-fetch-mode": "cors" } }));
+    // The request after a preflight is a fetch, not a page load: a 401.
+    expect(res.status).toBe(401);
   });
 
   it("keeps stamping the security headers it is responsible for", async () => {
