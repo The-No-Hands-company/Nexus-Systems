@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor, within } from "@testing-library/react";
 import Admin from "./Admin";
 
 const ADMIN = { id: "u-admin", username: "boss", email: "boss@x.dev", role: "founder" };
@@ -120,12 +120,12 @@ describe("Admin", () => {
     expect(screen.getByText("sam")).toBeTruthy();
   });
 
-  it("mints an invite and shows the code once", async () => {
+  it("mints a link-only invite and shows the code once", async () => {
     stubFetch(ADMIN);
     render(<Admin />);
-    await waitFor(() => expect(screen.getByRole("button", { name: /create invite/i })).toBeTruthy());
+    await waitFor(() => expect(screen.getByRole("button", { name: /create link only/i })).toBeTruthy());
 
-    fireEvent.click(screen.getByRole("button", { name: /create invite/i }));
+    fireEvent.click(screen.getByRole("button", { name: /create link only/i }));
     await waitFor(() => expect(screen.getByText("c".repeat(32))).toBeTruthy());
     expect(screen.getByText(/only time|save|shown once|cannot be shown again/i)).toBeTruthy();
     // The operator is handed a link to send, pointing at the page Auth serves;
@@ -140,7 +140,7 @@ describe("Admin", () => {
     const { container } = render(<Admin />);
     await waitFor(() => expect(container.textContent).not.toContain("Loading"));
     expect(screen.queryByText("sam")).toBeNull();
-    expect(screen.queryByRole("button", { name: /create invite/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /create link only/i })).toBeNull();
   });
 
   it("says so when the queue is empty rather than looking broken", async () => {
@@ -175,5 +175,70 @@ describe("Admin", () => {
     expect(screen.getByText("boss")).toBeTruthy();
     const selects = screen.getAllByRole("combobox");
     expect(selects.length).toBe(2);
+  });
+});
+
+describe("Admin emailed invites", () => {
+  const CODE = "d".repeat(32);
+  const LINK = `https://auth.tnhc.dev/join?code=${CODE}`;
+  const invited = (delivery: string) => () =>
+    jsonResponse({ id: "inv-2", code: CODE, expiresAt: "2026-10-20T00:00:00Z", link: LINK, delivery }, 201);
+
+  async function sendTo(email: string) {
+    render(<Admin />);
+    await waitFor(() => expect(screen.getByLabelText(/email/i)).toBeTruthy());
+    fireEvent.change(screen.getByLabelText(/email/i), { target: { value: email } });
+    fireEvent.click(screen.getByRole("button", { name: /send invite/i }));
+  }
+
+  it("sends the address to Auth and confirms the invite went out, keeping the link as a backup", async () => {
+    stubFetch(ADMIN, { "POST /ipa/v1/auth/invites": invited("sent") });
+    await sendTo("ada@example.com");
+    await waitFor(() => expect(screen.getByText(/invite sent to ada@example.com/i)).toBeTruthy());
+    expect(screen.getByText(LINK)).toBeTruthy();
+    const call = fetchSpy!.mock.calls.find(([u, init]) => String(u) === "/ipa/v1/auth/invites" && init?.method === "POST");
+    expect(JSON.parse(String(call![1]!.body))).toEqual({ email: "ada@example.com" });
+  });
+
+  it("tells the operator to send the link themselves when the email could not be sent", async () => {
+    stubFetch(ADMIN, { "POST /ipa/v1/auth/invites": invited("failed") });
+    await sendTo("ada@example.com");
+    await waitFor(() => expect(screen.getByText(/could not be sent/i)).toBeTruthy());
+    expect(screen.getByText(LINK)).toBeTruthy();
+  });
+
+  it("says when email is not set up on this node", async () => {
+    stubFetch(ADMIN, { "POST /ipa/v1/auth/invites": invited("disabled") });
+    await sendTo("ada@example.com");
+    await waitFor(() => expect(screen.getByText(/email sending is not set up/i)).toBeTruthy());
+  });
+
+  it("keeps Send invite disabled until an address is typed", async () => {
+    stubFetch(ADMIN);
+    render(<Admin />);
+    await waitFor(() => expect(screen.getByRole("button", { name: /send invite/i })).toBeTruthy());
+    expect((screen.getByRole("button", { name: /send invite/i }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("reports whether the approval email went out", async () => {
+    stubFetch(ADMIN, {
+      "POST /ipa/v1/auth/access-requests/usr-1/approve": () => jsonResponse({ user: {}, notice: "sent" }),
+    });
+    render(<Admin />);
+    await waitFor(() => expect(screen.getByText("sam")).toBeTruthy());
+    fireEvent.click(screen.getAllByRole("button", { name: /approve/i })[0]!);
+    await waitFor(() => expect(screen.getByText(/approved sam\. they were emailed/i)).toBeTruthy());
+  });
+
+  it("tells the operator to pass on the claim page when the approval email failed", async () => {
+    stubFetch(ADMIN, {
+      "POST /ipa/v1/auth/access-requests/usr-1/approve": () => jsonResponse({ user: {}, notice: "failed" }),
+    });
+    render(<Admin />);
+    await waitFor(() => expect(screen.getByText("sam")).toBeTruthy());
+    fireEvent.click(screen.getAllByRole("button", { name: /approve/i })[0]!);
+    await waitFor(() => expect(screen.getByText(/could not be emailed/i)).toBeTruthy());
+    const notice = screen.getByText(/could not be emailed/i).closest("[role=status]") as HTMLElement;
+    expect(within(notice).getByText("https://auth.tnhc.dev/claim")).toBeTruthy();
   });
 });

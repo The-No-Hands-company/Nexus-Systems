@@ -170,17 +170,29 @@ export function listAccessRequests() {
     .then((r) => r.requests);
 }
 
+/** What happened to an email Auth asked Nexus-Email to send. */
+export type MailDelivery = "sent" | "failed" | "rejected" | "disabled" | "not_requested";
+
 export function decideAccessRequest(id: string, decision: "approve" | "reject") {
-  return request<{ user: unknown }>(
+  return request<{ user: unknown; notice?: MailDelivery }>(
     `/ipa/v1/auth/access-requests/${encodeURIComponent(id)}/${decision}`,
     { method: "POST", body: JSON.stringify({}) },
   );
 }
 
-export function createInvite(expiresInDays?: number) {
-  return request<{ id: string; code: string; expiresAt: string }>("/ipa/v1/auth/invites", {
+export type CreatedInvite = {
+  id: string;
+  code: string;
+  expiresAt: string;
+  link?: string;
+  delivery?: MailDelivery;
+};
+
+/** With an email, Auth binds the invite to that address and emails it. */
+export function createInvite(input: { email?: string } = {}) {
+  return request<CreatedInvite>("/ipa/v1/auth/invites", {
     method: "POST",
-    body: JSON.stringify(expiresInDays === undefined ? {} : { expiresInDays }),
+    body: JSON.stringify(input.email ? { email: input.email } : {}),
   });
 }
 

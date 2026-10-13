@@ -6,6 +6,8 @@ import {
   listAccessRequests,
   decideAccessRequest,
   createInvite,
+  type CreatedInvite,
+  type MailDelivery,
   cloudFederationPeers,
   cloudEndpoints,
   cloudIdentity,
@@ -41,7 +43,9 @@ export default function Admin() {
   const [user, setUser] = useState<Me | null | undefined>(undefined);
   const [requests, setRequests] = useState<AccessRequest[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [invite, setInvite] = useState<{ code: string; expiresAt: string } | null>(null);
+  const [invite, setInvite] = useState<(CreatedInvite & { sentTo?: string }) | null>(null);
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [approvalNotice, setApprovalNotice] = useState<{ username: string; delivery: MailDelivery } | null>(null);
   // Dev-tools state. Declared unconditionally: hooks must run in the same
   // order every render, so none of these may sit below the early returns.
   const [devNotes, setDevNotes] = useState("");
@@ -109,19 +113,27 @@ export default function Admin() {
   async function decide(id: string, decision: "approve" | "reject") {
     setError(null);
     try {
-      await decideAccessRequest(id, decision);
+      const result = await decideAccessRequest(id, decision);
+      const decided = requests.find((r) => r.id === id);
       setRequests((list) => list.filter((r) => r.id !== id));
+      setApprovalNotice(
+        decision === "approve" && decided && result.notice && result.notice !== "not_requested"
+          ? { username: decided.username, delivery: result.notice }
+          : null,
+      );
     } catch {
       setError(`Could not ${decision} that request. It may already have been decided.`);
     }
   }
 
-  async function mint() {
+  async function mint(email?: string) {
     setError(null);
     try {
-      setInvite(await createInvite());
+      const created = await createInvite(email ? { email } : {});
+      setInvite(email ? { ...created, sentTo: email } : created);
+      setInviteEmail("");
     } catch {
-      setError("Could not create an invite.");
+      setError(email ? "Could not create an invite for that address. Check the email and try again." : "Could not create an invite.");
     }
   }
 
@@ -173,27 +185,49 @@ export default function Admin() {
             ))}
           </ul>
         )}
+        {approvalNotice && (
+          <p role="status" className="mt-3 rounded border border-zinc-800 bg-zinc-900/40 p-3 text-sm text-zinc-300">
+            {approvalNotice.delivery === "sent" ? (
+              <>Approved {approvalNotice.username}. They were emailed a link to claim their account.</>
+            ) : (
+              <>
+                Approved {approvalNotice.username}. The notice could not be emailed, so tell them to claim
+                their account at <code>{buildAuthPageUrl("/claim")}</code> with the code they were given.
+              </>
+            )}
+          </p>
+        )}
         <p className="mt-2 text-xs text-zinc-600">
-          Approving does not notify anyone — there is no outbound email. The person returns to{" "}
-          <code>{buildAuthPageUrl("/claim")}</code> with the code they were given when they asked.
+          Approving emails the person a link to <code>{buildAuthPageUrl("/claim")}</code>, where they
+          use the claim code they were given when they asked.
         </p>
       </div>
 
       <div>
         <h2 className="text-lg font-medium">Invites</h2>
         <p className="mt-2 text-sm text-zinc-400">
-          An invite skips the queue: whoever redeems it sets a password immediately.
+          An invite skips the queue: whoever redeems it sets a password immediately. An emailed
+          invite works only for that address and expires in 7 days.
         </p>
 
         {invite ? (
           <div className="mt-3 rounded-lg border border-amber-500/40 bg-amber-500/5 p-4">
+            {invite.sentTo && (
+              <p role="status" className="mb-3 text-sm text-amber-100">
+                {invite.delivery === "sent"
+                  ? `Invite sent to ${invite.sentTo}. The link below is a backup in case it does not arrive.`
+                  : invite.delivery === "disabled"
+                    ? `Email sending is not set up on this node. Send this link to ${invite.sentTo} yourself.`
+                    : `The invite email to ${invite.sentTo} could not be sent. Send this link to them yourself.`}
+              </p>
+            )}
             <div className="text-xs uppercase tracking-wide text-amber-400">Invite link</div>
             <code className="mt-2 block break-all font-mono text-sm text-amber-200">
-              {buildAuthPageUrl("/join", { code: invite.code })}
+              {invite.link ?? buildAuthPageUrl("/join", { code: invite.code })}
             </code>
             <p className="mt-2 text-sm text-amber-200/80">
-              Send this link to the person you are inviting. It opens a page where they choose a
-              username and password. This is the only time it is shown — copy it before you leave.
+              It opens a page where they choose a username and password. This is the only time the
+              link is shown, so copy it before you leave.
             </p>
             <div className="mt-3 text-xs uppercase tracking-wide text-amber-400">Code alone</div>
             <code className="mt-1 block break-all font-mono text-amber-200">{invite.code}</code>
@@ -205,12 +239,32 @@ export default function Admin() {
             </button>
           </div>
         ) : (
-          <button
-            type="button" onClick={() => void mint()}
-            className="mt-3 rounded bg-blue-600 px-4 py-2 font-medium"
+          <form
+            className="mt-3 flex flex-wrap items-end gap-3"
+            onSubmit={(e) => { e.preventDefault(); if (inviteEmail.trim()) void mint(inviteEmail.trim()); }}
           >
-            Create invite
-          </button>
+            <label htmlFor="invite-email" className="flex min-w-0 flex-1 flex-col gap-1 text-sm text-zinc-400">
+              Email of the person to invite
+              <input
+                id="invite-email" type="email" autoComplete="off" value={inviteEmail}
+                onChange={(e) => setInviteEmail(e.target.value)}
+                placeholder="name@example.com"
+                className="rounded border border-zinc-700 bg-zinc-950 px-3 py-2 text-zinc-100"
+              />
+            </label>
+            <button
+              type="submit" disabled={!inviteEmail.trim()}
+              className="rounded bg-blue-600 px-4 py-2 font-medium disabled:opacity-50"
+            >
+              Send invite
+            </button>
+            <button
+              type="button" onClick={() => void mint()}
+              className="rounded border border-zinc-700 px-4 py-2 text-sm hover:bg-zinc-800"
+            >
+              Create link only
+            </button>
+          </form>
         )}
       </div>
 
