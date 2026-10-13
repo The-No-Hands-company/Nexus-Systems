@@ -55,6 +55,10 @@ describe("zero retention in Auth", () => {
   });
 
   it("shows a failed attempt against my account in my activity, without deviceId or caller data", async () => {
+    // Earlier tests leave audit entries buffered; with no backend installed,
+    // drain() discards them, so only this test's own events reach its rows.
+    // Without this the count depended on which test files ran first.
+    await drain();
     const rows: any[] = [];
     setAuditBackendForTests({
       flush: async (entries) => { for (const e of entries) rows.push({ ...e, at: new Date() }); },

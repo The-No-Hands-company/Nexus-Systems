@@ -21,6 +21,7 @@ import {
 } from "./users";
 import { consumeRecoveryCode, countRemainingRecoveryCodes, issueRecoveryCodes } from "./recovery";
 import { createInvite, redeemInvite } from "./invites";
+import { isPlausibleEmail, sendSystemMail } from "./system-mail";
 import { checkRateLimit, recordFailure, clearFailures } from "./ratelimit";
 import {
   ONBOARDING_HEADERS,
@@ -100,6 +101,22 @@ const SESSION_COOKIE = "nexus_session";
  * The dashboard is the right answer: it is the front door and it lists
  * everything the account can now reach.
  */
+/**
+ * The browser-facing origin of this service, for links that leave the node in
+ * an email. NEXUS_AUTH_PUBLIC_URL in production; otherwise derived from the
+ * cookie domain; otherwise unknown, and no email is sent.
+ */
+function authPublicOrigin(): string | null {
+  const configured = process.env.NEXUS_AUTH_PUBLIC_URL?.trim();
+  if (configured) return configured.replace(/\/+$/, "");
+  const domain = cookieDomain()?.replace(/^\./, "");
+  return domain ? `https://auth.${domain}` : null;
+}
+
+/** At most this many emailed invites per operator per day. Bounds what a
+ *  stolen operator session could send in the platform's name. */
+const EMAILED_INVITES_PER_DAY = 20;
+
 function defaultPostLogin(): string {
   const configured = process.env.NEXUS_POST_LOGIN_URL?.trim();
   if (configured) return configured;
@@ -810,7 +827,19 @@ export async function handleRequest(request: Request): Promise<Response> {
       // Rejection kills any existing sessions — a previously approved user
       // who re-requested and was rejected must not keep working.
       if (action === "reject") revokeAllUserSessions(targetId!);
-      return jsonResponse({ user: updated });
+      // Tell the person they can claim their account. The approval stands
+      // whatever happens to the notice; the operator sees the outcome.
+      const origin = authPublicOrigin();
+      const notice = action === "approve" && target.email
+        ? origin
+          ? await sendSystemMail({
+            template: "access-approved",
+            to: target.email,
+            link: `${origin}/claim?email=${encodeURIComponent(target.email)}`,
+          })
+          : "disabled"
+        : "not_requested";
+      return jsonResponse({ user: updated, notice });
     }
 
     // ── Operator: mint an invite ──
@@ -820,7 +849,31 @@ export async function handleRequest(request: Request): Promise<Response> {
       }
       const body = await parseBody(request);
       const days = typeof body.expiresInDays === "number" ? body.expiresInDays : undefined;
-      return jsonResponse(createInvite(auth.userId, days), { status: 201 });
+      const email = typeof body.email === "string" ? body.email.trim() : "";
+      if (email && !isPlausibleEmail(email)) {
+        return jsonResponse({ error: "invalid_email" }, { status: 400 });
+      }
+      if (email) {
+        // Every emailed invite counts, not only failures: this caps sending.
+        const limit = checkRateLimit("invite-email", auth.userId, { max: EMAILED_INVITES_PER_DAY, windowMs: 86_400_000 });
+        if (!limit.allowed) {
+          return jsonResponse({ error: "daily_invite_limit" }, {
+            status: 429,
+            headers: { "retry-after": String(Math.ceil(limit.retryAfterMs / 1000)) },
+          });
+        }
+        recordFailure("invite-email", auth.userId);
+      }
+
+      const invite = createInvite(auth.userId, days, email || undefined);
+      const origin = authPublicOrigin();
+      const link = origin ? `${origin}/join?code=${invite.code}` : `/join?code=${invite.code}`;
+      const delivery = !email
+        ? "not_requested"
+        : origin
+          ? await sendSystemMail({ template: "invite", to: email, link, expiresAt: invite.expiresAt })
+          : "disabled";
+      return jsonResponse({ ...invite, link, delivery }, { status: 201 });
     }
 
     if (request.method === "POST" && path === "/api/v1/auth/login") {
