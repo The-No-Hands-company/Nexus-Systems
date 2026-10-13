@@ -117,11 +117,11 @@ export default function Account() {
   }
 
   if (!user) {
-    return <section className="mx-auto max-w-2xl p-8 text-zinc-500">Loading…</section>;
+    return <section className="mx-auto max-w-2xl px-4 py-6 sm:p-8 text-zinc-500">Loading…</section>;
   }
 
   return (
-    <section className="mx-auto max-w-2xl space-y-10 p-8">
+    <section className="mx-auto max-w-2xl space-y-10 px-4 py-6 sm:p-8">
       <div>
         <h1 className="text-2xl font-semibold">Account</h1>
         <p className="mt-2 text-zinc-400">

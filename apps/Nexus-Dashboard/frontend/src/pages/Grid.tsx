@@ -30,14 +30,14 @@ export default function Grid() {
   }, []);
 
   if (state.kind === "loading") {
-    return <section className="mx-auto max-w-4xl p-8 text-zinc-500">Loading…</section>;
+    return <section className="mx-auto max-w-4xl px-4 py-6 sm:p-8 text-zinc-500">Loading…</section>;
   }
 
   // Distinct from an empty grid on purpose: "you have no apps" and "we could
   // not ask" are different facts and must not look the same.
   if (state.kind === "error") {
     return (
-      <section className="mx-auto max-w-4xl p-8">
+      <section className="mx-auto max-w-4xl px-4 py-6 sm:p-8">
         <h1 className="text-2xl font-semibold">Your apps</h1>
         <p role="alert" className="mt-4 text-red-400">
           Could not load your apps. Try again in a moment.
@@ -48,7 +48,7 @@ export default function Grid() {
 
   if (state.apps.length === 0) {
     return (
-      <section className="mx-auto max-w-4xl p-8">
+      <section className="mx-auto max-w-4xl px-4 py-6 sm:p-8">
         <h1 className="text-2xl font-semibold">Your apps</h1>
         <p className="mt-4 text-zinc-400">No apps are reachable right now.</p>
       </section>
@@ -56,7 +56,7 @@ export default function Grid() {
   }
 
   return (
-    <section className="mx-auto max-w-4xl p-8">
+    <section className="mx-auto max-w-4xl px-4 py-6 sm:p-8">
       <h1 className="text-2xl font-semibold">Your apps</h1>
       <ul className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {state.apps.map((app) => (

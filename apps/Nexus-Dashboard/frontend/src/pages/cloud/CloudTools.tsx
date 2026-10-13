@@ -22,7 +22,7 @@ export default function CloudTools() {
   }, []);
 
   return (
-    <section className="mx-auto max-w-5xl space-y-6 p-8">
+    <section className="mx-auto max-w-5xl space-y-6 px-4 py-6 sm:p-8">
       <CloudNav />
       <div>
         <h1 className="text-2xl font-semibold">Cloud tools</h1>

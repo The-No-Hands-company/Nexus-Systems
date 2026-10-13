@@ -68,7 +68,7 @@ export default function MailCompose() {
   }
 
   return (
-    <section className="mx-auto max-w-3xl space-y-4 p-8">
+    <section className="mx-auto max-w-3xl space-y-4 px-4 py-6 sm:p-8">
       <Link to="/mail" className="text-sm text-zinc-400 hover:text-zinc-200">← Mail</Link>
       <h1 className="text-xl font-semibold text-zinc-100">New message</h1>
 

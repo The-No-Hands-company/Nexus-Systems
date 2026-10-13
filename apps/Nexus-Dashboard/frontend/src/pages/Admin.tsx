@@ -138,13 +138,13 @@ export default function Admin() {
   }
 
   if (user === undefined) {
-    return <section className="mx-auto max-w-3xl p-8 text-zinc-500">Loading…</section>;
+    return <section className="mx-auto max-w-3xl px-4 py-6 sm:p-8 text-zinc-500">Loading…</section>;
   }
 
   if (!isAdmin(user)) return null;
 
   return (
-    <section className="mx-auto max-w-3xl space-y-10 p-8">
+    <section className="mx-auto max-w-3xl space-y-10 px-4 py-6 sm:p-8">
       <div>
         <h1 className="text-2xl font-semibold">Operator</h1>
         <p className="mt-2 text-zinc-400">Approve access requests and hand out invites.</p>
@@ -243,7 +243,7 @@ export default function Admin() {
             className="mt-3 flex flex-wrap items-end gap-3"
             onSubmit={(e) => { e.preventDefault(); if (inviteEmail.trim()) void mint(inviteEmail.trim()); }}
           >
-            <label htmlFor="invite-email" className="flex min-w-0 flex-1 flex-col gap-1 text-sm text-zinc-400">
+            <label htmlFor="invite-email" className="flex min-w-0 basis-full flex-col gap-1 text-sm text-zinc-400 sm:basis-auto sm:flex-1">
               Email of the person to invite
               <input
                 id="invite-email" type="email" autoComplete="off" value={inviteEmail}

@@ -52,12 +52,12 @@ export default function MailList() {
   }, [folderId, query]);
 
   if (state.kind === "loading") {
-    return <section className="mx-auto max-w-5xl p-8 text-zinc-500">Loading…</section>;
+    return <section className="mx-auto max-w-5xl px-4 py-6 sm:p-8 text-zinc-500">Loading…</section>;
   }
 
   if (state.kind === "no-mailbox") {
     return (
-      <section className="mx-auto max-w-5xl p-8">
+      <section className="mx-auto max-w-5xl px-4 py-6 sm:p-8">
         <h1 className="text-2xl font-semibold">Mail</h1>
         <p className="mt-2 text-zinc-400">
           This account does not have a mailbox yet.
@@ -68,7 +68,7 @@ export default function MailList() {
 
   if (state.kind === "unavailable") {
     return (
-      <section className="mx-auto max-w-5xl p-8">
+      <section className="mx-auto max-w-5xl px-4 py-6 sm:p-8">
         <h1 className="text-2xl font-semibold">Mail</h1>
         <p role="alert" className="mt-2 text-zinc-400">
           Mail is unavailable right now ({state.reason}).
@@ -78,7 +78,7 @@ export default function MailList() {
   }
 
   return (
-    <section className="mx-auto max-w-5xl space-y-4 p-8">
+    <section className="mx-auto max-w-5xl space-y-4 px-4 py-6 sm:p-8">
       <MailNav folders={state.folders} />
 
       <form

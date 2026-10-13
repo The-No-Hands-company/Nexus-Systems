@@ -52,7 +52,7 @@ export default function Home() {
   }, []);
 
   if (user === undefined) {
-    return <section className="mx-auto max-w-4xl p-8 text-zinc-500">Loading…</section>;
+    return <section className="mx-auto max-w-4xl px-4 py-6 sm:p-8 text-zinc-500">Loading…</section>;
   }
 
   // Chrome only when signed in. Wrapping the signed-out page would advertise a

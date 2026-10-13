@@ -58,7 +58,7 @@ export default function ReportIssue() {
 
   if (filed) {
     return (
-      <div className="mx-auto max-w-2xl p-8">
+      <div className="mx-auto max-w-2xl px-4 py-6 sm:p-8">
         <h1 className="text-2xl font-semibold text-zinc-100">Thank you — that is filed.</h1>
         <p className="mt-4 text-zinc-500">
           It is issue #{filed.number} on the public tracker. You can follow it
@@ -86,7 +86,7 @@ export default function ReportIssue() {
   }
 
   return (
-    <div className="mx-auto max-w-2xl p-8">
+    <div className="mx-auto max-w-2xl px-4 py-6 sm:p-8">
       <h1 className="text-2xl font-semibold text-zinc-100">Report a problem</h1>
       <p className="mt-3 text-zinc-500">
         Anything that looks wrong, broken, missing or merely strange. This goes

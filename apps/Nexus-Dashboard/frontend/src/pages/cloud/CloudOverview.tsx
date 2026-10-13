@@ -98,12 +98,12 @@ export default function CloudOverview() {
   }, []);
 
   if (state.kind === "loading") {
-    return <section role="status" className="mx-auto max-w-5xl p-8 text-zinc-500">Loading…</section>;
+    return <section role="status" className="mx-auto max-w-5xl px-4 py-6 sm:p-8 text-zinc-500">Loading…</section>;
   }
 
   if (state.kind === "unavailable") {
     return (
-      <section className="mx-auto max-w-5xl space-y-6 p-8">
+      <section className="mx-auto max-w-5xl space-y-6 px-4 py-6 sm:p-8">
         <CloudNav />
         <h1 className="text-2xl font-semibold">Cloud</h1>
         <p role="alert" className="mt-4 text-red-400">
@@ -138,7 +138,7 @@ export default function CloudOverview() {
     : tools.filter((t) => t.publicUrl && (t.health ?? "") === "healthy").length;
 
   return (
-    <section className="mx-auto max-w-5xl space-y-6 p-8">
+    <section className="mx-auto max-w-5xl space-y-6 px-4 py-6 sm:p-8">
       <CloudNav />
       <div>
         <h1 className="text-2xl font-semibold">Cloud</h1>

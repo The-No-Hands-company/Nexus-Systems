@@ -54,12 +54,12 @@ export default function MailRead() {
   }, [messageId]);
 
   if (state.kind === "loading") {
-    return <section className="mx-auto max-w-3xl p-8 text-zinc-500">Loading…</section>;
+    return <section className="mx-auto max-w-3xl px-4 py-6 sm:p-8 text-zinc-500">Loading…</section>;
   }
 
   if (state.kind === "missing") {
     return (
-      <section className="mx-auto max-w-3xl p-8">
+      <section className="mx-auto max-w-3xl px-4 py-6 sm:p-8">
         <p className="text-zinc-400">That message is not in your mailbox.</p>
         <Link to="/mail" className="mt-4 inline-block text-sm text-zinc-300 underline">
           Back to mail
@@ -70,7 +70,7 @@ export default function MailRead() {
 
   if (state.kind === "unavailable") {
     return (
-      <section className="mx-auto max-w-3xl p-8">
+      <section className="mx-auto max-w-3xl px-4 py-6 sm:p-8">
         <p role="alert" className="text-zinc-400">Mail is unavailable ({state.reason}).</p>
       </section>
     );
@@ -78,7 +78,7 @@ export default function MailRead() {
 
   const m = state.message;
   return (
-    <section className="mx-auto max-w-3xl space-y-4 p-8">
+    <section className="mx-auto max-w-3xl space-y-4 px-4 py-6 sm:p-8">
       <div className="flex items-center gap-3">
         <Link to="/mail" className="text-sm text-zinc-400 hover:text-zinc-200">← Mail</Link>
         {/* Reply prefills through the URL: the quoted body is built here rather
