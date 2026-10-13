@@ -41,13 +41,13 @@ That gives four honest states:
 
 | Status | Meaning | Count |
 |---|---|---|
-| **Live** | Deployed and reachable on `tnhc.dev` today | 6 |
+| **Live** | Deployed and reachable on `tnhc.dev` today | 7 |
 | **Beta** | Deployed, feature-incomplete, in active use | 1 |
-| **In development** | Substantive code beyond the scaffold; not yet deployed | 25 |
-| **Scaffold** | The six-file `ghost` shape: registers with Systems-API, serves health, no domain logic | 75 |
-| **Stub** | Less than the scaffold — a directory with intent and little else | 7 |
+| **In development** | Substantive code beyond the scaffold; not yet deployed | 28 |
+| **Scaffold** | The six-file `ghost` shape: registers with Systems-API, serves health, no domain logic | 73 |
+| **Stub** | Less than the scaffold — a directory with intent and little else | 6 |
 
-**114 rows total**: 112 `Nexus-*` directories, plus `apps/Nexus` (the Rust chat
+**115 rows total**: 113 `Nexus-*` directories, plus `apps/Nexus` (the Rust chat
 runtime) and `apps/Phantom`, neither of which carries the prefix.
 
 Phantom is listed even though it is not an app. It is a protocol security layer
@@ -57,7 +57,7 @@ exists to prevent. A thing that is not written down does not get audited, and
 Phantom went a long time without one: its workspace did not compile, and its
 own STATUS.md said "Phase 2 COMPLETE". Nothing consumes it yet.
 
-The honest summary: **32 of the 114 have real code in them; 82 are placeholders.**
+The honest summary: **36 of the 115 have real code in them; 79 are placeholders.**
 This is not a failure — the scaffolds are a deliberate land-claim so that
 naming, routing and registration are settled before the work starts. But a
 scaffold is not a product, and this document will not call one a product.
@@ -120,7 +120,7 @@ Every app in the ecosystem, by category, with measured status.
 | **Nexus-Auth** | Identity provider; OIDC/SSO for every app in the ecosystem | **Live** |
 | **Nexus-Cloud** | Control plane — app registry, federation, operator console | **Live** |
 | **Nexus-Systems-API** | Service registration and discovery contract every app implements | Stub |
-| **Nexus-API** | Public API surface for the ecosystem | Stub |
+| **Nexus-API** | Public API surface for the ecosystem | In development |
 | **Nexus-Portal** | Public entry point and marketing surface | Scaffold |
 | **Nexus-Account** | End-user account and profile management | Scaffold |
 
@@ -165,7 +165,7 @@ Every app in the ecosystem, by category, with measured status.
 |---|---|---|
 | **Nexus-Security** | Security posture, policy, and hardening | Stub |
 | **Nexus-Guardian** | Runtime threat monitoring and abuse response | In development |
-| **Phantom** | Anonymous routing protocol: FHE-encrypted routing metadata, zk membership proofs, post-quantum keys. A protocol layer for other services to consume, not an app | In development |
+| **Phantom** | Anonymous routing protocol, in development: post-quantum signatures and FHE-encrypted routing metadata work today; message-content encryption and zero-knowledge membership proofs are not built yet, and no live service uses it (tnhc.dev/phantom). A protocol layer for other services to consume, not an app | In development |
 | **Nexus-Confidential** | Confidential workload handling | Scaffold |
 | **Nexus-Compliance** | Compliance frameworks and evidence collection | Stub |
 | **Nexus-Provenance** | Artifact provenance and supply-chain attestation | Scaffold |
@@ -190,7 +190,7 @@ Every app in the ecosystem, by category, with measured status.
 | **Nexus-Code-Review** | Review workflow and change gating | Scaffold |
 | **Nexus-IDE** | Integrated development environment | In development |
 | **Nexus-Editor** | Lightweight text and code editing | Scaffold |
-| **Nexus-Terminal** | Browser-accessible shell | Scaffold |
+| **Nexus-Terminal** | Browser-accessible shell | In development |
 | **Nexus-Testing** | Test orchestration and reporting | Stub |
 | **Nexus-Converter** | Format and file conversion | Scaffold |
 
@@ -198,7 +198,7 @@ Every app in the ecosystem, by category, with measured status.
 
 | App | Role | Status |
 |---|---|---|
-| **Nexus-Email** | Sovereign mail — SMTP, IMAP, DKIM/SPF/DMARC, webmail, federated egress; no third party in the path | **Beta** |
+| **Nexus-Email** | Self-hosted mail — SMTP, IMAP, DKIM/SPF/DMARC, webmail, federated egress. Mail between Nexus accounts never leaves the node; mail to outside addresses is relayed through Resend for now, because this node's ISP blocks outbound port 25 (replacement: a federated peer that can deliver) | **Beta** |
 | **Nexus-Team-Chat** | Team messaging and channels | Scaffold |
 | **Nexus-Meet** | Video meetings | Scaffold |
 | **Nexus-Broadcast** | One-to-many streaming and announcements | Scaffold |
@@ -217,7 +217,8 @@ Every app in the ecosystem, by category, with measured status.
 | **Nexus-Wiki** | Structured internal wiki | In development |
 | **Nexus-Tasks** | Task tracking | Scaffold |
 | **Nexus-Planner** | Project planning | Scaffold |
-| **Nexus-Calendar** | Personal/shared calendaring and public read-only links; `/calendar` and calendar.tnhc.dev | **Active** |
+| **Nexus-Calendar** | Personal/shared calendaring and public read-only links; `/calendar` and calendar.tnhc.dev | **Live** |
+| **Nexus-Project** | Project management for one person or a team: workspaces, boards, a critical-path schedule. Backend built and tested; web front end not yet | In development |
 | **Nexus-Agenda** | Meeting agendas and minutes | Scaffold |
 | **Nexus-Schedule** | Scheduling and booking windows | Scaffold |
 | **Nexus-Journal** | Journalling and daily logs | Scaffold |
