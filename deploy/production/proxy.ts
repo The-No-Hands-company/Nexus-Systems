@@ -72,6 +72,11 @@ const FALLBACK_AUTH_UPSTREAM = process.env.AUTH_UPSTREAM || "http://127.0.0.1:43
 // the Supabase gateway. /request, /claim and /join are the ways in for someone
 // without an account (apps/Nexus-Auth/src/onboarding-page.ts).
 const AUTH_OWN_PATHS = /^\/(login$|request$|claim$|join$|health$|api\/v1\/(auth|account)(\/|$)|\.well-known\/openid-configuration$)/;
+// The Supabase APIs the TNHC Community app uses (it installs Auth, Postgrest and
+// Functions; see TNHC-Community's CommunityRepository). Only these reach the
+// gateway: Studio's dashboard login, pg-meta, storage, realtime and analytics
+// stay unreachable from the internet (audit O-2).
+const SUPABASE_PUBLIC_PATHS = /^\/(auth|rest|functions)\/v1(\/|$)/;
 // Read at request time so tests can point them elsewhere.
 function supabaseUpstream(): string { return process.env.SUPABASE_UPSTREAM || "http://172.17.0.1:8000"; }
 function storageUpstream(): string { return process.env.STORAGE_UPSTREAM || "http://127.0.0.1:9010"; }
@@ -533,7 +538,9 @@ async function handleRequestInner(
       fixedKind = "site";
       preserveHost = true;
     } else if (!fixedDashboard && host === `auth.${DOMAIN}`) {
-      upstreamUrl = AUTH_OWN_PATHS.test(url.pathname) ? authUpstream() : supabaseUpstream();
+      if (AUTH_OWN_PATHS.test(url.pathname)) upstreamUrl = authUpstream();
+      else if (SUPABASE_PUBLIC_PATHS.test(url.pathname)) upstreamUrl = supabaseUpstream();
+      else return new Response("Not found", { status: 404 });
       requiresAuth = false;
       fixedKind = "site";
     }

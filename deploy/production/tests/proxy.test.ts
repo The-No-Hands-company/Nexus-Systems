@@ -556,6 +556,26 @@ describe("former bypass routes", () => {
       expect(AUTH_LOGIN.test("/login")).toBe(true);
     } finally { supa.stop(true); auth.stop(true); delete process.env.SUPABASE_UPSTREAM; delete process.env.AUTH_UPSTREAM_OVERRIDE; }
   });
+  it("forwards only the Supabase APIs the Community app uses, and nothing else", async () => {
+    // The Community app installs Auth, Postgrest and Functions and nothing
+    // more. Everything else behind the gateway (Studio's login, pg-meta,
+    // storage, realtime, analytics) stays unreachable from the internet.
+    const hits: string[] = [];
+    const supa = Bun.serve({ port: 0, hostname: "127.0.0.1", fetch(req) { hits.push(new URL(req.url).pathname); return new Response("ok"); } });
+    process.env.SUPABASE_UPSTREAM = `http://127.0.0.1:${supa.port}`;
+    try {
+      const { handleRequest } = await import("../proxy");
+      for (const path of ["/auth/v1/token", "/rest/v1/invitations", "/functions/v1/invite-member"]) {
+        expect((await handleRequest(new Request(`http://auth.tnhc.dev${path}`))).status).toBe(200);
+      }
+      for (const path of ["/", "/project/default", "/api/platform/profile", "/pg/tables", "/storage/v1/bucket",
+        "/realtime/v1/", "/graphql/v1", "/analytics/v1/", "/auth/v2/x", "/rest/v1x"]) {
+        expect((await handleRequest(new Request(`http://auth.tnhc.dev${path}`))).status).toBe(404);
+      }
+      expect(hits).toEqual(["/auth/v1/token", "/rest/v1/invitations", "/functions/v1/invite-member"]);
+    } finally { supa.stop(true); delete process.env.SUPABASE_UPSTREAM; }
+  });
+
   it("sends the onboarding pages on auth.tnhc.dev to Auth, not the Supabase gateway", async () => {
     // /request, /claim and /join are the ways in for someone without an
     // account. Sent to Supabase they answered 401 "Missing username and
@@ -570,8 +590,9 @@ describe("former bypass routes", () => {
       for (const path of ["/request", "/claim?email=a%40b.c", "/join?code=abc"]) {
         await handleRequest(new Request(`http://auth.tnhc.dev${path}`));
       }
-      await handleRequest(new Request("http://auth.tnhc.dev/requests"));
-      expect(hits).toEqual(["auth /request", "auth /claim", "auth /join", "supabase /requests"]);
+      // A near-miss is neither Auth's nor one of the allowed Supabase APIs.
+      expect((await handleRequest(new Request("http://auth.tnhc.dev/requests"))).status).toBe(404);
+      expect(hits).toEqual(["auth /request", "auth /claim", "auth /join"]);
     } finally { supa.stop(true); auth.stop(true); delete process.env.SUPABASE_UPSTREAM; delete process.env.AUTH_UPSTREAM_OVERRIDE; }
   });
 });
