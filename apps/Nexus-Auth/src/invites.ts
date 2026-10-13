@@ -11,6 +11,12 @@ import { issueRecoveryCodes } from "./recovery";
  */
 
 const DEFAULT_EXPIRY_DAYS = 30;
+/** An emailed invite travels through a mailbox and a relay, so it lives shorter. */
+export const EMAILED_EXPIRY_DAYS = 7;
+
+export function hashInviteEmail(email: string): string {
+  return createHash("sha256").update(email.trim().toLowerCase()).digest("hex");
+}
 
 type Invite = {
   id: string;
@@ -18,6 +24,9 @@ type Invite = {
   createdBy: string;
   createdAt: string;
   expiresAt: string;
+  /** SHA-256 of the invited address, when the invite was sent to one. The
+   *  address itself is never stored. */
+  emailHash?: string;
   redeemedBy?: string;
   redeemedAt?: string;
 };
@@ -63,12 +72,13 @@ function hydrate(): void {
   }
 }
 
-export function createInvite(createdBy: string, expiresInDays = DEFAULT_EXPIRY_DAYS): {
+export function createInvite(createdBy: string, expiresInDays?: number, email?: string): {
   id: string; code: string; expiresAt: string;
 } {
   const code = randomBytes(16).toString("hex");
   const now = new Date();
-  const expiresAt = new Date(now.getTime() + expiresInDays * 86_400_000).toISOString();
+  const days = expiresInDays ?? (email ? EMAILED_EXPIRY_DAYS : DEFAULT_EXPIRY_DAYS);
+  const expiresAt = new Date(now.getTime() + days * 86_400_000).toISOString();
   const invite: Invite = {
     id: `inv-${now.getTime().toString(36)}-${randomBytes(4).toString("hex")}`,
     codeHash: hashCode(code),
@@ -76,6 +86,7 @@ export function createInvite(createdBy: string, expiresInDays = DEFAULT_EXPIRY_D
     createdAt: now.toISOString(),
     expiresAt,
   };
+  if (email) invite.emailHash = hashInviteEmail(email);
   invites.set(invite.id, invite);
   persist();
   return { id: invite.id, code, expiresAt };
@@ -101,6 +112,11 @@ export function redeemInvite(input: {
   // Unknown and already-redeemed are the same answer: neither should confirm
   // that a code ever existed.
   if (!invite || invite.redeemedBy) return { ok: false, reason: "invalid_code" };
+  // A bound invite works only for the address it was sent to. Same answer as
+  // a wrong code, so a forwarded link reveals nothing.
+  if (invite.emailHash && invite.emailHash !== hashInviteEmail(input.email)) {
+    return { ok: false, reason: "invalid_code" };
+  }
   if (Date.parse(invite.expiresAt) < Date.now()) return { ok: false, reason: "expired" };
   if (input.password.length < MIN_PASSWORD_LENGTH) return { ok: false, reason: "weak_password" };
 

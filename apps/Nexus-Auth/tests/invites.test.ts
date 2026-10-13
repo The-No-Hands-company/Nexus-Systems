@@ -78,3 +78,32 @@ describe("invite codes", () => {
     expect(listed?.redeemedBy).toBe("rae");
   });
 });
+
+describe("email-bound invites", () => {
+  beforeEach(() => {
+    users.clearUsers();
+    recovery.clearRecoveryStore();
+    invites.clearInviteStore();
+  });
+
+  it("works only for the invited address, in any case or spacing", () => {
+    const { code } = invites.createInvite("usr-operator", undefined, "Ada@Example.com");
+    expect(invites.redeemInvite({ code, username: "eve", email: "eve@x.dev", password: PASSWORD }))
+      .toEqual({ ok: false, reason: "invalid_code" });
+    expect(invites.redeemInvite({ code, username: "ada", email: "  ada@example.COM ", password: PASSWORD }).ok).toBe(true);
+  });
+
+  it("expires in 7 days and never stores the address", () => {
+    const { expiresAt } = invites.createInvite("usr-operator", undefined, "ada@example.com");
+    const days = (Date.parse(expiresAt) - Date.now()) / 86_400_000;
+    expect(days).toBeGreaterThan(6.9);
+    expect(days).toBeLessThan(7.1);
+    expect(JSON.stringify(invites.listInvites())).not.toContain("ada@example.com");
+  });
+
+  it("leaves unbound invites as they were: 30 days, any address", () => {
+    const { code, expiresAt } = invites.createInvite("usr-operator");
+    expect((Date.parse(expiresAt) - Date.now()) / 86_400_000).toBeGreaterThan(29.9);
+    expect(invites.redeemInvite({ code, username: "fay", email: "f@x.dev", password: PASSWORD }).ok).toBe(true);
+  });
+});
