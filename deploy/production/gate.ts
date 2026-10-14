@@ -227,7 +227,14 @@ export async function resolveIdentity(cookie: string | null, audience: string): 
  *  - If a service ever genuinely needs a public endpoint, it can be added to
  *    this set explicitly rather than by forgetting to set a flag.
  */
-const PUBLIC_HOSTS = new Set([AUTH_HOST]);
+/**
+ * draw.tnhc.dev is the public whiteboard tool — no account required.
+ * Added here rather than via a per-tool flag because the gate is default-deny
+ * for all registered apps; the requiresAuth field is advisory only.
+ */
+const DRAW_HOST = `draw.${DOMAIN}`;
+
+const PUBLIC_HOSTS = new Set([AUTH_HOST, DRAW_HOST]);
 
 /** Paths exempt from the auth gate on ANY host (deploy.sh probes these). */
 const PUBLIC_PATHS = new Set(["/health", "/health/live", "/health/ready"]);
