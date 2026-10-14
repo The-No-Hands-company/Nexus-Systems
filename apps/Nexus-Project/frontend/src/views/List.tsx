@@ -7,6 +7,60 @@ import { TaskDrawer } from "../components/TaskDrawer";
 
 interface Props { project: Project; }
 
+function AddTaskRow({ projectId, defaultStatusId, onCreated }: {
+  projectId: string; defaultStatusId: string; onCreated: (t: Task) => void;
+}) {
+  const api = useApi();
+  const [active, setActive] = useState(false);
+  const [title, setTitle] = useState("");
+
+  const submit = async () => {
+    if (!title.trim()) { setActive(false); return; }
+    try {
+      const task = await api.createTask(projectId, { title: title.trim(), statusId: defaultStatusId });
+      onCreated(task);
+      setTitle("");
+    } catch { /* keep visible so user can retry */ }
+    setActive(false);
+  };
+
+  if (!active) {
+    return (
+      <tr>
+        <td colSpan={6} className="py-1">
+          <button
+            type="button"
+            onClick={() => setActive(true)}
+            className="flex items-center gap-1 px-3 py-1.5 text-xs text-zinc-700 hover:text-zinc-400 hover:bg-zinc-800 rounded transition-colors w-full"
+          >
+            + Add task
+          </button>
+        </td>
+      </tr>
+    );
+  }
+
+  return (
+    <tr>
+      <td className="py-2 px-3 text-zinc-600 font-mono text-xs">—</td>
+      <td className="py-2 px-3" colSpan={5}>
+        <input
+          autoFocus
+          value={title}
+          onChange={e => setTitle(e.target.value)}
+          onKeyDown={e => {
+            if (e.key === "Enter") void submit();
+            if (e.key === "Escape") { setActive(false); setTitle(""); }
+          }}
+          onBlur={submit}
+          placeholder="Task title…"
+          className="w-full bg-zinc-800 border border-zinc-600 rounded px-2 py-1 text-sm text-zinc-100 focus:outline-none focus:border-zinc-400 placeholder:text-zinc-600"
+        />
+      </td>
+    </tr>
+  );
+}
+
 interface TreeNode { task: Task; children: TreeNode[]; depth: number; }
 
 function buildTree(tasks: Task[]): TreeNode[] {
@@ -98,6 +152,13 @@ export function ListView({ project }: Props) {
           })}
           {rows.length === 0 && (
             <tr><td colSpan={6} className="py-8 text-center text-zinc-500">No tasks yet.</td></tr>
+          )}
+          {statuses.length > 0 && (
+            <AddTaskRow
+              projectId={project.id}
+              defaultStatusId={statuses[0].id}
+              onCreated={t => setTasks(ts => [...ts, t])}
+            />
           )}
         </tbody>
       </table>

@@ -23,28 +23,31 @@ export default function App() {
 
   return (
     <ApiContext.Provider value={api}>
-      <div className="flex flex-col h-screen bg-zinc-950 text-zinc-100">
-        <header className="flex items-center gap-4 px-4 h-12 border-b border-zinc-800 flex-shrink-0">
+      <div className="flex flex-col h-screen bg-zinc-900 text-zinc-200">
+        <header className="flex items-center gap-2 px-4 h-12 border-b border-zinc-700 flex-shrink-0">
           <button
             onClick={goHome}
-            className="font-semibold text-sm text-zinc-100 hover:text-white"
+            className="flex items-center gap-1.5 font-semibold text-sm text-zinc-100 hover:opacity-90 transition-opacity"
           >
-            Nexus Project
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" className="text-accent shrink-0">
+              <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
+            </svg>
+            <span>Project</span>
           </button>
 
           {project && (
             <>
-              <span className="text-zinc-600">/</span>
-              <span className="text-sm text-zinc-300">{project.name}</span>
-              <nav className="flex gap-1 ml-4">
+              <span className="text-zinc-700">/</span>
+              <span className="text-sm text-zinc-400 truncate max-w-[12rem]">{project.name}</span>
+              <nav className="flex gap-0.5 ml-3">
                 {NAV_ITEMS.map(item => (
                   <button
                     key={item.id}
                     onClick={() => setView(item.id)}
-                    className={`px-3 py-1 rounded text-sm transition-colors ${
+                    className={`px-3 py-1.5 rounded text-sm transition-colors ${
                       view === item.id
-                        ? "bg-zinc-700 text-zinc-100"
-                        : "text-zinc-400 hover:text-zinc-200"
+                        ? "bg-zinc-800 text-zinc-100"
+                        : "text-zinc-500 hover:text-zinc-300"
                     }`}
                   >
                     {item.label}

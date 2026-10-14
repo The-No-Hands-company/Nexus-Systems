@@ -6,6 +6,53 @@ import { TaskDrawer } from "../components/TaskDrawer";
 
 interface Props { project: Project; }
 
+function AddTaskRow({ projectId, statusId, onCreated }: {
+  projectId: string; statusId: string; onCreated: (t: Task) => void;
+}) {
+  const api = useApi();
+  const [active, setActive] = useState(false);
+  const [title, setTitle] = useState("");
+
+  const submit = async () => {
+    if (!title.trim()) { setActive(false); return; }
+    try {
+      const task = await api.createTask(projectId, { title: title.trim(), statusId });
+      onCreated(task);
+      setTitle("");
+    } catch { /* keep form open so user can retry */ }
+    setActive(false);
+  };
+
+  if (!active) {
+    return (
+      <button
+        type="button"
+        onClick={() => setActive(true)}
+        className="mt-1 w-full flex items-center gap-1 px-2 py-1.5 rounded text-xs text-zinc-700 hover:text-zinc-400 hover:bg-zinc-800 transition-colors"
+      >
+        + Add task
+      </button>
+    );
+  }
+
+  return (
+    <div className="mt-1 bg-zinc-800 border border-zinc-600 rounded p-2">
+      <input
+        autoFocus
+        value={title}
+        onChange={e => setTitle(e.target.value)}
+        onKeyDown={e => {
+          if (e.key === "Enter") void submit();
+          if (e.key === "Escape") { setActive(false); setTitle(""); }
+        }}
+        onBlur={submit}
+        placeholder="Task title…"
+        className="w-full bg-transparent text-sm text-zinc-100 outline-none placeholder:text-zinc-600"
+      />
+    </div>
+  );
+}
+
 export function BoardView({ project }: Props) {
   const api = useApi();
   const [statuses, setStatuses] = useState<Status[]>([]);
@@ -83,6 +130,11 @@ export function BoardView({ project }: Props) {
                 <div className="mt-1.5 text-xs text-zinc-600">#{task.number}</div>
               </div>
             ))}
+            <AddTaskRow
+              projectId={project.id}
+              statusId={status.id}
+              onCreated={(t) => setTasks(ts => [...ts, t])}
+            />
           </div>
         </div>
       ))}
