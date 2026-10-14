@@ -116,6 +116,7 @@ const NOTIFICATIONS_PREFIX = "/ipa/notifications";
 const CALENDAR_PREFIX = "/ipa/calendar/";
 const CALENDAR_WEB_PREFIX = "/calendar";
 const PROJECT_PREFIX = "/ipa/project/";
+const PROJECT_API_PREFIX = "/api/v1/project/";
 const PROJECT_WEB_PREFIX = "/project";
 
 function hostingUrl(): string {
@@ -486,6 +487,13 @@ export async function handleRequest(
 
   if (path.startsWith(PROJECT_PREFIX)) {
     return proxyProjectApi(req, path.slice(PROJECT_PREFIX.length), url.search);
+  }
+
+  // The project SPA (served at /project/) makes API calls to /api/v1/project/
+  // using root-relative paths, so those calls arrive here rather than at /ipa/project/.
+  // Route them to the same authenticated proxy.
+  if (path.startsWith(PROJECT_API_PREFIX)) {
+    return proxyProjectApi(req, path.slice(PROJECT_API_PREFIX.length), url.search);
   }
 
   if (path === PROJECT_WEB_PREFIX) {
