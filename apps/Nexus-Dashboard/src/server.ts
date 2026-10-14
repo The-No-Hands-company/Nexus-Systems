@@ -12,8 +12,6 @@ import { checkRateLimit, rateLimitMiddleware } from "./ratelimit";
 import { validateJWT, extractBearerToken, validateRequest } from "./jwt";
 import { listDevTools, runDevTool } from "./devtools";
 import { checkAllServices } from "./servicehealth";
-import { proxyCalendarApi, proxyCalendarWeb } from "./calendar-proxy";
-import { proxyProjectApi, proxyProjectWeb } from "./project-proxy";
 
 /**
  * The ecosystem front door — app.<domain>.
@@ -108,16 +106,6 @@ const MAIL_PREFIX = "/ipa/mail/";
  */
 const NOTIFICATIONS_PREFIX = "/ipa/notifications";
 
-/**
- * Calendar lives behind its own service on loopback (3068). Proxied onto the
- * dashboard origin so the SPA can call it same-origin without iframe or CORS
- * complications. The caller's identity is attached server-side.
- */
-const CALENDAR_PREFIX = "/ipa/calendar/";
-const CALENDAR_WEB_PREFIX = "/calendar";
-const PROJECT_PREFIX = "/ipa/project/";
-const PROJECT_API_PREFIX = "/api/v1/project/";
-const PROJECT_WEB_PREFIX = "/project";
 
 function hostingUrl(): string {
   // Read per call, not captured at module load — the same import-order trap
@@ -428,15 +416,6 @@ export async function handleRequest(
     return proxyToNotifications(req, path.slice(NOTIFICATIONS_PREFIX.length), url.search);
   }
 
-  if (path.startsWith(CALENDAR_PREFIX)) {
-    // Authorization, path/method allow-listing and identity forwarding all live
-    // in calendar-proxy.ts. This handler used to authenticate the caller into a
-    // local `who` and then never use it — the request went upstream with only a
-    // content-type, so Calendar had no idea who was asking and every signed-in
-    // user read and wrote one shared calendar.
-    return proxyCalendarApi(req, path.slice(CALENDAR_PREFIX.length), url.search);
-  }
-
   // Development helper tools (dhts/). Founder-only: these run commands on this
   // host, so the admin-role check happens before anything else, including the
   // list. Run ids resolve against a server-side whitelist; argv never comes
@@ -473,37 +452,7 @@ export async function handleRequest(
 
   if (path.startsWith(AUTH_PREFIX)) return proxyToAuth(req, path);
 
-  // Calendar owns the document and its client routes; Dashboard only mounts
-  // the artifact at its canonical in-shell path. Keep this before Dashboard's
-  // SPA fallback so /calendar never resolves to the old shell-native view.
-  // Vite emits relative asset URLs so the trailing slash is the canonical
-  // document base. Preserve /calendar as a safe bookmark by redirecting it.
-  if (path === CALENDAR_WEB_PREFIX) {
-    return new Response(null, { status: 308, headers: { location: `${CALENDAR_WEB_PREFIX}/` } });
-  }
-  if (path.startsWith(CALENDAR_WEB_PREFIX + "/")) {
-    return proxyCalendarWeb(req, path.slice(CALENDAR_WEB_PREFIX.length));
-  }
-
-  if (path.startsWith(PROJECT_PREFIX)) {
-    return proxyProjectApi(req, path.slice(PROJECT_PREFIX.length), url.search);
-  }
-
-  // The project SPA (served at /project/) makes API calls to /api/v1/project/
-  // using root-relative paths, so those calls arrive here rather than at /ipa/project/.
-  // Route them to the same authenticated proxy.
-  if (path.startsWith(PROJECT_API_PREFIX)) {
-    return proxyProjectApi(req, path.slice(PROJECT_API_PREFIX.length), url.search);
-  }
-
-  if (path === PROJECT_WEB_PREFIX) {
-    return new Response(null, { status: 308, headers: { location: `${PROJECT_WEB_PREFIX}/` } });
-  }
-  if (path.startsWith(PROJECT_WEB_PREFIX + "/")) {
-    return proxyProjectWeb(req, path.slice(PROJECT_WEB_PREFIX.length));
-  }
-
-  // Anything else under /ipa is not ours and must not fall through to the SPA.
+    // Anything else under /ipa is not ours and must not fall through to the SPA.
   // Returning the HTML shell for a mistyped API call is how a caller ends up
   // parsing "<!doctype html>" as JSON.
   if (path.startsWith("/ipa/")) {

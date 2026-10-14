@@ -71,12 +71,6 @@ afterEach(() => {
 });
 
 describe("dashboard server", () => {
-  it("redirects the canonical Calendar mount to a trailing-slash asset base", async () => {
-    const res = await handleRequest(new Request("http://app.test/calendar"));
-    expect(res.status).toBe(308);
-    expect(res.headers.get("location")).toBe("/calendar/");
-  });
-
   it("reports health", async () => {
     const res = await handleRequest(new Request("http://app.test/health"));
     expect(res.status).toBe(200);

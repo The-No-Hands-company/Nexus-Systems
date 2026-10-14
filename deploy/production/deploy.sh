@@ -449,56 +449,6 @@ cmd_start() {
     export NEXUS_ISSUES_TOKEN="${NEXUS_ISSUES_TOKEN:-}"
     [ -z "$NEXUS_ISSUES_TOKEN" ] && log "NEXUS_ISSUES_TOKEN unset — in-app issue reporting will answer 503"
 
-    # Calendar's private hop secret.
-    #
-    # Calendar is loopback-only and has no session of its own: Dashboard tells
-    # it who is asking via x-nexus-subject. That header is a bare string, so
-    # Calendar only believes it when the request also carries this secret —
-    # which is why it must reach BOTH services and must never reach a browser
-    # or any frontend build.
-    #
-    # Generated once and persisted beside the app, same as every other
-    # credential here. 32 bytes of urandom, hex-encoded.
-    if [ -z "${NEXUS_CALENDAR_DASHBOARD_SECRET:-}" ] && [ -f "$ROOT/apps/Nexus-Calendar/.env" ]; then
-        NEXUS_CALENDAR_DASHBOARD_SECRET="$(sed -n 's/^NEXUS_CALENDAR_DASHBOARD_SECRET=//p' "$ROOT/apps/Nexus-Calendar/.env" \
-            | head -1 | tr -d '\r' | sed -e 's/^"//' -e 's/"$//' -e "s/^'//" -e "s/'\$//")"
-        [ -n "$NEXUS_CALENDAR_DASHBOARD_SECRET" ] && log "Adopted NEXUS_CALENDAR_DASHBOARD_SECRET from apps/Nexus-Calendar/.env"
-    fi
-    if [ -z "${NEXUS_CALENDAR_DASHBOARD_SECRET:-}" ]; then
-        NEXUS_CALENDAR_DASHBOARD_SECRET="$(head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')"
-        umask 077
-        printf 'NEXUS_CALENDAR_DASHBOARD_SECRET=%s\n' "$NEXUS_CALENDAR_DASHBOARD_SECRET" \
-            >> "$ROOT/apps/Nexus-Calendar/.env"
-        log "Generated NEXUS_CALENDAR_DASHBOARD_SECRET into apps/Nexus-Calendar/.env"
-    fi
-    # Calendar trusts the subject only when this accompanies it, so a malformed
-    # value (a truncated .env line, a stray quote) must stop the deploy rather
-    # than start two services that silently cannot talk to each other.
-    if ! [[ "$NEXUS_CALENDAR_DASHBOARD_SECRET" =~ ^[A-Fa-f0-9]{64}$ ]]; then
-        echo "NEXUS_CALENDAR_DASHBOARD_SECRET must be a 32-byte hex secret" >&2
-        return 1
-    fi
-    export NEXUS_CALENDAR_DASHBOARD_SECRET
-
-    # Project dashboard hop secret — same scheme as the calendar one above.
-    if [ -z "${NEXUS_PROJECT_DASHBOARD_SECRET:-}" ] && [ -f "$ROOT/apps/Nexus-Project/.env" ]; then
-        NEXUS_PROJECT_DASHBOARD_SECRET="$(sed -n 's/^NEXUS_PROJECT_DASHBOARD_SECRET=//p' "$ROOT/apps/Nexus-Project/.env" \
-            | head -1 | tr -d '\r' | sed -e 's/^"//' -e 's/"$//' -e "s/^'//" -e "s/'\$//")"
-        [ -n "$NEXUS_PROJECT_DASHBOARD_SECRET" ] && log "Adopted NEXUS_PROJECT_DASHBOARD_SECRET from apps/Nexus-Project/.env"
-    fi
-    if [ -z "${NEXUS_PROJECT_DASHBOARD_SECRET:-}" ]; then
-        NEXUS_PROJECT_DASHBOARD_SECRET="$(head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')"
-        umask 077
-        printf 'NEXUS_PROJECT_DASHBOARD_SECRET=%s\n' "$NEXUS_PROJECT_DASHBOARD_SECRET" \
-            >> "$ROOT/apps/Nexus-Project/.env"
-        log "Generated NEXUS_PROJECT_DASHBOARD_SECRET into apps/Nexus-Project/.env"
-    fi
-    if ! [[ "$NEXUS_PROJECT_DASHBOARD_SECRET" =~ ^[A-Fa-f0-9]{64}$ ]]; then
-        echo "NEXUS_PROJECT_DASHBOARD_SECRET must be a 32-byte hex secret" >&2
-        return 1
-    fi
-    export NEXUS_PROJECT_DASHBOARD_SECRET
-
     # The owner for events that predate ownership.
     #
     # Calendar refuses to start when it finds unowned rows and this is unset —
@@ -677,7 +627,6 @@ cmd_start() {
             NEXUS_BIND_HOST=127.0.0.1
             NEXUS_CALENDAR_DB="$calendar_db"
             NEXUS_CALENDAR_JWT_AUDIENCE="$calendar_jwt_audience"
-            NEXUS_CALENDAR_DASHBOARD_SECRET="$NEXUS_CALENDAR_DASHBOARD_SECRET"
             NEXUS_CALENDAR_BASE_URL=http://127.0.0.1:8092
             NEXUS_AUTH_INTERNAL_URL=http://127.0.0.1:4310
             NEXUS_CLOUD_URL=http://localhost:8787
@@ -713,7 +662,6 @@ cmd_start() {
             NEXUS_PROJECT_DB="$project_db" \
             NEXUS_PROJECT_JWT_AUDIENCE="$project_jwt_audience" \
             NEXUS_PROJECT_BASE_URL=http://127.0.0.1:8093 \
-            NEXUS_PROJECT_DASHBOARD_SECRET="$NEXUS_PROJECT_DASHBOARD_SECRET" \
             NEXUS_AUTH_INTERNAL_URL=http://127.0.0.1:4310 \
             NEXUS_CLOUD_URL=http://localhost:8787 \
             bun run src/index.ts
@@ -769,12 +717,6 @@ cmd_start() {
             NEXUS_AUTH_INTERNAL_URL=http://127.0.0.1:4310 \
             NEXUS_CLOUD_URL=http://localhost:8787 \
             NEXUS_TERMINAL_URL=http://127.0.0.1:3110 \
-            NEXUS_CALENDAR_URL=http://127.0.0.1:3068 \
-            NEXUS_CALENDAR_DASHBOARD_SECRET="$NEXUS_CALENDAR_DASHBOARD_SECRET" \
-            NEXUS_CALENDAR_WEB_URL=http://127.0.0.1:8092 \
-            NEXUS_PROJECT_API_URL=http://127.0.0.1:3152 \
-            NEXUS_PROJECT_DASHBOARD_SECRET="$NEXUS_PROJECT_DASHBOARD_SECRET" \
-            NEXUS_PROJECT_WEB_URL=http://127.0.0.1:8093 \
             NEXUS_ISSUES_TOKEN="$NEXUS_ISSUES_TOKEN" \
             bun run src/index.ts
     fi
