@@ -31,10 +31,13 @@ export function AppHeader({
       {leadingSlot}
       <a
         href={homeHref}
-        className="font-semibold tracking-tight hover:text-[#ccff00]"
+        className="flex items-center gap-1.5 font-semibold tracking-tight hover:opacity-90"
         aria-label="Nexus home"
       >
-        Nexus
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" className="text-[#ccff00] shrink-0">
+          <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
+        </svg>
+        <span>Nexus</span>
       </a>
       <span className="text-sm text-white/60" aria-label={`${appName} app`}>
         {appName}
