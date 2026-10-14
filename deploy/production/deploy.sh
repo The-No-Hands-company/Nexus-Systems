@@ -856,6 +856,7 @@ cmd_start() {
         PROXY_PORT=8080 DOMAIN="$DOMAIN" CLOUD_URL=http://localhost:8787 \
         DASHBOARD_UPSTREAM=http://127.0.0.1:3132 \
         HOSTING_SITE_UPSTREAM="${HOSTING_SITE_UPSTREAM:-http://127.0.0.1:8090}" \
+        NEXUS_CLOUD_API_KEY="${NEXUS_CLOUD_API_KEY:-}" \
         bun run proxy.ts
 
     install_log_rotation
