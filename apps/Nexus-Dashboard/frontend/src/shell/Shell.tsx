@@ -85,8 +85,11 @@ export default function Shell({
             the grid except editing the URL. Making the mark itself the link is
             what every other product does, so it is what people try first.
           */}
-        <Link to="/" className="font-semibold tracking-tight hover:text-accent" aria-label="Nexus home">
-          Nexus
+        <Link to="/" className="flex items-center gap-1.5 font-semibold tracking-tight hover:opacity-90" aria-label="Nexus home">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" className="text-accent shrink-0">
+            <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
+          </svg>
+          <span>Nexus</span>
         </Link>
 
         {/*

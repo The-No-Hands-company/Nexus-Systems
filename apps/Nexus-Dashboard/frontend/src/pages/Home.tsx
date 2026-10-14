@@ -4,8 +4,6 @@ import Shell from "../shell/Shell";
 import HealthStrip from "../shell/HealthStrip";
 import NotificationBell from "../shell/NotificationBell";
 import { Pill } from "../../../../../packages/nexus-design/src/components/ui/pill";
-import Today from "./widgets/Today";
-import Unread from "./widgets/Unread";
 import Activity from "./widgets/Activity";
 import { buildAuthPageUrl } from "../authPages";
 import Pinned from "./widgets/Pinned";
@@ -60,15 +58,64 @@ export default function Home() {
   // without it the home header had no identity chip and no Operator link, so
   // the founder landed here and /admin might as well not have existed.
   if (user) {
+    const healthyCount = apps.filter((a) => a.health === "healthy").length;
+    const offlineCount = apps.length - healthyCount;
+    const allHealthy = offlineCount === 0;
+
     return (
       <Shell apps={apps} user={user} utility={<NotificationBell />}>
-        <div className="flex flex-col gap-4 p-4">
-          <HealthStrip apps={apps} />
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-            <div className="xl:row-span-2"><Today /></div>
-            <Unread />
-            <Activity />
-            <div className="md:col-span-2"><Pinned /></div>
+        <div className="flex flex-col">
+          {/* Platform status bar */}
+          <div className="border-b border-zinc-700 bg-zinc-800/30 px-6 py-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h1 className="text-xl font-semibold">
+                  Welcome, {user.username || user.email.split("@")[0]}
+                </h1>
+                <p className="mt-0.5 text-sm text-zinc-400">
+                  {apps.length} service{apps.length !== 1 ? "s" : ""} registered
+                </p>
+              </div>
+              <span className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium ${allHealthy ? "bg-state-success/10 text-state-success" : "bg-state-danger/10 text-state-danger"}`}>
+                <span className={`h-1.5 w-1.5 rounded-full ${allHealthy ? "bg-state-success" : "bg-state-danger"}`} />
+                {allHealthy ? "All systems operational" : `${offlineCount} service${offlineCount !== 1 ? "s" : ""} offline`}
+              </span>
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-6 p-6">
+            {/* Metrics row */}
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+              <div className="rounded-lg border border-zinc-700 bg-zinc-800/40 p-4">
+                <div className="text-[10px] font-semibold uppercase tracking-widest text-zinc-500">Services</div>
+                <div className="mt-2 text-3xl font-semibold tabular-nums">{apps.length}</div>
+                <div className="mt-0.5 text-xs text-zinc-500">registered</div>
+              </div>
+              <div className="rounded-lg border border-zinc-700 bg-zinc-800/40 p-4">
+                <div className="text-[10px] font-semibold uppercase tracking-widest text-zinc-500">Running</div>
+                <div className="mt-2 text-3xl font-semibold tabular-nums text-state-success">{healthyCount}</div>
+                <div className="mt-0.5 text-xs text-zinc-500">healthy</div>
+              </div>
+              <div className={`col-span-2 rounded-lg border sm:col-span-1 ${offlineCount > 0 ? "border-state-danger/30 bg-state-danger/5" : "border-zinc-700 bg-zinc-800/40"} p-4`}>
+                <div className="text-[10px] font-semibold uppercase tracking-widest text-zinc-500">Offline</div>
+                <div className={`mt-2 text-3xl font-semibold tabular-nums ${offlineCount > 0 ? "text-state-danger" : "text-zinc-500"}`}>{offlineCount}</div>
+                <div className="mt-0.5 text-xs text-zinc-500">need attention</div>
+              </div>
+            </div>
+
+            {/* Service health */}
+            <section aria-label="Service health">
+              <h2 className="mb-3 text-[10px] font-semibold uppercase tracking-widest text-zinc-500">
+                Service Health
+              </h2>
+              <HealthStrip apps={apps} />
+            </section>
+
+            {/* Pinned apps + activity */}
+            <div className="grid gap-4 md:grid-cols-2">
+              <Pinned />
+              <Activity />
+            </div>
           </div>
         </div>
       </Shell>

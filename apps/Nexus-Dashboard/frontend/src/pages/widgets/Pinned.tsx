@@ -33,23 +33,30 @@ export default function Pinned() {
         const shown = pinned.length > 0 ? pinned : healthy;
 
         return shown.length === 0 ? null : (
-          <ul className="flex flex-col gap-1">
+          <ul className="grid grid-cols-2 gap-2 sm:grid-cols-3">
             {shown.map((a) => {
               const isPinned = pinnedIds.includes(a.id);
               return (
-                <li
-                  key={a.id}
-                  className="flex items-center justify-between gap-2 border-b border-zinc-700 py-1 text-sm last:border-0"
-                >
-                  <Link to={a.path} className="text-zinc-200 hover:text-accent">{a.name}</Link>
+                <li key={a.id} className="group relative">
+                  <Link
+                    to={a.path}
+                    className="flex flex-col gap-2 rounded-lg border border-zinc-700 bg-zinc-800/40 p-3 transition-colors hover:border-zinc-600 hover:bg-zinc-800"
+                  >
+                    <div className="flex h-8 w-8 items-center justify-center rounded-md bg-zinc-700 text-xs font-semibold uppercase text-zinc-300">
+                      {a.name.slice(0, 2)}
+                    </div>
+                    <span className="line-clamp-1 text-sm font-medium text-zinc-200 group-hover:text-accent">
+                      {a.name}
+                    </span>
+                  </Link>
                   <button
                     type="button"
                     onClick={() => togglePinned(a.id)}
                     aria-pressed={isPinned}
                     aria-label={isPinned ? `Unpin ${a.name}` : `Pin ${a.name}`}
-                    className="shrink-0 text-xs text-zinc-500 hover:text-accent"
+                    className="absolute right-1.5 top-1.5 rounded px-1 py-0.5 text-[10px] text-zinc-600 opacity-0 transition-opacity hover:text-accent group-hover:opacity-100"
                   >
-                    {isPinned ? "Unpin" : "Pin"}
+                    {isPinned ? "✕" : "＋"}
                   </button>
                 </li>
               );
