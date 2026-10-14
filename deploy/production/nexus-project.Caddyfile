@@ -1,0 +1,46 @@
+# project.tnhc.dev — nexus-project front door.
+#
+# Joins the project SPA (static) with the project API (port 3152) into a
+# single origin. Same pattern as nexus-calendar.Caddyfile.
+
+{
+	admin off
+	auto_https off
+}
+
+:8093 {
+	bind 127.0.0.1
+
+	# All project API requests are identity-bound at the ecosystem proxy.
+	handle /api/v1/project/* {
+		reverse_proxy 127.0.0.1:3152
+	}
+	handle /health {
+		reverse_proxy 127.0.0.1:3152
+	}
+
+	# Vite emits hashed asset files.
+	handle /assets/* {
+		root * {$NEXUS_PROJECT_WEB_ROOT:/opt/nexus-systems/apps/Nexus-Project/frontend/dist}
+		header Cache-Control "public, max-age=31536000, immutable"
+		file_server
+	}
+
+	# SPA fallback.
+	handle {
+		root * {$NEXUS_PROJECT_WEB_ROOT:/opt/nexus-systems/apps/Nexus-Project/frontend/dist}
+		header Cache-Control "no-cache, no-store, must-revalidate"
+		try_files {path} /index.html
+		file_server
+	}
+
+	header {
+		X-Content-Type-Options "nosniff"
+		Content-Security-Policy "default-src 'self'; frame-ancestors 'self' https://app.tnhc.dev; base-uri 'self'; object-src 'none'"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=()"
+		-Server
+	}
+
+	# No access log: requests are not recorded (privacy: zero retention).
+}

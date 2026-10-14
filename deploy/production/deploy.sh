@@ -60,6 +60,8 @@ service_identity() {
         calendar)       SERVICE_DIR="$ROOT/apps/Nexus-Calendar"; SERVICE_EXEC_PATTERN="bun run src/index.ts" ;;
         nexus-calendar-web) SERVICE_DIR="$ROOT"; SERVICE_EXEC_PATTERN="run --config $ROOT/deploy/production/nexus-calendar.Caddyfile" ;;
         nexus-draw-web) SERVICE_DIR="$ROOT"; SERVICE_EXEC_PATTERN="run --config $ROOT/deploy/production/nexus-draw.Caddyfile" ;;
+        nexus-project)      SERVICE_DIR="$ROOT/apps/Nexus-Project"; SERVICE_EXEC_PATTERN="bun run src/index.ts" ;;
+        nexus-project-web)  SERVICE_DIR="$ROOT"; SERVICE_EXEC_PATTERN="run --config $ROOT/deploy/production/nexus-project.Caddyfile" ;;
         terminal)       SERVICE_DIR="$ROOT/apps/Nexus-Terminal"; SERVICE_EXEC_PATTERN="bun run src/index.ts" ;;
         mailapi)        SERVICE_DIR="$ROOT/apps/Nexus-Email"; SERVICE_EXEC_PATTERN="/nexus-mailapi" ;;
         mailsmtpd)      SERVICE_DIR="$ROOT/apps/Nexus-Email"; SERVICE_EXEC_PATTERN="/nexus-mailsmtpd" ;;
@@ -80,6 +82,8 @@ service_port() {
         calendar) printf '%s\n' 3068 ;;
         nexus-calendar-web) printf '%s\n' 8092 ;;
         nexus-draw-web) printf '%s\n' 8091 ;;
+        nexus-project) printf '%s\n' 3152 ;;
+        nexus-project-web) printf '%s\n' 8093 ;;
         terminal) printf '%s\n' 3110 ;;
         mailapi) printf '%s\n' 3140 ;;
         mailsmtpd) printf '%s\n' "${NEXUS_EMAIL_MX_PORT:-2525}" ;;
@@ -676,6 +680,34 @@ cmd_start() {
         fi
     fi
 
+    # 4d-3. Nexus-Project — project.tnhc.dev
+    #
+    # Backend API on 3152 (SQLite tasks), Caddy front door on 8093 joining
+    # SPA + API into one origin. Same pattern as nexus-calendar.
+    if [ -f "$ROOT/apps/Nexus-Project/package.json" ]; then
+        local project_db="${NEXUS_PROJECT_DB:-$ROOT/data/project.sqlite}"
+        local project_jwt_audience="${NEXUS_PROJECT_JWT_AUDIENCE:-project.$DOMAIN}"
+        local project_web_root="${NEXUS_PROJECT_WEB_ROOT:-$ROOT/apps/Nexus-Project/frontend/dist}"
+        start_service "nexus-project" "$ROOT/apps/Nexus-Project" 3152 \
+            PORT=3152 \
+            NEXUS_BIND_HOST=127.0.0.1 \
+            NEXUS_PROJECT_DB="$project_db" \
+            NEXUS_PROJECT_JWT_AUDIENCE="$project_jwt_audience" \
+            NEXUS_PROJECT_BASE_URL=http://127.0.0.1:8093 \
+            NEXUS_AUTH_INTERNAL_URL=http://127.0.0.1:4310 \
+            NEXUS_CLOUD_URL=http://localhost:8787 \
+            bun run src/index.ts
+        if command -v "$CADDY_BIN" >/dev/null 2>&1; then
+            if [ -f "$ROOT/apps/Nexus-Project/frontend/dist/index.html" ]; then
+                start_service "nexus-project-web" "$ROOT" 8093 \
+                    NEXUS_PROJECT_WEB_ROOT="$project_web_root" \
+                    "$CADDY_BIN" run --config "$ROOT/deploy/production/nexus-project.Caddyfile" --adapter caddyfile
+            else
+                warn "project UI not built — run: (cd apps/Nexus-Project/frontend && npm install && npm run build)"
+            fi
+        fi
+    fi
+
     # 4d. Nexus-Terminal — the loopback-only shell service used by Dashboard.
     #
     # The browser never reaches this port directly. Dashboard authorizes the
@@ -983,7 +1015,7 @@ cmd_stop() {
     local svc
 
     log "Stopping all Nexus services..."
-    for svc in auth cloud calendar nexus-calendar-web nexus-chat nexus-chat-web nexus-draw-web terminal dashboard draw mailapi mailsmtpd proxy; do
+    for svc in auth cloud calendar nexus-calendar-web nexus-project nexus-project-web nexus-chat nexus-chat-web nexus-draw-web terminal dashboard draw mailapi mailsmtpd proxy; do
         stop_service "$svc" || true
     done
     cd "$ROOT"
@@ -993,7 +1025,7 @@ cmd_stop() {
 
 cmd_service_status() {
     echo "Service Status:"
-    for svc in auth cloud calendar nexus-calendar-web nexus-chat nexus-chat-web nexus-draw-web terminal dashboard draw mailapi mailsmtpd proxy; do
+    for svc in auth cloud calendar nexus-calendar-web nexus-project nexus-project-web nexus-chat nexus-chat-web nexus-draw-web terminal dashboard draw mailapi mailsmtpd proxy; do
         service_identity "$svc" || continue
         local pid port
         port="$(service_port "$svc")"
