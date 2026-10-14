@@ -50,15 +50,3 @@ tnhc.dev, cloud.tnhc.dev, chat.tnhc.dev {
 
 	import nexus_common
 }
-
-# User-deployed Hosting sites. The *.tnhc.dev wildcard above only matches one
-# label (foo.tnhc.dev), so a second block is needed for the two-label namespace
-# (foo.sites.tnhc.dev). tls-ask approves the entire sites.tnhc.dev namespace
-# without per-site Cloud registration.
-*.sites.tnhc.dev {
-	tls {
-		on_demand
-	}
-
-	import nexus_common
-}

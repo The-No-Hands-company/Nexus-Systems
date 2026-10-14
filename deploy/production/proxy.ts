@@ -609,16 +609,6 @@ async function handleRequestInner(
       upstreamUrl = hostingSiteUpstream();
       kind = "site";
       isUserSite = true;
-      // Redirect bare *.DOMAIN user sites to the isolated sites.DOMAIN namespace.
-      // foo.sites.DOMAIN already passes through; system apps never reach here
-      // (they match Cloud's route table or static fallbacks above).
-      const sub = host.slice(0, host.length - (`.${DOMAIN}`).length);
-      if (!sub.includes(".")) {
-        return Response.redirect(
-          `https://${sub}.sites.${DOMAIN}${url.pathname}${url.search}`,
-          301,
-        );
-      }
     }
 
     // If we still don't have an upstream, return 404
