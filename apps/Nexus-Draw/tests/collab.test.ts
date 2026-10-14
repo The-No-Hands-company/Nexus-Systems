@@ -26,7 +26,7 @@ describe("collab websocket", () => {
     close = c;
     const resp = await fetch(`http://localhost:${server.port}/api/v1/draw/boards`, {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: { "content-type": "application/json", "x-nexus-subject": "user:collab-test" },
       body: JSON.stringify({ name: "Collab Test" }),
     });
     const board = (await resp.json()) as { id: string };
@@ -38,8 +38,9 @@ describe("collab websocket", () => {
   });
 
   it("two clients share element updates through a board", async () => {
-    const ws1 = new WebSocket(`ws://localhost:${server.port}/api/v1/draw/ws/${boardId}`);
-    const ws2 = new WebSocket(`ws://localhost:${server.port}/api/v1/draw/ws/${boardId}`);
+    const wsUrl = `ws://localhost:${server.port}/api/v1/draw/ws/${boardId}?subject=user:collab-test`;
+    const ws1 = new WebSocket(wsUrl);
+    const ws2 = new WebSocket(wsUrl);
     await new Promise<void>((r) => {
       ws1.onopen = () => r();
     });
@@ -110,7 +111,9 @@ describe("collab websocket", () => {
     // Wait for server to debounce-persist
     await wait(500);
     const got = (await (
-      await fetch(`http://localhost:${server.port}/api/v1/draw/boards/${boardId}`)
+      await fetch(`http://localhost:${server.port}/api/v1/draw/boards/${boardId}`, {
+        headers: { "x-nexus-subject": "user:collab-test" },
+      })
     ).json()) as { elements: { id: string }[] };
     const serverHasE1 = got.elements.some((e) => e.id === "e1");
     const clientBSawE1 = gotEvents.some((m) => (m as Record<string, unknown>).e1 !== undefined);

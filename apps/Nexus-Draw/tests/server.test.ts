@@ -3,21 +3,20 @@ import { createServer } from "../src/server";
 import { tmpdir } from "node:os";
 import { randomUUID } from "node:crypto";
 
+const ALICE = "user:alice";
+const BOB = "user:bob";
+
+function authHeaders(subject: string) {
+  return { "content-type": "application/json", "x-nexus-subject": subject };
+}
+
 describe("nexus-draw", () => {
   let base = "";
   let handle: Awaited<ReturnType<typeof createServer>>;
 
   beforeAll(async () => {
-    // Port 0 asks the OS for a free port. A fixed port cannot work here: the
-    // live nexus-draw service holds 3075 on the machine that also runs this
-    // suite, so every test calling createServer() failed with EADDRINUSE.
-    // The test already reads handle.server.port, so it was written expecting
-    // this.
     process.env["PORT"] = "0";
-    // And its own database file. Without this the suite writes to the live
-    // board data — which the port failure was accidentally preventing.
     process.env["NEXUS_DRAW_DB"] = `${tmpdir()}/nexus-draw-test-${randomUUID()}.sqlite`;
-
     handle = await createServer();
     await new Promise((r) => setTimeout(r, 200));
     base = `http://127.0.0.1:${handle.server.port}`;
@@ -43,14 +42,45 @@ describe("nexus-draw", () => {
   });
 });
 
-describe("board routes", () => {
+describe("board routes — auth", () => {
+  it("GET /boards without subject returns 401", async () => {
+    const { server, close } = await createServer();
+    const res = await fetch(`http://localhost:${server.port}/api/v1/draw/boards`);
+    expect(res.status).toBe(401);
+    close();
+  });
+
+  it("POST /boards without subject returns 401", async () => {
+    const { server, close } = await createServer();
+    const res = await fetch(`http://localhost:${server.port}/api/v1/draw/boards`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ name: "Test" }),
+    });
+    expect(res.status).toBe(401);
+    close();
+  });
+
+  it("GET /boards/:id without subject returns 401", async () => {
+    const { server, close } = await createServer();
+    const res = await fetch(`http://localhost:${server.port}/api/v1/draw/boards/some-id`);
+    expect(res.status).toBe(401);
+    close();
+  });
+});
+
+describe("board routes — ownership", () => {
   it("PATCH updates board meta", async () => {
     const { server, close } = await createServer();
     const base = `http://localhost:${server.port}`;
-    const created = await (await fetch(`${base}/api/v1/draw/boards`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name: "Meta" }) })).json() as any;
-    let res = await fetch(`${base}/api/v1/draw/boards/${created.id}`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ gridSnap: true, background: "#000000" }) });
+    const created = await (await fetch(`${base}/api/v1/draw/boards`, {
+      method: "POST", headers: authHeaders(ALICE), body: JSON.stringify({ name: "Meta" }),
+    })).json() as any;
+    const res = await fetch(`${base}/api/v1/draw/boards/${created.id}`, {
+      method: "PATCH", headers: authHeaders(ALICE), body: JSON.stringify({ gridSnap: true, background: "#000000" }),
+    });
     expect(res.status).toBe(200);
-    const got = await (await fetch(`${base}/api/v1/draw/boards/${created.id}`)).json() as any;
+    const got = await (await fetch(`${base}/api/v1/draw/boards/${created.id}`, { headers: authHeaders(ALICE) })).json() as any;
     expect(got.gridSnap).toBe(true);
     expect(got.background).toBe("#000000");
     close();
@@ -58,7 +88,9 @@ describe("board routes", () => {
 
   it("PATCH 404s for a missing board", async () => {
     const { server, close } = await createServer();
-    const res = await fetch(`http://localhost:${server.port}/api/v1/draw/boards/nope`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ gridSnap: true }) });
+    const res = await fetch(`http://localhost:${server.port}/api/v1/draw/boards/nope`, {
+      method: "PATCH", headers: authHeaders(ALICE), body: JSON.stringify({ gridSnap: true }),
+    });
     expect(res.status).toBe(404);
     close();
   });
@@ -66,9 +98,76 @@ describe("board routes", () => {
   it("DELETE removes a board and 404s the second time", async () => {
     const { server, close } = await createServer();
     const base = `http://localhost:${server.port}`;
-    const created = await (await fetch(`${base}/api/v1/draw/boards`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name: "Temp" }) })).json() as any;
-    expect((await fetch(`${base}/api/v1/draw/boards/${created.id}`, { method: "DELETE" })).status).toBe(200);
-    expect((await fetch(`${base}/api/v1/draw/boards/${created.id}`)).status).toBe(404);
+    const created = await (await fetch(`${base}/api/v1/draw/boards`, {
+      method: "POST", headers: authHeaders(ALICE), body: JSON.stringify({ name: "Temp" }),
+    })).json() as any;
+    expect((await fetch(`${base}/api/v1/draw/boards/${created.id}`, { method: "DELETE", headers: authHeaders(ALICE) })).status).toBe(200);
+    expect((await fetch(`${base}/api/v1/draw/boards/${created.id}`, { headers: authHeaders(ALICE) })).status).toBe(404);
+    close();
+  });
+
+  it("IDOR: Bob cannot read Alice's private board", async () => {
+    const { server, close } = await createServer();
+    const base = `http://localhost:${server.port}`;
+    const board = await (await fetch(`${base}/api/v1/draw/boards`, {
+      method: "POST", headers: authHeaders(ALICE), body: JSON.stringify({ name: "Alice secret" }),
+    })).json() as any;
+    const res = await fetch(`${base}/api/v1/draw/boards/${board.id}`, { headers: authHeaders(BOB) });
+    expect(res.status).toBe(403);
+    close();
+  });
+
+  it("IDOR: Bob cannot PATCH Alice's private board", async () => {
+    const { server, close } = await createServer();
+    const base = `http://localhost:${server.port}`;
+    const board = await (await fetch(`${base}/api/v1/draw/boards`, {
+      method: "POST", headers: authHeaders(ALICE), body: JSON.stringify({ name: "Alice board" }),
+    })).json() as any;
+    const res = await fetch(`${base}/api/v1/draw/boards/${board.id}`, {
+      method: "PATCH", headers: authHeaders(BOB), body: JSON.stringify({ name: "Hacked" }),
+    });
+    expect(res.status).toBe(404); // engine returns false → 404 (not found for this owner)
+    close();
+  });
+
+  it("IDOR: Bob cannot DELETE Alice's private board", async () => {
+    const { server, close } = await createServer();
+    const base = `http://localhost:${server.port}`;
+    const board = await (await fetch(`${base}/api/v1/draw/boards`, {
+      method: "POST", headers: authHeaders(ALICE), body: JSON.stringify({ name: "Alice board" }),
+    })).json() as any;
+    const res = await fetch(`${base}/api/v1/draw/boards/${board.id}`, {
+      method: "DELETE", headers: authHeaders(BOB),
+    });
+    expect(res.status).toBe(404);
+    // Board should still exist for Alice
+    const aliceRes = await fetch(`${base}/api/v1/draw/boards/${board.id}`, { headers: authHeaders(ALICE) });
+    expect(aliceRes.status).toBe(200);
+    close();
+  });
+
+  it("IDOR: Bob cannot see Alice's boards in list", async () => {
+    const { server, close } = await createServer();
+    const base = `http://localhost:${server.port}`;
+    await fetch(`${base}/api/v1/draw/boards`, {
+      method: "POST", headers: authHeaders(ALICE), body: JSON.stringify({ name: "Alice only board" }),
+    });
+    const bobBoards = await (await fetch(`${base}/api/v1/draw/boards`, { headers: authHeaders(BOB) })).json() as any[];
+    expect(bobBoards.map((b: any) => b.name)).not.toContain("Alice only board");
+    close();
+  });
+
+  it("Public board is accessible by any authenticated user", async () => {
+    const { server, close } = await createServer();
+    const base = `http://localhost:${server.port}`;
+    const board = await (await fetch(`${base}/api/v1/draw/boards`, {
+      method: "POST", headers: authHeaders(ALICE), body: JSON.stringify({ name: "Public board" }),
+    })).json() as any;
+    await fetch(`${base}/api/v1/draw/boards/${board.id}`, {
+      method: "PATCH", headers: authHeaders(ALICE), body: JSON.stringify({ isPublic: true }),
+    });
+    const res = await fetch(`${base}/api/v1/draw/boards/${board.id}`, { headers: authHeaders(BOB) });
+    expect(res.status).toBe(200);
     close();
   });
 });
@@ -77,7 +176,9 @@ describe("ai routes", () => {
   it("POST /api/v1/draw/ai/generate synthesizes elements", async () => {
     const { server, close } = await createServer();
     const base = `http://localhost:${server.port}`;
-    const r = await fetch(`${base}/api/v1/draw/ai/generate`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ prompt: "login flow" }) });
+    const r = await fetch(`${base}/api/v1/draw/ai/generate`, {
+      method: "POST", headers: authHeaders(ALICE), body: JSON.stringify({ prompt: "login flow" }),
+    });
     expect(r.status).toBe(200);
     const body = (await r.json()) as { elements: { id: string }[] };
     expect(Array.isArray(body.elements)).toBe(true);
@@ -88,20 +189,35 @@ describe("ai routes", () => {
   it("POST /api/v1/draw/ai/generate with board_id appends to the board", async () => {
     const { server, close } = await createServer();
     const base = `http://localhost:${server.port}`;
-    const board = await (await fetch(`${base}/api/v1/draw/boards`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name: "AI Board" }) })).json() as any;
-    const before = await (await fetch(`${base}/api/v1/draw/boards/${board.id}`)).json() as any;
-    await fetch(`${base}/api/v1/draw/ai/generate`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ prompt: "plan", board_id: board.id }) });
-    const got = await (await fetch(`${base}/api/v1/draw/boards/${board.id}`)).json() as any;
+    const board = await (await fetch(`${base}/api/v1/draw/boards`, {
+      method: "POST", headers: authHeaders(ALICE), body: JSON.stringify({ name: "AI Board" }),
+    })).json() as any;
+    const before = await (await fetch(`${base}/api/v1/draw/boards/${board.id}`, { headers: authHeaders(ALICE) })).json() as any;
+    await fetch(`${base}/api/v1/draw/ai/generate`, {
+      method: "POST", headers: authHeaders(ALICE), body: JSON.stringify({ prompt: "plan", board_id: board.id }),
+    });
+    const got = await (await fetch(`${base}/api/v1/draw/boards/${board.id}`, { headers: authHeaders(ALICE) })).json() as any;
     expect(got.elements.length).toBeGreaterThanOrEqual(before.elements.length + 3);
     close();
   });
 
   it("POST /api/v1/draw/ai/generate rejects a missing prompt", async () => {
     const { server, close } = await createServer();
-    const r = await fetch(`http://localhost:${server.port}/api/v1/draw/ai/generate`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({}) });
+    const r = await fetch(`http://localhost:${server.port}/api/v1/draw/ai/generate`, {
+      method: "POST", headers: authHeaders(ALICE), body: JSON.stringify({}),
+    });
     expect(r.status).toBe(400);
     const body = (await r.json()) as { error: string };
     expect(body.error).toBe("prompt is required");
+    close();
+  });
+
+  it("POST /api/v1/draw/ai/generate without subject returns 401", async () => {
+    const { server, close } = await createServer();
+    const r = await fetch(`http://localhost:${server.port}/api/v1/draw/ai/generate`, {
+      method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ prompt: "test" }),
+    });
+    expect(r.status).toBe(401);
     close();
   });
 });
