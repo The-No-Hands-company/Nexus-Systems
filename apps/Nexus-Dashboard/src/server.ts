@@ -479,7 +479,7 @@ export async function handleRequest(
   // Vite emits relative asset URLs so the trailing slash is the canonical
   // document base. Preserve /calendar as a safe bookmark by redirecting it.
   if (path === CALENDAR_WEB_PREFIX) {
-    return Response.redirect(new URL(`${CALENDAR_WEB_PREFIX}/`, req.url), 308);
+    return new Response(null, { status: 308, headers: { location: `${CALENDAR_WEB_PREFIX}/` } });
   }
   if (path.startsWith(CALENDAR_WEB_PREFIX + "/")) {
     return proxyCalendarWeb(req, path.slice(CALENDAR_WEB_PREFIX.length));
@@ -497,7 +497,7 @@ export async function handleRequest(
   }
 
   if (path === PROJECT_WEB_PREFIX) {
-    return Response.redirect(new URL(`${PROJECT_WEB_PREFIX}/`, req.url), 308);
+    return new Response(null, { status: 308, headers: { location: `${PROJECT_WEB_PREFIX}/` } });
   }
   if (path.startsWith(PROJECT_WEB_PREFIX + "/")) {
     return proxyProjectWeb(req, path.slice(PROJECT_WEB_PREFIX.length));
