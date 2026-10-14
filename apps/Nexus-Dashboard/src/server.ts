@@ -13,6 +13,7 @@ import { validateJWT, extractBearerToken, validateRequest } from "./jwt";
 import { listDevTools, runDevTool } from "./devtools";
 import { checkAllServices } from "./servicehealth";
 import { proxyCalendarApi, proxyCalendarWeb } from "./calendar-proxy";
+import { proxyProjectApi, proxyProjectWeb } from "./project-proxy";
 
 /**
  * The ecosystem front door — app.<domain>.
@@ -114,6 +115,8 @@ const NOTIFICATIONS_PREFIX = "/ipa/notifications";
  */
 const CALENDAR_PREFIX = "/ipa/calendar/";
 const CALENDAR_WEB_PREFIX = "/calendar";
+const PROJECT_PREFIX = "/ipa/project/";
+const PROJECT_WEB_PREFIX = "/project";
 
 function hostingUrl(): string {
   // Read per call, not captured at module load — the same import-order trap
@@ -479,6 +482,17 @@ export async function handleRequest(
   }
   if (path.startsWith(CALENDAR_WEB_PREFIX + "/")) {
     return proxyCalendarWeb(req, path.slice(CALENDAR_WEB_PREFIX.length));
+  }
+
+  if (path.startsWith(PROJECT_PREFIX)) {
+    return proxyProjectApi(req, path.slice(PROJECT_PREFIX.length), url.search);
+  }
+
+  if (path === PROJECT_WEB_PREFIX) {
+    return Response.redirect(new URL(`${PROJECT_WEB_PREFIX}/`, req.url), 308);
+  }
+  if (path.startsWith(PROJECT_WEB_PREFIX + "/")) {
+    return proxyProjectWeb(req, path.slice(PROJECT_WEB_PREFIX.length));
   }
 
   // Anything else under /ipa is not ours and must not fall through to the SPA.

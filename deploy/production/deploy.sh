@@ -480,6 +480,25 @@ cmd_start() {
     fi
     export NEXUS_CALENDAR_DASHBOARD_SECRET
 
+    # Project dashboard hop secret — same scheme as the calendar one above.
+    if [ -z "${NEXUS_PROJECT_DASHBOARD_SECRET:-}" ] && [ -f "$ROOT/apps/Nexus-Project/.env" ]; then
+        NEXUS_PROJECT_DASHBOARD_SECRET="$(sed -n 's/^NEXUS_PROJECT_DASHBOARD_SECRET=//p' "$ROOT/apps/Nexus-Project/.env" \
+            | head -1 | tr -d '\r' | sed -e 's/^"//' -e 's/"$//' -e "s/^'//" -e "s/'\$//")"
+        [ -n "$NEXUS_PROJECT_DASHBOARD_SECRET" ] && log "Adopted NEXUS_PROJECT_DASHBOARD_SECRET from apps/Nexus-Project/.env"
+    fi
+    if [ -z "${NEXUS_PROJECT_DASHBOARD_SECRET:-}" ]; then
+        NEXUS_PROJECT_DASHBOARD_SECRET="$(head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')"
+        umask 077
+        printf 'NEXUS_PROJECT_DASHBOARD_SECRET=%s\n' "$NEXUS_PROJECT_DASHBOARD_SECRET" \
+            >> "$ROOT/apps/Nexus-Project/.env"
+        log "Generated NEXUS_PROJECT_DASHBOARD_SECRET into apps/Nexus-Project/.env"
+    fi
+    if ! [[ "$NEXUS_PROJECT_DASHBOARD_SECRET" =~ ^[A-Fa-f0-9]{64}$ ]]; then
+        echo "NEXUS_PROJECT_DASHBOARD_SECRET must be a 32-byte hex secret" >&2
+        return 1
+    fi
+    export NEXUS_PROJECT_DASHBOARD_SECRET
+
     # The owner for events that predate ownership.
     #
     # Calendar refuses to start when it finds unowned rows and this is unset —
@@ -694,6 +713,7 @@ cmd_start() {
             NEXUS_PROJECT_DB="$project_db" \
             NEXUS_PROJECT_JWT_AUDIENCE="$project_jwt_audience" \
             NEXUS_PROJECT_BASE_URL=http://127.0.0.1:8093 \
+            NEXUS_PROJECT_DASHBOARD_SECRET="$NEXUS_PROJECT_DASHBOARD_SECRET" \
             NEXUS_AUTH_INTERNAL_URL=http://127.0.0.1:4310 \
             NEXUS_CLOUD_URL=http://localhost:8787 \
             bun run src/index.ts
@@ -752,6 +772,9 @@ cmd_start() {
             NEXUS_CALENDAR_URL=http://127.0.0.1:3068 \
             NEXUS_CALENDAR_DASHBOARD_SECRET="$NEXUS_CALENDAR_DASHBOARD_SECRET" \
             NEXUS_CALENDAR_WEB_URL=http://127.0.0.1:8092 \
+            NEXUS_PROJECT_API_URL=http://127.0.0.1:3152 \
+            NEXUS_PROJECT_DASHBOARD_SECRET="$NEXUS_PROJECT_DASHBOARD_SECRET" \
+            NEXUS_PROJECT_WEB_URL=http://127.0.0.1:8093 \
             NEXUS_ISSUES_TOKEN="$NEXUS_ISSUES_TOKEN" \
             bun run src/index.ts
     fi
