@@ -4,6 +4,8 @@ import Shell from "../shell/Shell";
 import HealthStrip from "../shell/HealthStrip";
 import NotificationBell from "../shell/NotificationBell";
 import { Pill } from "../../../../../packages/nexus-design/src/components/ui/pill";
+import { Stat } from "../../../../../packages/nexus-design/src/components/ui/stat";
+import { Badge } from "../../../../../packages/nexus-design/src/components/ui/badge";
 import Activity from "./widgets/Activity";
 import { buildAuthPageUrl } from "../authPages";
 import Pinned from "./widgets/Pinned";
@@ -76,31 +78,24 @@ export default function Home() {
                   {apps.length} service{apps.length !== 1 ? "s" : ""} registered
                 </p>
               </div>
-              <span className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium ${allHealthy ? "bg-state-success/10 text-state-success" : "bg-state-danger/10 text-state-danger"}`}>
-                <span className={`h-1.5 w-1.5 rounded-full ${allHealthy ? "bg-state-success" : "bg-state-danger"}`} />
+              <Badge variant={allHealthy ? "success" : "danger"} dot>
                 {allHealthy ? "All systems operational" : `${offlineCount} service${offlineCount !== 1 ? "s" : ""} offline`}
-              </span>
+              </Badge>
             </div>
           </div>
 
           <div className="flex flex-col gap-6 p-6">
             {/* Metrics row */}
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-              <div className="rounded-lg border border-zinc-700 bg-zinc-800/40 p-4">
-                <div className="text-[10px] font-semibold uppercase tracking-widest text-zinc-500">Services</div>
-                <div className="mt-2 text-3xl font-semibold tabular-nums">{apps.length}</div>
-                <div className="mt-0.5 text-xs text-zinc-500">registered</div>
-              </div>
-              <div className="rounded-lg border border-zinc-700 bg-zinc-800/40 p-4">
-                <div className="text-[10px] font-semibold uppercase tracking-widest text-zinc-500">Running</div>
-                <div className="mt-2 text-3xl font-semibold tabular-nums text-state-success">{healthyCount}</div>
-                <div className="mt-0.5 text-xs text-zinc-500">healthy</div>
-              </div>
-              <div className={`col-span-2 rounded-lg border sm:col-span-1 ${offlineCount > 0 ? "border-state-danger/30 bg-state-danger/5" : "border-zinc-700 bg-zinc-800/40"} p-4`}>
-                <div className="text-[10px] font-semibold uppercase tracking-widest text-zinc-500">Offline</div>
-                <div className={`mt-2 text-3xl font-semibold tabular-nums ${offlineCount > 0 ? "text-state-danger" : "text-zinc-500"}`}>{offlineCount}</div>
-                <div className="mt-0.5 text-xs text-zinc-500">need attention</div>
-              </div>
+              <Stat label="Services" value={apps.length} sub="registered" />
+              <Stat label="Running" value={healthyCount} sub="healthy" tone="success" />
+              <Stat
+                label="Offline"
+                value={offlineCount}
+                sub="need attention"
+                tone={offlineCount > 0 ? "danger" : "default"}
+                className="col-span-2 sm:col-span-1"
+              />
             </div>
 
             {/* Service health */}

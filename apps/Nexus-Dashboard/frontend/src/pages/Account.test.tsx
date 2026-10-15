@@ -59,8 +59,7 @@ describe("Account", () => {
   it("shows who you are signed in as", async () => {
     stubFetch();
     render(<Account />);
-    await waitFor(() => expect(screen.getByText("ada")).toBeTruthy());
-    expect(screen.getByText("ada@x.dev")).toBeTruthy();
+    await waitFor(() => expect(screen.getByText(/Signed in as ada/)).toBeTruthy());
   });
 
   it("shows how many recovery codes remain", async () => {

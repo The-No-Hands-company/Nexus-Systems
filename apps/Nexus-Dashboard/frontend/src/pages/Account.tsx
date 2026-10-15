@@ -3,6 +3,8 @@ import {
   me, listSessions, revokeSession, remainingRecoveryCodes, regenerateRecoveryCodes,
   changePassword, myActivity, ApiError, type Me, type Session, type ActivityEvent,
 } from "../api";
+import { PageHeader } from "../../../../../packages/nexus-design/src/components/ui/page-header";
+import { Badge } from "../../../../../packages/nexus-design/src/components/ui/badge";
 
 const EVENT_LABELS: Record<string, string> = {
   login_success: "Signed in",
@@ -137,14 +139,13 @@ export default function Account() {
   }
 
   return (
-    <section className="mx-auto max-w-2xl space-y-10 px-4 py-6 sm:p-8">
-      <div>
-        <h1 className="text-2xl font-semibold">Account</h1>
-        <p className="mt-2 text-zinc-400">
-          Signed in as <span className="text-zinc-100">{user.username}</span>{" "}
-          <span className="text-zinc-500">{user.email}</span>
-        </p>
-      </div>
+    <section className="mx-auto max-w-2xl">
+      <PageHeader
+        title="Account"
+        description={`Signed in as ${user.username} · ${user.email}`}
+        actions={<Badge variant="accent">{user.role ?? "member"}</Badge>}
+      />
+      <div className="space-y-10 px-6 py-6">
 
       <div>
         <h2 className="text-lg font-medium">Password</h2>
@@ -282,6 +283,7 @@ export default function Account() {
             ))}
           </ul>
         )}
+      </div>
       </div>
     </section>
   );

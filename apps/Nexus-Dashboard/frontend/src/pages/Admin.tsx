@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 import { buildAuthPageUrl } from "../authPages";
+import { PageHeader } from "../../../../../packages/nexus-design/src/components/ui/page-header";
+import { Badge } from "../../../../../packages/nexus-design/src/components/ui/badge";
 import {
   me,
   isAdmin,
@@ -144,13 +146,15 @@ export default function Admin() {
   if (!isAdmin(user)) return null;
 
   return (
-    <section className="mx-auto max-w-3xl space-y-10 px-4 py-6 sm:p-8">
-      <div>
-        <h1 className="text-2xl font-semibold">Operator</h1>
-        <p className="mt-2 text-zinc-400">Approve access requests and hand out invites.</p>
-      </div>
+    <section className="mx-auto max-w-3xl">
+      <PageHeader
+        title="Operator"
+        description="Approve access requests and hand out invites."
+        actions={requests.length > 0 ? <Badge variant="warning">{requests.length} pending</Badge> : undefined}
+      />
+      <div className="space-y-10 px-6 py-6">
 
-      {error && <p role="alert" className="text-sm text-red-400">{error}</p>}
+      {error && <p role="alert" className="text-sm text-state-danger">{error}</p>}
 
       <div>
         <h2 className="text-lg font-medium">Pending requests</h2>
@@ -516,6 +520,7 @@ export default function Admin() {
             </div>
           </div>
         )}
+      </div>
       </div>
     </section>
   );

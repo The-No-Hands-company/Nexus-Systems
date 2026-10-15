@@ -3,8 +3,12 @@ import {
   cloudStatus, cloudTrust, cloudIdentity, cloudAudit, cloudTools,
   type CloudStatus, type CloudTrust, type CloudIdentity, type CloudAuditEvent, type CloudTool,
 } from "../../api";
-import { timeAgo, healthDotClass, healthTextClass } from "./format";
+import { timeAgo } from "./format";
 import CloudNav from "./CloudNav";
+import { Badge } from "../../../../../../packages/nexus-design/src/components/ui/badge";
+import { Stat } from "../../../../../../packages/nexus-design/src/components/ui/stat";
+import { PageHeader } from "../../../../../../packages/nexus-design/src/components/ui/page-header";
+import { Table, TableHead, TableBody, TableRow, TableHeader, TableCell } from "../../../../../../packages/nexus-design/src/components/ui/table";
 
 /** status.html's hardcoded INTERNAL array in renderInternalServicesCard. */
 const INTERNAL_SERVICES = [
@@ -103,13 +107,14 @@ export default function CloudOverview() {
 
   if (state.kind === "unavailable") {
     return (
-      <section className="mx-auto max-w-5xl space-y-6 px-4 py-6 sm:p-8">
-        <CloudNav />
-        <h1 className="text-2xl font-semibold">Cloud</h1>
-        <p role="alert" className="mt-4 text-red-400">
-          Cloud is unavailable right now. The rest of the ecosystem still works — try this page
-          again in a moment.
-        </p>
+      <section className="mx-auto max-w-5xl">
+        <PageHeader title="Cloud" description="Node identity, trust and services" nav={<CloudNav />} />
+        <div className="px-6 py-6">
+          <p role="alert" className="text-state-danger">
+            Cloud is unavailable right now. The rest of the ecosystem still works — try this page
+            again in a moment.
+          </p>
+        </div>
       </section>
     );
   }
@@ -138,37 +143,22 @@ export default function CloudOverview() {
     : tools.filter((t) => t.publicUrl && (t.health ?? "") === "healthy").length;
 
   return (
-    <section className="mx-auto max-w-5xl space-y-6 px-4 py-6 sm:p-8">
-      <CloudNav />
-      <div>
-        <h1 className="text-2xl font-semibold">Cloud</h1>
-        <p className="mt-2 text-zinc-400">This node's control plane — identity, trust and services.</p>
-      </div>
+    <section className="mx-auto max-w-5xl">
+      <PageHeader
+        title="Cloud"
+        description="This node's control plane — identity, trust and services."
+        nav={<CloudNav />}
+      />
 
+      <div className="space-y-6 px-6 py-6">
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <div className="rounded-lg border border-zinc-800 bg-zinc-900 p-4">
-          <div className="text-2xl font-semibold text-zinc-100">{toolReachable ?? "—"}</div>
-          <div className="text-sm text-zinc-400">Reachable tools</div>
-          <div className="mt-1 text-xs text-zinc-500">
-            <span>{toolHealthy} heartbeating · </span>
-            <span>{toolTotal} registered</span>
-          </div>
-        </div>
-        {/* Was "Users". Cloud has no user count and should not — accounts moved
-            to Nexus-Auth. Exposed tools is the number this control plane
-            actually owns and the one an operator acts on. */}
-        <div className="rounded-lg border border-zinc-800 bg-zinc-900 p-4">
-          <div className="text-2xl font-semibold text-zinc-100">{toolExposed}</div>
-          <div className="text-sm text-zinc-400">Exposed</div>
-          <div className="mt-1 text-xs text-zinc-500">reachable publicly</div>
-        </div>
-        <div className="rounded-lg border border-zinc-800 bg-zinc-900 p-4">
-          <div className="text-2xl font-semibold text-zinc-100">{peerTotal}</div>
-          <div className="text-sm text-zinc-400">Peers</div>
-          {/* "federation nodes" alongside 0 implied this node was not one.
-              Peers are the *other* nodes; this one is not its own peer. */}
-          <div className="mt-1 text-xs text-zinc-500">other nodes federated with</div>
-        </div>
+        <Stat
+          label="Reachable tools"
+          value={toolReachable ?? "—"}
+          sub={`${toolHealthy} heartbeating · ${toolTotal} registered`}
+        />
+        <Stat label="Exposed" value={toolExposed} sub="reachable publicly" />
+        <Stat label="Peers" value={peerTotal} sub="other federated nodes" />
       </div>
 
       <div className="rounded-lg border border-zinc-800 bg-zinc-900 p-4">
@@ -237,38 +227,41 @@ export default function CloudOverview() {
       )}
 
       {audit.length > 0 && (
-        <div className="rounded-lg border border-zinc-800 bg-zinc-900 p-4">
-          <div className="flex items-center justify-between">
-            <h2 className="text-lg font-medium">Recent trust actions</h2>
+        <div className="rounded-lg border border-zinc-800 bg-zinc-900">
+          <div className="flex items-center justify-between border-b border-zinc-800 px-4 py-3">
+            <h2 className="text-sm font-medium text-zinc-100">Recent trust actions</h2>
             <span className="text-xs text-zinc-500">{audit.length}</span>
           </div>
-          <ul className="mt-3 divide-y divide-zinc-800">
-            {audit.map((ev, i) => {
-              const md = ev.metadata ?? {};
-              const transition = md.previousState && md.nextState
-                ? `${md.previousState} → ${md.nextState}`
-                : md.nextState ?? "";
-              return (
-                // eslint-disable-next-line react/no-array-index-key -- events carry no stable id
-                <li key={`${ev.subjectId ?? "event"}-${i}`} className="flex items-start justify-between gap-4 py-3">
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2">
-                      <span className="rounded bg-zinc-800 px-2 py-0.5 text-xs uppercase text-zinc-300">
-                        {md.action || "unknown"}
-                      </span>
-                      <span className="truncate font-mono text-sm text-zinc-200">{ev.subjectId || "—"}</span>
-                    </div>
-                    <div className="mt-1 text-xs text-zinc-500">
-                      {transition && <span className="mr-2">{transition}</span>}
-                      by {md.actor || "system"}
-                    </div>
-                    {md.reason && <div className="mt-1 text-xs text-zinc-400">{md.reason}</div>}
-                  </div>
-                  <div className="shrink-0 text-xs text-zinc-500">{timeAgo(ev.timestamp)}</div>
-                </li>
-              );
-            })}
-          </ul>
+          <Table>
+            <TableHead>
+              <TableRow>
+                <TableHeader>Action</TableHeader>
+                <TableHeader>Subject</TableHeader>
+                <TableHeader>By</TableHeader>
+                <TableHeader>When</TableHeader>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {audit.map((ev, i) => {
+                const md = ev.metadata ?? {};
+                const transition = md.previousState && md.nextState
+                  ? `${md.previousState} → ${md.nextState}`
+                  : md.nextState ?? "";
+                return (
+                  // eslint-disable-next-line react/no-array-index-key -- events carry no stable id
+                  <TableRow key={`${ev.subjectId ?? "event"}-${i}`}>
+                    <TableCell>
+                      <Badge variant="default">{md.action || "unknown"}</Badge>
+                      {transition && <div className="mt-1 text-xs text-zinc-500">{transition}</div>}
+                    </TableCell>
+                    <TableCell><span className="font-mono text-xs">{ev.subjectId || "—"}</span></TableCell>
+                    <TableCell className="text-zinc-400">{md.actor || "system"}</TableCell>
+                    <TableCell className="text-zinc-500">{timeAgo(ev.timestamp)}</TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
         </div>
       )}
 
@@ -296,14 +289,14 @@ export default function CloudOverview() {
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="font-medium text-zinc-100">{svc.name}</span>
                     {t ? (
-                      <span className={`flex items-center gap-1 text-xs ${healthTextClass(t.health)}`}>
-                        <span className={`h-1.5 w-1.5 rounded-full ${healthDotClass(t.health)}`} />
+                      <Badge
+                        variant={t.health === "healthy" ? "success" : t.health === "offline" ? "danger" : "warning"}
+                        dot
+                      >
                         {t.health || "unknown"}
-                      </span>
+                      </Badge>
                     ) : (
-                      <span className="rounded bg-amber-500/10 px-1.5 py-0.5 text-xs uppercase text-amber-400">
-                        not registered
-                      </span>
+                      <Badge variant="warning">not registered</Badge>
                     )}
                   </div>
                   <div className="mt-1 text-sm text-zinc-400">{svc.desc}</div>
@@ -340,6 +333,8 @@ export default function CloudOverview() {
             })}
           </ul>
         )}
+      </div>
+
       </div>
     </section>
   );

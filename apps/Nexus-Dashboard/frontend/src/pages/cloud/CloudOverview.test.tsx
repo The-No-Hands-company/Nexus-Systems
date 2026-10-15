@@ -172,7 +172,7 @@ describe("CloudOverview", () => {
     });
     render(<MemoryRouter><CloudOverview /></MemoryRouter>);
 
-    expect(await screen.findByText("86 registered")).toBeTruthy();
+    expect(await screen.findByText(/86 registered/)).toBeTruthy();
     expect(screen.getByRole("navigation", { name: "Cloud console" })).toBeTruthy();
   });
 
