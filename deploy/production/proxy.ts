@@ -621,6 +621,37 @@ async function handleRequestInner(
     const decision = await gate(req, { upstream: upstreamUrl, requiresAuth, kind });
     if (!decision.allow) return decision.response;
 
+    // Cross-subdomain CSRF protection (O-1 mitigation).
+    //
+    // The session cookie is scoped to .tnhc.dev so every subdomain is
+    // "same-site" from the browser's perspective — SameSite=Lax does NOT block
+    // a credentialed XHR from evil.tnhc.dev to app.tnhc.dev, because they
+    // share the same eTLD+1. A mutation from a user-deployed site would execute
+    // with the visitor's full session.
+    //
+    // Sec-Fetch-Site is injected by the browser on every fetch/XHR:
+    //   same-origin  — caller and target are the same exact origin  → safe
+    //   same-site    — different subdomain, same eTLD+1             → block if mutation
+    //   cross-site   — different domain entirely                    → SameSite=Lax already
+    //                                                                 withholds the cookie
+    //   none         — no header (API client, curl, Cloudflare)     → safe to pass through
+    //
+    // Blocking same-site mutations to app routes is safe: no legitimate
+    // ecosystem flow makes credentialed cross-subdomain mutations. The shell
+    // iframes apps but never POSTs to their APIs; each app mutates its own
+    // origin only.
+    const secFetchSite = req.headers.get("sec-fetch-site");
+    if (
+      kind === "app" &&
+      secFetchSite === "same-site" &&
+      ["POST", "PUT", "PATCH", "DELETE"].includes(req.method)
+    ) {
+      return Response.json(
+        { error: "cross_subdomain_mutation_forbidden" },
+        { status: 403 },
+      );
+    }
+
     // WebSockets cannot go through fetch(): it has no way to perform the
     // upgrade handshake, so every realtime connection to an app behind this
     // proxy simply failed. Hand these to Bun's own upgrade instead, and pump

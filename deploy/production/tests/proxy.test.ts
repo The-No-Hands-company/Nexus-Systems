@@ -697,3 +697,97 @@ describe("public health checks", () => {
     } finally { site.stop(true); delete process.env.HOSTING_SITE_UPSTREAM; }
   });
 });
+
+describe("cross-subdomain CSRF protection (O-1)", () => {
+  // A user-deployed site at e.g. evil.tnhc.dev shares the same eTLD+1 as all
+  // ecosystem apps, so SameSite=Lax does NOT prevent the session cookie from
+  // riding along on a credentialed cross-subdomain fetch. The browser tags every
+  // fetch/XHR with Sec-Fetch-Site; a "same-site" value on a mutation to an app
+  // route means the caller is a different subdomain, which is only ever a
+  // user-deployed site — block it.
+
+  it("blocks a same-site POST to an app route with 403", async () => {
+    const app = Bun.serve({ port: 0, hostname: "127.0.0.1", fetch() { return new Response("mutated"); } });
+    try {
+      const { handleRequest, __setRoutesForTest } = await import("../proxy");
+      __setRoutesForTest({ "app.tnhc.dev": { upstream: `http://127.0.0.1:${app.port}`, requiresAuth: false, kind: "app" } });
+      const res = await handleRequest(new Request("http://app.tnhc.dev/ipa/issues", {
+        method: "POST",
+        headers: { "sec-fetch-site": "same-site", "content-type": "application/json" },
+        body: JSON.stringify({ title: "injected" }),
+      }));
+      expect(res.status).toBe(403);
+      expect((await res.json() as { error: string }).error).toBe("cross_subdomain_mutation_forbidden");
+    } finally { app.stop(true); }
+  });
+
+  it("blocks same-site PUT, PATCH, DELETE as well", async () => {
+    const app = Bun.serve({ port: 0, hostname: "127.0.0.1", fetch() { return new Response("ok"); } });
+    try {
+      const { handleRequest, __setRoutesForTest } = await import("../proxy");
+      __setRoutesForTest({ "app.tnhc.dev": { upstream: `http://127.0.0.1:${app.port}`, requiresAuth: false, kind: "app" } });
+      for (const method of ["PUT", "PATCH", "DELETE"]) {
+        const res = await handleRequest(new Request("http://app.tnhc.dev/ipa/issues/1", {
+          method,
+          headers: { "sec-fetch-site": "same-site" },
+        }));
+        expect(res.status).toBe(403);
+      }
+    } finally { app.stop(true); }
+  });
+
+  it("passes a same-site GET (read-only) through", async () => {
+    const app = Bun.serve({ port: 0, hostname: "127.0.0.1", fetch() { return new Response("data"); } });
+    try {
+      const { handleRequest, __setRoutesForTest } = await import("../proxy");
+      __setRoutesForTest({ "app.tnhc.dev": { upstream: `http://127.0.0.1:${app.port}`, requiresAuth: false, kind: "app" } });
+      const res = await handleRequest(new Request("http://app.tnhc.dev/ipa/issues", {
+        headers: { "sec-fetch-site": "same-site" },
+      }));
+      expect(res.status).toBe(200);
+    } finally { app.stop(true); }
+  });
+
+  it("passes a mutation with no Sec-Fetch-Site (API client, curl)", async () => {
+    const app = Bun.serve({ port: 0, hostname: "127.0.0.1", fetch() { return new Response("created"); } });
+    try {
+      const { handleRequest, __setRoutesForTest } = await import("../proxy");
+      __setRoutesForTest({ "app.tnhc.dev": { upstream: `http://127.0.0.1:${app.port}`, requiresAuth: false, kind: "app" } });
+      const res = await handleRequest(new Request("http://app.tnhc.dev/ipa/issues", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ title: "api-client" }),
+      }));
+      expect(res.status).toBe(200);
+    } finally { app.stop(true); }
+  });
+
+  it("passes a same-origin POST (Sec-Fetch-Site: same-origin)", async () => {
+    const app = Bun.serve({ port: 0, hostname: "127.0.0.1", fetch() { return new Response("ok"); } });
+    try {
+      const { handleRequest, __setRoutesForTest } = await import("../proxy");
+      __setRoutesForTest({ "app.tnhc.dev": { upstream: `http://127.0.0.1:${app.port}`, requiresAuth: false, kind: "app" } });
+      const res = await handleRequest(new Request("http://app.tnhc.dev/ipa/issues", {
+        method: "POST",
+        headers: { "sec-fetch-site": "same-origin", "content-type": "application/json" },
+        body: "{}",
+      }));
+      expect(res.status).toBe(200);
+    } finally { app.stop(true); }
+  });
+
+  it("does NOT block mutations to user-deployed sites (kind: site)", async () => {
+    const site = Bun.serve({ port: 0, hostname: "127.0.0.1", fetch() { return new Response("site-ok"); } });
+    process.env.HOSTING_SITE_UPSTREAM = `http://127.0.0.1:${site.port}`;
+    try {
+      const { handleRequest, __setRoutesForTest } = await import("../proxy");
+      __setRoutesForTest({});
+      const res = await handleRequest(new Request("http://someones-site.tnhc.dev/submit", {
+        method: "POST",
+        headers: { "sec-fetch-site": "same-site" },
+        body: "data",
+      }));
+      expect(res.status).toBe(200);
+    } finally { site.stop(true); delete process.env.HOSTING_SITE_UPSTREAM; }
+  });
+});
