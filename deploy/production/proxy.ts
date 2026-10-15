@@ -716,11 +716,15 @@ async function handleRequestInner(
       if (preserveHost) forwardHeaders.set("host", host);
       forwardHeaders.delete("connection");
 
-      // Identity is something only this proxy may assert. Strip any inbound
-      // value first — without that, a client could set the header itself and
-      // claim to be anyone on every public route — then attach the one the
-      // gate minted, if it minted one.
+      // Identity and subject are something only this proxy (or trusted
+      // server-side callers) may assert. Strip any inbound value first —
+      // without that, a browser could set either header itself and claim to be
+      // anyone on every public route. The proxy then re-attaches the identity
+      // token it minted, if it minted one. x-nexus-subject is only set by
+      // trusted server-side code (e.g. the Dashboard's loopback calls) after
+      // this proxy hop — never by a browser reaching this forwarding path.
       forwardHeaders.delete("x-nexus-identity");
+      forwardHeaders.delete("x-nexus-subject");
       if (decision.identityToken) {
         forwardHeaders.set("x-nexus-identity", decision.identityToken);
       }
