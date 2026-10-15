@@ -1,11 +1,11 @@
 import type { Priority } from "../types";
 
 const CONFIG: Record<Priority, { color: string; label: string; symbol: string }> = {
-  none: { color: "text-zinc-500", label: "No priority", symbol: "–" },
-  low: { color: "text-blue-400", label: "Low", symbol: "↓" },
-  medium: { color: "text-yellow-400", label: "Medium", symbol: "→" },
-  high: { color: "text-orange-400", label: "High", symbol: "↑" },
-  urgent: { color: "text-red-400", label: "Urgent", symbol: "!!" },
+  none:   { color: "text-zinc-500",      label: "No priority", symbol: "–"  },
+  low:    { color: "text-state-info",    label: "Low",         symbol: "↓"  },
+  medium: { color: "text-state-warning", label: "Medium",      symbol: "→"  },
+  high:   { color: "text-state-danger",  label: "High",        symbol: "↑"  },
+  urgent: { color: "text-state-danger",  label: "Urgent",      symbol: "!!" },
 };
 
 export function PriorityIcon({ priority }: { priority: Priority }) {
