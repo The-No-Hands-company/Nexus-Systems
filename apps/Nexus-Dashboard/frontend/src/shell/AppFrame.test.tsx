@@ -4,6 +4,8 @@ import AppFrame, { embedUrl } from "./AppFrame";
 
 const apps = [
   { id: "nexus-draw", name: "Draw", description: "", publicUrl: "https://draw.tnhc.dev", path: "/draw", delivery: "framed" as const, health: "healthy" as const },
+  { id: "nexus-edge", name: "Nexus Edge", description: "Gateway orchestration", publicUrl: undefined, path: "/edge", delivery: "shell-native" as const, health: "offline" as const },
+  { id: "nexus-network", name: "Nexus Network", description: "Network topology", publicUrl: undefined, path: "/network", delivery: "shell-native" as const, health: "healthy" as const },
 ];
 
 describe("embedUrl", () => {
@@ -37,5 +39,18 @@ describe("AppFrame", () => {
     render(<AppFrame apps={apps} appId="does-not-exist" />);
     expect(screen.getByText(/not found/i)).toBeTruthy();
     expect(screen.queryByTitle("Draw")).toBeNull();
+  });
+
+  it("shows a placeholder for offline shell-native apps instead of looping iframe", () => {
+    render(<AppFrame apps={apps} appId="nexus-edge" />);
+    expect(screen.queryByTitle("Nexus Edge")).toBeNull(); // no iframe
+    expect(screen.getByText("Nexus Edge")).toBeTruthy();
+    expect(screen.getByText(/coming soon/i)).toBeTruthy();
+  });
+
+  it("shows a 'live — opening soon' badge for healthy shell-native apps", () => {
+    render(<AppFrame apps={apps} appId="nexus-network" />);
+    expect(screen.queryByTitle("Nexus Network")).toBeNull(); // no iframe
+    expect(screen.getByText(/live/i)).toBeTruthy();
   });
 });

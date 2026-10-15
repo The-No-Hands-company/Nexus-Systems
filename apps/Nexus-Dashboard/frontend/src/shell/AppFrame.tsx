@@ -34,8 +34,37 @@ export default function AppFrame({ apps, appId }: { apps: AppEntry[]; appId: str
       <div className="flex h-full flex-col items-center justify-center gap-2 p-8 text-center">
         <p className="text-zinc-100">App not found.</p>
         <p className="text-sm text-zinc-500">
-          No app is registered as <code>{appId}</code>.
+          No app is registered as <code>{appId || "(unknown)"}</code>.
         </p>
+      </div>
+    );
+  }
+
+  // Shell-native apps live as React components inside this SPA, not as
+  // standalone pages — iframing their own Dashboard path loops back into the
+  // shell. Show a status page instead. Apps with a publicUrl are different:
+  // they have a real standalone origin and are always safe to frame.
+  if (app.delivery === "shell-native" && !app.publicUrl) {
+    return (
+      <div className="flex h-full flex-col items-center justify-center gap-3 p-8 text-center">
+        <p className="text-lg font-semibold text-zinc-100">{app.name}</p>
+        {app.description && (
+          <p className="max-w-sm text-sm text-zinc-500">{app.description}</p>
+        )}
+        <span
+          className={`mt-1 inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium ${
+            app.health === "healthy"
+              ? "bg-emerald-950 text-emerald-400"
+              : "bg-zinc-800 text-zinc-500"
+          }`}
+        >
+          <span
+            className={`h-1.5 w-1.5 rounded-full ${
+              app.health === "healthy" ? "bg-emerald-400" : "bg-zinc-600"
+            }`}
+          />
+          {app.health === "healthy" ? "Live — opening soon" : "Coming soon"}
+        </span>
       </div>
     );
   }

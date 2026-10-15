@@ -294,6 +294,14 @@ export default function App() {
             duplicating that inside Overlay would mean two copies of the same
             three states. */}
         <Route path="/apps" element={<ShellView state={appsState} user={user}><Grid /></ShellView>} />
+        <Route
+          path="/report"
+          element={
+            <ShellView state={appsState} user={user}>
+              <ReportIssue />
+            </ShellView>
+          }
+        />
 
         {/* Flat app routes last: every static route above wins over this, so a
             registered app can never shadow /account or /admin. */}
