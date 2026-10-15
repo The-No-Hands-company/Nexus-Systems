@@ -157,12 +157,47 @@ function isPageLoad(req: Request): boolean {
 }
 
 /**
+ * Inline "session expired" page for iframe navigations that hit the gate
+ * without a valid session.
+ *
+ * The normal path — a top-level page load — gets a 302 to the login page.
+ * That works because the browser can follow the redirect in the top frame.
+ * Inside an iframe it breaks: the login page has `frame-ancestors 'self'`
+ * so the browser blocks it and the iframe shows blank with no explanation.
+ *
+ * This page avoids the problem:
+ *  - CSP allows `frame-ancestors 'self' https://app.tnhc.dev` so it renders.
+ *  - The sign-in link carries `target="_top"` so clicking it replaces the top
+ *    frame rather than opening auth inside the iframe.
+ *  - No redirect — the response IS the page, so no second frame-ancestors check.
+ */
+function iframeSignedOutPage(req: Request): Response {
+  const signInUrl = `https://${AUTH_HOST}/login?redirect_uri=${encodeURIComponent(publicUrl(req))}`;
+  const html = `<!doctype html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Sign in</title><style>*{box-sizing:border-box;margin:0;padding:0}html,body{height:100%;background:#030303;color:#a0a0a0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:14px;display:flex;align-items:center;justify-content:center}a{color:#ccff00;text-decoration:none;font-weight:600}a:hover{opacity:.8}</style></head><body><p>Session expired — <a href="${signInUrl}" target="_top">sign in</a></p></body></html>`;
+  return new Response(html, {
+    status: 401,
+    headers: {
+      "content-type": "text/html; charset=utf-8",
+      "cache-control": "no-store",
+      "content-security-policy": `default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'self' https://app.${DOMAIN}`,
+    },
+  });
+}
+
+/**
  * Signed out. A page load goes to the sign-in page. Anything else (an app's
  * fetch, a script, the CLI) cannot follow a redirect to an HTML form, so it
  * gets a 401 that says where to sign in (audit O-8).
+ *
+ * An iframe navigation is a special case: the login page has `frame-ancestors
+ * 'self'` and would be blocked inside the shell's iframe, showing blank. We
+ * return an inline page instead (see iframeSignedOutPage).
  */
 export function signedOutResponse(req: Request): Response {
-  if (isPageLoad(req)) return loginRedirect(publicUrl(req));
+  if (isPageLoad(req)) {
+    if (req.headers.get("sec-fetch-dest") === "iframe") return iframeSignedOutPage(req);
+    return loginRedirect(publicUrl(req));
+  }
   return Response.json(
     { error: "unauthenticated", signIn: `https://${AUTH_HOST}/login` },
     { status: 401, headers: { "cache-control": "no-store" } },

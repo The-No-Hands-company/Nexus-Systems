@@ -362,4 +362,27 @@ describe("signed-out requests", () => {
       }
     }
   });
+
+  it("an iframe navigation gets an inline HTML page instead of a login redirect", async () => {
+    // The login page has frame-ancestors 'self', so a redirect to it from inside
+    // an iframe would be blocked by the browser, showing blank. We return an
+    // inline page with the correct frame-ancestors header instead.
+    const r = await gate(
+      new Request("https://project.tnhc.dev/?embed=1", {
+        headers: { "sec-fetch-mode": "navigate", "sec-fetch-dest": "iframe" },
+      }),
+      { upstream: "http://127.0.0.1:9", requiresAuth: true, kind: "app" },
+    );
+    expect(r.allow).toBe(false);
+    if (!r.allow) {
+      expect(r.response.status).toBe(401);
+      expect(r.response.headers.get("content-type")).toContain("text/html");
+      const body = await r.response.text();
+      expect(body).toContain("sign in");
+      expect(body).toContain("target=\"_top\"");
+      const csp = r.response.headers.get("content-security-policy") ?? "";
+      expect(csp).toContain("frame-ancestors");
+      expect(csp).toContain("app.tnhc.dev");
+    }
+  });
 });
