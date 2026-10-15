@@ -13,7 +13,10 @@
   --color-zinc-200: var(--nexus-color-text-primary);
   --color-zinc-100: var(--nexus-color-text-primary);
   --color-accent: var(--nexus-color-accent-primary);
+  --color-state-success: var(--nexus-color-state-success);
+  --color-state-warning: var(--nexus-color-state-warning);
   --color-state-danger: var(--nexus-color-state-danger);
+  --color-state-info: var(--nexus-color-state-info);
 }
 
 :root { color-scheme: dark; }

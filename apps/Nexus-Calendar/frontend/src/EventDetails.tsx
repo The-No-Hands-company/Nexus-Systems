@@ -1,4 +1,11 @@
+import { Badge, type BadgeVariant } from "../../../../packages/nexus-design/src/components/ui/badge";
 import type { CalEvent } from "./calendar-api";
+
+const ACCESS_VARIANT: Record<string, BadgeVariant> = {
+  owner: "accent",
+  editor: "info",
+  viewer: "default",
+};
 
 export default function EventDetails({
   event,
@@ -21,7 +28,7 @@ export default function EventDetails({
       </p>
       {event.location && <p className="text-sm text-zinc-400">{event.location}</p>}
       {event.description && <p className="mt-2 text-sm text-zinc-300">{event.description}</p>}
-      <p className="mt-2 text-xs uppercase tracking-wider text-zinc-600">{event.access} access</p>
+      <div className="mt-2"><Badge variant={ACCESS_VARIANT[event.access] ?? "default"}>{event.access}</Badge></div>
 
       <div className="mt-3 flex flex-wrap gap-2">
         {canEdit && onEdit && (
