@@ -165,7 +165,7 @@ Every app in the ecosystem, by category, with measured status.
 |---|---|---|
 | **Nexus-Security** | Security posture, policy, and hardening | Stub |
 | **Nexus-Guardian** | Runtime threat monitoring and abuse response | In development |
-| **Phantom** | Anonymous routing protocol, in development: post-quantum signatures and FHE-encrypted routing metadata work today; message-content encryption and zero-knowledge membership proofs are not built yet, and no live service uses it (tnhc.dev/phantom). A protocol layer for other services to consume, not an app | In development |
+| **Phantom** | Anonymous routing protocol, in development: post-quantum signatures (Dilithium-5) done; FHE routing partial (single shared decryption key — privacy guarantee incomplete until per-relay keys are added); message-content encryption, zero-knowledge membership proofs, and multi-hop not yet built. No live service uses it yet (tnhc.dev/phantom). A protocol layer for other services to consume, not an app | In development |
 | **Nexus-Confidential** | Confidential workload handling | Scaffold |
 | **Nexus-Compliance** | Compliance frameworks and evidence collection | Stub |
 | **Nexus-Provenance** | Artifact provenance and supply-chain attestation | Scaffold |
