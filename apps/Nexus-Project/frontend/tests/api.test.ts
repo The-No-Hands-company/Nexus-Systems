@@ -15,7 +15,7 @@ describe("projectApi", () => {
   beforeEach(() => { vi.restoreAllMocks(); });
 
   it("listWorkspaces calls correct endpoint", async () => {
-    globalThis.fetch = mockFetch(200, [{ id: "ws1", name: "My WS" }]);
+    globalThis.fetch = mockFetch(200, { workspaces: [{ id: "ws1", name: "My WS" }] });
     const api = projectApi(BASE);
     const result = await api.listWorkspaces();
     expect(result).toHaveLength(1);
@@ -24,7 +24,7 @@ describe("projectApi", () => {
   });
 
   it("listProjects includes workspace id in URL", async () => {
-    globalThis.fetch = mockFetch(200, []);
+    globalThis.fetch = mockFetch(200, { projects: [] });
     const api = projectApi(BASE);
     await api.listProjects("ws123");
     const url = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls[0][0] as string;
@@ -53,7 +53,7 @@ describe("projectApi", () => {
   });
 
   it("listTasks appends query params for filters", async () => {
-    globalThis.fetch = mockFetch(200, []);
+    globalThis.fetch = mockFetch(200, { tasks: [] });
     const api = projectApi(BASE);
     await api.listTasks("p1", { status: "done" });
     const url = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls[0][0] as string;
@@ -61,7 +61,7 @@ describe("projectApi", () => {
   });
 
   it("myTasks calls /me/tasks", async () => {
-    globalThis.fetch = mockFetch(200, []);
+    globalThis.fetch = mockFetch(200, { tasks: [] });
     const api = projectApi(BASE);
     await api.myTasks();
     const url = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls[0][0] as string;

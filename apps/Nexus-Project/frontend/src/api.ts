@@ -22,28 +22,29 @@ export function projectApi(base: string) {
   const r = <T>(path: string, init?: RequestInit) => req<T>(base, path, init);
 
   return {
-    // Workspaces
-    listWorkspaces: () => r<Workspace[]>("/api/v1/project/workspaces"),
+    // Workspaces — backend returns { workspaces: [...] }
+    listWorkspaces: () =>
+      r<{ workspaces: Workspace[] }>("/api/v1/project/workspaces").then(d => d.workspaces),
     createWorkspace: (name: string, kind: "personal" | "team") =>
       r<Workspace>("/api/v1/project/workspaces", { method: "POST", body: JSON.stringify({ name, kind }) }),
 
-    // Projects
+    // Projects — backend returns { projects: [...] }
     listProjects: (workspaceId: string) =>
-      r<Project[]>(`/api/v1/project/workspaces/${workspaceId}/projects`),
+      r<{ projects: Project[] }>(`/api/v1/project/workspaces/${workspaceId}/projects`).then(d => d.projects),
     createProject: (workspaceId: string, body: { key: string; name: string; startDate?: string }) =>
       r<Project>(`/api/v1/project/workspaces/${workspaceId}/projects`, { method: "POST", body: JSON.stringify(body) }),
     getProject: (id: string) => r<Project>(`/api/v1/project/projects/${id}`),
     updateProject: (id: string, patch: Partial<Pick<Project, "name" | "description" | "startDate" | "scheduleMode">>) =>
       r<Project>(`/api/v1/project/projects/${id}`, { method: "PATCH", body: JSON.stringify(patch) }),
 
-    // Statuses
+    // Statuses — backend returns { statuses: [...] }
     listStatuses: (projectId: string) =>
-      r<Status[]>(`/api/v1/project/projects/${projectId}/statuses`),
+      r<{ statuses: Status[] }>(`/api/v1/project/projects/${projectId}/statuses`).then(d => d.statuses),
 
-    // Tasks
+    // Tasks — backend returns { tasks: [...] }
     listTasks: (projectId: string, filters?: { status?: string; assignee?: string; parent?: string }) => {
       const q = new URLSearchParams(filters as Record<string, string>).toString();
-      return r<Task[]>(`/api/v1/project/projects/${projectId}/tasks${q ? `?${q}` : ""}`);
+      return r<{ tasks: Task[] }>(`/api/v1/project/projects/${projectId}/tasks${q ? `?${q}` : ""}`).then(d => d.tasks);
     },
     createTask: (projectId: string, body: Partial<Task> & { title: string }) =>
       r<Task>(`/api/v1/project/projects/${projectId}/tasks`, { method: "POST", body: JSON.stringify(body) }),
@@ -69,8 +70,9 @@ export function projectApi(base: string) {
     getSchedule: (projectId: string) =>
       r<ScheduleResult>(`/api/v1/project/projects/${projectId}/schedule`),
 
-    // My tasks
-    myTasks: () => r<Task[]>("/api/v1/project/me/tasks"),
+    // My tasks — backend returns { tasks: [...] }
+    myTasks: () =>
+      r<{ tasks: Task[] }>("/api/v1/project/me/tasks").then(d => d.tasks),
   };
 }
 
