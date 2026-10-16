@@ -5,6 +5,7 @@
 
 import { gate } from "./gate";
 import { privacyStatusBody } from "./privacy-status";
+import { canaryStatusBody } from "./warrant-canary";
 import { stripAddressHeaders, tagFromRequestHeaders, CLIENT_TAG_HEADER } from "./client-tag";
 
 // Configuration
@@ -456,15 +457,19 @@ async function handleRequestInner(
     // reads it). Answered here, ungated, from a fixed file — no request input
     // reaches the filesystem.
     if (host === `status.${DOMAIN}`) {
-      if (url.pathname !== "/privacy.json") return new Response("Not found", { status: 404 });
+      const allowed = ["/privacy.json", "/canary.json"];
+      if (!allowed.includes(url.pathname)) return new Response("Not found", { status: 404 });
       const cors = { "access-control-allow-origin": "https://tnhc.dev", vary: "origin" };
       if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: { ...cors, "access-control-allow-methods": "GET, HEAD" } });
       if (req.method !== "GET" && req.method !== "HEAD") return new Response("Method not allowed", { status: 405, headers: { allow: "GET, HEAD" } });
-      const body = JSON.stringify(await privacyStatusBody());
+      const isCanary = url.pathname === "/canary.json";
+      const payload = isCanary ? await canaryStatusBody() : await privacyStatusBody();
+      const body = JSON.stringify(payload);
       const headers = {
         ...cors,
         "content-type": "application/json",
-        "cache-control": "public, max-age=300",
+        // Canary changes at most every 90 days; privacy check is daily.
+        "cache-control": isCanary ? "public, max-age=3600" : "public, max-age=300",
         "content-length": String(Buffer.byteLength(body)),
       };
       return new Response(req.method === "HEAD" ? null : body, { status: 200, headers });
