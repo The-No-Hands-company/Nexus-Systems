@@ -26,21 +26,23 @@ export default function Toolbar() {
   const setActiveTool = useEditorStore((s) => s.setActiveTool);
 
   return (
-    <div className="flex flex-col gap-1 p-2 bg-zinc-900 border-r border-zinc-800 w-14 shrink-0">
+    <nav role="toolbar" aria-label="Drawing tools" aria-orientation="vertical" className="flex flex-col gap-1 p-2 bg-zinc-900 border-r border-zinc-800 w-14 shrink-0">
       {tools.map((tool) => (
         <button
           key={tool.id}
           onClick={() => setActiveTool(tool.id)}
           title={`${tool.label} (${tool.key})`}
+          aria-label={`${tool.label} — press ${tool.key}`}
+          aria-pressed={activeTool === tool.id}
           className={`w-10 h-10 flex items-center justify-center rounded-lg text-sm transition-colors
             ${activeTool === tool.id ? "bg-blue-600 text-white" : "text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200"}`}
         >
-          {tool.icon}
+          <span aria-hidden="true">{tool.icon}</span>
         </button>
       ))}
       <div className="mt-auto pt-2 border-t border-zinc-800">
-        <div className="text-[10px] text-zinc-600 text-center leading-tight">v0.1</div>
+        <div className="text-[10px] text-zinc-600 text-center leading-tight" aria-hidden="true">v0.1</div>
       </div>
-    </div>
+    </nav>
   );
 }

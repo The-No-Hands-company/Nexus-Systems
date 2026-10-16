@@ -170,33 +170,42 @@ export default function App() {
           </div>
         )}
       </div>
-      <div className="flex items-center justify-between h-8 px-3 bg-zinc-900 border-t border-zinc-800 text-[11px] text-zinc-600 shrink-0">
+      <div role="toolbar" aria-label="Panel controls" className="flex items-center justify-between h-8 px-3 bg-zinc-900 border-t border-zinc-800 text-[11px] text-zinc-600 shrink-0">
         <div className="flex gap-3">
           <button
             onClick={() => setSidebar(sidebar === "layers" ? null : "layers")}
+            aria-pressed={sidebar === "layers"}
             className={`hover:text-zinc-300 ${sidebar === "layers" ? "text-blue-400" : ""}`}
           >
             Elements
           </button>
           <button
             onClick={() => setSidebar(sidebar === "properties" ? null : "properties")}
+            aria-pressed={sidebar === "properties"}
             className={`hover:text-zinc-300 ${sidebar === "properties" ? "text-blue-400" : ""}`}
           >
             Properties
           </button>
           <button
             onClick={() => setSidebar(sidebar === "boards" ? null : "boards")}
+            aria-pressed={sidebar === "boards"}
             className={`hover:text-zinc-300 ${sidebar === "boards" ? "text-blue-400" : ""}`}
           >
             Boards
           </button>
           <button
             onClick={() => setSidebar(sidebar === "ai" ? null : "ai")}
+            aria-pressed={sidebar === "ai"}
             className={`hover:text-zinc-300 ${sidebar === "ai" ? "text-blue-400" : ""}`}
           >
             AI
           </button>
-          <button onClick={() => setShowPanels(!showPanels)} className="hover:text-zinc-300">
+          <button
+            onClick={() => setShowPanels(!showPanels)}
+            aria-pressed={showPanels}
+            aria-label={showPanels ? "Hide all panels" : "Show all panels"}
+            className="hover:text-zinc-300"
+          >
             {showPanels ? "Hide" : "Show"}
           </button>
         </div>

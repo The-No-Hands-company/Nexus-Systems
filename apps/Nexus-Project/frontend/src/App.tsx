@@ -24,7 +24,7 @@ export default function App() {
   return (
     <ApiContext.Provider value={api}>
       <div className="flex flex-col h-screen bg-zinc-900 text-zinc-200">
-        <header className="flex items-center gap-2 px-4 h-12 border-b border-zinc-700 flex-shrink-0">
+        <header className="flex flex-wrap items-center gap-2 px-4 py-2 min-h-12 border-b border-zinc-700 flex-shrink-0">
           <button
             onClick={goHome}
             className="flex items-center gap-1.5 font-semibold text-sm text-zinc-100 hover:opacity-90 transition-opacity"
@@ -37,13 +37,14 @@ export default function App() {
 
           {project && (
             <>
-              <span className="text-zinc-700">/</span>
-              <span className="text-sm text-zinc-400 truncate max-w-[12rem]">{project.name}</span>
-              <nav className="flex gap-0.5 ml-3">
+              <span className="text-zinc-700" aria-hidden="true">/</span>
+              <span className="text-sm text-zinc-400 truncate max-w-[10rem] sm:max-w-[16rem]">{project.name}</span>
+              <nav className="flex gap-0.5 ml-1" aria-label="Project views">
                 {NAV_ITEMS.map(item => (
                   <button
                     key={item.id}
                     onClick={() => setView(item.id)}
+                    aria-current={view === item.id ? "page" : undefined}
                     className={`px-3 py-1.5 rounded text-sm transition-colors ${
                       view === item.id
                         ? "bg-zinc-800 text-zinc-100"

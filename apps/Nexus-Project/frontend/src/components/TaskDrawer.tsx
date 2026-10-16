@@ -44,18 +44,22 @@ export function TaskDrawer({ task, statuses, onClose, onUpdated }: Props) {
     <div className="fixed inset-0 z-50 flex justify-end bg-black/40">
       <div
         ref={drawerRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="task-drawer-title"
         className="w-full max-w-lg bg-zinc-900 border-l border-zinc-700 flex flex-col h-full shadow-2xl"
         data-testid="task-drawer"
       >
         <div className="flex items-center justify-between px-5 py-4 border-b border-zinc-700">
-          <span className="text-xs text-zinc-500 font-mono">#{task.number}</span>
-          <button onClick={onClose} className="text-zinc-400 hover:text-zinc-100 text-xl leading-none">×</button>
+          <span id="task-drawer-title" className="text-xs text-zinc-500 font-mono">Task #{task.number}</span>
+          <button onClick={onClose} aria-label="Close" className="text-zinc-400 hover:text-zinc-100 text-xl leading-none">×</button>
         </div>
 
         <div className="flex-1 overflow-y-auto p-5 space-y-4">
           <div>
-            <label className="block text-xs text-zinc-500 mb-1">Title</label>
+            <label htmlFor="task-title" className="block text-xs text-zinc-500 mb-1">Title</label>
             <input
+              id="task-title"
               className="w-full bg-zinc-800 border border-zinc-600 rounded px-3 py-2 text-sm text-zinc-100 focus:outline-none focus:border-zinc-400"
               value={title}
               onChange={e => setTitle(e.target.value)}
@@ -63,8 +67,9 @@ export function TaskDrawer({ task, statuses, onClose, onUpdated }: Props) {
           </div>
 
           <div>
-            <label className="block text-xs text-zinc-500 mb-1">Status</label>
+            <label htmlFor="task-status" className="block text-xs text-zinc-500 mb-1">Status</label>
             <select
+              id="task-status"
               className="w-full bg-zinc-800 border border-zinc-600 rounded px-3 py-2 text-sm text-zinc-100 focus:outline-none focus:border-zinc-400"
               value={statusId}
               onChange={e => setStatusId(e.target.value)}
@@ -75,8 +80,9 @@ export function TaskDrawer({ task, statuses, onClose, onUpdated }: Props) {
           </div>
 
           <div>
-            <label className="block text-xs text-zinc-500 mb-1">Priority</label>
+            <label htmlFor="task-priority" className="block text-xs text-zinc-500 mb-1">Priority</label>
             <select
+              id="task-priority"
               className="w-full bg-zinc-800 border border-zinc-600 rounded px-3 py-2 text-sm text-zinc-100 focus:outline-none focus:border-zinc-400"
               value={priority}
               onChange={e => setPriority(e.target.value as Task["priority"])}
@@ -89,8 +95,9 @@ export function TaskDrawer({ task, statuses, onClose, onUpdated }: Props) {
           </div>
 
           <div>
-            <label className="block text-xs text-zinc-500 mb-1">Description</label>
+            <label htmlFor="task-description" className="block text-xs text-zinc-500 mb-1">Description</label>
             <textarea
+              id="task-description"
               className="w-full bg-zinc-800 border border-zinc-600 rounded px-3 py-2 text-sm text-zinc-100 focus:outline-none focus:border-zinc-400 min-h-[100px] resize-y"
               value={description}
               onChange={e => setDescription(e.target.value)}

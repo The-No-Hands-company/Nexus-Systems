@@ -117,9 +117,13 @@ export function BoardView({ project }: Props) {
             {tasksByStatus(status.id).map(task => (
               <div
                 key={task.id}
+                role="button"
+                tabIndex={0}
+                aria-label={`${task.title}, task #${task.number}`}
                 draggable
                 onDragStart={() => handleDragStart(task.id)}
                 onClick={() => setSelected(task)}
+                onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setSelected(task); } }}
                 className="bg-zinc-800 border border-zinc-700 rounded p-2.5 cursor-pointer hover:border-zinc-500 transition-colors select-none"
                 data-testid={`task-card-${task.id}`}
               >

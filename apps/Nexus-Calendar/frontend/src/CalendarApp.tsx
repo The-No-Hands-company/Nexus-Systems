@@ -156,7 +156,7 @@ export default function CalendarApp({
 
       <main className="flex min-h-0 flex-1 flex-col md:flex-row">
         {/* Calendar grid */}
-        <section className="flex min-h-[32rem] min-w-0 flex-1 flex-col">
+        <section aria-label="Calendar" className="flex min-h-[32rem] min-w-0 flex-1 flex-col">
           {loading ? (
             <p className="p-6 text-zinc-400">Loading calendar…</p>
           ) : error ? (
@@ -250,7 +250,11 @@ export default function CalendarApp({
                 {selectedEvents.map((event) => (
                   <div
                     key={event.id}
+                    role="button"
+                    tabIndex={0}
+                    aria-label={event.title}
                     onClick={() => setSelectedEvent(event)}
+                    onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setSelectedEvent(event); } }}
                     className="mb-2 cursor-pointer"
                   >
                     <EventDetails
