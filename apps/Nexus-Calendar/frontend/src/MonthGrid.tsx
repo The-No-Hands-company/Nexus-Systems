@@ -35,7 +35,8 @@ export default function MonthGrid({ year, month, events, selectedDay, today, onS
     if (next >= 0 && next < buttons.length) buttons[next].focus();
   };
 
-  const cells = Array.from({ length: firstOffset }, (_, index) => (
+  // Build flat cell list (blanks + day buttons), then chunk into rows of 7
+  const flatCells: React.ReactNode[] = Array.from({ length: firstOffset }, (_, index) => (
     <div key={`blank-${index}`} role="gridcell" aria-hidden="true" className="border-b border-r border-white/10" />
   ));
 
@@ -45,7 +46,7 @@ export default function MonthGrid({ year, month, events, selectedDay, today, onS
     const isToday = today === date;
     const isSelected = selectedDay === date;
 
-    cells.push(
+    flatCells.push(
       <button
         key={date}
         type="button"
@@ -55,7 +56,7 @@ export default function MonthGrid({ year, month, events, selectedDay, today, onS
         aria-selected={isSelected}
         onClick={() => onSelectDay(date)}
         className={[
-          "min-h-20 border-b border-r border-white/10 p-1 text-left hover:bg-white/5 transition-colors",
+          "min-h-12 sm:min-h-20 border-b border-r border-white/10 p-1 text-left hover:bg-white/5 transition-colors",
           isSelected ? "bg-white/10" : "",
           isToday ? "ring-1 ring-inset ring-accent" : "",
         ].join(" ")}
@@ -69,11 +70,14 @@ export default function MonthGrid({ year, month, events, selectedDay, today, onS
             tabIndex={0}
             onClick={(e) => { e.stopPropagation(); onSelectEvent(event); }}
             onKeyDown={(e) => { if (e.key === "Enter") { e.stopPropagation(); onSelectEvent(event); } }}
-            className="mt-1 block truncate rounded bg-accent/15 px-1 text-xs text-accent"
+            className="mt-0.5 hidden sm:block truncate rounded-sm bg-accent/20 px-1 text-xs text-accent hover:bg-accent/30 transition-colors"
           >
             {event.title}
           </span>
         ))}
+        {eventList.length > 0 && (
+          <span className="sm:hidden mt-0.5 block h-1 w-1 rounded-full bg-accent" aria-hidden="true" />
+        )}
         {eventList.length > 3 && (
           <span className="block text-xs text-zinc-500">+{eventList.length - 3} more</span>
         )}
@@ -81,20 +85,24 @@ export default function MonthGrid({ year, month, events, selectedDay, today, onS
     );
   }
 
+  // Group flat cells into rows of 7 for proper grid ARIA structure
+  const gridRows: React.ReactNode[][] = [];
+  for (let i = 0; i < flatCells.length; i += 7) {
+    gridRows.push(flatCells.slice(i, i + 7));
+  }
+
   return (
-    <div role="grid" aria-label="Calendar days">
-      <div role="row" className="grid grid-cols-7 border-b border-white/10">
+    <div role="grid" aria-label="Calendar days" ref={gridRef} onKeyDown={handleGridKeyDown} className="flex flex-col flex-1 overflow-y-auto">
+      <div role="row" className="grid grid-cols-7 border-b border-white/10 shrink-0">
         {DAYS.map((day, i) => (
           <div key={day} role="columnheader" aria-label={DAY_FULL[i]} className="py-2 text-center text-xs uppercase tracking-wider text-zinc-500">{day}</div>
         ))}
       </div>
-      <div
-        ref={gridRef}
-        onKeyDown={handleGridKeyDown}
-        className="grid flex-1 grid-cols-7 auto-rows-fr overflow-y-auto"
-      >
-        {cells}
-      </div>
+      {gridRows.map((row, rowIdx) => (
+        <div key={rowIdx} role="row" className="grid grid-cols-7 flex-1">
+          {row}
+        </div>
+      ))}
     </div>
   );
 }

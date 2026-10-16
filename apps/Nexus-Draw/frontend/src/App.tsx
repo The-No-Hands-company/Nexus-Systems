@@ -146,57 +146,57 @@ export default function App() {
           <Canvas />
         </div>
         {showPanels && (
-          <div className="flex">
+          <>
             {sidebar === "layers" && (
-              <div className="w-56 border-l border-zinc-800 bg-zinc-900">
+              <div className="absolute inset-y-0 right-0 z-30 w-56 border-l border-zinc-800 bg-zinc-900 overflow-y-auto sm:relative sm:z-auto sm:inset-auto">
                 <LayerPanel />
               </div>
             )}
             {sidebar === "properties" && (
-              <div className="w-72 border-l border-zinc-800 bg-zinc-900">
+              <div className="absolute inset-y-0 right-0 z-30 w-72 border-l border-zinc-800 bg-zinc-900 overflow-y-auto sm:relative sm:z-auto sm:inset-auto">
                 <PropertiesPanel />
               </div>
             )}
             {sidebar === "boards" && (
-              <div className="w-64 border-l border-zinc-800 bg-zinc-900">
+              <div className="absolute inset-y-0 right-0 z-30 w-64 border-l border-zinc-800 bg-zinc-900 overflow-y-auto sm:relative sm:z-auto sm:inset-auto">
                 <BoardPanel key={boardId} onSwitch={switchBoard} onNew={newBoard} />
               </div>
             )}
             {sidebar === "ai" && boardId && (
-              <div className="w-72 border-l border-zinc-800 bg-zinc-900">
+              <div className="absolute inset-y-0 right-0 z-30 w-72 border-l border-zinc-800 bg-zinc-900 overflow-y-auto sm:relative sm:z-auto sm:inset-auto">
                 <AIPanel boardId={boardId} />
               </div>
             )}
-          </div>
+          </>
         )}
       </div>
-      <div role="toolbar" aria-label="Panel controls" className="flex items-center justify-between h-8 px-3 bg-zinc-900 border-t border-zinc-800 text-[11px] text-zinc-600 shrink-0">
-        <div className="flex gap-3">
+      <div role="toolbar" aria-label="Panel controls" className="flex items-center justify-between min-h-[2.5rem] px-3 bg-zinc-900 border-t border-zinc-800 text-xs text-zinc-500 shrink-0 flex-wrap gap-y-1 py-1">
+        <div className="flex gap-2 flex-wrap">
           <button
             onClick={() => setSidebar(sidebar === "layers" ? null : "layers")}
             aria-pressed={sidebar === "layers"}
-            className={`hover:text-zinc-300 ${sidebar === "layers" ? "text-blue-400" : ""}`}
+            className={`px-2 py-1 rounded transition-colors hover:text-zinc-300 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500 ${sidebar === "layers" ? "text-blue-400 bg-zinc-800" : ""}`}
           >
             Elements
           </button>
           <button
             onClick={() => setSidebar(sidebar === "properties" ? null : "properties")}
             aria-pressed={sidebar === "properties"}
-            className={`hover:text-zinc-300 ${sidebar === "properties" ? "text-blue-400" : ""}`}
+            className={`px-2 py-1 rounded transition-colors hover:text-zinc-300 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500 ${sidebar === "properties" ? "text-blue-400 bg-zinc-800" : ""}`}
           >
             Properties
           </button>
           <button
             onClick={() => setSidebar(sidebar === "boards" ? null : "boards")}
             aria-pressed={sidebar === "boards"}
-            className={`hover:text-zinc-300 ${sidebar === "boards" ? "text-blue-400" : ""}`}
+            className={`px-2 py-1 rounded transition-colors hover:text-zinc-300 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500 ${sidebar === "boards" ? "text-blue-400 bg-zinc-800" : ""}`}
           >
             Boards
           </button>
           <button
             onClick={() => setSidebar(sidebar === "ai" ? null : "ai")}
             aria-pressed={sidebar === "ai"}
-            className={`hover:text-zinc-300 ${sidebar === "ai" ? "text-blue-400" : ""}`}
+            className={`px-2 py-1 rounded transition-colors hover:text-zinc-300 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500 ${sidebar === "ai" ? "text-blue-400 bg-zinc-800" : ""}`}
           >
             AI
           </button>
@@ -204,12 +204,12 @@ export default function App() {
             onClick={() => setShowPanels(!showPanels)}
             aria-pressed={showPanels}
             aria-label={showPanels ? "Hide all panels" : "Show all panels"}
-            className="hover:text-zinc-300"
+            className="px-2 py-1 rounded transition-colors hover:text-zinc-300 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500"
           >
             {showPanels ? "Hide" : "Show"}
           </button>
         </div>
-        <div className="flex gap-3">
+        <div className="flex gap-3 text-zinc-600">
           <span>Board: {useEditorStore.getState().board?.name ?? "none"}</span>
         </div>
       </div>

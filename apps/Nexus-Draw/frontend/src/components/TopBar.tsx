@@ -29,28 +29,28 @@ export default function TopBar({ embedded = false }: { embedded?: boolean }) {
   };
 
   return (
-    <div className={`flex items-center ${embedded ? "justify-end" : "justify-between"} h-10 px-4 bg-zinc-900 border-b border-zinc-800 shrink-0`}>
+    <div className={`flex flex-wrap items-center ${embedded ? "justify-end" : "justify-between"} gap-y-1 min-h-[2.5rem] px-3 py-1 bg-zinc-900 border-b border-zinc-800 shrink-0`}>
       {!embedded && (
-        <div className="flex items-center gap-3">
-          <span className="font-semibold text-sm text-zinc-200">Nexus-Draw</span>
+        <div className="flex items-center gap-2 min-w-0">
+          <span className="font-semibold text-sm text-zinc-200 truncate">Nexus-Draw</span>
           {board && (
-            <span className="text-sm text-zinc-400">{board.name}</span>
+            <span className="text-sm text-zinc-400 truncate max-w-[8rem]">{board.name}</span>
           )}
         </div>
       )}
-      <div className="flex items-center gap-2 text-xs text-zinc-500">
-        <button onClick={undo} disabled={!board || undoStack.length === 0} className="hover:text-zinc-200 disabled:opacity-30">↩</button>
-        <button onClick={redo} disabled={!board || redoStack.length === 0} className="hover:text-zinc-200 disabled:opacity-30">↪</button>
-        <span className="text-zinc-700">|</span>
-        <button onClick={save} disabled={!board} className="hover:text-zinc-200 disabled:opacity-30">Save</button>
-        <span className="text-zinc-700">|</span>
-        <button onClick={() => doExport("png")} disabled={!board} className="hover:text-zinc-200 disabled:opacity-30">⇩ PNG</button>
-        <button onClick={() => doExport("svg")} disabled={!board} className="hover:text-zinc-200 disabled:opacity-30">⇩ SVG</button>
-        <span className="text-zinc-700">|</span>
-        <button onClick={() => setZoom(zoom - 0.1)} className="hover:text-zinc-200">−</button>
-        <span>{Math.round(zoom * 100)}%</span>
-        <button onClick={() => setZoom(zoom + 0.1)} className="hover:text-zinc-200">+</button>
-        <button onClick={() => { setZoom(1); setPan({ x: 0, y: 0 }); }} className="hover:text-zinc-200 ml-1">
+      <div className="flex items-center gap-1.5 text-xs text-zinc-500 flex-wrap">
+        <button onClick={undo} disabled={!board || undoStack.length === 0} aria-label="Undo" className="px-1.5 py-1 rounded hover:text-zinc-200 hover:bg-zinc-800 disabled:opacity-30 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-blue-500">↩</button>
+        <button onClick={redo} disabled={!board || redoStack.length === 0} aria-label="Redo" className="px-1.5 py-1 rounded hover:text-zinc-200 hover:bg-zinc-800 disabled:opacity-30 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-blue-500">↪</button>
+        <span className="text-zinc-700" aria-hidden="true">|</span>
+        <button onClick={save} disabled={!board} className="px-1.5 py-1 rounded hover:text-zinc-200 hover:bg-zinc-800 disabled:opacity-30 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-blue-500">Save</button>
+        <span className="text-zinc-700 hidden sm:inline" aria-hidden="true">|</span>
+        <button onClick={() => doExport("png")} disabled={!board} aria-label="Export PNG" className="hidden sm:inline-block px-1.5 py-1 rounded hover:text-zinc-200 hover:bg-zinc-800 disabled:opacity-30 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-blue-500">⇩ PNG</button>
+        <button onClick={() => doExport("svg")} disabled={!board} aria-label="Export SVG" className="hidden sm:inline-block px-1.5 py-1 rounded hover:text-zinc-200 hover:bg-zinc-800 disabled:opacity-30 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-blue-500">⇩ SVG</button>
+        <span className="text-zinc-700" aria-hidden="true">|</span>
+        <button onClick={() => setZoom(zoom - 0.1)} aria-label="Zoom out" className="px-1.5 py-1 rounded hover:text-zinc-200 hover:bg-zinc-800 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-blue-500">−</button>
+        <span aria-live="polite" aria-label={`Zoom ${Math.round(zoom * 100)} percent`}>{Math.round(zoom * 100)}%</span>
+        <button onClick={() => setZoom(zoom + 0.1)} aria-label="Zoom in" className="px-1.5 py-1 rounded hover:text-zinc-200 hover:bg-zinc-800 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-blue-500">+</button>
+        <button onClick={() => { setZoom(1); setPan({ x: 0, y: 0 }); }} aria-label="Fit to view" className="px-1.5 py-1 rounded hover:text-zinc-200 hover:bg-zinc-800 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-blue-500">
           Fit
         </button>
         <HelpOverlay />

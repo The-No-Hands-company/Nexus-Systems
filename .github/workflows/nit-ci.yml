@@ -1,0 +1,47 @@
+name: Nit CI (visual a11y)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "apps/Nexus-Calendar/frontend/**"
+      - "apps/Nexus-Project/frontend/**"
+      - "apps/Nexus-Draw/frontend/**"
+      - "packages/**"
+      - "dhts/nit-ci/**"
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  nit:
+    name: Nit CI
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.3.12"
+
+      - name: Install nit-ci deps
+        working-directory: dhts/nit-ci
+        run: bun install
+
+      - name: Install Playwright browsers
+        working-directory: dhts/nit-ci
+        run: bunx playwright install chromium --with-deps
+
+      - name: Run Nit CI
+        working-directory: dhts/nit-ci
+        run: bun run src/index.ts
+
+      - name: Upload screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nit-ci-screenshots
+          path: dhts/nit-ci/baselines/*.png
+          if-no-files-found: ignore

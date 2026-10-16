@@ -121,7 +121,7 @@ export default function CalendarApp({
       >
         ←
       </button>
-      <span aria-live="polite" className="whitespace-nowrap text-center text-sm text-zinc-200 sm:min-w-32">
+      <span aria-live="polite" className="text-center text-sm text-zinc-200 min-w-0 sm:min-w-32">
         {MONTHS[month]} {year}
       </span>
       <button
@@ -154,9 +154,9 @@ export default function CalendarApp({
     <div className="flex min-h-screen flex-col bg-zinc-900 text-zinc-200">
       <AppHeader homeHref="/" appName="Calendar" utilitySlot={navSlot} />
 
-      <main className="flex min-h-0 flex-1 flex-col md:flex-row">
+      <main className="flex min-h-0 flex-1 flex-col md:flex-row overflow-hidden">
         {/* Calendar grid */}
-        <section aria-label="Calendar" className="flex min-h-[32rem] min-w-0 flex-1 flex-col">
+        <section aria-label="Calendar" className="flex min-h-0 min-w-0 flex-1 flex-col overflow-auto">
           {loading ? (
             <p className="p-6 text-zinc-400">Loading calendar…</p>
           ) : error ? (
@@ -209,7 +209,7 @@ export default function CalendarApp({
         {selectedDay && !loading && !error && (
           <aside
             aria-label="Selected day"
-            className="border-t border-zinc-700 bg-zinc-900 p-4 md:w-96 md:border-l md:border-t-0"
+            className="max-h-[40vh] overflow-y-auto border-t border-zinc-700 bg-zinc-900 p-4 md:max-h-none md:w-96 md:border-l md:border-t-0 md:overflow-y-auto"
           >
             <div className="mb-3 flex items-center justify-between">
               <h2 className="font-semibold text-zinc-100">{readableDay(selectedDay)}</h2>

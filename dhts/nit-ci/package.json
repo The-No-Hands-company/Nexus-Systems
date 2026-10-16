@@ -1,0 +1,14 @@
+{
+  "name": "@nexus/nit-ci",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check": "bun run src/index.ts",
+    "check:update": "bun run src/index.ts --update-baselines",
+    "install-browsers": "bunx playwright install chromium --with-deps"
+  },
+  "dependencies": {
+    "@axe-core/playwright": "4.10.2",
+    "playwright": "1.62.1"
+  }
+}
