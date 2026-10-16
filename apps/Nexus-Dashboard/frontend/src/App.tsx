@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
-import { BrowserRouter, Routes, Route, useParams, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, useParams, Navigate, useLocation } from "react-router-dom";
 import Home from "./pages/Home";
 import { buildAuthPageUrl, type AuthPagePath } from "./authPages";
 import Account from "./pages/Account";
@@ -192,6 +192,7 @@ export default function App() {
 
   return (
     <BrowserRouter>
+      <RouteTitle />
       <Routes>
         {/* Home decides its own chrome: signed in, it wraps itself in Shell;
             signed out, it stays bare. It fetches its own user and apps, so
@@ -310,6 +311,30 @@ export default function App() {
       </Routes>
     </BrowserRouter>
   );
+}
+
+const ROUTE_TITLES: Record<string, string> = {
+  "/": "Nexus",
+  "/account": "Account — Nexus",
+  "/admin": "Operator — Nexus",
+  "/apps": "All Apps — Nexus",
+  "/cloud": "Cloud — Nexus",
+  "/cloud/tools": "Cloud Tools — Nexus",
+  "/cloud/federation": "Cloud Federation — Nexus",
+  "/cloud/identity": "Cloud Identity — Nexus",
+  "/cloud/api": "Cloud API — Nexus",
+  "/mail": "Mail — Nexus",
+  "/report": "Report — Nexus",
+  "/terminal": "Terminal — Nexus",
+};
+
+function RouteTitle() {
+  const { pathname } = useLocation();
+  useEffect(() => {
+    const base = pathname.startsWith("/mail/") ? "/mail" : pathname;
+    document.title = ROUTE_TITLES[base] ?? "Nexus";
+  }, [pathname]);
+  return null;
 }
 
 /** Hand an old /request or /claim link to the page Nexus-Auth serves, query intact. */

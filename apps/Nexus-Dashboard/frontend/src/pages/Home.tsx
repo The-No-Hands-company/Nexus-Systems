@@ -152,6 +152,12 @@ function SignedOut() {
 
   return (
     <div className="flex min-h-screen flex-col bg-zinc-900 text-zinc-100">
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:absolute focus:z-50 focus:top-2 focus:left-2 focus:rounded focus:bg-zinc-800 focus:px-4 focus:py-2 focus:text-zinc-100 focus:ring-2 focus:ring-accent focus:outline-none"
+      >
+        Skip to main content
+      </a>
       <header
         role="banner"
         className="flex h-14 shrink-0 items-center justify-between border-b border-zinc-700 px-6"
@@ -170,7 +176,7 @@ function SignedOut() {
         </a>
       </header>
 
-      <main role="main" className="flex flex-1 items-center justify-center px-6 py-16">
+      <main id="main-content" role="main" className="flex flex-1 items-center justify-center px-6 py-16">
         <div className="w-full max-w-3xl">
           <h1 className="text-4xl font-semibold tracking-tight md:text-5xl">
             One account for every app in the ecosystem.

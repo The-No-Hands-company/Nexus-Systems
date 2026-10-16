@@ -74,6 +74,13 @@ export default function Shell({
 
   return (
     <div className="flex h-screen flex-col bg-zinc-900 text-zinc-100">
+      {/* Skip-to-main shortcut for keyboard-only navigation (WCAG 2.4.1) */}
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:absolute focus:z-50 focus:top-2 focus:left-2 focus:rounded focus:bg-zinc-800 focus:px-4 focus:py-2 focus:text-zinc-100 focus:ring-2 focus:ring-accent focus:outline-none"
+      >
+        Skip to main content
+      </a>
       <header
         role="banner"
         className="flex h-14 shrink-0 items-center gap-2 border-b border-zinc-700 px-3 sm:gap-3 sm:px-4"
@@ -100,7 +107,7 @@ export default function Shell({
         <button
           type="button"
           onClick={() => setDrawerOpen(true)}
-          className="ml-2 hidden h-[var(--nexus-control-height)] items-center gap-2 rounded-md border border-zinc-700 px-3 text-sm text-zinc-400 hover:border-zinc-600 hover:text-zinc-200 sm:flex"
+          className="ml-2 hidden h-[var(--nexus-control-height)] items-center gap-2 rounded-md border border-zinc-700 px-3 text-sm text-zinc-400 hover:border-zinc-600 hover:text-zinc-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent sm:flex"
         >
           <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" aria-hidden="true">
             <circle cx="9" cy="9" r="6" />
@@ -121,7 +128,7 @@ export default function Shell({
           type="button"
           onClick={() => setDensity(density === "compact" ? "balanced" : "compact")}
           aria-pressed={density === "compact"}
-          className="ml-2 hidden h-[var(--nexus-control-height)] items-center rounded-md border border-zinc-700 px-2 text-xs text-zinc-400 hover:border-zinc-600 hover:text-zinc-200 sm:flex"
+          className="ml-2 hidden h-[var(--nexus-control-height)] items-center rounded-md border border-zinc-700 px-2 text-xs text-zinc-400 hover:border-zinc-600 hover:text-zinc-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent sm:flex"
         >
           Density: {density === "compact" ? "Compact" : "Balanced"}
         </button>
@@ -147,7 +154,7 @@ export default function Shell({
         {user && (user.role === "founder" || user.role === "admin") && (
           <Link
             to="/admin"
-            className={`${utility ? "" : "ml-auto"} rounded-md px-2 py-1 text-sm text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100`}
+            className={`${utility ? "" : "ml-auto"} rounded-md px-2 py-1 text-sm text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent`}
           >
             Operator
           </Link>
@@ -156,7 +163,7 @@ export default function Shell({
         {user && (
           <Link
             to="/account"
-            className={`${utility ? "" : "ml-auto"} flex items-center gap-2 rounded-md px-2 py-1 text-sm text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100`}
+            className={`${utility ? "" : "ml-auto"} flex items-center gap-2 rounded-md px-2 py-1 text-sm text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent`}
             title={user.email}
           >
             <Avatar label={user.username || user.email} />
@@ -181,7 +188,7 @@ export default function Shell({
           <button
             type="button"
             onClick={() => setDrawerOpen(true)}
-            className="flex flex-col items-center gap-1 rounded-md px-2 py-2 text-[10px] text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100"
+            className="flex flex-col items-center gap-1 rounded-md px-2 py-2 text-[10px] text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
           >
             <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true">
               <rect x="3" y="3" width="6" height="6" rx="1" />
@@ -202,7 +209,7 @@ export default function Shell({
               to="/report"
               aria-label="Report a problem"
               title="Report a problem"
-              className="flex flex-col items-center gap-1 rounded-md px-2 py-2 text-[10px] text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100"
+              className="flex flex-col items-center gap-1 rounded-md px-2 py-2 text-[10px] text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
             >
               <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                 <path d="M4 3v14" />
@@ -214,7 +221,7 @@ export default function Shell({
               href="https://tnhc.dev/charter"
               aria-label="TNHC Charter"
               title="TNHC Charter"
-              className="flex flex-col items-center gap-1 rounded-md px-2 py-2 text-[10px] text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100"
+              className="flex flex-col items-center gap-1 rounded-md px-2 py-2 text-[10px] text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
             >
               <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                 <path d="M5 2h7l4 4v12H5z" />
@@ -238,7 +245,7 @@ export default function Shell({
           The iframe still fills exactly h-full, so this adds no scrollbar to a
           framed app; it only lets taller content scroll.
         */}
-        <main role="main" className="min-w-0 flex-1 overflow-y-auto">
+        <main id="main-content" role="main" className="min-w-0 flex-1 overflow-y-auto">
           {children}
         </main>
       </div>

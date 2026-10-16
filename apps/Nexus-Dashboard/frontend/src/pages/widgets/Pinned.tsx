@@ -54,7 +54,7 @@ export default function Pinned() {
                     onClick={() => togglePinned(a.id)}
                     aria-pressed={isPinned}
                     aria-label={isPinned ? `Unpin ${a.name}` : `Pin ${a.name}`}
-                    className="absolute right-1.5 top-1.5 rounded px-1 py-0.5 text-[10px] text-zinc-600 opacity-0 transition-opacity hover:text-accent group-hover:opacity-100"
+                    className="absolute right-1.5 top-1.5 rounded px-1 py-0.5 text-[10px] text-zinc-600 opacity-0 transition-opacity hover:text-accent group-hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
                   >
                     {isPinned ? "✕" : "＋"}
                   </button>
