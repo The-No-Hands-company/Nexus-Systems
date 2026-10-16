@@ -142,28 +142,28 @@ export default function App() {
       <TopBar embedded={embedded} />
       <div className="flex flex-1 overflow-hidden">
         <Toolbar />
-        <div className="flex-1 relative">
+        <main className="flex-1 relative" aria-label="Drawing area">
           <Canvas />
-        </div>
+        </main>
         {showPanels && (
           <>
             {sidebar === "layers" && (
-              <div className="absolute inset-y-0 right-0 z-30 w-56 border-l border-zinc-800 bg-zinc-900 overflow-y-auto sm:relative sm:z-auto sm:inset-auto">
+              <div role="region" aria-label="Layers panel" className="absolute inset-y-0 right-0 z-30 w-56 border-l border-zinc-800 bg-zinc-900 overflow-y-auto sm:relative sm:z-auto sm:inset-auto">
                 <LayerPanel />
               </div>
             )}
             {sidebar === "properties" && (
-              <div className="absolute inset-y-0 right-0 z-30 w-72 border-l border-zinc-800 bg-zinc-900 overflow-y-auto sm:relative sm:z-auto sm:inset-auto">
+              <div role="region" aria-label="Properties panel" className="absolute inset-y-0 right-0 z-30 w-72 border-l border-zinc-800 bg-zinc-900 overflow-y-auto sm:relative sm:z-auto sm:inset-auto">
                 <PropertiesPanel />
               </div>
             )}
             {sidebar === "boards" && (
-              <div className="absolute inset-y-0 right-0 z-30 w-64 border-l border-zinc-800 bg-zinc-900 overflow-y-auto sm:relative sm:z-auto sm:inset-auto">
+              <div role="region" aria-label="Boards panel" className="absolute inset-y-0 right-0 z-30 w-64 border-l border-zinc-800 bg-zinc-900 overflow-y-auto sm:relative sm:z-auto sm:inset-auto">
                 <BoardPanel key={boardId} onSwitch={switchBoard} onNew={newBoard} />
               </div>
             )}
             {sidebar === "ai" && boardId && (
-              <div className="absolute inset-y-0 right-0 z-30 w-72 border-l border-zinc-800 bg-zinc-900 overflow-y-auto sm:relative sm:z-auto sm:inset-auto">
+              <div role="region" aria-label="AI panel" className="absolute inset-y-0 right-0 z-30 w-72 border-l border-zinc-800 bg-zinc-900 overflow-y-auto sm:relative sm:z-auto sm:inset-auto">
                 <AIPanel boardId={boardId} />
               </div>
             )}

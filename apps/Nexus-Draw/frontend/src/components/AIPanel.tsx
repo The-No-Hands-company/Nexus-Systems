@@ -33,7 +33,7 @@ export default function AIPanel({ boardId }: { boardId: string; currentElements?
 
   return (
     <div className="flex flex-col h-full p-2 gap-2">
-      <div className="text-xs font-semibold text-zinc-400 uppercase">AI Generate</div>
+      <h2 className="text-xs font-semibold text-zinc-400 uppercase">AI Generate</h2>
       <textarea
         value={prompt}
         onChange={(e) => setPrompt(e.target.value)}

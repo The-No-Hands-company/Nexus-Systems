@@ -26,7 +26,7 @@ export default function BoardPanel({ onSwitch, onNew }: { onSwitch: (id: string)
 
   return (
     <div className="flex flex-col h-full p-2 gap-2 overflow-y-auto">
-      <div className="text-xs font-semibold text-zinc-400 uppercase">Boards</div>
+      <h2 className="text-xs font-semibold text-zinc-400 uppercase">Boards</h2>
       {loading && <div className="text-xs text-zinc-600">Loading…</div>}
       {boards.map((b) => (
         <div key={b.id} className="flex items-center gap-1 rounded p-1 bg-zinc-800">

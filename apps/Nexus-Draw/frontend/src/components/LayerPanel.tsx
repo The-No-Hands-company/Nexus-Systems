@@ -35,9 +35,9 @@ export default function LayerPanel() {
 
   return (
     <div className="flex flex-col h-full">
-      <div className="p-2 text-xs font-semibold text-zinc-400 uppercase tracking-wider border-b border-zinc-800">
+      <h2 className="p-2 text-xs font-semibold text-zinc-400 uppercase tracking-wider border-b border-zinc-800">
         Layers
-      </div>
+      </h2>
       <div className="flex-1 overflow-y-auto p-1 space-y-1">
         {sorted.length === 0 && (
           <div className="p-3 text-xs text-zinc-600 text-center">No elements</div>

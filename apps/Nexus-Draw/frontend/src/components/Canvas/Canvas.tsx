@@ -626,6 +626,23 @@ export default function Canvas() {
         }
       }
 
+      // Arrow keys: nudge selected elements by 1px (Shift: 10px).
+      if (!mod && ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(e.key)) {
+        const store = useEditorStore.getState();
+        if (store.selectedElementIds.size > 0) {
+          e.preventDefault();
+          const dist = e.shiftKey ? 10 : 1;
+          const dx = e.key === "ArrowRight" ? dist : e.key === "ArrowLeft" ? -dist : 0;
+          const dy = e.key === "ArrowDown" ? dist : e.key === "ArrowUp" ? -dist : 0;
+          store.pushHistory();
+          store.setElementsLive(
+            store.elements.map((el) =>
+              store.selectedElementIds.has(el.id) ? translateElement(el, dx, dy) : el
+            )
+          );
+        }
+      }
+
       // Clipboard: Ctrl+C copy, Ctrl+X cut, Ctrl+V paste, Ctrl+D duplicate.
       if (mod && e.key === "c") {
         copySelectedElements();
@@ -692,8 +709,11 @@ export default function Canvas() {
       </div>
       <canvas
         ref={canvasRef}
+        role="application"
+        aria-label="Drawing canvas — press V to select, R rectangle, E ellipse, T text, Arrow keys to nudge selection, Delete to remove"
+        tabIndex={0}
         className={`w-full h-full ${activeTool === "hand" ? "cursor-grab" : "cursor-crosshair"}`}
-        style={{ background: "#1a1a2e" }}
+        style={{ background: "var(--nexus-color-bg-canvas, #1a1a2e)" }}
         onWheel={handleWheel}
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}

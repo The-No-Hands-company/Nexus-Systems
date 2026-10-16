@@ -14,9 +14,9 @@ export default function PropertiesPanel() {
     const dsm = board?.defaultStyleMode ?? "clean";
     return (
       <div className="flex flex-col h-full">
-        <div className="p-2 text-xs font-semibold text-zinc-400 uppercase tracking-wider border-b border-zinc-800">
+        <h2 className="p-2 text-xs font-semibold text-zinc-400 uppercase tracking-wider border-b border-zinc-800">
           Properties
-        </div>
+        </h2>
         <div className="flex-1 overflow-y-auto p-3 space-y-3 text-sm">
           <PropertyRow label="Style">
             <Segmented
@@ -56,9 +56,9 @@ export default function PropertiesPanel() {
 
   return (
     <div className="flex flex-col h-full">
-      <div className="p-2 text-xs font-semibold text-zinc-400 uppercase tracking-wider border-b border-zinc-800">
+      <h2 className="p-2 text-xs font-semibold text-zinc-400 uppercase tracking-wider border-b border-zinc-800">
         Properties
-      </div>
+      </h2>
       <div className="flex-1 overflow-y-auto p-3 space-y-3 text-sm">
         <PropertyRow label="X">
           <input type="number" value={Math.round((first.data.x ?? 0) * 100) / 100}
