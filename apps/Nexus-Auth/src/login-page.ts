@@ -62,12 +62,12 @@ export function renderLoginPage(options: {
   const redirectField = options.redirect
     ? `<input type="hidden" name="redirect" value="${escapeHtml(options.redirect)}" />`
     : "";
-  const errorBlock = options.error
-    ? `<p class="err" role="alert">${escapeHtml(options.error)}</p>`
-    : "";
   const destination = options.redirect
     ? `<p class="dest">You'll be returned to <code>${escapeHtml(options.redirect)}</code></p>`
     : "";
+
+  const errorId = options.error ? "login-err" : null;
+  const formDescBy = errorId ? ` aria-describedby="${errorId}"` : "";
 
   return `<!doctype html>
 <html lang="en">
@@ -76,52 +76,63 @@ export function renderLoginPage(options: {
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Sign in — Nexus Systems</title>
 <style>
-  :root { color-scheme: light dark; }
+  :root {
+    --bg: #0b0d12; --surface: #141821; --fg: #e8eaf0; --muted: #8b93a7;
+    --subtle: #b6bdcd; --dim: #6f778c; --border: #2b3145; --border-focus: #232838;
+    --input-bg: #0e1119; --accent: #4c7dff; --accent-hover: #3d6bec;
+    --err-bg: #3a1720; --err-border: #6b2333; --err-fg: #ffb4c0;
+    --link: #8fb0ff;
+    color-scheme: dark;
+  }
   * { box-sizing: border-box; }
   body {
-    margin: 0; min-height: 100vh; display: grid; place-items: center;
+    margin: 0; min-height: 100dvh; display: grid; place-items: center;
     font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
-    background: #0b0d12; color: #e8eaf0;
+    background: var(--bg); color: var(--fg);
+    padding: 24px 16px;
   }
   .card {
-    width: min(92vw, 380px); padding: 32px;
-    background: #141821; border: 1px solid #232838; border-radius: 14px;
+    width: min(100%, 380px); padding: clamp(20px, 6vw, 32px);
+    background: var(--surface); border: 1px solid var(--border-focus); border-radius: 14px;
   }
   h1 { margin: 0 0 4px; font-size: 1.3rem; }
-  .sub { margin: 0 0 22px; color: #8b93a7; font-size: .88rem; }
-  label { display: block; margin: 14px 0 6px; font-size: .82rem; color: #b6bdcd; }
+  .sub { margin: 0 0 22px; color: var(--muted); font-size: .88rem; }
+  label { display: block; margin: 14px 0 6px; font-size: .82rem; color: var(--subtle); }
   input[type=text], input[type=password] {
     width: 100%; padding: 10px 12px; border-radius: 8px;
-    border: 1px solid #2b3145; background: #0e1119; color: inherit; font: inherit;
+    border: 1px solid var(--border); background: var(--input-bg); color: inherit; font: inherit;
+    transition: border-color .15s;
   }
-  input:focus { outline: 2px solid #4c7dff; outline-offset: 1px; }
+  input:focus { outline: 2px solid var(--accent); outline-offset: 1px; border-color: var(--accent); }
   button {
     width: 100%; margin-top: 20px; padding: 11px; border: 0; border-radius: 8px;
-    background: #4c7dff; color: #fff; font: 600 15px/1 inherit; cursor: pointer;
+    background: var(--accent); color: #fff; font: 600 15px/1 inherit; cursor: pointer;
+    transition: background .15s;
   }
-  button:hover { background: #3d6bec; }
+  button:hover { background: var(--accent-hover); }
+  button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   .err {
     margin: 14px 0 0; padding: 9px 11px; border-radius: 8px;
-    background: #3a1720; border: 1px solid #6b2333; color: #ffb4c0; font-size: .85rem;
+    background: var(--err-bg); border: 1px solid var(--err-border); color: var(--err-fg); font-size: .85rem;
   }
-  .dest { margin: 16px 0 0; font-size: .76rem; color: #6f778c; word-break: break-all; }
+  .dest { margin: 16px 0 0; font-size: .76rem; color: var(--dim); word-break: break-all; }
   code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
-  .ways-in { margin: 18px 0 0; font-size: .78rem; color: #8b93a7; }
-  .ways-in a { color: #8fb0ff; }
+  .ways-in { margin: 18px 0 0; font-size: .78rem; color: var(--muted); }
+  .ways-in a { color: var(--link); text-underline-offset: 2px; }
 </style>
 </head>
 <body>
   <main class="card">
     <h1>Sign in</h1>
     <p class="sub">One account for every Nexus app.</p>
-    <form method="post" action="/login">
+    <form method="post" action="/login"${formDescBy}>
       ${redirectField}
       <label for="username">Username</label>
       <input id="username" name="username" type="text" autocomplete="username" autofocus required />
       <label for="password">Password</label>
       <input id="password" name="password" type="password" autocomplete="current-password" required />
       <button type="submit">Sign in</button>
-      ${errorBlock}
+      ${options.error ? `<p class="err" role="alert" id="login-err">${escapeHtml(options.error)}</p>` : ""}
     </form>
     ${destination}
     <p class="ways-in">New here? <a href="/request">Request access</a> · <a href="/join">Join with an invite</a> · <a href="/claim">Claim an approved account</a></p>

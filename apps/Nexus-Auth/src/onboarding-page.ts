@@ -50,58 +50,69 @@ function renderShell(title: string, body: string): string {
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>${escapeHtml(title)} — Nexus Systems</title>
 <style>
-  :root { color-scheme: light dark; }
+  :root {
+    --bg: #0b0d12; --surface: #141821; --fg: #e8eaf0; --muted: #8b93a7;
+    --subtle: #b6bdcd; --dim: #6f778c; --border: #2b3145; --border-focus: #232838;
+    --input-bg: #0e1119; --accent: #4c7dff; --accent-hover: #3d6bec;
+    --accent-subtle: #18203a; --accent-label: #c9d6ff;
+    --err-bg: #3a1720; --err-border: #6b2333; --err-fg: #ffb4c0;
+    --code-fg: #ffd98a; --link: #8fb0ff;
+    color-scheme: dark;
+  }
   * { box-sizing: border-box; }
   body {
-    margin: 0; min-height: 100vh; display: grid; place-items: center;
+    margin: 0; min-height: 100dvh; display: grid; place-items: center;
     font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
-    background: #0b0d12; color: #e8eaf0;
+    background: var(--bg); color: var(--fg);
+    padding: 24px 16px;
   }
   .card {
-    width: min(100% - 24px, 420px); padding: clamp(18px, 5vw, 32px); margin: 24px 0;
-    background: #141821; border: 1px solid #232838; border-radius: 14px;
+    width: min(100%, 420px); padding: clamp(18px, 5vw, 32px);
+    background: var(--surface); border: 1px solid var(--border-focus); border-radius: 14px;
   }
   h1 { margin: 0 0 4px; font-size: 1.3rem; }
-  .sub { margin: 0 0 18px; color: #8b93a7; font-size: .88rem; }
-  label { display: block; margin: 14px 0 6px; font-size: .82rem; color: #b6bdcd; }
+  .sub { margin: 0 0 18px; color: var(--muted); font-size: .88rem; }
+  label { display: block; margin: 14px 0 6px; font-size: .82rem; color: var(--subtle); }
   input, textarea {
     width: 100%; padding: 10px 12px; border-radius: 8px;
-    border: 1px solid #2b3145; background: #0e1119; color: inherit; font: inherit;
+    border: 1px solid var(--border); background: var(--input-bg); color: inherit; font: inherit;
+    transition: border-color .15s;
   }
   textarea { min-height: 70px; resize: vertical; }
-  input:focus, textarea:focus { outline: 2px solid #4c7dff; outline-offset: 1px; }
+  input:focus, textarea:focus { outline: 2px solid var(--accent); outline-offset: 1px; border-color: var(--accent); }
   button, .button {
     display: block; width: 100%; margin-top: 20px; padding: 11px; border: 0; border-radius: 8px;
-    background: #4c7dff; color: #fff; font: 600 15px/1 inherit; cursor: pointer;
-    text-align: center; text-decoration: none;
+    background: var(--accent); color: #fff; font: 600 15px/1 inherit; cursor: pointer;
+    text-align: center; text-decoration: none; transition: background .15s;
   }
-  button:hover, .button:hover { background: #3d6bec; }
+  button:hover, .button:hover { background: var(--accent-hover); }
+  button:focus-visible, .button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   .err {
     margin: 14px 0 0; padding: 9px 11px; border-radius: 8px;
-    background: #3a1720; border: 1px solid #6b2333; color: #ffb4c0; font-size: .85rem;
+    background: var(--err-bg); border: 1px solid var(--err-border); color: var(--err-fg); font-size: .85rem;
   }
   .secret {
-    margin: 12px 0; padding: 12px; border-radius: 8px; background: #0e1119;
-    border: 1px solid #2b3145; font: 600 1rem ui-monospace, SFMono-Regular, Menlo, monospace;
-    word-break: break-all; color: #ffd98a;
+    margin: 12px 0; padding: 12px; border-radius: 8px; background: var(--input-bg);
+    border: 1px solid var(--border); font: 600 1rem ui-monospace, SFMono-Regular, Menlo, monospace;
+    word-break: break-all; color: var(--code-fg);
   }
   /* One code per row: a 32-character code never fits two columns on a phone,
      and a code broken across lines is one nobody can copy correctly. The font
      shrinks a little on narrow screens instead. Tapping the block selects all. */
   .codes {
     margin: 12px 0; padding: 12px 12px 12px 2.6em; border-radius: 8px;
-    background: #0e1119; border: 1px solid #2b3145; color: #ffd98a;
+    background: var(--input-bg); border: 1px solid var(--border); color: var(--code-fg);
     font: clamp(.7rem, 3.4vw, .92rem)/1.7 ui-monospace, SFMono-Regular, Menlo, monospace;
     overflow-x: auto; user-select: all; -webkit-user-select: all;
   }
   .codes li { white-space: nowrap; }
-  .codes li::marker { color: #6f778c; }
-  .button.secondary { background: transparent; border: 1px solid #4c7dff; color: #c9d6ff; }
-  .button.secondary:hover { background: #18203a; }
-  .note { font-size: .82rem; color: #8b93a7; }
-  .links { margin: 18px 0 0; font-size: .8rem; color: #8b93a7; }
-  a { color: #8fb0ff; }
-  .hint { font-size: .75rem; color: #6f778c; margin: 4px 0 0; }
+  .codes li::marker { color: var(--dim); }
+  .button.secondary { background: transparent; border: 1px solid var(--accent); color: var(--accent-label); }
+  .button.secondary:hover { background: var(--accent-subtle); }
+  .note { font-size: .82rem; color: var(--muted); }
+  .links { margin: 18px 0 0; font-size: .8rem; color: var(--muted); }
+  a { color: var(--link); text-underline-offset: 2px; }
+  .hint { font-size: .75rem; color: var(--dim); margin: 4px 0 0; }
 </style>
 </head>
 <body>
@@ -118,10 +129,10 @@ function renderError(error: string | undefined): string {
 
 const passwordFields = (minLength: number) => `
       <label for="password">Password</label>
-      <input id="password" name="password" type="password" autocomplete="new-password" minlength="${minLength}" maxlength="${ONBOARDING_LIMITS.password}" required />
-      <p class="hint">At least ${minLength} characters.</p>
+      <input id="password" name="password" type="password" autocomplete="new-password" minlength="${minLength}" maxlength="${ONBOARDING_LIMITS.password}" aria-describedby="pw-hint" required />
+      <p class="hint" id="pw-hint">At least ${minLength} characters.</p>
       <label for="confirm">Confirm password</label>
-      <input id="confirm" name="confirm" type="password" autocomplete="new-password" minlength="${minLength}" maxlength="${ONBOARDING_LIMITS.password}" required />`;
+      <input id="confirm" name="confirm" type="password" autocomplete="new-password" minlength="${minLength}" maxlength="${ONBOARDING_LIMITS.password}" aria-describedby="pw-hint" required />`;
 
 const otherWaysIn = `
     <p class="links">Already have an account? <a href="/login">Sign in</a></p>`;
