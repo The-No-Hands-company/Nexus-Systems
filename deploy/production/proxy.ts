@@ -383,6 +383,36 @@ function isolateUserSiteResponse(headers: Headers): void {
   }
 }
 
+/**
+ * Content types that can execute scripts when rendered by a browser. Any such
+ * file served from storage.tnhc.dev must be downloaded, not rendered, so that
+ * JavaScript in it cannot reach the .tnhc.dev session cookie. Defense-in-depth
+ * on top of the per-route allowlist changes in uploads.rs and emoji.rs.
+ */
+const SCRIPTABLE_CONTENT_TYPES = new Set([
+  "image/svg+xml",
+  "text/html",
+  "text/javascript",
+  "application/javascript",
+  "application/xhtml+xml",
+  "text/xml",
+  "application/xml",
+]);
+
+export function forceAttachmentForStorage(
+  host: string,
+  headers: Headers,
+  domain: string,
+): void {
+  if (host !== `storage.${domain}`) return;
+  const ct = (headers.get("content-type") ?? "").split(";")[0].trim().toLowerCase();
+  if (SCRIPTABLE_CONTENT_TYPES.has(ct)) {
+    if (!headers.has("content-disposition")) {
+      headers.set("content-disposition", "attachment");
+    }
+  }
+}
+
 export function securityHeaders(headers: Headers): void {
   headers.set("strict-transport-security", "max-age=31536000; includeSubDomains; preload");
   headers.set("x-content-type-options", "nosniff");
@@ -777,6 +807,7 @@ async function handleRequestInner(
       // in the app. A reverse proxy should relay a policy, not author one.
       sanitizeResponseHeaders(headers);
       if (isUserSite) isolateUserSiteResponse(headers);
+      forceAttachmentForStorage(host, headers, DOMAIN);
 
       return new Response(resp.body, { status: resp.status, headers });
     } catch (err) {
