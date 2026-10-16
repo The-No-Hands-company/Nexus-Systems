@@ -120,8 +120,9 @@ export function HomeView({ onSelectProject }: { onSelectProject: (p: Project) =>
         <form onSubmit={submitCreateWs} className="w-full max-w-sm flex flex-col gap-4 bg-zinc-800 border border-zinc-700 rounded-xl p-6">
           <h2 className="font-semibold text-zinc-100">New workspace</h2>
           <div className="flex flex-col gap-1.5">
-            <label className="text-xs text-zinc-500">Name</label>
+            <label htmlFor="ws-name" className="text-xs text-zinc-500">Name</label>
             <input
+              id="ws-name"
               autoFocus
               value={wsName}
               onChange={e => setWsName(e.target.value)}
@@ -131,8 +132,9 @@ export function HomeView({ onSelectProject }: { onSelectProject: (p: Project) =>
             />
           </div>
           <div className="flex flex-col gap-1.5">
-            <label className="text-xs text-zinc-500">Type</label>
+            <label htmlFor="ws-kind" className="text-xs text-zinc-500">Type</label>
             <select
+              id="ws-kind"
               value={wsKind}
               onChange={e => setWsKind(e.target.value as "personal" | "team")}
               className="bg-zinc-900 border border-zinc-600 rounded-md px-3 py-2 text-sm text-zinc-100 focus:outline-none focus:border-zinc-400"
@@ -165,11 +167,12 @@ export function HomeView({ onSelectProject }: { onSelectProject: (p: Project) =>
   return (
     <div className="flex flex-col h-full">
       {/* workspace switcher */}
-      <div className="flex items-center gap-2 px-6 pt-5 pb-2 flex-wrap">
+      <div role="toolbar" aria-label="Workspaces" className="flex items-center gap-2 px-6 pt-5 pb-2 flex-wrap">
         {workspaces.map(ws => (
           <button
             key={ws.id}
             onClick={() => setActiveWs(ws.id)}
+            aria-pressed={activeWs === ws.id}
             className={`px-3 py-1.5 rounded-md text-sm font-medium border transition-colors ${
               activeWs === ws.id
                 ? "bg-zinc-800 border-zinc-600 text-zinc-100"
@@ -182,6 +185,7 @@ export function HomeView({ onSelectProject }: { onSelectProject: (p: Project) =>
         ))}
         <button
           onClick={() => setCreatingWs(true)}
+          aria-label="Create new workspace"
           className="px-3 py-1.5 rounded-md text-sm border border-dashed border-zinc-700 text-zinc-600 hover:text-zinc-400 hover:border-zinc-500 transition-colors"
         >
           + New workspace
@@ -189,10 +193,12 @@ export function HomeView({ onSelectProject }: { onSelectProject: (p: Project) =>
       </div>
 
       {/* tabs */}
-      <div className="flex gap-0 px-6 border-b border-zinc-700 mt-2">
+      <div role="tablist" aria-label="Content type" className="flex gap-0 px-6 border-b border-zinc-700 mt-2">
         {(["projects", "my-tasks"] as const).map(t => (
           <button
             key={t}
+            role="tab"
+            aria-selected={tab === t}
             onClick={() => setTab(t)}
             className={`px-4 py-2 text-sm border-b-2 transition-colors ${
               tab === t
@@ -216,8 +222,9 @@ export function HomeView({ onSelectProject }: { onSelectProject: (p: Project) =>
               >
                 <h3 className="font-semibold text-sm text-zinc-100">New project</h3>
                 <div className="flex flex-col gap-1.5">
-                  <label className="text-xs text-zinc-500">Name</label>
+                  <label htmlFor="proj-name" className="text-xs text-zinc-500">Name</label>
                   <input
+                    id="proj-name"
                     autoFocus
                     value={projName}
                     onChange={e => setProjName(e.target.value)}
@@ -227,8 +234,9 @@ export function HomeView({ onSelectProject }: { onSelectProject: (p: Project) =>
                   />
                 </div>
                 <div className="flex flex-col gap-1.5">
-                  <label className="text-xs text-zinc-500">Key <span className="text-zinc-600">(auto-generated, editable)</span></label>
+                  <label htmlFor="proj-key" className="text-xs text-zinc-500">Key <span className="text-zinc-600">(auto-generated, editable)</span></label>
                   <input
+                    id="proj-key"
                     value={projKey}
                     onChange={e => setProjKey(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 6))}
                     placeholder="PRJ"

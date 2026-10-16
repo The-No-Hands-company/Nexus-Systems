@@ -114,14 +114,15 @@ export function ListView({ project }: Props) {
   return (
     <div className="h-full overflow-auto p-4">
       <table className="w-full text-sm border-collapse" data-testid="list-table">
+        <caption className="sr-only">Tasks in {project.name}</caption>
         <thead>
           <tr className="border-b border-zinc-700 text-xs text-zinc-500 uppercase tracking-wider">
-            <th className="text-left py-2 px-3 w-8">#</th>
-            <th className="text-left py-2 px-3">Title</th>
-            <th className="text-left py-2 px-3 w-32">Status</th>
-            <th className="text-left py-2 px-3 w-10">P</th>
-            <th className="text-left py-2 px-3 w-24">Start</th>
-            <th className="text-left py-2 px-3 w-24">Finish</th>
+            <th scope="col" className="text-left py-2 px-3 w-8">#</th>
+            <th scope="col" className="text-left py-2 px-3">Title</th>
+            <th scope="col" className="text-left py-2 px-3 w-32">Status</th>
+            <th scope="col" aria-label="Priority" className="text-left py-2 px-3 w-10">P</th>
+            <th scope="col" className="text-left py-2 px-3 w-24">Start</th>
+            <th scope="col" className="text-left py-2 px-3 w-24">Finish</th>
           </tr>
         </thead>
         <tbody>
@@ -130,8 +131,11 @@ export function ListView({ project }: Props) {
             return (
               <tr
                 key={task.id}
+                tabIndex={0}
+                aria-label={task.title}
                 onClick={() => setSelected(task)}
-                className="border-b border-zinc-800 hover:bg-zinc-800/50 cursor-pointer"
+                onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setSelected(task); } }}
+                className="border-b border-zinc-800 hover:bg-zinc-800/50 cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
                 data-testid={`list-row-${task.id}`}
               >
                 <td className="py-2 px-3 text-zinc-600 font-mono text-xs">{task.number}</td>
