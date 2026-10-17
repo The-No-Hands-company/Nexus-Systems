@@ -52,7 +52,7 @@ export function TaskDrawer({ task, statuses, onClose, onUpdated }: Props) {
       >
         <div className="flex items-center justify-between px-5 py-4 border-b border-zinc-700">
           <span id="task-drawer-title" className="text-xs text-zinc-500 font-mono">Task #{task.number}</span>
-          <button onClick={onClose} aria-label="Close" className="text-zinc-400 hover:text-zinc-100 text-xl leading-none">×</button>
+          <button onClick={onClose} type="button" aria-label="Close task" className="flex items-center justify-center min-h-[44px] min-w-[44px] -m-2 rounded text-zinc-400 hover:text-zinc-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent text-xl leading-none transition-colors">×</button>
         </div>
 
         <div className="flex-1 overflow-y-auto p-5 space-y-4">

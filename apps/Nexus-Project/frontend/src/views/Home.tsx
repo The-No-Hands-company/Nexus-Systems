@@ -128,7 +128,7 @@ export function HomeView({ onSelectProject }: { onSelectProject: (p: Project) =>
               onChange={e => setWsName(e.target.value)}
               placeholder="My workspace"
               required
-              className="bg-zinc-900 border border-zinc-600 rounded-md px-3 py-2 text-sm text-zinc-100 focus:outline-none focus:border-zinc-400"
+              className="bg-zinc-900 border border-zinc-600 rounded-md px-3 py-2 text-sm text-zinc-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 focus-visible:border-accent"
             />
           </div>
           <div className="flex flex-col gap-1.5">
@@ -137,7 +137,7 @@ export function HomeView({ onSelectProject }: { onSelectProject: (p: Project) =>
               id="ws-kind"
               value={wsKind}
               onChange={e => setWsKind(e.target.value as "personal" | "team")}
-              className="bg-zinc-900 border border-zinc-600 rounded-md px-3 py-2 text-sm text-zinc-100 focus:outline-none focus:border-zinc-400"
+              className="bg-zinc-900 border border-zinc-600 rounded-md px-3 py-2 text-sm text-zinc-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 focus-visible:border-accent"
             >
               <option value="team">Team</option>
               <option value="personal">Personal</option>
@@ -197,10 +197,12 @@ export function HomeView({ onSelectProject }: { onSelectProject: (p: Project) =>
         {(["projects", "my-tasks"] as const).map(t => (
           <button
             key={t}
+            id={`tab-${t}`}
             role="tab"
             aria-selected={tab === t}
+            aria-controls={`panel-${t}`}
             onClick={() => setTab(t)}
-            className={`px-4 py-2 text-sm border-b-2 transition-colors ${
+            className={`px-4 py-2 text-sm border-b-2 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent rounded-t ${
               tab === t
                 ? "border-accent text-zinc-100"
                 : "border-transparent text-zinc-500 hover:text-zinc-300"
@@ -211,7 +213,12 @@ export function HomeView({ onSelectProject }: { onSelectProject: (p: Project) =>
         ))}
       </div>
 
-      <div className="flex-1 overflow-y-auto p-6">
+      <div
+        id={`panel-${tab}`}
+        role="tabpanel"
+        aria-labelledby={`tab-${tab}`}
+        className="flex-1 overflow-y-auto p-6"
+      >
         {tab === "projects" && (
           <div>
             {/* inline create-project form */}
@@ -230,7 +237,7 @@ export function HomeView({ onSelectProject }: { onSelectProject: (p: Project) =>
                     onChange={e => setProjName(e.target.value)}
                     placeholder="My project"
                     required
-                    className="bg-zinc-900 border border-zinc-600 rounded-md px-3 py-2 text-sm text-zinc-100 focus:outline-none focus:border-zinc-400"
+                    className="bg-zinc-900 border border-zinc-600 rounded-md px-3 py-2 text-sm text-zinc-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 focus-visible:border-accent"
                   />
                 </div>
                 <div className="flex flex-col gap-1.5">
@@ -241,7 +248,7 @@ export function HomeView({ onSelectProject }: { onSelectProject: (p: Project) =>
                     onChange={e => setProjKey(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 6))}
                     placeholder="PRJ"
                     required
-                    className="bg-zinc-900 border border-zinc-600 rounded-md px-3 py-2 text-sm text-zinc-100 font-mono focus:outline-none focus:border-zinc-400"
+                    className="bg-zinc-900 border border-zinc-600 rounded-md px-3 py-2 text-sm text-zinc-100 font-mono focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 focus-visible:border-accent"
                   />
                 </div>
                 <div className="flex gap-2">
@@ -293,7 +300,7 @@ export function HomeView({ onSelectProject }: { onSelectProject: (p: Project) =>
                 <button
                   key={p.id}
                   onClick={() => onSelectProject(p)}
-                  className="text-left bg-zinc-800/40 border border-zinc-700 rounded-lg p-4 hover:border-zinc-600 hover:bg-zinc-800 transition-colors"
+                  className="text-left bg-zinc-800/40 border border-zinc-700 rounded-lg p-4 hover:border-zinc-600 hover:bg-zinc-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent transition-colors"
                 >
                   <div className="flex items-start justify-between gap-2">
                     <span className="font-semibold text-zinc-100">{p.name}</span>

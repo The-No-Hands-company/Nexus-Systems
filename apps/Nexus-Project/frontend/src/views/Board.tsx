@@ -115,16 +115,14 @@ export function BoardView({ project }: Props) {
 
           <div className="flex-1 overflow-y-auto p-2 space-y-2 min-h-[40px]">
             {tasksByStatus(status.id).map(task => (
-              <div
+              <button
                 key={task.id}
-                role="button"
-                tabIndex={0}
+                type="button"
                 aria-label={`${task.title}, task #${task.number}`}
                 draggable
                 onDragStart={() => handleDragStart(task.id)}
                 onClick={() => setSelected(task)}
-                onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setSelected(task); } }}
-                className="bg-zinc-800 border border-zinc-700 rounded p-2.5 cursor-pointer hover:border-zinc-500 transition-colors select-none"
+                className="w-full text-left bg-zinc-800 border border-zinc-700 rounded p-2.5 cursor-pointer hover:border-zinc-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent transition-colors select-none"
                 data-testid={`task-card-${task.id}`}
               >
                 <div className="flex items-start gap-1.5">
@@ -132,7 +130,7 @@ export function BoardView({ project }: Props) {
                   <span className="flex-1 text-sm text-zinc-100 leading-snug">{task.title}</span>
                 </div>
                 <div className="mt-1.5 text-xs text-zinc-600">#{task.number}</div>
-              </div>
+              </button>
             ))}
             <AddTaskRow
               projectId={project.id}

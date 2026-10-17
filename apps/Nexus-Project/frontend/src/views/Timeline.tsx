@@ -64,11 +64,23 @@ export function TimelineView({ project }: Props) {
   return (
     <div className="h-full overflow-auto p-4" data-testid="timeline-view">
       {schedule.violations.length > 0 && (
-        <div className="mb-3 p-2 bg-red-900/40 border border-red-700 rounded text-xs text-red-300">
+        <div role="alert" className="mb-3 p-2 bg-red-900/40 border border-red-700 rounded text-xs text-red-300">
           {schedule.violations.length} constraint violation{schedule.violations.length > 1 ? "s" : ""}
         </div>
       )}
-      <svg width={svgWidth} height={svgHeight} className="font-mono text-xs">
+      {/* Screen-reader task list: the SVG is pure visuals */}
+      <ul className="sr-only" aria-label="Task schedule">
+        {tasks.map(task => {
+          const sched = new Map(schedule.tasks.map(s => [s.id, s])).get(task.id);
+          return (
+            <li key={task.id}>
+              {task.title}: {sched ? `${sched.earlyStart} – ${sched.earlyFinish}` : "not scheduled"}
+              {criticalSet.has(task.id) ? " (critical path)" : ""}
+            </li>
+          );
+        })}
+      </ul>
+      <svg width={svgWidth} height={svgHeight} className="font-mono text-xs" aria-hidden="true">
         {/* Week gridlines */}
         {weeks.map(w => (
           <g key={w.label}>
