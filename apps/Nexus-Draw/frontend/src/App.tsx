@@ -137,12 +137,24 @@ export default function App() {
     };
   }, [collabBoardId]);
 
+  const boardName = useEditorStore((s) => s.board?.name ?? "none");
+
+  useEffect(() => {
+    document.title = boardName !== "none" ? `${boardName} — Draw` : "Draw";
+  }, [boardName]);
+
   return (
     <div className="h-screen flex flex-col">
+      <a
+        href="#drawing-canvas"
+        className="sr-only focus:not-sr-only focus:absolute focus:z-50 focus:top-2 focus:left-2 focus:rounded focus:bg-zinc-800 focus:px-4 focus:py-2 focus:text-zinc-100 focus:ring-2 focus:ring-accent focus:outline-none"
+      >
+        Skip to drawing canvas
+      </a>
       <TopBar embedded={embedded} />
       <div className="flex flex-1 overflow-hidden">
         <Toolbar />
-        <main className="flex-1 relative" aria-label="Drawing area">
+        <main id="drawing-canvas" className="flex-1 relative" aria-label="Drawing area" tabIndex={-1}>
           <Canvas />
         </main>
         {showPanels && (
@@ -175,28 +187,28 @@ export default function App() {
           <button
             onClick={() => setSidebar(sidebar === "layers" ? null : "layers")}
             aria-pressed={sidebar === "layers"}
-            className={`px-2 py-1 rounded transition-colors hover:text-zinc-300 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500 ${sidebar === "layers" ? "text-blue-400 bg-zinc-800" : ""}`}
+            className={`px-2 py-1 rounded transition-colors hover:text-zinc-300 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent ${sidebar === "layers" ? "text-accent bg-zinc-800" : ""}`}
           >
             Elements
           </button>
           <button
             onClick={() => setSidebar(sidebar === "properties" ? null : "properties")}
             aria-pressed={sidebar === "properties"}
-            className={`px-2 py-1 rounded transition-colors hover:text-zinc-300 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500 ${sidebar === "properties" ? "text-blue-400 bg-zinc-800" : ""}`}
+            className={`px-2 py-1 rounded transition-colors hover:text-zinc-300 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent ${sidebar === "properties" ? "text-accent bg-zinc-800" : ""}`}
           >
             Properties
           </button>
           <button
             onClick={() => setSidebar(sidebar === "boards" ? null : "boards")}
             aria-pressed={sidebar === "boards"}
-            className={`px-2 py-1 rounded transition-colors hover:text-zinc-300 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500 ${sidebar === "boards" ? "text-blue-400 bg-zinc-800" : ""}`}
+            className={`px-2 py-1 rounded transition-colors hover:text-zinc-300 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent ${sidebar === "boards" ? "text-accent bg-zinc-800" : ""}`}
           >
             Boards
           </button>
           <button
             onClick={() => setSidebar(sidebar === "ai" ? null : "ai")}
             aria-pressed={sidebar === "ai"}
-            className={`px-2 py-1 rounded transition-colors hover:text-zinc-300 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500 ${sidebar === "ai" ? "text-blue-400 bg-zinc-800" : ""}`}
+            className={`px-2 py-1 rounded transition-colors hover:text-zinc-300 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent ${sidebar === "ai" ? "text-accent bg-zinc-800" : ""}`}
           >
             AI
           </button>
@@ -204,13 +216,13 @@ export default function App() {
             onClick={() => setShowPanels(!showPanels)}
             aria-pressed={showPanels}
             aria-label={showPanels ? "Hide all panels" : "Show all panels"}
-            className="px-2 py-1 rounded transition-colors hover:text-zinc-300 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500"
+            className="px-2 py-1 rounded transition-colors hover:text-zinc-300 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
           >
             {showPanels ? "Hide" : "Show"}
           </button>
         </div>
-        <div className="flex gap-3 text-zinc-600">
-          <span>Board: {useEditorStore.getState().board?.name ?? "none"}</span>
+        <div className="flex gap-3 text-zinc-600" aria-live="polite" aria-atomic="true">
+          <span>Board: {boardName}</span>
         </div>
       </div>
     </div>

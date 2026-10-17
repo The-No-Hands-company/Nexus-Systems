@@ -710,7 +710,7 @@ export default function Canvas() {
       <canvas
         ref={canvasRef}
         role="application"
-        aria-label="Drawing canvas — press V to select, R rectangle, E ellipse, T text, Arrow keys to nudge selection, Delete to remove"
+        aria-label="Drawing canvas — press V to select, R rectangle, O ellipse, T text, E eraser, Arrow keys to nudge selection, Delete to remove"
         tabIndex={0}
         className={`w-full h-full ${activeTool === "hand" ? "cursor-grab" : "cursor-crosshair"}`}
         style={{ background: "var(--nexus-color-bg-canvas, #1a1a2e)" }}

@@ -30,12 +30,13 @@ export default function Toolbar() {
       {tools.map((tool) => (
         <button
           key={tool.id}
+          type="button"
           onClick={() => setActiveTool(tool.id)}
           title={`${tool.label} (${tool.key})`}
           aria-label={`${tool.label} — press ${tool.key}`}
           aria-pressed={activeTool === tool.id}
-          className={`w-9 h-9 sm:w-10 sm:h-10 flex items-center justify-center rounded-lg text-sm transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500
-            ${activeTool === tool.id ? "bg-blue-600 text-white" : "text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200"}`}
+          className={`w-full min-h-[44px] flex items-center justify-center rounded-lg text-sm transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent
+            ${activeTool === tool.id ? "bg-accent text-white" : "text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200"}`}
         >
           <span aria-hidden="true">{tool.icon}</span>
         </button>
