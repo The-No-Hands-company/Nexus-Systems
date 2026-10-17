@@ -70,9 +70,12 @@ Add a skip link and main landmark, title updates, responsive sidebar/info behavi
 - Modify: `apps/Nexus-Video/frontend/src/components/Sidebar.tsx`
 - Modify: `apps/Nexus-Video/frontend/src/components/VideoGrid.tsx`
 - Modify: `apps/Nexus-Video/frontend/src/components/VideoPlayer.tsx`
+- Create: `apps/Nexus-Video/frontend/src/lucide-icons.d.ts`
 - Modify: `apps/Nexus-Video/frontend/src/components/ChannelPage.tsx`
 
 Add a skip link and main landmark, title updates, responsive sidebar and playlist regions, labelled header controls, focus-visible states, semantic channel/navigation headings, named video cards, and accessible media controls. Preserve pointer and keyboard playback shortcuts; expose seek/volume/playback controls to assistive technology without changing the store contract.
+
+Import only the icons used by the video surface and provide local declarations for those stable package paths so Vite does not transform the entire icon barrel during production builds.
 
 **Verification:** Run `bun run check`, `bun run build`, `bun test`, and the focused contract test.
 
