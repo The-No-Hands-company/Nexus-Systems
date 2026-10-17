@@ -1,14 +1,12 @@
 import { useRef, useEffect, useCallback } from "react";
 import { useEditorStore } from "../stores/useEditorStore";
-import {
-  Play,
-  Pause,
-  Volume2,
-  VolumeX,
-  Maximize,
-  Minimize,
-  PictureInPicture2,
-} from "lucide-react";
+import Play from "lucide-react/dist/esm/icons/play.js";
+import Pause from "lucide-react/dist/esm/icons/pause.js";
+import Volume2 from "lucide-react/dist/esm/icons/volume-2.js";
+import VolumeX from "lucide-react/dist/esm/icons/volume-x.js";
+import Maximize from "lucide-react/dist/esm/icons/maximize.js";
+import Minimize from "lucide-react/dist/esm/icons/minimize.js";
+import PictureInPicture2 from "lucide-react/dist/esm/icons/picture-in-picture-2.js";
 
 export default function VideoPlayer() {
   const videoRef = useRef<HTMLVideoElement>(null);

@@ -1,5 +1,9 @@
 import { useEditorStore } from "../stores/useEditorStore";
-import { Search, Upload, Grid3X3, List, Menu } from "lucide-react";
+import Search from "lucide-react/dist/esm/icons/search.js";
+import Upload from "lucide-react/dist/esm/icons/upload.js";
+import Grid3X3 from "lucide-react/dist/esm/icons/grid-3x3.js";
+import List from "lucide-react/dist/esm/icons/list.js";
+import Menu from "lucide-react/dist/esm/icons/menu.js";
 
 export default function TopBar() {
   const viewMode = useEditorStore((s) => s.viewMode);
