@@ -35,7 +35,7 @@ export default function TopBar({ embedded = false }: { embedded?: boolean }) {
           <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" className="text-accent shrink-0">
             <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
           </svg>
-          <span className="font-semibold text-sm text-zinc-200 truncate">Draw</span>
+          <span className="font-semibold text-sm text-zinc-200 truncate">Nexus-Draw</span>
           {board && (
             <span className="text-sm text-zinc-400 truncate max-w-[8rem]">{board.name}</span>
           )}
