@@ -81,6 +81,6 @@ Import only the icons used by the video surface and provide local declarations f
 
 ### Task 5: Cross-app audit and delivery
 
-Run all four apps' full gates from clean app-local paths, run `git diff --check`, inspect the final diff for nested interactive elements and hardcoded shell colors, and verify only the planned files changed. Commit each app's changes with a focused message, update the parent pointer only where applicable, then push `main`.
+Run all four apps' full app-local test, frontend type-check, and production-build gates, run `git diff --check`, inspect the final diff for nested interactive elements and hardcoded shell colors, and verify only the planned files changed. Commit each app's changes with a focused message, update the parent pointer only where applicable, then push `main`. Re-run the existing Green-pass app suites as a regression check; if a runner is resource-sensitive, rerun it serially with constrained workers and record any pre-existing failure separately.
 
-**Expected evidence:** Four passing type/build/test gates, four passing contract tests, clean diff check, and a final file-scope audit with unrelated work preserved.
+**Expected evidence:** Four passing frontend type/build gates, four passing app test suites with contract coverage, regression evidence for the previously Green apps, a clean diff check, and a final file-scope audit with unrelated work preserved. Repository-root checks that cannot resolve their declared tooling from the current installation must remain explicitly reported as environment blockers rather than silently treated as passes.
