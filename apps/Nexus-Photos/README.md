@@ -7,9 +7,16 @@ Photo and video backup with AI tagging, face recognition, and album sharing
 ## Quick Start
 
 ```bash
-bun install
+npm install --no-audit --no-fund --workspaces=false
+bun run check
+bun test
 bun run dev
 ```
+
+Use the isolated npm install above from this directory. The parent repository
+contains a pnpm workspace lock for other services, and a plain `bun install`
+can try to interpret that lock instead of installing this app's declared
+`bun-types`, TypeScript, and Biome dependencies.
 
 ## Endpoints
 

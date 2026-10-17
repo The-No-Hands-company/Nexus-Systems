@@ -13,11 +13,13 @@ function cloudHeaders(): Record<string, string> {
 }
 
 function hbMs(): number {
-  return Math.max(5000, Number(process.env["NEXUS_DESIGN_CLOUD_HEARTBEAT_INTERVAL_MS"] || "30000"));
+  return Math.max(5000, Number(process.env.NEXUS_DESIGN_CLOUD_HEARTBEAT_INTERVAL_MS || "30000"));
 }
 
 function enabled(): boolean {
-  return (process.env["NEXUS_DESIGN_ENABLE_CLOUD_INTEGRATION"] || "true").trim().toLowerCase() !== "false";
+  return (
+    (process.env.NEXUS_DESIGN_ENABLE_CLOUD_INTEGRATION || "true").trim().toLowerCase() !== "false"
+  );
 }
 
 export async function registerWithCloud(baseUrl: string): Promise<void> {
@@ -30,11 +32,14 @@ export async function registerWithCloud(baseUrl: string): Promise<void> {
 }
 
 export async function heartbeatWithCloud(baseUrl: string): Promise<void> {
-  const r = await fetch(`${cloudBaseUrl()}/api/v1/tools/${encodeURIComponent("nexus-design")}/heartbeat`, {
-    method: "POST",
-    headers: cloudHeaders(),
-    body: JSON.stringify({ health: "healthy", upstreamUrl: baseUrl }),
-  });
+  const r = await fetch(
+    `${cloudBaseUrl()}/api/v1/tools/${encodeURIComponent("nexus-design")}/heartbeat`,
+    {
+      method: "POST",
+      headers: cloudHeaders(),
+      body: JSON.stringify({ health: "healthy", upstreamUrl: baseUrl }),
+    },
+  );
   if (!r.ok) throw new Error(`Nexus-Design heartbeat failed: ${r.status}`);
 }
 

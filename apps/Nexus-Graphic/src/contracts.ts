@@ -14,12 +14,13 @@ export function buildSystemsApiRegistrationPayload(baseUrl: string): SystemsApiR
   return {
     id: "nexus-graphic",
     name: "Nexus-Graphic",
-    description: "Full graphic design suite with vectors, photo editing, templates, and AI generation",
+    description:
+      "Full graphic design suite with vectors, photo editing, templates, and AI generation",
     mode: "orchestrated",
     exposed: false,
     health: "healthy",
     upstreamUrl: baseUrl,
-    capabilities: ["graphic-design","photo-editing","ai-generation"],
+    capabilities: ["graphic-design", "photo-editing", "ai-generation"],
     metadata: {
       version: "v1",
       defaultPort: 3080,

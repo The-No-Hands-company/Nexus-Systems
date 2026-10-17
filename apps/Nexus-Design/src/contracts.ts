@@ -19,7 +19,7 @@ export function buildSystemsApiRegistrationPayload(baseUrl: string): SystemsApiR
     exposed: false,
     health: "healthy",
     upstreamUrl: baseUrl,
-    capabilities: ["design","prototyping","collaboration"],
+    capabilities: ["design", "prototyping", "collaboration"],
     metadata: {
       version: "v1",
       defaultPort: 3074,
