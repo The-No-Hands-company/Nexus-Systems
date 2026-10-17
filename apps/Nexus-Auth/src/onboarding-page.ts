@@ -47,16 +47,16 @@ function renderShell(title: string, body: string): string {
 <html lang="en">
 <head>
 <meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <title>${escapeHtml(title)} — Nexus Systems</title>
 <style>
   :root {
     --bg: #0b0d12; --surface: #141821; --fg: #e8eaf0; --muted: #8b93a7;
-    --subtle: #b6bdcd; --dim: #6f778c; --border: #2b3145; --border-focus: #232838;
+    --subtle: #b6bdcd; --dim: #8490a8; --border: #2b3145; --border-focus: #232838;
     --input-bg: #0e1119; --accent: #4c7dff; --accent-hover: #3d6bec;
     --accent-subtle: #18203a; --accent-label: #c9d6ff;
     --err-bg: #3a1720; --err-border: #6b2333; --err-fg: #ffb4c0;
-    --code-fg: #ffd98a; --link: #8fb0ff;
+    --code-fg: #ffd98a; --link: #8fb0ff; --brand: #ccff00;
     color-scheme: dark;
   }
   * { box-sizing: border-box; }
@@ -64,26 +64,32 @@ function renderShell(title: string, body: string): string {
     margin: 0; min-height: 100dvh; display: grid; place-items: center;
     font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
     background: var(--bg); color: var(--fg);
-    padding: 24px 16px;
+    padding: max(24px, env(safe-area-inset-top)) 16px max(24px, env(safe-area-inset-bottom));
   }
   .card {
     width: min(100%, 420px); padding: clamp(18px, 5vw, 32px);
     background: var(--surface); border: 1px solid var(--border-focus); border-radius: 14px;
   }
-  h1 { margin: 0 0 4px; font-size: 1.3rem; }
-  .sub { margin: 0 0 18px; color: var(--muted); font-size: .88rem; }
-  label { display: block; margin: 14px 0 6px; font-size: .82rem; color: var(--subtle); }
+  .brand-mark { display: flex; align-items: center; gap: 8px; margin-bottom: 18px; }
+  .brand-mark svg { color: var(--brand); flex-shrink: 0; }
+  .brand-mark span { font-size: .8rem; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--subtle); }
+  h1 { margin: 0 0 4px; font-size: 1.3rem; text-wrap: balance; }
+  .sub { margin: 0 0 18px; color: var(--muted); font-size: .88rem; text-wrap: balance; }
+  label { display: block; margin: 14px 0 6px; font-size: .82rem; color: var(--subtle); letter-spacing: .01em; }
   input, textarea {
     width: 100%; padding: 10px 12px; border-radius: 8px;
     border: 1px solid var(--border); background: var(--input-bg); color: inherit; font: inherit;
     transition: border-color .15s;
   }
   textarea { min-height: 70px; resize: vertical; }
-  input:focus, textarea:focus { outline: 2px solid var(--accent); outline-offset: 1px; border-color: var(--accent); }
+  input:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; border-color: var(--accent); }
+  fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
+  fieldset legend { font-size: .82rem; color: var(--subtle); letter-spacing: .01em; margin: 14px 0 0; font-weight: 500; float: left; width: 100%; }
+  fieldset legend + * { clear: both; }
   button, .button {
     display: block; width: 100%; margin-top: 20px; padding: 11px; border: 0; border-radius: 8px;
     background: var(--accent); color: #fff; font: 600 15px/1 inherit; cursor: pointer;
-    text-align: center; text-decoration: none; transition: background .15s;
+    text-align: center; text-decoration: none; transition: background .15s; min-height: 44px;
   }
   button:hover, .button:hover { background: var(--accent-hover); }
   button:focus-visible, .button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
@@ -110,13 +116,21 @@ function renderShell(title: string, body: string): string {
   .button.secondary { background: transparent; border: 1px solid var(--accent); color: var(--accent-label); }
   .button.secondary:hover { background: var(--accent-subtle); }
   .note { font-size: .82rem; color: var(--muted); }
-  .links { margin: 18px 0 0; font-size: .8rem; color: var(--muted); }
+  .divider { border: 0; border-top: 1px solid var(--border); margin: 20px 0 0; }
+  nav.links { margin: 12px 0 0; font-size: .8rem; color: var(--muted); display: flex; flex-direction: column; gap: 4px; }
+  nav.links p { margin: 0; }
   a { color: var(--link); text-underline-offset: 2px; }
+  a:hover { text-decoration-thickness: 2px; }
+  a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 2px; }
   .hint { font-size: .75rem; color: var(--dim); margin: 4px 0 0; }
 </style>
 </head>
 <body>
   <main class="card">
+    <div class="brand-mark" aria-hidden="true">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+      <span>Nexus Systems</span>
+    </div>
 ${body}
   </main>
 </body>
@@ -128,14 +142,17 @@ function renderError(error: string | undefined): string {
 }
 
 const passwordFields = (minLength: number) => `
-      <label for="password">Password</label>
-      <input id="password" name="password" type="password" autocomplete="new-password" minlength="${minLength}" maxlength="${ONBOARDING_LIMITS.password}" aria-describedby="pw-hint" required />
-      <p class="hint" id="pw-hint">At least ${minLength} characters.</p>
-      <label for="confirm">Confirm password</label>
-      <input id="confirm" name="confirm" type="password" autocomplete="new-password" minlength="${minLength}" maxlength="${ONBOARDING_LIMITS.password}" aria-describedby="pw-hint" required />`;
+      <fieldset>
+        <legend>Password</legend>
+        <label for="password">New password</label>
+        <input id="password" name="password" type="password" autocomplete="new-password" minlength="${minLength}" maxlength="${ONBOARDING_LIMITS.password}" aria-describedby="pw-hint" required />
+        <p class="hint" id="pw-hint">At least ${minLength} characters.</p>
+        <label for="confirm">Confirm password</label>
+        <input id="confirm" name="confirm" type="password" autocomplete="new-password" minlength="${minLength}" maxlength="${ONBOARDING_LIMITS.password}" aria-describedby="pw-hint" required />
+      </fieldset>`;
 
 const otherWaysIn = `
-    <p class="links">Already have an account? <a href="/login">Sign in</a></p>`;
+    <p style="margin:6px 0 0;font-size:.8rem;color:var(--muted)">Already have an account? <a href="/login">Sign in</a></p>`;
 
 export function renderRequestPage(options: { username?: string; email?: string; note?: string; error?: string }): string {
   return renderShell("Request access", `
@@ -151,7 +168,7 @@ export function renderRequestPage(options: { username?: string; email?: string; 
       <button type="submit">Request access</button>
       ${renderError(options.error)}
     </form>
-    <p class="links">Have an invite? <a href="/join">Join with it</a> · Already approved? <a href="/claim">Claim your account</a></p>${otherWaysIn}`);
+    <p style="margin:6px 0 0;font-size:.8rem;color:var(--muted)">Have an invite? <a href="/join">Join with it</a> · Already approved? <a href="/claim">Claim your account</a></p>${otherWaysIn}`);
 }
 
 export function renderRequestedPage(options: { email: string; claimCode: string }): string {
@@ -177,7 +194,7 @@ export function renderClaimPage(options: { email?: string; minPasswordLength: nu
       <button type="submit">Claim account</button>
       ${renderError(options.error)}
     </form>
-    <p class="links">No claim code? <a href="/request">Request access</a> · Have an invite? <a href="/join">Join with it</a></p>${otherWaysIn}`);
+    <p style="margin:6px 0 0;font-size:.8rem;color:var(--muted)">No claim code? <a href="/request">Request access</a> · Have an invite? <a href="/join">Join with it</a></p>${otherWaysIn}`);
 }
 
 export function renderJoinPage(options: { code?: string; username?: string; email?: string; minPasswordLength: number; error?: string }): string {
@@ -195,7 +212,7 @@ export function renderJoinPage(options: { code?: string; username?: string; emai
       <button type="submit">Create account</button>
       ${renderError(options.error)}
     </form>
-    <p class="links">No invite? <a href="/request">Request access</a></p>${otherWaysIn}`);
+    <p style="margin:6px 0 0;font-size:.8rem;color:var(--muted)">No invite? <a href="/request">Request access</a></p>${otherWaysIn}`);
 }
 
 export function renderRecoverPage(options: { email?: string; error?: string }): string {
@@ -210,7 +227,7 @@ export function renderRecoverPage(options: { email?: string; error?: string }): 
       <button type="submit">Continue</button>
       ${renderError(options.error)}
     </form>
-    <p class="links">No codes left? Ask whoever runs this Nexus node to help you get back in.</p>${otherWaysIn}`);
+    <p style="margin:6px 0 0;font-size:.8rem;color:var(--muted)">No codes left? Ask whoever runs this Nexus node to help you get back in.</p>${otherWaysIn}`);
 }
 
 export function renderResetPasswordPage(options: { grant: string; minPasswordLength: number; error?: string }): string {
