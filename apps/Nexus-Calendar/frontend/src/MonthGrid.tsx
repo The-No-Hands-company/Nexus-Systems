@@ -64,16 +64,15 @@ export default function MonthGrid({ year, month, events, selectedDay, today, onS
         <span className={`text-xs ${isToday ? "text-accent font-semibold" : "text-zinc-400"}`}>{day}</span>
         <span className="sr-only">{isoDate(new Date(`${date}T00:00:00.000Z`))}</span>
         {eventList.slice(0, 3).map((event) => (
-          <span
+          <button
             key={event.id}
-            role="button"
-            tabIndex={0}
+            type="button"
             onClick={(e) => { e.stopPropagation(); onSelectEvent(event); }}
-            onKeyDown={(e) => { if (e.key === "Enter") { e.stopPropagation(); onSelectEvent(event); } }}
-            className="mt-0.5 hidden sm:block truncate rounded-sm bg-accent/20 px-1 text-xs text-accent hover:bg-accent/30 transition-colors"
+            aria-label={event.title}
+            className="mt-0.5 hidden sm:flex w-full truncate rounded-sm bg-accent/20 px-1 text-left text-xs text-accent hover:bg-accent/30 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent transition-colors"
           >
-            {event.title}
-          </span>
+            <span className="truncate">{event.title}</span>
+          </button>
         ))}
         {eventList.length > 0 && (
           <span className="sm:hidden mt-0.5 block h-1 w-1 rounded-full bg-accent" aria-hidden="true" />

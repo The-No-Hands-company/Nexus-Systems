@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from "react";
 import type { CalEvent, EventInput } from "./calendar-api";
 
-const inputClass = "mt-1 w-full rounded border border-zinc-700 bg-zinc-800 px-2 py-1.5 text-sm text-zinc-100 focus:border-zinc-500 focus:outline-none";
+const inputClass = "mt-1 w-full rounded border border-zinc-700 bg-zinc-800 px-2 py-1.5 text-sm text-zinc-100 focus-visible:border-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 focus-visible:ring-offset-1 focus-visible:ring-offset-zinc-800";
 
 export default function EventEditor({
   day,
@@ -70,7 +70,7 @@ export default function EventEditor({
             type="time"
             value={start}
             onChange={(e) => setStart(e.target.value)}
-            className="mt-1 block rounded border border-zinc-700 bg-zinc-800 px-2 py-1.5 text-sm text-zinc-100 focus:border-zinc-500 focus:outline-none"
+            className="mt-1 block rounded border border-zinc-700 bg-zinc-800 px-2 py-1.5 text-sm text-zinc-100 focus-visible:border-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 focus-visible:ring-offset-1 focus-visible:ring-offset-zinc-800"
           />
         </label>
         <label className="text-sm text-zinc-300">
@@ -80,7 +80,7 @@ export default function EventEditor({
             type="time"
             value={end}
             onChange={(e) => setEnd(e.target.value)}
-            className="mt-1 block rounded border border-zinc-700 bg-zinc-800 px-2 py-1.5 text-sm text-zinc-100 focus:border-zinc-500 focus:outline-none"
+            className="mt-1 block rounded border border-zinc-700 bg-zinc-800 px-2 py-1.5 text-sm text-zinc-100 focus-visible:border-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 focus-visible:ring-offset-1 focus-visible:ring-offset-zinc-800"
           />
         </label>
       </div>

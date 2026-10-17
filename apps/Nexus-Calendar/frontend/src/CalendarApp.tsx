@@ -61,6 +61,10 @@ export default function CalendarApp({
 
   useEffect(() => { void load(); }, [load]);
 
+  useEffect(() => {
+    document.title = `${MONTHS[month]} ${year} — Calendar`;
+  }, [month, year]);
+
   const changeMonth = (offset: number) => {
     const next = new Date(Date.UTC(year, month + offset, 1));
     setYear(next.getUTCFullYear());
@@ -217,7 +221,7 @@ export default function CalendarApp({
                 type="button"
                 aria-label="Close selected day"
                 onClick={closeAside}
-                className="text-zinc-500 hover:text-zinc-200 transition-colors"
+                className="flex items-center justify-center rounded p-2 -m-1 min-h-[44px] min-w-[44px] text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800 transition-colors"
               >
                 ×
               </button>
@@ -248,14 +252,12 @@ export default function CalendarApp({
               /* Day overview: list of events + create form */
               <>
                 {selectedEvents.map((event) => (
-                  <div
+                  <button
                     key={event.id}
-                    role="button"
-                    tabIndex={0}
+                    type="button"
                     aria-label={event.title}
                     onClick={() => setSelectedEvent(event)}
-                    onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setSelectedEvent(event); } }}
-                    className="mb-2 cursor-pointer"
+                    className="mb-2 w-full text-left cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent rounded-lg"
                   >
                     <EventDetails
                       event={event}
@@ -263,7 +265,7 @@ export default function CalendarApp({
                       onEdit={() => setEditingEvent(event)}
                       onShare={() => { setSelectedEvent(event); setSharingOpen(true); }}
                     />
-                  </div>
+                  </button>
                 ))}
 
                 {!editorOpen && (
