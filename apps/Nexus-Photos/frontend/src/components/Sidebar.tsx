@@ -7,24 +7,28 @@ export default function Sidebar() {
   const photos = useEditorStore((s) => s.photos);
 
   return (
-    <div className="w-56 border-r border-zinc-800 bg-zinc-900 flex flex-col shrink-0">
+    <nav aria-label="Photo albums" className="w-56 max-w-[45vw] border-r border-zinc-800 bg-zinc-900 flex flex-col shrink-0">
       <div className="px-3 py-2 text-xs font-medium text-zinc-500 uppercase tracking-wider">
         Albums
       </div>
       <div className="flex-1 overflow-y-auto">
         <button
+          type="button"
           onClick={() => setSelectedAlbumId(null)}
-          className={`w-full text-left px-3 py-2 text-sm flex items-center justify-between hover:bg-zinc-800 ${
-            selectedAlbumId === null ? "bg-zinc-800 text-blue-400" : "text-zinc-300"
+          aria-current={selectedAlbumId === null ? "page" : undefined}
+          className={`w-full min-h-[44px] text-left px-3 py-2 text-sm flex items-center justify-between hover:bg-zinc-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent ${
+            selectedAlbumId === null ? "bg-zinc-800 text-accent" : "text-zinc-300"
           }`}
         >
           <span>All Photos</span>
           <span className="text-xs text-zinc-500">{photos.length}</span>
         </button>
         <button
+          type="button"
           onClick={() => setSelectedAlbumId("favorites")}
-          className={`w-full text-left px-3 py-2 text-sm flex items-center justify-between hover:bg-zinc-800 ${
-            selectedAlbumId === "favorites" ? "bg-zinc-800 text-blue-400" : "text-zinc-300"
+          aria-current={selectedAlbumId === "favorites" ? "page" : undefined}
+          className={`w-full min-h-[44px] text-left px-3 py-2 text-sm flex items-center justify-between hover:bg-zinc-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent ${
+            selectedAlbumId === "favorites" ? "bg-zinc-800 text-accent" : "text-zinc-300"
           }`}
         >
           <span>Favorites</span>
@@ -36,9 +40,11 @@ export default function Sidebar() {
         {albums.map((album) => (
           <button
             key={album.id}
+            type="button"
             onClick={() => setSelectedAlbumId(album.id)}
-            className={`w-full text-left px-3 py-2 text-sm flex items-center justify-between hover:bg-zinc-800 ${
-              selectedAlbumId === album.id ? "bg-zinc-800 text-blue-400" : "text-zinc-300"
+            aria-current={selectedAlbumId === album.id ? "page" : undefined}
+            className={`w-full min-h-[44px] text-left px-3 py-2 text-sm flex items-center justify-between hover:bg-zinc-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent ${
+              selectedAlbumId === album.id ? "bg-zinc-800 text-accent" : "text-zinc-300"
             }`}
           >
             <span className="truncate">{album.name}</span>
@@ -46,6 +52,6 @@ export default function Sidebar() {
           </button>
         ))}
       </div>
-    </div>
+    </nav>
   );
 }

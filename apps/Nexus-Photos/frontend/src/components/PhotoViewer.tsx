@@ -41,14 +41,14 @@ export default function PhotoViewer() {
   if (!viewingPhoto) return null;
 
   return (
-    <div className="w-full h-full flex flex-col">
+    <section aria-label={`Viewing ${viewingPhoto.title || "photo"}`} className="w-full h-full flex flex-col">
       <div className="flex items-center justify-between px-3 py-1.5 bg-zinc-900 border-b border-zinc-800 shrink-0">
         <span className="text-xs text-zinc-400">{viewingPhoto.title || "untitled"}</span>
         <div className="flex items-center gap-2 text-xs text-zinc-500">
-          <button onClick={() => setZoom((z) => z - 0.25)} className="hover:text-zinc-200">−</button>
+          <button type="button" aria-label="Zoom out" onClick={() => setZoom((z) => z - 0.25)} className="min-h-[44px] min-w-[44px] rounded hover:text-zinc-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">−</button>
           <span>{Math.round(zoom * 100)}%</span>
-          <button onClick={() => setZoom((z) => z + 0.25)} className="hover:text-zinc-200">+</button>
-          <button onClick={() => { setZoom(1); setPan({ x: 0, y: 0 }); }} className="hover:text-zinc-200 ml-1">Fit</button>
+          <button type="button" aria-label="Zoom in" onClick={() => setZoom((z) => z + 0.25)} className="min-h-[44px] min-w-[44px] rounded hover:text-zinc-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">+</button>
+          <button type="button" aria-label="Fit photo" onClick={() => { setZoom(1); setPan({ x: 0, y: 0 }); }} className="min-h-[44px] rounded px-2 hover:text-zinc-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent ml-1">Fit</button>
         </div>
       </div>
       <div
@@ -61,6 +61,6 @@ export default function PhotoViewer() {
       >
         <Canvas />
       </div>
-    </div>
+    </section>
   );
 }

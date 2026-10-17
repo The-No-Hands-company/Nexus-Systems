@@ -36,8 +36,10 @@ export default function VideoGrid() {
       {videos.map((v) => (
         <button
           key={v.id}
+          type="button"
           onClick={() => setCurrentlyPlaying(v)}
-          className="text-left group"
+          aria-label={`Play ${v.title} by ${v.channel_name || "unknown channel"}`}
+          className="text-left group rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
         >
           <div className="relative aspect-video bg-zinc-800 rounded-xl overflow-hidden mb-2">
             {v.thumbnail_url ? (

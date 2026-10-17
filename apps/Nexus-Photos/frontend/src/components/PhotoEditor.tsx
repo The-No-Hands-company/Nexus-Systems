@@ -22,7 +22,7 @@ export default function PhotoEditor() {
   ];
 
   return (
-    <div className="w-full h-full flex">
+    <section aria-label={`Editing ${viewingPhoto.title || "photo"}`} className="w-full h-full flex">
       <div className="flex-1 flex items-center justify-center bg-zinc-950">
         <img
           src={viewingPhoto.url}
@@ -46,13 +46,14 @@ export default function PhotoEditor() {
                 <span>{filters[slider.key].toFixed(2)}</span>
               </div>
               <input
+                aria-label={slider.label}
                 type="range"
                 min={slider.min}
                 max={slider.max}
                 step={0.01}
                 value={filters[slider.key]}
                 onChange={(e) => setFilter(slider.key, parseFloat(e.target.value))}
-                className="w-full h-1 bg-zinc-700 rounded appearance-none cursor-pointer accent-blue-500"
+                className="w-full h-2 bg-zinc-700 rounded appearance-none cursor-pointer accent-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
               />
             </div>
           ))}
@@ -64,26 +65,30 @@ export default function PhotoEditor() {
           </div>
           <div className="grid grid-cols-2 gap-2 text-xs">
             <button
+              type="button"
               onClick={() => setTransform({ flipH: !transform.flipH })}
-              className={`px-3 py-1.5 rounded ${transform.flipH ? "bg-blue-600 text-white" : "bg-zinc-800 text-zinc-300 hover:bg-zinc-700"}`}
+              className={`min-h-[44px] px-3 py-1.5 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent ${transform.flipH ? "bg-accent text-zinc-900" : "bg-zinc-800 text-zinc-300 hover:bg-zinc-700"}`}
             >
               Flip H
             </button>
             <button
+              type="button"
               onClick={() => setTransform({ flipV: !transform.flipV })}
-              className={`px-3 py-1.5 rounded ${transform.flipV ? "bg-blue-600 text-white" : "bg-zinc-800 text-zinc-300 hover:bg-zinc-700"}`}
+              className={`min-h-[44px] px-3 py-1.5 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent ${transform.flipV ? "bg-accent text-zinc-900" : "bg-zinc-800 text-zinc-300 hover:bg-zinc-700"}`}
             >
               Flip V
             </button>
             <button
+              type="button"
               onClick={() => setTransform({ rotation: ((transform.rotation + 90) % 360) })}
-              className="px-3 py-1.5 rounded bg-zinc-800 text-zinc-300 hover:bg-zinc-700"
+              className="min-h-[44px] px-3 py-1.5 rounded bg-zinc-800 text-zinc-300 hover:bg-zinc-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
             >
               Rotate 90°
             </button>
             <button
+              type="button"
               onClick={() => setTransform({ rotation: 0 })}
-              className="px-3 py-1.5 rounded bg-zinc-800 text-zinc-300 hover:bg-zinc-700"
+              className="min-h-[44px] px-3 py-1.5 rounded bg-zinc-800 text-zinc-300 hover:bg-zinc-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
             >
               Reset Rot
             </button>
@@ -96,14 +101,17 @@ export default function PhotoEditor() {
           </div>
           <div className="grid grid-cols-2 gap-2 text-xs">
             <button
+              type="button"
               onClick={() => setCropTool({ active: !cropTool.active })}
-              className={`px-3 py-1.5 rounded ${cropTool.active ? "bg-blue-600 text-white" : "bg-zinc-800 text-zinc-300 hover:bg-zinc-700"}`}
+              aria-pressed={cropTool.active}
+              className={`min-h-[44px] px-3 py-1.5 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent ${cropTool.active ? "bg-accent text-zinc-900" : "bg-zinc-800 text-zinc-300 hover:bg-zinc-700"}`}
             >
               {cropTool.active ? "Done" : "Crop"}
             </button>
             <button
+              type="button"
               onClick={() => setCropTool({ active: false, x: 0, y: 0, width: 0, height: 0 })}
-              className="px-3 py-1.5 rounded bg-zinc-800 text-zinc-300 hover:bg-zinc-700"
+              className="min-h-[44px] px-3 py-1.5 rounded bg-zinc-800 text-zinc-300 hover:bg-zinc-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
             >
               Reset
             </button>
@@ -112,16 +120,17 @@ export default function PhotoEditor() {
 
         <div className="border-t border-zinc-800 my-4 pt-4 flex gap-2 text-xs">
           <button
+            type="button"
             onClick={resetFilters}
-            className="flex-1 px-3 py-1.5 rounded bg-zinc-800 text-zinc-300 hover:bg-zinc-700"
+            className="flex-1 min-h-[44px] px-3 py-1.5 rounded bg-zinc-800 text-zinc-300 hover:bg-zinc-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
           >
             Reset All
           </button>
-          <button className="flex-1 px-3 py-1.5 rounded bg-blue-600 text-white hover:bg-blue-500">
+          <button type="button" className="flex-1 min-h-[44px] px-3 py-1.5 rounded bg-accent text-zinc-900 hover:bg-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">
             Apply
           </button>
         </div>
       </div>
-    </div>
+    </section>
   );
 }

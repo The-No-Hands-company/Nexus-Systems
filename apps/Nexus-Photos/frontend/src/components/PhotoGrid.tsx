@@ -16,12 +16,24 @@ function PhotoThumb({ photo }: { photo: PhotoData }) {
     setViewMode("detail");
   };
 
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter") handleDoubleClick();
+    if (e.key === " ") {
+      e.preventDefault();
+      selectPhoto(photo.id, e.ctrlKey || e.metaKey);
+    }
+  };
+
   return (
-    <div
+    <button
+      type="button"
       onClick={handleClick}
       onDoubleClick={handleDoubleClick}
-      className={`relative aspect-square rounded-lg overflow-hidden cursor-pointer border-2 transition-all group ${
-        isSelected ? "border-blue-500 ring-2 ring-blue-500/30" : "border-transparent hover:border-zinc-600"
+      onKeyDown={handleKeyDown}
+      aria-label={`${photo.title || "Untitled photo"}${isSelected ? ", selected" : ""}`}
+      aria-pressed={isSelected}
+      className={`relative aspect-square w-full rounded-lg overflow-hidden cursor-pointer border-2 transition-all group text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent ${
+        isSelected ? "border-accent ring-2 ring-accent/30" : "border-transparent hover:border-zinc-600"
       }`}
     >
       <img
@@ -38,7 +50,7 @@ function PhotoThumb({ photo }: { photo: PhotoData }) {
         <div className="text-[11px] text-white truncate">{photo.title || "untitled"}</div>
         <div className="text-[10px] text-zinc-400">{photo.width}×{photo.height}</div>
       </div>
-    </div>
+    </button>
   );
 }
 

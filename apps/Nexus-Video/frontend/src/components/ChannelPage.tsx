@@ -12,7 +12,7 @@ export default function ChannelPage() {
   const channelVideos = videos.filter((v) => v.channel_id === channel.id);
 
   return (
-    <div>
+    <article aria-labelledby="channel-title">
       <div
         className="h-48 bg-zinc-800 bg-cover bg-center"
         style={channel.banner_url ? { backgroundImage: `url(${channel.banner_url})` } : undefined}
@@ -24,8 +24,8 @@ export default function ChannelPage() {
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h1 className="text-2xl font-bold text-white">{channel.name}</h1>
-                {channel.is_verified && <span className="text-blue-400 text-lg" title="Verified">✓</span>}
+                <h1 id="channel-title" className="text-2xl font-bold text-white">{channel.name}</h1>
+                {channel.is_verified && <span className="text-accent text-lg" title="Verified">✓</span>}
               </div>
               <p className="text-sm text-zinc-400">
                 {channel.subscriber_count.toLocaleString()} subscribers · {channel.video_count} videos
@@ -38,7 +38,7 @@ export default function ChannelPage() {
         </div>
       </div>
       <div className="px-6 py-4 border-b border-zinc-800 flex items-center gap-4">
-        <button className="px-4 py-1.5 bg-red-600 hover:bg-red-700 text-white text-sm font-medium rounded-full">
+        <button type="button" aria-label={`Subscribe to ${channel.name}`} className="min-h-[44px] px-4 py-1.5 bg-accent hover:bg-accent-hover text-zinc-900 text-sm font-medium rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">
           Subscribe
         </button>
       </div>
@@ -50,8 +50,10 @@ export default function ChannelPage() {
             {channelVideos.map((v) => (
               <button
                 key={v.id}
+                type="button"
                 onClick={() => setCurrentlyPlaying(v)}
-                className="text-left group"
+                aria-label={`Play ${v.title}`}
+                className="text-left group rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
               >
                 <div className="relative aspect-video bg-zinc-800 rounded-xl overflow-hidden mb-2">
                   {v.thumbnail_url ? (
@@ -71,6 +73,6 @@ export default function ChannelPage() {
           </div>
         )}
       </div>
-    </div>
+    </article>
   );
 }

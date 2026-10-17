@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import TopBar from "./components/TopBar";
 import Sidebar from "./components/Sidebar";
 import VideoGrid from "./components/VideoGrid";
@@ -11,17 +12,34 @@ export default function App() {
   const showSidebar = useEditorStore((s) => s.showSidebar);
   const currentlyPlaying = useEditorStore((s) => s.currentlyPlaying);
   const selectedChannelId = useEditorStore((s) => s.selectedChannelId);
+  const selectedPlaylistId = useEditorStore((s) => s.selectedPlaylistId);
+
+  useEffect(() => {
+    document.title = currentlyPlaying
+      ? `${currentlyPlaying.title} — Video`
+      : selectedChannelId
+        ? "Channel — Nexus-Video"
+        : selectedPlaylistId
+          ? "Playlist — Nexus-Video"
+          : "Nexus-Video";
+  }, [currentlyPlaying, selectedChannelId, selectedPlaylistId]);
 
   return (
     <div className="h-screen flex flex-col">
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:absolute focus:z-50 focus:left-2 focus:top-2 focus:rounded focus:bg-zinc-800 focus:px-4 focus:py-2 focus:text-zinc-100 focus:ring-2 focus:ring-accent focus:outline-none"
+      >
+        Skip to video content
+      </a>
       <TopBar />
       <div className="flex flex-1 overflow-hidden">
         {showSidebar && (
-          <div className="w-60 border-r border-zinc-800 bg-zinc-900 shrink-0">
+          <aside aria-label="Video navigation" className="hidden sm:block w-60 border-r border-zinc-800 bg-zinc-900 shrink-0">
             <Sidebar />
-          </div>
+          </aside>
         )}
-        <div className="flex-1 flex flex-col overflow-hidden">
+        <main id="main-content" className="flex-1 min-w-0 flex flex-col overflow-hidden" aria-label="Video workspace" tabIndex={-1}>
           {currentlyPlaying ? (
             <div className="flex-1 flex flex-col">
               <VideoPlayer />
@@ -38,8 +56,8 @@ export default function App() {
               <VideoGrid />
             </div>
           )}
-        </div>
-        <div className="w-72 border-l border-zinc-800 bg-zinc-900 shrink-0 overflow-y-auto p-3">
+        </main>
+        <aside aria-label="Playlist and visualization" className="hidden xl:block w-72 border-l border-zinc-800 bg-zinc-900 shrink-0 overflow-y-auto p-3">
           <h3 className="text-sm font-semibold text-zinc-400 uppercase tracking-wider mb-3">Playlist</h3>
           <div className="space-y-1 text-sm text-zinc-500">
             <p>Select a playlist to view</p>
@@ -48,7 +66,7 @@ export default function App() {
             <h3 className="text-sm font-semibold text-zinc-400 uppercase tracking-wider mb-3">Visualization</h3>
             <Canvas />
           </div>
-        </div>
+        </aside>
       </div>
     </div>
   );

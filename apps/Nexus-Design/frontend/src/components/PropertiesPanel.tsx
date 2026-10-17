@@ -22,7 +22,7 @@ export default function PropertiesPanel() {
     : null;
 
   return (
-    <div className="flex flex-col h-full">
+    <aside aria-label="Properties" className="flex flex-col h-full">
       <div className="p-2 text-xs font-semibold text-zinc-400 uppercase tracking-wider border-b border-zinc-800">
         {layer ? "Layer Properties" : "Frame Properties"}
       </div>
@@ -31,13 +31,15 @@ export default function PropertiesPanel() {
           <>
             <PropertyRow label="Name">
               <input
+                aria-label="Layer name"
                 value={layer.name}
                 onChange={(e) => updateLayer(selectedFrame.id, layer.id, { name: e.target.value })}
-                className="flex-1 bg-zinc-800 px-2 py-1 rounded text-sm border border-zinc-700 focus:border-blue-500 outline-none"
+                className="flex-1 bg-zinc-800 px-2 py-1 rounded text-sm border border-zinc-700 focus:border-accent outline-none focus-visible:ring-2 focus-visible:ring-accent"
               />
             </PropertyRow>
             <PropertyRow label="Opacity">
               <input
+                aria-label="Layer opacity"
                 type="range" min="0" max="1" step="0.01"
                 value={layer.opacity}
                 onChange={(e) => updateLayer(selectedFrame.id, layer.id, { opacity: parseFloat(e.target.value) })}
@@ -47,6 +49,7 @@ export default function PropertiesPanel() {
             </PropertyRow>
             <PropertyRow label="Visible">
               <input
+                aria-label="Layer visibility"
                 type="checkbox"
                 checked={layer.visible}
                 onChange={(e) => updateLayer(selectedFrame.id, layer.id, { visible: e.target.checked })}
@@ -54,6 +57,7 @@ export default function PropertiesPanel() {
             </PropertyRow>
             <PropertyRow label="Locked">
               <input
+                aria-label="Layer lock"
                 type="checkbox"
                 checked={layer.locked}
                 onChange={(e) => updateLayer(selectedFrame.id, layer.id, { locked: e.target.checked })}
@@ -66,35 +70,40 @@ export default function PropertiesPanel() {
                     onChange={(e) => updateLayer(selectedFrame.id, layer.id, {
                       data: { ...layer.data, x: parseFloat(e.target.value) }
                     })}
-                    className="w-20 bg-zinc-800 px-2 py-1 rounded border border-zinc-700 focus:border-blue-500 outline-none text-sm" />
+                    aria-label="Layer X position"
+                    className="w-20 bg-zinc-800 px-2 py-1 rounded border border-zinc-700 focus:border-accent outline-none focus-visible:ring-2 focus-visible:ring-accent text-sm" />
                 </PropertyRow>
                 <PropertyRow label="Y">
                   <input type="number" value={(layer.data as any).y ?? 0}
                     onChange={(e) => updateLayer(selectedFrame.id, layer.id, {
                       data: { ...layer.data, y: parseFloat(e.target.value) }
                     })}
-                    className="w-20 bg-zinc-800 px-2 py-1 rounded border border-zinc-700 focus:border-blue-500 outline-none text-sm" />
+                    aria-label="Layer Y position"
+                    className="w-20 bg-zinc-800 px-2 py-1 rounded border border-zinc-700 focus:border-accent outline-none focus-visible:ring-2 focus-visible:ring-accent text-sm" />
                 </PropertyRow>
                 <PropertyRow label="W">
                   <input type="number" value={(layer.data as any).width ?? 100}
                     onChange={(e) => updateLayer(selectedFrame.id, layer.id, {
                       data: { ...layer.data, width: parseFloat(e.target.value) }
                     })}
-                    className="w-20 bg-zinc-800 px-2 py-1 rounded border border-zinc-700 focus:border-blue-500 outline-none text-sm" />
+                    aria-label="Layer width"
+                    className="w-20 bg-zinc-800 px-2 py-1 rounded border border-zinc-700 focus:border-accent outline-none focus-visible:ring-2 focus-visible:ring-accent text-sm" />
                 </PropertyRow>
                 <PropertyRow label="H">
                   <input type="number" value={(layer.data as any).height ?? 100}
                     onChange={(e) => updateLayer(selectedFrame.id, layer.id, {
                       data: { ...layer.data, height: parseFloat(e.target.value) }
                     })}
-                    className="w-20 bg-zinc-800 px-2 py-1 rounded border border-zinc-700 focus:border-blue-500 outline-none text-sm" />
+                    aria-label="Layer height"
+                    className="w-20 bg-zinc-800 px-2 py-1 rounded border border-zinc-700 focus:border-accent outline-none focus-visible:ring-2 focus-visible:ring-accent text-sm" />
                 </PropertyRow>
                 <PropertyRow label="Fill">
                   <input type="color" value={(layer.data as any).fill ?? "#3b82f6"}
                     onChange={(e) => updateLayer(selectedFrame.id, layer.id, {
                       data: { ...layer.data, fill: e.target.value }
                     })}
-                    className="w-10 h-8 bg-transparent border-0 cursor-pointer" />
+                    aria-label="Layer fill color"
+                    className="w-10 h-8 bg-transparent border-0 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent" />
                   <span className="text-xs text-zinc-500">{(layer.data as any).fill ?? "#3b82f6"}</span>
                 </PropertyRow>
               </>
@@ -104,20 +113,23 @@ export default function PropertiesPanel() {
           <>
             <PropertyRow label="Name">
               <input
+                aria-label="Frame name"
                 value={selectedFrame.name}
                 onChange={(e) => updateFrame(selectedFrame.id, { name: e.target.value })}
-                className="flex-1 bg-zinc-800 px-2 py-1 rounded text-sm border border-zinc-700 focus:border-blue-500 outline-none"
+                className="flex-1 bg-zinc-800 px-2 py-1 rounded text-sm border border-zinc-700 focus:border-accent outline-none focus-visible:ring-2 focus-visible:ring-accent"
               />
             </PropertyRow>
             <PropertyRow label="W">
               <input type="number" value={selectedFrame.width}
                 onChange={(e) => updateFrame(selectedFrame.id, { width: parseInt(e.target.value) || 0 })}
-                className="w-20 bg-zinc-800 px-2 py-1 rounded border border-zinc-700 focus:border-blue-500 outline-none text-sm" />
+                aria-label="Frame width"
+                className="w-20 bg-zinc-800 px-2 py-1 rounded border border-zinc-700 focus:border-accent outline-none focus-visible:ring-2 focus-visible:ring-accent text-sm" />
             </PropertyRow>
             <PropertyRow label="H">
               <input type="number" value={selectedFrame.height}
                 onChange={(e) => updateFrame(selectedFrame.id, { height: parseInt(e.target.value) || 0 })}
-                className="w-20 bg-zinc-800 px-2 py-1 rounded border border-zinc-700 focus:border-blue-500 outline-none text-sm" />
+                aria-label="Frame height"
+                className="w-20 bg-zinc-800 px-2 py-1 rounded border border-zinc-700 focus:border-accent outline-none focus-visible:ring-2 focus-visible:ring-accent text-sm" />
             </PropertyRow>
             <PropertyRow label="Bg">
               <input type="color" value={selectedFrame.background}
@@ -128,7 +140,7 @@ export default function PropertiesPanel() {
           </>
         )}
       </div>
-    </div>
+    </aside>
   );
 }
 

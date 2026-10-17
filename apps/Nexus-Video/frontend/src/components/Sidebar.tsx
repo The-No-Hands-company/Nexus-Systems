@@ -7,7 +7,7 @@ export default function Sidebar() {
   const setCurrentlyPlaying = useEditorStore((s) => s.setCurrentlyPlaying);
 
   return (
-    <div className="h-full flex flex-col py-2">
+    <nav aria-label="Video library" className="h-full flex flex-col py-2">
       <div className="px-3 mb-2">
         <h3 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">Subscriptions</h3>
       </div>
@@ -18,11 +18,13 @@ export default function Sidebar() {
         {channels.map((ch) => (
           <button
             key={ch.id}
+            type="button"
             onClick={() => {
               setSelectedChannelId(ch.id);
               setCurrentlyPlaying(null);
             }}
-            className={`flex items-center gap-3 w-full px-2 py-1.5 rounded-md text-sm transition-colors ${
+            aria-current={selectedChannelId === ch.id ? "page" : undefined}
+            className={`flex items-center gap-3 w-full min-h-[44px] px-2 py-1.5 rounded-md text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent ${
               selectedChannelId === ch.id
                 ? "bg-zinc-700 text-white"
                 : "text-zinc-300 hover:bg-zinc-800"
@@ -38,7 +40,7 @@ export default function Sidebar() {
               </div>
             </div>
             {ch.is_verified && (
-              <span className="text-blue-400 text-xs shrink-0" title="Verified">✓</span>
+              <span className="text-accent text-xs shrink-0" title="Verified">✓</span>
             )}
           </button>
         ))}
@@ -46,18 +48,20 @@ export default function Sidebar() {
       <div className="border-t border-zinc-800 pt-2 mt-2 px-3">
         <h3 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1">Library</h3>
         <button
+          type="button"
           onClick={() => { setSelectedChannelId(null); setCurrentlyPlaying(null); }}
-          className="block w-full text-left text-sm text-zinc-400 hover:text-zinc-200 py-1 px-2 rounded hover:bg-zinc-800"
+          aria-current={selectedChannelId === null ? "page" : undefined}
+          className="block w-full min-h-[44px] text-left text-sm text-zinc-400 hover:text-zinc-200 py-1 px-2 rounded hover:bg-zinc-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
         >
           All Videos
         </button>
-        <button className="block w-full text-left text-sm text-zinc-400 hover:text-zinc-200 py-1 px-2 rounded hover:bg-zinc-800">
+        <button type="button" className="block w-full min-h-[44px] text-left text-sm text-zinc-400 hover:text-zinc-200 py-1 px-2 rounded hover:bg-zinc-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">
           History
         </button>
-        <button className="block w-full text-left text-sm text-zinc-400 hover:text-zinc-200 py-1 px-2 rounded hover:bg-zinc-800">
+        <button type="button" className="block w-full min-h-[44px] text-left text-sm text-zinc-400 hover:text-zinc-200 py-1 px-2 rounded hover:bg-zinc-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">
           Liked Videos
         </button>
       </div>
-    </div>
+    </nav>
   );
 }

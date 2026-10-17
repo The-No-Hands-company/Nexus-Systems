@@ -27,7 +27,6 @@ export default function VideoPlayer() {
   const toggleFullscreen = useEditorStore((s) => s.toggleFullscreen);
   const setCurrentTime = useEditorStore((s) => s.setCurrentTime);
   const setDuration = useEditorStore((s) => s.setDuration);
-  const seek = useEditorStore((s) => s.seek);
 
   useEffect(() => {
     const el = videoRef.current;
@@ -87,22 +86,6 @@ export default function VideoPlayer() {
   const handlePlayPause = useCallback(() => {
     setIsPlaying(!isPlaying);
   }, [isPlaying, setIsPlaying]);
-
-  const handleSeek = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
-    const rect = e.currentTarget.getBoundingClientRect();
-    const ratio = (e.clientX - rect.left) / rect.width;
-    const el = videoRef.current;
-    if (!el) return;
-    const t = ratio * el.duration;
-    el.currentTime = t;
-    setCurrentTime(t);
-  }, [setCurrentTime]);
-
-  const handleVolume = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
-    const rect = e.currentTarget.getBoundingClientRect();
-    const ratio = (e.clientX - rect.left) / rect.width;
-    setVolume(ratio);
-  }, [setVolume]);
 
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
     const el = videoRef.current;
@@ -164,6 +147,7 @@ export default function VideoPlayer() {
       <video
         ref={videoRef}
         src={video.url || undefined}
+        aria-label={video.title}
         className="w-full h-full object-contain"
         onTimeUpdate={handleTimeUpdate}
         onLoadedMetadata={handleLoadedMetadata}
@@ -172,35 +156,34 @@ export default function VideoPlayer() {
         playsInline
       />
       <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent px-4 pt-8 pb-2">
-        <div
-          className="h-1 bg-zinc-600 rounded cursor-pointer mb-3 group"
-          onClick={handleSeek}
-        >
-          <div
-            className="h-full bg-red-600 rounded relative"
-            style={{ width: duration > 0 ? `${(currentTime / duration) * 100}%` : "0%" }}
-          >
-            <div className="absolute right-0 top-1/2 -translate-y-1/2 w-3 h-3 bg-red-600 rounded-full opacity-0 group-hover:opacity-100 transition-opacity" />
-          </div>
-        </div>
+        <label className="sr-only" htmlFor="video-seek">Seek video</label>
+        <input
+          id="video-seek"
+          type="range"
+          min={0}
+          max={Math.max(duration, 1)}
+          step={0.1}
+          value={Math.min(currentTime, Math.max(duration, 1))}
+          onChange={(e) => {
+            const next = Number(e.target.value);
+            const el = videoRef.current;
+            if (el) el.currentTime = next;
+            setCurrentTime(next);
+          }}
+          aria-valuetext={`${formatTime(currentTime)} of ${formatTime(duration)}`}
+          className="w-full h-2 accent-accent cursor-pointer mb-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+        />
         <div className="flex items-center justify-between text-white">
           <div className="flex items-center gap-3">
-            <button onClick={handlePlayPause} className="hover:text-zinc-300">
-              {isPlaying ? <Pause size={20} fill="currentColor" /> : <Play size={20} fill="currentColor" />}
+            <button type="button" aria-label={isPlaying ? "Pause video" : "Play video"} onClick={handlePlayPause} className="min-h-[44px] min-w-[44px] rounded hover:text-zinc-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">
+              {isPlaying ? <Pause size={20} fill="currentColor" aria-hidden="true" /> : <Play size={20} fill="currentColor" aria-hidden="true" />}
             </button>
             <div className="flex items-center gap-1.5 group/vol">
-              <button onClick={toggleMute} className="hover:text-zinc-300">
-                {muted || volume === 0 ? <VolumeX size={18} /> : <Volume2 size={18} />}
+              <button type="button" aria-label={muted || volume === 0 ? "Unmute video" : "Mute video"} onClick={toggleMute} className="min-h-[44px] min-w-[44px] rounded hover:text-zinc-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">
+                {muted || volume === 0 ? <VolumeX size={18} aria-hidden="true" /> : <Volume2 size={18} aria-hidden="true" />}
               </button>
-              <div
-                className="w-20 h-1 bg-zinc-600 rounded cursor-pointer hidden group-hover/vol:block"
-                onClick={handleVolume}
-              >
-                <div
-                  className="h-full bg-white rounded"
-                  style={{ width: `${(muted ? 0 : volume) * 100}%` }}
-                />
-              </div>
+              <label className="sr-only" htmlFor="video-volume">Volume</label>
+              <input id="video-volume" type="range" min={0} max={1} step={0.01} value={muted ? 0 : volume} onChange={(e) => setVolume(Number(e.target.value))} aria-label="Volume" className="w-20 h-2 accent-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent" />
             </div>
             <span className="text-xs text-zinc-300 font-mono">
               {formatTime(currentTime)} / {formatTime(duration)}
@@ -208,7 +191,8 @@ export default function VideoPlayer() {
           </div>
           <div className="flex items-center gap-2">
             <select
-              className="bg-transparent text-xs text-zinc-300 border border-zinc-600 rounded px-1 py-0.5"
+              aria-label="Playback speed"
+              className="min-h-[44px] bg-transparent text-xs text-zinc-300 border border-zinc-600 rounded px-1 py-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
               onChange={(e) => {
                 const el = videoRef.current;
                 if (el) el.playbackRate = parseFloat(e.target.value);
@@ -218,11 +202,11 @@ export default function VideoPlayer() {
                 <option key={r} value={r} className="bg-zinc-800">{r}x</option>
               ))}
             </select>
-            <button onClick={handlePiP} className="hover:text-zinc-300">
-              <PictureInPicture2 size={16} />
+            <button type="button" aria-label="Picture in picture" onClick={handlePiP} className="min-h-[44px] min-w-[44px] rounded hover:text-zinc-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">
+              <PictureInPicture2 size={16} aria-hidden="true" />
             </button>
-            <button onClick={toggleFullscreen} className="hover:text-zinc-300">
-              {fullscreen ? <Minimize size={18} /> : <Maximize size={18} />}
+            <button type="button" aria-label={fullscreen ? "Exit fullscreen" : "Enter fullscreen"} onClick={toggleFullscreen} className="min-h-[44px] min-w-[44px] rounded hover:text-zinc-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">
+              {fullscreen ? <Minimize size={18} aria-hidden="true" /> : <Maximize size={18} aria-hidden="true" />}
             </button>
           </div>
         </div>

@@ -13,7 +13,7 @@ export default function LayerPanel() {
   const selectedFrame = frames.find((f) => f.id === selectedFrameId);
 
   return (
-    <div className="flex flex-col h-full">
+    <aside aria-label="Layers" className="flex flex-col h-full">
       <div className="p-2 text-xs font-semibold text-zinc-400 uppercase tracking-wider border-b border-zinc-800">
         Layers
       </div>
@@ -22,26 +22,33 @@ export default function LayerPanel() {
           <div key={frame.id}>
             <button
               onClick={() => selectFrame(frame.id)}
-              className={`w-full flex items-center gap-2 px-2 py-1.5 rounded text-xs transition-colors
-                ${selectedFrameId === frame.id ? "bg-blue-600/20 text-blue-300" : "hover:bg-zinc-800 text-zinc-400"}`}
+              aria-pressed={selectedFrameId === frame.id}
+              className={`w-full min-h-[44px] flex items-center gap-2 px-2 py-1.5 rounded text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent
+                ${selectedFrameId === frame.id ? "bg-accent/20 text-accent" : "hover:bg-zinc-800 text-zinc-400"}`}
             >
-              <span className={`${selectedFrameId === frame.id ? "text-blue-400" : "text-zinc-600"}`}>▸</span>
+              <span className={`${selectedFrameId === frame.id ? "text-accent" : "text-zinc-600"}`}>▸</span>
               {frame.name}
             </button>
             {selectedFrameId === frame.id && frame.layers.map((layer) => (
               <div
                 key={layer.id}
-                onClick={(e) => selectLayer(layer.id, e.metaKey || e.ctrlKey)}
-                className={`flex items-center gap-2 px-2 py-1.5 ml-3 rounded cursor-pointer text-sm transition-colors
-                  ${selectedLayerIds.has(layer.id) ? "bg-blue-600/20 text-blue-300" : "hover:bg-zinc-800 text-zinc-300"}`}
+                className={`flex items-center gap-2 px-2 py-1.5 ml-3 rounded text-sm transition-colors
+                  ${selectedLayerIds.has(layer.id) ? "bg-accent/20 text-accent" : "text-zinc-300"}`}
               >
                 <button
+                  type="button"
                   onClick={(e) => { e.stopPropagation(); updateLayer(frame.id, layer.id, { visible: !layer.visible }); }}
-                  className="w-4 text-center text-xs"
+                  aria-label={`${layer.visible ? "Hide" : "Show"} ${layer.name}`}
+                  className="min-h-[44px] min-w-[44px] rounded text-center text-xs hover:bg-zinc-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
                 >
                   {layer.visible ? "👁" : "—"}
                 </button>
-                <span className="flex-1 truncate">{layer.name}</span>
+                <button
+                  type="button"
+                  onClick={(e) => selectLayer(layer.id, e.metaKey || e.ctrlKey)}
+                  aria-pressed={selectedLayerIds.has(layer.id)}
+                  className="flex-1 min-h-[44px] truncate text-left rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                >{layer.name}</button>
                 <span className="text-[10px] text-zinc-600 uppercase">{layer.type}</span>
               </div>
             ))}
@@ -50,6 +57,7 @@ export default function LayerPanel() {
       </div>
       <div className="p-2 border-t border-zinc-800 flex gap-1">
         <button
+          type="button"
           onClick={() => {
             if (!selectedFrameId) return;
             const id = crypto.randomUUID();
@@ -61,21 +69,24 @@ export default function LayerPanel() {
               data: { width: 100, height: 100, x: 0, y: 0, fill: "#3b82f6" },
             });
           }}
-          className="flex-1 px-2 py-1 text-xs bg-zinc-800 hover:bg-zinc-700 rounded"
+          aria-label="Add layer"
+          className="flex-1 min-h-[44px] px-2 py-1 text-xs bg-zinc-800 hover:bg-zinc-700 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
         >
           + Add
         </button>
         <button
+          type="button"
           onClick={() => {
             if (!selectedFrameId) return;
             selectedLayerIds.forEach((id) => removeLayer(selectedFrameId, id));
           }}
-          className="px-2 py-1 text-xs bg-red-900/40 hover:bg-red-800/60 text-red-400 rounded"
+          aria-label="Delete selected layers"
+          className="min-h-[44px] px-2 py-1 text-xs bg-state-danger/20 hover:bg-state-danger/30 text-state-danger rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
           disabled={selectedLayerIds.size === 0}
         >
           Del
         </button>
       </div>
-    </div>
+    </aside>
   );
 }

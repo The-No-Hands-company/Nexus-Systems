@@ -16,16 +16,19 @@ export default function Toolbar() {
   const setActiveTool = useEditorStore((s) => s.setActiveTool);
 
   return (
-    <div className="flex flex-col gap-1 p-2 bg-zinc-900 border-r border-zinc-800 w-14 shrink-0">
+    <aside aria-label="Graphic tools" className="flex flex-col gap-1 p-2 bg-zinc-900 border-r border-zinc-800 w-14 shrink-0">
       {tools.map((tool) => (
         <button
           key={tool.id}
+          type="button"
           onClick={() => setActiveTool(tool.id)}
+          aria-label={`${tool.label} — press ${tool.key}`}
+          aria-pressed={activeTool === tool.id}
           title={`${tool.label} (${tool.key})`}
-          className={`w-10 h-10 flex items-center justify-center rounded-lg text-sm transition-colors
-            ${activeTool === tool.id ? "bg-blue-600 text-white" : "text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200"}`}
+          className={`min-h-[44px] min-w-[44px] flex items-center justify-center rounded-lg text-sm transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent
+            ${activeTool === tool.id ? "bg-accent text-zinc-900" : "text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200"}`}
         >
-          {tool.icon}
+          <span aria-hidden="true">{tool.icon}</span>
         </button>
       ))}
       <div className="mt-auto pt-2 border-t border-zinc-800">
@@ -33,6 +36,6 @@ export default function Toolbar() {
           v0.1
         </div>
       </div>
-    </div>
+    </aside>
   );
 }

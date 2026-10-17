@@ -19,7 +19,7 @@ export default function LayerPanel() {
   const layers = [...project.layers].sort((a, b) => b.order - a.order);
 
   return (
-    <div className="flex flex-col h-full">
+    <aside aria-label="Layers" className="flex flex-col h-full">
       <div className="p-2 text-xs font-semibold text-zinc-400 uppercase tracking-wider border-b border-zinc-800">
         Layers
       </div>
@@ -27,23 +27,30 @@ export default function LayerPanel() {
         {layers.map((layer) => (
           <div
             key={layer.id}
-            onClick={(e) => selectLayer(layer.id, e.metaKey || e.ctrlKey)}
-            className={`flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer text-sm transition-colors
-              ${selectedLayerIds.has(layer.id) ? "bg-blue-600/20 text-blue-300" : "hover:bg-zinc-800 text-zinc-300"}`}
+            className={`flex items-center gap-2 px-2 py-1.5 rounded text-sm transition-colors
+              ${selectedLayerIds.has(layer.id) ? "bg-accent/20 text-accent" : "text-zinc-300"}`}
           >
             <button
+              type="button"
               onClick={(e) => { e.stopPropagation(); updateLayer(layer.id, { visible: !layer.visible }); }}
-              className="w-4 text-center text-xs"
+              aria-label={`${layer.visible ? "Hide" : "Show"} ${layer.name}`}
+              className="min-h-[44px] min-w-[44px] rounded text-center text-xs hover:bg-zinc-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
             >
               {layer.visible ? "👁" : "—"}
             </button>
-            <span className="flex-1 truncate">{layer.name}</span>
+            <button
+              type="button"
+              onClick={(e) => selectLayer(layer.id, e.metaKey || e.ctrlKey)}
+              aria-pressed={selectedLayerIds.has(layer.id)}
+              className="flex-1 min-h-[44px] truncate text-left rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+            >{layer.name}</button>
             <span className="text-[10px] text-zinc-600 uppercase">{layer.type}</span>
           </div>
         ))}
       </div>
       <div className="p-2 border-t border-zinc-800 flex gap-1">
         <button
+          type="button"
           onClick={() => {
             const id = crypto.randomUUID();
             const order = project.layers.length;
@@ -54,20 +61,23 @@ export default function LayerPanel() {
               data: { width: 100, height: 100, x: 0, y: 0, fill: "#3b82f6" },
             });
           }}
-          className="flex-1 px-2 py-1 text-xs bg-zinc-800 hover:bg-zinc-700 rounded"
+          aria-label="Add layer"
+          className="flex-1 min-h-[44px] px-2 py-1 text-xs bg-zinc-800 hover:bg-zinc-700 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
         >
           + Add
         </button>
         <button
+          type="button"
           onClick={() => {
             selectedLayerIds.forEach((id) => removeLayer(id));
           }}
-          className="px-2 py-1 text-xs bg-red-900/40 hover:bg-red-800/60 text-red-400 rounded"
+          aria-label="Delete selected layers"
+          className="min-h-[44px] px-2 py-1 text-xs bg-state-danger/20 hover:bg-state-danger/30 text-state-danger rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
           disabled={selectedLayerIds.size === 0}
         >
           Del
         </button>
       </div>
-    </div>
+    </aside>
   );
 }
