@@ -12,17 +12,29 @@ export default function EventDetails({
   onDelete,
   onEdit,
   onShare,
+  onSelect,
 }: {
   event: CalEvent;
   onDelete(): Promise<void>;
   onEdit?(): void;
   onShare(): void;
+  onSelect?(): void;
 }) {
   const canEdit = event.access === "owner" || event.access === "editor";
 
   return (
     <article className="rounded-lg border border-zinc-700 bg-zinc-800/50 p-3">
-      <h3 className="font-semibold text-zinc-100">{event.title}</h3>
+      <h3 className="font-semibold text-zinc-100">
+        {onSelect ? (
+          <button
+            type="button"
+            onClick={onSelect}
+            className="text-left hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+          >
+            {event.title}
+          </button>
+        ) : event.title}
+      </h3>
       <p className="mt-1 text-sm text-zinc-400">
         {event.allDay ? "All day" : `${event.startTime.slice(11, 16)} – ${event.endTime.slice(11, 16)}`}
       </p>

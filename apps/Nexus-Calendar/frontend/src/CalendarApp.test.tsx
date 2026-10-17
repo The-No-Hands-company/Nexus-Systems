@@ -51,9 +51,10 @@ describe("CalendarApp", () => {
   });
 
   it("renders one multi-day event on every overlapping day", async () => {
-    render(<CalendarApp runtime={runtime} api={api({ listEvents: vi.fn(async () => [event]) })} today={today} />);
+    const mounted = render(<CalendarApp runtime={runtime} api={api({ listEvents: vi.fn(async () => [event]) })} today={today} />);
     await screen.findAllByText("Design review");
     expect(screen.getAllByText("Design review")).toHaveLength(3);
+    expect(mounted.container.querySelectorAll("button button")).toHaveLength(0);
   });
 
   it("shows owner sharing controls but hides mutations from viewers", async () => {

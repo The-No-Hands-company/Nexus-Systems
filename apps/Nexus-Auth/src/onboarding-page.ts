@@ -152,7 +152,10 @@ const passwordFields = (minLength: number) => `
       </fieldset>`;
 
 const otherWaysIn = `
-    <p style="margin:6px 0 0;font-size:.8rem;color:var(--muted)">Already have an account? <a href="/login">Sign in</a></p>`;
+    <hr class="divider" />
+    <nav class="links" aria-label="Sign-in options">
+      <p>Already have an account? <a href="/login">Sign in</a></p>
+    </nav>`;
 
 export function renderRequestPage(options: { username?: string; email?: string; note?: string; error?: string }): string {
   return renderShell("Request access", `
@@ -168,7 +171,9 @@ export function renderRequestPage(options: { username?: string; email?: string; 
       <button type="submit">Request access</button>
       ${renderError(options.error)}
     </form>
-    <p style="margin:6px 0 0;font-size:.8rem;color:var(--muted)">Have an invite? <a href="/join">Join with it</a> · Already approved? <a href="/claim">Claim your account</a></p>${otherWaysIn}`);
+    <nav class="links" aria-label="Account options">
+      <p>Have an invite? <a href="/join">Join with it</a> · Already approved? <a href="/claim">Claim your account</a></p>
+    </nav>${otherWaysIn}`);
 }
 
 export function renderRequestedPage(options: { email: string; claimCode: string }): string {
@@ -194,7 +199,9 @@ export function renderClaimPage(options: { email?: string; minPasswordLength: nu
       <button type="submit">Claim account</button>
       ${renderError(options.error)}
     </form>
-    <p style="margin:6px 0 0;font-size:.8rem;color:var(--muted)">No claim code? <a href="/request">Request access</a> · Have an invite? <a href="/join">Join with it</a></p>${otherWaysIn}`);
+    <nav class="links" aria-label="Account options">
+      <p>No claim code? <a href="/request">Request access</a> · Have an invite? <a href="/join">Join with it</a></p>
+    </nav>${otherWaysIn}`);
 }
 
 export function renderJoinPage(options: { code?: string; username?: string; email?: string; minPasswordLength: number; error?: string }): string {
@@ -212,7 +219,9 @@ export function renderJoinPage(options: { code?: string; username?: string; emai
       <button type="submit">Create account</button>
       ${renderError(options.error)}
     </form>
-    <p style="margin:6px 0 0;font-size:.8rem;color:var(--muted)">No invite? <a href="/request">Request access</a></p>${otherWaysIn}`);
+    <nav class="links" aria-label="Account options">
+      <p>No invite? <a href="/request">Request access</a></p>
+    </nav>${otherWaysIn}`);
 }
 
 export function renderRecoverPage(options: { email?: string; error?: string }): string {
@@ -227,7 +236,9 @@ export function renderRecoverPage(options: { email?: string; error?: string }): 
       <button type="submit">Continue</button>
       ${renderError(options.error)}
     </form>
-    <p style="margin:6px 0 0;font-size:.8rem;color:var(--muted)">No codes left? Ask whoever runs this Nexus node to help you get back in.</p>${otherWaysIn}`);
+    <nav class="links" aria-label="Account options">
+      <p>No codes left? Ask whoever runs this Nexus node to help you get back in.</p>
+    </nav>${otherWaysIn}`);
 }
 
 export function renderResetPasswordPage(options: { grant: string; minPasswordLength: number; error?: string }): string {

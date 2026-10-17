@@ -47,22 +47,29 @@ export default function MonthGrid({ year, month, events, selectedDay, today, onS
     const isSelected = selectedDay === date;
 
     flatCells.push(
-      <button
+      <div
         key={date}
-        type="button"
         data-date={date}
         role="gridcell"
         aria-label={`${date}${eventList.length > 0 ? `, ${eventList.length} event${eventList.length !== 1 ? "s" : ""}` : ""}`}
         aria-selected={isSelected}
-        onClick={() => onSelectDay(date)}
         className={[
-          "min-h-12 sm:min-h-20 border-b border-r border-white/10 p-1 text-left hover:bg-white/5 transition-colors",
+          "min-h-12 sm:min-h-20 border-b border-r border-white/10 p-1",
           isSelected ? "bg-white/10" : "",
           isToday ? "ring-1 ring-inset ring-accent" : "",
         ].join(" ")}
       >
-        <span className={`text-xs ${isToday ? "text-accent font-semibold" : "text-zinc-400"}`}>{day}</span>
-        <span className="sr-only">{isoDate(new Date(`${date}T00:00:00.000Z`))}</span>
+        <button
+          type="button"
+          data-date={date}
+          aria-label={`Select ${date}`}
+          aria-pressed={isSelected}
+          onClick={() => onSelectDay(date)}
+          className="w-full rounded px-1 text-left hover:bg-white/5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+        >
+          <span className={`text-xs ${isToday ? "text-accent font-semibold" : "text-zinc-400"}`}>{day}</span>
+          <span className="sr-only">{isoDate(new Date(`${date}T00:00:00.000Z`))}</span>
+        </button>
         {eventList.slice(0, 3).map((event) => (
           <button
             key={event.id}
@@ -80,7 +87,7 @@ export default function MonthGrid({ year, month, events, selectedDay, today, onS
         {eventList.length > 3 && (
           <span className="block text-xs text-zinc-500">+{eventList.length - 3} more</span>
         )}
-      </button>,
+      </div>,
     );
   }
 

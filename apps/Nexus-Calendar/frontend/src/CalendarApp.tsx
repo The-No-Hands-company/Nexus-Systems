@@ -252,20 +252,18 @@ export default function CalendarApp({
               /* Day overview: list of events + create form */
               <>
                 {selectedEvents.map((event) => (
-                  <button
+                  <div
                     key={event.id}
-                    type="button"
-                    aria-label={event.title}
-                    onClick={() => setSelectedEvent(event)}
-                    className="mb-2 w-full text-left cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent rounded-lg"
+                    className="mb-2"
                   >
                     <EventDetails
                       event={event}
                       onDelete={remove}
+                      onSelect={() => setSelectedEvent(event)}
                       onEdit={() => setEditingEvent(event)}
                       onShare={() => { setSelectedEvent(event); setSharingOpen(true); }}
                     />
-                  </button>
+                  </div>
                 ))}
 
                 {!editorOpen && (

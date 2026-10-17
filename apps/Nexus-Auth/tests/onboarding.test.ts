@@ -73,6 +73,12 @@ describe("onboarding pages, when loaded by someone without an account", () => {
     const html = await (await handleRequest(new Request(`${BASE}/login`))).text();
     for (const path of ['href="/request"', 'href="/claim"', 'href="/join"']) expect(html).toContain(path);
   });
+
+  test("onboarding link clusters use a navigation landmark", async () => {
+    const html = await (await handleRequest(new Request(`${BASE}/request`))).text();
+    expect(html).toContain('<nav class="links"');
+    expect(html).not.toContain('<p style="margin:6px 0 0;font-size:.8rem;color:var(--muted)">');
+  });
 });
 
 describe("request then claim, when an operator approves in between", () => {
