@@ -78,6 +78,16 @@ const commands: Record<string, { desc: string; usage: string; run: CommandHandle
     usage: "nexus apps [category]",
     run: cmdApps,
   },
+  catalog: {
+    desc: "Read the approved Cloud app catalog",
+    usage: "nexus catalog [shelf]",
+    run: cmdCatalog,
+  },
+  knowledge: {
+    desc: "Search the ecosystem-grounded Nexus AI knowledge index",
+    usage: "nexus knowledge [query]",
+    run: cmdKnowledge,
+  },
   ping: {
     desc: "Ping all services to check reachability",
     usage: "nexus ping",
@@ -100,12 +110,23 @@ const commands: Record<string, { desc: string; usage: string; run: CommandHandle
   },
 };
 
-async function fetchJson(url: string): Promise<Record<string, unknown> | null> {
+async function fetchJson(url: string, init?: RequestInit): Promise<Record<string, unknown> | null> {
   try {
-    const r = await fetch(url, { signal: AbortSignal.timeout(3000) });
+    const r = await fetch(url, { ...init, signal: AbortSignal.timeout(3000) });
     if (!r.ok) return null;
     return await r.json() as Record<string, unknown>;
   } catch { return null; }
+}
+
+function cloudUrl(): string {
+  return (process.env.NEXUS_CLOUD_URL || "http://localhost:8787").trim().replace(/\/$/, "");
+}
+
+function cloudHeaders(): Record<string, string> {
+  return {
+    accept: "application/json",
+    ...(process.env.NEXUS_CLOUD_API_KEY ? { "x-api-key": process.env.NEXUS_CLOUD_API_KEY } : {}),
+  };
 }
 
 async function checkHealth(port: number): Promise<{ alive: boolean; service: string; uptime: number }> {
@@ -337,6 +358,57 @@ async function cmdApps(args: string[]) {
 
   console.log(`  ${color("● running  ○ scaffolded", DIM)}`);
   console.log(`  Total: 81 apps across ${Object.keys(categories).length} categories`);
+}
+
+async function cmdCatalog(args: string[]) {
+  const requestedShelf = args[0]?.trim().toLowerCase();
+  const payload = await fetchJson(`${cloudUrl()}/api/v1/catalog`, { headers: cloudHeaders() });
+  if (!payload || !Array.isArray(payload.apps)) {
+    console.log(color("Cloud catalog unavailable — check NEXUS_CLOUD_URL and authentication", RED));
+    return;
+  }
+
+  const apps = (payload.apps as Array<Record<string, unknown>>)
+    .filter((app) => {
+      if (!requestedShelf) return true;
+      return app.primaryShelf === requestedShelf ||
+        (Array.isArray(app.secondaryShelves) && app.secondaryShelves.includes(requestedShelf));
+    })
+    .sort((a, b) => String(a.name || a.id).localeCompare(String(b.name || b.id)));
+
+  console.log(BANNER);
+  console.log(color(`Cloud Catalog${requestedShelf ? ` — ${requestedShelf}` : ""}\n`, CYAN));
+  for (const app of apps) {
+    const health = app.health === "healthy" ? color("●", GREEN) : color("○", RED);
+    const path = typeof app.path === "string" ? app.path : "—";
+    const status = typeof app.reviewStatus === "string" ? app.reviewStatus : "unknown";
+    console.log(`  ${health} ${bold(String(app.name || app.id))} ${DIM}${path} · ${status}${RESET}`);
+  }
+  console.log(`\n  ${apps.length} catalog entr${apps.length === 1 ? "y" : "ies"}`);
+}
+
+async function cmdKnowledge(args: string[]) {
+  const query = args.join(" ").trim();
+  const base = (process.env.NEXUS_AI_HUB_URL || "http://localhost:3114").trim().replace(/\/$/, "");
+  const path = query
+    ? `/api/v1/knowledge/search?q=${encodeURIComponent(query)}`
+    : "/api/v1/knowledge";
+  const payload = await fetchJson(`${base}${path}`);
+  if (!payload || !Array.isArray(payload.documents)) {
+    console.log(color("Nexus AI knowledge index unavailable — check NEXUS_AI_HUB_URL", RED));
+    return;
+  }
+
+  console.log(BANNER);
+  console.log(color(`Ecosystem Knowledge${query ? ` — ${query}` : ""}\n`, CYAN));
+  console.log(`  Status: ${payload.status === "ready" ? color("ready", GREEN) : color("degraded", YELLOW)}`);
+  for (const document of payload.documents as Array<Record<string, unknown>>) {
+    const source = document.source as Record<string, unknown> | undefined;
+    console.log(`\n  ${bold(String(document.title || document.id))}`);
+    console.log(`  ${String(document.summary || "")}`);
+    console.log(`  ${DIM}source: ${String(source?.ref || "unknown")} · trust: ${String(document.trust || "unknown")}${RESET}`);
+  }
+  console.log(`\n  ${(payload.documents as unknown[]).length} document${(payload.documents as unknown[]).length === 1 ? "" : "s"}`);
 }
 
 async function cmdPing() {
@@ -577,7 +649,11 @@ async function cmdDemo() {
     });
     if (upload.ok) {
       const fileData = await upload.json() as Record<string, unknown>;
-      ok(`File uploaded: ${fileData.id} — "${fileData.file?.name || "nexus-architecture.md"}"`);
+      const file = fileData.file;
+      const fileName = file && typeof file === "object" && "name" in file && typeof file.name === "string"
+        ? file.name
+        : "nexus-architecture.md";
+      ok(`File uploaded: ${String(fileData.id)} — "${fileName}"`);
       info("File automatically indexed in Nexus Search via SDK");
 
       await wait(1000);
