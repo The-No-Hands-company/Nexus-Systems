@@ -85,6 +85,14 @@ describe("Shell operator link", () => {
     );
     const link = screen.getByRole("link", { name: "Operator" });
     expect(link.getAttribute("href")).toBe("/admin");
+    expect(screen.getByRole("link", { name: "Cloud console" }).getAttribute("href")).toBe("/cloud");
+    expect(screen.getByRole("link", { name: "Terminal" }).getAttribute("href")).toBe("/terminal");
+  });
+
+  it("offers administrators the Cloud console and Terminal as control links", () => {
+    renderInRouter(<Shell apps={[]} user={{ username: "admin", email: "a@x.dev", role: "admin" }}>x</Shell>);
+    expect(screen.getByRole("link", { name: "Cloud console" }).getAttribute("href")).toBe("/cloud");
+    expect(screen.getByRole("link", { name: "Terminal" }).getAttribute("href")).toBe("/terminal");
   });
 
   it("hides it from ordinary members", () => {
@@ -92,11 +100,15 @@ describe("Shell operator link", () => {
       <Shell apps={[]} user={{ username: "sam", email: "s@x.dev", role: "user" }}>x</Shell>,
     );
     expect(screen.queryByRole("link", { name: "Operator" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "Cloud console" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "Terminal" })).toBeNull();
   });
 
   it("hides it from nobody (signed out)", () => {
     renderInRouter(<Shell apps={[]}>x</Shell>);
     expect(screen.queryByRole("link", { name: "Operator" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "Cloud console" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "Terminal" })).toBeNull();
   });
 
   it("links the TNHC Charter from the rail", () => {

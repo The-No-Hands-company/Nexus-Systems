@@ -7,10 +7,10 @@ import { buildCatalogReleaseFixture } from "../../../../Nexus-Cloud/src/catalog/
 const APPS = [
   { id: "nexus-chat", name: "Nexus Chat", description: "Real-time messaging",
     publicUrl: "https://chat.tnhc.dev", path: "/chat", delivery: "framed", health: "healthy",
-    primaryShelf: "everyday", secondaryShelves: [], audiences: ["general"], capabilities: ["messaging"], maturity: "stable", visibility: "default", reviewStatus: "approved" },
+    primaryShelf: "everyday", secondaryShelves: [], audiences: ["general"], capabilities: ["messaging"], maturity: "stable", visibility: "default", reviewStatus: "approved", surface: "user-app", releaseState: "released" },
   { id: "nexus-draw", name: "Nexus Draw", description: "Whiteboard",
     publicUrl: "https://draw.tnhc.dev", path: "/draw", delivery: "framed", health: "offline",
-    primaryShelf: "create", secondaryShelves: [], audiences: ["creator"], capabilities: ["drawing"], maturity: "stable", visibility: "default", reviewStatus: "approved" },
+    primaryShelf: "create", secondaryShelves: [], audiences: ["creator"], capabilities: ["drawing"], maturity: "stable", visibility: "default", reviewStatus: "approved", surface: "user-app", releaseState: "released" },
 ];
 
 function jsonResponse(body: unknown, status = 200) {
@@ -25,15 +25,16 @@ beforeEach(() => {
 });
 
 describe("Grid", () => {
-  it("renders the shared release fixture into the right shelves and states", async () => {
+  it("renders only released user apps from the shared release fixture", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => jsonResponse(buildCatalogReleaseFixture())));
 
     render(<MemoryRouter><Grid /></MemoryRouter>);
-    await waitFor(() => expect(screen.getAllByText("Nexus Calendar").length).toBeGreaterThan(0));
+    await waitFor(() => expect(screen.getAllByText("Nexus Mail").length).toBeGreaterThan(0));
     expect(screen.getByRole("heading", { name: "Everyday" })).toBeTruthy();
-    expect(screen.getByRole("heading", { name: "Create" })).toBeTruthy();
-    expect(screen.getAllByText("Nexus Experimental").length).toBeGreaterThan(0);
-    expect(screen.getByText(/offline/i)).toBeTruthy();
+    expect(screen.queryByText("Nexus Calendar")).toBeNull();
+    expect(screen.queryByText("Nexus Cloud")).toBeNull();
+    expect(screen.queryByText("Nexus Forge")).toBeNull();
+    expect(screen.queryByText("Nexus Experimental")).toBeNull();
   });
 
   it("renders a tile per app, linking to its in-shell path", async () => {
@@ -47,14 +48,12 @@ describe("Grid", () => {
       .toBe("/chat");
   });
 
-  it("marks a down app as unavailable rather than offering a dead link", async () => {
+  it("omits an offline app from the directory", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => jsonResponse({ apps: APPS })));
 
     render(<MemoryRouter><Grid /></MemoryRouter>);
-    await waitFor(() => expect(screen.getByText("Nexus Draw")).toBeTruthy());
-    expect(screen.getByText(/unavailable|offline/i)).toBeTruthy();
-    // An offline app must not be a link at all — a click that goes nowhere is
-    // worse than a tile that says why.
+    await waitFor(() => expect(screen.getByText("Nexus Chat")).toBeTruthy());
+    expect(screen.queryByText("Nexus Draw")).toBeNull();
     expect(screen.queryByRole("link", { name: /nexus draw/i })).toBeNull();
   });
 

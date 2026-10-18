@@ -55,12 +55,37 @@ export function normalizeCatalogEntry(raw: unknown): AppEntry {
   };
 }
 
-const visible = (app: AppEntry) => app.visibility !== "hidden";
+function safePath(path: string): boolean {
+  return /^\/[A-Za-z0-9._~-]+(?:\/[A-Za-z0-9._~-]+)*$/.test(path) &&
+    path.split("/").slice(1).every((segment) => segment !== "." && segment !== "..");
+}
+
+function safePublicUrl(value: string): boolean {
+  if (!value || value.trim() !== value || /[\u0000-\u001f\u007f]/.test(value)) return false;
+  try {
+    const url = new URL(value);
+    return (url.protocol === "http:" || url.protocol === "https:") &&
+      !!url.hostname && !url.username && !url.password;
+  } catch {
+    return false;
+  }
+}
+
+/** The same fail-closed projection used by every ordinary app surface. */
+export function isLauncherApp(app: AppEntry): boolean {
+  return app.surface === "user-app" && app.releaseState === "released" &&
+    app.maturity === "stable" && app.health === "healthy" &&
+    app.reviewStatus === "approved" &&
+    (app.visibility === "default" || app.visibility === "discoverable") &&
+    safePath(app.path) &&
+    (app.delivery === "shell-native" ||
+      (typeof app.publicUrl === "string" && safePublicUrl(app.publicUrl)));
+}
+
 const stableName = (a: AppEntry, b: AppEntry) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id);
-const healthyFirst = (a: AppEntry, b: AppEntry) => Number(b.health === "healthy") - Number(a.health === "healthy") || stableName(a, b);
 
 export function appsForShelf(apps: AppEntry[], shelf: CatalogShelf): AppEntry[] {
-  return apps.filter((app) => visible(app) && (app.primaryShelf === shelf || (app.secondaryShelves ?? []).includes(shelf))).sort(stableName);
+  return apps.filter((app) => isLauncherApp(app) && (app.primaryShelf === shelf || (app.secondaryShelves ?? []).includes(shelf))).sort(stableName);
 }
 
 export function groupAppsByShelf(apps: AppEntry[]): Record<CatalogShelf, AppEntry[]> {
@@ -74,18 +99,18 @@ export function searchCatalog(
 ): AppEntry[] {
   const needle = query.trim().toLowerCase();
   return apps
-    .filter(visible)
+    .filter(isLauncherApp)
     .filter((app) => !needle || [app.name, app.id, app.description, ...(app.capabilities ?? [])].join(" ").toLowerCase().includes(needle))
     .filter((app) => !filters.shelf || filters.shelf === "all" || app.primaryShelf === filters.shelf || (app.secondaryShelves ?? []).includes(filters.shelf))
     .filter((app) => !filters.audience || filters.audience === "all" || (app.audiences ?? []).includes(filters.audience))
     .filter((app) => !filters.capability || filters.capability === "all" || (app.capabilities ?? []).includes(filters.capability))
-    .sort(healthyFirst);
+    .sort(stableName);
 }
 
 export const EMPTY_QUERY_CAP = 12;
 
 export function orderedLauncherApps(apps: AppEntry[], pinnedIds: string[] = [], recentIds: string[] = []): AppEntry[] {
-  const byId = new Map(apps.filter((app) => visible(app) && app.health === "healthy").map((app) => [app.id, app]));
+  const byId = new Map(apps.filter(isLauncherApp).map((app) => [app.id, app]));
   const ordered: AppEntry[] = [];
   const add = (id: string) => {
     const app = byId.get(id);

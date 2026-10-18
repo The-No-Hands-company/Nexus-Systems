@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 import type { AppEntry } from "../api";
+import { isLauncherApp } from "./catalog";
 
 /**
  * The app list in the sidebar.
@@ -22,9 +23,8 @@ export default function Launcher({
   return (
     <nav aria-label="App launcher" className="p-2">
       <ul className="space-y-1">
-        {apps.map((app) => (
+        {apps.filter(isLauncherApp).map((app) => (
           <li key={app.id}>
-            {app.health === "healthy" ? (
               <Link
                 to={app.path}
                 aria-current={app.id === activeId ? "page" : undefined}
@@ -32,14 +32,6 @@ export default function Launcher({
               >
                 {app.name}
               </Link>
-            ) : (
-              <span
-                className="block cursor-default rounded-md px-3 py-2 text-sm text-zinc-500"
-                title="This app is not running"
-              >
-                {app.name}
-              </span>
-            )}
           </li>
         ))}
       </ul>
