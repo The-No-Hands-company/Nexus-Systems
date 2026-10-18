@@ -10,7 +10,7 @@ export type NexusTerminalContract = {
   service: {
     id: "nexus-terminal";
     name: "Nexus Terminal";
-    auth: "Nexus-Auth session cookie";
+    auth: "Nexus-Auth session cookie or scoped Bearer credential";
     enabledByDefault: false;
   };
   routes: readonly TerminalContractRoute[];
@@ -32,7 +32,7 @@ export function buildTerminalContract(): NexusTerminalContract {
     service: {
       id: "nexus-terminal",
       name: "Nexus Terminal",
-      auth: "Nexus-Auth session cookie",
+      auth: "Nexus-Auth session cookie or scoped Bearer credential",
       enabledByDefault: false,
     },
     routes: ROUTES,

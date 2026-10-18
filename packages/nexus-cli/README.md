@@ -10,15 +10,16 @@ Cloud reads.
 nexus catalog             # approved Cloud catalog
 nexus catalog develop     # catalog entries on one shelf
 nexus api                 # versioned Nexus API contract
-nexus terminal audit      # read audited shell sessions with an Auth cookie
+nexus terminal audit      # read audited shell sessions with an Auth token/cookie
 nexus knowledge           # ecosystem-grounded Nexus AI index
 nexus knowledge "terminal audit"  # search the knowledge index
 ```
 
 Set `NEXUS_CLOUD_URL` and, when Cloud requires it, `NEXUS_CLOUD_API_KEY` for
 catalog reads. Set `NEXUS_AI_HUB_URL` to point knowledge queries at a specific
-AI Hub instance. Set `NEXUS_TERMINAL_URL` and `NEXUS_AUTH_COOKIE` for the
-read-only Terminal audit command. These commands only read contracts, catalog
+AI Hub instance. Set `NEXUS_TERMINAL_URL` and either `NEXUS_AUTH_TOKEN` (a
+scoped Nexus-Auth Bearer credential) or `NEXUS_AUTH_COOKIE` for the read-only
+Terminal audit command. These commands only read contracts, catalog
 projections, knowledge documents, or audit records; mutating operator actions
 will be added behind explicit scopes and approval records.
 

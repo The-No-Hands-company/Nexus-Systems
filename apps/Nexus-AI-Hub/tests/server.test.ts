@@ -4,15 +4,19 @@ import { createServer } from "../src/server";
 describe("nexus-ai-hub", () => {
   let base = "";
   let handle: Awaited<ReturnType<typeof createServer>>;
+  const originalCloudIntegration = process.env.NEXUS_AI_HUB_ENABLE_CLOUD_INTEGRATION;
 
   beforeAll(async () => {
+    process.env.NEXUS_AI_HUB_ENABLE_CLOUD_INTEGRATION = "false";
     handle = await createServer({ cloudUrl: "http://127.0.0.1:1" });
     await new Promise((r) => setTimeout(r, 200));
     base = `http://127.0.0.1:${handle.server.port}`;
   });
 
-  afterAll(() => {
-    handle.close();
+  afterAll(async () => {
+    await handle.close();
+    if (originalCloudIntegration === undefined) delete process.env.NEXUS_AI_HUB_ENABLE_CLOUD_INTEGRATION;
+    else process.env.NEXUS_AI_HUB_ENABLE_CLOUD_INTEGRATION = originalCloudIntegration;
   });
 
   it("GET /health returns 200", async () => {

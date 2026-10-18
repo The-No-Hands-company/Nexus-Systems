@@ -5,14 +5,21 @@ describe("nexus-api", () => {
   let base = "";
   let upstream: ReturnType<typeof Bun.serve>;
   let handle: ReturnType<typeof createApiServer>;
+  const originalCloudIntegration = process.env.NEXUS_API_ENABLE_CLOUD_INTEGRATION;
 
   beforeAll(async () => {
+    process.env.NEXUS_API_ENABLE_CLOUD_INTEGRATION = "false";
     upstream = Bun.serve({ port: 0, fetch: () => new Response(JSON.stringify({ from: "upstream", ok: true }), { headers: { "content-type": "application/json" } }) });
     handle = createApiServer();
     await new Promise((r) => setTimeout(r, 200));
     base = `http://127.0.0.1:${handle.server.port}`;
   });
-  afterAll(() => { handle.close(); upstream.stop(); });
+  afterAll(() => {
+    handle.close();
+    upstream.stop();
+    if (originalCloudIntegration === undefined) delete process.env.NEXUS_API_ENABLE_CLOUD_INTEGRATION;
+    else process.env.NEXUS_API_ENABLE_CLOUD_INTEGRATION = originalCloudIntegration;
+  });
 
   it("GET /health returns 200", async () => {
     const r = await fetch(`${base}/health`);

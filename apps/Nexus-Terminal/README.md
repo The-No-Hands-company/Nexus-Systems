@@ -27,8 +27,9 @@ healthy and registers with Cloud, but every shell attach returns `403`.
 | WebSocket | `/api/v1/terminal/attach?cols=80&rows=24` | Attach a new host shell |
 | GET | `/api/v1/terminal/audit` | List recent audited shell sessions |
 
-Attach and audit both ask Nexus-Auth to validate the caller's cookie. Only the
-exact roles `founder` and `admin` are authorized. Dashboard repeats that check,
+Attach and audit both ask Nexus-Auth to validate the caller's session cookie or
+scoped Bearer credential. Only the exact roles `founder` and `admin` are
+authorized. Dashboard repeats that check,
 requires its exact browser Origin, and relays only to its configured Terminal
 URL; Nexus-Terminal still enforces authorization independently.
 

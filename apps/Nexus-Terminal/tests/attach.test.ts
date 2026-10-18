@@ -56,7 +56,9 @@ describe("terminal attach guards", () => {
       port: 0,
       fetch(request) {
         const cookie = request.headers.get("cookie") ?? "";
-        const role = cookie.match(/(?:^|;\s*)role=([^;]*)/)?.[1];
+        const authorization = request.headers.get("authorization") ?? "";
+        const role = cookie.match(/(?:^|;\s*)role=([^;]*)/)?.[1]
+          ?? authorization.match(/^Bearer\s+role=([^;]*)$/i)?.[1];
 
         if (role === "outage") return new Response(null, { status: 503 });
         if (role === undefined || role === "missing-session") {
@@ -227,6 +229,13 @@ describe("terminal attach guards", () => {
       });
       expect(res.status).toBe(200);
     }
+  });
+
+  it("accepts a scoped Auth Bearer credential for audit reads", async () => {
+    const res = await fetch(`${base}/api/v1/terminal/audit`, {
+      headers: { authorization: "Bearer role=founder" },
+    });
+    expect(res.status).toBe(200);
   });
 
   it("rejects ordinary roles from the audit endpoint", async () => {

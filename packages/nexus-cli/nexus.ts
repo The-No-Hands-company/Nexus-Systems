@@ -422,13 +422,15 @@ async function cmdTerminal(args: string[]) {
     console.log(color("Usage: nexus terminal audit", YELLOW));
     return;
   }
+  const token = process.env.NEXUS_AUTH_TOKEN?.trim();
   const cookie = process.env.NEXUS_AUTH_COOKIE?.trim();
-  if (!cookie) {
-    console.log(color("NEXUS_AUTH_COOKIE is required for the Terminal audit read", YELLOW));
+  if (!token && !cookie) {
+    console.log(color("NEXUS_AUTH_TOKEN or NEXUS_AUTH_COOKIE is required for the Terminal audit read", YELLOW));
     return;
   }
   const base = (process.env.NEXUS_TERMINAL_URL || "http://localhost:3110").trim().replace(/\/$/, "");
-  const payload = await fetchJson(`${base}/api/v1/terminal/audit`, { headers: { cookie } });
+  const headers = token ? { authorization: `Bearer ${token}` } : { cookie: cookie! };
+  const payload = await fetchJson(`${base}/api/v1/terminal/audit`, { headers });
   if (!payload || !Array.isArray(payload.sessions)) {
     console.log(color("Nexus Terminal audit unavailable — check NEXUS_TERMINAL_URL and Auth session", RED));
     return;
