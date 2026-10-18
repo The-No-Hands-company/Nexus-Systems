@@ -11,6 +11,7 @@ Branch: `feat/nexus-app-catalog`
 | Dashboard Biome | pass | `bun run lint` — 23 files, no fixes |
 | Dashboard catalog/server regression | pass | 51 tests, 0 failures, 101 assertions |
 | Cloud typecheck | pass | `tsc --noEmit` |
+| Cloud app-root check | pass | `bun run check` — 85 files |
 | Cloud catalog/release/route regression | pass | 50 tests, 0 failures, 207 assertions |
 | Auth typecheck | pass | `bun run check` with frozen lockfile after lock refresh |
 | Auth regression | pass | 144 tests, 0 failures, 448 assertions |
@@ -46,13 +47,16 @@ release baseline for the frontend apps:
 - Draw's browser test prints the existing jsdom canvas warning; all 119 tests
   pass.
 
-## Known broader-suite limitations
+## Biome compatibility
 
-Cloud's repository-wide Biome command still reports legacy formatting and style
-diagnostics in unrelated files. The formatter was intentionally not applied to
-the whole service because it rewrites 77 legacy files and still leaves older
-explicit-`any` diagnostics. The catalog change is checked with TypeScript, the
-new catalog files' Biome gate, and the complete catalog/release regression set.
+Cloud now has an explicit Biome policy for its existing two-space source style.
+The app-root check keeps formatting and import ordering from rewriting legacy
+files, while retaining the remaining lint rules. Four noisy legacy rules are
+disabled explicitly (`useLiteralKeys`, `noDelete`, `noNonNullAssertion`, and
+`noExplicitAny`); the two remaining real style findings were fixed. `bun run
+check` passes all 85 Cloud files.
+
+## Broader-suite limitations
 
 The broader Cloud handler suite has three pre-existing host/order-sensitive
 failures when run together: two tests exceed Bun's five-second test timeout and
