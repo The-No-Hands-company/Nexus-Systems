@@ -19,12 +19,12 @@ export function normalizeCatalogEntry(raw: unknown): AppEntry {
   const source = raw && typeof raw === "object" ? raw as Record<string, unknown> : {};
   const id = typeof source.id === "string" ? source.id : "unknown-app";
   const name = typeof source.name === "string" ? source.name : id;
-  const path = typeof source.path === "string" ? source.path : `/${id.replace(/^nexus-/, "")}`;
+  const path = typeof source.path === "string" ? source.path : "";
   const shelf = isOneOf(CATALOG_SHELVES, source.primaryShelf) ? source.primaryShelf : "explore";
   const secondaryShelves = stringArray(source.secondaryShelves).filter((value): value is CatalogShelf => isOneOf(CATALOG_SHELVES, value));
   const audiences = stringArray(source.audiences).filter((value): value is CatalogAudience => isOneOf(CATALOG_AUDIENCES, value));
   const maturity: CatalogMaturity = source.maturity === "stable" || source.maturity === "preview" ? source.maturity : "experimental";
-  const visibility: CatalogVisibility = source.visibility === "default" || source.visibility === "restricted" || source.visibility === "hidden" ? source.visibility : "discoverable";
+  const visibility: CatalogVisibility = source.visibility === "default" || source.visibility === "discoverable" || source.visibility === "restricted" || source.visibility === "hidden" ? source.visibility : "hidden";
   const reviewStatus: CatalogReviewStatus = source.reviewStatus === "approved" || source.reviewStatus === "deferred" || source.reviewStatus === "rejected" ? source.reviewStatus : "pending";
   // Missing wire metadata cannot turn a legacy record into a released app.
   const inferredSurface: CatalogSurface = "platform-service";
@@ -73,13 +73,14 @@ function safePublicUrl(value: string): boolean {
 
 /** The same fail-closed projection used by every ordinary app surface. */
 export function isLauncherApp(app: AppEntry): boolean {
+  const destinationValid = app.publicUrl === undefined
+    ? app.delivery === "shell-native"
+    : typeof app.publicUrl === "string" && safePublicUrl(app.publicUrl);
   return app.surface === "user-app" && app.releaseState === "released" &&
     app.maturity === "stable" && app.health === "healthy" &&
     app.reviewStatus === "approved" &&
     (app.visibility === "default" || app.visibility === "discoverable") &&
-    safePath(app.path) &&
-    (app.delivery === "shell-native" ||
-      (typeof app.publicUrl === "string" && safePublicUrl(app.publicUrl)));
+    safePath(app.path) && destinationValid;
 }
 
 const stableName = (a: AppEntry, b: AppEntry) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id);

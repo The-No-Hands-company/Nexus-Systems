@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   appsForShelf,
   groupAppsByShelf,
@@ -9,6 +9,7 @@ import {
   type CatalogShelf,
 } from "./catalog";
 import type { AppEntry } from "../api";
+import { listApps } from "../api";
 
 const app = (overrides: Partial<AppEntry> = {}): AppEntry => ({
   id: "nexus-chat",
@@ -31,12 +32,12 @@ const app = (overrides: Partial<AppEntry> = {}): AppEntry => ({
 });
 
 describe("normalizeCatalogEntry", () => {
-  it("puts old records in discoverable Explore with pending review", () => {
+  it("puts old records in hidden Explore with pending review", () => {
     expect(normalizeCatalogEntry({ id: "legacy", name: "Legacy" })).toMatchObject({
       primaryShelf: "explore",
       secondaryShelves: [],
       maturity: "experimental",
-      visibility: "discoverable",
+      visibility: "hidden",
       reviewStatus: "pending",
       surface: "platform-service",
       releaseState: "staged",
@@ -56,7 +57,36 @@ describe("normalizeCatalogEntry", () => {
       audiences: [],
     });
   });
+
+  it("keeps missing and unknown visibility out of the launcher after wire normalization", async () => {
+    const raw = app({ delivery: "shell-native", publicUrl: undefined });
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ apps: [
+      { ...raw, id: "missing", visibility: undefined },
+      { ...raw, id: "unknown", visibility: "unknown" },
+      { ...raw, id: "discoverable", visibility: "discoverable" },
+    ] }), { status: 200, headers: { "content-type": "application/json" } })));
+    const entries = await listApps();
+    expect(entries.filter(isLauncherApp).map((entry) => entry.id)).toEqual(["discoverable"]);
+  });
+
+  it("rejects unsafe or fabricated shell-native destinations after wire normalization", async () => {
+    const raw = app({ delivery: "shell-native", publicUrl: undefined });
+    const credentialUrl = new URL("https://example.test");
+    credentialUrl.username = "someone";
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ apps: [
+      { ...raw, id: "mail", path: "/mail" },
+      { ...raw, id: "missing-route", path: undefined },
+      { ...raw, id: "bad-protocol", publicUrl: "javascript:alert(1)" },
+      { ...raw, id: "credentials", publicUrl: credentialUrl.href },
+      { ...raw, id: "control-char", publicUrl: "https://example.test/\n" },
+      { ...raw, id: "valid-url", publicUrl: "https://mail.tnhc.dev" },
+    ] }), { status: 200, headers: { "content-type": "application/json" } })));
+    const entries = await listApps();
+    expect(entries.filter(isLauncherApp).map((entry) => entry.id)).toEqual(["mail", "valid-url"]);
+  });
 });
+
+afterEach(() => vi.unstubAllGlobals());
 
 describe("catalog grouping and search", () => {
   const apps = [

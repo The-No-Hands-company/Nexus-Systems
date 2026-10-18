@@ -95,13 +95,12 @@ export async function me(): Promise<Me | null> {
 }
 
 /**
- * Derives an app's in-shell path when the server did not send one.
+ * Uses only an explicit in-shell path sent by the server.
  *
  * The static bundle and the server process are deployed independently — the
- * server serves `dist/` from disk, so a rebuilt frontend goes live the moment
- * the files change while the running process keeps its old code until it is
- * restarted. During that window a frontend that hard-required `path` rendered
- * every app link as undefined. Mirrors pathForApp in src/apps.ts.
+ * server serves `dist/` from disk, so a rebuilt frontend may temporarily talk
+ * to an older server. A legacy relative `url` is an explicit route. Missing
+ * paths remain empty so the catalog projection cannot invent a destination.
  */
 type WireAppEntry = {
   id: string;
@@ -127,8 +126,8 @@ type WireAppEntry = {
 function pathFor(app: WireAppEntry): string {
   if (app.path) return app.path;
   if (app.url?.startsWith("/")) return app.url;
-  const slug = app.id.replace(/^nexus-/, "").toLowerCase();
-  return slug ? `/${slug}` : `/a/${app.id}`;
+  // A fabricated slug is not proof that a released app has a usable route.
+  return "";
 }
 
 export async function listApps(): Promise<AppEntry[]> {
