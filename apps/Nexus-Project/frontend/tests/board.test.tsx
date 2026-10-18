@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { ApiContext } from "../src/runtime";
+import type { ProjectApi } from "../src/api";
 import { BoardView } from "../src/views/Board";
 import type { Project, Status, Task } from "../src/types";
 
@@ -36,7 +37,7 @@ const mockTasks: Task[] = [
   },
 ];
 
-function makeApi(overrides: Partial<ReturnType<typeof vi.fn>> = {}) {
+function makeApi(overrides: Partial<ProjectApi> = {}) {
   return {
     listStatuses: vi.fn().mockResolvedValue(mockStatuses),
     listTasks: vi.fn().mockResolvedValue(mockTasks),

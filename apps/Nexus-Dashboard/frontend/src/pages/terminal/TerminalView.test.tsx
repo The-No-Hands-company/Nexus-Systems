@@ -41,9 +41,9 @@ function createHarness({
         terminalFocusTarget.tabIndex = -1;
         element.append(terminalFocusTarget);
       }),
-      focus: vi.fn(() => terminalFocusTarget?.focus()),
-      fit: vi.fn(),
-      dispose: vi.fn(),
+      focus: vi.fn<() => void>(() => { terminalFocusTarget?.focus(); }),
+      fit: vi.fn<() => void>(),
+      dispose: vi.fn<() => void>(),
       report(state) {
         options.onStateChange?.(state);
       },
