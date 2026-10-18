@@ -8,6 +8,12 @@
  * login bug.
  */
 
+export type CatalogShelf = "everyday" | "work" | "create" | "develop" | "operate" | "personal" | "explore";
+export type CatalogAudience = "general" | "business" | "creator" | "developer" | "operations" | "power-user";
+export type CatalogMaturity = "stable" | "preview" | "experimental";
+export type CatalogVisibility = "default" | "discoverable" | "restricted" | "hidden";
+export type CatalogReviewStatus = "approved" | "pending" | "deferred" | "rejected";
+
 export type AppEntry = {
   id: string;
   name: string;
@@ -22,6 +28,13 @@ export type AppEntry = {
   publicUrl?: string;
   delivery: "shell-native" | "proxied-app" | "framed" | "external";
   health: "healthy" | "offline";
+  primaryShelf: CatalogShelf;
+  secondaryShelves: CatalogShelf[];
+  audiences: CatalogAudience[];
+  capabilities: string[];
+  maturity: CatalogMaturity;
+  visibility: CatalogVisibility;
+  reviewStatus: CatalogReviewStatus;
 };
 
 export type Me = { id: string; username: string; email: string; role: string };
@@ -77,12 +90,23 @@ export async function me(): Promise<Me | null> {
  * restarted. During that window a frontend that hard-required `path` rendered
  * every app link as undefined. Mirrors pathForApp in src/apps.ts.
  */
-type WireAppEntry = Omit<AppEntry, "path" | "publicUrl" | "delivery"> & {
+type WireAppEntry = {
+  id: string;
+  name?: string;
+  description?: string;
   path?: string;
   publicUrl?: string;
   /** Compatibility field from Dashboard servers that predate explicit delivery. */
   url?: string;
   delivery?: AppEntry["delivery"];
+  health?: AppEntry["health"];
+  primaryShelf?: unknown;
+  secondaryShelves?: unknown;
+  audiences?: unknown;
+  capabilities?: unknown;
+  maturity?: unknown;
+  visibility?: unknown;
+  reviewStatus?: unknown;
 };
 
 function pathFor(app: WireAppEntry): string {
@@ -94,13 +118,17 @@ function pathFor(app: WireAppEntry): string {
 
 export async function listApps(): Promise<AppEntry[]> {
   const { apps } = await request<{ apps: WireAppEntry[] }>("/ipa/apps");
+  // The catalog helper is the single frontend normalization boundary. Older
+  // Dashboard servers may omit every placement field, so components must not
+  // inspect the wire response directly.
+  const { normalizeCatalogEntry } = await import("./shell/catalog");
   // Normalise once, here, so no component has to care whether the server that
   // answered is older than the bundle asking.
   return apps.map(({ url, ...a }) => {
     const path = pathFor(a);
     const publicUrl = a.publicUrl ?? (url?.startsWith("/") ? undefined : url);
     const delivery = a.delivery ?? (url?.startsWith("/") ? "shell-native" : "framed");
-    return { ...a, path, ...(publicUrl ? { publicUrl } : {}), delivery };
+    return normalizeCatalogEntry({ ...a, path, ...(publicUrl ? { publicUrl } : {}), delivery });
   });
 }
 
