@@ -7,6 +7,7 @@ export type CatalogAudience = typeof CATALOG_AUDIENCES[number];
 export type CatalogMaturity = "stable" | "preview" | "experimental";
 export type CatalogVisibility = "default" | "discoverable" | "restricted" | "hidden";
 export type CatalogReviewStatus = "approved" | "pending" | "deferred" | "rejected";
+export type CatalogSurface = "user-app" | "admin-console" | "platform-service" | "developer-tool";
 
 const isOneOf = <T extends readonly string[]>(values: T, value: unknown): value is T[number] =>
   typeof value === "string" && values.includes(value);
@@ -25,6 +26,16 @@ export function normalizeCatalogEntry(raw: unknown): AppEntry {
   const maturity: CatalogMaturity = source.maturity === "stable" || source.maturity === "preview" ? source.maturity : "experimental";
   const visibility: CatalogVisibility = source.visibility === "default" || source.visibility === "restricted" || source.visibility === "hidden" ? source.visibility : "discoverable";
   const reviewStatus: CatalogReviewStatus = source.reviewStatus === "approved" || source.reviewStatus === "deferred" || source.reviewStatus === "rejected" ? source.reviewStatus : "pending";
+  const inferredSurface: CatalogSurface = id === "nexus-auth"
+    ? "platform-service"
+    : id === "nexus-cloud"
+      ? "admin-console"
+      : id === "nexus-terminal" || id === "nexus-forge" || id === "nexus-deploy"
+        ? "developer-tool"
+        : "user-app";
+  const surface: CatalogSurface = source.surface === "admin-console" || source.surface === "platform-service" || source.surface === "developer-tool" || source.surface === "user-app"
+    ? source.surface
+    : inferredSurface;
   const delivery = source.delivery === "shell-native" || source.delivery === "proxied-app" || source.delivery === "framed" || source.delivery === "external" ? source.delivery : "framed";
   return {
     id,
@@ -41,6 +52,7 @@ export function normalizeCatalogEntry(raw: unknown): AppEntry {
     maturity,
     visibility,
     reviewStatus,
+    surface,
   };
 }
 

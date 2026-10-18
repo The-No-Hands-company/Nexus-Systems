@@ -68,6 +68,7 @@ import {
 } from "./oidc";
 import { issueServiceToken, validateServiceToken, signJwt } from "./token";
 import { buildIdentityClaims, IDENTITY_TOKEN_TTL_SECONDS } from "./identity";
+import { getCatalogPreferences, saveCatalogPreferences } from "./preferences";
 import type { AccountStatus, LoginResult, Permission } from "./types";
 import { NexusClient, createConfig } from "../../../packages/nexus-sdk/src/index";
 import { verifyDidSignature } from "../../../packages/phantom-utils/src/verify";
@@ -507,6 +508,7 @@ export async function handleRequest(request: Request): Promise<Response> {
           logout: "/api/v1/auth/logout",
           users: "/api/v1/auth/users",
           me: "/api/v1/auth/me",
+          catalogPreferences: "/api/v1/auth/preferences/catalog",
           tokens: "/api/v1/auth/tokens",
           apiKeys: "/api/v1/auth/api-keys",
           sessions: "/api/v1/auth/sessions",
@@ -1034,6 +1036,25 @@ export async function handleRequest(request: Request): Promise<Response> {
       if (!user) return jsonResponse({ error: "user not found" }, { status: 404 });
 
       return jsonResponse({ user });
+    }
+
+    // ── Account catalog preferences ──
+    // Preferences are presentation only. They are deliberately self-scoped:
+    // neither the path nor the body accepts a user id, and they never grant
+    // access to an app.
+    if (request.method === "GET" && path === "/api/v1/auth/preferences/catalog") {
+      if (!auth) return jsonResponse({ error: "unauthorized" }, { status: 401 });
+      return jsonResponse({ preferences: getCatalogPreferences(auth.userId) });
+    }
+
+    if ((request.method === "PUT" || request.method === "PATCH") && path === "/api/v1/auth/preferences/catalog") {
+      if (!auth) return jsonResponse({ error: "unauthorized" }, { status: 401 });
+      const body = await parseBody(request);
+      try {
+        return jsonResponse({ preferences: saveCatalogPreferences(auth.userId, body) });
+      } catch {
+        return jsonResponse({ error: "invalid_preferences" }, { status: 400 });
+      }
     }
 
     // ── Link DID (proof-of-possession) ──

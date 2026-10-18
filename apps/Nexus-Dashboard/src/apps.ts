@@ -6,8 +6,10 @@
  */
 
 export type SystemsApiDelivery = "shell-native" | "proxied-app" | "framed" | "external";
+export type CatalogSurface = "user-app" | "admin-console" | "platform-service" | "developer-tool";
 
 export type CatalogPlacement = {
+  surface?: CatalogSurface;
   primaryShelf: string;
   secondaryShelves: string[];
   audiences: string[];
@@ -18,8 +20,14 @@ export type CatalogPlacement = {
 };
 
 const EXPLORE_DEFAULTS: CatalogPlacement = {
-  primaryShelf: "explore", secondaryShelves: [], audiences: [], capabilities: [],
-  maturity: "experimental", visibility: "discoverable", reviewStatus: "pending",
+  surface: "user-app",
+  primaryShelf: "explore",
+  secondaryShelves: [],
+  audiences: [],
+  capabilities: [],
+  maturity: "experimental",
+  visibility: "discoverable",
+  reviewStatus: "pending",
 };
 
 export type AppEntry = CatalogPlacement & {
@@ -79,6 +87,7 @@ type RawTool = {
   maturity?: unknown;
   visibility?: unknown;
   reviewStatus?: unknown;
+  surface?: unknown;
 };
 
 function str(v: unknown): string {
@@ -90,7 +99,10 @@ function isSafeRelativePath(path: string): boolean {
 }
 
 function deliveryFor(value: unknown): SystemsApiDelivery | undefined {
-  return value === "shell-native" || value === "proxied-app" || value === "framed" || value === "external"
+  return value === "shell-native" ||
+    value === "proxied-app" ||
+    value === "framed" ||
+    value === "external"
     ? value
     : undefined;
 }
@@ -100,14 +112,38 @@ function stringArray(value: unknown): string[] {
 }
 
 function placementFor(raw: RawTool): CatalogPlacement {
+  const inferredSurface: CatalogSurface =
+    raw.id === "nexus-auth"
+      ? "platform-service"
+      : raw.id === "nexus-cloud"
+        ? "admin-console"
+        : raw.id === "nexus-terminal" || raw.id === "nexus-forge" || raw.id === "nexus-deploy"
+          ? "developer-tool"
+          : "user-app";
   return {
+    surface:
+      raw.surface === "admin-console" ||
+      raw.surface === "platform-service" ||
+      raw.surface === "developer-tool" ||
+      raw.surface === "user-app"
+        ? raw.surface
+        : inferredSurface,
     primaryShelf: str(raw.primaryShelf) || EXPLORE_DEFAULTS.primaryShelf,
     secondaryShelves: stringArray(raw.secondaryShelves),
     audiences: stringArray(raw.audiences),
     capabilities: stringArray(raw.capabilities),
-    maturity: raw.maturity === "stable" || raw.maturity === "preview" ? raw.maturity : "experimental",
-    visibility: raw.visibility === "default" || raw.visibility === "restricted" || raw.visibility === "hidden" ? raw.visibility : "discoverable",
-    reviewStatus: raw.reviewStatus === "approved" || raw.reviewStatus === "deferred" || raw.reviewStatus === "rejected" ? raw.reviewStatus : "pending",
+    maturity:
+      raw.maturity === "stable" || raw.maturity === "preview" ? raw.maturity : "experimental",
+    visibility:
+      raw.visibility === "default" || raw.visibility === "restricted" || raw.visibility === "hidden"
+        ? raw.visibility
+        : "discoverable",
+    reviewStatus:
+      raw.reviewStatus === "approved" ||
+      raw.reviewStatus === "deferred" ||
+      raw.reviewStatus === "rejected"
+        ? raw.reviewStatus
+        : "pending",
   };
 }
 
@@ -124,11 +160,7 @@ function placementFor(raw: RawTool): CatalogPlacement {
  * separate service that can be mid-restart or mid-deploy, and that must cost
  * the user their app list, not the whole dashboard.
  */
-export function toAppEntries(
-  payload: unknown,
-  authHost: string,
-  selfHost?: string,
-): AppEntry[] {
+export function toAppEntries(payload: unknown, authHost: string, selfHost?: string): AppEntry[] {
   const source = payload as { apps?: unknown; tools?: unknown } | null;
   const tools = source?.apps ?? source?.tools;
   if (!Array.isArray(tools)) return [];
@@ -231,8 +263,6 @@ export function shellNativeEntries(opts: {
  * would be a puzzle rather than a feature.
  */
 export function mergeApps(registry: AppEntry[], native: AppEntry[]): AppEntry[] {
-  const kept = registry.filter(
-    (r) => !native.some((n) => n.id === r.id || n.path === r.path),
-  );
+  const kept = registry.filter((r) => !native.some((n) => n.id === r.id || n.path === r.path));
   return [...native, ...kept].sort((a, b) => a.name.localeCompare(b.name));
 }

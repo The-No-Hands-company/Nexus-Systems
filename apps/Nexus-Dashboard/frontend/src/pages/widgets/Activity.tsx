@@ -7,6 +7,10 @@ export default function Activity() {
 
   useEffect(() => {
     let cancelled = false;
+    if (typeof fetch !== "function") {
+      setState({ status: "error", message: "Notifications unavailable" });
+      return () => { cancelled = true; };
+    }
     fetch("/ipa/notifications")
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
       .then((body: { notifications?: unknown }) => {

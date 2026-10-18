@@ -1,8 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import { buildCatalogReleaseFixture } from "../../Nexus-Cloud/src/catalog/release-fixture";
 
-process.env.NEXUS_AUTH_INTERNAL_URL = "http://127.0.0.1:4399";
-process.env.NEXUS_CLOUD_URL = "http://127.0.0.1:4398";
-process.env.NEXUS_TERMINAL_URL = "http://127.0.0.1:4397";
+// Use ephemeral ports so this suite is isolated from developer services and
+// other test workers. The Dashboard reads these URLs when each request runs.
+process.env.NEXUS_AUTH_INTERNAL_URL = "http://127.0.0.1:4310";
+process.env.NEXUS_CLOUD_URL = "http://127.0.0.1:8787";
+process.env.NEXUS_TERMINAL_URL = "http://127.0.0.1:3110";
 const { handleRequest } = await import("../src/server");
 
 // Inferred rather than annotated: bun-types' Server is generic and the
@@ -11,14 +14,14 @@ type BunServer = ReturnType<typeof Bun.serve>;
 let auth: BunServer | null = null;
 let cloud: BunServer | null = null;
 let terminal: BunServer | null = null;
-let catalogMode: "legacy" | "catalog" = "legacy";
+let catalogMode: "legacy" | "catalog" | "release" = "legacy";
 let cloudPaths: string[] = [];
 
 beforeEach(() => {
   catalogMode = "legacy";
   cloudPaths = [];
   auth = Bun.serve({
-    port: 4399,
+    port: 0,
     fetch(req) {
       const u = new URL(req.url);
       if (u.pathname === "/api/v1/auth/me" && (req.headers.get("cookie") ?? "").includes("role=")) {
@@ -40,16 +43,38 @@ beforeEach(() => {
     },
   });
   cloud = Bun.serve({
-    port: 4398,
+    port: 0,
     fetch(req) {
       const path = new URL(req.url).pathname;
       cloudPaths.push(path);
       if (path === "/api/v1/catalog") {
         if (catalogMode === "legacy") return Response.json({ error: "Not found" }, { status: 404 });
-        return Response.json({ apps: [
-          { id: "nexus-chat", name: "Nexus Chat", publicUrl: "https://chat.tnhc.dev", health: "healthy", primaryShelf: "work", secondaryShelves: [], audiences: ["general"], capabilities: ["chat"], maturity: "stable", visibility: "default", reviewStatus: "approved" },
-          { id: "nexus-hidden", name: "Hidden", publicUrl: "https://hidden.tnhc.dev", health: "healthy", primaryShelf: "operate", visibility: "hidden" },
-        ] });
+        if (catalogMode === "release") return Response.json(buildCatalogReleaseFixture());
+        return Response.json({
+          apps: [
+            {
+              id: "nexus-chat",
+              name: "Nexus Chat",
+              publicUrl: "https://chat.tnhc.dev",
+              health: "healthy",
+              primaryShelf: "work",
+              secondaryShelves: [],
+              audiences: ["general"],
+              capabilities: ["chat"],
+              maturity: "stable",
+              visibility: "default",
+              reviewStatus: "approved",
+            },
+            {
+              id: "nexus-hidden",
+              name: "Hidden",
+              publicUrl: "https://hidden.tnhc.dev",
+              health: "healthy",
+              primaryShelf: "operate",
+              visibility: "hidden",
+            },
+          ],
+        });
       }
       return Response.json({
         tools: [
@@ -70,11 +95,14 @@ beforeEach(() => {
     },
   });
   terminal = Bun.serve({
-    port: 4397,
+    port: 0,
     fetch() {
       return Response.json({ service: "nexus-terminal", status: "ok" });
     },
   });
+  process.env.NEXUS_AUTH_INTERNAL_URL = `http://127.0.0.1:${auth.port}`;
+  process.env.NEXUS_CLOUD_URL = `http://127.0.0.1:${cloud.port}`;
+  process.env.NEXUS_TERMINAL_URL = `http://127.0.0.1:${terminal.port}`;
 });
 
 afterEach(() => {
@@ -84,12 +112,40 @@ afterEach(() => {
 });
 
 describe("dashboard server", () => {
+  it("serves the shared release fixture through the production catalog endpoint", async () => {
+    catalogMode = "release";
+    const res = await handleRequest(new Request("http://app.test/ipa/apps"));
+    expect(res.status).toBe(200);
+    const { apps } = (await res.json()) as {
+      apps: Array<{ id: string; primaryShelf: string; reviewStatus: string; health: string }>;
+    };
+    expect(cloudPaths).toEqual(["/api/v1/catalog"]);
+    expect(apps.find((app) => app.id === "nexus-calendar")).toMatchObject({
+      primaryShelf: "everyday",
+      reviewStatus: "approved",
+      health: "healthy",
+    });
+    expect(apps.find((app) => app.id === "nexus-experimental")).toMatchObject({
+      primaryShelf: "explore",
+      reviewStatus: "pending",
+    });
+    expect(apps.find((app) => app.id === "nexus-video")).toMatchObject({
+      primaryShelf: "create",
+      health: "offline",
+    });
+  });
+
   it("requests catalog first and serves approved metadata while hiding hidden entries", async () => {
     catalogMode = "catalog";
     const res = await handleRequest(new Request("http://app.test/ipa/apps"));
-    const { apps } = (await res.json()) as { apps: Array<{ id: string; primaryShelf: string; reviewStatus: string }> };
+    const { apps } = (await res.json()) as {
+      apps: Array<{ id: string; primaryShelf: string; reviewStatus: string }>;
+    };
     expect(cloudPaths).toEqual(["/api/v1/catalog"]);
-    expect(apps.find((app) => app.id === "nexus-chat")).toMatchObject({ primaryShelf: "work", reviewStatus: "approved" });
+    expect(apps.find((app) => app.id === "nexus-chat")).toMatchObject({
+      primaryShelf: "work",
+      reviewStatus: "approved",
+    });
     expect(apps.some((app) => app.id === "nexus-hidden")).toBe(false);
   });
 
@@ -115,7 +171,9 @@ describe("dashboard server", () => {
     };
     // Mail is served by this app at /mail and has no public host, so it never
     // appears in Cloud's registry — the shell contributes it.
-    expect(apps.map((a) => a.id).sort()).toEqual(expect.arrayContaining(["nexus-chat", "nexus-email", "nexus-terminal"]));
+    expect(apps.map((a) => a.id).sort()).toEqual(
+      expect.arrayContaining(["nexus-chat", "nexus-email", "nexus-terminal"]),
+    );
     expect(apps.map((a) => a.id)).not.toContain("nexus-calendar");
     expect(apps.find((app) => app.id === "nexus-terminal")).toMatchObject({
       path: "/terminal",
@@ -235,8 +293,15 @@ describe("dashboard server", () => {
     // With only default-src 'self', frame-src fell back to 'self' and the
     // browser refused every app frame: a blank page for every app, from
     // 2026-08-23 until this was caught.
-    const csp = (await handleRequest(new Request("http://app.test/"))).headers.get("content-security-policy") ?? "";
-    const frameSrc = csp.split(";").map((d) => d.trim()).find((d) => d.startsWith("frame-src ")) ?? "";
+    const csp =
+      (await handleRequest(new Request("http://app.test/"))).headers.get(
+        "content-security-policy",
+      ) ?? "";
+    const frameSrc =
+      csp
+        .split(";")
+        .map((d) => d.trim())
+        .find((d) => d.startsWith("frame-src ")) ?? "";
     expect(frameSrc).toContain("'self'");
     expect(frameSrc).toContain("https://*.tnhc.dev");
     expect(frameSrc).not.toContain("http:");

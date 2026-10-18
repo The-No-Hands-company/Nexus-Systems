@@ -15,6 +15,13 @@ export type CatalogAudience = "general" | "business" | "creator" | "developer" |
 export type CatalogMaturity = "stable" | "preview" | "experimental";
 export type CatalogVisibility = "default" | "discoverable" | "restricted" | "hidden";
 export type CatalogReviewStatus = "approved" | "pending" | "deferred" | "rejected";
+export type CatalogSurface = "user-app" | "admin-console" | "platform-service" | "developer-tool";
+
+export type CatalogPreferences = {
+  pinnedIds: string[];
+  recentIds: string[];
+  preferredShelf: CatalogShelf;
+};
 
 export type AppEntry = {
   id: string;
@@ -38,6 +45,7 @@ export type AppEntry = {
   maturity?: CatalogMaturity;
   visibility?: CatalogVisibility;
   reviewStatus?: CatalogReviewStatus;
+  surface?: CatalogSurface;
 };
 
 export type Me = { id: string; username: string; email: string; role: string };
@@ -110,6 +118,7 @@ type WireAppEntry = {
   maturity?: unknown;
   visibility?: unknown;
   reviewStatus?: unknown;
+  surface?: unknown;
 };
 
 function pathFor(app: WireAppEntry): string {
@@ -132,6 +141,18 @@ export async function listApps(): Promise<AppEntry[]> {
     const delivery = a.delivery ?? (url?.startsWith("/") ? "shell-native" : "framed");
     return normalizeCatalogEntry({ ...a, path, ...(publicUrl ? { publicUrl } : {}), delivery });
   });
+}
+
+export function getCatalogPreferences() {
+  return request<{ preferences: CatalogPreferences }>("/ipa/v1/auth/preferences/catalog")
+    .then((response) => response.preferences);
+}
+
+export function saveCatalogPreferences(preferences: CatalogPreferences) {
+  return request<{ preferences: CatalogPreferences }>("/ipa/v1/auth/preferences/catalog", {
+    method: "PUT",
+    body: JSON.stringify(preferences),
+  }).then((response) => response.preferences);
 }
 
 export type Session = {

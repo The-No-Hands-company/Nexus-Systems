@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCatalogPreferences } from "./useCatalogPreferences";
 
 const KEY = "nexus.pinnedApps";
 
@@ -26,21 +26,6 @@ export function writePinnedIds(ids: string[]): void {
 }
 
 export function usePinnedApps(): [string[], (id: string) => void] {
-  const [ids, setIds] = useState<string[]>(readPinnedIds);
-
-  // Reads happen synchronously from state; this just keeps other tabs/consumers
-  // that re-mount in sync with what is on disk.
-  useEffect(() => { setIds(readPinnedIds()); }, []);
-
-  const toggle = useCallback((id: string) => {
-    setIds((current) => {
-      const next = current.includes(id)
-        ? current.filter((x) => x !== id)
-        : [...current, id];
-      writePinnedIds(next);
-      return next;
-    });
-  }, []);
-
-  return [ids, toggle];
+  const { preferences, togglePinned } = useCatalogPreferences();
+  return [preferences.pinnedIds, togglePinned];
 }

@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCatalogPreferences } from "./useCatalogPreferences";
 
 const KEY = "nexus.recentApps";
 export const MAX_RECENT_APPS = 8;
@@ -29,13 +29,6 @@ export function recordRecentId(id: string): void {
 }
 
 export function useRecentApps(): [string[], (id: string) => void] {
-  const [ids, setIds] = useState<string[]>(readRecentIds);
-  const record = useCallback((id: string) => {
-    setIds((current) => {
-      const next = [id, ...current.filter((existing) => existing !== id)].slice(0, MAX_RECENT_APPS);
-      writeRecentIds(next);
-      return next;
-    });
-  }, []);
-  return [ids, record];
+  const { preferences, recordRecent } = useCatalogPreferences();
+  return [preferences.recentIds, recordRecent];
 }

@@ -165,7 +165,7 @@ describe("the /ipa/cloud proxy", () => {
     const res = await handleRequest(new Request("http://app.test/ipa/cloud/tools"));
 
     expect(res.status).toBe(401);
-    expect((await res.json() as { error: string }).error).toBe("not_authenticated");
+    expect(((await res.json()) as { error: string }).error).toBe("not_authenticated");
     expect(cloudSawHeaders).toBeNull();
   });
 

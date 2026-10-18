@@ -2,16 +2,16 @@ import { join } from "node:path";
 import { mergeApps, shellNativeEntries, toAppEntries } from "./apps";
 import { callerIdentity, isAdminRole } from "./auth";
 import { cloudBaseUrl, cloudHeaders } from "./cloud";
+import { listDevTools, runDevTool } from "./devtools";
 import { fileIssue, validateReport } from "./issues";
+import { validateJWT, validateRequest } from "./jwt";
+import { checkRateLimit, createRateLimitResponse, rateLimitMiddleware } from "./ratelimit";
+import { checkAllServices } from "./servicehealth";
 import {
   type TerminalSocketData,
   authorizeTerminalUpgrade,
   terminalWebSocketHandlers,
 } from "./terminal";
-import { checkRateLimit, rateLimitMiddleware } from "./ratelimit";
-import { validateJWT, extractBearerToken, validateRequest } from "./jwt";
-import { listDevTools, runDevTool } from "./devtools";
-import { checkAllServices } from "./servicehealth";
 
 /**
  * The ecosystem front door — app.<domain>.
@@ -55,11 +55,20 @@ const SHELL_CSP = [
 const AUTH_HOST = process.env.NEXUS_AUTH_HOST || `auth.${DOMAIN}`;
 /** This app's own public host, so it does not list itself in its own grid. */
 const SELF_HOST = process.env.NEXUS_DASHBOARD_HOST || `app.${DOMAIN}`;
-const AUTH_INTERNAL_URL = process.env.NEXUS_AUTH_INTERNAL_URL || "http://127.0.0.1:4310";
-const CLOUD_URL = process.env.NEXUS_CLOUD_URL || "http://127.0.0.1:8787";
-const CLOUD_API_KEY = process.env.NEXUS_CLOUD_API_KEY || "";
 const WEB_ROOT =
   process.env.NEXUS_DASHBOARD_WEB_ROOT || join(import.meta.dir, "..", "frontend", "dist");
+
+function authInternalUrl(): string {
+  return (process.env.NEXUS_AUTH_INTERNAL_URL || "http://127.0.0.1:4310").replace(/\/+$/, "");
+}
+
+function cloudUrl(): string {
+  return (process.env.NEXUS_CLOUD_URL || "http://127.0.0.1:8787").replace(/\/+$/, "");
+}
+
+function cloudApiKey(): string {
+  return process.env.NEXUS_CLOUD_API_KEY || "";
+}
 
 /**
  * The only prefix that is proxied. Anything broader would turn this public
@@ -105,7 +114,6 @@ const MAIL_PREFIX = "/ipa/mail/";
  * Read-only plus the two mark-read writes: an allow-list, not a passthrough.
  */
 const NOTIFICATIONS_PREFIX = "/ipa/notifications";
-
 
 function hostingUrl(): string {
   // Read per call, not captured at module load — the same import-order trap
@@ -309,9 +317,9 @@ async function fetchApps(req: Request): Promise<Response> {
   });
 
   try {
-    const cloudBase = CLOUD_URL.replace(/\/+$/, "");
+    const cloudBase = cloudUrl();
     const options = {
-      headers: CLOUD_API_KEY ? { "X-Api-Key": CLOUD_API_KEY } : {},
+      headers: cloudApiKey() ? { "X-Api-Key": cloudApiKey() } : {},
       signal: AbortSignal.timeout(3000),
     };
     let res = await fetch(`${cloudBase}/api/v1/catalog`, options);
@@ -330,7 +338,7 @@ async function fetchApps(req: Request): Promise<Response> {
 
 async function proxyToAuth(req: Request, path: string): Promise<Response> {
   const incoming = new URL(req.url);
-  const upstream = new URL(AUTH_INTERNAL_URL);
+  const upstream = new URL(authInternalUrl());
   // The browser-facing prefix is /ipa (see AUTH_PREFIX); Auth itself still
   // serves /api/v1/auth/*. Rewrite the first segment rather than forwarding
   // verbatim, or Auth would 404 every proxied call.
@@ -400,7 +408,9 @@ export async function handleRequest(
     }
     // Validate JWT for API clients
     const jwtIdentity = await validateRequest(req, "nexus-dashboard");
-    const who = jwtIdentity ? { subject: jwtIdentity.subject, role: jwtIdentity.role } : await callerIdentity(req);
+    const who = jwtIdentity
+      ? { subject: jwtIdentity.subject, role: jwtIdentity.role }
+      : await callerIdentity(req);
     if (!who) return Response.json({ error: "not_authenticated" }, { status: 401 });
 
     const parsed = validateReport(await req.json().catch(() => null));
@@ -415,7 +425,7 @@ export async function handleRequest(
     return Response.json({ number: result.number, url: result.url }, { status: 201 });
   }
 
-  if (path === NOTIFICATIONS_PREFIX || path.startsWith(NOTIFICATIONS_PREFIX + "/")) {
+  if (path === NOTIFICATIONS_PREFIX || path.startsWith(`${NOTIFICATIONS_PREFIX}/`)) {
     return proxyToNotifications(req, path.slice(NOTIFICATIONS_PREFIX.length), url.search);
   }
 
@@ -455,7 +465,7 @@ export async function handleRequest(
 
   if (path.startsWith(AUTH_PREFIX)) return proxyToAuth(req, path);
 
-    // Anything else under /ipa is not ours and must not fall through to the SPA.
+  // Anything else under /ipa is not ours and must not fall through to the SPA.
   // Returning the HTML shell for a mistyped API call is how a caller ends up
   // parsing "<!doctype html>" as JSON.
   if (path.startsWith("/ipa/")) {

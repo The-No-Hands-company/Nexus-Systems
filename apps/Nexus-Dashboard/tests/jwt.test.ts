@@ -1,4 +1,4 @@
-import { describe, it, expect } from "bun:test";
+import { describe, expect, it } from "bun:test";
 
 /**
  * A real RS256 keypair generated for this suite. The private side stands in
@@ -37,6 +37,7 @@ process.env.NEXUS_AUTH_INTERNAL_URL = `http://127.0.0.1:${jwksServer.port}`;
 const jwtModule = await import("../src/jwt");
 const validate = jwtModule.validateJWT;
 const JWTValidationError = jwtModule.JWTValidationError;
+type JWTValidationErrorInstance = InstanceType<typeof JWTValidationError>;
 
 function sign(payload: Record<string, unknown>, kid = KID): string {
   const { sign: rsaSign } = require("node:crypto") as typeof import("node:crypto");
@@ -64,9 +65,23 @@ describe("JWT validation", () => {
   });
 
   it("rejects a tampered payload without touching expiry logic", async () => {
-    const token = sign({ iss: "nexus-auth", sub: "user-1", aud: "nexus-dashboard", exp: now + 300 });
+    const token = sign({
+      iss: "nexus-auth",
+      sub: "user-1",
+      aud: "nexus-dashboard",
+      exp: now + 300,
+    });
     const [h, , s] = token.split(".");
-    const forgedBody = b64url(Buffer.from(JSON.stringify({ iss: "nexus-auth", sub: "attacker", aud: "nexus-dashboard", exp: now + 9999 })));
+    const forgedBody = b64url(
+      Buffer.from(
+        JSON.stringify({
+          iss: "nexus-auth",
+          sub: "attacker",
+          aud: "nexus-dashboard",
+          exp: now + 9999,
+        }),
+      ),
+    );
     await expect(validate(`${h}.${forgedBody}.${s}`)).rejects.toThrow(JWTValidationError);
   });
 
@@ -76,7 +91,7 @@ describe("JWT validation", () => {
       await validate(token);
       throw new Error("should have thrown");
     } catch (err) {
-      expect((err as JWTValidationError).code).toBe("TOKEN_EXPIRED");
+      expect((err as JWTValidationErrorInstance).code).toBe("TOKEN_EXPIRED");
     }
   });
 
@@ -86,17 +101,20 @@ describe("JWT validation", () => {
       await validate(token, "nexus-dashboard");
       throw new Error("should have thrown");
     } catch (err) {
-      expect((err as JWTValidationError).code).toBe("AUDIENCE_MISMATCH");
+      expect((err as JWTValidationErrorInstance).code).toBe("AUDIENCE_MISMATCH");
     }
   });
 
   it("rejects unknown-key tokens rather than trusting any kid", async () => {
-    const token = sign({ iss: "nexus-auth", sub: "user-1", aud: "nexus-dashboard", exp: now + 300 }, "attacker-key");
+    const token = sign(
+      { iss: "nexus-auth", sub: "user-1", aud: "nexus-dashboard", exp: now + 300 },
+      "attacker-key",
+    );
     try {
       await validate(token);
       throw new Error("should have thrown");
     } catch (err) {
-      expect((err as JWTValidationError).code).toBe("KEY_NOT_FOUND");
+      expect((err as JWTValidationErrorInstance).code).toBe("KEY_NOT_FOUND");
     }
   });
 
@@ -108,7 +126,7 @@ describe("JWT validation", () => {
       await validate(`${header}.${body}.AAAA`);
       throw new Error("should have thrown");
     } catch (err) {
-      expect((err as JWTValidationError).code).toBe("UNSUPPORTED_ALGORITHM");
+      expect((err as JWTValidationErrorInstance).code).toBe("UNSUPPORTED_ALGORITHM");
     }
   });
 
@@ -117,7 +135,7 @@ describe("JWT validation", () => {
       await validate("not-a-jwt");
       throw new Error("should have thrown");
     } catch (err) {
-      expect((err as JWTValidationError).code).toBe("INVALID_FORMAT");
+      expect((err as JWTValidationErrorInstance).code).toBe("INVALID_FORMAT");
     }
   });
 });

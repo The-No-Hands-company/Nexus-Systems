@@ -65,6 +65,24 @@ describe("identity routes", () => {
     expect((await post("/api/v1/auth/access-requests/usr-x/approve", {})).status).toBe(403);
   });
 
+  it("keeps catalog preferences self-scoped and account-backed", async () => {
+    expect((await get("/api/v1/auth/preferences/catalog")).status).toBe(401);
+    const token = await founderToken();
+    const auth = { authorization: `Bearer ${token}` };
+    const initial = await get("/api/v1/auth/preferences/catalog", auth);
+    expect(initial.status).toBe(200);
+    expect((await initial.json()).preferences).toMatchObject({ preferredShelf: "everyday", pinnedIds: [], recentIds: [] });
+
+    const saved = await handleRequest(new Request(`${BASE}/api/v1/auth/preferences/catalog`, {
+      method: "PUT",
+      headers: { "content-type": "application/json", ...auth },
+      body: JSON.stringify({ pinnedIds: ["nexus-chat", "nexus-chat"], recentIds: ["nexus-mail"], preferredShelf: "work", userId: "someone-else" }),
+    }));
+    expect(saved.status).toBe(200);
+    expect((await saved.json()).preferences).toEqual({ pinnedIds: ["nexus-chat"], recentIds: ["nexus-mail"], preferredShelf: "work" });
+    expect((await get("/api/v1/auth/preferences/catalog", auth)).status).toBe(200);
+  });
+
   it("walks the full request -> approve -> claim -> login path", async () => {
     const token = await founderToken();
     const auth = { authorization: `Bearer ${token}` };

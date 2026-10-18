@@ -16,7 +16,11 @@ type ServiceCheck = {
 const SERVICES: ServiceCheck[] = [
   { name: "auth", url: "http://127.0.0.1:4310/health", description: "Identity provider" },
   { name: "cloud", url: "http://127.0.0.1:8787/health", description: "Control plane" },
-  { name: "chat-gateway", url: "http://127.0.0.1:8180/api/v1/health", description: "nexus-chat REST" },
+  {
+    name: "chat-gateway",
+    url: "http://127.0.0.1:8180/api/v1/health",
+    description: "nexus-chat REST",
+  },
   { name: "terminal", url: "http://127.0.0.1:3110/health", description: "Shell service" },
   { name: "dashboard", url: "http://127.0.0.1:3132/health", description: "Ecosystem front door" },
   { name: "draw", url: "http://127.0.0.1:3075/health", description: "Draw API" },
@@ -47,13 +51,25 @@ export async function checkAllServices(): Promise<ServiceStatus[]> {
 
   return SERVICES.map((svc, i) => {
     const result = results[i];
+    if (!result) {
+      return {
+        name: svc.name,
+        description: svc.description,
+        healthy: false,
+        latencyMs: null,
+        detail: "no result",
+      };
+    }
     if (result.status === "fulfilled") return result.value;
     return {
       name: svc.name,
       description: svc.description,
       healthy: false,
       latencyMs: null,
-      detail: String(result.reason?.cause?.code ?? result.reason?.message ?? "unreachable").slice(0, 80),
+      detail: String(result.reason?.cause?.code ?? result.reason?.message ?? "unreachable").slice(
+        0,
+        80,
+      ),
     };
   });
 }

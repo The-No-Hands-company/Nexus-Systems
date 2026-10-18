@@ -1,4 +1,5 @@
 import { describe, expect, it } from "bun:test";
+import { buildCatalogReleaseFixture } from "../../Nexus-Cloud/src/catalog/release-fixture";
 import {
   type AppEntry,
   mergeApps,
@@ -8,7 +9,15 @@ import {
 } from "../src/apps";
 
 const AUTH = "auth.tnhc.dev";
-const EXPLORE = { primaryShelf: "explore", secondaryShelves: [], audiences: [], capabilities: [], maturity: "experimental" as const, visibility: "discoverable" as const, reviewStatus: "pending" as const };
+const EXPLORE = {
+  primaryShelf: "explore",
+  secondaryShelves: [],
+  audiences: [],
+  capabilities: [],
+  maturity: "experimental" as const,
+  visibility: "discoverable" as const,
+  reviewStatus: "pending" as const,
+};
 
 const TOOLS = {
   tools: [
@@ -47,15 +56,89 @@ const TOOLS = {
 };
 
 describe("app grid entries", () => {
+  it("projects the shared Cloud release fixture without losing state", () => {
+    const entries = toAppEntries(buildCatalogReleaseFixture(), AUTH);
+    expect(entries.find((entry) => entry.id === "nexus-calendar")).toMatchObject({
+      path: "/calendar",
+      primaryShelf: "everyday",
+      reviewStatus: "approved",
+      delivery: "proxied-app",
+    });
+    expect(entries.find((entry) => entry.id === "nexus-design")).toMatchObject({
+      primaryShelf: "create",
+      reviewStatus: "approved",
+    });
+    expect(entries.find((entry) => entry.id === "nexus-forge")).toMatchObject({
+      primaryShelf: "develop",
+      reviewStatus: "approved",
+    });
+    expect(entries.find((entry) => entry.id === "nexus-cloud")).toMatchObject({
+      primaryShelf: "operate",
+      delivery: "shell-native",
+    });
+    expect(entries.find((entry) => entry.id === "nexus-experimental")).toMatchObject({
+      primaryShelf: "explore",
+      reviewStatus: "pending",
+    });
+    expect(entries.find((entry) => entry.id === "nexus-video")).toMatchObject({
+      primaryShelf: "create",
+      health: "offline",
+    });
+    expect(entries.find((entry) => entry.id === "legacy-notes")).toMatchObject({
+      primaryShelf: "explore",
+      reviewStatus: "pending",
+    });
+  });
+
   it("normalizes catalog entries and old tools into stable placement fields", () => {
-    const entries = toAppEntries({ apps: [
-      { id: "approved", name: "Approved", publicUrl: "https://approved.example", health: "healthy", primaryShelf: "work", secondaryShelves: ["everyday"], audiences: ["business"], capabilities: ["chat"], maturity: "stable", visibility: "restricted", reviewStatus: "approved" },
-      { id: "old", name: "Old", publicUrl: "https://old.example", health: "offline" },
-      { id: "hidden", name: "Hidden", publicUrl: "https://hidden.example", visibility: "hidden", health: "healthy" },
-    ] }, AUTH);
+    const entries = toAppEntries(
+      {
+        apps: [
+          {
+            id: "approved",
+            name: "Approved",
+            publicUrl: "https://approved.example",
+            health: "healthy",
+            primaryShelf: "work",
+            secondaryShelves: ["everyday"],
+            audiences: ["business"],
+            capabilities: ["chat"],
+            maturity: "stable",
+            visibility: "restricted",
+            reviewStatus: "approved",
+          },
+          { id: "old", name: "Old", publicUrl: "https://old.example", health: "offline" },
+          {
+            id: "hidden",
+            name: "Hidden",
+            publicUrl: "https://hidden.example",
+            visibility: "hidden",
+            health: "healthy",
+          },
+        ],
+      },
+      AUTH,
+    );
     expect(entries.map((entry) => entry.id)).toEqual(["approved", "old"]);
-    expect(entries[0]).toMatchObject({ primaryShelf: "work", secondaryShelves: ["everyday"], audiences: ["business"], capabilities: ["chat"], maturity: "stable", visibility: "restricted", reviewStatus: "approved" });
-    expect(entries[1]).toMatchObject({ primaryShelf: "explore", secondaryShelves: [], audiences: [], capabilities: [], maturity: "experimental", visibility: "discoverable", reviewStatus: "pending", health: "offline" });
+    expect(entries[0]).toMatchObject({
+      primaryShelf: "work",
+      secondaryShelves: ["everyday"],
+      audiences: ["business"],
+      capabilities: ["chat"],
+      maturity: "stable",
+      visibility: "restricted",
+      reviewStatus: "approved",
+    });
+    expect(entries[1]).toMatchObject({
+      primaryShelf: "explore",
+      secondaryShelves: [],
+      audiences: [],
+      capabilities: [],
+      maturity: "experimental",
+      visibility: "discoverable",
+      reviewStatus: "pending",
+      health: "offline",
+    });
   });
   it("keeps Calendar's shell path separate from its proxied delivery origin", () => {
     const entries = toAppEntries(
@@ -334,14 +417,16 @@ describe("shell-native views", () => {
         terminalHealthy: true,
         includeTerminal: true,
       }),
-    ).toContainEqual(expect.objectContaining({
-      id: "nexus-terminal",
-      name: "Nexus Terminal",
-      description: "Audited host shell for Nexus operators",
-      path: "/terminal",
-      delivery: "shell-native",
-      health: "healthy",
-    }));
+    ).toContainEqual(
+      expect.objectContaining({
+        id: "nexus-terminal",
+        name: "Nexus Terminal",
+        description: "Audited host shell for Nexus operators",
+        path: "/terminal",
+        delivery: "shell-native",
+        health: "healthy",
+      }),
+    );
     expect(
       shellNativeEntries({ mailHealthy: true, terminalHealthy: true, includeTerminal: false }),
     ).not.toContainEqual(expect.objectContaining({ id: "nexus-terminal" }));
@@ -351,7 +436,12 @@ describe("shell-native views", () => {
     expect(
       shellNativeEntries({ mailHealthy: true, terminalHealthy: false, includeTerminal: true }),
     ).toContainEqual(
-      expect.objectContaining({ id: "nexus-terminal", path: "/terminal", delivery: "shell-native", health: "offline" }),
+      expect.objectContaining({
+        id: "nexus-terminal",
+        path: "/terminal",
+        delivery: "shell-native",
+        health: "offline",
+      }),
     );
   });
 

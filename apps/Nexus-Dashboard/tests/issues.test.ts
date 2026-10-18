@@ -1,5 +1,5 @@
-import { describe, it, expect } from "bun:test";
-import { validateReport, renderBody, fileIssue } from "../src/issues";
+import { describe, expect, it } from "bun:test";
+import { fileIssue, renderBody, validateReport } from "../src/issues";
 
 describe("validateReport", () => {
   it("accepts a minimal report", () => {
@@ -51,7 +51,10 @@ describe("renderBody", () => {
   });
 
   it("marks the context as system-added", () => {
-    const body = renderBody({ title: "t", body: "b", app: "hosting", url: "https://x/y" }, "user-123");
+    const body = renderBody(
+      { title: "t", body: "b", app: "hosting", url: "https://x/y" },
+      "user-123",
+    );
     expect(body).toContain("Filed from the Nexus dashboard");
     expect(body).toContain("hosting");
     expect(body).toContain("https://x/y");
@@ -80,9 +83,9 @@ describe("fileIssue", () => {
    * globally means a mistake like that cannot reach the network again.
    */
   const noNetwork = () =>
-    ((async () => {
+    (async () => {
       throw new Error("test attempted a real network call");
-    }) as unknown as typeof fetch);
+    }) as unknown as typeof fetch;
 
   it("reports unconfigured rather than failing obscurely", async () => {
     const original = globalThis.fetch;

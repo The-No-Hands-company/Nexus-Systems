@@ -4,7 +4,10 @@ import { cleanup } from '@testing-library/react';
 // Keep tests isolated. Without this, each render stays mounted in document
 // body and later accessibility queries see duplicate headers, navs, dialogs,
 // and status messages. That masks the behavior the test is supposed to check.
-afterEach(() => cleanup());
+afterEach(() => {
+  cleanup();
+  localStorage.clear();
+});
 
 // Mock matchMedia
 Object.defineProperty(window, 'matchMedia', {

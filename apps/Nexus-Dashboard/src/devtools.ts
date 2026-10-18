@@ -32,8 +32,7 @@ export type DevTool = {
   runnable?: { cmd: string; args: string[] };
 };
 
-const DHTS_ROOT =
-  process.env.NEXUS_DHTS_ROOT || join(import.meta.dir, "..", "..", "..", "dhts");
+const DHTS_ROOT = process.env.NEXUS_DHTS_ROOT || join(import.meta.dir, "..", "..", "..", "dhts");
 
 const REGISTRY: DevTool[] = [
   {
@@ -58,8 +57,7 @@ const REGISTRY: DevTool[] = [
     id: "documenter",
     dir: "ecosystem-documenter",
     name: "Ecosystem Documenter",
-    description:
-      "Auto-generates docs from code into generated-docs/. Bun workspace tool.",
+    description: "Auto-generates docs from code into generated-docs/. Bun workspace tool.",
     command: "cd dhts/ecosystem-documenter && bun run generate",
     runnable: { cmd: "bun", args: ["run", "generate"] },
   },
@@ -67,8 +65,7 @@ const REGISTRY: DevTool[] = [
     id: "porter",
     dir: "ecosystem-porter",
     name: "Ecosystem Porter",
-    description:
-      "Cross-app portability scan: how much of each app could move between hosts.",
+    description: "Cross-app portability scan: how much of each app could move between hosts.",
     command: "cd dhts/ecosystem-porter && bun run scan",
     runnable: { cmd: "bun", args: ["run", "scan"] },
   },
@@ -131,7 +128,13 @@ function unregisteredDirs(): DevTool[] {
   for (const entry of readdirSync(DHTS_ROOT, { withFileTypes: true })) {
     // Dot-dirs (.deepcode, .claude, .codex…) are tool settings folders, not
     // helpers — same rule as git: hidden means infrastructure, ignore.
-    if (!entry.isDirectory() || entry.name.startsWith(".") || known.has(entry.name) || skip.has(entry.name)) continue;
+    if (
+      !entry.isDirectory() ||
+      entry.name.startsWith(".") ||
+      known.has(entry.name) ||
+      skip.has(entry.name)
+    )
+      continue;
     out.push({
       id: entry.name,
       dir: entry.name,
@@ -160,20 +163,21 @@ export function runDevTool(
   id: string,
 ): Promise<{ ok: boolean; exitCode: number | null; output: string; error?: string }> {
   const tool = REGISTRY.find((t) => t.id === id);
-  if (!tool?.runnable || !existsSync(join(DHTS_ROOT, tool.dir))) {
+  const runnable = tool?.runnable;
+  if (!tool || !runnable || !existsSync(join(DHTS_ROOT, tool.dir))) {
     return Promise.resolve({ ok: false, exitCode: null, output: "", error: "not_runnable" });
   }
   const cwd = join(DHTS_ROOT, tool.dir);
   return new Promise((resolve) => {
     let output = "";
     let capped = false;
-    const child = spawn(tool.runnable!.cmd, tool.runnable!.args, { cwd, env: process.env });
+    const child = spawn(runnable.cmd, runnable.args, { cwd, env: process.env });
     const timer = setTimeout(() => child.kill("SIGKILL"), RUN_TIMEOUT_MS);
     const collect = (chunk: Buffer | string) => {
       if (capped) return;
       output += chunk.toString();
       if (output.length > OUTPUT_CAP) {
-        output = output.slice(0, OUTPUT_CAP) + "\n… output truncated";
+        output = `${output.slice(0, OUTPUT_CAP)}\n… output truncated`;
         capped = true;
       }
     };
