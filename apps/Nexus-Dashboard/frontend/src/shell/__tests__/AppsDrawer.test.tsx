@@ -6,7 +6,7 @@ import AppsDrawer from "../AppsDrawer";
 import type { AppEntry } from "../../api";
 
 function app(id: string, name: string, health: AppEntry["health"]): AppEntry {
-  return { id, name, description: "", publicUrl: `https://${id}.tnhc.dev`, path: `/${id}`, delivery: "framed", health };
+  return { id, name, description: "", publicUrl: `https://${id}.tnhc.dev`, path: `/${id}`, delivery: "framed", health, surface: "user-app", releaseState: "released", maturity: "stable", visibility: "default", reviewStatus: "approved" };
 }
 
 const APPS: AppEntry[] = [
@@ -19,32 +19,27 @@ const APPS: AppEntry[] = [
 describe("filterApps", () => {
   it("matches on name and on id", () => {
     expect(filterApps(APPS, "draw").map((a) => a.id)).toEqual(["nexus-draw"]);
-    expect(filterApps(APPS, "nexus-vault").map((a) => a.id)).toEqual(["nexus-vault"]);
+    expect(filterApps(APPS, "nexus-vault").map((a) => a.id)).toEqual([]);
   });
 
   it("is case-insensitive", () => {
     expect(filterApps(APPS, "CHAT").map((a) => a.id)).toEqual(["nexus-chat"]);
   });
 
-  it("sorts healthy before offline", () => {
-    expect(filterApps(APPS, "").map((a) => a.health)).toEqual(["healthy", "healthy", "offline", "offline"]);
+  it("omits offline apps from search", () => {
+    expect(filterApps(APPS, "").map((a) => a.health)).toEqual(["healthy", "healthy"]);
   });
 
-  it("returns everything for an empty query", () => {
-    // This is filterApps' own contract as a pure search function — "no filter
-    // matches everything" — not what the drawer shows by default. The
-    // drawer's empty-query policy is emptyQueryApps, tested below.
-    expect(filterApps(APPS, "  ")).toHaveLength(4);
+  it("returns released user apps for an empty query", () => {
+    expect(filterApps(APPS, "  ")).toHaveLength(2);
   });
 
   it("returns nothing rather than everything for no match", () => {
     expect(filterApps(APPS, "zzzz")).toEqual([]);
   });
 
-  it("still reaches offline entries once you type", () => {
-    // The spec is explicit: typing searches all apps, including offline ones
-    // — hiding them would silently deny that half the ecosystem exists.
-    expect(filterApps(APPS, "forge").map((a) => a.id)).toEqual(["nexus-forge"]);
+  it("never revives offline entries when the query matches", () => {
+    expect(filterApps(APPS, "forge").map((a) => a.id)).toEqual([]);
   });
 });
 
@@ -100,18 +95,17 @@ describe("AppsDrawer", () => {
     expect(screen.getByText("Chat")).toBeTruthy();
   });
 
-  it("lists offline apps once you search, so half the ecosystem is not silently denied", () => {
+  it("keeps offline apps out when searched", () => {
     open();
     fireEvent.change(screen.getByRole("searchbox"), { target: { value: "forge" } });
-    expect(screen.getByText("Forge")).toBeTruthy();
+    expect(screen.queryByText("Forge")).toBeNull();
+    expect(screen.getByText(/no apps match/i)).toBeTruthy();
   });
 
-  it("does not make an offline app activatable", () => {
+  it("does not render an offline app as a link", () => {
     open();
     fireEvent.change(screen.getByRole("searchbox"), { target: { value: "forge" } });
-    const offline = screen.getByText("Forge").closest("[data-app-entry]")!;
-    expect(offline.getAttribute("aria-disabled")).toBe("true");
-    expect(offline.tagName).not.toBe("A");
+    expect(screen.queryByRole("link", { name: "Forge" })).toBeNull();
   });
 
   it("makes a healthy app a link to its in-shell path", () => {
@@ -174,6 +168,6 @@ describe("AppsDrawer", () => {
     fireEvent.keyDown(box, { key: "Enter" });
     // Still on the same query, still showing the offline entry — Enter must
     // be a no-op, not a navigation to nowhere.
-    expect(screen.getByText("Forge")).toBeTruthy();
+    expect(screen.queryByText("Forge")).toBeNull();
   });
 });

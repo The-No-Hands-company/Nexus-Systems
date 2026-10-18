@@ -6,5 +6,5 @@ echo "nexus-auth..."
 # Not piped through `tail -1`. That printed the run's summary line and threw
 # away every failure above it, so a red gate named no test and showed no
 # assertion. bun's own exit code is the gate; `set -e` acts on it.
-bun test
+bun test --max-concurrency=1
 echo "PASS"

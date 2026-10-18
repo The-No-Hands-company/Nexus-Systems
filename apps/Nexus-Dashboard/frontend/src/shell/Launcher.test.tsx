@@ -3,17 +3,20 @@ import { render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import Launcher from "./Launcher";
 import { appById } from "./apps";
+import type { AppEntry } from "../api";
 
-const apps = [
-  { id: "nexus-draw", name: "Draw", description: "", publicUrl: "https://draw.tnhc.dev", path: "/draw", delivery: "framed" as const, health: "healthy" as const },
-  { id: "nexus-chat", name: "Chat", description: "", publicUrl: "https://chat.tnhc.dev", path: "/chat", delivery: "framed" as const, health: "offline" as const },
-];
+const app = (id: string, name: string, overrides: Partial<AppEntry> = {}): AppEntry => ({
+  id, name, description: "", publicUrl: `https://${id}.tnhc.dev`, path: `/${id.replace(/^nexus-/, "")}`,
+  delivery: "framed", health: "healthy", surface: "user-app", releaseState: "released",
+  maturity: "stable", visibility: "default", reviewStatus: "approved", ...overrides,
+});
+const apps = [app("nexus-draw", "Draw"), app("nexus-chat", "Chat", { health: "offline" })];
 
 describe("Launcher", () => {
-  it("lists every app", () => {
+  it("lists only released user apps", () => {
     render(<MemoryRouter><Launcher apps={apps} /></MemoryRouter>);
     expect(screen.getByText("Draw")).toBeTruthy();
-    expect(screen.getByText("Chat")).toBeTruthy();
+    expect(screen.queryByText("Chat")).toBeNull();
   });
 
   it("links a healthy app into the shell, not out to its own host", () => {
@@ -28,15 +31,10 @@ describe("Launcher", () => {
     expect(screen.queryByRole("link", { name: /Chat/ })).toBeNull();
   });
 
-  it("links an internal app (relative url) straight to its shell route, not through /a/", () => {
-    // Cloud's tile arrives with url "/cloud" (see apps.ts toAppEntries): a
-    // shell-native view, not a site to frame.
-    const withCloud = [
-      ...apps,
-      { id: "nexus-cloud", name: "Cloud", description: "", path: "/cloud", delivery: "shell-native" as const, health: "healthy" as const },
-    ];
+  it("does not show an admin console as a launcher app", () => {
+    const withCloud = [...apps, app("nexus-cloud", "Cloud", { path: "/cloud", publicUrl: undefined, delivery: "shell-native", surface: "admin-console" })];
     render(<MemoryRouter><Launcher apps={withCloud} /></MemoryRouter>);
-    expect(screen.getByRole("link", { name: /Cloud/ }).getAttribute("href")).toBe("/cloud");
+    expect(screen.queryByText("Cloud")).toBeNull();
   });
 
   it("marks the active app for assistive tech, not just visually", () => {

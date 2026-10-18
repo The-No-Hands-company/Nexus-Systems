@@ -8,7 +8,8 @@ const app = (overrides: Partial<AppEntry> = {}): AppEntry => ({
   id: "nexus-chat", name: "Nexus Chat", description: "Messaging", path: "/chat",
   publicUrl: "https://chat.tnhc.dev", delivery: "framed", health: "healthy",
   primaryShelf: "everyday", secondaryShelves: [], audiences: ["general"], capabilities: ["chat"],
-  maturity: "stable", visibility: "default", reviewStatus: "approved", ...overrides,
+  maturity: "stable", visibility: "default", reviewStatus: "approved",
+  surface: "user-app", releaseState: "released", ...overrides,
 });
 
 describe("AppShelf", () => {

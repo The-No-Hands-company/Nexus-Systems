@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { listApps, type AppEntry } from "../api";
-import { CATALOG_SHELVES, groupAppsByShelf, searchCatalog, type CatalogAudience, type CatalogShelf } from "../shell/catalog";
+import { CATALOG_SHELVES, groupAppsByShelf, isLauncherApp, searchCatalog, type CatalogAudience, type CatalogShelf } from "../shell/catalog";
 import AppCard from "../components/AppCard";
 import AppShelf from "../components/AppShelf";
 import CatalogFilters from "../components/CatalogFilters";
@@ -39,8 +39,8 @@ export default function Grid() {
 
   // Keep all hooks above the loading/error branches: the registry response is
   // asynchronous, so rendering a spinner must not change hook order.
-  const capabilities = useMemo(() => [...new Set(state.kind === "ready" ? state.apps.flatMap((app) => app.capabilities ?? []) : [])].sort(), [state]);
-  const apps = state.kind === "ready" ? state.apps : [];
+  const apps = useMemo(() => state.kind === "ready" ? state.apps.filter(isLauncherApp) : [], [state]);
+  const capabilities = useMemo(() => [...new Set(apps.flatMap((app) => app.capabilities ?? []))].sort(), [apps]);
   const hasFilters = Boolean(query.trim()) || shelf !== "all" || audience !== "all" || capability !== "all";
   const matches = useMemo(
     () => searchCatalog(apps, query, { shelf, audience, capability }),
@@ -65,7 +65,7 @@ export default function Grid() {
     );
   }
 
-  if (state.apps.length === 0) {
+  if (apps.length === 0) {
     return (
       <section className="mx-auto max-w-4xl px-4 py-6 sm:p-8">
         <h1 className="text-2xl font-semibold">Your apps</h1>

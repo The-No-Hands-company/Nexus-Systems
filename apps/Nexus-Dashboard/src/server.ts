@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import { mergeApps, shellNativeEntries, toAppEntries } from "./apps";
+import { isReleasedUserApp, mergeApps, shellNativeEntries, toAppEntries } from "./apps";
 import { callerIdentity, isAdminRole } from "./auth";
 import { cloudBaseUrl, cloudHeaders } from "./cloud";
 import { listDevTools, runDevTool } from "./devtools";
@@ -308,13 +308,15 @@ async function terminalReachable(): Promise<boolean> {
 async function fetchApps(req: Request): Promise<Response> {
   const caller = await callerIdentity(req);
   const includeTerminal = isAdminRole(caller?.role ?? null);
-  // Probed once and used on both paths: the shell's own views must not
-  // disappear just because Cloud is down.
+  // Probed once and used on both paths: healthy shell views remain available
+  // when Cloud is down. Keep offline entries through de-duplication so a Cloud
+  // record cannot revive an unavailable native route.
   const native = shellNativeEntries({
     mailHealthy: await mailReachable(),
     terminalHealthy: includeTerminal ? await terminalReachable() : false,
     includeTerminal,
   });
+  const healthyNative = native.filter((entry) => entry.health === "healthy");
 
   try {
     const cloudBase = cloudUrl();
@@ -324,15 +326,13 @@ async function fetchApps(req: Request): Promise<Response> {
     };
     let res = await fetch(`${cloudBase}/api/v1/catalog`, options);
     if (res.status === 404) res = await fetch(`${cloudBase}/api/v1/tools`, options);
-    if (!res.ok) return Response.json({ apps: native });
-    const registry = toAppEntries(await res.json(), AUTH_HOST, SELF_HOST).filter(
-      (entry) => includeTerminal || entry.id !== "nexus-terminal",
-    );
-    return Response.json({ apps: mergeApps(registry, native) });
+    if (!res.ok) return Response.json({ apps: healthyNative });
+    const registry = toAppEntries(await res.json(), AUTH_HOST, SELF_HOST).filter(isReleasedUserApp);
+    return Response.json({ apps: mergeApps(registry, native).filter((entry) => entry.health === "healthy") });
   } catch {
     // Cloud being down must degrade to the shell's own views, not a broken
     // dashboard — the account pages still work and the user can still sign in.
-    return Response.json({ apps: native });
+    return Response.json({ apps: healthyNative });
   }
 }
 

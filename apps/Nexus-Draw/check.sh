@@ -8,7 +8,7 @@ echo "$(basename "$PWD")..."
 # suite is vitest with a jsdom environment and React — bun's runner cannot load
 # it, and for five days CI failed here on `react/jsx-dev-runtime` because the
 # workflow ran the bare form instead of this file.
-bun test tests/
+bun test --max-concurrency=1 tests/
 
 # The frontend is a separate package with its own toolchain, so it gets its own
 # typecheck and its own runner rather than being swept up by the line above.

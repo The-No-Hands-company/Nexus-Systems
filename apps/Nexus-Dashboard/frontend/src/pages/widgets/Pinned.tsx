@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { listApps, type AppEntry } from "../../api";
 import { usePinnedApps } from "../../shell/usePinnedApps";
+import { isLauncherApp } from "../../shell/catalog";
 import WidgetShell, { type WidgetState } from "./WidgetShell";
 
 /**
@@ -26,7 +27,7 @@ export default function Pinned() {
   return (
     <WidgetShell title="Pinned" state={state} empty="No apps pinned yet">
       {(apps) => {
-        const healthy = apps.filter((a) => a.health === "healthy");
+        const healthy = apps.filter(isLauncherApp);
         const pinned = pinnedIds
           .map((id) => healthy.find((a) => a.id === id))
           .filter((a): a is AppEntry => Boolean(a));

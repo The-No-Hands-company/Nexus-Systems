@@ -26,8 +26,11 @@ function stubFetch(signedIn: boolean, role = "user") {
     }
     if (u === "/ipa/apps") {
       return jsonResponse({
-        apps: [{ id: "nexus-chat", name: "Nexus Chat", description: "Chat",
-                 publicUrl: "https://chat.tnhc.dev", path: "/chat", delivery: "framed", health: "healthy" }],
+        apps: [
+          { id: "nexus-chat", name: "Nexus Chat", description: "Chat", publicUrl: "https://chat.tnhc.dev", path: "/chat", delivery: "framed", health: "healthy", surface: "user-app", releaseState: "released", maturity: "stable", visibility: "default", reviewStatus: "approved", primaryShelf: "everyday" },
+          { id: "nexus-calendar", name: "Nexus Calendar", description: "Calendar", publicUrl: "https://calendar.tnhc.dev", path: "/calendar", delivery: "framed", health: "healthy", surface: "user-app", releaseState: "staged", maturity: "stable", visibility: "default", reviewStatus: "approved", primaryShelf: "everyday" },
+          { id: "nexus-cloud", name: "Nexus Cloud", description: "Control", path: "/cloud", delivery: "shell-native", health: "healthy", surface: "admin-console", releaseState: "released", maturity: "stable", visibility: "default", reviewStatus: "approved", primaryShelf: "operate" },
+        ],
       });
     }
     // Widgets (Today, Unread, Activity) fetch endpoints this test does not
@@ -51,6 +54,9 @@ describe("Home", () => {
     // zero matches and would make a `.length > 0` assertion tautological.
     await waitFor(() => expect(screen.getAllByText("Nexus Chat").length).toBeGreaterThanOrEqual(2));
     expect(screen.getByRole("heading", { name: /pinned/i })).toBeTruthy();
+    expect(screen.queryByText("Nexus Calendar")).toBeNull();
+    expect(screen.queryByText("Nexus Cloud")).toBeNull();
+    expect(screen.getByText("1 app available")).toBeTruthy();
   });
 
   it("puts the signed-in dashboard inside the shell, not bare", async () => {
@@ -111,6 +117,8 @@ describe("Home", () => {
     // open them.
     expect(screen.queryByRole("link", { name: /nexus chat/i })).toBeNull();
     expect(screen.queryByRole("link", { name: /nexus mail/i })).toBeNull();
+    expect(screen.queryByText("Nexus Calendar")).toBeNull();
+    expect(screen.queryByText("Nexus Cloud")).toBeNull();
   });
 
   it("sends the user back here after signing in", async () => {

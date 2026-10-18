@@ -7,6 +7,7 @@ import AppsDrawer from "./AppsDrawer";
 import { useDensity } from "./useDensity";
 import type { AppEntry } from "../api";
 import { useRecentApps } from "./useRecentApps";
+import { isLauncherApp } from "./catalog";
 
 /**
  * The frame every app renders inside.
@@ -60,6 +61,8 @@ export default function Shell({
   const [, recordRecent] = useRecentApps();
 
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const launcherApps = apps.filter(isLauncherApp);
+  const canManage = user?.role === "founder" || user?.role === "admin";
 
   // ⌘K / Ctrl+K opens the apps drawer from anywhere in the shell. preventDefault
   // is required, not decorative: without it Chrome and Firefox both still open
@@ -79,8 +82,8 @@ export default function Shell({
     // A deep link such as /mail/inbox still belongs to the Mail app. Record
     // the owning app by exact path first, then by a route-segment prefix so
     // navigation history remains useful inside nested shell-native routes.
-    const app = apps.find((entry) => entry.path === location.pathname)
-      ?? apps.find((entry) => entry.path !== "/" && location.pathname.startsWith(`${entry.path}/`));
+    const app = launcherApps.find((entry) => entry.path === location.pathname)
+      ?? launcherApps.find((entry) => location.pathname.startsWith(`${entry.path}/`));
     if (app) recordRecent(app.id);
   }, [apps, location.pathname, recordRecent]);
 
@@ -163,7 +166,7 @@ export default function Shell({
             in the header rather than the sidebar: it is about the ecosystem,
             not one of its apps.
           */}
-        {user && (user.role === "founder" || user.role === "admin") && (
+        {canManage && (
           <Link
             to="/admin"
             className={`${utility ? "" : "ml-auto"} rounded-md px-2 py-1 text-sm text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent`}
@@ -210,6 +213,13 @@ export default function Shell({
             </svg>
             Apps
           </button>
+
+          {canManage && (
+            <div className="w-full border-t border-zinc-700 pt-2">
+              <Link to="/cloud" aria-label="Cloud console" className="flex flex-col items-center rounded-md px-1 py-2 text-[10px] text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100 focus-visible:outline-2 focus-visible:outline-accent">Cloud</Link>
+              <Link to="/terminal" aria-label="Terminal" className="flex flex-col items-center rounded-md px-1 py-2 text-[10px] text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100 focus-visible:outline-2 focus-visible:outline-accent">Terminal</Link>
+            </div>
+          )}
 
           {/*
             Reporting lives in the chrome rather than the app list: it is about
@@ -262,7 +272,7 @@ export default function Shell({
         </main>
       </div>
 
-      <AppsDrawer apps={apps} open={drawerOpen} onClose={() => setDrawerOpen(false)} />
+      <AppsDrawer apps={launcherApps} open={drawerOpen} onClose={() => setDrawerOpen(false)} />
     </div>
   );
 }

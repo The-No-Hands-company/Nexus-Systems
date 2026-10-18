@@ -5,7 +5,7 @@ import { Pill } from "../../../../../packages/nexus-design/src/components/ui/pil
 import { EmptyState } from "../../../../../packages/nexus-design/src/components/ui/empty-state";
 import { cn } from "../../../../../packages/nexus-design/src/components/ui/cn";
 import { emptyQueryApps } from "./filterApps";
-import { appsForShelf, searchCatalog, type CatalogAudience, type CatalogShelf } from "./catalog";
+import { appsForShelf, isLauncherApp, searchCatalog, type CatalogAudience, type CatalogShelf } from "./catalog";
 import CatalogFilters from "../components/CatalogFilters";
 import { readPinnedIds } from "./usePinnedApps";
 import { readRecentIds } from "./useRecentApps";
@@ -26,20 +26,21 @@ export default function AppsDrawer({
   // the moment it appears.
   const pinnedIds = useMemo(() => (open ? readPinnedIds() : []), [open]);
   const recentIds = useMemo(() => (open ? readRecentIds() : []), [open]);
+  const launcherApps = useMemo(() => apps.filter(isLauncherApp), [apps]);
 
   const capabilities = useMemo(
-    () => [...new Set(apps.flatMap((app) => app.capabilities ?? []))].sort((a, b) => a.localeCompare(b)),
-    [apps],
+    () => [...new Set(launcherApps.flatMap((app) => app.capabilities ?? []))].sort((a, b) => a.localeCompare(b)),
+    [launcherApps],
   );
   const selectedApps = useMemo(
-    () => shelf === "all" ? apps : appsForShelf(apps, shelf),
-    [apps, shelf],
+    () => shelf === "all" ? launcherApps : appsForShelf(launcherApps, shelf),
+    [launcherApps, shelf],
   );
   const hasFilters = shelf !== "all" || audience !== "all" || capability !== "all";
   const results = useMemo(() => {
-    if (!query.trim() && !hasFilters) return emptyQueryApps(apps, { pinnedIds, recentIds });
+    if (!query.trim() && !hasFilters) return emptyQueryApps(launcherApps, { pinnedIds, recentIds });
     return searchCatalog(selectedApps, query, { shelf: "all", audience, capability });
-  }, [apps, audience, capability, hasFilters, pinnedIds, query, recentIds, selectedApps]);
+  }, [launcherApps, audience, capability, hasFilters, pinnedIds, query, recentIds, selectedApps]);
 
   // A shorter result set than before can leave `highlight` pointing past the
   // end (or at the previous list's second app, now a different one) — reset
@@ -56,9 +57,7 @@ export default function AppsDrawer({
   }, [open]);
 
   function activate(app: AppEntry | undefined) {
-    // Offline entries are never activatable — the same rule the click handler
-    // already enforces by rendering them as a <div>, not a <Link>.
-    if (!app || app.health !== "healthy" || app.visibility === "restricted" || app.reviewStatus === "pending" || app.reviewStatus === "deferred" || app.reviewStatus === "rejected") return;
+    if (!app || !isLauncherApp(app)) return;
     onClose();
     navigate(app.path);
   }
@@ -104,7 +103,6 @@ export default function AppsDrawer({
             const selected = i === highlight;
             return (
               <li key={a.id} role="option" aria-selected={selected ? "true" : "false"}>
-                {a.health === "healthy" && a.visibility !== "restricted" && (a.reviewStatus ?? "approved") === "approved" ? (
                   <Link
                     to={a.path}
                     onClick={onClose}
@@ -118,23 +116,6 @@ export default function AppsDrawer({
                     <span>{a.name}</span>
                     <Pill tone="success">available</Pill>
                   </Link>
-                ) : (
-                  <div
-                    data-app-entry=""
-                    aria-disabled="true"
-                    title={a.health !== "healthy" ? "This app is not running" : "This app is not available here"}
-                    onMouseEnter={() => setHighlight(i)}
-                    className={cn(
-                      "flex cursor-default items-center justify-between rounded px-3 py-2 text-sm text-zinc-500",
-                      selected && "bg-zinc-800",
-                    )}
-                  >
-                    <span>{a.name}</span>
-                    <Pill tone={a.health !== "healthy" ? "neutral" : "warning"}>
-                      {a.health !== "healthy" ? "offline" : a.reviewStatus === "pending" ? "pending review" : a.reviewStatus === "deferred" ? "deferred" : a.visibility === "restricted" ? "restricted" : "unavailable"}
-                    </Pill>
-                  </div>
-                )}
               </li>
             );
           })
@@ -147,7 +128,7 @@ export default function AppsDrawer({
           onClick={onClose}
           className="block rounded px-3 py-2 text-center text-sm text-zinc-400 hover:bg-zinc-700 hover:text-zinc-100"
         >
-          See all {apps.length} apps
+          See all {launcherApps.length} apps
         </Link>
       </div>
     </Overlay>

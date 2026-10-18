@@ -1,16 +1,13 @@
 import { useEffect, useState } from "react";
 import { me, listApps, type Me, type AppEntry } from "../api";
 import Shell from "../shell/Shell";
-import HealthStrip from "../shell/HealthStrip";
 import NotificationBell from "../shell/NotificationBell";
 import { Pill } from "../../../../../packages/nexus-design/src/components/ui/pill";
-import { Stat } from "../../../../../packages/nexus-design/src/components/ui/stat";
-import { Badge } from "../../../../../packages/nexus-design/src/components/ui/badge";
 import Activity from "./widgets/Activity";
 import { buildAuthPageUrl } from "../authPages";
 import Pinned from "./widgets/Pinned";
 import AppShelf from "../components/AppShelf";
-import { groupAppsByShelf } from "../shell/catalog";
+import { groupAppsByShelf, isLauncherApp } from "../shell/catalog";
 
 const AUTH_LOGIN_URL =
   import.meta.env.VITE_AUTH_LOGIN_URL ?? "https://auth.tnhc.dev/login";
@@ -62,14 +59,12 @@ export default function Home() {
   // without it the home header had no identity chip and no Operator link, so
   // the founder landed here and /admin might as well not have existed.
   if (user) {
-    const healthyCount = apps.filter((a) => a.health === "healthy").length;
-    const offlineCount = apps.length - healthyCount;
-    const allHealthy = offlineCount === 0;
+    const launcherApps = apps.filter(isLauncherApp);
+    const shelves = groupAppsByShelf(launcherApps);
 
     return (
-      <Shell apps={apps} user={user} utility={<NotificationBell />}>
+      <Shell apps={launcherApps} user={user} utility={<NotificationBell />}>
         <div className="flex flex-col">
-          {/* Platform status bar */}
           <div className="border-b border-zinc-700 bg-zinc-800/30 px-6 py-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
@@ -77,43 +72,19 @@ export default function Home() {
                   Welcome, {user.username || user.email.split("@")[0]}
                 </h1>
                 <p className="mt-0.5 text-sm text-zinc-400">
-                  {apps.length} service{apps.length !== 1 ? "s" : ""} registered
+                  {launcherApps.length} app{launcherApps.length !== 1 ? "s" : ""} available
                 </p>
               </div>
-              <Badge variant={allHealthy ? "success" : "danger"} dot>
-                {allHealthy ? "All systems operational" : `${offlineCount} service${offlineCount !== 1 ? "s" : ""} offline`}
-              </Badge>
             </div>
           </div>
 
           <div className="flex flex-col gap-6 p-6">
-            {/* Metrics row */}
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-              <Stat label="Services" value={apps.length} sub="registered" />
-              <Stat label="Running" value={healthyCount} sub="healthy" tone="success" />
-              <Stat
-                label="Offline"
-                value={offlineCount}
-                sub="need attention"
-                tone={offlineCount > 0 ? "danger" : "default"}
-                className="col-span-2 sm:col-span-1"
-              />
-            </div>
-
-            {/* Service health */}
-            <section aria-label="Service health">
-              <h2 className="mb-3 text-[10px] font-semibold uppercase tracking-widest text-zinc-500">
-                Service Health
-              </h2>
-              <HealthStrip apps={apps} />
-            </section>
-
             {/* Curated entry points keep the dashboard useful without turning
                 it into a flat wall of every registered service. The full
                 directory remains one click away at /apps. */}
             <section aria-label="Curated app shelves" className="space-y-8">
               {(["everyday", "work", "create"] as const).map((shelf) => (
-                <AppShelf key={shelf} shelf={shelf} apps={groupAppsByShelf(apps)[shelf]} limit={3} />
+                <AppShelf key={shelf} shelf={shelf} apps={shelves[shelf]} limit={3} />
               ))}
             </section>
 
@@ -159,7 +130,7 @@ function SignedOut() {
     return () => { cancelled = true; };
   }, []);
 
-  const healthy = (apps ?? []).filter((a) => a.health === "healthy");
+  const healthy = (apps ?? []).filter(isLauncherApp);
 
   return (
     <div className="flex min-h-screen flex-col bg-zinc-900 text-zinc-100">
@@ -194,7 +165,7 @@ function SignedOut() {
           </h1>
           <p className="mt-5 max-w-2xl text-lg leading-relaxed text-zinc-500">
             Sign in once and every Nexus app knows who you are — mail, chat,
-            drawing, hosting, the cloud console. No separate passwords, no app
+            drawing, and more. No separate passwords, no app
             asking you to register again.
           </p>
 
