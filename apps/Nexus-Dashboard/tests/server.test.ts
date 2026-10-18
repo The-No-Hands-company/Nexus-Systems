@@ -11,8 +11,12 @@ type BunServer = ReturnType<typeof Bun.serve>;
 let auth: BunServer | null = null;
 let cloud: BunServer | null = null;
 let terminal: BunServer | null = null;
+let catalogMode: "legacy" | "catalog" = "legacy";
+let cloudPaths: string[] = [];
 
 beforeEach(() => {
+  catalogMode = "legacy";
+  cloudPaths = [];
   auth = Bun.serve({
     port: 4399,
     fetch(req) {
@@ -37,7 +41,16 @@ beforeEach(() => {
   });
   cloud = Bun.serve({
     port: 4398,
-    fetch() {
+    fetch(req) {
+      const path = new URL(req.url).pathname;
+      cloudPaths.push(path);
+      if (path === "/api/v1/catalog") {
+        if (catalogMode === "legacy") return Response.json({ error: "Not found" }, { status: 404 });
+        return Response.json({ apps: [
+          { id: "nexus-chat", name: "Nexus Chat", publicUrl: "https://chat.tnhc.dev", health: "healthy", primaryShelf: "work", secondaryShelves: [], audiences: ["general"], capabilities: ["chat"], maturity: "stable", visibility: "default", reviewStatus: "approved" },
+          { id: "nexus-hidden", name: "Hidden", publicUrl: "https://hidden.tnhc.dev", health: "healthy", primaryShelf: "operate", visibility: "hidden" },
+        ] });
+      }
       return Response.json({
         tools: [
           {
@@ -71,6 +84,21 @@ afterEach(() => {
 });
 
 describe("dashboard server", () => {
+  it("requests catalog first and serves approved metadata while hiding hidden entries", async () => {
+    catalogMode = "catalog";
+    const res = await handleRequest(new Request("http://app.test/ipa/apps"));
+    const { apps } = (await res.json()) as { apps: Array<{ id: string; primaryShelf: string; reviewStatus: string }> };
+    expect(cloudPaths).toEqual(["/api/v1/catalog"]);
+    expect(apps.find((app) => app.id === "nexus-chat")).toMatchObject({ primaryShelf: "work", reviewStatus: "approved" });
+    expect(apps.some((app) => app.id === "nexus-hidden")).toBe(false);
+  });
+
+  it("falls back to old Cloud tools only on catalog 404", async () => {
+    const res = await handleRequest(new Request("http://app.test/ipa/apps"));
+    const { apps } = (await res.json()) as { apps: Array<{ id: string; primaryShelf: string }> };
+    expect(cloudPaths).toEqual(["/api/v1/catalog", "/api/v1/tools"]);
+    expect(apps.find((app) => app.id === "nexus-chat")?.primaryShelf).toBe("explore");
+  });
   it("reports health", async () => {
     const res = await handleRequest(new Request("http://app.test/health"));
     expect(res.status).toBe(200);

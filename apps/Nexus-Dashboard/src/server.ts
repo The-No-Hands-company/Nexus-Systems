@@ -309,10 +309,13 @@ async function fetchApps(req: Request): Promise<Response> {
   });
 
   try {
-    const res = await fetch(`${CLOUD_URL.replace(/\/+$/, "")}/api/v1/tools`, {
+    const cloudBase = CLOUD_URL.replace(/\/+$/, "");
+    const options = {
       headers: CLOUD_API_KEY ? { "X-Api-Key": CLOUD_API_KEY } : {},
       signal: AbortSignal.timeout(3000),
-    });
+    };
+    let res = await fetch(`${cloudBase}/api/v1/catalog`, options);
+    if (res.status === 404) res = await fetch(`${cloudBase}/api/v1/tools`, options);
     if (!res.ok) return Response.json({ apps: native });
     const registry = toAppEntries(await res.json(), AUTH_HOST, SELF_HOST).filter(
       (entry) => includeTerminal || entry.id !== "nexus-terminal",

@@ -8,6 +8,7 @@ import {
 } from "../src/apps";
 
 const AUTH = "auth.tnhc.dev";
+const EXPLORE = { primaryShelf: "explore", secondaryShelves: [], audiences: [], capabilities: [], maturity: "experimental" as const, visibility: "discoverable" as const, reviewStatus: "pending" as const };
 
 const TOOLS = {
   tools: [
@@ -46,6 +47,16 @@ const TOOLS = {
 };
 
 describe("app grid entries", () => {
+  it("normalizes catalog entries and old tools into stable placement fields", () => {
+    const entries = toAppEntries({ apps: [
+      { id: "approved", name: "Approved", publicUrl: "https://approved.example", health: "healthy", primaryShelf: "work", secondaryShelves: ["everyday"], audiences: ["business"], capabilities: ["chat"], maturity: "stable", visibility: "restricted", reviewStatus: "approved" },
+      { id: "old", name: "Old", publicUrl: "https://old.example", health: "offline" },
+      { id: "hidden", name: "Hidden", publicUrl: "https://hidden.example", visibility: "hidden", health: "healthy" },
+    ] }, AUTH);
+    expect(entries.map((entry) => entry.id)).toEqual(["approved", "old"]);
+    expect(entries[0]).toMatchObject({ primaryShelf: "work", secondaryShelves: ["everyday"], audiences: ["business"], capabilities: ["chat"], maturity: "stable", visibility: "restricted", reviewStatus: "approved" });
+    expect(entries[1]).toMatchObject({ primaryShelf: "explore", secondaryShelves: [], audiences: [], capabilities: [], maturity: "experimental", visibility: "discoverable", reviewStatus: "pending", health: "offline" });
+  });
   it("keeps Calendar's shell path separate from its proxied delivery origin", () => {
     const entries = toAppEntries(
       {
@@ -323,14 +334,14 @@ describe("shell-native views", () => {
         terminalHealthy: true,
         includeTerminal: true,
       }),
-    ).toContainEqual({
+    ).toContainEqual(expect.objectContaining({
       id: "nexus-terminal",
       name: "Nexus Terminal",
       description: "Audited host shell for Nexus operators",
       path: "/terminal",
       delivery: "shell-native",
       health: "healthy",
-    });
+    }));
     expect(
       shellNativeEntries({ mailHealthy: true, terminalHealthy: true, includeTerminal: false }),
     ).not.toContainEqual(expect.objectContaining({ id: "nexus-terminal" }));
@@ -356,6 +367,7 @@ describe("shell-native views", () => {
   it("keeps one tile per mailbox if Cloud also registers Nexus-Email", () => {
     const registry: AppEntry[] = [
       {
+        ...EXPLORE,
         id: "nexus-email",
         name: "Nexus Email",
         description: "dup",
@@ -413,6 +425,7 @@ describe("flat app paths", () => {
   it("dedupes a registry app that lands on a shell-native path", () => {
     const registry: AppEntry[] = [
       {
+        ...EXPLORE,
         id: "other-mail",
         name: "Other",
         description: "",
@@ -432,6 +445,7 @@ describe("flat app paths", () => {
   it("keeps the native terminal instead of a Cloud terminal record", () => {
     const registry: AppEntry[] = [
       {
+        ...EXPLORE,
         id: "nexus-terminal",
         name: "Nexus Terminal",
         description: "external",

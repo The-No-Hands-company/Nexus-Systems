@@ -7,7 +7,22 @@
 
 export type SystemsApiDelivery = "shell-native" | "proxied-app" | "framed" | "external";
 
-export type AppEntry = {
+export type CatalogPlacement = {
+  primaryShelf: string;
+  secondaryShelves: string[];
+  audiences: string[];
+  capabilities: string[];
+  maturity: "stable" | "preview" | "experimental";
+  visibility: "default" | "discoverable" | "restricted" | "hidden";
+  reviewStatus: "approved" | "pending" | "deferred" | "rejected";
+};
+
+const EXPLORE_DEFAULTS: CatalogPlacement = {
+  primaryShelf: "explore", secondaryShelves: [], audiences: [], capabilities: [],
+  maturity: "experimental", visibility: "discoverable", reviewStatus: "pending",
+};
+
+export type AppEntry = CatalogPlacement & {
   id: string;
   name: string;
   description: string;
@@ -57,6 +72,13 @@ type RawTool = {
   path?: unknown;
   delivery?: unknown;
   health?: unknown;
+  primaryShelf?: unknown;
+  secondaryShelves?: unknown;
+  audiences?: unknown;
+  capabilities?: unknown;
+  maturity?: unknown;
+  visibility?: unknown;
+  reviewStatus?: unknown;
 };
 
 function str(v: unknown): string {
@@ -71,6 +93,22 @@ function deliveryFor(value: unknown): SystemsApiDelivery | undefined {
   return value === "shell-native" || value === "proxied-app" || value === "framed" || value === "external"
     ? value
     : undefined;
+}
+
+function stringArray(value: unknown): string[] {
+  return Array.isArray(value) && value.every((item) => typeof item === "string") ? [...value] : [];
+}
+
+function placementFor(raw: RawTool): CatalogPlacement {
+  return {
+    primaryShelf: str(raw.primaryShelf) || EXPLORE_DEFAULTS.primaryShelf,
+    secondaryShelves: stringArray(raw.secondaryShelves),
+    audiences: stringArray(raw.audiences),
+    capabilities: stringArray(raw.capabilities),
+    maturity: raw.maturity === "stable" || raw.maturity === "preview" ? raw.maturity : "experimental",
+    visibility: raw.visibility === "default" || raw.visibility === "restricted" || raw.visibility === "hidden" ? raw.visibility : "discoverable",
+    reviewStatus: raw.reviewStatus === "approved" || raw.reviewStatus === "deferred" || raw.reviewStatus === "rejected" ? raw.reviewStatus : "pending",
+  };
 }
 
 /**
@@ -91,7 +129,8 @@ export function toAppEntries(
   authHost: string,
   selfHost?: string,
 ): AppEntry[] {
-  const tools = (payload as { tools?: unknown } | null)?.tools;
+  const source = payload as { apps?: unknown; tools?: unknown } | null;
+  const tools = source?.apps ?? source?.tools;
   if (!Array.isArray(tools)) return [];
 
   const entries: AppEntry[] = [];
@@ -99,6 +138,8 @@ export function toAppEntries(
     if (!raw || typeof raw !== "object") continue;
 
     const id = str(raw.id);
+    const placement = placementFor(raw);
+    if (placement.visibility === "hidden") continue;
     const publicUrl = str(raw.publicUrl) || str(raw.url);
     const explicitDelivery = deliveryFor(raw.delivery);
     if (!id || (!publicUrl && explicitDelivery !== "shell-native")) continue;
@@ -120,6 +161,7 @@ export function toAppEntries(
     if (entries.some((e) => e.path === path || (publicUrl && e.publicUrl === publicUrl))) continue;
 
     entries.push({
+      ...placement,
       id,
       name: str(raw.name) || id,
       description: str(raw.description),
@@ -157,6 +199,7 @@ export function shellNativeEntries(opts: {
 }): AppEntry[] {
   const entries: AppEntry[] = [
     {
+      ...EXPLORE_DEFAULTS,
       id: "nexus-email",
       name: "Nexus Mail",
       description: "Sovereign mail — read, compose and search your Nexus mailbox",
@@ -167,6 +210,7 @@ export function shellNativeEntries(opts: {
   ];
   if (opts.includeTerminal) {
     entries.push({
+      ...EXPLORE_DEFAULTS,
       id: "nexus-terminal",
       name: "Nexus Terminal",
       description: "Audited host shell for Nexus operators",
