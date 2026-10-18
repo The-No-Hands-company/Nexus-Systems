@@ -44,4 +44,20 @@ describe("nexus-api", () => {
     const body = await r.json() as { routedTotal: number };
     expect(typeof body.routedTotal).toBe("number");
   });
+
+  it("GET /api/v1/contract returns the versioned public API contract", async () => {
+    const r = await fetch(`${base}/api/v1/contract`);
+    expect(r.status).toBe(200);
+    const body = await r.json() as {
+      protocol: string;
+      service: { id: string; auth: string };
+      routes: Array<{ method: string; path: string; access: string }>;
+    };
+    expect(body.protocol).toBe("nexus-api/1");
+    expect(body.service).toMatchObject({ id: "nexus-api", auth: "Bearer token or hosted session" });
+    expect(body.routes).toEqual(expect.arrayContaining([
+      expect.objectContaining({ method: "GET", path: "/api/v1/contract", access: "public" }),
+      expect.objectContaining({ method: "POST", path: "/api/v1/gateway/routes", access: "operator" }),
+    ]));
+  });
 });

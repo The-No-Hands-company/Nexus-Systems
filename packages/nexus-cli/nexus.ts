@@ -83,6 +83,11 @@ const commands: Record<string, { desc: string; usage: string; run: CommandHandle
     usage: "nexus catalog [shelf]",
     run: cmdCatalog,
   },
+  api: {
+    desc: "Read the versioned Nexus API contract",
+    usage: "nexus api",
+    run: cmdApiContract,
+  },
   knowledge: {
     desc: "Search the ecosystem-grounded Nexus AI knowledge index",
     usage: "nexus knowledge [query]",
@@ -385,6 +390,26 @@ async function cmdCatalog(args: string[]) {
     console.log(`  ${health} ${bold(String(app.name || app.id))} ${DIM}${path} · ${status}${RESET}`);
   }
   console.log(`\n  ${apps.length} catalog entr${apps.length === 1 ? "y" : "ies"}`);
+}
+
+async function cmdApiContract() {
+  const base = (process.env.NEXUS_API_URL || "http://localhost:3036").trim().replace(/\/$/, "");
+  const payload = await fetchJson(`${base}/api/v1/contract`);
+  if (!payload || !payload.service || !Array.isArray(payload.routes)) {
+    console.log(color("Nexus API contract unavailable — check NEXUS_API_URL", RED));
+    return;
+  }
+
+  const service = payload.service as Record<string, unknown>;
+  console.log(BANNER);
+  console.log(color("Nexus API Contract\n", CYAN));
+  console.log(`  ${bold(String(service.name || service.id))} ${DIM}${String(service.version || "")}${RESET}`);
+  console.log(`  Base URL: ${String(service.baseUrl || base)}`);
+  console.log(`  Auth: ${String(service.auth || "unspecified")}\n`);
+  for (const route of payload.routes as Array<Record<string, unknown>>) {
+    const access = route.access === "operator" ? color("operator", YELLOW) : color("public", GREEN);
+    console.log(`  ${String(route.method).padEnd(6)} ${String(route.path).padEnd(38)} ${access}`);
+  }
 }
 
 async function cmdKnowledge(args: string[]) {

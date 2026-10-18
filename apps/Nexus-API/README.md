@@ -19,8 +19,14 @@ services.
 | Method | Path | Purpose |
 |--------|------|---------|
 | GET | /health | Liveness probe |
+| GET | /api/v1/contract | Versioned gateway contract for clients and operators |
 | POST | /api/v1/gateway/route | Route request to downstream service |
 | GET | /api/v1/gateway/status | Gateway counters |
+
+`/api/v1/contract` is the stable discovery entry point for this gateway. It
+declares which routes are public and which require an operator credential. It
+does not grant access; callers still authenticate each request according to the
+route policy.
 
 ## Runtime
 
