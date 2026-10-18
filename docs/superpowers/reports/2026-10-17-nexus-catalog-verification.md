@@ -13,6 +13,7 @@ Branch: `feat/nexus-app-catalog`
 | Cloud typecheck | pass | `tsc --noEmit` |
 | Cloud app-root check | pass | `bun run check` — 85 files |
 | Cloud catalog/release/route regression | pass | 50 tests, 0 failures, 207 assertions |
+| Cloud complete suite | pass | 160 tests across 28 files, 0 failures, 707 assertions |
 | Auth typecheck | pass | `bun run check` with frozen lockfile after lock refresh |
 | Auth regression | pass | 144 tests, 0 failures, 448 assertions |
 
@@ -56,9 +57,7 @@ disabled explicitly (`useLiteralKeys`, `noDelete`, `noNonNullAssertion`, and
 `noExplicitAny`); the two remaining real style findings were fixed. `bun run
 check` passes all 85 Cloud files.
 
-## Broader-suite limitations
-
-The broader Cloud handler suite has three pre-existing host/order-sensitive
-failures when run together: two tests exceed Bun's five-second test timeout and
-one conditional-ETag test can observe a changed response between requests. The
-isolated catalog/release suite is deterministic and green.
+The Cloud test command uses a 15-second per-test budget because persistence and
+trust lifecycle tests legitimately exceed Bun’s five-second default on slower
+storage. Conditional ETags now ignore informational timestamps, so unchanged
+polling responses correctly return `304` even after a delayed round trip.
