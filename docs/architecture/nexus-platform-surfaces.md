@@ -52,6 +52,8 @@ shown only where the caller's role permits them.
 ## API boundaries
 
 - `/api/v1/catalog` on Nexus Cloud is the global approved catalog projection.
+- Cloud `/api/v1/contract` is the versioned control-plane manifest. It describes
+  Cloud as the `admin-console` at hosted `/cloud`; it is not a user-app tile.
 - `/api/v1/tenants/:tenantId/catalog` is tenant availability and presentation
   policy; it cannot approve a global app.
 - Node overlays are node-scoped and may add local apps under Explore without

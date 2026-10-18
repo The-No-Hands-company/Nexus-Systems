@@ -9,6 +9,7 @@ Cloud reads.
 ```sh
 nexus catalog             # approved Cloud catalog
 nexus catalog develop     # catalog entries on one shelf
+nexus cloud                # Nexus Cloud control-plane contract
 nexus api                 # versioned Nexus API contract
 nexus auth                # Nexus Auth platform-service contract
 nexus terminal audit      # read audited shell sessions with an Auth token/cookie

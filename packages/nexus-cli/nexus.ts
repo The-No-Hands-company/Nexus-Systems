@@ -83,6 +83,11 @@ const commands: Record<string, { desc: string; usage: string; run: CommandHandle
     usage: "nexus catalog [shelf]",
     run: cmdCatalog,
   },
+  cloud: {
+    desc: "Read the Nexus Cloud control-plane contract",
+    usage: "nexus cloud",
+    run: cmdCloudContract,
+  },
   api: {
     desc: "Read the versioned Nexus API contract",
     usage: "nexus api",
@@ -400,6 +405,26 @@ async function cmdCatalog(args: string[]) {
     console.log(`  ${health} ${bold(String(app.name || app.id))} ${DIM}${path} · ${status}${RESET}`);
   }
   console.log(`\n  ${apps.length} catalog entr${apps.length === 1 ? "y" : "ies"}`);
+}
+
+async function cmdCloudContract() {
+  const payload = await fetchJson(`${cloudUrl()}/api/v1/contract`, { headers: cloudHeaders() });
+  if (!payload || !payload.service || !Array.isArray(payload.routes)) {
+    console.log(color("Nexus Cloud contract unavailable — check NEXUS_CLOUD_URL and authentication", RED));
+    return;
+  }
+
+  const service = payload.service as Record<string, unknown>;
+  console.log(BANNER);
+  console.log(color("Nexus Cloud Control Plane\n", CYAN));
+  console.log(`  ${bold(String(service.name || service.id))}`);
+  console.log(`  Surface: ${String(service.surface || "admin-console")} · Hosted path: ${String(service.hostedPath || "/cloud")}`);
+  console.log(`  Auth: ${String(service.auth || "unspecified")}\n`);
+  for (const route of payload.routes as Array<Record<string, unknown>>) {
+    const access = route.access === "public" ? color("public", GREEN) : color(String(route.access), YELLOW);
+    console.log(`  ${String(route.method).padEnd(6)} ${String(route.path).padEnd(54)} ${access}`);
+  }
+  console.log(`\n  ${(payload.routes as unknown[]).length} declared Cloud route${(payload.routes as unknown[]).length === 1 ? "" : "s"}`);
 }
 
 async function cmdApiContract() {
