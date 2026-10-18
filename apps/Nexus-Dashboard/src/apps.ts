@@ -98,16 +98,33 @@ function str(v: unknown): string {
 }
 
 function isSafeRelativePath(path: string): boolean {
-  return /^\/[A-Za-z0-9._~-]+(?:\/[A-Za-z0-9._~-]+)*$/.test(path) &&
-    path.split("/").slice(1).every((segment) => segment !== "." && segment !== "..");
+  return (
+    /^\/[A-Za-z0-9._~-]+(?:\/[A-Za-z0-9._~-]+)*$/.test(path) &&
+    path
+      .split("/")
+      .slice(1)
+      .every((segment) => segment !== "." && segment !== "..")
+  );
 }
 
 function safePublicUrl(value: string): URL | null {
-  if (!value || value.trim() !== value || /[\u0000-\u001f\u007f]/.test(value)) return null;
+  if (!value || value.trim() !== value) return null;
+  if (
+    [...value].some((character) => {
+      const code = character.charCodeAt(0);
+      return code <= 0x1f || code === 0x7f;
+    })
+  )
+    return null;
   try {
     const url = new URL(value);
-    if ((url.protocol !== "http:" && url.protocol !== "https:") ||
-      !url.hostname || url.username || url.password) return null;
+    if (
+      (url.protocol !== "http:" && url.protocol !== "https:") ||
+      !url.hostname ||
+      url.username ||
+      url.password
+    )
+      return null;
     return url;
   } catch {
     return null;
@@ -150,8 +167,12 @@ function placementFor(raw: RawTool, surface: CatalogSurface): CatalogPlacement {
 }
 
 function isCatalogSurface(value: unknown): value is CatalogSurface {
-  return value === "user-app" || value === "admin-console" ||
-    value === "platform-service" || value === "developer-tool";
+  return (
+    value === "user-app" ||
+    value === "admin-console" ||
+    value === "platform-service" ||
+    value === "developer-tool"
+  );
 }
 
 function isCatalogReleaseState(value: unknown): value is CatalogReleaseState {
@@ -159,9 +180,13 @@ function isCatalogReleaseState(value: unknown): value is CatalogReleaseState {
 }
 
 export function isReleasedUserApp(entry: AppEntry): boolean {
-  return entry.surface === "user-app" && entry.releaseState === "released" &&
-    entry.maturity === "stable" && entry.health === "healthy" &&
-    entry.reviewStatus === "approved";
+  return (
+    entry.surface === "user-app" &&
+    entry.releaseState === "released" &&
+    entry.maturity === "stable" &&
+    entry.health === "healthy" &&
+    entry.reviewStatus === "approved"
+  );
 }
 
 /**
@@ -187,8 +212,13 @@ export function toAppEntries(payload: unknown, authHost: string, selfHost?: stri
     if (!raw || typeof raw !== "object") continue;
 
     if (!isCatalogSurface(raw.surface) || !isCatalogReleaseState(raw.releaseState)) continue;
-    if (raw.visibility !== "default" && raw.visibility !== "discoverable" &&
-      raw.visibility !== "restricted" && raw.visibility !== "hidden") continue;
+    if (
+      raw.visibility !== "default" &&
+      raw.visibility !== "discoverable" &&
+      raw.visibility !== "restricted" &&
+      raw.visibility !== "hidden"
+    )
+      continue;
 
     const id = str(raw.id);
     const placement = placementFor(raw, raw.surface);
@@ -212,8 +242,9 @@ export function toAppEntries(payload: unknown, authHost: string, selfHost?: stri
     const parsedPublicUrl = publicUrl ? safePublicUrl(publicUrl) : null;
     if (publicUrl && !parsedPublicUrl) continue;
     if (!publicUrl && explicitDelivery !== "shell-native") continue;
-    if (raw.path !== undefined && (typeof raw.path !== "string" || !isSafeRelativePath(raw.path))) continue;
-    const path = typeof raw.path === "string" ? raw.path : nativeRoute ?? pathForApp(id);
+    if (raw.path !== undefined && (typeof raw.path !== "string" || !isSafeRelativePath(raw.path)))
+      continue;
+    const path = typeof raw.path === "string" ? raw.path : (nativeRoute ?? pathForApp(id));
     if (!isSafeRelativePath(path)) continue;
     // An absolute legacy `url` is framed by default. A relative legacy `url`
     // needs an explicit shell-native delivery contract and a safe route.

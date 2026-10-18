@@ -328,7 +328,9 @@ async function fetchApps(req: Request): Promise<Response> {
     if (res.status === 404) res = await fetch(`${cloudBase}/api/v1/tools`, options);
     if (!res.ok) return Response.json({ apps: healthyNative });
     const registry = toAppEntries(await res.json(), AUTH_HOST, SELF_HOST).filter(isReleasedUserApp);
-    return Response.json({ apps: mergeApps(registry, native).filter((entry) => entry.health === "healthy") });
+    return Response.json({
+      apps: mergeApps(registry, native).filter((entry) => entry.health === "healthy"),
+    });
   } catch {
     // Cloud being down must degrade to the shell's own views, not a broken
     // dashboard — the account pages still work and the user can still sign in.

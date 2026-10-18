@@ -199,7 +199,9 @@ describe("app grid entries", () => {
   it("drops an offline app rather than offering a dead link", () => {
     const entries = toAppEntries(
       {
-        tools: [{ ...RELEASED, id: "x", name: "X", publicUrl: "https://x.tnhc.dev", health: "offline" }],
+        tools: [
+          { ...RELEASED, id: "x", name: "X", publicUrl: "https://x.tnhc.dev", health: "offline" },
+        ],
       },
       AUTH,
     );
@@ -210,8 +212,20 @@ describe("app grid entries", () => {
     const entries = toAppEntries(
       {
         tools: [
-          { ...RELEASED, id: "b", name: "Zeta", publicUrl: "https://z.tnhc.dev", health: "healthy" },
-          { ...RELEASED, id: "a", name: "Alpha", publicUrl: "https://a.tnhc.dev", health: "healthy" },
+          {
+            ...RELEASED,
+            id: "b",
+            name: "Zeta",
+            publicUrl: "https://z.tnhc.dev",
+            health: "healthy",
+          },
+          {
+            ...RELEASED,
+            id: "a",
+            name: "Alpha",
+            publicUrl: "https://a.tnhc.dev",
+            health: "healthy",
+          },
         ],
       },
       AUTH,
@@ -222,7 +236,9 @@ describe("app grid entries", () => {
   it("falls back to the id when a tool has no name", () => {
     const entries = toAppEntries(
       {
-        tools: [{ ...RELEASED, id: "nexus-thing", publicUrl: "https://t.tnhc.dev", health: "healthy" }],
+        tools: [
+          { ...RELEASED, id: "nexus-thing", publicUrl: "https://t.tnhc.dev", health: "healthy" },
+        ],
       },
       AUTH,
     );
@@ -323,7 +339,16 @@ describe("explicit delivery", () => {
 
   it("does not infer proxied delivery from a public origin", () => {
     const entries = toAppEntries(
-      { tools: [{ ...RELEASED, id: "nexus-legacy", publicUrl: "https://legacy.tnhc.dev", health: "healthy" }] },
+      {
+        tools: [
+          {
+            ...RELEASED,
+            id: "nexus-legacy",
+            publicUrl: "https://legacy.tnhc.dev",
+            health: "healthy",
+          },
+        ],
+      },
       AUTH,
     );
     expect(entries[0]?.delivery).toBe("framed");
