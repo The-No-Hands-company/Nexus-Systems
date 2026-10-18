@@ -175,7 +175,7 @@ git commit -m "feat(cloud): classify catalog surfaces and releases"
 **Files:**
 - Modify: `apps/Nexus-Dashboard/src/apps.ts`
 - Modify: `apps/Nexus-Dashboard/src/server.ts`
-- Modify: `apps/Nexus-Dashboard/src/catalog-release.test.ts`
+- Modify: `apps/Nexus-Dashboard/tests/catalog-release.test.ts`
 - Modify: `apps/Nexus-Dashboard/frontend/src/api.ts`
 - Modify: `apps/Nexus-Dashboard/frontend/src/shell/catalog.ts`
 
@@ -188,7 +188,7 @@ git commit -m "feat(cloud): classify catalog surfaces and releases"
 
 - [ ] **Step 1: Write failing projection tests**
 
-Add to `apps/Nexus-Dashboard/src/catalog-release.test.ts`:
+Add to `apps/Nexus-Dashboard/tests/catalog-release.test.ts`:
 
 Define this test helper in the same file and use it for each fixture below:
 
@@ -235,7 +235,7 @@ Add native-entry assertions proving Mail is released user-app metadata and Termi
 
 ```bash
 cd apps/Nexus-Dashboard
-bun test src/catalog-release.test.ts src/apps.test.ts
+bun test ./tests/catalog-release.test.ts ./tests/apps.test.ts
 ```
 
 - [ ] **Step 3: Implement the server projection**
@@ -245,7 +245,7 @@ Make metadata required in `AppEntry`, validate it in `toAppEntries()`, and filte
 - [ ] **Step 4: Run the server suite**
 
 ```bash
-bun test src/catalog-release.test.ts src/apps.test.ts src/server.test.ts
+bun test ./tests/catalog-release.test.ts ./tests/apps.test.ts ./tests/server.test.ts
 ```
 
 Expected: platform services do not appear in the returned launcher list.
@@ -253,7 +253,7 @@ Expected: platform services do not appear in the returned launcher list.
 - [ ] **Step 5: Commit the server projection**
 
 ```bash
-git add apps/Nexus-Dashboard/src/apps.ts apps/Nexus-Dashboard/src/server.ts apps/Nexus-Dashboard/src/catalog-release.test.ts apps/Nexus-Dashboard/frontend/src/api.ts apps/Nexus-Dashboard/frontend/src/shell/catalog.ts
+git add apps/Nexus-Dashboard/src/apps.ts apps/Nexus-Dashboard/src/server.ts apps/Nexus-Dashboard/tests/catalog-release.test.ts apps/Nexus-Dashboard/frontend/src/api.ts apps/Nexus-Dashboard/frontend/src/shell/catalog.ts
 git commit -m "feat(dashboard): project only released user apps"
 ```
 
@@ -360,7 +360,7 @@ git commit -m "feat(dashboard): separate app and control surfaces"
 cd apps/Nexus-Cloud
 bun test --timeout=15000 --max-concurrency=1 src
 cd ../Nexus-Dashboard
-bun test src/catalog-release.test.ts src/apps.test.ts src/server.test.ts frontend/src/shell/catalog.test.ts frontend/src/shell/Launcher.test.tsx frontend/src/pages/Grid.test.tsx frontend/src/pages/Home.test.tsx frontend/src/shell/Shell.test.tsx
+bun test ./tests/catalog-release.test.ts ./tests/apps.test.ts ./tests/server.test.ts frontend/src/shell/catalog.test.ts frontend/src/shell/Launcher.test.tsx frontend/src/pages/Grid.test.tsx frontend/src/pages/Home.test.tsx frontend/src/shell/Shell.test.tsx
 ```
 
 - [ ] **Step 2: Run the established app matrix**
