@@ -46,6 +46,28 @@ describe("identity routes", () => {
     expect(body.claimCode).toMatch(/^[0-9a-f]{32}$/);
   });
 
+  it("publishes Auth as a platform-service contract rather than an app tile", async () => {
+    const res = await get("/api/v1/auth/contract");
+    expect(res.status).toBe(200);
+    const body = await res.json() as {
+      protocol: string;
+      service: { id: string; surface: string; hostedPath: string; auth: string };
+      routes: Array<{ method: string; path: string; access: string }>;
+    };
+    expect(body.protocol).toBe("nexus-auth/1");
+    expect(body.service).toMatchObject({
+      id: "nexus-auth",
+      surface: "platform-service",
+      hostedPath: "/auth",
+      auth: "Nexus Auth session or Bearer credential",
+    });
+    expect(body.routes).toEqual(expect.arrayContaining([
+      expect.objectContaining({ method: "GET", path: "/api/v1/auth/contract", access: "public" }),
+      expect.objectContaining({ method: "GET", path: "/api/v1/auth/me", access: "session-or-bearer" }),
+      expect.objectContaining({ method: "POST", path: "/api/v1/auth/api-keys", access: "session-with-permission" }),
+    ]));
+  });
+
   it("answers a taken username and a taken email identically, naming neither", async () => {
     // Otherwise this public endpoint tells anyone whether an address has an
     // account here (reproduced against production in the 2026-10-13 audit).

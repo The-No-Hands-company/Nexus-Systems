@@ -67,6 +67,7 @@ import {
   verifyClientSecret,
 } from "./oidc";
 import { issueServiceToken, validateServiceToken, signJwt } from "./token";
+import { buildAuthContract } from "./auth-contract";
 import { buildIdentityClaims, IDENTITY_TOKEN_TTL_SECONDS } from "./identity";
 import { getCatalogPreferences, saveCatalogPreferences } from "./preferences";
 import type { AccountStatus, LoginResult, Permission } from "./types";
@@ -500,10 +501,15 @@ export async function handleRequest(request: Request): Promise<Response> {
       return jsonResponse({ status: "ok", service: "nexus-auth", timestamp: new Date().toISOString() });
     }
 
+    if (request.method === "GET" && path === "/api/v1/auth/contract") {
+      return jsonResponse(buildAuthContract());
+    }
+
     if (request.method === "GET" && path === "/api/v1/auth/readiness") {
       return jsonResponse({
         status: "ready",
         contracts: {
+          contract: "/api/v1/auth/contract",
           login: "/api/v1/auth/login",
           logout: "/api/v1/auth/logout",
           users: "/api/v1/auth/users",

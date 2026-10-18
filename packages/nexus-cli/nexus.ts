@@ -88,6 +88,11 @@ const commands: Record<string, { desc: string; usage: string; run: CommandHandle
     usage: "nexus api",
     run: cmdApiContract,
   },
+  auth: {
+    desc: "Read the Nexus Auth platform-service contract",
+    usage: "nexus auth",
+    run: cmdAuthContract,
+  },
   terminal: {
     desc: "Read audited Nexus Terminal sessions",
     usage: "nexus terminal audit",
@@ -414,6 +419,26 @@ async function cmdApiContract() {
   for (const route of payload.routes as Array<Record<string, unknown>>) {
     const access = route.access === "operator" ? color("operator", YELLOW) : color("public", GREEN);
     console.log(`  ${String(route.method).padEnd(6)} ${String(route.path).padEnd(38)} ${access}`);
+  }
+}
+
+async function cmdAuthContract() {
+  const base = (process.env.NEXUS_AUTH_URL || "http://localhost:4310").trim().replace(/\/$/, "");
+  const payload = await fetchJson(`${base}/api/v1/auth/contract`);
+  if (!payload || !payload.service || !Array.isArray(payload.routes)) {
+    console.log(color("Nexus Auth contract unavailable — check NEXUS_AUTH_URL", RED));
+    return;
+  }
+
+  const service = payload.service as Record<string, unknown>;
+  console.log(BANNER);
+  console.log(color("Nexus Auth Platform Service\n", CYAN));
+  console.log(`  ${bold(String(service.name || service.id))}`);
+  console.log(`  Surface: ${String(service.surface || "platform-service")} · Hosted path: ${String(service.hostedPath || "/auth")}`);
+  console.log(`  Auth: ${String(service.auth || "unspecified")}\n`);
+  for (const route of payload.routes as Array<Record<string, unknown>>) {
+    const access = route.access === "public" ? color("public", GREEN) : color(String(route.access), YELLOW);
+    console.log(`  ${String(route.method).padEnd(6)} ${String(route.path).padEnd(46)} ${access}`);
   }
 }
 

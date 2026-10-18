@@ -10,6 +10,7 @@ Cloud reads.
 nexus catalog             # approved Cloud catalog
 nexus catalog develop     # catalog entries on one shelf
 nexus api                 # versioned Nexus API contract
+nexus auth                # Nexus Auth platform-service contract
 nexus terminal audit      # read audited shell sessions with an Auth token/cookie
 nexus knowledge           # ecosystem-grounded Nexus AI index
 nexus knowledge "terminal audit"  # search the knowledge index

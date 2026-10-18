@@ -58,6 +58,9 @@ shown only where the caller's role permits them.
   turning them into globally approved applications.
 - `/api/v1/auth/preferences/catalog` is the self-scoped account preference
   contract for pins, recents, and preferred shelf. It changes presentation only.
+- Auth `/api/v1/auth/contract` is the public identity-service manifest. It
+  describes Auth as a `platform-service` at hosted `/auth`; it is not a user
+  launcher entry and the manifest itself grants no access.
 - Dashboard `/apps` is the browser-facing projection. It combines Cloud's
   catalog with shell-native Mail and Terminal entries and never exposes Cloud
   credentials to the browser.
